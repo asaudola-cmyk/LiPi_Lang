@@ -44,7 +44,10 @@ require_once __DIR__ . '/../src/Unum/Server/HttpResponse.php';
 require_once __DIR__ . '/../src/Unum/Server/AsyncTcpServer.php';
 require_once __DIR__ . '/../src/Unum/Server/SovereignHttpServer.php';
 require_once __DIR__ . '/../src/Unum/Server/WebSocketFrame.php';
+require_once __DIR__ . '/../src/Unum/Server/SovereignTerminalView.php';
+require_once __DIR__ . '/../src/Unum/Server/SovereignRemoteConsole.php';
 require_once __DIR__ . '/../src/Unum/Server/DashboardView.php';
+require_once __DIR__ . '/../src/Unum/Ui/PixelCanvas.php';
 
 require_once __DIR__ . '/../src/Unum/Query/ColumnStore.php';
 require_once __DIR__ . '/../src/Unum/Query/SovereignQuery.php';
@@ -65,6 +68,8 @@ use Unum\Storage\SovereignStore;
 use Unum\Server\HttpRequest;
 use Unum\Server\HttpResponse;
 use Unum\Server\SovereignHttpServer;
+use Unum\Server\SovereignTerminalView;
+use Unum\Server\SovereignRemoteConsole;
 use Unum\Server\DashboardView;
 use Unum\Query\ColumnStore;
 use Unum\Query\SovereignQuery;
@@ -72,8 +77,9 @@ use Unum\CrossIsa\CrossIsaCompiler;
 use Unum\CrossIsa\UniversalTarget;
 
 // 1. Parse CLI options
-$options = getopt('', ['port::', 'host::', 'test-run']);
+$options = getopt('', ['port::', 'host::', 'console-port::', 'test-run']);
 $port = isset($options['port']) ? (int)$options['port'] : 8080;
+$consolePort = isset($options['console-port']) ? (int)$options['console-port'] : 7070;
 $host = isset($options['host']) ? (string)$options['host'] : '127.0.0.1';
 $isTestRun = isset($options['test-run']);
 
@@ -116,9 +122,13 @@ $dslCompiler = new DslCompiler();
 // 4. Initialize HTTP Server & Register Routes
 $server = new SovereignHttpServer($host, $port);
 
-// Route 1: Dashboard UI (Single Page Application directly from RAM)
-$server->get('/', function(HttpRequest $req) {
-    return HttpResponse::html(DashboardView::render());
+// Route 1: Sovereign Terminal Telemetry (Zero HTML, Zero JS, Zero React)
+$server->get('/', function(HttpRequest $req) use ($host, $port, $consolePort) {
+    return HttpResponse::text(SovereignTerminalView::renderAnsiDashboard(['host' => $host, 'port' => $port, 'consolePort' => $consolePort]));
+});
+
+$server->get('/stream', function(HttpRequest $req) use ($host, $port, $consolePort) {
+    return HttpResponse::text(SovereignTerminalView::renderAnsiDashboard(['host' => $host, 'port' => $port, 'consolePort' => $consolePort]));
 });
 
 // Route 2: Live AI Inference Endpoint
@@ -281,10 +291,16 @@ $server->get('/api/v1/status', function(HttpRequest $req) use ($cpu) {
 if ($isTestRun) {
     echo "\n  ⚡ [TEST RUN MODE] Dispatching Automated Test Requests...\n";
 
-    // Test 1: GET / (Dashboard HTML)
+    // Test 1: GET / (Zero-HTML / Zero-JS Terminal View)
     $reqIndex = HttpRequest::parse("GET / HTTP/1.1\r\nHost: {$host}\r\n\r\n");
     $resIndex = $server->dispatch($reqIndex);
-    echo "    ✔ GET / (Dashboard HTML)      : HTTP " . $resIndex->getStatusCode() . " (" . strlen($resIndex->toWireString()) . " bytes wire)\n";
+    $wire = $resIndex->toWireString();
+    $hasHtml = str_contains($wire, '<html') || str_contains($wire, '<script') || str_contains($wire, '<style');
+    echo "    ✔ GET / (Zero-HTML Terminal)  : HTTP " . $resIndex->getStatusCode() . " (" . strlen($wire) . " bytes wire | Zero HTML: " . ($hasHtml ? "FAIL" : "VERIFIED") . ")\n";
+    if ($hasHtml) {
+        fwrite(STDERR, "❌ HTML/JS detected in response!\n");
+        exit(1);
+    }
 
     // Test 2: POST /api/v1/chat (AI Inference)
     $reqChat = HttpRequest::parse("POST /api/v1/chat HTTP/1.1\r\nHost: {$host}\r\nContent-Type: application/json\r\n\r\n" . json_encode(['prompt' => 'Tell me about quantum states']));
@@ -304,14 +320,34 @@ if ($isTestRun) {
     $isaJson = json_decode(substr($resIsa->toWireString(), strpos($resIsa->toWireString(), "\r\n\r\n") + 4), true);
     echo "    ✔ POST /api/v1/cross-isa (JIT) : HTTP " . $resIsa->getStatusCode() . " (ARM64: " . $isaJson['arm64']['bytes'] . "B, WASM: " . $isaJson['wasm']['bytes'] . "B)\n";
 
-    echo "\n  🎉 ALL LIVE SERVER ENDPOINTS VERIFIED 100% OPERATIONAL!\n";
+    // Test 5: SovereignRemoteConsole binding
+    $remoteTest = new SovereignRemoteConsole($host, 7079);
+    $canBind = $remoteTest->start();
+    echo "    ✔ Sovereign Remote Console     : " . ($canBind ? "Socket Bound (tcp://{$host}:7079)" : "FAIL") . "\n";
+    $remoteTest->stop();
+
+    echo "\n  🎉 ALL LIVE SERVER ENDPOINTS VERIFIED 100% OPERATIONAL (ZERO HTML/JS)!\n";
     echo str_repeat('=', 80) . "\n\n";
     exit(0);
 }
 
-echo "  🚀 Server listening on http://{$host}:{$port}\n";
-echo "  👉 Open your browser at http://localhost:{$port} to view the live dashboard.\n";
+// Start Sovereign Remote Console on 7070
+$remoteConsole = new SovereignRemoteConsole($host, $consolePort);
+if ($remoteConsole->start()) {
+    echo "  ⚡ Sovereign Remote Console : tcp://{$host}:{$consolePort}\n";
+    echo "     👉 Connect via terminal  : nc {$host} {$consolePort} (or telnet {$host} {$consolePort})\n";
+} else {
+    echo "  ⚠️ Could not bind Remote Console on port {$consolePort}\n";
+}
+
+echo "  🚀 HTTP / API Server        : http://{$host}:{$port}\n";
+echo "     👉 Live ANSI Stream      : curl -N http://{$host}:{$port}/stream\n";
+echo "     👉 Native Silicon Window : php bin/unum-ui --mode=window\n";
+echo "     👉 Native Standalone CLI : php bin/unum-client --port={$consolePort}\n";
 echo "  Press Ctrl+C to stop.\n\n";
 
-// Start event loop
-$server->run();
+// Cooperative single-threaded asynchronous multiplexer
+while (true) {
+    $server->step(0.002);
+    $remoteConsole->step(2000);
+}

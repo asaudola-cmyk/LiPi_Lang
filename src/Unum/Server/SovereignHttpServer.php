@@ -90,6 +90,14 @@ final class SovereignHttpServer
         return $this->listen($maxRequests, $timeout);
     }
 
+    /**
+     * Runs a single non-blocking event step.
+     */
+    public function step(float $timeout = 0.005): int
+    {
+        return $this->tcpServer->step($timeout);
+    }
+
     public function close(): void
     {
         $this->tcpServer->close();

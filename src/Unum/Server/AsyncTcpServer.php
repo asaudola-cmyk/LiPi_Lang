@@ -165,6 +165,69 @@ final class AsyncTcpServer
         return $requestsHandled;
     }
 
+    /**
+     * Executes a single non-blocking event step.
+     * WHY: Enables cooperative multi-protocol event loops (HTTP + Remote Console).
+     */
+    public function step(float $timeout = 0.005): int
+    {
+        if (!$this->serverSocket) {
+            $this->bind();
+        }
+
+        $read = array_merge([$this->serverSocket], array_values($this->clients));
+        $write = null;
+        $except = null;
+
+        $sec = (int)floor($timeout);
+        $usec = (int)(($timeout - $sec) * 1_000_000);
+
+        $numChanged = @stream_select($read, $write, $except, $sec, $usec);
+        if ($numChanged === false || $numChanged === 0) {
+            return 0;
+        }
+
+        $requestsHandled = 0;
+        foreach ($read as $socket) {
+            if ($socket === $this->serverSocket) {
+                $client = @stream_socket_accept($this->serverSocket, 0);
+                if ($client) {
+                    stream_set_blocking($client, false);
+                    $id = (int)$client;
+                    $this->clients[$id] = $client;
+                    $this->buffers[$id] = '';
+                }
+            } else {
+                $id = (int)$socket;
+                $data = @fread($socket, 65536);
+                if ($data === false || $data === '') {
+                    $this->closeClient($id);
+                    continue;
+                }
+
+                $this->buffers[$id] .= $data;
+                if (str_contains($this->buffers[$id], "\r\n\r\n") || str_contains($this->buffers[$id], "\n\n")) {
+                    $request = HttpRequest::parse($this->buffers[$id]);
+                    if ($request !== null) {
+                        $handler = $this->requestHandler;
+                        /** @var HttpResponse $response */
+                        $response = $handler($request);
+
+                        @fwrite($socket, $response->toWireString());
+                        $requestsHandled++;
+
+                        $this->buffers[$id] = '';
+                        if (strtolower($request->getHeader('connection', '')) === 'close') {
+                            $this->closeClient($id);
+                        }
+                    }
+                }
+            }
+        }
+
+        return $requestsHandled;
+    }
+
     private function closeClient(int $id): void
     {
         if (isset($this->clients[$id])) {
