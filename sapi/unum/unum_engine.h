@@ -135,6 +135,31 @@ void unum_tensor_activate_f32(float *data, size_t size, int activation_type);
 /* Hardware Cosine Similarity with vectorized L2 normalization */
 float unum_tensor_cosine_similarity(const float *a, const float *b, size_t dim);
 
+/* Transformer RMS Normalization: y = (x / sqrt(mean(x^2) + eps)) * weight */
+void unum_tensor_rmsnorm_f32(const float *x, const float *weight, float *out, size_t dim, float eps);
+
+/* Rotary Position Embedding (RoPE) for Attention Heads */
+void unum_tensor_rope_f32(float *q, float *k, size_t seq_len, size_t num_heads, size_t head_dim, size_t pos_offset);
+
+/* Multi-Head Scaled Dot-Product Attention: out = Softmax(Q * K^T / sqrt(d)) * V */
+void unum_tensor_mha_f32(const float *Q, const float *K, const float *V, float *out, size_t seq_len, size_t num_heads, size_t head_dim);
+
+/* POSIX Shared Memory Allocator (Zero-Copy Inter-Process Binary Memory) */
+int unum_shm_create(const char *name, size_t size, void **addr_out);
+int unum_shm_open(const char *name, size_t size, void **addr_out);
+int unum_shm_close(void *addr, size_t size);
+int unum_shm_unlink(const char *name);
+
+/* Silicon Hardware Atomics (Lock-Free Primitives) */
+uint64_t unum_atomic_cas64(uint64_t *ptr, uint64_t old_val, uint64_t new_val);
+uint64_t unum_atomic_fetch_add64(uint64_t *ptr, uint64_t val);
+
+/* SIMD Columnar Filtering (Generates 8-bit match bitmap: 1 if col[i] > threshold, else 0) */
+size_t unum_column_filter_gt_i64(const int64_t *col, size_t size, int64_t threshold, uint8_t *bitmap_out);
+int64_t unum_column_sum_i64(const int64_t *col, const uint8_t *bitmap, size_t size);
+size_t unum_column_filter_gt_f32(const float *col, size_t size, float threshold, uint8_t *bitmap_out);
+float unum_column_sum_f32(const float *col, const uint8_t *bitmap, size_t size);
+
 /* CPU feature bitmask detection (AVX, AVX2, AVX-512, FMA) */
 uint32_t unum_cpu_features(void);
 

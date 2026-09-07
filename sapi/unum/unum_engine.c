@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <cpuid.h>
 #include <math.h>
@@ -606,3 +608,326 @@ uint32_t unum_cpu_features(void)
 #endif
     return flags;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Transformer RMSNorm & RoPE Kernels                                       */
+/* ------------------------------------------------------------------------ */
+
+void unum_tensor_rmsnorm_f32(const float *x, const float *weight, float *out, size_t dim, float eps)
+{
+    if (!x || !out || dim == 0) return;
+
+    /* WHY: Compute sum of squares sum(x_i^2) across the vector */
+    float sum_sq = 0.0f;
+#if defined(__x86_64__) || defined(_M_X64)
+    if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma")) {
+        __m256 vsum = _mm256_setzero_ps();
+        size_t i = 0;
+        for (; i + 8 <= dim; i += 8) {
+            __m256 vx = _mm256_loadu_ps(&x[i]);
+            vsum = _mm256_fmadd_ps(vx, vx, vsum);
+        }
+        __m128 lo = _mm256_castps256_ps128(vsum);
+        __m128 hi = _mm256_extractf128_ps(vsum, 1);
+        __m128 s = _mm_add_ps(lo, hi);
+        s = _mm_hadd_ps(s, s);
+        s = _mm_hadd_ps(s, s);
+        sum_sq = _mm_cvtss_f32(s);
+        for (; i < dim; i++) {
+            sum_sq += x[i] * x[i];
+        }
+    } else {
+        for (size_t i = 0; i < dim; i++) sum_sq += x[i] * x[i];
+    }
+#else
+    for (size_t i = 0; i < dim; i++) sum_sq += x[i] * x[i];
+#endif
+
+    float rms = sqrtf((sum_sq / (float)dim) + eps);
+    float inv_rms = 1.0f / rms;
+
+#if defined(__x86_64__) || defined(_M_X64)
+    if (__builtin_cpu_supports("avx2")) {
+        __m256 vinv = _mm256_set1_ps(inv_rms);
+        size_t i = 0;
+        for (; i + 8 <= dim; i += 8) {
+            __m256 vx = _mm256_loadu_ps(&x[i]);
+            __m256 vnorm = _mm256_mul_ps(vx, vinv);
+            if (weight) {
+                __m256 vw = _mm256_loadu_ps(&weight[i]);
+                vnorm = _mm256_mul_ps(vnorm, vw);
+            }
+            _mm256_storeu_ps(&out[i], vnorm);
+        }
+        for (; i < dim; i++) {
+            out[i] = (x[i] * inv_rms) * (weight ? weight[i] : 1.0f);
+        }
+        return;
+    }
+#endif
+
+    for (size_t i = 0; i < dim; i++) {
+        out[i] = (x[i] * inv_rms) * (weight ? weight[i] : 1.0f);
+    }
+}
+
+void unum_tensor_rope_f32(float *q, float *k, size_t seq_len, size_t num_heads, size_t head_dim, size_t pos_offset)
+{
+    if (!q || seq_len == 0 || num_heads == 0 || head_dim < 2) return;
+
+    size_t half_dim = head_dim / 2;
+
+    for (size_t pos = 0; pos < seq_len; pos++) {
+        float p = (float)(pos + pos_offset);
+        for (size_t h = 0; h < num_heads; h++) {
+            size_t head_offset = (pos * num_heads + h) * head_dim;
+            float *q_head = &q[head_offset];
+            float *k_head = k ? &k[head_offset] : NULL;
+
+            for (size_t j = 0; j < half_dim; j++) {
+                float freq = 1.0f / powf(10000.0f, (float)(2 * j) / (float)head_dim);
+                float theta = p * freq;
+                float cos_theta = cosf(theta);
+                float sin_theta = sinf(theta);
+
+                size_t idx0 = j * 2;
+                size_t idx1 = j * 2 + 1;
+
+                float q0 = q_head[idx0];
+                float q1 = q_head[idx1];
+                q_head[idx0] = q0 * cos_theta - q1 * sin_theta;
+                q_head[idx1] = q0 * sin_theta + q1 * cos_theta;
+
+                if (k_head) {
+                    float k0 = k_head[idx0];
+                    float k1 = k_head[idx1];
+                    k_head[idx0] = k0 * cos_theta - k1 * sin_theta;
+                    k_head[idx1] = k0 * sin_theta + k1 * cos_theta;
+                }
+            }
+        }
+    }
+}
+
+void unum_tensor_mha_f32(const float *Q, const float *K, const float *V, float *out, size_t seq_len, size_t num_heads, size_t head_dim)
+{
+    if (!Q || !K || !V || !out || seq_len == 0 || num_heads == 0 || head_dim == 0) return;
+
+    float scale = 1.0f / sqrtf((float)head_dim);
+
+    /* Allocate temporary attention score matrix S: seq_len x seq_len */
+    float *scores = (float*)malloc(seq_len * seq_len * sizeof(float));
+    if (!scores) return;
+
+    for (size_t h = 0; h < num_heads; h++) {
+        /* Pass 1: S = (Q * K^T) * scale */
+        for (size_t i = 0; i < seq_len; i++) {
+            const float *qi = &Q[(i * num_heads + h) * head_dim];
+            for (size_t j = 0; j < seq_len; j++) {
+                const float *kj = &K[(j * num_heads + h) * head_dim];
+                float dot = unum_simd_dot_f32(qi, kj, head_dim);
+                scores[i * seq_len + j] = dot * scale;
+            }
+        }
+
+        /* Pass 2: Row-wise Softmax on S */
+        for (size_t i = 0; i < seq_len; i++) {
+            float *row = &scores[i * seq_len];
+            float max_s = row[0];
+            for (size_t j = 1; j < seq_len; j++) {
+                if (row[j] > max_s) max_s = row[j];
+            }
+            float sum_exp = 0.0f;
+            for (size_t j = 0; j < seq_len; j++) {
+                row[j] = expf(row[j] - max_s);
+                sum_exp += row[j];
+            }
+            float inv_sum = sum_exp > 0.0f ? (1.0f / sum_exp) : 0.0f;
+            for (size_t j = 0; j < seq_len; j++) {
+                row[j] *= inv_sum;
+            }
+        }
+
+        /* Pass 3: out = S * V */
+        for (size_t i = 0; i < seq_len; i++) {
+            float *out_head = &out[(i * num_heads + h) * head_dim];
+            memset(out_head, 0, head_dim * sizeof(float));
+            for (size_t j = 0; j < seq_len; j++) {
+                float a_ij = scores[i * seq_len + j];
+                const float *vj = &V[(j * num_heads + h) * head_dim];
+                for (size_t d = 0; d < head_dim; d++) {
+                    out_head[d] += a_ij * vj[d];
+                }
+            }
+        }
+    }
+
+    free(scores);
+}
+
+/* ------------------------------------------------------------------------ */
+/* POSIX Shared Memory & Hardware Atomics                                   */
+/* ------------------------------------------------------------------------ */
+
+int unum_shm_create(const char *name, size_t size, void **addr_out)
+{
+    if (!name || size == 0 || !addr_out) return -1;
+
+    int fd = shm_open(name, O_CREAT | O_RDWR | O_TRUNC, 0666);
+    if (fd < 0) return -2;
+
+    if (ftruncate(fd, (off_t)size) < 0) {
+        close(fd);
+        shm_unlink(name);
+        return -3;
+    }
+
+    void *addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+
+    if (addr == MAP_FAILED) {
+        shm_unlink(name);
+        return -4;
+    }
+
+    *addr_out = addr;
+    return 0;
+}
+
+int unum_shm_open(const char *name, size_t size, void **addr_out)
+{
+    if (!name || size == 0 || !addr_out) return -1;
+
+    int fd = shm_open(name, O_RDWR, 0666);
+    if (fd < 0) return -2;
+
+    void *addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+
+    if (addr == MAP_FAILED) return -3;
+
+    *addr_out = addr;
+    return 0;
+}
+
+int unum_shm_close(void *addr, size_t size)
+{
+    if (!addr || size == 0) return 0;
+    return munmap(addr, size);
+}
+
+int unum_shm_unlink(const char *name)
+{
+    if (!name) return -1;
+    return shm_unlink(name);
+}
+
+uint64_t unum_atomic_cas64(uint64_t *ptr, uint64_t old_val, uint64_t new_val)
+{
+    if (!ptr) return 0;
+    return __sync_val_compare_and_swap(ptr, old_val, new_val);
+}
+
+uint64_t unum_atomic_fetch_add64(uint64_t *ptr, uint64_t val)
+{
+    if (!ptr) return 0;
+    return __sync_fetch_and_add(ptr, val);
+}
+
+/* ------------------------------------------------------------------------ */
+/* SIMD Columnar Filter & Aggregation Engine                                */
+/* ------------------------------------------------------------------------ */
+
+size_t unum_column_filter_gt_i64(const int64_t *col, size_t size, int64_t threshold, uint8_t *bitmap_out)
+{
+    if (!col || !bitmap_out || size == 0) return 0;
+
+    size_t match_count = 0;
+    size_t i = 0;
+
+#if defined(__x86_64__) || defined(_M_X64)
+    if (__builtin_cpu_supports("avx2")) {
+        __m256i vthresh = _mm256_set1_epi64x(threshold);
+        for (; i + 4 <= size; i += 4) {
+            __m256i vdata = _mm256_loadu_si256((const __m256i*)&col[i]);
+            __m256i vcmp = _mm256_cmpgt_epi64(vdata, vthresh);
+            int64_t m0 = _mm256_extract_epi64(vcmp, 0);
+            int64_t m1 = _mm256_extract_epi64(vcmp, 1);
+            int64_t m2 = _mm256_extract_epi64(vcmp, 2);
+            int64_t m3 = _mm256_extract_epi64(vcmp, 3);
+            bitmap_out[i + 0] = m0 ? 1 : 0;
+            bitmap_out[i + 1] = m1 ? 1 : 0;
+            bitmap_out[i + 2] = m2 ? 1 : 0;
+            bitmap_out[i + 3] = m3 ? 1 : 0;
+            match_count += (bitmap_out[i] + bitmap_out[i+1] + bitmap_out[i+2] + bitmap_out[i+3]);
+        }
+    }
+#endif
+
+    for (; i < size; i++) {
+        uint8_t match = (col[i] > threshold) ? 1 : 0;
+        bitmap_out[i] = match;
+        match_count += match;
+    }
+
+    return match_count;
+}
+
+int64_t unum_column_sum_i64(const int64_t *col, const uint8_t *bitmap, size_t size)
+{
+    if (!col || size == 0) return 0;
+
+    int64_t total = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (!bitmap || bitmap[i]) {
+            total += col[i];
+        }
+    }
+    return total;
+}
+
+size_t unum_column_filter_gt_f32(const float *col, size_t size, float threshold, uint8_t *bitmap_out)
+{
+    if (!col || !bitmap_out || size == 0) return 0;
+
+    size_t match_count = 0;
+    size_t i = 0;
+
+#if defined(__x86_64__) || defined(_M_X64)
+    if (__builtin_cpu_supports("avx")) {
+        __m256 vthresh = _mm256_set1_ps(threshold);
+        for (; i + 8 <= size; i += 8) {
+            __m256 vdata = _mm256_loadu_ps(&col[i]);
+            __m256 vcmp = _mm256_cmp_ps(vdata, vthresh, _CMP_GT_OQ);
+            int mask = _mm256_movemask_ps(vcmp);
+            for (int b = 0; b < 8; b++) {
+                uint8_t m = (mask & (1 << b)) ? 1 : 0;
+                bitmap_out[i + b] = m;
+                match_count += m;
+            }
+        }
+    }
+#endif
+
+    for (; i < size; i++) {
+        uint8_t m = (col[i] > threshold) ? 1 : 0;
+        bitmap_out[i] = m;
+        match_count += m;
+    }
+
+    return match_count;
+}
+
+float unum_column_sum_f32(const float *col, const uint8_t *bitmap, size_t size)
+{
+    if (!col || size == 0) return 0.0f;
+
+    float total = 0.0f;
+    for (size_t i = 0; i < size; i++) {
+        if (!bitmap || bitmap[i]) {
+            total += col[i];
+        }
+    }
+    return total;
+}
+

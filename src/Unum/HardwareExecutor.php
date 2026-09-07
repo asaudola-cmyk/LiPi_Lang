@@ -41,6 +41,19 @@ final class HardwareExecutor
                 void unum_tensor_matmul_f32(const float *A, const float *B, float *C, size_t M, size_t K, size_t N);
                 void unum_tensor_activate_f32(float *data, size_t size, int activation_type);
                 float unum_tensor_cosine_similarity(const float *a, const float *b, size_t dim);
+                void unum_tensor_rmsnorm_f32(const float *x, const float *weight, float *out, size_t dim, float eps);
+                void unum_tensor_rope_f32(float *q, float *k, size_t seq_len, size_t num_heads, size_t head_dim, size_t pos_offset);
+                void unum_tensor_mha_f32(const float *Q, const float *K, const float *V, float *out, size_t seq_len, size_t num_heads, size_t head_dim);
+                int unum_shm_create(const char *name, size_t size, void **addr_out);
+                int unum_shm_open(const char *name, size_t size, void **addr_out);
+                int unum_shm_close(void *addr, size_t size);
+                int unum_shm_unlink(const char *name);
+                uint64_t unum_atomic_cas64(uint64_t *ptr, uint64_t old_val, uint64_t new_val);
+                uint64_t unum_atomic_fetch_add64(uint64_t *ptr, uint64_t val);
+                size_t unum_column_filter_gt_i64(const int64_t *col, size_t size, int64_t threshold, uint8_t *bitmap_out);
+                int64_t unum_column_sum_i64(const int64_t *col, const uint8_t *bitmap, size_t size);
+                size_t unum_column_filter_gt_f32(const float *col, size_t size, float threshold, uint8_t *bitmap_out);
+                float unum_column_sum_f32(const float *col, const uint8_t *bitmap, size_t size);
                 uint32_t unum_cpu_features(void);
 CDEF;
 
@@ -211,6 +224,152 @@ CDEF;
     public function tensorCosineSimilarity(FFI\CData $a, FFI\CData $b, int $dim): float
     {
         return (float)self::$ffi->unum_tensor_cosine_similarity($a, $b, $dim);
+    }
+
+    /**
+     * Executes vectorized Root Mean Square Normalization (RMSNorm) on a contiguous float buffer.
+     */
+    public function tensorRmsNorm(FFI\CData $x, ?FFI\CData $weight, FFI\CData $out, int $dim, float $eps = 1e-5): void
+    {
+        self::$ffi->unum_tensor_rmsnorm_f32($x, $weight, $out, $dim, $eps);
+    }
+
+    /**
+     * Executes vectorized Rotary Position Embedding (RoPE) on query and key attention heads.
+     */
+    public function tensorRope(FFI\CData $q, ?FFI\CData $k, int $seqLen, int $numHeads, int $headDim, int $posOffset = 0): void
+    {
+        self::$ffi->unum_tensor_rope_f32($q, $k, $seqLen, $numHeads, $headDim, $posOffset);
+    }
+
+    /**
+     * Executes fused Multi-Head Scaled Dot-Product Attention: out = Softmax(Q * K^T / sqrt(d)) * V.
+     */
+    public function tensorMha(FFI\CData $Q, FFI\CData $K, FFI\CData $V, FFI\CData $out, int $seqLen, int $numHeads, int $headDim): void
+    {
+        self::$ffi->unum_tensor_mha_f32($Q, $K, $V, $out, $seqLen, $numHeads, $headDim);
+    }
+
+    /**
+     * Creates a POSIX Shared Memory segment mapped into the process virtual address space.
+     * 
+     * @return array{addr: FFI\CData, size: int}
+     */
+    public function shmCreate(string $name, int $size): array
+    {
+        $addrPtr = self::$ffi->new("void*[1]");
+        $err = self::$ffi->unum_shm_create($name, $size, FFI::addr($addrPtr[0]));
+        if ($err !== 0) {
+            throw new RuntimeException("Failed to create shared memory '{$name}' of size {$size}, code: {$err}");
+        }
+        return [
+            'addr' => $addrPtr[0],
+            'size' => $size,
+        ];
+    }
+
+    /**
+     * Opens an existing POSIX Shared Memory segment.
+     * 
+     * @return array{addr: FFI\CData, size: int}
+     */
+    public function shmOpen(string $name, int $size): array
+    {
+        $addrPtr = self::$ffi->new("void*[1]");
+        $err = self::$ffi->unum_shm_open($name, $size, FFI::addr($addrPtr[0]));
+        if ($err !== 0) {
+            throw new RuntimeException("Failed to open shared memory '{$name}' of size {$size}, code: {$err}");
+        }
+        return [
+            'addr' => $addrPtr[0],
+            'size' => $size,
+        ];
+    }
+
+    /**
+     * Unmaps a shared memory address.
+     */
+    public function shmClose(FFI\CData $addr, int $size): int
+    {
+        return self::$ffi->unum_shm_close($addr, $size);
+    }
+
+    /**
+     * Unlinks a POSIX Shared Memory segment by name.
+     */
+    public function shmUnlink(string $name): int
+    {
+        return self::$ffi->unum_shm_unlink($name);
+    }
+
+    /**
+     * Atomic 64-bit Compare-And-Swap (hardware CMPXCHG).
+     */
+    public function atomicCas64(FFI\CData $ptr, int $oldVal, int $newVal): int
+    {
+        return (int)self::$ffi->unum_atomic_cas64($ptr, $oldVal, $newVal);
+    }
+
+    /**
+     * Atomic 64-bit Fetch-And-Add (hardware XADD).
+     */
+    public function atomicFetchAdd64(FFI\CData $ptr, int $val): int
+    {
+        return (int)self::$ffi->unum_atomic_fetch_add64($ptr, $val);
+    }
+
+    /**
+     * Allocates a contiguous C int64_t buffer.
+     */
+    public function newInt64Buffer(int $count): FFI\CData
+    {
+        if ($count <= 0) {
+            throw new RuntimeException("Buffer count must be greater than zero, got: {$count}");
+        }
+        return self::$ffi->new("int64_t[{$count}]");
+    }
+
+    /**
+     * Allocates a contiguous C uint8_t buffer.
+     */
+    public function newUint8Buffer(int $count): FFI\CData
+    {
+        if ($count <= 0) {
+            throw new RuntimeException("Buffer count must be greater than zero, got: {$count}");
+        }
+        return self::$ffi->new("uint8_t[{$count}]");
+    }
+
+    /**
+     * SIMD Columnar Filter: col[i] > threshold. Populates bitmapOut with 1/0.
+     */
+    public function columnFilterGtI64(FFI\CData $col, int $size, int $threshold, FFI\CData $bitmapOut): int
+    {
+        return (int)self::$ffi->unum_column_filter_gt_i64($col, $size, $threshold, $bitmapOut);
+    }
+
+    /**
+     * SIMD Columnar Sum with optional filter bitmap.
+     */
+    public function columnSumI64(FFI\CData $col, ?FFI\CData $bitmap, int $size): int
+    {
+        return (int)self::$ffi->unum_column_sum_i64($col, $bitmap, $size);
+    }
+
+    /**
+     * SIMD Columnar Filter Float32: col[i] > threshold. Populates bitmapOut with 1/0.
+     */
+    public function columnFilterGtF32(FFI\CData $col, int $size, float $threshold, FFI\CData $bitmapOut): int
+    {
+        return (int)self::$ffi->unum_column_filter_gt_f32($col, $size, $threshold, $bitmapOut);
+    }
+
+    /**
+     * SIMD Columnar Sum Float32 with optional filter bitmap.
+     */
+    public function columnSumF32(FFI\CData $col, ?FFI\CData $bitmap, int $size): float
+    {
+        return (float)self::$ffi->unum_column_sum_f32($col, $bitmap, $size);
     }
 
     /**
