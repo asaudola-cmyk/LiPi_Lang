@@ -82,6 +82,14 @@ final class SovereignHttpServer
         return $this->tcpServer->run($maxRequests, $timeout);
     }
 
+    /**
+     * Runs the non-blocking event loop indefinitely.
+     */
+    public function run(?int $maxRequests = null, float $timeout = 0.5): int
+    {
+        return $this->listen($maxRequests, $timeout);
+    }
+
     public function close(): void
     {
         $this->tcpServer->close();
