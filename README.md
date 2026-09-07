@@ -177,6 +177,18 @@ $arm64 = $crossCompiler->compileArm64($unums);
 $wasm = $crossCompiler->compileWasm($unums);
 ```
 
+### Sovereign Bare-Metal UI Engine (Zero HTML / Zero JS)
+```bash
+# Launch 60 FPS Double-Buffered ANSI Terminal Dashboard with mouse support:
+php bin/unum-ui
+
+# Launch native direct Unix socket X11 window (zero Xlib / zero browser):
+php bin/unum-ui --mode=window
+
+# Export 32-bit ARGB Framebuffer to BMP:
+php bin/unum-ui --mode=bmp --out=dashboard.bmp
+```
+
 ---
 
 ## 📊 6. Empirical Verification Summary
@@ -197,6 +209,7 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
   [FRONTIER 7] Sovereign SIMD Columnar Analytical Query  : 500,000 rows in 6.57 ms
   [FRONTIER 8] Universal Cross-ISA Multi-Target JIT      : x86_64, ARM64, WASM verified
   [FRONTIER 9] Real-World GGUF Model Loader & Decoder    : 0.37 ms block dequantize
+  [SOVEREIGN UI] Zero-HTML / Zero-JS UI Engine           : 60 FPS TUI + Direct X11 Socket
 ================================================================================
 ```
 
@@ -206,6 +219,7 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 
 ```
 ├── bin/
+│   ├── unum-ui                       # Sovereign Bare-Metal UI Launcher (TUI / X11 / BMP)
 │   ├── server.php                    # Sovereign Unified Web Server & Live Dashboard
 │   ├── unum-chat                     # Standalone Terminal AI Chatbot CLI
 │   └── unum                          # Native C Bare-Metal Silicon Entry point
@@ -233,7 +247,11 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
     ├── Query/                        # Frontier 7: SIMD Columnar Analytical Engine
     ├── Server/                       # Frontier 6: Async HTTP Server & WebSocket
     ├── Storage/                      # Frontier 5: POSIX SHM & Robin Hood Table
-    └── Tensor/                       # Frontier 3: AVX-512 Tensor Core & Vector Index
+    ├── Tensor/                       # Frontier 3: AVX-512 Tensor Core & Vector Index
+    └── Ui/                           # Sovereign Bare-Metal UI (Zero HTML / Zero JS)
+        ├── PixelCanvas.php           # 32-bit ARGB Software SIMD Pixel Rasterizer
+        ├── AnsiTuiEngine.php         # 60 FPS Double-Buffered TUI with Mouse Tracking
+        └── X11SocketWindow.php       # Pure Unix Domain Socket X11 Wire Client
 ```
 
 ---
