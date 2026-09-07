@@ -1,0 +1,27 @@
+# ==============================================================================
+# 👑 UNUM SOVEREIGN HOSTING CONFIGURATION (.htaccess)
+# ZERO HTML, ZERO CSS, ZERO JAVASCRIPT, ZERO REACT
+# Compatible with cPanel, CloudLinux, LiteSpeed, Apache 2.4+
+# ==============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Route all requests to index.php if not an existing file or directory
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# Disable GZIP compression & buffering on streaming endpoints for instant TCP delivery
+<IfModule mod_env.c>
+    SetEnv no-gzip 1
+</IfModule>
+
+# Security: Prevent MIME type sniffing and strictly enforce Zero-HTML policy
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Sovereign-Engine "UNUM Universal Number GF(2^64)"
+    Header set X-Zero-HTML-Policy "ACTIVE"
+</IfModule>

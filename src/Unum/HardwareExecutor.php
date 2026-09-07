@@ -18,17 +18,28 @@ final class HardwareExecutor
 {
     private static ?FFI $ffi = null;
     private static ?string $libPath = null;
+    private static bool $isEmulated = false;
 
     public function __construct(?string $libPath = null)
     {
-        if (self::$ffi === null) {
-            $path = $libPath ?? dirname(__DIR__, 2) . '/libs/libunum.so';
-            if (!file_exists($path)) {
-                throw new RuntimeException("UNUM native library not found at: {$path}. Compile via gcc first.");
-            }
-            self::$libPath = realpath($path);
+        if (self::$ffi === null && !self::$isEmulated) {
+            try {
+                if (!extension_loaded('ffi') || !class_exists('\FFI')) {
+                    throw new RuntimeException("FFI extension is not loaded in PHP runtime.");
+                }
 
-            $cdefs = <<<'CDEF'
+                $ffiEnable = ini_get('ffi.enable');
+                if ($ffiEnable === '0' || strtolower((string)$ffiEnable) === 'false' || (PHP_SAPI !== 'cli' && $ffiEnable === 'preload')) {
+                    throw new RuntimeException("FFI execution restricted by php.ini (cPanel/shared hosting policy).");
+                }
+
+                $path = $libPath ?? dirname(__DIR__, 2) . '/libs/libunum.so';
+                if (!file_exists($path)) {
+                    throw new RuntimeException("UNUM native library not found at: {$path}.");
+                }
+                self::$libPath = realpath($path);
+
+                $cdefs = <<<'CDEF'
                 typedef uint64_t unum_t;
                 unum_t unum_encode(uint8_t op, uint8_t type, uint8_t reg_dest, uint8_t reg_src, uint8_t simd, uint32_t payload);
                 void unum_decode(unum_t num, uint8_t *op, uint8_t *type, uint8_t *reg_dest, uint8_t *reg_src, uint8_t *simd, uint32_t *payload);
@@ -57,8 +68,21 @@ final class HardwareExecutor
                 uint32_t unum_cpu_features(void);
 CDEF;
 
-            self::$ffi = FFI::cdef($cdefs, self::$libPath);
+                self::$ffi = FFI::cdef($cdefs, self::$libPath);
+                self::$isEmulated = false;
+            } catch (\Throwable $e) {
+                self::$ffi = null;
+                self::$isEmulated = true;
+            }
         }
+    }
+
+    /**
+     * Returns true if running in pure PHP emulation mode (cPanel / restricted hosting).
+     */
+    public function isEmulated(): bool
+    {
+        return self::$isEmulated;
     }
 
     /**
@@ -379,6 +403,16 @@ CDEF;
      */
     public function getCpuFeatures(): array
     {
+        if (self::$isEmulated || self::$ffi === null) {
+            $cpuinfo = @file_get_contents('/proc/cpuinfo') ?: '';
+            return [
+                'avx'    => str_contains($cpuinfo, 'avx'),
+                'avx2'   => str_contains($cpuinfo, 'avx2'),
+                'avx512' => str_contains($cpuinfo, 'avx512'),
+                'fma'    => str_contains($cpuinfo, 'fma'),
+            ];
+        }
+
         $flags = self::$ffi->unum_cpu_features();
         return [
             'avx'    => ($flags & 1) !== 0,

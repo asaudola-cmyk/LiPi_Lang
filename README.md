@@ -73,17 +73,32 @@ UNUM compresses instructions, types, registers, and vector states into a single 
 php benchmarks/benchmark_grand_nine_frontiers.php
 ```
 
-### 2. Launch the Unified Sovereign Server & Web Dashboard
+### 2. Launch the Sovereign Bare-Metal UI (Zero HTML / Zero JS)
 ```bash
-php bin/server.php --port=8080
-```
-Open your browser at `http://localhost:8080` to access the interactive single-page dashboard:
-- 🧠 **Silicon AI Assistant:** Real-time conversational inference powered by the AVX-512 transformer.
-- 📊 **500K SIMD Analytics:** Vectorized columnar filtering in ~6.5 milliseconds.
-- 💾 **RAM Cache Explorer:** Sub-microsecond reads, writes, and atomic hardware increments.
-- ⚙️ **Cross-ISA Playground:** Real-time equation compilation into x86_64, ARM64, and WebAssembly disassemblies.
+# 60 FPS Double-Buffered ANSI TrueColor TUI with mouse click tracking:
+php bin/unum-ui --mode=tui
 
-### 3. Launch the Standalone Terminal AI Chatbot
+# Direct Unix Domain Socket X11 Window (bypasses browser and web servers entirely):
+php bin/unum-ui --mode=window
+```
+
+### 3. Launch the Unified Sovereign Server & Remote Console
+```bash
+php bin/server.php --port=8080 --console-port=7070
+```
+- 📺 **Live 24-bit TrueColor Terminal Stream:** Run `curl -sN http://localhost:8080/stream`
+- 🖥️ **Sovereign Remote Console:** Run `nc localhost 7070` or `php bin/unum-client --port=7070`
+- 🧠 **Silicon AI API:** `curl -X POST http://localhost:8080/api/v1/chat -d '{"prompt":"UNUM"}'`
+- 📊 **500K SIMD Analytics:** `curl http://localhost:8080/api/v1/analytics`
+
+### 4. Deploy to cPanel & Restricted Shared Hosting (Zero Root, Standard Port 80/443)
+Simply copy `public_html/` into your hosting account's `public_html/` root.
+- **Auto-Adapts:** Runs seamlessly via FastCGI / PHP-FPM / LiteSpeed without root or background daemons.
+- **Pure Fallback:** Graceful pure-PHP 8.3 64-bit emulation if `php.ini` locks FFI or `/dev/shm`.
+- **Live Terminal:** View real-time telemetry with `curl -sN https://yourdomain.com/stream`.
+- **Framebuffer Export:** View live 32-bit ARGB render at `https://yourdomain.com/display.bmp`.
+
+### 5. Launch the Standalone Terminal AI Chatbot
 ```bash
 # Interactive REPL mode
 php bin/unum-chat
@@ -220,14 +235,19 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 ```
 ├── bin/
 │   ├── unum-ui                       # Sovereign Bare-Metal UI Launcher (TUI / X11 / BMP)
-│   ├── server.php                    # Sovereign Unified Web Server & Live Dashboard
+│   ├── unum-client                   # Sovereign Remote Terminal & Framebuffer Client
+│   ├── server.php                    # Sovereign Unified Web Server & Live ANSI Stream
 │   ├── unum-chat                     # Standalone Terminal AI Chatbot CLI
 │   └── unum                          # Native C Bare-Metal Silicon Entry point
 ├── benchmarks/
 │   ├── benchmark_grand_nine_frontiers.php # 9-Frontier Master Forensic Benchmark
+│   ├── benchmark_universal_cpanel_host.php# cPanel & Shared-Hosting Adaptive Benchmark
 │   ├── benchmark_universal_compiler.php   # Core UNUM JIT & Landauer Entropy
 │   ├── benchmark_dsl_and_tensor.php       # Pratt DSL & AVX-512 GEMM
 │   └── benchmark_all_frontiers.php        # 4-Grand Frontiers Benchmark
+├── public_html/                      # Universal cPanel / Apache / LiteSpeed Drop-in Gateway
+│   ├── .htaccess                     # Port 80/443 Rewrite & Streaming Header Directives
+│   └── index.php                     # Zero-HTML/Zero-JS Unified Sovereign Host Gateway
 ├── libs/
 │   └── libunum.so                    # Pre-compiled high-throughput C silicon kernel
 ├── sapi/unum/
@@ -237,15 +257,20 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 └── src/Unum/
     ├── UniversalNumber.php           # 64-bit bitfield specification (GF(2^64))
     ├── Compiler.php                  # Single-pass JIT machine code compiler
-    ├── HardwareExecutor.php          # FFI silicon execution gateway
+    ├── HardwareExecutor.php          # FFI silicon execution gateway + Pure PHP fallback
     ├── PhysicsMathEngine.php         # Posit32, Landauer entropy, Gödel hashing
     ├── CompiledProgram.php           # Executable memory page wrapper (mmap)
+    ├── Adapter/                      # Universal Hosting Adaptive Engine
+    │   └── UniversalHostAdapter.php  # cPanel, CageFS, CloudLinux & Container Inspector
     ├── Ai/                           # Frontier 4: Sovereign Transformer LLM
     ├── CrossIsa/                     # Frontier 8: ARM64 & WASM Binary Emitters
     ├── Dsl/                          # Frontier 2: Pratt Parser & Algorithmic DSL
     ├── Gguf/                         # Frontier 9: GGUF Model Parser & Dequantizer
     ├── Query/                        # Frontier 7: SIMD Columnar Analytical Engine
-    ├── Server/                       # Frontier 6: Async HTTP Server & WebSocket
+    ├── Server/                       # Frontier 6: Async HTTP Server, WebSocket & Remote Console
+    │   ├── SovereignRemoteConsole.php# 60 FPS Non-Blocking TCP Terminal Daemon
+    │   ├── SovereignBinaryDisplayServer.php # SBFP 32-bit ARGB Framebuffer Server
+    │   └── SovereignTerminalView.php # 24-bit TrueColor ANSI Telemetry Renderer
     ├── Storage/                      # Frontier 5: POSIX SHM & Robin Hood Table
     ├── Tensor/                       # Frontier 3: AVX-512 Tensor Core & Vector Index
     └── Ui/                           # Sovereign Bare-Metal UI (Zero HTML / Zero JS)
