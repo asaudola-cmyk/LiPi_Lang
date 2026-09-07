@@ -1,0 +1,179 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * 📜 LIPI PROGRAMMING LANGUAGE CLI RUNNER
+ *
+ * Ultra-simple, natural text-like syntax with 100% native Bengali Unicode
+ * and international English bilingual support.
+ *
+ * Usage:
+ *   php bin/lipi run <file.lp>      (Execute a Lipi program)
+ *   php bin/lipi check <file.lp>    (Verify syntax and display AST)
+ *   php bin/lipi eval "<code>"      (Evaluate inline code snippet)
+ *   php bin/lipi repl               (Launch interactive Bengali REPL)
+ *   php bin/lipi --test-run         (Run automated language test suite)
+ *   php bin/lipi help               (Show this guide)
+ *
+ * @author Shafiullah (Gyani Supreme Core)
+ */
+
+require_once __DIR__ . '/../src/Unum/Lipi/LipiEngine.php';
+
+use Unum\Lipi\LipiEngine;
+
+$args = array_slice($argv, 1);
+$command = $args[0] ?? 'help';
+
+// Banner
+$banner = <<<BANNER
+\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m
+\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📜 LIPI (লিপি) — THE SOVEREIGN BILINGUAL PROGRAMMING LANGUAGE\033[0m         \033[38;2;0;255;204m║\033[0m
+\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Ultra-Simple Natural Syntax | Native Bengali Unicode | 0% Bloat\033[0m    \033[38;2;0;255;204m║\033[0m
+\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m
+
+BANNER;
+
+if ($command === 'help' || $command === '--help' || $command === '-h' || empty($args)) {
+    echo $banner;
+    echo <<<HELP
+\033[1;33mব্যবহারবিধি (Usage):\033[0m
+  php bin/lipi run <file.lp>       একটি লিপি ফাইল সরাসরি রান করুন
+  php bin/lipi check <file.lp>     ফাইলটির সিনট্যাক্স ও AST পরীক্ষা করুন
+  php bin/lipi eval "<code>"       এক লাইনে কোড এক্সিকিউট করুন
+  php bin/lipi repl                ইন্টারেক্টিভ লিপি টার্মিনাল প্রম্পট চালু করুন
+  php bin/lipi --test-run          স্বয়ংক্রিয় ল্যাঙ্গুয়েজ ভেরিফিকেশন টেস্ট
+
+\033[1;33mউদাহরণ (Examples):\033[0m
+  php bin/lipi run examples/01_hello.lp
+  php bin/lipi eval 'ধরি ক = ২৫০; ধরি খ = ১০০; দেখাও "যোগফল: " + (ক + খ)'
+  php bin/lipi eval 'let x = 40; let y = 2; show "Sum: " + (x + y)'
+
+HELP;
+    exit(0);
+}
+
+$engine = new LipiEngine();
+
+// Command: --test-run
+if ($command === '--test-run') {
+    echo "\n● Testing Lipi Engine Self-Verification...\n";
+    $testCode = <<<LIPI
+ধরি নাম = "শফিউল্লাহ"
+ধরি বয়স = ২৫
+ধরি মোট = বয়স + ৫
+দেখাও "নাম: " + নাম + ", বয়স: " + বাংলা_সংখ্যা(মোট)
+LIPI;
+    $engine->getRuntime()->setCaptureOutput(true);
+    $engine->runString($testCode);
+    $out = $engine->getRuntime()->getOutput();
+    $expected = "নাম: শফিউল্লাহ, বয়স: ৩০";
+    $matched = in_array($expected, $out, true);
+    printf("      Test Output: %s\n", $out[0] ?? 'NONE');
+    printf("      Verdict    : %s\n\n", $matched ? 'PASSED [100% MATCH]' : 'FAILED');
+    exit($matched ? 0 : 1);
+}
+
+// Command: eval
+if ($command === 'eval') {
+    $code = $args[1] ?? '';
+    if (trim($code) === '') {
+        fwrite(STDERR, "❌ এরর: কোনো কোড পাওয়া যায়নি! উদাহরণ: php bin/lipi eval 'দেখাও \"হ্যালো\"'\n");
+        exit(1);
+    }
+    try {
+        $engine->runString($code);
+    } catch (Throwable $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+        exit(1);
+    }
+    exit(0);
+}
+
+// Command: check
+if ($command === 'check') {
+    $filePath = $args[1] ?? '';
+    if (!file_exists($filePath)) {
+        fwrite(STDERR, "❌ এরর: ফাইল পাওয়া যায়নি: {$filePath}\n");
+        exit(1);
+    }
+    try {
+        $source = file_get_contents($filePath);
+        $tokens = $engine->tokenize($source);
+        $program = $engine->parse($source);
+        echo $banner;
+        echo "\033[32m✔ সিনট্যাক্স ১০০% নির্ভুল (Syntax 100% Valid)!\033[0m\n";
+        echo "  • টোকেন সংখ্যা (Tokens)    : " . count($tokens) . "\n";
+        echo "  • স্টেটমেন্ট (Statements)   : " . count($program->statements) . "\n\n";
+    } catch (Throwable $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+        exit(1);
+    }
+    exit(0);
+}
+
+// Command: run
+if ($command === 'run') {
+    $filePath = $args[1] ?? '';
+    if (!file_exists($filePath)) {
+        fwrite(STDERR, "❌ এরর: ফাইল পাওয়া যায়নি: {$filePath}\n");
+        exit(1);
+    }
+    try {
+        $engine->runFile($filePath);
+    } catch (Throwable $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+        exit(1);
+    }
+    exit(0);
+}
+
+// If direct file passed: php bin/lipi myfile.lp
+if (file_exists($command)) {
+    try {
+        $engine->runFile($command);
+    } catch (Throwable $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+        exit(1);
+    }
+    exit(0);
+}
+
+// Command: repl
+if ($command === 'repl') {
+    echo $banner;
+    echo "\033[1;32mইন্টারেক্টিভ লিপি শেল (Lipi REPL) চালু হয়েছে। বের হতে 'বিদায়' বা 'exit' লিখুন।\033[0m\n\n";
+
+    while (true) {
+        $line = readline("\033[38;2;0;255;204mলিপি>\033[0m ");
+        if ($line === false) {
+            break;
+        }
+        $trimmed = trim($line);
+        if ($trimmed === 'exit' || $trimmed === 'quit' || $trimmed === 'বিদায়') {
+            echo "বিদায়! লিপি শেল বন্ধ হচ্ছে।\n";
+            break;
+        }
+        if ($trimmed === '') {
+            continue;
+        }
+
+        readline_add_history($line);
+
+        try {
+            // If it's an expression without show, wrap in show if simple
+            $result = $engine->runString($line);
+            if ($result !== null) {
+                echo "\033[38;2;120;200;255m" . $engine->getRuntime()->stringify($result) . "\033[0m\n";
+            }
+        } catch (Throwable $e) {
+            echo "\033[31m" . $e->getMessage() . "\033[0m\n";
+        }
+    }
+    exit(0);
+}
+
+fwrite(STDERR, "❌ অজানা কমান্ড: {$command}। সাহায্য পেতে 'php bin/lipi help' চালান।\n");
+exit(1);

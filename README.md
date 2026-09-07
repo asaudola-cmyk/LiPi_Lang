@@ -234,11 +234,13 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 
 ```
 ├── bin/
+│   ├── lipi                          # Lipi (.lp / .lipi) Sovereign Language CLI Runner & REPL
 │   ├── unum-ui                       # Sovereign Bare-Metal UI Launcher (TUI / X11 / BMP)
 │   ├── unum-client                   # Sovereign Remote Terminal & Framebuffer Client
 │   ├── server.php                    # Sovereign Unified Web Server & Live ANSI Stream
 │   └── unum-chat                     # Standalone Terminal AI Chatbot CLI
 ├── benchmarks/
+│   ├── benchmark_lipi_language.php        # Lipi Programming Language Forensic Benchmark
 │   ├── benchmark_zero_c_liberation.php    # 100% C & GCC Liberation Verification Benchmark
 │   ├── benchmark_sovereignty_dependency_audit.php # Full Sovereignty & Dependency Audit
 │   ├── benchmark_grand_nine_frontiers.php # 9-Frontier Master Forensic Benchmark
@@ -246,10 +248,22 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 │   ├── benchmark_universal_compiler.php   # Core UNUM JIT & Landauer Entropy
 │   ├── benchmark_dsl_and_tensor.php       # Pratt DSL & AVX-512 GEMM
 │   └── benchmark_all_frontiers.php        # 4-Grand Frontiers Benchmark
+├── examples/                         # Sovereign Lipi Language Programs (.lp)
+│   ├── 01_hello.lp                   # Bilingual Hello World in Bengali & English
+│   ├── 02_math_fibonacci.lp          # Recursion & Native Bengali Numerals (০-৯)
+│   ├── 03_logic_and_arrays.lp        # Collections, Loops & Filtering
+│   └── 04_web_server.lp              # Native Zero-Framework Lipi Web Server
 ├── public_html/                      # Universal cPanel / Apache / LiteSpeed Drop-in Gateway
 │   ├── .htaccess                     # Port 80/443 Rewrite & Streaming Header Directives
 │   └── index.php                     # Zero-HTML/Zero-JS Unified Sovereign Host Gateway
 └── src/Unum/
+    ├── Lipi/                         # The Lipi Programming Language (.lp / .lipi) Engine
+    │   ├── LipiEngine.php            # Master Facade & Visual Error Pointer Reporter
+    │   ├── LipiLexer.php             # Multi-Byte UTF-8 Bengali Unicode & Numeral Lexer
+    │   ├── LipiParser.php            # Pratt Operator-Precedence Syntax Parser
+    │   ├── LipiRuntime.php           # High-Speed Bilingual Tree-Walk Runtime & Built-ins
+    │   ├── LipiAst.php               # Complete Statement & Expression AST Nodes
+    │   └── LipiToken.php             # Bilingual Token Definitions
     ├── UniversalNumber.php           # 64-bit bitfield specification (GF(2^64))
     ├── Compiler.php                  # Single-pass JIT machine code compiler
     ├── HardwareExecutor.php          # Native Libc mmap/PROT_EXEC JIT Gateway + Pure PHP Fallback
