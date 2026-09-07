@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Unum\Lipi;
 
 require_once __DIR__ . '/LipiAst.php';
+require_once __DIR__ . '/LipiStdLib.php';
 require_once __DIR__ . '/../Storage/SovereignStore.php';
 
 use RuntimeException;
@@ -460,9 +461,11 @@ final class LipiRuntime
         $right = $this->evaluate($expr->right);
 
         return match ($expr->operator) {
-            '+' => (is_string($left) || is_string($right))
-                ? $this->stringify($left) . $this->stringify($right)
-                : $left + $right,
+            '+' => match (true) {
+                is_array($left) && is_array($right) => array_merge($left, $right),
+                is_string($left) || is_string($right) => $this->stringify($left) . $this->stringify($right),
+                default => $left + $right,
+            },
             '-' => $left - $right,
             '*' => $left * $right,
             '/' => $right != 0 ? $left / $right : throw new RuntimeException("Division by zero at line {$expr->line}"),
@@ -711,5 +714,8 @@ final class LipiRuntime
         ];
         $this->globals->define('স্মৃতি', $memMap, true);
         $this->globals->define('memory', $memMap, true);
+
+        // 9. রেজিস্টার সম্পূর্ণ স্ট্যান্ডার্ড লাইব্রেরি (Lipi Standard Library Modules)
+        LipiStdLib::register($this->globals);
     }
 }

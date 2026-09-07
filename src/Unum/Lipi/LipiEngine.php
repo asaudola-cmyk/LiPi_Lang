@@ -36,6 +36,24 @@ final class LipiEngine
         return $this->runtime;
     }
 
+    public function clearOutput(): void
+    {
+        $this->runtime->clearOutput();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getOutput(): array
+    {
+        return $this->runtime->getOutput();
+    }
+
+    public function setCaptureOutput(bool $capture): void
+    {
+        $this->runtime->setCaptureOutput($capture);
+    }
+
     /**
      * Executes a Lipi source file (.lp or .lipi).
      */

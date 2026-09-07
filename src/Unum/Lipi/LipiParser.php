@@ -407,10 +407,25 @@ final class LipiParser
             return new IndexExpr($left, $index, $opToken->line, $opToken->column);
         }
 
-        // Property access: obj.prop
+        // Property access: obj.prop (supports identifiers, built-in subsystem keywords, and literals)
         if ($type === LipiToken::TYPE_DOT) {
-            $propTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected property name after '.'");
-            return new MemberExpr($left, (string)$propTok->value, $opToken->line, $opToken->column);
+            $this->skipNewlines();
+            $tok = $this->peek();
+            if ($tok->type === LipiToken::TYPE_IDENTIFIER
+                || $tok->type === LipiToken::TYPE_MEMORY
+                || $tok->type === LipiToken::TYPE_UI
+                || $tok->type === LipiToken::TYPE_SERVER
+                || $tok->type === LipiToken::TYPE_COMPUTE
+                || $tok->type === LipiToken::TYPE_SHOW
+                || $tok->type === LipiToken::TYPE_NUMBER
+            ) {
+                $propTok = $this->advance();
+                $propName = (string)($propTok->rawText ?: $propTok->value);
+            } else {
+                $propTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected property name after '.'");
+                $propName = (string)$propTok->value;
+            }
+            return new MemberExpr($left, $propName, $opToken->line, $opToken->column);
         }
 
         // Standard binary operations

@@ -41,6 +41,7 @@ if ($command === 'help' || $command === '--help' || $command === '-h' || empty($
     echo <<<HELP
 \033[1;33mব্যবহারবিধি (Usage):\033[0m
   php bin/lipi run <file.lp>       একটি লিপি ফাইল সরাসরি রান করুন
+  php bin/lipi build <file.lp>     লিনাক্স স্ট্যান্ডঅ্যালোন ELF 64-bit বাইনারি তৈরি করুন
   php bin/lipi jit <file.lp>       সিলিকন JIT দিয়ে প্রসেসরে সরাসরি মেশিন কোডে রান করুন
   php bin/lipi check <file.lp>     ফাইলটির সিনট্যাক্স ও AST পরীক্ষা করুন
   php bin/lipi eval "<code>"       এক লাইনে কোড এক্সিকিউট করুন
@@ -49,6 +50,7 @@ if ($command === 'help' || $command === '--help' || $command === '-h' || empty($
 
 \033[1;33mউদাহরণ (Examples):\033[0m
   php bin/lipi run examples/01_hello.lp
+  php bin/lipi build examples/01_hello.lp -o dist/hello_native
   php bin/lipi jit examples/02_math_fibonacci.lp
   php bin/lipi eval 'ধরি ক = ২৫০; ধরি খ = ১০০; দেখাও "যোগফল: " + (ক + খ)'
   php bin/lipi eval 'let x = 40; let y = 2; show "Sum: " + (x + y)'
@@ -58,6 +60,45 @@ HELP;
 }
 
 $engine = new LipiEngine();
+
+// Command: build (Compile Lipi to Standalone Linux ELF 64-bit Native Binary)
+if ($command === 'build') {
+    require_once __DIR__ . '/../src/Unum/Lipi/LipiElfCompiler.php';
+    $filePath = $args[1] ?? '';
+    if (!file_exists($filePath)) {
+        fwrite(STDERR, "❌ এরর: ফাইল পাওয়া যায়নি: {$filePath}\n");
+        exit(1);
+    }
+
+    $outputPath = null;
+    for ($i = 2; $i < count($args); $i++) {
+        if ($args[$i] === '-o' && isset($args[$i + 1])) {
+            $outputPath = $args[$i + 1];
+            break;
+        }
+    }
+    if ($outputPath === null) {
+        $baseName = pathinfo($filePath, PATHINFO_FILENAME);
+        $outputPath = 'dist/' . $baseName;
+    }
+
+    try {
+        $source = file_get_contents($filePath);
+        $program = $engine->parse($source);
+        $compiler = new \Unum\Lipi\LipiElfCompiler();
+        $size = $compiler->compileToFile($program, $outputPath);
+
+        echo "\033[38;2;0;255;204m✔ সফলভাবে স্ট্যান্ডঅ্যালোন লিনাক্স ELF বাইনারি তৈরি হয়েছে (Standalone Native ELF Compiled)!\033[0m\n";
+        echo "  • উৎস ফাইল (Source)    : {$filePath}\n";
+        echo "  • আউটপুট বাইনারি (ELF) : \033[1;32m{$outputPath}\033[0m\n";
+        echo "  • বাইনারি আকার (Size)  : {$size} বাইট\n";
+        echo "  • এক্সিকিউট করতে চালান : \033[1;33m./{$outputPath}\033[0m (জিরো PHP/জিরো GCC ডিপেন্ডেন্সি!)\n\n";
+    } catch (Throwable $e) {
+        fwrite(STDERR, "❌ বিল্ড এরর: " . $e->getMessage() . "\n");
+        exit(1);
+    }
+    exit(0);
+}
 
 // Command: jit (Silicon Machine Code JIT Execution)
 if ($command === 'jit') {
