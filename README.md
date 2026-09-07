@@ -237,8 +237,7 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 │   ├── unum-ui                       # Sovereign Bare-Metal UI Launcher (TUI / X11 / BMP)
 │   ├── unum-client                   # Sovereign Remote Terminal & Framebuffer Client
 │   ├── server.php                    # Sovereign Unified Web Server & Live ANSI Stream
-│   ├── unum-chat                     # Standalone Terminal AI Chatbot CLI
-│   └── unum                          # Native C Bare-Metal Silicon Entry point
+│   └── unum-chat                     # Standalone Terminal AI Chatbot CLI
 ├── benchmarks/
 │   ├── benchmark_zero_c_liberation.php    # 100% C & GCC Liberation Verification Benchmark
 │   ├── benchmark_sovereignty_dependency_audit.php # Full Sovereignty & Dependency Audit
@@ -250,11 +249,6 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 ├── public_html/                      # Universal cPanel / Apache / LiteSpeed Drop-in Gateway
 │   ├── .htaccess                     # Port 80/443 Rewrite & Streaming Header Directives
 │   └── index.php                     # Zero-HTML/Zero-JS Unified Sovereign Host Gateway
-├── libs/                             # Zero-C Decoupled (Optional legacy libunum.so)
-├── sapi/unum/
-│   ├── unum_engine.h                 # Optional C kernel header & vector prototypes
-│   ├── unum_engine.c                 # Optional C reference implementation
-│   └── main.c                        # Standalone binary runner
 └── src/Unum/
     ├── UniversalNumber.php           # 64-bit bitfield specification (GF(2^64))
     ├── Compiler.php                  # Single-pass JIT machine code compiler
