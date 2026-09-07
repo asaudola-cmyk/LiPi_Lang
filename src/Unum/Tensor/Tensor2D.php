@@ -89,6 +89,32 @@ final class Tensor2D
     }
 
     /**
+     * Creates a tensor from a 1D contiguous flat array of floats.
+     *
+     * WHY: Quantized weights (Q4_0, Q8_0, FP16) are dequantized into flat
+     * linear vectors. This provides zero-reallocation loading directly into C float buffers.
+     *
+     * @param list<float|int> $flatData
+     */
+    public static function fromFlatArray(int $rows, int $cols, array $flatData, ?HardwareExecutor $executor = null): self
+    {
+        $expected = $rows * $cols;
+        $actual = count($flatData);
+        if ($actual < $expected) {
+            throw new InvalidArgumentException("Flat data count mismatch: expected {$expected}, got {$actual}");
+        }
+
+        $exec = $executor ?? new HardwareExecutor();
+        $buffer = $exec->newFloatBuffer($expected);
+
+        for ($i = 0; $i < $expected; $i++) {
+            $buffer[$i] = (float)$flatData[$i];
+        }
+
+        return new self($rows, $cols, $buffer, $exec);
+    }
+
+    /**
      * Creates a tensor initialized with uniform pseudo-random values.
      */
     public static function random(int $rows, int $cols, float $min = -1.0, float $max = 1.0, ?HardwareExecutor $executor = null): self

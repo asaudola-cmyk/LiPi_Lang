@@ -139,6 +139,22 @@ final class VectorIndex
     }
 
     /**
+     * Alias for insert().
+     */
+    public function addVector(int|string $id, array|FFI\CData $vector, array $meta = []): void
+    {
+        $this->insert($id, $vector, $meta);
+    }
+
+    /**
+     * Alias for search().
+     */
+    public function searchTopK(array|FFI\CData $queryVector, int $topK = 5): array
+    {
+        return $this->search($queryVector, $topK);
+    }
+
+    /**
      * Clears all indexed vectors and releases memory.
      */
     public function clear(): void
