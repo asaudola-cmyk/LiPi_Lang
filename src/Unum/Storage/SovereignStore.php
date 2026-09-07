@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Unum\Storage;
 
+require_once __DIR__ . '/RobinHoodTable.php';
+require_once __DIR__ . '/SharedMemory.php';
+
 use RuntimeException;
 use Unum\HardwareExecutor;
 

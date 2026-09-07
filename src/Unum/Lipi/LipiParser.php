@@ -351,8 +351,11 @@ final class LipiParser
             LipiToken::TYPE_NULL
                 => new LiteralExpr($token->value, $token->line, $token->column),
 
-            LipiToken::TYPE_IDENTIFIER
-                => new VariableExpr((string)$token->value, $token->line, $token->column),
+            LipiToken::TYPE_IDENTIFIER,
+            LipiToken::TYPE_MEMORY,
+            LipiToken::TYPE_UI,
+            LipiToken::TYPE_SERVER
+                => new VariableExpr((string)($token->rawText ?: $token->value), $token->line, $token->column),
 
             LipiToken::TYPE_MINUS,
             LipiToken::TYPE_NOT

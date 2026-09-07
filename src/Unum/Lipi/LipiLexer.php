@@ -218,6 +218,21 @@ final class LipiLexer
             if ($c === '\\') {
                 $this->advance();
                 $escaped = $this->peek();
+                if ($escaped === 'e') {
+                    $str .= "\e";
+                    $this->advance();
+                    continue;
+                }
+                if ($escaped === '0' && $this->peekNext() === '3') {
+                    // Octal \033 for ESC
+                    $this->advance(); // 0
+                    if ($this->peek() === '3' && $this->peekNext() === '3') {
+                        $this->advance(); // 3
+                        $this->advance(); // 3
+                    }
+                    $str .= "\033";
+                    continue;
+                }
                 $str .= match ($escaped) {
                     'n'  => "\n",
                     't'  => "\t",

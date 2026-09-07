@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Unum\Lipi;
 
 require_once __DIR__ . '/LipiAst.php';
+require_once __DIR__ . '/../Storage/SovereignStore.php';
 
 use RuntimeException;
 use Unum\Storage\SovereignStore;
@@ -702,10 +703,11 @@ final class LipiRuntime
         $this->globals->define('abs', $this->globals->get('পরমমান'), true);
 
         // 8. স্মৃতি / memory (In-Memory POSIX /dev/shm wrapper)
+        $store = new SovereignStore();
         $memMap = [
-            'set' => new LipiBuiltinFunction('set', 2, fn($rt, $a) => (new SovereignStore())->set((string)$a[0], (string)$a[1])),
-            'get' => new LipiBuiltinFunction('get', 1, fn($rt, $a) => (new SovereignStore())->get((string)$a[0])),
-            'delete' => new LipiBuiltinFunction('delete', 1, fn($rt, $a) => (new SovereignStore())->delete((string)$a[0])),
+            'set' => new LipiBuiltinFunction('set', 2, fn($rt, $a) => $store->set((string)$a[0], (string)$a[1])),
+            'get' => new LipiBuiltinFunction('get', 1, fn($rt, $a) => $store->get((string)$a[0])),
+            'delete' => new LipiBuiltinFunction('delete', 1, fn($rt, $a) => $store->delete((string)$a[0])),
         ];
         $this->globals->define('স্মৃতি', $memMap, true);
         $this->globals->define('memory', $memMap, true);

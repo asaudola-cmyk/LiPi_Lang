@@ -41,6 +41,7 @@ if ($command === 'help' || $command === '--help' || $command === '-h' || empty($
     echo <<<HELP
 \033[1;33mব্যবহারবিধি (Usage):\033[0m
   php bin/lipi run <file.lp>       একটি লিপি ফাইল সরাসরি রান করুন
+  php bin/lipi jit <file.lp>       সিলিকন JIT দিয়ে প্রসেসরে সরাসরি মেশিন কোডে রান করুন
   php bin/lipi check <file.lp>     ফাইলটির সিনট্যাক্স ও AST পরীক্ষা করুন
   php bin/lipi eval "<code>"       এক লাইনে কোড এক্সিকিউট করুন
   php bin/lipi repl                ইন্টারেক্টিভ লিপি টার্মিনাল প্রম্পট চালু করুন
@@ -48,6 +49,7 @@ if ($command === 'help' || $command === '--help' || $command === '-h' || empty($
 
 \033[1;33mউদাহরণ (Examples):\033[0m
   php bin/lipi run examples/01_hello.lp
+  php bin/lipi jit examples/02_math_fibonacci.lp
   php bin/lipi eval 'ধরি ক = ২৫০; ধরি খ = ১০০; দেখাও "যোগফল: " + (ক + খ)'
   php bin/lipi eval 'let x = 40; let y = 2; show "Sum: " + (x + y)'
 
@@ -56,6 +58,44 @@ HELP;
 }
 
 $engine = new LipiEngine();
+
+// Command: jit (Silicon Machine Code JIT Execution)
+if ($command === 'jit') {
+    require_once __DIR__ . '/../src/Unum/Lipi/LipiJitCompiler.php';
+    $filePath = $args[1] ?? '';
+    if (!file_exists($filePath)) {
+        fwrite(STDERR, "❌ এরর: ফাইল পাওয়া যায়নি: {$filePath}\n");
+        exit(1);
+    }
+    try {
+        $source = file_get_contents($filePath);
+        $program = $engine->parse($source);
+        $jit = new \Unum\Lipi\LipiJitCompiler();
+
+        // Auto-compile arithmetic functions into native silicon machine code
+        foreach ($program->statements as $stmt) {
+            if ($stmt instanceof \Unum\Lipi\FnDeclStmt) {
+                try {
+                    $callable = $jit->compileFunction($stmt);
+                    $engine->getRuntime()->globals->define(
+                        $stmt->name,
+                        new \Unum\Lipi\LipiBuiltinFunction($stmt->name, count($stmt->params), function ($rt, $a) use ($callable) {
+                            return $callable(...$a);
+                        })
+                    );
+                } catch (\Throwable) {
+                    // Fallback to interpreted closure if complex construct
+                }
+            }
+        }
+
+        $engine->getRuntime()->execute($program);
+    } catch (\Throwable $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+        exit(1);
+    }
+    exit(0);
+}
 
 // Command: --test-run
 if ($command === '--test-run') {
