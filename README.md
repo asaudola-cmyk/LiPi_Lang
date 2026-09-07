@@ -240,6 +240,8 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 │   ├── unum-chat                     # Standalone Terminal AI Chatbot CLI
 │   └── unum                          # Native C Bare-Metal Silicon Entry point
 ├── benchmarks/
+│   ├── benchmark_zero_c_liberation.php    # 100% C & GCC Liberation Verification Benchmark
+│   ├── benchmark_sovereignty_dependency_audit.php # Full Sovereignty & Dependency Audit
 │   ├── benchmark_grand_nine_frontiers.php # 9-Frontier Master Forensic Benchmark
 │   ├── benchmark_universal_cpanel_host.php# cPanel & Shared-Hosting Adaptive Benchmark
 │   ├── benchmark_universal_compiler.php   # Core UNUM JIT & Landauer Entropy
@@ -248,22 +250,21 @@ Measured on physical Linux x86_64 silicon (Intel Core with AVX2, AVX-512, FMA):
 ├── public_html/                      # Universal cPanel / Apache / LiteSpeed Drop-in Gateway
 │   ├── .htaccess                     # Port 80/443 Rewrite & Streaming Header Directives
 │   └── index.php                     # Zero-HTML/Zero-JS Unified Sovereign Host Gateway
-├── libs/
-│   └── libunum.so                    # Pre-compiled high-throughput C silicon kernel
+├── libs/                             # Zero-C Decoupled (Optional legacy libunum.so)
 ├── sapi/unum/
-│   ├── unum_engine.h                 # C kernel header & vector prototypes
-│   ├── unum_engine.c                 # AVX-512 GEMM, RoPE, RMSNorm, SHM, Atomics
+│   ├── unum_engine.h                 # Optional C kernel header & vector prototypes
+│   ├── unum_engine.c                 # Optional C reference implementation
 │   └── main.c                        # Standalone binary runner
 └── src/Unum/
     ├── UniversalNumber.php           # 64-bit bitfield specification (GF(2^64))
     ├── Compiler.php                  # Single-pass JIT machine code compiler
-    ├── HardwareExecutor.php          # FFI silicon execution gateway + Pure PHP fallback
+    ├── HardwareExecutor.php          # Native Libc mmap/PROT_EXEC JIT Gateway + Pure PHP Fallback
     ├── PhysicsMathEngine.php         # Posit32, Landauer entropy, Gödel hashing
     ├── CompiledProgram.php           # Executable memory page wrapper (mmap)
     ├── Adapter/                      # Universal Hosting Adaptive Engine
     │   └── UniversalHostAdapter.php  # cPanel, CageFS, CloudLinux & Container Inspector
     ├── Ai/                           # Frontier 4: Sovereign Transformer LLM
-    ├── CrossIsa/                     # Frontier 8: ARM64 & WASM Binary Emitters
+    ├── CrossIsa/                     # Frontier 8: Pure-PHP x86_64, ARM64 & WASM Emitters
     ├── Dsl/                          # Frontier 2: Pratt Parser & Algorithmic DSL
     ├── Gguf/                         # Frontier 9: GGUF Model Parser & Dequantizer
     ├── Query/                        # Frontier 7: SIMD Columnar Analytical Engine

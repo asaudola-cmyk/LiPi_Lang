@@ -19,13 +19,15 @@ use Unum\UniversalNumber;
  */
 final class CrossIsaCompiler
 {
+    private X86_64Emitter $x86_64Emitter;
     private Arm64Emitter $arm64Emitter;
     private WasmEmitter $wasmEmitter;
 
     public function __construct()
     {
-        $this->arm64Emitter = new Arm64Emitter();
-        $this->wasmEmitter  = new WasmEmitter();
+        $this->x86_64Emitter = new X86_64Emitter();
+        $this->arm64Emitter  = new Arm64Emitter();
+        $this->wasmEmitter   = new WasmEmitter();
     }
 
     /**
@@ -84,17 +86,18 @@ final class CrossIsaCompiler
      * Compiles to x86_64.
      *
      * @param UniversalNumber[] $unums
-     * @return array{target: string, bytes: int, binary: string}
+     * @return array{target: string, bytes: int, binary: string, disassembly: string[]}
      */
     public function compileX86_64(array $unums): array
     {
-        $compiler = new Compiler();
-        $compiled = $compiler->compile($unums);
+        $binary = $this->x86_64Emitter->emitUnums($unums);
+        $disasm = $this->x86_64Emitter->disassemble();
 
         return [
-            'target' => UniversalTarget::TARGET_X86_64,
-            'bytes'  => strlen($compiled->getMachineCode()),
-            'binary' => $compiled->getMachineCode(),
+            'target'      => UniversalTarget::TARGET_X86_64,
+            'bytes'       => strlen($binary),
+            'binary'      => $binary,
+            'disassembly' => $disasm,
         ];
     }
 
