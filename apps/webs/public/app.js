@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initPlayground();
   initHorizonsFilter();
   initCopyButtons();
+  initDbManager();
 });
 
 // ------------------------------------------------------------------------------
@@ -190,3 +191,220 @@ function initCopyButtons() {
     });
   });
 }
+
+// ------------------------------------------------------------------------------
+// ৫. সার্বভৌমিক লিপি বাইনারি ডাটাবেজ ম্যানেজার (Sovereign Database Manager)
+// WHY: Connects the cyber-silicon dashboard directly to Lipi's native binary
+// storage engine REST API (/api/db/items, /api/db/add, /api/db/delete, /api/db/stats).
+// ------------------------------------------------------------------------------
+function initDbManager() {
+  const recordsBody = document.getElementById('db-records-body');
+  const totalRecordsEl = document.getElementById('db-total-records');
+  const fileSizeEl = document.getElementById('db-file-size');
+  const fsyncBadge = document.getElementById('db-fsync-badge');
+  const valInput = document.getElementById('db-val-input');
+  const btnAdd = document.getElementById('btn-db-add');
+  const btnRefresh = document.getElementById('btn-db-refresh');
+  const feedbackEl = document.getElementById('db-feedback');
+  const quickChips = document.querySelectorAll('.db-chip');
+
+  if (!recordsBody) return;
+
+  // Local fallback cache for offline / static preview mode
+  let fallbackRecords = [
+    { id: 1, timestamp: 144217554355686, status: 1, value: 1024 },
+    { id: 2, timestamp: 144217558174032, status: 1, value: 2048 },
+    { id: 3, timestamp: 144217560610662, status: 1, value: 4096 }
+  ];
+
+  function showFeedback(msg, isSuccess = true) {
+    if (!feedbackEl) return;
+    feedbackEl.className = 'db-feedback-box ' + (isSuccess ? 'db-feedback-success' : 'db-feedback-error');
+    feedbackEl.innerHTML = msg;
+    feedbackEl.style.display = 'block';
+    setTimeout(() => {
+      feedbackEl.style.display = 'none';
+    }, 4500);
+  }
+
+  // ১. ডাটাবেজ পরিসংখ্যান লোড
+  async function loadStats() {
+    try {
+      const res = await fetch('/api/db/stats');
+      if (res.ok) {
+        const stats = await res.json();
+        if (totalRecordsEl) totalRecordsEl.innerText = stats.total_records;
+        if (fileSizeEl) fileSizeEl.innerText = stats.file_size_bytes + ' B (' + (stats.total_records * 32) + ' B)';
+        if (fsyncBadge) fsyncBadge.innerText = stats.fsync_guarantee || '১০০% NVMe fsync';
+        return;
+      }
+    } catch (e) {
+      // Offline fallback
+      if (totalRecordsEl) totalRecordsEl.innerText = fallbackRecords.length;
+      if (fileSizeEl) fileSizeEl.innerText = (fallbackRecords.length * 32) + ' B';
+      if (fsyncBadge) fsyncBadge.innerText = '১০০% NVMe Direct (Preview)';
+    }
+  }
+
+  // ২. ডাটাবেজের সকল সক্রিয় রেকর্ড লোড
+  async function loadRecords() {
+    try {
+      const res = await fetch('/api/db/items');
+      if (res.ok) {
+        const records = await res.json();
+        renderRecords(records);
+        return;
+      }
+      throw new Error('API Unavailable');
+    } catch (e) {
+      renderRecords(fallbackRecords);
+    }
+  }
+
+  // ৩. টেবিল রেন্ডারিং
+  function renderRecords(records) {
+    if (!records || records.length === 0) {
+      recordsBody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 40px;">
+            📭 ডাটাবেজে বর্তমানে কোনো সক্রিয় রেকর্ড নেই। ওপরের ইনপুট দিয়ে নতুন রেকর্ড যোগ করুন।
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    recordsBody.innerHTML = records.map(rec => {
+      const hexVal = '0x' + (Number(rec.value).toString(16).toUpperCase().padStart(8, '0'));
+      const formattedClock = Number(rec.timestamp).toLocaleString();
+      return `
+        <tr data-record-id="${rec.id}">
+          <td style="font-weight: 700; color: var(--neon-cyan);">#${rec.id}</td>
+          <td style="color: var(--text-muted); font-size: 0.85rem;" title="${rec.timestamp}">
+            ${formattedClock} <span style="font-size: 0.7rem; color: var(--neon-violet);">Cycles</span>
+          </td>
+          <td>
+            <span class="db-tag-active">● Active (১)</span>
+          </td>
+          <td style="font-weight: 600; color: #fff; font-size: 1rem;">
+            ${Number(rec.value).toLocaleString()}
+          </td>
+          <td style="color: var(--neon-amber); font-size: 0.85rem;">
+            ${hexVal}
+          </td>
+          <td>
+            <button class="btn-db-delete" data-id="${rec.id}">
+              🗑️ মুছে ফেলুন
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // ৪. নতুন রেকর্ড যোগ (INSERT)
+  async function insertRecord(val) {
+    if (!val || isNaN(val) || val <= 0) {
+      showFeedback('❌ দয়া করে একটি সঠিক ধনাত্মক পূর্ণসংখ্যা লিখুন!', false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/db/add?val=${val}`, { method: 'POST' });
+      if (res.ok) {
+        const result = await res.json();
+        showFeedback(`✔ রেকর্ড #${result.id} (মান: ${result.value}) সফলভাবে ডিস্কে (SYS_write + SYS_fsync) সেভ হয়েছে!`, true);
+        await loadStats();
+        await loadRecords();
+        return;
+      }
+      throw new Error('Server insert failed');
+    } catch (e) {
+      // Local preview fallback
+      const newId = fallbackRecords.length > 0 ? (Math.max(...fallbackRecords.map(r => r.id)) + 1) : 1;
+      fallbackRecords.push({
+        id: newId,
+        timestamp: Date.now() * 1000,
+        status: 1,
+        value: Number(val)
+      });
+      showFeedback(`✔ [লোকাল প্রভিউ] রেকর্ড #${newId} (মান: ${val}) ইনসার্ট সম্পন্ন!`, true);
+      loadStats();
+      loadRecords();
+    }
+  }
+
+  // ৫. রেকর্ড মুছে ফেলা (SOFT DELETE)
+  async function deleteRecord(id) {
+    try {
+      const res = await fetch(`/api/db/delete?id=${id}`, { method: 'POST' });
+      if (res.ok) {
+        const result = await res.json();
+        showFeedback(`🗑️ রেকর্ড #${id} সফট ডিলিট সম্পন্ন (স্ট্যাটাস অফসেট ০ করে কার্নেল fsync কার্যকর)!`, true);
+        await loadStats();
+        await loadRecords();
+        return;
+      }
+      throw new Error('Server delete failed');
+    } catch (e) {
+      // Local preview fallback
+      fallbackRecords = fallbackRecords.filter(r => r.id !== Number(id));
+      showFeedback(`🗑️ [লোকাল প্রভিউ] রেকর্ড #${id} সরানো হয়েছে!`, true);
+      loadStats();
+      loadRecords();
+    }
+  }
+
+  // ৬. ইভেন্ট লিসেনার রেজিস্ট্রেশন
+  if (btnAdd && valInput) {
+    btnAdd.addEventListener('click', () => {
+      const val = parseInt(valInput.value.trim(), 10);
+      insertRecord(val);
+    });
+
+    valInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const val = parseInt(valInput.value.trim(), 10);
+        insertRecord(val);
+      }
+    });
+  }
+
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', async () => {
+      btnRefresh.innerHTML = '<span>⏳ রিফ্রেশিং...</span>';
+      await loadStats();
+      await loadRecords();
+      setTimeout(() => {
+        btnRefresh.innerHTML = '<span>🔄 রিফ্রেশ</span>';
+      }, 500);
+    });
+  }
+
+  // কুইক চিপস হ্যান্ডলিং
+  quickChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const val = chip.dataset.val;
+      if (valInput) {
+        valInput.value = val;
+        valInput.focus();
+      }
+    });
+  });
+
+  // টেবিল অ্যাকশন ডেলিগেশন (Delete Button)
+  recordsBody.addEventListener('click', (e) => {
+    const target = e.target.closest('.btn-db-delete');
+    if (target) {
+      const id = target.dataset.id;
+      if (confirm(`আপনি কি সত্যিই রেকর্ড #${id} মুছে ফেলতে চান?`)) {
+        deleteRecord(id);
+      }
+    }
+  });
+
+  // প্রাথমিক লোড
+  loadStats();
+  loadRecords();
+}
+

@@ -32,6 +32,7 @@
       </a>
 
       <ul class="nav-links">
+        <li><a href="#database" class="nav-link" style="color: var(--neon-cyan); font-weight: 600;">👑 ডাটাবেজ</a></li>
         <li><a href="#features" class="nav-link">বৈশিষ্ট্য</a></li>
         <li><a href="#playground" class="nav-link">প্লেগ্রাউন্ড</a></li>
         <li><a href="#horizons" class="nav-link">২১টি মহাদিগন্ত</a></li>
@@ -134,6 +135,120 @@
         <div class="telemetry-value" style="color: var(--neon-cyan);">
           <span>১০০%</span>
           <span class="telemetry-unit">Sovereign</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================================
+       👑 SOVEREIGN FULL-STACK BINARY DATABASE ENGINE (Lipi Native DB Manager)
+       WHY: Live interactive dashboard directly controlling the native binary storage
+       engine (32-byte layout, SYS_fsync NVMe direct, zero external DBMS).
+       ============================================================================ -->
+  <section id="database" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">ফুল-স্ট্যাক সার্বভৌম ডাটাবেজ</span>
+        <h2 class="section-title">১০০% লিপি নেটিভ বাইনারি স্টোরেজ ইঞ্জিন</h2>
+        <p class="section-desc">
+          কোনো MySQL, SQLite কিংবা কোনো এক্সটার্নাল DBMS নেই। সরাসরি লিনাক্স কার্নেল সিসকল (<code class="code-pill">SYS_open</code>, <code class="code-pill">SYS_write</code>, <code class="code-pill">SYS_lseek</code>, <code class="code-pill">SYS_fsync</code>) ব্যবহার করে ফিজিক্যাল NVMe/SSD সিলিকনে ৩২-বাইট ফিক্সড বাইনারি রেকর্ডে ডেটা সংরক্ষিত হয়।
+        </p>
+      </div>
+
+      <div class="db-manager-card">
+        <!-- Database Header Telemetry -->
+        <div class="db-header-bar">
+          <div class="db-status-badge">
+            <span class="status-dot"></span>
+            <span>সিলিকন স্টোরেজ: <strong id="db-file-path">apps/webs/data/sovereign_store.db</strong></span>
+          </div>
+          <div class="db-meta-group">
+            <div class="db-meta-item">
+              <span class="db-meta-label">মোট রেকর্ড:</span>
+              <span id="db-total-records" class="db-meta-val">০</span>
+            </div>
+            <div class="db-meta-item">
+              <span class="db-meta-label">ফাইলের আকার:</span>
+              <span id="db-file-size" class="db-meta-val">০ B</span>
+            </div>
+            <div class="db-meta-item">
+              <span class="db-meta-label">সিঙ্ক নিশ্চয়তা:</span>
+              <span id="db-fsync-badge" class="db-meta-val" style="color: var(--neon-cyan);">১০০% NVMe fsync</span>
+            </div>
+            <button id="btn-db-refresh" class="btn btn-sm btn-outline-cyan" title="ডাটাবেজ রিফ্রেশ করুন">
+              <span>🔄 রিফ্রেশ</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Interactive CRUD Insertion Form -->
+        <div class="db-form-container">
+          <div class="db-form-title">
+            <span>➕ নতুন রেকর্ড যোগ করুন (POST /api/db/add)</span>
+          </div>
+          <div class="db-input-row">
+            <div class="db-input-wrapper">
+              <input type="number" id="db-val-input" class="db-input" placeholder="রেকর্ড ভ্যালু লিখুন (যেমন: ৫০০০)" value="5000" min="1" max="99999999">
+            </div>
+            <button id="btn-db-add" class="btn btn-primary">
+              <span>⚡ কার্নেলে ইনসার্ট ও fsync করুন</span>
+            </button>
+          </div>
+          <div class="db-quick-chips">
+            <span class="db-chips-label">দ্রুত মান নির্বাচন:</span>
+            <button class="db-chip" data-val="1024">+ ১০২৪ (1K)</button>
+            <button class="db-chip" data-val="2048">+ ২০৪৮ (2K)</button>
+            <button class="db-chip" data-val="4096">+ ৪০৯৬ (4K Page)</button>
+            <button class="db-chip" data-val="8192">+ ৮১৯২ (8K)</button>
+            <button class="db-chip" data-val="65536">+ ৬৫৫৩৬ (64K BSS)</button>
+          </div>
+          <div id="db-feedback" class="db-feedback-box" style="display: none;"></div>
+        </div>
+
+        <!-- Binary Storage Layout Visualizer -->
+        <div class="db-schema-visualizer">
+          <div class="db-schema-title">📐 ৩২-বাইট বাইনারি রেকর্ড লেআউট (AMD64 Little-Endian Silicon Layout):</div>
+          <div class="db-schema-grid">
+            <div class="db-schema-cell">
+              <div class="db-cell-offset">Offset 0..7 (8B)</div>
+              <div class="db-cell-name">রেকর্ড আইডি (QWORD)</div>
+            </div>
+            <div class="db-schema-cell">
+              <div class="db-cell-offset">Offset 8..15 (8B)</div>
+              <div class="db-cell-name">সিপিইউ ক্লক টাইমস্ট্যাম্প</div>
+            </div>
+            <div class="db-schema-cell">
+              <div class="db-cell-offset">Offset 16..23 (8B)</div>
+              <div class="db-cell-name">স্ট্যাটাস (১=সক্রিয়, ০=মুছে ফেলা)</div>
+            </div>
+            <div class="db-schema-cell">
+              <div class="db-cell-offset">Offset 24..31 (8B)</div>
+              <div class="db-cell-name">ডেটা ভ্যালু (QWORD)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-Time Data Records Table -->
+        <div class="db-table-container">
+          <table class="db-table">
+            <thead>
+              <tr>
+                <th>আইডি (ID)</th>
+                <th>সিপিইউ ক্লক (RDTSC Timestamp)</th>
+                <th>স্ট্যাটাস</th>
+                <th>সংরক্ষিত মান (Stored Value)</th>
+                <th>হেক্স মান (0xHEX)</th>
+                <th>অ্যাকশন (Action)</th>
+              </tr>
+            </thead>
+            <tbody id="db-records-body">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                  🔄 ডাটাবেজ থেকে রেকর্ডসমূহ লোড করা হচ্ছে...
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

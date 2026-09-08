@@ -875,28 +875,301 @@ body {
   }
 }
 
+/* ==============================================================================
+   👑 SOVEREIGN FULL-STACK DATABASE MANAGER UI STYLES
+   WHY: Ultra-modern glassmorphic styles for real-time binary storage dashboard.
+   ============================================================================== */
+
+.db-manager-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+  margin-bottom: 24px;
+}
+
+.db-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 28px;
+}
+
+.db-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: rgba(0, 255, 204, 0.08);
+  border: 1px solid rgba(0, 255, 204, 0.25);
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+}
+
+.db-meta-group {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.db-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.db-meta-label {
+  color: var(--text-muted);
+}
+
+.db-meta-val {
+  color: #fff;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+/* Database Insert Form */
+.db-form-container {
+  background: rgba(13, 17, 26, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  margin-bottom: 28px;
+}
+
+.db-form-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-input-row {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.db-input-wrapper {
+  flex: 1;
+  min-width: 260px;
+}
+
+.db-input {
+  width: 100%;
+  padding: 12px 18px;
+  background: rgba(7, 9, 14, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  outline: none;
+  transition: var(--transition);
+}
+
+.db-input:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 16px var(--neon-cyan-glow);
+}
+
+.db-quick-chips {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.db-chips-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.db-chip {
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.db-chip:hover {
+  background: rgba(0, 255, 204, 0.12);
+  border-color: var(--neon-cyan);
+  transform: translateY(-1px);
+}
+
+.db-feedback-box {
+  margin-top: 14px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+}
+
+.db-feedback-success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.db-feedback-error {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  color: #fb7185;
+}
+
+/* Binary Schema Layout Visualizer */
+.db-schema-visualizer {
+  margin-bottom: 28px;
+}
+
+.db-schema-title {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+}
+
+.db-schema-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.db-schema-cell {
+  background: rgba(18, 24, 38, 0.9);
+  border: 1px dashed rgba(0, 255, 204, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.db-cell-offset {
+  font-size: 0.72rem;
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
+}
+
+.db-cell-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #fff;
+}
+
+/* Database Table */
+.db-table-container {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(7, 9, 14, 0.5);
+}
+
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.db-table th {
+  background: rgba(13, 17, 26, 0.95);
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.db-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: var(--font-mono);
+  color: #e2e8f0;
+}
+
+.db-table tbody tr:hover {
+  background: rgba(0, 255, 204, 0.03);
+}
+
+.db-tag-active {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.db-tag-deleted {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: #fb7185;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.btn-db-delete {
+  padding: 5px 12px;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fb7185;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-db-delete:hover {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: var(--neon-rose);
+  transform: scale(1.02);
+}
+
+@media (max-width: 900px) {
+  .db-schema-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 640px) {
-  .hero-title {
-    font-size: 2.3rem;
-  }
-  .feature-grid {
+  .db-schema-grid {
     grid-template-columns: 1fr;
   }
-  .horizons-grid {
-    grid-template-columns: 1fr;
-  }
-  .telemetry-bar {
-    grid-template-columns: 1fr;
-  }
-  .nav-links {
-    display: none;
-  }
-  .footer-grid {
-    grid-template-columns: 1fr;
-  }
-  .footer-bottom {
+  .db-header-bar {
     flex-direction: column;
-    gap: 12px;
-    text-align: center;
+    align-items: flex-start;
+  }
+  .db-meta-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }
