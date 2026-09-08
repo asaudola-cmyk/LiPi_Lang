@@ -301,3 +301,5 @@ tmp-php.ini
 /dist/*
 !/dist/.gitkeep
 lipi_modules/
+apps/**/lipi_server
+apps/**/site_builder

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="লিপি (Lipi) — সার্বভৌম সিস্টেম প্রোগ্রামিং ভাষা। সরাসরি সিলিকন সিপিইউ ও লিনাক্স কার্নেল নিয়ন্ত্রণ। ০% PHP | ০% Libc | ০% GCC।">
+  <meta name="theme-color" content="#07090e">
+  <title>👑 LIPI (লিপি) — সার্বভৌম সিস্টেম প্রোগ্রামিং ভাষা | Official Site</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <a href="#" class="brand">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
+            <path d="M18 42 L22 24 L32 34 L42 24 L46 42 Z" fill="url(#navGrad)" />
+            <rect x="18" y="43" width="28" height="4" rx="2" fill="#00ffcc" />
+            <defs>
+              <linearGradient id="navGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#00ffcc" />
+                <stop offset="100%" stop-color="#8b5cf6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="brand-title">LIPI <span style="font-weight: 300; font-size: 1rem; color: var(--neon-cyan);">(লিপি)</span></span>
+        <span class="brand-tag">v2.1 Ultra</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#features" class="nav-link">বৈশিষ্ট্য</a></li>
+        <li><a href="#playground" class="nav-link">প্লেগ্রাউন্ড</a></li>
+        <li><a href="#horizons" class="nav-link">২১টি মহাদিগন্ত</a></li>
+        <li><a href="#benchmarks" class="nav-link">বেঞ্চমার্ক</a></li>
+        <li><a href="#quickstart" class="nav-link">শুরু করুন</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div id="server-status-pill" class="status-pill">
+          <span class="status-dot"></span>
+          <span>SOVEREIGN SERVER ONLINE</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <div class="hero-badge">
+          <span>👑 ১০০% সার্বভৌম ও স্বনির্ভর সিস্টেম প্রোগ্রামিং ভাষা</span>
+        </div>
+        <h1 class="hero-title">
+          সরাসরি সিলিকন সিপিইউ ও কার্নেল নিয়ন্ত্রণ: <br>
+          <span class="gradient-text">স্বাধীন লিপি ভাষা</span>
+        </h1>
+        <p class="hero-subtitle">
+          কোনো PHP, Libc কিংবা GCC রানটাইম নির্ভরতা নেই। বাংলায় ও ইংরেজিতে লিখিত সোর্স কোডকে সরাসরি স্ট্যান্ডঅ্যালোন ৬৪-বিট লিনাক্স ELF মেশিন কোডে কম্পাইল করে।
+        </p>
+        <div class="hero-btns">
+          <a href="#quickstart" class="btn btn-primary">
+            <span>⚡ দ্রুত শুরু করুন</span>
+          </a>
+          <a href="#playground" class="btn btn-secondary">
+            <span>💻 লাইভ প্লেগ্রাউন্ড দেখুন</span>
+          </a>
+          <a href="#horizons" class="btn btn-outline-cyan">
+            <span>🏛️ ২১টি মহাদিগন্ত এক্সপ্লোর করুন</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Hero Terminal Card -->
+      <div>
+        <div class="terminal-window">
+          <div class="terminal-header">
+            <div class="terminal-dots">
+              <span class="dot dot-red"></span>
+              <span class="dot dot-yellow"></span>
+              <span class="dot dot-green"></span>
+            </div>
+            <span class="terminal-title">bash — lipi-native-server</span>
+            <span style="font-size: 0.75rem; color: var(--neon-cyan);">x86_64 ELF</span>
+          </div>
+          <div class="terminal-body">
+            <div class="terminal-line"><span class="term-cyan">$</span> ./bin/lipic apps/webs/server.lp -o bin/lipi_server</div>
+            <div class="terminal-line term-dim">[১] লিপি সোর্স কোড ও মডিউল পার্সিং...</div>
+            <div class="terminal-line term-green">  ✔ সফলভাবে স্ট্যান্ডঅ্যালোন নেটিভ বাইনারি তৈরি হয়েছে!</div>
+            <div class="terminal-line term-dim">[২] বাইনারি স্বাধীনতা অডিট:</div>
+            <div class="terminal-line term-yellow">  • ldd bin/lipi_server : <span class="term-cyan">not a dynamic executable</span></div>
+            <div class="terminal-line term-yellow">  • ডিপেন্ডেন্সি        : <span class="term-green">০% Libc | ০% PHP | ০% GCC</span></div>
+            <div class="terminal-line"><span class="term-cyan">$</span> ./bin/lipi_server</div>
+            <div class="terminal-line term-cyan">╔═══════════════════════════════════════════════════╗</div>
+            <div class="terminal-line term-cyan">║ 👑 LIPI DYNAMIC SOVEREIGN HTTP WEB SERVER ONLINE  ║</div>
+            <div class="terminal-line term-cyan">╚═══════════════════════════════════════════════════╝</div>
+            <div class="terminal-line term-green">✔ TCP সকেট পোর্ট ৮০৮০ তে সক্রিয় (http://0.0.0.0:8080)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Telemetry Bar (Dynamic from /api/status) -->
+  <section class="container">
+    <div class="telemetry-bar">
+      <div class="telemetry-card">
+        <div class="telemetry-label">সিলিকন হার্ডওয়্যার ক্লক (RDTSC)</div>
+        <div class="telemetry-value">
+          <span id="telemetry-rdtsc">১,২৫০,০৫৮</span>
+          <span class="telemetry-unit">Cycles</span>
+        </div>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-label">সার্ভারে মোট অনুরোধ (HTTP Requests)</div>
+        <div class="telemetry-value">
+          <span id="telemetry-requests">৪২</span>
+          <span class="telemetry-unit">Reqs</span>
+        </div>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-label">কার্নেল ভার্চুয়াল মেমরি (SYS_mmap)</div>
+        <div class="telemetry-value">
+          <span id="telemetry-mem">১২৮ KB</span>
+          <span class="telemetry-unit">RAM</span>
+        </div>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-label">সার্বভৌম স্বাধীনতা স্ট্যাটাস</div>
+        <div class="telemetry-value" style="color: var(--neon-cyan);">
+          <span>১০০%</span>
+          <span class="telemetry-unit">Sovereign</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Pillars Section -->
+  <section id="features" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">প্রযুক্তিগত স্তম্ভসমূহ</span>
+        <h2 class="section-title">সরাসরি হার্ডওয়্যার ও কার্নেল ক্ষমতা</h2>
+        <p class="section-desc">
+          লিপি শুধু একটি সিনট্যাক্স নয় — এটি সরাসরি কম্পিউটার সিলিকন ও অপারেটিং সিস্টেম কার্নেলের সর্বোচ্চ দক্ষতা ব্যবহারের একটি সার্বভৌম আর্কিটেকচার।
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon-box">⚡</div>
+          <h3 class="feature-title">সিপিইউ মেশিন কোড জেনারেশন</h3>
+          <p class="feature-desc">
+            কোনো অ্যাসেম্বলার বা সি কম্পাইলার ছাড়া একক পাসে সরাসরি x86_64 মেশিন ইনস্ট্রাকশন ও পূর্ণাঙ্গ লিনাক্স ELF বাইনারি উৎপন্ন করে।
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-box">🌐</div>
+          <h3 class="feature-title">নেটিভ কার্নেল নেটওয়ার্কিং</h3>
+          <p class="feature-desc">
+            লিনাক্স কার্নেল সিসকল (`SYS_socket`, `SYS_bind`, `SYS_listen`, `SYS_accept`, `SYS_epoll`) দিয়ে চালিত স্বয়ংসম্পূর্ণ হাই-স্পিড ওয়েব সার্ভার।
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-box">🔒</div>
+          <h3 class="feature-title">হার্ডওয়্যার ক্রিপ্টোগ্রাফি ও TLS</h3>
+          <p class="feature-desc">
+            সরাসরি CPU `rdrand` এন্ট্রপি, একক সাইকেল `ror32`/`rol32`, NIST SHA-256 এবং RFC 8439 ChaCha20 সিমেট্রিক TLS 1.3 রেকর্ড স্ট্যাক।
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-box">🎨</div>
+          <h3 class="feature-title">র ফ্রেমবাফার ও ২ডি ক্যানভাস</h3>
+          <p class="feature-desc">
+            ৩২-বিট RGBA ফ্রেমবাফার মেমরি, ব্রেসেনহ্যাম লাইন অ্যালগরিদম, মিডপয়েন্ট সার্কেল এবং সরাসরি ৫৪-বাইট BMP ফাইল এক্সপোর্ট ইঞ্জিন।
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-box">🔍</div>
+          <h3 class="feature-title">সার্বভৌম সিস্টেম ডিবাগার (`lipidbg`)</h3>
+          <p class="feature-desc">
+            লিনাক্স `SYS_ptrace` ভিত্তিক নিজস্ব ডিবাগার। ফিজিক্যাল CPU রেজিস্টার (%rip, %rsp, %rax) নিরীক্ষণ এবং `int 3` ব্রেকপয়েন্ট ট্র্যাপ।
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-box">🏛️</div>
+          <h3 class="feature-title">সেলফ-হোস্টিং ক্লোজার (Self-Hosting)</h3>
+          <p class="feature-desc">
+            লিপির কম্পাইলার নিজেই নিজের সোর্স কোড নিখুঁতভাবে কম্পাইল করে (`bin/lipi == bin/lipi-gen2`)। বিট-ফর-বিট ১০০% ডিটারমিনিস্টিক ক্লোজার প্রমাণিত।
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Playground Section -->
+  <section id="playground" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">ইন্টারঅ্যাক্টিভ কোড রানার</span>
+        <h2 class="section-title">খাঁটি লিপি কোড সিলিকন প্লেগ্রাউন্ড</h2>
+        <p class="section-desc">
+          বাংলা কিংবা ইংরেজিতে লেখা কোড কীভাবে সরাসরি সিপিইউ হার্ডওয়্যারে এক্সিকিউট হয় তা বাস্তব উদাহরণে পরীক্ষা করুন।
+        </p>
+      </div>
+
+      <div class="playground-box">
+        <div class="playground-nav">
+          <div class="playground-tabs">
+            <button class="tab-btn active" data-snippet="hello">০১. হ্যালো ওয়ার্ল্ড</button>
+            <button class="tab-btn" data-snippet="fibonacci">০২. রিকার্সিভ ফিবোনাচ্চি</button>
+            <button class="tab-btn" data-snippet="server">১৮. কার্নেল সকেট সার্ভার</button>
+            <button class="tab-btn" data-snippet="crypto">২৮. হার্ডওয়্যার SHA-256</button>
+            <button class="tab-btn" data-snippet="tls">৩১. ChaCha20 TLS 1.3</button>
+            <button class="tab-btn" data-snippet="canvas">৩২. সিলিকন ২ডি গ্রাফিক্স</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="playground-cycles" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--neon-cyan);">২,৪১৮ Cycles</span>
+            <button id="btn-run-playground" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.85rem;">
+              ▶ রান করুন (Silicon Run)
+            </button>
+          </div>
+        </div>
+
+        <div class="playground-content">
+          <div class="editor-pane">
+            <pre><code id="playground-code">// কোড লোড হচ্ছে...</code></pre>
+          </div>
+          <div class="output-pane">
+            <div class="output-header">
+              <span class="output-title">কনসোল আউটপুট ও সিপিইউ রেজিস্টার ট্রেস</span>
+              <span style="font-size: 0.75rem; color: var(--neon-emerald);">● LIVE HARDWARE TERMINAL</span>
+            </div>
+            <pre class="output-body" id="playground-output">// এক্সিকিউশন আউটপুট লোড হচ্ছে...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 21 Sovereign Horizons Section -->
+  <section id="horizons" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">সার্বভৌম স্থাপত্য</span>
+        <h2 class="section-title">লিপির ২১টি মাস্টার মহাদিগন্ত</h2>
+        <p class="section-desc">
+          শূন্য থেকে শুরু করে স্বয়ংসম্পূর্ণ সিস্টেম স্তরে উত্তীর্ণ লিপির প্রতিটি প্রযুক্তিশ্রেণীর পূর্ণাঙ্গ ম্যাট্রিক্স।
+        </p>
+      </div>
+
+      <div class="horizons-filter">
+        <button class="filter-btn active" data-filter="all">সকল মহাদিগন্ত (২১)</button>
+        <button class="filter-btn" data-filter="core">কোর কম্পাইলার</button>
+        <button class="filter-btn" data-filter="systems">সিস্টেমস ও কার্নেল</button>
+        <button class="filter-btn" data-filter="crypto">সিকিউরিটি ও ক্রিপ্টো</button>
+        <button class="filter-btn" data-filter="graphics">গ্রাফিক্স ও ইউআই</button>
+        <button class="filter-btn" data-filter="tools">টুলস ও ডিবাগার</button>
+      </div>
+
+      <div class="horizons-grid">
+        <!-- 01 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ০১</div>
+          <h3 class="horizon-title">দ্বিভাষিক সিনট্যাক্স পার্সার</h3>
+          <p class="horizon-desc">বাংলা ও ইংরেজি কিওয়ার্ড সমান দক্ষতায় পার্সিং এবং এক্সপ্রেশন ট্রি কনস্ট্রাকশন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">UTF-8 Scanner</span><span class="badge-tag">Dual AST</span></div>
+        </div>
+        <!-- 02 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ০২</div>
+          <h3 class="horizon-title">x86_64 মেশিন কোড ইমিটার</h3>
+          <p class="horizon-desc">সরাসরি ALU, জাম্প, কল, রেজিস্টার ও স্ট্যাক ফ্রেম অপকোড মেমরিতে বাইট ফরম্যাটে এমিশন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">Single Pass</span><span class="badge-tag">Zero ASM</span></div>
+        </div>
+        <!-- 03 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ০৩</div>
+          <h3 class="horizon-title">লিনাক্স ELF হেডার সিন্থেসিস</h3>
+          <p class="horizon-desc">স্ট্যাটিক্যালি লিঙ্কড ৬৪-বিট ELF হেডার ও প্রোগ্রাম সেগমেন্ট হেডার জেনারেশন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">ELF64</span><span class="badge-tag">Zero Libc</span></div>
+        </div>
+        <!-- 04 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ০৪</div>
+          <h3 class="horizon-title">সেলফ-হোস্টিং বুটস্ট্র্যাপ</h3>
+          <p class="horizon-desc">C সিড থেকে খাঁটি লিপিতে রচিত কম্পাইলার (compiler.lp) এবং বিট-ফর-বিট আইডেন্টিটি।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">Self-Host</span><span class="badge-tag">Bit-Identical</span></div>
+        </div>
+        <!-- 05 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ০৫</div>
+          <h3 class="horizon-title">সার্বভৌমত্ব অডিট ও ০% PHP</h3>
+          <p class="horizon-desc">কোডবেস থেকে শতভাগ লিগ্যাসি কোড মুক্ত করে সম্পূর্ণ সার্বভৌমত্ব অর্জন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">0% PHP</span><span class="badge-tag">100% Native</span></div>
+        </div>
+        <!-- 06 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ০৬</div>
+          <h3 class="horizon-title">কার্নেল সকেট ও ওয়েব সার্ভার</h3>
+          <p class="horizon-desc">লিনাক্স কার্নেল সিসকল (SYS_socket, SYS_bind, SYS_listen, SYS_accept) ভিত্তিক HTTP ইঞ্জিন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/net.lp</span><span class="badge-tag">TCP/IP</span></div>
+        </div>
+        <!-- 07 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ০৭</div>
+          <h3 class="horizon-title">ডাইনামিক হিপ ও পয়েন্টার মেমরি</h3>
+          <p class="horizon-desc">SYS_mmap ও SYS_munmap দিয়ে কার্নেল পেজ মেমরি ও ইনডেক্সড অ্যারে ডি-রেফারেন্সিং।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/mem.lp</span><span class="badge-tag">mmap Heap</span></div>
+        </div>
+        <!-- 08 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ০৮</div>
+          <h3 class="horizon-title">গ্র্যান্ড স্ট্যান্ডার্ড লাইব্রেরি</h3>
+          <p class="horizon-desc">SYS_nanosleep, SYS_clock_gettime, ইন্ডিপেন্ডেন্ট JSON পার্সার ও স্ট্রিং মডিউল।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/time.lp</span><span class="badge-tag">std/json.lp</span></div>
+        </div>
+        <!-- 09 -->
+        <div class="horizon-card" data-category="tools">
+          <div class="horizon-num">মহাদিগন্ত ০৯</div>
+          <h3 class="horizon-title">টুলিং ও কোড ফরম্যাটার</h3>
+          <p class="horizon-desc">স্বয়ংক্রিয় কোড ফরম্যাটার (`lipi fmt`) এবং ভিএস কোড সিনট্যাক্স হাইলাইটিং।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">lipi fmt</span><span class="badge-tag">VS Code</span></div>
+        </div>
+        <!-- 10 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ১০</div>
+          <h3 class="horizon-title">কার্নেল মাল্টি-থ্রেডিং</h3>
+          <p class="horizon-desc">লিনাক্স SYS_clone (0x10f00) ভিত্তিক নিবেদিত ৮কেবি হার্ডওয়্যার স্ট্যাক সহ থ্রেড ইঞ্জিন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/thread.lp</span><span class="badge-tag">SYS_clone</span></div>
+        </div>
+        <!-- 11 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ১১</div>
+          <h3 class="horizon-title">কাস্টম গঠন ও ডেটা টাইপ</h3>
+          <p class="horizon-desc">স্ট্রাকচার (`গঠন`), ৬৪-বিট অ্যালাইনমেন্ট অফসেট এবং ডট সিনট্যাক্স মেমরি এক্সেস।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">struct</span><span class="badge-tag">QWORD Align</span></div>
+        </div>
+        <!-- 12 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ১২</div>
+          <h3 class="horizon-title">এমবেডেড ডাটাবেজ ইঞ্জিন</h3>
+          <p class="horizon-desc">১৬-বাইট বাইনারি কি-ভ্যালু রেকর্ড, SYS_open, SYS_fsync দিয়ে জিরো ডেটা লস পারসিস্টেন্স।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/db.lp</span><span class="badge-tag">Zero Data Loss</span></div>
+        </div>
+        <!-- 13 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ১৩</div>
+          <h3 class="horizon-title">সিলিকন সিমডি (SIMD) ও এআই</h3>
+          <p class="horizon-desc">SSE2 ১২৮-বিট ভেক্টর যোগ (`paddq`), নিউরাল নেটওয়ার্ক ডট গুণন ও এআই ReLU অ্যাক্টিভেশন।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/simd.lp</span><span class="badge-tag">SSE2 128-bit</span></div>
+        </div>
+        <!-- 14 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ১৪</div>
+          <h3 class="horizon-title">অ্যারিনা মেমরি ও এআরসি</h3>
+          <p class="horizon-desc">O(1) বাম্প বরাদ্দকারী, ইনস্ট্যান্ট ম্যাস-ফ্রি পুল এবং অটোমেটিক রেফারেন্স কাউন্টিং।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/arena.lp</span><span class="badge-tag">O(1) Bump</span></div>
+        </div>
+        <!-- 15 -->
+        <div class="horizon-card" data-category="systems">
+          <div class="horizon-num">মহাদিগন্ত ১৫</div>
+          <h3 class="horizon-title">লিনাক্স epoll এসিঙ্ক ইভেন্ট লুপ</h3>
+          <p class="horizon-desc">SYS_epoll_create1 ও SYS_epoll_wait ভিত্তিক O(1) C10K হাইপার-পারফরম্যান্স ইভেন্ট মাল্টিপ্লেক্সিং।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/event.lp</span><span class="badge-tag">epoll C10K</span></div>
+        </div>
+        <!-- 16 -->
+        <div class="horizon-card" data-category="tools">
+          <div class="horizon-num">মহাদিগন্ত ১৬</div>
+          <h3 class="horizon-title">সার্বভৌম প্যাকেজ ম্যানেজার</h3>
+          <p class="horizon-desc">`bin/lipipkg` — প্রজেক্ট লাইফসাইকেল টুল (init, build, run, test, vendor, version)।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">bin/lipipkg</span><span class="badge-tag">lipi_modules</span></div>
+        </div>
+        <!-- 17 -->
+        <div class="horizon-card" data-category="crypto">
+          <div class="horizon-num">মহাদিগন্ত ১৭</div>
+          <h3 class="horizon-title">হার্ডওয়্যার ক্রিপ্টো (SHA-256)</h3>
+          <p class="horizon-desc">CPU `rdrand` ট্রু র্যান্ডম এন্ট্রপি, `ror32` অপকোড এবং পূর্ণাঙ্গ NIST FIPS 180-4 SHA-256।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/crypto.lp</span><span class="badge-tag">NIST Tested</span></div>
+        </div>
+        <!-- 18 -->
+        <div class="horizon-card" data-category="tools">
+          <div class="horizon-num">মহাদিগন্ত ১৮</div>
+          <h3 class="horizon-title">সিস্টেম ডিবাগার (`lipidbg`)</h3>
+          <p class="horizon-desc">লিনাক্স SYS_ptrace প্রসেস মনিটরিং, সিপিইউ রেজিস্টার ডাম্প এবং `int 3` ব্রেকপয়েন্ট।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">bin/lipidbg</span><span class="badge-tag">SYS_ptrace</span></div>
+        </div>
+        <!-- 19 -->
+        <div class="horizon-card" data-category="core">
+          <div class="horizon-num">মহাদিগন্ত ১৯</div>
+          <h3 class="horizon-title">এএসটি কনস্ট্যান্ট ফোল্ডিং</h3>
+          <p class="horizon-desc">কম্পাইল-টাইমে এরিথমেটিক ও বিটওয়াইজ এক্সপ্রেশন সমাধান করে ০-সাইকেল রানটাইম লোডিং।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">Optimizer</span><span class="badge-tag">Const Fold</span></div>
+        </div>
+        <!-- 20 -->
+        <div class="horizon-card" data-category="crypto">
+          <div class="horizon-num">মহাদিগন্ত ২০</div>
+          <h3 class="horizon-title">ChaCha20 ও TLS 1.3 রেকর্ড</h3>
+          <p class="horizon-desc">RFC 8439 ChaCha20 সিমেট্রিক সাইফার, `rol32` অপকোড এবং RFC 8446 TLS 1.3 ফ্রেমিং।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/tls.lp</span><span class="badge-tag">ChaCha20</span></div>
+        </div>
+        <!-- 21 -->
+        <div class="horizon-card" data-category="graphics">
+          <div class="horizon-num">মহাদিগন্ত ২১</div>
+          <h3 class="horizon-title">র ফ্রেমবাফার ও ২ডি ক্যানভাস</h3>
+          <p class="horizon-desc">৩২-বিট RGBA ফ্রেমবাফার, ব্রেসেনহ্যাম রেখা, মিডপয়েন্ট সার্কেল এবং ৫৪-বাইট BMP ফাইল এক্সপোর্ট।</p>
+          <div class="horizon-badge-row"><span class="badge-tag">std/gfx.lp</span><span class="badge-tag">BMP 32-bit</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Hardware Silicon Benchmarks Section -->
+  <section id="benchmarks" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">হার্ডওয়্যার সক্ষমতা</span>
+        <h2 class="section-title">সিপিইউ ও রানটাইম স্বাধীনতা তুলনা</h2>
+        <p class="section-desc">
+          লিপি অন্যান্য রানটাইমের তুলনায় কেন সম্পূর্ণ ব্যতিক্রম ও দ্রুততর — তার স্পষ্ট প্রযুক্তিগত প্রমাণ।
+        </p>
+      </div>
+
+      <div class="benchmark-container">
+        <div class="table-responsive">
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>প্রোগ্রামিং ভাষা</th>
+                <th>কম্পাইলেশন মডেল</th>
+                <th>Libc নির্ভরতা</th>
+                <th>PHP নির্ভরতা</th>
+                <th>রানটাইম মেমরি</th>
+                <th>স্বাধীনতা স্ট্যাটাস</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="row-highlight">
+                <td><strong>👑 লিপি (Lipi v2.1)</strong></td>
+                <td>Direct Native ELF64 Machine Code</td>
+                <td><span class="bench-badge badge-winner">০% Libc (শূন্য)</span></td>
+                <td><span class="bench-badge badge-winner">০% PHP (শূন্য)</span></td>
+                <td><strong>~৭২ KB</strong> (স্ট্যাটিক পেজ)</td>
+                <td><span class="bench-badge badge-winner">১০০% সার্বভৌম স্বাধীন</span></td>
+              </tr>
+              <tr>
+                <td><strong>C (GCC -O3)</strong></td>
+                <td>C Compiler → Machine Code</td>
+                <td>glibc (৩.৫ MB নির্ভরতা)</td>
+                <td>০% PHP</td>
+                <td>~১.২ MB</td>
+                <td>আংশিক (Libc অধীন)</td>
+              </tr>
+              <tr>
+                <td><strong>Rust</strong></td>
+                <td>LLVM → Machine Code</td>
+                <td>glibc / musl</td>
+                <td>০% PHP</td>
+                <td>~২.৫ MB</td>
+                <td>আংশিক (Libc অধীন)</td>
+              </tr>
+              <tr>
+                <td><strong>Go</strong></td>
+                <td>Go Compiler → ELF (Runtime)</td>
+                <td>জিরো Libc (নিজস্ব রানটাইম)</td>
+                <td>০% PHP</td>
+                <td>~৩.৮ MB</td>
+                <td>উচ্চ (ভারী রানটাইম)</td>
+              </tr>
+              <tr>
+                <td><strong>Node.js</strong></td>
+                <td>V8 JIT Interpreter</td>
+                <td>libuv + OpenSSL + Libc</td>
+                <td>০% PHP</td>
+                <td>~৪২ MB</td>
+                <td>পরাধীন (ভারী ফ্রেমওয়ার্ক)</td>
+              </tr>
+              <tr>
+                <td><strong>PHP</strong></td>
+                <td>Zend VM Bytecode Engine</td>
+                <td>glibc + Zend Runtime</td>
+                <td>১০০% PHP</td>
+                <td>~৬০ MB</td>
+                <td>পরাধীন (ইন্টারপ্রেটার)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quickstart Section -->
+  <section id="quickstart" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">ব্যবহার নির্দেশিকা</span>
+        <h2 class="section-title">কয়েক সেকেন্ডে লিপি চালু করুন</h2>
+        <p class="section-desc">
+          কোনো ভারী কনফিগারেশন ছাড়াই সরাসরি ক্লোন করে এক্সিকিউট করুন।
+        </p>
+      </div>
+
+      <div style="max-width: 800px; margin: 0 auto;">
+        <h4 style="margin-bottom: 8px; color: var(--neon-cyan);">১. সম্পূর্ণ বিল্ড ও টেস্ট স্যুট রান:</h4>
+        <div class="install-box">
+          <span id="cmd-1">./build.sh</span>
+          <button class="copy-btn" data-target="cmd-1">কপি করুন</button>
+        </div>
+
+        <h4 style="margin-bottom: 8px; color: var(--neon-cyan);">২. খাঁটি লিপিতে লিখিত ওয়েব সার্ভার সংকলন ও চালু:</h4>
+        <div class="install-box">
+          <span id="cmd-2">./bin/lipic apps/webs/server.lp -o apps/webs/lipi_server && ./apps/webs/lipi_server</span>
+          <button class="copy-btn" data-target="cmd-2">কপি করুন</button>
+        </div>
+
+        <h4 style="margin-bottom: 8px; color: var(--neon-cyan);">৩. ২৩টি সার্বভৌম টেস্ট প্রোগ্রাম এক ক্লিকে যাচাই:</h4>
+        <div class="install-box">
+          <span id="cmd-3">./bin/lipic test</span>
+          <button class="copy-btn" data-target="cmd-3">কপি করুন</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="brand">
+            <div class="brand-icon">
+              <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
+                <path d="M18 42 L22 24 L32 34 L42 24 L46 42 Z" fill="#00ffcc" />
+                <rect x="18" y="43" width="28" height="4" rx="2" fill="#00ffcc" />
+              </svg>
+            </div>
+            <span class="brand-title">LIPI <span style="font-weight: 300; font-size: 1rem; color: var(--neon-cyan);">(লিপি)</span></span>
+          </div>
+          <p class="footer-brand-desc">
+            লিপি কোনো ফ্রেমওয়ার্ক নয় — এটি একটি ১০০% স্বাধীন, সার্বভৌম সিস্টেম প্রোগ্রামিং ভাষা। লিপি সরাসরি সিলিকন প্রসেসর ও কার্নেল নিয়ন্ত্রণ করে।
+          </p>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">স্থাপত্য</h4>
+          <ul class="footer-links">
+            <li><a href="#horizons">২১টি মহাদিগন্ত</a></li>
+            <li><a href="#features">সিলিকন এএলইউ</a></li>
+            <li><a href="#benchmarks">বেঞ্চমার্ক ম্যাট্রিক্স</a></li>
+            <li><a href="#playground">কোড প্লেগ্রাউন্ড</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">টুলস ও স্ট্যান্ডার্ড</h4>
+          <ul class="footer-links">
+            <li><a href="#quickstart">lipic (কম্পাইলার)</a></li>
+            <li><a href="#quickstart">lipidbg (ডিবাগার)</a></li>
+            <li><a href="#quickstart">lipipkg (প্যাকেজ)</a></li>
+            <li><a href="#quickstart">std/net ও std/tls</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">সার্বভৌম দর্শন</h4>
+          <ul class="footer-links">
+            <li><a href="#">০% PHP স্বাধীনতা</a></li>
+            <li><a href="#">০% Libc নিশ্চয়তা</a></li>
+            <li><a href="#">সেলফ-হোস্টিং ক্লোজার</a></li>
+            <li><a href="#">MIT লাইসেন্স</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>
+          <span>© ২০২৬ লিপি ওপেন আর্কিটেকচার ইনিশিয়েটিভ। সর্বস্বত্ব সার্বভৌম সিলিকনে সংরক্ষিত।</span>
+        </div>
+        <div>
+          <span>Crafted with Sovereign Precision by Shafiullah (Gyani Core)</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
