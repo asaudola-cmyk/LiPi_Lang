@@ -1,20 +1,18 @@
 /**
- * 👑 Lipi Standalone Native Linux ELF Compiler (lipic) — লিপি নেটিভ কম্পাইলার
+ * 👑 Lipi Standalone Native Linux ELF Compiler (lipic) — লিপি নেটিভ সিলিকন কম্পাইলার
  *
  * WHY: Lipi is a completely independent, sovereign systems programming language.
  * It is NOT a framework or a PHP wrapper.
  *
  * This compiler is a standalone native Linux executable that parses Lipi (.lp) code
- * and synthesizes 64-bit Linux ELF standalone binary executables with:
- *   - ZERO PHP (0% PHP at compile-time and 0% PHP at runtime)
- *   - ZERO GCC needed to run the compiled binaries
- *   - ZERO Libc / external dynamic shared library dependencies
- *   - Direct CPU arithmetic, branching (যদি/নাহলে), and Hardware TSC inspection
- *
- * Direct Linux x86_64 System Calls:
- *   - SYS_write  (1)
- *   - SYS_exit   (60)
- *   - SYS_socket (41), SYS_bind (49), SYS_listen (50), SYS_accept (43), SYS_close (3)
+ * and synthesizes 64-bit Linux ELF standalone binary executables with REAL x86_64 MACHINE CODE:
+ *   - Real stack frames (push rbp; mov rbp, rsp; sub rsp, 1024)
+ *   - Real ALU machine instructions (imul, add, sub, idiv) executed by CPU hardware at runtime
+ *   - Real conditional branching (cmp, jle, jg, jmp) with relative offset backpatching
+ *   - Real hardware RDTSC instruction (0x0F 0x31) to read physical CPU cycle registers
+ *   - Real runtime stack-allocated Bengali numeral (itoa) conversion in pure machine code
+ *   - Direct Linux x86_64 raw syscalls (SYS_write: 1, SYS_exit: 60)
+ *   - ZERO PHP, ZERO Libc, ZERO GCC required to run generated binaries
  *
  * @author Shafiullah (Gyani Supreme Core)
  */
@@ -32,71 +30,128 @@
 #define CODE_OFFSET   0x1000ULL
 #define ENTRY_POINT   (BASE_VADDR + CODE_OFFSET) // 0x401000
 
-#define MAX_VARS      512
-#define MAX_VAL_LEN   4096
-#define MAX_OUTPUT    65536
+#define MAX_SYMBOLS   256
+#define MAX_CODE_SIZE 65536
+#define MAX_RODATA    65536
+#define MAX_RELOCS    1024
 
+// 1. Symbol Table for local stack frame variables
 typedef struct {
     char name[128];
-    char value[MAX_VAL_LEN];
-} LipiVariable;
+    int32_t stack_offset; // e.g. -8, -16, -24 relative to rbp
+    bool is_initialized;
+    bool is_string;
+    size_t rodata_offset;
+    size_t string_len;
+    int64_t const_val;
+} Symbol;
 
-static LipiVariable g_vars[MAX_VARS];
-static int g_var_count = 0;
+static Symbol g_syms[MAX_SYMBOLS];
+static int g_sym_count = 0;
+static int32_t g_current_stack_offset = -8;
 
-static void set_var(const char *name, const char *val) {
-    for (int i = 0; i < g_var_count; i++) {
-        if (strcmp(g_vars[i].name, name) == 0) {
-            strncpy(g_vars[i].value, val, sizeof(g_vars[i].value) - 1);
-            g_vars[i].value[sizeof(g_vars[i].value) - 1] = '\0';
-            return;
-        }
-    }
-    if (g_var_count < MAX_VARS) {
-        strncpy(g_vars[g_var_count].name, name, sizeof(g_vars[g_var_count].name) - 1);
-        strncpy(g_vars[g_var_count].value, val, sizeof(g_vars[g_var_count].value) - 1);
-        g_vars[g_var_count].name[sizeof(g_vars[g_var_count].name) - 1] = '\0';
-        g_vars[g_var_count].value[sizeof(g_vars[g_var_count].value) - 1] = '\0';
-        g_var_count++;
-    }
-}
-
-static const char *get_var(const char *name) {
-    for (int i = 0; i < g_var_count; i++) {
-        if (strcmp(g_vars[i].name, name) == 0) {
-            return g_vars[i].value;
+static Symbol *find_symbol(const char *name) {
+    for (int i = 0; i < g_sym_count; i++) {
+        if (strcmp(g_syms[i].name, name) == 0) {
+            return &g_syms[i];
         }
     }
     return NULL;
 }
 
-// Convert ASCII numeral string to Bengali numeral string
-static void to_bangla_digits(const char *ascii_str, char *out_buf, size_t out_max) {
-    static const char *bdigits[] = {
-        "০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"
-    };
-    out_buf[0] = '\0';
-    size_t out_len = 0;
+static Symbol *add_symbol(const char *name) {
+    Symbol *s = find_symbol(name);
+    if (s) return s;
+    if (g_sym_count < MAX_SYMBOLS) {
+        s = &g_syms[g_sym_count++];
+        strncpy(s->name, name, sizeof(s->name) - 1);
+        s->name[sizeof(s->name) - 1] = '\0';
+        s->stack_offset = g_current_stack_offset;
+        g_current_stack_offset -= 8;
+        s->is_initialized = false;
+        s->is_string = false;
+        s->rodata_offset = 0;
+        s->string_len = 0;
+        s->const_val = 0;
+        return s;
+    }
+    return NULL;
+}
 
-    for (size_t i = 0; ascii_str[i] != '\0'; i++) {
-        char c = ascii_str[i];
-        if (c >= '0' && c <= '9') {
-            const char *bd = bdigits[c - '0'];
-            size_t bd_len = strlen(bd);
-            if (out_len + bd_len < out_max - 1) {
-                strcat(out_buf, bd);
-                out_len += bd_len;
-            }
-        } else {
-            if (out_len + 1 < out_max - 1) {
-                out_buf[out_len++] = c;
-                out_buf[out_len] = '\0';
-            }
-        }
+// 2. Code Buffer for x86_64 Machine Code instructions
+typedef struct {
+    uint8_t bytes[MAX_CODE_SIZE];
+    size_t size;
+} CodeBuffer;
+
+static void emit_u8(CodeBuffer *cb, uint8_t b) {
+    if (cb->size < sizeof(cb->bytes)) cb->bytes[cb->size++] = b;
+}
+
+static __attribute__((unused)) void emit_u16(CodeBuffer *cb, uint16_t v) {
+    emit_u8(cb, (uint8_t)(v & 0xFF));
+    emit_u8(cb, (uint8_t)((v >> 8) & 0xFF));
+}
+
+static void emit_u32(CodeBuffer *cb, uint32_t v) {
+    emit_u8(cb, (uint8_t)(v & 0xFF));
+    emit_u8(cb, (uint8_t)((v >> 8) & 0xFF));
+    emit_u8(cb, (uint8_t)((v >> 16) & 0xFF));
+    emit_u8(cb, (uint8_t)((v >> 24) & 0xFF));
+}
+
+static void emit_u64(CodeBuffer *cb, uint64_t v) {
+    emit_u32(cb, (uint32_t)(v & 0xFFFFFFFF));
+    emit_u32(cb, (uint32_t)((v >> 32) & 0xFFFFFFFF));
+}
+
+static void emit_bytes(CodeBuffer *cb, const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) emit_u8(cb, data[i]);
+}
+
+// 3. Read-Only Data (.rodata) Buffer
+typedef struct {
+    uint8_t bytes[MAX_RODATA];
+    size_t size;
+} RoDataBuffer;
+
+static size_t add_rodata(RoDataBuffer *ro, const uint8_t *data, size_t len) {
+    size_t offset = ro->size;
+    if (ro->size + len <= sizeof(ro->bytes)) {
+        memcpy(&ro->bytes[ro->size], data, len);
+        ro->size += len;
+    }
+    return offset;
+}
+
+// 4. Relocation records for string addresses in machine code
+typedef struct {
+    size_t code_patch_pos;
+    size_t rodata_offset;
+} RelocRecord;
+
+static RelocRecord g_relocs[MAX_RELOCS];
+static int g_reloc_count = 0;
+
+static void add_reloc(size_t code_pos, size_t rodata_off) {
+    if (g_reloc_count < MAX_RELOCS) {
+        g_relocs[g_reloc_count].code_patch_pos = code_pos;
+        g_relocs[g_reloc_count].rodata_offset = rodata_off;
+        g_reloc_count++;
     }
 }
 
-// Convert Bengali numeral string to 64-bit integer
+// 5. String helper utilities
+static char *trim(char *str) {
+    while (isspace((unsigned char)*str)) str++;
+    if (*str == 0) return str;
+    char *end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+    end[1] = '\0';
+    return str;
+}
+
+// Convert Bengali or ASCII numeral string to 64-bit signed integer
 static int64_t parse_bangla_number(const char *str) {
     int64_t val = 0;
     bool neg = false;
@@ -126,249 +181,258 @@ static int64_t parse_bangla_number(const char *str) {
     return neg ? -val : val;
 }
 
-// Trim leading and trailing whitespace
-static char *trim(char *str) {
-    while (isspace((unsigned char)*str)) str++;
-    if (*str == 0) return str;
-    char *end = str + strlen(str) - 1;
-    while (end > str && isspace((unsigned char)*end)) end--;
-    end[1] = '\0';
-    return str;
-}
-
-// Helper for recursive arithmetic expression evaluation with operator precedence
-static bool eval_arithmetic_helper(const char *str, int64_t *out_val) {
-    char buf[256];
-    strncpy(buf, str, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    char *s = trim(buf);
-    if (*s == '\0') return false;
-
-    // Search for lowest precedence operators ('+' or '-') from right to left (for left-associativity)
-    int len = (int)strlen(s);
-    for (int i = len - 1; i >= 0; i--) {
-        if ((s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '+' && s[i-1] != '-') {
-            char op = s[i];
-            s[i] = '\0';
-            char *left = trim(s);
-            char *right = trim(s + i + 1);
-            int64_t lval = 0, rval = 0;
-            if (!eval_arithmetic_helper(left, &lval)) return false;
-            if (!eval_arithmetic_helper(right, &rval)) return false;
-            *out_val = (op == '+') ? (lval + rval) : (lval - rval);
-            return true;
-        }
+// Check if string consists purely of digits (Bengali or ASCII)
+static bool is_numeric_str(const char *str) {
+    const unsigned char *p = (const unsigned char *)str;
+    while (*p && isspace(*p)) p++;
+    if (*p == '-' || *p == '+') p++;
+    if (!*p) return false;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') { p++; continue; }
+        if (p[0] == 0xE0 && p[1] == 0xA7 && (p[2] >= 0xA6 && p[2] <= 0xAF)) { p += 3; continue; }
+        if (isspace(*p)) { p++; continue; }
+        return false;
     }
-
-    // Search for higher precedence operators ('*' or '/') from right to left
-    for (int i = len - 1; i >= 0; i--) {
-        if (s[i] == '*' || s[i] == '/') {
-            char op = s[i];
-            s[i] = '\0';
-            char *left = trim(s);
-            char *right = trim(s + i + 1);
-            int64_t lval = 0, rval = 0;
-            if (!eval_arithmetic_helper(left, &lval)) return false;
-            if (!eval_arithmetic_helper(right, &rval)) return false;
-            *out_val = (op == '*') ? (lval * rval) : ((rval != 0) ? (lval / rval) : 0);
-            return true;
-        }
-    }
-
-    // Base case: variable or number
-    const char *v = get_var(s);
-    if (v) {
-        *out_val = parse_bangla_number(v);
-        return true;
-    }
-    *out_val = parse_bangla_number(s);
     return true;
 }
 
-// Evaluate arithmetic operations (+, -, *, /) between numbers or variables
-static bool eval_arithmetic(const char *expr_str, int64_t *out_val) {
-    if (strchr(expr_str, '"') != NULL || strchr(expr_str, '\'') != NULL) {
-        return false;
-    }
-    if (strchr(expr_str, '+') == NULL && strchr(expr_str, '-') == NULL &&
-        strchr(expr_str, '*') == NULL && strchr(expr_str, '/') == NULL) {
-        return false;
-    }
-    return eval_arithmetic_helper(expr_str, out_val);
+// 6. x86_64 Machine Code Emitter Functions
+
+// Prologue: push rbp; mov rbp, rsp; sub rsp, 1024
+static void emit_prologue(CodeBuffer *cb) {
+    emit_u8(cb, 0x55);                                          // push rbp
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xe5}, 3);    // mov rbp, rsp
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x81, 0xec}, 3);    // sub rsp, imm32
+    emit_u32(cb, 1024);                                         // 1024 bytes stack frame
 }
 
-// Evaluate comparison conditions (>, <, >=, <=, ==, !=)
-static bool eval_condition(const char *cond_str) {
-    char cond_copy[256];
-    strncpy(cond_copy, cond_str, sizeof(cond_copy) - 1);
-    cond_copy[sizeof(cond_copy) - 1] = '\0';
-
-    char *brace = strchr(cond_copy, '{');
-    if (brace) *brace = '\0';
-
-    char *op = NULL;
-    int op_type = 0; // 1:>, 2:<, 3:>=, 4:<=, 5:==, 6:!=
-
-    if ((op = strstr(cond_copy, ">=")) != NULL) { op_type = 3; *op = '\0'; op += 2; }
-    else if ((op = strstr(cond_copy, "<=")) != NULL) { op_type = 4; *op = '\0'; op += 2; }
-    else if ((op = strstr(cond_copy, "==")) != NULL) { op_type = 5; *op = '\0'; op += 2; }
-    else if ((op = strstr(cond_copy, "!=")) != NULL) { op_type = 6; *op = '\0'; op += 2; }
-    else if ((op = strchr(cond_copy, '>')) != NULL) { op_type = 1; *op = '\0'; op += 1; }
-    else if ((op = strchr(cond_copy, '<')) != NULL) { op_type = 2; *op = '\0'; op += 1; }
-
-    if (!op || op_type == 0) return true;
-
-    char *left_str = trim(cond_copy);
-    char *right_str = trim(op);
-
-    int64_t lval = 0, rval = 0;
-    if (!eval_arithmetic(left_str, &lval)) {
-        const char *lv = get_var(left_str);
-        lval = lv ? parse_bangla_number(lv) : parse_bangla_number(left_str);
-    }
-    if (!eval_arithmetic(right_str, &rval)) {
-        const char *rv = get_var(right_str);
-        rval = rv ? parse_bangla_number(rv) : parse_bangla_number(right_str);
-    }
-
-    switch (op_type) {
-        case 1: return lval > rval;
-        case 2: return lval < rval;
-        case 3: return lval >= rval;
-        case 4: return lval <= rval;
-        case 5: return lval == rval;
-        case 6: return lval != rval;
-        default: return false;
-    }
+// Epilogue: mov rax, 60; xor rdi, rdi; syscall
+static void emit_epilogue(CodeBuffer *cb) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc0, 0x3c, 0x00, 0x00, 0x00}, 7); // mov rax, 60
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x31, 0xff}, 3);                         // xor rdi, rdi
+    emit_bytes(cb, (const uint8_t[]){0x0f, 0x05}, 2);                               // syscall
 }
 
-// Evaluate string / variable / concatenation expression
-static void eval_expr(const char *expr_str, char *out_buf, size_t out_max) {
-    out_buf[0] = '\0';
-    size_t out_len = 0;
-    const char *p = expr_str;
+// mov qword ptr [rbp + disp32], imm32
+static void emit_mov_stack_imm(CodeBuffer *cb, int32_t disp32, int32_t imm32) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0x85}, 3);
+    emit_u32(cb, (uint32_t)disp32);
+    emit_u32(cb, (uint32_t)imm32);
+}
 
-    while (*p) {
-        while (isspace((unsigned char)*p) || *p == '+') p++;
-        if (!*p) break;
+// mov rax, [rbp + disp32]
+static void emit_mov_rax_stack(CodeBuffer *cb, int32_t disp32) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x8b, 0x85}, 3);
+    emit_u32(cb, (uint32_t)disp32);
+}
 
-        // 1. Quoted string literal ("..." or '...')
-        if (*p == '"' || *p == '\'') {
-            char quote = *p++;
-            while (*p && *p != quote) {
-                if (*p == '\\' && *(p + 1)) {
-                    p++;
-                    char esc = *p++;
-                    char c = 0;
-                    if (esc == 'n') c = '\n';
-                    else if (esc == 't') c = '\t';
-                    else if (esc == 'r') c = '\r';
-                    else if (esc == 'e') c = '\033';
-                    else if (esc == '0' && *p == '3' && *(p + 1) == '3') {
-                        c = '\033';
-                        p += 2;
-                    } else if (esc == 'x' && isxdigit((unsigned char)*p) && isxdigit((unsigned char)*(p + 1))) {
-                        char hex[3] = { *p, *(p + 1), '\0' };
-                        c = (char)strtol(hex, NULL, 16);
-                        p += 2;
-                    } else {
-                        c = esc;
-                    }
-                    if (out_len + 1 < out_max - 1) {
-                        out_buf[out_len++] = c;
-                        out_buf[out_len] = '\0';
-                    }
-                } else {
-                    if (out_len + 1 < out_max - 1) {
-                        out_buf[out_len++] = *p++;
-                        out_buf[out_len] = '\0';
-                    } else {
-                        p++;
-                    }
-                }
-            }
-            if (*p == quote) p++;
-            continue;
+// mov rbx, [rbp + disp32]
+static void emit_mov_rbx_stack(CodeBuffer *cb, int32_t disp32) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x8b, 0x9d}, 3);
+    emit_u32(cb, (uint32_t)disp32);
+}
+
+// mov [rbp + disp32], rax
+static void emit_mov_stack_rax(CodeBuffer *cb, int32_t disp32) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0x85}, 3);
+    emit_u32(cb, (uint32_t)disp32);
+}
+
+// mov rbx, imm64
+static void emit_mov_rbx_imm64(CodeBuffer *cb, int64_t imm64) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xbb}, 2);
+    emit_u64(cb, (uint64_t)imm64);
+}
+
+// Arithmetic: imul rax, rbx
+static void emit_imul_rax_rbx(CodeBuffer *cb) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x0f, 0xaf, 0xc3}, 4);
+}
+
+// Arithmetic: add rax, rbx
+static void emit_add_rax_rbx(CodeBuffer *cb) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xd8}, 3);
+}
+
+// Arithmetic: sub rax, rbx
+static void emit_sub_rax_rbx(CodeBuffer *cb) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x29, 0xd8}, 3);
+}
+
+// Arithmetic: cqo; idiv rbx
+static void emit_idiv_rax_rbx(CodeBuffer *cb) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x99, 0x48, 0xf7, 0xfb}, 5);
+}
+
+// Arithmetic: sub rax, imm32
+static __attribute__((unused)) void emit_sub_rax_imm(CodeBuffer *cb, int32_t imm32) {
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x2d}, 2);
+    emit_u32(cb, (uint32_t)imm32);
+}
+
+// Hardware TimeStamp Counter: rdtsc; shl rdx, 32; or rax, rdx
+static void emit_rdtsc(CodeBuffer *cb, int32_t stack_disp32) {
+    emit_bytes(cb, (const uint8_t[]){
+        0x0f, 0x31,             // rdtsc (eax = lo, edx = hi)
+        0x48, 0xc1, 0xe2, 0x20, // shl rdx, 32
+        0x48, 0x09, 0xd0        // or rax, rdx
+    }, 9);
+    emit_mov_stack_rax(cb, stack_disp32);
+}
+
+// Direct SYS_write(1, rodata_addr, len) using rodata offset
+static void emit_print_rodata_slice(CodeBuffer *cb, size_t ro_off, size_t len) {
+    // mov rax, 1 (SYS_write)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc0, 0x01, 0x00, 0x00, 0x00}, 7);
+    // mov rdi, 1 (stdout)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc7, 0x01, 0x00, 0x00, 0x00}, 7);
+    // movabs rsi, imm64 (placeholder patched later)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xbe}, 2);
+    size_t patch_pos = cb->size;
+    emit_u64(cb, 0); // placeholder
+    add_reloc(patch_pos, ro_off);
+    // mov rdx, imm32 (len)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc2}, 3);
+    emit_u32(cb, (uint32_t)len);
+    // syscall
+    emit_bytes(cb, (const uint8_t[]){0x0f, 0x05}, 2);
+}
+
+// Direct SYS_write(1, rodata_addr, len) for static C string
+static void emit_print_static_string(CodeBuffer *cb, RoDataBuffer *ro, const char *str, size_t len) {
+    size_t ro_off = add_rodata(ro, (const uint8_t *)str, len);
+    emit_print_rodata_slice(cb, ro_off, len);
+}
+
+// Emit runtime itoa routine: converts 64-bit integer in rax to UTF-8 Bengali digits
+// on the stack buffer at [rbp - 256] working backwards, then prints via SYS_write
+static void emit_runtime_print_bangla_num(CodeBuffer *cb, bool newline) {
+    // 102 bytes of pure x86_64 machine code
+    uint8_t itoa_code[] = {
+        0x48, 0x8d, 0xb5, 0x00, 0xff, 0xff, 0xff, // lea rsi, [rbp - 256]
+        0xc6, 0x06, 0x0a,                         // mov byte ptr [rsi], 0x0A (\n)
+        0x41, 0xb8, 0x01, 0x00, 0x00, 0x00,       // mov r8d, 1 (counter)
+        0x48, 0x85, 0xc0,                         // test rax, rax
+        0x75, 0x18,                               // jnz .loop (+24 bytes)
+        // Zero case:
+        0x48, 0xff, 0xce,                         // dec rsi
+        0xc6, 0x06, 0xa6,                         // mov byte ptr [rsi], 0xa6 ('০' byte 3)
+        0x48, 0xff, 0xce,                         // dec rsi
+        0xc6, 0x06, 0xa7,                         // mov byte ptr [rsi], 0xa7 ('০' byte 2)
+        0x48, 0xff, 0xce,                         // dec rsi
+        0xc6, 0x06, 0xe0,                         // mov byte ptr [rsi], 0xe0 ('০' byte 1)
+        0x49, 0x83, 0xc0, 0x03,                   // add r8, 3
+        0xeb, 0x2a,                               // jmp .done (+42 bytes)
+        // .loop:
+        0x48, 0x85, 0xc0,                         // test rax, rax
+        0x74, 0x25,                               // jz .done (+37 bytes)
+        0x48, 0x31, 0xd2,                         // xor rdx, rdx
+        0xbb, 0x0a, 0x00, 0x00, 0x00,             // mov ebx, 10
+        0x48, 0xf7, 0xf3,                         // div rbx (rax = quotient, rdx = remainder)
+        0x80, 0xc2, 0xa6,                         // add dl, 0xa6 (Bengali digit byte 3)
+        0x48, 0xff, 0xce,                         // dec rsi
+        0x88, 0x16,                               // mov [rsi], dl
+        0x48, 0xff, 0xce,                         // dec rsi
+        0xc6, 0x06, 0xa7,                         // mov byte ptr [rsi], 0xa7
+        0x48, 0xff, 0xce,                         // dec rsi
+        0xc6, 0x06, 0xe0,                         // mov byte ptr [rsi], 0xe0
+        0x49, 0x83, 0xc0, 0x03,                   // add r8, 3
+        0xeb, 0xd6,                               // jmp .loop (-42 bytes)
+        // .done:
+        0xb8, 0x01, 0x00, 0x00, 0x00,             // mov eax, 1 (SYS_write)
+        0xbf, 0x01, 0x00, 0x00, 0x00,             // mov edi, 1 (stdout)
+        0x4c, 0x89, 0xc2,                         // mov rdx, r8 (length)
+        0x0f, 0x05                                // syscall
+    };
+
+    if (!newline) {
+        itoa_code[9] = 0x00; // replace \n with null/no-op
+        itoa_code[12] = 0x00; // start counter at 0 instead of 1
+    }
+
+    emit_bytes(cb, itoa_code, sizeof(itoa_code));
+}
+
+// 7. Parse & Compile Expression
+static void compile_rhs_arithmetic(CodeBuffer *cb, const char *expr) {
+    char copy[256];
+    strncpy(copy, expr, sizeof(copy) - 1);
+    copy[sizeof(copy) - 1] = '\0';
+    char *s = trim(copy);
+
+    // Hardware Clock check
+    if (strstr(s, "সিপিউ_ক্লক") != NULL || strstr(s, "rdtsc") != NULL || strstr(s, "clock") != NULL) {
+        emit_rdtsc(cb, g_current_stack_offset);
+        return;
+    }
+
+    // Search for arithmetic operator (+, -, *, /) from right to left
+    int len = (int)strlen(s);
+    char op = 0;
+    int op_idx = -1;
+
+    for (int i = len - 1; i >= 0; i--) {
+        if ((s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '+' && s[i-1] != '-') {
+            op = s[i];
+            op_idx = i;
+            break;
         }
-
-        // 2. Token / Identifier / Number / Function
-        char token[256];
-        int tlen = 0;
-        while (*p && !isspace((unsigned char)*p) && *p != '+' && *p != '"' && *p != '\'' && *p != ';') {
-            if (tlen < (int)sizeof(token) - 1) {
-                token[tlen++] = *p;
+    }
+    if (op_idx == -1) {
+        for (int i = len - 1; i >= 0; i--) {
+            if (s[i] == '*' || s[i] == '/') {
+                op = s[i];
+                op_idx = i;
+                break;
             }
-            p++;
         }
-        token[tlen] = '\0';
+    }
 
-        if (tlen == 0) continue;
+    if (op_idx != -1) {
+        s[op_idx] = '\0';
+        char *left = trim(s);
+        char *right = trim(s + op_idx + 1);
 
-        // Check for direct hardware clock call inside expression
-        if (strstr(token, "সিপিউ_ক্লক") != NULL || strstr(token, "rdtsc") != NULL) {
-            uint64_t tsc = 0;
-            uint32_t lo = 0, hi = 0;
-            __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-            tsc = ((uint64_t)hi << 32) | lo;
-            char tsc_str[64];
-            snprintf(tsc_str, sizeof(tsc_str), "%lu", tsc);
-            if (strstr(token, "বাংলা_সংখ্যা") != NULL || strstr(token, "to_bangla") != NULL) {
-                char bnum[128] = {0};
-                to_bangla_digits(tsc_str, bnum, sizeof(bnum));
-                strcat(out_buf, bnum);
-                out_len += strlen(bnum);
-            } else {
-                strcat(out_buf, tsc_str);
-                out_len += strlen(tsc_str);
-            }
-            continue;
-        }
-
-        // Check for বাংলা_সংখ্যা(...) or to_bangla(...)
-        if (strncmp(token, "বাংলা_সংখ্যা(", strlen("বাংলা_সংখ্যা(")) == 0 ||
-            strncmp(token, "to_bangla(", strlen("to_bangla(")) == 0) {
-            char inner[128] = {0};
-            char *start = strchr(token, '(');
-            if (start) {
-                start++;
-                char *end = strchr(start, ')');
-                if (end) *end = '\0';
-                strncpy(inner, start, sizeof(inner) - 1);
-            }
-            const char *val = get_var(inner);
-            char bnum[256] = {0};
-            if (val) {
-                to_bangla_digits(val, bnum, sizeof(bnum));
-            } else {
-                to_bangla_digits(inner, bnum, sizeof(bnum));
-            }
-            size_t blen = strlen(bnum);
-            if (out_len + blen < out_max - 1) {
-                strcat(out_buf, bnum);
-                out_len += blen;
-            }
-            continue;
-        }
-
-        // Check if token is a registered variable
-        const char *var_val = get_var(token);
-        if (var_val) {
-            size_t vlen = strlen(var_val);
-            if (out_len + vlen < out_max - 1) {
-                strcat(out_buf, var_val);
-                out_len += vlen;
-            }
+        // Load Left into RAX
+        Symbol *sym_left = find_symbol(left);
+        if (sym_left) {
+            emit_mov_rax_stack(cb, sym_left->stack_offset);
         } else {
-            // Literal or unknown identifier
-            if (out_len + (size_t)tlen < out_max - 1) {
-                strcat(out_buf, token);
-                out_len += (size_t)tlen;
-            }
+            int64_t lnum = parse_bangla_number(left);
+            emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
+            emit_u64(cb, (uint64_t)lnum);
+        }
+
+        // Load Right into RBX
+        Symbol *sym_right = find_symbol(right);
+        if (sym_right) {
+            emit_mov_rbx_stack(cb, sym_right->stack_offset);
+        } else {
+            int64_t rnum = parse_bangla_number(right);
+            emit_mov_rbx_imm64(cb, rnum);
+        }
+
+        // Perform ALU operation
+        switch (op) {
+            case '*': emit_imul_rax_rbx(cb); break;
+            case '+': emit_add_rax_rbx(cb); break;
+            case '-': emit_sub_rax_rbx(cb); break;
+            case '/': emit_idiv_rax_rbx(cb); break;
+        }
+    } else {
+        // Single term
+        Symbol *sym = find_symbol(s);
+        if (sym) {
+            emit_mov_rax_stack(cb, sym->stack_offset);
+        } else {
+            int64_t num = parse_bangla_number(s);
+            emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
+            emit_u64(cb, (uint64_t)num);
         }
     }
 }
 
-// 64-bit Linux ELF Header structures
+// 8. 64-bit Linux ELF Header structures
 #pragma pack(push, 1)
 typedef struct {
     unsigned char e_ident[16];
@@ -423,7 +487,6 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    // Parse input and output arguments
     const char *source_path = NULL;
     const char *output_path = NULL;
 
@@ -450,7 +513,6 @@ int main(int argc, char *argv[]) {
         output_path = default_out;
     }
 
-    // Read source file
     FILE *f = fopen(source_path, "rb");
     if (!f) {
         fprintf(stderr, "\033[1;31m❌ এরর: ফাইল পাওয়া যায়নি: '%s'\033[0m\n", source_path);
@@ -473,19 +535,29 @@ int main(int argc, char *argv[]) {
     fclose(f);
 
     print_banner();
-    printf("\033[1;33m[১] লিপি সোর্স কোড পার্সিং (Parsing Pure Lipi Source)...\033[0m\n");
-    printf("  • সোর্স পাথ   : %s (%zu বাইট)\n", source_path, read_bytes);
+    printf("\033[1;33m[১] লিপি সোর্স কোড পার্সিং ও মেশিন কোড জেনারেশন...\033[0m\n");
+    printf("  • সোর্স ফাইল : %s (%zu বাইট)\n", source_path, read_bytes);
 
-    // Parse lines
-    char output_text[MAX_OUTPUT] = {0};
-    size_t output_len = 0;
+    CodeBuffer cb = { .size = 0 };
+    RoDataBuffer ro = { .size = 0 };
 
-    // Condition control stack
-    int if_depth = 0;
-    bool if_matched[32] = {false};
-    bool block_active[32] = {true};
-    int last_closed_depth = -1;
-    bool last_closed_matched = false;
+    // Emit function prologue
+    emit_prologue(&cb);
+
+    // Conditional tracking stack for branch backpatching
+    typedef struct {
+        size_t else_jump_patch; // position of jle disp32
+        size_t endif_jump_patch; // position of jmp disp32
+        bool has_else;
+    } CondStack;
+
+    CondStack cond_stack[32];
+    int cond_depth = 0;
+
+    const size_t len_dhori = strlen("ধরি");
+    const size_t len_dekhao = strlen("দেখাও");
+    const size_t len_jodi = strlen("যদি");
+    const size_t len_nahole = strlen("নাহলে");
 
     char *line = strtok(source, "\r\n");
     while (line) {
@@ -495,102 +567,135 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // 1. Check for closing brace '}' with optional 'নাহলে' on same line
+        // 1. Closing brace '}' with optional 'নাহলে' on same line
         if (trimmed[0] == '}') {
             char *after_brace = trim(trimmed + 1);
-            if (*after_brace == '\0') {
-                if (if_depth > 0) {
-                    last_closed_depth = if_depth;
-                    last_closed_matched = if_matched[if_depth];
-                    if_depth--;
+            if (cond_depth > 0) {
+                if (cond_stack[cond_depth - 1].has_else) {
+                    // Patch endif jump
+                    size_t patch_pos = cond_stack[cond_depth - 1].endif_jump_patch;
+                    int32_t disp = (int32_t)(cb.size - (patch_pos + 4));
+                    memcpy(&cb.bytes[patch_pos], &disp, sizeof(int32_t));
+                    cond_depth--;
+                } else if (*after_brace == '\0') {
+                    // Patch then branch jump to here
+                    size_t patch_pos = cond_stack[cond_depth - 1].else_jump_patch;
+                    int32_t disp = (int32_t)(cb.size - (patch_pos + 4));
+                    memcpy(&cb.bytes[patch_pos], &disp, sizeof(int32_t));
+                    cond_depth--;
                 }
+            }
+            if (*after_brace == '\0') {
                 line = strtok(NULL, "\r\n");
                 continue;
             }
             trimmed = after_brace;
         }
 
-        // 2. Check for 'নাহলে_যদি <cond> {' or 'else if <cond> {'
-        const size_t len_nahole_jodi = strlen("নাহলে_যদি");
-        bool is_nahole_jodi = (strncmp(trimmed, "নাহলে_যদি", len_nahole_jodi) == 0 && (trimmed[len_nahole_jodi] == ' ' || trimmed[len_nahole_jodi] == '\t'));
-        bool is_else_if = (strncmp(trimmed, "else if", 7) == 0 && (trimmed[7] == ' ' || trimmed[7] == '\t'));
-
-        if (is_nahole_jodi || is_else_if) {
-            if (if_depth == 0 && last_closed_depth > 0) {
-                if_depth = last_closed_depth;
-                if_matched[if_depth] = last_closed_matched;
-            }
-            if (if_depth > 0) {
-                if (if_matched[if_depth]) {
-                    block_active[if_depth] = false;
-                } else {
-                    size_t pfx = is_nahole_jodi ? len_nahole_jodi : 7;
-                    char *cond_part = trimmed + pfx;
-                    bool cond_val = eval_condition(cond_part);
-                    block_active[if_depth] = cond_val;
-                    if (cond_val) if_matched[if_depth] = true;
-                }
-            }
-            line = strtok(NULL, "\r\n");
-            continue;
-        }
-
-        // 3. Check for 'নাহলে {' or 'else {'
-        const size_t len_nahole = strlen("নাহলে");
+        // 2. 'নাহলে {' or 'else {'
         bool is_nahole = (strncmp(trimmed, "নাহলে", len_nahole) == 0 && (trimmed[len_nahole] == ' ' || trimmed[len_nahole] == '{' || trimmed[len_nahole] == '\0'));
         bool is_else = (strncmp(trimmed, "else", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '{' || trimmed[4] == '\0'));
 
         if (is_nahole || is_else) {
-            if (if_depth == 0 && last_closed_depth > 0) {
-                if_depth = last_closed_depth;
-                if_matched[if_depth] = last_closed_matched;
-            }
-            if (if_depth > 0) {
-                if (if_depth > 1 && !block_active[if_depth - 1]) {
-                    block_active[if_depth] = false;
-                } else {
-                    block_active[if_depth] = !if_matched[if_depth];
-                }
-                if_matched[if_depth] = true;
+            if (cond_depth > 0) {
+                // Emit unconditional jmp to endif
+                emit_u8(&cb, 0xe9); // jmp disp32
+                size_t jmp_patch = cb.size;
+                emit_u32(&cb, 0); // placeholder
+                cond_stack[cond_depth - 1].endif_jump_patch = jmp_patch;
+                cond_stack[cond_depth - 1].has_else = true;
+
+                // Patch the previous jle to jump right here (start of else block)
+                size_t else_patch = cond_stack[cond_depth - 1].else_jump_patch;
+                int32_t disp = (int32_t)(cb.size - (else_patch + 4));
+                memcpy(&cb.bytes[else_patch], &disp, sizeof(int32_t));
             }
             line = strtok(NULL, "\r\n");
             continue;
         }
 
-        // 4. Conditional statement: যদি <cond> { OR if <cond> {
-        const size_t len_jodi = strlen("যদি");
+        // 3. Conditional: যদি <cond> { OR if <cond> {
         bool is_jodi = (strncmp(trimmed, "যদি", len_jodi) == 0 && (trimmed[len_jodi] == ' ' || trimmed[len_jodi] == '\t'));
         bool is_if   = (strncmp(trimmed, "if", 2) == 0 && (trimmed[2] == ' ' || trimmed[2] == '\t'));
 
         if (is_jodi || is_if) {
             size_t pfx = is_jodi ? len_jodi : 2;
-            char *cond_part = trimmed + pfx;
-            bool cond_val = eval_condition(cond_part);
+            char *cond_part = trim(trimmed + pfx);
+            char *brace = strchr(cond_part, '{');
+            if (brace) *brace = '\0';
+            cond_part = trim(cond_part);
 
-            if_depth++;
-            if (if_depth > 1 && !block_active[if_depth - 1]) {
-                block_active[if_depth] = false;
-                if_matched[if_depth] = true;
+            char *op = NULL;
+            int op_type = 0; // 1:>, 2:<, 3:>=, 4:<=, 5:==, 6:!=
+            if ((op = strstr(cond_part, ">=")) != NULL) { op_type = 3; *op = '\0'; op += 2; }
+            else if ((op = strstr(cond_part, "<=")) != NULL) { op_type = 4; *op = '\0'; op += 2; }
+            else if ((op = strstr(cond_part, "==")) != NULL) { op_type = 5; *op = '\0'; op += 2; }
+            else if ((op = strstr(cond_part, "!=")) != NULL) { op_type = 6; *op = '\0'; op += 2; }
+            else if ((op = strchr(cond_part, '>')) != NULL) { op_type = 1; *op = '\0'; op += 1; }
+            else if ((op = strchr(cond_part, '<')) != NULL) { op_type = 2; *op = '\0'; op += 1; }
+
+            char *left = trim(cond_part);
+            char *right = op ? trim(op) : NULL;
+
+            // Load left into RAX
+            Symbol *sym_l = find_symbol(left);
+            if (sym_l) {
+                emit_mov_rax_stack(&cb, sym_l->stack_offset);
             } else {
-                block_active[if_depth] = cond_val;
-                if_matched[if_depth] = cond_val;
+                int64_t lval = parse_bangla_number(left);
+                emit_bytes(&cb, (const uint8_t[]){0x48, 0xb8}, 2);
+                emit_u64(&cb, (uint64_t)lval);
             }
-            last_closed_depth = -1;
+
+            // Load right into RBX
+            if (right) {
+                Symbol *sym_r = find_symbol(right);
+                if (sym_r) {
+                    emit_mov_rbx_stack(&cb, sym_r->stack_offset);
+                } else {
+                    int64_t rval = parse_bangla_number(right);
+                    emit_mov_rbx_imm64(&cb, rval);
+                }
+            } else {
+                emit_mov_rbx_imm64(&cb, 0);
+            }
+
+            // cmp rax, rbx
+            emit_bytes(&cb, (const uint8_t[]){0x48, 0x39, 0xd8}, 3);
+
+            // Inverted jump to ELSE if condition is FALSE:
+            // > (1)  -> jump if <= (jle: 0x0f 0x8e)
+            // < (2)  -> jump if >= (jge: 0x0f 0x8d)
+            // >= (3) -> jump if <  (jl:  0x0f 0x8c)
+            // <= (4) -> jump if >  (jg:  0x0f 0x8f)
+            // == (5) -> jump if != (jne: 0x0f 0x85)
+            // != (6) -> jump if == (je:  0x0f 0x84)
+            uint8_t jcc[2] = {0x0f, 0x8e};
+            switch (op_type) {
+                case 1: jcc[1] = 0x8e; break; // jle
+                case 2: jcc[1] = 0x8d; break; // jge
+                case 3: jcc[1] = 0x8c; break; // jl
+                case 4: jcc[1] = 0x8f; break; // jg
+                case 5: jcc[1] = 0x85; break; // jne
+                case 6: jcc[1] = 0x84; break; // je
+                default: jcc[1] = 0x8e; break;
+            }
+            emit_bytes(&cb, jcc, 2);
+            size_t patch_pos = cb.size;
+            emit_u32(&cb, 0); // placeholder
+
+            if (cond_depth < 32) {
+                cond_stack[cond_depth].else_jump_patch = patch_pos;
+                cond_stack[cond_depth].endif_jump_patch = 0;
+                cond_stack[cond_depth].has_else = false;
+                cond_depth++;
+            }
+
             line = strtok(NULL, "\r\n");
             continue;
         }
 
-        // If current block is inactive, skip statement
-        if (if_depth > 0 && !block_active[if_depth]) {
-            line = strtok(NULL, "\r\n");
-            continue;
-        }
-
-        // Normal active statement resets last_closed_depth
-        last_closed_depth = -1;
-
-        // Variable declaration: ধরি <name> = <expr> OR let <name> = <expr>
-        const size_t len_dhori = strlen("ধরি");
+        // 4. Variable declaration: ধরি <name> = <expr> OR let <name> = <expr>
         bool is_dhori = (strncmp(trimmed, "ধরি", len_dhori) == 0 && (trimmed[len_dhori] == ' ' || trimmed[len_dhori] == '\t'));
         bool is_let   = (strncmp(trimmed, "let", 3) == 0 && (trimmed[3] == ' ' || trimmed[3] == '\t'));
 
@@ -602,26 +707,41 @@ int main(int argc, char *argv[]) {
                 char *var_name = trim(trimmed + pfx);
                 char *expr = trim(eq + 1);
 
-                // Hardware Clock check: লিপি.হার্ডওয়্যার.সিপিউ_ক্লক() or rdtsc()
-                if (strstr(expr, "সিপিউ_ক্লক") != NULL || strstr(expr, "rdtsc") != NULL || strstr(expr, "clock") != NULL) {
-                    uint64_t tsc = 0;
-                    uint32_t lo = 0, hi = 0;
-                    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-                    tsc = ((uint64_t)hi << 32) | lo;
-                    char tsc_str[64];
-                    snprintf(tsc_str, sizeof(tsc_str), "%lu", tsc);
-                    set_var(var_name, tsc_str);
-                } else {
-                    // Try dynamic arithmetic
-                    int64_t arith_res = 0;
-                    if (eval_arithmetic(expr, &arith_res)) {
-                        char res_str[64];
-                        snprintf(res_str, sizeof(res_str), "%ld", arith_res);
-                        set_var(var_name, res_str);
+                Symbol *sym = add_symbol(var_name);
+                if (sym) {
+                    if (*expr == '"' || *expr == '\'') {
+                        char quote = *expr++;
+                        char str_buf[4096];
+                        size_t s_len = 0;
+                        while (*expr && *expr != quote) {
+                            if (*expr == '\\' && *(expr + 1)) {
+                                expr++;
+                                char esc = *expr++;
+                                char c = (esc == 'n') ? '\n' : ((esc == 't') ? '\t' : ((esc == 'r') ? '\r' : esc));
+                                if (s_len < sizeof(str_buf) - 1) str_buf[s_len++] = c;
+                            } else {
+                                if (s_len < sizeof(str_buf) - 1) str_buf[s_len++] = *expr++;
+                                else expr++;
+                            }
+                        }
+                        str_buf[s_len] = '\0';
+                        sym->is_string = true;
+                        sym->rodata_offset = add_rodata(&ro, (const uint8_t *)str_buf, s_len);
+                        sym->string_len = s_len;
+                        sym->is_initialized = true;
+                    } else if (is_numeric_str(expr)) {
+                        int64_t val = parse_bangla_number(expr);
+                        sym->const_val = val;
+                        sym->is_initialized = true;
+                        sym->is_string = false;
+                        // mov qword ptr [rbp + stack_offset], imm32
+                        emit_mov_stack_imm(&cb, sym->stack_offset, (int32_t)val);
                     } else {
-                        char evaluated[MAX_VAL_LEN];
-                        eval_expr(expr, evaluated, sizeof(evaluated));
-                        set_var(var_name, evaluated);
+                        // Compile RHS expression
+                        compile_rhs_arithmetic(&cb, expr);
+                        emit_mov_stack_rax(&cb, sym->stack_offset);
+                        sym->is_initialized = true;
+                        sym->is_string = false;
                     }
                 }
             }
@@ -629,26 +749,109 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // Show statement: দেখাও <expr> OR show <expr>
-        const size_t len_dekhao = strlen("দেখাও");
+        // 5. Show statement: দেখাও <expr> OR show <expr>
         bool is_dekhao = (strncmp(trimmed, "দেখাও", len_dekhao) == 0 && (trimmed[len_dekhao] == ' ' || trimmed[len_dekhao] == '\0' || trimmed[len_dekhao] == '\t'));
         bool is_show   = (strncmp(trimmed, "show", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '\0' || trimmed[4] == '\t'));
 
         if (is_dekhao || is_show) {
             size_t pfx = is_dekhao ? len_dekhao : 4;
             char *expr = trim(trimmed + pfx);
-            char evaluated[MAX_VAL_LEN] = {0};
 
-            if (*expr != '\0') {
-                eval_expr(expr, evaluated, sizeof(evaluated));
+            // Parse concatenation (+ operators)
+            const char *p = expr;
+            while (*p) {
+                while (isspace((unsigned char)*p) || *p == '+') p++;
+                if (!*p) break;
+
+                // Quoted string literal ("..." or '...')
+                if (*p == '"' || *p == '\'') {
+                    char quote = *p++;
+                    char str_buf[4096];
+                    size_t s_len = 0;
+                    while (*p && *p != quote) {
+                        if (*p == '\\' && *(p + 1)) {
+                            p++;
+                            char esc = *p++;
+                            char c = 0;
+                            if (esc == 'n') c = '\n';
+                            else if (esc == 't') c = '\t';
+                            else if (esc == 'r') c = '\r';
+                            else if (esc == 'e') c = '\033';
+                            else if (esc == '0' && *p == '3' && *(p + 1) == '3') {
+                                c = '\033';
+                                p += 2;
+                            } else if (esc == 'x' && isxdigit((unsigned char)*p) && isxdigit((unsigned char)*(p + 1))) {
+                                char hex[3] = { *p, *(p + 1), '\0' };
+                                c = (char)strtol(hex, NULL, 16);
+                                p += 2;
+                            } else {
+                                c = esc;
+                            }
+                            if (s_len < sizeof(str_buf) - 1) str_buf[s_len++] = c;
+                        } else {
+                            if (s_len < sizeof(str_buf) - 1) str_buf[s_len++] = *p++;
+                            else p++;
+                        }
+                    }
+                    if (*p == quote) p++;
+                    str_buf[s_len] = '\0';
+                    emit_print_static_string(&cb, &ro, str_buf, s_len);
+                    continue;
+                }
+
+                // Identifier / Number / Function token
+                char token[256];
+                int tlen = 0;
+                while (*p && !isspace((unsigned char)*p) && *p != '+' && *p != '"' && *p != '\'' && *p != ';') {
+                    if (tlen < (int)sizeof(token) - 1) token[tlen++] = *p;
+                    p++;
+                }
+                token[tlen] = '\0';
+                if (tlen == 0) continue;
+
+                // Check for বাংলা_সংখ্যা(var) or to_bangla(var)
+                if (strncmp(token, "বাংলা_সংখ্যা(", strlen("বাংলা_সংখ্যা(")) == 0 ||
+                    strncmp(token, "to_bangla(", strlen("to_bangla(")) == 0) {
+                    char inner[128] = {0};
+                    char *start = strchr(token, '(');
+                    if (start) {
+                        start++;
+                        char *end = strchr(start, ')');
+                        if (end) *end = '\0';
+                        strncpy(inner, start, sizeof(inner) - 1);
+                    }
+                    Symbol *sym = find_symbol(inner);
+                    if (sym) {
+                        emit_mov_rax_stack(&cb, sym->stack_offset);
+                        emit_runtime_print_bangla_num(&cb, false);
+                    } else if (is_numeric_str(inner)) {
+                        int64_t n = parse_bangla_number(inner);
+                        emit_bytes(&cb, (const uint8_t[]){0x48, 0xb8}, 2);
+                        emit_u64(&cb, (uint64_t)n);
+                        emit_runtime_print_bangla_num(&cb, false);
+                    }
+                    continue;
+                }
+
+                // Check if token is a variable
+                Symbol *sym = find_symbol(token);
+                if (sym) {
+                    if (sym->is_string) {
+                        emit_print_rodata_slice(&cb, sym->rodata_offset, sym->string_len);
+                    } else {
+                        emit_mov_rax_stack(&cb, sym->stack_offset);
+                        emit_runtime_print_bangla_num(&cb, false);
+                    }
+                } else if (is_numeric_str(token)) {
+                    int64_t n = parse_bangla_number(token);
+                    emit_bytes(&cb, (const uint8_t[]){0x48, 0xb8}, 2);
+                    emit_u64(&cb, (uint64_t)n);
+                    emit_runtime_print_bangla_num(&cb, false);
+                }
             }
 
-            size_t elen = strlen(evaluated);
-            if (output_len + elen + 1 < MAX_OUTPUT - 1) {
-                strcat(output_text, evaluated);
-                strcat(output_text, "\n");
-                output_len += elen + 1;
-            }
+            // Emit newline at end of দেখাও
+            emit_print_static_string(&cb, &ro, "\n", 1);
             line = strtok(NULL, "\r\n");
             continue;
         }
@@ -659,56 +862,25 @@ int main(int argc, char *argv[]) {
     free(source);
 
     // Append sovereign stamp
-    const char *stamp = "⚡ [100% Pure Lipi Synthesized Native ELF - Zero PHP / Zero GCC]\n";
-    strcat(output_text, stamp);
-    output_len = strlen(output_text);
+    const char *stamp = "⚡ [100% Sovereign Lipi Synthesized Native ELF - Hardware CPU Execution]\n";
+    emit_print_static_string(&cb, &ro, stamp, strlen(stamp));
 
-    printf("  • মোট রেজল্ভড আউটপুট লাইন সাইজ : %zu বাইট\n\n", output_len);
-    printf("\033[1;33m[২] স্ট্যান্ডঅ্যালোন লিনাক্স ELF ৬৪-বিট বাইনারি জেনারেশন...\033[0m\n");
+    // Emit function epilogue (SYS_exit 0)
+    emit_epilogue(&cb);
 
-    // Construct Machine Code
-    // x86_64 Machine Code:
-    // mov rax, 1 (SYS_write)
-    // mov rdi, 1 (stdout)
-    // movabs rsi, imm64 (data_vaddr)
-    // mov rdx, imm32 (output_len)
-    // syscall
-    // mov rax, 60 (SYS_exit)
-    // xor rdi, rdi (0)
-    // syscall
-    const uint32_t code_len = 45;
-    uint64_t data_vaddr = ENTRY_POINT + code_len;
+    // Patch all string virtual addresses (.rodata relocations)
+    uint64_t rodata_base_vaddr = ENTRY_POINT + cb.size;
+    for (int i = 0; i < g_reloc_count; i++) {
+        uint64_t final_vaddr = rodata_base_vaddr + g_relocs[i].rodata_offset;
+        memcpy(&cb.bytes[g_relocs[i].code_patch_pos], &final_vaddr, sizeof(uint64_t));
+    }
 
-    uint8_t machine_code[45] = {
-        // mov rax, 1
-        0x48, 0xc7, 0xc0, 0x01, 0x00, 0x00, 0x00,
-        // mov rdi, 1
-        0x48, 0xc7, 0xc7, 0x01, 0x00, 0x00, 0x00,
-        // movabs rsi, imm64
-        0x48, 0xbe,
-        0, 0, 0, 0, 0, 0, 0, 0, // patched below
-        // mov rdx, imm32
-        0x48, 0xc7, 0xc2,
-        0, 0, 0, 0,             // patched below
-        // syscall
-        0x0f, 0x05,
-        // mov rax, 60 (SYS_exit)
-        0x48, 0xc7, 0xc0, 0x3c, 0x00, 0x00, 0x00,
-        // xor rdi, rdi
-        0x48, 0x31, 0xff,
-        // syscall
-        0x0f, 0x05
-    };
+    printf("  • মোট জেনারেটকৃত মেশিন কোড : %zu বাইট (Pure x86_64 Instructions)\n", cb.size);
+    printf("  • মোট রিড-অনলি ডেটা (.rodata): %zu বাইট\n", ro.size);
+    printf("  • মোট সিম্বল ভেরিয়েবল      : %d টি\n\n", g_sym_count);
 
-    // Patch data_vaddr into movabs rsi
-    memcpy(&machine_code[16], &data_vaddr, sizeof(uint64_t));
-
-    // Patch output_len into mov rdx
-    uint32_t len32 = (uint32_t)output_len;
-    memcpy(&machine_code[27], &len32, sizeof(uint32_t));
-
-    // Calculate ELF file sizes: page-align mem_size to 4096-byte boundaries (WHY: prevents SIGSEGV on large payloads)
-    uint64_t file_size = CODE_OFFSET + code_len + output_len;
+    // Calculate ELF sizes
+    uint64_t file_size = CODE_OFFSET + cb.size + ro.size;
     uint64_t mem_size = ((file_size + 4095ULL) / 4096ULL) * 4096ULL;
     if (mem_size < 0x2000) mem_size = 0x2000;
 
@@ -742,7 +914,7 @@ int main(int argc, char *argv[]) {
     phdr.p_memsz = mem_size;
     phdr.p_align = CODE_OFFSET;
 
-    // Padding between headers and code (4096 - 64 - 56 = 3976 bytes)
+    // Padding (4096 - 64 - 56 = 3976 bytes)
     size_t padding_len = CODE_OFFSET - (sizeof(ehdr) + sizeof(phdr));
     uint8_t *padding = (uint8_t *)calloc(padding_len, 1);
 
@@ -766,18 +938,19 @@ int main(int argc, char *argv[]) {
     fwrite(&ehdr, 1, sizeof(ehdr), out);
     fwrite(&phdr, 1, sizeof(phdr), out);
     fwrite(padding, 1, padding_len, out);
-    fwrite(machine_code, 1, sizeof(machine_code), out);
-    fwrite(output_text, 1, output_len, out);
+    fwrite(cb.bytes, 1, cb.size, out);
+    fwrite(ro.bytes, 1, ro.size, out);
     fclose(out);
     free(padding);
 
-    // Make file executable
     chmod(output_path, 0755);
 
+    printf("\033[1;33m[২] স্ট্যান্ডঅ্যালোন লিনাক্স ELF ৬৪-বিট বাইনারি জেনারেশন সম্পন্ন...\033[0m\n");
     printf("  ✔ সফলভাবে স্ট্যান্ডঅ্যালোন নেটিভ বাইনারি তৈরি হয়েছে (Standalone ELF 64-bit Compiled)!\n");
     printf("  • আউটপুট বাইনারি : \033[1;32m%s\033[0m\n", output_path);
     printf("  • মোট ফাইল সাইজ   : %lu বাইট\n", file_size);
-    printf("  • ডিপেন্ডেন্সি     : \033[1;36m০%% PHP | ০%% GCC | ১০০%% স্বয়ংসম্পূর্ণ লিনাক্স কার্নেল\033[0m\n\n");
+    printf("  • মেমরি পেজ বরাদ্দ : %lu বাইট\n", mem_size);
+    printf("  • ডিপেন্ডেন্সি     : \033[1;36m০%% PHP | ০%% Libc | ০%% GCC | সরাসরি সিলিকন প্রসেসর\033[0m\n\n");
 
     printf("\033[1;33m[৩] তৈরি বাইনারি সরাসরি লিনাক্স কার্নেলে টেস্ট রান:\033[0m\n");
     printf("\033[38;2;120;200;255m------------------------------------------------------------------------\033[0m\n");
@@ -789,7 +962,7 @@ int main(int argc, char *argv[]) {
     (void)ret;
 
     printf("\033[38;2;120;200;255m------------------------------------------------------------------------\033[0m\n\n");
-    printf("\033[38;2;0;255;204m🎉 লিপি ১০০%% স্বাধীন! কোনো PHP ছাড়াই সরাসরি লিপি থেকে মেশিন কোড উৎপন্ন হয়েছে।\033[0m\n\n");
+    printf("\033[38;2;0;255;204m🎉 লিপি ১০০%% সার্বভৌম! কোনো PHP ছাড়াই সরাসরি লিপি থেকে মেশিন কোড উৎপন্ন হয়েছে।\033[0m\n\n");
 
     return 0;
 }
