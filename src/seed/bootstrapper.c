@@ -1,18 +1,19 @@
 /**
- * 👑 Lipi Standalone Native Linux ELF Compiler (lipic) — লিপি নেটিভ সিলিকন কম্পাইলার
+ * 👑 Lipi Standalone Native Linux ELF Bootstrapper Seed (lipic / lipi-seed)
  *
  * WHY: Lipi is a completely independent, sovereign systems programming language.
- * It is NOT a framework or a PHP wrapper.
- *
- * This compiler is a standalone native Linux executable that parses Lipi (.lp) code
- * and synthesizes 64-bit Linux ELF standalone binary executables with REAL x86_64 MACHINE CODE:
- *   - Real stack frames (push rbp; mov rbp, rsp; sub rsp, 1024)
+ * This bootstrapper is the minimal, standalone Stage 0 Seed compiler written in standard C
+ * that parses Lipi (.lp) code and synthesizes 64-bit Linux ELF standalone binary executables
+ * with REAL x86_64 MACHINE CODE:
+ *   - Real stack frames (push rbp; mov rbp, rsp; sub rsp, 4096)
+ *   - Arbitrary recursive expression trees (push/pop rax/rbx stack machine evaluation)
  *   - Real ALU machine instructions (imul, add, sub, idiv) executed by CPU hardware at runtime
- *   - Real conditional branching (cmp, jle, jg, jmp) with relative offset backpatching
+ *   - Real conditional branching (cmp, jle, jg, je, jne, jmp) with relative offset backpatching
+ *   - Real loop control flow (যতক্ষণ / while) with backward loop jumps and exit backpatching
  *   - Real hardware RDTSC instruction (0x0F 0x31) to read physical CPU cycle registers
  *   - Real runtime stack-allocated Bengali numeral (itoa) conversion in pure machine code
  *   - Direct Linux x86_64 raw syscalls (SYS_write: 1, SYS_exit: 60)
- *   - ZERO PHP, ZERO Libc, ZERO GCC required to run generated binaries
+ *   - ZERO PHP, ZERO Libc at runtime, ZERO GCC required to run generated binaries
  *
  * @author Shafiullah (Gyani Supreme Core)
  */
@@ -30,10 +31,11 @@
 #define CODE_OFFSET   0x1000ULL
 #define ENTRY_POINT   (BASE_VADDR + CODE_OFFSET) // 0x401000
 
-#define MAX_SYMBOLS   256
-#define MAX_CODE_SIZE 65536
-#define MAX_RODATA    65536
-#define MAX_RELOCS    1024
+#define MAX_SYMBOLS   512
+#define MAX_CODE_SIZE 131072
+#define MAX_RODATA    131072
+#define MAX_RELOCS    2048
+#define MAX_BLOCKS    64
 
 // 1. Symbol Table for local stack frame variables
 typedef struct {
@@ -86,11 +88,6 @@ typedef struct {
 
 static void emit_u8(CodeBuffer *cb, uint8_t b) {
     if (cb->size < sizeof(cb->bytes)) cb->bytes[cb->size++] = b;
-}
-
-static __attribute__((unused)) void emit_u16(CodeBuffer *cb, uint16_t v) {
-    emit_u8(cb, (uint8_t)(v & 0xFF));
-    emit_u8(cb, (uint8_t)((v >> 8) & 0xFF));
 }
 
 static void emit_u32(CodeBuffer *cb, uint32_t v) {
@@ -151,6 +148,29 @@ static char *trim(char *str) {
     return str;
 }
 
+// Strip comments outside quotes
+static void strip_inline_comments(char *str) {
+    bool in_quote = false;
+    char quote_char = 0;
+    for (char *p = str; *p; p++) {
+        if (!in_quote && (*p == '"' || *p == '\'')) {
+            in_quote = true;
+            quote_char = *p;
+        } else if (in_quote && *p == quote_char) {
+            if (*(p - 1) != '\\') in_quote = false;
+        } else if (!in_quote) {
+            if (*p == '/' && *(p + 1) == '/') {
+                *p = '\0';
+                break;
+            }
+            if (*p == '#') {
+                *p = '\0';
+                break;
+            }
+        }
+    }
+}
+
 // Convert Bengali or ASCII numeral string to 64-bit signed integer
 static int64_t parse_bangla_number(const char *str) {
     int64_t val = 0;
@@ -198,12 +218,12 @@ static bool is_numeric_str(const char *str) {
 
 // 6. x86_64 Machine Code Emitter Functions
 
-// Prologue: push rbp; mov rbp, rsp; sub rsp, 1024
+// Prologue: push rbp; mov rbp, rsp; sub rsp, 4096
 static void emit_prologue(CodeBuffer *cb) {
     emit_u8(cb, 0x55);                                          // push rbp
     emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xe5}, 3);    // mov rbp, rsp
     emit_bytes(cb, (const uint8_t[]){0x48, 0x81, 0xec}, 3);    // sub rsp, imm32
-    emit_u32(cb, 1024);                                         // 1024 bytes stack frame
+    emit_u32(cb, 4096);                                         // 4096 bytes stack frame
 }
 
 // Epilogue: mov rax, 60; xor rdi, rdi; syscall
@@ -262,12 +282,6 @@ static void emit_sub_rax_rbx(CodeBuffer *cb) {
 // Arithmetic: cqo; idiv rbx
 static void emit_idiv_rax_rbx(CodeBuffer *cb) {
     emit_bytes(cb, (const uint8_t[]){0x48, 0x99, 0x48, 0xf7, 0xfb}, 5);
-}
-
-// Arithmetic: sub rax, imm32
-static __attribute__((unused)) void emit_sub_rax_imm(CodeBuffer *cb, int32_t imm32) {
-    emit_bytes(cb, (const uint8_t[]){0x48, 0x2d}, 2);
-    emit_u32(cb, (uint32_t)imm32);
 }
 
 // Hardware TimeStamp Counter: rdtsc; shl rdx, 32; or rax, rdx
@@ -346,41 +360,71 @@ static void emit_runtime_print_bangla_num(CodeBuffer *cb, bool newline) {
     };
 
     if (!newline) {
-        itoa_code[9] = 0x00; // replace \n with null/no-op
-        itoa_code[12] = 0x00; // start counter at 0 instead of 1
+        itoa_code[9] = 0x00;  // replace \n with null
+        itoa_code[12] = 0x00; // start counter at 0
     }
 
     emit_bytes(cb, itoa_code, sizeof(itoa_code));
 }
 
-// 7. Parse & Compile Expression
-static void compile_rhs_arithmetic(CodeBuffer *cb, const char *expr) {
-    char copy[256];
+// 7. Recursive Expression Compiler (Stack Machine: push rax / pop rax)
+static void compile_expression_recursive(CodeBuffer *cb, const char *expr) {
+    char copy[512];
     strncpy(copy, expr, sizeof(copy) - 1);
     copy[sizeof(copy) - 1] = '\0';
     char *s = trim(copy);
 
-    // Hardware Clock check
+    // Strip wrapping parentheses if present
+    while (s[0] == '(' && s[strlen(s) - 1] == ')') {
+        int depth = 0;
+        bool outer_matches = true;
+        for (int i = 0; s[i]; i++) {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') {
+                depth--;
+                if (depth == 0 && s[i + 1] != '\0') {
+                    outer_matches = false;
+                    break;
+                }
+            }
+        }
+        if (outer_matches) {
+            s[strlen(s) - 1] = '\0';
+            s = trim(s + 1);
+        } else {
+            break;
+        }
+    }
+
     if (strstr(s, "সিপিউ_ক্লক") != NULL || strstr(s, "rdtsc") != NULL || strstr(s, "clock") != NULL) {
         emit_rdtsc(cb, g_current_stack_offset);
+        emit_mov_rax_stack(cb, g_current_stack_offset);
         return;
     }
 
-    // Search for arithmetic operator (+, -, *, /) from right to left
+    // Search for + or - outside parentheses from right to left
     int len = (int)strlen(s);
     char op = 0;
     int op_idx = -1;
+    int paren_depth = 0;
 
     for (int i = len - 1; i >= 0; i--) {
-        if ((s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '+' && s[i-1] != '-') {
+        if (s[i] == ')') paren_depth++;
+        else if (s[i] == '(') paren_depth--;
+        else if (paren_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '+' && s[i-1] != '-') {
             op = s[i];
             op_idx = i;
             break;
         }
     }
+
+    // If no + or -, search for * or /
     if (op_idx == -1) {
+        paren_depth = 0;
         for (int i = len - 1; i >= 0; i--) {
-            if (s[i] == '*' || s[i] == '/') {
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (paren_depth == 0 && (s[i] == '*' || s[i] == '/')) {
                 op = s[i];
                 op_idx = i;
                 break;
@@ -393,26 +437,22 @@ static void compile_rhs_arithmetic(CodeBuffer *cb, const char *expr) {
         char *left = trim(s);
         char *right = trim(s + op_idx + 1);
 
-        // Load Left into RAX
-        Symbol *sym_left = find_symbol(left);
-        if (sym_left) {
-            emit_mov_rax_stack(cb, sym_left->stack_offset);
-        } else {
-            int64_t lnum = parse_bangla_number(left);
-            emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
-            emit_u64(cb, (uint64_t)lnum);
-        }
+        // 1. Evaluate left expression into RAX
+        compile_expression_recursive(cb, left);
 
-        // Load Right into RBX
-        Symbol *sym_right = find_symbol(right);
-        if (sym_right) {
-            emit_mov_rbx_stack(cb, sym_right->stack_offset);
-        } else {
-            int64_t rnum = parse_bangla_number(right);
-            emit_mov_rbx_imm64(cb, rnum);
-        }
+        // 2. Save left result onto stack
+        emit_u8(cb, 0x50); // push rax
 
-        // Perform ALU operation
+        // 3. Evaluate right expression into RAX
+        compile_expression_recursive(cb, right);
+
+        // 4. Move right result into RBX
+        emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xc3}, 3); // mov rbx, rax
+
+        // 5. Restore left result into RAX
+        emit_u8(cb, 0x58); // pop rax
+
+        // 6. Perform ALU operation
         switch (op) {
             case '*': emit_imul_rax_rbx(cb); break;
             case '+': emit_add_rax_rbx(cb); break;
@@ -420,7 +460,7 @@ static void compile_rhs_arithmetic(CodeBuffer *cb, const char *expr) {
             case '/': emit_idiv_rax_rbx(cb); break;
         }
     } else {
-        // Single term
+        // Leaf operand: variable or literal number
         Symbol *sym = find_symbol(s);
         if (sym) {
             emit_mov_rax_stack(cb, sym->stack_offset);
@@ -463,6 +503,23 @@ typedef struct {
 } Elf64_Phdr;
 #pragma pack(pop)
 
+// Control flow stack for nested conditionals and loops
+typedef enum {
+    BLOCK_IF,
+    BLOCK_WHILE
+} BlockType;
+
+typedef struct {
+    BlockType type;
+    size_t loop_start;       // position of condition evaluation
+    size_t else_jump_patch;  // position of conditional exit jump disp32
+    size_t endif_jump_patch; // position of unconditional jump to endif disp32
+    bool has_else;
+} BlockRecord;
+
+static BlockRecord g_blocks[MAX_BLOCKS];
+static int g_block_depth = 0;
+
 void print_banner(void) {
     printf("\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m\n");
     printf("\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPIC — 100%% NATIVE STANDALONE LIPI COMPILER (ZERO PHP / ZERO GCC)\033[0m \033[38;2;0;255;204m║\033[0m\n");
@@ -483,7 +540,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-        printf("lipic version 2.0.0-sovereign (Standalone Pure Native Linux ELF Compiler)\n");
+        printf("lipic version 2.0.0-sovereign (Standalone Pure Native Linux ELF Bootstrapper)\n");
         return 0;
     }
 
@@ -544,25 +601,17 @@ int main(int argc, char *argv[]) {
     // Emit function prologue
     emit_prologue(&cb);
 
-    // Conditional tracking stack for branch backpatching
-    typedef struct {
-        size_t else_jump_patch; // position of jle disp32
-        size_t endif_jump_patch; // position of jmp disp32
-        bool has_else;
-    } CondStack;
-
-    CondStack cond_stack[32];
-    int cond_depth = 0;
-
     const size_t len_dhori = strlen("ধরি");
     const size_t len_dekhao = strlen("দেখাও");
     const size_t len_jodi = strlen("যদি");
     const size_t len_nahole = strlen("নাহলে");
+    const size_t len_jotokkhon = strlen("যতক্ষণ");
 
     char *line = strtok(source, "\r\n");
     while (line) {
+        strip_inline_comments(line);
         char *trimmed = trim(line);
-        if (*trimmed == '\0' || strncmp(trimmed, "//", 2) == 0 || *trimmed == '#') {
+        if (*trimmed == '\0') {
             line = strtok(NULL, "\r\n");
             continue;
         }
@@ -570,19 +619,30 @@ int main(int argc, char *argv[]) {
         // 1. Closing brace '}' with optional 'নাহলে' on same line
         if (trimmed[0] == '}') {
             char *after_brace = trim(trimmed + 1);
-            if (cond_depth > 0) {
-                if (cond_stack[cond_depth - 1].has_else) {
-                    // Patch endif jump
-                    size_t patch_pos = cond_stack[cond_depth - 1].endif_jump_patch;
-                    int32_t disp = (int32_t)(cb.size - (patch_pos + 4));
-                    memcpy(&cb.bytes[patch_pos], &disp, sizeof(int32_t));
-                    cond_depth--;
-                } else if (*after_brace == '\0') {
-                    // Patch then branch jump to here
-                    size_t patch_pos = cond_stack[cond_depth - 1].else_jump_patch;
-                    int32_t disp = (int32_t)(cb.size - (patch_pos + 4));
-                    memcpy(&cb.bytes[patch_pos], &disp, sizeof(int32_t));
-                    cond_depth--;
+            if (g_block_depth > 0) {
+                BlockRecord *blk = &g_blocks[g_block_depth - 1];
+                if (blk->type == BLOCK_WHILE) {
+                    // Loop backward jump: jmp loop_start (0xe9 disp32)
+                    emit_u8(&cb, 0xe9);
+                    int32_t loop_disp = (int32_t)(blk->loop_start - (cb.size + 4));
+                    emit_u32(&cb, (uint32_t)loop_disp);
+
+                    // Patch loop exit conditional jump to point here (after the backward jmp)
+                    int32_t exit_disp = (int32_t)(cb.size - (blk->else_jump_patch + 4));
+                    memcpy(&cb.bytes[blk->else_jump_patch], &exit_disp, sizeof(int32_t));
+                    g_block_depth--;
+                } else if (blk->type == BLOCK_IF) {
+                    if (blk->has_else) {
+                        // Patch endif jump
+                        int32_t disp = (int32_t)(cb.size - (blk->endif_jump_patch + 4));
+                        memcpy(&cb.bytes[blk->endif_jump_patch], &disp, sizeof(int32_t));
+                        g_block_depth--;
+                    } else if (*after_brace == '\0') {
+                        // Patch then branch jump to here
+                        int32_t disp = (int32_t)(cb.size - (blk->else_jump_patch + 4));
+                        memcpy(&cb.bytes[blk->else_jump_patch], &disp, sizeof(int32_t));
+                        g_block_depth--;
+                    }
                 }
             }
             if (*after_brace == '\0') {
@@ -597,16 +657,16 @@ int main(int argc, char *argv[]) {
         bool is_else = (strncmp(trimmed, "else", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '{' || trimmed[4] == '\0'));
 
         if (is_nahole || is_else) {
-            if (cond_depth > 0) {
+            if (g_block_depth > 0 && g_blocks[g_block_depth - 1].type == BLOCK_IF) {
                 // Emit unconditional jmp to endif
                 emit_u8(&cb, 0xe9); // jmp disp32
                 size_t jmp_patch = cb.size;
                 emit_u32(&cb, 0); // placeholder
-                cond_stack[cond_depth - 1].endif_jump_patch = jmp_patch;
-                cond_stack[cond_depth - 1].has_else = true;
+                g_blocks[g_block_depth - 1].endif_jump_patch = jmp_patch;
+                g_blocks[g_block_depth - 1].has_else = true;
 
-                // Patch the previous jle to jump right here (start of else block)
-                size_t else_patch = cond_stack[cond_depth - 1].else_jump_patch;
+                // Patch previous jle to jump right here (start of else block)
+                size_t else_patch = g_blocks[g_block_depth - 1].else_jump_patch;
                 int32_t disp = (int32_t)(cb.size - (else_patch + 4));
                 memcpy(&cb.bytes[else_patch], &disp, sizeof(int32_t));
             }
@@ -614,7 +674,76 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // 3. Conditional: যদি <cond> { OR if <cond> {
+        // 3. Loops: যতক্ষণ <cond> { OR while <cond> {
+        bool is_jotokkhon = (strncmp(trimmed, "যতক্ষণ", len_jotokkhon) == 0 && (trimmed[len_jotokkhon] == ' ' || trimmed[len_jotokkhon] == '\t'));
+        bool is_while     = (strncmp(trimmed, "while", 5) == 0 && (trimmed[5] == ' ' || trimmed[5] == '\t'));
+
+        if (is_jotokkhon || is_while) {
+            size_t pfx = is_jotokkhon ? len_jotokkhon : 5;
+            char *cond_part = trim(trimmed + pfx);
+            char *brace = strchr(cond_part, '{');
+            if (brace) *brace = '\0';
+            cond_part = trim(cond_part);
+
+            size_t loop_start = cb.size; // start of loop condition check
+
+            char *op = NULL;
+            int op_type = 0; // 1:>, 2:<, 3:>=, 4:<=, 5:==, 6:!=
+            if ((op = strstr(cond_part, ">=")) != NULL) { op_type = 3; *op = '\0'; op += 2; }
+            else if ((op = strstr(cond_part, "<=")) != NULL) { op_type = 4; *op = '\0'; op += 2; }
+            else if ((op = strstr(cond_part, "==")) != NULL) { op_type = 5; *op = '\0'; op += 2; }
+            else if ((op = strstr(cond_part, "!=")) != NULL) { op_type = 6; *op = '\0'; op += 2; }
+            else if ((op = strchr(cond_part, '>')) != NULL) { op_type = 1; *op = '\0'; op += 1; }
+            else if ((op = strchr(cond_part, '<')) != NULL) { op_type = 2; *op = '\0'; op += 1; }
+
+            char *left = trim(cond_part);
+            char *right = op ? trim(op) : NULL;
+
+            // Load left into RAX
+            compile_expression_recursive(&cb, left);
+
+            // Load right into RBX
+            if (right) {
+                emit_u8(&cb, 0x50); // push rax
+                compile_expression_recursive(&cb, right);
+                emit_bytes(&cb, (const uint8_t[]){0x48, 0x89, 0xc3}, 3); // mov rbx, rax
+                emit_u8(&cb, 0x58); // pop rax
+            } else {
+                emit_mov_rbx_imm64(&cb, 0);
+            }
+
+            // cmp rax, rbx
+            emit_bytes(&cb, (const uint8_t[]){0x48, 0x39, 0xd8}, 3);
+
+            // Inverted jump to loop exit:
+            uint8_t jcc[2] = {0x0f, 0x8e};
+            switch (op_type) {
+                case 1: jcc[1] = 0x8e; break; // jle (invert of >)
+                case 2: jcc[1] = 0x8d; break; // jge (invert of <)
+                case 3: jcc[1] = 0x8c; break; // jl  (invert of >=)
+                case 4: jcc[1] = 0x8f; break; // jg  (invert of <=)
+                case 5: jcc[1] = 0x85; break; // jne (invert of ==)
+                case 6: jcc[1] = 0x84; break; // je  (invert of !=)
+                default: jcc[1] = 0x8e; break;
+            }
+            emit_bytes(&cb, jcc, 2);
+            size_t exit_patch = cb.size;
+            emit_u32(&cb, 0); // placeholder
+
+            if (g_block_depth < MAX_BLOCKS) {
+                g_blocks[g_block_depth].type = BLOCK_WHILE;
+                g_blocks[g_block_depth].loop_start = loop_start;
+                g_blocks[g_block_depth].else_jump_patch = exit_patch;
+                g_blocks[g_block_depth].endif_jump_patch = 0;
+                g_blocks[g_block_depth].has_else = false;
+                g_block_depth++;
+            }
+
+            line = strtok(NULL, "\r\n");
+            continue;
+        }
+
+        // 4. Conditional: যদি <cond> { OR if <cond> {
         bool is_jodi = (strncmp(trimmed, "যদি", len_jodi) == 0 && (trimmed[len_jodi] == ' ' || trimmed[len_jodi] == '\t'));
         bool is_if   = (strncmp(trimmed, "if", 2) == 0 && (trimmed[2] == ' ' || trimmed[2] == '\t'));
 
@@ -638,24 +767,14 @@ int main(int argc, char *argv[]) {
             char *right = op ? trim(op) : NULL;
 
             // Load left into RAX
-            Symbol *sym_l = find_symbol(left);
-            if (sym_l) {
-                emit_mov_rax_stack(&cb, sym_l->stack_offset);
-            } else {
-                int64_t lval = parse_bangla_number(left);
-                emit_bytes(&cb, (const uint8_t[]){0x48, 0xb8}, 2);
-                emit_u64(&cb, (uint64_t)lval);
-            }
+            compile_expression_recursive(&cb, left);
 
             // Load right into RBX
             if (right) {
-                Symbol *sym_r = find_symbol(right);
-                if (sym_r) {
-                    emit_mov_rbx_stack(&cb, sym_r->stack_offset);
-                } else {
-                    int64_t rval = parse_bangla_number(right);
-                    emit_mov_rbx_imm64(&cb, rval);
-                }
+                emit_u8(&cb, 0x50); // push rax
+                compile_expression_recursive(&cb, right);
+                emit_bytes(&cb, (const uint8_t[]){0x48, 0x89, 0xc3}, 3); // mov rbx, rax
+                emit_u8(&cb, 0x58); // pop rax
             } else {
                 emit_mov_rbx_imm64(&cb, 0);
             }
@@ -664,12 +783,6 @@ int main(int argc, char *argv[]) {
             emit_bytes(&cb, (const uint8_t[]){0x48, 0x39, 0xd8}, 3);
 
             // Inverted jump to ELSE if condition is FALSE:
-            // > (1)  -> jump if <= (jle: 0x0f 0x8e)
-            // < (2)  -> jump if >= (jge: 0x0f 0x8d)
-            // >= (3) -> jump if <  (jl:  0x0f 0x8c)
-            // <= (4) -> jump if >  (jg:  0x0f 0x8f)
-            // == (5) -> jump if != (jne: 0x0f 0x85)
-            // != (6) -> jump if == (je:  0x0f 0x84)
             uint8_t jcc[2] = {0x0f, 0x8e};
             switch (op_type) {
                 case 1: jcc[1] = 0x8e; break; // jle
@@ -684,18 +797,20 @@ int main(int argc, char *argv[]) {
             size_t patch_pos = cb.size;
             emit_u32(&cb, 0); // placeholder
 
-            if (cond_depth < 32) {
-                cond_stack[cond_depth].else_jump_patch = patch_pos;
-                cond_stack[cond_depth].endif_jump_patch = 0;
-                cond_stack[cond_depth].has_else = false;
-                cond_depth++;
+            if (g_block_depth < MAX_BLOCKS) {
+                g_blocks[g_block_depth].type = BLOCK_IF;
+                g_blocks[g_block_depth].loop_start = 0;
+                g_blocks[g_block_depth].else_jump_patch = patch_pos;
+                g_blocks[g_block_depth].endif_jump_patch = 0;
+                g_blocks[g_block_depth].has_else = false;
+                g_block_depth++;
             }
 
             line = strtok(NULL, "\r\n");
             continue;
         }
 
-        // 4. Variable declaration: ধরি <name> = <expr> OR let <name> = <expr>
+        // 5. Variable declaration: ধরি <name> = <expr> OR let <name> = <expr>
         bool is_dhori = (strncmp(trimmed, "ধরি", len_dhori) == 0 && (trimmed[len_dhori] == ' ' || trimmed[len_dhori] == '\t'));
         bool is_let   = (strncmp(trimmed, "let", 3) == 0 && (trimmed[3] == ' ' || trimmed[3] == '\t'));
 
@@ -734,11 +849,9 @@ int main(int argc, char *argv[]) {
                         sym->const_val = val;
                         sym->is_initialized = true;
                         sym->is_string = false;
-                        // mov qword ptr [rbp + stack_offset], imm32
                         emit_mov_stack_imm(&cb, sym->stack_offset, (int32_t)val);
                     } else {
-                        // Compile RHS expression
-                        compile_rhs_arithmetic(&cb, expr);
+                        compile_expression_recursive(&cb, expr);
                         emit_mov_stack_rax(&cb, sym->stack_offset);
                         sym->is_initialized = true;
                         sym->is_string = false;
@@ -749,7 +862,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // 5. Show statement: দেখাও <expr> OR show <expr>
+        // 6. Show statement: দেখাও <expr> OR show <expr>
         bool is_dekhao = (strncmp(trimmed, "দেখাও", len_dekhao) == 0 && (trimmed[len_dekhao] == ' ' || trimmed[len_dekhao] == '\0' || trimmed[len_dekhao] == '\t'));
         bool is_show   = (strncmp(trimmed, "show", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '\0' || trimmed[4] == '\t'));
 
@@ -833,7 +946,7 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
 
-                // Check if token is a variable
+                // Check if token is an existing variable
                 Symbol *sym = find_symbol(token);
                 if (sym) {
                     if (sym->is_string) {
@@ -854,6 +967,29 @@ int main(int argc, char *argv[]) {
             emit_print_static_string(&cb, &ro, "\n", 1);
             line = strtok(NULL, "\r\n");
             continue;
+        }
+
+        // 7. Variable Reassignment: <existing_var> = <expr>
+        char *eq = strchr(trimmed, '=');
+        if (eq && eq > trimmed && *(eq - 1) != '!' && *(eq - 1) != '=' && *(eq - 1) != '<' && *(eq - 1) != '>') {
+            *eq = '\0';
+            char *var_name = trim(trimmed);
+            char *expr = trim(eq + 1);
+
+            Symbol *sym = find_symbol(var_name);
+            if (sym) {
+                if (is_numeric_str(expr)) {
+                    int64_t val = parse_bangla_number(expr);
+                    sym->const_val = val;
+                    emit_mov_stack_imm(&cb, sym->stack_offset, (int32_t)val);
+                } else {
+                    compile_expression_recursive(&cb, expr);
+                    emit_mov_stack_rax(&cb, sym->stack_offset);
+                }
+                line = strtok(NULL, "\r\n");
+                continue;
+            }
+            *eq = '='; // Restore if not matched
         }
 
         line = strtok(NULL, "\r\n");
