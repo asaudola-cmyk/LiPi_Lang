@@ -1,0 +1,38 @@
+{
+  "name": "lipi-lang",
+  "displayName": "Lipi (লিপি) Programming Language",
+  "description": "Rich bilingual language support for Lipi (.lp, .lipi) with Bengali Unicode & English syntax highlighting",
+  "version": "1.0.0",
+  "publisher": "shafiullah",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "lipi",
+    "bengali",
+    "unicode",
+    "sovereign",
+    "unum",
+    "programming language"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "lipi",
+        "aliases": ["Lipi", "লিপি", "lipi"],
+        "extensions": [".lp", ".lipi"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lipi",
+        "scopeName": "source.lipi",
+        "path": "./syntaxes/lipi.tmLanguage.json"
+      }
+    ]
+  }
+}

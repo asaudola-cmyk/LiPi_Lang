@@ -477,6 +477,12 @@ final class LipiParser
 
             LipiToken::TYPE_NEW => $this->parseNewExpr($token),
 
+            LipiToken::TYPE_SPAWN => $this->parseSpawnExpr($token),
+
+            LipiToken::TYPE_AWAIT => $this->parseAwaitExpr($token),
+
+            LipiToken::TYPE_CHANNEL => $this->parseChannelExpr($token),
+
             default => throw new RuntimeException(sprintf(
                 "Unexpected expression token '%s' (type: %s) at line %d, column %d",
                 (string)$token->value,
@@ -565,8 +571,16 @@ final class LipiParser
     private function parseNewExpr(LipiToken $newTok): NewExpr
     {
         $this->skipNewlines();
-        $nameTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected struct name after '" . $newTok->rawText . "'");
-        $structName = (string)$nameTok->value;
+        if ($this->check(LipiToken::TYPE_IDENTIFIER) || $this->check(LipiToken::TYPE_CHANNEL)) {
+            $nameTok = $this->advance();
+        } else {
+            $nameTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected struct name after '" . $newTok->rawText . "'");
+        }
+        $structName = (string)($nameTok->rawText ?: $nameTok->value);
+        while ($this->match(LipiToken::TYPE_DOT)) {
+            $memberTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected member name after '.' in struct instantiation");
+            $structName .= '.' . (string)($memberTok->rawText ?: $memberTok->value);
+        }
 
         $args = [];
         $namedArgs = [];
@@ -596,6 +610,56 @@ final class LipiParser
         }
 
         return new NewExpr($structName, $args, $namedArgs, $newTok->line, $newTok->column);
+    }
+
+    /**
+     * Parses an asynchronous / concurrent fiber spawn expression:
+     * - Block format: সহযোগ { ... } or spawn { ... }
+     * - Call/Expression format: সহযোগ my_func() or spawn task(123)
+     */
+    private function parseSpawnExpr(LipiToken $spawnTok): SpawnExpr
+    {
+        $this->skipNewlines();
+        if ($this->check(LipiToken::TYPE_LBRACE)) {
+            // Block syntax converted into an anonymous zero-argument function expression
+            $block = $this->parseBlock();
+            $fnExpr = new FnExpr([], $block, $spawnTok->line, $spawnTok->column);
+            return new SpawnExpr($fnExpr, $spawnTok->line, $spawnTok->column);
+        }
+
+        // Single expression / function invocation syntax
+        $expr = $this->parseExpression(self::PREC_UNARY);
+        return new SpawnExpr($expr, $spawnTok->line, $spawnTok->column);
+    }
+
+    /**
+     * Parses an await expression to yield until the fiber/async handle completes:
+     * অপেক্ষা ফাইবার or await fiber_handle
+     */
+    private function parseAwaitExpr(LipiToken $awaitTok): AwaitExpr
+    {
+        $this->skipNewlines();
+        $expr = $this->parseExpression(self::PREC_UNARY);
+        return new AwaitExpr($expr, $awaitTok->line, $awaitTok->column);
+    }
+
+    /**
+     * Parses channel constructor:
+     * চ্যানেল() or channel(10)
+     */
+    private function parseChannelExpr(LipiToken $chanTok): ChannelExpr
+    {
+        $this->skipNewlines();
+        $capacity = null;
+        if ($this->match(LipiToken::TYPE_LPAREN)) {
+            $this->skipNewlines();
+            if (!$this->check(LipiToken::TYPE_RPAREN)) {
+                $capacity = $this->parseExpression();
+            }
+            $this->skipNewlines();
+            $this->consume(LipiToken::TYPE_RPAREN, "Expected ')' after channel capacity");
+        }
+        return new ChannelExpr($capacity, $chanTok->line, $chanTok->column);
     }
 
     private function parseCallArguments(LipiExpr $callee, LipiToken $lparen): CallExpr

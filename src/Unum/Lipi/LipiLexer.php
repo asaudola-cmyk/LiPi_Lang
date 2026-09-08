@@ -70,6 +70,10 @@ final class LipiLexer
         'চেষ্টা'       => LipiToken::TYPE_TRY,
         'ধরো'         => LipiToken::TYPE_CATCH,
         'নিক্ষেপ'      => LipiToken::TYPE_THROW,
+        'সহযোগ'       => LipiToken::TYPE_SPAWN,
+        'সমান্তরাল'    => LipiToken::TYPE_SPAWN,
+        'অপেক্ষা'     => LipiToken::TYPE_AWAIT,
+        'চ্যানেল'     => LipiToken::TYPE_CHANNEL,
 
         // English Keywords (Full Equivalence)
         'let'         => LipiToken::TYPE_LET,
@@ -112,6 +116,10 @@ final class LipiLexer
         'try'         => LipiToken::TYPE_TRY,
         'catch'       => LipiToken::TYPE_CATCH,
         'throw'       => LipiToken::TYPE_THROW,
+        'spawn'       => LipiToken::TYPE_SPAWN,
+        'async'       => LipiToken::TYPE_SPAWN,
+        'await'       => LipiToken::TYPE_AWAIT,
+        'channel'     => LipiToken::TYPE_CHANNEL,
     ];
 
     public function __construct(string $source)

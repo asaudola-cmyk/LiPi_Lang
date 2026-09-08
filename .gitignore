@@ -300,3 +300,4 @@ tmp-php.ini
 *.bmp
 /dist/*
 !/dist/.gitkeep
+lipi_modules/

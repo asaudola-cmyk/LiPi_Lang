@@ -58,6 +58,11 @@ final class LipiToken
     public const TYPE_CATCH      = 'CATCH';      // ধরো / catch
     public const TYPE_THROW      = 'THROW';      // নিক্ষেপ / throw
 
+    // Concurrency & Async Keywords
+    public const TYPE_SPAWN      = 'SPAWN';      // সহযোগ / সমান্তরাল / spawn / async
+    public const TYPE_AWAIT      = 'AWAIT';      // অপেক্ষা / await
+    public const TYPE_CHANNEL    = 'CHANNEL';    // চ্যানেল / channel
+
     // Built-in Silicon Subsystems
     public const TYPE_SERVER     = 'SERVER';     // সার্ভার / server
     public const TYPE_UI         = 'UI';         // পর্দা / ui

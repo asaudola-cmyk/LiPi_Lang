@@ -1,0 +1,152 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Lipi",
+  "scopeName": "source.lipi",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numerals" },
+    { "include": "#keywords_control" },
+    { "include": "#keywords_declaration" },
+    { "include": "#keywords_subsystems" },
+    { "include": "#constants_boolean" },
+    { "include": "#functions" },
+    { "include": "#structs" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.lipi",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.lipi",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.lipi",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lipi",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.lipi",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lipi",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numerals": {
+      "patterns": [
+        {
+          "name": "constant.numeric.bengali.lipi",
+          "match": "\\b[০-৯]+(\\.[০-৯]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.ascii.lipi",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+    "keywords_control": {
+      "patterns": [
+        {
+          "name": "keyword.control.lipi",
+          "match": "\\b(যদি|নাহলে_যদি|নাহলে|তবে|যতক্ষণ|প্রতিটি|ভেতরে|থামো|চালিয়ে_যাও|ফেরত|চেষ্টা|ধরো|নিক্ষেপ|সহযোগ|সমান্তরাল|অপেক্ষা|if|else|elif|elseif|then|while|for|in|break|continue|return|try|catch|throw|spawn|async|await)\\b"
+        }
+      ]
+    },
+    "keywords_declaration": {
+      "patterns": [
+        {
+          "name": "keyword.declaration.lipi",
+          "match": "\\b(ধরি|ধ্রুবক|কাজ|গঠন|নতুন|আমদানি|হিসেবে|let|var|const|fn|def|func|function|struct|class|new|import|as)\\b"
+        }
+      ]
+    },
+    "keywords_subsystems": {
+      "patterns": [
+        {
+          "name": "support.class.subsystem.lipi",
+          "match": "\\b(লিপি|সার্ভার|পর্দা|স্মৃতি|গণনা|চ্যানেল|lipi|server|ui|memory|compute|channel)\\b"
+        },
+        {
+          "name": "keyword.other.show.lipi",
+          "match": "\\b(দেখাও|ইনপুট|show|print|echo|input)\\b"
+        }
+      ]
+    },
+    "constants_boolean": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.lipi",
+          "match": "\\b(সত্য|মিথ্যা|শূন্য|true|false|null|nil)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "match": "\\b(কাজ|fn|def|func|function)\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "keyword.declaration.lipi" },
+            "2": { "name": "entity.name.function.lipi" }
+          }
+        },
+        {
+          "match": "([\\p{L}_][\\p{L}0-9_]*)\\s*(?=\\()",
+          "name": "entity.name.function.call.lipi"
+        }
+      ]
+    },
+    "structs": {
+      "patterns": [
+        {
+          "match": "\\b(গঠন|struct|class)\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "keyword.declaration.lipi" },
+            "2": { "name": "entity.name.type.class.lipi" }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.lipi",
+          "match": "\\b(এবং|অথবা|না|and|or|not)\\b|&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.arithmetic.lipi",
+          "match": "[\\+\\-\\*/%\\^]"
+        },
+        {
+          "name": "keyword.operator.comparison.lipi",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.lipi",
+          "match": "=|\\+=|-=|\\*=|/="
+        }
+      ]
+    }
+  }
+}

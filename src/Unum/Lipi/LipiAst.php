@@ -436,3 +436,40 @@ final class NewExpr extends LipiExpr
     }
 }
 
+/** Asynchronous / Concurrent Fiber Spawn: সহযোগ { ... } or spawn my_task() */
+final class SpawnExpr extends LipiExpr
+{
+    public function __construct(
+        public readonly LipiExpr $expression,
+        int $line = 1,
+        int $column = 1
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+/** Await Asynchronous Expression: অপেক্ষা ফাইবার or await fiber */
+final class AwaitExpr extends LipiExpr
+{
+    public function __construct(
+        public readonly LipiExpr $expression,
+        int $line = 1,
+        int $column = 1
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+/** Channel Constructor: চ্যানেল(১০) or channel(10) */
+final class ChannelExpr extends LipiExpr
+{
+    public function __construct(
+        public readonly ?LipiExpr $capacity = null,
+        int $line = 1,
+        int $column = 1
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+

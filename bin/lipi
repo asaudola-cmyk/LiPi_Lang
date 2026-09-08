@@ -43,6 +43,10 @@ if ($command === 'help' || $command === '--help' || $command === '-h' || empty($
   php bin/lipi run <file.lp>       একটি লিপি ফাইল সরাসরি রান করুন
   php bin/lipi build <file.lp>     লিনাক্স স্ট্যান্ডঅ্যালোন ELF 64-bit বাইনারি তৈরি করুন
   php bin/lipi jit <file.lp>       সিলিকন JIT দিয়ে প্রসেসরে সরাসরি মেশিন কোডে রান করুন
+  php bin/lipi init [name]         নতুন লিপি প্রজেক্ট ও lipi.json ম্যানিফেস্ট তৈরি করুন
+  php bin/lipi add <pkg> [alias]   প্রজেক্টে নতুন ডিপেন্ডেন্সি যুক্ত ও ইনস্টল করুন
+  php bin/lipi install             সকল lipi.json ডিপেন্ডেন্সি lipi_modules এ ইনস্টল করুন
+  php bin/lipi test                প্রজেক্টের সকল ইউনিট টেস্ট স্বয়ংক্রিয়ভাবে চালান
   php bin/lipi check <file.lp>     ফাইলটির সিনট্যাক্স ও AST পরীক্ষা করুন
   php bin/lipi eval "<code>"       এক লাইনে কোড এক্সিকিউট করুন
   php bin/lipi repl                ইন্টারেক্টিভ লিপি টার্মিনাল প্রম্পট চালু করুন
@@ -51,9 +55,10 @@ if ($command === 'help' || $command === '--help' || $command === '-h' || empty($
 \033[1;33mউদাহরণ (Examples):\033[0m
   php bin/lipi run examples/01_hello.lp
   php bin/lipi build examples/01_hello.lp -o dist/hello_native
-  php bin/lipi jit examples/02_math_fibonacci.lp
+  php bin/lipi init my_app
+  php bin/lipi add examples/modules/math_utils.lp math_lib
+  php bin/lipi test
   php bin/lipi eval 'ধরি ক = ২৫০; ধরি খ = ১০০; দেখাও "যোগফল: " + (ক + খ)'
-  php bin/lipi eval 'let x = 40; let y = 2; show "Sum: " + (x + y)'
 
 HELP;
     exit(0);
@@ -136,6 +141,84 @@ if ($command === 'jit') {
         exit(1);
     }
     exit(0);
+}
+
+// Command: init (Initialize a new Lipi project with lipi.json manifest)
+if ($command === 'init') {
+    require_once __DIR__ . '/../src/Unum/Lipi/LipiPackageManager.php';
+    $pm = new \Unum\Lipi\LipiPackageManager();
+    $argTarget = $args[1] ?? null;
+
+    if ($argTarget !== null && (str_contains($argTarget, '/') || !file_exists($argTarget))) {
+        $dir = $argTarget;
+        $name = basename($argTarget);
+    } else {
+        $dir = getcwd() ?: '.';
+        $name = $argTarget;
+    }
+
+    $manifest = $pm->init($dir, $name);
+    echo "\033[38;2;0;255;204m✔ লিপি প্রজেক্ট সফলভাবে তৈরি হয়েছে (Lipi Project Initialized)!\033[0m\n";
+    echo "  • ডিরেক্টরি      : {$dir}\n";
+    echo "  • প্রজেক্ট নাম   : " . $manifest['name'] . "\n";
+    echo "  • ম্যানিফেস্ট    : {$dir}/lipi.json\n";
+    echo "  • এন্ট্রি ফাইল    : {$dir}/" . $manifest['main'] . "\n";
+    echo "  • চালাতে রান করুন: \033[1;33mphp bin/lipi run {$dir}/" . $manifest['main'] . "\033[0m\n\n";
+    exit(0);
+}
+
+// Command: add (Add and link a dependency into project lipi_modules)
+if ($command === 'add') {
+    require_once __DIR__ . '/../src/Unum/Lipi/LipiPackageManager.php';
+    $spec = $args[1] ?? '';
+    if (empty($spec)) {
+        fwrite(STDERR, "❌ ব্যবহারবিধি: php bin/lipi add <package-path-or-spec> [alias]\n");
+        exit(1);
+    }
+    $alias = $args[2] ?? null;
+    $pm = new \Unum\Lipi\LipiPackageManager();
+    $dir = getcwd() ?: '.';
+    $pkgName = $pm->add($dir, $spec, $alias);
+    echo "\033[38;2;0;255;204m✔ প্যাকেজ সফলভাবে প্রজেক্টে যুক্ত করা হয়েছে (Package Added)!\033[0m\n";
+    echo "  • প্যাকেজ নাম: \033[1;32m{$pkgName}\033[0m\n";
+    echo "  • ইনস্টল পাথ : \033[1;33mlipi_modules/{$pkgName}\033[0m\n";
+    echo "  • কোডে ব্যবহার: আমদানি \"{$pkgName}\" হিসেবে {$pkgName}\n\n";
+    exit(0);
+}
+
+// Command: install / i (Install all dependencies from lipi.json into lipi_modules)
+if ($command === 'install' || $command === 'i') {
+    require_once __DIR__ . '/../src/Unum/Lipi/LipiPackageManager.php';
+    $pm = new \Unum\Lipi\LipiPackageManager();
+    $dir = getcwd() ?: '.';
+    $installed = $pm->install($dir);
+    echo "\033[38;2;0;255;204m✔ সকল ডিপেন্ডেন্সি সফলভাবে ইনস্টল করা হয়েছে (Packages Installed)!\033[0m\n";
+    echo "  • মোট ইনস্টলকৃত প্যাকেজ: " . count($installed) . " টি\n";
+    foreach ($installed as $p) {
+        echo "    ──► {$p}\n";
+    }
+    echo "\n";
+    exit(0);
+}
+
+// Command: test (Run all unit tests in project)
+if ($command === 'test') {
+    require_once __DIR__ . '/../src/Unum/Lipi/LipiPackageManager.php';
+    $pm = new \Unum\Lipi\LipiPackageManager();
+    $dir = getcwd() ?: '.';
+    $results = $pm->runTests($dir, $engine);
+    echo "\033[38;2;0;255;204m========================================================================\033[0m\n";
+    echo "  🧪 LIPI AUTOMATED UNIT TEST RUNNER\n";
+    echo "\033[38;2;0;255;204m========================================================================\033[0m\n\n";
+    echo "  • মোট টেস্ট ফাইল: {$results['total']} টি\n";
+    echo "  • সফল টেস্ট     : \033[1;32m{$results['passed']} টি\033[0m\n";
+    echo "  • ব্যর্থ টেস্ট    : " . ($results['failed'] > 0 ? "\033[1;31m{$results['failed']} টি\033[0m" : "০ টি") . "\n\n";
+    foreach ($results['details'] as $det) {
+        $status = $det['passed'] ? "\033[1;32m[উত্তীর্ণ / PASS]\033[0m" : "\033[1;31m[ব্যর্থ / FAIL]\033[0m";
+        echo "  • {$det['file']} ──► {$status}\n";
+    }
+    echo "\n";
+    exit($results['failed'] > 0 ? 1 : 0);
 }
 
 // Command: --test-run

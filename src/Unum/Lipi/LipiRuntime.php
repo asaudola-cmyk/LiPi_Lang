@@ -208,6 +208,168 @@ final class LipiStructInstance
 }
 
 /**
+ * 📜 Lipi Go-Style Async Channel
+ *
+ * Supports buffered and unbuffered message passing across fibers.
+ * Coordinates cooperative fiber suspension and resumption without blocking OS threads.
+ */
+final class LipiChannel
+{
+    /** @var array<int, mixed> Internal circular FIFO buffer */
+    private array $buffer = [];
+
+    /** @var list<\Fiber> Queue of fibers suspended waiting to receive */
+    private array $waitingReceivers = [];
+
+    /** @var list<array{fiber: \Fiber, value: mixed}> Queue of fibers suspended waiting to send */
+    private array $waitingSenders = [];
+
+    private bool $closed = false;
+
+    public function __construct(public readonly int $capacity = 0)
+    {
+    }
+
+    /**
+     * Sends a value into the channel.
+     * Suspends fiber if buffer is full or unbuffered until a receiver arrives.
+     */
+    public function send(mixed $value, ?LipiRuntime $runtime = null): void
+    {
+        if ($this->closed) {
+            throw new \RuntimeException("Cannot send on closed Lipi channel");
+        }
+
+        // 1. If a receiver is already waiting, hand over value directly
+        if (!empty($this->waitingReceivers)) {
+            $receiver = array_shift($this->waitingReceivers);
+            if ($receiver->isSuspended()) {
+                $receiver->resume($value);
+                return;
+            }
+        }
+
+        // 2. If channel has capacity and buffer has room
+        if ($this->capacity > 0 && count($this->buffer) < $this->capacity) {
+            $this->buffer[] = $value;
+            return;
+        }
+
+        // 3. Otherwise, suspend current fiber if running inside one
+        $curFiber = \Fiber::getCurrent();
+        if ($curFiber !== null) {
+            $this->waitingSenders[] = ['fiber' => $curFiber, 'value' => $value];
+            \Fiber::suspend();
+        } else {
+            // Main thread unbuffered fallback: buffer directly
+            $this->buffer[] = $value;
+        }
+    }
+
+    /**
+     * Receives a value from the channel.
+     * Suspends fiber if channel is empty until a sender delivers data.
+     */
+    public function receive(?LipiRuntime $runtime = null): mixed
+    {
+        // 1. If buffer has items, pop the oldest
+        if (!empty($this->buffer)) {
+            $val = array_shift($this->buffer);
+
+            // If a sender was waiting to push into buffer, dequeue it
+            if (!empty($this->waitingSenders)) {
+                $senderItem = array_shift($this->waitingSenders);
+                $this->buffer[] = $senderItem['value'];
+                if ($senderItem['fiber']->isSuspended()) {
+                    $senderItem['fiber']->resume();
+                }
+            }
+            return $val;
+        }
+
+        // 2. If unbuffered and a sender is waiting, receive directly
+        if (!empty($this->waitingSenders)) {
+            $senderItem = array_shift($this->waitingSenders);
+            if ($senderItem['fiber']->isSuspended()) {
+                $senderItem['fiber']->resume();
+            }
+            return $senderItem['value'];
+        }
+
+        if ($this->closed) {
+            return null;
+        }
+
+        // 3. Channel is empty: suspend current fiber
+        $curFiber = \Fiber::getCurrent();
+        if ($curFiber !== null) {
+            $this->waitingReceivers[] = $curFiber;
+            return \Fiber::suspend();
+        }
+
+        return null;
+    }
+
+    public function close(): void
+    {
+        $this->closed = true;
+        // Wake up all waiting receivers with null
+        while (!empty($this->waitingReceivers)) {
+            $receiver = array_shift($this->waitingReceivers);
+            if ($receiver->isSuspended()) {
+                $receiver->resume(null);
+            }
+        }
+    }
+
+    public function isClosed(): bool
+    {
+        return $this->closed;
+    }
+
+    public function count(): int
+    {
+        return count($this->buffer);
+    }
+}
+
+/**
+ * 📜 Lipi Fiber Handle
+ *
+ * Represents an asynchronous fiber task spawned via `সহযোগ { ... }` or `spawn fn()`.
+ */
+final class LipiFiberHandle
+{
+    public mixed $result = null;
+    public bool $completed = false;
+    public ?\Throwable $error = null;
+
+    public function __construct(
+        public readonly int $id,
+        public readonly \Fiber $fiber
+    ) {
+    }
+
+    public function await(LipiRuntime $runtime): mixed
+    {
+        if ($this->completed) {
+            if ($this->error !== null) {
+                throw $this->error;
+            }
+            return $this->result;
+        }
+
+        // Drive runtime scheduler until this fiber completes
+        $runtime->runSchedulerUntil(fn() => $this->completed);
+
+        if ($this->error !== null) {
+            throw $this->error;
+        }
+        return $this->result;
+    }
+}
+
+/**
  * 📜 Lipi Callable Interface
  */
 interface LipiCallable
@@ -310,6 +472,10 @@ final class LipiRuntime
     /** @var array<string, array<string, mixed>> Module exports cache to avoid circular imports */
     private array $moduleCache = [];
 
+    /** @var array<int, LipiFiberHandle> Active asynchronous fibers managed by the runtime */
+    private array $activeFibers = [];
+    private int $nextFiberId = 1;
+
     public function __construct(bool $captureOutput = false)
     {
         $this->captureOutput = $captureOutput;
@@ -348,6 +514,89 @@ final class LipiRuntime
     }
 
     /**
+     * Spawns an asynchronous fiber task.
+     * WHY: Implements lightweight cooperative concurrency without thread overhead.
+     */
+    public function spawnFiber(callable $callback): LipiFiberHandle
+    {
+        $id = $this->nextFiberId++;
+        $fiber = new \Fiber($callback);
+        $handle = new LipiFiberHandle($id, $fiber);
+        $this->activeFibers[$id] = $handle;
+
+        // Eagerly start the fiber up to its first suspension point
+        try {
+            $fiber->start();
+            if ($fiber->isTerminated()) {
+                $handle->result = $fiber->getReturn();
+                $handle->completed = true;
+                unset($this->activeFibers[$id]);
+            }
+        } catch (\Throwable $e) {
+            $handle->error = $e;
+            $handle->completed = true;
+            unset($this->activeFibers[$id]);
+        }
+
+        return $handle;
+    }
+
+    /**
+     * Drives the cooperative scheduler until all active fibers complete
+     * or an optional predicate condition is satisfied.
+     */
+    public function runSchedulerUntil(?callable $predicate = null): void
+    {
+        $maxRounds = 50000;
+        $round = 0;
+
+        while (!empty($this->activeFibers) && $round++ < $maxRounds) {
+            if ($predicate !== null && $predicate()) {
+                return;
+            }
+
+            $progress = false;
+            foreach ($this->activeFibers as $id => $handle) {
+                $fiber = $handle->fiber;
+                if (!$fiber->isStarted()) {
+                    try {
+                        $fiber->start();
+                        $progress = true;
+                    } catch (\Throwable $e) {
+                        $handle->error = $e;
+                        $handle->completed = true;
+                        unset($this->activeFibers[$id]);
+                        continue;
+                    }
+                }
+
+                if ($fiber->isTerminated()) {
+                    $handle->result = $fiber->getReturn();
+                    $handle->completed = true;
+                    unset($this->activeFibers[$id]);
+                    $progress = true;
+                }
+            }
+
+            if ($predicate !== null && $predicate()) {
+                return;
+            }
+
+            if (!$progress && empty($this->activeFibers)) {
+                break;
+            }
+
+            // Yield microscopic slice to allow I/O and channels to settle
+            usleep(50);
+        }
+    }
+
+    public function runScheduler(): void
+    {
+        $this->runSchedulerUntil(null);
+    }
+
+    /**
      * Executes an entire Program AST.
      */
     public function execute(ProgramNode $program): mixed
@@ -356,6 +605,8 @@ final class LipiRuntime
         foreach ($program->statements as $stmt) {
             $result = $this->executeStmt($stmt);
         }
+        // Drain any remaining active fibers before finishing
+        $this->runScheduler();
         return $result;
     }
 
@@ -516,17 +767,34 @@ final class LipiRuntime
     private function executeImport(ImportStmt $stmt): void
     {
         $rawPath = $stmt->path;
-        $resolvedPath = $rawPath;
-        if (!str_starts_with($rawPath, '/')) {
-            $resolvedPath = $this->currentFileDir . '/' . $rawPath;
+        $resolvedPath = null;
+
+        // Project root reference for global package lookup
+        $projectRoot = dirname(__DIR__, 3);
+
+        // Candidate search paths in hierarchical order
+        $candidates = [
+            $this->currentFileDir . '/' . $rawPath,
+            $this->currentFileDir . '/' . $rawPath . '.lp',
+            $this->currentFileDir . '/lipi_modules/' . $rawPath . '/main.lp',
+            $this->currentFileDir . '/lipi_modules/' . $rawPath . '/index.lp',
+            $this->currentFileDir . '/lipi_modules/' . $rawPath . '.lp',
+            $projectRoot . '/lipi_modules/' . $rawPath . '/main.lp',
+            $projectRoot . '/lipi_modules/' . $rawPath . '/index.lp',
+            $projectRoot . '/lipi_modules/' . $rawPath . '.lp',
+            $rawPath,
+            $rawPath . '.lp',
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (file_exists($candidate) && !is_dir($candidate)) {
+                $resolvedPath = $candidate;
+                break;
+            }
         }
 
-        if (!file_exists($resolvedPath)) {
-            if (file_exists($rawPath)) {
-                $resolvedPath = $rawPath;
-            } else {
-                throw new RuntimeException("মডিউল ফাইল পাওয়া যায়নি (Module not found): '{$rawPath}' at line {$stmt->line}");
-            }
+        if ($resolvedPath === null) {
+            throw new RuntimeException("মডিউল ফাইল পাওয়া যায়নি (Module not found): '{$rawPath}' at line {$stmt->line}");
         }
 
         $canonical = realpath($resolvedPath) ?: $resolvedPath;
@@ -604,14 +872,47 @@ final class LipiRuntime
             IndexExpr::class    => $this->evaluateIndex($expr),
             MemberExpr::class   => $this->evaluateMember($expr),
             NewExpr::class      => $this->evaluateNew($expr),
+            SpawnExpr::class    => $this->evaluateSpawn($expr),
+            AwaitExpr::class    => $this->evaluateAwait($expr),
+            ChannelExpr::class  => $this->evaluateChannel($expr),
             FnExpr::class       => new LipiFunction("<anonymous>", $expr->params, $expr->body, $this->environment),
             default             => throw new RuntimeException("Unknown expression type: " . $expr::class),
         };
     }
 
-    private function evaluateNew(NewExpr $expr): LipiStructInstance
+    private function evaluateNew(NewExpr $expr): mixed
     {
-        $blueprint = $this->environment->get($expr->structName);
+        // Support built-in Channel creation: নতুন চ্যানেল() or new Channel(10)
+        if ($expr->structName === 'চ্যানেল' || $expr->structName === 'channel') {
+            $cap = 0;
+            if (!empty($expr->arguments)) {
+                $cap = (int)$this->evaluate($expr->arguments[0]);
+            } elseif (isset($expr->namedArguments['ধারণক্ষমতা'])) {
+                $cap = (int)$this->evaluate($expr->namedArguments['ধারণক্ষমতা']);
+            } elseif (isset($expr->namedArguments['capacity'])) {
+                $cap = (int)$this->evaluate($expr->namedArguments['capacity']);
+            }
+            return new LipiChannel($cap);
+        }
+
+        // Resolve struct blueprint from current scope or imported module (e.g. ওয়েব.রিকোয়েস্ট)
+        if (str_contains($expr->structName, '.')) {
+            $parts = explode('.', $expr->structName);
+            $target = $this->environment->get($parts[0]);
+            for ($i = 1; $i < count($parts); $i++) {
+                if (is_array($target)) {
+                    $target = $target[$parts[$i]] ?? null;
+                } elseif ($target instanceof LipiStructInstance) {
+                    $target = $target->get($parts[$i]);
+                } else {
+                    $target = null;
+                }
+            }
+            $blueprint = $target;
+        } else {
+            $blueprint = $this->environment->get($expr->structName);
+        }
+
         if (!$blueprint instanceof LipiStructBlueprint) {
             throw new RuntimeException("'{$expr->structName}' কোনো গঠন (struct) নয় at line {$expr->line}");
         }
@@ -624,6 +925,43 @@ final class LipiRuntime
             $namedArgs[$key] = $this->evaluate($argExpr);
         }
         return $blueprint->instantiate($this, $args, $namedArgs);
+    }
+
+    private function evaluateSpawn(SpawnExpr $expr): LipiFiberHandle
+    {
+        $targetExpr = $expr->expression;
+
+        if ($targetExpr instanceof FnExpr) {
+            $fn = new LipiFunction("<async>", $targetExpr->params, $targetExpr->body, $this->environment);
+            return $this->spawnFiber(function () use ($fn) {
+                return $fn->call($this, []);
+            });
+        }
+
+        if ($targetExpr instanceof CallExpr) {
+            return $this->spawnFiber(function () use ($targetExpr) {
+                return $this->evaluateCall($targetExpr);
+            });
+        }
+
+        return $this->spawnFiber(function () use ($targetExpr) {
+            return $this->evaluate($targetExpr);
+        });
+    }
+
+    private function evaluateAwait(AwaitExpr $expr): mixed
+    {
+        $target = $this->evaluate($expr->expression);
+        if ($target instanceof LipiFiberHandle) {
+            return $target->await($this);
+        }
+        return $target;
+    }
+
+    private function evaluateChannel(ChannelExpr $expr): LipiChannel
+    {
+        $cap = $expr->capacity !== null ? (int)$this->evaluate($expr->capacity) : 0;
+        return new LipiChannel($cap);
     }
 
     private function evaluateAssign(AssignExpr $expr): mixed
@@ -794,6 +1132,52 @@ final class LipiRuntime
             return $obj->get($prop);
         }
 
+        if ($obj instanceof LipiChannel) {
+            return match ($prop) {
+                'পাঠাও', 'send', 'push' => new class($obj, $this) implements LipiCallable {
+                    public function __construct(private LipiChannel $chan, private LipiRuntime $rt) {}
+                    public function arity(): int { return 1; }
+                    public function call(LipiRuntime $runtime, array $arguments): mixed {
+                        $this->chan->send($arguments[0] ?? null, $this->rt);
+                        return null;
+                    }
+                },
+                'গ্রহণ', 'receive', 'pop' => new class($obj, $this) implements LipiCallable {
+                    public function __construct(private LipiChannel $chan, private LipiRuntime $rt) {}
+                    public function arity(): int { return 0; }
+                    public function call(LipiRuntime $runtime, array $arguments): mixed {
+                        return $this->chan->receive($this->rt);
+                    }
+                },
+                'বন্ধ', 'close' => new class($obj) implements LipiCallable {
+                    public function __construct(private LipiChannel $chan) {}
+                    public function arity(): int { return 0; }
+                    public function call(LipiRuntime $runtime, array $arguments): mixed {
+                        $this->chan->close();
+                        return null;
+                    }
+                },
+                'আকার', 'size', 'length', 'count' => $obj->count(),
+                'বন্ধ_কিনা', 'is_closed' => $obj->isClosed(),
+                default => null,
+            };
+        }
+
+        if ($obj instanceof LipiFiberHandle) {
+            return match ($prop) {
+                'অপেক্ষা', 'await' => new class($obj, $this) implements LipiCallable {
+                    public function __construct(private LipiFiberHandle $handle, private LipiRuntime $rt) {}
+                    public function arity(): int { return 0; }
+                    public function call(LipiRuntime $runtime, array $arguments): mixed {
+                        return $this->handle->await($this->rt);
+                    }
+                },
+                'ফলাফল', 'result' => $obj->result,
+                'সম্পন্ন', 'is_done' => $obj->completed,
+                default => null,
+            };
+        }
+
         if (is_array($obj)) {
             return $obj[$prop] ?? null;
         }
@@ -829,6 +1213,12 @@ final class LipiRuntime
         }
         if ($value === false) {
             return 'মিথ্যা';
+        }
+        if ($value instanceof LipiChannel) {
+            return 'চ্যানেল(ধারণক্ষমতা: ' . $value->capacity . ', উপাদান: ' . $value->count() . ')';
+        }
+        if ($value instanceof LipiFiberHandle) {
+            return 'ফাইবার(আইডি: ' . $value->id . ', সম্পন্ন: ' . ($value->completed ? 'সত্য' : 'মিথ্যা') . ')';
         }
         if ($value instanceof LipiStructInstance) {
             $pairs = [];
