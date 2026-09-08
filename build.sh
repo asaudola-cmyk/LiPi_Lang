@@ -36,7 +36,8 @@ echo -e "${YELLOW}[ধাপ ০] বীজ (Bootstrapper Seed) ও টুলস
 gcc -O2 -Wall -Wextra src/seed/bootstrapper.c -o bin/lipic
 cp bin/lipic bin/lipi-seed
 gcc -O2 -Wall -Wextra src/tools/lipipkg.c -o bin/lipipkg
-echo -e "${GREEN}  ✔ bin/lipic, bin/lipi-seed এবং bin/lipipkg সফলভাবে নির্মিত হয়েছে।${NC}"
+gcc -O2 -Wall -Wextra src/tools/lipidbg.c -o bin/lipidbg
+echo -e "${GREEN}  ✔ bin/lipic, bin/lipi-seed, bin/lipipkg এবং bin/lipidbg সফলভাবে নির্মিত হয়েছে।${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -80,6 +81,10 @@ TESTS=(
     "examples/26_async_epoll_event_loop.lp:dist/test26_epoll"
     "examples/27_lipipkg_project_lifecycle.lp:dist/test27_pkg"
     "examples/28_hardware_crypto_sha256.lp:dist/test28_crypto"
+    "examples/29_lipidbg_system_debugger.lp:dist/test29_debug"
+    "examples/30_ast_optimizer_constant_folding.lp:dist/test30_optimizer"
+    "examples/31_pure_lipi_tls_crypto_stream.lp:dist/test31_tls"
+    "examples/32_silicon_graphics_framebuffer.lp:dist/test32_gfx"
 )
 
 for test_pair in "${TESTS[@]}"; do

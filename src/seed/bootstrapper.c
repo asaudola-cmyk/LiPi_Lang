@@ -1253,6 +1253,46 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         }
     }
 
+    // 32-bit Left Bitwise Rotation: রোটেট_বামে_৩২(মান, বিট) / rol32(val, bits)
+    // WHY: Direct single-cycle instruction execution for ChaCha20 TLS cryptographic stream cipher.
+    if (is_exact_builtin_call(s, "রোটেট_বামে_৩২(") ||
+        is_exact_builtin_call(s, "rol32(")) {
+        char copy_r[1024];
+        strncpy(copy_r, s, sizeof(copy_r) - 1);
+        copy_r[sizeof(copy_r) - 1] = '\0';
+        char *open_p = strchr(copy_r, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 2) {
+            compile_expression_recursive(cb, ro, args[0]); // val
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // bits
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xc1}, 3); // mov rcx, rax (count into cl)
+            emit_u8(cb, 0x58);                             // pop rax
+            emit_bytes(cb, (const uint8_t[]){0xd3, 0xc0}, 2);       // rol eax, cl (32-bit rotate)
+            return;
+        }
+    }
+
+    // Hardware Breakpoint Expression: ব্রেকপয়েন্ট() / breakpoint()
+    // WHY: Emits an x86_64 INT 3 (0xCC) software trap instruction for lipidbg / native debuggers.
+    if (strcmp(s, "ব্রেকপয়েন্ট()") == 0 || strcmp(s, "ব্রেকপয়েন্ট") == 0 ||
+        strcmp(s, "breakpoint()") == 0 || strcmp(s, "breakpoint") == 0) {
+        emit_u8(cb, 0xcc); // int 3
+        emit_bytes(cb, (const uint8_t[]){0x48, 0x31, 0xc0}, 3); // xor rax, rax
+        return;
+    }
+
+    // Hardware Stack Pointer Read: স্ট্যাক_পয়েন্টার() / stack_pointer()
+    // WHY: Direct single-cycle inspection of the physical %rsp register for memory layout inspection.
+    if (strcmp(s, "স্ট্যাক_পয়েন্টার()") == 0 || strcmp(s, "স্ট্যাক_পয়েন্টার") == 0 ||
+        strcmp(s, "stack_pointer()") == 0 || strcmp(s, "stack_pointer") == 0) {
+        emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xe0}, 3); // mov rax, rsp
+        return;
+    }
+
     if (is_function_call_expr(s)) {
         emit_function_call(cb, ro, s);
         return;
@@ -1264,13 +1304,19 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         OP_OR = 1,
         OP_XOR = 2,
         OP_AND = 3,
-        OP_ADD = 4,
-        OP_SUB = 5,
-        OP_SHL = 6,
-        OP_SHR = 7,
-        OP_MUL = 8,
-        OP_DIV = 9,
-        OP_MOD = 10
+        OP_EQ = 4,
+        OP_NE = 5,
+        OP_LT = 6,
+        OP_LE = 7,
+        OP_GT = 8,
+        OP_GE = 9,
+        OP_SHL = 10,
+        OP_SHR = 11,
+        OP_ADD = 12,
+        OP_SUB = 13,
+        OP_MUL = 14,
+        OP_DIV = 15,
+        OP_MOD = 16
     };
 
     enum OpType op_type = OP_NONE;
@@ -1338,7 +1384,35 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         }
     }
 
-    // Pass 4: Addition '+' and Subtraction '-'
+    // Pass 4: Equality '==' and '!='
+    if (op_idx == -1) {
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
+        for (int i = len - 1; i >= 1; i--) {
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0) {
+                if (s[i] == '=' && s[i-1] == '=') {
+                    op_idx = i - 1;
+                    op_len = 2;
+                    op_type = OP_EQ;
+                    break;
+                }
+                if (s[i] == '=' && s[i-1] == '!') {
+                    op_idx = i - 1;
+                    op_len = 2;
+                    op_type = OP_NE;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Pass 5: Relational '<=', '>=', '<', '>'
     if (op_idx == -1) {
         paren_depth = 0; bracket_depth = 0; in_quote = false;
         for (int i = len - 1; i >= 0; i--) {
@@ -1349,18 +1423,36 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
             else if (s[i] == '(') paren_depth--;
             else if (s[i] == ']') bracket_depth++;
             else if (s[i] == '[') bracket_depth--;
-            else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 &&
-                     s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '%' && s[i-1] != '+' && s[i-1] != '-' &&
-                     s[i-1] != '&' && s[i-1] != '|' && s[i-1] != '^' && s[i-1] != '<' && s[i-1] != '>') {
-                op_idx = i;
-                op_len = 1;
-                op_type = (s[i] == '+') ? OP_ADD : OP_SUB;
-                break;
+            else if (paren_depth == 0 && bracket_depth == 0) {
+                if (i >= 1 && s[i] == '=' && s[i-1] == '<') {
+                    op_idx = i - 1;
+                    op_len = 2;
+                    op_type = OP_LE;
+                    break;
+                }
+                if (i >= 1 && s[i] == '=' && s[i-1] == '>') {
+                    op_idx = i - 1;
+                    op_len = 2;
+                    op_type = OP_GE;
+                    break;
+                }
+                if (s[i] == '<' && (i == 0 || s[i-1] != '<') && s[i+1] != '<' && s[i+1] != '=') {
+                    op_idx = i;
+                    op_len = 1;
+                    op_type = OP_LT;
+                    break;
+                }
+                if (s[i] == '>' && (i == 0 || s[i-1] != '>') && s[i+1] != '>' && s[i+1] != '=') {
+                    op_idx = i;
+                    op_len = 1;
+                    op_type = OP_GT;
+                    break;
+                }
             }
         }
     }
 
-    // Pass 5: Bitwise Shifts '<<' and '>>'
+    // Pass 6: Bitwise Shifts '<<' and '>>'
     if (op_idx == -1) {
         paren_depth = 0; bracket_depth = 0; in_quote = false;
         for (int i = len - 1; i >= 1; i--) {
@@ -1388,7 +1480,30 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         }
     }
 
-    // Pass 6 (Highest precedence): Multiplication '*', Division '/', Modulo '%'
+    // Pass 7: Addition '+' and Subtraction '-'
+    if (op_idx == -1) {
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
+        for (int i = len - 1; i >= 0; i--) {
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 &&
+                     s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '%' && s[i-1] != '+' && s[i-1] != '-' &&
+                     s[i-1] != '&' && s[i-1] != '|' && s[i-1] != '^' && s[i-1] != '<' && s[i-1] != '>' &&
+                     s[i-1] != '=' && s[i-1] != '!') {
+                op_idx = i;
+                op_len = 1;
+                op_type = (s[i] == '+') ? OP_ADD : OP_SUB;
+                break;
+            }
+        }
+    }
+
+    // Pass 8 (Highest precedence): Multiplication '*', Division '/', Modulo '%'
     if (op_idx == -1) {
         paren_depth = 0; bracket_depth = 0; in_quote = false;
         for (int i = len - 1; i >= 0; i--) {
@@ -1413,6 +1528,40 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         char *left = trim(s);
         char *right = trim(s + op_idx + op_len);
 
+        // ⚡ AST & Compiler Optimization: Compile-time Constant Folding
+        // WHY: If both operands are known compile-time numeric constants, evaluate the arithmetic
+        // or bitwise operation at compile time, eliminating push/pop instructions and runtime CPU latency.
+        if (is_numeric_str(left) && is_numeric_str(right)) {
+            int64_t vl = parse_bangla_number(left);
+            int64_t vr = parse_bangla_number(right);
+            bool can_fold = true;
+            int64_t res = 0;
+            switch (op_type) {
+                case OP_OR:  res = vl | vr; break;
+                case OP_XOR: res = vl ^ vr; break;
+                case OP_AND: res = vl & vr; break;
+                case OP_EQ:  res = (vl == vr) ? 1 : 0; break;
+                case OP_NE:  res = (vl != vr) ? 1 : 0; break;
+                case OP_LT:  res = (vl < vr) ? 1 : 0; break;
+                case OP_LE:  res = (vl <= vr) ? 1 : 0; break;
+                case OP_GT:  res = (vl > vr) ? 1 : 0; break;
+                case OP_GE:  res = (vl >= vr) ? 1 : 0; break;
+                case OP_SHL: res = vl << (vr & 63); break;
+                case OP_SHR: res = (uint64_t)vl >> (vr & 63); break;
+                case OP_ADD: res = vl + vr; break;
+                case OP_SUB: res = vl - vr; break;
+                case OP_MUL: res = vl * vr; break;
+                case OP_DIV: if (vr != 0) res = vl / vr; else can_fold = false; break;
+                case OP_MOD: if (vr != 0) res = vl % vr; else can_fold = false; break;
+                default: can_fold = false; break;
+            }
+            if (can_fold) {
+                emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
+                emit_u64(cb, (uint64_t)res);
+                return;
+            }
+        }
+
         compile_expression_recursive(cb, ro, left);
         emit_u8(cb, 0x50); // push rax
         compile_expression_recursive(cb, ro, right);
@@ -1423,6 +1572,12 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
             case OP_OR:  emit_bytes(cb, (const uint8_t[]){0x48, 0x09, 0xd8}, 3); break; // or rax, rbx
             case OP_XOR: emit_bytes(cb, (const uint8_t[]){0x48, 0x31, 0xd8}, 3); break; // xor rax, rbx
             case OP_AND: emit_bytes(cb, (const uint8_t[]){0x48, 0x21, 0xd8}, 3); break; // and rax, rbx
+            case OP_EQ:  emit_bytes(cb, (const uint8_t[]){0x48, 0x39, 0xd8, 0x0f, 0x94, 0xc0, 0x48, 0x0f, 0xb6, 0xc0}, 10); break; // cmp rax, rbx; sete al; movzx rax, al
+            case OP_NE:  emit_bytes(cb, (const uint8_t[]){0x48, 0x39, 0xd8, 0x0f, 0x95, 0xc0, 0x48, 0x0f, 0xb6, 0xc0}, 10); break; // cmp rax, rbx; setne al; movzx rax, al
+            case OP_LT:  emit_bytes(cb, (const uint8_t[]){0x48, 0x39, 0xd8, 0x0f, 0x9c, 0xc0, 0x48, 0x0f, 0xb6, 0xc0}, 10); break; // cmp rax, rbx; setl al; movzx rax, al
+            case OP_LE:  emit_bytes(cb, (const uint8_t[]){0x48, 0x39, 0xd8, 0x0f, 0x9e, 0xc0, 0x48, 0x0f, 0xb6, 0xc0}, 10); break; // cmp rax, rbx; setle al; movzx rax, al
+            case OP_GT:  emit_bytes(cb, (const uint8_t[]){0x48, 0x39, 0xd8, 0x0f, 0x9f, 0xc0, 0x48, 0x0f, 0xb6, 0xc0}, 10); break; // cmp rax, rbx; setg al; movzx rax, al
+            case OP_GE:  emit_bytes(cb, (const uint8_t[]){0x48, 0x39, 0xd8, 0x0f, 0x9d, 0xc0, 0x48, 0x0f, 0xb6, 0xc0}, 10); break; // cmp rax, rbx; setge al; movzx rax, al
             case OP_SHL: emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xd9, 0x48, 0xd3, 0xe0}, 6); break; // mov rcx, rbx; shl rax, cl
             case OP_SHR: emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xd9, 0x48, 0xd3, 0xe8}, 6); break; // mov rcx, rbx; shr rax, cl
             case OP_ADD: emit_add_rax_rbx(cb); break;
@@ -2026,6 +2181,14 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         }
 
         emit_print_static_string(cb, ro, "\n", 1);
+        return;
+    }
+
+    // Hardware Breakpoint Statement: ব্রেকপয়েন্ট() / breakpoint()
+    // WHY: Emits an x86_64 INT 3 (0xCC) software trap instruction for lipidbg / OS kernel debuggers.
+    if (strcmp(trimmed, "ব্রেকপয়েন্ট()") == 0 || strcmp(trimmed, "ব্রেকপয়েন্ট") == 0 ||
+        strcmp(trimmed, "breakpoint()") == 0 || strcmp(trimmed, "breakpoint") == 0) {
+        emit_u8(cb, 0xcc); // int 3
         return;
     }
 
@@ -2887,6 +3050,10 @@ int run_tests(void) {
         "examples/26_async_epoll_event_loop.lp",
         "examples/27_lipipkg_project_lifecycle.lp",
         "examples/28_hardware_crypto_sha256.lp",
+        "examples/29_lipidbg_system_debugger.lp",
+        "examples/30_ast_optimizer_constant_folding.lp",
+        "examples/31_pure_lipi_tls_crypto_stream.lp",
+        "examples/32_silicon_graphics_framebuffer.lp",
         NULL
     };
 
