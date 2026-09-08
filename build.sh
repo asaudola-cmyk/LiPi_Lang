@@ -61,9 +61,13 @@ echo -e "${YELLOW}[ধাপ ৩] লিপি টেস্ট প্রোগ�
 
 TESTS=(
     "examples/01_hello.lp:dist/test01_hello"
+    "examples/02_math_fibonacci.lp:dist/test02_fibonacci"
     "examples/12_native_silicon_logic.lp:dist/test12_silicon"
     "examples/13_sovereign_cpu_arithmetic.lp:dist/test13_arithmetic"
     "examples/14_sovereign_loop_and_logic.lp:dist/test14_loop"
+    "examples/15_functions_and_recursion.lp:dist/test15_functions"
+    "examples/16_kernel_syscalls_file_io.lp:dist/test16_syscalls"
+    "examples/17_standard_library_import.lp:dist/test17_stdlib"
 )
 
 for test_pair in "${TESTS[@]}"; do
