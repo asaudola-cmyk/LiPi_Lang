@@ -71,6 +71,10 @@ TESTS=(
     "examples/18_native_web_server.lp:dist/test18_web_server"
     "examples/19_heap_memory_and_pointers.lp:dist/test19_heap"
     "examples/20_grand_stdlib_expansion.lp:dist/test20_stdlib"
+    "examples/21_kernel_multithreading.lp:dist/test21_threads"
+    "examples/22_custom_structs_and_types.lp:dist/test22_structs"
+    "examples/23_native_database_engine.lp:dist/test23_db"
+    "examples/24_silicon_matrix_ai.lp:dist/test24_simd"
 )
 
 for test_pair in "${TESTS[@]}"; do

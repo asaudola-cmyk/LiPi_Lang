@@ -54,6 +54,7 @@ typedef struct {
     size_t string_len;
     int64_t const_val;
     char func_scope[128]; // Empty for global/main, or function name
+    char struct_type[64]; // Stores struct type if known (মহাদিগন্ত ১১: গঠন / Structs)
 } Symbol;
 
 static Symbol g_syms[MAX_SYMBOLS];
@@ -91,6 +92,7 @@ static Symbol *add_symbol(const char *name) {
         s->rodata_offset = 0;
         s->string_len = 0;
         s->const_val = 0;
+        s->struct_type[0] = '\0';
         return s;
     }
     return NULL;
@@ -253,6 +255,120 @@ static void strip_inline_comments(char *str) {
                 break;
             }
         }
+    }
+}
+
+// Struct definition representation for Custom Types (মহাদিগন্ত ১১: গঠন / Structs)
+// WHY: Allows custom data structures with named fields, automatic 8-byte alignment, and dot syntax.
+typedef struct {
+    char name[64];
+    int field_count;
+    char field_names[16][64];
+    int field_offsets[16];
+    int total_size;
+} StructDef;
+
+static StructDef g_structs[32];
+static int g_struct_count = 0;
+
+static StructDef *find_struct(const char *name) {
+    for (int i = 0; i < g_struct_count; i++) {
+        if (strcmp(g_structs[i].name, name) == 0) return &g_structs[i];
+    }
+    return NULL;
+}
+
+static int find_struct_field_offset_in(const char *struct_name, const char *field_name) {
+    StructDef *sd = find_struct(struct_name);
+    if (sd) {
+        for (int j = 0; j < sd->field_count; j++) {
+            if (strcmp(sd->field_names[j], field_name) == 0) {
+                return sd->field_offsets[j];
+            }
+        }
+    }
+    return -1;
+}
+
+static int find_struct_field_offset(const char *field_name) {
+    for (int i = 0; i < g_struct_count; i++) {
+        for (int j = 0; j < g_structs[i].field_count; j++) {
+            if (strcmp(g_structs[i].field_names[j], field_name) == 0) {
+                return g_structs[i].field_offsets[j];
+            }
+        }
+    }
+    return -1;
+}
+
+static void parse_all_structs(const char *source) {
+    const char *p = source;
+    const size_t len_gothon = strlen("গঠন");
+
+    while (*p) {
+        bool is_gothon = (strncmp(p, "গঠন", len_gothon) == 0 && (p[len_gothon] == ' ' || p[len_gothon] == '\t'));
+        bool is_struct = (strncmp(p, "struct", 6) == 0 && (p[6] == ' ' || p[6] == '\t'));
+
+        if (is_gothon || is_struct) {
+            size_t pfx = is_gothon ? len_gothon : 6;
+            p += pfx;
+            while (*p && isspace((unsigned char)*p)) p++;
+
+            const char *name_start = p;
+            while (*p && !isspace((unsigned char)*p) && *p != '{') p++;
+            size_t name_len = (size_t)(p - name_start);
+
+            while (*p && *p != '{') p++;
+            if (*p == '{') {
+                p++;
+                const char *body_start = p;
+                int depth = 1;
+                while (*p && depth > 0) {
+                    if (*p == '{') depth++;
+                    else if (*p == '}') depth--;
+                    if (depth > 0) p++;
+                }
+                const char *body_end = p;
+
+                if (g_struct_count < 32 && name_len > 0) {
+                    StructDef *sd = &g_structs[g_struct_count++];
+                    memset(sd, 0, sizeof(StructDef));
+                    if (name_len < sizeof(sd->name)) {
+                        strncpy(sd->name, name_start, name_len);
+                        sd->name[name_len] = '\0';
+                    }
+
+                    char body_copy[4096];
+                    size_t blen = (size_t)(body_end - body_start);
+                    if (blen < sizeof(body_copy)) {
+                        strncpy(body_copy, body_start, blen);
+                        body_copy[blen] = '\0';
+
+                        char *saveptr = NULL;
+                        char *field_tok = strtok_r(body_copy, ",\r\n;", &saveptr);
+                        while (field_tok && sd->field_count < 16) {
+                            char *fn = trim(field_tok);
+                            char *c1 = strstr(fn, "//");
+                            if (c1) *c1 = '\0';
+                            char *c2 = strchr(fn, '#');
+                            if (c2) *c2 = '\0';
+                            fn = trim(fn);
+                            if (*fn != '\0') {
+                                strncpy(sd->field_names[sd->field_count], fn, 63);
+                                sd->field_names[sd->field_count][63] = '\0';
+                                sd->field_offsets[sd->field_count] = sd->field_count * 8;
+                                sd->field_count++;
+                            }
+                            field_tok = strtok_r(NULL, ",\r\n;", &saveptr);
+                        }
+                        sd->total_size = sd->field_count * 8;
+                    }
+                }
+                if (*p == '}') p++;
+                continue;
+            }
+        }
+        p++;
     }
 }
 
@@ -770,6 +886,87 @@ static void emit_function_call(CodeBuffer *cb, RoDataBuffer *ro, const char *cal
     add_func_reloc(patch_pos, func_name);
 }
 
+// Native Linux Kernel Thread Spawner (মহাদিগন্ত ১০: থ্রেড_চালু / thread_spawn)
+// WHY: Spawns an isolated kernel thread with its own stack and clean frame, calls target func(arg), and auto-exits.
+static void emit_thread_spawn(CodeBuffer *cb, RoDataBuffer *ro, const char *spawn_expr) {
+    char copy[4096];
+    strncpy(copy, spawn_expr, sizeof(copy) - 1);
+    copy[sizeof(copy) - 1] = '\0';
+    char *open_p = strchr(copy, '(');
+    if (!open_p) return;
+    char *close_p = find_matching_close_paren(open_p + 1);
+    if (close_p) *close_p = '\0';
+
+    char args[8][1024];
+    int count = parse_call_arguments(open_p + 1, args);
+    if (count < 2) return;
+
+    char *func_name = trim(args[0]);
+    char *stack_expr = trim(args[1]);
+    char *arg_expr = (count >= 3) ? trim(args[2]) : "0";
+
+    // 1. Evaluate arg and push to stack
+    compile_expression_recursive(cb, ro, arg_expr);
+    emit_u8(cb, 0x50); // push rax (arg)
+
+    // 2. Evaluate stack_top and push to stack
+    compile_expression_recursive(cb, ro, stack_expr);
+    emit_u8(cb, 0x50); // push rax (stack_top)
+
+    // 3. Pop stack_top into rsi, pop arg into r8
+    emit_u8(cb, 0x5e); // pop rsi (stack_top)
+    emit_bytes(cb, (const uint8_t[]){0x41, 0x58}, 2); // pop r8 (arg)
+
+    // 4. Align child stack to 16 bytes and store arg at top of child stack
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x83, 0xe6, 0xf0}, 4); // and rsi, -16
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x83, 0xee, 0x10}, 4); // sub rsi, 16
+    emit_bytes(cb, (const uint8_t[]){0x4c, 0x89, 0x06}, 3);       // mov [rsi], r8
+
+    // 5. Setup SYS_clone (56) arguments:
+    // rax = 56
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc0, 0x38, 0x00, 0x00, 0x00}, 7);
+    // rdi = flags = 69376 (0x10f00: CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc7, 0x00, 0x0f, 0x01, 0x00}, 7);
+    // rdx = 0 (parent_tid) -> xor rdx, rdx
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x31, 0xd2}, 3);
+    // r10 = 0 (child_tid) -> xor r10, r10
+    emit_bytes(cb, (const uint8_t[]){0x4d, 0x31, 0xd2}, 3);
+    // r8 = 0 (tls) -> xor r8, r8
+    emit_bytes(cb, (const uint8_t[]){0x4d, 0x31, 0xc0}, 3);
+    // syscall
+    emit_bytes(cb, (const uint8_t[]){0x0f, 0x05}, 2);
+
+    // 6. Test if child:
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x85, 0xc0}, 3); // test rax, rax
+    emit_bytes(cb, (const uint8_t[]){0x0f, 0x85}, 2);       // jnz .parent_continue
+    size_t parent_jmp_patch = cb->size;
+    emit_u32(cb, 0); // placeholder
+
+    // -------------------------------------------------------------
+    // CHILD THREAD EXECUTION BLOCK:
+    // -------------------------------------------------------------
+    emit_u8(cb, 0x5f);                                             // pop rdi (arg)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x31, 0xed}, 3);       // xor rbp, rbp (fresh base frame)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x83, 0xec, 0x08}, 4); // sub rsp, 8 (align 16-byte stack)
+    emit_u8(cb, 0xe8);                                             // call rel32 target_fn
+    size_t fn_patch = cb->size;
+    emit_u32(cb, 0);
+    add_func_reloc(fn_patch, func_name);
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x83, 0xc4, 0x08}, 4); // add rsp, 8
+
+    // Auto terminate child thread: SYS_exit (60)
+    emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xc7}, 3);                         // mov rdi, rax
+    emit_bytes(cb, (const uint8_t[]){0x48, 0xc7, 0xc0, 0x3c, 0x00, 0x00, 0x00}, 7); // mov rax, 60
+    emit_bytes(cb, (const uint8_t[]){0x0f, 0x05}, 2);                               // syscall
+
+    // -------------------------------------------------------------
+    // PARENT THREAD CONTINUATION:
+    // -------------------------------------------------------------
+    int32_t disp = (int32_t)(cb->size - (parent_jmp_patch + 4));
+    memcpy(&cb->bytes[parent_jmp_patch], &disp, sizeof(int32_t));
+    // RAX now holds child TID in parent thread!
+}
+
 // Outermost Parenthesis Stripper: ((a + b)) -> a + b
 static char *strip_outer_parens(char *s) {
     s = trim(s);
@@ -803,14 +1000,42 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
     copy[sizeof(copy) - 1] = '\0';
     char *s = strip_outer_parens(copy);
 
-    if (strstr(s, "সিপিউ_ক্লক") != NULL || strcmp(s, "rdtsc()") == 0 || strcmp(s, "rdtsc") == 0 || strcmp(s, "clock()") == 0) {
+    if (strstr(s, "সিপিউ_ক্লক") != NULL || strcmp(s, "rdtsc()") == 0 || strcmp(s, "rdtsc") == 0 || strcmp(s, "clock()") == 0 || strcmp(s, "সাইকেল()") == 0 || strcmp(s, "সাইকেল") == 0) {
         emit_rdtsc(cb, g_current_stack_offset);
         emit_mov_rax_stack(cb, g_current_stack_offset);
         return;
     }
 
+    if (strncmp(s, "সাইজ(", strlen("সাইজ(")) == 0 ||
+        strncmp(s, "আকার(", strlen("আকার(")) == 0 ||
+        strncmp(s, "sizeof(", 7) == 0) {
+        char copy_sz[256];
+        strncpy(copy_sz, s, sizeof(copy_sz) - 1);
+        copy_sz[sizeof(copy_sz) - 1] = '\0';
+        char *open_p = strchr(copy_sz, '(');
+        if (open_p) {
+            char *close_p = find_matching_close_paren(open_p + 1);
+            if (close_p) *close_p = '\0';
+            char *type_name = trim(open_p + 1);
+            StructDef *sd = find_struct(type_name);
+            if (sd) {
+                emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
+                emit_u64(cb, (uint64_t)sd->total_size);
+                return;
+            }
+        }
+    }
+
     if (strncmp(s, "সিসকল(", strlen("সিসকল(")) == 0 || strncmp(s, "syscall(", 8) == 0) {
         emit_syscall(cb, ro, s);
+        return;
+    }
+
+    // Native Linux Kernel Thread Spawner: থ্রেড_চালু(ফাংশন, স্ট্যাক_টপ, আর্গ) / thread_spawn(fn, stack, arg)
+    // WHY: Returns child TID to parent while child executes fn(arg) in an isolated hardware stack.
+    if (strncmp(s, "থ্রেড_চালু(", strlen("থ্রেড_চালু(")) == 0 ||
+        strncmp(s, "thread_spawn(", 13) == 0) {
+        emit_thread_spawn(cb, ro, s);
         return;
     }
 
@@ -996,6 +1221,43 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
             }
         }
 
+        // Struct field access expression: target.field (e.g. রহিম.বয়স)
+        // WHY: Computes base object memory address, offsets by struct field displacement, and dereferences 64-bit value.
+        char *dot = strchr(s, '.');
+        if (dot && dot != s && *(dot + 1) != '\0' && !is_numeric_str(s)) {
+            char target_part[512] = {0};
+            char field_part[512] = {0};
+            size_t t_len = (size_t)(dot - s);
+            if (t_len < sizeof(target_part)) {
+                strncpy(target_part, s, t_len);
+                target_part[t_len] = '\0';
+                strncpy(field_part, dot + 1, sizeof(field_part) - 1);
+                field_part[sizeof(field_part) - 1] = '\0';
+                char *target_trim = trim(target_part);
+                char *field_trim = trim(field_part);
+
+                int offset = -1;
+                Symbol *sym = find_symbol(target_trim);
+                if (sym && sym->struct_type[0] != '\0') {
+                    offset = find_struct_field_offset_in(sym->struct_type, field_trim);
+                }
+                if (offset < 0) {
+                    offset = find_struct_field_offset(field_trim);
+                }
+
+                if (offset >= 0) {
+                    compile_expression_recursive(cb, ro, target_trim);
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xc7}, 3); // mov rdi, rax
+                    if (offset > 0) {
+                        emit_bytes(cb, (const uint8_t[]){0x48, 0x81, 0xc7}, 3); // add rdi, imm32
+                        emit_u32(cb, (uint32_t)offset);
+                    }
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0x8b, 0x07}, 3); // mov rax, [rdi]
+                    return;
+                }
+            }
+        }
+
         if (s[0] == '"' || s[0] == '\'') {
             char q = s[0];
             char str_buf[4096];
@@ -1143,6 +1405,7 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
     const size_t len_dekhao = strlen("দেখাও");
     const size_t len_jodi = strlen("যদি");
     const size_t len_nahole = strlen("নাহলে");
+    const size_t len_onnothay = strlen("অন্যথায়");
     const size_t len_jotokkhon = strlen("যতক্ষণ");
     const size_t len_ferot = strlen("ফেরত");
 
@@ -1190,10 +1453,11 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         return;
     }
 
-    // 3. 'নাহলে {' / 'else {'
+    // 3. 'নাহলে {' / 'অন্যথায় {' / 'else {'
     bool is_nahole = (strncmp(trimmed, "নাহলে", len_nahole) == 0 && (trimmed[len_nahole] == ' ' || trimmed[len_nahole] == '{' || trimmed[len_nahole] == '\0'));
+    bool is_onnothay = (strncmp(trimmed, "অন্যথায়", len_onnothay) == 0 && (trimmed[len_onnothay] == ' ' || trimmed[len_onnothay] == '{' || trimmed[len_onnothay] == '\0'));
     bool is_else = (strncmp(trimmed, "else", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '{' || trimmed[4] == '\0'));
-    if (is_nahole || is_else) {
+    if (is_nahole || is_onnothay || is_else) {
         if (g_block_depth > 0 && g_blocks[g_block_depth - 1].type == BLOCK_IF) {
             emit_u8(cb, 0xe9); // jmp rel32 to skip else block
             size_t jmp_patch = cb->size;
@@ -1328,6 +1592,28 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         return;
     }
 
+    // Custom Struct Variable Declaration: <StructType> <var_name> (e.g. মানুষ রহিম)
+    // WHY: Provides strongly-typed composite struct variable declarations directly bound to memory.
+    char stmt_copy[256];
+    strncpy(stmt_copy, trimmed, sizeof(stmt_copy) - 1);
+    stmt_copy[sizeof(stmt_copy) - 1] = '\0';
+    char *first_space = strchr(stmt_copy, ' ');
+    if (!first_space) first_space = strchr(stmt_copy, '\t');
+    if (first_space) {
+        *first_space = '\0';
+        char *type_cand = trim(stmt_copy);
+        char *var_cand = trim(first_space + 1);
+        StructDef *sd_cand = find_struct(type_cand);
+        if (sd_cand && *var_cand != '\0' && !strchr(var_cand, '(') && !strchr(var_cand, '=')) {
+            Symbol *s = add_symbol(var_cand);
+            if (s) {
+                snprintf(s->struct_type, sizeof(s->struct_type), "%s", sd_cand->name);
+                emit_mov_stack_imm(cb, s->stack_offset, 0);
+            }
+            return;
+        }
+    }
+
     // 6. Variable declaration: ধরি <name> = <expr> / let <name> = <expr>
     bool is_dhori = (strncmp(trimmed, "ধরি", len_dhori) == 0 && (trimmed[len_dhori] == ' ' || trimmed[len_dhori] == '\t'));
     bool is_let   = (strncmp(trimmed, "let", 3) == 0 && (trimmed[3] == ' ' || trimmed[3] == '\t'));
@@ -1362,6 +1648,23 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
                     emit_mov_stack_rax(cb, sym->stack_offset);
                     sym->is_initialized = true;
                     sym->is_string = false;
+
+                    // Automatically infer struct type from sizeof/size expression
+                    char *sz = strstr(expr, "সাইজ(");
+                    if (!sz) sz = strstr(expr, "আকার(");
+                    if (!sz) sz = strstr(expr, "sizeof(");
+                    if (sz) {
+                        char *op = strchr(sz, '(');
+                        char *cp = op ? strchr(op, ')') : NULL;
+                        if (op && cp && cp > op + 1) {
+                            char tname[64] = {0};
+                            size_t tlen = cp - (op + 1);
+                            if (tlen < sizeof(tname)) {
+                                strncpy(tname, op + 1, tlen);
+                                strncpy(sym->struct_type, trim(tname), 63);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1439,7 +1742,8 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
             }
 
             if ((strchr(token, '(') && token[strlen(token) - 1] == ')') ||
-                (strchr(token, '[') && token[strlen(token) - 1] == ']')) {
+                (strchr(token, '[') && token[strlen(token) - 1] == ']') ||
+                (strchr(token, '.') && !is_numeric_str(token))) {
                 compile_expression_recursive(cb, ro, token);
                 emit_runtime_print_bangla_num(cb, false);
                 continue;
@@ -1525,9 +1829,50 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         }
     }
 
+    // SIMD 128-bit Vector Addition Statement: ভেক্টর_যোগ_১২৮(গন্তব্য, উৎস) / simd_add128(dst, src)
+    // WHY: Directly emits x86_64 SSE2 vector instructions to perform 128-bit parallel arithmetic.
+    // Loads two 64-bit integers simultaneously into xmm1 from [src], two 64-bit integers into xmm0
+    // from [dst], performs parallel vector addition with paddq in 1 silicon CPU cycle, and writes back.
+    if (strncmp(trimmed, "ভেক্টর_যোগ_১২৮(", strlen("ভেক্টর_যোগ_১২৮(")) == 0 ||
+        strncmp(trimmed, "simd_add128(", 12) == 0) {
+        char copy[4096];
+        strncpy(copy, trimmed, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 2) {
+            compile_expression_recursive(cb, ro, args[0]); // dst address
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // src address
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5e);                             // pop rsi (src)
+            emit_u8(cb, 0x5f);                             // pop rdi (dst)
+
+            // movdqu xmm1, [rsi] -> f3 0f 6f 0e (load 128-bit vector from src)
+            emit_bytes(cb, (const uint8_t[]){0xf3, 0x0f, 0x6f, 0x0e}, 4);
+            // movdqu xmm0, [rdi] -> f3 0f 6f 07 (load 128-bit vector from dst)
+            emit_bytes(cb, (const uint8_t[]){0xf3, 0x0f, 0x6f, 0x07}, 4);
+            // paddq xmm0, xmm1   -> 66 0f d4 c1 (parallel SIMD addition of two 64-bit elements)
+            emit_bytes(cb, (const uint8_t[]){0x66, 0x0f, 0xd4, 0xc1}, 4);
+            // movdqu [rdi], xmm0 -> f3 0f 7f 07 (store 128-bit result back to dst)
+            emit_bytes(cb, (const uint8_t[]){0xf3, 0x0f, 0x7f, 0x07}, 4);
+            return;
+        }
+    }
+
     // 8. Direct Linux Kernel Syscall Statement: সিসকল(...) / syscall(...)
     if (strncmp(trimmed, "সিসকল(", strlen("সিসকল(")) == 0 || strncmp(trimmed, "syscall(", 8) == 0) {
         emit_syscall(cb, ro, trimmed);
+        return;
+    }
+
+    // Native Kernel Thread Spawn Statement: থ্রেড_চালু(...) / thread_spawn(...)
+    if (strncmp(trimmed, "থ্রেড_চালু(", strlen("থ্রেড_চালু(")) == 0 ||
+        strncmp(trimmed, "thread_spawn(", 13) == 0) {
+        emit_thread_spawn(cb, ro, trimmed);
         return;
     }
 
@@ -1537,7 +1882,7 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         return;
     }
 
-    // 10. Variable / Array Indexed Reassignment: <target>[<index>] = <expr> OR <var> = <expr>
+    // 10. Variable / Array Indexed / Struct Field Reassignment: <target>[<index>] = <expr> OR <target>.<field> = <expr> OR <var> = <expr>
     char *eq = strchr(trimmed, '=');
     if (eq && eq > trimmed && *(eq - 1) != '!' && *(eq - 1) != '=' && *(eq - 1) != '<' && *(eq - 1) != '>') {
         *eq = '\0';
@@ -1567,6 +1912,42 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
             emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xc7}, 3);       // add rdi, rax
             emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0x17}, 3);       // mov [rdi], rdx
             return;
+        }
+
+        // Struct field assignment: target.field = expr (e.g. রহিম.বয়স = ২৫)
+        // WHY: Resolves named field offset in custom struct layout and writes 64-bit value directly to memory.
+        char *dot = strchr(lhs, '.');
+        if (dot && dot != lhs && *(dot + 1) != '\0') {
+            *dot = '\0';
+            char *target_expr = trim(lhs);
+            char *field_name = trim(dot + 1);
+
+            int offset = -1;
+            Symbol *sym = find_symbol(target_expr);
+            if (sym && sym->struct_type[0] != '\0') {
+                offset = find_struct_field_offset_in(sym->struct_type, field_name);
+            }
+            if (offset < 0) {
+                offset = find_struct_field_offset(field_name);
+            }
+
+            if (offset >= 0) {
+                compile_expression_recursive(cb, ro, target_expr);
+                emit_u8(cb, 0x50); // push rax (base)
+                compile_expression_recursive(cb, ro, rhs);
+                emit_u8(cb, 0x50); // push rax (val)
+
+                emit_u8(cb, 0x5a); // pop rdx (val)
+                emit_u8(cb, 0x5f); // pop rdi (base)
+
+                if (offset > 0) {
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0x81, 0xc7}, 3); // add rdi, imm32
+                    emit_u32(cb, (uint32_t)offset);
+                }
+                emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0x17}, 3); // mov [rdi], rdx
+                return;
+            }
+            *dot = '.'; // restore dot if not a struct field
         }
 
         Symbol *sym = find_symbol(lhs);
@@ -1674,6 +2055,27 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Reset all compiler state
+    g_sym_count = 0;
+    g_func_count = 0;
+    g_reloc_count = 0;
+    g_bss_reloc_count = 0;
+    g_func_reloc_count = 0;
+    g_block_depth = 0;
+    g_active_scope[0] = '\0';
+    g_current_stack_offset = -8;
+
+    // Parse all struct definitions first (মহাদিগন্ত ১১: কাস্টম গঠন / Structs)
+    g_struct_count = 0;
+    parse_all_structs(full_source);
+    if (g_struct_count > 0) {
+        printf("  • সনাক্তকৃত কাস্টম ডেটা গঠন (Structs) : %d টি\n", g_struct_count);
+        for (int s_i = 0; s_i < g_struct_count; s_i++) {
+            printf("    ├── গঠন '%s' (%d টি ফিল্ড, সাইজ: %d বাইট)\n",
+                   g_structs[s_i].name, g_structs[s_i].field_count, g_structs[s_i].total_size);
+        }
+    }
+
     CodeBuffer cb = { .size = 0 };
     RoDataBuffer ro = { .size = 0 };
 
@@ -1684,6 +2086,7 @@ int main(int argc, char *argv[]) {
 
     const size_t len_kaj = strlen("কাজ");
     const size_t len_pangson = strlen("ফাংশন");
+    const size_t len_gothon = strlen("গঠন");
 
     // Copy full_source for Pass 1 and Pass 2
     char *pass1_src = strdup(full_source);
@@ -1695,11 +2098,42 @@ int main(int argc, char *argv[]) {
     char *saveptr1 = NULL;
     char *line1 = strtok_r(pass1_src, "\r\n", &saveptr1);
     bool in_func = false;
+    bool skip_struct1 = false;
+    int struct_depth1 = 0;
 
     while (line1) {
         strip_inline_comments(line1);
         char *trimmed = trim(line1);
         if (*trimmed != '\0') {
+            bool is_gothon = (strncmp(trimmed, "গঠন", len_gothon) == 0 && (trimmed[len_gothon] == ' ' || trimmed[len_gothon] == '\t' || trimmed[len_gothon] == '{'));
+            bool is_struct = (strncmp(trimmed, "struct", 6) == 0 && (trimmed[6] == ' ' || trimmed[6] == '\t' || trimmed[6] == '{'));
+
+            if (is_gothon || is_struct) {
+                skip_struct1 = true;
+                struct_depth1 = 0;
+                for (char *c = trimmed; *c; c++) {
+                    if (*c == '{') struct_depth1++;
+                    else if (*c == '}') struct_depth1--;
+                }
+                if (struct_depth1 <= 0) skip_struct1 = false;
+                line1 = strtok_r(NULL, "\r\n", &saveptr1);
+                continue;
+            }
+            if (skip_struct1) {
+                for (char *c = trimmed; *c; c++) {
+                    if (*c == '{') struct_depth1++;
+                    else if (*c == '}') {
+                        struct_depth1--;
+                        if (struct_depth1 <= 0) {
+                            skip_struct1 = false;
+                            break;
+                        }
+                    }
+                }
+                line1 = strtok_r(NULL, "\r\n", &saveptr1);
+                continue;
+            }
+
             bool is_kaj     = (strncmp(trimmed, "কাজ", len_kaj) == 0 && (trimmed[len_kaj] == ' ' || trimmed[len_kaj] == '\t'));
             bool is_pangson = (strncmp(trimmed, "ফাংশন", len_pangson) == 0 && (trimmed[len_pangson] == ' ' || trimmed[len_pangson] == '\t'));
             bool is_fn      = (strncmp(trimmed, "fn", 2) == 0 && (trimmed[2] == ' ' || trimmed[2] == '\t'));
@@ -1791,11 +2225,42 @@ int main(int argc, char *argv[]) {
     char *line2 = strtok_r(pass2_src, "\r\n", &saveptr2);
     bool skip_func = false;
     int func_depth = 0;
+    bool skip_struct2 = false;
+    int struct_depth2 = 0;
 
     while (line2) {
         strip_inline_comments(line2);
         char *trimmed = trim(line2);
         if (*trimmed != '\0') {
+            bool is_gothon = (strncmp(trimmed, "গঠন", len_gothon) == 0 && (trimmed[len_gothon] == ' ' || trimmed[len_gothon] == '\t' || trimmed[len_gothon] == '{'));
+            bool is_struct = (strncmp(trimmed, "struct", 6) == 0 && (trimmed[6] == ' ' || trimmed[6] == '\t' || trimmed[6] == '{'));
+
+            if (is_gothon || is_struct) {
+                skip_struct2 = true;
+                struct_depth2 = 0;
+                for (char *c = trimmed; *c; c++) {
+                    if (*c == '{') struct_depth2++;
+                    else if (*c == '}') struct_depth2--;
+                }
+                if (struct_depth2 <= 0) skip_struct2 = false;
+                line2 = strtok_r(NULL, "\r\n", &saveptr2);
+                continue;
+            }
+            if (skip_struct2) {
+                for (char *c = trimmed; *c; c++) {
+                    if (*c == '{') struct_depth2++;
+                    else if (*c == '}') {
+                        struct_depth2--;
+                        if (struct_depth2 <= 0) {
+                            skip_struct2 = false;
+                            break;
+                        }
+                    }
+                }
+                line2 = strtok_r(NULL, "\r\n", &saveptr2);
+                continue;
+            }
+
             bool is_kaj     = (strncmp(trimmed, "কাজ", len_kaj) == 0 && (trimmed[len_kaj] == ' ' || trimmed[len_kaj] == '\t'));
             bool is_pangson = (strncmp(trimmed, "ফাংশন", len_pangson) == 0 && (trimmed[len_pangson] == ' ' || trimmed[len_pangson] == '\t'));
             bool is_fn      = (strncmp(trimmed, "fn", 2) == 0 && (trimmed[2] == ' ' || trimmed[2] == '\t'));
@@ -2125,8 +2590,15 @@ int run_tests(void) {
         "examples/18_native_web_server.lp",
         "examples/19_heap_memory_and_pointers.lp",
         "examples/20_grand_stdlib_expansion.lp",
+        "examples/21_kernel_multithreading.lp",
+        "examples/22_custom_structs_and_types.lp",
+        "examples/23_native_database_engine.lp",
+        "examples/24_silicon_matrix_ai.lp",
         NULL
     };
+
+    int total_count = 0;
+    while (test_files[total_count] != NULL) total_count++;
 
     int passed = 0;
     int total = 0;
@@ -2141,7 +2613,7 @@ int run_tests(void) {
         int b_res = system(build_cmd);
 
         if (b_res != 0) {
-            printf("  ❌ [%02d/11] কম্পাইলেশন ব্যর্থ: %s\n", i + 1, test_files[i]);
+            printf("  ❌ [%02d/%02d] কম্পাইলেশন ব্যর্থ: %s\n", i + 1, total_count, test_files[i]);
             continue;
         }
 
@@ -2150,10 +2622,10 @@ int run_tests(void) {
         int r_res = system(run_cmd);
 
         if (r_res == 0) {
-            printf("  ✔ \033[1;32m[%02d/11] সফলভাবে উত্তীর্ণ:\033[0m %s\n", i + 1, test_files[i]);
+            printf("  ✔ \033[1;32m[%02d/%02d] সফলভাবে উত্তীর্ণ:\033[0m %s\n", i + 1, total_count, test_files[i]);
             passed++;
         } else {
-            printf("  ❌ [%02d/11] রানটাইম ত্রুটি: %s\n", i + 1, test_files[i]);
+            printf("  ❌ [%02d/%02d] রানটাইম ত্রুটি: %s\n", i + 1, total_count, test_files[i]);
         }
     }
 
