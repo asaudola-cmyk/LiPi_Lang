@@ -68,6 +68,9 @@ TESTS=(
     "examples/15_functions_and_recursion.lp:dist/test15_functions"
     "examples/16_kernel_syscalls_file_io.lp:dist/test16_syscalls"
     "examples/17_standard_library_import.lp:dist/test17_stdlib"
+    "examples/18_native_web_server.lp:dist/test18_web_server"
+    "examples/19_heap_memory_and_pointers.lp:dist/test19_heap"
+    "examples/20_grand_stdlib_expansion.lp:dist/test20_stdlib"
 )
 
 for test_pair in "${TESTS[@]}"; do

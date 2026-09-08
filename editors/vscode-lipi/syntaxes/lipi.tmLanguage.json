@@ -78,7 +78,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.lipi",
-          "match": "\\b(ধরি|ধ্রুবক|কাজ|গঠন|নতুন|আমদানি|হিসেবে|let|var|const|fn|def|func|function|struct|class|new|import|as)\\b"
+          "match": "\\b(ধরি|ধ্রুবক|কাজ|গঠন|নতুন|আমদানি|অন্তর্ভুক্ত|হিসেবে|let|var|const|fn|def|func|function|struct|class|new|import|include|as)\\b"
         }
       ]
     },
@@ -86,11 +86,11 @@
       "patterns": [
         {
           "name": "support.class.subsystem.lipi",
-          "match": "\\b(লিপি|সার্ভার|পর্দা|স্মৃতি|গণনা|চ্যানেল|lipi|server|ui|memory|compute|channel)\\b"
+          "match": "\\b(লিপি|সার্ভার|পর্দা|স্মৃতি|গণনা|চ্যানেল|সিসকল|বাফার|মেমরি_লেখো|মেমরি_পড়ো|মেমরি_বাইট_লেখো|মেমরি_বাইট_পড়ো|মেমরি_বরাদ্দ|মেমরি_মুক্তি|সকেট_তৈরি|পোর্ট_বাইন্ড|lipi|server|ui|memory|compute|channel|syscall|buffer|mem_write|mem_read)\\b"
         },
         {
           "name": "keyword.other.show.lipi",
-          "match": "\\b(দেখাও|ইনপুট|show|print|echo|input)\\b"
+          "match": "\\b(দেখাও|ইনপুট|বাংলা_সংখ্যা|লেখা|স্ট্রিং|দৈর্ঘ্য|সিপিউ_ক্লক|show|print|echo|input|len|clock|rdtsc)\\b"
         }
       ]
     },

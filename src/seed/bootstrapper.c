@@ -531,14 +531,15 @@ static char *find_matching_close_paren(char *start_after_open) {
     return NULL;
 }
 
-// Parse comma-separated arguments respecting string quotes and nested parentheses
-static int parse_call_arguments(char *args_part, char out_args[6][1024]) {
+// Parse comma-separated arguments respecting string quotes, nested parentheses, and brackets
+static int parse_call_arguments(char *args_part, char out_args[8][1024]) {
     int count = 0;
     char current[1024];
     int c_idx = 0;
     bool in_quote = false;
     char quote_char = 0;
     int paren_depth = 0;
+    int bracket_depth = 0;
 
     for (char *p = args_part; *p; p++) {
         if (!in_quote && (*p == '"' || *p == '\'')) {
@@ -559,10 +560,16 @@ static int parse_call_arguments(char *args_part, char out_args[6][1024]) {
         } else if (!in_quote && *p == ')') {
             paren_depth--;
             if (c_idx < 1023) current[c_idx++] = *p;
-        } else if (!in_quote && paren_depth == 0 && *p == ',') {
+        } else if (!in_quote && *p == '[') {
+            bracket_depth++;
+            if (c_idx < 1023) current[c_idx++] = *p;
+        } else if (!in_quote && *p == ']') {
+            bracket_depth--;
+            if (c_idx < 1023) current[c_idx++] = *p;
+        } else if (!in_quote && paren_depth == 0 && bracket_depth == 0 && *p == ',') {
             current[c_idx] = '\0';
             char *trimmed = trim(current);
-            if (*trimmed != '\0' && count < 6) {
+            if (*trimmed != '\0' && count < 8) {
                 strncpy(out_args[count++], trimmed, 1023);
                 out_args[count - 1][1023] = '\0';
             }
@@ -575,7 +582,7 @@ static int parse_call_arguments(char *args_part, char out_args[6][1024]) {
     if (c_idx > 0) {
         current[c_idx] = '\0';
         char *trimmed = trim(current);
-        if (*trimmed != '\0' && count < 6) {
+        if (*trimmed != '\0' && count < 8) {
             strncpy(out_args[count++], trimmed, 1023);
             out_args[count - 1][1023] = '\0';
         }
@@ -620,7 +627,7 @@ static void emit_syscall(CodeBuffer *cb, RoDataBuffer *ro, const char *call_expr
     char *close_p = find_matching_close_paren(args_part);
     if (close_p) *close_p = '\0';
 
-    char args[6][1024];
+    char args[8][1024];
     int arg_count = parse_call_arguments(args_part, args);
     if (arg_count == 0) return;
 
@@ -670,6 +677,7 @@ static void emit_syscall(CodeBuffer *cb, RoDataBuffer *ro, const char *call_expr
     // arg 3 -> rdx
     // arg 4 -> r10 (pop r10: 41 5a)
     // arg 5 -> r8  (pop r8:  41 58)
+    // arg 6 -> r9  (pop r9:  41 59, e.g. for SYS_mmap offset argument)
     for (int i = arg_count - 1; i >= 0; i--) {
         switch (i) {
             case 0: emit_u8(cb, 0x58); break; // pop rax (sys_no)
@@ -678,6 +686,7 @@ static void emit_syscall(CodeBuffer *cb, RoDataBuffer *ro, const char *call_expr
             case 3: emit_u8(cb, 0x5a); break; // pop rdx (arg 3)
             case 4: emit_bytes(cb, (const uint8_t[]){0x41, 0x5a}, 2); break; // pop r10 (arg 4)
             case 5: emit_bytes(cb, (const uint8_t[]){0x41, 0x58}, 2); break; // pop r8 (arg 5)
+            case 6: emit_bytes(cb, (const uint8_t[]){0x41, 0x59}, 2); break; // pop r9 (arg 6)
         }
     }
 
@@ -703,7 +712,7 @@ static void emit_function_call(CodeBuffer *cb, RoDataBuffer *ro, const char *cal
         return;
     }
 
-    char args[6][1024];
+    char args[8][1024];
     int arg_count = parse_call_arguments(args_part, args);
 
     for (int i = 0; i < arg_count; i++) {
@@ -827,6 +836,52 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         return;
     }
 
+    if (strncmp(s, "মেমরি_পড়ো(", strlen("মেমরি_পড়ো(")) == 0 ||
+        strncmp(s, "mem_read(", 9) == 0) {
+        char copy[4096];
+        strncpy(copy, s, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 2) {
+            compile_expression_recursive(cb, ro, args[0]); // base
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // offset
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5e);                             // pop rsi (offset)
+            emit_u8(cb, 0x5f);                             // pop rdi (base)
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xf7}, 3); // add rdi, rsi
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x8b, 0x07}, 3); // mov rax, [rdi]
+            return;
+        }
+    }
+
+    if (strncmp(s, "মেমরি_বাইট_পড়ো(", strlen("মেমরি_বাইট_পড়ো(")) == 0 ||
+        strncmp(s, "mem_read_byte(", 14) == 0) {
+        char copy[4096];
+        strncpy(copy, s, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 2) {
+            compile_expression_recursive(cb, ro, args[0]); // base
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // offset
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5e);                             // pop rsi (offset)
+            emit_u8(cb, 0x5f);                             // pop rdi (base)
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xf7}, 3);       // add rdi, rsi
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x0f, 0xb6, 0x07}, 4); // movzx rax, byte ptr [rdi]
+            return;
+        }
+    }
+
     if (is_function_call_expr(s)) {
         emit_function_call(cb, ro, s);
         return;
@@ -836,6 +891,7 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
     char op = 0;
     int op_idx = -1;
     int paren_depth = 0;
+    int bracket_depth = 0;
     bool in_quote = false;
     char qchar = 0;
 
@@ -852,7 +908,9 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
 
         if (s[i] == ')') paren_depth++;
         else if (s[i] == '(') paren_depth--;
-        else if (paren_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '%' && s[i-1] != '+' && s[i-1] != '-') {
+        else if (s[i] == ']') bracket_depth++;
+        else if (s[i] == '[') bracket_depth--;
+        else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '%' && s[i-1] != '+' && s[i-1] != '-') {
             op = s[i];
             op_idx = i;
             break;
@@ -861,6 +919,7 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
 
     if (op_idx == -1) {
         paren_depth = 0;
+        bracket_depth = 0;
         in_quote = false;
         for (int i = len - 1; i >= 0; i--) {
             if (!in_quote && (s[i] == '"' || s[i] == '\'')) {
@@ -875,7 +934,9 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
 
             if (s[i] == ')') paren_depth++;
             else if (s[i] == '(') paren_depth--;
-            else if (paren_depth == 0 && (s[i] == '*' || s[i] == '/' || s[i] == '%')) {
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '*' || s[i] == '/' || s[i] == '%')) {
                 op = s[i];
                 op_idx = i;
                 break;
@@ -905,6 +966,34 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         if (strchr(s, '(') && s[strlen(s) - 1] == ')') {
             emit_function_call(cb, ro, s);
             return;
+        }
+
+        // Array indexing expression: target[index] (8-byte word dereference)
+        char *open_bracket = strchr(s, '[');
+        char *close_bracket = strrchr(s, ']');
+        if (open_bracket && close_bracket && close_bracket == (s + strlen(s) - 1) && close_bracket > open_bracket) {
+            char target_part[512] = {0};
+            char index_part[512] = {0};
+            size_t t_len = (size_t)(open_bracket - s);
+            if (t_len < sizeof(target_part)) {
+                strncpy(target_part, s, t_len);
+                target_part[t_len] = '\0';
+                size_t i_len = (size_t)(close_bracket - (open_bracket + 1));
+                if (i_len < sizeof(index_part)) {
+                    strncpy(index_part, open_bracket + 1, i_len);
+                    index_part[i_len] = '\0';
+                    compile_expression_recursive(cb, ro, trim(target_part));
+                    emit_u8(cb, 0x50); // push rax (base)
+                    compile_expression_recursive(cb, ro, trim(index_part));
+                    emit_u8(cb, 0x50); // push rax (index)
+                    emit_u8(cb, 0x58); // pop rax (index)
+                    emit_u8(cb, 0x5f); // pop rdi (base)
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0xc1, 0xe0, 0x03}, 4); // shl rax, 3
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xc7}, 3);       // add rdi, rax
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0x8b, 0x07}, 3);       // mov rax, [rdi]
+                    return;
+                }
+            }
         }
 
         if (s[0] == '"' || s[0] == '\'') {
@@ -1039,6 +1128,7 @@ void print_banner(void) {
 
 int run_repl(void);
 int run_tests(void);
+static int run_formatter(int argc, char *argv[]);
 
 // Compile statement in active context
 static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
@@ -1302,10 +1392,13 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
             char token[256];
             int tlen = 0;
             int paren_count = 0;
+            int bracket_count = 0;
             while (*p) {
                 if (*p == '(') paren_count++;
                 else if (*p == ')') paren_count--;
-                if (paren_count == 0 && (isspace((unsigned char)*p) || *p == '+' || *p == '"' || *p == '\'' || *p == ';')) {
+                else if (*p == '[') bracket_count++;
+                else if (*p == ']') bracket_count--;
+                if (paren_count == 0 && bracket_count == 0 && (isspace((unsigned char)*p) || *p == '+' || *p == '"' || *p == '\'' || *p == ';')) {
                     break;
                 }
                 if (tlen < (int)sizeof(token) - 1) token[tlen++] = *p;
@@ -1345,7 +1438,8 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
                 continue;
             }
 
-            if (strchr(token, '(') && token[strlen(token) - 1] == ')') {
+            if ((strchr(token, '(') && token[strlen(token) - 1] == ')') ||
+                (strchr(token, '[') && token[strlen(token) - 1] == ']')) {
                 compile_expression_recursive(cb, ro, token);
                 emit_runtime_print_bangla_num(cb, false);
                 continue;
@@ -1377,6 +1471,60 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         return;
     }
 
+    // Direct Memory Write Statement: মেমরি_লেখো(বেস, অফসেট, মান) / mem_write(base, offset, val)
+    if (strncmp(trimmed, "মেমরি_লেখো(", strlen("মেমরি_লেখো(")) == 0 ||
+        strncmp(trimmed, "mem_write(", 10) == 0) {
+        char copy[4096];
+        strncpy(copy, trimmed, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 3) {
+            compile_expression_recursive(cb, ro, args[0]); // base
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // offset
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[2]); // val
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5a);                             // pop rdx (val)
+            emit_u8(cb, 0x5e);                             // pop rsi (offset)
+            emit_u8(cb, 0x5f);                             // pop rdi (base)
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xf7}, 3); // add rdi, rsi
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0x17}, 3); // mov [rdi], rdx
+            return;
+        }
+    }
+
+    // Direct Memory Byte Write Statement: মেমরি_বাইট_লেখো(বেস, অফসেট, মান) / mem_write_byte(base, offset, val)
+    if (strncmp(trimmed, "মেমরি_বাইট_লেখো(", strlen("মেমরি_বাইট_লেখো(")) == 0 ||
+        strncmp(trimmed, "mem_write_byte(", 15) == 0) {
+        char copy[4096];
+        strncpy(copy, trimmed, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 3) {
+            compile_expression_recursive(cb, ro, args[0]); // base
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // offset
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[2]); // val
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5a);                             // pop rdx (val)
+            emit_u8(cb, 0x5e);                             // pop rsi (offset)
+            emit_u8(cb, 0x5f);                             // pop rdi (base)
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xf7}, 3); // add rdi, rsi
+            emit_bytes(cb, (const uint8_t[]){0x88, 0x17}, 2);       // mov byte ptr [rdi], dl
+            return;
+        }
+    }
+
     // 8. Direct Linux Kernel Syscall Statement: সিসকল(...) / syscall(...)
     if (strncmp(trimmed, "সিসকল(", strlen("সিসকল(")) == 0 || strncmp(trimmed, "syscall(", 8) == 0) {
         emit_syscall(cb, ro, trimmed);
@@ -1389,21 +1537,46 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         return;
     }
 
-    // 10. Variable Reassignment: <existing_var> = <expr>
+    // 10. Variable / Array Indexed Reassignment: <target>[<index>] = <expr> OR <var> = <expr>
     char *eq = strchr(trimmed, '=');
     if (eq && eq > trimmed && *(eq - 1) != '!' && *(eq - 1) != '=' && *(eq - 1) != '<' && *(eq - 1) != '>') {
         *eq = '\0';
-        char *var_name = trim(trimmed);
-        char *expr = trim(eq + 1);
+        char *lhs = trim(trimmed);
+        char *rhs = trim(eq + 1);
 
-        Symbol *sym = find_symbol(var_name);
+        char *open_br = strchr(lhs, '[');
+        char *close_br = strrchr(lhs, ']');
+        if (open_br && close_br && close_br > open_br && *(close_br + 1) == '\0') {
+            *open_br = '\0';
+            char *target_expr = trim(lhs);
+            *close_br = '\0';
+            char *index_expr = trim(open_br + 1);
+
+            compile_expression_recursive(cb, ro, target_expr);
+            emit_u8(cb, 0x50); // push rax (base)
+            compile_expression_recursive(cb, ro, index_expr);
+            emit_u8(cb, 0x50); // push rax (index)
+            compile_expression_recursive(cb, ro, rhs);
+            emit_u8(cb, 0x50); // push rax (val)
+
+            emit_u8(cb, 0x5a); // pop rdx (val)
+            emit_u8(cb, 0x58); // pop rax (index)
+            emit_u8(cb, 0x5f); // pop rdi (base)
+
+            emit_bytes(cb, (const uint8_t[]){0x48, 0xc1, 0xe0, 0x03}, 4); // shl rax, 3
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xc7}, 3);       // add rdi, rax
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0x17}, 3);       // mov [rdi], rdx
+            return;
+        }
+
+        Symbol *sym = find_symbol(lhs);
         if (sym) {
-            if (is_numeric_str(expr)) {
-                int64_t val = parse_bangla_number(expr);
+            if (is_numeric_str(rhs)) {
+                int64_t val = parse_bangla_number(rhs);
                 sym->const_val = val;
                 emit_mov_stack_imm(cb, sym->stack_offset, (int32_t)val);
             } else {
-                compile_expression_recursive(cb, ro, expr);
+                compile_expression_recursive(cb, ro, rhs);
                 emit_mov_stack_rax(cb, sym->stack_offset);
             }
             return;
@@ -1421,21 +1594,27 @@ int main(int argc, char *argv[]) {
         return run_tests();
     }
 
+    if (argc >= 2 && (strcmp(argv[1], "fmt") == 0 || strcmp(argv[1], "format") == 0)) {
+        return run_formatter(argc, argv);
+    }
+
     if (argc < 2 || strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
         print_banner();
         printf("\033[1;33mব্যবহারবিধি (Standalone Native Usage):\033[0m\n");
         printf("  ./bin/lipic build <source.lp> [-o binary]    লিপি সোর্স ফাইল সরাসরি লিনাক্স ELF বাইনারিতে কম্পাইল করুন\n");
         printf("  ./bin/lipic run <source.lp>                  লিপি ফাইল সরাসরি কম্পাইল ও রান করুন\n");
+        printf("  ./bin/lipic fmt <source.lp> [-w]             লিপি সোর্স ফাইল স্বয়ংক্রিয়ভাবে প্রমিত ফরম্যাট করুন\n");
         printf("  ./bin/lipic test                             সমস্ত টেস্ট সুইট স্বয়ংক্রিয়ভাবে এক্সিকিউট করুন\n");
         printf("  ./bin/lipic repl                             ইন্টারেক্টিভ সিলিকন টার্মিনাল প্রম্পট চালু করুন\n");
         printf("  ./bin/lipic --version                         কম্পাইলার ভার্সন প্রদর্শন করুন\n\n");
         printf("\033[1;33mবৈশিষ্ট্য (Features):\033[0m\n");
         printf("  • প্রথম শ্রেণীর ফাংশন (কাজ/fn) ও System V AMD64 ABI কলিং কনভেনশন\n");
-        printf("  • সরাসরি লিনাক্স কার্নেল সিসকল ইঞ্জিন (সিসকল/syscall) ও ফাইল হ্যান্ডলিং\n");
+        printf("  • সরাসরি লিনাক্স কার্নেল সিসকল ইঞ্জিন (সিসকল/syscall) ও র নেটওয়ার্কিং/ফাইল আইও\n");
+        printf("  • ডাইনামিক কার্নেল হিপ মেমরি (SYS_mmap, মেমরি_পড়ো, মেমরি_লেখো) ও অ্যারে তালিকা[i]\n");
         printf("  • ৬৪কেবি রাইটেবল বিএসএস মেমরি বাফার (বাফার/buffer)\n");
         printf("  • মাল্টি-ফাইল মডিউল ইমপোর্ট (অন্তর্ভুক্ত/import)\n");
-        printf("  • কম্পাইল করতে কোনো PHP, GCC বা বহিরাগত টুলের প্রয়োজন নেই!\n");
-        printf("  • জেনারেটকৃত বাইনারি সরাসরি লিনাক্স কার্নেলে শূন্য ডিপেন্ডেন্সিতে রান করে।\n\n");
+        printf("  • কম্পাইল করতে কোনো PHP, GCC বা বহিরাগত রানটাইম লাইব্রেরির প্রয়োজন নেই!\n");
+        printf("  • জেনারেটকৃত বাইনারি সরাসরি লিনাক্স কার্নেলে শূন্য ডিপেন্ডেন্সিতে ১০০%% নেটিভে রান করে।\n\n");
         return 0;
     }
 
@@ -1802,6 +1981,134 @@ int run_repl(void) {
     return 0;
 }
 
+// 10. Lipi Code Formatter Engine (lipi fmt)
+// WHY: Enforces consistent, readable code formatting across sovereign Lipi codebases.
+static int run_formatter(int argc, char *argv[]) {
+    const char *file_path = NULL;
+    bool write_back = false;
+
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--write") == 0) {
+            write_back = true;
+        } else if (!file_path && argv[i][0] != '-') {
+            file_path = argv[i];
+        }
+    }
+
+    if (!file_path) {
+        fprintf(stderr, "\033[1;31m❌ এরর: ফরম্যাট করার জন্য ফাইল পাথ উল্লেখ করুন (যেমন: ./bin/lipic fmt <file.lp> [-w])\033[0m\n");
+        return 1;
+    }
+
+    FILE *f = fopen(file_path, "rb");
+    if (!f) {
+        fprintf(stderr, "\033[1;31m❌ এরর: ফাইল ওপেন করা যায়নি: '%s'\033[0m\n", file_path);
+        return 1;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    char *src = (char *)malloc(sz + 1);
+    if (!src) { fclose(f); return 1; }
+    size_t r = fread(src, 1, sz, f);
+    src[r] = '\0';
+    fclose(f);
+
+    size_t out_cap = sz * 2 + 8192;
+    char *out = (char *)malloc(out_cap);
+    if (!out) { free(src); return 1; }
+    out[0] = '\0';
+    size_t out_len = 0;
+
+    int indent_level = 0;
+    char *saveptr = NULL;
+    char *line = strtok_r(src, "\r\n", &saveptr);
+    bool prev_empty = false;
+
+    while (line != NULL) {
+        char *t = trim(line);
+        if (*t == '\0') {
+            if (!prev_empty) {
+                if (out_len + 2 < out_cap) {
+                    out[out_len++] = '\n';
+                    out[out_len] = '\0';
+                }
+                prev_empty = true;
+            }
+            line = strtok_r(NULL, "\r\n", &saveptr);
+            continue;
+        }
+        prev_empty = false;
+
+        // Check closing brace '}' at start of line
+        if (t[0] == '}') {
+            if (indent_level > 0) indent_level--;
+        }
+
+        // Emit indentation spaces (4 spaces per indent level)
+        for (int i = 0; i < indent_level * 4; i++) {
+            if (out_len + 2 < out_cap) {
+                out[out_len++] = ' ';
+            }
+        }
+        out[out_len] = '\0';
+
+        size_t t_len = strlen(t);
+        if (out_len + t_len + 2 < out_cap) {
+            memcpy(out + out_len, t, t_len);
+            out_len += t_len;
+            out[out_len++] = '\n';
+            out[out_len] = '\0';
+        }
+
+        // Count braces outside comments and string literals
+        int open_count = 0;
+        int close_count = 0;
+        bool in_q = false;
+        char q_ch = 0;
+        for (size_t i = 0; i < t_len; i++) {
+            if (!in_q && (t[i] == '"' || t[i] == '\'')) {
+                in_q = true; q_ch = t[i];
+            } else if (in_q && t[i] == q_ch) {
+                if (i == 0 || t[i-1] != '\\') in_q = false;
+            } else if (!in_q) {
+                if (t[i] == '/' && i + 1 < t_len && t[i+1] == '/') break;
+                if (t[i] == '{') open_count++;
+                if (t[i] == '}') close_count++;
+            }
+        }
+
+        if (t[0] == '}') {
+            indent_level += (open_count - (close_count - 1));
+        } else {
+            indent_level += (open_count - close_count);
+        }
+        if (indent_level < 0) indent_level = 0;
+
+        line = strtok_r(NULL, "\r\n", &saveptr);
+    }
+
+    if (write_back) {
+        FILE *wf = fopen(file_path, "wb");
+        if (!wf) {
+            fprintf(stderr, "\033[1;31m❌ এরর: ফাইলে লিখতে ব্যর্থ: '%s'\033[0m\n", file_path);
+            free(src); free(out);
+            return 1;
+        }
+        fwrite(out, 1, out_len, wf);
+        fclose(wf);
+        printf("\033[1;32m✔ ফরম্যাটিং সফলভাবে সংরক্ষিত হয়েছে: %s\033[0m\n", file_path);
+    } else {
+        fputs(out, stdout);
+    }
+
+    free(src);
+    free(out);
+    return 0;
+}
+
 int run_tests(void) {
     print_banner();
     printf("\033[1;33m[🧪] লিপি স্বয়ংক্রিয় সার্বভৌম টেস্ট সুইট শুরু হচ্ছে...\033[0m\n\n");
@@ -1815,6 +2122,9 @@ int run_tests(void) {
         "examples/15_functions_and_recursion.lp",
         "examples/16_kernel_syscalls_file_io.lp",
         "examples/17_standard_library_import.lp",
+        "examples/18_native_web_server.lp",
+        "examples/19_heap_memory_and_pointers.lp",
+        "examples/20_grand_stdlib_expansion.lp",
         NULL
     };
 
@@ -1831,7 +2141,7 @@ int run_tests(void) {
         int b_res = system(build_cmd);
 
         if (b_res != 0) {
-            printf("  ❌ [%02d/08] কম্পাইলেশন ব্যর্থ: %s\n", i + 1, test_files[i]);
+            printf("  ❌ [%02d/11] কম্পাইলেশন ব্যর্থ: %s\n", i + 1, test_files[i]);
             continue;
         }
 
@@ -1840,10 +2150,10 @@ int run_tests(void) {
         int r_res = system(run_cmd);
 
         if (r_res == 0) {
-            printf("  ✔ \033[1;32m[%02d/08] সফলভাবে উত্তীর্ণ:\033[0m %s\n", i + 1, test_files[i]);
+            printf("  ✔ \033[1;32m[%02d/11] সফলভাবে উত্তীর্ণ:\033[0m %s\n", i + 1, test_files[i]);
             passed++;
         } else {
-            printf("  ❌ [%02d/08] রানটাইম ত্রুটি: %s\n", i + 1, test_files[i]);
+            printf("  ❌ [%02d/11] রানটাইম ত্রুটি: %s\n", i + 1, test_files[i]);
         }
     }
 
