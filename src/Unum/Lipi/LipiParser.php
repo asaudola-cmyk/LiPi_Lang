@@ -118,6 +118,26 @@ final class LipiParser
             return new ContinueStmt($prev->line, $prev->column);
         }
 
+        // Module import: আমদানি "ফাইল.lp" হিসেবে মডিউল or import "file.lp" as mod
+        if ($this->match(LipiToken::TYPE_IMPORT)) {
+            return $this->parseImportStmt();
+        }
+
+        // Struct / Record declaration: গঠন শিক্ষার্থী { নাম, বয়স }
+        if ($this->match(LipiToken::TYPE_STRUCT)) {
+            return $this->parseStructDecl();
+        }
+
+        // Exception handling: চেষ্টা { ... } ধরো এরর { ... }
+        if ($this->match(LipiToken::TYPE_TRY)) {
+            return $this->parseTryCatchStmt();
+        }
+
+        // Exception throw: নিক্ষেপ "ত্রুটি বার্তা"
+        if ($this->match(LipiToken::TYPE_THROW)) {
+            return $this->parseThrowStmt();
+        }
+
         // Show/print: দেখাও "হ্যালো"
         if ($this->match(LipiToken::TYPE_SHOW)) {
             return $this->parseShowStmt();
@@ -143,12 +163,98 @@ final class LipiParser
         $nameToken = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected variable name after '" . $keyword->rawText . "'");
         $name = (string)$nameToken->value;
 
+        // Optional type annotation: ধরি ক: সংখ্যা = ১০ or let x: int = 10
+        $typeAnnotation = null;
+        if ($this->match(LipiToken::TYPE_COLON)) {
+            $typeToken = $this->advance();
+            $typeAnnotation = (string)($typeToken->rawText ?: $typeToken->value);
+        }
+
         $initializer = null;
         if ($this->match(LipiToken::TYPE_ASSIGN)) {
             $initializer = $this->parseExpression();
         }
 
-        return new VarDeclStmt($name, $initializer, $isConst, $keyword->line, $keyword->column);
+        return new VarDeclStmt($name, $initializer, $isConst, $keyword->line, $keyword->column, $typeAnnotation);
+    }
+
+    private function parseImportStmt(): ImportStmt
+    {
+        $keyword = $this->previous();
+        $this->skipNewlines();
+        $pathTok = $this->consume(LipiToken::TYPE_STRING, "Expected file path string after '" . $keyword->rawText . "'");
+        $path = (string)$pathTok->value;
+
+        $alias = null;
+        if ($this->match(LipiToken::TYPE_AS)) {
+            $this->skipNewlines();
+            $aliasTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected module alias name after 'as' / 'হিসেবে'");
+            $alias = (string)$aliasTok->value;
+        }
+
+        return new ImportStmt($path, $alias, $keyword->line, $keyword->column);
+    }
+
+    private function parseStructDecl(): StructDeclStmt
+    {
+        $keyword = $this->previous();
+        $this->skipNewlines();
+        $nameTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected struct name after '" . $keyword->rawText . "'");
+        $name = (string)$nameTok->value;
+
+        $this->skipNewlines();
+        $this->consume(LipiToken::TYPE_LBRACE, "Expected '{' before struct body");
+
+        $fields = [];
+        $methods = [];
+
+        while (!$this->check(LipiToken::TYPE_RBRACE) && !$this->isAtEnd()) {
+            $this->skipNewlines();
+            if ($this->check(LipiToken::TYPE_RBRACE)) {
+                break;
+            }
+
+            if ($this->match(LipiToken::TYPE_FN)) {
+                $methods[] = $this->parseFnDecl();
+            } else {
+                $fieldTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected field name or method in struct");
+                $fields[] = (string)$fieldTok->value;
+                if ($this->match(LipiToken::TYPE_COMMA)) {
+                    // Optional trailing comma
+                }
+            }
+            $this->skipNewlines();
+        }
+
+        $this->consume(LipiToken::TYPE_RBRACE, "Expected '}' after struct body");
+        return new StructDeclStmt($name, $fields, $methods, $keyword->line, $keyword->column);
+    }
+
+    private function parseTryCatchStmt(): TryCatchStmt
+    {
+        $keyword = $this->previous();
+        $this->skipNewlines();
+        $tryBranch = $this->parseBlock();
+
+        $this->skipNewlines();
+        $this->consume(LipiToken::TYPE_CATCH, "Expected 'catch' or 'ধরো' after try block");
+
+        $this->skipNewlines();
+        $errorVarTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected error variable name after 'catch'");
+        $errorVar = (string)$errorVarTok->value;
+
+        $this->skipNewlines();
+        $catchBranch = $this->parseBlock();
+
+        return new TryCatchStmt($tryBranch, $errorVar, $catchBranch, $keyword->line, $keyword->column);
+    }
+
+    private function parseThrowStmt(): ThrowStmt
+    {
+        $keyword = $this->previous();
+        $this->skipNewlines();
+        $expr = $this->parseExpression();
+        return new ThrowStmt($expr, $keyword->line, $keyword->column);
     }
 
     private function parseFnDecl(): FnDeclStmt
@@ -369,6 +475,8 @@ final class LipiParser
 
             LipiToken::TYPE_FN => $this->parseAnonymousFn($token),
 
+            LipiToken::TYPE_NEW => $this->parseNewExpr($token),
+
             default => throw new RuntimeException(sprintf(
                 "Unexpected expression token '%s' (type: %s) at line %d, column %d",
                 (string)$token->value,
@@ -452,6 +560,42 @@ final class LipiParser
         $this->skipNewlines();
         $this->consume(LipiToken::TYPE_RPAREN, "Expected ')' after expression");
         return $expr;
+    }
+
+    private function parseNewExpr(LipiToken $newTok): NewExpr
+    {
+        $this->skipNewlines();
+        $nameTok = $this->consume(LipiToken::TYPE_IDENTIFIER, "Expected struct name after '" . $newTok->rawText . "'");
+        $structName = (string)$nameTok->value;
+
+        $args = [];
+        $namedArgs = [];
+        if ($this->match(LipiToken::TYPE_LPAREN)) {
+            $this->skipNewlines();
+            if (!$this->check(LipiToken::TYPE_RPAREN)) {
+                do {
+                    $this->skipNewlines();
+                    if ($this->check(LipiToken::TYPE_RPAREN)) {
+                        break;
+                    }
+                    // Check if named argument: ident : expr
+                    if ($this->check(LipiToken::TYPE_IDENTIFIER) && $this->peekNextToken()->type === LipiToken::TYPE_COLON) {
+                        $keyTok = $this->advance(); // Consume identifier
+                        $this->advance();           // Consume ':'
+                        $this->skipNewlines();
+                        $valExpr = $this->parseExpression();
+                        $namedArgs[(string)$keyTok->value] = $valExpr;
+                    } else {
+                        $args[] = $this->parseExpression();
+                    }
+                    $this->skipNewlines();
+                } while ($this->match(LipiToken::TYPE_COMMA));
+            }
+            $this->skipNewlines();
+            $this->consume(LipiToken::TYPE_RPAREN, "Expected ')' after struct arguments");
+        }
+
+        return new NewExpr($structName, $args, $namedArgs, $newTok->line, $newTok->column);
     }
 
     private function parseCallArguments(LipiExpr $callee, LipiToken $lparen): CallExpr

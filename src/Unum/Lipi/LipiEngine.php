@@ -68,6 +68,8 @@ final class LipiEngine
             throw new RuntimeException("Failed to read Lipi source file: {$filePath}");
         }
 
+        $this->runtime->setCurrentFileDir(dirname(realpath($filePath) ?: $filePath));
+
         return $this->runString($source, $filePath);
     }
 

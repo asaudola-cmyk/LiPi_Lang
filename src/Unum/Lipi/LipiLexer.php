@@ -63,6 +63,13 @@ final class LipiLexer
         'পর্দা'        => LipiToken::TYPE_UI,
         'স্মৃতি'       => LipiToken::TYPE_MEMORY,
         'গণনা'        => LipiToken::TYPE_COMPUTE,
+        'আমদানি'      => LipiToken::TYPE_IMPORT,
+        'হিসেবে'      => LipiToken::TYPE_AS,
+        'গঠন'         => LipiToken::TYPE_STRUCT,
+        'নতুন'        => LipiToken::TYPE_NEW,
+        'চেষ্টা'       => LipiToken::TYPE_TRY,
+        'ধরো'         => LipiToken::TYPE_CATCH,
+        'নিক্ষেপ'      => LipiToken::TYPE_THROW,
 
         // English Keywords (Full Equivalence)
         'let'         => LipiToken::TYPE_LET,
@@ -97,6 +104,14 @@ final class LipiLexer
         'ui'          => LipiToken::TYPE_UI,
         'memory'      => LipiToken::TYPE_MEMORY,
         'compute'     => LipiToken::TYPE_COMPUTE,
+        'import'      => LipiToken::TYPE_IMPORT,
+        'as'          => LipiToken::TYPE_AS,
+        'struct'      => LipiToken::TYPE_STRUCT,
+        'class'       => LipiToken::TYPE_STRUCT,
+        'new'         => LipiToken::TYPE_NEW,
+        'try'         => LipiToken::TYPE_TRY,
+        'catch'       => LipiToken::TYPE_CATCH,
+        'throw'       => LipiToken::TYPE_THROW,
     ];
 
     public function __construct(string $source)

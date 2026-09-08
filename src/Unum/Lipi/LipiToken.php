@@ -45,6 +45,19 @@ final class LipiToken
     public const TYPE_OR         = 'OR';         // অথবা / or / ||
     public const TYPE_NOT        = 'NOT';        // না / not / !
 
+    // Module & Import Keywords
+    public const TYPE_IMPORT     = 'IMPORT';     // আমদানি / import
+    public const TYPE_AS         = 'AS';         // হিসেবে / as
+
+    // Object / Struct Keywords
+    public const TYPE_STRUCT     = 'STRUCT';     // গঠন / struct / class
+    public const TYPE_NEW        = 'NEW';        // নতুন / new
+
+    // Exception Handling Keywords
+    public const TYPE_TRY        = 'TRY';        // চেষ্টা / try
+    public const TYPE_CATCH      = 'CATCH';      // ধরো / catch
+    public const TYPE_THROW      = 'THROW';      // নিক্ষেপ / throw
+
     // Built-in Silicon Subsystems
     public const TYPE_SERVER     = 'SERVER';     // সার্ভার / server
     public const TYPE_UI         = 'UI';         // পর্দা / ui

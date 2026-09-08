@@ -96,6 +96,115 @@ final class LipiEnvironment
         }
         return $this->parent !== null && $this->parent->has($name);
     }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getLocalValues(): array
+    {
+        return $this->values;
+    }
+}
+
+/**
+ * 📜 Lipi User Exception Container
+ */
+final class LipiUserException extends RuntimeException
+{
+    public function __construct(public readonly mixed $errorValue)
+    {
+        parent::__construct(is_string($errorValue) ? $errorValue : json_encode($errorValue));
+    }
+}
+
+/**
+ * 📜 Lipi Struct Blueprint
+ */
+final class LipiStructBlueprint
+{
+    /**
+     * @param list<string> $fields
+     * @param list<FnDeclStmt> $methods
+     */
+    public function __construct(
+        public readonly string $name,
+        public readonly array $fields,
+        public readonly array $methods,
+        public readonly LipiEnvironment $closure
+    ) {
+    }
+
+    /**
+     * @param list<mixed> $arguments
+     * @param array<string, mixed> $namedArguments
+     */
+    public function instantiate(LipiRuntime $runtime, array $arguments = [], array $namedArguments = []): LipiStructInstance
+    {
+        $fieldMap = [];
+        for ($i = 0; $i < count($this->fields); $i++) {
+            $fieldName = $this->fields[$i];
+            if (array_key_exists($fieldName, $namedArguments)) {
+                $fieldMap[$fieldName] = $namedArguments[$fieldName];
+            } else {
+                $fieldMap[$fieldName] = $arguments[$i] ?? null;
+            }
+        }
+        // Also capture any extra named arguments
+        foreach ($namedArguments as $k => $v) {
+            if (!array_key_exists($k, $fieldMap)) {
+                $fieldMap[$k] = $v;
+            }
+        }
+        return new LipiStructInstance($this, $fieldMap, $runtime);
+    }
+}
+
+/**
+ * 📜 Lipi Struct / Object Instance
+ */
+final class LipiStructInstance
+{
+    /**
+     * @param array<string, mixed> $fields
+     */
+    public function __construct(
+        public readonly LipiStructBlueprint $blueprint,
+        private array $fields,
+        private LipiRuntime $runtime
+    ) {
+    }
+
+    public function get(string $name): mixed
+    {
+        if (array_key_exists($name, $this->fields)) {
+            return $this->fields[$name];
+        }
+
+        // Method lookup
+        foreach ($this->blueprint->methods as $m) {
+            if ($m->name === $name) {
+                $env = new LipiEnvironment($this->blueprint->closure);
+                $env->define('এই', $this); // এই = this in Bengali
+                $env->define('this', $this);
+                return new LipiFunction($m->name, $m->params, $m->body, $env);
+            }
+        }
+
+        return null;
+    }
+
+    public function set(string $name, mixed $value): void
+    {
+        $this->fields[$name] = $value;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return $this->fields;
+    }
 }
 
 /**
@@ -195,6 +304,12 @@ final class LipiRuntime
     private array $outputBuffer = [];
     private bool $captureOutput = false;
 
+    /** @var string Base directory for resolving relative imports */
+    private string $currentFileDir = '.';
+
+    /** @var array<string, array<string, mixed>> Module exports cache to avoid circular imports */
+    private array $moduleCache = [];
+
     public function __construct(bool $captureOutput = false)
     {
         $this->captureOutput = $captureOutput;
@@ -202,6 +317,16 @@ final class LipiRuntime
         $this->environment = $this->globals;
 
         $this->registerBuiltins();
+    }
+
+    public function setCurrentFileDir(string $dir): void
+    {
+        $this->currentFileDir = $dir;
+    }
+
+    public function getCurrentFileDir(): string
+    {
+        return $this->currentFileDir;
     }
 
     public function setCaptureOutput(bool $capture): void
@@ -237,19 +362,23 @@ final class LipiRuntime
     public function executeStmt(LipiStmt $stmt): mixed
     {
         return match ($stmt::class) {
-            VarDeclStmt::class  => $this->executeVarDecl($stmt),
-            FnDeclStmt::class   => $this->executeFnDecl($stmt),
-            IfStmt::class       => $this->executeIf($stmt),
-            WhileStmt::class    => $this->executeWhile($stmt),
-            ForStmt::class      => $this->executeFor($stmt),
-            ReturnStmt::class   => $this->executeReturn($stmt),
-            BreakStmt::class    => throw new LipiBreakSignal(),
-            ContinueStmt::class => throw new LipiContinueSignal(),
-            ShowStmt::class     => $this->executeShow($stmt),
-            ExprStmt::class     => $this->evaluate($stmt->expression),
-            BlockStmt::class    => $this->executeBlock($stmt, new LipiEnvironment($this->environment)),
-            ServerStmt::class   => $this->executeServer($stmt),
-            default             => throw new RuntimeException("Unknown statement type: " . $stmt::class),
+            VarDeclStmt::class    => $this->executeVarDecl($stmt),
+            FnDeclStmt::class     => $this->executeFnDecl($stmt),
+            IfStmt::class         => $this->executeIf($stmt),
+            WhileStmt::class      => $this->executeWhile($stmt),
+            ForStmt::class        => $this->executeFor($stmt),
+            ReturnStmt::class     => $this->executeReturn($stmt),
+            BreakStmt::class      => throw new LipiBreakSignal(),
+            ContinueStmt::class   => throw new LipiContinueSignal(),
+            ImportStmt::class     => $this->executeImport($stmt),
+            StructDeclStmt::class => $this->executeStructDecl($stmt),
+            TryCatchStmt::class   => $this->executeTryCatch($stmt),
+            ThrowStmt::class      => $this->executeThrow($stmt),
+            ShowStmt::class       => $this->executeShow($stmt),
+            ExprStmt::class       => $this->evaluate($stmt->expression),
+            BlockStmt::class      => $this->executeBlock($stmt, new LipiEnvironment($this->environment)),
+            ServerStmt::class     => $this->executeServer($stmt),
+            default               => throw new RuntimeException("Unknown statement type: " . $stmt::class),
         };
     }
 
@@ -384,6 +513,79 @@ final class LipiRuntime
         ];
     }
 
+    private function executeImport(ImportStmt $stmt): void
+    {
+        $rawPath = $stmt->path;
+        $resolvedPath = $rawPath;
+        if (!str_starts_with($rawPath, '/')) {
+            $resolvedPath = $this->currentFileDir . '/' . $rawPath;
+        }
+
+        if (!file_exists($resolvedPath)) {
+            if (file_exists($rawPath)) {
+                $resolvedPath = $rawPath;
+            } else {
+                throw new RuntimeException("মডিউল ফাইল পাওয়া যায়নি (Module not found): '{$rawPath}' at line {$stmt->line}");
+            }
+        }
+
+        $canonical = realpath($resolvedPath) ?: $resolvedPath;
+
+        if (isset($this->moduleCache[$canonical])) {
+            $exports = $this->moduleCache[$canonical];
+        } else {
+            $content = file_get_contents($canonical);
+            if ($content === false) {
+                throw new RuntimeException("মডিউল পড়া যায়নি (Failed to read module): '{$canonical}' at line {$stmt->line}");
+            }
+
+            $lexer = new LipiLexer($content);
+            $tokens = $lexer->tokenize();
+            $parser = new LipiParser($tokens);
+            $ast = $parser->parse();
+
+            $modRuntime = new LipiRuntime($this->captureOutput);
+            $modRuntime->setCurrentFileDir(dirname($canonical));
+            $modRuntime->execute($ast);
+
+            $exports = $modRuntime->globals->getLocalValues();
+            $this->moduleCache[$canonical] = $exports;
+        }
+
+        $alias = $stmt->alias;
+        if ($alias === null) {
+            $alias = pathinfo($canonical, PATHINFO_FILENAME);
+        }
+
+        $this->environment->define($alias, $exports);
+    }
+
+    private function executeStructDecl(StructDeclStmt $stmt): void
+    {
+        $blueprint = new LipiStructBlueprint($stmt->name, $stmt->fields, $stmt->methods, $this->environment);
+        $this->environment->define($stmt->name, $blueprint);
+    }
+
+    private function executeTryCatch(TryCatchStmt $stmt): mixed
+    {
+        try {
+            return $this->executeBlock($stmt->tryBranch, new LipiEnvironment($this->environment));
+        } catch (LipiReturnSignal | LipiBreakSignal | LipiContinueSignal $signal) {
+            throw $signal;
+        } catch (\Throwable $e) {
+            $catchEnv = new LipiEnvironment($this->environment);
+            $errVal = ($e instanceof LipiUserException) ? $e->errorValue : $e->getMessage();
+            $catchEnv->define($stmt->errorVar, $errVal);
+            return $this->executeBlock($stmt->catchBranch, $catchEnv);
+        }
+    }
+
+    private function executeThrow(ThrowStmt $stmt): never
+    {
+        $val = $this->evaluate($stmt->expression);
+        throw new LipiUserException($val);
+    }
+
     // =========================================================================
     // EXPRESSION EVALUATION
     // =========================================================================
@@ -401,9 +603,27 @@ final class LipiRuntime
             MapExpr::class      => $this->evaluateMap($expr),
             IndexExpr::class    => $this->evaluateIndex($expr),
             MemberExpr::class   => $this->evaluateMember($expr),
+            NewExpr::class      => $this->evaluateNew($expr),
             FnExpr::class       => new LipiFunction("<anonymous>", $expr->params, $expr->body, $this->environment),
             default             => throw new RuntimeException("Unknown expression type: " . $expr::class),
         };
+    }
+
+    private function evaluateNew(NewExpr $expr): LipiStructInstance
+    {
+        $blueprint = $this->environment->get($expr->structName);
+        if (!$blueprint instanceof LipiStructBlueprint) {
+            throw new RuntimeException("'{$expr->structName}' কোনো গঠন (struct) নয় at line {$expr->line}");
+        }
+        $args = [];
+        foreach ($expr->arguments as $argExpr) {
+            $args[] = $this->evaluate($argExpr);
+        }
+        $namedArgs = [];
+        foreach ($expr->namedArguments as $key => $argExpr) {
+            $namedArgs[$key] = $this->evaluate($argExpr);
+        }
+        return $blueprint->instantiate($this, $args, $namedArgs);
     }
 
     private function evaluateAssign(AssignExpr $expr): mixed
@@ -443,6 +663,22 @@ final class LipiRuntime
             }
         }
 
+        if ($expr->target instanceof MemberExpr) {
+            $obj = $this->evaluate($expr->target->object);
+            $prop = $expr->target->property;
+            if ($obj instanceof LipiStructInstance) {
+                $obj->set($prop, $val);
+                return $val;
+            }
+            if (is_array($obj)) {
+                $obj[$prop] = $val;
+                if ($expr->target->object instanceof VariableExpr) {
+                    $this->environment->assign($expr->target->object->name, $obj);
+                }
+                return $val;
+            }
+        }
+
         throw new RuntimeException("Invalid assignment target at line {$expr->line}");
     }
 
@@ -451,10 +687,10 @@ final class LipiRuntime
         $left = $this->evaluate($expr->left);
 
         // Short-circuit logical operators
-        if ($expr->operator === '&&' || $expr->operator === 'and' || $expr->operator === 'এবং') {
+        if ($expr->operator === '&&' || $expr->operator === 'and' || $expr->operator === 'এবং' || $expr->operator === LipiToken::TYPE_AND) {
             return $this->isTruthy($left) ? $this->evaluate($expr->right) : $left;
         }
-        if ($expr->operator === '||' || $expr->operator === 'or' || $expr->operator === 'অথবা') {
+        if ($expr->operator === '||' || $expr->operator === 'or' || $expr->operator === 'অথবা' || $expr->operator === LipiToken::TYPE_OR) {
             return $this->isTruthy($left) ? $left : $this->evaluate($expr->right);
         }
 
@@ -554,6 +790,10 @@ final class LipiRuntime
         $obj = $this->evaluate($expr->object);
         $prop = $expr->property;
 
+        if ($obj instanceof LipiStructInstance) {
+            return $obj->get($prop);
+        }
+
         if (is_array($obj)) {
             return $obj[$prop] ?? null;
         }
@@ -589,6 +829,13 @@ final class LipiRuntime
         }
         if ($value === false) {
             return 'মিথ্যা';
+        }
+        if ($value instanceof LipiStructInstance) {
+            $pairs = [];
+            foreach ($value->toArray() as $k => $v) {
+                $pairs[] = $k . ': ' . $this->stringify($v);
+            }
+            return $value->blueprint->name . ' {' . implode(', ', $pairs) . '}';
         }
         if (is_array($value)) {
             // Check if associative map

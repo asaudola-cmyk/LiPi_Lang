@@ -69,7 +69,8 @@ final class VarDeclStmt extends LipiStmt
         public readonly ?LipiExpr $initializer,
         public readonly bool $isConst,
         int $line,
-        int $column
+        int $column,
+        public readonly ?string $typeAnnotation = null
     ) {
         parent::__construct($line, $column);
     }
@@ -192,6 +193,63 @@ final class ServerStmt extends LipiStmt
     public function __construct(
         public readonly LipiExpr $portExpr,
         public readonly FnExpr $handler,
+        int $line,
+        int $column
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+/** Module Import Statement: আমদানি "ফাইল.lp" হিসেবে মডিউল or import "file.lp" as mod */
+final class ImportStmt extends LipiStmt
+{
+    public function __construct(
+        public readonly string $path,
+        public readonly ?string $alias,
+        int $line,
+        int $column
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+/** Struct / Record Declaration: গঠন শিক্ষার্থী { নাম, বয়স, রোল } */
+final class StructDeclStmt extends LipiStmt
+{
+    /**
+     * @param list<string> $fields
+     * @param list<FnDeclStmt> $methods
+     */
+    public function __construct(
+        public readonly string $name,
+        public readonly array $fields,
+        public readonly array $methods,
+        int $line,
+        int $column
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+/** Exception Handling Statement: চেষ্টা { ... } ধরো এরর { ... } */
+final class TryCatchStmt extends LipiStmt
+{
+    public function __construct(
+        public readonly BlockStmt $tryBranch,
+        public readonly string $errorVar,
+        public readonly BlockStmt $catchBranch,
+        int $line,
+        int $column
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
+/** Exception Throw Statement: নিক্ষেপ "ভুল ইনপুট" or throw "Invalid input" */
+final class ThrowStmt extends LipiStmt
+{
+    public function __construct(
+        public readonly LipiExpr $expression,
         int $line,
         int $column
     ) {
@@ -359,3 +417,22 @@ final class FnExpr extends LipiExpr
         parent::__construct($line, $column);
     }
 }
+
+/** Struct Instantiation: নতুন শিক্ষার্থী(নাম: "শফিউল্লাহ", বয়স: ২৫) or new Student("Shafiullah", 25) */
+final class NewExpr extends LipiExpr
+{
+    /**
+     * @param list<LipiExpr> $arguments
+     * @param array<string, LipiExpr> $namedArguments
+     */
+    public function __construct(
+        public readonly string $structName,
+        public readonly array $arguments = [],
+        public readonly array $namedArguments = [],
+        int $line = 1,
+        int $column = 1
+    ) {
+        parent::__construct($line, $column);
+    }
+}
+
