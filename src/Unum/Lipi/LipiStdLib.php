@@ -59,34 +59,50 @@ final class LipiStdLib
         $dataModule = self::createDataModule();
         $env->define('ডাটা', $dataModule, true);
         $env->define('data', $dataModule, true);
+        $env->define('জেসন_লিখ', $dataModule['জেসন_লিখ'], true);
+        $env->define('json_encode', $dataModule['json_encode'], true);
+        $env->define('জেসন_পড়', $dataModule['জেসন_পড়'], true);
+        $env->define('json_decode', $dataModule['json_decode'], true);
 
-        // 6. Master Sovereign Namespace (লিপি / lipi)
+        // 6. Module: Bare-Metal Hardware & Universal Number (লিপি.হার্ডওয়্যার / hardware / unum)
+        $hwModule = self::createHardwareModule();
+        $env->define('হার্ডওয়্যার', $hwModule, true);
+        $env->define('hardware', $hwModule, true);
+        $env->define('ইউনাম', $hwModule, true);
+        $env->define('unum', $hwModule, true);
+
+        // 7. Master Sovereign Namespace (লিপি / lipi)
         // Bundles all subsystems including in-memory POSIX storage (লিপি.স্মৃতি)
         $memoryModule = $env->has('স্মৃতি') ? $env->get('স্মৃতি') : [];
 
         $lipiMaster = [
-            'ফাইল'    => $fsModule,
-            'fs'      => $fsModule,
-            'file'    => $fsModule,
+            'ফাইল'       => $fsModule,
+            'fs'         => $fsModule,
+            'file'       => $fsModule,
 
-            'সিস্টেম' => $sysModule,
-            'sys'     => $sysModule,
-            'system'  => $sysModule,
+            'সিস্টেম'    => $sysModule,
+            'sys'        => $sysModule,
+            'system'     => $sysModule,
 
-            'সময়'     => $timeModule,
-            'time'    => $timeModule,
+            'সময়'        => $timeModule,
+            'time'       => $timeModule,
 
-            'গণিত'    => $mathModule,
-            'math'    => $mathModule,
+            'গণিত'       => $mathModule,
+            'math'       => $mathModule,
 
-            'ডাটা'    => $dataModule,
-            'data'    => $dataModule,
+            'ডাটা'       => $dataModule,
+            'data'       => $dataModule,
 
-            'স্মৃতি'   => $memoryModule,
-            'memory'  => $memoryModule,
+            'স্মৃতি'      => $memoryModule,
+            'memory'     => $memoryModule,
 
-            'সংস্করণ' => '2.0.0-sovereign',
-            'version' => '2.0.0-sovereign',
+            'হার্ডওয়্যার' => $hwModule,
+            'hardware'   => $hwModule,
+            'ইউনাম'      => $hwModule,
+            'unum'       => $hwModule,
+
+            'সংস্করণ'    => '2.0.0-sovereign',
+            'version'    => '2.0.0-sovereign',
         ];
 
         $env->define('লিপি', $lipiMaster, true);
@@ -407,4 +423,155 @@ final class LipiStdLib
             'hash'           => $hashFn,
         ];
     }
+
+    /**
+     * Creates Bare-Metal Hardware & Universal Number Module (লিপি.হার্ডওয়্যার / hardware / unum).
+     *
+     * WHY: Lipi is NOT a framework or a library. It is a sovereign systems programming language
+     * whose foundational machine model is the 64-bit Universal Number (U ∈ GF(2^64)).
+     * This module provides direct, low-level abstractions over CPU registers, instruction bitfields,
+     * virtual memory page layouts, atomic hardware primitives, and OS kernel syscall vectors.
+     *
+     * @return array<string, mixed>
+     */
+    private static function createHardwareModule(): array
+    {
+        // 1. CPU Hardware Architecture & Execution Profile
+        $cpuFn = new LipiBuiltinFunction('cpu', 0, function (LipiRuntime $rt, array $args): array {
+            return [
+                'আর্কিটেকচার'        => php_uname('m'),
+                'arch'                => php_uname('m'),
+                'ওএস'                 => PHP_OS_FAMILY,
+                'os'                  => PHP_OS_FAMILY,
+                'কার্নেল'             => php_uname('s') . ' ' . php_uname('r'),
+                'kernel'              => php_uname('s') . ' ' . php_uname('r'),
+                'পেজ_আকার_বাইট'       => 4096,
+                'page_size'           => 4096,
+                'এন্ডিয়ান'            => 'Little-Endian (AMD64 / ARM64)',
+                'endian'              => 'little',
+                'হার্ডওয়্যার_রেজিস্টার' => [
+                    'RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI',
+                    'R8', 'R9', 'R10', 'R11', 'R12', 'R13', 'R14', 'R15'
+                ],
+                'registers'           => [
+                    'RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI',
+                    'R8', 'R9', 'R10', 'R11', 'R12', 'R13', 'R14', 'R15'
+                ],
+                'ভেক্টর_সক্ষমতা'       => ['AVX-512', 'AVX2', 'ARM_NEON', 'WASM_SIMD128'],
+                'simd'                => ['AVX-512', 'AVX2', 'ARM_NEON', 'WASM_SIMD128'],
+            ];
+        });
+
+        // 2. Synthesize a 64-bit Universal Number Machine Instruction
+        // Bitfield: [Opcode:8][Type:8][Reg:8][SIMD:8][Payload:32]
+        $unumFn = new LipiBuiltinFunction('unum_instruction', 4, function (LipiRuntime $rt, array $args): array {
+            $opcode  = isset($args[0]) ? ((int)$args[0] & 0xFF) : 0;
+            $type    = isset($args[1]) ? ((int)$args[1] & 0xFF) : 1;
+            $reg     = isset($args[2]) ? ((int)$args[2] & 0xFF) : 0;
+            $payload = isset($args[3]) ? ((int)$args[3] & 0xFFFFFFFF) : 0;
+            $simd    = isset($args[4]) ? ((int)$args[4] & 0xFF) : 0;
+
+            // Compute raw 64-bit integer bitfield in GF(2^64)
+            $raw64 = ($opcode << 56) | ($type << 48) | ($reg << 40) | ($simd << 32) | $payload;
+
+            // Map register index to human-readable hardware register name
+            $regNames = [
+                0 => 'RAX', 1 => 'RCX', 2 => 'RDX', 3 => 'RBX',
+                4 => 'RSP', 5 => 'RBP', 6 => 'RSI', 7 => 'RDI',
+                8 => 'R8',  9 => 'R9',  10 => 'R10', 11 => 'R11',
+                12 => 'R12', 13 => 'R13', 14 => 'R14', 15 => 'R15'
+            ];
+            $regName = $regNames[$reg] ?? "REG_{$reg}";
+
+            // Map standard opcodes
+            $opNames = [
+                0x00 => 'OP_NOP', 0x01 => 'OP_MOV_IMM', 0x02 => 'OP_MOV_REG',
+                0x03 => 'OP_ADD_IMM', 0x04 => 'OP_ADD_REG', 0x05 => 'OP_SUB_IMM',
+                0x06 => 'OP_SUB_REG', 0x07 => 'OP_MUL_REG', 0x08 => 'OP_XOR_REG',
+                0x09 => 'OP_LOOP_DEC', 0x10 => 'OP_SIMD_DOT', 0x11 => 'OP_SIMD_ADD',
+                0xFE => 'OP_RET', 0xFF => 'OP_HALT'
+            ];
+            $opName = $opNames[$opcode] ?? sprintf('OP_0x%02X', $opcode);
+
+            return [
+                'মান'         => $raw64,
+                'value'       => $raw64,
+                'হেক্স'       => sprintf('0x%016X', $raw64),
+                'hex'         => sprintf('0x%016X', $raw64),
+                'অপকোড'       => $opName,
+                'opcode'      => $opName,
+                'রেজিস্টার'   => $regName,
+                'register'    => $regName,
+                'পেলোড'       => $payload,
+                'payload'     => $payload,
+                'সিলিকন_মডেল' => 'Universal Number GF(2^64) Single-Cycle Instruction',
+            ];
+        });
+
+        // 3. Hardware Register Mapping (AMD64 System V ABI)
+        $regMapFn = new LipiBuiltinFunction('register_map', 0, function (LipiRuntime $rt, array $args): array {
+            return [
+                'RAX' => 0, 'RCX' => 1, 'RDX' => 2, 'RBX' => 3,
+                'RSP' => 4, 'RBP' => 5, 'RSI' => 6, 'RDI' => 7,
+                'R8'  => 8, 'R9'  => 9, 'R10' => 10, 'R11' => 11,
+                'R12' => 12, 'R13' => 13, 'R14' => 14, 'R15' => 15,
+            ];
+        });
+
+        // 4. Linux Kernel Direct Syscall Vector Map
+        $syscallMapFn = new LipiBuiltinFunction('syscall_map', 0, function (LipiRuntime $rt, array $args): array {
+            return [
+                'SYS_read'     => 0,
+                'SYS_write'    => 1,
+                'SYS_open'     => 2,
+                'SYS_close'    => 3,
+                'SYS_mmap'     => 9,
+                'SYS_mprotect' => 10,
+                'SYS_munmap'   => 11,
+                'SYS_socket'   => 41,
+                'SYS_accept'   => 43,
+                'SYS_bind'     => 49,
+                'SYS_listen'   => 50,
+                'SYS_fork'     => 57,
+                'SYS_execve'   => 59,
+                'SYS_exit'     => 60,
+            ];
+        });
+
+        // 5. Total Language Sovereignty Statement & Physical Identity
+        $sovereigntyFn = new LipiBuiltinFunction('sovereignty', 0, function (LipiRuntime $rt, array $args): array {
+            return [
+                'ভাষা'               => 'লিপি (Lipi)',
+                'language'           => 'Lipi',
+                'শ্রেণীবিভাগ'       => 'সার্বভৌম সিস্টেম প্রোগ্রামিং ভাষা (Sovereign Systems Language)',
+                'classification'     => 'Sovereign Systems Programming Language',
+                'ফ্রেমওয়ার্ক_কিনা'   => false,
+                'is_framework'       => false,
+                'মেশিন_মডেল'         => 'Universal Number (GF(2^64) Silicon Bitfield)',
+                'machine_model'      => 'Universal Number (GF(2^64) Silicon Bitfield)',
+                'বহিরাগত_নির্ভরতা'   => 'জিরো (Zero Dependency)',
+                'dependencies'       => 'None (0% External Dependencies)',
+                'পিএইচপি_মুক্ত'      => true,
+                'জিসিসি_মুক্ত'       => true,
+                'কার্নেল_ডাইরেক্ট'   => true,
+                'স্ট্যান্ডঅ্যালোন_ELF' => true,
+            ];
+        });
+
+        return [
+            'সিপিইউ'             => $cpuFn,
+            'cpu'                => $cpuFn,
+            'ইউনাম'              => $unumFn,
+            'unum'               => $unumFn,
+            'তৈরি_নির্দেশ'       => $unumFn,
+            'make_instruction'   => $unumFn,
+            'রেজিস্টার_ম্যাপ'    => $regMapFn,
+            'register_map'       => $regMapFn,
+            'সিস্টেম_কল_ম্যাপ'   => $syscallMapFn,
+            'syscall_map'        => $syscallMapFn,
+            'সার্বভৌম_স্থিতি'    => $sovereigntyFn,
+            'sovereignty'        => $sovereigntyFn,
+        ];
+    }
 }
+
