@@ -9,9 +9,9 @@
 }
 
 // ২. ফাইল তৈরি বা ট্রাঙ্কেট করা (Direct create/truncate via SYS_open: syscall 2)
-// O_WRONLY | O_CREAT | O_TRUNC = 0101o = 65, Mode 0644o = 420
+// O_WRONLY | O_CREAT | O_TRUNC = 1 | 64 | 512 = 577, Mode 0644o = 420
 কাজ ফাইল_তৈরি(পথ) {
-    ধরি fd = সিসকল(২, পথ, ৬৫, ৪২০)
+    ধরি fd = সিসকল(২, পথ, ৫৭৭, ৪২০)
     ফেরত fd
 }
 

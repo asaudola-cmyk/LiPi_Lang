@@ -32,10 +32,11 @@ mkdir -p bin dist
 # ------------------------------------------------------------------------------
 # [ধাপ ০: বীজ / Bootstrapper Seed Compilation]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ০] বীজ (Bootstrapper Seed) তৈরি হচ্ছে...${NC}"
+echo -e "${YELLOW}[ধাপ ০] বীজ (Bootstrapper Seed) ও টুলস তৈরি হচ্ছে...${NC}"
 gcc -O2 -Wall -Wextra src/seed/bootstrapper.c -o bin/lipic
 cp bin/lipic bin/lipi-seed
-echo -e "${GREEN}  ✔ bin/lipic এবং bin/lipi-seed সফলভাবে নির্মিত হয়েছে।${NC}"
+gcc -O2 -Wall -Wextra src/tools/lipipkg.c -o bin/lipipkg
+echo -e "${GREEN}  ✔ bin/lipic, bin/lipi-seed এবং bin/lipipkg সফলভাবে নির্মিত হয়েছে।${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -75,6 +76,10 @@ TESTS=(
     "examples/22_custom_structs_and_types.lp:dist/test22_structs"
     "examples/23_native_database_engine.lp:dist/test23_db"
     "examples/24_silicon_matrix_ai.lp:dist/test24_simd"
+    "examples/25_arena_memory_allocator.lp:dist/test25_arena"
+    "examples/26_async_epoll_event_loop.lp:dist/test26_epoll"
+    "examples/27_lipipkg_project_lifecycle.lp:dist/test27_pkg"
+    "examples/28_hardware_crypto_sha256.lp:dist/test28_crypto"
 )
 
 for test_pair in "${TESTS[@]}"; do

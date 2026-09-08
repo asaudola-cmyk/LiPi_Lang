@@ -306,6 +306,22 @@ static void parse_all_structs(const char *source) {
     const size_t len_gothon = strlen("গঠন");
 
     while (*p) {
+        // WHY: Skip line comments and string literals so Bengali words in comments are never misidentified as struct definitions.
+        if (p[0] == '/' && p[1] == '/') {
+            while (*p && *p != '\n') p++;
+            if (*p) p++;
+            continue;
+        }
+        if (p[0] == '"' || p[0] == '\'') {
+            char q = *p++;
+            while (*p && *p != q) {
+                if (*p == '\\' && *(p + 1)) p += 2;
+                else p++;
+            }
+            if (*p) p++;
+            continue;
+        }
+
         bool is_gothon = (strncmp(p, "গঠন", len_gothon) == 0 && (p[len_gothon] == ' ' || p[len_gothon] == '\t'));
         bool is_struct = (strncmp(p, "struct", 6) == 0 && (p[6] == ' ' || p[6] == '\t'));
 
@@ -415,6 +431,29 @@ static int64_t parse_bangla_number(const char *str) {
     } else if (*p == '+') {
         p++;
     }
+
+    // WHY: Support standard hexadecimal notation (0x... / 0X...) for cryptographic constants and bitmasks.
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        p += 2;
+        while (*p) {
+            if (*p >= '0' && *p <= '9') {
+                val = (val << 4) | (*p - '0');
+                p++;
+            } else if (*p >= 'a' && *p <= 'f') {
+                val = (val << 4) | (*p - 'a' + 10);
+                p++;
+            } else if (*p >= 'A' && *p <= 'F') {
+                val = (val << 4) | (*p - 'A' + 10);
+                p++;
+            } else if (isspace(*p)) {
+                p++;
+            } else {
+                break;
+            }
+        }
+        return neg ? -val : val;
+    }
+
     while (*p) {
         if (*p >= '0' && *p <= '9') {
             val = val * 10 + (*p - '0');
@@ -437,10 +476,35 @@ static bool is_numeric_str(const char *str) {
     while (*p && isspace(*p)) p++;
     if (*p == '-' || *p == '+') p++;
     if (!*p) return false;
+
+    // WHY: Recognize hex format as a valid numeric literal.
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        p += 2;
+        if (!*p) return false;
+        while (*p) {
+            if ((*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'f') || (*p >= 'A' && *p <= 'F')) {
+                p++;
+                continue;
+            }
+            if (isspace(*p)) { p++; continue; }
+            return false;
+        }
+        return true;
+    }
+
     while (*p) {
-        if (*p >= '0' && *p <= '9') { p++; continue; }
-        if (p[0] == 0xE0 && p[1] == 0xA7 && (p[2] >= 0xA6 && p[2] <= 0xAF)) { p += 3; continue; }
-        if (isspace(*p)) { p++; continue; }
+        if (*p >= '0' && *p <= '9') {
+            p++;
+            continue;
+        }
+        if (p[0] == 0xE0 && p[1] == 0xA7 && (p[2] >= 0xA6 && p[2] <= 0xAF)) {
+            p += 3;
+            continue;
+        }
+        if (isspace(*p)) {
+            p++;
+            continue;
+        }
         return false;
     }
     return true;
@@ -707,6 +771,23 @@ static int parse_call_arguments(char *args_part, char out_args[8][1024]) {
     return count;
 }
 
+// Check if expression is a standalone builtin call with matching closing parenthesis at the end
+// WHY: Ensures builtins within compound expressions (e.g. ror32(x, 6) ^ ror32(x, 11)) fall through to binary operator parsing.
+static bool is_exact_builtin_call(const char *s, const char *prefix) {
+    size_t plen = strlen(prefix);
+    if (strncmp(s, prefix, plen) != 0) return false;
+    const char *open_p = s + plen - 1;
+    if (*open_p != '(') {
+        open_p = strchr(s + plen, '(');
+        if (!open_p) return false;
+    }
+    char *close_p = find_matching_close_paren((char *)open_p + 1);
+    if (!close_p) return false;
+    const char *end = close_p + 1;
+    while (*end && isspace((unsigned char)*end)) end++;
+    return (*end == '\0');
+}
+
 // Check if an expression represents a single function call identifier(...)
 static bool is_function_call_expr(const char *s) {
     const char *p = s;
@@ -717,7 +798,9 @@ static bool is_function_call_expr(const char *s) {
     if (!open_p || open_p == p) return false;
 
     for (const char *c = p; c < open_p; c++) {
-        if (*c == '+' || *c == '-' || *c == '*' || *c == '/' || *c == '%' || isspace((unsigned char)*c)) {
+        if (*c == '+' || *c == '-' || *c == '*' || *c == '/' || *c == '%' ||
+            *c == '&' || *c == '|' || *c == '^' || *c == '<' || *c == '>' ||
+            isspace((unsigned char)*c)) {
             return false;
         }
     }
@@ -1000,15 +1083,18 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
     copy[sizeof(copy) - 1] = '\0';
     char *s = strip_outer_parens(copy);
 
-    if (strstr(s, "সিপিউ_ক্লক") != NULL || strcmp(s, "rdtsc()") == 0 || strcmp(s, "rdtsc") == 0 || strcmp(s, "clock()") == 0 || strcmp(s, "সাইকেল()") == 0 || strcmp(s, "সাইকেল") == 0) {
+    if (strcmp(s, "লিপি.হার্ডওয়্যার.সিপিউ_ক্লক()") == 0 || strcmp(s, "লিপি.হার্ডওয়্যার.সিপিউ_ক্লক") == 0 ||
+        strcmp(s, "সিপিউ_ক্লক()") == 0 || strcmp(s, "সিপিউ_ক্লক") == 0 ||
+        strcmp(s, "rdtsc()") == 0 || strcmp(s, "rdtsc") == 0 ||
+        strcmp(s, "clock()") == 0 || strcmp(s, "সাইকেল()") == 0 || strcmp(s, "সাইকেল") == 0) {
         emit_rdtsc(cb, g_current_stack_offset);
         emit_mov_rax_stack(cb, g_current_stack_offset);
         return;
     }
 
-    if (strncmp(s, "সাইজ(", strlen("সাইজ(")) == 0 ||
-        strncmp(s, "আকার(", strlen("আকার(")) == 0 ||
-        strncmp(s, "sizeof(", 7) == 0) {
+    if (is_exact_builtin_call(s, "সাইজ(") ||
+        is_exact_builtin_call(s, "আকার(") ||
+        is_exact_builtin_call(s, "sizeof(")) {
         char copy_sz[256];
         strncpy(copy_sz, s, sizeof(copy_sz) - 1);
         copy_sz[sizeof(copy_sz) - 1] = '\0';
@@ -1026,15 +1112,15 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         }
     }
 
-    if (strncmp(s, "সিসকল(", strlen("সিসকল(")) == 0 || strncmp(s, "syscall(", 8) == 0) {
+    if (is_exact_builtin_call(s, "সিসকল(") || is_exact_builtin_call(s, "syscall(")) {
         emit_syscall(cb, ro, s);
         return;
     }
 
     // Native Linux Kernel Thread Spawner: থ্রেড_চালু(ফাংশন, স্ট্যাক_টপ, আর্গ) / thread_spawn(fn, stack, arg)
     // WHY: Returns child TID to parent while child executes fn(arg) in an isolated hardware stack.
-    if (strncmp(s, "থ্রেড_চালু(", strlen("থ্রেড_চালু(")) == 0 ||
-        strncmp(s, "thread_spawn(", 13) == 0) {
+    if (is_exact_builtin_call(s, "থ্রেড_চালু(") ||
+        is_exact_builtin_call(s, "thread_spawn(")) {
         emit_thread_spawn(cb, ro, s);
         return;
     }
@@ -1047,7 +1133,7 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         return;
     }
 
-    if (strncmp(s, "দৈর্ঘ্য(", strlen("দৈর্ঘ্য(")) == 0 || strncmp(s, "len(", 4) == 0) {
+    if (is_exact_builtin_call(s, "দৈর্ঘ্য(") || is_exact_builtin_call(s, "len(")) {
         char inner[256] = {0};
         char *start = strchr(s, '(');
         if (start) {
@@ -1061,8 +1147,8 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         return;
     }
 
-    if (strncmp(s, "মেমরি_পড়ো(", strlen("মেমরি_পড়ো(")) == 0 ||
-        strncmp(s, "mem_read(", 9) == 0) {
+    if (is_exact_builtin_call(s, "মেমরি_পড়ো(") ||
+        is_exact_builtin_call(s, "mem_read(")) {
         char copy[4096];
         strncpy(copy, s, sizeof(copy) - 1);
         copy[sizeof(copy) - 1] = '\0';
@@ -1084,8 +1170,8 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         }
     }
 
-    if (strncmp(s, "মেমরি_বাইট_পড়ো(", strlen("মেমরি_বাইট_পড়ো(")) == 0 ||
-        strncmp(s, "mem_read_byte(", 14) == 0) {
+    if (is_exact_builtin_call(s, "মেমরি_বাইট_পড়ো(") ||
+        is_exact_builtin_call(s, "mem_read_byte(")) {
         char copy[4096];
         strncpy(copy, s, sizeof(copy) - 1);
         copy[sizeof(copy) - 1] = '\0';
@@ -1107,63 +1193,216 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         }
     }
 
+    // Direct Memory 32-bit (DWORD) Read: মেমরি_শব্দ৩২_পড়ো(বেস, অফসেট) / mem_read_u32(base, offset)
+    // WHY: Required for reading packed 32-bit integers (e.g. epoll_event events field, SHA-256 state words).
+    if (is_exact_builtin_call(s, "মেমরি_শব্দ৩২_পড়ো(") ||
+        is_exact_builtin_call(s, "mem_read_u32(")) {
+        char copy[4096];
+        strncpy(copy, s, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 2) {
+            compile_expression_recursive(cb, ro, args[0]); // base
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // offset
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5e);                             // pop rsi (offset)
+            emit_u8(cb, 0x5f);                             // pop rdi (base)
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xf7}, 3); // add rdi, rsi
+            emit_bytes(cb, (const uint8_t[]){0x8b, 0x07}, 2);       // mov eax, [rdi] (zero-extends into rax)
+            return;
+        }
+    }
+
+    // Hardware CPU Entropy / True Randomness: সিলিকন_র্যান্ডম() / rdrand()
+    // WHY: Direct hardware execution of CPU RDRAND instruction to retrieve cryptographically secure 64-bit entropy.
+    if (strcmp(s, "সিলিকন_র্যান্ডম()") == 0 || strcmp(s, "সিলিকন_র্যান্ডম") == 0 ||
+        strcmp(s, "rdrand()") == 0 || strcmp(s, "rdrand") == 0 ||
+        strcmp(s, "random()") == 0 || strcmp(s, "random") == 0) {
+        emit_bytes(cb, (const uint8_t[]){0x48, 0x0f, 0xc7, 0xf0}, 4); // rdrand rax
+        emit_bytes(cb, (const uint8_t[]){0x48, 0xb9}, 2);              // mov rcx, 0x7fffffffffffffff
+        emit_u64(cb, 0x7fffffffffffffffULL);
+        emit_bytes(cb, (const uint8_t[]){0x48, 0x21, 0xc8}, 3);        // and rax, rcx (ensure positive integer)
+        return;
+    }
+
+    // 32-bit Right Bitwise Rotation: রোটেট_ডানে_৩২(মান, বিট) / ror32(val, bits)
+    // WHY: Direct single-cycle instruction execution for SHA-256 cryptographic compression functions.
+    if (is_exact_builtin_call(s, "রোটেট_ডানে_৩২(") ||
+        is_exact_builtin_call(s, "ror32(")) {
+        char copy_r[1024];
+        strncpy(copy_r, s, sizeof(copy_r) - 1);
+        copy_r[sizeof(copy_r) - 1] = '\0';
+        char *open_p = strchr(copy_r, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 2) {
+            compile_expression_recursive(cb, ro, args[0]); // val
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // bits
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xc1}, 3); // mov rcx, rax (count into cl)
+            emit_u8(cb, 0x58);                             // pop rax
+            emit_bytes(cb, (const uint8_t[]){0xd3, 0xc8}, 2);       // ror eax, cl (32-bit rotate)
+            return;
+        }
+    }
+
     if (is_function_call_expr(s)) {
         emit_function_call(cb, ro, s);
         return;
     }
 
     int len = (int)strlen(s);
-    char op = 0;
+    enum OpType {
+        OP_NONE = 0,
+        OP_OR = 1,
+        OP_XOR = 2,
+        OP_AND = 3,
+        OP_ADD = 4,
+        OP_SUB = 5,
+        OP_SHL = 6,
+        OP_SHR = 7,
+        OP_MUL = 8,
+        OP_DIV = 9,
+        OP_MOD = 10
+    };
+
+    enum OpType op_type = OP_NONE;
     int op_idx = -1;
+    int op_len = 1;
     int paren_depth = 0;
     int bracket_depth = 0;
     bool in_quote = false;
     char qchar = 0;
 
+    // Pass 1 (Lowest precedence): Bitwise OR '|'
     for (int i = len - 1; i >= 0; i--) {
-        if (!in_quote && (s[i] == '"' || s[i] == '\'')) {
-            in_quote = true;
-            qchar = s[i];
-        } else if (in_quote && s[i] == qchar) {
-            if (i == 0 || s[i-1] != '\\') {
-                in_quote = false;
-            }
-        }
+        if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+        else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
         if (in_quote) continue;
-
         if (s[i] == ')') paren_depth++;
         else if (s[i] == '(') paren_depth--;
         else if (s[i] == ']') bracket_depth++;
         else if (s[i] == '[') bracket_depth--;
-        else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '%' && s[i-1] != '+' && s[i-1] != '-') {
-            op = s[i];
+        else if (paren_depth == 0 && bracket_depth == 0 && s[i] == '|' && (i == 0 || s[i-1] != '|') && s[i+1] != '|') {
             op_idx = i;
+            op_len = 1;
+            op_type = OP_OR;
             break;
         }
     }
 
+    // Pass 2: Bitwise XOR '^'
     if (op_idx == -1) {
-        paren_depth = 0;
-        bracket_depth = 0;
-        in_quote = false;
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
         for (int i = len - 1; i >= 0; i--) {
-            if (!in_quote && (s[i] == '"' || s[i] == '\'')) {
-                in_quote = true;
-                qchar = s[i];
-            } else if (in_quote && s[i] == qchar) {
-                if (i == 0 || s[i-1] != '\\') {
-                    in_quote = false;
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0 && s[i] == '^') {
+                op_idx = i;
+                op_len = 1;
+                op_type = OP_XOR;
+                break;
+            }
+        }
+    }
+
+    // Pass 3: Bitwise AND '&'
+    if (op_idx == -1) {
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
+        for (int i = len - 1; i >= 0; i--) {
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0 && s[i] == '&' && (i == 0 || s[i-1] != '&') && s[i+1] != '&') {
+                op_idx = i;
+                op_len = 1;
+                op_type = OP_AND;
+                break;
+            }
+        }
+    }
+
+    // Pass 4: Addition '+' and Subtraction '-'
+    if (op_idx == -1) {
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
+        for (int i = len - 1; i >= 0; i--) {
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '+' || s[i] == '-') && i > 0 &&
+                     s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '%' && s[i-1] != '+' && s[i-1] != '-' &&
+                     s[i-1] != '&' && s[i-1] != '|' && s[i-1] != '^' && s[i-1] != '<' && s[i-1] != '>') {
+                op_idx = i;
+                op_len = 1;
+                op_type = (s[i] == '+') ? OP_ADD : OP_SUB;
+                break;
+            }
+        }
+    }
+
+    // Pass 5: Bitwise Shifts '<<' and '>>'
+    if (op_idx == -1) {
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
+        for (int i = len - 1; i >= 1; i--) {
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
+            if (s[i] == ')') paren_depth++;
+            else if (s[i] == '(') paren_depth--;
+            else if (s[i] == ']') bracket_depth++;
+            else if (s[i] == '[') bracket_depth--;
+            else if (paren_depth == 0 && bracket_depth == 0) {
+                if (s[i] == '<' && s[i-1] == '<') {
+                    op_idx = i - 1;
+                    op_len = 2;
+                    op_type = OP_SHL;
+                    break;
+                }
+                if (s[i] == '>' && s[i-1] == '>') {
+                    op_idx = i - 1;
+                    op_len = 2;
+                    op_type = OP_SHR;
+                    break;
                 }
             }
-            if (in_quote) continue;
+        }
+    }
 
+    // Pass 6 (Highest precedence): Multiplication '*', Division '/', Modulo '%'
+    if (op_idx == -1) {
+        paren_depth = 0; bracket_depth = 0; in_quote = false;
+        for (int i = len - 1; i >= 0; i--) {
+            if (!in_quote && (s[i] == '"' || s[i] == '\'')) { in_quote = true; qchar = s[i]; }
+            else if (in_quote && s[i] == qchar && (i == 0 || s[i-1] != '\\')) { in_quote = false; }
+            if (in_quote) continue;
             if (s[i] == ')') paren_depth++;
             else if (s[i] == '(') paren_depth--;
             else if (s[i] == ']') bracket_depth++;
             else if (s[i] == '[') bracket_depth--;
             else if (paren_depth == 0 && bracket_depth == 0 && (s[i] == '*' || s[i] == '/' || s[i] == '%')) {
-                op = s[i];
                 op_idx = i;
+                op_len = 1;
+                op_type = (s[i] == '*') ? OP_MUL : ((s[i] == '/') ? OP_DIV : OP_MOD);
                 break;
             }
         }
@@ -1172,7 +1411,7 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
     if (op_idx != -1) {
         s[op_idx] = '\0';
         char *left = trim(s);
-        char *right = trim(s + op_idx + 1);
+        char *right = trim(s + op_idx + op_len);
 
         compile_expression_recursive(cb, ro, left);
         emit_u8(cb, 0x50); // push rax
@@ -1180,13 +1419,20 @@ static void compile_expression_recursive(CodeBuffer *cb, RoDataBuffer *ro, const
         emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xc3}, 3); // mov rbx, rax
         emit_u8(cb, 0x58); // pop rax
 
-        switch (op) {
-            case '*': emit_imul_rax_rbx(cb); break;
-            case '+': emit_add_rax_rbx(cb); break;
-            case '-': emit_sub_rax_rbx(cb); break;
-            case '/': emit_idiv_rax_rbx(cb); break;
-            case '%': emit_imod_rax_rbx(cb); break;
+        switch (op_type) {
+            case OP_OR:  emit_bytes(cb, (const uint8_t[]){0x48, 0x09, 0xd8}, 3); break; // or rax, rbx
+            case OP_XOR: emit_bytes(cb, (const uint8_t[]){0x48, 0x31, 0xd8}, 3); break; // xor rax, rbx
+            case OP_AND: emit_bytes(cb, (const uint8_t[]){0x48, 0x21, 0xd8}, 3); break; // and rax, rbx
+            case OP_SHL: emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xd9, 0x48, 0xd3, 0xe0}, 6); break; // mov rcx, rbx; shl rax, cl
+            case OP_SHR: emit_bytes(cb, (const uint8_t[]){0x48, 0x89, 0xd9, 0x48, 0xd3, 0xe8}, 6); break; // mov rcx, rbx; shr rax, cl
+            case OP_ADD: emit_add_rax_rbx(cb); break;
+            case OP_SUB: emit_sub_rax_rbx(cb); break;
+            case OP_MUL: emit_imul_rax_rbx(cb); break;
+            case OP_DIV: emit_idiv_rax_rbx(cb); break;
+            case OP_MOD: emit_imod_rax_rbx(cb); break;
+            default: break;
         }
+        return;
     } else {
         if (strchr(s, '(') && s[strlen(s) - 1] == ')') {
             emit_function_call(cb, ro, s);
@@ -1308,7 +1554,9 @@ static bool load_source_with_imports(const char *filepath, char *out_buf, size_t
         strncpy(line_copy, line, sizeof(line_copy) - 1);
         line_copy[sizeof(line_copy) - 1] = '\0';
         char *trimmed = trim(line_copy);
-        if (strncmp(trimmed, "অন্তর্ভুক্ত", strlen("অন্তর্ভুক্ত")) == 0 || strncmp(trimmed, "import", 6) == 0) {
+        if (strncmp(trimmed, "অন্তর্ভুক্ত", strlen("অন্তর্ভুক্ত")) == 0 ||
+            strncmp(trimmed, "আমদানি", strlen("আমদানি")) == 0 ||
+            strncmp(trimmed, "import", 6) == 0) {
             char *quote_start = strchr(trimmed, '"');
             if (quote_start) {
                 quote_start++;
@@ -1642,7 +1890,13 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
                     sym->const_val = val;
                     sym->is_initialized = true;
                     sym->is_string = false;
-                    emit_mov_stack_imm(cb, sym->stack_offset, (int32_t)val);
+                    if (val >= -2147483648LL && val <= 2147483647LL) {
+                        emit_mov_stack_imm(cb, sym->stack_offset, (int32_t)val);
+                    } else {
+                        emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
+                        emit_u64(cb, (uint64_t)val);
+                        emit_mov_stack_rax(cb, sym->stack_offset);
+                    }
                 } else {
                     compile_expression_recursive(cb, ro, expr);
                     emit_mov_stack_rax(cb, sym->stack_offset);
@@ -1829,6 +2083,35 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
         }
     }
 
+    // Direct Memory 32-bit (DWORD) Write Statement: মেমরি_শব্দ৩২_লেখো(বেস, অফসেট, মান) / mem_write_u32(base, offset, val)
+    // WHY: Required for writing packed 32-bit integers (e.g. epoll_event events field, SHA-256 blocks).
+    if (strncmp(trimmed, "মেমরি_শব্দ৩২_লেখো(", strlen("মেমরি_শব্দ৩২_লেখো(")) == 0 ||
+        strncmp(trimmed, "mem_write_u32(", 14) == 0) {
+        char copy[4096];
+        strncpy(copy, trimmed, sizeof(copy) - 1);
+        copy[sizeof(copy) - 1] = '\0';
+        char *open_p = strchr(copy, '(');
+        char *close_p = find_matching_close_paren(open_p + 1);
+        if (close_p) *close_p = '\0';
+        char args[8][1024];
+        int count = parse_call_arguments(open_p + 1, args);
+        if (count >= 3) {
+            compile_expression_recursive(cb, ro, args[0]); // base
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[1]); // offset
+            emit_u8(cb, 0x50);                             // push rax
+            compile_expression_recursive(cb, ro, args[2]); // val
+            emit_u8(cb, 0x50);                             // push rax
+            emit_u8(cb, 0x5a);                             // pop rdx (val)
+            emit_u8(cb, 0x5e);                             // pop rsi (offset)
+            emit_u8(cb, 0x5f);                             // pop rdi (base)
+            emit_bytes(cb, (const uint8_t[]){0x48, 0x01, 0xf7}, 3); // add rdi, rsi
+            emit_bytes(cb, (const uint8_t[]){0x89, 0x17}, 2);       // mov dword ptr [rdi], edx
+            return;
+        }
+    }
+
+
     // SIMD 128-bit Vector Addition Statement: ভেক্টর_যোগ_১২৮(গন্তব্য, উৎস) / simd_add128(dst, src)
     // WHY: Directly emits x86_64 SSE2 vector instructions to perform 128-bit parallel arithmetic.
     // Loads two 64-bit integers simultaneously into xmm1 from [src], two 64-bit integers into xmm0
@@ -1955,7 +2238,13 @@ static void compile_statement(CodeBuffer *cb, RoDataBuffer *ro, char *trimmed) {
             if (is_numeric_str(rhs)) {
                 int64_t val = parse_bangla_number(rhs);
                 sym->const_val = val;
-                emit_mov_stack_imm(cb, sym->stack_offset, (int32_t)val);
+                if (val >= -2147483648LL && val <= 2147483647LL) {
+                    emit_mov_stack_imm(cb, sym->stack_offset, (int32_t)val);
+                } else {
+                    emit_bytes(cb, (const uint8_t[]){0x48, 0xb8}, 2); // mov rax, imm64
+                    emit_u64(cb, (uint64_t)val);
+                    emit_mov_stack_rax(cb, sym->stack_offset);
+                }
             } else {
                 compile_expression_recursive(cb, ro, rhs);
                 emit_mov_stack_rax(cb, sym->stack_offset);
@@ -2594,6 +2883,10 @@ int run_tests(void) {
         "examples/22_custom_structs_and_types.lp",
         "examples/23_native_database_engine.lp",
         "examples/24_silicon_matrix_ai.lp",
+        "examples/25_arena_memory_allocator.lp",
+        "examples/26_async_epoll_event_loop.lp",
+        "examples/27_lipipkg_project_lifecycle.lp",
+        "examples/28_hardware_crypto_sha256.lp",
         NULL
     };
 
