@@ -63,6 +63,21 @@ final class LipiStdLib
         $env->define('json_encode', $dataModule['json_encode'], true);
         $env->define('জেসন_পড়', $dataModule['জেসন_পড়'], true);
         $env->define('json_decode', $dataModule['json_decode'], true);
+        $env->define('প্যাক_১৬', $dataModule['প্যাক_১৬'], true);
+        $env->define('pack_u16', $dataModule['pack_u16'], true);
+        $env->define('প্যাক_৩২', $dataModule['প্যাক_৩২'], true);
+        $env->define('pack_u32', $dataModule['pack_u32'], true);
+        $env->define('প্যাক_৬৪', $dataModule['প্যাক_৬৪'], true);
+        $env->define('pack_u64', $dataModule['pack_u64'], true);
+        $env->define('বাইট_অক্ষর', $dataModule['বাইট_অক্ষর'], true);
+        $env->define('chr', $dataModule['chr'], true);
+        $env->define('অর্ড', $dataModule['অর্ড'], true);
+        $env->define('ord', $dataModule['ord'], true);
+        $env->define('উপস্ট্রিং', $dataModule['উপস্ট্রিং'], true);
+        $env->define('substr', $dataModule['substr'], true);
+        $env->define('পুনরাবৃত্তি', $dataModule['পুনরাবৃত্তি'], true);
+        $env->define('str_repeat', $dataModule['str_repeat'], true);
+        $env->define('প্যাডিং', $dataModule['প্যাডিং'], true);
 
         // 6. Module: Bare-Metal Hardware & Universal Number (লিপি.হার্ডওয়্যার / hardware / unum)
         $hwModule = self::createHardwareModule();
@@ -185,8 +200,12 @@ final class LipiStdLib
 
         return [
             'পড়ো'       => $readFn,
+            'পড়'        => $readFn,
+            'পড়া'       => $readFn,
             'read'       => $readFn,
             'লেখো'       => $writeFn,
+            'লিখ'        => $writeFn,
+            'লেখা'       => $writeFn,
             'write'      => $writeFn,
             'যুক্ত_করো'  => $appendFn,
             'append'     => $appendFn,
@@ -249,6 +268,10 @@ final class LipiStdLib
             return memory_get_usage(true);
         });
 
+        $argsFn = new LipiBuiltinFunction('args', 0, function (LipiRuntime $rt, array $args): array {
+            return $rt->getArguments();
+        });
+
         return [
             'পরিবেশ'       => $envFn,
             'env'           => $envFn,
@@ -262,6 +285,9 @@ final class LipiStdLib
             'arch'          => $archFn,
             'মেমোরি'        => $memFn,
             'memory_usage'  => $memFn,
+            'আর্গুমেন্ট'    => $argsFn,
+            'args'          => $argsFn,
+            'argv'          => $argsFn,
         ];
     }
 
@@ -410,6 +436,41 @@ final class LipiStdLib
             return hash($algo, $data);
         });
 
+        // Binary packing primitives for bare-metal ELF machine code synthesis
+        $packU16Fn = new LipiBuiltinFunction('pack_u16', 1, function (LipiRuntime $rt, array $args): string {
+            return pack('v', (int)($args[0] ?? 0));
+        });
+
+        $packU32Fn = new LipiBuiltinFunction('pack_u32', 1, function (LipiRuntime $rt, array $args): string {
+            return pack('V', (int)($args[0] ?? 0));
+        });
+
+        $packU64Fn = new LipiBuiltinFunction('pack_u64', 1, function (LipiRuntime $rt, array $args): string {
+            return pack('P', (int)($args[0] ?? 0));
+        });
+
+        $chrFn = new LipiBuiltinFunction('chr', 1, function (LipiRuntime $rt, array $args): string {
+            return chr((int)($args[0] ?? 0));
+        });
+
+        $ordFn = new LipiBuiltinFunction('ord', 1, function (LipiRuntime $rt, array $args): int {
+            $s = (string)($args[0] ?? '');
+            return strlen($s) > 0 ? ord($s[0]) : 0;
+        });
+
+        $substrFn = new LipiBuiltinFunction('substr', 3, function (LipiRuntime $rt, array $args): string {
+            $str = (string)($args[0] ?? '');
+            $start = (int)($args[1] ?? 0);
+            $len = isset($args[2]) ? (int)$args[2] : null;
+            return $len !== null ? substr($str, $start, $len) : substr($str, $start);
+        });
+
+        $repeatFn = new LipiBuiltinFunction('str_repeat', 2, function (LipiRuntime $rt, array $args): string {
+            $input = (string)($args[0] ?? '');
+            $times = max(0, (int)($args[1] ?? 0));
+            return str_repeat($input, $times);
+        });
+
         return [
             'জেসন_লিখ'      => $jsonEncodeFn,
             'json_encode'    => $jsonEncodeFn,
@@ -421,6 +482,21 @@ final class LipiStdLib
             'base64_decode'  => $b64DecodeFn,
             'হ্যাশ'          => $hashFn,
             'hash'           => $hashFn,
+            'প্যাক_১৬'       => $packU16Fn,
+            'pack_u16'       => $packU16Fn,
+            'প্যাক_৩২'       => $packU32Fn,
+            'pack_u32'       => $packU32Fn,
+            'প্যাক_৬৪'       => $packU64Fn,
+            'pack_u64'       => $packU64Fn,
+            'বাইট_অক্ষর'     => $chrFn,
+            'chr'            => $chrFn,
+            'অর্ড'           => $ordFn,
+            'ord'            => $ordFn,
+            'উপস্ট্রিং'      => $substrFn,
+            'substr'         => $substrFn,
+            'পুনরাবৃত্তি'    => $repeatFn,
+            'str_repeat'     => $repeatFn,
+            'প্যাডিং'        => $repeatFn,
         ];
     }
 

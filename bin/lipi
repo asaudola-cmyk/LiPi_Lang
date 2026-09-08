@@ -286,6 +286,7 @@ if ($command === 'run') {
         exit(1);
     }
     try {
+        $engine->getRuntime()->setArguments(array_slice($args, 2));
         $engine->runFile($filePath);
     } catch (Throwable $e) {
         fwrite(STDERR, $e->getMessage() . "\n");
@@ -297,6 +298,7 @@ if ($command === 'run') {
 // If direct file passed: php bin/lipi myfile.lp
 if (file_exists($command)) {
     try {
+        $engine->getRuntime()->setArguments(array_slice($args, 1));
         $engine->runFile($command);
     } catch (Throwable $e) {
         fwrite(STDERR, $e->getMessage() . "\n");

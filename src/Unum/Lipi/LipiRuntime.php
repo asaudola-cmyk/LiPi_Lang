@@ -476,6 +476,9 @@ final class LipiRuntime
     private array $activeFibers = [];
     private int $nextFiberId = 1;
 
+    /** @var list<string>|null Command-line arguments passed to the running Lipi program */
+    private ?array $cliArguments = null;
+
     public function __construct(bool $captureOutput = false)
     {
         $this->captureOutput = $captureOutput;
@@ -511,6 +514,34 @@ final class LipiRuntime
     public function clearOutput(): void
     {
         $this->outputBuffer = [];
+    }
+
+    /**
+     * Sets command-line arguments passed to the Lipi script.
+     *
+     * @param list<string> $args
+     */
+    public function setArguments(array $args): void
+    {
+        $this->cliArguments = array_values($args);
+    }
+
+    /**
+     * Gets command-line arguments passed to the Lipi script.
+     * WHY: Sovereign programming languages require first-class access to system CLI arguments
+     * for building standalone compilers, package managers, and command-line tools in Lipi itself.
+     *
+     * @return list<string>
+     */
+    public function getArguments(): array
+    {
+        if ($this->cliArguments !== null) {
+            return $this->cliArguments;
+        }
+        if (isset($GLOBALS['argv']) && is_array($GLOBALS['argv'])) {
+            return array_values(array_slice($GLOBALS['argv'], 2));
+        }
+        return [];
     }
 
     /**
@@ -1182,10 +1213,11 @@ final class LipiRuntime
             return $obj[$prop] ?? null;
         }
 
-        // Built-in string methods
+        // Built-in string methods & properties
         if (is_string($obj)) {
             return match ($prop) {
                 'length', 'দৈর্ঘ্য' => mb_strlen($obj, 'UTF-8'),
+                'byte_length', 'বাইট_দৈর্ঘ্য', 'bytes', 'আকার' => strlen($obj),
                 'upper', 'বড়_হাত'  => mb_strtoupper($obj, 'UTF-8'),
                 'lower', 'ছোট_হাত'  => mb_strtolower($obj, 'UTF-8'),
                 default => null,
@@ -1252,7 +1284,7 @@ final class LipiRuntime
 
     private function registerBuiltins(): void
     {
-        // 1. দৈর্ঘ্য / len
+        // 1. দৈর্ঘ্য / len (UTF-8 character count)
         $lenFn = new LipiBuiltinFunction('দৈর্ঘ্য', 1, function (LipiRuntime $rt, array $args) {
             $val = $args[0] ?? null;
             if (is_string($val)) {
@@ -1266,6 +1298,22 @@ final class LipiRuntime
         $this->globals->define('দৈর্ঘ্য', $lenFn, true);
         $this->globals->define('len', $lenFn, true);
         $this->globals->define('length', $lenFn, true);
+
+        // 1.1 বাইট_দৈর্ঘ্য / byte_length / strlen (Raw byte count for ELF binary synthesis and low-level I/O)
+        $byteLenFn = new LipiBuiltinFunction('বাইট_দৈর্ঘ্য', 1, function (LipiRuntime $rt, array $args) {
+            $val = $args[0] ?? null;
+            if (is_string($val)) {
+                return strlen($val);
+            }
+            if (is_array($val)) {
+                return count($val);
+            }
+            return 0;
+        });
+        $this->globals->define('বাইট_দৈর্ঘ্য', $byteLenFn, true);
+        $this->globals->define('byte_length', $byteLenFn, true);
+        $this->globals->define('byte_len', $byteLenFn, true);
+        $this->globals->define('strlen', $byteLenFn, true);
 
         // 2. পরিসীমা / range (start, end, step)
         $rangeFn = new LipiBuiltinFunction('পরিসীমা', -1, function (LipiRuntime $rt, array $args) {
@@ -1317,6 +1365,15 @@ final class LipiRuntime
         });
         $this->globals->define('বাংলা_সংখ্যা', $toBanglaFn, true);
         $this->globals->define('to_bangla', $toBanglaFn, true);
+
+        // 5.1 আর্গুমেন্ট / args / argv (CLI Arguments passed to the Lipi script)
+        // WHY: Essential for pure Lipi self-hosting compiler, CLI programs, and scripts
+        $argsFn = new LipiBuiltinFunction('আর্গুমেন্ট', 0, function (LipiRuntime $rt, array $args): array {
+            return $rt->getArguments();
+        });
+        $this->globals->define('আর্গুমেন্ট', $argsFn, true);
+        $this->globals->define('args', $argsFn, true);
+        $this->globals->define('argv', $argsFn, true);
 
         // 6. টাইপ / type
         $typeFn = new LipiBuiltinFunction('টাইপ', 1, function (LipiRuntime $rt, array $args) {

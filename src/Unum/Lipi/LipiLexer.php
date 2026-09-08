@@ -240,29 +240,65 @@ final class LipiLexer
             }
             if ($c === '\\') {
                 $this->advance();
+                if ($this->isAtEnd()) {
+                    $str .= '\\';
+                    break;
+                }
                 $escaped = $this->peek();
+
+                // 1. Hexadecimal escape: \xHH (e.g. \x7f, \x00, \x48)
+                // Essential for raw binary ELF header and machine opcode emission
+                if ($escaped === 'x' || $escaped === 'X') {
+                    $this->advance(); // consume 'x' or 'X'
+                    $hex = '';
+                    if (!$this->isAtEnd() && ctype_xdigit($this->peek())) {
+                        $hex .= $this->peek();
+                        $this->advance();
+                        if (!$this->isAtEnd() && ctype_xdigit($this->peek())) {
+                            $hex .= $this->peek();
+                            $this->advance();
+                        }
+                    }
+                    if ($hex !== '') {
+                        $str .= chr((int)hexdec($hex));
+                    } else {
+                        $str .= 'x';
+                    }
+                    continue;
+                }
+
+                // 2. Octal escape: \0, \033, \012 (up to 3 octal digits starting with 0)
+                if ($escaped === '0') {
+                    $this->advance(); // consume '0'
+                    $octal = '0';
+                    while (!$this->isAtEnd() && in_array($this->peek(), ['0','1','2','3','4','5','6','7'], true) && strlen($octal) < 3) {
+                        $octal .= $this->peek();
+                        $this->advance();
+                    }
+                    $str .= chr((int)octdec($octal));
+                    continue;
+                }
+
+                // 3. Escape character: \e (ASCII 27)
                 if ($escaped === 'e') {
                     $str .= "\e";
                     $this->advance();
                     continue;
                 }
-                if ($escaped === '0' && $this->peekNext() === '3') {
-                    // Octal \033 for ESC
-                    $this->advance(); // 0
-                    if ($this->peek() === '3' && $this->peekNext() === '3') {
-                        $this->advance(); // 3
-                        $this->advance(); // 3
-                    }
-                    $str .= "\033";
-                    continue;
-                }
+
+                // 4. Standard C/POSIX escape characters
                 $str .= match ($escaped) {
                     'n'  => "\n",
                     't'  => "\t",
                     'r'  => "\r",
+                    'a'  => "\x07",
+                    'b'  => "\x08",
+                    'f'  => "\x0C",
+                    'v'  => "\x0B",
                     '"'  => '"',
                     "'"  => "'",
                     '\\' => '\\',
+                    '$'  => '$',
                     default => $escaped,
                 };
                 $this->advance();
