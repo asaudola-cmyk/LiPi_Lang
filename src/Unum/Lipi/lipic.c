@@ -9,6 +9,7 @@
  *   - ZERO PHP (0% PHP at compile-time and 0% PHP at runtime)
  *   - ZERO GCC needed to run the compiled binaries
  *   - ZERO Libc / external dynamic shared library dependencies
+ *   - Direct CPU arithmetic, branching (যদি/নাহলে), and Hardware TSC inspection
  *
  * Direct Linux x86_64 System Calls:
  *   - SYS_write  (1)
@@ -98,7 +99,15 @@ static void to_bangla_digits(const char *ascii_str, char *out_buf, size_t out_ma
 // Convert Bengali numeral string to 64-bit integer
 static int64_t parse_bangla_number(const char *str) {
     int64_t val = 0;
+    bool neg = false;
     const unsigned char *p = (const unsigned char *)str;
+    while (*p && isspace(*p)) p++;
+    if (*p == '-') {
+        neg = true;
+        p++;
+    } else if (*p == '+') {
+        p++;
+    }
     while (*p) {
         if (*p >= '0' && *p <= '9') {
             val = val * 10 + (*p - '0');
@@ -114,7 +123,7 @@ static int64_t parse_bangla_number(const char *str) {
         }
         p++;
     }
-    return val;
+    return neg ? -val : val;
 }
 
 // Trim leading and trailing whitespace
@@ -125,6 +134,112 @@ static char *trim(char *str) {
     while (end > str && isspace((unsigned char)*end)) end--;
     end[1] = '\0';
     return str;
+}
+
+// Helper for recursive arithmetic expression evaluation with operator precedence
+static bool eval_arithmetic_helper(const char *str, int64_t *out_val) {
+    char buf[256];
+    strncpy(buf, str, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char *s = trim(buf);
+    if (*s == '\0') return false;
+
+    // Search for lowest precedence operators ('+' or '-') from right to left (for left-associativity)
+    int len = (int)strlen(s);
+    for (int i = len - 1; i >= 0; i--) {
+        if ((s[i] == '+' || s[i] == '-') && i > 0 && s[i-1] != '*' && s[i-1] != '/' && s[i-1] != '+' && s[i-1] != '-') {
+            char op = s[i];
+            s[i] = '\0';
+            char *left = trim(s);
+            char *right = trim(s + i + 1);
+            int64_t lval = 0, rval = 0;
+            if (!eval_arithmetic_helper(left, &lval)) return false;
+            if (!eval_arithmetic_helper(right, &rval)) return false;
+            *out_val = (op == '+') ? (lval + rval) : (lval - rval);
+            return true;
+        }
+    }
+
+    // Search for higher precedence operators ('*' or '/') from right to left
+    for (int i = len - 1; i >= 0; i--) {
+        if (s[i] == '*' || s[i] == '/') {
+            char op = s[i];
+            s[i] = '\0';
+            char *left = trim(s);
+            char *right = trim(s + i + 1);
+            int64_t lval = 0, rval = 0;
+            if (!eval_arithmetic_helper(left, &lval)) return false;
+            if (!eval_arithmetic_helper(right, &rval)) return false;
+            *out_val = (op == '*') ? (lval * rval) : ((rval != 0) ? (lval / rval) : 0);
+            return true;
+        }
+    }
+
+    // Base case: variable or number
+    const char *v = get_var(s);
+    if (v) {
+        *out_val = parse_bangla_number(v);
+        return true;
+    }
+    *out_val = parse_bangla_number(s);
+    return true;
+}
+
+// Evaluate arithmetic operations (+, -, *, /) between numbers or variables
+static bool eval_arithmetic(const char *expr_str, int64_t *out_val) {
+    if (strchr(expr_str, '"') != NULL || strchr(expr_str, '\'') != NULL) {
+        return false;
+    }
+    if (strchr(expr_str, '+') == NULL && strchr(expr_str, '-') == NULL &&
+        strchr(expr_str, '*') == NULL && strchr(expr_str, '/') == NULL) {
+        return false;
+    }
+    return eval_arithmetic_helper(expr_str, out_val);
+}
+
+// Evaluate comparison conditions (>, <, >=, <=, ==, !=)
+static bool eval_condition(const char *cond_str) {
+    char cond_copy[256];
+    strncpy(cond_copy, cond_str, sizeof(cond_copy) - 1);
+    cond_copy[sizeof(cond_copy) - 1] = '\0';
+
+    char *brace = strchr(cond_copy, '{');
+    if (brace) *brace = '\0';
+
+    char *op = NULL;
+    int op_type = 0; // 1:>, 2:<, 3:>=, 4:<=, 5:==, 6:!=
+
+    if ((op = strstr(cond_copy, ">=")) != NULL) { op_type = 3; *op = '\0'; op += 2; }
+    else if ((op = strstr(cond_copy, "<=")) != NULL) { op_type = 4; *op = '\0'; op += 2; }
+    else if ((op = strstr(cond_copy, "==")) != NULL) { op_type = 5; *op = '\0'; op += 2; }
+    else if ((op = strstr(cond_copy, "!=")) != NULL) { op_type = 6; *op = '\0'; op += 2; }
+    else if ((op = strchr(cond_copy, '>')) != NULL) { op_type = 1; *op = '\0'; op += 1; }
+    else if ((op = strchr(cond_copy, '<')) != NULL) { op_type = 2; *op = '\0'; op += 1; }
+
+    if (!op || op_type == 0) return true;
+
+    char *left_str = trim(cond_copy);
+    char *right_str = trim(op);
+
+    int64_t lval = 0, rval = 0;
+    if (!eval_arithmetic(left_str, &lval)) {
+        const char *lv = get_var(left_str);
+        lval = lv ? parse_bangla_number(lv) : parse_bangla_number(left_str);
+    }
+    if (!eval_arithmetic(right_str, &rval)) {
+        const char *rv = get_var(right_str);
+        rval = rv ? parse_bangla_number(rv) : parse_bangla_number(right_str);
+    }
+
+    switch (op_type) {
+        case 1: return lval > rval;
+        case 2: return lval < rval;
+        case 3: return lval >= rval;
+        case 4: return lval <= rval;
+        case 5: return lval == rval;
+        case 6: return lval != rval;
+        default: return false;
+    }
 }
 
 // Evaluate string / variable / concatenation expression
@@ -144,7 +259,21 @@ static void eval_expr(const char *expr_str, char *out_buf, size_t out_max) {
                 if (*p == '\\' && *(p + 1)) {
                     p++;
                     char esc = *p++;
-                    char c = (esc == 'n') ? '\n' : ((esc == 't') ? '\t' : esc);
+                    char c = 0;
+                    if (esc == 'n') c = '\n';
+                    else if (esc == 't') c = '\t';
+                    else if (esc == 'r') c = '\r';
+                    else if (esc == 'e') c = '\033';
+                    else if (esc == '0' && *p == '3' && *(p + 1) == '3') {
+                        c = '\033';
+                        p += 2;
+                    } else if (esc == 'x' && isxdigit((unsigned char)*p) && isxdigit((unsigned char)*(p + 1))) {
+                        char hex[3] = { *p, *(p + 1), '\0' };
+                        c = (char)strtol(hex, NULL, 16);
+                        p += 2;
+                    } else {
+                        c = esc;
+                    }
                     if (out_len + 1 < out_max - 1) {
                         out_buf[out_len++] = c;
                         out_buf[out_len] = '\0';
@@ -174,6 +303,26 @@ static void eval_expr(const char *expr_str, char *out_buf, size_t out_max) {
         token[tlen] = '\0';
 
         if (tlen == 0) continue;
+
+        // Check for direct hardware clock call inside expression
+        if (strstr(token, "সিপিউ_ক্লক") != NULL || strstr(token, "rdtsc") != NULL) {
+            uint64_t tsc = 0;
+            uint32_t lo = 0, hi = 0;
+            __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+            tsc = ((uint64_t)hi << 32) | lo;
+            char tsc_str[64];
+            snprintf(tsc_str, sizeof(tsc_str), "%lu", tsc);
+            if (strstr(token, "বাংলা_সংখ্যা") != NULL || strstr(token, "to_bangla") != NULL) {
+                char bnum[128] = {0};
+                to_bangla_digits(tsc_str, bnum, sizeof(bnum));
+                strcat(out_buf, bnum);
+                out_len += strlen(bnum);
+            } else {
+                strcat(out_buf, tsc_str);
+                out_len += strlen(tsc_str);
+            }
+            continue;
+        }
 
         // Check for বাংলা_সংখ্যা(...) or to_bangla(...)
         if (strncmp(token, "বাংলা_সংখ্যা(", strlen("বাংলা_সংখ্যা(")) == 0 ||
@@ -318,6 +467,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Out of memory!\n");
         return 1;
     }
+
     size_t read_bytes = fread(source, 1, fsize, f);
     source[read_bytes] = '\0';
     fclose(f);
@@ -330,8 +480,12 @@ int main(int argc, char *argv[]) {
     char output_text[MAX_OUTPUT] = {0};
     size_t output_len = 0;
 
-    const size_t len_dhori = strlen("ধরি ");
-    const size_t len_dekhao = strlen("দেখাও ");
+    // Condition control stack
+    int if_depth = 0;
+    bool if_matched[32] = {false};
+    bool block_active[32] = {true};
+    int last_closed_depth = -1;
+    bool last_closed_matched = false;
 
     char *line = strtok(source, "\r\n");
     while (line) {
@@ -341,36 +495,134 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        // 1. Check for closing brace '}' with optional 'নাহলে' on same line
+        if (trimmed[0] == '}') {
+            char *after_brace = trim(trimmed + 1);
+            if (*after_brace == '\0') {
+                if (if_depth > 0) {
+                    last_closed_depth = if_depth;
+                    last_closed_matched = if_matched[if_depth];
+                    if_depth--;
+                }
+                line = strtok(NULL, "\r\n");
+                continue;
+            }
+            trimmed = after_brace;
+        }
+
+        // 2. Check for 'নাহলে_যদি <cond> {' or 'else if <cond> {'
+        const size_t len_nahole_jodi = strlen("নাহলে_যদি");
+        bool is_nahole_jodi = (strncmp(trimmed, "নাহলে_যদি", len_nahole_jodi) == 0 && (trimmed[len_nahole_jodi] == ' ' || trimmed[len_nahole_jodi] == '\t'));
+        bool is_else_if = (strncmp(trimmed, "else if", 7) == 0 && (trimmed[7] == ' ' || trimmed[7] == '\t'));
+
+        if (is_nahole_jodi || is_else_if) {
+            if (if_depth == 0 && last_closed_depth > 0) {
+                if_depth = last_closed_depth;
+                if_matched[if_depth] = last_closed_matched;
+            }
+            if (if_depth > 0) {
+                if (if_matched[if_depth]) {
+                    block_active[if_depth] = false;
+                } else {
+                    size_t pfx = is_nahole_jodi ? len_nahole_jodi : 7;
+                    char *cond_part = trimmed + pfx;
+                    bool cond_val = eval_condition(cond_part);
+                    block_active[if_depth] = cond_val;
+                    if (cond_val) if_matched[if_depth] = true;
+                }
+            }
+            line = strtok(NULL, "\r\n");
+            continue;
+        }
+
+        // 3. Check for 'নাহলে {' or 'else {'
+        const size_t len_nahole = strlen("নাহলে");
+        bool is_nahole = (strncmp(trimmed, "নাহলে", len_nahole) == 0 && (trimmed[len_nahole] == ' ' || trimmed[len_nahole] == '{' || trimmed[len_nahole] == '\0'));
+        bool is_else = (strncmp(trimmed, "else", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '{' || trimmed[4] == '\0'));
+
+        if (is_nahole || is_else) {
+            if (if_depth == 0 && last_closed_depth > 0) {
+                if_depth = last_closed_depth;
+                if_matched[if_depth] = last_closed_matched;
+            }
+            if (if_depth > 0) {
+                if (if_depth > 1 && !block_active[if_depth - 1]) {
+                    block_active[if_depth] = false;
+                } else {
+                    block_active[if_depth] = !if_matched[if_depth];
+                }
+                if_matched[if_depth] = true;
+            }
+            line = strtok(NULL, "\r\n");
+            continue;
+        }
+
+        // 4. Conditional statement: যদি <cond> { OR if <cond> {
+        const size_t len_jodi = strlen("যদি");
+        bool is_jodi = (strncmp(trimmed, "যদি", len_jodi) == 0 && (trimmed[len_jodi] == ' ' || trimmed[len_jodi] == '\t'));
+        bool is_if   = (strncmp(trimmed, "if", 2) == 0 && (trimmed[2] == ' ' || trimmed[2] == '\t'));
+
+        if (is_jodi || is_if) {
+            size_t pfx = is_jodi ? len_jodi : 2;
+            char *cond_part = trimmed + pfx;
+            bool cond_val = eval_condition(cond_part);
+
+            if_depth++;
+            if (if_depth > 1 && !block_active[if_depth - 1]) {
+                block_active[if_depth] = false;
+                if_matched[if_depth] = true;
+            } else {
+                block_active[if_depth] = cond_val;
+                if_matched[if_depth] = cond_val;
+            }
+            last_closed_depth = -1;
+            line = strtok(NULL, "\r\n");
+            continue;
+        }
+
+        // If current block is inactive, skip statement
+        if (if_depth > 0 && !block_active[if_depth]) {
+            line = strtok(NULL, "\r\n");
+            continue;
+        }
+
+        // Normal active statement resets last_closed_depth
+        last_closed_depth = -1;
+
         // Variable declaration: ধরি <name> = <expr> OR let <name> = <expr>
-        bool is_dhori = (strncmp(trimmed, "ধরি ", len_dhori) == 0);
-        bool is_let   = (strncmp(trimmed, "let ", 4) == 0);
+        const size_t len_dhori = strlen("ধরি");
+        bool is_dhori = (strncmp(trimmed, "ধরি", len_dhori) == 0 && (trimmed[len_dhori] == ' ' || trimmed[len_dhori] == '\t'));
+        bool is_let   = (strncmp(trimmed, "let", 3) == 0 && (trimmed[3] == ' ' || trimmed[3] == '\t'));
 
         if (is_dhori || is_let) {
-            size_t pfx = is_dhori ? len_dhori : 4;
+            size_t pfx = is_dhori ? len_dhori : 3;
             char *eq = strchr(trimmed + pfx, '=');
             if (eq) {
                 *eq = '\0';
                 char *var_name = trim(trimmed + pfx);
                 char *expr = trim(eq + 1);
 
-                // Check for multiplication: a * b
-                char *mul = strchr(expr, '*');
-                if (mul) {
-                    *mul = '\0';
-                    char *left_name = trim(expr);
-                    char *right_name = trim(mul + 1);
-                    const char *lv = get_var(left_name);
-                    const char *rv = get_var(right_name);
-                    int64_t lnum = lv ? parse_bangla_number(lv) : parse_bangla_number(left_name);
-                    int64_t rnum = rv ? parse_bangla_number(rv) : parse_bangla_number(right_name);
-                    int64_t res = lnum * rnum;
-                    char res_str[64];
-                    snprintf(res_str, sizeof(res_str), "%ld", res);
-                    set_var(var_name, res_str);
+                // Hardware Clock check: লিপি.হার্ডওয়্যার.সিপিউ_ক্লক() or rdtsc()
+                if (strstr(expr, "সিপিউ_ক্লক") != NULL || strstr(expr, "rdtsc") != NULL || strstr(expr, "clock") != NULL) {
+                    uint64_t tsc = 0;
+                    uint32_t lo = 0, hi = 0;
+                    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+                    tsc = ((uint64_t)hi << 32) | lo;
+                    char tsc_str[64];
+                    snprintf(tsc_str, sizeof(tsc_str), "%lu", tsc);
+                    set_var(var_name, tsc_str);
                 } else {
-                    char evaluated[MAX_VAL_LEN];
-                    eval_expr(expr, evaluated, sizeof(evaluated));
-                    set_var(var_name, evaluated);
+                    // Try dynamic arithmetic
+                    int64_t arith_res = 0;
+                    if (eval_arithmetic(expr, &arith_res)) {
+                        char res_str[64];
+                        snprintf(res_str, sizeof(res_str), "%ld", arith_res);
+                        set_var(var_name, res_str);
+                    } else {
+                        char evaluated[MAX_VAL_LEN];
+                        eval_expr(expr, evaluated, sizeof(evaluated));
+                        set_var(var_name, evaluated);
+                    }
                 }
             }
             line = strtok(NULL, "\r\n");
@@ -378,14 +630,18 @@ int main(int argc, char *argv[]) {
         }
 
         // Show statement: দেখাও <expr> OR show <expr>
-        bool is_dekhao = (strncmp(trimmed, "দেখাও ", len_dekhao) == 0);
-        bool is_show   = (strncmp(trimmed, "show ", 5) == 0);
+        const size_t len_dekhao = strlen("দেখাও");
+        bool is_dekhao = (strncmp(trimmed, "দেখাও", len_dekhao) == 0 && (trimmed[len_dekhao] == ' ' || trimmed[len_dekhao] == '\0' || trimmed[len_dekhao] == '\t'));
+        bool is_show   = (strncmp(trimmed, "show", 4) == 0 && (trimmed[4] == ' ' || trimmed[4] == '\0' || trimmed[4] == '\t'));
 
         if (is_dekhao || is_show) {
-            size_t pfx = is_dekhao ? len_dekhao : 5;
-            char *expr = trimmed + pfx;
-            char evaluated[MAX_VAL_LEN];
-            eval_expr(expr, evaluated, sizeof(evaluated));
+            size_t pfx = is_dekhao ? len_dekhao : 4;
+            char *expr = trim(trimmed + pfx);
+            char evaluated[MAX_VAL_LEN] = {0};
+
+            if (*expr != '\0') {
+                eval_expr(expr, evaluated, sizeof(evaluated));
+            }
 
             size_t elen = strlen(evaluated);
             if (output_len + elen + 1 < MAX_OUTPUT - 1) {
@@ -451,9 +707,10 @@ int main(int argc, char *argv[]) {
     uint32_t len32 = (uint32_t)output_len;
     memcpy(&machine_code[27], &len32, sizeof(uint32_t));
 
-    // Calculate ELF file sizes
+    // Calculate ELF file sizes: page-align mem_size to 4096-byte boundaries (WHY: prevents SIGSEGV on large payloads)
     uint64_t file_size = CODE_OFFSET + code_len + output_len;
-    uint64_t mem_size = 0x2000; // 8192 bytes (2 pages)
+    uint64_t mem_size = ((file_size + 4095ULL) / 4096ULL) * 4096ULL;
+    if (mem_size < 0x2000) mem_size = 0x2000;
 
     // ELF Header (64 bytes)
     Elf64_Ehdr ehdr;
