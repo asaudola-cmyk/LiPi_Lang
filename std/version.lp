@@ -7,42 +7,38 @@
 // ==============================================================================
 
 // ─── মূল সংস্করণ ───────────────────────────────────────────────────────────
-ধরি LIPI_সংস্করণ = "প্রথম ১.০"
-ধরি LIPI_VERSION = "Prothom 1.0"
-ধরি LIPI_সংকেতনাম = "সোভেরিন"
-ধরি LIPI_CODENAME = "Sovereign"
+LIPI_সংস্করণ = "প্রথম ১.০"
+LIPI_VERSION = "Prothom 1.0"
+LIPI_সংকেতনাম = "সোভেরিন"
+LIPI_CODENAME = "Sovereign"
 
 // ─── সংস্করণ নম্বর (SemVer equivalent) ────────────────────────────────────
 // WHY: machine-readable version for programmatic comparison
-ধরি LIPI_MAJOR = ১
-ধরি LIPI_MINOR = ০
-ধরি LIPI_PATCH = ০
+LIPI_MAJOR = 1
+LIPI_MINOR = 0
+LIPI_PATCH = 0
 
 // ─── বিল্ড তথ্য ─────────────────────────────────────────────────────────────
-ধরি LIPI_লক্ষ্য_প্ল্যাটফর্ম = "Linux x86_64 ELF64"
-ধরি LIPI_TARGET_PLATFORM = "Linux x86_64 ELF64"
-ধরি LIPI_নির্মাতা = "Shafiullah (আশরাফ উদ্দৌলা)"
-ধরি LIPI_লাইসেন্স = "MIT"
+LIPI_লক্ষ্য_প্ল্যাটফর্ম = "Linux x86_64 ELF64"
+LIPI_TARGET_PLATFORM = "Linux x86_64 ELF64"
+LIPI_নির্মাতা = "Shafiullah (আশরাফ উদ্দৌলা)"
+LIPI_লাইসেন্স = "MIT"
 
 // ─── সংস্করণ তুলনা ফাংশন ───────────────────────────────────────────────────
 // WHY: Allow programs to check minimum required Lipi version
-কাজ সংস্করণ_যাচাই(major: সংখ্যা, minor: সংখ্যা) {
-    যদি LIPI_MAJOR >= major {
-        যদি LIPI_MINOR >= minor {
-            ফেরত ১
-        }
-    }
-    ফেরত ০
-}
+fn সংস্করণ_যাচাই(major: সংখ্যা, minor: সংখ্যা)
+    if LIPI_MAJOR >= major
+        if LIPI_MINOR >= minor
+            return 1
+    return 0
 
 // ─── সংস্করণ প্রদর্শন ───────────────────────────────────────────────────────
 // WHY: Human-readable version banner for CLI tools
-কাজ সংস্করণ_দেখাও() {
-    দেখাও "╔══════════════════════════════════════════╗"
-    দেখাও "║  👑 লিপি সার্বভৌম প্রোগ্রামিং ভাষা      ║"
-    দেখাও "║  সংস্করণ : প্রথম ১.০ (Prothom 1.0)     ║"
-    দেখাও "║  সংকেতনাম: সোভেরিন (Sovereign)          ║"
-    দেখাও "║  লক্ষ্য   : Linux x86_64 ELF64           ║"
-    দেখাও "║  লাইসেন্স : MIT                          ║"
-    দেখাও "╚══════════════════════════════════════════╝"
-}
+fn সংস্করণ_দেখাও()
+    say "╔══════════════════════════════════════════╗"
+    say "║  👑 লিপি সার্বভৌম প্রোগ্রামিং ভাষা      ║"
+    say "║  সংস্করণ : প্রথম ১.০ (Prothom 1.0)     ║"
+    say "║  সংকেতনাম: সোভেরিন (Sovereign)          ║"
+    say "║  লক্ষ্য   : Linux x86_64 ELF64           ║"
+    say "║  লাইসেন্স : MIT                          ║"
+    say "╚══════════════════════════════════════════╝"

@@ -1,7 +1,7 @@
 // ==============================================================================
 // 🌐 লিপি ওয়েব ফ্রেমওয়ার্ক — সম্পূর্ণ Full-Stack Framework
 // লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
-অন্তর্ভুক্ত "std/core/io.lp"
+include "std/core/io.lp"
 // File: std/web.lp
 //
 // WHY এই মডিউল:
@@ -14,40 +14,39 @@
 //   Handler → ORM → DB → Handler → Template → Response
 //
 // ব্যবহার:
-//   অন্তর্ভুক্ত "std/web.lp"
-//   ধরি app = ওয়েব_অ্যাপ_তৈরি()
+//   include "std/web.lp"
+//    app = ওয়েব_অ্যাপ_তৈরি()
 //   ওয়েব_রাউট_যোগ(app, "GET", "/", হোম_হ্যান্ডলার)
 //   ওয়েব_চালু(app, ৮০৮০)
 // ==============================================================================
 
-অন্তর্ভুক্ত "std/http.lp"
-অন্তর্ভুক্ত "std/core/mem.lp"
-অন্তর্ভুক্ত "std/core/str.lp"
-অন্তর্ভুক্ত "std/core/json.lp"
-অন্তর্ভুক্ত "std/version.lp"
+include "std/http.lp"
+include "std/core/mem.lp"
+include "std/core/str.lp"
+include "std/core/json.lp"
+include "std/version.lp"
 
 // ─── ধ্রুবক ──────────────────────────────────────────────────────────────────
-ধরি ওয়েব_সংস্করণ        = "২.০"
-ধরি MAX_ROUTES           = ৫১২      // সর্বোচ্চ রাউট সংখ্যা
-ধরি MAX_MIDDLEWARE        = ৩২       // middleware stack depth
-ধরি MAX_PARAMS           = ১৬       // URL params per route
-ধরি MAX_QUERY_PARAMS     = ৬৪       // query string params
-ধরি MAX_HEADERS          = ৬৪       // request headers
-ধরি DEFAULT_TIMEOUT      = ৩০       // seconds
-ধরি DEFAULT_BODY_LIMIT   = ১০৪৮৫৭৬  // 1MB max request body
+ওয়েব_সংস্করণ        = "২.০"
+MAX_ROUTES           = 512      // সর্বোচ্চ রাউট সংখ্যা
+MAX_MIDDLEWARE        = 32       // middleware stack depth
+MAX_PARAMS           = 16       // URL params per route
+MAX_QUERY_PARAMS     = 64       // query string params
+MAX_HEADERS          = 64       // request headers
+DEFAULT_TIMEOUT      = 30       // seconds
+DEFAULT_BODY_LIMIT   = 1048576  // 1MB max request body
 
 // Session constants
-ধরি SESSION_COOKIE_NAME  = "lipi_session"
-ধরি SESSION_MAX_AGE      = ৮৬৪০০    // 24 hours in seconds
+SESSION_COOKIE_NAME  = "lipi_session"
+SESSION_MAX_AGE      = 86400    // 24 hours in seconds
 
 // ─── Core Structs ─────────────────────────────────────────────────────────────
 
-গঠন ওয়েব_প্যারামিটার {
+struct ওয়েব_প্যারামিটার
     চাবি_পয়েন্টার,
     মান_পয়েন্টার
-}
 
-গঠন ওয়েব_অনুরোধ_ctx {
+struct ওয়েব_অনুরোধ_ctx
     পদ্ধতি,           // GET/POST/PUT/DELETE/PATCH
     পাথ_পয়েন্টার,    // URL path
     হেডার_বাফার,      // raw headers
@@ -60,9 +59,8 @@
     client_fd,        // socket descriptor
     session_id,       // session token
     user_data         // handler-specific data
-}
 
-গঠন ওয়েব_উত্তর_ctx {
+struct ওয়েব_উত্তর_ctx
     স্ট্যাটাস,
     বডি_পয়েন্টার,
     বডি_দৈর্ঘ্য,
@@ -70,23 +68,20 @@
     হেডার_বাফার,
     হেডার_গণনা,
     পাঠানো হয়েছে    // prevent double-send
-}
 
-গঠন রাউট_এন্ট্রি {
+struct রাউট_এন্ট্রি
     পাথ_প্যাটার্ন,    // "/users/:id/posts/:post_id"
     পদ্ধতি,           // METHOD_GET etc
     হ্যান্ডলার,       // function pointer
     middleware_স্ট্যাক,
     middleware_গণনা
-}
 
-গঠন middleware_এন্ট্রি {
+struct middleware_এন্ট্রি
     হ্যান্ডলার_পয়েন্টার,
     নাম_পয়েন্টার,
     সক্রিয়
-}
 
-গঠন ওয়েব_অ্যাপ_ctx {
+struct ওয়েব_অ্যাপ_ctx
     রাউট_তালিকা,
     রাউট_গণনা,
     global_middleware,
@@ -98,317 +93,280 @@
     static_dir_পয়েন্টার,  // static files directory
     template_dir_পয়েন্টার, // template directory
     ত্রুটি_হ্যান্ডলার
-}
 
-গঠন টেমপ্লেট_ctx {
+struct টেমপ্লেট_ctx
     টেমপ্লেট_পয়েন্টার,
     ভেরিয়েবল_তালিকা,
     ভেরিয়েবল_গণনা
-}
 
 // ─── App Factory ───────────────────────────────────────────────────────────────
 // WHY: Factory pattern creates a configured app object
-কাজ ওয়েব_অ্যাপ_তৈরি() {
-    ধরি app_সাইজ = সাইজ(ওয়েব_অ্যাপ_ctx)
-    ধরি app = মেমরি_বরাদ্দ(app_সাইজ)
-    app.রাউট_তালিকা = মেমরি_বরাদ্দ(MAX_ROUTES * সাইজ(রাউট_এন্ট্রি))
-    app.রাউট_গণনা = ০
-    app.global_middleware = মেমরি_বরাদ্দ(MAX_MIDDLEWARE * সাইজ(middleware_এন্ট্রি))
-    app.middleware_গণনা = ০
-    app.পোর্ট = ৮০৮০
-    app.থ্রেড_গণনা = ৪
-    app.চলছে = ০
+fn ওয়েব_অ্যাপ_তৈরি
+    app_সাইজ = size_of(ওয়েব_অ্যাপ_ctx)
+    app = malloc(app_সাইজ)
+    app.রাউট_তালিকা = malloc(MAX_ROUTES * size_of(রাউট_এন্ট্রি))
+    app.রাউট_গণনা = 0
+    app.global_middleware = malloc(MAX_MIDDLEWARE * size_of(middleware_এন্ট্রি))
+    app.middleware_গণনা = 0
+    app.পোর্ট = 8080
+    app.থ্রেড_গণনা = 4
+    app.চলছে = 0
     app.static_dir_পয়েন্টার = "public/"
     app.template_dir_পয়েন্টার = "templates/"
-    দেখাও "  ✔ লিপি ওয়েব অ্যাপ তৈরি হয়েছে"
-    ফেরত app
-}
+    say "  ✔ লিপি ওয়েব অ্যাপ তৈরি হয়েছে"
+    return app
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 // WHY: Pattern-based routing with named URL parameters
 // Pattern syntax: /users/:id/posts/:post_id
 // Wildcard: /static/* matches everything after
 
-কাজ ওয়েব_রাউট_যোগ(app, পদ্ধতি, প্যাটার্ন, হ্যান্ডলার) {
+fn ওয়েব_রাউট_যোগ app পদ্ধতি প্যাটার্ন হ্যান্ডলার
     // WHY: Prevent route table overflow
-    যদি app.রাউট_গণনা >= MAX_ROUTES {
-        দেখাও "  ⚠️  সতর্কতা: রাউট সীমা পূর্ণ (", MAX_ROUTES, "টি)"
-        ফেরত -১
-    }
+    if app.রাউট_গণনা >= MAX_ROUTES
+        say "  ⚠️  সতর্কতা: রাউট সীমা পূর্ণ (", MAX_ROUTES, "টি)"
+        return -1
 
-    ধরি রাউট_সাইজ = সাইজ(রাউট_এন্ট্রি)
-    ধরি অফসেট = app.রাউট_গণনা * রাউট_সাইজ
+    রাউট_সাইজ = size_of(রাউট_এন্ট্রি)
+    অফসেট = app.রাউট_গণনা * রাউট_সাইজ
     // Write route data at offset in routes list
     // রাউট.পাথ_প্যাটার্ন = প্যাটার্ন
-    // রাউট.পদ্ধতি = পদ্ধতি  
+    // রাউট.পদ্ধতি = পদ্ধতি
     // রাউট.হ্যান্ডলার = হ্যান্ডলার
 
-    app.রাউট_গণনা = app.রাউট_গণনা + ১
-    দেখাও "  ✔ রাউট যোগ:", পদ্ধতি, প্যাটার্ন
-    ফেরত app.রাউট_গণনা
-}
+    app.রাউট_গণনা = app.রাউট_গণনা + 1
+    say "  ✔ রাউট যোগ:", পদ্ধতি, প্যাটার্ন
+    return app.রাউট_গণনা
 
 // Convenience shortcuts (like Express .get(), .post(), etc.)
-কাজ ওয়েব_GET(app, প্যাটার্ন, হ্যান্ডলার) {
-    ফেরত ওয়েব_রাউট_যোগ(app, "GET", প্যাটার্ন, হ্যান্ডলার)
-}
+fn ওয়েব_GET app প্যাটার্ন হ্যান্ডলার
+    return ওয়েব_রাউট_যোগ(app, "GET", প্যাটার্ন, হ্যান্ডলার)
 
-কাজ ওয়েব_POST(app, প্যাটার্ন, হ্যান্ডলার) {
-    ফেরত ওয়েব_রাউট_যোগ(app, "POST", প্যাটার্ন, হ্যান্ডলার)
-}
+fn ওয়েব_POST app প্যাটার্ন হ্যান্ডলার
+    return ওয়েব_রাউট_যোগ(app, "POST", প্যাটার্ন, হ্যান্ডলার)
 
-কাজ ওয়েব_PUT(app, প্যাটার্ন, হ্যান্ডলার) {
-    ফেরত ওয়েব_রাউট_যোগ(app, "PUT", প্যাটার্ন, হ্যান্ডলার)
-}
+fn ওয়েব_PUT app প্যাটার্ন হ্যান্ডলার
+    return ওয়েব_রাউট_যোগ(app, "PUT", প্যাটার্ন, হ্যান্ডলার)
 
-কাজ ওয়েব_DELETE(app, প্যাটার্ন, হ্যান্ডলার) {
-    ফেরত ওয়েব_রাউট_যোগ(app, "DELETE", প্যাটার্ন, হ্যান্ডলার)
-}
+fn ওয়েব_DELETE app প্যাটার্ন হ্যান্ডলার
+    return ওয়েব_রাউট_যোগ(app, "DELETE", প্যাটার্ন, হ্যান্ডলার)
 
-কাজ ওয়েব_PATCH(app, প্যাটার্ন, হ্যান্ডলার) {
-    ফেরত ওয়েব_রাউট_যোগ(app, "PATCH", প্যাটার্ন, হ্যান্ডলার)
-}
+fn ওয়েব_PATCH app প্যাটার্ন হ্যান্ডলার
+    return ওয়েব_রাউট_যোগ(app, "PATCH", প্যাটার্ন, হ্যান্ডলার)
 
 // ─── Middleware System ─────────────────────────────────────────────────────────
 // WHY: Middleware is the backbone of web frameworks
 // Order: Global middleware → route-specific middleware → handler
 // Example uses: auth check, rate limiting, request logging, CORS
 
-কাজ ওয়েব_middleware_যোগ(app, নাম, হ্যান্ডলার) {
+fn ওয়েব_middleware_যোগ app নাম হ্যান্ডলার
     // WHY: Global middleware runs on EVERY request
-    যদি app.middleware_গণনা >= MAX_MIDDLEWARE {
-        দেখাও "  ⚠️  middleware সীমা পূর্ণ"
-        ফেরত -১
-    }
-    app.middleware_গণনা = app.middleware_গণনা + ১
-    দেখাও "  ✔ Middleware যোগ:", নাম
-    ফেরত app.middleware_গণনা
-}
+    if app.middleware_গণনা >= MAX_MIDDLEWARE
+        say "  ⚠️  middleware সীমা পূর্ণ"
+        return -1
+    app.middleware_গণনা = app.middleware_গণনা + 1
+    say "  ✔ Middleware যোগ:", নাম
+    return app.middleware_গণনা
 
 // Built-in middleware: লগ করো (request logging)
-কাজ middleware_logger(req, resp, next) {
+fn middleware_logger req resp next
     // WHY: Log every request for debugging
-    ধরি start_time = সিপিউ_ক্লক()
-    দেখাও "[LOG]", req.পদ্ধতি, req.পাথ_পয়েন্টার, "→ client_fd:", req.client_fd
-    দেখাও "  → [middleware chain পরবর্তী]"
-    ধরি end_time = সিপিউ_ক্লক()
-    দেখাও "  → উত্তর:", resp.স্ট্যাটাস, "| সময়:", end_time - start_time, "cycles"
-}
+    start_time = cpu_clock()
+    say "[LOG]", req.পদ্ধতি, req.পাথ_পয়েন্টার, "→ client_fd:", req.client_fd
+    say "  → [middleware chain পরবর্তী]"
+    end_time = cpu_clock()
+    say "  → উত্তর:", resp.স্ট্যাটাস, "| সময়:", end_time - start_time, "cycles"
 
 // Built-in middleware: CORS (Cross-Origin Resource Sharing)
-কাজ middleware_cors(req, resp, next) {
+fn middleware_cors req resp next
     // WHY: Modern browsers block cross-origin requests without CORS headers
     // We add the headers here, before the handler runs
-    দেখাও "[CORS] Access-Control-Allow-Origin: * যোগ হচ্ছে"
-    দেখাও "  → [middleware chain পরবর্তী]"
-}
+    say "[CORS] Access-Control-Allow-Origin: * যোগ হচ্ছে"
+    say "  → [middleware chain পরবর্তী]"
 
 // Built-in middleware: Rate limiting
-কাজ middleware_rate_limit(req, resp, next, per_second) {
+fn middleware_rate_limit req resp next per_second
     // WHY: Without rate limiting, APIs can be DDoS'd
     // Tracks request count per IP using in-memory hashmap
-    দেখাও "[RateLimit] checking:", req.client_fd
-    দেখাও "  → [middleware chain পরবর্তী]"
-}
+    say "[RateLimit] checking:", req.client_fd
+    say "  → [middleware chain পরবর্তী]"
 
 // Built-in middleware: JWT Authentication
-কাজ middleware_jwt_auth(req, resp, next, secret) {
+fn middleware_jwt_auth req resp next secret
     // WHY: Stateless authentication — no session storage needed
-    দেখাও "[JWT] token validating..."
+    say "[JWT] token validating..."
     // Parse Authorization: Bearer <token> header
     // Verify signature with secret
     // Decode payload → set req.user_data
-    দেখাও "  → [middleware chain পরবর্তী]"
-}
+    say "  → [middleware chain পরবর্তী]"
 
 // Built-in middleware: Static file server
-কাজ middleware_static(req, resp, next, dir) {
+fn middleware_static req resp next dir
     // WHY: Serve HTML/CSS/JS/images without a handler
     // Check if path exists in dir
     // If yes: serve file with correct MIME type
     // If no: call next()
-    দেখাও "[Static] checking:", req.পাথ_পয়েন্টার, "in", dir
-    দেখাও "  → [middleware chain পরবর্তী]"
-}
+    say "[Static] checking:", req.পাথ_পয়েন্টার, "in", dir
+    say "  → [middleware chain পরবর্তী]"
 
 // ─── Request Helpers ──────────────────────────────────────────────────────────
 // WHY: Handler functions need easy access to request data
 
-কাজ req_param(req, নাম) {
+fn req_param req নাম
     // WHY: Get URL parameter, e.g. /users/:id → req_param(req, "id")
-    ধরি i = ০
-    যতক্ষণ i < req.প্যারাম_গণনা {
+    i = 0
+    while i < req.প্যারাম_গণনা
         // Check if প্যারাম[i].চাবি == নাম
         // If yes: return প্যারাম[i].মান
-        i = i + ১
-    }
-    ফেরত ০   // not found
-}
+        i = i + 1
+    return 0   // not found
 
-কাজ req_query(req, নাম) {
+fn req_query req নাম
     // WHY: Get query param, e.g. /search?q=lipi → req_query(req, "q")
-    ধরি i = ০
-    যতক্ষণ i < req.query_গণনা {
-        i = i + ১
-    }
-    ফেরত ০
-}
+    i = 0
+    while i < req.query_গণনা
+        i = i + 1
+    return 0
 
-কাজ req_header(req, নাম) {
+fn req_header req নাম
     // WHY: Get HTTP header, e.g. req_header(req, "Authorization")
-    ফেরত ০
-}
+    return 0
 
-কাজ req_body_string(req) {
+fn req_body_string req
     // WHY: Get request body as string (for text/json)
-    যদি req.বডি_দৈর্ঘ্য == ০ { ফেরত "" }
-    ফেরত req.বডি_পয়েন্টার
-}
+    if req.বডি_দৈর্ঘ্য == 0 { return "" }
+    return req.বডি_পয়েন্টার
 
-কাজ req_body_json(req) {
+fn req_body_json req
     // WHY: Parse JSON body automatically
-    ফেরত req_body_string(req)
-}
+    return req_body_string(req)
 
 // ─── Response Builders ────────────────────────────────────────────────────────
 // WHY: Clean API for building responses — no manual header writing
 
-কাজ resp_html(resp, বডি) {
+fn resp_html resp বডি
     resp.স্ট্যাটাস = HTTP_200_OK
     resp.বডি_পয়েন্টার = বডি
-    resp.বডি_দৈর্ঘ্য = দৈর্ঘ্য(বডি)
+    resp.বডি_দৈর্ঘ্য = len(বডি)
     resp.content_type_পয়েন্টার = MIME_HTML
-    ফেরত resp
-}
+    return resp
 
-কাজ resp_json(resp, json_str) {
+fn resp_json resp json_str
     resp.স্ট্যাটাস = HTTP_200_OK
     resp.বডি_পয়েন্টার = json_str
-    resp.বডি_দৈর্ঘ্য = দৈর্ঘ্য(json_str)
+    resp.বডি_দৈর্ঘ্য = len(json_str)
     resp.content_type_পয়েন্টার = MIME_JSON
-    ফেরত resp
-}
+    return resp
 
-কাজ resp_text(resp, টেক্সট) {
+fn resp_text resp টেক্সট
     resp.স্ট্যাটাস = HTTP_200_OK
     resp.বডি_পয়েন্টার = টেক্সট
-    resp.বডি_দৈর্ঘ্য = দৈর্ঘ্য(টেক্সট)
+    resp.বডি_দৈর্ঘ্য = len(টেক্সট)
     resp.content_type_পয়েন্টার = MIME_TEXT
-    ফেরত resp
-}
+    return resp
 
-কাজ resp_redirect(resp, url) {
+fn resp_redirect resp url
     // WHY: Redirect with 302 Found status
     resp.স্ট্যাটাস = HTTP_301_REDIRECT
     // Location: url header
-    ফেরত resp
-}
+    return resp
 
-কাজ resp_status(resp, code) {
+fn resp_status resp code
     resp.স্ট্যাটাস = code
-    ফেরত resp
-}
+    return resp
 
-কাজ resp_header_যোগ(resp, নাম, মান) {
+fn resp_header_যোগ resp নাম মান
     // WHY: Add custom headers (Cache-Control, X-Custom, etc.)
-    ফেরত resp
-}
+    return resp
 
 // ─── Template Engine ──────────────────────────────────────────────────────────
 // WHY: Most web pages are HTML templates with dynamic data
 // Syntax: {{variable}}, {{#each list}} ... {{/each}}, {{#if cond}} ... {{/if}}
 
-কাজ টেমপ্লেট_লোড(ফাইল_পাথ) {
+fn টেমপ্লেট_লোড ফাইল_পাথ
     // WHY: Read template file from disk (cached after first load)
-    ধরি fd = ফাইল_খোলো(ফাইল_পাথ)
-    যদি fd < ০ {
-        দেখাও "  ❌ টেমপ্লেট পাওয়া যায়নি:", ফাইল_পাথ
-        ফেরত ০
-    }
-    ধরি বাফার = মেমরি_বরাদ্দ(৬৫৫৩৬)  // 64KB max template
+    fd = ফাইল_খোলো(ফাইল_পাথ)
+    if fd < 0
+        say "  ❌ টেমপ্লেট পাওয়া যায়নি:", ফাইল_পাথ
+        return 0
+    বাফার = malloc(65536)  // 64KB max template
     ফাইল_বন্ধ(fd)
-    ফেরত বাফার
-}
+    return বাফার
 
-কাজ টেমপ্লেট_রেন্ডার(টেমপ্লেট, ভেরিয়েবল_নাম, ভেরিয়েবল_মান) {
+fn টেমপ্লেট_রেন্ডার টেমপ্লেট ভেরিয়েবল_নাম ভেরিয়েবল_মান
     // WHY: Simple string replace: {{name}} → value
     // For production: use proper tokenizer for nested templates
-    দেখাও "  → টেমপ্লেট রেন্ডার: {{", ভেরিয়েবল_নাম, "}} → ", ভেরিয়েবল_মান
-    ফেরত টেমপ্লেট
-}
+    say "  → টেমপ্লেট রেন্ডার: {{", ভেরিয়েবল_নাম, "}} → ", ভেরিয়েবল_মান
+    return টেমপ্লেট
 
 // ─── Session Management ───────────────────────────────────────────────────────
 // WHY: Web apps need to track users across requests (login state)
 // Sessions stored in memory hashmap (production: use Redis via std/kv.lp)
 
-কাজ session_তৈরি(req) {
+fn session_তৈরি req
     // WHY: Generate cryptographically random session ID
-    ধরি session_id_বাফার = মেমরি_বরাদ্দ(৩২)
+    session_id_বাফার = malloc(32)
     // Fill with random bytes via SYS_getrandom (syscall 318)
-    সিসকল(৩১৮, session_id_বাফার, ৩২, ০)
-    ফেরত session_id_বাফার
-}
+    সিসকল(318, session_id_বাফার, 32, 0)
+    return session_id_বাফার
 
-কাজ session_পড়ো(req, চাবি) {
+fn session_পড়ো req চাবি
     // WHY: Read session data for this request
-    ফেরত ০
-}
+    return 0
 
-কাজ session_লেখো(req, চাবি, মান) {
+fn session_লেখো req চাবি মান
     // WHY: Store data in session for next request
-    ফেরত ০
-}
+    return 0
 
-কাজ session_মুছো(req) {
+fn session_মুছো req
     // WHY: Logout — invalidate session
-    ফেরত ০
-}
+    return 0
 
 // ─── Main Server Loop ─────────────────────────────────────────────────────────
 // WHY: This is the core accept() loop that powers the entire web server
-কাজ ওয়েব_চালু(app, পোর্ট) {
+fn ওয়েব_চালু app পোর্ট
     app.পোর্ট = পোর্ট
 
-    দেখাও ""
-    দেখাও "\033[38;2;0;255;204m╔════════════════════════════════════════════╗\033[0m"
-    দেখাও "\033[38;2;0;255;204m║\033[0m  🌐 লিপি ওয়েব ফ্রেমওয়ার্ক", ওয়েব_সংস্করণ
-    দেখাও "\033[38;2;0;255;204m║\033[0m  ⚡ সংস্করণ: প্রথম ১.০ | port:", পোর্ট
-    দেখাও "\033[38;2;0;255;204m╚════════════════════════════════════════════╝\033[0m"
-    দেখাও ""
-    দেখাও "  রাউট সংখ্যা  :", app.রাউট_গণনা
-    দেখাও "  Middleware   :", app.middleware_গণনা
-    দেখাও "  থ্রেড        :", app.থ্রেড_গণনা
-    দেখাও "  Static dir   :", app.static_dir_পয়েন্টার
-    দেখাও "  Template dir :", app.template_dir_পয়েন্টার
-    দেখাও ""
-    দেখাও "  🚀 চালু হচ্ছে: http://localhost:", পোর্ট
-    দেখাও "  Ctrl+C দিয়ে বন্ধ করুন"
-    দেখাও ""
+    say ""
+    say "\033[38;2;0;255;204m╔════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  🌐 লিপি ওয়েব ফ্রেমওয়ার্ক", ওয়েব_সংস্করণ
+    say "\033[38;2;0;255;204m║\033[0m  ⚡ সংস্করণ: প্রথম ১.০ | port:", পোর্ট
+    say "\033[38;2;0;255;204m╚════════════════════════════════════════════╝\033[0m"
+    say ""
+    say "  রাউট সংখ্যা  :", app.রাউট_গণনা
+    say "  Middleware   :", app.middleware_গণনা
+    say "  থ্রেড        :", app.থ্রেড_গণনা
+    say "  Static dir   :", app.static_dir_পয়েন্টার
+    say "  Template dir :", app.template_dir_পয়েন্টার
+    say ""
+    say "  🚀 চালু হচ্ছে: http://localhost:", পোর্ট
+    say "  Ctrl+C দিয়ে বন্ধ করুন"
+    say ""
 
     // Socket setup
-    ধরি server_fd = সিসকল(৪১, ২, ১, ০)  // socket(AF_INET, SOCK_STREAM, 0)
-    ধরি opt_buf = মেমরি_বরাদ্দ(৮)
-    সিসকল(৫৪, server_fd, ১, ২, opt_buf, ৪)  // SO_REUSEADDR
+    server_fd = সিসকল(41, 2, 1, 0)  // socket(AF_INET, SOCK_STREAM, 0)
+    opt_buf = malloc(8)
+    সিসকল(54, server_fd, 1, 2, opt_buf, 4)  // SO_REUSEADDR
 
-    ধরি addr_buf = মেমরি_বরাদ্দ(১৬)
-    সিসকল(৪৯, server_fd, addr_buf, ১৬)   // bind
-    সিসকল(৫০, server_fd, ১২৮)            // listen
+    addr_buf = malloc(16)
+    সিসকল(49, server_fd, addr_buf, 16)   // bind
+    সিসকল(50, server_fd, 128)            // listen
 
     app.server_fd = server_fd
-    app.চলছে = ১
+    app.চলছে = 1
 
-    দেখাও "  ✔ TCP socket তৈরি হয়েছে (fd:", server_fd, ")"
-    দেখাও "  ✔ Port", পোর্ট, "এ listening"
-    দেখাও ""
+    say "  ✔ TCP socket তৈরি হয়েছে (fd:", server_fd, ")"
+    say "  ✔ Port", পোর্ট, "এ listening"
+    say ""
 
     // Accept loop — WHY: Each client connection is handled sequentially
     // (Multi-threaded version uses clone() from std/sys/thread.lp)
-    ধরি total_requests = ০
-    যতক্ষণ app.চলছে == ১ {
-        ধরি client_fd = সিসকল(৪৩, server_fd, ০, ০)  // accept()
+    total_requests = 0
+    while app.চলছে == 1
+        client_fd = সিসকল(43, server_fd, 0, 0)  // accept()
 
-        যদি client_fd >= ০ {
-            total_requests = total_requests + ১
+        if client_fd >= 0
+            total_requests = total_requests + 1
             // 1. Parse HTTP request
             // 2. Run global middleware chain
             // 3. Find matching route
@@ -417,61 +375,52 @@
             // 6. Call handler
             // 7. Send response
             // 8. Close client connection
-            সিসকল(৩, client_fd)  // close(client_fd)
-        }
-    }
+            সিসকল(3, client_fd)  // close(client_fd)
 
     // Cleanup
-    সিসকল(৩, server_fd)  // close(server_fd)
-    মেমরি_মুক্তি(opt_buf, ৮)
-    মেমরি_মুক্তি(addr_buf, ১৬)
-    মেমরি_মুক্তি(app.রাউট_তালিকা, MAX_ROUTES * সাইজ(রাউট_এন্ট্রি))
-    মেমরি_মুক্তি(app.global_middleware, MAX_MIDDLEWARE * সাইজ(middleware_এন্ট্রি))
-    মেমরি_মুক্তি(app, সাইজ(ওয়েব_অ্যাপ_ctx))
-    ফেরত ০
-}
+    সিসকল(3, server_fd)  // close(server_fd)
+    free(opt_buf, 8)
+    free(addr_buf, 16)
+    free(app.রাউট_তালিকা, MAX_ROUTES * size_of(রাউট_এন্ট্রি))
+    free(app.global_middleware, MAX_MIDDLEWARE * size_of(middleware_এন্ট্রি))
+    free(app, size_of(ওয়েব_অ্যাপ_ctx))
+    return 0
 
 // ─── Route Groups ─────────────────────────────────────────────────────────────
 // WHY: Group related routes under a prefix (like Express Router)
 // app.group("/api/v1", api_routes)
 
-কাজ ওয়েব_গ্রুপ_তৈরি(app, prefix) {
-    দেখাও "  ✔ রাউট গ্রুপ:", prefix
-    ফেরত app   // returns app with prefix context
-}
+fn ওয়েব_গ্রুপ_তৈরি app prefix
+    say "  ✔ রাউট গ্রুপ:", prefix
+    return app   // returns app with prefix context
 
 // ─── WebSocket Support ────────────────────────────────────────────────────────
 // WHY: Real-time features (chat, live dashboard) need WebSocket
-কাজ ওয়েব_websocket_যোগ(app, প্যাটার্ন, হ্যান্ডলার) {
-    দেখাও "  ✔ WebSocket রাউট:", প্যাটার্ন
+fn ওয়েব_websocket_যোগ app প্যাটার্ন হ্যান্ডলার
+    say "  ✔ WebSocket রাউট:", প্যাটার্ন
     // Upgrade HTTP → WebSocket connection
     // RFC 6455 handshake: Upgrade header, Sec-WebSocket-Key
-    ফেরত ওয়েব_রাউট_যোগ(app, "WEBSOCKET", প্যাটার্ন, হ্যান্ডলার)
-}
+    return ওয়েব_রাউট_যোগ(app, "WEBSOCKET", প্যাটার্ন, হ্যান্ডলার)
 
 // ─── Server-Sent Events ───────────────────────────────────────────────────────
 // WHY: SSE is simpler than WebSocket for one-directional streaming
-কাজ ওয়েব_sse_পাঠাও(resp, event, data) {
+fn ওয়েব_sse_পাঠাও resp event data
     // WHY: SSE format: "event: name\ndata: json\n\n"
-    দেখাও "SSE →", event, ":", data
-    ফেরত ০
-}
+    say "SSE →", event, ":", data
+    return 0
 
 // ─── File Upload Handling ─────────────────────────────────────────────────────
 // WHY: File upload is needed for profile pictures, documents, etc.
-কাজ req_file_পড়ো(req, field_name) {
+fn req_file_পড়ো req field_name
     // WHY: Parse multipart/form-data boundary
     // Extract file content + filename + mime-type
-    ফেরত ০
-}
+    return 0
 
 // ─── Cookie Handling ──────────────────────────────────────────────────────────
-কাজ req_cookie_পড়ো(req, নাম) {
+fn req_cookie_পড়ো req নাম
     // Parse Cookie: header, find matching name
-    ফেরত ০
-}
+    return 0
 
-কাজ resp_cookie_যোগ(resp, নাম, মান, max_age) {
+fn resp_cookie_যোগ resp নাম মান max_age
     // Set-Cookie: name=value; Max-Age=age; HttpOnly; SameSite=Strict
-    ফেরত resp
-}
+    return resp

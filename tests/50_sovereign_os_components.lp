@@ -1,115 +1,108 @@
 // Test 50: সার্বভৌম OS Components — লিপিতে OS Building Blocks
 // WHY: লিপির ultimate goal — সম্পূর্ণ লিপিতে লেখা OS
 // এই টেস্ট OS এর মূল উপাদানগুলি demonstrate করে
-অন্তর্ভুক্ত "std/sys/kernel.lp"
-অন্তর্ভুক্ত "std/core/mem.lp"
-অন্তর্ভুক্ত "std/version.lp"
+include "std/sys/kernel.lp"
+include "std/core/mem.lp"
+include "std/version.lp"
 
 // ─── Virtual Memory Manager ───
-গঠন VM_পেজ {
+struct VM_পেজ
     ভার্চুয়াল_ঠিকানা,
     ফিজিক্যাল_ঠিকানা,
     পতাকা,
     মালিক_pid
-}
 
 // ─── Process Control Block ────
-গঠন PCB {
+struct PCB
     pid,
     অবস্থা,
     priority,
     stack_পয়েন্টার,
     heap_শুরু
-}
 
 // ─── Scheduler Simulation ─────
-কাজ scheduler_রান(process_গণনা) {
-    দেখাও "  🔄 Round-Robin Scheduler"
-    ধরি quantum = ১০  // time quantum in ms
-    ধরি i = ০
-    যতক্ষণ i < process_গণনা {
-        দেখাও "    → PID", i + ১, "| quantum:", quantum, "ms | state: RUNNING"
-        i = i + ১
-    }
-}
+fn scheduler_রান process_গণনা
+    say "  🔄 Round-Robin Scheduler"
+    quantum = 10  // time quantum in ms
+    i = 0
+    while i < process_গণনা
+        say "    → PID", i + 1, "| quantum:", quantum, "ms | state: RUNNING"
+        i = i + 1
 
 // ─── Memory Mapper ────────────
-কাজ mmap_সিমুলেশন(আকার, পতাকা) {
-    ধরি পেজ_সাইজ = ৪০৯৬
-    ধরি পেজ_গণনা = (আকার + পেজ_সাইজ - ১) / পেজ_সাইজ
-    ধরি বাফার = মেমরি_বরাদ্দ(আকার)
-    দেখাও "  mmap(", আকার, "bytes) → ", পেজ_গণনা, "pages allocated"
-    মেমরি_মুক্তি(বাফার, আকার)
-    দেখাও "  munmap → pages freed"
-    ফেরত পেজ_গণনা
-}
+fn mmap_সিমুলেশন আকার পতাকা
+    পেজ_সাইজ = 4096
+    পেজ_গণনা = (আকার + পেজ_সাইজ - 1) / পেজ_সাইজ
+    বাফার = malloc(আকার)
+    say "  mmap(", আকার, "bytes) → ", পেজ_গণনা, "pages allocated"
+    free(বাফার, আকার)
+    say "  munmap → pages freed"
+    return পেজ_গণনা
 
 // ─── Syscall Interface ─────────
-কাজ syscall_ডেমো() {
-    ধরি pid = সিসকল(৩৯, ০, ০, ০)    // getpid (syscall 39)
-    দেখাও "  getpid() → PID:", pid
+fn syscall_ডেমো
+    pid = সিসকল(39, 0, 0, 0)    // getpid (syscall 39)
+    say "  getpid() → PID:", pid
 
-    ধরি uid = সিসকল(১০২, ০, ০, ০)   // getuid (syscall 102)
-    দেখাও "  getuid() → UID:", uid
+    uid = সিসকল(102, 0, 0, 0)   // getuid (syscall 102)
+    say "  getuid() → UID:", uid
 
-    ধরি clock = সিপিউ_ক্লক()
-    দেখাও "  RDTSC → CPU Clock:", clock
-}
+    clock = cpu_clock()
+    say "  RDTSC → CPU Clock:", clock
 
-কাজ প্রধান() {
-    দেখাও "\033[38;2;0;255;204m╔═══════════════════════════════════════════════╗\033[0m"
-    দেখাও "\033[38;2;0;255;204m║\033[0m  🏛️ Test 50: সার্বভৌম OS Components"
-    দেখাও "\033[38;2;0;255;204m║\033[0m  লিপিতে OS Building Blocks"
-    দেখাও "\033[38;2;0;255;204m╚═══════════════════════════════════════════════╝\033[0m"
-    দেখাও ""
+fn প্রধান
+    say "\033[38;2;0;255;204m╔═══════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  🏛️ Test 50: সার্বভৌম OS Components"
+    say "\033[38;2;0;255;204m║\033[0m  লিপিতে OS Building Blocks"
+    say "\033[38;2;0;255;204m╚═══════════════════════════════════════════════╝\033[0m"
+    say ""
 
-    দেখাও "\033[1;33m[1] ভার্চুয়াল মেমরি ম্যানেজার (VMM)\033[0m"
-    ধরি vm_সাইজ = সাইজ(VM_পেজ)
-    ধরি পেজ১ = মেমরি_বরাদ্দ(vm_সাইজ)
-    পেজ১.ভার্চুয়াল_ঠিকানা = ৪১৯৪৩০৪
-    পেজ১.ফিজিক্যাল_ঠিকানা = ২০৯৭১৫২
-    পেজ১.পতাকা = ৫
-    পেজ১.মালিক_pid = ১
-    দেখাও "  VM Page: VA=0x400000 → PA=0x200000 | flags=RX | pid=1"
-    মেমরি_মুক্তি(পেজ১, vm_সাইজ)
-    দেখাও ""
+    say "\033[1;33m[1] ভার্চুয়াল মেমরি ম্যানেজার (VMM)\033[0m"
+    vm_সাইজ = size_of(VM_পেজ)
+    পেজ1 = malloc(vm_সাইজ)
+    পেজ1.ভার্চুয়াল_ঠিকানা = 4194304
+    পেজ1.ফিজিক্যাল_ঠিকানা = 2097152
+    পেজ1.পতাকা = 5
+    পেজ1.মালিক_pid = 1
+    say "  VM Page: VA=0x400000 → PA=0x200000 | flags=RX | pid=1"
+    free(পেজ1, vm_সাইজ)
+    say ""
 
-    দেখাও "\033[1;33m[2] প্রসেস কন্ট্রোল ব্লক (PCB)\033[0m"
-    ধরি pcb_সাইজ = সাইজ(PCB)
-    ধরি proc১ = মেমরি_বরাদ্দ(pcb_সাইজ)
-    proc১.pid = ১
-    proc১.অবস্থা = ১
-    proc১.priority = ১০
-    দেখাও "  PCB[1]: pid=1, state=RUNNING, priority=10"
-    ধরি proc২ = মেমরি_বরাদ্দ(pcb_সাইজ)
-    proc২.pid = ২
-    proc২.অবস্থা = ২
-    proc২.priority = ৫
-    দেখাও "  PCB[2]: pid=2, state=SLEEPING, priority=5"
-    মেমরি_মুক্তি(proc১, pcb_সাইজ)
-    মেমরি_মুক্তি(proc২, pcb_সাইজ)
-    দেখাও ""
+    say "\033[1;33m[2] প্রসেস কন্ট্রোল ব্লক (PCB)\033[0m"
+    pcb_সাইজ = size_of(PCB)
+    proc1 = malloc(pcb_সাইজ)
+    proc1.pid = 1
+    proc1.অবস্থা = 1
+    proc1.priority = 10
+    say "  PCB[1]: pid=1, state=RUNNING, priority=10"
+    proc2 = malloc(pcb_সাইজ)
+    proc2.pid = 2
+    proc2.অবস্থা = 2
+    proc2.priority = 5
+    say "  PCB[2]: pid=2, state=SLEEPING, priority=5"
+    free(proc1, pcb_সাইজ)
+    free(proc2, pcb_সাইজ)
+    say ""
 
-    দেখাও "\033[1;33m[3] Round-Robin Scheduler\033[0m"
-    scheduler_রান(৪)
-    দেখাও ""
+    say "\033[1;33m[3] Round-Robin Scheduler\033[0m"
+    scheduler_রান(4)
+    say ""
 
-    দেখাও "\033[1;33m[4] Memory Mapper (mmap)\033[0m"
-    ধরি p1 = mmap_সিমুলেশন(৪০৯৬, ৫)
-    ধরি p2 = mmap_সিমুলেশন(৬৫৫৩৬, ৬)
-    ধরি p3 = mmap_সিমুলেশন(১০৪৮৫৭৬, ৩)
-    দেখাও "  মোট pages:", p1 + p2 + p3
-    দেখাও ""
+    say "\033[1;33m[4] Memory Mapper (mmap)\033[0m"
+    p1 = mmap_সিমুলেশন(4096, 5)
+    p2 = mmap_সিমুলেশন(65536, 6)
+    p3 = mmap_সিমুলেশন(1048576, 3)
+    say "  মোট pages:", p1 + p2 + p3
+    say ""
 
-    দেখাও "\033[1;33m[5] Direct Syscall Interface\033[0m"
+    say "\033[1;33m[5] Direct Syscall Interface\033[0m"
     syscall_ডেমো()
-    দেখাও ""
+    say ""
 
-    দেখাও "\033[1;32m╔═══════════════════════════════════════════╗\033[0m"
-    দেখাও "\033[1;32m║  ✅ Test 50 পাস — সার্বভৌম OS Components   ║\033[0m"
-    দেখাও "\033[1;32m║  লিপি OS তৈরির পথে — প্রথম ধাপ সম্পন্ন  ║\033[0m"
-    দেখাও "\033[1;32m╚═══════════════════════════════════════════╝\033[0m"
-    দেখাও "⚡ [লিপি প্রথম ১.০]"
-    ফেরত ০
-}
+    say "\033[1;32m╔═══════════════════════════════════════════╗\033[0m"
+    say "\033[1;32m║  ✅ Test 50 পাস — সার্বভৌম OS Components   ║\033[0m"
+    say "\033[1;32m║  লিপি OS তৈরির পথে — প্রথম ধাপ সম্পন্ন  ║\033[0m"
+    say "\033[1;32m╚═══════════════════════════════════════════╝\033[0m"
+    say "⚡ [লিপি প্রথম ১.০]"
+    return 0
 প্রধান()

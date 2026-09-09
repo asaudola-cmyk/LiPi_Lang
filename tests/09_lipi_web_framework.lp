@@ -2,45 +2,45 @@
 // বিশুদ্ধ লিপিতে HTTP রাউটিং ও মিডলওয়্যার ফ্রেমওয়ার্ক প্রদর্শনী
 // WHY: web framework = socket + parse + route + response, no Express/Laravel needed.
 
-অন্তর্ভুক্ত "std/io.lp"
-অন্তর্ভুক্ত "std/net.lp"
+include "std/io.lp"
+include "std/net.lp"
 
-দেখাও "╔════════════════════════════════════════════════════════════════════════╗"
-দেখাও "║  🌐 LIPI SOVEREIGN WEB FRAMEWORK — NATIVE HTTP ROUTING ENGINE         ║"
-দেখাও "║  ⚡ Zero Express | Zero Laravel | Pure Linux Kernel TCP Sockets        ║"
-দেখাও "╚════════════════════════════════════════════════════════════════════════╝"
-দেখাও ""
+say "╔════════════════════════════════════════════════════════════════════════╗"
+say "║  🌐 LIPI SOVEREIGN WEB FRAMEWORK — NATIVE HTTP ROUTING ENGINE         ║"
+say "║  ⚡ Zero Express | Zero Laravel | Pure Linux Kernel TCP Sockets        ║"
+say "╚════════════════════════════════════════════════════════════════════════╝"
+say ""
 
 // ১. রাউট টেবিল সিমুলেশন
-দেখাও "=== [১] HTTP রাউট রেজিস্ট্রেশন ==="
-দেখাও "  GET  / ───────────── index_handler"
-দেখাও "  GET  /api/status ─── status_handler"
-দেখাও "  POST /api/data ───── data_handler"
-দেখাও "  GET  /health ──────── health_handler"
-দেখাও ""
+say "=== [১] HTTP রাউট রেজিস্ট্রেশন ==="
+say "  GET  / ───────────── index_handler"
+say "  GET  /api/status ─── status_handler"
+say "  POST /api/data ───── data_handler"
+say "  GET  /health ──────── health_handler"
+say ""
 
 // ২. মিডলওয়্যার চেইন প্রদর্শন
-দেখাও "=== [২] মিডলওয়্যার পাইপলাইন ==="
-দেখাও "  রিকোয়েস্ট → [CORS] → [Auth] → [RateLimit] → [Handler] → রেসপন্স"
-দেখাও "  লেটেন্সি   : 1.2 µs per hop (direct kernel TCP)"
-দেখাও ""
+say "=== [২] মিডলওয়্যার পাইপলাইন ==="
+say "  রিকোয়েস্ট → [CORS] → [Auth] → [RateLimit] → [Handler] → রেসপন্স"
+say "  লেটেন্সি   : 1.2 µs per hop (direct kernel TCP)"
+say ""
 
 // ৩. HTTP রেসপন্স বিল্ডার সিমুলেশন
-দেখাও "=== [৩] HTTP রেসপন্স বিল্ডার ==="
-ধরি স্ট্যাটাস_কোড = ২০০
-ধরি কনটেন্ট_টাইপ = "application/json"
-ধরি বডি = "{\"status\": \"sovereign\", \"lang\": \"lipi\", \"version\": \"1.0.0\"}"
-দেখাও "  HTTP/" + স্ট্যাটাস_কোড + " OK"
-দেখাও "  Content-Type: " + কনটেন্ট_টাইপ
-দেখাও "  Body: " + বডি
-দেখাও ""
+say "=== [৩] HTTP রেসপন্স বিল্ডার ==="
+স্ট্যাটাস_কোড = 200
+কনটেন্ট_টাইপ = "application/json"
+বডি = "{\"status\": \"sovereign\", \"lang\": \"lipi\", \"version\": \"1.0.0\"}"
+say "  HTTP/" + স্ট্যাটাস_কোড + " OK"
+say "  Content-Type: " + কনটেন্ট_টাইপ
+say "  Body: " + বডি
+say ""
 
 // ৪. পারফরম্যান্স মেট্রিক্স
-ধরি শুরু = সিপিউ_ক্লক()
-ধরি ডামি = স্ট্যাটাস_কোড * ২
-ধরি শেষ = সিপিউ_ক্লক()
-দেখাও "=== [৪] পারফরম্যান্স বেঞ্চমার্ক ==="
-দেখাও "  Route resolution: " + (শেষ - শুরু) + " CPU cycles"
-দেখাও "  Throughput: 1.2M requests/sec (theoretical kernel limit)"
-দেখাও ""
-দেখাও "✅ লিপি ওয়েব ফ্রেমওয়ার্ক: শতভাগ নেটিভ, শূন্য Express, শূন্য Laravel!"
+শুরু = cpu_clock()
+ডামি = স্ট্যাটাস_কোড * 2
+শেষ = cpu_clock()
+say "=== [৪] পারফরম্যান্স বেঞ্চমার্ক ==="
+say "  Route resolution: " + (শেষ - শুরু) + " CPU cycles"
+say "  Throughput: 1.2M requests/sec (theoretical kernel limit)"
+say ""
+say "✅ লিপি ওয়েব ফ্রেমওয়ার্ক: শতভাগ নেটিভ, null Express, null Laravel!"

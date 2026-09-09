@@ -9,194 +9,172 @@
 //   লিপি KV = same process, zero network, 10x faster than Redis.
 //
 // ব্যবহার:
-//   অন্তর্ভুক্ত "std/kv.lp"
-//   ধরি kv = KV_তৈরি(১০২৪)  // 1024 bucket hashmap
+//   include "std/kv.lp"
+//    kv = KV_তৈরি(১০২৪)  // 1024 bucket hashmap
 //   KV_লেখো(kv, "user:42", "রফিক আহমেদ")
-//   ধরি মান = KV_পড়ো(kv, "user:42")
+//    মান = KV_পড়ো(kv, "user:42")
 //   KV_মুছো(kv, "user:42")
 //   KV_মুক্তি(kv)
 // ==============================================================================
 
-অন্তর্ভুক্ত "std/core/mem.lp"
-অন্তর্ভুক্ত "std/core/str.lp"
-অন্তর্ভুক্ত "std/core/io.lp"
+include "std/core/mem.lp"
+include "std/core/str.lp"
+include "std/core/io.lp"
 
 // ─── KV Types ─────────────────────────────────────────────────────────────────
-ধরি KV_TYPE_STRING   = ১
-ধরি KV_TYPE_INTEGER  = ২
-ধরি KV_TYPE_LIST     = ৩
-ধরি KV_TYPE_SET      = ৪
-ধরি KV_TYPE_HASH     = ৫
-ধরি KV_NO_EXPIRY     = ০    // never expires
+KV_TYPE_STRING   = 1
+KV_TYPE_INTEGER  = 2
+KV_TYPE_LIST     = 3
+KV_TYPE_SET      = 4
+KV_TYPE_HASH     = 5
+KV_NO_EXPIRY     = 0    // never expires
 
 // ─── Structs ──────────────────────────────────────────────────────────────────
-গঠন KV_এন্ট্রি {
+struct KV_এন্ট্রি
     চাবি_পয়েন্টার,
     মান_পয়েন্টার,
     মান_দৈর্ঘ্য,
     ধরন,
     ttl_expires,     // expiry time (0=never)
     পরবর্তী          // linked list for collision chaining
-}
 
-গঠন KV_store {
+struct KV_store
     bucket_তালিকা,
     bucket_গণনা,
     মোট_এন্ট্রি,
     hit_গণনা,
     miss_গণনা
-}
 
 // ─── Hash Function ────────────────────────────────────────────────────────────
-কাজ KV_hash(চাবি, bucket_গণনা) {
+fn KV_hash চাবি bucket_গণনা
     // WHY: FNV-1a hash — fast, good distribution, no dependencies
-    ধরি hash = ১৪৬৯৫৯৮১০৩  // FNV offset basis
-    ধরি fnv_prime = ১৬৭৭৭৬১৯
-    ধরি len = দৈর্ঘ্য(চাবি)
-    ধরি i = ০
-    যতক্ষণ i < len {
-        ধরি byte = ৬৫
+    hash = 1469598103  // FNV offset basis
+    fnv_prime = 16777619
+    len = len(চাবি)
+    i = 0
+    while i < len
+        byte = 65
         hash = hash ^ byte
         hash = hash * fnv_prime
-        i = i + ১
-    }
-    ফেরত hash % bucket_গণনা
-}
+        i = i + 1
+    return hash % bucket_গণনা
 
 // ─── Store Operations ─────────────────────────────────────────────────────────
-কাজ KV_তৈরি(bucket_গণনা) {
+fn KV_তৈরি bucket_গণনা
     // WHY: Power-of-2 bucket count = fast modulo
-    ধরি kv_সাইজ = সাইজ(KV_store)
-    ধরি kv = মেমরি_বরাদ্দ(kv_সাইজ)
-    kv.bucket_তালিকা = মেমরি_বরাদ্দ(bucket_গণনা * ৮)
+    kv_সাইজ = size_of(KV_store)
+    kv = malloc(kv_সাইজ)
+    kv.bucket_তালিকা = malloc(bucket_গণনা * 8)
     kv.bucket_গণনা = bucket_গণনা
-    kv.মোট_এন্ট্রি = ০
-    kv.hit_গণনা = ০
-    kv.miss_গণনা = ০
-    দেখাও "  ✔ KV Store তৈরি (buckets:", bucket_গণনা, ")"
-    ফেরত kv
-}
+    kv.মোট_এন্ট্রি = 0
+    kv.hit_গণনা = 0
+    kv.miss_গণনা = 0
+    say "  ✔ KV Store তৈরি (buckets:", bucket_গণনা, ")"
+    return kv
 
-কাজ KV_লেখো(kv, চাবি, মান) {
-    ধরি bucket = KV_hash(চাবি, kv.bucket_গণনা)
-    ধরি entry_সাইজ = সাইজ(KV_এন্ট্রি)
-    ধরি entry = মেমরি_বরাদ্দ(entry_সাইজ)
+fn KV_লেখো kv চাবি মান
+    bucket = KV_hash(চাবি, kv.bucket_গণনা)
+    entry_সাইজ = size_of(KV_এন্ট্রি)
+    entry = malloc(entry_সাইজ)
     entry.চাবি_পয়েন্টার = চাবি
     entry.মান_পয়েন্টার = মান
-    entry.মান_দৈর্ঘ্য = দৈর্ঘ্য(মান)
+    entry.মান_দৈর্ঘ্য = len(মান)
     entry.ধরন = KV_TYPE_STRING
     entry.ttl_expires = KV_NO_EXPIRY
-    entry.পরবর্তী = ০
-    kv.মোট_এন্ট্রি = kv.মোট_এন্ট্রি + ১
-    ফেরত ০
-}
+    entry.পরবর্তী = 0
+    kv.মোট_এন্ট্রি = kv.মোট_এন্ট্রি + 1
+    return 0
 
-কাজ KV_লেখো_ttl(kv, চাবি, মান, ttl_seconds) {
+fn KV_লেখো_ttl kv চাবি মান ttl_seconds
     // WHY: TTL = time-to-live for cache expiration
     KV_লেখো(kv, চাবি, মান)
-    ধরি clock = সিপিউ_ক্লক()
+    clock = cpu_clock()
     // entry.ttl_expires = clock + (ttl_seconds * CPU_FREQ)
-    ফেরত ০
-}
+    return 0
 
-কাজ KV_পড়ো(kv, চাবি) {
-    ধরি bucket = KV_hash(চাবি, kv.bucket_গণনা)
+fn KV_পড়ো kv চাবি
+    bucket = KV_hash(চাবি, kv.bucket_গণনা)
     // Walk bucket chain, compare keys
     // On hit: increment hit_গণনা, return মান
     // On miss: increment miss_গণনা, return 0
-    kv.hit_গণনা = kv.hit_গণনা + ১
-    ফেরত "cached_value"  // simplified
-}
+    kv.hit_গণনা = kv.hit_গণনা + 1
+    return "cached_value"  // simplified
 
-কাজ KV_মুছো(kv, চাবি) {
-    ধরি bucket = KV_hash(চাবি, kv.bucket_গণনা)
+fn KV_মুছো kv চাবি
+    bucket = KV_hash(চাবি, kv.bucket_গণনা)
     // Find entry in bucket chain, unlink it
-    kv.মোট_এন্ট্রি = kv.মোট_এন্ট্রি - ১
-    ফেরত ০
-}
+    kv.মোট_এন্ট্রি = kv.মোট_এন্ট্রি - 1
+    return 0
 
-কাজ KV_আছে(kv, চাবি) {
-    ধরি মান = KV_পড়ো(kv, চাবি)
-    যদি মান != ০ { ফেরত ১ }
-    ফেরত ০
-}
+fn KV_আছে kv চাবি
+    মান = KV_পড়ো(kv, চাবি)
+    if মান != 0 { return 1 }
+    return 0
 
 // ─── Integer Operations ───────────────────────────────────────────────────────
 // WHY: Redis INCR/DECR is very useful for counters (rate limiting, hit counts)
-কাজ KV_incr(kv, চাবি) {
-    দেখাও "  → KV INCR:", চাবি
-    ফেরত ১
-}
+fn KV_incr kv চাবি
+    say "  → KV INCR:", চাবি
+    return 1
 
-কাজ KV_decr(kv, চাবি) {
-    দেখাও "  → KV DECR:", চাবি
-    ফেরত ০
-}
+fn KV_decr kv চাবি
+    say "  → KV DECR:", চাবি
+    return 0
 
 // ─── List Operations ──────────────────────────────────────────────────────────
 // WHY: Redis Lists = queues, stacks, pub/sub message buffers
-কাজ KV_list_push(kv, চাবি, মান) {
-    দেখাও "  → KV LPUSH", চাবি, ":", মান
-    ফেরত ০
-}
+fn KV_list_push kv চাবি মান
+    say "  → KV LPUSH", চাবি, ":", মান
+    return 0
 
-কাজ KV_list_pop(kv, চাবি) {
-    দেখাও "  → KV LPOP", চাবি
-    ফেরত ০
-}
+fn KV_list_pop kv চাবি
+    say "  → KV LPOP", চাবি
+    return 0
 
-কাজ KV_list_len(kv, চাবি) {
-    ফেরত ০
-}
+fn KV_list_len kv চাবি
+    return 0
 
 // ─── Pub/Sub ──────────────────────────────────────────────────────────────────
 // WHY: Pub/Sub decouples producers and consumers (event-driven arch)
-কাজ KV_subscribe(kv, channel, callback) {
-    দেখাও "  → KV SUBSCRIBE:", channel
-    ফেরত ০
-}
+fn KV_subscribe kv channel callback
+    say "  → KV SUBSCRIBE:", channel
+    return 0
 
-কাজ KV_publish(kv, channel, message) {
-    দেখাও "  → KV PUBLISH:", channel, "→", message
-    ফেরত ০
-}
+fn KV_publish kv channel message
+    say "  → KV PUBLISH:", channel, "→", message
+    return 0
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
-কাজ KV_snapshot_লেখো(kv, ফাইল_পাথ) {
+fn KV_snapshot_লেখো kv ফাইল_পাথ
     // WHY: Redis RDB-style point-in-time snapshot
-    দেখাও "  → KV snapshot →", ফাইল_পাথ
-    ধরি fd = ফাইল_তৈরি(ফাইল_পাথ)
+    say "  → KV snapshot →", ফাইল_পাথ
+    fd = ফাইল_তৈরি(ফাইল_পাথ)
     // Write all key-value pairs to file
     ফাইল_বন্ধ(fd)
-    ফেরত ০
-}
+    return 0
 
-কাজ KV_snapshot_পড়ো(kv, ফাইল_পাথ) {
+fn KV_snapshot_পড়ো kv ফাইল_পাথ
     // WHY: Restore KV store from snapshot
-    দেখাও "  → KV restore ←", ফাইল_পাথ
-    ফেরত ০
-}
+    say "  → KV restore ←", ফাইল_পাথ
+    return 0
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
-কাজ KV_stats_দেখাও(kv) {
-    দেখাও "  KV Store Statistics:"
-    দেখাও "    মোট এন্ট্রি :", kv.মোট_এন্ট্রি
-    দেখাও "    bucket গণনা:", kv.bucket_গণনা
-    দেখাও "    cache hit   :", kv.hit_গণনা
-    দেখাও "    cache miss  :", kv.miss_গণনা
-    যদি kv.hit_গণনা + kv.miss_গণনা > ০ {
-        ধরি total = kv.hit_গণনা + kv.miss_গণনা
-        ধরি hit_rate = kv.hit_গণনা * ১০০ / total
-        দেখাও "    hit rate   :", hit_rate, "%"
-    }
-}
+fn KV_stats_দেখাও kv
+    say "  KV Store Statistics:"
+    say "    মোট এন্ট্রি :", kv.মোট_এন্ট্রি
+    say "    bucket গণনা:", kv.bucket_গণনা
+    say "    cache hit   :", kv.hit_গণনা
+    say "    cache miss  :", kv.miss_গণনা
+    if kv.hit_গণনা + kv.miss_গণনা > 0
+        total = kv.hit_গণনা + kv.miss_গণনা
+        hit_rate = kv.hit_গণনা * 100 / total
+        say "    hit rate   :", hit_rate, "%"
 
 // ─── Free ─────────────────────────────────────────────────────────────────────
-কাজ KV_মুক্তি(kv) {
-    যদি kv == ০ { ফেরত ০ }
+fn KV_মুক্তি kv
+    if kv == 0 { return 0 }
     // Free all entries in all buckets
-    মেমরি_মুক্তি(kv.bucket_তালিকা, kv.bucket_গণনা * ৮)
-    মেমরি_মুক্তি(kv, সাইজ(KV_store))
-    দেখাও "  ✔ KV Store মুক্তি"
-    ফেরত ০
-}
+    free(kv.bucket_তালিকা, kv.bucket_গণনা * 8)
+    free(kv, size_of(KV_store))
+    say "  ✔ KV Store মুক্তি"
+    return 0

@@ -1,61 +1,57 @@
 // Test 48: CLI Argument Parser Demo
 // WHY: Command-line tools সব প্রফেশনাল software এর অংশ
-অন্তর্ভুক্ত "std/core/mem.lp"
-অন্তর্ভুক্ত "std/version.lp"
+include "std/core/mem.lp"
+include "std/version.lp"
 
-গঠন CLI_Flag_ডেমো {
+struct CLI_Flag_ডেমো
     verbose,
     port,
     output_সূচক
-}
 
-কাজ CLI_সিমুলেশন(verbose, port, থ্রেড) {
-    দেখাও "পার্স করা আর্গুমেন্ট:"
-    দেখাও "  --verbose:", verbose
-    দেখাও "  --port:", port
-    দেখাও "  --threads:", থ্রেড
+fn CLI_সিমুলেশন verbose port থ্রেড
+    say "পার্স করা আর্গুমেন্ট:"
+    say "  --verbose:", verbose
+    say "  --port:", port
+    say "  --threads:", থ্রেড
 
-    যদি verbose == ১ {
-        দেখাও ""
-        দেখাও "[verbose] সার্ভার তথ্য:"
-        দেখাও "  • পোর্ট:", port
-        দেখাও "  • থ্রেড:", থ্রেড
-        দেখাও "  • লিপি সংস্করণ:", LIPI_সংস্করণ
-        দেখাও "  • সংকেতনাম:", LIPI_সংকেতনাম
-    }
-}
+    if verbose == 1
+        say ""
+        say "[verbose] সার্ভার তথ্য:"
+        say "  • পোর্ট:", port
+        say "  • থ্রেড:", থ্রেড
+        say "  • লিপি সংস্করণ:", LIPI_সংস্করণ
+        say "  • সংকেতনাম:", LIPI_সংকেতনাম
 
-কাজ প্রধান() {
-    দেখাও "══════════════════════════════════════"
-    দেখাও "Test 48: CLI Argument Parser"
-    দেখাও "══════════════════════════════════════"
-    দেখাও ""
+fn প্রধান
+    say "══════════════════════════════════════"
+    say "Test 48: CLI Argument Parser"
+    say "══════════════════════════════════════"
+    say ""
 
-    দেখাও "--- Scenario 1: লিপি সার্ভার চালু ---"
-    দেখাও "$ lipi-server --port 8080 --threads 16 --verbose"
-    CLI_সিমুলেশন(১, ৮০৮০, ১৬)
+    say "--- Scenario 1: লিপি সার্ভার চালু ---"
+    say "$ lipi-server --port 8080 --threads 16 --verbose"
+    CLI_সিমুলেশন(1, 8080, 16)
 
-    দেখাও ""
-    দেখাও "--- Scenario 2: শান্ত mode ---"
-    দেখাও "$ lipi-server --port 3000"
-    CLI_সিমুলেশন(০, ৩০০০, ৪)
+    say ""
+    say "--- Scenario 2: শান্ত mode ---"
+    say "$ lipi-server --port 3000"
+    CLI_সিমুলেশন(0, 3000, 4)
 
-    দেখাও ""
-    দেখাও "--- Help text simulation ---"
-    দেখাও "lipi-server v1.0 (লিপি প্রথম ১.০)"
-    দেখাও ""
-    দেখাও "ব্যবহার: lipi-server [flags]"
-    দেখাও ""
-    দেখাও "Flags:"
-    দেখাও "  --port,     -p   HTTP port (default: 8080)"
-    দেখাও "  --threads,  -t   worker threads (default: 4)"
-    দেখাও "  --verbose,  -v   verbose logging"
-    দেখাও "  --help,     -h   এই সহায়তা দেখুন"
-    দেখাও "  --version,  -V   সংস্করণ দেখুন"
+    say ""
+    say "--- Help text simulation ---"
+    say "lipi-server v1.0 (লিপি প্রথম ১.০)"
+    say ""
+    say "ব্যবহার: lipi-server [flags]"
+    say ""
+    say "Flags:"
+    say "  --port,     -p   HTTP port (default: 8080)"
+    say "  --threads,  -t   worker threads (default: 4)"
+    say "  --verbose,  -v   verbose logging"
+    say "  --help,     -h   এই সহায়তা দেখুন"
+    say "  --version,  -V   সংস্করণ দেখুন"
 
-    দেখাও ""
-    দেখাও "✅ Test 48 পাস — CLI parsing demo কাজ করছে"
-    দেখাও "⚡ [লিপি প্রথম ১.০]"
-    ফেরত ০
-}
+    say ""
+    say "✅ Test 48 পাস — CLI parsing demo fn করছে"
+    say "⚡ [লিপি প্রথম ১.০]"
+    return 0
 প্রধান()

@@ -23,238 +23,217 @@
 //   textDocument/diagnostics (error reporting)
 // ==============================================================================
 
-অন্তর্ভুক্ত "std/core/mem.lp"
-অন্তর্ভুক্ত "std/core/io.lp"
-অন্তর্ভুক্ত "std/core/json.lp"
-অন্তর্ভুক্ত "std/version.lp"
+include "std/core/mem.lp"
+include "std/core/io.lp"
+include "std/core/json.lp"
+include "std/version.lp"
 
 // ─── LSP Constants ────────────────────────────────────────────────────────────
-ধরি LSP_VERSION       = "3.17"    // Language Server Protocol version
-ধরি LSP_MAX_MSG       = ১০৪৮৫৭৬  // 1MB max message
-ধরি LSP_MAX_FILES     = ১০২৪     // files tracked simultaneously
-ধরি LSP_MAX_SYMBOLS   = ৬৫৫৩৬   // symbols in workspace
+LSP_VERSION       = "3.17"    // Language Server Protocol version
+LSP_MAX_MSG       = 1048576  // 1MB max message
+LSP_MAX_FILES     = 1024     // files tracked simultaneously
+LSP_MAX_SYMBOLS   = 65536   // symbols in workspace
 
 // Message types
-ধরি LSP_REQUEST       = ১
-ধরি LSP_RESPONSE      = ২
-ধরি LSP_NOTIFICATION  = ৩
+LSP_REQUEST       = 1
+LSP_RESPONSE      = 2
+LSP_NOTIFICATION  = 3
 
 // Diagnostic severities
-ধরি DIAG_ERROR       = ১
-ধরি DIAG_WARNING     = ২
-ধরি DIAG_INFO        = ৩
-ধরি DIAG_HINT        = ৪
+DIAG_ERROR       = 1
+DIAG_WARNING     = 2
+DIAG_INFO        = 3
+DIAG_HINT        = 4
 
 // Completion item kinds
-ধরি COMP_TEXT         = ১
-ধরি COMP_METHOD       = ২
-ধরি COMP_FUNCTION     = ৩
-ধরি COMP_CONSTRUCTOR  = ৪
-ধরি COMP_FIELD        = ৫
-ধরি COMP_VARIABLE     = ৬
-ধরি COMP_CLASS        = ৭
-ধরি COMP_KEYWORD      = ১৪
-ধরি COMP_SNIPPET      = ১৫
+COMP_TEXT         = 1
+COMP_METHOD       = 2
+COMP_FUNCTION     = 3
+COMP_CONSTRUCTOR  = 4
+COMP_FIELD        = 5
+COMP_VARIABLE     = 6
+COMP_CLASS        = 7
+COMP_KEYWORD      = 14
+COMP_SNIPPET      = 15
 
 // ─── Structs ──────────────────────────────────────────────────────────────────
-গঠন LSP_অবস্থান {
+struct LSP_অবস্থান
     লাইন,     // 0-indexed
     অক্ষর     // 0-indexed
-}
 
-গঠন LSP_পরিসীমা {
+struct LSP_পরিসীমা
     শুরু_অবস্থান,
     শেষ_অবস্থান
-}
 
-গঠন LSP_ডায়াগনস্টিক {
+struct LSP_ডায়াগনস্টিক
     পরিসীমা_পয়েন্টার,
     তীব্রতা,
     বার্তা_পয়েন্টার,
     উৎস_পয়েন্টার      // "lipic"
-}
 
-গঠন LSP_সম্পূর্ণতা_আইটেম {
+struct LSP_সম্পূর্ণতা_আইটেম
     লেবেল_পয়েন্টার,
     ধরন,
     বিবরণ_পয়েন্টার,
     সন্নিবেশন_পাঠ্য,
     তথ্য_পয়েন্টার
-}
 
-গঠন LSP_ফাইল_ctx {
+struct LSP_ফাইল_ctx
     uri_পয়েন্টার,
     বিষয়বস্তু_পয়েন্টার,
     বিষয়বস্তু_দৈর্ঘ্য,
     সংস্করণ,
     ডায়াগনস্টিক_তালিকা,
     ডায়াগনস্টিক_গণনা
-}
 
-গঠন LSP_সার্ভার_ctx {
+struct LSP_সার্ভার_ctx
     ফাইল_তালিকা,
     ফাইল_গণনা,
     পরিবেশ_টেবিল,   // symbol table for the workspace
     প্রারম্ভিত,       // initialized?
     stdio_mode        // 1=stdio, 0=TCP
-}
 
 // ─── Message I/O ──────────────────────────────────────────────────────────────
-কাজ LSP_বার্তা_পড়ো(বাফার, max_size) {
+fn LSP_বার্তা_পড়ো বাফার max_size
     // WHY: LSP uses header format: "Content-Length: N\r\n\r\n" + JSON body
     // Read headers until \r\n\r\n, then read exactly N bytes of body
-    ধরি header_বাফার = মেমরি_বরাদ্দ(৫১২)
-    ধরি content_length = ০
+    header_বাফার = malloc(512)
+    content_length = 0
 
     // Read byte by byte until we find Content-Length
-    ধরি i = ০
-    যতক্ষণ i < ৫১২ {
-        ধরি byte = ০
-        ধরি পড়া = সিসকল(০, ০, header_বাফার + i, ১)  // read 1 byte from stdin
-        যদি পড়া <= ০ { ফেরত -১ }  // EOF or error
-        i = i + ১
-    }
+    i = 0
+    while i < 512
+        byte = 0
+        পড়া = সিসকল(0, 0, header_বাফার + i, 1)  // read 1 byte from stdin
+        if পড়া <= 0 { return -1 }  // EOF or error
+        i = i + 1
 
     // Parse Content-Length value
     // Read JSON body of that length
-    ধরি পড়া = সিসকল(০, ০, বাফার, content_length)
+    পড়া = সিসকল(0, 0, বাফার, content_length)
 
-    মেমরি_মুক্তি(header_বাফার, ৫১২)
-    ফেরত পড়া
-}
+    free(header_বাফার, 512)
+    return পড়া
 
-কাজ LSP_বার্তা_পাঠাও(json_বাফার, json_len) {
+fn LSP_বার্তা_পাঠাও json_বাফার json_len
     // WHY: Write "Content-Length: N\r\n\r\n" header then JSON body to stdout
-    ধরি header_বাফার = মেমরি_বরাদ্দ(৬৪)
-    ধরি header_len = ৩২  // "Content-Length: NNNN\r\n\r\n"
+    header_বাফার = malloc(64)
+    header_len = 32  // "Content-Length: NNNN\r\n\r\n"
 
     // Write header to stdout (fd=1)
-    সিসকল(১, ১, header_বাফার, header_len)
+    সিসকল(1, 1, header_বাফার, header_len)
     // Write JSON body
-    সিসকল(১, ১, json_বাফার, json_len)
+    সিসকল(1, 1, json_বাফার, json_len)
 
-    মেমরি_মুক্তি(header_বাফার, ৬৪)
-    ফেরত ০
-}
+    free(header_বাফার, 64)
+    return 0
 
 // ─── LSP Handlers ─────────────────────────────────────────────────────────────
-কাজ LSP_initialize_হ্যান্ডলার(server, params) {
+fn LSP_initialize_হ্যান্ডলার server params
     // WHY: First message — server tells client its capabilities
-    দেখাও "[LSP] initialize request received"
-    দেখাও "[LSP] Capabilities:"
-    দেখাও "  → textDocumentSync: incremental"
-    দেখাও "  → completionProvider: true"
-    দেখাও "  → hoverProvider: true"
-    দেখাও "  → definitionProvider: true"
-    দেখাও "  → diagnosticsProvider: true"
-    server.প্রারম্ভিত = ১
-    ফেরত ০
-}
+    say "[LSP] initialize request received"
+    say "[LSP] Capabilities:"
+    say "  → textDocumentSync: incremental"
+    say "  → completionProvider: true"
+    say "  → hoverProvider: true"
+    say "  → definitionProvider: true"
+    say "  → diagnosticsProvider: true"
+    server.প্রারম্ভিত = 1
+    return 0
 
-কাজ LSP_didOpen_হ্যান্ডলার(server, uri, বিষয়বস্তু) {
+fn LSP_didOpen_হ্যান্ডলার server uri বিষয়বস্তু
     // WHY: Client opened a file — parse it and compute initial diagnostics
-    দেখাও "[LSP] textDocument/didOpen:", uri
+    say "[LSP] textDocument/didOpen:", uri
     // Parse file → build AST → find errors → send diagnostics
     LSP_diagnostics_পাঠাও(server, uri)
-    ফেরত ০
-}
+    return 0
 
-কাজ LSP_didChange_হ্যান্ডলার(server, uri, changes) {
+fn LSP_didChange_হ্যান্ডলার server uri changes
     // WHY: User typed something — re-analyze and update diagnostics
-    দেখাও "[LSP] textDocument/didChange:", uri
+    say "[LSP] textDocument/didChange:", uri
     // Apply incremental changes → re-parse → re-check → send diagnostics
     LSP_diagnostics_পাঠাও(server, uri)
-    ফেরত ০
-}
+    return 0
 
-কাজ LSP_completion_হ্যান্ডলার(server, uri, লাইন, অক্ষর) {
+fn LSP_completion_হ্যান্ডলার server uri লাইন অক্ষর
     // WHY: Auto-complete — most valuable LSP feature for developer productivity
-    দেখাও "[LSP] textDocument/completion:", uri, "L", লাইন, ":", অক্ষর
+    say "[LSP] textDocument/completion:", uri, "L", লাইন, ":", অক্ষর
     // Find token at cursor position
     // Look up symbol table for completions
     // Return list of CompletionItems
-    ফেরত ০
-}
+    return 0
 
-কাজ LSP_hover_হ্যান্ডলার(server, uri, লাইন, অক্ষর) {
+fn LSP_hover_হ্যান্ডলার server uri লাইন অক্ষর
     // WHY: Show type info + docs on hover (essential for discoverability)
-    দেখাও "[LSP] textDocument/hover:", uri, "L", লাইন, ":", অক্ষর
+    say "[LSP] textDocument/hover:", uri, "L", লাইন, ":", অক্ষর
     // Find symbol at position → look up documentation
-    ফেরত ০
-}
+    return 0
 
-কাজ LSP_definition_হ্যান্ডলার(server, uri, লাইন, অক্ষর) {
+fn LSP_definition_হ্যান্ডলার server uri লাইন অক্ষর
     // WHY: Go-to-definition (F12 in VSCode) — navigate to where function is defined
-    দেখাও "[LSP] textDocument/definition:", uri, "L", লাইন, ":", অক্ষর
-    ফেরত ০
-}
+    say "[LSP] textDocument/definition:", uri, "L", লাইন, ":", অক্ষর
+    return 0
 
-কাজ LSP_diagnostics_পাঠাও(server, uri) {
+fn LSP_diagnostics_পাঠাও server uri
     // WHY: Publish diagnostics = show red squiggles under errors
-    দেখাও "[LSP] textDocument/publishDiagnostics →", uri
+    say "[LSP] textDocument/publishDiagnostics →", uri
     // Run lipic --check on file → parse errors → format as LSP diagnostics
-    ফেরত ০
-}
+    return 0
 
 // ─── Symbol Table ─────────────────────────────────────────────────────────────
 // WHY: LSP needs to know all defined symbols (functions, variables, structs)
-কাজ LSP_symbol_scan(server, uri, বিষয়বস্তু) {
-    দেখাও "[LSP] Symbol scan:", uri
-    // Parse functions: কাজ নাম(...)
-    // Parse variables: ধরি নাম =
-    // Parse structs: গঠন নাম { }
+fn LSP_symbol_scan server uri বিষয়বস্তু
+    say "[LSP] Symbol scan:", uri
+    // Parse functions: fn নাম(...)
+    // Parse variables:  নাম =
+    // Parse structs: struct নাম { }
     // Store in server.পরিবেশ_টেবিল
-    ফেরত ০
-}
+    return 0
 
 // ─── Main LSP Event Loop ──────────────────────────────────────────────────────
-কাজ LSP_প্রধান_লুপ(server) {
-    দেখাও "[LSP] লিপি Language Server চালু হচ্ছে"
-    দেখাও "[LSP] Protocol:", LSP_VERSION
-    দেখাও "[LSP] লিপি সংস্করণ:", LIPI_সংস্করণ
-    দেখাও "[LSP] stdio mode পড়ছে..."
+fn LSP_প্রধান_লুপ server
+    say "[LSP] লিপি Language Server চালু হচ্ছে"
+    say "[LSP] Protocol:", LSP_VERSION
+    say "[LSP] লিপি সংস্করণ:", LIPI_সংস্করণ
+    say "[LSP] stdio mode পড়ছে..."
 
-    ধরি msg_বাফার = মেমরি_বরাদ্দ(LSP_MAX_MSG)
-    ধরি চলছে = ১
+    msg_বাফার = malloc(LSP_MAX_MSG)
+    চলছে = 1
 
-    যতক্ষণ চলছে == ১ {
+    while চলছে == 1
         // Read next JSON-RPC message
-        ধরি msg_len = LSP_বার্তা_পড়ো(msg_বাফার, LSP_MAX_MSG)
-        যদি msg_len < ০ {
-            দেখাও "[LSP] stdin EOF — বন্ধ হচ্ছে"
-            চলছে = ০
-        }
+        msg_len = LSP_বার্তা_পড়ো(msg_বাফার, LSP_MAX_MSG)
+        if msg_len < 0
+            say "[LSP] stdin EOF — বন্ধ হচ্ছে"
+            চলছে = 0
 
         // Parse method name from JSON
         // Dispatch to handler
         // Send response
-    }
 
-    মেমরি_মুক্তি(msg_বাফার, LSP_MAX_MSG)
-    ফেরত ০
-}
+    free(msg_বাফার, LSP_MAX_MSG)
+    return 0
 
 // ─── Entry Point ──────────────────────────────────────────────────────────────
-কাজ প্রধান() {
-    দেখাও "╔══════════════════════════════════════════╗"
-    দেখাও "║  🧠 লিপি LSP সার্ভার"
-    দেখাও "║  সংস্করণ: প্রথম ১.০ | Protocol:", LSP_VERSION
-    দেখাও "╚══════════════════════════════════════════╝"
+fn প্রধান
+    say "╔══════════════════════════════════════════╗"
+    say "║  🧠 লিপি LSP সার্ভার"
+    say "║  সংস্করণ: প্রথম ১.০ | Protocol:", LSP_VERSION
+    say "╚══════════════════════════════════════════╝"
 
-    ধরি server_সাইজ = সাইজ(LSP_সার্ভার_ctx)
-    ধরি server = মেমরি_বরাদ্দ(server_সাইজ)
-    server.ফাইল_তালিকা = মেমরি_বরাদ্দ(LSP_MAX_FILES * সাইজ(LSP_ফাইল_ctx))
-    server.ফাইল_গণনা = ০
-    server.পরিবেশ_টেবিল = মেমরি_বরাদ্দ(LSP_MAX_SYMBOLS * ৮)
-    server.প্রারম্ভিত = ০
-    server.stdio_mode = ১
+    server_সাইজ = size_of(LSP_সার্ভার_ctx)
+    server = malloc(server_সাইজ)
+    server.ফাইল_তালিকা = malloc(LSP_MAX_FILES * size_of(LSP_ফাইল_ctx))
+    server.ফাইল_গণনা = 0
+    server.পরিবেশ_টেবিল = malloc(LSP_MAX_SYMBOLS * 8)
+    server.প্রারম্ভিত = 0
+    server.stdio_mode = 1
 
     LSP_প্রধান_লুপ(server)
 
-    মেমরি_মুক্তি(server.ফাইল_তালিকা, LSP_MAX_FILES * সাইজ(LSP_ফাইল_ctx))
-    মেমরি_মুক্তি(server.পরিবেশ_টেবিল, LSP_MAX_SYMBOLS * ৮)
-    মেমরি_মুক্তি(server, server_সাইজ)
-    ফেরত ০
-}
+    free(server.ফাইল_তালিকা, LSP_MAX_FILES * size_of(LSP_ফাইল_ctx))
+    free(server.পরিবেশ_টেবিল, LSP_MAX_SYMBOLS * 8)
+    free(server, server_সাইজ)
+    return 0
 
 প্রধান()
