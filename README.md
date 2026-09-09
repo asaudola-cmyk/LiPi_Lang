@@ -6,6 +6,9 @@
 [![Native ELF](https://img.shields.io/badge/Binary-Native%20ELF%2064--bit-emerald.svg)]()
 [![Zero Dependencies](https://img.shields.io/badge/Runtime-0%25%20PHP%20%7C%200%25%20Libc%20%7C%200%25%20GCC-blue.svg)]()
 [![Self-Hosting](https://img.shields.io/badge/Self--Hosting-100%25%20Closure%20Proven-purple.svg)]()
+[![Version](https://img.shields.io/badge/সংস্করণ-প্রথম%20১.০%20%7C%20Prothom%201.0-gold.svg)]()
+[![Codename](https://img.shields.io/badge/Codename-সোভেরিন%20%7C%20Sovereign-cyan.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-42%2F42%20PASS-brightgreen.svg)]()
 [![Hardware ALU](https://img.shields.io/badge/Hardware-Direct%20x86__64%20ALU%20%26%20RDTSC-orange.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 

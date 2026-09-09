@@ -11,7 +11,10 @@ GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-VERSION="1.0.0"
+LIPI_VERSION_BENGALI="প্রথম ১.০"
+VERSION="1.0.0"  # SemVer for filenames
+LIPI_CODENAME="সোভেরিন"
+# WHY: Version locked at প্রথম ১.০ until user explicitly changes it
 ARCH="linux-x86_64"
 RELEASE_NAME="lipi-v${VERSION}-${ARCH}"
 RELEASE_DIR="dist/${RELEASE_NAME}"

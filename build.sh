@@ -13,6 +13,12 @@
 #   [Stage 3] Total Sovereignty: 0% PHP verification & test suite execution
 # ==============================================================================
 
+# ─── সংস্করণ লক (Version Lock) ───────────────────────────────────────────
+LIPI_VERSION="প্রথম ১.০"
+LIPI_VERSION_ENG="Prothom 1.0"
+LIPI_CODENAME="সোভেরিন"
+# WHY: Version locked. Change only when user explicitly authorizes upgrade.
+
 set -euo pipefail
 
 CYAN='\033[38;2;0;255;204m'
