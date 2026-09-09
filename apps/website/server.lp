@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI FULL-STACK SOVEREIGN HTTP WEB SERVER & DATABASE BACKEND
-// File: apps/webs/server.lp
+// File: apps/website/server.lp
 // ⚡ 100% Pure Lipi | Zero Libc | Zero PHP | Linux Kernel AMD64 Syscalls
 //
 // WHY: Full-stack engine handling HTTP 1.1 routing, REST API endpoints,
@@ -11,7 +11,7 @@
 অন্তর্ভুক্ত "std/net.lp"
 অন্তর্ভুক্ত "std/mem.lp"
 অন্তর্ভুক্ত "std/str.lp"
-অন্তর্ভুক্ত "apps/webs/db_engine.lp"
+অন্তর্ভুক্ত "apps/website/db_engine.lp"
 
 // ১. পূর্ণসংখ্যাকে আস্কি অক্ষরে রূপান্তর করে মেমরিতে লেখা
 // WHY: ডাইনামিক মেট্রিক্স ও আইডিকে আস্কি স্ট্রিংয়ে রূপান্তর করা
@@ -371,7 +371,7 @@
 দেখাও ""
 
 // ১. ডাটাবেজ ফাইল ইনিশিয়ালাইজেশন
-ধরি ডিবি_পাথ = "apps/webs/data/sovereign_store.db"
+ধরি ডিবি_পাথ = "apps/website/data/sovereign_store.db"
 ধরি ডিবি_এফডি = ডিবি_খোলো(ডিবি_পাথ)
 যদি ডিবি_এফডি < ০ {
     দেখাও "\033[1;31m❌ ত্রুটি: ডাটাবেজ ফাইল খোলা সম্ভব হয়নি!\033[0m"
@@ -507,7 +507,7 @@
             যদি p1 == ১১৫ {
                 যদি p2 == ১১৬ {
                     যদি p3 == ১২১ {
-                        ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/webs/public/style.css", "text/css; charset=utf-8")
+                        ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/website/public/style.css", "text/css; charset=utf-8")
                         সকেট_বন্ধ(ক্লায়েন্ট_এফডি)
                         হ্যান্ডেলড = ১
                     }
@@ -521,7 +521,7 @@
                 যদি p2 == ১১২ {
                     যদি p3 == ১১২ {
                         যদি p4 == ৪৬ {
-                            ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/webs/public/app.js", "application/javascript; charset=utf-8")
+                            ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/website/public/app.js", "application/javascript; charset=utf-8")
                             সকেট_বন্ধ(ক্লায়েন্ট_এফডি)
                             হ্যান্ডেলড = ১
                         }
@@ -535,7 +535,7 @@
             যদি p1 == ১০২ {
                 যদি p2 == ৯৭ {
                     যদি p3 == ১১৮ {
-                        ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/webs/public/favicon.svg", "image/svg+xml")
+                        ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/website/public/favicon.svg", "image/svg+xml")
                         সকেট_বন্ধ(ক্লায়েন্ট_এফডি)
                         হ্যান্ডেলড = ১
                     }
@@ -545,7 +545,7 @@
 
         // [হোমপেজ] / অথবা /index.html
         যদি হ্যান্ডেলড == ০ {
-            ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/webs/public/index.html", "text/html; charset=utf-8")
+            ফাইল_পাঠাও(ক্লায়েন্ট_এফডি, "apps/website/public/index.html", "text/html; charset=utf-8")
             সকেট_বন্ধ(ক্লায়েন্ট_এফডি)
             হ্যান্ডেলড = ১
         }

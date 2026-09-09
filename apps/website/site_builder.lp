@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI WEB ASSET INSPECTOR & BUILD VALIDATOR (apps/webs/site_builder.lp)
+// 👑 LIPI WEB ASSET INSPECTOR & BUILD VALIDATOR (apps/website/site_builder.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | Linux Kernel AMD64 Syscalls
 //
 // WHY: Verifies that all official website assets (HTML, CSS, JS, SVG) are
@@ -28,10 +28,10 @@
 দেখাও ""
 
 দেখাও "\033[1;33m[১] ওয়েবসাইট অ্যাসেট ভেরিফিকেশন শুরু হচ্ছে...\033[0m"
-ধরি s1 = ফাইল_আকার_যাচাই("apps/webs/public/index.html")
-ধরি s2 = ফাইল_আকার_যাচাই("apps/webs/public/style.css")
-ধরি s3 = ফাইল_আকার_যাচাই("apps/webs/public/app.js")
-ধরি s4 = ফাইল_আকার_যাচাই("apps/webs/public/favicon.svg")
+ধরি s1 = ফাইল_আকার_যাচাই("apps/website/public/index.html")
+ধরি s2 = ফাইল_আকার_যাচাই("apps/website/public/style.css")
+ধরি s3 = ফাইল_আকার_যাচাই("apps/website/public/app.js")
+ধরি s4 = ফাইল_আকার_যাচাই("apps/website/public/favicon.svg")
 
 যদি s1 > ০ {
     যদি s2 > ০ {
@@ -41,7 +41,7 @@
                 দেখাও ""
                 দেখাও "\033[1;32m✔ সকল ওয়েব অ্যাসেট শতভাগ প্রস্তুত ও ভ্যালিডেটেড!\033[0m"
                 দেখাও "  • মোট অ্যাসেট আকার: " + মোট_সাইজ + " বাইট"
-                দেখাও "  • সার্ভার রেডি: apps/webs/server.lp দিয়ে তাৎক্ষণিক ডিপ্লয়যোগ্য।"
+                দেখাও "  • সার্ভার রেডি: apps/website/server.lp দিয়ে তাৎক্ষণিক ডিপ্লয়যোগ্য।"
                 ফেরত ০
             }
         }

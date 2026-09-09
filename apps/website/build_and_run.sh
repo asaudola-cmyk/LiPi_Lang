@@ -21,9 +21,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 echo -e "${YELLOW}[১] খাঁটি লিপি কম্পাইলার দিয়ে server.lp সংকলন করা হচ্ছে...${NC}"
-./bin/lipic apps/webs/server.lp -o apps/webs/lipi_server
+./bin/lipic apps/website/server.lp -o apps/website/lipi_server
 
-echo -e "${GREEN}  ✔ বাইনারি তৈরি সম্পন্ন: apps/webs/lipi_server${NC}"
+echo -e "${GREEN}  ✔ বাইনারি তৈরি সম্পন্ন: apps/website/lipi_server${NC}"
 echo ""
 
 echo -e "${YELLOW}[২] লিপি সার্বভৌম ওয়েব সার্ভার চালু করা হচ্ছে (Port 8080)...${NC}"
@@ -31,4 +31,4 @@ echo -e "${CYAN}  👉 ব্রাউজারে খুলুন: http://local
 echo -e "${YELLOW}  (বন্ধ করতে কীবোর্ডে Ctrl+C চাপুন)${NC}"
 echo ""
 
-exec ./apps/webs/lipi_server
+exec ./apps/website/lipi_server

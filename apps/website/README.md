@@ -1,4 +1,4 @@
-# 👑 LIPI (লিপি) অফিশিয়াল ওয়েবসাইট ও ডাইনামিক ওয়েব সার্ভার (`apps/webs/`)
+# 👑 LIPI (লিপি) অফিশিয়াল ওয়েবসাইট ও ডাইনামিক ওয়েব সার্ভার (`apps/website/`)
 
 এই ডিরেক্টরিটি লিপি প্রোগ্রামিং ভাষায় তৈরি একটি সম্পূর্ণ **সার্বভৌম, ডাইনামিক ও আধুনিক প্রিমিয়াম ওয়েব অ্যাপ্লিকেশন**। এটি কোনো বহিরাগত সার্ভার ইঞ্জিন (Apache, Nginx, Node.js, PHP-FPM) বা ফ্রেমওয়ার্ক ছাড়া সরাসরি লিনাক্স কার্নেল সকেটের ওপর চলে।
 
@@ -11,7 +11,7 @@
 ## 🏛️ স্থাপত্য ওভারভিউ (Architecture Overview)
 
 ```
-apps/webs/
+apps/website/
 ├── server.lp                  # ১০০% খাঁটি লিপিতে লিখিত ডাইনামিক HTTP ওয়েব সার্ভার
 ├── site_builder.lp            # অ্যাসেট অডিটর ও ভ্যালিডেটর
 ├── build_and_run.sh           # কম্পাইলেশন ও সার্ভার রানার স্ক্রিপ্ট
@@ -63,11 +63,11 @@ apps/webs/
 ### ১. সার্ভার সংকলন ও চালু করা:
 ```bash
 # স্বয়ংক্রিয় রানার স্ক্রিপ্ট দিয়ে চালু করুন:
-./apps/webs/build_and_run.sh
+./apps/website/build_and_run.sh
 
 # অথবা সরাসরি লিপিক কম্পাইলার দিয়ে:
-./bin/lipic apps/webs/server.lp -o apps/webs/lipi_server
-./apps/webs/lipi_server
+./bin/lipic apps/website/server.lp -o apps/website/lipi_server
+./apps/website/lipi_server
 ```
 
 ### ২. ব্রাউজারে প্রবেশ করুন:
@@ -79,16 +79,16 @@ http://127.0.0.1:8080/
 
 ### ৩. অটোমেটেড এন্ড-টু-এন্ড টেস্ট রান:
 ```bash
-./apps/webs/test_web.sh
+./apps/website/test_web.sh
 ```
 
 ---
 
 ## 🛡️ সার্বভৌমত্ব ও ডিপেন্ডেন্সি অডিট
 ```bash
-file apps/webs/lipi_server
+file apps/website/lipi_server
 # ELF 64-bit LSB executable, x86-64, statically linked, no section header
 
-ldd apps/webs/lipi_server
+ldd apps/website/lipi_server
 # not a dynamic executable (০% Libc, ০% GCC, ০% PHP)
 ```

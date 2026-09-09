@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN BINARY DATABASE ENGINE (apps/webs/db_engine.lp)
+// 👑 LIPI SOVEREIGN BINARY DATABASE ENGINE (apps/website/db_engine.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | Zero External DBMS | Direct Silicon Storage
 //
 // WHY: Implements a standalone, persistent 32-byte binary record database engine

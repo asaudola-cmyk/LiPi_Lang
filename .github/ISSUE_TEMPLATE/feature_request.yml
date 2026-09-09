@@ -1,10 +1,41 @@
-name: Feature request
-description: Create a feature request
-labels: ["Feature", "Status: Needs Triage"]
+name: "✨ Feature Request"
+description: "লিপি ভাষায় নতুন ফিচার প্রস্তাব করুন।"
+title: "[FEATURE] "
+labels: ["enhancement"]
 body:
-  - type: textarea
+  - type: markdown
     attributes:
-      label: Description
-      description: "Please describe the requested feature and why it should be included in PHP."
+      value: |
+        ## ✨ লিপি ফিচার রিকোয়েস্ট
+        নতুন ভাষা বৈশিষ্ট্য বা টুলচেইন উন্নতির প্রস্তাব।
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "কোন সমস্যা সমাধান করতে চান?"
+      description: "বর্তমান লিপিতে কী নেই যা প্রয়োজন?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: "প্রস্তাবিত সমাধান"
+      description: "লিপি সিনট্যাক্সে উদাহরণ দিন"
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: "ফিচার বিভাগ"
+      options:
+        - "ভাষা সিনট্যাক্স (Language Syntax)"
+        - "স্ট্যান্ডার্ড লাইব্রেরি (std/)"
+        - "কম্পাইলার অপ্টিমাইজেশন"
+        - "টুলচেইন (lipipkg/lipidbg)"
+        - "প্ল্যাটফর্ম সাপোর্ট"
+        - "পারফরম্যান্স"
     validations:
       required: true

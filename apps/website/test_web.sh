@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # 👑 LIPI DYNAMIC WEB SERVER VERIFICATION TEST SUITE (test_web.sh)
-# WHY: Verifies that apps/webs/server.lp compiles and serves the modern
+# WHY: Verifies that apps/website/server.lp compiles and serves the modern
 # official Lipi homepage and dynamic JSON API endpoints over Linux TCP socket.
 # ==============================================================================
 
@@ -21,12 +21,12 @@ echo ""
 
 # ১. কম্পাইলেশন পরীক্ষা
 echo -e "${YELLOW}[ধাপ ১] খাঁটি লিপি কম্পাইলার দিয়ে server.lp সংকলন...${NC}"
-./bin/lipic apps/webs/server.lp -o apps/webs/lipi_server > /dev/null
-echo -e "${GREEN}  ✔ apps/webs/lipi_server সফলভাবে তৈরি হয়েছে।${NC}"
+./bin/lipic apps/website/server.lp -o apps/website/lipi_server > /dev/null
+echo -e "${GREEN}  ✔ apps/website/lipi_server সফলভাবে তৈরি হয়েছে।${NC}"
 
 # ২. ডিপেন্ডেন্সি ও স্বাধীনতা অডিট
 echo -e "${YELLOW}[ধাপ ২] বাইনারি স্বাধীনতা অডিট...${NC}"
-if (ldd apps/webs/lipi_server 2>&1 || true) | grep -q "not a dynamic executable"; then
+if (ldd apps/website/lipi_server 2>&1 || true) | grep -q "not a dynamic executable"; then
     echo -e "${GREEN}  ✔ স্ট্যাটিক লিনাক্স ELF ৬৪-বিট (not a dynamic executable: ০% Libc, ০% GCC)${NC}"
 else
     echo -e "${RED}  ❌ এরর: বাইনারি স্ট্যাটিক নয়!${NC}"
@@ -35,7 +35,7 @@ fi
 
 # ৩. ব্যাকগ্রাউন্ডে সার্ভার শুরু
 echo -e "${YELLOW}[ধাপ ৩] লিপি নেটিভ ওয়েব সার্ভার ব্যাকগ্রাউন্ডে চালু করা হচ্ছে...${NC}"
-./apps/webs/lipi_server &
+./apps/website/lipi_server &
 SERVER_PID=$!
 
 # ট্র্যাপ দিয়ে সার্ভার বন্ধ করার ব্যবস্থা
@@ -103,11 +103,11 @@ fi
 
 # ৯. সক্রিয় কোডবেস পিএইচপি অডিট
 echo -e "${YELLOW}[ধাপ ৯] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
-PHP_COUNT=$(find apps/webs -name "*.php" | wc -l)
+PHP_COUNT=$(find apps/website -name "*.php" | wc -l)
 if [ "${PHP_COUNT}" -eq 0 ]; then
-    echo -e "${GREEN}  ✔ apps/webs এ কোনো PHP ফাইল নেই (০% PHP, ১০০% লিপি)!${NC}"
+    echo -e "${GREEN}  ✔ apps/website এ কোনো PHP ফাইল নেই (০% PHP, ১০০% লিপি)!${NC}"
 else
-    echo -e "${RED}  ❌ সতর্কতা: apps/webs এ PHP ফাইল রয়েছে!${NC}"
+    echo -e "${RED}  ❌ সতর্কতা: apps/website এ PHP ফাইল রয়েছে!${NC}"
     exit 1
 fi
 

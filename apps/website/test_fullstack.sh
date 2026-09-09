@@ -20,14 +20,14 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 
 # ক্লিনআপ পুরানো টেস্ট ডিবি
-rm -f apps/webs/data/sovereign_store.db
+rm -f apps/website/data/sovereign_store.db
 
 echo -e "${YELLOW}[ধাপ ১] খাঁটি লিপি কম্পাইলার দিয়ে server.lp সংকলন...${NC}"
-./bin/lipic apps/webs/server.lp -o apps/webs/lipi_server > /dev/null
-echo -e "${GREEN}  ✔ apps/webs/lipi_server সফলভাবে নির্মিত।${NC}"
+./bin/lipic apps/website/server.lp -o apps/website/lipi_server > /dev/null
+echo -e "${GREEN}  ✔ apps/website/lipi_server সফলভাবে নির্মিত।${NC}"
 
 # ব্যাকগ্রাউন্ডে সার্ভার শুরু
-./apps/webs/lipi_server &
+./apps/website/lipi_server &
 SERVER_PID=$!
 
 cleanup() {
@@ -106,7 +106,7 @@ fi
 
 # ধাপ ৮: ডিস্ক ফাইল পারসিস্টেন্স অডিট
 echo -e "${YELLOW}[ধাপ ৮] ফিজিক্যাল ডিস্ক বাইনারি ফাইল অডিট...${NC}"
-DB_SIZE=$(wc -c < apps/webs/data/sovereign_store.db)
+DB_SIZE=$(wc -c < apps/website/data/sovereign_store.db)
 echo -e "  • ডিস্ক ফাইল সাইজ: ${DB_SIZE} বাইট (৪টি রেকর্ড x ৩২ বাইট = ১২৮ বাইট)"
 if [ "${DB_SIZE}" -eq 128 ]; then
     echo -e "${GREEN}  ✔ ডিস্ক বাইনারি সাইজ ১২৮ বাইট ১০০% নিখুঁত!${NC}"

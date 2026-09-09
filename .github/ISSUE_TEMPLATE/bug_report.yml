@@ -1,36 +1,65 @@
-name: Bug report
-description: Create a bug report
-labels: ["Bug", "Status: Needs Triage"]
+name: "🐛 Bug Report"
+description: "লিপি কম্পাইলার বা স্ট্যান্ডার্ড লাইব্রেরিতে বাগ রিপোর্ট করুন।"
+title: "[BUG] "
+labels: ["bug"]
 body:
-  - type: textarea
+  - type: markdown
     attributes:
-      label: Description
-      description: "Please provide a minimal way to reproduce the problem and describe what the expected vs actual behavior is. Provide a [3v4l.org](https://3v4l.org/) link if possible."
       value: |
-        The following code:
+        ## 🐛 লিপি বাগ রিপোর্ট
+        আপনার সমস্যার বিস্তারিত বিবরণ দিন।
 
-        ```php
-        <?php
-        ```
-
-        Resulted in this output:
-        ```
-        ```
-
-        But I expected this output instead:
-        ```
-        ```
+  - type: textarea
+    id: description
+    attributes:
+      label: "সমস্যার বিবরণ"
+      description: "কী হচ্ছে এবং কী হওয়া উচিত ছিল?"
     validations:
       required: true
-  - type: input
+
+  - type: textarea
+    id: reproduction
     attributes:
-      label: PHP Version
-      description: "The used PHP version. Make sure it is [supported](https://www.php.net/supported-versions.php)."
-      placeholder: "PHP 8.0.12"
+      label: "পুনরুৎপাদনযোগ্য উদাহরণ (.lp কোড)"
+      description: "ন্যূনতম কোড যা সমস্যাটি তৈরি করে"
+      render: text
     validations:
       required: true
-  - type: input
+
+  - type: textarea
+    id: expected
     attributes:
-      label: Operating System
-      description: "The used operating system, if relevant."
-      placeholder: "Ubuntu 20.04"
+      label: "প্রত্যাশিত আচরণ"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "প্রকৃত আচরণ (এরর মেসেজ বা আউটপুট)"
+    validations:
+      required: true
+
+  - type: input
+    id: lipi-version
+    attributes:
+      label: "লিপি সংস্করণ"
+      description: "`./bin/lipic --version` এর আউটপুট"
+      placeholder: "e.g. Lipi v1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: "প্রভাবিত কম্পোনেন্ট"
+      options:
+        - "bin/lipic (কম্পাইলার)"
+        - "bin/lipi (সেলফ-হোস্টেড কম্পাইলার)"
+        - "std/ (স্ট্যান্ডার্ড লাইব্রেরি)"
+        - "bin/lipipkg (প্যাকেজ ম্যানেজার)"
+        - "bin/lipidbg (ডিবাগার)"
+        - "bin/lipirepl (REPL)"
+        - "অন্যান্য"
+    validations:
+      required: true

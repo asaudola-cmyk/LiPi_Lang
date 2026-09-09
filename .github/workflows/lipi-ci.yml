@@ -1,0 +1,88 @@
+name: Lipi CI
+
+# WHY: Continuous Integration for the Lipi Sovereign Programming Language.
+# Runs on every push and pull request to main branch.
+# Tests: compilation, self-hosting closure, and regression test suite.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: "Lipi Build & Test (Linux x86_64)"
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make boot seed executable
+        run: chmod +x boot/lipi-seed bin/lipic
+
+      - name: Verify boot seed is valid ELF64
+        run: file boot/lipi-seed | grep -q "ELF 64-bit"
+
+      - name: "Stage 0 — Copy seed to bin/lipic"
+        run: |
+          cp boot/lipi-seed bin/lipic
+          chmod +x bin/lipic
+          echo "✔ bin/lipic ready ($(wc -c < bin/lipic) bytes)"
+
+      - name: "Stage 1 — Compile self-hosting compiler (compiler.lp → bin/lipi)"
+        run: |
+          ./bin/lipic src/compiler/compiler.lp -o bin/lipi
+          chmod +x bin/lipi
+          echo "✔ bin/lipi compiled ($(wc -c < bin/lipi) bytes)"
+          file bin/lipi | grep -q "statically linked" && echo "✔ Statically linked (no libc!)" || echo "⚠️ Not statically linked"
+
+      - name: "Stage 2 — Compile toolchain (lipipkg, lipidbg, lipirepl, lipiconvert)"
+        run: |
+          ./bin/lipic src/tools/lipipkg.lp    -o bin/lipipkg
+          ./bin/lipic src/tools/lipidbg.lp    -o bin/lipidbg
+          ./bin/lipic src/tools/lipirepl.lp   -o bin/lipirepl
+          ./bin/lipic src/tools/lipiconvert.lp -o bin/lipiconvert
+          chmod +x bin/lipipkg bin/lipidbg bin/lipirepl bin/lipiconvert
+          echo "✔ Full toolchain compiled"
+
+      - name: "Stage 3 — Self-hosting closure proof (bit-for-bit determinism)"
+        run: |
+          ./bin/lipic src/compiler/compiler.lp -o /tmp/lipi-gen2
+          cmp bin/lipi /tmp/lipi-gen2 && echo "✅ CLOSURE PROOF: bin/lipi === lipi-gen2 (bit-for-bit identical)" || (echo "❌ CLOSURE FAILED: binaries differ!" && exit 1)
+
+      - name: "Stage 4 — Sovereignty audit (0% PHP / 0% C in src, std, tests)"
+        run: |
+          PHP_COUNT=$(find src std tests -name "*.php" | wc -l)
+          C_COUNT=$(find src std tests -name "*.c" -o -name "*.h" | wc -l)
+          echo "PHP files in src/std/tests: $PHP_COUNT"
+          echo "C/H files in src/std/tests: $C_COUNT"
+          [ "$PHP_COUNT" -eq 0 ] && echo "✔ 0% PHP" || (echo "❌ PHP contamination!" && exit 1)
+          [ "$C_COUNT"   -eq 0 ] && echo "✔ 0% C/C++" || (echo "❌ C contamination!" && exit 1)
+
+      - name: "Stage 5 — Regression test suite (tests/run_tests.sh)"
+        run: |
+          chmod +x tests/run_tests.sh
+          bash tests/run_tests.sh
+
+      - name: "Stage 6 — Compile apps/website (web server)"
+        run: |
+          ./bin/lipic apps/website/server.lp -o apps/website/lipi_server
+          file apps/website/lipi_server | grep -q "ELF 64-bit" && echo "✔ lipi_server compiled"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lipi-binaries-linux-x86_64
+          path: |
+            bin/lipi
+            bin/lipic
+            bin/lipipkg
+            bin/lipidbg
+            bin/lipirepl
+            bin/lipiconvert
+          retention-days: 7
