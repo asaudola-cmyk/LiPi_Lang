@@ -1,0 +1,5 @@
+#!/bin/bash
+# লিপি ২.০ Runtime wrapper
+LIPI_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
+cd "$LIPI_HOME"
+python3 -m src.runtime "$@"
