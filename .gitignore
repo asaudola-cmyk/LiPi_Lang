@@ -303,3 +303,6 @@ tmp-php.ini
 lipi_modules/
 apps/**/lipi_server
 apps/**/site_builder
+bin/lipic-stage1
+bin/lipic_gen
+bin/lipi-gen2

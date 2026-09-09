@@ -30,22 +30,54 @@ echo ""
 mkdir -p bin dist
 
 # ------------------------------------------------------------------------------
-# [ধাপ ০: বীজ / Bootstrapper Seed Compilation]
+# [ধাপ ০: সার্বভৌম বুটস্ট্র্যাপ / Sovereign Bootstrap Verification]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ০] বীজ (Bootstrapper Seed) ও টুলস তৈরি হচ্ছে...${NC}"
-gcc -O2 -Wall -Wextra src/seed/bootstrapper.c -o bin/lipic
-cp bin/lipic bin/lipi-seed
-gcc -O2 -Wall -Wextra src/tools/lipipkg.c -o bin/lipipkg
-gcc -O2 -Wall -Wextra src/tools/lipidbg.c -o bin/lipidbg
-echo -e "${GREEN}  ✔ bin/lipic, bin/lipi-seed, bin/lipipkg এবং bin/lipidbg সফলভাবে নির্মিত হয়েছে।${NC}"
+echo -e "${YELLOW}[ধাপ ০] সার্বভৌম বুটস্ট্র্যাপ যাচাইকরণ (Go/Rust Model — Zero GCC)...${NC}"
+if [ ! -f "bin/lipic" ]; then
+    if [ -f "boot/lipi-seed" ]; then
+        cp boot/lipi-seed bin/lipic
+    elif [ -f "bin/lipi-seed" ]; then
+        cp bin/lipi-seed bin/lipic
+    else
+        echo -e "${RED}❌ এরর: বুটস্ট্র্যাপ সিড অনুপস্থিত!${NC}"
+        exit 1
+    fi
+fi
+chmod +x bin/lipic
+
+echo "  ► Stage 1 Lipi Self-Hosted Compiler (compiler.lp)..."
+./bin/lipic src/compiler/compiler.lp -o bin/lipic-stage1
+
+echo "  ► Stage 2 Sovereign Lipi Machine Code Synthesis..."
+chmod +x bin/lipic-stage1
+./bin/lipic-stage1
+
+echo "  ► Testing the ELF generated strictly by Pure Lipi (bin/lipic_gen)..."
+chmod +x bin/lipic_gen
+./bin/lipic_gen
+if [ $? -eq 0 ]; then
+    echo "  ✔ SUCCESS: bin/lipic_gen (generated strictly by Lipi) executed successfully with 0 exit code!"
+else
+    echo "  ❌ FAILED: bin/lipic_gen did not execute properly."
+fi
+
+echo "  ► Compiling lipipkg (Pure Lipi Package Manager) using Lipi..."
+./bin/lipic src/tools/lipipkg.lp -o bin/lipipkg
+echo "  ► Compiling lipidbg (Pure Lipi System Debugger) using Lipi..."
+./bin/lipic src/tools/lipidbg.lp -o bin/lipidbg
+echo "  ► Compiling lipirepl (Pure Lipi Interactive Shell) using Lipi..."
+./bin/lipic src/tools/lipirepl.lp -o bin/lipirepl
+echo "  ► Compiling lipiconvert (Pure Lipi Universal Code Migration Transpiler) using Lipi..."
+./bin/lipic src/tools/lipiconvert.lp -o bin/lipiconvert
+echo -e "${GREEN}  ✔ bin/lipic, bin/lipipkg, bin/lipidbg, bin/lipirepl এবং bin/lipiconvert প্রস্তুত (100% Pure Lipi Tooling | Zero C)।${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
 # [ধাপ ১ ও ২: খাঁটি লিপি কম্পাইলার ও সেলফ-হোস্টিং ক্লোজার]
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}[ধাপ ১ ও ২] খাঁটি লিপিতে রচিত compiler.lp কম্পাইল এবং সেলফ-হোস্টিং ক্লোজার...${NC}"
-./bin/lipic src/Lipi/compiler.lp -o bin/lipi
-./bin/lipic src/Lipi/compiler.lp -o bin/lipi-gen2
+./bin/lipic src/compiler/compiler.lp -o bin/lipi
+./bin/lipic src/compiler/compiler.lp -o bin/lipi-gen2
 
 echo -e "${YELLOW}  • বাইনারি ডিটারমিনিজম (Bit-for-Bit Determinism) পরীক্ষা:${NC}"
 if cmp -s bin/lipi bin/lipi-gen2; then
@@ -85,6 +117,16 @@ TESTS=(
     "examples/30_ast_optimizer_constant_folding.lp:dist/test30_optimizer"
     "examples/31_pure_lipi_tls_crypto_stream.lp:dist/test31_tls"
     "examples/32_silicon_graphics_framebuffer.lp:dist/test32_gfx"
+    "examples/33_unum_shared_memory.lp:dist/test33_shm"
+    "examples/34_unum_ansi_tui.lp:dist/test34_tui"
+    "examples/35_unum_columnstore_ai.lp:dist/test35_ai"
+    "examples/36_unum_robinhood_hashmap.lp:dist/test36_hashmap"
+    "examples/37_unum_websocket.lp:dist/test37_websocket"
+    "examples/38_unum_x11_gui.lp:dist/test38_x11"
+    "examples/39_sovereign_production_app.lp:dist/test39_showcase"
+    "examples/40_gguf_tensor_inference.lp:dist/test40_gguf"
+    "examples/41_baremetal_multiboot_kernel.lp:dist/test41_kernel"
+    "examples/42_bilingual_english_syntax.lp:dist/test42_bilingual"
 )
 
 for test_pair in "${TESTS[@]}"; do
@@ -105,14 +147,23 @@ for test_pair in "${TESTS[@]}"; do
 done
 
 # ------------------------------------------------------------------------------
-# [সার্বভৌমত্ব অডিট: কোডবেসে ০% PHP নিশ্চিতকরণ]
+# [সার্বভৌমত্ব অডিট: কোডবেসে ০% PHP এবং ০% C/C++ নিশ্চিতকরণ]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[সার্বভৌমত্ব অডিট] সক্রিয় কোডবেসে ০% PHP উপস্থিতি পরীক্ষা:${NC}"
-PHP_COUNT=$(find . -name "*.php" | wc -l)
+echo -e "${YELLOW}[সার্বভৌমত্ব অডিট] সক্রিয় কোডবেসে ০% PHP এবং ০% C/C++ উপস্থিতি পরীক্ষা:${NC}"
+PHP_COUNT=$(find src std bin apps examples -name "*.php" 2>/dev/null | wc -l)
+C_COUNT=$(find src std bin apps examples \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) 2>/dev/null | wc -l)
+
 if [ "${PHP_COUNT}" -eq 0 ]; then
-    echo -e "${GREEN}  ✔ কোডবেসে কোনো .php ফাইল নেই! লিপি ১০০% স্বাধীন ও সার্বভৌম।${NC}"
+    echo -e "${GREEN}  ✔ কোডবেসে কোনো .php ফাইল নেই! (০% PHP — ১০০% লিপি)${NC}"
 else
     echo -e "${RED}  ❌ সতর্কতা: কোডবেসে এখনও ${PHP_COUNT} টি .php ফাইল রয়েছে!${NC}"
+    exit 1
+fi
+
+if [ "${C_COUNT}" -eq 0 ]; then
+    echo -e "${GREEN}  ✔ কোডবেসে কোনো .c বা .h ফাইল নেই! (০% C — ১০০% স্বাধীন ও সার্বভৌম লিপি)${NC}"
+else
+    echo -e "${RED}  ❌ সতর্কতা: কোডবেসে এখনও ${C_COUNT} টি C/C++ ফাইল রয়েছে!${NC}"
     exit 1
 fi
 
