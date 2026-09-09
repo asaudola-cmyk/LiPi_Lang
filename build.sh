@@ -94,39 +94,39 @@ echo ""
 echo -e "${YELLOW}[ধাপ ৩] লিপি টেস্ট প্রোগ্রামসমূহ কম্পাইলেশন ও সিলিকন সিপিইউ এক্সিকিউশন:${NC}"
 
 TESTS=(
-    "examples/01_hello.lp:dist/test01_hello"
-    "examples/02_math_fibonacci.lp:dist/test02_fibonacci"
-    "examples/12_native_silicon_logic.lp:dist/test12_silicon"
-    "examples/13_sovereign_cpu_arithmetic.lp:dist/test13_arithmetic"
-    "examples/14_sovereign_loop_and_logic.lp:dist/test14_loop"
-    "examples/15_functions_and_recursion.lp:dist/test15_functions"
-    "examples/16_kernel_syscalls_file_io.lp:dist/test16_syscalls"
-    "examples/17_standard_library_import.lp:dist/test17_stdlib"
-    "examples/18_native_web_server.lp:dist/test18_web_server"
-    "examples/19_heap_memory_and_pointers.lp:dist/test19_heap"
-    "examples/20_grand_stdlib_expansion.lp:dist/test20_stdlib"
-    "examples/21_kernel_multithreading.lp:dist/test21_threads"
-    "examples/22_custom_structs_and_types.lp:dist/test22_structs"
-    "examples/23_native_database_engine.lp:dist/test23_db"
-    "examples/24_silicon_matrix_ai.lp:dist/test24_simd"
-    "examples/25_arena_memory_allocator.lp:dist/test25_arena"
-    "examples/26_async_epoll_event_loop.lp:dist/test26_epoll"
-    "examples/27_lipipkg_project_lifecycle.lp:dist/test27_pkg"
-    "examples/28_hardware_crypto_sha256.lp:dist/test28_crypto"
-    "examples/29_lipidbg_system_debugger.lp:dist/test29_debug"
-    "examples/30_ast_optimizer_constant_folding.lp:dist/test30_optimizer"
-    "examples/31_pure_lipi_tls_crypto_stream.lp:dist/test31_tls"
-    "examples/32_silicon_graphics_framebuffer.lp:dist/test32_gfx"
-    "examples/33_unum_shared_memory.lp:dist/test33_shm"
-    "examples/34_unum_ansi_tui.lp:dist/test34_tui"
-    "examples/35_unum_columnstore_ai.lp:dist/test35_ai"
-    "examples/36_unum_robinhood_hashmap.lp:dist/test36_hashmap"
-    "examples/37_unum_websocket.lp:dist/test37_websocket"
-    "examples/38_unum_x11_gui.lp:dist/test38_x11"
-    "examples/39_sovereign_production_app.lp:dist/test39_showcase"
-    "examples/40_gguf_tensor_inference.lp:dist/test40_gguf"
-    "examples/41_baremetal_multiboot_kernel.lp:dist/test41_kernel"
-    "examples/42_bilingual_english_syntax.lp:dist/test42_bilingual"
+    "tests/01_hello.lp:dist/test01_hello"
+    "tests/02_math_fibonacci.lp:dist/test02_fibonacci"
+    "tests/12_native_silicon_logic.lp:dist/test12_silicon"
+    "tests/13_sovereign_cpu_arithmetic.lp:dist/test13_arithmetic"
+    "tests/14_sovereign_loop_and_logic.lp:dist/test14_loop"
+    "tests/15_functions_and_recursion.lp:dist/test15_functions"
+    "tests/16_kernel_syscalls_file_io.lp:dist/test16_syscalls"
+    "tests/17_standard_library_import.lp:dist/test17_stdlib"
+    "tests/18_native_web_server.lp:dist/test18_web_server"
+    "tests/19_heap_memory_and_pointers.lp:dist/test19_heap"
+    "tests/20_grand_stdlib_expansion.lp:dist/test20_stdlib"
+    "tests/21_kernel_multithreading.lp:dist/test21_threads"
+    "tests/22_custom_structs_and_types.lp:dist/test22_structs"
+    "tests/23_native_database_engine.lp:dist/test23_db"
+    "tests/24_silicon_matrix_ai.lp:dist/test24_simd"
+    "tests/25_arena_memory_allocator.lp:dist/test25_arena"
+    "tests/26_async_epoll_event_loop.lp:dist/test26_epoll"
+    "tests/27_lipipkg_project_lifecycle.lp:dist/test27_pkg"
+    "tests/28_hardware_crypto_sha256.lp:dist/test28_crypto"
+    "tests/29_lipidbg_system_debugger.lp:dist/test29_debug"
+    "tests/30_ast_optimizer_constant_folding.lp:dist/test30_optimizer"
+    "tests/31_pure_lipi_tls_crypto_stream.lp:dist/test31_tls"
+    "tests/32_silicon_graphics_framebuffer.lp:dist/test32_gfx"
+    "tests/33_unum_shared_memory.lp:dist/test33_shm"
+    "tests/34_unum_ansi_tui.lp:dist/test34_tui"
+    "tests/35_unum_columnstore_ai.lp:dist/test35_ai"
+    "tests/36_unum_robinhood_hashmap.lp:dist/test36_hashmap"
+    "tests/37_unum_websocket.lp:dist/test37_websocket"
+    "tests/38_unum_x11_gui.lp:dist/test38_x11"
+    "tests/39_sovereign_production_app.lp:dist/test39_showcase"
+    "tests/40_gguf_tensor_inference.lp:dist/test40_gguf"
+    "tests/41_baremetal_multiboot_kernel.lp:dist/test41_kernel"
+    "tests/42_bilingual_english_syntax.lp:dist/test42_bilingual"
 )
 
 for test_pair in "${TESTS[@]}"; do
@@ -146,12 +146,15 @@ for test_pair in "${TESTS[@]}"; do
     echo ""
 done
 
+# Clean up transient build-stage artifacts
+rm -f bin/lipic-stage1 bin/lipic_gen bin/lipi-gen2 bin/lipi-seed
+
 # ------------------------------------------------------------------------------
 # [সার্বভৌমত্ব অডিট: কোডবেসে ০% PHP এবং ০% C/C++ নিশ্চিতকরণ]
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}[সার্বভৌমত্ব অডিট] সক্রিয় কোডবেসে ০% PHP এবং ০% C/C++ উপস্থিতি পরীক্ষা:${NC}"
-PHP_COUNT=$(find src std bin apps examples -name "*.php" 2>/dev/null | wc -l)
-C_COUNT=$(find src std bin apps examples \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) 2>/dev/null | wc -l)
+PHP_COUNT=$(find src std bin apps examples tests boot -name "*.php" 2>/dev/null | wc -l)
+C_COUNT=$(find src std bin apps examples tests boot \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) 2>/dev/null | wc -l)
 
 if [ "${PHP_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ কোডবেসে কোনো .php ফাইল নেই! (০% PHP — ১০০% লিপি)${NC}"
