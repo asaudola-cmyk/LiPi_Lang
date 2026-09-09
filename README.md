@@ -8,7 +8,7 @@
 [![Self-Hosting](https://img.shields.io/badge/Self--Hosting-100%25%20Closure%20Proven-purple.svg)]()
 [![Version](https://img.shields.io/badge/সংস্করণ-প্রথম%20১.০%20%7C%20Prothom%201.0-gold.svg)]()
 [![Codename](https://img.shields.io/badge/Codename-সোভেরিন%20%7C%20Sovereign-cyan.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-42%2F42%20PASS-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-50%2F50%20PASS-brightgreen.svg)]()
 [![Hardware ALU](https://img.shields.io/badge/Hardware-Direct%20x86__64%20ALU%20%26%20RDTSC-orange.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -85,12 +85,16 @@ lipi/
 │   ├── net/                   # net, tls, websocket
 │   ├── db/                    # db, columnstore, hashmap
 │   ├── ai/                    # ai, gguf
-│   └── ui/                    # tui, x11, gfx
+│   ├── ui/                    # tui, x11, gfx
+│   ├── http.lp                # [নতুন] HTTP/1.1 ফ্রেমওয়ার্ক
+│   ├── cli.lp                 # [নতুন] CLI argument parser
+│   ├── fmt.lp                 # [নতুন] String formatting
+│   └── version.lp             # [নতুন] সংস্করণ constants (প্রথম ১.০ locked)
 │
-├── 📁 tests/                   # ৪২টি কম্প্রিহেনসিভ স্টেজ টেস্ট স্যুট
+├── 📁 tests/                   # ৫০টি কম্প্রিহেনসিভ স্টেজ টেস্ট স্যুট
 │   ├── 01_hello.lp
 │   ├── 02_fibonacci.lp
-│   └── ...
+│   └── ... (50 total — 50/50 PASS ✅)
 │
 ├── 📁 examples/                # রিয়েল প্রজেক্ট ডেমো
 │   ├── 01_hello_world/        # ব্যাসিক স্টার্টার
@@ -108,6 +112,7 @@ lipi/
 │   └── vscode-lipi/           # ভিএস কোড সিনট্যাক্স হাইলাইটার এক্সটেনশন
 │
 ├── 📁 scripts/                 # ডেভপস ও ডিস্ট্রিবিউশন অটোমেশন
+│   ├── lipi                   # [নতুন] স্মার্ট lipi wrapper (auto-preprocessor)
 │   ├── install.sh             # গ্লোবাল ওয়ান-ক্লিক ইন্সটলার
 │   └── package_release.sh     # গ্লোবাল রিলিজ প্যাকার
 │

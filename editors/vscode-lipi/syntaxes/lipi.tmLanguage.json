@@ -3,16 +3,39 @@
   "name": "Lipi",
   "scopeName": "source.lipi",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#numerals" },
-    { "include": "#keywords_control" },
-    { "include": "#keywords_declaration" },
-    { "include": "#keywords_subsystems" },
-    { "include": "#constants_boolean" },
-    { "include": "#functions" },
-    { "include": "#structs" },
-    { "include": "#operators" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numerals"
+    },
+    {
+      "include": "#keywords_control"
+    },
+    {
+      "include": "#type_keywords"
+    },
+    {
+      "include": "#keywords_declaration"
+    },
+    {
+      "include": "#keywords_subsystems"
+    },
+    {
+      "include": "#constants_boolean"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#structs"
+    },
+    {
+      "include": "#operators"
+    }
   ],
   "repository": {
     "comments": {
@@ -70,7 +93,7 @@
       "patterns": [
         {
           "name": "keyword.control.lipi",
-          "match": "\\b(যদি|নাহলে_যদি|নাহলে|তবে|যতক্ষণ|প্রতিটি|ভেতরে|থামো|চালিয়ে_যাও|ফেরত|চেষ্টা|ধরো|নিক্ষেপ|সহযোগ|সমান্তরাল|অপেক্ষা|if|else|elif|elseif|then|while|for|in|break|continue|return|try|catch|throw|spawn|async|await)\\b"
+          "match": "\\b(যদি|নাহলে_যদি|নাহলে|তবে|যতক্ষণ|প্রতিটি|ভেতরে|থামো|চালিয়ে_যাও|ফেরত|চেষ্টা|ধরো|নিক্ষেপ|সহযোগ|সমান্তরাল|অপেক্ষা|প্রধান|if|else|elif|elseif|then|while|for|in|break|continue|return|try|catch|throw|spawn|async|await|main)\\b"
         }
       ]
     },
@@ -78,7 +101,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.lipi",
-          "match": "\\b(ধরি|ধ্রুবক|কাজ|গঠন|নতুন|আমদানি|অন্তর্ভুক্ত|হিসেবে|let|var|const|fn|def|func|function|struct|class|new|import|include|as)\\b"
+          "match": "\\b(ধরি|ধ্রুবক|কাজ|গঠন|নতুন|আমদানি|অন্তর্ভুক্ত|হিসেবে|সার্বজনীন|সংরক্ষিত|বিমূর্ত|ইন্টারফেস|বাস্তবায়ন|বিস্তার|let|var|const|fn|def|func|function|struct|class|new|import|include|as|pub|priv|abstract|interface|impl|extends)\\b"
         }
       ]
     },
@@ -86,11 +109,11 @@
       "patterns": [
         {
           "name": "support.class.subsystem.lipi",
-          "match": "\\b(লিপি|সার্ভার|পর্দা|স্মৃতি|গণনা|চ্যানেল|সিসকল|বাফার|মেমরি_লেখো|মেমরি_পড়ো|মেমরি_শব্দ_লেখো|মেমরি_শব্দ_পড়ো|মেমরি_বাইট_লেখো|মেমরি_বাইট_পড়ো|মেমরি_বরাদ্দ|মেমরি_মুক্তি|মেমরি_অনুলিপি|মেমরি_পূরণ|কলাম_তৈরি|কলাম_লেখো|কলাম_পড়ো|কলাম_শর্তযুক্ত_যোগফল|কলাম_মুছে_ফেলো|হ্যাশম্যাপ_তৈরি|হ্যাশম্যাপ_ইনসার্ট|হ্যাশম্যাপ_লুকআপ|হ্যাশম্যাপ_মুছে_ফেলো|শেয়ার্ড_মেমরি_খোলো|শেয়ার্ড_মেমরি_মুছে_ফেলো|এআই_কোসাইন_সিমিলারিটি|এআই_সফটম্যাক্স|ওয়েবসকেট_ফ্রেম_তৈরি|ওয়েবসকেট_আনমাস্ক|টার্মিনাল_বাফার_তৈরি|কার্সর_লুকাও|কার্সর_দেখাও|জিজিইউএফ_হেডার_যাচাই|জিজিইউএফ_কিউ৪_আনপ্যাক|জিজিইউএফ_ম্যাট্রিক্স_ভেক্টর_গুণন|জিজিইউএফ_টোকেন_আর্গম্যাক্স|মাল্টিবুট_হেডার_তৈরি|ভিজিএ_সেল_তৈরি|দাবি|বর্তমান_স্ট্যাক|মেমরি_পরিদর্শন|lipi|server|ui|memory|compute|channel|syscall|buffer|mem_write|mem_read)\\b"
+          "match": "\\b(লিপি|সার্ভার|পর্দা|স্মৃতি|গণনা|চ্যানেল|সিসকল|বাফার|মেমরি_লেখো|মেমরি_পড়ো|মেমরি_শব্দ_লেখো|মেমরি_শব্দ_পড়ো|মেমরি_বাইট_লেখো|মেমরি_বাইট_পড়ো|মেমরি_বরাদ্দ|মেমরি_মুক্তি|মেমরি_অনুলিপি|মেমরি_পূরণ|কলাম_তৈরি|কলাম_লেখো|কলাম_পড়ো|কলাম_শর্তযুক্ত_যোগফল|কলাম_মুছে_ফেলো|হ্যাশম্যাপ_তৈরি|হ্যাশম্যাপ_ইনসার্ট|হ্যাশম্যাপ_লুকআপ|হ্যাশম্যাপ_মুছে_ফেলো|শেয়ার্ড_মেমরি_খোলো|শেয়ার্ড_মেমরি_মুছে_ফেলো|এআই_কোসাইন_সিমিলারিটি|এআই_সফটম্যাক্স|ওয়েবসকেট_ফ্রেম_তৈরি|ওয়েবসকেট_আনমাস্ক|টার্মিনাল_বাফার_তৈরি|কার্সর_লুকাও|কার্সর_দেখাও|জিজিইউএফ_হেডার_যাচাই|জিজিইউএফ_কিউ৪_আনপ্যাক|জিজিইউএফ_ম্যাট্রিক্স_ভেক্টর_গুণন|জিজিইউএফ_টোকেন_আর্গম্যাক্স|মাল্টিবুট_হেডার_তৈরি|ভিজিএ_সেল_তৈরি|দাবি|বর্তমান_স্ট্যাক|মেমরি_পরিদর্শন|lipi|server|ui|memory|compute|channel|syscall|buffer|mem_write|mem_read|সিম্বল_টেবিল_তৈরি|সিম্বল_টেবিল_যোগ|সিম্বল_টেবিল_খোঁজো|ফাইল_তৈরি|ফাইল_খোলো|ফাইল_লেখো|ফাইল_পড়ো|ফাইল_বন্ধ|নেটওয়ার্ক_সংযোগ|নেটওয়ার্ক_পাঠাও|নেটওয়ার্ক_পড়ো|HTTP_OK|HTTP_JSON|HTTP_NOT_FOUND|HTTP_ERROR|CLI_তৈরি|CLI_পার্স|CLI_flag_যোগ|FMT_hex|FMT_binary|FMT_itoa|FMT_সবুজ|FMT_লাল|FMT_হলুদ|FMT_লিপি_রং|HTTP_সার্ভার_চালু|HTTP_সার্ভার_তৈরি|আর্গুমেন্ট_গণনা|আর্গুমেন্ট_পড়ো|পরিবেশ_পড়ো|file_create|file_open|file_write|file_read|file_close)\\b"
         },
         {
           "name": "keyword.other.show.lipi",
-          "match": "\\b(দেখাও|ইনপুট|বাংলা_সংখ্যা|লেখা|স্ট্রিং|দৈর্ঘ্য|সিপিউ_ক্লক|show|print|echo|input|len|clock|rdtsc)\\b"
+          "match": "\\b(দেখাও|ইনপুট|বাংলা_সংখ্যা|লেখা|স্ট্রিং|দৈর্ঘ্য|সিপিউ_ক্লক|সাইজ|ব্যানার_দেখাও|সহায়তা_দেখাও|সংস্করণ_দেখাও|সংস্করণ_যাচাই|show|print|echo|input|len|clock|rdtsc|size)\\b"
         }
       ]
     },
@@ -98,7 +121,7 @@
       "patterns": [
         {
           "name": "constant.language.boolean.lipi",
-          "match": "\\b(সত্য|মিথ্যা|শূন্য|true|false|null|nil)\\b"
+          "match": "\\b(সত্য|মিথ্যা|শূন্য|LIPI_সংস্করণ|LIPI_VERSION|LIPI_সংকেতনাম|LIPI_CODENAME|HTTP_200_OK|HTTP_404_NOT_FOUND|HTTP_500_SERVER_ERROR|FLAG_TYPE_BOOL|FLAG_TYPE_STRING|FLAG_TYPE_NUMBER|FMT_RED|FMT_GREEN|FMT_YELLOW|FMT_CYAN|FMT_RESET|FMT_BOLD|FMT_LIPI_TEAL|EXIT_OK|EXIT_ERR|METHOD_GET|METHOD_POST|true|false|null|nil)\\b"
         }
       ]
     },
@@ -107,8 +130,12 @@
         {
           "match": "\\b(কাজ|fn|def|func|function)\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
           "captures": {
-            "1": { "name": "keyword.declaration.lipi" },
-            "2": { "name": "entity.name.function.lipi" }
+            "1": {
+              "name": "keyword.declaration.lipi"
+            },
+            "2": {
+              "name": "entity.name.function.lipi"
+            }
           }
         },
         {
@@ -122,8 +149,12 @@
         {
           "match": "\\b(গঠন|struct|class)\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
           "captures": {
-            "1": { "name": "keyword.declaration.lipi" },
-            "2": { "name": "entity.name.type.class.lipi" }
+            "1": {
+              "name": "keyword.declaration.lipi"
+            },
+            "2": {
+              "name": "entity.name.type.class.lipi"
+            }
           }
         }
       ]
@@ -145,6 +176,14 @@
         {
           "name": "keyword.operator.assignment.lipi",
           "match": "=|\\+=|-=|\\*=|/="
+        }
+      ]
+    },
+    "type_keywords": {
+      "patterns": [
+        {
+          "name": "storage.type.lipi",
+          "match": "\\b(সংখ্যা|দশমিক|লেখা|বুলিয়ান|তালিকা|মানচিত্র|শূন্যতা|পয়েন্টার|int|float|string|bool|list|map|void|ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\\b"
         }
       ]
     }
