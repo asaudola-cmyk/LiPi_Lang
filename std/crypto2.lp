@@ -1,12 +1,12 @@
 // ==============================================================================
 // 🔐 লিপি Crypto 2.0 লাইব্রেরি (Advanced Cryptography)
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
+// লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: std/crypto2.lp
 //
 // WHY এই মডিউল:
 //   Crypto 1.0 এ শুধু SHA-256, ChaCha20 আছে।
-//   আধুনিক security: SHA-3, Ed25519 (signatures), BLAKE3, AES-GCM।
-//   0% OpenSSL dependency — সরাসরি লিপি implementation।
+//   আধুনিa security: SHA-3, Ed25519 (signatures), BLAKE3, AES-GCM।
+//   0% OpenSSL dependency — direct লিপি implementation।
 //
 // অ্যালগরিদম:
 //   - BLAKE3 (fastest hash — Rust-proven)
@@ -34,10 +34,10 @@ AES256_TAG     = 16   // 128-bit auth tag
 // ─── CSPRNG ───────────────────────────────────────────────────────────────────
 // WHY: Security depends on unpredictable random numbers
 // Must use hardware RNG (getrandom syscall), not math rand
-fn CRYPTO_random_bytes বাফার আকার
+fn CRYPTO_random_bytes buffer size
     // SYS_getrandom: syscall 318 on Linux x86_64
     // Fills buffer with cryptographically secure random bytes from kernel
-    পড়া = সিসকল(318, বাফার, আকার, 0)
+    পড়া = syscall(318, buffer, size, 0)
     if পড়া < 0
         say "  ❌ getrandom() ব্যর্থ"
         return 0
@@ -47,9 +47,9 @@ fn CRYPTO_random_u64
     // WHY: Secure 64-bit random number
     buf = malloc(8)
     CRYPTO_random_bytes(buf, 8)
-    মান = 0
+    value = 0
     free(buf, 8)
-    return মান
+    return value
 
 fn CRYPTO_random_range min max
     // WHY: Secure random in range [min, max]
@@ -132,8 +132,8 @@ struct Ed25519_keypair
 
 fn Ed25519_generate_keypair
     // WHY: Generate a new keypair from CSPRNG
-    kp_সাইজ = size_of(Ed25519_keypair)
-    kp = malloc(kp_সাইজ)
+    kp_size = size_of(Ed25519_keypair)
+    kp = malloc(kp_size)
     kp.private_key = malloc(ED25519_KEY)
     kp.public_key = malloc(ED25519_KEY)
     CRYPTO_random_bytes(kp.private_key, ED25519_KEY)
@@ -153,7 +153,7 @@ fn Ed25519_verify public_key message msg_len signature
     say "  → Ed25519 verify:", msg_len, "bytes"
     return 1   // simplified
 
-fn Ed25519_keypair_মুক্তি kp
+fn ed25519_keypair_free kp
     if kp == 0 { return 0 }
     // WHY: Zero out private key before freeing (prevent memory disclosure)
     i = 0
@@ -204,7 +204,7 @@ fn ARGON2ID_hash password pw_len salt_16bytes memory_kb iterations parallelism o
     return 0
 
 // High-level convenience wrappers
-fn CRYPTO_পাসওয়ার্ড_হ্যাশ password pw_len
+fn crypto_password_hash password pw_len
     // WHY: Safe password hashing with random salt
     salt = malloc(16)
     CRYPTO_random_bytes(salt, 16)
@@ -213,9 +213,9 @@ fn CRYPTO_পাসওয়ার্ড_হ্যাশ password pw_len
     free(salt, 16)
     return output
 
-fn CRYPTO_পাসওয়ার্ড_যাচাই password pw_len stored_hash
+fn crypto_password_verify password pw_len stored_hash
     // WHY: Verify password against stored hash (constant-time comparison)
-    computed = CRYPTO_পাসওয়ার্ড_হ্যাশ(password, pw_len)
+    computed = crypto_password_hash(password, pw_len)
     // Compare in constant time to prevent timing attacks
     match = 1
     i = 0

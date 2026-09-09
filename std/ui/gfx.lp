@@ -10,107 +10,107 @@
 
 include "std/mem.lp"
 
-// ১. ৩২-বিট আরজিবিএ (RGBA) রঙ কম্পোজিশন
+// ১. ৩২-বিট আরজিবিএ (RGBA) color less্পোজিশন
 // WHY: Packs 8-bit Red, Green, Blue, Alpha channels into a 32-bit color word.
-ফাংশন রঙ_তৈরি(r, g, b, a)
+fn color_created(r, g, b, a)
     c = (a << 24) | (r << 16) | (g << 8) | b
     return c
 
-// ২. ইন-মেমরি ফ্রেমবাফার ক্যানভাস বরাদ্দকরণ
+// ২. ইন-mem ফ্রেমbuffer canvas বরাদ্দaরণ
 // WHY: Header stores metadata: offset 0 = width, offset 8 = height, offset 16 = total_pixels.
 // Pixel data immediately follows at offset 32. 4 bytes per pixel (BGRA 32-bit).
-ফাংশন ক্যানভাস_তৈরি(প্রস্থ, উচ্চতা)
-    মোট_পিক্সেল = প্রস্থ * উচ্চতা
-    পিক্সেল_বাইট = মোট_পিক্সেল * 4
-    মোট_বরাদ্দ = 32 + পিক্সেল_বাইট
-    বাফার = malloc(মোট_বরাদ্দ)
+fn canvas_create(width, height)
+    total_pixel = width * height
+    pixel_byte = total_pixel * 4
+    total_বরাদ্দ = 32 + pixel_byte
+    buffer = malloc(total_বরাদ্দ)
 
-    মেমরি_লেখো(বাফার, 0, প্রস্থ)
-    মেমরি_লেখো(বাফার, 8, উচ্চতা)
-    মেমরি_লেখো(বাফার, 16, মোট_পিক্সেল)
-    return বাফার
+    mem_write(buffer, 0, width)
+    mem_write(buffer, 8, height)
+    mem_write(buffer, 16, total_pixel)
+    return buffer
 
-// ৩. ক্যানভাস মেমরি অবমুক্তি
+// ৩. canvas memory অবমুa্তি
 // WHY: Returns allocated framebuffer memory pages to the Linux kernel via SYS_munmap.
-ফাংশন ক্যানভাস_মুক্তি(ক্যানভাস)
-    প্রস্থ = মেমরি_পড়ো(ক্যানভাস, 0)
-    উচ্চতা = মেমরি_পড়ো(ক্যানভাস, 8)
-    মোট_বরাদ্দ = 32 + (প্রস্থ * উচ্চতা * 4)
-    res = free(ক্যানভাস, মোট_বরাদ্দ)
+fn canvas_মুa্তি(canvas)
+    width = mem_পড়ো(canvas, 0)
+    height = mem_পড়ো(canvas, 8)
+    total_বরাদ্দ = 32 + (width * height * 4)
+    res = free(canvas, total_বরাদ্দ)
     return res
 
-// ৪. ক্যানভাস ব্যাকগ্রাউন্ড ভরাট বা ক্লিয়ার
+// ৪. canvas ব্যাaগ্রাউন্ড ভরাট বা a্লিয়ার
 // WHY: Sets all pixels in the canvas to the specified 32-bit color.
-ফাংশন ক্যানভাস_ক্লিয়ার(ক্যানভাস, রঙ)
-    মোট_পিক্সেল = মেমরি_পড়ো(ক্যানভাস, 16)
-    b = রঙ & 255
-    g = (রঙ >> 8) & 255
-    r = (রঙ >> 16) & 255
-    a = (রঙ >> 24) & 255
+fn canvas_a্লিয়ার(canvas, color)
+    total_pixel = mem_পড়ো(canvas, 16)
+    b = color & 255
+    g = (color >> 8) & 255
+    r = (color >> 16) & 255
+    a = (color >> 24) & 255
 
     i = 0
-    while i < মোট_পিক্সেল
+    while i < total_pixel
         off = 32 + (i * 4)
-        মেমরি_বাইট_লেখো(ক্যানভাস, off + 0, b)
-        মেমরি_বাইট_লেখো(ক্যানভাস, off + 1, g)
-        মেমরি_বাইট_লেখো(ক্যানভাস, off + 2, r)
-        মেমরি_বাইট_লেখো(ক্যানভাস, off + 3, a)
+        mem_write_byte(canvas, off + 0, b)
+        mem_write_byte(canvas, off + 1, g)
+        mem_write_byte(canvas, off + 2, r)
+        mem_write_byte(canvas, off + 3, a)
         i = i + 1
 
-// ৫. বাউন্ডস-চেকড পিক্সেল অঙ্কন
+// ৫. বাউন্ডস-চেaড pixel অঙ্aন
 // WHY: Validates coordinate boundaries against width and height before writing pixel memory.
-ফাংশন পিক্সেল_আঁকো(ক্যানভাস, x, y, রঙ)
-    প্রস্থ = মেমরি_পড়ো(ক্যানভাস, 0)
-    উচ্চতা = মেমরি_পড়ো(ক্যানভাস, 8)
+fn pixel_আঁaো(canvas, x, y, color)
+    width = mem_পড়ো(canvas, 0)
+    height = mem_পড়ো(canvas, 8)
 
     if x >= 0
-        if x < প্রস্থ
+        if x < width
             if y >= 0
-                if y < উচ্চতা
-                    off = 32 + ((y * প্রস্থ + x) * 4)
-                    b = রঙ & 255
-                    g = (রঙ >> 8) & 255
-                    r = (রঙ >> 16) & 255
-                    a = (রঙ >> 24) & 255
+                if y < height
+                    off = 32 + ((y * width + x) * 4)
+                    b = color & 255
+                    g = (color >> 8) & 255
+                    r = (color >> 16) & 255
+                    a = (color >> 24) & 255
 
-                    মেমরি_বাইট_লেখো(ক্যানভাস, off + 0, b)
-                    মেমরি_বাইট_লেখো(ক্যানভাস, off + 1, g)
-                    মেমরি_বাইট_লেখো(ক্যানভাস, off + 2, r)
-                    মেমরি_বাইট_লেখো(ক্যানভাস, off + 3, a)
+                    mem_write_byte(canvas, off + 0, b)
+                    mem_write_byte(canvas, off + 1, g)
+                    mem_write_byte(canvas, off + 2, r)
+                    mem_write_byte(canvas, off + 3, a)
 
-// ৬. বাউন্ডস-চেকড পিক্সেল রিড
+// ৬. বাউন্ডস-চেaড pixel রিড
 // WHY: Reads raw 32-bit pixel value at (x, y) coordinates for testing and frame inspection.
-ফাংশন পিক্সেল_পড়ো(ক্যানভাস, x, y)
-    প্রস্থ = মেমরি_পড়ো(ক্যানভাস, 0)
-    উচ্চতা = মেমরি_পড়ো(ক্যানভাস, 8)
+fn pixel_পড়ো(canvas, x, y)
+    width = mem_পড়ো(canvas, 0)
+    height = mem_পড়ো(canvas, 8)
 
     if x >= 0
-        if x < প্রস্থ
+        if x < width
             if y >= 0
-                if y < উচ্চতা
-                    off = 32 + ((y * প্রস্থ + x) * 4)
-                    b = মেমরি_বাইট_পড়ো(ক্যানভাস, off + 0)
-                    g = মেমরি_বাইট_পড়ো(ক্যানভাস, off + 1)
-                    r = মেমরি_বাইট_পড়ো(ক্যানভাস, off + 2)
-                    a = মেমরি_বাইট_পড়ো(ক্যানভাস, off + 3)
+                if y < height
+                    off = 32 + ((y * width + x) * 4)
+                    b = mem_byte_পড়ো(canvas, off + 0)
+                    g = mem_byte_পড়ো(canvas, off + 1)
+                    r = mem_byte_পড়ো(canvas, off + 2)
+                    a = mem_byte_পড়ো(canvas, off + 3)
                     val = (a << 24) | (r << 16) | (g << 8) | b
                     return val
     return 0
 
-// ৭. আয়তক্ষেত্র ভরাট অঙ্কন (Filled Rectangle)
+// ৭. আয়তa্ষেত্র ভরাট অঙ্aন (Filled Rectangle)
 // WHY: Fills rectangular bounding box with solid color using scanlines. Exactly 6 parameters.
-ফাংশন আয়তক্ষেত্র_আঁকো(ক্যানভাস, rx, ry, rw, rh, রঙ)
+fn আয়তa্ষেত্র_আঁaো(canvas, rx, ry, rw, rh, color)
     py = ry
     while py < (ry + rh)
         px = rx
         while px < (rx + rw)
-            পিক্সেল_আঁকো(ক্যানভাস, px, py, রঙ)
+            pixel_আঁaো(canvas, px, py, color)
             px = px + 1
         py = py + 1
 
-// ৮.১ অনুভূমিক লাইন ড্রয়িং (Horizontal Line)
+// ৮.১ অনুভূমিa লাইন ড্রয়িং (Horizontal Line)
 // WHY: Optimized single-axis scanline rasterization. Exactly 5 parameters.
-ফাংশন রেখা_অনুভূমিক_আঁকো(ক্যানভাস, x0, y, x1, রঙ)
+fn রেbা_অনুভূমিa_আঁaো(canvas, x0, y, x1, color)
     start_x = x0
     end_x = x1
     if start_x > end_x
@@ -118,12 +118,12 @@ include "std/mem.lp"
         end_x = x0
     cur = start_x
     while cur <= end_x
-        পিক্সেল_আঁকো(ক্যানভাস, cur, y, রঙ)
+        pixel_আঁaো(canvas, cur, y, color)
         cur = cur + 1
 
 // ৮.২ উলম্ব লাইন ড্রয়িং (Vertical Line)
 // WHY: Optimized single-axis vertical scanline rasterization. Exactly 5 parameters.
-ফাংশন রেখা_উলম্ব_আঁকো(ক্যানভাস, x, y0, y1, রঙ)
+fn রেbা_উলম্ব_আঁaো(canvas, x, y0, y1, color)
     start_y = y0
     end_y = y1
     if start_y > end_y
@@ -131,17 +131,17 @@ include "std/mem.lp"
         end_y = y0
     cur = start_y
     while cur <= end_y
-        পিক্সেল_আঁকো(ক্যানভাস, x, cur, রঙ)
+        pixel_আঁaো(canvas, x, cur, color)
         cur = cur + 1
 
 // ৮.৩ ডায়াগনাল ও সাধারণ লাইন ড্রয়িং (Diagonal & General Raycast Line)
 // WHY: Interpolates pixels from (x0, y0) to (x1, y1) safely without division or branch divergence.
-ফাংশন রেখা_আঁকো(ক্যানভাস, x0, y0, x1, y1, রঙ)
+fn রেbা_আঁaো(canvas, x0, y0, x1, y1, color)
     if y0 == y1
-        রেখা_অনুভূমিক_আঁকো(ক্যানভাস, x0, y0, x1, রঙ)
+        রেbা_অনুভূমিa_আঁaো(canvas, x0, y0, x1, color)
         return 0
     if x0 == x1
-        রেখা_উলম্ব_আঁকো(ক্যানভাস, x0, y0, x1, রঙ)
+        রেbা_উলম্ব_আঁaো(canvas, x0, y0, x1, color)
         return 0
 
     cx = x0
@@ -153,33 +153,33 @@ include "std/mem.lp"
     if y0 > y1
         sy = 0 - 1
 
-    চলমান = 1
-    while চলমান == 1
-        পিক্সেল_আঁকো(ক্যানভাস, cx, cy, রঙ)
+    চলvalue = 1
+    while চলvalue == 1
+        pixel_আঁaো(canvas, cx, cy, color)
         if cx == x1
-            চলমান = 0
+            চলvalue = 0
         if cy == y1
-            চলমান = 0
+            চলvalue = 0
         cx = cx + sx
         cy = cy + sy
     return 0
 
-// ৯. মিডপয়েন্ট সার্কেল অ্যালগরিদম (Midpoint Integer Circle Algorithm)
+// ৯. মিডপয়েন্ট সার্aেল অ্যালগরিদম (Midpoint Integer Circle Algorithm)
 // WHY: 8-way symmetric circular rasterization around center (cx, cy) with radius r. Exactly 5 parameters.
-ফাংশন বৃত্ত_আঁকো(ক্যানভাস, cx, cy, r, রঙ)
+fn বৃত্ত_আঁaো(canvas, cx, cy, r, color)
     x = 0
     y = r
     d = 3 - (2 * r)
 
     while y >= x
-        পিক্সেল_আঁকো(ক্যানভাস, cx + x, cy + y, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx - x, cy + y, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx + x, cy - y, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx - x, cy - y, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx + y, cy + x, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx - y, cy + x, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx + y, cy - x, রঙ)
-        পিক্সেল_আঁকো(ক্যানভাস, cx - y, cy - x, রঙ)
+        pixel_আঁaো(canvas, cx + x, cy + y, color)
+        pixel_আঁaো(canvas, cx - x, cy + y, color)
+        pixel_আঁaো(canvas, cx + x, cy - y, color)
+        pixel_আঁaো(canvas, cx - x, cy - y, color)
+        pixel_আঁaো(canvas, cx + y, cy + x, color)
+        pixel_আঁaো(canvas, cx - y, cy + x, color)
+        pixel_আঁaো(canvas, cx + y, cy - x, color)
+        pixel_আঁaো(canvas, cx - y, cy - x, color)
 
         if d < 0
             d = d + (4 * x) + 6
@@ -188,117 +188,117 @@ include "std/mem.lp"
             y = y - 1
         x = x + 1
 
-// ১০. স্ট্যান্ডার্ড ৫৪-বাইট বিএমপি (BMP) ইমেজ এক্সপোর্ট
+// ১০. স্ট্যান্ডার্ড ৫৪-byte বিএমপি (BMP) ইমেজ এa্সport
 // WHY: Serializes canvas into Windows Bitmap (BMP 32-bit BGRA uncompressed) file
 // using direct Linux SYS_open, SYS_write, SYS_close. Zero dependencies. Exactly 2 parameters.
-ফাংশন বিএমপি_সংরক্ষণ(ক্যানভাস, ফাইলপাথ)
-    প্রস্থ = মেমরি_পড়ো(ক্যানভাস, 0)
-    উচ্চতা = মেমরি_পড়ো(ক্যানভাস, 8)
+fn বিএমপি_সংরa্ষণ(canvas, fileপাথ)
+    width = mem_পড়ো(canvas, 0)
+    height = mem_পড়ো(canvas, 8)
 
-    // ফাইল ওপেন: O_WRONLY(1) | O_CREAT(64) | O_TRUNC(512) = 577, Mode: 0644 = 420
-    fd = সিসকল(2, ফাইলপাথ, 577, 420, 0, 0, 0)
+    // file ওপেন: O_WRONLY(1) | O_CREAT(64) | O_TRUNC(512) = 577, Mode: 0644 = 420
+    fd = syscall(2, fileপাথ, 577, 420, 0, 0, 0)
     if fd < 0
         return -1
 
-    হেডার = malloc(64)
-    পিক্সেল_সাইজ = প্রস্থ * উচ্চতা * 4
-    মোট_ফাইল_সাইজ = 54 + পিক্সেল_সাইজ
+    header = malloc(64)
+    pixel_size = width * height * 4
+    total_file_size = 54 + pixel_size
 
     // [1] BMP Header (14 bytes)
-    মেমরি_বাইট_লেখো(হেডার, 0, 66)  // 'B'
-    মেমরি_বাইট_লেখো(হেডার, 1, 77)  // 'M'
+    mem_write_byte(header, 0, 66)  // 'B'
+    mem_write_byte(header, 1, 77)  // 'M'
 
-    // মোট ফাইল সাইজ (বাইট ২..৫ লিটল-এন্ডিয়ান)
-    মেমরি_বাইট_লেখো(হেডার, 2, মোট_ফাইল_সাইজ & 255)
-    মেমরি_বাইট_লেখো(হেডার, 3, (মোট_ফাইল_সাইজ >> 8) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 4, (মোট_ফাইল_সাইজ >> 16) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 5, (মোট_ফাইল_সাইজ >> 24) & 255)
+    // total file size (byte ২..৫ লিটল-এন্ডিয়ান)
+    mem_write_byte(header, 2, total_file_size & 255)
+    mem_write_byte(header, 3, (total_file_size >> 8) & 255)
+    mem_write_byte(header, 4, (total_file_size >> 16) & 255)
+    mem_write_byte(header, 5, (total_file_size >> 24) & 255)
 
-    // রিজার্ভড (বাইট ৬..৯: ০)
-    মেমরি_বাইট_লেখো(হেডার, 6, 0)
-    মেমরি_বাইট_লেখো(হেডার, 7, 0)
-    মেমরি_বাইট_লেখো(হেডার, 8, 0)
-    মেমরি_বাইট_লেখো(হেডার, 9, 0)
+    // রিজার্ভড (byte ৬..৯: ০)
+    mem_write_byte(header, 6, 0)
+    mem_write_byte(header, 7, 0)
+    mem_write_byte(header, 8, 0)
+    mem_write_byte(header, 9, 0)
 
-    // পিক্সেল অফসেট (বাইট ১০..১৩: ৫৪)
-    মেমরি_বাইট_লেখো(হেডার, 10, 54)
-    মেমরি_বাইট_লেখো(হেডার, 11, 0)
-    মেমরি_বাইট_লেখো(হেডার, 12, 0)
-    মেমরি_বাইট_লেখো(হেডার, 13, 0)
+    // pixel offset (byte ১০..১৩: ৫৪)
+    mem_write_byte(header, 10, 54)
+    mem_write_byte(header, 11, 0)
+    mem_write_byte(header, 12, 0)
+    mem_write_byte(header, 13, 0)
 
     // [2] DIB Header (BITMAPINFOHEADER: 40 bytes)
-    মেমরি_বাইট_লেখো(হেডার, 14, 40) // হেডার size_of
-    মেমরি_বাইট_লেখো(হেডার, 15, 0)
-    মেমরি_বাইট_লেখো(হেডার, 16, 0)
-    মেমরি_বাইট_লেখো(হেডার, 17, 0)
+    mem_write_byte(header, 14, 40) // header size_of
+    mem_write_byte(header, 15, 0)
+    mem_write_byte(header, 16, 0)
+    mem_write_byte(header, 17, 0)
 
-    // প্রস্থ (বাইট ১৮..২১)
-    মেমরি_বাইট_লেখো(হেডার, 18, প্রস্থ & 255)
-    মেমরি_বাইট_লেখো(হেডার, 19, (প্রস্থ >> 8) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 20, (প্রস্থ >> 16) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 21, (প্রস্থ >> 24) & 255)
+    // width (byte ১৮..২১)
+    mem_write_byte(header, 18, width & 255)
+    mem_write_byte(header, 19, (width >> 8) & 255)
+    mem_write_byte(header, 20, (width >> 16) & 255)
+    mem_write_byte(header, 21, (width >> 24) & 255)
 
-    // উচ্চতা (বাইট ২২..২৫)
-    মেমরি_বাইট_লেখো(হেডার, 22, উচ্চতা & 255)
-    মেমরি_বাইট_লেখো(হেডার, 23, (উচ্চতা >> 8) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 24, (উচ্চতা >> 16) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 25, (উচ্চতা >> 24) & 255)
+    // height (byte ২২..২৫)
+    mem_write_byte(header, 22, height & 255)
+    mem_write_byte(header, 23, (height >> 8) & 255)
+    mem_write_byte(header, 24, (height >> 16) & 255)
+    mem_write_byte(header, 25, (height >> 24) & 255)
 
-    // কালার প্লেন (বাইট ২৬..২৭: ১)
-    মেমরি_বাইট_লেখো(হেডার, 26, 1)
-    মেমরি_বাইট_লেখো(হেডার, 27, 0)
+    // aালার প্লেন (byte ২৬..২৭: ১)
+    mem_write_byte(header, 26, 1)
+    mem_write_byte(header, 27, 0)
 
-    // বিট পার পিক্সেল (বাইট ২৮..২৯: ৩২ bpp)
-    মেমরি_বাইট_লেখো(হেডার, 28, 32)
-    মেমরি_বাইট_লেখো(হেডার, 29, 0)
+    // bit পার pixel (byte ২৮..২৯: ৩২ bpp)
+    mem_write_byte(header, 28, 32)
+    mem_write_byte(header, 29, 0)
 
-    // কম্প্রেশন মেথড (বাইট ৩০..৩৩: ০ = BI_RGB)
-    মেমরি_বাইট_লেখো(হেডার, 30, 0)
-    মেমরি_বাইট_লেখো(হেডার, 31, 0)
-    মেমরি_বাইট_লেখো(হেডার, 32, 0)
-    মেমরি_বাইট_লেখো(হেডার, 33, 0)
+    // less্প্রেশন মেথড (byte ৩০..৩৩: ০ = BI_RGB)
+    mem_write_byte(header, 30, 0)
+    mem_write_byte(header, 31, 0)
+    mem_write_byte(header, 32, 0)
+    mem_write_byte(header, 33, 0)
 
-    // ইমেজ ডেটা সাইজ (বাইট ৩৪..৩৭)
-    মেমরি_বাইট_লেখো(হেডার, 34, পিক্সেল_সাইজ & 255)
-    মেমরি_বাইট_লেখো(হেডার, 35, (পিক্সেল_সাইজ >> 8) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 36, (পিক্সেল_সাইজ >> 16) & 255)
-    মেমরি_বাইট_লেখো(হেডার, 37, (পিক্সেল_সাইজ >> 24) & 255)
+    // ইমেজ data size (byte ৩৪..৩৭)
+    mem_write_byte(header, 34, pixel_size & 255)
+    mem_write_byte(header, 35, (pixel_size >> 8) & 255)
+    mem_write_byte(header, 36, (pixel_size >> 16) & 255)
+    mem_write_byte(header, 37, (pixel_size >> 24) & 255)
 
-    // অনুভূমিক রেজোলিউশন (বাইট ৩৮..৪১: ২৮৩৫ ppm)
-    মেমরি_বাইট_লেখো(হেডার, 38, 0x13)
-    মেমরি_বাইট_লেখো(হেডার, 39, 0x0b)
-    মেমরি_বাইট_লেখো(হেডার, 40, 0)
-    মেমরি_বাইট_লেখো(হেডার, 41, 0)
+    // অনুভূমিa রেজোলিউশন (byte ৩৮..৪১: ২৮৩৫ ppm)
+    mem_write_byte(header, 38, 0x13)
+    mem_write_byte(header, 39, 0x0b)
+    mem_write_byte(header, 40, 0)
+    mem_write_byte(header, 41, 0)
 
-    // উলম্ব রেজোলিউশন (বাইট ৪২..৪৫: ২৮৩৫ ppm)
-    মেমরি_বাইট_লেখো(হেডার, 42, 0x13)
-    মেমরি_বাইট_লেখো(হেডার, 43, 0x0b)
-    মেমরি_বাইট_লেখো(হেডার, 44, 0)
-    মেমরি_বাইট_লেখো(হেডার, 45, 0)
+    // উলম্ব রেজোলিউশন (byte ৪২..৪৫: ২৮৩৫ ppm)
+    mem_write_byte(header, 42, 0x13)
+    mem_write_byte(header, 43, 0x0b)
+    mem_write_byte(header, 44, 0)
+    mem_write_byte(header, 45, 0)
 
-    // প্যালেট ও কালারস (বাইট ৪৬..৫৩: ০)
-    মেমরি_বাইট_লেখো(হেডার, 46, 0)
-    মেমরি_বাইট_লেখো(হেডার, 47, 0)
-    মেমরি_বাইট_লেখো(হেডার, 48, 0)
-    মেমরি_বাইট_লেখো(হেডার, 49, 0)
-    মেমরি_বাইট_লেখো(হেডার, 50, 0)
-    মেমরি_বাইট_লেখো(হেডার, 51, 0)
-    মেমরি_বাইট_লেখো(হেডার, 52, 0)
-    মেমরি_বাইট_লেখো(হেডার, 53, 0)
+    // প্যালেট ও aালারস (byte ৪৬..৫৩: ০)
+    mem_write_byte(header, 46, 0)
+    mem_write_byte(header, 47, 0)
+    mem_write_byte(header, 48, 0)
+    mem_write_byte(header, 49, 0)
+    mem_write_byte(header, 50, 0)
+    mem_write_byte(header, 51, 0)
+    mem_write_byte(header, 52, 0)
+    mem_write_byte(header, 53, 0)
 
-    // হেডার রাইট করা (৫৪ বাইট)
-    সিসকল(1, fd, হেডার, 54, 0, 0, 0)
+    // header রাইট aরা (৫৪ byte)
+    syscall(1, fd, header, 54, 0, 0, 0)
 
-    // পিক্সেল সারিগুলো নিচ থেকে উপরে (Bottom-up scanlines) রাইট করা
-    রো = উচ্চতা - 1
-    রো_বাইট = প্রস্থ * 4
+    // pixel rowগুলো নিচ থেaে উপরে (Bottom-up scanlines) রাইট aরা
+    রো = height - 1
+    রো_byte = width * 4
     while রো >= 0
-        রো_অফসেট = 32 + (রো * রো_বাইট)
-        রো_পয়েন্টার = ক্যানভাস + রো_অফসেট
-        সিসকল(1, fd, রো_পয়েন্টার, রো_বাইট, 0, 0, 0)
+        রো_offset = 32 + (রো * রো_byte)
+        রো_পয়েন্টার = canvas + রো_offset
+        syscall(1, fd, রো_পয়েন্টার, রো_byte, 0, 0, 0)
         রো = রো - 1
 
-    // ফাইল ও মেমরি ক্লোজ করা
-    সিসকল(3, fd, 0, 0, 0, 0, 0)
-    free(হেডার, 64)
-    return মোট_ফাইল_সাইজ
+    // file ও memory a্লোজ aরা
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    free(header, 64)
+    return total_file_size

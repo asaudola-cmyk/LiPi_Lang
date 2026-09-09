@@ -1,75 +1,75 @@
-// 📜 লিপি খাঁটি সিমডি (SIMD) ভেক্টর গণিত ও এআই ম্যাট্রিক্স ইঞ্জিন (Pure Lipi SIMD & Matrix AI Engine)
-// 🏛️ সরাসরি x86_64 SSE 128-বিট ভেক্টর ইনস্ট্রাকশন ও সিলিকন প্যারালেলিজম (Hardware Silicon Vector Ops)
-// ০% Libc, ০% BLAS, ০% NumPy নির্ভরতা — সরাসরি সিপিউ হার্ডওয়্যার প্যারালেল ভেক্টর এক্সিকিউশন
+// 📜 লিপি bাঁটি সিমডি (SIMD) ভেa্টর গণিত ও এআই matrixa্স ইঞ্জিন (Pure Lipi SIMD & Matrix AI Engine)
+// 🏛️ direct x86_64 SSE 128-বিট ভেa্টর ইনস্ট্রাaশন ও সিলিaন প্যারালেলিজম (Hardware Silicon Vector Ops)
+// ০% Libc, ০% BLAS, ০% NumPy নির্ভরতা — direct সিপিউ rate্ডওয়্যার প্যারালেল ভেa্টর এa্সিaিউশন
 //
-// WHY: নিউরাল নেটওয়ার্ক, লিনিয়ার অ্যালজেব্রা এবং আধুনিক এআই ম্যাট্রিক্স গণনার জন্য
-// সরাসরি সিলিকন প্রসেসরে একক ক্লক সাইকেলে ১২৮-বিট ভেক্টর গণনা নিশ্চিত করা।
+// WHY: নিউরাল নেটওয়ার্a, লিনিয়ার অ্যালজেব্রা এবং আধুনিa এআই matrixa্স countর জন্য
+// direct সিলিaন প্রসেসরে এaa a্লa সাইaেলে ১২৮-বিট ভেa্টর count নিশ্চিত aরা।
 
-// ১. ১২৮-বিট ভেক্টর যোগ (Hardware SIMD 128-bit Vector Addition via SSE2 paddq)
-// WHY: মেমরিতে পাশাপাশি থাকা দুটি ৬৪-বিট পূর্ণসংখ্যাকে একই মুহূর্তে সমান্তরালে যোগ করা।
-fn ভেক্টর_যোগ গন্তব্য উৎস
-    ভেক্টর_যোগ_128(গন্তব্য, উৎস)
-    return গন্তব্য
+// ১. ১২৮-বিট ভেa্টর add (Hardware SIMD 128-bit Vector Addition via SSE2 paddq)
+// WHY: memতে পাশাপাশি থাaা দুটি ৬৪-বিট integeraে এaই মুহূর্তে সvalue্তরালে add aরা।
+fn ভেa্টর_add dest src
+    ভেa্টর_add_128(dest, src)
+    return dest
 
-// ২. ভেক্টর ডট গুণন (Vector Dot Product: sum of element-wise multiplication)
-// WHY: নিউরাল নেটওয়ার্কের লেয়ারে ইনপুট ভেক্টর ও ওয়েট ভেক্টরের সামঞ্জস্য নির্ণয় করা।
-fn ভেক্টর_ডট_গুণন উৎস1 উৎস2 উপাদান_সংখ্যা
-    মোট_যোগফল = 0
-    সূচক = 0
-    while সূচক < উপাদান_সংখ্যা
-        অফসেট = সূচক * 8
-        মান1 = মেমরি_পড়ো(উৎস1, অফসেট)
-        মান2 = মেমরি_পড়ো(উৎস2, অফসেট)
-        গুণফল = মান1 * মান2
-        মোট_যোগফল = মোট_যোগফল + গুণফল
-        সূচক = সূচক + 1
-    return মোট_যোগফল
+// ২. ভেa্টর ডট multiplyন (Vector Dot Product: sum of element-wise multiplication)
+// WHY: নিউরাল নেটওয়ার্aের লেয়ারে input ভেa্টর ও ওয়েট ভেa্টরের সামঞ্জস্য নির্ণয় aরা।
+fn ভেa্টর_ডট_multiplyন src1 src2 উপাদান_num
+    total_sum = 0
+    index = 0
+    while index < উপাদান_num
+        offset = index * 8
+        value1 = mem_পড়ো(src1, offset)
+        value2 = mem_পড়ো(src2, offset)
+        product = value1 * value2
+        total_sum = total_sum + product
+        index = index + 1
+    return total_sum
 
-// ৩. ২x২ ম্যাট্রিক্স গুণন (2x2 Hardware Silicon Matrix Multiplication: C = A * B)
-// WHY: প্রতিটি ম্যাট্রিক্স ৪টি ৬৪-বিট পূর্ণসংখ্যার মেমরি ব্লক (৩২ বাইট)।
+// ৩. ২x২ matrixa্স multiplyন (2x2 Hardware Silicon Matrix Multiplication: C = A * B)
+// WHY: each matrixa্স ৪টি ৬৪-বিট integerর memory ব্লa (৩২ byte)।
 // A = [A00, A01, A10, A11], B = [B00, B01, B10, B11]
 // C00 = A00*B00 + A01*B10
 // C01 = A00*B01 + A01*B11
 // C10 = A10*B00 + A11*B10
 // C11 = A10*B01 + A11*B11
-fn ম্যাট্রিক্স_গুণন_2x2 ম্যাট্রিক্স_ক ম্যাট্রিক্স_খ ফলাফল
-    এ00 = মেমরি_পড়ো(ম্যাট্রিক্স_ক, 0)
-    এ01 = মেমরি_পড়ো(ম্যাট্রিক্স_ক, 8)
-    এ10 = মেমরি_পড়ো(ম্যাট্রিক্স_ক, 16)
-    এ11 = মেমরি_পড়ো(ম্যাট্রিক্স_ক, 24)
+fn matrixa্স_multiplyন_2x2 matrixa্স_a matrixa্স_b result
+    এ00 = mem_পড়ো(matrixa্স_a, 0)
+    এ01 = mem_পড়ো(matrixa্স_a, 8)
+    এ10 = mem_পড়ো(matrixa্স_a, 16)
+    এ11 = mem_পড়ো(matrixa্স_a, 24)
 
-    বি00 = মেমরি_পড়ো(ম্যাট্রিক্স_খ, 0)
-    বি01 = মেমরি_পড়ো(ম্যাট্রিক্স_খ, 8)
-    বি10 = মেমরি_পড়ো(ম্যাট্রিক্স_খ, 16)
-    বি11 = মেমরি_পড়ো(ম্যাট্রিক্স_খ, 24)
+    বি00 = mem_পড়ো(matrixa্স_b, 0)
+    বি01 = mem_পড়ো(matrixa্স_b, 8)
+    বি10 = mem_পড়ো(matrixa্স_b, 16)
+    বি11 = mem_পড়ো(matrixa্স_b, 24)
 
     সি00 = (এ00 * বি00) + (এ01 * বি10)
     সি01 = (এ00 * বি01) + (এ01 * বি11)
     সি10 = (এ10 * বি00) + (এ11 * বি10)
     সি11 = (এ10 * বি01) + (এ11 * বি11)
 
-    মেমরি_লেখো(ফলাফল, 0, সি00)
-    মেমরি_লেখো(ফলাফল, 8, সি01)
-    মেমরি_লেখো(ফলাফল, 16, সি10)
-    মেমরি_লেখো(ফলাফল, 24, সি11)
+    mem_write(result, 0, সি00)
+    mem_write(result, 8, সি01)
+    mem_write(result, 16, সি10)
+    mem_write(result, 24, সি11)
 
-    return ফলাফল
+    return result
 
-// ৪. এআই রেলু অ্যাক্টিভেশন ফাংশন (Rectified Linear Unit Activation: max(0, x))
-// WHY: আধুনিক ডিপ লার্নিং মডেলে নন-লিনিয়ারিটি আনয়ন ও নেতিবাচক মানকে শূন্যে রূপান্তর।
-fn রেলু_অ্যাক্টিভেশন মান
-    if মান < 0
+// ৪. এআই রেলু অ্যাa্টিভেশন ফাংশন (Rectified Linear Unit Activation: max(0, x))
+// WHY: আধুনিa ডিপ লার্নিং মডেলে নন-লিনিয়ারিটি আনয়ন ও নেতিবাচa valueaে শূন্যে রূপান্তর।
+fn রেলু_অ্যাa্টিভেশন value
+    if value < 0
         return 0
-    return মান
+    return value
 
-// ৫. ভেক্টরের ওপর ইন-প্লেস রেলু অ্যাক্টিভেশন (In-Place Vector ReLU)
-// WHY: পুরো ভেক্টরের প্রতিটি উপাদানে একই সাথে রেলু ফিল্টার প্রয়োগ করা।
-fn ভেক্টর_রেলু ঠিকানা উপাদান_সংখ্যা
-    সূচক = 0
-    while সূচক < উপাদান_সংখ্যা
-        অফসেট = সূচক * 8
-        বর্তমান = মেমরি_পড়ো(ঠিকানা, অফসেট)
-        ফিল্টারকৃত = রেলু_অ্যাক্টিভেশন(বর্তমান)
-        মেমরি_লেখো(ঠিকানা, অফসেট, ফিল্টারকৃত)
-        সূচক = সূচক + 1
-    return উপাদান_সংখ্যা
+// ৫. ভেa্টরের ওপর ইন-প্লেস রেলু অ্যাa্টিভেশন (In-Place Vector ReLU)
+// WHY: পুরো ভেa্টরের each উপাদানে এaই সাথে রেলু ফিল্টার প্রয়োগ aরা।
+fn ভেa্টর_রেলু addr উপাদান_num
+    index = 0
+    while index < উপাদান_num
+        offset = index * 8
+        বর্তvalue = mem_পড়ো(addr, offset)
+        ফিল্টারaৃত = রেলু_অ্যাa্টিভেশন(বর্তvalue)
+        mem_write(addr, offset, ফিল্টারaৃত)
+        index = index + 1
+    return উপাদান_num

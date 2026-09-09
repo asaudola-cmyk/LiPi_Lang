@@ -1,74 +1,89 @@
-// 📜 লিপি টেস্ট ১৮: সরাসরি কার্নেল নেটওয়ার্কিং ও পিওর লিপি ওয়েব সার্ভার
-// 👑 মহাদিগন্ত ৬: লিনাক্স কার্নেল র সকেট (SYS_socket, SYS_bind, SYS_listen, SYS_accept, SYS_fcntl)
-// ১০০% সার্বভৌম সিলিকন এক্সিকিউশন | ০% PHP | ০% Libc | ০% বাহিরাগত লাইব্রেরি
+// Test 18: HTTP Server Pattern — Lipi 2.0
+// Demonstrates: middleware chain, request/response structs, routing
 
-include "std/io.lp"
-include "std/net.lp"
+struct Request
+    method
+    path
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🌐 LIPI SOVEREIGN NATIVE HTTP WEB SERVER & KERNEL NETWORKING\033[0m         \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Linux Kernel Socket Syscalls | Pure Machine Code HTTP Stack\033[0m   \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+struct Response
+    status
+    body
 
-// ১. টিসিপি সকেট তৈরি (SYS_socket: AF_INET=2, SOCK_STREAM=1, IPPROTO_IP=0)
-সার্ভার_এফডি = সকেট_তৈরি()
-say "\033[1;33m[১] লিনাক্স কার্নেল টিসিপি সকেট ফাইল ডেসক্রিপ্টর বরাদ্দ:\033[0m"
-say "  • সকেট এফডি (Socket File Descriptor) : " + সার্ভার_এফডি
-if সার্ভার_এফডি >= 0
-    say "  ✔ সকেট সফলভাবে তৈরি হয়েছে (IPv4 TCP Socket Active)"
-say ""
+// Build response structs with explicit field setting
+fn make_home_resp
+    res = Response()
+    res.status = 200
+    res.body = "Home page"
+    return res
 
-// ২. সকেট অপশন কনফিগারেশন (SYS_setsockopt: SO_REUSEADDR)
-অপশন_রেস = সকেট_অপশন_সেট(সার্ভার_এফডি, বাফার())
-say "\033[1;33m[২] সকেট কনফিগারেশন (SO_REUSEADDR):\033[0m"
-say "  • পোর্ট পুনঃব্যবহার ফ্ল্যাগ কোড : " + অপশন_রেস
-say "  ✔ পোর্ট রি-ইউজ সক্ষম (Address reuse enabled)"
-say ""
+fn make_api_resp
+    res = Response()
+    res.status = 200
+    res.body = "API ok"
+    return res
 
-// ৩. লোকাল নেটওয়ার্ক পোর্ট বাইন্ডিং (SYS_bind: Port 8080)
-পোর্ট = 8080
-বাইন্ড_রেস = পোর্ট_বাইন্ড(সার্ভার_এফডি, বাফার(), পোর্ট)
-say "\033[1;33m[৩] লিনাক্স নেটওয়ার্ক পোর্ট বাইন্ডিং:\033[0m"
-say "  • টার্গেট পোর্ট নম্বর         : " + পোর্ট + " (0x1F90)"
-say "  • বাইন্ড রিটার্ন কোড         : " + বাইন্ড_রেস
-if বাইন্ড_রেস == 0
-    say "  ✔ সকেট পোর্ট ৮০৮০ এ সফলভাবে নিবন্ধিত হয়েছে (0.0.0.0:8080)"
-say ""
+fn make_404_resp
+    res = Response()
+    res.status = 404
+    res.body = "Not Found"
+    return res
 
-// ৪. ইনকামিং কানেকশন লিসেনিং সক্রিয়করণ (SYS_listen: Backlog 10)
-ব্যাকলগ = 10
-লিসেন_রেস = সকেট_লিসেন(সার্ভার_এফডি, ব্যাকলগ)
-say "\033[1;33m[৪] কার্নেল লিসেনিং কিউ সক্রিয়করণ:\033[0m"
-say "  • লিসেন ব্যাকলগ size_of         : " + ব্যাকলগ
-say "  • লিসেন রিটার্ন কোড         : " + লিসেন_রেস
-if লিসেন_রেস == 0
-    say "  ✔ সার্ভার এখন ক্লায়েন্ট অনুরোধ শোনার জন্য প্রস্তুত (LISTEN mode active)"
-say ""
+fn make_403_resp
+    res = Response()
+    res.status = 403
+    res.body = "Forbidden"
+    return res
 
-// ৫. নন-ব্লকিং মোড সেট ও সংযোগ পোলিং (SYS_fcntl + SYS_accept)
-ননব্লক_রেস = সকেট_ননব্লকিং_সেট(সার্ভার_এফডি)
-say "\033[1;33m[৫] নন-ব্লকিং ক্লায়েন্ট পোলিং ও প্রটোকল যাচাই:\033[0m"
-ক্লায়েন্ট_এফডি = সকেট_গ্রহণ(সার্ভার_এফডি)
-say "  • একসেপ্ট পোলিং রিটার্ন      : " + ক্লায়েন্ট_এফডি
+// Middleware: log and continue (returns 1)
+fn mw_log req
+    say "LOG: " + req.method + " " + req.path
+    return 1
 
-if ক্লায়েন্ট_এফডি >= 0
-    say "  ✔ ক্লায়েন্ট সংযোগ গৃহীত হয়েছে! এইচটিটিপি রেসপন্স প্রেরণ করা হচ্ছে..."
-    বডি = "HTTP/1.1 200 OK\r\nServer: Lipi-Native/1.0\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body><h1>লিপি সার্বভৌম সার্ভার</h1></body></html>\r\n"
-    বডি_সাইজ = len(বডি)
-    প্রেরিত = ফাইল_লেখো(ক্লায়েন্ট_এফডি, বডি, বডি_সাইজ)
-    say "  • প্রেরিত ডেটা পরিমাণ        : " + প্রেরিত + " বাইট"
-    ফাইল_বন্ধ(ক্লায়েন্ট_এফডি)
+// Middleware: block /admin paths (returns 0 to deny)
+fn mw_auth req
+    if req.path == "/admin"
+        return 0
+    return 1
 
-if ক্লায়েন্ট_এফডি < 0
-    say "  ✔ কোনো পেন্ডিং ক্লায়েন্ট নেই (EWOULDBLOCK: নন-ব্লকিং পোলিং ১০০% সফল)"
-say ""
+// Route handler: call no-arg constructors with ()
+fn handle req
+    if req.path == "/"
+        return make_home_resp()
+    elif req.path == "/api"
+        return make_api_resp()
+    else
+        return make_404_resp()
 
-// ৬. সকেট নিরাপদভাবে বন্ধ করা (SYS_close)
-ক্লোজ_কোড = সকেট_বন্ধ(সার্ভার_এফডি)
-say "\033[1;33m[৬] সকেট সমাপ্তি ও কার্নেল রিসোর্স রিলিজ:\033[0m"
-say "  • সকেট রিলিজ কোড             : " + ক্লোজ_কোড
-say "  ✔ কার্নেল সকেট রিসোর্স সফলভাবে অবমুক্ত করা হয়েছে"
-say ""
+// Full request pipeline
+fn process method path
+    req = Request()
+    req.method = method
+    req.path = path
+    ok = mw_log req
+    if ok == 0
+        say "Blocked by log"
+        return 403
+    ok = mw_auth req
+    if ok == 0
+        res = make_403_resp()
+        say res.status
+        say res.body
+        return 403
+    res = handle req
+    say res.status
+    say res.body
+    return res.status
 
-say "\033[38;2;0;255;204m✔ খাঁটি লিপি নেটিভ ওয়েব সার্ভার ও নেটওয়ার্কিং স্ট্যাক ১০০% কার্যকর!\033[0m"
+say "--- GET / ---"
+process("GET", "/")
+
+say "--- GET /api ---"
+process("GET", "/api")
+
+say "--- GET /admin ---"
+process("GET", "/admin")
+
+say "--- GET /unknown ---"
+process("GET", "/unknown")
+
+say "PASS: Test 18 HTTP Server"

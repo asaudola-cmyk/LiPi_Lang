@@ -1,75 +1,68 @@
-// Test 49: String Formatting Library Demo
-// WHY: Printf-style formatting is essential for all real programs
-include "std/core/mem.lp"
-include "std/core/str.lp"
+// Test 49: String Formatting — Lipi 2.0 Global Standard
+// String interpolation, padding, templates
 
-fn hex_দেখাও n
-    say "hex(", n, ") = 0x..."
-    h15 = n / 16 / 16 / 16 % 16
-    h8 = n / 16 / 16 % 16
-    h4 = n / 16 % 16
-    h1 = n % 16
-    say "  nibbles:", h15, h8, h4, h1
-
-fn বাইনারি_দেখাও n
-    say "binary(", n, "):"
-    bit7 = (n / 128) % 2
-    bit6 = (n / 64) % 2
-    bit5 = (n / 32) % 2
-    bit4 = (n / 16) % 2
-    bit3 = (n / 8) % 2
-    bit2 = (n / 4) % 2
-    bit1 = (n / 2) % 2
-    bit0 = n % 2
-    say "  0b", bit7, bit6, bit5, bit4, bit3, bit2, bit1, bit0
-
-fn টেবিল_দেখাও
-    say "══════════════════════════════════════════"
-    say "  নাম           সংখ্যা    বাংলা"
-    say "══════════════════════════════════════════"
-    say "  ফিবোনাচি(১)    ১         ", 1
-    say "  ফিবোনাচি(৫)    ৫         ", 5
-    say "  ফিবোনাচি(১০)   ৫৫        ", 55
-    say "  ফিবোনাচি(১৫)   ৬১০       ", 610
-    say "  ফিবোনাচি(২০)   ৬৭৬৫      ", 6765
-    say "══════════════════════════════════════════"
-
-fn progress_দেখাও done total
-    pct = done * 100 / total
-    bars = done * 20 / total
-    say "  Progress:", done, "/", total, "(", pct, "%)"
-    say "  [", bars, "/20 filled]"
-
-fn প্রধান
-    say "══════════════════════════════════════"
-    say "Test 49: String Formatting"
-    say "══════════════════════════════════════"
-    say ""
-    say "--- Hex Formatting ---"
-    hex_দেখাও(255)
-    hex_দেখাও(65536)
-    hex_দেখাও(4194304)
-    say ""
-    say "--- Binary Formatting ---"
-    বাইনারি_দেখাও(10)
-    বাইনারি_দেখাও(42)
-    বাইনারি_দেখাও(255)
-    say ""
-    say "--- Table Formatting ---"
-    টেবিল_দেখাও()
-    say ""
-    say "--- Progress Bar ---"
-    progress_দেখাও(7, 10)
-    progress_দেখাও(15, 20)
-    progress_দেখাও(20, 20)
-    say ""
-    say "--- Bengali Number Formatting ---"
-    i = 1
-    while i <= 10
-        say "  n=", i, "→", i * i
+fn pad_left s width
+    result = ""
+    i = len s
+    while i < width
+        result = result + " "
         i = i + 1
-    say ""
-    say "✅ Test 49 পাস — String formatting fn করছে"
-    say "⚡ [লিপি প্রথম ১.০]"
-    return 0
-প্রধান()
+    return result + s
+
+fn pad_right s width
+    result = s
+    i = len s
+    while i < width
+        result = result + " "
+        i = i + 1
+    return result
+
+fn center_str s width
+    total_pad = width - len s
+    left_pad  = total_pad / 2
+    right_pad = total_pad - left_pad
+    result = ""
+    i = 0
+    while i < left_pad
+        result = result + " "
+        i = i + 1
+    result = result + s
+    i = 0
+    while i < right_pad
+        result = result + " "
+        i = i + 1
+    return result
+
+fn repeat_char c n
+    result = ""
+    i = 0
+    while i < n
+        result = result + c
+        i = i + 1
+    return result
+
+say "=== String Formatting ==="
+// String interpolation
+name = "Lipi"
+ver  = 2
+say "Welcome to {name} {ver}.0!"
+say "The answer is {42 + 0}!"
+
+// Padding
+say pad_left "42" 10
+say pad_right "hello" 10
+
+// Table formatting
+say repeat_char "-" 30
+say pad_right "Name" 15 + pad_right "Score" 10
+say repeat_char "-" 30
+say pad_right "Alice" 15 + pad_right "95" 10
+say pad_right "Bob" 15 + pad_right "87" 10
+say pad_right "Charlie" 15 + pad_right "72" 10
+say repeat_char "-" 30
+
+// Interpolation in loop
+for i in 1..5
+    say "Item {i}: value={i * i}"
+
+say "PASS: Test 49 String Formatting"

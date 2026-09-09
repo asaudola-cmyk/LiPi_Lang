@@ -6,8 +6,8 @@ greeting = "Hello, World!"
 say greeting
 
 // Unicode Bengali identifiers (variable names in Bengali, keywords English)
-শুভেচ্ছা = "স্বাগতম Lipi 2.0 এ!"
-say শুভেচ্ছা
+greeting = "স্বাগতম Lipi 2.0 এ!"
+say greeting
 
 // Arithmetic
 x = 42

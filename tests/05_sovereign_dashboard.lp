@@ -1,43 +1,32 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — পঞ্চম পাঠ (Lipi 05: Sovereign Production Dashboard)
-// এই সম্পূর্ণ অ্যাপ্লিকেশনটি কোনো ফ্রেমওয়ার্ক ছাড়া বিশুদ্ধ লিপি (.lp) ভাষায় লেখা।
-// WHY: একটি production-grade টার্মিনাল ড্যাশবোর্ড শুধু say/ দিয়ে লেখা সম্ভব।
+// Test 05: Dashboard — Lipi 2.0
+// Demonstrates: string formatting, function calls, arithmetic display
 
-include "std/io.lp"
-include "std/sys/time.lp"
+// Dashboard header
+say "=== Lipi System Dashboard ==="
+say "CPU Usage: 45%"
+say "Memory: 2.1 GB / 8 GB"
+say "Disk: 120 GB free"
+say "Network: 1.2 Gbps"
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN FULLSTACK PRODUCTION DASHBOARD                     \033[0m\033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Pure .lp Language | POSIX Storage | Real-Time Telemetry           \033[0m\033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Function to format and display a metric
+fn format_metric name value unit
+    say name + ": " + value + " " + unit
 
-// ১. সার্ভার স্টেট সিমুলেশন (শেয়ার্ড মেমরির বিকল্প)
-say "● [১/৩] সার্ভার স্টেট ইনিশিয়ালাইজেশন..."
-সার্ভার_স্ট্যাটাস = "সক্রিয় ✔"
-মোট_অনুরোধ = "৫০০০০০"
-ল্যাটেন্সি = "৩.৫ মাইক্রোসেকেন্ড"
+format_metric "Temperature" 42 "C"
+format_metric "Uptime" 99 "days"
+format_metric "Requests" 15000 "req/s"
 
-say "      স্টোরেজ মোড      : POSIX Shared Memory (/dev/shm)"
-say "      বর্তমান অবস্থা    : " + সার্ভার_স্ট্যাটাস
-say "      প্রসেস করা হয়েছে  : " + মোট_অনুরোধ + " টি রিকোয়েস্ট"
-say "      গড় এক্সিকিউশন গতি : " + ল্যাটেন্সি + " [PASS]"
-say ""
+// Compute a simple usage percentage
+fn usage_bar used total
+    percent = used * 100 / total
+    return percent
 
-// ২. ২৪-বিট ট্রু-কালার টেলিমেট্রি ড্যাশবোর্ড
-say "● [২/৩] ২৪-বিট ট্রু-কালার টার্মিনাল টেলিমেট্রি রেন্ডারিং..."
-say "      \033[32m✔ সিপিইউ হার্ডওয়্যার    ──► x86_64 AVX-512\033[0m"
-say "      \033[36m✔ লিপি JIT ইঞ্জিন      ──► Direct Silicon mmap\033[0m"
-say "      \033[33m✔ মেমরি ব্যান্ডউইথ     ──► ৪.৩৬M Ops/sec\033[0m"
-say "      \033[35m✔ PHP/JS নির্ভরতা      ──► ০% (সম্পূর্ণ বর্জিত)\033[0m"
-say ""
+cpu_percent = usage_bar 45 100
+mem_percent = usage_bar 21 80
+disk_percent = usage_bar 120 500
 
-// ৩. লাইভ সার্ভার কনফিগারেশন প্রদর্শন
-say "● [৩/৩] লিপি সার্ভার কনফিগারেশন..."
-say "      লিসেনিং পোর্ট   : 8080"
-say "      প্রোটোকল        : HTTP/1.1 Native Kernel Sockets"
-say "      SSL/TLS         : ChaCha20 Pure-Lipi Encryption"
-say "      ডেটাবেজ        : Binary NVMe Sovereign Store"
-say ""
+say "CPU %: " + cpu_percent
+say "Mem %: " + mem_percent
+say "Disk %: " + disk_percent
 
-rdtsc_cycles = cpu_clock()
-say "\033[1;32m🎉 লিপি সোভেরিন ড্যাশবোর্ড সফলভাবে কার্যক্ষম! CPU Cycles: " + rdtsc_cycles + "\033[0m"
+say "PASS: Test 05 Dashboard"

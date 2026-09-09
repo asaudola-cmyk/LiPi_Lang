@@ -1,76 +1,56 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — অষ্টম পাঠ (Lipi 08: Structs, Types & Error Handling)
-// কাস্টম স্ট্রাকচার ও এরর হ্যান্ডলিং প্রদর্শনী
-// WHY: struct = typed memory layout, error handling = safe divide with guard clauses.
+// Test 08: Structs — Lipi 2.0
+// Demonstrates: struct declaration, field access, struct as function argument
+// NOTE: Uses fn(arg1, arg2) paren syntax for 2-arg calls inside function bodies
 
-include "std/io.lp"
-include "std/mem.lp"
+struct Fraction
+    num
+    den
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  🏛️ LIPI STRUCTS, TYPES & SAFE ERROR HANDLING SYSTEM                  ║"
-say "║  ⚡ Memory Layout | Field Access | Guard Clauses | Safe Division       ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+struct Point
+    x
+    y
 
-// =============================================================================
-// ১. কাস্টম স্ট্রাকচার ডিক্লেয়ারেশন ও মেমরি বরাদ্দ
-// =============================================================================
-say "--- [১] struct (Structs) ডিক্লেয়ারেশন ও মেমরি বরাদ্দ ---"
+// Construct a Fraction with given numerator and denominator
+fn make_fraction n d
+    f = Fraction()
+    f.num = n
+    f.den = d
+    return f
 
-struct কর্মী
-    আইডি,
-    বেতন,
-    সক্রিয়
+// Add two fractions: a/b + c/d = (a*d + c*b) / (b*d)
+fn fraction_add f1 f2
+    result = Fraction()
+    result.num = f1.num * f2.den + f2.num * f1.den
+    result.den = f1.den * f2.den
+    return result
 
-কর্মী_আকার = size_of(কর্মী)
-say "কর্মী স্ট্রাকচার আকার: " + কর্মী_আকার + " বাইট (৩টি ৬৪-বিট ফিল্ড = ২৪B)"
-say ""
+// GCD using Euclidean algorithm
+fn gcd a b
+    while b != 0
+        temp = b
+        b = a % b
+        a = temp
+    return a
 
-// কর্মী ১ — মেমরি বরাদ্দ করে ফিল্ড সেট করা
-কর্মকর্তা = malloc(কর্মী_আকার)
-কর্মকর্তা.আইডি = 1001
-কর্মকর্তা.বেতন = 85000
-কর্মকর্তা.সক্রিয় = 1
+// 1/2 + 1/3 = 5/6
+// Use paren syntax inside fn body for 2-arg calls
+f1 = make_fraction(1, 2)
+f2 = make_fraction(1, 3)
+f3 = fraction_add(f1, f2)
+say f3.num
+say f3.den
 
-say "কর্মী আইডি    : " + কর্মকর্তা.আইডি
-say "মাসিক বেতন   : " + কর্মকর্তা.বেতন + " টাকা"
-say "সক্রিয় স্ট্যাটাস: " + কর্মকর্তা.সক্রিয়
+// Point struct: distance squared from origin
+p = Point()
+p.x = 3
+p.y = 4
+dist_sq = p.x * p.x + p.y * p.y
+say dist_sq
 
-// বেতন পরিবর্তন
-নতুন_বেতন = কর্মকর্তা.বেতন + 10000
-কর্মকর্তা.বেতন = নতুন_বেতন
-say "ইনক্রিমেন্টের পর বেতন: " + কর্মকর্তা.বেতন + " টাকা"
-say ""
+// GCD checks using paren syntax
+g1 = gcd(48, 18)
+say g1
+g2 = gcd(100, 75)
+say g2
 
-// =============================================================================
-// ২. নিরাপদ ভাগ ফাংশন (Guard Clause Error Handling)
-// =============================================================================
-say "--- [২] নিরাপদ ভাগ ও এরর হ্যান্ডলিং (Guard Clause) ---"
-
-fn নিরাপদ_ভাগ লব হর
-    if হর == 0
-        return -1
-    return লব / হর
-
-ফল_1 = নিরাপদ_ভাগ(100, 4)
-say "১০০ / ৪ = " + ফল_1 + " ✔"
-
-ফল_2 = নিরাপদ_ভাগ(100, 0)
-if ফল_2 == -1
-    say "১০০ / ০ = null দ্বারা ভাগ নিষিদ্ধ! ✔ ধরা পড়েছে"
-
-ফল_3 = নিরাপদ_ভাগ(256, 16)
-say "২৫৬ / ১৬ = " + ফল_3 + " ✔"
-say ""
-
-// =============================================================================
-// ৩. টাইপ অ্যানোটেশন (Type Annotations) প্রদর্শন
-// =============================================================================
-say "--- [৩] টাইপ অ্যানোটেশন (Gradual Type System) ---"
-ফ্রেমওয়ার্ক = "ওশিম ও লিপি সার্বভৌম সিলিকন"
-সংস্করণ = 3
-উন্মুক্ত = 1
-say "ফ্রেমওয়ার্ক : " + ফ্রেমওয়ার্ক
-say "ভার্সন      : " + সংস্করণ + ".০"
-say "ওপেন সোর্স : true"
-say ""
-say "✅ লিপি স্ট্রাকচার ও এরর হ্যান্ডলিং সিস্টেম সফলভাবে সম্পন্ন!"
+say "PASS: Test 08 Structs"

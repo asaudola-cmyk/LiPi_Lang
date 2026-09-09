@@ -1,75 +1,114 @@
-// 📜 লিপি স্ট্যান্ডার্ড ম্যাথমেটিক্যাল লাইব্রেরি (Pure Lipi Standard Math Library)
-// 🏛️ স্বয়ংসম্পূর্ণ, ডিপেন্ডেন্সিমুক্ত এবং সিলিকন সিপিউ-তে সরাসরি এক্সিকিউটেবল গণিত ইঞ্জিন
+// std/math.lp — Lipi 2.0 Standard Math Library
+// Global Standard | Unicode-ready
+// Usage: include "std/math"
 
-// ১. পরম মান নির্ণয় (Absolute value: |x|)
-// নেতিবাচক সংখ্যাকে ধনাত্মক করে, ধনাত্মক সংখ্যা অপরিবর্তিত থাকে
-fn পরম_মান সংখ্যা
-    if সংখ্যা < 0
-        return 0 - সংখ্যা
-    return সংখ্যা
+// Absolute value
+fn abs x
+    if x < 0
+        return x * -1
+    return x
 
-// ২. ঘাত বা পাওয়ার নির্ণয় (Exponentiation: base^exp)
-// লুপের মাধ্যমে ভিত্তি সংখ্যাকে ঘাত সংখ্যক বার গুণ করে মান নির্ণয় করে
-fn পাওয়ার ভিত্তি ঘাত
-    ফল = 1
-    i = 0
-    while i < ঘাত
-        ফল = ফল * ভিত্তি
-        i = i + 1
-    return ফল
-
-// ৩. গরিষ্ঠ সাধারণ গুণনীয়ক বা গসাগু (Greatest Common Divisor - Euclidean Algorithm)
-// ইউক্লিডীয় অ্যালগরিদমের মাধ্যমে দুটি সংখ্যার গসাগু নির্ণয়
-fn গসাগু ক খ
-    while খ != 0
-        ভাগশেষ = ক % খ
-        ক = খ
-        খ = ভাগশেষ
-    return ক
-
-// ৪. লঘিষ্ঠ সাধারণ গুণিতক বা লসাগু (Least Common Multiple: (ক * খ) / গসাগু(ক, খ))
-// সংখ্যা দুটির গুণফলকে তাদের গসাগু দিয়ে ভাগ করে লসাগু পাওয়া যায়
-fn লসাগু ক খ
-    g = গসাগু(ক, খ)
-    গুণফল = ক * খ
-    ফল = গুণফল / g
-    return ফল
-
-// ৫. মৌলিক সংখ্যা যাচাই (Prime Number Detection)
-// ২ এর চেয়ে ছোট হলে ০, ২ হলে ১, জোড় হলে ০, বিজোড় উৎপাদক যাচাই করে ১ অথবা ০ return দেয়
-fn মৌলিক_কিনা সংখ্যা
-    if সংখ্যা <= 1
+// Integer square root (Newton's method)
+fn sqrt n
+    if n < 0
+        return -1
+    if n == 0
         return 0
-    if সংখ্যা == 2
+    x = n
+    y = (x + 1) / 2
+    while y < x
+        x = y
+        y = (x + n / x) / 2
+    return x
+
+// Power: base ^ exp (integer)
+fn power base exp
+    result = 1
+    i = 0
+    while i < exp
+        result = result * base
+        i = i + 1
+    return result
+
+// Greatest common divisor (Euclidean algorithm)
+fn gcd a b
+    while b != 0
+        temp = b
+        b = a % b
+        a = temp
+    return a
+
+// Least common multiple
+fn lcm a b
+    return a / gcd a b * b
+
+// Check if prime
+fn is_prime n
+    if n < 2
+        return 0
+    if n == 2
         return 1
-    d = সংখ্যা % 2
-    if d == 0
+    if n % 2 == 0
         return 0
     i = 3
-    সীমা = সংখ্যা / 2
-    while i <= সীমা
-        rem = সংখ্যা % i
-        if rem == 0
+    while i * i <= n
+        if n % i == 0
             return 0
         i = i + 2
     return 1
 
-// ৬. সর্বোচ্চ মান নির্ণয় (Maximum of two numbers)
-fn সর্বোচ্চ ক খ
-    if ক > খ
-        return ক
-    return খ
+// Fibonacci (iterative, fast)
+fn fibonacci n
+    if n <= 1
+        return n
+    a = 0
+    b = 1
+    i = 2
+    while i <= n
+        c = a + b
+        a = b
+        b = c
+        i = i + 1
+    return b
 
-// ৭. সর্বনিম্ন মান নির্ণয় (Minimum of two numbers)
-fn সর্বনিম্ন ক খ
-    if ক < খ
-        return ক
-    return খ
+// Factorial (iterative)
+fn factorial n
+    result = 1
+    i = 1
+    while i <= n
+        result = result * i
+        i = i + 1
+    return result
 
-// ৮. শক্তি বা এক্সপোনেন্ট অ্যালিয়াস (Alias for পাওয়ার)
-fn শক্তি ভিত্তি ঘাত
-    return পাওয়ার(ভিত্তি, ঘাত)
+// Min / Max
+fn min a b
+    if a < b
+        return a
+    return b
 
-// ৯. পরম অ্যালিয়াস (Alias for পরম_মান)
-fn পরম সংখ্যা
-    return পরম_মান(সংখ্যা)
+fn max a b
+    if a > b
+        return a
+    return b
+
+// Clamp value between lo and hi
+fn clamp val lo hi
+    if val < lo
+        return lo
+    if val > hi
+        return hi
+    return val
+
+// Floor division
+fn floor_div a b = a / b
+
+// Modulo (always positive)
+fn mod_pos a b
+    r = a % b
+    if r < 0
+        return r + b
+    return r
+
+// Math constants
+PI = 3
+E  = 2

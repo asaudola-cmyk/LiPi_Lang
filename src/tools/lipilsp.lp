@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧠 লিপি LSP — Language Server Protocol Implementation
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
+// লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: src/tools/lipilsp.lp
 //
 // WHY এই মডিউল:
@@ -12,7 +12,7 @@
 //   JSON-RPC 2.0 over stdio (or TCP socket)
 //   Messages: Content-Length: N\r\n\r\n{json}
 //
-// ব্যবহার:
+// ব্যবrate:
 //   lipilsp --stdio          # VSCode/Neovim mode
 //   lipilsp --port 2087      # TCP socket mode
 //
@@ -59,77 +59,77 @@ COMP_SNIPPET      = 15
 // ─── Structs ──────────────────────────────────────────────────────────────────
 struct LSP_অবস্থান
     লাইন,     // 0-indexed
-    অক্ষর     // 0-indexed
+    অa্ষর     // 0-indexed
 
 struct LSP_পরিসীমা
     শুরু_অবস্থান,
     শেষ_অবস্থান
 
-struct LSP_ডায়াগনস্টিক
-    পরিসীমা_পয়েন্টার,
+struct LSP_ডায়াগনস্টিa
+    পরিসীমা_ptr,
     তীব্রতা,
-    বার্তা_পয়েন্টার,
-    উৎস_পয়েন্টার      // "lipic"
+    message_ptr,
+    src_ptr      // "lipic"
 
 struct LSP_সম্পূর্ণতা_আইটেম
-    লেবেল_পয়েন্টার,
-    ধরন,
-    বিবরণ_পয়েন্টার,
+    লেবেল_ptr,
+    type_flag,
+    description_ptr,
     সন্নিবেশন_পাঠ্য,
-    তথ্য_পয়েন্টার
+    তথ্য_ptr
 
-struct LSP_ফাইল_ctx
-    uri_পয়েন্টার,
-    বিষয়বস্তু_পয়েন্টার,
-    বিষয়বস্তু_দৈর্ঘ্য,
-    সংস্করণ,
-    ডায়াগনস্টিক_তালিকা,
-    ডায়াগনস্টিক_গণনা
+struct LSP_file_ctx
+    uri_ptr,
+    বিষয়obj_ptr,
+    বিষয়obj_length,
+    version,
+    ডায়াগনস্টিa_list,
+    ডায়াগনস্টিa_count
 
 struct LSP_সার্ভার_ctx
-    ফাইল_তালিকা,
-    ফাইল_গণনা,
-    পরিবেশ_টেবিল,   // symbol table for the workspace
+    file_list,
+    file_count,
+    পরিবেশ_table,   // symbol table for the workspace
     প্রারম্ভিত,       // initialized?
     stdio_mode        // 1=stdio, 0=TCP
 
 // ─── Message I/O ──────────────────────────────────────────────────────────────
-fn LSP_বার্তা_পড়ো বাফার max_size
+fn LSP_message_read buffer max_size
     // WHY: LSP uses header format: "Content-Length: N\r\n\r\n" + JSON body
     // Read headers until \r\n\r\n, then read exactly N bytes of body
-    header_বাফার = malloc(512)
+    header_buffer = malloc(512)
     content_length = 0
 
     // Read byte by byte until we find Content-Length
     i = 0
     while i < 512
         byte = 0
-        পড়া = সিসকল(0, 0, header_বাফার + i, 1)  // read 1 byte from stdin
+        পড়া = syscall(0, 0, header_buffer + i, 1)  // read 1 byte from stdin
         if পড়া <= 0 { return -1 }  // EOF or error
         i = i + 1
 
     // Parse Content-Length value
     // Read JSON body of that length
-    পড়া = সিসকল(0, 0, বাফার, content_length)
+    পড়া = syscall(0, 0, buffer, content_length)
 
-    free(header_বাফার, 512)
+    free(header_buffer, 512)
     return পড়া
 
-fn LSP_বার্তা_পাঠাও json_বাফার json_len
+fn LSP_message_send json_buffer json_len
     // WHY: Write "Content-Length: N\r\n\r\n" header then JSON body to stdout
-    header_বাফার = malloc(64)
+    header_buffer = malloc(64)
     header_len = 32  // "Content-Length: NNNN\r\n\r\n"
 
     // Write header to stdout (fd=1)
-    সিসকল(1, 1, header_বাফার, header_len)
+    syscall(1, 1, header_buffer, header_len)
     // Write JSON body
-    সিসকল(1, 1, json_বাফার, json_len)
+    syscall(1, 1, json_buffer, json_len)
 
-    free(header_বাফার, 64)
+    free(header_buffer, 64)
     return 0
 
 // ─── LSP Handlers ─────────────────────────────────────────────────────────────
-fn LSP_initialize_হ্যান্ডলার server params
+fn LSP_initialize_handler server params
     // WHY: First message — server tells client its capabilities
     say "[LSP] initialize request received"
     say "[LSP] Capabilities:"
@@ -141,40 +141,40 @@ fn LSP_initialize_হ্যান্ডলার server params
     server.প্রারম্ভিত = 1
     return 0
 
-fn LSP_didOpen_হ্যান্ডলার server uri বিষয়বস্তু
+fn LSP_didOpen_handler server uri বিষয়obj
     // WHY: Client opened a file — parse it and compute initial diagnostics
     say "[LSP] textDocument/didOpen:", uri
     // Parse file → build AST → find errors → send diagnostics
-    LSP_diagnostics_পাঠাও(server, uri)
+    LSP_diagnostics_send(server, uri)
     return 0
 
-fn LSP_didChange_হ্যান্ডলার server uri changes
+fn LSP_didChange_handler server uri changes
     // WHY: User typed something — re-analyze and update diagnostics
     say "[LSP] textDocument/didChange:", uri
     // Apply incremental changes → re-parse → re-check → send diagnostics
-    LSP_diagnostics_পাঠাও(server, uri)
+    LSP_diagnostics_send(server, uri)
     return 0
 
-fn LSP_completion_হ্যান্ডলার server uri লাইন অক্ষর
+fn LSP_completion_handler server uri লাইন অa্ষর
     // WHY: Auto-complete — most valuable LSP feature for developer productivity
-    say "[LSP] textDocument/completion:", uri, "L", লাইন, ":", অক্ষর
+    say "[LSP] textDocument/completion:", uri, "L", লাইন, ":", অa্ষর
     // Find token at cursor position
     // Look up symbol table for completions
     // Return list of CompletionItems
     return 0
 
-fn LSP_hover_হ্যান্ডলার server uri লাইন অক্ষর
+fn LSP_hover_handler server uri লাইন অa্ষর
     // WHY: Show type info + docs on hover (essential for discoverability)
-    say "[LSP] textDocument/hover:", uri, "L", লাইন, ":", অক্ষর
+    say "[LSP] textDocument/hover:", uri, "L", লাইন, ":", অa্ষর
     // Find symbol at position → look up documentation
     return 0
 
-fn LSP_definition_হ্যান্ডলার server uri লাইন অক্ষর
+fn LSP_definition_handler server uri লাইন অa্ষর
     // WHY: Go-to-definition (F12 in VSCode) — navigate to where function is defined
-    say "[LSP] textDocument/definition:", uri, "L", লাইন, ":", অক্ষর
+    say "[LSP] textDocument/definition:", uri, "L", লাইন, ":", অa্ষর
     return 0
 
-fn LSP_diagnostics_পাঠাও server uri
+fn LSP_diagnostics_send server uri
     // WHY: Publish diagnostics = show red squiggles under errors
     say "[LSP] textDocument/publishDiagnostics →", uri
     // Run lipic --check on file → parse errors → format as LSP diagnostics
@@ -182,58 +182,58 @@ fn LSP_diagnostics_পাঠাও server uri
 
 // ─── Symbol Table ─────────────────────────────────────────────────────────────
 // WHY: LSP needs to know all defined symbols (functions, variables, structs)
-fn LSP_symbol_scan server uri বিষয়বস্তু
+fn LSP_symbol_scan server uri বিষয়obj
     say "[LSP] Symbol scan:", uri
-    // Parse functions: fn নাম(...)
-    // Parse variables:  নাম =
-    // Parse structs: struct নাম { }
-    // Store in server.পরিবেশ_টেবিল
+    // Parse functions: fn name(...)
+    // Parse variables:  name =
+    // Parse structs: struct name { }
+    // Store in server.পরিবেশ_table
     return 0
 
 // ─── Main LSP Event Loop ──────────────────────────────────────────────────────
-fn LSP_প্রধান_লুপ server
+fn LSP_main_লুপ server
     say "[LSP] লিপি Language Server চালু হচ্ছে"
     say "[LSP] Protocol:", LSP_VERSION
-    say "[LSP] লিপি সংস্করণ:", LIPI_সংস্করণ
+    say "[LSP] লিপি সংস্করণ:", LIPI_version
     say "[LSP] stdio mode পড়ছে..."
 
-    msg_বাফার = malloc(LSP_MAX_MSG)
-    চলছে = 1
+    msg_buffer = malloc(LSP_MAX_MSG)
+    running = 1
 
-    while চলছে == 1
+    while running == 1
         // Read next JSON-RPC message
-        msg_len = LSP_বার্তা_পড়ো(msg_বাফার, LSP_MAX_MSG)
+        msg_len = LSP_message_read(msg_buffer, LSP_MAX_MSG)
         if msg_len < 0
-            say "[LSP] stdin EOF — বন্ধ হচ্ছে"
-            চলছে = 0
+            say "[LSP] stdin EOF — close হচ্ছে"
+            running = 0
 
         // Parse method name from JSON
         // Dispatch to handler
         // Send response
 
-    free(msg_বাফার, LSP_MAX_MSG)
+    free(msg_buffer, LSP_MAX_MSG)
     return 0
 
 // ─── Entry Point ──────────────────────────────────────────────────────────────
-fn প্রধান
+fn main
     say "╔══════════════════════════════════════════╗"
     say "║  🧠 লিপি LSP সার্ভার"
     say "║  সংস্করণ: প্রথম ১.০ | Protocol:", LSP_VERSION
     say "╚══════════════════════════════════════════╝"
 
-    server_সাইজ = size_of(LSP_সার্ভার_ctx)
-    server = malloc(server_সাইজ)
-    server.ফাইল_তালিকা = malloc(LSP_MAX_FILES * size_of(LSP_ফাইল_ctx))
-    server.ফাইল_গণনা = 0
-    server.পরিবেশ_টেবিল = malloc(LSP_MAX_SYMBOLS * 8)
+    server_size = size_of(LSP_সার্ভার_ctx)
+    server = malloc(server_size)
+    server.file_list = malloc(LSP_MAX_FILES * size_of(LSP_file_ctx))
+    server.file_count = 0
+    server.পরিবেশ_table = malloc(LSP_MAX_SYMBOLS * 8)
     server.প্রারম্ভিত = 0
     server.stdio_mode = 1
 
-    LSP_প্রধান_লুপ(server)
+    LSP_main_লুপ(server)
 
-    free(server.ফাইল_তালিকা, LSP_MAX_FILES * size_of(LSP_ফাইল_ctx))
-    free(server.পরিবেশ_টেবিল, LSP_MAX_SYMBOLS * 8)
-    free(server, server_সাইজ)
+    free(server.file_list, LSP_MAX_FILES * size_of(LSP_file_ctx))
+    free(server.পরিবেশ_table, LSP_MAX_SYMBOLS * 8)
+    free(server, server_size)
     return 0
 
-প্রধান()
+main()

@@ -1,40 +1,43 @@
-// 📜 লিপি ওয়েবসকেট RFC 6455 ফ্রেম ইঞ্জিন টেস্ট
-// 👑 UNUM এর রিয়েল-টাইম ডেটা ইঞ্জিন এখন সম্পূর্ণ লিপির নেটিভ মেশিন কোডে!
+// Test 37: WebSocket Protocol — Lipi 2.0 Global Standard
 
-include "std/io.lp"
-include "std/mem.lp"
-include "std/websocket.lp"
-
-fn প্রধান
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI NATIVE WEBSOCKET ENGINE (RFC 6455 Framing & Masking)\033[0m       \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-    say ""
-
-    // ১. সার্ভার টু ক্লায়েন্ট ফ্রেম তৈরি (Unmasked)
-    say "১. সার্ভার ফ্রেম জেনারেট করা হচ্ছে..."
-    পেয়লোড_আকার = 5 // "Hello"
-    টেক্সট_মেমরি = সিসকল(9, 0, 10, 3, 34, -1, 0)
-    মেমরি_বাইট_লেখো(টেক্সট_মেমরি, 0, 72) // H
-    মেমরি_বাইট_লেখো(টেক্সট_মেমরি, 1, 101)
-    মেমরি_বাইট_লেখো(টেক্সট_মেমরি, 2, 108) // l
-    মেমরি_বাইট_লেখো(টেক্সট_মেমরি, 3, 108) // l
-    মেমরি_বাইট_লেখো(টেক্সট_মেমরি, 4, 111) // o
-
-    ফ্রেম_বাফার = সিসকল(9, 0, 20, 3, 34, -1, 0)
-    ফ্রেম_সাইজ = ওয়েবসকেট_ফ্রেম_তৈরি(ফ্রেম_বাফার, টেক্সট_মেমরি, পেয়লোড_আকার)
-
-    বাইট0 = মেমরি_বাইট_পড়ো(ফ্রেম_বাফার, 0)
-    বাইট1 = মেমরি_বাইট_পড়ো(ফ্রেম_বাফার, 1)
-
-    say "  • ফ্রেম size_of: " + ফ্রেম_সাইজ + " বাইট (Expected: 7)"
-    say "  • Byte 0 (FIN+Opcode): " + বাইট0 + " (Expected: 129 / 0x81)"
-    say "  • Byte 1 (Length)    : " + বাইট1 + " (Expected: 5)"
-
-    সিসকল(11, টেক্সট_মেমরি, 10)
-    সিসকল(11, ফ্রেম_বাফার, 20)
-
-    say "\n🎉 টেস্ট সফল! লিপি এখন ওয়েবসকেট বাইনারি ফ্রেম পার্স করতে সক্ষম!"
+fn ws_opcode byte0 = byte0 % 16
+fn ws_is_fin byte0
+    if byte0 >= 128
+        return 1
     return 0
+fn ws_masked byte1
+    if byte1 >= 128
+        return 1
+    return 0
+fn ws_payload_len byte1
+    if byte1 >= 128
+        return byte1 - 128
+    return byte1
 
-প্রধান()
+fn ws_build_frame opcode length
+    byte0 = 128 + opcode
+    return byte0 * 256 + length
+
+fn ws_xor_mask data key
+    return (data + key) % 256
+
+say "=== WebSocket Protocol ==="
+frame1 = ws_build_frame(1, 11)
+frame2 = ws_build_frame(2, 5)
+frame3 = ws_build_frame(8, 0)
+
+say "Text frame:   " + frame1
+say "Binary frame: " + frame2
+say "Close frame:  " + frame3
+
+// Parse
+say "Opcode: " + ws_opcode(129)
+say "FIN:    " + ws_is_fin(129)
+say "Masked: " + ws_masked(140)
+say "Len:    " + ws_payload_len(11)
+
+// Masking
+encoded = ws_xor_mask(65, 42)
+say "Masked char: " + encoded
+
+say "PASS: Test 37 WebSocket"

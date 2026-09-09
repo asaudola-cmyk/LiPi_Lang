@@ -1,32 +1,32 @@
 // 📜 লিপি স্ট্যান্ডার্ড জেএসন সিরিয়ালাইজেশন লাইব্রেরি (Pure Lipi JSON Serialization Library)
-// 🏛️ খাঁটি লিপিতে রচিত হালকা ও দ্রুতগতির জেএসন জেনারেটর (Lightweight Zero-Dependency JSON)
-// ০% Libc, ০% বহিরাগত লাইব্রেরি — সরাসরি নেটিভ স্ট্রিং ও কনসোল এমিশন
+// 🏛️ bাঁটি লিপিতে রচিত হালaা ও দ্রুতগতির জেএসন generator (Lightweight Zero-Dependency JSON)
+// ০% Libc, ০% বহিরাগত লাইব্রেরি — direct নেটিভ string ও aনসোল এমিশন
 
-// ১. দুই কী-মান জোড়ার জেএসন অবজেক্ট প্রিন্ট (Print 2 Key-Value Pair JSON)
-// WHY: ওয়েব সার্ভিস ও এপিআই এন্ডপয়েন্টে দ্রুত স্ট্রাকচার্ড ডেটা রেসপন্স দেওয়া।
-fn জেএসন_অবজেক্ট_প্রিন্ট কী1 মান1 কী2 মান2
+// ১. দুই key-value জোড়ার জেএসন অবজেa্ট প্রিন্ট (Print 2 Key-Value Pair JSON)
+// WHY: ওয়েব সার্ভিস ও এপিআই এন্ডপয়েন্টে fast স্ট্রাaচার্ড data রেসপন্স দেওয়া।
+fn জেএসন_অবজেa্ট_প্রিন্ট key1 value1 key2 value2
     say "{"
-    say "  \"" + কী1 + "\": " + মান1 + ","
-    say "  \"" + কী2 + "\": " + মান2
+    say "  \"" + key1 + "\": " + value1 + ","
+    say "  \"" + key2 + "\": " + value2
     say "}"
     return 0
 
-// ২. এপিআই স্ট্যাটাস ও বার্তা সংবলিত জেএসন প্রদর্শন (Print API Status JSON)
-// WHY: মাইক্রোসার্ভিস ও ওয়েব সার্ভারের স্ট্যান্ডার্ড স্ট্যাটাস পে-লোড struct।
-fn জেএসন_স্ট্যাটাস_প্রিন্ট কোড বার্তা
+// ২. এপিআই status ও message সংবলিত জেএসন প্রদর্শন (Print API Status JSON)
+// WHY: মাইa্রোসার্ভিস ও ওয়েব সার্ভারের স্ট্যান্ডার্ড status পে-লোড struct।
+fn জেএসন_status_প্রিন্ট code message
     say "{"
-    say "  \"status\": " + কোড + ","
-    say "  \"message\": \"" + বার্তা + "\","
+    say "  \"status\": " + code + ","
+    say "  \"message\": \"" + message + "\","
     say "  \"engine\": \"Lipi-Pure-Native-Silicon\""
     say "}"
-    return কোড
+    return code
 
-// ৩. সিস্টেম ও প্রসেসর মেট্রিক্স জেএসন রিপোর্ট (Print Hardware Performance Metrics)
-// WHY: আরডিটিএসসি সাইকেল ও মেমরি সাইজ ইত্যাদি মেশিনে-পঠনযোগ্য ফরম্যাটে রূপান্তর।
-fn জেএসন_মেট্রিক্স_প্রিন্ট সাইকেল_গণনা মেমরি_বাইট
+// ৩. সিস্টেম ও প্রসেসর মেট্রিa্স জেএসন রিport (Print Hardware Performance Metrics)
+// WHY: আরডিটিএসসি সাইaেল ও memory size ইত্যাদি মেশিনে-পঠনadd্য ফরম্যাটে রূপান্তর।
+fn জেএসন_মেট্রিa্স_প্রিন্ট সাইaেল_count mem_byte
     say "{"
-    say "  \"hardware_rdtsc_cycles\": " + সাইকেল_গণনা + ","
-    say "  \"heap_allocated_bytes\": " + মেমরি_বাইট + ","
+    say "  \"hardware_rdtsc_cycles\": " + সাইaেল_count + ","
+    say "  \"heap_allocated_bytes\": " + mem_byte + ","
     say "  \"sovereign\": true"
     say "}"
     return 0

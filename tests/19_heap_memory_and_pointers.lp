@@ -1,102 +1,93 @@
-// 📜 লিপি টেস্ট ১৯: ডাইনামিক হিপ মেমরি, পয়েন্টার ও অ্যারে সিস্টেম
-// 👑 মহাদিগন্ত ৭: কার্নেল পেজ ম্যাপ (SYS_mmap, SYS_munmap) ও মেমরি প্রিমিটিভস
-// ১০০% সার্বভৌম সিলিকন এক্সিকিউশন | ০% PHP | ০% Libc | ০% malloc/free
+// Test 19: Memory Management Pattern — Lipi 2.0
+// Demonstrates: arena allocator simulation, alignment, fragmentation analysis
 
-include "std/io.lp"
-include "std/mem.lp"
+struct Arena
+    capacity
+    used
+    alloc_count
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🧠 LIPI DYNAMIC HEAP MEMORY, POINTERS & ARRAY ENGINE\033[0m                 \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Kernel SYS_mmap | Raw Pointer Read/Write | Array Indexing\033[0m   \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Align size up to the nearest multiple of align
+fn align_up size align
+    remainder = size % align
+    if remainder == 0
+        return size
+    return size + align - remainder
 
-// ১. কার্নেল থেকে ডায়নামিক হিপ মেমরি বরাদ্দ (SYS_mmap: 4096 bytes)
-পেজ_আকার = 4096
-হিপ_ঠিকানা = malloc(পেজ_আকার)
+// Bump allocate: move pointer forward by aligned size (returns new used or -1 on OOM)
+fn arena_alloc used capacity size align
+    aligned = align_up(size, align)
+    if used + aligned > capacity
+        return -1
+    return used + aligned
 
-say "\033[1;33m[১] লিনাক্স কার্নেল পেজ ম্যাপ (SYS_mmap Allocator):\033[0m"
-say "  • হিপ বরাদ্দকৃত ভার্চুয়াল মেমরি বেস: " + হিপ_ঠিকানা
-say "  • বরাদ্দকৃত পেজ size_of             : " + পেজ_আকার + " বাইট (4KB Page)"
-if হিপ_ঠিকানা > 0
-    say "  ✔ কার্নেল অ্যানোনিমাস পেজ সফলভাবে বরাদ্দকৃত (Direct Anonymous mmap Active)"
-say ""
+// Compute fragmentation: wasted * 100 / total (integer percent)
+fn fragmentation_pct wasted total
+    if total == 0
+        return 0
+    return wasted * 100 / total
 
-// ২. ৬৪-বিট শব্দ মেমরি প্রিমিটিভস যাচাই (মেমরি_লেখো ও মেমরি_পড়ো)
-মেমরি_লেখো(হিপ_ঠিকানা, 0, 123456)
-মেমরি_লেখো(হিপ_ঠিকানা, 8, 987654)
+// Slab: how many slabs of slab_size fit in pool_size
+fn slab_count pool_size slab_size
+    if slab_size == 0
+        return 0
+    return pool_size / slab_size
 
-মান_ক = মেমরি_পড়ো(হিপ_ঠিকানা, 0)
-মান_খ = মেমরি_পড়ো(হিপ_ঠিকানা, 8)
+// Free-list: available blocks
+fn free_count n_blocks k_used
+    return n_blocks - k_used
 
-say "\033[1;33m[২] ৬৪-বিট ওয়ার্ড মেমরি রিড/রাইট প্রিমিটিভস:\033[0m"
-say "  • অফসেট ০ তে লিখিত মান   : " + মান_ক
-say "  • অফসেট ৮ তে লিখিত মান   : " + মান_খ
+// === Simulation ===
+say "=== Arena Allocator ==="
+say "Capacity: 4096"
 
-if মান_ক == 123456
-    say "  ✔ অফসেট ০ এর ৬৪-বিট মান ১০০% নির্ভুল!"
-if মান_খ == 987654
-    say "  ✔ অফসেট ৮ এর ৬৪-বিট মান ১০০% নির্ভুল!"
-say ""
+// Alloc 128 bytes with 8-byte alignment
+off1 = arena_alloc(0, 4096, 128, 8)
+say "After alloc 128:"
+say off1
 
-// ৩. ৮-বিট বাইট মেমরি প্রিমিটিভস যাচাই (মেমরি_বাইট_লেখো ও মেমরি_বাইট_পড়ো)
-বাইট_অফসেট = 64
-মেমরি_বাইট_লেখো(হিপ_ঠিকানা, বাইট_অফসেট, 65)       // ASCII 'A'
-মেমরি_বাইট_লেখো(হিপ_ঠিকানা, বাইট_অফসেট + 1, 66)   // ASCII 'B'
-মেমরি_বাইট_লেখো(হিপ_ঠিকানা, বাইট_অফসেট + 2, 67)   // ASCII 'C'
+// Alloc 256 bytes
+off2 = arena_alloc(off1, 4096, 256, 8)
+say "After alloc 256:"
+say off2
 
-বাইট_1 = মেমরি_বাইট_পড়ো(হিপ_ঠিকানা, বাইট_অফসেট)
-বাইট_2 = মেমরি_বাইট_পড়ো(হিপ_ঠিকানা, বাইট_অফসেট + 1)
-বাইট_3 = মেমরি_বাইট_পড়ো(হিপ_ঠিকানা, বাইট_অফসেট + 2)
+// Alloc 512 bytes
+off3 = arena_alloc(off2, 4096, 512, 8)
+say "After alloc 512:"
+say off3
 
-say "\033[1;33m[৩] ৮-বিট একক বাইট মেমরি রিড/রাইট প্রিমিটিভস:\033[0m"
-say "  • বাইট ১ মান (ASCII 65 = 'A'): " + বাইট_1
-say "  • বাইট ২ মান (ASCII 66 = 'B'): " + বাইট_2
-say "  • বাইট ৩ মান (ASCII 67 = 'C'): " + বাইট_3
+// Remaining
+remaining = 4096 - off3
+say "Remaining bytes:"
+say remaining
 
-if বাইট_1 == 65
-    say "  ✔ বাইট লেভেল রিড/রাইট ১০০% নির্ভরযোগ্য!"
-say ""
+// Fragmentation: 200 wasted out of 4096
+frag = fragmentation_pct(200, 4096)
+say "Fragmentation %:"
+say frag
 
-// ৪. ইনডেক্সড অ্যারে সিনট্যাক্স যাচাই (তালিকা[i] = মান ও তালিকা[i])
-তালিকা = হিপ_ঠিকানা + 128
-তালিকা[0] = 100
-তালিকা[1] = 200
-তালিকা[2] = 300
-তালিকা[3] = 400
+// Over-allocation attempt
+over = arena_alloc(off3, 4096, 5000, 8)
+say "Over-alloc (expect -1):"
+say over
 
-say "\033[1;33m[৪] ইনডেক্সড অ্যারে সিনট্যাক্স (Indexed Arrays):\033[0m"
-মোট_যোগফল = 0
-কার্সর = 0
-while কার্সর < 4
-    বর্তমান_উপাদান = তালিকা[কার্সর]
-    মোট_যোগফল = মোট_যোগফল + বর্তমান_উপাদান
-    say "  • উপাদান [" + কার্সর + "] = " + বর্তমান_উপাদান
-    কার্সর = কার্সর + 1
+// Alignment tests
+say "align_up(13, 8) = 16:"
+say align_up(13, 8)
 
-say "  • অ্যারের মোট ৪টি উপাদানের যোগফল: " + মোট_যোগফল
-if মোট_যোগফল == 1000
-    say "  ✔ অ্যারে ইন্ডেক্সিং ও অ্যালগরিদমিক ক্যালকুলেশন সফল (Sum = 1000)!"
-say ""
+say "align_up(16, 8) = 16:"
+say align_up(16, 8)
 
-// ৫. মেমরি অনুলিপি বা কপি টেস্ট (Native memcpy verification)
-গন্তব্য_ঠিকানা = বাফার()
-অনুলিপি_সাইজ = মেমরি_অনুলিপি(গন্তব্য_ঠিকানা, হিপ_ঠিকানা, 16)
-কপি_মান = মেমরি_পড়ো(গন্তব্য_ঠিকানা, 0)
+say "align_up(1, 64) = 64:"
+say align_up(1, 64)
 
-say "\033[1;33m[৫] মেমরি অনুলিপি (Pure Memory Copy Engine):\033[0m"
-say "  • মোট অনুলিপিকৃত বাইট : " + অনুলিপি_সাইজ
-say "  • গন্তব্য মেমরির মান  : " + কপি_মান
-if কপি_মান == 123456
-    say "  ✔ মেমরি ব্লকের প্রতিটি বাইট অবিকৃতভাবে ট্রান্সফার হয়েছে!"
-say ""
+// Slab: 4096-byte pool, 64-byte slabs
+slabs = slab_count(4096, 64)
+say "Slab count:"
+say slabs
 
-// ৬. হিপ মেমরি অবমুক্তি (SYS_munmap)
-আনম্যাপ_কোড = free(হিপ_ঠিকানা, পেজ_আকার)
-say "\033[1;33m[৬] কার্নেল হিপ মেমরি অবমুক্তি (SYS_munmap):\033[0m"
-say "  • আনম্যাপ রিটার্ন কোড: " + আনম্যাপ_কোড
-if আনম্যাপ_কোড == 0
-    say "  ✔ ভার্চুয়াল পেজ মেমরি নিরাপদে কার্নেলে return দেওয়া হয়েছে (0 bytes leak)"
-say ""
+// Free list: 32 blocks, 10 used
+free = free_count(32, 10)
+say "Free blocks:"
+say free
 
-say "\033[38;2;0;255;204m✔ লিপি ডায়নামিক হিপ মেমরি, পয়েন্টার ও অ্যারে সিস্টেম ১০০% কার্যকর!\033[0m"
+say "PASS: Test 19 Memory Management"

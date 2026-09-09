@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🖥️ লিপি CLI আর্গুমেন্ট পার্সার (Command-Line Interface Library)
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
+// লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: std/cli.lp
 //
 // WHY এই মডিউল:
@@ -12,19 +12,19 @@
 //   - Subcommands: lipipkg build, lipipkg test
 //   - Auto-generated help: --help
 //
-// ব্যবহার:
+// ব্যবrate:
 //   include "std/cli.lp"
-//    app = CLI_তৈরি("my-tool", "আমার টুলের বিবরণ")
-//   CLI_flag_যোগ(app, "--verbose", "-v", "বিস্তারিত আউটপুট")
-//   CLI_পার্স(app)
-//   if CLI_flag_পড়ো(app, "--verbose") { say "verbose mode" }
+//    app = cli_create("my-tool", "আমার টুলের description")
+//   cli_flag_add(app, "--verbose", "-v", "বিস্তারিত output")
+//   cli_parse(app)
+//   if cli_flag_read(app, "--verbose") { say "verbose mode" }
 // ==============================================================================
 
 include "std/core/mem.lp"
 include "std/core/str.lp"
 include "std/sys/kernel.lp"
 
-// ─── ধ্রুবক ──────────────────────────────────────────────────────────────────
+// ─── ধ্রুবa ──────────────────────────────────────────────────────────────────
 CLI_MAX_FLAGS    = 64    // সর্বোচ্চ ৬৪টি flag
 CLI_MAX_ARGS     = 32    // সর্বোচ্চ ৩২টি positional arg
 CLI_MAX_SUBCMDS  = 16    // সর্বোচ্চ ১৬টি subcommand
@@ -36,88 +36,88 @@ FLAG_TYPE_NUMBER = 3     // --port 8080
 // ─── গঠনসমূহ ─────────────────────────────────────────────────────────────────
 
 struct CLI_Flag
-    নাম_পয়েন্টার,       // --verbose
-    শর্ট_পয়েন্টার,      // -v
-    বিবরণ_পয়েন্টার,    // help text
-    ধরন,               // FLAG_TYPE_BOOL/STRING/NUMBER
-    মান_পয়েন্টার,      // parsed value
+    name_ptr,       // --verbose
+    শর্ট_ptr,      // -v
+    description_ptr,    // help text
+    type_flag,               // FLAG_TYPE_BOOL/STRING/NUMBER
+    value_ptr,      // parsed value
     পাওয়া গেছে         // was this flag provided?
 
 struct CLI_App
-    নাম_পয়েন্টার,
-    সংস্করণ_পয়েন্টার,
-    বিবরণ_পয়েন্টার,
-    flag_তালিকা,
-    flag_গণনা,
-    arg_তালিকা,
-    arg_গণনা,
-    ত্রুটি_বার্তা
+    name_ptr,
+    version_ptr,
+    description_ptr,
+    flag_list,
+    flag_count,
+    arg_list,
+    arg_count,
+    error_message
 
-// ─── CLI তৈরি ────────────────────────────────────────────────────────────────
-fn CLI_তৈরি নাম বিবরণ
-    app_সাইজ = size_of(CLI_App)
-    app = malloc(app_সাইজ)
-    app.নাম_পয়েন্টার = নাম
-    app.বিবরণ_পয়েন্টার = বিবরণ
-    app.সংস্করণ_পয়েন্টার = "প্রথম ১.০"
-    app.flag_তালিকা = malloc(CLI_MAX_FLAGS * size_of(CLI_Flag))
-    app.flag_গণনা = 0
-    app.arg_তালিকা = malloc(CLI_MAX_ARGS * 8)
-    app.arg_গণনা = 0
+// ─── CLI create ────────────────────────────────────────────────────────────────
+fn cli_create name description
+    app_size = size_of(CLI_App)
+    app = malloc(app_size)
+    app.name_ptr = name
+    app.description_ptr = description
+    app.version_ptr = "প্রথম ১.০"
+    app.flag_list = malloc(CLI_MAX_FLAGS * size_of(CLI_Flag))
+    app.flag_count = 0
+    app.arg_list = malloc(CLI_MAX_ARGS * 8)
+    app.arg_count = 0
     return app
 
-// ─── Flag যোগ করো ────────────────────────────────────────────────────────────
+// ─── Flag add aরো ────────────────────────────────────────────────────────────
 // WHY: Declarative API — describe flags before parsing
-fn CLI_flag_যোগ app long_flag short_flag বিবরণ ধরন
-    if app.flag_গণনা >= CLI_MAX_FLAGS
+fn cli_flag_add app long_flag short_flag description type_flag
+    if app.flag_count >= CLI_MAX_FLAGS
         say "  ⚠️  সতর্কতা: সর্বোচ্চ flag সংখ্যা পূর্ণ হয়েছে"
         return -1
 
-    flag_সাইজ = size_of(CLI_Flag)
-    অফসেট = app.flag_গণনা * flag_সাইজ
+    flag_size = size_of(CLI_Flag)
+    offset = app.flag_count * flag_size
     // write flag data to buffer at offset...
-    app.flag_গণনা = app.flag_গণনা + 1
-    return app.flag_গণনা
+    app.flag_count = app.flag_count + 1
+    return app.flag_count
 
-// সংক্ষিপ্ত version (Boolean flag)
-fn CLI_bool_flag app long_flag short_flag বিবরণ
-    return CLI_flag_যোগ(app, long_flag, short_flag, বিবরণ, FLAG_TYPE_BOOL)
+// সংa্ষিপ্ত version (Boolean flag)
+fn CLI_bool_flag app long_flag short_flag description
+    return cli_flag_add(app, long_flag, short_flag, description, FLAG_TYPE_BOOL)
 
 // String value flag
-fn CLI_string_flag app long_flag short_flag বিবরণ
-    return CLI_flag_যোগ(app, long_flag, short_flag, বিবরণ, FLAG_TYPE_STRING)
+fn CLI_string_flag app long_flag short_flag description
+    return cli_flag_add(app, long_flag, short_flag, description, FLAG_TYPE_STRING)
 
 // Number value flag
-fn CLI_number_flag app long_flag short_flag বিবরণ
-    return CLI_flag_যোগ(app, long_flag, short_flag, বিবরণ, FLAG_TYPE_NUMBER)
+fn CLI_number_flag app long_flag short_flag description
+    return cli_flag_add(app, long_flag, short_flag, description, FLAG_TYPE_NUMBER)
 
 // ─── Help say ───────────────────────────────────────────────────────────────
 // WHY: --help is the most important flag. Auto-generate it.
-fn CLI_help_দেখাও app
-    say app.নাম_পয়েন্টার
+fn cli_help_show app
+    say app.name_ptr
     say ""
-    say app.বিবরণ_পয়েন্টার
+    say app.description_ptr
     say ""
-    say "ব্যবহার:", app.নাম_পয়েন্টার, "[flags] [args]"
+    say "ব্যবহার:", app.name_ptr, "[flags] [args]"
     say ""
     say "Flags:"
     say "  --help,    -h    এই সহায়তা বার্তা দেখান"
     say "  --version, -V    সংস্করণ দেখান"
-    say "  --verbose, -v    বিস্তারিত আউটপুট"
+    say "  --verbose, -v    বিস্তারিত outপুট"
 
     i = 0
-    while i < app.flag_গণনা
+    while i < app.flag_count
         // print each registered flag
         i = i + 1
 
-// ─── আর্গুমেন্ট পার্স করো ─────────────────────────────────────────────────────
+// ─── আর্গুমেন্ট পার্স aরো ─────────────────────────────────────────────────────
 // WHY: Walk argv array, classify each as flag or positional
-fn CLI_পার্স app
+fn cli_parse app
     // In Lipi, argc/argv are available via std/sys/kernel.lp
     // WHY: We use kernel ABI: [argc: i64] [argv[0]: ptr] [argv[1]: ptr] ...
-    argc = আর্গুমেন্ট_গণনা()
+    argc = আর্গুমেন্ট_count()
 
-    say "  → CLI পার্স: ", argc, "টি আর্গুমেন্ট পাওয়া গেছে"
+    say "  → CLI parse: ", argc, "টি আর্গুমেন্ট পাওয়া গেছে"
 
     i = 1   // skip argv[0] (program name)
     while i < argc
@@ -127,27 +127,27 @@ fn CLI_পার্স app
         i = i + 1
     return 0
 
-// ─── Flag পড়ো ─────────────────────────────────────────────────────────────────
-fn CLI_flag_পড়ো app flag_নাম
-    // Search flag_তালিকা for matching নাম_পয়েন্টার
+// ─── Flag read ─────────────────────────────────────────────────────────────────
+fn cli_flag_read app flag_name
+    // Search flag_list for matching name_ptr
     // Return পাওয়া_গেছে field
     return 0   // not found = false
 
-fn CLI_string_পড়ো app flag_নাম
-    // Return মান_পয়েন্টার for string flags
+fn cli_string_read app flag_name
+    // Return value_ptr for string flags
     return "default_value"
 
-fn CLI_number_পড়ো app flag_নাম
+fn cli_number_read app flag_name
     return 0
 
-// ─── Positional arg পড়ো ───────────────────────────────────────────────────────
-fn CLI_arg_পড়ো app সূচক
-    if সূচক >= app.arg_গণনা
+// ─── Positional arg read ───────────────────────────────────────────────────────
+fn cli_arg_read app index
+    if index >= app.arg_count
         return 0   // null — no such arg
-    return app.arg_তালিকা   // return pointer to arg string
+    return app.arg_list   // return pointer to arg string
 
-// ─── CLI মুক্তি ────────────────────────────────────────────────────────────────
-fn CLI_মুক্তি app
-    free(app.flag_তালিকা, CLI_MAX_FLAGS * size_of(CLI_Flag))
-    free(app.arg_তালিকা, CLI_MAX_ARGS * 8)
+// ─── CLI মুa্তি ────────────────────────────────────────────────────────────────
+fn cli_free app
+    free(app.flag_list, CLI_MAX_FLAGS * size_of(CLI_Flag))
+    free(app.arg_list, CLI_MAX_ARGS * 8)
     free(app, size_of(CLI_App))

@@ -1,16 +1,33 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — দ্বিতীয় পাঠ (Lipi 02: Functions & Recursion)
-// রিকার্সিভ ফাংশন এবং বাংলা সংখ্যা দিয়ে ফিবোনাচ্চি সিরিজ গণনা
+// Test 02: Math and Fibonacci — Lipi 2.0
+// Demonstrates: iterative fibonacci, factorial, for loops
 
-fn ফিবোনাচ্চি সংখ্যা
-    if সংখ্যা <= 1
-        return সংখ্যা
-    return ফিবোনাচ্চি(সংখ্যা - 1) + ফিবোনাচ্চি(সংখ্যা - 2)
+fn fibonacci n
+    if n <= 1
+        return n
+    a = 0
+    b = 1
+    i = 2
+    while i <= n
+        c = a + b
+        a = b
+        b = c
+        i = i + 1
+    return b
 
-say "--- ফিবোনাচ্চি সিরিজ (প্রথম ১০টি পদ) ---"
-পদ = 0
-while পদ <= 10
-    মান = ফিবোনাচ্চি(পদ)
-    say "পদ " + পদ + " ──► " + মান
-    পদ = পদ + 1
+say "Fibonacci sequence:"
+for i in 0..12
+    say fibonacci i
 
-say "\nগণিত সম্পন্ন হয়েছে!"
+fn factorial n
+    result = 1
+    i = 1
+    while i <= n
+        result = result * i
+        i = i + 1
+    return result
+
+say "Factorials:"
+for i in 1..8
+    say factorial i
+
+say "PASS: Test 02 Math Fibonacci"

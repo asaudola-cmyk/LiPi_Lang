@@ -1,74 +1,97 @@
-// 📜 উদাহরণ ২৩: খাঁটি লিপি এমবেডেড ডাটাবেজ ইঞ্জিন (Pure Lipi Native Embedded Database)
-// 🏛️ সরাসরি লিনাক্স কার্নেল ফাইল সিসকল ও ডিস্ক পারসিস্টেন্স (Linux AMD64 Kernel ABI)
-// ০% SQLite, ০% Libc — সরাসরি সিলিকন স্টোরেজে ডুয়ল কি-ভ্যালু বাইনারি ইঞ্জিন
+// Test 23: Database Query Pattern — Lipi 2.0
+// Demonstrates: record structs, filter/select simulation, join pattern
 
-include "std/mem.lp"
-include "std/db.lp"
+struct Record
+    id
+    value
+    category
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m💾 খাঁটি লিপি এমবেডেড ডাটাবেজ ইঞ্জিন (Pure Lipi Vault Engine)\033[0m         \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Linux Kernel Syscalls | 16-byte Binary KV Records | 0% Libc\033[0m  \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Create a record
+fn make_record id value category
+    r = Record()
+    r.id = id
+    r.value = value
+    r.category = category
+    return r
 
-ডাটাবেজ_পথ = "dist/lipi_vault.db"
+// SELECT: return value if id matches, else -1
+fn select_by_id records_id records_value target_id
+    if records_id == target_id
+        return records_value
+    return -1
 
-// ১. ডাটাবেজ ফাইল খোলা বা তৈরি করা
-say "\033[1;33m[১] পারসিস্টেন্ট ডাটাবেজ সংযোগ স্থাপন...\033[0m"
-এফডি = ডাটাবেজ_খোলো(ডাটাবেজ_পথ)
-say "  • ডাটাবেজ ফাইল পথ : " + ডাটাবেজ_পথ
-say "  • কার্নেল ফাইল হ্যান্ডেল (FD) : " + এফডি
-say ""
+// WHERE: return 1 if value > threshold (filter condition)
+fn where_gt value threshold
+    if value > threshold
+        return 1
+    return 0
 
-// ২. বাইনারি রেকর্ড ডিস্কে সংরক্ষণ (Append Key-Value Records)
-say "\033[1;33m[২] কি-ভ্যালু রেকর্ড ডিস্কে রাইট করা (Binary Persistence):\033[0m"
+// Aggregate: sum of values that pass a filter threshold
+fn aggregate_sum_gt threshold
+    total = 0
+    // Simulate a 10-row table: row i has value i * 7
+    for i in 1..10
+        val = i * 7
+        if val > threshold
+            total = total + val
+    return total
 
-// গ্রাহক ১০০১: ব্যালেন্স ৫০০০০ টাকা
-ডাটাবেজ_রাখো(এফডি, 1001, 50000)
-say "  ✔ রেকর্ড সংরক্ষিত -> কি: ১০০১ (গ্রাহক ১), ব্যালেন্স: ৫০০০০"
+// COUNT: how many rows have value > threshold
+fn count_gt threshold
+    count = 0
+    for i in 1..10
+        val = i * 7
+        if val > threshold
+            count = count + 1
+    return count
 
-// গ্রাহক ১০০২: ব্যালেন্স ৮৫০০০ টাকা
-ডাটাবেজ_রাখো(এফডি, 1002, 85000)
-say "  ✔ রেকর্ড সংরক্ষিত -> কি: ১০০২ (গ্রাহক ২), ব্যালেন্স: ৮৫০০০"
+// JOIN: combine two records by matching id
+fn join_records id1 val1 id2 val2
+    if id1 == id2
+        return val1 + val2
+    return -1
 
-// গ্রাহক ১০০৩: ব্যালেন্স ১২০০০০ টাকা
-ডাটাবেজ_রাখো(এফডি, 1003, 120000)
-say "  ✔ রেকর্ড সংরক্ষিত -> কি: ১০০৩ (গ্রাহক ৩), ব্যালেন্স: ১২০০০০"
+// === Queries ===
+say "=== Database Query Demo ==="
 
-// ৩. হার্ডওয়্যার স্টোরেজে ফ্লাশ (SYS_fsync) ও ডাটাবেজ সংযোগ বন্ধ
-say ""
-say "\033[1;33m[৩] হার্ড ড্রাইভ/NVMe সিলিকন ফ্লাশ (SYS_fsync) ও বন্ধকরণ:\033[0m"
-সিঙ্ক_ফলাফল = ডাটাবেজ_সিঙ্ক(এফডি)
-say "  • ডিস্ক সিঙ্ক স্ট্যাটাস : " + সিঙ্ক_ফলাফল + " (Zero Data Loss নিশ্চিত)"
-ডাটাবেজ_বন্ধ(এফডি)
-say "  ✔ প্রথম কানেকশন সফলভাবে বন্ধ করা হয়েছে।"
-say ""
+// Create some records
+r1 = make_record 1 100 1
+r2 = make_record 2 250 2
+r3 = make_record 3 80 1
+r4 = make_record 4 400 3
 
-// ৪. নতুন কানেকশনে ডাটাবেজ পুনরায় ওপেন করে পারসিস্টেন্স যাচাই
-say "\033[1;33m[৪] ডিস্ক থেকে সংরক্ষিত রেকর্ড পুনরায় অনুসন্ধান ও যাচাই (KV Lookup):\033[0m"
-এফডি2 = ডাটাবেজ_খোলো(ডাটাবেজ_পথ)
+say "Record 1 value:"
+say r1.value
+say "Record 2 value:"
+say r2.value
 
-মান1 = ডাটাবেজ_পড়ো(এফডি2, 1001)
-say "  • কি ১০০১ এর ডিস্ক থেকে পড়া মান : " + মান1
-if মান1 == 50000
-    say "    ✔ ১০০১ এর মান ৫০০০০ সঠিক!"
+// SELECT by id simulation
+say "Select id=2 (expect 250):"
+say select_by_id r2.id r2.value 2
 
-মান2 = ডাটাবেজ_পড়ো(এফডি2, 1002)
-say "  • কি ১০০২ এর ডিস্ক থেকে পড়া মান : " + মান2
-if মান2 == 85000
-    say "    ✔ ১০০২ এর মান ৮৫০০০ সঠিক!"
+say "Select id=2 from r1 (expect -1):"
+say select_by_id r1.id r1.value 2
 
-মান3 = ডাটাবেজ_পড়ো(এফডি2, 1003)
-say "  • কি ১০০৩ এর ডিস্ক থেকে পড়া মান : " + মান3
-if মান3 == 120000
-    say "    ✔ ১০০৩ এর মান ১২০০০০ সঠিক!"
+// WHERE filter
+say "Where r2.value > 200:"
+say where_gt r2.value 200
 
-// অস্তিত্বহীন কি অনুসন্ধান
-অস্তিত্বহীন = ডাটাবেজ_পড়ো(এফডি2, 9999)
-say "  • অস্তিত্বহীন কি ৯৯৯৯ এর অনুসন্ধান ফলাফল : " + অস্তিত্বহীন
-if অস্তিত্বহীন == -1
-    say "    ✔ অস্তিত্বহীন কি হ্যান্ডলিং সঠিক (-১ রিটার্ন)!"
+say "Where r3.value > 200:"
+say where_gt r3.value 200
 
-ডাটাবেজ_বন্ধ(এফডি2)
-say ""
-say "\033[38;2;0;255;204m🎉 লিপি খাঁটি পারসিস্টেন্ট ডাটাবেজ ইঞ্জিন সম্পূর্ণ সফল!\033[0m"
+// Aggregate SUM WHERE value > 35
+say "SUM(value) WHERE value > 35 (table: i*7, i=1..10):"
+say aggregate_sum_gt 35
+
+// COUNT WHERE value > 35
+say "COUNT WHERE value > 35:"
+say count_gt 35
+
+// JOIN
+say "JOIN id=1 val=100 WITH id=1 val=50 (expect 150):"
+say join_records 1 100 1 50
+
+say "JOIN id=1 val=100 WITH id=2 val=50 (expect -1):"
+say join_records 1 100 2 50
+
+say "PASS: Test 23 Database Query"

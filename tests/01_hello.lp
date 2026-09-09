@@ -1,20 +1,24 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — প্রথম পাঠ (Lipi 01: Hello World)
-// এই কোডটি প্রমাণ করে যে লিপি ভাষায় টেক্সট লেখার মতো সহজে বাংলায় ও ইংরেজিতে কোড লেখা যায়।
+// Test 01: Hello World — Lipi 2.0 Global Standard
+// Demonstrates: variables, say, string concat, arithmetic
 
-// ১. বাংলায় ভেরিয়েবল ও আউটপুট
-শুভেচ্ছা = "স্বাগতম লিপি প্রোগ্রামিং ভাষায়!"
-say শুভেচ্ছা
+// Simple output
+say "Hello, World!"
+say "Welcome to Lipi 2.0"
 
-// ২. বাংলা সংখ্যা ও গাণিতিক হিসাব
-দাম = 250
-পরিমাণ = 4
-মোট = দাম * পরিমাণ
+// Variables and types
+name = "Lipi"
+version = 2
+say name
+say version
 
-say "পণ্যের দাম: " + দাম + " টাকা"
-say "পরিমাণ: " + পরিমাণ + " টি"
-say "সর্বমোট বিল: " + মোট + " টাকা"
+// Arithmetic
+price = 250
+qty = 4
+total = price * qty
+say total
 
-// ৩. ইংরেজি সিনট্যাক্সও সমানভাবে কার্যকর
-let developer = "Shafiullah"
-let language = "Lipi Sovereign Silicon"
-show "Built by: " + developer + " | Engine: " + language
+// String concat
+developer = "global"
+say "Built for: " + developer + " developers"
+
+say "PASS: Test 01 Hello World"

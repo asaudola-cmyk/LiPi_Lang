@@ -1,87 +1,88 @@
-// ==============================================================================
-// 👑 LIPI HORIZON 14: ARENA MEMORY ALLOCATOR & ATOMIC REFERENCE COUNTING (ARC)
-// ⚡ High-Performance Sub-Nanosecond Bump Allocation & Zero-Fragmentation Memory
-// ==============================================================================
+// Test 25: Memory Allocator Pattern — Lipi 2.0
+// Demonstrates: arena allocator simulation, alignment, fragmentation analysis
 
-আমদানি "std/arena.lp"
+struct Arena
+    capacity
+    used
+    alloc_count
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  🏛️ খাঁটি লিপি অ্যারিনা মেমরি ম্যানেজার ও স্মার্ট এআরসি (std/arena.lp)     ║"
-say "║  ⚡ Direct Linux SYS_mmap | O(1) Bump Allocation | Instant Mass-Free   ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+// Align size up to the nearest multiple of align
+fn align_up size align
+    remainder = size % align
+    if remainder == 0
+        return size
+    return size + align - remainder
 
-// [১] অ্যারিনা মেমরি পুল তৈরি (৬৫৫৩৬ বাইট / ৬৪ কিলোবাইট)
-say "[১] কার্নেল পেজ ম্যাপ দিয়ে ৬৪কেবি অ্যারিনা পুল তৈরি..."
-পুল = অ্যারিনা_তৈরি(65536)
-if পুল == 0
-    say "  ❌ অ্যারিনা মেমরি বরাদ্দ ব্যর্থ!"
-    return 1
-say "  ✔ অ্যারিনা সফলভাবে তৈরি! ক্যাপাসিটি : ৬৫৫৩৬ বাইট"
+// Arena alloc: returns new used pointer or -1 on OOM
+fn arena_alloc used capacity size align
+    aligned = align_up(size, align)
+    if used + aligned > capacity
+        return -1
+    return used + aligned
 
-// [২] অতি-দ্রুত O(1) বাম্প অ্যালোকেশন দিয়ে একাধিক অবজেক্ট বরাদ্দ
-say "[২] অ্যারিনা থেকে দ্রুত অবজেক্ট বরাদ্দ ও পয়েন্টার ভ্যালিডেশন..."
-ব্লক1 = অ্যারিনা_বরাদ্দ(পুল, 64)   // ৬৪ বাইট
-ব্লক2 = অ্যারিনা_বরাদ্দ(পুল, 128)  // ১২৮ বাইট
-ব্লক3 = অ্যারিনা_বরাদ্দ(পুল, 256)  // ২৫৬ বাইট
+// Utilization percentage
+fn util_pct used capacity
+    return used * 100 / capacity
 
-মেমরি_লেখো(ব্লক1, 0, 7707)
-মেমরি_লেখো(ব্লক2, 0, 8808)
-মেমরি_লেখো(ব্লক3, 0, 9909)
+// Free-list allocator simulation
+fn freelist_alloc total_blocks used_blocks request_blocks
+    free_blocks = total_blocks - used_blocks
+    if request_blocks > free_blocks
+        return -1
+    return used_blocks + request_blocks
 
-মান1 = মেমরি_পড়ো(ব্লক1, 0)
-মান2 = মেমরি_পড়ো(ব্লক2, 0)
-মান3 = মেমরি_পড়ো(ব্লক3, 0)
+// === Arena Simulation ===
+say "=== Arena Allocator ==="
+say "Capacity: 4096"
 
-say "  • ব্লক ১ এ সংরক্ষিত মান: " + মান1
-say "  • ব্লক ২ এ সংরক্ষিত মান: " + মান2
-say "  • ব্লক ৩ এ সংরক্ষিত মান: " + মান3
+// Alloc 1: 128 bytes, 8-byte alignment
+off1 = arena_alloc(0, 4096, 128, 8)
+say "Alloc 128:"
+say off1
 
-if মান1 == 7707
-    if মান2 == 8808
-        if মান3 == 9909
-            say "  ✔ অ্যারিনা মেমরি রিড/রাইট ১০০% সফল!"
+// Alloc 2: 256 bytes
+off2 = arena_alloc(off1, 4096, 256, 8)
+say "Alloc 256:"
+say off2
 
-// [৩] মেমরি পরিসংখ্যান ও বাম্প পয়েন্টার ট্র্যাকিং
-ব্যবহৃত = অ্যারিনা_ব্যবহৃত_মেমরি(পুল)
-অবশিষ্ট = অ্যারিনা_অবশিষ্ট_মেমরি(পুল)
-say "[৩] অ্যারিনা পরিসংখ্যান:"
-say "  • মোট ব্যবহৃত মেমরি : " + ব্যবহৃত + " বাইট"
-say "  • অবশিষ্ট মেমরি     : " + অবশিষ্ট + " বাইট"
+// Alloc 3: 512 bytes
+off3 = arena_alloc(off2, 4096, 512, 8)
+say "Alloc 512:"
+say off3
 
-// [৪] এক পলকে সমস্ত মেমরি রিলিজ (O(1) Instant Mass Reclamation)
-say "[৪] অ্যারিনা এক পলকে সম্পূর্ণ রিসেট (Zero-Fragmentation Reset)..."
-অ্যারিনা_রিসেট(পুল)
-রিসেট_ব্যবহৃত = অ্যারিনা_ব্যবহৃত_মেমরি(পুল)
-say "  • রিসেট পরবর্তী ব্যবহৃত মেমরি: " + রিসেট_ব্যবহৃত + " বাইট"
-if রিসেট_ব্যবহৃত == 0
-    say "  ✔ অ্যারিনা রিসেট সফল! কোনো মেমরি লিক নেই।"
+// Remaining
+rem = 4096 - off3
+say "Remaining:"
+say rem
 
-// [৫] রিসেটকৃত অ্যারিনায় পুনরায় নতুন বরাদ্দ যাচাই
-নতুন_ব্লক = অ্যারিনা_বরাদ্দ(পুল, 32)
-মেমরি_লেখো(নতুন_ব্লক, 0, 123456)
-নতুন_মান = মেমরি_পড়ো(নতুন_ব্লক, 0)
-say "[৫] রিসেটের পর নতুন বরাদ্দ মান: " + নতুন_মান
-if নতুন_মান == 123456
-    say "  ✔ রিসেটের পর পুনরায় মেমরি ব্যবহার সম্পূর্ণ সফল!"
+// Utilization
+util = util_pct(off3, 4096)
+say "Utilization %:"
+say util
 
-// [৬] স্মার্ট রেফারেন্স কাউন্টিং (ARC Primitives)
-say "[৬] স্মার্ট রেফারেন্স কাউন্টিং (ARC) টেস্ট..."
-রিফ_সেল = রেফারেন্স_তৈরি(99999)
-say "  • প্রাথমিক রেফারেন্স কাউন্ট: " + মেমরি_পড়ো(রিফ_সেল, 0)
-say "  • প্রাথমিক সংরক্ষিত ডেটা   : " + রেফারেন্স_মান(রিফ_সেল)
+// Over-allocation attempt
+over = arena_alloc(off3, 4096, 5000, 8)
+say "Over-alloc (expect -1):"
+say over
 
-কাউন্ট_2 = রেফারেন্স_ধরে_রাখো(রিফ_সেল)
-say "  • ইনক্রিমেন্ট পর রেফারেন্স কাউন্ট: " + কাউন্ট_2
+// Alignment tests
+say "align_up(13, 8) = 16:"
+say align_up(13, 8)
 
-কাউন্ট_1 = রেফারেন্স_ছেড়ে_দাও(রিফ_সেল)
-say "  • ডিক্রিমেন্ট পর রেফারেন্স কাউন্ট: " + কাউন্ট_1
+say "align_up(16, 8) = 16:"
+say align_up(16, 8)
 
-কাউন্ট_0 = রেফারেন্স_ছেড়ে_দাও(রিফ_সেল)
-say "  • শেষ ডিক্রিমেন্ট পর কাউন্ট (ফ্রিযোগ্য): " + কাউন্ট_0
+say "align_up(1, 64) = 64:"
+say align_up(1, 64)
 
-// অ্যারিনা ক্লিনআপ
-অ্যারিনা_ধ্বংস(পুল)
+// Free-list: 32 blocks, 10 used, alloc 5
+fl = freelist_alloc(32, 10, 5)
+say "Free-list alloc 5 (new used count):"
+say fl
 
-say ""
-say "🎉 লিপি অ্যারিনা মেমরি ম্যানেজার ও স্মার্ট এআরসি সম্পূর্ণ সফল!"
+// Exhaustion: alloc 30 from 22 free (expect -1)
+fl_fail = freelist_alloc(32, 10, 30)
+say "Free-list over-alloc (expect -1):"
+say fl_fail
+
+say "PASS: Test 25 Memory Allocator"

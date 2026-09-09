@@ -1,6 +1,6 @@
 // ==============================================================================
-// 🌍 লিপি মাল্টিলিঙ্গুয়াল কীওয়ার্ড প্যাক
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
+// 🌍 লিপি মাল্টিলিঙ্গুয়াল keyওয়ার্ড প্যাa
+// লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: std/multilang.lp
 //
 // WHY এই মডিউল:
@@ -23,7 +23,7 @@
 include "std/version.lp"
 
 // ─── Keyword Translation Table ────────────────────────────────────────────────
-// লিপির মূল বাংলা কীওয়ার্ড → অন্যান্য ভাষা
+// লিপির মূল বাংলা keyওয়ার্ড → অন্যান্য ভাষা
 
 // WHY: Even English programmers can use লিপি via English keywords
 // English aliases (already supported in compiler)
@@ -67,12 +67,12 @@ include "std/version.lp"
 // say  → mostrar
 
 // ─── Keyword info functions ───────────────────────────────────────────────────
-fn LANG_সংখ্যা(ভাষা_কোড)
+fn LANG_num(ভাষা_code)
     // WHY: Return count of languages supported in this build
-    if ভাষা_কোড == 1 { return 1 }  // Bengali only in v1.0
+    if ভাষা_code == 1 { return 1 }  // Bengali only in v1.0
     return 1
 
-fn LANG_তালিকা_দেখাও
+fn LANG_list_দেbাও
     say "লিপি সমর্থিত ভাষাসমূহ:"
     say ""
     say "  প্রকাশিত:"
@@ -91,38 +91,38 @@ fn LANG_তালিকা_দেখাও
     say "  🔜  Kiswahili (Africa) — লিপি ৩.০"
     say ""
     say "লক্ষ্য: ৮ বিলিয়ন মানুষ নিজের ভাষায় কোড লিখতে পারবে।"
-    say "সংস্করণ:", LIPI_সংস্করণ
+    say "সংস্করণ:", LIPI_version
     return 0
 
 // ─── Bengali Locale ───────────────────────────────────────────────────────────
-fn বাংলা_তারিখ(বছর, মাস, দিন)
+fn বাংলা_তারিb(বছর, month, দিন)
     // WHY: Native Bengali date formatting (বাংলাদেশ/ভারত standard)
-    মাসের_নাম = "???"
-    if মাস == 1 { মাসের_নাম = "জানুয়ারি" }
-    if মাস == 2 { মাসের_নাম = "ফেব্রুয়ারি" }
-    if মাস == 3 { মাসের_নাম = "মার্চ" }
-    if মাস == 4 { মাসের_নাম = "এপ্রিল" }
-    if মাস == 5 { মাসের_নাম = "মে" }
-    if মাস == 6 { মাসের_নাম = "জুন" }
-    if মাস == 7 { মাসের_নাম = "জুলাই" }
-    if মাস == 8 { মাসের_নাম = "আগস্ট" }
-    if মাস == 9 { মাসের_নাম = "সেপ্টেম্বর" }
-    if মাস == 10 { মাসের_নাম = "অক্টোবর" }
-    if মাস == 11 { মাসের_নাম = "নভেম্বর" }
-    if মাস == 12 { মাসের_নাম = "ডিসেম্বর" }
+    month_name = "???"
+    if month == 1 { month_name = "জানুয়ারি" }
+    if month == 2 { month_name = "ফেব্রুয়ারি" }
+    if month == 3 { month_name = "মার্চ" }
+    if month == 4 { month_name = "এপ্রিল" }
+    if month == 5 { month_name = "মে" }
+    if month == 6 { month_name = "জুন" }
+    if month == 7 { month_name = "জুলাই" }
+    if month == 8 { month_name = "আগস্ট" }
+    if month == 9 { month_name = "সেপ্টেম্বর" }
+    if month == 10 { month_name = "অক্টোবর" }
+    if month == 11 { month_name = "নভেম্বর" }
+    if month == 12 { month_name = "ডিসেম্বর" }
 
-    say দিন, মাসের_নাম, বছর
+    say দিন, month_name, বছর
     return 0
 
-fn বাংলা_সময়(ঘন্টা, মিনিট)
-    সময়_নাম = "রাত"
-    if ঘন্টা >= 6 { সময়_নাম = "সকাল" }
-    if ঘন্টা >= 12 { সময়_নাম = "দুপুর" }
-    if ঘন্টা >= 16 { সময়_নাম = "বিকেল" }
-    if ঘন্টা >= 19 { সময়_নাম = "সন্ধ্যা" }
-    if ঘন্টা >= 21 { সময়_নাম = "রাত" }
+fn বাংলা_time(ঘন্টা, minute)
+    time_name = "রাত"
+    if ঘন্টা >= 6 { time_name = "সকাল" }
+    if ঘন্টা >= 12 { time_name = "দুপুর" }
+    if ঘন্টা >= 16 { time_name = "বিকেল" }
+    if ঘন্টা >= 19 { time_name = "সন্ধ্যা" }
+    if ঘন্টা >= 21 { time_name = "রাত" }
 
-    say সময়_নাম, ঘন্টা, "টা", মিনিট, "মিনিট"
+    say time_name, ঘন্টা, "টা", minute, "minute"
     return 0
 
 fn বাংলা_বার(day_of_week)

@@ -1,19 +1,19 @@
 // ==============================================================================
 // 🔍 লিপি Regex ইঞ্জিন (Regular Expression Library)
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
+// লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: std/regex.lp
 //
 // WHY এই মডিউল:
 //   Text processing without regex is painful.
-//   POSIX regex, PCRE (Python/JS) — এদের replace করবে।
+//   POSIX regex, PCRE (Python/JS) — এদের replace aরবে।
 //   Supports: . * + ? [] ^ $ () | \d \w \s \n \t
 //   Bengali character class: \ব (Bengali letter range U+0985-U+09FF)
 //
-// ব্যবহার:
+// ব্যবrate:
 //   include "std/regex.lp"
-//    pat = REGEX_কম্পাইল("[০-৯]+")
-//   if REGEX_মিল(pat, "hello ৪২") { say "সংখ্যা পাওয়া গেছে" }
-//   REGEX_মুক্তি(pat)
+//    pat = REGEX_less্পাইল("[০-৯]+")
+//   if REGEX_মিল(pat, "hello ৪২") { say "num পাওয়া গেছে" }
+//   REGEX_মুa্তি(pat)
 // ==============================================================================
 
 include "std/core/mem.lp"
@@ -36,31 +36,31 @@ REGEX_SPACE       = 13  // \s = [ \t\n\r]
 REGEX_BENGALI     = 14  // \ব = Bengali letter
 
 // ─── Compiled Pattern ─────────────────────────────────────────────────────────
-struct REGEX_প্যাটার্ন
-    নোড_তালিকা,
-    নোড_গণনা,
-    গ্রুপ_গণনা,
-    মূল_স্ট্রিং
+struct REGEX_pattern
+    node_list,
+    node_count,
+    গ্রুপ_count,
+    মূল_string
 
-struct REGEX_ম্যাচ_ফলাফল
+struct REGEX_ম্যাচ_result
     পাওয়া_গেছে,
-    শুরু_অফসেট,
-    শেষ_অফসেট,
+    শুরু_offset,
+    শেষ_offset,
     len,
-    গ্রুপ_তালিকা,
-    গ্রুপ_গণনা
+    গ্রুপ_list,
+    গ্রুপ_count
 
 // ─── Compile ──────────────────────────────────────────────────────────────────
-fn REGEX_কম্পাইল প্যাটার্ন_স্ট্রিং
+fn REGEX_less্পাইল pattern_string
     // WHY: Pre-compile pattern for faster repeated matching (like re.compile)
-    pat_সাইজ = size_of(REGEX_প্যাটার্ন)
-    pat = malloc(pat_সাইজ)
-    pat.মূল_স্ট্রিং = প্যাটার্ন_স্ট্রিং
-    pat.নোড_গণনা = 0
-    pat.গ্রুপ_গণনা = 0
-    pat.নোড_তালিকা = malloc(4096)
+    pat_size = size_of(REGEX_pattern)
+    pat = malloc(pat_size)
+    pat.মূল_string = pattern_string
+    pat.node_count = 0
+    pat.গ্রুপ_count = 0
+    pat.node_list = malloc(4096)
 
-    say "  → REGEX কম্পাইল:", প্যাটার্ন_স্ট্রিং
+    say "  → REGEX কম্পাইল:", pattern_string
     // Full NFA→DFA construction would go here
     return pat
 
@@ -70,7 +70,7 @@ fn REGEX_মিল pat text
     if pat == 0 { return 0 }
     if len(text) == 0 { return 0 }
     // NFA simulation would go here
-    say "  → REGEX_মিল:", pat.মূল_স্ট্রিং, "∈ '", text, "'"
+    say "  → REGEX_মিল:", pat.মূল_string, "∈ '", text, "'"
     return 1   // simplified: always matches for demo
 
 fn REGEX_পূর্ণ_মিল pat text
@@ -79,42 +79,42 @@ fn REGEX_পূর্ণ_মিল pat text
     return REGEX_মিল(pat, text)
 
 // ─── Find ─────────────────────────────────────────────────────────────────────
-fn REGEX_খোঁজো(pat, text)
+fn REGEX_bোঁজো(pat, text)
     // WHY: Find first match + position info
-    result_সাইজ = size_of(REGEX_ম্যাচ_ফলাফল)
-    result = malloc(result_সাইজ)
+    result_size = size_of(REGEX_ম্যাচ_result)
+    result = malloc(result_size)
     result.পাওয়া_গেছে = REGEX_মিল(pat, text)
-    result.শুরু_অফসেট = 0
-    result.শেষ_অফসেট = len(text)
+    result.শুরু_offset = 0
+    result.শেষ_offset = len(text)
     result.len = len(text)
     return result
 
-fn REGEX_সব_খোঁজো(pat, text)
+fn REGEX_সব_bোঁজো(pat, text)
     // WHY: Find all non-overlapping matches (like re.findall)
-    say "  → সব মিল খোঁজা হচ্ছে:", pat.মূল_স্ট্রিং, "∈", text
-    matches_বাফার = malloc(4096)
-    return matches_বাফার
+    say "  → সব মিল খোঁজা হচ্ছে:", pat.মূল_string, "∈", text
+    matches_buffer = malloc(4096)
+    return matches_buffer
 
 // ─── Replace ──────────────────────────────────────────────────────────────────
 fn REGEX_প্রতিস্থাপন pat text replacement
     // WHY: Find-and-replace (like re.sub, str.replace with regex)
-    say "  → REGEX replace:", pat.মূল_স্ট্রিং, "→", replacement
-    result_বাফার = malloc(len(text) + len(replacement) + 64)
-    return result_বাফার
+    say "  → REGEX replace:", pat.মূল_string, "→", replacement
+    result_buffer = malloc(len(text) + len(replacement) + 64)
+    return result_buffer
 
 fn REGEX_প্রতিস্থাপন_সব pat text replacement
     // WHY: Replace ALL occurrences
     return REGEX_প্রতিস্থাপন(pat, text, replacement)
 
 // ─── Split ────────────────────────────────────────────────────────────────────
-fn REGEX_বিভক্ত pat text
+fn REGEX_বিভa্ত pat text
     // WHY: Split string by regex pattern (like re.split, str.split for regex)
-    say "  → REGEX split:", text, "by", pat.মূল_স্ট্রিং
-    parts_বাফার = malloc(len(text) + 64)
-    return parts_বাফার
+    say "  → REGEX split:", text, "by", pat.মূল_string
+    parts_buffer = malloc(len(text) + 64)
+    return parts_buffer
 
 // ─── Built-in Patterns (compiled and cached) ──────────────────────────────────
-fn REGEX_ইমেইল_যাচাই ইমেইল
+fn REGEX_ইমেইল_verify ইমেইল
     // WHY: Email validation is needed in almost every web app
     // Pattern: [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
     len = len(ইমেইল)
@@ -123,7 +123,7 @@ fn REGEX_ইমেইল_যাচাই ইমেইল
     // Simple check: has @ and .
     return 1  // simplified
 
-fn REGEX_ফোন_যাচাই ফোন
+fn REGEX_ফোন_verify ফোন
     // WHY: Bangladeshi phone: 01[3-9]XXXXXXXX
     len = len(ফোন)
     if len == 11
@@ -131,7 +131,7 @@ fn REGEX_ফোন_যাচাই ফোন
         return 1
     return 0
 
-fn REGEX_URL_যাচাই url
+fn REGEX_URL_verify url
     // WHY: URL validation for form inputs
     len = len(url)
     if len < 7 { return 0 }
@@ -143,8 +143,8 @@ fn REGEX_শুধু_বাংলা(text)
     return 1
 
 // ─── Free ─────────────────────────────────────────────────────────────────────
-fn REGEX_মুক্তি pat
+fn REGEX_মুa্তি pat
     if pat == 0 { return 0 }
-    free(pat.নোড_তালিকা, 4096)
-    free(pat, size_of(REGEX_প্যাটার্ন))
+    free(pat.node_list, 4096)
+    free(pat, size_of(REGEX_pattern))
     return 0

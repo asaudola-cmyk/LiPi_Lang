@@ -1,46 +1,41 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — নবম পাঠ (Lipi 09: Native Web Framework)
-// বিশুদ্ধ লিপিতে HTTP রাউটিং ও মিডলওয়্যার ফ্রেমওয়ার্ক প্রদর্শনী
-// WHY: web framework = socket + parse + route + response, no Express/Laravel needed.
+// Test 09: Web Framework — Lipi 2.0
+// Demonstrates: router pattern, HTTP response builder, struct for routes
 
-include "std/io.lp"
-include "std/net.lp"
+struct Route
+    path
+    method
+    status
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  🌐 LIPI SOVEREIGN WEB FRAMEWORK — NATIVE HTTP ROUTING ENGINE         ║"
-say "║  ⚡ Zero Express | Zero Laravel | Pure Linux Kernel TCP Sockets        ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+// Build a text/plain HTTP response string
+fn text_response code body
+    return "HTTP/1.1 " + code + "\r\nContent-Type: text/plain\r\n\r\n" + body
 
-// ১. রাউট টেবিল সিমুলেশন
-say "=== [১] HTTP রাউট রেজিস্ট্রেশন ==="
-say "  GET  / ───────────── index_handler"
-say "  GET  /api/status ─── status_handler"
-say "  POST /api/data ───── data_handler"
-say "  GET  /health ──────── health_handler"
-say ""
+// Build a JSON HTTP response string
+fn json_response code body
+    return "HTTP/1.1 " + code + "\r\nContent-Type: application/json\r\n\r\n" + body
 
-// ২. মিডলওয়্যার চেইন প্রদর্শন
-say "=== [২] মিডলওয়্যার পাইপলাইন ==="
-say "  রিকোয়েস্ট → [CORS] → [Auth] → [RateLimit] → [Handler] → রেসপন্স"
-say "  লেটেন্সি   : 1.2 µs per hop (direct kernel TCP)"
-say ""
+// Match a path+method pair and return the appropriate response
+fn match_route path method
+    if path == "/" and method == "GET"
+        return text_response "200 OK" "Hello from Lipi!"
+    elif path == "/api" and method == "GET"
+        return json_response "200 OK" "{\"status\": \"ok\"}"
+    elif path == "/health" and method == "GET"
+        return json_response "200 OK" "{\"alive\": true}"
+    else
+        return text_response "404 Not Found" "Not found"
 
-// ৩. HTTP রেসপন্স বিল্ডার সিমুলেশন
-say "=== [৩] HTTP রেসপন্স বিল্ডার ==="
-স্ট্যাটাস_কোড = 200
-কনটেন্ট_টাইপ = "application/json"
-বডি = "{\"status\": \"sovereign\", \"lang\": \"lipi\", \"version\": \"1.0.0\"}"
-say "  HTTP/" + স্ট্যাটাস_কোড + " OK"
-say "  Content-Type: " + কনটেন্ট_টাইপ
-say "  Body: " + বডি
-say ""
+// Simulate several HTTP requests
+say match_route "/" "GET"
+say match_route "/api" "GET"
+say match_route "/health" "GET"
+say match_route "/xyz" "GET"
 
-// ৪. পারফরম্যান্স মেট্রিক্স
-শুরু = cpu_clock()
-ডামি = স্ট্যাটাস_কোড * 2
-শেষ = cpu_clock()
-say "=== [৪] পারফরম্যান্স বেঞ্চমার্ক ==="
-say "  Route resolution: " + (শেষ - শুরু) + " CPU cycles"
-say "  Throughput: 1.2M requests/sec (theoretical kernel limit)"
-say ""
-say "✅ লিপি ওয়েব ফ্রেমওয়ার্ক: শতভাগ নেটিভ, null Express, null Laravel!"
+// Record a route struct for logging
+r = Route()
+r.path = "/api"
+r.method = "GET"
+r.status = 200
+say r.status
+
+say "PASS: Test 09 Web Framework"

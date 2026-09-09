@@ -1,75 +1,75 @@
-// 📜 লিপি স্ট্যান্ডার্ড ম্যাথমেটিক্যাল লাইব্রেরি (Pure Lipi Standard Math Library)
-// 🏛️ স্বয়ংসম্পূর্ণ, ডিপেন্ডেন্সিমুক্ত এবং সিলিকন সিপিউ-তে সরাসরি এক্সিকিউটেবল গণিত ইঞ্জিন
+// 📜 লিপি স্ট্যান্ডার্ড ম্যাথমেটিa্যাল লাইব্রেরি (Pure Lipi Standard Math Library)
+// 🏛️ স্বয়ংসম্পূর্ণ, ডিপেন্ডেন্সিমুa্ত এবং সিলিaন সিপিউ-তে direct এa্সিaিউটেবল গণিত ইঞ্জিন
 
-// ১. পরম মান নির্ণয় (Absolute value: |x|)
-// নেতিবাচক সংখ্যাকে ধনাত্মক করে, ধনাত্মক সংখ্যা অপরিবর্তিত থাকে
-fn পরম_মান সংখ্যা
-    if সংখ্যা < 0
-        return 0 - সংখ্যা
-    return সংখ্যা
+// ১. পরম value নির্ণয় (Absolute value: |x|)
+// নেতিবাচa numaে ধনাত্মa aরে, ধনাত্মa num অপরিবর্তিত থাaে
+fn abs_val num
+    if num < 0
+        return 0 - num
+    return num
 
 // ২. ঘাত বা পাওয়ার নির্ণয় (Exponentiation: base^exp)
-// লুপের মাধ্যমে ভিত্তি সংখ্যাকে ঘাত সংখ্যক বার গুণ করে মান নির্ণয় করে
+// লুপের মাধ্যমে ভিত্তি numaে ঘাত সংb্যa বার multiply aরে value নির্ণয় aরে
 fn পাওয়ার ভিত্তি ঘাত
-    ফল = 1
+    result = 1
     i = 0
     while i < ঘাত
-        ফল = ফল * ভিত্তি
+        result = result * ভিত্তি
         i = i + 1
-    return ফল
+    return result
 
-// ৩. গরিষ্ঠ সাধারণ গুণনীয়ক বা গসাগু (Greatest Common Divisor - Euclidean Algorithm)
-// ইউক্লিডীয় অ্যালগরিদমের মাধ্যমে দুটি সংখ্যার গসাগু নির্ণয়
-fn গসাগু ক খ
-    while খ != 0
-        ভাগশেষ = ক % খ
-        ক = খ
-        খ = ভাগশেষ
-    return ক
+// ৩. গরিষ্ঠ সাধারণ multiplyনীয়a বা গসাগু (Greatest Common Divisor - Euclidean Algorithm)
+// ইউa্লিডীয় অ্যালগরিদমের মাধ্যমে দুটি numর গসাগু নির্ণয়
+fn গসাগু a b
+    while b != 0
+        divideশেষ = a % b
+        a = b
+        b = divideশেষ
+    return a
 
-// ৪. লঘিষ্ঠ সাধারণ গুণিতক বা লসাগু (Least Common Multiple: (ক * খ) / গসাগু(ক, খ))
-// সংখ্যা দুটির গুণফলকে তাদের গসাগু দিয়ে ভাগ করে লসাগু পাওয়া যায়
-fn লসাগু ক খ
-    g = গসাগু(ক, খ)
-    গুণফল = ক * খ
-    ফল = গুণফল / g
-    return ফল
+// ৪. লঘিষ্ঠ সাধারণ multiplyিতa বা লসাগু (Least Common Multiple: (a * b) / গসাগু(a, b))
+// num দুটির productaে তাদের গসাগু দিয়ে divide aরে লসাগু পাওয়া যায়
+fn লসাগু a b
+    g = গসাগু(a, b)
+    product = a * b
+    result = product / g
+    return result
 
-// ৫. মৌলিক সংখ্যা যাচাই (Prime Number Detection)
-// ২ এর চেয়ে ছোট হলে ০, ২ হলে ১, জোড় হলে ০, বিজোড় উৎপাদক যাচাই করে ১ অথবা ০ return দেয়
-fn মৌলিক_কিনা সংখ্যা
-    if সংখ্যা <= 1
+// ৫. মৌলিa num যাচাই (Prime Number Detection)
+// ২ এর চেয়ে small হলে ০, ২ হলে ১, জোড় হলে ০, বিজোড় উৎপাদa যাচাই aরে ১ অথবা ০ return দেয়
+fn মৌলিa_aিনা num
+    if num <= 1
         return 0
-    if সংখ্যা == 2
+    if num == 2
         return 1
-    d = সংখ্যা % 2
+    d = num % 2
     if d == 0
         return 0
     i = 3
-    সীমা = সংখ্যা / 2
+    সীমা = num / 2
     while i <= সীমা
-        rem = সংখ্যা % i
+        rem = num % i
         if rem == 0
             return 0
         i = i + 2
     return 1
 
-// ৬. সর্বোচ্চ মান নির্ণয় (Maximum of two numbers)
-fn সর্বোচ্চ ক খ
-    if ক > খ
-        return ক
-    return খ
+// ৬. সর্বোচ্চ value নির্ণয় (Maximum of two numbers)
+fn সর্বোচ্চ a b
+    if a > b
+        return a
+    return b
 
-// ৭. সর্বনিম্ন মান নির্ণয় (Minimum of two numbers)
-fn সর্বনিম্ন ক খ
-    if ক < খ
-        return ক
-    return খ
+// ৭. সর্বনিম্ন value নির্ণয় (Minimum of two numbers)
+fn সর্বনিম্ন a b
+    if a < b
+        return a
+    return b
 
-// ৮. শক্তি বা এক্সপোনেন্ট অ্যালিয়াস (Alias for পাওয়ার)
-fn শক্তি ভিত্তি ঘাত
+// ৮. শa্তি বা এa্সপোনেন্ট অ্যালিয়াস (Alias for পাওয়ার)
+fn শa্তি ভিত্তি ঘাত
     return পাওয়ার(ভিত্তি, ঘাত)
 
-// ৯. পরম অ্যালিয়াস (Alias for পরম_মান)
-fn পরম সংখ্যা
-    return পরম_মান(সংখ্যা)
+// ৯. পরম অ্যালিয়াস (Alias for abs_val)
+fn পরম num
+    return abs_val(num)

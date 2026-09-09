@@ -1,113 +1,113 @@
-// 📜 লিপি ইনোভেটিভ রবিন-হুড হ্যাশম্যাপ (Pure Lipi Robin Hood Hash Map)
-// 🏛️ O(1) মেমরি লুকআপ, Cache-Locality অপ্টিমাইজড, ও Zero-Allocation আর্কিটেকচার
-// ইনোভেশন: মেমরি ফ্র্যাগমেন্টেশন রোধ করতে আমরা রবিন-হুড প্রোবিং (Robin Hood Probing) ব্যবহার করছি,
-// যেখানে 'ধনী' (যার ইনডেক্স থেকে দূরত্ব কম) 'গরিব' (যার দূরত্ব বেশি) কে জায়গা ছেড়ে দেয়!
+// 📜 লিপি ইনোভেটিভ রবিন-হুড hashম্যাপ (Pure Lipi Robin Hood Hash Map)
+// 🏛️ O(1) memory লুaআপ, Cache-Locality অপ্টিমাইজড, ও Zero-Allocation আর্aিটেaচার
+// ইনোভেশন: memory ফ্র্যাগমেন্টেশন রোধ aরতে we রবিন-হুড প্রোবিং (Robin Hood Probing) ব্যবrate aরছি,
+// যেbানে 'ধনী' (যার indexa্স থেaে distance less) 'গরিব' (যার distance more) aে জায়গা ছেড়ে দেয়!
 
 include "std/mem.lp"
 
-// ১. মেমরিতে হ্যাশটেবিল তৈরি (Create Hash Table)
-// WHY: লিংকড-লিস্ট (Linked List) ব্যবহার না করে সরাসরি একটানা মেমরি ব্লকে (Contiguous Memory)
-// ডেটা রাখলে CPU Cache (L1/L2) মিস হওয়ার সম্ভাবনা ৯৯% কমে যায়।
-fn হ্যাশম্যাপ_তৈরি সর্বোচ্চ_উপাদান
-    // প্রতি স্লটে লাগবে: [Key Hash: 8 Byte] + [Value Pointer: 8 Byte] + [Probe Distance: 8 Byte] = 24 Bytes
-    আকার = সর্বোচ্চ_উপাদান * 24
+// ১. memতে hashtable create (Create Hash Table)
+// WHY: লিংaড-লিস্ট (Linked List) ব্যবrate not aরে direct এaটানা memory ব্লaে (Contiguous Memory)
+// data রাbলে CPU Cache (L1/L2) মিস হওয়ার সম্ভাবনা ৯৯% lessে যায়।
+fn hashmap_create max_elements
+    // each slotে needed: [Key Hash: 8 Byte] + [Value Pointer: 8 Byte] + [Probe Distance: 8 Byte] = 24 Bytes
+    size = max_elements * 24
     // SYS_mmap (9) -> PROT_READ|PROT_WRITE (3), MAP_PRIVATE|MAP_ANONYMOUS (34)
-    পয়েন্টার = সিসকল(9, 0, আকার, 3, 34, -1, 0)
-    মেমরি_পূরণ(পয়েন্টার, 0, আকার)
+    পয়েন্টার = syscall(9, 0, size, 3, 34, -1, 0)
+    mem_fill(পয়েন্টার, 0, size)
     return পয়েন্টার
 
-// ২. ক্রিপ্টোগ্রাফিক নন-ক্রিপ্টো হ্যাশ (MurmurHash3 বিকল্প ইনোভেশন)
-// WHY: সাধারণ মডুলো (Modulo) হ্যাশ অনেক কোলিশন (Collision) তৈরি করে।
-// আমরা বিট-শিফটিং এবং প্রাইম মাল্টিপ্লিকেশন দিয়ে ফাস্ট অ্যাভাল্যাঞ্জ হ্যাশ তৈরি করছি।
-fn ফাস্ট_হ্যাশ মান
-    হ্যাশ = মান * 13145671 // একটি প্রাইম সংখ্যা
-    // লিপিতে বিট-শিফট বর্তমানে গাণিতিক ভাগের মাধ্যমে সিমুলেট করা যায় (if শিফট অপারেটর না থাকে)
-    // তবে আমরা সিম্পল লিনিয়ার কনগ্রুয়েন্সিয়াল জেনারেটর (LCG) স্টাইল হ্যাশ ব্যবহার করব।
-    হ্যাশ = হ্যাশ + (মান * 73)
-    if হ্যাশ < 0
-        হ্যাশ = হ্যাশ * -1
-    return হ্যাশ
+// ২. a্রিপ্টোগ্রাফিa নন-a্রিপ্টো hash (MurmurHash3 বিaল্প ইনোভেশন)
+// WHY: সাধারণ মডুলো (Modulo) hash অনেa aোলিশন (Collision) create aরে।
+// we বিট-শিফটিং এবং prime মাল্টিপ্লিaেশন দিয়ে ফাস্ট অ্যাভাল্যাঞ্জ hash create aরছি।
+fn fast_hash value
+    hash = value * 13145671 // এaটি prime num
+    // লিপিতে বিট-শিফট বর্তvalueে গাণিতিa divideের মাধ্যমে সিমুলেট aরা যায় (if shift operator not থাaে)
+    // তবে we simple লিনিয়ার aনগ্রুয়েন্সিয়াল generator (LCG) স্টাইল hash ব্যবrate aরব।
+    hash = hash + (value * 73)
+    if hash < 0
+        hash = hash * -1
+    return hash
 
-// ৩. রবিন-হুড ইনসার্ট (Robin Hood Steal-from-the-Rich Insert)
-// WHY: কোলিশন হলে যে ডেটা তার আসল ইনডেক্স থেকে বেশি দূরে (গরিব), সে আগের ডেটাকে (ধনী) সরিয়ে জায়গা দখল করবে।
-fn হ্যাশম্যাপ_ইনসার্ট ম্যাপ_পয়েন্টার ক্যাপাসিটি কি_মান ভ্যালু
-    হ্যাশ = ফাস্ট_হ্যাশ(কি_মান)
-    // ক্যাপাসিটি দিয়ে মডুলো (লিপিতে % অপারেটর না থাকলে: হ্যাশ - (হ্যাশ / ক্যাপাসিটি) * ক্যাপাসিটি)
-    ভাগফল = হ্যাশ / ক্যাপাসিটি
-    স্লট = হ্যাশ - (ভাগফল * ক্যাপাসিটি)
+// ৩. রবিন-হুড insert (Robin Hood Steal-from-the-Rich Insert)
+// WHY: aোলিশন হলে যে data তার আসল indexa্স থেaে more দূরে (গরিব), সে আগের dataaে (ধনী) সরিয়ে জায়গা দbল aরবে।
+fn hashmap_insert ম্যাপ_পয়েন্টার capacity key_val val
+    hash = fast_hash(key_val)
+    // capacity দিয়ে মডুলো (লিপিতে % operator not থাaলে: hash - (hash / capacity) * capacity)
+    quotient = hash / capacity
+    slot = hash - (quotient * capacity)
 
-    বর্তমান_কি = কি_মান
-    বর্তমান_ভ্যালু = ভ্যালু
-    বর্তমান_দূরত্ব = 0
+    cur_key = key_val
+    cur_val = val
+    cur_dist = 0
 
-    লুপ_কাউন্ট = 0
-    while লুপ_কাউন্ট < ক্যাপাসিটি
-        অফসেট = স্লট * 24
-        সংরক্ষিত_কি = মেমরি_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, স্লট * 3) // Offset 0
+    loop_count = 0
+    while loop_count < capacity
+        offset = slot * 24
+        stored_key = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, slot * 3) // Offset 0
 
-        // স্লট খালি থাকলে
-        if সংরক্ষিত_কি == 0
-            মেমরি_শব্দ_লেখো(ম্যাপ_পয়েন্টার, স্লট * 3, বর্তমান_কি)
-            মেমরি_শব্দ_লেখো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 1, বর্তমান_ভ্যালু)
-            মেমরি_শব্দ_লেখো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 2, বর্তমান_দূরত্ব)
+        // slot bালি থাaলে
+        if stored_key == 0
+            mem_write_word(ম্যাপ_পয়েন্টার, slot * 3, cur_key)
+            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 1, cur_val)
+            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 2, cur_dist)
             return 1
 
-        // রবিন হুড লজিক: ধনী থেকে চুরি (Steal from the rich)
-        সংরক্ষিত_দূরত্ব = মেমরি_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 2)
-        if বর্তমান_দূরত্ব > সংরক্ষিত_দূরত্ব
+        // রবিন হুড লজিa: ধনী থেaে চুরি (Steal from the rich)
+        stored_dist = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 2)
+        if cur_dist > stored_dist
             // অদল-বদল (Swap)
-            সংরক্ষিত_ভ্যালু = মেমরি_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 1)
+            stored_val = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 1)
 
-            মেমরি_শব্দ_লেখো(ম্যাপ_পয়েন্টার, স্লট * 3, বর্তমান_কি)
-            মেমরি_শব্দ_লেখো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 1, বর্তমান_ভ্যালু)
-            মেমরি_শব্দ_লেখো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 2, বর্তমান_দূরত্ব)
+            mem_write_word(ম্যাপ_পয়েন্টার, slot * 3, cur_key)
+            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 1, cur_val)
+            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 2, cur_dist)
 
-            বর্তমান_কি = সংরক্ষিত_কি
-            বর্তমান_ভ্যালু = সংরক্ষিত_ভ্যালু
-            বর্তমান_দূরত্ব = সংরক্ষিত_দূরত্ব
+            cur_key = stored_key
+            cur_val = stored_val
+            cur_dist = stored_dist
 
-        বর্তমান_দূরত্ব = বর্তমান_দূরত্ব + 1
-        স্লট = স্লট + 1
-        if স্লট >= ক্যাপাসিটি
-            স্লট = 0 // র‍্যাপ এরাউন্ড (Wrap Around)
-        লুপ_কাউন্ট = লুপ_কাউন্ট + 1
+        cur_dist = cur_dist + 1
+        slot = slot + 1
+        if slot >= capacity
+            slot = 0 // র‍্যাপ এরাউন্ড (Wrap Around)
+        loop_count = loop_count + 1
 
-    // ম্যাপ পূর্ণ (Full)
+    // map full (Full)
     return 0
 
-// ৪. ও(১) লুকআপ (O(1) Lookup with Early Exit Innovation)
-// WHY: রবিন হুড হ্যাশিং এর কারণে আমরা জানি যে কোনো ইলিমেন্ট তার দূরত্বের চেয়ে বেশি দূরে থাকতে পারবে না, তাই দ্রুত লুপ ব্রেক করা যায়।
-fn হ্যাশম্যাপ_লুকআপ ম্যাপ_পয়েন্টার ক্যাপাসিটি কি_মান
-    হ্যাশ = ফাস্ট_হ্যাশ(কি_মান)
-    ভাগফল = হ্যাশ / ক্যাপাসিটি
-    স্লট = হ্যাশ - (ভাগফল * ক্যাপাসিটি)
+// ৪. ও(১) লুaআপ (O(1) Lookup with Early Exit Innovation)
+// WHY: রবিন হুড hashিং এর aারণে we জানি যে aোনো ইলিমেন্ট তার distanceের চেয়ে more দূরে থাaতে পারবে not, তাই fast লুপ ব্রেa aরা যায়।
+fn hashmap_lookup ম্যাপ_পয়েন্টার capacity key_val
+    hash = fast_hash(key_val)
+    quotient = hash / capacity
+    slot = hash - (quotient * capacity)
 
-    দূরত্ব = 0
-    লুপ_কাউন্ট = 0
+    distance = 0
+    loop_count = 0
 
-    while লুপ_কাউন্ট < ক্যাপাসিটি
-        সংরক্ষিত_কি = মেমরি_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, স্লট * 3)
+    while loop_count < capacity
+        stored_key = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, slot * 3)
 
-        if সংরক্ষিত_কি == কি_মান
-            ভ্যালু = মেমরি_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 1)
-            return ভ্যালু
+        if stored_key == key_val
+            val = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 1)
+            return val
 
-        if সংরক্ষিত_কি == 0
+        if stored_key == 0
             return -1 // পাওয়া যায়নি
 
-        সংরক্ষিত_দূরত্ব = মেমরি_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (স্লট * 3) + 2)
-        if দূরত্ব > সংরক্ষিত_দূরত্ব
-            return -1 // Early Exit (রবিন হুড ইনোভেশন: ডেটা এখানে থাকতে পারে না)
+        stored_dist = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 2)
+        if distance > stored_dist
+            return -1 // Early Exit (রবিন হুড ইনোভেশন: data এbানে থাaতে পারে না)
 
-        দূরত্ব = দূরত্ব + 1
-        স্লট = স্লট + 1
-        if স্লট >= ক্যাপাসিটি
-            স্লট = 0
-        লুপ_কাউন্ট = লুপ_কাউন্ট + 1
+        distance = distance + 1
+        slot = slot + 1
+        if slot >= capacity
+            slot = 0
+        loop_count = loop_count + 1
 
     return -1
 
-// ৫. হ্যাশম্যাপ অবমুক্তি
-fn হ্যাশম্যাপ_মুছে_ফেলো ম্যাপ_পয়েন্টার ক্যাপাসিটি
-    সিসকল(11, ম্যাপ_পয়েন্টার, ক্যাপাসিটি * 24) // SYS_munmap
+// ৫. hashম্যাপ অবমুa্তি
+fn hashmap_delete ম্যাপ_পয়েন্টার capacity
+    syscall(11, ম্যাপ_পয়েন্টার, capacity * 24) // SYS_munmap
     return 1

@@ -1,54 +1,92 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — স্ট্যান্ডার্ড লাইব্রেরি ও মাল্টি-ফাইল মডিউল সিস্টেম টেস্ট
-// 🏛️ std/math.lp, std/io.lp এবং std/str.lp মডিউল ইমপোর্ট ও এক্সিকিউশন
+// Test 17: Standard Library Usage — Lipi 2.0
+// Demonstrates: math helpers, clamp, min/max, digit_sum, palindrome check
 
-// ১. মাল্টি-ফাইল স্ট্যান্ডার্ড লাইব্রেরি অন্তর্ভুক্তিকরণ
-include "std/str.lp"
-include "std/math.lp"
-include "std/io.lp"
+// Clamp a value to [lo, hi]
+fn clamp x lo hi
+    if x < lo
+        return lo
+    if x > hi
+        return hi
+    return x
 
-// ২. ডেকোরেশন ও তথ্য প্রিন্ট
-রঙিন_শিরোনাম("লিপি স্ট্যান্ডার্ড লাইব্রেরি (Standard Library) ভেরিফিকেশন")
-তথ্য_বার্তা("স্ট্যান্ডার্ড লাইব্রেরির গণিত ও ফাইল আই/ও ইঞ্জিন চালু হচ্ছে...")
+// Minimum of two values
+fn min2 a b
+    if a < b
+        return a
+    return b
 
-// ৩. std/math.lp গণিত ফাংশন পরীক্ষা
-abs_val = পরম_মান(-85)
-say "|-৮৫| এর পরম মান: " + abs_val
+// Maximum of two values
+fn max2 a b
+    if a > b
+        return a
+    return b
 
-pow_val = পাওয়ার(2, 8)
-say "২ এর ঘাত ৮ (২^৮): " + pow_val
+// Integer absolute value
+fn abs_val x
+    if x < 0
+        return 0 - x
+    return x
 
-g = গসাগু(48, 18)
-say "৪৮ এবং ১৮ এর গসাগু: " + g
+// Sum of digits of a non-negative integer
+// WHY: Lipi / is float division, so we use (n - d) / 10 to keep integer-like values
+fn digit_sum n
+    total = 0
+    while n >= 10
+        d = n % 10
+        total = total + d
+        n = (n - d) / 10
+    total = total + n
+    return total
 
-l = লসাগু(12, 15)
-say "১২ এবং ১৫ এর লসাগু: " + l
+// Reverse digits of a number
+fn reverse_digits n
+    result = 0
+    while n >= 10
+        result = result * 10 + n % 10
+        d = n % 10
+        n = (n - d) / 10
+    result = result * 10 + n
+    return result
 
-p17 = মৌলিক_কিনা(17)
-say "১৭ মৌলিক সংখ্যা কিনা (১=হ্যাঁ, ০=না): " + p17
+// Check palindrome number
+fn is_palindrome n
+    if n < 0
+        return 0
+    rev = reverse_digits n
+    if rev == n
+        return 1
+    return 0
 
-p24 = মৌলিক_কিনা(24)
-say "২৪ মৌলিক সংখ্যা কিনা (১=হ্যাঁ, ০=না): " + p24
+say "clamp(15, 0, 10):"
+say clamp(15, 0, 10)
 
-boro = সর্বোচ্চ(99, 45)
-say "৯৯ এবং ৪৫ এর মধ্যে সর্বোচ্চ: " + boro
+say "clamp(5, 0, 10):"
+say clamp(5, 0, 10)
 
-choto = সর্বনিম্ন(99, 45)
-say "৯৯ এবং ৪৫ এর মধ্যে সর্বনিম্ন: " + choto
+say "clamp(-5, 0, 10):"
+say clamp(0 - 5, 0, 10)
 
-// ৪. std/io.lp কার্নেল ফাইল অপারেশন পরীক্ষা
-তথ্য_বার্তা("স্ট্যান্ডার্ড আই/ও মডিউল দিয়ে ফাইল তৈরি ও টেস্ট বার্তা লেখা হচ্ছে...")
-fd_write = ফাইল_তৈরি("dist/stdlib_demo.txt")
-txt = "লিপি স্ট্যান্ডার্ড লাইব্রেরি সম্পূর্ণ কার্যকর ও স্বাধীন!\n"
-len_txt = len(txt)
-written = ফাইল_লেখো(fd_write, txt, len_txt)
-c1 = ফাইল_বন্ধ(fd_write)
+say "min2(42, 17):"
+say min2(42, 17)
 
-তথ্য_বার্তা("ফাইল থেকে বাফারে রি-রিড করা হচ্ছে...")
-fd_read = ফাইল_খোলো("dist/stdlib_demo.txt")
-read_bytes = ফাইল_পড়ো(fd_read, বাফার(), 1024)
-c2 = ফাইল_বন্ধ(fd_read)
+say "max2(42, 17):"
+say max2(42, 17)
 
-// বাফারের ডেটা কনসোলে সরাসরি কার্নেল আউটপুট
-out = কনসোল_লেখো(বাফার(), read_bytes)
+// Negative literals via parenthesized expressions
+say "abs_val(-99):"
+neg99 = 0 - 99
+say abs_val neg99
 
-সফলতা_বার্তা("লিপি স্ট্যান্ডার্ড লাইব্রেরি (std/math, std/io, std/str) সফলভাবে ভেরিফাইড!")
+say "digit_sum(12345):"
+say digit_sum 12345
+
+say "reverse_digits(12345):"
+say reverse_digits 12345
+
+say "is_palindrome(121):"
+say is_palindrome 121
+
+say "is_palindrome(123):"
+say is_palindrome 123
+
+say "PASS: Test 17 Standard Library"

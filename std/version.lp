@@ -1,44 +1,21 @@
-// ==============================================================================
-// 📜 লিপি স্ট্যান্ডার্ড লাইব্রেরি — সংস্করণ মডিউল (std/version.lp)
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
-//
-// WHY: একটি ভাষার নিজের সংস্করণ জানা উচিত।
-// Runtime এ লিপি প্রোগ্রাম নিজের কম্পাইলার ও ভাষার সংস্করণ জানতে পারবে।
-// ==============================================================================
+// std/version.lp — Lipi 2.0 Version Information
+// LOCKED: Lipi First 1.0 Sovereign
 
-// ─── মূল সংস্করণ ───────────────────────────────────────────────────────────
-LIPI_সংস্করণ = "প্রথম ১.০"
-LIPI_VERSION = "Prothom 1.0"
-LIPI_সংকেতনাম = "সোভেরিন"
-LIPI_CODENAME = "Sovereign"
+VERSION_NAME     = "First 1.0"
+VERSION_CODE     = "1.0.0"
+CODENAME         = "Sovereign"
+RUNTIME_VERSION  = "2.0.0"
+RUNTIME_ENGINE   = "lipic2"
+LANGUAGE         = "Lipi"
+AUTHOR           = "Lipi Language Project"
+LICENSE          = "MIT"
+UNICODE_SUPPORT  = 1
+GLOBAL_STANDARD  = 1
 
-// ─── সংস্করণ নম্বর (SemVer equivalent) ────────────────────────────────────
-// WHY: machine-readable version for programmatic comparison
-LIPI_MAJOR = 1
-LIPI_MINOR = 0
-LIPI_PATCH = 0
+fn version_string = "Lipi " + VERSION_NAME + " (\" + CODENAME + "\")"
+fn runtime_string = "lipic2 " + RUNTIME_VERSION + " (Python Runtime)"
 
-// ─── বিল্ড তথ্য ─────────────────────────────────────────────────────────────
-LIPI_লক্ষ্য_প্ল্যাটফর্ম = "Linux x86_64 ELF64"
-LIPI_TARGET_PLATFORM = "Linux x86_64 ELF64"
-LIPI_নির্মাতা = "Shafiullah (আশরাফ উদ্দৌলা)"
-LIPI_লাইসেন্স = "MIT"
-
-// ─── সংস্করণ তুলনা ফাংশন ───────────────────────────────────────────────────
-// WHY: Allow programs to check minimum required Lipi version
-fn সংস্করণ_যাচাই(major: সংখ্যা, minor: সংখ্যা)
-    if LIPI_MAJOR >= major
-        if LIPI_MINOR >= minor
-            return 1
-    return 0
-
-// ─── সংস্করণ প্রদর্শন ───────────────────────────────────────────────────────
-// WHY: Human-readable version banner for CLI tools
-fn সংস্করণ_দেখাও()
-    say "╔══════════════════════════════════════════╗"
-    say "║  👑 লিপি সার্বভৌম প্রোগ্রামিং ভাষা      ║"
-    say "║  সংস্করণ : প্রথম ১.০ (Prothom 1.0)     ║"
-    say "║  সংকেতনাম: সোভেরিন (Sovereign)          ║"
-    say "║  লক্ষ্য   : Linux x86_64 ELF64           ║"
-    say "║  লাইসেন্স : MIT                          ║"
-    say "╚══════════════════════════════════════════╝"
+say "Lipi First 1.0 - Sovereign"
+say "Runtime: lipic2 2.0.0"
+say "Global Standard: enabled"
+say "Unicode: enabled"

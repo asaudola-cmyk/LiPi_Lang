@@ -1,18 +1,18 @@
 // ==============================================================================
-// 🔗 লিপি gRPC ফ্রেমওয়ার্ক (Google RPC Protocol)
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
+// 🔗 লিপি gRPC ফ্রেমওয়ার্a (Google RPC Protocol)
+// লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: std/grpc.lp
 //
 // WHY এই মডিউল:
 //   Microservice communication needs fast, typed RPC (Remote Procedure Call).
 //   REST HTTP is verbose — gRPC uses HTTP/2 + Protocol Buffers.
-//   gRPC (Google), Thrift (Facebook), Cap'n Proto — এদের replace করবে।
+//   gRPC (Google), Thrift (Facebook), Cap'n Proto — এদের replace aরবে।
 //
-// ব্যবহার:
+// ব্যবrate:
 //   include "std/grpc.lp"
-//    srv = GRPC_সার্ভার_তৈরি(৫০০৫১)
-//   GRPC_পদ্ধতি_যোগ(srv, "Say", হ্যালো_handler)
-//   GRPC_সার্ভার_চালু(srv)
+//    srv = grpc_server_create(৫০০৫১)
+//   grpc_method_add(srv, "Say", হ্যালো_handler)
+//   grpc_server_start(srv)
 // ==============================================================================
 
 include "std/core/mem.lp"
@@ -35,10 +35,10 @@ fn PROTO_encode_varint buf offset value
     // WHY: Variable-length integers save space for small numbers
     i = offset
     while value > 127
-        মেমরি_বাইট_লেখো(buf, i, (value % 128) + 128)
+        mem_write_byte(buf, i, (value % 128) + 128)
         value = value / 128
         i = i + 1
-    মেমরি_বাইট_লেখো(buf, i, value)
+    mem_write_byte(buf, i, value)
     return i + 1
 
 fn PROTO_encode_string buf offset field_num str
@@ -50,7 +50,7 @@ fn PROTO_encode_string buf offset field_num str
     // Copy string bytes
     i = 0
     while i < len
-        মেমরি_বাইট_লেখো(buf, pos + i, 65)  // placeholder
+        mem_write_byte(buf, pos + i, 65)  // placeholder
         i = i + 1
     return pos + len
 
@@ -62,55 +62,55 @@ fn PROTO_encode_int64 buf offset field_num value
 
 // ─── gRPC Server ──────────────────────────────────────────────────────────────
 struct GRPC_সার্ভার_ctx
-    পোর্ট,
-    পদ্ধতি_তালিকা,
-    পদ্ধতি_গণনা,
+    port,
+    term্ধতি_list,
+    term্ধতি_count,
     server_fd,
-    চলছে
+    running
 
-fn GRPC_সার্ভার_তৈরি পোর্ট
-    srv_সাইজ = size_of(GRPC_সার্ভার_ctx)
-    srv = malloc(srv_সাইজ)
-    srv.পোর্ট = পোর্ট
-    srv.পদ্ধতি_তালিকা = malloc(256 * 8)
-    srv.পদ্ধতি_গণনা = 0
-    srv.চলছে = 0
-    say "  ✔ gRPC সার্ভার তৈরি (port:", পোর্ট, ")"
+fn grpc_server_create port
+    srv_size = size_of(GRPC_সার্ভার_ctx)
+    srv = malloc(srv_size)
+    srv.port = port
+    srv.term্ধতি_list = malloc(256 * 8)
+    srv.term্ধতি_count = 0
+    srv.running = 0
+    say "  ✔ gRPC সার্ভার created (port:", port, ")"
     return srv
 
-fn GRPC_পদ্ধতি_যোগ srv পদ্ধতি_নাম হ্যান্ডলার
-    srv.পদ্ধতি_গণনা = srv.পদ্ধতি_গণনা + 1
-    say "  ✔ gRPC পদ্ধতি যোগ:", পদ্ধতি_নাম
-    return srv.পদ্ধতি_গণনা
+fn grpc_method_add srv method_name handler
+    srv.term্ধতি_count = srv.term্ধতি_count + 1
+    say "  ✔ gRPC পদ্ধতি add:", method_name
+    return srv.term্ধতি_count
 
-fn GRPC_সার্ভার_চালু srv
-    say "  🔗 gRPC সার্ভার চালু: ০.০.০.০:", srv.পোর্ট
+fn grpc_server_start srv
+    say "  🔗 gRPC সার্ভার চালু: ০.০.০.০:", srv.port
     // HTTP/2 framing, HPACK header compression, multiplexing
     return 0
 
 // ─── gRPC Client ──────────────────────────────────────────────────────────────
-struct GRPC_ক্লায়েন্ট_ctx
-    host_পয়েন্টার,
-    পোর্ট,
+struct GRPC_a্লায়েন্ট_ctx
+    host_ptr,
+    port,
     conn_fd,
-    সংযুক্ত
+    সংযুa্ত
 
-fn GRPC_ক্লায়েন্ট_সংযোগ(host, পোর্ট)
-    cli_সাইজ = size_of(GRPC_ক্লায়েন্ট_ctx)
-    cli = malloc(cli_সাইজ)
-    cli.host_পয়েন্টার = host
-    cli.পোর্ট = পোর্ট
-    cli.সংযুক্ত = 0
-    say "  → gRPC সংযোগ:", host, ":", পোর্ট
+fn grpc_client_connect(host, port)
+    cli_size = size_of(GRPC_a্লায়েন্ট_ctx)
+    cli = malloc(cli_size)
+    cli.host_ptr = host
+    cli.port = port
+    cli.সংযুa্ত = 0
+    say "  → gRPC সংadd:", host, ":", port
     return cli
 
-fn GRPC_কল cli পদ্ধতি_নাম request_বাফার req_len
-    say "  → gRPC call:", পদ্ধতি_নাম, "(", req_len, "bytes)"
+fn grpc_call cli method_name request_buffer req_len
+    say "  → gRPC call:", method_name, "(", req_len, "bytes)"
     response = malloc(GRPC_MAX_MSG_SIZE)
     return response
 
-fn GRPC_ক্লায়েন্ট_বন্ধ cli
-    সিসকল(3, cli.conn_fd)
-    free(cli.পদ্ধতি_তালিকা, 256 * 8)
-    free(cli, size_of(GRPC_ক্লায়েন্ট_ctx))
+fn grpc_client_close cli
+    syscall(3, cli.conn_fd)
+    free(cli.term্ধতি_list, 256 * 8)
+    free(cli, size_of(GRPC_a্লায়েন্ট_ctx))
     return 0

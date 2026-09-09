@@ -1,51 +1,45 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — ষষ্ঠ পাঠ (Lipi 06: Silicon AI Engine)
-// সিলিকন এআই ইঞ্জিন: SIMD ম্যাট্রিক্স, নিউরাল ওয়েট ও ইনফারেন্স সিমুলেশন
-// WHY: AI inference = matrix multiply + activation functions, done in pure silicon registers.
+// Test 06: AI Inference — Lipi 2.0
+// Demonstrates: activation functions, neural net simulation, loops
 
-include "std/io.lp"
-include "std/core/math.lp"
+// ReLU activation: clamp negative values to zero
+fn relu x
+    if x < 0
+        return 0
+    return x
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  🧠 LIPI SILICON AI ENGINE — PURE HARDWARE MATRIX INFERENCE           ║"
-say "║  ⚡ SIMD AVX + RDTSC Cycle Counting | Zero Python | Zero NumPy        ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+// Classify based on threshold
+fn classify score threshold
+    if score >= threshold
+        return 1
+    return 0
 
-// ১. প্ল্যাটফর্ম তথ্য (namespace call ছাড়া)
-say "=== [১] সিলিকন প্ল্যাটফর্ম তথ্য ==="
-say "  • আর্কিটেকচার   : x86_64 Linux (AMD64)"
-say "  • SIMD সাপোর্ট  : AVX-512 (সিলিকন নেটিভ)"
-say "  • রানটাইম       : 0% Python | 0% NumPy | 0% TensorFlow"
-say ""
+// Tiny neural network layer simulation
+// Weights and inputs
+w1 = 3
+w2 = 2
+input1 = 5
+input2 = 3
 
-// ২. ম্যাট্রিক্স ডট প্রোডাক্ট (নিউরাল লেয়ার ওয়েট গুণন)
-say "=== [২] নিউরাল নেটওয়ার্ক ম্যাট্রিক্স ডট প্রোডাক্ট ==="
-শুরু = cpu_clock()
+// Compute weighted sum at top level
+network_output = w1 * input1 + w2 * input2
+say "Network output:"
+say network_output
 
-ইনপুট_ভেক্টর_1 = 7
-ইনপুট_ভেক্টর_2 = 11
-ওয়েট_1 = 3
-ওয়েট_2 = 5
+// Apply ReLU activation
+activated = relu network_output
+say "After ReLU:"
+say activated
 
-নিউরন_আউটপুট = (ইনপুট_ভেক্টর_1 * ওয়েট_1) + (ইনপুট_ভেক্টর_2 * ওয়েট_2)
-say "  ইনপুট        : [" + ইনপুট_ভেক্টর_1 + ", " + ইনপুট_ভেক্টর_2 + "]"
-say "  ওয়েট         : [" + ওয়েট_1 + ", " + ওয়েট_2 + "]"
-say "  ডট প্রোডাক্ট : " + নিউরন_আউটপুট + " (pre-activation)"
-say ""
+// Simulate 5 neurons with shifted inputs
+say "Neuron outputs (relu(i - 3)):"
+for i in 1..5
+    shifted = i - 3
+    neuron_out = relu shifted
+    say neuron_out
 
-// ৩. ReLU অ্যাক্টিভেশন ফাংশন সিমুলেশন
-say "=== [৩] ReLU অ্যাক্টিভেশন ফাংশন ==="
-relu_আউট = নিউরন_আউটপুট
-if নিউরন_আউটপুট < 0
-    relu_আউট = 0
-say "  ReLU(" + নিউরন_আউটপুট + ") = " + relu_আউট
-say ""
+// Binary classification using paren syntax for 2-arg call
+label = classify(network_output, 10)
+say "Classified as:"
+say label
 
-// ৪. ইনফারেন্স ক্লক বেঞ্চমার্ক
-শেষ = cpu_clock()
-মোট_ক্লক = শেষ - শুরু
-say "=== [৪] ইনফারেন্স পারফরম্যান্স বেঞ্চমার্ক ==="
-say "  RDTSC CPU Cycles: " + মোট_ক্লক
-say "  থ্রুপুট       : Sub-microsecond inference (direct silicon)"
-say ""
-say "✅ লিপি সিলিকন এআই ইঞ্জিন: শতভাগ খাঁটি, null পাইথন, null TensorFlow!"
+say "PASS: Test 06 AI Inference"

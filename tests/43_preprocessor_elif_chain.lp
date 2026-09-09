@@ -1,79 +1,39 @@
-// ==============================================================================
-// 🧪 Test 43: Preprocessor — elif Chain
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
-//
-// WHY এই টেস্ট:
-//   লিপি প্রথম ১.০ এ elif fn করে না।
-//   কিন্তু nested if/else দিয়ে একই fn করা যায়।
-//   এই টেস্ট সেই pattern টি verify করে।
-//   যখন Compiler 2.0 আসবে, elif সরাসরি fn করবে।
-// ==============================================================================
+// Test 43: elif Chain — Lipi 2.0 Global Standard
 
-fn গ্রেড নম্বর
-    if নম্বর >= 90
-        say "গ্রেড: A+"
+fn classify n
+    if n < 0
+        return "negative"
+    elif n == 0
+        return "zero"
+    elif n < 10
+        return "single digit"
+    elif n < 100
+        return "double digit"
+    elif n < 1000
+        return "triple digit"
     else
-        if নম্বর >= 80
-            say "গ্রেড: A"
-        else
-            if নম্বর >= 70
-                say "গ্রেড: B"
-            else
-                if নম্বর >= 60
-                    say "গ্রেড: C"
-                else
-                    say "গ্রেড: F"
+        return "large"
 
-fn বয়স_শ্রেণী বয়স
-    if বয়স >= 65
-        say "প্রবীণ"
+fn fizzbuzz n
+    if n % 15 == 0
+        return "FizzBuzz"
+    elif n % 3 == 0
+        return "Fizz"
+    elif n % 5 == 0
+        return "Buzz"
     else
-        if বয়স >= 18
-            say "প্রাপ্তবয়স্ক"
-        else
-            if বয়স >= 13
-                say "কিশোর"
-            else
-                say "শিশু"
+        return n
 
-fn দিনের_সময় ঘন্টা
-    if ঘন্টা >= 17
-        say "সন্ধ্যা/রাত"
-    else
-        if ঘন্টা >= 12
-            say "বিকেল"
-        else
-            if ঘন্টা >= 6
-                say "সকাল"
-            else
-                say "রাত (গভীর)"
+say "=== elif Chain ==="
+say classify(-5)
+say classify(0)
+say classify(7)
+say classify(42)
+say classify(999)
+say classify(10000)
 
-fn প্রধান
-    say "══════════════════════════════════════"
-    say "Test 43: else_যদি Chain Pattern"
-    say "══════════════════════════════════════"
-    say ""
-    say "--- গ্রেড পরীক্ষা ---"
-    গ্রেড(95)
-    গ্রেড(82)
-    গ্রেড(73)
-    গ্রেড(61)
-    গ্রেড(45)
-    say ""
-    say "--- বয়স শ্রেণী ---"
-    বয়স_শ্রেণী(70)
-    বয়স_শ্রেণী(25)
-    বয়স_শ্রেণী(15)
-    বয়স_শ্রেণী(8)
-    say ""
-    say "--- দিনের সময় ---"
-    দিনের_সময়(6)
-    দিনের_সময়(12)
-    দিনের_সময়(18)
-    দিনের_সময়(2)
-    say ""
-    say "✅ Test 43 পাস — nested if/else সঠিকভাবে fn করছে"
-    say "⚡ [লিপি প্রথম ১.০]"
-    return 0
+say "=== FizzBuzz ==="
+for i in 1..20
+    say fizzbuzz(i)
 
-প্রধান()
+say "PASS: Test 43 elif Chain"

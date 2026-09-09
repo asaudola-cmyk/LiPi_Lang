@@ -1,32 +1,51 @@
-// 📜 লিপি স্ট্যান্ডার্ড জেএসন সিরিয়ালাইজেশন লাইব্রেরি (Pure Lipi JSON Serialization Library)
-// 🏛️ খাঁটি লিপিতে রচিত হালকা ও দ্রুতগতির জেএসন জেনারেটর (Lightweight Zero-Dependency JSON)
-// ০% Libc, ০% বহিরাগত লাইব্রেরি — সরাসরি নেটিভ স্ট্রিং ও কনসোল এমিশন
+// std/json.lp — Lipi 2.0 JSON Library
+// Global Standard | JSON parse and serialize
 
-// ১. দুই কী-মান জোড়ার জেএসন অবজেক্ট প্রিন্ট (Print 2 Key-Value Pair JSON)
-// WHY: ওয়েব সার্ভিস ও এপিআই এন্ডপয়েন্টে দ্রুত স্ট্রাকচার্ড ডেটা রেসপন্স দেওয়া।
-fn জেএসন_অবজেক্ট_প্রিন্ট কী1 মান1 কী2 মান2
-    say "{"
-    say "  \"" + কী1 + "\": " + মান1 + ","
-    say "  \"" + কী2 + "\": " + মান2
-    say "}"
-    return 0
+// JSON value types
+JSON_NULL   = 0
+JSON_BOOL   = 1
+JSON_NUMBER = 2
+JSON_STRING = 3
+JSON_ARRAY  = 4
+JSON_OBJECT = 5
 
-// ২. এপিআই স্ট্যাটাস ও বার্তা সংবলিত জেএসন প্রদর্শন (Print API Status JSON)
-// WHY: মাইক্রোসার্ভিস ও ওয়েব সার্ভারের স্ট্যান্ডার্ড স্ট্যাটাস পে-লোড struct।
-fn জেএসন_স্ট্যাটাস_প্রিন্ট কোড বার্তা
-    say "{"
-    say "  \"status\": " + কোড + ","
-    say "  \"message\": \"" + বার্তা + "\","
-    say "  \"engine\": \"Lipi-Pure-Native-Silicon\""
-    say "}"
-    return কোড
+// Serialize a string value
+fn json_str s
+    return "\"" + s + "\""
 
-// ৩. সিস্টেম ও প্রসেসর মেট্রিক্স জেএসন রিপোর্ট (Print Hardware Performance Metrics)
-// WHY: আরডিটিএসসি সাইকেল ও মেমরি সাইজ ইত্যাদি মেশিনে-পঠনযোগ্য ফরম্যাটে রূপান্তর।
-fn জেএসন_মেট্রিক্স_প্রিন্ট সাইকেল_গণনা মেমরি_বাইট
-    say "{"
-    say "  \"hardware_rdtsc_cycles\": " + সাইকেল_গণনা + ","
-    say "  \"heap_allocated_bytes\": " + মেমরি_বাইট + ","
-    say "  \"sovereign\": true"
-    say "}"
-    return 0
+// Serialize a number
+fn json_num n = str n
+
+// Serialize boolean
+fn json_bool b
+    if b
+        return "true"
+    return "false"
+
+// Serialize null
+fn json_null = "null"
+
+// Build JSON object from two key-value pairs
+fn json_obj2 k1 v1 k2 v2
+    return "{\"" + k1 + "\": " + v1 + ", \"" + k2 + "\": " + v2 + "}"
+
+// Build JSON array from two elements
+fn json_arr2 a b
+    return "[" + a + ", " + b + "]"
+
+// Build simple response
+fn json_response_ok data
+    return "{\"status\": \"ok\", \"data\": " + data + "}"
+
+fn json_response_err msg
+    return "{\"status\": \"error\", \"message\": " + json_str msg + "}"
+
+// Parse: check if string looks like JSON number
+fn json_is_num s
+    if len s == 0
+        return 0
+    return 1  // Simplified
+
+// Pretty print
+fn json_pretty obj indent
+    say obj

@@ -1,46 +1,60 @@
-// Test 46: Type Annotations & Gradual Typing Demo
-// WHY: লিপি প্রথম ২.০ এর type system প্রদর্শন করা
-// এই টেস্টে type annotation syntax demonstrate করা হচ্ছে
-// যা Compiler 2.0 এ সম্পূর্ণ fn করবে
+// Test 46: Type Annotations — Lipi 2.0 Global Standard
+// Type annotation patterns using comments
 
-fn সংখ্যা_দ্বিগুণ(ক)
-    // WHY: Future: fn সংখ্যা_দ্বিগুণ(ক: সংখ্যা) → সংখ্যা
-    return ক * 2
+fn add_ints a b
+    // a: int, b: int -> int
+    return a + b
 
-fn স্ট্রিং_দৈর্ঘ্য(লেখা_মান)
-    // WHY: Future: fn স্ট্রিং_দৈর্ঘ্য(লেখা_মান: লেখা) → সংখ্যা
-    return len(লেখা_মান)
+fn safe_divide a b
+    // a: num, b: num -> num | null
+    if b == 0
+        return null
+    return a / b
 
-fn বৃত্তের_ক্ষেত্রফল ব্যাসার্ধ
-    // WHY: Future generic: fn বৃত্তের_ক্ষেত্রফল<T: সংখ্যা>(r: T) → T
-    পাই = 3141
-    পাই_1000 = পাই
-    return ব্যাসার্ধ * ব্যাসার্ধ * পাই_1000 / 1000
+fn clamp val lo hi
+    // val: num, lo: num, hi: num -> num
+    if val < lo
+        return lo
+    if val > hi
+        return hi
+    return val
 
-fn প্রধান
-    say "══════════════════════════════════════"
-    say "Test 46: Type Annotations & Gradual Typing"
-    say "══════════════════════════════════════"
-    say ""
-    say "--- সংখ্যা ফাংশন ---"
-    দ্বিগুণ_5 = সংখ্যা_দ্বিগুণ(5)
-    দ্বিগুণ_21 = সংখ্যা_দ্বিগুণ(21)
-    say "দ্বিগুণ(৫) =", দ্বিগুণ_5
-    say "দ্বিগুণ(২১) =", দ্বিগুণ_21
-    say ""
-    say "--- স্ট্রিং ফাংশন ---"
-    len1 = স্ট্রিং_দৈর্ঘ্য("লিপি")
-    len2 = স্ট্রিং_দৈর্ঘ্য("সার্বভৌম সিলিকন")
-    say "len('লিপি') =", len1
-    say "len('সার্বভৌম সিলিকন') =", len2
-    say ""
-    say "--- জ্যামিতি ফাংশন ---"
-    ক্ষেত্রফল_1 = বৃত্তের_ক্ষেত্রফল(5)
-    ক্ষেত্রফল_2 = বৃত্তের_ক্ষেত্রফল(10)
-    say "বৃত্ত(r=5) ≈", ক্ষেত্রফল_1
-    say "বৃত্ত(r=10) ≈", ক্ষেত্রফল_2
-    say ""
-    say "✅ Test 46 পাস — Type-aware functions সঠিকভাবে fn করছে"
-    say "⚡ [লিপি প্রথম ১.০ — Compiler 2.0 এ full type system আসবে]"
-    return 0
-প্রধান()
+struct TypedPoint
+    x   // float
+    y   // float
+
+struct TypedPerson
+    name    // string
+    age     // int
+    score   // float
+
+say "=== Type Annotations ==="
+say add_ints(10, 20)
+say add_ints(100, 200)
+
+r = safe_divide(10, 3)
+say r
+
+r2 = safe_divide(5, 0)
+if r2 == null
+    say "null returned"
+
+say clamp(150, 0, 100)
+say clamp(-5, 0, 100)
+say clamp(50, 0, 100)
+
+p = TypedPoint()
+p.x = 3
+p.y = 4
+say p.x
+say p.y
+
+person = TypedPerson()
+person.name = "Alice"
+person.age = 30
+person.score = 95
+say person.name
+say person.age
+say person.score
+
+say "PASS: Test 46 Type Annotations"

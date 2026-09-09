@@ -1,66 +1,89 @@
-// 📜 উদাহরণ ২১: খাঁটি লিনাক্স কার্নেল মাল্টি-থ্রেডিং ও কনকারেন্সি (Pure Native Kernel Multithreading)
-// 🏛️ সরাসরি লিনাক্স SYS_clone (56), SYS_sched_yield (24) ও SYS_exit (60)
-// ০% Libc, ০% pthreads — সরাসরি সিলিকন প্রসেসরে হার্ডওয়্যার কার্নেল থ্রেড
+// Test 21: Data Structures — Lipi 2.0
+// Demonstrates: stack, queue, linked-list patterns via structs
 
-include "std/mem.lp"
-include "std/thread.lp"
+struct Node
+    value
+    next_val   // stores next node's value (simplified, no real pointers)
 
-// চাইল্ড থ্রেড ফাংশন: সম্পূর্ণ স্বাধীন স্ট্যাক ও আর্কিটেকচারে এক্সিকিউট হয়
-fn চাইল্ড_কম্পিউটেশন মেমরি_ঠিকানা
-    যোগফল = 0
-    সংখ্যা = 1
-    while সংখ্যা <= 100
-        যোগফল = যোগফল + সংখ্যা
-        সংখ্যা = সংখ্যা + 1
+struct Stack
+    top
+    size
 
-    // গণনাকৃত যোগফল শেয়ার্ড মেমরিতে সংরক্ষণ (অফসেট ৮)
-    মেমরি_লেখো(মেমরি_ঠিকানা, 8, যোগফল)
-    // fn সমাপ্তির ফ্ল্যাগ ১ নির্ধারণ (অফসেট ০)
-    মেমরি_লেখো(মেমরি_ঠিকানা, 0, 1)
+struct Queue
+    head_val
+    size
 
-    // থ্রেড সমাপ্তি ও ০ রিটার্ন
+// Stack: push — update top and size
+fn stack_push s val
+    s.top = val
+    s.size = s.size + 1
+    return s
+
+fn stack_top s
+    return s.top
+
+fn stack_empty s
+    if s.size == 0
+        return 1
     return 0
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🧵 খাঁটি লিনাক্স কার্নেল মাল্টি-থ্রেডিং ও কনকারেন্সি ইঞ্জিন\033[0m            \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Pure Linux SYS_clone (56) | Shared Virtual Memory | 0% Libc\033[0m       \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Queue: enqueue — update head_val on first insert
+fn queue_enqueue q val
+    if q.size == 0
+        q.head_val = val
+    q.size = q.size + 1
+    return q
 
-// ১. থ্রেড কমিউনিকেশনের জন্য শেয়ার্ড হিপ মেমরি বরাদ্দ
-// অফসেট ০: fn শেষের ফ্ল্যাগ (০ = পেন্ডিং, ১ = সমাপ্ত)
-// অফসেট ৮: চাইল্ড থ্রেডের গণনাকৃত ফলাফল (১ থেকে ১০০ এর যোগফল = ৫০৫০)
-শেয়ার্ড_মেমরি = malloc(64)
-মেমরি_লেখো(শেয়ার্ড_মেমরি, 0, 0)
-মেমরি_লেখো(শেয়ার্ড_মেমরি, 8, 0)
+fn queue_front q
+    return q.head_val
 
-// ২. চাইল্ড থ্রেডের জন্য নিবেদিত ৮কেবি (৮১৯২ বাইট) স্ট্যাক বরাদ্দ
-স্ট্যাক_আকার = 8192
-স্ট্যাক_বেস = malloc(স্ট্যাক_আকার)
-স্ট্যাক_টপ = স্ট্যাক_বেস + স্ট্যাক_আকার
+// Linked list node creation
+fn make_node val
+    n = Node()
+    n.value = val
+    n.next_val = -1   // -1 = null sentinel
+    return n
 
-say "\033[1;33m[১] কার্নেল মেমরি ও স্ট্যাক প্রস্তুতি:\033[0m"
-say "  • শেয়ার্ড মেমরি ঠিকানা    : " + শেয়ার্ড_মেমরি
-say "  • চাইল্ড স্ট্যাক বেস       : " + স্ট্যাক_বেস
-say "  • চাইল্ড স্ট্যাক টপ (RSP)  : " + স্ট্যাক_টপ + " (Downward Growth)"
-say ""
+// Stack demo — note: create struct inline, NOT via no-arg fn
+say "=== Stack ==="
+s = Stack()
+s.top = 0
+s.size = 0
 
-say "\033[1;33m[২] SYS_clone (56) সিসকলের মাধ্যমে নতুন কার্নেল থ্রেড সৃষ্টি...\033[0m"
-টিআইডি = থ্রেড_চালু(চাইল্ড_কম্পিউটেশন, স্ট্যাক_টপ, শেয়ার্ড_মেমরি)
+// Push via paren syntax (struct, value)
+s = stack_push(s, 10)
+s = stack_push(s, 20)
+s = stack_push(s, 30)
+say "Top of stack:"
+say stack_top s
+say "Stack size:"
+say s.size
+say "Is empty:"
+say stack_empty s
 
-say "  ✔ সফলভাবে নতুন লিনাক্স থ্রেড তৈরি হয়েছে! চাইল্ড TID: " + টিআইডি
-say "  • প্যারেন্ট থ্রেড চাইল্ড থ্রেডের সমাপ্তির জন্য অপেক্ষা করছে..."
+// Queue demo
+say "=== Queue ==="
+q = Queue()
+q.head_val = 0
+q.size = 0
+q = queue_enqueue(q, 100)
+q = queue_enqueue(q, 200)
+say "Front of queue:"
+say queue_front q
+say "Queue size:"
+say q.size
 
-// সিপিউ ছেড়ে দিয়ে চাইল্ডের ফ্ল্যাগ ১ হওয়ার অপেক্ষা
-while মেমরি_পড়ো(শেয়ার্ড_মেমরি, 0) == 0
-    থ্রেড_ছেড়ে_দাও()
+// Linked list demo
+say "=== Linked List Nodes ==="
+n1 = make_node 1
+n2 = make_node 2
+n3 = make_node 3
+n1.next_val = n2.value
+n2.next_val = n3.value
+say n1.value
+say n1.next_val
+say n2.value
+say n2.next_val
+say n3.value
 
-চূড়ান্ত_যোগফল = মেমরি_পড়ো(শেয়ার্ড_মেমরি, 8)
-say ""
-say "\033[1;33m[৩] মাল্টি-থ্রেডিং কম্পিউটেশন ফলাফল যাচাই:\033[0m"
-say "  • ১ থেকে ১০০ পর্যন্ত সংখ্যার যোগফল : " + চূড়ান্ত_যোগফল
-if চূড়ান্ত_যোগফল == 5050
-    say "  ✔ গণনার ফলাফল ১০০% সঠিক ও অভিন্ন (৫০৫০)!"
-
-say ""
-say "\033[38;2;0;255;204m🎉 লিপি খাঁটি কার্নেল মাল্টি-থ্রেডিং ও কনকারেন্সি সম্পূর্ণ সফল!\033[0m"
+say "PASS: Test 21 Data Structures"

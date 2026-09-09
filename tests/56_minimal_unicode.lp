@@ -2,17 +2,17 @@
 // English keywords + Bengali/Unicode variable names = global + local
 
 // Bengali variable names work perfectly
-নাম = "লিপি"
-সংস্করণ = 2
-say নাম
-say সংস্করণ
+name = "লিপি"
+version = 2
+say name
+say version
 
 // Bengali function names work too
-fn যোগফল a b = a + b
-fn গুণফল a b = a * b
+fn sum a b = a + b
+fn product a b = a * b
 
-say যোগফল 10 20
-say গুণফল 5 6
+say sum 10 20
+say product 5 6
 
 // Bengali identifiers in loops
 total = 0

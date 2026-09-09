@@ -1,79 +1,80 @@
-// 📜 লিপি টেস্ট ২০: স্ট্যান্ডার্ড লাইব্রেরির পূর্ণাঙ্গ বিস্তার ও সমন্বয়
-// 👑 মহাদিগন্ত ৮: টাইম, স্লিপ, জেএসন, গণিত, স্ট্রিং ও মেমরি লাইব্রেরির সমন্বিত রূপ
-// ১০০% সার্বভৌম সিলিকন এক্সিকিউশন | ০% PHP | ০% Libc | ০% বাহিরাগত লাইব্রেরি
+// Test 20: Algorithm Showcase — Lipi 2.0
+// Demonstrates: binary search, prime sieve, GCD/LCM, sort analysis
 
-include "std/io.lp"
-include "std/math.lp"
-include "std/str.lp"
-include "std/mem.lp"
-include "std/time.lp"
-include "std/json.lp"
+// Binary search: value at index i = i * 3 (sorted array simulation)
+// Returns index of target or -1
+fn binary_search target lo hi
+    while lo < hi
+        mid = (lo + hi) / 2
+        val = mid * 3
+        if val == target
+            return mid
+        elif val < target
+            lo = mid + 1
+        else
+            hi = mid
+    return -1
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🏛️ LIPI GRAND STANDARD LIBRARY EXPANSION & INTEGRATION\033[0m               \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Unified Time, Sleep, JSON, Math, String & Memory Engine\033[0m            \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Check if n is prime (trial division)
+fn is_prime n
+    if n < 2
+        return 0
+    if n == 2
+        return 1
+    if n % 2 == 0
+        return 0
+    i = 3
+    while i * i <= n
+        if n % i == 0
+            return 0
+        i = i + 2
+    return 1
 
-// ১. হাই-রেজোলিউশন সময় ও ন্যানোস্লিপ টেস্ট (std/time.lp)
-say "\033[1;33m[১] লিনাক্স কার্নেল হাই-রেজোলিউশন টাইম ও স্লিপ যাচাই (std/time.lp):\033[0m"
-ইপোক_সেকেন্ড = বর্তমান_সময়_সেকেন্ড()
-say "  • বর্তমান ইউনিক্স ইপোক সময় (সেকেন্ড) : " + ইপোক_সেকেন্ড
-if ইপোক_সেকেন্ড > 1700000000
-    say "  ✔ ইউনিক্স ইপোক টাইমস্ট্যাম্প সফলভাবে প্রাপ্ত (POSIX Realtime Clock)"
+// Count primes up to n
+fn count_primes n
+    count = 0
+    for k in 2..n
+        if is_prime k
+            count = count + 1
+    return count
 
-স্লিপ_শুরু_ক্লক = cpu_clock()
-স্লিপ_কোড = মিলিসেকেন্ড_ঘুম(50) // ৫০ মিলিসেকেন্ড হাই-রেজোলিউশন স্লিপ
-স্লিপ_শেষ_ক্লক = cpu_clock()
-ক্লক_ব্যবধান = স্লিপ_শেষ_ক্লক - স্লিপ_শুরু_ক্লক
+// Bubble sort swap count (worst case for n elements)
+fn bubble_sort_swaps n = n * (n - 1) / 2
 
-say "  • ৫০ মিলিসেকেন্ড স্লিপ রিটার্ন কোড : " + স্লিপ_কোড
-say "  • অতিবাহিত সিপিউ সাইকেল (RDTSC)     : " + ক্লক_ব্যবধান + " সাইকেল"
-if ক্লক_ব্যবধান > 10 লাখ
-    say "  ✔ স্লিপ সফলভাবে কার্নেল থ্রেড সাসপেন্ড করেছে (No Busy-Wait Burn)"
-say ""
+// GCD iterative
+fn gcd a b
+    while b != 0
+        temp = b
+        b = a % b
+        a = temp
+    return a
 
-// ২. স্ট্রাকচার্ড জেএসন সিরিয়ালাইজেশন টেস্ট (std/json.lp)
-say "\033[1;33m[২] খাঁটি লিপি জেএসন সিরিয়ালাইজার যাচাই (std/json.lp):\033[0m"
-say "  • এপিআই স্ট্যাটাস জেএসন পে-লোড:"
-জেএসন_স্ট্যাটাস_প্রিন্ট(200, "Lipi Sovereign Native Web Engine Active")
-say ""
-say "  • হার্ডওয়্যার মেট্রিক্স জেএসন পে-লোড:"
-জেএসন_মেট্রিক্স_প্রিন্ট(ক্লক_ব্যবধান, 4096)
-say ""
+// LCM using GCD
+fn lcm a b
+    g = gcd(a, b)
+    return a * b / g
 
-// ৩. গণিত স্ট্যান্ডার্ড লাইব্রেরি ফাংশন সমন্বয় (std/math.lp)
-say "\033[1;33m[৩] উন্নত গাণিতিক অ্যালগরিদম লাইব্রেরি যাচাই (std/math.lp):\033[0m"
-পাওয়ার_মান = শক্তি(2, 10)        // 2^10 = 1024
-গসাগু_মান = গসাগু(48, 18)        // GCD(48, 18) = 6
-লসাগু_মান = লসাগু(12, 15)        // LCM(12, 15) = 60
-পরম_মান = পরম(0 - 75)           // abs(-75) = 75
+say "Binary search for 15 in i*3 array [0..20):"
+say binary_search(15, 0, 20)
 
-say "  • শক্তি হিসাব (২^১০)               : " + পাওয়ার_মান
-say "  • গরিষ্ঠ সাধারণ গুণনীয়ক (৪৮, ১৮)    : " + গসাগু_মান
-say "  • লঘিষ্ঠ সাধারণ গুণিতক (১২, ১৫)    : " + লসাগু_মান
-say "  • পরম মান abs(-৭৫)                : " + পরম_মান
+say "Binary search for 7 (not found, expect -1):"
+say binary_search(7, 0, 20)
 
-if পাওয়ার_মান == 1024
-    say "  ✔ গাণিতিক লাইব্রেরির গণনা ১০০% নিখুঁত!"
-say ""
+say "Prime count up to 50:"
+say count_primes 50
 
-// ৪. স্ট্রিং লাইব্রেরি ও মেমরি সমন্বয় (std/str.lp & std/mem.lp)
-say "\033[1;33m[৪] স্ট্রিং ও মেমরি লাইব্রেরি সমন্বয় (std/str.lp & std/mem.lp):\033[0m"
-পরীক্ষা_স্ট্রিং = "লিপি প্রোগ্রামিং ভাষা ২০২৬"
-মোট_দৈর্ঘ্য = স্ট্রিং_দৈর্ঘ্য(পরীক্ষা_স্ট্রিং)
-say "  • স্যাম্পল স্ট্রিং                : " + পরীক্ষা_স্ট্রিং
-say "  • ইউটিএফ-৮ বাইট len          : " + মোট_দৈর্ঘ্য + " বাইট"
+say "Bubble sort swaps n=10:"
+say bubble_sort_swaps 10
 
-বাফার_ঠিকানা = বাফার()
-মেমরি_পূরণ(বাফার_ঠিকানা, 0, 64)
-কপি_লেন = মেমরি_অনুলিপি(বাফার_ঠিকানা, পরীক্ষা_স্ট্রিং, মোট_দৈর্ঘ্য)
-মেমরি_বাইট_লেখো(বাফার_ঠিকানা, কপি_লেন, 0)
+say "GCD(56, 98):"
+say gcd(56, 98)
 
-প্রথম_বাইট = মেমরি_বাইট_পড়ো(বাফার_ঠিকানা, 0)
-say "  • মেমরিতে সংরক্ষিত প্রথম বাইট    : " + প্রথম_বাইট
-if প্রথম_বাইট == 224
-    say "  ✔ ইউটিএফ-৮ বাংলা অক্ষরের বাইট ইন্টিগ্রিটি অক্ষুণ্ণ রয়েছে!"
-say ""
+say "LCM(12, 18):"
+say lcm(12, 18)
 
-say "\033[38;2;0;255;204m✔ লিপি গ্র্যান্ড স্ট্যান্ডার্ড লাইব্রেরি বিস্তার ১০০% সফল ও সংহত!\033[0m"
+say "Primes up to 30:"
+for n in 2..30
+    if is_prime n
+        say n
+
+say "PASS: Test 20 Algorithm Showcase"

@@ -1,70 +1,92 @@
-// 📜 উদাহরণ ২২: কাস্টম স্ট্রাকচার ও ডেটা টাইপ মডেল (Custom Structs & Data Types)
-// 🏛️ সরাসরি লিনাক্স কার্নেল হিপ ও মেমরি ফিল্ড অফসেট অ্যালাইনমেন্ট (Linux AMD64 64-bit Fields)
-// ০% Libc, ০% GCC — সরাসরি লিপিতে ডট সিনট্যাক্স ও টাইপ সাইজ মডেল
+// Test 22: Type System Demo — Lipi 2.0
+// Demonstrates: runtime type checking patterns, value classification, guards
 
-include "std/mem.lp"
+// Classify an integer as negative, zero, or positive
+fn classify_sign x
+    if x < 0
+        return "negative"
+    elif x == 0
+        return "zero"
+    else
+        return "positive"
 
-// ১. কাস্টম পয়েন্ট স্ট্রাকচার ডিফিনিশন (x, y স্থানাঙ্ক)
-struct পয়েন্ট
-    x,
-    y
+// Check if a value is within a valid range
+fn in_range x lo hi
+    if x >= lo and x <= hi
+        return 1
+    return 0
 
-// ২. কাস্টম মানুষ স্ট্রাকচার ডিফিনিশন
-struct মানুষ
-    আইডি,
-    বয়স,
-    উচ্চতা
+// Tag value by magnitude
+fn type_tag x
+    if x < 0
+        y = 0 - x
+    else
+        y = x
+    if y <= 255
+        return "byte"
+    elif y <= 65535
+        return "short"
+    else
+        return "int"
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🏛️ কাস্টম স্ট্রাকচার ও কম্পোজিট ডেটা টাইপ মডেল (Structs Engine)\033[0m      \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Dot-Syntax Access (var.field) | 8-byte QWORD Offsets | 0% Libc\033[0m     \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Clamp to byte range [0, 255]
+fn to_byte x
+    if x < 0
+        return 0
+    if x > 255
+        return 255
+    return x
 
-say "\033[1;33m[১] স্ট্রাকচার মেমরি size_of মূল্যায়ন (sizeof / size_of):\033[0m"
-মানুষ_আকার = size_of(মানুষ)
-পয়েন্ট_আকার = size_of(পয়েন্ট)
-say "  • 'মানুষ' কাঠামোর মেমরি size_of  : " + মানুষ_আকার + " বাইট (৩টি ৬৪-বিট ফিল্ড = ২৪B)"
-say "  • 'পয়েন্ট' কাঠামোর মেমরি size_of : " + পয়েন্ট_আকার + " বাইট (২টি ৬৪-বিট ফিল্ড = ১৬B)"
-say ""
+// Struct with typed fields
+struct TypedRecord
+    int_val
+    flag
+    level
 
-// ৩. হিপ মেমরিতে স্ট্রাকচার ইনস্ট্যান্স বরাদ্দ
-রহিম = malloc(মানুষ_আকার)
-কেন্দ্র = malloc(পয়েন্ট_আকার)
+fn make_record iv flag lvl
+    r = TypedRecord()
+    r.int_val = iv
+    r.flag = flag
+    r.level = lvl
+    return r
 
-// ৪. ডট সিনট্যাক্সের মাধ্যমে ফিল্ডে ডেটা সংরক্ষণ (Field Assignment)
-রহিম.আইডি = 101
-রহিম.বয়স = 25
-রহিম.উচ্চতা = 175
+// Test classify_sign — use variable for negative input
+say "Sign of -7:"
+neg7 = 0 - 7
+say classify_sign neg7
 
-কেন্দ্র.x = 50
-কেন্দ্র.y = 100
+say "Sign of 0:"
+say classify_sign 0
 
-say "\033[1;33m[২] ডট সিনট্যাক্সে স্ট্রাকচার ফিল্ড পাঠ (Field Read):\033[0m"
-say "  • রহিমের আইডি       : ", রহিম.আইডি
-say "  • রহিমের বয়স         : ", রহিম.বয়স
-say "  • রহিমের উচ্চতা      : ", রহিম.উচ্চতা
-say "  • কেন্দ্রের X স্থানাঙ্ক   : ", কেন্দ্র.x
-say "  • কেন্দ্রের Y স্থানাঙ্ক   : ", কেন্দ্র.y
-say ""
+say "Sign of 42:"
+say classify_sign 42
 
-// ৫. স্ট্রাকচার ফিল্ড দিয়ে এক্সপ্রেশন ও গণনা
-say "\033[1;33m[৩] ফিল্ড ম্যানিপুলেশন ও লজিক্যাল ভ্যালিডেশন:\033[0m"
-নতুন_বয়স = রহিম.বয়স + 5
-রহিম.বয়স = নতুন_বয়স
-say "  • ৫ বছর বৃদ্ধির পর বয়স : ", রহিম.বয়স
+// in_range with paren syntax
+say "in_range(5, 1, 10):"
+say in_range(5, 1, 10)
 
-if রহিম.বয়স == 30
-    say "  ✔ রহিমের বয়স সফলভাবে ৩০ এ আপডেট হয়েছে!"
+say "in_range(15, 1, 10):"
+say in_range(15, 1, 10)
 
-// কেন্দ্রের পিথাগোরাস দূরত্ব গণনা: x*x + y*y
-এক্স_বর্গ = কেন্দ্র.x * কেন্দ্র.x
-ওয়াই_বর্গ = কেন্দ্র.y * কেন্দ্র.y
-মোট_দূরত্ব = এক্স_বর্গ + ওয়াই_বর্গ
+say "type_tag(42):"
+say type_tag 42
 
-say "  • কেন্দ্রের দূরত্বের বর্গ (x² + y²) : " + মোট_দূরত্ব
-if মোট_দূরত্ব == 12500
-    say "  ✔ পিথাগোরাস ভেক্টর গণনা ১০০% সঠিক ও সফল (৫০² + ১০০² = ১২৫০০)!"
+say "type_tag(70000):"
+say type_tag 70000
 
-say ""
-say "\033[38;2;0;255;204m🎉 লিপি কাস্টম স্ট্রাকচার ও ডেটা টাইপ মডেল সম্পূর্ণ সফল!\033[0m"
+say "to_byte(300):"
+say to_byte 300
+
+say "to_byte(-5):"
+say to_byte(0 - 5)
+
+// Struct-based typed record using paren syntax
+rec = make_record(1024, 1, 3)
+say "Record int_val:"
+say rec.int_val
+say "Record flag:"
+say rec.flag
+say "Record level:"
+say rec.level
+
+say "PASS: Test 22 Type System"

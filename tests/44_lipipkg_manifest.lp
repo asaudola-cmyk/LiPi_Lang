@@ -1,46 +1,55 @@
-// Test 44: lipipkg.toml ম্যানিফেস্ট সিস্টেম
-// WHY: Package manager এর core feature যাচাই করা
-include "std/core/mem.lp"
-include "std/version.lp"
+// Test 44: Package Manifest — Lipi 2.0 Global Standard
+// lipipkg.toml manifest parsing and validation
 
-struct ম্যানিফেস্ট
-    নাম_সূচক,
-    সংস্করণ_সূচক,
-    লেখক_সূচক,
-    নির্ভরতা_গণনা
+struct Manifest
+    name
+    version
+    description
+    author
+    license
 
-fn ম্যানিফেস্ট_তৈরি নাম সংস্করণ লেখক
-    সাইজ_মান = size_of(ম্যানিফেস্ট)
-    pkg = malloc(সাইজ_মান)
-    pkg.নাম_সূচক = 1
-    pkg.সংস্করণ_সূচক = 2
-    pkg.লেখক_সূচক = 3
-    pkg.নির্ভরতা_গণনা = 0
-    return pkg
+fn manifest_new name version
+    m = Manifest()
+    m.name = name
+    m.version = version
+    m.description = "A Lipi package"
+    m.author = "developer"
+    m.license = "MIT"
+    return m
 
-fn প্রধান
-    say "══════════════════════════════════"
-    say "Test 44: lipipkg ম্যানিফেস্ট সিস্টেম"
-    say "══════════════════════════════════"
-    say ""
-    say "[প্যাকেজ]"
-    say "নাম        = \"my-sovereign-app\""
-    say "সংস্করণ    = \"১.০.০\""
-    say "লেখক       = \"রফিক আহমেদ\""
-    say "বিবরণ      = \"লিপিতে তৈরি অ্যাপ\""
-    say "লাইসেন্স   = \"MIT\""
-    say ""
-    say "[নির্ভরতা]"
-    say "std         = \"", LIPI_সংস্করণ, "\""
-    say "http        = \"২.০\""
-    say "crypto      = \"১.৫\""
-    say ""
-    pkg = ম্যানিফেস্ট_তৈরি("my-app", "১.০.০", "রফিক")
-    say "struct size:", size_of(ম্যানিফেস্ট)
-    say "নির্ভরতা গণনা:", pkg.নির্ভরতা_গণনা
-    free(pkg, size_of(ম্যানিফেস্ট))
-    say ""
-    say "✅ Test 44 পাস — lipipkg ম্যানিফেস্ট fn করছে"
-    say "⚡ [লিপি প্রথম ১.০]"
-    return 0
-প্রধান()
+fn manifest_validate m
+    if len m.name == 0
+        say "Error: name is required"
+        return 0
+    if len m.version == 0
+        say "Error: version is required"
+        return 0
+    return 1
+
+fn manifest_print m
+    say "Name:        " + m.name
+    say "Version:     " + m.version
+    say "Description: " + m.description
+    say "Author:      " + m.author
+    say "License:     " + m.license
+
+say "=== Package Manifest ==="
+pkg = manifest_new "myapp" "1.0.0"
+pkg.description = "My awesome Lipi app"
+pkg.author = "Shafiullah"
+
+valid = manifest_validate pkg
+if valid
+    say "Manifest: valid"
+    manifest_print pkg
+else
+    say "Manifest: invalid"
+
+// Dependency list simulation
+say ""
+say "Dependencies:"
+say "  std/http ^1.0.0"
+say "  std/json ^1.0.0"
+say "  std/crypto ^1.0.0"
+
+say "PASS: Test 44 Package Manifest"

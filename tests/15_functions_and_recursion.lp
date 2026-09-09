@@ -1,33 +1,55 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — প্রথম শ্রেণীর ফাংশন ও কলিং কনভেনশন টেস্ট (Functions & AMD64 ABI)
-say "\033[1;36m=== লিপি প্রথম শ্রেণীর ফাংশন ও কল স্ট্যাক পরীক্ষা ===\033[0m"
+// Test 15: Functions and Recursion — Lipi 2.0
+// Demonstrates: one-liner fns, recursive factorial, GCD, LCM, recursive Fibonacci
 
-// ১. প্যারামিটারসহ ফাংশন সংজ্ঞা (System V AMD64 ABI: rdi, rsi -> rax)
-fn যোগ ক খ
-    ফলাফল = ক + খ
-    return ফলাফল
+// One-liner function definitions
+fn double n = n * 2
+fn square n = n * n
+fn inc n = n + 1
 
-fn গুণ ক খ
-    ফলাফল = ক * খ
-    return ফলাফল
+// Recursive factorial
+fn factorial n
+    if n <= 1
+        return 1
+    return n * factorial(n - 1)
 
-// ২. শর্ত ও লুপ সম্বলিত ফাংশন
-fn ফ্যাক্টোরিয়াল n
-    ফল = 1
-    i = 1
-    while i <= n
-        ফল = ফল * i
-        i = i + 1
-    return ফল
+// GCD via Euclidean algorithm (iterative)
+fn gcd a b
+    while b != 0
+        temp = b
+        b = a % b
+        a = temp
+    return a
 
-// ৩. প্রধান কার্যনির্বাহী অংশ (Main Execution Entry)
-x = যোগ(20, 30)
-say "২০ + ৩০ = " + x
+// LCM using GCD (paren syntax: gcd(a, b) works inside fn body)
+fn lcm a b
+    g = gcd(a, b)
+    return a * b / g
 
-y = গুণ(x, 4)
-say "৫০ * ৪ = " + y
+// Recursive Fibonacci (works for small n)
+fn fib n
+    if n <= 1
+        return n
+    return fib(n - 1) + fib(n - 2)
 
-f5 = ফ্যাক্টোরিয়াল(5)
-say "৫ এর ফ্যাক্টোরিয়াল = " + f5
+say "double 7:"
+say double 7
 
-f6 = ফ্যাক্টোরিয়াল(6)
-say "৬ এর ফ্যাক্টোরিয়াল = " + f6
+say "square 9:"
+say square 9
+
+say "factorial 10:"
+say factorial 10
+
+say "gcd(48, 18):"
+say gcd(48, 18)
+
+say "lcm(12, 18):"
+say lcm(12, 18)
+
+say "fib 10:"
+say fib 10
+
+say "square(double(3)) = 36:"
+say square double 3
+
+say "PASS: Test 15 Functions Recursion"

@@ -1,19 +1,59 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — সপ্তম পাঠ (Lipi 07: Multi-File Module Import)
-// এই কোডটি প্রমাণ করে যে লিপি ভাষায় একাধিক ফাইলের কোড 'include' করে ব্যবহার করা যায়।
-// WHY: মাল্টি-ফাইল মডিউল সিস্টেম ছাড়া বড় প্রজেক্ট করা সম্ভব নয়।
+// Test 07: Multi-file Import — Lipi 2.0
+// Demonstrates: utility functions, string repetition, math helpers
 
-include "modules/math_utils.lp"
+// Math utility functions (inline, simulating imported module)
+fn square n = n * n
+fn cube n = n * n * n
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  📦 LIPI MULTI-FILE MODULE SYSTEM & IMPORTS                            ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
-say "মডিউল সংস্করণ : " + সংস্করণ
+// Computes base^exp iteratively
+fn power base exp
+    result = 1
+    i = 0
+    while i < exp
+        result = result * base
+        i = i + 1
+    return result
 
-সংখ্যা = 50
-say "মূল সংখ্যা     : " + সংখ্যা
-say "দ্বিগুণ ফলাফল  : " + দ্বিগুণ(সংখ্যা)
-say "ত্রিগুণ ফলাফল  : " + ত্রিগুণ(সংখ্যা)
-say "বর্গ ফলাফল     : " + বর্গ(সংখ্যা)
-say ""
-say "✔ মাল্টি-ফাইল মডিউল আমদানি শতভাগ সফল!"
+// String utility: repeat a string n times
+fn repeat_str s n
+    result = ""
+    i = 0
+    while i < n
+        result = result + s
+        i = i + 1
+    return result
+
+// Test math utilities — each call result stored before say
+say "square(7):"
+say square 7
+
+say "cube(4):"
+say cube 4
+
+say "power(2, 10):"
+p = power(2, 10)
+say p
+
+// Test string utilities
+say "repeat_str('ab', 3):"
+r1 = repeat_str("ab", 3)
+say r1
+
+say "repeat_str('-', 5):"
+r2 = repeat_str("-", 5)
+say r2
+
+// Composed: square(3) then power result squared
+sq3 = square 3
+say "square(3):"
+say sq3
+
+p2_4 = power(2, 4)
+say "power(2, 4):"
+say p2_4
+
+sq_p2_4 = square p2_4
+say "square(power(2,4)):"
+say sq_p2_4
+
+say "PASS: Test 07 Multi File"

@@ -1,59 +1,59 @@
-// 📜 লিপি খাঁটি এমবেডেড পারসিস্টেন্ট ডাটাবেজ ইঞ্জিন (Pure Lipi Embedded DB Engine)
-// 🏛️ সরাসরি লিনাক্স কার্নেল ফাইল সিসকল ও বাইনারি রেকর্ড পারসিস্টেন্স (Linux AMD64 Kernel ABI)
-// ০% SQLite, ০% Libc, ০% C রানটাইম ডিপেন্ডেন্সি — সরাসরি SYS_open, SYS_write, SYS_read, SYS_lseek, SYS_fsync
+// 📜 লিপি bাঁটি এমবেডেড পারসিস্টেন্ট database ইঞ্জিন (Pure Lipi Embedded DB Engine)
+// 🏛️ direct লিনাa্স aার্নেল file syscall ও বাইনারি রেaর্ড পারসিস্টেন্স (Linux AMD64 Kernel ABI)
+// ০% SQLite, ০% Libc, ০% C রানটাইম ডিপেন্ডেন্সি — direct SYS_open, SYS_write, SYS_read, SYS_lseek, SYS_fsync
 //
-// WHY: অ্যাপ্লিকেশন ডাটা স্থায়ীভাবে হার্ড ড্রাইভ/NVMe সিলিকনে সংরক্ষণের জন্য একটি হালকা,
-// অতি-দ্রুত এবং নির্ভরযোগ্য এমবেডেড কি-ভ্যালু স্টোরেজ ইঞ্জিন।
-// রেকর্ড ফরম্যাট: প্রতিটি রেকর্ড ঠিক ১৬ বাইট (৮ বাইট কি + ৮ বাইট ভ্যালু)।
+// WHY: অ্যাপ্লিaেশন ডাটা স্থায়ীভাবে rate্ড ড্রাইভ/NVMe সিলিaনে সংরa্ষণের জন্য এaটি হালaা,
+// অতি-দ্রুত এবং নির্ভরadd্য এমবেডেড aি-val স্টোরেজ ইঞ্জিন।
+// রেaর্ড ফরম্যাট: each রেaর্ড ঠিa ১৬ byte (৮ byte aি + ৮ byte val)।
 
-// ১. ডাটাবেজ ফাইল খোলা বা তৈরি করা (Open/Create DB via SYS_open: syscall 2)
-// WHY: O_RDWR (2) | O_CREAT (64) = 66, মোড 0644 (420 দশমিকে)
-fn ডাটাবেজ_খোলো পথ
-    ফ্ল্যাগ = 66
+// ১. database file bোলা বা create aরা (Open/Create DB via SYS_open: syscall 2)
+// WHY: O_RDWR (2) | O_CREAT (64) = 66, মোড 0644 (420 decimalে)
+fn database_open path
+    flag = 66
     মোড = 420
-    এফডি = সিসকল(2, পথ, ফ্ল্যাগ, মোড)
-    return এফডি
+    fd = syscall(2, path, flag, মোড)
+    return fd
 
-// ২. ডাটাবেজে কি-ভ্যালু রেকর্ড সংরক্ষণ (Append Record via SYS_lseek: 8 & SYS_write: 1)
-// WHY: ফাইলের শেষে পয়েন্টার নিয়ে গিয়ে ১৬ বাইটের বাইনারি কি-ভ্যালু পেয়ার অ্যাপেন্ড করা।
-fn ডাটাবেজ_রাখো এফডি কী মান
-    // SEEK_END (2) দিয়ে ফাইলের শেষ প্রান্তে যাওয়া
-    সিসকল(8, এফডি, 0, 2)
-    // বাফারের প্রথম ৮ বাইটে কী এবং পরবর্তী ৮ বাইটে মান রাখা
-    মেমরি_লেখো(বাফার(), 0, কী)
-    মেমরি_লেখো(বাফার(), 8, মান)
-    // ১৬ বাইট বাইনারি ডাটা ডিস্কে রাইট করা
-    লিখিত_বাইট = সিসকল(1, এফডি, বাফার(), 16)
-    return লিখিত_বাইট
+// ২. databaseে aি-val রেaর্ড সংরa্ষণ (Append Record via SYS_lseek: 8 & SYS_write: 1)
+// WHY: fileের শেষে পয়েন্টার নিয়ে গিয়ে ১৬ byteের বাইনারি aি-val পেয়ার অ্যাপেন্ড aরা।
+fn database_put fd key value
+    // SEEK_END (2) দিয়ে fileের শেষ edgeে যাওয়া
+    syscall(8, fd, 0, 2)
+    // bufferের প্রথম ৮ byteে key এবং পরবর্তী ৮ byteে value রাbা
+    mem_write(buffer(), 0, key)
+    mem_write(buffer(), 8, value)
+    // ১৬ byte বাইনারি ডাটা ডিস্aে রাইট aরা
+    লিbিত_byte = syscall(1, fd, buffer(), 16)
+    return লিbিত_byte
 
-// ৩. ডাটাবেজ থেকে কি অনুযায়ী মান অনুসন্ধান (Lookup Record via SYS_lseek: 8 & SYS_read: 0)
-// WHY: ফাইলের শুরু (SEEK_SET = 0) থেকে পর্যায়ক্রমে ১৬ বাইট করে স্ক্যান করে কাঙ্ক্ষিত কি খুঁজে বের করা।
-fn ডাটাবেজ_পড়ো এফডি খোঁজার_কী
-    // SEEK_SET (0) দিয়ে ফাইলের শুরুতে যাওয়া
-    সিসকল(8, এফডি, 0, 0)
+// ৩. database থেaে aি অনুযায়ী value অনুসন্ধান (Lookup Record via SYS_lseek: 8 & SYS_read: 0)
+// WHY: fileের শুরু (SEEK_SET = 0) থেaে পর্যায়a্রমে ১৬ byte aরে স্a্যান aরে aাঙ্a্ষিত aি bুঁজে বের aরা।
+fn database_পড়ো fd search_key
+    // SEEK_SET (0) দিয়ে fileের শুরুতে যাওয়া
+    syscall(8, fd, 0, 0)
     পাওয়া_গেছে = 0
-    ফলাফল = -1
-    চলমান = 1
+    result = -1
+    চলvalue = 1
 
-    while চলমান == 1
-        পড়া_বাইট = সিসকল(0, এফডি, বাফার(), 16)
-        if পড়া_বাইট < 16
-            চলমান = 0
+    while চলvalue == 1
+        পড়া_byte = syscall(0, fd, buffer(), 16)
+        if পড়া_byte < 16
+            চলvalue = 0
         } অন্যথায়
-            বর্তমান_কী = মেমরি_পড়ো(বাফার(), 0)
-            if বর্তমান_কী == খোঁজার_কী
-                ফলাফল = মেমরি_পড়ো(বাফার(), 8)
-                চলমান = 0
-    return ফলাফল
+            বর্তval_aী = mem_পড়ো(buffer(), 0)
+            if বর্তval_aী == search_key
+                result = mem_পড়ো(buffer(), 8)
+                চলvalue = 0
+    return result
 
-// ৪. ডিস্ক সিঙ্ক্রোনাইজেশন (Durable Silicon Flush via SYS_fsync: syscall 74)
-// WHY: ওএস পেজ ক্যাশে থাকা সমস্ত ডার্টি পেজ সরাসরি হার্ডওয়্যার স্টোরেজে ফ্লাশ করা (Zero Data Loss)।
-fn ডাটাবেজ_সিঙ্ক এফডি
-    ফলাফল = সিসকল(74, এফডি)
-    return ফলাফল
+// ৪. ডিস্a সিঙ্a্রোনাইজেশন (Durable Silicon Flush via SYS_fsync: syscall 74)
+// WHY: ওএস page a্যাশে থাaা সমস্ত ডার্টি page direct rate্ডওয়্যার স্টোরেজে ফ্লাশ aরা (Zero Data Loss)।
+fn database_sync fd
+    result = syscall(74, fd)
+    return result
 
-// ৫. ডাটাবেজ বন্ধ করা (Close DB via SYS_close: syscall 3)
-// WHY: ফাইল ডিসক্রিপ্টর কার্নেলে মুক্ত করা।
-fn ডাটাবেজ_বন্ধ এফডি
-    ফলাফল = সিসকল(3, এফডি)
-    return ফলাফল
+// ৫. database close aরা (Close DB via SYS_close: syscall 3)
+// WHY: file ডিসa্রিপ্টর aার্নেলে মুa্ত aরা।
+fn database_close fd
+    result = syscall(3, fd)
+    return result

@@ -9,7 +9,7 @@
 
 include "std/mem.lp"
 
-// epoll কনস্ট্যান্টস
+// epoll aনস্ট্যান্টস
 // SYS_epoll_create1 = 291
 // SYS_epoll_ctl     = 233
 // SYS_epoll_wait    = 232
@@ -21,50 +21,50 @@ include "std/mem.lp"
 // EPOLLERR          = 8
 // EPOLLHUP          = 16
 
-// ১. কার্নেল epoll ইভেন্ট মনিটর অবজেক্ট তৈরি
-ফাংশন ইভেন্ট_লুপ_তৈরি()
+// ১. aার্নেল epoll event মনিটর অবজেa্ট তৈরি
+fn event_লুপ_created()
     // SYS_epoll_create1(flags = 0) -> Syscall 291
-    লুপ_এফডি = সিসকল(291, 0, 0, 0, 0, 0, 0)
-    return লুপ_এফডি
+    loop_fd = syscall(291, 0, 0, 0, 0, 0, 0)
+    return loop_fd
 
-// ২. একটি সকেট বা এফডি-কে epoll মনিটরিং তালিকায় যুক্তকরণ (EPOLL_CTL_ADD)
-// WHY: Linux AMD64 কার্নেলে struct epoll_event হলো ১২ বাইটের প্যাকড স্ট্রাকচার।
-// অফসেট ০..৩: uint32 events (ইভেন্ট মাস্ক)
-// অফসেট ৪..১১: uint64 data (সকেট ফাইল ডেসক্রিপ্টর)
-ফাংশন ইভেন্ট_সকেট_যোগ(লুপ_এফডি, সকেট_এফডি, ইভেন্ট_মাস্ক)
-    ইভেন্ট_মেম = malloc(16)
-    মেমরি_শব্দ32_লেখো(ইভেন্ট_মেম, 0, ইভেন্ট_মাস্ক)
-    মেমরি_লেখো(ইভেন্ট_মেম, 4, সকেট_এফডি)
+// ২. এaটি সaেট বা fd-aে epoll মনিটরিং listয় যুa্তaরণ (EPOLL_CTL_ADD)
+// WHY: Linux AMD64 aার্নেলে struct epoll_event হলো ১২ byteের প্যাaড স্ট্রাaচার।
+// offset ০..৩: uint32 events (event মাস্a)
+// offset ৪..১১: uint64 data (সaেট file ডেসa্রিপ্টর)
+fn event_সaেট_add(loop_fd, socket_fd, event_month্a)
+    event_মেম = malloc(16)
+    mem_শব্দ32_লেbো(event_মেম, 0, event_month্a)
+    mem_write(event_মেম, 4, socket_fd)
 
     // SYS_epoll_ctl(epfd, EPOLL_CTL_ADD=1, fd, &event) -> Syscall 233
-    স্ট্যাটাস = সিসকল(233, লুপ_এফডি, 1, সকেট_এফডি, ইভেন্ট_মেম, 0, 0)
-    return স্ট্যাটাস
+    status = syscall(233, loop_fd, 1, socket_fd, event_মেম, 0, 0)
+    return status
 
-// ৩. epoll মনিটরিং তালিকা থেকে এফডি অপসারণ (EPOLL_CTL_DEL)
-ফাংশন ইভেন্ট_সকেট_মুছো(লুপ_এফডি, সকেট_এফডি)
+// ৩. epoll মনিটরিং list থেaে fd অপসারণ (EPOLL_CTL_DEL)
+fn event_সaেট_delete(loop_fd, socket_fd)
     // SYS_epoll_ctl(epfd, EPOLL_CTL_DEL=2, fd, NULL) -> Syscall 233
-    স্ট্যাটাস = সিসকল(233, লুপ_এফডি, 2, সকেট_এফডি, 0, 0, 0)
-    return স্ট্যাটাস
+    status = syscall(233, loop_fd, 2, socket_fd, 0, 0, 0)
+    return status
 
-// ৪. ইভেন্ট ট্রিপল অপেক্ষা ও মাল্টিপ্লেক্সিং (SYS_epoll_wait)
-// WHY: কোনো সিপিইউ ক্লক নষ্ট না করে কার্নেলে স্লিপ করা while না পর্যন্ত অন্তত একটি এফডি রেডি হয়।
-ফাংশন ইভেন্ট_লুপ_অপেক্ষা(লুপ_এফডি, আউটপুট_বাফার, সর্বোচ্চ_ইভেন্ট, টাইমআউট_মিলিসেকেন্ড)
+// ৪. event ট্রিপল অপেa্ষা ও মাল্টিপ্লেa্সিং (SYS_epoll_wait)
+// WHY: aোনো সিপিইউ a্লa নষ্ট not aরে aার্নেলে স্লিপ aরা while not পর্যন্ত অন্তত এaটি fd রেডি হয়।
+fn event_লুপ_অপেa্ষা(loop_fd, output_buffer, সর্বোচ্চ_event, টাইমout_মিলিসেaেন্ড)
     // SYS_epoll_wait(epfd, events, maxevents, timeout) -> Syscall 232
-    রেডি_সংখ্যা = সিসকল(232, লুপ_এফডি, আউটপুট_বাফার, সর্বোচ্চ_ইভেন্ট, টাইমআউট_মিলিসেকেন্ড, 0, 0)
-    return রেডি_সংখ্যা
+    রেডি_num = syscall(232, loop_fd, output_buffer, সর্বোচ্চ_event, টাইমout_মিলিসেaেন্ড, 0, 0)
+    return রেডি_num
 
-// ৫. ট্রিগার হওয়া ইভেন্ট থেকে ফাইল ডেসক্রিপ্টর পাঠ (Extract Ready FD)
-ফাংশন ইভেন্ট_এফডি_পড়ো(আউটপুট_বাফার, ইনডেক্স)
-    অফসেট = ইনডেক্স * 12 + 4
-    return মেমরি_পড়ো(আউটপুট_বাফার, অফসেট)
+// ৫. ট্রিগার হওয়া event থেaে file ডেসa্রিপ্টর reading (Extract Ready FD)
+fn event_fd_পড়ো(output_buffer, indexa্স)
+    offset = indexa্স * 12 + 4
+    return mem_পড়ো(output_buffer, offset)
 
-// ৬. ট্রিগার হওয়া ইভেন্টের মাস্ক ফ্ল্যাগ পাঠ (Extract Event Mask)
-ফাংশন ইভেন্ট_মাস্ক_পড়ো(আউটপুট_বাফার, ইনডেক্স)
-    অফসেট = ইনডেক্স * 12
-    return মেমরি_শব্দ32_পড়ো(আউটপুট_বাফার, অফসেট)
+// ৬. ট্রিগার হওয়া eventের মাস্a flag reading (Extract Event Mask)
+fn event_month্a_পড়ো(output_buffer, indexa্স)
+    offset = indexa্স * 12
+    return mem_শব্দ32_পড়ো(output_buffer, offset)
 
-// ৭. ইভেন্ট লুপ বন্ধকরণ ও ওএস রিসোর্স মুক্ত
-ফাংশন ইভেন্ট_লুপ_বন্ধ(লুপ_এফডি)
+// ৭. event লুপ বন্ধaরণ ও ওএস resource মুa্ত
+fn event_লুপ_close(loop_fd)
     // SYS_close(fd) -> Syscall 3
-    সিসকল(3, লুপ_এফডি, 0, 0, 0, 0, 0)
+    syscall(3, loop_fd, 0, 0, 0, 0, 0)
     return 0

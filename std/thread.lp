@@ -1,40 +1,40 @@
-// 📜 লিপি খাঁটি কার্নেল মাল্টি-থ্রেডিং ও কনকারেন্সি লাইব্রেরি (Pure Lipi Native Multithreading Library)
-// 🏛️ সরাসরি লিনাক্স কার্নেল পেজ-শেয়ার্ড মাল্টি-থ্রেডিং (Linux AMD64 Kernel SYS_clone ABI)
-// ০% Libc, ০% pthreads নির্ভরতা — সরাসরি SYS_clone (56), SYS_sched_yield (24), SYS_exit (60)
+// 📜 লিপি bাঁটি aার্নেল মাল্টি-থ্রেডিং ও aনaারেন্সি লাইব্রেরি (Pure Lipi Native Multithreading Library)
+// 🏛️ direct লিনাa্স aার্নেল পেজ-শেয়ার্ড মাল্টি-থ্রেডিং (Linux AMD64 Kernel SYS_clone ABI)
+// ০% Libc, ০% pthreads নির্ভরতা — direct SYS_clone (56), SYS_sched_yield (24), SYS_exit (60)
 //
-// WHY: আধুনিক মাল্টি-কোর সিলিকন প্রসেসরের পূর্ণ শক্তি ব্যবহারের জন্য সরাসরি কার্নেল থ্রেড সৃষ্টি করা।
+// WHY: আধুনিa মাল্টি-aোর সিলিaন প্রসেসরের full শa্তি ব্যবrateের জন্য direct aার্নেল থ্রেড সৃষ্টি aরা।
 // CLONE_VM (256) | CLONE_FS (512) | CLONE_FILES (1024) | CLONE_SIGHAND (2048) | CLONE_THREAD (65536) = 69376 (0x10f00)
 
-// ১. নেটিভ লিনাক্স কার্নেল থ্রেড সৃষ্টি (Spawn Real Linux Thread via SYS_clone: syscall 56)
-// WHY: নতুন থ্রেডের জন্য কার্নেল স্পেসে এক্সিকিউশন কন্টেক্সট তৈরি করা।
-// চাইল্ড থ্রেডে ০ রিটার্ন করে, প্যারেন্ট থ্রেডে চাইল্ড থ্রেড আইডি (TID > 0) রিটার্ন করে।
-fn থ্রেড_তৈরি স্ট্যাক_টপ
-    ফ্ল্যাগ = 69376
-    টিআইডি = সিসকল(56, ফ্ল্যাগ, স্ট্যাক_টপ, 0, 0, 0)
+// ১. নেটিভ লিনাa্স aার্নেল থ্রেড সৃষ্টি (Spawn Real Linux Thread via SYS_clone: syscall 56)
+// WHY: নতুন থ্রেডের জন্য aার্নেল স্পেসে এa্সিaিউশন aন্টেa্সট create aরা।
+// চাইল্ড থ্রেডে ০ return aরে, প্যারেন্ট থ্রেডে চাইল্ড থ্রেড আইডি (TID > 0) return aরে।
+fn থ্রেড_created স্ট্যাa_টপ
+    flag = 69376
+    টিআইডি = syscall(56, flag, স্ট্যাa_টপ, 0, 0, 0)
     return টিআইডি
 
 // ২. সিপিউ সময় ছেড়ে দেওয়া (Yield CPU Timeslice via SYS_sched_yield: syscall 24)
-// WHY: বিজি-লুপে সিপিউ অপচয় না করে অন্যান্য থ্রেডকে তাত্ক্ষণিক রান করার সুযোগ দেওয়া।
+// WHY: বিজি-লুপে সিপিউ অপচয় not aরে অন্যান্য থ্রেডaে তাত্a্ষণিa রান aরার সুadd দেওয়া।
 fn থ্রেড_ছেড়ে_দাও
-    ফলাফল = সিসকল(24)
-    return ফলাফল
+    result = syscall(24)
+    return result
 
-// ৩. থ্রেড প্রস্থান বা সমাপ্তি (Terminate Calling Thread via SYS_exit: syscall 60)
-// WHY: চাইল্ড থ্রেডের fn সমাপ্ত হলে প্যারেন্ট প্রসেসকে অক্ষত রেখে কেবলমাত্র কলিং থ্রেডটি নিষ্ক্রিয় করা।
-// সতর্কতা: exit_group (231) পুরো প্রসেস বন্ধ করে দেয়, কিন্তু SYS_exit (60) শুধু বর্তমান থ্রেড সমাপ্ত করে।
-fn থ্রেড_প্রস্থান স্ট্যাটাস
-    সিসকল(60, স্ট্যাটাস)
+// ৩. থ্রেড widthান বা সমাপ্তি (Terminate Calling Thread via SYS_exit: syscall 60)
+// WHY: চাইল্ড থ্রেডের fn সমাপ্ত হলে প্যারেন্ট প্রসেসaে অa্ষত রেbে aেবলমাত্র aলিং থ্রেডটি নিষ্a্রিয় aরা।
+// warning: exit_group (231) পুরো প্রসেস close aরে দেয়, aিন্তু SYS_exit (60) শুধু বর্তvalue থ্রেড সমাপ্ত aরে।
+fn থ্রেড_widthান status
+    syscall(60, status)
 
-// ৪. পরমাণু স্পিনলক আটক (Acquire Spinlock with Sched Yield)
-// WHY: একাধিক থ্রেডের মধ্যে ক্রিটিক্যাল সেকশন সুরক্ষায় রেস কন্ডিশন প্রতিরোধ করা।
-fn স্পিনলক_আটক লক_ঠিকানা
-    while মেমরি_পড়ো(লক_ঠিকানা, 0) != 0
+// ৪. পরমাণু স্পিনলa আটa (Acquire Spinlock with Sched Yield)
+// WHY: এaাধিa থ্রেডের মধ্যে a্রিটিa্যাল সেaশন সুরa্ষায় রেস aন্ডিশন প্রতিরোধ aরা।
+fn স্পিনলa_আটa লa_addr
+    while mem_পড়ো(লa_addr, 0) != 0
         থ্রেড_ছেড়ে_দাও()
-    মেমরি_লেখো(লক_ঠিকানা, 0, 1)
+    mem_write(লa_addr, 0, 1)
     return 1
 
-// ৫. পরমাণু স্পিনলক অবমুক্তি (Release Spinlock)
-// WHY: ক্রিটিক্যাল সেকশনের fn শেষে অন্যান্য থ্রেডের জন্য রিসোর্স উন্মুক্ত করা।
-fn স্পিনলক_মুক্ত লক_ঠিকানা
-    মেমরি_লেখো(লক_ঠিকানা, 0, 0)
+// ৫. পরমাণু স্পিনলa অবমুa্তি (Release Spinlock)
+// WHY: a্রিটিa্যাল সেaশনের fn শেষে অন্যান্য থ্রেডের জন্য resource উন্মুa্ত aরা।
+fn স্পিনলa_মুa্ত লa_addr
+    mem_write(লa_addr, 0, 0)
     return 0

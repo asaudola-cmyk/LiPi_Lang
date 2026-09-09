@@ -1,50 +1,42 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — তৃতীয় পাঠ (Lipi 03: Logic, Conditionals & Grade System)
-// শর্তযুক্ত যুক্তি ও গ্রেডিং সিস্টেম — ৪ শিক্ষার্থীর নম্বর বিশ্লেষণ
-// WHY: if/else blocks দিয়ে grade classification — real-world decision tree।
+// Test 03: Logic and Conditionals — Lipi 2.0
+// Demonstrates: if/elif/else chains, boolean logic (and, or, not)
 
-include "std/io.lp"
-
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  📊 LIPI LOGIC ENGINE — STUDENT GRADE CLASSIFICATION SYSTEM           ║"
-say "║  ⚡ Conditional Logic | Grade Boundaries | Real-World Decision Engine  ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
-say "মোট শিক্ষার্থীর সংখ্যা: ৪"
-say "------------------------------------------"
-
-// তানভীর: ৮৫ নম্বর → A+
-ন1 = 85
-if ন1 >= 80
-    say "শিক্ষার্থী: তানভীর | নম্বর: ৮৫ | গ্রেড: A+"
-
-// সাদিয়া: ৯২ নম্বর → A+
-ন2 = 92
-if ন2 >= 80
-    say "শিক্ষার্থী: সাদিয়া | নম্বর: ৯২ | গ্রেড: A+"
-
-// রাকিব: ৫৮ নম্বর → F
-ন3 = 58
-if ন3 >= 80
-    say "শিক্ষার্থী: রাকিব | নম্বর: ৫৮ | গ্রেড: A+"
-else
-    if ন3 >= 60
-        say "শিক্ষার্থী: রাকিব | নম্বর: ৫৮ | গ্রেড: B"
+fn grade score
+    if score >= 90
+        return "A+"
+    elif score >= 80
+        return "A"
+    elif score >= 70
+        return "B"
+    elif score >= 60
+        return "C"
     else
-        say "শিক্ষার্থী: রাকিব | নম্বর: ৫৮ | গ্রেড: F"
+        return "F"
 
-// মীম: ৭৬ নম্বর → A
-ন4 = 76
-if ন4 >= 80
-    say "শিক্ষার্থী: মীম | নম্বর: ৭৬ | গ্রেড: A+"
-else
-    if ন4 >= 70
-        say "শিক্ষার্থী: মীম | নম্বর: ৭৬ | গ্রেড: A"
-    else
-        say "শিক্ষার্থী: মীম | নম্বর: ৭৬ | গ্রেড: B"
+// Test grade function with several scores
+say grade 95
+say grade 85
+say grade 75
+say grade 55
 
-say "------------------------------------------"
+// Boolean logic with and
+x = 15
+if x > 10 and x < 20
+    say "x is between 10 and 20"
 
-// সারাংশ গণনা
-গড় = (ন1 + ন2 + ন3 + ন4) / 4
-say "শ্রেণীর গড় নম্বর:", গড়
-say "✅ ফলাফল প্রক্রিয়াকরণ সম্পন্ন! (৪/৪ শিক্ষার্থী গ্রেড প্রাপ্ত)"
+// Boolean logic with or
+if x == 15 or x == 20
+    say "x is 15 or 20"
+
+// Boolean logic with not
+if not x == 99
+    say "x is not 99"
+
+// Nested conditionals
+a = 100
+b = 200
+if a < b
+    if a > 50
+        say "a is between 50 and 200"
+
+say "PASS: Test 03 Logic"

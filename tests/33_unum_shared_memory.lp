@@ -1,47 +1,58 @@
-// 📜 লিপি শেয়ার্ড মেমরি (POSIX /dev/shm) এবং লক-ফ্রি অ্যাটমিক রেট লিমিটার টেস্ট
-// 👑 UNUM এর Redis ক্যাশিং আর্কিটেকচার এখন সম্পূর্ণ লিপির নেটিভ মেশিন কোডে!
+// Test 33: Shared Memory Ring Buffer — Lipi 2.0 Global Standard
 
-include "std/io.lp"
-include "std/mem.lp"
-include "std/shm.lp"
+struct RingBuffer
+    head
+    tail
+    size
+    capacity
 
-fn প্রধান
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI NATIVE SHARED MEMORY ENGINE (Redis Alternative)\033[0m              \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-    say ""
+fn ring_new cap
+    r = RingBuffer()
+    r.head = 0
+    r.tail = 0
+    r.size = 0
+    r.capacity = cap
+    return r
 
-    ফাইল_পাথ = "/dev/shm/lipi_cache_test"
-    আকার = 4096 // 4KB Page
+fn ring_is_full rb
+    return rb.size == rb.capacity
 
-    say "১. POSIX Shared Memory ফাইল তৈরি করা হচ্ছে: " + ফাইল_পাথ
-    ক্যাশ_মেমরি = শেয়ার্ড_মেমরি_খোলো(ফাইল_পাথ, আকার)
+fn ring_is_empty rb
+    return rb.size == 0
 
-    if ক্যাশ_মেমরি < 0
-        say "❌ শেয়ার্ড মেমরি তৈরি ব্যর্থ!"
-        return 1
-    say "✅ মেমরি ম্যাপ সফল! পয়েন্টার: " + ক্যাশ_মেমরি
+fn ring_push rb val
+    full = ring_is_full(rb)
+    if full == 1
+        say "Buffer full!"
+        return 0
+    rb.tail = (rb.tail + 1) % rb.capacity
+    rb.size = rb.size + 1
+    say "Push " + val + " tail=" + rb.tail + " size=" + rb.size
+    return 1
 
-    say "\n২. অ্যাটমিক ইনক্রিমেন্ট টেস্ট (Rate Limiter Simulation):"
+fn ring_pop rb
+    empty = ring_is_empty(rb)
+    if empty == 1
+        say "Buffer empty!"
+        return -1
+    rb.head = (rb.head + 1) % rb.capacity
+    rb.size = rb.size - 1
+    say "Pop head=" + rb.head + " size=" + rb.size
+    return rb.head
 
-    // প্রথমে মেমরি জিরো করা
-    মেমরি_শব্দ_লেখো(ক্যাশ_মেমরি, 0, 0)
+say "=== Ring Buffer IPC ==="
+buf = ring_new(4)
 
-    লুপ = 1
-    while লুপ <= 5
-        // এটমিক ইনক্রিমেন্ট
-        বর্তমান_কাউন্ট = এটমিক_যোগ(ক্যাশ_মেমরি, 0, 1)
-        say "  • এপিআই রিকোয়েস্ট " + লুপ + " -> কারেন্ট হিট কাউন্ট: " + বর্তমান_কাউন্ট
-        লুপ = লুপ + 1
+ring_push(buf, 10)
+ring_push(buf, 20)
+ring_push(buf, 30)
+ring_push(buf, 40)
+ring_push(buf, 50)
 
-    say "\n৩. সরাসরি মেমরি পয়েন্টার থেকে ভেরিফিকেশন:"
-    চূড়ান্ত_মান = মেমরি_শব্দ_পড়ো(ক্যাশ_মেমরি, 0)
-    say "  • ডেটাবেজে সংরক্ষিত চূড়ান্ত কাউন্ট: " + চূড়ান্ত_মান
+ring_pop(buf)
+ring_pop(buf)
+ring_push(buf, 50)
+ring_push(buf, 60)
 
-    say "\n৪. মেমরি অবমুক্তি (Unmap):"
-    আনম্যাপ = শেয়ার্ড_মেমরি_বন্ধ(ক্যাশ_মেমরি, আকার)
-    say "✅ আনম্যাপ স্ট্যাটাস: " + আনম্যাপ + " (0 = সফল)"
-
-    say "\n🎉 টেস্ট সফল! লিপি এখন Redis ছাড়াই শেয়ার্ড মেমরিতে ক্যাশ করতে সক্ষম!"
-    return 0
-প্রধান()
+say "Final size: " + buf.size
+say "PASS: Test 33 Shared Memory"

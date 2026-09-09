@@ -1,47 +1,47 @@
-// 📜 লিপি স্ট্যান্ডার্ড স্ট্রিং ও কনসোল ডেকোরেশন লাইব্রেরি (Pure Lipi String & Terminal UI Library)
-// 🎨 এএনএসআই ট্রু-কালার (ANSI TrueColor) ও ইউটিএফ-৮ ফরম্যাটিং রুটিন
+// 📜 লিপি স্ট্যান্ডার্ড string ও aনসোল ডেaোরেশন লাইব্রেরি (Pure Lipi String & Terminal UI Library)
+// 🎨 এএনএসআই ট্রু-aালার (ANSI TrueColor) ও ইউটিএফ-৮ ফরম্যাটিং routeিন
 
-// ১. রঙিন শিরোনাম মুদ্রণ
-fn রঙিন_শিরোনাম শিরোনাম
-    say "\033[1;36m=== " + শিরোনাম + " ===\033[0m"
+// ১. colorিন শিরোname মুদ্রণ
+fn colorিন_শিরোname শিরোname
+    say "\033[1;36m=== " + শিরোname + " ===\033[0m"
 
-// ২. সবুজ রঙের সাফল্য বার্তা মুদ্রণ
-fn সফলতা_বার্তা বার্তা
-    say "\033[1;32m[সাফল্য ✔] \033[0m" + বার্তা
+// ২. সবুজ colorের সাresult্য message মুদ্রণ
+fn successতা_message message
+    say "\033[1;32m[সাফল্য ✔] \033[0m" + message
 
-// ৩. সায়ান রঙের তথ্য বার্তা মুদ্রণ
-fn তথ্য_বার্তা বার্তা
-    say "\033[1;36m[তথ্য ℹ] \033[0m" + বার্তা
+// ৩. সায়ান colorের তথ্য message মুদ্রণ
+fn তথ্য_message message
+    say "\033[1;36m[তথ্য ℹ] \033[0m" + message
 
-// ৪. হলুদ রঙের সতর্কতা বার্তা মুদ্রণ
-fn সতর্ক_বার্তা বার্তা
-    say "\033[1;33m[সতর্কতা ⚠] \033[0m" + বার্তা
+// ৪. হলুদ colorের warning message মুদ্রণ
+fn সতর্a_message message
+    say "\033[1;33m[সতর্কতা ⚠] \033[0m" + message
 
-// ৫. লাল রঙের ত্রুটি বার্তা মুদ্রণ
-fn ভুল_বার্তা বার্তা
-    say "\033[1;31m[ত্রুটি ✖] \033[0m" + বার্তা
+// ৫. লাল colorের error message মুদ্রণ
+fn ভুল_message message
+    say "\033[1;31m[ত্রুটি ✖] \033[0m" + message
 
-// ৬. স্ট্রিং len নির্ণয় (String Byte Length via builtin len)
-// WHY: স্ট্রিং ভেরিয়েবল বা লিটারেলের ইউটিএফ-৮ বাইট সাইজ রিটার্ন করে।
-fn স্ট্রিং_দৈর্ঘ্য(লেখা)
-    d = len(লেখা)
+// ৬. string len নির্ণয় (String Byte Length via builtin len)
+// WHY: string ভেরিয়েবল বা লিটারেলের ইউটিএফ-৮ byte size return aরে।
+fn string_length(লেbা)
+    d = len(লেbা)
     return d
 
-// ৭. স্ট্রিং খালি কিনা যাচাই (Check if string is empty)
-fn স্ট্রিং_খালি_কিনা(লেখা)
-    d = len(লেখা)
+// ৭. string bালি aিনা যাচাই (Check if string is empty)
+fn string_bালি_aিনা(লেbা)
+    d = len(লেbা)
     if d == 0
         return 1
     return 0
 
-// ৮. দুটি স্ট্রিং তুলনা (Byte-by-Byte String Equality Compare: strcmp)
+// ৮. দুটি string তুলনা (Byte-by-Byte String Equality Compare: strcmp)
 // WHY: Returns 0 if identical, or difference of non-matching byte.
-fn স্ট্রিং_তুলনা(ক, খ)
+fn string_তুলনা(a, b)
     i = 0
-    চলমান = 1
-    while চলমান
-        বা = মেমরি_বাইট_পড়ো(ক, i)
-        বব = মেমরি_বাইট_পড়ো(খ, i)
+    চলvalue = 1
+    while চলvalue
+        বা = mem_byte_পড়ো(a, i)
+        বব = mem_byte_পড়ো(b, i)
         if বা != বব
             return বা - বব
         if বা == 0

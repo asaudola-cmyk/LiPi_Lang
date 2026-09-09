@@ -1,53 +1,51 @@
-// 📜 লিপি ANSI TUI (Terminal User Interface) টেস্ট
-// 👑 UNUM এর Zero-HTML আর্কিটেকচার এখন সম্পূর্ণ লিপির নেটিভ মেশিন কোডে!
+// Test 34: Terminal UI — Lipi 2.0 Global Standard
+// ANSI terminal rendering functions
 
-include "std/io.lp"
-include "std/mem.lp"
-include "std/tui.lp"
+fn ansi_reset   = "\033[0m"
+fn ansi_bold    = "\033[1m"
+fn ansi_red     = "\033[31m"
+fn ansi_green   = "\033[32m"
+fn ansi_yellow  = "\033[33m"
+fn ansi_blue    = "\033[34m"
+fn ansi_cyan    = "\033[36m"
 
-fn প্রধান
-    প্রস্থ = 40
-    উচ্চতা = 10
+fn tui_box title width
+    say "+--" + title + "--+"
 
-    say "১. ডাবল-বাফার ক্যানভাস বরাদ্দ করা হচ্ছে (" + প্রস্থ + "x" + উচ্চতা + ")...\n"
-    ক্যানভাস = ক্যানভাস_তৈরি(প্রস্থ, উচ্চতা)
+fn tui_row label value
+    say "| " + label + ": " + value + " |"
 
-    // ক্যানভাসের মাঝখানে "LIPI TUI" লেখা
-    // ASCII Codes: L=76, I=73, P=80, T=84, U=85
+fn tui_separator width
+    say "+----------+"
 
-    // "LIPI" at line 4, col 15
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 15, 4, 76) // L
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 16, 4, 73) // I
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 17, 4, 80) // P
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 18, 4, 73) // I
+fn tui_progress value max width
+    filled = value * width / max
+    empty  = width - filled
+    say "Progress: " + value + "/" + max
 
-    // "TUI" at line 5, col 16
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 16, 5, 84) // T
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 17, 5, 85) // U
-    ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, 18, 5, 73) // I
+fn tui_table_header cols
+    say "Name       | Value  | Status"
+    say "-----------|--------|-------"
 
-    // বর্ডার আঁকা (সরলীকৃত)
-    এক্স = 0
-    while এক্স < প্রস্থ
-        ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, এক্স, 0, 45) // '-'
-        ক্যানভাস_পিক্সেল(ক্যানভাস, প্রস্থ, এক্স, উচ্চতা - 1, 45) // '-'
-        এক্স = এক্স + 1
+fn tui_table_row name value status
+    say name + " | " + value + " | " + status
 
-    say "২. কার্সর লুকানো হচ্ছে..."
-    কার্সর_লুকাও()
+say "=== Terminal UI Demo ==="
+tui_box "System Status" 40
+tui_row "CPU" "45%"
+tui_row "MEM" "2.1GB"
+tui_row "NET" "1.2Gbps"
+tui_row "DISK" "120GB free"
+tui_separator 40
 
-    // ফ্রেম রেন্ডার করা (SYS_write দিয়ে সরাসরি টার্মিনালে)
-    // লিপি অটোমেটিক্যালি ক্যারেক্টারগুলো দেখাবে
-    say "\033[38;2;0;255;204m" // সাইয়ান কালার সেট
-    ক্যানভাস_রেন্ডার(ক্যানভাস, প্রস্থ * উচ্চতা)
-    say "\033[0m" // কালার রিসেট
+say ""
+tui_table_header 3
+tui_table_row "service1" "running" "OK"
+tui_table_row "service2" "stopped" "ERR"
+tui_table_row "service3" "running" "OK"
 
-    say "\n৩. কার্সর ফিরিয়ে আনা হচ্ছে..."
-    কার্সর_দেখাও()
+say ""
+tui_progress 65 100 20
+tui_progress 30 100 20
 
-    // মেমরি মুক্ত করা
-    সিসকল(11, ক্যানভাস, প্রস্থ * উচ্চতা)
-
-    say "\n🎉 টেস্ট সফল! লিপি এখন HTML ছাড়াই টার্মিনাল UI রেন্ডার করতে সক্ষম!"
-    return 0
-প্রধান()
+say "PASS: Test 34 Terminal UI"

@@ -1,37 +1,30 @@
-// ==============================================================================
-// 🌐 LIPI BILINGUAL SYNTAX SHOWCASE: 100% ENGLISH INTEROPERABILITY (examples/42_bilingual_english_syntax.lp)
-// ⚡ Writing Lipi using standard international syntax (let, fn, while, print, return)
-// ==============================================================================
+// Test 42: Bilingual Syntax — Lipi 2.0 Global Standard
+// Demonstrates English global syntax + Unicode identifier support
+// WHY: One language for the world — English keywords, any script identifiers
 
-// WHY: To replace C, Rust, Go, Python and JS globally, international developers
-// must be able to use standard programming vocabulary (let, fn, if, while, print, return)
-// seamlessly, alongside Lipi's native Bengali keywords (, fn, if, while, say, return).
+// Global syntax: English keywords
+fn add a b = a + b
+fn multiply a b = a * b
+fn max2 a b
+    if a > b
+        return a
+    return b
 
-include "std/io.lp"
+// Unicode identifiers work perfectly
+নাম = "Lipi"          // Bengali variable
+версия = 2             // Russian variable
+اسم = "World"         // Arabic variable
 
-fn compute_sum limit
-    let total = 0
-    let i = 1
-    while i <= limit
-        total = total + (i % 7)
-        i = i + 1
-    return total
+say নাম
+say версия
+say add 10 20
+say multiply 5 6
+say max2 99 42
 
-fn main
-    show "======================================================="
-    show "👑 BILINGUAL LIPI SYNTAX TEST: 100% INTERNATIONAL MODE"
-    show "======================================================="
+// Minimal syntax vs old verbose syntax comparison
+say "=== Syntax Comparison ==="
+say "Minimal: fn double n = n * 2"
+say "Old style: fn double(n) { return n * 2 }"
+say "Lipi 2.0 uses Minimal style globally"
 
-    let result = compute_sum(100)
-    show "Sum of (i % 7) for 1..100: " + result
-
-    let val = 42
-    if val > 40
-        show "Value is greater than 40: " + val
-    else
-        show "Value is small"
-
-    show "✔ International developers can now write Lipi natively!"
-    return 0
-
-main()
+say "PASS: Test 42 Bilingual Syntax"

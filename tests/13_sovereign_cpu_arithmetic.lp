@@ -1,56 +1,72 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — খাঁটি সিলিকন মেশিন কোড এক্সিকিউশন (13_sovereign_cpu_arithmetic.lp)
-// 👑 এই প্রোগ্রামটি প্রমাণ করে:
-//   ১. লিপি সরাসরি x86_64 মেশিন কোডে কম্পাইল হয় (0% PHP, 0% Libc, 0% GCC)।
-//   ২. ভেরিয়েবলগুলো সিপিউ স্ট্যাক ফ্রেমে (%rbp - offset) সংরক্ষিত হয়।
-//   ৩. গাণিতিক অপারেশন (imul, sub, add, idiv) সরাসরি সিপিউ এএলইউ (ALU)-তে রানটাইমে সম্পাদিত হয়।
-//   ৪. সিদ্ধান্ত গ্রহণ (cmp, jle, jg) সরাসরি সিপিউ ফ্ল্যাগ ও ব্রাঞ্চিং দ্বারা নিয়ন্ত্রিত হয়।
-//   ৫. হার্ডওয়্যার আরডিটিএসসি (RDTSC) সরাসরি ফিজিক্যাল সিপিউ ক্লক সাইকেল কাউন্টার রিড করে।
-//   ৬. রানটাইমে সংখ্যা থেকে বাংলা ইউনিকোড রূপান্তর কোনো লাইব্রেরি ছাড়া খাঁটি মেশিন কোডে সম্পন্ন হয়।
+// Test 13: CPU Arithmetic — Lipi 2.0
+// Demonstrates: integer division, modulo, signed arithmetic, absolute value, isqrt
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN SILICON MACHINE CODE BENCHMARK (x86_64 NATIVE)     \033[0m \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Zero PHP | Zero Libc | Zero GCC | Direct CPU Silicon Registers    \033[0m \033[38;2;0;255;204m║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-say ""
+// Safe integer division (guards against divide-by-zero)
+fn safe_div a b
+    if b == 0
+        return 0
+    return a / b
 
-// ১. প্রারম্ভিক হার্ডওয়্যার সিপিউ ক্লক সাইকেল গ্রহণ (RDTSC 0x0F 0x31)
-শুরু_ক্লক = লিপি.হার্ডওয়্যার.cpu_clock()
+// Compute average of sum/count (safe)
+fn average sum count
+    return safe_div(sum, count)
 
-// ২. সিলিকন স্ট্যাক ভেরিয়েবল ও ডায়নামিক রানটাইম অ্যারিথমেটিক
-বেস_দাম = 120
-আইটেম_সংখ্যা = 6
-মোট_ক্রয় = বেস_দাম * আইটেম_সংখ্যা
-ভ্যাট = 50
-মোট_বিল = মোট_ক্রয় + ভ্যাট
-কুপন_ছাড় = 70
-প্রদেয়_অর্থ = মোট_বিল - কুপন_ছাড়
+// Absolute value without built-in
+fn abs_val x
+    if x < 0
+        return 0 - x
+    return x
 
-say "\033[1;33m--- [১] সিলিকন স্ট্যাক ফ্রেম ও রানটাইম এএলইউ হিসাব (Hardware ALU) ---\033[0m"
-say "  • প্রতি ইউনিটের বেস দাম   : " + বেস_দাম + " টাকা"
-say "  • মোট আইটেমের সংখ্যা       : " + আইটেম_সংখ্যা + " টি"
-say "  • প্রাথমিক ক্রয়মূল্য (১২০ * ৬): " + মোট_ক্রয় + " টাকা"
-say "  • সরকারি ভ্যাট সংযোজন (+ ৫০) : " + মোট_বিল + " টাকা"
-say "  • কুপন ডিসকাউন্ট বিয়োগ (- ৭০): " + প্রদেয়_অর্থ + " টাকা (চূড়ান্ত বিল)"
-say ""
+// Integer square root via linear search (guaranteed termination)
+fn isqrt n
+    if n < 0
+        return 0
+    x = 0
+    while (x + 1) * (x + 1) <= n
+        x = x + 1
+    return x
 
-// ৩. সিপিউ ফ্ল্যাগ ভিত্তিক শর্তাধীন লজিক্যাল ব্রাঞ্চিং (cmp, jle, jg)
-say "\033[1;33m--- [২] সিলিকন কন্ডিশনাল ব্রাঞ্চিং (Hardware CPU CMP & Jumps) ---\033[0m"
-if প্রদেয়_অর্থ > 500
-    say "  [সিপিউ সিদ্ধান্ত]: প্রদেয় অর্থ ৫০০ এর বেশি (৭০০ টাকা) — প্রিমিয়াম লয়্যালটি পয়েন্ট অর্জিত!"
-else
-    say "  [সিপিউ সিদ্ধান্ত]: প্রদেয় অর্থ ৫০০ এর নিচে বা সমান — রেগুলার ক্যাশ ট্রানজ্যাকশন।"
-say ""
+// Power using repeated multiplication
+fn power base exp
+    result = 1
+    i = 0
+    while i < exp
+        result = result * base
+        i = i + 1
+    return result
 
-// ৪. সমাপ্তি হার্ডওয়্যার সিপিউ ক্লক সাইকেল গ্রহণ ও ব্যবধান
-শেষ_ক্লক = লিপি.হার্ডওয়্যার.cpu_clock()
+say "Safe division:"
+say safe_div(100, 4)
+say safe_div(100, 0)
 
-say "\033[1;33m--- [৩] সিপিউ সিলিকন হার্ডওয়্যার টাইমস্ট্যাম্প কাউন্টার (RDTSC) ---\033[0m"
-say "  • শুরুর সিপিউ ক্লক সাইকেল : " + শুরু_ক্লক + " সাইকেল"
-say "  • শেষের সিপিউ ক্লক সাইকেল: " + শেষ_ক্লক + " সাইকেল"
-say "  • হার্ডওয়্যার রেজিস্টার সেট : %rax (ALU Accumulator), %rbx (Base), %rdx (Div Remainder), %rsi (Stack Buffer)"
-say ""
+say "Average of sum=150 over 6:"
+say average(150, 6)
 
-say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║  ✔ লিপি একটি ১০০% স্বাধীন সিস্টেম ভাষা — কারো ফ্রেমওয়ার্ক বা অধীন নয়! ║\033[0m"
-say "\033[38;2;0;255;204m║  ⚡ সরাসরি লিনাক্স কার্নেল x86_64 সিস্টেম কল ও রানটাইম মেশিন কোড!      ║\033[0m"
-say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+// Absolute value: use variable for negative inputs
+neg42 = 0 - 42
+say "Abs of -42:"
+say abs_val neg42
+
+say "Abs of 17:"
+say abs_val 17
+
+say "Integer sqrt of 144:"
+say isqrt 144
+
+say "Integer sqrt of 50:"
+say isqrt 50
+
+say "Power 2^10:"
+say power(2, 10)
+
+say "Power 3^5:"
+say power(3, 5)
+
+// Modulo chain
+r = 1
+for i in 1..10
+    r = r * i % 1000007
+say "Factorial mod 1000007 (1..10):"
+say r
+
+say "PASS: Test 13 CPU Arithmetic"

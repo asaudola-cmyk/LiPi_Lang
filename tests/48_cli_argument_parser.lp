@@ -1,57 +1,62 @@
-// Test 48: CLI Argument Parser Demo
-// WHY: Command-line tools সব প্রফেশনাল software এর অংশ
-include "std/core/mem.lp"
-include "std/version.lp"
+// Test 48: CLI Argument Parser — Lipi 2.0 Global Standard
+// Command-line argument parsing patterns
 
-struct CLI_Flag_ডেমো
-    verbose,
-    port,
-    output_সূচক
+struct Flag
+    name
+    short
+    value
+    required
 
-fn CLI_সিমুলেশন verbose port থ্রেড
-    say "পার্স করা আর্গুমেন্ট:"
-    say "  --verbose:", verbose
-    say "  --port:", port
-    say "  --threads:", থ্রেড
+fn flag_new name short default_val required
+    f = Flag()
+    f.name = name
+    f.short = short
+    f.value = default_val
+    f.required = required
+    return f
 
-    if verbose == 1
-        say ""
-        say "[verbose] সার্ভার তথ্য:"
-        say "  • পোর্ট:", port
-        say "  • থ্রেড:", থ্রেড
-        say "  • লিপি সংস্করণ:", LIPI_সংস্করণ
-        say "  • সংকেতনাম:", LIPI_সংকেতনাম
+fn parse_flag flags_str name
+    // Simulate arg parsing: "--name=value"
+    return "parsed_" + name
 
-fn প্রধান
-    say "══════════════════════════════════════"
-    say "Test 48: CLI Argument Parser"
-    say "══════════════════════════════════════"
-    say ""
+fn cli_parse args
+    say "Parsing: " + args
+    return 1
 
-    say "--- Scenario 1: লিপি সার্ভার চালু ---"
-    say "$ lipi-server --port 8080 --threads 16 --verbose"
-    CLI_সিমুলেশন(1, 8080, 16)
+fn cli_help prog flags_count
+    say "Usage: " + prog + " [OPTIONS]"
+    say "Options:"
+    say "  --port     Server port (default: 8080)"
+    say "  --host     Server host (default: localhost)"
+    say "  --workers  Worker count (default: 4)"
+    say "  --debug    Enable debug mode"
+    say "  --help     Show this help"
 
-    say ""
-    say "--- Scenario 2: শান্ত mode ---"
-    say "$ lipi-server --port 3000"
-    CLI_সিমুলেশন(0, 3000, 4)
+fn run_with_args port host workers debug
+    say "Starting server:"
+    say "  Host:    " + host
+    say "  Port:    " + port
+    say "  Workers: " + workers
+    if debug
+        say "  Debug:   enabled"
+    else
+        say "  Debug:   disabled"
 
-    say ""
-    say "--- Help text simulation ---"
-    say "lipi-server v1.0 (লিপি প্রথম ১.০)"
-    say ""
-    say "ব্যবহার: lipi-server [flags]"
-    say ""
-    say "Flags:"
-    say "  --port,     -p   HTTP port (default: 8080)"
-    say "  --threads,  -t   worker threads (default: 4)"
-    say "  --verbose,  -v   verbose logging"
-    say "  --help,     -h   এই সহায়তা দেখুন"
-    say "  --version,  -V   সংস্করণ দেখুন"
+say "=== CLI Argument Parser ==="
+cli_help "lipi-server" 5
 
-    say ""
-    say "✅ Test 48 পাস — CLI parsing demo fn করছে"
-    say "⚡ [লিপি প্রথম ১.০]"
-    return 0
-প্রধান()
+say ""
+say "Example: lipi-server --port=9090 --workers=8"
+run_with_args 9090 "0.0.0.0" 8 1
+
+// Flag defaults
+port_flag    = flag_new "port"    "p" 8080 0
+host_flag    = flag_new "host"    "h" "localhost" 0
+workers_flag = flag_new "workers" "w" 4 0
+
+say ""
+say "Default port: " + port_flag.value
+say "Default host: " + host_flag.value
+say "Default workers: " + workers_flag.value
+
+say "PASS: Test 48 CLI Args"

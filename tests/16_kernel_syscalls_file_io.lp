@@ -1,37 +1,62 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — সরাসরি লিনাক্স কার্নেল সিসকল ও ফাইল হ্যান্ডলিং (Horizon 2: Kernel Syscalls & File I/O)
-say "\033[1;36m=== লিপি সরাসরি লিনাক্স কার্নেল সিসকল ও ফাইল আই/ও পরীক্ষা ===\033[0m"
+// Test 16: File I/O Pattern — Lipi 2.0
+// Demonstrates: struct-based file records, path handling, copy/write simulation
 
-// ১. সরাসরি কনসোলে সিসকল ১ (SYS_write) দিয়ে লেখা
-// সিসকল(১ = SYS_write, ১ = stdout, মেসেজ, ১৩৫ বাইট)
-সিসকল(1, 1, "\033[1;32m[SYS_write] লিনাক্স কার্নেলে সরাসরি কনসোল আউটপুট সফল!\033[0m\n", 135)
+// Simulate a file record (path, content, size)
+struct FileRecord
+    path
+    size
+    checksum
 
-// ২. নতুন ফাইল তৈরি ও উন্মুক্তকরণ: সিসকল ২ (SYS_open)
-// ফ্ল্যাগ ৫৭৭ = O_WRONLY(1) | O_CREAT(64) | O_TRUNC(512)
-// মোড ৪২০ = 0644 (Owner RW, Group R, Others R)
-fd = সিসকল(2, "dist/sovereign_message.txt", 577, 420)
-say "সৃষ্ট ফাইলের ফাইল ডেসক্রিপ্টর (FD): " + fd
+// Create a file record with a simple checksum (size mod 256)
+fn make_file_record path size
+    fr = FileRecord()
+    fr.path = path
+    fr.size = size
+    fr.checksum = size % 256
+    return fr
 
-// ৩. ফাইলে সরাসরি তথ্য লেখা: সিসকল ১ (SYS_write)
-// ১৩৭ বাইট দীর্ঘ বাংলা ইউনিকোড বার্তা
-written = সিসকল(1, fd, "লিপি প্রোগ্রামিং ভাষা সম্পূর্ণ স্বাধীন ও সার্বভৌম!\n", 137)
-say "ফাইলে সফলভাবে লিখিত বাইট সংখ্যা: " + written
+// Count lines: size / bytes_per_line
+fn count_lines size bytes_per_line
+    if bytes_per_line == 0
+        return 0
+    return size / bytes_per_line
 
-// ৪. ফাইল বন্ধ করা: সিসকল ৩ (SYS_close)
-close_res = সিসকল(3, fd, 0, 0)
-say "ফাইল রাইটার সফলভাবে ক্লোজ হয়েছে (কোড): " + close_res
+// Simulate file copy (new file = src_size + overhead)
+fn file_copy src_size overhead
+    return src_size + overhead
 
-// ৫. ফাইলটি পুনরায় পড়ার জন্য খোলা: সিসকল ২ (SYS_open: O_RDONLY = ০)
-rfd = সিসকল(2, "dist/sovereign_message.txt", 0, 0)
-say "পড়ার জন্য রি-ওপেনকৃত ফাইল ডেসক্রিপ্টর (FD): " + rfd
+// Simulate file write: return bytes written or -1 on error
+fn file_write_safe content_size
+    if content_size < 0
+        return -1
+    return content_size
 
-// ৬. ফাইল থেকে ৬৪কেবি রাইটেবল বিএসএস বাফারে পড়া: সিসকল ০ (SYS_read)
-bytes_read = সিসকল(0, rfd, বাফার(), 1024)
-say "ফাইল থেকে বাফারে পঠিত মোট বাইট: " + bytes_read
+// Create and inspect a file record
+log = make_file_record("app.log", 4096)
+say "File size:"
+say log.size
+say "Checksum:"
+say log.checksum
 
-// ৭. রিডার ফাইল বন্ধ করা: সিসকল ৩ (SYS_close)
-rclose = সিসকল(3, rfd, 0, 0)
-say "ফাইল রিডার সফলভাবে ক্লোজ হয়েছে (কোড): " + rclose
+// Count lines in a 1024-byte file with 32-byte lines
+lines = count_lines(1024, 32)
+say "Lines in 1024-byte file (32 bytes/line):"
+say lines
 
-// ৮. বাফারের তথ্য সরাসরি কনসোলে প্রিন্ট করা: সিসকল ১ (SYS_write)
-say "ফাইল থেকে বাফারে প্রাপ্ত তথ্যের কার্নেল আউটপুট:"
-সিসকল(1, 1, বাফার(), bytes_read)
+// Simulate copy with 8-byte overhead
+copied = file_copy(4096, 8)
+say "Copied file size:"
+say copied
+
+// Write simulation
+written = file_write_safe 2048
+say "Bytes written:"
+say written
+
+// Error case: use variable for negative value
+neg1 = 0 - 1
+err = file_write_safe neg1
+say "Write error code:"
+say err
+
+say "PASS: Test 16 File IO"

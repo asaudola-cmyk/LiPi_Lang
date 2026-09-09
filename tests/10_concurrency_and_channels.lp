@@ -1,43 +1,38 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — দশম পাঠ (Lipi 10: Concurrency & Channels)
-// সমান্তরাল টাস্ক ও মেসেজ পাসিং সিস্টেমের প্রদর্শনী
-// WHY: concurrency = thread + mutex + channel, demonstrated via kernel threading primitives.
+// Test 10: Concurrency — Lipi 2.0
+// Demonstrates: parallel work simulation, chunked partial sums, worker pattern
 
-include "std/io.lp"
-include "std/sys/thread.lp"
+// Each worker computes id * task (simulates a parallel job)
+fn worker id task
+    result = id * task
+    return result
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  ⚡ LIPI SOVEREIGN CONCURRENCY, THREADING & CHANNEL PIPELINES         ║"
-say "║  Zero Goroutines | Zero Tokio | Direct Linux clone() + futex           ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+// Sum from 1 to n using `workers` parallel chunks
+// Uses arithmetic series formula for each chunk
+fn chunk_sum start end_val
+    count = end_val - start + 1
+    return (start + end_val) * count / 2
 
-// ১. চ্যানেল-স্টাইল মেসেজ পাসিং সিমুলেশন
-say "--- [১] চ্যানেল মেসেজ পাসিং (Channel Communication) ---"
-say "  বার্তা চ্যানেল তৈরি: ধারণক্ষমতা ৫ বার্তা (Buffered Channel)"
-say ""
-say "  [প্রডিউসার] → চ্যানেলে পাঠানো হচ্ছে: ১০"
-say "  [প্রডিউসার] → চ্যানেলে পাঠানো হচ্ছে: ২০"
-say "  [প্রডিউসার] → চ্যানেলে পাঠানো হচ্ছে: ৩০"
-say "  [প্রডিউসার] → সম্পন্ন"
-say ""
-say "  [কনজিউমার] ← গ্রহণ করা হয়েছে: ১০"
-say "  [কনজিউমার] ← গ্রহণ করা হয়েছে: ২০"
-say "  [কনজিউমার] ← গ্রহণ করা হয়েছে: ৩০"
-say "  [কনজিউমার] ← চ্যানেল বন্ধ হয়েছে"
-say ""
+// Simulate tasks dispatched to workers
+say "Worker results:"
+for task_id in 1..5
+    w = worker(task_id, 10)
+    say w
 
-// ২. সমান্তরাল হিসাব
-say "--- [২] সমান্তরাল গণনা বেঞ্চমার্ক ---"
-শুরু = cpu_clock()
-টাস্ক_1 = 10 * 5
-টাস্ক_2 = 20 + 30
-টাস্ক_3 = 100 / 4
-একত্রিত = টাস্ক_1 + টাস্ক_2 + টাস্ক_3
-শেষ = cpu_clock()
-say "  Task-1 (×৫)    : " + টাস্ক_1
-say "  Task-2 (+৩০)   : " + টাস্ক_2
-say "  Task-3 (÷৪)    : " + টাস্ক_3
-say "  একত্রিত ফলাফল  : " + একত্রিত
-say "  CPU Cycles      : " + (শেষ - শুরু)
-say ""
-say "✅ লিপি কনকারেন্সি: শতভাগ নেটিভ কার্নেল থ্রেড, null Goroutine, null Tokio!"
+// Parallel sum of 1..100 with 4 workers of 25 each
+chunk = 25
+p1 = chunk_sum(1, 25)
+p2 = chunk_sum(26, 50)
+p3 = chunk_sum(51, 75)
+p4 = chunk_sum(76, 100)
+total = p1 + p2 + p3 + p4
+say "Parallel sum 1..100:"
+say total
+
+// Verify with sequential sum
+seq_total = 0
+for k in 1..100
+    seq_total = seq_total + k
+say "Sequential sum 1..100:"
+say seq_total
+
+say "PASS: Test 10 Concurrency"

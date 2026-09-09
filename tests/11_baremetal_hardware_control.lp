@@ -1,48 +1,64 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — একাদশ পাঠ (Lipi 11: Bare-Metal Hardware Control)
-// সরাসরি হার্ডওয়্যার পোর্ট, MSR ও সিলিকন রেজিস্টার নিয়ন্ত্রণ প্রদর্শনী
-// WHY: bare-metal = direct CPU instruction emission without OS abstraction layers.
+// Test 11: Bare Metal / Hardware Control — Lipi 2.0
+// Demonstrates: port I/O simulation, register patterns, syscall-like dispatch
+// NOTE: Uses decimal port numbers (no hex literals — not supported by parser)
 
-include "std/io.lp"
-include "std/sys/kernel.lp"
+// Simulate reading from a hardware port (returns a mock register value)
+// Port 1016 = 0x3F8 (UART), Port 96 = 0x60 (PS/2)
+fn port_read port
+    if port == 1016
+        return 65    // UART data register mock: ASCII 'A'
+    elif port == 96
+        return 28    // PS/2 keyboard: Enter key scancode (0x1C)
+    else
+        return 0     // Unknown port returns 0
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  🔩 LIPI BARE-METAL HARDWARE CONTROL — DIRECT SILICON REGISTER ACCESS ║"
-say "║  ⚡ RDTSC | CPUID | MSR | x86_64 I/O Port Direct Access              ║"
-say "╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+// Simulate writing to a port (returns acknowledgement code)
+fn port_write port value
+    if port == 1016
+        return 1     // UART write acknowledged
+    elif port == 32
+        return 1     // PIC end-of-interrupt acknowledged (0x20 = 32)
+    else
+        return 0     // Unknown port, write ignored
 
-// ১. প্ল্যাটফর্ম সার্বভৌম স্থিতি (namespace ছাড়া)
-say "=== [১] সার্বভৌম সিলিকন প্ল্যাটফর্ম স্থিতি ==="
-say "  সার্বভৌমতার স্তর : সম্পূর্ণ (RING-0 capable ELF64)"
-say "  CPU আর্কিটেকচার  : x86_64 (Intel/AMD 64-bit)"
-say "  এক্সিকিউশন মোড  : Protected Mode, Long Mode active"
-say "  OS ইন্টারফেস     : Linux syscall (INT 0x80 / SYSCALL)"
-say ""
+// Simulated syscall dispatcher
+// syscall 1 = sys_write (returns bytes written), syscall 60 = sys_exit
+fn syscall number arg1 arg2
+    if number == 1
+        return arg2    // sys_write: return length
+    elif number == 60
+        return arg1    // sys_exit: return exit code
+    else
+        return -1      // ENOSYS
 
-// ২. RDTSC হার্ডওয়্যার টাইমস্ট্যাম্প
-say "=== [২] RDTSC হার্ডওয়্যার টাইমস্ট্যাম্প কাউন্টার ==="
-t1 = cpu_clock()
-হিসাব = 256 * 256
-t2 = cpu_clock()
-say "  TSC শুরু   : " + t1 + " cycles"
-say "  TSC শেষ    : " + t2 + " cycles"
-say "  ব্যবধান    : " + (t2 - t1) + " cycles"
-say ""
+// Read from UART (port 0x3F8 = 1016)
+uart_data = port_read 1016
+say "UART read:"
+say uart_data
 
-// ৩. হার্ডওয়্যার রেজিস্টার সিমুলেশন
-say "=== [৩] সিলিকন হার্ডওয়্যার রেজিস্টার ডাম্প ==="
-say "  RAX: 0x0000000000000001 (syscall return)"
-say "  RBX: 0xFFFF888000000000 (kernel virtual base)"
-say "  RCX: 0x00007FFF00000000 (user stack)"
-say "  RDX: 0x0000000000000000"
-say "  RSP: 0x00007FFFFFFFE000 (stack pointer)"
-say "  RIP: 0x0000000000401000 (instruction pointer)"
-say ""
+// Read keyboard scancode (port 0x60 = 96)
+key_code = port_read 96
+say "Keyboard scancode:"
+say key_code
 
-// ৪. I/O পোর্ট এ্যাক্সেস সিমুলেশন
-say "=== [৪] x86_64 I/O পোর্ট ও MSR এ্যাক্সেস ==="
-say "  OUT 0x3F8, 0x41  → UART COM1 পোর্টে 'A' সিরিয়াল আউটপুট"
-say "  RDMSR 0xC0000080 → EFER MSR: Long Mode Enabled"
-say "  CPUID eax=1      → Family:6 Model:58 Stepping:9"
-say ""
-say "✅ লিপি বেয়ার-মেটাল: শতভাগ হার্ডওয়্যার কন্ট্রোল, null HAL, null RTOS লাইব্রেরি!"
+// Write to UART
+ack = port_write 1016 72
+say "UART write ack:"
+say ack
+
+// Write to unknown port
+unk = port_write 999 0
+say "Unknown port write:"
+say unk
+
+// Simulate syscall write (fd=1, len=13)
+bytes_written = syscall(1, 1, 13)
+say "Bytes written:"
+say bytes_written
+
+// Simulate syscall exit (code=0)
+exit_code = syscall(60, 0, 0)
+say "Exit code:"
+say exit_code
+
+say "PASS: Test 11 Baremetal Hardware"

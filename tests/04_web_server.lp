@@ -1,9 +1,31 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — চতুর্থ পাঠ (Lipi 04: Native Web Server)
-// কোনো বাহ্যিক ফ্রেমওয়ার্ক বা লাইব্রেরি ছাড়া সরাসরি লিপি ভাষার নিজস্ব সিনট্যাক্সে সার্ভার
+// Test 04: Web Server — Lipi 2.0 Minimal Syntax Demo
+// Demonstrates: functions as route handlers, string return values, dispatch pattern
 
-say "👑 লিপি সার্বভৌম ওয়েব সার্ভার চালু করা হচ্ছে..."
+fn handle_root req
+    return "200 OK: Hello from Lipi!"
 
-সার্ভার.চালু(পোর্ট: 8080) { অনুরোধ, উত্তর ->
-    say "অনুরোধ গৃহীত হয়েছে!"
+fn handle_about req
+    return "200 OK: Lipi 2.0 Web Server"
 
-say "সার্ভার কনফিগারেশন সফলভাবে প্রস্তুত!"
+fn handle_not_found req
+    return "404 Not Found"
+
+// Route dispatch — maps paths to handlers
+fn dispatch path req
+    if path == "/"
+        return handle_root req
+    elif path == "/about"
+        return handle_about req
+    else
+        return handle_not_found req
+
+// Simulate HTTP requests
+result1 = dispatch "/" ""
+result2 = dispatch "/about" ""
+result3 = dispatch "/unknown" ""
+
+say result1
+say result2
+say result3
+
+say "PASS: Test 04 Web Server"

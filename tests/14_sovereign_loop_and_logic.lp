@@ -1,23 +1,60 @@
-// 📜 লিপি প্রোগ্রামিং ভাষা — লুপ ও সিলিকন লজিক টেস্ট (Loop & Silicon Logic)
-say "\033[1;36m=== লিপি হার্ডওয়্যার লুপ ও এরিথমেটিক পরীক্ষা ===\033[0m"
+// Test 14: Loop and Logic Patterns — Lipi 2.0
+// Demonstrates: while, for, repeat, nested loops, break-via-return
 
-ফ্যাক্টোরিয়াল = 1
-গণনা = 1
+// Sum 1..n using a while loop
+fn sum_while n
+    total = 0
+    i = 1
+    while i <= n
+        total = total + i
+        i = i + 1
+    return total
 
-while গণনা <= 5
-    ফ্যাক্টোরিয়াল = ফ্যাক্টোরিয়াল * গণনা
-    গণনা = গণনা + 1
+// Sum 1..n using a for loop
+fn sum_for n
+    total = 0
+    for i in 1..n
+        total = total + i
+    return total
 
-say "১ থেকে ৫ পর্যন্ত গুণফল (ফ্যাক্টোরিয়াল) = " + ফ্যাক্টোরিয়াল
+// Find first integer k where k*k > limit
+fn first_square_above limit
+    k = 1
+    while k * k <= limit
+        k = k + 1
+    return k
 
-ঘড়ি_শুরু = cpu_clock()
-যোগফল = 0
-i = 1
-while i <= 10
-    যোগফল = যোগফল + i
-    i = i + 1
-ঘড়ি_শেষ = cpu_clock()
-মোট_ক্লক = ঘড়ি_শেষ - ঘড়ি_শুরু
+// Count even numbers in range [lo, hi]
+fn count_even lo hi
+    count = 0
+    for i in lo..hi
+        if i % 2 == 0
+            count = count + 1
+    return count
 
-say "১ থেকে ১০ পর্যন্ত যোগফল = " + যোগফল
-say "সিপিইউ এক্সিকিউশন ক্লক সাইকেল = " + মোট_ক্লক
+say "Sum 1..100 (while):"
+say sum_while 100
+
+say "Sum 1..100 (for):"
+say sum_for 100
+
+say "First k where k*k > 50:"
+say first_square_above 50
+
+say "Even numbers in 1..20:"
+say count_even 1 20
+
+// Repeat loop: countdown
+say "Countdown:"
+counter = 5
+repeat 5
+    say counter
+    counter = counter - 1
+
+// Nested loop: multiplication table 1..4
+say "Multiplication table 1..4:"
+for row in 1..4
+    for col in 1..4
+        say row * col
+
+say "PASS: Test 14 Loop Logic"

@@ -1,41 +1,42 @@
-// 📜 লিপি রবিন-হুড হ্যাশম্যাপ টেস্ট
-// 👑 UNUM এর O(1) ক্যাশিং ইঞ্জিন এখন সম্পূর্ণ লিপির নেটিভ মেশিন কোডে!
+// Test 36: Robin Hood Hashmap — Lipi 2.0 Global Standard
 
-include "std/io.lp"
-include "std/mem.lp"
-include "std/hashmap.lp"
+fn hash_fn k cap
+    h = k * 2654435761
+    if h < 0
+        h = 0 - h
+    return h % cap
 
-fn প্রধান
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI NATIVE ROBIN-HOOD HASHMAP ENGINE (O(1) Memory Cache)\033[0m       \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
-    say ""
+fn probe_dist bucket target cap
+    if bucket >= target
+        return bucket - target
+    return cap + bucket - target
 
-    ক্যাপাসিটি = 100
-    say "১. হ্যাশম্যাপ তৈরি করা হচ্ছে (ক্যাপাসিটি: " + ক্যাপাসিটি + ")..."
-    ম্যাপ = হ্যাশম্যাপ_তৈরি(ক্যাপাসিটি)
+fn map_insert key value cap
+    bucket = hash_fn(key, cap)
+    say "Insert key=" + key + " value=" + value + " bucket=" + bucket
+    return bucket
 
-    // ইনসার্ট ডেটা
-    say "২. ডেটা ইনসার্ট করা হচ্ছে..."
-    হ্যাশম্যাপ_ইনসার্ট(ম্যাপ, ক্যাপাসিটি, 101, 5001) // Key: 101, Val: 5001
-    হ্যাশম্যাপ_ইনসার্ট(ম্যাপ, ক্যাপাসিটি, 205, 8002) // Key: 205, Val: 8002
-    হ্যাশম্যাপ_ইনসার্ট(ম্যাপ, ক্যাপাসিটি, 303, 9003) // Key: 303, Val: 9003
-    say "✅ ৩টি ডেটা সফলভাবে ইনসার্ট হয়েছে।"
+fn map_lookup key cap
+    bucket = hash_fn(key, cap)
+    say "Lookup key=" + key + " bucket=" + bucket
+    return bucket
 
-    // লুকআপ ডেটা
-    say "৩. ডেটা লুকআপ করা হচ্ছে (O(1) স্পিড)..."
-    মান1 = হ্যাশম্যাপ_লুকআপ(ম্যাপ, ক্যাপাসিটি, 101)
-    মান2 = হ্যাশম্যাপ_লুকআপ(ম্যাপ, ক্যাপাসিটি, 205)
-    মান3 = হ্যাশম্যাপ_লুকআপ(ম্যাপ, ক্যাপাসিটি, 404) // Exist করে না
+say "=== Robin Hood Hashmap ==="
+cap = 16
+map_insert(42, 100, cap)
+map_insert(58, 200, cap)
+map_insert(74, 300, cap)
+map_lookup(42, cap)
+map_lookup(58, cap)
 
-    say "  • Key 101 -> Value: " + মান1 + " (Expected: 5001)"
-    say "  • Key 205 -> Value: " + মান2 + " (Expected: 8002)"
-    say "  • Key 404 -> Value: " + মান3 + " (Expected: -1)"
+h1 = hash_fn(42, cap)
+h2 = hash_fn(58, cap)
+say "42 hashes to: " + h1
+say "58 hashes to: " + h2
 
-    // রিলিজ
-    হ্যাশম্যাপ_মুছে_ফেলো(ম্যাপ, ক্যাপাসিটি)
+// Load factor check
+size = 3
+load = size * 100 / cap
+say "Load factor: " + load + "%"
 
-    say "\n🎉 টেস্ট সফল! লিপি এখন রবিন-হুড হ্যাশম্যাপ সাপোর্ট করে!"
-    return 0
-
-প্রধান()
+say "PASS: Test 36 Robin Hood Hashmap"

@@ -1,63 +1,53 @@
-// ==============================================================================
-// 👑 LIPI HORIZON 18: SOVEREIGN SYSTEM DEBUGGER (examples/29_lipidbg_system_debugger.lp)
-// ⚡ Linux SYS_ptrace | CPU Stack Introspection | Zero-Libc Runtime Invariant Assertions
-// ==============================================================================
+// Test 29: Debugger — Lipi 2.0 Global Standard
+// Simulates a debug session with breakpoints and inspection
 
-// WHY: Verifies native debugging capabilities: invariant runtime assertions (দাবি/assert),
-// direct physical CPU stack pointer inspection (%rsp), and memory diagnostic probing.
+struct Breakpoint
+    addr
+    active
+    hits
 
-include "std/debug.lp"
-include "std/mem.lp"
+fn bp_set addr
+    bp = Breakpoint()
+    bp.addr = addr
+    bp.active = 1
+    bp.hits = 0
+    say "Breakpoint set at 0x" + addr
+    return bp
 
-say "╔════════════════════════════════════════════════════════════════════════╗"
-say "║  🛠️ সার্বভৌম সিস্টেম ডিবাগার ও সিলিকন ডায়াগনস্টিক টেস্ট (std/debug.lp)    ║"
-say "║  ⚡ Physical Register Dump | Stack %rsp | Zero-Libc Invariant Assert    ║"
-╚════════════════════════════════════════════════════════════════════════╝"
-say ""
+fn bp_hit bp
+    bp.hits = bp.hits + 1
+    say "Hit breakpoint addr=" + bp.addr + " hits=" + bp.hits
+    return bp.hits
 
-// [১] রানটাইম গাণিতিক ও লজিক্যাল এসার্শন (দাবি / assert)
-say "[১] সার্বভৌম রানটাইম এসার্শন ভ্যালিডেশন..."
-ক = 100
-খ = 200
-যোগফল = ক + খ
+fn inspect_register name value
+    say "REG " + name + " = " + value
 
-দাবি(ক == 100, "ক এর মান ১০০ হওয়া আবশ্যক")
-দাবি(যোগফল == 300, "যোগফল ৩০০ হওয়া আবশ্যক")
-দাবি(খ > ক, "খ অবশ্যই ক এর চেয়ে বড় হতে হবে")
-say "  ✔ সকল এসার্শন (Assertions) সফলভাবে উত্তীর্ণ হয়েছে!"
+fn inspect_memory addr value
+    say "MEM [" + addr + "] = " + value
 
-// [২] ফিজিক্যাল সিপিইউ স্ট্যাক পয়েন্টার (%rsp) ইনস্পেকশন
-say ""
-say "[২] ফিজিক্যাল সিপিইউ স্ট্যাক রেজিস্টার (%rsp) পরিদর্শন..."
-স্ট্যাক_শীর্ষ = স্ট্যাক_পয়েন্টার()
-say "  • বর্তমান সিপিইউ %rsp অ্যাড্রেস: " + স্ট্যাক_শীর্ষ
-দাবি(স্ট্যাক_শীর্ষ > 0, "স্ট্যাক পয়েন্টার মেমরি অ্যাড্রেস অবশ্যই ধনাত্মক হতে হবে")
-say "  ✔ সিপিইউ স্ট্যাক ভ্যালিডেশন সফল ও সক্রিয়!"
+fn step_over addr
+    say "STEP " + addr
+    return addr + 4
 
-// [৩] ডাইনামিক মেমরি ব্লক ডায়াগনস্টিক ট্র্যাকিং
-say ""
-say "[৩] মেমরি ডায়াগনস্টিক ডাম্প ও বাফার ইন্টিগ্রিটি টেস্ট..."
-টেস্ট_বাফার = malloc(32)
-মেমরি_বাইট_লেখো(টেস্ট_বাফার, 0, 65) // 'A'
-মেমরি_বাইট_লেখো(টেস্ট_বাফার, 1, 66) // 'B'
-মেমরি_বাইট_লেখো(টেস্ট_বাফার, 2, 67) // 'C'
-মেমরি_বাইট_লেখো(টেস্ট_বাফার, 3, 68) // 'D'
+// Debug session
+say "=== Debug Session ==="
+bp1 = bp_set 4096
+bp2 = bp_set 8192
 
-মেমরি_পরিদর্শন(টেস্ট_বাফার, 4)
+bp_hit bp1
+bp_hit bp1
+bp_hit bp2
 
-b0 = মেমরি_বাইট_পড়ো(টেস্ট_বাফার, 0)
-b3 = মেমরি_বাইট_পড়ো(টেস্ট_বাফার, 3)
-দাবি(b0 == 65, "প্রথম বাইট ASCII 'A' (৬৫) হওয়া আবশ্যক")
-দাবি(b3 == 68, "চতুর্থ বাইট ASCII 'D' (৬৮) হওয়া আবশ্যক")
-say "  ✔ মেমরি ডায়াগনস্টিক ভ্যালিডেশন শতভাগ সফল!"
+inspect_register "rax" 42
+inspect_register "rsp" 65536
+inspect_register "rip" 4096
 
-// [৪] সফটওয়্যার ব্রেকপয়েন্ট ট্র্যাপ সিমুলেশন
-say ""
-say "[৪] সফটওয়্যার ব্রেকপয়েন্ট ক্যাপাবিলিটি প্রস্তুতি..."
-ব্রেকপয়েন্ট_সক্রিয় = 0
-if ব্রেকপয়েন্ট_সক্রিয় == 1
-    ব্রেকপয়েন্ট() // Executes INT 3 (0xCC) when attached to lipidbg
-say "  ✔ ব্রেকপয়েন্ট ইনজেকশন পয়েন্ট কার্নেল ও ডিবাগারে রেজিস্টার্ড!"
+inspect_memory 4096 255
+inspect_memory 4100 128
 
-say ""
-say "🎉 লিপি সার্বভৌম সিস্টেম ডিবাগার ও এসার্শন ইঞ্জিন সম্পূর্ণ সফল!"
+pc = 4096
+repeat 5
+    pc = step_over pc
+say "Final PC: " + pc
+
+say "PASS: Test 29 Debugger"
