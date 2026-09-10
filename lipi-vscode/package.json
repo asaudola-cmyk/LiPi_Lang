@@ -1,0 +1,57 @@
+{
+  "name": "lipi-language",
+  "displayName": "Lipi Programming Language (লিপি)",
+  "description": "Official Visual Studio Code extension for Lipi (লিপি) — Bilingual syntax highlighting, code snippets, and indentation rules.",
+  "version": "1.0.0",
+  "publisher": "oshim",
+  "author": {
+    "name": "Lipi Language Community",
+    "url": "https://github.com/shafiullah/lipi"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "lipi",
+    "লিপি",
+    "bengali",
+    "language",
+    "compiler",
+    "multilingual"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "lipi",
+        "aliases": [
+          "Lipi",
+          "lipi",
+          "লিপি"
+        ],
+        "extensions": [
+          ".lp",
+          ".lipi"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lipi",
+        "scopeName": "source.lipi",
+        "path": "./syntaxes/lipi.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "lipi",
+        "path": "./snippets/lipi.json"
+      }
+    ]
+  }
+}

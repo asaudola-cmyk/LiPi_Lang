@@ -178,6 +178,21 @@ class Interpreter:
             import os
             return 1 if os.path.exists(path) else 0
 
+        def lipi_file_write_bytes(path, byte_list):
+            """Write raw byte list directly to disk and set executable permissions (0755)."""
+            try:
+                if isinstance(byte_list, list):
+                    raw_bytes = bytes(int(b) & 0xFF for b in byte_list)
+                else:
+                    raw_bytes = bytes(byte_list)
+                with open(path, 'wb') as f:
+                    f.write(raw_bytes)
+                import os
+                os.chmod(path, 0o755)
+                return 1
+            except Exception as e:
+                raise LipiError(f"file_write_bytes error: {e}")
+
         # ── Math ──────────────────────────────────────────────────────────
         import math as _math
         def lipi_sqrt(x):
@@ -291,6 +306,7 @@ class Interpreter:
             # File I/O
             'file_read': lipi_file_read,
             'file_write': lipi_file_write,
+            'file_write_bytes': lipi_file_write_bytes,
             'file_append': lipi_file_append,
             'file_exists': lipi_file_exists,
             # Type query

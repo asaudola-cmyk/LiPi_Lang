@@ -21,6 +21,8 @@
 #include <stdarg.h>
 #include <time.h>
 #include <ctype.h>  /* WHY: toupper/tolower for string ops */
+#include <stdint.h> /* WHY: uint8_t for raw binary buffer manipulation */
+#include <sys/stat.h> /* WHY: chmod for executable binary permissions */
 
 
 /* ── Value Types ──────────────────────────────────────────── */
@@ -438,6 +440,24 @@ static inline LipiVal lv_file_write(LipiVal path, LipiVal content) {
     FILE* f = fopen(path.str, "w");
     if (f) { fputs(cs, f); fclose(f); return lv_bool(1); }
     return lv_bool(0);
+}
+static inline LipiVal lv_file_write_bytes(LipiVal path, LipiVal bytes) {
+    /* WHY: Writes raw binary byte lists directly to disk and sets chmod 0755
+     *      Crucial for pure Lipi self-hosting ELF binary generation without C!
+     */
+    if (path.type != LV_STR || bytes.type != LV_LIST) return lv_bool(0);
+    FILE* f = fopen(path.str, "wb");
+    if (!f) return lv_bool(0);
+    int count = bytes.list->count;
+    uint8_t* buf = (uint8_t*)malloc(count > 0 ? count : 1);
+    for (int i = 0; i < count; i++) {
+        buf[i] = (uint8_t)((int64_t)bytes.list->items[i].num & 0xFF);
+    }
+    fwrite(buf, 1, count, f);
+    fclose(f);
+    free(buf);
+    chmod(path.str, 0755);
+    return lv_bool(1);
 }
 static inline LipiVal lv_file_append(LipiVal path, LipiVal content) {
     if (path.type != LV_STR) return lv_null();

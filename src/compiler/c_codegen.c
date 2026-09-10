@@ -1228,7 +1228,7 @@ static LipiVal u_parse_primary(LipiVal* _args, int _nargs) {
         return lv_list_make(2, u_NT_IDENT_N, u_name);
     }
     if (lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW)))) {
-        u_bkw_list = lv_list_make(51, lv_str("len"), lv_str("push"), lv_str("pop"), lv_str("get"), lv_str("set"), lv_str("list"), lv_str("sort"), lv_str("sum"), lv_str("join"), lv_str("str"), lv_str("int"), lv_str("float"), lv_str("abs"), lv_str("sqrt"), lv_str("floor"), lv_str("ceil"), lv_str("round"), lv_str("min"), lv_str("max"), lv_str("upper"), lv_str("lower"), lv_str("trim"), lv_str("split"), lv_str("contains"), lv_str("starts_with"), lv_str("ends_with"), lv_str("replace"), lv_str("char_at"), lv_str("index_of"), lv_str("ord"), lv_str("chr"), lv_str("file_read"), lv_str("file_write"), lv_str("file_append"), lv_str("file_exists"), lv_str("argv"), lv_str("type"), lv_str("exit"), lv_str("list_set"), lv_str("list_get"), lv_str("pow"), lv_str("log"), lv_str("bool"), lv_str("append"), lv_str("env"), lv_str("time_ms"), lv_str("log2"), lv_str("log10"), lv_str("tan"), lv_str("sin"), lv_str("cos"));
+        u_bkw_list = lv_list_make(52, lv_str("len"), lv_str("push"), lv_str("pop"), lv_str("get"), lv_str("set"), lv_str("list"), lv_str("sort"), lv_str("sum"), lv_str("join"), lv_str("str"), lv_str("int"), lv_str("float"), lv_str("abs"), lv_str("sqrt"), lv_str("floor"), lv_str("ceil"), lv_str("round"), lv_str("min"), lv_str("max"), lv_str("upper"), lv_str("lower"), lv_str("trim"), lv_str("split"), lv_str("contains"), lv_str("starts_with"), lv_str("ends_with"), lv_str("replace"), lv_str("char_at"), lv_str("index_of"), lv_str("ord"), lv_str("chr"), lv_str("file_read"), lv_str("file_write"), lv_str("file_write_bytes"), lv_str("file_append"), lv_str("file_exists"), lv_str("argv"), lv_str("type"), lv_str("exit"), lv_str("list_set"), lv_str("list_get"), lv_str("pow"), lv_str("log"), lv_str("bool"), lv_str("append"), lv_str("env"), lv_str("time_ms"), lv_str("log2"), lv_str("log10"), lv_str("tan"), lv_str("sin"), lv_str("cos"));
         u_found = lv_num(0);
         { LipiVal _e70_it=u_bkw_list;
         if (_e70_it.type==LV_LIST) { for (int _e70_i=0; _e70_i<_e70_it.list->count; _e70_i++) {
@@ -1429,7 +1429,7 @@ static LipiVal u_escape_str(LipiVal* _args, int _nargs) {
 static LipiVal u_is_builtin(LipiVal* _args, int _nargs) {
     LipiVal u_name = (_nargs > 0) ? _args[0] : lv_null();
     LipiVal u_blist = lv_null();
-    u_blist = lv_list_make(58, lv_str("say"), lv_str("print"), lv_str("println"), lv_str("show"), lv_str("echo"), lv_str("len"), lv_str("length"), lv_str("push"), lv_str("append"), lv_str("pop"), lv_str("get"), lv_str("set"), lv_str("list_get"), lv_str("list_set"), lv_str("list"), lv_str("sort"), lv_str("sum"), lv_str("join"), lv_str("str"), lv_str("int"), lv_str("float"), lv_str("bool"), lv_str("abs"), lv_str("sqrt"), lv_str("floor"), lv_str("ceil"), lv_str("round"), lv_str("min"), lv_str("max"), lv_str("pow"), lv_str("log"), lv_str("sin"), lv_str("cos"), lv_str("upper"), lv_str("lower"), lv_str("trim"), lv_str("strip"), lv_str("split"), lv_str("contains"), lv_str("starts_with"), lv_str("ends_with"), lv_str("replace"), lv_str("char_at"), lv_str("index_of"), lv_str("ord"), lv_str("chr"), lv_str("file_read"), lv_str("file_write"), lv_str("file_append"), lv_str("file_exists"), lv_str("argv"), lv_str("type"), lv_str("exit"), lv_str("time_ms"), lv_str("log2"), lv_str("log10"), lv_str("tan"), lv_str("env"));
+    u_blist = lv_list_make(59, lv_str("say"), lv_str("print"), lv_str("println"), lv_str("show"), lv_str("echo"), lv_str("len"), lv_str("length"), lv_str("push"), lv_str("append"), lv_str("pop"), lv_str("get"), lv_str("set"), lv_str("list_get"), lv_str("list_set"), lv_str("list"), lv_str("sort"), lv_str("sum"), lv_str("join"), lv_str("str"), lv_str("int"), lv_str("float"), lv_str("bool"), lv_str("abs"), lv_str("sqrt"), lv_str("floor"), lv_str("ceil"), lv_str("round"), lv_str("min"), lv_str("max"), lv_str("pow"), lv_str("log"), lv_str("sin"), lv_str("cos"), lv_str("upper"), lv_str("lower"), lv_str("trim"), lv_str("strip"), lv_str("split"), lv_str("contains"), lv_str("starts_with"), lv_str("ends_with"), lv_str("replace"), lv_str("char_at"), lv_str("index_of"), lv_str("ord"), lv_str("chr"), lv_str("file_read"), lv_str("file_write"), lv_str("file_write_bytes"), lv_str("file_append"), lv_str("file_exists"), lv_str("argv"), lv_str("type"), lv_str("exit"), lv_str("time_ms"), lv_str("log2"), lv_str("log10"), lv_str("tan"), lv_str("env"));
     { LipiVal _e5_it=u_blist;
     if (_e5_it.type==LV_LIST) { for (int _e5_i=0; _e5_i<_e5_it.list->count; _e5_i++) {
         LipiVal u_b=_e5_it.list->items[_e5_i];
@@ -1587,6 +1587,9 @@ static LipiVal u_gen_builtin(LipiVal* _args, int _nargs) {
     }
     if (lv_truthy(lv_bool(lv_equal(u_name, lv_str("file_write"))))) {
         return lv_add(lv_add(lv_add(lv_add(lv_str("lv_file_write("), u_a0), lv_str(", ")), u_a1), lv_str(")"));
+    }
+    if (lv_truthy(lv_bool(lv_equal(u_name, lv_str("file_write_bytes"))))) {
+        return lv_add(lv_add(lv_add(lv_add(lv_str("lv_file_write_bytes("), u_a0), lv_str(", ")), u_a1), lv_str(")"));
     }
     if (lv_truthy(lv_bool(lv_equal(u_name, lv_str("file_append"))))) {
         return lv_add(lv_add(lv_add(lv_add(lv_str("lv_file_append("), u_a0), lv_str(", ")), u_a1), lv_str(")"));

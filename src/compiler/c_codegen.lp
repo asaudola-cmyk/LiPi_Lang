@@ -721,7 +721,7 @@ fn parse_primary ps
         return list(NT_IDENT_N, name)
     // Built-in keyword used as expression
     if tt == TT_KW
-        bkw_list = list("len", "push", "pop", "get", "set", "list", "sort", "sum", "join", "str", "int", "float", "abs", "sqrt", "floor", "ceil", "round", "min", "max", "upper", "lower", "trim", "split", "contains", "starts_with", "ends_with", "replace", "char_at", "index_of", "ord", "chr", "file_read", "file_write", "file_append", "file_exists", "argv", "type", "exit", "list_set", "list_get", "pow", "log", "bool", "append", "env", "time_ms", "log2", "log10", "tan", "sin", "cos")
+        bkw_list = list("len", "push", "pop", "get", "set", "list", "sort", "sum", "join", "str", "int", "float", "abs", "sqrt", "floor", "ceil", "round", "min", "max", "upper", "lower", "trim", "split", "contains", "starts_with", "ends_with", "replace", "char_at", "index_of", "ord", "chr", "file_read", "file_write", "file_write_bytes", "file_append", "file_exists", "argv", "type", "exit", "list_set", "list_get", "pow", "log", "bool", "append", "env", "time_ms", "log2", "log10", "tan", "sin", "cos")
         found = 0
         for bkw in bkw_list
             if bkw == tv
@@ -883,6 +883,7 @@ fn gen_builtin name args_c
     if name == "chr"         return "lv_chr(" + a0 + ")"
     if name == "file_read"   return "lv_file_read(" + a0 + ")"
     if name == "file_write"  return "lv_file_write(" + a0 + ", " + a1 + ")"
+    if name == "file_write_bytes" return "lv_file_write_bytes(" + a0 + ", " + a1 + ")"
     if name == "file_append" return "lv_file_append(" + a0 + ", " + a1 + ")"
     if name == "file_exists" return "lv_file_exists(" + a0 + ")"
     if name == "argv"        return "lv_argv()"
