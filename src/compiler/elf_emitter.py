@@ -54,10 +54,11 @@ R14 = 14
 R15 = 15
 
 # Type tags for compiler type inference
-TYPE_INT    = 1
-TYPE_STR    = 2
-TYPE_BOOL   = 3
-TYPE_STRUCT = 4
+TYPE_INT     = 1
+TYPE_STR     = 2
+TYPE_BOOL    = 3
+TYPE_STRUCT  = 4
+TYPE_DYNAMIC = 5
 
 
 class X86Emitter:
@@ -365,31 +366,47 @@ class LipiElfCompiler:
 
     def _infer_fn_return_type(self, fn: FnDef) -> int:
         """
-        Infers return type of function (TYPE_STR or TYPE_INT) by scanning return statements.
+        Infers return type of function (TYPE_STR, TYPE_INT, or TYPE_DYNAMIC)
+        by scanning all return statements across all branches.
         """
-        def scan(node: Node) -> int:
-            if isinstance(node, Return) and node.value:
-                if isinstance(node.value, String):
-                    return TYPE_STR
-                if isinstance(node.value, BinOp) and node.value.op == "+":
-                    if isinstance(node.value.left, String) or isinstance(node.value.right, String):
-                        return TYPE_STR
-            if isinstance(node, Block):
-                for s in node.stmts:
-                    t = scan(s)
-                    if t == TYPE_STR:
-                        return TYPE_STR
-            if isinstance(node, If):
-                t1 = scan(node.then_block)
-                if t1 == TYPE_STR:
-                    return TYPE_STR
-                if node.else_block:
-                    t2 = scan(node.else_block)
-                    if t2 == TYPE_STR:
-                        return TYPE_STR
-            return TYPE_INT
+        return_types: Set[int] = set()
 
-        return scan(fn.body)
+        def scan(node: Node):
+            if isinstance(node, Return):
+                if node.value is None:
+                    return_types.add(TYPE_INT)
+                elif isinstance(node.value, String):
+                    return_types.add(TYPE_STR)
+                elif isinstance(node.value, BinOp) and node.value.op == "+":
+                    if isinstance(node.value.left, String) or isinstance(node.value.right, String):
+                        return_types.add(TYPE_STR)
+                    else:
+                        return_types.add(TYPE_INT)
+                elif isinstance(node.value, Number):
+                    return_types.add(TYPE_INT)
+                elif isinstance(node.value, Identifier):
+                    # Identifier could hold int or string at runtime
+                    return_types.add(TYPE_DYNAMIC)
+                else:
+                    return_types.add(TYPE_INT)
+            elif isinstance(node, Block):
+                for s in node.stmts:
+                    scan(s)
+            elif isinstance(node, If):
+                scan(node.then_block)
+                if node.else_block:
+                    scan(node.else_block)
+            elif isinstance(node, (While, Repeat, ForRange, ForEach)):
+                scan(node.body)
+
+        scan(fn.body)
+        if not return_types:
+            return TYPE_INT
+        if len(return_types) == 1:
+            return next(iter(return_types))
+        if TYPE_STR in return_types or TYPE_DYNAMIC in return_types:
+            return TYPE_DYNAMIC
+        return TYPE_INT
 
     def compile(self, program: Program) -> bytes:
         """
@@ -705,6 +722,192 @@ class LipiElfCompiler:
         asm.leave()
         asm.ret()
 
+        # ── _lipi_print_dynamic: Dynamic type dispatcher for say ────────────
+        # in: rdi = val
+        # If val is a string pointer (in data section or heap), call _lipi_print_str.
+        # Otherwise, treat as 64-bit integer and call _lipi_print_int.
+        asm.define_label("_lipi_print_dynamic")
+        asm.push_rbp()
+        asm.mov_rbp_rsp()
+        lbl_dyn_is_int = asm.new_label("dyn_is_int")
+        lbl_dyn_is_str = asm.new_label("dyn_is_str")
+        lbl_dyn_chk_heap = asm.new_label("dyn_chk_heap")
+
+        # If val == 0: it's int 0 (null is also printed as 0)
+        asm.emit(b"\x48\x85\xff")  # test rdi, rdi
+        asm.jz(lbl_dyn_is_int)
+
+        # Check if rdi >= _lipi_data_start
+        asm.lea_reg_rip(RAX, "_lipi_data_start")
+        asm.emit(b"\x48\x39\xc7")  # cmp rdi, rax
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x82\x00\x00\x00\x00")  # jb dyn_chk_heap
+        asm.relocs.append((pos + 2, lbl_dyn_chk_heap, 6))
+
+        # Check if rdi < _lipi_data_end
+        asm.lea_reg_rip(RDX, "_lipi_data_end")
+        asm.emit(b"\x48\x39\xd7")  # cmp rdi, rdx
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x82\x00\x00\x00\x00")  # jb dyn_is_str
+        asm.relocs.append((pos + 2, lbl_dyn_is_str, 6))
+
+        # Check heap bounds: [_lipi_heap_base] <= rdi < [_lipi_heap_ptr]
+        asm.define_label(lbl_dyn_chk_heap)
+        asm.lea_reg_rip(RBX, self.heap_base_lbl)
+        asm.emit(b"\x48\x8b\x03")  # mov rax, [rbx]
+        asm.emit(b"\x48\x85\xc0")  # test rax, rax
+        asm.jz(lbl_dyn_is_int)
+        asm.emit(b"\x48\x39\xc7")  # cmp rdi, rax
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x82\x00\x00\x00\x00")  # jb dyn_is_int
+        asm.relocs.append((pos + 2, lbl_dyn_is_int, 6))
+
+        asm.lea_reg_rip(RBX, self.heap_ptr_lbl)
+        asm.emit(b"\x48\x8b\x13")  # mov rdx, [rbx]
+        asm.emit(b"\x48\x39\xd7")  # cmp rdi, rdx
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x83\x00\x00\x00\x00")  # jae dyn_is_int
+        asm.relocs.append((pos + 2, lbl_dyn_is_int, 6))
+
+        # Matches valid string pointer range!
+        asm.define_label(lbl_dyn_is_str)
+        asm.call("_lipi_print_str")
+        asm.leave()
+        asm.ret()
+
+        # Matches integer value!
+        asm.define_label(lbl_dyn_is_int)
+        asm.call("_lipi_print_int")
+        asm.leave()
+        asm.ret()
+
+        # ── _lipi_is_str: Check if rdi points to a valid Lipi string ────────
+        # Returns rax = 1 (true) if rdi is within data section or heap, else 0.
+        asm.define_label("_lipi_is_str")
+        lbl_is_str_chk_heap = asm.new_label("iss_chk_heap")
+        lbl_is_str_true     = asm.new_label("iss_true")
+        lbl_is_str_false    = asm.new_label("iss_false")
+
+        asm.emit(b"\x48\x85\xff")  # test rdi, rdi
+        asm.jz(lbl_is_str_false)
+
+        # Check data section: _lipi_data_start <= rdi < _lipi_data_end
+        asm.lea_reg_rip(RAX, "_lipi_data_start")
+        asm.emit(b"\x48\x39\xc7")  # cmp rdi, rax
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x82\x00\x00\x00\x00")  # jb iss_chk_heap
+        asm.relocs.append((pos + 2, lbl_is_str_chk_heap, 6))
+
+        asm.lea_reg_rip(RDX, "_lipi_data_end")
+        asm.emit(b"\x48\x39\xd7")  # cmp rdi, rdx
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x82\x00\x00\x00\x00")  # jb iss_true
+        asm.relocs.append((pos + 2, lbl_is_str_true, 6))
+
+        # Check heap section: [_lipi_heap_base] <= rdi < [_lipi_heap_ptr]
+        asm.define_label(lbl_is_str_chk_heap)
+        asm.lea_reg_rip(RBX, self.heap_base_lbl)
+        asm.emit(b"\x48\x8b\x03")  # mov rax, [rbx]
+        asm.emit(b"\x48\x85\xc0")  # test rax, rax
+        asm.jz(lbl_is_str_false)
+        asm.emit(b"\x48\x39\xc7")  # cmp rdi, rax
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x82\x00\x00\x00\x00")  # jb iss_false
+        asm.relocs.append((pos + 2, lbl_is_str_false, 6))
+
+        asm.lea_reg_rip(RBX, self.heap_ptr_lbl)
+        asm.emit(b"\x48\x8b\x13")  # mov rdx, [rbx]
+        asm.emit(b"\x48\x39\xd7")  # cmp rdi, rdx
+        pos = len(asm.code)
+        asm.emit(b"\x0f\x83\x00\x00\x00\x00")  # jae iss_false
+        asm.relocs.append((pos + 2, lbl_is_str_false, 6))
+
+        asm.define_label(lbl_is_str_true)
+        asm.mov_reg_imm64(RAX, 1)
+        asm.ret()
+
+        asm.define_label(lbl_is_str_false)
+        asm.mov_reg_imm64(RAX, 0)
+        asm.ret()
+
+        # ── _lipi_ensure_str: Ensure value in rdi is a string pointer ───────
+        # in: rdi = val. out: rax = string pointer.
+        asm.define_label("_lipi_ensure_str")
+        asm.push_rbp()
+        asm.mov_rbp_rsp()
+        asm.push_reg(RBX)
+        asm.push_reg(R12)
+        asm.mov_reg_reg(R12, RDI)
+        asm.call("_lipi_is_str")
+        lbl_es_already = asm.new_label("es_already")
+        asm.emit(b"\x48\x85\xc0")  # test rax, rax
+        asm.jnz(lbl_es_already)
+        # Not string -> convert int to str
+        asm.mov_reg_reg(RDI, R12)
+        asm.call("_lipi_int_to_str")
+        asm.pop_reg(R12)
+        asm.pop_reg(RBX)
+        asm.leave()
+        asm.ret()
+        asm.define_label(lbl_es_already)
+        asm.mov_reg_reg(RAX, R12)
+        asm.pop_reg(R12)
+        asm.pop_reg(RBX)
+        asm.leave()
+        asm.ret()
+
+        # ── _lipi_add_dynamic: Dynamic addition / concatenation ──────────────
+        # in: rdi = left, rsi = right. out: rax = sum (int) or concat (str).
+        asm.define_label("_lipi_add_dynamic")
+        asm.push_rbp()
+        asm.mov_rbp_rsp()
+        asm.push_reg(R12)
+        asm.push_reg(R13)
+        asm.push_reg(R14)
+        asm.mov_reg_reg(R12, RDI)
+        asm.mov_reg_reg(R13, RSI)
+
+        lbl_ad_str = asm.new_label("ad_str")
+
+        # Test left
+        asm.mov_reg_reg(RDI, R12)
+        asm.call("_lipi_is_str")
+        asm.emit(b"\x48\x85\xc0")  # test rax, rax
+        asm.jnz(lbl_ad_str)
+
+        # Test right
+        asm.mov_reg_reg(RDI, R13)
+        asm.call("_lipi_is_str")
+        asm.emit(b"\x48\x85\xc0")  # test rax, rax
+        asm.jnz(lbl_ad_str)
+
+        # Integer addition
+        asm.mov_reg_reg(RAX, R12)
+        asm.mov_reg_reg(RBX, R13)
+        asm.add_rax_rbx()
+        asm.pop_reg(R14)
+        asm.pop_reg(R13)
+        asm.pop_reg(R12)
+        asm.leave()
+        asm.ret()
+
+        # String concatenation
+        asm.define_label(lbl_ad_str)
+        asm.mov_reg_reg(RDI, R12)
+        asm.call("_lipi_ensure_str")
+        asm.mov_reg_reg(R14, RAX)  # r14 = left str
+
+        asm.mov_reg_reg(RDI, R13)
+        asm.call("_lipi_ensure_str")
+        asm.mov_reg_reg(RSI, RAX)  # rsi = right str
+        asm.mov_reg_reg(RDI, R14)  # rdi = left str
+        asm.call("_lipi_str_concat")
+        asm.pop_reg(R14)
+        asm.pop_reg(R13)
+        asm.pop_reg(R12)
+        asm.leave()
+        asm.ret()
+
     def _compile_main(self, stmts: List[Node]):
         asm = self.asm
         asm.define_label("lipi_main")
@@ -1013,13 +1216,17 @@ class LipiElfCompiler:
 
             arg_type = self._compile_expr(arg)
             if arg_type == TYPE_STR:
-                # String pointer in RAX
+                # Guaranteed string pointer in RAX
                 asm.mov_reg_reg(RDI, RAX)
                 asm.call("_lipi_print_str")
-            else:
-                # Integer in RAX
+            elif isinstance(arg, Number):
+                # Guaranteed integer literal
                 asm.mov_reg_reg(RDI, RAX)
                 asm.call("_lipi_print_int")
+            else:
+                # Dynamic check at runtime: handles function returns, variables, structs
+                asm.mov_reg_reg(RDI, RAX)
+                asm.call("_lipi_print_dynamic")
 
         asm.call("_lipi_print_nl")
 
@@ -1059,6 +1266,36 @@ class LipiElfCompiler:
         asm = self.asm
         fn_name = call.func.name if isinstance(call.func, Identifier) else None
 
+        # Builtin len / length / দৈর্ঘ্য (Direct machine code length lookup)
+        # WHY: String allocations and constants always store 64-bit length at [ptr - 8]
+        if fn_name in ("len", "length", "দৈর্ঘ্য"):
+            if call.args:
+                self._compile_expr(call.args[0])
+                lbl_nz = asm.new_label("len_nz")
+                lbl_done = asm.new_label("len_done")
+                asm.emit(b"\x48\x85\xc0")  # test rax, rax
+                asm.jnz(lbl_nz)
+                asm.jmp(lbl_done)
+                asm.define_label(lbl_nz)
+                asm.emit(b"\x48\x8b\x40\xf8")  # mov rax, [rax - 8]
+                asm.define_label(lbl_done)
+            else:
+                asm.mov_reg_imm64(RAX, 0)
+            return TYPE_INT
+
+        # Builtin abs (integer absolute value)
+        if fn_name in ("abs",):
+            if call.args:
+                self._compile_expr(call.args[0])
+                lbl_pos = asm.new_label("abs_pos")
+                asm.emit(b"\x48\x85\xc0")  # test rax, rax
+                pos = len(asm.code)
+                asm.emit(b"\x0f\x89\x00\x00\x00\x00")  # jns
+                asm.relocs.append((pos + 2, lbl_pos, 6))
+                asm.neg_rax()
+                asm.define_label(lbl_pos)
+            return TYPE_INT
+
         # Pass arguments in System V AMD64 ABI: RDI, RSI, RDX, RCX, R8, R9
         param_regs = [RDI, RSI, RDX, RCX, R8, R9]
         for arg in call.args:
@@ -1094,7 +1331,13 @@ class LipiElfCompiler:
                     if start > last_idx:
                         parts.append(String(val[last_idx:start]))
                     var_expr = match.group(1).strip()
-                    parts.append(Identifier(var_expr))
+                    try:
+                        from src.runtime.lexer import Lexer
+                        from src.runtime.parser import Parser
+                        p = Parser(Lexer(var_expr + "\n").tokenize())
+                        parts.append(p.parse_expr())
+                    except Exception:
+                        parts.append(Identifier(var_expr))
                     last_idx = end
                 if last_idx < len(val):
                     parts.append(String(val[last_idx:]))
@@ -1149,8 +1392,8 @@ class LipiElfCompiler:
                 else:
                     asm.emit(b"\x48\x8b\x40" + bytes([field_disp]))
 
-                # Check if field holds string
-                return self.local_types.get(f"{var_name}.{expr.field}", TYPE_INT)
+                # Check if field holds string or dynamic
+                return self.local_types.get(f"{var_name}.{expr.field}", TYPE_DYNAMIC)
             return TYPE_INT
 
         elif isinstance(expr, UnaryOp):
@@ -1166,41 +1409,33 @@ class LipiElfCompiler:
         elif isinstance(expr, BinOp):
             op = expr.op
 
-            # ── String Concatenation ─────────────────────────────────────────
+            # ── Dynamic Addition & String Concatenation ──────────────────────
             if op == "+":
                 # Evaluate left
                 t_left = self._compile_expr(expr.left)
-                if t_left != TYPE_STR:
-                    # Check if right is string
-                    t_right_peek = self._peek_type(expr.right)
-                    if t_right_peek == TYPE_STR:
-                        # Convert left int to string
-                        asm.mov_reg_reg(RDI, RAX)
-                        asm.call("_lipi_int_to_str")
-                        t_left = TYPE_STR
-
                 asm.push_reg(RAX)  # save left
 
                 # Evaluate right
                 t_right = self._compile_expr(expr.right)
-                if t_left == TYPE_STR and t_right != TYPE_STR:
-                    # Convert right int to string
-                    asm.mov_reg_reg(RDI, RAX)
-                    asm.call("_lipi_int_to_str")
-                    t_right = TYPE_STR
+                asm.mov_reg_reg(RSI, RAX)  # rsi = right
+                asm.pop_reg(RDI)           # rdi = left
 
-                if t_left == TYPE_STR or t_right == TYPE_STR:
-                    # String concatenation!
-                    asm.mov_reg_reg(RSI, RAX)  # rsi = right str
-                    asm.pop_reg(RDI)           # rdi = left str
+                if t_left == TYPE_INT and t_right == TYPE_INT:
+                    # Pure integer addition fast path
+                    asm.mov_reg_reg(RAX, RDI)
+                    asm.mov_reg_reg(RBX, RSI)
+                    asm.add_rax_rbx()
+                    return TYPE_INT
+                elif t_left == TYPE_STR and t_right == TYPE_STR:
+                    # Pure string concatenation fast path
                     asm.call("_lipi_str_concat")
                     return TYPE_STR
-
-                # Standard integer addition
-                asm.mov_reg_reg(RBX, RAX)
-                asm.pop_reg(RAX)
-                asm.add_rax_rbx()
-                return TYPE_INT
+                else:
+                    # Dynamic addition / concatenation dispatch
+                    asm.call("_lipi_add_dynamic")
+                    if t_left == TYPE_STR or t_right == TYPE_STR:
+                        return TYPE_STR
+                    return TYPE_DYNAMIC
 
             # Evaluate left side
             self._compile_expr(expr.left)
@@ -1261,6 +1496,9 @@ class LipiElfCompiler:
         if rem != 0:
             asm.emit(b"\x00" * (8 - rem))
 
+        # WHY: Bounds markers for _lipi_print_dynamic to recognize valid string constants
+        asm.define_label("_lipi_data_start")
+
         # Heap state variables
         asm.define_label(self.heap_base_lbl)
         asm.emit(b"\x00\x00\x00\x00\x00\x00\x00\x00")
@@ -1276,6 +1514,8 @@ class LipiElfCompiler:
             # String pointer starts here!
             asm.define_label(lbl)
             asm.emit(encoded + b"\x00")
+
+        asm.define_label("_lipi_data_end")
 
     def _wrap_elf(self, code_bytes: bytes) -> bytes:
         """

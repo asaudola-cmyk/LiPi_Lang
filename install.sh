@@ -148,6 +148,16 @@ create_command() {
                 ok "Built native REPL: $LIPI_INSTALL_DIR/bin/lipirepl_bin"
             fi
         fi
+
+        # Build native direct ELF compiler (Zero GCC, Zero Libc runtime, Zero Python) 👑
+        if [ -f "$LIPI_INSTALL_DIR/src/compiler/native_elf_compiler.c" ]; then
+            info "Building native direct ELF compiler with $cc_cmd..."
+            if $cc_cmd -O2 "$LIPI_INSTALL_DIR/src/compiler/native_elf_compiler.c" \
+                -o "$LIPI_INSTALL_DIR/bin/lipc_native_elf" 2>/dev/null; then
+                chmod +x "$LIPI_INSTALL_DIR/bin/lipc_native_elf"
+                ok "Built native direct ELF compiler: $LIPI_INSTALL_DIR/bin/lipc_native_elf 👑"
+            fi
+        fi
     fi
 
     # 3. Native compiler command wrapper

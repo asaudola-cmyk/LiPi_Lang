@@ -76,6 +76,15 @@ fi
 if [[ $DIRECT_ELF -eq 1 ]] || ! command -v gcc &>/dev/null; then
     [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Direct ELF Generation: $INPUT → ./$OUTPUT${RESET}"
     cd "$LIPI_HOME"
+    # WHY: Native standalone compiler binary — 0% Python invocation
+    if [[ -x "$LIPI_HOME/bin/lipc_native_elf" ]]; then
+        if "$LIPI_HOME/bin/lipc_native_elf" "$INPUT" "$OUTPUT" >/dev/null 2>&1; then
+            echo -e "${GREEN}✔ Compiled (Direct Machine Code 👑): $INPUT → ./$OUTPUT${RESET}"
+            echo -e "  Zero GCC | Zero Libc | 100% Statically Linked Linux ELF64"
+            echo -e "  Run: ${CYAN}./$OUTPUT${RESET}"
+            exit 0
+        fi
+    fi
     if python3 -m src.compiler.elf_emitter "$INPUT" "$OUTPUT"; then
         echo -e "${GREEN}✔ Compiled (Direct Machine Code 👑): $INPUT → ./$OUTPUT${RESET}"
         echo -e "  Zero GCC | Zero Libc | 100% Statically Linked Linux ELF64"
