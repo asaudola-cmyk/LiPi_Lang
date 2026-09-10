@@ -1,145 +1,161 @@
-# লিপি পরিবর্তন ইতিহাস (CHANGELOG)
-# Lipi Programming Language — Change Log
+# Lipi Language — Changelog
+
+All notable changes to the Lipi Programming Language are documented here.
 
 ---
 
-## 🔖 প্রথম ১.০ — "সোভেরিন" | Prothom 1.0 — "Sovereign"
-**মুক্তির তারিখ:** ২০২৬-০৯-০৯
+## [First 1.0 — Sovereign] — 2026-09-10
 
-> *"বিশ্বের প্রথম বাংলা প্রোগ্রামিং ভাষার প্রথম সার্বজনীন মুক্তি।"*
-> *"First public release of the world's first Bengali programming language."*
+### 🎉 Initial Release
 
----
+The first public release of the Lipi Programming Language.
 
-### 🏆 মুখ্য অর্জন (Major Achievements)
+### Runtime
 
-#### ১. স্বনির্ভর কম্পাইলার (Self-Hosting Compiler)
-- `bin/lipi` — ১৭KB স্ট্যাটিক ELF, শূন্য libc, শূন্য GCC
-- লিপি দিয়ে লিপি কম্পাইল হয় (gen-1 ≡ gen-2, bit-for-bit)
-- সরাসরি Linux kernel syscall — কোনো মধ্যস্থতাকারী নেই
-- পাঁচটি কম্পাইলার পাইপলাইন স্টেজ:
-  - Lexer → AST → SSA IR → Register Allocation → ELF Emitter
+#### Added
+- **lipic2** — Python-based tree-walking interpreter
+  - `src/runtime/lexer.py` — Unicode-aware tokenizer (Bengali + ASCII numerals)
+  - `src/runtime/parser.py` — Recursive descent parser
+  - `src/runtime/interpreter.py` — Tree-walking interpreter with proper scoping
+  - `src/runtime/ast_nodes.py` — All AST node definitions
+  - `src/runtime/stdlib.py` — Optional stdlib module loader
+- **`bin/lipi`** — Global command: `lipi file.lp`, `lipi` (REPL), `lipi --version`
+- **Interactive REPL** — `lipi` with no args starts REPL, preserves state between lines
 
-#### ২. সম্পূর্ণ টুলচেইন (Complete Toolchain)
-| টুল | উদ্দেশ্য |
-|-----|---------|
-| `bin/lipic` | C bootstrap compiler (স্থায়ী কম্পাইলার) |
-| `bin/lipi` | স্বনির্ভর সোভেরিন কম্পাইলার |
-| `bin/lipipkg` | প্যাকেজ ম্যানেজার |
-| `bin/lipidbg` | ptrace-based debugger |
-| `bin/lipirepl` | ইন্টারেক্টিভ REPL |
-| `bin/lipiconvert` | কোড রূপান্তরকারী |
+#### Fixed (vs old lipic C binary)
+- ✅ Recursive functions now work (factorial, fibonacci, tree traversal)
+- ✅ `say variable` prints value, not memory address
+- ✅ `struct` fields work correctly at runtime
+- ✅ `for i in 1..N` range loops work
+- ✅ `repeat N` loops work
+- ✅ String interpolation `"Hello, {name}!"` works
 
-#### ৩. স্ট্যান্ডার্ড লাইব্রেরি (Standard Library)
-৪,৮৭০+ লাইনের বিশুদ্ধ লিপি কোড:
+### Language Features
 
-| মডিউল | বিষয়বস্তু |
-|--------|----------|
-| `std/core/io.lp` | ফাইল I/O, stdin/stdout |
-| `std/core/mem.lp` | হিপ মেমরি বরাদ্দ |
-| `std/core/str.lp` | স্ট্রিং প্রক্রিয়াকরণ |
-| `std/core/math.lp` | গণিত ফাংশন |
-| `std/core/json.lp` | JSON পার্সার |
-| `std/core/arena.lp` | Arena allocator |
-| `std/net/net.lp` | TCP/UDP socket |
-| `std/net/tls.lp` | TLS 1.3 (ChaCha20) |
-| `std/net/crypto.lp` | SHA-256, RDRAND |
-| `std/net/websocket.lp` | WebSocket protocol |
-| `std/sys/thread.lp` | Linux kernel threading |
-| `std/sys/kernel.lp` | syscall wrappers |
-| `std/sys/simd.lp` | AVX-512 SIMD |
-| `std/sys/shm.lp` | POSIX shared memory |
-| `std/sys/time.lp` | RDTSC, time |
-| `std/sys/debug.lp` | ptrace debugger |
-| `std/sys/event.lp` | epoll event loop |
-| `std/ai/gguf.lp` | GGUF tensor inference |
-| `std/ai/ai.lp` | AI/ML primitives |
-| `std/db/db.lp` | Binary database engine |
-| `std/db/columnstore.lp` | Column-oriented store |
-| `std/db/hashmap.lp` | Robin Hood hashmap |
-| `std/ui/gfx.lp` | BMP/framebuffer graphics |
-| `std/ui/tui.lp` | ANSI terminal UI |
-| `std/ui/x11.lp` | X11 window system |
-| `std/version.lp` | ভাষার সংস্করণ তথ্য |
+#### Added
+- **Minimal Global Standard syntax**
+  ```lipi
+  fn double n = n * 2
+  if x > 10 say "big"
+  for i in 1..10 say i
+  repeat 5 say "hello"
+  each item in myList say item
+  ```
+- **`for item in list`** — ForEach over any list/string (NEW in v1.0)
+- **`each item in list`** — Alias for ForEach
+- **Unicode identifiers** — Any Unicode script works as variable/function names
+- **Bengali numeral support** — `৪২` is parsed as `42`
+- **Both English and Bengali keywords** work simultaneously
 
-#### ৪. পরীক্ষা স্যুট (Test Suite)
-**৪২/৪২ পাস** — সম্পূর্ণ রিগ্রেশন কভারেজ:
+### Stdlib Builtins (Runtime)
 
-| পরীক্ষা পরিসর | বিষয় |
-|--------------|-------|
-| ০১-১১ | ভাষার মূল বৈশিষ্ট্য |
-| ১২-২০ | সিলিকন লজিক, CPU arithmetic, stdlib |
-| ২১-২৫ | থ্রেড, স্ট্রাকচার, DB, SIMD, Arena |
-| ২৬-৩০ | Epoll, PKG, SHA-256, Debugger, AST optimizer |
-| ৩১-৩৫ | TLS crypto, Graphics, Shared mem, TUI, ColumnAI |
-| ৩৬-৪০ | Robin Hood, WebSocket, X11 GUI, Production app, GGUF |
-| ৪১-৪২ | Bare-metal kernel, বাইলিঙ্গুয়াল syntax |
+#### Added
+- **Output:** `say`, `print`, `println`, `show`
+- **Math:** `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `log`, `pi`, `e`
+- **String:** `len`, `upper`, `lower`, `trim`, `split`, `contains`, `starts_with`, `ends_with`, `replace`, `char_at`, `index_of`
+- **List:** `list()`, `push`, `pop`, `get`, `set` / `list_get`, `list_set`, `sort`, `sum`, `join`
+- **Type:** `str`, `int`, `float`, `bool`, `chr`, `ord`, `type`
+- **File I/O:** `file_read`, `file_write`, `file_append`, `file_exists`
+- **System:** `exit`, `time_ms`, `env`, `input`
 
-#### ৫. বেঞ্চমার্ক (Benchmark Results)
-লিপি ১১টি ভাষার বিরুদ্ধে পরীক্ষিত: C, C++, Rust, Go, Python, JS, TS, Java, Swift, C#, Zig
+### Standard Library (.lp files)
 
-**১০ মিলিয়ন লুপ বেঞ্চমার্কে** লিপি C-সমতুল্য পারফরম্যান্স অর্জন করেছে।
+#### Added
+- `std/math.lp` — Mathematical functions (abs, sqrt, gcd, lcm, is_prime, factorial, fibonacci)
+- `std/str.lp` — String utilities (str_repeat, pad_left, pad_right, center)
+- `std/io.lp` — I/O operations
+- `std/http.lp` — HTTP patterns (status codes, response builders)
+- `std/fmt.lp` — Formatting (pad_int, format_bytes, format_ms, print_ok/fail)
+- `std/json.lp` — JSON helpers (json_str, json_num, json_response_ok/err)
+- `std/version.lp` — Version constants (VERSION_NAME, CODENAME, RUNTIME)
 
-#### ৬. ডিরেক্টরি কাঠামো (Directory Structure)
-```
-lipi/
-├── apps/website/     অফিসিয়াল ওয়েবসাইট ও ওয়েব সার্ভার
-├── benchmarks/       ১১ ভাষার বেঞ্চমার্ক স্যুট
-├── bin/              ৬টি প্রডাকশন বাইনারি
-├── boot/lipi-seed    C bootstrap seed
-├── docs/             স্পেসিফিকেশন ও ম্যানুয়াল
-├── editors/vscode-lipi  VSCode এক্সটেনশন
-├── examples/         ৪টি রিয়েল-ওয়ার্ল্ড ডেমো
-├── modules/          ব্যবহারকারী মডিউল
-├── scripts/          install, release, QEMU scripts
-├── src/compiler/     কম্পাইলার সোর্স কোড
-├── src/tools/        টুলচেইন সোর্স কোড
-├── std/              স্ট্যান্ডার্ড লাইব্রেরি (৪৮৭০+ লাইন)
-└── tests/            ৪২টি পরীক্ষা ফাইল
-```
+### Bootstrap Compiler
 
-#### ৭. GitHub CI/CD
-- ৬-স্টেজ GitHub Actions পাইপলাইন:
-  1. Boot seed verification
-  2. Compiler compilation
-  3. Full toolchain build
-  4. Self-hosting closure proof (bit-for-bit)
-  5. Sovereignty audit (0% PHP/C in src/)
-  6. Regression test suite (42/42)
+#### Added
+- **`src/compiler/lipic3.lp`** — Phase 0 of the self-hosting compiler, written in Lipi
+  - Token struct definition
+  - 21-keyword recognition table
+  - Number, operator, and string tokenizer demo
+  - Self-analysis: tokenizes Lipi syntax using Lipi
+  - **Proves:** Lipi can process its own syntax (bootstrap prerequisite)
 
----
+### Tests
 
-### 🐛 পরিচিত সমস্যা (Known Issues)
+#### Added
+- 60 tests, all passing ✅
+  - Tests 01-25: Core language (hello, math, structs, recursion)
+  - Tests 26-50: Advanced (async, crypto, graphics, networking, OS)
+  - Tests 51-60: Minimal syntax showcase
+- All tests written in Global Standard (English identifiers, English comments)
 
-#### কম্পাইলার সীমাবদ্ধতা (Compiler Limitations) — Phase 2 তে ঠিক হবে:
-| সমস্যা | অবস্থা | ঠিক হবে |
-|--------|--------|---------|
-| `নাহলে_যদি` chain কাজ করে না | ⚠️ পরিচিত | প্রথম ২.০ |
-| Array literal `[{...}]` segfault | ⚠️ পরিচিত | প্রথম ২.০ |
-| `প্রতিটি x ভেতরে` for-each segfault | ⚠️ পরিচিত | প্রথম ২.০ |
-| String concat initial value হারায় | ⚠️ পরিচিত | প্রথম ২.০ |
-| Function string return → address | ⚠️ পরিচিত | প্রথম ২.০ |
-| `চেষ্টা...ধরো` try-catch অবাস্তবায়িত | ⚠️ পরিচিত | প্রথম ২.০ |
-| Namespace.method() calls | ⚠️ পরিচিত | প্রথম ২.০ |
-| শুধু Linux x86_64 | ⚠️ পরিচিত | প্রথম ৩.০ |
+### Tooling
 
-#### Workaround:
-- `নাহলে_যদি` এর পরিবর্তে nested `যদি...নাহলে` ব্যবহার করুন
-- Array এর পরিবর্তে individual variables ব্যবহার করুন
-- `দেখাও "label:", variable` পদ্ধতি ব্যবহার করুন (+ এর বদলে ,)
+#### Added
+- **`install.sh`** — One-line GitHub installer
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash
+  ```
+  - Python 3.8+ detection
+  - Clones to `~/.lipi/`
+  - Creates `~/.local/bin/lipi` command
+  - Auto-adds to PATH in `.bashrc`/`.zshrc`
+  - `--uninstall` flag
 
----
+- **`vscode-lipi/`** — VS Code extension
+  - TextMate syntax grammar for `.lp` files
+  - 11 code snippets (`fn`, `if`, `while`, `for`, `struct`, ...)
+  - Unicode/Bengali identifier highlighting
+  - String interpolation highlighting
 
-### 🗺️ পরবর্তী পদক্ষেপ (Roadmap)
+- **`docs/index.html`** — Landing page website (GitHub Pages compatible)
+  - Dark theme, mobile responsive
+  - Syntax showcase
+  - Unicode demo (Bengali, Arabic, Chinese, Russian, Japanese, Korean)
+  - Step-by-step install guide
 
-| সংস্করণ | পরিকল্পিত বৈশিষ্ট্য |
-|---------|---------------------|
-| **প্রথম ২.০** | Compiler 2.0 (else-if fix, arrays, strings, try-catch, generics) |
-| **প্রথম ৩.০** | Windows/macOS/Android/iOS cross-platform |
-| **দ্বিতীয় ১.০** | WASM, AI framework, lipipkg registry |
-| **তৃতীয় ১.০** | Multilingual keywords (Hindi, Arabic, Chinese...) |
-| **চতুর্থ ১.০** | Lipi OS (sovereign computing stack) |
+- **`src/tools/bn2min.py`** — Bengali Lipi 1.0 → Minimal syntax converter
+- **`src/tools/global_rename.py`** — Bengali identifier → English batch renamer
+
+### CI/CD
+
+#### Added
+- **`.github/workflows/lipi-ci.yml`** — GitHub Actions
+  - Tests on Python 3.9, 3.11, 3.12 (matrix)
+  - Runs all 60 tests on every push/PR
+  - Verifies install script
+  - Badge: [![Tests](https://github.com/asaudola-cmyk/LiPi_Lang/actions/workflows/lipi-ci.yml/badge.svg)](https://github.com/asaudola-cmyk/LiPi_Lang/actions)
+
+### Documentation
+
+#### Added
+- `README.md` — Professional English (356 lines)
+  - 30-second install guide
+  - Complete syntax reference
+  - Unicode identifier documentation
+  - Standard library table
+  - Architecture diagram
+  - Roadmap
+- `docs/LIPI2_SYNTAX.md` — Language specification
 
 ---
 
-*পরিবর্তন লগ রক্ষণাবেক্ষণ: Gyani Supreme | শেষ আপডেট: ২০২৬-০৯-০৯*
+## Roadmap
+
+### [1.1] — lipic3 Phase 1 (Parser in Lipi)
+- Write the Lipi parser as a Lipi program
+- AST node generation in Lipi
+- Milestone: Lipi parses Lipi
+
+### [1.2] — lipic3 Phase 2 (Lipi → Python codegen)
+- Code generator: Lipi AST → Python source
+- Milestone: Lipi compiles Lipi to Python
+
+### [2.0] — lipic3 Phase 3 (Lipi → C)
+- Lipi to C transpiler written in Lipi
+- Compile C to native binary
+- Milestone: Zero Python dependency
+
+### [3.0] — Full Bootstrap
+- lipic3 compiles itself
+- True self-hosting: Lipi builds Lipi
+- WASM target for browser execution

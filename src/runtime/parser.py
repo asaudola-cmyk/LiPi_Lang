@@ -270,20 +270,32 @@ class Parser:
         return Repeat(count, body)
 
     def parse_for(self) -> Node:
-        """for i in 1..10  OR  for i in 1..10 step 2"""
+        """for i in 1..10  OR  for i in 1..10 step 2  OR  for item in myList
+        
+        WHY: Both range iteration and list iteration use 'for x in ...' syntax.
+        We auto-detect: if '..' follows the start expression, it's a ForRange.
+        Otherwise, it's a ForEach over an iterable (list, string, etc.)
+        """
         self.advance()  # consume 'for'
         var_tok = self.expect(TT.IDENT)
         var = var_tok.value
         self.expect(TT.KW, 'in')
         start = self.parse_add()
-        self.expect(TT.OP, '..')
-        end = self.parse_add()
-        step = None
-        if self.match(TT.KW, 'step'):
-            self.advance()
-            step = self.parse_primary()
-        body = self.parse_inline_or_block()
-        return ForRange(var, start, end, step, body)
+        # Check for '..' — if present, this is a range; otherwise a ForEach
+        if self.match(TT.OP, '..'):
+            self.advance()  # consume '..'
+            end = self.parse_add()
+            step = None
+            if self.match(TT.KW, 'step'):
+                self.advance()
+                step = self.parse_primary()
+            body = self.parse_inline_or_block()
+            return ForRange(var, start, end, step, body)
+        else:
+            # 'for item in myList' → ForEach iteration
+            body = self.parse_inline_or_block()
+            return ForEach(var, start, body)
+
 
     def parse_each(self) -> ForEach:
         """each item in mylist"""

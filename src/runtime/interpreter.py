@@ -135,33 +135,165 @@ class Interpreter:
         def lipi_range(*args):
             return list(range(*args))
 
+        # ── File I/O ──────────────────────────────────────────────────────
+        def lipi_file_read(path):
+            """Read entire file as string. WHY: needed for lipic3 Phase 1."""
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except FileNotFoundError:
+                raise LipiError(f"file_read: file not found: {path}")
+            except PermissionError:
+                raise LipiError(f"file_read: permission denied: {path}")
+
+        def lipi_file_write(path, content):
+            """Write string to file."""
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(str(content))
+                return 1
+            except PermissionError:
+                raise LipiError(f"file_write: permission denied: {path}")
+
+        def lipi_file_append(path, content):
+            """Append string to file."""
+            try:
+                with open(path, 'a', encoding='utf-8') as f:
+                    f.write(str(content))
+                return 1
+            except PermissionError:
+                raise LipiError(f"file_append: permission denied: {path}")
+
+        def lipi_file_exists(path):
+            import os
+            return 1 if os.path.exists(path) else 0
+
+        # ── Math ──────────────────────────────────────────────────────────
+        import math as _math
+        def lipi_sqrt(x):
+            if x < 0:
+                raise LipiError("sqrt: negative number")
+            return _math.sqrt(x)
+
+        def lipi_floor(x): return int(_math.floor(x))
+        def lipi_ceil(x):  return int(_math.ceil(x))
+        def lipi_round_n(x, n=0): return round(x, int(n)) if n else round(x)
+
+        # ── String operations ─────────────────────────────────────────────
+        def lipi_split(s, sep=None):
+            """Split string by separator. Returns list."""
+            return s.split(sep) if sep else s.split()
+
+        def lipi_trim(s):  return s.strip()
+        def lipi_upper(s): return s.upper()
+        def lipi_lower(s): return s.lower()
+        def lipi_starts_with(s, prefix): return 1 if s.startswith(prefix) else 0
+        def lipi_ends_with(s, suffix):   return 1 if s.endswith(suffix)   else 0
+        def lipi_contains(s, sub):       return 1 if sub in s else 0
+        def lipi_replace(s, old, new):   return s.replace(old, new)
+        def lipi_char_at(s, i):          return s[int(i)] if 0 <= int(i) < len(s) else ''
+        def lipi_index_of(s, sub):       return s.find(sub)
+
+        # ── List operations ───────────────────────────────────────────────
+        def lipi_push(lst, item):
+            if not isinstance(lst, list):
+                raise LipiError(f"push: expected list, got {self.lipi_type(lst)}")
+            lst.append(item)
+            return lst
+
+        def lipi_pop(lst):
+            if not isinstance(lst, list):
+                raise LipiError(f"pop: expected list")
+            if not lst:
+                raise LipiError("pop: empty list")
+            return lst.pop()
+
+        def lipi_list_get(lst, i):
+            if not isinstance(lst, list):
+                raise LipiError(f"list_get: expected list")
+            idx = int(i)
+            if idx < 0 or idx >= len(lst):
+                raise LipiError(f"list_get: index {idx} out of range")
+            return lst[idx]
+
+        def lipi_list_set(lst, i, val):
+            if not isinstance(lst, list):
+                raise LipiError(f"list_set: expected list")
+            lst[int(i)] = val
+            return lst
+
+        def lipi_list_new(*args): return list(args)
+        def lipi_sort(lst): return sorted(lst)
+        def lipi_sum(lst):  return sum(lst)
+        def lipi_join(lst, sep=''): return sep.join(self.lipi_str(x) for x in lst)
+
+        # ── System ───────────────────────────────────────────────────────
+        import os as _os, time as _time
+        def lipi_exit(code=0): raise SystemExit(int(code))
+        def lipi_time_ms(): return int(_time.time() * 1000)
+        def lipi_env_get(key): return _os.environ.get(key, '')
+        def lipi_chr(n): return chr(int(n))
+        def lipi_ord(c): return ord(c[0]) if c else 0
+
         builtins = {
             # Output
             'say': lipi_say, 'show': lipi_say, 'print': lipi_say,
             'println': lipi_say, 'puts': lipi_say, 'echo': lipi_say,
             'বলো': lipi_say, 'দেখাও': lipi_say,
             # Input
-            'input': lipi_input, 'read': lipi_input,
+            'input': lipi_input, 'read_line': lipi_input,
             # Type conversions
             'str': lambda x: self.lipi_str(x),
             'int': lambda x: int(float(x)) if isinstance(x, str) else int(x),
             'float': lambda x: float(x),
+            'bool': lambda x: 1 if x else 0,
+            'chr': lipi_chr, 'ord': lipi_ord,
             # Collections
             'len': lipi_len, 'length': lipi_len, 'দৈর্ঘ্য': lipi_len,
             'range': lipi_range,
-            'list': lambda *args: list(args),
-            'append': lambda lst, item: lst.append(item) or lst,
+            'list': lipi_list_new,
+            'push': lipi_push, 'append': lipi_push,
+            'pop': lipi_pop,
+            'get': lipi_list_get, 'list_get': lipi_list_get,
+            'set': lipi_list_set, 'list_set': lipi_list_set,
+            'sort': lipi_sort,
+            'sum': lipi_sum,
+            'join': lipi_join,
             # Math
             'abs': abs,
             'max': lambda *args: max(args) if len(args) > 1 else max(args[0]),
             'min': lambda *args: min(args) if len(args) > 1 else min(args[0]),
             'pow': pow,
+            'sqrt': lipi_sqrt,
+            'floor': lipi_floor, 'ceil': lipi_ceil,
+            'round': lipi_round_n,
+            'pi': _math.pi, 'e': _math.e,
+            'sin': _math.sin, 'cos': _math.cos, 'tan': _math.tan,
+            'log': _math.log, 'log2': _math.log2, 'log10': _math.log10,
+            # String
+            'trim': lipi_trim, 'strip': lipi_trim,
+            'upper': lipi_upper, 'lower': lipi_lower,
+            'split': lipi_split,
+            'starts_with': lipi_starts_with, 'ends_with': lipi_ends_with,
+            'contains': lipi_contains,
+            'replace': lipi_replace,
+            'char_at': lipi_char_at, 'index_of': lipi_index_of,
+            # File I/O
+            'file_read': lipi_file_read,
+            'file_write': lipi_file_write,
+            'file_append': lipi_file_append,
+            'file_exists': lipi_file_exists,
             # Type query
             'type': lambda x: self.lipi_type(x),
             'ধরন': lambda x: self.lipi_type(x),
+            # System
+            'exit': lipi_exit,
+            'time_ms': lipi_time_ms,
+            'env': lipi_env_get,
         }
         for name, fn in builtins.items():
             env.set(name, fn)
+
 
     def run(self, program: Program):
         """Execute top-level program."""
