@@ -1229,7 +1229,8 @@ fn gen_c ast
         push(decl_buf, "static LipiVal " + ml_cn + ";  /* global: " + ml + " */")
     push(decl_buf, "")
 
-    push(main_buf, "int main(void) {")
+    push(main_buf, "int main(int argc, char** argv) {")
+    push(main_buf, "    lv_init_args(argc, argv);")
     for stmt in ast
         if stmt != null
             k = n_kind(stmt)

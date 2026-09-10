@@ -2173,7 +2173,8 @@ static LipiVal u_gen_c(LipiVal* _args, int _nargs) {
         lv_push(u_decl_buf, lv_add(lv_add(lv_add(lv_add(lv_str("static LipiVal "), u_ml_cn), lv_str(";  /* global: ")), u_ml), lv_str(" */")));
     }}}
     lv_push(u_decl_buf, lv_str(""));
-    lv_push(u_main_buf, lv_str("int main(void) {"));
+    lv_push(u_main_buf, lv_str("int main(int argc, char** argv) {"));
+    lv_push(u_main_buf, lv_str("    lv_init_args(argc, argv);"));
     { LipiVal _e78_it=u_ast;
     if (_e78_it.type==LV_LIST) { for (int _e78_i=0; _e78_i<_e78_it.list->count; _e78_i++) {
         LipiVal u_stmt=_e78_it.list->items[_e78_i];
@@ -2206,7 +2207,8 @@ static LipiVal u_gen_c(LipiVal* _args, int _nargs) {
     return lv_null();
 }
 
-int main(void) {
+int main(int argc, char** argv) {
+    lv_init_args(argc, argv);
     u_TT_NUM = lv_num(1);
     u_TT_STR = lv_num(2);
     u_TT_IDENT = lv_num(3);

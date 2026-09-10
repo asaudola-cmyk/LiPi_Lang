@@ -474,16 +474,28 @@ static inline LipiVal lv_file_exists(LipiVal path) {
 }
 
 /* ── System ──────────────────────────────────────────────────── */
+static int g_lipi_argc = 0;
+static char** g_lipi_argv = NULL;
+static inline void lv_init_args(int argc, char** argv) {
+    g_lipi_argc = argc;
+    g_lipi_argv = argv;
+}
 static inline LipiVal lv_argv(void) {
-    /* WHY: argv() in native binaries reads _LIPI_ARGV env var (pipe-separated)
-       matching the Python runtime behavior for portability. */
+    /* WHY: Reads standard CLI argv from main(), with _LIPI_ARGV override for piped execution */
     LipiVal result = lv_list_make(0);
     const char* env = getenv("_LIPI_ARGV");
-    if (env) {
+    if (env && strlen(env) > 0) {
         char* buf = strdup(env);
         char* tok = strtok(buf, "|");
         while (tok) { result = lv_push(result, lv_str(tok)); tok = strtok(NULL, "|"); }
         free(buf);
+        return result;
+    }
+    if (g_lipi_argv && g_lipi_argc > 0) {
+        for (int i = 0; i < g_lipi_argc; i++) {
+            result = lv_push(result, lv_str(g_lipi_argv[i]));
+        }
+        return result;
     }
     return result;
 }

@@ -1117,6 +1117,31 @@ static int g_native_failed = 0;
 static void compile_native_expr(ByteBuf* bb, CScope* sc);
 static void compile_native_stmt(ByteBuf* bb, CScope* sc);
 
+static bool is_arg_start(CToken* t) {
+    if (!t) return false;
+    if (t->type == TOK_INT || t->type == TOK_STR) return true;
+    if (t->type == TOK_IDENT) {
+        if (strcmp(t->text, "if") == 0 || strcmp(t->text, "while") == 0 ||
+            strcmp(t->text, "for") == 0 || strcmp(t->text, "return") == 0 ||
+            strcmp(t->text, "say") == 0 || strcmp(t->text, "fn") == 0 ||
+            strcmp(t->text, "else") == 0 || strcmp(t->text, "elif") == 0 ||
+            strcmp(t->text, "and") == 0 || strcmp(t->text, "or") == 0 ||
+            strcmp(t->text, "not") == 0 || strcmp(t->text, "in") == 0 ||
+            strcmp(t->text, "to") == 0 || strcmp(t->text, "step") == 0 ||
+            strcmp(t->text, "যদি") == 0 || strcmp(t->text, "যতক্ষণ") == 0 ||
+            strcmp(t->text, "প্রতিটি") == 0 || strcmp(t->text, "ফেরত") == 0 ||
+            strcmp(t->text, "বলো") == 0 || strcmp(t->text, "কাজ") == 0 ||
+            strcmp(t->text, "নাহলে") == 0 || strcmp(t->text, "নাহলে_যদি") == 0 ||
+            strcmp(t->text, "এবং") == 0 || strcmp(t->text, "অথবা") == 0 ||
+            strcmp(t->text, "না") == 0 || strcmp(t->text, "ভেতরে") == 0) {
+            return false;
+        }
+        return true;
+    }
+    if (t->type == TOK_OP && strcmp(t->text, "(") == 0) return true;
+    return false;
+}
+
 static void compile_native_primary(ByteBuf* bb, CScope* sc) {
     skip_nl();
     CToken* t = cur_tok();
@@ -1230,16 +1255,40 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
             return;
         }
 
+        /* Space-separated function call: fn_name arg1 arg2 ... */
+        if (is_arg_start(cur_tok())) {
+            int arg_count = 0;
+            int arg_regs[6] = { 7, 6, 2, 1, 8, 9 }; /* rdi, rsi, rdx, rcx, r8, r9 */
+            while (is_arg_start(cur_tok()) && cur_tok()->type != TOK_NL && cur_tok()->type != TOK_EOF && !g_native_failed) {
+                compile_native_primary(bb, sc);
+                x86_push_reg(bb, 0);
+                arg_count++;
+            }
+            for (int i = arg_count - 1; i >= 0; i--) {
+                if (i < 6) {
+                    x86_pop_reg(bb, arg_regs[i]);
+                } else {
+                    x86_pop_reg(bb, 0);
+                }
+            }
+            char fn_lbl[128];
+            snprintf(fn_lbl, sizeof(fn_lbl), "lipi_fn_%s", name);
+            x86_call(bb, fn_lbl);
+            return;
+        }
+
         /* If variable not found, treat as 0 or fail */
         x86_mov_reg_imm64(bb, 0, 0);
         return;
     }
 
     g_native_failed = 1;
+    adv_tok(); /* WHY: Always advance on failure to prevent infinite parse loop */
 }
 
 static void compile_native_unary(ByteBuf* bb, CScope* sc) {
     skip_nl();
+    if (g_native_failed) return;
     if (match_tok(TOK_OP, "-")) {
         adv_tok();
         compile_native_unary(bb, sc);
@@ -1250,8 +1299,9 @@ static void compile_native_unary(ByteBuf* bb, CScope* sc) {
 }
 
 static void compile_native_mul(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
     compile_native_unary(bb, sc);
-    while (cur_tok()->type == TOK_OP && (strcmp(cur_tok()->text, "*") == 0 ||
+    while (!g_native_failed && cur_tok()->type == TOK_OP && (strcmp(cur_tok()->text, "*") == 0 ||
            strcmp(cur_tok()->text, "/") == 0 || strcmp(cur_tok()->text, "%") == 0)) {
         char op[4];
         strcpy(op, cur_tok()->text);
@@ -1267,8 +1317,9 @@ static void compile_native_mul(ByteBuf* bb, CScope* sc) {
 }
 
 static void compile_native_add(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
     compile_native_mul(bb, sc);
-    while (cur_tok()->type == TOK_OP && (strcmp(cur_tok()->text, "+") == 0 || strcmp(cur_tok()->text, "-") == 0)) {
+    while (!g_native_failed && cur_tok()->type == TOK_OP && (strcmp(cur_tok()->text, "+") == 0 || strcmp(cur_tok()->text, "-") == 0)) {
         char op[4];
         strcpy(op, cur_tok()->text);
         adv_tok();
@@ -1287,8 +1338,9 @@ static void compile_native_add(ByteBuf* bb, CScope* sc) {
 }
 
 static void compile_native_cmp(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
     compile_native_add(bb, sc);
-    while (cur_tok()->type == TOK_OP &&
+    while (!g_native_failed && cur_tok()->type == TOK_OP &&
            (strcmp(cur_tok()->text, "==") == 0 || strcmp(cur_tok()->text, "!=") == 0 ||
             strcmp(cur_tok()->text, "<") == 0  || strcmp(cur_tok()->text, "<=") == 0 ||
             strcmp(cur_tok()->text, ">") == 0  || strcmp(cur_tok()->text, ">=") == 0)) {
@@ -1303,15 +1355,81 @@ static void compile_native_cmp(ByteBuf* bb, CScope* sc) {
     }
 }
 
-static void compile_native_expr(ByteBuf* bb, CScope* sc) {
+/* Logical NOT: not x, না x, !x */
+static void compile_native_not(ByteBuf* bb, CScope* sc) {
+    skip_nl();
+    if (g_native_failed) return;
+    if ((cur_tok()->type == TOK_IDENT && (strcmp(cur_tok()->text, "not") == 0 || strcmp(cur_tok()->text, "না") == 0)) ||
+        (cur_tok()->type == TOK_OP && strcmp(cur_tok()->text, "!") == 0)) {
+        adv_tok();
+        compile_native_not(bb, sc);
+        /* Logical NOT: test rax, rax; setz al; movzx rax, al */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+        bb_put8(bb, 0x0F); bb_put8(bb, 0x94); bb_put8(bb, 0xC0); /* setz al */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x0F); bb_put8(bb, 0xB6); bb_put8(bb, 0xC0); /* movzx rax, al */
+        return;
+    }
     compile_native_cmp(bb, sc);
 }
 
+/* Logical AND: lhs and rhs, lhs এবং rhs, lhs && rhs (Short-circuiting) */
+static void compile_native_and(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
+    compile_native_not(bb, sc);
+    while (!g_native_failed &&
+           ((cur_tok()->type == TOK_IDENT && (strcmp(cur_tok()->text, "and") == 0 || strcmp(cur_tok()->text, "এবং") == 0)) ||
+            (cur_tok()->type == TOK_OP && strcmp(cur_tok()->text, "&&") == 0))) {
+        adv_tok();
+        char lbl_sc[64];
+        make_anon_label(lbl_sc, "and_sc");
+        bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+        x86_jz(bb, lbl_sc);
+        compile_native_not(bb, sc);
+        /* Normalize rhs in rax to 0 or 1 */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+        bb_put8(bb, 0x0F); bb_put8(bb, 0x95); bb_put8(bb, 0xC0); /* setnz al */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x0F); bb_put8(bb, 0xB6); bb_put8(bb, 0xC0); /* movzx rax, al */
+        label_define(lbl_sc, bb->size);
+    }
+}
+
+/* Logical OR: lhs or rhs, lhs অথবা rhs, lhs || rhs (Short-circuiting) */
+static void compile_native_or(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
+    compile_native_and(bb, sc);
+    while (!g_native_failed &&
+           ((cur_tok()->type == TOK_IDENT && (strcmp(cur_tok()->text, "or") == 0 || strcmp(cur_tok()->text, "অথবা") == 0)) ||
+            (cur_tok()->type == TOK_OP && strcmp(cur_tok()->text, "||") == 0))) {
+        adv_tok();
+        char lbl_sc[64], lbl_done[64];
+        make_anon_label(lbl_sc, "or_sc");
+        make_anon_label(lbl_done, "or_done");
+        bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+        x86_jnz(bb, lbl_sc);
+        compile_native_and(bb, sc);
+        /* Normalize rhs in rax to 0 or 1 */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+        bb_put8(bb, 0x0F); bb_put8(bb, 0x95); bb_put8(bb, 0xC0); /* setnz al */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x0F); bb_put8(bb, 0xB6); bb_put8(bb, 0xC0); /* movzx rax, al */
+        x86_jmp(bb, lbl_done);
+        label_define(lbl_sc, bb->size);
+        x86_mov_reg_imm64(bb, 0, 1); /* rax = 1 */
+        label_define(lbl_done, bb->size);
+    }
+}
+
+static void compile_native_expr(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
+    compile_native_or(bb, sc);
+}
+
 static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
+    if (g_native_failed) return;
     skip_nl();
     CToken* t = cur_tok();
 
     if (t->type == TOK_EOF || t->type == TOK_DEDENT) return;
+    int start_tok_idx = g_tok_idx;
 
     /* say / বলো / show / দেখাও / print / println */
     if (t->type == TOK_IDENT &&
@@ -1326,21 +1444,23 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
         return;
     }
 
-    /* if / যদি */
+    /* if / যদি (With arbitrary elif and else support) */
     if (t->type == TOK_IDENT && (strcmp(t->text, "if") == 0 || strcmp(t->text, "যদি") == 0)) {
         adv_tok();
         compile_native_expr(bb, sc);
-        char lbl_else[64], lbl_end[64];
-        make_anon_label(lbl_else, "if_else");
+        char lbl_end[64];
         make_anon_label(lbl_end, "if_end");
 
+        char lbl_next[64];
+        make_anon_label(lbl_next, "if_next");
+
         bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
-        x86_jz(bb, lbl_else);
+        x86_jz(bb, lbl_next);
 
         skip_nl();
         if (cur_tok()->type == TOK_INDENT) {
             adv_tok();
-            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF) {
+            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
                 compile_native_stmt(bb, sc);
                 skip_nl();
             }
@@ -1350,15 +1470,45 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
         }
 
         x86_jmp(bb, lbl_end);
-        label_define(lbl_else, bb->size);
+        label_define(lbl_next, bb->size);
 
+        /* Handle zero or more elif / নাহলে_যদি branches */
         skip_nl();
-        if (cur_tok()->type == TOK_IDENT && (strcmp(cur_tok()->text, "else") == 0 || strcmp(cur_tok()->text, "নাহলে") == 0)) {
+        while (!g_native_failed && cur_tok()->type == TOK_IDENT &&
+               (strcmp(cur_tok()->text, "elif") == 0 || strcmp(cur_tok()->text, "নাহলে_যদি") == 0)) {
+            adv_tok(); /* consume elif */
+            compile_native_expr(bb, sc);
+            make_anon_label(lbl_next, "elif_next");
+
+            bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+            x86_jz(bb, lbl_next);
+
+            skip_nl();
+            if (cur_tok()->type == TOK_INDENT) {
+                adv_tok();
+                while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
+                    compile_native_stmt(bb, sc);
+                    skip_nl();
+                }
+                if (cur_tok()->type == TOK_DEDENT) adv_tok();
+            } else {
+                compile_native_stmt(bb, sc);
+            }
+
+            x86_jmp(bb, lbl_end);
+            label_define(lbl_next, bb->size);
+            skip_nl();
+        }
+
+        /* Handle optional else / নাহলে branch */
+        skip_nl();
+        if (!g_native_failed && cur_tok()->type == TOK_IDENT &&
+            (strcmp(cur_tok()->text, "else") == 0 || strcmp(cur_tok()->text, "নাহলে") == 0)) {
             adv_tok();
             skip_nl();
             if (cur_tok()->type == TOK_INDENT) {
                 adv_tok();
-                while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF) {
+                while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
                     compile_native_stmt(bb, sc);
                     skip_nl();
                 }
@@ -1386,7 +1536,7 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
         skip_nl();
         if (cur_tok()->type == TOK_INDENT) {
             adv_tok();
-            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF) {
+            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
                 compile_native_stmt(bb, sc);
                 skip_nl();
             }
@@ -1410,6 +1560,140 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
         }
         x86_leave(bb);
         x86_ret(bb);
+        return;
+    }
+
+    /* fn / কাজ (Function Definition) */
+    if (t->type == TOK_IDENT && (strcmp(t->text, "fn") == 0 || strcmp(t->text, "কাজ") == 0)) {
+        adv_tok(); /* consume fn/কাজ */
+        char fn_name[64];
+        strncpy(fn_name, cur_tok()->text, 63); fn_name[63] = '\0';
+        adv_tok(); /* consume function name */
+
+        char params[6][64];
+        int param_count = 0;
+        if (match_tok(TOK_OP, "(")) {
+            adv_tok();
+            while (!match_tok(TOK_OP, ")") && cur_tok()->type != TOK_EOF) {
+                if (cur_tok()->type == TOK_IDENT && param_count < 6) {
+                    strncpy(params[param_count], cur_tok()->text, 63);
+                    params[param_count][63] = '\0';
+                    param_count++;
+                    adv_tok();
+                }
+                if (cur_tok()->type == TOK_COMMA) adv_tok();
+            }
+            if (match_tok(TOK_OP, ")")) adv_tok();
+        } else {
+            while (cur_tok()->type == TOK_IDENT && param_count < 6) {
+                strncpy(params[param_count], cur_tok()->text, 63);
+                params[param_count][63] = '\0';
+                param_count++;
+                adv_tok();
+            }
+        }
+
+        char lbl_skip[64];
+        make_anon_label(lbl_skip, "skip_fn");
+        x86_jmp(bb, lbl_skip);
+
+        char fn_lbl[128];
+        snprintf(fn_lbl, sizeof(fn_lbl), "lipi_fn_%s", fn_name);
+        label_define(fn_lbl, bb->size);
+
+        x86_push_rbp(bb);
+        x86_mov_rbp_rsp(bb);
+        x86_sub_rsp(bb, 2048);
+
+        CScope fn_sc;
+        scope_init(&fn_sc);
+
+        int arg_regs[6] = {7, 6, 2, 1, 8, 9};
+        for (int i = 0; i < param_count; i++) {
+            int off = scope_add(&fn_sc, params[i]);
+            x86_mov_reg_reg(bb, 0, arg_regs[i]);
+            x86_mov_stack_rax(bb, off);
+        }
+
+        skip_nl();
+        if (cur_tok()->type == TOK_INDENT) {
+            adv_tok();
+            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
+                compile_native_stmt(bb, &fn_sc);
+                skip_nl();
+            }
+            if (cur_tok()->type == TOK_DEDENT) adv_tok();
+        } else {
+            compile_native_stmt(bb, &fn_sc);
+        }
+
+        x86_mov_reg_imm64(bb, 0, 0);
+        x86_leave(bb);
+        x86_ret(bb);
+
+        label_define(lbl_skip, bb->size);
+        return;
+    }
+
+    /* for / প্রতিটি (Range loop: for var in start..end) */
+    if (t->type == TOK_IDENT && (strcmp(t->text, "for") == 0 || strcmp(t->text, "প্রতিটি") == 0)) {
+        adv_tok();
+        char var_name[64];
+        strncpy(var_name, cur_tok()->text, 63); var_name[63] = '\0';
+        adv_tok();
+
+        if (cur_tok()->type == TOK_IDENT && (strcmp(cur_tok()->text, "in") == 0 || strcmp(cur_tok()->text, "ভেতরে") == 0)) {
+            adv_tok();
+        }
+
+        compile_native_expr(bb, sc);
+        int var_off = scope_add(sc, var_name);
+        x86_mov_stack_rax(bb, var_off);
+
+        if (cur_tok()->type == TOK_OP && strcmp(cur_tok()->text, "..") == 0) {
+            adv_tok();
+        }
+
+        compile_native_expr(bb, sc);
+        char end_var[70];
+        snprintf(end_var, sizeof(end_var), "__end_%s", var_name);
+        int end_off = scope_add(sc, end_var);
+        x86_mov_stack_rax(bb, end_off);
+
+        char lbl_start[64], lbl_step[64], lbl_end[64];
+        make_anon_label(lbl_start, "for_start");
+        make_anon_label(lbl_step, "for_step");
+        make_anon_label(lbl_end, "for_end");
+
+        label_define(lbl_start, bb->size);
+
+        x86_mov_rax_stack(bb, var_off);
+        x86_mov_reg_reg(bb, 3, 0);
+        x86_mov_rax_stack(bb, end_off);
+        bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xC3); /* cmp rbx, rax */
+        size_t p_jg = bb->size;
+        bb_put8(bb, 0x0F); bb_put8(bb, 0x8F); bb_put32(bb, 0); /* jg */
+        reloc_add(p_jg + 2, lbl_end, 6);
+
+        skip_nl();
+        if (cur_tok()->type == TOK_INDENT) {
+            adv_tok();
+            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
+                compile_native_stmt(bb, sc);
+                skip_nl();
+            }
+            if (cur_tok()->type == TOK_DEDENT) adv_tok();
+        } else {
+            compile_native_stmt(bb, sc);
+        }
+
+        label_define(lbl_step, bb->size);
+        x86_mov_rax_stack(bb, var_off);
+        bb_put8(bb, 0x48); bb_put8(bb, 0xFF); bb_put8(bb, 0xC0); /* inc rax */
+        x86_mov_stack_rax(bb, var_off);
+        x86_jmp(bb, lbl_start);
+
+        label_define(lbl_end, bb->size);
         return;
     }
 
@@ -1446,6 +1730,13 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
 
     /* Standalone expression */
     compile_native_expr(bb, sc);
+
+    /* Progress guard: if token position did not advance, mark failure to avoid infinite loop */
+    if (g_tok_idx == start_tok_idx) {
+        g_native_failed = 1;
+        adv_tok();
+        return;
+    }
 }
 
 /* Compile entire Lipi source file natively to ELF */
@@ -1480,7 +1771,13 @@ static int compile_lipi_native(const char* input_path, const char* output_path) 
     scope_init(&main_scope);
 
     skip_nl();
+    int last_tok_idx = -1;
     while (cur_tok()->type != TOK_EOF && !g_native_failed) {
+        if (g_tok_idx == last_tok_idx) {
+            g_native_failed = 1;
+            break;
+        }
+        last_tok_idx = g_tok_idx;
         compile_native_stmt(bb, &main_scope);
         skip_nl();
     }
@@ -1490,7 +1787,7 @@ static int compile_lipi_native(const char* input_path, const char* output_path) 
     x86_leave(bb);
     x86_ret(bb);
 
-    if (g_native_failed) {
+    if (g_native_failed || cur_tok()->type != TOK_EOF) {
         bb_free(bb);
         free(src);
         return -1;
@@ -1536,19 +1833,9 @@ int main(int argc, char** argv) {
     const char* input_path = argv[1];
     const char* output_path = argv[2];
 
-    /* Step 1: Try 100% Native In-Memory Compilation (Zero Subprocess / Zero Python) */
+    /* Try 100% Native In-Memory Compilation (Zero Subprocess / Zero Python) */
     if (compile_lipi_native(input_path, output_path) == 0) {
         return 0;
     }
-
-    /* Step 2: Seamless fallback for complex multi-file AST to elf_emitter */
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "python3 -m src.compiler.elf_emitter \"%s\" \"%s\"", input_path, output_path);
-    int res = system(cmd);
-    if (res == 0) {
-        return 0;
-    }
-
-    fprintf(stderr, "❌ Compilation failed for '%s'\n", input_path);
     return 1;
 }
