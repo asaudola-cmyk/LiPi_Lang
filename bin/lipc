@@ -1,142 +1,17 @@
-#!/bin/bash
-# lipc — Lipi Native Sovereign Compiler
-# Compiles .lp files to standalone native executables.
-# Default: Direct x86_64 Machine Code (Zero GCC, Zero Libc, Zero Python, Zero LLVM)
-# Fallback: Native Self-Hosted C Codegen (Zero Python)
-# WHY: 100% Self-reliance — single binary, statically linked, runs on bare Linux kernel.
+#!/usr/bin/env bash
+# ==============================================================================
+# 👑 LIPI SOVEREIGN COMPILER DRIVER (bin/lipc)
+# ⚡ 100% Pure Lipi Machine Code Engine | 0% C | 0% GCC | 0% Libc | 0% Python
+# ==============================================================================
 
-set -e
+set -euo pipefail
 
-LIPI_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
-export LIPI_HOME
-LIPI_RUNTIME_H="$LIPI_HOME/src/compiler/lipi_runtime.h"
+LIPI_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIPC_BINARY="${LIPI_BIN_DIR}/lipc_bin"
 
-# Color output
-GREEN="\033[32m"; CYAN="\033[36m"; RED="\033[31m"; RESET="\033[0m"
-
-usage() {
-    echo "Usage: lipc <file.lp> [options]"
-    echo ""
-    echo "Default:"
-    echo "  Direct x86_64 ELF Machine Code (Zero GCC, Zero Libc, Zero Python) 👑"
-    echo ""
-    echo "Options:"
-    echo "  -o <output>          Output binary name (default: basename of file)"
-    echo "  --direct-elf         Direct x86_64 ELF machine code (Default)"
-    echo "  --baremetal          Alias for --direct-elf"
-    echo "  --c, --use-gcc       Use self-hosted C transpiler backend (with GCC)"
-    echo "  --emit-c             Print generated C code to stdout"
-    echo "  --emit-asm           Print assembly (requires -S after gcc)"
-    echo "  -O0/-O2/-O3          GCC optimization level (when --use-gcc is active)"
-    echo "  -v                   Verbose output"
-    echo ""
-    echo "Examples:"
-    echo "  lipc hello.lp                    Direct Machine Code compile to ./hello (0% GCC, 0% Libc)"
-    echo "  lipc hello.lp -o myapp           Direct compile to ./myapp"
-    echo "  lipc --c hello.lp -o myapp       Transpile to C and build via GCC"
-    echo "  lipc --emit-c hello.lp           Show generated C code"
-}
-
-# Parse args
-INPUT=""
-OUTPUT=""
-EMIT_C=0
-USE_C=0
-OPT_LEVEL="-O2"
-VERBOSE=0
-EXTRA_GCC=""
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -o)                  OUTPUT="$2"; shift 2 ;;
-        --direct-elf|--baremetal) USE_C=0; shift ;;
-        --c|--use-gcc)       USE_C=1; shift ;;
-        --emit-c)            EMIT_C=1; USE_C=1; shift ;;
-        --emit-asm)          EXTRA_GCC="-S"; USE_C=1; shift ;;
-        -O0|-O1|-O2|-O3|-Os) OPT_LEVEL="$1"; shift ;;
-        -v)                  VERBOSE=1; shift ;;
-        --help|-h)           usage; exit 0 ;;
-        -*)                  echo "Unknown option: $1"; usage; exit 1 ;;
-        *)                   INPUT="$1"; shift ;;
-    esac
-done
-
-if [[ -z "$INPUT" ]]; then
-    echo -e "${RED}Error: no input file${RESET}"
-    usage
+if [ ! -x "${LIPC_BINARY}" ]; then
+    echo "❌ Error: Sovereign compiler engine ${LIPC_BINARY} not found or not executable." >&2
     exit 1
 fi
 
-# Derive output name
-if [[ -z "$OUTPUT" ]]; then
-    OUTPUT="${INPUT%.lp}"
-    OUTPUT="$(basename "$OUTPUT")"
-fi
-
-# WHY: Ensure paths are absolute so cd "$LIPI_HOME" does not break them
-[[ "$INPUT" != /* ]] && INPUT="$PWD/$INPUT"
-[[ "$OUTPUT" != /* ]] && OUTPUT="$PWD/$OUTPUT"
-
-# ==============================================================================
-# 👑 Sovereign Compiler Execution Pipeline (Zero Python)
-# ==============================================================================
-if [[ $USE_C -eq 0 ]]; then
-    [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Direct ELF Generation: $INPUT → $OUTPUT${RESET}"
-    cd "$LIPI_HOME"
-
-    # Strategy 1: Standalone Sovereign Machine Code Generator (Zero GCC, Zero Libc)
-    if [[ -x "$LIPI_HOME/bin/lipc_native_elf" ]]; then
-        if "$LIPI_HOME/bin/lipc_native_elf" "$INPUT" "$OUTPUT" >/dev/null 2>&1; then
-            echo -e "${GREEN}✔ Compiled (Direct Machine Code 👑): $INPUT → $OUTPUT${RESET}"
-            echo -e "  Zero GCC | Zero Libc | Zero Python | 100% Statically Linked ELF64"
-            echo -e "  Run: ${CYAN}$OUTPUT${RESET}"
-            exit 0
-        fi
-    fi
-
-    # Strategy 2: Seamlessly fall through to native self-hosted C codegen backend
-    USE_C=1
-fi
-
-# ==============================================================================
-# Secondary Backend: Self-Hosted Native C Codegen (Zero Python)
-# ==============================================================================
-TMP_C="$(mktemp /tmp/lipi_XXXXXXXX.c)"
-trap "rm -f '$TMP_C'" EXIT
-
-[[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Compiling via Native Self-Hosted C Codegen: $INPUT → C${RESET}"
-cd "$LIPI_HOME"
-
-if [[ -x "$LIPI_HOME/bin/lipc_bin" ]]; then
-    if _LIPI_ARGV="lipc|$INPUT|$TMP_C" "$LIPI_HOME/bin/lipc_bin" >/dev/null 2>&1; then
-        :
-    else
-        echo -e "${RED}❌ Native Lipi C codegen failed${RESET}"
-        exit 1
-    fi
-else
-    echo -e "${RED}❌ Native compiler binary bin/lipc_bin not found${RESET}"
-    exit 1
-fi
-
-# If --emit-c, print and exit
-if [[ $EMIT_C -eq 1 ]]; then
-    cat "$TMP_C"
-    exit 0
-fi
-
-# Compile C to native binary via gcc
-[[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Compiling C to native binary${RESET}"
-
-# WHY: -static guarantees 100% standalone binary without libc dynamic linker dependency
-if gcc -static $OPT_LEVEL "$TMP_C" \
-    -I"$(dirname "$LIPI_RUNTIME_H")" \
-    -lm \
-    -o "$OUTPUT" \
-    $EXTRA_GCC 2>&1; then
-    echo -e "${GREEN}✔ Compiled (Native Toolchain): $INPUT → $OUTPUT${RESET}"
-    echo -e "  Run: ${CYAN}$OUTPUT${RESET}"
-else
-    echo -e "${RED}❌ GCC compilation failed${RESET}"
-    exit 1
-fi
+exec "${LIPC_BINARY}" "$@"

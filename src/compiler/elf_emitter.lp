@@ -43,7 +43,27 @@ fn ctx_new
     push(c, list())     // 9: sc_offs
     push(c, list(0))    // 10: sc_stack
     push(c, list(0))    // 11: anon_id
+    push(c, list())     // 12: glob_names
+    push(c, list())     // 13: glob_vals
+    push(c, list())     // 14: loop_start_stack
+    push(c, list())     // 15: loop_end_stack
+    push(c, list())     // 16: struct_names
+    push(c, list())     // 17: struct_fields
+    push(c, list())     // 18: struct_var_names
+    push(c, list())     // 19: struct_var_types
     return c
+
+fn loop_push ctx start_lbl end_lbl
+    push(get(ctx, 14), start_lbl)
+    push(get(ctx, 15), end_lbl)
+
+fn loop_pop ctx
+    sstk = get(ctx, 14)
+    estk = get(ctx, 15)
+    if len(sstk) > 0
+        pop(sstk)
+    if len(estk) > 0
+        pop(estk)
 
 fn ctx_bb c = get(c, 0)
 fn ctx_len c = len(get(c, 0))
@@ -74,6 +94,13 @@ fn bb_put32 ctx val
 
 fn bb_put64 ctx val
     v = floor(val)
+    if v < 0
+        // WHY: 64-bit two's complement encoding for negative numbers
+        lo = v + 4294967296
+        hi = 4294967295
+        bb_put32(ctx, lo)
+        bb_put32(ctx, hi)
+        return 0
     lo = v % 4294967296
     hi = floor(v / 4294967296) % 4294967296
     bb_put32(ctx, lo)
@@ -183,6 +210,68 @@ fn scope_add ctx name
     push(get(ctx, 8), name)
     push(get(ctx, 9), new_stack)
     return new_stack
+
+// ── Struct Registry & Type Tracking ──────────────────────────────────────────
+// WHY: Allows native stack/heap struct allocation and field access with Zero Libc
+fn struct_add ctx name fields
+    push(get(ctx, 16), name)
+    push(get(ctx, 17), fields)
+
+fn struct_find ctx name
+    snames = get(ctx, 16)
+    i = 0
+    while i < len(snames)
+        if get(snames, i) == name
+            return i
+        i = i + 1
+    return -1
+
+fn struct_get_field_offset ctx sname fname
+    snames = get(ctx, 16)
+    sfields = get(ctx, 17)
+    if sname != ""
+        sidx = struct_find(ctx, sname)
+        if sidx >= 0
+            fnames = get(sfields, sidx)
+            f = 0
+            while f < len(fnames)
+                if get(fnames, f) == fname
+                    return f * 8
+                f = f + 1
+    // Fallback: search across all defined structs for field name
+    s = 0
+    while s < len(snames)
+        fnames = get(sfields, s)
+        f = 0
+        while f < len(fnames)
+            if get(fnames, f) == fname
+                return f * 8
+            f = f + 1
+        s = s + 1
+    return 0
+
+fn struct_set_var_type ctx vname sname
+    vnames = get(ctx, 18)
+    vtypes = get(ctx, 19)
+    i = 0
+    while i < len(vnames)
+        if get(vnames, i) == vname
+            list_set(vtypes, i, sname)
+            return 0
+        i = i + 1
+    push(vnames, vname)
+    push(vtypes, sname)
+    return 0
+
+fn struct_get_var_type ctx vname
+    vnames = get(ctx, 18)
+    vtypes = get(ctx, 19)
+    i = 0
+    while i < len(vnames)
+        if get(vnames, i) == vname
+            return get(vtypes, i)
+        i = i + 1
+    return ""
 
 // ── x86_64 Machine Code Instructions ─────────────────────────────────────────
 fn x86_push_rbp ctx
@@ -329,6 +418,25 @@ fn x86_cmp_rax_rbx ctx
     bb_put8(ctx, 57)  // 0x39
     bb_put8(ctx, 216) // 0xD8 (cmp rbx, rax)
 
+
+fn x86_cmp_reg_reg ctx reg1 reg2
+    rex = 72
+    if reg2 >= 8
+        rex = rex + 4
+    if reg1 >= 8
+        rex = rex + 1
+    modrm = 192 + ((reg2 % 8) * 8) + (reg1 % 8)
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 57) // 0x39 cmp r/m, reg
+    bb_put8(ctx, modrm)
+
+fn x86_add_rsp ctx bytes_n
+    if bytes_n > 0
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 129)
+        bb_put8(ctx, 196) // add rsp, imm32
+        bb_put32(ctx, bytes_n)
+
 fn x86_jmp ctx target_name
     pos = ctx_len(ctx)
     bb_put8(ctx, 233) // 0xE9 (jmp rel32)
@@ -396,6 +504,12 @@ fn emit_runtime_stubs ctx
     bb_put32(ctx, 0)           // 0x00000000 flags
     bb_put32(ctx, 3830599678)  // 0xE4524FFE checksum = -(magic + flags)
 
+    // Capture Linux initial stack frame (argc/argv) before 16-byte alignment
+    x86_lea_reg_rip(ctx, 0, "_lipi_initial_rsp")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 32) // mov [rax], rsp
+
     // Align stack to 16 bytes: and rsp, -16
     bb_put8(ctx, 72)  // 0x48
     bb_put8(ctx, 131) // 0x83
@@ -413,7 +527,7 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 72)  // 0x48
     bb_put8(ctx, 49)  // 0x31
     bb_put8(ctx, 255) // 0xFF (xor rdi, rdi)
-    x86_mov_reg_imm64(ctx, 6, 16777216) // rsi = 16MB
+    x86_mov_reg_imm64(ctx, 6, 268435456) // rsi = 256MB
     x86_mov_reg_imm64(ctx, 2, 3)        // rdx = PROT_READ|PROT_WRITE
     x86_mov_reg_imm64(ctx, 10, 34)      // r10 = MAP_PRIVATE|MAP_ANONYMOUS
     x86_mov_reg_imm64(ctx, 8, -1)       // r8 = -1
@@ -492,15 +606,15 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 73)
     bb_put8(ctx, 137)
     bb_put8(ctx, 245) // mov r13, rsi
-    bb_put8(ctx, 77)
+    bb_put8(ctx, 69)
     bb_put8(ctx, 139)
     bb_put8(ctx, 116)
     bb_put8(ctx, 36)
-    bb_put8(ctx, 248) // mov r14, [r12 - 8]
-    bb_put8(ctx, 77)
+    bb_put8(ctx, 248) // mov r14d, [r12 - 8]
+    bb_put8(ctx, 69)
     bb_put8(ctx, 139)
     bb_put8(ctx, 125)
-    bb_put8(ctx, 248) // mov r15, [r13 - 8]
+    bb_put8(ctx, 248) // mov r15d, [r13 - 8]
     x86_mov_reg_reg(ctx, 7, 14) // mov rdi, r14
     bb_put8(ctx, 76)
     bb_put8(ctx, 1)
@@ -526,6 +640,10 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 77)
     bb_put8(ctx, 1)
     bb_put8(ctx, 254) // add r14, r15
+    x86_mov_reg_imm64(ctx, 2, 6004514569303621632) // mov rdx, 0x5354523000000000 ('STR0')
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 214) // or r14, rdx
     bb_put8(ctx, 76)
     bb_put8(ctx, 137)
     bb_put8(ctx, 112)
@@ -639,6 +757,11 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 76)
     bb_put8(ctx, 41)
     bb_put8(ctx, 194) // sub rdx, r8
+    // WHY: Tag integer-to-string heap buffer with upper 32-bit STR0 (0x53545230)
+    x86_mov_reg_imm64(ctx, 0, 6004514569303621632) // mov rax, 0x5354523000000000
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 194) // or rdx, rax
     bb_put8(ctx, 73)
     bb_put8(ctx, 137)
     bb_put8(ctx, 80)
@@ -655,14 +778,26 @@ fn emit_runtime_stubs ctx
 
     // 6. _lipi_print_str: rdi = str ptr
     label_define(ctx, "_lipi_print_str")
-    bb_put8(ctx, 72)
+    // WHY: Load lower 32-bit length from [rdi - 8] into edx, zero-extending into rdx
     bb_put8(ctx, 139)
     bb_put8(ctx, 87)
-    bb_put8(ctx, 248) // mov rdx, [rdi - 8]
+    bb_put8(ctx, 248) // mov edx, [rdi - 8]
     x86_mov_reg_reg(ctx, 6, 7) // mov rsi, rdi
     x86_mov_reg_imm64(ctx, 7, 1) // rdi = 1 (stdout)
     x86_mov_reg_imm64(ctx, 0, 1) // rax = 1 (sys_write)
     x86_syscall(ctx)
+    x86_ret(ctx)
+
+    // _lipi_print_space: WHY: Required for multi-argument say statements
+    label_define(ctx, "_lipi_print_space")
+    bb_put8(ctx, 106)
+    bb_put8(ctx, 32) // push 32 (' ')
+    x86_mov_reg_reg(ctx, 6, 4) // mov rsi, rsp
+    x86_mov_reg_imm64(ctx, 7, 1)
+    x86_mov_reg_imm64(ctx, 2, 1)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_syscall(ctx)
+    x86_pop_reg(ctx, 0)
     x86_ret(ctx)
 
     // 7. _lipi_print_nl
@@ -767,34 +902,43 @@ fn emit_runtime_stubs ctx
     x86_leave(ctx)
     x86_ret(ctx)
 
-    // 9. _lipi_is_str: rdi = val -> rax = 1 (true) or 0 (false)
+    // 9. _lipi_is_str: in: rdi = val. out: rax = 1 (true) or 0 (false)
     label_define(ctx, "_lipi_is_str")
-    lbl_is_heap  = make_anon_label(ctx, "is_heap")
-    lbl_is_true  = make_anon_label(ctx, "is_true")
-    lbl_is_false = make_anon_label(ctx, "is_false")
+    // WHY: rbx is a callee-saved register under AMD64 ABI; must preserve
+    x86_push_reg(ctx, 3)
+    lbl_iss_chk   = make_anon_label(ctx, "iss_chk")
+    lbl_iss_true  = make_anon_label(ctx, "iss_true")
+    lbl_iss_false = make_anon_label(ctx, "iss_false")
+    lbl_chk_heap  = make_anon_label(ctx, "iss_chkheap")
+
     bb_put8(ctx, 72)
     bb_put8(ctx, 133)
     bb_put8(ctx, 255) // test rdi, rdi
-    x86_jz(ctx, lbl_is_false)
-    x86_lea_reg_rip(ctx, 0, "_lipi_data_start")
+    x86_jz(ctx, lbl_iss_false)
+
+    // 1. Check if rdi in [_lipi_data_start, _lipi_data_end]
+    x86_lea_reg_rip(ctx, 3, "_lipi_data_start")
     bb_put8(ctx, 72)
     bb_put8(ctx, 57)
-    bb_put8(ctx, 199) // cmp rdi, rax
-    p_ish = ctx_len(ctx)
+    bb_put8(ctx, 223) // cmp rdi, rbx
+    p_ds = ctx_len(ctx)
     bb_put8(ctx, 15)
     bb_put8(ctx, 130)
-    bb_put32(ctx, 0) // jb is_heap
-    reloc_add(ctx, p_ish + 2, lbl_is_heap, 6)
-    x86_lea_reg_rip(ctx, 2, "_lipi_data_end")
+    bb_put32(ctx, 0)   // jb iss_chkheap
+    reloc_add(ctx, p_ds + 2, lbl_chk_heap, 6)
+
+    x86_lea_reg_rip(ctx, 3, "_lipi_data_end")
     bb_put8(ctx, 72)
     bb_put8(ctx, 57)
-    bb_put8(ctx, 215) // cmp rdi, rdx
-    p_ist = ctx_len(ctx)
+    bb_put8(ctx, 223) // cmp rdi, rbx
+    p_de = ctx_len(ctx)
     bb_put8(ctx, 15)
     bb_put8(ctx, 130)
-    bb_put32(ctx, 0) // jb is_true
-    reloc_add(ctx, p_ist + 2, lbl_is_true, 6)
-    label_define(ctx, lbl_is_heap)
+    bb_put32(ctx, 0)   // jb iss_chk
+    reloc_add(ctx, p_de + 2, lbl_iss_chk, 6)
+
+    // 2. Check if rdi in [_lipi_heap_base, _lipi_heap_ptr]
+    label_define(ctx, lbl_chk_heap)
     x86_lea_reg_rip(ctx, 3, "_lipi_heap_base")
     bb_put8(ctx, 72)
     bb_put8(ctx, 139)
@@ -802,15 +946,16 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 72)
     bb_put8(ctx, 133)
     bb_put8(ctx, 192) // test rax, rax
-    x86_jz(ctx, lbl_is_false)
+    x86_jz(ctx, lbl_iss_false)
     bb_put8(ctx, 72)
     bb_put8(ctx, 57)
     bb_put8(ctx, 199) // cmp rdi, rax
-    p_isf = ctx_len(ctx)
+    p_hb = ctx_len(ctx)
     bb_put8(ctx, 15)
     bb_put8(ctx, 130)
-    bb_put32(ctx, 0) // jb is_false
-    reloc_add(ctx, p_isf + 2, lbl_is_false, 6)
+    bb_put32(ctx, 0)   // jb iss_false
+    reloc_add(ctx, p_hb + 2, lbl_iss_false, 6)
+
     x86_lea_reg_rip(ctx, 3, "_lipi_heap_ptr")
     bb_put8(ctx, 72)
     bb_put8(ctx, 139)
@@ -818,16 +963,40 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 72)
     bb_put8(ctx, 57)
     bb_put8(ctx, 215) // cmp rdi, rdx
-    p_isf2 = ctx_len(ctx)
+    p_hp = ctx_len(ctx)
     bb_put8(ctx, 15)
     bb_put8(ctx, 131)
-    bb_put32(ctx, 0) // jae is_false
-    reloc_add(ctx, p_isf2 + 2, lbl_is_false, 6)
-    label_define(ctx, lbl_is_true)
-    x86_mov_reg_imm64(ctx, 0, 1)
-    x86_ret(ctx)
-    label_define(ctx, lbl_is_false)
+    bb_put32(ctx, 0)   // jae iss_false
+    reloc_add(ctx, p_hp + 2, lbl_iss_false, 6)
+
+    // In valid pointer range -> Verify 32-bit tag 'STR0' (0x53545230) at [rdi - 8] >> 32
+    label_define(ctx, lbl_iss_chk)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 248) // mov rax, [rdi - 8]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 232)
+    bb_put8(ctx, 32)  // shr rax, 32
+    x86_mov_reg_imm64(ctx, 3, 1398034992) // mov rbx, 0x53545230 ('STR0')
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 216) // cmp rax, rbx
+    p_eq = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)   // je iss_true
+    reloc_add(ctx, p_eq + 2, lbl_iss_true, 6)
+
+    label_define(ctx, lbl_iss_false)
     x86_mov_reg_imm64(ctx, 0, 0)
+    x86_pop_reg(ctx, 3)
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_iss_true)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_pop_reg(ctx, 3)
     x86_ret(ctx)
 
     // 10. _lipi_ensure_str: rdi = val -> rax = string ptr
@@ -858,6 +1027,10 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 91) // pop rbx
     x86_leave(ctx)
     x86_ret(ctx)
+
+    // lipi_fn_str
+    label_define(ctx, "lipi_fn_str")
+    x86_jmp(ctx, "_lipi_ensure_str")
 
     // 11. _lipi_print_dynamic: rdi = val
     label_define(ctx, "_lipi_print_dynamic")
@@ -923,6 +1096,1143 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 92) // pop r12
     x86_leave(ctx)
     x86_ret(ctx)
+
+    // String concat
+    label_define(ctx, lbl_ad_str)
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_call(ctx, "_lipi_ensure_str")
+    x86_mov_reg_reg(ctx, 14, 0) // r14 = left str
+
+    x86_mov_reg_reg(ctx, 7, 13)
+    x86_call(ctx, "_lipi_ensure_str")
+    x86_mov_reg_reg(ctx, 6, 0)  // rsi = right str
+    x86_mov_reg_reg(ctx, 7, 14) // rdi = left str
+    x86_call(ctx, "_lipi_str_concat")
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 94) // pop r14
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 93) // pop r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 92) // pop r12
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+// ── _lipi_cmp_dynamic: in: rdi = lhs, rsi = rhs. out: rax = -1, 0, 1 ──
+    label_define(ctx, "_lipi_cmp_dynamic")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+    x86_push_reg(ctx, 15)
+
+    lbl_cd_exit = make_anon_label(ctx, "cd_exit")
+    lbl_cd_chk_str = make_anon_label(ctx, "cd_chk_str")
+    lbl_cd_as_ints = make_anon_label(ctx, "cd_as_ints")
+    lbl_cd_lens = make_anon_label(ctx, "cd_lens")
+    lbl_cd_ret_lt = make_anon_label(ctx, "cd_ret_lt")
+    lbl_cd_ret_gt = make_anon_label(ctx, "cd_ret_gt")
+    lbl_cd_min_ok = make_anon_label(ctx, "cd_min_ok")
+
+    // Quick pointer/integer identity check
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 247)
+    p_cd_eq = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 133)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_eq + 2, lbl_cd_chk_str, 6)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_jmp(ctx, lbl_cd_exit)
+
+    label_define(ctx, lbl_cd_chk_str)
+    x86_mov_reg_reg(ctx, 12, 7)
+    x86_mov_reg_reg(ctx, 13, 6)
+
+    // Check if lhs is string
+    x86_call(ctx, "_lipi_is_str")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_cd_ns1 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_ns1 + 2, lbl_cd_as_ints, 6)
+
+    // Check if rhs is string
+    x86_mov_reg_reg(ctx, 7, 13)
+    x86_call(ctx, "_lipi_is_str")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_cd_ns2 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_ns2 + 2, lbl_cd_as_ints, 6)
+
+    // Both are strings! Compare contents.
+    // len1 in r14 = lower 32-bit of [r12 - 8]
+    x86_mov_reg_reg(ctx, 0, 12)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 112)
+    bb_put8(ctx, 248)
+    x86_mov_reg_reg(ctx, 14, 6)
+
+    // len2 in r15 = lower 32-bit of [r13 - 8]
+    x86_mov_reg_reg(ctx, 0, 13)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 120)
+    bb_put8(ctx, 248)
+    x86_mov_reg_reg(ctx, 15, 7)
+
+    // rcx = min(r14, r15)
+    x86_mov_reg_reg(ctx, 1, 14)
+    x86_cmp_reg_reg(ctx, 1, 15)
+    p_cd_min = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 134)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_min + 2, lbl_cd_min_ok, 6)
+    x86_mov_reg_reg(ctx, 1, 15)
+    label_define(ctx, lbl_cd_min_ok)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 201)
+    p_cd_zl = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_zl + 2, lbl_cd_lens, 6)
+
+    x86_mov_reg_reg(ctx, 6, 12)
+    x86_mov_reg_reg(ctx, 7, 13)
+    bb_put8(ctx, 243)
+    bb_put8(ctx, 166)
+    p_cd_eqb = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_eqb + 2, lbl_cd_lens, 6)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 70)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 87)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 208)
+    p_cd_blt = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 140)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_blt + 2, lbl_cd_ret_lt, 6)
+    x86_jmp(ctx, lbl_cd_ret_gt)
+
+    label_define(ctx, lbl_cd_lens)
+    x86_cmp_reg_reg(ctx, 14, 15)
+    p_cd_llt = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 140)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_llt + 2, lbl_cd_ret_lt, 6)
+    p_cd_lgt = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 143)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_lgt + 2, lbl_cd_ret_gt, 6)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_jmp(ctx, lbl_cd_exit)
+
+    label_define(ctx, lbl_cd_as_ints)
+    x86_cmp_reg_reg(ctx, 12, 13)
+    p_cd_ilt = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 140)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_ilt + 2, lbl_cd_ret_lt, 6)
+    p_cd_igt = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 143)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_cd_igt + 2, lbl_cd_ret_gt, 6)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_jmp(ctx, lbl_cd_exit)
+
+    label_define(ctx, lbl_cd_ret_lt)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_neg_rax(ctx)
+    x86_jmp(ctx, lbl_cd_exit)
+
+    label_define(ctx, lbl_cd_ret_gt)
+    x86_mov_reg_imm64(ctx, 0, 1)
+
+    label_define(ctx, lbl_cd_exit)
+    x86_pop_reg(ctx, 15)
+    x86_pop_reg(ctx, 14)
+    x86_pop_reg(ctx, 13)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    // ── _lipi_len: in: rdi = obj. out: rax = len ────────────────────────────
+    label_define(ctx, "_lipi_len")
+    label_define(ctx, "lipi_fn_len")
+    lbl_len_zero = make_anon_label(ctx, "len_zero")
+    lbl_len_list = make_anon_label(ctx, "len_list")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_len_zero)
+
+    x86_push_reg(ctx, 7)
+    x86_call(ctx, "_lipi_is_str")
+    x86_pop_reg(ctx, 7)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_ln_list = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ln_list + 2, lbl_len_list, 6)
+
+    // String: lower 32-bit length from [rdi - 8]
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 248)
+    x86_ret(ctx)
+
+    // List: count from [rdi + 0]
+    label_define(ctx, lbl_len_list)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_len_zero)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_ret(ctx)
+
+    // ── _lipi_list_create: in: rdi = count, rsi = src_ptr. out: rax = list ──
+    label_define(ctx, "_lipi_list_create")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+    x86_push_reg(ctx, 15)
+
+    lbl_lc_cap_ok = make_anon_label(ctx, "lc_cap_ok")
+    lbl_lc_copy_done = make_anon_label(ctx, "lc_cp_done")
+    lbl_lc_copy_loop = make_anon_label(ctx, "lc_cp_loop")
+
+    x86_mov_reg_reg(ctx, 12, 7)
+    x86_mov_reg_reg(ctx, 13, 6)
+
+    // cap in r14 = (count <= 16 ? 16 : count * 2)
+    x86_mov_reg_imm64(ctx, 14, 16)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 252)
+    bb_put8(ctx, 16)
+    p_lc_cap = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 134)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_lc_cap + 2, lbl_lc_cap_ok, 6)
+    x86_mov_reg_reg(ctx, 14, 12)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 209)
+    bb_put8(ctx, 230)
+    label_define(ctx, lbl_lc_cap_ok)
+
+    // Allocate buffer for cap * 8 bytes
+    x86_mov_reg_reg(ctx, 7, 14)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 231)
+    bb_put8(ctx, 3)
+    x86_call(ctx, "_lipi_alloc")
+    x86_mov_reg_reg(ctx, 15, 0)
+
+    // If count == 0, skip copy
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 228)
+    p_lc_cp = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_lc_cp + 2, lbl_lc_copy_done, 6)
+
+    // Copy loop: for (rcx = 0; rcx < r12; rcx++)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 201)
+    label_define(ctx, lbl_lc_copy_loop)
+    // rdx = (r12 - 1 - rcx) * 8
+    x86_mov_reg_reg(ctx, 2, 12)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 202)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 41)
+    bb_put8(ctx, 202)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 226)
+    bb_put8(ctx, 3)
+    // rax = [r13 + rdx]
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 234)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 2)
+    // [r15 + rcx*8] = rax
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 202)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 226)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 250)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 2)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 193)
+    x86_cmp_reg_reg(ctx, 1, 12)
+    p_lc_loop = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_lc_loop + 2, lbl_lc_copy_loop, 6)
+
+    label_define(ctx, lbl_lc_copy_done)
+    // Allocate 24-byte list struct
+    x86_mov_reg_imm64(ctx, 7, 24)
+    x86_call(ctx, "_lipi_alloc")
+    // Store header: [rax + 0] = r12, [rax + 8] = r14, [rax + 16] = r15
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 32)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 112)
+    bb_put8(ctx, 8)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 120)
+    bb_put8(ctx, 16)
+
+    x86_pop_reg(ctx, 15)
+    x86_pop_reg(ctx, 14)
+    x86_pop_reg(ctx, 13)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    // ── lipi_fn_list: 0-arg caller stub ────────────────────────────────────
+    label_define(ctx, "lipi_fn_list")
+    x86_mov_reg_imm64(ctx, 7, 0)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_jmp(ctx, "_lipi_list_create")
+
+    // ── lipi_fn_push: in: rdi = list, rsi = val. out: rax = list ──────────
+    label_define(ctx, "lipi_fn_push")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+
+    lbl_pu_ret0 = make_anon_label(ctx, "pu_ret0")
+    lbl_pu_has_cap = make_anon_label(ctx, "pu_has_cap")
+    lbl_pu_dbl = make_anon_label(ctx, "pu_dbl")
+    lbl_pu_do_alloc = make_anon_label(ctx, "pu_do_alloc")
+    lbl_pu_exit = make_anon_label(ctx, "pu_exit")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_pu_ret0)
+
+    x86_mov_reg_reg(ctx, 12, 7)
+    x86_mov_reg_reg(ctx, 13, 6)
+
+    // rax = count, rbx = cap, r14 = data_ptr
+    x86_mov_reg_reg(ctx, 7, 12)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 95)
+    bb_put8(ctx, 8)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 119)
+    bb_put8(ctx, 16)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 216)
+    p_pu_cap = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_pu_cap + 2, lbl_pu_has_cap, 6)
+
+    // Double capacity
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 219)
+    p_pu_nz = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 133)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_pu_nz + 2, lbl_pu_dbl, 6)
+    x86_mov_reg_imm64(ctx, 3, 16)
+    x86_jmp(ctx, lbl_pu_do_alloc)
+    label_define(ctx, lbl_pu_dbl)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 209)
+    bb_put8(ctx, 227)
+    label_define(ctx, lbl_pu_do_alloc)
+
+    // Allocate rbx * 8 bytes
+    x86_mov_reg_reg(ctx, 7, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 231)
+    bb_put8(ctx, 3)
+    x86_call(ctx, "_lipi_alloc")
+    // Copy old elements: rsi = r14, rdi = rax, rcx = [r12]
+    x86_push_reg(ctx, 0)
+    x86_mov_reg_reg(ctx, 7, 0)
+    x86_mov_reg_reg(ctx, 6, 14)
+    x86_mov_reg_reg(ctx, 1, 12)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 243)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 165)
+    x86_pop_reg(ctx, 0)
+    // Update cap and data_ptr in list header
+    x86_mov_reg_reg(ctx, 7, 12)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 95)
+    bb_put8(ctx, 8)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 16)
+    x86_mov_reg_reg(ctx, 14, 0)
+
+    label_define(ctx, lbl_pu_has_cap)
+    // rdx = [r12] * 8
+    x86_mov_reg_reg(ctx, 7, 12)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 23)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 226)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 242)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 42)
+    // [rdi] = [rdi] + 1
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 7)
+    x86_mov_reg_reg(ctx, 0, 12)
+    x86_jmp(ctx, lbl_pu_exit)
+
+    label_define(ctx, lbl_pu_ret0)
+    x86_mov_reg_imm64(ctx, 0, 0)
+
+    label_define(ctx, lbl_pu_exit)
+    x86_pop_reg(ctx, 14)
+    x86_pop_reg(ctx, 13)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    // ── lipi_fn_get: in: rdi = list, rsi = idx. out: rax = val ─────────────
+    label_define(ctx, "lipi_fn_get")
+    lbl_ge_zero = make_anon_label(ctx, "ge_zero")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_ge_zero)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 246)
+    p_ge_neg = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 136)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ge_neg + 2, lbl_ge_zero, 6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 59)
+    bb_put8(ctx, 55)
+    p_ge_oob = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 141)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ge_oob + 2, lbl_ge_zero, 6)
+
+    // rax = [rdi + 16]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 16)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 230)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 0)
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_ge_zero)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_ret(ctx)
+
+    // ── lipi_fn_list_set: in: rdi = list, rsi = idx, rdx = val. out: rax = list
+    label_define(ctx, "lipi_fn_list_set")
+    lbl_ls_done = make_anon_label(ctx, "ls_done")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_ls_done)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 246)
+    p_ls_neg = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 136)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ls_neg + 2, lbl_ls_done, 6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 59)
+    bb_put8(ctx, 55)
+    p_ls_oob = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 141)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ls_oob + 2, lbl_ls_done, 6)
+
+    // rax = [rdi + 16]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 16)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 230)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 16)
+
+    label_define(ctx, lbl_ls_done)
+    x86_mov_reg_reg(ctx, 0, 7)
+    x86_ret(ctx)
+
+    // ── lipi_fn_pop: in: rdi = list. out: rax = popped item ────────────────
+    label_define(ctx, "lipi_fn_pop")
+    lbl_po_zero = make_anon_label(ctx, "po_zero")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_po_zero)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_po_le = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 142)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_po_le + 2, lbl_po_zero, 6)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 200)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 7)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 87)
+    bb_put8(ctx, 16)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 224)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 208)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 0)
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_po_zero)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_ret(ctx)
+
+    // ── lipi_fn_ord: in: rdi = str. out: rax = byte value ──────────────────
+    label_define(ctx, "lipi_fn_ord")
+    lbl_ord_zero = make_anon_label(ctx, "ord_zero")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_ord_zero)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 7)
+    x86_ret(ctx)
+    label_define(ctx, lbl_ord_zero)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_ret(ctx)
+
+    // ── lipi_fn_chr: in: rdi = ascii code. out: rax = 1-char str ───────────
+    label_define(ctx, "lipi_fn_chr")
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_mov_reg_reg(ctx, 12, 7)
+    x86_mov_reg_imm64(ctx, 7, 2)
+    x86_call(ctx, "_lipi_alloc")
+    // [rax] = r12b, [rax + 1] = 0
+    bb_put8(ctx, 68)
+    bb_put8(ctx, 136)
+    bb_put8(ctx, 32)
+    bb_put8(ctx, 198)
+    bb_put8(ctx, 64)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 0)
+    // Header: [rax - 8] = 0x5354523000000001
+    x86_mov_reg_imm64(ctx, 3, 6004514569303621633)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 88)
+    bb_put8(ctx, 248)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_ret(ctx)
+
+    // ── lipi_fn_char_at: in: rdi = str, rsi = idx. out: rax = 1-char str ──
+    label_define(ctx, "lipi_fn_char_at")
+    lbl_ca_zero = make_anon_label(ctx, "ca_zero")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_ca_zero)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 247)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 63)
+    x86_jmp(ctx, "lipi_fn_chr")
+    label_define(ctx, lbl_ca_zero)
+    x86_mov_reg_imm64(ctx, 7, 0)
+    x86_jmp(ctx, "lipi_fn_chr")
+
+    // ── lipi_fn_floor: in: rdi = val. out: rax = val ───────────────────────
+    label_define(ctx, "lipi_fn_floor")
+    x86_mov_reg_reg(ctx, 0, 7)
+    x86_ret(ctx)
+
+    // ── lipi_fn_exit: in: rdi = code ───────────────────────────────────────
+    label_define(ctx, "lipi_fn_exit")
+    x86_mov_reg_imm64(ctx, 0, 60)
+    x86_syscall(ctx)
+    bb_put8(ctx, 244)
+
+    // ── lipi_fn_file_exists: in: rdi = path. out: rax = 1 or 0 ─────────────
+    label_define(ctx, "lipi_fn_file_exists")
+    lbl_fe_fail = make_anon_label(ctx, "fe_fail")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_fe_fail)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_mov_reg_imm64(ctx, 0, 21)
+    x86_syscall(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_fe_nz = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 133)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fe_nz + 2, lbl_fe_fail, 6)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_ret(ctx)
+    label_define(ctx, lbl_fe_fail)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_ret(ctx)
+
+    // ── lipi_fn_file_read: in: rdi = path. out: rax = string content ───────
+    label_define(ctx, "lipi_fn_file_read")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+    x86_push_reg(ctx, 15)
+
+    lbl_fr_empty = make_anon_label(ctx, "fr_empty")
+    lbl_fr_close_empty = make_anon_label(ctx, "fr_cl_empty")
+    lbl_fr_read_ok = make_anon_label(ctx, "fr_rd_ok")
+    lbl_fr_exit = make_anon_label(ctx, "fr_exit")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_fr_empty)
+
+    // SYS_open(path, O_RDONLY=0, 0)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_mov_reg_imm64(ctx, 2, 0)
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_fr_op = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 136)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fr_op + 2, lbl_fr_empty, 6)
+    x86_mov_reg_reg(ctx, 12, 0)
+
+    // SYS_lseek(fd, 0, SEEK_END=2)
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_mov_reg_imm64(ctx, 2, 2)
+    x86_mov_reg_imm64(ctx, 0, 8)
+    x86_syscall(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_fr_ls1 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 136)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fr_ls1 + 2, lbl_fr_close_empty, 6)
+    x86_mov_reg_reg(ctx, 13, 0)
+
+    // SYS_lseek(fd, 0, SEEK_SET=0)
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_mov_reg_imm64(ctx, 2, 0)
+    x86_mov_reg_imm64(ctx, 0, 8)
+    x86_syscall(ctx)
+
+    // Allocate buffer: rdi = r13 + 1
+    x86_mov_reg_reg(ctx, 7, 13)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199)
+    x86_call(ctx, "_lipi_alloc")
+    x86_mov_reg_reg(ctx, 14, 0)
+
+    // SYS_read(fd, buf_ptr, file_size)
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_mov_reg_reg(ctx, 6, 14)
+    x86_mov_reg_reg(ctx, 2, 13)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_syscall(ctx)
+    x86_mov_reg_reg(ctx, 15, 0)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    p_fr_rd = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 137)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fr_rd + 2, lbl_fr_read_ok, 6)
+    x86_mov_reg_imm64(ctx, 15, 0)
+    label_define(ctx, lbl_fr_read_ok)
+
+    // Null terminate: [r14 + r15] = 0
+    x86_mov_reg_reg(ctx, 2, 14)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 250)
+    bb_put8(ctx, 198)
+    bb_put8(ctx, 2)
+    bb_put8(ctx, 0)
+
+    // Tag header: [r14 - 8] = 0x5354523000000000 | r15
+    x86_mov_reg_imm64(ctx, 0, 6004514569303621632)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 248)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 70)
+    bb_put8(ctx, 248)
+
+    // SYS_close(fd)
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_mov_reg_imm64(ctx, 0, 3)
+    x86_syscall(ctx)
+
+    x86_mov_reg_reg(ctx, 0, 14)
+    x86_jmp(ctx, lbl_fr_exit)
+
+    label_define(ctx, lbl_fr_close_empty)
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_mov_reg_imm64(ctx, 0, 3)
+    x86_syscall(ctx)
+
+    label_define(ctx, lbl_fr_empty)
+    x86_mov_reg_imm64(ctx, 7, 1)
+    x86_call(ctx, "_lipi_alloc")
+    bb_put8(ctx, 198)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)
+    x86_mov_reg_imm64(ctx, 2, 6004514569303621632)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 80)
+    bb_put8(ctx, 248)
+
+    label_define(ctx, lbl_fr_exit)
+    x86_pop_reg(ctx, 15)
+    x86_pop_reg(ctx, 14)
+    x86_pop_reg(ctx, 13)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    // ── lipi_fn_file_write_bytes: in: rdi = path, rsi = byte_list. out: rax = 0 or -1
+    label_define(ctx, "lipi_fn_file_write_bytes")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+    x86_push_reg(ctx, 15)
+
+    lbl_fw_fail = make_anon_label(ctx, "fw_fail")
+    lbl_fw_close = make_anon_label(ctx, "fw_close")
+    lbl_fw_cp_loop = make_anon_label(ctx, "fw_cp_loop")
+    lbl_fw_exit = make_anon_label(ctx, "fw_exit")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_fw_fail)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 246)
+    x86_jz(ctx, lbl_fw_fail)
+
+    x86_mov_reg_reg(ctx, 12, 7)
+    x86_mov_reg_reg(ctx, 13, 6)
+
+    // SYS_open(path, 577, 0755=493)
+    x86_mov_reg_imm64(ctx, 6, 577)
+    x86_mov_reg_imm64(ctx, 2, 493)
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192)
+    p_fw_op = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 136)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fw_op + 2, lbl_fw_fail, 6)
+    x86_mov_reg_reg(ctx, 14, 0)
+
+    // rbx = count = [r13]
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 93)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 219)
+    p_fw_zero = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 142)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fw_zero + 2, lbl_fw_close, 6)
+
+    // Allocate rbx bytes
+    x86_mov_reg_reg(ctx, 7, 3)
+    x86_call(ctx, "_lipi_alloc")
+    x86_mov_reg_reg(ctx, 15, 0)
+
+    // data_ptr in rdx = [r13 + 16]
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 85)
+    bb_put8(ctx, 16)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 201)
+    label_define(ctx, lbl_fw_cp_loop)
+    // rax = [rdx + rcx*8]
+    x86_mov_reg_reg(ctx, 0, 1)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 224)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 208)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 0)
+    // byte_buf[rcx] = al
+    x86_mov_reg_reg(ctx, 8, 15)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 200)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 136)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 193)
+    x86_cmp_reg_reg(ctx, 1, 3)
+    p_fw_loop = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_fw_loop + 2, lbl_fw_cp_loop, 6)
+
+    // SYS_write(fd, byte_buf, count)
+    x86_mov_reg_reg(ctx, 7, 14)
+    x86_mov_reg_reg(ctx, 6, 15)
+    x86_mov_reg_reg(ctx, 2, 3)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_syscall(ctx)
+
+    label_define(ctx, lbl_fw_close)
+    // SYS_close(fd)
+    x86_mov_reg_reg(ctx, 7, 14)
+    x86_mov_reg_imm64(ctx, 0, 3)
+    x86_syscall(ctx)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_jmp(ctx, lbl_fw_exit)
+
+    label_define(ctx, lbl_fw_fail)
+    x86_mov_reg_imm64(ctx, 0, -1)
+
+    label_define(ctx, lbl_fw_exit)
+    x86_pop_reg(ctx, 15)
+    x86_pop_reg(ctx, 14)
+    x86_pop_reg(ctx, 13)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    // ── lipi_fn_argv: out: rax = list of argv strings ───────────────────────
+    label_define(ctx, "lipi_fn_argv")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 3)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+    x86_push_reg(ctx, 15)
+
+    lbl_av_empty = make_anon_label(ctx, "av_empty")
+    lbl_av_loop = make_anon_label(ctx, "av_loop")
+    lbl_av_sl = make_anon_label(ctx, "av_sl")
+    lbl_av_exit = make_anon_label(ctx, "av_exit")
+
+    x86_lea_reg_rip(ctx, 0, "_lipi_initial_rsp")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 0)
+    x86_mov_reg_reg(ctx, 12, 0)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 228)
+    x86_jz(ctx, lbl_av_empty)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 0)
+    x86_mov_reg_reg(ctx, 13, 0)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 237)
+    p_av_le = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 142)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_av_le + 2, lbl_av_empty, 6)
+
+    // Create empty list for argv: _lipi_list_create(0, NULL)
+    x86_mov_reg_imm64(ctx, 7, 0)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_call(ctx, "_lipi_list_create")
+    x86_mov_reg_reg(ctx, 14, 0)
+
+    // Loop r15 from 0 to r13 - 1
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 255)
+    label_define(ctx, lbl_av_loop)
+
+    // rbx = argv[i] = [r12 + 8 + r15*8]
+    x86_mov_reg_reg(ctx, 0, 15)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 192)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 224)
+    bb_put8(ctx, 3)
+    x86_mov_reg_reg(ctx, 3, 12)
+    x86_add_rax_rbx(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 24)
+
+    // strlen(rbx) -> rcx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 201)
+    label_define(ctx, lbl_av_sl)
+    x86_mov_reg_reg(ctx, 2, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 202)
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 58)
+    bb_put8(ctx, 0)
+    lbl_av_sl_done = make_anon_label(ctx, "av_sl_done")
+    x86_jz(ctx, lbl_av_sl_done)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 193)
+    x86_jmp(ctx, lbl_av_sl)
+    label_define(ctx, lbl_av_sl_done)
+
+    // Allocate slen + 1 bytes: rdi = rcx + 1
+    x86_push_reg(ctx, 1)
+    x86_mov_reg_reg(ctx, 7, 1)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199)
+    x86_call(ctx, "_lipi_alloc")
+    x86_pop_reg(ctx, 1)
+
+    // Copy slen bytes: rsi = rbx, rdi = rax, rcx = slen
+    x86_push_reg(ctx, 0)
+    x86_push_reg(ctx, 1)
+    x86_mov_reg_reg(ctx, 7, 0)
+    x86_mov_reg_reg(ctx, 6, 3)
+    bb_put8(ctx, 243)
+    bb_put8(ctx, 164)
+    bb_put8(ctx, 198)
+    bb_put8(ctx, 7)
+    bb_put8(ctx, 0)
+    x86_pop_reg(ctx, 1)
+    x86_pop_reg(ctx, 0)
+
+    // Tag header: [rax - 8] = 0x5354523000000000 | rcx
+    x86_mov_reg_imm64(ctx, 2, 6004514569303621632)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 202)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 80)
+    bb_put8(ctx, 248)
+
+    // push(r14, rax)
+    x86_mov_reg_reg(ctx, 7, 14)
+    x86_mov_reg_reg(ctx, 6, 0)
+    x86_call(ctx, "lipi_fn_push")
+
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199)
+    x86_cmp_reg_reg(ctx, 15, 13)
+    p_av_loop = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_av_loop + 2, lbl_av_loop, 6)
+
+    x86_mov_reg_reg(ctx, 0, 14)
+    x86_jmp(ctx, lbl_av_exit)
+
+    label_define(ctx, lbl_av_empty)
+    x86_mov_reg_imm64(ctx, 7, 0)
+    x86_mov_reg_imm64(ctx, 6, 0)
+    x86_call(ctx, "_lipi_list_create")
+
+    label_define(ctx, lbl_av_exit)
+    x86_pop_reg(ctx, 15)
+    x86_pop_reg(ctx, 14)
+    x86_pop_reg(ctx, 13)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_leave(ctx)
+    x86_ret(ctx)
+
     // String concatenation
     label_define(ctx, lbl_ad_str)
     x86_mov_reg_reg(ctx, 7, 12)
@@ -1116,7 +2426,7 @@ fn tokenize_pure src
                 continue
 
         // 1-char operators
-        if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!"
+        if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!" or c == "."
             push(tokens, tok_new(TOK_OP, c, 0))
             p = p + 1
             continue
@@ -1154,6 +2464,8 @@ fn ps_new tokens
     push(s, tokens)
     push(s, list(0)) // index in a 1-element list for mutable reference
     return s
+
+fn ps_pos s = get(get(s, 1), 0)
 
 fn ps_cur s
     tokens = get(s, 0)
@@ -1193,13 +2505,18 @@ fn ps_skip_nl s
 // WHY: Detect whether next token is the start of an argument expression for bare function calls
 fn is_pure_arg_start ps
     tt = ps_cur_type(ps)
-    if tt == TOK_INT or tt == TOK_STR or tt == TOK_LPAREN return 1
+    if tt == TOK_INT or tt == TOK_STR return 1
     if tt == TOK_IDENT
         txt = ps_cur_text(ps)
         if txt == "if" or txt == "যদি" or txt == "while" or txt == "যতক্ষণ" return 0
         if txt == "for" or txt == "প্রতিটি" or txt == "return" or txt == "ফেরত" return 0
         if txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println" return 0
+        if txt == "fn" or txt == "কাজ" or txt == "struct" or txt == "গঠন" or txt == "repeat" or txt == "বার" return 0
+        if txt == "else" or txt == "নাহলে" or txt == "elif" or txt == "নাহলে_যদি" return 0
+        if txt == "and" or txt == "এবং" or txt == "or" or txt == "অথবা" or txt == "not" or txt == "না" return 0
+        if txt == "in" or txt == "ভেতরে" or txt == "to" or txt == "step" or txt == "ধাপ" return 0
         return 1
+    if tt == TOK_OP and ps_cur_text(ps) == "(" return 1
     return 0
 
 // ── Code Generation: Expressions & Statements ────────────────────────────────
@@ -1238,11 +2555,30 @@ fn compile_pure_primary ctx ps
             x86_mov_reg_imm64(ctx, 0, 0)
             return 0
 
+        // Struct field access: name.field
+        if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+            ps_adv(ps) // consume '.'
+            field_name = ps_cur_text(ps)
+            ps_adv(ps) // consume field name
+            off = scope_get(ctx, name)
+            if off > 0
+                x86_mov_rax_stack(ctx, off)
+            else
+                x86_mov_reg_imm64(ctx, 0, 0)
+            sname = struct_get_var_type(ctx, name)
+            f_off = struct_get_field_offset(ctx, sname, field_name)
+            // mov rax, [rax + f_off] (0x48 0x8B 0x40 f_off)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 139)
+            bb_put8(ctx, 64)
+            bb_put8(ctx, f_off)
+            return 0
+
         // Function call: name(...)
         if ps_cur_type(ps) == TOK_LPAREN
             ps_adv(ps)
             arg_count = 0
-            arg_regs = list(7, 6, 2, 1, 8, 9) // rdi, rsi, rdx, rcx, r8, r9
+            arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15) // 12 argument registers
             while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
                 compile_pure_expr(ctx, ps)
                 x86_push_reg(ctx, 0)
@@ -1252,20 +2588,42 @@ fn compile_pure_primary ctx ps
             if ps_cur_type(ps) == TOK_RPAREN
                 ps_adv(ps)
 
+            // Check if name is a struct constructor (e.g. Point() or Fraction())
+            sidx = struct_find(ctx, name)
+            if sidx >= 0
+                ai = 0
+                while ai < arg_count
+                    x86_pop_reg(ctx, 0)
+                    ai = ai + 1
+                sfields = get(get(ctx, 17), sidx)
+                fcount = len(sfields)
+                if fcount == 0
+                    fcount = 4
+                // Alloc (fcount + 1) * 8 bytes
+                x86_mov_reg_imm64(ctx, 7, (fcount + 1) * 8)
+                x86_call(ctx, "_lipi_alloc")
+                return 0
+
+            // WHY: First-class compiler built-in for list(...) supporting arbitrary argument count directly from stack
+            if name == "list"
+                x86_mov_reg_imm64(ctx, 7, arg_count)
+                x86_mov_reg_reg(ctx, 6, 4) // rsi = rsp
+                x86_call(ctx, "_lipi_list_create")
+                if arg_count > 0
+                    x86_add_rsp(ctx, arg_count * 8)
+                return 0
+
             // Pop args into registers in reverse
             ai = arg_count - 1
             while ai >= 0
-                if ai < 6
+                if ai < 12
                     x86_pop_reg(ctx, get(arg_regs, ai))
                 else
                     x86_pop_reg(ctx, 0)
                 ai = ai - 1
 
             if name == "len" or name == "length" or name == "দৈর্ঘ্য"
-                bb_put8(ctx, 72)
-                bb_put8(ctx, 139)
-                bb_put8(ctx, 71)
-                bb_put8(ctx, 248) // mov rax, [rdi - 8]
+                x86_call(ctx, "_lipi_len")
                 return 0
             if name == "abs"
                 x86_mov_reg_reg(ctx, 0, 7)
@@ -1285,13 +2643,27 @@ fn compile_pure_primary ctx ps
             x86_call(ctx, "lipi_fn_" + name)
             return 0
 
+        // Local variable lookup (WHY: Local variables/parameters must shadow built-in function names like 'length')
+        off = scope_get(ctx, name)
+        if off > 0
+            x86_mov_rax_stack(ctx, off)
+            return 0
+
+        // Global constant lookup
+        gi = 0
+        gnames = get(ctx, 12)
+        gvals  = get(ctx, 13)
+        while gi < len(gnames)
+            if get(gnames, gi) == name
+                x86_mov_reg_imm64(ctx, 0, get(gvals, gi))
+                return 0
+            gi = gi + 1
+
         // Bare function call: len x, abs x
         if name == "len" or name == "length" or name == "দৈর্ঘ্য"
             compile_pure_primary(ctx, ps)
-            bb_put8(ctx, 72)
-            bb_put8(ctx, 139)
-            bb_put8(ctx, 64)
-            bb_put8(ctx, 248) // mov rax, [rax - 8]
+            x86_mov_reg_reg(ctx, 7, 0)
+            x86_call(ctx, "_lipi_len")
             return 0
         if name == "abs"
             compile_pure_primary(ctx, ps)
@@ -1308,23 +2680,17 @@ fn compile_pure_primary ctx ps
             label_define(ctx, lbl_abs2)
             return 0
 
-        // Local variable lookup
-        off = scope_get(ctx, name)
-        if off > 0
-            x86_mov_rax_stack(ctx, off)
-            return 0
-
         // WHY: Handle space-separated function calls without parentheses (e.g., fibonacci i, say sum 10 20)
         if is_pure_arg_start(ps) == 1
             arg_count = 0
-            arg_regs = list(7, 6, 2, 1, 8, 9)
+            arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
             while is_pure_arg_start(ps) == 1 and ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
                 compile_pure_primary(ctx, ps)
                 x86_push_reg(ctx, 0)
                 arg_count = arg_count + 1
             ai = arg_count - 1
             while ai >= 0
-                if ai < 6
+                if ai < 12
                     x86_pop_reg(ctx, get(arg_regs, ai))
                 else
                     x86_pop_reg(ctx, 0)
@@ -1382,9 +2748,59 @@ fn compile_pure_cmp ctx ps
         ps_adv(ps)
         x86_push_reg(ctx, 0)
         compile_pure_add(ctx, ps)
-        x86_mov_reg_reg(ctx, 3, 0) // rbx = rhs
-        x86_pop_reg(ctx, 0)        // rax = lhs
-        x86_set_cmp(ctx, op)
+        x86_mov_reg_reg(ctx, 6, 0) // rsi = rhs
+        x86_pop_reg(ctx, 7)        // rdi = lhs
+        x86_call(ctx, "_lipi_cmp_dynamic")
+        if op == "=="
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 133)
+            bb_put8(ctx, 192) // test rax, rax
+            bb_put8(ctx, 15)
+            bb_put8(ctx, 148)
+            bb_put8(ctx, 192) // sete al
+        elif op == "!="
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 133)
+            bb_put8(ctx, 192) // test rax, rax
+            bb_put8(ctx, 15)
+            bb_put8(ctx, 149)
+            bb_put8(ctx, 192) // setne al
+        elif op == "<"
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 131)
+            bb_put8(ctx, 248)
+            bb_put8(ctx, 0)   // cmp rax, 0
+            bb_put8(ctx, 15)
+            bb_put8(ctx, 156)
+            bb_put8(ctx, 192) // setl al
+        elif op == "<="
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 131)
+            bb_put8(ctx, 248)
+            bb_put8(ctx, 0)   // cmp rax, 0
+            bb_put8(ctx, 15)
+            bb_put8(ctx, 158)
+            bb_put8(ctx, 192) // setle al
+        elif op == ">"
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 131)
+            bb_put8(ctx, 248)
+            bb_put8(ctx, 0)   // cmp rax, 0
+            bb_put8(ctx, 15)
+            bb_put8(ctx, 159)
+            bb_put8(ctx, 192) // setg al
+        elif op == ">="
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 131)
+            bb_put8(ctx, 248)
+            bb_put8(ctx, 0)   // cmp rax, 0
+            bb_put8(ctx, 15)
+            bb_put8(ctx, 157)
+            bb_put8(ctx, 192) // setge al
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 182)
+        bb_put8(ctx, 192) // movzx rax, al
 
 // WHY: Boolean NOT (not, না, !)
 fn compile_pure_not ctx ps
@@ -1468,6 +2884,81 @@ fn compile_pure_stmt ctx ps
 
     if tt == TOK_EOF or tt == TOK_DEDENT return 0
 
+    // include / অন্তর্ভুক্ত -- skip line
+    if tt == TOK_IDENT and (txt == "include" or txt == "অন্তর্ভুক্ত")
+        while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
+            ps_adv(ps)
+        return 0
+
+    // struct / গঠন (Struct Definition)
+    // WHY: Pure in-memory layout description without external runtime or header requirements
+    if tt == TOK_IDENT and (txt == "struct" or txt == "গঠন")
+        ps_adv(ps)
+        sname = ps_cur_text(ps)
+        ps_adv(ps)
+        fields = list()
+        ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if ps_cur_type(ps) == TOK_IDENT
+                    if len(fields) < 16
+                        push(fields, ps_cur_text(ps))
+                    ps_adv(ps)
+                    while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                        ps_adv(ps)
+                else
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+        struct_add(ctx, sname, fields)
+        return 0
+
+    // Struct field assignment: obj.field = expr
+    // WHY: Direct offset store into heap-allocated struct pointer
+    t1 = ps_peek_tok(ps, 1)
+    t2 = ps_peek_tok(ps, 2)
+    t3 = ps_peek_tok(ps, 3)
+    if tt == TOK_IDENT and tok_t(t1) == TOK_OP and tok_s(t1) == "." and tok_t(t2) == TOK_IDENT and tok_t(t3) == TOK_OP and tok_s(t3) == "="
+        obj_name = txt
+        field_name = tok_s(t2)
+        ps_adv(ps) // obj
+        ps_adv(ps) // '.'
+        ps_adv(ps) // field
+        ps_adv(ps) // '='
+        compile_pure_expr(ctx, ps) // rax = value
+        x86_mov_reg_reg(ctx, 3, 0)  // rbx = value
+        off = scope_get(ctx, obj_name)
+        if off > 0
+            x86_mov_rax_stack(ctx, off) // rax = obj ptr
+        else
+            x86_mov_reg_imm64(ctx, 0, 0)
+        sname = struct_get_var_type(ctx, obj_name)
+        f_off = struct_get_field_offset(ctx, sname, field_name)
+        // mov [rax + f_off], rbx
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 137)
+        bb_put8(ctx, 88)
+        bb_put8(ctx, f_off)
+        return 0
+
+    // break / থামো
+    if tt == TOK_IDENT and (txt == "break" or txt == "থামো")
+        ps_adv(ps)
+        estk = get(ctx, 15)
+        if len(estk) > 0
+            x86_jmp(ctx, get(estk, len(estk) - 1))
+        return 0
+
+    // continue / চলুক
+    if tt == TOK_IDENT and (txt == "continue" or txt == "চলুক")
+        ps_adv(ps)
+        sstk = get(ctx, 14)
+        if len(sstk) > 0
+            x86_jmp(ctx, get(sstk, len(sstk) - 1))
+        return 0
+
     // say / বলো / show / দেখাও / print / println
     if tt == TOK_IDENT and (txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println")
         ps_adv(ps)
@@ -1493,9 +2984,9 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                prev_if_p = get(ps, 0)
+                prev_if_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
-                if get(ps, 0) == prev_if_p
+                if ps_pos(ps) == prev_if_p
                     ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
@@ -1520,9 +3011,9 @@ fn compile_pure_stmt ctx ps
             if ps_cur_type(ps) == TOK_INDENT
                 ps_adv(ps)
                 while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                    prev_elif_p = get(ps, 0)
+                    prev_elif_p = ps_pos(ps)
                     compile_pure_stmt(ctx, ps)
-                    if get(ps, 0) == prev_elif_p
+                    if ps_pos(ps) == prev_elif_p
                         ps_adv(ps)
                     ps_skip_nl(ps)
                 if ps_cur_type(ps) == TOK_DEDENT
@@ -1540,9 +3031,9 @@ fn compile_pure_stmt ctx ps
             if ps_cur_type(ps) == TOK_INDENT
                 ps_adv(ps)
                 while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                    prev_else_p = get(ps, 0)
+                    prev_else_p = ps_pos(ps)
                     compile_pure_stmt(ctx, ps)
-                    if get(ps, 0) == prev_else_p
+                    if ps_pos(ps) == prev_else_p
                         ps_adv(ps)
                     ps_skip_nl(ps)
                 if ps_cur_type(ps) == TOK_DEDENT
@@ -1565,6 +3056,7 @@ fn compile_pure_stmt ctx ps
         bb_put8(ctx, 192) // test rax, rax
         x86_jz(ctx, lbl_end)
 
+        loop_push(ctx, lbl_loop, lbl_end)
         ps_skip_nl(ps)
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
@@ -1575,6 +3067,7 @@ fn compile_pure_stmt ctx ps
                 ps_adv(ps)
         else
             compile_pure_stmt(ctx, ps)
+        loop_pop(ctx)
 
         x86_jmp(ctx, lbl_loop)
         label_define(ctx, lbl_end)
@@ -1592,7 +3085,7 @@ fn compile_pure_stmt ctx ps
         return 0
 
     // fn / কাজ (Function Definition)
-    // WHY: Support top-level and nested function definitions with up to 6 register arguments (AMD64 ABI)
+    // WHY: Support top-level and nested function definitions with up to 12 register arguments
     if tt == TOK_IDENT and (txt == "fn" or txt == "কাজ")
         ps_adv(ps)
         fn_name = ps_cur_text(ps)
@@ -1602,7 +3095,7 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_LPAREN
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
-                if ps_cur_type(ps) == TOK_IDENT and len(params) < 6
+                if ps_cur_type(ps) == TOK_IDENT and len(params) < 12
                     push(params, ps_cur_text(ps))
                     ps_adv(ps)
                 if ps_cur_type(ps) == TOK_COMMA
@@ -1610,7 +3103,9 @@ fn compile_pure_stmt ctx ps
             if ps_cur_type(ps) == TOK_RPAREN
                 ps_adv(ps)
         else
-            while ps_cur_type(ps) == TOK_IDENT and len(params) < 6
+            while ps_cur_type(ps) == TOK_IDENT and len(params) < 12
+                if is_pure_arg_start(ps) == 0
+                    break
                 push(params, ps_cur_text(ps))
                 ps_adv(ps)
 
@@ -1632,15 +3127,16 @@ fn compile_pure_stmt ctx ps
         x86_mov_rbp_rsp(ctx)
         x86_sub_rsp(ctx, 2048)
 
-        arg_regs = list(7, 6, 2, 1, 8, 9)
+        arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
         pi = 0
         while pi < len(params)
             off = scope_add(ctx, get(params, pi))
-            x86_mov_reg_reg(ctx, 0, get(arg_regs, pi))
-            x86_mov_stack_rax(ctx, off)
+            if pi < 12
+                x86_mov_reg_reg(ctx, 0, get(arg_regs, pi))
+                x86_mov_stack_rax(ctx, off)
             pi = pi + 1
 
-        // WHY: Support one-liner expression functions (e.g., fn double n = n * 2, fn add a b = a + b)
+        // WHY: Support one-liner expression functions (e.g., fn double n = n * 2, fn ws_opcode b = b % 16)
         if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "="
             ps_adv(ps)
             compile_pure_expr(ctx, ps)
@@ -1656,9 +3152,9 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                prev_fn_p = get(ps, 0)
+                prev_fn_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
-                if get(ps, 0) == prev_fn_p
+                if ps_pos(ps) == prev_fn_p
                     ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
@@ -1722,9 +3218,9 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                prev_for_p = get(ps, 0)
+                prev_for_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
-                if get(ps, 0) == prev_for_p
+                if ps_pos(ps) == prev_for_p
                     ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
@@ -1777,9 +3273,9 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                prev_rep_p = get(ps, 0)
+                prev_rep_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
-                if get(ps, 0) == prev_rep_p
+                if ps_pos(ps) == prev_rep_p
                     ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
@@ -1803,9 +3299,25 @@ fn compile_pure_stmt ctx ps
         name = txt
         ps_adv(ps) // ident
         ps_adv(ps) // '='
+
+        // Check if RHS is struct constructor: StructName(...)
+        rhs_cur = ps_cur_text(ps)
+        rhs_next = ps_peek_tok(ps, 1)
+        rhs_struct = ""
+        if ps_cur_type(ps) == TOK_IDENT and (tok_t(rhs_next) == TOK_LPAREN or (tok_t(rhs_next) == TOK_OP and tok_s(rhs_next) == "("))
+            if struct_find(ctx, rhs_cur) >= 0
+                rhs_struct = rhs_cur
+
+        is_int_c = (ps_cur_type(ps) == TOK_INT)
+        int_c_val = ps_cur_int(ps)
         compile_pure_expr(ctx, ps)
         off = scope_add(ctx, name)
+        if rhs_struct != ""
+            struct_set_var_type(ctx, name, rhs_struct)
         x86_mov_stack_rax(ctx, off)
+        if is_int_c == 1
+            push(get(ctx, 12), name)
+            push(get(ctx, 13), int_c_val)
         return 0
 
     // Compound assignment: name += expr, -=
@@ -2027,9 +3539,9 @@ fn compile_source_to_elf in_path out_path
     ps_skip_nl(ps)
     while ps_cur_type(ps) != TOK_EOF
         // WHY: Safeguard against parser stall if an unsupported token is encountered
-        prev_p = get(ps, 0)
+        prev_p = ps_pos(ps)
         compile_pure_stmt(ctx, ps)
-        if get(ps, 0) == prev_p
+        if ps_pos(ps) == prev_p
             ps_adv(ps)
         ps_skip_nl(ps)
 
@@ -2046,7 +3558,9 @@ fn compile_source_to_elf in_path out_path
         stext = get(str_texts, si)
         slbl  = get(str_labels, si)
         slen  = len(stext)
-        bb_put64(ctx, slen) // 8-byte length prefix
+        // WHY: 8-byte STR0 prefix: lower 32 bits = slen, upper 32 bits = 'STR0' (0x53545230 = 1398034992)
+        bb_put32(ctx, slen)
+        bb_put32(ctx, 1398034992)
         label_define(ctx, slbl)
         ci = 0
         while ci < slen
@@ -2061,6 +3575,8 @@ fn compile_source_to_elf in_path out_path
     bb_put64(ctx, 0)
     label_define(ctx, "_lipi_heap_ptr")
     bb_put64(ctx, 0)
+    label_define(ctx, "_lipi_initial_rsp")
+    bb_put64(ctx, 0)
 
     // Step 4: Backpatch all jumps, calls, and RIP relocations
     backpatch_all(ctx)
@@ -2071,14 +3587,36 @@ fn compile_source_to_elf in_path out_path
 
 // ── Main CLI Driver ───────────────────────────────────────────────────────────
 args = argv()
-if len(args) < 3
+in_file = ""
+out_file = ""
+
+i = 1
+while i < len(args)
+    arg = get(args, i)
+    if arg == "-o"
+        i = i + 1
+        if i < len(args)
+            out_file = get(args, i)
+    else
+        if arg == "--direct-elf" or arg == "--baremetal"
+            // Direct ELF is native and sovereign default
+            pass_noop = 0
+        else
+            if in_file == ""
+                in_file = arg
+            else
+                if out_file == ""
+                    out_file = arg
+    i = i + 1
+
+if in_file == ""
     say "Lipi Pure ELF Compiler — First 1.0 (প্রথম ১.০)"
     say "100% Pure Lipi Source | Zero C | Zero GCC | Zero Python Output"
-    say "Usage: lipi elf_emitter.lp <input.lp> <output_binary>"
+    say "Usage: lipc <input.lp> [-o <output_binary>]"
     exit(1)
 
-in_file  = get(args, 1)
-out_file = get(args, 2)
+if out_file == ""
+    out_file = in_file + ".bin"
 
 res = compile_source_to_elf(in_file, out_file)
 if res == 0

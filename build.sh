@@ -4,15 +4,17 @@
 #
 # WHY: Lipi is a 100% sovereign native programming language.
 # It compiles directly to standalone 64-bit Linux ELF executables.
-# Zero Python, Zero PHP, Zero Libc, Zero GCC dependencies required at runtime.
+# Zero C, Zero GCC, Zero Python, Zero PHP, Zero Libc dependencies.
 #
 # Stages:
-#   [Stage 0] Sovereign Bootstrap Seed Verification
-#   [Stage 1] Self-Hosted Compiler Rebuild (c_codegen.lp -> bin/lipc_bin)
-#   [Stage 2] Pure Lipi Direct ELF Machine Code Generator (elf_emitter.lp -> bin/lipc_pure_elf)
-#   [Stage 3] Bit-for-Bit Determinism Self-Hosting Closure
-#   [Stage 4] 60/60 Regression Test Suite in Direct ELF Machine Code Mode
-#   [Stage 5] Zero-Python & Zero-PHP Sovereignty Audit
+#   [Stage 0] Sovereign Bootstrap Seed Verification (boot/lipi-seed / boot/seed.b64)
+#   [Stage 1] Seed Compilation: boot/lipi-seed -> bin/lipc_gen1
+#   [Stage 2] Self-Hosting Generation 2: bin/lipc_gen1 -> bin/lipc_gen2
+#   [Stage 3] Bit-for-Bit Determinism Verification: bin/lipc_gen2 -> bin/lipc_gen3
+#   [Stage 4] Deploy Sovereign Compiler Engine (bin/lipc_bin, bin/lipc, bin/lipi)
+#   [Stage 5] Compile Sovereign Native Tools (bin/lipiconvert)
+#   [Stage 6] 60/60 Regression Test Suite in Direct ELF Machine Code Mode
+#   [Stage 7] Complete Sovereignty Audit (0% C, 0% GCC, 0% Python, 0% PHP)
 # ==============================================================================
 
 LIPI_VERSION="প্রথম ১.০"
@@ -32,7 +34,7 @@ cd "${BASE_DIR}"
 
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║  👑 LIPI SOVEREIGN SELF-HOSTING BOOTSTRAP & BUILD PIPELINE             ║${NC}"
-echo -e "${CYAN}║  ⚡ 100% Native Silicon Machine Code | 0% Python | 0% PHP               ║${NC}"
+echo -e "${CYAN}║  ⚡ 100% Pure Lipi Machine Code | 0% C | 0% GCC | 0% Python | 0% PHP   ║${NC}"
 echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -41,58 +43,49 @@ mkdir -p bin dist
 # ------------------------------------------------------------------------------
 # [ধাপ ০: সার্বভৌম বুটস্ট্র্যাপ সিড যাচাইকরণ / Bootstrap Seed Verification]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ০] সার্বভৌম বুটস্ট্র্যাপ যাচাইকরণ (Go/Rust Model)...${NC}"
-if [ ! -f "bin/lipc_native_elf" ]; then
-    if [ -f "boot/lipi-seed" ]; then
-        echo "  ► Deploying bin/lipc_native_elf from static sovereign seed (boot/lipi-seed)..."
-        cp boot/lipi-seed bin/lipc_native_elf
-        chmod +x bin/lipc_native_elf
-    elif [ -f "boot/seed.b64" ]; then
-        echo "  ► Materializing bin/lipc_native_elf from zero-tool seed (boot/seed.b64)..."
-        bash boot/bootstrap.sh > /dev/null
-    else
-        echo "  ► Fallback: Building bin/lipc_native_elf from native C engine (-static)..."
-        gcc -static -O2 src/compiler/native_elf_compiler.c -o bin/lipc_native_elf
-        strip bin/lipc_native_elf
-    fi
+echo -e "${YELLOW}[ধাপ ০] সার্বভৌম বুটস্ট্র্যাপ সিড প্রস্তুতি ও যাচাইকরণ...${NC}"
+if [ -f "boot/lipi-seed" ]; then
+    echo "  ► Deploying sovereign bootstrap seed from boot/lipi-seed..."
+    chmod +x boot/lipi-seed
+elif [ -f "boot/seed.b64" ]; then
+    echo "  ► Materializing sovereign bootstrap seed from ASCII text (boot/seed.b64)..."
+    base64 -d boot/seed.b64 | gzip -d > boot/lipi-seed
+    chmod +x boot/lipi-seed
+else
+    echo -e "${RED}❌ Fatal: No bootstrap seed found in boot/!${NC}"
+    exit 1
 fi
-chmod +x bin/lipc_native_elf bin/lipc
-echo -e "${GREEN}  ✔ সার্বভৌম স্ট্যাটিক সিড ইঞ্জিন সক্রিয় (bin/lipc_native_elf প্রস্তুত - ০% Libc)।${NC}"
+echo -e "${GREEN}  ✔ সার্বভৌম স্ট্যাটিক সিড ইঞ্জিন প্রস্তুত (boot/lipi-seed - ১০০% স্বাধীন)।${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ১: সেলফ-হোস্টেড কম্পাইলার রি-বুটস্ট্র্যাপ / Self-Hosted Compiler Rebuild]
+# [ধাপ ১: স্টেজ ১ রি-বুটস্ট্র্যাপ / Stage 1 Seed Compilation]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ১] খাঁটি লিপিতে রচিত c_codegen.lp সেলফ-কম্পাইলেশন...${NC}"
-_LIPI_ARGV="lipc|src/compiler/c_codegen.lp|src/compiler/c_codegen.c" ./bin/lipc_bin > /dev/null
-# WHY: -static ensures compiler binary has zero dependency on host dynamic linker /lib64/ld-linux
-gcc -static -O2 src/compiler/c_codegen.c -I src/compiler/ -lm -o bin/lipc_bin
-strip bin/lipc_bin
-echo -e "${GREEN}  ✔ bin/lipc_bin সেলফ-হোস্টেড কম্পাইলার সফলভাবে তৈরি হয়েছে (100% Statically Linked)।${NC}"
+echo -e "${YELLOW}[ধাপ ১] সিড দিয়ে খাঁটি লিপি কম্পাইলার (Gen1) তৈরি...${NC}"
+./boot/lipi-seed src/compiler/elf_emitter.lp bin/lipc_gen1 > /dev/null
+chmod +x bin/lipc_gen1
+echo -e "${GREEN}  ✔ bin/lipc_gen1 সফলভাবে সংকলিত (খাঁটি লিপি ডিরেক্ট মেশিন কোড)।${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ২: খাঁটি লিপি ডিরেক্ট ELF মেশিন কোড জেনারেটর / Pure Lipi ELF Emitter]
+# [ধাপ ২: স্টেজ ২ সেলফ-হোস্টিং / Stage 2 Self-Hosting]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ২] খাঁটি লিপি ELF এমিটার (elf_emitter.lp) সংকলন...${NC}"
-_LIPI_ARGV="lipc|src/compiler/elf_emitter.lp|dist/pure_elf.c" ./bin/lipc_bin > /dev/null
-gcc -static -O2 dist/pure_elf.c -I src/compiler/ -lm -o bin/lipc_pure_elf
-strip bin/lipc_pure_elf
-rm -f dist/pure_elf.c
-chmod +x bin/lipc_pure_elf
-echo -e "${GREEN}  ✔ bin/lipc_pure_elf খাঁটি লিপি ডিরেক্ট মেশিন কোড কম্পাইলার প্রস্তুত (100% Statically Linked)।${NC}"
+echo -e "${YELLOW}[ধাপ ২] খাঁটি লিপি Gen1 দিয়ে সম্পূর্ণ সেলফ-হোস্টেড Gen2 সংকলন...${NC}"
+./bin/lipc_gen1 src/compiler/elf_emitter.lp bin/lipc_gen2 > /dev/null
+chmod +x bin/lipc_gen2
+echo -e "${GREEN}  ✔ bin/lipc_gen2 সেলফ-হোস্টেড কম্পাইলার প্রস্তুত (100% Statically Linked ELF64)।${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৩: সেলফ-হোস্টিং ক্লোজার ও বিট-ফর-বিট ডিটারমিনিজম পরীক্ষা]
+# [ধাপ ৩: স্টেজ ৩ বিট-ফর-বিট ডিটারমিনিজম ক্লোজার / Stage 3 Determinism Closure]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৩] সেলফ-হোস্টিং ক্লোজার ও বিট-ফর-বিট ডিটারমিনিজম পরীক্ষা...${NC}"
-_LIPI_ARGV="lipc|src/compiler/c_codegen.lp|dist/lipc_gen1.c" ./bin/lipc_bin > /dev/null
-_LIPI_ARGV="lipc|src/compiler/c_codegen.lp|dist/lipc_gen2.c" ./bin/lipc_bin > /dev/null
+echo -e "${YELLOW}[ধাপ ৩] সেলফ-হোস্টিং ক্লোজার ও বিট-ফর-বিট ডিটারমিনিজম পরীক্ষা (Gen2 -> Gen3)...${NC}"
+./bin/lipc_gen2 src/compiler/elf_emitter.lp bin/lipc_gen3 > /dev/null
+chmod +x bin/lipc_gen3
 
-if cmp -s dist/lipc_gen1.c dist/lipc_gen2.c; then
-    echo -e "${GREEN}  ✔ সেলফ-হোস্টিং ক্লোজার সফল! Gen1 এবং Gen2 ১০০% আইডেন্টিক্যাল (Bit-for-Bit Determinism Verified)।${NC}"
-    rm -f dist/lipc_gen1.c dist/lipc_gen2.c
+if cmp -s bin/lipc_gen2 bin/lipc_gen3; then
+    echo -e "${GREEN}  ✔ সেলফ-হোস্টিং ক্লোজার সফল! Gen2 এবং Gen3 ১০০% বিট-ফর-বিট অভিন্ন (Bit-for-Bit Identical)!${NC}"
+    rm -f bin/lipc_gen1 bin/lipc_gen3
 else
     echo -e "${RED}  ❌ এরর: বিট-ফর-বিট ডিটারমিনিজম অমিল!${NC}"
     exit 1
@@ -100,21 +93,71 @@ fi
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৪: টেস্ট প্রোগ্রামসমূহ নেটিভ ডিরেক্ট ELF কম্পাইলেশন ও রানটাইম ভ্যালিডেশন]
+# [ধাপ ৪: সার্বভৌমিক কম্পাইলার ইঞ্জিন ডেপ্লয় / Deploy Sovereign Engine]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৪] ৬০টি রিগ্রেশন টেস্ট রান করা হচ্ছে (Direct Machine Code Mode)...${NC}"
+echo -e "${YELLOW}[ধাপ ৪] সার্বভৌমিক কম্পাইলার ইঞ্জিন ডেপ্লয়মেন্ট...${NC}"
+cp bin/lipc_gen2 bin/lipc_bin
+chmod +x bin/lipc_bin
+rm -f bin/lipc_gen2
+
+# WHY: Lightweight sovereign wrapper script delegating directly to native machine code engine
+cat << 'DRIVER' > bin/lipc
+#!/usr/bin/env bash
+# ==============================================================================
+# 👑 LIPI SOVEREIGN COMPILER DRIVER (bin/lipc)
+# ⚡ 100% Pure Lipi Machine Code Engine | 0% C | 0% GCC | 0% Libc | 0% Python
+# ==============================================================================
+
+set -euo pipefail
+
+LIPI_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIPC_BINARY="${LIPI_BIN_DIR}/lipc_bin"
+
+if [ ! -x "${LIPC_BINARY}" ]; then
+    echo "❌ Error: Sovereign compiler engine ${LIPC_BINARY} not found or not executable." >&2
+    exit 1
+fi
+
+exec "${LIPC_BINARY}" "$@"
+DRIVER
+chmod +x bin/lipc bin/lipi
+echo -e "${GREEN}  ✔ bin/lipc এবং bin/lipc_bin সফলভাবে স্থাপন করা হয়েছে।${NC}"
+echo ""
+
+# ------------------------------------------------------------------------------
+# [ধাপ ৫: নেটিভ টুলচেইন সংকলন / Compile Native Tools]
+# ------------------------------------------------------------------------------
+echo -e "${YELLOW}[ধাপ ৫] নেটিভ টুলচেইন টুলস যাচাইকরণ...${NC}"
+./bin/lipc_bin src/tools/lipiconvert.lp bin/lipiconvert > /dev/null
+chmod +x bin/lipiconvert
+echo -e "${GREEN}  ✔ নেটিভ টুলস সংকলিত (bin/lipiconvert)।${NC}"
+echo ""
+
+# ------------------------------------------------------------------------------
+# [ধাপ ৬: ৬০টি রিগ্রেশন টেস্ট রান / Run 60/60 Regression Tests]
+# ------------------------------------------------------------------------------
+echo -e "${YELLOW}[ধাপ ৬] ৬০টি রিগ্রেশন টেস্ট রান করা হচ্ছে (Direct Machine Code Mode)...${NC}"
 bash tests/run_tests.sh --direct-elf
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৫: সার্বভৌমত্ব অডিট: কোডবেসে ০% Python এবং ০% PHP নিশ্চিতকরণ]
+# [ধাপ ৭: সার্বভৌমত্ব অডিট / Complete Sovereignty Audit]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৫] সার্বভৌমত্ব অডিট: কোডবেসে ০% Python ও ০% PHP উপস্থিতি পরীক্ষা:${NC}"
-PY_COUNT=$(find src std tests bin scripts -name "*.py" 2>/dev/null | wc -l)
+echo -e "${YELLOW}[ধাপ ৭] সার্বভৌমত্ব অডিট: কোডবেসে ০% C, ০% GCC, ০% Python ও ০% PHP নিশ্চিতকরণ:${NC}"
+
+C_COUNT=$(find . -name "*.c" -o -name "*.h" 2>/dev/null | wc -l)
+PY_COUNT=$(find src std tests bin scripts apps -name "*.py" 2>/dev/null | wc -l)
 PHP_COUNT=$(find src std tests bin scripts apps -name "*.php" 2>/dev/null | wc -l)
 
+if [ "${C_COUNT}" -eq 0 ]; then
+    echo -e "${GREEN}  ✔ কোডবেসে কোনো .c বা .h ফাইল নেই! (০% C, ০% হেডার — ১০০% খাঁটি লিপি)${NC}"
+else
+    echo -e "${RED}  ❌ সতর্কতা: কোডবেসে এখনও ${C_COUNT} টি .c/.h ফাইল রয়েছে!${NC}"
+    exit 1
+fi
+
 if [ "${PY_COUNT}" -eq 0 ]; then
-    echo -e "${GREEN}  ✔ কোর ডিরেক্টরিতে কোনো .py ফাইল নেই! (০% Python — ১০০% স্বাধীন লিপি)${NC}"
+    echo -e "${GREEN}  ✔ কোডবেসে কোনো .py ফাইল নেই! (০% Python — ১০০% স্বাধীন লিপি)${NC}"
 else
     echo -e "${RED}  ❌ সতর্কতা: কোডবেসে এখনও ${PY_COUNT} টি .py ফাইল রয়েছে!${NC}"
     exit 1
@@ -127,7 +170,29 @@ else
     exit 1
 fi
 
+# WHY: Verify that the compiler executes and generates working binaries even when GCC is completely disabled
+FAKE_BIN="$(mktemp -d)"
+echo '#!/bin/sh' > "${FAKE_BIN}/gcc"
+echo 'echo "CRITICAL: GCC called!" >&2; exit 1' >> "${FAKE_BIN}/gcc"
+chmod +x "${FAKE_BIN}/gcc"
+
+TMP_PROBE="/tmp/lipi_no_gcc_audit"
+if PATH="${FAKE_BIN}:${PATH}" ./bin/lipc tests/51_minimal_hello.lp -o "${TMP_PROBE}" >/dev/null 2>&1; then
+    if "${TMP_PROBE}" >/dev/null 2>&1; then
+        echo -e "${GREEN}  ✔ GCC মাস্কিং টেস্ট সফল: ০% GCC নির্ভরতা নিশ্চিত (সম্পূর্ণ স্বয়ংসম্পূর্ণ)!${NC}"
+    else
+        echo -e "${RED}  ❌ GCC মাস্কিং টেস্ট রানটাইম ব্যর্থ!${NC}"
+        rm -rf "${FAKE_BIN}" "${TMP_PROBE}"
+        exit 1
+    fi
+    rm -rf "${FAKE_BIN}" "${TMP_PROBE}"
+else
+    echo -e "${RED}  ❌ GCC মাস্কিং টেস্ট সংকলন ব্যর্থ!${NC}"
+    rm -rf "${FAKE_BIN}"
+    exit 1
+fi
+
 echo ""
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║  🎉 সকল পরীক্ষা সফল! লিপি এখন সম্পূর্ণ সার্বভৌম ও আত্মনির্ভর!       ║${NC}"
+echo -e "${CYAN}║  🎉 সকল ধাপ ও পরীক্ষা সফল! লিপি এখন ১০০% সার্বভৌম ও আত্মনির্ভর!  ║${NC}"
 echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════╝${NC}"
