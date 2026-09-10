@@ -181,7 +181,8 @@ fn tokenize src
         p = get(p_ref, 0)
         c = lex_char(src, p)
 
-        if c == "\r"
+        // WHY: Carriage return \r (ASCII 13) check by ord() so it does not rely on string escape
+        if ord(c) == 13
             list_set(p_ref, 0, p + 1)
             continue
 
@@ -225,11 +226,18 @@ fn tokenize src
                 if sc == "\\"
                     list_set(p_ref, 0, get(p_ref, 0) + 1)
                     esc = lex_char(src, get(p_ref, 0))
-                    if esc == "n" sv = sv + "\n"
-                    elif esc == "t" sv = sv + "\t"
-                    elif esc == "\\" sv = sv + "\\"
-                    elif esc == "\"" sv = sv + "\""
-                    else sv = sv + esc
+                    if esc == "n"
+                        sv = sv + "\n"
+                    elif esc == "t"
+                        sv = sv + "\t"
+                    elif esc == "r"
+                        sv = sv + chr(13)
+                    elif esc == "\\"
+                        sv = sv + "\\"
+                    elif esc == "\""
+                        sv = sv + "\""
+                    else
+                        sv = sv + esc
                     list_set(p_ref, 0, get(p_ref, 0) + 1)
                 elif sc == "\""
                     list_set(p_ref, 0, get(p_ref, 0) + 1)
@@ -472,11 +480,15 @@ fn parse_stmt ps
         then_b = parse_block(ps)
         elifs = list()
         else_b = null
+        // WHY: Skip newlines before elif/else — handles one-liner if bodies like:
+        //      "if cond body_stmt\nelif cond2 body2" where NL is current after body_stmt
+        ps_skip_nl(ps)
         while ps_is_kw(ps, "elif") == 1
             ps_adv(ps)
             ec = parse_expr(ps)
             eb = parse_block(ps)
             push(elifs, list(ec, eb))
+            ps_skip_nl(ps)
         if ps_is_kw(ps, "else") == 1
             ps_adv(ps)
             else_b = parse_block(ps)

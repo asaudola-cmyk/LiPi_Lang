@@ -27,9 +27,10 @@ class ContinueException(Exception):
 
 
 class Environment:
-    def __init__(self, parent: Optional['Environment'] = None):
+    def __init__(self, parent: Optional['Environment'] = None, is_function_boundary: bool = False):
         self.vars: Dict[str, Any] = {}
         self.parent = parent
+        self.is_function_boundary = is_function_boundary
 
     def get(self, name: str) -> Any:
         if name in self.vars:
@@ -42,13 +43,22 @@ class Environment:
         """Create/update variable in current scope."""
         self.vars[name] = value
 
+    def has_in_fn_scope(self, name: str) -> bool:
+        """Check if variable exists in this environment or any parent up to function boundary."""
+        if name in self.vars:
+            return True
+        if self.is_function_boundary or not self.parent:
+            return False
+        return self.parent.has_in_fn_scope(name)
+
     def assign(self, name: str, value: Any):
-        """Update existing variable (walks up scope chain) or create in current scope.
-        WHY: So inner functions can read outer vars, and assignment updates the right scope.
+        """Update existing variable in function scope or create in current scope.
+        WHY: Does NOT walk past function boundary to prevent accidental mutation of globals.
+             Inside loops/blocks, updates enclosing variables within the same function.
         """
         if name in self.vars:
             self.vars[name] = value
-        elif self.parent and self.parent.has(name):
+        elif not self.is_function_boundary and self.parent and self.parent.has_in_fn_scope(name):
             self.parent.assign(name, value)
         else:
             self.vars[name] = value  # create new in current scope
@@ -73,8 +83,8 @@ class LipiFunction:
             raise LipiError(
                 f"Function '{self.name}' expects {len(self.params)} args, got {len(args)}"
             )
-        # WHY: New env with closure as parent — each call gets fresh local scope
-        env = Environment(parent=self.closure)
+        # WHY: New env with closure as parent — each call gets fresh local scope with is_function_boundary=True
+        env = Environment(parent=self.closure, is_function_boundary=True)
         for param, arg in zip(self.params, args):
             env.set(param, arg)
         try:

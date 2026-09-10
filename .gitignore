@@ -306,3 +306,4 @@ bin/lipic-stage1
 bin/lipic_gen
 bin/lipi-gen2
 __pycache__/
+bin/lipc_bin

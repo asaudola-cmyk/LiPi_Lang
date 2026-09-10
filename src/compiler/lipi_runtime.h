@@ -92,7 +92,12 @@ static inline int lv_truthy(LipiVal v) {
 }
 
 static inline int lv_equal(LipiVal a, LipiVal b) {
-    if (a.type != b.type) return 0;
+    if (a.type != b.type) {
+        /* WHY: Allow bool and num comparison (e.g. lv_bool(1) == lv_num(1)), standard in dynamic languages */
+        if (a.type == LV_BOOL && b.type == LV_NUM) return a.bool_val == (b.num != 0.0);
+        if (a.type == LV_NUM && b.type == LV_BOOL) return (a.num != 0.0) == b.bool_val;
+        return 0;
+    }
     switch (a.type) {
         case LV_NULL:  return 1;
         case LV_NUM:   return a.num == b.num;

@@ -75,7 +75,15 @@ trap "rm -f '$TMP_C'" EXIT
 [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Compiling: $INPUT → C${RESET}"
 cd "$LIPI_HOME"
 
-if python3 "$LIPI_CODEGEN" "$INPUT" -o "$TMP_C" 2>&1; then
+if [[ -x "$LIPI_HOME/bin/lipc_bin" ]]; then
+    # WHY: Native self-hosted compiler — zero Python dependency at compile time
+    if _LIPI_ARGV="lipc|$INPUT|$TMP_C" "$LIPI_HOME/bin/lipc_bin" >/dev/null 2>&1; then
+        :
+    else
+        echo -e "${RED}❌ Native Lipi→C compilation failed${RESET}"
+        exit 1
+    fi
+elif python3 "$LIPI_CODEGEN" "$INPUT" -o "$TMP_C" 2>&1; then
     :
 else
     echo -e "${RED}❌ Lipi→C transpilation failed${RESET}"
