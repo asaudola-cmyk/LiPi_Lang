@@ -290,6 +290,11 @@ class Interpreter:
             'exit': lipi_exit,
             'time_ms': lipi_time_ms,
             'env': lipi_env_get,
+            # argv() → list of args passed after script name on command line
+            # WHY: 'lipi c_codegen.lp input.lp output.c' → argv() = ["c_codegen.lp", "input.lp", "output.c"]
+            'argv': lambda: [s for s in _os.environ.get('_LIPI_ARGV', '').split('|') if s],
+
+
         }
         for name, fn in builtins.items():
             env.set(name, fn)

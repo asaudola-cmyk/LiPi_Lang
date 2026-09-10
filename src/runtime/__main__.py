@@ -43,12 +43,23 @@ Docs: {LIPI_GITHUB}
 """,
     )
     ap.add_argument('file', nargs='?', help='Lipi source file (.lp)')
+    ap.add_argument('script_args', nargs='*', help='Arguments passed to the Lipi script via argv()')
     ap.add_argument('-e', '--eval', metavar='CODE', help='Evaluate code string directly')
     ap.add_argument('--tokens', action='store_true', help='Show lexer tokens and exit')
     ap.add_argument('--ast', action='store_true', help='Show AST and exit')
     ap.add_argument('--repl', action='store_true', help='Start interactive REPL')
     ap.add_argument('-V', '--version', action='store_true', help='Show version')
     args = ap.parse_args()
+
+    # WHY: Make script args available to Lipi programs via argv() builtin
+    # E.g.: lipi c_codegen.lp input.lp output.c  → argv() returns ["input.lp", "output.c"]
+    script_args = args.script_args if args.script_args else []
+    # Store globally so interpreter can expose via argv()
+    # WHY: Use pipe | as separator (null bytes not allowed in Linux env vars)
+    import os
+    all_args = [args.file or ''] + script_args
+    os.environ['_LIPI_ARGV'] = '|'.join(all_args)
+
 
     if args.version:
         print(f'Lipi {LIPI_VERSION} — {LIPI_CODENAME}')
@@ -76,6 +87,7 @@ Docs: {LIPI_GITHUB}
             return 1
 
     return _run(source, filename, show_tokens=args.tokens, show_ast=args.ast)
+
 
 
 def _run(source: str, filename: str, show_tokens=False, show_ast=False) -> int:
