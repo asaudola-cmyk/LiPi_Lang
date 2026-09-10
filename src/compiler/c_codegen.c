@@ -38,6 +38,7 @@ static LipiVal u_ps_eat_kw(LipiVal*, int);
 static LipiVal u_ps_eat_op(LipiVal*, int);
 static LipiVal u_ps_eat_ident(LipiVal*, int);
 static LipiVal u_ps_is_ident(LipiVal*, int);
+static LipiVal u_ps_is_arg_start(LipiVal*, int);
 static LipiVal u_n_kind(LipiVal*, int);
 static LipiVal u_parse_block(LipiVal*, int);
 static LipiVal u_parse_stmt(LipiVal*, int);
@@ -741,6 +742,37 @@ static LipiVal u_ps_is_ident(LipiVal* _args, int _nargs) {
     return lv_null();
 }
 
+/* fn ps_is_arg_start */
+static LipiVal u_ps_is_arg_start(LipiVal* _args, int _nargs) {
+    LipiVal u_s = (_nargs > 0) ? _args[0] : lv_null();
+    LipiVal u_t = lv_null();
+    LipiVal u_tt = lv_null();
+    LipiVal u_tv = lv_null();
+    u_t = u_ps_cur((LipiVal[1]){u_s}, 1);
+    if (lv_truthy(lv_bool(lv_equal(u_t, lv_null())))) {
+        return lv_num(0);
+    }
+    u_tt = u_tok_type((LipiVal[1]){u_t}, 1);
+    u_tv = u_tok_val((LipiVal[1]){u_t}, 1);
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_NL))) || lv_truthy(lv_bool(lv_equal(u_tt, u_TT_DEDENT))))) || lv_truthy(lv_bool(lv_equal(u_tt, u_TT_EOF))))) || lv_truthy(lv_bool(lv_equal(u_tt, u_TT_INDENT)))))) {
+        return lv_num(0);
+    }
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_NUM))) || lv_truthy(lv_bool(lv_equal(u_tt, u_TT_STR)))))) {
+        return lv_num(1);
+    }
+    if (lv_truthy(lv_bool(lv_equal(u_tt, u_TT_IDENT)))) {
+        return lv_num(1);
+    }
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_OP))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("("))))))) {
+        return lv_num(1);
+    }
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("true")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("false")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("null")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("nil"))))))))) {
+        return lv_num(1);
+    }
+    return lv_num(0);
+    return lv_null();
+}
+
 /* fn n_kind */
 static LipiVal u_n_kind(LipiVal* _args, int _nargs) {
     LipiVal u_node = (_nargs > 0) ? _args[0] : lv_null();
@@ -812,7 +844,7 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
     LipiVal u_start_e = lv_null();
     LipiVal u_end_e = lv_null();
     LipiVal u_step_e = lv_null();
-    LipiVal u_arg = lv_null();
+    LipiVal u_say_args = lv_null();
     LipiVal u_next = lv_null();
     LipiVal u_expr = lv_null();
     u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
@@ -835,8 +867,17 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
         u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
         if (lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_INDENT}, 2), lv_num(1))))) {
             u_ps_adv((LipiVal[1]){u_ps}, 1);
-            while (lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null()))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_DEDENT}, 2), lv_num(0))))))) {
+            while (lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
                 u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
+                if (lv_truthy(lv_bool(lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
+                    break;
+                }
+                if (lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_DEDENT}, 2), lv_num(1))))) {
+                    break;
+                }
+                if (lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(1))))) {
+                    break;
+                }
                 if (lv_truthy(lv_bool(lv_equal(u_ps_is_ident((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
                     lv_push(u_fields, u_ps_eat_ident((LipiVal[1]){u_ps}, 1));
                 } else {
@@ -937,8 +978,11 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
         if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(1))))))) {
             return lv_list_make(3, u_NT_FNCALL, lv_str("say"), lv_list_make(0));
         }
-        u_arg = u_parse_expr((LipiVal[1]){u_ps}, 1);
-        return lv_list_make(3, u_NT_FNCALL, lv_str("say"), lv_list_make(1, u_arg));
+        u_say_args = lv_list_make(0);
+        while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null()))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_DEDENT}, 2), lv_num(0))))))) {
+            lv_push(u_say_args, u_parse_add((LipiVal[1]){u_ps}, 1));
+        }
+        return lv_list_make(3, u_NT_FNCALL, lv_str("say"), u_say_args);
     }
     if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("include"))))))) {
         while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null()))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(0))))))) {
@@ -1174,14 +1218,21 @@ static LipiVal u_parse_primary(LipiVal* _args, int _nargs) {
             u_ps_eat_op((LipiVal[2]){u_ps, lv_str(")")}, 2);
             return lv_list_make(3, u_NT_FNCALL, u_name, u_args);
         }
+        u_args = lv_list_make(0);
+        while (lv_truthy(lv_bool(lv_equal(u_ps_is_arg_start((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
+            lv_push(u_args, u_parse_add((LipiVal[1]){u_ps}, 1));
+        }
+        if (lv_truthy(lv_bool(lv_gt(lv_len(u_args), lv_num(0))))) {
+            return lv_list_make(3, u_NT_FNCALL, u_name, u_args);
+        }
         return lv_list_make(2, u_NT_IDENT_N, u_name);
     }
     if (lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW)))) {
         u_bkw_list = lv_list_make(51, lv_str("len"), lv_str("push"), lv_str("pop"), lv_str("get"), lv_str("set"), lv_str("list"), lv_str("sort"), lv_str("sum"), lv_str("join"), lv_str("str"), lv_str("int"), lv_str("float"), lv_str("abs"), lv_str("sqrt"), lv_str("floor"), lv_str("ceil"), lv_str("round"), lv_str("min"), lv_str("max"), lv_str("upper"), lv_str("lower"), lv_str("trim"), lv_str("split"), lv_str("contains"), lv_str("starts_with"), lv_str("ends_with"), lv_str("replace"), lv_str("char_at"), lv_str("index_of"), lv_str("ord"), lv_str("chr"), lv_str("file_read"), lv_str("file_write"), lv_str("file_append"), lv_str("file_exists"), lv_str("argv"), lv_str("type"), lv_str("exit"), lv_str("list_set"), lv_str("list_get"), lv_str("pow"), lv_str("log"), lv_str("bool"), lv_str("append"), lv_str("env"), lv_str("time_ms"), lv_str("log2"), lv_str("log10"), lv_str("tan"), lv_str("sin"), lv_str("cos"));
         u_found = lv_num(0);
-        { LipiVal _e63_it=u_bkw_list;
-        if (_e63_it.type==LV_LIST) { for (int _e63_i=0; _e63_i<_e63_it.list->count; _e63_i++) {
-            LipiVal u_bkw=_e63_it.list->items[_e63_i];
+        { LipiVal _e70_it=u_bkw_list;
+        if (_e70_it.type==LV_LIST) { for (int _e70_i=0; _e70_i<_e70_it.list->count; _e70_i++) {
+            LipiVal u_bkw=_e70_it.list->items[_e70_i];
             if (lv_truthy(lv_bool(lv_equal(u_bkw, u_tv)))) {
                 u_found = lv_num(1);
                 break;
@@ -1424,7 +1475,7 @@ static LipiVal u_gen_builtin(LipiVal* _args, int _nargs) {
         u_acc = u_a0;
         u_i = lv_num(1);
         while (lv_truthy(lv_bool(lv_lt(u_i, u_n)))) {
-            u_acc = lv_add(lv_add(lv_add(lv_add(lv_str("lv_add("), u_acc), lv_str(", ")), lv_get(u_args_c, u_i)), lv_str(")"));
+            u_acc = lv_add(lv_add(lv_add(lv_add(lv_str("lv_add(lv_add("), u_acc), lv_str(", lv_str(\" \")), ")), lv_get(u_args_c, u_i)), lv_str(")"));
             u_i = lv_add(u_i, lv_num(1));
         }
         return lv_add(lv_add(lv_str("lipi_say("), u_acc), lv_str(")"));
@@ -2208,13 +2259,5 @@ int main(void) {
         lipi_say(lv_add(lv_add(lv_add(lv_str("DONE: "), u_input_file), lv_str(" -> ")), u_output_file));
         lipi_say(lv_add(lv_add(lv_str("Next: gcc "), u_output_file), lv_str(" -I src/compiler/ -lm -o program")));
     }
-    lv_null();
-    lv_null();
-    lv_null();
-    lv_null();
-    lv_null();
-    lv_null();
-    lv_null();
-    lv_null();
     return 0;
 }

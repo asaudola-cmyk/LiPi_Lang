@@ -307,3 +307,4 @@ bin/lipic_gen
 bin/lipi-gen2
 __pycache__/
 bin/lipc_bin
+bin/lipirepl_bin

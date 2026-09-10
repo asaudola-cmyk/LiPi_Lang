@@ -1,13 +1,67 @@
 #!/bin/bash
-# Lipi Programming Language — Runtime Wrapper
-# Version: First 1.0 (Sovereign)
-# Usage:
-#   lipi              → Interactive REPL
-#   lipi file.lp     → Run a Lipi file
-#   lipi --version   → Show version
-#   lipi --help      → Show help
-#   lipi -e 'code'   → Evaluate expression
+# Lipi Programming Language — Native Sovereign Runner
+# Version: First 1.0 (প্রথম ১.০) — Sovereign
+# WHY: 100% Native execution toolchain — Zero Python dependency.
+
+set -e
 
 LIPI_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
-cd "$LIPI_HOME"
-exec python3 -m src.runtime "$@"
+export LIPI_HOME
+
+VERSION="First 1.0 (প্রথম ১.০) — Sovereign [Native Toolchain]"
+
+# No arguments -> Launch native REPL
+if [ $# -eq 0 ]; then
+    if [ -x "$LIPI_HOME/bin/lipirepl_bin" ]; then
+        exec "$LIPI_HOME/bin/lipirepl_bin"
+    else
+        echo "Error: Native REPL binary not found. Rebuilding..."
+        gcc -O2 "$LIPI_HOME/src/runtime/native_repl.c" -o "$LIPI_HOME/bin/lipirepl_bin"
+        exec "$LIPI_HOME/bin/lipirepl_bin"
+    fi
+fi
+
+case "$1" in
+    --version|-v)
+        echo "Lipi $VERSION"
+        exit 0
+        ;;
+    --help|-h)
+        echo "Lipi Programming Language — Native Runner"
+        echo "Version: $VERSION"
+        echo ""
+        echo "Usage:"
+        echo "  lipi                     → Launch interactive native REPL"
+        echo "  lipi <file.lp> [args...] → Run Lipi source file natively"
+        echo "  lipi -e '<code>'         → Evaluate one-liner expression"
+        echo "  lipi --version           → Print version"
+        echo "  lipi --help              → Show this help message"
+        echo ""
+        echo "Native Compiler:"
+        echo "  lipc <file.lp> -o <bin>  → Compile to standalone executable"
+        exit 0
+        ;;
+    -e)
+        if [ -z "$2" ]; then
+            echo "Error: -e requires code string"
+            exit 1
+        fi
+        TMP_SRC="$(mktemp /tmp/lipi_eval_XXXXXXXX.lp)"
+        TMP_BIN="$(mktemp /tmp/lipi_eval_XXXXXXXX)"
+        trap "rm -f '$TMP_SRC' '$TMP_BIN' '${TMP_BIN}.c'" EXIT
+        echo "$2" > "$TMP_SRC"
+        "$LIPI_HOME/bin/lipc" "$TMP_SRC" -o "$TMP_BIN" >/dev/null 2>&1
+        exec "$TMP_BIN" "${@:3}"
+        ;;
+    *)
+        INPUT="$1"
+        if [ ! -f "$INPUT" ]; then
+            echo "Error: file '$INPUT' not found"
+            exit 1
+        fi
+        TMP_BIN="$(mktemp /tmp/lipi_run_XXXXXXXX)"
+        trap "rm -f '$TMP_BIN' '${TMP_BIN}.c'" EXIT
+        "$LIPI_HOME/bin/lipc" "$INPUT" -o "$TMP_BIN" >/dev/null 2>&1
+        exec "$TMP_BIN" "${@:2}"
+        ;;
+esac

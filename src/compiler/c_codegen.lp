@@ -398,6 +398,24 @@ fn ps_is_ident s
     if tok_type(t) == TT_IDENT return 1
     return 0
 
+// WHY: Check if token is valid start of a function argument on the same line
+fn ps_is_arg_start s
+    t = ps_cur(s)
+    if t == null return 0
+    tt = tok_type(t)
+    tv = tok_val(t)
+    if tt == TT_NL or tt == TT_DEDENT or tt == TT_EOF or tt == TT_INDENT
+        return 0
+    if tt == TT_NUM or tt == TT_STR
+        return 1
+    if tt == TT_IDENT
+        return 1
+    if tt == TT_OP and tv == "("
+        return 1
+    if tt == TT_KW and (tv == "true" or tv == "false" or tv == "null" or tv == "nil")
+        return 1
+    return 0
+
 // AST node kind accessor
 fn n_kind node
     if node == null return 0
@@ -442,13 +460,17 @@ fn parse_stmt ps
         ps_skip_nl(ps)
         if ps_is_tt(ps, TT_INDENT) == 1
             ps_adv(ps)
-            while ps_cur(ps) != null and ps_is_tt(ps, TT_DEDENT) == 0
+            while ps_cur(ps) != null
                 ps_skip_nl(ps)
+                if ps_cur(ps) == null break
+                if ps_is_tt(ps, TT_DEDENT) == 1 break
+                if ps_is_tt(ps, TT_EOF) == 1 break
                 if ps_is_ident(ps) == 1
                     push(fields, ps_eat_ident(ps))
                 else
                     ps_adv(ps)
-            if ps_is_tt(ps, TT_DEDENT) == 1 ps_adv(ps)
+            if ps_is_tt(ps, TT_DEDENT) == 1
+                ps_adv(ps)
         return list(NT_STRUCT, name, fields)
 
     // fn definition
@@ -542,8 +564,10 @@ fn parse_stmt ps
         ps_adv(ps)
         if ps_is_tt(ps, TT_NL) == 1 or ps_is_tt(ps, TT_EOF) == 1
             return list(NT_FNCALL, "say", list())
-        arg = parse_expr(ps)
-        return list(NT_FNCALL, "say", list(arg))
+        say_args = list()
+        while ps_cur(ps) != null and ps_is_tt(ps, TT_NL) == 0 and ps_is_tt(ps, TT_EOF) == 0 and ps_is_tt(ps, TT_DEDENT) == 0
+            push(say_args, parse_add(ps))
+        return list(NT_FNCALL, "say", say_args)
 
     // include -- skip
     if tt == TT_KW and tv == "include"
@@ -688,6 +712,12 @@ fn parse_primary ps
                     push(args, parse_expr(ps))
             ps_eat_op(ps, ")")
             return list(NT_FNCALL, name, args)
+        // WHY: Bare function call without parentheses (e.g. "fibonacci i", "double x")
+        args = list()
+        while ps_is_arg_start(ps) == 1
+            push(args, parse_add(ps))
+        if len(args) > 0
+            return list(NT_FNCALL, name, args)
         return list(NT_IDENT_N, name)
     // Built-in keyword used as expression
     if tt == TT_KW
@@ -807,7 +837,8 @@ fn gen_builtin name args_c
         acc = a0
         i = 1
         while i < n
-            acc = "lv_add(" + acc + ", " + get(args_c, i) + ")"
+            // WHY: In Lipi/Python, say a b prints space-separated arguments
+            acc = "lv_add(lv_add(" + acc + ", lv_str(\" \")), " + get(args_c, i) + ")"
             i = i + 1
         return "lipi_say(" + acc + ")"
     if name == "len" or name == "length"  return "lv_len(" + a0 + ")"
