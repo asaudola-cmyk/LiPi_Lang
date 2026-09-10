@@ -21,37 +21,42 @@ usage() {
     echo "Usage: lipc <file.lp> [options]"
     echo ""
     echo "Options:"
-    echo "  -o <output>   Output binary name (default: basename of file)"
-    echo "  --emit-c      Print generated C code to stdout"
-    echo "  --emit-asm    Print assembly (requires -S after gcc)"
-    echo "  -O0/-O2/-O3   GCC optimization level (default: -O2)"
-    echo "  -v            Verbose output"
+    echo "  -o <output>          Output binary name (default: basename of file)"
+    echo "  --direct-elf         Direct x86_64 ELF machine code (Zero GCC, Zero Libc) 👑"
+    echo "  --baremetal          Alias for --direct-elf"
+    echo "  --emit-c             Print generated C code to stdout"
+    echo "  --emit-asm           Print assembly (requires -S after gcc)"
+    echo "  -O0/-O2/-O3          GCC optimization level (default: -O2)"
+    echo "  -v                   Verbose output"
     echo ""
     echo "Examples:"
-    echo "  lipc hello.lp              Compile to ./hello"
-    echo "  lipc hello.lp -o myapp     Compile to ./myapp"
-    echo "  lipc --emit-c hello.lp     Show generated C code"
-    echo "  echo 'say 42' | lipc -     Read from stdin"
+    echo "  lipc hello.lp                    Compile to ./hello"
+    echo "  lipc --direct-elf hello.lp       Zero-GCC Direct Machine Code"
+    echo "  lipc hello.lp -o myapp           Compile to ./myapp"
+    echo "  lipc --emit-c hello.lp           Show generated C code"
+    echo "  echo 'say 42' | lipc -           Read from stdin"
 }
 
 # Parse args
 INPUT=""
 OUTPUT=""
 EMIT_C=0
+DIRECT_ELF=0
 OPT_LEVEL="-O2"
 VERBOSE=0
 EXTRA_GCC=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -o)          OUTPUT="$2"; shift 2 ;;
-        --emit-c)    EMIT_C=1; shift ;;
-        --emit-asm)  EXTRA_GCC="-S"; shift ;;
+        -o)                  OUTPUT="$2"; shift 2 ;;
+        --direct-elf|--baremetal) DIRECT_ELF=1; shift ;;
+        --emit-c)            EMIT_C=1; shift ;;
+        --emit-asm)          EXTRA_GCC="-S"; shift ;;
         -O0|-O1|-O2|-O3|-Os) OPT_LEVEL="$1"; shift ;;
-        -v)          VERBOSE=1; shift ;;
-        --help|-h)   usage; exit 0 ;;
-        -*)          echo "Unknown option: $1"; usage; exit 1 ;;
-        *)           INPUT="$1"; shift ;;
+        -v)                  VERBOSE=1; shift ;;
+        --help|-h)           usage; exit 0 ;;
+        -*)                  echo "Unknown option: $1"; usage; exit 1 ;;
+        *)                   INPUT="$1"; shift ;;
     esac
 done
 
@@ -65,6 +70,21 @@ fi
 if [[ -z "$OUTPUT" ]]; then
     OUTPUT="${INPUT%.lp}"
     OUTPUT="$(basename "$OUTPUT")"
+fi
+
+# 👑 Pillar 1 & 2: Direct x86_64 ELF Machine Code Emitter (Zero GCC, Zero Libc)
+if [[ $DIRECT_ELF -eq 1 ]] || ! command -v gcc &>/dev/null; then
+    [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Direct ELF Generation: $INPUT → ./$OUTPUT${RESET}"
+    cd "$LIPI_HOME"
+    if python3 -m src.compiler.elf_emitter "$INPUT" "$OUTPUT"; then
+        echo -e "${GREEN}✔ Compiled (Direct Machine Code 👑): $INPUT → ./$OUTPUT${RESET}"
+        echo -e "  Zero GCC | Zero Libc | 100% Statically Linked Linux ELF64"
+        echo -e "  Run: ${CYAN}./$OUTPUT${RESET}"
+        exit 0
+    else
+        echo -e "${RED}❌ Direct ELF compilation failed${RESET}"
+        exit 1
+    fi
 fi
 
 # Temp files
