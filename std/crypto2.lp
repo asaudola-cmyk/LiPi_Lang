@@ -18,8 +18,8 @@
 //   - CSPRNG (cryptographically secure random)
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/sys/kernel.lp"
+include "std/mem.lp"
+include "std/kernel.lp"
 
 // ─── Hash Sizes ───────────────────────────────────────────────────────────────
 SHA3_256_SIZE  = 32   // 256 bits = 32 bytes

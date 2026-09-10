@@ -15,9 +15,10 @@ NC='\033[0m'
 KERNEL="dist/lipi_os_kernel.elf"
 
 if [ ! -f "${KERNEL}" ]; then
+    # WHY: Synthesize multiboot OS kernel ELF if not already present
     echo -e "${YELLOW}► কার্নেল ইমেজ পাওয়া যায়নি! প্রথমে সিন্থেসিস করা হচ্ছে...${NC}"
-    ./bin/lipic examples/41_baremetal_multiboot_kernel.lp -o dist/test41_kernel
-    ./dist/test41_kernel
+    ./bin/lipc examples/08_baremetal_os/main.lp -o dist/test_kernel_builder
+    ./dist/test_kernel_builder
 fi
 
 if ! command -v qemu-system-x86_64 &> /dev/null; then

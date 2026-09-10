@@ -27,9 +27,9 @@
 //   http = "২.০"
 // ==============================================================================
 
-include "std/core/io.lp"
-include "std/core/mem.lp"
-include "std/sys/kernel.lp"
+include "std/io.lp"
+include "std/mem.lp"
+include "std/kernel.lp"
 include "std/version.lp"
 
 // ─────────────────────────────────────────────────────────────────────────────

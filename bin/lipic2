@@ -1,4 +1,0 @@
-#!/bin/bash
-# লিপি ২.০ Native Runtime wrapper — Zero Python
-LIPI_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
-exec "$LIPI_HOME/bin/lipi" "$@"

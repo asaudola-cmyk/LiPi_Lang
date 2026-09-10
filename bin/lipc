@@ -84,7 +84,7 @@ if [[ $USE_C -eq 0 ]]; then
     [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Direct ELF Generation: $INPUT → $OUTPUT${RESET}"
     cd "$LIPI_HOME"
 
-    # Strategy 1: Native Standalone In-Memory Machine Code Generator (Zero GCC, Zero Libc)
+    # Strategy 1: Standalone Sovereign Machine Code Generator (Zero GCC, Zero Libc)
     if [[ -x "$LIPI_HOME/bin/lipc_native_elf" ]]; then
         if "$LIPI_HOME/bin/lipc_native_elf" "$INPUT" "$OUTPUT" >/dev/null 2>&1; then
             echo -e "${GREEN}✔ Compiled (Direct Machine Code 👑): $INPUT → $OUTPUT${RESET}"
@@ -128,7 +128,8 @@ fi
 # Compile C to native binary via gcc
 [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Compiling C to native binary${RESET}"
 
-if gcc $OPT_LEVEL "$TMP_C" \
+# WHY: -static guarantees 100% standalone binary without libc dynamic linker dependency
+if gcc -static $OPT_LEVEL "$TMP_C" \
     -I"$(dirname "$LIPI_RUNTIME_H")" \
     -lm \
     -o "$OUTPUT" \

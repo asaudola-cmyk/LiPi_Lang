@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI BARE-METAL MULTIBOOT KERNEL (examples/04_baremetal_os/main.lp)
+// 👑 LIPI BARE-METAL MULTIBOOT KERNEL (examples/08_baremetal_os/main.lp)
 // ⚡ Zero Linux | Native Multiboot 0x1BADB002 | Direct Hardware VGA 0xB8000
 // ==============================================================================
 

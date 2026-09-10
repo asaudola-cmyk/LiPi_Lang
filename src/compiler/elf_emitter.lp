@@ -96,8 +96,12 @@ fn bb_set32 ctx pos val
     bb_set8(ctx, pos + 3, floor(v / 16777216) % 256)
 
 fn bb_write ctx bytes_list
-    for b in bytes_list
-        bb_put8(ctx, b)
+    // WHY: Explicit while loop avoids range-loop vs list-iteration parser divergence in native seed
+    bi = 0
+    blen = len(bytes_list)
+    while bi < blen
+        bb_put8(ctx, get(bytes_list, bi))
+        bi = bi + 1
 
 // ── Labels & Relocations ─────────────────────────────────────────────────────
 fn label_define ctx name
@@ -1186,6 +1190,18 @@ fn ps_skip_nl s
     while ps_cur_type(s) == TOK_NL
         ps_adv(s)
 
+// WHY: Detect whether next token is the start of an argument expression for bare function calls
+fn is_pure_arg_start ps
+    tt = ps_cur_type(ps)
+    if tt == TOK_INT or tt == TOK_STR or tt == TOK_LPAREN return 1
+    if tt == TOK_IDENT
+        txt = ps_cur_text(ps)
+        if txt == "if" or txt == "যদি" or txt == "while" or txt == "যতক্ষণ" return 0
+        if txt == "for" or txt == "প্রতিটি" or txt == "return" or txt == "ফেরত" return 0
+        if txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println" return 0
+        return 1
+    return 0
+
 // ── Code Generation: Expressions & Statements ────────────────────────────────
 fn compile_pure_primary ctx ps
     ps_skip_nl(ps)
@@ -1298,6 +1314,24 @@ fn compile_pure_primary ctx ps
             x86_mov_rax_stack(ctx, off)
             return 0
 
+        // WHY: Handle space-separated function calls without parentheses (e.g., fibonacci i, say sum 10 20)
+        if is_pure_arg_start(ps) == 1
+            arg_count = 0
+            arg_regs = list(7, 6, 2, 1, 8, 9)
+            while is_pure_arg_start(ps) == 1 and ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
+                compile_pure_primary(ctx, ps)
+                x86_push_reg(ctx, 0)
+                arg_count = arg_count + 1
+            ai = arg_count - 1
+            while ai >= 0
+                if ai < 6
+                    x86_pop_reg(ctx, get(arg_regs, ai))
+                else
+                    x86_pop_reg(ctx, 0)
+                ai = ai - 1
+            x86_call(ctx, "lipi_fn_" + name)
+            return 0
+
         x86_mov_reg_imm64(ctx, 0, 0)
         return 0
 
@@ -1352,8 +1386,80 @@ fn compile_pure_cmp ctx ps
         x86_pop_reg(ctx, 0)        // rax = lhs
         x86_set_cmp(ctx, op)
 
-fn compile_pure_expr ctx ps
+// WHY: Boolean NOT (not, না, !)
+fn compile_pure_not ctx ps
+    ps_skip_nl(ps)
+    tt = ps_cur_type(ps)
+    txt = ps_cur_text(ps)
+    if (tt == TOK_IDENT and (txt == "not" or txt == "না")) or (tt == TOK_OP and txt == "!")
+        ps_adv(ps)
+        compile_pure_not(ctx, ps)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 133)
+        bb_put8(ctx, 192) // test rax, rax
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 148)
+        bb_put8(ctx, 192) // setz al (0x0F 0x94 0xC0)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 182)
+        bb_put8(ctx, 192) // movzx rax, al (0x48 0x0F 0xB6 0xC0)
+        return 0
     compile_pure_cmp(ctx, ps)
+    return 0
+
+// WHY: Short-circuiting logical AND (and, এবং, &&)
+fn compile_pure_and ctx ps
+    compile_pure_not(ctx, ps)
+    while (ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "and" or ps_cur_text(ps) == "এবং")) or (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "&&")
+        ps_adv(ps)
+        lbl_sc = make_anon_label(ctx, "and_sc")
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 133)
+        bb_put8(ctx, 192) // test rax, rax
+        x86_jz(ctx, lbl_sc)
+        compile_pure_not(ctx, ps)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 133)
+        bb_put8(ctx, 192) // test rax, rax
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 149)
+        bb_put8(ctx, 192) // setnz al
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 182)
+        bb_put8(ctx, 192) // movzx rax, al
+        label_define(ctx, lbl_sc)
+
+// WHY: Short-circuiting logical OR (or, অথবা, ||)
+fn compile_pure_or ctx ps
+    compile_pure_and(ctx, ps)
+    while (ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "or" or ps_cur_text(ps) == "অথবা")) or (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "||")
+        ps_adv(ps)
+        lbl_sc   = make_anon_label(ctx, "or_sc")
+        lbl_done = make_anon_label(ctx, "or_done")
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 133)
+        bb_put8(ctx, 192) // test rax, rax
+        x86_jnz(ctx, lbl_sc)
+        compile_pure_and(ctx, ps)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 133)
+        bb_put8(ctx, 192) // test rax, rax
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 149)
+        bb_put8(ctx, 192) // setnz al
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 182)
+        bb_put8(ctx, 192) // movzx rax, al
+        x86_jmp(ctx, lbl_done)
+        label_define(ctx, lbl_sc)
+        x86_mov_reg_imm64(ctx, 0, 1) // rax = 1
+        label_define(ctx, lbl_done)
+
+fn compile_pure_expr ctx ps
+    compile_pure_or(ctx, ps)
 
 fn compile_pure_stmt ctx ps
     ps_skip_nl(ps)
@@ -1371,22 +1477,26 @@ fn compile_pure_stmt ctx ps
         x86_call(ctx, "_lipi_print_nl")
         return 0
 
-    // if / যদি
+    // if / elif / else (যদি / নাহলে_যদি / নাহলে)
+    // WHY: Support arbitrary elif chaining and else fallback branches
     if tt == TOK_IDENT and (txt == "if" or txt == "যদি")
         ps_adv(ps)
         compile_pure_expr(ctx, ps)
-        lbl_else = make_anon_label(ctx, "if_else")
         lbl_end  = make_anon_label(ctx, "if_end")
+        lbl_next = make_anon_label(ctx, "if_next")
         bb_put8(ctx, 72)
         bb_put8(ctx, 133)
         bb_put8(ctx, 192) // test rax, rax
-        x86_jz(ctx, lbl_else)
+        x86_jz(ctx, lbl_next)
 
         ps_skip_nl(ps)
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                prev_if_p = get(ps, 0)
                 compile_pure_stmt(ctx, ps)
+                if get(ps, 0) == prev_if_p
+                    ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
@@ -1394,16 +1504,46 @@ fn compile_pure_stmt ctx ps
             compile_pure_stmt(ctx, ps)
 
         x86_jmp(ctx, lbl_end)
-        label_define(ctx, lbl_else)
+        label_define(ctx, lbl_next)
 
         ps_skip_nl(ps)
+        while ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "elif" or ps_cur_text(ps) == "নাহলে_যদি")
+            ps_adv(ps)
+            compile_pure_expr(ctx, ps)
+            lbl_next = make_anon_label(ctx, "elif_next")
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 133)
+            bb_put8(ctx, 192) // test rax, rax
+            x86_jz(ctx, lbl_next)
+
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_INDENT
+                ps_adv(ps)
+                while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                    prev_elif_p = get(ps, 0)
+                    compile_pure_stmt(ctx, ps)
+                    if get(ps, 0) == prev_elif_p
+                        ps_adv(ps)
+                    ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
+            else
+                compile_pure_stmt(ctx, ps)
+
+            x86_jmp(ctx, lbl_end)
+            label_define(ctx, lbl_next)
+            ps_skip_nl(ps)
+
         if ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "else" or ps_cur_text(ps) == "নাহলে")
             ps_adv(ps)
             ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_INDENT
                 ps_adv(ps)
                 while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                    prev_else_p = get(ps, 0)
                     compile_pure_stmt(ctx, ps)
+                    if get(ps, 0) == prev_else_p
+                        ps_adv(ps)
                     ps_skip_nl(ps)
                 if ps_cur_type(ps) == TOK_DEDENT
                     ps_adv(ps)
@@ -1451,6 +1591,212 @@ fn compile_pure_stmt ctx ps
         x86_ret(ctx)
         return 0
 
+    // fn / কাজ (Function Definition)
+    // WHY: Support top-level and nested function definitions with up to 6 register arguments (AMD64 ABI)
+    if tt == TOK_IDENT and (txt == "fn" or txt == "কাজ")
+        ps_adv(ps)
+        fn_name = ps_cur_text(ps)
+        ps_adv(ps)
+
+        params = list()
+        if ps_cur_type(ps) == TOK_LPAREN
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                if ps_cur_type(ps) == TOK_IDENT and len(params) < 6
+                    push(params, ps_cur_text(ps))
+                    ps_adv(ps)
+                if ps_cur_type(ps) == TOK_COMMA
+                    ps_adv(ps)
+            if ps_cur_type(ps) == TOK_RPAREN
+                ps_adv(ps)
+        else
+            while ps_cur_type(ps) == TOK_IDENT and len(params) < 6
+                push(params, ps_cur_text(ps))
+                ps_adv(ps)
+
+        lbl_skip = make_anon_label(ctx, "skip_fn")
+        x86_jmp(ctx, lbl_skip)
+
+        label_define(ctx, "lipi_fn_" + fn_name)
+
+        // Save parent scope
+        saved_names = get(ctx, 8)
+        saved_offs  = get(ctx, 9)
+        saved_stack = get(get(ctx, 10), 0)
+
+        list_set(ctx, 8, list())
+        list_set(ctx, 9, list())
+        list_set(get(ctx, 10), 0, 0)
+
+        x86_push_rbp(ctx)
+        x86_mov_rbp_rsp(ctx)
+        x86_sub_rsp(ctx, 2048)
+
+        arg_regs = list(7, 6, 2, 1, 8, 9)
+        pi = 0
+        while pi < len(params)
+            off = scope_add(ctx, get(params, pi))
+            x86_mov_reg_reg(ctx, 0, get(arg_regs, pi))
+            x86_mov_stack_rax(ctx, off)
+            pi = pi + 1
+
+        // WHY: Support one-liner expression functions (e.g., fn double n = n * 2, fn add a b = a + b)
+        if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "="
+            ps_adv(ps)
+            compile_pure_expr(ctx, ps)
+            x86_leave(ctx)
+            x86_ret(ctx)
+            list_set(ctx, 8, saved_names)
+            list_set(ctx, 9, saved_offs)
+            list_set(get(ctx, 10), 0, saved_stack)
+            label_define(ctx, lbl_skip)
+            return 0
+
+        ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                prev_fn_p = get(ps, 0)
+                compile_pure_stmt(ctx, ps)
+                if get(ps, 0) == prev_fn_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+        else
+            compile_pure_stmt(ctx, ps)
+
+        x86_mov_reg_imm64(ctx, 0, 0)
+        x86_leave(ctx)
+        x86_ret(ctx)
+
+        // Restore parent scope
+        list_set(ctx, 8, saved_names)
+        list_set(ctx, 9, saved_offs)
+        list_set(get(ctx, 10), 0, saved_stack)
+
+        label_define(ctx, lbl_skip)
+        return 0
+
+    // for / প্রতিটি (Range loop: for var in start..end)
+    // WHY: Support iterative loops with start and end expressions emitting fast x86_64 cmp/jg
+    if tt == TOK_IDENT and (txt == "for" or txt == "প্রতিটি")
+        ps_adv(ps)
+        var_name = ps_cur_text(ps)
+        ps_adv(ps)
+
+        if ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "in" or ps_cur_text(ps) == "ভেতরে")
+            ps_adv(ps)
+
+        compile_pure_expr(ctx, ps)
+        var_off = scope_add(ctx, var_name)
+        x86_mov_stack_rax(ctx, var_off)
+
+        if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".."
+            ps_adv(ps)
+
+        compile_pure_expr(ctx, ps)
+        end_var = "__end_" + var_name
+        end_off = scope_add(ctx, end_var)
+        x86_mov_stack_rax(ctx, end_off)
+
+        lbl_start = make_anon_label(ctx, "for_start")
+        lbl_step  = make_anon_label(ctx, "for_step")
+        lbl_end   = make_anon_label(ctx, "for_end")
+
+        label_define(ctx, lbl_start)
+
+        x86_mov_rax_stack(ctx, var_off)
+        x86_mov_reg_reg(ctx, 3, 0) // rbx = var
+        x86_mov_rax_stack(ctx, end_off) // rax = end
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 57)
+        bb_put8(ctx, 195) // cmp rbx, rax
+        p_jg = ctx_len(ctx)
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 143)
+        bb_put32(ctx, 0) // jg (0x0F 0x8F)
+        reloc_add(ctx, p_jg + 2, lbl_end, 6)
+
+        ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                prev_for_p = get(ps, 0)
+                compile_pure_stmt(ctx, ps)
+                if get(ps, 0) == prev_for_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+        else
+            compile_pure_stmt(ctx, ps)
+
+        label_define(ctx, lbl_step)
+        x86_mov_rax_stack(ctx, var_off)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 255)
+        bb_put8(ctx, 192) // inc rax (0x48 0xFF 0xC0)
+        x86_mov_stack_rax(ctx, var_off)
+        x86_jmp(ctx, lbl_start)
+
+        label_define(ctx, lbl_end)
+        return 0
+
+    // repeat N / বার (Repeat loop)
+    // WHY: Support fixed-count iteration loops with an anonymous counter
+    if tt == TOK_IDENT and (txt == "repeat" or txt == "বার")
+        ps_adv(ps)
+        compile_pure_expr(ctx, ps)
+        cnt_var = make_anon_label(ctx, "__repeat_cnt")
+        cnt_off = scope_add(ctx, cnt_var)
+        x86_mov_stack_rax(ctx, cnt_off)
+
+        idx_var = make_anon_label(ctx, "__repeat_idx")
+        idx_off = scope_add(ctx, idx_var)
+        x86_mov_reg_imm64(ctx, 0, 0)
+        x86_mov_stack_rax(ctx, idx_off)
+
+        lbl_start = make_anon_label(ctx, "repeat_start")
+        lbl_end   = make_anon_label(ctx, "repeat_end")
+
+        label_define(ctx, lbl_start)
+        x86_mov_rax_stack(ctx, idx_off)
+        x86_mov_reg_reg(ctx, 3, 0) // rbx = idx
+        x86_mov_rax_stack(ctx, cnt_off) // rax = count
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 57)
+        bb_put8(ctx, 195) // cmp rbx, rax
+        p_jge = ctx_len(ctx)
+        bb_put8(ctx, 15)
+        bb_put8(ctx, 141)
+        bb_put32(ctx, 0) // jge (0x0F 0x8D)
+        reloc_add(ctx, p_jge + 2, lbl_end, 6)
+
+        ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                prev_rep_p = get(ps, 0)
+                compile_pure_stmt(ctx, ps)
+                if get(ps, 0) == prev_rep_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+        else
+            compile_pure_stmt(ctx, ps)
+
+        x86_mov_rax_stack(ctx, idx_off)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 255)
+        bb_put8(ctx, 192) // inc rax (0x48 0xFF 0xC0)
+        x86_mov_stack_rax(ctx, idx_off)
+        x86_jmp(ctx, lbl_start)
+
+        label_define(ctx, lbl_end)
+        return 0
+
     // Variable assignment: name = expr
     next_tok = ps_peek_tok(ps, 1)
     if tt == TOK_IDENT and tok_t(next_tok) == TOK_OP and tok_s(next_tok) == "="
@@ -1492,8 +1838,12 @@ fn build_and_write_pure_elf ctx out_path
     // 1. ELF64 Header (64 bytes)
     // Magic: 0x7F, 'E', 'L', 'F', 2 (64-bit), 1 (little-endian), 1 (version 1), 0 (System V), 8 zeroes
     ident = list(127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    for b in ident
-        push(elf, b)
+    // WHY: Explicit while loop avoids range vs collection loop discrepancy
+    ii = 0
+    ilen = len(ident)
+    while ii < ilen
+        push(elf, get(ident, ii))
+        ii = ii + 1
 
     // e_type: ET_EXEC (0x0002)
     push(elf, 2)
@@ -1643,8 +1993,12 @@ fn build_and_write_pure_elf ctx out_path
     push(elf, 0)
 
     // 3. User Code & Data
-    for b in code_bb
-        push(elf, b)
+    // WHY: Explicit while loop avoids range vs collection loop discrepancy
+    cbi = 0
+    cblen = len(code_bb)
+    while cbi < cblen
+        push(elf, get(code_bb, cbi))
+        cbi = cbi + 1
 
     // 4. Write binary directly to disk and apply chmod 0755
     res = file_write_bytes(out_path, elf)
@@ -1672,7 +2026,11 @@ fn compile_source_to_elf in_path out_path
 
     ps_skip_nl(ps)
     while ps_cur_type(ps) != TOK_EOF
+        // WHY: Safeguard against parser stall if an unsupported token is encountered
+        prev_p = get(ps, 0)
         compile_pure_stmt(ctx, ps)
+        if get(ps, 0) == prev_p
+            ps_adv(ps)
         ps_skip_nl(ps)
 
     x86_mov_reg_imm64(ctx, 0, 0) // exit 0

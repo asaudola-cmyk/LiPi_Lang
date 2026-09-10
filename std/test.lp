@@ -15,8 +15,8 @@
 //   TEST_শেষ()
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/core/io.lp"
+include "std/mem.lp"
+include "std/io.lp"
 include "std/version.lp"
 
 // ─── Test stats ───────────────────────────────────────────────────────────────

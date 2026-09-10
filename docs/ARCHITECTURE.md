@@ -1,7 +1,7 @@
 # 🏛️ Lipi 5-Stage Nano-Compiler Engine Architecture
 
 ## Abstract
-The Lipi compiler (`src/compiler/compiler.lp`) is a 100% self-hosted, sovereign compilation engine written entirely in pure Lipi. It translates high-level Lipi programs directly into native, standalone 64-bit Linux ELF binaries without intermediary assembly files, external linkers (`ld`), or C runtimes (`libc`).
+The Lipi compiler (`src/compiler/elf_emitter.lp` and `src/compiler/c_codegen.lp`) is a 100% self-hosted, sovereign compilation engine written entirely in pure Lipi. It translates high-level Lipi programs directly into native, standalone 64-bit Linux ELF binaries without intermediary assembly files, external linkers (`ld`), or C runtimes (`libc`).
 
 ```
 [Lipi Source (.lp)] ➔ [1. Lexer] ➔ [2. AST Parser] ➔ [3. SSA IR Optimizer] ➔ [4. Linear Scan RegAlloc] ➔ [5. ELF64 Synthesis] ➔ [Hardware Execution]

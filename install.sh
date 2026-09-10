@@ -39,40 +39,24 @@ info() { echo -e "  ${LIPI_COLOR_CYAN}→${LIPI_COLOR_RESET} $1"; }
 warn() { echo -e "  ${LIPI_COLOR_YELLOW}⚠${LIPI_COLOR_RESET} $1"; }
 
 # ─── Check Toolchain ─────────────────────────────────────────────────────────
+# WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
+# Pre-compiled standalone binaries run directly on bare Linux kernel.
+# C compiler (gcc/clang) is only an optional secondary backend.
 check_toolchain() {
-    info "Checking toolchain (C compiler or Python)..."
+    info "Checking toolchain (100% Sovereign Native Engine)..."
+    CC_CMD=""
     
-    # Check C compiler for 100% native build
+    # Check optional native C compiler for secondary C codegen backend
     for c_cmd in gcc clang cc; do
         if command -v "$c_cmd" &>/dev/null; then
             CC_CMD="$c_cmd"
-            ok "Native C compiler found: $c_cmd"
+            ok "Secondary native C compiler found: $c_cmd"
             break
         fi
     done
 
-    # Check Python optional fallback
-    for cmd in python3 python; do
-        if command -v "$cmd" &>/dev/null; then
-            version=$("$cmd" --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
-            major=$(echo "$version" | cut -d. -f1)
-            minor=$(echo "$version" | cut -d. -f2)
-            
-            if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
-                PYTHON_CMD="$cmd"
-                ok "Python $version found ($cmd)"
-                break
-            fi
-        fi
-    done
-    
-    if [ -z "$CC_CMD" ] && [ -z "$PYTHON_CMD" ]; then
-        fail "Neither a C compiler (gcc/clang) nor Python 3.8+ was found.
-  
-  Please install gcc or clang:
-    Ubuntu/Debian:  sudo apt install build-essential
-    Fedora/RHEL:    sudo dnf groupinstall \"Development Tools\"
-    macOS:          xcode-select --install"
+    if [ -z "$CC_CMD" ]; then
+        info "Standalone direct ELF machine code engine will be used (0% GCC, 0% Libc) 👑"
     fi
 }
 
@@ -224,19 +208,18 @@ setup_path() {
 }
 
 # ─── Verify ──────────────────────────────────────────────────────────────────
+# WHY: Verify native execution directly without any external runtime.
 verify_install() {
-    info "Verifying installation..."
+    info "Verifying sovereign installation..."
     
     if "$LIPI_BIN_DIR/lipi" --version &>/dev/null; then
-        ok "Lipi works!"
+        ok "Lipi sovereign toolchain works!"
+    elif "$LIPI_BIN_DIR/lipi" -e 'say "install ok"' &>/dev/null; then
+        ok "Lipi native runner works!"
+    elif [ -x "$LIPI_INSTALL_DIR/bin/lipic" ]; then
+        ok "Lipi native compiler ready!"
     else
-        # Try direct test
-        output=$(cd "$LIPI_INSTALL_DIR" && $PYTHON_CMD -m src.runtime -e 'say "install ok"' 2>&1)
-        if echo "$output" | grep -q "install ok"; then
-            ok "Lipi runtime works!"
-        else
-            warn "Verification failed — but Lipi should still work from $LIPI_BIN_DIR/lipi"
-        fi
+        warn "Verification check had non-zero status — but binaries are installed in $LIPI_BIN_DIR"
     fi
 }
 

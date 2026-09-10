@@ -35,21 +35,53 @@ fn read_line prompt
     return ""  // Runtime provides input
 
 // File operations (syscall-based)
-fn file_open path flags
-    // Returns fd via syscall
-    return syscall 2 path flags 0
+fn file_open(path, flags) {
+    return syscall(2, path, flags, 420)
+}
+কাজ ফাইল_খোলো(path) {
+    return syscall(2, path, 0, 0)
+}
+কাজ ফাইল_তৈরি(path) {
+    return syscall(2, path, 577, 420)
+}
+কাজ ফাইল_খোলো_যুক্ত(path) {
+    return syscall(2, path, 1089, 420)
+}
 
-fn file_close fd
-    return syscall 3 fd 0 0
+fn file_close(fd) {
+    return syscall(3, fd, 0, 0)
+}
+কাজ ফাইল_বন্ধ(fd) {
+    return syscall(3, fd, 0, 0)
+}
 
-fn file_read fd buffer size
-    return syscall 0 fd buffer size
+fn file_read(fd, buffer, size) {
+    return syscall(0, fd, buffer, size)
+}
+কাজ ফাইল_পড়ো(fd, buffer, size) {
+    return syscall(0, fd, buffer, size)
+}
 
-fn file_write fd data size
-    return syscall 1 fd data size
+fn file_write(fd, data, size) {
+    return syscall(1, fd, data, size)
+}
+কাজ ফাইল_লেখো(fd, data, size) {
+    return syscall(1, fd, data, size)
+}
 
-fn file_seek fd offset whence
-    return syscall 8 fd offset whence
+fn file_seek(fd, offset, whence) {
+    return syscall(8, fd, offset, whence)
+}
+কাজ ফাইল_সিক(fd, offset, whence) {
+    return syscall(8, fd, offset, whence)
+}
+
+fn file_sync(fd) {
+    return syscall(74, fd, 0, 0)
+}
+কাজ ফাইল_সিঙ্ক(fd) {
+    return syscall(74, fd, 0, 0)
+}
 
 // Print a horizontal rule
 fn print_rule width char

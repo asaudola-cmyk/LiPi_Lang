@@ -51,7 +51,7 @@ sleep 0.5
 
 # ৪. HTTP রিকোয়েস্ট যাচাই (GET /)
 echo -e "${YELLOW}[ধাপ ৪] HTTP রিকোয়েস্ট ১: GET / (অফিশিয়াল হোমপেজ)...${NC}"
-HTTP_CODE=$(curl -s -o /tmp/lipi_home.html -w "%{http_code}" http://127.0.0.1:8080/)
+HTTP_CODE=$(curl -s -o /tmp/lipi_home.html -w "%{http_code}" http://127.0.0.1:8088/)
 if [ "${HTTP_CODE}" -eq 200 ] && grep -q "LIPI" /tmp/lipi_home.html; then
     echo -e "${GREEN}  ✔ GET / সফল! HTTP 200 OK — হোমপেজ নিখুঁতভাবে রিসিভ হয়েছে।${NC}"
     echo -e "    • ফাইলের সাইজ: $(wc -c < /tmp/lipi_home.html) বাইট"
@@ -62,7 +62,7 @@ fi
 
 # ৫. HTTP রিকোয়েস্ট যাচাই (GET /style.css)
 echo -e "${YELLOW}[ধাপ ৫] HTTP রিকোয়েস্ট ২: GET /style.css (ডিজাইন সিস্টেম)...${NC}"
-HTTP_CODE_CSS=$(curl -s -o /tmp/lipi_style.css -w "%{http_code}" http://127.0.0.1:8080/style.css)
+HTTP_CODE_CSS=$(curl -s -o /tmp/lipi_style.css -w "%{http_code}" http://127.0.0.1:8088/style.css)
 if [ "${HTTP_CODE_CSS}" -eq 200 ] && grep -q "neon-cyan" /tmp/lipi_style.css; then
     echo -e "${GREEN}  ✔ GET /style.css সফল! HTTP 200 OK — সিএসএস ডেটা প্রাপ্ত।${NC}"
 else
@@ -72,7 +72,7 @@ fi
 
 # ৬. HTTP রিকোয়েস্ট যাচাই (GET /app.js)
 echo -e "${YELLOW}[ধাপ ৬] HTTP রিকোয়েস্ট ৩: GET /app.js (ইন্টারঅ্যাক্টিভ ইঞ্জিন)...${NC}"
-HTTP_CODE_JS=$(curl -s -o /tmp/lipi_app.js -w "%{http_code}" http://127.0.0.1:8080/app.js)
+HTTP_CODE_JS=$(curl -s -o /tmp/lipi_app.js -w "%{http_code}" http://127.0.0.1:8088/app.js)
 if [ "${HTTP_CODE_JS}" -eq 200 ] && grep -q "initTelemetryPolling" /tmp/lipi_app.js; then
     echo -e "${GREEN}  ✔ GET /app.js সফল! HTTP 200 OK — জাভাস্ক্রিপ্ট ক্লায়েন্ট ইঞ্জিন প্রস্তুত।${NC}"
 else
@@ -82,7 +82,7 @@ fi
 
 # ৭. HTTP রিকোয়েস্ট যাচাই (GET /favicon.svg)
 echo -e "${YELLOW}[ধাপ ৭] HTTP রিকোয়েস্ট ৪: GET /favicon.svg (লিপি ক্রাউন লোগো)...${NC}"
-HTTP_CODE_SVG=$(curl -s -o /tmp/lipi_fav.svg -w "%{http_code}" http://127.0.0.1:8080/favicon.svg)
+HTTP_CODE_SVG=$(curl -s -o /tmp/lipi_fav.svg -w "%{http_code}" http://127.0.0.1:8088/favicon.svg)
 if [ "${HTTP_CODE_SVG}" -eq 200 ] && grep -q "svg" /tmp/lipi_fav.svg; then
     echo -e "${GREEN}  ✔ GET /favicon.svg সফল! HTTP 200 OK — এসভিজি লোগো প্রাপ্ত।${NC}"
 else
@@ -92,7 +92,7 @@ fi
 
 # ৮. HTTP রিকোয়েস্ট যাচাই (GET /api/status - Dynamic Telemetry)
 echo -e "${YELLOW}[ধাপ ৮] HTTP রিকোয়েস্ট ৫: GET /api/status (ডাইনামিক সিলিকন মেট্রিক্স JSON)...${NC}"
-STATUS_JSON=$(curl -s http://127.0.0.1:8080/api/status)
+STATUS_JSON=$(curl -s http://127.0.0.1:8088/api/status)
 echo -e "  • প্রাপ্ত ডাইনামিক JSON: ${CYAN}${STATUS_JSON}${NC}"
 if echo "${STATUS_JSON}" | grep -q "sovereign_online"; then
     echo -e "${GREEN}  ✔ ডাইনামিক এপিআই সফল! লাইভ সিপিইউ সাইকেল ও সার্ভার কাউন্টার সক্রিয়।${NC}"

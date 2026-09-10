@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI NATIVE GGUF & QUANTIZED LLM INFERENCE ENGINE (examples/03_llm_inference/main.lp)
+// 👑 LIPI NATIVE GGUF & QUANTIZED LLM INFERENCE ENGINE (examples/07_llm_inference/main.lp)
 // ⚡ 100% Python/PyTorch Free | Hardware GEMV Matrix Vector Multiplying
 // ==============================================================================
 

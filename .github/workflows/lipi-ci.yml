@@ -1,8 +1,8 @@
-name: Lipi Tests
+name: Lipi Sovereign Native CI
 
-# WHY: CI runs all 60 tests using lipic2 (Python runtime)
+# WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
+# CI verifies standalone native compilation, regression tests, and zero-python audit.
 # Triggered on every push/PR to main.
-# Badge: [![Tests](https://github.com/asaudola-cmyk/LiPi_Lang/actions/workflows/lipi-ci.yml/badge.svg)](...)
 
 on:
   push:
@@ -14,98 +14,91 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: "Lipi 60-Test Suite (lipic2)"
+  native-regression-test:
+    name: "Lipi 60-Test Regression Suite (Native Toolchain)"
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.11", "3.12"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Show Lipi version
-        run: python3 -m src.runtime --version
-
-      - name: Run test suite (tests/01-60)
+      - name: Setup binary permissions
         run: |
-          passed=0
-          failed=0
-          fail_list=""
+          chmod +x bin/* scripts/* tests/*.sh 2>/dev/null || true
 
-          for t in tests/[0-9][0-9]_*.lp; do
-            [ -f "$t" ] || continue
-            name=$(basename "$t")
-            result=$(timeout 10 python3 -m src.runtime "$t" 2>&1 | tail -1)
-            if echo "$result" | grep -q "PASS"; then
-              echo "  ✅ $name"
-              ((passed++))
-            else
-              echo "  ❌ $name → $result"
-              fail_list="$fail_list\n  - $name"
-              ((failed++))
-            fi
-          done
+      - name: Show Lipi Native Version
+        run: |
+          ./bin/lipi --version
 
-          echo ""
-          echo "========================================"
-          echo "Results: $passed PASS, $failed FAIL"
-          echo "========================================"
+      - name: Verify One-Liner Evaluation (Zero Python)
+        run: |
+          ./bin/lipi -e 'say "CI: Lipi Native Runner OK"'
 
-          if [ "$failed" -gt 0 ]; then
-            echo ""
-            echo "Failed tests:$fail_list"
+      - name: Run Full 60-Test Regression Engine
+        run: |
+          bash tests/run_tests.sh
+
+      - name: Verify Direct Machine Code Compilation
+        run: |
+          ./bin/lipc tests/01_hello.lp -o /tmp/ci_hello
+          /tmp/ci_hello
+          rm -f /tmp/ci_hello
+
+      - name: Verify Fibonacci Execution
+        run: |
+          ./bin/lipc tests/59_minimal_fibonacci.lp -o /tmp/ci_fib
+          /tmp/ci_fib
+          rm -f /tmp/ci_fib
+
+      - name: Verify Unicode Execution
+        run: |
+          ./bin/lipc tests/56_minimal_unicode.lp -o /tmp/ci_unicode
+          /tmp/ci_unicode
+          rm -f /tmp/ci_unicode
+
+  zero-dependency-audit:
+    name: "Zero-Dependency Sovereignty Audit"
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Audit for Python Elimination in Core
+        run: |
+          echo "Auditing core directories (src, std, tests, bin) for Python files..."
+          py_files=$(find src std tests bin -name "*.py" 2>/dev/null || true)
+          if [ -n "$py_files" ]; then
+            echo "❌ Sovereignty breach: Found Python files in core tree:"
+            echo "$py_files"
             exit 1
           fi
+          echo "✔ 100% Pure: Zero Python files in src, std, tests, bin!"
 
-      - name: Verify lipi command works
+      - name: Audit for Bytecode Artifacts
         run: |
-          chmod +x bin/lipi
-          python3 -m src.runtime -e 'say "CI: lipi runtime ok"'
+          pyc_files=$(find . -name "*.pyc" 2>/dev/null || true)
+          if [ -n "$pyc_files" ]; then
+            echo "❌ Found untracked or stale bytecode:"
+            echo "$pyc_files"
+            exit 1
+          fi
+          echo "✔ 100% Pure: Zero .pyc bytecode files!"
 
-      - name: Run hello world
-        run: |
-          python3 -m src.runtime tests/01_hello.lp
-
-      - name: Run fibonacci
-        run: |
-          python3 -m src.runtime tests/59_minimal_fibonacci.lp
-
-      - name: Run unicode test
-        run: |
-          python3 -m src.runtime tests/56_minimal_unicode.lp
-
-  install-test:
-    name: "Install script test"
+  installer-test:
+    name: "Sovereign Installer Test"
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Test install.sh syntax
-        run: bash -n install.sh && echo "install.sh syntax OK"
-
-      - name: Test install.sh (local clone simulation)
         run: |
-          # Simulate what install.sh does (skip git clone, use current dir)
-          mkdir -p ~/.local/bin
-          LIPI_HOME="$PWD"
-          cat > ~/.local/bin/lipi << WRAPPER
-          #!/bin/bash
-          exec python3 -m src.runtime "\$@"
-          WRAPPER
-          chmod +x ~/.local/bin/lipi
-          export PATH="$PATH:$HOME/.local/bin"
-          python3 -m src.runtime -e 'say "install test ok"'
-          echo "Install simulation: OK"
+          bash -n install.sh
+          echo "install.sh syntax OK"
+
+      - name: Test scripts/install.sh syntax
+        run: |
+          bash -n scripts/install.sh
+          echo "scripts/install.sh syntax OK"

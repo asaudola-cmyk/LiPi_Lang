@@ -25,10 +25,15 @@ PASSED=0
 FAILED=0
 
 EXTRA_FLAG=""
-if [[ "${1:-}" == "--direct-elf" || "${1:-}" == "--baremetal" ]]; then
-    EXTRA_FLAG="--direct-elf"
-    echo -e "${CYAN}⚡ Running in DIRECT MACHINE CODE (Zero-GCC) Mode 👑${NC}"
-fi
+KEEP_BINARIES=0
+for arg in "$@"; do
+    if [[ "${arg}" == "--direct-elf" || "${arg}" == "--baremetal" ]]; then
+        EXTRA_FLAG="--direct-elf"
+        echo -e "${CYAN}⚡ Running in DIRECT MACHINE CODE (Zero-GCC) Mode 👑${NC}"
+    elif [[ "${arg}" == "--keep-binaries" ]]; then
+        KEEP_BINARIES=1
+    fi
+done
 
 # WHY: Collect all 60 test files dynamically in sorted order
 mapfile -t TESTS < <(find tests -maxdepth 1 -name "*.lp" | sort)
@@ -48,6 +53,10 @@ for test_file in "${TESTS[@]}"; do
     else
         echo -e "${RED}COMPILE FAIL ✖${NC}"
         FAILED=$((FAILED + 1))
+    fi
+    # WHY: Keep dist/ clean from 60+ generated binary artifacts unless explicitly requested
+    if [[ "${KEEP_BINARIES}" -eq 0 ]]; then
+        rm -f "${out}"
     fi
 done
 

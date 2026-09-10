@@ -386,8 +386,9 @@ static void emit_runtime_stubs(ByteBuf* bb) {
 
     bb_put8(bb, 0x49); bb_put8(bb, 0x89); bb_put8(bb, 0xFC); /* mov r12, rdi */
     bb_put8(bb, 0x49); bb_put8(bb, 0x89); bb_put8(bb, 0xF5); /* mov r13, rsi */
-    bb_put8(bb, 0x4D); bb_put8(bb, 0x8B); bb_put8(bb, 0x74); bb_put8(bb, 0x24); bb_put8(bb, 0xF8); /* mov r14, [r12 - 8] */
-    bb_put8(bb, 0x4D); bb_put8(bb, 0x8B); bb_put8(bb, 0x7D); bb_put8(bb, 0xF8); /* mov r15, [r13 - 8] */
+    // WHY: Load 32-bit length from [r12 - 8] and [r13 - 8], masking off upper 32-bit STR0 tag
+    bb_put8(bb, 0x45); bb_put8(bb, 0x8B); bb_put8(bb, 0x74); bb_put8(bb, 0x24); bb_put8(bb, 0xF8); /* mov r14d, [r12 - 8] */
+    bb_put8(bb, 0x45); bb_put8(bb, 0x8B); bb_put8(bb, 0x7D); bb_put8(bb, 0xF8);                     /* mov r15d, [r13 - 8] */
 
     x86_mov_reg_reg(bb, 7, 14); /* mov rdi, r14 */
     bb_put8(bb, 0x4C); bb_put8(bb, 0x01); bb_put8(bb, 0xFF); /* add rdi, r15 */
@@ -408,6 +409,9 @@ static void emit_runtime_stubs(ByteBuf* bb) {
     x86_pop_reg(bb, 0); /* pop rax */
 
     bb_put8(bb, 0x4D); bb_put8(bb, 0x01); bb_put8(bb, 0xFE); /* add r14, r15 */
+    // WHY: Write 'STR0' (0x53545230) in upper 32 bits and combined length in lower 32 bits
+    x86_mov_reg_imm64(bb, 2, 0x5354523000000000ULL);         /* mov rdx, 0x5354523000000000 */
+    bb_put8(bb, 0x49); bb_put8(bb, 0x09); bb_put8(bb, 0xD6); /* or r14, rdx */
     bb_put8(bb, 0x4C); bb_put8(bb, 0x89); bb_put8(bb, 0x70); bb_put8(bb, 0xF8); /* mov [rax - 8], r14 */
 
     bb_put8(bb, 0x41); bb_put8(bb, 0x5F); /* pop r15 */
@@ -478,6 +482,9 @@ static void emit_runtime_stubs(ByteBuf* bb) {
     label_define(lbl_its_done, bb->size);
     x86_mov_reg_reg(bb, 2, 13); /* mov rdx, r13 */
     bb_put8(bb, 0x4C); bb_put8(bb, 0x29); bb_put8(bb, 0xC2); /* sub rdx, r8 */
+    // WHY: Tag integer-to-string heap buffer with upper 32-bit STR0 (0x53545230)
+    x86_mov_reg_imm64(bb, 0, 0x5354523000000000ULL);         /* mov rax, 0x5354523000000000 */
+    bb_put8(bb, 0x48); bb_put8(bb, 0x09); bb_put8(bb, 0xC2); /* or rdx, rax */
     bb_put8(bb, 0x49); bb_put8(bb, 0x89); bb_put8(bb, 0x50); bb_put8(bb, 0xF8); /* mov [r8 - 8], rdx */
     x86_mov_reg_reg(bb, 0, 8);  /* mov rax, r8 */
 
@@ -489,7 +496,8 @@ static void emit_runtime_stubs(ByteBuf* bb) {
 
     /* _lipi_print_str: rdi = ptr */
     label_define("_lipi_print_str", bb->size);
-    bb_put8(bb, 0x48); bb_put8(bb, 0x8B); bb_put8(bb, 0x57); bb_put8(bb, 0xF8); /* mov rdx, [rdi - 8] */
+    // WHY: Load lower 32-bit length from [rdi - 8] into edx, zero-extending into rdx
+    bb_put8(bb, 0x8B); bb_put8(bb, 0x57); bb_put8(bb, 0xF8); /* mov edx, [rdi - 8] */
     x86_mov_reg_reg(bb, 6, 7); /* mov rsi, rdi */
     x86_mov_reg_imm64(bb, 7, 1); /* rdi = 1 (stdout) */
     x86_mov_reg_imm64(bb, 0, 1); /* rax = 1 (sys_write) */
@@ -498,7 +506,18 @@ static void emit_runtime_stubs(ByteBuf* bb) {
 
     /* _lipi_print_nl */
     label_define("_lipi_print_nl", bb->size);
-    bb_put8(bb, 0x6A); bb_put8(bb, 0x0A); /* push 10 */
+    bb_put8(bb, 0x6A); bb_put8(bb, 0x0A); /* push 10 (\n) */
+    x86_mov_reg_reg(bb, 6, 4); /* mov rsi, rsp */
+    x86_mov_reg_imm64(bb, 7, 1);
+    x86_mov_reg_imm64(bb, 2, 1);
+    x86_mov_reg_imm64(bb, 0, 1);
+    x86_syscall(bb);
+    x86_pop_reg(bb, 0);
+    x86_ret(bb);
+
+    /* _lipi_print_space: WHY: Required for multi-argument say statements (e.g. say a b c) */
+    label_define("_lipi_print_space", bb->size);
+    bb_put8(bb, 0x6A); bb_put8(bb, 0x20); /* push 32 (' ') */
     x86_mov_reg_reg(bb, 6, 4); /* mov rsi, rsp */
     x86_mov_reg_imm64(bb, 7, 1);
     x86_mov_reg_imm64(bb, 2, 1);
@@ -512,6 +531,8 @@ static void emit_runtime_stubs(ByteBuf* bb) {
     x86_push_rbp(bb);
     x86_mov_rbp_rsp(bb);
     x86_sub_rsp(bb, 48);
+    // WHY: rbx is a callee-saved register under AMD64 ABI; must preserve
+    x86_push_reg(bb, 3);
     bb_put8(bb, 0x4C); bb_put8(bb, 0x8D); bb_put8(bb, 0x45); bb_put8(bb, 0xFF); /* lea r8, [rbp - 1] */
     bb_put8(bb, 0x41); bb_put8(bb, 0xC6); bb_put8(bb, 0x00); bb_put8(bb, 0x00); /* mov byte [r8], 0 */
     x86_mov_reg_reg(bb, 0, 7); /* mov rax, rdi */
@@ -565,54 +586,74 @@ static void emit_runtime_stubs(ByteBuf* bb) {
     x86_mov_reg_imm64(bb, 0, 1);
     x86_syscall(bb);
 
+    x86_pop_reg(bb, 3); /* pop rbx */
     x86_leave(bb);
     x86_ret(bb);
 
     /* ── _lipi_is_str: in: rdi = val. out: rax = 1 (true) or 0 (false) ───── */
     label_define("_lipi_is_str", bb->size);
-    char lbl_iss_heap[64], lbl_iss_true[64], lbl_iss_false[64];
-    make_anon_label(lbl_iss_heap, "iss_heap");
+    // WHY: rbx is a callee-saved register under AMD64 ABI; must preserve across call
+    x86_push_reg(bb, 3);
+    char lbl_iss_chk[64], lbl_iss_true[64], lbl_iss_false[64], lbl_chk_heap[64];
+    make_anon_label(lbl_iss_chk, "iss_chk");
     make_anon_label(lbl_iss_true, "iss_true");
     make_anon_label(lbl_iss_false, "iss_false");
+    make_anon_label(lbl_chk_heap, "iss_chkheap");
 
-    bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xFF); /* test rdi, rdi */
+    /* test rdi, rdi */
+    bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xFF);
     x86_jz(bb, lbl_iss_false);
 
-    x86_lea_reg_rip(bb, 0, "_lipi_data_start");
-    bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xC7); /* cmp rdi, rax */
-    size_t p_ish = bb->size;
-    bb_put8(bb, 0x0F); bb_put8(bb, 0x82); bb_put32(bb, 0);   /* jb iss_heap */
-    reloc_add(p_ish + 2, lbl_iss_heap, 6);
+    /* 1. Check if rdi in [_lipi_data_start, _lipi_data_end] */
+    x86_lea_reg_rip(bb, 3, "_lipi_data_start");
+    bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xDF); /* cmp rdi, rbx */
+    size_t p_ds = bb->size;
+    bb_put8(bb, 0x0F); bb_put8(bb, 0x82); bb_put32(bb, 0);   /* jb iss_chkheap */
+    reloc_add(p_ds + 2, lbl_chk_heap, 6);
 
-    x86_lea_reg_rip(bb, 2, "_lipi_data_end");
-    bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xD7); /* cmp rdi, rdx */
-    size_t p_ist = bb->size;
-    bb_put8(bb, 0x0F); bb_put8(bb, 0x82); bb_put32(bb, 0);   /* jb iss_true */
-    reloc_add(p_ist + 2, lbl_iss_true, 6);
+    x86_lea_reg_rip(bb, 3, "_lipi_data_end");
+    bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xDF); /* cmp rdi, rbx */
+    size_t p_de = bb->size;
+    bb_put8(bb, 0x0F); bb_put8(bb, 0x82); bb_put32(bb, 0);   /* jb iss_chk */
+    reloc_add(p_de + 2, lbl_iss_chk, 6);
 
-    label_define(lbl_iss_heap, bb->size);
+    /* 2. Check if rdi in [_lipi_heap_base, _lipi_heap_ptr] */
+    label_define(lbl_chk_heap, bb->size);
+
     x86_lea_reg_rip(bb, 3, "_lipi_heap_base");
     bb_put8(bb, 0x48); bb_put8(bb, 0x8B); bb_put8(bb, 0x03); /* mov rax, [rbx] */
     bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
     x86_jz(bb, lbl_iss_false);
     bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xC7); /* cmp rdi, rax */
-    size_t p_isf = bb->size;
+    size_t p_hb = bb->size;
     bb_put8(bb, 0x0F); bb_put8(bb, 0x82); bb_put32(bb, 0);   /* jb iss_false */
-    reloc_add(p_isf + 2, lbl_iss_false, 6);
+    reloc_add(p_hb + 2, lbl_iss_false, 6);
 
     x86_lea_reg_rip(bb, 3, "_lipi_heap_ptr");
     bb_put8(bb, 0x48); bb_put8(bb, 0x8B); bb_put8(bb, 0x13); /* mov rdx, [rbx] */
     bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xD7); /* cmp rdi, rdx */
-    size_t p_isf2 = bb->size;
-    bb_put8(bb, 0x0F); bb_put8(bb, 0x83); bb_put32(bb, 0);  /* jae iss_false */
-    reloc_add(p_isf2 + 2, lbl_iss_false, 6);
+    size_t p_hp = bb->size;
+    bb_put8(bb, 0x0F); bb_put8(bb, 0x83); bb_put32(bb, 0);   /* jae iss_false */
+    reloc_add(p_hp + 2, lbl_iss_false, 6);
 
-    label_define(lbl_iss_true, bb->size);
-    x86_mov_reg_imm64(bb, 0, 1);
-    x86_ret(bb);
+    /* In valid pointer range -> Verify 32-bit tag 'STR0' (0x53545230) at [rdi - 8] >> 32 */
+    label_define(lbl_iss_chk, bb->size);
+    bb_put8(bb, 0x48); bb_put8(bb, 0x8B); bb_put8(bb, 0x47); bb_put8(bb, 0xF8); /* mov rax, [rdi - 8] */
+    bb_put8(bb, 0x48); bb_put8(bb, 0xC1); bb_put8(bb, 0xE8); bb_put8(bb, 0x20); /* shr rax, 32 */
+    x86_mov_reg_imm64(bb, 3, 0x53545230ULL);                                     /* mov rbx, 0x53545230 ('STR0') */
+    bb_put8(bb, 0x48); bb_put8(bb, 0x39); bb_put8(bb, 0xD8);                     /* cmp rax, rbx */
+    size_t p_eq = bb->size;
+    bb_put8(bb, 0x0F); bb_put8(bb, 0x84); bb_put32(bb, 0);                       /* je iss_true */
+    reloc_add(p_eq + 2, lbl_iss_true, 6);
 
     label_define(lbl_iss_false, bb->size);
     x86_mov_reg_imm64(bb, 0, 0);
+    x86_pop_reg(bb, 3);
+    x86_ret(bb);
+
+    label_define(lbl_iss_true, bb->size);
+    x86_mov_reg_imm64(bb, 0, 1);
+    x86_pop_reg(bb, 3);
     x86_ret(bb);
 
     /* ── _lipi_ensure_str: in: rdi = val. out: rax = string pointer ───────── */
@@ -751,8 +792,10 @@ static void build_and_write_elf(const char* out_path, ByteBuf* code_bb) {
     bb_put64(elf, 0);                       /* p_offset: 0 */
     bb_put64(elf, ELF_BASE_VADDR);          /* p_vaddr: 0x400000 */
     bb_put64(elf, ELF_BASE_VADDR);          /* p_paddr: 0x400000 */
+    // WHY: Ensure page-aligned virtual memory headroom (64KB) for data section and global heap pointers
+    size_t mem_size = (total_size + 0x10000ULL) & ~0xFFFULL;
     bb_put64(elf, total_size);              /* p_filesz */
-    bb_put64(elf, total_size);              /* p_memsz */
+    bb_put64(elf, mem_size);                /* p_memsz */
     bb_put64(elf, 0x1000);                  /* p_align: 4KB */
 
     /* 3. Code & Data */
@@ -922,6 +965,11 @@ static int tokenize_lipi_source(const char* src) {
                     if (src[p] == 'n') str_buf[s_idx++] = '\n';
                     else if (src[p] == 't') str_buf[s_idx++] = '\t';
                     else if (src[p] == 'r') str_buf[s_idx++] = '\r';
+                    else if (src[p] == 'e') str_buf[s_idx++] = '\033';
+                    else if (src[p] == '0' && src[p+1] == '3' && src[p+2] == '3') {
+                        str_buf[s_idx++] = '\033';
+                        p += 2;
+                    }
                     else str_buf[s_idx++] = src[p];
                     p++;
                 } else {
@@ -1003,8 +1051,8 @@ static int tokenize_lipi_source(const char* src) {
             g_token_count++; p += 2; continue;
         }
 
-        /* 1-char operators */
-        if (strchr("+-*/%=<>!", c)) {
+        /* 1-char operators (including '.' for struct field access) */
+        if (strchr("+-*/%=<>!.", c)) {
             g_tokens[g_token_count].type = TOK_OP;
             g_tokens[g_token_count].text[0] = c;
             g_tokens[g_token_count].text[1] = '\0';
@@ -1051,10 +1099,51 @@ static int tokenize_lipi_source(const char* src) {
     return 0;
 }
 
+/* ── Struct Registry ─────────────────────────────────────────────────────── */
+/* WHY: Allows native stack/heap struct allocation and field access with Zero Libc */
+typedef struct {
+    char name[64];
+    char fields[16][64];
+    int  field_count;
+} CStructDef;
+
+static CStructDef g_structs[64];
+static int g_struct_count = 0;
+
+static int struct_find(const char* name) {
+    for (int i = 0; i < g_struct_count; i++) {
+        if (strcmp(g_structs[i].name, name) == 0) return i;
+    }
+    return -1;
+}
+
+static int struct_get_field_offset(const char* sname, const char* fname) {
+    if (sname && sname[0] != '\0') {
+        int sidx = struct_find(sname);
+        if (sidx >= 0) {
+            for (int f = 0; f < g_structs[sidx].field_count; f++) {
+                if (strcmp(g_structs[sidx].fields[f], fname) == 0) {
+                    return f * 8;
+                }
+            }
+        }
+    }
+    /* Fallback: search across all defined structs for field name */
+    for (int s = 0; s < g_struct_count; s++) {
+        for (int f = 0; f < g_structs[s].field_count; f++) {
+            if (strcmp(g_structs[s].fields[f], fname) == 0) {
+                return f * 8;
+            }
+        }
+    }
+    return 0;
+}
+
 /* ── Scope & Local Variables ─────────────────────────────────────────────── */
 typedef struct {
     char name[64];
     int offset; /* -offset(%rbp) */
+    char type_name[64]; /* Struct type if instantiated */
 } CLocalVar;
 
 typedef struct {
@@ -1062,6 +1151,9 @@ typedef struct {
     int count;
     int stack_size;
 } CScope;
+
+/* 12 AMD64 general-purpose argument registers for functions with up to 12 parameters */
+static const int g_arg_regs[12] = { 7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 static void scope_init(CScope* sc) {
     sc->count = 0;
@@ -1077,12 +1169,32 @@ static int scope_get(CScope* sc, const char* name) {
     return 0;
 }
 
+static const char* scope_get_type(CScope* sc, const char* name) {
+    for (int i = 0; i < sc->count; i++) {
+        if (strcmp(sc->locals[i].name, name) == 0) {
+            return sc->locals[i].type_name;
+        }
+    }
+    return "";
+}
+
+static void scope_set_type(CScope* sc, const char* name, const char* tname) {
+    for (int i = 0; i < sc->count; i++) {
+        if (strcmp(sc->locals[i].name, name) == 0) {
+            strncpy(sc->locals[i].type_name, tname, 63);
+            sc->locals[i].type_name[63] = '\0';
+            return;
+        }
+    }
+}
+
 static int scope_add(CScope* sc, const char* name) {
     int existing = scope_get(sc, name);
     if (existing != 0) return existing;
     if (sc->count < 256) {
         sc->stack_size += 8;
         strncpy(sc->locals[sc->count].name, name, 63);
+        sc->locals[sc->count].type_name[0] = '\0';
         sc->locals[sc->count].offset = sc->stack_size;
         sc->count++;
         return sc->stack_size;
@@ -1128,6 +1240,8 @@ static bool is_arg_start(CToken* t) {
             strcmp(t->text, "and") == 0 || strcmp(t->text, "or") == 0 ||
             strcmp(t->text, "not") == 0 || strcmp(t->text, "in") == 0 ||
             strcmp(t->text, "to") == 0 || strcmp(t->text, "step") == 0 ||
+            strcmp(t->text, "repeat") == 0 || strcmp(t->text, "বার") == 0 ||
+            strcmp(t->text, "struct") == 0 || strcmp(t->text, "গঠন") == 0 ||
             strcmp(t->text, "যদি") == 0 || strcmp(t->text, "যতক্ষণ") == 0 ||
             strcmp(t->text, "প্রতিটি") == 0 || strcmp(t->text, "ফেরত") == 0 ||
             strcmp(t->text, "বলো") == 0 || strcmp(t->text, "কাজ") == 0 ||
@@ -1182,11 +1296,29 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
             return;
         }
 
+        /* Check for struct field access: name.field */
+        if (cur_tok()->type == TOK_OP && strcmp(cur_tok()->text, ".") == 0) {
+            adv_tok(); /* consume '.' */
+            char field_name[64];
+            strncpy(field_name, cur_tok()->text, 63); field_name[63] = '\0';
+            adv_tok(); /* consume field name */
+            int off = scope_get(sc, name);
+            if (off > 0) {
+                x86_mov_rax_stack(bb, off);
+            } else {
+                x86_mov_reg_imm64(bb, 0, 0);
+            }
+            const char* sname = scope_get_type(sc, name);
+            int f_off = struct_get_field_offset(sname, field_name);
+            /* mov rax, [rax + f_off] */
+            bb_put8(bb, 0x48); bb_put8(bb, 0x8B); bb_put8(bb, 0x40); bb_put8(bb, (uint8_t)f_off);
+            return;
+        }
+
         /* Check for function call: name(...) or name arg1 arg2 */
         if (cur_tok()->type == TOK_LPAREN) {
             adv_tok();
             int arg_count = 0;
-            int arg_regs[6] = { 7, 6, 2, 1, 8, 9 }; /* rdi, rsi, rdx, rcx, r8, r9 */
 
             while (cur_tok()->type != TOK_RPAREN && cur_tok()->type != TOK_EOF) {
                 compile_native_expr(bb, sc);
@@ -1196,10 +1328,20 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
             }
             if (cur_tok()->type == TOK_RPAREN) adv_tok();
 
-            /* Pop args into System V ABI registers in reverse */
+            /* Check if name is a struct constructor (e.g. Point() or Fraction()) */
+            int sidx = struct_find(name);
+            if (sidx >= 0 || (isupper((unsigned char)name[0]) && struct_find(name) >= 0)) {
+                for (int i = 0; i < arg_count; i++) x86_pop_reg(bb, 0);
+                int fcount = (sidx >= 0 && g_structs[sidx].field_count > 0) ? g_structs[sidx].field_count : 4;
+                x86_mov_reg_imm64(bb, 7, (fcount + 1) * 8);
+                x86_call(bb, "_lipi_alloc");
+                return;
+            }
+
+            /* Pop args into AMD64 registers in reverse */
             for (int i = arg_count - 1; i >= 0; i--) {
-                if (i < 6) {
-                    x86_pop_reg(bb, arg_regs[i]);
+                if (i < 12) {
+                    x86_pop_reg(bb, g_arg_regs[i]);
                 } else {
                     x86_pop_reg(bb, 0);
                 }
@@ -1207,7 +1349,8 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
 
             /* Builtins */
             if (strcmp(name, "len") == 0 || strcmp(name, "length") == 0 || strcmp(name, "দৈর্ঘ্য") == 0) {
-                bb_put8(bb, 0x48); bb_put8(bb, 0x8B); bb_put8(bb, 0x47); bb_put8(bb, 0xF8); /* mov rax, [rdi - 8] */
+                // WHY: Load lower 32-bit length from [rdi - 8] into eax, zero-extending into rax
+                bb_put8(bb, 0x8B); bb_put8(bb, 0x47); bb_put8(bb, 0xF8); /* mov eax, [rdi - 8] */
                 return;
             }
             if (strcmp(name, "abs") == 0) {
@@ -1226,6 +1369,13 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
             char fn_lbl[128];
             snprintf(fn_lbl, sizeof(fn_lbl), "lipi_fn_%s", name);
             x86_call(bb, fn_lbl);
+            return;
+        }
+
+        /* Local variable lookup (WHY: Local variables/parameters must shadow built-in function names) */
+        int off = scope_get(sc, name);
+        if (off > 0) {
+            x86_mov_rax_stack(bb, off);
             return;
         }
 
@@ -1248,25 +1398,17 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
             return;
         }
 
-        /* Local variable lookup */
-        int off = scope_get(sc, name);
-        if (off > 0) {
-            x86_mov_rax_stack(bb, off);
-            return;
-        }
-
         /* Space-separated function call: fn_name arg1 arg2 ... */
         if (is_arg_start(cur_tok())) {
             int arg_count = 0;
-            int arg_regs[6] = { 7, 6, 2, 1, 8, 9 }; /* rdi, rsi, rdx, rcx, r8, r9 */
             while (is_arg_start(cur_tok()) && cur_tok()->type != TOK_NL && cur_tok()->type != TOK_EOF && !g_native_failed) {
                 compile_native_primary(bb, sc);
                 x86_push_reg(bb, 0);
                 arg_count++;
             }
             for (int i = arg_count - 1; i >= 0; i--) {
-                if (i < 6) {
-                    x86_pop_reg(bb, arg_regs[i]);
+                if (i < 12) {
+                    x86_pop_reg(bb, g_arg_regs[i]);
                 } else {
                     x86_pop_reg(bb, 0);
                 }
@@ -1277,7 +1419,15 @@ static void compile_native_primary(ByteBuf* bb, CScope* sc) {
             return;
         }
 
-        /* If variable not found, treat as 0 or fail */
+        /* If variable not found, check if it is a 0-arg function (e.g. ansi_reset) */
+        char fn_lbl[128];
+        snprintf(fn_lbl, sizeof(fn_lbl), "lipi_fn_%s", name);
+        for (int i = 0; i < g_label_count; i++) {
+            if (strcmp(g_labels[i].name, fn_lbl) == 0) {
+                x86_call(bb, fn_lbl);
+                return;
+            }
+        }
         x86_mov_reg_imm64(bb, 0, 0);
         return;
     }
@@ -1437,9 +1587,16 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
          strcmp(t->text, "show") == 0 || strcmp(t->text, "দেখাও") == 0 ||
          strcmp(t->text, "print") == 0 || strcmp(t->text, "println") == 0)) {
         adv_tok();
-        compile_native_expr(bb, sc);
-        x86_mov_reg_reg(bb, 7, 0); /* mov rdi, rax */
-        x86_call(bb, "_lipi_print_dynamic");
+        int arg_num = 0;
+        while (cur_tok()->type != TOK_NL && cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
+            if (arg_num > 0) {
+                x86_call(bb, "_lipi_print_space");
+            }
+            compile_native_expr(bb, sc);
+            x86_mov_reg_reg(bb, 7, 0); /* mov rdi, rax */
+            x86_call(bb, "_lipi_print_dynamic");
+            arg_num++;
+        }
         x86_call(bb, "_lipi_print_nl");
         return;
     }
@@ -1564,18 +1721,19 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
     }
 
     /* fn / কাজ (Function Definition) */
+    /* WHY: Supports both indented blocks and one-liner expressions: fn name params... = expr */
     if (t->type == TOK_IDENT && (strcmp(t->text, "fn") == 0 || strcmp(t->text, "কাজ") == 0)) {
         adv_tok(); /* consume fn/কাজ */
         char fn_name[64];
         strncpy(fn_name, cur_tok()->text, 63); fn_name[63] = '\0';
         adv_tok(); /* consume function name */
 
-        char params[6][64];
+        char params[16][64];
         int param_count = 0;
         if (match_tok(TOK_OP, "(")) {
             adv_tok();
             while (!match_tok(TOK_OP, ")") && cur_tok()->type != TOK_EOF) {
-                if (cur_tok()->type == TOK_IDENT && param_count < 6) {
+                if (cur_tok()->type == TOK_IDENT && param_count < 16) {
                     strncpy(params[param_count], cur_tok()->text, 63);
                     params[param_count][63] = '\0';
                     param_count++;
@@ -1585,7 +1743,9 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
             }
             if (match_tok(TOK_OP, ")")) adv_tok();
         } else {
-            while (cur_tok()->type == TOK_IDENT && param_count < 6) {
+            while (cur_tok()->type == TOK_IDENT && param_count < 16) {
+                /* WHY: Stop parameter parsing if a keyword or '=' is encountered */
+                if (!is_arg_start(cur_tok())) break;
                 strncpy(params[param_count], cur_tok()->text, 63);
                 params[param_count][63] = '\0';
                 param_count++;
@@ -1608,14 +1768,25 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
         CScope fn_sc;
         scope_init(&fn_sc);
 
-        int arg_regs[6] = {7, 6, 2, 1, 8, 9};
         for (int i = 0; i < param_count; i++) {
             int off = scope_add(&fn_sc, params[i]);
-            x86_mov_reg_reg(bb, 0, arg_regs[i]);
-            x86_mov_stack_rax(bb, off);
+            if (i < 12) {
+                x86_mov_reg_reg(bb, 0, g_arg_regs[i]);
+                x86_mov_stack_rax(bb, off);
+            }
         }
 
         skip_nl();
+        /* WHY: One-liner function expression (e.g. fn double n = n * 2 or fn ansi_reset = "\033[0m") */
+        if (match_tok(TOK_OP, "=")) {
+            adv_tok(); /* consume '=' */
+            compile_native_expr(bb, &fn_sc);
+            x86_leave(bb);
+            x86_ret(bb);
+            label_define(lbl_skip, bb->size);
+            return;
+        }
+
         if (cur_tok()->type == TOK_INDENT) {
             adv_tok();
             while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
@@ -1697,14 +1868,131 @@ static void compile_native_stmt(ByteBuf* bb, CScope* sc) {
         return;
     }
 
+    /* repeat / বার (Repeat loop: repeat N \n body) */
+    /* WHY: Native machine code loop without loop counter induction overhead */
+    if (t->type == TOK_IDENT && (strcmp(t->text, "repeat") == 0 || strcmp(t->text, "বার") == 0)) {
+        adv_tok(); /* consume repeat */
+        compile_native_expr(bb, sc); /* rax = count */
+        char cnt_var[64];
+        snprintf(cnt_var, sizeof(cnt_var), "__rpt_%d", ++g_anon_label_id);
+        int cnt_off = scope_add(sc, cnt_var);
+        x86_mov_stack_rax(bb, cnt_off);
+
+        char lbl_loop[64], lbl_end[64];
+        make_anon_label(lbl_loop, "rpt_loop");
+        make_anon_label(lbl_end, "rpt_end");
+
+        label_define(lbl_loop, bb->size);
+        x86_mov_rax_stack(bb, cnt_off);
+        bb_put8(bb, 0x48); bb_put8(bb, 0x85); bb_put8(bb, 0xC0); /* test rax, rax */
+        size_t p_jle = bb->size;
+        bb_put8(bb, 0x0F); bb_put8(bb, 0x8E); bb_put32(bb, 0); /* jle rpt_end */
+        reloc_add(p_jle + 2, lbl_end, 6);
+
+        /* decrement counter: cnt = cnt - 1 */
+        bb_put8(bb, 0x48); bb_put8(bb, 0xFF); bb_put8(bb, 0xC8); /* dec rax */
+        x86_mov_stack_rax(bb, cnt_off);
+
+        skip_nl();
+        if (cur_tok()->type == TOK_INDENT) {
+            adv_tok();
+            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
+                compile_native_stmt(bb, sc);
+                skip_nl();
+            }
+            if (cur_tok()->type == TOK_DEDENT) adv_tok();
+        } else {
+            compile_native_stmt(bb, sc);
+        }
+
+        x86_jmp(bb, lbl_loop);
+        label_define(lbl_end, bb->size);
+        return;
+    }
+
+    /* struct / গঠন (Struct Definition) */
+    /* WHY: Pure in-memory layout description without external runtime or header requirements */
+    if (t->type == TOK_IDENT && (strcmp(t->text, "struct") == 0 || strcmp(t->text, "গঠন") == 0)) {
+        adv_tok(); /* consume struct/গঠন */
+        char sname[64];
+        strncpy(sname, cur_tok()->text, 63); sname[63] = '\0';
+        adv_tok(); /* struct name */
+
+        int sidx = g_struct_count < 64 ? g_struct_count++ : 0;
+        strncpy(g_structs[sidx].name, sname, 63);
+        g_structs[sidx].field_count = 0;
+
+        skip_nl();
+        if (cur_tok()->type == TOK_INDENT) {
+            adv_tok();
+            while (cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF && !g_native_failed) {
+                if (cur_tok()->type == TOK_IDENT) {
+                    if (g_structs[sidx].field_count < 16) {
+                        strncpy(g_structs[sidx].fields[g_structs[sidx].field_count], cur_tok()->text, 63);
+                        g_structs[sidx].field_count++;
+                    }
+                    adv_tok();
+                    /* Consume any trailing type annotation words or tokens on the line */
+                    while (cur_tok()->type != TOK_NL && cur_tok()->type != TOK_DEDENT && cur_tok()->type != TOK_EOF) {
+                        adv_tok();
+                    }
+                } else {
+                    adv_tok();
+                }
+                skip_nl();
+            }
+            if (cur_tok()->type == TOK_DEDENT) adv_tok();
+        }
+        return;
+    }
+
+    /* Struct field assignment: obj.field = expr */
+    /* WHY: Direct offset store into heap-allocated struct pointer */
+    if (t->type == TOK_IDENT &&
+        g_tokens[g_tok_idx + 1].type == TOK_OP && strcmp(g_tokens[g_tok_idx + 1].text, ".") == 0 &&
+        g_tokens[g_tok_idx + 2].type == TOK_IDENT &&
+        g_tokens[g_tok_idx + 3].type == TOK_OP && strcmp(g_tokens[g_tok_idx + 3].text, "=") == 0) {
+        char obj_name[64];
+        char field_name[64];
+        strncpy(obj_name, t->text, 63); obj_name[63] = '\0';
+        adv_tok(); /* obj */
+        adv_tok(); /* '.' */
+        strncpy(field_name, cur_tok()->text, 63); field_name[63] = '\0';
+        adv_tok(); /* field */
+        adv_tok(); /* '=' */
+        compile_native_expr(bb, sc); /* rax = value */
+        x86_mov_reg_reg(bb, 3, 0);   /* rbx = value */
+        int off = scope_get(sc, obj_name);
+        if (off > 0) {
+            x86_mov_rax_stack(bb, off);  /* rax = obj ptr */
+        } else {
+            x86_mov_reg_imm64(bb, 0, 0);
+        }
+        const char* sname = scope_get_type(sc, obj_name);
+        int f_off = struct_get_field_offset(sname, field_name);
+        /* mov [rax + f_off], rbx */
+        bb_put8(bb, 0x48); bb_put8(bb, 0x89); bb_put8(bb, 0x58); bb_put8(bb, (uint8_t)f_off);
+        return;
+    }
+
     /* Variable assignment: name = expr */
     if (t->type == TOK_IDENT && (g_tokens[g_tok_idx + 1].type == TOK_OP && strcmp(g_tokens[g_tok_idx + 1].text, "=") == 0)) {
         char name[64];
         strncpy(name, t->text, 63); name[63] = '\0';
         adv_tok(); /* ident */
         adv_tok(); /* '=' */
+        char rhs_struct[64] = {0};
+        if (cur_tok()->type == TOK_IDENT && g_tokens[g_tok_idx + 1].type == TOK_LPAREN) {
+            int sidx = struct_find(cur_tok()->text);
+            if (sidx >= 0) {
+                strncpy(rhs_struct, cur_tok()->text, 63);
+            }
+        }
         compile_native_expr(bb, sc);
         int off = scope_add(sc, name);
+        if (rhs_struct[0] != '\0') {
+            scope_set_type(sc, name, rhs_struct);
+        }
         x86_mov_stack_rax(bb, off);
         return;
     }
@@ -1750,6 +2038,7 @@ static int compile_lipi_native(const char* input_path, const char* output_path) 
     g_string_count = 0;
     g_anon_label_id = 0;
     g_native_failed = 0;
+    g_struct_count = 0;
 
     if (tokenize_lipi_source(src) != 0) {
         free(src);
@@ -1788,6 +2077,12 @@ static int compile_lipi_native(const char* input_path, const char* output_path) 
     x86_ret(bb);
 
     if (g_native_failed || cur_tok()->type != TOK_EOF) {
+        fprintf(stderr, "❌ Lipi Native ELF Compiler: parse error near line %d, token '%s' (type %d), tok_idx=%d\n", cur_tok()->line, cur_tok()->text, cur_tok()->type, g_tok_idx);
+        for (int di = g_tok_idx - 5; di <= g_tok_idx + 5; di++) {
+            if (di >= 0 && di < g_token_count) {
+                fprintf(stderr, "  tok[%d]: line %d, type %d, text '%s'\n", di, g_tokens[di].line, g_tokens[di].type, g_tokens[di].text);
+            }
+        }
         bb_free(bb);
         free(src);
         return -1;
@@ -1797,10 +2092,13 @@ static int compile_lipi_native(const char* input_path, const char* output_path) 
     label_define("_lipi_data_start", bb->size);
     for (int i = 0; i < g_string_count; i++) {
         size_t slen = strlen(g_strings[i].text);
-        bb_put64(bb, slen); /* 8-byte length prefix */
+        // WHY: Upper 32 bits = 'STR0' (0x53545230), lower 32 bits = string length.
+        // Guarantees zero collision with numeric variables in loops or registers.
+        uint64_t header = (0x53545230ULL << 32) | (uint64_t)(slen & 0xFFFFFFFF);
+        bb_put64(bb, header);                       /* 8-byte tagged length prefix */
         label_define(g_strings[i].label, bb->size); /* String characters start here */
         bb_write(bb, g_strings[i].text, slen);
-        bb_put8(bb, 0);     /* null terminator */
+        bb_put8(bb, 0);                             /* null terminator */
     }
     label_define("_lipi_data_end", bb->size);
 

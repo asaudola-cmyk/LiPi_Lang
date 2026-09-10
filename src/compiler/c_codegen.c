@@ -791,6 +791,28 @@ static LipiVal u_parse_block(LipiVal* _args, int _nargs) {
     LipiVal u_stmt = lv_null();
     u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
     u_stmts = lv_list_make(0);
+    if (lv_truthy(lv_bool(lv_equal(u_ps_is_op((LipiVal[2]){u_ps, lv_str("{")}, 2), lv_num(1))))) {
+        u_ps_adv((LipiVal[1]){u_ps}, 1);
+        while (lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
+            u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
+            u_t = u_ps_cur((LipiVal[1]){u_ps}, 1);
+            if (lv_truthy(lv_bool(lv_equal(u_t, lv_null())))) {
+                break;
+            }
+            if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tok_type((LipiVal[1]){u_t}, 1), u_TT_OP))) && lv_truthy(lv_bool(lv_equal(u_tok_val((LipiVal[1]){u_t}, 1), lv_str("}"))))))) {
+                u_ps_adv((LipiVal[1]){u_ps}, 1);
+                break;
+            }
+            if (lv_truthy(lv_bool(lv_equal(u_tok_type((LipiVal[1]){u_t}, 1), u_TT_EOF)))) {
+                break;
+            }
+            u_stmt = u_parse_stmt((LipiVal[1]){u_ps}, 1);
+            if (lv_truthy(lv_bool(!lv_equal(u_stmt, lv_null())))) {
+                lv_push(u_stmts, u_stmt);
+            }
+        }
+        return u_stmts;
+    }
     if (lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_INDENT}, 2), lv_num(1))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         while (lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
@@ -858,13 +880,43 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
     if (lv_truthy(lv_bool(lv_equal(u_tok_type((LipiVal[1]){u_t}, 1), u_TT_DEDENT)))) {
         return lv_null();
     }
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tok_type((LipiVal[1]){u_t}, 1), u_TT_OP))) && lv_truthy(lv_bool(lv_equal(u_tok_val((LipiVal[1]){u_t}, 1), lv_str("}"))))))) {
+        return lv_null();
+    }
     u_tt = u_tok_type((LipiVal[1]){u_t}, 1);
     u_tv = u_tok_val((LipiVal[1]){u_t}, 1);
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("struct"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("ধরি")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("ধরো"))))))))) {
+        u_ps_adv((LipiVal[1]){u_ps}, 1);
+        return u_parse_stmt((LipiVal[1]){u_ps}, 1);
+    }
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("struct")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("গঠন"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_name = u_ps_eat_ident((LipiVal[1]){u_ps}, 1);
         u_fields = lv_list_make(0);
         u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
+        if (lv_truthy(lv_bool(lv_equal(u_ps_is_op((LipiVal[2]){u_ps, lv_str("{")}, 2), lv_num(1))))) {
+            u_ps_adv((LipiVal[1]){u_ps}, 1);
+            while (lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
+                u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
+                if (lv_truthy(lv_bool(lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
+                    break;
+                }
+                if (lv_truthy(lv_bool(lv_equal(u_ps_is_op((LipiVal[2]){u_ps, lv_str("}")}, 2), lv_num(1))))) {
+                    u_ps_adv((LipiVal[1]){u_ps}, 1);
+                    break;
+                }
+                if (lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(1))))) {
+                    break;
+                }
+                if (lv_truthy(lv_bool(lv_equal(u_ps_is_ident((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
+                    lv_push(u_fields, u_ps_eat_ident((LipiVal[1]){u_ps}, 1));
+                    u_ps_eat_op((LipiVal[2]){u_ps, lv_str(",")}, 2);
+                } else {
+                    u_ps_adv((LipiVal[1]){u_ps}, 1);
+                }
+            }
+            return lv_list_make(3, u_NT_STRUCT, u_name, u_fields);
+        }
         if (lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_INDENT}, 2), lv_num(1))))) {
             u_ps_adv((LipiVal[1]){u_ps}, 1);
             while (lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null())))) {
@@ -880,6 +932,7 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
                 }
                 if (lv_truthy(lv_bool(lv_equal(u_ps_is_ident((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
                     lv_push(u_fields, u_ps_eat_ident((LipiVal[1]){u_ps}, 1));
+                    u_ps_eat_op((LipiVal[2]){u_ps, lv_str(",")}, 2);
                 } else {
                     u_ps_adv((LipiVal[1]){u_ps}, 1);
                 }
@@ -890,12 +943,21 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
         }
         return lv_list_make(3, u_NT_STRUCT, u_name, u_fields);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("fn"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("fn")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("কাজ"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_name = u_ps_eat_ident((LipiVal[1]){u_ps}, 1);
         u_params = lv_list_make(0);
-        while (lv_truthy(lv_bool(lv_equal(u_ps_is_ident((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
-            lv_push(u_params, u_ps_eat_ident((LipiVal[1]){u_ps}, 1));
+        if (lv_truthy(lv_bool(lv_equal(u_ps_is_op((LipiVal[2]){u_ps, lv_str("(")}, 2), lv_num(1))))) {
+            u_ps_adv((LipiVal[1]){u_ps}, 1);
+            while (lv_truthy(lv_bool(lv_equal(u_ps_is_ident((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
+                lv_push(u_params, u_ps_eat_ident((LipiVal[1]){u_ps}, 1));
+                u_ps_eat_op((LipiVal[2]){u_ps, lv_str(",")}, 2);
+            }
+            u_ps_eat_op((LipiVal[2]){u_ps, lv_str(")")}, 2);
+        } else {
+            while (lv_truthy(lv_bool(lv_equal(u_ps_is_ident((LipiVal[1]){u_ps}, 1), lv_num(1))))) {
+                lv_push(u_params, u_ps_eat_ident((LipiVal[1]){u_ps}, 1));
+            }
         }
         if (lv_truthy(lv_bool(lv_equal(u_ps_eat_op((LipiVal[2]){u_ps, lv_str("=")}, 2), lv_num(1))))) {
             u_body_expr = u_parse_expr((LipiVal[1]){u_ps}, 1);
@@ -905,7 +967,7 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
         u_body = u_parse_block((LipiVal[1]){u_ps}, 1);
         return lv_list_make(4, u_NT_FNDEF, u_name, u_params, u_body);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("return"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("return")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("ফেরত"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(1))))))) {
             return lv_list_make(2, u_NT_RETURN, lv_list_make(1, u_NT_NULL_N));
@@ -913,48 +975,50 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
         u_val = u_parse_expr((LipiVal[1]){u_ps}, 1);
         return lv_list_make(2, u_NT_RETURN, u_val);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("if"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("if")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("যদি"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_cond = u_parse_expr((LipiVal[1]){u_ps}, 1);
         u_then_b = u_parse_block((LipiVal[1]){u_ps}, 1);
         u_elifs = lv_list_make(0);
         u_else_b = lv_null();
         u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
-        while (lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("elif")}, 2), lv_num(1))))) {
+        while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("elif")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("নাহলে_যদি")}, 2), lv_num(1))))))) {
             u_ps_adv((LipiVal[1]){u_ps}, 1);
             u_ec = u_parse_expr((LipiVal[1]){u_ps}, 1);
             u_eb = u_parse_block((LipiVal[1]){u_ps}, 1);
             lv_push(u_elifs, lv_list_make(2, u_ec, u_eb));
             u_ps_skip_nl((LipiVal[1]){u_ps}, 1);
         }
-        if (lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("else")}, 2), lv_num(1))))) {
+        if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("else")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("নাহলে")}, 2), lv_num(1))))))) {
             u_ps_adv((LipiVal[1]){u_ps}, 1);
             u_else_b = u_parse_block((LipiVal[1]){u_ps}, 1);
         }
         return lv_list_make(5, u_NT_IF, u_cond, u_then_b, u_elifs, u_else_b);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("while"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("while")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("যতক্ষণ"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_cond = u_parse_expr((LipiVal[1]){u_ps}, 1);
         u_body = u_parse_block((LipiVal[1]){u_ps}, 1);
         return lv_list_make(3, u_NT_WHILE, u_cond, u_body);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("repeat"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("repeat")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("বার"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_cnt = u_parse_expr((LipiVal[1]){u_ps}, 1);
         u_body = u_parse_block((LipiVal[1]){u_ps}, 1);
         return lv_list_make(3, u_NT_REPEAT, u_cnt, u_body);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("for")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("each"))))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("for")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("each")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("প্রতিটি"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_var_nm = u_ps_eat_ident((LipiVal[1]){u_ps}, 1);
-        u_ps_eat_kw((LipiVal[2]){u_ps, lv_str("in")}, 2);
+        if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("in")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("ভেতরে")}, 2), lv_num(1))))))) {
+            u_ps_adv((LipiVal[1]){u_ps}, 1);
+        }
         u_start_e = u_parse_add((LipiVal[1]){u_ps}, 1);
         if (lv_truthy(lv_bool(lv_equal(u_ps_is_op((LipiVal[2]){u_ps, lv_str("..")}, 2), lv_num(1))))) {
             u_ps_adv((LipiVal[1]){u_ps}, 1);
             u_end_e = u_parse_add((LipiVal[1]){u_ps}, 1);
             u_step_e = lv_null();
-            if (lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("step")}, 2), lv_num(1))))) {
+            if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("step")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("ধাপ")}, 2), lv_num(1))))))) {
                 u_ps_adv((LipiVal[1]){u_ps}, 1);
                 u_step_e = u_parse_primary((LipiVal[1]){u_ps}, 1);
             }
@@ -965,26 +1029,26 @@ static LipiVal u_parse_stmt(LipiVal* _args, int _nargs) {
             return lv_list_make(4, u_NT_FOREACH, u_var_nm, u_start_e, u_body);
         }
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("break"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("break")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("থামো"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         return lv_list_make(1, u_NT_BREAK);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("continue"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("continue")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("চালিয়ে_যাও"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         return lv_list_make(1, u_NT_CONTINUE);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("say")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("print")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("println")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("show"))))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("say")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("print")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("println")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("show")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("বলো")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("দেখাও"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(1))))))) {
             return lv_list_make(3, u_NT_FNCALL, lv_str("say"), lv_list_make(0));
         }
         u_say_args = lv_list_make(0);
-        while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null()))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_DEDENT}, 2), lv_num(0))))))) {
+        while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null()))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_DEDENT}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_op((LipiVal[2]){u_ps, lv_str("}")}, 2), lv_num(0))))))) {
             lv_push(u_say_args, u_parse_add((LipiVal[1]){u_ps}, 1));
         }
         return lv_list_make(3, u_NT_FNCALL, lv_str("say"), u_say_args);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("include"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("include")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("অন্তর্ভুক্ত"))))))))) {
         while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_ps_cur((LipiVal[1]){u_ps}, 1), lv_null()))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_NL}, 2), lv_num(0)))))) && lv_truthy(lv_bool(lv_equal(u_ps_is_tt((LipiVal[2]){u_ps, u_TT_EOF}, 2), lv_num(0))))))) {
             u_ps_adv((LipiVal[1]){u_ps}, 1);
         }
@@ -1026,7 +1090,7 @@ static LipiVal u_parse_or(LipiVal* _args, int _nargs) {
     LipiVal u_left = lv_null();
     LipiVal u_right = lv_null();
     u_left = u_parse_and((LipiVal[1]){u_ps}, 1);
-    while (lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("or")}, 2), lv_num(1))))) {
+    while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("or")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("অথবা")}, 2), lv_num(1))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_right = u_parse_and((LipiVal[1]){u_ps}, 1);
         u_left = lv_list_make(4, u_NT_BINOP, lv_str("or"), u_left, u_right);
@@ -1041,7 +1105,7 @@ static LipiVal u_parse_and(LipiVal* _args, int _nargs) {
     LipiVal u_left = lv_null();
     LipiVal u_right = lv_null();
     u_left = u_parse_not((LipiVal[1]){u_ps}, 1);
-    while (lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("and")}, 2), lv_num(1))))) {
+    while (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("and")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("এবং")}, 2), lv_num(1))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_right = u_parse_not((LipiVal[1]){u_ps}, 1);
         u_left = lv_list_make(4, u_NT_BINOP, lv_str("and"), u_left, u_right);
@@ -1054,7 +1118,7 @@ static LipiVal u_parse_and(LipiVal* _args, int _nargs) {
 static LipiVal u_parse_not(LipiVal* _args, int _nargs) {
     LipiVal u_ps = (_nargs > 0) ? _args[0] : lv_null();
     LipiVal u_operand = lv_null();
-    if (lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("not")}, 2), lv_num(1))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("not")}, 2), lv_num(1)))) || lv_truthy(lv_bool(lv_equal(u_ps_is_kw((LipiVal[2]){u_ps, lv_str("না")}, 2), lv_num(1))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         u_operand = u_parse_not((LipiVal[1]){u_ps}, 1);
         return lv_list_make(3, u_NT_UNARY, lv_str("not"), u_operand);
@@ -1185,15 +1249,15 @@ static LipiVal u_parse_primary(LipiVal* _args, int _nargs) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         return lv_list_make(2, u_NT_STR_N, u_tv);
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("true"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("true")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("সত্য"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         return lv_list_make(2, u_NT_BOOL_N, lv_num(1));
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_equal(u_tv, lv_str("false"))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("false")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("মিথ্যা"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         return lv_list_make(2, u_NT_BOOL_N, lv_num(0));
     }
-    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("null")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("nil"))))))))) {
+    if (lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tt, u_TT_KW))) && lv_truthy(lv_bool(lv_truthy(lv_bool(lv_truthy(lv_bool(lv_equal(u_tv, lv_str("null")))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("nil")))))) || lv_truthy(lv_bool(lv_equal(u_tv, lv_str("শূন্য"))))))))) {
         u_ps_adv((LipiVal[1]){u_ps}, 1);
         return lv_list_make(1, u_NT_NULL_N);
     }
@@ -2175,9 +2239,9 @@ static LipiVal u_gen_c(LipiVal* _args, int _nargs) {
     lv_push(u_decl_buf, lv_str(""));
     lv_push(u_main_buf, lv_str("int main(int argc, char** argv) {"));
     lv_push(u_main_buf, lv_str("    lv_init_args(argc, argv);"));
-    { LipiVal _e78_it=u_ast;
-    if (_e78_it.type==LV_LIST) { for (int _e78_i=0; _e78_i<_e78_it.list->count; _e78_i++) {
-        LipiVal u_stmt=_e78_it.list->items[_e78_i];
+    { LipiVal _e79_it=u_ast;
+    if (_e79_it.type==LV_LIST) { for (int _e79_i=0; _e79_i<_e79_it.list->count; _e79_i++) {
+        LipiVal u_stmt=_e79_it.list->items[_e79_i];
         if (lv_truthy(lv_bool(!lv_equal(u_stmt, lv_null())))) {
             u_k = u_n_kind((LipiVal[1]){u_stmt}, 1);
             if (lv_truthy(lv_bool(lv_truthy(lv_bool(!lv_equal(u_k, u_NT_FNDEF))) && lv_truthy(lv_bool(!lv_equal(u_k, u_NT_STRUCT)))))) {
@@ -2188,19 +2252,19 @@ static LipiVal u_gen_c(LipiVal* _args, int _nargs) {
     lv_push(u_main_buf, lv_str("    return 0;"));
     lv_push(u_main_buf, lv_str("}"));
     u_result = lv_str("");
-    { LipiVal _e91_it=u_decl_buf;
-    if (_e91_it.type==LV_LIST) { for (int _e91_i=0; _e91_i<_e91_it.list->count; _e91_i++) {
-        LipiVal u_line=_e91_it.list->items[_e91_i];
+    { LipiVal _e92_it=u_decl_buf;
+    if (_e92_it.type==LV_LIST) { for (int _e92_i=0; _e92_i<_e92_it.list->count; _e92_i++) {
+        LipiVal u_line=_e92_it.list->items[_e92_i];
         u_result = lv_add(lv_add(u_result, u_line), lv_str("\n"));
     }}}
-    { LipiVal _e96_it=u_fn_buf;
-    if (_e96_it.type==LV_LIST) { for (int _e96_i=0; _e96_i<_e96_it.list->count; _e96_i++) {
-        LipiVal u_line=_e96_it.list->items[_e96_i];
+    { LipiVal _e97_it=u_fn_buf;
+    if (_e97_it.type==LV_LIST) { for (int _e97_i=0; _e97_i<_e97_it.list->count; _e97_i++) {
+        LipiVal u_line=_e97_it.list->items[_e97_i];
         u_result = lv_add(lv_add(u_result, u_line), lv_str("\n"));
     }}}
-    { LipiVal _e101_it=u_main_buf;
-    if (_e101_it.type==LV_LIST) { for (int _e101_i=0; _e101_i<_e101_it.list->count; _e101_i++) {
-        LipiVal u_line=_e101_it.list->items[_e101_i];
+    { LipiVal _e102_it=u_main_buf;
+    if (_e102_it.type==LV_LIST) { for (int _e102_i=0; _e102_i<_e102_it.list->count; _e102_i++) {
+        LipiVal u_line=_e102_it.list->items[_e102_i];
         u_result = lv_add(lv_add(u_result, u_line), lv_str("\n"));
     }}}
     return u_result;
@@ -2239,7 +2303,7 @@ int main(int argc, char** argv) {
     u_NT_FIELD_SET = lv_num(19);
     u_NT_BREAK = lv_num(20);
     u_NT_CONTINUE = lv_num(21);
-    u_KEYWORDS = lv_list_make(26, lv_str("fn"), lv_str("if"), lv_str("elif"), lv_str("else"), lv_str("while"), lv_str("for"), lv_str("in"), lv_str("repeat"), lv_str("return"), lv_str("say"), lv_str("show"), lv_str("print"), lv_str("println"), lv_str("struct"), lv_str("include"), lv_str("break"), lv_str("continue"), lv_str("and"), lv_str("or"), lv_str("not"), lv_str("null"), lv_str("nil"), lv_str("true"), lv_str("false"), lv_str("each"), lv_str("step"));
+    u_KEYWORDS = lv_list_make(50, lv_str("fn"), lv_str("কাজ"), lv_str("if"), lv_str("যদি"), lv_str("elif"), lv_str("নাহলে_যদি"), lv_str("else"), lv_str("নাহলে"), lv_str("while"), lv_str("যতক্ষণ"), lv_str("for"), lv_str("প্রতিটি"), lv_str("in"), lv_str("ভেতরে"), lv_str("repeat"), lv_str("বার"), lv_str("return"), lv_str("ফেরত"), lv_str("say"), lv_str("বলো"), lv_str("show"), lv_str("দেখাও"), lv_str("print"), lv_str("println"), lv_str("struct"), lv_str("গঠন"), lv_str("include"), lv_str("অন্তর্ভুক্ত"), lv_str("break"), lv_str("থামো"), lv_str("continue"), lv_str("চালিয়ে_যাও"), lv_str("and"), lv_str("এবং"), lv_str("or"), lv_str("অথবা"), lv_str("not"), lv_str("না"), lv_str("null"), lv_str("শূন্য"), lv_str("nil"), lv_str("true"), lv_str("সত্য"), lv_str("false"), lv_str("মিথ্যা"), lv_str("each"), lv_str("step"), lv_str("ধাপ"), lv_str("ধরি"), lv_str("ধরো"));
     u_args = lv_argv();
     if (lv_truthy(lv_bool(lv_lt(lv_len(u_args), lv_num(3))))) {
         lipi_say(lv_str("Usage: lipi c_codegen.lp input.lp output.c"));
@@ -2264,5 +2328,615 @@ int main(int argc, char** argv) {
         lipi_say(lv_add(lv_add(lv_add(lv_str("DONE: "), u_input_file), lv_str(" -> ")), u_output_file));
         lipi_say(lv_add(lv_add(lv_str("Next: gcc "), u_output_file), lv_str(" -I src/compiler/ -lm -o program")));
     }
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
+    lv_null();
     return 0;
 }

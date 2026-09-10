@@ -1,27 +1,15 @@
 // ==============================================================================
 // 👑 LIPI BENCHMARK: 10,000,000 ARITHMETIC LOOP ITERATIONS (benchmarks/bench_loop.lp)
-// ⚡ Pure Native Silicon ALU & CPU Hardware Clock Performance
+// ⚡ Pure Native Silicon ALU & CPU Hardware Performance
 // ==============================================================================
 
-অন্তর্ভুক্ত "std/io.lp"
+fn bench_loop n
+    total = 0
+    i = 1
+    while i <= n
+        total = total + (i % 7)
+        i = i + 1
+    return total
 
-কাজ প্রধান() {
-    ধরি শুরু = সিপিউ_ক্লক()
-    
-    ধরি যোগফল = ০
-    ধরি i = ১
-    যতক্ষণ i <= ১০০০০০০০ {
-        যোগফল = যোগফল + (i % ৭)
-        i = i + ১
-    }
-    
-    ধরি শেষ = সিপিউ_ক্লক()
-    ধরি মোট_ক্লক = শেষ - শুরু
-    
-    দেখাও "Lipi Loop 10,000,000 Iterations Complete!"
-    দেখাও "Sum: " + যোগফল
-    দেখাও "Hardware CPU Cycles: " + মোট_ক্লক
-    ফেরত ০
-}
-
-প্রধান()
+say "Lipi 10,000,000 Loop Benchmark Result:"
+say bench_loop 10000000

@@ -16,8 +16,8 @@
 //   REGEX_মুa্তি(pat)
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/core/str.lp"
+include "std/mem.lp"
+include "std/str.lp"
 
 // ─── Regex Node Types ─────────────────────────────────────────────────────────
 REGEX_LITERAL      = 1   // literal character match

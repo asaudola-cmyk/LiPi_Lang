@@ -1,7 +1,7 @@
 // ==============================================================================
 // 🌐 লিপি ওয়েব ফ্রেমওয়ার্a — সম্পূর্ণ Full-Stack Framework
 // লিপি প্রথম ১.০ | ciphername: সোভেরিন
-include "std/core/io.lp"
+include "std/io.lp"
 // File: std/web.lp
 //
 // WHY এই মডিউল:
@@ -21,9 +21,9 @@ include "std/core/io.lp"
 // ==============================================================================
 
 include "std/http.lp"
-include "std/core/mem.lp"
-include "std/core/str.lp"
-include "std/core/json.lp"
+include "std/mem.lp"
+include "std/str.lp"
+include "std/json.lp"
 include "std/version.lp"
 
 // ─── ধ্রুবa ──────────────────────────────────────────────────────────────────

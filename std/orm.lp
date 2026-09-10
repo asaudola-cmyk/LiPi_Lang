@@ -17,9 +17,9 @@
 //   ORM_delete("users", "id", ৪২)
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/core/str.lp"
-include "std/core/io.lp"
+include "std/mem.lp"
+include "std/str.lp"
+include "std/io.lp"
 include "std/db.lp"
 
 // ─── ORM Constants ────────────────────────────────────────────────────────────

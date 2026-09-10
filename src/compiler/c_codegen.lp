@@ -45,7 +45,8 @@ NT_BREAK     = 20
 NT_CONTINUE  = 21
 
 // Global keyword list -- created once at startup
-KEYWORDS = list("fn", "if", "elif", "else", "while", "for", "in", "repeat", "return", "say", "show", "print", "println", "struct", "include", "break", "continue", "and", "or", "not", "null", "nil", "true", "false", "each", "step")
+// WHY: Includes both English standard and Bengali sovereign language keywords
+KEYWORDS = list("fn", "কাজ", "if", "যদি", "elif", "নাহলে_যদি", "else", "নাহলে", "while", "যতক্ষণ", "for", "প্রতিটি", "in", "ভেতরে", "repeat", "বার", "return", "ফেরত", "say", "বলো", "show", "দেখাও", "print", "println", "struct", "গঠন", "include", "অন্তর্ভুক্ত", "break", "থামো", "continue", "চালিয়ে_যাও", "and", "এবং", "or", "অথবা", "not", "না", "null", "শূন্য", "nil", "true", "সত্য", "false", "মিথ্যা", "each", "step", "ধাপ", "ধরি", "ধরো")
 
 fn is_kw word
     for kw in KEYWORDS
@@ -422,9 +423,23 @@ fn n_kind node
     return get(node, 0)
 
 // Parse a block -- returns list of statement nodes
+// WHY: Supports both modern indentation blocks and explicit { ... } blocks
 fn parse_block ps
     ps_skip_nl(ps)
     stmts = list()
+    if ps_is_op(ps, "{") == 1
+        ps_adv(ps)
+        while ps_cur(ps) != null
+            ps_skip_nl(ps)
+            t = ps_cur(ps)
+            if t == null break
+            if tok_type(t) == TT_OP and tok_val(t) == "}"
+                ps_adv(ps)
+                break
+            if tok_type(t) == TT_EOF break
+            stmt = parse_stmt(ps)
+            if stmt != null push(stmts, stmt)
+        return stmts
     if ps_is_tt(ps, TT_INDENT) == 1
         ps_adv(ps)
         while ps_cur(ps) != null
@@ -448,16 +463,37 @@ fn parse_stmt ps
     if t == null return null
     if tok_type(t) == TT_EOF return null
     if tok_type(t) == TT_DEDENT return null
+    if tok_type(t) == TT_OP and tok_val(t) == "}" return null
 
     tt = tok_type(t)
     tv = tok_val(t)
 
-    // struct definition
-    if tt == TT_KW and tv == "struct"
+    // dhari / dhoro variable declaration keyword (like let / var)
+    if tt == TT_KW and (tv == "ধরি" or tv == "ধরো")
+        ps_adv(ps)
+        return parse_stmt(ps)
+
+    // struct definition (struct / গঠন)
+    if tt == TT_KW and (tv == "struct" or tv == "গঠন")
         ps_adv(ps)
         name = ps_eat_ident(ps)
         fields = list()
         ps_skip_nl(ps)
+        if ps_is_op(ps, "{") == 1
+            ps_adv(ps)
+            while ps_cur(ps) != null
+                ps_skip_nl(ps)
+                if ps_cur(ps) == null break
+                if ps_is_op(ps, "}") == 1
+                    ps_adv(ps)
+                    break
+                if ps_is_tt(ps, TT_EOF) == 1 break
+                if ps_is_ident(ps) == 1
+                    push(fields, ps_eat_ident(ps))
+                    ps_eat_op(ps, ",")
+                else
+                    ps_adv(ps)
+            return list(NT_STRUCT, name, fields)
         if ps_is_tt(ps, TT_INDENT) == 1
             ps_adv(ps)
             while ps_cur(ps) != null
@@ -467,19 +503,27 @@ fn parse_stmt ps
                 if ps_is_tt(ps, TT_EOF) == 1 break
                 if ps_is_ident(ps) == 1
                     push(fields, ps_eat_ident(ps))
+                    ps_eat_op(ps, ",")
                 else
                     ps_adv(ps)
             if ps_is_tt(ps, TT_DEDENT) == 1
                 ps_adv(ps)
         return list(NT_STRUCT, name, fields)
 
-    // fn definition
-    if tt == TT_KW and tv == "fn"
+    // fn definition (fn / কাজ)
+    if tt == TT_KW and (tv == "fn" or tv == "কাজ")
         ps_adv(ps)
         name = ps_eat_ident(ps)
         params = list()
-        while ps_is_ident(ps) == 1
-            push(params, ps_eat_ident(ps))
+        if ps_is_op(ps, "(") == 1
+            ps_adv(ps)
+            while ps_is_ident(ps) == 1
+                push(params, ps_eat_ident(ps))
+                ps_eat_op(ps, ",")
+            ps_eat_op(ps, ")")
+        else
+            while ps_is_ident(ps) == 1
+                push(params, ps_eat_ident(ps))
         if ps_eat_op(ps, "=") == 1
             body_expr = parse_expr(ps)
             body = list(list(NT_RETURN, body_expr))
@@ -487,16 +531,16 @@ fn parse_stmt ps
         body = parse_block(ps)
         return list(NT_FNDEF, name, params, body)
 
-    // return
-    if tt == TT_KW and tv == "return"
+    // return / ফেরত
+    if tt == TT_KW and (tv == "return" or tv == "ফেরত")
         ps_adv(ps)
         if ps_is_tt(ps, TT_NL) == 1 or ps_is_tt(ps, TT_EOF) == 1
             return list(NT_RETURN, list(NT_NULL_N))
         val = parse_expr(ps)
         return list(NT_RETURN, val)
 
-    // if / elif / else
-    if tt == TT_KW and tv == "if"
+    // if / elif / else (যদি / নাহলে_যদি / নাহলে)
+    if tt == TT_KW and (tv == "if" or tv == "যদি")
         ps_adv(ps)
         cond = parse_expr(ps)
         then_b = parse_block(ps)
@@ -505,42 +549,43 @@ fn parse_stmt ps
         // WHY: Skip newlines before elif/else — handles one-liner if bodies like:
         //      "if cond body_stmt\nelif cond2 body2" where NL is current after body_stmt
         ps_skip_nl(ps)
-        while ps_is_kw(ps, "elif") == 1
+        while ps_is_kw(ps, "elif") == 1 or ps_is_kw(ps, "নাহলে_যদি") == 1
             ps_adv(ps)
             ec = parse_expr(ps)
             eb = parse_block(ps)
             push(elifs, list(ec, eb))
             ps_skip_nl(ps)
-        if ps_is_kw(ps, "else") == 1
+        if ps_is_kw(ps, "else") == 1 or ps_is_kw(ps, "নাহলে") == 1
             ps_adv(ps)
             else_b = parse_block(ps)
         return list(NT_IF, cond, then_b, elifs, else_b)
 
-    // while
-    if tt == TT_KW and tv == "while"
+    // while / যতক্ষণ
+    if tt == TT_KW and (tv == "while" or tv == "যতক্ষণ")
         ps_adv(ps)
         cond = parse_expr(ps)
         body = parse_block(ps)
         return list(NT_WHILE, cond, body)
 
-    // repeat N
-    if tt == TT_KW and tv == "repeat"
+    // repeat N / বার
+    if tt == TT_KW and (tv == "repeat" or tv == "বার")
         ps_adv(ps)
         cnt = parse_expr(ps)
         body = parse_block(ps)
         return list(NT_REPEAT, cnt, body)
 
-    // for / each
-    if tt == TT_KW and (tv == "for" or tv == "each")
+    // for / each / প্রতিটি
+    if tt == TT_KW and (tv == "for" or tv == "each" or tv == "প্রতিটি")
         ps_adv(ps)
         var_nm = ps_eat_ident(ps)
-        ps_eat_kw(ps, "in")
+        if ps_is_kw(ps, "in") == 1 or ps_is_kw(ps, "ভেতরে") == 1
+            ps_adv(ps)
         start_e = parse_add(ps)
         if ps_is_op(ps, "..") == 1
             ps_adv(ps)
             end_e = parse_add(ps)
             step_e = null
-            if ps_is_kw(ps, "step") == 1
+            if ps_is_kw(ps, "step") == 1 or ps_is_kw(ps, "ধাপ") == 1
                 ps_adv(ps)
                 step_e = parse_primary(ps)
             body = parse_block(ps)
@@ -549,28 +594,28 @@ fn parse_stmt ps
             body = parse_block(ps)
             return list(NT_FOREACH, var_nm, start_e, body)
 
-    // break
-    if tt == TT_KW and tv == "break"
+    // break / থামো
+    if tt == TT_KW and (tv == "break" or tv == "থামো")
         ps_adv(ps)
         return list(NT_BREAK)
 
-    // continue
-    if tt == TT_KW and tv == "continue"
+    // continue / চালিয়ে_যাও
+    if tt == TT_KW and (tv == "continue" or tv == "চালিয়ে_যাও")
         ps_adv(ps)
         return list(NT_CONTINUE)
 
-    // say / print / show
-    if tt == TT_KW and (tv == "say" or tv == "print" or tv == "println" or tv == "show")
+    // say / print / show / বলো / দেখাও
+    if tt == TT_KW and (tv == "say" or tv == "print" or tv == "println" or tv == "show" or tv == "বলো" or tv == "দেখাও")
         ps_adv(ps)
         if ps_is_tt(ps, TT_NL) == 1 or ps_is_tt(ps, TT_EOF) == 1
             return list(NT_FNCALL, "say", list())
         say_args = list()
-        while ps_cur(ps) != null and ps_is_tt(ps, TT_NL) == 0 and ps_is_tt(ps, TT_EOF) == 0 and ps_is_tt(ps, TT_DEDENT) == 0
+        while ps_cur(ps) != null and ps_is_tt(ps, TT_NL) == 0 and ps_is_tt(ps, TT_EOF) == 0 and ps_is_tt(ps, TT_DEDENT) == 0 and ps_is_op(ps, "}") == 0
             push(say_args, parse_add(ps))
         return list(NT_FNCALL, "say", say_args)
 
-    // include -- skip
-    if tt == TT_KW and tv == "include"
+    // include / অন্তর্ভুক্ত -- skip
+    if tt == TT_KW and (tv == "include" or tv == "অন্তর্ভুক্ত")
         while ps_cur(ps) != null and ps_is_tt(ps, TT_NL) == 0 and ps_is_tt(ps, TT_EOF) == 0
             ps_adv(ps)
         return null
@@ -598,7 +643,7 @@ fn parse_expr ps = parse_or(ps)
 
 fn parse_or ps
     left = parse_and(ps)
-    while ps_is_kw(ps, "or") == 1
+    while ps_is_kw(ps, "or") == 1 or ps_is_kw(ps, "অথবা") == 1
         ps_adv(ps)
         right = parse_and(ps)
         left = list(NT_BINOP, "or", left, right)
@@ -606,14 +651,14 @@ fn parse_or ps
 
 fn parse_and ps
     left = parse_not(ps)
-    while ps_is_kw(ps, "and") == 1
+    while ps_is_kw(ps, "and") == 1 or ps_is_kw(ps, "এবং") == 1
         ps_adv(ps)
         right = parse_not(ps)
         left = list(NT_BINOP, "and", left, right)
     return left
 
 fn parse_not ps
-    if ps_is_kw(ps, "not") == 1
+    if ps_is_kw(ps, "not") == 1 or ps_is_kw(ps, "না") == 1
         ps_adv(ps)
         operand = parse_not(ps)
         return list(NT_UNARY, "not", operand)
@@ -686,13 +731,13 @@ fn parse_primary ps
     if tt == TT_STR
         ps_adv(ps)
         return list(NT_STR_N, tv)
-    if tt == TT_KW and tv == "true"
+    if tt == TT_KW and (tv == "true" or tv == "সত্য")
         ps_adv(ps)
         return list(NT_BOOL_N, 1)
-    if tt == TT_KW and tv == "false"
+    if tt == TT_KW and (tv == "false" or tv == "মিথ্যা")
         ps_adv(ps)
         return list(NT_BOOL_N, 0)
-    if tt == TT_KW and (tv == "null" or tv == "nil")
+    if tt == TT_KW and (tv == "null" or tv == "nil" or tv == "শূন্য")
         ps_adv(ps)
         return list(NT_NULL_N)
     if tt == TT_OP and tv == "("
@@ -818,7 +863,8 @@ fn escape_str s
         i = i + 1
     return result
 fn is_builtin name
-    blist = list("say", "print", "println", "show", "echo", "len", "length", "push", "append", "pop", "get", "set", "list_get", "list_set", "list", "sort", "sum", "join", "str", "int", "float", "bool", "abs", "sqrt", "floor", "ceil", "round", "min", "max", "pow", "log", "sin", "cos", "upper", "lower", "trim", "strip", "split", "contains", "starts_with", "ends_with", "replace", "char_at", "index_of", "ord", "chr", "file_read", "file_write", "file_append", "file_exists", "argv", "type", "exit", "time_ms", "log2", "log10", "tan", "env")
+    // WHY: Recognize all standard runtime functions so they are generated as lv_* calls
+    blist = list("say", "print", "println", "show", "echo", "len", "length", "push", "append", "pop", "get", "set", "list_get", "list_set", "list", "sort", "sum", "join", "str", "int", "float", "bool", "abs", "sqrt", "floor", "ceil", "round", "min", "max", "pow", "log", "sin", "cos", "upper", "lower", "trim", "strip", "split", "contains", "starts_with", "ends_with", "replace", "char_at", "index_of", "ord", "chr", "file_read", "file_write", "file_write_bytes", "file_append", "file_exists", "argv", "type", "exit", "time_ms", "log2", "log10", "tan", "env")
     for b in blist
         if b == name return 1
     return 0

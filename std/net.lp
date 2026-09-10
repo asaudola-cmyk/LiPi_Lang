@@ -1,78 +1,86 @@
-// 📜 লিপি direct aার্নেল নেটওয়ার্aিং ও সaেট লাইব্রেরি (Pure Lipi Native Networking)
-// 🏛️ direct লিনাa্স aার্নেল টিসিপি/আইপি স্ট্যাa ও এইচটিটিপি প্রোটোaল ইঞ্জিন (Linux AMD64 Kernel ABI)
-// ০% Libc, ০% বহিরাগত লাইব্রেরি — direct র লিনাa্স সaেট syscall
+// 📜 লিপি সরাসরি কার্নেল নেটওয়ার্কিং ও সকেট লাইব্রেরি (Pure Lipi Native Networking)
+// 🏛️ সরাসরি লিনাক্স কার্নেল টিসিপি/আইপি স্ট্যাক ও এইচটিটিপি প্রোটোকল ইঞ্জিন (Linux AMD64 Kernel ABI)
+// ০% Libc, ০% বহিরাগত লাইব্রেরি — সরাসরি র লিনাক্স সকেট সিসকল
 
-// ১. র টিসিপি সaেট create (Create TCP Socket via SYS_socket: syscall 41)
-// WHY: aার্নেল থেaে AF_INET (IPv4 = 2) এবং SOCK_STREAM (TCP = 1) সaেট file ডেসa্রিপ্টর allocation নেওয়া।
-fn socket_create
-    fd = syscall(41, 2, 1, 0)
-    return fd
+// ১. র টিসিপি সকেট তৈরি (Create TCP Socket via SYS_socket: syscall 41)
+// WHY: কার্নেল থেকে AF_INET (IPv4 = 2) এবং SOCK_STREAM (TCP = 1) সকেট ফাইল ডেসক্রিপ্টর বরাদ্দ নেওয়া।
+কাজ সকেট_তৈরি() {
+    ধরি fd = সিসকল(৪১, ২, ১, ০)
+    ফেরত fd
+}
 
-// ২. সaেট পুনঃব্যবrate অপশন সেট (Set SO_REUSEADDR via SYS_setsockopt: syscall 54)
-// WHY: server রিস্টার্টের সময় 'Address already in use' error এড়ানো।
+// ২. সকেট পুনঃব্যবহার অপশন সেট (Set SO_REUSEADDR via SYS_setsockopt: syscall 54)
+// WHY: সার্ভার রিস্টার্টের সময় 'Address already in use' ত্রুটি এড়ানো।
 // SOL_SOCKET = 1, SO_REUSEADDR = 2, optval = 1, optlen = 4
-fn socket_opt_set fd mem_addr
-    mem_write(mem_addr, 0, 1)
-    code = syscall(54, fd, 1, 2, mem_addr, 4)
-    return code
+কাজ সকেট_অপশন_সেট(fd, মেমরি_ঠিকানা) {
+    মেমরি_লেখো(মেমরি_ঠিকানা, ০, ১)
+    ধরি কোড = সিসকল(৫৪, fd, ১, ২, মেমরি_ঠিকানা, ৪)
+    ফেরত কোড
+}
 
-// ৩. নন-ব্লaিং মোড সa্রিয়aরণ (Set O_NONBLOCK via SYS_fcntl: syscall 72)
-// WHY: a্লায়েন্ট connectionের জন্য অপেa্ষা aরার সময় থ্রেড বা টেস্ট রানার ব্লa not হওয়া।
+// ৩. নন-ব্লকিং মোড সক্রিয়করণ (Set O_NONBLOCK via SYS_fcntl: syscall 72)
+// WHY: ক্লায়েন্ট সংযোগের জন্য অপেক্ষা করার সময় থ্রেড বা টেস্ট রানার ব্লক না হওয়া।
 // F_GETFL = 3, F_SETFL = 4, O_NONBLOCK = 2048 (0x800)
-fn socket_set_nonblocking(fd)
-    flag = syscall(72, fd, 3, 0)
-    new_flag = flag + 2048
-    code = syscall(72, fd, 4, new_flag)
-    return code
+কাজ সকেট_ননব্লকিং_সেট(fd) {
+    ধরি ফ্ল্যাগ = সিসকল(৭২, fd, ৩, ০)
+    ধরি নতুন_ফ্ল্যাগ = ফ্ল্যাগ + ২০৪৮
+    ধরি কোড = সিসকল(৭২, fd, ৪, নতুন_ফ্ল্যাগ)
+    ফেরত কোড
+}
 
-// ৪. sockaddr_in স্ট্রাaচার aনস্ট্রাaশন (16-byte IPv4 Address Layout)
-// WHY: port ও আইপিaে নেটওয়ার্a byte অর্ডারে (Big Endian) memতে সাজানো।
+// ৪. sockaddr_in স্ট্রাকচার কনস্ট্রাকশন (16-byte IPv4 Address Layout)
+// WHY: পোর্ট ও আইপিকে নেটওয়ার্ক বাইট অর্ডারে (Big Endian) মেমরিতে সাজানো।
 // offset 0..1: sin_family = AF_INET (2)
 // offset 2..3: sin_port = htons(port)
 // offset 4..7: sin_addr = INADDR_ANY (0.0.0.0)
 // offset 8..15: zero padding
-fn socket_addr_prepare buffer_addr port
-    hi_byte = port / 256
-    lo_byte = port % 256
-    mem_write_byte(buffer_addr, 0, 2)
-    mem_write_byte(buffer_addr, 1, 0)
-    mem_write_byte(buffer_addr, 2, hi_byte)
-    mem_write_byte(buffer_addr, 3, lo_byte)
-    mem_write_byte(buffer_addr, 4, 0)
-    mem_write_byte(buffer_addr, 5, 0)
-    mem_write_byte(buffer_addr, 6, 0)
-    mem_write_byte(buffer_addr, 7, 0)
-    mem_write_byte(buffer_addr, 8, 0)
-    mem_write_byte(buffer_addr, 9, 0)
-    mem_write_byte(buffer_addr, 10, 0)
-    mem_write_byte(buffer_addr, 11, 0)
-    mem_write_byte(buffer_addr, 12, 0)
-    mem_write_byte(buffer_addr, 13, 0)
-    mem_write_byte(buffer_addr, 14, 0)
-    mem_write_byte(buffer_addr, 15, 0)
-    return 0
+কাজ সকেট_ঠিকানা_প্রস্তুত(বাফার_ঠিকানা, পোর্ট) {
+    ধরি হাই_বাইট = পোর্ট / ২৫৬
+    ধরি লো_বাইট = পোর্ট % ২৫৬
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ০, ২)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ২, হাই_বাইট)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৩, লো_বাইট)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৪, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৫, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৬, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৭, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৮, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ৯, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১০, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১১, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১২, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১৩, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১৪, ০)
+    মেমরি_বাইট_লেখো(বাফার_ঠিকানা, ১৫, ০)
+    ফেরত ০
+}
 
-// ৫. নির্দিষ্ট portে bind aরা (Bind Socket via SYS_bind: syscall 49)
-// WHY: অপারেটিং সিস্টেমে লোaাল টিসিপি portে সaেট file ডেসa্রিপ্টর নিবন্ধন aরা।
-fn port_bind fd buffer_addr port
-    socket_addr_prepare(buffer_addr, port)
-    result = syscall(49, fd, buffer_addr, 16)
-    return result
+// ৫. নির্দিষ্ট পোর্টে বাইন্ড করা (Bind Socket via SYS_bind: syscall 49)
+// WHY: অপারেটিং সিস্টেমে লোকাল টিসিপি পোর্টে সকেট ফাইল ডেসক্রিপ্টর নিবন্ধন করা।
+কাজ পোর্ট_বাইন্ড(fd, বাফার_ঠিকানা, পোর্ট) {
+    সকেট_ঠিকানা_প্রস্তুত(বাফার_ঠিকানা, পোর্ট)
+    ধরি ফলাফল = সিসকল(৪৯, fd, বাফার_ঠিকানা, ১৬)
+    ফেরত ফলাফল
+}
 
-// ৬. connection শোনার মোড (Listen via SYS_listen: syscall 50)
-// WHY: ইনaামিং a্লায়েন্ট aানেaশনের জন্য aার্নেল aিউ সa্রিয় aরা।
-fn socket_listen fd backlog
-    result = syscall(50, fd, backlog)
-    return result
+// ৬. সংযোগ শোনার মোড (Listen via SYS_listen: syscall 50)
+// WHY: ইনকামিং ক্লায়েন্ট কানেকশনের জন্য কার্নেল কিউ সক্রিয় করা।
+কাজ সকেট_লিসেন(fd, ব্যাকলগ) {
+    ধরি ফলাফল = সিসকল(৫০, fd, ব্যাকলগ)
+    ফেরত ফলাফল
+}
 
-// ৭. ইনaামিং connection accept (Accept Connection via SYS_accept: syscall 43)
-// WHY: pending a্লায়েন্ট aানেaশন থেaে নতুন a্লায়েন্ট file ডেসa্রিপ্টর return পাওয়া।
-fn socket_accept fd
-    client_fd = syscall(43, fd, 0, 0)
-    return client_fd
+// ৭. ইনকামিং সংযোগ গ্রহণ (Accept Connection via SYS_accept: syscall 43)
+// WHY: পেন্ডিং ক্লায়েন্ট কানেকশন থেকে নতুন ক্লায়েন্ট ফাইল ডেসক্রিপ্টর রিটার্ন পাওয়া।
+কাজ সকেট_গ্রহণ(fd) {
+    ধরি ক্লায়েন্ট_এফডি = সিসকল(৪৩, fd, ০, ০)
+    ফেরত ক্লায়েন্ট_এফডি
+}
 
-// ৮. সaেট close aরা (Close Socket via SYS_close: syscall 3)
-// WHY: নেটওয়ার্a resource সঠিaভাবে aার্নেলaে return দেওয়া।
-fn socket_close fd
-    code = syscall(3, fd)
-    return code
+// ৮. সকেট বন্ধ করা (Close Socket via SYS_close: syscall 3)
+// WHY: নেটওয়ার্ক রিসোর্স সঠিকভাবে কার্নেলকে ফেরত দেওয়া।
+কাজ সকেট_বন্ধ(fd) {
+    ধরি কোড = সিসকল(৩, fd)
+    ফেরত কোড
+}

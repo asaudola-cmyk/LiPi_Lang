@@ -1,6 +1,6 @@
 // Lipi 2.0 — Hello World Example
 // Global Standard Minimal Syntax
-// Run: python3 -m src.runtime main.lp
+// Run: lipi main.lp (or: lipc main.lp -o main && ./main)
 
 // Basic output
 say "Hello, World!"

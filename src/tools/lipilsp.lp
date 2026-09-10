@@ -23,9 +23,9 @@
 //   textDocument/diagnostics (error reporting)
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/core/io.lp"
-include "std/core/json.lp"
+include "std/mem.lp"
+include "std/io.lp"
+include "std/json.lp"
 include "std/version.lp"
 
 // ─── LSP Constants ────────────────────────────────────────────────────────────

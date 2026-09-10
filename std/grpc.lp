@@ -15,7 +15,7 @@
 //   grpc_server_start(srv)
 // ==============================================================================
 
-include "std/core/mem.lp"
+include "std/mem.lp"
 include "std/net.lp"
 
 // ─── gRPC Constants ───────────────────────────────────────────────────────────

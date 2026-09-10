@@ -17,9 +17,9 @@
 //   KV_মুa্তি(kv)
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/core/str.lp"
-include "std/core/io.lp"
+include "std/mem.lp"
+include "std/str.lp"
+include "std/io.lp"
 
 // ─── KV Types ─────────────────────────────────────────────────────────────────
 KV_TYPE_STRING   = 1

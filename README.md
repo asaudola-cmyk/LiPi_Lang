@@ -6,8 +6,7 @@
 **Lipi First 1.0 — Sovereign**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-60%2F60%20PASS-brightgreen)](#tests)
-[![Runtime](https://img.shields.io/badge/runtime-lipic2%202.0-blue)](#runtime)
+[![Runtime](https://img.shields.io/badge/compiler-Sovereign%20Native%20ELF-blue)](#architecture)
 [![Unicode](https://img.shields.io/badge/identifiers-Unicode%20✓-orange)](#unicode)
 
 </div>
@@ -200,11 +199,8 @@ say factorial 12    // 479001600
 ## Tests
 
 ```bash
-# Run all 60 tests
-cd ~/.lipi
-for t in tests/*.lp; do
-    python3 -m src.runtime "$t"
-done
+# Run all 60 tests (100% Native Regression Engine)
+bash tests/run_tests.sh
 ```
 
 60/60 tests pass:
@@ -233,33 +229,33 @@ code --install-extension lipi-lang-1.0.0.vsix
 ---
 
 ## Architecture
-
+ 
 ```
 Lipi First 1.0 — Sovereign
 │
-├── bin/lipi               ← Global command (runs any .lp file)
-├── src/runtime/           ← lipic2: Python-based interpreter
-│   ├── lexer.py           ← Unicode tokenizer (Bengali + ASCII)
-│   ├── parser.py          ← Recursive descent parser
-│   ├── interpreter.py     ← Tree-walking interpreter
-│   ├── ast_nodes.py       ← AST node definitions
-│   └── stdlib.py          ← Built-in functions
+├── bin/lipc               ← Sovereign Native Compiler (Direct ELF64 Machine Code)
+├── bin/lipi               ← Universal Runner / CLI
+├── src/compiler/          ← Compiler Core
+│   ├── elf_emitter.lp     ← Pure Lipi Direct x86_64 Machine Code Generator (Zero GCC, Zero Libc)
+│   ├── c_codegen.lp       ← Self-Hosted Native C Codegen Bootstrap
+│   └── native_elf_compiler.c ← Sovereign In-Memory ELF Compiler Seed
 ├── std/                   ← Standard library (.lp files)
-├── tests/                 ← 60 tests (all passing)
+├── tests/                 ← 60 regression tests (all passing in Direct Machine Code)
 ├── examples/              ← Example programs
 ├── vscode-lipi/           ← VS Code extension
 └── install.sh             ← One-line installer
 ```
-
+ 
 ### Roadmap
-
+ 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| **lipic2** (Python runtime) | ✅ Done | Current: tree-walking interpreter |
-| **lipic3** (Lipi in Lipi) | 🔄 Planned | Self-hosted compiler written in Lipi |
-| **ARM64 native** | 📋 Future | Compile .lp → ARM64 binary (no Python needed) |
+| **Direct ELF Machine Code** | ✅ Done | Zero GCC, Zero Libc, Zero Python standalone ELF64 emitter |
+| **Self-Hosting Closure** | ✅ Done | Bit-for-bit deterministic reproducibility (Gen1 == Gen2) |
+| **Bilingual Standard** | ✅ Done | Full Bengali (বাংলা) & English syntax interoperability |
+| **ARM64 native** | 📋 Future | Compile .lp → ARM64 binary |
 | **WASM target** | 📋 Future | Run Lipi in the browser |
-| **lipi.dev** | 📋 Future | Online playground |
+| **lipi.dev** | 📋 Future | Online sovereign playground |
 
 ---
 
@@ -333,7 +329,7 @@ say "Final size: " + s.size
 ```bash
 git clone https://github.com/asaudola-cmyk/LiPi_Lang
 cd LiPi_Lang
-python3 -m src.runtime tests/01_hello.lp  # Verify setup
+./bin/lipi tests/01_hello.lp  # Verify setup (Zero Python)
 ```
 
 Pull requests welcome! See [`docs/LIPI2_SYNTAX.md`](docs/LIPI2_SYNTAX.md) for the language spec.

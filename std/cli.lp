@@ -20,9 +20,9 @@
 //   if cli_flag_read(app, "--verbose") { say "verbose mode" }
 // ==============================================================================
 
-include "std/core/mem.lp"
-include "std/core/str.lp"
-include "std/sys/kernel.lp"
+include "std/mem.lp"
+include "std/str.lp"
+include "std/kernel.lp"
 
 // ─── ধ্রুবa ──────────────────────────────────────────────────────────────────
 CLI_MAX_FLAGS    = 64    // সর্বোচ্চ ৬৪টি flag
