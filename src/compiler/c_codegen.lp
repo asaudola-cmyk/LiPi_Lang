@@ -176,8 +176,6 @@ fn tokenize src
     ln_ref = list(1)
     indent_stk = ist_new()
 
-    fn emit_tok tt tv
-        push(tokens, tok_new(tt, tv, get(ln_ref, 0)))
 
     while get(p_ref, 0) < slen
         p = get(p_ref, 0)
@@ -193,16 +191,16 @@ fn tokenize src
             np = get(p_ref, 0)
             if is_blank_line(src, np) == 1
                 continue
-            emit_tok(TT_NL, "\n")
+            push(tokens, tok_new(TT_NL, "\n", get(ln_ref, 0)))
             new_lvl = count_spaces(src, np)
             cur_lvl = ist_top(indent_stk)
             if new_lvl > cur_lvl
                 ist_push_v(indent_stk, new_lvl)
-                emit_tok(TT_INDENT, "")
+                push(tokens, tok_new(TT_INDENT, "", get(ln_ref, 0)))
             elif new_lvl < cur_lvl
                 while ist_top(indent_stk) > new_lvl and ist_size(indent_stk) > 1
                     ist_pop(indent_stk)
-                    emit_tok(TT_DEDENT, "")
+                    push(tokens, tok_new(TT_DEDENT, "", get(ln_ref, 0)))
             continue
 
         if is_space(c) == 1
@@ -239,7 +237,7 @@ fn tokenize src
                 else
                     sv = sv + sc
                     list_set(p_ref, 0, get(p_ref, 0) + 1)
-            emit_tok(TT_STR, sv)
+            push(tokens, tok_new(TT_STR, sv, get(ln_ref, 0)))
             continue
 
         if is_digit(c) == 1
@@ -259,7 +257,7 @@ fn tokenize src
                     list_set(p_ref, 0, get(p_ref, 0) + 1)
                 else
                     break
-            emit_tok(TT_NUM, nv)
+            push(tokens, tok_new(TT_NUM, nv, get(ln_ref, 0)))
             continue
 
 
@@ -269,41 +267,41 @@ fn tokenize src
                 word = word + lex_char(src, get(p_ref, 0))
                 list_set(p_ref, 0, get(p_ref, 0) + 1)
             if word == "null" or word == "nil"
-                emit_tok(TT_KW, "null")
+                push(tokens, tok_new(TT_KW, "null", get(ln_ref, 0)))
             elif word == "true"
-                emit_tok(TT_KW, "true")
+                push(tokens, tok_new(TT_KW, "true", get(ln_ref, 0)))
             elif word == "false"
-                emit_tok(TT_KW, "false")
+                push(tokens, tok_new(TT_KW, "false", get(ln_ref, 0)))
             elif is_kw(word) == 1
-                emit_tok(TT_KW, word)
+                push(tokens, tok_new(TT_KW, word, get(ln_ref, 0)))
             else
-                emit_tok(TT_IDENT, word)
+                push(tokens, tok_new(TT_IDENT, word, get(ln_ref, 0)))
             continue
 
         if c == "=" and lex_peek2(src, p) == "="
             list_set(p_ref, 0, p + 2)
-            emit_tok(TT_OP, "==")
+            push(tokens, tok_new(TT_OP, "==", get(ln_ref, 0)))
             continue
         if c == "!" and lex_peek2(src, p) == "="
             list_set(p_ref, 0, p + 2)
-            emit_tok(TT_OP, "!=")
+            push(tokens, tok_new(TT_OP, "!=", get(ln_ref, 0)))
             continue
         if c == "<" and lex_peek2(src, p) == "="
             list_set(p_ref, 0, p + 2)
-            emit_tok(TT_OP, "<=")
+            push(tokens, tok_new(TT_OP, "<=", get(ln_ref, 0)))
             continue
         if c == ">" and lex_peek2(src, p) == "="
             list_set(p_ref, 0, p + 2)
-            emit_tok(TT_OP, ">=")
+            push(tokens, tok_new(TT_OP, ">=", get(ln_ref, 0)))
             continue
         if c == "." and lex_peek2(src, p) == "."
             list_set(p_ref, 0, p + 2)
-            emit_tok(TT_OP, "..")
+            push(tokens, tok_new(TT_OP, "..", get(ln_ref, 0)))
             continue
 
         if contains("+-*/%=<>()[]{}.,;:", c) == 1
             list_set(p_ref, 0, p + 1)
-            emit_tok(TT_OP, c)
+            push(tokens, tok_new(TT_OP, c, get(ln_ref, 0)))
             continue
 
         list_set(p_ref, 0, p + 1)
@@ -929,7 +927,8 @@ fn collect_vars stmts result
         if stmt != null
             k = n_kind(stmt)
             if k == NT_ASSIGN
-                vn = c_ident(get(stmt, 1))
+                // WHY: Store raw Lipi name, c_ident() applied later in gen_fn_node/gen_c
+                vn = get(stmt, 1)
                 found = 0
                 for rv in result
                     if rv == vn
@@ -1085,14 +1084,16 @@ fn gen_fn_node node cg
     locals = list()
     collect_vars(body, locals)
     for lv_nm in locals
+        lv_cn = c_ident(lv_nm)
         already = 0
         for pn_chk in cg_dvars(cg)
-            if pn_chk == lv_nm
+            if pn_chk == lv_cn
                 already = 1
 
         if already == 0
-            cg_add_var(cg, lv_nm)
-            push(lines, "    LipiVal " + lv_nm + " = lv_null();")
+            cg_add_var(cg, lv_cn)
+            push(lines, "    LipiVal " + lv_cn + " = lv_null();")
+
     gen_stmts(body, cg, lines, 1)
     push(lines, "    return lv_null();")
     push(lines, "}")
@@ -1162,20 +1163,29 @@ fn gen_c ast
             for fl in fls
                 push(fn_buf, fl)
 
-    push(main_buf, "int main(void) {")
-    // Pre-declare all main-body locals
+    // Pre-collect all main-body statements
     main_stmts = list()
     for stmt in ast
         if stmt != null
             k = n_kind(stmt)
             if k != NT_FNDEF and k != NT_STRUCT
                 push(main_stmts, stmt)
+
+    // WHY: Global variables (assigned at top level) must be C-static globals.
+    //      If declared only inside main(), functions defined BEFORE main() can't see them.
+    //      E.g., KEYWORDS = list(...) used by is_kw() — which is before main() in C output.
+    //      Solution: emit as "static LipiVal u_X = {0};" at file scope,
+    //      then assign in main() as "u_X = value;" (not re-declaring).
     main_locals = list()
     collect_vars(main_stmts, main_locals)
     for ml in main_locals
         ml_cn = c_ident(ml)
         cg_add_var(cg, ml_cn)
-        push(main_buf, "    LipiVal " + ml_cn + " = lv_null();")
+        // Emit as file-scope static (so ALL functions can see them)
+        push(decl_buf, "static LipiVal " + ml_cn + ";  /* global: " + ml + " */")
+    push(decl_buf, "")
+
+    push(main_buf, "int main(void) {")
     for stmt in ast
         if stmt != null
             k = n_kind(stmt)
@@ -1183,6 +1193,7 @@ fn gen_c ast
                 gen_stmt(stmt, cg, main_buf, 1)
     push(main_buf, "    return 0;")
     push(main_buf, "}")
+
 
     result = ""
     for line in decl_buf
