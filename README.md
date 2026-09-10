@@ -1,299 +1,356 @@
 <div align="center">
 
-# 👑 LIPI (লিপি): সার্বভৌম সিস্টেম প্রোগ্রামিং ভাষা
-### Sovereign Systems Programming Language & Silicon Compiler
+# Lipi Programming Language
+### *Simpler than Python. Global by design.*
 
-[![Native ELF](https://img.shields.io/badge/Binary-Native%20ELF%2064--bit-emerald.svg)]()
-[![Zero Dependencies](https://img.shields.io/badge/Runtime-0%25%20PHP%20%7C%200%25%20Libc%20%7C%200%25%20GCC-blue.svg)]()
-[![Self-Hosting](https://img.shields.io/badge/Self--Hosting-100%25%20Closure%20Proven-purple.svg)]()
-[![Version](https://img.shields.io/badge/সংস্করণ-প্রথম%20১.০%20%7C%20Prothom%201.0-gold.svg)]()
-[![Codename](https://img.shields.io/badge/Codename-সোভেরিন%20%7C%20Sovereign-cyan.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-50%2F50%20PASS-brightgreen.svg)]()
-[![Hardware ALU](https://img.shields.io/badge/Hardware-Direct%20x86__64%20ALU%20%26%20RDTSC-orange.svg)]()
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+**Lipi First 1.0 — Sovereign**
 
-*লিপি কোনো ফ্রেমওয়ার্ক নয় — এটি একটি ১০০% স্বাধীন, সার্বভৌম সিস্টেম প্রোগ্রামিং ভাষা। লিপি সরাসরি সিলিকন প্রসেসর ও লিনাক্স কার্নেল নিয়ন্ত্রণ করে।*
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-60%2F60%20PASS-brightgreen)](#tests)
+[![Runtime](https://img.shields.io/badge/runtime-lipic2%202.0-blue)](#runtime)
+[![Unicode](https://img.shields.io/badge/identifiers-Unicode%20✓-orange)](#unicode)
 
 </div>
 
 ---
 
-## ⚡ ১. পরিচিতি ও দর্শন (The Lipi Sovereign Paradigm)
+## Install
 
-ঐতিহ্যবাহী প্রোগ্রামিং ভাষাগুলো রানটাইম ইন্টারপ্রেটার (PHP, Python, Node.js) বা ভারী বহিরাগত লাইব্রেরি ফ্রেমওয়ার্কের ওপর নির্ভরশীল। **লিপি (Lipi)** এই পরাধীনতা সম্পূর্ণভাবে ভেঙে দিয়েছে।
-
-- **০% PHP / ০% Libc / ০% GCC রানটাইম নির্ভরতা:** লিপি সোর্স কোড (`.lp`) কম্পাইল করার পর সরাসরি লিনাক্স ELF ৬৪-বিট স্ট্যান্ডঅ্যালোন বাইনারি উৎপন্ন হয়। এটি রান করার জন্য কোনো PHP, Python, Libc বা বহিরাগত কম্পাইলারের প্রয়োজন নেই।
-- **সরাসরি সিলিকন হার্ডওয়্যার এক্সিকিউশন:** গাণিতিক হিসাব (`imul`, `add`, `sub`, `idiv`), কন্ডিশনাল ব্রাঞ্চিং (`cmp`, `jle`, `jg`) এবং হার্ডওয়্যার ক্লক রিডিং (`RDTSC`) সরাসরি সিপিইউ রেজিস্টার (`%rax`, `%rbx`, `%rdx`, `%rsi`) ও স্ট্যাক ফ্রেমে রান করে।
-- **দ্বিভাষিক ইউনিকোড সিনট্যাক্স:** বাংলায় কিংবা ইংরেজিতে সম্পূর্ণ সমান দক্ষতায় সিস্টেম কোড লেখা যায়।
-
----
-
-## 🏛️ ২. ৪-ধাপের সার্বভৌম বুটস্ট্র্যাপিং আর্কিটেকচার (4-Stage Bootstrapping)
-
-```
-[ধাপ ০: বীজ / Bootstrapper] 
-       │  (boot/lipi-seed)
-       │  স্ট্যান্ডঅ্যালোন বুটস্ট্র্যাপ সিড যা লিপির প্রথম স্ট্যান্ডঅ্যালোন কম্পাইলার তৈরি করে
-       ▼
-[ধাপ ১: খাঁটি লিপিতে কম্পাইলার (src/compiler/compiler.lp)]
-       │  টোকেনাইজার, এএসটি স্ক্যানার, x86_64 মেশিন কোড ও ELF হেডার জেনারেটর
-       ▼
-[ধাপ ২: সেলফ-হোস্টিং ক্লোজার (Self-Hosting Closure)]
-       │  bin/lipi (Gen-1) == bin/lipi-gen2 (Gen-2)
-       │  লিপি বাইনারি এখন নিজেই নিজের সোর্স কোড কম্পাইল করে (Bit-for-Bit Determinism)
-       ▼
-[ধাপ ৩: সম্পূর্ণ সার্বভৌমত্ব (Total Sovereignty)]
-          কোডবেস থেকে সমস্ত লেগ্যাসি কোড অপসারিত, লিপি ১০০% স্বাধীন!
-```
-
----
-
-## 📁 অফিসিয়াল ডিরেক্টরি কাঠামো (Official Directory Structure)
-
-```text
-lipi/
-├── 📁 apps/                    # রিয়েল-ওয়ার্ল্ড প্রডাকশন অ্যাপ্লিকেশন
-│   └── website/               # অফিসিয়াল লিপি ডাইনামিক ওয়েবসাইট ও ওয়েব সার্ভার
-│
-├── 📁 benchmarks/              # ১১টি ভাষার সিলিকন স্পিড অডিট স্যুট
-│   ├── bench_loop.lp          # লিপির অফিশিয়াল ন্যানো-বেঞ্চমার্ক
-│   ├── competitors/           # সি, সি++, রাস্ট, গো, পাইথন ইত্যাদির টেস্ট ফাইল
-│   └── run_benchmarks.sh      # অটোমেটিক বেঞ্চমার্ক এক্সিকিউটর
-│
-├── 📁 bin/                     # শুধুমাত্র মূল রিলিজ বাইনারিসমূহ
-│   ├── lipi                   # লিপির মূল হাইপার-কম্পাইলার বাইনারি
-│   ├── lipipkg                # প্যাকেজ ও ডিপেন্ডেন্সি ম্যানেজার বাইনারি
-│   ├── lipidbg                # ইন্টারেক্টিভ হার্ডওয়্যার ডিব্যাগার
-│   ├── lipirepl               # রিয়েল-টাইম ইন্টারেক্টিভ ইন্টারপ্রেটার/শেল
-│   └── lipiconvert            # বাইলিঙ্গুয়াল সিনট্যাক্স কনভার্টার
-│
-├── 📁 boot/                    # কার্নেল বুটস্ট্র্যাপ সিড (Zero C/Rust Dependency)
-│   └── lipi-seed              # আল্টিমেট সেলফ-হোস্টিং বুটস্ট্র্যাপ কার্নেল
-│
-├── 📁 src/                     # সোর্স কোড (১০০% খাঁটি লিপিতে লিখিত)
-│   ├── compiler/              # কম্পাইলারের মূল কোর ইঞ্জিন
-│   │   └── compiler.lp
-│   └── tools/                 # অফিশিয়াল টুলস
-│       ├── lipipkg.lp
-│       ├── lipidbg.lp
-│       ├── lipirepl.lp
-│       └── lipiconvert.lp
-│
-├── 📁 std/                     # সমৃদ্ধ স্ট্যান্ডার্ড লাইব্রেরি
-│   ├── core/                  # mem, str, math, json, io, arena
-│   ├── sys/                   # thread, time, shm, debug, simd, kernel
-│   ├── net/                   # net, tls, websocket
-│   ├── db/                    # db, columnstore, hashmap
-│   ├── ai/                    # ai, gguf
-│   ├── ui/                    # tui, x11, gfx
-│   ├── http.lp                # [নতুন] HTTP/1.1 ফ্রেমওয়ার্ক
-│   ├── cli.lp                 # [নতুন] CLI argument parser
-│   ├── fmt.lp                 # [নতুন] String formatting
-│   └── version.lp             # [নতুন] সংস্করণ constants (প্রথম ১.০ locked)
-│
-├── 📁 tests/                   # ৫০টি কম্প্রিহেনসিভ স্টেজ টেস্ট স্যুট
-│   ├── 01_hello.lp
-│   ├── 02_fibonacci.lp
-│   └── ... (50 total — 50/50 PASS ✅)
-│
-├── 📁 examples/                # রিয়েল প্রজেক্ট ডেমো
-│   ├── 01_hello_world/        # ব্যাসিক স্টার্টার
-│   ├── 02_http_server/        # প্রোডাকশন ওয়েব সার্ভার
-│   ├── 03_llm_inference/      # লোকাল এআই ইনফারেন্স
-│   └── 04_baremetal_os/       # ওএস কার্নেল ডেমো
-│
-├── 📁 docs/                    # এ টু জেড ডকুমেন্টেশন
-│   ├── SPECIFICATION.md
-│   ├── STANDARD_LIBRARY.md
-│   ├── ARCHITECTURE.md
-│   └── UNUM_DEVELOPER_MANUAL.md
-│
-├── 📁 editors/
-│   └── vscode-lipi/           # ভিএস কোড সিনট্যাক্স হাইলাইটার এক্সটেনশন
-│
-├── 📁 scripts/                 # ডেভপস ও ডিস্ট্রিবিউশন অটোমেশন
-│   ├── lipi                   # [নতুন] স্মার্ট lipi wrapper (auto-preprocessor)
-│   ├── install.sh             # গ্লোবাল ওয়ান-ক্লিক ইন্সটলার
-│   └── package_release.sh     # গ্লোবাল রিলিজ প্যাকার
-│
-├── 📁 build/                   # বিল্ড আর্টফ্যাক্ট ও ইন্টারমিডিয়েট ফাইলস
-├── build.sh                   # আল্টিমেট মাস্টার বিল্ড পাইপলাইন
-├── LICENSE                    # MIT/Apache Sovereign লাইসেন্স
-└── README.md                  # আন্তর্জাতিক মানের গ্লোবাল রিডমি
-```
-
----
-
-## 🚀 ৩. দ্রুত ব্যবহার নির্দেশিকা (Quick Start)
-
-### সম্পূর্ণ পাইপলাইন বিল্ড ও টেস্ট রান:
 ```bash
-./build.sh
+curl -sSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash
 ```
 
-### লিপি সোর্স কোড কম্পাইল করা:
-```bash
-# যেকোনো .lp ফাইল সরাসরি স্ট্যান্ডঅ্যালোন লিনাক্স ELF বাইনারিতে কম্পাইল করুন:
-./bin/lipic tests/01_hello.lp -o dist/my_app
+Or clone manually:
 
-# তৈরি বাইনারি সরাসরি রান করুন:
-./dist/my_app
+```bash
+git clone https://github.com/asaudola-cmyk/LiPi_Lang ~/.lipi
+echo 'export PATH="$PATH:$HOME/.lipi/bin"' >> ~/.bashrc
+source ~/.bashrc
 ```
 
-### বাইনারির স্বাধীনতা যাচাই (Audit & Verification):
-```bash
-file dist/my_app
-# dist/my_app: ELF 64-bit LSB executable, x86-64, statically linked, no section header
+Then run any `.lp` file:
 
-ldd dist/my_app
-# not a dynamic executable (শূন্য ডায়নামিক লাইব্রেরি নির্ভরতা)
+```bash
+lipi hello.lp           # Run a file
+lipi                    # Interactive REPL
+lipi --version          # Show version
+lipi -e 'say "Hello"'  # One-liner
 ```
 
 ---
 
-## 📜 ৪. লিপি কোড উদাহরণ (Example Code)
+## Hello World
 
 ```lipi
-// 📜 লিপি কোড উদাহরণ (লুপ, এরিথমেটিক ও সিলিকন ক্লক)
-দেখাও "=== স্বাগতম লিপি প্রোগ্রামিং ভাষায়! ==="
+say "Hello, World!"
+```
 
-ধরি ফ্যাক্টোরিয়াল = ১
-ধরি গণনা = ১
-
-যতক্ষণ গণনা <= ৫ {
-    ফ্যাক্টোরিয়াল = ফ্যাক্টোরিয়াল * গণনা
-    গণনা = গণনা + ১
-}
-
-দেখাও "১ থেকে ৫ পর্যন্ত গুণফল = " + ফ্যাক্টোরিয়াল
-
-ধরি শুরু_ক্লক = সিপিউ_ক্লক()
-ধরি যোগফল = ০
-ধরি i = ১
-যতক্ষণ i <= ১০ {
-    যোগফল = যোগফল + i
-    i = i + ১
-}
-ধরি শেষ_ক্লক = সিপিউ_ক্লক()
-ধরি মোট_ক্লক = শেষ_ক্লক - শুরু_ক্লক
-
-দেখাও "১ থেকে ১০ পর্যন্ত যোগফল = " + যোগফল
-দেখাও "সিপিইউ এক্সিকিউশন ক্লক সাইকেল = " + মোট_ক্লক
+```bash
+$ lipi hello.lp
+Hello, World!
 ```
 
 ---
 
-## 🌐 ৫. নতুন সার্বভৌম মহাদিগন্তসমূহ (Sovereign Horizons 6-9)
+## Why Lipi?
 
-### মহাদিগন্ত ৬: সরাসরি কার্নেল নেটওয়ার্কিং ও পিওর লিপি ওয়েব সার্ভার
-- **র সকেট ইঞ্জিন (`std/net.lp`):** লিনাক্স কার্নেল সিসকল (`SYS_socket=41`, `SYS_bind=49`, `SYS_listen=50`, `SYS_accept=43`, `SYS_setsockopt=54`, `SYS_fcntl=72`)।
-- **নেটিভ এইচটিটিপি সার্ভার (`examples/18_native_web_server.lp`):** পোর্ট ৮০৮০ তে বাইন্ড, নন-ব্লকিং একসেপ্ট পোলিং ও সরাসরি এইচটিটিপি/১.১ রেসপন্স এমিশন।
+| Feature | Lipi | Python | JavaScript |
+|---------|------|--------|-----------|
+| No braces `{}` | ✅ | ✅ | ❌ |
+| No colons `:` | ✅ | ❌ | ✅ |
+| No semicolons `;` | ✅ | ✅ | Optional |
+| No parens for calls | ✅ | ❌ | ❌ |
+| Unicode identifiers | ✅ | Limited | Limited |
+| `say` instead of `print()` | ✅ | ❌ | ❌ |
+| Self-hosted (roadmap) | 🔄 | ✅ | ✅ |
 
-### মহাদিগন্ত ৭: ডাইনামিক হিপ মেমরি, পয়েন্টার ও অ্যারে
-- **কার্নেল পেজ ম্যাপ (`std/mem.lp`):** `SYS_mmap=9` ও `SYS_munmap=11` দিয়ে সরাসরি ভার্চুয়াল মেমরি পেজ বরাদ্দ ও অবমুক্তি।
-- **পয়েন্টার ও মেমরি প্রিমিটিভস:** `মেমরি_লেখো`, `মেমরি_পড়ো`, `মেমরি_বাইট_লেখো`, `মেমরি_বাইট_পড়ো`।
-- **ইনডেক্সড অ্যারে সিনট্যাক্স:** `তালিকা[i] = মান` এবং `তালিকা[i]` (৬৪-বিট ওয়ার্ড অটো-স্কেলিং ও ডিরেক্ট ডি-রেফারেন্স)।
+**Minimal noise. Maximum clarity.**
 
-### মহাদিগন্ত ৮: স্ট্যান্ডার্ড লাইব্রেরির পূর্ণাঙ্গ বিস্তার
-- **উচ্চ নির্ভুলতা সময় (`std/time.lp`):** `SYS_nanosleep=35` ও `SYS_clock_gettime=228` (ইউনিক্স ইপোক ও মিলিসেকেন্ড স্লিপ)।
-- **জেএসন সিরিয়ালাইজার (`std/json.lp`):** স্বয়ংসম্পূর্ণ, ডিপেন্ডেন্সিমুক্ত স্ট্রাকচার্ড ডেটা এমিশন।
-- **সমন্বিত রূপ (`tests/20_grand_stdlib_expansion.lp`):** টাইম, স্লিপ, জেএসন, গণিত, স্ট্রিং ও মেমরির পূর্ণ মিলন।
-
-### মহাদিগন্ত ৯: ডেভেলপার ইকোসিস্টেম ও টুলিং
-- **স্বয়ংক্রিয় কোড ফরম্যাটার:** `./bin/lipic fmt <file.lp> [-w]`
-- **ভিএস কোড এক্সটেনশন:** `editors/vscode-lipi/` সিনট্যাক্স হাইলাইটিং ও ল্যাঙ্গুয়েজ কনফিগারেশন।
-
-### মহাদিগন্ত ১০: খাঁটি লিনাক্স কার্নেল মাল্টি-থ্রেডিং ও কনকারেন্সি
-- **সরাসরি কার্নেল থ্রেড (`std/thread.lp`):** `SYS_clone=56` এবং `CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD=69376` (0x10f00)।
-- **নিবেদিত হার্ডওয়্যার স্ট্যাক:** প্রতিটি থ্রেডের জন্য ৮কেবি স্বাধীন মেমরি পেজ স্ট্যাক ও ক্লিন ফ্রেম।
-- **সিপিউ শিডিউলিং ও পরমাণু সিঙ্ক:** `SYS_sched_yield=24`, `SYS_exit=60` ও স্পিনলক অ্যালগরিদম।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/21_kernel_multithreading.lp` (সমান্তরাল কার্নেল থ্রেড এক্সিকিউশন ও রেজাল্ট সিঙ্ক্রোনাইজেশন)।
-
-### মহাদিগন্ত ১১: কাস্টম স্ট্রাকচার ও ডেটা টাইপ মডেল
-- **কাস্টম গঠন ডিফিনিশন (`গঠন` / `struct`):** `গঠন মানুষ { আইডি, বয়স, উচ্চতা }`।
-- **স্বয়ংক্রিয় মেমরি অফসেট অ্যালাইনমেন্ট:** ৬৪-বিট QWORD অফসেট (০, ৮, ১৬ বাইট) এবং `সাইজ(গঠন)` মেমরি মূল্যায়ন।
-- **ডট সিনট্যাক্স ম্যানিপুলেশন:** `রহিম.বয়স = ২৫` ও `রহিম.বয়স` দিয়ে মেমরিতে সরাসরি রাইট ও রিড।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/22_custom_structs_and_types.lp` (পয়েন্ট ও মানুষ স্ট্রাকচার এবং পিথাগোরাস ভেক্টর ম্যাথ)।
-
-### মহাদিগন্ত ১২: খাঁটি লিপি পারসিস্টেন্ট স্টোরেজ ও এমবেডেড ডাটাবেজ ইঞ্জিন
-- **লিনাক্স ফাইল কার্নেল সিসকল (`std/db.lp`):** `SYS_open=2`, `SYS_write=1`, `SYS_read=0`, `SYS_lseek=8`, `SYS_fsync=74`, `SYS_close=3`।
-- **১৬-বাইট বাইনারি কি-ভ্যালু রেকর্ড ফরম্যাট:** ৮ বাইট কি + ৮ বাইট ভ্যালু পারসিস্টেন্স।
-- **সিলিকন ফ্ল্যাশ সিঙ্ক (Zero Data Loss):** `SYS_fsync` দিয়ে ওএস পেজ ক্যাশে থেকে সরাসরি হার্ডওয়্যার স্টোরেজে ফ্লাশ।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/23_native_database_engine.lp` (অ্যাকাউন্ট ভল্ট ডাটাবেজ তৈরি, রাইট, সিঙ্ক, ক্লোজ এবং রি-ওপেন অনুসন্ধান)।
-
-### মহাদিগন্ত ১৩: হাই-পারফরম্যান্স সিলিকন সিমডি (SIMD) ও এআই ম্যাট্রিক্স ইঞ্জিন
-- **সরাসরি x86_64 SSE2 ১২৮-বিট ভেক্টর অপকোড:** `ভেক্টর_যোগ_১২৮` (`movdqu`, `paddq`, `movdqu`) দিয়ে ১ ক্লক সাইকেলে দুটি ৬৪-বিট পূর্ণসংখ্যার সমান্তরাল যোগ।
-- **ভেক্টর ডট গুণন ও এআই অপারেশন (`std/simd.lp`):** নিউরাল নেটওয়ার্ক লেয়ার ডট প্রোডাক্ট ($\sum A_i \times B_i$) ও নন-লিনিয়ার ReLU অ্যাক্টিভেশন ($\max(0, x)$)।
-- **২x২ সিলিকন ম্যাট্রিক্স গুণন:** $C = A \times B$ সম্পূর্ণ মেশিন কোডে ৪টি ৬৪-বিট মেমরি এলিমেন্ট মাল্টিপ্লিকেশন।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/24_silicon_matrix_ai.lp` (১২৮-বিট SIMD যোগ, ডট প্রোডাক্ট, ২x২ ম্যাট্রিক্স এবং ৪২ সাইকেল RDTSC বেঞ্চমার্ক)।
-
-### মহাদিগন্ত ১৪: অ্যারিনা মেমরি ম্যানেজার ও স্মার্ট রেফারেন্স কাউন্টিং (ARC)
-- **O(1) বাম্প বরাদ্দকারী (`std/arena.lp`):** `SYS_mmap` দিয়ে রিজার্ভকৃত ভার্চুয়াল মেমরিতে পয়েন্টার অফসেট বাড়িয়ে O(1) গতিতে তাৎক্ষণিক মেমরি প্রদান।
-- **এক পলকে সম্পূর্ণ রিসেট (Instant Mass-Free):** ফ্র্যাগমেন্টেশন মুক্ত রিসেট ফাংশন `অ্যারিনা_রিসেট` দিয়ে পুরো পুল পুনরায় ব্যবহারের উপযোগী করা।
-- **অটোমেটিক রেফারেন্স কাউন্টিং (`std/arena.lp`):** থ্রেড-সেফ রেফারেন্স কাউন্টার, শেয়ার্ড মেমরি সেফটি এবং জিরো-কাউন্ট অটো-রিক্লেইম।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/25_arena_memory_allocator.lp` (৬৪কেবি পুল তৈরি, অবজেক্ট রিড/রাইট, পরিসংখ্যান ও এআরসি ভ্যালিডেশন)।
-
-### মহাদিগন্ত ১৫: এসিঙ্ক ইভেন্ট লুপ ও লিনাক্স epoll নেটওয়ার্ক ইঞ্জিন
-- **লিনাক্স epoll কার্নেল ড্রাইভেন মাল্টিপ্লেক্সিং (`std/event.lp`):** `SYS_epoll_create1=291`, `SYS_epoll_ctl=233` (প্যাকড ১২-বাইট `epoll_event` স্ট্রাক্ট), `SYS_epoll_wait=232`।
-- **নন-ব্লকিং ও টাইমআউট হ্যান্ডলিং:** অপ্রয়োজনীয় সিপিইউ স্পিনিং ছাড়া সিগন্যাল নোটিফিকেশন এবং ইভেন্ট প্রসেসিং।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/26_async_epoll_event_loop.lp` (লিনাক্স কার্নেল পাইপ ও epoll ভিত্তিক O(1) C10K ইভেন্ট লুপ)।
-
-### মহাদিগন্ত ১৬: সার্বভৌম প্যাকেজ ম্যানেজার ও প্রজেক্ট লাইফসাইকেল (`lipipkg` / `লিপিকোষ`)
-- **সার্বভৌম প্যাকেজ টুল (`bin/lipipkg`):** কোনো নোড/এনপিএম বা এক্সটার্নাল প্যাকেজ ম্যানেজার ছাড়া সম্পূর্ণ স্বাধীন সি-রুট ও লিপি ইকোসিস্টেম।
-- **প্রজেক্ট লাইফসাইকেল কমান্ড:** `lipipkg init`, `lipipkg build`, `lipipkg run`, `lipipkg test`, `lipipkg vendor`, `lipipkg version`।
-- **হারমেটিক ভেন্ডরিং (`lipi_modules/`):** রিপ্রোডিউসিবল আইসোলেটেড ডিপেন্ডেন্সি ম্যানেজমেন্ট।
-- **বাস্তবায়ন ও প্রমাণ:** `src/tools/lipipkg.lp` ও `tests/27_lipipkg_project_lifecycle.lp` (ম্যানিফেস্ট এমিশন ও প্যাকেজ লাইফসাইকেল অটোমেশন)।
-
-### মহাদিগন্ত ১৭: হার্ডওয়্যার ক্রিপ্টোগ্রাফি ও সিলিকন সিকিউরিটি (Hardware SHA-256 & RDRAND)
-- **সিপিইউ ট্রু র্যান্ডমনেস এন্ট্রপি:** x86_64 `rdrand` অপকোড দিয়ে কার্নেল ট্রু র্যান্ডম ক্রিপ্টোগ্রাফিক এন্ট্রপি জেনারেশন।
-- **সিঙ্গেল-সাইকেল রোটেশন:** ৩২-বিট `ror eax, cl` ইনস্ট্রাকশন ইমিটার (`রোটেট_ডানে_৩২` / `ror32`)।
-- **পূর্ণাঙ্গ NIST FIPS 180-4 SHA-256 ইঞ্জিন (`std/crypto.lp`):** বিগ-এন্ডিয়ান মেমরি আনপ্যাকিং, ৬৪ রাউন্ড শিডিউল এক্সপ্যানশন, কম্প্রেশন ফাংশন (`Ch`, `Maj`, $\Sigma_0$, $\Sigma_1$, $\sigma_0$, $\sigma_1$) এবং হেক্স ডাইজেস্ট ফরম্যাটার।
-- **বাস্তবায়ন ও প্রমাণ:** `tests/28_hardware_crypto_sha256.lp` (NIST টেস্ট ভেক্টর 'abc' এবং সার্বভৌম ভেক্টর 'Lipi Sovereign Silicon' ১০০% বাইট-টু-বাইট নিখুঁত মিল)।
-
-### মহাদিগন্ত ১৮: সার্বভৌম সিস্টেম ডিবাগার ও সিলিকন প্রোফাইলার (`lipidbg` & `std/debug.lp`)
-- **লিনাক্স ptrace প্রসেস ট্র্যাকিং (`bin/lipidbg`):** সরাসরি `PTRACE_TRACEME`, `PTRACE_ATTACH`, `PTRACE_GETREGS`, `PTRACE_PEEKDATA` এবং `PTRACE_CONT` দিয়ে চাইল্ড প্রসেস নিরীক্ষণ।
-- **হার্ডওয়্যার রেজিস্টার স্টেট ডাম্প:** `%rip`, `%rsp`, `%rax`, `%rbx`, `%rcx`, `%rdx`, `%rsi`, `%rdi`, `%rbp`, `%r8-r15` রেজিস্টারের তাৎক্ষণিক হেক্সাডেসিমেল বিশ্লেষণ।
-- **সিলিকন ব্রেকপয়েন্ট ও স্ট্যাক ট্র্যাকিং:** নেটিভ `ব্রেকপয়েন্ট()` (`int 3` / `0xCC`) এবং `স্ট্যাক_পয়েন্টার()` (`mov rax, rsp`) অপকোড।
-- **রানটাইম ইনভেরিয়েন্ট অ্যাসারশন (`std/debug.lp`):** `দাবি(শর্ত, বার্তা)` এবং `মেমরি_পরিদর্শন(পয়েন্টার, দৈর্ঘ্য)` দিয়ে বাফার ওভারফ্লো প্রতিরোধ।
-- **বাস্তবায়ন ও প্রমাণ:** `src/tools/lipidbg.lp`, `std/debug.lp` ও `tests/29_lipidbg_system_debugger.lp`।
-
-### মহাদিগন্ত ১৯: নেটিভ এএসটি, কনস্ট্যান্ট ফোল্ডিং ও অপটিমাইজার পাইপলাইন
-- **কম্পাইল-টাইম কনস্ট্যান্ট ফোল্ডিং (Constant Folding):** বাইনারি এরিথমেটিক (`+`, `-`, `*`, `/`, `%`), বিটওয়াইজ শিফট (`<<`, `>>`), এবং রিলেশনাল অপারেটর (`==`, `!=`, `<`, `<=`, `>`, `>=`) কম্পাইল টাইমে ক্যালকুলেট করে সরাসরি ইমিডিয়েট ভ্যালু এমিশন।
-- **রানটাইম সিপিইউ সাইকেল রিডাকশন:** রানটাইমে গাণিতিক ইন্সট্রাকশন এক্সিকিউশন বাতিল করে ০-সাইকেল কনস্ট্যান্ট লোডিং।
-- **বাস্তবায়ন ও প্রমাণ:** `boot/lipi-seed (ELF64 bootstrap binary)` ও `tests/30_ast_optimizer_constant_folding.lp` (RDTSC সাইকেল বেঞ্চমার্কে প্রমাণিত)।
-
-### মহাদিগন্ত ২০: পিওর লিপি ক্রিপ্টো টিএলএস ও সিমেট্রিক সাইফার ইঞ্জিন (ChaCha20 & TLS 1.3 Framing)
-- **RFC 8439 ChaCha20 সিমেট্রিক স্ট্রিম সাইফার (`std/tls.lp`):** ১৬-ওয়ার্ড (৫১২-বিট) স্টেট ম্যাট্রিক্স, ২৫৬-বিট সিমেট্রিক কি, ৯৬-বিট ক্রিপ্টোগ্রাফিক ননস, এবং ৩২-বিট কাউন্টার।
-- **সিঙ্গেল-সাইকেল বামে ঘূর্ণন (`rol32`):** নেটিভ x86_64 `rol eax, cl` হার্ডওয়্যার ইনস্ট্রাকশন ইমিটার (`রোটেট_বামে_৩২`)।
-- **কোয়ার্টার রাউন্ড (Quarter Round) ম্যাথমেটিক্স:** কলাম ও ডায়াগনাল রাউন্ড এক্সিকিউশন, ৬৪-বাইট কিস্ট্রিম ব্লক জেনারেশন এবং বাইটওয়াইজ XOR স্ট্রিম এনক্রিপশন/ডিক্রিপশন।
-- **RFC 8446 টিএলএস রেকর্ড লেয়ার ফ্রেমিং:** ৫-বাইট স্ট্যান্ডার্ড টিএলএস হেডার প্যাকেজিং ও আনপ্যাকিং (`tls_রেকর্ড_প্যাক`, `tls_রেকর্ড_আনপ্যাক`), কন্টেন্ট টাইপ ২৩ (Application Data) ও প্রোটোকল ভার্সন ৩.৩ (0x0303)।
-- **বাস্তবায়ন ও প্রমাণ:** `std/tls.lp` ও `examples/31_pure_lipi_tls_crypto_stream.lp`।
-
-### মহাদিগন্ত ২১: র লিনাক্স ফ্রেমবাফার ও ২ডি গ্রাফিক্স ক্যানভাস ইঞ্জিন (Canvas, Rasterization & BMP)
-- **৩২-বিট RGBA ফ্রেমবাফার ক্যানভাস (`std/gfx.lp`):** মেমরি পেজ হেডার এনক্যাপসুলেশন (উইথ, হাইট, পিক্সেল কাউন্ট) ও বাউন্ডস-চেকড পিক্সেল ম্যানিপুলেশন।
-- **২ডি জ্যামিতিক র‍্যাস্টারাইজেশন অ্যালগরিদম:**
-  - ভরাট আয়তক্ষেত্র (`আয়তক্ষেত্র_আঁকো`)
-  - ব্রেসেনহ্যাম / ডিডিএ রেখা অঙ্কন (`রেখা_আঁকো`)
-  - মিডপয়েন্ট সার্কেল অ্যালগরিদম (`বৃত্ত_আঁকো`)
-- **৫৪-বাইট উইন্ডোজ ৩.x বিএমপি (BMP) ফাইল সিরিয়ালাইজার:** ১৪-বাইট ফাইল হেডার ও ৪০-বাইট ডিআইবি হেডার জেনারেট করে সরাসরি কার্নেল `SYS_open`, `SYS_write`, `SYS_close` দিয়ে ডিস্কে এক্সপোর্ট (`বিএমপি_সংরক্ষণ`)।
-- **বাস্তবায়ন ও প্রমাণ:** `std/gfx.lp`, `examples/32_silicon_graphics_framebuffer.lp` এবং জেনারেটকৃত `dist/sovereign_canvas.bmp`।
+```lipi
+// Lipi                    // Python equivalent
+fn double n = n * 2        # def double(n): return n * 2
+say double 21              # print(double(21))
+for i in 1..5             # for i in range(1, 6):
+    say i                  #     print(i)
+```
 
 ---
 
-## 📊 ৬. এম্পিরিক্যাল পারফরম্যান্স ও টেস্ট ম্যাট্রিক্স
+## Syntax Guide
 
-| প্যারামিটার | লিপির মান | স্ট্যাটাস |
-| :--- | :--- | :--- |
-| **কম্পাইল করা বাইনারি টাইপ** | Linux ELF 64-bit Static Executable | ✅ প্রমাণিত |
-| **ডায়নামিক লাইব্রেরি (`ldd`)** | `not a dynamic executable` | ✅ ০% Libc |
-| **PHP নির্ভরতা** | 0% PHP (কোডবেসে ০টি `.php` ফাইল) | ✅ সম্পূর্ণ স্বাধীন |
-| **সেলফ-হোস্টিং ক্লোজার** | `bin/lipi` ↔ `bin/lipi-gen2` (100% Bit-for-Bit Deterministic) | ✅ প্রমাণিত |
-| **সিপিইউ ইন্সট্রাকশন সেট** | x86_64 Direct Machine Code (ALU, SSE2 SIMD, RDTSC, RDRAND, ROR, ROL, INT3, Syscalls) | ✅ সিলিকন হার্ডওয়্যার |
-| **স্বয়ংক্রিয় টেস্ট সুইট** | ২৩ / ২৩ টি টেস্ট সফলভাবে উত্তীর্ণ (`./bin/lipic test` & `./build.sh`) | ✅ ১০০% পাস |
+### Variables
+```lipi
+name    = "Lipi"
+version = 2
+pi      = 3.14
+active  = true
+```
+
+### Functions
+```lipi
+// One-liner
+fn double n = n * 2
+fn add a b  = a + b
+
+// Multi-line
+fn factorial n
+    if n <= 1
+        return 1
+    return n * factorial(n - 1)
+
+say factorial 10    // 3628800
+```
+
+### Conditionals
+```lipi
+fn grade score
+    if score >= 90
+        return "A+"
+    elif score >= 80
+        return "A"
+    elif score >= 70
+        return "B"
+    else
+        return "F"
+
+say grade 95    // A+
+say grade 72    // B
+```
+
+### Loops
+```lipi
+// while loop
+i = 0
+while i < 5
+    say i
+    i = i + 1
+
+// for range
+for i in 1..10
+    say i
+
+// repeat N times
+repeat 3
+    say "hello"
+```
+
+### Structs
+```lipi
+struct Point
+    x
+    y
+
+p = Point()
+p.x = 10
+p.y = 20
+say p.x + p.y    // 30
+```
+
+### Strings
+```lipi
+name = "World"
+say "Hello, " + name + "!"          // Concatenation
+say "Hello, {name}!"                // Interpolation
+say len "hello"                      // 5
+```
 
 ---
 
-## 👤 Author & Core Intelligence
-**Shafiullah (Gyani Supreme Core)**  
-*Universal Sovereign Computing & Systems Architecture*
+## Unicode Identifiers
 
+Any Unicode script works as identifiers — English keywords, your language's words:
+
+```lipi
+// Bengali identifiers
+নাম     = "Lipi"
+সংস্করণ = 2
+say নাম
+
+// Russian identifiers
+версия = 1
+say версия
+
+// Function names in any script
+fn যোগফল a b = a + b
+say যোগফল 10 20    // 30
+```
+
+---
+
+## Standard Library
+
+| Module | Functions |
+|--------|-----------|
+| `std/math` | `abs`, `sqrt`, `gcd`, `lcm`, `is_prime`, `factorial`, `fibonacci`, `power`, `min`, `max` |
+| `std/str` | `str_repeat`, `str_pad_left`, `str_pad_right`, `str_center` |
+| `std/io` | `write_out`, `write_err`, `file_open`, `file_read`, `file_write` |
+| `std/http` | `http_response`, `http_json`, `http_route`, HTTP status constants |
+| `std/fmt` | `pad_int`, `format_bytes`, `format_ms`, `print_ok`, `print_fail` |
+| `std/json` | `json_str`, `json_num`, `json_bool`, `json_response_ok`, `json_response_err` |
+
+```lipi
+include "std/math"
+say fibonacci 20    // 6765
+say is_prime 97     // 1 (true)
+say factorial 12    // 479001600
+```
+
+---
+
+## Tests
+
+```bash
+# Run all 60 tests
+cd ~/.lipi
+for t in tests/*.lp; do
+    python3 -m src.runtime "$t"
+done
+```
+
+60/60 tests pass:
+- ✅ Tests 01-25: Core language (hello, math, loops, structs, recursion)
+- ✅ Tests 26-50: Advanced (async, crypto, graphics, networking, OS)
+- ✅ Tests 51-60: Minimal syntax showcase
+
+---
+
+## VS Code Extension
+
+For syntax highlighting in VS Code:
+
+```bash
+# Method 1: Manual install
+cp -r ~/.lipi/vscode-lipi ~/.vscode/extensions/lipi-lang
+# Restart VS Code → .lp files get highlighting
+
+# Method 2: Build VSIX
+cd ~/.lipi/vscode-lipi
+npm install -g @vscode/vsce
+vsce package
+code --install-extension lipi-lang-1.0.0.vsix
+```
+
+---
+
+## Architecture
+
+```
+Lipi First 1.0 — Sovereign
+│
+├── bin/lipi               ← Global command (runs any .lp file)
+├── src/runtime/           ← lipic2: Python-based interpreter
+│   ├── lexer.py           ← Unicode tokenizer (Bengali + ASCII)
+│   ├── parser.py          ← Recursive descent parser
+│   ├── interpreter.py     ← Tree-walking interpreter
+│   ├── ast_nodes.py       ← AST node definitions
+│   └── stdlib.py          ← Built-in functions
+├── std/                   ← Standard library (.lp files)
+├── tests/                 ← 60 tests (all passing)
+├── examples/              ← Example programs
+├── vscode-lipi/           ← VS Code extension
+└── install.sh             ← One-line installer
+```
+
+### Roadmap
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **lipic2** (Python runtime) | ✅ Done | Current: tree-walking interpreter |
+| **lipic3** (Lipi in Lipi) | 🔄 Planned | Self-hosted compiler written in Lipi |
+| **ARM64 native** | 📋 Future | Compile .lp → ARM64 binary (no Python needed) |
+| **WASM target** | 📋 Future | Run Lipi in the browser |
+| **lipi.dev** | 📋 Future | Online playground |
+
+---
+
+## Examples
+
+### Fibonacci
+```lipi
+fn fibonacci n
+    if n <= 1
+        return n
+    a = 0
+    b = 1
+    i = 2
+    while i <= n
+        c = a + b
+        a = b
+        b = c
+        i = i + 1
+    return b
+
+for i in 0..15
+    say fibonacci i
+```
+
+### Web Server (pattern)
+```lipi
+fn handle_home req   = "200 OK: Welcome to Lipi!"
+fn handle_api req    = "200 OK: {\"version\":\"2.0\"}"
+fn handle_404 req    = "404 Not Found"
+
+fn dispatch path req
+    if path == "/"
+        return handle_home req
+    elif path == "/api"
+        return handle_api req
+    else
+        return handle_404 req
+
+say dispatch "/" ""
+say dispatch "/api" ""
+```
+
+### Struct + Methods
+```lipi
+struct Stack
+    size
+
+fn stack_push s val
+    s.size = s.size + 1
+    say "Push: " + val + " (size=" + s.size + ")"
+
+fn stack_pop s
+    if s.size == 0
+        say "Stack empty!"
+        return null
+    s.size = s.size - 1
+
+s = Stack()
+s.size = 0
+stack_push(s, 10)
+stack_push(s, 20)
+stack_push(s, 30)
+stack_pop(s)
+say "Final size: " + s.size
+```
+
+---
+
+## Contributing
+
+```bash
+git clone https://github.com/asaudola-cmyk/LiPi_Lang
+cd LiPi_Lang
+python3 -m src.runtime tests/01_hello.lp  # Verify setup
+```
+
+Pull requests welcome! See [`docs/LIPI2_SYNTAX.md`](docs/LIPI2_SYNTAX.md) for the language spec.
+
+---
+
+## License
+
+MIT License — free to use, modify, and distribute.
+
+---
+
+<div align="center">
+
+**Lipi First 1.0 — Sovereign**  
+*The language that speaks your language.*
+
+[GitHub](https://github.com/asaudola-cmyk/LiPi_Lang) • [Issues](https://github.com/asaudola-cmyk/LiPi_Lang/issues) • [Install](#install)
+
+</div>

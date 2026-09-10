@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lipi Programming Language</title>
+<meta name="description" content="Lipi: Simpler than Python. Global by design. Unicode-ready programming language.">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+  
+  /* Nav */
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .nav-brand { font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+  .nav-links { display: flex; gap: 1.5rem; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--text); }
+  
+  /* Hero */
+  .hero { text-align: center; padding: 5rem 2rem; max-width: 900px; margin: 0 auto; }
+  .hero-badge { display: inline-block; background: rgba(88,166,255,0.1); border: 1px solid var(--accent); color: var(--accent); padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; margin-bottom: 1.5rem; }
+  .hero h1 { font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero-sub { font-size: 1.25rem; color: var(--muted); margin-bottom: 2.5rem; }
+  .hero-install { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.5rem; font-family: monospace; font-size: 0.95rem; margin-bottom: 2.5rem; display: inline-block; cursor: pointer; transition: border-color 0.2s; }
+  .hero-install:hover { border-color: var(--accent); }
+  .hero-install span { color: var(--muted); margin-right: 0.5rem; }
+  .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+  .btn { padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 600; transition: all 0.2s; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #79c0ff; }
+  .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  
+  /* Features */
+  .section { padding: 4rem 2rem; max-width: 1100px; margin: 0 auto; }
+  .section h2 { font-size: 2rem; margin-bottom: 0.5rem; }
+  .section-sub { color: var(--muted); margin-bottom: 3rem; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  .feature { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; transition: border-color 0.2s; }
+  .feature:hover { border-color: var(--accent); }
+  .feature-icon { font-size: 1.75rem; margin-bottom: 0.75rem; }
+  .feature h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .feature p { color: var(--muted); font-size: 0.9rem; }
+  
+  /* Code */
+  .code-section { padding: 4rem 2rem; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .code-inner { max-width: 1100px; margin: 0 auto; }
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem; }
+  @media (max-width: 768px) { .code-grid { grid-template-columns: 1fr; } }
+  .code-block { position: relative; }
+  .code-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; overflow-x: auto; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 0.875rem; line-height: 1.6; }
+  .kw { color: var(--accent); }
+  .fn-name { color: var(--yellow); }
+  .str { color: var(--green); }
+  .num { color: var(--orange); }
+  .cmt { color: var(--muted); font-style: italic; }
+  .builtin { color: var(--purple); }
+  
+  /* Install section */
+  .install-section { padding: 4rem 2rem; max-width: 800px; margin: 0 auto; text-align: center; }
+  .install-steps { display: grid; gap: 1rem; margin-top: 2rem; text-align: left; }
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; }
+  .step-num { color: var(--accent); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem; }
+  .step code { font-family: monospace; color: var(--green); }
+  
+  /* Table */
+  .compare { overflow-x: auto; margin-top: 2rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th { background: var(--surface); color: var(--accent); padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); color: var(--muted); }
+  td:first-child { color: var(--text); font-weight: 600; }
+  .yes { color: var(--green); }
+  .no  { color: #f85149; }
+  .partial { color: var(--yellow); }
+  
+  /* Unicode */
+  .unicode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 2rem; }
+  .unicode-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; text-align: center; }
+  .unicode-card .script { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .unicode-card .lang { font-size: 0.8rem; color: var(--muted); }
+  
+  /* Footer */
+  footer { border-top: 1px solid var(--border); padding: 2rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">⚡ Lipi</div>
+  <div class="nav-links">
+    <a href="#install">Install</a>
+    <a href="#syntax">Syntax</a>
+    <a href="#unicode">Unicode</a>
+    <a href="https://github.com/asaudola-cmyk/LiPi_Lang">GitHub</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-badge">🎉 Lipi First 1.0 — Sovereign</div>
+  <h1>Simpler than Python.<br>Global by design.</h1>
+  <p class="hero-sub">A programming language with zero noise syntax, Unicode identifiers,<br>and a runtime that runs anywhere Python does.</p>
+  <div class="hero-install" onclick="navigator.clipboard?.writeText('curl -sSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash')">
+    <span>$</span>curl -sSL .../install.sh | bash
+  </div>
+  <div class="hero-buttons">
+    <a href="#install" class="btn btn-primary">Install Lipi</a>
+    <a href="https://github.com/asaudola-cmyk/LiPi_Lang" class="btn btn-secondary">GitHub →</a>
+  </div>
+</section>
+
+<div class="section">
+  <h2>Why Lipi?</h2>
+  <p class="section-sub">Built for clarity. Built for everyone.</p>
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">🚫</div>
+      <h3>Zero Noise</h3>
+      <p>No braces <code>{}</code>, no semicolons <code>;</code>, no colons <code>:</code>. Just code that reads like plain English.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🌍</div>
+      <h3>Unicode Identifiers</h3>
+      <p>Variable and function names in ANY language — Bengali, Arabic, Chinese, Russian. English keywords, your language's words.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⚡</div>
+      <h3>Instant Start</h3>
+      <p>One-line install. No npm, no cargo, no SDK. Requires only Python 3.8+ which is already on most systems.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔌</div>
+      <h3>Independent</h3>
+      <p>Install directly from GitHub. No PyPI. No package manager. Just <code>curl | bash</code> and you're running.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📚</div>
+      <h3>Standard Library</h3>
+      <p>math, http, json, fmt, io, str — all written in Lipi itself. Batteries included, all in .lp files.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🛠️</div>
+      <h3>VS Code Extension</h3>
+      <p>Syntax highlighting, snippets, and auto-indentation for .lp files. Works offline, no marketplace needed.</p>
+    </div>
+  </div>
+</div>
+
+<section class="code-section" id="syntax">
+  <div class="code-inner">
+    <h2>The Syntax</h2>
+    <p class="section-sub">Minimal. Readable. Powerful.</p>
+    <div class="code-grid">
+      <div class="code-block">
+        <div class="code-label">Hello World</div>
+        <pre><span class="builtin">say</span> <span class="str">"Hello, World!"</span></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">Variables</div>
+        <pre>name    = <span class="str">"Lipi"</span>
+version = <span class="num">2</span>
+active  = <span class="kw">true</span></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">Functions</div>
+        <pre><span class="cmt">// One-liner</span>
+<span class="kw">fn</span> <span class="fn-name">double</span> n = n * <span class="num">2</span>
+
+<span class="cmt">// Multi-line</span>
+<span class="kw">fn</span> <span class="fn-name">factorial</span> n
+    <span class="kw">if</span> n <= <span class="num">1</span>
+        <span class="kw">return</span> <span class="num">1</span>
+    <span class="kw">return</span> n * factorial(n - <span class="num">1</span>)</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">Loops</div>
+        <pre><span class="kw">for</span> i <span class="kw">in</span> <span class="num">1</span>..<span class="num">10</span>
+    <span class="builtin">say</span> i
+
+<span class="kw">while</span> n > <span class="num">0</span>
+    n = n - <span class="num">1</span>
+
+<span class="kw">repeat</span> <span class="num">5</span>
+    <span class="builtin">say</span> <span class="str">"hello"</span></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">Structs</div>
+        <pre><span class="kw">struct</span> <span class="fn-name">Point</span>
+    x
+    y
+
+p = Point()
+p.x = <span class="num">10</span>
+p.y = <span class="num">20</span>
+<span class="builtin">say</span> p.x + p.y    <span class="cmt">// 30</span></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">String Interpolation</div>
+        <pre>name = <span class="str">"World"</span>
+<span class="builtin">say</span> <span class="str">"Hello, {name}!"</span>
+
+lang = <span class="str">"Lipi"</span>
+ver  = <span class="num">2</span>
+<span class="builtin">say</span> <span class="str">"Welcome to {lang} {ver}.0!"</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section" id="unicode">
+  <h2>Unicode Identifiers</h2>
+  <p class="section-sub">English keywords. Your language's words. Works everywhere.</p>
+  <pre><span class="cmt">// Bengali</span>
+নাম = <span class="str">"Lipi"</span>
+<span class="builtin">say</span> নাম
+
+<span class="cmt">// Bengali function</span>
+<span class="kw">fn</span> <span class="fn-name">যোগফল</span> a b = a + b
+<span class="builtin">say</span> যোগফল <span class="num">10</span> <span class="num">20</span>    <span class="cmt">// 30</span>
+
+<span class="cmt">// Multiple scripts work simultaneously</span>
+বাংলা    = <span class="str">"hello"</span>    <span class="cmt">// Bengali</span>
+版本      = <span class="num">2</span>          <span class="cmt">// Chinese</span>
+اسم      = <span class="str">"world"</span>   <span class="cmt">// Arabic</span>
+<span class="builtin">say</span> বাংলা + <span class="str">" "</span> + اسم</pre>
+
+  <div class="unicode-grid" style="margin-top: 2rem;">
+    <div class="unicode-card"><div class="script">বাংলা</div><div class="lang">Bengali</div></div>
+    <div class="unicode-card"><div class="script">العربية</div><div class="lang">Arabic</div></div>
+    <div class="unicode-card"><div class="script">中文</div><div class="lang">Chinese</div></div>
+    <div class="unicode-card"><div class="script">Русский</div><div class="lang">Russian</div></div>
+    <div class="unicode-card"><div class="script">日本語</div><div class="lang">Japanese</div></div>
+    <div class="unicode-card"><div class="script">한국어</div><div class="lang">Korean</div></div>
+  </div>
+</div>
+
+<section class="install-section" id="install">
+  <h2>Install in 30 seconds</h2>
+  <p class="section-sub" style="text-align:center;">Requires: Python 3.8+ and git (both standard on Linux/macOS)</p>
+  
+  <div class="install-steps">
+    <div class="step">
+      <div class="step-num">Step 1 — Install</div>
+      <pre style="margin-top:0.5rem;"><span style="color:var(--muted)">$</span> <span style="color:var(--green)">curl -sSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash</span></pre>
+    </div>
+    <div class="step">
+      <div class="step-num">Step 2 — Restart terminal</div>
+      <p>Or run: <code>source ~/.bashrc</code></p>
+    </div>
+    <div class="step">
+      <div class="step-num">Step 3 — Hello World</div>
+      <pre style="margin-top:0.5rem;"><span style="color:var(--muted)">$</span> <span style="color:var(--green)">echo 'say "Hello, World!"' | lipi</span>
+Hello, World!</pre>
+    </div>
+  </div>
+</section>
+
+<div class="section">
+  <h2>Compare</h2>
+  <p class="section-sub">Less noise. More signal.</p>
+  <div class="compare">
+    <table>
+      <tr><th>Feature</th><th>Lipi</th><th>Python</th><th>JavaScript</th></tr>
+      <tr><td>No braces <code>{}</code></td><td class="yes">✅</td><td class="yes">✅</td><td class="no">❌</td></tr>
+      <tr><td>No colons <code>:</code></td><td class="yes">✅</td><td class="no">❌</td><td class="yes">✅</td></tr>
+      <tr><td>No parentheses for calls</td><td class="yes">✅</td><td class="no">❌</td><td class="no">❌</td></tr>
+      <tr><td>Unicode identifiers (all scripts)</td><td class="yes">✅</td><td class="partial">Limited</td><td class="partial">Limited</td></tr>
+      <tr><td>Install without package manager</td><td class="yes">✅</td><td class="no">❌</td><td class="no">❌</td></tr>
+      <tr><td>Readable like prose</td><td class="yes">✅</td><td class="partial">Mostly</td><td class="no">❌</td></tr>
+    </table>
+  </div>
+</div>
+
+<footer>
+  <p>
+    <strong>Lipi First 1.0 — Sovereign</strong> &nbsp;|&nbsp;
+    MIT License &nbsp;|&nbsp;
+    <a href="https://github.com/asaudola-cmyk/LiPi_Lang">GitHub</a> &nbsp;|&nbsp;
+    <a href="https://github.com/asaudola-cmyk/LiPi_Lang/issues">Issues</a>
+  </p>
+  <p style="margin-top: 0.5rem; color: var(--muted); font-size: 0.8rem;">
+    The language that speaks your language.
+  </p>
+</footer>
+
+</body>
+</html>

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-লিপি ২.০ Runtime Entry Point
+Lipi Programming Language Runtime — Entry Point
+Version: First 1.0 (Sovereign)
+Runtime: lipic2 2.0.0
+
 Usage:
-    python -m src.runtime file.lp
-    python -m src.runtime -e 'say "Hello"'
-    python -m src.runtime --repl
-    python -m src.runtime --tokens file.lp
-    python -m src.runtime --ast file.lp
+    lipi                    → Interactive REPL
+    lipi file.lp            → Run a Lipi file
+    lipi -e 'say "Hello"'   → Evaluate one-liner
+    lipi --version          → Show version
+    lipi --tokens file.lp   → Show lexer tokens
+    lipi --ast file.lp      → Show AST
 """
 from __future__ import annotations
 import sys
-import os
 import argparse
 
 # WHY: Lipi programs can be recursive (factorial, fibonacci, AST traversal)
@@ -18,14 +21,28 @@ import argparse
 # 10000 handles fibonacci(30), factorial(500), etc. safely.
 sys.setrecursionlimit(10000)
 
+LIPI_VERSION  = "First 1.0"
+LIPI_CODENAME = "Sovereign"
+LIPI_RUNTIME  = "lipic2 2.0.0 (Python)"
+LIPI_GITHUB   = "https://github.com/asaudola-cmyk/LiPi_Lang"
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        prog='lipic2',
-        description='লিপি ২.০ Runtime — Simpler than Python',
+        prog='lipi',
+        description='Lipi Programming Language — Simpler than Python, global by design',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"""
+Examples:
+  lipi                       Start interactive REPL
+  lipi hello.lp              Run a Lipi file
+  lipi -e 'say "Hello"'      Evaluate a one-liner
+  lipi --version             Show version info
+
+Docs: {LIPI_GITHUB}
+""",
     )
     ap.add_argument('file', nargs='?', help='Lipi source file (.lp)')
-    ap.add_argument('-o', '--output', help='Output path (ignored, for compatibility)')
     ap.add_argument('-e', '--eval', metavar='CODE', help='Evaluate code string directly')
     ap.add_argument('--tokens', action='store_true', help='Show lexer tokens and exit')
     ap.add_argument('--ast', action='store_true', help='Show AST and exit')
@@ -34,14 +51,17 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.version:
-        print('লিপি ২.০ Runtime v2.0.0')
+        print(f'Lipi {LIPI_VERSION} — {LIPI_CODENAME}')
+        print(f'Runtime:  {LIPI_RUNTIME}')
+        print(f'Python:   {sys.version.split()[0]}')
+        print(f'GitHub:   {LIPI_GITHUB}')
         return 0
 
     if args.repl or (not args.file and not args.eval):
         return _repl()
 
     if args.eval:
-        source = args.eval + '\n'
+        source   = args.eval + '\n'
         filename = '<eval>'
     else:
         try:
@@ -49,10 +69,10 @@ def main() -> int:
                 source = f.read()
             filename = args.file
         except FileNotFoundError:
-            print(f'❌ ফাইল পাওয়া যায়নি: {args.file}', file=sys.stderr)
+            print(f'❌ File not found: {args.file}', file=sys.stderr)
             return 1
         except PermissionError:
-            print(f'❌ ফাইল পড়ার অনুমতি নেই: {args.file}', file=sys.stderr)
+            print(f'❌ Permission denied: {args.file}', file=sys.stderr)
             return 1
 
     return _run(source, filename, show_tokens=args.tokens, show_ast=args.ast)
@@ -66,7 +86,7 @@ def _run(source: str, filename: str, show_tokens=False, show_ast=False) -> int:
 
     # ── Lex ──────────────────────────────────────────────────────────────────
     try:
-        lexer = Lexer(source, filename)
+        lexer  = Lexer(source, filename)
         tokens = lexer.tokenize()
     except LexError as e:
         print(f'❌ Lex Error: {e}', file=sys.stderr)
@@ -120,8 +140,10 @@ def _repl() -> int:
     from .parser import Parser, ParseError
     from .interpreter import Interpreter, LipiError
 
-    print('লিপি ২.০ REPL — "exit" বা "বের" লিখে বের হও')
-    print('─' * 40)
+    print(f'Lipi {LIPI_VERSION} — {LIPI_CODENAME}')
+    print(f'Runtime: {LIPI_RUNTIME}')
+    print('Type "exit" to quit. Unicode identifiers supported.')
+    print('─' * 50)
     interp = Interpreter(filename='<repl>')
 
     while True:
@@ -133,17 +155,14 @@ def _repl() -> int:
                 break
 
             stripped = line.strip()
-            if stripped in ('exit', 'quit', 'বের', 'বাহির'):
+            if stripped in ('exit', 'quit', 'বের', ':q', 'q'):
                 break
             if not stripped:
                 continue
 
-            # Run line through full pipeline but reuse interpreter state
             try:
-                from .lexer import Lexer
-                from .parser import Parser
                 tokens = Lexer(line + '\n', '<repl>').tokenize()
-                ast = Parser(tokens).parse()
+                ast    = Parser(tokens).parse()
                 for stmt in ast.stmts:
                     interp.exec(stmt, interp.global_env)
             except (LexError, ParseError) as e:
