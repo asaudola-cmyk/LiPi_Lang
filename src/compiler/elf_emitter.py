@@ -461,6 +461,15 @@ class LipiElfCompiler:
 
         # ── _start: Kernel Entry Point ──────────────────────────────────────
         asm.define_label("_start")
+        # ── Multiboot 1 Specification Header (16 bytes aligned) ─────────────
+        # WHY: Allows Lipi binaries to boot directly on bare metal (QEMU / GRUB).
+        # We emit a short jump (0xEB, 0x0E) over the 14 bytes so Linux userland
+        # execution jumps straight to stack alignment and heap init.
+        # Magic: 0x1BADB002, Flags: 0x00000000, Checksum: 0xE4524FFE
+        asm.emit(b"\xeb\x0e")                     # jmp short +14 bytes
+        asm.emit(b"\x90\x90")                     # 2 nop padding to 4-byte align
+        asm.emit(struct.pack("<III", 0x1BADB002, 0x00000000, 0xE4524FFE)) # Multiboot header (12 bytes)
+
         # Align stack to 16 bytes for System V ABI compliance
         asm.emit(b"\x48\x83\xe4\xf0")  # and rsp, -16
         asm.call("_lipi_init_heap")   # initialize 16MB bump allocator
@@ -1366,6 +1375,9 @@ class LipiElfCompiler:
                 off = self.local_offsets[expr.name]
                 asm.mov_rax_stack(off)
                 return self.local_types.get(expr.name, TYPE_INT)
+            elif expr.name in self.fn_return_types:
+                # WHY: Support 0-argument function invocation without parentheses (e.g. `kernel_main`)
+                return self._compile_call(FnCall(expr, []))
             else:
                 # Undefined variable -> return 0
                 asm.mov_reg_imm64(RAX, 0)

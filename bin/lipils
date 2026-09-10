@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# 🏛️ lipils — Lipi Language Server Protocol CLI Driver
+# Version: প্রথম ১.০ (First 1.0) — Sovereign
+# ==============================================================================
+LIPI_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONPATH="$LIPI_HOME:$PYTHONPATH"
+exec python3 "$LIPI_HOME/src/lsp/lipils.py" "$@"

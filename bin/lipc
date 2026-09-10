@@ -72,6 +72,10 @@ if [[ -z "$OUTPUT" ]]; then
     OUTPUT="$(basename "$OUTPUT")"
 fi
 
+# WHY: Ensure paths are absolute so cd "$LIPI_HOME" does not break them
+[[ "$INPUT" != /* ]] && INPUT="$PWD/$INPUT"
+[[ "$OUTPUT" != /* ]] && OUTPUT="$PWD/$OUTPUT"
+
 # 👑 Pillar 1 & 2: Direct x86_64 ELF Machine Code Emitter (Zero GCC, Zero Libc)
 if [[ $DIRECT_ELF -eq 1 ]] || ! command -v gcc &>/dev/null; then
     [[ $VERBOSE -eq 1 ]] && echo -e "${CYAN}→ Direct ELF Generation: $INPUT → ./$OUTPUT${RESET}"

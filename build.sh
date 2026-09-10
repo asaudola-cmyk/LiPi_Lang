@@ -67,8 +67,8 @@ else
     echo "  ❌ FAILED: bin/lipic_gen did not execute properly."
 fi
 
-echo "  ► Compiling lipipkg (Pure Lipi Package Manager) using Lipi..."
-./bin/lipic src/tools/lipipkg.lp -o bin/lipipkg
+echo "  ► Compiling lipipkg demo (Pure Lipi Package Manager Demo) using Lipi..."
+./bin/lipic src/tools/lipipkg.lp -o bin/lipipkg_demo
 echo "  ► Compiling lipidbg (Pure Lipi System Debugger) using Lipi..."
 ./bin/lipic src/tools/lipidbg.lp -o bin/lipidbg
 echo "  ► Compiling lipirepl (Pure Lipi Interactive Shell) using Lipi..."
