@@ -19,9 +19,10 @@
 @end
 
 @fn str_char_at(s, idx)
-  // WHY: Directly index character byte from string pointer to avoid string-plus concatenation
+  // WHY: Returns integer ASCII / Unicode byte value of character at idx
   @if s == 0 return 0 @end
-  return s[idx]
+  c = char_at(s, idx)
+  return ord(c)
 @end
 
 @fn string_length(s)

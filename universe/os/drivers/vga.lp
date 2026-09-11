@@ -67,13 +67,13 @@ import "universe/core/string"
   }
 @end
 
-@fn vga_clear(vga_buf, fg_color, bg_color)
+@fn vga_clear(vga_buf: VGATextBuffer, fg_color, bg_color)
   attr = vga_attr_make(fg_color, bg_color)
   vga_buf.current_attr = attr
   total = vga_buf.width * vga_buf.height
   i = 0
   @while i < total
-    cell = vga_buf.buffer[i]
+    cell: VGATextChar = vga_buf.buffer[i]
     cell.ascii = 32
     cell.attribute = attr
     i = i + 1
@@ -83,7 +83,7 @@ import "universe/core/string"
   return vga_buf
 @end
 
-@fn vga_scroll(vga_buf)
+@fn vga_scroll(vga_buf: VGATextBuffer)
   w = vga_buf.width
   h = vga_buf.height
   
@@ -94,8 +94,8 @@ import "universe/core/string"
     @while x < w
       src_idx = (y * w) + x
       dst_idx = ((y - 1) * w) + x
-      src_cell = vga_buf.buffer[src_idx]
-      dst_cell = vga_buf.buffer[dst_idx]
+      src_cell: VGATextChar = vga_buf.buffer[src_idx]
+      dst_cell: VGATextChar = vga_buf.buffer[dst_idx]
       dst_cell.ascii = src_cell.ascii
       dst_cell.attribute = src_cell.attribute
       x = x + 1
@@ -108,7 +108,7 @@ import "universe/core/string"
   x = 0
   @while x < w
     idx = (last_y * w) + x
-    c = vga_buf.buffer[idx]
+    c: VGATextChar = vga_buf.buffer[idx]
     c.ascii = 32
     c.attribute = vga_buf.current_attr
     x = x + 1
@@ -118,7 +118,7 @@ import "universe/core/string"
   return vga_buf
 @end
 
-@fn vga_put_char(vga_buf, ch)
+@fn vga_put_char(vga_buf: VGATextBuffer, ch)
   @if ch == 10 @! '\n'
     vga_buf.cursor_x = 0
     vga_buf.cursor_y = vga_buf.cursor_y + 1
@@ -132,7 +132,7 @@ import "universe/core/string"
   @end
 
   idx = (vga_buf.cursor_y * vga_buf.width) + vga_buf.cursor_x
-  cell = vga_buf.buffer[idx]
+  cell: VGATextChar = vga_buf.buffer[idx]
   cell.ascii = ch
   cell.attribute = vga_buf.current_attr
 
@@ -148,7 +148,7 @@ import "universe/core/string"
   return vga_buf
 @end
 
-@fn vga_print_str(vga_buf, str_text)
+@fn vga_print_str(vga_buf: VGATextBuffer, str_text)
   i = 0
   n = str_len(str_text)
   @while i < n
@@ -160,7 +160,7 @@ import "universe/core/string"
 @end
 
 @! Computes VGA CRTC hardware cursor position registers (0x3D4 Index, 0x3D5 Data)
-@fn vga_get_cursor_offset(vga_buf)
+@fn vga_get_cursor_offset(vga_buf: VGATextBuffer)
   return (vga_buf.cursor_y * vga_buf.width) + vga_buf.cursor_x
 @end
 

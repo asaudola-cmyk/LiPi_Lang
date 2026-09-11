@@ -39,11 +39,11 @@ import "universe/os/drivers/memory"
   @! SECTION 1: Multiboot 1 & Multiboot 2 Boot Specification
   println("▶ Section 1: Multiboot 1 & 2 Specification & Framebuffer Tags...")
   total_tests = total_tests + 1
-  mb1 = multiboot1_create_header(1048576, 1024, 768, 32)
+  mb1: Multiboot1Header = multiboot1_create_header(1048576, 1024, 768, 32)
   ok1 = assert_eq_int(mb1.magic, 464367618, "Multiboot 1 Magic is 0x1BADB002")
   ok2 = assert_eq_int(mb1.magic + mb1.flags + mb1.checksum, 0, "Multiboot 1 Checksum satisfies identity (magic+flags+checksum = 0)")
 
-  mb2 = multiboot2_create_header(1920, 1080, 32)
+  mb2: Multiboot2Header = multiboot2_create_header(1920, 1080, 32)
   ok3 = assert_eq_int(mb2.magic, 3897741526, "Multiboot 2 Magic is 0xE85250D6")
   mb2_bin = multiboot2_serialize_binary(mb2, 1920, 1080, 32)
   ok4 = assert_eq_int(mb2_bin.len(), 44, "Serialized Multiboot 2 binary header is 44 bytes")
@@ -55,7 +55,7 @@ import "universe/os/drivers/memory"
   @! SECTION 2: VGA 80x25 Text Buffer & Cursor CRTC Driver
   println("▶ Section 2: VGA Text Mode (0xB8000) & CRTC Cursor Driver...")
   total_tests = total_tests + 1
-  vga = vga_text_buffer_new()
+  vga: VGATextBuffer = vga_text_buffer_new()
   vga = vga_clear(vga, 15, 0)
   vga = vga_print_str(vga, "Hello Maya OS!\nLine 2")
   ok1 = assert_eq_int(vga.cursor_x, 6, "Cursor X is 6 after Line 2")
