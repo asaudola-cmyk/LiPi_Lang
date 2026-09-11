@@ -104,7 +104,7 @@ fn resolve_bin_path rel_name
         return repo_p
     return rel_name
 
-fn handle_run file_path
+fn handle_run file_path a1 a2 a3 a4
     if len(file_path) == 0
         say "❌ ত্রুটি: ইনপুট ফাইল উল্লেখ করুন: lipi run <file.lp>"
         return 1
@@ -119,7 +119,7 @@ fn handle_run file_path
         
     say "⚡ এক্সিকিউশন শুরু..."
     say "--------------------------------------------------"
-    exec_code = spawn_exec_cmd(tmp_bin, "", "", "", "")
+    exec_code = spawn_exec_cmd(tmp_bin, a1, a2, a3, a4)
     say "--------------------------------------------------"
     say "✔ এক্সিকিউশন সম্পন্ন (Return code: " + str(exec_code) + ")"
     
@@ -216,9 +216,17 @@ fn main
 
     if cmd == "run"
         if argc < 3
-            say "ব্যবহারবিধি: lipi run <file.lp>"
+            say "ব্যবহারবিধি: lipi run <file.lp> [args...]"
             return 1
-        return handle_run(get(args, 2))
+        a1 = ""
+        a2 = ""
+        a3 = ""
+        a4 = ""
+        if argc >= 4 a1 = get(args, 3)
+        if argc >= 5 a2 = get(args, 4)
+        if argc >= 6 a3 = get(args, 5)
+        if argc >= 7 a4 = get(args, 6)
+        return handle_run(get(args, 2), a1, a2, a3, a4)
 
     if cmd == "build"
         if argc < 3
