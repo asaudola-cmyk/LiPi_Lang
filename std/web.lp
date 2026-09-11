@@ -234,7 +234,8 @@ fn req_header req name
 
 fn req_body_string req
     // WHY: Get request body as string (for text/json)
-    if req.body_length == 0 { return "" }
+    if req.body_length == 0
+        return ""
     return req.body_ptr
 
 fn req_body_json req

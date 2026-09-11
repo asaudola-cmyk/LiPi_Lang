@@ -1,5 +1,5 @@
 // ==============================================================================
-// 🌍 লিপি মাল্টিলিঙ্গুয়াল keyওয়ার্ড প্যাa
+// 🌍 লিপি মাল্টিলিঙ্গুয়াল কিওয়ার্ড প্যাক
 // লিপি প্রথম ১.০ | ciphername: সোভেরিন
 // File: std/multilang.lp
 //
@@ -23,7 +23,7 @@
 include "std/version.lp"
 
 // ─── Keyword Translation Table ────────────────────────────────────────────────
-// লিপির মূল বাংলা keyওয়ার্ড → অন্যান্য ভাষা
+// লিপির মূল বাংলা কিওয়ার্ড → অন্যান্য ভাষা
 
 // WHY: Even English programmers can use লিপি via English keywords
 // English aliases (already supported in compiler)
@@ -33,46 +33,18 @@ include "std/version.lp"
 // for         → প্রতিটি/ভেতরে
 // return      → return
 // function    → fn
-// let/var     → 
 // struct      → struct
 // include     → include
 // show/print  → say
 
-// ─── Hindi (হিন্দি) — v2.0 ──────────────────────────────────────────────────
-// if    → यदि
-// else  → अन्यथा
-// while → जबतक
-// return   → वापस
-// fn    → काम
-//     → धारण
-// struct    → संरचना
-// say  → दिखाओ
-
-// ─── Arabic (আরবি) — v2.1 ───────────────────────────────────────────────────
-// if    → إذا
-// else  → وإلا
-// while → طالما
-// return   → أعد
-// fn    → دالة
-//     → دع
-// say  → أظهر
-
-// ─── Spanish (স্প্যানিশ) — v2.3 ─────────────────────────────────────────────
-// if    → si
-// else  → sino
-// while → mientras
-// return   → retornar
-// fn    → función
-//     → sea
-// say  → mostrar
-
 // ─── Keyword info functions ───────────────────────────────────────────────────
-fn LANG_num(ভাষা_code)
+fn LANG_num ভাষা_code
     // WHY: Return count of languages supported in this build
-    if ভাষা_code == 1 { return 1 }  // Bengali only in v1.0
+    if ভাষা_code == 1
+        return 1  // Bengali only in v1.0
     return 1
 
-fn LANG_list_দেbাও
+fn LANG_list_দেখাও
     say "লিপি সমর্থিত ভাষাসমূহ:"
     say ""
     say "  প্রকাশিত:"
@@ -91,46 +63,70 @@ fn LANG_list_দেbাও
     say "  🔜  Kiswahili (Africa) — লিপি ৩.০"
     say ""
     say "লক্ষ্য: ৮ বিলিয়ন মানুষ নিজের ভাষায় কোড লিখতে পারবে।"
-    say "সংস্করণ:", LIPI_version
+    say "সংস্করণ: 1.0.0"
     return 0
 
 // ─── Bengali Locale ───────────────────────────────────────────────────────────
-fn বাংলা_তারিb(বছর, month, দিন)
+fn বাংলা_তারিখ বছর month দিন
     // WHY: Native Bengali date formatting (বাংলাদেশ/ভারত standard)
     month_name = "???"
-    if month == 1 { month_name = "জানুয়ারি" }
-    if month == 2 { month_name = "ফেব্রুয়ারি" }
-    if month == 3 { month_name = "মার্চ" }
-    if month == 4 { month_name = "এপ্রিল" }
-    if month == 5 { month_name = "মে" }
-    if month == 6 { month_name = "জুন" }
-    if month == 7 { month_name = "জুলাই" }
-    if month == 8 { month_name = "আগস্ট" }
-    if month == 9 { month_name = "সেপ্টেম্বর" }
-    if month == 10 { month_name = "অক্টোবর" }
-    if month == 11 { month_name = "নভেম্বর" }
-    if month == 12 { month_name = "ডিসেম্বর" }
+    if month == 1
+        month_name = "জানুয়ারি"
+    if month == 2
+        month_name = "ফেব্রুয়ারি"
+    if month == 3
+        month_name = "মার্চ"
+    if month == 4
+        month_name = "এপ্রিল"
+    if month == 5
+        month_name = "মে"
+    if month == 6
+        month_name = "জুন"
+    if month == 7
+        month_name = "জুলাই"
+    if month == 8
+        month_name = "আগস্ট"
+    if month == 9
+        month_name = "সেপ্টেম্বর"
+    if month == 10
+        month_name = "অক্টোবর"
+    if month == 11
+        month_name = "নভেম্বর"
+    if month == 12
+        month_name = "ডিসেম্বর"
 
-    say দিন, month_name, বছর
+    say দিন + " " + month_name + " " + বছর
     return 0
 
-fn বাংলা_time(ঘন্টা, minute)
+fn বাংলা_সময় ঘন্টা minute
     time_name = "রাত"
-    if ঘন্টা >= 6 { time_name = "সকাল" }
-    if ঘন্টা >= 12 { time_name = "দুপুর" }
-    if ঘন্টা >= 16 { time_name = "বিকেল" }
-    if ঘন্টা >= 19 { time_name = "সন্ধ্যা" }
-    if ঘন্টা >= 21 { time_name = "রাত" }
+    if ঘন্টা >= 6
+        time_name = "সকাল"
+    if ঘন্টা >= 12
+        time_name = "দুপুর"
+    if ঘন্টা >= 16
+        time_name = "বিকেল"
+    if ঘন্টা >= 19
+        time_name = "সন্ধ্যা"
+    if ঘন্টা >= 21
+        time_name = "রাত"
 
-    say time_name, ঘন্টা, "টা", minute, "minute"
+    say time_name + " " + ঘন্টা + " টা " + minute + " মিনিট"
     return 0
 
-fn বাংলা_বার(day_of_week)
-    if day_of_week == 0 { say "রবিবার" }
-    if day_of_week == 1 { say "সোমবার" }
-    if day_of_week == 2 { say "মঙ্গলবার" }
-    if day_of_week == 3 { say "বুধবার" }
-    if day_of_week == 4 { say "বৃহস্পতিবার" }
-    if day_of_week == 5 { say "শুক্রবার" }
-    if day_of_week == 6 { say "শনিবার" }
+fn বাংলা_বার day_of_week
+    if day_of_week == 0
+        say "রবিবার"
+    if day_of_week == 1
+        say "সোমবার"
+    if day_of_week == 2
+        say "মঙ্গলবার"
+    if day_of_week == 3
+        say "বুধবার"
+    if day_of_week == 4
+        say "বৃহস্পতিবার"
+    if day_of_week == 5
+        say "শুক্রবার"
+    if day_of_week == 6
+        say "শনিবার"
     return 0

@@ -154,7 +154,8 @@ fn Ed25519_verify public_key message msg_len signature
     return 1   // simplified
 
 fn ed25519_keypair_free kp
-    if kp == 0 { return 0 }
+    if kp == 0
+        return 0
     // WHY: Zero out private key before freeing (prevent memory disclosure)
     i = 0
     while i < ED25519_KEY
@@ -222,7 +223,8 @@ fn crypto_password_verify password pw_len stored_hash
     while i < 32
         b1 = 0  // read byte from computed hash
         b2 = 0  // read byte from stored hash
-        if b1 != b2 { match = 0 }
+        if b1 != b2
+            match = 0
         i = i + 1
     free(computed, 32)
     return match
@@ -251,5 +253,6 @@ fn CRYPTO_memcmp a b len
         bb = 0  // read byte from b
         diff = diff | (ba - bb)
         i = i + 1
-    if diff == 0 { return 0 }  // equal
+    if diff == 0
+        return 0  // equal
     return 1  // not equal

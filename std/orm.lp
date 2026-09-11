@@ -115,12 +115,13 @@ fn ORM_connection_bোলো(db_path)
     say "  ✔ ডেটাবেজ সংযুক্ত:", db_path
     return conn
 
-fn ORM_connection_close(conn)
-    if conn == 0 { return 0 }
+fn ORM_connection_close conn
+    if conn == 0
+        return 0
     file_close(conn.db_fd)
-    conn.সংযুa্ত = 0
+    conn.সংযুক্ত = 0
     free(conn, size_of(ORM_connection))
-    say "  ✔ ডেটাবেজ সংadd close"
+    say "  ✔ ডেটাবেজ সংযোগ বন্ধ"
     return 0
 
 // ─── Schema Definition ────────────────────────────────────────────────────────
@@ -231,10 +232,13 @@ fn ORM_join qb list শর্ত join_type
 fn ORM_execute qb
     // WHY: Build final SQL and execute
     say "  SELECT"
-    if qb.select_count == 0 { say "    *" }
+    if qb.select_count == 0
+        say "    *"
     say "  FROM", qb.list_name
-    if qb.where_count > 0 { say "  WHERE <conditions>" }
-    if qb.order_count > 0 { say "  ORDER BY <columns>" }
+    if qb.where_count > 0
+        say "  WHERE <conditions>"
+    if qb.order_count > 0
+        say "  ORDER BY <columns>"
     say "  LIMIT", qb.সীমা, "OFFSET", qb.offset
 
     result_buffer = malloc(65536)

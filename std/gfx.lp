@@ -183,7 +183,7 @@ fn বৃত্ত_আঁaো(canvas, cx, cy, r, color)
 
         if d < 0
             d = d + (4 * x) + 6
-        } অন্যথায়
+        else
             d = d + (4 * (x - y)) + 10
             y = y - 1
         x = x + 1

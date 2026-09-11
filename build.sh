@@ -125,12 +125,33 @@ echo -e "${GREEN}  ✔ bin/lipc এবং bin/lipc_bin সফলভাবে স
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৫: নেটিভ টুলচেইন সংকলন / Compile Native Tools]
+# [ধাপ ৫: নেটিভ টুলচেইন সংকলন / Compile Native Tools & Oshim Framework]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৫] নেটিভ টুলচেইন টুলস যাচাইকরণ...${NC}"
+echo -e "${YELLOW}[ধাপ ৫] নেটিভ সার্বভৌম টুলচেইন ও ফ্রেমওয়ার্ক সংকলন...${NC}"
 ./bin/lipc_bin src/tools/lipiconvert.lp bin/lipiconvert > /dev/null
 chmod +x bin/lipiconvert
-echo -e "${GREEN}  ✔ নেটিভ টুলস সংকলিত (bin/lipiconvert)।${NC}"
+echo -e "${GREEN}  ✔ bin/lipiconvert প্রস্তুত।${NC}"
+
+./bin/lipc_bin src/tools/lipirepl.lp bin/lipirepl > /dev/null
+chmod +x bin/lipirepl
+echo -e "${GREEN}  ✔ bin/lipirepl প্রস্তুত (ইন্টারঅ্যাক্টিভ আরইপিএল)।${NC}"
+
+./bin/lipc_bin src/tools/lipidbg.lp bin/lipidbg > /dev/null
+chmod +x bin/lipidbg
+echo -e "${GREEN}  ✔ bin/lipidbg প্রস্তুত (নেটিভ সিস্টেম ডিবাগার)।${NC}"
+
+./bin/lipc_bin src/tools/lipilsp.lp bin/lipilsp > /dev/null
+chmod +x bin/lipilsp
+echo -e "${GREEN}  ✔ bin/lipilsp প্রস্তুত (ল্যাঙ্গুয়েজ সার্ভার প্রোটোকল)।${NC}"
+
+./bin/lipc_bin src/tools/lipipkg.lp bin/lipipkg > /dev/null
+chmod +x bin/lipipkg
+echo -e "${GREEN}  ✔ bin/lipipkg প্রস্তুত (প্যাকেজ ম্যানেজার ২.০)।${NC}"
+
+./bin/lipc_bin tests/test_oshim_framework.lp /tmp/oshim_build_test > /dev/null
+/tmp/oshim_build_test > /dev/null
+rm -f /tmp/oshim_build_test
+echo -e "${GREEN}  ✔ ওসীম ফ্রেমওয়ার্ক (Oshim Framework) ইন্টিগ্রেশন টেস্ট সফল!${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------

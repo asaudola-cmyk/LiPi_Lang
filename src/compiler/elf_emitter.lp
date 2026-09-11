@@ -2252,6 +2252,130 @@ fn emit_runtime_stubs ctx
     x86_leave(ctx)
     x86_ret(ctx)
 
+    // ── Universal Baremetal Linux AMD64 Syscall Dispatcher (0% Libc) ───────────
+    // WHY: Provides unrestricted access to all Linux kernel syscalls directly from Lipi.
+    // Lipi args: rdi=nr, rsi=a1, rdx=a2, rcx=a3, r8=a4, r9=a5, r10=a6
+    // Kernel expects: rax=nr, rdi=a1, rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6
+    label_define(ctx, "lipi_fn_syscall")
+    label_define(ctx, "lipi_fn_সিসকল")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 248) // mov rax, rdi (syscall nr)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 247) // mov rdi, rsi (arg 1)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 214) // mov rsi, rdx (arg 2)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 202) // mov rdx, rcx (arg 3)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 211) // mov r11, r10 (save arg 6 from r10)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 194) // mov r10, r8  (arg 4 into r10)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 200) // mov r8, r9   (arg 5 into r8)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 217) // mov r9, r11  (arg 6 into r9)
+    x86_syscall(ctx)  // 0f 05 (execute kernel syscall)
+    x86_ret(ctx)      // return with kernel status/ptr in rax
+
+    // ── Raw Silicon Memory Byte Read (Direct Memory Inspection) ────────────────
+    // WHY: Reads a single 8-bit unsigned byte from memory at [base + offset].
+    label_define(ctx, "lipi_fn_mem_byte_read")
+    label_define(ctx, "lipi_fn_mem_read_byte")
+    label_define(ctx, "lipi_fn_mem_byte_পড়ো")
+    label_define(ctx, "lipi_fn_মেমরি_বাইট_পড়ো")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 247) // add rdi, rsi
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 7)   // movzx eax, byte ptr [rdi]
+    x86_ret(ctx)
+
+    // ── Raw Silicon Memory Byte Write (Direct Memory Manipulation) ─────────────
+    // WHY: Stores a single 8-bit byte at memory address [base + offset].
+    label_define(ctx, "lipi_fn_mem_byte_write")
+    label_define(ctx, "lipi_fn_mem_write_byte")
+    label_define(ctx, "lipi_fn_mem_byte_লেখো")
+    label_define(ctx, "lipi_fn_মেমরি_বাইট_লেখো")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 247) // add rdi, rsi
+    bb_put8(ctx, 136)
+    bb_put8(ctx, 23)  // mov byte ptr [rdi], dl
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 208) // mov rax, rdx (return stored value)
+    x86_ret(ctx)
+
+    // ── Raw Silicon Memory 64-bit QWORD Read ───────────────────────────────────
+    // WHY: Reads a 64-bit integer from memory at [base + offset].
+    label_define(ctx, "lipi_fn_mem_read_word")
+    label_define(ctx, "lipi_fn_mem_word_read")
+    label_define(ctx, "lipi_fn_mem_read")
+    label_define(ctx, "lipi_fn_মেমরি_পড়ো")
+    label_define(ctx, "lipi_fn_মেমরি_শব্দ_পড়ো")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 4)
+    bb_put8(ctx, 55)  // mov rax, [rdi + rsi]
+    x86_ret(ctx)
+
+    // ── Raw Silicon Memory 64-bit QWORD Write ──────────────────────────────────
+    // WHY: Stores a 64-bit integer into memory at [base + offset].
+    label_define(ctx, "lipi_fn_mem_write_word")
+    label_define(ctx, "lipi_fn_mem_word_write")
+    label_define(ctx, "lipi_fn_mem_write")
+    label_define(ctx, "lipi_fn_মেমরি_লেখো")
+    label_define(ctx, "lipi_fn_মেমরি_শব্দ_লেখো")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 20)
+    bb_put8(ctx, 55)  // mov [rdi + rsi], rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 208) // mov rax, rdx
+    x86_ret(ctx)
+
+    // ── Type and Struct Size Introspection (sizeof / size_of) ──────────────────
+    // WHY: Provides default 64-byte heap layout for struct containers.
+    label_define(ctx, "lipi_fn_size_of")
+    label_define(ctx, "lipi_fn_sizeof")
+    label_define(ctx, "lipi_fn_সাইজ_অফ")
+    x86_mov_reg_imm64(ctx, 0, 64)
+    x86_ret(ctx)
+
+    // ── Physical Stack Pointer Introspection ───────────────────────────────────
+    // WHY: Diagnostic inspection of the hardware %rsp register.
+    label_define(ctx, "lipi_fn_stack_pointer")
+    label_define(ctx, "lipi_fn_স্ট্যাক_পয়েন্টার")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 224) // mov rax, rsp
+    x86_ret(ctx)
+
+    // ── Hardware High-Resolution CPU Cycle Counter (RDTSC) ────────────────────
+    // WHY: Nanosecond-accurate benchmarking and jitter measurement on physical CPU.
+    label_define(ctx, "lipi_fn_cpu_clock")
+    label_define(ctx, "lipi_fn_ক্লক")
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 49)  // rdtsc (eax = low 32 bits, edx = high 32 bits)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 226)
+    bb_put8(ctx, 32)  // shl rdx, 32
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 208) // or rax, rdx
+    x86_ret(ctx)
+
 // ── In-Memory Tokenizer & Parser for Pure Lipi ───────────────────────────────
 TOK_INT    = 1
 TOK_STR    = 2
@@ -3516,13 +3640,147 @@ fn build_and_write_pure_elf ctx out_path
     res = file_write_bytes(out_path, elf)
     return res
 
+// ── Helper String & Multi-File Bundler Utilities ──────────────────────────────
+// WHY: Inlines included Lipi source files recursively, ensuring lexical include_once
+// semantics, zero runtime overhead, and single self-contained binary compilation.
+
+fn str_sub s start end
+    res = ""
+    i = start
+    slen = len(s)
+    while i < end and i < slen
+        res = res + char_at(s, i)
+        i = i + 1
+    return res
+
+fn str_trim_start s
+    i = 0
+    slen = len(s)
+    while i < slen
+        c = char_at(s, i)
+        if c != " " and c != "\t" and c != "\r"
+            break
+        i = i + 1
+    if i == 0
+        return s
+    return str_sub(s, i, slen)
+
+fn path_dirname p
+    last_slash = -1
+    i = 0
+    plen = len(p)
+    while i < plen
+        if char_at(p, i) == "/"
+            last_slash = i
+        i = i + 1
+    if last_slash < 0
+        return "."
+    if last_slash == 0
+        return "/"
+    return str_sub(p, 0, last_slash)
+
+fn list_has lst item
+    i = 0
+    llen = len(lst)
+    while i < llen
+        if get(lst, i) == item
+            return 1
+        i = i + 1
+    return 0
+
+fn resolve_inc_path cur_dir inc_name
+    if file_exists(inc_name) == 1
+        return inc_name
+    cand1 = cur_dir + "/" + inc_name
+    if file_exists(cand1) == 1
+        return cand1
+    cand2 = "std/" + inc_name
+    if file_exists(cand2) == 1
+        return cand2
+    cand3 = "../" + inc_name
+    if file_exists(cand3) == 1
+        return cand3
+    return cand1
+
+fn has_include content
+    p = 0
+    clen = len(content)
+    while p < clen
+        while p < clen and (char_at(content, p) == " " or char_at(content, p) == "\t")
+            p = p + 1
+        if p + 9 < clen
+            if char_at(content, p) == "i" and char_at(content, p+1) == "n" and char_at(content, p+2) == "c" and char_at(content, p+3) == "l" and char_at(content, p+4) == "u" and char_at(content, p+5) == "d" and char_at(content, p+6) == "e" and char_at(content, p+7) == " "
+                q = char_at(content, p+8)
+                if q == "\"" or q == "'"
+                    return 1
+        while p < clen and char_at(content, p) != "\n"
+            p = p + 1
+        if p < clen and char_at(content, p) == "\n"
+            p = p + 1
+    return 0
+
+fn bundle_source file_path visited
+    if list_has(visited, file_path) == 1
+        return ""
+    push(visited, file_path)
+    if file_exists(file_path) == 0
+        say "Warning: Included file not found: " + file_path
+        return ""
+    content = file_read(file_path)
+    if has_include(content) == 0
+        return content
+
+    cur_dir = path_dirname(file_path)
+    out = ""
+    chunk_start = 0
+    p = 0
+    clen = len(content)
+    while p < clen
+        line_start = p
+        while p < clen and (char_at(content, p) == " " or char_at(content, p) == "\t")
+            p = p + 1
+
+        is_inc = 0
+        inc_target = ""
+        if p + 9 < clen
+            if char_at(content, p) == "i" and char_at(content, p+1) == "n" and char_at(content, p+2) == "c" and char_at(content, p+3) == "l" and char_at(content, p+4) == "u" and char_at(content, p+5) == "d" and char_at(content, p+6) == "e" and char_at(content, p+7) == " "
+                q = char_at(content, p+8)
+                if q == "\"" or q == "'"
+                    p_tstart = p + 9
+                    p_tend = p_tstart
+                    while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
+                        p_tend = p_tend + 1
+                    if p_tend < clen and char_at(content, p_tend) == q
+                        is_inc = 1
+                        inc_target = str_sub(content, p_tstart, p_tend)
+
+        while p < clen and char_at(content, p) != "\n"
+            p = p + 1
+        if p < clen and char_at(content, p) == "\n"
+            p = p + 1
+
+        if is_inc == 1
+            if line_start > chunk_start
+                out = out + str_sub(content, chunk_start, line_start)
+            resolved = resolve_inc_path(cur_dir, inc_target)
+            bundled = bundle_source(resolved, visited)
+            if len(bundled) > 0
+                out = out + bundled + "\n"
+            chunk_start = p
+
+    if chunk_start < clen
+        out = out + str_sub(content, chunk_start, clen)
+
+    return out
+
 // ── Pure Lipi ELF Compiler Entry Point ────────────────────────────────────────
 fn compile_source_to_elf in_path out_path
     if file_exists(in_path) == 0
         say "Error: Input source file not found: " + in_path
         return 1
 
-    src = file_read(in_path)
+    visited = list()
+    src = bundle_source(in_path, visited)
     tokens = tokenize_pure(src)
     ps = ps_new(tokens)
     ctx = ctx_new()

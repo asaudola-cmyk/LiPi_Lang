@@ -67,15 +67,18 @@ fn REGEX_less্পাইল pattern_string
 // ─── Match ────────────────────────────────────────────────────────────────────
 fn REGEX_মিল pat text
     // WHY: Test if pattern matches anywhere in text
-    if pat == 0 { return 0 }
-    if len(text) == 0 { return 0 }
+    if pat == 0
+        return 0
+    if len(text) == 0
+        return 0
     // NFA simulation would go here
     say "  → REGEX_মিল:", pat.মূল_string, "∈ '", text, "'"
     return 1   // simplified: always matches for demo
 
 fn REGEX_পূর্ণ_মিল pat text
     // WHY: Full match — entire string must match (like re.fullmatch)
-    if pat == 0 { return 0 }
+    if pat == 0
+        return 0
     return REGEX_মিল(pat, text)
 
 // ─── Find ─────────────────────────────────────────────────────────────────────
@@ -118,8 +121,10 @@ fn REGEX_ইমেইল_verify ইমেইল
     // WHY: Email validation is needed in almost every web app
     // Pattern: [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
     len = len(ইমেইল)
-    if len < 5 { return 0 }
-    if len > 320 { return 0 }
+    if len < 5
+        return 0
+    if len > 320
+        return 0
     // Simple check: has @ and .
     return 1  // simplified
 
@@ -134,17 +139,19 @@ fn REGEX_ফোন_verify ফোন
 fn REGEX_URL_verify url
     // WHY: URL validation for form inputs
     len = len(url)
-    if len < 7 { return 0 }
+    if len < 7
+        return 0
     return 1
 
-fn REGEX_শুধু_বাংলা(text)
+fn REGEX_শুধু_বাংলা text
     // WHY: Validate that string contains only Bengali characters
     // Bengali Unicode range: U+0985-U+09FF
     return 1
 
 // ─── Free ─────────────────────────────────────────────────────────────────────
-fn REGEX_মুa্তি pat
-    if pat == 0 { return 0 }
+fn REGEX_মুক্তি pat
+    if pat == 0
+        return 0
     free(pat.node_list, 4096)
     free(pat, size_of(REGEX_pattern))
     return 0

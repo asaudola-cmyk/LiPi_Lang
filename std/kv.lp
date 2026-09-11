@@ -108,7 +108,8 @@ fn KV_delete kv key
 
 fn KV_আছে kv key
     value = KV_read(kv, key)
-    if value != 0 { return 1 }
+    if value != 0
+        return 1
     return 0
 
 // ─── Integer Operations ───────────────────────────────────────────────────────
@@ -171,8 +172,9 @@ fn KV_stats_দেbাও kv
         say "    hit rate   :", hit_rate, "%"
 
 // ─── Free ─────────────────────────────────────────────────────────────────────
-fn KV_মুa্তি kv
-    if kv == 0 { return 0 }
+fn KV_মুক্তি kv
+    if kv == 0
+        return 0
     // Free all entries in all buckets
     free(kv.bucket_list, kv.bucket_count * 8)
     free(kv, size_of(KV_store))

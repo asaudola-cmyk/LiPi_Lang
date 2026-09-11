@@ -11,13 +11,13 @@ include "std/io.lp"
 include "std/mem.lp"
 include "std/debug.lp"
 
-// ১. string তুলনা ও হেল্পার routeিন (Byte-by-byte String Comparison)
+// ১. স্ট্রিং তুলনা ও হেল্পার রুটিন (Byte-by-byte String Comparison)
 // WHY: Used to match interactive user commands without external string libraries.
-fn কvalue্ড_মেলে_aিনা input কvalue্ড len
+fn কমান্ড_মেলে_কিনা input cmd len
     i = 0
     while i < len
-        b1 = mem_byte_পড়ো(input, i)
-        b2 = mem_byte_পড়ো(কvalue্ড, i)
+        b1 = mem_byte_read(input, i)
+        b2 = mem_byte_read(cmd, i)
         if b1 != b2
             return 0
         i = i + 1
@@ -37,72 +37,72 @@ fn প্রিন্ট_রেপল_ব্যানার
 fn রেপল_সাহায্য
     say "\n\033[1;33m[লিপি আরইপিএল কমান্ড সহায়িকা / Commands]:\033[0m"
     say "  :help / :সাহায্য     - এই সাহায্য বার্তা প্রদর্শন"
-    say "  :reg  / :রেজিস্টার   - current সিপিইউ স্ট্যাক ও হার্ডওয়্যার রেজিস্টার ডাম্প"
-    say "  :mem  <addr> <len>   - mem ঠিকানা সরাসরি বাইট-বাই-বাইট পরিদর্শন"
+    say "  :reg  / :রেজিস্টার   - বর্তমান সিপিইউ স্ট্যাক ও হার্ডওয়্যার রেজিস্টার ডাম্প"
+    say "  :mem  <addr> <len>   - মেমরি ঠিকানা সরাসরি বাইট-বাই-বাইট পরিদর্শন"
     say "  :eval <num1> + <num2>- তাৎক্ষণিক গাণিতিক এক্সপ্রেশন মূল্যায়ন"
     say "  :exit / :বিদায়       - আরইপিএল শেল থেকে প্রস্থান\n"
 
-// ৪. সিপিইউ রেজিস্টার ও ডায়াগনস্টিa এa্সিaিউশন
+// ৪. সিপিইউ রেজিস্টার ও ডায়াগনস্টিক এক্সিকিউশন
 fn রেপল_সিপিইউ_পরিদর্শন
     say "\n\033[1;36m--- [সিপিইউ লাইভ স্টেট / Live CPU Register State] ---\033[0m"
-    rsp = স্ট্যাa_পয়েন্টার()
+    rsp = stack_pointer()
     say "  • হার্ডওয়্যার স্ট্যাক পয়েন্টার (%rsp): " + rsp
-    a্লa = cpu_clock()
-    say "  • current সিপিইউ টাইমস্ট্যাম্প (RDTSC) : " + a্লa
+    clk = cpu_clock()
+    say "  • বর্তমান সিপিইউ টাইমস্ট্যাম্প (RDTSC) : " + clk
     say "----------------------------------------------------\n"
 
-// ৫. memory direct test
-fn রেপল_mem_পরিদর্শন addr len
-    say "\n\033[1;35m--- [mem হেক্স ডাম্প @ " + addr + "] ---\033[0m"
+// ৫. সরাসরি মেমরি পরিদর্শন
+fn রেপল_মেমরি_পরিদর্শন addr len
+    say "\n\033[1;35m--- [মেমরি হেক্স ডাম্প @ " + addr + "] ---\033[0m"
     i = 0
     while i < len
-        val = mem_byte_পড়ো(addr, i)
+        val = mem_byte_read(addr, i)
         say "  [+" + i + "] = " + val
         i = i + 1
     say "-------------------------------------\n"
 
-// ৬. এaa এa্সপ্রেশন ইvalয়েশন সিমুলেশন
+// ৬. এক্সপ্রেশন ইভ্যালুয়েশন সিমুলেশন
 fn রেপল_ইভ্যাল a b অপারেশন
-    // অপারেশন ১: add, ২: multiply, ৩: বিয়োগ
+    // অপারেশন ১: যোগ, ২: গুণ, ৩: বিয়োগ
     if অপারেশন == 1
         sum = a + b
-        say "  => ফলাফল (add): " + sum
+        say "  => ফলাফল (যোগ): " + sum
         return sum
     if অপারেশন == 2
         product = a * b
         say "  => ফলাফল (গুণ): " + product
         return product
     if অপারেশন == 3
-        subtractফল = a - b
-        say "  => ফলাফল (বিয়োগ): " + subtractফল
-        return subtractফল
+        sub_res = a - b
+        say "  => ফলাফল (বিয়োগ): " + sub_res
+        return sub_res
     return 0
 
-// ৭. main আরইপিএল aন্ট্রোল লুপ ও অটোমেটেড টেস্ট
+// ৭. মেইন আরইপিএল কন্ট্রোল লুপ ও ডায়াগনস্টিক এক্সিকিউশন
 fn main
     প্রিন্ট_রেপল_ব্যানার()
 
-    // [টেস্ট ১: রেপল হেল্প avalue্ড টেস্ট]
-    say "[১] কমান্ড parseিং টেস্ট: ':help'..."
+    // [টেস্ট ১: রেপল হেল্প কমান্ড টেস্ট]
+    say "[১] কমান্ড পার্সিং টেস্ট: ':help'..."
     রেপল_সাহায্য()
 
-    // [টেস্ট ২: সিপিইউ লাইভ ডায়াগনস্টিa]
+    // [টেস্ট ২: সিপিইউ লাইভ ডায়াগনস্টিক]
     say "[২] লাইভ রেজিস্টার ও আরডিটিএসসি টেস্ট: ':reg'..."
     রেপল_সিপিইউ_পরিদর্শন()
 
-    // [টেস্ট ৩: রিয়েল-টাইম a্যালaুলেশন ও ইvalয়েশন]
+    // [টেস্ট ৩: রিয়েল-টাইম ক্যালকুলেশন ও ইভ্যালুয়েশন]
     say "[৩] লাইভ এক্সপ্রেশন ইভ্যালুয়েশন টেস্ট: '৪২ * ১০'..."
     রেপল_ইভ্যাল(42, 10, 2)
 
-    // [টেস্ট ৪: memory পরিদর্শন টেস্ট]
-    say "\n[৪] লাইভ mem বাফার টেস্ট: ':mem'..."
+    // [টেস্ট ৪: মেমরি পরিদর্শন টেস্ট]
+    say "\n[৪] লাইভ মেমরি বাফার টেস্ট: ':mem'..."
     buffer = malloc(16)
     mem_fill(buffer, 0, 16)
-    mem_write_byte(buffer, 0, 76)  // 'L'
-    mem_write_byte(buffer, 1, 73)  // 'I'
-    mem_write_byte(buffer, 2, 80)  // 'P'
-    mem_write_byte(buffer, 3, 73)  // 'I'
-    রেপল_mem_পরিদর্শন(buffer, 4)
+    mem_byte_write(buffer, 0, 76)  // 'L'
+    mem_byte_write(buffer, 1, 73)  // 'I'
+    mem_byte_write(buffer, 2, 80)  // 'P'
+    mem_byte_write(buffer, 3, 73)  // 'I'
+    রেপল_মেমরি_পরিদর্শন(buffer, 4)
     free(buffer, 16)
 
     say "\033[1;32m✔ lipirepl ইন্টারঅ্যাক্টিভ কোর ইঞ্জিন ১০০% প্রস্তুত ও কার্যকর!\033[0m"
