@@ -9,10 +9,11 @@
 // signing package releases with authentic Ed25519/SHA-256 signatures, and verifying
 // distribution integrity with zero external libc or build tool dependencies.
 
-include "std/io.lp"
-include "std/mem.lp"
-include "std/str.lp"
-include "std/crypto.lp"
+// WHY: Canonical standard library modules unified under universe/ for clean architecture.
+include "universe/core/std_io.lp"
+include "universe/core/std_mem.lp"
+include "universe/core/std_str.lp"
+include "universe/crypto/std_crypto.lp"
 
 PKG_VERSION = "প্রথম ১.০"
 PKG_MANIFEST = "lipipkg.toml"

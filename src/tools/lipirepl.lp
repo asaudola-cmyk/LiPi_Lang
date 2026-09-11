@@ -6,9 +6,10 @@
 // WHY: A sovereign language requires an interactive environment to experiment with
 // expressions, inspect CPU registers, and measure hardware latency with zero libc.
 
-include "std/io.lp"
-include "std/mem.lp"
-include "std/debug.lp"
+// WHY: Canonical standard library modules unified under universe/ for clean architecture.
+include "universe/core/std_io.lp"
+include "universe/core/std_mem.lp"
+include "universe/tools/std_debug.lp"
 
 fn hex_digit n
     val = n % 16
