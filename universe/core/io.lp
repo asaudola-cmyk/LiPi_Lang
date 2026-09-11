@@ -72,6 +72,21 @@ fn ফাইল_লেখো fd data size
 fn file_seek fd offset whence
     return syscall(8, fd, offset, whence, 0, 0, 0)
 
+fn ফাইল_সিক fd offset whence
+    return syscall(8, fd, offset, whence, 0, 0, 0)
+
+fn file_sync fd
+    return syscall(74, fd, 0, 0, 0, 0, 0)
+
+fn ফাইল_সিঙ্ক fd
+    return syscall(74, fd, 0, 0, 0, 0, 0)
+
+fn print_row label value
+    say label + ": " + value
+
+fn সারি_প্রিন্ট label value
+    say label + ": " + value
+
 // ── ৩. উচ্চ-স্তরের ফাইল ইউটিলিটি (High-Level File Operations) ────────────────────
 // WHY: এক কলেই পুরো ফাইল পড়া ও লেখার জন্য কম্পাইলার ইন্ট্রিনসিক কল।
 fn read_file path
