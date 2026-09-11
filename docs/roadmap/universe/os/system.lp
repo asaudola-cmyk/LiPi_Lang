@@ -29,7 +29,7 @@ import "universe/core/string"
 @end
 
 @fn get_cwd()
-  return "/home/shafiullah/Documents/file/maya"
+  return "/home/shafiullah/Documents/file/work/lipi"
 @end
 
 @fn get_home_dir()

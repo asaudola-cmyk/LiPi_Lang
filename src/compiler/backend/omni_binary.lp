@@ -96,15 +96,18 @@ import "universe/crypto/sha256"
   @! WHY: Directly writes the BootSeed loader and the Base-256 Universal Number payload
   @! to disk via Linux syscalls, avoiding dynamic array reallocation bottlenecks.
   
-  seed_fd = sys_syscall(2, "compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
+  seed_fd = sys_syscall(2, "src/compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
   @if seed_fd < 0
-    seed_fd = sys_syscall(2, "/home/shafiullah/Documents/file/maya/compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
+    seed_fd = sys_syscall(2, "compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
   @end
   @if seed_fd < 0
     seed_fd = sys_syscall(2, "./boot_seed_binary.bin", 0, 0, 0, 0, 0)
   @end
   @if seed_fd < 0
-    seed_fd = sys_syscall(2, "../compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
+    seed_fd = sys_syscall(2, "../src/compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
+  @end
+  @if seed_fd < 0
+    seed_fd = sys_syscall(2, "/home/shafiullah/Documents/file/work/lipi/src/compiler/backend/boot_seed_binary.bin", 0, 0, 0, 0, 0)
   @end
   @if seed_fd < 0
     println("Error: BootSeed binary not found!")

@@ -1,0 +1,316 @@
+{
+  "project": "Maya Sovereign Programming Language",
+  "total_agents": 28,
+  "council_name": "Maya Supreme Council of 28 Autonomous Agents",
+  "version": "2.0.0",
+  "sovereignty_level": "Absolute (0.0000001% Zero External Reliance)",
+  "agents": [
+    {
+      "name": "maya_compiler_frontend",
+      "role": "Frontend Compiler Architect",
+      "domain": "compiler/frontend",
+      "responsibilities": [
+        "Pure Maya Lexer and Tokenizer",
+        "AST and Concrete Syntax Tree Parser",
+        "Macro Expansion and Metaprogramming",
+        "Source Span Error Diagnostics"
+      ]
+    },
+    {
+      "name": "maya_compiler_typechecker",
+      "role": "Static Type Checker & Semantic Analysis Architect",
+      "domain": "compiler/frontend",
+      "responsibilities": [
+        "Hindley-Milner Type Inference",
+        "Structural and Nominal Typing",
+        "Trait and Interface Verification",
+        "Compile-time Type Safety"
+      ]
+    },
+    {
+      "name": "maya_compiler_middleend",
+      "role": "MIR & SSA Optimization Engineer",
+      "domain": "compiler/middleend",
+      "responsibilities": [
+        "Maya Intermediate Representation (MIR)",
+        "Static Single Assignment (SSA) form",
+        "Control Flow Graph (CFG) analysis",
+        "Dominator Tree & Loop Invariant Analysis"
+      ]
+    },
+    {
+      "name": "maya_compiler_dce_inline",
+      "role": "Advanced Code Elimination & Inlining Specialist",
+      "domain": "compiler/middleend",
+      "responsibilities": [
+        "Dead Code Elimination (DCE)",
+        "Heuristic Function Inlining",
+        "Loop Unrolling & Devirtualization",
+        "Constant Folding (-O0 to -O3)"
+      ]
+    },
+    {
+      "name": "maya_x86_backend",
+      "role": "x86_64 Machine Code Specialist",
+      "domain": "compiler/backend/x86_64",
+      "responsibilities": [
+        "Native x86_64 Machine Code Generation",
+        "System V AMD64 & Microsoft x64 ABIs",
+        "Linear Scan Register Allocation",
+        "REX/ModR/M/SIB Encoding & AVX2 SIMD"
+      ]
+    },
+    {
+      "name": "maya_arm_backend",
+      "role": "ARM64 / AArch64 Backend Engineer",
+      "domain": "compiler/backend/arm64",
+      "responsibilities": [
+        "Native AArch64 32-bit Fixed Instruction Encoding",
+        "AAPCS64 Standard Calling Convention",
+        "Apple Silicon & Linux ARM64 Support",
+        "NEON SIMD Vectorization"
+      ]
+    },
+    {
+      "name": "maya_riscv_backend",
+      "role": "RISC-V 64 Backend Specialist",
+      "domain": "compiler/backend/riscv64",
+      "responsibilities": [
+        "RV64GC (IMAFDC) Instruction Encoding",
+        "RV64 Standard Calling Convention & ecall",
+        "RVC 16-bit Compressed Instructions",
+        "A-Extension Atomic Memory Operations"
+      ]
+    },
+    {
+      "name": "maya_wasm_backend",
+      "role": "WebAssembly (WASM/WASI) Backend Architect",
+      "domain": "compiler/backend/wasm",
+      "responsibilities": [
+        "Binary WASM Bytecode Serialization",
+        "WASI Preview 1 Direct Emission",
+        "Zero Emscripten / LLVM Dependency",
+        "Edge & Browser Execution Support"
+      ]
+    },
+    {
+      "name": "maya_elf_linker",
+      "role": "Freestanding Linux ELF64 Linker Specialist",
+      "domain": "compiler/backend/formats",
+      "responsibilities": [
+        "Pure Maya ELF64 Direct Serializer",
+        "Program Headers & Static PT_LOAD Segments",
+        "Zero GNU ld / lld Dependency",
+        "Direct Syscall Disk Emission"
+      ]
+    },
+    {
+      "name": "maya_pe_linker",
+      "role": "Direct Windows PE32+ Linker Specialist",
+      "domain": "compiler/backend/formats",
+      "responsibilities": [
+        "Pure Maya PE32+ (PE64) .exe Serializer",
+        "DOS Stub, COFF & Optional Headers",
+        "Import Directory Table Construction",
+        "Zero MSVC link.exe / MinGW Dependency"
+      ]
+    },
+    {
+      "name": "maya_macho_linker",
+      "role": "Direct macOS Mach-O 64-bit Linker Specialist",
+      "domain": "compiler/backend/formats",
+      "responsibilities": [
+        "Pure Maya Mach-O 64 Serializer",
+        "LC_SEGMENT_64 & LC_MAIN Emission",
+        "Cross-compilation Without Xcode/ld64",
+        "Apple Silicon & Intel Darwin Support"
+      ]
+    },
+    {
+      "name": "maya_ape_linker",
+      "role": "Cosmopolitan APE Fat Binary Specialist",
+      "domain": "compiler/backend/formats",
+      "responsibilities": [
+        "Polyglot Shell Trampoline Construction",
+        "Unified Linux/Windows/macOS Execution",
+        "Authenticode Padding & Header Layout",
+        "True Omni-Binary Generation"
+      ]
+    },
+    {
+      "name": "maya_linker_binary_formats",
+      "role": "Direct Linker & Binary Formats Orchestrator",
+      "domain": "compiler/backend/formats",
+      "responsibilities": [
+        "Multi-Target Format Routing",
+        "Symbol Resolution & Relocations",
+        "Binary Determinism Guarantees"
+      ]
+    },
+    {
+      "name": "maya_core_runtime",
+      "role": "Freestanding Core Runtime Engineer",
+      "domain": "universe/sys",
+      "responsibilities": [
+        "Zero-Libc Raw Direct Syscall Wrappers",
+        "Platform _start Entry Point & Stack Frame",
+        "Signal Handling & Panic Recovery",
+        "Process Lifecycle (fork/execve/wait4/exit)"
+      ]
+    },
+    {
+      "name": "maya_memory_allocator",
+      "role": "Low-Level Memory Allocator Engineer",
+      "domain": "universe/memory",
+      "responsibilities": [
+        "Raw sys_mmap/sys_brk Memory Allocation",
+        "Bump & Linear Scratch Allocators",
+        "Arena Lifecycle Allocators",
+        "Slab & Buddy Page Pool Allocators"
+      ]
+    },
+    {
+      "name": "maya_memory_gc",
+      "role": "Memory Management & Allocator Orchestrator",
+      "domain": "universe/memory",
+      "responsibilities": [
+        "Automatic Reference Counting (ARC)",
+        "Cycle Detection & Collection",
+        "Zero-Pause Concurrent Garbage Collection",
+        "Heap Integrity & Leak Detection"
+      ]
+    },
+    {
+      "name": "maya_concurrency_runtime",
+      "role": "M:N Green Threads & Async Engineer",
+      "domain": "universe/concurrency",
+      "responsibilities": [
+        "Maya Fibers / Goroutines Engine",
+        "User-Space Context Switching Assembly",
+        "Lock-Free Work-Stealing Scheduler",
+        "Lock-Free Synchronization Channels"
+      ]
+    },
+    {
+      "name": "maya_async_reactor",
+      "role": "Asynchronous I/O Reactor Specialist",
+      "domain": "universe/concurrency",
+      "responsibilities": [
+        "Linux Raw epoll / io_uring Event Loop",
+        "macOS / BSD Raw kqueue & kevent Syscalls",
+        "Non-blocking Socket Event Demultiplexing",
+        "Zero libuv Dependency"
+      ]
+    },
+    {
+      "name": "maya_stdlib_collections",
+      "role": "Standard Library Collections Architect",
+      "domain": "universe/collections",
+      "responsibilities": [
+        "SwissTable / Robin Hood HashMap",
+        "Dynamic Vec, RingBuffer, BTreeMap",
+        "UTF-8 String, StringBuilder & Slices",
+        "Branchless Search Optimizations"
+      ]
+    },
+    {
+      "name": "maya_stdlib_io_net",
+      "role": "Sovereign I/O & Networking Engineer",
+      "domain": "universe/net",
+      "responsibilities": [
+        "Buffered File, Pipe & Stream I/O",
+        "Native IPv4/IPv6 TCP & UDP Sockets",
+        "Pure Maya RFC 1035 DNS Resolver",
+        "Zero libresolv / libc Dependency"
+      ]
+    },
+    {
+      "name": "maya_stdlib_http",
+      "role": "Sovereign HTTP & Network Protocol Specialist",
+      "domain": "universe/net/http",
+      "responsibilities": [
+        "Pure Maya HTTP/1.1 & HTTP/2 Client/Server",
+        "Pure TLS 1.3 Cryptographic Handshake",
+        "HPACK Header Compression & Framing",
+        "Zero OpenSSL / curl Dependency"
+      ]
+    },
+    {
+      "name": "maya_crypto_security",
+      "role": "Cryptography & Security Engineer",
+      "domain": "universe/crypto",
+      "responsibilities": [
+        "Pure Maya SHA-256, SHA-512, BLAKE3",
+        "ChaCha20-Poly1305 AEAD & AES-256-GCM",
+        "Ed25519 Signatures & Key Generation",
+        "Constant-Time Arithmetic & CSPRNG"
+      ]
+    },
+    {
+      "name": "maya_pkg_manager",
+      "role": "Decentralized Package Manager Engineer",
+      "domain": "packages/mpm",
+      "responsibilities": [
+        "MPM (maya pkg) Manifest & Lockfile",
+        "P2P Content-Addressed Storage",
+        "Cryptographic Package Verification",
+        "Offline Caching & Reproducible Installs"
+      ]
+    },
+    {
+      "name": "maya_build_toolchain",
+      "role": "CLI Toolchain & Driver Architect",
+      "domain": "cmd/maya",
+      "responsibilities": [
+        "Unified CLI: build, run, test, bench, doc, fmt, pkg",
+        "Multi-Target Architecture Routing",
+        "Optimization Levels -O0 to -O3",
+        "Dynamic Path Resolution & Portability"
+      ]
+    },
+    {
+      "name": "maya_unikernel_os",
+      "role": "Bare-Metal Ring-0 OS Architect",
+      "domain": "universe/os",
+      "responsibilities": [
+        "Multiboot1 & Multiboot2 Specification",
+        "64-bit Long Mode Kernel Initialization",
+        "COM1 16550 UART & VGA 0xB8000 Drivers",
+        "Sub-5ms Cloud MicroVM Boot (QEMU/Firecracker)"
+      ]
+    },
+    {
+      "name": "maya_lsp_developer_tools",
+      "role": "LSP Server & Developer Tooling Specialist",
+      "domain": "editors/lsp",
+      "responsibilities": [
+        "JSON-RPC 2.0 LSP Daemon (maya lsp)",
+        "Realtime Diagnostics & Code Completion",
+        "Canonical Code Formatter (maya fmt)",
+        "Syntax Highlighting & IDE Extensions"
+      ]
+    },
+    {
+      "name": "maya_testing_qa",
+      "role": "Ecosystem QA & Test Automation Lead",
+      "domain": "tests",
+      "responsibilities": [
+        "Multi-Target End-to-End Test Matrix",
+        "Regression Testing & Process Isolation",
+        "Fuzzing Harnesses & Resilience Checks",
+        "Performance Benchmarking"
+      ]
+    },
+    {
+      "name": "maya_selfhost_sentinel",
+      "role": "Triple-Stage Self-Hosting Sentinel",
+      "domain": "tools/selfhost",
+      "responsibilities": [
+        "Triple-Stage Pipeline (Stage 1 -> 2 -> 3)",
+        "Bit-for-Bit SHA-256 Fixed Point Proof",
+        "Elimination of Non-Deterministic Artifacts",
+        "0.0000001% Zero External Reliance Certification"
+      ]
+    }
+  ]
+}
