@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — 3D RAYTRACER & BVH ACCELERATION ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — 3D RAYTRACER & BVH ACCELERATION ENGINE
 @! Module: universe/engine3d/raytracer.maya
 @! Milestone: 3D Raytracing & Physics Engine
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Ray-Sphere, Möller–Trumbore Ray-Triangle, AABB BVH Traversal,
 @! Diffuse & Specular Lighting, Shadow Rays and Framebuffer Rendering
 @! ============================================================================

@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — THE EDGE (FREESTANDING #[NO_OS] ENGINE)
+@! LIPI UNIVERSAL ARCHITECTURE — THE EDGE (FREESTANDING #[NO_OS] ENGINE)
 @! Module: universe/os/freestanding.maya
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Freestanding #[no_os] RISC-V Engine, Fixed Memory Arena Allocator,
 @! Full Two-Finger Compaction & Defragmenting Garbage Collector for 2MB RAM IoT Chips
 @! ============================================================================

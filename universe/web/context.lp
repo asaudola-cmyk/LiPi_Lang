@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — HTTP CONTEXT, REQUEST & RESPONSE (universe/web/context.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — HTTP CONTEXT, REQUEST & RESPONSE (universe/web/context.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! RFC 7230 / RFC 7231 Compliant Request / Response / Context Engine
 @! ============================================================================
 

@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — PURE MAYA MPM PACKAGE MANAGER
+@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA MPM PACKAGE MANAGER
 @! Module: universe/pkg/mpm_cli.maya
 @! Milestone: Grand Sovereign Pillar 1
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: TOML/JSON Manifests, SemVer 2.0.0 Resolver, Deterministic Lockfile,
 @! CAS Integration, Package Fetcher, Publisher, Script Runner, CLI Dispatcher
 @! ============================================================================

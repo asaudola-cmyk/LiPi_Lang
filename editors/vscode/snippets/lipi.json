@@ -1,220 +1,84 @@
 {
-  "Function Definition (English)": {
+  "Lipi Function (English)": {
     "prefix": "fn",
     "body": [
-      "fn ${1:name}(${2:params})",
-      "    ${0:// function body}",
-      "    return ${3:result}"
+      "fn ${1:name}(${2:args}):",
+      "\t$0"
     ],
-    "description": "Define a function in Lipi"
+    "description": "Lipi English Function Definition"
   },
-  "OOP Struct Method (English)": {
-    "prefix": "fn method",
+  "Lipi Function (Bengali)": {
+    "prefix": "kaj",
     "body": [
-      "fn ${1:Class}.${2:method}(${3:params})",
-      "    ${0:// method implementation}",
-      "    return ${4:result}"
+      "কাজ ${1:নাম}(${2:চলক}):",
+      "\t$0"
     ],
-    "description": "Define an OOP struct method in Lipi"
+    "description": "Lipi Bengali Function Definition (কাজ)"
   },
-  "Function Definition (Bengali)": {
-    "prefix": "কাজ",
+  "Lipi Directive Function": {
+    "prefix": "@fn",
     "body": [
-      "কাজ ${1:নাম}(${2:প্যারামিটার})",
-      "    ${0:// কাজের বিবরণ}",
-      "    ফেরত ${3:ফলাফল}"
+      "@fn ${1:name}(${2:args})",
+      "\t$0",
+      "@end"
     ],
-    "description": "লিপিতে নতুন কাজ (ফাংশন) তৈরি করুন"
+    "description": "Lipi Directive Function Definition (@fn)"
   },
-  "OOP Struct Method (Bengali)": {
-    "prefix": "কাজ মেথড",
-    "body": [
-      "কাজ ${1:কাঠামো}.${2:মেথড}(${3:প্যারামিটার})",
-      "    ${0:// মেথড বাস্তবায়ন}",
-      "    ফেরত ${4:ফলাফল}"
-    ],
-    "description": "লিপিতে কাঠামোর ওওপি মেথড তৈরি করুন"
-  },
-  "Struct Definition (English)": {
+  "Lipi Struct (English)": {
     "prefix": "struct",
     "body": [
-      "struct ${1:Name}",
-      "    ${2:field1},",
-      "    ${3:field2}"
+      "struct ${1:Name}:",
+      "\t${2:field1}",
+      "\t${3:field2}"
     ],
-    "description": "Define a structure data type"
+    "description": "Lipi English Struct Definition"
   },
-  "Struct Definition (Bengali)": {
-    "prefix": "কাঠামো",
+  "Lipi Struct (Bengali)": {
+    "prefix": "dhach",
     "body": [
-      "কাঠামো ${1:নাম}",
-      "    ${2:ক্ষেত্র১},",
-      "    ${3:ক্ষেত্র২}"
+      "গঠন ${1:নাম}:",
+      "\t${2:ক্ষেত্র১}",
+      "\t${3:ক্ষেত্র২}"
     ],
-    "description": "লিপিতে নতুন ডেটা কাঠামো তৈরি করুন"
+    "description": "Lipi Bengali Struct Definition (গঠন)"
   },
-  "Web Router HTTP Server": {
-    "prefix": "web_router",
+  "Lipi Directive Struct": {
+    "prefix": "@struct",
     "body": [
-      "include \"std/web.lp\"",
-      "",
-      "fn handle_home(req)",
-      "    return web_response_json(200, \"{\\\"status\\\":\\\"ok\\\",\\\"message\\\":\\\"Lipi Server Online\\\"}\")",
-      "",
-      "fn handle_api(req)",
-      "    return web_response_json(200, \"{\\\"version\\\":\\\"2.0.0\\\",\\\"engine\\\":\\\"lipc\\\"}\")",
-      "",
-      "fn start_server()",
-      "    router = web_router_create()",
-      "    web_router_get(router, \"/\", handle_home)",
-      "    web_router_get(router, \"/api\", handle_api)",
-      "    say \"🚀 Web Server listening on http://0.0.0.0:${1:8080}...\"",
-      "    web_server_start(router, ${1:8080})",
-      "",
-      "start_server()"
+      "@struct ${1:Name}",
+      "\t${2:field1}",
+      "\t${3:field2}",
+      "@end"
     ],
-    "description": "High-performance HTTP Web Router and Server template using std/web.lp"
+    "description": "Lipi Directive Struct Definition (@struct)"
   },
-  "Native Thread Spawn": {
-    "prefix": "thread_create",
+  "Lipi Variable (Bengali)": {
+    "prefix": "cholok",
     "body": [
-      "include \"std/thread.lp\"",
-      "",
-      "fn worker_task(arg)",
-      "    say \"[Thread Worker] Running task with arg: \" + arg",
-      "    ${0:// concurrent workload here}",
-      "    return 0",
-      "",
-      "th = thread_create(worker_task, ${1:100})",
-      "thread_join(th)",
-      "say \"✔ Thread execution completed.\""
+      "চলক ${1:নাম} = ${2:মান}"
     ],
-    "description": "Spawn and join a native Linux OS thread via direct clone syscall"
+    "description": "Lipi Bengali Variable Declaration (চলক)"
   },
-  "Say Statement (English)": {
-    "prefix": "say",
+  "Lipi Print (Bengali)": {
+    "prefix": "bolo",
     "body": [
-      "say \"${1:Hello, Lipi!}\""
+      "বলো \"${1:বার্তা}\""
     ],
-    "description": "Print line to standard output"
+    "description": "Lipi Bengali Print Statement (বলো)"
   },
-  "Bolo Statement (Bengali)": {
-    "prefix": "বলো",
+  "Lipi If (Bengali)": {
+    "prefix": "jodi",
     "body": [
-      "বলো \"${1:হ্যালো লিপি!}\""
+      "যদি ${1:শর্ত}:",
+      "\t$0"
     ],
-    "description": "কনসোলে বার্তা প্রিন্ট করুন"
+    "description": "Lipi Bengali If Statement (যদি)"
   },
-  "If Statement (English)": {
-    "prefix": "if",
+  "Lipi Return (Bengali)": {
+    "prefix": "ferot",
     "body": [
-      "if ${1:condition}",
-      "    ${0:// body}"
+      "ফেরত ${1:মান}"
     ],
-    "description": "If conditional statement"
-  },
-  "If Statement (Bengali)": {
-    "prefix": "যদি",
-    "body": [
-      "যদি ${1:শর্ত}",
-      "    ${0:// কোড}"
-    ],
-    "description": "যদি শর্ত সাপেক্ষ বিবৃতি"
-  },
-  "If-Else Statement (English)": {
-    "prefix": "ifelse",
-    "body": [
-      "if ${1:condition}",
-      "    ${2:// then body}",
-      "else",
-      "    ${0:// else body}"
-    ],
-    "description": "If-Else conditional block"
-  },
-  "If-Else Statement (Bengali)": {
-    "prefix": "যদি_নাহলে",
-    "body": [
-      "যদি ${1:শর্ত}",
-      "    ${2:// যদি সত্য হয়}",
-      "নাহলে",
-      "    ${0:// যদি মিথ্যা হয়}"
-    ],
-    "description": "যদি-নাহলে শর্ত সাপেক্ষ ব্লক"
-  },
-  "While Loop (English)": {
-    "prefix": "while",
-    "body": [
-      "while ${1:condition}",
-      "    ${0:// loop body}"
-    ],
-    "description": "While loop statement"
-  },
-  "While Loop (Bengali)": {
-    "prefix": "যতক্ষণ",
-    "body": [
-      "যতক্ষণ ${1:শর্ত}",
-      "    ${0:// লুপ বডি}"
-    ],
-    "description": "যতক্ষণ পুনরাবৃত্তি লুপ"
-  },
-  "For Range Loop (English)": {
-    "prefix": "for",
-    "body": [
-      "for ${1:i} in ${2:1}..${3:10}",
-      "    ${0:// loop body}"
-    ],
-    "description": "For range loop"
-  },
-  "For Range Loop (Bengali)": {
-    "prefix": "প্রতিটি",
-    "body": [
-      "প্রতিটি ${1:i} মধ্যে ${2:১}..${3:১০}",
-      "    ${0:// লুপ বডি}"
-    ],
-    "description": "প্রতিটি রেঞ্জ লুপ"
-  },
-  "Pattern Match (English)": {
-    "prefix": "match",
-    "body": [
-      "match ${1:val}",
-      "    case ${2:1} =>",
-      "        ${3:// case 1}",
-      "    case ${4:2} =>",
-      "        ${5:// case 2}",
-      "    else =>",
-      "        ${0:// default}"
-    ],
-    "description": "Pattern matching block"
-  },
-  "Hash Map Template": {
-    "prefix": "hashmap",
-    "body": [
-      "include \"std/hashmap.lp\"",
-      "",
-      "hm = hashmap_new()",
-      "hashmap_set(hm, \"${1:key}\", \"${2:value}\")",
-      "val = hashmap_get(hm, \"${1:key}\")",
-      "say \"Lookup result: \" + val"
-    ],
-    "description": "Fast Robin-Hood hash map data structure initialization and lookup"
-  },
-  "Memory Arena Allocator": {
-    "prefix": "arena",
-    "body": [
-      "include \"std/arena.lp\"",
-      "",
-      "ar = arena_create(${1:65536}) // 64KB arena",
-      "ptr1 = arena_alloc(ar, ${2:256})",
-      "arena_reset(ar)"
-    ],
-    "description": "High-performance contiguous memory arena allocator"
-  },
-  "Linux Kernel Syscall": {
-    "prefix": "syscall",
-    "body": [
-      "// Linux AMD64 Syscall: num=${1:1}, arg1=${2:1}, arg2=${3:buf}, arg3=${4:len}",
-      "res = syscall(${1:1}, ${2:1}, ${3:buf}, ${4:len}, 0, 0, 0)"
-    ],
-    "description": "Direct Linux x86_64 kernel syscall (0% Libc)"
+    "description": "Lipi Bengali Return Statement (ফেরত)"
   }
 }

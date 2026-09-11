@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA MOBILE PLATFORM ABSTRACTION (universe/mobile/platform.maya)
-@! 100% Pure Maya Implementation — Zero Native C/Java Framework Dependencies
+@! 100% Pure Lipi Implementation — Zero Native C/Java Framework Dependencies
 @! Supports Orientation, Touch Event Queue, Safe Area, Status, & JNI Generator
 @! ============================================================================
 

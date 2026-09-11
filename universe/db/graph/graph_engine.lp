@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE - NATIVE OBJECT-GRAPH DATABASE ENGINE
+@! LIPI UNIVERSE - NATIVE OBJECT-GRAPH DATABASE ENGINE
 @! Bypasses traditional SQL for a direct memory-mapped graph relationship
 @! ============================================================================
 

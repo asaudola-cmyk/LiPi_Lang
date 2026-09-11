@@ -21,8 +21,8 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSE NET — RFC 9000 QUIC PROTOCOL STACK (universe/net/quic.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE NET — RFC 9000 QUIC PROTOCOL STACK (universe/net/quic.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: RFC 9000 Long/Short Headers, Variable-Length Integers, Frame Types,
 @!           Connection State Machine, Packet Tracking, TLS 1.3 Crypto Dispatch,
 @!           RFC 9002 Congestion Control Stub, Stream Multiplexing

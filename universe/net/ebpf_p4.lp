@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — EBPF & SMARTNIC (P4) IN-HARDWARE ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — EBPF & SMARTNIC (P4) IN-HARDWARE ENGINE
 @! Module: universe/net/ebpf_p4.maya
 @! Milestone: Pinnacle Advanced Hyper-Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 64-Bit eBPF Bytecode Compiler, P4 Match-Action Tables, SmartNIC
 @! Hardware Offloading & Line-Rate Pre-Host RAM Packet Filtering
 @! ============================================================================

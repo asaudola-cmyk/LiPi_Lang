@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB — WRITE-AHEAD LOG ENGINE (universe/db/wal.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE DB — WRITE-AHEAD LOG ENGINE (universe/db/wal.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! 32-Byte Binary Record Framing, Table-Driven IEEE 802.3 CRC-32 Checksum,
 @! Zero-Copy Dynamic NativeArray Buffers, Atomic fsync & Safe Truncation
 @! ============================================================================

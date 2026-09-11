@@ -12,7 +12,7 @@
 @! ============================================================================
 @! MAYA NATIVE GUI FRAMEWORK — BITMAP FONT & TEXT RENDERER
 @! Module: universe/gui/font.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Monospace 8x16 ASCII Bitmap Font Table (ASCII 32..126)
 @! - Fast bitmask glyph row lookup

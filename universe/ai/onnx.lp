@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — ZERO-DEPENDENCY ONNX PROTOBUF PARSER & RUNTIME
+@! LIPI UNIVERSAL ARCHITECTURE — ZERO-DEPENDENCY ONNX PROTOBUF PARSER & RUNTIME
 @! Module: universe/ai/onnx.maya
 @! Milestone: Grand Sovereign Ecosystem
-@! 100% Pure Maya Implementation — Zero External / C++ / Python Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C++ / Python Dependencies
 @! Features: Zero-Dependency Streaming Protobuf Wire Format Reader (Varint LEB128,
 @! 64-bit, Length-Delimited, 32-bit Float), ONNX Graph Parser & Execution Engine
 @! ============================================================================

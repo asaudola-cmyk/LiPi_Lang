@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — CORE TYPES & DATA STRUCTURES (universe/swarm/types.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Defines PID, NodeInfo, TaskDescriptor, SwarmJoinHandle, ActorMessage, SwarmPacket
 @! ============================================================================
 

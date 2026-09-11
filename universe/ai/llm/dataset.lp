@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — DATASET & DATALOADER
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE AI — DATASET & DATALOADER
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: Token Packing, BPE Tokenization Integration, Mini-batching
 @! ============================================================================
 

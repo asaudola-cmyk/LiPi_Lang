@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — PURE MAYA LSP SERVER DAEMON
+@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA LSP SERVER DAEMON
 @! Module = universe/tools/lsp/server.maya
 @! Milestone = Grand Sovereign Pillar 2
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features = Diagnostics, Symbol Completion, Hover Tooltips, Go-To Definition,
 @! Document Outline Symbols, Document Memory Store & JSON-RPC Dispatcher
 @! ============================================================================

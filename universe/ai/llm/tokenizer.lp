@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — BPE TOKENIZER (ADVANCED)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE AI — BPE TOKENIZER (ADVANCED)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: Byte-level Pair Encoding, Frequency-based Pair Merging,
 @! Complete Reversible Token-to-String Decoding & Vocabulary Indexing
 @! ============================================================================

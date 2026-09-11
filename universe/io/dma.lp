@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — CPU-ZERO-TOUCH HARDWARE DMA OFFLOAD ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — CPU-ZERO-TOUCH HARDWARE DMA OFFLOAD ENGINE
 @! Module: universe/io/dma.maya
 @! Milestone: Pinnacle Advanced Hyper-Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Scatter-Gather PCIe DMA Descriptors, Peer-to-Peer (P2P) NIC-to-NVMe
 @! Direct Bus Streaming, Zero CPU Touch (0% CPU Utilization for 100GB+ I/O)
 @! ============================================================================

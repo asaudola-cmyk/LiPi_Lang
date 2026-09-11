@@ -1,7 +1,7 @@
 @! ============================================================================
 @! PURE MAYA WEBSOCKET PROTOCOL ENGINE: RFC 6455
 @! Module: universe/net/websocket
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/string"

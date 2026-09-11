@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — PURE MAYA X11 DIRECT WIRE PROTOCOL
+@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA X11 DIRECT WIRE PROTOCOL
 @! Module: universe/gui/x11/x11_protocol.maya
 @! Milestone: Grand Sovereign Pillar 3
-@! 100% Pure Maya Implementation — Direct Unix Domain Socket / X11 Wire Protocol
+@! 100% Pure Lipi Implementation — Direct Unix Domain Socket / X11 Wire Protocol
 @! Features: Binary X11 Wire Framing, Handshake, Opcodes (CreateWindow, MapWindow,
 @! PutImage ZPixmap, CreateGC), and 32-Byte Event Packet Demuxing
 @! ============================================================================

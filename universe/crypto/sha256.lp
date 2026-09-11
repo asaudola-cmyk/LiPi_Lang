@@ -12,7 +12,7 @@
 @! ============================================================================
 @! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-4 SHA-256
 @! Module: universe/crypto/sha256
-@! 100% Pure Maya Implementation - Zero External / C Dependencies
+@! 100% Pure Lipi Implementation - Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/string"

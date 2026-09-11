@@ -2,7 +2,7 @@
 @! MAYA SOVEREIGN IDE — NATIVE IN-PROCESS LSP CLIENT ENGINE
 @! Module: universe/ide/lsp_client.maya
 @! Milestone: M3 (Maya Studio Sovereign IDE)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

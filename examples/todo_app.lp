@@ -1,4 +1,4 @@
-@! Todo list application in Maya
+@! Todo list application in Lipi
 
 @struct Todo
   td_id: i64
@@ -71,7 +71,7 @@
 @end
 
 @fn main()
-  list = todolist_new("Maya Development Tasks")
+  list = todolist_new("Lipi Development Tasks")
   
   list = todolist_add(list, "Implement @enum support", 1)
   list = todolist_add(list, "Add @impl struct methods", 1)

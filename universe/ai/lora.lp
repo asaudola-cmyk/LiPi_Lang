@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — AI LoRA (Low-Rank Adaptation)
+@! LIPI UNIVERSAL ARCHITECTURE — AI LoRA (Low-Rank Adaptation)
 @! Module: universe/ai/lora.maya
 @! Milestone: Grand Sovereign Ecosystem
 @! Features: Parameter Efficient Fine-Tuning for LLMs

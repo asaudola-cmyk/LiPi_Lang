@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CORE — ADVANCED B-TREE DATABASE & WAL ENGINE
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE CORE — ADVANCED B-TREE DATABASE & WAL ENGINE
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

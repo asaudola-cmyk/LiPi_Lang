@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — ONION MIDDLEWARE PIPELINE (universe/web/middleware.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — ONION MIDDLEWARE PIPELINE (universe/web/middleware.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Onion Chain, Logger, JSON Parser, CORS, Recovery, Static Server
 @! ============================================================================
 

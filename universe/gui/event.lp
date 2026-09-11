@@ -1,7 +1,7 @@
 @! ============================================================================
 @! MAYA NATIVE GUI FRAMEWORK — EVENT MODEL & DISPATCHER
 @! Module: universe/gui/event.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Universal GuiEvent Data Model
 @! - Reverse Z-Order Point-in-Rect Hit-Testing

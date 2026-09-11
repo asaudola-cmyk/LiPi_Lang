@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: web_router
+# ==============================================================================
+
+name = "web_router"
+version = "1.0.0"
+description = "Zero-allocation radix-tree web router for Lipi web services"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

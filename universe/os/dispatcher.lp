@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA NATIVE COMMAND DISPATCHER — universe/os/dispatcher.maya
-@! 100% Pure Maya Implementation — Complete Sovereign Shell Eradication
+@! 100% Pure Lipi Implementation — Complete Sovereign Shell Eradication
 @! Direct Linux x86-64 Native Syscalls & Pipeline Execution Engine
 @! ============================================================================
 

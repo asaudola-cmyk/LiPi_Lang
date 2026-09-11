@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE SECURITY: PROCESS SANDBOXING & SECCOMP BPF FILTERS
+@! LIPI UNIVERSE SECURITY: PROCESS SANDBOXING & SECCOMP BPF FILTERS
 @! Module: universe/security/sandbox
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Standard: Linux Kernel BPF Seccomp (PR_SET_NO_NEW_PRIVS & SECCOMP_SET_MODE_FILTER)
 @! ============================================================================
 

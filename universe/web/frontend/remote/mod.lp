@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/remote/mod.maya
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Root Aggregator Subsystem Exporting AST @remote Directive Parser,
 @! WebRTC Client, Video Blitter, and Remote Server Streaming Adapter
 @! ============================================================================
@@ -28,7 +28,7 @@ import "universe/web/frontend/remote/remote_server_adapter"
 @end
 
 @fn remote_subsystem_version()
-  return "Maya WebRTC Hybrid Rendering Engine 1.0 (DOM-Bypass / WASM)"
+  return "Lipi WebRTC Hybrid Rendering Engine 1.0 (DOM-Bypass / WASM)"
 @end
 
 @fn remote_pipeline_init(canvas_w, canvas_h, session_id, component_id, x, y, w, h, fps, codec)

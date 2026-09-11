@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — APPLICATION DEVELOPER API (universe/web/app.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — APPLICATION DEVELOPER API (universe/web/app.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Application Container, Route Registration, Groups, Pipeline Dispatcher
 @! ============================================================================
 

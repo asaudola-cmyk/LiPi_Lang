@@ -3,7 +3,7 @@ import "universe/core/collections"
 
 @! ============================================================================
 @! MAYA VIRTUAL FILESYSTEM (VFS) — universe/os/vfs.maya
-@! 100% Written in Pure Maya Language — Complete Zero libc / Zero C Dependencies
+@! 100% Written in Pure Lipi Language — Complete Zero libc / Zero C Dependencies
 @! Features: Inode RamFS, DevFS (/dev/null, /dev/zero, /dev/random, /dev/tty),
 @! File Descriptors, Path Resolution, and Standard File System Operations
 @! ============================================================================

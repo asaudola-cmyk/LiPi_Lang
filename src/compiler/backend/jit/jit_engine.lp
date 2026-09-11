@@ -8,7 +8,7 @@
 import "universe/core/collections"
 import "universe/core/string"
 import "compiler/backend/compiler"
-import "compiler/backend/maya_ir"
+import "compiler/backend/lipi_ir"
 import "compiler/backend/x86_64/codegen"
 import "compiler/backend/jit/jit_memory"
 import "compiler/backend/jit/jit_executor"

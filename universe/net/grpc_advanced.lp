@@ -21,8 +21,8 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSE NET — ADVANCED gRPC PROTOCOL (HTTP/2 + PROTOBUF)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE NET — ADVANCED gRPC PROTOCOL (HTTP/2 + PROTOBUF)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: Full HTTP/2 Framing, HPACK RFC 7541, gRPC Wire Framing,
 @!           TCP Socket Dialing, Client/Server Streaming, Trailer Processing
 @! ============================================================================

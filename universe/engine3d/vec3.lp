@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — 3D VECTOR MATH & PRIMITIVES
+@! LIPI UNIVERSAL ARCHITECTURE — 3D VECTOR MATH & PRIMITIVES
 @! Module: universe/engine3d/vec3.maya
 @! Milestone: 3D Raytracing & Physics Engine
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Fixed-Point 3D Vectors (Scale: 1000), Ray, Sphere, Triangle & AABB
 @! ============================================================================
 

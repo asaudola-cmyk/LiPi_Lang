@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND — INCREMENTAL BUILD & DEPENDENCY GRAPH ENGINE
+@! LIPI COMPILER MIDDLEEND — INCREMENTAL BUILD & DEPENDENCY GRAPH ENGINE
 @! Module: compiler/middleend/incremental.maya
 @! 100% Pure Maya Implementation — Zero Foreign Dependencies
 @! Supports:
@@ -15,7 +15,7 @@
 import "universe/core/collections"
 import "universe/core/string"
 import "universe/crypto/sha256"
-import "compiler/backend/maya_ir"
+import "compiler/backend/lipi_ir"
 import "compiler/backend/compiler"
 
 @! ============================================================================
@@ -72,7 +72,7 @@ import "compiler/backend/compiler"
 @struct CompilationCache
   cc_dir: string
   cc_entries: array          @! Map entries: CacheMapEntry
-  cc_magic_header: i64       @! 0x4D415941 ('MAYA')
+  cc_magic_header: i64       @! 0x4C495049 ('LIPI')
   cc_version: i64            @! 1
 @end
 
@@ -541,7 +541,7 @@ _i_c_0 = 0
   cache = {
     cc_dir: cache_directory,
     cc_entries: [],
-    cc_magic_header: 0x4D415941, @! 'MAYA'
+    cc_magic_header: 0x4C495049, @! 'LIPI'
     cc_version: 1
   }
   return cache

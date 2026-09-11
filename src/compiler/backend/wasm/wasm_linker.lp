@@ -4,7 +4,7 @@
 import "compiler/backend/wasm/wasm_ir"
 import "compiler/backend/wasm/wasm_emitter"
 import "compiler/backend/x86_64/codegen"
-import "compiler/backend/maya_ir"
+import "compiler/backend/lipi_ir"
 
 @fn lower_maya_type(maya_type)
   @! Maya Int -> I64, Bool -> I32, Float -> F64, Ptr -> I32

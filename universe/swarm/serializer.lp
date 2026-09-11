@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — DEEP SERIALIZATION ENGINE (universe/swarm/serializer.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Serializes/Deserializes Values, Structs, Arrays, Maps, and Swarm Descriptors
 @! ============================================================================
 

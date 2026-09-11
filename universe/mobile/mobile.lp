@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — MAYA MOBILE ENGINE (ZERO-JVM IOS/ANDROID)
+@! LIPI UNIVERSAL ARCHITECTURE — MAYA MOBILE ENGINE (ZERO-JVM IOS/ANDROID)
 @! Module: universe/mobile/mobile.maya
 @! Milestone: Phase 4 — Production Hardened Mobile Subsystem
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Authentic AArch64 ELF64 .so Shared Object Emitter with Dynamic Symbols,
 @! Dalvik classes.dex Synthesizer, Authentic PKZip APK Packager with CRC-32,
 @! Central Directory Records, and 4096-Byte Page Alignment for .so Libraries.

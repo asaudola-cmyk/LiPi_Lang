@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — RL REPLAY BUFFERS & GAE TRAJECTORIES
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — RL REPLAY BUFFERS & GAE TRAJECTORIES
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Uniform Replay Buffer, Prioritized Experience Replay (SumTree PER),
 @! On-Policy Trajectory Buffer, Generalized Advantage Estimation (GAE).
 @! ============================================================================

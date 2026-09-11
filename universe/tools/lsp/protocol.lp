@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — PURE MAYA LSP PROTOCOL
+@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA LSP PROTOCOL
 @! Module: universe/tools/lsp/protocol.maya
 @! Milestone: Grand Sovereign Pillar 2
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: JSON-RPC 2.0 Framing, Wire Codec, LSP Data Structures & Helpers
 @! ============================================================================
 

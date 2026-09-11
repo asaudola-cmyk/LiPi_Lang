@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET — gRPC OVER HTTP/2 & PROTOBUF (universe/net/grpc.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE NET — gRPC OVER HTTP/2 & PROTOBUF (universe/net/grpc.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! ============================================================================
 
 import "universe/net/tcp"

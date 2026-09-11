@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — VISION SPATIAL & PHOTOMETRIC TRANSFORMS
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — VISION SPATIAL & PHOTOMETRIC TRANSFORMS
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Bilinear & Nearest Resizing, Crop, Pad (Constant, Reflect, Edge),
 @! Flips, 90-Degree & Affine Rotations, Normalization, Brightness/Contrast/Gamma.
 @! ============================================================================

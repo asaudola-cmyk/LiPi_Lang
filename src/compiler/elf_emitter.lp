@@ -2843,6 +2843,7 @@ fn emit_runtime_stubs ctx
     label_define(ctx, "lipi_fn_mem_byte_read")
     label_define(ctx, "lipi_fn_mem_read_byte")
     label_define(ctx, "lipi_fn_str_char_at")
+    label_define(ctx, "lipi_fn_lipi_str_char_at")
     label_define(ctx, "lipi_fn_maya_str_char_at")
     label_define(ctx, "lipi_fn_mem_byte_পড়ো")
     label_define(ctx, "lipi_fn_মেমরি_বাইট_পড়ো")
@@ -2941,6 +2942,9 @@ fn emit_runtime_stubs ctx
     // ── Realtime Millisecond Clock Intrinsic (Linux SYS_clock_gettime) ────────
     // WHY: High-resolution millisecond timer for DB caching, metrics, and network timeouts.
     label_define(ctx, "lipi_fn_clock_ms")
+    label_define(ctx, "lipi_fn_time_now_ms")
+    label_define(ctx, "lipi_fn_time_now")
+    label_define(ctx, "lipi_fn_lipi_clock_ms")
     label_define(ctx, "lipi_fn_maya_clock_ms")
     label_define(ctx, "lipi_fn_সময়_মিলি")
     bb_put8(ctx, 85)                                     // push rbp
@@ -3039,14 +3043,17 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 7)
     x86_ret(ctx)
 
-    // ── Maya Memory Intrinsics ───────────────────────────────────────────────
-    // WHY: Provides 100% native Linux silicon execution for Maya baremetal memory operations
+    // ── Lipi Memory Intrinsics ───────────────────────────────────────────────
+    // WHY: Provides 100% native Linux silicon execution for Lipi baremetal memory operations
+    label_define(ctx, "lipi_fn_lipi_mem_write_u8")
     label_define(ctx, "lipi_fn_maya_mem_write_u8")
     x86_jmp(ctx, "lipi_fn_sys_poke8")
 
+    label_define(ctx, "lipi_fn_lipi_mem_read_u8")
     label_define(ctx, "lipi_fn_maya_mem_read_u8")
     x86_jmp(ctx, "lipi_fn_sys_peek8")
 
+    label_define(ctx, "lipi_fn_lipi_mem_write_u16")
     label_define(ctx, "lipi_fn_maya_mem_write_u16")
     // rdi = addr, rsi = val -> mov [rdi], si
     bb_put8(ctx, 102)
@@ -3054,6 +3061,7 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 55)
     x86_ret(ctx)
 
+    label_define(ctx, "lipi_fn_lipi_mem_read_u16")
     label_define(ctx, "lipi_fn_maya_mem_read_u16")
     // rdi = addr -> movzx eax, word ptr [rdi]
     bb_put8(ctx, 15)
@@ -3061,28 +3069,34 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 7)
     x86_ret(ctx)
 
+    label_define(ctx, "lipi_fn_lipi_mem_write_u32")
     label_define(ctx, "lipi_fn_maya_mem_write_u32")
     // rdi = addr, rsi = val -> mov [rdi], esi
     bb_put8(ctx, 137)
     bb_put8(ctx, 55)
     x86_ret(ctx)
 
+    label_define(ctx, "lipi_fn_lipi_mem_read_u32")
     label_define(ctx, "lipi_fn_maya_mem_read_u32")
     // rdi = addr -> mov eax, [rdi]
     bb_put8(ctx, 139)
     bb_put8(ctx, 7)
     x86_ret(ctx)
 
+    label_define(ctx, "lipi_fn_lipi_mem_write_u64")
     label_define(ctx, "lipi_fn_maya_mem_write_u64")
     x86_jmp(ctx, "lipi_fn_sys_poke")
 
+    label_define(ctx, "lipi_fn_lipi_mem_read_u64")
     label_define(ctx, "lipi_fn_maya_mem_read_u64")
     x86_jmp(ctx, "lipi_fn_sys_peek")
 
     // ── String Pointer Resolution Intrinsics ────────────────────────────────
     // WHY: In Lipi/Maya, string references are pointers. Returns the raw char pointer in rax.
+    label_define(ctx, "lipi_fn_lipi_str_ptr")
     label_define(ctx, "lipi_fn_maya_str_ptr")
     label_define(ctx, "lipi_fn_str_ptr")
+    label_define(ctx, "lipi_fn_lipi_str_new")
     label_define(ctx, "lipi_fn_maya_str_new")
     x86_mov_reg_reg(ctx, 0, 7)
     x86_ret(ctx)
@@ -3091,6 +3105,7 @@ fn emit_runtime_stubs ctx
     // WHY: Converts null-terminated or STR0 string pointer into 64-bit signed integer.
     label_define(ctx, "lipi_fn_str_to_int")
     label_define(ctx, "lipi_fn_int_from_str")
+    label_define(ctx, "lipi_fn_lipi_str_to_int")
     label_define(ctx, "lipi_fn_maya_str_to_int")
     lbl_sti_zero   = make_anon_label(ctx, "sti_zero")
     lbl_sti_loop   = make_anon_label(ctx, "sti_loop")
@@ -4128,7 +4143,7 @@ fn tokenize_pure src
                 p = p + 1
             continue
 
-        // Comments @! (Maya sovereign directive comments)
+        // Comments @! (Lipi directive comments)
         if c == "@" and p + 1 < slen and char_at(src, p + 1) == "!"
             while p < slen and char_at(src, p) != "\n"
                 p = p + 1
@@ -4352,7 +4367,7 @@ fn tokenize_pure src
             p = p + 1
             continue
 
-        // Identifiers and Keywords (including Maya @-directives)
+        // Identifiers and Keywords (including Lipi @-directives)
         is_ident_char = 0
         if (code >= 65 and code <= 90) or (code >= 97 and code <= 122) or c == "_" or c == "@" or code > 127
             is_ident_char = 1
@@ -5607,7 +5622,7 @@ fn compile_pure_stmt ctx ps
         return 0
 
     // struct / গঠন / @struct (Struct Definition)
-    // WHY: Support both indentation-delimited structs and Maya @struct ... @end blocks
+    // WHY: Support both indentation-delimited structs and Lipi @struct ... @end blocks
     if tt == TOK_IDENT and (txt == "struct" or txt == "গঠন" or txt == "@struct")
         is_meta_struct = (txt == "@struct")
         ps_adv(ps)
@@ -5989,7 +6004,7 @@ fn compile_pure_stmt ctx ps
         return 0
 
     // while / যতক্ষণ / @while
-    // WHY: Support both indentation loops and Maya @while ... @end loops
+    // WHY: Support both indentation loops and Lipi @while ... @end loops
     if tt == TOK_IDENT and (txt == "while" or txt == "যতক্ষণ" or txt == "@while")
         is_meta_while = (txt == "@while")
         ps_adv(ps)
@@ -6048,7 +6063,7 @@ fn compile_pure_stmt ctx ps
         return 0
 
     // fn / কাজ / @fn (Function Definition)
-    // WHY: Unify Bengali, English, and Maya @fn syntax into identical machine code functions
+    // WHY: Unify Bengali, English, and Lipi @fn directive syntax into identical machine code functions
     if tt == TOK_IDENT and (txt == "fn" or txt == "কাজ" or txt == "@fn")
         is_meta_fn = (txt == "@fn")
         ps_adv(ps)
@@ -6234,7 +6249,7 @@ fn compile_pure_stmt ctx ps
         return 0
 
     // for / প্রতিটি / @for (Range loop: for var in start..end)
-    // WHY: Support iterative loops across Lipi and Maya syntax with half-open interval and break/continue
+    // WHY: Support iterative loops across Lipi indentation and directive syntax with half-open interval and break/continue
     if tt == TOK_IDENT and (txt == "for" or txt == "প্রতিটি" or txt == "@for")
         is_meta_for = (txt == "@for")
         ps_adv(ps)

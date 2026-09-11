@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (universe/db/sql/parser.maya)
+@! LIPI UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (universe/db/sql/parser.maya)
 @! Standard: 100% Pure Maya SQL AST Parser
 @! ============================================================================
 

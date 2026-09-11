@@ -1,6 +1,6 @@
 
 import "compiler/infinity_syntax"
-import "compiler/backend/maya_ir"
+import "compiler/backend/lipi_ir"
 import "compiler/backend/x86_64/codegen"
 import "compiler/backend/elf_writer"
 import "compiler/backend/omni_binary"

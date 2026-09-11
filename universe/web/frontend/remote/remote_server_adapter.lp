@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/remote/remote_server_adapter.maya
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Backend WebRTC Streaming Gateway, Session Manager,
 @! Offscreen 3D Frame Generator & DataChannel Input Event Processor
 @! ============================================================================
@@ -165,7 +165,7 @@ import "universe/web/frontend/remote/video_blitter"
 
       ans = "v=0\r\n"
       ans = ans + "o=- " + s.session_id + " 2 IN IP4 127.0.0.1\r\n"
-      ans = ans + "s=Maya WebRTC Backend Streamer\r\n"
+      ans = ans + "s=Lipi WebRTC Backend Streamer\r\n"
       ans = ans + "t=0 0\r\n"
       ans = ans + "a=group:BUNDLE 0 1\r\n"
       ans = ans + "m=video 9 UDP/TLS/RTP/SAVPF " + pt.to_str() + "\r\n"

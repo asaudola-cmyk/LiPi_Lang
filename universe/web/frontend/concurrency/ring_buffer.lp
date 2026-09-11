@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/concurrency/ring_buffer.maya
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: io_uring-Style SQ/CQ Ring Buffers over SharedArrayBuffer / Atomics,
 @! 64-Byte SQEs & 16-Byte CQEs, Power-of-2 Bitmask Indexing, SPSC / MPSC Modes,
 @! Atomic Load/Store/CAS, Wait-Free Submission & Reaping, High Throughput (100k+ ops)

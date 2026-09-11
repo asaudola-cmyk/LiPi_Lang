@@ -2,7 +2,7 @@
 @! MAYA SOVEREIGN IDE — SYNTAX HIGHLIGHTING ENGINE & THEME PALETTE
 @! Module: universe/ide/syntax.maya
 @! Milestone: M3 (Maya Studio Sovereign IDE)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

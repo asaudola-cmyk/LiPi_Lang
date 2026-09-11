@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — RL VALUE-BASED ALGORITHMS (Q-LEARNING & DQN)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — RL VALUE-BASED ALGORITHMS (Q-LEARNING & DQN)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Tabular Q-Learning, SARSA, Deep Q-Network (DQN), Double DQN (DDQN),
 @! Dueling DQN Architecture with Soft Target Network Synchronization.
 @! ============================================================================

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA GPU SHADER COMPILER & SPIR-V EMISSION (universe/gpu/shader.maya)
-@! 100% Pure Maya Implementation — Zero External Compiler / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Compiler / C++ Dependencies
 @! Supports Vertex, Fragment, and Compute Stage SPIR-V Generation
 @! ============================================================================
 

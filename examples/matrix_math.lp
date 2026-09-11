@@ -90,7 +90,7 @@ import "universe/core/fmt"
 @end
 
 @fn main()
-  println("=== Maya Matrix Math ===")
+  println("=== Lipi Matrix Math ===")
   println("")
 
   v1 = [1, 2, 3]

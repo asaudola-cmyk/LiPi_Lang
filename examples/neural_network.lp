@@ -15,7 +15,7 @@ import "universe/core/fmt"
 @end
 
 @fn main()
-  println("=== Maya Neural Network (XOR Problem) ===")
+  println("=== Lipi Neural Network (XOR Problem) ===")
   println("Network: 2 Input -> 3 Hidden -> 1 Output")
   println("Activation: Fast Sigmoid")
   println("Training for 1000 Epochs...")

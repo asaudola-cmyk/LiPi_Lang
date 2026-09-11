@@ -1,4 +1,4 @@
-@@! Graph Algorithms in Maya
+@@! Graph Algorithms in Lipi
 @@! Demonstrates Breadth-First Search (BFS), Depth-First Search (DFS), and Dijkstra's Shortest Path
 
 @fn bfs(matrix, n, start_node, names)

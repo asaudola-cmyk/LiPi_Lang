@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE SECURITY: RFC 8032 ED25519 DIGITAL SIGNATURES
+@! LIPI UNIVERSE SECURITY: RFC 8032 ED25519 DIGITAL SIGNATURES
 @! Module: universe/security/ed25519
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/crypto/ed25519"

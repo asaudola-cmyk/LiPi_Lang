@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 3 — 100% PURE MAYA MULTI-PASS TYPECHECKER & IMPORT RESOLVER
+@! LIPI COMPILER STAGE 3 — 100% PURE LIPI MULTI-PASS TYPECHECKER & IMPORT RESOLVER
 @! Zero External Dependencies — 4-Pass Semantic Validation & Cycle Detection
 @! ============================================================================
 
@@ -25,6 +25,18 @@ import "compiler/frontend/parser"
 @fn TYPE_RESULT()  return 9  @end
 @fn TYPE_OPTION()  return 10 @end
 @fn TYPE_ANY()     return 11 @end
+
+@struct LipiType
+  kind: i64
+  name: string
+  elem_type: i64
+  err_type: i64
+  param_types: array
+  ret_type: i64
+  fields: array
+  size_bytes: i64
+  align_bytes: i64
+@end
 
 @struct MayaType
   kind: i64

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA DIRECT LINUX x86-64 NATIVE SYSCALL INTERFACE (maya_syscall.maya)
-@! 100% Written in Pure Maya Language — Complete Independence from libc.so
+@! LIPI DIRECT LINUX x86-64 NATIVE SYSCALL INTERFACE (src/runtime/lipi_syscall.lp)
+@! 100% Written in Pure Lipi Language — Complete Independence from libc.so
 @! Architecture: x86_64-unknown-linux-gnu
 @! ============================================================================
 
@@ -559,4 +559,15 @@
 
 @fn sys_io_uring_register(fd, opcode, arg_ptr, nr_args)
   return syscall(427, fd, opcode, arg_ptr, nr_args, 0, 0)
+@end
+
+@! ============================================================================
+@! CANONICAL LIPI SYSTEM CALL GATEWAY & DUAL ALIASES
+@! ============================================================================
+@fn lipi_syscall(nr, a1, a2, a3, a4, a5, a6)
+  return syscall(nr, a1, a2, a3, a4, a5, a6)
+@end
+
+@fn maya_syscall(nr, a1, a2, a3, a4, a5, a6)
+  return lipi_syscall(nr, a1, a2, a3, a4, a5, a6)
 @end

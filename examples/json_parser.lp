@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA JSON PARSER — Full JSON parser written in Maya
+@! LIPI JSON PARSER — Full JSON parser written in Lipi
 @! Supports: strings, numbers, booleans, null, arrays, objects
 @! ============================================================================
 

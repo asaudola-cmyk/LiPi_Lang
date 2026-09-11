@@ -2,7 +2,7 @@
 @! MAYA SOVEREIGN IDE — BACKGROUND PROCESS RUNNER & COMPILER CONTROLLER
 @! Module: universe/ide/runner.maya
 @! Milestone: M3 (Maya Studio Sovereign IDE)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

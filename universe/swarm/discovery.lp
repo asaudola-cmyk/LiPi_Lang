@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — P2P DISCOVERY & CLUSTER FORMATION (universe/swarm/discovery.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! UDP Broadcast Beacons (SO_REUSEPORT), TCP Gossip, Heartbeat & Failure Detector
 @! ============================================================================
 

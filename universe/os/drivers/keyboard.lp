@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE OS — ADVANCED KEYBOARD DRIVER (PS/2 & USB HID)
+@! LIPI UNIVERSE OS — ADVANCED KEYBOARD DRIVER (PS/2 & USB HID)
 @! Scancode Translation, Modifier State, Keymaps, Interrupt Handling
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/os/syscalls"

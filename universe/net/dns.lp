@@ -10,9 +10,9 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSE NETWORKING: DNS PROTOCOL & WIRE RESOLVER
+@! LIPI UNIVERSE NETWORKING: DNS PROTOCOL & WIRE RESOLVER
 @! Module: universe/net/dns
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: DNS Wire Format, Label Compression/Decompression, Record Parser
 @! ============================================================================
 

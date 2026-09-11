@@ -1,5 +1,5 @@
 @! Tri-Syntax Sovereign Verification Test (লিপি ৩-সিনট্যাক্স সার্বভৌমিক টেস্ট)
-@! Mode 1 (Bengali), Mode 2 (English), and Mode 3 (Maya @-Directives)
+@! Mode 1 (Bengali), Mode 2 (English), and Mode 3 (Lipi @-Directives)
 
 @struct Point
     x
@@ -38,7 +38,7 @@ fn english_helper(a, b):
 // Main execution verifying all three syntaxes
 say "Testing Tri-Syntax Engine..."
 
-// Test Maya Meta-syntax function
+// Test Lipi Directive syntax function
 v1 = calc_dist(60, 50)
 say v1 // 110 * 2 = 220
 

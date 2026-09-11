@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — VISION SPATIAL FILTERS & CANNY EDGE DETECTOR
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — VISION SPATIAL FILTERS & CANNY EDGE DETECTOR
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: 2D Spatial Convolutions, Box & Gaussian Blur, Sobel Gradients,
 @! Laplacian, 5-Stage Canny Edge Detection (NMS + Hysteresis), Morphology.
 @! ============================================================================

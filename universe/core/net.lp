@@ -1,5 +1,5 @@
 @! ==================================================================
-@! MAYA UNIVERSE - Core Networking Library (Phase 9/10)
+@! LIPI UNIVERSE - Core Networking Library (Phase 9/10)
 @! ==================================================================
 @! Provides native TCP/UDP socket networking via raw Linux syscalls
 @! Syscall documentation:

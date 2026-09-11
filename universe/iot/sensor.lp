@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE IoT — SENSOR ABSTRACTION (universe/iot/sensor.maya)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! LIPI UNIVERSE IoT — SENSOR ABSTRACTION (universe/iot/sensor.maya)
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Simulates: Temperature, Humidity, Pressure sensors with calibration
 @! ============================================================================
 

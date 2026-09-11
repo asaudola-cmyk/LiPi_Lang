@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL IDT & PIC 8259A INTERRUPT CONTROLLER
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL IDT & PIC 8259A INTERRUPT CONTROLLER
 @! Module: universe/os/drivers/idt.maya
 @! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 64-Bit IDT Gate Descriptors, PIC 8259A Remapping (0x20-0x28),
 @! PIT Timer (0x40/0x43) Frequency Setup
 @! ============================================================================

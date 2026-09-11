@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/remote/video_blitter.maya
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: WebRTC Video Stream Frame Decoder, Canvas Sub-Rect Placement,
 @! Dirty-Rect Tracking & Framebuffer Compositing with Local WASM UI
 @! ============================================================================

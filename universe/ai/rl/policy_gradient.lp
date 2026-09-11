@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — RL POLICY GRADIENT & ACTOR-CRITIC ENGINES
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — RL POLICY GRADIENT & ACTOR-CRITIC ENGINES
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: REINFORCE (Monte Carlo Policy Gradient with Baseline),
 @! Advantage Actor-Critic (A2C) with GAE & Entropy Regularization.
 @! ============================================================================

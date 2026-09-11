@@ -1,8 +1,8 @@
 import "universe/core/string"
 @! ============================================================================
-@! MAYA WEB ENGINE — SOVEREIGN MARKUP PARSER & TOKENIZER (F09)
+@! LIPI WEB ENGINE — SOVEREIGN MARKUP PARSER & TOKENIZER (F09)
 @! Module: universe/web/markup_parser.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-speed lexical tokenizer for HTML5/XML sovereign tags & attributes
 @! - Cascading CSS declaration & embedded <style> stylesheet parser

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SOVEREIGN OS MICROKERNEL — universe/os/kernel.maya
-@! 100% Written in Pure Maya Language — Complete Zero libc / Zero C Dependencies
+@! 100% Written in Pure Lipi Language — Complete Zero libc / Zero C Dependencies
 @! Master Kernel Entry Point, Subsystem Orchestration, and Event Loop
 @! ============================================================================
 

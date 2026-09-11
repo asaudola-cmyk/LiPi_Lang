@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE NETWORKING: gRPC SERVER
+@! LIPI UNIVERSE NETWORKING: gRPC SERVER
 @! Module: universe/net/grpc/grpc_server
-@! 100% Pure Maya Implementation
+@! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

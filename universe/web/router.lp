@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — FAST PREFIX TRIE ROUTER (universe/web/router.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — FAST PREFIX TRIE ROUTER (universe/web/router.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Supports Static Segments, :param Variables, *wildcard Catch-Alls,
 @! HTTP Method Dispatch, 404 Not Found, 405 Method Not Allowed with Allow Header,
 @! and Composable Route Grouping

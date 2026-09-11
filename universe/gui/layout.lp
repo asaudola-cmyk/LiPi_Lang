@@ -1,7 +1,7 @@
 @! ============================================================================
 @! MAYA NATIVE GUI FRAMEWORK — FLEXBOX LAYOUT ENGINE
 @! Module: universe/gui/layout.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Multi-pass Flexbox layout engine
 @! - ROW (horizontal flex) and COLUMN (vertical flex) solvers

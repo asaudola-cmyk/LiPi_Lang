@@ -6,7 +6,7 @@
 
 import "universe/core/collections"
 import "universe/core/string"
-import "compiler/backend/maya_ir"
+import "compiler/backend/lipi_ir"
 
 @! ============================================================================
 @! 1. PURE MAYA BYTE BUFFER MANAGEMENT (ByteBuf)

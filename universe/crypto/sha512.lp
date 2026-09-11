@@ -2,7 +2,7 @@ import "universe/core/collections"
 @! ============================================================================
 @! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-4 / RFC 6234 SHA-512
 @! Module: universe/crypto/sha512
-@! 100% Pure Maya Implementation - Portable 64-Bit Word Pair [hi, lo] Arithmetic
+@! 100% Pure Lipi Implementation - Portable 64-Bit Word Pair [hi, lo] Arithmetic
 @! Zero External / C Dependencies
 @! ============================================================================
 

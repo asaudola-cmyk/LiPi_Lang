@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — MASTER AGGREGATOR MODULE (universe/web/web.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — MASTER AGGREGATOR MODULE (universe/web/web.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! High-Performance Sovereign Web & REST API Framework
 @! ============================================================================
 

@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI: BYTE PAIR ENCODING (BPE) TOKENIZER
+@! LIPI UNIVERSE AI: BYTE PAIR ENCODING (BPE) TOKENIZER
 @! Module: universe/ai/tokenizer
-@! 100% Pure Maya Implementation
+@! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

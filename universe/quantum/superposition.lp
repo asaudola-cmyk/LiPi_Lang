@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE QUANTUM - SUPERPOSITION ENGINE (universe/quantum/superposition.maya)
+@! LIPI UNIVERSE QUANTUM - SUPERPOSITION ENGINE (universe/quantum/superposition.maya)
 @! Standard: Sovereign Non-Binary Logic Subsystem
 @! ============================================================================
 

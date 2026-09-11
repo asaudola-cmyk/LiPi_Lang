@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI: FAST INFERENCE ENGINE
+@! LIPI UNIVERSE AI: FAST INFERENCE ENGINE
 @! Module: universe/ai/inference
-@! 100% Pure Maya Implementation
+@! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

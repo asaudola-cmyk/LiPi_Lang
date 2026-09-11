@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — ANSI TERMINAL TRUECOLOR RASTERIZER (F13)
+@! LIPI WEB FRONTEND ENGINE — ANSI TERMINAL TRUECOLOR RASTERIZER (F13)
 @! Module: universe/web/frontend/renderer/terminal_renderer.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Direct 24-bit TrueColor ANSI escape sequence generator
 @! - Dual-pixel Unicode upper-half block ('▀') terminal rasterizer

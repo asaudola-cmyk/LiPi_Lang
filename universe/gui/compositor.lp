@@ -1,7 +1,7 @@
 @! ============================================================================
 @! MAYA NATIVE GUI FRAMEWORK — WINDOW COMPOSITOR & DESKTOP MANAGER
 @! Module: universe/gui/compositor.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Multi-Window Layering & Z-Index Management
 @! - Painter's Algorithm rendering with Drop Shadows

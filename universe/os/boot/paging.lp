@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA 4-LEVEL MMU PAGING ENGINE (x86-64) — universe/os/boot/paging.maya
-@! 100% Written in Pure Maya Language — Zero C / Zero Libc Dependencies
+@! 100% Written in Pure Lipi Language — Zero C / Zero Libc Dependencies
 @! Features: PML4, PDPT, PD (2MB Huge Pages), PT (4KB Standard Pages),
 @! Page Table Entry Encoder/Decoder, Virtual Address Decomposition
 @! ============================================================================

@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI: CONVOLUTIONAL NEURAL NETWORK LAYERS
+@! LIPI UNIVERSE AI: CONVOLUTIONAL NEURAL NETWORK LAYERS
 @! Module: universe/ai/cnn
-@! 100% Pure Maya Implementation
+@! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

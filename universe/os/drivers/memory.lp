@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL PHYSICAL MEMORY & 4-LEVEL PAGING
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL PHYSICAL MEMORY & 4-LEVEL PAGING
 @! Module: universe/os/drivers/memory.maya
 @! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Physical Page Frame Allocator (4KB Frames), PML4/PDPT/PD/PT
 @! 4-Level Paging Table Descriptors and Address Translation Math
 @! ============================================================================

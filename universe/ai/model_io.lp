@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI: MODEL SERIALIZATION & DESERIALIZATION (.mayamodel)
+@! LIPI UNIVERSE AI: MODEL SERIALIZATION & DESERIALIZATION (.mayamodel)
 @! Module: universe/ai/model_io
-@! 100% Pure Maya Implementation
+@! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

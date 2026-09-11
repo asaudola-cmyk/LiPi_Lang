@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/remote/webrtc_client.maya
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: WebRTC Client Peer Connection, SDP Negotiation,
 @! ICE Candidate Handshake, DataChannel Interaction & MediaStream Tracking
 @! ============================================================================
@@ -295,7 +295,7 @@ import "universe/core/string"
 
   sdp = "v=0\r\n"
   sdp = sdp + "o=- " + client.session_id + " 2 IN IP4 127.0.0.1\r\n"
-  sdp = sdp + "s=Maya WebRTC Hybrid Streaming\r\n"
+  sdp = sdp + "s=Lipi WebRTC Hybrid Streaming\r\n"
   sdp = sdp + "t=0 0\r\n"
   sdp = sdp + "a=group:BUNDLE 0 1\r\n"
   sdp = sdp + "m=video 9 UDP/TLS/RTP/SAVPF " + pt.to_str() + "\r\n"

@@ -1,7 +1,7 @@
 @! ============================================================================
 @! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: RFC 4648 BASE64 CODEC
 @! Module: universe/crypto/base64
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/string"

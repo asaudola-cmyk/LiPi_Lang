@@ -37,16 +37,16 @@ import "universe/net/tcp_server"
   header = header + "Content-Type: " + content_type + "\r\n"
   header = header + "Content-Length: " + int_to_str(str_len(body)) + "\r\n"
   header = header + "Connection: close\r\n"
-  header = header + "Server: Maya/2.0\r\n"
+  header = header + "Server: Lipi/2.0\r\n"
   header = header + "\r\n"
   return header + body
 @end
 
 @fn handle_request(path)
   @if path == "/"
-    body = "<!DOCTYPE html><html><head><title>Maya HTTP Server</title></head>"
-    body = body + "<body><h1>Maya is the Universe</h1>"
-    body = body + "<p>This HTTP server is written entirely in Maya.</p>"
+    body = "<!DOCTYPE html><html><head><title>Lipi HTTP Server</title></head>"
+    body = body + "<body><h1>Lipi is the Universe</h1>"
+    body = body + "<p>This HTTP server is written entirely in Lipi.</p>"
     body = body + "<p>Maya karo help ney na - Maya r help sobai ney. Even C.</p>"
     body = body + "<ul><li><a href='/api/status'>/api/status</a></li>"
     body = body + "<li><a href='/api/version'>/api/version</a></li>"
@@ -63,14 +63,14 @@ import "universe/net/tcp_server"
     return http_response("200 OK", "application/json", body)
   @end
   @if path == "/hello"
-    return http_response("200 OK", "text/plain", "Hello from Maya! Maya is the Universe.")
+    return http_response("200 OK", "text/plain", "Hello from Lipi! Maya is the Universe.")
   @end
   return http_response("404 Not Found", "text/plain", "Not found: " + path)
 @end
 
 @fn main()
   port = 8080
-  println("Maya HTTP Server starting on port " + int_to_str(port) + "...")
+  println("Lipi HTTP Server starting on port " + int_to_str(port) + "...")
   println("Visit: http://localhost:" + int_to_str(port))
   println("Press Ctrl+C to stop")
   println("")
@@ -82,7 +82,7 @@ import "universe/net/tcp_server"
     return 1
   @end
   
-  println("[Maya HTTP] Listening on 0.0.0.0:" + int_to_str(port))
+  println("[Lipi HTTP] Listening on 0.0.0.0:" + int_to_str(port))
   
   requests = 0
   @while server.ts_running == 1

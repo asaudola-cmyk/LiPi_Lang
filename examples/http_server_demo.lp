@@ -2,7 +2,7 @@ import "universe/web/router"
 import "universe/web/server"
 
 @fn handle_index(req)
-  return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello from Maya!</h1><p>Maya is the Universe.</p>"
+  return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello from Lipi!</h1><p>Maya is the Universe.</p>"
 @end
 
 @fn handle_api_status(req)
@@ -14,7 +14,7 @@ import "universe/web/server"
 @end
 
 @fn main()
-  println("Maya HTTP Server Demo")
+  println("Lipi HTTP Server Demo")
   println("Simulating request handling...")
   
   @! Simulate router

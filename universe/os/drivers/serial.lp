@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL UART 16550 SERIAL DRIVER
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL UART 16550 SERIAL DRIVER
 @! Module: universe/os/drivers/serial.maya
 @! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: UART 16550 COM1 (0x3F8) Serial Logging, Baud Divisor Math,
 @! FIFO Setup & Line Status Register Polling
 @! ============================================================================

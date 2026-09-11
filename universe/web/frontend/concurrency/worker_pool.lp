@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/concurrency/worker_pool.maya
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 3-Worker Multi-Threaded WASM Architecture (Layout Worker, Network
 @! Worker, Render Thread), Inter-Worker Lock-Free Ring Channels, Work Routing,
 @! Lifecycle Management, Event Dispatching & Diagnostics Telemetry

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI - AUTODIFF & OPTIMIZATION ENGINE
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE AI - AUTODIFF & OPTIMIZATION ENGINE
+@! 100% Written in Pure Lipi Language
 @! Features: Dynamic Computational Graph (DAG), Reverse-Mode Autodiff,
 @! Advanced Optimizers (Adam, SGD, RMSprop), LR Schedulers, and Loss Functions.
 @! ============================================================================

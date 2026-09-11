@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — P2P BINARY & WIRE PROTOCOL CODEC (universe/swarm/protocol.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
 import "universe/net/tcp"

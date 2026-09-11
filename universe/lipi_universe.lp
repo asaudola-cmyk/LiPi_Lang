@@ -20,3 +20,11 @@ import "universe/core/string"
   println("==================================================================")
   return 0
 @end
+
+import "universe/crypto/sha256"
+
+// ── Cryptographic Convenience Intrinsic ───────────────────────────────────────
+// WHY: Provides instant hexadecimal SHA-256 hash across all universe modules.
+@fn crypto_sha256_hex(s)
+  return sha256_hex_string(s)
+@end

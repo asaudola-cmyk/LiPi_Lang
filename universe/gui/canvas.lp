@@ -1,7 +1,7 @@
 @! ============================================================================
 @! MAYA NATIVE GUI FRAMEWORK — CANVAS & 2D RASTERIZER
 @! Module: universe/gui/canvas.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flat ARGB pixel array Framebuffer
 @! - Stack-based ClipRect intersection & boundary clipping

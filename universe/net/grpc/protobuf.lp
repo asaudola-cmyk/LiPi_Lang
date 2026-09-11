@@ -10,9 +10,9 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSE NETWORKING: PROTOCOL BUFFERS WIRE CODEC
+@! LIPI UNIVERSE NETWORKING: PROTOCOL BUFFERS WIRE CODEC
 @! Module: universe/net/grpc/protobuf
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: LEB128 Varint Encoding/Decoding, ZigZag, Wire Types, Zero Synthetic Comments
 @! ============================================================================
 

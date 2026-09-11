@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL PS/2 KEYBOARD & MOUSE DRIVERS
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL PS/2 KEYBOARD & MOUSE DRIVERS
 @! Module: universe/os/drivers/ps2.maya
 @! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Scancode Set 1 & 2 Decoders, Shift/Ctrl/Alt Modifier States,
 @! 3-Byte PS/2 Mouse Packet Decoder (Buttons, Sign Extension, X/Y Deltas)
 @! ============================================================================

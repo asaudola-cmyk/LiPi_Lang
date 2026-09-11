@@ -1,7 +1,7 @@
 @! ============================================================================
 @! MAYA SOVEREIGN TEST SUITE — DOM-BYPASSING WEB ENGINE (F09-F13)
 @! Module: universe/web/tests/test_web_engine.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Comprehensive 4-Tier Test Suite Covering:
 @! - Tier 1: Canvas2D 32-bit ARGB Software Rasterizer (F11)
 @! - Tier 2: Dirty Rect Damage Compositor & HiDPI Scaling (F12)
@@ -246,7 +246,7 @@ import "universe/web/frontend/mod"
   @! ==========================================================================
   println("\n--- Suite 4: End-to-End Sovereign Web Engine Integration ---")
 
-  e2e_markup = "<div class=\"dashboard\" style=\"width: 600px; height: 400px; padding: 20px; gap: 15px; background: #1E1E2E;\"><header style=\"height: 60px; background: #313244; color: white;\"><h1>Maya Sovereign Web Engine</h1></header><div style=\"display: flex; flex-direction: row; gap: 10px; height: 200px;\"><div class=\"card\" style=\"flex-grow: 1; background: #181825; border: 1px solid #89B4FA;\">Card A</div><div class=\"card\" style=\"flex-grow: 2; background: #181825; border: 1px solid #A6E3A1;\">Card B</div></div></div>"
+  e2e_markup = "<div class=\"dashboard\" style=\"width: 600px; height: 400px; padding: 20px; gap: 15px; background: #1E1E2E;\"><header style=\"height: 60px; background: #313244; color: white;\"><h1>Lipi Sovereign Web Engine</h1></header><div style=\"display: flex; flex-direction: row; gap: 10px; height: 200px;\"><div class=\"card\" style=\"flex-grow: 1; background: #181825; border: 1px solid #89B4FA;\">Card A</div><div class=\"card\" style=\"flex-grow: 2; background: #181825; border: 1px solid #A6E3A1;\">Card B</div></div></div>"
 
   @! 4.1 Parse and Solve Layout
   solved_e2e = web_engine_solve_markup(e2e_markup, 600, 400)

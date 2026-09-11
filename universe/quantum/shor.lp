@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — QUANTUM COMPUTING
+@! LIPI UNIVERSAL ARCHITECTURE — QUANTUM COMPUTING
 @! Module: universe/quantum/shor.maya
 @! Features: Shor's Algorithm Simulation for Integer Factorization
 @! ============================================================================

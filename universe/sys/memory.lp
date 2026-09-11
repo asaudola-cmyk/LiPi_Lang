@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA FREESTANDING VIRTUAL MEMORY SUBSYSTEM (universe/sys/memory.maya)
-@! 100% Written in Pure Maya Language — Complete Independence from libc malloc/free
+@! 100% Written in Pure Lipi Language — Complete Independence from libc malloc/free
 @! Direct Kernel MMAP, MUNMAP, MPROTECT, BRK Memory Primitives
 @! ============================================================================
 

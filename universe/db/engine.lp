@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB — UNIFIED DATABASE ENGINE (universe/db/engine.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE DB — UNIFIED DATABASE ENGINE (universe/db/engine.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Unifies BufferPool, B+Tree, Write-Ahead Log (WAL), ACID Transactions,
 @! Redo Crash Recovery, Auto-Commit Durability, and Checkpointing
 @! ============================================================================

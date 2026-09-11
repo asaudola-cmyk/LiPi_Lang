@@ -52,7 +52,7 @@
 @end
 
 @fn main()
-  println("=== Sorting Algorithms in Maya ===")
+  println("=== Sorting Algorithms in Lipi ===")
   data = [64, 34, 25, 12, 22, 11, 90]
   print_arr(data, "Original")
   print_arr(bubble_sort([64, 34, 25, 12, 22, 11, 90]), "Bubble Sort")

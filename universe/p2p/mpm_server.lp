@@ -4,10 +4,10 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DECENTRALIZED MPM PACKAGE SERVER & REGISTRY
+@! LIPI UNIVERSAL ARCHITECTURE — DECENTRALIZED MPM PACKAGE SERVER & REGISTRY
 @! Module: universe/p2p/mpm_server.maya
 @! Milestone 3 (Requirement R2)
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Full HTTP REST Server, P2P CAS Storage, Merkle DAG Sync,
 @! SemVer 2.0.0 Constraint Resolution, Cryptographic Verification, Client API
 @! ============================================================================

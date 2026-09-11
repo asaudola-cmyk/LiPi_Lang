@@ -1,5 +1,5 @@
 @! ============================================================
-@! MAYA UNIVERSE — Core String Library v3.0
+@! LIPI UNIVERSE — Core String Library v3.0
 @! Interpreter-compatible: uses built-in .len() .char_at()
 @! NO sys_peek8 / sys_poke8 / sys_mmap — those are ELF64 only
 @! ============================================================

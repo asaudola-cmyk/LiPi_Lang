@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB - SQL PLANNER (universe/db/sql/planner.maya)
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! LIPI UNIVERSE DB - SQL PLANNER (universe/db/sql/planner.maya)
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/concurrency/mod.maya
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Subsystem Aggregator Exporting Message Protocol, Ring Buffer,
 @! and Worker Pool for Multi-Threaded WASM Frontend Engine
 @! ============================================================================

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE SECURITY: ZERO-KNOWLEDGE PROOF — SCHNORR SIGNATURE
+@! LIPI UNIVERSE SECURITY: ZERO-KNOWLEDGE PROOF — SCHNORR SIGNATURE
 @! Module: universe/security/zkp.maya
 @! 100% Pure Maya — Zero C / External Dependencies
 @! Protocol: Schnorr Identification / Signature (Discrete Logarithm ZKP)

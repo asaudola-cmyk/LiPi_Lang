@@ -2,7 +2,7 @@
 @! MAYA SOVEREIGN IDE — UI POPUP & TOOLTIP OVERLAY RENDERING
 @! Module: universe/ide/ui_popup.maya
 @! Milestone: M3 (Maya Studio Sovereign IDE)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

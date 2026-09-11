@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — MAYAVM SMART CONTRACT EXECUTOR
+@! LIPI UNIVERSAL ARCHITECTURE — MAYAVM SMART CONTRACT EXECUTOR
 @! Module: universe/blockchain/vm.maya
 @! Milestone: Layer-1 Sovereign Blockchain (MayaNet)
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Isolated Virtual Machine, Deterministic Gas Metering, Opcode Stack,
 @! Persistent Contract Storage & Transaction State Rollback on Revert
 @! ============================================================================

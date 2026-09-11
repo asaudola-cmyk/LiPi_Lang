@@ -112,3 +112,29 @@ fn mod_pos a b
 // Math constants
 PI = 3
 E  = 2
+
+// ── Additional Mathematical Utilities & Aliases ──────────────────────────────
+// WHY: Provides standard aliases and fixed-point trigonometric functions.
+
+fn sqrt_int n
+    return sqrt n
+
+fn pow_int base exp
+    return power base exp
+
+fn sin_fixed_deg deg scale
+    d = deg % 360
+    if d < 0
+        d = d + 360
+    sign = 1
+    if d > 180
+        sign = -1
+        d = d - 180
+    if d > 90
+        d = 180 - d
+    term = d * (180 - d)
+    denom = 40500 - term
+    if denom == 0
+        return 0
+    res = (4 * term * scale) / denom
+    return res * sign

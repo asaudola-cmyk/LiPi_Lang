@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET - PURE TLS 1.3 RECORD LAYER (universe/net/tls/record.maya)
+@! LIPI UNIVERSE NET - PURE TLS 1.3 RECORD LAYER (universe/net/tls/record.maya)
 @! Standard: Sovereign Implementation (RFC 8446 Section 5.2)
 @! ============================================================================
 

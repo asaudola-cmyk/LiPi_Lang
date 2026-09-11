@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — LAYOUT SUBSYSTEM ROOT AGGREGATOR
+@! LIPI WEB FRONTEND ENGINE — LAYOUT SUBSYSTEM ROOT AGGREGATOR
 @! Module: universe/web/frontend/layout/mod.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-level layout engine coordinator
 @! - Unified GPU compute & CPU Flexbox layout dispatch API

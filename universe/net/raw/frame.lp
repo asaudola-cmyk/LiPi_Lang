@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE - OS-INDEPENDENT RAW NETWORK STACK
+@! LIPI UNIVERSE - OS-INDEPENDENT RAW NETWORK STACK
 @! Bypasses OS socket layer to build raw Ethernet/IP packets directly in memory
 @! ============================================================================
 

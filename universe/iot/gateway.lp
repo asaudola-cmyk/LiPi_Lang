@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE IoT — GATEWAY (universe/iot/gateway.maya)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! LIPI UNIVERSE IoT — GATEWAY (universe/iot/gateway.maya)
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/string"

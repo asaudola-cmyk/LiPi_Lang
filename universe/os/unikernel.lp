@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — MAYA RING-0 UNIKERNEL ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — MAYA RING-0 UNIKERNEL ENGINE
 @! Module: universe/os/unikernel.maya
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Multiboot2 Header Emitter, VirtIO Network Ring Transmit/Receive,
 @! 5ms Ring-0 Cloud Boot & Remote Diagnostic Network Logger
 @! ============================================================================

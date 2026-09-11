@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — ZERO-COPY NETWORK PARSING ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — ZERO-COPY NETWORK PARSING ENGINE
 @! Module: universe/net/zero_copy.maya
 @! Milestone: Undisputed #1 Hyper-Performance Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: In-Place Byte Span Slicing, Zero-Allocation HTTP/1.1 & HTTP/2
 @! Method, URI, Header, and Payload Extraction Directly via Pointer Offsets
 @! ============================================================================

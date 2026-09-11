@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — 3D RIGID BODY PHYSICS SIMULATION ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — 3D RIGID BODY PHYSICS SIMULATION ENGINE
 @! Module: universe/engine3d/physics.maya
 @! Milestone: 3D Raytracing & Physics Engine
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Rigid Body Dynamics, Numerical Time Integration (Euler/Verlet),
 @! Elastic Collision Impulses & Gravity Simulation
 @! ============================================================================

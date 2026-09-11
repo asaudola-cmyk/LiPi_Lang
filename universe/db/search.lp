@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB - SEARCH ENGINE (universe/db/search.maya)
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! LIPI UNIVERSE DB - SEARCH ENGINE (universe/db/search.maya)
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

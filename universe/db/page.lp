@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB — SLOTTED BINARY DATABASE PAGE LAYOUT (universe/db/page.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE DB — SLOTTED BINARY DATABASE PAGE LAYOUT (universe/db/page.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Fixed 4096-Byte Page Frame, 32-Byte Header, Lexicographically Sorted Slots,
 @! Variable-Length Leaf & Internal Cell Heaps, Zero-Fragmentation Defragmentation
 @! ============================================================================

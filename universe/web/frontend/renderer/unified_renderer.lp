@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — UNIFIED AUTO-DOWNGRADING GPU RENDERER
+@! LIPI WEB FRONTEND ENGINE — UNIFIED AUTO-DOWNGRADING GPU RENDERER
 @! Module: universe/web/frontend/renderer/unified_renderer.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Unified frontend rendering interface
 @! - Auto-probing capability detection
@@ -76,7 +76,7 @@ import "universe/web/frontend/renderer/canvas2d_renderer"
     cap_supports_compute: webgpu_ok,
     cap_supports_sdf_anti_aliasing: webgpu_ok || webgl2_ok,
     cap_supports_instancing: webgpu_ok || webgl2_ok,
-    cap_vendor_string: "Maya Universal Web Graphics Pipeline"
+    cap_vendor_string: "Lipi Universal Web Graphics Pipeline"
   }
 @end
 

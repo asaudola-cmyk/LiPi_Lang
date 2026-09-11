@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB — ACID TRANSACTION ENGINE (universe/db/tx.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE DB — ACID TRANSACTION ENGINE (universe/db/tx.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Staged Write-Set, Read-Your-Own-Writes, Atomic Commit & Instant Rollback
 @! Enforces Strict Write-Ahead Invariant (WAL fsync before in-memory tree mutation)
 @! ============================================================================

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — RL OBSERVATION & ACTION SPACES (space.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — RL OBSERVATION & ACTION SPACES (space.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Discrete, Continuous Box, MultiDiscrete Spaces with Stochastic Sampling,
 @! Value Containment & Bound Clamping.
 @! ============================================================================

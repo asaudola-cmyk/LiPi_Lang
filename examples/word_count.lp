@@ -1,4 +1,4 @@
-@! Word counter and text analyzer in Maya
+@! Word counter and text analyzer in Lipi
 
 @fn count_chars(text)
   return str_len(text)
@@ -69,7 +69,7 @@
 @fn main()
   text = "Maya is the Universe. Maya is free.\nMaya karo help ney na.\nMaya r help sobai ney. Even C."
   
-  println("=== Maya Word Counter ===")
+  println("=== Lipi Word Counter ===")
   println("")
   println("Text: " + text)
   println("")

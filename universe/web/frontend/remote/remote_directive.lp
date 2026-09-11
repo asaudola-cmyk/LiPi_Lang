@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/remote/remote_directive.maya
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: AST Parser & Metadata Tagging for @remote Directive
 @! Component Partitioning (Local WASM UI vs Remote Streaming Components)
 @! ============================================================================

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND: HINDLEY-MILNER TYPE INFERENCE (ALGORITHM W)
+@! LIPI COMPILER MIDDLEEND: HINDLEY-MILNER TYPE INFERENCE (ALGORITHM W)
 @! Module: compiler/middleend/type_inference
 @! Canonical Maya Implementation
 @! ============================================================================

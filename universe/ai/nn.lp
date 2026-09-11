@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — NEURAL NETWORK MODULES & OPTIMIZERS (universe/ai/nn.maya)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! LIPI UNIVERSE AI — NEURAL NETWORK MODULES & OPTIMIZERS (universe/ai/nn.maya)
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Parameter & Module Abstraction, Linear Layer with Xavier/He Init,
 @! LayerNorm with Affine Scale/Shift, Inverted Dropout, Multi-Head Attention,
 @! Loss Functions (MSE, Stable Cross-Entropy with LogSumExp),

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA ADVANCED INTERACTIVE REPL ENGINE
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! Features: Multi-operator Arithmetic Parsing, Parentheses, Variable Environment,
 @! REPL Metacommands (.help, .vars, .version, .exit, .clear)
 @! ============================================================================

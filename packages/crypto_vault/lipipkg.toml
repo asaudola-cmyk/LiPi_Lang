@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: crypto_vault
+# ==============================================================================
+
+name = "crypto_vault"
+version = "1.0.0"
+description = "Sovereign cryptographic algorithms and security primitives for Lipi"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

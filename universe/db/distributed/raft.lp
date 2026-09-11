@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB — SOVEREIGN DISTRIBUTED RAFT CONSENSUS ENGINE
+@! LIPI UNIVERSE DB — SOVEREIGN DISTRIBUTED RAFT CONSENSUS ENGINE
 @! File: universe/db/distributed/raft.maya
 @! Standard: Ongaro & Ousterhout Raft Consensus Algorithm
-@! 100% Pure Maya Implementation — Zero External C / libc Dependencies
+@! 100% Pure Lipi Implementation — Zero External C / libc Dependencies
 @! Features: Quorum Election, Log Replication, Term Progression, State Machine
 @! ============================================================================
 

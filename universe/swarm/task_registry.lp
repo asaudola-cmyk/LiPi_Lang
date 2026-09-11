@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — TASK REGISTRY & INVOCATION DISPATCHER (universe/swarm/task_registry.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Maps String Identifiers to Executable Function Pointers Across Cluster Nodes
 @! ============================================================================
 

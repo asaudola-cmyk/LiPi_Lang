@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — AWS FIRECRACKER-STYLE ADVANCED KVM HYPERVISOR
+@! LIPI UNIVERSAL ARCHITECTURE — AWS FIRECRACKER-STYLE ADVANCED KVM HYPERVISOR
 @! Module: universe/hypervisor/kvm_advanced.maya
 @! Milestone: Next-Gen Sovereign Cloud MicroVM
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Direct Linux Kernel Booting (Zero-Page / E820 / bzImage Parser),
 @! BIOS/GRUB Bypass, VirtIO-Block & VirtIO-Net Shared vring Buffers, EPT Paging
 @! ============================================================================

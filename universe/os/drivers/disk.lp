@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA OS - ATA PIO / AHCI SATA DISK DRIVER
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! Features: LBA48 Addressing, DMA Scatter/Gather, NCQ (Native Command Queuing),
 @! MBR Partition Table Parsing, GPT Header Validation & In-Memory Sector Store
 @! ============================================================================

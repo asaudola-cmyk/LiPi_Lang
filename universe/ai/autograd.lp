@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — REVERSE-MODE AUTOMATIC DIFFERENTIATION ENGINE (universe/ai/autograd.maya)
-@! 100% Pure Maya Implementation — Zero External Python/C++/CUDA Dependencies
+@! LIPI UNIVERSE AI — REVERSE-MODE AUTOMATIC DIFFERENTIATION ENGINE (universe/ai/autograd.maya)
+@! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Computation DAG, Topological Sorting, Gradient Accumulation,
 @! Backward Propagators for all Ops, Gradient Unbroadcasting, Activations,
 @! Reductions, GEMM, Views, and Finite-Difference Numerical Gradient Checking.

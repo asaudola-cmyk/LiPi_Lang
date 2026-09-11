@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — MAYA VECTOR DB (AI MEMORY ENGINE)
+@! LIPI UNIVERSAL ARCHITECTURE — MAYA VECTOR DB (AI MEMORY ENGINE)
 @! Module: universe/db/vector/vectordb.maya
 @! Milestone: Grand Sovereign Ecosystem
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: AVX-512 512-Bit Cosine Similarity, Multi-Layer HNSW Graph Index,
 @! WAL Persistence & Sub-Millisecond AI Semantic Search
 @! ============================================================================

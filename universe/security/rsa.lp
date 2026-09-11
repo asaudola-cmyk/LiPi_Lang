@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE SECURITY - RSA CRYPTOGRAPHY (universe/security/rsa.maya)
+@! LIPI UNIVERSE SECURITY - RSA CRYPTOGRAPHY (universe/security/rsa.maya)
 @! Standard: Sovereign Native BigInt & RSA Engine
 @! ============================================================================
 

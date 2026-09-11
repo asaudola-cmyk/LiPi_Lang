@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA FREESTANDING CORE RUNTIME SUBSYSTEM (universe/sys/sys.maya)
-@! 100% Written in Pure Maya Language — Absolute Zero-Libc Independence
+@! 100% Written in Pure Lipi Language — Absolute Zero-Libc Independence
 @! Domain: universe/sys (Freestanding Core Runtime Engineer)
 @! ============================================================================
 

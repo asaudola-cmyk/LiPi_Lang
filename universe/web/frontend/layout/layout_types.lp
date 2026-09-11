@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE & FLEXBOX SOLVER
+@! LIPI WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE & FLEXBOX SOLVER
 @! Module: universe/web/frontend/layout/layout_types.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Linear GpuLayoutNode structure for WebGPU storage buffers
 @! - Complete styling enums & constants (FLEX_ROW, FLEX_ROW_REV, FLEX_COLUMN, FLEX_COLUMN_REV, GRID, etc.)

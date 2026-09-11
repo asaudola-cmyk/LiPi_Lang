@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE NETWORKING: HTTP/2 FRAME CODEC
+@! LIPI UNIVERSE NETWORKING: HTTP/2 FRAME CODEC
 @! Module: universe/net/http2/frame
-@! 100% Pure Maya Implementation — RFC 7540
+@! 100% Pure Lipi Implementation — RFC 7540
 @! ============================================================================
 
 import "universe/core/collections"

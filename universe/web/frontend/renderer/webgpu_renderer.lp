@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — TIER 1 WEBGPU RENDERER
+@! LIPI WEB FRONTEND ENGINE — TIER 1 WEBGPU RENDERER
 @! Module: universe/web/frontend/renderer/webgpu_renderer.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Emits WGSL draw commands, vertex/index buffers, uniform bind groups,
 @! SDF rounded rectangles, drop shadows, gradients, and glyph pipelines.
 @! ============================================================================

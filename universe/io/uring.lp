@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — HIGH-PERFORMANCE IO_URING ASYNC ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — HIGH-PERFORMANCE IO_URING ASYNC ENGINE
 @! Module: universe/io/uring.maya
 @! Milestone: Undisputed #1 Hyper-Performance Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Linux io_uring (Syscall 425, 426, 427), SQ/CQ Shared Ring Buffers via sys_mmap,
 @! 64-Byte Submission Queue Entries (SQE), 16-Byte Completion Queue Entries (CQE),
 @! Batch Async I/O Submission & Zero-Syscall Event Reaping with Graceful Fallback

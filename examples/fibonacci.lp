@@ -37,7 +37,7 @@ import "universe/core/string"
 @end
 
 @fn main()
-  println("=== Fibonacci in Maya ===")
+  println("=== Fibonacci in Lipi ===")
   println("")
   i = 0
   @while i <= 15

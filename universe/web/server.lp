@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (universe/web/server.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (universe/web/server.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! BSD TCP Socket Container, Request Ingestion, Response Serialization, Lifecycle
 @! ============================================================================
 

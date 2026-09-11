@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — MAYA-GPT (NATIVE TRANSFORMER ENGINE)
+@! LIPI UNIVERSAL ARCHITECTURE — MAYA-GPT (NATIVE TRANSFORMER ENGINE)
 @! Module: universe/ai/transformer/gpt.maya
 @! Milestone: Grand Sovereign Ecosystem
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: SafeTensors/GGUF Zero-Copy Weights Ingestion, FlashAttention,
 @! KV-Cache Ring Buffer, Softmax/Top-K/Top-P Token Sampler
 @! ============================================================================

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — LRU CACHE
+@! LIPI UNIVERSAL ARCHITECTURE — LRU CACHE
 @! Module: universe/db/lru.maya
 @! Features: Least Recently Used (LRU) In-Memory Cache for DB & Web
 @! ============================================================================

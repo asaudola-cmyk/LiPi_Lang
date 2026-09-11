@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SEGREGATED FREE-LIST HEAP ALLOCATOR — universe/os/memory.maya
-@! 100% Written in Pure Maya Language — Linux x86-64 sys_mmap/munmap Backing
+@! 100% Written in Pure Lipi Language — Linux x86-64 sys_mmap/munmap Backing
 @! Features: 9 Segregated Size Classes, Splitting, Immediate Coalescing, Canaries
 @! ============================================================================
 

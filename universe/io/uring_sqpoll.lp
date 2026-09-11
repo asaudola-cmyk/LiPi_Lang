@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — IO_URING SQPOLL (ZERO-SYSCALL I/O ENGINE)
+@! LIPI UNIVERSAL ARCHITECTURE — IO_URING SQPOLL (ZERO-SYSCALL I/O ENGINE)
 @! Module: universe/io/uring_sqpoll.maya
 @! Milestone: Pinnacle Advanced Hyper-Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: IORING_SETUP_SQPOLL (0x0002), Dedicated Kernel Polling Thread (kthread),
 @! Shared Memory SQ Ring Polling & Lifetime 0-Syscall Storage/Network I/O
 @! ============================================================================

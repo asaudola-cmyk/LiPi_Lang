@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB — CRASH RECOVERY & REDO SCANNER (universe/db/recovery.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE DB — CRASH RECOVERY & REDO SCANNER (universe/db/recovery.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! 5-Phase Durability Protocol: Scan, Header Verify, CRC Check, Extract Committed,
 @! Redo Replay Mutations into B+Tree Pages, and Buffer Pool Sync
 @! Robust to Incomplete Logs, Process Crashes, and Torn Writes

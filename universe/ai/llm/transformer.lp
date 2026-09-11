@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — FULL TRANSFORMER / LLM (GPT-2 & LLAMA ARCHITECTURE)
-@! 100% Written in Pure Maya Language — Zero PyTorch / LibTorch / C++ Dependencies
+@! LIPI UNIVERSE AI — FULL TRANSFORMER / LLM (GPT-2 & LLAMA ARCHITECTURE)
+@! 100% Written in Pure Lipi Language — Zero PyTorch / LibTorch / C++ Dependencies
 @! Features: RoPE, GQA, SwiGLU, RMSNorm, KV-Cache, Auto-Regressive Decoding
 @! ============================================================================
 

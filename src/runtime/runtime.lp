@@ -1,21 +1,27 @@
 @! ============================================================================
-@! MAYA FREESTANDING RUNTIME & STANDARD ENGINE (runtime/runtime.maya)
-@! 100% Written in Pure Maya Language — Zero libc.so Dependencies
+@! LIPI FREESTANDING RUNTIME & STANDARD ENGINE (src/runtime/runtime.lp)
+@! 100% Written in Pure Lipi Language — Zero libc.so Dependencies
 @! Architecture: x86_64 Linux Direct Kernel Gateway
 @! ============================================================================
 
-import "runtime/maya_syscall"
-import "runtime/maya_gc"
+import "runtime/lipi_syscall"
+import "runtime/lipi_gc"
 
 @! ----------------------------------------------------------------------------
 @! 1. Type Identifiers & Tags
 @! ----------------------------------------------------------------------------
 @fn TYPE_RAW_BYTES() return 0 @end
+@fn TYPE_LIPI_STRING() return 1 @end
 @fn TYPE_MAYA_STRING() return 1 @end
+@fn TYPE_LIPI_ARRAY() return 2 @end
 @fn TYPE_MAYA_ARRAY() return 2 @end
+@fn TYPE_LIPI_MAP() return 3 @end
 @fn TYPE_MAYA_MAP() return 3 @end
+@fn TYPE_LIPI_STRUCT() return 4 @end
 @fn TYPE_MAYA_STRUCT() return 4 @end
+@fn TYPE_LIPI_CLOSURE() return 5 @end
 @fn TYPE_MAYA_CLOSURE() return 5 @end
+@fn TYPE_LIPI_BOXED_FLOAT() return 6 @end
 @fn TYPE_MAYA_BOXED_FLOAT() return 6 @end
 
 @! ----------------------------------------------------------------------------
@@ -48,15 +54,23 @@ import "runtime/maya_gc"
 @! ----------------------------------------------------------------------------
 @! 3. Core Memory Allocation & GC Bridge
 @! ----------------------------------------------------------------------------
-@fn maya_runtime_init()
+@fn lipi_runtime_init()
   maya_init_gc()
 @end
 
-@fn maya_alloc_typed(size, type_id)
+@fn maya_runtime_init()
+  lipi_runtime_init()
+@end
+
+@fn lipi_alloc_typed(size, type_id)
   @if size <= 0
     size = 1
   @end
   return gc_alloc_typed(size, type_id)
+@end
+
+@fn maya_alloc_typed(size, type_id)
+  return lipi_alloc_typed(size, type_id)
 @end
 
 @fn is_maya_string_ptr(val)

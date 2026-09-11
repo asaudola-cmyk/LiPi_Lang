@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB - SQL EXECUTOR (universe/db/sql/executor.maya)
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! LIPI UNIVERSE DB - SQL EXECUTOR (universe/db/sql/executor.maya)
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

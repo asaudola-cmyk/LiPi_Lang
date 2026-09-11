@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CORE — 2D SOFTWARE RENDERER
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE CORE — 2D SOFTWARE RENDERER
+@! 100% Written in Pure Lipi Language
 @! Features: Bresenham Lines, Circles, Triangles, Bezier Curves, Bitmap ops
 @! ============================================================================
 

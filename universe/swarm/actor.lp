@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — DISTRIBUTED ACTOR MODEL (universe/swarm/actor.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Erlang/Elixir-Style Actors, Mailboxes, PIDs, actor_send(), actor_ask() RPC
 @! ============================================================================
 

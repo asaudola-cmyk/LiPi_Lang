@@ -1,5 +1,5 @@
 @! ============================================================
-@! MAYA UNIVERSE — Core Collections Library v2.0
+@! LIPI UNIVERSE — Core Collections Library v2.0
 @! Pure Maya: Stack, Queue, Set, HashMap, list helpers
 @! Interpreter-compatible — no sys_peek8/sys_mmap/sys_poke
 @! ============================================================

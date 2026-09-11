@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL MULTIBOOT SPECIFICATION
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL MULTIBOOT SPECIFICATION
 @! Module: universe/os/boot/multiboot.maya
 @! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Multiboot 1 & Multiboot 2 Header Emission, Framebuffer Request Tags
 @! ============================================================================
 

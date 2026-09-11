@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — TIER 3 CPU CANVAS 2D SOFTWARE RASTERIZER (F11)
+@! LIPI WEB FRONTEND ENGINE — TIER 3 CPU CANVAS 2D SOFTWARE RASTERIZER (F11)
 @! Module: universe/web/frontend/renderer/canvas2d_renderer.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - 32-bit ARGB Flat Framebuffer Software Rasterizer with Alpha Blending
 @! - Porter-Duff "Over" compositing & color bitwise channel math

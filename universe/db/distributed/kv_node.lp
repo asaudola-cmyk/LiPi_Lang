@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE DB - KV NODE (universe/db/distributed/kv_node.maya)
-@! 100% Pure Maya Implementation — Zero External / C Dependencies
+@! LIPI UNIVERSE DB - KV NODE (universe/db/distributed/kv_node.maya)
+@! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

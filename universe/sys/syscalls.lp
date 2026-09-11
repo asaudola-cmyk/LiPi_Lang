@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA DIRECT KERNEL SYSCALL INTERFACE (universe/sys/syscalls.maya)
-@! 100% Written in Pure Maya Language — Complete Independence from libc.so
+@! 100% Written in Pure Lipi Language — Complete Independence from libc.so
 @! Supported Architectures: Linux x86_64, Linux ARM64, Linux RV64, macOS, Windows
 @! Freestanding Core Runtime Engine
 @! ============================================================================

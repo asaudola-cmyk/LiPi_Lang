@@ -54,7 +54,7 @@
 @end
 
 @fn main()
-  println("=== Data Structures in Maya ===")
+  println("=== Data Structures in Lipi ===")
   println("")
   
   list = [1, 2, 3, 4, 5]

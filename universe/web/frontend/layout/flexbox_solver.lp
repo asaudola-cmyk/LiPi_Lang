@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — HIGH-PRECISION CPU FLEXBOX & GRID SOLVER (F10)
+@! LIPI WEB FRONTEND ENGINE — HIGH-PRECISION CPU FLEXBOX & GRID SOLVER (F10)
 @! Module: universe/web/frontend/layout/flexbox_solver.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-precision 7-pass integer-conserving flexbox and grid layout solver
 @! - Multi-strategy solvers: ROW, ROW_REV, COLUMN, COLUMN_REV, GRID, ABSOLUTE

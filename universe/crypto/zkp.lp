@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — ZERO-KNOWLEDGE PROOFS (ZK-SNARKS / R1CS)
+@! LIPI UNIVERSAL ARCHITECTURE — ZERO-KNOWLEDGE PROOFS (ZK-SNARKS / R1CS)
 @! Module: universe/crypto/zkp.maya
 @! Milestone: Frontier Sovereign Cryptography
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Rank-1 Constraint System (R1CS), Quadratic Arithmetic Programs (QAP),
 @! Witness Generation, Polynomial Commitments & Non-Interactive Verification
 @! ============================================================================

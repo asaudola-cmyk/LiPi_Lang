@@ -67,7 +67,7 @@ import "universe/core/string"
 @end
 
 @fn main()
-  println("=== Maya Calculator ===")
+  println("=== Lipi Calculator ===")
   println("")
   println("Basic Operations:")
   println(str_concat("  10 + 5 = ", int_to_str(add(10, 5))))

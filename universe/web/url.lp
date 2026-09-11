@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE WEB — URL DECODER & QUERY PARSER (universe/web/url.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE WEB — URL DECODER & QUERY PARSER (universe/web/url.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! RFC 3986 URL Percent-Decoding, Component Encoding, and Query String Parser
 @! ============================================================================
 

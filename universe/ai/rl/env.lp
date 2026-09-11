@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — RL MDP ENVIRONMENTS & SIMULATION ENGINE
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — RL MDP ENVIRONMENTS & SIMULATION ENGINE
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Unified MDP Protocol (env_reset, env_step, env_render),
 @! GridWorld, CartPole Physics ODE (Euler Integration), Multi-Armed Bandit.
 @! ============================================================================

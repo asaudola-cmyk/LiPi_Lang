@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE
+@! LIPI WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE
 @! Module: universe/web/frontend/layout/gpu_layout.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flattens hierarchical widget trees into linear GPU storage buffers
 @! - WGSL Compute Pipeline simulation (Pass 1: Measure, Pass 2: Layout, Pass 3: Dirty Bounds)

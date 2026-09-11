@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: math_extra
+# ==============================================================================
+
+name = "math_extra"
+version = "1.0.0"
+description = "Advanced numeric, matrix, and mathematical functions for Lipi"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

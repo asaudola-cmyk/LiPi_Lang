@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (universe/ai/tensor.maya)
-@! 100% Pure Maya Implementation — Zero External Python/C++/CUDA Dependencies
+@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (universe/ai/tensor.maya)
+@! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Strided Memory Views, Reshaping, Transposition, Permutation,
 @! Slicing, Multidirectional Broadcasting, 2D/Batched GEMM, Reductions,
 @! Transcendental Mathematics, and Numerically Stable Activations.

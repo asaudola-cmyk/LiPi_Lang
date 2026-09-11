@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CORE — CONCURRENCY & GREEN THREADS (universe/core/concurrency.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE CORE — CONCURRENCY & GREEN THREADS (universe/core/concurrency.maya)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Native Linux x86-64 sys_clone Green Threads & Dynamic Swarm Routing Bridge
 @! ============================================================================
 

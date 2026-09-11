@@ -32,7 +32,7 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSE NET - PURE TLS 1.3 (universe/net/tls/tls13.maya)
+@! LIPI UNIVERSE NET - PURE TLS 1.3 (universe/net/tls/tls13.maya)
 @! Standard: Sovereign NIST SP 800-38D AES-GCM Implementation (128/256-Bit)
 @! ============================================================================
 

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — RL POLICIES, VALUE NETWORKS & EXPLORATION
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — RL POLICIES, VALUE NETWORKS & EXPLORATION
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Q-Table, Epsilon-Greedy, Boltzmann Softmax Exploration, UCB1,
 @! Categorical Policy Network, State-Value V(s) Network, Continuous Gaussian Policy.
 @! ============================================================================

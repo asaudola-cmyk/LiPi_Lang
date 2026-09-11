@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — ENVIRONMENT POLYMORPHIC WEB SERVER
+@! LIPI UNIVERSAL ARCHITECTURE — ENVIRONMENT POLYMORPHIC WEB SERVER
 @! Module: universe/web/polymorphic_server.maya
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Binary FastCGI Frame Parser (RFC 3875), FCGI_BEGIN_REQUEST,
 @! FCGI_PARAMS Name-Value Stream Decoder, FCGI_STDOUT / FCGI_END_REQUEST Builder,
 @! Persistent Worker Loop & Standalone io_uring Fallback
@@ -248,7 +248,7 @@ import "universe/core/string"
     @elif hdr.rec_type == 5 @! FCGI_STDIN
       @if hdr.content_len == 0
         @! Empty STDIN marks end of request input -> generate response with COOP/COEP
-        resp_content = "Status: 200 OK\r\nContent-Type: text/html\r\nCross-Origin-Opener-Policy: same-origin\r\nCross-Origin-Embedder-Policy: require-corp\r\n\r\n<h1>FastCGI Pure Maya Daemon</h1>"
+        resp_content = "Status: 200 OK\r\nContent-Type: text/html\r\nCross-Origin-Opener-Policy: same-origin\r\nCross-Origin-Embedder-Policy: require-corp\r\n\r\n<h1>FastCGI Pure Lipi Daemon</h1>"
         session.stdout_buffer = resp_content
         session.is_complete = 1
       @end
@@ -316,12 +316,12 @@ import "universe/core/string"
     ctx.requests_handled = ctx.requests_handled + 1
     return ctx.last_response
   @elif ctx.active_mode == 1
-    resp = "Status: 200 OK\r\nContent-Type: text/html\r\nCross-Origin-Opener-Policy: same-origin\r\nCross-Origin-Embedder-Policy: require-corp\r\n\r\n<h1>Hello from Pure Maya CGI!</h1>"
+    resp = "Status: 200 OK\r\nContent-Type: text/html\r\nCross-Origin-Opener-Policy: same-origin\r\nCross-Origin-Embedder-Policy: require-corp\r\n\r\n<h1>Hello from Pure Lipi CGI!</h1>"
     ctx.last_response = resp
     ctx.requests_handled = ctx.requests_handled + 1
     return resp
   @else
-    body = "Hello from Maya Standalone Daemon"
+    body = "Hello from Lipi Standalone Daemon"
     body_len = str_len(body)
     resp = str_concat("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ", str_concat(to_str(body_len), str_concat("\r\nCross-Origin-Opener-Policy: same-origin\r\nCross-Origin-Embedder-Policy: require-corp\r\n\r\n", body)))
     ctx.last_response = resp

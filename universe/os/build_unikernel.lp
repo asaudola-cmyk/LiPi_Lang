@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL & UNIKERNEL BUILD TOOLING
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL & UNIKERNEL BUILD TOOLING
 @! Module: tools/build_unikernel.maya
 @! Milestone: Grand Sovereign Pillar 5 — Bare-Metal Unikernel Generation
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
 @! 1. Serializes valid Multiboot2 Header (Magic 0xE85250D6, Arch 0, Length 44 bytes, Checksum)
 @! 2. Embeds x86-64 64-bit/32-bit compatible Entry Stub (COM1 UART 16550 & VGA 0xB8000)

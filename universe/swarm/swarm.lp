@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — UNIFIED PUBLIC DISTRIBUTED RUNTIME API (universe/swarm/swarm.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! P2P Cluster Runtime, Dynamic Scheduler, Actor System, and Remote Task Router
 @! ============================================================================
 

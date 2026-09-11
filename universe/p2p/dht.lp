@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSE - DECENTRALIZED P2P PACKAGE REGISTRY (DHT)
+@! LIPI UNIVERSE - DECENTRALIZED P2P PACKAGE REGISTRY (DHT)
 @! Replaces central servers with a peer-to-peer Distributed Hash Table
 @! ============================================================================
 

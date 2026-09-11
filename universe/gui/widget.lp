@@ -1,7 +1,7 @@
 @! ============================================================================
 @! MAYA NATIVE GUI FRAMEWORK — STANDARD WIDGET SUITE
 @! Module: universe/gui/widget.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Complete Widget data structure (Window, Button, Label, TextInput, ScrollView, Slider, Container)
 @! - Lifecycle, tree hierarchy mutations, and state management

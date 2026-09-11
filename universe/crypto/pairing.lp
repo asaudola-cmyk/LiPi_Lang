@@ -45,10 +45,10 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — ADVANCED PLONK & ELLIPTIC CURVE ZK-SNARKS
+@! LIPI UNIVERSAL ARCHITECTURE — ADVANCED PLONK & ELLIPTIC CURVE ZK-SNARKS
 @! Module: universe/crypto/plonk.maya
 @! Milestone: Next-Gen Universal Zero-Knowledge Cryptography
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: BN254 Elliptic Curve Field Tower (Fp -> Fp2 -> Fp6 -> Fp12),
 @! Miller Loop, Bilinear Pairing e(G1, G2), Universal PLONK Custom Gates,
 @! and Genuine KZG Polynomial Commitment Verification

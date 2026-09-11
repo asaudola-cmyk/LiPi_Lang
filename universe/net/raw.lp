@@ -21,9 +21,9 @@
 @end
 
 @! ============================================================================
-@! MAYA UNIVERSE: OS-INDEPENDENT RAW NETWORK PROTOCOL STACK
+@! LIPI UNIVERSE: OS-INDEPENDENT RAW NETWORK PROTOCOL STACK
 @! Module: universe/net/raw.maya
-@! 100% Pure Maya Implementation - Zero External / OS C Socket Dependencies
+@! 100% Pure Lipi Implementation - Zero External / OS C Socket Dependencies
 @! ============================================================================
 
 import "universe/core/string"

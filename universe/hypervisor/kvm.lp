@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — NATIVE LINUX KVM HYPERVISOR ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — NATIVE LINUX KVM HYPERVISOR ENGINE
 @! Module: universe/hypervisor/kvm.maya
 @! Milestone: Frontier Sovereign Virtualization
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: /dev/kvm ioctl Command Serialization (KVM_CREATE_VM, KVM_CREATE_VCPU),
 @! Guest Physical RAM Mapping via sys_mmap, vCPU Registers & Hardware Virtualization
 @! with Graceful Automatic Software Interpreter Fallback

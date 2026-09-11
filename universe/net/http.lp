@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET — PURE MAYA HTTP/1.1 CLIENT & SERVER (universe/net/http)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE NET — PURE MAYA HTTP/1.1 CLIENT & SERVER (universe/net/http)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! RFC 7230 / RFC 7231 Compliant HTTP/1.1 Protocol Engine
 @! ============================================================================
 

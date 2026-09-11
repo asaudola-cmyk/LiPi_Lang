@@ -96,7 +96,7 @@
 @fn main()
   println("=== Markdown Parser ===")
   
-  doc = "# Maya Language\n"
+  doc = "# Lipi Language\n"
   doc = doc + "\n"
   doc = doc + "Maya is a **statically typed** programming language.\n"
   doc = doc + "It has several cool features:\n"

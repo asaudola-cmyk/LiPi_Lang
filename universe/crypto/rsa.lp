@@ -1,7 +1,7 @@
 @! ============================================================================
 @! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: RSA PUBLIC KEY CRYPTOGRAPHY
 @! Module: universe/crypto/rsa
-@! 100% Pure Maya Implementation — O(log phi) Extended Euclidean Algorithm (ext_gcd)
+@! 100% Pure Lipi Implementation — O(log phi) Extended Euclidean Algorithm (ext_gcd)
 @! ============================================================================
 
 @fn rsa_gcd(a, b)

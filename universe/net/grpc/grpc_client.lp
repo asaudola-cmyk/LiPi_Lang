@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE NETWORKING: gRPC CLIENT & CHANNELS
+@! LIPI UNIVERSE NETWORKING: gRPC CLIENT & CHANNELS
 @! Module: universe/net/grpc/grpc_client
-@! 100% Pure Maya Implementation
+@! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

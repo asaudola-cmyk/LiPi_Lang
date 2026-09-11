@@ -1,5 +1,5 @@
 @! ==================================================================
-@! MAYA UNIVERSE - Core Filesystem Library (Phase 14)
+@! LIPI UNIVERSE - Core Filesystem Library (Phase 14)
 @! ==================================================================
 
 @! O_RDONLY = 0

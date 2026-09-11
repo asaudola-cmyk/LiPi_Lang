@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — VISION IMAGE REPRESENTATION & COLOR CONVERSIONS
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — VISION IMAGE REPRESENTATION & COLOR CONVERSIONS
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Multi-channel Image Struct (HWC), Coordinate Indexing, Color Spaces
 @! (RGB, Grayscale, HSV, RGBA), Channel Slicing, Tensor & Framebuffer Interop.
 @! ============================================================================

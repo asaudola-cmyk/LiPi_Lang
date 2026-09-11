@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — AUTONOMOUS MULTI-AGENT SWARM & TASK ROUTING (universe/ai/swarm.maya)
-@! 100% Pure Maya Implementation — Zero External / Foreign Code Dependencies
+@! LIPI UNIVERSE AI — AUTONOMOUS MULTI-AGENT SWARM & TASK ROUTING (universe/ai/swarm.maya)
+@! 100% Pure Lipi Implementation — Zero External / Foreign Code Dependencies
 @! Features: F18 Autonomous Multi-Agent Cognitive Roles (Planner, Coder, Critic, Synthesizer),
 @! Deterministic State Machine Engine, Priority Mailboxes, Topic Pub/Sub Event Bus,
 @! F19 Dynamic Task Routing & Multi-Stage DAG Workflow Execution with Reflection Loops.

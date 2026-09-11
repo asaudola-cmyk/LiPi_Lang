@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/dom_bypass/canvas_host.maya
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
 @! - <canvas> presentation target abstraction
 @! - Device Pixel Ratio (DPR) HiDPI / Retina coordinate scaling

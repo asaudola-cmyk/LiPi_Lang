@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SOVEREIGN PROCESS LIFECYCLE & CORE RUNTIME ENGINE (universe/sys/runtime.maya)
-@! 100% Written in Pure Maya Language — Absolute Zero-Libc Independence
+@! 100% Written in Pure Lipi Language — Absolute Zero-Libc Independence
 @! Process Lifecycle, CRT0 _start Vectors, Signal Handlers, Panic Recovery
 @! ============================================================================
 

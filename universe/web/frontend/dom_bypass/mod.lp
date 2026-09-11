@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
 @! Module: universe/web/frontend/dom_bypass/mod.maya
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
 @! - Root Subsystem Aggregator for DOM-Bypass Host Runtime
 @! - Integrates Canvas Presentation Target, Frame Loop, HiDPI Scaling, and Input Dispatcher

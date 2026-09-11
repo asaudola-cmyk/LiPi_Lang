@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — AF_XDP KERNEL BYPASS PACKET ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — AF_XDP KERNEL BYPASS PACKET ENGINE
 @! Module: universe/net/xdp.maya
 @! Milestone: Undisputed #1 Hyper-Performance Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: AF_XDP (Socket Family 44), UMEM Memory Pool Frames, Fill/RX/TX/Completion Rings,
 @! Zero-Copy NIC Packet DMA Polling & Kernel TCP/IP Stack Bypass
 @! ============================================================================

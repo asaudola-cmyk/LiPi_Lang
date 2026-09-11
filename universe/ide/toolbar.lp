@@ -2,7 +2,7 @@
 @! MAYA SOVEREIGN IDE — SOVEREIGN ACTION TOOLBAR RIBBON
 @! Module: universe/ide/toolbar.maya
 @! Milestone: M3 (Maya Studio Sovereign IDE)
-@! 100% Pure Maya Implementation — Zero External Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

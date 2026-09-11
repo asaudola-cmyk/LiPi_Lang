@@ -61,7 +61,7 @@ import "universe/core/fmt"
 @end
 
 @fn main()
-  fmt_box("Maya Performance Benchmark", 40)
+  fmt_box("Lipi Performance Benchmark", 40)
   println("")
   
   t1 = timer_start("Fibonacci(1000000)")
@@ -90,6 +90,6 @@ import "universe/core/fmt"
   
   total_ms = elapsed1 + elapsed2 + elapsed3 + elapsed4
   println("Total benchmark time: " + time_format_ms(total_ms))
-  println("Maya is FAST.")
+  println("Lipi is FAST.")
   return 0
 @end

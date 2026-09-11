@@ -3,7 +3,7 @@ import "universe/core/fmt"
 import "universe/maya_universe"
 
 @! ============================================================================
-@! MAYA SHOWCASE — Official demonstration of Maya's capabilities
+@! LIPI SHOWCASE — Official demonstration of Maya's capabilities
 @! Author: Shafiullah
 @! ============================================================================
 
@@ -151,7 +151,7 @@ import "universe/maya_universe"
   println("")
   
   println(fmt_repeat("=", 50))
-  println("  Maya Showcase — All Features")
+  println("  Lipi Showcase — All Features")
   println(fmt_repeat("=", 50))
   println("")
   
@@ -169,7 +169,7 @@ import "universe/maya_universe"
   println("")
   
   println(fmt_repeat("=", 50))
-  println("  MAYA IS THE UNIVERSE")
+  println("  LIPI IS THE UNIVERSE")
   println(fmt_repeat("=", 50))
   println("  modules: " + int_to_str(maya_module_count()))
   println("  Author: " + maya_author())

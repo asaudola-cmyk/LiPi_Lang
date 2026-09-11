@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA GPU COMPUTE & SPIR-V ACCELERATOR (universe/gpu/compute.maya)
-@! 100% Pure Maya Implementation — Zero C++ / Vulkan SDK / CUDA Dependencies
+@! 100% Pure Lipi Implementation — Zero C++ / Vulkan SDK / CUDA Dependencies
 @! Supports SPIR-V 1.0/1.5 Binary Shader Emission and Compute Pipeline Layouts
 @! ============================================================================
 

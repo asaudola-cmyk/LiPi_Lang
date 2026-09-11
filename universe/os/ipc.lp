@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA INTER-PROCESS COMMUNICATION (IPC) — universe/os/ipc.maya
-@! 100% Written in Pure Maya Language — Zero Foreign / Zero libc Dependencies
+@! 100% Written in Pure Lipi Language — Zero Foreign / Zero libc Dependencies
 @! Features: Named Pipes (FIFO), Shared Memory, Unix Domain Sockets (Stream/Dgram),
 @! Prioritized Message Queues, and Counting Semaphores / Mutexes
 @! ============================================================================

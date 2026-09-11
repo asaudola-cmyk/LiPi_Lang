@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SOVEREIGN DEBUGGER CLI & PTRACE DRIVER (universe/tools/debugger_cli.maya)
-@! 100% Written in Pure Maya Language — Zero Foreign Syntax
+@! 100% Written in Pure Lipi Language — Zero Foreign Syntax
 @! Freestanding Linux x86-64 Machine Code Tracing via Linux Kernel sys_ptrace (Syscall 101)
 @! ============================================================================
 

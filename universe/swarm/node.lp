@@ -1,6 +1,6 @@
 @! ============================================================================
 @! MAYA SWARM — NODE DAEMON & CLUSTER COORDINATOR (universe/swarm/node.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Integrates UDP Discovery, TCP RPC Server, Actor Routing & Task Execution
 @! ============================================================================
 

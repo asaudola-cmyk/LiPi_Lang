@@ -1,5 +1,6 @@
 # ============================================================================
-# Pure Maya Freestanding Linux x86-64 Kernel Syscall Gateway & Runtime Engine
+# Pure Lipi Freestanding Linux x86-64 Kernel Syscall Gateway & Runtime Engine
+# (100% Dual-Aliased Sovereign ABI for Pure Lipi)
 # Architecture: x86_64 Linux Direct Kernel Gateway (Zero C/C++, Zero Libc)
 # File: runtime/syscall.s
 # ============================================================================
@@ -70,14 +71,17 @@ syscall5:
 .global syscall6
 .global raw_syscall
 .global syscall
+.global lipi_syscall
 .global maya_syscall
 .type syscall6, @function
 .type raw_syscall, @function
 .type syscall, @function
+.type lipi_syscall, @function
 .type maya_syscall, @function
 syscall6:
 raw_syscall:
 syscall:
+lipi_syscall:
 maya_syscall:
     mov rax, rdi
     mov rdi, rsi
@@ -146,8 +150,11 @@ maya_syscall:
     syscall
     ret
 
+.global lipi_clone_wrapper
 .global maya_clone_wrapper
+.type lipi_clone_wrapper, @function
 .type maya_clone_wrapper, @function
+lipi_clone_wrapper:
 maya_clone_wrapper:
     sub rsi, 16
     mov [rsi + 8], rcx
@@ -168,27 +175,39 @@ maya_clone_wrapper:
 .Lparent:
     ret
 
+.global lipi_atomic_add
 .global maya_atomic_add
+.type lipi_atomic_add, @function
 .type maya_atomic_add, @function
+lipi_atomic_add:
 maya_atomic_add:
     lock add [rdi], rsi
     mov rax, [rdi]
     ret
 
+.global lipi_get_rsp
 .global maya_get_rsp
+.type lipi_get_rsp, @function
 .type maya_get_rsp, @function
+lipi_get_rsp:
 maya_get_rsp:
     mov rax, rsp
     ret
 
+.global lipi_get_rbp
 .global maya_get_rbp
+.type lipi_get_rbp, @function
 .type maya_get_rbp, @function
+lipi_get_rbp:
 maya_get_rbp:
     mov rax, rbp
     ret
 
+.global lipi_flush_regs_and_get_rsp
 .global maya_flush_regs_and_get_rsp
+.type lipi_flush_regs_and_get_rsp, @function
 .type maya_flush_regs_and_get_rsp, @function
+lipi_flush_regs_and_get_rsp:
 maya_flush_regs_and_get_rsp:
     push rbx
     push rbp
@@ -205,8 +224,11 @@ maya_flush_regs_and_get_rsp:
     pop rbx
     ret
 
+.global lipi_stack_scan_helper
 .global maya_stack_scan_helper
+.type lipi_stack_scan_helper, @function
 .type maya_stack_scan_helper, @function
+lipi_stack_scan_helper:
 maya_stack_scan_helper:
     push rbx
     push rbp
@@ -260,11 +282,17 @@ g_envp:       .quad 0
 
 
 .text
+.global lipi_runtime_init
 .global maya_runtime_init
+.type lipi_runtime_init, @function
+.global lipi_init_gc
 .global maya_init_gc
+.type lipi_init_gc, @function
 .type maya_runtime_init, @function
 .type maya_init_gc, @function
+lipi_runtime_init:
 maya_runtime_init:
+lipi_init_gc:
 maya_init_gc:
     cmp qword ptr [rip + g_heap_start], 0
     jne .Lgc_init_done
@@ -283,10 +311,13 @@ maya_init_gc:
 .Lgc_init_done:
     ret
 
+.global lipi_alloc
 .global maya_alloc
+.type lipi_alloc, @function
 .weak maya_gc_alloc
 .type maya_alloc, @function
 .type maya_gc_alloc, @function
+lipi_alloc:
 maya_alloc:
 maya_gc_alloc:
     push rbp
@@ -355,8 +386,11 @@ maya_gc_alloc:
     pop rbp
     ret
 
+.global lipi_alloc_typed
 .global maya_alloc_typed
+.type lipi_alloc_typed, @function
 .type maya_alloc_typed, @function
+lipi_alloc_typed:
 maya_alloc_typed:
     push rbp
     mov rbp, rsp
@@ -369,8 +403,11 @@ maya_alloc_typed:
     pop rbp
     ret
 
+.global lipi_free
 .global maya_free
+.type lipi_free, @function
 .type maya_free, @function
+lipi_free:
 maya_free:
     test rdi, rdi
     jz .Lfree_ret
@@ -388,8 +425,11 @@ maya_free:
 .Lfree_ret:
     ret
 
+.global lipi_realloc
 .global maya_realloc
+.type lipi_realloc, @function
 .type maya_realloc, @function
+lipi_realloc:
 maya_realloc:
     test rdi, rdi
     jnz .Lrealloc_do
@@ -542,10 +582,13 @@ gc_collect:
     xor rax, rax
     ret
 
+.global lipi_str_ptr
 .global maya_str_ptr
+.type lipi_str_ptr, @function
 .global str_ptr
 .type maya_str_ptr, @function
 .type str_ptr, @function
+lipi_str_ptr:
 maya_str_ptr:
 str_ptr:
     test rdi, rdi
@@ -574,8 +617,11 @@ str_ptr:
 # 4. String Operations
 # ----------------------------------------------------------------------------
 
+.global lipi_str_new
 .global maya_str_new
+.type lipi_str_new, @function
 .type maya_str_new, @function
+lipi_str_new:
 maya_str_new:
     push rbp
     mov rbp, rsp
@@ -619,14 +665,20 @@ maya_str_new:
     pop rbp
     ret
 
+.global lipi_str_from_raw
 .global maya_str_from_raw
+.type lipi_str_from_raw, @function
 .type maya_str_from_raw, @function
+lipi_str_from_raw:
 maya_str_from_raw:
     mov rsi, -1
     jmp maya_str_new
 
+.global lipi_str_len
 .global maya_str_len
+.type lipi_str_len, @function
 .type maya_str_len, @function
+lipi_str_len:
 maya_str_len:
     test rdi, rdi
     jz .Lstr_len_zero
@@ -636,14 +688,20 @@ maya_str_len:
     xor rax, rax
     ret
 
+.global lipi_str_len_ms
 .global maya_str_len_ms
+.type lipi_str_len_ms, @function
 .type maya_str_len_ms, @function
+lipi_str_len_ms:
 maya_str_len_ms:
     jmp maya_str_len
 
 
+.global lipi_str_concat
 .global maya_str_concat
+.type lipi_str_concat, @function
 .type maya_str_concat, @function
+lipi_str_concat:
 maya_str_concat:
     push rbp
     mov rbp, rsp
@@ -736,8 +794,11 @@ maya_str_concat:
     pop rbp
     ret
 
+.global lipi_str_eq
 .global maya_str_eq
+.type lipi_str_eq, @function
 .type maya_str_eq, @function
+lipi_str_eq:
 maya_str_eq:
     cmp rdi, rsi
     je .Lseq_true
@@ -768,8 +829,11 @@ maya_str_eq:
     xor rax, rax
     ret
 
+.global lipi_str_char_at
 .global maya_str_char_at
+.type lipi_str_char_at, @function
 .type maya_str_char_at, @function
+lipi_str_char_at:
 maya_str_char_at:
     test rdi, rdi
     jz .Lsca_zero
@@ -784,8 +848,11 @@ maya_str_char_at:
     xor rax, rax
     ret
 
+.global lipi_str_substr
 .global maya_str_substr
+.type lipi_str_substr, @function
 .type maya_str_substr, @function
+lipi_str_substr:
 maya_str_substr:
     push rbp
     mov rbp, rsp
@@ -835,8 +902,11 @@ maya_str_substr:
     pop rbp
     ret
 
+.global lipi_str_from_char_code
 .global maya_str_from_char_code
+.type lipi_str_from_char_code, @function
 .type maya_str_from_char_code, @function
+lipi_str_from_char_code:
 maya_str_from_char_code:
     push rbp
     mov rbp, rsp
@@ -849,8 +919,11 @@ maya_str_from_char_code:
     leave
     ret
 
+.global lipi_str_to_upper
 .global maya_str_to_upper
+.type lipi_str_to_upper, @function
 .type maya_str_to_upper, @function
+lipi_str_to_upper:
 maya_str_to_upper:
     push rbp
     mov rbp, rsp
@@ -892,8 +965,11 @@ maya_str_to_upper:
     pop rbp
     ret
 
+.global lipi_str_to_lower
 .global maya_str_to_lower
+.type lipi_str_to_lower, @function
 .type maya_str_to_lower, @function
+lipi_str_to_lower:
 maya_str_to_lower:
     push rbp
     mov rbp, rsp
@@ -935,8 +1011,11 @@ maya_str_to_lower:
     pop rbp
     ret
 
+.global lipi_str_trim
 .global maya_str_trim
+.type lipi_str_trim, @function
 .type maya_str_trim, @function
+lipi_str_trim:
 maya_str_trim:
     push rbp
     mov rbp, rsp
@@ -1010,8 +1089,11 @@ maya_str_trim:
     pop rbp
     ret
 
+.global lipi_str_replace
 .global maya_str_replace
+.type lipi_str_replace, @function
 .type maya_str_replace, @function
+lipi_str_replace:
 maya_str_replace:
     push rbp
     mov rbp, rsp
@@ -1116,8 +1198,11 @@ maya_str_replace:
     pop rbp
     ret
 
+.global lipi_str_starts_with
 .global maya_str_starts_with
+.type lipi_str_starts_with, @function
 .type maya_str_starts_with, @function
+lipi_str_starts_with:
 maya_str_starts_with:
     test rdi, rdi
     jz .Lsw_no
@@ -1137,8 +1222,11 @@ maya_str_starts_with:
     mov rax, 1
     ret
 
+.global lipi_str_ends_with
 .global maya_str_ends_with
+.type lipi_str_ends_with, @function
 .type maya_str_ends_with, @function
+lipi_str_ends_with:
 maya_str_ends_with:
     test rdi, rdi
     jz .Lew_no
@@ -1163,8 +1251,11 @@ maya_str_ends_with:
     ret
 
 
+.global lipi_str_contains
 .global maya_str_contains
+.type lipi_str_contains, @function
 .type maya_str_contains, @function
+lipi_str_contains:
 maya_str_contains:
     push rbp
     mov rbp, rsp
@@ -1179,8 +1270,11 @@ maya_str_contains:
     pop rbp
     ret
 
+.global lipi_str_index_of
 .global maya_str_index_of
+.type lipi_str_index_of, @function
 .type maya_str_index_of, @function
+lipi_str_index_of:
 maya_str_index_of:
     push rbp
     mov rbp, rsp
@@ -1277,8 +1371,11 @@ maya_str_index_of:
     pop rbp
     ret
 
+.global lipi_int_to_str
 .global maya_int_to_str
+.type lipi_int_to_str, @function
 .type maya_int_to_str, @function
+lipi_int_to_str:
 maya_int_to_str:
     push rbp
     mov rbp, rsp
@@ -1315,8 +1412,11 @@ maya_int_to_str:
     leave
     ret
 
+.global lipi_bool_to_str
 .global maya_bool_to_str
+.type lipi_bool_to_str, @function
 .type maya_bool_to_str, @function
+lipi_bool_to_str:
 maya_bool_to_str:
     test rdi, rdi
     jnz .Lbts_true
@@ -1328,13 +1428,19 @@ maya_bool_to_str:
     mov rsi, 4
     jmp maya_str_new
 
+.global lipi_float_to_str
 .global maya_float_to_str
+.type lipi_float_to_str, @function
 .type maya_float_to_str, @function
+lipi_float_to_str:
 maya_float_to_str:
     jmp maya_int_to_str
 
+.global lipi_str_to_int
 .global maya_str_to_int
+.type lipi_str_to_int, @function
 .type maya_str_to_int, @function
+lipi_str_to_int:
 maya_str_to_int:
     test rdi, rdi
     jz .Lsti_zero
@@ -1375,16 +1481,22 @@ maya_str_to_int:
     xor rax, rax
     ret
 
+.global lipi_str_to_float
 .global maya_str_to_float
+.type lipi_str_to_float, @function
 .type maya_str_to_float, @function
+lipi_str_to_float:
 maya_str_to_float:
     jmp maya_str_to_int
 
 # ----------------------------------------------------------------------------
 # 5. Dynamic Operations Dispatcher
 # ----------------------------------------------------------------------------
+.global lipi_dynamic_to_str
 .global maya_dynamic_to_str
+.type lipi_dynamic_to_str, @function
 .type maya_dynamic_to_str, @function
+lipi_dynamic_to_str:
 maya_dynamic_to_str:
     push rbp
     mov rbp, rsp
@@ -1408,8 +1520,11 @@ maya_dynamic_to_str:
     pop rbp
     ret
 
+.global lipi_dynamic_add
 .global maya_dynamic_add
+.type lipi_dynamic_add, @function
 .type maya_dynamic_add, @function
+lipi_dynamic_add:
 maya_dynamic_add:
     push rbp
     mov rbp, rsp
@@ -1446,8 +1561,11 @@ maya_dynamic_add:
     pop rbp
     ret
 
+.global lipi_dynamic_eq
 .global maya_dynamic_eq
+.type lipi_dynamic_eq, @function
 .type maya_dynamic_eq, @function
+lipi_dynamic_eq:
 maya_dynamic_eq:
     push rbp
     mov rbp, rsp
@@ -1487,8 +1605,11 @@ maya_dynamic_eq:
     pop rbp
     ret
 
+.global lipi_dynamic_ne
 .global maya_dynamic_ne
+.type lipi_dynamic_ne, @function
 .type maya_dynamic_ne, @function
+lipi_dynamic_ne:
 maya_dynamic_ne:
     push rbp
     mov rbp, rsp
@@ -1500,8 +1621,11 @@ maya_dynamic_ne:
 # ----------------------------------------------------------------------------
 # 6. Standard I/O via Linux Raw Syscalls
 # ----------------------------------------------------------------------------
+.global lipi_print_str
 .global maya_print_str
+.type lipi_print_str, @function
 .type maya_print_str, @function
+lipi_print_str:
 maya_print_str:
     test rdi, rdi
     jz .Lpstr_done
@@ -1533,8 +1657,11 @@ maya_print_str:
     xor rax, rax
     ret
 
+.global lipi_println_str
 .global maya_println_str
+.type lipi_println_str, @function
 .type maya_println_str, @function
+lipi_println_str:
 maya_println_str:
     push rbp
     mov rbp, rsp
@@ -1548,8 +1675,11 @@ maya_println_str:
     xor rax, rax
     ret
 
+.global lipi_print_mayastr
 .global maya_print_mayastr
+.type lipi_print_mayastr, @function
 .type maya_print_mayastr, @function
+lipi_print_mayastr:
 maya_print_mayastr:
     test rdi, rdi
     jz .Lpms_done
@@ -1580,8 +1710,11 @@ maya_print_mayastr:
     xor rax, rax
     ret
 
+.global lipi_println_mayastr
 .global maya_println_mayastr
+.type lipi_println_mayastr, @function
 .type maya_println_mayastr, @function
+lipi_println_mayastr:
 maya_println_mayastr:
     push rbp
     mov rbp, rsp
@@ -1595,8 +1728,11 @@ maya_println_mayastr:
     xor rax, rax
     ret
 
+.global lipi_print_i64
 .global maya_print_i64
+.type lipi_print_i64, @function
 .type maya_print_i64, @function
+lipi_print_i64:
 maya_print_i64:
     push rbp
     mov rbp, rsp
@@ -1606,8 +1742,11 @@ maya_print_i64:
     pop rbp
     ret
 
+.global lipi_println_i64
 .global maya_println_i64
+.type lipi_println_i64, @function
 .type maya_println_i64, @function
+lipi_println_i64:
 maya_println_i64:
     push rbp
     mov rbp, rsp
@@ -1617,8 +1756,11 @@ maya_println_i64:
     pop rbp
     ret
 
+.global lipi_print_bool
 .global maya_print_bool
+.type lipi_print_bool, @function
 .type maya_print_bool, @function
+lipi_print_bool:
 maya_print_bool:
     push rbp
     mov rbp, rsp
@@ -1628,8 +1770,11 @@ maya_print_bool:
     pop rbp
     ret
 
+.global lipi_println_bool
 .global maya_println_bool
+.type lipi_println_bool, @function
 .type maya_println_bool, @function
+lipi_println_bool:
 maya_println_bool:
     push rbp
     mov rbp, rsp
@@ -1639,8 +1784,11 @@ maya_println_bool:
     pop rbp
     ret
 
+.global lipi_print_err
 .global maya_print_err
+.type lipi_print_err, @function
 .type maya_print_err, @function
+lipi_print_err:
 maya_print_err:
     test rdi, rdi
     jz .Lpe_ret
@@ -1676,8 +1824,11 @@ maya_print_err:
     xor rax, rax
     ret
 
+.global lipi_println_err
 .global maya_println_err
+.type lipi_println_err, @function
 .type maya_println_err, @function
+lipi_println_err:
 maya_println_err:
     push rbp
     mov rbp, rsp
@@ -1691,35 +1842,53 @@ maya_println_err:
     xor rax, rax
     ret
 
+.global lipi_print_f64
 .global maya_print_f64
+.type lipi_print_f64, @function
 .type maya_print_f64, @function
+lipi_print_f64:
 maya_print_f64:
     jmp maya_print_i64
 
+.global lipi_println_f64
 .global maya_println_f64
+.type lipi_println_f64, @function
 .type maya_println_f64, @function
+lipi_println_f64:
 maya_println_f64:
     jmp maya_println_i64
 
+.global lipi_println_array
 .global maya_println_array
+.type lipi_println_array, @function
 .type maya_println_array, @function
+lipi_println_array:
 maya_println_array:
     ret
 
+.global lipi_print_no_newline
 .global maya_print_no_newline
+.type lipi_print_no_newline, @function
 .type maya_print_no_newline, @function
+lipi_print_no_newline:
 maya_print_no_newline:
     jmp maya_print_mayastr
 
+.global lipi_exit
 .global maya_exit
+.type lipi_exit, @function
 .type maya_exit, @function
+lipi_exit:
 maya_exit:
     mov rax, 60
     syscall
     ret
 
+.global lipi_clock_ms
 .global maya_clock_ms
+.type lipi_clock_ms, @function
 .type maya_clock_ms, @function
+lipi_clock_ms:
 maya_clock_ms:
     push rbp
     mov rbp, rsp
@@ -1741,8 +1910,11 @@ maya_clock_ms:
     leave
     ret
 
+.global lipi_file_read
 .global maya_file_read
+.type lipi_file_read, @function
 .type maya_file_read, @function
+lipi_file_read:
 maya_file_read:
     push rbp
     mov rbp, rsp
@@ -1815,8 +1987,11 @@ maya_file_read:
     pop rbp
     ret
 
+.global lipi_file_write
 .global maya_file_write
+.type lipi_file_write, @function
 .type maya_file_write, @function
+lipi_file_write:
 maya_file_write:
     push rbp
     mov rbp, rsp
@@ -1865,8 +2040,11 @@ maya_file_write:
     pop rbp
     ret
 
+.global lipi_file_append
 .global maya_file_append
+.type lipi_file_append, @function
 .type maya_file_append, @function
+lipi_file_append:
 maya_file_append:
     push rbp
     mov rbp, rsp
@@ -1915,8 +2093,11 @@ maya_file_append:
     pop rbp
     ret
 
+.global lipi_file_exists
 .global maya_file_exists
+.type lipi_file_exists, @function
 .type maya_file_exists, @function
+lipi_file_exists:
 maya_file_exists:
     test rdi, rdi
     jz .Lfe_no
@@ -1933,8 +2114,11 @@ maya_file_exists:
     mov rax, 1
     ret
 
+.global lipi_system
 .global maya_system
+.type lipi_system, @function
 .type maya_system, @function
+lipi_system:
 maya_system:
     push rbp
     mov rbp, rsp
@@ -2010,14 +2194,20 @@ maya_system:
     ret
 
 
+.global lipi_process_argc
 .global maya_process_argc
+.type lipi_process_argc, @function
 .type maya_process_argc, @function
+lipi_process_argc:
 maya_process_argc:
     mov rax, [rip + g_argc]
     ret
 
+.global lipi_process_argv
 .global maya_process_argv
+.type lipi_process_argv, @function
 .type maya_process_argv, @function
+lipi_process_argv:
 maya_process_argv:
     mov rcx, [rip + g_argv]
     test rcx, rcx
@@ -2033,18 +2223,27 @@ maya_process_argv:
     xor rsi, rsi
     jmp maya_str_new
 
+.global lipi_set_args
 .global maya_set_args
+.type lipi_set_args, @function
 .type maya_set_args, @function
+lipi_set_args:
 maya_set_args:
     mov [rip + g_argc], rdi
     mov [rip + g_argv], rsi
     ret
 
+.global lipi_read_line
 .global maya_read_line
+.type lipi_read_line, @function
+.global lipi_read_stdin
 .global maya_read_stdin
+.type lipi_read_stdin, @function
 .type maya_read_line, @function
 .type maya_read_stdin, @function
+lipi_read_line:
 maya_read_line:
+lipi_read_stdin:
 maya_read_stdin:
     xor rdi, rdi
     xor rsi, rsi
@@ -2053,8 +2252,11 @@ maya_read_stdin:
 # ----------------------------------------------------------------------------
 # 7. Array Operations
 # ----------------------------------------------------------------------------
+.global lipi_array_new
 .global maya_array_new
+.type lipi_array_new, @function
 .type maya_array_new, @function
+lipi_array_new:
 maya_array_new:
     push rbp
     mov rbp, rsp
@@ -2092,8 +2294,11 @@ maya_array_new:
     pop rbp
     ret
 
+.global lipi_array_len
 .global maya_array_len
+.type lipi_array_len, @function
 .type maya_array_len, @function
+lipi_array_len:
 maya_array_len:
     test rdi, rdi
     jz .Lal_zero
@@ -2103,8 +2308,11 @@ maya_array_len:
     xor rax, rax
     ret
 
+.global lipi_array_push
 .global maya_array_push
+.type lipi_array_push, @function
 .type maya_array_push, @function
+lipi_array_push:
 maya_array_push:
     push rbp
     mov rbp, rsp
@@ -2143,8 +2351,11 @@ maya_array_push:
     pop rbp
     ret
 
+.global lipi_array_get
 .global maya_array_get
+.type lipi_array_get, @function
 .type maya_array_get, @function
+lipi_array_get:
 maya_array_get:
     test rdi, rdi
     jz .Lag_zero
@@ -2161,8 +2372,11 @@ maya_array_get:
     xor rax, rax
     ret
 
+.global lipi_array_set
 .global maya_array_set
+.type lipi_array_set, @function
 .type maya_array_set, @function
+lipi_array_set:
 maya_array_set:
     test rdi, rdi
     jz .Las_ret
@@ -2178,23 +2392,35 @@ maya_array_set:
     mov rax, rdx
     ret
 
+.global lipi_array_concat
 .global maya_array_concat
+.type lipi_array_concat, @function
+.global lipi_array_contains
 .global maya_array_contains
+.type lipi_array_contains, @function
+.global lipi_array_find
 .global maya_array_find
+.type lipi_array_find, @function
+.global lipi_array_slice
 .global maya_array_slice
+.type lipi_array_slice, @function
 .type maya_array_concat, @function
 .type maya_array_contains, @function
 .type maya_array_find, @function
 .type maya_array_slice, @function
+lipi_array_concat:
 maya_array_concat:
     mov rax, rdi
     ret
+lipi_array_contains:
 maya_array_contains:
     xor rax, rax
     ret
+lipi_array_find:
 maya_array_find:
     mov rax, -1
     ret
+lipi_array_slice:
 maya_array_slice:
     mov rax, rdi
     ret
@@ -2202,8 +2428,11 @@ maya_array_slice:
 # ----------------------------------------------------------------------------
 # 8. Map Operations
 # ----------------------------------------------------------------------------
+.global lipi_map_new
 .global maya_map_new
+.type lipi_map_new, @function
 .type maya_map_new, @function
+lipi_map_new:
 maya_map_new:
     push rbp
     mov rbp, rsp
@@ -2225,8 +2454,11 @@ maya_map_new:
     pop rbp
     ret
 
+.global lipi_map_set
 .global maya_map_set
+.type lipi_map_set, @function
 .type maya_map_set, @function
+lipi_map_set:
 maya_map_set:
     push rbp
     mov rbp, rsp
@@ -2291,8 +2523,11 @@ maya_map_set:
     pop rbp
     ret
 
+.global lipi_map_get
 .global maya_map_get
+.type lipi_map_get, @function
 .type maya_map_get, @function
+lipi_map_get:
 maya_map_get:
     push rbp
     mov rbp, rsp
@@ -2342,8 +2577,11 @@ maya_map_get:
     pop rbp
     ret
 
+.global lipi_map_has
 .global maya_map_has
+.type lipi_map_has, @function
 .type maya_map_has, @function
+lipi_map_has:
 maya_map_has:
     push rbp
     mov rbp, rsp
@@ -2354,14 +2592,20 @@ maya_map_has:
     pop rbp
     ret
 
+.global lipi_map_delete
 .global maya_map_delete
+.type lipi_map_delete, @function
 .type maya_map_delete, @function
+lipi_map_delete:
 maya_map_delete:
     xor rax, rax
     ret
 
+.global lipi_map_size
 .global maya_map_size
+.type lipi_map_size, @function
 .type maya_map_size, @function
+lipi_map_size:
 maya_map_size:
     test rdi, rdi
     jz .Lmsz_zero
@@ -2371,8 +2615,11 @@ maya_map_size:
     xor rax, rax
     ret
 
+.global lipi_map_keys
 .global maya_map_keys
+.type lipi_map_keys, @function
 .type maya_map_keys, @function
+lipi_map_keys:
 maya_map_keys:
     push rbp
     mov rbp, rsp
@@ -2385,15 +2632,33 @@ maya_map_keys:
 # ----------------------------------------------------------------------------
 # 9. Networking & JIT & Memory Access
 # ----------------------------------------------------------------------------
+.global lipi_tcp_socket
 .global maya_tcp_socket
+.type lipi_tcp_socket, @function
+.global lipi_tcp_bind
 .global maya_tcp_bind
+.type lipi_tcp_bind, @function
+.global lipi_tcp_listen
 .global maya_tcp_listen
+.type lipi_tcp_listen, @function
+.global lipi_tcp_accept
 .global maya_tcp_accept
+.type lipi_tcp_accept, @function
+.global lipi_tcp_connect
 .global maya_tcp_connect
+.type lipi_tcp_connect, @function
+.global lipi_tcp_send
 .global maya_tcp_send
+.type lipi_tcp_send, @function
+.global lipi_tcp_recv
 .global maya_tcp_recv
+.type lipi_tcp_recv, @function
+.global lipi_tcp_close
 .global maya_tcp_close
+.type lipi_tcp_close, @function
+.global lipi_tcp_set_nonblocking
 .global maya_tcp_set_nonblocking
+.type lipi_tcp_set_nonblocking, @function
 .type maya_tcp_socket, @function
 .type maya_tcp_bind, @function
 .type maya_tcp_listen, @function
@@ -2403,6 +2668,7 @@ maya_map_keys:
 .type maya_tcp_recv, @function
 .type maya_tcp_close, @function
 .type maya_tcp_set_nonblocking, @function
+lipi_tcp_socket:
 maya_tcp_socket:
     mov rax, 41
     mov rdi, 2
@@ -2410,70 +2676,96 @@ maya_tcp_socket:
     xor rdx, rdx
     syscall
     ret
+lipi_tcp_bind:
 maya_tcp_bind:
     mov rax, 49
     syscall
     ret
+lipi_tcp_listen:
 maya_tcp_listen:
     mov rax, 50
     syscall
     ret
+lipi_tcp_accept:
 maya_tcp_accept:
     mov rax, 43
     syscall
     ret
+lipi_tcp_connect:
 maya_tcp_connect:
     mov rax, 42
     syscall
     ret
+lipi_tcp_send:
 maya_tcp_send:
     mov r10, rcx
     mov rax, 44
     syscall
     ret
+lipi_tcp_recv:
 maya_tcp_recv:
     mov r10, rcx
     mov rax, 45
     syscall
     ret
+lipi_tcp_close:
 maya_tcp_close:
     mov rax, 3
     syscall
     ret
+lipi_tcp_set_nonblocking:
 maya_tcp_set_nonblocking:
     xor rax, rax
     ret
 
+.global lipi_jit_call
 .global maya_jit_call
+.type lipi_jit_call, @function
+.global lipi_jit_call0
 .global maya_jit_call0
+.type lipi_jit_call0, @function
+.global lipi_jit_call1
 .global maya_jit_call1
+.type lipi_jit_call1, @function
+.global lipi_jit_call2
 .global maya_jit_call2
+.type lipi_jit_call2, @function
+.global lipi_jit_call3
 .global maya_jit_call3
+.type lipi_jit_call3, @function
+.global lipi_jit_call4
 .global maya_jit_call4
+.type lipi_jit_call4, @function
 .type maya_jit_call, @function
 .type maya_jit_call0, @function
 .type maya_jit_call1, @function
 .type maya_jit_call2, @function
 .type maya_jit_call3, @function
 .type maya_jit_call4, @function
+lipi_jit_call:
 maya_jit_call:
+lipi_jit_call0:
 maya_jit_call0:
     jmp rdi
+lipi_jit_call1:
 maya_jit_call1:
     mov rax, rdi
     mov rdi, rsi
     jmp rax
+lipi_jit_call2:
 maya_jit_call2:
     mov rax, rdi
     mov rdi, rsi
     mov rsi, rdx
     jmp rax
+lipi_jit_call3:
 maya_jit_call3:
     mov rax, rdi
     mov rdi, rsi
     mov rsi, rdx
     mov rdx, rcx
     jmp rax
+lipi_jit_call4:
 maya_jit_call4:
     mov rax, rdi
     mov rdi, rsi
@@ -2486,109 +2778,148 @@ maya_jit_call4:
 # 10. Sovereign Memory Accessors
 # ----------------------------------------------------------------------------
 .global sys_mem_read_u8
+.global lipi_mem_read_u8
 .global maya_mem_read_u8
+.type lipi_mem_read_u8, @function
 .type sys_mem_read_u8, @function
 .type maya_mem_read_u8, @function
 sys_mem_read_u8:
+lipi_mem_read_u8:
 maya_mem_read_u8:
     movzx rax, byte ptr [rdi]
     ret
 
 .global sys_mem_write_u8
+.global lipi_mem_write_u8
 .global maya_mem_write_u8
+.type lipi_mem_write_u8, @function
 .type sys_mem_write_u8, @function
 .type maya_mem_write_u8, @function
 sys_mem_write_u8:
+lipi_mem_write_u8:
 maya_mem_write_u8:
     mov [rdi], sil
     xor rax, rax
     ret
 
 .global sys_mem_read_u16
+.global lipi_mem_read_u16
 .global maya_mem_read_u16
+.type lipi_mem_read_u16, @function
 .type sys_mem_read_u16, @function
 .type maya_mem_read_u16, @function
 sys_mem_read_u16:
+lipi_mem_read_u16:
 maya_mem_read_u16:
     movzx rax, word ptr [rdi]
     ret
 
 .global sys_mem_write_u16
+.global lipi_mem_write_u16
 .global maya_mem_write_u16
+.type lipi_mem_write_u16, @function
 .type sys_mem_write_u16, @function
 .type maya_mem_write_u16, @function
 sys_mem_write_u16:
+lipi_mem_write_u16:
 maya_mem_write_u16:
     mov [rdi], si
     xor rax, rax
     ret
 
 .global sys_mem_read_u32
+.global lipi_mem_read_u32
 .global maya_mem_read_u32
+.type lipi_mem_read_u32, @function
 .type sys_mem_read_u32, @function
 .type maya_mem_read_u32, @function
 sys_mem_read_u32:
+lipi_mem_read_u32:
 maya_mem_read_u32:
     mov eax, dword ptr [rdi]
     ret
 
 .global sys_mem_write_u32
+.global lipi_mem_write_u32
 .global maya_mem_write_u32
+.type lipi_mem_write_u32, @function
 .type sys_mem_write_u32, @function
 .type maya_mem_write_u32, @function
 sys_mem_write_u32:
+lipi_mem_write_u32:
 maya_mem_write_u32:
     mov [rdi], esi
     xor rax, rax
     ret
 
 .global sys_mem_read_u64
+.global lipi_mem_read_u64
 .global maya_mem_read_u64
+.type lipi_mem_read_u64, @function
 .type sys_mem_read_u64, @function
 .type maya_mem_read_u64, @function
 sys_mem_read_u64:
+lipi_mem_read_u64:
 maya_mem_read_u64:
     mov rax, [rdi]
     ret
 
 .global sys_mem_write_u64
+.global lipi_mem_write_u64
 .global maya_mem_write_u64
+.type lipi_mem_write_u64, @function
 .type sys_mem_write_u64, @function
 .type maya_mem_write_u64, @function
 sys_mem_write_u64:
+lipi_mem_write_u64:
 maya_mem_write_u64:
     mov [rdi], rsi
     xor rax, rax
     ret
 
+.global lipi_mem_write_bytes
 .global maya_mem_write_bytes
+.type lipi_mem_write_bytes, @function
 .type maya_mem_write_bytes, @function
+lipi_mem_write_bytes:
 maya_mem_write_bytes:
     mov rcx, rdx
     rep movsb
     xor rax, rax
     ret
 
+.global lipi_gc_arenas_head
 .global maya_gc_arenas_head
+.type lipi_gc_arenas_head, @function
 .type maya_gc_arenas_head, @function
+lipi_gc_arenas_head:
 maya_gc_arenas_head:
     lea rax, [rip + g_arenas_head]
     ret
 
+.global lipi_gc_large_chunks_head
 .global maya_gc_large_chunks_head
+.type lipi_gc_large_chunks_head, @function
 .type maya_gc_large_chunks_head, @function
+lipi_gc_large_chunks_head:
 maya_gc_large_chunks_head:
     lea rax, [rip + g_large_chunks_head]
     ret
 
+.global lipi_gc_get_stack_top
 .global maya_gc_get_stack_top
+.type lipi_gc_get_stack_top, @function
 .type maya_gc_get_stack_top, @function
+lipi_gc_get_stack_top:
 maya_gc_get_stack_top:
     mov rax, [rip + g_stack_top]
     ret
 
+.global lipi_get_reg_dump
 .global maya_get_reg_dump
+.type lipi_get_reg_dump, @function
 .type maya_get_reg_dump, @function
+lipi_get_reg_dump:
 maya_get_reg_dump:
     lea rax, [rip + maya_reg_dump]
     ret

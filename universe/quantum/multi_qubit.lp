@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — MULTI-QUBIT QUANTUM SIMULATOR ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — MULTI-QUBIT QUANTUM SIMULATOR ENGINE
 @! Module: universe/quantum/multi_qubit.maya
 @! Milestone: Multi-Qubit True Quantum Simulator
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 2^N State Vectors, Matrix Gate Operations (H, X, Y, Z, CNOT, Toffoli),
 @! Quantum Entanglement (Bell States), and Measurement Probabilities
 @! ============================================================================

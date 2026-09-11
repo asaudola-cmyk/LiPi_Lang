@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE NETWORKING: HTTP/2 STREAM STATE MACHINE
+@! LIPI UNIVERSE NETWORKING: HTTP/2 STREAM STATE MACHINE
 @! Module: universe/net/http2/stream
-@! 100% Pure Maya Implementation — RFC 7540
+@! 100% Pure Lipi Implementation — RFC 7540
 @! ============================================================================
 
 import "universe/core/collections"

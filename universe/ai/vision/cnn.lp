@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — DIFFERENTIABLE CNN LAYERS & ARCHITECTURES
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE AI — DIFFERENTIABLE CNN LAYERS & ARCHITECTURES
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Differentiable Conv2D (im2col/col2im), MaxPool2D (with argmax routing),
 @! AvgPool2D, BatchNorm2D, ResNet Blocks, SimpleCNN / LeNet Backbone.
 @! ============================================================================

@@ -1,7 +1,7 @@
 @! ============================================================================
 @! PURE MAYA MOBILE PERSISTENT KEY-VALUE STORAGE ENGINE
 @! Module: universe/mobile/storage
-@! 100% Pure Maya Implementation — File-Backed Durable Persistence
+@! 100% Pure Lipi Implementation — File-Backed Durable Persistence
 @! ============================================================================
 
 import "universe/core/string"

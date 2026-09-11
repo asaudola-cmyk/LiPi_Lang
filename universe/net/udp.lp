@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET - PURE MAYA UDP SOCKET STACK (universe/net/udp.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE NET - PURE MAYA UDP SOCKET STACK (universe/net/udp.maya)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Complete Linux x86-64 BSD Sockets Datagram & Broadcast Implementation
 @! ============================================================================
 

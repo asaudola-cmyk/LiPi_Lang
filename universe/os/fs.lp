@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE OS — FILE SYSTEM & PATH MANAGEMENT (universe/os/fs)
-@! 100% Written in Pure Maya Language — Native Linux x86-64 Syscalls
+@! LIPI UNIVERSE OS — FILE SYSTEM & PATH MANAGEMENT (universe/os/fs)
+@! 100% Written in Pure Lipi Language — Native Linux x86-64 Syscalls
 @! Complete Independence from libc.so / stdio
 @! ============================================================================
 

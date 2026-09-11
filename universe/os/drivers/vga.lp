@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — BARE-METAL VGA TEXT & LFB DRIVERS
+@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL VGA TEXT & LFB DRIVERS
 @! Module: universe/os/drivers/vga.maya
 @! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 80x25 Text Mode (0xB8000), Cursor Positioning via CRTC IO Ports,
 @! Text Buffer Scrolling, Linear Framebuffer (LFB 0xFD000000) Pixel Pipeline
 @! ============================================================================
