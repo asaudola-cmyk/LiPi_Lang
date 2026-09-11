@@ -7,66 +7,71 @@
 // SYS_read, SYS_fsync) with zero data loss guarantee.
 // ==============================================================================
 
-অন্তর্ভুক্ত "std/io.lp"
-অন্তর্ভুক্ত "std/mem.lp"
+include "std/io.lp"
+include "std/mem.lp"
 
 // ১. ডাটাবেজ ফাইল খোলা বা তৈরি করা (Open or Create Binary DB File)
 // WHY: O_RDWR (2) | O_CREAT (64) = 66, Mode 0644o = 420
-কাজ ডিবি_খোলো(পাথ) {
-     fd = syscall(২, পাথ, ৬৬, ৪২০)
+fn db_open path
+    fd = syscall(2, path, 66, 420, 0, 0, 0)
     return fd
-}
+
+fn ডিবি_খোলো পাথ
+    return db_open(পাথ)
 
 // ২. ডাটাবেজে নতুন রেকর্ড ইনসার্ট করা (Insert Record with SYS_fsync)
-// WHY: 32-byte binary layout: [ID: 8B | Timestamp: 8B | Status: 8B | Value: 8B]
+// WHY: 32-byte binary layout: [ID: 8B (off 0) | Timestamp: 8B (off 8) | Status: 8B (off 16) | Value: 8B (off 24)]
 // SYS_fsync (74) ensures the data is written directly to physical NVMe/SSD silicon.
-কাজ ডিবি_রেকর্ড_যোগ(fd, মান) {
-    // ফাইলের আকার ও পরবর্তী আইডি নির্ধারণ
-     আকার = syscall(৮, fd, ০, ২) // lseek SEEK_END
-     পরবর্তী_আইডি = (আকার / ৩২) + ১
+fn db_insert_record fd val
+    size = syscall(8, fd, 0, 2, 0, 0, 0)
+    next_id = (size / 32) + 1
+    buf = malloc(64)
 
-    মেমরি_লেখো(বাফার(), ০, পরবর্তী_আইডি)
-    মেমরি_লেখো(বাফার(), ৮, সিপিউ_ক্লক())
-    মেমরি_লেখো(বাফার(), ১৬, ১) // স্ট্যাটাস ১ = সক্রিয়
-    মেমরি_লেখো(বাফার(), ২৪, মান) // ডেটা মান
+    mem_write(buf, 0, next_id)
+    mem_write(buf, 8, cpu_clock())
+    mem_write(buf, 16, 1)
+    mem_write(buf, 24, val)
 
-    // ৩২ বাইট রেকর্ড ফাইলে লেখা
-    syscall(১, fd, বাফার(), ৩২)
+    syscall(1, fd, buf, 32, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0)
+    free(buf, 64)
+    return next_id
 
-    // হার্ডওয়্যার ডিস্কে সরাসরি ফ্লাশ (Zero Data Loss)
-    syscall(৭৪, fd)
-
-    return পরবর্তী_আইডি
-}
+fn ডিবি_রেকর্ড_যোগ fd মান
+    return db_insert_record(fd, মান)
 
 // ৩. রেকর্ড মুছে ফেলা (Soft Delete Record via Offset Mutation)
-// WHY: স্ট্যাটাস ফিল্ডকে ০ করে দিলে রেকর্ডটি নিষ্ক্রিয় হয়, ডাটাবেজের indexক্স অখণ্ড থাকে।
-কাজ ডিবি_রেকর্ড_মুছো(fd, টার্গেট_আইডি) {
-    if টার্গেট_আইডি <= ০ {
-        return ০
-    }
+// WHY: স্ট্যাটাস ফিল্ডকে ০ করে দিলে রেকর্ডটি নিষ্ক্রিয় হয়, ডাটাবেজের ইনডেক্স অখণ্ড থাকে।
+fn db_delete_record fd target_id
+    if target_id <= 0
+        return 0
 
-     অফসেট = (টার্গেট_আইডি - ১) * ৩২
-    // স্ট্যাটাস ফিল্ড অফসেট + ১৬ এ পয়েন্ট করা
-    syscall(৮, fd, অফসেট + ১৬, ০) // lseek SEEK_SET
+    offset = (target_id - 1) * 32
+    syscall(8, fd, offset + 16, 0, 0, 0, 0)
 
-    মেমরি_লেখো(বাফার(), ০, ০) // স্ট্যাটাস ০ = মুছে ফেলা
-    syscall(১, fd, বাফার(), ৮)
+    buf = malloc(16)
+    mem_write(buf, 0, 0)
+    syscall(1, fd, buf, 8, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0)
+    free(buf, 16)
+    return 1
 
-    // হার্ডওয়্যার ডিস্কে সিঙ্ক
-    syscall(৭৪, fd)
-    return ১
-}
+fn ডিবি_রেকর্ড_মুছো fd টার্গেট_আইডি
+    return db_delete_record(fd, টার্গেট_আইডি)
 
 // ৪. মোট রেকর্ডের সংখ্যা গণনা
-কাজ ডিবি_মোট_রেকর্ড(fd) {
-     আকার = syscall(৮, fd, ০, ২)
-     মোট = আকার / ৩২
-    return মোট
-}
+fn db_total_records fd
+    size = syscall(8, fd, 0, 2, 0, 0, 0)
+    total = size / 32
+    return total
+
+fn ডিবি_মোট_রেকর্ড fd
+    return db_total_records(fd)
 
 // ৫. ডাটাবেজের বাইট সাইজ রিটার্ন করা
-কাজ ডিবি_ফাইলের_সাইজ(fd) {
-     আকার = syscall(৮, fd, ০, ২)
-    return আকার
-}
+fn db_file_size fd
+    size = syscall(8, fd, 0, 2, 0, 0, 0)
+    return size
+
+fn ডিবি_ফাইলের_সাইজ fd
+    return db_file_size(fd)

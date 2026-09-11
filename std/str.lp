@@ -64,3 +64,17 @@ fn str_wrap text width
 
 // Repeat char n times (shorthand)
 fn chars n c = str_repeat c n
+
+// Extract substring from start index to end index (exclusive)
+fn str_sub s start end
+    res = ""
+    i = start
+    slen = len s
+    while i < end and i < slen
+        res = res + char_at s i
+        i = i + 1
+    return res
+
+// Substring alias
+fn substring s start end
+    return str_sub s start end

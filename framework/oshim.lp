@@ -164,6 +164,7 @@ fn oshim_serialize_response res
     wire = wire + "Server: Oshim-Framework/1.0.0 (Lipi-Sovereign-x86_64)\r\n"
     wire = wire + "Content-Type: " + res.content_type + "\r\n"
     wire = wire + "Content-Length: " + blen + "\r\n"
+    wire = wire + "Access-Control-Allow-Origin: *\r\n"
     wire = wire + "Connection: close\r\n"
     wire = wire + "X-Content-Type-Options: nosniff\r\n"
     wire = wire + "\r\n"

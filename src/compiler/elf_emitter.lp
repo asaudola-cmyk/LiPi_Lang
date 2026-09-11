@@ -3185,7 +3185,10 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                prev_while_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_while_p
+                    ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
@@ -3713,6 +3716,12 @@ fn has_include content
                 q = char_at(content, p+8)
                 if q == "\"" or q == "'"
                     return 1
+        if p + 35 < clen
+            if ord(char_at(content, p)) == 224
+                if str_sub(content, p, p + 34) == "অন্তর্ভুক্ত "
+                    q = char_at(content, p+34)
+                    if q == "\"" or q == "'"
+                        return 1
         while p < clen and char_at(content, p) != "\n"
             p = p + 1
         if p < clen and char_at(content, p) == "\n"
@@ -3753,6 +3762,19 @@ fn bundle_source file_path visited
                     if p_tend < clen and char_at(content, p_tend) == q
                         is_inc = 1
                         inc_target = str_sub(content, p_tstart, p_tend)
+
+        if is_inc == 0 and p + 35 < clen
+            if ord(char_at(content, p)) == 224
+                if str_sub(content, p, p + 34) == "অন্তর্ভুক্ত "
+                    q = char_at(content, p+34)
+                    if q == "\"" or q == "'"
+                        p_tstart = p + 35
+                        p_tend = p_tstart
+                        while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
+                            p_tend = p_tend + 1
+                        if p_tend < clen and char_at(content, p_tend) == q
+                            is_inc = 1
+                            inc_target = str_sub(content, p_tstart, p_tend)
 
         while p < clen and char_at(content, p) != "\n"
             p = p + 1

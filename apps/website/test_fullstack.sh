@@ -27,7 +27,7 @@ echo -e "${YELLOW}[ধাপ ১] খাঁটি লিপি কম্পা�
 echo -e "${GREEN}  ✔ apps/website/lipi_server সফলভাবে নির্মিত।${NC}"
 
 # ব্যাকগ্রাউন্ডে সার্ভার শুরু
-./apps/website/lipi_server &
+./apps/website/lipi_server 8088 &
 SERVER_PID=$!
 
 cleanup() {
@@ -39,7 +39,7 @@ sleep 0.6
 
 # ধাপ ২: প্রাথমিক সিড রেকর্ড যাচাই
 echo -e "${YELLOW}[ধাপ ২] GET /api/db/items (প্রাথমিক রেকর্ডসমূহ লোড)...${NC}"
-ITEMS_JSON=$(curl -s http://127.0.0.1:8080/api/db/items)
+ITEMS_JSON=$(curl -s http://127.0.0.1:8088/api/db/items)
 echo -e "  • প্রাপ্ত ডেটা: ${CYAN}${ITEMS_JSON}${NC}"
 if echo "${ITEMS_JSON}" | grep -q "1024"; then
     echo -e "${GREEN}  ✔ প্রাথমিক সিড রেকর্ড প্রাপ্তি সফল!${NC}"
@@ -50,7 +50,7 @@ fi
 
 # ধাপ ৩: ডাটাবেজে নতুন রেকর্ড যোগ (INSERT)
 echo -e "${YELLOW}[ধাপ ৩] POST /api/db/add (নতুন রেকর্ড ৫০০০ ইনসার্ট)...${NC}"
-ADD_RES=$(curl -s -X POST "http://127.0.0.1:8080/api/db/add?val=5000")
+ADD_RES=$(curl -s -X POST "http://127.0.0.1:8088/api/db/add?val=5000")
 echo -e "  • ইনসার্ট রেসপন্স: ${CYAN}${ADD_RES}${NC}"
 if echo "${ADD_RES}" | grep -q "success"; then
     echo -e "${GREEN}  ✔ রেকর্ড ইনসার্ট সফল!${NC}"
@@ -61,7 +61,7 @@ fi
 
 # ধাপ ৪: পুনরায় সব রেকর্ড চেক (ভ্যালিডেশন)
 echo -e "${YELLOW}[ধাপ ৪] GET /api/db/items (নতুন ইনসার্ট সহ যাচাই)...${NC}"
-UPDATED_JSON=$(curl -s http://127.0.0.1:8080/api/db/items)
+UPDATED_JSON=$(curl -s http://127.0.0.1:8088/api/db/items)
 echo -e "  • আপডেটকৃত ডেটা: ${CYAN}${UPDATED_JSON}${NC}"
 if echo "${UPDATED_JSON}" | grep -q "5000"; then
     echo -e "${GREEN}  ✔ নতুন রেকর্ড ৫০০০ ডাটাবেজে দৃশ্যমান!${NC}"
@@ -72,7 +72,7 @@ fi
 
 # ধাপ ৫: ডাটাবেজ পরিসংখ্যান এপিআই
 echo -e "${YELLOW}[ধাপ ৫] GET /api/db/stats (ডাটাবেজ স্ট্যাটাস)...${NC}"
-STATS_RES=$(curl -s http://127.0.0.1:8080/api/db/stats)
+STATS_RES=$(curl -s http://127.0.0.1:8088/api/db/stats)
 echo -e "  • স্ট্যাটাস রেসপন্স: ${CYAN}${STATS_RES}${NC}"
 if echo "${STATS_RES}" | grep -q "fsync_guarantee"; then
     echo -e "${GREEN}  ✔ ডাটাবেজ স্ট্যাটস সফল!${NC}"
@@ -83,7 +83,7 @@ fi
 
 # ধাপ ৬: রেকর্ড সফট ডিলিট
 echo -e "${YELLOW}[ধাপ ৬] POST /api/db/delete?id=2 (রেকর্ড #২ ডিলিট)...${NC}"
-DEL_RES=$(curl -s -X POST "http://127.0.0.1:8080/api/db/delete?id=2")
+DEL_RES=$(curl -s -X POST "http://127.0.0.1:8088/api/db/delete?id=2")
 echo -e "  • ডিলিট রেসপন্স: ${CYAN}${DEL_RES}${NC}"
 if echo "${DEL_RES}" | grep -q "success"; then
     echo -e "${GREEN}  ✔ রেকর্ড ২ ডিলিট সফল!${NC}"
@@ -94,7 +94,7 @@ fi
 
 # ধাপ ৭: ডিলিট পরবর্তী ডাটাবেজ যাচাই
 echo -e "${YELLOW}[ধাপ ৭] GET /api/db/items (ডিলিট পরবর্তী যাচাই)...${NC}"
-AFTER_DEL=$(curl -s http://127.0.0.1:8080/api/db/items)
+AFTER_DEL=$(curl -s http://127.0.0.1:8088/api/db/items)
 echo -e "  • বর্তমান ডেটা: ${CYAN}${AFTER_DEL}${NC}"
 # Record 2 (val 2048) should be omitted
 if echo "${AFTER_DEL}" | grep -q "2048"; then
