@@ -80,8 +80,28 @@ else
     exit 1
 fi
 
-# ৭. HTTP রিকোয়েস্ট যাচাই (GET /favicon.svg)
-echo -e "${YELLOW}[ধাপ ৭] HTTP রিকোয়েস্ট ৪: GET /favicon.svg (লিপি ক্রাউন লোগো)...${NC}"
+# ৭. HTTP রিকোয়েস্ট যাচাই (GET /wasm_runner.js)
+echo -e "${YELLOW}[ধাপ ৭] HTTP রিকোয়েস্ট ৪: GET /wasm_runner.js (ক্লায়েন্ট WebAssembly ইঞ্জিন)...${NC}"
+HTTP_CODE_WASM=$(curl -s -o /tmp/lipi_wasm.js -w "%{http_code}" http://127.0.0.1:8088/wasm_runner.js)
+if [ "${HTTP_CODE_WASM}" -eq 200 ] && grep -q "LipiWasmRunner" /tmp/lipi_wasm.js; then
+    echo -e "${GREEN}  ✔ GET /wasm_runner.js সফল! HTTP 200 OK — WebAssembly রানার প্রস্তুত।${NC}"
+else
+    echo -e "${RED}  ❌ এরর: GET /wasm_runner.js ব্যর্থ (Code: ${HTTP_CODE_WASM})!${NC}"
+    exit 1
+fi
+
+# ৮. HTTP রিকোয়েস্ট যাচাই (GET /lipi_worker.js)
+echo -e "${YELLOW}[ধাপ ৮] HTTP রিকোয়েস্ট ৫: GET /lipi_worker.js (ব্যাকগ্রাউন্ড WebWorker)...${NC}"
+HTTP_CODE_WORKER=$(curl -s -o /tmp/lipi_worker.js -w "%{http_code}" http://127.0.0.1:8088/lipi_worker.js)
+if [ "${HTTP_CODE_WORKER}" -eq 200 ] && grep -q "RUN_WASM" /tmp/lipi_worker.js; then
+    echo -e "${GREEN}  ✔ GET /lipi_worker.js সফল! HTTP 200 OK — মাল্টি-থ্রেডেড ওয়ার্কার প্রস্তুত।${NC}"
+else
+    echo -e "${RED}  ❌ এরর: GET /lipi_worker.js ব্যর্থ (Code: ${HTTP_CODE_WORKER})!${NC}"
+    exit 1
+fi
+
+# ৯. HTTP রিকোয়েস্ট যাচাই (GET /favicon.svg)
+echo -e "${YELLOW}[ধাপ ৯] HTTP রিকোয়েস্ট ৬: GET /favicon.svg (লিপি ক্রাউন লোগো)...${NC}"
 HTTP_CODE_SVG=$(curl -s -o /tmp/lipi_fav.svg -w "%{http_code}" http://127.0.0.1:8088/favicon.svg)
 if [ "${HTTP_CODE_SVG}" -eq 200 ] && grep -q "svg" /tmp/lipi_fav.svg; then
     echo -e "${GREEN}  ✔ GET /favicon.svg সফল! HTTP 200 OK — এসভিজি লোগো প্রাপ্ত।${NC}"
@@ -90,8 +110,8 @@ else
     exit 1
 fi
 
-# ৮. HTTP রিকোয়েস্ট যাচাই (GET /api/status - Dynamic Telemetry)
-echo -e "${YELLOW}[ধাপ ৮] HTTP রিকোয়েস্ট ৫: GET /api/status (ডাইনামিক সিলিকন মেট্রিক্স JSON)...${NC}"
+# ১০. HTTP রিকোয়েস্ট যাচাই (GET /api/status - Dynamic Telemetry)
+echo -e "${YELLOW}[ধাপ ১০] HTTP রিকোয়েস্ট ৭: GET /api/status (ডাইনামিক সিলিকন মেট্রিক্স JSON)...${NC}"
 STATUS_JSON=$(curl -s http://127.0.0.1:8088/api/status)
 echo -e "  • প্রাপ্ত ডাইনামিক JSON: ${CYAN}${STATUS_JSON}${NC}"
 if echo "${STATUS_JSON}" | grep -q "sovereign_online"; then
@@ -101,8 +121,8 @@ else
     exit 1
 fi
 
-# ৯. HTTP রিকোয়েস্ট যাচাই (POST /api/run - Sandbox Compilation & Execution API)
-echo -e "${YELLOW}[ধাপ ৯] HTTP রিকোয়েস্ট ৬: POST /api/run (স্যান্ডবক্স রানার API)...${NC}"
+# ১১. HTTP রিকোয়েস্ট যাচাই (POST /api/run - Sandbox Compilation & Execution API)
+echo -e "${YELLOW}[ধাপ ১১] HTTP রিকোয়েস্ট ৮: POST /api/run (স্যান্ডবক্স রানার API)...${NC}"
 RUN_JSON=$(curl -s -X POST http://127.0.0.1:8088/api/run -d '{"code": "say \"Hello from Lipi Playground!\""}')
 echo -e "  • প্রাপ্ত স্যান্ডবক্স JSON: ${CYAN}${RUN_JSON}${NC}"
 if echo "${RUN_JSON}" | grep -q "Hello from Lipi Playground"; then
@@ -112,8 +132,8 @@ else
     exit 1
 fi
 
-# ১০. সক্রিয় কোডবেস পিএইচপি অডিট
-echo -e "${YELLOW}[ধাপ ১০] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
+# ১২. সক্রিয় কোডবেস পিএইচপি অডিট
+echo -e "${YELLOW}[ধাপ ১২] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
 PHP_COUNT=$(find apps/website -name "*.php" | wc -l)
 if [ "${PHP_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ apps/website এ কোনো PHP ফাইল নেই (০% PHP, ১০০% লিপি)!${NC}"
@@ -122,7 +142,7 @@ else
     exit 1
 fi
 
-rm -f /tmp/lipi_home.html /tmp/lipi_style.css /tmp/lipi_app.js /tmp/lipi_fav.svg
+rm -f /tmp/lipi_home.html /tmp/lipi_style.css /tmp/lipi_app.js /tmp/lipi_wasm.js /tmp/lipi_worker.js /tmp/lipi_fav.svg
 
 echo ""
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${NC}"

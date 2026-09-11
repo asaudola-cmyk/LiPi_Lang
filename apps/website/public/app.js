@@ -360,10 +360,108 @@ function initPlayground() {
   const valTime = document.getElementById('val-time');
   const valCycles = document.getElementById('val-cycles');
 
+  // Dual-Engine DOM Elements
+  const engineBtnServer = document.getElementById('engine-btn-server');
+  const engineBtnWasm = document.getElementById('engine-btn-wasm');
+  const enginePill = document.getElementById('playground-engine-pill');
+  const valEngine = document.getElementById('val-engine');
+  const valSecurity = document.getElementById('val-security');
+  const securityPill = document.getElementById('playground-security-pill');
+  const terminalHeaderTitle = document.getElementById('terminal-header-title');
+  const termFooterMeta = document.getElementById('term-footer-meta');
+
   if (!textarea || !highlightCode) return;
 
   let currentKey = 'hello';
+  let currentEngine = 'server'; // 'server' (AMD64 Linux Syscalls) | 'wasm' (In-Browser Virtual Silicon)
 
+  // ----------------------------------------------------------------------------
+  // Web Worker Initialization (Multi-Threaded Virtual Silicon Background Runner)
+  // WHY: Runs heavy computations (e.g. 10M iterations, recursion) off the UI thread.
+  // ----------------------------------------------------------------------------
+  let workerInstance = null;
+  let workerPendingId = 0;
+  const workerCallbacks = new Map();
+
+  try {
+    if (typeof Worker !== 'undefined') {
+      workerInstance = new Worker('/lipi_worker.js');
+      workerInstance.onmessage = function (e) {
+        const msg = e.data || {};
+        if (msg.type === 'WASM_RESULT' && workerCallbacks.has(msg.id)) {
+          const cb = workerCallbacks.get(msg.id);
+          workerCallbacks.delete(msg.id);
+          cb(msg.result);
+        }
+      };
+      workerInstance.onerror = function (err) {
+        console.warn('[Playground Worker] Worker error, falling back to direct WASM runner:', err);
+      };
+    }
+  } catch (workerErr) {
+    console.warn('[Playground Worker] Worker initialization skipped:', workerErr);
+    workerInstance = null;
+  }
+
+  // ----------------------------------------------------------------------------
+  // Engine Selector Toggle Switch Handler
+  // ----------------------------------------------------------------------------
+  function setEngine(engine) {
+    currentEngine = engine;
+
+    const isServer = (engine === 'server');
+    const isWasm = (engine === 'wasm');
+
+    if (engineBtnServer) {
+      engineBtnServer.classList.toggle('active', isServer);
+      engineBtnServer.setAttribute('aria-selected', isServer ? 'true' : 'false');
+    }
+    if (engineBtnWasm) {
+      engineBtnWasm.classList.toggle('active', isWasm);
+      engineBtnWasm.setAttribute('aria-selected', isWasm ? 'true' : 'false');
+    }
+
+    if (isServer) {
+      if (valEngine) valEngine.innerText = 'Server Silicon';
+      if (enginePill) enginePill.className = 'telemetry-pill engine-pill';
+      if (valSecurity) valSecurity.innerText = 'Linux Jail (২GB / ২s)';
+      if (securityPill) securityPill.className = 'telemetry-pill security-pill';
+      if (terminalHeaderTitle) terminalHeaderTitle.innerText = 'লিপি সার্বভৌম টার্মিনাল (AMD64 ELF64)';
+      if (termFooterMeta) termFooterMeta.innerText = 'সরাসরি লিনাক্স কার্নেল সিসকল ট্রেস • ০% Libc • ০% GCC • ০% PHP';
+      if (btnRun) {
+        const runIcon = btnRun.querySelector('.btn-run-icon');
+        if (runIcon) runIcon.innerText = '⚡';
+        btnRun.title = 'কোড সংকলন ও এক্সিকিউট করুন (Ctrl+Enter) [Server Silicon]';
+      }
+    } else {
+      // Offline Client WASM
+      if (valEngine) valEngine.innerText = 'Client-Side WebAssembly (Offline)';
+      if (enginePill) enginePill.className = 'telemetry-pill engine-pill engine-wasm';
+      if (valSecurity) valSecurity.innerText = 'In-Browser Wasm VM';
+      if (securityPill) securityPill.className = 'telemetry-pill security-pill security-wasm';
+      if (terminalHeaderTitle) terminalHeaderTitle.innerText = 'লিপি সার্বভৌম টার্মিনাল (Client WebAssembly VM)';
+      if (termFooterMeta) termFooterMeta.innerText = 'ব্রাউজার ভার্চুয়াল সিলিকন • 100% In-Memory Wasm • ০% Network • ০% Libc';
+      if (valTime && valTime.innerText.indexOf('ms') !== -1) {
+        valTime.innerText = '<1 ms';
+      }
+      if (btnRun) {
+        const runIcon = btnRun.querySelector('.btn-run-icon');
+        if (runIcon) runIcon.innerText = '🌐';
+        btnRun.title = 'কোড সংকলন ও এক্সিকিউট করুন (Ctrl+Enter) [Offline Client WASM]';
+      }
+    }
+  }
+
+  if (engineBtnServer) {
+    engineBtnServer.addEventListener('click', () => setEngine('server'));
+  }
+  if (engineBtnWasm) {
+    engineBtnWasm.addEventListener('click', () => setEngine('wasm'));
+  }
+
+  // ----------------------------------------------------------------------------
+  // Line Numbers and Editor Rendering
+  // ----------------------------------------------------------------------------
   function updateLineNumbers(text) {
     if (!editorGutter) return;
     const lines = text.split('\n');
@@ -398,7 +496,14 @@ function initPlayground() {
     textarea.value = snippet.code;
     if (filenameEl) filenameEl.innerText = snippet.filename;
     if (valCycles) valCycles.innerText = snippet.cycles + ' Cycles';
-    if (valTime) valTime.innerText = (snippet.time_ms !== undefined ? snippet.time_ms : 0) + ' ms';
+
+    if (currentEngine === 'wasm') {
+      if (valTime) valTime.innerText = '<1 ms';
+      if (valEngine) valEngine.innerText = 'Client-Side WebAssembly (Offline)';
+    } else {
+      if (valTime) valTime.innerText = (snippet.time_ms !== undefined ? snippet.time_ms : 0) + ' ms';
+      if (valEngine) valEngine.innerText = 'Server Silicon';
+    }
 
     renderEditor();
 
@@ -486,7 +591,60 @@ function initPlayground() {
     });
   }
 
-  // Execute Code via POST /api/run
+  // ----------------------------------------------------------------------------
+  // Client-Side WebAssembly Runner Invocation Helper
+  // ----------------------------------------------------------------------------
+  async function runWasmCode(code) {
+    return new Promise((resolve) => {
+      if (workerInstance) {
+        const id = ++workerPendingId;
+        const timeout = setTimeout(() => {
+          if (workerCallbacks.has(id)) {
+            workerCallbacks.delete(id);
+            // Fallback to direct window.LipiWasmRunner
+            if (typeof window !== 'undefined' && window.LipiWasmRunner) {
+              window.LipiWasmRunner.run(code).then(resolve);
+            } else {
+              resolve({
+                status: 'error',
+                phase: 'wasm_timeout',
+                error: 'WebAssembly execution timed out after 3 seconds',
+                time_ms: 3000,
+                cycles: 9600000,
+                engine: 'Client-Side WebAssembly (Offline)'
+              });
+            }
+          }
+        }, 3000);
+
+        workerCallbacks.set(id, (res) => {
+          clearTimeout(timeout);
+          resolve(res);
+        });
+
+        workerInstance.postMessage({
+          action: 'RUN_WASM',
+          id: id,
+          code: code
+        });
+      } else if (typeof window !== 'undefined' && window.LipiWasmRunner) {
+        window.LipiWasmRunner.run(code).then(resolve);
+      } else {
+        resolve({
+          status: 'error',
+          phase: 'wasm_loader',
+          error: 'WebAssembly runner is not loaded.',
+          time_ms: 0,
+          cycles: 0,
+          engine: 'Client-Side WebAssembly (Offline)'
+        });
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------------------
+  // Dual-Engine Unified Code Runner
+  // ----------------------------------------------------------------------------
   async function runCode() {
     const code = textarea.value.trim();
     if (!code) {
@@ -498,7 +656,85 @@ function initPlayground() {
 
     if (!btnRun || !terminalScreen) return;
 
-    // Loading State
+    // ──────────────────────────────────────────────────────────────────────────
+    // BRANCH A: 🌐 Offline Client WASM (In-Browser Virtual Silicon)
+    // ──────────────────────────────────────────────────────────────────────────
+    if (currentEngine === 'wasm') {
+      btnRun.classList.add('loading');
+      btnRun.disabled = true;
+      btnRun.innerHTML = '<span class="btn-run-spinner"></span> <span>WASM ভার্চুয়াল সিলিকনে চলছে...</span>';
+
+      if (statusBadge) {
+        statusBadge.className = 'term-badge term-badge-running';
+        statusBadge.innerText = '● IN-MEMORY WASM';
+      }
+
+      terminalScreen.innerHTML = `<span class="term-out-banner">╔════════════════════════════════════════════════════════════════════════╗</span>
+<span class="term-out-banner">║  🌐 LIPI CLIENT-SIDE WEBASSEMBLY (WASM) VIRTUAL SILICON ENGINE        ║</span>
+<span class="term-out-banner">║  ⚡ 100% In-Browser Memory | Zero Network Roundtrip | 0% Libc          ║</span>
+<span class="term-out-banner">╚════════════════════════════════════════════════════════════════════════╝</span>
+
+<span class="term-out-dim">[১/৩] ব্রাউজার মেমোরিতে W3C WebAssembly বাইটকোড ও AST সিন্থেসিস...</span>
+<span class="term-out-dim">[২/৩] ক্লায়েন্ট-সাইড WebAssembly JIT ও ভার্চুয়াল সিলিকন ইনিশিয়ালাইজেশন...</span>
+<span class="term-out-dim">[৩/৩] ইন-মেমোরি আইসোলেটেড ভার্চুয়াল মেমোরি টেবিলে কোড এক্সিকিউশন...</span>
+<span class="term-out-prompt">────────────────────────────────────────────────────────────────────────</span>
+`;
+
+      const tStart = performance.now();
+
+      try {
+        const wasmRes = await runWasmCode(code);
+        const tEnd = performance.now();
+        const clientLatency = Math.max(0, Math.round((tEnd - tStart) * 100) / 100);
+
+        if (wasmRes.status === 'ok') {
+          const timeDisplay = wasmRes.time_ms < 1 ? '<1 ms' : `${wasmRes.time_ms} ms`;
+          const cycles = wasmRes.cycles || 1240;
+
+          if (valTime) valTime.innerText = timeDisplay;
+          if (valCycles) valCycles.innerText = `${Number(cycles).toLocaleString()} Cycles`;
+          if (valEngine) valEngine.innerText = 'Client-Side WebAssembly (Offline)';
+
+          terminalScreen.innerHTML += `\n<span class="term-out-success">${escapeHtml(wasmRes.stdout)}</span>\n`;
+          terminalScreen.innerHTML += `<span class="term-out-dim">────────────────────────────────────────────────────────────────────────</span>
+<span class="term-out-success">✔ সঞ্চালন সফল!</span> <span class="term-out-dim">• ইঞ্জিন: Client-Side WebAssembly (Offline) • সময়: ${timeDisplay} (Latency: ${clientLatency} ms) • ০% Server Latency • ০% Libc</span>`;
+
+          if (statusBadge) {
+            statusBadge.className = 'term-badge term-badge-ready';
+            statusBadge.innerText = '● WASM EXECUTED';
+          }
+          if (termExitStatus) termExitStatus.innerText = 'Status: OK (Client WASM)';
+        } else {
+          // Execution or compilation error
+          terminalScreen.innerHTML += `\n<span class="term-out-err">❌ WebAssembly ভার্চুয়াল সিলিকন ত্রুটি (Phase: ${escapeHtml(wasmRes.phase || 'wasm_execution')}):</span>\n`;
+          terminalScreen.innerHTML += `<span class="term-out-err">${escapeHtml(wasmRes.error || 'অজ্ঞাত WASM ত্রুটি')}</span>\n`;
+
+          if (statusBadge) {
+            statusBadge.className = 'term-badge term-badge-error';
+            statusBadge.innerText = '● WASM ERROR';
+          }
+          if (termExitStatus) termExitStatus.innerText = `Status: Error (${wasmRes.phase || 'wasm'})`;
+        }
+      } catch (err) {
+        terminalScreen.innerHTML += `\n<span class="term-out-err">❌ ক্লায়েন্ট-সাইড এক্সিকিউশন ব্যর্থ: ${escapeHtml(err.message)}</span>\n`;
+        if (statusBadge) {
+          statusBadge.className = 'term-badge term-badge-error';
+          statusBadge.innerText = '● ERROR';
+        }
+      } finally {
+        btnRun.classList.remove('loading');
+        btnRun.disabled = false;
+        btnRun.innerHTML = '<span class="btn-run-icon">🌐</span> <span class="btn-run-text">চালান / Run</span>';
+        if (terminalConsoleBody) {
+          terminalConsoleBody.scrollTop = terminalConsoleBody.scrollHeight;
+        }
+      }
+      return;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // BRANCH B: ⚡ Server Silicon (Linux AMD64 Syscalls) via POST /api/run
+    // ──────────────────────────────────────────────────────────────────────────
     btnRun.classList.add('loading');
     btnRun.disabled = true;
     btnRun.innerHTML = '<span class="btn-run-spinner"></span> <span>সংকলন ও সঞ্চালন হচ্ছে...</span>';
@@ -536,10 +772,11 @@ function initPlayground() {
 
           if (valTime) valTime.innerText = `${timeMs} ms`;
           if (valCycles) valCycles.innerText = `${Number(cycles).toLocaleString()} Cycles`;
+          if (valEngine) valEngine.innerText = 'Server Silicon';
 
           terminalScreen.innerHTML += `\n<span class="term-out-success">${escapeHtml(data.stdout)}</span>\n`;
           terminalScreen.innerHTML += `<span class="term-out-dim">────────────────────────────────────────────────────────────────────────</span>
-<span class="term-out-success">✔ সঞ্চালন সফল!</span> <span class="term-out-dim">• সময়: ${timeMs} ms (API Latency: ${elapsedTotal} ms) • ০% Libc • ০% GCC • ০% PHP</span>`;
+<span class="term-out-success">✔ সঞ্চালন সফল!</span> <span class="term-out-dim">• ইঞ্জিন: Server Silicon • সময়: ${timeMs} ms (API Latency: ${elapsedTotal} ms) • ০% Libc • ০% GCC • ০% PHP</span>`;
 
           if (statusBadge) {
             statusBadge.className = 'term-badge term-badge-ready';

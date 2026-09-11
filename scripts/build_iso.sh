@@ -41,17 +41,22 @@ STAGING_DIR="iso_staging"
 GRUB_CFG="${STAGING_DIR}/boot/grub/grub.cfg"
 ISO_OUTPUT="dist/lipi-os.iso"
 
-# Parse CLI flags
-DO_QEMU_TEST=false
+# Parse CLI flags (Default: verify QEMU boot if qemu-system-x86_64 is available)
+DO_QEMU_TEST=true
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --no-qemu|--no-test|--skip-test)
+            DO_QEMU_TEST=false
+            shift
+            ;;
         --test|--boot|--qemu)
             DO_QEMU_TEST=true
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--test|--boot|--qemu]"
-            echo "  --test, --boot, --qemu  Run headless QEMU verification after ISO synthesis"
+            echo "Usage: $0 [--no-qemu|--test|--boot]"
+            echo "  --test, --boot, --qemu  Run headless QEMU verification after ISO synthesis (default)"
+            echo "  --no-qemu, --skip-test  Skip headless QEMU verification"
             echo "  -h, --help              Show this help message"
             exit 0
             ;;
@@ -114,13 +119,10 @@ echo -e "${GREEN}  ✔ কার্নেল ELF সফলভাবে সংক
 # ধাপ ২: মাল্টিবুট ১ হেডার যাচাই (Verify Multiboot 1 header magic: 0x1BADB002)
 # ──────────────────────────────────────────────────────────────────────────────
 echo -e "${YELLOW}[২] মাল্টিবুট ১ হেডার ম্যাজিক (0x1BADB002) যাচাইকরণ...${NC}"
-# WHY: Multiboot 1 specification dictates that bootloaders search for the 32-bit magic
-# number 0x1BADB002 in the first 8192 bytes of the OS image.
-# In Little-Endian byte order, 0x1BADB002 is stored as: 02 b0 ad 1b
-
-HEXDUMP_8K=$(hexdump -C -n 8192 "${KERNEL_ELF}")
-if echo "${HEXDUMP_8K}" | grep -q "02 b0 ad 1b"; then
-    MAGIC_LOC=$(echo "${HEXDUMP_8K}" | grep "02 b0 ad 1b" | head -n 1)
+# WHY: Direct binary string search avoids pipeline SIGPIPE issues under set -o pipefail
+# while inspecting the Multiboot 1 specification magic (0x1BADB002 = 02 b0 ad 1b).
+if grep -a -F -q $'\x02\xb0\xad\x1b' "${KERNEL_ELF}"; then
+    MAGIC_LOC=$(hexdump -C -n 256 "${KERNEL_ELF}" | grep "02 b0 ad 1b" | head -n 1)
     echo -e "${GREEN}  ✔ মাল্টিবুট ১ স্পেসিফিকেশন হেডার নিশ্চিত হয়েছে (Magic: 0x1BADB002 present)${NC}"
     echo "    হেডার ডাম্প: ${MAGIC_LOC}"
 else

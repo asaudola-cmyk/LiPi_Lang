@@ -501,6 +501,10 @@ while 1
                 serve_static_file(client_fd, "apps/website/public/style.css", "text/css; charset=utf-8")
             elif path == "/app.js"
                 serve_static_file(client_fd, "apps/website/public/app.js", "application/javascript; charset=utf-8")
+            elif path == "/wasm_runner.js"
+                serve_static_file(client_fd, "apps/website/public/wasm_runner.js", "application/javascript; charset=utf-8")
+            elif path == "/lipi_worker.js"
+                serve_static_file(client_fd, "apps/website/public/lipi_worker.js", "application/javascript; charset=utf-8")
             elif path == "/favicon.svg"
                 serve_static_file(client_fd, "apps/website/public/favicon.svg", "image/svg+xml")
             elif path == "/healthz"

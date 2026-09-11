@@ -601,6 +601,90 @@ body {
   box-shadow: 0 0 6px #a855f7;
 }
 
+/* Execution Engine Selector Toggle Switch (Dual-Engine) */
+.engine-switch-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.engine-switch-label {
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.engine-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background: #090d1a;
+  border: 1px solid rgba(0, 255, 204, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  gap: 2px;
+}
+
+.engine-toggle-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.engine-toggle-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.engine-toggle-btn.active[data-engine="server"] {
+  background: linear-gradient(135deg, rgba(0, 255, 204, 0.18) 0%, rgba(0, 180, 216, 0.25) 100%);
+  color: #00ffcc;
+  border-color: rgba(0, 255, 204, 0.5);
+  box-shadow: 0 0 12px rgba(0, 255, 204, 0.25);
+}
+
+.engine-toggle-btn.active[data-engine="wasm"] {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(99, 102, 241, 0.25) 100%);
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.5);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+}
+
+.engine-pill {
+  border-color: rgba(0, 255, 204, 0.3);
+}
+
+.engine-pill.engine-wasm {
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+.engine-pill.engine-wasm strong {
+  color: #c084fc;
+}
+
+.security-pill.security-wasm {
+  border-color: rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+.security-pill.security-wasm .pill-dot {
+  background: #a855f7;
+  box-shadow: 0 0 6px #a855f7;
+}
+
 .playground-controls-right {
   display: flex;
   align-items: center;

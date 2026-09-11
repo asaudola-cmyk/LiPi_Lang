@@ -370,6 +370,22 @@
                 <option value="softmax">৪. সিলিকন এআই সফটম্যাক্স (Silicon AI Softmax)</option>
               </select>
             </div>
+
+            <!-- Execution Engine Selector Toggle Switch (Dual-Engine: Server Silicon vs Offline Client WASM) -->
+            <div class="engine-switch-container">
+              <span class="engine-switch-label">ইঞ্জিন (Engine):</span>
+              <div class="engine-toggle-group" role="tablist" aria-label="Execution Engine">
+                <button type="button" id="engine-btn-server" class="engine-toggle-btn active" role="tab" aria-selected="true" data-engine="server" title="সার্ভার সিলিকন স্যান্ডবক্স (Linux AMD64 Syscalls)">
+                  <span class="engine-btn-icon">⚡</span>
+                  <span class="engine-btn-text">⚡ Server Silicon (Linux AMD64 Syscalls)</span>
+                </button>
+                <button type="button" id="engine-btn-wasm" class="engine-toggle-btn" role="tab" aria-selected="false" data-engine="wasm" title="ব্রাউজার ভার্চুয়াল সিলিকন (In-Browser Virtual Silicon)">
+                  <span class="engine-btn-icon">🌐</span>
+                  <span class="engine-btn-text">🌐 Offline Client WASM (In-Browser Virtual Silicon)</span>
+                </button>
+              </div>
+            </div>
+
             <div class="playground-lang-badge">
               <span class="lang-dot"></span>
               <span>Lipi 2.0 (দ্বিভাষিক EN + BN)</span>
@@ -378,14 +394,17 @@
 
           <div class="playground-controls-right">
             <div class="telemetry-badge-group">
+              <span id="playground-engine-pill" class="telemetry-pill engine-pill" title="সক্রিয় এক্সিকিউশন ইঞ্জিন">
+                <span class="pill-label">ইঞ্জিন:</span> <strong id="val-engine">Server Silicon</strong>
+              </span>
               <span id="playground-time" class="telemetry-pill" title="কার্নেল এক্সিকিউশন সময়">
                 <span class="pill-label">সময়:</span> <strong id="val-time">০ ms</strong>
               </span>
               <span id="playground-cycles" class="telemetry-pill" title="সিপিইউ সাইকেল (RDTSC)">
                 <span class="pill-label">সাইকেল:</span> <strong id="val-cycles">২,৪১৮ Cycles</strong>
               </span>
-              <span class="telemetry-pill security-pill" title="লিনাক্স কার্নেল স্যান্ডবক্স জেল">
-                <span class="pill-dot"></span> <strong>Linux Jail (২GB / ২s)</strong>
+              <span id="playground-security-pill" class="telemetry-pill security-pill" title="লিনাক্স কার্নেল স্যান্ডবক্স জেল">
+                <span class="pill-dot"></span> <strong id="val-security">Linux Jail (২GB / ২s)</strong>
               </span>
             </div>
             <button id="btn-run-code" class="btn btn-primary btn-run" title="কোড সংকলন ও এক্সিকিউট করুন (Ctrl+Enter)">
@@ -435,7 +454,7 @@
                 <span class="dot dot-red"></span>
                 <span class="dot dot-yellow"></span>
                 <span class="dot dot-green"></span>
-                <span class="terminal-header-title">লিপি সার্বভৌম টার্মিনাল (AMD64 ELF64)</span>
+                <span id="terminal-header-title" class="terminal-header-title">লিপি সার্বভৌম টার্মিনাল (AMD64 ELF64)</span>
               </div>
               <div class="terminal-header-actions">
                 <span id="terminal-status-badge" class="term-badge term-badge-ready">● READY</span>
@@ -448,7 +467,7 @@
             </div>
 
             <div class="terminal-pane-footer">
-              <span class="term-footer-meta">সরাসরি লিনাক্স কার্নেল সিসকল ট্রেস • ০% Libc • ০% GCC • ০% PHP</span>
+              <span id="term-footer-meta" class="term-footer-meta">সরাসরি লিনাক্স কার্নেল সিসকল ট্রেস • ০% Libc • ০% GCC • ০% PHP</span>
               <span id="term-exit-status" class="term-footer-status">Status: OK</span>
             </div>
           </div>
@@ -803,6 +822,7 @@
     </div>
   </footer>
 
+  <script src="/wasm_runner.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
