@@ -1,9 +1,9 @@
-import "compiler/maya_compiler_v2_bootstrap.maya"
-import "universe/core/memory.maya"
-import "universe/core/string.maya"
-import "universe/core/fs.maya"
-import "universe/core/net.maya"
-import "universe/core/http.maya"
+import "src/compiler/middleend/maya_compiler_v2_bootstrap.lp"
+import "universe/core/memory.lp"
+import "universe/core/string.lp"
+import "universe/core/fs.lp"
+import "universe/core/net.lp"
+import "universe/core/http.lp"
 
 @fn maya_declare_universe()
   println("==================================================================")

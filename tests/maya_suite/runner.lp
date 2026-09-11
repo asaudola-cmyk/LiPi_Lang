@@ -85,9 +85,9 @@ import "universe/core/string"
   println("=================================================================")
   
   fails = 0
-  fails = fails + run_test("tests/universe/test_advanced_features.maya")
-  fails = fails + run_test("tests/universe/test_crypto_sha256.maya")
-  fails = fails + run_test("tests/universe/test_native_basic2.maya")
+  fails = fails + run_test("tests/universe/test_advanced_features.lp")
+  fails = fails + run_test("tests/universe/test_crypto_sha256.lp")
+  fails = fails + run_test("tests/universe/test_native_basic2.lp")
   
   println("=================================================================")
   @if fails == 0

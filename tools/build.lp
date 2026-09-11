@@ -39,8 +39,8 @@
   println("▶ Starting Pure Maya Build Orchestrator")
   
   fails = 0
-  fails = fails + build_module("DB Parser", "universe/db/sql/parser.maya", "build/db_parser.o")
-  fails = fails + build_module("Raft", "universe/db/distributed/raft.maya", "build/raft.o")
+  fails = fails + build_module("DB Parser", "universe/db/sql/parser.lp", "build/db_parser.o")
+  fails = fails + build_module("Raft", "universe/db/distributed/raft.lp", "build/raft.o")
   
   @if fails == 0
     println("▶ Universe build complete!")

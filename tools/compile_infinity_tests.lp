@@ -2,7 +2,7 @@ import "compiler/backend/compiler"
 
 @fn main()
   println("▶ Compiling tests/test_infinity_syntax.maya directly...")
-  src = file_read("tests/test_infinity_syntax.maya")
+  src = file_read("tests/test_infinity_syntax.lp")
   opts = CompilerOptions {
     opt_dump_tokens: 0,
     opt_dump_ast: 0,

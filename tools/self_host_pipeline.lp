@@ -127,7 +127,7 @@ import "universe/core/string"
   println("================================================================================")
   
   println("Stage 1: Building Stage 1 compiler using seed (bin/maya)...")
-  s1 = run_build_step("bin/maya", "cmd/maya/main.maya", "build/maya_stage1")
+  s1 = run_build_step("bin/maya", "cmd/maya/main.lp", "build/maya_stage1")
   @if s1 != 0
     println("❌ Stage 1 build failed.")
     return 1
@@ -135,7 +135,7 @@ import "universe/core/string"
   println("  ✓ Stage 1 compiler built: build/maya_stage1")
 
   println("Stage 2: Building Stage 2 compiler using Stage 1 (build/maya_stage1)...")
-  s2 = run_build_step("build/maya_stage1", "cmd/maya/main.maya", "build/maya_stage2")
+  s2 = run_build_step("build/maya_stage1", "cmd/maya/main.lp", "build/maya_stage2")
   @if s2 != 0
     println("❌ Stage 2 build failed.")
     return 1
@@ -143,7 +143,7 @@ import "universe/core/string"
   println("  ✓ Stage 2 compiler built: build/maya_stage2")
 
   println("Stage 3: Building Stage 3 compiler using Stage 2 (build/maya_stage2)...")
-  s3 = run_build_step("build/maya_stage2", "cmd/maya/main.maya", "build/maya_stage3")
+  s3 = run_build_step("build/maya_stage2", "cmd/maya/main.lp", "build/maya_stage3")
   @if s3 != 0
     println("❌ Stage 3 build failed.")
     return 1

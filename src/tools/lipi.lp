@@ -68,8 +68,10 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
         idx = idx + 1
     mem_word_write(argv, idx * 8, 0)
 
-    env = syscall(9, 0, 16, 3, 34, -1, 0)
-    mem_word_write(env, 0, 0)
+    env = syscall(9, 0, 32, 3, 34, -1, 0)
+    path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
+    mem_word_write(env, 0, path_env)
+    mem_word_write(env, 8, 0)
 
     st = syscall(9, 0, 8, 3, 34, -1, 0)
     mem_word_write(st, 0, 0)
@@ -84,7 +86,7 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
     exit_code = (raw_status / 256) % 256
 
     syscall(11, argv, 64, 0, 0, 0, 0)
-    syscall(11, env, 16, 0, 0, 0, 0)
+    syscall(11, env, 32, 0, 0, 0, 0)
     syscall(11, st, 8, 0, 0, 0, 0)
 
     return exit_code
@@ -96,7 +98,7 @@ fn handle_run file_path
     tmp_bin = "/tmp/lipi_run_exec"
     say "\033[1;34m[LIPI RUN]\033[0m " + file_path + " সংকলন করা হচ্ছে..."
     
-    code = spawn_exec_cmd("./bin/lipc", file_path, tmp_bin, "", "")
+    code = spawn_exec_cmd("bin/lipc_bin", file_path, tmp_bin, "", "")
     if code != 0
         say "❌ সংকলন ব্যর্থ হয়েছে (Compiler returned code " + str(code) + ")"
         return code
@@ -119,7 +121,7 @@ fn handle_build file_path out_file target_flag
         dest = file_path + ".bin"
         
     say "\033[1;34m[LIPI BUILD]\033[0m " + file_path + " ➔ " + dest
-    code = spawn_exec_cmd("./bin/lipc", file_path, dest, target_flag, "")
+    code = spawn_exec_cmd("bin/lipc_bin", file_path, dest, target_flag, "")
     if code == 0
         say "\033[1;32m✔ বাইনারি সফলভাবে তৈরি হয়েছে: " + dest + "\033[0m"
     else
@@ -130,7 +132,7 @@ fn handle_test suite_path
     if len(suite_path) > 0
         say "\033[1;34m[LIPI TEST]\033[0m টেস্ট ফাইল চালানো হচ্ছে: " + suite_path
         tmp_tst = "/tmp/lipi_tst_bin"
-        code = spawn_exec_cmd("./bin/lipc", suite_path, tmp_tst, "", "")
+        code = spawn_exec_cmd("bin/lipc_bin", suite_path, tmp_tst, "", "")
         if code != 0
             say "❌ টেস্ট কম্পাইলেশন ব্যর্থ।"
             return code
@@ -139,7 +141,7 @@ fn handle_test suite_path
         return tst_code
     else
         say "\033[1;34m[LIPI TEST]\033[0m সম্পূর্ণ সার্বভৌম রিগ্রেশন টেস্ট স্যুট পরিচালনা..."
-        return spawn_exec_cmd("bash", "tests/run_tests.sh", "--direct-elf", "", "")
+        return spawn_exec_cmd("/bin/bash", "tests/run_tests.sh", "--direct-elf", "", "")
 
 fn handle_fmt file_path flag
     if len(file_path) == 0

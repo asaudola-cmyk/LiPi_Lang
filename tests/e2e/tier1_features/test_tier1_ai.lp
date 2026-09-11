@@ -58,12 +58,12 @@ import "universe/core/collections"
 
   suite = { total: 0, passed: 0, failed: 0 }
 
-  suite = run_feature_test(suite, "Feature 14: N-D Tensor Engine", "tests/e2e/tier1_features/ai/test_f14_tensor.maya")
-  suite = run_feature_test(suite, "Feature 15: Autograd Engine", "tests/e2e/tier1_features/ai/test_f15_autograd.maya")
-  suite = run_feature_test(suite, "Feature 16: Neural Network Architecture", "tests/e2e/tier1_features/ai/test_f16_nn.maya")
-  suite = run_feature_test(suite, "Feature 17: Transformer & LLM Engine", "tests/e2e/tier1_features/ai/test_f17_transformer.maya")
-  suite = run_feature_test(suite, "Feature 18: Autonomous Multi-Agent Swarm", "tests/e2e/tier1_features/ai/test_f18_swarm.maya")
-  suite = run_feature_test(suite, "Feature 19: Autonomous Task Routing", "tests/e2e/tier1_features/ai/test_f19_router.maya")
+  suite = run_feature_test(suite, "Feature 14: N-D Tensor Engine", "tests/e2e/tier1_features/ai/test_f14_tensor.lp")
+  suite = run_feature_test(suite, "Feature 15: Autograd Engine", "tests/e2e/tier1_features/ai/test_f15_autograd.lp")
+  suite = run_feature_test(suite, "Feature 16: Neural Network Architecture", "tests/e2e/tier1_features/ai/test_f16_nn.lp")
+  suite = run_feature_test(suite, "Feature 17: Transformer & LLM Engine", "tests/e2e/tier1_features/ai/test_f17_transformer.lp")
+  suite = run_feature_test(suite, "Feature 18: Autonomous Multi-Agent Swarm", "tests/e2e/tier1_features/ai/test_f18_swarm.lp")
+  suite = run_feature_test(suite, "Feature 19: Autonomous Task Routing", "tests/e2e/tier1_features/ai/test_f19_router.lp")
 
   println("=================================================================")
   println("📊 TIER 1 AI SUITE EXECUTION SUMMARY:")

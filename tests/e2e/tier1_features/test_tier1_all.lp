@@ -59,16 +59,16 @@ import "universe/core/collections"
   suite = { total: 0, passed: 0, failed: 0 }
 
   @! AI Neural Swarm Tier 1 Feature Suites (F14 - F19)
-  suite = run_feature_test(suite, "Feature 14: N-D Tensor Engine", "tests/e2e/tier1_features/ai/test_f14_tensor.maya")
-  suite = run_feature_test(suite, "Feature 15: Autograd Engine", "tests/e2e/tier1_features/ai/test_f15_autograd.maya")
-  suite = run_feature_test(suite, "Feature 16: Neural Network Architecture", "tests/e2e/tier1_features/ai/test_f16_nn.maya")
-  suite = run_feature_test(suite, "Feature 17: Transformer & LLM Engine", "tests/e2e/tier1_features/ai/test_f17_transformer.maya")
-  suite = run_feature_test(suite, "Feature 18: Autonomous Multi-Agent Swarm", "tests/e2e/tier1_features/ai/test_f18_swarm.maya")
-  suite = run_feature_test(suite, "Feature 19: Autonomous Task Routing", "tests/e2e/tier1_features/ai/test_f19_router.maya")
+  suite = run_feature_test(suite, "Feature 14: N-D Tensor Engine", "tests/e2e/tier1_features/ai/test_f14_tensor.lp")
+  suite = run_feature_test(suite, "Feature 15: Autograd Engine", "tests/e2e/tier1_features/ai/test_f15_autograd.lp")
+  suite = run_feature_test(suite, "Feature 16: Neural Network Architecture", "tests/e2e/tier1_features/ai/test_f16_nn.lp")
+  suite = run_feature_test(suite, "Feature 17: Transformer & LLM Engine", "tests/e2e/tier1_features/ai/test_f17_transformer.lp")
+  suite = run_feature_test(suite, "Feature 18: Autonomous Multi-Agent Swarm", "tests/e2e/tier1_features/ai/test_f18_swarm.lp")
+  suite = run_feature_test(suite, "Feature 19: Autonomous Task Routing", "tests/e2e/tier1_features/ai/test_f19_router.lp")
 
   @! Sovereign Infrastructure & Purity Suites (F20 - F21)
-  suite = run_feature_test(suite, "Feature 20: Sovereign Test Framework", "tests/e2e/tier1_features/infra/test_f20_test_framework.maya")
-  suite = run_feature_test(suite, "Feature 21: Zero Foreign Code Purity", "tests/e2e/tier1_features/infra/test_f21_purity.maya")
+  suite = run_feature_test(suite, "Feature 20: Sovereign Test Framework", "tests/e2e/tier1_features/infra/test_f20_test_framework.lp")
+  suite = run_feature_test(suite, "Feature 21: Zero Foreign Code Purity", "tests/e2e/tier1_features/infra/test_f21_purity.lp")
 
   println("=================================================================")
   println("📊 TIER 1 MASTER EXECUTION SUMMARY:")

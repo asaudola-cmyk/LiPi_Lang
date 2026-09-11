@@ -2,7 +2,7 @@
 @! MAYA P2P REGISTRY ITERATION 2 DEEP ADVERSARIAL VERIFICATION HARNESS
 @! ============================================================================
 
-import "universe/p2p/registry.maya"
+import "universe/p2p/registry.lp"
 
 @fn assert_true(cond, msg)
   @if cond == 1

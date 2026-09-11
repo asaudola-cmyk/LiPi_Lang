@@ -51,7 +51,7 @@ import "universe/core/string"
   @! TC-F21-02: Native Maya Memory Management & GC Purity
   @! --------------------------------------------------------------------------
   total = total + 1
-  pure_gc_exists = fs_exists("universe/core/maya_gc.maya")
+  pure_gc_exists = fs_exists("universe/core/maya_gc.lp")
   c_gc_absent = (fs_exists("runtime/maya_gc.c") == 0) && (fs_exists("universe/core/gc.c") == 0)
 
   gc_purity_ok = (pure_gc_exists == 1) && (c_gc_absent != 0)
@@ -68,14 +68,14 @@ import "universe/core/string"
   @! TC-F21-03: Pure Maya Universe Modules Verification
   @! --------------------------------------------------------------------------
   total = total + 1
-  has_tensor = fs_exists("universe/ai/tensor.maya")
-  has_autograd = fs_exists("universe/ai/autograd.maya")
-  has_nn = fs_exists("universe/ai/nn.maya")
-  has_transformer = fs_exists("universe/ai/transformer/gpt.maya")
-  has_swarm = fs_exists("universe/swarm/swarm.maya")
-  has_router = fs_exists("universe/swarm/router.maya")
-  has_syscalls = fs_exists("universe/os/syscalls.maya")
-  has_test = fs_exists("universe/tools/maya_test.maya")
+  has_tensor = fs_exists("universe/ai/tensor.lp")
+  has_autograd = fs_exists("universe/ai/autograd.lp")
+  has_nn = fs_exists("universe/ai/nn.lp")
+  has_transformer = fs_exists("universe/ai/transformer/gpt.lp")
+  has_swarm = fs_exists("universe/swarm/swarm.lp")
+  has_router = fs_exists("universe/swarm/router.lp")
+  has_syscalls = fs_exists("universe/os/syscalls.lp")
+  has_test = fs_exists("universe/tools/maya_test.lp")
 
   all_modules_exist = (has_tensor == 1) && (has_autograd == 1) && (has_nn == 1) && (has_transformer == 1) && (has_swarm == 1) && (has_router == 1) && (has_syscalls == 1) && (has_test == 1)
 

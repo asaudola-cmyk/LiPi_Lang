@@ -58,8 +58,8 @@ import "universe/core/collections"
 
   suite = { total: 0, passed: 0, failed: 0 }
 
-  suite = run_feature_test(suite, "Feature 20: Sovereign Test Framework", "tests/e2e/tier1_features/infra/test_f20_test_framework.maya")
-  suite = run_feature_test(suite, "Feature 21: Zero Foreign Code Purity", "tests/e2e/tier1_features/infra/test_f21_purity.maya")
+  suite = run_feature_test(suite, "Feature 20: Sovereign Test Framework", "tests/e2e/tier1_features/infra/test_f20_test_framework.lp")
+  suite = run_feature_test(suite, "Feature 21: Zero Foreign Code Purity", "tests/e2e/tier1_features/infra/test_f21_purity.lp")
 
   println("=================================================================")
   println("📊 TIER 1 INFRA & PURITY SUITE SUMMARY:")
