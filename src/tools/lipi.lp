@@ -8,8 +8,8 @@
 // like `go` or `cargo`. Developers should never invoke foreign build systems.
 // `bin/lipi` serves as the universal dispatcher for run, build, test, debug, fmt, lsp, pkg, repl, and os.
 
-include "std/io.lp"
-include "std/mem.lp"
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
 
 fn print_lipi_banner
     say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"

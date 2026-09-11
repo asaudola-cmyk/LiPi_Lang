@@ -2931,6 +2931,74 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 208) // or rax, rdx
     x86_ret(ctx)
 
+    // ── Realtime Millisecond Clock Intrinsic (Linux SYS_clock_gettime) ────────
+    // WHY: High-resolution millisecond timer for DB caching, metrics, and network timeouts.
+    label_define(ctx, "lipi_fn_clock_ms")
+    label_define(ctx, "lipi_fn_maya_clock_ms")
+    label_define(ctx, "lipi_fn_সময়_মিলি")
+    bb_put8(ctx, 85)                                     // push rbp
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 229)                                    // mov rbp, rsp
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 236)
+    bb_put8(ctx, 32)                                     // sub rsp, 32
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 192)
+    bb_put8(ctx, 228)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)                                      // mov rax, 228 (SYS_clock_gettime)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 255)                                    // xor rdi, rdi (CLOCK_REALTIME = 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 230)                                    // mov rsi, rsp (timespec* buffer)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 5)                                      // syscall
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 4)
+    bb_put8(ctx, 36)                                     // mov rax, [rsp] (tv_sec)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 105)
+    bb_put8(ctx, 192)
+    bb_put8(ctx, 232)
+    bb_put8(ctx, 3)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)                                      // imul rax, 1000
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 84)
+    bb_put8(ctx, 36)
+    bb_put8(ctx, 8)                                      // mov rdx, [rsp + 8] (tv_nsec)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 64)
+    bb_put8(ctx, 66)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 0)                                      // mov r9, 1000000
+    bb_put8(ctx, 80)                                     // push rax
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 208)                                    // mov rax, rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 210)                                    // xor rdx, rdx
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 247)
+    bb_put8(ctx, 241)                                    // div r9
+    bb_put8(ctx, 90)                                     // pop rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 208)                                    // add rax, rdx
+    bb_put8(ctx, 201)                                    // leave
+    bb_put8(ctx, 195)                                    // ret
+
     // ── Maya Sovereign Syscall & Memory Intrinsics ────────────────────────────
     // WHY: Provides 100% native Linux silicon execution for Maya system calls and memory operations.
 
@@ -6598,7 +6666,89 @@ fn check_file_ext path
         return path
     return ""
 
+fn map_legacy_stdlib inc_name
+    // WHY: Transparent backward compatibility mapping for legacy std/* includes
+    // to their canonical unified locations under universe/* with zero file duplication.
+    if inc_name == "std/crypto.lp" or inc_name == "std/crypto"
+        return "universe/crypto/crypto.lp"
+    if inc_name == "std/crypto2.lp" or inc_name == "std/crypto2"
+        return "universe/crypto/advanced.lp"
+    if inc_name == "std/tls.lp" or inc_name == "std/tls"
+        return "universe/crypto/tls.lp"
+    if inc_name == "std/mem.lp" or inc_name == "std/mem"
+        return "universe/core/memory.lp"
+    if inc_name == "std/io.lp" or inc_name == "std/io"
+        return "universe/core/io.lp"
+    if inc_name == "std/str.lp" or inc_name == "std/str"
+        return "universe/core/string.lp"
+    if inc_name == "std/math.lp" or inc_name == "std/math"
+        return "universe/core/math.lp"
+    if inc_name == "std/arena.lp" or inc_name == "std/arena"
+        return "universe/core/arena.lp"
+    if inc_name == "std/hashmap.lp" or inc_name == "std/hashmap"
+        return "universe/core/hashmap.lp"
+    if inc_name == "std/fmt.lp" or inc_name == "std/fmt"
+        return "universe/core/fmt.lp"
+    if inc_name == "std/time.lp" or inc_name == "std/time"
+        return "universe/core/time.lp"
+    if inc_name == "std/json.lp" or inc_name == "std/json"
+        return "universe/core/json.lp"
+    if inc_name == "std/regex.lp" or inc_name == "std/regex"
+        return "universe/core/regex.lp"
+    if inc_name == "std/simd.lp" or inc_name == "std/simd"
+        return "universe/core/simd.lp"
+    if inc_name == "std/multilang.lp" or inc_name == "std/multilang"
+        return "universe/core/multilang.lp"
+    if inc_name == "std/version.lp" or inc_name == "std/version"
+        return "universe/core/version.lp"
+    if inc_name == "std/web.lp" or inc_name == "std/web"
+        return "universe/web/engine.lp"
+    if inc_name == "std/http.lp" or inc_name == "std/http"
+        return "universe/web/http.lp"
+    if inc_name == "std/net.lp" or inc_name == "std/net"
+        return "universe/net/socket.lp"
+    if inc_name == "std/websocket.lp" or inc_name == "std/websocket"
+        return "universe/net/ws_wire.lp"
+    if inc_name == "std/grpc.lp" or inc_name == "std/grpc"
+        return "universe/net/grpc_server.lp"
+    if inc_name == "std/db.lp" or inc_name == "std/db"
+        return "universe/db/engine.lp"
+    if inc_name == "std/kv.lp" or inc_name == "std/kv"
+        return "universe/db/kv.lp"
+    if inc_name == "std/orm.lp" or inc_name == "std/orm"
+        return "universe/db/orm.lp"
+    if inc_name == "std/columnstore.lp" or inc_name == "std/columnstore"
+        return "universe/db/column/columnstore.lp"
+    if inc_name == "std/kernel.lp" or inc_name == "std/kernel"
+        return "universe/os/kernel_multiboot.lp"
+    if inc_name == "std/thread.lp" or inc_name == "std/thread"
+        return "universe/os/thread.lp"
+    if inc_name == "std/shm.lp" or inc_name == "std/shm"
+        return "universe/os/shm.lp"
+    if inc_name == "std/event.lp" or inc_name == "std/event"
+        return "universe/os/event.lp"
+    if inc_name == "std/cli.lp" or inc_name == "std/cli"
+        return "universe/tools/cli.lp"
+    if inc_name == "std/debug.lp" or inc_name == "std/debug"
+        return "universe/tools/debug.lp"
+    if inc_name == "std/test.lp" or inc_name == "std/test"
+        return "universe/tools/test_runner.lp"
+    if inc_name == "std/ai.lp" or inc_name == "std/ai"
+        return "universe/ai/tensor_engine.lp"
+    if inc_name == "std/gguf.lp" or inc_name == "std/gguf"
+        return "universe/ai/gguf.lp"
+    if inc_name == "std/gfx.lp" or inc_name == "std/gfx"
+        return "universe/gui/gfx.lp"
+    if inc_name == "std/x11.lp" or inc_name == "std/x11"
+        return "universe/gui/x11/x11.lp"
+    if inc_name == "std/tui.lp" or inc_name == "std/tui"
+        return "universe/gui/tui.lp"
+    return ""
+
 fn resolve_inc_path cur_dir inc_name
+    legacy = map_legacy_stdlib(inc_name)
+    if len(legacy) > 0
+        return legacy
     r = check_file_ext(inc_name)
     if len(r) > 0
         return r
@@ -6606,9 +6756,6 @@ fn resolve_inc_path cur_dir inc_name
     if len(r) > 0
         return r
     r = check_file_ext("universe/" + inc_name)
-    if len(r) > 0
-        return r
-    r = check_file_ext("std/" + inc_name)
     if len(r) > 0
         return r
     r = check_file_ext("src/" + inc_name)

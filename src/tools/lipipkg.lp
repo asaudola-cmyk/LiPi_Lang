@@ -10,10 +10,10 @@
 // distribution integrity with zero external libc or build tool dependencies.
 
 // WHY: Canonical standard library modules unified under universe/ for clean architecture.
-include "universe/core/std_io.lp"
-include "universe/core/std_mem.lp"
-include "universe/core/std_str.lp"
-include "universe/crypto/std_crypto.lp"
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
+include "universe/core/string.lp"
+include "universe/crypto/crypto.lp"
 
 PKG_VERSION = "প্রথম ১.০"
 PKG_MANIFEST = "lipipkg.toml"

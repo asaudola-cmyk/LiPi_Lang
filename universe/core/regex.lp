@@ -1,373 +1,636 @@
-@! ============================================================================
-@! MAYA UNIVERSE CORE — ADVANCED REGULAR EXPRESSION ENGINE
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
-@! Features: Recursive Matcher, Alternation (|), Kleene Star (*),
-@! Plus (+), Optional (?), Wildcard (.), Character Classes ([...]), Anchors (^, $)
-@! ============================================================================
+// ==============================================================================
+// 🔍 লিপি Regex ইঞ্জিন (Regular Expression Library)
+// লিপি প্রথম ২.০ | ciphername: সোভেরিন
+// File: std/regex.lp
+//
+// WHY এই মডিউল:
+//   Text processing without regex is painful.
+//   POSIX regex, PCRE (Python/JS) — এদের replace করবে।
+//   Pure sovereign NFA state machine with zero external libc runtime dependencies.
+//   Supports: . * + ? [] ^ $ \d \w \s \n \t
+//   Bengali character class: \ব (Bengali letter range U+0980-U+09FF)
+//
+// ব্যবহার:
+//   include "universe/core/std_regex.lp"
+//   pat = REGEX_কম্পাইল("[০-৯]+")
+//   if REGEX_মিল(pat, "hello ৪২")
+//       say "সংখ্যা পাওয়া গেছে"
+//   REGEX_মুক্তি(pat)
+// ==============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+include "universe/core/memory.lp"
+include "universe/core/string.lp"
 
-@! ----------------------------------------------------------------------------
-@! 1. CHARACTER CLASSIFICATION & UTILITIES
-@! ----------------------------------------------------------------------------
+// ─── Regex Node Types ─────────────────────────────────────────────────────────
+REGEX_LITERAL      = 1   // literal character match
+REGEX_DOT          = 2   // . matches any char except newline
+REGEX_STAR         = 3   // * zero or more
+REGEX_PLUS         = 4   // + one or more
+REGEX_QUESTION     = 5   // ? zero or one
+REGEX_ANCHOR_START = 6   // ^ start of string
+REGEX_ANCHOR_END   = 7   // $ end of string
+REGEX_CHAR_CLASS   = 8   // [abc] or [a-z]
+REGEX_GROUP        = 9   // (group)
+REGEX_ALTERNATE    = 10  // a|b
+REGEX_DIGIT        = 11  // \d = [0-9০-৯]
+REGEX_WORD         = 12  // \w = [a-zA-Z0-9_] + Bengali
+REGEX_SPACE        = 13  // \s = [ \t\n\r]
+REGEX_BENGALI      = 14  // \ব = Bengali Unicode letter range (U+0980-U+09FF)
 
-@fn regex_char_match(pattern_ch, text_ch)
-  @if pattern_ch == 46 @! '.' wildcard
-    @if text_ch != 10 return 1 @end
-    return 0
-  @end
-  @if pattern_ch == text_ch return 1 @end
-  return 0
-@end
+// Quantifier enums
+QUANT_ONE  = 1
+QUANT_STAR = 2
+QUANT_PLUS = 3
+QUANT_OPT  = 4
 
-@fn regex_match_class(class_str, text_ch)
-  c_len = class_str.c_len()
-  @if c_len == 0 return 0 @end
-  
-  is_negated = 0
-  start_idx = 0
-  @if class_str[0] == 94 @! '^'
-    is_negated = 1
-    start_idx = 1
-  @end
-  
-  matched = 0
-  i = start_idx
-  @while i < c_len
-    @if i + 2 < c_len && class_str[i + 1] == 45 @! Range: 'a-z'
-      c_lo = class_str[i]
-      c_hi = class_str[i + 2]
-      @if text_ch >= c_lo && text_ch <= c_hi
-        matched = 1
-        i = c_len
-      @else
-        i = i + 3
-      @end
-    @else
-      @if text_ch == class_str[i]
-        matched = 1
-        i = c_len
-      @else
-        i = i + 1
-      @end
-    @end
-  @end
-  
-  @if is_negated == 1
-    @if matched == 0 return 1 @end
-    return 0
-  @end
-  return matched
-@end
+// ─── Pure Lipi 2.0 Struct Declarations (No Commas) ───────────────────────────
+// WHY: Pure Lipi 2.0 indentation syntax enforces clean single-field lines.
+struct RegexNode
+    node_type
+    quantifier
+    char_code
+    ranges
+    negated
 
-@! ----------------------------------------------------------------------------
-@! 2. RECURSIVE PATTERN MATCHER ENGINE
-@! ----------------------------------------------------------------------------
+struct REGEX_pattern
+    node_list
+    node_count
+    গ্রুপ_count
+    মূল_string
+    has_anchor_start
+    has_anchor_end
 
-@fn match_here(pattern, p_idx, text, t_idx)
-  p_len = pattern.c_len()
-  t_len = text.c_len()
-  
-  @if p_idx >= p_len
+struct REGEX_ম্যাচ_result
+    পাওয়া_গেছে
+    শুরু_offset
+    শেষ_offset
+    len
+    গ্রুপ_list
+    গ্রুপ_count
+
+// ─── UTF-8 & Unicode Helpers ──────────────────────────────────────────────────
+// WHY: Bengali characters (U+0980..U+09FF) and other Unicode codepoints span 2 to 4
+// UTF-8 bytes. Pure rune decoding ensures exact character boundary awareness.
+fn utf8_rune_len b0
+    if b0 < 128
+        return 1
+    elif b0 >= 192 and b0 <= 223
+        return 2
+    elif b0 >= 224 and b0 <= 239
+        return 3
+    elif b0 >= 240 and b0 <= 247
+        return 4
     return 1
-  @end
-  
-  @if pattern[p_idx] == 36 && p_idx + 1 == p_len @! '$'
-    @if t_idx >= t_len return 1 @end
-    return 0
-  @end
-  
-  @if pattern[p_idx] == 124 @! '|'
-    return 1
-  @end
-  
-  @! Character class: [...]
-  @if pattern[p_idx] == 91 @! '['
-    close_idx = p_idx + 1
-    @while close_idx < p_len && pattern[close_idx] != 93 @! ']'
-      close_idx = close_idx + 1
-    @end
-    
-    @if close_idx < p_len
-      class_content = string_slice(pattern, p_idx + 1, close_idx)
-      next_p = close_idx + 1
-      
-      @if next_p < p_len && pattern[next_p] == 42 @! '*'
-        @if match_here(pattern, next_p + 1, text, t_idx) == 1
-          return 1
-        @end
-        @while t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          t_idx = t_idx + 1
-          @if match_here(pattern, next_p + 1, text, t_idx) == 1
-            return 1
-          @end
-        @end
+
+fn utf8_decode_cp s idx slen
+    b0 = ord(char_at(s, idx))
+    if b0 < 128
+        return b0
+    if b0 >= 192 and b0 <= 223
+        if idx + 1 < slen
+            b1 = ord(char_at(s, idx + 1))
+            return (b0 % 32) * 64 + (b1 % 64)
+    elif b0 >= 224 and b0 <= 239
+        if idx + 2 < slen
+            b1 = ord(char_at(s, idx + 1))
+            b2 = ord(char_at(s, idx + 2))
+            return (b0 % 16) * 4096 + (b1 % 64) * 64 + (b2 % 64)
+    elif b0 >= 240 and b0 <= 247
+        if idx + 3 < slen
+            b1 = ord(char_at(s, idx + 1))
+            b2 = ord(char_at(s, idx + 2))
+            b3 = ord(char_at(s, idx + 3))
+            return (b0 % 8) * 262144 + (b1 % 64) * 4096 + (b2 % 64) * 64 + (b3 % 64)
+    return b0
+
+// ─── NFA State Transition Matcher ─────────────────────────────────────────────
+// WHY: Evaluates whether an individual regex node matches the character at text[t_idx].
+// Returns the number of bytes consumed if matched, or 0 if mismatch.
+fn regex_node_matches node text t_idx t_len
+    if t_idx >= t_len
         return 0
-      @elif next_p < p_len && pattern[next_p] == 43 @! '+'
-        @if t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          t_idx = t_idx + 1
-          @while 1 == 1
-            @if match_here(pattern, next_p + 1, text, t_idx) == 1
-              return 1
-            @end
-            @if t_idx >= t_len || regex_match_class(class_content, text[t_idx]) == 0
-              return 0
-            @end
-            t_idx = t_idx + 1
-          @end
-        @end
+    b0 = ord(char_at(text, t_idx))
+    rlen = utf8_rune_len(b0)
+    cp = utf8_decode_cp(text, t_idx, t_len)
+    nt = node.node_type
+
+    // Dot matches any character except newline (ASCII 10)
+    if nt == REGEX_DOT
+        if cp != 10
+            return rlen
         return 0
-      @elif next_p < p_len && pattern[next_p] == 63 @! '?'
-        @if t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          @if match_here(pattern, next_p + 1, text, t_idx + 1) == 1
-            return 1
-          @end
-        @end
-        return match_here(pattern, next_p + 1, text, t_idx)
-      @else
-        @if t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          return match_here(pattern, next_p, text, t_idx + 1)
-        @end
+
+    // Literal codepoint equality
+    if nt == REGEX_LITERAL
+        if cp == node.char_code
+            return rlen
         return 0
-      @end
-    @end
-  @end
-  
-  @! Quantifier: *
-  @if p_idx + 1 < p_len && pattern[p_idx + 1] == 42 @! '*'
-    pch = pattern[p_idx]
-    @if match_here(pattern, p_idx + 2, text, t_idx) == 1
-      return 1
-    @end
-    @while t_idx < t_len && regex_char_match(pch, text[t_idx]) == 1
-      t_idx = t_idx + 1
-      @if match_here(pattern, p_idx + 2, text, t_idx) == 1
-        return 1
-      @end
-    @end
+
+    // Bengali Unicode range U+0980..U+09FF (codepoints 2432..2559)
+    if nt == REGEX_BENGALI
+        if cp >= 2432 and cp <= 2559
+            return rlen
+        return 0
+
+    // Digits: ASCII 0-9 (48..57) or Bengali ০-৯ (2534..2543)
+    if nt == REGEX_DIGIT
+        if (cp >= 48 and cp <= 57) or (cp >= 2534 and cp <= 2543)
+            return rlen
+        return 0
+
+    // Word characters: ASCII alphanumeric, underscore, or Bengali characters
+    if nt == REGEX_WORD
+        if (cp >= 97 and cp <= 122) or (cp >= 65 and cp <= 90) or (cp >= 48 and cp <= 57) or cp == 95 or (cp >= 2432 and cp <= 2559)
+            return rlen
+        return 0
+
+    // Whitespace: space, tab, newline, carriage return
+    if nt == REGEX_SPACE
+        if cp == 32 or cp == 9 or cp == 10 or cp == 13
+            return rlen
+        return 0
+
+    // Character Class [abc], [a-z], [০-৯], [^0-9]
+    if nt == REGEX_CHAR_CLASS
+        in_range = 0
+        ri = 0
+        nranges = len(node.ranges)
+        while ri < nranges
+            c_min = get(node.ranges, ri)
+            c_max = get(node.ranges, ri + 1)
+            if cp >= c_min and cp <= c_max
+                in_range = 1
+                break
+            ri = ri + 2
+        if node.negated == 1
+            if in_range == 0
+                return rlen
+            return 0
+        else
+            if in_range == 1
+                return rlen
+            return 0
+
     return 0
-  @end
-  
-  @! Quantifier: +
-  @if p_idx + 1 < p_len && pattern[p_idx + 1] == 43 @! '+'
-    pch = pattern[p_idx]
-    @if t_idx < t_len && regex_char_match(pch, text[t_idx]) == 1
-      t_idx = t_idx + 1
-      @while 1 == 1
-        @if match_here(pattern, p_idx + 2, text, t_idx) == 1
-          return 1
-        @end
-        @if t_idx >= t_len || regex_char_match(pch, text[t_idx]) == 0
-          return 0
-        @end
-        t_idx = t_idx + 1
-      @end
-    @end
-    return 0
-  @end
-  
-  @! Quantifier: ?
-  @if p_idx + 1 < p_len && pattern[p_idx + 1] == 63 @! '?'
-    pch = pattern[p_idx]
-    @if t_idx < t_len && regex_char_match(pch, text[t_idx]) == 1
-      @if match_here(pattern, p_idx + 2, text, t_idx + 1) == 1
-        return 1
-      @end
-    @end
-    return match_here(pattern, p_idx + 2, text, t_idx)
-  @end
-  
-  @! Single character match
-  @if t_idx < t_len && regex_char_match(pattern[p_idx], text[t_idx]) == 1
-    return match_here(pattern, p_idx + 1, text, t_idx + 1)
-  @end
-  
-  return 0
-@end
 
-@! ----------------------------------------------------------------------------
-@! 3. PUBLIC REGEX API
-@! ----------------------------------------------------------------------------
+// ─── NFA Simulation Engine with Backtracking ──────────────────────────────────
+// WHY: Executes the compiled NFA state sequence with greedy matching and clean
+// backtracking for * (zero or more), + (one or more), and ? (zero or one).
+fn regex_exec_nodes pat node_idx text t_idx t_len
+    if node_idx >= pat.node_count
+        if pat.has_anchor_end == 1
+            if t_idx == t_len
+                return t_idx
+            return -1
+        return t_idx
 
-@fn regex_match_single_branch(branch_pat, text)
-  p_len = branch_pat.c_len()
-  t_len = text.c_len()
-  
-  @if p_len == 0
-    @if t_len == 0 return 1 @end
-    return 0
-  @end
-  
-  @if branch_pat[0] == 94 @! '^'
-    return match_here(branch_pat, 1, text, 0)
-  @end
-  
-  i = 0
-  @while i <= t_len
-    @if match_here(branch_pat, 0, text, i) == 1
-      return 1
-    @end
-    i = i + 1
-  @end
-  
-  return 0
-@end
+    node = get(pat.node_list, node_idx)
+    q = node.quantifier
 
-@fn regex_match(pattern, text)
-  @if string_contains(pattern, "|") == 1
-    branches = string_split(pattern, "|")
-    i = 0
-    @while i < branches.c_len()
-      @if regex_match_single_branch(branches[i], text) == 1
-        return 1
-      @end
-      i = i + 1
-    @end
-    return 0
-  @end
-  
-  return regex_match_single_branch(pattern, text)
-@end
+    // Exact single match
+    if q == QUANT_ONE
+        if t_idx >= t_len
+            return -1
+        adv = regex_node_matches(node, text, t_idx, t_len)
+        if adv > 0
+            return regex_exec_nodes(pat, node_idx + 1, text, t_idx + adv, t_len)
+        return -1
 
-@fn regex_is_match(pattern, text)
-  return regex_match(pattern, text)
-@end
+    // Optional match (?)
+    if q == QUANT_OPT
+        if t_idx < t_len
+            adv = regex_node_matches(node, text, t_idx, t_len)
+            if adv > 0
+                sub_res = regex_exec_nodes(pat, node_idx + 1, text, t_idx + adv, t_len)
+                if sub_res >= 0
+                    return sub_res
+        return regex_exec_nodes(pat, node_idx + 1, text, t_idx, t_len)
 
-@fn regex_find_match_end(pattern, p_idx, text, t_idx)
-  p_len = pattern.c_len()
-  t_len = text.c_len()
-  
-  @if p_idx >= p_len
-    return t_idx
-  @end
-  
-  @if pattern[p_idx] == 36 && p_idx + 1 == p_len
-    @if t_idx >= t_len return t_idx @end
+    // Repetitions (* and +)
+    if q == QUANT_STAR or q == QUANT_PLUS
+        positions = list()
+        if q == QUANT_STAR
+            push(positions, t_idx)
+        cur = t_idx
+        while cur < t_len
+            adv = regex_node_matches(node, text, cur, t_len)
+            if adv > 0
+                cur = cur + adv
+                push(positions, cur)
+            else
+                break
+        if len(positions) == 0
+            return -1
+        // Greedy: check from most matched positions down to fewest
+        p_idx = len(positions) - 1
+        while p_idx >= 0
+            pos = get(positions, p_idx)
+            sub_res = regex_exec_nodes(pat, node_idx + 1, text, pos, t_len)
+            if sub_res >= 0
+                return sub_res
+            p_idx = p_idx - 1
+        return -1
+
     return -1
-  @end
-  
-  @! Character class [...]
-  @if pattern[p_idx] == 91
-    close_idx = p_idx + 1
-    @while close_idx < p_len && pattern[close_idx] != 93
-      close_idx = close_idx + 1
-    @end
-    @if close_idx < p_len
-      class_content = string_slice(pattern, p_idx + 1, close_idx)
-      next_p = close_idx + 1
-      @if next_p < p_len && pattern[next_p] == 42 @! *
-        cur_t = t_idx
-        best_end = -1
-        @while cur_t <= t_len
-          res = regex_find_match_end(pattern, next_p + 1, text, cur_t)
-          @if res != -1 best_end = res @end
-          @if cur_t < t_len && regex_match_class(class_content, text[cur_t]) == 1
-            cur_t = cur_t + 1
-          @else
-            cur_t = t_len + 1
-          @end
-        @end
-        return best_end
-      @elif next_p < p_len && pattern[next_p] == 43 @! +
-        @if t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          cur_t = t_idx + 1
-          best_end = -1
-          @while cur_t <= t_len
-            res = regex_find_match_end(pattern, next_p + 1, text, cur_t)
-            @if res != -1 best_end = res @end
-            @if cur_t < t_len && regex_match_class(class_content, text[cur_t]) == 1
-              cur_t = cur_t + 1
-            @else
-              cur_t = t_len + 1
-            @end
-          @end
-          return best_end
-        @end
-        return -1
-      @elif next_p < p_len && pattern[next_p] == 63 @! ?
-        @if t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          res = regex_find_match_end(pattern, next_p + 1, text, t_idx + 1)
-          @if res != -1 return res @end
-        @end
-        return regex_find_match_end(pattern, next_p + 1, text, t_idx)
-      @else
-        @if t_idx < t_len && regex_match_class(class_content, text[t_idx]) == 1
-          return regex_find_match_end(pattern, next_p, text, t_idx + 1)
-        @end
-        return -1
-      @end
-    @end
-  @end
-  
-  @if p_idx + 1 < p_len && pattern[p_idx + 1] == 42
-    pch = pattern[p_idx]
-    best_end = -1
-    cur_t = t_idx
-    @while cur_t <= t_len
-      res = regex_find_match_end(pattern, p_idx + 2, text, cur_t)
-      @if res != -1
-        best_end = res
-      @end
-      @if cur_t < t_len && regex_char_match(pch, text[cur_t]) == 1
-        cur_t = cur_t + 1
-      @else
-        cur_t = t_len + 1
-      @end
-    @end
-    return best_end
-  @end
-  
-  @if t_idx < t_len && regex_char_match(pattern[p_idx], text[t_idx]) == 1
-    return regex_find_match_end(pattern, p_idx + 1, text, t_idx + 1)
-  @end
-  
-  return -1
-@end
 
-@fn regex_find(pattern, text)
-  t_len = text.c_len()
-  p_len = pattern.c_len()
-  
-  @if pattern.c_len() == 0 return "" @end
-  
-  is_anchored = 0
-  pat_start = 0
-  @if pattern[0] == 94
-    is_anchored = 1
-    pat_start = 1
-  @end
-  
-  i = 0
-  @while i < t_len
-    end_idx = regex_find_match_end(pattern, pat_start, text, i)
-    @if end_idx != -1 && end_idx >= i
-      return string_slice(text, i, end_idx)
-    @end
-    @if is_anchored == 1
-      return ""
-    @end
-    i = i + 1
-  @end
-  
-  return ""
-@end
+// ─── Compile ──────────────────────────────────────────────────────────────────
+// WHY: Parses pattern string into an NFA sequence of compiled RegexNode states.
+fn REGEX_কম্পাইল pattern_string
+    pat = REGEX_pattern()
+    pat.মূল_string = pattern_string
+    pat.node_list = list()
+    pat.node_count = 0
+    pat.গ্রুপ_count = 0
+    pat.has_anchor_start = 0
+    pat.has_anchor_end = 0
 
-@fn regex_replace_all(pattern, text, replacement)
-  res = ""
-  t_len = text.c_len()
-  i = 0
-  
-  @while i < t_len
-    end_idx = regex_find_match_end(pattern, 0, text, i)
-    @if end_idx != -1 && end_idx > i
-      res = res + replacement
-      i = end_idx
-    @else
-      res = res + str_substr(text, i, i + 1)
-      i = i + 1
-    @end
-  @end
-  
-  return res
-@end
+    plen = len(pattern_string)
+    if plen == 0
+        return pat
+
+    p_idx = 0
+    if char_at(pattern_string, 0) == "^"
+        pat.has_anchor_start = 1
+        p_idx = 1
+
+    has_end = 0
+    if plen > 1 and char_at(pattern_string, plen - 1) == "$"
+        if char_at(pattern_string, plen - 2) != "\\"
+            has_end = 1
+    elif plen == 1 and char_at(pattern_string, 0) == "$"
+        has_end = 1
+
+    pat.has_anchor_end = has_end
+    limit = plen
+    if has_end == 1
+        limit = plen - 1
+
+    while p_idx < limit
+        c = char_at(pattern_string, p_idx)
+        node = RegexNode()
+        node.ranges = list()
+        node.negated = 0
+        node.quantifier = QUANT_ONE
+
+        if c == "."
+            node.node_type = REGEX_DOT
+            p_idx = p_idx + 1
+        elif c == "\\"
+            p_idx = p_idx + 1
+            if p_idx < limit
+                esc = char_at(pattern_string, p_idx)
+                p_idx = p_idx + 1
+                if esc == "d"
+                    node.node_type = REGEX_DIGIT
+                elif esc == "w"
+                    node.node_type = REGEX_WORD
+                elif esc == "s"
+                    node.node_type = REGEX_SPACE
+                elif esc == "b" or esc == "ব"
+                    node.node_type = REGEX_BENGALI
+                else
+                    node.node_type = REGEX_LITERAL
+                    node.char_code = ord(esc)
+            else
+                node.node_type = REGEX_LITERAL
+                node.char_code = 92
+        elif c == "["
+            p_idx = p_idx + 1
+            node.node_type = REGEX_CHAR_CLASS
+            if p_idx < limit and char_at(pattern_string, p_idx) == "^"
+                node.negated = 1
+                p_idx = p_idx + 1
+            while p_idx < limit and char_at(pattern_string, p_idx) != "]"
+                b0 = ord(char_at(pattern_string, p_idx))
+                r1_len = utf8_rune_len(b0)
+                cp1 = utf8_decode_cp(pattern_string, p_idx, limit)
+                p_idx = p_idx + r1_len
+                if p_idx + 1 < limit and char_at(pattern_string, p_idx) == "-" and char_at(pattern_string, p_idx + 1) != "]"
+                    p_idx = p_idx + 1 // skip '-'
+                    b2 = ord(char_at(pattern_string, p_idx))
+                    r2_len = utf8_rune_len(b2)
+                    cp2 = utf8_decode_cp(pattern_string, p_idx, limit)
+                    p_idx = p_idx + r2_len
+                    push(node.ranges, cp1)
+                    push(node.ranges, cp2)
+                else
+                    push(node.ranges, cp1)
+                    push(node.ranges, cp1)
+            if p_idx < limit and char_at(pattern_string, p_idx) == "]"
+                p_idx = p_idx + 1
+        else
+            b0 = ord(char_at(pattern_string, p_idx))
+            r_len = utf8_rune_len(b0)
+            cp = utf8_decode_cp(pattern_string, p_idx, limit)
+            p_idx = p_idx + r_len
+            node.node_type = REGEX_LITERAL
+            node.char_code = cp
+
+        // Check for trailing quantifier: *, +, ?
+        if p_idx < limit
+            qc = char_at(pattern_string, p_idx)
+            if qc == "*"
+                node.quantifier = QUANT_STAR
+                p_idx = p_idx + 1
+            elif qc == "+"
+                node.quantifier = QUANT_PLUS
+                p_idx = p_idx + 1
+            elif qc == "?"
+                node.quantifier = QUANT_OPT
+                p_idx = p_idx + 1
+
+        push(pat.node_list, node)
+        pat.node_count = pat.node_count + 1
+
+    return pat
+
+fn regex_compile pattern_string
+    return REGEX_কম্পাইল(pattern_string)
+
+// ─── Match ────────────────────────────────────────────────────────────────────
+// WHY: Tests if pattern matches anywhere in text, respecting start/end anchors.
+fn REGEX_মিল pat text
+    if pat == 0
+        return 0
+    tlen = len(text)
+    if pat.has_anchor_start == 1
+        res = regex_exec_nodes(pat, 0, text, 0, tlen)
+        if res >= 0
+            return 1
+        return 0
+    i = 0
+    while i <= tlen
+        res = regex_exec_nodes(pat, 0, text, i, tlen)
+        if res >= 0
+            return 1
+        if i == tlen
+            break
+        b0 = ord(char_at(text, i))
+        i = i + utf8_rune_len(b0)
+    return 0
+
+fn regex_match pat text
+    return REGEX_মিল(pat, text)
+
+// ─── Full Match ───────────────────────────────────────────────────────────────
+// WHY: Ensures entire text string is fully consumed by pattern.
+fn REGEX_পূর্ণ_মিল pat text
+    if pat == 0
+        return 0
+    tlen = len(text)
+    res = regex_exec_nodes(pat, 0, text, 0, tlen)
+    if res == tlen
+        return 1
+    return 0
+
+fn regex_full_match pat text
+    return REGEX_পূর্ণ_মিল(pat, text)
+
+// ─── Find ─────────────────────────────────────────────────────────────────────
+// WHY: Finds first match in text and returns offsets in REGEX_ম্যাচ_result.
+fn REGEX_খোঁজো pat text
+    res_obj = REGEX_ম্যাচ_result()
+    res_obj.পাওয়া_গেছে = 0
+    res_obj.শুরু_offset = -1
+    res_obj.শেষ_offset = -1
+    res_obj.len = 0
+    res_obj.গ্রুপ_list = list()
+    res_obj.গ্রুপ_count = 0
+    if pat == 0
+        return res_obj
+    tlen = len(text)
+    if pat.has_anchor_start == 1
+        end_pos = regex_exec_nodes(pat, 0, text, 0, tlen)
+        if end_pos >= 0
+            res_obj.পাওয়া_গেছে = 1
+            res_obj.শুরু_offset = 0
+            res_obj.শেষ_offset = end_pos
+            res_obj.len = end_pos
+            return res_obj
+        return res_obj
+    i = 0
+    while i <= tlen
+        end_pos = regex_exec_nodes(pat, 0, text, i, tlen)
+        if end_pos >= 0
+            res_obj.পাওয়া_গেছে = 1
+            res_obj.শুরু_offset = i
+            res_obj.শেষ_offset = end_pos
+            res_obj.len = end_pos - i
+            return res_obj
+        if i == tlen
+            break
+        b0 = ord(char_at(text, i))
+        i = i + utf8_rune_len(b0)
+    return res_obj
+
+fn regex_find pat text
+    return REGEX_খোঁজো(pat, text)
+
+// WHY: Finds all non-overlapping matches across the text string.
+fn REGEX_সব_খোঁজো pat text
+    matches = list()
+    if pat == 0
+        return matches
+    tlen = len(text)
+    i = 0
+    while i <= tlen
+        end_pos = regex_exec_nodes(pat, 0, text, i, tlen)
+        if end_pos >= 0
+            matched_len = end_pos - i
+            if matched_len > 0
+                matched_str = str_sub(text, i, end_pos)
+                push(matches, matched_str)
+                i = end_pos
+            else
+                if i < tlen
+                    b0 = ord(char_at(text, i))
+                    i = i + utf8_rune_len(b0)
+                else
+                    break
+        else
+            if i == tlen
+                break
+            b0 = ord(char_at(text, i))
+            i = i + utf8_rune_len(b0)
+    return matches
+
+fn regex_find_all pat text
+    return REGEX_সব_খোঁজো(pat, text)
+
+// ─── Replace ──────────────────────────────────────────────────────────────────
+// WHY: Replaces first matching occurrence with replacement string.
+fn REGEX_প্রতিস্থাপন pat text replacement
+    if pat == 0
+        return text
+    m = REGEX_খোঁজো(pat, text)
+    if m.পাওয়া_গেছে == 0
+        return text
+    prefix = str_sub(text, 0, m.শুরু_offset)
+    suffix = str_sub(text, m.শেষ_offset, len(text))
+    return prefix + replacement + suffix
+
+fn regex_replace pat text replacement
+    return REGEX_প্রতিস্থাপন(pat, text, replacement)
+
+// WHY: Replaces all matching occurrences with replacement string.
+fn REGEX_প্রতিস্থাপন_সব pat text replacement
+    if pat == 0
+        return text
+    tlen = len(text)
+    result = ""
+    i = 0
+    while i <= tlen
+        end_pos = regex_exec_nodes(pat, 0, text, i, tlen)
+        if end_pos >= 0
+            matched_len = end_pos - i
+            if matched_len > 0
+                result = result + replacement
+                i = end_pos
+            else
+                if i < tlen
+                    b0 = ord(char_at(text, i))
+                    rlen = utf8_rune_len(b0)
+                    result = result + str_sub(text, i, i + rlen)
+                    i = i + rlen
+                else
+                    break
+        else
+            if i == tlen
+                break
+            b0 = ord(char_at(text, i))
+            rlen = utf8_rune_len(b0)
+            result = result + str_sub(text, i, i + rlen)
+            i = i + rlen
+    return result
+
+fn regex_replace_all pat text replacement
+    return REGEX_প্রতিস্থাপন_সব(pat, text, replacement)
+
+// ─── Split ────────────────────────────────────────────────────────────────────
+// WHY: Splits text by regex delimiter into a list of strings.
+fn REGEX_বিভক্ত pat text
+    parts = list()
+    if pat == 0
+        push(parts, text)
+        return parts
+    tlen = len(text)
+    last_idx = 0
+    i = 0
+    while i <= tlen
+        end_pos = regex_exec_nodes(pat, 0, text, i, tlen)
+        if end_pos >= 0
+            matched_len = end_pos - i
+            if matched_len > 0
+                part = str_sub(text, last_idx, i)
+                push(parts, part)
+                i = end_pos
+                last_idx = end_pos
+            else
+                if i < tlen
+                    b0 = ord(char_at(text, i))
+                    i = i + utf8_rune_len(b0)
+                else
+                    break
+        else
+            if i == tlen
+                break
+            b0 = ord(char_at(text, i))
+            i = i + utf8_rune_len(b0)
+    tail = str_sub(text, last_idx, tlen)
+    push(parts, tail)
+    return parts
+
+fn regex_split pat text
+    return REGEX_বিভক্ত(pat, text)
+
+// ─── Built-in Validators ──────────────────────────────────────────────────────
+// WHY: Validates standard email address syntax with username and domain.
+fn REGEX_ইমেইল_verify email
+    elen = len(email)
+    if elen < 5 or elen > 320
+        return 0
+    at_idx = index_of(email, "@")
+    if at_idx <= 0 or at_idx >= elen - 3
+        return 0
+    dot_idx = index_of(email, ".")
+    if dot_idx <= 0 or dot_idx >= elen - 1
+        return 0
+    if dot_idx < at_idx
+        domain = str_sub(email, at_idx + 1, elen)
+        if index_of(domain, ".") <= 0
+            return 0
+    return 1
+
+fn regex_email_verify email
+    return REGEX_ইমেইল_verify(email)
+
+// WHY: Validates Bangladeshi mobile phone numbers (11 digits, starts with 01[3-9]).
+fn REGEX_ফোন_verify phone
+    plen = len(phone)
+    if plen == 11
+        if starts_with(phone, "01")
+            prefix_char = char_at(phone, 2)
+            p_code = ord(prefix_char)
+            if p_code >= 51 and p_code <= 57
+                return 1
+    return 0
+
+fn regex_phone_verify phone
+    return REGEX_ফোন_verify(phone)
+
+// WHY: Validates HTTP/HTTPS URLs.
+fn REGEX_URL_verify url
+    ulen = len(url)
+    if ulen < 8
+        return 0
+    if starts_with(url, "http://") or starts_with(url, "https://")
+        return 1
+    return 0
+
+fn regex_url_verify url
+    return REGEX_URL_verify(url)
+
+// WHY: Validates that string contains only Bengali characters, spaces, and punctuation.
+// Bengali Unicode range: U+0980-U+09FF (2432..2559).
+fn REGEX_শুধু_বাংলা text
+    tlen = len(text)
+    if tlen == 0
+        return 0
+    idx = 0
+    while idx < tlen
+        b0 = ord(char_at(text, idx))
+        rlen = utf8_rune_len(b0)
+        cp = utf8_decode_cp(text, idx, tlen)
+        if (cp >= 2432 and cp <= 2559) or cp == 32 or cp == 9 or cp == 10 or cp == 44 or cp == 46 or cp == 2404 or cp == 2405
+            idx = idx + rlen
+        else
+            return 0
+    return 1
+
+fn regex_is_bengali_only text
+    return REGEX_শুধু_বাংলা(text)
+
+// ─── Free ─────────────────────────────────────────────────────────────────────
+// WHY: Safe deallocation and release of compiled pattern resources.
+fn REGEX_মুক্তি pat
+    if pat == 0
+        return 0
+    return 0
+
+fn regex_free pat
+    return REGEX_মুক্তি(pat)
+
+// ─── Character Matcher ────────────────────────────────────────────────────────
+// WHY: Low-level character matcher supporting wildcard '.' (46) and literal matching.
+// Used by lexers, tokenizers, and verification suites.
+fn regex_char_match pat_char text_char
+    if pat_char == 46
+        if text_char == 10
+            return 0
+        return 1
+    if pat_char == text_char
+        return 1
+    return 0
+
+fn রেজেক্স_অক্ষর_মিল pat_char text_char
+    return regex_char_match pat_char text_char

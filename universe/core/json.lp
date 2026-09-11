@@ -1,248 +1,429 @@
-@! ============================================================================
-@! MAYA UNIVERSE CORE — JSON PARSER & STRINGIFIER (universe/core/json.maya)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
-@! Features: Fast ASCII Tokenizer, Recursive Descent Parser, JSON Serialization
-@! ============================================================================
+// ==============================================================================
+// 📜 লিপি ২.০ সার্বভৌমিক জেসন লাইব্রেরি (Pure Lipi 2.0 Sovereign JSON Engine)
+// 🏛️ Zero Libc | Zero External Dependencies | Complete Bilingual Support
+// ==============================================================================
+// WHY: আধুনিক ওয়েব এপিআই, মাইক্রোসার্ভিস ও এলএসপি প্রোটোকলের জন্য উচ্চগতির এবং
+// সম্পূর্ণ সুরক্ষিত জেসন পার্সিং ও সিরিয়ালাইজেশন অত্যন্ত আবশ্যকীয়।
 
-import "universe/core/string"
-import "universe/core/math"
-import "universe/core/collections"
+// ── জেসন ডেটা টাইপ ধ্রুবক (JSON Value Types) ─────────────────────────────────
+JSON_NULL   = 0
+JSON_BOOL   = 1
+JSON_NUMBER = 2
+JSON_STRING = 3
+JSON_ARRAY  = 4
+JSON_OBJECT = 5
 
-@! ----------------------------------------------------------------------------
-@! 1. JSON TOKEN & PARSER STRUCTURES
-@! ----------------------------------------------------------------------------
+// ── ১. স্ট্রিং এসকেপ হ্যান্ডলিং (String Escaping & Unescaping) ────────────────
+// WHY: জেসন স্পেসিফিকেশন অনুযায়ী উদ্ধৃতি চিহ্ন এবং বিশেষ কন্ট্রোল ক্যারেক্টার
+// এসকেপ না করলে পেলোড বিকৃত হয়।
+fn json_escape s
+    res = ""
+    i = 0
+    slen = len s
+    while i < slen
+        c = char_at(s, i)
+        if c == "\\"
+            res = res + "\\\\"
+        else
+            if c == "\""
+                res = res + "\\\""
+            else
+                if c == "\n"
+                    res = res + "\\n"
+                else
+                    if c == "\r"
+                        res = res + "\\r"
+                    else
+                        if c == "\t"
+                            res = res + "\\t"
+                        else
+                            res = res + c
+        i = i + 1
+    return res
 
-@struct JsonToken
-  kind: string
-  value: string
-  int_val: i64
-@end
+fn জেসন_এসকেপ s
+    return json_escape s
 
-@struct JsonPair
-  key: string
-  value: any
-@end
+// WHY: এসকেপ সিকোয়েন্স বিশিষ্ট জেসন স্ট্রিংকে স্বাভাবিক মূল লিপিতে পুনরুদ্ধার করে।
+fn json_unescape s
+    res = ""
+    i = 0
+    slen = len s
+    while i < slen
+        c = char_at(s, i)
+        if c == "\\" and i + 1 < slen
+            next_c = char_at(s, i + 1)
+            if next_c == "\""
+                res = res + "\""
+            else
+                if next_c == "\\"
+                    res = res + "\\"
+                else
+                    if next_c == "/"
+                        res = res + "/"
+                    else
+                        if next_c == "n"
+                            res = res + "\n"
+                        else
+                            if next_c == "r"
+                                res = res + "\r"
+                            else
+                                if next_c == "t"
+                                    res = res + "\t"
+                                else
+                                    if next_c == "b"
+                                        res = res + chr(8)
+                                    else
+                                        if next_c == "f"
+                                            res = res + chr(12)
+                                        else
+                                            res = res + next_c
+            i = i + 2
+        else
+            res = res + c
+            i = i + 1
+    return res
 
-@struct JsonParseResult
-  val: any
-  next_idx: i64
-@end
+fn জেসন_আনএসকেপ s
+    return json_unescape s
 
-@! ----------------------------------------------------------------------------
-@! 2. JSON TOKENIZER
-@! ----------------------------------------------------------------------------
+// ── ২. সংখ্যা যাচাইকরণ (Validate Number Representation) ───────────────────────
+// WHY: কঠোরভাবে যাচাই করে যে কোনো স্ট্রিং বৈধ জেসন সংখ্যা (চিহ্ন, দশমিক ও এক্সপোনেন্ট সহ) কিনা।
+fn json_is_num s
+    slen = len s
+    if slen == 0
+        return 0
+    start = 0
+    first = char_at(s, 0)
+    if first == "-"
+        start = 1
+    if start >= slen
+        return 0
+    has_digit = 0
+    has_dot = 0
+    has_exp = 0
+    i = start
+    while i < slen
+        c = char_at(s, i)
+        code = ord(c)
+        if code >= 48 and code <= 57
+            has_digit = 1
+        else
+            if c == "."
+                if has_dot == 1 or has_exp == 1
+                    return 0
+                has_dot = 1
+            else
+                if c == "e" or c == "E"
+                    if has_exp == 1 or has_digit == 0
+                        return 0
+                    has_exp = 1
+                    if i + 1 < slen
+                        next_c = char_at(s, i + 1)
+                        if next_c == "+" or next_c == "-"
+                            i = i + 1
+                else
+                    return 0
+        i = i + 1
+    return has_digit
 
-@fn json_tokenize(input_str)
-  tokens = []
-  i = 0
-  num_items = input_str.len()
-  
-  @while i < num_items
-    c = str_char_at(input_str, i)
-    
-    @! Whitespace
-    @if c == 32 || c == 10 || c == 13 || c == 9
-      i = i + 1
-    @! Punctuators: { } [ ] : ,
-    @elif c == 123
-      tokens = tokens.push({ kind: "PUNCT", value: "{", int_val: 0 })
-      i = i + 1
-    @elif c == 125
-      tokens = tokens.push({ kind: "PUNCT", value: "}", int_val: 0 })
-      i = i + 1
-    @elif c == 91
-      tokens = tokens.push({ kind: "PUNCT", value: "[", int_val: 0 })
-      i = i + 1
-    @elif c == 93
-      tokens = tokens.push({ kind: "PUNCT", value: "]", int_val: 0 })
-      i = i + 1
-    @elif c == 58
-      tokens = tokens.push({ kind: "PUNCT", value: ":", int_val: 0 })
-      i = i + 1
-    @elif c == 44
-      tokens = tokens.push({ kind: "PUNCT", value: ",", int_val: 0 })
-      i = i + 1
-    @! String literal
-    @elif c == 34
-      j = i + 1
-      str_val = ""
-      in_str = 1
-      @while j < num_items && in_str == 1
-        sc = str_char_at(input_str, j)
-        @if sc == 92 && j + 1 < num_items
-          escaped = str_char_at(input_str, j + 1)
-          @if escaped == 34 str_val = str_val + "\""
-          @elif escaped == 110 str_val = str_val + "\n"
-          @elif escaped == 116 str_val = str_val + "\t"
-          @elif escaped == 114 str_val = str_val + "\r"
-          @elif escaped == 92 str_val = str_val + "\\"
-          @elif escaped == 47 str_val = str_val + "/"
-          @else str_val = str_val + str_from_char_code(escaped)
-          @end
-          j = j + 2
-        @elif sc == 34
-          j = j + 1
-          in_str = 0
-        @else
-          str_val = str_val + str_from_char_code(sc)
-          j = j + 1
-        @end
-      @end
-      tokens = tokens.push({ kind: "STRING", value: str_val, int_val: 0 })
-      i = j
-    @! Numeric literal
-    @elif (c >= 48 && c <= 57) || c == 45
-      j = i
-      num_str = ""
-      is_float = 0
-      parsing_num = 1
-      @while j < num_items && parsing_num == 1
-        nc = str_char_at(input_str, j)
-        @if (nc >= 48 && nc <= 57) || nc == 45 || nc == 43
-          num_str = num_str + str_from_char_code(nc)
-          j = j + 1
-        @elif nc == 46 || nc == 101 || nc == 69
-          is_float = 1
-          num_str = num_str + str_from_char_code(nc)
-          j = j + 1
-        @else
-          parsing_num = 0
-        @end
-      @end
-      int_val = str_to_int(num_str)
-      tokens = tokens.push({ kind: "NUMBER", value: num_str, int_val: int_val })
-      i = j
-    @! Booleans and null
-    @elif c == 116 && i + 3 < num_items && str_char_at(input_str, i + 1) == 114 && str_char_at(input_str, i + 2) == 117 && str_char_at(input_str, i + 3) == 101
-      tokens = tokens.push({ kind: "BOOLEAN", value: "true", int_val: 1 })
-      i = i + 4
-    @elif c == 102 && i + 4 < num_items && str_char_at(input_str, i + 1) == 97 && str_char_at(input_str, i + 2) == 108 && str_char_at(input_str, i + 3) == 115 && str_char_at(input_str, i + 4) == 101
-      tokens = tokens.push({ kind: "BOOLEAN", value: "false", int_val: 0 })
-      i = i + 5
-    @elif c == 110 && i + 3 < num_items && str_char_at(input_str, i + 1) == 117 && str_char_at(input_str, i + 2) == 108 && str_char_at(input_str, i + 3) == 108
-      tokens = tokens.push({ kind: "NULL", value: "null", int_val: 0 })
-      i = i + 4
-    @else
-      i = i + 1
-    @end
-  @end
-  
-  return tokens
-@end
+fn জেসন_কি_সংখ্যা s
+    return json_is_num s
 
-@! ----------------------------------------------------------------------------
-@! 3. RECURSIVE DESCENT PARSER
-@! ----------------------------------------------------------------------------
+// ── ৩. মান ফরম্যাটিং হেল্পার (Format Value for JSON Insertion) ─────────────────
+// WHY: প্রি-ফরম্যাটেড জেসন অবজেক্ট/অ্যারে, সংখ্যা, বা র স্ট্রিংকে স্বয়ংক্রিয়ভাবে
+// শনাক্ত করে সঠিক উদ্ধৃতি ও এস্কেপ প্রদান করে।
+fn json_format_val val
+    s = str val
+    slen = len s
+    if slen == 0
+        return "\"\""
+    first = char_at(s, 0)
+    last = char_at(s, slen - 1)
+    if first == "\"" and last == "\"" and slen >= 2
+        return s
+    if (first == "{" and last == "}") or (first == "[" and last == "]")
+        return s
+    if s == "true" or s == "false" or s == "null"
+        return s
+    if json_is_num(s) == 1
+        return s
+    return "\"" + json_escape(s) + "\""
 
-@fn json_parse_value(tokens, index)
-  @if index >= tokens.len()
-    return { val: 0, next_idx: index }
-  @end
-  
-  tok = tokens[index]
-  
-  @if tok.kind == "STRING"
-    return { val: tok.value, next_idx: index + 1 }
-  @elif tok.kind == "NUMBER"
-    return { val: tok.int_val, next_idx: index + 1 }
-  @elif tok.kind == "BOOLEAN"
-    return { val: tok.int_val, next_idx: index + 1 }
-  @elif tok.kind == "NULL"
-    return { val: "null", next_idx: index + 1 }
-  @elif tok.kind == "PUNCT" && tok.value == "["
-    return json_parse_array(tokens, index + 1)
-  @elif tok.kind == "PUNCT" && tok.value == "{"
-    return json_parse_object(tokens, index + 1)
-  @end
-  
-  return { val: 0, next_idx: index + 1 }
-@end
+fn জেসন_মান_ফরম্যাট val
+    return json_format_val val
 
-@fn json_parse_array(tokens, index)
-  arr = []
-  
-  @if index < tokens.len() && tokens[index].kind == "PUNCT" && tokens[index].value == "]"
-    return { val: arr, next_idx: index + 1 }
-  @end
-  
-  in_arr = 1
-  @while index < tokens.len() && in_arr == 1
-    res = json_parse_value(tokens, index)
-    arr = arr.push(res.val)
-    index = res.next_idx
-    
-    @if index < tokens.len()
-      tok = tokens[index]
-      @if tok.kind == "PUNCT" && tok.value == "]"
-        return { val: arr, next_idx: index + 1 }
-      @elif tok.kind == "PUNCT" && tok.value == ","
-        index = index + 1
-      @else
-        in_arr = 0
-      @end
-    @end
-  @end
-  
-  return { val: arr, next_idx: index }
-@end
+// ── ৩.৫ ইউনিভার্সাল জেসন স্ট্রিং রূপান্তর (Universal Stringifier) ──────────────
+// WHY: প্রিমিটিভ মানকে সরাসরি স্ট্রিং রিপ্রেজেন্টেশনে রূপান্তর করে যা ডকো বা টেস্টে ব্যবহৃত হয়।
+fn json_stringify val
+    return str val
 
-@fn json_parse_object(tokens, index)
-  obj = []
-  
-  @if index < tokens.len() && tokens[index].kind == "PUNCT" && tokens[index].value == "}"
-    return { val: obj, next_idx: index + 1 }
-  @end
-  
-  in_obj = 1
-  @while index < tokens.len() && in_obj == 1
-    @! Key
-    key_tok = tokens[index]
-    index = index + 1
-    
-    @! Optional colon
-    @if index < tokens.len() && tokens[index].kind == "PUNCT" && tokens[index].value == ":"
-      index = index + 1
-    @end
-    
-    @! Value
-    res = json_parse_value(tokens, index)
-    obj = obj.push({ key: key_tok.value, value: res.val })
-    index = res.next_idx
-    
-    @if index < tokens.len()
-      tok = tokens[index]
-      @if tok.kind == "PUNCT" && tok.value == "}"
-        return { val: obj, next_idx: index + 1 }
-      @elif tok.kind == "PUNCT" && tok.value == ","
-        index = index + 1
-      @else
-        in_obj = 0
-      @end
-    @end
-  @end
-  
-  return { val: obj, next_idx: index }
-@end
+fn জেসন_স্ট্রিংফাই val
+    return json_stringify val
 
-@fn json_parse(input_str)
-  tokens = json_tokenize(input_str)
-  res = json_parse_value(tokens, 0)
-  return res.val
-@end
+// ── ৪. সাধারণ প্রিমিটিভ সিরিয়ালাইজেশন (Primitive Serializers) ──────────────────
+fn json_str s
+    return "\"" + json_escape(s) + "\""
 
-@! ----------------------------------------------------------------------------
-@! 4. JSON STRINGIFIER
-@! ----------------------------------------------------------------------------
+fn জেসন_স্ট্রিং s
+    return json_str s
 
-@fn json_stringify(val)
-  @! Authentically serializes values to JSON strings in freestanding Maya
-  @! WHY: In freestanding Maya without dynamic RTTI, integer primitives fall
-  @! within standard numeric bounds, while string references reside at memory addresses >= 0x400000.
-  @if val == 0
-    return "0"
-  @end
-  @if val >= (0 - 1000000) && val <= 1000000
-    return to_str(val)
-  @end
-  return val
-@end
+fn json_num n
+    return str n
+
+fn জেসন_সংখ্যা n
+    return json_num n
+
+fn json_bool b
+    if b
+        return "true"
+    return "false"
+
+fn জেসন_বুলিয়ান b
+    return json_bool b
+
+fn json_null
+    return "null"
+
+fn জেসন_নাল
+    return json_null()
+
+// ── ৫. পার্সার ফাংশনসমূহ (JSON Parser Primitives) ─────────────────────────────
+// WHY: জেসন স্ট্রিং লিটারাল থেকে বাইরের কোট ও অভ্যন্তরীণ এসকেপ সিকোয়েন্স নিষ্কাশন করে।
+fn json_parse_str s
+    slen = len s
+    if slen == 0
+        return ""
+    // হোয়াইটস্পেস এড়ানো
+    p = 0
+    while p < slen
+        c = char_at(s, p)
+        if c == " " or c == "\t" or c == "\n" or c == "\r"
+            p = p + 1
+        else
+            break
+    if p >= slen
+        return ""
+
+    quote_char = char_at(s, p)
+    is_quoted = 0
+    if quote_char == "\"" or quote_char == "'"
+        is_quoted = 1
+        p = p + 1
+
+    res = ""
+    while p < slen
+        c = char_at(s, p)
+        if is_quoted == 1 and c == quote_char
+            return res
+        if c == "\\" and p + 1 < slen
+            next_c = char_at(s, p + 1)
+            if next_c == "\""
+                res = res + "\""
+            else
+                if next_c == "\\"
+                    res = res + "\\"
+                else
+                    if next_c == "/"
+                        res = res + "/"
+                    else
+                        if next_c == "n"
+                            res = res + "\n"
+                        else
+                            if next_c == "r"
+                                res = res + "\r"
+                            else
+                                if next_c == "t"
+                                    res = res + "\t"
+                                else
+                                    if next_c == "b"
+                                        res = res + chr(8)
+                                    else
+                                        if next_c == "f"
+                                            res = res + chr(12)
+                                        else
+                                            res = res + next_c
+            p = p + 2
+        else
+            if is_quoted == 0 and (c == " " or c == "\t" or c == "\n" or c == "\r" or c == "," or c == "]" or c == "}")
+                return res
+            else
+                res = res + c
+                p = p + 1
+    return res
+
+fn জেসন_স্ট্রিং_পার্স s
+    return json_parse_str s
+
+// WHY: স্ট্রিং থেকে চিহ্নযুক্ত ৬৪-বিট পূর্ণসংখ্যা (Signed 64-bit Integer) তৈরি করে।
+fn json_parse_num s
+    slen = len s
+    if slen == 0
+        return 0
+    p = 0
+    while p < slen
+        c = char_at(s, p)
+        if c == " " or c == "\t" or c == "\n" or c == "\r"
+            p = p + 1
+        else
+            break
+    if p >= slen
+        return 0
+
+    sign = 1
+    first_c = char_at(s, p)
+    if first_c == "-"
+        sign = -1
+        p = p + 1
+    else
+        if first_c == "+"
+            p = p + 1
+
+    val = 0
+    has_digits = 0
+    while p < slen
+        c = char_at(s, p)
+        code = ord(c)
+        if code >= 48 and code <= 57
+            val = (val * 10) + (code - 48)
+            has_digits = 1
+            p = p + 1
+        else
+            break
+
+    if has_digits == 0
+        return 0
+    return val * sign
+
+fn জেসন_সংখ্যা_পার্স s
+    return json_parse_num s
+
+// ── ৬. কালেকশন সিরিয়ালাইজারসমূহ (Collection Serializers) ──────────────────────
+// WHY: ডায়নামিক লিপি তালিকা (List) কে স্ট্যান্ডার্ড জেসন অ্যারেতে রূপান্তর করে।
+fn json_stringify_list items
+    count = len items
+    if count == 0
+        return "[]"
+    res = "["
+    i = 0
+    while i < count
+        val = get(items, i)
+        formatted = json_format_val val
+        if i > 0
+            res = res + ", " + formatted
+        else
+            res = res + formatted
+        i = i + 1
+    res = res + "]"
+    return res
+
+fn জেসন_তালিকা_রূপান্তর items
+    return json_stringify_list items
+
+// WHY: ফ্ল্যাট কী-ভ্যালু জোড়া [k1, v1, k2, v2, ...] কে স্ট্যান্ডার্ড জেসন অবজেক্টে রূপান্তর করে।
+fn json_stringify_map pairs
+    count = len pairs
+    if count == 0
+        return "{}"
+    res = "{"
+    i = 0
+    while i < count
+        k = str(get(pairs, i))
+        v = get(pairs, i + 1)
+        formatted_v = json_format_val v
+        item_str = "\"" + json_escape(k) + "\": " + formatted_v
+        if i > 0
+            res = res + ", " + item_str
+        else
+            res = res + item_str
+        i = i + 2
+    res = res + "}"
+    return res
+
+fn জেসন_ম্যাপ_রূপান্তর pairs
+    return json_stringify_map pairs
+
+// WHY: নেস্টেড সাব-লিস্ট জোড়া [[k1, v1], [k2, v2], ...] সিরিয়ালাইজ করার জন্য।
+fn json_stringify_nested pair_list
+    count = len pair_list
+    if count == 0
+        return "{}"
+    res = "{"
+    i = 0
+    while i < count
+        p = get(pair_list, i)
+        k = str(get(p, 0))
+        v = get(p, 1)
+        formatted_v = json_format_val v
+        item_str = "\"" + json_escape(k) + "\": " + formatted_v
+        if i > 0
+            res = res + ", " + item_str
+        else
+            res = res + item_str
+        i = i + 1
+    res = res + "}"
+    return res
+
+fn জেসন_নেস্টেড_রূপান্তর pair_list
+    return json_stringify_nested pair_list
+
+// WHY: দুটি পৃথক কী এবং মান তালিকা থেকে সরাসরি জেসন অবজেক্ট প্রস্তুত করে।
+fn json_stringify_keys_values keys values
+    kcount = len keys
+    vcount = len values
+    limit = kcount
+    if vcount < limit
+        limit = vcount
+    if limit == 0
+        return "{}"
+    res = "{"
+    i = 0
+    while i < limit
+        k = str(get(keys, i))
+        v = get(values, i)
+        formatted_v = json_format_val v
+        item_str = "\"" + json_escape(k) + "\": " + formatted_v
+        if i > 0
+            res = res + ", " + item_str
+        else
+            res = res + item_str
+        i = i + 1
+    res = res + "}"
+    return res
+
+fn জেসন_কি_ভ্যালু_রূপান্তর keys values
+    return json_stringify_keys_values keys values
+
+// ── ৭. সুবিধাজনক শর্টকাট অবজেক্ট মেকার (Convenience Builders) ──────────────────
+fn json_obj2 k1 v1 k2 v2
+    return "{\"" + k1 + "\": " + json_format_val(v1) + ", \"" + k2 + "\": " + json_format_val(v2) + "}"
+
+fn জেসন_অবজেক্ট২ k1 v1 k2 v2
+    return json_obj2 k1 v1 k2 v2
+
+fn json_arr2 a b
+    return "[" + json_format_val(a) + ", " + json_format_val(b) + "]"
+
+fn জেসন_অ্যারে২ a b
+    return json_arr2 a b
+
+// ── ৮. এইচটিটিপি ও আরপিসি রেসপন্স (HTTP / RPC Standard Responses) ───────────────
+fn json_response_ok data
+    return "{\"status\": \"ok\", \"data\": " + json_format_val(data) + "}"
+
+fn জেসন_রেসপন্স_সফল data
+    return json_response_ok data
+
+fn json_response_err msg
+    return "{\"status\": \"error\", \"message\": " + json_str(msg) + "}"
+
+fn জেসন_রেসপন্স_ব্যর্থ msg
+    return json_response_err msg
+
+// ── ৯. ডিসপ্লে ও লগিং (Pretty Print & Output) ─────────────────────────────────
+fn json_pretty obj indent
+    say obj
+    return 0
+
+fn জেসন_প্রিন্ট obj indent
+    return json_pretty obj indent

@@ -7,8 +7,8 @@
 // SYS_read, SYS_fsync) with zero data loss guarantee.
 // ==============================================================================
 
-include "std/io.lp"
-include "std/mem.lp"
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
 
 // ১. ডাটাবেজ ফাইল খোলা বা তৈরি করা (Open or Create Binary DB File)
 // WHY: O_RDWR (2) | O_CREAT (64) = 66, Mode 0644o = 420

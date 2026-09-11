@@ -8,8 +8,8 @@
 // uniform operator spacing (e.g. 'a + b', 'x = 10', 'i == 0'), trailing whitespace removal,
 // and normalization of consecutive blank lines.
 
-include "std/io.lp"
-include "std/mem.lp"
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
 
 // ── 1. Helper Utilities ──────────────────────────────────────────────────────
 

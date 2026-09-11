@@ -7,8 +7,8 @@
 // empowered to migrate legacy codebases into sovereign Lipi code with zero friction.
 // lipiconvert parses input source tokens and emits production-ready idiomatic Lipi.
 
-include "std/io.lp"
-include "std/mem.lp"
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
 
 // ১. ব্যানার প্রদর্শন (Display Header)
 fn প্রিন্ট_কনভার্টার_ব্যানার

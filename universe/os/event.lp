@@ -7,7 +7,7 @@
 // The Linux epoll subsystem provides O(1) event notification for thousands
 // of concurrent file descriptors without busy-polling or thread-context overhead.
 
-include "universe/core/std_mem.lp"
+include "universe/core/memory.lp"
 
 // ১. লিনাক্স কার্নেল সিসকল ও epoll কনস্ট্যান্টস (Kernel Syscalls & Epoll Flags)
 SYS_EPOLL_CREATE1 = 291

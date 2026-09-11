@@ -7,13 +7,13 @@
 // binary database CRUD operations, and persistent NVMe/SSD storage using Lipi Web Engine.
 // ==============================================================================
 
-include "std/io.lp"
-include "std/net.lp"
-include "std/mem.lp"
-include "std/str.lp"
-include "std/web.lp"
-include "std/time.lp"
-include "std/json.lp"
+include "universe/core/io.lp"
+include "universe/net/socket.lp"
+include "universe/core/memory.lp"
+include "universe/core/string.lp"
+include "universe/web/engine.lp"
+include "universe/core/time.lp"
+include "universe/core/json.lp"
 include "apps/website/db_engine.lp"
 
 // ── String to Integer Parser ──────────────────────────────────────────────────

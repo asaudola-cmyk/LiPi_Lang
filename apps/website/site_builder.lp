@@ -6,8 +6,8 @@
 // present on disk and properly sized before server deployment.
 // ==============================================================================
 
-অন্তর্ভুক্ত "std/io.lp"
-অন্তর্ভুক্ত "std/str.lp"
+অন্তর্ভুক্ত "universe/core/io.lp"
+অন্তর্ভুক্ত "universe/core/string.lp"
 
 কাজ ফাইল_আকার_যাচাই(পাথ) {
      fd = ফাইল_খোলো(পাথ)

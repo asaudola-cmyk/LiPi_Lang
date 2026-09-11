@@ -7,9 +7,9 @@
 // expressions, inspect CPU registers, and measure hardware latency with zero libc.
 
 // WHY: Canonical standard library modules unified under universe/ for clean architecture.
-include "universe/core/std_io.lp"
-include "universe/core/std_mem.lp"
-include "universe/tools/std_debug.lp"
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
+include "universe/tools/debug.lp"
 
 fn hex_digit n
     val = n % 16

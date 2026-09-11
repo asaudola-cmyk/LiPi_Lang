@@ -8,7 +8,7 @@
 // std/tui.lp implements 24-bit TrueColor RGB, 256-color palette, cursor control,
 // mouse event tracking, and flicker-free frame rendering.
 
-include "universe/core/std_mem.lp"
+include "universe/core/memory.lp"
 
 // ১. ANSI টেক্সট স্টাইল ও রিসেট ফরম্যাটিং (ANSI Formatting Sequences)
 fn ansi_reset

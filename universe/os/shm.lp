@@ -7,7 +7,7 @@
 // across multiple independent OS processes without TCP, Redis, or Libc overhead.
 // Linux maps /dev/shm via tmpfs directly in RAM for sub-microsecond latency.
 
-include "universe/core/std_mem.lp"
+include "universe/core/memory.lp"
 
 // ১. শেয়ার্ড মেমরি কনস্ট্যান্টস (POSIX Shared Memory Constants)
 SHM_O_RDONLY = 0

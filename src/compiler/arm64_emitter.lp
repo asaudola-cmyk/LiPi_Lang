@@ -2597,9 +2597,9 @@ fn arm64_resolve_inc_path cur_dir inc_name
     cand1 = cur_dir + "/" + inc_name
     if file_exists(cand1) == 1
         return cand1
-    cand2 = "std/" + inc_name
-    if file_exists(cand2) == 1
-        return cand2
+    cand_uni = "universe/" + inc_name
+    if file_exists(cand_uni) == 1
+        return cand_uni
     cand3 = "../" + inc_name
     if file_exists(cand3) == 1
         return cand3

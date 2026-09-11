@@ -7,8 +7,8 @@
 // runtime stack (PyTorch, llama.cpp, etc.). std/gguf.lp provides binary parsing of
 // GGUF model headers, Q4_0/Q8_0 tensor unpackers, and hardware vector-matrix multiplication.
 
-include "universe/core/std_mem.lp"
-include "universe/ai/std_ai.lp"
+include "universe/core/memory.lp"
+include "universe/ai/tensor_engine.lp"
 
 // ── ১. GGUF ফরম্যাট কনস্ট্যান্টস ──────────────────────────────────────────────
 // Magic: 'G' (0x47), 'G' (0x47), 'U' (0x55), 'F' (0x46) -> 0x46554747 (1179998023 little-endian)
