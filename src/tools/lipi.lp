@@ -91,6 +91,19 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
 
     return exit_code
 
+// WHY: Resolves toolchain binaries dynamically across current directory, ~/.local/bin, and Lipi repository
+fn resolve_bin_path rel_name
+    local_p = "bin/" + rel_name
+    if syscall(21, local_p, 0, 0, 0, 0, 0) == 0
+        return local_p
+    user_p = "/home/shafiullah/.local/bin/" + rel_name
+    if syscall(21, user_p, 0, 0, 0, 0, 0) == 0
+        return user_p
+    repo_p = "/home/shafiullah/Documents/file/work/lipi/bin/" + rel_name
+    if syscall(21, repo_p, 0, 0, 0, 0, 0) == 0
+        return repo_p
+    return rel_name
+
 fn handle_run file_path
     if len(file_path) == 0
         say "❌ ত্রুটি: ইনপুট ফাইল উল্লেখ করুন: lipi run <file.lp>"
@@ -98,7 +111,8 @@ fn handle_run file_path
     tmp_bin = "/tmp/lipi_run_exec"
     say "\033[1;34m[LIPI RUN]\033[0m " + file_path + " সংকলন করা হচ্ছে..."
     
-    code = spawn_exec_cmd("bin/lipc_bin", file_path, tmp_bin, "", "")
+    c_bin = resolve_bin_path("lipc_bin")
+    code = spawn_exec_cmd(c_bin, file_path, tmp_bin, "", "")
     if code != 0
         say "❌ সংকলন ব্যর্থ হয়েছে (Compiler returned code " + str(code) + ")"
         return code
@@ -121,7 +135,8 @@ fn handle_build file_path out_file target_flag
         dest = file_path + ".bin"
         
     say "\033[1;34m[LIPI BUILD]\033[0m " + file_path + " ➔ " + dest
-    code = spawn_exec_cmd("bin/lipc_bin", file_path, dest, target_flag, "")
+    c_bin = resolve_bin_path("lipc_bin")
+    code = spawn_exec_cmd(c_bin, file_path, dest, target_flag, "")
     if code == 0
         say "\033[1;32m✔ বাইনারি সফলভাবে তৈরি হয়েছে: " + dest + "\033[0m"
     else
@@ -132,7 +147,8 @@ fn handle_test suite_path
     if len(suite_path) > 0
         say "\033[1;34m[LIPI TEST]\033[0m টেস্ট ফাইল চালানো হচ্ছে: " + suite_path
         tmp_tst = "/tmp/lipi_tst_bin"
-        code = spawn_exec_cmd("bin/lipc_bin", suite_path, tmp_tst, "", "")
+        c_bin = resolve_bin_path("lipc_bin")
+        code = spawn_exec_cmd(c_bin, suite_path, tmp_tst, "", "")
         if code != 0
             say "❌ টেস্ট কম্পাইলেশন ব্যর্থ।"
             return code
@@ -147,27 +163,27 @@ fn handle_fmt file_path flag
     if len(file_path) == 0
         say "❌ ত্রুটি: ফরম্যাট করার ফাইল উল্লেখ করুন: lipi fmt <file.lp> [-w]"
         return 1
-    return spawn_exec_cmd("./bin/lipifmt", file_path, flag, "", "")
+    return spawn_exec_cmd(resolve_bin_path("lipifmt"), file_path, flag, "", "")
 
 fn handle_lsp
     say "⚡ লিপির সার্বভৌম ল্যাঙ্গুয়েজ সার্ভার (LSP) চালু হচ্ছে..."
-    return spawn_exec_cmd("./bin/lipilsp", "", "", "", "")
+    return spawn_exec_cmd(resolve_bin_path("lipilsp"), "", "", "", "")
 
 fn handle_debug target
     if len(target) == 0
         say "❌ ত্রুটি: ডিবাগ করার বাইনারি উল্লেখ করুন: lipi debug <binary>"
         return 1
-    return spawn_exec_cmd("./bin/lipidbg", target, "", "", "")
+    return spawn_exec_cmd(resolve_bin_path("lipidbg"), target, "", "", "")
 
 fn handle_pkg subcmd arg1 arg2
-    return spawn_exec_cmd("./bin/lipipkg", subcmd, arg1, arg2, "")
+    return spawn_exec_cmd(resolve_bin_path("lipipkg"), subcmd, arg1, arg2, "")
 
 fn handle_repl
     say "⚡ লিপি ইন্টারঅ্যাক্টিভ আরইপিএল..."
-    return spawn_exec_cmd("./bin/lipirepl", "", "", "", "")
+    return spawn_exec_cmd(resolve_bin_path("lipirepl"), "", "", "", "")
 
 fn handle_convert file_path to_syntax
-    return spawn_exec_cmd("./bin/lipiconvert", file_path, to_syntax, "", "")
+    return spawn_exec_cmd(resolve_bin_path("lipiconvert"), file_path, to_syntax, "", "")
 
 fn handle_os action
     if action == "boot"
