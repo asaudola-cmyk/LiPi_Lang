@@ -54,6 +54,14 @@
           "match": "//.*$"
         },
         {
+          "name": "comment.line.directive.lipi",
+          "match": "@!.*$"
+        },
+        {
+          "name": "comment.line.number-sign.lipi",
+          "match": "#.*$"
+        },
+        {
           "name": "comment.block.lipi",
           "begin": "/\\*",
           "end": "\\*/"
@@ -110,7 +118,7 @@
       "patterns": [
         {
           "name": "keyword.control.lipi",
-          "match": "\\b(if|elif|elseif|else|then|while|for|in|return|match|case|break|continue|try|catch|throw|spawn|async|await|main|যদি|নাহলে_যদি|নাহলে|তবে|যতক্ষণ|প্রতিটি|মধ্যে|ভেতরে|ফেরত|মিল|ঘটনা|থামো|চলো|চালিয়ে_যাও|চেষ্টা|ধরো|নিক্ষেপ|সহযোগ|সমান্তরাল|অপেক্ষা|প্রধান)\\b"
+          "match": "(@if|@elif|@else|@while|@for|@end|@return|@break|@continue|@yield)\\b|\\b(if|elif|elseif|else|then|while|for|in|return|match|case|break|continue|try|catch|throw|spawn|async|await|main|যদি|নাহলে_যদি|নাহলে|তবে|যতক্ষণ|প্রতিটি|মধ্যে|ভেতরে|ফেরত|মিল|ঘটনা|থামো|চলো|চালিয়ে_যাও|চেষ্টা|ধরো|নিক্ষেপ|সহযোগ|সমান্তরাল|অপেক্ষা|প্রধান)\\b"
         }
       ]
     },
@@ -118,14 +126,14 @@
       "patterns": [
         {
           "name": "keyword.declaration.lipi",
-          "match": "\\b(fn|struct|let|var|const|type|asm|include|import|as|pub|priv|abstract|interface|impl|extends|কাজ|কাঠামো|গঠন|চলক|ধরি|ধ্রুবক|ধরন|অন্তর্ভুক্ত|আমদানি|হিসেবে|সার্বজনীন|সংরক্ষিত|বিমূর্ত|ইন্টারফেস|বাস্তবায়ন|বিস্তার)\\b"
+          "match": "(@fn|@struct|@let|@var|@const|@type|@pub|@use|@include)\\b|\\b(fn|struct|let|var|const|type|asm|include|import|as|pub|priv|abstract|interface|impl|extends|কাজ|কাঠামো|গঠন|চলক|ধরি|ধ্রুবক|ধরন|অন্তর্ভুক্ত|আমদানি|হিসেবে|সার্বজনীন|সংরক্ষিত|বিমূর্ত|ইন্টারফেস|বাস্তবায়ন|বিস্তার)\\b"
         }
       ]
     },
     "functions": {
       "patterns": [
         {
-          "match": "\\b(fn|কাজ|def|func|function)\\s+([\\p{L}_][\\p{L}0-9_]*)\\.([\\p{L}_][\\p{L}0-9_]*)\\b",
+          "match": "(@fn|\\b(fn|কাজ|def|func|function))\\s+([\\p{L}_][\\p{L}0-9_]*)\\.([\\p{L}_][\\p{L}0-9_]*)\\b",
           "captures": {
             "1": {
               "name": "keyword.declaration.lipi"
@@ -139,7 +147,7 @@
           }
         },
         {
-          "match": "\\b(fn|কাজ|def|func|function)\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
+          "match": "(@fn|\\b(fn|কাজ|def|func|function))\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
           "captures": {
             "1": {
               "name": "keyword.declaration.lipi"
@@ -162,7 +170,7 @@
     "structs": {
       "patterns": [
         {
-          "match": "\\b(struct|class|interface|কাঠামো|গঠন|ইন্টারফেস)\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
+          "match": "(@struct|\\b(struct|class|interface|কাঠামো|গঠন|ইন্টারফেস))\\s+([\\p{L}_][\\p{L}0-9_]*)\\b",
           "captures": {
             "1": {
               "name": "keyword.declaration.lipi"
@@ -218,7 +226,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.lipi",
-          "match": "\\b(say|print|echo|input|len|size|clock|rdtsc|syscall|malloc|free|mem_byte_read|mem_byte_write|mem_word_read|mem_write_word|mem_copy|mem_fill|file_open|file_read|file_write|file_close|file_exists|argv|ord|chr|char_at|floor|exit|বলো|দেখাও|ইনপুট|দৈর্ঘ্য|সাইজ|ক্লক|সিসকল|মেমরি_বরাদ্দ|মেমরি_মুক্তি|মেমরি_বাইট_পড়ো|মেমরি_বাইট_লেখো|মেমরি_শব্দ_পড়ো|মেমরি_শব্দ_লেখো|মেমরি_কপি|মেমরি_ভরাট|ফাইল_খোলো|ফাইল_পড়ো|ফাইল_লেখো|ফাইল_বন্ধ|প্রস্থান)\\b"
+          "match": "(@!|println|\\b(say|print|echo|input|len|size|clock|rdtsc|syscall|malloc|free|mem_byte_read|mem_byte_write|mem_word_read|mem_write_word|mem_copy|mem_fill|file_open|file_read|file_write|file_close|file_exists|argv|ord|chr|char_at|floor|exit|বলো|দেখাও|ইনপুট|দৈর্ঘ্য|সাইজ|ক্লক|সিসকল|মেমরি_বরাদ্দ|মেমরি_মুক্তি|মেমরি_বাইট_পড়ো|মেমরি_বাইট_লেখো|মেমরি_শব্দ_পড়ো|মেমরি_শব্দ_লেখো|মেমরি_কপি|মেমরি_ভরাট|ফাইল_খোলো|ফাইল_পড়ো|ফাইল_লেখো|ফাইল_বন্ধ|প্রস্থান)\\b)"
         },
         {
           "name": "support.class.stdlib.lipi",

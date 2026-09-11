@@ -44,54 +44,237 @@ fn show_version
     say "Multi-Target Emitters: ELF64, PE32+ (Windows), Mach-O (macOS), WASM, RISC-V"
     say "Status: Sovereign, Independent, Bit-for-Bit Deterministic Closure"
 
-fn lipi_run_target target_file
-    say "\033[1;34m[LIPI RUN]\033[0m " + target_file + " কম্পাইল ও এক্সিকিউট করা হচ্ছে..."
-    // WHY: Use direct execution via bin/lipc
-    say "✔ Program compiled in 8ms."
-    say "✔ Executing native machine code..."
-    say "----------------------------------------"
-    say "Hello from Lipi Sovereign Megalith!"
-    say "----------------------------------------"
-    say "✔ Execution completed with return code 0."
-    return 0
+// ── ৩. প্রসেস এক্সিকিউশন ও সিসকল গেটওয়ে (Pure Syscall Process Spawner) ────────
+// WHY: A sovereign freestanding binary cannot rely on glibc's system() or popen().
+// We spawn processes directly using Linux sys_mmap (9), sys_fork (57),
+// sys_execve (59), sys_wait4 (61), and sys_munmap (11).
 
-fn lipi_build_target target_file out_file
-    say "\033[1;34m[LIPI BUILD]\033[0m " + target_file + " ➔ " + out_file
-    say "  • Lexing Tri-Syntax stream (Bengali + English + Maya Directives)... OK"
-    say "  • Monomorphic Lowering & SSA IR Optimization (-O2)... OK"
-    say "  • Peephole XOR Zero-Init & Constant Folding... OK"
-    say "  • Emitting Freestanding ELF64 Machine Code (0x40000000 Base)... OK"
-    say "\033[1;32m✔ বাইনারি সফলভাবে তৈরি হয়েছে: " + out_file + "\033[0m"
-    return 0
+fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
+    argv = syscall(9, 0, 64, 3, 34, -1, 0)
+    mem_word_write(argv, 0, cmd_path)
+    
+    idx = 1
+    if len(arg1) > 0
+        mem_word_write(argv, idx * 8, arg1)
+        idx = idx + 1
+    if len(arg2) > 0
+        mem_word_write(argv, idx * 8, arg2)
+        idx = idx + 1
+    if len(arg3) > 0
+        mem_word_write(argv, idx * 8, arg3)
+        idx = idx + 1
+    if len(arg4) > 0
+        mem_word_write(argv, idx * 8, arg4)
+        idx = idx + 1
+    mem_word_write(argv, idx * 8, 0)
 
-fn lipi_test_suite
-    say "\033[1;34m[LIPI TEST]\033[0m সম্পূর্ণ রিগ্রেশন টেস্ট স্যুট রান করা হচ্ছে..."
-    say "  • ৬০টি সিলিকন টেস্ট (Core Silicon Tests)... PASS ✔"
-    say "  • ৯টি অ্যাডভান্সড টেস্ট (WASM, ARM64, SSA, Tri-Syntax)... PASS ✔"
-    say "  • ৪৪টি ইউনিভার্স মেগা টেস্ট (Tensor, Raft, Unikernel, Web)... PASS ✔"
-    say "\033[1;32m🎉 ALL 113 SOVEREIGN REGRESSION TESTS PASSED (0% FAILURE)!\033[0m"
-    return 0
+    env = syscall(9, 0, 16, 3, 34, -1, 0)
+    mem_word_write(env, 0, 0)
 
-fn lipi_self_build
-    say "\033[1;35m[LIPI SELF-BUILD]\033[0m ৩-জেনারেশন সেলফ-হোস্টিং বুটস্ট্র্যাপ পাইপলাইন..."
-    say "  ► Stage 0: boot/lipi-seed (0% C bootstrap anchor)"
-    say "  ► Stage 1: boot/lipi-seed -> bin/lipc_gen1"
-    say "  ► Stage 2: bin/lipc_gen1 -> bin/lipc_gen2"
-    say "  ► Stage 3: bin/lipc_gen2 -> bin/lipc_gen3"
-    say "  ► Bit-for-Bit Determinism Check: cmp bin/lipc_gen2 bin/lipc_gen3"
-    say "\033[1;32m✔ সেলফ-হোস্টিং ক্লোজার সফল! শূন্য বাইট ব্যবধান (0 bytes difference)!\033[0m"
-    return 0
+    st = syscall(9, 0, 8, 3, 34, -1, 0)
+    mem_word_write(st, 0, 0)
 
-fn lipi_os_boot
-    say "\033[1;36m[LIPI OS]\033[0m ক্লাউড ইউনিকার্নেল বুট টেস্ট (MicroVM Mode)..."
-    say "  • Multiboot 1 (0x1BADB002) + Multiboot 2 (0xE85250D6) Header detected"
-    say "  • 4-Level Paging (PML4, PDPT, PD, PT) initialized at 0x20000000"
-    say "  • VirtIO Net ring buffer mapped"
-    say "  • COM1 UART serial link at 115200 8N1"
-    say "\033[1;32m✔ QEMU MicroVM cold boot completed in 3.4 ms! COM1 telemetry OK.\033[0m"
-    return 0
+    pid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if pid == 0
+        syscall(59, cmd_path, argv, env, 0, 0, 0)
+        syscall(60, 127, 0, 0, 0, 0, 0)
+
+    syscall(61, pid, st, 0, 0, 0, 0)
+    raw_status = mem_word_read(st, 0)
+    exit_code = (raw_status / 256) % 256
+
+    syscall(11, argv, 64, 0, 0, 0, 0)
+    syscall(11, env, 16, 0, 0, 0, 0)
+    syscall(11, st, 8, 0, 0, 0, 0)
+
+    return exit_code
+
+fn handle_run file_path
+    if len(file_path) == 0
+        say "❌ ত্রুটি: ইনপুট ফাইল উল্লেখ করুন: lipi run <file.lp>"
+        return 1
+    tmp_bin = "/tmp/lipi_run_exec"
+    say "\033[1;34m[LIPI RUN]\033[0m " + file_path + " সংকলন করা হচ্ছে..."
+    
+    code = spawn_exec_cmd("./bin/lipc", file_path, tmp_bin, "", "")
+    if code != 0
+        say "❌ সংকলন ব্যর্থ হয়েছে (Compiler returned code " + str(code) + ")"
+        return code
+        
+    say "⚡ এক্সিকিউশন শুরু..."
+    say "--------------------------------------------------"
+    exec_code = spawn_exec_cmd(tmp_bin, "", "", "", "")
+    say "--------------------------------------------------"
+    say "✔ এক্সিকিউশন সম্পন্ন (Return code: " + str(exec_code) + ")"
+    
+    syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+    return exec_code
+
+fn handle_build file_path out_file target_flag
+    if len(file_path) == 0
+        say "❌ ত্রুটি: ইনপুট ফাইল উল্লেখ করুন: lipi build <file.lp> [-o <out>]"
+        return 1
+    dest = out_file
+    if len(dest) == 0
+        dest = file_path + ".bin"
+        
+    say "\033[1;34m[LIPI BUILD]\033[0m " + file_path + " ➔ " + dest
+    code = spawn_exec_cmd("./bin/lipc", file_path, dest, target_flag, "")
+    if code == 0
+        say "\033[1;32m✔ বাইনারি সফলভাবে তৈরি হয়েছে: " + dest + "\033[0m"
+    else
+        say "\033[1;31m❌ বাইনারি বিল্ড ব্যর্থ হয়েছে।\033[0m"
+    return code
+
+fn handle_test suite_path
+    if len(suite_path) > 0
+        say "\033[1;34m[LIPI TEST]\033[0m টেস্ট ফাইল চালানো হচ্ছে: " + suite_path
+        tmp_tst = "/tmp/lipi_tst_bin"
+        code = spawn_exec_cmd("./bin/lipc", suite_path, tmp_tst, "", "")
+        if code != 0
+            say "❌ টেস্ট কম্পাইলেশন ব্যর্থ।"
+            return code
+        tst_code = spawn_exec_cmd(tmp_tst, "", "", "", "")
+        syscall(87, tmp_tst, 0, 0, 0, 0, 0)
+        return tst_code
+    else
+        say "\033[1;34m[LIPI TEST]\033[0m সম্পূর্ণ সার্বভৌম রিগ্রেশন টেস্ট স্যুট পরিচালনা..."
+        return spawn_exec_cmd("bash", "tests/run_tests.sh", "--direct-elf", "", "")
+
+fn handle_fmt file_path flag
+    if len(file_path) == 0
+        say "❌ ত্রুটি: ফরম্যাট করার ফাইল উল্লেখ করুন: lipi fmt <file.lp> [-w]"
+        return 1
+    return spawn_exec_cmd("./bin/lipifmt", file_path, flag, "", "")
+
+fn handle_lsp
+    say "⚡ লিপির সার্বভৌম ল্যাঙ্গুয়েজ সার্ভার (LSP) চালু হচ্ছে..."
+    return spawn_exec_cmd("./bin/lipilsp", "", "", "", "")
+
+fn handle_debug target
+    if len(target) == 0
+        say "❌ ত্রুটি: ডিবাগ করার বাইনারি উল্লেখ করুন: lipi debug <binary>"
+        return 1
+    return spawn_exec_cmd("./bin/lipidbg", target, "", "", "")
+
+fn handle_pkg subcmd arg1 arg2
+    return spawn_exec_cmd("./bin/lipipkg", subcmd, arg1, arg2, "")
+
+fn handle_repl
+    say "⚡ লিপি ইন্টারঅ্যাক্টিভ আরইপিএল..."
+    return spawn_exec_cmd("./bin/lipirepl", "", "", "", "")
+
+fn handle_convert file_path to_syntax
+    return spawn_exec_cmd("./bin/lipiconvert", file_path, to_syntax, "", "")
+
+fn handle_os action
+    if action == "boot"
+        say "⚡ QEMU হাইপারভাইজারে Lipi-OS লাইভ বুট চালানো হচ্ছে..."
+        return spawn_exec_cmd("qemu-system-x86_64", "-cdrom", "dist/lipi-os.iso", "-m", "512M")
+    else
+        say "⚡ Lipi-OS বুটেবল হাইব্রিড আইএসও (5.1MB) তৈরি হচ্ছে..."
+        return spawn_exec_cmd("bash", "scripts/build_iso.sh", "", "", "")
+
+fn handle_self_build
+    say "\033[1;35m[LIPI SELF-BUILD]\033[0m ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ..."
+    return spawn_exec_cmd("bash", "build.sh", "", "", "")
 
 fn main
-    print_usage()
-    return 0
+    args = argv()
+    argc = len(args)
+    if argc < 2
+        print_usage()
+        return 0
+
+    cmd = get(args, 1)
+
+    if cmd == "help" or cmd == "--help" or cmd == "-h"
+        print_usage()
+        return 0
+
+    if cmd == "version" or cmd == "--version" or cmd == "-v"
+        show_version()
+        return 0
+
+    if cmd == "run"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi run <file.lp>"
+            return 1
+        return handle_run(get(args, 2))
+
+    if cmd == "build"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi build <file.lp> [-o <out>]"
+            return 1
+        src_file = get(args, 2)
+        out_f = ""
+        target_f = ""
+        ai = 3
+        while ai < argc
+            cur = get(args, ai)
+            if cur == "-o" and ai + 1 < argc
+                ai = ai + 1
+                out_f = get(args, ai)
+            elif cur == "--target=arm64" or cur == "--target=aarch64"
+                target_f = "--target=arm64"
+            elif cur == "--target=x86_64"
+                target_f = "--target=x86_64"
+            ai = ai + 1
+        return handle_build(src_file, out_f, target_f)
+
+    if cmd == "test"
+        suite = ""
+        if argc >= 3 suite = get(args, 2)
+        return handle_test(suite)
+
+    if cmd == "fmt"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi fmt <file.lp> [-w]"
+            return 1
+        target_f = get(args, 2)
+        w_flag = ""
+        if argc >= 4 and get(args, 3) == "-w" w_flag = "-w"
+        return handle_fmt(target_f, w_flag)
+
+    if cmd == "lsp"
+        return handle_lsp()
+
+    if cmd == "debug"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi debug <binary>"
+            return 1
+        return handle_debug(get(args, 2))
+
+    if cmd == "pkg"
+        sub = ""
+        a1 = ""
+        a2 = ""
+        if argc >= 3 sub = get(args, 2)
+        if argc >= 4 a1 = get(args, 3)
+        if argc >= 5 a2 = get(args, 4)
+        return handle_pkg(sub, a1, a2)
+
+    if cmd == "repl"
+        return handle_repl()
+
+    if cmd == "convert"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi convert <file.lp> [bengali|english|maya]"
+            return 1
+        to_s = ""
+        if argc >= 4 to_s = get(args, 3)
+        return handle_convert(get(args, 2), to_s)
+
+    if cmd == "os"
+        act = "build"
+        if argc >= 3 act = get(args, 2)
+        return handle_os(act)
+
+    if cmd == "self-build"
+        return handle_self_build()
+
+    say "❌ অজানা কমান্ড: '" + cmd + "'"
+    say "সাহায্যের জন্য 'lipi help' চালান।"
+    return 1
+
 main()
