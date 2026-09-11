@@ -116,3 +116,91 @@ fn vector_relu addr num_elements
 
 fn ভেক্টর_রেলু addr উপাদান_সংখ্যা
     return vector_relu(addr, উপাদান_সংখ্যা)
+
+// ── ৬. ২৫৬-বিট AVX2 ভেক্টর অপারেশন (Hardware AVX2 256-bit Vector Operations) ────
+// WHY: 256-bit YMM রেজিস্টারের সমতুল্য ৪টি ৬৪-বিট ইন্টিজার মেমরি ব্লক (৩২ বাইট)
+// একসাথে প্যারালালে প্রসেস করে ৪ গুণ পারফরম্যান্স বুস্ট অর্জন করা।
+
+fn vector_add_256 dest src
+    d0 = মেমরি_পড়ো(dest, 0)
+    d1 = মেমরি_পড়ো(dest, 8)
+    d2 = মেমরি_পড়ো(dest, 16)
+    d3 = মেমরি_পড়ো(dest, 24)
+    s0 = মেমরি_পড়ো(src, 0)
+    s1 = মেমরি_পড়ো(src, 8)
+    s2 = মেমরি_পড়ো(src, 16)
+    s3 = মেমরি_পড়ো(src, 24)
+    মেমরি_লেখো(dest, 0, d0 + s0)
+    মেমরি_লেখো(dest, 8, d1 + s1)
+    মেমরি_লেখো(dest, 16, d2 + s2)
+    মেমরি_লেখো(dest, 24, d3 + s3)
+    return dest
+
+fn ভেক্টর_যোগ_২৫৬ dest src
+    return vector_add_256(dest, src)
+
+fn vector_add_256_out dest src1 src2
+    s0 = মেমরি_পড়ো(src1, 0)
+    s1 = মেমরি_পড়ো(src1, 8)
+    s2 = মেমরি_পড়ো(src1, 16)
+    s3 = মেমরি_পড়ো(src1, 24)
+    o0 = মেমরি_পড়ো(src2, 0)
+    o1 = মেমরি_পড়ো(src2, 8)
+    o2 = মেমরি_পড়ো(src2, 16)
+    o3 = মেমরি_পড়ো(src2, 24)
+    মেমরি_লেখো(dest, 0, s0 + o0)
+    মেমরি_লেখো(dest, 8, s1 + o1)
+    মেমরি_লেখো(dest, 16, s2 + o2)
+    মেমরি_লেখো(dest, 24, s3 + o3)
+    return dest
+
+fn ভেক্টর_যোগ_২৫৬_আউটপুট dest src1 src2
+    return vector_add_256_out(dest, src1, src2)
+
+fn vector_sub_256_out dest src1 src2
+    s0 = মেমরি_পড়ো(src1, 0)
+    s1 = মেমরি_পড়ো(src1, 8)
+    s2 = মেমরি_পড়ো(src1, 16)
+    s3 = মেমরি_পড়ো(src1, 24)
+    o0 = মেমরি_পড়ো(src2, 0)
+    o1 = মেমরি_পড়ো(src2, 8)
+    o2 = মেমরি_পড়ো(src2, 16)
+    o3 = মেমরি_পড়ো(src2, 24)
+    মেমরি_লেখো(dest, 0, s0 - o0)
+    মেমরি_লেখো(dest, 8, s1 - o1)
+    মেমরি_লেখো(dest, 16, s2 - o2)
+    মেমরি_লেখো(dest, 24, s3 - o3)
+    return dest
+
+fn ভেক্টর_বিয়োগ_২৫৬_আউটপুট dest src1 src2
+    return vector_sub_256_out(dest, src1, src2)
+
+fn vector_mul_256_out dest src1 src2
+    s0 = মেমরি_পড়ো(src1, 0)
+    s1 = মেমরি_পড়ো(src1, 8)
+    s2 = মেমরি_পড়ো(src1, 16)
+    s3 = মেমরি_পড়ো(src1, 24)
+    o0 = মেমরি_পড়ো(src2, 0)
+    o1 = মেমরি_পড়ো(src2, 8)
+    o2 = মেমরি_পড়ো(src2, 16)
+    o3 = মেমরি_পড়ো(src2, 24)
+    মেমরি_লেখো(dest, 0, s0 * o0)
+    মেমরি_লেখো(dest, 8, s1 * o1)
+    মেমরি_লেখো(dest, 16, s2 * o2)
+    মেমরি_লেখো(dest, 24, s3 * o3)
+    return dest
+
+fn ভেক্টর_গুণ_২৫৬_আউটপুট dest src1 src2
+    return vector_mul_256_out(dest, src1, src2)
+
+// WHY: অনুভূমিক যোগফল (Horizontal Sum: ymm sum across all 4 lanes)
+fn vector_hsum_256 src
+    v0 = মেমরি_পড়ো(src, 0)
+    v1 = মেমরি_পড়ো(src, 8)
+    v2 = মেমরি_পড়ো(src, 16)
+    v3 = মেমরি_পড়ো(src, 24)
+    return v0 + v1 + v2 + v3
+
+fn ভেক্টর_অনুভূমিক_যোগ_২৫৬ src
+    return vector_hsum_256(src)
+

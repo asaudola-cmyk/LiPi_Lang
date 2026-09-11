@@ -123,7 +123,7 @@ if len(diag_bn) <= 0
 say "  ✔ Rust-Style Diagnostics (format_diagnostic / ডায়াগনস্টিক_ফরম্যাট) rendered successfully"
 
 // ── Test Part 4: Pure Linux epoll Async Event Loop Reactor ──────────────────
-say "[4/4] Testing Pure Linux epoll Event Loop Reactor (Syscall 291)..."
+say "[4/5] Testing Pure Linux epoll Event Loop Reactor (Syscall 291)..."
 
 ep_fd = event_loop_create()
 if ep_fd <= 0
@@ -135,7 +135,45 @@ say "  ✔ epoll instance initialized with kernel fd: " + ep_fd
 // Close epfd using Linux syscall 3 (SYS_close)
 syscall(3, ep_fd, 0, 0, 0, 0, 0)
 say "  ✔ epoll instance closed cleanly without resource leaks"
+
+// ── Test Part 5: Compact 8-byte Hardware Object Header Protocol ─────────────
+say "[5/5] Testing Compact 8-byte Hardware Object Header Protocol..."
+
+raw_buf = malloc(64)
+user_ptr = raw_buf + 8 // 8-byte header precedes user_ptr
+
+// Initialize header: size=56, type=OBJ_TYPE_STRUCT (3), flags=ALLOC(1)|HAS_PTRS(4)=5
+obj_header_init(user_ptr, 56, OBJ_TYPE_STRUCT, 5)
+
+h_size = obj_get_size(user_ptr)
+h_type = obj_get_type(user_ptr)
+h_color = obj_get_color(user_ptr)
+h_flags = obj_get_flags(user_ptr)
+h_has_ptrs = obj_has_ptrs(user_ptr)
+
+if h_size != 56 or h_type != OBJ_TYPE_STRUCT or h_color != OBJ_COLOR_WHITE or h_flags != 5 or h_has_ptrs != 1
+    say "FAILED: Hardware object header metadata mismatch"
+    say h_size
+    say h_type
+    say h_flags
+    exit(1)
+
+// Color change test (Tri-color state change)
+obj_set_color(user_ptr, OBJ_COLOR_BLACK)
+if obj_get_color(user_ptr) != OBJ_COLOR_BLACK
+    say "FAILED: Color transition failed"
+    exit(1)
+
+// Bilingual Bengali interface test
+অবজেক্ট_হেডার_তৈরি(user_ptr, 56, OBJ_TYPE_ARRAY, 1)
+if অবজেক্ট_সাইজ(user_ptr) != 56 or অবজেক্ট_টাইপ(user_ptr) != OBJ_TYPE_ARRAY
+    say "FAILED: Bengali hardware header API mismatch"
+    exit(1)
+
+free(raw_buf, 64)
+say "  ✔ Compact 8-byte hardware header verified: O(1) direct offset metadata without dict"
 say ""
 say "========================================================"
-say "🎉 ALL 4 ADVANCED ARCHITECTURE SECTIONS PASSED! 👑"
+say "🎉 ALL 5 ADVANCED ARCHITECTURE SECTIONS PASSED! 👑"
 say "========================================================"
+

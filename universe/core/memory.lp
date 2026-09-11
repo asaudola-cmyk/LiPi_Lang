@@ -108,11 +108,19 @@ fn mem_read_idx addr index
 fn মেমরি_সূচক_পড়ো addr index
     return mem_read_idx(addr, index)
 
-fn mem_read_u32 addr index
-    return mem_read_idx(addr, index)
+fn mem_read_u32 addr offset
+    b0 = mem_read_byte(addr, offset)
+    b1 = mem_read_byte(addr, offset + 1)
+    b2 = mem_read_byte(addr, offset + 2)
+    b3 = mem_read_byte(addr, offset + 3)
+    return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
 
-fn mem_write_u32 addr index value
-    return mem_write_idx(addr, index, value)
+fn mem_write_u32 addr offset value
+    mem_write_byte(addr, offset, value % 256)
+    mem_write_byte(addr, offset + 1, (value / 256) % 256)
+    mem_write_byte(addr, offset + 2, (value / 65536) % 256)
+    mem_write_byte(addr, offset + 3, (value / 16777216) % 256)
+    return value
 
 // ── ৮. সভেরিন সেগ্রিগেটেড স্ল্যাব অ্যালোকেটর (Segregated Slab Allocator) ────────
 // WHY: ছোট ছোট মেমরি বরাদ্দ (16B থেকে 2048B) সরাসরি কার্নেল সিসকল ছাড়া O(1) LIFO
@@ -230,4 +238,90 @@ fn slab_free addr req_size
 
 fn স্ল্যাব_মুক্তি addr req_size
     return slab_free(addr, req_size)
+
+// ── ৯. কমপ্যাক্ট ৮-বাইট হার্ডওয়্যার অবজেক্ট হেডার প্রোটোকল (Hardware Object Header) ─
+// WHY: মেমরি ট্র্যাকিংয়ের জন্য কোনো পাইথন-স্টাইল O(n) ডিকশনারি বা হ্যাশম্যাপ না রেখে
+// সরাসরি মেমরি ব্লকের পূর্বে ৮-বাইটের ফিক্সড হার্ডওয়্যার হেডার সংরক্ষণ করা:
+//   Offset -8: [ Size: 32-bit uint ]
+//   Offset -4: [ Type: 8-bit uint  ] (0=Raw, 1=String, 2=Array, 3=Struct, 4=Closure)
+//   Offset -3: [ Color: 8-bit uint ] (0=White, 1=Grey, 2=Black)
+//   Offset -2: [ Flags: 16-bit uint] (Bit0=Alloc, Bit1=Pinned, Bit2=HasPtrs)
+//   Offset  0: [ User Payload Data... ]
+// এটি O(1) টাইমে ১টি মেমরি অপারেশনে অবজেক্টের মেটাডাটা প্রদান করে।
+
+OBJ_TYPE_RAW     = 0
+OBJ_TYPE_STR     = 1
+OBJ_TYPE_ARRAY   = 2
+OBJ_TYPE_STRUCT  = 3
+OBJ_TYPE_CLOSURE = 4
+
+OBJ_FLAG_ALLOC    = 1
+OBJ_FLAG_PINNED   = 2
+OBJ_FLAG_HAS_PTRS = 4
+
+OBJ_COLOR_WHITE  = 0
+OBJ_COLOR_GREY   = 1
+OBJ_COLOR_BLACK  = 2
+
+fn obj_header_init payload_ptr size type_id flags
+    if payload_ptr <= 8
+        return 0
+    hdr_base = payload_ptr - 8
+    // Write 32-bit size (4 bytes: offset 0..3)
+    mem_write_u32(hdr_base, 0, size)
+    // Write 8-bit type (offset 4)
+    mem_write_byte(hdr_base, 4, type_id % 256)
+    // Write 8-bit color (offset 5, default white = 0)
+    mem_write_byte(hdr_base, 5, 0)
+    // Write 16-bit flags (offset 6..7)
+    mem_write_byte(hdr_base, 6, flags % 256)
+    mem_write_byte(hdr_base, 7, (flags / 256) % 256)
+    return payload_ptr
+
+fn অবজেক্ট_হেডার_তৈরি পয়েন্টার সাইজ টাইপ ফ্ল্যাগ
+    return obj_header_init(পয়েন্টার, সাইজ, টাইপ, ফ্ল্যাগ)
+
+fn obj_get_size payload_ptr
+    if payload_ptr <= 8 return 0
+    return mem_read_u32(payload_ptr - 8, 0)
+
+fn অবজেক্ট_সাইজ পয়েন্টার
+    return obj_get_size(পয়েন্টার)
+
+fn obj_get_type payload_ptr
+    if payload_ptr <= 8 return 0
+    return mem_read_byte(payload_ptr - 8, 4)
+
+fn অবজেক্ট_টাইপ পয়েন্টার
+    return obj_get_type(পয়েন্টার)
+
+fn obj_get_color payload_ptr
+    if payload_ptr <= 8 return 0
+    return mem_read_byte(payload_ptr - 8, 5)
+
+fn অবজেক্ট_রং পয়েন্টার
+    return obj_get_color(পয়েন্টার)
+
+fn obj_set_color payload_ptr color
+    if payload_ptr <= 8 return 0
+    mem_write_byte(payload_ptr - 8, 5, color % 256)
+    return color
+
+fn অবজেক্ট_রং_নির্ধারণ পয়েন্টার রং
+    return obj_set_color(পয়েন্টার, রং)
+
+fn obj_get_flags payload_ptr
+    if payload_ptr <= 8 return 0
+    hdr_base = payload_ptr - 8
+    f0 = mem_read_byte(hdr_base, 6)
+    f1 = mem_read_byte(hdr_base, 7)
+    return f0 + (f1 * 256)
+
+fn অবজেক্ট_ফ্ল্যাগ পয়েন্টার
+    return obj_get_flags(পয়েন্টার)
+
+fn obj_has_ptrs payload_ptr
+    flags = obj_get_flags(payload_ptr)
+    return (flags % 8) / 4
+
 
