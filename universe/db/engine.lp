@@ -13,40 +13,40 @@ import "universe/db/page"
 import "universe/db/buffer"
 import "universe/db/btree"
 import "universe/db/wal"
-import "universe/db/tx"
-import "universe/db/recovery"
-
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures
 @! ----------------------------------------------------------------------------
 @struct Database
-  path: ""
-  wal_path: ""
-  pool: 0
-  tree: 0
-  wal: 0
-  next_tx_id: 1
-  is_open: 1
-  capacity: 64
-  auto_checkpoint_ops: 500
-  ops_since_checkpoint: 0
-  stats_puts: 0
-  stats_deletes: 0
-  stats_gets: 0
-  stats_scans: 0
+  path: string
+  wal_path: string
+  pool: BufferPool
+  tree: array
+  wal: Wal
+  next_tx_id: i64
+  is_open: i64
+  capacity: i64
+  auto_checkpoint_ops: i64
+  ops_since_checkpoint: i64
+  stats_puts: i64
+  stats_deletes: i64
+  stats_gets: i64
+  stats_scans: i64
 @end
 
 @struct DBStats
-  puts: 0
-  deletes: 0
-  gets: 0
-  scans: 0
-  pool_hits: 0
-  pool_misses: 0
-  pool_flushes: 0
-  pool_evictions: 0
-  wal_last_lsn: 0
+  puts: i64
+  deletes: i64
+  gets: i64
+  scans: i64
+  pool_hits: i64
+  pool_misses: i64
+  pool_flushes: i64
+  pool_evictions: i64
+  wal_last_lsn: i64
 @end
+
+import "universe/db/tx"
+import "universe/db/recovery"
 
 @! ----------------------------------------------------------------------------
 @! 2. Database Lifecycle API
@@ -140,12 +140,12 @@ import "universe/db/recovery"
   return btree_get(db.tree[0], key, "")
 @end
 
-@fn db_get(db, key)
+@fn db_get(db: Database, key)
   return maya_db_get(db, key)
 @end
 
 @! Auto-commit PUT: enforces strict Write-Ahead Invariant
-@fn db_put(db, key, val)
+@fn db_put(db: Database, key, val)
   @if db.is_open == 0
     return 0
   @end
@@ -172,7 +172,7 @@ import "universe/db/recovery"
 @end
 
 @! Auto-commit DELETE: enforces strict Write-Ahead Invariant
-@fn db_delete(db, key)
+@fn db_delete(db: Database, key)
   @if db.is_open == 0
     return 0
   @end
@@ -199,7 +199,7 @@ import "universe/db/recovery"
 @end
 
 @! Range scan: returns array of { key, value } records in [start_key, end_key]
-@fn db_scan(db, start_key, end_key, limit)
+@fn db_scan(db: Database, start_key, end_key, limit)
   @if db.is_open == 0
     return []
   @end
@@ -212,7 +212,7 @@ import "universe/db/recovery"
 @! ----------------------------------------------------------------------------
 
 @! Begins an explicit multi-statement transaction
-@fn db_begin(db)
+@fn db_begin(db: Database)
   return tx_begin(db)
 @end
 
@@ -221,7 +221,7 @@ import "universe/db/recovery"
 @! ----------------------------------------------------------------------------
 
 @! Flushes all dirty buffer pool frames, logs CHECKPOINT record, and truncates WAL
-@fn db_checkpoint(db)
+@fn db_checkpoint(db: Database)
   @if db.is_open == 0
     return 0
   @end
@@ -241,7 +241,7 @@ import "universe/db/recovery"
 @end
 
 @! Verifies structural B+Tree invariants
-@fn db_verify(db)
+@fn db_verify(db: Database)
   @if db.is_open == 0
     return 0
   @end
@@ -249,7 +249,7 @@ import "universe/db/recovery"
 @end
 
 @! Counts total active key-value pairs
-@fn db_count(db)
+@fn db_count(db: Database)
   @if db.is_open == 0
     return 0
   @end
@@ -257,7 +257,7 @@ import "universe/db/recovery"
 @end
 
 @! Returns runtime telemetry metrics
-@fn db_stats(db)
+@fn db_stats(db: Database)
   pool = db.pool
   wal = db.wal
   return {
@@ -274,7 +274,7 @@ import "universe/db/recovery"
 @end
 
 @! Closes database gracefully: flushes pages, truncates WAL, closes file descriptors
-@fn db_close(db)
+@fn db_close(db: Database)
   @if db.is_open == 0
     return 1
   @end

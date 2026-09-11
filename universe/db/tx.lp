@@ -26,20 +26,37 @@ import "universe/db/wal"
 @! ----------------------------------------------------------------------------
 @! 2. Data Structures
 @! ----------------------------------------------------------------------------
+@struct Database
+  path: string
+  wal_path: string
+  pool: BufferPool
+  tree: array
+  wal: Wal
+  next_tx_id: i64
+  is_open: i64
+  capacity: i64
+  auto_checkpoint_ops: i64
+  ops_since_checkpoint: i64
+  stats_puts: i64
+  stats_deletes: i64
+  stats_gets: i64
+  stats_scans: i64
+@end
+
 @struct TxOp
-  key: ""
-  value: ""
-  op_type: 0
-  tx_id: 0
-  lsn: 0
+  key: string
+  value: string
+  op_type: i64
+  tx_id: i64
+  lsn: i64
 @end
 
 @struct Transaction
-  tx_id: 0
-  db: 0
-  state: 0
-  operations: 0
-  start_time: 0
+  tx_id: i64
+  db: Database
+  state: array
+  operations: array
+  start_time: i64
 @end
 
 @! ----------------------------------------------------------------------------
@@ -47,7 +64,7 @@ import "universe/db/wal"
 @! ----------------------------------------------------------------------------
 
 @! Begins a new ACID transaction with unique monotonic TxID
-@fn tx_begin(db)
+@fn tx_begin(db: Database)
   tid = db.next_tx_id
   db.next_tx_id = db.next_tx_id + 1
   ops = []
@@ -62,7 +79,7 @@ import "universe/db/wal"
 @end
 
 @! Stages a PUT operation within the active transaction write set
-@fn tx_put(tx, key, value)
+@fn tx_put(tx: Transaction, key, value)
   @if tx.state[0] != TX_STATE_ACTIVE()
     return 0
   @end
@@ -72,7 +89,7 @@ import "universe/db/wal"
 @end
 
 @! Stages a DELETE operation within the active transaction write set
-@fn tx_delete(tx, key)
+@fn tx_delete(tx: Transaction, key)
   @if tx.state[0] != TX_STATE_ACTIVE()
     return 0
   @end
@@ -82,11 +99,11 @@ import "universe/db/wal"
 @end
 
 @! Point query respecting Read-Your-Own-Writes within transaction
-@fn tx_get(tx, key, default_val)
+@fn tx_get(tx: Transaction, key, default_val)
   num_items = tx.operations.len()
   i = num_items - 1
   @while i >= 0
-    op = tx.operations[i]
+    op: TxOp = tx.operations[i]
     @if str_eq(op.key, key) == 1
       @if op.op_type == TX_OP_PUT()
         return op.value
@@ -96,11 +113,12 @@ import "universe/db/wal"
     @end
     i = i - 1
   @end
-  return btree_get(tx.db.tree[0], key, default_val)
+  db: Database = tx.db
+  return btree_get(db.tree[0], key, default_val)
 @end
 
 @! Commits transaction with Write-Ahead Log durability guarantee
-@fn tx_commit(tx)
+@fn tx_commit(tx: Transaction)
   @if tx.state[0] != TX_STATE_ACTIVE()
     return 0
   @end
@@ -111,12 +129,13 @@ import "universe/db/wal"
     return 1
   @end
 
-  wal = tx.db.wal
+  db: Database = tx.db
+  wal: Wal = db.wal
 
   @! 1. Append staged operations to WAL
   i = 0
   @while i < num_items
-    op = tx.operations[i]
+    op: TxOp = tx.operations[i]
     @if op.op_type == TX_OP_PUT()
       wal_append_put(wal, tx.tx_id, op.key, op.value)
     @elif op.op_type == TX_OP_DEL()
@@ -134,11 +153,11 @@ import "universe/db/wal"
   @! 4. Apply operations to in-memory B+Tree pages
   i = 0
   @while i < num_items
-    op = tx.operations[i]
+    op: TxOp = tx.operations[i]
     @if op.op_type == TX_OP_PUT()
-      tx.db.tree[0] = btree_insert(tx.db.tree[0], op.key, op.value)
+      db.tree[0] = btree_insert(db.tree[0], op.key, op.value)
     @elif op.op_type == TX_OP_DEL()
-      tx.db.tree[0] = btree_delete(tx.db.tree[0], op.key)
+      db.tree[0] = btree_delete(db.tree[0], op.key)
     @end
     i = i + 1
   @end
@@ -148,7 +167,7 @@ import "universe/db/wal"
 @end
 
 @! Rolls back and aborts active transaction without writing to WAL or modifying B+Tree
-@fn tx_rollback(tx)
+@fn tx_rollback(tx: Transaction)
   @if tx.state[0] != TX_STATE_ACTIVE()
     return 0
   @end
@@ -160,7 +179,7 @@ import "universe/db/wal"
 @! ----------------------------------------------------------------------------
 @! 4. Transaction State Query Helpers
 @! ----------------------------------------------------------------------------
-@fn tx_is_active(tx) return tx.state[0] == TX_STATE_ACTIVE() @end
-@fn tx_is_committed(tx) return tx.state[0] == TX_STATE_COMMITTED() @end
-@fn tx_is_aborted(tx) return tx.state[0] == TX_STATE_ABORTED() @end
-@fn tx_id(tx) return tx.tx_id @end
+@fn tx_is_active(tx: Transaction) return tx.state[0] == TX_STATE_ACTIVE() @end
+@fn tx_is_committed(tx: Transaction) return tx.state[0] == TX_STATE_COMMITTED() @end
+@fn tx_is_aborted(tx: Transaction) return tx.state[0] == TX_STATE_ABORTED() @end
+@fn tx_id(tx: Transaction) return tx.tx_id @end

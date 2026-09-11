@@ -15,17 +15,17 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @struct BTree
-  pool: 0
-  root_page_id: 1
-  height: 1
-  degree: 64
+  pool: any
+  root_page_id: i64
+  height: i64
+  degree: i64
 @end
 
 @struct BTreeSearchResult
-  found: 0
-  value: ""
-  leaf_page_id: 0
-  slot_index: 0
+  found: i64
+  value: string
+  leaf_page_id: i64
+  slot_index: i64
 @end
 
 @! ----------------------------------------------------------------------------
@@ -33,7 +33,7 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @! Opens or connects to an existing B+Tree rooted at root_page_id
-@fn btree_open(pool, root_page_id)
+@fn btree_open(pool: BufferPool, root_page_id)
   @if root_page_id <= 0
     root_page_id = pool.root_page_id
   @end
@@ -68,7 +68,7 @@ import "universe/db/buffer"
 @end
 
 @! Constructor alias conforming to PROJECT.md
-@fn btree_new(pool, root_page_id)
+@fn btree_new(pool: BufferPool, root_page_id)
   return btree_open(pool, root_page_id)
 @end
 
@@ -77,7 +77,7 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @! Performs exact key search, traversing internal routing pages down to target leaf
-@fn btree_search(tree, key)
+@fn btree_search(tree: BTree, key)
   curr_id = tree.root_page_id
 
   @while 1
@@ -89,7 +89,7 @@ import "universe/db/buffer"
       buffer_pool_unpin_page(tree.pool, curr_id, 0)
       curr_id = child_id
     @else
-      res = page_find_leaf_cell(buf, key)
+      res: PageSearchLeafResult = page_find_leaf_cell(buf, key)
       buffer_pool_unpin_page(tree.pool, curr_id, 0)
       return {
         found: res.found,
@@ -104,8 +104,8 @@ import "universe/db/buffer"
 @end
 
 @! Retrieves value associated with key, or default_val if key does not exist
-@fn btree_get(tree, key, default_val)
-  res = btree_search(tree, key)
+@fn btree_get(tree: BTree, key, default_val)
+  res: BTreeSearchResult = btree_search(tree, key)
   @if res.found == 1
     return res.value
   @end
@@ -117,7 +117,7 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @! Internal helper to recursively insert separator keys into parent internal nodes
-@fn btree_insert_parent(tree, stack, left_child_id, key, right_child_id)
+@fn btree_insert_parent(tree: BTree, stack, left_child_id, key, right_child_id)
   @if stack.len() == 0
     @! Root Split: Allocate a new internal page to become the new root
     alloc = buffer_pool_allocate_page(tree.pool)
@@ -181,7 +181,7 @@ import "universe/db/buffer"
 @end
 
 @! Inserts or updates a (key, value) entry into the B+Tree
-@fn btree_insert(tree, key, value)
+@fn btree_insert(tree: BTree, key, value)
   curr_id = tree.root_page_id
   stack = []
 
@@ -260,7 +260,7 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @! Scans a range of keys [start_key .. end_key] up to limit entries
-@fn btree_scan(tree, start_key, end_key, limit)
+@fn btree_scan(tree: BTree, start_key, end_key, limit)
   @if limit <= 0
     return []
   @end
@@ -327,7 +327,7 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @! Removes a key from the B+Tree and maintains sibling linked list continuity
-@fn btree_delete(tree, key)
+@fn btree_delete(tree: BTree, key)
   curr_id = tree.root_page_id
   stack = []
 
@@ -377,7 +377,7 @@ import "universe/db/buffer"
 @! ----------------------------------------------------------------------------
 
 @! Verifies total key order, sibling pointer integrity, and tree invariants
-@fn btree_verify(tree)
+@fn btree_verify(tree: BTree)
   curr_id = tree.root_page_id
   find_vleaf = 1
   @while find_vleaf == 1
@@ -426,7 +426,7 @@ import "universe/db/buffer"
 @end
 
 @! Computes total number of keys in the B+Tree
-@fn btree_count(tree)
+@fn btree_count(tree: BTree)
   curr_id = tree.root_page_id
   find_cleaf = 1
   @while find_cleaf == 1
@@ -457,6 +457,6 @@ import "universe/db/buffer"
 @end
 
 @! Returns the current height of the B+Tree
-@fn btree_get_height(tree)
+@fn btree_get_height(tree: BTree)
   return tree.height
 @end

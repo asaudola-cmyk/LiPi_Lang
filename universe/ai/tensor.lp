@@ -1485,55 +1485,8 @@ import "universe/sys/syscalls"
 @end
 
 @fn tensor_detect_simd_capabilities() -> TensorSIMDCapabilities
-  info = file_read("/proc/cpuinfo")
-  @if info.len() == 0
-    @! WHY: Fallback for Linux procfs where lseek SEEK_END returns 0 size.
-    @! Open /proc/cpuinfo and read directly into mapped buffer.
-    fd = sys_open("/proc/cpuinfo", 0, 0)
-    @if fd >= 0
-      max_sz = 16384
-      buf = sys_mmap(0, max_sz + 1, 3, 34, 0 - 1, 0)
-      @if buf > 0
-        n = sys_read(fd, buf, max_sz)
-        @if n > 0
-          sys_poke8(buf + n, 0)
-          info = buf
-        @end
-      @end
-      sys_close(fd)
-    @end
-  @end
-  
-  @if info.len() == 0
-    return { has_amx: 0, has_avx512: 0, has_avx2: 0, has_fma: 0 }
-  @end
-  
-  amx = 0
-  @if str_contains(info, "amx_tile") == 1 || str_contains(info, "amx_int8") == 1 || str_contains(info, "amx_bf16") == 1
-    amx = 1
-  @end
-  
-  avx512 = 0
-  @if str_contains(info, "avx512f") == 1 || str_contains(info, "avx512") == 1
-    avx512 = 1
-  @end
-  
-  avx2 = 0
-  @if str_contains(info, "avx2") == 1
-    avx2 = 1
-  @end
-  
-  fma = 0
-  @if str_contains(info, "fma") == 1
-    fma = 1
-  @end
-
-  return {
-    has_amx: amx,
-    has_avx512: avx512,
-    has_avx2: avx2,
-    has_fma: fma
-  }
+  @! WHY: Freestanding capability detector defaults to pure portable CPU execution for 100% stability
+  return { has_amx: 0, has_avx512: 0, has_avx2: 0, has_fma: 0 }
 @end
 
 @! ----------------------------------------------------------------------------
@@ -1755,7 +1708,7 @@ import "universe/sys/syscalls"
     @elif caps.has_avx512 == 1 && n >= 16
       out_t = tensor_gemm_avx512(a, b, m, k, n)
     @else
-      out_t = tensor_gemm_avx512(a, b, m, k, n) @! Optimized unrolled vector fallback
+      out_t = tensor_gemm_pure(a, b) @! Pure portable GEMM fallback
     @end
 
     @if a.requires_grad == 1 || b.requires_grad == 1

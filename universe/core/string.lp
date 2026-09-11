@@ -267,20 +267,23 @@
 @! ─── Case Conversion ─────────────────────────────────────────
 
 @fn string_to_lower(s)
+  // WHY: Pure portable case conversion producing STR0-managed Lipi strings without raw unmanaged memory allocations
   n = str_len(s)
   @if n == 0 return "" @end
-  buf = sys_mmap(0, n + 1, 3, 34, 0 - 1, 0)
+  alpha_lower = "abcdefghijklmnopqrstuvwxyz"
+  res = ""
   i = 0
   @while i < n
     ch = str_char_at(s, i)
     @if ch >= 65 && ch <= 90
-      ch = ch + 32
+      idx = ch - 65
+      res = res + str_sub(alpha_lower, idx, idx + 1)
+    @else
+      res = res + str_sub(s, i, i + 1)
     @end
-    sys_poke8(buf + i, ch)
     i = i + 1
   @end
-  sys_poke8(buf + n, 0)
-  return buf
+  return res
 @end
 
 @fn str_to_lower(s)
@@ -296,20 +299,23 @@
 @end
 
 @fn string_to_upper(s)
+  // WHY: Pure portable case conversion producing STR0-managed Lipi strings without raw unmanaged memory allocations
   n = str_len(s)
   @if n == 0 return "" @end
-  buf = sys_mmap(0, n + 1, 3, 34, 0 - 1, 0)
+  alpha_upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  res = ""
   i = 0
   @while i < n
     ch = str_char_at(s, i)
     @if ch >= 97 && ch <= 122
-      ch = ch - 32
+      idx = ch - 97
+      res = res + str_sub(alpha_upper, idx, idx + 1)
+    @else
+      res = res + str_sub(s, i, i + 1)
     @end
-    sys_poke8(buf + i, ch)
     i = i + 1
   @end
-  sys_poke8(buf + n, 0)
-  return buf
+  return res
 @end
 
 @fn str_to_upper(s)

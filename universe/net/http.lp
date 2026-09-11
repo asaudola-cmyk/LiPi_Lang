@@ -8,6 +8,27 @@ import "universe/net/tcp"
 import "universe/core/string"
 
 @! ----------------------------------------------------------------------------
+@! 0. HTTP Protocol Models
+@! WHY: Explicit struct definitions provide deterministic O(1) field offsets across all compilation units
+@! ----------------------------------------------------------------------------
+
+@struct HttpResponse
+  status_code: i64
+  status_text: string
+  version: string
+  headers: array
+  body: string
+@end
+
+@struct HttpRequest
+  method: string
+  path: string
+  version: string
+  headers: array
+  body: string
+@end
+
+@! ----------------------------------------------------------------------------
 @! 1. HTTP Status Codes & Reason Phrase Helpers
 @! ----------------------------------------------------------------------------
 

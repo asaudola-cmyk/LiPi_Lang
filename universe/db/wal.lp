@@ -136,9 +136,10 @@ import "universe/db/page"
 @end
 
 @fn wal_data_ptr(buf)
+  // WHY: Allocates memory buffer via pure native heap allocator avoiding kernel mmap page alignment constraints
   n = buf.len()
   @if n <= 0 return 0 @end
-  m = sys_mmap(0, n, 3, 34, 0 - 1, 0)
+  m = alloc(n)
   i = 0
   @while i < n
     sys_poke8(m + i, buf[i] & 255)
@@ -170,7 +171,7 @@ import "universe/db/page"
 @end
 
 @! Generic append helper creating framed 32-byte header + payload record
-@fn wal_append_record(wal, tx_id, op_type, key, val)
+@fn wal_append_record(wal: Wal, tx_id, op_type, key, val)
   @if wal.fd < 0
     return 0
   @end
@@ -214,32 +215,32 @@ import "universe/db/page"
 @end
 
 @! Appends an OP_PUT log record
-@fn wal_append_put(wal, tx_id, key, val)
+@fn wal_append_put(wal: Wal, tx_id, key, val)
   return wal_append_record(wal, tx_id, OP_PUT(), key, val)
 @end
 
 @! Appends an OP_DEL log record
-@fn wal_append_del(wal, tx_id, key)
+@fn wal_append_del(wal: Wal, tx_id, key)
   return wal_append_record(wal, tx_id, OP_DEL(), key, "")
 @end
 
 @! Appends an OP_COMMIT log record
-@fn wal_append_commit(wal, tx_id)
+@fn wal_append_commit(wal: Wal, tx_id)
   return wal_append_record(wal, tx_id, OP_COMMIT(), "", "")
 @end
 
 @! Appends an OP_CHECKPOINT log record
-@fn wal_append_checkpoint(wal, lsn)
+@fn wal_append_checkpoint(wal: Wal, lsn)
   return wal_append_record(wal, 0, OP_CHECKPOINT(), "", "")
 @end
 
 @! Appends an OP_ROLLBACK log record
-@fn wal_append_rollback(wal, tx_id)
+@fn wal_append_rollback(wal: Wal, tx_id)
   return wal_append_record(wal, tx_id, OP_ROLLBACK(), "", "")
 @end
 
 @! Flushes WAL file descriptor to disk (sys_fsync)
-@fn wal_sync(wal)
+@fn wal_sync(wal: Wal)
   @if wal.fd >= 0
     sys_fsync(wal.fd)
     return 1
@@ -248,7 +249,7 @@ import "universe/db/page"
 @end
 
 @! Truncates WAL file to 0 bytes and seeks to beginning
-@fn wal_truncate(wal)
+@fn wal_truncate(wal: Wal)
   @if wal.fd >= 0
     sys_ftruncate(wal.fd, 0)
     sys_lseek(wal.fd, 0, 0)
@@ -259,7 +260,7 @@ import "universe/db/page"
 @end
 
 @! Syncs and closes WAL file descriptor
-@fn wal_close(wal)
+@fn wal_close(wal: Wal)
   @if wal.fd >= 0
     sys_fsync(wal.fd)
     sys_close(wal.fd)

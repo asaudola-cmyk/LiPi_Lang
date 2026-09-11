@@ -28,28 +28,28 @@ import "universe/db/wal"
 @end
 
 @struct WalLogEntry
-  key: ""
-  value: ""
-  op_type: 0
-  tx_id: 0
-  lsn: 0
+  key: string
+  value: string
+  op_type: i64
+  tx_id: i64
+  lsn: i64
 @end
 
 @struct RecoveryScanResult
-  valid_records: 0
-  committed_txs: 0
-  last_checkpoint_lsn: 0
-  last_lsn: 0
-  last_tx_id: 0
-  has_torn_write: 0
-  total_records: 0
+  valid_records: array
+  committed_txs: array
+  last_checkpoint_lsn: i64
+  last_lsn: i64
+  last_tx_id: i64
+  has_torn_write: i64
+  total_records: i64
 @end
 
 @struct RecoveryResult
-  replayed_txs: 0
-  replayed_ops: 0
-  last_lsn: 0
-  last_tx_id: 0
+  replayed_txs: i64
+  replayed_ops: i64
+  last_lsn: i64
+  last_tx_id: i64
 @end
 
 @! ----------------------------------------------------------------------------
@@ -86,8 +86,9 @@ import "universe/db/wal"
     }
   @end
 
-  @! Read the entire file into memory via mmap
-  raw_mmap = sys_mmap(0, file_len, 3, 34, 0 - 1, 0)
+  @! Read the entire file into memory via native heap buffer
+  // WHY: Allocates heap memory buffer via pure native allocator avoiding mmap page alignment constraints
+  raw_mmap = alloc(file_len)
   sys_lseek(fd, 0, 0)
   nread = sys_read(fd, raw_mmap, file_len)
   sys_close(fd)
@@ -109,6 +110,7 @@ import "universe/db/wal"
   has_torn = 0
   total_cnt = 0
   scan_active = 1
+  pos = 0
 
   @while pos + 32 <= file_len && scan_active == 1
     magic = page_read_u32(buf, pos)
@@ -213,7 +215,7 @@ import "universe/db/wal"
 
   i = 0
   @while i < rec_count
-    rec = valid_records[i]
+    rec: WalLogEntry = valid_records[i]
 
     @if rec.lsn > last_lsn
       last_lsn = rec.lsn
@@ -258,7 +260,7 @@ import "universe/db/wal"
 @! ----------------------------------------------------------------------------
 
 @! Coordinates WAL scan, committed transaction extraction, redo replay, and buffer flush
-@fn wal_recover(wal_path, tree_ref, pool)
+@fn wal_recover(wal_path, tree_ref, pool: BufferPool)
   scan_res = recovery_scan_wal(wal_path)
   @if scan_res.total_records == 0
     return {

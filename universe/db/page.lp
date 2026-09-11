@@ -7,6 +7,7 @@
 
 import "universe/core/string"
 import "universe/core/collections"
+import "universe/os/syscalls"
 
 @fn PAGE_SIZE() return 4096 @end
 @fn PAGE_HEADER_SIZE() return 32 @end
@@ -22,6 +23,39 @@ import "universe/core/collections"
   data_ptr: i64
 @end
 
+@struct PageSearchLeafResult
+  found: i64
+  index: i64
+  offset: i64
+  value: string
+@end
+
+@struct PageSearchInternalResult
+  found: i64
+  index: i64
+  offset: i64
+  child_page_id: i64
+@end
+
+@struct PageLeafCell
+  key: string
+  value: string
+  cell_size: i64
+  k_len: i64
+  v_len: i64
+@end
+
+@struct PageOpResult
+  ok: i64
+  buf: array
+@end
+
+@struct PageInsertResult
+  ok: i64
+  offset: i64
+  buf: array
+@end
+
 @fn page_new()
   arr = []
   i = 0
@@ -33,13 +67,34 @@ import "universe/core/collections"
 @end
 
 @fn page_data_ptr(buf)
-  @if buf.contains("data_ptr") && buf.data_ptr != 0
-    return buf.data_ptr
+  // WHY: Safely serializes 4096-element page array to contiguous raw byte buffer for native syscalls
+  raw_mem = alloc(4096)
+  i = 0
+  @while i < 4096
+    sys_poke8(raw_mem + i, buf[i] & 255)
+    i = i + 1
   @end
-  @if buf.contains("raw_bytes")
-    return buf.raw_bytes
+  return raw_mem
+@end
+
+@fn page_write_to_fd(fd, buf)
+  // WHY: Writes 4096-element page array to file descriptor via contiguous serialized buffer
+  ptr = page_data_ptr(buf)
+  return sys_write(fd, ptr, 4096)
+@end
+
+@fn page_read_from_fd(fd, buf)
+  // WHY: Reads 4096 bytes from file descriptor directly into 4096-element page array
+  raw_mem = alloc(4096)
+  n = sys_read(fd, raw_mem, 4096)
+  @if n < 4096 return n @end
+  i = 0
+  @while i < 4096
+    val = sys_peek8(raw_mem + i) & 255
+    buf = list_set(buf, i, val)
+    i = i + 1
   @end
-  return buf
+  return n
 @end
 
 @fn page_read_u8(buf, offset)
@@ -274,16 +329,18 @@ import "universe/core/collections"
 @end
 
 @fn page_binary_search_leaf(buf, key)
+  // WHY: Direct binary search on slot array reading keys directly from buffer avoiding intermediate map allocations
   cnt = page_get_cell_count(buf)
   low = 0
   high = cnt - 1
   @while low <= high
     mid = (low + high) / 2
     offset = page_get_slot(buf, mid)
-    cell = page_read_leaf_cell(buf, offset)
-    cmp = page_str_cmp(key, cell.key)
+    k = page_get_leaf_key(buf, mid)
+    cmp = page_str_cmp(key, k)
     @if cmp == 0
-      return { found: 1, index: mid, offset: offset, value: cell.value }
+      val = page_get_leaf_val(buf, mid)
+      return { found: 1, index: mid, offset: offset, value: val }
     @elif cmp > 0
       low = mid + 1
     @else
@@ -298,16 +355,18 @@ import "universe/core/collections"
 @end
 
 @fn page_binary_search_internal(buf, key)
+  // WHY: Direct binary search on internal routing node reading keys and child page IDs directly
   cnt = page_get_cell_count(buf)
   low = 0
   high = cnt - 1
   @while low <= high
     mid = (low + high) / 2
     offset = page_get_slot(buf, mid)
-    cell = page_read_internal_cell(buf, offset)
-    cmp = page_str_cmp(key, cell.key)
+    k = page_get_internal_key(buf, mid)
+    cmp = page_str_cmp(key, k)
     @if cmp == 0
-      return { found: 1, index: mid, offset: offset, child_page_id: cell.child_page_id }
+      child_id = page_get_internal_child_page_id(buf, mid)
+      return { found: 1, index: mid, offset: offset, child_page_id: child_id }
     @elif cmp > 0
       low = mid + 1
     @else
@@ -318,14 +377,14 @@ import "universe/core/collections"
 @end
 
 @fn page_find_internal_child(buf, key)
+  // WHY: Finds routing child page pointer directly via internal keys without object allocation
   cnt = page_get_cell_count(buf)
   @if cnt == 0
     return page_get_first_child_page_id(buf)
   @end
 
-  off0 = page_get_slot(buf, 0)
-  c0 = page_read_internal_cell(buf, off0)
-  @if page_str_cmp(key, c0.key) < 0
+  k0 = page_get_internal_key(buf, 0)
+  @if page_str_cmp(key, k0) < 0
     return page_get_first_child_page_id(buf)
   @end
 
@@ -334,9 +393,8 @@ import "universe/core/collections"
   best_idx = 0
   @while low <= high
     mid = (low + high) / 2
-    off = page_get_slot(buf, mid)
-    cell = page_read_internal_cell(buf, off)
-    cmp = page_str_cmp(key, cell.key)
+    k = page_get_internal_key(buf, mid)
+    cmp = page_str_cmp(key, k)
     @if cmp >= 0
       best_idx = mid
       low = mid + 1
@@ -345,9 +403,7 @@ import "universe/core/collections"
     @end
   @end
 
-  best_off = page_get_slot(buf, best_idx)
-  best_cell = page_read_internal_cell(buf, best_off)
-  return best_cell.child_page_id
+  return page_get_internal_child_page_id(buf, best_idx)
 @end
 
 @fn page_defrag(buf)
@@ -364,10 +420,10 @@ import "universe/core/collections"
     vals = []
     i = 0
     @while i < cnt
-      offset = page_get_slot(buf, i)
-      c = page_read_leaf_cell(buf, offset)
-      keys = keys.push(c.key)
-      vals = vals.push(c.value)
+      k = page_get_leaf_key(buf, i)
+      v = page_get_leaf_val(buf, i)
+      keys = keys.push(k)
+      vals = vals.push(v)
       i = i + 1
     @end
 
@@ -394,10 +450,10 @@ import "universe/core/collections"
     children = []
     i = 0
     @while i < cnt
-      offset = page_get_slot(buf, i)
-      c = page_read_internal_cell(buf, offset)
-      keys = keys.push(c.key)
-      children = children.push(c.child_page_id)
+      k = page_get_internal_key(buf, i)
+      ch_id = page_get_internal_child_page_id(buf, i)
+      keys = keys.push(k)
+      children = children.push(ch_id)
       i = i + 1
     @end
 
@@ -431,7 +487,7 @@ import "universe/core/collections"
   cell_size = 6 + k_len + v_len
   req_space = cell_size + 2
 
-  search_res = page_binary_search_leaf(buf, key)
+  search_res: PageSearchLeafResult = page_binary_search_leaf(buf, key)
   cnt = page_get_cell_count(buf)
 
   @if search_res.found == 1
@@ -441,9 +497,9 @@ import "universe/core/collections"
       buf = page_write_str(buf, old_offset + 6 + k_len, value)
       return { ok: 1, offset: old_offset, buf: buf }
     @else
-      del_res = page_delete_leaf_cell(buf, key)
+      del_res: PageOpResult = page_delete_leaf_cell(buf, key)
       buf = del_res.buf
-      df_res = page_defrag(buf)
+      df_res: PageOpResult = page_defrag(buf)
       buf = df_res.buf
       avail = page_free_space(buf)
       @if avail < req_space
@@ -455,8 +511,8 @@ import "universe/core/collections"
 
   avail = page_free_space(buf)
   @if avail < req_space
-    df_res = page_defrag(buf)
-    buf = df_res.buf
+    df_res2: PageOpResult = page_defrag(buf)
+    buf = df_res2.buf
     avail = page_free_space(buf)
     @if avail < req_space
       return { ok: 0, offset: 0, buf: buf }

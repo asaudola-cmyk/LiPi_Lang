@@ -65,18 +65,20 @@ import "universe/db/engine"
   return 1
 @end
 
-@! Converts slice of byte array to native null-terminated string via single mmap allocation
-@! WHY: Prevents O(N^2) allocations and avoids pointer addition segfaults in ELF64 codegen
+@! Converts slice of byte array to native null-terminated string via single heap allocation
+@! WHY: Writes bytes using pure integer pointer offsets before tagging 64-bit STR0 header to prevent string concatenation coercion
 @fn bytes_slice_to_str(arr, start, len)
   @if len <= 0 return "" @end
-  buf = sys_mmap(0, len + 1, 3, 34, 0 - 1, 0)
+  buf_base = alloc(len + 16)
   i = 0
   @while i < len
-    sys_poke8(buf + i, arr[start + i] & 255)
+    val = arr[start + i] & 255
+    sys_poke8(buf_base + 8 + i, val)
     i = i + 1
   @end
-  sys_poke8(buf + len, 0)
-  return buf
+  sys_poke8(buf_base + 8 + len, 0)
+  sys_poke(buf_base, 6004514569303621632 + len)
+  return buf_base + 8
 @end
 
 @! Converts ASCII string to array of byte values
@@ -91,13 +93,44 @@ import "universe/db/engine"
   return arr
 @end
 
+@! ----------------------------------------------------------------------------
+@! Sovereign Web Test Data Structures
+@! ----------------------------------------------------------------------------
+
+@struct SovereignHeader
+  name: string
+  val: string
+@end
+
+@struct SovereignRequest
+  method: string
+  path: string
+  version: string
+  headers: array
+  body: string
+@end
+
+@struct Http2FrameHeader
+  length: i64
+  frame_type: i64
+  flags: i64
+  stream_id: i64
+@end
+
+@struct RouteMatch
+  matched: i64
+  status: i64
+  handler_id: i64
+  param: string
+@end
+
 @! Header map case-insensitive lookup
-@fn req_header_get(req, name)
+@fn req_header_get(req: SovereignRequest, name: string)
   target = str_to_lower(name)
   i = 0
   n = req.headers.len()
   @while i < n
-    h = req.headers[i]
+    h: SovereignHeader = req.headers[i]
     @if str_eq(str_to_lower(h.name), target) == 1
       return h.val
     @end
@@ -111,7 +144,7 @@ import "universe/db/engine"
 @! ============================================================================
 
 @! Pure Maya HTTP/1.1 wire parser for request-line, headers, and body payload
-@fn sovereign_parse_http1_request(raw_req)
+@fn sovereign_parse_http1_request(raw_req: string) -> SovereignRequest
   method = "GET"
   path = "/"
   version = "HTTP/1.1"
@@ -236,7 +269,7 @@ import "universe/db/engine"
 @end
 
 @! Pure Maya HTTP/2 request frame stream decoder (HEADERS + DATA frames, HPACK static and literal fields)
-@fn sovereign_parse_http2_request(bytes)
+@fn sovereign_parse_http2_request(bytes: array) -> SovereignRequest
   method = "GET"
   path = "/"
   version = "HTTP/2.0"
@@ -548,7 +581,7 @@ import "universe/db/engine"
   @! 2.1 200 OK Response
   body_200 = "{\"status\":\"operational\",\"cluster_nodes\":8}"
   resp_200 = sovereign_build_response(200, "application/json", body_200)
-  parsed_200 = http_parse_response(resp_200)
+  parsed_200: HttpResponse = http_parse_response(resp_200)
   r_ok1 = assert_eq_int(parsed_200.status_code, 200, "200 OK status code")
   r_ok2 = assert_true(str_contains(resp_200, "HTTP/1.1 200 OK"), "200 OK wire status line")
   r_ok3 = assert_true(str_contains(resp_200, "Content-Type: application/json"), "Content-Type header")
@@ -561,7 +594,7 @@ import "universe/db/engine"
   @! 2.2 404 Not Found Response
   body_404 = "404 Route Not Found"
   resp_404 = sovereign_build_response(404, "text/plain", body_404)
-  parsed_404 = http_parse_response(resp_404)
+  parsed_404: HttpResponse = http_parse_response(resp_404)
   r_ok9 = assert_eq_int(parsed_404.status_code, 404, "404 Not Found status code")
   r_ok10 = assert_true(str_contains(resp_404, "HTTP/1.1 404 Not Found"), "404 Not Found wire status line")
   r_ok11 = assert_eq_str(parsed_404.body, body_404, "404 Not Found body round-trip")
@@ -569,7 +602,7 @@ import "universe/db/engine"
   @! 2.3 500 Internal Server Error Response
   body_500 = "{\"error\":\"Internal Server Error\"}"
   resp_500 = sovereign_build_response(500, "application/json", body_500)
-  parsed_500 = http_parse_response(resp_500)
+  parsed_500: HttpResponse = http_parse_response(resp_500)
   r_ok12 = assert_eq_int(parsed_500.status_code, 500, "500 Internal Server Error status code")
   r_ok13 = assert_true(str_contains(resp_500, "HTTP/1.1 500 Internal Server Error"), "500 Internal Server Error wire status line")
   r_ok14 = assert_eq_str(parsed_500.body, body_500, "500 Error body round-trip")
@@ -673,7 +706,7 @@ import "universe/db/engine"
   sys_unlink(wal_test_path)
 
   @! 4.1 CRUD & Auto-Commit Durability
-  db = db_open(db_test_path, 16)
+  db: Database = db_open(db_test_path, 16)
   db_ok1 = assert_eq_int(db.is_open, 1, "Database opened successfully")
 
   db_put(db, "usr:1001:name", "Sovereign Alice")
@@ -703,7 +736,7 @@ import "universe/db/engine"
   
   @! Read first 32-byte WAL record header directly from disk via sys_read
   sys_lseek(wal_fd, 0, 0)
-  wal_hdr_buf = sys_mmap(0, 32, 3, 34, 0 - 1, 0)
+  wal_hdr_buf = alloc(64)
   n_read = sys_read(wal_fd, wal_hdr_buf, 32)
   sys_close(wal_fd)
   db_ok10 = assert_eq_int(n_read, 32, "Read 32-byte WAL record header via raw sys_read")
@@ -720,7 +753,7 @@ import "universe/db/engine"
   db_ok11 = assert_eq_int(is_wal_magic_valid, 1, "WAL on-disk serialization verified: Magic header is 'MAYA' (0x4D415941)")
 
   @! 4.3 Multi-Statement ACID Transactions (Commit & Rollback)
-  tx1 = db_begin(db)
+  tx1: Transaction = db_begin(db)
   tx_put(tx1, "tx_acct:1", "50000")
   tx_put(tx1, "tx_acct:2", "75000")
   
@@ -733,14 +766,14 @@ import "universe/db/engine"
   db_ok15 = assert_eq_str(db_get(db, "tx_acct:2"), "75000", "Committed tx_acct:2 queryable in DB")
 
   @! Rollback check
-  tx_rb = db_begin(db)
+  tx_rb: Transaction = db_begin(db)
   tx_put(tx_rb, "tx_acct:ghost", "999999")
   tx_rollback(tx_rb)
   db_ok16 = assert_eq_str(db_get(db, "tx_acct:ghost"), "", "Rolled back key tx_acct:ghost does not exist in DB")
 
   @! 4.4 Transaction Crash Recovery Check (Committed vs Uncommitted)
   @! Append committed transaction
-  tx_comm = db_begin(db)
+  tx_comm: Transaction = db_begin(db)
   tx_put(tx_comm, "session:alice", "valid_token_xyz")
   tx_commit(tx_comm)
 
@@ -754,7 +787,7 @@ import "universe/db/engine"
   db.is_open = 0
 
   @! Reopen DB: startup Redo crash recovery scanner runs on the WAL
-  db_rec = db_open(db_test_path, 16)
+  db_rec: Database = db_open(db_test_path, 16)
   db_ok17 = assert_eq_int(db_rec.is_open, 1, "Database reopened after crash simulation")
   db_ok18 = assert_eq_str(db_get(db_rec, "session:alice"), "valid_token_xyz", "Committed transaction recovered from WAL")
   db_ok19 = assert_eq_str(db_get(db_rec, "session:corrupt_uncommitted"), "", "Uncommitted transaction discarded during crash recovery")

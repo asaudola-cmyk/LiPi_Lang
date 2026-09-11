@@ -23,38 +23,38 @@ import "universe/db/page"
 @! ----------------------------------------------------------------------------
 
 @struct PageTableEntry
-  pte_page_id: 0
-  pte_frame_id: 0
+  pte_page_id: i64
+  pte_frame_id: i64
 @end
 
 @struct PageFrame
-  frame_id: 0
-  page_id: 0
-  dirty: 0
-  pin_count: 0
-  buffer: 0
-  prev_lru: 0
-  next_lru: 0
-  access_count: 0
+  frame_id: i64
+  page_id: i64
+  dirty: i64
+  pin_count: i64
+  buffer: array
+  prev_lru: i64
+  next_lru: i64
+  access_count: i64
 @end
 
 @struct BufferPool
-  fd: 0
-  file_path: ""
-  capacity: 0
-  total_pages: 0
-  root_page_id: 1
-  free_page_head: 0
-  frames: 0
-  page_table: 0
-  table_size: 0
-  free_frames: 0
-  lru_head: 0
-  lru_tail: 0
-  stats_hits: 0
-  stats_misses: 0
-  stats_evictions: 0
-  stats_flushes: 0
+  fd: i64
+  file_path: string
+  capacity: i64
+  total_pages: i64
+  root_page_id: i64
+  free_page_head: i64
+  frames: array
+  page_table: array
+  table_size: i64
+  free_frames: array
+  lru_head: i64
+  lru_tail: i64
+  stats_hits: i64
+  stats_misses: i64
+  stats_evictions: i64
+  stats_flushes: i64
 @end
 
 @! ----------------------------------------------------------------------------
@@ -209,7 +209,7 @@ import "universe/db/page"
 @fn bp_read_page_0(pool)
   p0_buf = page_new()
   sys_lseek(pool.fd, 0, 0)
-  bytes = sys_read(pool.fd, page_data_ptr(p0_buf), 4096)
+  bytes = page_read_from_fd(pool.fd, p0_buf)
   @if bytes < 4096
     return 0
   @end
@@ -374,7 +374,7 @@ import "universe/db/page"
 
   frame = pool.frames[target_frame_id]
   sys_lseek(pool.fd, page_id * 4096, 0)
-  bytes_read = sys_read(pool.fd, page_data_ptr(frame.buffer), 4096)
+  bytes_read = page_read_from_fd(pool.fd, frame.buffer)
   @if bytes_read < 4096
     @! Zero remainder of page buffer if file read was shorter than 4KB
     j = bytes_read
@@ -519,11 +519,11 @@ import "universe/db/page"
 @end
 
 @! Flushes all dirty frames to disk and calls sys_fsync
-@fn buffer_pool_flush_all(pool)
+@fn buffer_pool_flush_all(pool: BufferPool)
   flushed = 0
   i = 0
   @while i < pool.capacity
-    frame = pool.frames[i]
+    frame: PageFrame = pool.frames[i]
     @if frame.page_id != (0 - 1) && frame.dirty == 1
       sys_lseek(pool.fd, frame.page_id * 4096, 0)
       sys_write(pool.fd, page_data_ptr(frame.buffer), 4096)
@@ -540,7 +540,7 @@ import "universe/db/page"
 @end
 
 @! Flushes all data and closes the database file descriptor
-@fn buffer_pool_close(pool)
+@fn buffer_pool_close(pool: BufferPool)
   @if pool.fd >= 0
     buffer_pool_flush_all(pool)
     sys_close(pool.fd)
