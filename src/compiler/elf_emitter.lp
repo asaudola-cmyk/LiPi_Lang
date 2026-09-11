@@ -71,6 +71,8 @@ fn ctx_new
     push(c, list())     // 18: struct_var_names
     push(c, list())     // 19: struct_var_types
     push(c, list())     // 20: sc_types
+    push(c, list(""))   // 21: main_fn_label
+    push(c, list(0))    // 22: called_top_level_main
     return c
 
 fn loop_push ctx start_lbl end_lbl
@@ -3355,8 +3357,8 @@ fn compile_pure_stmt ctx ps
         ps_adv(ps)
         return 0
 
-    // include / অন্তর্ভুক্ত -- skip line
-    if tt == TOK_IDENT and (txt == "include" or txt == "অন্তর্ভুক্ত")
+    // include / import / অন্তর্ভুক্ত / আমদানি / @use / @include -- skip line
+    if tt == TOK_IDENT and (txt == "include" or txt == "import" or txt == "অন্তর্ভুক্ত" or txt == "আমদানি" or txt == "@use" or txt == "@include")
         while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
             ps_adv(ps)
         return 0
@@ -3681,6 +3683,8 @@ fn compile_pure_stmt ctx ps
         is_meta_fn = (txt == "@fn")
         ps_adv(ps)
         fn_name = ps_cur_text(ps)
+        if fn_name == "main" or fn_name == "প্রধান"
+            list_set(get(ctx, 21), 0, "lipi_fn_" + fn_name)
         ps_adv(ps)
 
         // WHY: Support OOP struct methods (e.g. fn Point.distance self other)
@@ -3969,6 +3973,10 @@ fn compile_pure_stmt ctx ps
         return 0
 
     // Standalone expression
+    if tt == TOK_IDENT and (txt == "main" or txt == "প্রধান")
+        next_t = ps_peek_tok(ps, 1)
+        if tok_t(next_t) == TOK_LPAREN or (tok_t(next_t) == TOK_OP and tok_s(next_t) == "(")
+            list_set(get(ctx, 22), 0, 1)
     compile_pure_expr(ctx, ps)
     return 0
 
@@ -4208,19 +4216,56 @@ fn list_has lst item
         i = i + 1
     return 0
 
+fn check_file_ext path
+    if file_exists(path) == 1
+        return path
+    if file_exists(path + ".lp") == 1
+        return path + ".lp"
+    if file_exists(path + ".lipi") == 1
+        return path + ".lipi"
+    if file_exists(path + ".maya") == 1
+        return path + ".maya"
+    return ""
+
 fn resolve_inc_path cur_dir inc_name
-    if file_exists(inc_name) == 1
-        return inc_name
-    cand1 = cur_dir + "/" + inc_name
-    if file_exists(cand1) == 1
-        return cand1
-    cand2 = "std/" + inc_name
-    if file_exists(cand2) == 1
-        return cand2
-    cand3 = "../" + inc_name
-    if file_exists(cand3) == 1
-        return cand3
-    return cand1
+    r = check_file_ext(inc_name)
+    if len(r) > 0
+        return r
+    r = check_file_ext(cur_dir + "/" + inc_name)
+    if len(r) > 0
+        return r
+    r = check_file_ext("universe/" + inc_name)
+    if len(r) > 0
+        return r
+    r = check_file_ext("std/" + inc_name)
+    if len(r) > 0
+        return r
+    r = check_file_ext("../" + inc_name)
+    if len(r) > 0
+        return r
+    return cur_dir + "/" + inc_name
+
+fn check_inc_prefix content p clen
+    ch = char_at(content, p)
+    if ch == "i"
+        if p + 8 <= clen and str_sub(content, p, p + 8) == "include "
+            return 8
+        if p + 7 <= clen and str_sub(content, p, p + 7) == "import "
+            return 7
+        return 0
+    if ch == "@"
+        if p + 9 <= clen and str_sub(content, p, p + 9) == "@include "
+            return 9
+        if p + 5 <= clen and str_sub(content, p, p + 5) == "@use "
+            return 5
+        return 0
+    if ord(ch) == 224
+        if p + 19 <= clen and str_sub(content, p, p + 19) == "আমদানি "
+            return 19
+        if p + 34 <= clen and str_sub(content, p, p + 34) == "অন্তর্ভুক্ত "
+            return 34
+        return 0
+    return 0
 
 fn has_include content
     p = 0
@@ -4228,17 +4273,11 @@ fn has_include content
     while p < clen
         while p < clen and (char_at(content, p) == " " or char_at(content, p) == "\t")
             p = p + 1
-        if p + 9 < clen
-            if char_at(content, p) == "i" and char_at(content, p+1) == "n" and char_at(content, p+2) == "c" and char_at(content, p+3) == "l" and char_at(content, p+4) == "u" and char_at(content, p+5) == "d" and char_at(content, p+6) == "e" and char_at(content, p+7) == " "
-                q = char_at(content, p+8)
-                if q == "\"" or q == "'"
-                    return 1
-        if p + 35 < clen
-            if ord(char_at(content, p)) == 224
-                if str_sub(content, p, p + 34) == "অন্তর্ভুক্ত "
-                    q = char_at(content, p+34)
-                    if q == "\"" or q == "'"
-                        return 1
+        plen = check_inc_prefix(content, p, clen)
+        if plen > 0 and p + plen < clen
+            q = char_at(content, p + plen)
+            if q == "\"" or q == "'"
+                return 1
         while p < clen and char_at(content, p) != "\n"
             p = p + 1
         if p < clen and char_at(content, p) == "\n"
@@ -4268,30 +4307,17 @@ fn bundle_source file_path visited
 
         is_inc = 0
         inc_target = ""
-        if p + 9 < clen
-            if char_at(content, p) == "i" and char_at(content, p+1) == "n" and char_at(content, p+2) == "c" and char_at(content, p+3) == "l" and char_at(content, p+4) == "u" and char_at(content, p+5) == "d" and char_at(content, p+6) == "e" and char_at(content, p+7) == " "
-                q = char_at(content, p+8)
-                if q == "\"" or q == "'"
-                    p_tstart = p + 9
-                    p_tend = p_tstart
-                    while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
-                        p_tend = p_tend + 1
-                    if p_tend < clen and char_at(content, p_tend) == q
-                        is_inc = 1
-                        inc_target = str_sub(content, p_tstart, p_tend)
-
-        if is_inc == 0 and p + 35 < clen
-            if ord(char_at(content, p)) == 224
-                if str_sub(content, p, p + 34) == "অন্তর্ভুক্ত "
-                    q = char_at(content, p+34)
-                    if q == "\"" or q == "'"
-                        p_tstart = p + 35
-                        p_tend = p_tstart
-                        while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
-                            p_tend = p_tend + 1
-                        if p_tend < clen and char_at(content, p_tend) == q
-                            is_inc = 1
-                            inc_target = str_sub(content, p_tstart, p_tend)
+        plen = check_inc_prefix(content, p, clen)
+        if plen > 0 and p + plen < clen
+            q = char_at(content, p + plen)
+            if q == "\"" or q == "'"
+                p_tstart = p + plen + 1
+                p_tend = p_tstart
+                while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
+                    p_tend = p_tend + 1
+                if p_tend < clen and char_at(content, p_tend) == q
+                    is_inc = 1
+                    inc_target = str_sub(content, p_tstart, p_tend)
 
         while p < clen and char_at(content, p) != "\n"
             p = p + 1
@@ -4342,9 +4368,28 @@ fn compile_source_to_elf in_path out_path
             ps_adv(ps)
         ps_skip_nl(ps)
 
-    x86_mov_reg_imm64(ctx, 0, 0) // exit 0
-    x86_leave(ctx)
-    x86_ret(ctx)
+    main_target = get(get(ctx, 21), 0)
+    has_called = get(get(ctx, 22), 0)
+    if len(main_target) > 0 and has_called == 0
+        // Setup argc/argv from _lipi_initial_rsp in rdi, rsi in case main expects arguments
+        x86_lea_reg_rip(ctx, 0, "_lipi_initial_rsp")
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 8)  // mov rcx, [rax] (initial rsp pointer)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 57) // mov rdi, [rcx] (argc)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 141)
+        bb_put8(ctx, 113)
+        bb_put8(ctx, 8)  // lea rsi, [rcx + 8] (argv)
+        x86_call(ctx, main_target)
+        x86_leave(ctx)
+        x86_ret(ctx)
+    else
+        x86_mov_reg_imm64(ctx, 0, 0) // exit 0
+        x86_leave(ctx)
+        x86_ret(ctx)
 
     // Step 3: Emit Data Section
     label_define(ctx, "_lipi_data_start")

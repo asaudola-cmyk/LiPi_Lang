@@ -26,17 +26,25 @@ FAILED=0
 
 EXTRA_FLAG=""
 KEEP_BINARIES=0
+INCLUDE_MAYA=0
 for arg in "$@"; do
     if [[ "${arg}" == "--direct-elf" || "${arg}" == "--baremetal" ]]; then
         EXTRA_FLAG="--direct-elf"
         echo -e "${CYAN}⚡ Running in DIRECT MACHINE CODE (Zero-GCC) Mode 👑${NC}"
     elif [[ "${arg}" == "--keep-binaries" ]]; then
         KEEP_BINARIES=1
+    elif [[ "${arg}" == "--with-maya" || "${arg}" == "--all" ]]; then
+        INCLUDE_MAYA=1
+        echo -e "${CYAN}🌌 Including Maya Sovereign Heritage Test Suite (${NC}"
     fi
 done
 
 # WHY: Collect all regression test files dynamically in sorted order (including test_web_router)
 mapfile -t TESTS < <(find tests -maxdepth 1 -name "*.lp" | sort)
+if [[ "${INCLUDE_MAYA}" -eq 1 ]]; then
+    mapfile -t MAYA_TESTS < <(find tests/maya_suite -maxdepth 1 -name "*.lp" | sort)
+    TESTS+=("${MAYA_TESTS[@]}")
+fi
 
 for test_file in "${TESTS[@]}"; do
     name="$(basename "${test_file}" .lp)"
