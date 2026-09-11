@@ -76,3 +76,90 @@ fn column_free column_pointer row_count
 
 fn কলাম_মুক্তি column_pointer row_count
     return column_delete(column_pointer, row_count)
+
+// ── ৬. কলাম কম্প্রেশন ও বিটপ্যাকিং (RLE Compression & Bitpacking) ────────────
+// WHY: মেমরি ব্যবহার কমাতে ও ব্যান্ডউইথ অপটিমাইজ করতে রান-লেন্থ এনকোডিং (RLE) ও ইন্টিজার বিটপ্যাকিং।
+
+@struct ColumnChunk
+  name: ""
+  col_type: "INT"
+  row_count: 0
+  rle_data: []
+  min_val: 0
+  max_val: 0
+@end
+
+fn rle_encode values
+    if len(values) == 0
+        return []
+
+    encoded = []
+    curr_val = values[0]
+    curr_count = 1
+    i = 1
+    n = len(values)
+
+    while i < n
+        v = values[i]
+        if v == curr_val
+            curr_count = curr_count + 1
+        else
+            encoded = push(encoded, [curr_val, curr_count])
+            curr_val = v
+            curr_count = 1
+        i = i + 1
+
+    encoded = push(encoded, [curr_val, curr_count])
+    return encoded
+
+fn rle_এনকোড values
+    return rle_encode(values)
+
+fn rle_decode encoded
+    decoded = []
+    i = 0
+    n = len(encoded)
+    while i < n
+        chunk = encoded[i]
+        val = chunk[0]
+        count = chunk[1]
+        c = 0
+        while c < count
+            decoded = push(decoded, val)
+            c = c + 1
+        i = i + 1
+    return decoded
+
+fn rle_ডিকোড encoded
+    return rle_decode(encoded)
+
+fn bitpack values bit_width
+    if len(values) == 0
+        return []
+
+    mask = (1 << bit_width) - 1
+    packed = []
+    curr_word = 0
+    bits_filled = 0
+    i = 0
+    n = len(values)
+
+    while i < n
+        val = values[i] & mask
+        curr_word = curr_word | (val << bits_filled)
+        bits_filled = bits_filled + bit_width
+
+        if bits_filled >= 64
+            packed = push(packed, curr_word)
+            curr_word = 0
+            bits_filled = 0
+        i = i + 1
+
+    if bits_filled > 0
+        packed = push(packed, curr_word)
+
+    return packed
+
+fn বিটপ্যাক values bit_width
+    return bitpack(values, bit_width)
+
