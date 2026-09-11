@@ -1,4 +1,5 @@
-import "cmd/repl"
+// WHY: Interactive REPL evaluator module relocated to universe/tools/repl for clean architecture
+import "universe/tools/repl"
 
 @fn main()
   env = repl_env_new()

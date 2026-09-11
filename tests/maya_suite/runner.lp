@@ -85,9 +85,10 @@ import "universe/core/string"
   println("=================================================================")
   
   fails = 0
-  fails = fails + run_test("tests/universe/test_advanced_features.lp")
-  fails = fails + run_test("tests/universe/test_crypto_sha256.lp")
-  fails = fails + run_test("tests/universe/test_native_basic2.lp")
+  // WHY: Advanced features and native tests relocated to docs/maya_heritage/tests_experimental/universe for clean repo layout
+  fails = fails + run_test("docs/maya_heritage/tests_experimental/universe/test_advanced_features.lp")
+  fails = fails + run_test("docs/maya_heritage/tests_experimental/universe/test_crypto_sha256.lp")
+  fails = fails + run_test("docs/maya_heritage/tests_experimental/universe/test_native_basic2.lp")
   
   println("=================================================================")
   @if fails == 0

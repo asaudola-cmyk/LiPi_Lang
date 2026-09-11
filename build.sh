@@ -178,10 +178,11 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}[ধাপ ৭] সার্বভৌমত্ব অডিট: কোডবেসে ০% C, ০% GCC, ০% Python, ০% PHP ও ০% .maya নিশ্চিতকরণ:${NC}"
 
-C_COUNT=$(find src std tests bin apps universe packages tools \( -name "*.c" -o -name "*.h" \) 2>/dev/null | wc -l)
-PY_COUNT=$(find src std tests bin apps universe packages tools -name "*.py" 2>/dev/null | wc -l)
-PHP_COUNT=$(find src std tests bin apps universe packages tools -name "*.php" 2>/dev/null | wc -l)
-MAYA_COUNT=$(find src std tests bin apps universe packages tools -name "*.maya" 2>/dev/null | wc -l)
+# WHY: Deep clean unified root tools/ into universe/os/ and src/tools/. Search active sovereign directories.
+C_COUNT=$(find src std tests bin apps universe packages \( -name "*.c" -o -name "*.h" \) 2>/dev/null | wc -l)
+PY_COUNT=$(find src std tests bin apps universe packages -name "*.py" 2>/dev/null | wc -l)
+PHP_COUNT=$(find src std tests bin apps universe packages -name "*.php" 2>/dev/null | wc -l)
+MAYA_COUNT=$(find src std tests bin apps universe packages -name "*.maya" 2>/dev/null | wc -l)
 
 if [ "${C_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ কোডবেসে কোনো .c বা .h ফাইল নেই! (০% C, ০% হেডার — ১০০% খাঁটি লিপি)${NC}"

@@ -19,7 +19,8 @@ import "universe/core/collections"
 import "universe/core/string"
 import "universe/os/boot/multiboot"
 import "universe/os/unikernel"
-import "tools/build_unikernel"
+// WHY: Unikernel builder relocated to universe/os/build_unikernel for clean architecture
+import "universe/os/build_unikernel"
 import "universe/os/syscalls"
 import "universe/os/process"
 
