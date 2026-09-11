@@ -77,7 +77,8 @@ import "universe/core/string"
   i = 0
   text_len = text.len()
   @while i < text_len
-    tokens = tokens.push(char_at(text, i))
+    // WHY: BPE operates on raw byte values [0..255] to ensure proper integer merging and expansion
+    tokens = tokens.push(text[i])
     i = i + 1
   @end
   
@@ -115,7 +116,8 @@ import "universe/core/string"
   tokens = []
   i = 0
   @while i < text.len()
-    tokens = tokens.push(char_at(text, i))
+    // WHY: BPE operates on raw byte values [0..255] for correct merge lookup
+    tokens = tokens.push(text[i])
     i = i + 1
   @end
   

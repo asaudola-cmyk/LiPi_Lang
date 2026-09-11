@@ -206,13 +206,8 @@ import "universe/core/string"
 
 @fn sha256_update(ctx, data)
   @if data == 0 return ctx @end
-  @! If string literal (< 10000000) or packed ASCII string (adjacent non-zero bytes):
-  @! WHY: String literals reside at 0x400000..0x600000 and dynamic strings have packed bytes.
-  @! Maya arrays have 64-bit elements so byte arrays [0..255] have zero in upper 7 bytes (sys_peek8(data + 1) == 0).
-  @if data < 10000000
-    return sha256_update_string(ctx, data)
-  @end
-  @if sys_peek8(data) != 0 && sys_peek8(data + 1) != 0
+  // WHY: Native is_str reliably identifies string literals and heap strings via STR0 tags
+  @if is_str(data) == 1
     return sha256_update_string(ctx, data)
   @end
   num_items = data.len()
@@ -234,10 +229,8 @@ import "universe/core/string"
   num_items = str_len(str)
   i = 0
   @while i < num_items
-    @! Directly inspect raw byte in memory
-    @! WHY: str_char_at allocates a 2-byte heap buffer and returns its pointer.
-    @! Masking the pointer & 255 corrupts the input byte stream.
-    b = sys_peek8(str + i) & 255
+    // WHY: str[i] uses compiler indexer which extracts the exact byte at index i without string concatenation
+    b = str[i] & 255
     ctx.buffer = ctx.buffer.push(b)
     ctx.count = ctx.count + 1
     @if ctx.buffer.len() == 64

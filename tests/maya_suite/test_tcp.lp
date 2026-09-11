@@ -1,3 +1,6 @@
+// WHY: Import core TCP networking library for direct Linux socket syscalls
+import "universe/core/net"
+
 @fn main()
   println("=== Maya TCP Socket Test ===")
   

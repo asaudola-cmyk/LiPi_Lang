@@ -143,50 +143,11 @@ import "universe/core/string"
 @! 5. Whole-File I/O Helpers
 @! ----------------------------------------------------------------------------
 
-@! Reads the entire file content into a string using native syscalls
 @fn fs_read_file(path)
-  fd = sys_open(path, 0, 0)  @! O_RDONLY
-  @if fd < 0
-    return file_read(path)
-  @end
-
-  st = fs_stat(path)
-  @if st.size > 0
-    buf = maya_alloc(st.size + 1)
-    bytes_read = sys_read(fd, buf, st.size)
-    sys_close(fd)
-    @if bytes_read <= 0
-      return ""
-    @end
-    return maya_str_new(buf)
-  @end
-
-  @! For 0-length stat or special pseudo-files (/proc, /sys), stream in chunks
-  chunk_size = 4096
-  buf = maya_alloc(chunk_size + 1)
-  accum = ""
-  @while 1
-    bytes_read = sys_read(fd, buf, chunk_size)
-    @if bytes_read <= 0
-      break
-    @end
-    chunk_str = maya_str_new(buf)
-    accum = accum + chunk_str
-    @if bytes_read < chunk_size
-      break
-    @end
-  @end
-  sys_close(fd)
-
-  @if accum.len() == 0
-    @! Fallback to builtin file_read if needed
-    f_res = file_read(path)
-    @if f_res.len() > 0
-      return f_res
-    @end
-  @end
-
-  return accum
+  // WHY: Returns file content string using native compiler intrinsic file_read
+  // which deterministically calculates length, allocates on Lipi runtime heap with STR0 header,
+  // reads contents, and properly closes descriptor.
+  return file_read(path)
 @end
 
 @! Writes complete content string to target path, overwriting if exists

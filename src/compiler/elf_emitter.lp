@@ -74,7 +74,17 @@ fn ctx_new
     push(c, list(""))   // 21: main_fn_label
     push(c, list(0))    // 22: called_top_level_main
     push(c, list())     // 23: global_fields
+    push(c, list(""))   // 24: current_impl_struct
     return c
+
+// WHY: Tracks enclosing @impl StructName block for automatic OOP method name mangling
+fn ctx_get_impl ctx
+    if len(ctx) <= 24 return ""
+    return get(get(ctx, 24), 0)
+
+fn ctx_set_impl ctx sname
+    if len(ctx) <= 24 push(ctx, list(sname))
+    else list_set(get(ctx, 24), 0, sname)
 
 // WHY: Maps struct and map field names to unique 8-byte aligned offsets
 fn global_field_get_offset ctx name
@@ -281,6 +291,11 @@ fn scope_add ctx name
 fn struct_add ctx name fields
     push(get(ctx, 16), name)
     push(get(ctx, 17), fields)
+    fi = 0
+    while fi < len(fields)
+        global_field_get_offset(ctx, get(fields, fi))
+        fi = fi + 1
+    return 0
 
 fn struct_find ctx name
     snames = get(ctx, 16)
@@ -313,7 +328,8 @@ fn struct_get_field_offset ctx sname fname
                 return f * 8
             f = f + 1
         s = s + 1
-    return 0
+    // WHY: Dynamically maps unregistered/anonymous struct fields to deterministic 8-byte offsets
+    return global_field_get_offset(ctx, fname)
 
 fn struct_set_var_type ctx vname sname
     vnames = get(ctx, 18)
@@ -336,6 +352,45 @@ fn struct_get_var_type ctx vname
         if get(vnames, i) == vname
             return get(vtypes, i)
         i = i + 1
+    // WHY: Heuristic type deduction for common compiler and universe objects when unannotated
+    if vname == "expr" or vname == "stmt" or vname == "node" or vname == "ast" or vname == "fn_ast" or vname == "prim" or vname == "left" or vname == "right" or vname == "target_node"
+        if struct_find(ctx, "ASTNode") >= 0
+            return "ASTNode"
+    if vname == "db" or vname == "database"
+        if struct_find(ctx, "MayaDatabase") >= 0
+            return "MayaDatabase"
+    if vname == "inst" or vname == "ir_inst"
+        if struct_find(ctx, "IRInst") >= 0
+            return "IRInst"
+    return ""
+
+// WHY: Matches a set of field names against all declared structs to deduce the exact struct type
+fn struct_find_matching_keys ctx keys
+    if len(keys) == 0 return ""
+    snames = get(ctx, 16)
+    sfields = get(ctx, 17)
+    best_sidx = -1
+    best_match_count = 0
+    s = 0
+    while s < len(snames)
+        fnames = get(sfields, s)
+        match_count = 0
+        k = 0
+        while k < len(keys)
+            key = get(keys, k)
+            f = 0
+            while f < len(fnames)
+                if get(fnames, f) == key
+                    match_count = match_count + 1
+                    break
+                f = f + 1
+            k = k + 1
+        if match_count == len(keys) and match_count > best_match_count
+            best_match_count = match_count
+            best_sidx = s
+        s = s + 1
+    if best_sidx >= 0
+        return get(snames, best_sidx)
     return ""
 
 // ── x86_64 Machine Code Instructions ─────────────────────────────────────────
@@ -756,6 +811,14 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 228) // 0xE4
     bb_put8(ctx, 240) // 0xF0
     x86_call(ctx, "_lipi_init_heap")
+    // WHY: Populate argc (rdi) and argv list (rsi) so main(argc, argv) receives valid arguments directly
+    x86_call(ctx, "lipi_fn_argv")
+    x86_mov_reg_reg(ctx, 6, 0) // rsi = argv list
+    x86_push_reg(ctx, 6)       // save rsi
+    x86_mov_reg_reg(ctx, 7, 0) // rdi = argv list
+    x86_call(ctx, "_lipi_len")
+    x86_mov_reg_reg(ctx, 7, 0) // rdi = argc (int)
+    x86_pop_reg(ctx, 6)        // restore rsi = argv list
     x86_call(ctx, "lipi_main")
     x86_mov_reg_reg(ctx, 7, 0) // mov rdi, rax
     x86_mov_reg_imm64(ctx, 0, 60) // mov rax, 60 (sys_exit)
@@ -789,6 +852,8 @@ fn emit_runtime_stubs ctx
 
     // 3. _lipi_alloc: rdi = size -> rax = ptr
     label_define(ctx, "_lipi_alloc")
+    label_define(ctx, "lipi_fn_alloc")
+    label_define(ctx, "lipi_fn_sys_alloc")
     bb_put8(ctx, 83) // push rbx
     bb_put8(ctx, 65)
     bb_put8(ctx, 84) // push r12
@@ -843,19 +908,158 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 87) // push r15
     bb_put8(ctx, 73)
     bb_put8(ctx, 137)
-    bb_put8(ctx, 252) // mov r12, rdi
+    bb_put8(ctx, 252) // mov r12, rdi (str1)
     bb_put8(ctx, 73)
     bb_put8(ctx, 137)
-    bb_put8(ctx, 245) // mov r13, rsi
-    bb_put8(ctx, 69)
+    bb_put8(ctx, 245) // mov r13, rsi (str2)
+
+    // WHY: Measure str1 length safely with STR0 tag check and null-terminated scan fallback
+    lbl_s1_scan = make_anon_label(ctx, "s1_scan")
+    lbl_s1_loop = make_anon_label(ctx, "s1_loop")
+    lbl_s1_done = make_anon_label(ctx, "s1_done")
+
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 246) // xor r14, r14
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 228) // test r12, r12
+    x86_jz(ctx, lbl_s1_done)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 224) // mov rax, r12
+    bb_put8(ctx, 37)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)   // and eax, 4095
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 248)
+    bb_put8(ctx, 8)   // cmp eax, 8
+    p_s1_jb = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)   // jb s1_scan
+    reloc_add(ctx, p_s1_jb + 2, lbl_s1_scan, 6)
+    bb_put8(ctx, 73)
     bb_put8(ctx, 139)
-    bb_put8(ctx, 116)
+    bb_put8(ctx, 68)
     bb_put8(ctx, 36)
-    bb_put8(ctx, 248) // mov r14d, [r12 - 8]
-    bb_put8(ctx, 69)
+    bb_put8(ctx, 248) // mov rax, [r12 - 8]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 195) // mov rbx, rax
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 235)
+    bb_put8(ctx, 32)  // shr rbx, 32
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 251)
+    bb_put8(ctx, 48)
+    bb_put8(ctx, 82)
+    bb_put8(ctx, 84)
+    bb_put8(ctx, 83)  // cmp ebx, 0x53545230 ('STR0')
+    p_s1_jne = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 133)
+    bb_put32(ctx, 0)   // jne s1_scan
+    reloc_add(ctx, p_s1_jne + 2, lbl_s1_scan, 6)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 198) // mov r14d, eax
+    x86_jmp(ctx, lbl_s1_done)
+
+    label_define(ctx, lbl_s1_scan)
+    label_define(ctx, lbl_s1_loop)
+    bb_put8(ctx, 67)
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 60)
+    bb_put8(ctx, 52)
+    bb_put8(ctx, 0)   // cmp byte ptr [r12 + r14], 0
+    p_s1_end = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)   // je s1_done
+    reloc_add(ctx, p_s1_end + 2, lbl_s1_done, 6)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 198) // inc r14
+    x86_jmp(ctx, lbl_s1_loop)
+    label_define(ctx, lbl_s1_done)
+
+    // WHY: Measure str2 length safely with STR0 tag check and null-terminated scan fallback
+    lbl_s2_scan = make_anon_label(ctx, "s2_scan")
+    lbl_s2_loop = make_anon_label(ctx, "s2_loop")
+    lbl_s2_done = make_anon_label(ctx, "s2_done")
+
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 255) // xor r15, r15
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 237) // test r13, r13
+    x86_jz(ctx, lbl_s2_done)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 232) // mov rax, r13
+    bb_put8(ctx, 37)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)   // and eax, 4095
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 248)
+    bb_put8(ctx, 8)   // cmp eax, 8
+    p_s2_jb = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)   // jb s2_scan
+    reloc_add(ctx, p_s2_jb + 2, lbl_s2_scan, 6)
+    bb_put8(ctx, 73)
     bb_put8(ctx, 139)
-    bb_put8(ctx, 125)
-    bb_put8(ctx, 248) // mov r15d, [r13 - 8]
+    bb_put8(ctx, 69)
+    bb_put8(ctx, 248) // mov rax, [r13 - 8]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 195) // mov rbx, rax
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 235)
+    bb_put8(ctx, 32)  // shr rbx, 32
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 251)
+    bb_put8(ctx, 48)
+    bb_put8(ctx, 82)
+    bb_put8(ctx, 84)
+    bb_put8(ctx, 83)  // cmp ebx, 0x53545230 ('STR0')
+    p_s2_jne = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 133)
+    bb_put32(ctx, 0)   // jne s2_scan
+    reloc_add(ctx, p_s2_jne + 2, lbl_s2_scan, 6)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 199) // mov r15d, eax
+    x86_jmp(ctx, lbl_s2_done)
+
+    label_define(ctx, lbl_s2_scan)
+    label_define(ctx, lbl_s2_loop)
+    bb_put8(ctx, 67)
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 124) // Mod=01, Reg=111, R/M=100 (disp8 needed for r13 base)
+    bb_put8(ctx, 61)  // SIB: scale=0, index=r15, base=r13
+    bb_put8(ctx, 0)   // disp8 = 0
+    bb_put8(ctx, 0)   // imm8 = 0: cmp byte ptr [r13 + r15], 0
+    p_s2_end = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)   // je s2_done
+    reloc_add(ctx, p_s2_end + 2, lbl_s2_done, 6)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199) // inc r15
+    x86_jmp(ctx, lbl_s2_loop)
+    label_define(ctx, lbl_s2_done)
     x86_mov_reg_reg(ctx, 7, 14) // mov rdi, r14
     bb_put8(ctx, 76)
     bb_put8(ctx, 1)
@@ -1145,6 +1349,8 @@ fn emit_runtime_stubs ctx
 
     // 9. _lipi_is_str: in: rdi = val. out: rax = 1 (true) or 0 (false)
     label_define(ctx, "_lipi_is_str")
+    label_define(ctx, "lipi_fn_is_str")
+    label_define(ctx, "lipi_fn_is_string")
     // WHY: rbx is a callee-saved register under AMD64 ABI; must preserve
     x86_push_reg(ctx, 3)
     lbl_iss_chk   = make_anon_label(ctx, "iss_chk")
@@ -1828,32 +2034,70 @@ fn emit_runtime_stubs ctx
     x86_leave(ctx)
     x86_ret(ctx)
 
-    // ── lipi_fn_get: in: rdi = list, rsi = idx. out: rax = val ─────────────
+    // ── lipi_fn_get / lipi_fn_list_get: in: rdi = obj (list or str), rsi = idx. out: rax = val ──
+    label_define(ctx, "lipi_fn_list_get")
     label_define(ctx, "lipi_fn_get")
     lbl_ge_zero = make_anon_label(ctx, "ge_zero")
+    lbl_ge_list = make_anon_label(ctx, "ge_list")
 
     bb_put8(ctx, 72)
     bb_put8(ctx, 133)
-    bb_put8(ctx, 255)
+    bb_put8(ctx, 255) // test rdi, rdi
     x86_jz(ctx, lbl_ge_zero)
     bb_put8(ctx, 72)
     bb_put8(ctx, 133)
-    bb_put8(ctx, 246)
+    bb_put8(ctx, 246) // test rsi, rsi
     p_ge_neg = ctx_len(ctx)
     bb_put8(ctx, 15)
     bb_put8(ctx, 136)
-    bb_put32(ctx, 0)
+    bb_put32(ctx, 0)   // js ge_zero (index < 0)
     reloc_add(ctx, p_ge_neg + 2, lbl_ge_zero, 6)
+
+    // WHY: Support polymorphic indexing s[idx] returning ASCII char code if obj is string
+    x86_push_reg(ctx, 7)
+    x86_push_reg(ctx, 6)
+    x86_call(ctx, "_lipi_is_str")
+    x86_pop_reg(ctx, 6)
+    x86_pop_reg(ctx, 7)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192) // test rax, rax
+    p_ge_nstr = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132)
+    bb_put32(ctx, 0)   // jz ge_list
+    reloc_add(ctx, p_ge_nstr + 2, lbl_ge_list, 6)
+
+    // String byte indexing: len is at [rdi - 8]
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 248) // mov eax, [rdi - 8]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 198) // cmp rsi, rax
+    p_ge_soob = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 141)
+    bb_put32(ctx, 0)   // jae ge_zero
+    reloc_add(ctx, p_ge_soob + 2, lbl_ge_zero, 6)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 4)
+    bb_put8(ctx, 55)  // movzx eax, byte ptr [rdi + rsi]
+    x86_ret(ctx)
+
+    // List indexing: count is at [rdi]
+    label_define(ctx, lbl_ge_list)
     bb_put8(ctx, 72)
     bb_put8(ctx, 59)
-    bb_put8(ctx, 55)
+    bb_put8(ctx, 55)  // cmp rsi, [rdi]
     p_ge_oob = ctx_len(ctx)
     bb_put8(ctx, 15)
     bb_put8(ctx, 141)
-    bb_put32(ctx, 0)
+    bb_put32(ctx, 0)   // jae ge_zero
     reloc_add(ctx, p_ge_oob + 2, lbl_ge_zero, 6)
 
-    // rax = [rdi + 16]
+    // rax = [rdi + 16] (data_ptr)
     bb_put8(ctx, 72)
     bb_put8(ctx, 139)
     bb_put8(ctx, 71)
@@ -1861,13 +2105,13 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 72)
     bb_put8(ctx, 193)
     bb_put8(ctx, 230)
-    bb_put8(ctx, 3)
+    bb_put8(ctx, 3)   // shl rsi, 3
     bb_put8(ctx, 72)
     bb_put8(ctx, 1)
-    bb_put8(ctx, 240)
+    bb_put8(ctx, 240) // add rax, rsi
     bb_put8(ctx, 72)
     bb_put8(ctx, 139)
-    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)   // mov rax, [rax]
     x86_ret(ctx)
 
     label_define(ctx, lbl_ge_zero)
@@ -2497,6 +2741,7 @@ fn emit_runtime_stubs ctx
     // WHY: Provides unrestricted access to all Linux kernel syscalls directly from Lipi.
     // Lipi args: rdi=nr, rsi=a1, rdx=a2, rcx=a3, r8=a4, r9=a5, r10=a6
     // Kernel expects: rax=nr, rdi=a1, rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6
+    label_define(ctx, "lipi_fn_sys_syscall")
     label_define(ctx, "lipi_fn_syscall")
     label_define(ctx, "lipi_fn_সিসকল")
     bb_put8(ctx, 72)
@@ -2530,6 +2775,8 @@ fn emit_runtime_stubs ctx
     // WHY: Reads a single 8-bit unsigned byte from memory at [base + offset].
     label_define(ctx, "lipi_fn_mem_byte_read")
     label_define(ctx, "lipi_fn_mem_read_byte")
+    label_define(ctx, "lipi_fn_str_char_at")
+    label_define(ctx, "lipi_fn_maya_str_char_at")
     label_define(ctx, "lipi_fn_mem_byte_পড়ো")
     label_define(ctx, "lipi_fn_মেমরি_বাইট_পড়ো")
     bb_put8(ctx, 72)
@@ -2650,6 +2897,393 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 7)
     x86_ret(ctx)
 
+    // ── Maya Memory Intrinsics ───────────────────────────────────────────────
+    // WHY: Provides 100% native Linux silicon execution for Maya baremetal memory operations
+    label_define(ctx, "lipi_fn_maya_mem_write_u8")
+    x86_jmp(ctx, "lipi_fn_sys_poke8")
+
+    label_define(ctx, "lipi_fn_maya_mem_read_u8")
+    x86_jmp(ctx, "lipi_fn_sys_peek8")
+
+    label_define(ctx, "lipi_fn_maya_mem_write_u16")
+    // rdi = addr, rsi = val -> mov [rdi], si
+    bb_put8(ctx, 102)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 55)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_maya_mem_read_u16")
+    // rdi = addr -> movzx eax, word ptr [rdi]
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 183)
+    bb_put8(ctx, 7)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_maya_mem_write_u32")
+    // rdi = addr, rsi = val -> mov [rdi], esi
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 55)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_maya_mem_read_u32")
+    // rdi = addr -> mov eax, [rdi]
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_maya_mem_write_u64")
+    x86_jmp(ctx, "lipi_fn_sys_poke")
+
+    label_define(ctx, "lipi_fn_maya_mem_read_u64")
+    x86_jmp(ctx, "lipi_fn_sys_peek")
+
+    // ── String Pointer Resolution Intrinsics ────────────────────────────────
+    // WHY: In Lipi/Maya, string references are pointers. Returns the raw char pointer in rax.
+    label_define(ctx, "lipi_fn_maya_str_ptr")
+    label_define(ctx, "lipi_fn_str_ptr")
+    label_define(ctx, "lipi_fn_maya_str_new")
+    x86_mov_reg_reg(ctx, 0, 7)
+    x86_ret(ctx)
+
+    // ── String to Integer Parser Builtin ────────────────────────────────────
+    // WHY: Converts null-terminated or STR0 string pointer into 64-bit signed integer.
+    label_define(ctx, "lipi_fn_str_to_int")
+    label_define(ctx, "lipi_fn_int_from_str")
+    label_define(ctx, "lipi_fn_maya_str_to_int")
+    lbl_sti_zero   = make_anon_label(ctx, "sti_zero")
+    lbl_sti_loop   = make_anon_label(ctx, "sti_loop")
+    lbl_sti_chkpos = make_anon_label(ctx, "sti_chkpos")
+    lbl_sti_done   = make_anon_label(ctx, "sti_done")
+    lbl_sti_ret    = make_anon_label(ctx, "sti_ret")
+
+    // test rdi, rdi; jz sti_zero
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255)
+    x86_jz(ctx, lbl_sti_zero)
+
+    // xor rax, rax (res = 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192)
+
+    // xor rcx, rcx (neg = 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 201)
+
+    // movzx edx, byte ptr [rdi]
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 23)
+
+    // cmp dl, 45 ('-')
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 250)
+    bb_put8(ctx, 45)
+    x86_jnz(ctx, lbl_sti_chkpos)
+
+    // neg flag = 1, inc rdi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 193)
+    bb_put32(ctx, 1) // mov rcx, 1
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199) // inc rdi
+    x86_jmp(ctx, lbl_sti_loop)
+
+    label_define(ctx, lbl_sti_chkpos)
+    // cmp dl, 43 ('+')
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 250)
+    bb_put8(ctx, 43)
+    x86_jnz(ctx, lbl_sti_loop)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199) // inc rdi
+
+    label_define(ctx, lbl_sti_loop)
+    // movzx edx, byte ptr [rdi]
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 23)
+
+    // cmp dl, 48 ('0')
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 250)
+    bb_put8(ctx, 48)
+    p_jb = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130) // 0x0F 0x82 (jb rel32)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_jb + 2, lbl_sti_done, 6)
+
+    // cmp dl, 57 ('9')
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 250)
+    bb_put8(ctx, 57)
+    p_ja = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 135) // 0x0F 0x87 (ja rel32)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ja + 2, lbl_sti_done, 6)
+
+    // sub edx, 48
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 234)
+    bb_put8(ctx, 48)
+
+    // imul rax, 10
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 107)
+    bb_put8(ctx, 192)
+    bb_put8(ctx, 10)
+
+    // add rax, rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 208)
+
+    // inc rdi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199)
+    x86_jmp(ctx, lbl_sti_loop)
+
+    label_define(ctx, lbl_sti_done)
+    // test rcx, rcx; jz sti_ret
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 201)
+    x86_jz(ctx, lbl_sti_ret)
+    // neg rax
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 247)
+    bb_put8(ctx, 216)
+
+    label_define(ctx, lbl_sti_ret)
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_sti_zero)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192)
+    x86_ret(ctx)
+
+    // ── Result Monad Builtins ────────────────────────────────────────────────
+    // WHY: Provides freestanding Result types for functional error handling (ok/err/unwrap)
+    label_define(ctx, "lipi_fn_ok")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    bb_put8(ctx, 83) // push rbx
+    x86_mov_reg_reg(ctx, 3, 7) // mov rbx, rdi (value)
+    x86_mov_reg_imm64(ctx, 7, 32)
+    x86_call(ctx, "_lipi_alloc")
+    // mov qword ptr [rax], 1
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 0)
+    bb_put32(ctx, 1)
+    // mov [rax + 8], rbx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 88)
+    bb_put8(ctx, 8)
+    // mov qword ptr [rax + 16], 0
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 64)
+    bb_put8(ctx, 16)
+    bb_put32(ctx, 0)
+    bb_put8(ctx, 91) // pop rbx
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_err")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    bb_put8(ctx, 83) // push rbx
+    x86_mov_reg_reg(ctx, 3, 7) // mov rbx, rdi (msg)
+    x86_mov_reg_imm64(ctx, 7, 32)
+    x86_call(ctx, "_lipi_alloc")
+    // mov qword ptr [rax], 0
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 0)
+    bb_put32(ctx, 0)
+    // mov qword ptr [rax + 8], 0
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 199)
+    bb_put8(ctx, 64)
+    bb_put8(ctx, 8)
+    bb_put32(ctx, 0)
+    // mov [rax + 16], rbx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 88)
+    bb_put8(ctx, 16)
+    bb_put8(ctx, 91) // pop rbx
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_is_ok")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255) // test rdi, rdi
+    lbl_isok_f = make_anon_label(ctx, "isok_f")
+    x86_jz(ctx, lbl_isok_f)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)   // mov rax, [rdi]
+    x86_ret(ctx)
+    label_define(ctx, lbl_isok_f)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_is_err")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255) // test rdi, rdi
+    lbl_iserr_t = make_anon_label(ctx, "iserr_t")
+    x86_jz(ctx, lbl_iserr_t)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)   // mov rax, [rdi]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 1)   // xor rax, 1
+    x86_ret(ctx)
+    label_define(ctx, lbl_iserr_t)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_unwrap")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 8)   // mov rax, [rdi + 8]
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_err_msg")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 16)  // mov rax, [rdi + 16]
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_unwrap_or")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255) // test rdi, rdi
+    lbl_unw_def = make_anon_label(ctx, "unw_def")
+    x86_jz(ctx, lbl_unw_def)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)   // mov rax, [rdi]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192) // test rax, rax
+    x86_jz(ctx, lbl_unw_def)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 8)   // mov rax, [rdi + 8]
+    x86_ret(ctx)
+    label_define(ctx, lbl_unw_def)
+    x86_mov_reg_reg(ctx, 0, 6) // mov rax, rsi
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_is_prime")
+    // WHY: Freestanding 64-bit trial division primality test
+    bb_put8(ctx, 83) // push rbx
+    lbl_pr_f = make_anon_label(ctx, "pr_f")
+    lbl_pr_t = make_anon_label(ctx, "pr_t")
+    lbl_pr_lp = make_anon_label(ctx, "pr_lp")
+
+    // if n <= 1 return 0
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 1)
+    p_pr_le = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 142) // 0x0F 0x8E (jle)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_pr_le + 2, lbl_pr_f, 6)
+
+    // if n <= 3 return 1
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 3)
+    p_pr_le3 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 142)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_pr_le3 + 2, lbl_pr_t, 6)
+
+    // test rdi, 1
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 247)
+    bb_put8(ctx, 199)
+    bb_put32(ctx, 1)
+    x86_jz(ctx, lbl_pr_f)
+
+    // rbx = 3
+    x86_mov_reg_imm64(ctx, 3, 3)
+
+    label_define(ctx, lbl_pr_lp)
+    x86_mov_reg_reg(ctx, 0, 3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 247)
+    bb_put8(ctx, 235) // imul rbx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 248) // cmp rax, rdi
+    p_pr_ja = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 135) // ja
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_pr_ja + 2, lbl_pr_t, 6)
+
+    x86_mov_reg_reg(ctx, 0, 7)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 210) // xor rdx, rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 247)
+    bb_put8(ctx, 243) // div rbx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 210) // test rdx, rdx
+    p_pr_div0 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 132) // jz
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_pr_div0 + 2, lbl_pr_f, 6)
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 195)
+    bb_put8(ctx, 2) // add rbx, 2
+    x86_jmp(ctx, lbl_pr_lp)
+
+    label_define(ctx, lbl_pr_f)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
+    bb_put8(ctx, 91) // pop rbx
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_pr_t)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    bb_put8(ctx, 91) // pop rbx
+    x86_ret(ctx)
+
     label_define(ctx, "lipi_fn_sys_open_read")
     // rdi = path -> syscall 2 (O_RDONLY=0, mode=0)
     bb_put8(ctx, 72)
@@ -2750,13 +3384,69 @@ fn emit_runtime_stubs ctx
     x86_ret(ctx)
 
     label_define(ctx, "lipi_fn_sys_execve")
+    label_define(ctx, "lipi_fn_execve")
+    label_define(ctx, "lipi_fn_process_execve")
     // rdi=path, rsi=argv, rdx=envp -> syscall 59
+    // WHY: Unpack Lipi list structs [count, cap, data_ptr] to raw pointer array data_ptr for kernel execve
+    lbl_ex_rsi_done = make_anon_label(ctx, "ex_rsi_done")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 254)
+    bb_put32(ctx, 4096) // cmp rsi, 4096
+    p_rsi_jb = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)     // jb ex_rsi_done
+    reloc_add(ctx, p_rsi_jb + 2, lbl_ex_rsi_done, 6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 70)
+    bb_put8(ctx, 16)   // mov rax, [rsi + 16] (data_ptr)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 4096) // cmp rax, 4096
+    p_rsi_jb2 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)    // jb ex_rsi_done
+    reloc_add(ctx, p_rsi_jb2 + 2, lbl_ex_rsi_done, 6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 198)   // mov rsi, rax
+    label_define(ctx, lbl_ex_rsi_done)
+
+    lbl_ex_rdx_done = make_anon_label(ctx, "ex_rdx_done")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 250)
+    bb_put32(ctx, 4096) // cmp rdx, 4096
+    p_rdx_jb = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)     // jb ex_rdx_done
+    reloc_add(ctx, p_rdx_jb + 2, lbl_ex_rdx_done, 6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 66)
+    bb_put8(ctx, 16)   // mov rax, [rdx + 16]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 4096) // cmp rax, 4096
+    p_rdx_jb2 = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 130)
+    bb_put32(ctx, 0)    // jb ex_rdx_done
+    reloc_add(ctx, p_rdx_jb2 + 2, lbl_ex_rdx_done, 6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 194)   // mov rdx, rax
+    label_define(ctx, lbl_ex_rdx_done)
+
     x86_mov_reg_imm64(ctx, 0, 59)
     x86_syscall(ctx)
     x86_ret(ctx)
-
-    label_define(ctx, "lipi_fn_sys_syscall")
-    x86_jmp(ctx, "lipi_fn_syscall")
 
     label_define(ctx, "lipi_fn_to_str")
     label_define(ctx, "lipi_fn_int_to_str")
@@ -2771,6 +3461,151 @@ fn emit_runtime_stubs ctx
 
     label_define(ctx, "lipi_fn_read_file")
     x86_jmp(ctx, "lipi_fn_file_read")
+
+    // ── lipi_fn_string_slice / lipi_fn_str_slice / lipi_fn_str_sub ────────────
+    // WHY: Extract substring [start, stop) from string with bounds safety and STR0 header
+    label_define(ctx, "lipi_fn_string_slice")
+    label_define(ctx, "lipi_fn_str_slice")
+    label_define(ctx, "lipi_fn_str_sub")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 84) // push r12 (src str)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 85) // push r13 (start)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 86) // push r14 (stop)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 87) // push r15 (slice len)
+
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 252) // mov r12, rdi (src)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 245) // mov r13, rsi (start)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 214) // mov r14, rdx (stop)
+
+    lbl_ss_empty = make_anon_label(ctx, "ss_empty")
+
+    // if r12 == 0 jz ss_empty
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 228) // test r12, r12
+    x86_jz(ctx, lbl_ss_empty)
+
+    // Measure length of r12 via lipi_fn_str_len
+    x86_mov_reg_reg(ctx, 7, 12)
+    x86_call(ctx, "lipi_fn_str_len")
+    // rax = str len
+    // if start < 0 -> start = 0
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 237) // test r13, r13
+    lbl_ss_sok = make_anon_label(ctx, "ss_sok")
+    p_ss_sge = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 141) // 0x0F 0x8D (jge)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ss_sge + 2, lbl_ss_sok, 6)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 237) // xor r13, r13
+    label_define(ctx, lbl_ss_sok)
+
+    // if stop > len -> stop = len
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 198) // cmp r14, rax
+    lbl_ss_eok = make_anon_label(ctx, "ss_eok")
+    p_ss_ele = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 142) // 0x0F 0x8E (jle)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ss_ele + 2, lbl_ss_eok, 6)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 198) // mov r14, rax
+    label_define(ctx, lbl_ss_eok)
+
+    // if start >= stop jmp ss_empty
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 245) // cmp r13, r14
+    p_ss_sge_e = ctx_len(ctx)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 141) // 0x0F 0x8D (jge)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, p_ss_sge_e + 2, lbl_ss_empty, 6)
+
+    // r15 = r14 - r13 (slice len)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 247) // mov r15, r14
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 41)
+    bb_put8(ctx, 239) // sub r15, r13
+
+    // Allocate r15 + 1 bytes via _lipi_alloc
+    x86_mov_reg_reg(ctx, 7, 15)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199) // inc rdi
+    x86_call(ctx, "_lipi_alloc")
+    x86_push_reg(ctx, 0) // push rax (dest ptr)
+
+    // Copy bytes: dst = rax, src = r12 + r13, count = r15
+    x86_mov_reg_reg(ctx, 7, 0)  // mov rdi, rax
+    x86_mov_reg_reg(ctx, 6, 12) // mov rsi, r12
+    bb_put8(ctx, 76)            // REX.W | REX.R (0x4C) for add rsi, r13
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 238)           // add rsi, r13
+    x86_mov_reg_reg(ctx, 1, 15) // mov rcx, r15
+    bb_put8(ctx, 243)
+    bb_put8(ctx, 164)           // rep movsb
+    bb_put8(ctx, 198)
+    bb_put8(ctx, 7)
+    bb_put8(ctx, 0)             // mov byte ptr [rdi], 0
+
+    x86_pop_reg(ctx, 0) // pop rax (return dest ptr)
+    // WHY: Write 8-byte STR0 header (0x5354523000000000 | r15) at [rax - 8] so string operations recognise as valid Lipi string
+    x86_mov_reg_imm64(ctx, 2, 6004514569303621632)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 9)
+    bb_put8(ctx, 250) // or rdx, r15
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 80)
+    bb_put8(ctx, 248) // mov [rax - 8], rdx
+    lbl_ss_ret = make_anon_label(ctx, "ss_ret")
+    x86_jmp(ctx, lbl_ss_ret)
+
+    label_define(ctx, lbl_ss_empty)
+    x86_mov_reg_imm64(ctx, 7, 1)
+    x86_call(ctx, "_lipi_alloc")
+    bb_put8(ctx, 198)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0) // mov byte ptr [rax], 0
+    // WHY: Tag empty string with STR0 length 0 header
+    x86_mov_reg_imm64(ctx, 2, 6004514569303621632)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 80)
+    bb_put8(ctx, 248) // mov [rax - 8], rdx
+
+    label_define(ctx, lbl_ss_ret)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 95) // pop r15
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 94) // pop r14
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 93) // pop r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 92) // pop r12
+    x86_leave(ctx)
+    x86_ret(ctx)
 
     // String length: lipi_fn_str_len / lipi_fn_c_len
     // WHY: Measures length for managed STR0 strings O(1) or null-terminated pointers O(N)
@@ -2928,6 +3763,73 @@ fn emit_runtime_stubs ctx
     x86_leave(ctx)
     x86_ret(ctx)
 
+    // ── lipi_fn_file_append / lipi_fn_append_file: in: rdi = path, rsi = content ───
+    // WHY: Appends content to an existing or new file using Linux syscall 2 with O_WRONLY|O_CREAT|O_APPEND (1089)
+    label_define(ctx, "lipi_fn_file_append")
+    label_define(ctx, "lipi_fn_append_file")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    bb_put8(ctx, 83) // push rbx
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 84) // push r12
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 85) // push r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 86) // push r14
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 252) // mov r12, rdi (path)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 245) // mov r13, rsi (content)
+    // Measure content length
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 239) // mov rdi, r13
+    x86_call(ctx, "lipi_fn_str_len")
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 198) // mov r14, rax (len)
+    // Open path with O_WRONLY|O_CREAT|O_APPEND = 1089, mode = 0644 = 420
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 231) // mov rdi, r12
+    x86_mov_reg_imm64(ctx, 6, 1089)
+    x86_mov_reg_imm64(ctx, 2, 420)
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 195) // mov rbx, rax (fd)
+    // Write buffer
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 223) // mov rdi, rbx (fd)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 238) // mov rsi, r13 (buf)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 242) // mov rdx, r14 (len)
+    x86_mov_reg_imm64(ctx, 0, 1) // sys_write
+    x86_syscall(ctx)
+    // Close fd
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 223) // mov rdi, rbx
+    x86_mov_reg_imm64(ctx, 0, 3) // sys_close
+    x86_syscall(ctx)
+    x86_mov_reg_imm64(ctx, 0, 1) // return 1 on success
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 94) // pop r14
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 93) // pop r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 92) // pop r12
+    bb_put8(ctx, 91) // pop rbx
+    x86_leave(ctx)
+    x86_ret(ctx)
+
     // ── lipi_fn_str_contains / lipi_fn_contains: in: rdi = str, rsi = sub ───
     label_define(ctx, "lipi_fn_str_contains")
     label_define(ctx, "lipi_fn_contains")
@@ -2969,6 +3871,8 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 65)
     bb_put8(ctx, 128)
     bb_put8(ctx, 124)
+    // WHY: r12 encoding in AMD64 ModR/M byte requires SIB byte (0x24) to address [r12]
+    bb_put8(ctx, 36)
     bb_put8(ctx, 0)
     bb_put8(ctx, 0)   // cmp byte [r12], 0
     x86_jz(ctx, lbl_sc_f)
@@ -2978,15 +3882,19 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 201) // xor rcx, rcx
     lbl_sc_in = make_anon_label(ctx, "sc_in")
     label_define(ctx, lbl_sc_in)
-    bb_put8(ctx, 67)
+    // WHY: In AMD64 SIB encoding, base r13 (5) with mod 00 means disp32 (no base); must use mod 01 (disp8=0)
+    // 0x45 (REX.R | REX.B) 0x8A (mov) 0x44 (ModR/M mod=01 reg=0 rm=4) 0x0D (SIB scale=0 idx=rcx base=r13) 0x00 (disp8=0)
+    bb_put8(ctx, 69)
     bb_put8(ctx, 138)
-    bb_put8(ctx, 4)
-    bb_put8(ctx, 13)  // mov r8b, [r13 + rcx]
+    bb_put8(ctx, 68)
+    bb_put8(ctx, 13)
+    bb_put8(ctx, 0)   // mov r8b, [r13 + rcx + 0]
     bb_put8(ctx, 69)
     bb_put8(ctx, 132)
     bb_put8(ctx, 192) // test r8b, r8b
     x86_jz(ctx, lbl_sc_t) // full sub matched!
-    bb_put8(ctx, 67)
+    // WHY: 0x41 (REX.B) 0x8A (mov) 0x14 (ModR/M mod=00 reg=2 rm=4) 0x0C (SIB scale=0 idx=rcx base=r12)
+    bb_put8(ctx, 65)
     bb_put8(ctx, 138)
     bb_put8(ctx, 20)
     bb_put8(ctx, 12)  // mov dl, [r12 + rcx]
@@ -3056,6 +3964,7 @@ fn tokenize_pure src
     p = 0
     slen = len(src)
     indent_stk = list(0)
+    bracket_depth = 0
 
     while p < slen
         c = char_at(src, p)
@@ -3096,6 +4005,10 @@ fn tokenize_pure src
         // Newline & Indentation
         if c == "\n"
             p = p + 1
+            if bracket_depth > 0
+                // WHY: Inside (), [], or {}, newlines are treated as whitespace.
+                // Indentation changes (TOK_INDENT/TOK_DEDENT) are suppressed so multi-line expressions and literals parse seamlessly.
+                continue
             if len(tokens) > 0 and tok_t(get(tokens, len(tokens) - 1)) != TOK_NL
                 push(tokens, tok_new(TOK_NL, "\n", 0))
 
@@ -3226,26 +4139,35 @@ fn tokenize_pure src
             continue
 
         if c == "("
+            bracket_depth = bracket_depth + 1
             push(tokens, tok_new(TOK_LPAREN, "(", 0))
             p = p + 1
             continue
         if c == ")"
+            if bracket_depth > 0
+                bracket_depth = bracket_depth - 1
             push(tokens, tok_new(TOK_RPAREN, ")", 0))
             p = p + 1
             continue
         if c == "["
+            bracket_depth = bracket_depth + 1
             push(tokens, tok_new(TOK_LBRACKET, "[", 0))
             p = p + 1
             continue
         if c == "]"
+            if bracket_depth > 0
+                bracket_depth = bracket_depth - 1
             push(tokens, tok_new(TOK_RBRACKET, "]", 0))
             p = p + 1
             continue
         if c == "{"
+            bracket_depth = bracket_depth + 1
             push(tokens, tok_new(TOK_LBRACE, "{", 0))
             p = p + 1
             continue
         if c == "}"
+            if bracket_depth > 0
+                bracket_depth = bracket_depth - 1
             push(tokens, tok_new(TOK_RBRACE, "}", 0))
             p = p + 1
             continue
@@ -3347,23 +4269,203 @@ fn ps_skip_nl s
     while ps_cur_type(s) == TOK_NL
         ps_adv(s)
 
+// WHY: Scans an anonymous struct literal { key: val, ... } to extract top-level field names for type deduction
+fn ps_scan_brace_keys ps
+    toks = get(ps, 0)
+    cur_p = ps_pos(ps)
+    keys = list()
+    if cur_p >= len(toks) return keys
+    if tok_t(get(toks, cur_p)) != TOK_LBRACE return keys
+    scan_p = cur_p + 1
+    depth = 1
+    while scan_p < len(toks)
+        st = get(toks, scan_p)
+        st_t = tok_t(st)
+        if st_t == TOK_LBRACE
+            depth = depth + 1
+        elif st_t == TOK_RBRACE
+            depth = depth - 1
+            if depth == 0 break
+        elif depth == 1 and st_t == TOK_IDENT
+            np = scan_p + 1
+            while np < len(toks) and tok_t(get(toks, np)) == TOK_NL
+                np = np + 1
+            if np < len(toks) and tok_t(get(toks, np)) == TOK_COLON
+                push(keys, tok_s(st))
+        scan_p = scan_p + 1
+    return keys
+
 // WHY: Detect whether next token is the start of an argument expression for bare function calls
 fn is_pure_arg_start ps
     tt = ps_cur_type(ps)
     if tt == TOK_INT or tt == TOK_STR return 1
+    if tt == TOK_LPAREN or tt == TOK_LBRACKET or tt == TOK_LBRACE return 1
     if tt == TOK_IDENT
         txt = ps_cur_text(ps)
         if txt == "if" or txt == "যদি" or txt == "while" or txt == "যতক্ষণ" or txt == "@if" or txt == "@while" return 0
-        if txt == "for" or txt == "প্রতিটি" or txt == "return" or txt == "ফেরত" return 0
+        if txt == "for" or txt == "প্রতিটি" or txt == "return" or txt == "ফেরত" or txt == "@for" return 0
         if txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println" return 0
         if txt == "fn" or txt == "কাজ" or txt == "struct" or txt == "গঠন" or txt == "repeat" or txt == "বার" return 0
         if txt == "@fn" or txt == "@struct" or txt == "@end" or txt == "@gpu" or txt == "@inline" or txt == "@let" return 0
         if txt == "else" or txt == "নাহলে" or txt == "elif" or txt == "নাহলে_যদি" or txt == "@else" or txt == "@elif" return 0
         if txt == "and" or txt == "এবং" or txt == "or" or txt == "অথবা" or txt == "not" or txt == "না" return 0
         if txt == "in" or txt == "ভেতরে" or txt == "to" or txt == "step" or txt == "ধাপ" return 0
+        if txt == "@impl" or txt == "@match" or txt == "@universe" or txt == "@infinity_rule" return 0
         return 1
     if tt == TOK_OP and ps_cur_text(ps) == "(" return 1
     return 0
+
+// WHY: Mathematically verifies whether a string is a format string {var} or a raw string (JSON/JS/regex)
+fn is_interpolated_format_str ctx txt
+    tlen = len(txt)
+    p = 0
+    found_any = 0
+    while p < tlen
+        if char_at(txt, p) == "{"
+            if p > 0 and char_at(txt, p - 1) == "\\"
+                p = p + 1
+            else
+                brace_end = -1
+                j = p + 1
+                while j < tlen
+                    if char_at(txt, j) == "}"
+                        brace_end = j
+                        break
+                    j = j + 1
+                if brace_end <= p + 1
+                    return 0
+                inner = str_sub(txt, p + 1, brace_end)
+                k = 0
+                while k < len(inner)
+                    ch = char_at(inner, k)
+                    if ch == "\"" or ch == ":" or ch == ";" or ch == " " or ch == "\t" or ch == "[" or ch == "]" or ch == "{" or ch == "\\" or ch == "'"
+                        return 0
+                    k = k + 1
+                dot_pos = -1
+                k = 0
+                while k < len(inner)
+                    if char_at(inner, k) == "."
+                        dot_pos = k
+                        break
+                    k = k + 1
+                base_v = inner
+                if dot_pos >= 0
+                    base_v = str_sub(inner, 0, dot_pos)
+                if len(base_v) == 0
+                    return 0
+                if scope_get(ctx, base_v) <= 0
+                    return 0
+                found_any = 1
+                p = brace_end
+        p = p + 1
+    return found_any
+
+// WHY: Parses and emits runtime string interpolation for format strings with {expr} and {obj.field}
+fn compile_interpolated_str ctx txt
+    tlen = len(txt)
+    p = 0
+    has_root = 0
+    while p < tlen
+        brace_open = -1
+        i = p
+        while i < tlen
+            if char_at(txt, i) == "{"
+                brace_open = i
+                break
+            i = i + 1
+        if brace_open == -1
+            chunk = str_sub(txt, p, tlen)
+            lbl = string_pool_get(ctx, chunk)
+            x86_lea_reg_rip(ctx, 0, lbl)
+            if has_root == 1
+                x86_mov_reg_reg(ctx, 6, 0) // rsi = chunk
+                x86_pop_reg(ctx, 7)        // rdi = prev
+                x86_call(ctx, "_lipi_add_dynamic")
+                x86_push_reg(ctx, 0)
+            else
+                x86_push_reg(ctx, 0)
+                has_root = 1
+            p = tlen
+        else
+            if brace_open > p
+                chunk = str_sub(txt, p, brace_open)
+                lbl = string_pool_get(ctx, chunk)
+                x86_lea_reg_rip(ctx, 0, lbl)
+                if has_root == 1
+                    x86_mov_reg_reg(ctx, 6, 0) // rsi = chunk
+                    x86_pop_reg(ctx, 7)        // rdi = prev
+                    x86_call(ctx, "_lipi_add_dynamic")
+                    x86_push_reg(ctx, 0)
+                else
+                    x86_push_reg(ctx, 0)
+                    has_root = 1
+            brace_close = -1
+            i = brace_open + 1
+            while i < tlen
+                if char_at(txt, i) == "}"
+                    brace_close = i
+                    break
+                i = i + 1
+            if brace_close == -1
+                chunk = str_sub(txt, brace_open, tlen)
+                lbl = string_pool_get(ctx, chunk)
+                x86_lea_reg_rip(ctx, 0, lbl)
+                if has_root == 1
+                    x86_mov_reg_reg(ctx, 6, 0)
+                    x86_pop_reg(ctx, 7)
+                    x86_call(ctx, "_lipi_add_dynamic")
+                    x86_push_reg(ctx, 0)
+                else
+                    x86_push_reg(ctx, 0)
+                    has_root = 1
+                p = tlen
+            else
+                expr_str = str_sub(txt, brace_open + 1, brace_close)
+                dot_pos = -1
+                di = 0
+                while di < len(expr_str)
+                    if char_at(expr_str, di) == "."
+                        dot_pos = di
+                        break
+                    di = di + 1
+                if dot_pos >= 0
+                    v_name = str_sub(expr_str, 0, dot_pos)
+                    f_name = str_sub(expr_str, dot_pos + 1, len(expr_str))
+                    off = scope_get(ctx, v_name)
+                    if off > 0
+                        x86_mov_rax_stack(ctx, off)
+                    else
+                        x86_mov_reg_imm64(ctx, 0, 0)
+                    f_off = struct_get_field_offset(ctx, "", f_name)
+                    bb_put8(ctx, 72)
+                    bb_put8(ctx, 139)
+                    if f_off < 128
+                        bb_put8(ctx, 64)
+                        bb_put8(ctx, f_off)
+                    else
+                        bb_put8(ctx, 128)
+                        bb_put32(ctx, f_off)
+                else
+                    off = scope_get(ctx, expr_str)
+                    if off > 0
+                        x86_mov_rax_stack(ctx, off)
+                    else
+                        x86_mov_reg_imm64(ctx, 0, 0)
+                if has_root == 1
+                    x86_mov_reg_reg(ctx, 6, 0)
+                    x86_pop_reg(ctx, 7)
+                    x86_call(ctx, "_lipi_add_dynamic")
+                    x86_push_reg(ctx, 0)
+                else
+                    x86_push_reg(ctx, 0)
+                    has_root = 1
+                p = brace_close + 1
+    if has_root == 1
+        x86_pop_reg(ctx, 0)
+    else
+        lbl = string_pool_get(ctx, "")
+        x86_lea_reg_rip(ctx, 0, lbl)
+    return TY_STR
 
 // ── Code Generation: Expressions & Statements ────────────────────────────────
 fn compile_pure_primary ctx ps
@@ -3375,12 +4477,100 @@ fn compile_pure_primary ctx ps
         val = ps_cur_int(ps)
         ps_adv(ps)
         x86_mov_reg_imm64(ctx, 0, val) // mov rax, val
+        // Check for chained postfix operations (e.g. 1234.to_str())
+        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_LBRACKET
+                ps_adv(ps)
+                x86_push_reg(ctx, 0)
+                compile_pure_expr(ctx, ps)
+                if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+                x86_mov_reg_reg(ctx, 6, 0)
+                x86_pop_reg(ctx, 7)
+                x86_call(ctx, "lipi_fn_get")
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+                ps_adv(ps)
+                member_name = ps_cur_text(ps)
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_LPAREN
+                    ps_adv(ps)
+                    x86_push_reg(ctx, 0)
+                    m_arg_count = 1
+                    m_arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                    while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_RPAREN break
+                        compile_pure_expr(ctx, ps)
+                        x86_push_reg(ctx, 0)
+                        m_arg_count = m_arg_count + 1
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                        ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
+                    m_ai = m_arg_count - 1
+                    while m_ai >= 0
+                        if m_ai < 12 x86_pop_reg(ctx, get(m_arg_regs, m_ai))
+                        else x86_pop_reg(ctx, 0)
+                        m_ai = m_ai - 1
+                    if member_name == "to_str" x86_call(ctx, "lipi_fn_to_str")
+                    elif member_name == "len" or member_name == "length" or member_name == "c_len" x86_call(ctx, "_lipi_len")
+                    else x86_call(ctx, "lipi_fn_" + member_name)
+                else
+                    f_off = struct_get_field_offset(ctx, "", member_name)
+                    bb_put8(ctx, 72)
+                    bb_put8(ctx, 139)
+                    if f_off < 128
+                        bb_put8(ctx, 64)
+                        bb_put8(ctx, f_off)
+                    else
+                        bb_put8(ctx, 128)
+                        bb_put32(ctx, f_off)
         return TY_INT
 
     if tt == TOK_STR
-        lbl = string_pool_get(ctx, txt)
+        is_interp = is_interpolated_format_str(ctx, txt)
         ps_adv(ps)
-        x86_lea_reg_rip(ctx, 0, lbl) // lea rax, [rip + lbl]
+        if is_interp == 1
+            compile_interpolated_str(ctx, txt)
+        else
+            lbl = string_pool_get(ctx, txt)
+            x86_lea_reg_rip(ctx, 0, lbl)
+        // Check for chained postfix operations (e.g. "hello".len())
+        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_LBRACKET
+                ps_adv(ps)
+                x86_push_reg(ctx, 0)
+                compile_pure_expr(ctx, ps)
+                if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+                x86_mov_reg_reg(ctx, 6, 0)
+                x86_pop_reg(ctx, 7)
+                x86_call(ctx, "lipi_fn_get")
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+                ps_adv(ps)
+                member_name = ps_cur_text(ps)
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_LPAREN
+                    ps_adv(ps)
+                    x86_push_reg(ctx, 0)
+                    m_arg_count = 1
+                    m_arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                    while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_RPAREN break
+                        compile_pure_expr(ctx, ps)
+                        x86_push_reg(ctx, 0)
+                        m_arg_count = m_arg_count + 1
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                        ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
+                    m_ai = m_arg_count - 1
+                    while m_ai >= 0
+                        if m_ai < 12 x86_pop_reg(ctx, get(m_arg_regs, m_ai))
+                        else x86_pop_reg(ctx, 0)
+                        m_ai = m_ai - 1
+                    if member_name == "len" or member_name == "length" or member_name == "c_len" x86_call(ctx, "_lipi_len")
+                    elif member_name == "to_str" x86_call(ctx, "lipi_fn_to_str")
+                    else x86_call(ctx, "lipi_fn_" + member_name)
         return TY_STR
 
     if tt == TOK_LPAREN
@@ -3388,7 +4578,184 @@ fn compile_pure_primary ctx ps
         inner_ty = compile_pure_expr(ctx, ps)
         if ps_cur_type(ps) == TOK_RPAREN
             ps_adv(ps)
+        // Check for chained operations on parenthesized expression (e.g. (a + b).to_str())
+        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_LBRACKET
+                ps_adv(ps)
+                x86_push_reg(ctx, 0)
+                compile_pure_expr(ctx, ps)
+                if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+                x86_mov_reg_reg(ctx, 6, 0)
+                x86_pop_reg(ctx, 7)
+                x86_call(ctx, "lipi_fn_get")
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+                ps_adv(ps)
+                member_name = ps_cur_text(ps)
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_LPAREN
+                    ps_adv(ps)
+                    x86_push_reg(ctx, 0)
+                    m_arg_count = 1
+                    m_arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                    while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_RPAREN break
+                        compile_pure_expr(ctx, ps)
+                        x86_push_reg(ctx, 0)
+                        m_arg_count = m_arg_count + 1
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                        ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
+                    m_ai = m_arg_count - 1
+                    while m_ai >= 0
+                        if m_ai < 12 x86_pop_reg(ctx, get(m_arg_regs, m_ai))
+                        else x86_pop_reg(ctx, 0)
+                        m_ai = m_ai - 1
+                    if member_name == "to_str" x86_call(ctx, "lipi_fn_to_str")
+                    elif member_name == "len" or member_name == "length" or member_name == "c_len" x86_call(ctx, "_lipi_len")
+                    else x86_call(ctx, "lipi_fn_" + member_name)
         return inner_ty
+
+    // WHY: First-class native array literal [elem1, elem2, ...] lowers directly to _lipi_list_create
+    if tt == TOK_LBRACKET
+        ps_adv(ps)
+        elem_count = 0
+        while ps_cur_type(ps) != TOK_RBRACKET and ps_cur_type(ps) != TOK_EOF
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_RBRACKET break
+            compile_pure_expr(ctx, ps)
+            x86_push_reg(ctx, 0)
+            elem_count = elem_count + 1
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+            ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+        x86_mov_reg_imm64(ctx, 7, elem_count)
+        x86_mov_reg_reg(ctx, 6, 4) // rsi = rsp
+        x86_call(ctx, "_lipi_list_create")
+        if elem_count > 0 x86_add_rsp(ctx, elem_count * 8)
+        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_LBRACKET
+                ps_adv(ps)
+                x86_push_reg(ctx, 0)
+                compile_pure_expr(ctx, ps)
+                if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+                x86_mov_reg_reg(ctx, 6, 0)
+                x86_pop_reg(ctx, 7)
+                x86_call(ctx, "lipi_fn_get")
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+                ps_adv(ps)
+                member_name = ps_cur_text(ps)
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_LPAREN
+                    ps_adv(ps)
+                    x86_push_reg(ctx, 0)
+                    m_arg_count = 1
+                    m_arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                    while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_RPAREN break
+                        compile_pure_expr(ctx, ps)
+                        x86_push_reg(ctx, 0)
+                        m_arg_count = m_arg_count + 1
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                        ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
+                    m_ai = m_arg_count - 1
+                    while m_ai >= 0
+                        if m_ai < 12 x86_pop_reg(ctx, get(m_arg_regs, m_ai))
+                        else x86_pop_reg(ctx, 0)
+                        m_ai = m_ai - 1
+                    if member_name == "len" or member_name == "length" or member_name == "c_len" x86_call(ctx, "_lipi_len")
+                    elif member_name == "push" x86_call(ctx, "lipi_fn_push")
+                    elif member_name == "pop" x86_call(ctx, "lipi_fn_pop")
+                    else x86_call(ctx, "lipi_fn_" + member_name)
+        return TY_UNKNOWN
+
+    // WHY: First-class struct/map literal { key: val, ... } allocates 1024-byte record and initialises fields
+    if tt == TOK_LBRACE
+        brace_keys = ps_scan_brace_keys(ps)
+        lit_struct = struct_find_matching_keys(ctx, brace_keys)
+        ps_adv(ps)
+        x86_mov_reg_imm64(ctx, 7, 1024)
+        x86_call(ctx, "_lipi_alloc")
+        x86_push_reg(ctx, 0) // save base pointer on stack: [rsp]
+        while ps_cur_type(ps) != TOK_RBRACE and ps_cur_type(ps) != TOK_EOF
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_RBRACE break
+            key_name = ps_cur_text(ps)
+            ps_adv(ps)
+            if ps_cur_type(ps) == TOK_COLON ps_adv(ps)
+            compile_pure_expr(ctx, ps) // rax = value
+            f_off = struct_get_field_offset(ctx, lit_struct, key_name)
+            // mov rdx, [rsp] -> 0x48 0x8B 0x14 0x24
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 139)
+            bb_put8(ctx, 20)
+            bb_put8(ctx, 36)
+            // mov [rdx + f_off], rax
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 137)
+            if f_off < 128
+                bb_put8(ctx, 66)
+                bb_put8(ctx, f_off)
+            else
+                bb_put8(ctx, 130)
+                bb_put32(ctx, f_off)
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+            ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_RBRACE ps_adv(ps)
+        x86_pop_reg(ctx, 0) // restore base pointer into rax
+        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_LBRACKET
+                ps_adv(ps)
+                x86_push_reg(ctx, 0)
+                compile_pure_expr(ctx, ps)
+                if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+                x86_mov_reg_reg(ctx, 6, 0)
+                x86_pop_reg(ctx, 7)
+                x86_call(ctx, "lipi_fn_get")
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+                ps_adv(ps)
+                member_name = ps_cur_text(ps)
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_LPAREN
+                    ps_adv(ps)
+                    x86_push_reg(ctx, 0)
+                    m_arg_count = 1
+                    m_arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                    while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_RPAREN break
+                        compile_pure_expr(ctx, ps)
+                        x86_push_reg(ctx, 0)
+                        m_arg_count = m_arg_count + 1
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                        ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
+                    m_ai = m_arg_count - 1
+                    while m_ai >= 0
+                        if m_ai < 12 x86_pop_reg(ctx, get(m_arg_regs, m_ai))
+                        else x86_pop_reg(ctx, 0)
+                        m_ai = m_ai - 1
+                    if member_name == "len" or member_name == "length" or member_name == "c_len" x86_call(ctx, "_lipi_len")
+                    elif member_name == "to_str" x86_call(ctx, "lipi_fn_to_str")
+                    else x86_call(ctx, "lipi_fn_" + member_name)
+                else
+                    f_off = struct_get_field_offset(ctx, "", member_name)
+                    bb_put8(ctx, 72)
+                    bb_put8(ctx, 139)
+                    if f_off < 128
+                        bb_put8(ctx, 64)
+                        bb_put8(ctx, f_off)
+                    else
+                        bb_put8(ctx, 128)
+                        bb_put32(ctx, f_off)
+        return TY_UNKNOWN
 
     if tt == TOK_IDENT
         name = txt
@@ -3401,74 +4768,21 @@ fn compile_pure_primary ctx ps
             x86_mov_reg_imm64(ctx, 0, 0)
             return TY_INT
 
-        // Struct field access: name.field or OOP method call: name.method(...)
-        if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
-            ps_adv(ps) // consume '.'
-            field_name = ps_cur_text(ps)
-            ps_adv(ps) // consume field name
-
-            // Check if this is an OOP method call: name.method(...)
-            if ps_cur_type(ps) == TOK_LPAREN
-                ps_adv(ps) // consume '('
-                off = scope_get(ctx, name)
-                if off > 0
-                    x86_mov_rax_stack(ctx, off)
-                else
-                    x86_mov_reg_imm64(ctx, 0, 0)
-                x86_push_reg(ctx, 0) // push self pointer as arg 0
-                arg_count = 1
-                arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
-                while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
-                    compile_pure_expr(ctx, ps)
-                    x86_push_reg(ctx, 0)
-                    arg_count = arg_count + 1
-                    if ps_cur_type(ps) == TOK_COMMA
-                        ps_adv(ps)
-                if ps_cur_type(ps) == TOK_RPAREN
-                    ps_adv(ps)
-
-                ai = arg_count - 1
-                while ai >= 0
-                    if ai < 12
-                        x86_pop_reg(ctx, get(arg_regs, ai))
-                    else
-                        x86_pop_reg(ctx, 0)
-                    ai = ai - 1
-
-                sname = struct_get_var_type(ctx, name)
-                target_m = "lipi_fn_" + field_name
-                if sname != ""
-                    target_m = "lipi_fn_" + sname + "_" + field_name
-                x86_call(ctx, target_m)
-                return 0
-
-            off = scope_get(ctx, name)
-            if off > 0
-                x86_mov_rax_stack(ctx, off)
-            else
-                x86_mov_reg_imm64(ctx, 0, 0)
-            sname = struct_get_var_type(ctx, name)
-            f_off = struct_get_field_offset(ctx, sname, field_name)
-            // mov rax, [rax + f_off] (0x48 0x8B 0x40 f_off)
-            bb_put8(ctx, 72)
-            bb_put8(ctx, 139)
-            bb_put8(ctx, 64)
-            bb_put8(ctx, f_off)
-            return 0
-
         // Function call: name(...)
         if ps_cur_type(ps) == TOK_LPAREN
             ps_adv(ps)
             arg_count = 0
             arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15) // 12 argument registers
             while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_RPAREN break
                 compile_pure_expr(ctx, ps)
                 x86_push_reg(ctx, 0)
                 arg_count = arg_count + 1
-                if ps_cur_type(ps) == TOK_COMMA
-                    ps_adv(ps)
-            if ps_cur_type(ps) == TOK_RPAREN
-                ps_adv(ps)
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
 
             // Check if name is a struct constructor (e.g. Point() or Fraction())
             sidx = struct_find(ctx, name)
@@ -3479,111 +4793,153 @@ fn compile_pure_primary ctx ps
                     ai = ai + 1
                 sfields = get(get(ctx, 17), sidx)
                 fcount = len(sfields)
-                if fcount == 0
-                    fcount = 4
-                // Alloc (fcount + 1) * 8 bytes
+                if fcount == 0 fcount = 4
                 x86_mov_reg_imm64(ctx, 7, (fcount + 1) * 8)
                 x86_call(ctx, "_lipi_alloc")
-                return 0
-
-            // WHY: First-class compiler built-in for list(...) supporting arbitrary argument count directly from stack
-            if name == "list"
+            elif name == "list"
                 x86_mov_reg_imm64(ctx, 7, arg_count)
                 x86_mov_reg_reg(ctx, 6, 4) // rsi = rsp
                 x86_call(ctx, "_lipi_list_create")
-                if arg_count > 0
-                    x86_add_rsp(ctx, arg_count * 8)
-                return 0
+                if arg_count > 0 x86_add_rsp(ctx, arg_count * 8)
+            else
+                ai = arg_count - 1
+                while ai >= 0
+                    if ai < 12 x86_pop_reg(ctx, get(arg_regs, ai))
+                    else x86_pop_reg(ctx, 0)
+                    ai = ai - 1
 
-            // Pop args into registers in reverse
-            ai = arg_count - 1
-            while ai >= 0
-                if ai < 12
-                    x86_pop_reg(ctx, get(arg_regs, ai))
+                if name == "len" or name == "length" or name == "দৈর্ঘ্য"
+                    x86_call(ctx, "_lipi_len")
+                elif name == "abs"
+                    x86_mov_reg_reg(ctx, 0, 7)
+                    lbl_abs = make_anon_label(ctx, "abs_d")
+                    bb_put8(ctx, 72)
+                    bb_put8(ctx, 133)
+                    bb_put8(ctx, 192)
+                    p_abs = ctx_len(ctx)
+                    bb_put8(ctx, 15)
+                    bb_put8(ctx, 137)
+                    bb_put32(ctx, 0)
+                    reloc_add(ctx, p_abs + 2, lbl_abs, 6)
+                    x86_neg_rax(ctx)
+                    label_define(ctx, lbl_abs)
                 else
-                    x86_pop_reg(ctx, 0)
-                ai = ai - 1
+                    // Check if name is a local function pointer
+                    off = scope_get(ctx, name)
+                    if off > 0
+                        x86_mov_rax_stack(ctx, off)
+                        x86_call_rax(ctx)
+                    else
+                        x86_call(ctx, "lipi_fn_" + name)
+        else
+            // Variable / Constant / Bare call lookup
+            off = scope_get(ctx, name)
+            if off > 0
+                x86_mov_rax_stack(ctx, off)
+            else
+                gi = 0
+                gnames = get(ctx, 12)
+                gvals  = get(ctx, 13)
+                found_g = 0
+                while gi < len(gnames)
+                    if get(gnames, gi) == name
+                        x86_mov_reg_imm64(ctx, 0, get(gvals, gi))
+                        found_g = 1
+                        break
+                    gi = gi + 1
+                if found_g == 0
+                    if name == "len" or name == "length" or name == "দৈর্ঘ্য"
+                        compile_pure_primary(ctx, ps)
+                        x86_mov_reg_reg(ctx, 7, 0)
+                        x86_call(ctx, "_lipi_len")
+                    elif name == "abs"
+                        compile_pure_primary(ctx, ps)
+                        lbl_abs2 = make_anon_label(ctx, "abs_d2")
+                        bb_put8(ctx, 72)
+                        bb_put8(ctx, 133)
+                        bb_put8(ctx, 192)
+                        p_abs2 = ctx_len(ctx)
+                        bb_put8(ctx, 15)
+                        bb_put8(ctx, 137)
+                        bb_put32(ctx, 0)
+                        reloc_add(ctx, p_abs2 + 2, lbl_abs2, 6)
+                        x86_neg_rax(ctx)
+                        label_define(ctx, lbl_abs2)
+                    elif is_pure_arg_start(ps) == 1
+                        arg_count = 0
+                        arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                        while is_pure_arg_start(ps) == 1 and ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
+                            compile_pure_primary(ctx, ps)
+                            x86_push_reg(ctx, 0)
+                            arg_count = arg_count + 1
+                        ai = arg_count - 1
+                        while ai >= 0
+                            if ai < 12 x86_pop_reg(ctx, get(arg_regs, ai))
+                            else x86_pop_reg(ctx, 0)
+                            ai = ai - 1
+                        x86_call(ctx, "lipi_fn_" + name)
+                    else
+                        x86_mov_reg_imm64(ctx, 0, 0)
 
-            if name == "len" or name == "length" or name == "দৈর্ঘ্য"
-                x86_call(ctx, "_lipi_len")
-                return TY_INT
-            if name == "abs"
-                x86_mov_reg_reg(ctx, 0, 7)
-                lbl_abs = make_anon_label(ctx, "abs_d")
-                bb_put8(ctx, 72)
-                bb_put8(ctx, 133)
-                bb_put8(ctx, 192)
-                p_abs = ctx_len(ctx)
-                bb_put8(ctx, 15)
-                bb_put8(ctx, 137)
-                bb_put32(ctx, 0) // jns
-                reloc_add(ctx, p_abs + 2, lbl_abs, 6)
-                x86_neg_rax(ctx)
-                label_define(ctx, lbl_abs)
-                return TY_INT
-
-            x86_call(ctx, "lipi_fn_" + name)
-            return TY_UNKNOWN
-
-        // Local variable lookup (WHY: Local variables/parameters must shadow built-in function names like 'length')
-        off = scope_get(ctx, name)
-        if off > 0
-            x86_mov_rax_stack(ctx, off)
-            v_ty = scope_get_type(ctx, name)
-            if v_ty != TY_UNKNOWN
-                return v_ty
-            return TY_UNKNOWN
-
-        // Global constant lookup
-        gi = 0
-        gnames = get(ctx, 12)
-        gvals  = get(ctx, 13)
-        while gi < len(gnames)
-            if get(gnames, gi) == name
-                x86_mov_reg_imm64(ctx, 0, get(gvals, gi))
-                return TY_INT
-            gi = gi + 1
-
-        // Bare function call: len x, abs x
-        if name == "len" or name == "length" or name == "দৈর্ঘ্য"
-            compile_pure_primary(ctx, ps)
-            x86_mov_reg_reg(ctx, 7, 0)
-            x86_call(ctx, "_lipi_len")
-            return TY_INT
-        if name == "abs"
-            compile_pure_primary(ctx, ps)
-            lbl_abs2 = make_anon_label(ctx, "abs_d2")
-            bb_put8(ctx, 72)
-            bb_put8(ctx, 133)
-            bb_put8(ctx, 192)
-            p_abs2 = ctx_len(ctx)
-            bb_put8(ctx, 15)
-            bb_put8(ctx, 137)
-            bb_put32(ctx, 0)
-            reloc_add(ctx, p_abs2 + 2, lbl_abs2, 6)
-            x86_neg_rax(ctx)
-            label_define(ctx, lbl_abs2)
-            return TY_INT
-
-        // WHY: Handle space-separated function calls without parentheses (e.g., fibonacci i, say sum 10 20)
-        if is_pure_arg_start(ps) == 1
-            arg_count = 0
-            arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
-            while is_pure_arg_start(ps) == 1 and ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
-                compile_pure_primary(ctx, ps)
+        // Postfix chained operations on rax: .field, .method(), [index]
+        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_LBRACKET
+                ps_adv(ps)
                 x86_push_reg(ctx, 0)
-                arg_count = arg_count + 1
-            ai = arg_count - 1
-            while ai >= 0
-                if ai < 12
-                    x86_pop_reg(ctx, get(arg_regs, ai))
+                compile_pure_expr(ctx, ps)
+                if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+                x86_mov_reg_reg(ctx, 6, 0)
+                x86_pop_reg(ctx, 7)
+                x86_call(ctx, "lipi_fn_get")
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
+                ps_adv(ps)
+                member_name = ps_cur_text(ps)
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_LPAREN
+                    ps_adv(ps)
+                    x86_push_reg(ctx, 0)
+                    m_arg_count = 1
+                    m_arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
+                    while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_RPAREN break
+                        compile_pure_expr(ctx, ps)
+                        x86_push_reg(ctx, 0)
+                        m_arg_count = m_arg_count + 1
+                        ps_skip_nl(ps)
+                        if ps_cur_type(ps) == TOK_COMMA ps_adv(ps)
+                        ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_RPAREN ps_adv(ps)
+                    m_ai = m_arg_count - 1
+                    while m_ai >= 0
+                        if m_ai < 12 x86_pop_reg(ctx, get(m_arg_regs, m_ai))
+                        else x86_pop_reg(ctx, 0)
+                        m_ai = m_ai - 1
+                    if member_name == "len" or member_name == "length" or member_name == "c_len"
+                        x86_call(ctx, "_lipi_len")
+                    elif member_name == "to_str"
+                        x86_call(ctx, "lipi_fn_to_str")
+                    elif member_name == "push"
+                        x86_call(ctx, "lipi_fn_push")
+                    elif member_name == "pop"
+                        x86_call(ctx, "lipi_fn_pop")
+                    else
+                        sname = struct_get_var_type(ctx, name)
+                        target_m = "lipi_fn_" + member_name
+                        if sname != ""
+                            target_m = "lipi_fn_" + sname + "_" + member_name
+                        x86_call(ctx, target_m)
                 else
-                    x86_pop_reg(ctx, 0)
-                ai = ai - 1
-            x86_call(ctx, "lipi_fn_" + name)
-            return TY_UNKNOWN
-
-        x86_mov_reg_imm64(ctx, 0, 0)
+                    sname = struct_get_var_type(ctx, name)
+                    f_off = struct_get_field_offset(ctx, sname, member_name)
+                    bb_put8(ctx, 72)
+                    bb_put8(ctx, 139)
+                    if f_off < 128
+                        bb_put8(ctx, 64)
+                        bb_put8(ctx, f_off)
+                    else
+                        bb_put8(ctx, 128)
+                        bb_put32(ctx, f_off)
         return TY_UNKNOWN
 
     return TY_UNKNOWN
@@ -3594,6 +4950,14 @@ fn compile_pure_unary ctx ps
         ps_adv(ps)
         compile_pure_unary(ctx, ps)
         x86_neg_rax(ctx)
+        return TY_INT
+    if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "~"
+        ps_adv(ps)
+        compile_pure_unary(ctx, ps)
+        // not rax: 0x48 0xF7 0xD0
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 247)
+        bb_put8(ctx, 208)
         return TY_INT
     return compile_pure_primary(ctx, ps)
 
@@ -3653,13 +5017,36 @@ fn compile_pure_add ctx ps
             lhs_ty = TY_INT
     return lhs_ty
 
-fn compile_pure_cmp ctx ps
+// WHY: Native AMD64 bitwise shift operations (<<, >>) lowering to shl/sar rax, cl
+fn compile_pure_shift ctx ps
     lhs_ty = compile_pure_add(ctx, ps)
+    while ps_cur_type(ps) == TOK_OP and (ps_cur_text(ps) == "<<" or ps_cur_text(ps) == ">>")
+        op = ps_cur_text(ps)
+        ps_adv(ps)
+        x86_push_reg(ctx, 0)      // push lhs (rax)
+        compile_pure_add(ctx, ps) // rhs into rax (shift count)
+        x86_mov_reg_reg(ctx, 1, 0) // rcx = shift count (rax)
+        x86_pop_reg(ctx, 0)       // rax = lhs
+        if op == "<<"
+            // shl rax, cl (0x48 0xD3 0xE0)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 211)
+            bb_put8(ctx, 224)
+        elif op == ">>"
+            // sar rax, cl (0x48 0xD3 0xF8)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 211)
+            bb_put8(ctx, 248)
+        lhs_ty = TY_INT
+    return lhs_ty
+
+fn compile_pure_cmp ctx ps
+    lhs_ty = compile_pure_shift(ctx, ps)
     while ps_cur_type(ps) == TOK_OP and (ps_cur_text(ps) == "==" or ps_cur_text(ps) == "!=" or ps_cur_text(ps) == "<" or ps_cur_text(ps) == "<=" or ps_cur_text(ps) == ">" or ps_cur_text(ps) == ">=")
         op = ps_cur_text(ps)
         ps_adv(ps)
         x86_push_reg(ctx, 0)
-        rhs_ty = compile_pure_add(ctx, ps)
+        rhs_ty = compile_pure_shift(ctx, ps)
         if lhs_ty == TY_INT and rhs_ty == TY_INT
             // WHY: Direct integer comparison lowers to native cmp rax, rbx and setcc
             x86_mov_reg_reg(ctx, 3, 0) // rbx = rhs
@@ -3752,6 +5139,34 @@ fn compile_pure_cmp ctx ps
         lhs_ty = TY_INT
     return lhs_ty
 
+// WHY: Native AMD64 bitwise operations (&, |, ^) lowering to native ALU instructions
+fn compile_pure_bitwise ctx ps
+    lhs_ty = compile_pure_cmp(ctx, ps)
+    while ps_cur_type(ps) == TOK_OP and (ps_cur_text(ps) == "&" or ps_cur_text(ps) == "|" or ps_cur_text(ps) == "^")
+        op = ps_cur_text(ps)
+        ps_adv(ps)
+        x86_push_reg(ctx, 0)       // push lhs (rax)
+        compile_pure_cmp(ctx, ps)  // rhs into rax
+        x86_mov_reg_reg(ctx, 3, 0) // rbx = rhs
+        x86_pop_reg(ctx, 0)        // rax = lhs
+        if op == "&"
+            // and rax, rbx (0x48 0x21 0xD8)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 33)
+            bb_put8(ctx, 216)
+        elif op == "|"
+            // or rax, rbx (0x48 0x09 0xD8)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 9)
+            bb_put8(ctx, 216)
+        elif op == "^"
+            // xor rax, rbx (0x48 0x31 0xD8)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 49)
+            bb_put8(ctx, 216)
+        lhs_ty = TY_INT
+    return lhs_ty
+
 // WHY: Boolean NOT (not, না, !)
 fn compile_pure_not ctx ps
     ps_skip_nl(ps)
@@ -3771,7 +5186,7 @@ fn compile_pure_not ctx ps
         bb_put8(ctx, 182)
         bb_put8(ctx, 192) // movzx rax, al (0x48 0x0F 0xB6 0xC0)
         return TY_INT
-    return compile_pure_cmp(ctx, ps)
+    return compile_pure_bitwise(ctx, ps)
 
 // WHY: Short-circuiting logical AND (and, এবং, &&)
 fn compile_pure_and ctx ps
@@ -3835,7 +5250,15 @@ fn compile_pure_stmt ctx ps
     tt  = ps_cur_type(ps)
     txt = ps_cur_text(ps)
 
-    if tt == TOK_EOF or tt == TOK_DEDENT return 0
+    if tt == TOK_EOF return 0
+    if tt == TOK_INDENT or tt == TOK_DEDENT
+        ps_adv(ps)
+        return 0
+
+    // WHY: Gracefully consume optional semicolons at statement boundaries
+    if tt == TOK_SEMI
+        ps_adv(ps)
+        return 0
 
     // WHY: Unwrap let/চলক/@let variable declaration keyword so statement falls through to assignment
     if tt == TOK_IDENT and (txt == "let" or txt == "চলক" or txt == "@let")
@@ -3846,6 +5269,14 @@ fn compile_pure_stmt ctx ps
     // WHY: Gracefully consume any standalone @end directive at top level or block boundary
     if tt == TOK_IDENT and txt == "@end"
         ps_adv(ps)
+        return 0
+
+    // WHY: Gracefully skip Maya @infinity_rule macro definitions
+    if tt == TOK_IDENT and txt == "@infinity_rule"
+        while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_SEMI and ps_cur_type(ps) != TOK_EOF
+            ps_adv(ps)
+        if ps_cur_type(ps) == TOK_SEMI
+            ps_adv(ps)
         return 0
 
     // include / import / অন্তর্ভুক্ত / আমদানি / @use / @include -- skip line
@@ -3887,6 +5318,110 @@ fn compile_pure_stmt ctx ps
             ps_adv(ps)
         return 0
 
+    // @impl StructName ... @end (Maya Struct Implementation Block)
+    // WHY: Transparently lowers struct method implementation blocks with proper OOP name mangling
+    if tt == TOK_IDENT and txt == "@impl"
+        ps_adv(ps)
+        impl_sname = ""
+        if ps_cur_type(ps) == TOK_IDENT
+            impl_sname = ps_cur_text(ps)
+            ps_adv(ps)
+        old_impl = ctx_get_impl(ctx)
+        ctx_set_impl(ctx, impl_sname)
+        while ps_cur_type(ps) != TOK_EOF
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                ps_adv(ps)
+                break
+            prev_im_p = ps_pos(ps)
+            compile_pure_stmt(ctx, ps)
+            if ps_pos(ps) == prev_im_p
+                ps_adv(ps)
+            ps_skip_nl(ps)
+        ctx_set_impl(ctx, old_impl)
+        return 0
+
+    // @universe ... @end (Maya Infinite Loop Lowering)
+    // WHY: Lower @universe into native unconditional while-loop with break/continue support
+    if tt == TOK_IDENT and txt == "@universe"
+        ps_adv(ps)
+        lbl_start = make_anon_label(ctx, "uni_start")
+        lbl_end   = make_anon_label(ctx, "uni_end")
+        loop_push(ctx, lbl_start, lbl_end)
+        label_define(ctx, lbl_start)
+        while ps_cur_type(ps) != TOK_EOF
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                ps_adv(ps)
+                break
+            prev_un_p = ps_pos(ps)
+            compile_pure_stmt(ctx, ps)
+            if ps_pos(ps) == prev_un_p
+                ps_adv(ps)
+            ps_skip_nl(ps)
+        x86_jmp(ctx, lbl_start)
+        label_define(ctx, lbl_end)
+        loop_pop(ctx)
+        return 0
+
+    // @match target ... case val: ... case _: ... @end
+    // WHY: Native pattern matching lowering to AMD64 cmp and conditional jumps
+    if tt == TOK_IDENT and txt == "@match"
+        ps_adv(ps)
+        compile_pure_expr(ctx, ps) // rax = target value
+        x86_push_reg(ctx, 0)       // push target on stack: [rsp]
+        lbl_match_end = make_anon_label(ctx, "match_end")
+        while ps_cur_type(ps) != TOK_EOF
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                ps_adv(ps)
+                break
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "case"
+                ps_adv(ps) // consume 'case'
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "_"
+                    ps_adv(ps) // consume '_'
+                    if ps_cur_type(ps) == TOK_COLON ps_adv(ps)
+                    while ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if (ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "case" or ps_cur_text(ps) == "@end")) or ps_cur_type(ps) == TOK_DEDENT
+                            break
+                        prev_mc_p = ps_pos(ps)
+                        compile_pure_stmt(ctx, ps)
+                        if ps_pos(ps) == prev_mc_p
+                            ps_adv(ps)
+                        ps_skip_nl(ps)
+                    x86_jmp(ctx, lbl_match_end)
+                else
+                    compile_pure_expr(ctx, ps) // rax = pattern val
+                    lbl_next_case = make_anon_label(ctx, "next_case")
+                    // cmp rax, [rsp] -> 0x48 0x3B 0x04 0x24
+                    bb_put8(ctx, 72)
+                    bb_put8(ctx, 59)
+                    bb_put8(ctx, 4)
+                    bb_put8(ctx, 36)
+                    p_jne = ctx_len(ctx)
+                    bb_put8(ctx, 15)
+                    bb_put8(ctx, 133)
+                    bb_put32(ctx, 0) // jne
+                    reloc_add(ctx, p_jne + 2, lbl_next_case, 6)
+                    if ps_cur_type(ps) == TOK_COLON ps_adv(ps)
+                    while ps_cur_type(ps) != TOK_EOF
+                        ps_skip_nl(ps)
+                        if (ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "case" or ps_cur_text(ps) == "@end")) or ps_cur_type(ps) == TOK_DEDENT
+                            break
+                        prev_mc_p = ps_pos(ps)
+                        compile_pure_stmt(ctx, ps)
+                        if ps_pos(ps) == prev_mc_p
+                            ps_adv(ps)
+                        ps_skip_nl(ps)
+                    x86_jmp(ctx, lbl_match_end)
+                    label_define(ctx, lbl_next_case)
+            else
+                ps_adv(ps)
+        label_define(ctx, lbl_match_end)
+        x86_add_rsp(ctx, 8) // pop match target from stack
+        return 0
+
     // struct / গঠন / @struct (Struct Definition)
     // WHY: Support both indentation-delimited structs and Maya @struct ... @end blocks
     if tt == TOK_IDENT and (txt == "struct" or txt == "গঠন" or txt == "@struct")
@@ -3896,25 +5431,12 @@ fn compile_pure_stmt ctx ps
         ps_adv(ps)
         fields = list()
         ps_skip_nl(ps)
-        if ps_cur_type(ps) == TOK_INDENT
-            ps_adv(ps)
-            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                if is_meta_struct == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                    break
-                if ps_cur_type(ps) == TOK_IDENT
-                    if len(fields) < 16
-                        push(fields, ps_cur_text(ps))
-                    ps_adv(ps)
-                    while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                        ps_adv(ps)
-                else
-                    ps_adv(ps)
-                ps_skip_nl(ps)
-            if ps_cur_type(ps) == TOK_DEDENT
-                ps_adv(ps)
-        elif is_meta_struct == 1
+        if is_meta_struct == 1
             while ps_cur_type(ps) != TOK_EOF
                 ps_skip_nl(ps)
+                while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
+                    ps_skip_nl(ps)
                 if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
                     ps_adv(ps)
                     break
@@ -3927,11 +5449,74 @@ fn compile_pure_stmt ctx ps
                 else
                     ps_adv(ps)
                 ps_skip_nl(ps)
-        if is_meta_struct == 1
-            ps_skip_nl(ps)
-            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+        elif ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if ps_cur_type(ps) == TOK_IDENT
+                    if len(fields) < 16
+                        push(fields, ps_cur_text(ps))
+                    ps_adv(ps)
+                    while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                        ps_adv(ps)
+                else
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
         struct_add(ctx, sname, fields)
+        return 0
+
+    // enum / @enum (Enumeration Definition)
+    // WHY: Registers enum variants as global sequential constants in both Enum_Variant and Variant formats
+    if tt == TOK_IDENT and (txt == "enum" or txt == "@enum")
+        is_meta_enum = (txt == "@enum")
+        ps_adv(ps)
+        enum_name = ps_cur_text(ps)
+        ps_adv(ps)
+        ps_skip_nl(ps)
+        val_idx = 0
+        gnames = get(ctx, 12)
+        gvals  = get(ctx, 13)
+        if is_meta_enum == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
+                    ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                if ps_cur_type(ps) == TOK_IDENT
+                    v_name = ps_cur_text(ps)
+                    ps_adv(ps)
+                    push(gnames, enum_name + "_" + v_name)
+                    push(gvals, val_idx)
+                    push(gnames, v_name)
+                    push(gvals, val_idx)
+                    val_idx = val_idx + 1
+                    while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
+                        ps_adv(ps)
+                else
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+        elif ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if ps_cur_type(ps) == TOK_IDENT
+                    v_name = ps_cur_text(ps)
+                    ps_adv(ps)
+                    push(gnames, enum_name + "_" + v_name)
+                    push(gvals, val_idx)
+                    push(gnames, v_name)
+                    push(gvals, val_idx)
+                    val_idx = val_idx + 1
+                    while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                        ps_adv(ps)
+                else
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
         return 0
 
     // Struct field assignment: obj.field = expr
@@ -3958,9 +5543,55 @@ fn compile_pure_stmt ctx ps
         // mov [rax + f_off], rbx
         bb_put8(ctx, 72)
         bb_put8(ctx, 137)
-        bb_put8(ctx, 88)
-        bb_put8(ctx, f_off)
+        if f_off < 128
+            bb_put8(ctx, 88)
+            bb_put8(ctx, f_off)
+        else
+            bb_put8(ctx, 152)
+            bb_put32(ctx, f_off)
         return 0
+
+    // Array indexing assignment: arr[idx] = expr
+    // WHY: Direct store into dynamic list buffer using lipi_fn_list_set
+    if tt == TOK_IDENT and tok_t(t1) == TOK_LBRACKET
+        arr_name = txt
+        is_arr_assign = 0
+        scan_p = ps_pos(ps) + 1
+        b_depth = 0
+        while scan_p < len(get(ps, 0))
+            st = get(get(ps, 0), scan_p)
+            if tok_t(st) == TOK_LBRACKET
+                b_depth = b_depth + 1
+            elif tok_t(st) == TOK_RBRACKET
+                b_depth = b_depth - 1
+                if b_depth == 0
+                    next_p = scan_p + 1
+                    while next_p < len(get(ps, 0)) and tok_t(get(get(ps, 0), next_p)) == TOK_NL
+                        next_p = next_p + 1
+                    if next_p < len(get(ps, 0))
+                        nt = get(get(ps, 0), next_p)
+                        if tok_t(nt) == TOK_OP and tok_s(nt) == "="
+                            is_arr_assign = 1
+                    break
+            scan_p = scan_p + 1
+        if is_arr_assign == 1
+            ps_adv(ps) // consume arr_name
+            ps_adv(ps) // consume '['
+            compile_pure_expr(ctx, ps) // rax = idx
+            x86_push_reg(ctx, 0)       // push idx
+            if ps_cur_type(ps) == TOK_RBRACKET ps_adv(ps)
+            if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "=" ps_adv(ps)
+            compile_pure_expr(ctx, ps) // rax = val
+            x86_mov_reg_reg(ctx, 2, 0) // rdx = val
+            x86_pop_reg(ctx, 6)        // rsi = idx
+            off = scope_get(ctx, arr_name)
+            if off > 0
+                x86_mov_rax_stack(ctx, off)
+            else
+                x86_mov_reg_imm64(ctx, 0, 0)
+            x86_mov_reg_reg(ctx, 7, 0) // rdi = list ptr
+            x86_call(ctx, "lipi_fn_list_set")
+            return 0
 
     // break / থামো
     if tt == TOK_IDENT and (txt == "break" or txt == "থামো")
@@ -4001,21 +5632,12 @@ fn compile_pure_stmt ctx ps
         x86_jz(ctx, lbl_next)
 
         ps_skip_nl(ps)
-        if ps_cur_type(ps) == TOK_INDENT
-            ps_adv(ps)
-            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                if is_meta_if == 1 and ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "@end" or ps_cur_text(ps) == "@elif" or ps_cur_text(ps) == "@else")
-                    break
-                prev_if_p = ps_pos(ps)
-                compile_pure_stmt(ctx, ps)
-                if ps_pos(ps) == prev_if_p
-                    ps_adv(ps)
-                ps_skip_nl(ps)
-            if ps_cur_type(ps) == TOK_DEDENT
-                ps_adv(ps)
-        elif is_meta_if == 1
+        if is_meta_if == 1
             while ps_cur_type(ps) != TOK_EOF
                 ps_skip_nl(ps)
+                while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
+                    ps_skip_nl(ps)
                 cur_if_t = ps_cur_text(ps)
                 if ps_cur_type(ps) == TOK_IDENT and (cur_if_t == "@end" or cur_if_t == "@elif" or cur_if_t == "@else")
                     break
@@ -4024,6 +5646,16 @@ fn compile_pure_stmt ctx ps
                 if ps_pos(ps) == prev_if_p
                     ps_adv(ps)
                 ps_skip_nl(ps)
+        elif ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                prev_if_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_if_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
         else
             compile_pure_stmt(ctx, ps)
 
@@ -4041,21 +5673,12 @@ fn compile_pure_stmt ctx ps
             x86_jz(ctx, lbl_next)
 
             ps_skip_nl(ps)
-            if ps_cur_type(ps) == TOK_INDENT
-                ps_adv(ps)
-                while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                    if is_meta_if == 1 and ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "@end" or ps_cur_text(ps) == "@elif" or ps_cur_text(ps) == "@else")
-                        break
-                    prev_elif_p = ps_pos(ps)
-                    compile_pure_stmt(ctx, ps)
-                    if ps_pos(ps) == prev_elif_p
-                        ps_adv(ps)
-                    ps_skip_nl(ps)
-                if ps_cur_type(ps) == TOK_DEDENT
-                    ps_adv(ps)
-            elif is_meta_if == 1
+            if is_meta_if == 1
                 while ps_cur_type(ps) != TOK_EOF
                     ps_skip_nl(ps)
+                    while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                        ps_adv(ps)
+                        ps_skip_nl(ps)
                     cur_elif_t = ps_cur_text(ps)
                     if ps_cur_type(ps) == TOK_IDENT and (cur_elif_t == "@end" or cur_elif_t == "@elif" or cur_elif_t == "@else")
                         break
@@ -4064,6 +5687,16 @@ fn compile_pure_stmt ctx ps
                     if ps_pos(ps) == prev_elif_p
                         ps_adv(ps)
                     ps_skip_nl(ps)
+            elif ps_cur_type(ps) == TOK_INDENT
+                ps_adv(ps)
+                while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                    prev_elif_p = ps_pos(ps)
+                    compile_pure_stmt(ctx, ps)
+                    if ps_pos(ps) == prev_elif_p
+                        ps_adv(ps)
+                    ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
             else
                 compile_pure_stmt(ctx, ps)
 
@@ -4074,21 +5707,12 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "else" or ps_cur_text(ps) == "নাহলে" or ps_cur_text(ps) == "@else")
             ps_adv(ps)
             ps_skip_nl(ps)
-            if ps_cur_type(ps) == TOK_INDENT
-                ps_adv(ps)
-                while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                    if is_meta_if == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                        break
-                    prev_else_p = ps_pos(ps)
-                    compile_pure_stmt(ctx, ps)
-                    if ps_pos(ps) == prev_else_p
-                        ps_adv(ps)
-                    ps_skip_nl(ps)
-                if ps_cur_type(ps) == TOK_DEDENT
-                    ps_adv(ps)
-            elif is_meta_if == 1
+            if is_meta_if == 1
                 while ps_cur_type(ps) != TOK_EOF
                     ps_skip_nl(ps)
+                    while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                        ps_adv(ps)
+                        ps_skip_nl(ps)
                     if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
                         break
                     prev_else_p = ps_pos(ps)
@@ -4096,11 +5720,24 @@ fn compile_pure_stmt ctx ps
                     if ps_pos(ps) == prev_else_p
                         ps_adv(ps)
                     ps_skip_nl(ps)
+            elif ps_cur_type(ps) == TOK_INDENT
+                ps_adv(ps)
+                while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                    prev_else_p = ps_pos(ps)
+                    compile_pure_stmt(ctx, ps)
+                    if ps_pos(ps) == prev_else_p
+                        ps_adv(ps)
+                    ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
             else
                 compile_pure_stmt(ctx, ps)
 
         if is_meta_if == 1
             ps_skip_nl(ps)
+            while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+                ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
                 ps_adv(ps)
 
@@ -4123,11 +5760,23 @@ fn compile_pure_stmt ctx ps
 
         loop_push(ctx, lbl_loop, lbl_end)
         ps_skip_nl(ps)
-        if ps_cur_type(ps) == TOK_INDENT
+        if is_meta_while == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
+                    ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                prev_while_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_while_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+        elif ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                if is_meta_while == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                    break
                 prev_while_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
                 if ps_pos(ps) == prev_while_p
@@ -4135,25 +5784,11 @@ fn compile_pure_stmt ctx ps
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
-        elif is_meta_while == 1
-            while ps_cur_type(ps) != TOK_EOF
-                ps_skip_nl(ps)
-                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                    break
-                prev_while_p = ps_pos(ps)
-                compile_pure_stmt(ctx, ps)
-                if ps_pos(ps) == prev_while_p
-                    ps_adv(ps)
-                ps_skip_nl(ps)
         else
             compile_pure_stmt(ctx, ps)
         loop_pop(ctx)
 
         x86_jmp(ctx, lbl_loop)
-        if is_meta_while == 1
-            ps_skip_nl(ps)
-            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                ps_adv(ps)
         label_define(ctx, lbl_end)
         return 0
 
@@ -4174,50 +5809,102 @@ fn compile_pure_stmt ctx ps
         is_meta_fn = (txt == "@fn")
         ps_adv(ps)
         fn_name = ps_cur_text(ps)
+        orig_fn_name = fn_name
+        has_und = 0
+        ui = 0
+        while ui < len(fn_name)
+            if char_at(fn_name, ui) == "_"
+                has_und = 1
+            ui = ui + 1
+        // WHY: Methods inside @impl Struct blocks are automatically mangled to Struct_method for OOP dispatch
+        cur_impl = ctx_get_impl(ctx)
+        if len(cur_impl) > 0 and has_und == 0
+            fn_name = cur_impl + "_" + fn_name
         if fn_name == "main" or fn_name == "প্রধান"
             list_set(get(ctx, 21), 0, "lipi_fn_" + fn_name)
         ps_adv(ps)
 
         // WHY: Support OOP struct methods (e.g. fn Point.distance self other)
+        is_oop_method = 0
+        oop_struct = ""
         if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "."
             ps_adv(ps)
             method_name = ps_cur_text(ps)
             ps_adv(ps)
+            oop_struct = fn_name
             fn_name = fn_name + "_" + method_name
+            is_oop_method = 1
 
         params = list()
+        param_types = list()
         if ps_cur_type(ps) == TOK_LPAREN
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_RPAREN and ps_cur_type(ps) != TOK_EOF
                 if ps_cur_type(ps) == TOK_IDENT and len(params) < 12
                     push(params, ps_cur_text(ps))
                     ps_adv(ps)
+                    p_ty = ""
+                    // Optional type annotation: param: type
+                    if ps_cur_type(ps) == TOK_COLON
+                        ps_adv(ps)
+                        if ps_cur_type(ps) == TOK_IDENT
+                            p_ty = ps_cur_text(ps)
+                            ps_adv(ps)
+                    push(param_types, p_ty)
                 if ps_cur_type(ps) == TOK_COMMA
                     ps_adv(ps)
             if ps_cur_type(ps) == TOK_RPAREN
                 ps_adv(ps)
+            // Optional return type annotation: -> type or - > type
+            if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "->"
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_IDENT
+                    ps_adv(ps)
+            elif ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "-"
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ">"
+                    ps_adv(ps)
+                if ps_cur_type(ps) == TOK_IDENT
+                    ps_adv(ps)
         else
             while ps_cur_type(ps) == TOK_IDENT and len(params) < 12
                 if is_pure_arg_start(ps) == 0
                     break
                 push(params, ps_cur_text(ps))
                 ps_adv(ps)
+                p_ty = ""
+                if ps_cur_type(ps) == TOK_COLON
+                    ps_adv(ps)
+                    if ps_cur_type(ps) == TOK_IDENT
+                        p_ty = ps_cur_text(ps)
+                        ps_adv(ps)
+                push(param_types, p_ty)
+            if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "->"
+                ps_adv(ps)
+                if ps_cur_type(ps) == TOK_IDENT
+                    ps_adv(ps)
 
         lbl_skip = make_anon_label(ctx, "skip_fn")
         x86_jmp(ctx, lbl_skip)
 
         label_define(ctx, "lipi_fn_" + fn_name)
+        if is_oop_method == 0 and orig_fn_name != fn_name
+            label_define(ctx, "lipi_fn_" + orig_fn_name)
 
         // Save parent scope
         saved_names = get(ctx, 8)
         saved_offs  = get(ctx, 9)
         saved_types = get(ctx, 20)
         saved_stack = get(get(ctx, 10), 0)
+        saved_vnames = get(ctx, 18)
+        saved_vtypes = get(ctx, 19)
 
         list_set(ctx, 8, list())
         list_set(ctx, 9, list())
         list_set(ctx, 20, list())
         list_set(get(ctx, 10), 0, 0)
+        list_set(ctx, 18, list())
+        list_set(ctx, 19, list())
 
         x86_push_rbp(ctx)
         x86_mov_rbp_rsp(ctx)
@@ -4226,10 +5913,21 @@ fn compile_pure_stmt ctx ps
         arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
         pi = 0
         while pi < len(params)
-            off = scope_add(ctx, get(params, pi))
+            p_name = get(params, pi)
+            off = scope_add(ctx, p_name)
             if pi < 12
                 x86_mov_reg_reg(ctx, 0, get(arg_regs, pi))
                 x86_mov_stack_rax(ctx, off)
+            if pi < len(param_types)
+                p_ty = get(param_types, pi)
+                if p_ty != "" and struct_find(ctx, p_ty) >= 0
+                    struct_set_var_type(ctx, p_name, p_ty)
+            // WHY: Automatically type 'self' with the enclosing @impl struct name or OOP method struct for accurate field offset dispatch
+            if pi == 0 and p_name == "self"
+                if len(cur_impl) > 0
+                    struct_set_var_type(ctx, p_name, cur_impl)
+                elif is_oop_method == 1 and len(oop_struct) > 0
+                    struct_set_var_type(ctx, p_name, oop_struct)
             pi = pi + 1
 
         // WHY: Support one-liner expression functions (e.g., fn double n = n * 2, fn ws_opcode b = b % 16)
@@ -4242,15 +5940,29 @@ fn compile_pure_stmt ctx ps
             list_set(ctx, 9, saved_offs)
             list_set(ctx, 20, saved_types)
             list_set(get(ctx, 10), 0, saved_stack)
+            list_set(ctx, 18, saved_vnames)
+            list_set(ctx, 19, saved_vtypes)
             label_define(ctx, lbl_skip)
             return 0
 
         ps_skip_nl(ps)
-        if ps_cur_type(ps) == TOK_INDENT
+        if is_meta_fn == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                while ps_cur_type(ps) == TOK_INDENT or ps_cur_type(ps) == TOK_DEDENT
+                    ps_adv(ps)
+                    ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                prev_fn_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_fn_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+        elif ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
-                if is_meta_fn == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                    break
                 prev_fn_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
                 if ps_pos(ps) == prev_fn_p
@@ -4258,21 +5970,6 @@ fn compile_pure_stmt ctx ps
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
-            if is_meta_fn == 1
-                ps_skip_nl(ps)
-                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                    ps_adv(ps)
-        elif is_meta_fn == 1
-            while ps_cur_type(ps) != TOK_EOF
-                ps_skip_nl(ps)
-                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
-                    ps_adv(ps)
-                    break
-                prev_fn_p = ps_pos(ps)
-                compile_pure_stmt(ctx, ps)
-                if ps_pos(ps) == prev_fn_p
-                    ps_adv(ps)
-                ps_skip_nl(ps)
         else
             compile_pure_stmt(ctx, ps)
 
@@ -4285,13 +5982,16 @@ fn compile_pure_stmt ctx ps
         list_set(ctx, 9, saved_offs)
         list_set(ctx, 20, saved_types)
         list_set(get(ctx, 10), 0, saved_stack)
+        list_set(ctx, 18, saved_vnames)
+        list_set(ctx, 19, saved_vtypes)
 
         label_define(ctx, lbl_skip)
         return 0
 
-    // for / প্রতিটি (Range loop: for var in start..end)
-    // WHY: Support iterative loops with start and end expressions emitting fast x86_64 cmp/jg
-    if tt == TOK_IDENT and (txt == "for" or txt == "প্রতিটি")
+    // for / প্রতিটি / @for (Range loop: for var in start..end)
+    // WHY: Support iterative loops across Lipi and Maya syntax with half-open interval and break/continue
+    if tt == TOK_IDENT and (txt == "for" or txt == "প্রতিটি" or txt == "@for")
+        is_meta_for = (txt == "@for")
         ps_adv(ps)
         var_name = ps_cur_text(ps)
         ps_adv(ps)
@@ -4317,6 +6017,7 @@ fn compile_pure_stmt ctx ps
         lbl_step  = make_anon_label(ctx, "for_step")
         lbl_end   = make_anon_label(ctx, "for_end")
 
+        loop_push(ctx, lbl_step, lbl_end)
         label_define(ctx, lbl_start)
 
         x86_mov_rax_stack(ctx, var_off)
@@ -4327,12 +6028,26 @@ fn compile_pure_stmt ctx ps
         bb_put8(ctx, 195) // cmp rbx, rax
         p_jg = ctx_len(ctx)
         bb_put8(ctx, 15)
-        bb_put8(ctx, 143)
-        bb_put32(ctx, 0) // jg (0x0F 0x8F)
+        if is_meta_for == 1
+            bb_put8(ctx, 141) // jge (0x0F 0x8D) for half-open interval [start, end)
+        else
+            bb_put8(ctx, 143) // jg (0x0F 0x8F)
+        bb_put32(ctx, 0)
         reloc_add(ctx, p_jg + 2, lbl_end, 6)
 
         ps_skip_nl(ps)
-        if ps_cur_type(ps) == TOK_INDENT
+        if is_meta_for == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                prev_for_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_for_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+        elif ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
                 prev_for_p = ps_pos(ps)
@@ -4354,6 +6069,7 @@ fn compile_pure_stmt ctx ps
         x86_jmp(ctx, lbl_start)
 
         label_define(ctx, lbl_end)
+        loop_pop(ctx)
         return 0
 
     // repeat N / বার (Repeat loop)
@@ -4419,13 +6135,16 @@ fn compile_pure_stmt ctx ps
         ps_adv(ps) // ident
         ps_adv(ps) // '='
 
-        // Check if RHS is struct constructor: StructName(...)
+        // Check if RHS is struct constructor: StructName(...) or literal { ... }
         rhs_cur = ps_cur_text(ps)
         rhs_next = ps_peek_tok(ps, 1)
         rhs_struct = ""
         if ps_cur_type(ps) == TOK_IDENT and (tok_t(rhs_next) == TOK_LPAREN or (tok_t(rhs_next) == TOK_OP and tok_s(rhs_next) == "("))
             if struct_find(ctx, rhs_cur) >= 0
                 rhs_struct = rhs_cur
+        elif ps_cur_type(ps) == TOK_LBRACE
+            b_keys = ps_scan_brace_keys(ps)
+            rhs_struct = struct_find_matching_keys(ctx, b_keys)
 
         is_int_c = (ps_cur_type(ps) == TOK_INT)
         int_c_val = ps_cur_int(ps)
@@ -4707,15 +6426,16 @@ fn list_has lst item
         i = i + 1
     return 0
 
+// WHY: Searches for canonical Lipi and Maya files with extension resolution prioritized over raw names
 fn check_file_ext path
-    if file_exists(path) == 1
-        return path
     if file_exists(path + ".lp") == 1
         return path + ".lp"
     if file_exists(path + ".lipi") == 1
         return path + ".lipi"
     if file_exists(path + ".maya") == 1
         return path + ".maya"
+    if file_exists(path) == 1
+        return path
     return ""
 
 fn resolve_inc_path cur_dir inc_name
@@ -4729,6 +6449,9 @@ fn resolve_inc_path cur_dir inc_name
     if len(r) > 0
         return r
     r = check_file_ext("std/" + inc_name)
+    if len(r) > 0
+        return r
+    r = check_file_ext("src/" + inc_name)
     if len(r) > 0
         return r
     r = check_file_ext("../" + inc_name)
@@ -4862,18 +6585,14 @@ fn compile_source_to_elf in_path out_path
     main_target = get(get(ctx, 21), 0)
     has_called = get(get(ctx, 22), 0)
     if len(main_target) > 0 and has_called == 0
-        // Setup argc/argv from _lipi_initial_rsp in rdi, rsi in case main expects arguments
-        x86_lea_reg_rip(ctx, 0, "_lipi_initial_rsp")
-        bb_put8(ctx, 72)
-        bb_put8(ctx, 139)
-        bb_put8(ctx, 8)  // mov rcx, [rax] (initial rsp pointer)
-        bb_put8(ctx, 72)
-        bb_put8(ctx, 139)
-        bb_put8(ctx, 57) // mov rdi, [rcx] (argc)
-        bb_put8(ctx, 72)
-        bb_put8(ctx, 141)
-        bb_put8(ctx, 113)
-        bb_put8(ctx, 8)  // lea rsi, [rcx + 8] (argv)
+        // WHY: Pass argc in rdi and Lipi list of argv strings in rsi so fn main(argc, argv) gets first-class Lipi strings
+        x86_call(ctx, "lipi_fn_argv")
+        x86_mov_reg_reg(ctx, 6, 0) // rsi = argv list
+        x86_push_reg(ctx, 6)
+        x86_mov_reg_reg(ctx, 7, 0)
+        x86_call(ctx, "_lipi_len")
+        x86_mov_reg_reg(ctx, 7, 0) // rdi = argc (int)
+        x86_pop_reg(ctx, 6)        // rsi = argv list
         x86_call(ctx, main_target)
         x86_leave(ctx)
         x86_ret(ctx)

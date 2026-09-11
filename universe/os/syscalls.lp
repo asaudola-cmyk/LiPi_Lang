@@ -632,7 +632,7 @@ import "universe/core/string"
   return syscall(56, flags, stack_ptr, ptid_ptr, ctid_ptr, tls, 0)
 @end
 
-@fn sys_execve(filename_ptr, argv_ptr, envp_ptr)
+@fn sys_execve_raw(filename_ptr, argv_ptr, envp_ptr)
   return syscall(59, filename_ptr, argv_ptr, envp_ptr, 0, 0, 0)
 @end
 
@@ -968,7 +968,7 @@ import "universe/core/string"
   return 0
 @end
 
-@fn file_read(path)
+@fn sys_file_read_raw(path)
   fd = sys_open(path, 0, 0)
   @if fd < 0 return "" @end
   size = syscall(8, fd, 0, 2, 0, 0, 0)

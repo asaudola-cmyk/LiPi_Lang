@@ -102,10 +102,10 @@
     fail_count = fail_count + 1
   @end
 
-  @! 5. Bitwise logic stress
+  // WHY: (0xFF00 & 0x0FF0) ^ (0x00F0 | 0x000F) = 0x0F00 ^ 0x00FF = 0x0FFF = 4095
   b1 = (0xFF00 & 0x0FF0) ^ (0x00F0 | 0x000F)
-  @if b1 == 255
-    println("  [PASS] TC-BIT-01: Bitwise operations evaluated correctly (255)")
+  @if b1 == 4095
+    println("  [PASS] TC-BIT-01: Bitwise operations evaluated correctly (4095)")
     pass_count = pass_count + 1
   @else
     println("  [FAIL] TC-BIT-01: Bitwise operations mismatch: " + b1.to_str())

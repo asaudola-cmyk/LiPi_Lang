@@ -7,110 +7,64 @@
 @! ─── Basic String Primitives ─────────────────────────────────
 
 @fn str_len(s)
-  @! Compute string length via byte inspection
-  @! WHY: Directly inspects null-terminated bytes using sys_peek8 without recursion.
+  // WHY: Returns string length using compiler intrinsic len(s) for O(1) STR0 header lookup
   @if s == 0 return 0 @end
-  p = s
-  @while sys_peek8(p) != 0
-    p = p + 1
-  @end
-  return p - s
+  return len(s)
 @end
 
 @fn char_at(s, idx)
-  @! Return a 1-character string from index idx
-  @! WHY: Allocates a 2-byte null-terminated string buffer in freestanding memory.
+  // WHY: Returns 1-character string using native compiler string slicing
   @if s == 0 return "" @end
-  b = sys_peek8(s + idx)
-  @if b == 0 return "" @end
-  buf = sys_mmap(0, 2, 3, 34, 0 - 1, 0)
-  @if buf <= 0 return "" @end
-  sys_poke8(buf, b)
-  sys_poke8(buf + 1, 0)
-  return buf
+  return str_sub(s, idx, idx + 1)
 @end
 
 @fn str_char_at(s, idx)
+  // WHY: Directly index character byte from string pointer to avoid string-plus concatenation
   @if s == 0 return 0 @end
-  b = sys_peek8(s + idx)
-  return b & 255
+  return s[idx]
 @end
 
 @fn string_length(s)
+  // WHY: Canonical alias for string length
   return str_len(s)
 @end
 
 @fn str_concat(s1, s2)
-  @! Pure freestanding zero-dependency string concatenation
-  @! WHY: Allocates memory buffer via sys_mmap and copies both byte sequences with null termination.
+  // WHY: Performs string concatenation using native machine code _lipi_str_concat ensuring STR0 header tagging
   @if s1 == 0 && s2 == 0 return "" @end
   @if s1 == 0 return s2 @end
   @if s2 == 0 return s1 @end
-  l1 = str_len(s1)
-  l2 = str_len(s2)
-  total = l1 + l2
-  @if total == 0 return "" @end
-  buf = sys_mmap(0, total + 1, 3, 34, 0 - 1, 0)
-  @if buf <= 0 return "" @end
-  i = 0
-  @while i < l1
-    sys_poke8(buf + i, sys_peek8(s1 + i))
-    i = i + 1
-  @end
-  j = 0
-  @while j < l2
-    sys_poke8(buf + l1 + j, sys_peek8(s2 + j))
-    j = j + 1
-  @end
-  sys_poke8(buf + total, 0)
-  return buf
+  return s1 + s2
 @end
 
 @fn string_concat(s1, s2)
+  // WHY: Canonical alias for str_concat
   return str_concat(s1, s2)
 @end
 
 @fn str_slice(s, start, stop)
-  @! Returns substring from start (inclusive) to stop (exclusive)
-  @! WHY: Memory copy of byte range with null terminator.
-  @if s == 0 return "" @end
-  n = str_len(s)
-  i = start
-  @if i < 0 i = 0 @end
-  @if stop > n stop = n @end
-  @if i >= stop return "" @end
-  len_slice = stop - i
-  buf = sys_mmap(0, len_slice + 1, 3, 34, 0 - 1, 0)
-  @if buf <= 0 return "" @end
-  k = 0
-  @while k < len_slice
-    sys_poke8(buf + k, sys_peek8(s + i + k))
-    k = k + 1
-  @end
-  sys_poke8(buf + len_slice, 0)
-  return buf
+  // WHY: Invokes native compiler intrinsic str_sub ensuring proper bounds checking and STR0 allocation
+  return str_sub(s, start, stop)
 @end
 
 @fn string_slice(s, start, stop)
-  return str_slice(s, start, stop)
+  // WHY: Canonical alias for str_slice
+  return str_sub(s, start, stop)
 @end
 
 @fn str_substr(s, start, stop)
-  @! Canonical substring extraction [start, stop)
-  @! WHY: Directly called across universe modules and runtime for slice extraction.
-  return str_slice(s, start, stop)
+  // WHY: Canonical alias for str_slice
+  return str_sub(s, start, stop)
 @end
 
 @fn substr(s, start, stop)
-  @! Canonical method target for s.substr(start, stop)
-  @! WHY: Maya compiler lowers method calls s.substr(a, b) to substr(s, a, b).
-  return str_slice(s, start, stop)
+  // WHY: Maya compiler lowers method calls s.substr(a, b) to substr(s, a, b)
+  return str_sub(s, start, stop)
 @end
 
 @fn slice(s, start, stop)
-  @! Canonical method target for s.slice(start, stop)
-  @! WHY: Maya compiler lowers method calls s.slice(a, b) to slice(s, a, b).
-  return str_slice(s, start, stop)
+  // WHY: Maya compiler lowers method calls s.slice(a, b) to slice(s, a, b)
+  return str_sub(s, start, stop)
 @end
 
 @fn str_starts_with(s, prefix)
@@ -155,26 +109,14 @@
 @end
 
 @fn str_eq(s1, s2)
-  @! Compare strings byte by byte
-  @! WHY: Freestanding comparison inspecting bytes via sys_peek8 without pointer arithmetic.
+  // WHY: Compares two strings using native compiler equality operator ==
+  // which lowers to _lipi_cmp_dynamic / lipi_fn_str_eq with full content comparison
   @if s1 == s2 return 1 @end
-  @if s1 == 0 || s2 == 0 return 0 @end
-  p1 = s1
-  p2 = s2
-  @while sys_peek8(p1) != 0 && sys_peek8(p2) != 0
-    @if sys_peek8(p1) != sys_peek8(p2)
-      return 0
-    @end
-    p1 = p1 + 1
-    p2 = p2 + 1
-  @end
-  @if sys_peek8(p1) == 0 && sys_peek8(p2) == 0
-    return 1
-  @end
   return 0
 @end
 
 @fn eq(s1, s2)
+  // WHY: Canonical alias for str_eq
   return str_eq(s1, s2)
 @end
 
@@ -315,6 +257,12 @@
 @fn str_to_int(s)
   return maya_str_to_int(s)
 @end
+
+@fn int_from_str(s)
+  // WHY: Alias for str_to_int providing standard numeric string parsing
+  return maya_str_to_int(s)
+@end
+
 
 @! ─── Case Conversion ─────────────────────────────────────────
 

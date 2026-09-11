@@ -48,8 +48,9 @@ import "universe/os/syscalls"
 
 @struct TagDecodeResult
   field_num: i64
-  wire_type: i64
+  // WHY: Aligning next_offset at offset 8 matches VarintDecodeResult to ensure zero field offset collisions
   next_offset: i64
+  wire_type: i64
 @end
 
 @struct StringDecodeResult
@@ -217,8 +218,8 @@ import "universe/os/syscalls"
   val = res.value
   return {
     field_num: val / 8,
-    wire_type: val % 8,
-    next_offset: res.next_offset
+    next_offset: res.next_offset,
+    wire_type: val % 8
   }
 @end
 

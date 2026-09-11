@@ -12,6 +12,13 @@ import "universe/core/collections"
 @! 1. MULTIBOOT DATA STRUCTURES
 @! ============================================================================
 
+@struct Multiboot2Header
+  magic: i64      @! 0xE85250D6 (3897741526)
+  architecture: i64 @! 0
+  header_length: i64
+  checksum: i64
+@end
+
 @struct Multiboot1Header
   magic: i64      @! 0x1BADB002 (464367618)
   flags: i64      @! 0x00010007 (65543)
@@ -25,13 +32,6 @@ import "universe/core/collections"
   width: i64
   height: i64
   depth: i64
-@end
-
-@struct Multiboot2Header
-  magic: i64      @! 0xE85250D6 (3897741526)
-  architecture: i64 @! 0
-  header_length: i64
-  checksum: i64
 @end
 
 @struct Multiboot2Tag

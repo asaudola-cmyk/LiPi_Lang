@@ -1,3 +1,6 @@
+// WHY: Import core string transformation library for str_upper and str_lower
+import "universe/core/string"
+
 @fn main()
   println("=== REPL Test ===")
   

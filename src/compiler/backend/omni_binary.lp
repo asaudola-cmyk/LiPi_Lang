@@ -10,9 +10,6 @@ import "universe/core/collections"
 import "universe/core/string"
 import "universe/os/syscalls"
 import "universe/crypto/sha256"
-@fn sys_syscall(nr, a1, a2, a3, a4, a5, a6)
-  return syscall(nr, a1, a2, a3, a4, a5, a6)
-@end
 
 @! ============================================================================
 @! 1. OMNI-BINARY STRUCTS & OFFSETS

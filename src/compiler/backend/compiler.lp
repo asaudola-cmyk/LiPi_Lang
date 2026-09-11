@@ -1,4 +1,63 @@
 
+import "compiler/infinity_syntax"
+import "compiler/backend/maya_ir"
+import "compiler/backend/x86_64/codegen"
+import "compiler/backend/elf_writer"
+import "compiler/backend/omni_binary"
+
+@fn lex_is_space(c)
+  // WHY: Returns 1 if character is ASCII space, tab, or carriage return
+  @if c == 32 || c == 9 || c == 13 return 1 @end
+  return 0
+@end
+
+@fn lex_is_newline(c)
+  // WHY: Returns 1 if character is ASCII newline (LF)
+  @if c == 10 return 1 @end
+  return 0
+@end
+
+@fn lex_is_digit(c)
+  // WHY: Returns 1 if character is ASCII decimal digit '0'..'9'
+  @if c >= 48 && c <= 57 return 1 @end
+  return 0
+@end
+
+@fn lex_is_alpha(c)
+  // WHY: Returns 1 if character is ASCII alphabetic ('a'..'z', 'A'..'Z') or underscore '_'
+  @if (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 return 1 @end
+  return 0
+@end
+
+@fn ast_node(kind)
+  // WHY: Construct uniform ASTNode with default fields for compiler AST representation
+  return {
+    kind: kind,
+    name: "",
+    params: [],
+    body: [],
+    ret_type: "i64",
+    val: 0,
+    op: "",
+    left: 0,
+    right: 0,
+    expr: 0,
+    condition: 0,
+    then_body: [],
+    elif_branches: [],
+    else_body: [],
+    target: "",
+    value: 0,
+    elements: [],
+    args: [],
+    func: 0,
+    variable: "",
+    iterable: 0,
+    index: 0,
+    cond: 0
+  }
+@end
+
 @fn is_elif_tok_safe(tokens, p)
   @if p >= tokens.len() return 0 @end
   return is_elif_tok(tokens[p])
@@ -109,40 +168,19 @@
 @end
 
 @fn compiler_get_char(s, k)
+  // WHY: Bound-checked character retrieval using native str_char_at avoiding pointer dynamic concat
   @if s == "" || k < 0
     return 0
   @end
-  ptr = maya_str_ptr(s)
-  @if ptr == 0
+  @if k >= str_len(s)
     return 0
   @end
-  return maya_mem_read_u8(ptr + k)
+  return str_char_at(s, k)
 @end
 
-@fn compiler_str_eq(s1, s2) 
- 
-  @if s1 == s2
-    return 1
-  @end
-  @if s1 == "" || s2 == ""
-    return 0
-  @end
-  i = 0
-  @while 1
-    
- c1 = compiler_get_char(s1, i)
-    
- c2 = compiler_get_char(s2, i)
-    
- @if c1 != c2
-      return 0
-    @end
-    @if c1 == 0
-      return 1
-    @end
-    i = i + 1
-  @end
-  return 1
+@fn compiler_str_eq(s1, s2)
+  // WHY: Native string equality check leveraging zero-overhead CPU string compare (lipi_fn_str_eq)
+  return str_eq(s1, s2)
 @end
 
 @fn str_substr(s, start, end_pos)

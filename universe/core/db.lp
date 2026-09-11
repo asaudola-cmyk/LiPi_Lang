@@ -7,10 +7,10 @@ import "universe/core/collections"
 import "universe/core/string"
 
 @struct MayaDatabase
-  name: string
-  order: i64
   keys: array
   values: array
+  name: string
+  order: i64
   wal: array
   in_tx: i64
   tx_wal: array
@@ -23,18 +23,19 @@ import "universe/core/string"
 @end
 
 @fn db_new(name, order)
+  // WHY: Initializes MayaDatabase with keys and values as first fields to guarantee deterministic offset alignment
   return {
-    name: name,
-    order: order,
     keys: [],
     values: [],
+    name: name,
+    order: order,
     wal: [],
     in_tx: 0,
     tx_wal: []
   }
 @end
 
-@fn db_insert(db, key, val)
+@fn db_insert(db: MayaDatabase, key, val)
   entry = { op: "INSERT", key: key, val: val }
   @if db.in_tx == 1
     db.tx_wal = arr_push(db.tx_wal, entry)
@@ -86,7 +87,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_fetch(db, key)
+@fn db_fetch(db: MayaDatabase, key)
   i = 0
   num_items = arr_len(db.keys)
   @while i < num_items
@@ -102,17 +103,22 @@ import "universe/core/string"
   return "NULL"
 @end
 
-@fn db_has(db, key)
+@fn db_get(db: MayaDatabase, key)
+  // WHY: Canonical key-value retrieval alias mapping to db_fetch
+  return db_fetch(db, key)
+@end
+
+@fn db_has(db: MayaDatabase, key)
   v = db_fetch(db, key)
   @if v != "NULL" return 1 @end
   return 0
 @end
 
-@fn db_count(db)
+@fn db_count(db: MayaDatabase)
   return arr_len(db.keys)
 @end
 
-@fn db_delete(db, key)
+@fn db_delete(db: MayaDatabase, key)
   entry = { op: "DELETE", key: key, val: "" }
   @if db.in_tx == 1
     db.tx_wal = arr_push(db.tx_wal, entry)
@@ -137,7 +143,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_scan(db, start_key, end_key)
+@fn db_scan(db: MayaDatabase, start_key, end_key)
   res = []
   num_items = arr_len(db.keys)
   i = 0
@@ -151,13 +157,13 @@ import "universe/core/string"
   return res
 @end
 
-@fn db_begin_tx(db)
+@fn db_begin_tx(db: MayaDatabase)
   db.in_tx = 1
   db.tx_wal = []
   return db
 @end
 
-@fn db_commit_tx(db)
+@fn db_commit_tx(db: MayaDatabase)
   @if db.in_tx == 1
     i = 0
     @while i < arr_len(db.tx_wal)
@@ -170,7 +176,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_rollback_tx(db)
+@fn db_rollback_tx(db: MayaDatabase)
   @if db.in_tx == 1
     i = arr_len(db.tx_wal) - 1
     @while i >= 0
@@ -186,7 +192,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_flush_wal(db)
+@fn db_flush_wal(db: MayaDatabase)
   db.wal = []
   return db
 @end
@@ -207,7 +213,7 @@ import "universe/core/string"
   return database
 @end
 
-@fn db_query(db, sql_query)
+@fn db_query(db: MayaDatabase, sql_query)
   @if starts_with(sql_query, "SELECT * WHERE key = ")
     key = str_substr(sql_query, 21, str_len(sql_query))
     @if str_len(key) >= 2 && str_char_at(key, 0) == 39

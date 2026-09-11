@@ -154,65 +154,41 @@ import "universe/core/collections"
 @end
 
 @fn bigint_to_string(a)
+  // WHY: Converts arbitrary-precision BigInt to canonical decimal string representation.
+  // Uses pure Lipi/Maya string concatenation to allocate on the runtime heap with valid STR0 tag headers,
+  // preventing pointer-as-integer interpretation bugs in _lipi_is_str.
   @if a.limbs.len() == 0
     return "0"
   @end
   @if a.limbs.len() == 1 && a.limbs[0] == 0
     return "0"
   @end
-  
-  buf_raw = sys_mmap(0, 16392, 3, 34, 0 - 1, 0)
-  @if buf_raw <= 0
-    return "OOM"
-  @end
-  
-  buf = buf_raw + 8
-  buf_idx = 0
-  
+
+  res = ""
   @if a.sign < 0
-    sys_poke8(buf + buf_idx, 45)
-    buf_idx = buf_idx + 1
+    res = "-"
   @end
-  
+
   i = a.limbs.len() - 1
-  limb_val = a.limbs[i]
-  
-  limb_str = to_str(limb_val)
-  p = limb_str
-  @while sys_peek8(p) != 0
-    sys_poke8(buf + buf_idx, sys_peek8(p))
-    buf_idx = buf_idx + 1
-    p = p + 1
-  @end
-  
+  res = str_concat(res, to_str(a.limbs[i]))
+
   i = i - 1
   @while i >= 0
     limb_val = a.limbs[i]
     limb_str = to_str(limb_val)
     len_str = c_len(limb_str)
     pad_len = 9 - len_str
-    
+
     pad_idx = 0
     @while pad_idx < pad_len
-      sys_poke8(buf + buf_idx, 48)
-      buf_idx = buf_idx + 1
+      res = str_concat(res, "0")
       pad_idx = pad_idx + 1
     @end
-    
-    p = limb_str
-    @while sys_peek8(p) != 0
-      sys_poke8(buf + buf_idx, sys_peek8(p))
-      buf_idx = buf_idx + 1
-      p = p + 1
-    @end
-    
+
+    res = str_concat(res, limb_str)
     i = i - 1
   @end
-  
-  tag = 6004514569303621632 + buf_idx
-  sys_poke(buf - 8, tag)
-  sys_poke8(buf + buf_idx, 0)
-  return buf
+  return res
 @end
 
 @! ─── Universal Number Decoder ───────────────────────────────────────────────
@@ -278,7 +254,8 @@ import "universe/core/collections"
   i = 0
   n = c_len(str)
   @while i < n
-    c = sys_peek8(str + i)
+    // WHY: Use direct string indexing s[i] to read character byte cleanly
+    c = str[i]
     @if c >= 48 && c <= 57
       digit = c - 48
       res = bigint_mul(res, ten)

@@ -6,27 +6,6 @@
 
 @! ─── Array / List helpers ───────────────────────────────────
 
-@fn len(arr)
-  @if arr == 0 return 0 @end
-  @! WHY: Check pointer address and page offset. Arrays store length at arr - 8.
-  @! Ensure arr % 4096 >= 8 so accessing arr - 8 stays strictly within the mapped page.
-  @if arr >= 4096
-    page_off = arr % 4096
-    @if page_off >= 8
-      count = sys_peek(arr - 8)
-      @if count >= 0 && count < 100000000
-        return count
-      @end
-    @end
-  @end
-  @! WHY: Fallback for raw null-terminated byte strings
-  p = arr
-  @while sys_peek8(p) != 0
-    p = p + 1
-  @end
-  return p - arr
-@end
-
 @fn c_len(arr)
   @! Character and buffer length alias
   @! WHY: Lowering of .c_len() method syntax in regex and tokenizer creates c_len(arr) calls.
@@ -50,90 +29,16 @@
   return 0
 @end
 
-@fn push(arr, val)
-  old_len = 0
-  cap = 0
-  @if arr != 0
-    @! WHY: On Linux x86_64, mmap allocations are 4096-byte aligned.
-    @! If arr was created by bootstrap with an 8-byte header (base + 8), arr % 4096 == 8.
-    @! Reading arr - 16 would dereference unmapped memory before the page and cause SIGSEGV.
-    @! Thus, only read cap at arr - 16 if page_off >= 16. Otherwise, treat capacity as exhausted.
-    page_off = arr % 4096
-    @if page_off >= 16
-      old_len = sys_peek(arr - 8)
-      @if old_len < 0 || old_len > 100000000
-        old_len = 0
-      @end
-      cap = sys_peek(arr - 16)
-      @if cap < 0 || cap > 100000000
-        cap = 0
-      @end
-    @elif page_off >= 8
-      old_len = sys_peek(arr - 8)
-      @if old_len < 0 || old_len > 100000000
-        old_len = 0
-      @end
-      cap = old_len
-    @else
-      old_len = 0
-      cap = 0
-    @end
-  @end
-
-  @if old_len < cap
-    sys_poke(arr + (old_len * 8), val)
-    sys_poke(arr - 8, old_len + 1)
-    return arr
-  @end
-
-  new_cap = cap * 2
-  @if new_cap < 8
-    new_cap = 8
-  @end
-
-  alloc_size = (new_cap + 2) * 8
-  new_buf = sys_mmap(0, alloc_size, 3, 34, 0 - 1, 0)
-  @if new_buf <= 0
-    return arr
-  @end
-
-  sys_poke(new_buf, new_cap)
-  sys_poke(new_buf + 8, old_len + 1)
-  new_elems = new_buf + 16
-
-  i = 0
-  @while i < old_len
-    sys_poke(new_elems + (i * 8), sys_peek(arr + (i * 8)))
-    i = i + 1
-  @end
-
-  sys_poke(new_elems + (old_len * 8), val)
-  return new_elems
-@end
-
 @fn pop(arr)
-  n = arr.len()
+  @! WHY: Returns a shallow copy excluding the final item using native Lipi list operations.
+  n = len(arr)
   result = []
   i = 0
   @while i < n - 1
-    result = result.push(arr[i])
+    result = push(result, arr[i])
     i = i + 1
   @end
   return result
-@end
-
-@fn list_get(arr, idx)
-  return arr[idx]
-@end
-
-@fn list_set(arr, idx, val)
-  @! High-performance in-place mutation of array element at index idx.
-  @! WHY: In-place poke avoids O(N^2) memory churn and reallocations when rendering
-  @! canvases, updating neural network weights, or running scheduler rings.
-  @if arr != 0 && idx >= 0
-    sys_poke(arr + (idx * 8), val)
-  @end
-  return arr
 @end
 
 @fn list_map(arr, f)
@@ -736,7 +641,10 @@
 @end
 
 @fn contains(m, k)
-  @! Alias for map.contains(k) method invocation in pure Maya
+  // WHY: Polymorphic contains: checks if string contains substring, or if map/collection contains key
+  @if is_str(m) == 1
+    return str_contains(m, k)
+  @end
   return hashmap_has(m, k)
 @end
 

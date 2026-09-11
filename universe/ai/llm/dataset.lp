@@ -8,6 +8,15 @@ import "universe/core/collections"
 import "universe/core/string"
 import "universe/ai/tensor"
 
+// WHY: Explicit struct definition ensures deterministic field offsets (file_path at offset 0, block_size at offset 8, etc.) across compilation units
+@struct Dataset
+  file_path: string
+  block_size: i64
+  samples: array
+  num_samples: i64
+  current_index: i64
+@end
+
 @fn dataset_new(file_path, block_size)
   return {
     file_path: file_path,

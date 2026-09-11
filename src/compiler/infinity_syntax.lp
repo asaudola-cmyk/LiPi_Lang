@@ -53,36 +53,19 @@ import "universe/core/string"
 @! ----------------------------------------------------------------------------
 
 @fn infinity_get_char(s, k)
+  // WHY: Direct character code access with bounds checking
   @if s == "" || k < 0
     return 0
   @end
-  ptr = maya_str_ptr(s)
-  @if ptr == 0
+  @if k >= str_len(s)
     return 0
   @end
-  return maya_mem_read_u8(ptr + k)
+  return str_char_at(s, k)
 @end
 
 @fn infinity_str_eq(s1, s2)
-  @if s1 == s2
-    return 1
-  @end
-  @if s1 == "" || s2 == ""
-    return 0
-  @end
-  i = 0
-  @while 1
-    c1 = infinity_get_char(s1, i)
-    c2 = infinity_get_char(s2, i)
-    @if c1 != c2
-      return 0
-    @end
-    @if c1 == 0
-      return 1
-    @end
-    i = i + 1
-  @end
-  return 1
+  // WHY: Native string equality check leveraging zero-overhead CPU string compare
+  return str_eq(s1, s2)
 @end
 
 @fn infinity_pat_matches(tname, pat)
@@ -471,6 +454,7 @@ import "universe/core/string"
 @! ----------------------------------------------------------------------------
 
 @fn infinity_extract_rules_and_ops(tokens)
+  println(str_concat("Inside extract, num tokens = ", int_to_str(tokens.len())))
   remaining_tokens = []
   rules_pat = []
   rules_rep_tokens = []
@@ -486,7 +470,6 @@ import "universe/core/string"
     
     @! Handle @infinity_rule directive
     @if (infinity_str_eq(tkind, "DIRECTIVE") == 1 && infinity_str_eq(tname, "@infinity_rule") == 1) || infinity_str_eq(tname, "@infinity_rule") == 1
-  println(str_concat("TOKEN AT 0: ", tok[0]))
       i = i + 1
       @while i < num_items && infinity_str_eq(tokens[i][0], "NEWLINE") == 1
         i = i + 1
@@ -766,10 +749,7 @@ import "universe/core/string"
 @end
 
 @fn infinity_transform_tokens(inf_eng, tokens)
-  println("Enter infinity_transform_tokens")
-  println("Calling extract")
   extracted = infinity_extract_rules_and_ops(tokens)
-  println("Extract done")
   
   depth_limit = 128
   @if inf_eng != 0
@@ -780,13 +760,10 @@ import "universe/core/string"
   @end
   
   @! Step 1: Fixed-point token replacement
-  println("Calling expand fixed point")
   expanded = infinity_expand_tokens_fixed_point(extracted.tokens, extracted.rules_pat, extracted.rules_rep_tokens, depth_limit)
-  println("Expand fixed point done")
   
   @! Step 2: Custom operator token combination
   result = infinity_merge_custom_ops(expanded, extracted.custom_ops)
-  println("Exit infinity_transform_tokens")
   return result
 @end
 

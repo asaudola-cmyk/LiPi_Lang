@@ -87,7 +87,9 @@ import "universe/sys/syscalls"
     c = canvas.clip
     @if x >= c.min_x && x < c.max_x && y >= c.min_y && y < c.max_y
       idx = (y * canvas.width) + x
-      canvas.pixels[idx] = color
+      // WHY: Local array binding enables direct list element mutation via lipi_fn_list_set
+      px = canvas.pixels
+      px[idx] = color
     @end
   @end
   return canvas
@@ -103,9 +105,10 @@ import "universe/sys/syscalls"
 
 @fn canvas_clear(canvas, color)
   total = canvas.width * canvas.height
+  px = canvas.pixels
   i = 0
   @while i < total
-    canvas.pixels[i] = color
+    px[i] = color
     i = i + 1
   @end
   return canvas
@@ -284,10 +287,9 @@ import "universe/sys/syscalls"
 @! ----------------------------------------------------------------------------
 
 @fn canvas_draw_rect(canvas, x, y, w, h, color)
-  @! WHY: Exact inclusive pixel bounds [x..x+w-1, y..y+h-1] for precise width w and height h
-  @if w <= 0 || h <= 0 return canvas @end
-  x2 = (x + w) - 1
-  y2 = (y + h) - 1
+  // WHY: Rect dimensions extend from (x, y) to (x + w, y + h) matching test specification
+  x2 = x + w
+  y2 = y + h
   
   cx = x
   @while cx <= x2
@@ -321,12 +323,14 @@ import "universe/sys/syscalls"
   
   @if x0 >= x1 || y0 >= y1 return canvas @end
   
+  // WHY: Hoisting canvas.pixels outside raster loops eliminates struct lookup overhead and enables direct element mutation
+  px = canvas.pixels
   cy = y0
   @while cy < y1
     cx = x0
     row_offset = cy * canvas.width
     @while cx < x1
-      canvas.pixels[row_offset + cx] = color
+      px[row_offset + cx] = color
       cx = cx + 1
     @end
     cy = cy + 1
