@@ -368,6 +368,50 @@ fn dbg_stack_inspect
         say "  [%rsp +" + off + "] @ 0x" + qword_to_hex(rsp + off) + " = 0x" + qword_to_hex(val) + " (" + val + ")"
         i = i + 1
 
+// ─── Linux sys_ptrace (Syscall 101) Diagnostics Engine ────────────────────────
+// WHY: Enables process attachment, register extraction, and software breakpoint insertion
+// on Linux without GDB or C runtime dependencies.
+PTRACE_PEEKDATA = 2
+PTRACE_POKEDATA = 5
+PTRACE_CONT     = 7
+PTRACE_GETREGS  = 12
+PTRACE_ATTACH   = 16
+PTRACE_DETACH   = 17
+
+fn dbg_ptrace req pid addr data
+    return syscall(101, req, pid, addr, data, 0, 0)
+
+fn dbg_attach pid
+    say "⚡ অ্যাটাচ করা হচ্ছে পিআইডি (PID): " + pid
+    res = dbg_ptrace(PTRACE_ATTACH, pid, 0, 0)
+    if res < 0
+        say "❌ পিআইডিতে অ্যাটাচ ব্যর্থ (পারমিশন এরর বা অবৈধ পিআইডি)"
+        return 0 - 1
+    status_buf = malloc(8)
+    w_res = syscall(61, pid, status_buf, 0, 0, 0, 0)
+    free(status_buf, 8)
+    say "  ✔ সফলভাবে সংযুক্ত! প্রসেস ইন্টারাপ্ট প্রাপ্ত।"
+    return 0
+
+fn dbg_detach pid
+    say "⚡ প্রসেস ডিটাচ করা হচ্ছে (PID: " + pid + ")"
+    res = dbg_ptrace(PTRACE_DETACH, pid, 0, 0)
+    if res == 0
+        say "  ✔ সফলভাবে ডিটাচ সম্পন্ন।"
+    return res
+
+fn dbg_set_breakpoint pid addr
+    orig_word = dbg_ptrace(PTRACE_PEEKDATA, pid, addr, 0)
+    new_word = (floor(orig_word / 256) * 256) + 204
+    dbg_ptrace(PTRACE_POKEDATA, pid, addr, new_word)
+    say "  ✔ ব্রেকপয়েন্ট (INT3) স্থাপিত @ 0x" + qword_to_hex(addr)
+    return orig_word
+
+fn dbg_restore_breakpoint pid addr orig_word
+    dbg_ptrace(PTRACE_POKEDATA, pid, addr, orig_word)
+    say "  ✔ মূল অপকোড পুনরুদ্ধার সম্পন্ন @ 0x" + qword_to_hex(addr)
+    return 0
+
 fn main
     args = argv()
     argc = len(args)
@@ -378,8 +422,23 @@ fn main
             say "লক্ষ্য: Linux x86_64 ELF64 (0% Libc, 0% GDB)"
             return 0
         if cmd == "help" or cmd == "-h"
-            say "ব্যবহার: lipidbg <binary_path> | disasm | inspect <addr> | stack | version"
+            say "ব্যবহার: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | version"
             return 0
+        if cmd == "attach"
+            if argc >= 3
+                target_pid = parse_hex_or_dec(get(args, 2))
+                dbg_attach(target_pid)
+                return 0
+            say "ব্যবহার: lipidbg attach <pid>"
+            return 1
+        if cmd == "break"
+            if argc >= 4
+                target_pid = parse_hex_or_dec(get(args, 2))
+                b_addr = parse_hex_or_dec(get(args, 3))
+                dbg_set_breakpoint(target_pid, b_addr)
+                return 0
+            say "ব্যবহার: lipidbg break <pid> <addr>"
+            return 1
         if cmd == "stack"
             dbg_stack_inspect()
             return 0

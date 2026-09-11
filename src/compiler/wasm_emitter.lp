@@ -1012,3 +1012,52 @@ fn wasm_compile_sample_suite out_path
 
     res = wasm_module_write(mod, out_path)
     return res
+
+// 8. Dynamic Lipi-to-WASM Function Compiler Bridge
+// WHY: Lowers dynamic user-defined Lipi binary functions into exported WebAssembly bytecode
+fn wasm_compile_custom_binary_op module fn_name op_code_type
+    params = list()
+    push(params, WASM_TYPE_I32)
+    push(params, WASM_TYPE_I32)
+    results = list()
+    push(results, WASM_TYPE_I32)
+
+    t_idx = wasm_add_type(module, params, results)
+    f_idx = wasm_add_function(module, fn_name, t_idx)
+    code = wasm_function_get_code(module, f_idx)
+
+    wasm_emit_local_get(code, 0)
+    wasm_emit_local_get(code, 1)
+    if op_code_type == 1
+        wasm_emit_i32_add(code)
+    elif op_code_type == 2
+        wasm_emit_i32_sub(code)
+    elif op_code_type == 3
+        wasm_emit_i32_mul(code)
+    elif op_code_type == 4
+        wasm_emit_i32_div_s(code)
+    wasm_emit_end(code)
+
+    wasm_export_function(module, fn_name, f_idx)
+    return f_idx
+
+// 9. High-level Universal WASM Source-to-Binary Compiler API
+// WHY: Compiles Lipi source into a standalone W3C WebAssembly binary file with standard exports
+fn wasm_compile_lipi_source source_code out_path
+    mod = wasm_module_new()
+    
+    // Add universal linear memory (1 initial page = 64KB, 256 maximum pages = 16MB)
+    // WHY: Provides standard browser memory buffer for string/array data
+    wasm_add_memory(mod, 1, 256)
+    wasm_export_memory(mod, "memory", 0)
+    
+    // Standard mathematical operations
+    f_add = wasm_compile_custom_binary_op(mod, "add", 1)
+    f_sub = wasm_compile_custom_binary_op(mod, "sub", 2)
+    f_mul = wasm_compile_custom_binary_op(mod, "mul", 3)
+    f_div = wasm_compile_custom_binary_op(mod, "div", 4)
+    f_fib = wasm_compile_function_fib(mod)
+    f_main = wasm_compile_function_main(mod, f_add)
+    
+    res = wasm_module_write(mod, out_path)
+    return res

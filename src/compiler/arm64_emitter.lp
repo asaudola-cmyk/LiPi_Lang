@@ -127,7 +127,50 @@ fn arm64_ctx_new
     push(c, list())     // 14: loop_end_stack
     push(c, list())     // 15: glob_names
     push(c, list())     // 16: glob_vals
+    push(c, list())     // 17: struct_names
+    push(c, list())     // 18: struct_fields
+    push(c, list(""))   // 19: current_impl
     return c
+
+// ── Struct Definition & Field Offset Registry ─────────────────────────────────
+// WHY: Enables native ARM64 object orientation and field access with zero libc dependencies
+fn arm64_struct_add ctx name fields
+    push(get(ctx, 17), name)
+    push(get(ctx, 18), fields)
+    return 0
+
+fn arm64_struct_find ctx name
+    snames = get(ctx, 17)
+    i = 0
+    while i < len(snames)
+        if get(snames, i) == name
+            return i
+        i = i + 1
+    return 0 - 1
+
+fn arm64_struct_get_field_offset ctx sname fname
+    snames = get(ctx, 17)
+    sfields = get(ctx, 18)
+    if sname != ""
+        sidx = arm64_struct_find(ctx, sname)
+        if sidx >= 0
+            fnames = get(sfields, sidx)
+            f = 0
+            while f < len(fnames)
+                if get(fnames, f) == fname
+                    return f * 8
+                f = f + 1
+    // Fallback: search across all defined structs for matching field name
+    s = 0
+    while s < len(snames)
+        fnames = get(sfields, s)
+        f = 0
+        while f < len(fnames)
+            if get(fnames, f) == fname
+                return f * 8
+            f = f + 1
+        s = s + 1
+    return 0
 
 fn arm64_ctx_bb ctx
     return get(ctx, 0)
@@ -2094,6 +2137,12 @@ fn arm64_compile_primary ctx ps
         off = arm64_scope_get(ctx, name)
         if off > 0
             arm64_emit_ldr_imm(ctx, ARM64_REG_X0, ARM64_REG_SP, floor(off / 8))
+            while arm64_ps_cur_type(ps) == ARM64_TOK_OP and arm64_ps_cur_text(ps) == "."
+                arm64_ps_adv(ps)
+                fname = arm64_ps_cur_text(ps)
+                arm64_ps_adv(ps)
+                foff = arm64_struct_get_field_offset(ctx, "", fname)
+                arm64_emit_ldr_imm(ctx, ARM64_REG_X0, ARM64_REG_X0, floor(foff / 8))
             return 0
 
         // Global constant lookup
@@ -2257,6 +2306,54 @@ fn arm64_compile_stmt ctx ps
     if tt == ARM64_TOK_IDENT and (txt == "include" or txt == "অন্তর্ভুক্ত")
         while arm64_ps_cur_type(ps) != ARM64_TOK_NL and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
             arm64_ps_adv(ps)
+        return 0
+
+    // struct / গঠন / @struct
+    // WHY: Support defining structured data types with 8-byte field offsets on ARM64
+    if tt == ARM64_TOK_IDENT and (txt == "struct" or txt == "গঠন" or txt == "@struct")
+        is_meta_struct = (txt == "@struct")
+        arm64_ps_adv(ps)
+        sname = arm64_ps_cur_text(ps)
+        arm64_ps_adv(ps)
+        fields = list()
+        arm64_ps_skip_nl(ps)
+        if is_meta_struct == 1
+            while arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                arm64_ps_skip_nl(ps)
+                if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and arm64_ps_cur_text(ps) == "@end"
+                    arm64_ps_adv(ps)
+                    break
+                if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT
+                    push(fields, arm64_ps_cur_text(ps))
+                    arm64_ps_adv(ps)
+                    while arm64_ps_cur_type(ps) != ARM64_TOK_NL and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                        arm64_ps_adv(ps)
+                else
+                    arm64_ps_adv(ps)
+                arm64_ps_skip_nl(ps)
+        elif arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
+            arm64_ps_adv(ps)
+            while arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT
+                    push(fields, arm64_ps_cur_text(ps))
+                    arm64_ps_adv(ps)
+                    while arm64_ps_cur_type(ps) != ARM64_TOK_NL and arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                        arm64_ps_adv(ps)
+                else
+                    arm64_ps_adv(ps)
+                arm64_ps_skip_nl(ps)
+            if arm64_ps_cur_type(ps) == ARM64_TOK_DEDENT
+                arm64_ps_adv(ps)
+        arm64_struct_add(ctx, sname, fields)
+        return 0
+
+    // impl / @impl
+    // WHY: Support struct method blocks and contextual method namespacing
+    if tt == ARM64_TOK_IDENT and (txt == "impl" or txt == "@impl")
+        arm64_ps_adv(ps)
+        sname = arm64_ps_cur_text(ps)
+        arm64_ps_adv(ps)
+        list_set(get(ctx, 19), 0, sname)
         return 0
 
     // let / চলক / ধরি -- variable declaration binding

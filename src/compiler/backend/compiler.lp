@@ -1,6 +1,7 @@
 
 import "compiler/infinity_syntax"
 import "compiler/backend/lipi_ir"
+import "compiler/middleend/ir_peephole"
 import "compiler/backend/x86_64/codegen"
 import "compiler/backend/elf_writer"
 import "compiler/backend/omni_binary"
@@ -1570,6 +1571,10 @@ import "compiler/backend/omni_binary"
   @end
 
   ir_mod = ir_res.module
+
+  @! WHY: Run 3-Address Code IR-level peephole optimizer before code generation
+  @! Simplifies algebraic identities (e.g. + 0, * 1) and collapses redundant MOV chains
+  ir_peephole_optimize_module(ir_mod)
 
   @! Lower IR Module to x86-64 Machine Code
   x86_res = x86_codegen_module(ir_mod)

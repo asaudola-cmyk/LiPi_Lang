@@ -240,10 +240,81 @@ fn repl_dispatch_command cmd
     if repl_str_starts(":eval", cmd) == 1
         // Parse a op b e.g. :eval 42 * 10
         say "  [ইভ্যালুয়েশন] " + cmd
+        if len(cmd) > 6
+            return repl_eval_expr_string(str_sub(cmd, 6, len(cmd)))
         রেপল_ইভ্যাল(42, 10, 2)
         return 1
+
+    // Direct live expression evaluation (e.g. '10 + 20' or '42 * 2')
+    if repl_str_starts(":", cmd) == 0
+        if len(cmd) > 0
+            return repl_eval_expr_string(cmd)
+        return 1
+
     if len(cmd) > 0
         say "অজানা কমান্ড: " + cmd + " (টাইপ করুন :help সহায়তার জন্য)"
+    return 1
+
+// ─── Direct Interactive Expression Evaluator ──────────────────────────────────
+// WHY: Evaluates numeric and arithmetic expressions instantly in-memory without compiling to disk
+fn repl_eval_expr_string s
+    slen = len(s)
+    p = 0
+    while p < slen and (char_at(s, p) == " " or char_at(s, p) == "\t")
+        p = p + 1
+    if p >= slen
+        return 1
+
+    num_str1 = ""
+    while p < slen and ((ord(char_at(s, p)) >= 48 and ord(char_at(s, p)) <= 57) or char_at(s, p) == "x" or char_at(s, p) == "X")
+        num_str1 = num_str1 + char_at(s, p)
+        p = p + 1
+
+    if len(num_str1) == 0
+        say "অজানা ইনপুট: " + s + " (টাইপ করুন :help সহায়তার জন্য)"
+        return 1
+
+    v1 = parse_hex_or_dec(num_str1)
+
+    while p < slen and (char_at(s, p) == " " or char_at(s, p) == "\t")
+        p = p + 1
+
+    if p >= slen
+        say "  => ফলাফল: " + str(v1)
+        return 1
+
+    op_char = char_at(s, p)
+    op_id = 0
+    if op_char == "+"
+        op_id = 1
+    if op_char == "*"
+        op_id = 2
+    if op_char == "-"
+        op_id = 3
+    if op_char == "/"
+        op_id = 4
+    if op_char == "%"
+        op_id = 5
+
+    if op_id == 0
+        say "  => ফলাফল: " + str(v1)
+        return 1
+
+    p = p + 1
+    while p < slen and (char_at(s, p) == " " or char_at(s, p) == "\t")
+        p = p + 1
+
+    num_str2 = ""
+    while p < slen and ((ord(char_at(s, p)) >= 48 and ord(char_at(s, p)) <= 57) or char_at(s, p) == "x" or char_at(s, p) == "X")
+        num_str2 = num_str2 + char_at(s, p)
+        p = p + 1
+
+    if len(num_str2) == 0
+        say "  => ফলাফল: " + str(v1)
+        return 1
+
+    v2 = parse_hex_or_dec(num_str2)
+    রেপল_ইভ্যাল(v1, v2, op_id)
     return 1
 
 fn main

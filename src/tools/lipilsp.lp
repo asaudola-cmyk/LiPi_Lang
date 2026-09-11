@@ -359,6 +359,74 @@ fn get_word_at_pos text target_line target_char
     if w_start >= w_end { return "" }
     return str_sub(text, w_start, w_end)
 
+// ─── Symbol Definition Locator ────────────────────────────────────────────────
+// WHY: Enables textDocument/definition (Go-to-Definition) for LSP clients (e.g. VS Code).
+// Scans lines in document for function, struct, or variable bindings matching the queried identifier.
+fn find_symbol_definition_in_text text symbol
+    if len(symbol) == 0 { return -1 }
+    tlen = len(text)
+    cur_line = 0
+    line_start = 0
+    i = 0
+    while i <= tlen
+        is_eol = 0
+        if i == tlen
+            is_eol = 1
+        elif char_at(text, i) == "\n"
+            is_eol = 1
+            
+        if is_eol == 1
+            line = str_sub(text, line_start, i)
+            trimmed = str_trim(line)
+            t_len = len(trimmed)
+            s_len = len(symbol)
+            matched = 0
+            
+            // 1. Function declarations: fn, @fn, কাজ
+            if starts_with_keyword(trimmed, "fn") == 1
+                rem = str_trim(str_sub(trimmed, 2, t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            elif starts_with_keyword(trimmed, "@fn") == 1
+                rem = str_trim(str_sub(trimmed, 3, t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            elif starts_with_keyword(trimmed, "কাজ") == 1
+                rem = str_trim(str_sub(trimmed, len("কাজ"), t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            // 2. Struct declarations: struct, @struct, কাঠামো, দল
+            elif starts_with_keyword(trimmed, "struct") == 1
+                rem = str_trim(str_sub(trimmed, 6, t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            elif starts_with_keyword(trimmed, "@struct") == 1
+                rem = str_trim(str_sub(trimmed, 7, t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            elif starts_with_keyword(trimmed, "কাঠামো") == 1
+                rem = str_trim(str_sub(trimmed, len("কাঠামো"), t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            // 3. Variable declarations: let, @let, চলক, ধরি
+            elif starts_with_keyword(trimmed, "let") == 1
+                rem = str_trim(str_sub(trimmed, 3, t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            elif starts_with_keyword(trimmed, "@let") == 1
+                rem = str_trim(str_sub(trimmed, 4, t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            elif starts_with_keyword(trimmed, "চলক") == 1
+                rem = str_trim(str_sub(trimmed, len("চলক"), t_len))
+                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+            // 4. Assignment bindings: symbol = ...
+            elif starts_with_keyword(trimmed, symbol) == 1
+                rem = str_trim(str_sub(trimmed, s_len, t_len))
+                if len(rem) > 0 and char_at(rem, 0) == "="
+                    matched = 1
+
+            if matched == 1
+                return cur_line
+                
+            cur_line = cur_line + 1
+            line_start = i + 1
+        i = i + 1
+        
+    return -1
+
 // ─── Completion Provider ──────────────────────────────────────────────────────
 // WHY: Supplies full autocompletion items for English keywords, Bengali keywords,
 // and Standard Library modules.
@@ -501,12 +569,14 @@ fn str_trim_start s
     i = 0
     while i < slen and (char_at(s, i) == " " or char_at(s, i) == "\t" or char_at(s, i) == "\r")
         i = i + 1
-    if i == 0 { return s }
+    if i == 0
+        return s
     return str_sub(s, i, slen)
 
 fn str_trim_end s
     slen = len(s)
-    if slen == 0 { return "" }
+    if slen == 0
+        return ""
     i = slen
     while i > 0 and (char_at(s, i - 1) == " " or char_at(s, i - 1) == "\t" or char_at(s, i - 1) == "\r")
         i = i - 1
@@ -518,14 +588,18 @@ fn str_trim s
 fn starts_with_keyword s word
     wlen = len(word)
     slen = len(s)
-    if slen < wlen { return 0 }
+    if slen < wlen
+        return 0
     i = 0
     while i < wlen
-        if char_at(s, i) != char_at(word, i) { return 0 }
+        if char_at(s, i) != char_at(word, i)
+            return 0
         i = i + 1
-    if slen == wlen { return 1 }
+    if slen == wlen
+        return 1
     c = char_at(s, wlen)
-    if c == " " or c == "(" or c == "{" or c == ":" or c == "\n" { return 1 }
+    if c == " " or c == "(" or c == "{" or c == ":" or c == "\n" or c == "\t" or c == "="
+        return 1
     return 0
 
 fn count_newlines text
@@ -625,7 +699,7 @@ fn lsp_main_loop
             // ── 1. initialize ──
             if method == "initialize"
                 lsp_log("Received initialize request (id: " + req_id + ")")
-                resp = "{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\",\"/\",\"\\\"\",\":\",\" \"]},\"hoverProvider\":true,\"documentFormattingProvider\":true},\"serverInfo\":{\"name\":\"" + sname + "\",\"version\":\"" + sver + "\"}}"
+                resp = "{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\",\"/\",\"\\\"\",\":\",\" \"]},\"hoverProvider\":true,\"documentFormattingProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true},\"serverInfo\":{\"name\":\"" + sname + "\",\"version\":\"" + sver + "\"}}"
                 lsp_send_response(req_id, resp)
 
             // ── 2. initialized ──
@@ -679,7 +753,40 @@ fn lsp_main_loop
                 resp = "{\"contents\":{\"kind\":\"markdown\",\"value\":\"" + json_escape(docstring) + "\"}}"
                 lsp_send_response(req_id, resp)
 
-            // ── 8. textDocument/formatting ──
+            // ── 8. textDocument/definition (Go-to-Definition) ──
+            elif method == "textDocument/definition"
+                uri = json_extract_str_value(raw_msg, "uri")
+                line = json_extract_int_value(raw_msg, "line")
+                char_pos = json_extract_int_value(raw_msg, "character")
+                
+                doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)
+                word = get_word_at_pos(doc_text, line, char_pos)
+                lsp_log("Definition lookup for: [" + word + "] in " + uri)
+                
+                found_line = find_symbol_definition_in_text(doc_text, word)
+                found_uri = uri
+                
+                if found_line < 0
+                    // Search in other tracked workspace files
+                    t_idx = 0
+                    num_tracked = len(tracked_uris)
+                    while t_idx < num_tracked and found_line < 0
+                        other_u = get(tracked_uris, t_idx)
+                        if other_u != uri
+                            other_t = get(tracked_texts, t_idx)
+                            other_l = find_symbol_definition_in_text(other_t, word)
+                            if other_l >= 0
+                                found_line = other_l
+                                found_uri = other_u
+                        t_idx = t_idx + 1
+                        
+                if found_line >= 0
+                    resp = "{\"uri\":\"" + found_uri + "\",\"range\":{\"start\":{\"line\":" + str(found_line) + ",\"character\":0},\"end\":{\"line\":" + str(found_line) + ",\"character\":0}}}"
+                    lsp_send_response(req_id, resp)
+                else
+                    lsp_send_response(req_id, "null")
+
+            // ── 9. textDocument/formatting ──
             elif method == "textDocument/formatting"
                 uri = json_extract_str_value(raw_msg, "uri")
                 doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)

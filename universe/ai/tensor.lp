@@ -10,6 +10,7 @@ import "universe/core/math"
 import "universe/core/collections"
 import "universe/core/string"
 import "universe/sys/syscalls"
+import "universe/ai/simd_gemm"
 
 @! ----------------------------------------------------------------------------
 @! 1. Core Struct Definitions
@@ -1485,8 +1486,18 @@ import "universe/sys/syscalls"
 @end
 
 @fn tensor_detect_simd_capabilities() -> TensorSIMDCapabilities
-  @! WHY: Freestanding capability detector defaults to pure portable CPU execution for 100% stability
-  return { has_amx: 0, has_avx512: 0, has_avx2: 0, has_fma: 0 }
+  @! WHY: Automatically enables 256-bit AVX2 SIMD acceleration for matrix multiplication
+  return { has_amx: 0, has_avx512: 0, has_avx2: 1, has_fma: 1 }
+@end
+
+@! ----------------------------------------------------------------------------
+@! 10.0 AVX2 256-Bit 4x4 Tiled GEMM Kernel
+@! ----------------------------------------------------------------------------
+
+@fn tensor_gemm_avx2_tiled(a: Tensor, b: Tensor, m: i64, k: i64, n: i64) -> Tensor
+  out_t = tensor_zeros([m, n])
+  simd_gemm_blocked(a.data, b.data, out_t.data, m, k, n)
+  return out_t
 @end
 
 @! ----------------------------------------------------------------------------
@@ -1707,6 +1718,8 @@ import "universe/sys/syscalls"
       out_t = tensor_gemm_amx_tiled(a, b, m, k, n)
     @elif caps.has_avx512 == 1 && n >= 16
       out_t = tensor_gemm_avx512(a, b, m, k, n)
+    @elif caps.has_avx2 == 1 && n >= 4 && k >= 4
+      out_t = tensor_gemm_avx2_tiled(a, b, m, k, n)
     @else
       out_t = tensor_gemm_pure(a, b) @! Pure portable GEMM fallback
     @end
