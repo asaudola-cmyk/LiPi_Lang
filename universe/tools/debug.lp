@@ -41,3 +41,52 @@ fn mem_পরিদর্শন base len
 
 fn mem_dump base len
     mem_পরিদর্শন(base, len)
+
+// ── ৪. রাস্ট-স্টাইল ভিজুয়াল ডায়াগনস্টিকস (Rust-Style Diagnostic Engine) ───────────
+// WHY: আধুনিক ডেভেলপার অভিজ্ঞতার (DX) জন্য রঙিন, ভিজুয়াল ও সুনির্দিষ্ট সমাধানমূলক এরর বক্স রেন্ডার করা।
+// সোর্স কোডের লাইন, কলাম ও লাল ক্যারোট (^) দিয়ে এরর লোকেশন চিহ্নিত করে এবং সাহায্যকারী টিপস প্রদর্শন করে।
+fn format_diagnostic err_code title file_path line_no col_no line_content hint
+    esc = chr(27)
+    c_red = esc + "[1;31m"
+    c_cyan = esc + "[1;36m"
+    c_yellow = esc + "[1;33m"
+    c_bold = esc + "[1m"
+    c_reset = esc + "[0m"
+
+    actual_col = col_no
+    if actual_col <= 0
+        actual_col = 1
+
+    actual_line = line_no
+    if actual_line <= 0
+        actual_line = 1
+
+    out = ""
+    out = out + c_red + "Error[" + err_code + "]" + c_reset + ": " + c_bold + title + c_reset + "\n"
+    out = out + "  " + c_cyan + "-->" + c_reset + " " + file_path + ":" + str(actual_line) + ":" + str(actual_col) + "\n"
+    out = out + "   " + c_cyan + "|" + c_reset + "\n"
+
+    line_str = str(actual_line)
+    pad = ""
+    if len(line_str) == 1
+        pad = " "
+
+    out = out + pad + line_str + " " + c_cyan + "|" + c_reset + " " + line_content + "\n"
+
+    // Construct pointing caret line
+    caret_pad = ""
+    ci = 1
+    while ci < actual_col
+        caret_pad = caret_pad + " "
+        ci = ci + 1
+
+    out = out + "   " + c_cyan + "|" + c_reset + " " + caret_pad + c_red + "^ " + title + c_reset + "\n"
+    out = out + "   " + c_cyan + "|" + c_reset + "\n"
+
+    if len(hint) > 0
+        out = out + "   " + c_yellow + "= help" + c_reset + ": " + hint + "\n"
+
+    return out
+
+fn ডায়াগনস্টিক_ফরম্যাট err_code title file_path line_no col_no line_content hint
+    return format_diagnostic(err_code, title, file_path, line_no, col_no, line_content, hint)

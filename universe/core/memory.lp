@@ -113,3 +113,121 @@ fn mem_read_u32 addr index
 
 fn mem_write_u32 addr index value
     return mem_write_idx(addr, index, value)
+
+// ── ৮. সভেরিন সেগ্রিগেটেড স্ল্যাব অ্যালোকেটর (Segregated Slab Allocator) ────────
+// WHY: ছোট ছোট মেমরি বরাদ্দ (16B থেকে 2048B) সরাসরি কার্নেল সিসকল ছাড়া O(1) LIFO
+// ফ্রি-লিস্টে তাৎক্ষণিক রিসাইক্লিং করে মেমরি ফ্র্যাগমেন্টেশন ও কার্নেল ট্রানজিশন দূর করা।
+// এটি ভারী Tracing GC ছাড়াই সিস্টেমকে ১০০% জিরো-পজ (Zero-Pause) ও আল্ট্রা-ফাস্ট রাখে।
+
+fn get_slab_buckets
+    return slab_buckets_ptr()
+
+fn slab_get_class_index size
+    if size <= 16
+        return 0
+    if size <= 32
+        return 1
+    if size <= 64
+        return 2
+    if size <= 128
+        return 3
+    if size <= 256
+        return 4
+    if size <= 512
+        return 5
+    if size <= 1024
+        return 6
+    if size <= 2048
+        return 7
+    return -1
+
+fn slab_get_slot_size class_idx
+    if class_idx == 0
+        return 16
+    if class_idx == 1
+        return 32
+    if class_idx == 2
+        return 64
+    if class_idx == 3
+        return 128
+    if class_idx == 4
+        return 256
+    if class_idx == 5
+        return 512
+    if class_idx == 6
+        return 1024
+    if class_idx == 7
+        return 2048
+    return 0
+
+fn slab_alloc req_size
+    if req_size <= 0
+        return 0
+    if req_size > 2048
+        return malloc(req_size)
+
+    b_addr = get_slab_buckets()
+    c_idx = slab_get_class_index(req_size)
+    slot_size = slab_get_slot_size(c_idx)
+
+    head = mem_read_idx(b_addr, c_idx)
+    if head > 0
+        // O(1) Pop from freelist
+        next_free = mem_read(head, 0)
+        mem_write_idx(b_addr, c_idx, next_free)
+        // Zero slot payload for memory safety
+        mem_zero(head, slot_size)
+        return head
+
+    // Freelist empty: Allocate a fresh 64KB slab
+    slab_capacity = 65536
+    slab_page = malloc(slab_capacity)
+    if slab_page <= 0
+        return 0
+
+    // Carve slab into slots and build LIFO freelist
+    total_slots = slab_capacity / slot_size
+    // First slot is allocated to caller
+    ret_ptr = slab_page
+
+    // Link remaining slots into freelist
+    if total_slots > 1
+        first_free = slab_page + slot_size
+        mem_write_idx(b_addr, c_idx, first_free)
+
+        curr_slot = first_free
+        si = 2
+        while si < total_slots
+            next_slot = slab_page + (si * slot_size)
+            mem_write(curr_slot, 0, next_slot)
+            curr_slot = next_slot
+            si = si + 1
+        // Last slot points to 0 (end of freelist)
+        mem_write(curr_slot, 0, 0)
+
+    mem_zero(ret_ptr, slot_size)
+    return ret_ptr
+
+fn স্ল্যাব_বরাদ্দ req_size
+    return slab_alloc(req_size)
+
+fn slab_free addr req_size
+    if addr <= 0
+        return 0
+    if req_size > 2048
+        return free(addr, req_size)
+
+    b_addr = get_slab_buckets()
+    c_idx = slab_get_class_index(req_size)
+    if c_idx < 0
+        return 0
+
+    // O(1) Push to freelist
+    curr_head = mem_read_idx(b_addr, c_idx)
+    mem_write(addr, 0, curr_head)
+    mem_write_idx(b_addr, c_idx, addr)
+    return 0
+
+fn স্ল্যাব_মুক্তি addr req_size
+    return slab_free(addr, req_size)
+

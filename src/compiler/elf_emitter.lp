@@ -2907,6 +2907,13 @@ fn emit_runtime_stubs ctx
     x86_mov_reg_imm64(ctx, 0, 64)
     x86_ret(ctx)
 
+    // ── Slab Allocator Buckets RIP Pointer Intrinsic ───────────────────────────
+    // WHY: Returns the static 64-byte QWORD table address for segregated slab freelists in 1 CPU cycle.
+    label_define(ctx, "lipi_fn_slab_buckets_ptr")
+    label_define(ctx, "lipi_fn_স্ল্যাব_বাকেট_পয়েন্টার")
+    x86_lea_reg_rip(ctx, 0, "_lipi_slab_buckets")
+    x86_ret(ctx)
+
     // ── Physical Stack Pointer Introspection ───────────────────────────────────
     // WHY: Diagnostic inspection of the hardware %rsp register.
     label_define(ctx, "lipi_fn_stack_pointer")
@@ -4340,7 +4347,7 @@ fn tokenize_pure src
                 continue
 
         // 1-char operators
-        if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!" or c == "." or c == "&" or c == "|" or c == "^" or c == "~"
+        if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!" or c == "." or c == "&" or c == "|" or c == "^" or c == "~" or c == "?"
             push(tokens, tok_new(TOK_OP, c, 0))
             p = p + 1
             continue
@@ -4725,9 +4732,24 @@ fn compile_pure_primary ctx ps
         inner_ty = compile_pure_expr(ctx, ps)
         if ps_cur_type(ps) == TOK_RPAREN
             ps_adv(ps)
-        // Check for chained operations on parenthesized expression (e.g. (a + b).to_str())
-        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
-            if ps_cur_type(ps) == TOK_LBRACKET
+        // Check for chained operations on parenthesized expression (e.g. (a + b).to_str() or (res)?)
+        while (ps_cur_type(ps) == TOK_OP and (ps_cur_text(ps) == "." or ps_cur_text(ps) == "?")) or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "?"
+                // WHY: Postfix ? operator propagates error/zero by early returning from caller
+                ps_adv(ps)
+                lbl_qp_ok = make_anon_label(ctx, "qp_ok")
+                bb_put8(ctx, 72)
+                bb_put8(ctx, 133)
+                bb_put8(ctx, 192) // test rax, rax
+                pqp = ctx_len(ctx)
+                bb_put8(ctx, 15)
+                bb_put8(ctx, 133) // jnz lbl_qp_ok
+                bb_put32(ctx, 0)
+                reloc_add(ctx, pqp + 2, lbl_qp_ok, 6)
+                x86_leave(ctx)
+                x86_ret(ctx)
+                label_define(ctx, lbl_qp_ok)
+            elif ps_cur_type(ps) == TOK_LBRACKET
                 ps_adv(ps)
                 x86_push_reg(ctx, 0)
                 compile_pure_expr(ctx, ps)
@@ -5028,9 +5050,24 @@ fn compile_pure_primary ctx ps
                     else
                         x86_mov_reg_imm64(ctx, 0, 0)
 
-        // Postfix chained operations on rax: .field, .method(), [index]
-        while (ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".") or ps_cur_type(ps) == TOK_LBRACKET
-            if ps_cur_type(ps) == TOK_LBRACKET
+        // Postfix chained operations on rax: .field, .method(), [index], ? (error propagation)
+        while (ps_cur_type(ps) == TOK_OP and (ps_cur_text(ps) == "." or ps_cur_text(ps) == "?")) or ps_cur_type(ps) == TOK_LBRACKET
+            if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "?"
+                // WHY: Postfix ? operator propagates error/zero by early returning from caller
+                ps_adv(ps)
+                lbl_q_ok = make_anon_label(ctx, "q_ok")
+                bb_put8(ctx, 72)
+                bb_put8(ctx, 133)
+                bb_put8(ctx, 192) // test rax, rax
+                pq = ctx_len(ctx)
+                bb_put8(ctx, 15)
+                bb_put8(ctx, 133) // jnz lbl_q_ok
+                bb_put32(ctx, 0)
+                reloc_add(ctx, pq + 2, lbl_q_ok, 6)
+                x86_leave(ctx)
+                x86_ret(ctx)
+                label_define(ctx, lbl_q_ok)
+            elif ps_cur_type(ps) == TOK_LBRACKET
                 ps_adv(ps)
                 x86_push_reg(ctx, 0)
                 compile_pure_expr(ctx, ps)
@@ -6936,6 +6973,18 @@ fn compile_source_to_elf in_path out_path
     label_define(ctx, "_lipi_heap_ptr")
     bb_put64(ctx, 0)
     label_define(ctx, "_lipi_initial_rsp")
+    bb_put64(ctx, 0)
+
+    // Global Slab Allocator Bucket Table (8 size classes * 8 bytes = 64 bytes)
+    // WHY: Static zero-initialized QWORD slots holding freelist heads for 16B..2048B size classes
+    label_define(ctx, "_lipi_slab_buckets")
+    bb_put64(ctx, 0)
+    bb_put64(ctx, 0)
+    bb_put64(ctx, 0)
+    bb_put64(ctx, 0)
+    bb_put64(ctx, 0)
+    bb_put64(ctx, 0)
+    bb_put64(ctx, 0)
     bb_put64(ctx, 0)
 
     // Step 4: Backpatch all jumps, calls, and RIP relocations
