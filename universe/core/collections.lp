@@ -40,35 +40,9 @@
 @end
 
 @fn to_str(val)
-  @! Freestanding integer to string conversion
-  @! WHY: Formats 64-bit signed integer into ASCII bytes in an mmap buffer.
-  @! Avoids string concatenation operators that lower to raw pointer addition.
-  @if val == 0
-    return "0"
-  @end
-  buf = sys_mmap(0, 32, 3, 34, 0 - 1, 0)
-  @if buf <= 0
-    return "0"
-  @end
-  n = val
-  is_neg = 0
-  @if n < 0
-    is_neg = 1
-    n = 0 - n
-  @end
-  idx = 30
-  sys_poke8(buf + 31, 0)
-  @while n > 0
-    rem = n % 10
-    sys_poke8(buf + idx, 48 + rem)
-    idx = idx - 1
-    n = n / 10
-  @end
-  @if is_neg == 1
-    sys_poke8(buf + idx, 45)
-    idx = idx - 1
-  @end
-  return buf + idx + 1
+  @! First-class integer to Lipi string conversion
+  @! WHY: Uses native compiler built-in str(val) ensuring STR0 header tag and length prefix.
+  return str(val)
 @end
 
 @fn print_int(val)

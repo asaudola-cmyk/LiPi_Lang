@@ -263,43 +263,25 @@
 @! ─── Integer / String Conversion ────────────────────────────
 
 @fn to_str(n)
-  @! Canonical integer to string conversion in pure freestanding Maya
-  @! WHY: Formats 64-bit integer into ASCII bytes in an mmap buffer.
-  @! Avoids string pointer addition (d + digits) which produces corrupted memory offsets.
-  @if n == 0
-    return "0"
-  @end
-  buf = sys_mmap(0, 32, 3, 34, 0 - 1, 0)
-  @if buf <= 0
-    return "0"
-  @end
-  val = n
-  is_neg = 0
-  @if val < 0
-    is_neg = 1
-    val = 0 - val
-  @end
-  idx = 30
-  sys_poke8(buf + 31, 0)
-  @while val > 0
-    rem = val % 10
-    sys_poke8(buf + idx, 48 + rem)
-    idx = idx - 1
-    val = val / 10
-  @end
-  @if is_neg == 1
-    sys_poke8(buf + idx, 45)
-    idx = idx - 1
-  @end
-  return buf + idx + 1
+  @! Canonical integer to string conversion in pure sovereign Lipi
+  @! WHY: Directly leverages native str(n) builtin for correct STR0 tags and O(1) length.
+  return str(n)
 @end
 
 @fn maya_int_to_str(n)
-  return to_str(n)
+  return str(n)
 @end
 
 @fn int_to_str(n)
-  return to_str(n)
+  return str(n)
+@end
+
+@fn from_char(code)
+  return chr(code)
+@end
+
+@fn string_length(s)
+  return str_len(s)
 @end
 
 @fn maya_str_to_int(s)
@@ -357,6 +339,14 @@
   return string_to_lower(s)
 @end
 
+@fn string_lower(s)
+  return string_to_lower(s)
+@end
+
+@fn str_lower(s)
+  return string_to_lower(s)
+@end
+
 @fn string_to_upper(s)
   n = str_len(s)
   @if n == 0 return "" @end
@@ -375,6 +365,14 @@
 @end
 
 @fn str_to_upper(s)
+  return string_to_upper(s)
+@end
+
+@fn string_upper(s)
+  return string_to_upper(s)
+@end
+
+@fn str_upper(s)
   return string_to_upper(s)
 @end
 

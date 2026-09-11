@@ -51,11 +51,35 @@ for test_file in "${TESTS[@]}"; do
     out="dist/test_${name}"
     echo -n "  • Testing ${name}... "
     if ./bin/lipc ${EXTRA_FLAG} "${test_file}" -o "${out}" > /dev/null 2>&1; then
-        if ./"${out}" > /dev/null 2>&1; then
+        set +e
+        ./"${out}" > /dev/null 2>&1
+        rc=$?
+        set -e
+        # WHY: Specific Maya heritage arithmetic tests verify correctness via process exit codes:
+        # add_test returns 40 (15+25), mul_test returns 42 (7*6), branch_test returns 1,
+        # hello returns 30 (10+20), loop_test returns 55 (sum 1..10), test_direct_syscall returns 42.
+        is_pass=0
+        if [[ "${rc}" -eq 0 ]]; then
+            is_pass=1
+        elif [[ "${name}" == "add_test" && "${rc}" -eq 40 ]]; then
+            is_pass=1
+        elif [[ "${name}" == "mul_test" && "${rc}" -eq 42 ]]; then
+            is_pass=1
+        elif [[ "${name}" == "branch_test" && "${rc}" -eq 1 ]]; then
+            is_pass=1
+        elif [[ "${name}" == "hello" && "${rc}" -eq 30 ]]; then
+            is_pass=1
+        elif [[ "${name}" == "loop_test" && "${rc}" -eq 55 ]]; then
+            is_pass=1
+        elif [[ "${name}" == "test_direct_syscall" && "${rc}" -eq 42 ]]; then
+            is_pass=1
+        fi
+
+        if [[ "${is_pass}" -eq 1 ]]; then
             echo -e "${GREEN}PASS ✔${NC}"
             PASSED=$((PASSED + 1))
         else
-            echo -e "${RED}RUNTIME FAIL ✖${NC}"
+            echo -e "${RED}RUNTIME FAIL ✖ (exit ${rc})${NC}"
             FAILED=$((FAILED + 1))
         fi
     else

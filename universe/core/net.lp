@@ -56,45 +56,59 @@
   return (b2 * 256) + b1
 @end
 
-@fn net_tcp_listen(port)
-  sockfd = net_socket(2, 1, 0)
-  @if sockfd < 0 return sockfd @end
-  
-  @! Use our native struct for sockaddr_in!
-  @! Note: fields are 64-bit aligned (8 bytes) so the struct is 40 bytes!
-  @! Wait... Linux expects exactly 16 bytes for sockaddr_in!
-  @! We cannot use native Maya struct for syscall arguments yet because
-  @! Maya structs are currently arrays of 64-bit pointers/ints (8 bytes each)!
-  
+@fn net_tcp_socket()
+  // WHY: Allocates IPv4 (AF_INET=2) streaming (SOCK_STREAM=1) socket directly via Linux syscall 41.
+  return net_socket(2, 1, 0)
+@end
+
+@fn net_tcp_bind(sockfd, port)
+  // WHY: Binds socket to sockaddr_in using raw Linux syscall 49.
   addr = sys_mmap(0, 16, 3, 34, -1, 0)
   sys_poke8(addr + 0, 2)
   sys_poke8(addr + 1, 0)
-  
   h_port = htons(port)
   p1 = h_port / 256
   p2 = h_port - (p1 * 256)
   sys_poke8(addr + 2, p2)
   sys_poke8(addr + 3, p1)
-  
-  sys_poke8(addr + 4, 0)
-  sys_poke8(addr + 5, 0)
-  sys_poke8(addr + 6, 0)
-  sys_poke8(addr + 7, 0)
-  
-  optval = sys_mmap(0, 4, 3, 34, -1, 0)
-  sys_poke8(optval + 0, 1)
-  sys_poke8(optval + 1, 0)
-  sys_poke8(optval + 2, 0)
-  sys_poke8(optval + 3, 0)
-  println("Optval pointer:")
-  print_int(optval)
-  sys_syscall(54, sockfd, 1, 2, optval, 4)
-  
+  k = 4
+  @while k < 16
+    sys_poke8(addr + k, 0)
+    k = k + 1
+  @end
   res = net_bind(sockfd, addr, 16)
-  @if res < 0 return res @end
-  
-  res = net_listen(sockfd, 10)
-  @if res < 0 return res @end
-  
-  return sockfd
+  sys_munmap(addr, 16)
+  return res
+@end
+
+@fn net_tcp_listen(sockfd, backlog)
+  // WHY: Places socket in passive listening state with specified queue backlog.
+  return net_listen(sockfd, backlog)
+@end
+
+@fn net_tcp_close(sockfd)
+  // WHY: Frees kernel socket descriptor via sys_close.
+  return net_close(sockfd)
+@end
+
+@fn net_tcp_accept(sockfd)
+  // WHY: Accepts inbound client connection via sys_accept.
+  return net_accept(sockfd, 0, 0)
+@end
+
+@fn net_tcp_send(sockfd, data)
+  // WHY: Sends data payload over socket connection.
+  return net_write(sockfd, data, str_len(data))
+@end
+
+@fn net_tcp_recv(sockfd, max_len)
+  // WHY: Reads raw incoming bytes into buffer via sys_read.
+  buf = sys_mmap(0, max_len + 1, 3, 34, -1, 0)
+  bytes_read = net_read(sockfd, buf, max_len)
+  @if bytes_read <= 0
+    sys_munmap(buf, max_len + 1)
+    return ""
+  @end
+  sys_poke8(buf + bytes_read, 0)
+  return buf
 @end

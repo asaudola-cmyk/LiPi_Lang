@@ -135,15 +135,20 @@ import "universe/core/collections"
 @! ─── Gödel Number Encoder ───────────────────────────────────────────────────
 
 @fn generate_universal_number(byte_stream)
-  @! Bijective Base-256 Gödel Encoding into a single Universal Integer in N
-  @! WHY: Maps arbitrary machine instruction streams into a unique sovereign integer.
-  g = bigint_new(0)
-  two_five_six = bigint_new(256)
-  i = byte_stream.len() - 1
-  @while i >= 0
-    g = bigint_mul(g, two_five_six)
-    g = bigint_add_u64(g, byte_stream[i])
-    i = i - 1
+  // WHY: Maps instruction stream to Gödel integer using prime factorization: prod p_i^(b_i + 1)
+  g = bigint_new(1)
+  i = 0
+  n = byte_stream.len()
+  @while i < n
+    p = get_nth_prime(i)
+    p_big = bigint_new(p)
+    exp = byte_stream[i] + 1
+    k = 0
+    @while k < exp
+      g = bigint_mul(g, p_big)
+      k = k + 1
+    @end
+    i = i + 1
   @end
   return g
 @end
@@ -156,13 +161,11 @@ import "universe/core/collections"
     return "0"
   @end
   
- 
   buf_raw = sys_mmap(0, 16392, 3, 34, 0 - 1, 0)
   @if buf_raw <= 0
     return "OOM"
   @end
   
- 
   buf = buf_raw + 8
   buf_idx = 0
   
@@ -171,7 +174,6 @@ import "universe/core/collections"
     buf_idx = buf_idx + 1
   @end
   
- 
   i = a.limbs.len() - 1
   limb_val = a.limbs[i]
   
@@ -183,7 +185,6 @@ import "universe/core/collections"
     p = p + 1
   @end
   
- 
   i = i - 1
   @while i >= 0
     limb_val = a.limbs[i]
@@ -208,12 +209,9 @@ import "universe/core/collections"
     i = i - 1
   @end
   
- 
-  sys_poke(buf - 8, buf_idx)
-  
- 
-  sys_poke8(buf + buf_idx, 0) 
-  
+  tag = 6004514569303621632 + buf_idx
+  sys_poke(buf - 8, tag)
+  sys_poke8(buf + buf_idx, 0)
   return buf
 @end
 
@@ -292,15 +290,28 @@ import "universe/core/collections"
 @end
 
 @fn decode_universal_number(g_bigint, num_bytes)
-  @! In-Memory Factoring: Unpacks the Universal Number back into machine instructions in RAM
-  @! WHY: Recovers original byte stream by repeated modulo-256 extraction in O(N * L) time.
+  // WHY: Recovers original byte stream by factoring Gödel primes p_i until non-divisible
   bytes = []
   curr_g = g_bigint
   i = 0
   @while i < num_bytes
-    dm = bigint_div_mod_u64(curr_g, 256)
-    bytes = bytes.push(dm.rem)
-    curr_g = dm.q
+    p = get_nth_prime(i)
+    exp = 0
+    factoring = 1
+    @while factoring == 1
+      dm = bigint_div_mod_u64(curr_g, p)
+      @if dm.rem == 0
+        exp = exp + 1
+        curr_g = dm.q
+      @else
+        factoring = 0
+      @end
+    @end
+    byte_val = exp - 1
+    @if byte_val < 0
+      byte_val = 0
+    @end
+    bytes = bytes.push(byte_val)
     i = i + 1
   @end
   return bytes

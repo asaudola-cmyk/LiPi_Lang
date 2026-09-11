@@ -73,7 +73,19 @@ fn ctx_new
     push(c, list())     // 20: sc_types
     push(c, list(""))   // 21: main_fn_label
     push(c, list(0))    // 22: called_top_level_main
+    push(c, list())     // 23: global_fields
     return c
+
+// WHY: Maps struct and map field names to unique 8-byte aligned offsets
+fn global_field_get_offset ctx name
+    fields = get(ctx, 23)
+    i = 0
+    while i < len(fields)
+        if get(fields, i) == name
+            return i * 8
+        i = i + 1
+    push(fields, name)
+    return (len(fields) - 1) * 8
 
 fn loop_push ctx start_lbl end_lbl
     push(get(ctx, 14), start_lbl)
@@ -162,11 +174,11 @@ fn label_define ctx name
 fn label_find ctx name
     names = get(ctx, 1)
     offs  = get(ctx, 2)
-    i = 0
-    while i < len(names)
+    i = len(names) - 1
+    while i >= 0
         if get(names, i) == name
             return get(offs, i)
-        i = i + 1
+        i = i - 1
     say "Undefined machine code label: " + name
     exit(1)
     return 0
@@ -685,6 +697,11 @@ fn x86_call ctx target_name
     bb_put8(ctx, 232) // 0xE8 (call rel32)
     bb_put32(ctx, 0)
     reloc_add(ctx, pos + 1, target_name, 5)
+
+// WHY: Indirect function call via 64-bit function pointer held in rax (call rax: 0xFF 0xD0)
+fn x86_call_rax ctx
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 208)
 
 fn x86_set_cmp ctx op
     // cmp rax, rbx (left=rax, right=rbx)
@@ -2600,18 +2617,428 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 208) // or rax, rdx
     x86_ret(ctx)
 
+    // ── Maya Sovereign Syscall & Memory Intrinsics ────────────────────────────
+    // WHY: Provides 100% native Linux silicon execution for Maya system calls and memory operations.
+
+    label_define(ctx, "lipi_fn_sys_poke")
+    // rdi = addr, rsi = val -> mov [rdi], rsi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 55)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_poke8")
+    // rdi = addr, rsi = byte -> mov [rdi], sil
+    bb_put8(ctx, 64)
+    bb_put8(ctx, 136)
+    bb_put8(ctx, 55)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_peek")
+    // rdi = addr -> mov rax, [rdi]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 7)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_peek8")
+    // rdi = addr -> xor rax, rax; mov al, [rdi]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192)
+    bb_put8(ctx, 138)
+    bb_put8(ctx, 7)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_open_read")
+    // rdi = path -> syscall 2 (O_RDONLY=0, mode=0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 246) // xor rsi, rsi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 210) // xor rdx, rdx
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_open_write")
+    // rdi = path -> syscall 2 (flags=577, mode=420)
+    x86_mov_reg_imm64(ctx, 6, 577)
+    x86_mov_reg_imm64(ctx, 2, 420)
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_write_byte")
+    // rdi = byte -> writes 1 byte to stdout (fd=1)
+    bb_put8(ctx, 87) // push rdi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 230) // mov rsi, rsp
+    x86_mov_reg_imm64(ctx, 7, 1) // rdi = 1
+    x86_mov_reg_imm64(ctx, 2, 1) // rdx = 1
+    x86_mov_reg_imm64(ctx, 0, 1) // rax = 1 (sys_write)
+    x86_syscall(ctx)
+    bb_put8(ctx, 88) // pop rax
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_close")
+    // rdi = fd -> syscall 3
+    x86_mov_reg_imm64(ctx, 0, 3)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_chmod")
+    // rdi = path, rsi = mode -> syscall 90
+    x86_mov_reg_imm64(ctx, 0, 90)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_exit")
+    // rdi = code -> syscall 60
+    x86_mov_reg_imm64(ctx, 0, 60)
+    x86_syscall(ctx)
+    bb_put8(ctx, 244) // hlt
+
+    label_define(ctx, "lipi_fn_sys_mmap")
+    // rdi=addr, rsi=len, rdx=prot, rcx=flags, r8=fd, r9=off -> syscall 9
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 202) // mov r10, rcx
+    x86_mov_reg_imm64(ctx, 0, 9)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_munmap")
+    // rdi=addr, rsi=len -> syscall 11
+    x86_mov_reg_imm64(ctx, 0, 11)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_write")
+    // rdi=fd, rsi=buf, rdx=count -> syscall 1
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_read")
+    // rdi=fd, rsi=buf, rdx=count -> syscall 0
+    x86_mov_reg_imm64(ctx, 0, 0)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_open")
+    // rdi=path, rsi=flags, rdx=mode -> syscall 2
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_fork")
+    // syscall 57
+    x86_mov_reg_imm64(ctx, 0, 57)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_wait4")
+    // rdi=pid, rsi=status, rdx=opts, rcx=rusage -> syscall 61
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 202) // mov r10, rcx
+    x86_mov_reg_imm64(ctx, 0, 61)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_execve")
+    // rdi=path, rsi=argv, rdx=envp -> syscall 59
+    x86_mov_reg_imm64(ctx, 0, 59)
+    x86_syscall(ctx)
+    x86_ret(ctx)
+
+    label_define(ctx, "lipi_fn_sys_syscall")
+    x86_jmp(ctx, "lipi_fn_syscall")
+
+    label_define(ctx, "lipi_fn_to_str")
+    label_define(ctx, "lipi_fn_int_to_str")
+    x86_jmp(ctx, "_lipi_ensure_str")
+
+    label_define(ctx, "lipi_fn_str_concat")
+    x86_jmp(ctx, "_lipi_str_concat")
+
+    label_define(ctx, "lipi_fn_str_from_char_code")
+    label_define(ctx, "lipi_fn_from_char")
+    x86_jmp(ctx, "lipi_fn_chr")
+
+    label_define(ctx, "lipi_fn_read_file")
+    x86_jmp(ctx, "lipi_fn_file_read")
+
+    // String length: lipi_fn_str_len / lipi_fn_c_len
+    // WHY: Measures length for managed STR0 strings O(1) or null-terminated pointers O(N)
+    label_define(ctx, "lipi_fn_str_len")
+    label_define(ctx, "lipi_fn_c_len")
+    lbl_sl_z = make_anon_label(ctx, "sl_z")
+    lbl_sl_r = make_anon_label(ctx, "sl_r")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255) // test rdi, rdi
+    x86_jz(ctx, lbl_sl_z)
+    bb_put8(ctx, 87)  // push rdi
+    x86_call(ctx, "_lipi_is_str")
+    bb_put8(ctx, 95)  // pop rdi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192) // test rax, rax
+    x86_jz(ctx, lbl_sl_r)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 248) // mov eax, [rdi - 8]
+    x86_ret(ctx)
+    label_define(ctx, lbl_sl_r)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
+    lbl_sl_lp = make_anon_label(ctx, "sl_lp")
+    label_define(ctx, lbl_sl_lp)
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 56)
+    bb_put8(ctx, 0)   // cmp byte [rax + rdi], 0
+    lbl_sl_dn = make_anon_label(ctx, "sl_dn")
+    x86_jz(ctx, lbl_sl_dn)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 192) // inc rax
+    x86_jmp(ctx, lbl_sl_lp)
+    label_define(ctx, lbl_sl_dn)
+    x86_ret(ctx)
+    label_define(ctx, lbl_sl_z)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
+    x86_ret(ctx)
+
+    // String equality: lipi_fn_str_eq / lipi_fn_eq
+    // WHY: Compares byte contents of two strings returning 1 (equal) or 0
+    label_define(ctx, "lipi_fn_str_eq")
+    label_define(ctx, "lipi_fn_eq")
+    lbl_se_t = make_anon_label(ctx, "se_t")
+    lbl_se_f = make_anon_label(ctx, "se_f")
+    lbl_se_lp = make_anon_label(ctx, "se_lp")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 57)
+    bb_put8(ctx, 247) // cmp rdi, rsi
+    x86_jz(ctx, lbl_se_t)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255) // test rdi, rdi
+    x86_jz(ctx, lbl_se_f)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 246) // test rsi, rsi
+    x86_jz(ctx, lbl_se_f)
+    label_define(ctx, lbl_se_lp)
+    bb_put8(ctx, 138)
+    bb_put8(ctx, 7)   // mov al, [rdi]
+    bb_put8(ctx, 138)
+    bb_put8(ctx, 30)  // mov bl, [rsi]
+    bb_put8(ctx, 56)
+    bb_put8(ctx, 216) // cmp al, bl
+    x86_jnz(ctx, lbl_se_f)
+    bb_put8(ctx, 132)
+    bb_put8(ctx, 192) // test al, al
+    x86_jz(ctx, lbl_se_t)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 199) // inc rdi
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 198) // inc rsi
+    x86_jmp(ctx, lbl_se_lp)
+    label_define(ctx, lbl_se_t)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_ret(ctx)
+    label_define(ctx, lbl_se_f)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
+    x86_ret(ctx)
+
+    // ── lipi_fn_file_write / lipi_fn_write_file: in: rdi = path, rsi = content ────
+    label_define(ctx, "lipi_fn_file_write")
+    label_define(ctx, "lipi_fn_write_file")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    bb_put8(ctx, 83) // push rbx
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 84) // push r12
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 85) // push r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 86) // push r14
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 252) // mov r12, rdi (path)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 245) // mov r13, rsi (content)
+    // Measure content length
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 239) // mov rdi, r13
+    x86_call(ctx, "lipi_fn_str_len")
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 198) // mov r14, rax (len)
+    // Open path (O_WRONLY|O_CREAT|O_TRUNC=577, 0644=420)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 231) // mov rdi, r12
+    x86_mov_reg_imm64(ctx, 6, 577)
+    x86_mov_reg_imm64(ctx, 2, 420)
+    x86_mov_reg_imm64(ctx, 0, 2)
+    x86_syscall(ctx)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 195) // mov rbx, rax (fd)
+    // Write buf
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 223) // mov rdi, rbx (fd)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 238) // mov rsi, r13 (buf)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 242) // mov rdx, r14 (len)
+    x86_mov_reg_imm64(ctx, 0, 1) // sys_write
+    x86_syscall(ctx)
+    // Close fd
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 223) // mov rdi, rbx
+    x86_mov_reg_imm64(ctx, 0, 3) // sys_close
+    x86_syscall(ctx)
+    x86_mov_reg_imm64(ctx, 0, 1) // return 1 on success
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 94) // pop r14
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 93) // pop r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 92) // pop r12
+    bb_put8(ctx, 91) // pop rbx
+    x86_leave(ctx)
+    x86_ret(ctx)
+
+    // ── lipi_fn_str_contains / lipi_fn_contains: in: rdi = str, rsi = sub ───
+    label_define(ctx, "lipi_fn_str_contains")
+    label_define(ctx, "lipi_fn_contains")
+    x86_push_rbp(ctx)
+    x86_mov_rbp_rsp(ctx)
+    bb_put8(ctx, 83) // push rbx
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 84) // push r12
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 85) // push r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 86) // push r14
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 252) // mov r12, rdi (str)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 245) // mov r13, rsi (sub)
+    lbl_sc_f = make_anon_label(ctx, "sc_f")
+    lbl_sc_t = make_anon_label(ctx, "sc_t")
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 237) // test r13, r13
+    x86_jz(ctx, lbl_sc_f)
+    bb_put8(ctx, 77)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 228) // test r12, r12
+    x86_jz(ctx, lbl_sc_f)
+    // If sub is empty -> true
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 125)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)   // cmp byte [r13], 0
+    x86_jz(ctx, lbl_sc_t)
+    // Outer loop over r12
+    lbl_sc_out = make_anon_label(ctx, "sc_out")
+    label_define(ctx, lbl_sc_out)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 128)
+    bb_put8(ctx, 124)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 0)   // cmp byte [r12], 0
+    x86_jz(ctx, lbl_sc_f)
+    // Inner compare r12 + k vs r13 + k
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 201) // xor rcx, rcx
+    lbl_sc_in = make_anon_label(ctx, "sc_in")
+    label_define(ctx, lbl_sc_in)
+    bb_put8(ctx, 67)
+    bb_put8(ctx, 138)
+    bb_put8(ctx, 4)
+    bb_put8(ctx, 13)  // mov r8b, [r13 + rcx]
+    bb_put8(ctx, 69)
+    bb_put8(ctx, 132)
+    bb_put8(ctx, 192) // test r8b, r8b
+    x86_jz(ctx, lbl_sc_t) // full sub matched!
+    bb_put8(ctx, 67)
+    bb_put8(ctx, 138)
+    bb_put8(ctx, 20)
+    bb_put8(ctx, 12)  // mov dl, [r12 + rcx]
+    bb_put8(ctx, 68)
+    bb_put8(ctx, 56)
+    bb_put8(ctx, 194) // cmp dl, r8b
+    lbl_sc_next = make_anon_label(ctx, "sc_nxt")
+    x86_jnz(ctx, lbl_sc_next)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 193) // inc rcx
+    x86_jmp(ctx, lbl_sc_in)
+    label_define(ctx, lbl_sc_next)
+    bb_put8(ctx, 73)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 196) // inc r12
+    x86_jmp(ctx, lbl_sc_out)
+    label_define(ctx, lbl_sc_t)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    lbl_sc_done = make_anon_label(ctx, "sc_dn")
+    x86_jmp(ctx, lbl_sc_done)
+    label_define(ctx, lbl_sc_f)
+    x86_mov_reg_imm64(ctx, 0, 0)
+    label_define(ctx, lbl_sc_done)
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 94) // pop r14
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 93) // pop r13
+    bb_put8(ctx, 65)
+    bb_put8(ctx, 92) // pop r12
+    bb_put8(ctx, 91) // pop rbx
+    x86_leave(ctx)
+    x86_ret(ctx)
+
 // ── In-Memory Tokenizer & Parser for Pure Lipi ───────────────────────────────
-TOK_INT    = 1
-TOK_STR    = 2
-TOK_IDENT  = 3
-TOK_OP     = 4
-TOK_LPAREN = 5
-TOK_RPAREN = 6
-TOK_COMMA  = 7
-TOK_NL     = 8
-TOK_INDENT = 9
-TOK_DEDENT = 10
-TOK_EOF    = 11
+TOK_INT      = 1
+TOK_STR      = 2
+TOK_IDENT    = 3
+TOK_OP       = 4
+TOK_LPAREN   = 5
+TOK_RPAREN   = 6
+TOK_COMMA    = 7
+TOK_NL       = 8
+TOK_INDENT   = 9
+TOK_DEDENT   = 10
+TOK_EOF      = 11
+TOK_LBRACKET = 12
+TOK_RBRACKET = 13
+TOK_LBRACE   = 14
+TOK_RBRACE   = 15
+TOK_COLON    = 16
+TOK_SEMI     = 17
 
 fn tok_new tt txt int_val
     t = list()
@@ -2744,6 +3171,46 @@ fn tokenize_pure src
             push(tokens, tok_new(TOK_INT, str(val), val))
             continue
 
+        // Hexadecimal numbers: 0x... / 0X...
+        // WHY: Supports baremetal memory offsets, bitmasks, and hardware registers
+        if c == "0" and p + 1 < slen and (char_at(src, p + 1) == "x" or char_at(src, p + 1) == "X")
+            p = p + 2
+            val = 0
+            while p < slen
+                hc = char_at(src, p)
+                hcode = ord(hc)
+                if hcode >= 48 and hcode <= 57
+                    val = (val * 16) + (hcode - 48)
+                    p = p + 1
+                elif hcode >= 97 and hcode <= 102
+                    val = (val * 16) + (hcode - 97 + 10)
+                    p = p + 1
+                elif hcode >= 65 and hcode <= 70
+                    val = (val * 16) + (hcode - 65 + 10)
+                    p = p + 1
+                else
+                    break
+            push(tokens, tok_new(TOK_INT, str(val), val))
+            continue
+
+        // Binary numbers: 0b... / 0B...
+        // WHY: Supports direct silicon bit manipulation and flag registers
+        if c == "0" and p + 1 < slen and (char_at(src, p + 1) == "b" or char_at(src, p + 1) == "B")
+            p = p + 2
+            val = 0
+            while p < slen
+                bc = char_at(src, p)
+                if bc == "0"
+                    val = val * 2
+                    p = p + 1
+                elif bc == "1"
+                    val = (val * 2) + 1
+                    p = p + 1
+                else
+                    break
+            push(tokens, tok_new(TOK_INT, str(val), val))
+            continue
+
         // ASCII digits
         if code >= 48 and code <= 57
             val = 0
@@ -2766,6 +3233,30 @@ fn tokenize_pure src
             push(tokens, tok_new(TOK_RPAREN, ")", 0))
             p = p + 1
             continue
+        if c == "["
+            push(tokens, tok_new(TOK_LBRACKET, "[", 0))
+            p = p + 1
+            continue
+        if c == "]"
+            push(tokens, tok_new(TOK_RBRACKET, "]", 0))
+            p = p + 1
+            continue
+        if c == "{"
+            push(tokens, tok_new(TOK_LBRACE, "{", 0))
+            p = p + 1
+            continue
+        if c == "}"
+            push(tokens, tok_new(TOK_RBRACE, "}", 0))
+            p = p + 1
+            continue
+        if c == ":"
+            push(tokens, tok_new(TOK_COLON, ":", 0))
+            p = p + 1
+            continue
+        if c == ";"
+            push(tokens, tok_new(TOK_SEMI, ";", 0))
+            p = p + 1
+            continue
         if c == ","
             push(tokens, tok_new(TOK_COMMA, ",", 0))
             p = p + 1
@@ -2774,13 +3265,13 @@ fn tokenize_pure src
         // 2-char operators
         if p + 1 < slen
             two = c + char_at(src, p + 1)
-            if two == "==" or two == "!=" or two == "<=" or two == ">=" or two == "+=" or two == "-=" or two == "*=" or two == "/=" or two == "&&" or two == "||" or two == ".."
+            if two == "==" or two == "!=" or two == "<=" or two == ">=" or two == "+=" or two == "-=" or two == "*=" or two == "/=" or two == "&&" or two == "||" or two == ".." or two == "<<" or two == ">>" or two == "=>" or two == "->"
                 push(tokens, tok_new(TOK_OP, two, 0))
                 p = p + 2
                 continue
 
         // 1-char operators
-        if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!" or c == "."
+        if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!" or c == "." or c == "&" or c == "|" or c == "^" or c == "~"
             push(tokens, tok_new(TOK_OP, c, 0))
             p = p + 1
             continue

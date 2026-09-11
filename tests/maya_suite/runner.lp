@@ -19,8 +19,8 @@ import "universe/core/string"
   @! Stage 1: Compile the test using the sovereign self-hosted compiler
   comp_pid = sys_fork()
   @if comp_pid == 0
-    comp_argv = ["./bin/maya_self_hosted", test_path, "-o", tmp_bin, 0]
-    sys_execve("./bin/maya_self_hosted", comp_argv, 0)
+    comp_argv = ["./bin/lipc", test_path, "-o", tmp_bin, 0]
+    sys_execve("./bin/lipc", comp_argv, 0)
     sys_exit(1)
   @end
   
