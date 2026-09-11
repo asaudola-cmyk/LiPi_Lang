@@ -1,0 +1,9 @@
+{
+  "name": "http",
+  "version": "1.0.0",
+  "edition": "2026",
+  "description": "Mock package http version 1.0.0 for MPM testing",
+  "dependencies": {
+    "logger": "^0.1.0"
+  }
+}

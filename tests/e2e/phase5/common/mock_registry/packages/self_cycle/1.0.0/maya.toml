@@ -1,0 +1,8 @@
+[package]
+name = "self_cycle"
+version = "1.0.0"
+edition = "2026"
+description = "Mock package self_cycle version 1.0.0 for MPM testing"
+
+[dependencies]
+self_cycle = "^1.0.0"

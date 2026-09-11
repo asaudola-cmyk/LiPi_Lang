@@ -1,0 +1,10 @@
+{
+  "name": "http_client",
+  "version": "1.0.0",
+  "edition": "2026",
+  "description": "Mock package http_client version 1.0.0 for MPM testing",
+  "dependencies": {
+    "crypto_utils": "^1.0.0",
+    "logger": "^0.1.0"
+  }
+}

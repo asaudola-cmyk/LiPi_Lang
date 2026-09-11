@@ -148,6 +148,18 @@ echo -e "${GREEN}  ✔ bin/lipilsp প্রস্তুত (ল্যাঙ্�
 chmod +x bin/lipipkg
 echo -e "${GREEN}  ✔ bin/lipipkg প্রস্তুত (প্যাকেজ ম্যানেজার ২.০)।${NC}"
 
+./bin/lipc_bin src/tools/lipi.lp bin/lipi > /dev/null
+chmod +x bin/lipi
+echo -e "${GREEN}  ✔ bin/lipi প্রস্তুত (মাস্টার সিএলআই ড্রাইভার)।${NC}"
+
+./bin/lipc_bin src/tools/lipifmt.lp bin/lipifmt > /dev/null
+chmod +x bin/lipifmt
+echo -e "${GREEN}  ✔ bin/lipifmt প্রস্তুত (৩-সিনট্যাক্স কোড ফরম্যাটার)।${NC}"
+
+./bin/lipc_bin src/tools/lipidoc.lp bin/lipidoc > /dev/null
+chmod +x bin/lipidoc
+echo -e "${GREEN}  ✔ bin/lipidoc প্রস্তুত (স্বয়ংক্রিয় ডকুমেন্টার)।${NC}"
+
 ./bin/lipc_bin tests/test_web_router.lp /tmp/web_router_build_test > /dev/null
 /tmp/web_router_build_test > /dev/null
 rm -f /tmp/web_router_build_test
@@ -155,20 +167,21 @@ echo -e "${GREEN}  ✔ ওয়েব রাউটার (Standard Web Router) ই
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৬: ৬০টি রিগ্রেশন টেস্ট রান / Run 60/60 Regression Tests]
+# [ধাপ ৬: ৬৯টি রিগ্রেশন টেস্ট রান / Run 69/69 Regression Tests]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৬] ৬০টি রিগ্রেশন টেস্ট রান করা হচ্ছে (Direct Machine Code Mode)...${NC}"
+echo -e "${YELLOW}[ধাপ ৬] ৬৯টি রিগ্রেশন টেস্ট রান করা হচ্ছে (Direct Machine Code Mode)...${NC}"
 bash tests/run_tests.sh --direct-elf
 echo ""
 
 # ------------------------------------------------------------------------------
 # [ধাপ ৭: সার্বভৌমত্ব অডিট / Complete Sovereignty Audit]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৭] সার্বভৌমত্ব অডিট: কোডবেসে ০% C, ০% GCC, ০% Python ও ০% PHP নিশ্চিতকরণ:${NC}"
+echo -e "${YELLOW}[ধাপ ৭] সার্বভৌমত্ব অডিট: কোডবেসে ০% C, ০% GCC, ০% Python, ০% PHP ও ০% .maya নিশ্চিতকরণ:${NC}"
 
-C_COUNT=$(find src std tests bin apps \( -name "*.c" -o -name "*.h" \) 2>/dev/null | wc -l)
-PY_COUNT=$(find src std tests bin apps -name "*.py" 2>/dev/null | wc -l)
-PHP_COUNT=$(find src std tests bin apps -name "*.php" 2>/dev/null | wc -l)
+C_COUNT=$(find src std tests bin apps universe packages tools \( -name "*.c" -o -name "*.h" \) 2>/dev/null | wc -l)
+PY_COUNT=$(find src std tests bin apps universe packages tools -name "*.py" 2>/dev/null | wc -l)
+PHP_COUNT=$(find src std tests bin apps universe packages tools -name "*.php" 2>/dev/null | wc -l)
+MAYA_COUNT=$(find src std tests bin apps universe packages tools -name "*.maya" 2>/dev/null | wc -l)
 
 if [ "${C_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ কোডবেসে কোনো .c বা .h ফাইল নেই! (০% C, ০% হেডার — ১০০% খাঁটি লিপি)${NC}"
@@ -188,6 +201,13 @@ if [ "${PHP_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ কোডবেসে কোনো .php ফাইল নেই! (০% PHP — ১০০% স্বাধীন লিপি)${NC}"
 else
     echo -e "${RED}  ❌ সতর্কতা: কোডবেসে এখনও ${PHP_COUNT} টি .php ফাইল রয়েছে!${NC}"
+    exit 1
+fi
+
+if [ "${MAYA_COUNT}" -eq 0 ]; then
+    echo -e "${GREEN}  ✔ কোডবেসে কোনো .maya ফাইল নেই! (১০০% খাঁটি .lp এবং .lipi — অখণ্ড সার্বভৌম লিপি)${NC}"
+else
+    echo -e "${RED}  ❌ সতর্কতা: কোডবেসে এখনও ${MAYA_COUNT} টি .maya ফাইল রয়েছে!${NC}"
     exit 1
 fi
 

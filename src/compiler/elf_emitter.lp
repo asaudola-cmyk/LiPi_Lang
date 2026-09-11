@@ -2648,6 +2648,12 @@ fn tokenize_pure src
                 p = p + 1
             continue
 
+        // Comments @! (Maya sovereign directive comments)
+        if c == "@" and p + 1 < slen and char_at(src, p + 1) == "!"
+            while p < slen and char_at(src, p) != "\n"
+                p = p + 1
+            continue
+
         // Comments /* */
         if c == "/" and p + 1 < slen and char_at(src, p + 1) == "*"
             p = p + 2
@@ -2678,7 +2684,7 @@ fn tokenize_pure src
 
             if p < slen
                 next_c = char_at(src, p)
-                if next_c == "\n" or next_c == "#" or (next_c == "/" and p + 1 < slen and char_at(src, p + 1) == "/")
+                if next_c == "\n" or next_c == "#" or (next_c == "/" and p + 1 < slen and char_at(src, p + 1) == "/") or (next_c == "@" and p + 1 < slen and char_at(src, p + 1) == "!")
                     continue
 
             cur_indent = get(indent_stk, len(indent_stk) - 1)
@@ -2777,9 +2783,9 @@ fn tokenize_pure src
             p = p + 1
             continue
 
-        // Identifiers and Keywords
+        // Identifiers and Keywords (including Maya @-directives)
         is_ident_char = 0
-        if (code >= 65 and code <= 90) or (code >= 97 and code <= 122) or c == "_" or code > 127
+        if (code >= 65 and code <= 90) or (code >= 97 and code <= 122) or c == "_" or c == "@" or code > 127
             is_ident_char = 1
 
         if is_ident_char == 1
@@ -2787,7 +2793,7 @@ fn tokenize_pure src
             while p < slen
                 ic = char_at(src, p)
                 icode = ord(ic)
-                if (icode >= 65 and icode <= 90) or (icode >= 97 and icode <= 122) or (icode >= 48 and icode <= 57) or ic == "_" or icode > 127
+                if (icode >= 65 and icode <= 90) or (icode >= 97 and icode <= 122) or (icode >= 48 and icode <= 57) or ic == "_" or ic == "@" or icode > 127
                     id_acc = id_acc + ic
                     p = p + 1
                 else
@@ -2854,11 +2860,12 @@ fn is_pure_arg_start ps
     if tt == TOK_INT or tt == TOK_STR return 1
     if tt == TOK_IDENT
         txt = ps_cur_text(ps)
-        if txt == "if" or txt == "যদি" or txt == "while" or txt == "যতক্ষণ" return 0
+        if txt == "if" or txt == "যদি" or txt == "while" or txt == "যতক্ষণ" or txt == "@if" or txt == "@while" return 0
         if txt == "for" or txt == "প্রতিটি" or txt == "return" or txt == "ফেরত" return 0
         if txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println" return 0
         if txt == "fn" or txt == "কাজ" or txt == "struct" or txt == "গঠন" or txt == "repeat" or txt == "বার" return 0
-        if txt == "else" or txt == "নাহলে" or txt == "elif" or txt == "নাহলে_যদি" return 0
+        if txt == "@fn" or txt == "@struct" or txt == "@end" or txt == "@gpu" or txt == "@inline" or txt == "@let" return 0
+        if txt == "else" or txt == "নাহলে" or txt == "elif" or txt == "নাহলে_যদি" or txt == "@else" or txt == "@elif" return 0
         if txt == "and" or txt == "এবং" or txt == "or" or txt == "অথবা" or txt == "not" or txt == "না" return 0
         if txt == "in" or txt == "ভেতরে" or txt == "to" or txt == "step" or txt == "ধাপ" return 0
         return 1
@@ -3337,15 +3344,60 @@ fn compile_pure_stmt ctx ps
 
     if tt == TOK_EOF or tt == TOK_DEDENT return 0
 
+    // WHY: Unwrap let/চলক/@let variable declaration keyword so statement falls through to assignment
+    if tt == TOK_IDENT and (txt == "let" or txt == "চলক" or txt == "@let")
+        ps_adv(ps)
+        tt  = ps_cur_type(ps)
+        txt = ps_cur_text(ps)
+
+    // WHY: Gracefully consume any standalone @end directive at top level or block boundary
+    if tt == TOK_IDENT and txt == "@end"
+        ps_adv(ps)
+        return 0
+
     // include / অন্তর্ভুক্ত -- skip line
     if tt == TOK_IDENT and (txt == "include" or txt == "অন্তর্ভুক্ত")
         while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
             ps_adv(ps)
         return 0
 
-    // struct / গঠন (Struct Definition)
-    // WHY: Pure in-memory layout description without external runtime or header requirements
-    if tt == TOK_IDENT and (txt == "struct" or txt == "গঠন")
+    // @gpu / @inline (Maya sovereign hardware/optimization blocks)
+    // WHY: Transparently lower hardware acceleration and inlining directives by executing inner statements
+    if tt == TOK_IDENT and (txt == "@gpu" or txt == "@inline")
+        ps_adv(ps)
+        ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_INDENT
+            ps_adv(ps)
+            while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    break
+                prev_gpu_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_gpu_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+        else
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                prev_gpu_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_gpu_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+        ps_skip_nl(ps)
+        if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+            ps_adv(ps)
+        return 0
+
+    // struct / গঠন / @struct (Struct Definition)
+    // WHY: Support both indentation-delimited structs and Maya @struct ... @end blocks
+    if tt == TOK_IDENT and (txt == "struct" or txt == "গঠন" or txt == "@struct")
+        is_meta_struct = (txt == "@struct")
         ps_adv(ps)
         sname = ps_cur_text(ps)
         ps_adv(ps)
@@ -3354,6 +3406,8 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if is_meta_struct == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    break
                 if ps_cur_type(ps) == TOK_IDENT
                     if len(fields) < 16
                         push(fields, ps_cur_text(ps))
@@ -3364,6 +3418,25 @@ fn compile_pure_stmt ctx ps
                     ps_adv(ps)
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
+                ps_adv(ps)
+        elif is_meta_struct == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                if ps_cur_type(ps) == TOK_IDENT
+                    if len(fields) < 16
+                        push(fields, ps_cur_text(ps))
+                    ps_adv(ps)
+                    while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
+                        ps_adv(ps)
+                else
+                    ps_adv(ps)
+                ps_skip_nl(ps)
+        if is_meta_struct == 1
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
                 ps_adv(ps)
         struct_add(ctx, sname, fields)
         return 0
@@ -3421,9 +3494,10 @@ fn compile_pure_stmt ctx ps
         x86_call(ctx, "_lipi_print_nl")
         return 0
 
-    // if / elif / else (যদি / নাহলে_যদি / নাহলে)
-    // WHY: Support arbitrary elif chaining and else fallback branches
-    if tt == TOK_IDENT and (txt == "if" or txt == "যদি")
+    // if / elif / else (যদি / নাহলে_যদি / নাহলে / @if / @elif / @else)
+    // WHY: Support arbitrary elif chaining and else fallback branches across all 3 syntax styles
+    if tt == TOK_IDENT and (txt == "if" or txt == "যদি" or txt == "@if")
+        is_meta_if = (txt == "@if")
         ps_adv(ps)
         compile_pure_expr(ctx, ps)
         lbl_end  = make_anon_label(ctx, "if_end")
@@ -3437,6 +3511,8 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if is_meta_if == 1 and ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "@end" or ps_cur_text(ps) == "@elif" or ps_cur_text(ps) == "@else")
+                    break
                 prev_if_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
                 if ps_pos(ps) == prev_if_p
@@ -3444,6 +3520,17 @@ fn compile_pure_stmt ctx ps
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
+        elif is_meta_if == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                cur_if_t = ps_cur_text(ps)
+                if ps_cur_type(ps) == TOK_IDENT and (cur_if_t == "@end" or cur_if_t == "@elif" or cur_if_t == "@else")
+                    break
+                prev_if_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_if_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
         else
             compile_pure_stmt(ctx, ps)
 
@@ -3451,7 +3538,7 @@ fn compile_pure_stmt ctx ps
         label_define(ctx, lbl_next)
 
         ps_skip_nl(ps)
-        while ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "elif" or ps_cur_text(ps) == "নাহলে_যদি")
+        while ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "elif" or ps_cur_text(ps) == "নাহলে_যদি" or ps_cur_text(ps) == "@elif")
             ps_adv(ps)
             compile_pure_expr(ctx, ps)
             lbl_next = make_anon_label(ctx, "elif_next")
@@ -3464,6 +3551,8 @@ fn compile_pure_stmt ctx ps
             if ps_cur_type(ps) == TOK_INDENT
                 ps_adv(ps)
                 while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                    if is_meta_if == 1 and ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "@end" or ps_cur_text(ps) == "@elif" or ps_cur_text(ps) == "@else")
+                        break
                     prev_elif_p = ps_pos(ps)
                     compile_pure_stmt(ctx, ps)
                     if ps_pos(ps) == prev_elif_p
@@ -3471,6 +3560,17 @@ fn compile_pure_stmt ctx ps
                     ps_skip_nl(ps)
                 if ps_cur_type(ps) == TOK_DEDENT
                     ps_adv(ps)
+            elif is_meta_if == 1
+                while ps_cur_type(ps) != TOK_EOF
+                    ps_skip_nl(ps)
+                    cur_elif_t = ps_cur_text(ps)
+                    if ps_cur_type(ps) == TOK_IDENT and (cur_elif_t == "@end" or cur_elif_t == "@elif" or cur_elif_t == "@else")
+                        break
+                    prev_elif_p = ps_pos(ps)
+                    compile_pure_stmt(ctx, ps)
+                    if ps_pos(ps) == prev_elif_p
+                        ps_adv(ps)
+                    ps_skip_nl(ps)
             else
                 compile_pure_stmt(ctx, ps)
 
@@ -3478,12 +3578,14 @@ fn compile_pure_stmt ctx ps
             label_define(ctx, lbl_next)
             ps_skip_nl(ps)
 
-        if ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "else" or ps_cur_text(ps) == "নাহলে")
+        if ps_cur_type(ps) == TOK_IDENT and (ps_cur_text(ps) == "else" or ps_cur_text(ps) == "নাহলে" or ps_cur_text(ps) == "@else")
             ps_adv(ps)
             ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_INDENT
                 ps_adv(ps)
                 while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                    if is_meta_if == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                        break
                     prev_else_p = ps_pos(ps)
                     compile_pure_stmt(ctx, ps)
                     if ps_pos(ps) == prev_else_p
@@ -3491,14 +3593,31 @@ fn compile_pure_stmt ctx ps
                     ps_skip_nl(ps)
                 if ps_cur_type(ps) == TOK_DEDENT
                     ps_adv(ps)
+            elif is_meta_if == 1
+                while ps_cur_type(ps) != TOK_EOF
+                    ps_skip_nl(ps)
+                    if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                        break
+                    prev_else_p = ps_pos(ps)
+                    compile_pure_stmt(ctx, ps)
+                    if ps_pos(ps) == prev_else_p
+                        ps_adv(ps)
+                    ps_skip_nl(ps)
             else
                 compile_pure_stmt(ctx, ps)
+
+        if is_meta_if == 1
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                ps_adv(ps)
 
         label_define(ctx, lbl_end)
         return 0
 
-    // while / যতক্ষণ
-    if tt == TOK_IDENT and (txt == "while" or txt == "যতক্ষণ")
+    // while / যতক্ষণ / @while
+    // WHY: Support both indentation loops and Maya @while ... @end loops
+    if tt == TOK_IDENT and (txt == "while" or txt == "যতক্ষণ" or txt == "@while")
+        is_meta_while = (txt == "@while")
         ps_adv(ps)
         lbl_loop = make_anon_label(ctx, "while_loop")
         lbl_end  = make_anon_label(ctx, "while_end")
@@ -3514,6 +3633,8 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if is_meta_while == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    break
                 prev_while_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
                 if ps_pos(ps) == prev_while_p
@@ -3521,11 +3642,25 @@ fn compile_pure_stmt ctx ps
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
+        elif is_meta_while == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    break
+                prev_while_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_while_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
         else
             compile_pure_stmt(ctx, ps)
         loop_pop(ctx)
 
         x86_jmp(ctx, lbl_loop)
+        if is_meta_while == 1
+            ps_skip_nl(ps)
+            if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                ps_adv(ps)
         label_define(ctx, lbl_end)
         return 0
 
@@ -3540,8 +3675,10 @@ fn compile_pure_stmt ctx ps
         x86_ret(ctx)
         return 0
 
-    // fn / কাজ (Function Definition)
-    if tt == TOK_IDENT and (txt == "fn" or txt == "কাজ")
+    // fn / কাজ / @fn (Function Definition)
+    // WHY: Unify Bengali, English, and Maya @fn syntax into identical machine code functions
+    if tt == TOK_IDENT and (txt == "fn" or txt == "কাজ" or txt == "@fn")
+        is_meta_fn = (txt == "@fn")
         ps_adv(ps)
         fn_name = ps_cur_text(ps)
         ps_adv(ps)
@@ -3617,6 +3754,8 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_INDENT
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
+                if is_meta_fn == 1 and ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    break
                 prev_fn_p = ps_pos(ps)
                 compile_pure_stmt(ctx, ps)
                 if ps_pos(ps) == prev_fn_p
@@ -3624,6 +3763,21 @@ fn compile_pure_stmt ctx ps
                 ps_skip_nl(ps)
             if ps_cur_type(ps) == TOK_DEDENT
                 ps_adv(ps)
+            if is_meta_fn == 1
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+        elif is_meta_fn == 1
+            while ps_cur_type(ps) != TOK_EOF
+                ps_skip_nl(ps)
+                if ps_cur_type(ps) == TOK_IDENT and ps_cur_text(ps) == "@end"
+                    ps_adv(ps)
+                    break
+                prev_fn_p = ps_pos(ps)
+                compile_pure_stmt(ctx, ps)
+                if ps_pos(ps) == prev_fn_p
+                    ps_adv(ps)
+                ps_skip_nl(ps)
         else
             compile_pure_stmt(ctx, ps)
 

@@ -1,0 +1,133 @@
+@fn build_sarbotro_v5_card(post_num, lang_code, h1, h2, category, date_str, source_str, location_tag, img_path, icon_path)
+  motto = "সত্যে সর্বত্র সর্বদা"
+  font_family = "'Hind Siliguri', 'Anek Bangla', sans-serif"
+  font_size_h1 = "44"
+  font_size_h2 = "39"
+
+  @if lang_code == "EN"
+    motto = "TRUTH • EVERYWHERE • ALWAYS"
+    font_family = "'Inter', Arial, sans-serif"
+    font_size_h1 = "41"
+    font_size_h2 = "36"
+  @end
+
+  svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1080 1350\" width=\"1080\" height=\"1350\">\n"
+  svg = svg + "  <defs>\n"
+  svg = svg + "    <linearGradient id=\"sarbotroBase\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"100%\">\n"
+  svg = svg + "      <stop offset=\"0%\" stop-color=\"#070A11\" />\n"
+  svg = svg + "      <stop offset=\"40%\" stop-color=\"#0C1322\" />\n"
+  svg = svg + "      <stop offset=\"100%\" stop-color=\"#04060A\" />\n"
+  svg = svg + "    </linearGradient>\n"
+  svg = svg + "    <linearGradient id=\"sarbotroCrimson\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">\n"
+  svg = svg + "      <stop offset=\"0%\" stop-color=\"#FF1E38\" />\n"
+  svg = svg + "      <stop offset=\"100%\" stop-color=\"#E0001B\" />\n"
+  svg = svg + "    </linearGradient>\n"
+  svg = svg + "    <linearGradient id=\"truthAmber\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">\n"
+  svg = svg + "      <stop offset=\"0%\" stop-color=\"#FFC700\" />\n"
+  svg = svg + "      <stop offset=\"100%\" stop-color=\"#FFA800\" />\n"
+  svg = svg + "    </linearGradient>\n"
+  svg = svg + "    <radialGradient id=\"mastheadGlow\" cx=\"15%\" cy=\"10%\" r=\"50%\">\n"
+  svg = svg + "      <stop offset=\"0%\" stop-color=\"#FF1E38\" stop-opacity=\"0.14\" />\n"
+  svg = svg + "      <stop offset=\"100%\" stop-color=\"#FF1E38\" stop-opacity=\"0\" />\n"
+  svg = svg + "    </radialGradient>\n"
+  svg = svg + "    <linearGradient id=\"photoTopBlend\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\">\n"
+  svg = svg + "      <stop offset=\"0%\" stop-color=\"#0C1322\" stop-opacity=\"1\" />\n"
+  svg = svg + "      <stop offset=\"35%\" stop-color=\"#0C1322\" stop-opacity=\"0.75\" />\n"
+  svg = svg + "      <stop offset=\"100%\" stop-color=\"#0C1322\" stop-opacity=\"0\" />\n"
+  svg = svg + "    </linearGradient>\n"
+  svg = svg + "    <linearGradient id=\"photoBottomBlend\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\">\n"
+  svg = svg + "      <stop offset=\"0%\" stop-color=\"#04060A\" stop-opacity=\"0\" />\n"
+  svg = svg + "      <stop offset=\"70%\" stop-color=\"#04060A\" stop-opacity=\"0.85\" />\n"
+  svg = svg + "      <stop offset=\"100%\" stop-color=\"#04060A\" stop-opacity=\"1\" />\n"
+  svg = svg + "    </linearGradient>\n"
+  svg = svg + "    <filter id=\"cardShadow\" x=\"-10%\" y=\"-10%\" width=\"120%\" height=\"120%\">\n"
+  svg = svg + "      <feDropShadow dx=\"0\" dy=\"12\" stdDeviation=\"16\" flood-color=\"#000000\" flood-opacity=\"0.8\" />\n"
+  svg = svg + "    </filter>\n"
+  svg = svg + "    <filter id=\"ribbonShadow\" x=\"-5%\" y=\"-10%\" width=\"110%\" height=\"120%\">\n"
+  svg = svg + "      <feDropShadow dx=\"0\" dy=\"6\" stdDeviation=\"8\" flood-color=\"#000000\" flood-opacity=\"0.6\" />\n"
+  svg = svg + "    </filter>\n"
+  svg = svg + "  </defs>\n\n"
+
+  svg = svg + "  <rect width=\"1080\" height=\"1350\" fill=\"url(#sarbotroBase)\" />\n"
+  svg = svg + "  <rect width=\"1080\" height=\"600\" fill=\"url(#mastheadGlow)\" />\n\n"
+
+  @! Grid
+  svg = svg + "  <g opacity=\"0.03\" stroke=\"#FFFFFF\" stroke-width=\"1.5\">\n"
+  svg = svg + "    <line x1=\"50\" y1=\"0\" x2=\"50\" y2=\"1350\" />\n"
+  svg = svg + "    <line x1=\"1030\" y1=\"0\" x2=\"1030\" y2=\"1350\" />\n"
+  svg = svg + "    <line x1=\"0\" y1=\"130\" x2=\"1080\" y2=\"130\" />\n"
+  svg = svg + "    <circle cx=\"950\" cy=\"220\" r=\"320\" fill=\"none\" stroke-dasharray=\"12 12\" />\n"
+  svg = svg + "    <circle cx=\"950\" cy=\"220\" r=\"180\" fill=\"none\" />\n"
+  svg = svg + "  </g>\n\n"
+
+  @! Photo
+  @if file_exists(img_path) == 1
+    svg = svg + "  <g transform=\"translate(0, 390)\">\n"
+    svg = svg + "    <image href=\"file://" + img_path + "\" x=\"0\" y=\"0\" width=\"1080\" height=\"960\" preserveAspectRatio=\"xMidYMid slice\" />\n"
+    svg = svg + "    <rect x=\"0\" y=\"0\" width=\"1080\" height=\"260\" fill=\"url(#photoTopBlend)\" />\n"
+    svg = svg + "    <rect x=\"0\" y=\"580\" width=\"1080\" height=\"380\" fill=\"url(#photoBottomBlend)\" />\n"
+    svg = svg + "    <g transform=\"translate(50, 840)\">\n"
+    svg = svg + "      <polygon points=\"0,0 470,0 455,42 0,42\" fill=\"#070A11\" fill-opacity=\"0.9\" filter=\"url(#cardShadow)\" />\n"
+    svg = svg + "      <rect x=\"0\" y=\"0\" width=\"6\" height=\"42\" fill=\"#FF1E38\" />\n"
+    svg = svg + "      <circle cx=\"24\" cy=\"21\" r=\"4.5\" fill=\"#00E5FF\" />\n"
+    svg = svg + "      <text x=\"38\" y=\"26\" fill=\"#F1F5F9\" font-family=\"'Inter', Arial, sans-serif\" font-size=\"12\" font-weight=\"800\" letter-spacing=\"2\">" + location_tag + "</text>\n"
+    svg = svg + "    </g>\n"
+    svg = svg + "  </g>\n\n"
+  @end
+
+  @! Masthead
+  svg = svg + "  <g transform=\"translate(50, 45)\">\n"
+  svg = svg + "    <g transform=\"translate(0, 0)\">\n"
+  @if file_exists(icon_path) == 1
+    svg = svg + "      <image href=\"file://" + icon_path + "\" x=\"0\" y=\"-4\" width=\"46\" height=\"64\" />\n"
+  @end
+  svg = svg + "      <g transform=\"translate(58, 2)\">\n"
+  svg = svg + "        <text x=\"0\" y=\"24\" fill=\"#FFFFFF\" font-family=\"'Inter', Arial, sans-serif\" font-size=\"28\" font-weight=\"900\" letter-spacing=\"3.5\">SARBOTRO</text>\n"
+  svg = svg + "        <text x=\"2\" y=\"46\" fill=\"#FF1E38\" font-family=\"'Inter', Arial, sans-serif\" font-size=\"13\" font-weight=\"900\" letter-spacing=\"6\">NEWS</text>\n"
+  svg = svg + "      </g>\n"
+  svg = svg + "    </g>\n"
+
+  @! Category
+  svg = svg + "    <g transform=\"translate(980, 0)\">\n"
+  svg = svg + "      <g transform=\"translate(-170, 0)\">\n"
+  svg = svg + "        <polygon points=\"15,0 170,0 155,42 0,42\" fill=\"url(#sarbotroCrimson)\" filter=\"url(#cardShadow)\" />\n"
+  svg = svg + "        <circle cx=\"26\" cy=\"21\" r=\"4\" fill=\"#FFFFFF\" />\n"
+  svg = svg + "        <text x=\"38\" y=\"27\" fill=\"#FFFFFF\" font-family=\"'Inter', Arial, sans-serif\" font-size=\"13.5\" font-weight=\"900\" letter-spacing=\"2.5\">" + category + "</text>\n"
+  svg = svg + "      </g>\n"
+  svg = svg + "    </g>\n"
+  svg = svg + "  </g>\n\n"
+
+  svg = svg + "  <g transform=\"translate(50, 130)\">\n"
+  svg = svg + "    <line x1=\"0\" y1=\"0\" x2=\"980\" y2=\"0\" stroke=\"#FFFFFF\" stroke-width=\"1\" opacity=\"0.12\" />\n"
+  svg = svg + "    <rect x=\"0\" y=\"-1.5\" width=\"60\" height=\"3\" fill=\"#FF1E38\" />\n"
+  svg = svg + "  </g>\n\n"
+
+  @! Headline
+  svg = svg + "  <g transform=\"translate(50, 168)\">\n"
+  svg = svg + "    <g transform=\"translate(0, 10)\">\n"
+  svg = svg + "      <rect x=\"0\" y=\"8\" width=\"5\" height=\"36\" fill=\"#FF1E38\" rx=\"2.5\" />\n"
+  svg = svg + "      <rect x=\"9\" y=\"8\" width=\"5\" height=\"36\" fill=\"#FFC700\" rx=\"2.5\" />\n"
+  svg = svg + "    </g>\n"
+  svg = svg + "    <text x=\"28\" y=\"48\" fill=\"#F8FAFC\" font-family=\"" + font_family + "\" font-size=\"" + font_size_h1 + "\" font-weight=\"800\" filter=\"url(#cardShadow)\">" + h1 + "</text>\n"
+  svg = svg + "    <g transform=\"translate(0, 78)\">\n"
+  svg = svg + "      <polygon points=\"0,0 980,0 965,76 0,76\" fill=\"url(#truthAmber)\" filter=\"url(#ribbonShadow)\" />\n"
+  svg = svg + "      <polygon points=\"0,0 12,0 12,76 0,76\" fill=\"#FF1E38\" />\n"
+  svg = svg + "      <text x=\"28\" y=\"53\" fill=\"#06090E\" font-family=\"" + font_family + "\" font-size=\"" + font_size_h2 + "\" font-weight=\"900\">" + h2 + "</text>\n"
+  svg = svg + "    </g>\n"
+  svg = svg + "  </g>\n\n"
+
+  @! Footer
+  svg = svg + "  <g transform=\"translate(50, 1295)\">\n"
+  svg = svg + "    <line x1=\"0\" y1=\"-18\" x2=\"980\" y2=\"-18\" stroke=\"#FFFFFF\" stroke-width=\"1\" opacity=\"0.08\" />\n"
+  svg = svg + "    <g transform=\"translate(0, 6)\">\n"
+  svg = svg + "      <circle cx=\"6\" cy=\"-5\" r=\"3\" fill=\"#00E5FF\" />\n"
+  svg = svg + "      <text x=\"18\" y=\"0\" fill=\"#94A3B8\" font-family=\"'Inter', Arial, sans-serif\" font-size=\"14.5\" font-weight=\"600\">Source: " + source_str + " | " + date_str + "</text>\n"
+  svg = svg + "    </g>\n"
+  svg = svg + "    <g transform=\"translate(980, 6)\">\n"
+  svg = svg + "      <text x=\"0\" y=\"0\" fill=\"#64748B\" font-family=\"" + font_family + "\" font-size=\"14\" font-weight=\"700\" letter-spacing=\"1.5\" text-anchor=\"end\"><tspan fill=\"#FF1E38\" font-weight=\"900\" font-family=\"'Inter'\">SARBOTRO</tspan> » " + motto + "</text>\n"
+  svg = svg + "    </g>\n"
+  svg = svg + "  </g>\n"
+  svg = svg + "</svg>\n"
+
+  return svg
+@end

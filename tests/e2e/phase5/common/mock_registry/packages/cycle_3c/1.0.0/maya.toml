@@ -1,0 +1,8 @@
+[package]
+name = "cycle_3c"
+version = "1.0.0"
+edition = "2026"
+description = "Mock package cycle_3c version 1.0.0 for MPM testing"
+
+[dependencies]
+cycle_3a = "^1.0.0"
