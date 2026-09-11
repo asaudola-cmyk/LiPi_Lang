@@ -1,11 +1,11 @@
 {
   "name": "lipi-language",
-  "displayName": "Lipi Programming Language (লিপি)",
-  "description": "Official Visual Studio Code extension for Lipi (লিপি) — Bilingual syntax highlighting, code snippets, and indentation rules.",
-  "version": "1.0.0",
-  "publisher": "oshim",
+  "displayName": "Lipi Sovereign Programming Language",
+  "description": "Official Language Support for Lipi 2.0 (Bilingual English & Bengali, Direct Silicon Compiler)",
+  "version": "2.0.0",
+  "publisher": "lipi-lang",
   "author": {
-    "name": "Lipi Language Community",
+    "name": "Lipi Language Project",
     "url": "https://github.com/shafiullah/lipi"
   },
   "license": "MIT",
@@ -22,7 +22,12 @@
     "bengali",
     "language",
     "compiler",
-    "multilingual"
+    "multilingual",
+    "sovereign"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:lipi"
   ],
   "contributes": {
     "languages": [
@@ -35,6 +40,7 @@
         ],
         "extensions": [
           ".lp",
+          ".লিপি",
           ".lipi"
         ],
         "configuration": "./language-configuration.json"
@@ -52,6 +58,22 @@
         "language": "lipi",
         "path": "./snippets/lipi.json"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Lipi Language Server",
+      "properties": {
+        "lipi.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Lipi Language Server (lipilsp) integration"
+        },
+        "lipi.lsp.path": {
+          "type": "string",
+          "default": "bin/lipilsp",
+          "description": "Path to the lipilsp executable"
+        }
+      }
+    }
   }
 }

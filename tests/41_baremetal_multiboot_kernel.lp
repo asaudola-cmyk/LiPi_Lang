@@ -1,6 +1,8 @@
 // Test 41: Bare Metal Kernel — Lipi 2.0 Global Standard
 // Multiboot kernel initialization sequence
 
+include "std/kernel.lp"
+
 fn gdt_entry base limit access flags
     // Global Descriptor Table entry construction
     return base + limit + access + flags
@@ -28,9 +30,12 @@ fn cpu_detect
 
 fn kernel_main
     say "=== Lipi Kernel Boot ==="
-    say "Multiboot header: OK"
+    // WHY: Multiboot 1 checksum and magic specification verification from std/kernel.lp
+    mb_ok = multiboot_checksum_verify(MULTIBOOT_MAGIC, MULTIBOOT_FLAGS, MULTIBOOT_CHECKSUM)
+    if mb_ok == 1
+        say "Multiboot header: OK"
     
-    cpu_detect
+    cpu_detect()
     pic_init 32 40
     
     kernel_map_pages 0 0 1024 3
@@ -42,6 +47,6 @@ fn kernel_main
     say "VFS: mounted"
     return 0
 
-kernel_main
+kernel_main()
 
 say "PASS: Test 41 Bare Metal Kernel"

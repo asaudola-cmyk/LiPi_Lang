@@ -6,7 +6,16 @@
       "    ${0:// function body}",
       "    return ${3:result}"
     ],
-    "description": "Define a new function in Lipi"
+    "description": "Define a function in Lipi"
+  },
+  "OOP Struct Method (English)": {
+    "prefix": "fn method",
+    "body": [
+      "fn ${1:Class}.${2:method}(${3:params})",
+      "    ${0:// method implementation}",
+      "    return ${4:result}"
+    ],
+    "description": "Define an OOP struct method in Lipi"
   },
   "Function Definition (Bengali)": {
     "prefix": "কাজ",
@@ -16,6 +25,85 @@
       "    ফেরত ${3:ফলাফল}"
     ],
     "description": "লিপিতে নতুন কাজ (ফাংশন) তৈরি করুন"
+  },
+  "OOP Struct Method (Bengali)": {
+    "prefix": "কাজ মেথড",
+    "body": [
+      "কাজ ${1:কাঠামো}.${2:মেথড}(${3:প্যারামিটার})",
+      "    ${0:// মেথড বাস্তবায়ন}",
+      "    ফেরত ${4:ফলাফল}"
+    ],
+    "description": "লিপিতে কাঠামোর ওওপি মেথড তৈরি করুন"
+  },
+  "Struct Definition (English)": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name}",
+      "    ${2:field1},",
+      "    ${3:field2}"
+    ],
+    "description": "Define a structure data type"
+  },
+  "Struct Definition (Bengali)": {
+    "prefix": "কাঠামো",
+    "body": [
+      "কাঠামো ${1:নাম}",
+      "    ${2:ক্ষেত্র১},",
+      "    ${3:ক্ষেত্র২}"
+    ],
+    "description": "লিপিতে নতুন ডেটা কাঠামো তৈরি করুন"
+  },
+  "Web Router HTTP Server": {
+    "prefix": "web_router",
+    "body": [
+      "include \"std/web.lp\"",
+      "",
+      "fn handle_home(req)",
+      "    return web_response_json(200, \"{\\\"status\\\":\\\"ok\\\",\\\"message\\\":\\\"Lipi Server Online\\\"}\")",
+      "",
+      "fn handle_api(req)",
+      "    return web_response_json(200, \"{\\\"version\\\":\\\"2.0.0\\\",\\\"engine\\\":\\\"lipc\\\"}\")",
+      "",
+      "fn start_server()",
+      "    router = web_router_create()",
+      "    web_router_get(router, \"/\", handle_home)",
+      "    web_router_get(router, \"/api\", handle_api)",
+      "    say \"🚀 Web Server listening on http://0.0.0.0:${1:8080}...\"",
+      "    web_server_start(router, ${1:8080})",
+      "",
+      "start_server()"
+    ],
+    "description": "High-performance HTTP Web Router and Server template using std/web.lp"
+  },
+  "Native Thread Spawn": {
+    "prefix": "thread_create",
+    "body": [
+      "include \"std/thread.lp\"",
+      "",
+      "fn worker_task(arg)",
+      "    say \"[Thread Worker] Running task with arg: \" + arg",
+      "    ${0:// concurrent workload here}",
+      "    return 0",
+      "",
+      "th = thread_create(worker_task, ${1:100})",
+      "thread_join(th)",
+      "say \"✔ Thread execution completed.\""
+    ],
+    "description": "Spawn and join a native Linux OS thread via direct clone syscall"
+  },
+  "Say Statement (English)": {
+    "prefix": "say",
+    "body": [
+      "say \"${1:Hello, Lipi!}\""
+    ],
+    "description": "Print line to standard output"
+  },
+  "Bolo Statement (Bengali)": {
+    "prefix": "বলো",
+    "body": [
+      "বলো \"${1:হ্যালো লিপি!}\""
+    ],
+    "description": "কনসোলে বার্তা প্রিন্ট করুন"
   },
   "If Statement (English)": {
     "prefix": "if",
@@ -59,7 +147,7 @@
       "while ${1:condition}",
       "    ${0:// loop body}"
     ],
-    "description": "While loop"
+    "description": "While loop statement"
   },
   "While Loop (Bengali)": {
     "prefix": "যতক্ষণ",
@@ -67,7 +155,7 @@
       "যতক্ষণ ${1:শর্ত}",
       "    ${0:// লুপ বডি}"
     ],
-    "description": "যতক্ষণ লুপ"
+    "description": "যতক্ষণ পুনরাবৃত্তি লুপ"
   },
   "For Range Loop (English)": {
     "prefix": "for",
@@ -80,78 +168,53 @@
   "For Range Loop (Bengali)": {
     "prefix": "প্রতিটি",
     "body": [
-      "প্রতিটি ${1:i} ভেতরে ${2:১}..${3:১০}",
+      "প্রতিটি ${1:i} মধ্যে ${2:১}..${3:১০}",
       "    ${0:// লুপ বডি}"
     ],
     "description": "প্রতিটি রেঞ্জ লুপ"
   },
-  "Repeat Loop (English)": {
-    "prefix": "repeat",
+  "Pattern Match (English)": {
+    "prefix": "match",
     "body": [
-      "repeat ${1:5}",
-      "    ${0:// body}"
+      "match ${1:val}",
+      "    case ${2:1} =>",
+      "        ${3:// case 1}",
+      "    case ${4:2} =>",
+      "        ${5:// case 2}",
+      "    else =>",
+      "        ${0:// default}"
     ],
-    "description": "Repeat block N times"
+    "description": "Pattern matching block"
   },
-  "Repeat Loop (Bengali)": {
-    "prefix": "বার",
+  "Hash Map Template": {
+    "prefix": "hashmap",
     "body": [
-      "${1:৫} বার বলো \"${0:হ্যালো লিপি!}\""
-    ],
-    "description": "N বার পুনরাবৃত্তি বিবৃতি"
-  },
-  "Struct Definition (English)": {
-    "prefix": "struct",
-    "body": [
-      "struct ${1:Name}",
-      "    ${2:field1}",
-      "    ${3:field2}"
-    ],
-    "description": "Define a structure data type"
-  },
-  "Struct Definition (Bengali)": {
-    "prefix": "গঠন",
-    "body": [
-      "গঠন ${1:নাম}",
-      "    ${2:ক্ষেত্র১}",
-      "    ${3:ক্ষেত্র২}"
-    ],
-    "description": "লিপিতে নতুন গঠন (স্ট্রাকচার) তৈরি করুন"
-  },
-  "Say Statement": {
-    "prefix": "say",
-    "body": [
-      "say \"${1:Hello, Lipi!}\""
-    ],
-    "description": "Print line to standard output"
-  },
-  "Bolo Statement": {
-    "prefix": "বলো",
-    "body": [
-      "বলো \"${1:হ্যালো লিপি!}\""
-    ],
-    "description": "কনসোলে বার্তা প্রিন্ট করুন"
-  },
-  "Main Application Template": {
-    "prefix": "main",
-    "body": [
-      "// Lipi Application: ${1:AppName}",
+      "include \"std/hashmap.lp\"",
       "",
-      "fn main()",
-      "    say \"Starting ${1:AppName}...\"",
-      "    ${0:// code here}",
-      "    say \"Done.\"",
-      "",
-      "main()"
+      "hm = hashmap_new()",
+      "hashmap_set(hm, \"${1:key}\", \"${2:value}\")",
+      "val = hashmap_get(hm, \"${1:key}\")",
+      "say \"Lookup result: \" + val"
     ],
-    "description": "Standard Lipi main application entry point"
+    "description": "Fast Robin-Hood hash map data structure initialization and lookup"
+  },
+  "Memory Arena Allocator": {
+    "prefix": "arena",
+    "body": [
+      "include \"std/arena.lp\"",
+      "",
+      "ar = arena_create(${1:65536}) // 64KB arena",
+      "ptr1 = arena_alloc(ar, ${2:256})",
+      "arena_reset(ar)"
+    ],
+    "description": "High-performance contiguous memory arena allocator"
   },
   "Linux Kernel Syscall": {
     "prefix": "syscall",
     "body": [
-      "// Syscall ${1:write}: num=${2:1}, fd=${3:1}, buf=${4:ptr}, len=${5:count}",
-      "val res = syscall(${2:1}, ${3:1}, ${4:ptr}, ${5:count})"
+      "// Linux AMD64 Syscall: num=${1:1}, arg1=${2:1}, arg2=${3:buf}, arg3=${4:len}",
+      "res = syscall(${1:1}, ${2:1}, ${3:buf}, ${4:len}, 0, 0, 0)"
     ],
-    "description": "Direct Linux x86_64 kernel syscall"
+    "description": "Direct Linux x86_64 kernel syscall (0% Libc)"
   }
 }

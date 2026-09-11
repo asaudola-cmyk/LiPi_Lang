@@ -48,22 +48,41 @@ fn mem_fill addr value len
 fn মেমরি_ভরাট addr value len
     return mem_fill(addr, value, len)
 
-// ৫. ৬৪-বিট ওয়ার্ড মেমরিতে সংরক্ষণ (Write 64-bit QWORD at index)
-// WHY: অ্যারে ও স্ট্রাকচারের ইনডেক্সড ডাটা দ্রুত সংরক্ষণ করা।
-fn mem_write_word addr index value
+// ৫. ৬৪-বিট মেমরি রিড ও রাইট (64-bit Memory Read/Write via byte offset)
+// WHY: সিপিইউ মেমরির নির্দিষ্ট বাইট অফসেট থেকে ৬৪-বিট পূর্ণসংখ্যা পড়া ও লেখা।
+fn mem_read addr offset
+    return মেমরি_পড়ো(addr, offset)
+
+fn mem_write addr offset value
+    মেমরি_লেখো(addr, offset, value)
+    return value
+
+// ৬. সূচক ভিত্তিক মেমরি এক্সেস (Index-based Memory Access: index * 8 bytes)
+// WHY: অ্যারে ও স্ট্রাকচারের ইনডেক্সড ডাটা (০, ১, ২...) দ্রুত রিড ও রাইট করা।
+fn mem_write_idx addr index value
     offset = index * 8
     মেমরি_লেখো(addr, offset, value)
     return value
 
-fn মেমরি_শব্দ_লেখো addr index value
-    return mem_write_word(addr, index, value)
+fn মেমরি_সূচক_লেখো addr index value
+    return mem_write_idx(addr, index, value)
 
-// ৬. ৬৪-বিট ওয়ার্ড মেমরি থেকে পড়া (Read 64-bit QWORD from index)
-// WHY: অ্যারে বা স্ট্রাকচারের ইনডেক্সড ডাটা সরাসরি লোড করা।
-fn mem_word_read addr index
+fn mem_read_idx addr index
     offset = index * 8
-    value = মেমরি_পড়ো(addr, offset)
-    return value
+    return মেমরি_পড়ো(addr, offset)
 
-fn মেমরি_শব্দ_পড়ো addr index
-    return mem_word_read(addr, index)
+fn মেমরি_সূচক_পড়ো addr index
+    return mem_read_idx(addr, index)
+
+fn mem_read_u32 addr index
+    return mem_read_idx(addr, index)
+
+fn mem_write_u32 addr index value
+    return mem_write_idx(addr, index, value)
+
+// ৭. মেমরি বরাদ্দ ও অবমুক্তির সার্বভৌমিক এলিয়াস (Universal Allocation Aliases)
+fn mem_alloc size
+    return malloc(size)
+
+fn mem_free addr size
+    return free(addr, size)

@@ -24,14 +24,75 @@ fn http_response status headers body
 fn http_json status body
     return "HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\n\r\n" + body
 
-// Parse HTTP method from request line
+// WHY: Extracts HTTP method (e.g. "GET", "POST", "PUT", "DELETE") from the request line.
+// Reads characters up to the first ASCII space (0x20 = 32). Handles leading whitespace
+// and gracefully falls back to METHOD_GET if request string is empty or ill-formed.
 fn http_method request
-    // "GET /path HTTP/1.1" -> "GET"
-    return "GET"  // Simplified
+    rlen = len(request)
+    if rlen == 0
+        return METHOD_GET
 
-// Parse HTTP path from request line
+    // Skip leading whitespace if present
+    start = 0
+    while start < rlen
+        c = char_at(request, start)
+        if c != " " and c != "\r" and c != "\n" and c != "\t"
+            break
+        start = start + 1
+
+    if start >= rlen
+        return METHOD_GET
+
+    // Extract method characters until next delimiter (space, \r, \n, \t)
+    method_str = ""
+    i = start
+    while i < rlen
+        c = char_at(request, i)
+        if c == " " or c == "\r" or c == "\n" or c == "\t"
+            break
+        method_str = method_str + c
+        i = i + 1
+
+    if len(method_str) == 0
+        return METHOD_GET
+    return method_str
+
+// WHY: Extracts the request URI path (e.g. "/", "/api/v1/users", "/index.html") from HTTP request line.
+// Locates the first space separating method from URI, then extracts up to the second space (or \r, \n).
+// Defaults safely to "/" if the path cannot be resolved.
 fn http_path request
-    return "/"  // Simplified
+    rlen = len(request)
+    if rlen == 0
+        return "/"
+
+    // 1. Locate first space
+    i = 0
+    while i < rlen
+        if char_at(request, i) == " "
+            break
+        i = i + 1
+
+    // Skip spaces between method and URI
+    while i < rlen
+        if char_at(request, i) != " "
+            break
+        i = i + 1
+
+    if i >= rlen
+        return "/"
+
+    // 2. Extract path until next space, carriage return, newline, or tab
+    path_str = ""
+    while i < rlen
+        c = char_at(request, i)
+        if c == " " or c == "\r" or c == "\n" or c == "\t"
+            break
+        path_str = path_str + c
+        i = i + 1
+
+    if len(path_str) == 0
+        return "/"
+    return path_str
 
 // Create HTTP server (returns fd)
 fn http_server port

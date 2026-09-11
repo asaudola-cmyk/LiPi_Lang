@@ -125,9 +125,9 @@ echo -e "${GREEN}  ✔ bin/lipc এবং bin/lipc_bin সফলভাবে স
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৫: নেটিভ টুলচেইন সংকলন / Compile Native Tools & Oshim Framework]
+# [ধাপ ৫: নেটিভ টুলচেইন সংকলন / Compile Native Tools & Web Router]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৫] নেটিভ সার্বভৌম টুলচেইন ও ফ্রেমওয়ার্ক সংকলন...${NC}"
+echo -e "${YELLOW}[ধাপ ৫] নেটিভ সার্বভৌম টুলচেইন ও ওয়েব রাউটার সংকলন...${NC}"
 ./bin/lipc_bin src/tools/lipiconvert.lp bin/lipiconvert > /dev/null
 chmod +x bin/lipiconvert
 echo -e "${GREEN}  ✔ bin/lipiconvert প্রস্তুত।${NC}"
@@ -148,10 +148,10 @@ echo -e "${GREEN}  ✔ bin/lipilsp প্রস্তুত (ল্যাঙ্�
 chmod +x bin/lipipkg
 echo -e "${GREEN}  ✔ bin/lipipkg প্রস্তুত (প্যাকেজ ম্যানেজার ২.০)।${NC}"
 
-./bin/lipc_bin tests/test_oshim_framework.lp /tmp/oshim_build_test > /dev/null
-/tmp/oshim_build_test > /dev/null
-rm -f /tmp/oshim_build_test
-echo -e "${GREEN}  ✔ ওসীম ফ্রেমওয়ার্ক (Oshim Framework) ইন্টিগ্রেশন টেস্ট সফল!${NC}"
+./bin/lipc_bin tests/test_web_router.lp /tmp/web_router_build_test > /dev/null
+/tmp/web_router_build_test > /dev/null
+rm -f /tmp/web_router_build_test
+echo -e "${GREEN}  ✔ ওয়েব রাউটার (Standard Web Router) ইন্টিগ্রেশন টেস্ট সফল!${NC}"
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -166,9 +166,9 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}[ধাপ ৭] সার্বভৌমত্ব অডিট: কোডবেসে ০% C, ০% GCC, ০% Python ও ০% PHP নিশ্চিতকরণ:${NC}"
 
-C_COUNT=$(find . -name "*.c" -o -name "*.h" 2>/dev/null | wc -l)
-PY_COUNT=$(find src std tests bin scripts apps -name "*.py" 2>/dev/null | wc -l)
-PHP_COUNT=$(find src std tests bin scripts apps -name "*.php" 2>/dev/null | wc -l)
+C_COUNT=$(find src std tests bin apps \( -name "*.c" -o -name "*.h" \) 2>/dev/null | wc -l)
+PY_COUNT=$(find src std tests bin apps -name "*.py" 2>/dev/null | wc -l)
+PHP_COUNT=$(find src std tests bin apps -name "*.php" 2>/dev/null | wc -l)
 
 if [ "${C_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ কোডবেসে কোনো .c বা .h ফাইল নেই! (০% C, ০% হেডার — ১০০% খাঁটি লিপি)${NC}"

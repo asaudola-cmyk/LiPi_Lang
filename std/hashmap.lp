@@ -1,38 +1,45 @@
-// 📜 লিপি ইনোভেটিভ রবিন-হুড hashম্যাপ (Pure Lipi Robin Hood Hash Map)
-// 🏛️ O(1) memory লুaআপ, Cache-Locality অপ্টিমাইজড, ও Zero-Allocation আর্aিটেaচার
-// ইনোভেশন: memory ফ্র্যাগমেন্টেশন রোধ aরতে we রবিন-হুড প্রোবিং (Robin Hood Probing) ব্যবrate aরছি,
-// যেbানে 'ধনী' (যার indexa্স থেaে distance less) 'গরিব' (যার distance more) aে জায়গা ছেড়ে দেয়!
+// ==============================================================================
+// 📜 লিপি ইনোভেটিভ রবিন-হুড হ্যাশম্যাপ (Pure Lipi Robin Hood Hash Map)
+// 🏛️ O(1) মেমরি লুকআপ, Cache-Locality অপ্টিমাইজড, ও Zero-Allocation আর্কিটেকচার
+// ==============================================================================
+// ইনোভেশন: মেমরি ফ্র্যাগমেন্টেশন রোধ করতে আমরা রবিন-হুড প্রোবিং (Robin Hood Probing) ব্যবহার করছি,
+// যেখানে 'ধনী' (যার ইনডেক্স থেকে দূরত্ব কম) 'গরিব' (যার দূরত্ব বেশি) কে জায়গা ছেড়ে দেয়!
 
 include "std/mem.lp"
 
-// ১. memতে hashtable create (Create Hash Table)
-// WHY: লিংaড-লিস্ট (Linked List) ব্যবrate not aরে direct এaটানা memory ব্লaে (Contiguous Memory)
-// data রাbলে CPU Cache (L1/L2) মিস হওয়ার সম্ভাবনা ৯৯% lessে যায়।
+// ── ১. মেমরিতে হ্যাশটেবিল তৈরি (Create Hash Table) ─────────────────────────────
+// WHY: লিংকড-লিস্ট (Linked List) ব্যবহার না করে সরাসরি একটানা মেমরি ব্লকে (Contiguous Memory)
+// ডেটা রাখলে CPU Cache (L1/L2) মিস হওয়ার সম্ভাবনা ৯৯% কমে যায়।
 fn hashmap_create max_elements
-    // each slotে needed: [Key Hash: 8 Byte] + [Value Pointer: 8 Byte] + [Probe Distance: 8 Byte] = 24 Bytes
+    // প্রতি স্লটে প্রয়োজন: [Key Hash: 8 Byte] + [Value Pointer: 8 Byte] + [Probe Distance: 8 Byte] = 24 Bytes
     size = max_elements * 24
     // SYS_mmap (9) -> PROT_READ|PROT_WRITE (3), MAP_PRIVATE|MAP_ANONYMOUS (34)
-    পয়েন্টার = syscall(9, 0, size, 3, 34, -1, 0)
-    mem_fill(পয়েন্টার, 0, size)
-    return পয়েন্টার
+    pointr = syscall(9, 0, size, 3, 34, -1, 0)
+    mem_fill(pointr, 0, size)
+    return pointr
 
-// ২. a্রিপ্টোগ্রাফিa নন-a্রিপ্টো hash (MurmurHash3 বিaল্প ইনোভেশন)
-// WHY: সাধারণ মডুলো (Modulo) hash অনেa aোলিশন (Collision) create aরে।
-// we বিট-শিফটিং এবং prime মাল্টিপ্লিaেশন দিয়ে ফাস্ট অ্যাভাল্যাঞ্জ hash create aরছি।
+fn হ্যাশম্যাপ_তৈরি max_elements
+    return hashmap_create(max_elements)
+
+// ── ২. ক্রিপ্টোগ্রাফিক নন-ক্রিপ্টো হ্যাশ (MurmurHash3 বিকল্প ইনোভেশন) ───────────
+// WHY: সাধারণ মডুলো (Modulo) হ্যাশ অনেক কোলিশন (Collision) তৈরি করে।
+// আমরা বিট-শিফটিং এবং প্রাইম মাল্টিপ্লিকেশন দিয়ে ফাস্ট অ্যাভাল্যাঞ্জ হ্যাশ তৈরি করছি।
 fn fast_hash value
-    hash = value * 13145671 // এaটি prime num
-    // লিপিতে বিট-শিফট বর্তvalueে গাণিতিa divideের মাধ্যমে সিমুলেট aরা যায় (if shift operator not থাaে)
-    // তবে we simple লিনিয়ার aনগ্রুয়েন্সিয়াল generator (LCG) স্টাইল hash ব্যবrate aরব।
+    hash = value * 13145671 // একটি প্রাইম সংখ্যা
+    // লিপিতে বিট-শিফট বর্তমানে গাণিতিক ভাগের মাধ্যমে সিমুলেট করা যায় (যদি শিফট অপারেটর না থাকে)
+    // তবে আমরা সাধারণ লিনিয়ার কনগ্রুয়েন্সিয়াল জেনারেটর (LCG) স্টাইল হ্যাশ ব্যবহার করব।
     hash = hash + (value * 73)
     if hash < 0
         hash = hash * -1
     return hash
 
-// ৩. রবিন-হুড insert (Robin Hood Steal-from-the-Rich Insert)
-// WHY: aোলিশন হলে যে data তার আসল indexa্স থেaে more দূরে (গরিব), সে আগের dataaে (ধনী) সরিয়ে জায়গা দbল aরবে।
-fn hashmap_insert ম্যাপ_পয়েন্টার capacity key_val val
+fn ফাস্ট_হ্যাশ value
+    return fast_hash(value)
+
+// ── ৩. রবিন-হুড ইনসার্ট (Robin Hood Steal-from-the-Rich Insert) ─────────────────
+// WHY: কোলিশন হলে যে ডেটা তার আসল ইনডেক্স থেকে বেশি দূরে (গরিব), সে আগের ডেটাকে (ধনী) সরিয়ে জায়গা দখল করবে।
+fn hashmap_insert map_ptr capacity key_val val
     hash = fast_hash(key_val)
-    // capacity দিয়ে মডুলো (লিপিতে % operator not থাaলে: hash - (hash / capacity) * capacity)
     quotient = hash / capacity
     slot = hash - (quotient * capacity)
 
@@ -42,25 +49,30 @@ fn hashmap_insert ম্যাপ_পয়েন্টার capacity key_val val
 
     loop_count = 0
     while loop_count < capacity
-        offset = slot * 24
-        stored_key = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, slot * 3) // Offset 0
+        slot_offset = slot * 24
+        stored_key = মেমরি_পড়ো(map_ptr, slot_offset)
 
-        // slot bালি থাaলে
-        if stored_key == 0
-            mem_write_word(ম্যাপ_পয়েন্টার, slot * 3, cur_key)
-            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 1, cur_val)
-            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 2, cur_dist)
+        // যদি একই কী আগেই উপস্থিত থাকে, মান আপডেট করো
+        if stored_key == cur_key
+            মেমরি_লেখো(map_ptr, slot_offset + 8, cur_val)
             return 1
 
-        // রবিন হুড লজিa: ধনী থেaে চুরি (Steal from the rich)
-        stored_dist = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 2)
+        // স্লট খালি থাকলে সংরক্ষণ করো
+        if stored_key == 0
+            মেমরি_লেখো(map_ptr, slot_offset, cur_key)
+            মেমরি_লেখো(map_ptr, slot_offset + 8, cur_val)
+            মেমরি_লেখো(map_ptr, slot_offset + 16, cur_dist)
+            return 1
+
+        // রবিন হুড লজিক: ধনী থেকে চুরি (Steal from the rich)
+        stored_dist = মেমরি_পড়ো(map_ptr, slot_offset + 16)
         if cur_dist > stored_dist
             // অদল-বদল (Swap)
-            stored_val = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 1)
+            stored_val = মেমরি_পড়ো(map_ptr, slot_offset + 8)
 
-            mem_write_word(ম্যাপ_পয়েন্টার, slot * 3, cur_key)
-            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 1, cur_val)
-            mem_write_word(ম্যাপ_পয়েন্টার, (slot * 3) + 2, cur_dist)
+            মেমরি_লেখো(map_ptr, slot_offset, cur_key)
+            মেমরি_লেখো(map_ptr, slot_offset + 8, cur_val)
+            মেমরি_লেখো(map_ptr, slot_offset + 16, cur_dist)
 
             cur_key = stored_key
             cur_val = stored_val
@@ -72,12 +84,15 @@ fn hashmap_insert ম্যাপ_পয়েন্টার capacity key_val val
             slot = 0 // র‍্যাপ এরাউন্ড (Wrap Around)
         loop_count = loop_count + 1
 
-    // map full (Full)
+    // ম্যাপ পূর্ণ (Full)
     return 0
 
-// ৪. ও(১) লুaআপ (O(1) Lookup with Early Exit Innovation)
-// WHY: রবিন হুড hashিং এর aারণে we জানি যে aোনো ইলিমেন্ট তার distanceের চেয়ে more দূরে থাaতে পারবে not, তাই fast লুপ ব্রেa aরা যায়।
-fn hashmap_lookup ম্যাপ_পয়েন্টার capacity key_val
+fn হ্যাশম্যাপ_ইনসার্ট map_ptr capacity key_val val
+    return hashmap_insert(map_ptr, capacity, key_val, val)
+
+// ── ৪. O(1) লুকআপ (O(1) Lookup with Early Exit Innovation) ────────────────────
+// WHY: রবিন হুড হ্যাশিং এর কারণে আমরা জানি যে কোনো উপাদান তার দূরত্বের চেয়ে বেশি দূরে থাকতে পারবে না, তাই দ্রুত লুপ ব্রেক করা যায়।
+fn hashmap_lookup map_ptr capacity key_val
     hash = fast_hash(key_val)
     quotient = hash / capacity
     slot = hash - (quotient * capacity)
@@ -86,18 +101,19 @@ fn hashmap_lookup ম্যাপ_পয়েন্টার capacity key_val
     loop_count = 0
 
     while loop_count < capacity
-        stored_key = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, slot * 3)
+        slot_offset = slot * 24
+        stored_key = মেমরি_পড়ো(map_ptr, slot_offset)
 
         if stored_key == key_val
-            val = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 1)
+            val = মেমরি_পড়ো(map_ptr, slot_offset + 8)
             return val
 
         if stored_key == 0
             return -1 // পাওয়া যায়নি
 
-        stored_dist = mem_শব্দ_পড়ো(ম্যাপ_পয়েন্টার, (slot * 3) + 2)
+        stored_dist = মেমরি_পড়ো(map_ptr, slot_offset + 16)
         if distance > stored_dist
-            return -1 // Early Exit (রবিন হুড ইনোভেশন: data এbানে থাaতে পারে না)
+            return -1 // Early Exit (রবিন হুড ইনোভেশন: ডেটা এখানে থাকতে পারে না)
 
         distance = distance + 1
         slot = slot + 1
@@ -107,7 +123,17 @@ fn hashmap_lookup ম্যাপ_পয়েন্টার capacity key_val
 
     return -1
 
-// ৫. hashম্যাপ অবমুa্তি
-fn hashmap_delete ম্যাপ_পয়েন্টার capacity
-    syscall(11, ম্যাপ_পয়েন্টার, capacity * 24) // SYS_munmap
+fn হ্যাশম্যাপ_লুকআপ map_ptr capacity key_val
+    return hashmap_lookup(map_ptr, capacity, key_val)
+
+// ── ৫. হ্যাশম্যাপ অবমুক্তি (Destroy Hashmap via SYS_munmap) ──────────────────────
+// WHY: ম্যাপের জন্য বরাদ্দকৃত মেমরি কার্নেলে ফিরিয়ে দেওয়া।
+fn hashmap_delete map_ptr capacity
+    syscall(11, map_ptr, capacity * 24, 0, 0, 0, 0) // SYS_munmap
     return 1
+
+fn হ্যাশম্যাপ_মুছে_ফেলো map_ptr capacity
+    return hashmap_delete(map_ptr, capacity)
+
+fn হ্যাশম্যাপ_অবমুক্তি map_ptr capacity
+    return hashmap_delete(map_ptr, capacity)

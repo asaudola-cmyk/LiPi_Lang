@@ -57,10 +57,8 @@ editors/vscode/node_modules/
 editors/vscode/out/
 editors/vscode/*.vsix
 
-# ------------------------------------------------------------------------------
-# Test & CI Artifacts
-# ------------------------------------------------------------------------------
 junit.out.xml
 .cache/
+iso_staging/
 
 

@@ -1,6 +1,8 @@
 // String Tools — Lipi 2.0 Example
 // Demonstrates string builtins: upper, lower, trim, split, contains, etc.
 
+include "std/str.lp"
+
 fn count_chars s ch
     count = 0
     i = 0
@@ -57,11 +59,14 @@ say "  count 'l' in 'hello world' = " + count_chars("hello world", "l")
 say ""
 say "Palindrome check:"
 words_to_check = list("racecar", "hello", "level", "lipi", "madam")
-for w in words_to_check
+i = 0
+while i < len(words_to_check)
+    w = get(words_to_check, i)
     if is_palindrome(w) == 1
         say "  " + w + " → palindrome ✓"
     else
         say "  " + w + " → not palindrome"
+    i = i + 1
 
 say ""
 say "Reverse strings:"

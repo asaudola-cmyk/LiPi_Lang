@@ -17,19 +17,19 @@ fn main
     say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
 
-    // ১. মাল্টিবুট ১ header স্পেসিফিaেশন ভ্যালিডেশন
+    // ১. মাল্টিবুট ১ header স্পেসিফিকেশন ভ্যালিডেশন
     say "[১] মাল্টিবুট ১ স্পেসিফিকেশন (0x1BADB002) হেডার প্রস্তুতি..."
-    ম্যাজিa = 0x1BADB002
-    flagস = 0x00000003
-    চেaসাম = 0xE4524FFB
+    ম্যাজিক = 0x1BADB002
+    ফ্ল্যাগস = 0x00000003
+    চেকসাম = 0xE4524FFB
 
-    চেa_result = মাল্টিবুট_চেaসাম_verify(ম্যাজিa, flagস, চেaসাম)
-    if চেa_result == 1
+    চেক_result = মাল্টিবুট_চেকসাম_যাচাই(ম্যাজিক, ফ্ল্যাগস, চেকসাম)
+    if চেক_result == 1
         say "  ✔ মাল্টিবুট হেডার জেনারেটেড: 0x1BADB002"
         say "  ✔ মাল্টিবুট ফ্ল্যাগস        : 0x00000003 (Page Aligned + Memory Map)"
         say "  ✔ মাল্টিবুট চেকসাম         : 0xE4524FFB (Magic + Flags + Checksum == 0)"
 
-    // ২. ফিজিa্যাল ভিজিএ buffer সেল এনcodeিং (0xB8000 Hardware Framebuffer)
+    // ২. ফিজিক্যাল ভিজিএ buffer সেল এনকোডিং (0xB8000 Hardware Framebuffer)
     say "\n[২] ফিজিক্যাল ভিজিএ বাফার cell এনকোডিং (0xB8000 Hardware Framebuffer)..."
     cell_L = ভিজিএ_cell_created(76, ভিজিএ_সায়ান_রং) // 'L'
     cell_I = ভিজিএ_cell_created(73, ভিজিএ_সবুজ_রং) // 'I'
@@ -39,14 +39,14 @@ fn main
     say "  ✔ cell 'I' (রঙ: সবুজ) : " + cell_I + " (ASCII: 73, Color: 10)"
     say "  ✔ cell 'P' (রঙ: সায়ান): " + cell_P + " (ASCII: 80, Color: 11)"
 
-    // ৩. বুটেবল ৩২-বিট ELF32 aার্নেল ইমেজ সিন্থেসিস
+    // ৩. বুটেবল ৩২-বিট ELF32 কার্নেল ইমেজ সিন্থেসিস
     say "\n[৩] স্ট্যান্ডঅ্যালোন বুটেবল ৩২-bit মাল্টিবুট ELF কার্নেল সিন্থেসিস..."
-    aার্নেল_path = "dist/lipi_os_kernel.elf"
+    কার্নেল_path = "dist/lipi_os_kernel.elf"
 
-    // aার্নেল file create (SYS_open: 2, O_WRONLY|O_CREAT|O_TRUNC = 577, mode = 420)
-    aার্নেল_fd = syscall(2, aার্নেল_path, 577, 420)
+    // কার্নেল file create (SYS_open: 2, O_WRONLY|O_CREAT|O_TRUNC = 577, mode = 420)
+    কার্নেল_fd = syscall(2, কার্নেল_path, 577, 420)
 
-    if aার্নেল_fd > 0
+    if কার্নেল_fd > 0
         image_buffer = malloc(160)
         mem_fill(image_buffer, 0, 160)
 
@@ -116,14 +116,14 @@ fn main
         mem_write_byte(image_buffer, 134, 0xEB) // jmp
         mem_write_byte(image_buffer, 135, 0xFD) // -2
 
-        // fileে লেbা
-        রাইট = syscall(1, aার্নেল_fd, image_buffer, 160)
-        syscall(3, aার্নেল_fd)
+        // ফাইলে লেখা
+        রাইট = syscall(1, কার্নেল_fd, image_buffer, 160)
+        syscall(3, কার্নেল_fd)
         free(image_buffer, 160)
 
-        say "  ✔ সফলভাবে বুটেবল ELF32 কার্নেল created হয়েছে: " + aার্নেল_path + " (" + রাইট + " বাইট)"
+        say "  ✔ সফলভাবে বুটেবল ELF32 কার্নেল created হয়েছে: " + কার্নেল_path + " (" + রাইট + " বাইট)"
         say "  ✔ আর্কিটেকচার: 32-bit Multiboot-1 Compliant (ELFCLASS32 / EM_386)"
-        say "  ✔ QEMU বুট কমান্ড: qemu-system-x86_64 -kernel " + aার্নেল_path
+        say "  ✔ QEMU বুট কমান্ড: qemu-system-x86_64 -kernel " + কার্নেল_path
 
     say "\n\033[1;32m🎉 লিপি বেয়ারমেটাল ওএস কার্নেল টেস্ট সম্পূর্ণ সফল!\033[0m"
     say "⚡ [100% Sovereign Lipi Synthesized Native ELF - Hardware CPU Execution]"

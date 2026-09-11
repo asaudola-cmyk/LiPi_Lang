@@ -2,6 +2,8 @@
 // 🏛️ সরাসরি লিনাক্স কার্নেল টিসিপি/আইপি স্ট্যাক ও এইচটিটিপি প্রোটোকল ইঞ্জিন (Linux AMD64 Kernel ABI)
 // ০% Libc, ০% বহিরাগত লাইব্রেরি — সরাসরি র লিনাক্স সকেট সিসকল
 
+include "std/mem.lp"
+
 // ১. র টিসিপি সকেট তৈরি (Create TCP Socket via SYS_socket: syscall 41)
 // WHY: কার্নেল থেকে AF_INET (IPv4 = 2) এবং SOCK_STREAM (TCP = 1) সকেট ফাইল ডেসক্রিপ্টর বরাদ্দ নেওয়া।
 fn socket_create
@@ -56,6 +58,27 @@ fn socket_addr_prepare buf_addr port
 fn সকেট_ঠিকানা_প্রস্তুত বাফার_ঠিকানা পোর্ট
     return socket_addr_prepare(বাফার_ঠিকানা, পোর্ট)
 
+// WHY: আইপি অ্যাড্রেস নির্দিষ্ট করে sockaddr_in স্ট্রাকচার প্রস্তুত (e.g. 127.0.0.1)
+fn socket_addr_prepare_ip buf_addr ip0 ip1 ip2 ip3 port
+    hi_byte = port / 256
+    lo_byte = port % 256
+    mem_byte_write(buf_addr, 0, 2)
+    mem_byte_write(buf_addr, 1, 0)
+    mem_byte_write(buf_addr, 2, hi_byte)
+    mem_byte_write(buf_addr, 3, lo_byte)
+    mem_byte_write(buf_addr, 4, ip0)
+    mem_byte_write(buf_addr, 5, ip1)
+    mem_byte_write(buf_addr, 6, ip2)
+    mem_byte_write(buf_addr, 7, ip3)
+    i = 8
+    while i < 16
+        mem_byte_write(buf_addr, i, 0)
+        i = i + 1
+    return 0
+
+fn সকেট_ঠিকানা_আইপি_প্রস্তুত বাফার_ঠিকানা ip0 ip1 ip2 ip3 পোর্ট
+    return socket_addr_prepare_ip(বাফার_ঠিকানা, ip0, ip1, ip2, ip3, পোর্ট)
+
 // ৫. নির্দিষ্ট পোর্টে বাইন্ড করা (Bind Socket via SYS_bind: syscall 49)
 // WHY: অপারেটিং সিস্টেমে লোকাল টিসিপি পোর্টে সকেট ফাইল ডেসক্রিপ্টর নিবন্ধন করা।
 fn socket_bind fd buf_addr port
@@ -84,7 +107,26 @@ fn socket_accept fd
 fn সকেট_গ্রহণ fd
     return socket_accept(fd)
 
-// ৮. সকেট বন্ধ করা (Close Socket via SYS_close: syscall 3)
+// ৮. রিমোট হোস্টে সংযোগ স্থাপন (Connect via SYS_connect: syscall 42)
+// WHY: কার্নেলকে নির্দেশ দিয়ে রিমোট টিসিপি সার্ভারে সংযোগ স্থাপন ও থ্রি-ওয়ে হ্যান্ডশেক শুরু করা।
+fn socket_connect fd buf_addr port
+    socket_addr_prepare(buf_addr, port)
+    res = syscall(42, fd, buf_addr, 16, 0, 0, 0)
+    return res
+
+fn সকেট_সংযোগ fd বাফার_ঠিকানা পোর্ট
+    return socket_connect(fd, বাফার_ঠিকানা, পোর্ট)
+
+fn socket_connect_ip fd buf_addr ip0 ip1 ip2 ip3 port
+    // WHY: নির্দিষ্ট রিমোট আইপি ও পোর্টে টিসিপি সংযোগ স্থাপন করা।
+    socket_addr_prepare_ip(buf_addr, ip0, ip1, ip2, ip3, port)
+    res = syscall(42, fd, buf_addr, 16, 0, 0, 0)
+    return res
+
+fn সকেট_আইপি_সংযোগ fd বাফার_ঠিকানা ip0 ip1 ip2 ip3 পোর্ট
+    return socket_connect_ip(fd, বাফার_ঠিকানা, ip0, ip1, ip2, ip3, পোর্ট)
+
+// ৯. সকেট বন্ধ করা (Close Socket via SYS_close: syscall 3)
 // WHY: নেটওয়ার্ক রিসোর্স সঠিকভাবে কার্নেলকে ফেরত দেওয়া।
 fn socket_close fd
     code = syscall(3, fd, 0, 0, 0, 0, 0)

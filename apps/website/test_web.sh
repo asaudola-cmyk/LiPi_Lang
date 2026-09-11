@@ -101,8 +101,19 @@ else
     exit 1
 fi
 
-# ৯. সক্রিয় কোডবেস পিএইচপি অডিট
-echo -e "${YELLOW}[ধাপ ৯] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
+# ৯. HTTP রিকোয়েস্ট যাচাই (POST /api/run - Sandbox Compilation & Execution API)
+echo -e "${YELLOW}[ধাপ ৯] HTTP রিকোয়েস্ট ৬: POST /api/run (স্যান্ডবক্স রানার API)...${NC}"
+RUN_JSON=$(curl -s -X POST http://127.0.0.1:8088/api/run -d '{"code": "say \"Hello from Lipi Playground!\""}')
+echo -e "  • প্রাপ্ত স্যান্ডবক্স JSON: ${CYAN}${RUN_JSON}${NC}"
+if echo "${RUN_JSON}" | grep -q "Hello from Lipi Playground"; then
+    echo -e "${GREEN}  ✔ স্যান্ডবক্স রানার API সফল! মেশিন কোড সংকলন ও এক্সিকিউশন ১০০% কার্যকর।${NC}"
+else
+    echo -e "${RED}  ❌ এরর: স্যান্ডবক্স রানার API ব্যর্থ!${NC}"
+    exit 1
+fi
+
+# ১০. সক্রিয় কোডবেস পিএইচপি অডিট
+echo -e "${YELLOW}[ধাপ ১০] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
 PHP_COUNT=$(find apps/website -name "*.php" | wc -l)
 if [ "${PHP_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ apps/website এ কোনো PHP ফাইল নেই (০% PHP, ১০০% লিপি)!${NC}"

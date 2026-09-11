@@ -50,9 +50,12 @@ say ""
 say "Counting sort on [3,1,4,1,5,9,2,6,5,3,5]:"
 counts = list(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 sample = list(3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5)
-for digit in sample
+i = 0
+while i < len(sample)
+    digit = get(sample, i)
     old = get(counts, digit)
     counts = list_set(counts, digit, old + 1)
+    i = i + 1
 
 say "Digit frequencies:"
 for d in 0..9
@@ -60,8 +63,54 @@ for d in 0..9
     if cnt > 0
         say "  " + d + " → " + cnt + " times"
 
+// WHY: Formats a list of integers into human-readable bracketed representation "[1, 2, 3]".
+fn list_to_str lst
+    res = "["
+    idx = 0
+    n = len(lst)
+    while idx < n
+        res = res + str(get(lst, idx))
+        if idx < n - 1
+            res = res + ", "
+        idx = idx + 1
+    return res + "]"
+
+// WHY: Lomuto partition scheme for pure Lipi quicksort.
+fn quicksort_partition lst low high
+    pivot = get(lst, high)
+    pi = low - 1
+    pj = low
+    while pj < high
+        if get(lst, pj) <= pivot
+            pi = pi + 1
+            tmp = get(lst, pi)
+            list_set(lst, pi, get(lst, pj))
+            list_set(lst, pj, tmp)
+        pj = pj + 1
+    tmp = get(lst, pi + 1)
+    list_set(lst, pi + 1, get(lst, high))
+    list_set(lst, high, tmp)
+    return pi + 1
+
+// WHY: Recursive divide-and-conquer quicksort helper.
+fn quicksort_helper lst low high
+    if low < high
+        p = quicksort_partition(lst, low, high)
+        quicksort_helper(lst, low, p - 1)
+        quicksort_helper(lst, p + 1, high)
+    return lst
+
+// WHY: Sovereign O(n log n) sorting routine in pure Lipi 2.0.
+// Sorts list in-place and returns the list.
+fn sort lst
+    n = len(lst)
+    if n <= 1
+        return lst
+    return quicksort_helper(lst, 0, n - 1)
+
 say ""
-say "List sort builtin:"
+say "List sort:"
 unsorted = list(9, 3, 7, 1, 5, 2, 8, 4, 6)
-say "  Before: " + unsorted
-say "  After:  " + sort(unsorted)
+say "  Before: " + list_to_str(unsorted)
+sorted_items = sort(unsorted)
+say "  After:  " + list_to_str(sorted_items)

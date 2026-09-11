@@ -341,45 +341,116 @@
     </div>
   </section>
 
-  <!-- Interactive Playground Section -->
+  <!-- ============================================================================
+       👑 LIPI INTERACTIVE SOVEREIGN PLAYGROUND (লিপি কোড প্লেগ্রাউন্ড)
+       WHY: Live in-browser dual-language code editor with synchronized line numbers,
+       bilingual keyword syntax highlighting (English + Bengali), example selector,
+       hardware execution animation, and real-time POST /api/run Linux kernel execution.
+       ============================================================================ -->
   <section id="playground" class="section">
     <div class="container">
       <div class="section-header">
-        <span class="section-tag">ইন্টারঅ্যাক্টিভ কোড রানার</span>
-        <h2 class="section-title">খাঁটি লিপি কোড সিলিকন প্লেগ্রাউন্ড</h2>
+        <span class="section-tag">লিপি কোড প্লেগ্রাউন্ড • LIVE SOVEREIGN PLAYGROUND</span>
+        <h2 class="section-title">খাঁটি লিপি ২.০ ইন্টারঅ্যাক্টিভ সিলিকন প্লেগ্রাউন্ড</h2>
         <p class="section-desc">
-          বাংলা কিংবা ইংরেজিতে লেখা কোড কীভাবে সরাসরি সিপিইউ হার্ডওয়্যারে এক্সিকিউট হয় তা বাস্তব উদাহরণে পরীক্ষা করুন।
+          ব্রাউজার থেকেই সরাসরি লিখুন ও সঞ্চালন করুন খাঁটি লিপি কোড। সার্ভারে সরাসরি লিনাক্স কার্নেল স্যান্ডবক্সে (<code class="code-pill">POST /api/run</code>) কোনো Libc বা C কম্পাইলার ছাড়াই তৈরি হবে স্ট্যান্ডঅ্যালোন ৬৪-বিট ELF মেশিন কোড।
         </p>
       </div>
 
       <div class="playground-box">
+        <!-- Playground Top Navigation Bar -->
         <div class="playground-nav">
-          <div class="playground-tabs">
-            <button class="tab-btn active" data-snippet="hello">০১. হ্যালো ওয়ার্ল্ড</button>
-            <button class="tab-btn" data-snippet="fibonacci">০২. রিকার্সিভ ফিবোনাচ্চি</button>
-            <button class="tab-btn" data-snippet="server">১৮. কার্নেল সকেট সার্ভার</button>
-            <button class="tab-btn" data-snippet="crypto">২৮. হার্ডওয়্যার SHA-256</button>
-            <button class="tab-btn" data-snippet="tls">৩১. ChaCha20 TLS 1.3</button>
-            <button class="tab-btn" data-snippet="canvas">৩২. সিলিকন ২ডি গ্রাফিক্স</button>
+          <div class="playground-controls-left">
+            <div class="example-select-wrapper">
+              <span class="example-label">নমুনা কোড (Example):</span>
+              <select id="example-select" class="playground-select" aria-label="লিপি উদাহরণ নির্বাচন করুন">
+                <option value="hello">১. হ্যালো ওয়ার্ল্ড (Hello World)</option>
+                <option value="fibonacci">২. ফিবোনাচ্চি সিরিজ (Fibonacci)</option>
+                <option value="benchmark">৩. ১০ মিলিয়ন লুপ বেঞ্চমার্ক (10M Modulo Benchmark)</option>
+                <option value="softmax">৪. সিলিকন এআই সফটম্যাক্স (Silicon AI Softmax)</option>
+              </select>
+            </div>
+            <div class="playground-lang-badge">
+              <span class="lang-dot"></span>
+              <span>Lipi 2.0 (দ্বিভাষিক EN + BN)</span>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span id="playground-cycles" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--neon-cyan);">২,৪১৮ Cycles</span>
-            <button id="btn-run-playground" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.85rem;">
-              ▶ রান করুন (Silicon Run)
+
+          <div class="playground-controls-right">
+            <div class="telemetry-badge-group">
+              <span id="playground-time" class="telemetry-pill" title="কার্নেল এক্সিকিউশন সময়">
+                <span class="pill-label">সময়:</span> <strong id="val-time">০ ms</strong>
+              </span>
+              <span id="playground-cycles" class="telemetry-pill" title="সিপিইউ সাইকেল (RDTSC)">
+                <span class="pill-label">সাইকেল:</span> <strong id="val-cycles">২,৪১৮ Cycles</strong>
+              </span>
+              <span class="telemetry-pill security-pill" title="লিনাক্স কার্নেল স্যান্ডবক্স জেল">
+                <span class="pill-dot"></span> <strong>Linux Jail (২GB / ২s)</strong>
+              </span>
+            </div>
+            <button id="btn-run-code" class="btn btn-primary btn-run" title="কোড সংকলন ও এক্সিকিউট করুন (Ctrl+Enter)">
+              <span class="btn-run-icon">⚡</span>
+              <span class="btn-run-text">চালান / Run</span>
             </button>
           </div>
         </div>
 
+        <!-- Playground Editor and Terminal Grid -->
         <div class="playground-content">
-          <div class="editor-pane">
-            <pre><code id="playground-code">// কোড লোড হচ্ছে...</code></pre>
-          </div>
-          <div class="output-pane">
-            <div class="output-header">
-              <span class="output-title">কনসোল আউটপুট ও সিপিইউ রেজিস্টার ট্রেস</span>
-              <span style="font-size: 0.75rem; color: var(--neon-emerald);">● LIVE HARDWARE TERMINAL</span>
+          <!-- Left: Code Editor Pane -->
+          <div class="editor-pane-modern">
+            <div class="editor-pane-header">
+              <div class="editor-filename">
+                <span class="file-icon">📜</span>
+                <span id="editor-active-filename">main.lp</span>
+                <span class="editor-edit-hint">(সম্পাদনযোগ্য / Editable)</span>
+              </div>
+              <div class="editor-actions">
+                <button id="btn-copy-code" class="editor-tool-btn" title="কোড কপি করুন">📋 কপি</button>
+                <button id="btn-reset-code" class="editor-tool-btn" title="বর্তমান উদাহরণ রিসেট করুন">↺ রিসেট</button>
+              </div>
             </div>
-            <pre class="output-body" id="playground-output">// এক্সিকিউশন আউটপুট লোড হচ্ছে...</pre>
+
+            <div class="editor-container">
+              <!-- Line Numbers Gutter -->
+              <div id="editor-gutter" class="editor-gutter" aria-hidden="true"></div>
+
+              <!-- Synchronized Highlighted Display Layer & Textarea Input -->
+              <div class="editor-text-wrapper">
+                <pre id="playground-highlight-layer" class="editor-highlight-layer" aria-hidden="true"><code id="playground-highlight-code"></code></pre>
+                <textarea id="playground-textarea" class="editor-textarea" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="লিপি সোর্স কোড লিখুন..."></textarea>
+              </div>
+            </div>
+
+            <div class="editor-pane-footer">
+              <span class="editor-footer-hint">💡 কিবোর্ড শর্টকাট: <kbd>Ctrl</kbd> + <kbd>Enter</kbd> চেপে কোড রান করুন | <kbd>Tab</kbd> ৪-স্পেস ইনডেন্টেশন</span>
+              <span id="editor-line-col" class="editor-cursor-pos">লাইন ১, কলাম ১</span>
+            </div>
+          </div>
+
+          <!-- Right: Interactive Terminal Output Console -->
+          <div class="terminal-pane-modern">
+            <div class="output-header">
+              <div class="terminal-dots">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-yellow"></span>
+                <span class="dot dot-green"></span>
+                <span class="terminal-header-title">লিপি সার্বভৌম টার্মিনাল (AMD64 ELF64)</span>
+              </div>
+              <div class="terminal-header-actions">
+                <span id="terminal-status-badge" class="term-badge term-badge-ready">● READY</span>
+                <button id="btn-clear-terminal" class="editor-tool-btn" title="কনসোল পরিষ্কার করুন">🧹 পরিষ্কার</button>
+              </div>
+            </div>
+
+            <div class="terminal-console-body">
+              <pre id="playground-terminal" class="terminal-screen"></pre>
+            </div>
+
+            <div class="terminal-pane-footer">
+              <span class="term-footer-meta">সরাসরি লিনাক্স কার্নেল সিসকল ট্রেস • ০% Libc • ০% GCC • ০% PHP</span>
+              <span id="term-exit-status" class="term-footer-status">Status: OK</span>
+            </div>
           </div>
         </div>
       </div>

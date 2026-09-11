@@ -35,7 +35,7 @@ for arg in "$@"; do
     fi
 done
 
-# WHY: Collect all 60 test files dynamically in sorted order
+# WHY: Collect all regression test files dynamically in sorted order (including test_web_router)
 mapfile -t TESTS < <(find tests -maxdepth 1 -name "*.lp" | sort)
 
 for test_file in "${TESTS[@]}"; do
