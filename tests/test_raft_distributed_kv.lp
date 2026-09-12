@@ -85,7 +85,7 @@ import "universe/core/string"
   idx1 = raft_cluster_propose_entry(cluster, 1, "SET", "user:1001=SovereignLipi")
   ok_idx = assert_eq_int(idx1, 1, "First command committed at Raft index 1")
 
-  idx2 = raft_cluster_propose_entry(cluster, 1, "SET", "user:1002=OshimPower")
+  idx2 = raft_cluster_propose_entry(cluster, 1, "SET", "user:1002=LipiPower")
   ok_idx2 = assert_eq_int(idx2, 2, "Second command committed at Raft index 2")
 
   l_node: RaftNode = cluster.nodes[0]
