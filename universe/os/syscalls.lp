@@ -887,13 +887,13 @@ import "universe/core/string"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 7. Runtime Memory & String Primitives
+@! 7. Runtime Memory & String Primitives (Pure Sovereign Lipi)
 @! ----------------------------------------------------------------------------
-@fn maya_alloc(size)
+@fn lipi_alloc(size)
   return syscall(9, 0, size, 3, 34, 0 - 1, 0)
 @end
 
-@fn maya_gc_alloc(size)
+@fn lipi_gc_alloc(size)
   return syscall(9, 0, size, 3, 34, 0 - 1, 0)
 @end
 
@@ -901,38 +901,48 @@ import "universe/core/string"
   return syscall(9, 0, size, 3, 34, 0 - 1, 0)
 @end
 
-@fn maya_free(ptr, size)
+@fn lipi_free(ptr, size)
   return syscall(11, ptr, size, 0, 0, 0, 0)
 @end
 
-@fn maya_gc_free(ptr, size)
+@fn lipi_gc_free(ptr, size)
   return syscall(11, ptr, size, 0, 0, 0, 0)
 @end
 
-@fn maya_str_ptr(s)
+@fn lipi_str_ptr(s)
   @! Return pointer to string bytes
-  @! WHY: Strings in Maya are represented as direct pointers to null-terminated ASCII/UTF-8.
+  @! WHY: Strings in Lipi are represented as direct pointers to null-terminated ASCII/UTF-8.
   return s
 @end
 
-@fn maya_str_new(ptr)
+@fn lipi_str_new(ptr)
   @! Cast byte buffer address to string
   @! WHY: Directly aliases pointer into string format without heap allocation.
   return ptr
 @end
 
-@fn maya_mem_read_u8(addr)
+@fn lipi_mem_read_u8(addr)
   @! Read an 8-bit unsigned integer from memory address
   @! WHY: Uses compiler intrinsic sys_peek8 for direct byte dereferencing.
   return sys_peek8(addr)
 @end
 
-@fn maya_mem_write_u8(addr, val)
+@fn lipi_mem_write_u8(addr, val)
   @! Write an 8-bit unsigned integer to memory address
   @! WHY: Uses compiler intrinsic sys_poke8 for direct byte assignment.
   sys_poke8(addr, val)
   return 1
 @end
+
+// ── Sovereign Compatibility Aliases ──────────────────────────────────────────
+@fn maya_alloc(size) return lipi_alloc(size) @end
+@fn maya_gc_alloc(size) return lipi_gc_alloc(size) @end
+@fn maya_free(ptr, size) return lipi_free(ptr, size) @end
+@fn maya_gc_free(ptr, size) return lipi_gc_free(ptr, size) @end
+@fn maya_str_ptr(s) return lipi_str_ptr(s) @end
+@fn maya_str_new(ptr) return lipi_str_new(ptr) @end
+@fn maya_mem_read_u8(addr) return lipi_mem_read_u8(addr) @end
+@fn maya_mem_write_u8(addr, val) return lipi_mem_write_u8(addr, val) @end
 
 @fn file_write(path, content)
   @! Native direct write: O_WRONLY|O_CREAT|O_TRUNC (577), mode 0644 (420)

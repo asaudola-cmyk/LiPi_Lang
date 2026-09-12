@@ -9,6 +9,7 @@
 
 include "universe/core/memory.lp"
 include "universe/ai/tensor_engine.lp"
+include "universe/cpu/avx512_native.lp"
 
 // ── ১. GGUF ফরম্যাট কনস্ট্যান্টস ──────────────────────────────────────────────
 // Magic: 'G' (0x47), 'G' (0x47), 'U' (0x55), 'F' (0x46) -> 0x46554747 (1179998023 little-endian)
@@ -83,8 +84,8 @@ fn gguf_q4_unpack packed_addr unpacked_addr byte_count scale
         val_low = (low_nibble - 8) * scale
         val_high = (high_nibble - 8) * scale
 
-        mem_write_u32(unpacked_addr, out_index, val_low)
-        mem_write_u32(unpacked_addr, out_index + 1, val_high)
+        mem_write_u32(unpacked_addr, out_index * 4, val_low)
+        mem_write_u32(unpacked_addr, (out_index + 1) * 4, val_high)
 
         out_index = out_index + 2
         index = index + 1
@@ -108,7 +109,7 @@ fn gguf_q8_unpack packed_addr unpacked_addr byte_count scale
 
         scaled_val = signed_val * scale
 
-        mem_write_u32(unpacked_addr, out_index, scaled_val)
+        mem_write_u32(unpacked_addr, out_index * 4, scaled_val)
 
         out_index = out_index + 1
         index = index + 1
@@ -125,20 +126,38 @@ fn gguf_gemv output_vec weight_matrix input_vec column row
         c = 0
 
         while c < column
-            matrix_offset = (r * column) + c
+            matrix_offset = ((r * column) + c) * 4
             weight = mem_read_u32(weight_matrix, matrix_offset)
-            input = mem_read_u32(input_vec, c)
+            input = mem_read_u32(input_vec, c * 4)
 
             dot_product = dot_product + (weight * input)
             c = c + 1
 
-        mem_write_u32(output_vec, r, dot_product)
+        mem_write_u32(output_vec, r * 4, dot_product)
         r = r + 1
 
     return row
 
 fn gguf_matmul weight_matrix input_vec output_vec row column
     return gguf_gemv(output_vec, weight_matrix, input_vec, column, row)
+
+// ── ৮খ. সিলিকন ত্বরান্বিত ম্যাট্রিক্স-ভেক্টর গুণন (Silicon AVX-512 Accelerated GEMV) ────
+// WHY: Uses 512-bit ZMM hardware vector dot-products for 8x parallel throughput per CPU cycle.
+fn gguf_gemv_silicon output_vec weight_matrix input_vec column row
+    if output_vec == 0 or weight_matrix == 0 or input_vec == 0 or row <= 0 or column <= 0
+        return 0
+
+    r = 0
+    while r < row
+        row_offset = (r * column) * 8
+        row_ptr = weight_matrix + row_offset
+        dot_product = vector_dot_accelerated(row_ptr, input_vec, column)
+        sys_poke(output_vec + (r * 8), dot_product)
+        r = r + 1
+    return row
+
+fn জিজিইউএফ_সিলিকন_ম্যাট্রিক্স_ভেক্টর_গুণন output_vec weight_matrix input_vec column row
+    return gguf_gemv_silicon(output_vec, weight_matrix, input_vec, column, row)
 
 // ── ৯. আর্গম্যাক্স গ্রিডি টোকেন স্যাম্পলার (Greedy Next-Token ArgMax) ─────────────
 // WHY: Selects the token ID with the highest computed logit probability.
@@ -151,7 +170,7 @@ fn gguf_token_argmax logit_addr vocab_size
     i = 1
 
     while i < vocab_size
-        current_val = mem_read_u32(logit_addr, i)
+        current_val = mem_read_u32(logit_addr, i * 4)
         if current_val > highest_val
             highest_val = current_val
             best_token = i

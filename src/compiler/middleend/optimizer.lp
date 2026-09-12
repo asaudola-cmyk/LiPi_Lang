@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA OMNIPOTENT OPTIMIZER - 100% PURE MAYA
+@! LIPI OMNIPOTENT OPTIMIZER - 100% PURE LIPI
 @! Features: Constant Folding, Constant Propagation, Common Subexpression
 @! Elimination (CSE), Dead Code Elimination (DCE), Tail Call Optimization (TCO),
 @! Loop Invariant Code Motion (LICM), Inline Expansion, Algebraic Strength Reduction.

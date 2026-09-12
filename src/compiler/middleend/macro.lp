@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND: HYGIENIC MACRO EXPANSION ENGINE
+@! LIPI COMPILER MIDDLEEND: HYGIENIC MACRO EXPANSION ENGINE
 @! Module: compiler/middleend/macro
-@! Canonical Maya Implementation
+@! Canonical Pure Lipi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

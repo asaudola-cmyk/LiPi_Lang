@@ -62,3 +62,9 @@ junit.out.xml
 iso_staging/
 
 
+
+# Test binaries and temporary silicon artifacts
+bin/test_*
+*.spv
+*.db
+/tmp/libtest_*

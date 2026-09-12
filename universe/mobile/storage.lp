@@ -1,5 +1,5 @@
 @! ============================================================================
-@! PURE MAYA MOBILE PERSISTENT KEY-VALUE STORAGE ENGINE
+@! PURE LIPI MOBILE PERSISTENT KEY-VALUE STORAGE ENGINE
 @! Module: universe/mobile/storage
 @! 100% Pure Lipi Implementation — File-Backed Durable Persistence
 @! ============================================================================
@@ -9,7 +9,7 @@ import "universe/core/collections"
 
 @! Default storage file path
 @fn default_storage_path() -> string
-  return "maya_mobile_storage.kv"
+  return "lipi_mobile_storage.kv"
 @end
 
 @! ----------------------------------------------------------------------------

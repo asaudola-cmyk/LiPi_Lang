@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA MOBILE PLATFORM ABSTRACTION (universe/mobile/platform.maya)
+@! LIPI MOBILE PLATFORM ABSTRACTION (universe/mobile/platform.lp)
 @! 100% Pure Lipi Implementation — Zero Native C/Java Framework Dependencies
 @! Supports Orientation, Touch Event Queue, Safe Area, Status, & JNI Generator
 @! ============================================================================

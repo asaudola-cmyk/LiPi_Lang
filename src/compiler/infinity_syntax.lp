@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA INFINITY DYNAMIC SYNTAX & GRAMMAR RULE ENGINE
-@! Module: compiler/infinity_syntax.maya
-@! Architecture: Pure Maya Sovereign Metaprogramming & Dynamic Grammar Subsystem
+@! LIPI INFINITY DYNAMIC SYNTAX & GRAMMAR RULE ENGINE
+@! Module: compiler/infinity_syntax.lp
+@! Architecture: Pure Lipi Sovereign Metaprogramming & Dynamic Grammar Subsystem
 @! Standard: Zero Foreign Dependencies, Fixed-Point Iterative Expansion
 @! ============================================================================
 
@@ -107,10 +107,10 @@ import "universe/core/string"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 3. BUILT-IN MATHEMATICAL & LOGICAL OPERATOR HANDLERS
+@! 3. BUILT-IN MATHEMATICAL & LOGICAL OPERATOR HANDLERS (Sovereign Lipi)
 @! ----------------------------------------------------------------------------
 
-@fn maya_power(base, exp)
+@fn lipi_power(base, exp)
   @if exp <= 0
     return 1
   @end
@@ -130,7 +130,7 @@ import "universe/core/string"
   return res
 @end
 
-@fn maya_spaceship(a, b)
+@fn lipi_spaceship(a, b)
   @if a < b
     return 0 - 1
   @elif a > b
@@ -140,7 +140,7 @@ import "universe/core/string"
   @end
 @end
 
-@fn maya_xor(a, b)
+@fn lipi_xor(a, b)
   b_a = 0
   @if a != 0
     b_a = 1
@@ -156,7 +156,7 @@ import "universe/core/string"
   @end
 @end
 
-@fn maya_approx_eq(a, b, epsilon)
+@fn lipi_approx_eq(a, b, epsilon)
   diff = a - b
   @if diff < 0
     diff = 0 - diff
@@ -168,8 +168,14 @@ import "universe/core/string"
   @end
 @end
 
+// ── Compatibility Aliases ────────────────────────────────────────────────────
+@fn maya_power(base, exp) return lipi_power(base, exp) @end
+@fn maya_spaceship(a, b) return lipi_spaceship(a, b) @end
+@fn maya_xor(a, b) return lipi_xor(a, b) @end
+@fn maya_approx_eq(a, b, epsilon) return lipi_approx_eq(a, b, epsilon) @end
+
 @! ----------------------------------------------------------------------------
-@! 4. PURE MAYA REPLACEMENT TOKENIZER & NUMERIC PARSER
+@! 4. PURE LIPI REPLACEMENT TOKENIZER & NUMERIC PARSER
 @! ----------------------------------------------------------------------------
 
 @fn infinity_is_space(c)
@@ -785,35 +791,35 @@ import "universe/core/string"
   failures = 0
   
   @! Test 1: Power Math Helper
-  @if maya_power(2, 8) != 256 || maya_power(3, 4) != 81 || maya_power(5, 0) != 1 || maya_power(0, 5) != 0
-    println("  [FAIL] Math: maya_power verification")
+  @if lipi_power(2, 8) != 256 || lipi_power(3, 4) != 81 || lipi_power(5, 0) != 1 || lipi_power(0, 5) != 0
+    println("  [FAIL] Math: lipi_power verification")
     failures = failures + 1
   @else
-    println("  [PASS] Math: maya_power(2, 8) == 256")
+    println("  [PASS] Math: lipi_power(2, 8) == 256")
   @end
   
   @! Test 2: Spaceship Math Helper
-  @if maya_spaceship(10, 20) != 0 - 1 || maya_spaceship(20, 20) != 0 || maya_spaceship(30, 20) != 1
-    println("  [FAIL] Math: maya_spaceship verification")
+  @if lipi_spaceship(10, 20) != 0 - 1 || lipi_spaceship(20, 20) != 0 || lipi_spaceship(30, 20) != 1
+    println("  [FAIL] Math: lipi_spaceship verification")
     failures = failures + 1
   @else
-    println("  [PASS] Math: maya_spaceship(10, 20) == -1")
+    println("  [PASS] Math: lipi_spaceship(10, 20) == -1")
   @end
   
   @! Test 3: XOR Math Helper
-  @if maya_xor(1, 0) != 1 || maya_xor(0, 1) != 1 || maya_xor(1, 1) != 0 || maya_xor(0, 0) != 0
-    println("  [FAIL] Math: maya_xor verification")
+  @if lipi_xor(1, 0) != 1 || lipi_xor(0, 1) != 1 || lipi_xor(1, 1) != 0 || lipi_xor(0, 0) != 0
+    println("  [FAIL] Math: lipi_xor verification")
     failures = failures + 1
   @else
-    println("  [PASS] Math: maya_xor(1, 0) == 1")
+    println("  [PASS] Math: lipi_xor(1, 0) == 1")
   @end
   
   @! Test 4: Approx Eq Math Helper
-  @if maya_approx_eq(100, 105, 10) != 1 || maya_approx_eq(100, 120, 10) != 0
-    println("  [FAIL] Math: maya_approx_eq verification")
+  @if lipi_approx_eq(100, 105, 10) != 1 || lipi_approx_eq(100, 120, 10) != 0
+    println("  [FAIL] Math: lipi_approx_eq verification")
     failures = failures + 1
   @else
-    println("  [PASS] Math: maya_approx_eq(100, 105, 10) == 1")
+    println("  [PASS] Math: lipi_approx_eq(100, 105, 10) == 1")
   @end
   
   @! Test 5: Dynamic Keyword Aliasing
@@ -844,7 +850,7 @@ import "universe/core/string"
     ["STR", "**", 1, 12],
     ["STR", "INFIX_RIGHT", 1, 17],
     ["INT", "80", 1, 31],
-    ["STR", "maya_power", 1, 34],
+    ["STR", "lipi_power", 1, 34],
     ["SEMI", ";", 1, 46],
     ["INT", "2", 2, 1],
     ["STAR", "*", 2, 3],

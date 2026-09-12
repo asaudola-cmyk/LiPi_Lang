@@ -4,8 +4,8 @@
 @end
 
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — DECENTRALIZED MPM PACKAGE SERVER & REGISTRY
-@! Module: universe/p2p/mpm_server.maya
+@! LIPI UNIVERSAL ARCHITECTURE — DECENTRALIZED LIPIPKG PACKAGE SERVER & REGISTRY
+@! Module: universe/p2p/mpm_server.lp
 @! Milestone 3 (Requirement R2)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Full HTTP REST Server, P2P CAS Storage, Merkle DAG Sync,

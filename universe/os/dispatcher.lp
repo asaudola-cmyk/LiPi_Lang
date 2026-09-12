@@ -193,10 +193,10 @@ import "universe/os/process"
   @elif cmd == "false"
     return { exit_code: 1, stdout_data: "", stderr_data: "", success: 0 }
   @elif cmd == "pwd"
-    buf = maya_alloc(4096)
+    buf = lipi_alloc(4096)
     res = sys_getcwd(buf, 4096)
     @if res >= 0
-      cwd_str = maya_str_new(buf)
+      cwd_str = lipi_str_new(buf)
       return { exit_code: 0, stdout_data: cwd_str + "\n", stderr_data: "", success: 1 }
     @end
     return { exit_code: 1, stdout_data: "", stderr_data: "pwd: error retrieving current directory\n", success: 0 }
@@ -390,14 +390,14 @@ import "universe/os/process"
   
   captured = ""
   buf_size = 4096
-  buf = maya_alloc(buf_size)
+  buf = lipi_alloc(buf_size)
   
   @while 1 == 1
     n = sys_read(read_fd, buf, buf_size - 1)
     @if n <= 0
       break
     @end
-    chunk = maya_str_new(buf)
+    chunk = lipi_str_new(buf)
     captured = captured + chunk
   @end
   

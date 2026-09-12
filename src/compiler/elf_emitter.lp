@@ -414,6 +414,8 @@ fn struct_get_var_type ctx vname
         if struct_find(ctx, "ASTNode") >= 0
             return "ASTNode"
     if vname == "db" or vname == "database"
+        if struct_find(ctx, "LipiDatabase") >= 0
+            return "LipiDatabase"
         if struct_find(ctx, "MayaDatabase") >= 0
             return "MayaDatabase"
     if vname == "inst" or vname == "ir_inst"

@@ -242,8 +242,8 @@ import "universe/os/syscalls"
 @fn memory_copy(dst_ptr, src_ptr, count)
   i = 0
   @while i < count
-    b = maya_mem_read_u8(src_ptr + i)
-    maya_mem_write_u8(dst_ptr + i, b)
+    b = lipi_mem_read_u8(src_ptr + i)
+    lipi_mem_write_u8(dst_ptr + i, b)
     i = i + 1
   @end
   return dst_ptr
@@ -252,46 +252,46 @@ import "universe/os/syscalls"
 @fn memory_set(dst_ptr, byte_val, count)
   i = 0
   @while i < count
-    maya_mem_write_u8(dst_ptr + i, byte_val & 255)
+    lipi_mem_write_u8(dst_ptr + i, byte_val & 255)
     i = i + 1
   @end
   return dst_ptr
 @end
 
 @fn memory_read8(addr)
-  return maya_mem_read_u8(addr)
+  return lipi_mem_read_u8(addr)
 @end
 
 @fn memory_write8(addr, val)
-  maya_mem_write_u8(addr, val & 255)
+  lipi_mem_write_u8(addr, val & 255)
   return 1
 @end
 
 @fn memory_read16(addr)
-  b0 = maya_mem_read_u8(addr)
-  b1 = maya_mem_read_u8(addr + 1)
+  b0 = lipi_mem_read_u8(addr)
+  b1 = lipi_mem_read_u8(addr + 1)
   return b0 | (b1 * 256)
 @end
 
 @fn memory_write16(addr, val)
-  maya_mem_write_u8(addr, val & 255)
-  maya_mem_write_u8(addr + 1, (val / 256) & 255)
+  lipi_mem_write_u8(addr, val & 255)
+  lipi_mem_write_u8(addr + 1, (val / 256) & 255)
   return 2
 @end
 
 @fn memory_read32(addr)
-  b0 = maya_mem_read_u8(addr)
-  b1 = maya_mem_read_u8(addr + 1)
-  b2 = maya_mem_read_u8(addr + 2)
-  b3 = maya_mem_read_u8(addr + 3)
+  b0 = lipi_mem_read_u8(addr)
+  b1 = lipi_mem_read_u8(addr + 1)
+  b2 = lipi_mem_read_u8(addr + 2)
+  b3 = lipi_mem_read_u8(addr + 3)
   return b0 | (b1 * 256) | (b2 * 65536) | (b3 * 16777216)
 @end
 
 @fn memory_write32(addr, val)
-  maya_mem_write_u8(addr, val & 255)
-  maya_mem_write_u8(addr + 1, (val / 256) & 255)
-  maya_mem_write_u8(addr + 2, (val / 65536) & 255)
-  maya_mem_write_u8(addr + 3, (val / 16777216) & 255)
+  lipi_mem_write_u8(addr, val & 255)
+  lipi_mem_write_u8(addr + 1, (val / 256) & 255)
+  lipi_mem_write_u8(addr + 2, (val / 65536) & 255)
+  lipi_mem_write_u8(addr + 3, (val / 16777216) & 255)
   return 4
 @end
 
