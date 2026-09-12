@@ -122,6 +122,12 @@ fn mem_write_u32 addr offset value
     mem_write_byte(addr, offset + 3, (value / 16777216) % 256)
     return value
 
+fn mem_read_u64 addr offset
+    return mem_read(addr, offset)
+
+fn mem_write_u64 addr offset value
+    return mem_write(addr, offset, value)
+
 // ── ৮. সভেরিন সেগ্রিগেটেড স্ল্যাব অ্যালোকেটর (Segregated Slab Allocator) ────────
 // WHY: ছোট ছোট মেমরি বরাদ্দ (16B থেকে 2048B) সরাসরি কার্নেল সিসকল ছাড়া O(1) LIFO
 // ফ্রি-লিস্টে তাৎক্ষণিক রিসাইক্লিং করে মেমরি ফ্র্যাগমেন্টেশন ও কার্নেল ট্রানজিশন দূর করা।
