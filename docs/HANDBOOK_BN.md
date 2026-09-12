@@ -244,9 +244,9 @@ say "বিন্দুদ্বয়ের দূরত্বের বর্গ:
 ## ৫. ডিরেক্ট সিলিকন ও বাইটকোড আর্কিটেকচার: x86_64, ARM64 ও WebAssembly
 
 লিপির সবচেয়ে যুগান্তকারী দিক হলো এর সার্বভৌম মেশিন কোড ও বাইটকোড এমিটারসমূহ:
-- **x86_64 ELF64 এমিটার:** [`src/compiler/elf_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/elf_emitter.lp)
-- **ARM64 (AArch64) ELF64 এমিটার:** [`src/compiler/arm64_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/arm64_emitter.lp)
-- **WebAssembly (WASM) বাইনারি এমিটার:** [`src/compiler/wasm_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/wasm_emitter.lp)
+- **x86_64 ELF64 এমিটার:** [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp)
+- **ARM64 (AArch64) ELF64 এমিটার:** [`src/compiler/arm64_emitter.lp`](../src/compiler/arm64_emitter.lp)
+- **WebAssembly (WASM) বাইনারি এমিটার:** [`src/compiler/wasm_emitter.lp`](../src/compiler/wasm_emitter.lp)
 
 ```
                        ┌────────────────────────┐
@@ -359,7 +359,7 @@ include "std/arena.lp"
 
 ## ৭. নেটিভ ওয়েব রাউটার ও ব্যাকএন্ড (`std/web.lp`)
 
-লিপি ২.০ এর সাথে কোনো বাহ্যিক ফ্রেমওয়ার্ক (যেমন Node, Express, Flask) ছাড়াই সরাসরি হাই-পারফরম্যান্স ওয়েব অ্যাপ্লিকেশন তৈরির পূর্ণাঙ্গ স্ট্যান্ডার্ড লাইব্রেরি যুক্ত করা হয়েছে: [`std/web.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/web.lp)।
+লিপি ২.০ এর সাথে কোনো বাহ্যিক ফ্রেমওয়ার্ক (যেমন Node, Express, Flask) ছাড়াই সরাসরি হাই-পারফরম্যান্স ওয়েব অ্যাপ্লিকেশন তৈরির পূর্ণাঙ্গ স্ট্যান্ডার্ড লাইব্রেরি যুক্ত করা হয়েছে: [`std/web.lp`](../std/web.lp)।
 
 ### ৭.১ ওয়েব ইঞ্জিন স্ট্রাকচার
 - `WebRoute`: রাউটের মেথড, পাথ এবং হ্যান্ডলার আইডির ম্যাপিং।
@@ -436,7 +436,7 @@ free(টাইম_বাফার, 16)
 
 ## ৯. প্যাকেজ ম্যানেজার (`lipipkg`) ব্যবহার নির্দেশিকা
 
-`lipipkg` হলো লিপির অফিশিয়াল সার্বভৌম প্যাকেজ ম্যানেজার যা [`lipipkg.toml`](file:///home/shafiullah/Documents/file/work/lipi/docs/LIPIPKG_TOML_SPEC.md) ম্যানিফেস্ট ফাইল মেনে চলে:
+`lipipkg` হলো লিপির অফিশিয়াল সার্বভৌম প্যাকেজ ম্যানেজার যা [`lipipkg.toml`](./LIPIPKG_TOML_SPEC.md) ম্যানিফেস্ট ফাইল মেনে চলে:
 
 ```bash
 # নতুন প্রজেক্টের স্কেলিটন তৈরি

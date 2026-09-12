@@ -1,6 +1,6 @@
 # 🏆 Lipi Sovereign Programming Language: Grand Multi-Language Performance Benchmark Showdown
 > **Host Environment:** Linux x86_64 (Ubuntu 24.04 LTS) | **CPU:** AMD Ryzen 5 8400F 6-Core Processor (Zen 4 Architecture) @ ~4.7 GHz Turbo  
-> **Toolchains Measured:** GCC 13.3.0, Clang 18.1.3, G++ 13.3.0, Rustc 1.97.1, Node.js v24.19.0 (V8), Bun 1.3.14 (JavaScriptCore), Python 3.12.3 (CPython), Lipi 2.5 Sovereign Enterprise (Pure ELF64 Native Silicon)  
+> **Toolchains Measured:** GCC 13.3.0, Clang 18.1.3, G++ 13.3.0, Rustc 1.97.1, Node.js v24.19.0 (V8), Bun 1.3.14 (JavaScriptCore), Python 3.12.3 (CPython), Lipi First 1.0.0 (প্রথম ১.০.০) Sovereign (Pure ELF64 Native Silicon)  
 > **Empirical Guarantee:** 100% measured on live hardware with zero mock data. Hardware cycles sampled via x86_64 `RDTSC`, memory via Linux `/proc/[pid]/statm` and `getrusage` (Peak RSS).
 
 ---

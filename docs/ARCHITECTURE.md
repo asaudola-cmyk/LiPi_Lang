@@ -41,8 +41,8 @@ The Lipi toolchain operates with **Zero Foreign Dependencies**:
 ## 1. Direct Silicon Architecture & Multi-Platform Emitters
 
 Lipi features twin first-class silicon emitters written in 100% pure Lipi code:
-1. **x86_64 (AMD64) ELF64 Emitter:** [`src/compiler/elf_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/elf_emitter.lp)
-2. **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/arm64_emitter.lp)
+1. **x86_64 (AMD64) ELF64 Emitter:** [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp)
+2. **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](../src/compiler/arm64_emitter.lp)
 
 ### 1.1 x86_64 Direct Machine Code Generation
 The x86_64 emitter translates Lipi AST constructs into raw x86_64 machine instructions:
@@ -83,7 +83,7 @@ The ARM64 emitter delivers native execution on 64-bit ARM platforms (Apple Silic
     - Executed via `SVC #0` (`0xD4000001`). Return values delivered in register `X0`.
 
 ### 1.3 WebAssembly (WASM) Direct Binary Synthesis
-The WebAssembly emitter ([`src/compiler/wasm_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/wasm_emitter.lp)) translates Lipi procedures directly into W3C WebAssembly 1.0 binary modules (`.wasm`) for execution in browsers, edge workers, and sandboxed runtimes (0% C, 0% LLVM, 0% Emscripten):
+The WebAssembly emitter ([`src/compiler/wasm_emitter.lp`](../src/compiler/wasm_emitter.lp)) translates Lipi procedures directly into W3C WebAssembly 1.0 binary modules (`.wasm`) for execution in browsers, edge workers, and sandboxed runtimes (0% C, 0% LLVM, 0% Emscripten):
 
 - **WASM Binary Layout:**
   - Magic Header: 4 bytes `0x00, 0x61, 0x73, 0x6D` (`\0asm`).
@@ -185,7 +185,7 @@ movabsq $0, %rax       ; 0x48 0xB8 00 00 00 00 00 00 00 00 (10 bytes!)
 This consumes 10 bytes of instruction cache and requires 8 bytes of immediate operand decoding.
 
 #### The Lipi Peephole Solution
-In [`src/compiler/elf_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/elf_emitter.lp#L326-L338):
+In [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp#L326-L338):
 ```lipi
 fn x86_mov_reg_imm64 ctx reg val
     if val == 0
@@ -211,7 +211,7 @@ fn x86_mov_reg_imm64 ctx reg val
 
 ## 4. First-Class Web Standard Library (`std/web.lp`)
 
-Lipi 2.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`std/web.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/web.lp).
+Lipi 2.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`std/web.lp`](../std/web.lp).
 
 ### 4.1 Architectural Foundations
 - **Direct Linux Socket Calls:** Binds directly to the operating system network stack via `SYS_socket` (syscall 41), `SYS_bind` (syscall 49), `SYS_listen` (syscall 50), and `SYS_accept` (syscall 43).
@@ -243,7 +243,7 @@ fn handle_request req
 Lipi implements high-concurrency systems programming directly against the Linux kernel without `pthreads` or external threading libraries.
 
 ### 5.1 Kernel Thread Creation via `SYS_clone`
-[`std/thread.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/thread.lp) invokes the Linux `SYS_clone` syscall (56 on x86_64, 220 on AArch64):
+[`std/thread.lp`](../std/thread.lp) invokes the Linux `SYS_clone` syscall (56 on x86_64, 220 on AArch64):
 - **Clone Flags:**
   - `CLONE_VM` (`0x00000100` = 256): Shares virtual memory space with the parent process.
   - `CLONE_FS` (`0x00000200` = 512): Shares filesystem information.
@@ -259,7 +259,7 @@ Concurrency synchronization is managed through memory word locks:
 - **Release (`স্পিনলক_মুক্ত` / `spinlock_unlock`):** Writes `0` to the lock memory address, enabling waiting worker threads to claim the critical section.
 
 ### 5.3 O(1) Bump-Pointer Arena Memory Allocator
-[`std/arena.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/arena.lp) implements linear bump allocation for high-throughput pipelines:
+[`std/arena.lp`](../std/arena.lp) implements linear bump allocation for high-throughput pipelines:
 - Allocates contiguous blocks of physical memory directly from the kernel via `SYS_mmap`.
 - Dispenses memory sequentially via an internal offset pointer aligned to 8-byte QWORD boundaries.
 - **Instant Mass Reclamation:** Resetting the arena (`used = 0`) reclaims all allocations in **0 cycles** with zero memory fragmentation and zero pointer chasing.
