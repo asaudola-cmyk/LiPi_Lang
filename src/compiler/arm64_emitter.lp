@@ -439,6 +439,58 @@ fn arm64_ret_reg rn
     r = floor(rn) % 32
     return 3596551040 + (r * 32)
 
+// ── ARM64 NEON 128-Bit SIMD Vector Encoders ───────────────────────────────────
+// WHY: Direct machine instruction synthesis for 128-bit vector arithmetic,
+//      accelerating AI matrix dot-products, tensor operations, and graphics rasterization
+//      on ARMv8-A/ARMv9 silicon without external runtime libraries.
+
+// 28. ADD Vd.4S, Vn.4S, Vm.4S: 4x 32-bit integer SIMD vector addition
+// Base: 0x4E208400 = 1310753792
+fn arm64_neon_add_4s vd vn vm
+    d = floor(vd) % 32
+    n = floor(vn) % 32
+    m = floor(vm) % 32
+    return 1310753792 + (m * 65536) + (n * 32) + d
+
+// 29. SUB Vd.4S, Vn.4S, Vm.4S: 4x 32-bit integer SIMD vector subtraction
+// Base: 0x6E208400 = 1847624704
+fn arm64_neon_sub_4s vd vn vm
+    d = floor(vd) % 32
+    n = floor(vn) % 32
+    m = floor(vm) % 32
+    return 1847624704 + (m * 65536) + (n * 32) + d
+
+// 30. MUL Vd.4S, Vn.4S, Vm.4S: 4x 32-bit integer SIMD vector multiplication
+// Base: 0x4E209C00 = 1310759936
+fn arm64_neon_mul_4s vd vn vm
+    d = floor(vd) % 32
+    n = floor(vn) % 32
+    m = floor(vm) % 32
+    return 1310759936 + (m * 65536) + (n * 32) + d
+
+// 31. LDR Qt, [Xn, #imm12*16]: 128-bit vector load from address [Xn + imm12*16]
+// Base: 0x3DC00000 = 1035993088
+fn arm64_neon_ldr_q vt xn imm12
+    t = floor(vt) % 32
+    n = floor(xn) % 32
+    imm = floor(imm12) % 4096
+    return 1035993088 + (imm * 1024) + (n * 32) + t
+
+// 32. STR Qt, [Xn, #imm12*16]: 128-bit vector store to address [Xn + imm12*16]
+// Base: 0x3D800000 = 1031798784
+fn arm64_neon_str_q vt xn imm12
+    t = floor(vt) % 32
+    n = floor(xn) % 32
+    imm = floor(imm12) % 4096
+    return 1031798784 + (imm * 1024) + (n * 32) + t
+
+// 33. UADDLV Vd.2D, Vn.4S: Unsigned Add Long Across Vector (4S reduction to 64-bit sum)
+// Base: 0x6E30C800 = 1848690688
+fn arm64_neon_uaddlv_4s vd vn
+    d = floor(vd) % 32
+    n = floor(vn) % 32
+    return 1848690688 + (n * 32) + d
+
 // ── Context Emission Primitives ───────────────────────────────────────────────
 // WHY: These wrappers encode the instruction and append the resulting 4 bytes
 //      directly into the compilation context byte stream.
@@ -487,6 +539,24 @@ fn arm64_emit_bl ctx disp
 
 fn arm64_emit_nop ctx
     arm64_emit(ctx, arm64_nop())
+
+fn arm64_emit_neon_add_4s ctx vd vn vm
+    arm64_emit(ctx, arm64_neon_add_4s(vd, vn, vm))
+
+fn arm64_emit_neon_sub_4s ctx vd vn vm
+    arm64_emit(ctx, arm64_neon_sub_4s(vd, vn, vm))
+
+fn arm64_emit_neon_mul_4s ctx vd vn vm
+    arm64_emit(ctx, arm64_neon_mul_4s(vd, vn, vm))
+
+fn arm64_emit_neon_ldr_q ctx vt xn imm12
+    arm64_emit(ctx, arm64_neon_ldr_q(vt, xn, imm12))
+
+fn arm64_emit_neon_str_q ctx vt xn imm12
+    arm64_emit(ctx, arm64_neon_str_q(vt, xn, imm12))
+
+fn arm64_emit_neon_uaddlv_4s ctx vd vn
+    arm64_emit(ctx, arm64_neon_uaddlv_4s(vd, vn))
 
 // ── Arbitrary 64-Bit Immediate Loading Synthesis ─────────────────────────────
 // WHY: In ARM64, instructions are fixed 32 bits, so 64-bit immediates cannot be
@@ -2418,9 +2488,9 @@ fn arm64_compile_stmt ctx ps
             arm64_emit_b_label(ctx, get(sstk, len(sstk) - 1))
         return 0
 
-    // say / বলো / show / দেখাও / print / println
-    if tt == ARM64_TOK_IDENT and (txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println")
-        is_say = (txt == "say" or txt == "বলো" or txt == "println")
+    // say / বলো / show / দেখাও / print / println / @say / @print
+    if tt == ARM64_TOK_IDENT and (txt == "say" or txt == "বলো" or txt == "show" or txt == "দেখাও" or txt == "print" or txt == "println" or txt == "@say" or txt == "@print")
+        is_say = (txt == "say" or txt == "বলো" or txt == "println" or txt == "@say")
         arm64_ps_adv(ps)
         arm64_compile_expr(ctx, ps)
         arm64_emit_bl_label(ctx, "_lipi_print_dynamic")
@@ -2428,8 +2498,9 @@ fn arm64_compile_stmt ctx ps
             arm64_emit_bl_label(ctx, "_lipi_print_nl")
         return 0
 
-    // if / elif / else (যদি / নাহলে_যদি / নাহলে)
-    if tt == ARM64_TOK_IDENT and (txt == "if" or txt == "যদি")
+    // if / elif / else (যদি / নাহলে_যদি / নাহলে / @if / @elif / @else / @end)
+    if tt == ARM64_TOK_IDENT and (txt == "if" or txt == "যদি" or txt == "@if")
+        is_meta_if = (txt == "@if")
         arm64_ps_adv(ps)
         arm64_compile_expr(ctx, ps)
         lbl_end  = arm64_make_anon_label(ctx, "if_end")
@@ -2437,7 +2508,17 @@ fn arm64_compile_stmt ctx ps
         arm64_emit_cbz_label(ctx, ARM64_REG_X0, lbl_next)
 
         arm64_ps_skip_nl(ps)
-        if arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
+        if is_meta_if == 1
+            while arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                arm64_ps_skip_nl(ps)
+                if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and (arm64_ps_cur_text(ps) == "@end" or arm64_ps_cur_text(ps) == "@elif" or arm64_ps_cur_text(ps) == "@else")
+                    break
+                prev_if_p = arm64_ps_pos(ps)
+                arm64_compile_stmt(ctx, ps)
+                if arm64_ps_pos(ps) == prev_if_p
+                    arm64_ps_adv(ps)
+                arm64_ps_skip_nl(ps)
+        elif arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
             arm64_ps_adv(ps)
             while arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
                 prev_if_p = arm64_ps_pos(ps)
@@ -2454,14 +2535,25 @@ fn arm64_compile_stmt ctx ps
         arm64_label_define(ctx, lbl_next)
 
         arm64_ps_skip_nl(ps)
-        while arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and (arm64_ps_cur_text(ps) == "elif" or arm64_ps_cur_text(ps) == "নাহলে_যদি")
+        while arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and (arm64_ps_cur_text(ps) == "elif" or arm64_ps_cur_text(ps) == "নাহলে_যদি" or arm64_ps_cur_text(ps) == "@elif")
+            is_meta_elif = (arm64_ps_cur_text(ps) == "@elif")
             arm64_ps_adv(ps)
             arm64_compile_expr(ctx, ps)
             lbl_next = arm64_make_anon_label(ctx, "elif_next")
             arm64_emit_cbz_label(ctx, ARM64_REG_X0, lbl_next)
 
             arm64_ps_skip_nl(ps)
-            if arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
+            if is_meta_elif == 1
+                while arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                    arm64_ps_skip_nl(ps)
+                    if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and (arm64_ps_cur_text(ps) == "@end" or arm64_ps_cur_text(ps) == "@elif" or arm64_ps_cur_text(ps) == "@else")
+                        break
+                    prev_elif_p = arm64_ps_pos(ps)
+                    arm64_compile_stmt(ctx, ps)
+                    if arm64_ps_pos(ps) == prev_elif_p
+                        arm64_ps_adv(ps)
+                    arm64_ps_skip_nl(ps)
+            elif arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
                 arm64_ps_adv(ps)
                 while arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
                     prev_elif_p = arm64_ps_pos(ps)
@@ -2478,10 +2570,22 @@ fn arm64_compile_stmt ctx ps
             arm64_label_define(ctx, lbl_next)
             arm64_ps_skip_nl(ps)
 
-        if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and (arm64_ps_cur_text(ps) == "else" or arm64_ps_cur_text(ps) == "নাহলে")
+        if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and (arm64_ps_cur_text(ps) == "else" or arm64_ps_cur_text(ps) == "নাহলে" or arm64_ps_cur_text(ps) == "@else")
+            is_meta_else = (arm64_ps_cur_text(ps) == "@else")
             arm64_ps_adv(ps)
             arm64_ps_skip_nl(ps)
-            if arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
+            if is_meta_else == 1
+                while arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                    arm64_ps_skip_nl(ps)
+                    if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and arm64_ps_cur_text(ps) == "@end"
+                        arm64_ps_adv(ps)
+                        break
+                    prev_else_p = arm64_ps_pos(ps)
+                    arm64_compile_stmt(ctx, ps)
+                    if arm64_ps_pos(ps) == prev_else_p
+                        arm64_ps_adv(ps)
+                    arm64_ps_skip_nl(ps)
+            elif arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
                 arm64_ps_adv(ps)
                 while arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
                     prev_else_p = arm64_ps_pos(ps)
@@ -2494,11 +2598,16 @@ fn arm64_compile_stmt ctx ps
             else
                 arm64_compile_stmt(ctx, ps)
 
+        if is_meta_if == 1
+            if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and arm64_ps_cur_text(ps) == "@end"
+                arm64_ps_adv(ps)
+
         arm64_label_define(ctx, lbl_end)
         return 0
 
-    // while / যতক্ষণ
-    if tt == ARM64_TOK_IDENT and (txt == "while" or txt == "যতক্ষণ")
+    // while / যতক্ষণ / @while
+    if tt == ARM64_TOK_IDENT and (txt == "while" or txt == "যতক্ষণ" or txt == "@while")
+        is_meta_while = (txt == "@while")
         arm64_ps_adv(ps)
         lbl_loop = arm64_make_anon_label(ctx, "while_loop")
         lbl_end  = arm64_make_anon_label(ctx, "while_end")
@@ -2508,7 +2617,18 @@ fn arm64_compile_stmt ctx ps
 
         arm64_loop_push(ctx, lbl_loop, lbl_end)
         arm64_ps_skip_nl(ps)
-        if arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
+        if is_meta_while == 1
+            while arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                arm64_ps_skip_nl(ps)
+                if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and arm64_ps_cur_text(ps) == "@end"
+                    arm64_ps_adv(ps)
+                    break
+                prev_while_p = arm64_ps_pos(ps)
+                arm64_compile_stmt(ctx, ps)
+                if arm64_ps_pos(ps) == prev_while_p
+                    arm64_ps_adv(ps)
+                arm64_ps_skip_nl(ps)
+        elif arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
             arm64_ps_adv(ps)
             while arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
                 prev_while_p = arm64_ps_pos(ps)
@@ -2526,8 +2646,8 @@ fn arm64_compile_stmt ctx ps
         arm64_label_define(ctx, lbl_end)
         return 0
 
-    // return / ফেরত
-    if tt == ARM64_TOK_IDENT and (txt == "return" or txt == "ফেরত")
+    // return / ফেরত / @return
+    if tt == ARM64_TOK_IDENT and (txt == "return" or txt == "ফেরত" or txt == "@return")
         arm64_ps_adv(ps)
         if arm64_ps_cur_type(ps) != ARM64_TOK_NL and arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
             arm64_compile_expr(ctx, ps)
@@ -2536,8 +2656,9 @@ fn arm64_compile_stmt ctx ps
         arm64_emit_epilogue(ctx)
         return 0
 
-    // fn / কাজ (Function Definition)
-    if tt == ARM64_TOK_IDENT and (txt == "fn" or txt == "কাজ")
+    // fn / কাজ / @fn (Function Definition)
+    if tt == ARM64_TOK_IDENT and (txt == "fn" or txt == "কাজ" or txt == "@fn")
+        is_meta_fn = (txt == "@fn")
         arm64_ps_adv(ps)
         fn_name = arm64_ps_cur_text(ps)
         arm64_ps_adv(ps)
@@ -2603,7 +2724,18 @@ fn arm64_compile_stmt ctx ps
             return 0
 
         arm64_ps_skip_nl(ps)
-        if arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
+        if is_meta_fn == 1
+            while arm64_ps_cur_type(ps) != ARM64_TOK_EOF
+                arm64_ps_skip_nl(ps)
+                if arm64_ps_cur_type(ps) == ARM64_TOK_IDENT and arm64_ps_cur_text(ps) == "@end"
+                    arm64_ps_adv(ps)
+                    break
+                prev_fn_p = arm64_ps_pos(ps)
+                arm64_compile_stmt(ctx, ps)
+                if arm64_ps_pos(ps) == prev_fn_p
+                    arm64_ps_adv(ps)
+                arm64_ps_skip_nl(ps)
+        elif arm64_ps_cur_type(ps) == ARM64_TOK_INDENT
             arm64_ps_adv(ps)
             while arm64_ps_cur_type(ps) != ARM64_TOK_DEDENT and arm64_ps_cur_type(ps) != ARM64_TOK_EOF
                 prev_fn_p = arm64_ps_pos(ps)

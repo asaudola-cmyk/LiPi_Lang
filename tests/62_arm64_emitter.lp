@@ -81,6 +81,35 @@ fn main
     test_assert_eq(w_cbz_neg, 3036675968, "arm64_cbz(0, -16) -> 0xB4FFFF80")
 
     // ──────────────────────────────────────────────────────────────────────────
+    // [Phase 1b]: NEON 128-Bit SIMD Vector Instruction Encoders Verification
+    // ──────────────────────────────────────────────────────────────────────────
+    say "\n[Phase 1b]: Validating ARM64 NEON 128-Bit SIMD Vector Encoders..."
+
+    // 15. ADD V0.4S, V1.4S, V2.4S -> 0x4E228420 (1310884896)
+    w_nadd = arm64_neon_add_4s(0, 1, 2)
+    test_assert_eq(w_nadd, 1310884896, "arm64_neon_add_4s(0, 1, 2) -> 0x4E228420")
+
+    // 16. SUB V0.4S, V1.4S, V2.4S -> 0x6E228420 (1847755808)
+    w_nsub = arm64_neon_sub_4s(0, 1, 2)
+    test_assert_eq(w_nsub, 1847755808, "arm64_neon_sub_4s(0, 1, 2) -> 0x6E228420")
+
+    // 17. MUL V0.4S, V1.4S, V2.4S -> 0x4E229C20 (1310891040)
+    w_nmul = arm64_neon_mul_4s(0, 1, 2)
+    test_assert_eq(w_nmul, 1310891040, "arm64_neon_mul_4s(0, 1, 2) -> 0x4E229C20")
+
+    // 18. LDR Q0, [X1, #0] -> 0x3DC00020 (1035993120)
+    w_nldr = arm64_neon_ldr_q(0, 1, 0)
+    test_assert_eq(w_nldr, 1035993120, "arm64_neon_ldr_q(0, 1, 0) -> 0x3DC00020")
+
+    // 19. STR Q0, [X1, #0] -> 0x3D800020 (1031798816)
+    w_nstr = arm64_neon_str_q(0, 1, 0)
+    test_assert_eq(w_nstr, 1031798816, "arm64_neon_str_q(0, 1, 0) -> 0x3D800020")
+
+    // 20. UADDLV V0.2D, V1.4S (4S reduction) -> 0x6E30C820 (1848690720)
+    w_nuadd = arm64_neon_uaddlv_4s(0, 1)
+    test_assert_eq(w_nuadd, 1848690720, "arm64_neon_uaddlv_4s(0, 1) -> 0x6E30C820")
+
+    // ──────────────────────────────────────────────────────────────────────────
     // [Phase 2]: Linux AArch64 Syscall Convention Verification
     // ──────────────────────────────────────────────────────────────────────────
     say "\n[Phase 2]: Validating Linux AArch64 Syscall Calling Convention..."

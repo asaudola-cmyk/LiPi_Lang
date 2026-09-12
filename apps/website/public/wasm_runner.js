@@ -124,7 +124,29 @@
           }
         },
         fd_write: function (fd, iovs, iovs_len, nwritten) {
-          return 0;
+          // WHY: Complete standard WASI fd_write POSIX implementation.
+          // Reads iovec structures (ptr, len) from WebAssembly linear memory,
+          // decodes UTF-8 strings, and passes them to output sink.
+          const memBuffer = getMemoryBuffer() || memoryObj.buffer;
+          if (!memBuffer) return 0;
+          const view = new DataView(memBuffer);
+          let totalWritten = 0;
+          for (let i = 0; i < iovs_len; i++) {
+            const iovOffset = iovs + (i * 8);
+            if (iovOffset + 8 <= memBuffer.byteLength) {
+              const ptr = view.getUint32(iovOffset, true);
+              const len = view.getUint32(iovOffset + 4, true);
+              const text = decodeUtf8FromMemory(memBuffer, ptr, len);
+              if (text && typeof outputSink === 'function') {
+                outputSink(text);
+              }
+              totalWritten += len;
+            }
+          }
+          if (nwritten > 0 && nwritten + 4 <= memBuffer.byteLength) {
+            view.setUint32(nwritten, totalWritten, true);
+          }
+          return 0; // ESUCCESS
         }
       }
     };
