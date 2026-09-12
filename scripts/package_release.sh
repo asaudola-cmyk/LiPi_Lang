@@ -11,10 +11,10 @@ GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-LIPI_VERSION_BENGALI="প্রথম ১.০"
+LIPI_VERSION_BENGALI="প্রথম ১.০.০"
 VERSION="1.0.0"  # SemVer for filenames
 LIPI_CODENAME="সোভেরিন"
-# WHY: Version locked at প্রথম ১.০ until user explicitly changes it
+# WHY: Version permanently locked at First 1.0.0 (প্রথম ১.০.০) per user directive
 ARCH="linux-x86_64"
 RELEASE_NAME="lipi-v${VERSION}-${ARCH}"
 RELEASE_DIR="dist/${RELEASE_NAME}"
@@ -27,19 +27,25 @@ echo ""
 
 # ১. বিল্ড ডিরেক্টরি তৈরি
 rm -rf "${RELEASE_DIR}" "${TARBALL}"
-mkdir -p "${RELEASE_DIR}/bin" "${RELEASE_DIR}/std" "${RELEASE_DIR}/docs"
+mkdir -p "${RELEASE_DIR}/bin" "${RELEASE_DIR}/universe" "${RELEASE_DIR}/docs"
 
-# ২. মূল বাইনারিসমূহ কপি
+# ২. মূল বাইনারিসমূহ কপি (100% Pure Lipi Sovereign Binaries)
 echo -e "${YELLOW}[১] সার্বভৌম বাইনারিসমূহ প্যাকেজ করা হচ্ছে...${NC}"
-cp bin/lipic "${RELEASE_DIR}/bin/"
+cp bin/lipc "${RELEASE_DIR}/bin/"
+cp bin/lipc_bin "${RELEASE_DIR}/bin/"
+cp bin/lipi "${RELEASE_DIR}/bin/"
 cp bin/lipipkg "${RELEASE_DIR}/bin/"
 cp bin/lipidbg "${RELEASE_DIR}/bin/"
 cp bin/lipirepl "${RELEASE_DIR}/bin/"
+cp bin/lipifmt "${RELEASE_DIR}/bin/"
+cp bin/lipilsp "${RELEASE_DIR}/bin/"
+cp bin/lipiconvert "${RELEASE_DIR}/bin/"
 chmod +x "${RELEASE_DIR}/bin/"*
 
-# ৩. স্ট্যান্ডার্ড লাইব্রেরি কপি
-echo -e "${YELLOW}[২] স্ট্যান্ডার্ড লাইব্রেরি কপি করা হচ্ছে...${NC}"
-cp std/*.lp "${RELEASE_DIR}/std/"
+# ৩. স্ট্যান্ডার্ড লাইব্রেরি ও ইউনিভার্স মডিউল কপি
+echo -e "${YELLOW}[২] স্ট্যান্ডার্ড লাইব্রেরি ও ইউনিভার্স কপি করা হচ্ছে...${NC}"
+cp -r universe/* "${RELEASE_DIR}/universe/"
+cp -r docs/* "${RELEASE_DIR}/docs/"
 
 # ৪. লাইসেন্স, ইনস্টলার ও রিডমি
 cp README.md LICENSE install.sh "${RELEASE_DIR}/"

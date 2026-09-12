@@ -132,8 +132,30 @@ else
     exit 1
 fi
 
-# ১২. সক্রিয় কোডবেস পিএইচপি অডিট
-echo -e "${YELLOW}[ধাপ ১২] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
+# ১২. HTTP রিকোয়েস্ট যাচাই (GET /api/packages - LipiPkg Package Registry API)
+echo -e "${YELLOW}[ধাপ ১২] HTTP রিকোয়েস্ট ৯: GET /api/packages (প্যাকেজ রেজিস্ট্রি মেটাডাটা)...${NC}"
+PKG_JSON=$(curl -s http://127.0.0.1:8088/api/packages)
+echo -e "  • প্রাপ্ত প্যাকেজ JSON: ${CYAN}${PKG_JSON}${NC}"
+if echo "${PKG_JSON}" | grep -q "web_router" && echo "${PKG_JSON}" | grep -q "crypto_vault"; then
+    echo -e "${GREEN}  ✔ প্যাকেজ রেজিস্ট্রি API সফল! Ed25519 সিকিউরড প্যাকেজ ক্যাটালগ পরিবেশিত।${NC}"
+else
+    echo -e "${RED}  ❌ এরর: প্যাকেজ রেজিস্ট্রি API ব্যর্থ!${NC}"
+    exit 1
+fi
+
+# ১৩. HTTP রিকোয়েস্ট যাচাই (GET /api/benchmarks - Silicon Hardware Benchmarks API)
+echo -e "${YELLOW}[ধাপ ১৩] HTTP রিকোয়েস্ট ১০: GET /api/benchmarks (হার্ডওয়্যার বেঞ্চমার্ক মেট্রিক্স)...${NC}"
+BENCH_JSON=$(curl -s http://127.0.0.1:8088/api/benchmarks)
+echo -e "  • প্রাপ্ত বেঞ্চমার্ক JSON: ${CYAN}${BENCH_JSON}${NC}"
+if echo "${BENCH_JSON}" | grep -q "loop_10m" && echo "${BENCH_JSON}" | grep -q "Ryzen"; then
+    echo -e "${GREEN}  ✔ সিলিকন বেঞ্চমার্ক API সফল! হার্ডওয়্যার মেট্রিক্স প্রাপ্ত।${NC}"
+else
+    echo -e "${RED}  ❌ এরর: সিলিকন বেঞ্চমার্ক API ব্যর্থ!${NC}"
+    exit 1
+fi
+
+# ১৪. সক্রিয় কোডবেস পিএইচপি অডিট
+echo -e "${YELLOW}[ধাপ ১৪] কোডবেস ০% PHP সার্বভৌমত্ব অডিট...${NC}"
 PHP_COUNT=$(find apps/website -name "*.php" | wc -l)
 if [ "${PHP_COUNT}" -eq 0 ]; then
     echo -e "${GREEN}  ✔ apps/website এ কোনো PHP ফাইল নেই (০% PHP, ১০০% লিপি)!${NC}"

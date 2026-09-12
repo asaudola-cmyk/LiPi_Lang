@@ -1,5 +1,5 @@
-# 📜 Lipi 2.0 Sovereign Developer Manual & Systems Reference
-### Version: First 1.0 (Sovereign Release) — Pure Machine Code & Bilingual Silicon Engine
+# 📜 Lipi Sovereign Developer Manual & Systems Reference
+### Version: First 1.0.0 (প্রথম ১.০.০ — Sovereign Release) — Pure Machine Code & Bilingual Silicon Engine
 
 ---
 
@@ -523,8 +523,12 @@ The official VS Code extension is packaged under `editors/vscode/`:
 
 ### Installation
 ```bash
-mkdir -p ~/.vscode/extensions/lipi-lang-2.0.0
-cp -r editors/vscode/* ~/.vscode/extensions/lipi-lang-2.0.0/
+# Option 1: Install packaged VSIX
+code --install-extension dist/lipi-language-1.0.0.vsix
+
+# Option 2: Copy directly to VS Code extensions directory
+mkdir -p ~/.vscode/extensions/lipi-lang-1.0.0
+cp -r editors/vscode/* ~/.vscode/extensions/lipi-lang-1.0.0/
 ```
 Restart Visual Studio Code to enable syntax highlighting and editing support for all `.lp` and `.lipi` files.
 

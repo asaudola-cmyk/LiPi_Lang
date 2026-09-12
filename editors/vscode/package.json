@@ -1,8 +1,8 @@
 {
   "name": "lipi-language",
   "displayName": "Lipi Sovereign Programming Language",
-  "description": "Official Language Support for Lipi 2.0 (Bilingual English & Bengali, Direct Silicon Compiler)",
-  "version": "2.0.0",
+  "description": "Official Language Support for Lipi (Bilingual English & Bengali, Direct Silicon Compiler)",
+  "version": "1.0.0",
   "publisher": "lipi-lang",
   "author": {
     "name": "Lipi Language Project",

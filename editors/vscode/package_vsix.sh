@@ -40,9 +40,9 @@ cat <<'EOF' > "${STAGE_DIR}/extension.vsixmanifest"
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
   <Metadata>
-    <Identity Id="lipi-language" Version="2.0.0" Publisher="lipi-lang" />
+    <Identity Id="lipi-language" Version="1.0.0" Publisher="lipi-lang" />
     <DisplayName>Lipi Sovereign Programming Language</DisplayName>
-    <Description>Official Language Support for Lipi 2.0 (Tri-Syntax, Direct Silicon Compiler)</Description>
+    <Description>Official Language Support for Lipi (Tri-Syntax, Direct Silicon Compiler)</Description>
     <Categories>Programming Languages,Snippets</Categories>
     <Icon>extension/icons/icon.png</Icon>
   </Metadata>
@@ -76,7 +76,7 @@ if [ -d "${SCRIPT_DIR}/icons" ]; then
 fi
 
 # 4. Pack into .vsix OPC archive
-VSIX_PATH="${DIST_DIR}/lipi-language-2.0.0.vsix"
+VSIX_PATH="${DIST_DIR}/lipi-language-1.0.0.vsix"
 rm -f "${VSIX_PATH}"
 
 (cd "${STAGE_DIR}" && zip -q -r "${VSIX_PATH}" "[Content_Types].xml" "extension.vsixmanifest" "extension")

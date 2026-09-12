@@ -1,7 +1,7 @@
 // ==============================================================================
 // 👑 Lipi Pure Self-Hosting Direct ELF Emitter (src/compiler/elf_emitter.lp)
 // ⚡ Written 100% in Pure Lipi (.lp) | Emits Raw Linux x86_64 ELF64 Machine Code
-// 🏛️ Version: First 1.0 (প্রথম ১.০) — Sovereign
+// 🏛️ Version: First 1.0.0 (প্রথম ১.০.০) — Sovereign
 //
 // WHY: This file realizes the ultimate theoretical closure of the Lipi language:
 //      A compiler written entirely in Lipi that synthesizes native silicon machine
@@ -8779,7 +8779,7 @@ while i < len(args)
     elif arg == "--direct-elf" or arg == "--baremetal"
         pass_noop = 0
     elif arg == "--help" or arg == "-h"
-        say "👑 Lipi Sovereign Compiler — First 1.0 (প্রথম ১.০)"
+        say "👑 Lipi Sovereign Compiler — First 1.0.0 (প্রথম ১.০.০)"
         say "⚡ 100% Pure Lipi Source | Zero C | Zero GCC | Zero Libc | Zero Python"
         say "Usage:"
         say "  lipc <input.lp> [-o <output_binary>]                 Compile to Linux x86_64 ELF64"
@@ -8797,7 +8797,7 @@ while i < len(args)
     i = i + 1
 
 if in_file == ""
-    say "Lipi Pure Sovereign Compiler — First 1.0 (প্রথম ১.০)"
+    say "Lipi Pure Sovereign Compiler — First 1.0.0 (প্রথম ১.০.০)"
     say "Usage: lipc [-shared] [--target=arm64|--target=wasm|--target=x86_64] <input.lp> [-o <output_binary>]"
     exit(1)
 

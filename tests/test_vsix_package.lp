@@ -40,7 +40,7 @@ import "universe/core/string"
   println("▶ Section 1: Standalone VSIX Archive Verification...")
   total_tests = total_tests + 1
 
-  vsix_path = "dist/lipi-language-2.0.0.vsix"
+  vsix_path = "dist/lipi-language-1.0.0.vsix"
   ok_exist = file_exists(vsix_path)
   ok_v1 = assert_eq_int(ok_exist, 1, "VSIX package exists in dist/ directory")
 
@@ -61,11 +61,11 @@ import "universe/core/string"
 
   pkg_json = read_file("editors/vscode/package.json")
   has_name = str_contains(pkg_json, "\"name\": \"lipi-language\"")
-  has_ver = str_contains(pkg_json, "\"version\": \"2.0.0\"")
+  has_ver = str_contains(pkg_json, "\"version\": \"1.0.0\"")
   has_main = str_contains(pkg_json, "\"main\": \"./extension.js\"")
 
   ok_m1 = assert_eq_int(has_name, 1, "package.json contains name 'lipi-language'")
-  ok_m2 = assert_eq_int(has_ver, 1, "package.json contains version '2.0.0'")
+  ok_m2 = assert_eq_int(has_ver, 1, "package.json contains version '1.0.0'")
   ok_m3 = assert_eq_int(has_main, 1, "package.json contains main entrypoint")
 
   if ok_m1 == 1 && ok_m2 == 1 && ok_m3 == 1

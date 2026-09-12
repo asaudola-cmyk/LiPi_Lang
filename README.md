@@ -5,7 +5,7 @@
 # 👑 Lipi Sovereign Programming Language
 ### *Simpler than Python. Fast as C/Rust. 100% Self-Hosting & Zero-Dependency.*
 
-**Lipi 2.0 (প্রথম ১.০ — Sovereign Release)**  
+**Lipi First 1.0.0 (প্রথম ১.০.০ — Sovereign Release)**  
 *The world's first bilingual systems programming language compiling directly to native silicon machine code.*
 
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
@@ -55,7 +55,7 @@ Lipi features a self-hosted 5-stage compiler pipeline with dual native silicon e
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      Lipi 2.0 Sovereign Architecture                        │
+│                   Lipi First 1.0.0 Sovereign Architecture                   │
 │                                                                             │
 │   [Bengali Source (.lp)] ──┐                                                │
 │                            ├─► [Bilingual Lexer] ──► [Recursive AST Parser] │
@@ -215,15 +215,19 @@ The official VS Code extension is available under `editors/vscode/`:
 
 ### Install Extension:
 ```bash
-mkdir -p ~/.vscode/extensions/lipi-lang-2.0.0
-cp -r editors/vscode/* ~/.vscode/extensions/lipi-lang-2.0.0/
+# Option 1: Install packaged VSIX
+code --install-extension dist/lipi-language-1.0.0.vsix
+
+# Option 2: Copy directly to VS Code extensions directory
+mkdir -p ~/.vscode/extensions/lipi-lang-1.0.0
+cp -r editors/vscode/* ~/.vscode/extensions/lipi-lang-1.0.0/
 ```
 
 ---
 
 ## 📋 Comprehensive Feature Matrix
 
-| Feature | Lipi 2.0 | C | Rust | Go | Python |
+| Feature | Lipi (First 1.0.0) | C | Rust | Go | Python |
 |---|:---:|:---:|:---:|:---:|:---:|
 | **Zero Runtime Dependencies** | ✅ (0% Libc) | ❌ (Requires Libc) | ❌ (Requires Libc) | ❌ (Heavy Runtime) | ❌ (VM Required) |
 | **Direct Silicon ELF Emitter** | ✅ (Self-Hosted) | ❌ (Requires GCC/LLVM) | ❌ (Requires LLVM) | ❌ (Go Toolchain) | ❌ (Bytecode) |

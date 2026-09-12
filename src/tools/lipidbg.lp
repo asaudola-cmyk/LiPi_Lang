@@ -418,7 +418,7 @@ fn main
     if argc >= 2
         cmd = get(args, 1)
         if cmd == "version" or cmd == "-v"
-            say "lipidbg সংস্করণ: প্রথম ১.০ (Prothom 1.0 Sovereign)"
+            say "lipidbg সংস্করণ: প্রথম ১.০.০ (First 1.0.0 Sovereign)"
             say "লক্ষ্য: Linux x86_64 ELF64 (0% Libc, 0% GDB)"
             return 0
         if cmd == "help" or cmd == "-h"

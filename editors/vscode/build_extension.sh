@@ -47,7 +47,7 @@ if (failed) {
 ' "${SCRIPT_DIR}"
 
 # 2. Package tar.gz bundle for direct editor installation
-ARCHIVE_NAME="vscode-lipi-v2.0.0.tar.gz"
+ARCHIVE_NAME="vscode-lipi-v1.0.0.tar.gz"
 echo ""
 echo "📦 Packaging VS Code Lipi Extension Archive (${ARCHIVE_NAME})..."
 
@@ -74,8 +74,8 @@ echo "  • Files included: ${PACKAGE_ITEMS[*]}"
 if command -v vsce &>/dev/null; then
   echo ""
   echo "📦 Packaging VSIX with vsce..."
-  (cd "${SCRIPT_DIR}" && vsce package --out "${DIST_DIR}/lipi-language-2.0.0.vsix")
-  echo "  ✔ VSIX package created: ${DIST_DIR}/lipi-language-2.0.0.vsix"
+  (cd "${SCRIPT_DIR}" && vsce package --out "${DIST_DIR}/lipi-language-1.0.0.vsix")
+  echo "  ✔ VSIX package created: ${DIST_DIR}/lipi-language-1.0.0.vsix"
 fi
 
 echo ""

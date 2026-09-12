@@ -75,3 +75,45 @@ fn db_file_size fd
 
 fn ডিবি_ফাইলের_সাইজ fd
     return db_file_size(fd)
+
+// ৬. সক্রিয় রেকর্ডের সংখ্যা গণনা (Count Active Records where status == 1)
+// WHY: Computes live non-deleted records count without allocating intermediate structures
+fn db_active_count fd
+    total = db_total_records(fd)
+    syscall(8, fd, 0, 0, 0, 0, 0) // lseek SEEK_SET
+    buf = malloc(32)
+    active = 0
+    i = 0
+    while i < total
+        n = syscall(0, fd, buf, 32, 0, 0, 0)
+        if n == 32
+            st = mem_read(buf, 16)
+            if st == 1
+                active = active + 1
+        i = i + 1
+    free(buf, 32)
+    return active
+
+fn ডিবি_সক্রিয়_সংখ্যা fd
+    return db_active_count(fd)
+
+// ৭. ইন-প্লেস রেকর্ড আপডেট (Update Value of Record with SYS_fsync)
+// WHY: Modifies the 8-byte QWORD payload at offset 24 without altering ID or timestamp
+fn db_update_record fd target_id new_val
+    if target_id <= 0
+        return 0
+    total = db_total_records(fd)
+    if target_id > total
+        return 0
+
+    offset = (target_id - 1) * 32
+    syscall(8, fd, offset + 24, 0, 0, 0, 0)
+    buf = malloc(16)
+    mem_write(buf, 0, new_val)
+    syscall(1, fd, buf, 8, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0)
+    free(buf, 16)
+    return 1
+
+fn ডিবি_রেকর্ড_আপডেট fd টার্গেট_আইডি নতুন_মান
+    return db_update_record(fd, টার্গেট_আইডি, নতুন_মান)

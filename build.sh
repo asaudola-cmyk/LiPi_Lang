@@ -17,8 +17,8 @@
 #   [Stage 7] Complete Sovereignty Audit (0% C, 0% GCC, 0% Python, 0% PHP)
 # ==============================================================================
 
-LIPI_VERSION="প্রথম ১.০"
-LIPI_VERSION_ENG="Prothom 1.0"
+LIPI_VERSION="প্রথম ১.০.০"
+LIPI_VERSION_ENG="First 1.0.0"
 LIPI_CODENAME="সোভেরিন"
 
 set -euo pipefail

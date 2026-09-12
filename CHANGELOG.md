@@ -4,7 +4,27 @@ All notable changes to the Lipi Programming Language are documented here.
 
 ---
 
-## [First 1.0 — Sovereign] — 2026-09-10
+## [First 1.0.0] (প্রথম ১.০.০ — Official Sovereign Silicon Release) — 2026-09-13
+
+### 👑 Sovereign Architecture & Milestone Achievements
+- **100% Autonomous Silicon Code Generation**: Native ELF64 machine code generation with 0% C, 0% GCC, 0% LLVM, 0% Python runtime dependencies.
+- **Triple-Gen Self-Hosting Closure**: Verified bit-for-bit deterministic self-hosting closure where Gen 2 and Gen 3 binaries match identically (0 bytes diff).
+- **Unified Toolchain Suite**: All official tools standard-aligned and built natively:
+  - `lipc` / `lipc_bin`: Core sovereign ELF64 compiler
+  - `lipi`: Universal driver CLI
+  - `lipipkg`: Sovereign package manager with Ed25519 cryptographic signing and verification
+  - `lipidbg`: Native hardware debugger using Linux ptrace and hardware INT3 breakpoints
+  - `lipirepl`: Interactive silicon REPL
+  - `lipifmt`: Indentation and style code formatter
+  - `lipilsp`: Standard JSON-RPC 2.0 Language Server Protocol implementation
+  - `lipiconvert`: Bilingual syntax converter (Bengali <-> English)
+- **Standard Library Ecosystem (`universe/`)**: 40+ production modules covering Core, Network/HTTP/TLS 1.3, Crypto (AES-GCM, SHA-256, Ed25519), Storage & ACID Key-Value DB, AI Tensor, 2D Rasterizer, and OS Unikernel bootloader.
+- **Official VS Code IDE Extension**: Bilingual syntax highlighting, auto-indentation, snippets, and integrated LSP support packaged as `lipi-language-1.0.0.vsix`.
+- **100% Test Suite Verification**: 130/130 sovereign regression and integration tests passing cleanly.
+
+---
+
+## [First 1.0.0-rc] — 2026-09-10
 
 ### 🎉 Initial Release
 

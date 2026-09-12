@@ -14,7 +14,7 @@ include "universe/core/memory.lp"
 fn print_lipi_banner
     say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
     say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN PROGRAMMING LANGUAGE & COMPUTING UNIVERSE\033[0m          \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Silicon Machine Code | 0% C | 0% GCC | 0% Libc | v2.5.0\033[0m       \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Silicon Machine Code | 0% C | 0% GCC | 0% Libc | First 1.0.0 (প্রথম ১.০.০)\033[0m  \033[38;2;0;255;204m║\033[0m"
     say "\033[38;2;0;255;204m║\033[0m  \033[38;2;255;215;0m🌌 Tri-Syntax: Bengali Indent + English Indent + Lipi Directive Syntax\033[0m   \033[38;2;0;255;204m║\033[0m"
     say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
@@ -40,7 +40,7 @@ fn print_usage
 
 fn show_version
     print_lipi_banner()
-    say "Lipi Sovereign Compiler & Universe Core v2.5.0-monolith"
+    say "Lipi Sovereign Compiler & Universe Core — First 1.0.0 (প্রথম ১.০.০)"
     say "Target: x86_64-unknown-linux-musl-freestanding"
     say "Bootstrap Seed: boot/lipi-seed (100% Native Silicon Machine Code)"
     say "Multi-Target Emitters: ELF64, PE32+ (Windows), Mach-O (macOS), WASM, RISC-V"

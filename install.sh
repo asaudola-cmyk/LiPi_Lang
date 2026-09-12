@@ -7,7 +7,7 @@
 
 set -e
 
-LIPI_VERSION="2.5.0 (Sovereign)"
+LIPI_VERSION="First 1.0.0 (প্রথম ১.০.০)"
 LIPI_REPO="https://github.com/asaudola-cmyk/LiPi_Lang.git"
 LIPI_INSTALL_DIR="$HOME/.lipi"
 LIPI_BIN_DIR="$HOME/.local/bin"

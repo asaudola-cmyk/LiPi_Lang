@@ -1,7 +1,7 @@
 // ==============================================================================
-// 📦 লিপি প্যাকেজ ম্যানেজার ২.০ — lipipkg (src/tools/lipipkg.lp)
-// লিপি প্রথম ১.০ | সংকেতনাম: সোভেরিন
-// 🏛️ Horizon 8: Production-Grade Developer Toolchain & Ed25519 Package Security
+// 📦 লিপি প্যাকেজ ম্যানেজার — lipipkg (src/tools/lipipkg.lp)
+// লিপি প্রথম ১.০.০ | First 1.0.0 Sovereign Package Manager
+// 🏛️ Production-Grade Developer Toolchain & Ed25519 Package Security
 // ==============================================================================
 
 // WHY: A sovereign language requires a full-featured package manager capable of
@@ -15,7 +15,7 @@ include "universe/core/memory.lp"
 include "universe/core/string.lp"
 include "universe/crypto/crypto.lp"
 
-PKG_VERSION = "প্রথম ১.০"
+PKG_VERSION = "প্রথম ১.০.০"
 PKG_MANIFEST = "lipipkg.toml"
 
 // ── ১. হেক্সাডেসিমেল ও ডেটা রূপান্তর হেল্পার (Hex Conversion Helpers) ───────────
@@ -318,8 +318,8 @@ fn parse_sig_manifest content
 
 fn ব্যানার_দেখাও
     say "\033[38;2;0;255;204m╔═══════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📦 lipipkg — লিপি প্যাকেজ ম্যানেজার ২.০\033[0m                  \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m🔖 সংস্করণ: প্রথম ১.০ | রেজিস্ট্রি: pkg.lipi.dev\033[0m           \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📦 lipipkg — লিপি প্যাকেজ ম্যানেজার\033[0m                      \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m🔖 সংস্করণ: প্রথম ১.০.০ (First 1.0.0) | pkg.lipi.dev\033[0m     \033[38;2;0;255;204m║\033[0m"
     say "\033[38;2;0;255;204m╚═══════════════════════════════════════════════════════════╝\033[0m\n"
 
 fn সহায়তা_দেখাও
@@ -559,7 +559,7 @@ fn cmd_verify target
 // ── ৭. অন্যান্য কমান্ডসমূহ (Standard Subcommands) ──────────────────────────────
 
 fn cmd_version
-    say "lipipkg সংস্করণ : প্রথম ১.০ (Prothom 1.0)"
+    say "lipipkg সংস্করণ : প্রথম ১.০.০ (First 1.0.0)"
     say "lipi কম্পাইলার  : bin/lipc_bin (Sovereign Machine Code Engine)"
     say "সংকেতনাম       : সোভেরিন (Sovereign)"
     say "লক্ষ্য          : Linux x86_64 ELF64 (Direct Kernel ABI)"

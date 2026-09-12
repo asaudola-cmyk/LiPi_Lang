@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧠 লিপি LSP — Language Server Protocol Implementation (JSON-RPC 2.0)
-// লিপি দ্বিতীয় ২.০ | Lipi Sovereign Language Server
+// লিপি প্রথম ১.০.০ | Lipi Sovereign Language Server (First 1.0.0)
 // File: src/tools/lipilsp.lp
 //
 // WHY এই মডিউল:
@@ -28,7 +28,7 @@ include "universe/core/string.lp"
 
 // ─── LSP Identity & Protocol ──────────────────────────────────────────────────
 fn lsp_protocol_version = "3.17"
-fn lsp_server_version  = "2.0.0"
+fn lsp_server_version  = "1.0.0"
 fn lsp_server_name     = "lipilsp"
 CHUNK_READ_SIZE        = 512
 
@@ -560,7 +560,7 @@ fn get_hover_documentation word
     if word == "malloc" or word == "free"
         return "### Memory Management (`malloc` / `free`)\nDirect kernel memory allocation via SYS_mmap / SYS_munmap."
     
-    return "### 👑 Lipi Sovereign Programming Language (লিপি ২.০)\n**Direct Silicon Execution** | 0% Libc | 0% LLVM | Bilingual (English & Bengali)"
+    return "### 👑 Lipi Sovereign Programming Language (লিপি প্রথম ১.০.০ - First 1.0.0)\n**Direct Silicon Execution** | 0% Libc | 0% LLVM | Bilingual (English & Bengali)"
 
 // ─── Source Formatter ─────────────────────────────────────────────────────────
 // WHY: Provides 4-space indentation alignment for functions, structs, conditionals, and loops.

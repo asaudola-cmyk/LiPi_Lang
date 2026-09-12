@@ -1,6 +1,6 @@
 # 📖 লিপি ভাষার সম্পূর্ণ গাইড
 # Lipi Programming Language — Complete Language Guide
-## সংস্করণ: প্রথম ১.০ | Version: Prothom 1.0
+## সংস্করণ: প্রথম ১.০.০ | Version: First 1.0.0
 
 ---
 

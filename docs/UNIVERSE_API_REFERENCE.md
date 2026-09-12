@@ -1,6 +1,6 @@
 # 👑 Lipi Universe Standard Library — Complete API Reference
 
-> **Version:** First 1.0 (প্রথম ১.০) — Sovereign  
+> **Version:** First 1.0.0 (প্রথম ১.০.০) — Sovereign  
 > **Architecture:** Direct Machine Code (x86_64, ARM64, WASM)  
 > **Zero-Libc / Zero-C / Zero-Python:** 100% Guaranteed Native Silicon  
 
