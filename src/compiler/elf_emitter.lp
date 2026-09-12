@@ -5670,20 +5670,24 @@ fn try_fold_symbolic_mod_loop ctx ps
         if tok_t(t_i2) != TOK_IDENT or tok_s(t_i2) != var_i return 0
         idx = idx + 1
 
+        is_gauss = 0
+        const_c = 0
         t_pct = ps_peek_tok(ps, idx)
-        if tok_t(t_pct) != TOK_OP or tok_s(t_pct) != "%" return 0
-        idx = idx + 1
-
-        t_c = ps_peek_tok(ps, idx)
-        if tok_t(t_c) != TOK_INT return 0
-        const_c = tok_i(t_c)
-        if const_c <= 1 return 0
-        idx = idx + 1
-
-        if has_paren == 1
-            t_rp = ps_peek_tok(ps, idx)
-            if tok_t(t_rp) != TOK_RPAREN and (tok_t(t_rp) != TOK_OP or tok_s(t_rp) != ")") return 0
+        if has_paren == 0 and (tok_t(t_pct) == TOK_NL or tok_t(t_pct) == TOK_EOF or tok_t(t_pct) == TOK_DEDENT)
+            is_gauss = 1
+        elif tok_t(t_pct) == TOK_OP and tok_s(t_pct) == "%"
             idx = idx + 1
+            t_c = ps_peek_tok(ps, idx)
+            if tok_t(t_c) != TOK_INT return 0
+            const_c = tok_i(t_c)
+            if const_c <= 1 return 0
+            idx = idx + 1
+            if has_paren == 1
+                t_rp = ps_peek_tok(ps, idx)
+                if tok_t(t_rp) != TOK_RPAREN and (tok_t(t_rp) != TOK_OP or tok_s(t_rp) != ")") return 0
+                idx = idx + 1
+        else
+            return 0
 
         while tok_t(ps_peek_tok(ps, idx)) == TOK_NL
             idx = idx + 1
@@ -5725,7 +5729,7 @@ fn try_fold_symbolic_mod_loop ctx ps
     if tok_t(t_end) == TOK_IDENT and tok_s(t_end) == "@end" is_end_ok = 1
     if is_end_ok == 0 return 0
 
-    // VERIFIED: Strictly pure linear periodic accumulation loop!
+    // VERIFIED: Strictly pure linear periodic or Gauss accumulation loop!
     adv_count = idx
     if tok_t(t_end) == TOK_IDENT and tok_s(t_end) == "@end" adv_count = adv_count + 1
     adv_i = 0
@@ -5736,8 +5740,6 @@ fn try_fold_symbolic_mod_loop ctx ps
     ps_skip_nl(ps)
 
     // O(1) Mathematical Closed Form Emission:
-    cycle_sum = (const_c * (const_c - 1)) / 2
-
     off_tot = scope_get(ctx, var_tot)
     if off_tot == 0
         off_tot = scope_add(ctx, var_tot)
@@ -5762,7 +5764,7 @@ fn try_fold_symbolic_mod_loop ctx ps
     x86_mov_reg_reg(ctx, 8, 0)
 
     // Check if effective N < i_start
-    lbl_done = make_anon_label(ctx, "mod_loop_done")
+    lbl_done = make_anon_label(ctx, "sym_loop_done")
     x86_mov_rax_stack(ctx, off_i) // rax = i_start
     x86_mov_reg_reg(ctx, 3, 0)    // rbx = i_start
     x86_mov_reg_reg(ctx, 0, 8)    // rax = effective N
@@ -5772,38 +5774,79 @@ fn try_fold_symbolic_mod_loop ctx ps
     bb_put8(ctx, 192)             // test rax, rax
     x86_jnz(ctx, lbl_done)        // if effective N < i_start, jump to done!
 
-    // Divide N / C to obtain K (quotient in rax) and R (remainder in rdx)
-    x86_mov_reg_reg(ctx, 0, 8)    // rax = effective N
-    x86_mov_reg_imm64(ctx, 3, const_c)
-    x86_idiv_rbx(ctx)             // rax = K, rdx = R
+    if is_gauss == 1
+        // WHY: Pure O(1) Gauss Closed-Form Summation: Sum(i_start..N) = Sum(1..N) - Sum(1..i_start-1)
+        // 1. Sum(1..N) = N * (N + 1) / 2
+        x86_mov_reg_reg(ctx, 0, 8)    // rax = N
+        x86_mov_reg_reg(ctx, 3, 8)    // rbx = N
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 131)
+        bb_put8(ctx, 195)
+        bb_put8(ctx, 1)               // add rbx, 1 -> rbx = N + 1
+        x86_imul_rax_rbx(ctx)         // rax = N * (N + 1)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 209)
+        bb_put8(ctx, 248)             // sar rax, 1 -> rax = Sum(1..N)
+        x86_mov_reg_reg(ctx, 9, 0)    // r9 = Sum(1..N)
 
-    // r10 = R (remainder)
-    x86_mov_reg_reg(ctx, 10, 2)
+        // 2. Adjust for i_start: Sum(1..i_start-1) = i_start * (i_start - 1) / 2
+        x86_mov_rax_stack(ctx, off_i) // rax = i_start
+        x86_mov_reg_reg(ctx, 3, 0)    // rbx = i_start
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 131)
+        bb_put8(ctx, 235)
+        bb_put8(ctx, 1)               // sub rbx, 1 -> rbx = i_start - 1
+        x86_imul_rax_rbx(ctx)         // rax = i_start * (i_start - 1)
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 209)
+        bb_put8(ctx, 248)             // sar rax, 1 -> rax = Sum(1..i_start-1)
 
-    // cycle_contrib = K * cycle_sum
-    x86_mov_reg_imm64(ctx, 3, cycle_sum)
-    x86_imul_rax_rbx(ctx)         // rax = K * cycle_sum
-    x86_mov_reg_reg(ctx, 9, 0)    // r9 = cycle_contrib
+        // 3. delta = Sum(1..N) - Sum(1..i_start-1)
+        x86_mov_reg_reg(ctx, 3, 0)    // rbx = adjust
+        x86_mov_reg_reg(ctx, 0, 9)    // rax = Sum(1..N)
+        x86_sub_rax_rbx(ctx)          // rax = delta
 
-    // rem_sum = R * (R + 1) / 2
-    x86_mov_reg_reg(ctx, 0, 10)   // rax = R
-    x86_mov_reg_imm64(ctx, 3, 1)
-    x86_add_rax_rbx(ctx)          // rax = R + 1
-    x86_mov_reg_reg(ctx, 3, 10)   // rbx = R
-    x86_imul_rax_rbx(ctx)         // rax = (R + 1) * R
-    bb_put8(ctx, 72)
-    bb_put8(ctx, 209)
-    bb_put8(ctx, 248)             // sar rax, 1 -> rem_sum
+        // total = total + delta
+        x86_mov_reg_reg(ctx, 3, 0)    // rbx = delta
+        x86_mov_rax_stack(ctx, off_tot)
+        x86_add_rax_rbx(ctx)
+        x86_mov_stack_rax(ctx, off_tot)
+    else
+        // WHY: Pure O(1) Modulo Periodic Induction: K * Cycle_Sum + Rem_Sum
+        cycle_sum = (const_c * (const_c - 1)) / 2
 
-    // total addition = cycle_contrib + rem_sum
-    x86_mov_reg_reg(ctx, 3, 9)
-    x86_add_rax_rbx(ctx)          // rax = total_add
+        // Divide N / C to obtain K (quotient in rax) and R (remainder in rdx)
+        x86_mov_reg_reg(ctx, 0, 8)    // rax = effective N
+        x86_mov_reg_imm64(ctx, 3, const_c)
+        x86_idiv_rbx(ctx)             // rax = K, rdx = R
 
-    // total = total + total_add
-    x86_mov_reg_reg(ctx, 3, 0)    // rbx = total_add
-    x86_mov_rax_stack(ctx, off_tot)
-    x86_add_rax_rbx(ctx)
-    x86_mov_stack_rax(ctx, off_tot)
+        // r10 = R (remainder)
+        x86_mov_reg_reg(ctx, 10, 2)
+
+        // cycle_contrib = K * cycle_sum
+        x86_mov_reg_imm64(ctx, 3, cycle_sum)
+        x86_imul_rax_rbx(ctx)         // rax = K * cycle_sum
+        x86_mov_reg_reg(ctx, 9, 0)    // r9 = cycle_contrib
+
+        // rem_sum = R * (R + 1) / 2
+        x86_mov_reg_reg(ctx, 0, 10)   // rax = R
+        x86_mov_reg_imm64(ctx, 3, 1)
+        x86_add_rax_rbx(ctx)          // rax = R + 1
+        x86_mov_reg_reg(ctx, 3, 10)   // rbx = R
+        x86_imul_rax_rbx(ctx)         // rax = (R + 1) * R
+        bb_put8(ctx, 72)
+        bb_put8(ctx, 209)
+        bb_put8(ctx, 248)             // sar rax, 1 -> rem_sum
+
+        // total addition = cycle_contrib + rem_sum
+        x86_mov_reg_reg(ctx, 3, 9)
+        x86_add_rax_rbx(ctx)          // rax = total_add
+
+        // total = total + total_add
+        x86_mov_reg_reg(ctx, 3, 0)    // rbx = total_add
+        x86_mov_rax_stack(ctx, off_tot)
+        x86_add_rax_rbx(ctx)
+        x86_mov_stack_rax(ctx, off_tot)
 
     // final i = effective N + 1
     x86_mov_reg_reg(ctx, 0, 8)    // rax = effective N
@@ -6803,6 +6846,34 @@ fn compile_pure_stmt ctx ps
 
         is_int_c = (ps_cur_type(ps) == TOK_INT)
         int_c_val = ps_cur_int(ps)
+
+        // WHY: Peephole optimization for self-increment/decrement: name = name +/- imm8
+        //      Lowers 5 CPU instructions (24 bytes) to 1 single CPU instruction (5 bytes)
+        t_r0 = ps_cur(ps)
+        t_r1 = ps_peek_tok(ps, 1)
+        t_r2 = ps_peek_tok(ps, 2)
+        t_r3 = ps_peek_tok(ps, 3)
+        off = scope_get(ctx, name)
+        if off > 0 and off <= 128 and tok_t(t_r0) == TOK_IDENT and tok_s(t_r0) == name
+            if tok_t(t_r1) == TOK_OP and (tok_s(t_r1) == "+" or tok_s(t_r1) == "-")
+                if tok_t(t_r2) == TOK_INT
+                    if tok_t(t_r3) == TOK_NL or tok_t(t_r3) == TOK_EOF or tok_t(t_r3) == TOK_DEDENT
+                        imm_v = tok_i(t_r2)
+                        if imm_v >= 0 and imm_v <= 127
+                            ps_adv(ps) // name
+                            ps_adv(ps) // op
+                            ps_adv(ps) // imm
+                            bb_put8(ctx, 72)
+                            bb_put8(ctx, 131)
+                            if tok_s(t_r1) == "+"
+                                bb_put8(ctx, 69) // 0x45: addq imm8, -off(%rbp)
+                            else
+                                bb_put8(ctx, 109) // 0x6D: subq imm8, -off(%rbp)
+                            bb_put8(ctx, 256 - off)
+                            bb_put8(ctx, imm_v)
+                            scope_set_type(ctx, name, TY_INT)
+                            return 0
+
         expr_ty = compile_pure_expr(ctx, ps)
         off = scope_add(ctx, name)
         if rhs_struct != ""
@@ -6824,8 +6895,24 @@ fn compile_pure_stmt ctx ps
         cop = tok_s(next_tok)
         ps_adv(ps) // ident
         ps_adv(ps) // op
-        expr_ty = compile_pure_expr(ctx, ps)
         off = scope_add(ctx, name)
+        // WHY: Peephole optimization for compound immediate: name += imm8 / -= imm8
+        if ps_cur_type(ps) == TOK_INT and off <= 128
+            imm_c = ps_cur_int(ps)
+            if imm_c >= 0 and imm_c <= 127
+                ps_adv(ps)
+                bb_put8(ctx, 72)
+                bb_put8(ctx, 131)
+                if char_at(cop, 0) == "+"
+                    bb_put8(ctx, 69) // 0x45: addq imm8, -off(%rbp)
+                else
+                    bb_put8(ctx, 109) // 0x6D: subq imm8, -off(%rbp)
+                bb_put8(ctx, 256 - off)
+                bb_put8(ctx, imm_c)
+                scope_set_type(ctx, name, TY_INT)
+                return 0
+
+        expr_ty = compile_pure_expr(ctx, ps)
         x86_mov_reg_reg(ctx, 3, 0) // rbx = rhs
         x86_mov_rax_stack(ctx, off) // rax = lhs
         if char_at(cop, 0) == "+"

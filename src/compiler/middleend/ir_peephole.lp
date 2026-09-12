@@ -21,8 +21,27 @@ import "universe/core/string"
   return str_eq(s1, s2)
 @end
 
+// ── ১.১ গণিত পাওয়ার-অব-টু হেল্পার (Power of 2 Strength Reduction Helpers) ────
+@fn ir_is_power_of_two(n: i64) -> i64
+  @if n <= 0 return 0 @end
+  @if (n & (n - 1)) == 0 return 1 @end
+  return 0
+@end
+
+@fn ir_log2_power_of_two(n: i64) -> i64
+  @if n <= 0 return 0 - 1 @end
+  shift = 0
+  val = n
+  @while val > 1
+    val = val / 2
+    shift = shift + 1
+  @end
+  return shift
+@end
+
 // ── ২. পিপহোল সিঙ্গেল ইন্সট্রাকশন অ্যালজেব্রাইক রুলস (Single Inst Peephole) ─────
 // WHY: গাণিতিক সমীকরণ যেমন x + 0 = x, x * 1 = x, x * 0 = 0 সরাসরি সিম্পলিফাই করা
+// এবং ব্যয়বহুল গুণ ও ভাগ অপারেশনকে ১-সাইকেলের বিট-শিফট ও বিটওয়াইজ অ্যান্ডে রূপান্তর করা
 @fn ir_peephole_simplify_inst(inst: IRInst) -> IRInst
   @if inst == 0 return 0 @end
   
@@ -68,6 +87,51 @@ import "universe/core/string"
       inst.op = "CONST"
       inst.inst_op = "CONST"
       inst.inst_val = 0
+      return inst
+    @end
+  @end
+
+  // Rule 5: Multiplication by power of 2 -> Shift Left (SHL)
+  // WHY: Hardware shift takes 1 CPU cycle vs 3-5 cycles for IMUL
+  @if ir_opt_str_eq(op, "*") == 1 || ir_opt_str_eq(op, "MUL") == 1
+    k = inst.right
+    @if k == 0 k = inst.inst_val @end
+    @if k > 1 && ir_is_power_of_two(k) == 1
+      shift = ir_log2_power_of_two(k)
+      inst.op = "SHL"
+      inst.inst_op = "SHL"
+      inst.right = shift
+      inst.inst_val = shift
+      return inst
+    @end
+  @end
+
+  // Rule 6: Modulo by power of 2 -> Bitwise AND with (2^k - 1)
+  // WHY: Bitwise AND takes 1 CPU cycle, eliminating 20-40 cycle hardware IDIV instruction
+  @if ir_opt_str_eq(op, "%") == 1 || ir_opt_str_eq(op, "MOD") == 1 || ir_opt_str_eq(op, "SREM") == 1
+    k = inst.right
+    @if k == 0 k = inst.inst_val @end
+    @if k > 1 && ir_is_power_of_two(k) == 1
+      mask = k - 1
+      inst.op = "AND"
+      inst.inst_op = "AND"
+      inst.right = mask
+      inst.inst_val = mask
+      return inst
+    @end
+  @end
+
+  // Rule 7: Division by power of 2 -> Arithmetic Shift Right (SHR)
+  // WHY: Replaces high-latency integer division with 1-cycle bitwise right shift
+  @if ir_opt_str_eq(op, "/") == 1 || ir_opt_str_eq(op, "DIV") == 1 || ir_opt_str_eq(op, "SDIV") == 1
+    k = inst.right
+    @if k == 0 k = inst.inst_val @end
+    @if k > 1 && ir_is_power_of_two(k) == 1
+      shift = ir_log2_power_of_two(k)
+      inst.op = "SHR"
+      inst.inst_op = "SHR"
+      inst.right = shift
+      inst.inst_val = shift
       return inst
     @end
   @end

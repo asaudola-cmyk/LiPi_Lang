@@ -2203,31 +2203,54 @@ fn arm64_compile_mul ctx ps
     while arm64_ps_cur_type(ps) == ARM64_TOK_OP and (arm64_ps_cur_text(ps) == "*" or arm64_ps_cur_text(ps) == "/" or arm64_ps_cur_text(ps) == "%")
         op = arm64_ps_cur_text(ps)
         arm64_ps_adv(ps)
-        arm64_push_reg(ctx, ARM64_REG_X0)
-        arm64_compile_unary(ctx, ps)
-        arm64_emit_mov_reg(ctx, ARM64_REG_X1, ARM64_REG_X0) // X1 = rhs
-        arm64_pop_reg(ctx, ARM64_REG_X0)                    // X0 = lhs
-        if op == "*"
-            arm64_emit(ctx, arm64_mul(ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1))
-        elif op == "/"
-            arm64_emit(ctx, arm64_sdiv(ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1))
-        elif op == "%"
-            arm64_emit(ctx, arm64_sdiv(ARM64_REG_X2, ARM64_REG_X0, ARM64_REG_X1))
-            arm64_emit(ctx, arm64_msub(ARM64_REG_X0, ARM64_REG_X2, ARM64_REG_X1, ARM64_REG_X0))
+        if (op == "*" or op == "/" or op == "%") and arm64_ps_cur_type(ps) == ARM64_TOK_INT
+            // WHY: Immediate arithmetic avoids stack push/pop memory traffic
+            k = arm64_ps_cur_int(ps)
+            arm64_ps_adv(ps)
+            arm64_emit_mov_imm64(ctx, ARM64_REG_X1, k)
+            if op == "*"
+                arm64_emit(ctx, arm64_mul(ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1))
+            elif op == "/"
+                arm64_emit(ctx, arm64_sdiv(ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1))
+            elif op == "%"
+                arm64_emit(ctx, arm64_sdiv(ARM64_REG_X2, ARM64_REG_X0, ARM64_REG_X1))
+                arm64_emit(ctx, arm64_msub(ARM64_REG_X0, ARM64_REG_X2, ARM64_REG_X1, ARM64_REG_X0))
+        else
+            arm64_push_reg(ctx, ARM64_REG_X0)
+            arm64_compile_unary(ctx, ps)
+            arm64_emit_mov_reg(ctx, ARM64_REG_X1, ARM64_REG_X0) // X1 = rhs
+            arm64_pop_reg(ctx, ARM64_REG_X0)                    // X0 = lhs
+            if op == "*"
+                arm64_emit(ctx, arm64_mul(ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1))
+            elif op == "/"
+                arm64_emit(ctx, arm64_sdiv(ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1))
+            elif op == "%"
+                arm64_emit(ctx, arm64_sdiv(ARM64_REG_X2, ARM64_REG_X0, ARM64_REG_X1))
+                arm64_emit(ctx, arm64_msub(ARM64_REG_X0, ARM64_REG_X2, ARM64_REG_X1, ARM64_REG_X0))
 
 fn arm64_compile_add ctx ps
     arm64_compile_mul(ctx, ps)
     while arm64_ps_cur_type(ps) == ARM64_TOK_OP and (arm64_ps_cur_text(ps) == "+" or arm64_ps_cur_text(ps) == "-")
         op = arm64_ps_cur_text(ps)
         arm64_ps_adv(ps)
-        arm64_push_reg(ctx, ARM64_REG_X0)
-        arm64_compile_mul(ctx, ps)
-        arm64_emit_mov_reg(ctx, ARM64_REG_X1, ARM64_REG_X0) // X1 = rhs
-        arm64_pop_reg(ctx, ARM64_REG_X0)                    // X0 = lhs
-        if op == "+"
-            arm64_emit_bl_label(ctx, "_lipi_add_or_concat")
+        if arm64_ps_cur_type(ps) == ARM64_TOK_INT
+            // WHY: Immediate add/sub avoids stack push/pop overhead
+            k = arm64_ps_cur_int(ps)
+            arm64_ps_adv(ps)
+            arm64_emit_mov_imm64(ctx, ARM64_REG_X1, k)
+            if op == "+"
+                arm64_emit_bl_label(ctx, "_lipi_add_or_concat")
+            else
+                arm64_emit_sub(ctx, ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1)
         else
-            arm64_emit_sub(ctx, ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1)
+            arm64_push_reg(ctx, ARM64_REG_X0)
+            arm64_compile_mul(ctx, ps)
+            arm64_emit_mov_reg(ctx, ARM64_REG_X1, ARM64_REG_X0) // X1 = rhs
+            arm64_pop_reg(ctx, ARM64_REG_X0)                    // X0 = lhs
+            if op == "+"
+                arm64_emit_bl_label(ctx, "_lipi_add_or_concat")
+            else
+                arm64_emit_sub(ctx, ARM64_REG_X0, ARM64_REG_X0, ARM64_REG_X1)
 
 fn arm64_compile_cmp ctx ps
     arm64_compile_add(ctx, ps)
