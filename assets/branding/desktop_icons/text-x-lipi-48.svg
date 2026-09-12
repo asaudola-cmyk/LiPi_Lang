@@ -1,12 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" version="1.1">
- <!-- Sovereign Lipi Desktop MIME Icon (48x48) -->
- <path style="opacity:0.2" d="M 10,5 C 8.892,5 8,5.892 8,7 v 36 c 0,1.108 0.892,2 2,2 h 28 c 1.108,0 2,-0.892 2,-2 V 17 L 29,16 28,5 Z"/>
- <path style="fill:#e4e4e4" d="M 10,4 C 8.892,4 8,4.892 8,6 V 42 C 8,43.108 8.892,44 10,44 H 38 C 39.108,44 40,43.108 40,42 V 16 L 29,15 28,4 Z"/>
- <path style="fill:#ffffff;opacity:0.2" d="M 10 4 C 8.892 4 8 4.892 8 6 L 8 7 C 8 5.892 8.892 5 10 5 L 28 5 L 28 4 L 10 4 z"/>
- <path style="opacity:0.2" d="m 28,5 v 10 c 0,1.105 0.895,2 2,2 h 10 z"/>
- <path style="fill:#fafafa" d="M 28,4 V 14 C 28,15.105 28.895,16 30,16 H 40 Z"/>
- <!-- Lipi Sovereign Monogram -->
- <rect x="15.5" y="20" width="5.5" height="19" rx="2.6" fill="#00C2FF" />
- <rect x="15.5" y="33.5" width="15" height="5.5" rx="2.6" fill="#FF007A" />
- <circle cx="24.5" cy="26" r="4.5" fill="none" stroke="#FFD700" stroke-width="4.5" />
+  <defs>
+    <linearGradient id="dtGradPri48" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="100%" stop-color="#4FACFE" />
+    </linearGradient>
+    <linearGradient id="dtGradSec48" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FA709A" />
+      <stop offset="100%" stop-color="#FEE140" />
+    </linearGradient>
+  </defs>
+  <!-- Sovereign Lipi Desktop MIME Icon (48x48) -->
+  <path style="opacity:0.2" d="M 10,5 C 8.892,5 8,5.892 8,7 v 36 c 0,1.108 0.892,2 2,2 h 28 c 1.108,0 2,-0.892 2,-2 V 17 L 29,16 28,5 Z"/>
+  <path style="fill:#e4e4e4" d="M 10,4 C 8.892,4 8,4.892 8,6 V 42 C 8,43.108 8.892,44 10,44 H 38 C 39.108,44 40,43.108 40,42 V 16 L 29,15 28,4 Z"/>
+  <path style="fill:#ffffff;opacity:0.2" d="M 10 4 C 8.892,4 8 4.892 8 6 L 8 7 C 8 5.892 8.892 5 10 5 L 28 5 L 28 4 L 10 4 z"/>
+  <path style="opacity:0.2" d="m 28,5 v 10 c 0,1.105 0.895,2 2,2 h 10 z"/>
+  <path style="fill:#fafafa" d="M 28,4 V 14 C 28,15.105 28.895,16 30,16 H 40 Z"/>
+  <!-- New Sovereign Lipi Monogram -->
+  <g transform="translate(13, 19) scale(0.055)">
+    <path d="M 140 50 L 20 200 L 140 350" fill="none" stroke="url(#dtGradPri48)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 200 50 L 300 50 C 360 50 410 100 410 160 C 410 220 360 270 300 270 L 200 270 L 200 350" fill="none" stroke="url(#dtGradSec48)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="200" cy="-30" r="32" fill="url(#dtGradSec48)" />
+  </g>
 </svg>

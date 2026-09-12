@@ -50,10 +50,10 @@ import "universe/web/frontend/layout/layout_types"
     h = pad_v
   @end
   
-  @if w < node.min_width w = node.min_width @end
-  @if w > node.max_width w = node.max_width @end
-  @if h < node.min_height h = node.min_height @end
-  @if h > node.max_height h = node.max_height @end
+  @if node.min_width > 0 && w < node.min_width w = node.min_width @end
+  @if node.max_width > 0 && w > node.max_width w = node.max_width @end
+  @if node.min_height > 0 && h < node.min_height h = node.min_height @end
+  @if node.max_height > 0 && h > node.max_height h = node.max_height @end
   
   return rect_new(0, 0, w, h)
 @end
@@ -138,16 +138,16 @@ import "universe/web/frontend/layout/layout_types"
     @else
       ch.width = meas.width
     @end
-    @if ch.width < ch.min_width ch.width = ch.min_width @end
-    @if ch.width > ch.max_width ch.width = ch.max_width @end
+    @if ch.min_width > 0 && ch.width < ch.min_width ch.width = ch.min_width @end
+    @if ch.max_width > 0 && ch.width > ch.max_width ch.width = ch.max_width @end
     
     @if ch.pref_height > 0
       ch.height = ch.pref_height
     @else
       ch.height = meas.height
     @end
-    @if ch.height < ch.min_height ch.height = ch.min_height @end
-    @if ch.height > ch.max_height ch.height = ch.max_height @end
+    @if ch.min_height > 0 && ch.height < ch.min_height ch.height = ch.min_height @end
+    @if ch.max_height > 0 && ch.height > ch.max_height ch.height = ch.max_height @end
     
     normal_children[i] = ch
     i = i + 1
@@ -242,7 +242,7 @@ import "universe/web/frontend/layout/layout_types"
             rem_free = rem_free - add_w
             rem_grow = rem_grow - ch.flex_grow
             new_w = ch.width + add_w
-            @if new_w > ch.max_width new_w = ch.max_width @end
+            @if ch.max_width > 0 && new_w > ch.max_width new_w = ch.max_width @end
             ch.width = new_w
           @end
           line_items[i] = ch
@@ -340,7 +340,13 @@ import "universe/web/frontend/layout/layout_types"
         ch.y = ch_item_y
         
         @! Recursively solve child subtree
-        ch = flexbox_solve_node(ch, ch.x, ch.y, ch.width, ch.height)
+        solve_w = ch.width
+        @if solve_w <= 0 solve_w = ch.pref_width @end
+        solve_h = ch.height
+        @if solve_h <= 0 solve_h = target_line_h - (ch.margin.top + ch.margin.bottom) @end
+        ch = flexbox_solve_node(ch, ch.x, ch.y, solve_w, solve_h)
+        @if ch.width <= 0 ch.width = solve_w @end
+        @if ch.height <= 0 ch.height = solve_h @end
         solved_children = solved_children.push(ch)
         
         cur_step_gap = eff_gap
@@ -389,11 +395,23 @@ import "universe/web/frontend/layout/layout_types"
   
   node.children = solved_children
   
-  @if node.width <= 0
-    node.width = max_line_w + pad_left + pad_right
+  @if node.pref_width > 0
+    node.width = node.pref_width
+  @elif node.width <= 0
+    @if max_w > 0
+      node.width = max_w
+    @else
+      node.width = max_line_w + pad_left + pad_right
+    @end
   @end
-  @if node.height <= 0
-    node.height = total_content_h + pad_top + pad_bottom
+  @if node.pref_height > 0
+    node.height = node.pref_height
+  @elif node.height <= 0
+    @if max_h > 0
+      node.height = max_h
+    @else
+      node.height = total_content_h + pad_top + pad_bottom
+    @end
   @end
   
   node.x = cur_x
@@ -681,7 +699,12 @@ import "universe/web/frontend/layout/layout_types"
         ch.y = ch_item_y
         
         @! Recursively solve child subtree
-        ch = flexbox_solve_node(ch, ch.x, ch.y, ch.width, ch.height)
+        solve_w = ch.width
+        @if solve_w <= 0 solve_w = target_line_w - (ch.margin.left + ch.margin.right) @end
+        solve_h = ch.height
+        @if solve_h <= 0 solve_h = ch.pref_height @end
+        ch = flexbox_solve_node(ch, ch.x, ch.y, solve_w, solve_h)
+        @if ch.width <= 0 ch.width = solve_w @end
         solved_children = solved_children.push(ch)
         
         cur_step_gap = eff_gap
@@ -730,11 +753,23 @@ import "universe/web/frontend/layout/layout_types"
   
   node.children = solved_children
   
-  @if node.width <= 0
-    node.width = total_content_w + pad_left + pad_right
+  @if node.pref_width > 0
+    node.width = node.pref_width
+  @elif node.width <= 0
+    @if max_w > 0
+      node.width = max_w
+    @else
+      node.width = total_content_w + pad_left + pad_right
+    @end
   @end
-  @if node.height <= 0
-    node.height = max_line_h + pad_top + pad_bottom
+  @if node.pref_height > 0
+    node.height = node.pref_height
+  @elif node.height <= 0
+    @if max_h > 0
+      node.height = max_h
+    @else
+      node.height = max_line_h + pad_top + pad_bottom
+    @end
   @end
   
   node.x = cur_x

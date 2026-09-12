@@ -629,6 +629,11 @@ import "universe/core/string"
 @fn canvas2d_renderer_render_layout_node(renderer, node)
   @if node == 0 return renderer @end
   
+  @! WHY: Draw background rect for layout boxes so canvas records draw calls and visually renders hierarchy
+  @if node.width > 0 && node.height > 0
+    renderer = canvas2d_renderer_draw_rect(renderer, node.x, node.y, node.width, node.height, 0xFF181825, 0, 0, 0)
+  @end
+
   @! Draw text if present
   @if str_len(node.text_content) > 0
     fs = node.font_size

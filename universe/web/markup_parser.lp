@@ -1,4 +1,3 @@
-import "universe/core/string"
 @! ============================================================================
 @! LIPI WEB ENGINE — SOVEREIGN MARKUP PARSER & TOKENIZER (F09)
 @! Module: universe/web/markup_parser.lp
@@ -80,7 +79,7 @@ import "universe/web/frontend/layout/layout_types"
 @fn markup_style_default()
   return {
     style_display: 0,
-    style_flex_dir: 1,
+    style_flex_dir: 0,
     style_justify: 0,
     style_align_items: 0,
     style_align_self: 255,
@@ -368,9 +367,22 @@ import "universe/web/frontend/layout/layout_types"
         a = 255
         @if parts.len() >= 4
           a_str = string_trim(parts[3])
-          @if string_contains(a_str, ".")
-            f = float_from_str(a_str)
-            a = (f * 255.0).to_int()
+          @if str_index_of(a_str, ".") >= 0
+            @! Decimal alpha string e.g. "0.5", "1.0", "0.25"
+            @if str_starts_with(a_str, "1") == 1
+              a = 255
+            @elif str_starts_with(a_str, "0.") == 1
+              dot_part = string_slice(a_str, 2, str_len(a_str))
+              @if str_len(dot_part) == 1
+                a = str_to_int(dot_part) * 255 / 10
+              @elif str_len(dot_part) >= 2
+                a = str_to_int(string_slice(dot_part, 0, 2)) * 255 / 100
+              @else
+                a = 255
+              @end
+            @else
+              a = 255
+            @end
           @else
             a = str_to_int(a_str)
             @if a <= 1 && str_len(a_str) == 1 && a_str != "0"
@@ -776,7 +788,7 @@ import "universe/web/frontend/layout/layout_types"
 @! ============================================================================
 
 @fn markup_decode_entities(s)
-  @if string_contains(s, "&") == false
+  @if str_index_of(s, "&") < 0
     return s
   @end
   
@@ -1156,23 +1168,23 @@ import "universe/web/frontend/layout/layout_types"
   tag = string_to_lower(node.tag_name)
   
   @if tag == "div" || tag == "section" || tag == "main" || tag == "article" || tag == "header" || tag == "footer" || tag == "nav" || tag == "form" || tag == "root" || tag == "flex-col" || tag == "col" || tag == "column"
-    lt = 2 @! LAYOUT_FLEX_COLUMN
+    lt = LAYOUT_FLEX_COLUMN()
   @elif tag == "flex-row" || tag == "row"
-    lt = 1 @! LAYOUT_FLEX_ROW
+    lt = LAYOUT_FLEX_ROW()
   @elif tag == "grid"
-    lt = 3 @! LAYOUT_GRID
+    lt = LAYOUT_GRID()
   @elif tag == "button" || tag == "span" || tag == "p" || tag == "h1" || tag == "h2" || tag == "h3" || tag == "label" || tag == "a" || tag == "b" || tag == "i"
-    lt = 1 @! LAYOUT_FLEX_ROW
+    lt = LAYOUT_FLEX_ROW()
   @end
   
-  @if node.style.style_flex_dir == 1 lt = 1
-  @elif node.style.style_flex_dir == 2 lt = 1 @! ROW_REV
-  @elif node.style.style_flex_dir == 3 lt = 2 @! COLUMN
-  @elif node.style.style_flex_dir == 4 lt = 2 @! COLUMN_REV
+  @if node.style.style_flex_dir == 1 lt = LAYOUT_FLEX_ROW()
+  @elif node.style.style_flex_dir == 2 lt = LAYOUT_FLEX_ROW_REV()
+  @elif node.style.style_flex_dir == 3 lt = LAYOUT_FLEX_COLUMN()
+  @elif node.style.style_flex_dir == 4 lt = LAYOUT_FLEX_COLUMN_REV()
   @end
   
-  @if node.style.style_display == 3 lt = 3 @! GRID
-  @elif node.style.style_display == 4 lt = 0 @! ABSOLUTE
+  @if node.style.style_display == 3 lt = LAYOUT_GRID()
+  @elif node.style.style_display == 4 lt = LAYOUT_ABSOLUTE()
   @end
   
   lnode = layout_node_new(node.node_id, lt, node.style.style_align_items, node.style.style_justify)
@@ -1202,6 +1214,7 @@ import "universe/web/frontend/layout/layout_types"
   
   @if node.is_text
     @! Intrinsic measurement for text
+    lnode.text_content = node.text_content
     t_len = str_len(node.text_content)
     char_w = 7
     char_h = 14

@@ -1,8 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%">
-  <!-- Transparent Background Vector Glyph -->
-  <g transform="translate(45, 40)" style="mix-blend-mode: multiply;">
-    <rect x="50" y="30" width="60" height="200" rx="30" fill="#00C2FF" opacity="0.85" />
-    <rect x="50" y="170" width="150" height="60" rx="30" fill="#FF007A" opacity="0.85" />
-    <circle cx="150" cy="100" r="40" fill="none" stroke="#FFD700" stroke-width="60" opacity="0.85" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- Cyan to Blue Gradient for the Bracket -->
+    <linearGradient id="gradPrimary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="100%" stop-color="#4FACFE" />
+    </linearGradient>
+    
+    <!-- Magenta to Yellow Gradient for the 'P' Loop -->
+    <linearGradient id="gradSecondary" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FA709A" />
+      <stop offset="100%" stop-color="#FEE140" />
+    </linearGradient>
+
+    <!-- Drop Shadow for Premium 3D Feel -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Logo Mark Group (Transparent Background) -->
+  <g transform="translate(180, 200)" filter="url(#glow)">
+    
+    <!-- Left Bracket representing Logic/Code -->
+    <path d="M 140 50 L 20 200 L 140 350" 
+          fill="none" 
+          stroke="url(#gradPrimary)" 
+          stroke-width="56" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+          
+    <!-- Right styled 'P' / Script Loop representing 'LiPi' -->
+    <path d="M 200 50 L 300 50 C 360 50 410 100 410 160 C 410 220 360 270 300 270 L 200 270 L 200 350" 
+          fill="none" 
+          stroke="url(#gradSecondary)" 
+          stroke-width="56" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+          
+    <!-- Subtle Dot indicating the dot of an 'i' -->
+    <circle cx="200" cy="-30" r="28" fill="url(#gradSecondary)" />
   </g>
 </svg>

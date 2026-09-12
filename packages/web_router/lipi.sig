@@ -1,0 +1,11 @@
+# Lipi Sovereign Package Signature Manifest (RFC 8032 Ed25519)
+version = "1.0"
+algorithm = "Ed25519-SHA256"
+public_key = "9323ce10e1465e453699777f4a9ed1473f475efe23aba8c5018eb4da1590ec25"
+manifest_hash = "3e4989cfdb295441b18b28ce416149e92676bba2027ef76138dd91a315ac174c"
+signature = "e8512a38b74c751eac9ce1271dc72943c351ee5f73285ffd1f582a52af6edda9b61014e8047c46b268066c84764ef8ac4008cc36a8daeeac848428d0cc947a14"
+
+[files]
+lipipkg.toml = "e2b5b3d2ba470bf1345a361dc2e170ce4185b967d74bb4e157d04d89510f3ff6"
+src/lib.lp = "016b8e7811d0525277323a7d5f8617c4f5012fc9d911596cd98bcbb6ad73eead"
+tests/test_router.lp = "088d032db5255b1d4fc7c512ef7df0f3f2883300e5394ea8d71142fd39fd4e1c"

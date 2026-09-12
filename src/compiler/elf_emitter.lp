@@ -6416,7 +6416,7 @@ fn compile_pure_stmt ctx ps
                     ps_adv(ps)
                     break
                 if ps_cur_type(ps) == TOK_IDENT
-                    if len(fields) < 16
+                    if len(fields) < 64
                         push(fields, ps_cur_text(ps))
                     ps_adv(ps)
                     while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_EOF
@@ -6428,7 +6428,7 @@ fn compile_pure_stmt ctx ps
             ps_adv(ps)
             while ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF
                 if ps_cur_type(ps) == TOK_IDENT
-                    if len(fields) < 16
+                    if len(fields) < 64
                         push(fields, ps_cur_text(ps))
                     ps_adv(ps)
                     while ps_cur_type(ps) != TOK_NL and ps_cur_type(ps) != TOK_DEDENT and ps_cur_type(ps) != TOK_EOF

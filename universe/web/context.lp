@@ -269,6 +269,76 @@ import "universe/web/router"
 @end
 
 @! ----------------------------------------------------------------------------
+@! Cookie Parsing Helpers (RFC 6265)
+@! WHY: HTTP cookies are passed in the 'Cookie' header as semicolon-separated
+@! name=value pairs. Parsing them into key-value pairs enables sovereign session
+@! tracking, authentication token retrieval, and stateful web service handlers.
+@! ----------------------------------------------------------------------------
+
+@fn req_cookies(req)
+  cookie_header = req_get_header(req, "Cookie", "")
+  @if cookie_header == ""
+    return []
+  @end
+
+  cookies = []
+  plen = str_len(cookie_header)
+  pos = 0
+  @while pos < plen
+    @! Skip leading whitespace and semicolons
+    @while pos < plen && (str_char_at(cookie_header, pos) == 32 || str_char_at(cookie_header, pos) == 59 || str_char_at(cookie_header, pos) == 9)
+      pos = pos + 1
+    @end
+    @if pos >= plen
+      break
+    @end
+
+    eq_pos = pos
+    @while eq_pos < plen && str_char_at(cookie_header, eq_pos) != 61 && str_char_at(cookie_header, eq_pos) != 59
+      eq_pos = eq_pos + 1
+    @end
+
+    @if eq_pos < plen && str_char_at(cookie_header, eq_pos) == 61
+      k_str = str_trim(str_substr(cookie_header, pos, eq_pos))
+      v_start = eq_pos + 1
+      v_end = v_start
+      @while v_end < plen && str_char_at(cookie_header, v_end) != 59
+        v_end = v_end + 1
+      @end
+
+      val_str = str_trim(str_substr(cookie_header, v_start, v_end))
+      v_len = str_len(val_str)
+      @if v_len >= 2 && str_char_at(val_str, 0) == 34 && str_char_at(val_str, v_len - 1) == 34
+        val_str = str_substr(val_str, 1, v_len - 1)
+      @end
+
+      @if k_str != ""
+        cookies = cookies.push({ name: k_str, value: val_str })
+      @end
+      pos = v_end + 1
+    @else
+      pos = eq_pos + 1
+    @end
+  @end
+
+  return cookies
+@end
+
+@fn req_cookie(req, name, default_val)
+  cookies = req_cookies(req)
+  i = 0
+  num_items = cookies.len()
+  @while i < num_items
+    c = cookies[i]
+    @if c.name == name
+      return c.value
+    @end
+    i = i + 1
+  @end
+  return default_val
+@end
+
+@! ----------------------------------------------------------------------------
 @! 5. HttpResponse API & Fluent Builders
 @! ----------------------------------------------------------------------------
 
@@ -577,4 +647,23 @@ import "universe/web/router"
 
 @fn ctx_json_get(ctx, key, default_val)
   return req_json_get(ctx.ctx_req, key, default_val)
+@end
+
+@! ----------------------------------------------------------------------------
+@! 8. HttpContext Cookie Helpers (RFC 6265)
+@! WHY: Provides ergonomic, fluent access for request cookies and response Set-Cookie
+@! headers directly from the HttpContext without manual header manipulations.
+@! ----------------------------------------------------------------------------
+
+@fn ctx_cookie(ctx, name, default_val)
+  return req_cookie(ctx.ctx_req, name, default_val)
+@end
+
+@fn ctx_cookies(ctx)
+  return req_cookies(ctx.ctx_req)
+@end
+
+@fn ctx_set_cookie(ctx, name, value, max_age, path, http_only, secure)
+  res_cookie(ctx.ctx_res, name, value, max_age, path, http_only, secure)
+  return ctx
 @end

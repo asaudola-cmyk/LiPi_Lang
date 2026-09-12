@@ -299,7 +299,145 @@ import "universe/core/math"
 @end
 
 @! ============================================================================
-@! 3. LINEAR GPU LAYOUT NODE DATA STRUCTURE
+@! 3. HIERARCHICAL LAYOUT NODE (DECLARATIVE TREE REPRESENTATION)
+@! ============================================================================
+
+@struct LayoutNode
+  x: i64
+  y: i64
+  width: i64
+  height: i64
+  id: i64
+  node_type: string
+  children: array
+  layout_type: i64
+  position_type: i64
+  box_sizing: i64
+  align_items: i64
+  justify_content: i64
+  align_self: i64
+  flex_wrap: i64
+  flex_grow: i64
+  flex_shrink: i64
+  flex_basis: i64
+  pref_width: i64
+  pref_height: i64
+  min_width: i64
+  min_height: i64
+  max_width: i64
+  max_height: i64
+  padding: i64
+  margin: i64
+  border_width: i64
+  gap: i64
+  row_gap: i64
+  column_gap: i64
+  pos_top: i64
+  pos_right: i64
+  pos_bottom: i64
+  pos_left: i64
+  has_pos_top: bool
+  has_pos_right: bool
+  has_pos_bottom: bool
+  has_pos_left: bool
+  grid_columns: i64
+  grid_col_span: i64
+  grid_row_span: i64
+  text_content: string
+  font_size: i64
+  line_height: i64
+  node_is_dirty: bool
+  clip_id: i64
+@end
+
+@fn layout_node_new(id, layout_type, align_items, justify_content)
+  return {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    id: id,
+    node_type: "div",
+    children: [],
+    layout_type: layout_type,
+    position_type: POSITION_STATIC(),
+    box_sizing: BOX_SIZING_CONTENT(),
+    align_items: align_items,
+    justify_content: justify_content,
+    align_self: ALIGN_SELF_AUTO(),
+    flex_wrap: WRAP_NO_WRAP(),
+    flex_grow: 0,
+    flex_shrink: 1,
+    flex_basis: 0,
+    pref_width: 0,
+    pref_height: 0,
+    min_width: 0,
+    min_height: 0,
+    max_width: 999999,
+    max_height: 999999,
+    padding: edge_insets_zero(),
+    margin: edge_insets_zero(),
+    border_width: edge_insets_zero(),
+    gap: 0,
+    row_gap: 0,
+    column_gap: 0,
+    pos_top: 0,
+    pos_right: 0,
+    pos_bottom: 0,
+    pos_left: 0,
+    has_pos_top: false,
+    has_pos_right: false,
+    has_pos_bottom: false,
+    has_pos_left: false,
+    grid_columns: 1,
+    grid_col_span: 1,
+    grid_row_span: 1,
+    text_content: "",
+    font_size: 14,
+    line_height: 18,
+    node_is_dirty: true,
+    clip_id: 0
+  }
+@end
+
+@fn layout_node_add_child(parent, child)
+  parent.children = parent.children.push(child)
+  return parent
+@end
+
+@fn layout_node_set_size(node, w, h)
+  node.pref_width = w
+  node.pref_height = h
+  node.width = w
+  node.height = h
+  return node
+@end
+
+@fn layout_node_set_flex(node, grow, shrink)
+  node.flex_grow = grow
+  node.flex_shrink = shrink
+  return node
+@end
+
+@fn layout_node_set_padding(node, top, right, bottom, left)
+  node.padding = edge_insets_ltrb(left, top, right, bottom)
+  return node
+@end
+
+@fn layout_node_set_margin(node, top, right, bottom, left)
+  node.margin = edge_insets_ltrb(left, top, right, bottom)
+  return node
+@end
+
+@fn layout_node_set_gap(node, gap)
+  node.gap = gap
+  node.row_gap = gap
+  node.column_gap = gap
+  return node
+@end
+
+@! ============================================================================
+@! 4. LINEAR GPU LAYOUT NODE DATA STRUCTURE
 @! ============================================================================
 
 @struct GpuLayoutNode
@@ -388,142 +526,4 @@ import "universe/core/math"
     computed_height: 0,
     children_indices: []
   }
-@end
-
-@! ============================================================================
-@! 4. HIERARCHICAL LAYOUT NODE (DECLARATIVE TREE REPRESENTATION)
-@! ============================================================================
-
-@struct LayoutNode
-  x: i64
-  y: i64
-  width: i64
-  height: i64
-  id: i64
-  node_type: string
-  layout_type: i64
-  position_type: i64
-  box_sizing: i64
-  align_items: i64
-  justify_content: i64
-  align_self: i64
-  flex_wrap: i64
-  flex_grow: i64
-  flex_shrink: i64
-  flex_basis: i64
-  pref_width: i64
-  pref_height: i64
-  min_width: i64
-  min_height: i64
-  max_width: i64
-  max_height: i64
-  padding: i64
-  margin: i64
-  border_width: i64
-  gap: i64
-  row_gap: i64
-  column_gap: i64
-  pos_top: i64
-  pos_right: i64
-  pos_bottom: i64
-  pos_left: i64
-  has_pos_top: bool
-  has_pos_right: bool
-  has_pos_bottom: bool
-  has_pos_left: bool
-  grid_columns: i64
-  grid_col_span: i64
-  grid_row_span: i64
-  text_content: string
-  font_size: i64
-  line_height: i64
-  node_is_dirty: bool
-  clip_id: i64
-  children: array
-@end
-
-@fn layout_node_new(id, layout_type, align_items, justify_content)
-  return {
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-    id: id,
-    node_type: "div",
-    layout_type: layout_type,
-    position_type: POSITION_STATIC(),
-    box_sizing: BOX_SIZING_CONTENT(),
-    align_items: align_items,
-    justify_content: justify_content,
-    align_self: ALIGN_SELF_AUTO(),
-    flex_wrap: WRAP_NO_WRAP(),
-    flex_grow: 0,
-    flex_shrink: 1,
-    flex_basis: 0,
-    pref_width: 0,
-    pref_height: 0,
-    min_width: 0,
-    min_height: 0,
-    max_width: 999999,
-    max_height: 999999,
-    padding: 0,
-    margin: 0,
-    border_width: 0,
-    gap: 0,
-    row_gap: 0,
-    column_gap: 0,
-    pos_top: 0,
-    pos_right: 0,
-    pos_bottom: 0,
-    pos_left: 0,
-    has_pos_top: false,
-    has_pos_right: false,
-    has_pos_bottom: false,
-    has_pos_left: false,
-    grid_columns: 1,
-    grid_col_span: 1,
-    grid_row_span: 1,
-    text_content: "",
-    font_size: 14,
-    line_height: 18,
-    node_is_dirty: true,
-    clip_id: 0,
-    children: []
-  }
-@end
-
-@fn layout_node_add_child(parent, child)
-  parent.children = parent.children.push(child)
-  return parent
-@end
-
-@fn layout_node_set_size(node, w, h)
-  node.pref_width = w
-  node.pref_height = h
-  node.width = w
-  node.height = h
-  return node
-@end
-
-@fn layout_node_set_flex(node, grow, shrink)
-  node.flex_grow = grow
-  node.flex_shrink = shrink
-  return node
-@end
-
-@fn layout_node_set_padding(node, top, right, bottom, left)
-  node.padding = edge_insets_ltrb(left, top, right, bottom)
-  return node
-@end
-
-@fn layout_node_set_margin(node, top, right, bottom, left)
-  node.margin = edge_insets_ltrb(left, top, right, bottom)
-  return node
-@end
-
-@fn layout_node_set_gap(node, gap)
-  node.gap = gap
-  node.row_gap = gap
-  node.column_gap = gap
-  return node
 @end

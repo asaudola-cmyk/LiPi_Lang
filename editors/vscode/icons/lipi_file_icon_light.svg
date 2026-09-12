@@ -1,11 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 20 190 220" width="100%" height="100%">
-  <!-- Sovereign Lipi File Icon (Light Theme Optimized: Deeper Contrast) -->
-  <!-- 1. The Vertical Stem (Deep Cyan #0099CC) -->
-  <rect x="50" y="30" width="60" height="200" rx="30" fill="#0099CC" />
-  
-  <!-- 2. The Base of L (Deep Magenta #E6006F) -->
-  <rect x="50" y="170" width="150" height="60" rx="30" fill="#E6006F" />
-  
-  <!-- 3. The Loop of P (Dark Amber #D4A000) -->
-  <circle cx="145" cy="100" r="48" fill="none" stroke="#D4A000" stroke-width="44" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="vsGradPriL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0090EA" />
+      <stop offset="100%" stop-color="#0052CC" />
+    </linearGradient>
+    <linearGradient id="vsGradSecL" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#D81B60" />
+      <stop offset="100%" stop-color="#F57F17" />
+    </linearGradient>
+  </defs>
+  <!-- Centered Sovereign Lipi File Icon Monogram (Light Theme) -->
+  <g transform="translate(45, 70)">
+    <!-- Left Bracket -->
+    <path d="M 140 50 L 20 200 L 140 350" 
+          fill="none" 
+          stroke="url(#vsGradPriL)" 
+          stroke-width="56" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+    <!-- Styled 'P' Loop -->
+    <path d="M 200 50 L 300 50 C 360 50 410 100 410 160 C 410 220 360 270 300 270 L 200 270 L 200 350" 
+          fill="none" 
+          stroke="url(#vsGradSecL)" 
+          stroke-width="56" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+    <!-- Dot of 'i' -->
+    <circle cx="200" cy="-30" r="28" fill="url(#vsGradSecL)" />
+  </g>
 </svg>

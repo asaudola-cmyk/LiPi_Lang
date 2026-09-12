@@ -105,7 +105,7 @@ import "universe/web/frontend/mod"
 
   @! 1.2 Porter-Duff Alpha Blending
   opaque_red = argb_pack(255, 255, 0, 0)
-  opaque_blue = argb_pack(255, 0, 0, 255)
+  opaque_blue = argb_pack(255, 0, 0, 50)
   semi_white = argb_pack(128, 255, 255, 255)
   blended = argb_blend(semi_white, opaque_blue)
   assert_eq_int(state, argb_get_a(blended), 255, "S1.5", "Blended opaque destination stays alpha 255")
@@ -218,9 +218,10 @@ import "universe/web/frontend/mod"
   assert_eq_int(state, term.term_rows, 20, "S3.2", "Terminal rows = 20")
 
   tc_sample = terminal_format_truecolor(255, 0, 0, 0, 0, 255, "X")
-  assert_true(state, string_contains(tc_sample, "\x1b[38;2;255;0;0m"), "S3.3", "TrueColor FG escape sequence formatted")
-  assert_true(state, string_contains(tc_sample, "\x1b[48;2;0;0;255m"), "S3.4", "TrueColor BG escape sequence formatted")
-  assert_true(state, string_contains(tc_sample, "\x1b[0m"), "S3.5", "ANSI reset sequence appended")
+  esc = str_from_char_code(27)
+  assert_true(state, string_contains(tc_sample, esc + "[38;2;255;0;0m"), "S3.3", "TrueColor FG escape sequence formatted")
+  assert_true(state, string_contains(tc_sample, esc + "[48;2;0;0;255m"), "S3.4", "TrueColor BG escape sequence formatted")
+  assert_true(state, string_contains(tc_sample, esc + "[0m"), "S3.5", "ANSI reset sequence appended")
 
   @! Dual-pixel half-block canvas rasterization
   small_c2d = canvas2d_renderer_new(4, 4, 1.0)

@@ -163,25 +163,25 @@ import "universe/web/frontend/renderer/unified_renderer"
 
 @struct HostFrameTimingLoop
   loop_target_fps: i64
-  loop_target_frame_time_ms: f64
+  loop_target_frame_time_ms: i64
   loop_last_timestamp: i64
-  loop_delta_time_ms: f64
+  loop_delta_time_ms: i64
   loop_frame_count: i64
-  loop_fps_estimate: f64
+  loop_fps_estimate: i64
   loop_frame_history: array
   loop_is_active: bool
 @end
 
 @fn frame_timing_loop_new(target_fps)
   @if target_fps <= 0 target_fps = 60 @end
-  frame_ms = 1000.0 / target_fps
+  frame_ms = 1000 / target_fps
   return {
-    loop_target_fps: target_fps * 1.0,
-    loop_target_frame_time_ms: frame_ms * 1.0,
+    loop_target_fps: target_fps,
+    loop_target_frame_time_ms: frame_ms,
     loop_last_timestamp: 0,
-    loop_delta_time_ms: 0.0,
+    loop_delta_time_ms: 0,
     loop_frame_count: 0,
-    loop_fps_estimate: target_fps * 1.0,
+    loop_fps_estimate: target_fps,
     loop_frame_history: [],
     loop_is_active: true
   }
@@ -190,14 +190,14 @@ import "universe/web/frontend/renderer/unified_renderer"
 @fn frame_timing_loop_tick(loop, timestamp_ms)
   @if loop.loop_last_timestamp > 0
     delta = timestamp_ms - loop.loop_last_timestamp
-    @if delta <= 0 delta = 1.0 @end
-    loop.loop_delta_time_ms = delta * 1.0
+    @if delta <= 0 delta = 1 @end
+    loop.loop_delta_time_ms = delta
     
-    @! Estimate FPS: 1000.0 / delta_ms smoothed with exponential filter
-    instant_fps = 1000.0 / (delta * 1.0)
-    @if instant_fps > 240.0 instant_fps = 240.0 @end
+    @! Estimate FPS: 1000 / delta smoothed with exponential filter (90% / 10%)
+    instant_fps = 1000 / delta
+    @if instant_fps > 240 instant_fps = 240 @end
     
-    loop.loop_fps_estimate = (loop.loop_fps_estimate * 0.9) + (instant_fps * 0.1)
+    loop.loop_fps_estimate = ((loop.loop_fps_estimate * 9) + instant_fps) / 10
     
     loop.loop_frame_history = loop.loop_frame_history.push(delta)
     @if loop.loop_frame_history.len() > 60
@@ -222,7 +222,7 @@ import "universe/web/frontend/renderer/unified_renderer"
 
 @fn frame_timing_loop_reset(loop)
   loop.loop_last_timestamp = 0
-  loop.loop_delta_time_ms = 0.0
+  loop.loop_delta_time_ms = 0
   loop.loop_frame_count = 0
   loop.loop_fps_estimate = loop.loop_target_fps
   loop.loop_frame_history = []

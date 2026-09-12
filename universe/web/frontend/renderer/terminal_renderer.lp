@@ -60,15 +60,18 @@ import "universe/web/frontend/layout/layout_types"
 @! ============================================================================
 
 @fn ansi_escape_fg(r, g, b)
-  return "[38;2;" + int_to_str(r) + ";" + int_to_str(g) + ";" + int_to_str(b) + "m"
+  esc = str_from_char_code(27)
+  return esc + "[38;2;" + int_to_str(r) + ";" + int_to_str(g) + ";" + int_to_str(b) + "m"
 @end
 
 @fn ansi_escape_bg(r, g, b)
-  return "[48;2;" + int_to_str(r) + ";" + int_to_str(g) + ";" + int_to_str(b) + "m"
+  esc = str_from_char_code(27)
+  return esc + "[48;2;" + int_to_str(r) + ";" + int_to_str(g) + ";" + int_to_str(b) + "m"
 @end
 
 @fn ansi_reset()
-  return "[0m"
+  esc = str_from_char_code(27)
+  return esc + "[0m"
 @end
 
 @fn terminal_format_truecolor(fg_r, fg_g, fg_b, bg_r, bg_g, bg_b, char_str)
