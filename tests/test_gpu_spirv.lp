@@ -104,7 +104,8 @@ assert_eq(get(bytes, 2), 35, "Byte 2 of magic is 0x23 (35)")
 assert_eq(get(bytes, 3), 7, "Byte 3 of magic is 0x07")
 
 // Write directly to disk via raw Linux syscalls
-out_file = "bin/test_kernel.spv"
+// WHY: Test output artifacts belong in dist/, keeping bin/ strictly reserved for executable toolchain binaries.
+out_file = "dist/test_kernel.spv"
 written = spirv_write_binary(b_vadd, out_file)
 assert_eq(written, expected_bytes, "Direct kernel SYS_write wrote " + str(expected_bytes) + " bytes to " + out_file)
 

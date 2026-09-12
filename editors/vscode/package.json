@@ -6,8 +6,13 @@
   "publisher": "lipi-lang",
   "author": {
     "name": "Lipi Language Project",
-    "url": "https://github.com/shafiullah/lipi"
+    "url": "https://github.com/asaudola-cmyk/LiPi_Lang"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asaudola-cmyk/LiPi_Lang.git"
+  },
+  "homepage": "https://github.com/asaudola-cmyk/LiPi_Lang",
   "license": "MIT",
   "icon": "icons/icon.png",
   "engines": {

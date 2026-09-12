@@ -10,7 +10,7 @@ authors = ["Shafiullah <shafiullah@lipi.dev>"]
 edition = "2026"
 description = "👑 Lipi Sovereign Programming Language & Computing Universe (Tri-Syntax: Bengali + English + Lipi Directive Syntax)"
 license = "MIT / Sovereign-Core-License"
-repository = "local"
+repository = "https://github.com/asaudola-cmyk/LiPi_Lang.git"
 entry = "src/tools/lipi.lp"
 
 [dependencies]
@@ -26,5 +26,6 @@ members = [
     "packages/math_extra",
     "packages/web_router",
     "packages/crypto_vault",
-    "packages/json_toolkit"
+    "packages/json_toolkit",
+    "packages/sovereign_mesh"
 ]
