@@ -1,12 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" version="1.1">
- <!-- Sovereign Lipi Desktop MIME Icon (32x32) -->
- <path style="opacity:0.2" d="M 6.375,3 C 5.61325,3 5,3.6244 5,4.4 V 29.6 C 5,30.37504 5.61325,31 6.375,31 h 19.25 C 26.3862,31 27,30.37504 27,29.6 V 12 L 20,10 18,3 Z"/>
- <path style="fill:#e4e4e4" d="M 6.375,2 C 5.61325,2 5,2.6244 5,3.4 V 28.6 C 5,29.37504 5.61325,30 6.375,30 h 19.25 C 26.3862,30 27,29.37504 27,28.6 V 11 L 20,9 18,2 Z"/>
- <path style="opacity:0.2" d="M 27,12 18,3 v 7.59375 C 18,11.373375 18.62775,12 19.40625,12 Z"/>
- <path style="fill:#fafafa" d="M 27,11 18,2 V 9.59375 C 18,10.373375 18.62775,11 19.40625,11 Z"/>
- <path style="opacity:0.2;fill:#ffffff" d="M 6.375,2 C 5.61325,2 5,2.6247906 5,3.4003906 v 1 C 5,3.6247906 5.61325,3 6.375,3 H 18 V 2 Z"/>
- <!-- Lipi Sovereign Monogram -->
- <rect x="10.5" y="13.5" width="3.8" height="13.5" rx="1.8" fill="#00C2FF" />
- <rect x="10.5" y="23.2" width="10.8" height="3.8" rx="1.8" fill="#FF007A" />
- <circle cx="17" cy="18" r="3.2" fill="none" stroke="#FFD700" stroke-width="3.2" />
+  <defs>
+    <linearGradient id="dtGradPri32" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="100%" stop-color="#4FACFE" />
+    </linearGradient>
+    <linearGradient id="dtGradSec32" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FA709A" />
+      <stop offset="100%" stop-color="#FEE140" />
+    </linearGradient>
+  </defs>
+  <path style="opacity:0.2" d="M 7,3 C 6.261,3 5.667,3.594 5.667,4.333 V 28.333 C 5.667,29.073 6.261,29.667 7,29.667 H 25.667 C 26.406,29.667 27,29.073 27,28.333 V 11.333 L 19.667,10.667 19,3 Z"/>
+  <path style="fill:#e4e4e4" d="M 7,2 C 6.261,2 5.667,2.594 5.667,3.333 V 27.333 C 5.667,28.073 6.261,28.667 7,28.667 H 25.667 C 26.406,28.667 27,28.073 27,27.333 V 10.333 L 19.667,9.667 19,2 Z"/>
+  <path style="fill:#ffffff;opacity:0.2" d="M 7 2 C 6.261 2 5.667 2.594 5.667 3.333 L 5.667 4 C 5.667 3.261 6.261 2.667 7 2.667 L 19 2.667 L 19 2 L 7 2 z"/>
+  <path style="opacity:0.2" d="m 19,3 v 6.667 c 0,0.737 0.597,1.333 1.333,1.333 H 27 Z"/>
+  <path style="fill:#fafafa" d="M 19,2 V 8.667 C 19,9.404 19.597,10 20.333,10 H 27 Z"/>
+  <g transform="translate(8.5, 12) scale(0.038)">
+    <path d="M 140 50 L 20 200 L 140 350" fill="none" stroke="url(#dtGradPri32)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 200 50 L 300 50 C 360 50 410 100 410 160 C 410 220 360 270 300 270 L 200 270 L 200 350" fill="none" stroke="url(#dtGradSec32)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="200" cy="-30" r="32" fill="url(#dtGradSec32)" />
+  </g>
 </svg>

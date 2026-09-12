@@ -1,31 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
   <defs>
-    <linearGradient id="vsGradPriL" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0090EA" />
-      <stop offset="100%" stop-color="#0052CC" />
+    <!-- Cyan to Blue Gradient for the Bracket -->
+    <linearGradient id="gradPrimary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="100%" stop-color="#4FACFE" />
     </linearGradient>
-    <linearGradient id="vsGradSecL" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#D81B60" />
-      <stop offset="100%" stop-color="#F57F17" />
+    
+    <!-- Magenta to Yellow Gradient for the 'P' Loop -->
+    <linearGradient id="gradSecondary" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FA709A" />
+      <stop offset="100%" stop-color="#FEE140" />
     </linearGradient>
+
+    <!-- Drop Shadow for Premium 3D Feel -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
   </defs>
-  <!-- Centered Sovereign Lipi File Icon Monogram (Light Theme) -->
-  <g transform="translate(45, 70)">
-    <!-- Left Bracket -->
+
+  <!-- Dark Premium Background -->
+  <rect width="800" height="800" rx="160" fill="#121212" />
+
+  <!-- Logo Mark Group -->
+  <g transform="translate(180, 200)" filter="url(#glow)">
+    
+    <!-- Left Bracket representing Logic/Code -->
     <path d="M 140 50 L 20 200 L 140 350" 
           fill="none" 
-          stroke="url(#vsGradPriL)" 
+          stroke="url(#gradPrimary)" 
           stroke-width="56" 
           stroke-linecap="round" 
           stroke-linejoin="round" />
-    <!-- Styled 'P' Loop -->
+          
+    <!-- Right styled 'P' / Script Loop representing 'LiPi' -->
     <path d="M 200 50 L 300 50 C 360 50 410 100 410 160 C 410 220 360 270 300 270 L 200 270 L 200 350" 
           fill="none" 
-          stroke="url(#vsGradSecL)" 
+          stroke="url(#gradSecondary)" 
           stroke-width="56" 
           stroke-linecap="round" 
           stroke-linejoin="round" />
-    <!-- Dot of 'i' -->
-    <circle cx="200" cy="-30" r="28" fill="url(#vsGradSecL)" />
+          
+    <!-- Subtle Dot indicating the dot of an 'i' -->
+    <circle cx="200" cy="-30" r="28" fill="url(#gradSecondary)" />
   </g>
 </svg>
