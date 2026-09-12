@@ -75,6 +75,10 @@ fn ctx_new
     push(c, list(0))    // 22: called_top_level_main
     push(c, list())     // 23: global_fields
     push(c, list(""))   // 24: current_impl_struct
+    push(c, list())     // 25: sc_regs (variable hardware register map)
+    push(c, list(0))    // 26: fn_has_reg_alloc (active callee-saved registers flag)
+    push(c, list())     // 27: dwarf_lines (recorded [code_offset, line_number])
+    push(c, list(""))   // 28: source_file_name
     return c
 
 // WHY: Tracks enclosing @impl StructName block for automatic OOP method name mangling
@@ -274,6 +278,36 @@ fn scope_set_type ctx name ty
         i = i + 1
     return 0
 
+// ── Hardware Register Allocation Subsystem ──────────────────────────────────
+// WHY: Callee-saved hardware registers (r12, r13, r14) eliminate L1 cache stack traffic,
+//      achieving 0-1 cycle register-to-register latency for hottest variables.
+fn scope_get_reg ctx name
+    if len(ctx) <= 25 return 0
+    names = get(ctx, 8)
+    regs  = get(ctx, 25)
+    i = 0
+    while i < len(names)
+        if get(names, i) == name
+            if i < len(regs)
+                return get(regs, i)
+            return 0
+        i = i + 1
+    return 0
+
+fn scope_set_reg ctx name reg_id
+    if len(ctx) <= 25 return 0
+    names = get(ctx, 8)
+    regs  = get(ctx, 25)
+    i = 0
+    while i < len(names)
+        if get(names, i) == name
+            while len(regs) <= i
+                push(regs, 0)
+            list_set(regs, i, reg_id)
+            return 0
+        i = i + 1
+    return 0
+
 fn scope_add ctx name
     existing = scope_get(ctx, name)
     if existing != 0 return existing
@@ -284,6 +318,8 @@ fn scope_add ctx name
     push(get(ctx, 9), new_stack)
     if len(ctx) > 20
         push(get(ctx, 20), TY_UNKNOWN)
+    if len(ctx) > 25
+        push(get(ctx, 25), 0)
     return new_stack
 
 // ── Struct Registry & Type Tracking ──────────────────────────────────────────
@@ -577,7 +613,7 @@ fn x86_lea_reg_rip ctx reg label_name
     bb_put8(ctx, rex)
     bb_put8(ctx, 141) // 0x8D
     bb_put8(ctx, modrm)
-    bb_put32(ctx, 0)  // Relocation placeholder
+    bb_put32(ctx, 0)  // Relocation offset slot patched by reloc_add
     reloc_add(ctx, pos + 3, label_name, 7)
 
 fn x86_add_rax_rbx ctx
@@ -589,6 +625,60 @@ fn x86_sub_rax_rbx ctx
     bb_put8(ctx, 72)  // 0x48
     bb_put8(ctx, 41)  // 0x29
     bb_put8(ctx, 216) // 0xD8
+
+// WHY: In-register arithmetic: add rax to destination register (e.g. add %rax, %r12)
+// Eliminates memory reads, stack loads, and intermediate scratch spills.
+fn x86_add_reg_rax ctx reg
+    rex = 72
+    if reg >= 8
+        rex = 73
+    modrm = 192 + ((0 % 8) * 8) + (reg % 8)
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, modrm)
+
+fn x86_sub_reg_rax ctx reg
+    rex = 72
+    if reg >= 8
+        rex = 73
+    modrm = 192 + ((0 % 8) * 8) + (reg % 8)
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 41)
+    bb_put8(ctx, modrm)
+
+fn x86_inc_reg ctx reg
+    rex = 72
+    if reg >= 8
+        rex = 73
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 192 + (reg % 8))
+
+fn x86_dec_reg ctx reg
+    rex = 72
+    if reg >= 8
+        rex = 73
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 200 + (reg % 8))
+
+fn x86_add_reg_imm8 ctx reg imm_val
+    rex = 72
+    if reg >= 8
+        rex = 73
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 192 + (reg % 8))
+    bb_put8(ctx, imm_val % 256)
+
+fn x86_sub_reg_imm8 ctx reg imm_val
+    rex = 72
+    if reg >= 8
+        rex = 73
+    bb_put8(ctx, rex)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 232 + (reg % 8))
+    bb_put8(ctx, imm_val % 256)
 
 fn x86_imul_rax_rbx ctx
     bb_put8(ctx, 72)  // 0x48
@@ -3172,6 +3262,48 @@ fn emit_runtime_stubs ctx
     label_define(ctx, "lipi_fn_maya_mem_read_u64")
     x86_jmp(ctx, "lipi_fn_sys_peek")
 
+    // ── AVX2 256-Bit SIMD Vector Sum Intrinsic ──────────────────────────────
+    // WHY: Processes 4x 64-bit integers per single CPU cycle directly on hardware silicon.
+    //      Zero external libraries, 100% pure machine code.
+    // Signature: simd_avx2_sum(ptr, count) -> sum (u64)
+    label_define(ctx, "lipi_fn_simd_avx2_sum_u64")
+    label_define(ctx, "lipi_fn_simd_avx2_sum")
+    label_define(ctx, "lipi_fn_ভেক্টর_যোগ_২৫৬")
+    label_define(ctx, "lipi_fn_ভেক্টর_যোগ")
+    // Bytes verified with objdump (130 bytes):
+    bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 246); bb_put8(ctx, 127); bb_put8(ctx, 4)
+    bb_put8(ctx, 72); bb_put8(ctx, 49); bb_put8(ctx, 192); bb_put8(ctx, 195)
+    bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 255); bb_put8(ctx, 117); bb_put8(ctx, 4)
+    bb_put8(ctx, 72); bb_put8(ctx, 49); bb_put8(ctx, 192); bb_put8(ctx, 195)
+    bb_put8(ctx, 197); bb_put8(ctx, 253); bb_put8(ctx, 239); bb_put8(ctx, 192)
+    bb_put8(ctx, 197); bb_put8(ctx, 245); bb_put8(ctx, 239); bb_put8(ctx, 201)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 254); bb_put8(ctx, 8); bb_put8(ctx, 124); bb_put8(ctx, 27)
+    bb_put8(ctx, 197); bb_put8(ctx, 254); bb_put8(ctx, 111); bb_put8(ctx, 23)
+    bb_put8(ctx, 197); bb_put8(ctx, 253); bb_put8(ctx, 212); bb_put8(ctx, 194)
+    bb_put8(ctx, 197); bb_put8(ctx, 254); bb_put8(ctx, 111); bb_put8(ctx, 95); bb_put8(ctx, 32)
+    bb_put8(ctx, 197); bb_put8(ctx, 245); bb_put8(ctx, 212); bb_put8(ctx, 203)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199); bb_put8(ctx, 64)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 238); bb_put8(ctx, 8)
+    bb_put8(ctx, 235); bb_put8(ctx, 223)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 254); bb_put8(ctx, 4); bb_put8(ctx, 124); bb_put8(ctx, 16)
+    bb_put8(ctx, 197); bb_put8(ctx, 254); bb_put8(ctx, 111); bb_put8(ctx, 23)
+    bb_put8(ctx, 197); bb_put8(ctx, 253); bb_put8(ctx, 212); bb_put8(ctx, 194)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199); bb_put8(ctx, 32)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 238); bb_put8(ctx, 4)
+    bb_put8(ctx, 197); bb_put8(ctx, 253); bb_put8(ctx, 212); bb_put8(ctx, 193)
+    bb_put8(ctx, 196); bb_put8(ctx, 227); bb_put8(ctx, 125); bb_put8(ctx, 57); bb_put8(ctx, 193); bb_put8(ctx, 1)
+    bb_put8(ctx, 197); bb_put8(ctx, 249); bb_put8(ctx, 212); bb_put8(ctx, 193)
+    bb_put8(ctx, 196); bb_put8(ctx, 227); bb_put8(ctx, 249); bb_put8(ctx, 22); bb_put8(ctx, 194); bb_put8(ctx, 1)
+    bb_put8(ctx, 196); bb_put8(ctx, 225); bb_put8(ctx, 249); bb_put8(ctx, 126); bb_put8(ctx, 192)
+    bb_put8(ctx, 72); bb_put8(ctx, 1); bb_put8(ctx, 208)
+    bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 246); bb_put8(ctx, 126); bb_put8(ctx, 12)
+    bb_put8(ctx, 72); bb_put8(ctx, 3); bb_put8(ctx, 7)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199); bb_put8(ctx, 8)
+    bb_put8(ctx, 72); bb_put8(ctx, 255); bb_put8(ctx, 206)
+    bb_put8(ctx, 117); bb_put8(ctx, 244)
+    bb_put8(ctx, 197); bb_put8(ctx, 248); bb_put8(ctx, 119) // vzeroupper
+    bb_put8(ctx, 195)                                       // ret
+
     // ── String Pointer Resolution Intrinsics ────────────────────────────────
     // WHY: In Lipi/Maya, string references are pointers. Returns the raw char pointer in rax.
     label_define(ctx, "lipi_fn_lipi_str_ptr")
@@ -4186,16 +4318,20 @@ TOK_RBRACE   = 15
 TOK_COLON    = 16
 TOK_SEMI     = 17
 
-fn tok_new tt txt int_val
+fn tok_new tt txt int_val line_no
     t = list()
     push(t, tt)
     push(t, txt)
     push(t, int_val)
+    push(t, line_no)
     return t
 
 fn tok_t t = get(t, 0)
 fn tok_s t = get(t, 1)
 fn tok_i t = get(t, 2)
+fn tok_line t
+    if len(t) <= 3 return 1
+    return get(t, 3)
 
 fn tokenize_pure src
     tokens = list()
@@ -4203,6 +4339,7 @@ fn tokenize_pure src
     slen = len(src)
     indent_stk = list(0)
     bracket_depth = 0
+    cur_line = 1
 
     while p < slen
         c = char_at(src, p)
@@ -4243,12 +4380,13 @@ fn tokenize_pure src
         // Newline & Indentation
         if c == "\n"
             p = p + 1
+            cur_line = cur_line + 1
             if bracket_depth > 0
                 // WHY: Inside (), [], or {}, newlines are treated as whitespace.
                 // Indentation changes (TOK_INDENT/TOK_DEDENT) are suppressed so multi-line expressions and literals parse seamlessly.
                 continue
             if len(tokens) > 0 and tok_t(get(tokens, len(tokens) - 1)) != TOK_NL
-                push(tokens, tok_new(TOK_NL, "\n", 0))
+                push(tokens, tok_new(TOK_NL, "\n", 0, cur_line))
 
             spaces = 0
             while p < slen
@@ -4270,11 +4408,11 @@ fn tokenize_pure src
             cur_indent = get(indent_stk, len(indent_stk) - 1)
             if spaces > cur_indent
                 push(indent_stk, spaces)
-                push(tokens, tok_new(TOK_INDENT, "", spaces))
+                push(tokens, tok_new(TOK_INDENT, "", spaces, cur_line))
             elif spaces < cur_indent
                 while len(indent_stk) > 1 and get(indent_stk, len(indent_stk) - 1) > spaces
                     pop(indent_stk)
-                    push(tokens, tok_new(TOK_DEDENT, "", spaces))
+                    push(tokens, tok_new(TOK_DEDENT, "", spaces, cur_line))
             continue
 
         if c == " " or c == "\t"
@@ -4305,7 +4443,7 @@ fn tokenize_pure src
                     p = p + 1
             if p < slen and char_at(src, p) == quote
                 p = p + 1
-            push(tokens, tok_new(TOK_STR, str_acc, 0))
+            push(tokens, tok_new(TOK_STR, str_acc, 0, cur_line))
             continue
 
         // Bengali digits (০-৯: ord 2534..2543)
@@ -4319,7 +4457,7 @@ fn tokenize_pure src
                     p = p + 1
                 else
                     break
-            push(tokens, tok_new(TOK_INT, str(val), val))
+            push(tokens, tok_new(TOK_INT, str(val), val, cur_line))
             continue
 
         // Hexadecimal numbers: 0x... / 0X...
@@ -4341,7 +4479,7 @@ fn tokenize_pure src
                     p = p + 1
                 else
                     break
-            push(tokens, tok_new(TOK_INT, str(val), val))
+            push(tokens, tok_new(TOK_INT, str(val), val, cur_line))
             continue
 
         // Binary numbers: 0b... / 0B...
@@ -4359,7 +4497,7 @@ fn tokenize_pure src
                     p = p + 1
                 else
                     break
-            push(tokens, tok_new(TOK_INT, str(val), val))
+            push(tokens, tok_new(TOK_INT, str(val), val, cur_line))
             continue
 
         // ASCII digits
@@ -4385,52 +4523,52 @@ fn tokenize_pure src
                             p = p + 1
                         else
                             break
-            push(tokens, tok_new(TOK_INT, str(val), val))
+            push(tokens, tok_new(TOK_INT, str(val), val, cur_line))
             continue
 
         if c == "("
             bracket_depth = bracket_depth + 1
-            push(tokens, tok_new(TOK_LPAREN, "(", 0))
+            push(tokens, tok_new(TOK_LPAREN, "(", 0, cur_line))
             p = p + 1
             continue
         if c == ")"
             if bracket_depth > 0
                 bracket_depth = bracket_depth - 1
-            push(tokens, tok_new(TOK_RPAREN, ")", 0))
+            push(tokens, tok_new(TOK_RPAREN, ")", 0, cur_line))
             p = p + 1
             continue
         if c == "["
             bracket_depth = bracket_depth + 1
-            push(tokens, tok_new(TOK_LBRACKET, "[", 0))
+            push(tokens, tok_new(TOK_LBRACKET, "[", 0, cur_line))
             p = p + 1
             continue
         if c == "]"
             if bracket_depth > 0
                 bracket_depth = bracket_depth - 1
-            push(tokens, tok_new(TOK_RBRACKET, "]", 0))
+            push(tokens, tok_new(TOK_RBRACKET, "]", 0, cur_line))
             p = p + 1
             continue
         if c == "{"
             bracket_depth = bracket_depth + 1
-            push(tokens, tok_new(TOK_LBRACE, "{", 0))
+            push(tokens, tok_new(TOK_LBRACE, "{", 0, cur_line))
             p = p + 1
             continue
         if c == "}"
             if bracket_depth > 0
                 bracket_depth = bracket_depth - 1
-            push(tokens, tok_new(TOK_RBRACE, "}", 0))
+            push(tokens, tok_new(TOK_RBRACE, "}", 0, cur_line))
             p = p + 1
             continue
         if c == ":"
-            push(tokens, tok_new(TOK_COLON, ":", 0))
+            push(tokens, tok_new(TOK_COLON, ":", 0, cur_line))
             p = p + 1
             continue
         if c == ";"
-            push(tokens, tok_new(TOK_SEMI, ";", 0))
+            push(tokens, tok_new(TOK_SEMI, ";", 0, cur_line))
             p = p + 1
             continue
         if c == ","
-            push(tokens, tok_new(TOK_COMMA, ",", 0))
+            push(tokens, tok_new(TOK_COMMA, ",", 0, cur_line))
             p = p + 1
             continue
 
@@ -4438,13 +4576,13 @@ fn tokenize_pure src
         if p + 1 < slen
             two = c + char_at(src, p + 1)
             if two == "==" or two == "!=" or two == "<=" or two == ">=" or two == "+=" or two == "-=" or two == "*=" or two == "/=" or two == "&&" or two == "||" or two == ".." or two == "<<" or two == ">>" or two == "=>" or two == "->"
-                push(tokens, tok_new(TOK_OP, two, 0))
+                push(tokens, tok_new(TOK_OP, two, 0, cur_line))
                 p = p + 2
                 continue
 
         // 1-char operators
         if c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "=" or c == "<" or c == ">" or c == "!" or c == "." or c == "&" or c == "|" or c == "^" or c == "~" or c == "?"
-            push(tokens, tok_new(TOK_OP, c, 0))
+            push(tokens, tok_new(TOK_OP, c, 0, cur_line))
             p = p + 1
             continue
 
@@ -4463,16 +4601,16 @@ fn tokenize_pure src
                     p = p + 1
                 else
                     break
-            push(tokens, tok_new(TOK_IDENT, id_acc, 0))
+            push(tokens, tok_new(TOK_IDENT, id_acc, 0, cur_line))
             continue
 
         p = p + 1
 
     while len(indent_stk) > 1
         pop(indent_stk)
-        push(tokens, tok_new(TOK_DEDENT, "", 0))
+        push(tokens, tok_new(TOK_DEDENT, "", 0, cur_line))
 
-    push(tokens, tok_new(TOK_EOF, "", 0))
+    push(tokens, tok_new(TOK_EOF, "", 0, cur_line))
     return tokens
 
 // ── Parser State (ps) ────────────────────────────────────────────────────────
@@ -4488,7 +4626,7 @@ fn ps_cur s
     tokens = get(s, 0)
     idx = get(get(s, 1), 0)
     if idx < len(tokens) return get(tokens, idx)
-    return tok_new(TOK_EOF, "", 0)
+    return tok_new(TOK_EOF, "", 0, 0)
 
 fn ps_cur_type s
     t = ps_cur(s)
@@ -4502,11 +4640,33 @@ fn ps_cur_int s
     t = ps_cur(s)
     return tok_i(t)
 
+fn ps_cur_line s
+    t = ps_cur(s)
+    return tok_line(t)
+
+// ── DWARF v4 Line Matrix Recorder ───────────────────────────────────────────
+// WHY: Associates machine code instruction offsets with human-readable Lipi source
+//      line numbers, enabling gdb/lldb source-level debugging directly on native ELF binaries.
+fn dwarf_record_line ctx ps
+    if len(ctx) <= 27 return 0
+    lines = get(ctx, 27)
+    cur_l = ps_cur_line(ps)
+    if cur_l <= 0 return 0
+    cur_off = len(ctx_bb(ctx))
+    if len(lines) == 0
+        push(lines, list(cur_off, cur_l))
+        return 0
+    last_entry = get(lines, len(lines) - 1)
+    last_l = get(last_entry, 1)
+    if last_l != cur_l
+        push(lines, list(cur_off, cur_l))
+    return 0
+
 fn ps_peek_tok s offset
     tokens = get(s, 0)
     idx = get(get(s, 1), 0) + offset
     if idx < len(tokens) return get(tokens, idx)
-    return tok_new(TOK_EOF, "", 0)
+    return tok_new(TOK_EOF, "", 0, 0)
 
 fn ps_adv s
     tokens = get(s, 0)
@@ -5099,7 +5259,10 @@ fn compile_pure_primary ctx ps
         else
             // Variable / Constant / Bare call lookup
             off = scope_get(ctx, name)
-            if off > 0
+            reg_id = scope_get_reg(ctx, name)
+            if reg_id > 0
+                x86_mov_reg_reg(ctx, 0, reg_id)
+            elif off > 0
                 x86_mov_rax_stack(ctx, off)
             else
                 gi = 0
@@ -5740,21 +5903,28 @@ fn try_fold_symbolic_mod_loop ctx ps
     ps_skip_nl(ps)
 
     // O(1) Mathematical Closed Form Emission:
+    reg_tot = scope_get_reg(ctx, var_tot)
+    reg_i   = scope_get_reg(ctx, var_i)
+
     off_tot = scope_get(ctx, var_tot)
-    if off_tot == 0
+    if off_tot == 0 and reg_tot == 0
         off_tot = scope_add(ctx, var_tot)
         scope_set_type(ctx, var_tot, TY_INT)
 
     off_i = scope_get(ctx, var_i)
-    if off_i == 0
+    if off_i == 0 and reg_i == 0
         off_i = scope_add(ctx, var_i)
         scope_set_type(ctx, var_i, TY_INT)
 
     if n_is_const == 1
         x86_mov_reg_imm64(ctx, 0, n_const_val)
     else
-        off_n = scope_get(ctx, var_n)
-        x86_mov_rax_stack(ctx, off_n)
+        reg_n = scope_get_reg(ctx, var_n)
+        if reg_n > 0
+            x86_mov_reg_reg(ctx, 0, reg_n)
+        else
+            off_n = scope_get(ctx, var_n)
+            x86_mov_rax_stack(ctx, off_n)
 
     if cmp_op == "<"
         x86_mov_reg_imm64(ctx, 3, 1)
@@ -5765,7 +5935,10 @@ fn try_fold_symbolic_mod_loop ctx ps
 
     // Check if effective N < i_start
     lbl_done = make_anon_label(ctx, "sym_loop_done")
-    x86_mov_rax_stack(ctx, off_i) // rax = i_start
+    if reg_i > 0
+        x86_mov_reg_reg(ctx, 0, reg_i) // rax = i_start
+    else
+        x86_mov_rax_stack(ctx, off_i) // rax = i_start
     x86_mov_reg_reg(ctx, 3, 0)    // rbx = i_start
     x86_mov_reg_reg(ctx, 0, 8)    // rax = effective N
     x86_set_cmp(ctx, "<")         // rax = (effective N < i_start)
@@ -5790,7 +5963,10 @@ fn try_fold_symbolic_mod_loop ctx ps
         x86_mov_reg_reg(ctx, 9, 0)    // r9 = Sum(1..N)
 
         // 2. Adjust for i_start: Sum(1..i_start-1) = i_start * (i_start - 1) / 2
-        x86_mov_rax_stack(ctx, off_i) // rax = i_start
+        if reg_i > 0
+            x86_mov_reg_reg(ctx, 0, reg_i) // rax = i_start
+        else
+            x86_mov_rax_stack(ctx, off_i) // rax = i_start
         x86_mov_reg_reg(ctx, 3, 0)    // rbx = i_start
         bb_put8(ctx, 72)
         bb_put8(ctx, 131)
@@ -5807,10 +5983,13 @@ fn try_fold_symbolic_mod_loop ctx ps
         x86_sub_rax_rbx(ctx)          // rax = delta
 
         // total = total + delta
-        x86_mov_reg_reg(ctx, 3, 0)    // rbx = delta
-        x86_mov_rax_stack(ctx, off_tot)
-        x86_add_rax_rbx(ctx)
-        x86_mov_stack_rax(ctx, off_tot)
+        if reg_tot > 0
+            x86_add_reg_rax(ctx, reg_tot)
+        else
+            x86_mov_reg_reg(ctx, 3, 0)    // rbx = delta
+            x86_mov_rax_stack(ctx, off_tot)
+            x86_add_rax_rbx(ctx)
+            x86_mov_stack_rax(ctx, off_tot)
     else
         // WHY: Pure O(1) Modulo Periodic Induction: K * Cycle_Sum + Rem_Sum
         cycle_sum = (const_c * (const_c - 1)) / 2
@@ -5843,16 +6022,22 @@ fn try_fold_symbolic_mod_loop ctx ps
         x86_add_rax_rbx(ctx)          // rax = total_add
 
         // total = total + total_add
-        x86_mov_reg_reg(ctx, 3, 0)    // rbx = total_add
-        x86_mov_rax_stack(ctx, off_tot)
-        x86_add_rax_rbx(ctx)
-        x86_mov_stack_rax(ctx, off_tot)
+        if reg_tot > 0
+            x86_add_reg_rax(ctx, reg_tot)
+        else
+            x86_mov_reg_reg(ctx, 3, 0)    // rbx = total_add
+            x86_mov_rax_stack(ctx, off_tot)
+            x86_add_rax_rbx(ctx)
+            x86_mov_stack_rax(ctx, off_tot)
 
     // final i = effective N + 1
     x86_mov_reg_reg(ctx, 0, 8)    // rax = effective N
     x86_mov_reg_imm64(ctx, 3, 1)
     x86_add_rax_rbx(ctx)          // rax = effective N + 1
-    x86_mov_stack_rax(ctx, off_i)
+    if reg_i > 0
+        x86_mov_reg_reg(ctx, reg_i, 0)
+    else
+        x86_mov_stack_rax(ctx, off_i)
 
     label_define(ctx, lbl_done)
     return 1
@@ -5861,6 +6046,7 @@ fn compile_pure_expr ctx ps
     return compile_pure_or(ctx, ps)
 
 fn compile_pure_stmt ctx ps
+    dwarf_record_line(ctx, ps)
     ps_skip_nl(ps)
     tt  = ps_cur_type(ps)
     txt = ps_cur_text(ps)
@@ -5880,6 +6066,61 @@ fn compile_pure_stmt ctx ps
         ps_adv(ps)
         tt  = ps_cur_type(ps)
         txt = ps_cur_text(ps)
+
+    // reg / @reg / রেজিস্টার: bind variable to callee-saved hardware register (r12, r13, r14)
+    // WHY: Linear scan register binding for hot loop counters and accumulators, eliminating L1 stack roundtrips.
+    // Guarded so variable assignments like 'reg = list()' parse as standard assignments rather than register declarations.
+    next_t_reg = ps_peek_tok(ps, 1)
+    is_reg_decl = 0
+    if tt == TOK_IDENT
+        if txt == "@reg" or txt == "রেজিস্টার"
+            is_reg_decl = 1
+        elif txt == "reg" and tok_t(next_t_reg) == TOK_IDENT
+            is_reg_decl = 1
+
+    if is_reg_decl == 1
+        ps_adv(ps)
+        var_name = ps_cur_text(ps)
+        ps_adv(ps)
+        assigned_reg = 0
+        if scope_get_reg(ctx, var_name) > 0
+            assigned_reg = scope_get_reg(ctx, var_name)
+        else
+            used_regs = 0
+            if len(ctx) > 25
+                r_list = get(ctx, 25)
+                ri = 0
+                while ri < len(r_list)
+                    if get(r_list, ri) > 0
+                        used_regs = used_regs + 1
+                    ri = ri + 1
+            if used_regs == 0
+                assigned_reg = 12 // r12
+            elif used_regs == 1
+                assigned_reg = 13 // r13
+            elif used_regs == 2
+                assigned_reg = 14 // r14
+            if assigned_reg > 0
+                scope_add(ctx, var_name)
+                scope_set_reg(ctx, var_name, assigned_reg)
+                if len(ctx) > 26
+                    list_set(get(ctx, 26), 0, 1)
+            else
+                // WHY: Linear scan register spill: when %r12-%r14 are occupied, spill to stack frame
+                scope_add(ctx, var_name)
+        if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "="
+            ps_adv(ps)
+            expr_ty = compile_pure_expr(ctx, ps)
+            if assigned_reg > 0
+                x86_mov_reg_reg(ctx, assigned_reg, 0)
+            else
+                off = scope_get(ctx, var_name)
+                x86_mov_stack_rax(ctx, off)
+            if expr_ty == TY_INT
+                scope_set_type(ctx, var_name, TY_INT)
+            else
+                scope_set_type(ctx, var_name, expr_ty)
+        return 0
 
     // WHY: Gracefully consume any standalone @end directive at top level or block boundary
     if tt == TOK_IDENT and txt == "@end"
@@ -6476,6 +6717,18 @@ fn compile_pure_stmt ctx ps
             compile_pure_expr(ctx, ps)
         else
             x86_mov_reg_imm64(ctx, 0, 0)
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 117)
+        bb_put8(ctx, 232) // mov r14, [rbp - 24]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 109)
+        bb_put8(ctx, 240) // mov r13, [rbp - 16]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 101)
+        bb_put8(ctx, 248) // mov r12, [rbp - 8]
         x86_leave(ctx)
         x86_ret(ctx)
         return 0
@@ -6575,6 +6828,8 @@ fn compile_pure_stmt ctx ps
         saved_stack = get(get(ctx, 10), 0)
         saved_vnames = get(ctx, 18)
         saved_vtypes = get(ctx, 19)
+        saved_regs = get(ctx, 25)
+        saved_has_reg = get(get(ctx, 26), 0)
 
         list_set(ctx, 8, list())
         list_set(ctx, 9, list())
@@ -6582,10 +6837,17 @@ fn compile_pure_stmt ctx ps
         list_set(get(ctx, 10), 0, 0)
         list_set(ctx, 18, list())
         list_set(ctx, 19, list())
+        list_set(ctx, 25, list())
+        list_set(get(ctx, 26), 0, 0)
 
         x86_push_rbp(ctx)
         x86_mov_rbp_rsp(ctx)
-        // WHY: Expands function stack frame headroom to 64KB (8,192 local slots) to prevent caller frame clobbering
+        // WHY: Always preserve callee-saved registers r12, r13, r14 at fixed offsets [rbp-8, rbp-16, rbp-24]
+        // This guarantees zero register clobbering across all nested and recursive calls while enabling 0-cycle local registers.
+        x86_push_reg(ctx, 12)
+        x86_push_reg(ctx, 13)
+        x86_push_reg(ctx, 14)
+        list_set(get(ctx, 10), 0, 32)
         x86_sub_rsp(ctx, 65536)
 
         arg_regs = list(7, 6, 2, 1, 8, 9, 10, 11, 12, 13, 14, 15)
@@ -6612,6 +6874,18 @@ fn compile_pure_stmt ctx ps
         if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == "="
             ps_adv(ps)
             compile_pure_expr(ctx, ps)
+            bb_put8(ctx, 76)
+            bb_put8(ctx, 139)
+            bb_put8(ctx, 117)
+            bb_put8(ctx, 232) // mov r14, [rbp - 24]
+            bb_put8(ctx, 76)
+            bb_put8(ctx, 139)
+            bb_put8(ctx, 109)
+            bb_put8(ctx, 240) // mov r13, [rbp - 16]
+            bb_put8(ctx, 76)
+            bb_put8(ctx, 139)
+            bb_put8(ctx, 101)
+            bb_put8(ctx, 248) // mov r12, [rbp - 8]
             x86_leave(ctx)
             x86_ret(ctx)
             list_set(ctx, 8, saved_names)
@@ -6620,6 +6894,8 @@ fn compile_pure_stmt ctx ps
             list_set(get(ctx, 10), 0, saved_stack)
             list_set(ctx, 18, saved_vnames)
             list_set(ctx, 19, saved_vtypes)
+            list_set(ctx, 25, saved_regs)
+            list_set(get(ctx, 26), 0, saved_has_reg)
             label_define(ctx, lbl_skip)
             return 0
 
@@ -6652,6 +6928,18 @@ fn compile_pure_stmt ctx ps
             compile_pure_stmt(ctx, ps)
 
         x86_mov_reg_imm64(ctx, 0, 0)
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 117)
+        bb_put8(ctx, 232) // mov r14, [rbp - 24]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 109)
+        bb_put8(ctx, 240) // mov r13, [rbp - 16]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 101)
+        bb_put8(ctx, 248) // mov r12, [rbp - 8]
         x86_leave(ctx)
         x86_ret(ctx)
 
@@ -6662,6 +6950,8 @@ fn compile_pure_stmt ctx ps
         list_set(get(ctx, 10), 0, saved_stack)
         list_set(ctx, 18, saved_vnames)
         list_set(ctx, 19, saved_vtypes)
+        list_set(ctx, 25, saved_regs)
+        list_set(get(ctx, 26), 0, saved_has_reg)
 
         label_define(ctx, lbl_skip)
         return 0
@@ -6821,7 +7111,11 @@ fn compile_pure_stmt ctx ps
         off = scope_add(ctx, name)
         if struct_find(ctx, type_ann) >= 0
             struct_set_var_type(ctx, name, type_ann)
-        x86_mov_stack_rax(ctx, off)
+        reg_id = scope_get_reg(ctx, name)
+        if reg_id > 0
+            x86_mov_reg_reg(ctx, reg_id, 0)
+        else
+            x86_mov_stack_rax(ctx, off)
         return 0
 
     // Variable assignment: name = expr
@@ -6854,7 +7148,33 @@ fn compile_pure_stmt ctx ps
         t_r2 = ps_peek_tok(ps, 2)
         t_r3 = ps_peek_tok(ps, 3)
         off = scope_get(ctx, name)
-        if off > 0 and off <= 128 and tok_t(t_r0) == TOK_IDENT and tok_s(t_r0) == name
+        reg_id = scope_get_reg(ctx, name)
+        if reg_id > 0 and tok_t(t_r0) == TOK_IDENT and tok_s(t_r0) == name
+            if tok_t(t_r1) == TOK_OP and (tok_s(t_r1) == "+" or tok_s(t_r1) == "-")
+                if tok_t(t_r2) == TOK_INT
+                    if tok_t(t_r3) == TOK_NL or tok_t(t_r3) == TOK_EOF or tok_t(t_r3) == TOK_DEDENT
+                        imm_v = tok_i(t_r2)
+                        if imm_v == 1
+                            ps_adv(ps)
+                            ps_adv(ps)
+                            ps_adv(ps)
+                            if tok_s(t_r1) == "+"
+                                x86_inc_reg(ctx, reg_id)
+                            else
+                                x86_dec_reg(ctx, reg_id)
+                            scope_set_type(ctx, name, TY_INT)
+                            return 0
+                        elif imm_v >= 0 and imm_v <= 127
+                            ps_adv(ps)
+                            ps_adv(ps)
+                            ps_adv(ps)
+                            if tok_s(t_r1) == "+"
+                                x86_add_reg_imm8(ctx, reg_id, imm_v)
+                            else
+                                x86_sub_reg_imm8(ctx, reg_id, imm_v)
+                            scope_set_type(ctx, name, TY_INT)
+                            return 0
+        elif off > 0 and off <= 128 and tok_t(t_r0) == TOK_IDENT and tok_s(t_r0) == name
             if tok_t(t_r1) == TOK_OP and (tok_s(t_r1) == "+" or tok_s(t_r1) == "-")
                 if tok_t(t_r2) == TOK_INT
                     if tok_t(t_r3) == TOK_NL or tok_t(t_r3) == TOK_EOF or tok_t(t_r3) == TOK_DEDENT
@@ -6878,7 +7198,11 @@ fn compile_pure_stmt ctx ps
         off = scope_add(ctx, name)
         if rhs_struct != ""
             struct_set_var_type(ctx, name, rhs_struct)
-        x86_mov_stack_rax(ctx, off)
+        reg_id = scope_get_reg(ctx, name)
+        if reg_id > 0
+            x86_mov_reg_reg(ctx, reg_id, 0)
+        else
+            x86_mov_stack_rax(ctx, off)
         if is_int_c == 1
             push(get(ctx, 12), name)
             push(get(ctx, 13), int_c_val)
@@ -6896,6 +7220,33 @@ fn compile_pure_stmt ctx ps
         ps_adv(ps) // ident
         ps_adv(ps) // op
         off = scope_add(ctx, name)
+        reg_id = scope_get_reg(ctx, name)
+        if reg_id > 0
+            if ps_cur_type(ps) == TOK_INT
+                imm_c = ps_cur_int(ps)
+                if imm_c == 1
+                    ps_adv(ps)
+                    if char_at(cop, 0) == "+"
+                        x86_inc_reg(ctx, reg_id)
+                    else
+                        x86_dec_reg(ctx, reg_id)
+                    scope_set_type(ctx, name, TY_INT)
+                    return 0
+                elif imm_c >= 0 and imm_c <= 127
+                    ps_adv(ps)
+                    if char_at(cop, 0) == "+"
+                        x86_add_reg_imm8(ctx, reg_id, imm_c)
+                    else
+                        x86_sub_reg_imm8(ctx, reg_id, imm_c)
+                    scope_set_type(ctx, name, TY_INT)
+                    return 0
+            expr_ty = compile_pure_expr(ctx, ps)
+            if char_at(cop, 0) == "+"
+                x86_add_reg_rax(ctx, reg_id)
+            else
+                x86_sub_reg_rax(ctx, reg_id)
+            scope_set_type(ctx, name, TY_INT)
+            return 0
         // WHY: Peephole optimization for compound immediate: name += imm8 / -= imm8
         if ps_cur_type(ps) == TOK_INT and off <= 128
             imm_c = ps_cur_int(ps)
@@ -6913,6 +7264,20 @@ fn compile_pure_stmt ctx ps
                 return 0
 
         expr_ty = compile_pure_expr(ctx, ps)
+        // WHY: Peephole optimization for compound variable assignment: name += expr / -= expr
+        //      Emits single-instruction memory ALU: addq/subq %rax, -off(%rbp)
+        //      Eliminates 3 instructions and 2 memory roundtrips.
+        if (expr_ty == TY_INT or scope_get_type(ctx, name) == TY_INT) and off <= 128
+            bb_put8(ctx, 72)
+            if char_at(cop, 0) == "+"
+                bb_put8(ctx, 1) // 0x01: addq %rax, -off(%rbp)
+            else
+                bb_put8(ctx, 41) // 0x29: subq %rax, -off(%rbp)
+            bb_put8(ctx, 69)     // ModR/M 0x45: [rbp - off]
+            bb_put8(ctx, 256 - off)
+            scope_set_type(ctx, name, TY_INT)
+            return 0
+
         x86_mov_reg_reg(ctx, 3, 0) // rbx = rhs
         x86_mov_rax_stack(ctx, off) // rax = lhs
         if char_at(cop, 0) == "+"
@@ -6932,10 +7297,289 @@ fn compile_pure_stmt ctx ps
     compile_pure_expr(ctx, ps)
     return 0
 
+// ── DWARF v4 Encoding Primitives ─────────────────────────────────────────────
+// WHY: LEB128 (Little-Endian Base 128) variable-length encoding mandated by DWARF v4 standard.
+fn leb128_encode_u val
+    res = list()
+    v = val
+    while 1 == 1
+        b = v % 128
+        v = floor(v / 128)
+        if v != 0
+            b = b + 128
+            push(res, b)
+        else
+            push(res, b)
+            break
+    return res
+
+fn leb128_encode_s val
+    res = list()
+    v = val
+    more = 1
+    while more == 1
+        b = v % 128
+        if b < 0
+            b = b + 128
+        v = floor(v / 128)
+        sign_bit = 0
+        if b >= 64
+            sign_bit = 1
+        if (v == 0 and sign_bit == 0) or (v == -1 and sign_bit == 1)
+            more = 0
+        else
+            b = b + 128
+        push(res, b)
+    return res
+
+// WHY: Constructs a standards-compliant DWARF v4 .debug_line section from recorded statement line numbers.
+fn build_dwarf_debug_line ctx file_name
+    if len(ctx) <= 27 return list()
+    lines = get(ctx, 27)
+    if len(lines) == 0 return list()
+
+    matrix = list()
+    // Standard virtual text load address: ELF_BASE_VADDR (0x400000) + 120 (0x78)
+    base_vaddr = 4194304 + 120
+
+    first_entry = get(lines, 0)
+    first_off  = get(first_entry, 0)
+    first_line = get(first_entry, 1)
+
+    // DW_LNE_set_address (Extended opcode 2, 8 bytes addr)
+    push(matrix, 0)
+    push(matrix, 9)
+    push(matrix, 2)
+    vaddr = base_vaddr + first_off
+    push(matrix, vaddr % 256)
+    push(matrix, floor(vaddr / 256) % 256)
+    push(matrix, floor(vaddr / 65536) % 256)
+    push(matrix, floor(vaddr / 16777216) % 256)
+    push(matrix, 0)
+    push(matrix, 0)
+    push(matrix, 0)
+    push(matrix, 0)
+
+    ldelta = first_line - 1
+    if ldelta != 0
+        push(matrix, 3) // DW_LNS_advance_line
+        sleb = leb128_encode_s(ldelta)
+        si = 0
+        while si < len(sleb)
+            push(matrix, get(sleb, si))
+            si = si + 1
+
+    push(matrix, 1) // DW_LNS_copy
+
+    prev_off  = first_off
+    prev_line = first_line
+
+    li = 1
+    while li < len(lines)
+        entry = get(lines, li)
+        cur_off  = get(entry, 0)
+        cur_line = get(entry, 1)
+
+        addr_delta = cur_off - prev_off
+        line_delta = cur_line - prev_line
+
+        if addr_delta > 0
+            push(matrix, 2) // DW_LNS_advance_pc
+            uleb = leb128_encode_u(addr_delta)
+            ui = 0
+            while ui < len(uleb)
+                push(matrix, get(uleb, ui))
+                ui = ui + 1
+
+        if line_delta != 0
+            push(matrix, 3) // DW_LNS_advance_line
+            sleb = leb128_encode_s(line_delta)
+            si = 0
+            while si < len(sleb)
+                push(matrix, get(sleb, si))
+                si = si + 1
+
+        push(matrix, 1) // DW_LNS_copy
+
+        prev_off  = cur_off
+        prev_line = cur_line
+        li = li + 1
+
+    // DW_LNE_end_sequence: 0, 1, 1
+    push(matrix, 0)
+    push(matrix, 1)
+    push(matrix, 1)
+
+    // Standard DWARF v4 header
+    std_op_lens = list(0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1)
+    hdr_body = list()
+    push(hdr_body, 1)   // min_inst_length
+    push(hdr_body, 1)   // max_ops_per_inst (DWARF 4)
+    push(hdr_body, 1)   // default_is_stmt
+    push(hdr_body, 251) // line_base = -5
+    push(hdr_body, 14)  // line_range
+    push(hdr_body, 13)  // opcode_base
+    oi = 0
+    while oi < len(std_op_lens)
+        push(hdr_body, get(std_op_lens, oi))
+        oi = oi + 1
+
+    push(hdr_body, 0) // include directory table: empty
+
+    // File names table
+    clean_fn = file_name
+    if len(clean_fn) == 0
+        clean_fn = "source.lp"
+    fni = 0
+    while fni < len(clean_fn)
+        push(hdr_body, ord(char_at(clean_fn, fni)))
+        fni = fni + 1
+    push(hdr_body, 0)
+    push(hdr_body, 0) // dir_index: 0
+    push(hdr_body, 0) // mod_time: 0
+    push(hdr_body, 0) // file_len: 0
+    push(hdr_body, 0) // end of file table
+
+    hdr_len = len(hdr_body)
+
+    res = list()
+    unit_len = 2 + 4 + hdr_len + len(matrix)
+    push(res, unit_len % 256)
+    push(res, floor(unit_len / 256) % 256)
+    push(res, floor(unit_len / 65536) % 256)
+    push(res, floor(unit_len / 16777216) % 256)
+
+    // DWARF Version 4
+    push(res, 4)
+    push(res, 0)
+
+    // Header length
+    push(res, hdr_len % 256)
+    push(res, floor(hdr_len / 256) % 256)
+    push(res, floor(hdr_len / 65536) % 256)
+    push(res, floor(hdr_len / 16777216) % 256)
+
+    hbi = 0
+    while hbi < len(hdr_body)
+        push(res, get(hdr_body, hbi))
+        hbi = hbi + 1
+
+    mi = 0
+    while mi < len(matrix)
+        push(res, get(matrix, mi))
+        mi = mi + 1
+
+    return res
+
+// WHY: Emits 64-byte ELF64 Section Header Structure
+fn emit_elf64_shdr list_out name_idx sh_type sh_flags sh_addr sh_offset sh_size sh_link sh_info sh_addralign sh_entsize
+    push(list_out, name_idx % 256)
+    push(list_out, floor(name_idx / 256) % 256)
+    push(list_out, floor(name_idx / 65536) % 256)
+    push(list_out, floor(name_idx / 16777216) % 256)
+
+    push(list_out, sh_type % 256)
+    push(list_out, floor(sh_type / 256) % 256)
+    push(list_out, floor(sh_type / 65536) % 256)
+    push(list_out, floor(sh_type / 16777216) % 256)
+
+    push(list_out, sh_flags % 256)
+    push(list_out, floor(sh_flags / 256) % 256)
+    push(list_out, floor(sh_flags / 65536) % 256)
+    push(list_out, floor(sh_flags / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
+    push(list_out, sh_addr % 256)
+    push(list_out, floor(sh_addr / 256) % 256)
+    push(list_out, floor(sh_addr / 65536) % 256)
+    push(list_out, floor(sh_addr / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
+    push(list_out, sh_offset % 256)
+    push(list_out, floor(sh_offset / 256) % 256)
+    push(list_out, floor(sh_offset / 65536) % 256)
+    push(list_out, floor(sh_offset / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
+    push(list_out, sh_size % 256)
+    push(list_out, floor(sh_size / 256) % 256)
+    push(list_out, floor(sh_size / 65536) % 256)
+    push(list_out, floor(sh_size / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
+    push(list_out, sh_link % 256)
+    push(list_out, floor(sh_link / 256) % 256)
+    push(list_out, floor(sh_link / 65536) % 256)
+    push(list_out, floor(sh_link / 16777216) % 256)
+
+    push(list_out, sh_info % 256)
+    push(list_out, floor(sh_info / 256) % 256)
+    push(list_out, floor(sh_info / 65536) % 256)
+    push(list_out, floor(sh_info / 16777216) % 256)
+
+    push(list_out, sh_addralign % 256)
+    push(list_out, floor(sh_addralign / 256) % 256)
+    push(list_out, floor(sh_addralign / 65536) % 256)
+    push(list_out, floor(sh_addralign / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
+    push(list_out, sh_entsize % 256)
+    push(list_out, floor(sh_entsize / 256) % 256)
+    push(list_out, floor(sh_entsize / 65536) % 256)
+    push(list_out, floor(sh_entsize / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
 // ── Build Final ELF64 Binary File ─────────────────────────────────────────────
 fn build_and_write_pure_elf ctx out_path
     code_bb = ctx_bb(ctx)
-    total_size = ELF_HEADER_SIZE + len(code_bb)
+    code_len = len(code_bb)
+
+    src_file = "source.lp"
+    if len(ctx) > 28
+        s_candidate = get(get(ctx, 28), 0)
+        if len(s_candidate) > 0
+            src_file = s_candidate
+
+    dbg_bytes = build_dwarf_debug_line(ctx, src_file)
+    has_dwarf = 0
+    if len(dbg_bytes) > 0
+        has_dwarf = 1
+
+    text_offset = 120 // 64 (ELF Header) + 56 (Program Header)
+    dbg_offset = text_offset + code_len
+    shstrtab = list(0, 46, 116, 101, 120, 116, 0, 46, 100, 101, 98, 117, 103, 95, 108, 105, 110, 101, 0, 46, 115, 104, 115, 116, 114, 116, 97, 98, 0)
+    shstrtab_offset = dbg_offset + len(dbg_bytes)
+    sh_offset = shstrtab_offset + len(shstrtab)
+
+    shdrs = list()
+    if has_dwarf == 1
+        emit_elf64_shdr(shdrs, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        emit_elf64_shdr(shdrs, 1, 1, 6, ELF_BASE_VADDR + text_offset, text_offset, code_len, 0, 0, 16, 0)
+        emit_elf64_shdr(shdrs, 7, 1, 0, 0, dbg_offset, len(dbg_bytes), 0, 0, 1, 0)
+        emit_elf64_shdr(shdrs, 19, 3, 0, 0, shstrtab_offset, len(shstrtab), 0, 0, 1, 0)
+
+    total_size = ELF_HEADER_SIZE + code_len
+    if has_dwarf == 1
+        total_size = sh_offset + len(shdrs)
+
     elf = list()
 
     // 1. ELF64 Header (64 bytes)
@@ -6982,15 +7626,25 @@ fn build_and_write_pure_elf ctx out_path
     push(elf, 0)
     push(elf, 0)
 
-    // e_shoff: 0
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // e_shoff (8 bytes)
+    if has_dwarf == 1
+        push(elf, sh_offset % 256)
+        push(elf, floor(sh_offset / 256) % 256)
+        push(elf, floor(sh_offset / 65536) % 256)
+        push(elf, floor(sh_offset / 16777216) % 256)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+    else
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
+        push(elf, 0)
 
     // e_flags: 0
     push(elf, 0)
@@ -7010,17 +7664,29 @@ fn build_and_write_pure_elf ctx out_path
     push(elf, 1)
     push(elf, 0)
 
-    // e_shentsize: 0
-    push(elf, 0)
-    push(elf, 0)
+    // e_shentsize: 64 if has_dwarf else 0
+    if has_dwarf == 1
+        push(elf, 64)
+        push(elf, 0)
+    else
+        push(elf, 0)
+        push(elf, 0)
 
-    // e_shnum: 0
-    push(elf, 0)
-    push(elf, 0)
+    // e_shnum: 4 if has_dwarf else 0
+    if has_dwarf == 1
+        push(elf, 4)
+        push(elf, 0)
+    else
+        push(elf, 0)
+        push(elf, 0)
 
-    // e_shstrndx: 0
-    push(elf, 0)
-    push(elf, 0)
+    // e_shstrndx: 3 if has_dwarf else 0
+    if has_dwarf == 1
+        push(elf, 3)
+        push(elf, 0)
+    else
+        push(elf, 0)
+        push(elf, 0)
 
     // 2. Program Header Table (56 bytes, PT_LOAD)
     // p_type: PT_LOAD (1)
@@ -7102,6 +7768,23 @@ fn build_and_write_pure_elf ctx out_path
     while cbi < cblen
         push(elf, get(code_bb, cbi))
         cbi = cbi + 1
+
+    if has_dwarf == 1
+        // Append .debug_line bytes
+        dbi = 0
+        while dbi < len(dbg_bytes)
+            push(elf, get(dbg_bytes, dbi))
+            dbi = dbi + 1
+        // Append .shstrtab bytes
+        sti = 0
+        while sti < len(shstrtab)
+            push(elf, get(shstrtab, sti))
+            sti = sti + 1
+        // Append Section Headers Table
+        shi = 0
+        while shi < len(shdrs)
+            push(elf, get(shdrs, shi))
+            shi = shi + 1
 
     // 4. Write binary directly to disk and apply chmod 0755
     res = file_write_bytes(out_path, elf)
@@ -7384,6 +8067,8 @@ fn compile_source_to_elf in_path out_path
     tokens = tokenize_pure(src)
     ps = ps_new(tokens)
     ctx = ctx_new()
+    if len(ctx) > 28
+        list_set(get(ctx, 28), 0, in_path)
 
     // Step 1: Emit baremetal runtime syscall stubs
     emit_runtime_stubs(ctx)
@@ -7392,6 +8077,10 @@ fn compile_source_to_elf in_path out_path
     label_define(ctx, "lipi_main")
     x86_push_rbp(ctx)
     x86_mov_rbp_rsp(ctx)
+    x86_push_reg(ctx, 12)
+    x86_push_reg(ctx, 13)
+    x86_push_reg(ctx, 14)
+    list_set(get(ctx, 10), 0, 32)
     // WHY: Expands main script stack frame headroom to 64KB (8,192 local slots) for comprehensive end-to-end test suites
     x86_sub_rsp(ctx, 65536) // Local stack frame
 
@@ -7416,10 +8105,34 @@ fn compile_source_to_elf in_path out_path
         x86_mov_reg_reg(ctx, 7, 0) // rdi = argc (int)
         x86_pop_reg(ctx, 6)        // rsi = argv list
         x86_call(ctx, main_target)
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 117)
+        bb_put8(ctx, 232) // mov r14, [rbp - 24]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 109)
+        bb_put8(ctx, 240) // mov r13, [rbp - 16]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 101)
+        bb_put8(ctx, 248) // mov r12, [rbp - 8]
         x86_leave(ctx)
         x86_ret(ctx)
     else
         x86_mov_reg_imm64(ctx, 0, 0) // exit 0
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 117)
+        bb_put8(ctx, 232) // mov r14, [rbp - 24]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 109)
+        bb_put8(ctx, 240) // mov r13, [rbp - 16]
+        bb_put8(ctx, 76)
+        bb_put8(ctx, 139)
+        bb_put8(ctx, 101)
+        bb_put8(ctx, 248) // mov r12, [rbp - 8]
         x86_leave(ctx)
         x86_ret(ctx)
 
