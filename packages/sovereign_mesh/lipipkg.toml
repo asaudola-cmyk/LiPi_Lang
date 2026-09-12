@@ -1,0 +1,14 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: sovereign_mesh
+# ==============================================================================
+
+name = "sovereign_mesh"
+version = "1.0.0"
+description = "Enterprise Peer-to-Peer Sovereign Mesh Protocol and Distributed Routing Engine"
+author = "Shafiullah (Lipi Sovereign Team)"
+license = "MIT Sovereign"
+main = "src/mesh.lp"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi Universe

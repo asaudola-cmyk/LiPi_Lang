@@ -1,0 +1,16 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.manifest)
+# ==============================================================================
+
+[package]
+name = "sovereign_mesh"
+version = "1.0.0"
+edition = "2026"
+entry = "src/mesh.lp"
+author = "Shafiullah"
+license = "MIT"
+target = "x86_64-linux-sovereign"
+
+[files]
+main = "src/mesh.lp"
+tests = "tests/test_mesh.lp"

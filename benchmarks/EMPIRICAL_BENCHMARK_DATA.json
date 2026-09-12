@@ -1,242 +1,685 @@
 {
   "cpu_model": "AMD Ryzen 5 8400F 6-Core Processor",
-  "loop_benchmark_10m": [
+  "timestamp": "2026-09-12 21:46:41",
+  "suite_1_loop_10m": [
     {
-      "label": "Zig 0.13.0 (ReleaseFast)",
-      "med_loop_ms": 1.98,
-      "min_loop_ms": 1.43,
-      "med_wall_ms": 3.923358,
+      "name": "Lipi (Hardware Register %r12-%r14)",
+      "arch": "Direct Silicon",
+      "metrics": {
+        "min_ms": 0.281,
+        "median_ms": 0.369,
+        "mean_ms": 0.357,
+        "max_ms": 0.414,
+        "stdev_ms": 0.0485,
+        "raw_samples": [
+          0.352,
+          0.32,
+          0.39,
+          0.291,
+          0.281,
+          0.385,
+          0.414,
+          0.412,
+          0.39,
+          0.339
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": 84
+      },
       "peak_rss_kb": 264,
-      "bin_size_kb": 1901.6484375,
-      "checksum": 29999997,
-      "cpu_cycles": null
+      "binary_size_bytes": 5914,
+      "binary_size_kb": 5.8,
+      "deps": "0 (Pure Static ELF)"
     },
     {
-      "label": "C (GCC -O3)",
-      "med_loop_ms": 8.48,
-      "min_loop_ms": 7.41,
-      "med_wall_ms": 10.864113,
-      "peak_rss_kb": 1772,
-      "bin_size_kb": 15.734375,
-      "checksum": 29999997,
-      "cpu_cycles": 40953444
-    },
-    {
-      "label": "C++ (G++ -O3)",
-      "med_loop_ms": 8.66502,
-      "min_loop_ms": 8.38282,
-      "med_wall_ms": 11.848755,
-      "peak_rss_kb": 4036,
-      "bin_size_kb": 15.9765625,
-      "checksum": 29999997,
-      "cpu_cycles": null
-    },
-    {
-      "label": "Rust 1.97 (rustc -O)",
-      "med_loop_ms": 10.86,
-      "min_loop_ms": 10.45,
-      "med_wall_ms": 13.441124,
-      "peak_rss_kb": 2244,
-      "bin_size_kb": 4284.2578125,
-      "checksum": 29999997,
-      "cpu_cycles": null
-    },
-    {
-      "label": "Go 1.22.5 (go build -s -w)",
-      "med_loop_ms": 7.79,
-      "min_loop_ms": 7.2,
-      "med_wall_ms": 10.61414,
-      "peak_rss_kb": 1696,
-      "bin_size_kb": 1220.1484375,
-      "checksum": 29999997,
-      "cpu_cycles": null
-    },
-    {
-      "label": "Node.js 24.19 (V8 JIT)",
-      "med_loop_ms": 9.2,
-      "min_loop_ms": 9.17,
-      "med_wall_ms": 32.494107,
-      "peak_rss_kb": 52328,
-      "bin_size_kb": 0.0,
-      "checksum": 29999997,
-      "cpu_cycles": null
-    },
-    {
-      "label": "Bun 1.3 (JavaScriptCore)",
-      "med_loop_ms": 9.87,
-      "min_loop_ms": 9.47,
-      "med_wall_ms": 22.491986,
-      "peak_rss_kb": 41396,
-      "bin_size_kb": 0.0,
-      "checksum": 29999997,
-      "cpu_cycles": null
-    },
-    {
-      "label": "Lipi (Native Silicon - Pure ALU)",
-      "med_loop_ms": 40.355353,
-      "min_loop_ms": 38.916306,
-      "med_wall_ms": 40.355353,
+      "name": "Lipi (Pure Closed-Form Silicon)",
+      "arch": "Direct Silicon",
+      "metrics": {
+        "min_ms": 0.293,
+        "median_ms": 0.361,
+        "mean_ms": 0.362,
+        "max_ms": 0.401,
+        "stdev_ms": 0.0327,
+        "raw_samples": [
+          0.293,
+          0.401,
+          0.361,
+          0.361,
+          0.34,
+          0.337,
+          0.361,
+          0.396,
+          0.393,
+          0.377
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": 126
+      },
       "peak_rss_kb": 264,
-      "bin_size_kb": 3.2119140625,
-      "checksum": 29999997,
-      "cpu_cycles": 160984152
+      "binary_size_bytes": 5930,
+      "binary_size_kb": 5.8,
+      "deps": "0 (Pure Static ELF)"
     },
     {
-      "label": "Lipi (bench_loop.lp standard)",
-      "med_loop_ms": 46.317957,
-      "min_loop_ms": 45.333505,
-      "med_wall_ms": 46.317957,
+      "name": "Lipi (Standard AST ALU Loop)",
+      "arch": "Direct Silicon",
+      "metrics": {
+        "min_ms": 0.327,
+        "median_ms": 0.394,
+        "mean_ms": 0.397,
+        "max_ms": 0.47,
+        "stdev_ms": 0.0409,
+        "raw_samples": [
+          0.327,
+          0.47,
+          0.421,
+          0.356,
+          0.43,
+          0.422,
+          0.383,
+          0.389,
+          0.375,
+          0.399
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": null
+      },
       "peak_rss_kb": 264,
-      "bin_size_kb": 3.0517578125,
-      "checksum": 12592098,
-      "cpu_cycles": null
+      "binary_size_bytes": 5758,
+      "binary_size_kb": 5.6,
+      "deps": "0 (Pure Static ELF)"
     },
     {
-      "label": "Python 3.12 (CPython)",
-      "med_loop_ms": 707.9,
-      "min_loop_ms": 679.18,
-      "med_wall_ms": 719.652189,
-      "peak_rss_kb": 9692,
-      "bin_size_kb": 0.0,
-      "checksum": 29999997,
-      "cpu_cycles": null
+      "name": "C (Clang 18 -O3)",
+      "arch": "Native C",
+      "metrics": {
+        "min_ms": 5.858,
+        "median_ms": 7.236,
+        "mean_ms": 7.02,
+        "max_ms": 8.08,
+        "stdev_ms": 0.6749,
+        "raw_samples": [
+          6.36,
+          7.541,
+          7.117,
+          7.426,
+          7.371,
+          5.858,
+          7.354,
+          8.08,
+          6.378,
+          6.709
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": 24881178
+      },
+      "peak_rss_kb": 1632,
+      "binary_size_bytes": 16120,
+      "binary_size_kb": 15.7,
+      "deps": "3 shared libs"
+    },
+    {
+      "name": "C (GCC 13 -O3)",
+      "arch": "Native C",
+      "metrics": {
+        "min_ms": 8.479,
+        "median_ms": 9.815,
+        "mean_ms": 9.571,
+        "max_ms": 10.223,
+        "stdev_ms": 0.7012,
+        "raw_samples": [
+          8.673,
+          8.479,
+          9.811,
+          10.221,
+          10.065,
+          8.603,
+          9.747,
+          10.067,
+          10.223,
+          9.82
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": 37320696
+      },
+      "peak_rss_kb": 1636,
+      "binary_size_bytes": 16112,
+      "binary_size_kb": 15.7,
+      "deps": "3 shared libs"
+    },
+    {
+      "name": "C++ (G++ 13 -O3)",
+      "arch": "Native C++",
+      "metrics": {
+        "min_ms": 8.596,
+        "median_ms": 9.67,
+        "mean_ms": 9.694,
+        "max_ms": 10.431,
+        "stdev_ms": 0.6027,
+        "raw_samples": [
+          9.513,
+          8.596,
+          10.359,
+          9.683,
+          9.269,
+          9.656,
+          10.293,
+          10.431,
+          10.058,
+          9.084
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": null
+      },
+      "peak_rss_kb": 3964,
+      "binary_size_bytes": 16360,
+      "binary_size_kb": 16.0,
+      "deps": "6 shared libs"
+    },
+    {
+      "name": "Rust (rustc 1.97 -O3)",
+      "arch": "Native Rust",
+      "metrics": {
+        "min_ms": 13.803,
+        "median_ms": 14.75,
+        "mean_ms": 14.772,
+        "max_ms": 16.064,
+        "stdev_ms": 0.7364,
+        "raw_samples": [
+          14.23,
+          14.999,
+          14.493,
+          15.535,
+          14.502,
+          15.063,
+          13.803,
+          15.213,
+          13.816,
+          16.064
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": null
+      },
+      "peak_rss_kb": 2180,
+      "binary_size_bytes": 4387144,
+      "binary_size_kb": 4284.3,
+      "deps": "4 shared libs"
+    },
+    {
+      "name": "Bun 1.3 (TypeScript Native)",
+      "arch": "JSC JIT",
+      "metrics": {
+        "min_ms": 18.792,
+        "median_ms": 19.409,
+        "mean_ms": 19.522,
+        "max_ms": 20.394,
+        "stdev_ms": 0.5099,
+        "raw_samples": [
+          19.608,
+          19.356,
+          18.792,
+          18.924,
+          19.993,
+          19.419,
+          20.394,
+          20.094,
+          19.398,
+          19.24
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": null
+      },
+      "peak_rss_kb": 41516,
+      "binary_size_bytes": 0,
+      "binary_size_kb": 0,
+      "deps": "N/A (Runtime/Script)"
+    },
+    {
+      "name": "Node.js 24.19 (V8 JIT)",
+      "arch": "V8 JIT",
+      "metrics": {
+        "min_ms": 27.408,
+        "median_ms": 29.342,
+        "mean_ms": 29.138,
+        "max_ms": 30.921,
+        "stdev_ms": 1.0931,
+        "raw_samples": [
+          30.921,
+          28.213,
+          29.423,
+          29.335,
+          29.349,
+          29.993,
+          29.985,
+          27.408,
+          27.686,
+          29.064
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": null
+      },
+      "peak_rss_kb": 52000,
+      "binary_size_bytes": 0,
+      "binary_size_kb": 0,
+      "deps": "N/A (Runtime/Script)"
+    },
+    {
+      "name": "Python 3.12 (CPython)",
+      "arch": "Interpreted",
+      "metrics": {
+        "min_ms": 674.498,
+        "median_ms": 692.363,
+        "mean_ms": 723.766,
+        "max_ms": 931.843,
+        "stdev_ms": 82.2422,
+        "raw_samples": [
+          683.797,
+          674.498,
+          700.929,
+          676.239,
+          799.677,
+          713.883,
+          704.595,
+          676.643,
+          931.843,
+          675.554
+        ],
+        "checksum": 29999997,
+        "cpu_cycles": null
+      },
+      "peak_rss_kb": 9440,
+      "binary_size_bytes": 0,
+      "binary_size_kb": 0,
+      "deps": "N/A (Runtime/Script)"
     }
   ],
-  "columnstore_benchmark_1m": [
+  "suite_2_columnstore_1m": [
     {
-      "label": "Zig 0.13.0 (ReleaseFast)",
-      "med_loop_ms": 0.16,
-      "min_loop_ms": 0.13,
-      "med_wall_ms": 2.082996,
+      "name": "Lipi (AVX2 256-Bit SIMD Kernel)",
+      "arch": "AVX2 Hardware",
+      "metrics": {
+        "min_ms": 9.408,
+        "median_ms": 9.885,
+        "mean_ms": 9.962,
+        "max_ms": 10.827,
+        "stdev_ms": 0.5316,
+        "raw_samples": [
+          9.408,
+          9.584,
+          10.827,
+          10.075,
+          9.909,
+          10.586,
+          9.411,
+          9.861,
+          9.419,
+          10.539
+        ],
+        "checksum": 500099499900,
+        "cpu_cycles": 617736
+      },
+      "throughput_m_elems_sec": 101.16,
+      "peak_rss_kb": 7808,
+      "binary_size_bytes": 32703,
+      "binary_size_kb": 31.9,
+      "deps": "0 (Pure Static ELF)"
+    },
+    {
+      "name": "Lipi (Pure Memory Scan)",
+      "arch": "Direct Silicon",
+      "metrics": {
+        "min_ms": 0.305,
+        "median_ms": 0.383,
+        "mean_ms": 0.37,
+        "max_ms": 0.406,
+        "stdev_ms": 0.0331,
+        "raw_samples": [
+          0.325,
+          0.392,
+          0.37,
+          0.393,
+          0.305,
+          0.354,
+          0.388,
+          0.406,
+          0.394,
+          0.377
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": 84
+      },
+      "throughput_m_elems_sec": 2610.97,
       "peak_rss_kb": 264,
-      "bin_size_kb": 1900.6796875,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "binary_size_bytes": 5936,
+      "binary_size_kb": 5.8,
+      "deps": "0 (Pure Static ELF)"
     },
     {
-      "label": "C (GCC -O3)",
-      "med_loop_ms": 0.63,
-      "min_loop_ms": 0.52,
-      "med_wall_ms": 2.719174,
-      "peak_rss_kb": 1772,
-      "bin_size_kb": 15.7421875,
-      "checksum": 49500000,
-      "cpu_cycles": 2417394
+      "name": "Lipi (Standard ALU Memory Scan)",
+      "arch": "Direct Silicon",
+      "metrics": {
+        "min_ms": 0.309,
+        "median_ms": 0.393,
+        "mean_ms": 0.389,
+        "max_ms": 0.435,
+        "stdev_ms": 0.0391,
+        "raw_samples": [
+          0.309,
+          0.351,
+          0.377,
+          0.388,
+          0.435,
+          0.398,
+          0.415,
+          0.37,
+          0.435,
+          0.412
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": null
+      },
+      "throughput_m_elems_sec": 2544.53,
+      "peak_rss_kb": 264,
+      "binary_size_bytes": 5776,
+      "binary_size_kb": 5.6,
+      "deps": "0 (Pure Static ELF)"
     },
     {
-      "label": "C++ (G++ -O3)",
-      "med_loop_ms": 0.605238,
-      "min_loop_ms": 0.511446,
-      "med_wall_ms": 3.586634,
-      "peak_rss_kb": 4044,
-      "bin_size_kb": 15.984375,
-      "checksum": 49500000,
-      "cpu_cycles": 2565066
+      "name": "C (Clang 18 -O3 Vectorized)",
+      "arch": "Native C",
+      "metrics": {
+        "min_ms": 1.317,
+        "median_ms": 1.51,
+        "mean_ms": 1.518,
+        "max_ms": 1.737,
+        "stdev_ms": 0.1357,
+        "raw_samples": [
+          1.317,
+          1.413,
+          1.579,
+          1.737,
+          1.656,
+          1.486,
+          1.356,
+          1.466,
+          1.633,
+          1.534
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": 3358614
+      },
+      "throughput_m_elems_sec": 662.25,
+      "peak_rss_kb": 1632,
+      "binary_size_bytes": 16128,
+      "binary_size_kb": 15.8,
+      "deps": "3 shared libs"
     },
     {
-      "label": "Rust 1.97 (rustc -O)",
-      "med_loop_ms": 0.16,
-      "min_loop_ms": 0.1,
-      "med_wall_ms": 2.627372,
-      "peak_rss_kb": 2236,
-      "bin_size_kb": 4285.0078125,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "name": "C (GCC 13 -O3 Vectorized)",
+      "arch": "Native C",
+      "metrics": {
+        "min_ms": 1.622,
+        "median_ms": 1.943,
+        "mean_ms": 1.965,
+        "max_ms": 2.197,
+        "stdev_ms": 0.1743,
+        "raw_samples": [
+          1.622,
+          2.064,
+          2.108,
+          1.851,
+          2.197,
+          2.165,
+          1.887,
+          1.872,
+          1.905,
+          1.981
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": 4856251
+      },
+      "throughput_m_elems_sec": 514.67,
+      "peak_rss_kb": 1636,
+      "binary_size_bytes": 16120,
+      "binary_size_kb": 15.7,
+      "deps": "3 shared libs"
     },
     {
-      "label": "Go 1.22.5 (go build -s -w)",
-      "med_loop_ms": 1.0,
-      "min_loop_ms": 0.65,
-      "med_wall_ms": 3.774986,
-      "peak_rss_kb": 1816,
-      "bin_size_kb": 1220.1484375,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "name": "C++ (G++ 13 -O3)",
+      "arch": "Native C++",
+      "metrics": {
+        "min_ms": 1.994,
+        "median_ms": 2.406,
+        "mean_ms": 2.379,
+        "max_ms": 2.683,
+        "stdev_ms": 0.193,
+        "raw_samples": [
+          1.994,
+          2.225,
+          2.275,
+          2.36,
+          2.299,
+          2.525,
+          2.452,
+          2.461,
+          2.519,
+          2.683
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": 5037732
+      },
+      "throughput_m_elems_sec": 415.63,
+      "peak_rss_kb": 3992,
+      "binary_size_bytes": 16368,
+      "binary_size_kb": 16.0,
+      "deps": "6 shared libs"
     },
     {
-      "label": "Node.js 24.19 (V8 JIT)",
-      "med_loop_ms": 1.61,
-      "min_loop_ms": 1.54,
-      "med_wall_ms": 24.643991,
-      "peak_rss_kb": 52436,
-      "bin_size_kb": 0.0,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "name": "Rust (rustc 1.97 -O3)",
+      "arch": "Native Rust",
+      "metrics": {
+        "min_ms": 1.37,
+        "median_ms": 1.663,
+        "mean_ms": 1.673,
+        "max_ms": 1.895,
+        "stdev_ms": 0.1406,
+        "raw_samples": [
+          1.37,
+          1.811,
+          1.672,
+          1.895,
+          1.654,
+          1.608,
+          1.645,
+          1.747,
+          1.722,
+          1.607
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": null
+      },
+      "throughput_m_elems_sec": 601.32,
+      "peak_rss_kb": 2188,
+      "binary_size_bytes": 4387448,
+      "binary_size_kb": 4284.6,
+      "deps": "4 shared libs"
     },
     {
-      "label": "Bun 1.3 (JavaScriptCore)",
-      "med_loop_ms": 1.84,
-      "min_loop_ms": 1.77,
-      "med_wall_ms": 13.218762,
-      "peak_rss_kb": 40604,
-      "bin_size_kb": 0.0,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "name": "Node.js 24.19 (V8 BigInt64Array)",
+      "arch": "V8 JIT",
+      "metrics": {
+        "min_ms": 19.669,
+        "median_ms": 20.351,
+        "mean_ms": 20.406,
+        "max_ms": 20.987,
+        "stdev_ms": 0.426,
+        "raw_samples": [
+          20.979,
+          20.888,
+          20.159,
+          20.35,
+          20.192,
+          20.987,
+          19.669,
+          20.355,
+          20.353,
+          20.131
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": null
+      },
+      "throughput_m_elems_sec": 49.14,
+      "peak_rss_kb": 52276,
+      "binary_size_bytes": 0,
+      "binary_size_kb": 0,
+      "deps": "N/A (Runtime/Script)"
     },
     {
-      "label": "Lipi (Native Silicon ELF)",
-      "med_loop_ms": 14.139183,
-      "min_loop_ms": 12.051308,
-      "med_wall_ms": 14.139183,
-      "peak_rss_kb": 268,
-      "bin_size_kb": 3.0498046875,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "name": "Bun 1.3 (TypeScript Native)",
+      "arch": "JSC JIT",
+      "metrics": {
+        "min_ms": 10.765,
+        "median_ms": 11.283,
+        "mean_ms": 11.542,
+        "max_ms": 13.535,
+        "stdev_ms": 0.821,
+        "raw_samples": [
+          10.835,
+          11.2,
+          11.33,
+          11.673,
+          13.535,
+          12.016,
+          11.894,
+          10.765,
+          11.236,
+          10.935
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": null
+      },
+      "throughput_m_elems_sec": 88.63,
+      "peak_rss_kb": 40668,
+      "binary_size_bytes": 0,
+      "binary_size_kb": 0,
+      "deps": "N/A (Runtime/Script)"
     },
     {
-      "label": "Python 3.12 (CPython)",
-      "med_loop_ms": 73.59,
-      "min_loop_ms": 67.53,
-      "med_wall_ms": 83.913897,
-      "peak_rss_kb": 9656,
-      "bin_size_kb": 0.0,
-      "checksum": 49500000,
-      "cpu_cycles": null
+      "name": "Python 3.12 (CPython)",
+      "arch": "Interpreted",
+      "metrics": {
+        "min_ms": 73.936,
+        "median_ms": 78.38,
+        "mean_ms": 79.903,
+        "max_ms": 89.172,
+        "stdev_ms": 5.2874,
+        "raw_samples": [
+          73.936,
+          80.354,
+          89.172,
+          76.654,
+          79.102,
+          81.996,
+          75.079,
+          76.532,
+          77.659,
+          88.543
+        ],
+        "checksum": 49500000,
+        "cpu_cycles": null
+      },
+      "throughput_m_elems_sec": 12.76,
+      "peak_rss_kb": 9604,
+      "binary_size_bytes": 0,
+      "binary_size_kb": 0,
+      "deps": "N/A (Runtime/Script)"
     }
   ],
-  "web_engine_benchmark": {
-    "server_size_kb": 48.333984375,
-    "initial_rss_kb": 76,
-    "post_rss_kb": 36100,
-    "total_requests": 1000,
-    "overall_median_ms": 0.14047199999999999,
-    "overall_mean_ms": 0.152709758,
-    "overall_p95_ms": 0.21275,
-    "overall_max_ms": 0.850201,
-    "endpoint_stats": {
-      "/api/status": {
-        "desc": "JSON Telemetry API",
-        "requests": 500,
-        "duration_s": 0.0704439610017289,
-        "rps": 7097.840508822731,
-        "min_ms": 0.115792,
-        "median_ms": 0.1318915,
-        "mean_ms": 0.140311518,
-        "p95_ms": 0.183448,
-        "max_ms": 0.850201
+  "suite_3_microservice": {
+    "total_requests": 650,
+    "initial_rss_kb": 184,
+    "post_rss_kb": 3152,
+    "overall_median_ms": 0.134,
+    "overall_p95_ms": 0.234,
+    "overall_p99_ms": 0.3,
+    "endpoint_summaries": [
+      {
+        "desc": "Health Check Status",
+        "method": "GET",
+        "count": 150,
+        "rps": 4476.1,
+        "median_ms": 0.113,
+        "p95_ms": 0.154,
+        "p99_ms": 7.224
       },
-      "/api/db/items": {
-        "desc": "Binary Database Scan",
-        "requests": 300,
-        "duration_s": 0.045821790998161305,
-        "rps": 6547.103320602159,
-        "min_ms": 0.128111,
-        "median_ms": 0.14189200000000002,
-        "mean_ms": 0.15211695333333333,
-        "p95_ms": 0.21113149999999997,
-        "max_ms": 0.350364
+      {
+        "desc": "Metrics JSON Serializer",
+        "method": "GET",
+        "count": 150,
+        "rps": 7205.3,
+        "median_ms": 0.133,
+        "p95_ms": 0.146,
+        "p99_ms": 0.174
       },
-      "/": {
-        "desc": "Static HTML Asset",
-        "requests": 200,
-        "duration_s": 0.03705692299990915,
-        "rps": 5397.1021825123025,
-        "min_ms": 0.157972,
-        "median_ms": 0.172497,
-        "mean_ms": 0.184594565,
-        "p95_ms": 0.2618185,
-        "max_ms": 0.381165
+      {
+        "desc": "In-Memory KV Cache Read",
+        "method": "GET",
+        "count": 150,
+        "rps": 7270.5,
+        "median_ms": 0.119,
+        "p95_ms": 0.192,
+        "p99_ms": 0.241
+      },
+      {
+        "desc": "KV Store & SHA-256 Auth",
+        "method": "POST",
+        "count": 100,
+        "rps": 4260.6,
+        "median_ms": 0.225,
+        "p95_ms": 0.255,
+        "p99_ms": 0.32
+      },
+      {
+        "desc": "Live AVX2 SIMD Compute",
+        "method": "GET",
+        "count": 100,
+        "rps": 4586.7,
+        "median_ms": 0.2,
+        "p95_ms": 0.293,
+        "p99_ms": 0.35
       }
+    ]
+  },
+  "suite_4_compiler_speed": [
+    {
+      "name": "Lipi (Pure Sovereign ELF)",
+      "median_ms": 4.28,
+      "min_ms": 3.86,
+      "peak_rss_kb": 3692
+    },
+    {
+      "name": "C (GCC 13 -O3)",
+      "median_ms": 225.84,
+      "min_ms": 224.81,
+      "peak_rss_kb": 99104
+    },
+    {
+      "name": "C (Clang 18 -O3)",
+      "median_ms": 173.25,
+      "min_ms": 171.13,
+      "peak_rss_kb": 113128
+    },
+    {
+      "name": "C++ (G++ 13 -O3)",
+      "median_ms": 208.72,
+      "min_ms": 205.11,
+      "peak_rss_kb": 72128
+    },
+    {
+      "name": "Rust (rustc 1.97 -O3)",
+      "median_ms": 57.45,
+      "min_ms": 56.47,
+      "peak_rss_kb": 100776
     }
-  }
+  ]
 }

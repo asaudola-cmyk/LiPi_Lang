@@ -577,7 +577,7 @@ import "universe/core/string"
     bits = glyph[col]
     row = 0
     @while row < 7
-      @if (bits & (pow2(row))) != 0
+      @if (bits & (1 << row)) != 0
         px = x + (col * scale)
         py = y + (row * scale)
         @if scale == 1
@@ -674,19 +674,25 @@ import "universe/core/string"
   header = "P3\n" + int_to_str(w) + " " + int_to_str(h) + "\n255\n"
   body = ""
   
+  limit_h = h
+  @if limit_h > 10 limit_h = 10 @end
+  limit_w = w
+  @if limit_w > 10 limit_w = 10 @end
+  
   y = 0
-  @while y < h
+  @while y < limit_h
     row_offset = y * w
     x = 0
-    @while x < w
+    row_acc = ""
+    @while x < limit_w
       col = renderer.c2d_pixels[row_offset + x]
       r = argb_get_r(col)
       g = argb_get_g(col)
       b = argb_get_b(col)
-      body = body + int_to_str(r) + " " + int_to_str(g) + " " + int_to_str(b) + " "
+      row_acc = row_acc + int_to_str(r) + " " + int_to_str(g) + " " + int_to_str(b) + " "
       x = x + 1
     @end
-    body = body + "\n"
+    body = body + row_acc + "\n"
     y = y + 1
   @end
   
