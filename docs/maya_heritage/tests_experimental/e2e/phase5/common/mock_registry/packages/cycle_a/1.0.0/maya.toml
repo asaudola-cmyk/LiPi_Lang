@@ -1,8 +1,0 @@
-[package]
-name = "cycle_a"
-version = "1.0.0"
-edition = "2026"
-description = "Mock package cycle_a version 1.0.0 for MPM testing"
-
-[dependencies]
-cycle_b = "^1.0.0"

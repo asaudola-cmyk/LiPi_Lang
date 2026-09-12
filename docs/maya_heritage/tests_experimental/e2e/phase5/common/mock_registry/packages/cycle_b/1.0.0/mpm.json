@@ -1,9 +1,0 @@
-{
-  "name": "cycle_b",
-  "version": "1.0.0",
-  "edition": "2026",
-  "description": "Mock package cycle_b version 1.0.0 for MPM testing",
-  "dependencies": {
-    "cycle_a": "^1.0.0"
-  }
-}

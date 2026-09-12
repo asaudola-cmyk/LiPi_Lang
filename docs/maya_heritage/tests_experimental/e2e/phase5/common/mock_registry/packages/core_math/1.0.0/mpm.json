@@ -1,7 +1,0 @@
-{
-  "name": "core_math",
-  "version": "1.0.0",
-  "edition": "2026",
-  "description": "Mock package core_math version 1.0.0 for MPM testing",
-  "dependencies": {}
-}

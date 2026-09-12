@@ -1,8 +1,0 @@
-[package]
-name = "dep_left"
-version = "1.0.0"
-edition = "2026"
-description = "Mock package dep_left version 1.0.0 for MPM testing"
-
-[dependencies]
-shared_leaf = "^1.0.0"

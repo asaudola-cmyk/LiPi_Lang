@@ -1,7 +1,0 @@
-{
-  "name": "crypto_utils",
-  "version": "1.0.0",
-  "edition": "2026",
-  "description": "Mock package crypto_utils version 1.0.0 for MPM testing",
-  "dependencies": {}
-}

@@ -1,9 +1,0 @@
-{
-  "name": "math_stats",
-  "version": "1.0.0",
-  "edition": "2026",
-  "description": "Mock package math_stats version 1.0.0 for MPM testing",
-  "dependencies": {
-    "core_math": "^1.0.0"
-  }
-}

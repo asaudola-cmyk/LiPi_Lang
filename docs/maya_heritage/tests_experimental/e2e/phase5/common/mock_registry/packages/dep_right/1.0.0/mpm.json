@@ -1,9 +1,0 @@
-{
-  "name": "dep_right",
-  "version": "1.0.0",
-  "edition": "2026",
-  "description": "Mock package dep_right version 1.0.0 for MPM testing",
-  "dependencies": {
-    "shared_leaf": "^1.2.0"
-  }
-}
