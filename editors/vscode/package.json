@@ -67,6 +67,23 @@
         "path": "./snippets/lipi.json"
       }
     ],
+    "commands": [
+      {
+        "command": "lipi.restartLsp",
+        "title": "Lipi: Restart Language Server (lipilsp)",
+        "category": "Lipi"
+      },
+      {
+        "command": "lipi.runFile",
+        "title": "Lipi: Run Active File in Terminal",
+        "category": "Lipi"
+      },
+      {
+        "command": "lipi.buildFile",
+        "title": "Lipi: Build Executable Binary",
+        "category": "Lipi"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "Lipi Language Server",

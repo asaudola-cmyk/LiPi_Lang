@@ -151,6 +151,11 @@ echo -e "${YELLOW}[৪] গ্রাব (GRUB 2) কনফিগারেশন 
 cat << 'GRUB_CFG_EOF' > "${GRUB_CFG}"
 set timeout=0
 set default=0
+# WHY: Configure dual terminal for headless cloud microVMs (COM1 serial 115200) and physical monitors (VGA console)
+serial --unit=0 --speed=115200
+terminal_input serial console
+terminal_output serial console
+
 menuentry "Lipi Sovereign Operating System (লিপি ওএস)" {
     multiboot /boot/kernel.elf
     boot
@@ -205,10 +210,11 @@ if [ "${DO_QEMU_TEST}" = true ]; then
     if ! command -v qemu-system-x86_64 &>/dev/null; then
         echo -e "${RED}❌ সতর্কতা: QEMU (qemu-system-x86_64) ইনস্টল করা নেই, বুট পরীক্ষা বাদ দেওয়া হলো।${NC}"
     else
-        echo "  ► কমান্ড: timeout 5s qemu-system-x86_64 -cdrom ${ISO_OUTPUT} -m 128M -display none"
+        echo "  ► কমান্ড: timeout 5s qemu-system-x86_64 -cdrom ${ISO_OUTPUT} -m 2048M -display none"
         # WHY: In headless execution, a running kernel does not exit. timeout returns 124 on normal termination.
+        # 2048M ensures guest physical memory covers the 0x40000000 ELF load address.
         set +e
-        timeout 5s qemu-system-x86_64 -cdrom "${ISO_OUTPUT}" -m 128M -display none 2>/dev/null
+        timeout 5s qemu-system-x86_64 -cdrom "${ISO_OUTPUT}" -m 2048M -display none 2>/dev/null
         QEMU_STATUS=$?
         set -e
         if [ ${QEMU_STATUS} -eq 124 ] || [ ${QEMU_STATUS} -eq 0 ]; then

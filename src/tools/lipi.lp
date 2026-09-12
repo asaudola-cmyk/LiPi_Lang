@@ -190,7 +190,7 @@ fn handle_convert file_path to_syntax
 fn handle_os action
     if action == "boot"
         say "⚡ QEMU হাইপারভাইজারে Lipi-OS লাইভ বুট চালানো হচ্ছে..."
-        return spawn_exec_cmd("qemu-system-x86_64", "-cdrom", "dist/lipi-os.iso", "-m", "512M")
+        return spawn_exec_cmd("bash", "scripts/boot_qemu.sh", "--iso", "--test", "")
     else
         say "⚡ Lipi-OS বুটেবল হাইব্রিড আইএসও (5.1MB) তৈরি হচ্ছে..."
         return spawn_exec_cmd("bash", "scripts/build_iso.sh", "", "", "")
