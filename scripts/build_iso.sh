@@ -37,7 +37,8 @@ cd "${PROJECT_ROOT}"
 
 KERNEL_SRC="tests/41_baremetal_multiboot_kernel.lp"
 KERNEL_ELF="dist/kernel.elf"
-STAGING_DIR="iso_staging"
+STAGING_DIR="$(mktemp -d /tmp/iso_staging_XXXXXX)"
+trap 'rm -rf "${STAGING_DIR}"' EXIT
 GRUB_CFG="${STAGING_DIR}/boot/grub/grub.cfg"
 ISO_OUTPUT="dist/lipi-os.iso"
 

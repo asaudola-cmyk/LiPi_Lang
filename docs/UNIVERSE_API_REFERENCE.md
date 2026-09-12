@@ -284,5 +284,5 @@ Any English keyword or function in Universe can be interchanged with its canonic
 
 ---
 
-> *Generated autonomously by Lipi Sovereign DocGen Engine (`tools/universe_docgen.lp`).*
+> *Generated autonomously by Lipi Sovereign DocGen Engine (`scripts/universe_docgen.lp`).*
 > *100% Pure Lipi Machine Code Engine | 0% Libc | 0% Python | 0% C.*

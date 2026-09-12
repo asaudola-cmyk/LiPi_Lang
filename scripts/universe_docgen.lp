@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE SOVEREIGN DOCUMENTATION GENERATOR (tools/universe_docgen.lp)
+// 👑 LIPI UNIVERSE SOVEREIGN DOCUMENTATION GENERATOR (scripts/universe_docgen.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | 0% C | 0% Libc | 0% Python
 // ==============================================================================
 //
@@ -296,14 +296,14 @@ import "universe/core/io"
     d = d + "| `str_lower()` | `ছোট_অক্ষর()` | String Case |\n"
     d = d + "| `str_trim()` | `ছাঁটাই()` | String Cleaning |\n\n"
     d = d + "---\n\n"
-    d = d + "> *Generated autonomously by Lipi Sovereign DocGen Engine (`tools/universe_docgen.lp`).*\n"
+    d = d + "> *Generated autonomously by Lipi Sovereign DocGen Engine (`scripts/universe_docgen.lp`).*\n"
     d = d + "> *100% Pure Lipi Machine Code Engine | 0% Libc | 0% Python | 0% C.*\n"
     return d
 @end
 
 @fn main()
     say "=================================================================="
-    say "  📖 LIPI UNIVERSE SOVEREIGN DOCGEN ENGINE (tools/universe_docgen.lp)"
+    say "  📖 LIPI UNIVERSE SOVEREIGN DOCGEN ENGINE (scripts/universe_docgen.lp)"
     say "  ⚡ 100% Pure Sovereign Lipi Machine Code | Zero Libc | Zero Python"
     say "=================================================================="
 
