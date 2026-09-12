@@ -417,9 +417,9 @@ import "universe/core/math"
   min_height: i64
   max_width: i64
   max_height: i64
-  padding: EdgeInsets
-  margin: EdgeInsets
-  border_width: EdgeInsets
+  padding: i64
+  margin: i64
+  border_width: i64
   gap: i64
   row_gap: i64
   column_gap: i64
@@ -466,9 +466,9 @@ import "universe/core/math"
     min_height: 0,
     max_width: 999999,
     max_height: 999999,
-    padding: edge_insets_zero(),
-    margin: edge_insets_zero(),
-    border_width: edge_insets_zero(),
+    padding: 0,
+    margin: 0,
+    border_width: 0,
     gap: 0,
     row_gap: 0,
     column_gap: 0,

@@ -130,7 +130,7 @@ import "universe/web/frontend/layout/layout_types"
   is_text: bool
   text_content: string
   attributes: array         @! Array of MarkupAttribute
-  style: MarkupStyle
+  style: i64
   children: array           @! Array of MarkupNode
   raw_style_str: string
   class_names: array        @! Array of string

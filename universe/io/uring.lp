@@ -332,6 +332,28 @@ import "universe/os/syscalls"
   return ring
 @end
 
+@fn io_uring_prep_nop(ring, tag)
+  tail = ring.sq_tail
+  idx = tail % ring.entries
+
+  sqe = {
+    opcode: 0, @! IORING_OP_NOP
+    flags: 0,
+    ioprio: 0,
+    fd: 0 - 1,
+    offset: 0,
+    addr: 0,
+    nbytes: 0,
+    op_flags: 0,
+    sqe_tag: tag
+  }
+
+  ring.sqes = list_set(ring.sqes, idx, sqe)
+  io_uring_write_raw_sqe(ring.sqes_ptr, idx, sqe)
+  ring.sq_tail = tail + 1
+  return ring
+@end
+
 @! ============================================================================
 @! 5. BATCH SUBMISSION & CQE EVENT REAPING
 @! ============================================================================
