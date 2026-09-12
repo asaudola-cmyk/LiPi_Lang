@@ -309,6 +309,26 @@ fn scope_set_reg ctx name reg_id
         i = i + 1
     return 0
 
+// WHY: Scan active registers in current function scope to find first free callee-saved register (%r12-%r14)
+// Enables zero-keyword auto-register promotion for hot loop counters and accumulators.
+fn scope_find_free_reg ctx
+    if len(ctx) <= 25 return 0
+    regs = get(ctx, 25)
+    has12 = 0
+    has13 = 0
+    has14 = 0
+    ri = 0
+    while ri < len(regs)
+        r = get(regs, ri)
+        if r == 12 has12 = 1
+        elif r == 13 has13 = 1
+        elif r == 14 has14 = 1
+        ri = ri + 1
+    if has12 == 0 return 12
+    if has13 == 0 return 13
+    if has14 == 0 return 14
+    return 0
+
 fn scope_add ctx name
     existing = scope_get(ctx, name)
     if existing != 0 return existing
@@ -603,6 +623,40 @@ fn x86_mov_rax_stack ctx offset
         bb_put8(ctx, 72)  // 0x48
         bb_put8(ctx, 139) // 0x8B
         bb_put8(ctx, 133) // 0x85
+        bb_put32(ctx, disp)
+
+// WHY: Load stack offset [rbp - offset] into any hardware register (e.g. %r12-%r14)
+fn x86_mov_reg_stack ctx reg offset
+    disp = 0 - offset
+    rex = 72
+    if reg >= 8 rex = 76
+    reg_idx = reg % 8
+    if disp >= -128 and disp <= 127
+        bb_put8(ctx, rex)
+        bb_put8(ctx, 139) // 0x8B
+        bb_put8(ctx, 69 + (reg_idx * 8))
+        bb_put8(ctx, disp)
+    else
+        bb_put8(ctx, rex)
+        bb_put8(ctx, 139) // 0x8B
+        bb_put8(ctx, 133 + (reg_idx * 8))
+        bb_put32(ctx, disp)
+
+// WHY: Store hardware register (e.g. %r12-%r14) into stack offset [rbp - offset]
+fn x86_mov_stack_reg ctx offset reg
+    disp = 0 - offset
+    rex = 72
+    if reg >= 8 rex = 76
+    reg_idx = reg % 8
+    if disp >= -128 and disp <= 127
+        bb_put8(ctx, rex)
+        bb_put8(ctx, 137) // 0x89
+        bb_put8(ctx, 69 + (reg_idx * 8))
+        bb_put8(ctx, disp)
+    else
+        bb_put8(ctx, rex)
+        bb_put8(ctx, 137) // 0x89
+        bb_put8(ctx, 133 + (reg_idx * 8))
         bb_put32(ctx, disp)
 
 fn x86_lea_reg_rip ctx reg label_name
@@ -3304,6 +3358,68 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 117); bb_put8(ctx, 244)
     bb_put8(ctx, 197); bb_put8(ctx, 248); bb_put8(ctx, 119) // vzeroupper
     bb_put8(ctx, 195)                                       // ret
+
+    // ── Native CPUID Feature Probing Intrinsics ──────────────────────────────
+    // WHY: In-silicon feature detection protects against illegal instruction (SIGILL) traps.
+    // Querying CPUID leaf 7, subleaf 0 directly on hardware without OS or C library reliance.
+    label_define(ctx, "lipi_fn_cpu_has_avx512")
+    label_define(ctx, "lipi_fn_cpu_has_avx512f")
+    label_define(ctx, "lipi_fn_cpuid_avx512")
+    // push rbx; mov eax, 7; xor ecx, ecx; cpuid; shr ebx, 16; and ebx, 1; mov eax, ebx; pop rbx; ret
+    bb_put8(ctx, 83); bb_put8(ctx, 184); bb_put8(ctx, 7); bb_put8(ctx, 0); bb_put8(ctx, 0); bb_put8(ctx, 0); bb_put8(ctx, 49); bb_put8(ctx, 201)
+    bb_put8(ctx, 15); bb_put8(ctx, 162); bb_put8(ctx, 193); bb_put8(ctx, 235); bb_put8(ctx, 16); bb_put8(ctx, 131); bb_put8(ctx, 227); bb_put8(ctx, 1)
+    bb_put8(ctx, 137); bb_put8(ctx, 216); bb_put8(ctx, 91); bb_put8(ctx, 195)
+
+    label_define(ctx, "lipi_fn_cpu_has_avx2")
+    label_define(ctx, "lipi_fn_cpuid_avx2")
+    // push rbx; mov eax, 7; xor ecx, ecx; cpuid; shr ebx, 5; and ebx, 1; mov eax, ebx; pop rbx; ret
+    bb_put8(ctx, 83); bb_put8(ctx, 184); bb_put8(ctx, 7); bb_put8(ctx, 0); bb_put8(ctx, 0); bb_put8(ctx, 0); bb_put8(ctx, 49); bb_put8(ctx, 201)
+    bb_put8(ctx, 15); bb_put8(ctx, 162); bb_put8(ctx, 193); bb_put8(ctx, 235); bb_put8(ctx, 5); bb_put8(ctx, 131); bb_put8(ctx, 227); bb_put8(ctx, 1)
+    bb_put8(ctx, 137); bb_put8(ctx, 216); bb_put8(ctx, 91); bb_put8(ctx, 195)
+
+    // ── AVX-512 512-Bit Silicon Vector Sum Intrinsic ─────────────────────────
+    // WHY: Processes 8x 64-bit integers (64 bytes) per instruction across 512-bit ZMM registers.
+    // Signature: simd_avx512_sum_u64(ptr, count) -> sum (u64)
+    label_define(ctx, "lipi_fn_simd_avx512_sum_u64")
+    label_define(ctx, "lipi_fn_simd_avx512_sum")
+    label_define(ctx, "lipi_fn_ভেক্টর_যোগ_৫১২")
+    bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 246); bb_put8(ctx, 126); bb_put8(ctx, 89); bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 255)
+    bb_put8(ctx, 116); bb_put8(ctx, 84); bb_put8(ctx, 98); bb_put8(ctx, 241); bb_put8(ctx, 125); bb_put8(ctx, 72); bb_put8(ctx, 239); bb_put8(ctx, 192)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 254); bb_put8(ctx, 8); bb_put8(ctx, 124); bb_put8(ctx, 16); bb_put8(ctx, 98); bb_put8(ctx, 241)
+    bb_put8(ctx, 253); bb_put8(ctx, 72); bb_put8(ctx, 212); bb_put8(ctx, 7); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199); bb_put8(ctx, 64)
+    bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 238); bb_put8(ctx, 8); bb_put8(ctx, 235); bb_put8(ctx, 234); bb_put8(ctx, 98); bb_put8(ctx, 243)
+    bb_put8(ctx, 253); bb_put8(ctx, 72); bb_put8(ctx, 59); bb_put8(ctx, 193); bb_put8(ctx, 1); bb_put8(ctx, 197); bb_put8(ctx, 253); bb_put8(ctx, 212)
+    bb_put8(ctx, 193); bb_put8(ctx, 196); bb_put8(ctx, 227); bb_put8(ctx, 125); bb_put8(ctx, 57); bb_put8(ctx, 193); bb_put8(ctx, 1); bb_put8(ctx, 197)
+    bb_put8(ctx, 249); bb_put8(ctx, 212); bb_put8(ctx, 193); bb_put8(ctx, 197); bb_put8(ctx, 241); bb_put8(ctx, 115); bb_put8(ctx, 216); bb_put8(ctx, 8)
+    bb_put8(ctx, 197); bb_put8(ctx, 249); bb_put8(ctx, 212); bb_put8(ctx, 193); bb_put8(ctx, 196); bb_put8(ctx, 225); bb_put8(ctx, 249); bb_put8(ctx, 126)
+    bb_put8(ctx, 192); bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 246); bb_put8(ctx, 126); bb_put8(ctx, 12); bb_put8(ctx, 72); bb_put8(ctx, 3)
+    bb_put8(ctx, 7); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199); bb_put8(ctx, 8); bb_put8(ctx, 72); bb_put8(ctx, 255); bb_put8(ctx, 206)
+    bb_put8(ctx, 117); bb_put8(ctx, 244); bb_put8(ctx, 197); bb_put8(ctx, 248); bb_put8(ctx, 119); bb_put8(ctx, 195); bb_put8(ctx, 72); bb_put8(ctx, 49)
+    bb_put8(ctx, 192); bb_put8(ctx, 195)
+
+    // ── AVX-512 512-Bit Silicon Vector Dot Product Intrinsic ──────────────────
+    // WHY: Hardware Silicon Dot Product (GEMM kernel step) via 512-bit ZMM execution.
+    // Signature: simd_avx512_dot_u64(ptr_a, ptr_b, count) -> dot_product (u64)
+    label_define(ctx, "lipi_fn_simd_avx512_dot_u64")
+    label_define(ctx, "lipi_fn_simd_avx512_dot")
+    label_define(ctx, "lipi_fn_ভেক্টর_ডট_৫১২")
+    bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 210); bb_put8(ctx, 126); bb_put8(ctx, 121); bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 255)
+    bb_put8(ctx, 116); bb_put8(ctx, 116); bb_put8(ctx, 72); bb_put8(ctx, 133); bb_put8(ctx, 246); bb_put8(ctx, 116); bb_put8(ctx, 111); bb_put8(ctx, 98)
+    bb_put8(ctx, 241); bb_put8(ctx, 125); bb_put8(ctx, 72); bb_put8(ctx, 239); bb_put8(ctx, 192); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 250)
+    bb_put8(ctx, 8); bb_put8(ctx, 124); bb_put8(ctx, 32); bb_put8(ctx, 98); bb_put8(ctx, 241); bb_put8(ctx, 254); bb_put8(ctx, 72); bb_put8(ctx, 111)
+    bb_put8(ctx, 15); bb_put8(ctx, 98); bb_put8(ctx, 242); bb_put8(ctx, 245); bb_put8(ctx, 72); bb_put8(ctx, 64); bb_put8(ctx, 14); bb_put8(ctx, 98)
+    bb_put8(ctx, 241); bb_put8(ctx, 253); bb_put8(ctx, 72); bb_put8(ctx, 212); bb_put8(ctx, 193); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199)
+    bb_put8(ctx, 64); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 198); bb_put8(ctx, 64); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 234)
+    bb_put8(ctx, 8); bb_put8(ctx, 235); bb_put8(ctx, 218); bb_put8(ctx, 98); bb_put8(ctx, 243); bb_put8(ctx, 253); bb_put8(ctx, 72); bb_put8(ctx, 59)
+    bb_put8(ctx, 193); bb_put8(ctx, 1); bb_put8(ctx, 197); bb_put8(ctx, 253); bb_put8(ctx, 212); bb_put8(ctx, 193); bb_put8(ctx, 196); bb_put8(ctx, 227)
+    bb_put8(ctx, 125); bb_put8(ctx, 57); bb_put8(ctx, 193); bb_put8(ctx, 1); bb_put8(ctx, 197); bb_put8(ctx, 249); bb_put8(ctx, 212); bb_put8(ctx, 193)
+    bb_put8(ctx, 197); bb_put8(ctx, 241); bb_put8(ctx, 115); bb_put8(ctx, 216); bb_put8(ctx, 8); bb_put8(ctx, 197); bb_put8(ctx, 249); bb_put8(ctx, 212)
+    bb_put8(ctx, 193); bb_put8(ctx, 196); bb_put8(ctx, 225); bb_put8(ctx, 249); bb_put8(ctx, 126); bb_put8(ctx, 192); bb_put8(ctx, 72); bb_put8(ctx, 133)
+    bb_put8(ctx, 210); bb_put8(ctx, 126); bb_put8(ctx, 23); bb_put8(ctx, 76); bb_put8(ctx, 139); bb_put8(ctx, 7); bb_put8(ctx, 76); bb_put8(ctx, 15)
+    bb_put8(ctx, 175); bb_put8(ctx, 6); bb_put8(ctx, 76); bb_put8(ctx, 1); bb_put8(ctx, 192); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 199)
+    bb_put8(ctx, 8); bb_put8(ctx, 72); bb_put8(ctx, 131); bb_put8(ctx, 198); bb_put8(ctx, 8); bb_put8(ctx, 72); bb_put8(ctx, 255); bb_put8(ctx, 202)
+    bb_put8(ctx, 117); bb_put8(ctx, 233); bb_put8(ctx, 197); bb_put8(ctx, 248); bb_put8(ctx, 119); bb_put8(ctx, 195); bb_put8(ctx, 72); bb_put8(ctx, 49)
+    bb_put8(ctx, 192); bb_put8(ctx, 195)
 
     // ── String Pointer Resolution Intrinsics ────────────────────────────────
     // WHY: In Lipi/Maya, string references are pointers. Returns the raw char pointer in rax.
@@ -6670,6 +6786,74 @@ fn compile_pure_stmt ctx ps
             return 0
         lbl_loop = make_anon_label(ctx, "while_loop")
         lbl_end  = make_anon_label(ctx, "while_end")
+
+        // ── Zero-Keyword Auto-Register Promotion for Tight While Loops ─────────
+        // WHY: Automatically promotes loop counters and accumulators into %r12-%r14
+        //      without requiring explicit 'reg' keyword for leaf tight loops (loops without inner function calls).
+        //      This guarantees 0-cycle ALU operations while completely dodging caller-saved and ABI clobbers.
+        promoted_names = list()
+        promoted_regs  = list()
+        promoted_offs  = list()
+
+        tok_arr = get(ps, 0)
+        tok_p   = ps_pos(ps)
+        scan_lim = tok_p + 120
+        if scan_lim > len(tok_arr)
+            scan_lim = len(tok_arr)
+
+        has_inner_call = 0
+        ci = tok_p
+        while ci < scan_lim
+            stk = get(tok_arr, ci)
+            if tok_t(stk) == TOK_LPAREN and ci > tok_p
+                prev_tk = get(tok_arr, ci - 1)
+                if tok_t(prev_tk) == TOK_IDENT
+                    ptxt = tok_s(prev_tk)
+                    if ptxt != "if" and ptxt != "while" and ptxt != "elif" and ptxt != "for" and ptxt != "যতক্ষণ" and ptxt != "যদি"
+                        has_inner_call = 1
+                        break
+            ci = ci + 1
+
+        if has_inner_call == 0
+            cond_var = ps_cur_text(ps)
+            if ps_cur_type(ps) == TOK_IDENT
+                c_off = scope_get(ctx, cond_var)
+                c_reg = scope_get_reg(ctx, cond_var)
+                if c_off > 0 and c_reg == 0
+                    free_r = scope_find_free_reg(ctx)
+                    if free_r > 0
+                        x86_mov_reg_stack(ctx, free_r, c_off)
+                        scope_set_reg(ctx, cond_var, free_r)
+                        push(promoted_names, cond_var)
+                        push(promoted_regs, free_r)
+                        push(promoted_offs, c_off)
+                        if len(ctx) > 26
+                            list_set(get(ctx, 26), 0, 1)
+
+            si = tok_p
+            while si < scan_lim
+                stk = get(tok_arr, si)
+                if tok_t(stk) == TOK_IDENT
+                    sname = tok_s(stk)
+                    if si + 1 < scan_lim
+                        ntk = get(tok_arr, si + 1)
+                        if tok_t(ntk) == TOK_OP
+                            nop = tok_s(ntk)
+                            if nop == "+=" or nop == "-=" or nop == "="
+                                s_off = scope_get(ctx, sname)
+                                s_reg = scope_get_reg(ctx, sname)
+                                if s_off > 0 and s_reg == 0
+                                    free_r = scope_find_free_reg(ctx)
+                                    if free_r > 0
+                                        x86_mov_reg_stack(ctx, free_r, s_off)
+                                        scope_set_reg(ctx, sname, free_r)
+                                        push(promoted_names, sname)
+                                        push(promoted_regs, free_r)
+                                        push(promoted_offs, s_off)
+                                        if len(ctx) > 26
+                                            list_set(get(ctx, 26), 0, 1)
+                si = si + 1
+
         label_define(ctx, lbl_loop)
         compile_pure_expr(ctx, ps)
         bb_put8(ctx, 72)
@@ -6709,6 +6893,17 @@ fn compile_pure_stmt ctx ps
 
         x86_jmp(ctx, lbl_loop)
         label_define(ctx, lbl_end)
+
+        // WHY: Write-Back Sync: Commit register states back to stack frame and recycle registers
+        pi = 0
+        while pi < len(promoted_names)
+            p_name = get(promoted_names, pi)
+            p_reg  = get(promoted_regs, pi)
+            p_off  = get(promoted_offs, pi)
+            x86_mov_stack_reg(ctx, p_off, p_reg)
+            scope_set_reg(ctx, p_name, 0)
+            pi = pi + 1
+
         return 0
 
     // return / ফেরত
@@ -6973,6 +7168,34 @@ fn compile_pure_stmt ctx ps
         scope_set_type(ctx, var_name, TY_INT)
         x86_mov_stack_rax(ctx, var_off)
 
+        // ── Auto-Register Promotion for 'for' Loop Index Variable ──────────────
+        // WHY: Automatically allocates free callee-saved register (%r12-%r14) for loop index in leaf loops
+        has_for_call = 0
+        f_tokens = get(ps, 0)
+        f_p = ps_pos(ps)
+        f_lim = f_p + 100
+        if f_lim > len(f_tokens) f_lim = len(f_tokens)
+        f_ci = f_p
+        while f_ci < f_lim
+            fstk = get(f_tokens, f_ci)
+            if tok_t(fstk) == TOK_LPAREN and f_ci > f_p
+                f_prev = get(f_tokens, f_ci - 1)
+                if tok_t(f_prev) == TOK_IDENT
+                    f_ptxt = tok_s(f_prev)
+                    if f_ptxt != "if" and f_ptxt != "while" and f_ptxt != "elif" and f_ptxt != "for" and f_ptxt != "যতক্ষণ" and f_ptxt != "যদি"
+                        has_for_call = 1
+                        break
+            f_ci = f_ci + 1
+
+        assigned_for_reg = 0
+        if has_for_call == 0
+            assigned_for_reg = scope_find_free_reg(ctx)
+            if assigned_for_reg > 0
+                scope_set_reg(ctx, var_name, assigned_for_reg)
+                x86_mov_reg_reg(ctx, assigned_for_reg, 0)
+                if len(ctx) > 26
+                    list_set(get(ctx, 26), 0, 1)
+
         if ps_cur_type(ps) == TOK_OP and ps_cur_text(ps) == ".."
             ps_adv(ps)
 
@@ -6989,8 +7212,11 @@ fn compile_pure_stmt ctx ps
         loop_push(ctx, lbl_step, lbl_end)
         label_define(ctx, lbl_start)
 
-        x86_mov_rax_stack(ctx, var_off)
-        x86_mov_reg_reg(ctx, 3, 0) // rbx = var
+        if assigned_for_reg > 0
+            x86_mov_reg_reg(ctx, 3, assigned_for_reg) // rbx = var
+        else
+            x86_mov_rax_stack(ctx, var_off)
+            x86_mov_reg_reg(ctx, 3, 0) // rbx = var
         x86_mov_rax_stack(ctx, end_off) // rax = end
         bb_put8(ctx, 72)
         bb_put8(ctx, 57)
@@ -7030,14 +7256,21 @@ fn compile_pure_stmt ctx ps
             compile_pure_stmt(ctx, ps)
 
         label_define(ctx, lbl_step)
-        x86_mov_rax_stack(ctx, var_off)
-        bb_put8(ctx, 72)
-        bb_put8(ctx, 255)
-        bb_put8(ctx, 192) // inc rax (0x48 0xFF 0xC0)
-        x86_mov_stack_rax(ctx, var_off)
+        if assigned_for_reg > 0
+            x86_inc_reg(ctx, assigned_for_reg)
+        else
+            x86_mov_rax_stack(ctx, var_off)
+            bb_put8(ctx, 72)
+            bb_put8(ctx, 255)
+            bb_put8(ctx, 192) // inc rax (0x48 0xFF 0xC0)
+            x86_mov_stack_rax(ctx, var_off)
         x86_jmp(ctx, lbl_start)
 
         label_define(ctx, lbl_end)
+        // WHY: Write-back sync for promoted for-loop index
+        if assigned_for_reg > 0
+            x86_mov_stack_reg(ctx, var_off, assigned_for_reg)
+            scope_set_reg(ctx, var_name, 0)
         loop_pop(ctx)
         return 0
 
@@ -7547,6 +7780,335 @@ fn emit_elf64_shdr list_out name_idx sh_type sh_flags sh_addr sh_offset sh_size 
     push(list_out, 0)
     push(list_out, 0)
     push(list_out, 0)
+
+fn emit_dyn_entry list_out d_tag d_val
+    push(list_out, d_tag % 256)
+    push(list_out, floor(d_tag / 256) % 256)
+    push(list_out, floor(d_tag / 65536) % 256)
+    push(list_out, floor(d_tag / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+
+    push(list_out, d_val % 256)
+    push(list_out, floor(d_val / 256) % 256)
+    push(list_out, floor(d_val / 65536) % 256)
+    push(list_out, floor(d_val / 16777216) % 256)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    push(list_out, 0)
+    return 0
+
+// ── Build Sovereign ELF64 Shared Object (.so, ET_DYN) ────────────────────────
+// WHY: Emits standalone position-independent Linux dynamic library (.so)
+//      with canonical .dynamic, .dynsym, .dynstr, and .hash tables.
+//      Zero GCC, Zero ld, Zero Libc — 100% pure Lipi sovereignty.
+fn build_and_write_pure_so ctx out_path
+    code_bb = ctx_bb(ctx)
+    code_len = len(code_bb)
+
+    lbl_names = get(ctx, 1)
+    lbl_offs  = get(ctx, 2)
+    exp_names = list()
+    exp_offs  = list()
+
+    li = 0
+    while li < len(lbl_names)
+        lname = get(lbl_names, li)
+        if len(lname) > 8
+            prefix = str_sub(lname, 0, 8)
+            if prefix == "lipi_fn_"
+                fn_clean = str_sub(lname, 8, len(lname))
+                if fn_clean != "main" and fn_clean != "প্রধান"
+                    first_c = char_at(fn_clean, 0)
+                    if first_c != "_"
+                        push(exp_names, fn_clean)
+                        push(exp_offs, get(lbl_offs, li))
+                        push(exp_names, lname)
+                        push(exp_offs, get(lbl_offs, li))
+        li = li + 1
+
+    text_offset = 176 // 64 (ELF Header) + 112 (2 Program Headers: PT_LOAD + PT_DYNAMIC)
+
+    dynstr = list(0)
+    dynstr_name_offs = list()
+    ei = 0
+    while ei < len(exp_names)
+        ename = get(exp_names, ei)
+        push(dynstr_name_offs, len(dynstr))
+        ci = 0
+        while ci < len(ename)
+            push(dynstr, ord(char_at(ename, ci)))
+            ci = ci + 1
+        push(dynstr, 0)
+        ei = ei + 1
+    dynstr_len = len(dynstr)
+
+    dynsym = list()
+    zi = 0
+    while zi < 24
+        push(dynsym, 0)
+        zi = zi + 1
+
+    ei = 0
+    while ei < len(exp_names)
+        sname_off = get(dynstr_name_offs, ei)
+        sv_addr   = text_offset + get(exp_offs, ei)
+
+        push(dynsym, sname_off % 256)
+        push(dynsym, floor(sname_off / 256) % 256)
+        push(dynsym, floor(sname_off / 65536) % 256)
+        push(dynsym, floor(sname_off / 16777216) % 256)
+
+        push(dynsym, 18) // STB_GLOBAL (1) << 4 | STT_FUNC (2) = 18
+        push(dynsym, 0)  // STV_DEFAULT
+        push(dynsym, 1)  // st_shndx = 1 (.text)
+        push(dynsym, 0)
+
+        push(dynsym, sv_addr % 256)
+        push(dynsym, floor(sv_addr / 256) % 256)
+        push(dynsym, floor(sv_addr / 65536) % 256)
+        push(dynsym, floor(sv_addr / 16777216) % 256)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+        push(dynsym, 0)
+
+        ei = ei + 1
+
+    num_syms = len(exp_names) + 1
+    dynsym_len = len(dynsym)
+
+    hashtab = list()
+    push(hashtab, 1)
+    push(hashtab, 0)
+    push(hashtab, 0)
+    push(hashtab, 0)
+    push(hashtab, num_syms % 256)
+    push(hashtab, floor(num_syms / 256) % 256)
+    push(hashtab, floor(num_syms / 65536) % 256)
+    push(hashtab, floor(num_syms / 16777216) % 256)
+
+    last_sym = 0
+    if num_syms > 1
+        last_sym = num_syms - 1
+    push(hashtab, last_sym % 256)
+    push(hashtab, floor(last_sym / 256) % 256)
+    push(hashtab, floor(last_sym / 65536) % 256)
+    push(hashtab, floor(last_sym / 16777216) % 256)
+
+    push(hashtab, 0)
+    push(hashtab, 0)
+    push(hashtab, 0)
+    push(hashtab, 0)
+
+    ck = 1
+    while ck < num_syms
+        prev_k = ck - 1
+        push(hashtab, prev_k % 256)
+        push(hashtab, floor(prev_k / 256) % 256)
+        push(hashtab, floor(prev_k / 65536) % 256)
+        push(hashtab, floor(prev_k / 16777216) % 256)
+        ck = ck + 1
+
+    hash_len = len(hashtab)
+
+    dynstr_offset  = text_offset + code_len
+    dynsym_offset  = dynstr_offset + dynstr_len
+    hash_offset    = dynsym_offset + dynsym_len
+    dynamic_offset = hash_offset + hash_len
+
+    dynamic = list()
+    emit_dyn_entry(dynamic, 4, hash_offset)
+    emit_dyn_entry(dynamic, 5, dynstr_offset)
+    emit_dyn_entry(dynamic, 6, dynsym_offset)
+    emit_dyn_entry(dynamic, 10, dynstr_len)
+    emit_dyn_entry(dynamic, 11, 24)
+    emit_dyn_entry(dynamic, 0, 0)
+    dynamic_len = len(dynamic)
+
+    shstrtab = list(0, 46, 116, 101, 120, 116, 0, 46, 100, 121, 110, 115, 121, 109, 0, 46, 100, 121, 110, 115, 116, 114, 0, 46, 104, 97, 115, 104, 0, 46, 100, 121, 110, 97, 109, 105, 99, 0, 46, 115, 104, 115, 116, 114, 116, 97, 98, 0)
+    shstrtab_offset = dynamic_offset + dynamic_len
+    sh_offset = shstrtab_offset + len(shstrtab)
+
+    shdrs = list()
+    emit_elf64_shdr(shdrs, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    emit_elf64_shdr(shdrs, 1, 1, 6, text_offset, text_offset, code_len, 0, 0, 16, 0)
+    emit_elf64_shdr(shdrs, 7, 11, 2, dynsym_offset, dynsym_offset, dynsym_len, 3, 1, 8, 24)
+    emit_elf64_shdr(shdrs, 15, 3, 2, dynstr_offset, dynstr_offset, dynstr_len, 0, 0, 1, 0)
+    emit_elf64_shdr(shdrs, 23, 5, 2, hash_offset, hash_offset, hash_len, 2, 0, 4, 4)
+    emit_elf64_shdr(shdrs, 29, 6, 3, dynamic_offset, dynamic_offset, dynamic_len, 3, 0, 8, 16)
+    emit_elf64_shdr(shdrs, 38, 3, 0, 0, shstrtab_offset, len(shstrtab), 0, 0, 1, 0)
+
+    total_size = sh_offset + len(shdrs)
+    elf = list()
+
+    ident = list(127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    ii = 0
+    while ii < len(ident)
+        push(elf, get(ident, ii))
+        ii = ii + 1
+
+    // e_type: ET_DYN (3)
+    push(elf, 3)
+    push(elf, 0)
+
+    // e_machine: EM_X86_64 (62)
+    push(elf, 62)
+    push(elf, 0)
+
+    // e_version: 1
+    push(elf, 1)
+    push(elf, 0)
+    push(elf, 0)
+    push(elf, 0)
+
+    // e_entry: 0
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+
+    // e_phoff: 64
+    push(elf, 64)
+    push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+
+    // e_shoff: sh_offset
+    push(elf, sh_offset % 256)
+    push(elf, floor(sh_offset / 256) % 256)
+    push(elf, floor(sh_offset / 65536) % 256)
+    push(elf, floor(sh_offset / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+
+    // e_flags: 0
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+
+    // e_ehsize: 64
+    push(elf, 64); push(elf, 0)
+
+    // e_phentsize: 56
+    push(elf, 56); push(elf, 0)
+
+    // e_phnum: 2 (PT_LOAD and PT_DYNAMIC)
+    push(elf, 2); push(elf, 0)
+
+    // e_shentsize: 64
+    push(elf, 64); push(elf, 0)
+
+    // e_shnum: 7
+    push(elf, 7); push(elf, 0)
+
+    // e_shstrndx: 6
+    push(elf, 6); push(elf, 0)
+
+    // Program Header 0: PT_LOAD
+    push(elf, 1); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 7); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, total_size % 256)
+    push(elf, floor(total_size / 256) % 256)
+    push(elf, floor(total_size / 65536) % 256)
+    push(elf, floor(total_size / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    mem_sz = total_size + 4096
+    push(elf, mem_sz % 256)
+    push(elf, floor(mem_sz / 256) % 256)
+    push(elf, floor(mem_sz / 65536) % 256)
+    push(elf, floor(mem_sz / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 16); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+
+    // Program Header 1: PT_DYNAMIC
+    push(elf, 2); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 6); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, dynamic_offset % 256)
+    push(elf, floor(dynamic_offset / 256) % 256)
+    push(elf, floor(dynamic_offset / 65536) % 256)
+    push(elf, floor(dynamic_offset / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, dynamic_offset % 256)
+    push(elf, floor(dynamic_offset / 256) % 256)
+    push(elf, floor(dynamic_offset / 65536) % 256)
+    push(elf, floor(dynamic_offset / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, dynamic_offset % 256)
+    push(elf, floor(dynamic_offset / 256) % 256)
+    push(elf, floor(dynamic_offset / 65536) % 256)
+    push(elf, floor(dynamic_offset / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, dynamic_len % 256)
+    push(elf, floor(dynamic_len / 256) % 256)
+    push(elf, floor(dynamic_len / 65536) % 256)
+    push(elf, floor(dynamic_len / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, dynamic_len % 256)
+    push(elf, floor(dynamic_len / 256) % 256)
+    push(elf, floor(dynamic_len / 65536) % 256)
+    push(elf, floor(dynamic_len / 16777216) % 256)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 8); push(elf, 0); push(elf, 0); push(elf, 0)
+    push(elf, 0); push(elf, 0); push(elf, 0); push(elf, 0)
+
+    // Append machine code
+    ci = 0
+    while ci < code_len
+        push(elf, get(code_bb, ci))
+        ci = ci + 1
+
+    // Append .dynstr
+    di = 0
+    while di < dynstr_len
+        push(elf, get(dynstr, di))
+        di = di + 1
+
+    // Append .dynsym
+    si = 0
+    while si < dynsym_len
+        push(elf, get(dynsym, si))
+        si = si + 1
+
+    // Append .hash
+    hi = 0
+    while hi < hash_len
+        push(elf, get(hashtab, hi))
+        hi = hi + 1
+
+    // Append .dynamic
+    dyi = 0
+    while dyi < dynamic_len
+        push(elf, get(dynamic, dyi))
+        dyi = dyi + 1
+
+    // Append .shstrtab
+    sti = 0
+    while sti < len(shstrtab)
+        push(elf, get(shstrtab, sti))
+        sti = sti + 1
+
+    // Append Section Headers
+    shi = 0
+    while shi < len(shdrs)
+        push(elf, get(shdrs, shi))
+        shi = shi + 1
+
+    res = file_write_bytes(out_path, elf)
+    return res
 
 // ── Build Final ELF64 Binary File ─────────────────────────────────────────────
 fn build_and_write_pure_elf ctx out_path
@@ -8058,7 +8620,7 @@ fn bundle_source file_path visited
     return out
 
 // ── Pure Lipi ELF Compiler Entry Point ────────────────────────────────────────
-fn compile_source_to_elf in_path out_path
+fn compile_source_to_elf in_path out_path is_shared
     if file_exists(in_path) == 0
         say "Error: Input source file not found: " + in_path
         return 1
@@ -8181,8 +8743,11 @@ fn compile_source_to_elf in_path out_path
     // Step 4: Backpatch all jumps, calls, and RIP relocations
     backpatch_all(ctx)
 
-    // Step 5: Wrap in ELF64 and write executable
-    build_and_write_pure_elf(ctx, out_path)
+    // Step 5: Wrap in ELF64 and write executable or shared object
+    if is_shared == 1
+        build_and_write_pure_so(ctx, out_path)
+    else
+        build_and_write_pure_elf(ctx, out_path)
     return 0
 
 // ── Main CLI Driver ───────────────────────────────────────────────────────────
@@ -8192,6 +8757,7 @@ args = argv()
 in_file = ""
 out_file = ""
 target_arch = "x86_64"
+is_shared = 0
 
 i = 1
 while i < len(args)
@@ -8200,6 +8766,8 @@ while i < len(args)
         i = i + 1
         if i < len(args)
             out_file = get(args, i)
+    elif arg == "-shared" or arg == "--shared"
+        is_shared = 1
     elif arg == "--target=arm64" or arg == "--target=aarch64" or arg == "-marm64"
         target_arch = "arm64"
     elif arg == "--target=wasm" or arg == "--target=web" or arg == "-mwasm"
@@ -8213,6 +8781,7 @@ while i < len(args)
         say "⚡ 100% Pure Lipi Source | Zero C | Zero GCC | Zero Libc | Zero Python"
         say "Usage:"
         say "  lipc <input.lp> [-o <output_binary>]                 Compile to Linux x86_64 ELF64"
+        say "  lipc -shared <input.lp> [-o <output.so>]             Compile to Linux Shared Object (.so)"
         say "  lipc --target=arm64 <input.lp> [-o <output_binary>]  Compile to Linux AArch64 (ARM64) ELF64"
         say "  lipc --target=wasm <input.lp> [-o <output_binary>]   Compile to W3C WebAssembly (WASM)"
         say "  lipc --target=x86_64 <input.lp> [-o <output_binary>] Compile to Linux x86_64 ELF64"
@@ -8227,11 +8796,13 @@ while i < len(args)
 
 if in_file == ""
     say "Lipi Pure Sovereign Compiler — First 1.0 (প্রথম ১.০)"
-    say "Usage: lipc [--target=arm64|--target=wasm|--target=x86_64] <input.lp> [-o <output_binary>]"
+    say "Usage: lipc [-shared] [--target=arm64|--target=wasm|--target=x86_64] <input.lp> [-o <output_binary>]"
     exit(1)
 
 if out_file == ""
-    if target_arch == "wasm"
+    if is_shared == 1
+        out_file = in_file + ".so"
+    elif target_arch == "wasm"
         out_file = in_file + ".wasm"
     else
         out_file = in_file + ".bin"
@@ -8251,9 +8822,12 @@ elif target_arch == "wasm"
         say "❌ Failed to compile " + in_file + " for WASM"
         exit(1)
 else
-    res = compile_source_to_elf(in_file, out_file)
+    res = compile_source_to_elf(in_file, out_file, is_shared)
     if res == 0
-        say "✔ Successfully compiled " + in_file + " to " + out_file + " (Pure Lipi ELF)"
+        if is_shared == 1
+            say "✔ Successfully compiled " + in_file + " to " + out_file + " (Pure Lipi Shared Object .so)"
+        else
+            say "✔ Successfully compiled " + in_file + " to " + out_file + " (Pure Lipi ELF)"
     else
         say "❌ Failed to compile " + in_file
         exit(1)
