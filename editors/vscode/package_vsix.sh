@@ -31,6 +31,7 @@ cat <<'EOF' > "${STAGE_DIR}/[Content_Types].xml"
   <Default Extension="txt" ContentType="text/plain" />
   <Default Extension="png" ContentType="image/png" />
   <Default Extension="svg" ContentType="image/svg+xml" />
+  <Default Extension="woff" ContentType="font/woff" />
 </Types>
 EOF
 

@@ -31,6 +31,13 @@
     "onLanguage:lipi"
   ],
   "contributes": {
+    "iconThemes": [
+      {
+        "id": "lipi-icons",
+        "label": "Lipi (লিপি Seti Icons)",
+        "path": "./icons/lipi-icon-theme.json"
+      }
+    ],
     "languages": [
       {
         "id": "lipi",
