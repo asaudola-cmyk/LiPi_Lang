@@ -142,7 +142,30 @@ import "universe/core/string"
   return 1
 @end
 
-// ── ৫. উইন্ডো ম্যানেজার প্রিমিটিভস (Window Chrome & UI Controls) ────────────────
+// ── ৫. লিপির অফিশিয়াল লোগোমার্ক রাস্টারাইজার (Official Lipi Brand Icon) ─────────
+// WHY: ফ্রেমবাফার জিইউআইতে উইন্ডো টাইটেল বার বা সিস্টেম মেনুতে লিপির নিজস্ব L+P
+// মিনিম্যালিস্ট আইকন (সায়ান স্টেম, পিঙ্ক বেস ও গোল্ডেন লুপ) সরাসরি রাস্টারাইজ করা।
+@fn fb_draw_lipi_icon(fb, x, y)
+  @if fb == 0 || fb.is_active == 0 return 0 @end
+  
+  // ব্যাকগ্রাউন্ড অফ-হোয়াইট ক্যানভাস (0x00F4F4F9 = 16053497)
+  fb_fill_rect(fb, x, y, 12, 12, 16053497)
+
+  // স্টেম: L এবং P এর কমন ভার্টিক্যাল বার (সায়ান: #00C2FF = 49919)
+  fb_fill_rect(fb, x + 2, y + 2, 2, 8, 49919)
+
+  // বেস: L-এর অনুভূমিক বেস বার (ম্যাজেন্টা/পিঙ্ক: #FF007A = 16711802)
+  fb_fill_rect(fb, x + 2, y + 8, 6, 2, 16711802)
+
+  // লুপ: P-এর বৃত্তাকার লুপ (গোল্ড/হলুদ: #FFD700 = 16766720)
+  fb_fill_rect(fb, x + 4, y + 2, 4, 2, 16766720)
+  fb_fill_rect(fb, x + 6, y + 4, 2, 2, 16766720)
+  fb_fill_rect(fb, x + 4, y + 5, 3, 1, 16766720)
+
+  return 1
+@end
+
+// ── ৬. উইন্ডো ম্যানেজার প্রিমিটিভস (Window Chrome & UI Controls) ────────────────
 // WHY: অপারেটিং সিস্টেমের মতো টাইটেল বার, ক্লোজ বাটন ও উইন্ডো ফ্রেম তৈরি।
 @fn fb_window_create(fb: LipiFramebuffer, x: i64, y: i64, w: i64, h: i64, title: string)
   @if fb == 0 || fb.is_active == 0 return 0 @end
@@ -167,7 +190,10 @@ import "universe/core/string"
   header_height = 24
   fb_fill_rect(fb, x, y, w, header_height, col_hdr)
 
-  // 4. Draw close button (12x12 red box at top right)
+  // 4. Draw official Lipi Brand Icon at top left of title bar
+  fb_draw_lipi_icon(fb, x + 6, y + 6)
+
+  // 5. Draw close button (12x12 red box at top right)
   close_x = (x + w) - 18
   close_y = y + 6
   fb_fill_rect(fb, close_x, close_y, 12, 12, col_close)

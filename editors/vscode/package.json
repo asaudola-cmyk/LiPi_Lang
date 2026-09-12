@@ -9,6 +9,7 @@
     "url": "https://github.com/shafiullah/lipi"
   },
   "license": "MIT",
+  "icon": "icons/icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },

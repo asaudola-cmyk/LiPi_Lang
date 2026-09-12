@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Dark Slate Canvas for Dark Themes & Terminals -->
+  <rect width="500" height="500" rx="90" fill="#0D1117" stroke="#30363D" stroke-width="4" />
+  
+  <!-- Logo Group with Screen / Normal blend on Dark Canvas -->
+  <g transform="translate(130, 90)">
+    <!-- Vertical Stem -->
+    <rect x="50" y="30" width="60" height="200" rx="30" fill="#00C2FF" opacity="0.9" />
+    
+    <!-- Base (Completes L) -->
+    <rect x="50" y="170" width="150" height="60" rx="30" fill="#FF007A" opacity="0.9" />
+    
+    <!-- Loop (Completes P) -->
+    <circle cx="150" cy="100" r="40" fill="none" stroke="#FFD700" stroke-width="60" opacity="0.9" />
+  </g>
+
+  <!-- High-End Typography for Dark Theme -->
+  <text x="250" y="400" font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="900" fill="#F0F6FC" text-anchor="middle" letter-spacing="8">LiPi</text>
+  <text x="250" y="435" font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700" fill="#8B949E" text-anchor="middle" letter-spacing="4">SOVEREIGN PROGRAMMING LANGUAGE</text>
+</svg>

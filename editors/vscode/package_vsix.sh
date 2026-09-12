@@ -29,6 +29,8 @@ cat <<'EOF' > "${STAGE_DIR}/[Content_Types].xml"
   <Default Extension="js" ContentType="application/javascript" />
   <Default Extension="md" ContentType="text/markdown" />
   <Default Extension="txt" ContentType="text/plain" />
+  <Default Extension="png" ContentType="image/png" />
+  <Default Extension="svg" ContentType="image/svg+xml" />
 </Types>
 EOF
 
@@ -41,6 +43,7 @@ cat <<'EOF' > "${STAGE_DIR}/extension.vsixmanifest"
     <DisplayName>Lipi Sovereign Programming Language</DisplayName>
     <Description>Official Language Support for Lipi 2.0 (Tri-Syntax, Direct Silicon Compiler)</Description>
     <Categories>Programming Languages,Snippets</Categories>
+    <Icon>extension/icons/icon.png</Icon>
   </Metadata>
   <Installation>
     <InstallationTarget Id="Microsoft.VisualStudio.Code" />
@@ -48,6 +51,7 @@ cat <<'EOF' > "${STAGE_DIR}/extension.vsixmanifest"
   <Dependencies />
   <Assets>
     <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true" />
   </Assets>
 </PackageManifest>
 EOF
