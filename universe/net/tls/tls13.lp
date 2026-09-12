@@ -39,6 +39,7 @@
 import "universe/core/collections"
 import "universe/core/string"
 import "universe/crypto/aes"
+import "universe/crypto/x25519"
 
 @struct TlsSession
   state: string
@@ -501,4 +502,156 @@ import "universe/crypto/aes"
     return ""
   @end
   return tls_bytes_to_string(pt_bytes)
+@end
+
+@fn tls_append_bytes(dest, src)
+  @! WHY: Appends bytes from src array to dest array without modifying original
+  i = 0
+  n = src.len()
+  @while i < n
+    dest = dest.push(src[i] & 255)
+    i = i + 1
+  @end
+  return dest
+@end
+
+@struct TlsClientHello
+  wire_bytes: array
+  client_random: array
+  client_pub_key: array
+  server_name: string
+@end
+
+@fn tls13_build_client_hello(server_name, client_pub_key)
+  @! WHY: Serializes standard RFC 8446 TLS 1.3 ClientHello handshake message with
+  @! Supported Versions (0x002B), Supported Groups (X25519 0x001D), Key Share (0x0033),
+  @! and SNI (0x0000) extensions for sovereign HTTPS connections.
+
+  // 1. Client Random (32 bytes deterministic or pseudo-random)
+  c_rand = []
+  r_i = 0
+  @while r_i < 32
+    c_rand = c_rand.push((r_i * 7 + 13) % 256)
+    r_i = r_i + 1
+  @end
+
+  // 2. ClientHello Body
+  ch_body = []
+  // Legacy version: 0x0303 (TLS 1.2 compatibility)
+  ch_body = ch_body.push(3)
+  ch_body = ch_body.push(3)
+
+  // 32-byte Client Random
+  ch_body = tls_append_bytes(ch_body, c_rand)
+
+  // Legacy Session ID (32 bytes)
+  ch_body = ch_body.push(32)
+  s_i = 0
+  @while s_i < 32
+    ch_body = ch_body.push(s_i & 255)
+    s_i = s_i + 1
+  @end
+
+  // Cipher Suites (Length: 4 bytes = 2 suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384)
+  ch_body = ch_body.push(0)
+  ch_body = ch_body.push(4)
+  ch_body = ch_body.push(19) // 0x13
+  ch_body = ch_body.push(1)  // 0x01
+  ch_body = ch_body.push(19) // 0x13
+  ch_body = ch_body.push(2)  // 0x02
+
+  // Legacy Compression Methods (Length: 1 byte = 0x00 null compression)
+  ch_body = ch_body.push(1)
+  ch_body = ch_body.push(0)
+
+  // Extensions Block
+  ext_bytes = []
+
+  // Ext 1: Server Name Indication (SNI) - Type 0x0000
+  sn_len = str_len(server_name)
+  @if sn_len > 0
+    ext_bytes = ext_bytes.push(0)
+    ext_bytes = ext_bytes.push(0)
+    sni_data_len = 5 + sn_len
+    ext_bytes = ext_bytes.push((sni_data_len / 256) & 255)
+    ext_bytes = ext_bytes.push(sni_data_len & 255)
+    list_len = 3 + sn_len
+    ext_bytes = ext_bytes.push((list_len / 256) & 255)
+    ext_bytes = ext_bytes.push(list_len & 255)
+    ext_bytes = ext_bytes.push(0)
+    ext_bytes = ext_bytes.push((sn_len / 256) & 255)
+    ext_bytes = ext_bytes.push(sn_len & 255)
+    si = 0
+    @while si < sn_len
+      ext_bytes = ext_bytes.push(str_char_at(server_name, si) & 255)
+      si = si + 1
+    @end
+  @end
+
+  // Ext 2: Supported Versions - Type 0x002B (43)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(43)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(3)
+  ext_bytes = ext_bytes.push(2)
+  ext_bytes = ext_bytes.push(3)
+  ext_bytes = ext_bytes.push(4) // TLS 1.3
+
+  // Ext 3: Supported Groups - Type 0x000A (10)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(10)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(4)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(2)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(29) // X25519
+
+  // Ext 4: Key Share - Type 0x0033 (51)
+  klen = client_pub_key.len()
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(51)
+  ks_ext_len = 6 + klen
+  ext_bytes = ext_bytes.push((ks_ext_len / 256) & 255)
+  ext_bytes = ext_bytes.push(ks_ext_len & 255)
+  cs_list_len = 4 + klen
+  ext_bytes = ext_bytes.push((cs_list_len / 256) & 255)
+  ext_bytes = ext_bytes.push(cs_list_len & 255)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(29) // X25519
+  ext_bytes = ext_bytes.push((klen / 256) & 255)
+  ext_bytes = ext_bytes.push(klen & 255)
+  ext_bytes = tls_append_bytes(ext_bytes, client_pub_key)
+
+  // Append extensions length and extensions body
+  ext_tot_len = ext_bytes.len()
+  ch_body = ch_body.push((ext_tot_len / 256) & 255)
+  ch_body = ch_body.push(ext_tot_len & 255)
+  ch_body = tls_append_bytes(ch_body, ext_bytes)
+
+  // 3. Handshake Header (4 bytes): Type 0x01 (ClientHello), 3-byte length
+  hs_msg = []
+  hs_msg = hs_msg.push(1) // ClientHello
+  ch_body_len = ch_body.len()
+  hs_msg = hs_msg.push((ch_body_len / 65536) & 255)
+  hs_msg = hs_msg.push((ch_body_len / 256) & 255)
+  hs_msg = hs_msg.push(ch_body_len & 255)
+  hs_msg = tls_append_bytes(hs_msg, ch_body)
+
+  // 4. TLS Record Layer Framing (5 bytes): ContentType 0x16 (Handshake), Version 0x0301 (TLS 1.0 legacy)
+  wire = []
+  wire = wire.push(22) // 0x16 Handshake
+  wire = wire.push(3)  // Legacy Record Version TLS 1.0 (0x0301)
+  wire = wire.push(1)
+  hs_len = hs_msg.len()
+  wire = wire.push((hs_len / 256) & 255)
+  wire = wire.push(hs_len & 255)
+  wire = tls_append_bytes(wire, hs_msg)
+
+  return {
+    wire_bytes: wire,
+    client_random: c_rand,
+    client_pub_key: client_pub_key,
+    server_name: server_name
+  }
 @end

@@ -17,24 +17,24 @@ The **Lipi Sovereign Standard Library** (`std/`) is engineered from the ground u
 
 | Module | Primary Responsibility | Silicon / Kernel Primitives |
 |---|---|---|
-| [`std/web.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/web.lp) | First-class HTTP router, parser & serializer | `SYS_socket`, `SYS_bind`, `SYS_listen`, `SYS_accept`, `SYS_write` |
-| [`std/thread.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/thread.lp) | Native kernel multithreading & atomic spinlocks | `SYS_clone` (56/220), `SYS_sched_yield` (24), `SYS_exit` (60) |
-| [`std/hashmap.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/hashmap.lp) | Cache-conscious Robin Hood open-addressing hash table | `SYS_mmap`, `SYS_munmap`, contiguous cache lines |
-| [`std/arena.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/arena.lp) | High-throughput O(1) bump allocator & ARC | `SYS_mmap`, 8-byte QWORD alignment, 0-cycle resets |
-| [`std/simd.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/simd.lp) | Vector acceleration & matrix AI operations | x86_64 SSE/AVX2 (`paddq`), AArch64 NEON, silicon dot product |
-| [`std/crypto.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/crypto.lp) | Cryptographic digests, stream ciphers & signatures | NIST FIPS 180-4 SHA-256, RFC 8439 ChaCha20, Ed25519 |
-| [`std/io.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/io.lp) | Direct kernel standard I/O and file descriptors | `SYS_read` (0), `SYS_write` (1), `SYS_open` (2), `SYS_close` (3) |
-| [`std/mem.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/mem.lp) | Virtual memory paging, byte/word reads & writes | `SYS_mmap` (9), `SYS_munmap` (11), memory copy & fill |
-| [`std/net.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/net.lp) | Berkeley socket networking | `SYS_socket` (41), `SYS_connect` (42), `SYS_sendto` (44) |
-| [`std/str.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/str.lp) | UTF-8 string manipulation & formatting | Zero-copy slicing, string concatenation, ANSI truecolor |
-| [`std/json.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/json.lp) | RFC 8259 JSON serialization & escaping | Fast string builders, JSON types, key-value formatting |
-| [`std/db.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/db.lp) | Embedded append-only binary B-tree database | Binary index pages, transactional WAL, direct disk I/O |
+| [`std/web.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/web.lp) | First-class HTTP router, parser & serializer | `SYS_socket`, `SYS_bind`, `SYS_listen`, `SYS_accept`, `SYS_write` |
+| [`std/thread.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/thread.lp) | Native kernel multithreading & atomic spinlocks | `SYS_clone` (56/220), `SYS_sched_yield` (24), `SYS_exit` (60) |
+| [`std/hashmap.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/hashmap.lp) | Cache-conscious Robin Hood open-addressing hash table | `SYS_mmap`, `SYS_munmap`, contiguous cache lines |
+| [`std/arena.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/arena.lp) | High-throughput O(1) bump allocator & ARC | `SYS_mmap`, 8-byte QWORD alignment, 0-cycle resets |
+| [`std/simd.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/simd.lp) | Vector acceleration & matrix AI operations | x86_64 SSE/AVX2 (`paddq`), AArch64 NEON, silicon dot product |
+| [`std/crypto.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/crypto.lp) | Cryptographic digests, stream ciphers & signatures | NIST FIPS 180-4 SHA-256, RFC 8439 ChaCha20, Ed25519 |
+| [`std/io.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/io.lp) | Direct kernel standard I/O and file descriptors | `SYS_read` (0), `SYS_write` (1), `SYS_open` (2), `SYS_close` (3) |
+| [`std/mem.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/mem.lp) | Virtual memory paging, byte/word reads & writes | `SYS_mmap` (9), `SYS_munmap` (11), memory copy & fill |
+| [`std/net.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/net.lp) | Berkeley socket networking | `SYS_socket` (41), `SYS_connect` (42), `SYS_sendto` (44) |
+| [`std/str.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/str.lp) | UTF-8 string manipulation & formatting | Zero-copy slicing, string concatenation, ANSI truecolor |
+| [`std/json.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/json.lp) | RFC 8259 JSON serialization & escaping | Fast string builders, JSON types, key-value formatting |
+| [`std/db.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/db.lp) | Embedded append-only binary B-tree database | Binary index pages, transactional WAL, direct disk I/O |
 
 ---
 
 ## 1. Web Engine & HTTP Router (`std/web.lp`)
 
-[`std/web.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/web.lp) provides an autonomous, ultra-fast HTTP/1.1 web microservice engine. It performs route dispatching, request parsing, and response serialization directly against Linux network sockets without third-party frameworks.
+[`std/web.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/web.lp) provides an autonomous, ultra-fast HTTP/1.1 web microservice engine. It performs route dispatching, request parsing, and response serialization directly against Linux network sockets without third-party frameworks.
 
 ### 1.1 HTTP Status Constants
 ```lipi
@@ -173,7 +173,7 @@ say wire
 
 ## 2. Native Multithreading & Concurrency (`std/thread.lp`)
 
-[`std/thread.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/thread.lp) enables pure silicon multicore concurrency by calling the Linux kernel `SYS_clone` system call directly. It requires zero POSIX threading (`pthreads`) wrappers.
+[`std/thread.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/thread.lp) enables pure silicon multicore concurrency by calling the Linux kernel `SYS_clone` system call directly. It requires zero POSIX threading (`pthreads`) wrappers.
 
 ### 2.1 Syscall Identifiers & Clone Mask
 - **`SYS_clone`:** Syscall 56 (x86_64) / Syscall 220 (AArch64).
@@ -251,7 +251,7 @@ say "Parent thread proceeding after worker thread launch"
 
 ## 3. Robin Hood Hash Table (`std/hashmap.lp`)
 
-[`std/hashmap.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/hashmap.lp) implements a high-performance, cache-conscious Robin Hood open-addressing hash table with backward-shift deletion. It guarantees deterministic O(1) lookups and eliminates heap fragmentation.
+[`std/hashmap.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/hashmap.lp) implements a high-performance, cache-conscious Robin Hood open-addressing hash table with backward-shift deletion. It guarantees deterministic O(1) lookups and eliminates heap fragmentation.
 
 ### 3.1 In-Memory Slot Architecture
 Each slot is stored contiguously in 24 bytes (3 QWORDs):
@@ -314,7 +314,7 @@ hashmap_delete(map, capacity)
 
 ## 4. Bump-Pointer Arena Memory Allocator (`std/arena.lp`)
 
-[`std/arena.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/arena.lp) delivers ultra-fast, zero-fragmentation linear memory allocation for high-throughput batch operations, compilers, and microservices.
+[`std/arena.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/arena.lp) delivers ultra-fast, zero-fragmentation linear memory allocation for high-throughput batch operations, compilers, and microservices.
 
 ### 4.1 Arena Pool Layout
 An arena pool is structured across 24 bytes of metadata:
@@ -377,7 +377,7 @@ say "Arena reset complete. Active used bytes: " + অ্যারিনা_used_
 
 ## 5. SIMD Vector Acceleration & Matrix AI Engine (`std/simd.lp`)
 
-[`std/simd.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/simd.lp) unlocks physical silicon vector parallelism for neural networks, linear algebra, and data science workloads. It eliminates BLAS and NumPy dependencies.
+[`std/simd.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/simd.lp) unlocks physical silicon vector parallelism for neural networks, linear algebra, and data science workloads. It eliminates BLAS and NumPy dependencies.
 
 ### 5.1 Architectural Capabilities
 - **x86_64:** Emits SSE2 / AVX2 packed vector instructions (`paddq`, `mulpd`, `xorpd`).

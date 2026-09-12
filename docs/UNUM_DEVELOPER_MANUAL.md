@@ -41,7 +41,7 @@ To use UNUM in any PHP script or application:
 declare(strict_types=1);
 
 // 1. Bootstrap UNUM Core Classes
-$unumRoot = __DIR__ . '/vendor/unum'; // or path to oshim-framework
+$unumRoot = __DIR__ . '/vendor/unum'; // or path to lipi
 
 require_once $unumRoot . '/src/Unum/UniversalNumber.php';
 require_once $unumRoot . '/src/Unum/PhysicsMathEngine.php';
@@ -339,7 +339,7 @@ file_put_contents('module.wasm', $wasmResult['binary']);
 ## 10. Scenario 8: Deployment Guide
 
 ### Option A: Bare-Metal Silicon VPS / Dedicated Server
-1. Clone the repository: `git clone https://github.com/asaudola-cmyk/oshim-framework.git`
+1. Clone the repository: `git clone https://github.com/asaudola-cmyk/LiPi_Lang.git`
 2. Start the unified sovereign daemon:
    ```bash
    php bin/server.php --port=8080 --console-port=7070

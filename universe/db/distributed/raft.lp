@@ -200,3 +200,107 @@ import "universe/core/string"
   @end
   return node
 @end
+
+@! ----------------------------------------------------------------------------
+@! 6. MULTI-NODE CLUSTER ORCHESTRATION & RAFT STATE MACHINE
+@! ----------------------------------------------------------------------------
+
+@struct RaftCluster
+  nodes: array
+  leader_id: i64
+  cluster_size: i64
+@end
+
+@fn raft_cluster_new(node_count)
+  @! WHY: Constructs a cluster topology of N sovereign Raft consensus nodes
+  nodes = []
+  i = 1
+  @while i <= node_count
+    n = raft_node_with_cluster(i, node_count)
+    nodes = nodes.push(n)
+    i = i + 1
+  @end
+  return {
+    nodes: nodes,
+    leader_id: 0 - 1,
+    cluster_size: node_count
+  }
+@end
+
+@fn raft_cluster_elect(cluster: RaftCluster, candidate_id)
+  @! WHY: Candidate triggers term increment and requests vote from all peers in cluster.
+  @! Requires strict majority quorum ((cluster_size / 2) + 1) to win election.
+  cand_idx = candidate_id - 1
+  cand = cluster.nodes[cand_idx]
+  cand = raft_start_election(cand)
+  
+  i = 0
+  sz = cluster.nodes.len()
+  @while i < sz
+    @if i != cand_idx
+      peer = cluster.nodes[i]
+      granted = raft_request_vote(peer, cand.current_term, cand.node_id, raft_last_log_index(cand), raft_last_log_term(cand))
+      cand = raft_record_vote(cand, granted)
+    @end
+    i = i + 1
+  @end
+  
+  cluster.nodes[cand_idx] = cand
+  @if cand.is_leader == 1
+    cluster.leader_id = candidate_id
+    return 1
+  @end
+  return 0
+@end
+
+@fn raft_cluster_propose_entry(cluster: RaftCluster, leader_id, cmd, payload)
+  @! WHY: Leader receives write command, appends to its log, and replicates to peer followers.
+  @! Advances commit_index once strict majority confirms append.
+  leader_idx = leader_id - 1
+  leader = cluster.nodes[leader_idx]
+  @if leader.is_leader != 1
+    return 0
+  @end
+
+  new_idx = raft_last_log_index(leader) + 1
+  entry = raft_entry_new(leader.current_term, new_idx, cmd, payload)
+  leader.log = leader.log.push(entry)
+
+  acks = 1
+  sz = cluster.nodes.len()
+  majority = (sz / 2) + 1
+
+  i = 0
+  @while i < sz
+    @if i != leader_idx
+      peer = cluster.nodes[i]
+      ok = raft_append_entries(peer, leader.current_term, leader.node_id, [entry], leader.commit_index)
+      @if ok == 1
+        acks = acks + 1
+      @end
+    @end
+    i = i + 1
+  @end
+
+  @if acks >= majority
+    leader.commit_index = new_idx
+    leader = raft_apply_committed_entries(leader)
+    cluster.nodes[leader_idx] = leader
+
+    @! Notify followers of updated commit_index
+    j = 0
+    @while j < sz
+      @if j != leader_idx
+        p = cluster.nodes[j]
+        raft_append_entries(p, leader.current_term, leader.node_id, [], leader.commit_index)
+        p = raft_apply_committed_entries(p)
+        cluster.nodes[j] = p
+      @end
+      j = j + 1
+    @end
+    return new_idx
+  @end
+
+  cluster.nodes[leader_idx] = leader
+  return 0
+@end

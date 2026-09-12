@@ -425,6 +425,9 @@
 
 @fn str_from_char_code(code)
   @! ASCII code to single-character string
+  @if code == 9 return "\t" @end
+  @if code == 10 return "\n" @end
+  @if code == 13 return "\r" @end
   @if code == 32 return " " @end
   @if code == 33 return "!" @end
   @if code == 34 return "\"" @end
@@ -525,6 +528,9 @@
 
 @fn char_code(c)
   @! Single char string → ASCII code
+  @if c == "\t" return 9 @end
+  @if c == "\n" return 10 @end
+  @if c == "\r" return 13 @end
   @if c == " " return 32 @end
   @if c == "!" return 33 @end
   @if c == "\"" return 34 @end

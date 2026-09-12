@@ -261,9 +261,9 @@ When compiling an OOP call `p1.set_xy(10, 20)`:
 ## 5. Direct Silicon Architecture: x86_64, ARM64 & WebAssembly Emitters
 
 Lipi implements first-class native machine code and bytecode generators written entirely in pure Lipi:
-- **x86_64 ELF64 Emitter:** [`src/compiler/elf_emitter.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/src/compiler/elf_emitter.lp)
-- **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/src/compiler/arm64_emitter.lp)
-- **WebAssembly (WASM) Binary Emitter:** [`src/compiler/wasm_emitter.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/src/compiler/wasm_emitter.lp)
+- **x86_64 ELF64 Emitter:** [`src/compiler/elf_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/elf_emitter.lp)
+- **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/arm64_emitter.lp)
+- **WebAssembly (WASM) Binary Emitter:** [`src/compiler/wasm_emitter.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/wasm_emitter.lp)
 
 ```
                        ┌────────────────────────┐
@@ -314,7 +314,7 @@ When assigning zero to any register or initializing variables, the Lipi emitter 
 Lipi delivers true hardware multicore concurrency through direct Linux kernel syscalls without `pthreads` or external runtime schedulers.
 
 ### 6.1 Kernel Thread Creation via `SYS_clone`
-[`std/thread.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/thread.lp) invokes `SYS_clone` (syscall 56 on x86_64, syscall 220 on AArch64) with flags `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD` (`69376` / `0x10F00`):
+[`std/thread.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/thread.lp) invokes `SYS_clone` (syscall 56 on x86_64, syscall 220 on AArch64) with flags `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD` (`69376` / `0x10F00`):
 
 ```lipi
 include "std/thread.lp"
@@ -355,7 +355,7 @@ shared_counter = shared_counter + 1
 During lock contention, the waiting thread issues `SYS_sched_yield` (syscall 24), preventing CPU thermal throttling and power waste.
 
 ### 6.3 Bump-Pointer Arena Memory Allocator (`std/arena.lp`)
-High-performance workloads utilize [`std/arena.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/arena.lp) for O(1) allocation and instant mass reclamation:
+High-performance workloads utilize [`std/arena.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/arena.lp) for O(1) allocation and instant mass reclamation:
 ```lipi
 include "std/arena.lp"
 
@@ -377,7 +377,7 @@ buf2 = অ্যারিনা_বরাদ্দ(pool, 4096)
 
 ## 7. First-Class Web Engine & HTTP Router (`std/web.lp`)
 
-Lipi 2.0 provides an enterprise-grade standard web engine in [`std/web.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/std/web.lp), eliminating foreign web frameworks like Express, Flask, or Axum.
+Lipi 2.0 provides an enterprise-grade standard web engine in [`std/web.lp`](file:///home/shafiullah/Documents/file/work/lipi/std/web.lp), eliminating foreign web frameworks like Express, Flask, or Axum.
 
 ### 7.1 Core Components
 - `WebRoute`: Record binding HTTP methods, path strings, and integer handler IDs.
@@ -457,7 +457,7 @@ free(ts, 16)
 Lipi provides a comprehensive suite of developer tools written in pure Lipi.
 
 ### 9.1 `lipidbg` — Sovereign System Debugger
-Located at [`src/tools/lipidbg.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/src/tools/lipidbg.lp), `lipidbg` inspects compiled ELF binaries and runtime environments without GDB:
+Located at [`src/tools/lipidbg.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipidbg.lp), `lipidbg` inspects compiled ELF binaries and runtime environments without GDB:
 - Validates ELF magic bytes (`0x7F 'E' 'L' 'F'`).
 - Verifies 64-bit architecture classification (`ELFCLASS64`).
 - Assesses entry point virtual memory offsets and segment alignment.
@@ -468,7 +468,7 @@ Located at [`src/tools/lipidbg.lp`](file:///home/shafiullah/Documents/file/work/
 ```
 
 ### 9.2 `lipirepl` — Interactive Evaluation Shell
-Located at [`src/tools/lipirepl.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/src/tools/lipirepl.lp), `lipirepl` offers immediate feedback and low-level introspection:
+Located at [`src/tools/lipirepl.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipirepl.lp), `lipirepl` offers immediate feedback and low-level introspection:
 - `:eval <expr>`: Evaluates arithmetic and logic expressions immediately.
 - `:reg` / `:রেজিস্টার`: Dumps physical `%rsp` stack pointer and CPU clock (RDTSC).
 - `:mem <addr> <len>`: Hex dump of raw virtual memory addresses.
@@ -479,7 +479,7 @@ Located at [`src/tools/lipirepl.lp`](file:///home/shafiullah/Documents/file/work
 ```
 
 ### 9.3 `lipipkg` — Sovereign Package Manager
-Located at [`src/tools/lipipkg.lp`](file:///home/shafiullah/Documents/file/work/oshim-framework/src/tools/lipipkg.lp), `lipipkg` orchestrates the complete software lifecycle:
+Located at [`src/tools/lipipkg.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipipkg.lp), `lipipkg` orchestrates the complete software lifecycle:
 - `lipipkg init <name>`: Initializes a standard project structure.
 - `lipipkg build`: Compiles `src/main.lp` into a standalone ELF binary.
 - `lipipkg run`: Builds and runs the executable in a single pass.
@@ -497,7 +497,7 @@ cd my_microservice
 
 ## 10. Package Management & Manifest Specification (`lipipkg.toml`)
 
-Projects are configured using the standard [`lipipkg.toml`](file:///home/shafiullah/Documents/file/work/oshim-framework/docs/LIPIPKG_TOML_SPEC.md) manifest:
+Projects are configured using the standard [`lipipkg.toml`](file:///home/shafiullah/Documents/file/work/lipi/docs/LIPIPKG_TOML_SPEC.md) manifest:
 
 ```toml
 [package]

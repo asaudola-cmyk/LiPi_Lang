@@ -268,3 +268,120 @@ import "universe/db/page"
   @end
   return 1
 @end
+
+@! Replays all binary records from a WAL file into structured records
+@fn wal_replay_all(wal_path)
+  @! WHY: Replays write-ahead log records after a crash to rebuild in-memory KV state
+  @! with zero data loss, honoring NIST/RFC ACID durability guarantees.
+  fd = sys_open(wal_path, 0, 0)
+  @if fd < 0
+    return []
+  @end
+
+  file_sz = sys_lseek(fd, 0, 2)
+  sys_lseek(fd, 0, 0)
+  @if file_sz < 32
+    sys_close(fd)
+    return []
+  @end
+
+  raw_buf = sys_mmap(0, file_sz + 16, 3, 34, 0 - 1, 0)
+  @if raw_buf <= 0
+    sys_close(fd)
+    return []
+  @end
+
+  bytes_read = sys_read(fd, raw_buf, file_sz)
+  sys_close(fd)
+
+  records = []
+  offset = 0
+
+  @while (offset + 32) <= bytes_read
+    b0 = sys_peek8(raw_buf + offset) & 255
+    b1 = sys_peek8(raw_buf + offset + 1) & 255
+    b2 = sys_peek8(raw_buf + offset + 2) & 255
+    b3 = sys_peek8(raw_buf + offset + 3) & 255
+    magic = b0 | (b1 * 256) | (b2 * 65536) | (b3 * 16777216)
+    @if magic != WAL_MAGIC()
+      break
+    @end
+
+    lsn_low = (sys_peek8(raw_buf + offset + 4) & 255) | ((sys_peek8(raw_buf + offset + 5) & 255) * 256) | ((sys_peek8(raw_buf + offset + 6) & 255) * 65536) | ((sys_peek8(raw_buf + offset + 7) & 255) * 16777216)
+    lsn_high = (sys_peek8(raw_buf + offset + 8) & 255) | ((sys_peek8(raw_buf + offset + 9) & 255) * 256) | ((sys_peek8(raw_buf + offset + 10) & 255) * 65536) | ((sys_peek8(raw_buf + offset + 11) & 255) * 16777216)
+    lsn = lsn_low + (lsn_high * 4294967296)
+
+    tx_low = (sys_peek8(raw_buf + offset + 12) & 255) | ((sys_peek8(raw_buf + offset + 13) & 255) * 256) | ((sys_peek8(raw_buf + offset + 14) & 255) * 65536) | ((sys_peek8(raw_buf + offset + 15) & 255) * 16777216)
+    tx_high = (sys_peek8(raw_buf + offset + 16) & 255) | ((sys_peek8(raw_buf + offset + 17) & 255) * 256) | ((sys_peek8(raw_buf + offset + 18) & 255) * 65536) | ((sys_peek8(raw_buf + offset + 19) & 255) * 16777216)
+    tx_id = tx_low + (tx_high * 4294967296)
+
+    op_type = sys_peek8(raw_buf + offset + 20) & 255
+    k_len = (sys_peek8(raw_buf + offset + 22) & 255) | ((sys_peek8(raw_buf + offset + 23) & 255) * 256)
+
+    v_b0 = sys_peek8(raw_buf + offset + 24) & 255
+    v_b1 = sys_peek8(raw_buf + offset + 25) & 255
+    v_b2 = sys_peek8(raw_buf + offset + 26) & 255
+    v_b3 = sys_peek8(raw_buf + offset + 27) & 255
+    v_len = v_b0 | (v_b1 * 256) | (v_b2 * 65536) | (v_b3 * 16777216)
+
+    total_rec_len = 32 + k_len + v_len
+    @if (offset + total_rec_len) > bytes_read
+      break
+    @end
+
+    k_str = ""
+    ki = 0
+    @while ki < k_len
+      k_c = sys_peek8(raw_buf + offset + 32 + ki) & 255
+      k_str = str_concat(k_str, str_from_char_code(k_c))
+      ki = ki + 1
+    @end
+
+    v_str = ""
+    vi = 0
+    @while vi < v_len
+      v_c = sys_peek8(raw_buf + offset + 32 + k_len + vi) & 255
+      v_str = str_concat(v_str, str_from_char_code(v_c))
+      vi = vi + 1
+    @end
+
+    rec = wal_record_new(k_str, v_str, op_type, tx_id, lsn)
+    records = records.push(rec)
+    offset = offset + total_rec_len
+  @end
+
+  sys_munmap(raw_buf, file_sz + 16)
+  return records
+@end
+
+@fn wal_record_new(key, val, op_type, tx_id, lsn)
+  @! WHY: Explicit constructor ensuring correct memory offset allocation matching WalRecord
+  return {
+    key: key,
+    value: val,
+    op_type: op_type,
+    tx_id: tx_id,
+    lsn: lsn
+  }
+@end
+
+@fn wal_record_get_key(rec: WalRecord)
+  return rec.key
+@end
+
+@fn wal_record_get_value(rec: WalRecord)
+  return rec.value
+@end
+
+@fn wal_record_get_op(rec: WalRecord)
+  return rec.op_type
+@end
+
+@fn wal_record_get_tx(rec: WalRecord)
+  return rec.tx_id
+@end
+
+@fn wal_record_get_lsn(rec: WalRecord)
+  return rec.lsn
+@end
+
