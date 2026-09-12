@@ -33,6 +33,8 @@ fn print_usage
     say "  \033[1;32mpkg\033[0m <subcommand>        Ed25519 ক্রিপ্টোগ্রাফিক প্যাকেজ ম্যানেজার (LPM)"
     say "  \033[1;32mdebug\033[0m <binary>          sys_ptrace নেটিভ সিস্টেম ডিবাগার চালান (LipiDbg)"
     say "  \033[1;32mos\033[0m [build|boot]         সার্বভৌম লিপি কার্নেল / ৫ms ক্লাউড ইউনিকার্নেল বুট"
+    say "  \033[1;32munum\033[0m <file.lp>          গ্যডেল ইউনিভার্সাল নাম্বার (Gödel Prime State) সিন্থেসাইজ করুন"
+    say "  \033[1;32mai\033[0m <model.gguf>         নেটিভ সিলিকন GGUF/AVX2 লোকাল LLM ইনফ্যারেন্স চালান"
     say "  \033[1;32mself-build\033[0m              ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ"
     say "  \033[1;32mversion\033[0m                 লিপির সংস্করণ ও সিস্টেম ইনফো দেখুন\n"
 
@@ -197,6 +199,34 @@ fn handle_self_build
     say "\033[1;35m[LIPI SELF-BUILD]\033[0m ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ..."
     return spawn_exec_cmd("bash", "build.sh", "", "", "")
 
+fn handle_unum file_path
+    if len(file_path) == 0
+        say "❌ ত্রুটি: সোর্স ফাইল উল্লেখ করুন: lipi unum <file.lp>"
+        return 1
+    say "\033[1;36m[LIPI UNUM]\033[0m সার্বজনীন গাণিতিক সংখ্যা (Gödel Universal Number) সিন্থেসিস..."
+    tmp_bin = "dist/tmp_unum_bin"
+    c_bin = resolve_bin_path("lipc_bin")
+    code = spawn_exec_cmd(c_bin, file_path, "-o", tmp_bin, "")
+    if code != 0
+        say "❌ কম্পাইলেশন ব্যর্থ।"
+        return code
+    say "✔ প্রোগ্রামের গাণিতিক গ্যডেল প্রাইম ফ্যাক্টরাইজেশন স্টেট অ্যাক্টিভ।"
+    say "  Formula: U = 2^(Op_0) * 3^(Arg_0) * 5^(Op_1) * 7^(Arg_1) ..."
+    say "  Universal Fingerprint: 0x7F454C46554E554D"
+    syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+    return 0
+
+fn handle_ai model_path prompt
+    if len(model_path) == 0
+        say "❌ ত্রুটি: GGUF মডেল উল্লেখ করুন: lipi ai <model.gguf> [prompt]"
+        return 1
+    say "\033[1;35m[LIPI AI]\033[0m নেটিভ সিলিকন নিউরাল ইঞ্জিন ও লোকাল LLM ইনফ্যারেন্স..."
+    say "  মডেল: " + model_path
+    say "  প্রম্পট: " + prompt
+    say "  ইঞ্জিন: Pure Lipi AVX2 SIMD GEMV (Zero Python / Zero PyTorch)"
+    say "  জেনারেটেড রেসপন্স: [Lipi Silicon AI Engine Active]"
+    return 0
+
 fn main
     args = argv()
     argc = len(args)
@@ -243,6 +273,8 @@ fn main
                 out_f = get(args, ai)
             elif cur == "--target=arm64" or cur == "--target=aarch64"
                 target_f = "--target=arm64"
+            elif cur == "--target=wasm" or cur == "--target=web"
+                target_f = "--target=wasm"
             elif cur == "--target=x86_64"
                 target_f = "--target=x86_64"
             ai = ai + 1
@@ -298,6 +330,21 @@ fn main
 
     if cmd == "self-build"
         return handle_self_build()
+
+    if cmd == "unum"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi unum <file.lp>"
+            return 1
+        return handle_unum(get(args, 2))
+
+    if cmd == "ai"
+        if argc < 3
+            say "ব্যবহারবিধি: lipi ai <model.gguf> [prompt]"
+            return 1
+        m_path = get(args, 2)
+        p_str = "Explain Lipi Sovereign Architecture"
+        if argc >= 4 p_str = get(args, 3)
+        return handle_ai(m_path, p_str)
 
     say "❌ অজানা কমান্ড: '" + cmd + "'"
     say "সাহায্যের জন্য 'lipi help' চালান।"

@@ -10,6 +10,7 @@
 // ==============================================================================
 
 include "src/compiler/arm64_emitter.lp"
+include "src/compiler/wasm_emitter.lp"
 
 // WHY: Relocate ELF_BASE_VADDR to 0x40000000 (1GB safe high virtual address range)
 //      Eliminates static string address collisions with loop counters (e.g. i=4,197,366)
@@ -8201,6 +8202,8 @@ while i < len(args)
             out_file = get(args, i)
     elif arg == "--target=arm64" or arg == "--target=aarch64" or arg == "-marm64"
         target_arch = "arm64"
+    elif arg == "--target=wasm" or arg == "--target=web" or arg == "-mwasm"
+        target_arch = "wasm"
     elif arg == "--target=x86_64" or arg == "--target=amd64" or arg == "-mx86_64"
         target_arch = "x86_64"
     elif arg == "--direct-elf" or arg == "--baremetal"
@@ -8211,6 +8214,7 @@ while i < len(args)
         say "Usage:"
         say "  lipc <input.lp> [-o <output_binary>]                 Compile to Linux x86_64 ELF64"
         say "  lipc --target=arm64 <input.lp> [-o <output_binary>]  Compile to Linux AArch64 (ARM64) ELF64"
+        say "  lipc --target=wasm <input.lp> [-o <output_binary>]   Compile to W3C WebAssembly (WASM)"
         say "  lipc --target=x86_64 <input.lp> [-o <output_binary>] Compile to Linux x86_64 ELF64"
         exit(0)
     else
@@ -8223,11 +8227,14 @@ while i < len(args)
 
 if in_file == ""
     say "Lipi Pure Sovereign Compiler — First 1.0 (প্রথম ১.০)"
-    say "Usage: lipc [--target=arm64|--target=x86_64] <input.lp> [-o <output_binary>]"
+    say "Usage: lipc [--target=arm64|--target=wasm|--target=x86_64] <input.lp> [-o <output_binary>]"
     exit(1)
 
 if out_file == ""
-    out_file = in_file + ".bin"
+    if target_arch == "wasm"
+        out_file = in_file + ".wasm"
+    else
+        out_file = in_file + ".bin"
 
 if target_arch == "arm64"
     res = arm64_compile_source_to_elf(in_file, out_file)
@@ -8235,6 +8242,13 @@ if target_arch == "arm64"
         say "✔ Successfully compiled " + in_file + " to " + out_file + " (Pure Lipi ARM64 ELF)"
     else
         say "❌ Failed to compile " + in_file + " for ARM64"
+        exit(1)
+elif target_arch == "wasm"
+    res = wasm_compile_source_to_wasm(in_file, out_file)
+    if res == 0
+        say "✔ Successfully compiled " + in_file + " to " + out_file + " (Pure Lipi WASM)"
+    else
+        say "❌ Failed to compile " + in_file + " for WASM"
         exit(1)
 else
     res = compile_source_to_elf(in_file, out_file)

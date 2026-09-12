@@ -1061,3 +1061,16 @@ fn wasm_compile_lipi_source source_code out_path
     
     res = wasm_module_write(mod, out_path)
     return res
+
+// ── Pure Lipi WebAssembly (WASM) Compiler Pipeline Entry Point ────────────────
+// WHY: Translates Lipi source programs into standalone W3C WebAssembly (.wasm)
+//      binary modules with zero C, zero LLVM, and zero Emscripten dependencies.
+fn wasm_compile_source_to_wasm in_path out_path
+    if file_exists(in_path) == 0
+        say "Error: Input source file not found: " + in_path
+        return 1
+
+    src = file_read(in_path)
+    res = wasm_compile_lipi_source(src, out_path)
+    return res
+
