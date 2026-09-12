@@ -247,6 +247,16 @@ print_success() {
     echo ""
 }
 
+# ─── Setup Desktop MIME & Icons ──────────────────────────────────────────────
+# WHY: Automatically register *.lp, *.lipi MIME types and install file manager
+# icons so Linux desktop file managers (Thunar, Nautilus, Dolphin) render Lipi icons.
+setup_desktop_mime() {
+    info "Setting up Linux desktop MIME types and file manager icons..."
+    if [ -x "$LIPI_INSTALL_DIR/scripts/install_desktop_mime.sh" ]; then
+        "$LIPI_INSTALL_DIR/scripts/install_desktop_mime.sh" || warn "Desktop integration encountered a non-fatal warning"
+    fi
+}
+
 # ─── Uninstall ───────────────────────────────────────────────────────────────
 uninstall() {
     echo "Uninstalling Lipi..."
@@ -270,6 +280,7 @@ main() {
     install_lipi
     create_command
     setup_path
+    setup_desktop_mime
     verify_install
     print_success
 }

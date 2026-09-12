@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" version="1.1">
+ <!-- Sovereign Lipi Desktop MIME Icon (128x128) -->
+ <path style="opacity:0.2" d="M 25.5,10 C 22.453,10 20,12.4976 20,15.6 v 100.8 c 0,3.10016 2.453,5.6 5.5,5.6 h 77 C 105.5448,122 108,119.50016 108,116.4 V 46 L 80,38 72,10 Z"/>
+ <path style="fill:#e4e4e4" d="M 25.5,8 C 22.453,8 20,10.4976 20,13.6 v 100.8 c 0,3.10016 2.453,5.6 5.5,5.6 h 77 C 105.5448,120 108,117.50016 108,114.4 V 44 L 80,36 72,8 Z"/>
+ <path style="opacity:0.2" d="M 108,46 72,10 V 40.375 C 72,43.4935 74.511,46 77.625,46 Z"/>
+ <path style="fill:#fafafa" d="M 108,44 72,8 V 38.375 C 72,41.4935 74.511,44 77.625,44 Z"/>
+ <path style="opacity:0.2;fill:#ffffff" d="M 25.5 8 C 22.453 8 20 10.49916 20 13.60156 L 20 15.60156 C 20 12.49916 22.453 10 25.5 10 L 72 10 L 72 8 L 25.5 8 z"/>
+ <!-- Lipi Sovereign Monogram -->
+ <rect x="42" y="54" width="14.4" height="50" rx="7" fill="#00C2FF" />
+ <rect x="42" y="89.6" width="39" height="14.4" rx="7" fill="#FF007A" />
+ <circle cx="65.6" cy="70" r="11.6" fill="none" stroke="#FFD700" stroke-width="11.6" />
+</svg>

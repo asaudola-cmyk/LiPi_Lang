@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- FreeDesktop Shared MIME-info definition for Lipi Source Code -->
+<!-- Standard: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/x-lipi">
+    <comment>Lipi source code</comment>
+    <comment xml:lang="bn">লিপি সোর্স কোড</comment>
+    <!-- Explicitly bind to Lipi's sovereign vector desktop icon -->
+    <icon name="text-x-lipi"/>
+    <generic-icon name="text-x-generic"/>
+    <glob pattern="*.lp" weight="80"/>
+    <glob pattern="*.lipi" weight="80"/>
+    <glob pattern="*.লিপি" weight="80"/>
+    <sub-class-of type="text/plain"/>
+  </mime-type>
+</mime-info>

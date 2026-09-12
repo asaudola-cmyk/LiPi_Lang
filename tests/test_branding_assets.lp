@@ -166,6 +166,41 @@ import "universe/gui/framebuffer"
     passed_tests = passed_tests + 1
   @end
 
+  // ── Section 5: Linux Desktop MIME & File Manager Icon Verification ────────
+  // WHY: Verify that FreeDesktop Shared MIME definition and multi-resolution
+  // desktop icons exist and are ready for OS file managers (Thunar, Nautilus, Dolphin).
+  println("▶ Section 5: Linux Desktop FreeDesktop MIME & Icon Assets...")
+  total_tests = total_tests + 1
+
+  mime_xml = "assets/branding/lipi-mime.xml"
+  desktop_entry = "assets/branding/lipi.desktop"
+  mime_script = "scripts/install_desktop_mime.sh"
+  icon_48 = "assets/branding/desktop_icons/text-x-lipi-48.svg"
+  icon_64 = "assets/branding/desktop_icons/text-x-lipi-64.svg"
+  icon_sc = "assets/branding/desktop_icons/text-x-lipi-scalable.svg"
+
+  ok_mx = file_exists(mime_xml)
+  ok_de = file_exists(desktop_entry)
+  ok_ms = file_exists(mime_script)
+  ok_i48 = file_exists(icon_48)
+  ok_i64 = file_exists(icon_64)
+  ok_isc = file_exists(icon_sc)
+
+  sz_mx = get_file_size(mime_xml)
+  sz_i48 = get_file_size(icon_48)
+  sz_i64 = get_file_size(icon_64)
+
+  ok_s5 = 0
+  @if ok_mx == 1 && ok_de == 1 && ok_ms == 1 && ok_i48 == 1 && ok_i64 == 1 && ok_isc == 1 && sz_mx > 200 && sz_i48 > 300 && sz_i64 > 300
+    ok_s5 = 1
+  @end
+
+  ok_v5 = assert_true(ok_s5 == 1, "Linux desktop MIME XML, installer script, and SVG icons verified")
+  @if ok_v5 == 1
+    println(str_concat("  ✔ [PASS] Desktop FreeDesktop MIME & icon theme assets verified (MIME: ", str_concat(to_str(sz_mx), str_concat(" B, 48px: ", str_concat(to_str(sz_i48), str_concat(" B, 64px: ", str_concat(to_str(sz_i64), " B)")))))))
+    passed_tests = passed_tests + 1
+  @end
+
   // ── Final Verification Summary ────────────────────────────────────────────
   println("=================================================================")
   @if passed_tests == total_tests
