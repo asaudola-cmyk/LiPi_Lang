@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — LAYOUT SUBSYSTEM ROOT AGGREGATOR
-@! Module: universe/web/frontend/layout/mod.maya
+@! Module: universe/web/frontend/layout/mod.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-level layout engine coordinator

@@ -22,7 +22,7 @@
 
 @! ============================================================================
 @! LIPI UNIVERSE: OS-INDEPENDENT RAW NETWORK PROTOCOL STACK
-@! Module: universe/net/raw.maya
+@! Module: universe/net/raw.lp
 @! 100% Pure Lipi Implementation - Zero External / OS C Socket Dependencies
 @! ============================================================================
 

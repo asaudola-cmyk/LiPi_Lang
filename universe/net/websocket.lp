@@ -1,5 +1,5 @@
 @! ============================================================================
-@! PURE MAYA WEBSOCKET PROTOCOL ENGINE: RFC 6455
+@! PURE LIPI WEBSOCKET PROTOCOL ENGINE: RFC 6455
 @! Module: universe/net/websocket
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
@@ -596,6 +596,8 @@ import "universe/crypto/base64"
 @fn ws_fragment_assembler_process(assembler, frame)
   assembler = ws_fragment_assembler_feed(assembler, frame)
   return assembler.completed_frame
-@end@fn ws_frame_encode(payload, is_text)
+@end
+
+@fn ws_frame_encode(payload, is_text)
   return [129, payload.len()]
 @end

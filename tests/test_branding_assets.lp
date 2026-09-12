@@ -211,3 +211,5 @@ import "universe/gui/framebuffer"
     return 1
   @end
 @end
+
+main()

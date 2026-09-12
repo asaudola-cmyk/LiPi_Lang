@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — IO_URING SQPOLL (ZERO-SYSCALL I/O ENGINE)
-@! Module: universe/io/uring_sqpoll.maya
+@! Module: universe/io/uring_sqpoll.lp
 @! Milestone: Pinnacle Advanced Hyper-Weapon
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: IORING_SETUP_SQPOLL (0x0002), Dedicated Kernel Polling Thread (kthread),

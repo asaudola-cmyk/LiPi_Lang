@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA FREESTANDING CORE RUNTIME SUBSYSTEM (universe/sys/sys.maya)
+@! LIPI FREESTANDING CORE RUNTIME SUBSYSTEM (universe/sys/sys.lp)
 @! 100% Written in Pure Lipi Language — Absolute Zero-Libc Independence
 @! Domain: universe/sys (Freestanding Core Runtime Engineer)
 @! ============================================================================

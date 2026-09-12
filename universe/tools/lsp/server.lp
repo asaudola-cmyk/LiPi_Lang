@@ -1,6 +1,6 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA LSP SERVER DAEMON
-@! Module = universe/tools/lsp/server.maya
+@! LIPI UNIVERSAL ARCHITECTURE — PURE LIPI LSP SERVER DAEMON
+@! Module = universe/tools/lsp/server.lp
 @! Milestone = Grand Sovereign Pillar 2
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features = Diagnostics, Symbol Completion, Hover Tooltips, Go-To Definition,

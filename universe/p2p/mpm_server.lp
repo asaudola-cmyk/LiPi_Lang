@@ -389,7 +389,7 @@ import "universe/p2p/registry"
     p2p_peer_id: "mpm-primary-node",
     p2p_port: 9090,
     p2p_enabled: 1,
-    data_dir: ".maya/mpm_registry",
+    data_dir: ".lipi/mpm_registry",
     max_body_bytes: 10485760
   }
 @end
@@ -1087,7 +1087,7 @@ import "universe/p2p/registry"
 @end
 
 @! ============================================================================
-@! 8. PURE MAYA SCRIPTABLE CLIENT API
+@! 8. PURE LIPI SCRIPTABLE CLIENT API
 @! ============================================================================
 
 @fn mpm_client_publish(target, manifest_data, payload)

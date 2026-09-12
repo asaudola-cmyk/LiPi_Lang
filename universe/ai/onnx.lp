@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — ZERO-DEPENDENCY ONNX PROTOBUF PARSER & RUNTIME
-@! Module: universe/ai/onnx.maya
+@! Module: universe/ai/onnx.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! 100% Pure Lipi Implementation — Zero External / C++ / Python Dependencies
 @! Features: Zero-Dependency Streaming Protobuf Wire Format Reader (Varint LEB128,

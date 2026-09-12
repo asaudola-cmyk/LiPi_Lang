@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA NATIVE GUI FRAMEWORK — WINDOW COMPOSITOR & DESKTOP MANAGER
-@! Module: universe/gui/compositor.maya
+@! LIPI NATIVE GUI FRAMEWORK — WINDOW COMPOSITOR & DESKTOP MANAGER
+@! Module: universe/gui/compositor.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Multi-Window Layering & Z-Index Management

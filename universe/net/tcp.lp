@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE NET - PURE MAYA TCP SOCKET STACK (universe/net/tcp.maya)
+@! LIPI UNIVERSE NET - PURE LIPI TCP SOCKET STACK (universe/net/tcp.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Complete Linux x86-64 BSD Sockets Implementation
 @! ============================================================================

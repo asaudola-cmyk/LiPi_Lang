@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA NATIVE GUI FRAMEWORK — CANVAS & 2D RASTERIZER
-@! Module: universe/gui/canvas.maya
+@! LIPI NATIVE GUI FRAMEWORK — CANVAS & 2D RASTERIZER
+@! Module: universe/gui/canvas.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flat ARGB pixel array Framebuffer

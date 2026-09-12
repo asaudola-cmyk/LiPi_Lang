@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — NATIVE LINUX KVM HYPERVISOR ENGINE
-@! Module: universe/hypervisor/kvm.maya
+@! Module: universe/hypervisor/kvm.lp
 @! Milestone: Frontier Sovereign Virtualization
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: /dev/kvm ioctl Command Serialization (KVM_CREATE_VM, KVM_CREATE_VCPU),

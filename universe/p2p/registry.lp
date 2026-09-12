@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — SOVEREIGN P2P PACKAGE REGISTRY & CAS ENGINE
-@! Module: universe/p2p/registry.maya
+@! Module: universe/p2p/registry.lp
 @! Milestone 2 (Requirement R2)
 @! 100% Pure Lipi Implementation — Zero External / C Standard Library Dependencies
 @! ============================================================================

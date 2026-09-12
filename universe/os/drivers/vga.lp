@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL VGA TEXT & LFB DRIVERS
-@! Module: universe/os/drivers/vga.maya
+@! Module: universe/os/drivers/vga.lp
 @! Milestone: Grand Sovereign Pillar 4
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 80x25 Text Mode (0xB8000), Cursor Positioning via CRTC IO Ports,

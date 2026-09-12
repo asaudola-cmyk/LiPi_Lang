@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — UNIFIED AUTO-DOWNGRADING GPU RENDERER
-@! Module: universe/web/frontend/renderer/unified_renderer.maya
+@! Module: universe/web/frontend/renderer/unified_renderer.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Unified frontend rendering interface

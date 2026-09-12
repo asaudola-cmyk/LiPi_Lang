@@ -10,7 +10,7 @@
 @end
 
 @! ============================================================================
-@! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: RFC 8032 ED25519 SIGNATURES
+@! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: RFC 8032 ED25519 SIGNATURES
 @! Module: universe/crypto/ed25519
 @! 100% Pure Lipi Implementation — Edwards25519 Curve Arithmetic & Digital Signatures
 @! Curve Equation: -x^2 + y^2 = 1 + d * x^2 * y^2 over F(2^255 - 19)

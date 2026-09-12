@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL IDT & PIC 8259A INTERRUPT CONTROLLER
-@! Module: universe/os/drivers/idt.maya
+@! Module: universe/os/drivers/idt.lp
 @! Milestone: Grand Sovereign Pillar 4
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 64-Bit IDT Gate Descriptors, PIC 8259A Remapping (0x20-0x28),

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL UART 16550 SERIAL DRIVER
-@! Module: universe/os/drivers/serial.maya
+@! Module: universe/os/drivers/serial.lp
 @! Milestone: Grand Sovereign Pillar 4
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: UART 16550 COM1 (0x3F8) Serial Logging, Baud Divisor Math,

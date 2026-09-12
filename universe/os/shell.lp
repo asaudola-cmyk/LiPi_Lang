@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA NATIVE SHELL — universe/os/shell.maya
+@! LIPI NATIVE SHELL — universe/os/shell.lp
 @! A self-contained command interpreter written in 100% pure Maya.
 @! Zero dependency on bash / sh / libc.  All I/O via raw Linux syscalls.
 @!

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SWARM — P2P BINARY & WIRE PROTOCOL CODEC (universe/swarm/protocol.maya)
+@! LIPI SWARM — P2P BINARY & WIRE PROTOCOL CODEC (universe/swarm/protocol.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 

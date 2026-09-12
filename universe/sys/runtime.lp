@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SOVEREIGN PROCESS LIFECYCLE & CORE RUNTIME ENGINE (universe/sys/runtime.maya)
+@! LIPI SOVEREIGN PROCESS LIFECYCLE & CORE RUNTIME ENGINE (universe/sys/runtime.lp)
 @! 100% Written in Pure Lipi Language — Absolute Zero-Libc Independence
 @! Process Lifecycle, CRT0 _start Vectors, Signal Handlers, Panic Recovery
 @! ============================================================================
@@ -413,7 +413,7 @@ import "universe/sys/syscalls"
 
 @fn sys_panic(msg)
   @! Freestanding Panic Recovery Handler: Writes directly to STDERR and terminates process cleanly
-  prefix = "\n[MAYA CORE RUNTIME PANIC] "
+  prefix = "\n[LIPI CORE RUNTIME PANIC] "
   sys_write(2, prefix, str_len(prefix))
   sys_write(2, msg, str_len(msg))
   newline = "\nTerminating process via direct kernel sys_exit_group(134)\n"

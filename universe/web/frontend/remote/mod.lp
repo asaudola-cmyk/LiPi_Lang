@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/remote/mod.maya
+@! Module: universe/web/frontend/remote/mod.lp
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Root Aggregator Subsystem Exporting AST @remote Directive Parser,
@@ -32,13 +32,13 @@ import "universe/web/frontend/remote/remote_server_adapter"
 @end
 
 @fn remote_pipeline_init(canvas_w, canvas_h, session_id, component_id, x, y, w, h, fps, codec)
-  client = webrtc_client_new(session_id, component_id, "stun.maya.universe:3478", "turn.maya.universe:3478")
+  client = webrtc_client_new(session_id, component_id, "stun.lipi.universe:3478", "turn.lipi.universe:3478")
   client = webrtc_create_data_channel(client, "user_input", true)
   client = webrtc_attach_track(client, "track_" + component_id, "video", w, h, fps)
 
   blitter = video_blitter_new(canvas_w, canvas_h, x, y, w, h)
 
-  gw = remote_gateway_init("stun.maya.universe:3478", "turn.maya.universe:3478", 32)
+  gw = remote_gateway_init("stun.lipi.universe:3478", "turn.lipi.universe:3478", 32)
   gw = remote_gateway_create_session(gw, session_id, component_id, w, h, fps, codec)
 
   @! Auto-handshake SDP Offer -> SDP Answer

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL PLANNER (universe/db/sql/planner.maya)
+@! LIPI UNIVERSE DB - SQL PLANNER (universe/db/sql/planner.lp)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

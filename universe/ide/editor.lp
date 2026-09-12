@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA SOVEREIGN IDE — HIGH-PERFORMANCE MULTI-LINE CODE EDITOR COMPONENT
-@! Module: universe/ide/editor.maya
+@! LIPI SOVEREIGN IDE — HIGH-PERFORMANCE MULTI-LINE CODE EDITOR COMPONENT
+@! Module: universe/ide/editor.lp
 @! Milestone: M3 (Maya Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
@@ -69,7 +69,7 @@ import "universe/ide/ui_popup"
     lines = [""]
   @end
 
-  f_name = "untitled.maya"
+  f_name = "untitled.lp"
   @if str_len(file_path) > 0
     f_name = file_path
     last_slash = -1

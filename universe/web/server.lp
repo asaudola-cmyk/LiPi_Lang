@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (universe/web/server.maya)
+@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (universe/web/server.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! BSD TCP Socket Container, Request Ingestion, Response Serialization, Lifecycle
 @! ============================================================================
@@ -126,4 +126,13 @@ import "universe/web/app"
 @fn app_listen_limited(app, host, port, max_requests)
   srv = web_server_new(app)
   return web_server_listen_limited(srv, host, port, max_requests)
+@end
+
+@fn web_listen_and_serve(app, port)
+  // WHY: Go/Express-style single-call server listener binding to all interfaces (0.0.0.0)
+  return app_listen(app, "0.0.0.0", port)
+@end
+
+@fn লিপি_শুনো_এবং_পরিবেশন_করো(অ্যাপ, পোর্ট)
+  return web_listen_and_serve(অ্যাপ, পোর্ট)
 @end

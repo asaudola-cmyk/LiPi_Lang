@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SWARM — NODE DAEMON & CLUSTER COORDINATOR (universe/swarm/node.maya)
+@! LIPI SWARM — NODE DAEMON & CLUSTER COORDINATOR (universe/swarm/node.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Integrates UDP Discovery, TCP RPC Server, Actor Routing & Task Execution
 @! ============================================================================

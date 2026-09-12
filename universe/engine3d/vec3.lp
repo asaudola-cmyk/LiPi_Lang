@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — 3D VECTOR MATH & PRIMITIVES
-@! Module: universe/engine3d/vec3.maya
+@! Module: universe/engine3d/vec3.lp
 @! Milestone: 3D Raytracing & Physics Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Fixed-Point 3D Vectors (Scale: 1000), Ray, Sphere, Triangle & AABB

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — LRU BUFFER POOL & PAGE CACHE (universe/db/buffer.maya)
+@! LIPI UNIVERSE DB — LRU BUFFER POOL & PAGE CACHE (universe/db/buffer.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Complete Sovereign Linux x86-64 Native Syscalls (sys_open, sys_lseek, sys_read, sys_write, sys_fsync)
 @! ============================================================================

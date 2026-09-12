@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — TIER 2 WEBGL2 FALLBACK RENDERER
-@! Module: universe/web/frontend/renderer/webgl2_renderer.maya
+@! Module: universe/web/frontend/renderer/webgl2_renderer.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Emits instanced GLSL ES 3.00 drawing commands, VBO/VAO attribute buffers,
 @! Uniform Buffer Objects (UBOs), and scissor clipping commands.

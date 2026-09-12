@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — ENVIRONMENT POLYMORPHIC WEB SERVER
-@! Module: universe/web/polymorphic_server.maya
+@! Module: universe/web/polymorphic_server.lp
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Binary FastCGI Frame Parser (RFC 3875), FCGI_BEGIN_REQUEST,
@@ -241,7 +241,7 @@ import "universe/core/string"
         @! Store simulated params
         p = {
           param_name: "SCRIPT_NAME",
-          param_value: "/index.maya"
+          param_value: "/index.lp"
         }
         session.params_list = session.params_list.push(p)
       @end

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SWARM — TASK REGISTRY & INVOCATION DISPATCHER (universe/swarm/task_registry.maya)
+@! LIPI SWARM — TASK REGISTRY & INVOCATION DISPATCHER (universe/swarm/task_registry.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Maps String Identifiers to Executable Function Pointers Across Cluster Nodes
 @! ============================================================================

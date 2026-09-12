@@ -1,20 +1,18 @@
-@! ============================================================================
-@! LIPI UNIVERSE AI: MODEL SERIALIZATION & DESERIALIZATION (.mayamodel)
-@! Module: universe/ai/model_io
-@! 100% Pure Lipi Implementation
-@! ============================================================================
+// 👑 LIPI UNIVERSE AI: MODEL SERIALIZATION & DESERIALIZATION (.lipimodel)
+// ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero Python | Zero PyTorch
+// Module: universe/ai/model_io.lp
+// WHY: Native binary checkpointing and hyperparameter persistence for Lipi AI models.
 
-import "universe/core/collections"
 import "universe/core/string"
-import "universe/ai/tensor"
+import "universe/os/fs"
 
-@struct ModelMetadata
+@struct ModelMeta
   model_name: string
-  architecture: string
-  num_parameters: i64
-  creation_date: string
-  tokenizer_path: string
-  training_step: i64
+  version: string
+  arch: string
+  num_layers: i64
+  hidden_dim: i64
+  vocab_size: i64
 @end
 
 @struct Checkpoint
@@ -22,38 +20,26 @@ import "universe/ai/tensor"
   step: i64
 @end
 
-@struct TensorMeta
-  name: string
-  dtype: i64
-  ndim: i64
-  shape: array
-  data_offset: i64
-  data_len: i64
-  compressed: i64
-@end
-
-@fn get_dtype_code(dtype_str: string) -> i64
-  @if dtype_str == "f32" return 0 @end
-  @if dtype_str == "f64" return 1 @end
-  @if dtype_str == "i32" return 2 @end
-  @if dtype_str == "i64" return 3 @end
-  @if dtype_str == "f16" return 4 @end
-  @if dtype_str == "bf16" return 5 @end
+@fn model_dtype_to_code(dtype: string) -> i64
+  @if str_eq(dtype, "f32") return 1 @end
+  @if str_eq(dtype, "f64") return 2 @end
+  @if str_eq(dtype, "i32") return 3 @end
+  @if str_eq(dtype, "f16") return 4 @end
+  @if str_eq(dtype, "bf16") return 5 @end
   return 0
 @end
 
-@fn get_dtype_from_code(code: i64) -> string
-  @if code == 0 return "f32" @end
-  @if code == 1 return "f64" @end
-  @if code == 2 return "i32" @end
-  @if code == 3 return "i64" @end
+@fn model_code_to_dtype(code: i64) -> string
+  @if code == 1 return "f32" @end
+  @if code == 2 return "f64" @end
+  @if code == 3 return "i32" @end
   @if code == 4 return "f16" @end
   @if code == 5 return "bf16" @end
   return "f32"
 @end
 
 @fn save_checkpoint(model_name: string, step: i64, path: string) -> i64
-  content = "MAYAMDL\nmodel=" + model_name + "\nstep=" + step.to_str() + "\n"
+  content = str_concat("LIPIMDL\nmodel=", str_concat(model_name, str_concat("\nstep=", str_concat(to_str(step), "\n"))))
   file_write(path, content)
   return 1
 @end

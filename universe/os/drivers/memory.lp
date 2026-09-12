@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL PHYSICAL MEMORY & 4-LEVEL PAGING
-@! Module: universe/os/drivers/memory.maya
+@! Module: universe/os/drivers/memory.lp
 @! Milestone: Grand Sovereign Pillar 4
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Physical Page Frame Allocator (4KB Frames), PML4/PDPT/PD/PT

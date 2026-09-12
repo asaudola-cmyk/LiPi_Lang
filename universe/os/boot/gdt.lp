@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA 64-BIT LONG MODE GLOBAL DESCRIPTOR TABLE (GDT) — universe/os/boot/gdt.maya
+@! LIPI 64-BIT LONG MODE GLOBAL DESCRIPTOR TABLE (GDT) — universe/os/boot/gdt.lp
 @! 100% Written in Pure Lipi Language — Zero C / Foreign Toolchain Dependencies
 @! Features: Long Mode Kernel/User Code & Data Segments, TSS 64-Bit System Descriptors,
 @! and GDTR Register Serialization

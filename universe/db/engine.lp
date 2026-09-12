@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — UNIFIED DATABASE ENGINE (universe/db/engine.maya)
+@! LIPI UNIVERSE DB — UNIFIED DATABASE ENGINE (universe/db/engine.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Unifies BufferPool, B+Tree, Write-Ahead Log (WAL), ACID Transactions,
 @! Redo Crash Recovery, Auto-Commit Durability, and Checkpointing
@@ -132,7 +132,7 @@ import "universe/db/recovery"
 @! ----------------------------------------------------------------------------
 
 @! Point query: retrieves value by key from in-memory pages
-@fn maya_db_get(db, key)
+@fn lipi_db_get(db, key)
   @if db.is_open == 0
     return ""
   @end
@@ -140,8 +140,16 @@ import "universe/db/recovery"
   return btree_get(db.tree[0], key, "")
 @end
 
+@fn maya_db_get(db, key)
+  return lipi_db_get(db, key)
+@end
+
 @fn db_get(db: Database, key)
-  return maya_db_get(db, key)
+  return lipi_db_get(db, key)
+@end
+
+@fn লিপি_ডিবি_গেট(ডিবি, কি)
+  return lipi_db_get(ডিবি, কি)
 @end
 
 @! Auto-commit PUT: enforces strict Write-Ahead Invariant

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — APPLICATION DEVELOPER API (universe/web/app.maya)
+@! LIPI UNIVERSE WEB — APPLICATION DEVELOPER API (universe/web/app.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Application Container, Route Registration, Groups, Pipeline Dispatcher
 @! ============================================================================
@@ -36,6 +36,15 @@ import "universe/core/string"
     app_middlewares: [],
     app_handlers: []
   }
+@end
+
+@fn web_app_create()
+  // WHY: Canonical alias matching web_app_create convention
+  return web_new()
+@end
+
+@fn লিপি_নতুন_অ্যাপ()
+  return web_new()
 @end
 
 @fn app_use(app, mw_fn)

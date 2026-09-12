@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA SOVEREIGN IDE — SOVEREIGN ACTION TOOLBAR RIBBON
-@! Module: universe/ide/toolbar.maya
+@! LIPI SOVEREIGN IDE — SOVEREIGN ACTION TOOLBAR RIBBON
+@! Module: universe/ide/toolbar.lp
 @! Milestone: M3 (Maya Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

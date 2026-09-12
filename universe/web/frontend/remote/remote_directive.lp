@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/remote/remote_directive.maya
+@! Module: universe/web/frontend/remote/remote_directive.lp
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: AST Parser & Metadata Tagging for @remote Directive

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE DB - NATIVE OBJECT-GRAPH DATABASE ENGINE
-@! Module: universe/db/object_graph.maya
+@! Module: universe/db/object_graph.lp
 @! 100% Written in Pure Lipi Language - Zero External C Dependencies
 @! Bypasses traditional SQL parsing with high-performance in-memory graph
 @! indexing, ACID transactions, graph traversals, and native Raft consensus.

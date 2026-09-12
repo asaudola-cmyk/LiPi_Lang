@@ -1,6 +1,6 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA DIRECT X11 WINDOW ENGINE
-@! Module: universe/gui/x11/x11_window.maya
+@! LIPI UNIVERSAL ARCHITECTURE — PURE LIPI DIRECT X11 WINDOW ENGINE
+@! Module: universe/gui/x11/x11_window.lp
 @! Milestone: Grand Sovereign Pillar 3
 @! 100% Pure Lipi Implementation — Direct Unix Domain Socket / X11 Engine
 @! Features: Window Lifecycle, Direct Canvas Blitting via ZPixmap Framebuffer,

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — 3D RIGID BODY PHYSICS SIMULATION ENGINE
-@! Module: universe/engine3d/physics.maya
+@! Module: universe/engine3d/physics.lp
 @! Milestone: 3D Raytracing & Physics Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Rigid Body Dynamics, Numerical Time Integration (Euler/Verlet),

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA SOVEREIGN TEST SUITE — DOM-BYPASSING WEB ENGINE (F09-F13)
-@! Module: universe/web/tests/test_web_engine.maya
+@! LIPI SOVEREIGN TEST SUITE — DOM-BYPASSING WEB ENGINE (F09-F13)
+@! Module: universe/web/tests/test_web_engine.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Comprehensive 4-Tier Test Suite Covering:
 @! - Tier 1: Canvas2D 32-bit ARGB Software Rasterizer (F11)

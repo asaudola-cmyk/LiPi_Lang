@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (universe/ai/tensor.maya)
+@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (universe/ai/tensor.lp)
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Strided Memory Views, Reshaping, Transposition, Permutation,
 @! Slicing, Multidirectional Broadcasting, 2D/Batched GEMM, Reductions,

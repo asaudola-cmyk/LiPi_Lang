@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — 3D RAYTRACER & BVH ACCELERATION ENGINE
-@! Module: universe/engine3d/raytracer.maya
+@! Module: universe/engine3d/raytracer.lp
 @! Milestone: 3D Raytracing & Physics Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Ray-Sphere, Möller–Trumbore Ray-Triangle, AABB BVH Traversal,

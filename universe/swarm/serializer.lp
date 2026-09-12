@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SWARM — DEEP SERIALIZATION ENGINE (universe/swarm/serializer.maya)
+@! LIPI SWARM — DEEP SERIALIZATION ENGINE (universe/swarm/serializer.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Serializes/Deserializes Values, Structs, Arrays, Maps, and Swarm Descriptors
 @! ============================================================================

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SEARCH ENGINE (universe/db/search.maya)
+@! LIPI UNIVERSE DB - SEARCH ENGINE (universe/db/search.lp)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

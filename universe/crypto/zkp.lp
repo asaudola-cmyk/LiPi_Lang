@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — ZERO-KNOWLEDGE PROOFS (ZK-SNARKS / R1CS)
-@! Module: universe/crypto/zkp.maya
+@! Module: universe/crypto/zkp.lp
 @! Milestone: Frontier Sovereign Cryptography
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Rank-1 Constraint System (R1CS), Quadratic Arithmetic Programs (QAP),

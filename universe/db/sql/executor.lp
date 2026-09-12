@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL EXECUTOR (universe/db/sql/executor.maya)
+@! LIPI UNIVERSE DB - SQL EXECUTOR (universe/db/sql/executor.lp)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

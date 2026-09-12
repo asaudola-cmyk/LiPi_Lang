@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA SOVEREIGN IDE — NATIVE IN-PROCESS LSP CLIENT ENGINE
-@! Module: universe/ide/lsp_client.maya
+@! LIPI SOVEREIGN IDE — NATIVE IN-PROCESS LSP CLIENT ENGINE
+@! Module: universe/ide/lsp_client.lp
 @! Milestone: M3 (Maya Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

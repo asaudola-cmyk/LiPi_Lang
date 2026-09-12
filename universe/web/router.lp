@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — FAST PREFIX TRIE ROUTER (universe/web/router.maya)
+@! LIPI UNIVERSE WEB — FAST PREFIX TRIE ROUTER (universe/web/router.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Supports Static Segments, :param Variables, *wildcard Catch-Alls,
 @! HTTP Method Dispatch, 404 Not Found, 405 Method Not Allowed with Allow Header,

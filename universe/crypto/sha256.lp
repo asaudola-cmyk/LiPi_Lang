@@ -1,4 +1,4 @@
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -9,8 +9,12 @@
   return res
 @end
 
+@fn maya_pow2(n)
+  return lipi_pow2(n)
+@end
+
 @! ============================================================================
-@! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-4 SHA-256
+@! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-4 SHA-256
 @! Module: universe/crypto/sha256
 @! 100% Pure Lipi Implementation - Zero External / C Dependencies
 @! ============================================================================
@@ -188,19 +192,19 @@ import "universe/core/string"
 @! 4. Streaming Incremental Hash API
 @! ----------------------------------------------------------------------------
 @struct Sha256Context
-  state: array
-  count: i64
-  buffer: array
+  sha_state: array
+  sha_count: i64
+  sha_buf: array
 @end
 
 @fn sha256_init()
   return {
-    state: [
+    sha_state: [
       1779033703, 3144134277, 1013904242, 2773480762,
       1359893119, 2600822924, 528734635, 1541459225
     ],
-    count: 0,
-    buffer: []
+    sha_count: 0,
+    sha_buf: []
   }
 @end
 
@@ -214,11 +218,11 @@ import "universe/core/string"
   i = 0
   @while i < num_items
     b = data[i] & 255
-    ctx.buffer = ctx.buffer.push(b)
-    ctx.count = ctx.count + 1
-    @if ctx.buffer.len() == 64
-      ctx.state = sha256_transform(ctx.state, ctx.buffer)
-      ctx.buffer = []
+    ctx.sha_buf = ctx.sha_buf.push(b)
+    ctx.sha_count = ctx.sha_count + 1
+    @if ctx.sha_buf.len() == 64
+      ctx.sha_state = sha256_transform(ctx.sha_state, ctx.sha_buf)
+      ctx.sha_buf = []
     @end
     i = i + 1
   @end
@@ -231,11 +235,11 @@ import "universe/core/string"
   @while i < num_items
     // WHY: str[i] uses compiler indexer which extracts the exact byte at index i without string concatenation
     b = str[i] & 255
-    ctx.buffer = ctx.buffer.push(b)
-    ctx.count = ctx.count + 1
-    @if ctx.buffer.len() == 64
-      ctx.state = sha256_transform(ctx.state, ctx.buffer)
-      ctx.buffer = []
+    ctx.sha_buf = ctx.sha_buf.push(b)
+    ctx.sha_count = ctx.sha_count + 1
+    @if ctx.sha_buf.len() == 64
+      ctx.sha_state = sha256_transform(ctx.sha_state, ctx.sha_buf)
+      ctx.sha_buf = []
     @end
     i = i + 1
   @end
@@ -243,45 +247,45 @@ import "universe/core/string"
 @end
 
 @fn sha256_final(ctx)
-  total_bytes = ctx.count
+  total_bytes = ctx.sha_count
   total_bits = total_bytes * 8
 
   @! 1. Append bit '1' (0x80 = 128)
-  ctx.buffer = ctx.buffer.push(128)
+  ctx.sha_buf = ctx.sha_buf.push(128)
 
   @! 2. If buffer exceeds 56 bytes, pad to 64, transform, and start new block
-  @if ctx.buffer.len() > 56
-    @while ctx.buffer.len() < 64
-      ctx.buffer = ctx.buffer.push(0)
+  @if ctx.sha_buf.len() > 56
+    @while ctx.sha_buf.len() < 64
+      ctx.sha_buf = ctx.sha_buf.push(0)
     @end
-    ctx.state = sha256_transform(ctx.state, ctx.buffer)
-    ctx.buffer = []
+    ctx.sha_state = sha256_transform(ctx.sha_state, ctx.sha_buf)
+    ctx.sha_buf = []
   @end
 
   @! 3. Zero-pad up to 56 bytes
-  @while ctx.buffer.len() < 56
-    ctx.buffer = ctx.buffer.push(0)
+  @while ctx.sha_buf.len() < 56
+    ctx.sha_buf = ctx.sha_buf.push(0)
   @end
 
   @! 4. Append 64-bit big-endian original bit length (8 bytes)
-  ctx.buffer = ctx.buffer.push((total_bits / 72057594037927936) & 255)
-  ctx.buffer = ctx.buffer.push((total_bits / 281474976710656) & 255)
-  ctx.buffer = ctx.buffer.push((total_bits / 1099511627776) & 255)
-  ctx.buffer = ctx.buffer.push((total_bits / 4294967296) & 255)
-  ctx.buffer = ctx.buffer.push((total_bits / 16777216) & 255)
-  ctx.buffer = ctx.buffer.push((total_bits / 65536) & 255)
-  ctx.buffer = ctx.buffer.push((total_bits / 256) & 255)
-  ctx.buffer = ctx.buffer.push(total_bits & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 72057594037927936) & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 281474976710656) & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 1099511627776) & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 4294967296) & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 16777216) & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 65536) & 255)
+  ctx.sha_buf = ctx.sha_buf.push((total_bits / 256) & 255)
+  ctx.sha_buf = ctx.sha_buf.push(total_bits & 255)
 
   @! 5. Transform final 64-byte block
-  ctx.state = sha256_transform(ctx.state, ctx.buffer)
-  ctx.buffer = []
+  ctx.sha_state = sha256_transform(ctx.sha_state, ctx.sha_buf)
+  ctx.sha_buf = []
 
   @! 6. Emit 32-byte digest array
   digest = []
   i = 0
   @while i < 8
-    word = ctx.state[i] % 4294967296
+    word = ctx.sha_state[i] % 4294967296
     digest = digest.push((word / 16777216) & 255)
     digest = digest.push((word / 65536) & 255)
     digest = digest.push((word / 256) & 255)

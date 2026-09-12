@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA NATIVE COMMAND DISPATCHER — universe/os/dispatcher.maya
+@! LIPI NATIVE COMMAND DISPATCHER — universe/os/dispatcher.lp
 @! 100% Pure Lipi Implementation — Complete Sovereign Shell Eradication
 @! Direct Linux x86-64 Native Syscalls & Pipeline Execution Engine
 @! ============================================================================

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SOVEREIGN DEBUGGER CLI & PTRACE DRIVER (universe/tools/debugger_cli.maya)
+@! LIPI SOVEREIGN DEBUGGER CLI & PTRACE DRIVER (universe/tools/debugger_cli.lp)
 @! 100% Written in Pure Lipi Language — Zero Foreign Syntax
 @! Freestanding Linux x86-64 Machine Code Tracing via Linux Kernel sys_ptrace (Syscall 101)
 @! ============================================================================

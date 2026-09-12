@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SWARM — DYNAMIC LOAD ROUTER & SCHEDULER (universe/swarm/router.maya)
+@! LIPI SWARM — DYNAMIC LOAD ROUTER & SCHEDULER (universe/swarm/router.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Load Metrics, Green Thread vs Remote P2P Node Routing Heuristics
 @! ============================================================================

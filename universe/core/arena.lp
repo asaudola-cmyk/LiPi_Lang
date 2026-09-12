@@ -52,6 +52,38 @@ fn অ্যারিনা_বরাদ্দ pool byte_size
 fn arena_alloc pool byte_size
     return অ্যারিনা_বরাদ্দ(pool, byte_size)
 
+// ── ২.১. অ্যারিনা থেকে কাস্টম অ্যালাইন্ড মেমরি বরাদ্দ (৮, ১৬, ৩২ বা ৬৪-বাইট ক্যাশলাইন) ──
+// WHY: AVX2 (৩২-বাইট) এবং AVX-512 (৬৪-বাইট) ভেক্টর অপারেশন চালানোর সময়
+// আন-অ্যালাইন্ড পয়েন্টার হার্ডওয়্যার ফল্ট (#GP / SIGSEGV) প্রতিরোধ করে।
+fn অ্যারিনা_বরাদ্দ_অ্যালাইন্ড pool byte_size alignment
+    base = মেমরি_পড়ো(pool, 0)
+    capacity = মেমরি_পড়ো(pool, 8)
+    used = মেমরি_পড়ো(pool, 16)
+
+    if alignment <= 8
+        alignment = 8
+
+    current_ptr = base + used
+    rem = current_ptr % alignment
+    padding = 0
+    if rem > 0
+        padding = alignment - rem
+
+    অ্যালাইন্ড_size = ((byte_size + 7) / 8) * 8
+    total_needed = padding + অ্যালাইন্ড_size
+
+    if used + total_needed > capacity
+        return 0
+
+    বরাদ্দী_addr = current_ptr + padding
+    নতুন_used = used + total_needed
+    মেমরি_লেখো(pool, 16, নতুন_used)
+
+    return বরাদ্দী_addr
+
+fn arena_alloc_aligned pool byte_size alignment
+    return অ্যারিনা_বরাদ্দ_অ্যালাইন্ড(pool, byte_size, alignment)
+
 // ── ৩. বর্তমানে ব্যবহৃত মোট মেমরি বাইট সংখ্যা ──────────────────────────────────
 fn অ্যারিনা_ব্যবহৃত_মেমরি pool
     return মেমরি_পড়ো(pool, 16)

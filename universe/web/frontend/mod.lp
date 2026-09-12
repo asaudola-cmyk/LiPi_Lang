@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/mod.maya
+@! Module: universe/web/frontend/mod.lp
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:

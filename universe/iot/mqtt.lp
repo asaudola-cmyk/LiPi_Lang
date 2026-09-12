@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE IoT — MQTT CLIENT (universe/iot/mqtt.maya)
+@! LIPI UNIVERSE IoT — MQTT CLIENT (universe/iot/mqtt.lp)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Implements: MQTT 3.1.1 wire protocol simulation (CONNECT/PUBLISH/SUBSCRIBE)
 @! ============================================================================

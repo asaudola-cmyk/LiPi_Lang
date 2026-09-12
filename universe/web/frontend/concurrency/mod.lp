@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/concurrency/mod.maya
+@! Module: universe/web/frontend/concurrency/mod.lp
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Subsystem Aggregator Exporting Message Protocol, Ring Buffer,

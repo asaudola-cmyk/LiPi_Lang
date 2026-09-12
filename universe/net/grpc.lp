@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE NET — gRPC OVER HTTP/2 & PROTOBUF (universe/net/grpc.maya)
+@! LIPI UNIVERSE NET — gRPC OVER HTTP/2 & PROTOBUF (universe/net/grpc.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! ============================================================================
 

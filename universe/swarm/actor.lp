@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA SWARM — DISTRIBUTED ACTOR MODEL (universe/swarm/actor.maya)
+@! LIPI SWARM — DISTRIBUTED ACTOR MODEL (universe/swarm/actor.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Erlang/Elixir-Style Actors, Mailboxes, PIDs, actor_send(), actor_ask() RPC
 @! ============================================================================

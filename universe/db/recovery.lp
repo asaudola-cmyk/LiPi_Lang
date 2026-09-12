@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — CRASH RECOVERY & REDO SCANNER (universe/db/recovery.maya)
+@! LIPI UNIVERSE DB — CRASH RECOVERY & REDO SCANNER (universe/db/recovery.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! 5-Phase Durability Protocol: Scan, Header Verify, CRC Check, Extract Committed,
 @! Redo Replay Mutations into B+Tree Pages, and Buffer Pool Sync

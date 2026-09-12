@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — EBPF & SMARTNIC (P4) IN-HARDWARE ENGINE
-@! Module: universe/net/ebpf_p4.maya
+@! Module: universe/net/ebpf_p4.lp
 @! Milestone: Pinnacle Advanced Hyper-Weapon
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 64-Bit eBPF Bytecode Compiler, P4 Match-Action Tables, SmartNIC

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — MAYA MOBILE ENGINE (ZERO-JVM IOS/ANDROID)
-@! Module: universe/mobile/mobile.maya
+@! Module: universe/mobile/mobile.lp
 @! Milestone: Phase 4 — Production Hardened Mobile Subsystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Authentic AArch64 ELF64 .so Shared Object Emitter with Dynamic Symbols,
@@ -508,10 +508,10 @@ import "universe/crypto/sha1"
     438, @! 4: <init>
     446, @! 5: Landroid/app/NativeActivity;
     476, @! 6: Landroid/os/Bundle;
-    497, @! 7: Lcom/maya/MayaNativeActivity;
+    497, @! 7: Lcom/lipi/LipiNativeActivity;
     528, @! 8: Ljava/lang/String;
     548, @! 9: Ljava/lang/System;
-    568, @! 10: MayaNativeActivity.maya
+    568, @! 10: LipiNativeActivity.lipi
     593, @! 11: V
     596, @! 12: VL
     600, @! 13: loadLibrary
@@ -632,14 +632,14 @@ import "universe/crypto/sha1"
     "<init>",
     "Landroid/app/NativeActivity;",
     "Landroid/os/Bundle;",
-    "Lcom/maya/MayaNativeActivity;",
+    "Lcom/lipi/LipiNativeActivity;",
     "Ljava/lang/String;",
     "Ljava/lang/System;",
-    "MayaNativeActivity.maya",
+    "LipiNativeActivity.lipi",
     "V",
     "VL",
     "loadLibrary",
-    "maya",
+    "lipi",
     "onCreate"
   ]
 

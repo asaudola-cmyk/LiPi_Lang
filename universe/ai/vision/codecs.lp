@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — VISION CODECS (universe/ai/vision/codecs.maya)
+@! LIPI UNIVERSE AI — VISION CODECS (universe/ai/vision/codecs.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Pure Maya PPM (P2/P3/P5/P6) & BMP (24-bit/32-bit) Encoders & Decoders,
 @! Synthetic Test Pattern Generators (Checkerboard, Gradients, Color Bars, Circles).

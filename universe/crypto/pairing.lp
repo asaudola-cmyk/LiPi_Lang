@@ -46,7 +46,7 @@
 
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — ADVANCED PLONK & ELLIPTIC CURVE ZK-SNARKS
-@! Module: universe/crypto/plonk.maya
+@! Module: universe/crypto/plonk.lp
 @! Milestone: Next-Gen Universal Zero-Knowledge Cryptography
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: BN254 Elliptic Curve Field Tower (Fp -> Fp2 -> Fp6 -> Fp12),

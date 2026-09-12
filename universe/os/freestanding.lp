@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — THE EDGE (FREESTANDING #[NO_OS] ENGINE)
-@! Module: universe/os/freestanding.maya
+@! Module: universe/os/freestanding.lp
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Freestanding #[no_os] RISC-V Engine, Fixed Memory Arena Allocator,

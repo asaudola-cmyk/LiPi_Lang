@@ -81,19 +81,19 @@ import "universe/os/fs"
 
 @fn mpm_manifest_new(name, version, description, author, license)
   @! WHY: Creates new sovereign manifest with default scripts avoiding pointer addition.
-  build_cmd = str_concat("maya build src/main.maya -o bin/", name)
+  build_cmd = str_concat("lipi build src/main.lp -o bin/", name)
   return {
     name: name,
     version: version,
     description: description,
     author: author,
     license: license,
-    entry_file: "src/main.maya",
+    entry_file: "src/main.lp",
     dependencies: [],
     tags: ["maya"],
     scripts: [
       { name: "build", command: build_cmd },
-      { name: "test", command: "maya tests/test_main.maya" }
+      { name: "test", command: "lipi test tests/test_main.lp" }
     ]
   }
 @end
@@ -211,7 +211,7 @@ import "universe/os/fs"
   author = mpm_extract_json_string(json_str, "author")
   license = mpm_extract_json_string(json_str, "license")
   entry_file = mpm_extract_json_string(json_str, "entry_file")
-  @if str_len(entry_file) == 0 entry_file = "src/main.maya" @end
+  @if str_len(entry_file) == 0 entry_file = "src/main.lp" @end
   tags = mpm_extract_json_tags(json_str)
 
   manifest = {

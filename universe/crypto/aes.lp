@@ -1,5 +1,5 @@
 @! ============================================================================
-@! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 197 & NIST SP 800-38A AES
+@! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 197 & NIST SP 800-38A AES
 @! Module: universe/crypto/aes
 @! 100% Pure Lipi Implementation of AES-128 & AES-256 (ECB / CBC / CTR / PKCS#7)
 @! ============================================================================

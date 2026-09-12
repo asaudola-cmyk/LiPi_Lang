@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE
-@! Module: universe/web/frontend/layout/gpu_layout.maya
+@! Module: universe/web/frontend/layout/gpu_layout.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flattens hierarchical widget trees into linear GPU storage buffers

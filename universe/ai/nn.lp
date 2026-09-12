@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — NEURAL NETWORK MODULES & OPTIMIZERS (universe/ai/nn.maya)
+@! LIPI UNIVERSE AI — NEURAL NETWORK MODULES & OPTIMIZERS (universe/ai/nn.lp)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Parameter & Module Abstraction, Linear Layer with Xavier/He Init,
 @! LayerNorm with Affine Scale/Shift, Inverted Dropout, Multi-Head Attention,

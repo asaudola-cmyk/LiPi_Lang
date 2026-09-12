@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — HIGH-PERFORMANCE IO_URING ASYNC ENGINE
-@! Module: universe/io/uring.maya
+@! Module: universe/io/uring.lp
 @! Milestone: Undisputed #1 Hyper-Performance Weapon
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Linux io_uring (Syscall 425, 426, 427), SQ/CQ Shared Ring Buffers via sys_mmap,

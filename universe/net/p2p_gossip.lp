@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — NETWORKING
-@! Module: universe/net/p2p_gossip.maya
+@! Module: universe/net/p2p_gossip.lp
 @! Features: Epidemic Gossip Protocol for Decentralized P2P Networks
 @! ============================================================================
 

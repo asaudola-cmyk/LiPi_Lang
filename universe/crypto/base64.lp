@@ -1,5 +1,5 @@
 @! ============================================================================
-@! PURE MAYA CRYPTOGRAPHIC STANDARD LIBRARY: RFC 4648 BASE64 CODEC
+@! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: RFC 4648 BASE64 CODEC
 @! Module: universe/crypto/base64
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================

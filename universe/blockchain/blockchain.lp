@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LAYER-1 SOVEREIGN BLOCKCHAIN (MAYANET)
-@! Module: universe/blockchain/blockchain.maya
+@! Module: universe/blockchain/blockchain.lp
 @! Milestone: Layer-1 Sovereign Blockchain (MayaNet)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Transactions, SHA-256 Merkle Trees, Proof-of-Work (PoW) Mining,

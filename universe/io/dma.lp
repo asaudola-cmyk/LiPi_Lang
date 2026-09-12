@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — CPU-ZERO-TOUCH HARDWARE DMA OFFLOAD ENGINE
-@! Module: universe/io/dma.maya
+@! Module: universe/io/dma.lp
 @! Milestone: Pinnacle Advanced Hyper-Weapon
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Scatter-Gather PCIe DMA Descriptors, Peer-to-Peer (P2P) NIC-to-NVMe

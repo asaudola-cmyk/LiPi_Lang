@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA SOVEREIGN IDE — MASTER MAYA STUDIO APPLICATION
-@! Module: universe/ide/studio.maya
+@! LIPI SOVEREIGN IDE — MASTER MAYA STUDIO APPLICATION
+@! Module: universe/ide/studio.lp
 @! Milestone: M3 (Maya Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
@@ -47,7 +47,7 @@ import "universe/ide/editor"
 @fn studio_app_create(width, height, file_path)
   @if width <= 0 width = 800 @end
   @if height <= 0 height = 600 @end
-  @if str_len(file_path) == 0 file_path = "src/main.maya" @end
+  @if str_len(file_path) == 0 file_path = "src/main.lp" @end
 
   win = widget_window_new("maya_studio_win", "Maya Studio — Sovereign IDE", 0, 0, width, height)
   win.bg_color = 0xFF1E1E1E
@@ -311,7 +311,7 @@ import "universe/ide/editor"
   println("🚀 MAYA STUDIO SOVEREIGN GRAPHICAL IDE 🚀")
   println("=================================================================")
   
-  app = studio_app_create(800, 600, "apps/demo.maya")
+  app = studio_app_create(800, 600, "apps/demo.lp")
   println("Master Maya Studio Application initialized (800x600).")
 
   demo_code = "@! Maya Sovereign Application Demo\n@struct Vector3\n  x: f64\n  y: f64\n  z: f64\n

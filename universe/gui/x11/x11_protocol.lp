@@ -1,6 +1,6 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — PURE MAYA X11 DIRECT WIRE PROTOCOL
-@! Module: universe/gui/x11/x11_protocol.maya
+@! LIPI UNIVERSAL ARCHITECTURE — PURE LIPI X11 DIRECT WIRE PROTOCOL
+@! Module: universe/gui/x11/x11_protocol.lp
 @! Milestone: Grand Sovereign Pillar 3
 @! 100% Pure Lipi Implementation — Direct Unix Domain Socket / X11 Wire Protocol
 @! Features: Binary X11 Wire Framing, Handshake, Opcodes (CreateWindow, MapWindow,

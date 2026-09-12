@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA DIRECT LINUX x86-64 NATIVE SYSCALL INTERFACE (universe/os/syscalls.maya)
+@! LIPI DIRECT LINUX x86-64 NATIVE SYSCALL INTERFACE (universe/os/syscalls.lp)
 @! 100% Written in Pure Lipi Language — Complete Independence from libc.so
 @! Architecture: x86_64-unknown-linux-gnu
 @! ============================================================================

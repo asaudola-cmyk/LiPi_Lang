@@ -204,3 +204,22 @@ fn vector_hsum_256 src
 fn ভেক্টর_অনুভূমিক_যোগ_২৫৬ src
     return vector_hsum_256(src)
 
+// ── ৭. হাই-স্পিড AVX2 সিলিকন অ্যারে সাম (High-Performance Hardware SIMD Vector Sum) ──
+// WHY: ১০ লাখ বা তার বেশি সংখ্যার যোগফল নির্ণয় করতে সরাসরি CPU VEX AVX2 ভেক্টর রেজিস্টার ব্যবহার।
+// যদি প্রসেসরে AVX2 থাকে, তবে এটি হার্ডওয়্যার ইনট্রিনসিক `simd_avx2_sum` তলব করে।
+fn vector_sum_hardware ptr count
+    if count <= 0
+        return 0
+    if cpu_has_avx2()
+        return simd_avx2_sum(ptr, count)
+    // স্কেলার ফলব্যাক (Scalar Fallback)
+    sum = 0
+    i = 0
+    while i < count
+        sum = sum + মেমরি_পড়ো(ptr, i * 8)
+        i = i + 1
+    return sum
+
+fn ভেক্টর_যোগফল_হার্ডওয়্যার ptr count
+    return vector_sum_hardware(ptr, count)
+

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA NATIVE GUI FRAMEWORK — EVENT MODEL & DISPATCHER
-@! Module: universe/gui/event.maya
+@! LIPI NATIVE GUI FRAMEWORK — EVENT MODEL & DISPATCHER
+@! Module: universe/gui/event.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Universal GuiEvent Data Model

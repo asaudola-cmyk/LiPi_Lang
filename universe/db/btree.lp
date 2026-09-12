@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — DISK-BACKED B+TREE ENGINE (universe/db/btree.maya)
+@! LIPI UNIVERSE DB — DISK-BACKED B+TREE ENGINE (universe/db/btree.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Sovereign Slotted 4096-byte Binary Pages with LRU Cache & Syscall Persistence
 @! ============================================================================

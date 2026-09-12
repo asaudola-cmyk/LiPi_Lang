@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — AUTONOMOUS MULTI-AGENT SWARM & TASK ROUTING (universe/ai/swarm.maya)
+@! LIPI UNIVERSE AI — AUTONOMOUS MULTI-AGENT SWARM & TASK ROUTING (universe/ai/swarm.lp)
 @! 100% Pure Lipi Implementation — Zero External / Foreign Code Dependencies
 @! Features: F18 Autonomous Multi-Agent Cognitive Roles (Planner, Coder, Critic, Synthesizer),
 @! Deterministic State Machine Engine, Priority Mailboxes, Topic Pub/Sub Event Bus,

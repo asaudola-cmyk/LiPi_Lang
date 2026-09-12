@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/concurrency/ring_buffer.maya
+@! Module: universe/web/frontend/concurrency/ring_buffer.lp
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: io_uring-Style SQ/CQ Ring Buffers over SharedArrayBuffer / Atomics,

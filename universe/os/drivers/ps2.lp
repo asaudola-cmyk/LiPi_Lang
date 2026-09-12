@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL PS/2 KEYBOARD & MOUSE DRIVERS
-@! Module: universe/os/drivers/ps2.maya
+@! Module: universe/os/drivers/ps2.lp
 @! Milestone: Grand Sovereign Pillar 4
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Scancode Set 1 & 2 Decoders, Shift/Ctrl/Alt Modifier States,

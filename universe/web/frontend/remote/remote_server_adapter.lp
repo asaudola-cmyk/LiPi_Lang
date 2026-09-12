@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/remote/remote_server_adapter.maya
+@! Module: universe/web/frontend/remote/remote_server_adapter.lp
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Backend WebRTC Streaming Gateway, Session Manager,

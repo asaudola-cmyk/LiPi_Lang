@@ -260,6 +260,71 @@
   return maya_str_to_int(s)
 @end
 
+@fn to_int(v)
+  // WHY: Universal to_int method. If string, parses integer; otherwise returns numeric value.
+  @if is_str(v) == 1
+    return maya_str_to_int(v)
+  @end
+  return v
+@end
+
+@fn লিপি_ইন্টে_রূপান্তর(মান)
+  return to_int(মান)
+@end
+
+@fn float_from_str(s)
+  // WHY: Parses a floating point value from a decimal string without libc strtod.
+  // Supports optional leading sign, integer portion, and fractional decimal digits.
+  n = str_len(s)
+  @if n == 0 return 0.0 @end
+
+  negative = 0
+  i = 0
+  first_ch = str_char_at(s, 0)
+  @if first_ch == 45
+    negative = 1
+    i = 1
+  @elif first_ch == 43
+    i = 1
+  @end
+
+  int_part = 0
+  frac_part = 0
+  frac_div = 1.0
+  in_frac = 0
+
+  @while i < n
+    ch = str_char_at(s, i)
+    @if ch == 46
+      in_frac = 1
+    @elif ch >= 48 && ch <= 57
+      digit = ch - 48
+      @if in_frac == 0
+        int_part = int_part * 10 + digit
+      @else
+        frac_part = frac_part * 10 + digit
+        frac_div = frac_div * 10.0
+      @end
+    @end
+    i = i + 1
+  @end
+
+  val = (int_part * 1.0) + ((frac_part * 1.0) / frac_div)
+  @if negative == 1
+    return 0.0 - val
+  @end
+  return val
+@end
+
+@fn str_to_float(s)
+  // WHY: Standard alias for float_from_str
+  return float_from_str(s)
+@end
+
+@fn লিপি_স্ট্রিং_থেকে_ফ্লোট(লেখা)
+  return float_from_str(লেখা)
+@end
+
 
 @! ─── Case Conversion ─────────────────────────────────────────
 
@@ -633,6 +698,11 @@
   return 0
 @end
 
+@fn string_is_digit(c)
+  // WHY: Canonical string_is_digit alias matching SQL lexer and markup parser expectations
+  return is_digit(c)
+@end
+
 @fn is_alpha(c)
   @if c == "a" return 1 @end @if c == "b" return 1 @end
   @if c == "c" return 1 @end @if c == "d" return 1 @end
@@ -661,6 +731,11 @@
   @if c == "W" return 1 @end @if c == "X" return 1 @end
   @if c == "Y" return 1 @end @if c == "Z" return 1 @end
   return 0
+@end
+
+@fn string_is_alpha(c)
+  // WHY: Canonical string_is_alpha alias
+  return is_alpha(c)
 @end
 
 @fn is_space(c)

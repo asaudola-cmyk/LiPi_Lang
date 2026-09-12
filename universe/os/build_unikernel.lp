@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL & UNIKERNEL BUILD TOOLING
-@! Module: tools/build_unikernel.maya
+@! Module: tools/build_unikernel.lp
 @! Milestone: Grand Sovereign Pillar 5 — Bare-Metal Unikernel Generation
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:

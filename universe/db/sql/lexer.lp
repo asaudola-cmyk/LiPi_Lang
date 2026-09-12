@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL LEXER (universe/db/sql/lexer.maya)
+@! LIPI UNIVERSE DB - SQL LEXER (universe/db/sql/lexer.lp)
 @! Standard: 100% Pure Maya SQL Tokenizer
 @! ============================================================================
 

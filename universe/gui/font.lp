@@ -10,8 +10,8 @@
 @end
 
 @! ============================================================================
-@! MAYA NATIVE GUI FRAMEWORK — BITMAP FONT & TEXT RENDERER
-@! Module: universe/gui/font.maya
+@! LIPI NATIVE GUI FRAMEWORK — BITMAP FONT & TEXT RENDERER
+@! Module: universe/gui/font.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Monospace 8x16 ASCII Bitmap Font Table (ASCII 32..126)

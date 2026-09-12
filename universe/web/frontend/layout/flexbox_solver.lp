@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — HIGH-PRECISION CPU FLEXBOX & GRID SOLVER (F10)
-@! Module: universe/web/frontend/layout/flexbox_solver.maya
+@! Module: universe/web/frontend/layout/flexbox_solver.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-precision 7-pass integer-conserving flexbox and grid layout solver
