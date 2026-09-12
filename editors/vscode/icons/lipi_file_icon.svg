@@ -1,16 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
-  <!-- Clean Off-White Canvas for 1:1 App Icon / Favicon -->
-  <rect width="500" height="500" rx="90" fill="#F4F4F9" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 20 190 220" width="100%" height="100%">
+  <!-- Sovereign Lipi File Icon: 100% Transparent Canvas, Ultra-Crisp Vector Monogram -->
+  <!-- 1. The Vertical Stem (Electric Cyan #00C2FF) -->
+  <rect x="50" y="30" width="60" height="200" rx="30" fill="#00C2FF" />
   
-  <!-- Centered Logo Group (Offset adjusted to center the 200x200 L+P mark) -->
-  <g transform="translate(145, 140)" style="mix-blend-mode: multiply;">
-    <!-- Vertical Stem -->
-    <rect x="50" y="30" width="60" height="200" rx="30" fill="#00C2FF" opacity="0.85" />
-    
-    <!-- Base (Completes L) -->
-    <rect x="50" y="170" width="150" height="60" rx="30" fill="#FF007A" opacity="0.85" />
-    
-    <!-- Loop (Completes P) -->
-    <circle cx="150" cy="100" r="40" fill="none" stroke="#FFD700" stroke-width="60" opacity="0.85" />
-  </g>
+  <!-- 2. The Base of L (Vivid Magenta #FF007A) -->
+  <rect x="50" y="170" width="150" height="60" rx="30" fill="#FF007A" opacity="0.95" />
+  
+  <!-- 3. The Loop of P (Golden Amber #FFD700) -->
+  <circle cx="145" cy="100" r="48" fill="none" stroke="#FFD700" stroke-width="44" opacity="0.95" />
 </svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 20 190 220" width="100%" height="100%">
+  <!-- Sovereign Lipi File Icon (Light Theme Optimized: Deeper Contrast) -->
+  <!-- 1. The Vertical Stem (Deep Cyan #0099CC) -->
+  <rect x="50" y="30" width="60" height="200" rx="30" fill="#0099CC" />
+  
+  <!-- 2. The Base of L (Deep Magenta #E6006F) -->
+  <rect x="50" y="170" width="150" height="60" rx="30" fill="#E6006F" />
+  
+  <!-- 3. The Loop of P (Dark Amber #D4A000) -->
+  <circle cx="145" cy="100" r="48" fill="none" stroke="#D4A000" stroke-width="44" />
+</svg>

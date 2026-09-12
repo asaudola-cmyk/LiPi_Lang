@@ -1555,6 +1555,9 @@
     },
     "_lipi": {
       "iconPath": "./lipi_file_icon.svg"
+    },
+    "_lipi_light": {
+      "iconPath": "./lipi_file_icon_light.svg"
     }
   },
   "file": "_default",
@@ -2231,9 +2234,9 @@
       "crt": "_lock_light",
       "pem": "_lock_light",
       "ds_store": "_ignored_light",
-      "lp": "_lipi",
-      "lipi": "_lipi",
-      "লিপি": "_lipi"
+      "lp": "_lipi_light",
+      "lipi": "_lipi_light",
+      "লিপি": "_lipi_light"
     },
     "languageIds": {
       "bat": "_windows_light",
@@ -2318,7 +2321,7 @@
       "instructions": "_markdown_light",
       "chatagent": "_markdown_light",
       "skill": "_markdown_light",
-      "lipi": "_lipi"
+      "lipi": "_lipi_light"
     },
     "fileNames": {
       "mix": "_hex_light",
