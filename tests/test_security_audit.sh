@@ -40,6 +40,7 @@ cleanup() {
     echo ""
     echo -e "${YELLOW}[ক্লিনআপ] সিকিউরিটি টেস্ট সার্ভার প্রসেস (${SERVER_PID}) বন্ধ করা হচ্ছে...${NC}"
     kill -9 "${SERVER_PID}" 2>/dev/null || true
+    wait "${SERVER_PID}" 2>/dev/null || true
     fuser -k "${TEST_PORT}/tcp" 2>/dev/null || true
 }
 trap cleanup EXIT

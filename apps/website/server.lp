@@ -32,19 +32,27 @@ fn str_to_int s
 
 // ── Raw Socket Memory Buffer to String Converter ─────────────────────────────
 // WHY: Converts incoming TCP socket wire stream into a high-level Lipi string for routing.
-// Supports payloads up to 64KB for interactive code compilation requests.
+// Optimized with 64-byte chunking to avoid O(N^2) single-byte heap churn and capped at 16384 bytes
+// to prevent memory exhaustion and buffer bomb denial of service attacks.
 fn buf_to_str buf_addr n
     res = ""
     i = 0
     limit = n
-    if limit > 65536
-        limit = 65536
+    if limit > 16384
+        limit = 16384
     while i < limit
-        b = mem_byte_read(buf_addr, i)
-        if b == 0
-            return res
-        res = res + chr(b)
-        i = i + 1
+        chunk = ""
+        j = 0
+        while j < 64 and i < limit
+            b = mem_byte_read(buf_addr, i)
+            if b == 0
+                if len(chunk) > 0
+                    res = res + chunk
+                return res
+            chunk = chunk + chr(b)
+            j = j + 1
+            i = i + 1
+        res = res + chunk
     return res
 
 // ── Query / Form Parameter Parser ─────────────────────────────────────────────
@@ -145,10 +153,16 @@ fn lipidb_serve_stats client_fd
 
 // ── Database API: Insert Record (/api/db/add) ──────────────────────────────────
 // WHY: Commits new 32-byte binary record to disk with SYS_fsync silicon guarantee
+// Validates positive numeric value to prevent database bloating by fuzz payloads.
 fn db_serve_add client_fd db_fd req_str
     val = parse_param(req_str, "val=")
-    if val == 0
-        val = 100
+    if val <= 0
+        err_body = "{\"error\":400,\"message\":\"Bad Request: val parameter must be a positive integer\"}\n"
+        res = web_response_new(400, "application/json; charset=utf-8", err_body)
+        wire = web_serialize_response(res)
+        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+        socket_close(client_fd)
+        return 0
     new_id = db_insert_record(db_fd, val)
     body = "{\"success\":true,\"message\":\"Record committed to Lipi NVMe store\",\"id\":" + str(new_id) + ",\"value\":" + str(val) + "}\n"
     res = web_response_new(201, "application/json; charset=utf-8", body)
@@ -159,8 +173,16 @@ fn db_serve_add client_fd db_fd req_str
 
 // ── Database API: Soft Delete Record (/api/db/delete) ─────────────────────────
 // WHY: Sets record status to 0 at offset 16 with zero data fragmentation
+// Validates target_id is positive before mutation
 fn db_serve_delete client_fd db_fd req_str
     target_id = parse_param(req_str, "id=")
+    if target_id <= 0
+        err_body = "{\"error\":400,\"message\":\"Bad Request: id parameter must be a positive integer\"}\n"
+        res = web_response_new(400, "application/json; charset=utf-8", err_body)
+        wire = web_serialize_response(res)
+        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+        socket_close(client_fd)
+        return 0
     result = db_delete_record(db_fd, target_id)
     body = "{\"success\":true,\"message\":\"Record soft deleted in Lipi store\",\"id\":" + str(target_id) + ",\"result\":" + str(result) + "}\n"
     res = web_response_json(body)
@@ -171,9 +193,17 @@ fn db_serve_delete client_fd db_fd req_str
 
 // ── Database API: Update Record (/api/db/update) ─────────────────────────────
 // WHY: In-place modification of 8-byte QWORD payload with direct SYS_fsync silicon guarantee
+// Validates both target_id and new_val are positive before in-place QWORD mutation
 fn db_serve_update client_fd db_fd req_str
     target_id = parse_param(req_str, "id=")
     new_val = parse_param(req_str, "val=")
+    if target_id <= 0 or new_val <= 0
+        err_body = "{\"error\":400,\"message\":\"Bad Request: id and val parameters must be positive integers\"}\n"
+        res = web_response_new(400, "application/json; charset=utf-8", err_body)
+        wire = web_serialize_response(res)
+        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+        socket_close(client_fd)
+        return 0
     result = db_update_record(db_fd, target_id, new_val)
     body = "{\"success\":true,\"message\":\"Record updated in Lipi store with fsync\",\"id\":" + str(target_id) + ",\"value\":" + str(new_val) + ",\"result\":" + str(result) + "}\n"
     res = web_response_json(body)
@@ -586,6 +616,19 @@ else
         db_insert_record(db_fd, 4096)
         say "  ✔ Seeded database with 3 initial records"
 
+// 0. Kernel Signal Hardening: Ignore SIGPIPE (Linux signal 13)
+// WHY: In raw socket network servers, abrupt client disconnects (TCP RST, closed socket)
+// trigger SIGPIPE during write/send syscalls. Without SIG_IGN, the Linux kernel terminates
+// the server process with exit code 141 (128 + 13). Handling via SYS_rt_sigaction (13)
+// ensures writes gracefully return -EPIPE (-32) without crashing the server.
+sa_sigpipe = malloc(64)
+mem_write(sa_sigpipe, 0, 1) // sa_handler = SIG_IGN (1)
+mem_write(sa_sigpipe, 8, 0)
+mem_write(sa_sigpipe, 16, 0)
+mem_write(sa_sigpipe, 24, 0)
+syscall(13, 13, sa_sigpipe, 0, 8, 0, 0) // SYS_rt_sigaction(SIGPIPE=13, sa, NULL, sizeof(sigset_t)=8)
+free(sa_sigpipe, 64)
+
 // 2. Initialize TCP network socket
 server_fd = socket_create()
 if server_fd < 0
@@ -633,80 +676,85 @@ while 1
         else
             req_count = req_count + 1
             nread = syscall(0, client_fd, req_buf, 65536, 0, 0, 0)
-            if nread > 0
+            if nread > 16384
+                // HTTP 413: Defense against payload and header bombs
+                err_resp = "HTTP/1.1 413 Payload Too Large\r\nContent-Type: text/plain\r\nContent-Length: 22\r\nConnection: close\r\n\r\nPayload exceeds limit\n"
+                syscall(1, client_fd, err_resp, len(err_resp), 0, 0, 0)
+                socket_close(client_fd)
+            elif nread <= 0
+                socket_close(client_fd)
+            else
                 req_str = buf_to_str(req_buf, nread)
                 method = web_parse_method(req_str)
                 path = web_parse_path(req_str)
 
-            if path == "/" or path == "/index.html"
-                serve_static_file(client_fd, "apps/website/public/index.html", "text/html; charset=utf-8")
-            elif path == "/style.css"
-                serve_static_file(client_fd, "apps/website/public/style.css", "text/css; charset=utf-8")
-            elif path == "/app.js"
-                serve_static_file(client_fd, "apps/website/public/app.js", "application/javascript; charset=utf-8")
-            elif path == "/wasm_runner.js"
-                serve_static_file(client_fd, "apps/website/public/wasm_runner.js", "application/javascript; charset=utf-8")
-            elif path == "/lipi_worker.js"
-                serve_static_file(client_fd, "apps/website/public/lipi_worker.js", "application/javascript; charset=utf-8")
-            elif path == "/favicon.svg"
-                serve_static_file(client_fd, "apps/website/public/favicon.svg", "image/svg+xml")
-            elif path == "/healthz"
-                // ── Dedicated Lightweight Healthcheck Endpoint ───────────────────────────
-                // WHY: Production orchestrators (Kubernetes liveness/readiness probes, AWS ALB,
-                // systemd watchdog, keepalived) require an instantaneous HTTP 200 response
-                // without touching database storage or allocating heavy objects.
-                body = "{\"status\":\"healthy\",\"engine\":\"Lipi Sovereign\"}\n"
-                res = web_response_json(body)
-                wire = web_serialize_response(res)
-                syscall(1, client_fd, wire, len(wire), 0, 0, 0)
-                socket_close(client_fd)
-            elif path == "/api/status"
-                cur_clock = cpu_clock()
-                delta_cycles = cur_clock - start_clock
-                body = "{\"status\":\"sovereign_online\",\"engine\":\"Lipi Full-Stack Silicon ELF64\",\"version\":\"2.1-ultra\",\"cpu_cycles\":" + str(cur_clock) + ",\"uptime_cycles\":" + str(delta_cycles) + ",\"requests_served\":" + str(req_count) + ",\"memory_allocated_kb\":128,\"active_horizons\":21,\"php_dependency\":0,\"libc_dependency\":0}\n"
-                res = web_response_json(body)
-                wire = web_serialize_response(res)
-                syscall(1, client_fd, wire, len(wire), 0, 0, 0)
-                socket_close(client_fd)
-            elif path == "/api/run" or path == "/api/compile_and_run"
-                if method == "OPTIONS"
-                    res = web_response_new(204, "text/plain; charset=utf-8", "")
+                if path == "/" or path == "/index.html"
+                    serve_static_file(client_fd, "apps/website/public/index.html", "text/html; charset=utf-8")
+                elif path == "/style.css"
+                    serve_static_file(client_fd, "apps/website/public/style.css", "text/css; charset=utf-8")
+                elif path == "/app.js"
+                    serve_static_file(client_fd, "apps/website/public/app.js", "application/javascript; charset=utf-8")
+                elif path == "/wasm_runner.js"
+                    serve_static_file(client_fd, "apps/website/public/wasm_runner.js", "application/javascript; charset=utf-8")
+                elif path == "/lipi_worker.js"
+                    serve_static_file(client_fd, "apps/website/public/lipi_worker.js", "application/javascript; charset=utf-8")
+                elif path == "/favicon.svg"
+                    serve_static_file(client_fd, "apps/website/public/favicon.svg", "image/svg+xml")
+                elif path == "/healthz"
+                    // ── Dedicated Lightweight Healthcheck Endpoint ───────────────────────────
+                    // WHY: Production orchestrators (Kubernetes liveness/readiness probes, AWS ALB,
+                    // systemd watchdog, keepalived) require an instantaneous HTTP 200 response
+                    // without touching database storage or allocating heavy objects.
+                    body = "{\"status\":\"healthy\",\"engine\":\"Lipi Sovereign\"}\n"
+                    res = web_response_json(body)
                     wire = web_serialize_response(res)
                     syscall(1, client_fd, wire, len(wire), 0, 0, 0)
                     socket_close(client_fd)
+                elif path == "/api/status"
+                    cur_clock = cpu_clock()
+                    delta_cycles = cur_clock - start_clock
+                    body = "{\"status\":\"sovereign_online\",\"engine\":\"Lipi Full-Stack Silicon ELF64\",\"version\":\"2.1-ultra\",\"cpu_cycles\":" + str(cur_clock) + ",\"uptime_cycles\":" + str(delta_cycles) + ",\"requests_served\":" + str(req_count) + ",\"memory_allocated_kb\":128,\"active_horizons\":21,\"php_dependency\":0,\"libc_dependency\":0}\n"
+                    res = web_response_json(body)
+                    wire = web_serialize_response(res)
+                    syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                    socket_close(client_fd)
+                elif path == "/api/run" or path == "/api/compile_and_run"
+                    if method == "OPTIONS"
+                        res = web_response_new(204, "text/plain; charset=utf-8", "")
+                        wire = web_serialize_response(res)
+                        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                        socket_close(client_fd)
+                    else
+                        api_serve_run(client_fd, req_str, req_count)
+                elif path == "/api/lipidb/stats"
+                    lipidb_serve_stats(client_fd)
+                elif path == "/api/db/items"
+                    db_serve_items(client_fd, db_fd)
+                elif path == "/api/db/stats"
+                    db_serve_stats(client_fd, db_fd)
+                elif path == "/api/db/add"
+                    db_serve_add(client_fd, db_fd, req_str)
+                elif path == "/api/db/delete"
+                    db_serve_delete(client_fd, db_fd, req_str)
+                elif path == "/api/db/update"
+                    db_serve_update(client_fd, db_fd, req_str)
+                elif path == "/api/db/reseed"
+                    db_serve_reseed(client_fd, db_fd, req_str)
+                elif path == "/api/packages"
+                    api_serve_packages(client_fd)
+                elif path == "/api/benchmarks"
+                    api_serve_benchmarks(client_fd)
+                elif path == "/og-image.png"
+                    serve_static_file(client_fd, "apps/website/public/og-image.png", "image/png")
+                elif path == "/logo.svg"
+                    serve_static_file(client_fd, "apps/website/public/logo.svg", "image/svg+xml")
+                elif path == "/favicon.ico"
+                    serve_static_file(client_fd, "apps/website/public/favicon.ico", "image/x-icon")
                 else
-                    api_serve_run(client_fd, req_str, req_count)
-            elif path == "/api/lipidb/stats"
-                lipidb_serve_stats(client_fd)
-            elif path == "/api/db/items"
-                db_serve_items(client_fd, db_fd)
-            elif path == "/api/db/stats"
-                db_serve_stats(client_fd, db_fd)
-            elif path == "/api/db/add"
-                db_serve_add(client_fd, db_fd, req_str)
-            elif path == "/api/db/delete"
-                db_serve_delete(client_fd, db_fd, req_str)
-            elif path == "/api/db/update"
-                db_serve_update(client_fd, db_fd, req_str)
-            elif path == "/api/db/reseed"
-                db_serve_reseed(client_fd, db_fd, req_str)
-            elif path == "/api/packages"
-                api_serve_packages(client_fd)
-            elif path == "/api/benchmarks"
-                api_serve_benchmarks(client_fd)
-            elif path == "/og-image.png"
-                serve_static_file(client_fd, "apps/website/public/og-image.png", "image/png")
-            elif path == "/logo.svg"
-                serve_static_file(client_fd, "apps/website/public/logo.svg", "image/svg+xml")
-            elif path == "/favicon.ico"
-                serve_static_file(client_fd, "apps/website/public/favicon.ico", "image/x-icon")
-            else
-                res = web_response_not_found()
-                wire = web_serialize_response(res)
-                syscall(1, client_fd, wire, len(wire), 0, 0, 0)
-                socket_close(client_fd)
-        else
-            socket_close(client_fd)
+                    res = web_response_not_found()
+                    wire = web_serialize_response(res)
+                    syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                    socket_close(client_fd)
 
 free(req_buf, 65536)
 file_close(db_fd)
