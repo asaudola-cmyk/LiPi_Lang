@@ -177,7 +177,7 @@ chmod +x build/hello_app
 
 ### 4. Run the Full Test Suite
 ```bash
-bash tests/run_tests.sh
+./bin/lipi test
 ```
 All 140 regression and integration test suites pass (140/140) across core language semantics, networking, cryptography, concurrency, memory arenas, and baremetal components.
 

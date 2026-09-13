@@ -160,10 +160,16 @@ fn handle_test suite_path
         return tst_code
     else
         say "\033[1;34m[LIPI TEST]\033[0m Executing complete sovereign regression test suite..."
-        b_bin = resolve_bin_path("lipi-build")
-        if syscall(21, b_bin, 0, 0, 0, 0, 0) == 0
-            return spawn_exec_cmd(b_bin, "", "", "", "")
-        return spawn_exec_cmd("/bin/bash", "tests/run_tests.sh", "--direct-elf", "", "")
+        t_bin = resolve_bin_path("lipi-test")
+        if syscall(21, t_bin, 0, 0, 0, 0, 0) == 0
+            return spawn_exec_cmd(t_bin, "", "", "", "")
+        c_bin = resolve_bin_path("lipc_bin")
+        t_code = spawn_exec_cmd(c_bin, "tests/run_tests.lp", "/tmp/lipi_tst_runner", "", "")
+        if t_code == 0
+            res = spawn_exec_cmd("/tmp/lipi_tst_runner", "", "", "", "")
+            syscall(87, "/tmp/lipi_tst_runner", 0, 0, 0, 0, 0)
+            return res
+        return t_code
 
 fn handle_fmt file_path flag
     if len(file_path) == 0
@@ -194,17 +200,31 @@ fn handle_convert file_path to_syntax
 fn handle_os action
     if action == "boot"
         say "⚡ Launching Lipi-OS live in QEMU hypervisor..."
-        return spawn_exec_cmd("bash", "scripts/boot_qemu.sh", "--iso", "--test", "")
+        k_bin = "dist/lipi_kernel.bin"
+        if syscall(21, k_bin, 0, 0, 0, 0, 0) != 0
+            c_bin = resolve_bin_path("lipc_bin")
+            spawn_exec_cmd(c_bin, "src/tools/lipi_unikernel_boot.lp", "/tmp/lipi_kbuild", "", "")
+            spawn_exec_cmd("/tmp/lipi_kbuild", "", "", "", "")
+            syscall(87, "/tmp/lipi_kbuild", 0, 0, 0, 0, 0)
+        return spawn_exec_cmd("qemu-system-x86_64", "-kernel", "dist/lipi_kernel.bin", "-nographic", "-serial mon:stdio")
     else
-        say "⚡ Building Lipi-OS bootable hybrid ISO image (5.1MB)..."
-        return spawn_exec_cmd("bash", "scripts/build_iso.sh", "", "", "")
+        say "⚡ Building Lipi-OS bare-metal unikernel image..."
+        c_bin = resolve_bin_path("lipc_bin")
+        spawn_exec_cmd(c_bin, "src/tools/lipi_unikernel_boot.lp", "/tmp/lipi_kbuild", "", "")
+        code = spawn_exec_cmd("/tmp/lipi_kbuild", "", "", "", "")
+        syscall(87, "/tmp/lipi_kbuild", 0, 0, 0, 0, 0)
+        return code
 
 fn handle_self_build
     say "\033[1;35m[LIPI SELF-BUILD]\033[0m 3-generation self-hosting deterministic bootstrap..."
     b_bin = resolve_bin_path("lipi-build")
     if syscall(21, b_bin, 0, 0, 0, 0, 0) == 0
         return spawn_exec_cmd(b_bin, "", "", "", "")
-    return spawn_exec_cmd("bash", "build.sh", "", "", "")
+    c_bin = resolve_bin_path("lipc_bin")
+    spawn_exec_cmd(c_bin, "build.lp", "/tmp/lipi_build_runner", "", "")
+    code = spawn_exec_cmd("/tmp/lipi_build_runner", "", "", "", "")
+    syscall(87, "/tmp/lipi_build_runner", 0, 0, 0, 0, 0)
+    return code
 
 // ── Clean Command Handler ─────────────────────────────────────────────────────
 // WHY: 100% native repository artifact sanitizer without bash or rm dependencies.

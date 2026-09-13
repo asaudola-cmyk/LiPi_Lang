@@ -81,7 +81,7 @@
 
 ```bash
 # ১. কম্পাইলার বিল্ড ও সেলফ-হোস্টিং ভেরিফিকেশন
-bash build.sh
+./bin/lipi self-build
 
 # ২. প্রোগ্রাম রান ও বিল্ড
 ./bin/lipi run examples/fibonacci.lp

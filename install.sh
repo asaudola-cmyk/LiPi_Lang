@@ -95,6 +95,17 @@ create_command() {
     info "Setting up native standalone toolchain in $LIPI_BIN_DIR..."
     mkdir -p "$LIPI_BIN_DIR"
     
+    # Ensure canonical compiler binary exists from bootstrap seed
+    if [ ! -x "$LIPI_INSTALL_DIR/bin/lipc_bin" ]; then
+        if [ -f "$LIPI_INSTALL_DIR/boot/lipi-seed" ]; then
+            cp "$LIPI_INSTALL_DIR/boot/lipi-seed" "$LIPI_INSTALL_DIR/bin/lipc_bin"
+            chmod +x "$LIPI_INSTALL_DIR/bin/lipc_bin"
+        elif [ -f "$LIPI_INSTALL_DIR/boot/seed.b64" ]; then
+            base64 -d "$LIPI_INSTALL_DIR/boot/seed.b64" | gzip -d > "$LIPI_INSTALL_DIR/bin/lipc_bin"
+            chmod +x "$LIPI_INSTALL_DIR/bin/lipc_bin"
+        fi
+    fi
+    
     # 1. Native CLI driver and runner
     ln -sf "$LIPI_INSTALL_DIR/bin/lipi" "$LIPI_BIN_DIR/lipi"
     ok "Linked: $LIPI_BIN_DIR/lipi (Sovereign CLI Driver & Runner)"
@@ -200,9 +211,22 @@ print_success() {
 # icons so Linux desktop file managers (Thunar, Nautilus, Dolphin) render Lipi icons.
 setup_desktop_mime() {
     info "Setting up Linux desktop MIME types and file manager icons..."
-    if [ -x "$LIPI_INSTALL_DIR/scripts/install_desktop_mime.sh" ]; then
-        "$LIPI_INSTALL_DIR/scripts/install_desktop_mime.sh" || warn "Desktop integration encountered a non-fatal warning"
+    local mime_dir="$HOME/.local/share/mime/packages"
+    local icons_dir="$HOME/.local/share/icons/hicolor/scalable/mimetypes"
+    mkdir -p "$mime_dir" "$icons_dir"
+    if [ -f "$LIPI_INSTALL_DIR/assets/branding/lipi-mime.xml" ]; then
+        cp -f "$LIPI_INSTALL_DIR/assets/branding/lipi-mime.xml" "$mime_dir/lipi.xml"
+        if command -v update-mime-database &>/dev/null; then
+            update-mime-database "$HOME/.local/share/mime" &>/dev/null || true
+        fi
     fi
+    if [ -f "$LIPI_INSTALL_DIR/assets/branding/lipi_logo_bold.svg" ]; then
+        cp -f "$LIPI_INSTALL_DIR/assets/branding/lipi_logo_bold.svg" "$icons_dir/text-x-lipi.svg"
+        if command -v gtk-update-icon-cache &>/dev/null; then
+            gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+        fi
+    fi
+    ok "Desktop MIME and vector icon integration registered"
 }
 
 # ─── Uninstall ───────────────────────────────────────────────────────────────

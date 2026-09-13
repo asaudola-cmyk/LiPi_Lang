@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi 60-Test Regression Suite (Native Toolchain)"
+    name: "Lipi 140-Test Regression Suite (Native Toolchain)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -24,19 +24,19 @@ jobs:
 
       - name: Setup binary permissions
         run: |
-          chmod +x bin/* scripts/* tests/*.sh 2>/dev/null || true
+          chmod +x bin/* install.sh 2>/dev/null || true
 
       - name: Show Lipi Native Version
         run: |
-          ./bin/lipi --version
+          ./bin/lipi version
 
       - name: Verify One-Liner Evaluation (Zero Python)
         run: |
           ./bin/lipi -e 'say "CI: Lipi Native Runner OK"'
 
-      - name: Run Full 60-Test Regression Engine
+      - name: Run Full 140-Test Sovereign Regression Engine (0% Shell)
         run: |
-          bash tests/run_tests.sh
+          ./bin/lipi test
 
       - name: Verify Direct Machine Code Compilation
         run: |
