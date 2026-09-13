@@ -392,7 +392,8 @@ fn web_response_internal_error message
 fn web_response_redirect location
     return web_response_new(302, "text/html; charset=utf-8", "<html><body>Redirecting to <a href=\"" + location + "\">" + location + "</a></body></html>\n")
 
-// WHY: Builds standards-compliant HTTP/1.1 wire protocol string with RFC headers.
+// WHY: Builds standards-compliant HTTP/1.1 wire protocol string with RFC headers,
+// including OWASP-recommended security headers (X-Frame-Options, CSP, Referrer-Policy).
 fn web_serialize_response res
     st = web_status_text(res.status_code)
     blen = len(res.body_text)
@@ -403,6 +404,9 @@ fn web_serialize_response res
     wire = wire + "Access-Control-Allow-Origin: *\r\n"
     wire = wire + "Connection: close\r\n"
     wire = wire + "X-Content-Type-Options: nosniff\r\n"
+    wire = wire + "X-Frame-Options: SAMEORIGIN\r\n"
+    wire = wire + "Content-Security-Policy: default-src 'self' 'unsafe-inline' data:; connect-src 'self' http: ws:;\r\n"
+    wire = wire + "Referrer-Policy: strict-origin-when-cross-origin\r\n"
     wire = wire + "\r\n"
     wire = wire + res.body_text
     return wire
