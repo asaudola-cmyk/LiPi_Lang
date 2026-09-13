@@ -1,4 +1,4 @@
-// Test 08: Structs — Lipi 2.0
+// Test 08: Structs — Lipi First 1.0.0
 // Demonstrates: struct declaration, field access, struct as function argument
 // NOTE: Uses fn(arg1, arg2) paren syntax for 2-arg calls inside function bodies
 

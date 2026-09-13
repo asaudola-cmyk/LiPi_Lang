@@ -1,4 +1,4 @@
-// Test 07: Multi-file Import — Lipi 2.0
+// Test 07: Multi-file Import — Lipi First 1.0.0
 // Demonstrates: utility functions, string repetition, math helpers
 
 // Math utility functions (inline, simulating imported module)

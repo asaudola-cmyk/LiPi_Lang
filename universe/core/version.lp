@@ -1,4 +1,4 @@
-// std/version.lp — Lipi 2.0 Version Information
+// std/version.lp — Lipi First 1.0.0 Version Information
 // LOCKED: Lipi First 1.0 Sovereign
 
 VERSION_NAME     = "First 1.0"

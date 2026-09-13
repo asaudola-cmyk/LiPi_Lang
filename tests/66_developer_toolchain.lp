@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST 66: Developer Toolchain & Format/Doc Verification Suite
-// ⚡ 100% Pure Lipi 2.0 Indentation Syntax | 0% Libc | 0% External Dependencies
+// ⚡ 100% Pure Lipi First 1.0.0 Indentation Syntax | 0% Libc | 0% External Dependencies
 // 🏛️ File: tests/66_developer_toolchain.lp
 //
 // WHY: Validates the official Lipi developer toolchain:

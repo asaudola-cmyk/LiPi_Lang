@@ -1,4 +1,4 @@
-// Test 15: Functions and Recursion — Lipi 2.0
+// Test 15: Functions and Recursion — Lipi First 1.0.0
 // Demonstrates: one-liner fns, recursive factorial, GCD, LCM, recursive Fibonacci
 
 // One-liner function definitions

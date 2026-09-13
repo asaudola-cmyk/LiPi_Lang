@@ -1,4 +1,4 @@
-// Test 06: AI Inference — Lipi 2.0
+// Test 06: AI Inference — Lipi First 1.0.0
 // Demonstrates: activation functions, neural net simulation, loops
 
 // ReLU activation: clamp negative values to zero

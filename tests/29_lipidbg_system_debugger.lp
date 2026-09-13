@@ -1,4 +1,4 @@
-// Test 29: Debugger — Lipi 2.0 Global Standard
+// Test 29: Debugger — Lipi First 1.0.0 Global Standard
 // Simulates a debug session with breakpoints and inspection
 
 struct Breakpoint

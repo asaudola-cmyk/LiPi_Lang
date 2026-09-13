@@ -1,4 +1,4 @@
-// Test 02: Math and Fibonacci — Lipi 2.0
+// Test 02: Math and Fibonacci — Lipi First 1.0.0
 // Demonstrates: iterative fibonacci, factorial, for loops
 
 fn fibonacci n

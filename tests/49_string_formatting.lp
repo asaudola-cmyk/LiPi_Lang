@@ -1,4 +1,4 @@
-// Test 49: String Formatting — Lipi 2.0 Global Standard
+// Test 49: String Formatting — Lipi First 1.0.0 Global Standard
 // String interpolation, padding, templates
 
 fn pad_left s width

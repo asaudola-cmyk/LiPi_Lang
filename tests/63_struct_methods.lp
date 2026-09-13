@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI ADVANCED LANGUAGE TEST: OBJECT-ORIENTED STRUCT METHODS & PEEPHOLE (63)
-// ⚡ 100% Pure Lipi 2.0 | Zero Libc | Zero External Runtime | Direct Silicon
+// ⚡ 100% Pure Lipi First 1.0.0 | Zero Libc | Zero External Runtime | Direct Silicon
 //
 // WHY: Validates first-class OOP struct method declarations (fn Struct.method self args)
 // and caller invocation (obj.method(args)) with direct AMD64 register passing.

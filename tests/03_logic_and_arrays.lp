@@ -1,4 +1,4 @@
-// Test 03: Logic and Conditionals — Lipi 2.0
+// Test 03: Logic and Conditionals — Lipi First 1.0.0
 // Demonstrates: if/elif/else chains, boolean logic (and, or, not)
 
 fn grade score

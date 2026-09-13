@@ -1,11 +1,11 @@
-// Test 04: Web Server — Lipi 2.0 Minimal Syntax Demo
+// Test 04: Web Server — Lipi First 1.0.0 Minimal Syntax Demo
 // Demonstrates: functions as route handlers, string return values, dispatch pattern
 
 fn handle_root req
     return "200 OK: Hello from Lipi!"
 
 fn handle_about req
-    return "200 OK: Lipi 2.0 Web Server"
+    return "200 OK: Lipi First 1.0.0 Web Server"
 
 fn handle_not_found req
     return "404 Not Found"

@@ -1,10 +1,10 @@
 // ==============================================================================
 // 🎨 LIPI SOVEREIGN CODE FORMATTER (src/tools/lipifmt.lp)
-// ⚡ 100% Pure Lipi 2.0 Indentation Syntax | 0% Libc | 0% External Dependencies
+// ⚡ 100% Pure Lipi First 1.0.0 Indentation Syntax | 0% Libc | 0% External Dependencies
 // ==============================================================================
 
 // WHY: Code formatting in a sovereign ecosystem must be deterministic, zero-dependency,
-// and natively compiled. lipifmt enforces idiomatic Lipi 2.0 styling: 4-space indentation,
+// and natively compiled. lipifmt enforces idiomatic Lipi First 1.0.0 styling: 4-space indentation,
 // uniform operator spacing (e.g. 'a + b', 'x = 10', 'i == 0'), trailing whitespace removal,
 // and normalization of consecutive blank lines.
 

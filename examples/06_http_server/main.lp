@@ -1,4 +1,4 @@
-// Lipi 2.0 — HTTP Server Example
+// Lipi First 1.0.0 — HTTP Server Example
 // Global Standard | Minimal Syntax
 // Shows: Web router, REST dispatching, JSON response serialization
 
@@ -16,7 +16,7 @@ fn handle_request router method path
     if handler_id == 1
         return web_response_html("<h1>Welcome to Lipi HTTP Server!</h1>")
     elif handler_id == 2
-        return web_response_json("{\"status\": \"ok\", \"engine\": \"Lipi 2.0 Sovereign\", \"arch\": \"pure_elf64\"}")
+        return web_response_json("{\"status\": \"ok\", \"engine\": \"Lipi First 1.0.0 Sovereign\", \"arch\": \"pure_elf64\"}")
     elif handler_id == 3
         return web_response_json("{\"health\": \"UP\", \"status_code\": 200}")
     else

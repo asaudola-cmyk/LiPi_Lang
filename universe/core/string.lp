@@ -792,7 +792,7 @@
   return 0
 @end
 
-// ─── Pure Lipi 2.0 String Algorithms & Case Transformations ───────────────────
+// ─── Pure Lipi First 1.0.0 String Algorithms & Case Transformations ───────────────────
 
 // WHY: Converts lowercase ASCII characters (a-z: 97-122) to uppercase (A-Z: 65-90).
 fn upper s

@@ -1,4 +1,4 @@
-// Test 35: Column Store Analytics — Lipi 2.0 Global Standard
+// Test 35: Column Store Analytics — Lipi First 1.0.0 Global Standard
 
 fn col_min first count stride
     min_val = first

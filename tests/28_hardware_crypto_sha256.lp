@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST 28: NIST FIPS 180-4 HARDWARE SILICON SHA-256 CRYPTOGRAPHY
-// ⚡ 100% Pure Lipi 2.0 | Zero Mocks | Zero Simplifications | NIST Test Vectors
+// ⚡ 100% Pure Lipi First 1.0.0 | Zero Mocks | Zero Simplifications | NIST Test Vectors
 //
 // WHY: Validates 100% sovereign NIST SHA-256 cryptographic hashing, single-cycle
 // 32-bit bitwise rotation (ror32, rol32), bitwise XOR, AND logic, and deterministic

@@ -2,7 +2,7 @@
 @! 👑 LIPI UNIVERSAL CODE ASSIMILATOR & TRANSPILER: lipiassimilate
 @! Module: src/tools/lipiassimilate.lp
 @! 100% Pure Lipi Implementation — Zero External / C / Python Dependencies
-@! Transpiles Legacy Python & C Source Code into 100% Sovereign Lipi 2.0
+@! Transpiles Legacy Python & C Source Code into 100% Sovereign Lipi First 1.0.0
 @! ============================================================================
 
 import "universe/os/syscalls"
@@ -310,7 +310,7 @@ import "universe/core/collections"
     out_path = str_concat(in_path, ".lp")
   @end
 
-  println("👑 Transpiling legacy code to Sovereign Lipi 2.0...")
+  println("👑 Transpiling legacy code to Sovereign Lipi First 1.0.0...")
   println(str_concat("  • Source : ", in_path))
   println(str_concat("  • Target : ", out_path))
 

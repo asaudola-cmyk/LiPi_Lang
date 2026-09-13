@@ -1,4 +1,4 @@
-// Test 19: Memory Management Pattern — Lipi 2.0
+// Test 19: Memory Management Pattern — Lipi First 1.0.0
 // Demonstrates: arena allocator simulation, alignment, fragmentation analysis
 
 struct Arena

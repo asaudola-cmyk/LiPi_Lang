@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST 31: TLS CRYPTOGRAPHIC STREAM & AUTHENTICATION ENGINE
-// ⚡ 100% Pure Lipi 2.0 | Zero Mocks | RFC 8439 ChaCha20 & Poly1305 Engine
+// ⚡ 100% Pure Lipi First 1.0.0 | Zero Mocks | RFC 8439 ChaCha20 & Poly1305 Engine
 //
 // WHY: TLS 1.3 requires modern stream ciphers (ChaCha20) and polynomial one-time
 // authenticators (Poly1305) operating entirely on raw silicon primitives.

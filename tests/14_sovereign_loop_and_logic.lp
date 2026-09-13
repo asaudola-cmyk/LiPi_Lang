@@ -1,4 +1,4 @@
-// Test 14: Loop and Logic Patterns — Lipi 2.0
+// Test 14: Loop and Logic Patterns — Lipi First 1.0.0
 // Demonstrates: while, for, repeat, nested loops, break-via-return
 
 // Sum 1..n using a while loop

@@ -1,4 +1,4 @@
-// Test 05: Dashboard — Lipi 2.0
+// Test 05: Dashboard — Lipi First 1.0.0
 // Demonstrates: string formatting, function calls, arithmetic display
 
 // Dashboard header

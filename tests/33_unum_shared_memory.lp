@@ -1,4 +1,4 @@
-// Test 33: Shared Memory Ring Buffer — Lipi 2.0 Global Standard
+// Test 33: Shared Memory Ring Buffer — Lipi First 1.0.0 Global Standard
 
 struct RingBuffer
     head

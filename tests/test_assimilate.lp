@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI TEST SUITE: UNIVERSAL CODE ASSIMILATOR & TRANSPILER VERIFICATION
 @! File: tests/test_assimilate.lp
-@! Standard: Python & C to Canonical Lipi 2.0 AST / Source Lowering
+@! Standard: Python & C to Canonical Lipi First 1.0.0 AST / Source Lowering
 @! 100% Pure Lipi Implementation — Zero External Libc / Python Dependencies
 @! ============================================================================
 

@@ -1,4 +1,4 @@
-// Data Structures — Lipi 2.0 Example
+// Data Structures — Lipi First 1.0.0 Example
 // Demonstrates: Stack, Queue, Binary Search Tree, Set, Map, and Pure Sorting
 
 // ─── 1. Stack (LIFO) ──────────────────────────────────────────

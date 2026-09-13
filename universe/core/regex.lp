@@ -43,8 +43,8 @@ QUANT_STAR = 2
 QUANT_PLUS = 3
 QUANT_OPT  = 4
 
-// ─── Pure Lipi 2.0 Struct Declarations (No Commas) ───────────────────────────
-// WHY: Pure Lipi 2.0 indentation syntax enforces clean single-field lines.
+// ─── Pure Lipi First 1.0.0 Struct Declarations (No Commas) ───────────────────────────
+// WHY: Pure Lipi First 1.0.0 indentation syntax enforces clean single-field lines.
 struct RegexNode
     node_type
     quantifier

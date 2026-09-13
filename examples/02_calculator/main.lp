@@ -1,4 +1,4 @@
-// Calculator — Lipi 2.0 Example
+// Calculator — Lipi First 1.0.0 Example
 // A full-featured calculator with all operations
 
 fn add a b = a + b

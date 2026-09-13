@@ -1,4 +1,4 @@
-// Sorting Algorithms — Lipi 2.0 Example
+// Sorting Algorithms — Lipi First 1.0.0 Example
 
 fn bubble_pass a b c d e
     // One pass of bubble sort — move largest right
@@ -100,7 +100,7 @@ fn quicksort_helper lst low high
         quicksort_helper(lst, p + 1, high)
     return lst
 
-// WHY: Sovereign O(n log n) sorting routine in pure Lipi 2.0.
+// WHY: Sovereign O(n log n) sorting routine in pure Lipi First 1.0.0.
 // Sorts list in-place and returns the list.
 fn sort lst
     n = len(lst)

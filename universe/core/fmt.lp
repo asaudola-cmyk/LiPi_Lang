@@ -5,7 +5,7 @@
 //
 // WHY এই মডিউল:
 //   Production-grade string formatting, padding, alignment, hex encoding,
-//   and human-readable byte sizes in 100% pure Lipi 2.0 with Zero Libc.
+//   and human-readable byte sizes in 100% pure Lipi First 1.0.0 with Zero Libc.
 // ==============================================================================
 
 include "universe/core/string.lp"

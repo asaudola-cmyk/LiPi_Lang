@@ -1,4 +1,4 @@
-// Test 23: Database Query Pattern — Lipi 2.0
+// Test 23: Database Query Pattern — Lipi First 1.0.0
 // Demonstrates: record structs, filter/select simulation, join pattern
 
 struct Record

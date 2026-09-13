@@ -1,4 +1,4 @@
-# 🏛️ Lipi 2.0 Sovereign Architecture Specification
+# 🏛️ Lipi First 1.0.0 Sovereign Architecture Specification
 
 ## Abstract
 The **Lipi Sovereign Programming Language** is an autonomous, bilingual systems programming language and toolchain engineered for absolute software independence. Lipi compiles high-level, human-readable source code directly into native 64-bit Linux Executable and Linkable Format (ELF64) binaries.
@@ -110,7 +110,7 @@ The WebAssembly emitter ([`src/compiler/wasm_emitter.lp`](../src/compiler/wasm_e
 
 ## 2. Object-Oriented Struct Methods & ABI
 
-Lipi 2.0 introduces first-class **Object-Oriented Struct Methods** that combine high-level object ergonomics with zero-cost low-level static dispatch.
+Lipi First 1.0.0 introduces first-class **Object-Oriented Struct Methods** that combine high-level object ergonomics with zero-cost low-level static dispatch.
 
 ### 2.1 Method Definition Syntax
 Methods are declared with struct-type qualification:
@@ -119,7 +119,7 @@ struct Point
     x
     y
 
-// Modern Lipi 2.0 Method Definition
+// Modern Lipi First 1.0.0 Method Definition
 fn Point.set_xy self x y
     self.x = x
     self.y = y
@@ -211,7 +211,7 @@ fn x86_mov_reg_imm64 ctx reg val
 
 ## 4. First-Class Web Standard Library (`std/web.lp`)
 
-Lipi 2.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`std/web.lp`](../std/web.lp).
+Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`std/web.lp`](../std/web.lp).
 
 ### 4.1 Architectural Foundations
 - **Direct Linux Socket Calls:** Binds directly to the operating system network stack via `SYS_socket` (syscall 41), `SYS_bind` (syscall 49), `SYS_listen` (syscall 50), and `SYS_accept` (syscall 43).
@@ -230,9 +230,9 @@ web_post(router, "/api/data", 3)
 fn handle_request req
     route_id = web_dispatch(router, req.method, req.path)
     if route_id == 1
-        return web_response_html("<h1>Lipi 2.0 Sovereign Web Server</h1>")
+        return web_response_html("<h1>Lipi First 1.0.0 Sovereign Web Server</h1>")
     if route_id == 2
-        return web_response_json("{\"status\":\"healthy\",\"engine\":\"Lipi 2.0\"}")
+        return web_response_json("{\"status\":\"healthy\",\"engine\":\"Lipi First 1.0.0\"}")
     return web_response_not_found()
 ```
 

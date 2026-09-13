@@ -1,4 +1,4 @@
-// Test 22: Type System Demo — Lipi 2.0
+// Test 22: Type System Demo — Lipi First 1.0.0
 // Demonstrates: runtime type checking patterns, value classification, guards
 
 // Classify an integer as negative, zero, or positive

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST 11: BARE-METAL HARDWARE CONTROL & MMIO REGISTER DISPATCH
-// ⚡ 100% Pure Lipi 2.0 | Zero Mocks | Direct Silicon Hardware State Machines
+// ⚡ 100% Pure Lipi First 1.0.0 | Zero Mocks | Direct Silicon Hardware State Machines
 //
 // WHY: Validates bare-metal hardware register operations, UART 16550 serial state
 // machines, PS/2 keyboard controller scancode dispatch, and Linux kernel syscalls

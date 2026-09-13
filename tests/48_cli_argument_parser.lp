@@ -1,4 +1,4 @@
-// Test 48: CLI Argument Parser — Lipi 2.0 Global Standard
+// Test 48: CLI Argument Parser — Lipi First 1.0.0 Global Standard
 // Command-line argument parsing patterns
 
 struct Flag

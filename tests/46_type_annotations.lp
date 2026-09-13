@@ -1,4 +1,4 @@
-// Test 46: Type Annotations — Lipi 2.0 Global Standard
+// Test 46: Type Annotations — Lipi First 1.0.0 Global Standard
 // Type annotation patterns using comments
 
 fn add_ints a b

@@ -1,4 +1,4 @@
-// std/math.lp — Lipi 2.0 Standard Math Library
+// std/math.lp — Lipi First 1.0.0 Standard Math Library
 // Global Standard | Unicode-ready
 // Usage: include "universe/core/math.lp"
 

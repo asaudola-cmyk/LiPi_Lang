@@ -518,7 +518,7 @@ fn এআই_স্যাম্পল লজিটস ভোকাব_আকা�
 
 // ── ১২. ট্রান্সফরমার এআই মডেল কনটেক্সট (Silicon Transformer AI Model Context) ──
 // WHY: Encapsulates model architecture hyperparameters, preallocated workspace buffers,
-// weight matrices, and KV-cache. Exactly 16 fields to conform to Lipi 2.0 compiler layout.
+// weight matrices, and KV-cache. Exactly 16 fields to conform to Lipi First 1.0.0 compiler layout.
 struct AIModelCtx
     vocab_size
     dim

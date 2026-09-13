@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 TEST 41: BARE-METAL MULTIBOOT KERNEL & SOVEREIGN OS RUNTIME
-// ⚡ 100% Pure Lipi 2.0 Indentation Syntax | Zero Linux | Zero POSIX
+// ⚡ 100% Pure Lipi First 1.0.0 Indentation Syntax | Zero Linux | Zero POSIX
 // ==============================================================================
 
 // WHY: Verifies the entire baremetal execution chain defined in std/kernel.lp:

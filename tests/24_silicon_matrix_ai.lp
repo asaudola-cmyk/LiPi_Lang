@@ -1,4 +1,4 @@
-// Test 24: Matrix Operations — Lipi 2.0
+// Test 24: Matrix Operations — Lipi First 1.0.0
 // Demonstrates: 2x2 and 3x3 matrix arithmetic using flat variables
 
 // 2x2 Matrix: stored as a11, a12, a21, a22

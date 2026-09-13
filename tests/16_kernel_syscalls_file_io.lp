@@ -1,4 +1,4 @@
-// Test 16: File I/O Pattern — Lipi 2.0
+// Test 16: File I/O Pattern — Lipi First 1.0.0
 // Demonstrates: struct-based file records, path handling, copy/write simulation
 
 // Simulate a file record (path, content, size)

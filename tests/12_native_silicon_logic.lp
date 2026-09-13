@@ -1,4 +1,4 @@
-// Test 12: Native Silicon Logic — Lipi 2.0
+// Test 12: Native Silicon Logic — Lipi First 1.0.0
 // Demonstrates: bitwise operations, bit manipulation patterns, flag registers
 
 // Bitwise AND: mask lowest 4 bits

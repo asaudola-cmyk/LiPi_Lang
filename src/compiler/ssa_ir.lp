@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN SSA IR & COMPILER OPTIMIZATION ENGINE (src/compiler/ssa_ir.lp)
-// ⚡ 100% Pure Lipi 2.0 Indentation Syntax | 0% C | 0% LLVM | Direct Silicon Architecture
+// ⚡ 100% Pure Lipi First 1.0.0 Indentation Syntax | 0% C | 0% LLVM | Direct Silicon Architecture
 //
 // WHY: Modern high-performance optimizing compilers rely on an Intermediate
 //      Representation (IR) structured as Three-Address Code (TAC) in Static Single

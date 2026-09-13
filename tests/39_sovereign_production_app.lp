@@ -1,4 +1,4 @@
-// Test 39: Production App — Lipi 2.0 Global Standard
+// Test 39: Production App — Lipi First 1.0.0 Global Standard
 
 struct Config
     port

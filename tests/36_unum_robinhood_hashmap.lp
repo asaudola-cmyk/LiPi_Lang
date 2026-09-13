@@ -1,4 +1,4 @@
-// Test 36: Robin Hood Hashmap — Lipi 2.0 Global Standard
+// Test 36: Robin Hood Hashmap — Lipi First 1.0.0 Global Standard
 
 fn hash_fn k cap
     h = k * 2654435761

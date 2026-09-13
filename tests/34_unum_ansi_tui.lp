@@ -1,4 +1,4 @@
-// Test 34: Terminal UI — Lipi 2.0 Global Standard
+// Test 34: Terminal UI — Lipi First 1.0.0 Global Standard
 // ANSI terminal rendering functions
 
 fn ansi_reset   = "\033[0m"

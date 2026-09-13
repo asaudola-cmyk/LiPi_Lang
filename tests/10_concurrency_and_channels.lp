@@ -1,4 +1,4 @@
-// Test 10: Concurrency — Lipi 2.0
+// Test 10: Concurrency — Lipi First 1.0.0
 // Demonstrates: parallel work simulation, chunked partial sums, worker pattern
 
 // Each worker computes id * task (simulates a parallel job)

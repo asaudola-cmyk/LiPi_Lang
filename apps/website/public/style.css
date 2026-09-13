@@ -2140,3 +2140,230 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==============================================================================
+   👑 5 STRATEGIC SOVEREIGN FRONTIERS DESIGN SYSTEM
+   WHY: Ultra-modern glassmorphic styling for WebSockets, LipiDB WAL, AI Assistant,
+   Package Registry, and Micro-Container sandboxing interfaces.
+   ============================================================================== */
+
+.frontier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.frontier-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.frontier-card:hover {
+  border-color: var(--border-glow);
+  box-shadow: 0 12px 30px rgba(0, 255, 204, 0.08);
+  transform: translateY(-2px);
+}
+
+.frontier-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.frontier-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.frontier-icon {
+  font-size: 1.5rem;
+}
+
+.frontier-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.frontier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  background: rgba(0, 255, 204, 0.12);
+  color: var(--neon-cyan);
+  border: 1px solid rgba(0, 255, 204, 0.3);
+}
+
+.frontier-desc {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+/* WAL 64-Byte Frame Tape */
+.wal-tape-container {
+  background: #04060a;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.wal-tape-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--neon-amber);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.wal-tape-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 600px) {
+  .wal-tape-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.wal-tape-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.wal-chip-name {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.wal-chip-val {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--neon-cyan);
+}
+
+/* WebSocket Live Stream Console */
+.ws-stream-box {
+  background: #04060a;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #a7f3d0;
+  height: 120px;
+  overflow-y: auto;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.ws-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ws-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.ws-input:focus {
+  outline: none;
+  border-color: var(--neon-cyan);
+}
+
+/* Silicon AI Panel */
+.ai-explainer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ai-chip-btn {
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ai-chip-btn:hover, .ai-chip-btn.active {
+  background: var(--neon-violet);
+  color: #fff;
+  border-color: var(--neon-violet);
+}
+
+.ai-output-box {
+  background: #04060a;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  min-height: 90px;
+}
+
+/* Micro-Container Metrics */
+.container-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.container-spec-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.container-spec-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.container-spec-val {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--neon-emerald);
+}
+

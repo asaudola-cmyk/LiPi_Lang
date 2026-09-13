@@ -29,8 +29,8 @@ KV_TYPE_SET      = 4
 KV_TYPE_HASH     = 5
 KV_NO_EXPIRY     = 0    // never expires
 
-// ─── Structs (Pure Lipi 2.0 Syntax) ───────────────────────────────────────────
-// WHY: Lipi 2.0 struct definition uses clean indented lines without trailing commas.
+// ─── Structs (Pure Lipi First 1.0.0 Syntax) ───────────────────────────────────────────
+// WHY: Lipi First 1.0.0 struct definition uses clean indented lines without trailing commas.
 struct KV_entry
     key_ptr
     value_ptr

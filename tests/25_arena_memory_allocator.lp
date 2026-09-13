@@ -1,4 +1,4 @@
-// Test 25: Memory Allocator Pattern — Lipi 2.0
+// Test 25: Memory Allocator Pattern — Lipi First 1.0.0
 // Demonstrates: arena allocator simulation, alignment, fragmentation analysis
 
 struct Arena

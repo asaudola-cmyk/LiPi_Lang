@@ -249,7 +249,7 @@ fn জিজিইউএফ_স্যাম্পল লজিটস ভোক�
     return ai_sample(লজিটস, ভোকাব_আকার, তাপমাত্রা, টপ_কে)
 
 // ── ১৪. জিজিইউএফ কেভি-ক্যাশ ইন্টারফেস (GGUF KV-Cache Bindings) ─────────────────
-// WHY: Provides direct GGUF-namespaced bindings to pure Lipi 2.0 silicon KV-cache state buffer.
+// WHY: Provides direct GGUF-namespaced bindings to pure Lipi First 1.0.0 silicon KV-cache state buffer.
 fn gguf_kv_cache_create max_seq_len n_layers n_heads head_dim
     return kv_cache_create(max_seq_len, n_layers, n_heads, head_dim)
 

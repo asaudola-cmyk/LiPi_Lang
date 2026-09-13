@@ -23,17 +23,18 @@
           <img src="/favicon.svg" alt="LiPi" width="24" height="24" style="display: block;">
         </div>
         <span class="brand-title">LIPI <span style="font-weight: 300; font-size: 1rem; color: var(--neon-cyan);">(লিপি)</span></span>
-        <span class="brand-tag">v2.1 Ultra</span>
+        <span class="brand-tag">First 1.0.0</span>
       </a>
 
       <ul class="nav-links">
-        <li><a href="#database" class="nav-link" style="color: var(--neon-cyan); font-weight: 600;">👑 ডাটাবেজ</a></li>
+        <li><a href="#database" class="nav-link" style="color: var(--neon-cyan); font-weight: 600;">👑 ডাটাবেজ & WAL</a></li>
+        <li><a href="#websockets" class="nav-link">⚡ ওয়েব-সকেট</a></li>
         <li><a href="#packages" class="nav-link">📦 প্যাকেজ হাব</a></li>
+        <li><a href="#silicon-ai" class="nav-link">🧠 সিলিকন AI</a></li>
+        <li><a href="#containers" class="nav-link">🐳 মাইক্রো-ডকার</a></li>
         <li><a href="#playground" class="nav-link">💻 প্লেগ্রাউন্ড</a></li>
         <li><a href="#benchmarks" class="nav-link">🚀 বেঞ্চমার্ক</a></li>
-        <li><a href="#api-console" class="nav-link">⚡ এপিআই কনসোল</a></li>
-        <li><a href="#horizons" class="nav-link">🏛️ ২১টি মহাদিগন্ত</a></li>
-        <li><a href="#quickstart" class="nav-link">শুরু করুন</a></li>
+        <li><a href="#api-console" class="nav-link">⚡ এপিআই</a></li>
       </ul>
 
       <div class="nav-actions">
@@ -245,6 +246,230 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- LipiDB v2 Write-Ahead Logging (WAL) & ARIES Recovery Panel -->
+        <div class="wal-tape-container" style="margin-top: 24px;">
+          <div class="wal-tape-label">
+            <span>🛡️ LipiDB v2 Write-Ahead Logging (WAL) & ARIES ক্র্যাশ রিকভারি ইঞ্জিন:</span>
+            <span id="wal-status-indicator" style="color: var(--neon-cyan);">ARIES REDO: সক্রিয় ও সুরক্ষিত (64B Atomic Frames)</span>
+          </div>
+          <div class="wal-tape-grid">
+            <div class="wal-tape-chip">
+              <div class="wal-chip-name">LSN (Log Seq No)</div>
+              <div id="wal-lsn-val" class="wal-chip-val">#1042</div>
+            </div>
+            <div class="wal-tape-chip">
+              <div class="wal-chip-name">TxID (Transaction)</div>
+              <div id="wal-tx-val" class="wal-chip-val">TX_1042</div>
+            </div>
+            <div class="wal-tape-chip">
+              <div class="wal-chip-name">OpType & Target</div>
+              <div id="wal-op-val" class="wal-chip-val">INSERT (Rec: 3)</div>
+            </div>
+            <div class="wal-tape-chip">
+              <div class="wal-chip-name">Silicon fsync</div>
+              <div id="wal-sync-val" class="wal-chip-val">SYS_fsync (74)</div>
+            </div>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 10px; margin-bottom: 0;">
+            ⚡ <strong>ARIES গ্যারান্টি:</strong> প্রাইমারি টেবিলে লেখার পূর্বেই ৬৪-বাইট WAL এন্ট্রি NVMe ডিস্কে ফ্ল্যাশ হয়। হঠাৎ বিদ্যুৎ বিভ্রাট বা সার্ভার ক্র্যাশে রিস্টার্টের সময় REDO ফেজ স্বয়ংক্রিয়ভাবে অসম্পূর্ণ ট্রানজ্যাকশন পুনরুদ্ধার করে।
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RFC 6455 Real-Time WebSockets Engine Section -->
+  <section id="websockets" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">রিয়েল-টাইম বাইনারি নেটওয়ার্কিং</span>
+        <h2 class="section-title">⚡ RFC 6455 সার্বভৌম ওয়েব-সকেট ইঞ্জিন</h2>
+        <p class="section-desc">
+          কোনো NodeJS, Nginx বা বাহ্যিক লাইব্রেরি নয়। ১০০% খাঁটি লিপিতে FIPS 180-1 SHA-1 ও RFC 4648 Base64 হ্যান্ডশেক ডেরিভেশন এবং ক্লায়েন্ট মাস্কিং ডিকোডার। সরাসরি কার্নেল সকেটে সাব-মিলিসেকেন্ড বাইনারি স্ট্রিমিং।
+        </p>
+      </div>
+
+      <div class="frontier-grid">
+        <div class="frontier-card">
+          <div class="frontier-card-header">
+            <div class="frontier-title-group">
+              <span class="frontier-icon">📡</span>
+              <h3 class="frontier-title">লাইভ টেলিমেট্রি স্ট্রিম (/ws/telemetry)</h3>
+            </div>
+            <span id="ws-status-badge" class="frontier-badge">🟢 সংযুক্ত (RFC 6455)</span>
+          </div>
+          <p class="frontier-desc">
+            সার্ভারের সিপিইউ ক্লক সাইকেল, আপটাইম এবং মোট রিকোয়েস্ট সংখ্যা সরাসরি ব্রাউজারে পুশ হচ্ছে।
+          </p>
+          <div id="ws-stream-output" class="ws-stream-box">
+            [RFC 6455] হ্যান্ডশেক যাচাই হচ্ছে...
+          </div>
+          <div class="container-spec-grid">
+            <div class="container-spec-item">
+              <div class="container-spec-label">সিপিইউ সাইকেল (RDTSC)</div>
+              <div id="ws-live-cycles" class="container-spec-val">০</div>
+            </div>
+            <div class="container-spec-item">
+              <div class="container-spec-label">লেটেন্সি</div>
+              <div class="container-spec-val" style="color: var(--neon-cyan);">&lt; ০.৮ ms</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="frontier-card">
+          <div class="frontier-card-header">
+            <div class="frontier-title-group">
+              <span class="frontier-icon">💬</span>
+              <h3 class="frontier-title">দ্বিমুখী পিং-পং কনসোল (Bidirectional Echo)</h3>
+            </div>
+            <span class="frontier-badge">৩২-বিট XOR Unmasking</span>
+          </div>
+          <p class="frontier-desc">
+            ক্লায়েন্ট ফ্রেম মাস্কিং এবং সার্ভার আনমাস্কড ফ্রেম (0x81 টেক্সট ফ্রেম) বিনিময় পরীক্ষা করুন।
+          </p>
+          <div id="ws-echo-log" class="ws-stream-box" style="height: 100px;">
+            [Ready] বার্তা লিখে 'সেন্ড' বাটনে চাপুন...
+          </div>
+          <div class="ws-input-row">
+            <input type="text" id="ws-msg-input" class="ws-input" placeholder="লিপি সার্ভারে ফ্রেম পাঠান..." value="হ্যালো লিপি সার্বভৌম!">
+            <button id="btn-ws-send" class="btn btn-primary" style="padding: 8px 16px;">
+              <span>🚀 সেন্ড ফ্রেম</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Silicon AI Assistant & Explainer Section -->
+  <section id="silicon-ai" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">নেটিভ মেশিন কোড ইন্টেলিজেন্স</span>
+        <h2 class="section-title">🧠 সিলিকন এআই কোড অ্যাসিস্ট্যান্ট ও আর্কিটেকচার ইঞ্জিন</h2>
+        <p class="section-desc">
+          কোনো ক্লাউড LLM বা ধীরগতির API নয়। সরাসরি মেশিন কোডে লিখিত এএসটি (AST) অ্যানালাইজার এবং অপ্টিমাইজেশন সাজেশন ইঞ্জিন (লেটেন্সি: ১২ মাইক্রোসেকেন্ড)।
+        </p>
+      </div>
+
+      <div class="frontier-grid">
+        <div class="frontier-card">
+          <div class="frontier-card-header">
+            <div class="frontier-title-group">
+              <span class="frontier-icon">💡</span>
+              <h3 class="frontier-title">কোড এএসটি অ্যানালাইজার (/api/ai/suggest)</h3>
+            </div>
+            <span class="frontier-badge">১২ μs Instant Latency</span>
+          </div>
+          <p class="frontier-desc">
+            লিপি কোড লিখুন বা পরিবর্তন করুন; সিলিকন এআই তাৎক্ষণিকভাবে কার্নেল এবিআই, মেমরি সেফটি ও লুপ বাউন্ডিং সাজেশন প্রদান করবে।
+          </p>
+          <div class="ws-input-row" style="margin-bottom: 12px;">
+            <input type="text" id="ai-code-input" class="ws-input" placeholder="কোড স্নিপেট লিখুন..." value="fn compute x\n    return x * 42">
+            <button id="btn-ai-analyze" class="btn btn-primary" style="padding: 8px 16px;">
+              <span>⚡ বিশ্লেষণ</span>
+            </button>
+          </div>
+          <div id="ai-suggest-output" class="ai-output-box">
+            👉 'বিশ্লেষণ' বাটনে চাপ দিয়ে তাৎক্ষণিক সিলিকন এএসটি ইনসাইট দেখুন।
+          </div>
+        </div>
+
+        <div class="frontier-card">
+          <div class="frontier-card-header">
+            <div class="frontier-title-group">
+              <span class="frontier-icon">🏛️</span>
+              <h3 class="frontier-title">সিলিকন আর্কিটেকচার ব্যাখ্যাকারী (/api/ai/explain)</h3>
+            </div>
+            <span class="frontier-badge">১০০% সভরেন নলেজ</span>
+          </div>
+          <p class="frontier-desc">
+            টপিক নির্বাচন করুন এবং লিপি সিস্টেমের অন্তর্নিহিত কার্নেল স্থাপত্যের প্রযুক্তিগত বিশ্লেষণ জেনে নিন:
+          </p>
+          <div class="ai-explainer-chips">
+            <button class="ai-chip-btn active" data-topic="wal">🛡️ WAL ও ARIES রিকভারি</button>
+            <button class="ai-chip-btn" data-topic="websocket">⚡ RFC 6455 ওয়েব-সকেট</button>
+            <button class="ai-chip-btn" data-topic="container">🐳 মাইক্রো-ডকার স্যান্ডবক্স</button>
+            <button class="ai-chip-btn" data-topic="compiler">👑 জিরো-লিবসি কার্নেল কম্পাইলার</button>
+          </div>
+          <div id="ai-explain-output" class="ai-output-box">
+            LipiDB v2 implements an atomic 64-byte WAL frame containing [LSN, TxID, OpType, TargetID, OldVal, NewVal, Checksum, Magic]. In accordance with ARIES recovery algorithms, mutations are committed to physical disk with SYS_fsync before the primary storage table is modified. During startup recovery, the REDO phase scans the WAL log and replays any committed transactions that were interrupted by a hardware or system failure, guaranteeing 100% ACID durability with zero data loss.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sovereign Micro-Docker & Cloud Sandboxing Section -->
+  <section id="containers" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">ক্লাউড ও বেয়ারমেটাল আইসোলেশন</span>
+        <h2 class="section-title">🐳 সার্বভৌম মাইক্রো-ডকার (FROM scratch) ও স্যান্ডবক্সিং</h2>
+        <p class="section-desc">
+          কোনো আলপাইন, উবুন্টু বা ডায়নামিক লিংকার নেই। সম্পূর্ণ শূন্য থেকে (FROM scratch) তৈরি ওলট্রা-লাইটওয়েট কনটেইনার ও হার্ডেনড সিস্টেম-ডি সার্ভিস।
+        </p>
+      </div>
+
+      <div class="frontier-grid">
+        <div class="frontier-card">
+          <div class="frontier-card-header">
+            <div class="frontier-title-group">
+              <span class="frontier-icon">📦</span>
+              <h3 class="frontier-title">জিরো-লিবসি কনটেইনার ফুটপ্রিন্ট</h3>
+            </div>
+            <span class="frontier-badge">&lt; ৫০০ KB মোট ইমেজ</span>
+          </div>
+          <p class="frontier-desc">
+            পরিপূর্ণ ওয়েব ও ডাটাবেজ সার্ভার রুটএফএস মাত্র ৪৮০ কিলোবাইট — সাধারণ নোড বা পাইথন ডকার ইমেজের চেয়ে ৫০০ গুণ ছোট!
+          </p>
+          <div class="container-spec-grid">
+            <div class="container-spec-item">
+              <div class="container-spec-label">স্ট্যাটিক বাইনারি আকার</div>
+              <div class="container-spec-val">১৫১ KB</div>
+            </div>
+            <div class="container-spec-item">
+              <div class="container-spec-label">মোট রুটএফএস ইমেজ</div>
+              <div class="container-spec-val">৪৮০ KB</div>
+            </div>
+            <div class="container-spec-item">
+              <div class="container-spec-label">ডায়নামিক লিংকার</div>
+              <div class="container-spec-val" style="color: var(--neon-cyan);">০% (শূন্য)</div>
+            </div>
+            <div class="container-spec-item">
+              <div class="container-spec-label">রানটাইম মেমরি</div>
+              <div class="container-spec-val">১২৮ KB</div>
+            </div>
+          </div>
+          <div class="pkg-cmd-box" style="margin-top: 14px;">
+            <code>docker run -d -p 8088:8088 --security-opt=no-new-privileges:true lipi-web</code>
+            <button class="btn-copy-cmd" data-cmd="docker run -d -p 8088:8088 --security-opt=no-new-privileges:true lipi-web" title="কপি করুন">📋</button>
+          </div>
+        </div>
+
+        <div class="frontier-card">
+          <div class="frontier-card-header">
+            <div class="frontier-title-group">
+              <span class="frontier-icon">🔒</span>
+              <h3 class="frontier-title">কার্নেল স্যান্ডবক্সিং ও সিকিউরিটি বাউন্ডারি</h3>
+            </div>
+            <span class="frontier-badge badge-winner">১০/১০ পেনটেস্ট পাস</span>
+          </div>
+          <p class="frontier-desc">
+            লিনাক্স কার্নেল সিকিউরিটি ক্যাপাবিলিটি ও সেককম্প পলিসি দ্বারা সীমাবদ্ধ, রুট অধিকার বা প্রিভিলেজ এস্কেলেশন অসম্ভব:
+          </p>
+          <ul style="list-style: none; font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; margin-bottom: 16px;">
+            <li>🛡️ <strong style="color: var(--text-main);">NoNewPrivileges=yes:</strong> বাইনারি কখনো suid বা sudo অধিকার নিতে পারবে না।</li>
+            <li>🛡️ <strong style="color: var(--text-main);">CAP_NET_BIND_SERVICE:</strong> রুট ছাড়াই নন-প্রিভিলেজড পোর্টে সকেট বাইন্ড।</li>
+            <li>🛡️ <strong style="color: var(--text-main);">ProtectSystem=strict:</strong> মূল ওএস ফাইলসিস্টেম সম্পূর্ণ রিড-অনলি লকড।</li>
+            <li>🛡️ <strong style="color: var(--text-main);">Slowloris/DoS রেজিলিয়েন্স:</strong> ২-সেকেন্ডের হার্ডেনড সকেট টাইমআউট ও পোলিং।</li>
+          </ul>
+          <div class="pkg-cmd-box">
+            <code>systemctl status lipi-web.service</code>
+            <button class="btn-copy-cmd" data-cmd="systemctl status lipi-web.service" title="কপি করুন">📋</button>
+          </div>
         </div>
       </div>
     </div>
@@ -882,7 +1107,7 @@
             </thead>
             <tbody>
               <tr class="row-highlight">
-                <td><strong>👑 লিপি (Lipi v2.1)</strong></td>
+                <td><strong>👑 লিপি (Lipi First 1.0.0)</strong></td>
                 <td>Direct Native ELF64 Machine Code</td>
                 <td><span class="bench-badge badge-winner">০% Libc (শূন্য)</span></td>
                 <td><span class="bench-badge badge-winner">০% PHP (শূন্য)</span></td>

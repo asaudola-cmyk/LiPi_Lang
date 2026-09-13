@@ -253,7 +253,7 @@ Pure sovereign DEX bytecode synthesizer producing installable Android binaries w
 
 ## 14. Universal Code Assimilation & Multi-Language Transpiler
 
-In-memory AST lowering engine converting legacy languages into canonical Lipi 2.0 source.
+In-memory AST lowering engine converting legacy languages into canonical Lipi First 1.0.0 source.
 - `assimilate_python_source(py_code) -> string`: Lowers Python function definitions, indentation blocks, and control flow into pure Lipi AST.
 - `assimilate_c_source(c_code) -> string`: Strips C-style braces, semicolon delimiters, and types into idiomatic Lipi syntax.
 - `assimilate_file_to_lipi(in_path, out_path) -> i64`: Complete end-to-end file migration pipeline.

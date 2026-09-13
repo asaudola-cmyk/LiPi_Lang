@@ -1,4 +1,4 @@
-// Test 45: HTTP Framework — Lipi 2.0 Global Standard
+// Test 45: HTTP Framework — Lipi First 1.0.0 Global Standard
 
 struct Context
     method

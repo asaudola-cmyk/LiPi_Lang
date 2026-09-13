@@ -1,4 +1,4 @@
-// String Tools — Lipi 2.0 Example
+// String Tools — Lipi First 1.0.0 Example
 // Demonstrates string builtins: upper, lower, trim, split, contains, etc.
 
 include "std/str.lp"

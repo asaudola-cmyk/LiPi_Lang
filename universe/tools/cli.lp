@@ -36,8 +36,8 @@ FLAG_TYPE_BOOL   = 1     // --verbose (no value)
 FLAG_TYPE_STRING = 2     // --output file.txt or --output=file.txt
 FLAG_TYPE_NUMBER = 3     // --port 8080 or --port=8080
 
-// ─── গঠনসমূহ (Pure Lipi 2.0 Struct Declarations) ──────────────────────────────
-// WHY: Pure Lipi 2.0 indentation syntax — no commas, each field on its own line.
+// ─── গঠনসমূহ (Pure Lipi First 1.0.0 Struct Declarations) ──────────────────────────────
+// WHY: Pure Lipi First 1.0.0 indentation syntax — no commas, each field on its own line.
 struct CLI_Flag
     name_ptr
     short_ptr

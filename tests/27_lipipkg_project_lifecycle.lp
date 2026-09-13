@@ -1,4 +1,4 @@
-// Test 27: Package Manager — Lipi 2.0 Global Standard
+// Test 27: Package Manager — Lipi First 1.0.0 Global Standard
 // Simulates lipipkg project lifecycle operations
 
 struct Package

@@ -1,4 +1,4 @@
-// Test 42: Bilingual Syntax — Lipi 2.0 Global Standard
+// Test 42: Bilingual Syntax — Lipi First 1.0.0 Global Standard
 // Demonstrates English global syntax + Unicode identifier support
 // WHY: One language for the world — English keywords, any script identifiers
 
@@ -25,6 +25,6 @@ say max2 99 42
 say "=== Syntax Comparison ==="
 say "Minimal: fn double n = n * 2"
 say "Old style: fn double(n) { return n * 2 }"
-say "Lipi 2.0 uses Minimal style globally"
+say "Lipi First 1.0.0 uses Minimal style globally"
 
 say "PASS: Test 42 Bilingual Syntax"

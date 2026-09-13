@@ -1,4 +1,4 @@
-// Test 13: CPU Arithmetic — Lipi 2.0
+// Test 13: CPU Arithmetic — Lipi First 1.0.0
 // Demonstrates: integer division, modulo, signed arithmetic, absolute value, isqrt
 
 // Safe integer division (guards against divide-by-zero)

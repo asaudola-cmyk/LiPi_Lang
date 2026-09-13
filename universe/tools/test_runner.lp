@@ -21,7 +21,7 @@ include "universe/core/memory.lp"
 include "universe/core/string.lp"
 include "universe/core/io.lp"
 
-// ─── Pure Lipi 2.0 Struct Declarations (No Commas) ───────────────────────────
+// ─── Pure Lipi First 1.0.0 Struct Declarations (No Commas) ───────────────────────────
 // WHY: TestSuite struct encapsulates per-suite test metrics cleanly on heap/stack.
 struct TestSuite
     name

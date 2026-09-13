@@ -1,4 +1,4 @@
-// std/http.lp — Lipi 2.0 HTTP Library
+// std/http.lp — Lipi First 1.0.0 HTTP Library
 // Global Standard | TCP/HTTP Server and Client
 
 // HTTP Status codes

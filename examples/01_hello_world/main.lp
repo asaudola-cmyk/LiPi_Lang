@@ -1,10 +1,10 @@
-// Lipi 2.0 — Hello World Example
+// Lipi First 1.0.0 — Hello World Example
 // Global Standard Minimal Syntax
 // Run: lipi main.lp (or: lipc main.lp -o main && ./main)
 
 // Basic output
 say "Hello, World!"
-say "Welcome to Lipi 2.0"
+say "Welcome to Lipi First 1.0.0"
 
 // Variables
 name = "Lipi"

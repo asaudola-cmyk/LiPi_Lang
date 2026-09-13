@@ -37,7 +37,7 @@
 ### ১. Output — দেখানো
 
 ```lipi2
-// Lipi 2.0                      // Python equivalent
+// Lipi First 1.0.0                      // Python equivalent
 show "Hello World"                // print("Hello World")
 show x                            // print(x)
 show "Name:" name                 // print("Name:", name)
@@ -48,7 +48,7 @@ show "{x} + {y} = {x + y}"       // print(f"{x} + {y} = {x + y}")
 ### ২. Variables — চলক
 
 ```lipi2
-// Lipi 2.0                      // Python / JS equivalent
+// Lipi First 1.0.0                      // Python / JS equivalent
 let x = 42                        // x = 42 (Python) or let x = 42 (JS)
 let name = "Lipi"                 // name = "Lipi"
 let pi = 3.14                     // pi = 3.14
@@ -213,7 +213,7 @@ let userAge = বয়স
 
 ````carousel
 ```
-// 🌟 Lipi 2.0
+// 🌟 Lipi First 1.0.0
 show "Hello World"
 fn multiply a b
     return a * b
@@ -303,7 +303,7 @@ public class Main {
 # Write code
 nano myapp.lp2
 
-# Run with Lipi 2.0 transpiler
+# Run with Lipi First 1.0.0 transpiler
 python3 /path/to/lipi2.py myapp.lp2 -o myapp
 
 # Or see what it translates to
@@ -316,7 +316,7 @@ python3 /path/to/lipi2.py myapp.lp2 --show
 ### `scripts/lipi` wrapper এ automatically:
 ```bash
 lipi run myapp.lp      # auto-detects syntax version
-lipi run myapp.lp2     # Lipi 2.0 clean syntax
+lipi run myapp.lp2     # Lipi First 1.0.0 clean syntax
 ```
 
 ---

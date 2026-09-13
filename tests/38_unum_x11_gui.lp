@@ -1,4 +1,4 @@
-// Test 38: X11 GUI — Lipi 2.0 Global Standard
+// Test 38: X11 GUI — Lipi First 1.0.0 Global Standard
 
 fn x11_connect display
     say "X11: connecting to " + display

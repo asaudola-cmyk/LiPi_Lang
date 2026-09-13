@@ -1,4 +1,4 @@
-// Test 44: Package Manifest — Lipi 2.0 Global Standard
+// Test 44: Package Manifest — Lipi First 1.0.0 Global Standard
 // lipipkg.toml manifest parsing and validation
 
 struct Manifest

@@ -1,4 +1,4 @@
-// Test 47: Memory Patterns — Lipi 2.0 Global Standard
+// Test 47: Memory Patterns — Lipi First 1.0.0 Global Standard
 
 struct Arena
     base

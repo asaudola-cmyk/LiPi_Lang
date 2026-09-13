@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST 67: Package Security & Ed25519 Cryptographic Signing Suite
-// ⚡ 100% Pure Lipi 2.0 Indentation Syntax | 0% Libc | 0% External Dependencies
+// ⚡ 100% Pure Lipi First 1.0.0 Indentation Syntax | 0% Libc | 0% External Dependencies
 // 🏛️ File: tests/67_package_security_ed25519.lp
 //
 // WHY: Validates the sovereign package manager cryptographic security toolchain:

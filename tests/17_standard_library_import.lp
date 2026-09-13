@@ -1,4 +1,4 @@
-// Test 17: Standard Library Usage — Lipi 2.0
+// Test 17: Standard Library Usage — Lipi First 1.0.0
 // Demonstrates: math helpers, clamp, min/max, digit_sum, palindrome check
 
 // Clamp a value to [lo, hi]

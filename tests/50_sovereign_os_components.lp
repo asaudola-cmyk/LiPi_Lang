@@ -1,4 +1,4 @@
-// Test 50: OS Components — Lipi 2.0 Global Standard
+// Test 50: OS Components — Lipi First 1.0.0 Global Standard
 
 fn vfs_mount device mp fstype
     say "Mount: " + device + " -> " + mp + " [" + fstype + "]"

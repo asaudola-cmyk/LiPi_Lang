@@ -18,7 +18,7 @@ say "========================================================"
 // ── Test 1: Complex JSON Parsing & In-Place DOM Traversal ─────────────────────
 say "[1/4] Testing Zero-Copy Complex JSON Parsing..."
 
-json_text = "{\"name\":\"Lipi 2.0\",\"version\":200,\"is_sovereign\":true,\"license\":null,\"features\":[\"SIMD\",\"Epoll\",\"DWARF\"]}"
+json_text = "{\"name\":\"Lipi First 1.0.0\",\"version\":200,\"is_sovereign\":true,\"license\":null,\"features\":[\"SIMD\",\"Epoll\",\"DWARF\"]}"
 
 doc = fast_json_parse(json_text)
 root = fast_json_root(doc)
@@ -30,7 +30,7 @@ if fast_json_node_type(doc, root) != FAST_JSON_OBJECT
 // String field
 name_idx = fast_json_get(doc, root, "name")
 name_val = fast_json_get_str(doc, name_idx)
-if name_val != "Lipi 2.0"
+if name_val != "Lipi First 1.0.0"
     say "FAIL: Name field mismatch: " + name_val
     exit(1)
 say "  ✔ String field verified: " + name_val
@@ -111,7 +111,7 @@ root3 = fast_json_root(doc3)
 round_name = fast_json_get_str(doc3, fast_json_get(doc3, root3, "name"))
 round_ver = fast_json_get_int(doc3, fast_json_get(doc3, root3, "version"))
 
-if round_name != "Lipi 2.0" or round_ver != 200
+if round_name != "Lipi First 1.0.0" or round_ver != 200
     say "FAIL: Roundtrip serialization failed!"
     exit(1)
 say "  ✔ Roundtrip serialization verified: " + ser_out

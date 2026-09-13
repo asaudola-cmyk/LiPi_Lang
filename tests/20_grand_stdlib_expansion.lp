@@ -1,4 +1,4 @@
-// Test 20: Algorithm Showcase — Lipi 2.0
+// Test 20: Algorithm Showcase — Lipi First 1.0.0
 // Demonstrates: binary search, prime sieve, GCD/LCM, sort analysis
 
 // Binary search: value at index i = i * 3 (sorted array simulation)

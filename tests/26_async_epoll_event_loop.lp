@@ -1,4 +1,4 @@
-// Test 26: Async Event Loop — Lipi 2.0 Global Standard
+// Test 26: Async Event Loop — Lipi First 1.0.0 Global Standard
 
 fn process_read fd
     say "READ  fd=" + fd

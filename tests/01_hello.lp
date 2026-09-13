@@ -1,9 +1,9 @@
-// Test 01: Hello World — Lipi 2.0 Global Standard
+// Test 01: Hello World — Lipi First 1.0.0 Global Standard
 // Demonstrates: variables, say, string concat, arithmetic
 
 // Simple output
 say "Hello, World!"
-say "Welcome to Lipi 2.0"
+say "Welcome to Lipi First 1.0.0"
 
 // Variables and types
 name = "Lipi"

@@ -1,4 +1,4 @@
-// Test 37: WebSocket Protocol — Lipi 2.0 Global Standard
+// Test 37: WebSocket Protocol — Lipi First 1.0.0 Global Standard
 
 fn ws_opcode byte0 = byte0 % 16
 fn ws_is_fin byte0

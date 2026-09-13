@@ -1,4 +1,4 @@
-// Test 43: elif Chain — Lipi 2.0 Global Standard
+// Test 43: elif Chain — Lipi First 1.0.0 Global Standard
 
 fn classify n
     if n < 0

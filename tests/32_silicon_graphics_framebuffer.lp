@@ -1,4 +1,4 @@
-// Test 32: Graphics Framebuffer — Lipi 2.0 Global Standard
+// Test 32: Graphics Framebuffer — Lipi First 1.0.0 Global Standard
 // Pixel operations on a virtual framebuffer
 
 fn rgb_pack r g b

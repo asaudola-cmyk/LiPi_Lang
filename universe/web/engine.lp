@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🌐 LIPI STANDARD WEB & ROUTING ENGINE (std/web.lp)
-// ⚡ 100% Pure Lipi 2.0 | Zero Libc | Zero External Dependencies | Pure Machine Code
+// ⚡ 100% Pure Lipi First 1.0.0 | Zero Libc | Zero External Dependencies | Pure Machine Code
 // ==============================================================================
 
 // WHY: A sovereign computing language requires an idiomatic, ultra-fast,

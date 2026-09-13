@@ -1,4 +1,4 @@
-// Test 30: AST Optimizer — Lipi 2.0 Global Standard
+// Test 30: AST Optimizer — Lipi First 1.0.0 Global Standard
 
 fn fold_add a b = a + b
 fn fold_mul a b = a * b

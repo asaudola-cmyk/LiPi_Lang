@@ -58,8 +58,8 @@ JOIN_LEFT         = 2
 JOIN_RIGHT        = 3
 JOIN_FULL         = 4
 
-// ─── Structs (Pure Lipi 2.0 Syntax) ───────────────────────────────────────────
-// WHY: Lipi 2.0 structs require clean indented fields with no trailing commas.
+// ─── Structs (Pure Lipi First 1.0.0 Syntax) ───────────────────────────────────────────
+// WHY: Lipi First 1.0.0 structs require clean indented fields with no trailing commas.
 struct ORM_column_সংজ্ঞা
     name_ptr
     type_flag

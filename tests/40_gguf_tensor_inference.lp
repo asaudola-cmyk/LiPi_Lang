@@ -1,4 +1,4 @@
-// Test 40: GGUF Tensor Inference — Lipi 2.0 Global Standard
+// Test 40: GGUF Tensor Inference — Lipi First 1.0.0 Global Standard
 
 fn tensor_dot a b c d = a * c + b * d
 
