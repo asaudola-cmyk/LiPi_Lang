@@ -66,24 +66,6 @@ struct WebResponse
     content_type
     body_text
 
-// WHY: Backwards-compatibility aliases for legacy codebases migrating from Oshim.
-struct OshimRoute
-    method
-    path
-    handler_id
-
-struct OshimRequest
-    method
-    path
-    raw_query
-    body_length
-    body_ptr
-
-struct OshimResponse
-    status_code
-    content_type
-    body_text
-
 // ── Router Engine ─────────────────────────────────────────────────────────────
 // WHY: Instantiates an in-memory list for route registration with O(1) appending.
 fn web_router_new
@@ -420,53 +402,3 @@ fn web_app_banner port
     say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
     say "🌐 Server listening on http://127.0.0.1:" + port + " [Active]"
     say "------------------------------------------------------------------------"
-
-// ── Legacy Backwards-Compatibility Shims ──────────────────────────────────────
-// WHY: Guarantees zero regressions for any legacy code calling oshim_* functions.
-fn oshim_router_new
-    return web_router_new()
-
-fn oshim_router_add router method path handler_id
-    return web_router_add(router, method, path, handler_id)
-
-fn oshim_get router path handler_id
-    return web_get(router, path, handler_id)
-
-fn oshim_post router path handler_id
-    return web_post(router, path, handler_id)
-
-fn oshim_put router path handler_id
-    return web_put(router, path, handler_id)
-
-fn oshim_delete router path handler_id
-    return web_delete(router, path, handler_id)
-
-fn oshim_dispatch router method path
-    return web_dispatch(router, method, path)
-
-fn oshim_parse_method raw_req
-    return web_parse_method(raw_req)
-
-fn oshim_parse_path raw_req
-    return web_parse_path(raw_req)
-
-fn oshim_status_text code
-    return web_status_text(code)
-
-fn oshim_response_new status_code content_type body_text
-    return web_response_new(status_code, content_type, body_text)
-
-fn oshim_response_json data
-    return web_response_json(data)
-
-fn oshim_response_html html_content
-    return web_response_html(html_content)
-
-fn oshim_response_not_found
-    return web_response_not_found()
-
-fn oshim_serialize_response res
-    return web_serialize_response(res)
-
-fn oshim_app_banner port
-    return web_app_banner(port)

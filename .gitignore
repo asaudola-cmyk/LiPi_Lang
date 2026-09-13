@@ -52,9 +52,8 @@ apps/**/site_builder
 .DS_Store
 Thumbs.db
 
-# VS Code / IDE development caches (editors/vscode extension builds)
-.vscode/*
-!.vscode/settings.json
+# VS Code / IDE development caches
+.vscode/
 .idea/
 editors/vscode/node_modules/
 editors/vscode/out/

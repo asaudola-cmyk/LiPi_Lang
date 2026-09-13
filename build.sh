@@ -167,9 +167,9 @@ echo -e "${GREEN}  ✔ ওয়েব রাউটার (Standard Web Router) ই
 echo ""
 
 # ------------------------------------------------------------------------------
-# [ধাপ ৬: ৬৯টি রিগ্রেশন টেস্ট রান / Run 69/69 Regression Tests]
+# [ধাপ ৬: ১৪০টি রিগ্রেশন টেস্ট রান / Run 140/140 Regression Tests]
 # ------------------------------------------------------------------------------
-echo -e "${YELLOW}[ধাপ ৬] ৬৯টি রিগ্রেশন টেস্ট রান করা হচ্ছে (Direct Machine Code Mode)...${NC}"
+echo -e "${YELLOW}[ধাপ ৬] ১৪০টি রিগ্রেশন টেস্ট রান করা হচ্ছে (Direct Machine Code Mode)...${NC}"
 bash tests/run_tests.sh --direct-elf
 echo ""
 

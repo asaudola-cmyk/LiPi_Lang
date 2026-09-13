@@ -5,7 +5,7 @@
 
 [package]
 name = "lipi"
-version = "2.5.0-monolith"
+version = "1.0.0"
 authors = ["Shafiullah <shafiullah@lipi.dev>"]
 edition = "2026"
 description = "👑 Lipi Sovereign Programming Language & Computing Universe (Tri-Syntax: Bengali + English + Lipi Directive Syntax)"
@@ -14,7 +14,7 @@ repository = "https://github.com/asaudola-cmyk/LiPi_Lang.git"
 entry = "src/tools/lipi.lp"
 
 [dependencies]
-# ⚡ Maya and Lipi Unified Universe — 0% Outside Help
+# ⚡ Lipi Sovereign Universe — 0% Outside Help
 
 [build]
 target = "x86_64-unknown-linux-musl-freestanding"
