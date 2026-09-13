@@ -14,8 +14,7 @@
 apps/website/
 ├── server.lp                  # ১০০% খাঁটি লিপিতে লিখিত ডাইনামিক HTTP ওয়েব সার্ভার
 ├── site_builder.lp            # অ্যাসেট অডিটর ও ভ্যালিডেটর
-├── build_and_run.sh           # কম্পাইলেশন ও সার্ভার রানার স্ক্রিপ্ট
-├── test_web.sh                # এন্ড-টু-এন্ড অটোমেটেড HTTP টেস্ট স্যুট
+├── lipi-web.service           # প্রোডাকশন সিস্টেমডি ডেমন কনফিগারেশন
 └── public/
     ├── index.html             # প্রিমিয়াম ডার্ক সাইবার-সিলিকন অফিশিয়াল হোমপেজ UI
     ├── style.css              # গ্লাস মরফিজম ও নিয়ন ডিজাইন সিস্টেম
@@ -62,12 +61,12 @@ apps/website/
 
 ### ১. সার্ভার সংকলন ও চালু করা:
 ```bash
-# স্বয়ংক্রিয় রানার স্ক্রিপ্ট দিয়ে চালু করুন:
-./apps/website/build_and_run.sh
-
-# অথবা সরাসরি লিপিক কম্পাইলার দিয়ে:
-./bin/lipic apps/website/server.lp -o apps/website/lipi_server
+# সরাসরি লিপিক কম্পাইলার দিয়ে নেটিভ বাইনারি তৈরি করুন:
+./bin/lipc apps/website/server.lp -o apps/website/lipi_server
 ./apps/website/lipi_server
+
+# অথবা সার্বজনীন লিপি রানার দিয়ে এক কমান্ডে চালু করুন:
+lipi run apps/website/server.lp
 ```
 
 ### ২. ব্রাউজারে প্রবেশ করুন:
@@ -79,7 +78,8 @@ http://127.0.0.1:8080/
 
 ### ৩. অটোমেটেড এন্ড-টু-এন্ড টেস্ট রান:
 ```bash
-./apps/website/test_web.sh
+# নেটিভ ফুল-স্ট্যাক টেস্ট স্যুট পরিচালনা:
+./dist/test_sovereign_fullstack
 ```
 
 ---

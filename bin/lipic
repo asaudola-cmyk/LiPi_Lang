@@ -1,6 +1,1 @@
-#!/bin/bash
-# ==============================================================================
-# 👑 lipic — Lipi Sovereign Compiler Alias
-# WHY: Seamless backwards compatibility alias forwarding to bin/lipc.
-# ==============================================================================
-exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lipc" "$@"
+lipc_bin

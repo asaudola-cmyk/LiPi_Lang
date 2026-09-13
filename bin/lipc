@@ -1,17 +1,1 @@
-#!/usr/bin/env bash
-# ==============================================================================
-# 👑 LIPI SOVEREIGN COMPILER DRIVER (bin/lipc)
-# ⚡ 100% Pure Lipi Machine Code Engine | 0% C | 0% GCC | 0% Libc | 0% Python
-# ==============================================================================
-
-set -euo pipefail
-
-LIPI_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIPC_BINARY="${LIPI_BIN_DIR}/lipc_bin"
-
-if [ ! -x "${LIPC_BINARY}" ]; then
-    echo "❌ Error: Sovereign compiler engine ${LIPC_BINARY} not found or not executable." >&2
-    exit 1
-fi
-
-exec "${LIPC_BINARY}" "$@"
+lipc_bin

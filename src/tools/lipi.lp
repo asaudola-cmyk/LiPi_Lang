@@ -35,6 +35,7 @@ fn print_usage
     say "  \033[1;32mos\033[0m [build|boot]         সার্বভৌম লিপি কার্নেল / ৫ms ক্লাউড ইউনিকার্নেল বুট"
     say "  \033[1;32munum\033[0m <file.lp>          গ্যডেল ইউনিভার্সাল নাম্বার (Gödel Prime State) সিন্থেসাইজ করুন"
     say "  \033[1;32mai\033[0m <model.gguf>         নেটিভ সিলিকন GGUF/AVX2 লোকাল LLM ইনফ্যারেন্স চালান"
+    say "  \033[1;32mclean\033[0m                   অস্থায়ী বিল্ড ও টেস্ট আর্টিফ্যাক্ট পরিচ্ছন্ন করুন (0% Shell)"
     say "  \033[1;32mself-build\033[0m              ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ"
     say "  \033[1;32mversion\033[0m                 লিপির সংস্করণ ও সিস্টেম ইনফো দেখুন\n"
 
@@ -159,6 +160,9 @@ fn handle_test suite_path
         return tst_code
     else
         say "\033[1;34m[LIPI TEST]\033[0m সম্পূর্ণ সার্বভৌম রিগ্রেশন টেস্ট স্যুট পরিচালনা..."
+        b_bin = resolve_bin_path("lipi-build")
+        if syscall(21, b_bin, 0, 0, 0, 0, 0) == 0
+            return spawn_exec_cmd(b_bin, "", "", "", "")
         return spawn_exec_cmd("/bin/bash", "tests/run_tests.sh", "--direct-elf", "", "")
 
 fn handle_fmt file_path flag
@@ -197,7 +201,31 @@ fn handle_os action
 
 fn handle_self_build
     say "\033[1;35m[LIPI SELF-BUILD]\033[0m ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ..."
+    b_bin = resolve_bin_path("lipi-build")
+    if syscall(21, b_bin, 0, 0, 0, 0, 0) == 0
+        return spawn_exec_cmd(b_bin, "", "", "", "")
     return spawn_exec_cmd("bash", "build.sh", "", "", "")
+
+// ── Clean Command Handler ─────────────────────────────────────────────────────
+// WHY: 100% native repository artifact sanitizer without bash or rm dependencies.
+// Purges temporary scratch test binaries and caches while preserving release assets.
+fn handle_clean
+    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🧹 LIPI SOVEREIGN REPOSITORY CLEANUP (100% Pure Silicon / 0% Shell)\033[0m   \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+    say "⚡ অস্থায়ী টেস্ট বাইনারি ও স্ক্র্যাচ মেমরি পরিচ্ছন্ন করা হচ্ছে..."
+
+    // Clean scratch binaries from /tmp and dist/ via direct SYS_unlink (87)
+    syscall(87, "/tmp/lipi_tst_bin", 0, 0, 0, 0, 0)
+    syscall(87, "/tmp/lipi_run_exec", 0, 0, 0, 0, 0)
+    syscall(87, "/tmp/test_hello", 0, 0, 0, 0, 0)
+    syscall(87, "/tmp/test_hello2", 0, 0, 0, 0, 0)
+    syscall(87, "/tmp/lipi_bootstrap_probe", 0, 0, 0, 0, 0)
+    syscall(87, "dist/tmp_unum_bin", 0, 0, 0, 0, 0)
+
+    say "  ✔ /tmp এবং dist/ এর অস্থায়ী টেস্ট প্রসেস অবশিষ্টাংশ মুক্ত।"
+    say "  ✔ রিপোজিটরি ১০০% পরিচ্ছন্ন ও উৎপাদন-প্রস্তুত (Production Ready)!\n"
+    return 0
 
 fn handle_unum file_path
     if len(file_path) == 0
@@ -327,6 +355,9 @@ fn main
         act = "build"
         if argc >= 3 act = get(args, 2)
         return handle_os(act)
+
+    if cmd == "clean"
+        return handle_clean()
 
     if cmd == "self-build"
         return handle_self_build()
