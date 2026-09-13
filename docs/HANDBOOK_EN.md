@@ -6,7 +6,7 @@
 ## Table of Contents
 1. [Executive Summary & The Sovereign Vision](#1-executive-summary-the-sovereign-vision)
 2. [Sovereign Toolchain Architecture & Binary Ecosystem](#2-sovereign-toolchain-architecture-binary-ecosystem)
-3. [Modern Lipi 2.0 Syntax & Dual-Numeral System](#3-modern-lipi-20-syntax-dual-numeral-system)
+3. [Unified Tri-Syntax & Dual-Numeral System](#3-modern-lipi-20-syntax-dual-numeral-system)
    - [Variables & Dual-Numeral System](#variables-dual-numeral-system)
    - [Control Flow & Branching](#control-flow-branching)
    - [Loops & Iteration](#loops-iteration)
@@ -25,7 +25,7 @@
 
 ## 1. Executive Summary & The Sovereign Vision
 
-**Lipi 2.0** is an autonomous general-purpose, self-hosted systems programming language engineered for uncompromising software sovereignty and maximum hardware efficiency. It seamlessly bridges native silicon execution with natural human expression across Bengali (বাংলা) and English.
+**Lipi First 1.0.0** is an autonomous general-purpose, self-hosted systems programming language engineered for uncompromising software sovereignty and maximum hardware efficiency. It seamlessly bridges native silicon execution with natural human expression across Bengali (বাংলা) and English.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -74,9 +74,9 @@ chmod +x build/hello_app
 
 ---
 
-## 3. Modern Lipi 2.0 Syntax & Dual-Numeral System
+## 3. Unified Tri-Syntax & Dual-Numeral System
 
-Lipi 2.0 syntax emphasizes clean, expressive, and minimalist readability. It completely discards syntactic clutter:
+Lipi First 1.0.0 syntax emphasizes clean, expressive, and minimalist readability. It completely discards syntactic clutter:
 - **No curly braces** (`{}`)
 - **No statement semicolons** (`;`)
 - **No mandatory colons** (`:`) after conditions or function headers
@@ -87,7 +87,7 @@ Lipi provides native first-class support for both Roman numerals (`0-9`) and Ben
 
 ```lipi
 // English syntax
-language = "Lipi 2.0"
+language = "Lipi First 1.0.0"
 version = 2
 pi = 3.14159
 is_active = true
@@ -188,7 +188,7 @@ say s.name + " | Roll: " + s.roll + " | Dept: " + s.department
 
 ## 4. Object-Oriented Struct Methods & Calling ABI
 
-Lipi 2.0 supports first-class **Object-Oriented Struct Methods** via `fn Struct.method self arg1 arg2`. This equips developers with modern encapsulation while retaining the baremetal speed of zero-cost static dispatch.
+Lipi First 1.0.0 supports first-class **Object-Oriented Struct Methods** via `fn Struct.method self arg1 arg2`. This equips developers with modern encapsulation while retaining the baremetal speed of zero-cost static dispatch.
 
 ### 4.1 Method Definition & Encapsulation
 Methods are declared with explicit type association:
@@ -198,7 +198,7 @@ struct Point
     x
     y
 
-// Modern Lipi 2.0 Struct Method
+// Modern Lipi First 1.0.0 Struct Method
 fn Point.set_xy self new_x new_y
     self.x = new_x
     self.y = new_y
@@ -377,7 +377,7 @@ buf2 = অ্যারিনা_বরাদ্দ(pool, 4096)
 
 ## 7. First-Class Web Engine & HTTP Router (`std/web.lp`)
 
-Lipi 2.0 provides an enterprise-grade standard web engine in [`std/web.lp`](../std/web.lp), eliminating foreign web frameworks like Express, Flask, or Axum.
+Lipi First 1.0.0 provides an enterprise-grade standard web engine in [`std/web.lp`](../std/web.lp), eliminating foreign web frameworks like Express, Flask, or Axum.
 
 ### 7.1 Core Components
 - `WebRoute`: Record binding HTTP methods, path strings, and integer handler IDs.
@@ -403,7 +403,7 @@ fn handle_http_request raw_req
     handler_id = web_dispatch(router, method, path)
 
     if handler_id == 1
-        return web_response_html("<h1>Lipi 2.0 Sovereign Web Server</h1>")
+        return web_response_html("<h1>Lipi First 1.0.0 Sovereign Web Server</h1>")
 
     if handler_id == 2
         return web_response_json("{\"status\":\"healthy\",\"compiler\":\"ELF64\"}")
@@ -507,7 +507,7 @@ authors = ["Sovereign Team <dev@lipi.dev>"]
 entry = "src/main.lp"
 
 [dependencies]
-std-web = ">=2.0.0"
+std-web = ">=1.0.0"
 std-crypto = ">=1.0.0"
 ```
 
@@ -535,4 +535,4 @@ Restart Visual Studio Code to enable syntax highlighting and editing support for
 ---
 
 ## Conclusion
-Lipi 2.0 represents a modern triumph in autonomous systems engineering: uniting bilingual syntax ergonomics with baremetal execution speed, direct silicon ELF generation, native multithreading, and zero third-party dependencies.
+Lipi First 1.0.0 represents a modern triumph in autonomous systems engineering: uniting bilingual syntax ergonomics with baremetal execution speed, direct silicon ELF generation, native multithreading, and zero third-party dependencies.

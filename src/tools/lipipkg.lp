@@ -559,18 +559,18 @@ fn cmd_verify target
 // ── ৭. অন্যান্য কমান্ডসমূহ (Standard Subcommands) ──────────────────────────────
 
 fn cmd_version
-    say "lipipkg সংস্করণ : প্রথম ১.০.০ (First 1.0.0)"
-    say "lipi কম্পাইলার  : bin/lipc_bin (Sovereign Machine Code Engine)"
-    say "সংকেতনাম       : সোভেরিন (Sovereign)"
-    say "লক্ষ্য          : Linux x86_64 ELF64 (Direct Kernel ABI)"
-    say "নির্ভরতা       : ০% Libc | ০% GCC | ০% Python"
-    say "রেজিস্ট্রি      : https://pkg.lipi.dev"
-    say "লাইসেন্স        : MIT Sovereign Open Source"
+    say "lipipkg Version  : First 1.0.0 (প্রথম ১.০.০)"
+    say "Lipi Compiler    : bin/lipc_bin (Sovereign Machine Code Engine)"
+    say "Codename         : Sovereign"
+    say "Target           : Linux x86_64 ELF64 (Direct Kernel ABI)"
+    say "Dependencies     : 0% Libc | 0% GCC | 0% Python"
+    say "Registry         : https://pkg.lipi.dev"
+    say "License          : MIT Sovereign Open Source"
 
 fn cmd_init proj_name
-    say "\033[1;36m📁 নতুন লিপি প্রজেক্ট ইনিশিয়ালাইজ করা হচ্ছে: \033[0m" + proj_name
+    say "\033[1;36m📁 Initializing new Lipi package project: \033[0m" + proj_name
     syscall(83, proj_name, 509, 0, 0, 0, 0)
-    say "  ✔ ডিরেক্টরি তৈরি: " + proj_name
+    say "  ✔ Created directory: " + proj_name
 
     toml_path = proj_name + "/lipipkg.toml"
     tfd = syscall(2, toml_path, 577, 420, 0, 0, 0)
@@ -578,7 +578,7 @@ fn cmd_init proj_name
         tcontent = "[package]\nname = \"" + proj_name + "\"\nversion = \"0.1.0\"\nmain = \"src/main.lp\"\n"
         syscall(1, tfd, tcontent, len(tcontent), 0, 0, 0)
         syscall(3, tfd, 0, 0, 0, 0, 0)
-        say "  ✔ ম্যানিফেস্ট তৈরি: " + toml_path
+        say "  ✔ Created manifest: " + toml_path
 
     src_dir = proj_name + "/src"
     syscall(83, src_dir, 509, 0, 0, 0, 0)
@@ -586,56 +586,56 @@ fn cmd_init proj_name
     main_path = proj_name + "/src/main.lp"
     mfd = syscall(2, main_path, 577, 420, 0, 0, 0)
     if mfd >= 0
-        mcontent = "include \"std/io.lp\"\n\nfn main\n    say \"সালাম লিপি!\"\n    return 0\n\nmain()\n"
+        mcontent = "include \"universe/core/io.lp\"\n\nfn main\n    say \"Hello from Lipi!\"\n    return 0\n\nmain()\n"
         syscall(1, mfd, mcontent, len(mcontent), 0, 0, 0)
         syscall(3, mfd, 0, 0, 0, 0, 0)
-        say "  ✔ প্রধান সোর্স তৈরি: " + main_path
+        say "  ✔ Created main entrypoint: " + main_path
 
     tests_dir = proj_name + "/tests"
     syscall(83, tests_dir, 509, 0, 0, 0, 0)
-    say "  ✔ টেস্ট ডিরেক্টরি তৈরি: " + tests_dir
+    say "  ✔ Created tests directory: " + tests_dir
 
     rm_path = proj_name + "/README.md"
     rfd = syscall(2, rm_path, 577, 420, 0, 0, 0)
     if rfd >= 0
-        rcontent = "# " + proj_name + "\n\nলিপি প্রথম ১.০ সার্বভৌম অ্যাপ।\n"
+        rcontent = "# " + proj_name + "\n\nLipi sovereign package application.\n"
         syscall(1, rfd, rcontent, len(rcontent), 0, 0, 0)
         syscall(3, rfd, 0, 0, 0, 0, 0)
-        say "  ✔ ডকুমেন্টেশন তৈরি: " + rm_path
+        say "  ✔ Created documentation: " + rm_path
 
-    say "\n\033[1;32m✅ প্রজেক্ট তৈরি সম্পন্ন!\033[0m"
-    say "  চালাতে: cd " + proj_name + " && lipipkg build"
+    say "\n\033[1;32m✅ Project initialized successfully!\033[0m"
+    say "  To build: cd " + proj_name + " && lipipkg build"
 
 fn cmd_build target
-    say "\033[1;36m⚙️  লিপি প্রজেক্ট কম্পাইল হচ্ছে...\033[0m"
-    say "  • কম্পাইলার  : bin/lipc_bin (লিপি সার্বভৌম কম্পাইলার)"
-    say "  • প্রধান ফাইল : src/main.lp"
-    say "  • আউটপুট     : build/app"
+    say "\033[1;36m⚙️  Compiling Lipi package project...\033[0m"
+    say "  • Compiler    : bin/lipc_bin (Sovereign Machine Code Compiler)"
+    say "  • Entry Point : src/main.lp"
+    say "  • Output      : build/app"
 
     syscall(83, "build", 509, 0, 0, 0, 0)
-    say "  ✔ কম্পাইল সম্পন্ন!"
-    say "  • আউটপুট বাইনারি : build/app (Pure ELF64)"
-    say "  • নির্ভরতা       : ০% Libc | ০% GCC"
-    say "\n\033[1;32m✅ Build সফল! → build/app\033[0m"
+    say "  ✔ Compilation finished!"
+    say "  • Output binary : build/app (Pure ELF64)"
+    say "  • Dependencies  : 0% Libc | 0% GCC"
+    say "\n\033[1;32m✅ Build succeeded! -> build/app\033[0m"
 
 fn cmd_test
-    say "\033[1;36m🧪 লিপি পরীক্ষা স্যুট চালানো হচ্ছে...\033[0m"
+    say "\033[1;36m🧪 Running Lipi package test suite...\033[0m"
     say "  \033[38;2;0;255;100m✔\033[0m 01_basic_syntax.lp      [PASS]"
     say "  \033[38;2;0;255;100m✔\033[0m 02_hardware_syscalls.lp [PASS]"
     say "  \033[38;2;0;255;100m✔\033[0m 03_memory_allocator.lp  [PASS]"
-    say "\n\033[1;32m✅ সব পরীক্ষা সফলভাবে পাস করেছে!\033[0m"
+    say "\n\033[1;32m✅ All package tests passed!\033[0m"
 
 fn cmd_clean
-    say "🧹 build/ পরিষ্কার করা হচ্ছে..."
+    say "🧹 Purging build/ directory artifacts..."
     syscall(87, "build/app", 0, 0, 0, 0, 0)
-    say "  ✔ build/app মুছে ফেলা হয়েছে"
-    say "\033[1;32m✅ পরিষ্কার সম্পন্ন!\033[0m"
+    say "  ✔ build/app removed"
+    say "\033[1;32m✅ Cleanup complete!\033[0m"
 
 fn cmd_hash file_path
-    say "\033[1;36m🔐 সার্বভৌম হ্যাশ গণনা: \033[0m" + file_path
+    say "\033[1;36m🔐 Cryptographic Hash Calculation: \033[0m" + file_path
     fd = syscall(2, file_path, 0, 0, 0, 0, 0)
     if fd < 0
-        say "❌ ফাইল পাওয়া যায়নি: " + file_path
+        say "❌ File not found: " + file_path
         return 0
 
     buf = malloc(4096)
