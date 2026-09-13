@@ -12,7 +12,7 @@ import "universe/io/console"
 
 @! The main shell loop
 @fn shell_run()
-  println("Lipi Shell v2.0.0 — The Sovereign Universe")
+  println("Lipi Shell First 1.0.0 (প্রথম ১.০.০) — The Sovereign Universe")
   println("Type 'exit' to leave.")
   
   @while 1

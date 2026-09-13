@@ -415,7 +415,7 @@ fn web_serialize_response res
 // WHY: Visual server lifecycle reporting with zero libc dependency.
 fn web_app_banner port
     say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🌐 LIPI SOVEREIGN WEB ENGINE (std/web.lp v2.0)\033[0m                       \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🌐 LIPI SOVEREIGN WEB ENGINE (First 1.0.0)\033[0m                             \033[38;2;0;255;204m║\033[0m"
     say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ High-Performance HTTP Routing | Zero Libc | Pure Silicon Execution\033[0m   \033[38;2;0;255;204m║\033[0m"
     say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
     say "🌐 Server listening on http://127.0.0.1:" + port + " [Active]"

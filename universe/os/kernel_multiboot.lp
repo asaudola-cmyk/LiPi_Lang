@@ -507,7 +507,7 @@ fn কার্নেল_কমান্ড_চালাও cmd
 
 fn kernel_shell
     say "======================================================="
-    say "👑 Lipi-OS Baremetal Kernel Shell v2.0"
+    say "👑 Lipi-OS Baremetal Kernel Shell First 1.0.0 (প্রথম ১.০.০)"
     say "⚡ 100% Pure Sovereign Lipi | Zero Linux | Ring 0"
     say "Type 'help' for available commands."
     say "======================================================="

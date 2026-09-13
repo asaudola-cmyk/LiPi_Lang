@@ -144,7 +144,7 @@ fn db_serve_stats client_fd db_fd
 // WHY: Bridges live status from LipiDB Redis-compatible in-memory cluster (port 6389),
 // reporting RESP2/3 protocol metrics, active memory footprint, and cluster state.
 fn lipidb_serve_stats client_fd
-    body = "{\"status\":\"active\",\"cluster_mode\":\"standalone\",\"protocol\":\"RESP2/RESP3\",\"port\":6389,\"connected_clients\":1,\"total_commands_processed\":128,\"used_memory_bytes\":262144,\"persistence\":\"AOF+Snapshot\",\"engine\":\"LipiDB Sovereign Redis-Compatible Store v2.0\",\"sovereign\":1}\n"
+    body = "{\"status\":\"active\",\"cluster_mode\":\"standalone\",\"protocol\":\"RESP2/RESP3\",\"port\":6389,\"connected_clients\":1,\"total_commands_processed\":128,\"used_memory_bytes\":262144,\"persistence\":\"AOF+Snapshot\",\"engine\":\"LipiDB Sovereign Redis-Compatible Store (First 1.0.0)\",\"sovereign\":1}\n"
     res = web_response_json(body)
     wire = web_serialize_response(res)
     syscall(1, client_fd, wire, len(wire), 0, 0, 0)
@@ -599,7 +599,7 @@ if len(args) > 1
             port = p_val
 
 say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI FULL-STACK SOVEREIGN WEB & DATABASE ENGINE (v2.1 Ultra)\033[0m       \033[38;2;0;255;204m║\033[0m"
+say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI FULL-STACK SOVEREIGN WEB & DATABASE ENGINE (First 1.0.0)\033[0m   \033[38;2;0;255;204m║\033[0m"
 say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Frontend + Backend + Database | 100% Pure Native Machine Code        \033[0m\033[38;2;0;255;204m║\033[0m"
 say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
 say ""
