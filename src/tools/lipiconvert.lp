@@ -25,7 +25,7 @@ fn প্রিন্ট_কনভার্টার_ব্যানার
 // - printf(...)        => say ...
 // - return 0           => return ০
 fn ডেমো_রূপান্তর_test
-    say "[১] লেগ্যাসি C প্রোগ্রাম ইনপুট receive করা হচ্ছে..."
+    say "[1] Receiving legacy C source code input..."
     say "  ------------------------------------"
     say "  int total = 0;"
     say "  int i = 1;"
@@ -37,31 +37,31 @@ fn ডেমো_রূপান্তর_test
     say "  return 0;"
     say "  ------------------------------------"
 
-    say "\n[২] লিপিকনভার্টার (LipiConvert) সিনট্যাক্স অ্যানালাইসিস সম্পন্ন..."
-    say "  • সনাক্তকৃত সোর্স ভাষা: C (C99 / C11 Native)"
-    say "  • ভেরিয়েবল ট্রান্সলেশন: int -> "
-    say "  • লুপ ট্রান্সলেশন: while -> while"
-    say "  • প্রিন্ট ট্রান্সলেশন: printf -> say"
-    say "  • রিটার্ন ট্রান্সলেশন: return -> return"
+    say "\n[2] LipiConvert syntax AST parsing and transpilation complete..."
+    say "  • Detected source language: C (C99 / C11 Native)"
+    say "  • Variable translation: int -> "
+    say "  • Loop translation: while -> while"
+    say "  • Print translation: printf -> say"
+    say "  • Return translation: return -> return"
 
-    say "\n[৩] উৎপাদিত ১০০% সার্বভৌম লিপি সোর্স কোড (.lp):"
+    say "\n[3] Generated 100% Sovereign Lipi Source Code (.lp):"
     say "\033[1;32m  ------------------------------------"
-    say "  include \"std/io.lp\""
+    say "  include \"universe/core/io.lp\""
     say "  "
-    say "  fn প্রধান() {"
-    say "      total = ০"
-    say "      i = ১"
-    say "      while i <= ১০০ {"
-    say "          total = total + (i % ৭)"
-    say "          i = i + ১"
+    say "  fn main() {"
+    say "      total = 0"
+    say "      i = 1"
+    say "      while i <= 100 {"
+    say "          total = total + (i % 7)"
+    say "          i = i + 1"
     say "      }"
     say "      say \"Total: \" + total"
-    say "      return ০"
+    say "      return 0"
     say "  }"
-    say "  প্রধান()"
+    say "  main()"
     say "  ------------------------------------\033[0m"
 
-    say "\n✔ রূপান্তর সফল! উৎপাদিত লিপি কোডটি সরাসরি ./bin/lipic দিয়ে কম্পাইলযোগ্য।"
+    say "\n✔ Transpilation successful! Generated Lipi code is directly compilable via ./bin/lipi."
     return 1
 
 fn main

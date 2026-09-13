@@ -21,23 +21,23 @@ fn print_lipi_banner
 
 fn print_usage
     print_lipi_banner()
-    say "\033[1;33mব্যবহারবিধি (Usage):\033[0m"
+    say "\033[1;33mUsage:\033[0m"
     say "  lipi <command> [arguments...]\n"
-    say "\033[1;36mপ্রধান কমান্ডসমূহ (Core Commands):\033[0m"
-    say "  \033[1;32mrun\033[0m <file.lp>           প্রোগ্রাম কম্পাইল করে সরাসরি এক্সিকিউট করুন (Run in-memory)"
-    say "  \033[1;32mbuild\033[0m <file.lp> [-o out] স্ট্যান্ডঅ্যালোন নেটিভ মেশিন কোড বাইনারি তৈরি করুন"
-    say "  \033[1;32mtest\033[0m [suite]             সম্পূর্ণ স্বয়ংক্রিয় টেস্ট স্যুট পরিচালনা করুন"
-    say "  \033[1;32mrepl\033[0m                    টার্মিনালে ইন্টারঅ্যাক্টিভ আরইপিএল শুরু করুন"
-    say "  \033[1;32mfmt\033[0m <file.lp>            ৩-সিনট্যাক্স ক্যানোনিকাল কোড ফরম্যাট করুন"
-    say "  \033[1;32mlsp\033[0m                     ল্যাঙ্গুয়েজ সার্ভার প্রোটোকল ডিমন চালু করুন (IDE Server)"
-    say "  \033[1;32mpkg\033[0m <subcommand>        Ed25519 ক্রিপ্টোগ্রাফিক প্যাকেজ ম্যানেজার (LPM)"
-    say "  \033[1;32mdebug\033[0m <binary>          sys_ptrace নেটিভ সিস্টেম ডিবাগার চালান (LipiDbg)"
-    say "  \033[1;32mos\033[0m [build|boot]         সার্বভৌম লিপি কার্নেল / ৫ms ক্লাউড ইউনিকার্নেল বুট"
-    say "  \033[1;32munum\033[0m <file.lp>          গ্যডেল ইউনিভার্সাল নাম্বার (Gödel Prime State) সিন্থেসাইজ করুন"
-    say "  \033[1;32mai\033[0m <model.gguf>         নেটিভ সিলিকন GGUF/AVX2 লোকাল LLM ইনফ্যারেন্স চালান"
-    say "  \033[1;32mclean\033[0m                   অস্থায়ী বিল্ড ও টেস্ট আর্টিফ্যাক্ট পরিচ্ছন্ন করুন (0% Shell)"
-    say "  \033[1;32mself-build\033[0m              ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ"
-    say "  \033[1;32mversion\033[0m                 লিপির সংস্করণ ও সিস্টেম ইনফো দেখুন\n"
+    say "\033[1;36mCore Commands:\033[0m"
+    say "  \033[1;32mrun\033[0m <file.lp>           Compile and run program in-memory (Zero disk overhead)"
+    say "  \033[1;32mbuild\033[0m <file.lp> [-o out] Compile standalone native machine code binary"
+    say "  \033[1;32mtest\033[0m [suite]             Execute autonomous test suites (0% Shell)"
+    say "  \033[1;32mrepl\033[0m                    Launch interactive REPL terminal session"
+    say "  \033[1;32mfmt\033[0m <file.lp>            Format source code to canonical 3-syntax standard"
+    say "  \033[1;32mlsp\033[0m                     Launch Language Server Protocol daemon (IDE Server)"
+    say "  \033[1;32mpkg\033[0m <subcommand>        Sovereign Ed25519 cryptographic package manager (LPM)"
+    say "  \033[1;32mdebug\033[0m <binary>          Launch sys_ptrace native system debugger (LipiDbg)"
+    say "  \033[1;32mos\033[0m [build|boot]         Bare-metal Multiboot kernel & 5ms cloud unikernel"
+    say "  \033[1;32munum\033[0m <file.lp>          Synthesize Gödel Universal Prime State Number"
+    say "  \033[1;32mai\033[0m <model.gguf>         Direct silicon AVX2 SIMD GGUF local LLM inference"
+    say "  \033[1;32mclean\033[0m                   Purge temporary build caches and scratch binaries (0% Shell)"
+    say "  \033[1;32mself-build\033[0m              3-generation self-hosting deterministic bootstrap"
+    say "  \033[1;32mversion\033[0m                 Display compiler version and platform architecture\n"
 
 fn show_version
     print_lipi_banner()
@@ -109,29 +109,29 @@ fn resolve_bin_path rel_name
 
 fn handle_run file_path a1 a2 a3 a4
     if len(file_path) == 0
-        say "❌ ত্রুটি: ইনপুট ফাইল উল্লেখ করুন: lipi run <file.lp>"
+        say "❌ Error: Source file required: lipi run <file.lp> [args...]"
         return 1
     tmp_bin = "/tmp/lipi_run_exec"
-    say "\033[1;34m[LIPI RUN]\033[0m " + file_path + " সংকলন করা হচ্ছে..."
+    say "\033[1;34m[LIPI RUN]\033[0m Compiling " + file_path + "..."
     
     c_bin = resolve_bin_path("lipc_bin")
     code = spawn_exec_cmd(c_bin, file_path, tmp_bin, "", "")
     if code != 0
-        say "❌ সংকলন ব্যর্থ হয়েছে (Compiler returned code " + str(code) + ")"
+        say "❌ Compilation failed (Compiler exit code " + str(code) + ")"
         return code
         
-    say "⚡ এক্সিকিউশন শুরু..."
+    say "⚡ Executing in-memory binary..."
     say "--------------------------------------------------"
     exec_code = spawn_exec_cmd(tmp_bin, a1, a2, a3, a4)
     say "--------------------------------------------------"
-    say "✔ এক্সিকিউশন সম্পন্ন (Return code: " + str(exec_code) + ")"
+    say "✔ Execution finished (Exit code: " + str(exec_code) + ")"
     
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
     return exec_code
 
 fn handle_build file_path out_file target_flag
     if len(file_path) == 0
-        say "❌ ত্রুটি: ইনপুট ফাইল উল্লেখ করুন: lipi build <file.lp> [-o <out>]"
+        say "❌ Error: Source file required: lipi build <file.lp> [-o <out>]"
         return 1
     dest = out_file
     if len(dest) == 0
@@ -141,25 +141,25 @@ fn handle_build file_path out_file target_flag
     c_bin = resolve_bin_path("lipc_bin")
     code = spawn_exec_cmd(c_bin, file_path, dest, target_flag, "")
     if code == 0
-        say "\033[1;32m✔ বাইনারি সফলভাবে তৈরি হয়েছে: " + dest + "\033[0m"
+        say "\033[1;32m✔ Binary generated successfully: " + dest + "\033[0m"
     else
-        say "\033[1;31m❌ বাইনারি বিল্ড ব্যর্থ হয়েছে।\033[0m"
+        say "\033[1;31m❌ Binary build failed.\033[0m"
     return code
 
 fn handle_test suite_path
     if len(suite_path) > 0
-        say "\033[1;34m[LIPI TEST]\033[0m টেস্ট ফাইল চালানো হচ্ছে: " + suite_path
+        say "\033[1;34m[LIPI TEST]\033[0m Running test suite: " + suite_path
         tmp_tst = "/tmp/lipi_tst_bin"
         c_bin = resolve_bin_path("lipc_bin")
         code = spawn_exec_cmd(c_bin, suite_path, tmp_tst, "", "")
         if code != 0
-            say "❌ টেস্ট কম্পাইলেশন ব্যর্থ।"
+            say "❌ Test compilation failed."
             return code
         tst_code = spawn_exec_cmd(tmp_tst, "", "", "", "")
         syscall(87, tmp_tst, 0, 0, 0, 0, 0)
         return tst_code
     else
-        say "\033[1;34m[LIPI TEST]\033[0m সম্পূর্ণ সার্বভৌম রিগ্রেশন টেস্ট স্যুট পরিচালনা..."
+        say "\033[1;34m[LIPI TEST]\033[0m Executing complete sovereign regression test suite..."
         b_bin = resolve_bin_path("lipi-build")
         if syscall(21, b_bin, 0, 0, 0, 0, 0) == 0
             return spawn_exec_cmd(b_bin, "", "", "", "")
@@ -167,17 +167,17 @@ fn handle_test suite_path
 
 fn handle_fmt file_path flag
     if len(file_path) == 0
-        say "❌ ত্রুটি: ফরম্যাট করার ফাইল উল্লেখ করুন: lipi fmt <file.lp> [-w]"
+        say "❌ Error: Source file required: lipi fmt <file.lp> [-w]"
         return 1
     return spawn_exec_cmd(resolve_bin_path("lipifmt"), file_path, flag, "", "")
 
 fn handle_lsp
-    say "⚡ লিপির সার্বভৌম ল্যাঙ্গুয়েজ সার্ভার (LSP) চালু হচ্ছে..."
+    say "⚡ Starting Lipi Sovereign Language Server (LSP daemon)..."
     return spawn_exec_cmd(resolve_bin_path("lipilsp"), "", "", "", "")
 
 fn handle_debug target
     if len(target) == 0
-        say "❌ ত্রুটি: ডিবাগ করার বাইনারি উল্লেখ করুন: lipi debug <binary>"
+        say "❌ Error: Target binary required: lipi debug <binary>"
         return 1
     return spawn_exec_cmd(resolve_bin_path("lipidbg"), target, "", "", "")
 
@@ -185,7 +185,7 @@ fn handle_pkg subcmd arg1 arg2
     return spawn_exec_cmd(resolve_bin_path("lipipkg"), subcmd, arg1, arg2, "")
 
 fn handle_repl
-    say "⚡ লিপি ইন্টারঅ্যাক্টিভ আরইপিএল..."
+    say "⚡ Launching Lipi Interactive REPL..."
     return spawn_exec_cmd(resolve_bin_path("lipirepl"), "", "", "", "")
 
 fn handle_convert file_path to_syntax
@@ -193,14 +193,14 @@ fn handle_convert file_path to_syntax
 
 fn handle_os action
     if action == "boot"
-        say "⚡ QEMU হাইপারভাইজারে Lipi-OS লাইভ বুট চালানো হচ্ছে..."
+        say "⚡ Launching Lipi-OS live in QEMU hypervisor..."
         return spawn_exec_cmd("bash", "scripts/boot_qemu.sh", "--iso", "--test", "")
     else
-        say "⚡ Lipi-OS বুটেবল হাইব্রিড আইএসও (5.1MB) তৈরি হচ্ছে..."
+        say "⚡ Building Lipi-OS bootable hybrid ISO image (5.1MB)..."
         return spawn_exec_cmd("bash", "scripts/build_iso.sh", "", "", "")
 
 fn handle_self_build
-    say "\033[1;35m[LIPI SELF-BUILD]\033[0m ৩-জেনারেশন সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ..."
+    say "\033[1;35m[LIPI SELF-BUILD]\033[0m 3-generation self-hosting deterministic bootstrap..."
     b_bin = resolve_bin_path("lipi-build")
     if syscall(21, b_bin, 0, 0, 0, 0, 0) == 0
         return spawn_exec_cmd(b_bin, "", "", "", "")
@@ -214,8 +214,7 @@ fn handle_clean
     say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🧹 LIPI SOVEREIGN REPOSITORY CLEANUP (100% Pure Silicon / 0% Shell)\033[0m   \033[38;2;0;255;204m║\033[0m"
     say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
-    say "\033[1;33m⚡ অস্থায়ী টেস্ট বাইনারি ও স্ক্র্যাচ মেমরি পরিচ্ছন্ন করা হচ্ছে...\033[0m"
-    say ""
+    say "\033[1;33m⚡ Purging temporary scratch binaries and test memory...\033[0m"
 
     // Clean scratch binaries from /tmp and dist/ via direct SYS_unlink (87)
     syscall(87, "/tmp/lipi_tst_bin", 0, 0, 0, 0, 0)
@@ -225,24 +224,23 @@ fn handle_clean
     syscall(87, "/tmp/lipi_bootstrap_probe", 0, 0, 0, 0, 0)
     syscall(87, "dist/tmp_unum_bin", 0, 0, 0, 0, 0)
 
-    say "\033[1;32m  ✔ /tmp এবং dist/ ডিরেক্টরি সম্পূর্ণ অবশিষ্টাংশমুক্ত।\033[0m"
-    say ""
-    say "\033[1;32m  ✔ রিপোজিটরি ১০০% পরিচ্ছন্ন ও উৎপাদন-প্রস্তুত (Production Ready)!\033[0m"
+    say "\033[1;32m  ✔ Temporary artifacts in /tmp and dist/ successfully purged.\033[0m"
+    say "\033[1;32m  ✔ Repository is 100% clean and production-ready!\033[0m"
     say ""
     return 0
 
 fn handle_unum file_path
     if len(file_path) == 0
-        say "❌ ত্রুটি: সোর্স ফাইল উল্লেখ করুন: lipi unum <file.lp>"
+        say "❌ Error: Source file required: lipi unum <file.lp>"
         return 1
-    say "\033[1;36m[LIPI UNUM]\033[0m সার্বজনীন গাণিতিক সংখ্যা (Gödel Universal Number) সিন্থেসিস..."
+    say "\033[1;36m[LIPI UNUM]\033[0m Synthesizing Gödel Universal Prime State Number..."
     tmp_bin = "dist/tmp_unum_bin"
     c_bin = resolve_bin_path("lipc_bin")
     code = spawn_exec_cmd(c_bin, file_path, "-o", tmp_bin, "")
     if code != 0
-        say "❌ কম্পাইলেশন ব্যর্থ।"
+        say "❌ Compilation failed."
         return code
-    say "✔ প্রোগ্রামের গাণিতিক গ্যডেল প্রাইম ফ্যাক্টরাইজেশন স্টেট অ্যাক্টিভ।"
+    say "✔ Program universal prime state factorization active."
     say "  Formula: U = 2^(Op_0) * 3^(Arg_0) * 5^(Op_1) * 7^(Arg_1) ..."
     say "  Universal Fingerprint: 0x7F454C46554E554D"
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
@@ -250,13 +248,13 @@ fn handle_unum file_path
 
 fn handle_ai model_path prompt
     if len(model_path) == 0
-        say "❌ ত্রুটি: GGUF মডেল উল্লেখ করুন: lipi ai <model.gguf> [prompt]"
+        say "❌ Error: GGUF model required: lipi ai <model.gguf> [prompt]"
         return 1
-    say "\033[1;35m[LIPI AI]\033[0m নেটিভ সিলিকন নিউরাল ইঞ্জিন ও লোকাল LLM ইনফ্যারেন্স..."
-    say "  মডেল: " + model_path
-    say "  প্রম্পট: " + prompt
-    say "  ইঞ্জিন: Pure Lipi AVX2 SIMD GEMV (Zero Python / Zero PyTorch)"
-    say "  জেনারেটেড রেসপন্স: [Lipi Silicon AI Engine Active]"
+    say "\033[1;35m[LIPI AI]\033[0m Native silicon neural engine & local LLM inference..."
+    say "  Model: " + model_path
+    say "  Prompt: " + prompt
+    say "  Engine: Pure Lipi AVX2 SIMD GEMV (Zero Python / Zero PyTorch)"
+    say "  Generated Response: [Lipi Silicon AI Engine Active]"
     return 0
 
 fn main
@@ -278,7 +276,7 @@ fn main
 
     if cmd == "run"
         if argc < 3
-            say "ব্যবহারবিধি: lipi run <file.lp> [args...]"
+            say "Usage: lipi run <file.lp> [args...]"
             return 1
         a1 = ""
         a2 = ""
@@ -292,7 +290,7 @@ fn main
 
     if cmd == "build"
         if argc < 3
-            say "ব্যবহারবিধি: lipi build <file.lp> [-o <out>]"
+            say "Usage: lipi build <file.lp> [-o <out>]"
             return 1
         src_file = get(args, 2)
         out_f = ""
@@ -319,7 +317,7 @@ fn main
 
     if cmd == "fmt"
         if argc < 3
-            say "ব্যবহারবিধি: lipi fmt <file.lp> [-w]"
+            say "Usage: lipi fmt <file.lp> [-w]"
             return 1
         target_f = get(args, 2)
         w_flag = ""
@@ -331,7 +329,7 @@ fn main
 
     if cmd == "debug"
         if argc < 3
-            say "ব্যবহারবিধি: lipi debug <binary>"
+            say "Usage: lipi debug <binary>"
             return 1
         return handle_debug(get(args, 2))
 
@@ -349,7 +347,7 @@ fn main
 
     if cmd == "convert"
         if argc < 3
-            say "ব্যবহারবিধি: lipi convert <file.lp> [bengali|english|maya]"
+            say "Usage: lipi convert <file.lp> [bengali|english|maya]"
             return 1
         to_s = ""
         if argc >= 4 to_s = get(args, 3)
@@ -368,21 +366,21 @@ fn main
 
     if cmd == "unum"
         if argc < 3
-            say "ব্যবহারবিধি: lipi unum <file.lp>"
+            say "Usage: lipi unum <file.lp>"
             return 1
         return handle_unum(get(args, 2))
 
     if cmd == "ai"
         if argc < 3
-            say "ব্যবহারবিধি: lipi ai <model.gguf> [prompt]"
+            say "Usage: lipi ai <model.gguf> [prompt]"
             return 1
         m_path = get(args, 2)
         p_str = "Explain Lipi Sovereign Architecture"
         if argc >= 4 p_str = get(args, 3)
         return handle_ai(m_path, p_str)
 
-    say "❌ অজানা কমান্ড: '" + cmd + "'"
-    say "সাহায্যের জন্য 'lipi help' চালান।"
+    say "❌ Unknown command: '" + cmd + "'"
+    say "Run 'lipi' or 'lipi help' for available commands."
     return 1
 
 main()

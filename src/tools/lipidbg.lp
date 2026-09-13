@@ -415,21 +415,23 @@ fn dbg_restore_breakpoint pid addr orig_word
 fn main
     args = argv()
     argc = len(args)
-    if argc >= 2
-        cmd = get(args, 1)
-        if cmd == "version" or cmd == "-v"
-            say "lipidbg সংস্করণ: প্রথম ১.০.০ (First 1.0.0 Sovereign)"
-            say "লক্ষ্য: Linux x86_64 ELF64 (0% Libc, 0% GDB)"
-            return 0
-        if cmd == "help" or cmd == "-h"
-            say "ব্যবহার: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | version"
-            return 0
+    if argc < 2
+        say "Usage: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | version"
+        return 0
+    cmd = get(args, 1)
+    if cmd == "version" or cmd == "-v" or cmd == "--version"
+        say "lipidbg Version: First 1.0.0 (প্রথম ১.০.০ Sovereign)"
+        say "Target: Linux x86_64 ELF64 (0% Libc, 0% GDB)"
+        return 0
+    if cmd == "help" or cmd == "-h" or cmd == "--help"
+        say "Usage: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | version"
+        return 0
         if cmd == "attach"
             if argc >= 3
                 target_pid = parse_hex_or_dec(get(args, 2))
                 dbg_attach(target_pid)
                 return 0
-            say "ব্যবহার: lipidbg attach <pid>"
+            say "Usage: lipidbg attach <pid>"
             return 1
         if cmd == "break"
             if argc >= 4
@@ -437,7 +439,7 @@ fn main
                 b_addr = parse_hex_or_dec(get(args, 3))
                 dbg_set_breakpoint(target_pid, b_addr)
                 return 0
-            say "ব্যবহার: lipidbg break <pid> <addr>"
+            say "Usage: lipidbg break <pid> <addr>"
             return 1
         if cmd == "stack"
             dbg_stack_inspect()

@@ -478,7 +478,7 @@ fn document_directory dir_path
     free_buf(buf, 4096)
 
     if count == 0
-        say "কোনো .lp ফাইল পাওয়া যায়নি এই ডিরেক্টরিতে: " + dir_path
+        say "No .lp source files found in directory: " + dir_path
     return count
 
 // ── 6. CLI Driver & Entry Point ──────────────────────────────────────────────
@@ -491,16 +491,16 @@ fn print_banner
 
 fn print_usage
     print_banner()
-    say "\033[1;33mব্যবহার (Usage):\033[0m"
+    say "\033[1;33mUsage:\033[0m"
     say "  lipidoc <file.lp>"
     say "  lipidoc <directory>"
     say ""
-    say "\033[1;33mউদাহরণ (Examples):\033[0m"
+    say "\033[1;33mExamples:\033[0m"
     say "  lipidoc src/tools/lipidbg.lp"
     say "  lipidoc src/tools/"
     say ""
-    say "\033[1;33mবিকল্পসমূহ (Flags):\033[0m"
-    say "  \033[1;32m-h, --help\033[0m    এই সহায়তা বার্তা প্রদর্শন\n"
+    say "\033[1;33mFlags:\033[0m"
+    say "  \033[1;32m-h, --help\033[0m    Display this help information\n"
 
 fn main
     args = argv()

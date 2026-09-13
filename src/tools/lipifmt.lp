@@ -453,14 +453,14 @@ fn print_banner
 
 fn print_usage
     print_banner()
-    say "\033[1;33mব্যবহার (Usage):\033[0m"
+    say "\033[1;33mUsage:\033[0m"
     say "  lipifmt [flags] <file.lp>"
     say ""
-    say "\033[1;33mবিকল্পসমূহ (Flags):\033[0m"
-    say "  \033[1;32m--check <file.lp>\033[0m       ফরম্যাটিং পরীক্ষা করুন (০ = সঠিক, ১ = পরিবর্তন প্রয়োজন)"
-    say "  \033[1;32m-w, --write <file.lp>\033[0m   ফাইলটিতে সরাসরি ফরম্যাটকৃত কোড প্রতিস্থাপন করুন"
-    say "  \033[1;32m<file.lp>\033[0m               ফরম্যাটকৃত কোড সরাসরি STDOUT-এ প্রিন্ট করুন"
-    say "  \033[1;32m-h, --help\033[0m              এই সহায়তা বার্তা প্রদর্শন\n"
+    say "\033[1;33mFlags:\033[0m"
+    say "  \033[1;32m--check <file.lp>\033[0m       Check code formatting (0 = clean, 1 = reformatting needed)"
+    say "  \033[1;32m-w, --write <file.lp>\033[0m   Format and overwrite source file in-place"
+    say "  \033[1;32m<file.lp>\033[0m               Print formatted code directly to STDOUT"
+    say "  \033[1;32m-h, --help\033[0m              Display this help information\n"
 
 fn main
     args = argv()
@@ -479,12 +479,12 @@ fn main
     // Mode 1: --check <file.lp>
     if arg1 == "--check"
         if argc < 3
-            say "❌ ত্রুটি: ফাইলের পাথ প্রদান করুন: lipifmt --check <file.lp>"
+            say "❌ Error: File path required: lipifmt --check <file.lp>"
             syscall(60, 1, 0, 0, 0, 0, 0)
         target_path = get(args, 2)
         raw_lines = read_file_lines(target_path)
         if len(raw_lines) == 0
-            say "❌ ত্রুটি: ফাইল পড়তে ব্যর্থ বা ফাইলটি শূন্য: " + target_path
+            say "❌ Error: Failed to read file or file is empty: " + target_path
             syscall(60, 1, 0, 0, 0, 0, 0)
 
         formatted_lines = format_source_lines(raw_lines)
@@ -504,31 +504,31 @@ fn main
                     ci = ci + 1
 
         if is_identical == 1
-            say "✓ " + target_path + " ইতিমধ্যে যথাযথভাবে ফরম্যাট করা আছে।"
+            say "✔ " + target_path + " is formatted properly."
             syscall(60, 0, 0, 0, 0, 0, 0)
         else
-            say "✗ " + target_path + " ফরম্যাটিং প্রয়োজন।"
+            say "✗ " + target_path + " requires reformatting."
             syscall(60, 1, 0, 0, 0, 0, 0)
         return 0
 
     // Mode 2: -w or --write <file.lp>
     if arg1 == "-w" or arg1 == "--write"
         if argc < 3
-            say "❌ ত্রুটি: ফাইলের পাথ প্রদান করুন: lipifmt -w <file.lp>"
+            say "❌ Error: File path required: lipifmt -w <file.lp>"
             syscall(60, 1, 0, 0, 0, 0, 0)
         target_path = get(args, 2)
         raw_lines = read_file_lines(target_path)
         if len(raw_lines) == 0
-            say "❌ ত্রুটি: ফাইল পাওয়া যায়নি: " + target_path
+            say "❌ Error: File not found or empty: " + target_path
             syscall(60, 1, 0, 0, 0, 0, 0)
 
         formatted_lines = format_source_lines(raw_lines)
         write_ok = write_file_lines(target_path, formatted_lines)
         if write_ok == 1
-            say "✓ " + target_path + " সফলভাবে ফরম্যাট ও সংরক্ষণ করা হয়েছে।"
+            say "✔ " + target_path + " formatted and written successfully."
             return 0
         else
-            say "❌ ত্রুটি: ফাইলে লিখতে ব্যর্থ: " + target_path
+            say "❌ Error: Failed to write formatted file: " + target_path
             syscall(60, 1, 0, 0, 0, 0, 0)
         return 0
 
@@ -536,7 +536,7 @@ fn main
     target_path = arg1
     raw_lines = read_file_lines(target_path)
     if len(raw_lines) == 0
-        say "❌ ত্রুটি: ফাইল পাওয়া যায়নি বা পড়তে ব্যর্থ: " + target_path
+        say "❌ Error: File not found or empty: " + target_path
         syscall(60, 1, 0, 0, 0, 0, 0)
 
     formatted_lines = format_source_lines(raw_lines)

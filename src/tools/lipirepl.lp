@@ -65,24 +65,23 @@ fn parse_hex_or_dec s
     return val
 
 fn প্রিন্ট_রেপল_ব্যানার
-    say "[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗[0m"
-    say "[38;2;0;255;204m║[0m  [1;38;2;255;255;255m👑 LIPIREPL — SOVEREIGN INTERACTIVE LIPI SHELL (First 1.0.0)[0m          [38;2;0;255;204m║[0m"
-    say "[38;2;0;255;204m║[0m  [38;2;180;180;180m⚡ Live Silicon Evaluation | Hardware CPU Introspection | 0% Libc[0m     [38;2;0;255;204m║[0m"
-    say "[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝[0m"
+    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPIREPL — SOVEREIGN INTERACTIVE LIPI SHELL (First 1.0.0)\033[0m          \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Live Silicon Evaluation | Hardware CPU Introspection | 0% Libc\033[0m      \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
-    say "টাইপ করুন :help নির্দেশিকার জন্য, অথবা :exit প্রস্থান করার জন্য।"
+    say "Type :help for command reference, or :exit to quit."
     say "────────────────────────────────────────────────────────────────────────"
 
 fn রেপল_সাহায্য
-    say "[1;33m[লিপি আরইপিএল কমান্ড সহায়িকা / REPL Commands]:[0m"
-    say "  :help / :সাহায্য     - এই সাহায্য মেনু প্রদর্শন"
-    say "  :clock / :ক্লক       - হার্ডওয়্যার আরডিটিএসসি (RDTSC) সাইকেল টাইমিং ও ল্যাটেন্সি"
-    say "  :stack / :স্ট্যাক    - সিপিইউ স্ট্যাক পয়েন্টার (%rsp) ও ফ্রেম পরিদর্শন"
-    say "  :mem <addr> [len]    - লাইভ মেমরি হেক্স ডাম্প ও আসকি পরিদর্শন"
-    say "  :reg / :রেজিস্টার    - বর্তমান হার্ডওয়্যার রেজিস্টার ও সিপিইউ স্টেট"
-    say "  :eval <n1> <op> <n2> - সরাসরি গাণিতিক হিসাব ও এক্সিকিউশন টাইমিং"
-    say "  :exit / :বিদায়       - আরইপিএল শেল থেকে প্রস্থান
-"
+    say "\033[1;33m[Lipi REPL Command Reference]:\033[0m"
+    say "  :help / :সাহায্য     - Display this help menu"
+    say "  :clock / :ক্লক       - Hardware RDTSC CPU cycle timing & latency"
+    say "  :stack / :স্ট্যাক    - CPU stack pointer (%rsp) & frame inspector"
+    say "  :mem <addr> [len]    - Live memory hex dump & ASCII inspection"
+    say "  :reg / :রেজিস্টার    - Hardware general-purpose register state"
+    say "  :eval <n1> <op> <n2> - Direct arithmetic evaluation & cycle benchmark"
+    say "  :exit / :বিদায়       - Exit interactive REPL session\n"
 
 fn রেপল_ক্লক
     t1 = cpu_clock()

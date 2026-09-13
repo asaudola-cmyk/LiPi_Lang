@@ -317,25 +317,25 @@ fn parse_sig_manifest content
 // ── ৫. ইউআই ও ব্যানার ফাংশনসমূহ (UI & Help Display) ─────────────────────────────
 
 fn ব্যানার_দেখাও
-    say "\033[38;2;0;255;204m╔═══════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📦 lipipkg — লিপি প্যাকেজ ম্যানেজার\033[0m                      \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m🔖 সংস্করণ: প্রথম ১.০.০ (First 1.0.0) | pkg.lipi.dev\033[0m     \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚═══════════════════════════════════════════════════════════╝\033[0m\n"
+    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📦 LIPIPKG — SOVEREIGN PACKAGE MANAGER (First 1.0.0)\033[0m                 \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m🔖 Version: First 1.0.0 (প্রথম ১.০.০) | pkg.lipi.dev\033[0m                  \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m\n"
 
 fn সহায়তা_দেখাও
-    say "\033[1;33mব্যবহার:\033[0m lipipkg <কমান্ড> [বিকল্প]"
+    say "\033[1;33mUsage:\033[0m lipipkg <command> [arguments...]"
     say ""
-    say "\033[1;33mকমান্ডসমূহ (Commands):\033[0m"
-    say "  \033[1;32minit\033[0m    [নাম]          নতুন লিপি প্রজেক্ট তৈরি করুন"
-    say "  \033[1;32mbuild\033[0m                 প্রজেক্ট কম্পাইল করুন (src/main.lp → build/app)"
-    say "  \033[1;32mtest\033[0m                  tests/ ডিরেক্টরির সব পরীক্ষা চালান"
-    say "  \033[1;32mclean\033[0m                 build/ ডিরেক্টরি পরিষ্কার করুন"
-    say "  \033[1;32msign\033[0m    [ডিরেক্টরি/টার] প্যাকেজে Ed25519 ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর প্রদান"
-    say "  \033[1;32mverify\033[0m  [ডিরেক্টরি/টার] প্যাকেজের Ed25519 ডিজিটাল স্বাক্ষর ও অখণ্ডতা যাচাইকরণ"
-    say "  \033[1;32mversion\033[0m               সংস্করণ ও আর্কিটেকচার তথ্য দেখুন"
-    say "  \033[1;32mhash\033[0m    <ফাইল>         ফাইলের সার্বভৌম ক্রিপ্টোগ্রাফিক হ্যাশ নির্ণয় করুন"
-    say "  \033[1;32minfo\033[0m                  ম্যানিফেস্ট ও প্যাকেজ তথ্য প্রদর্শন"
-    say "  \033[1;32mhelp\033[0m                  এই সহায়তা মেনু প্রদর্শন\n"
+    say "\033[1;33mCommands:\033[0m"
+    say "  \033[1;32minit\033[0m    [name]        Initialize new Lipi package project"
+    say "  \033[1;32mbuild\033[0m                 Compile project (src/main.lp -> build/app)"
+    say "  \033[1;32mtest\033[0m                  Run all tests in tests/ directory"
+    say "  \033[1;32mclean\033[0m                 Purge build/ directory artifacts"
+    say "  \033[1;32msign\033[0m    [target]      Sign package with Ed25519 cryptographic signature"
+    say "  \033[1;32mverify\033[0m  [target]      Verify Ed25519 signature and package integrity"
+    say "  \033[1;32mversion\033[0m               Display version and platform architecture info"
+    say "  \033[1;32mhash\033[0m    <file>        Calculate SHA-256 cryptographic digest"
+    say "  \033[1;32minfo\033[0m                  Display manifest and dependency metadata"
+    say "  \033[1;32mhelp\033[0m                  Display this help menu\n"
 
 // ── ৬. প্যাকেজ সাইনিং ও ভেরিফিকেশন (Package Signing & Verification) ──────────────
 
@@ -769,7 +769,7 @@ fn main
 
     if cmd == "hash" or cmd == "হ্যাশ"
         if argc < 3
-            say "ব্যবহার: lipipkg hash <ফাইল_পাথ>"
+            say "Usage: lipipkg hash <file_path>"
             syscall(60, 1, 0, 0, 0, 0, 0)
             return 1
         cmd_hash(get(args, 2))
@@ -781,7 +781,7 @@ fn main
 
     if cmd == "install" or cmd == "ইনস্টল" or cmd == "add"
         if argc < 3
-            say "ব্যবহার: lipipkg install <প্যাকেজের_নাম>"
+            say "Usage: lipipkg install <package_name>"
             syscall(60, 1, 0, 0, 0, 0, 0)
             return 1
         cmd_install(get(args, 2))
@@ -794,8 +794,8 @@ fn main
         if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
         return 0
 
-    say "❌ অজানা কমান্ড: " + cmd
-    say "টাইপ করুন 'lipipkg help' উপলব্ধ কমান্ডসমূহের জন্য।"
+    say "❌ Unknown command: " + cmd
+    say "Run 'lipipkg help' for available commands."
     syscall(60, 1, 0, 0, 0, 0, 0)
     return 1
 
