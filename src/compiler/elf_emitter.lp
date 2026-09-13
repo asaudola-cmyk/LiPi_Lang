@@ -4548,12 +4548,76 @@ fn tokenize_pure src
                 if sc == "\\" and p + 1 < slen
                     p = p + 1
                     esc = char_at(src, p)
+                    ecode = ord(esc)
                     if esc == "n"
                         str_acc = str_acc + "\n"
                     elif esc == "t"
                         str_acc = str_acc + "\t"
                     elif esc == "r"
                         str_acc = str_acc + "\r"
+                    elif esc == "e"
+                        // WHY: ANSI Escape control byte (ASCII 27 / 0x1B)
+                        str_acc = str_acc + chr(27)
+                    elif esc == "a"
+                        // WHY: Terminal alert/bell byte (ASCII 7)
+                        str_acc = str_acc + chr(7)
+                    elif esc == "b"
+                        // WHY: Backspace control byte (ASCII 8)
+                        str_acc = str_acc + chr(8)
+                    elif esc == "f"
+                        // WHY: Formfeed control byte (ASCII 12)
+                        str_acc = str_acc + chr(12)
+                    elif esc == "v"
+                        // WHY: Vertical tab control byte (ASCII 11)
+                        str_acc = str_acc + chr(11)
+                    elif esc == "\""
+                        str_acc = str_acc + "\""
+                    elif esc == "'"
+                        str_acc = str_acc + "'"
+                    elif esc == "\\"
+                        str_acc = str_acc + "\\"
+                    elif esc == "x" or esc == "X"
+                        // WHY: Hexadecimal byte escape (\x1b, \x7F, etc.)
+                        hex_val = 0
+                        hex_count = 0
+                        while hex_count < 2 and p + 1 < slen
+                            hc = char_at(src, p + 1)
+                            hcode = ord(hc)
+                            hdigit = -1
+                            if hcode >= 48 and hcode <= 57
+                                hdigit = hcode - 48
+                            elif hcode >= 65 and hcode <= 70
+                                hdigit = hcode - 55
+                            elif hcode >= 97 and hcode <= 102
+                                hdigit = hcode - 87
+                            if hdigit != -1
+                                hex_val = (hex_val * 16) + hdigit
+                                p = p + 1
+                                hex_count = hex_count + 1
+                            else
+                                break
+                        if hex_count > 0
+                            str_acc = str_acc + chr(hex_val)
+                        else
+                            str_acc = str_acc + "x"
+                    elif ecode >= 48 and ecode <= 55
+                        // WHY: Standard 1..3 digit octal escape (\0, \033 for ESC, \377, etc.)
+                        oct_val = ecode - 48
+                        oct_count = 1
+                        while oct_count < 3 and p + 1 < slen
+                            oc = char_at(src, p + 1)
+                            ocode = ord(oc)
+                            if ocode >= 48 and ocode <= 55
+                                next_oct = (oct_val * 8) + (ocode - 48)
+                                if next_oct <= 255
+                                    oct_val = next_oct
+                                    p = p + 1
+                                    oct_count = oct_count + 1
+                                else
+                                    break
+                            else
+                                break
+                        str_acc = str_acc + chr(oct_val)
                     else
                         str_acc = str_acc + esc
                     p = p + 1
