@@ -70,4 +70,9 @@ iso_staging/
 bin/test_*
 *.spv
 *.db
+*.wal
+apps/website/data/*
+!apps/website/data/.gitkeep
 /tmp/libtest_*
+__pycache__/
+*.py[cod]
