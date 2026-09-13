@@ -24,11 +24,12 @@ echo -e "${CYAN}║  ⚡ Automated Vulnerability Scanner & Penetration Resilienc
 echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Ensure server binary is compiled
-if [ ! -f "${SERVER_BIN}" ]; then
-    echo -e "${YELLOW}[প্রস্তুতি] সার্ভার বাইনারি তৈরি করা হচ্ছে...${NC}"
-    ./bin/lipc apps/website/server.lp -o "${SERVER_BIN}" > /dev/null
-fi
+# Ensure test port is free
+fuser -k "${TEST_PORT}/tcp" 2>/dev/null || true
+
+# Always compile latest server binary
+echo -e "${YELLOW}[প্রস্তুতি] সার্ভার বাইনারি সংকলন করা হচ্ছে...${NC}"
+./bin/lipc apps/website/server.lp -o "${SERVER_BIN}" > /dev/null
 
 # Start server on test port 8099
 echo -e "${YELLOW}[ধাপ ০] টেস্ট সিকিউরিটি সার্ভার শুরু করা হচ্ছে (Port: ${TEST_PORT})...${NC}"
@@ -39,10 +40,11 @@ cleanup() {
     echo ""
     echo -e "${YELLOW}[ক্লিনআপ] সিকিউরিটি টেস্ট সার্ভার প্রসেস (${SERVER_PID}) বন্ধ করা হচ্ছে...${NC}"
     kill -9 "${SERVER_PID}" 2>/dev/null || true
+    fuser -k "${TEST_PORT}/tcp" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-sleep 0.8
+sleep 1.0
 
 # Verify server is listening
 if ! curl -s "http://127.0.0.1:${TEST_PORT}/healthz" > /dev/null; then

@@ -330,6 +330,21 @@ fn parse_code_payload body
 
     return body
 
+// ── Sandbox Security Static Validator ─────────────────────────────────────────
+// WHY: Analyzes untrusted code payloads submitted to public /api/run playground.
+// Strictly blocks direct kernel syscall execution and dangerous filesystem inclusion
+// to prevent sandbox escapes, unauthorized host access, and command execution.
+fn sandbox_validate_security code
+    if str_contains(code, "syscall(") == 1 or str_contains(code, "syscall ") == 1
+        return "Security Sandbox Violation: Direct kernel syscall execution is restricted in public playground"
+    if str_contains(code, "সিসকল(") == 1 or str_contains(code, "সিসকল ") == 1
+        return "Security Sandbox Violation: Direct kernel syscall execution is restricted in public playground"
+    if str_contains(code, "include \"/") == 1 or str_contains(code, "অন্তর্ভুক্ত \"/") == 1
+        return "Security Sandbox Violation: Absolute filesystem path inclusion is forbidden"
+    if str_contains(code, "include \"..") == 1 or str_contains(code, "অন্তর্ভুক্ত \"..") == 1
+        return "Security Sandbox Violation: Directory traversal path inclusion is forbidden"
+    return ""
+
 // ── Sandbox Compilation & Execution API (/api/run) ────────────────────────────
 // WHY: Compiles and executes untrusted Lipi code in an isolated temporary Linux process.
 // Enforces hard wall-clock timeout (2s) via SYS_alarm, CPU timeout (2s) and virtual memory
@@ -341,6 +356,16 @@ fn api_serve_run client_fd req_str req_id
 
     if len(code) == 0
         err_json = "{\"status\": \"error\", \"phase\": \"compilation\", \"error\": \"No source code provided in request body\"}\n"
+        res = web_response_json(err_json)
+        wire = web_serialize_response(res)
+        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+        socket_close(client_fd)
+        return 0
+
+    // Security Static Audit Guard
+    sec_err = sandbox_validate_security(code)
+    if len(sec_err) > 0
+        err_json = "{\"status\": \"error\", \"phase\": \"security\", \"error\": \"" + sec_err + "\"}\n"
         res = web_response_json(err_json)
         wire = web_serialize_response(res)
         syscall(1, client_fd, wire, len(wire), 0, 0, 0)
@@ -474,6 +499,10 @@ fn api_serve_run client_fd req_str req_id
         // Wall-clock timeout: 2 seconds alarm
         syscall(37, 2, 0, 0, 0, 0, 0)
 
+        // Sandbox Security: Prevent acquiring new privileges via setuid/setgid
+        // WHY: PR_SET_NO_NEW_PRIVS (38) disables privilege elevation for child process
+        syscall(157, 38, 1, 0, 0, 0, 0)
+
         eargv = malloc(24)
         mem_write_idx(eargv, 0, bin_path)
         mem_write_idx(eargv, 1, 0)
@@ -592,12 +621,22 @@ req_buf = malloc(65536)
 while 1
     client_fd = socket_accept(server_fd)
     if client_fd >= 0
-        req_count = req_count + 1
-        nread = syscall(0, client_fd, req_buf, 65536, 0, 0, 0)
-        if nread > 0
-            req_str = buf_to_str(req_buf, nread)
-            method = web_parse_method(req_str)
-            path = web_parse_path(req_str)
+        // Socket Security: 2-second receive/send timeout prevents Slowloris starvation DoS
+        socket_set_rcvtimeo(client_fd, 2)
+        socket_set_sndtimeo(client_fd, 2)
+
+        // Poll socket for readability within 150ms before blocking read
+        // WHY: Fast detection and teardown of idle/slowloris sockets prevents starvation of concurrent requests
+        pready = socket_poll_read(client_fd, 150)
+        if pready <= 0
+            socket_close(client_fd)
+        else
+            req_count = req_count + 1
+            nread = syscall(0, client_fd, req_buf, 65536, 0, 0, 0)
+            if nread > 0
+                req_str = buf_to_str(req_buf, nread)
+                method = web_parse_method(req_str)
+                path = web_parse_path(req_str)
 
             if path == "/" or path == "/index.html"
                 serve_static_file(client_fd, "apps/website/public/index.html", "text/html; charset=utf-8")
@@ -650,7 +689,7 @@ while 1
             elif path == "/api/db/update"
                 db_serve_update(client_fd, db_fd, req_str)
             elif path == "/api/db/reseed"
-                db_serve_reseed(client_fd, db_fd)
+                db_serve_reseed(client_fd, db_fd, req_str)
             elif path == "/api/packages"
                 api_serve_packages(client_fd)
             elif path == "/api/benchmarks"
