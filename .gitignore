@@ -21,7 +21,10 @@ bin/lipic_gen
 bin/lipi-gen2
 bin/lipirepl_bin
 bin/lipils
-bin/lipic2
+bin/lipc2
+bin/lipi-build
+bin/lipi-installer
+scratch/
 
 # Standalone package manager dependencies
 lipi_modules/

@@ -134,3 +134,50 @@ fn socket_close fd
 
 fn সকেট_বন্ধ fd
     return socket_close(fd)
+
+// ১০. সকেট রিসিভ টাইমআউট সেট (Set SO_RCVTIMEO via SYS_setsockopt: syscall 54)
+// WHY: Slowloris DoS প্রতিরোধে ক্লায়েন্ট সংযোগে সর্বোচ্চ ডেটা আসার সময়সীমা নির্ধারণ করা।
+// SOL_SOCKET = 1, SO_RCVTIMEO = 20, sizeof(timeval) = 16 bytes
+fn socket_set_rcvtimeo fd sec
+    tv = malloc(16)
+    mem_write(tv, 0, sec)
+    mem_write(tv, 8, 0)
+    res = syscall(54, fd, 1, 20, tv, 16, 0)
+    free(tv, 16)
+    return res
+
+fn সকেট_রিসিভ_টাইমআউট fd সেকেন্ড
+    return socket_set_rcvtimeo(fd, সেকেন্ড)
+
+// ১১. সকেট সেন্ড টাইমআউট সেট (Set SO_SNDTIMEO via SYS_setsockopt: syscall 54)
+// WHY: ধীরগতির বা হ্যাং হওয়া ক্লায়েন্ট সকেটে রেসপন্স পাঠানোর সর্বোচ্চ সময়সীমা নির্ধারণ।
+// SOL_SOCKET = 1, SO_SNDTIMEO = 21, sizeof(timeval) = 16 bytes
+fn socket_set_sndtimeo fd sec
+    tv = malloc(16)
+    mem_write(tv, 0, sec)
+    mem_write(tv, 8, 0)
+    res = syscall(54, fd, 1, 21, tv, 16, 0)
+    free(tv, 16)
+    return res
+
+fn সকেট_সেন্ড_টাইমআউট fd সেকেন্ড
+    return socket_set_sndtimeo(fd, সেকেন্ড)
+
+// ১২. সকেট পোল রিড (Poll Socket Read Readiness via SYS_poll: syscall 7)
+// WHY: সকেট থেকে ডেটা আসার জন্য নন-ব্লকিং অপেক্ষা (POLLIN = 1)। টাইমআউট পার হলে ০ রিটার্ন করে।
+fn socket_poll_read fd timeout_ms
+    pfd = malloc(8)
+    mem_byte_write(pfd, 0, fd % 256)
+    mem_byte_write(pfd, 1, (fd / 256) % 256)
+    mem_byte_write(pfd, 2, 0)
+    mem_byte_write(pfd, 3, 0)
+    mem_byte_write(pfd, 4, 1)
+    mem_byte_write(pfd, 5, 0)
+    mem_byte_write(pfd, 6, 0)
+    mem_byte_write(pfd, 7, 0)
+    res = syscall(7, pfd, 1, timeout_ms, 0, 0, 0)
+    free(pfd, 8)
+    return res
+
+fn সকেট_পোল_রিড fd মিলিসেকেন্ড
+    return socket_poll_read(fd, মিলিসেকেন্ড)

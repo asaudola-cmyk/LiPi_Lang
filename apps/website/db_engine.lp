@@ -42,8 +42,12 @@ fn ডিবি_রেকর্ড_যোগ fd মান
 
 // ৩. রেকর্ড মুছে ফেলা (Soft Delete Record via Offset Mutation)
 // WHY: স্ট্যাটাস ফিল্ডকে ০ করে দিলে রেকর্ডটি নিষ্ক্রিয় হয়, ডাটাবেজের ইনডেক্স অখণ্ড থাকে।
+// বাউন্ডারি চেক: target_id > total হলে অবৈধ এক্সেস ঠেকানো হয় যাতে ডিস্কে স্পার্স ফাইল না বাড়ে।
 fn db_delete_record fd target_id
     if target_id <= 0
+        return 0
+    total = db_total_records(fd)
+    if target_id > total
         return 0
 
     offset = (target_id - 1) * 32
