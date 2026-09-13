@@ -9,9 +9,9 @@
 include "universe/net/dns_pure.lp"
 include "universe/net/tls13_server.lp"
 include "universe/gui/drm_kms.lp"
-include "tools/lipi_unikernel_boot.lp"
+include "src/tools/lipi_unikernel_boot.lp"
 include "build.lp"
-include "tools/installer.lp"
+include "src/tools/installer.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 

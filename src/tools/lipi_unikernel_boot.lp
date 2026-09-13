@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN OS: BARE-METAL RING-0 UNIKERNEL BOOT ENGINE
-// Module: tools/lipi_unikernel_boot.lp
+// Module: src/tools/lipi_unikernel_boot.lp
 // Milestone: Sovereign Full-Stack Frontier 4 (0% Linux OS, 0% Glibc, Pure Hardware)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Linux Dependencies

@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN STANDALONE INSTALLER ENGINE (tools/installer.lp)
+// 👑 LIPI SOVEREIGN STANDALONE INSTALLER ENGINE (src/tools/installer.lp)
 // Milestone: 100% Native Silicon Installer (Replacing install.sh)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Bash / Python Dependencies
@@ -123,7 +123,7 @@ fn main
     installer_add_file(engine, "universe/net/", home_dir + "/universe/net/", 0)
     installer_add_file(engine, "universe/io/", home_dir + "/universe/io/", 0)
     installer_add_file(engine, "universe/ai/", home_dir + "/universe/ai/", 0)
-    installer_add_file(engine, "tools/lipi_unikernel_boot.lp", home_dir + "/tools/lipi_unikernel_boot.lp", 0)
+    installer_add_file(engine, "src/tools/lipi_unikernel_boot.lp", home_dir + "/src/tools/lipi_unikernel_boot.lp", 0)
 
     say "\n▶ Deploying Sovereign Toolchain and Standard Universe..."
     installer_deploy_all(engine)

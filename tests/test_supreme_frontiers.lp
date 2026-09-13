@@ -17,7 +17,7 @@ include "universe/ai/llm_engine_pure.lp"
 include "universe/core/formal_proof.lp"
 include "universe/net/bft_consensus.lp"
 include "build.lp"
-include "tools/installer.lp"
+include "src/tools/installer.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 

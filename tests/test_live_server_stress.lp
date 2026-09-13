@@ -17,7 +17,7 @@
 include "universe/gui/sovereign_ui.lp"
 include "universe/web/sovereign_framework.lp"
 include "build.lp"
-include "tools/installer.lp"
+include "src/tools/installer.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 

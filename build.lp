@@ -132,7 +132,7 @@ fn main
     build_pipeline_add_target(pipe, "Pure DNS Resolver", "universe/net/dns_pure.lp", "dist/dns_pure", 1)
     build_pipeline_add_target(pipe, "In-Process TLS 1.3 Server", "universe/net/tls13_server.lp", "dist/tls13_server", 1)
     build_pipeline_add_target(pipe, "Direct DRM/KMS Engine", "universe/gui/drm_kms.lp", "dist/drm_kms", 1)
-    build_pipeline_add_target(pipe, "Bare-Metal Ring-0 Unikernel", "tools/lipi_unikernel_boot.lp", "dist/lipi_unikernel_boot", 1)
+    build_pipeline_add_target(pipe, "Bare-Metal Ring-0 Unikernel", "src/tools/lipi_unikernel_boot.lp", "dist/lipi_unikernel_boot", 1)
     build_pipeline_add_target(pipe, "Absolute Sovereignty Suite", "tests/test_absolute_sovereignty.lp", "dist/test_absolute_sovereignty", 1)
     build_pipeline_add_target(pipe, "PCIe NVMe Storage Controller", "universe/io/nvme_direct.lp", "dist/nvme_direct", 1)
     build_pipeline_add_target(pipe, "VirtIO-Net Card Driver", "universe/net/virtio_net.lp", "dist/virtio_net", 1)

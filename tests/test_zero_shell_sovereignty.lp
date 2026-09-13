@@ -7,7 +7,7 @@
 // ==============================================================================
 
 include "build.lp"
-include "tools/installer.lp"
+include "src/tools/installer.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 
