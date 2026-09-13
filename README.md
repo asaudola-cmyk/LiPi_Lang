@@ -179,7 +179,7 @@ chmod +x build/hello_app
 ```bash
 bash tests/run_tests.sh
 ```
-All 130 regression and integration test suites pass (130/130) across core language semantics, networking, cryptography, concurrency, memory arenas, and baremetal components.
+All 140 regression and integration test suites pass (140/140) across core language semantics, networking, cryptography, concurrency, memory arenas, and baremetal components.
 
 ---
 
@@ -296,7 +296,7 @@ cp -r editors/vscode/* ~/.vscode/extensions/lipi-lang-1.0.0/
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
 | **Peak Memory (10M Iterations)** | **264 KB** | 1,632 KB | 1,636 KB | 2,180 KB | 1,696 KB | 9,440 KB |
-| **Test Suite Pass Rate** | **130/130 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **140/140 (100%)** | — | — | — | — | — |
 
 ---
 
