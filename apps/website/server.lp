@@ -183,8 +183,20 @@ fn db_serve_update client_fd db_fd req_str
     return result
 
 // ── Database API: Reseed Storage (/api/db/reseed) ─────────────────────────────
-// WHY: Re-initializes clean 3-record seed dataset for interactive testing
-fn db_serve_reseed client_fd db_fd
+// WHY: Re-initializes clean 3-record seed dataset for interactive testing,
+// requiring an admin authorization key/token to prevent unauthorized data wipes.
+fn db_serve_reseed client_fd db_fd req_str
+    has_auth = 0
+    if str_contains(req_str, "token=sovereign") == 1 or str_contains(req_str, "X-Lipi-Admin: sovereign") == 1
+        has_auth = 1
+    if has_auth == 0
+        err_body = "{\"error\":401,\"message\":\"Unauthorized: Sovereign admin token required for database reseed\"}\n"
+        res = web_response_new(401, "application/json; charset=utf-8", err_body)
+        wire = web_serialize_response(res)
+        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+        socket_close(client_fd)
+        return 0
+
     db_insert_record(db_fd, 1024)
     db_insert_record(db_fd, 2048)
     db_insert_record(db_fd, 4096)
