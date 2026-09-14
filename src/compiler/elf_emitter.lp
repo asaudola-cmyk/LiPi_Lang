@@ -8571,44 +8571,113 @@ fn map_legacy_stdlib inc_name
         return "universe/gui/tui.lp"
     return ""
 
+fn get_compiler_self_path
+    // WHY: Retrieves the absolute canonical filesystem path of the running compiler binary
+    // via direct Linux kernel syscall 89 (readlink /proc/self/exe). Enables fully dynamic
+    // sysroot discovery without hardcoded usernames or absolute directory paths.
+    buf = alloc(512)
+    n = syscall(89, "/proc/self/exe", buf, 510, 0, 0, 0)
+    if n <= 0
+        return ""
+    res = ""
+    i = 0
+    while i < n
+        b = mem_byte_read(buf, i)
+        res = res + chr(b)
+        i = i + 1
+    return res
+
+fn get_compiler_sysroot
+    // WHY: Derives the root sysroot directory of the LiPi compiler installation from its binary location.
+    // If binary is at /path/to/lipi/bin/lipc_bin, returns /path/to/lipi.
+    self_exe = get_compiler_self_path()
+    if len(self_exe) == 0
+        return ""
+    bin_dir = path_dirname(self_exe)
+    if len(bin_dir) == 0 or bin_dir == "."
+        return ""
+    sysroot = path_dirname(bin_dir)
+    return sysroot
+
 fn resolve_inc_path cur_dir inc_name
     target = inc_name
     legacy = map_legacy_stdlib(inc_name)
     if len(legacy) > 0
         target = legacy
+
+    // 1. Direct absolute or relative path as requested
     r = check_file_ext(target)
     if len(r) > 0
         return r
+
+    // 2. Relative to current file being compiled
     r = check_file_ext(cur_dir + "/" + target)
     if len(r) > 0
         return r
     r = check_file_ext(cur_dir + "/../" + target)
     if len(r) > 0
         return r
-    r = check_file_ext("/home/shafiullah/.lipi/" + target)
+    r = check_file_ext(cur_dir + "/../../" + target)
     if len(r) > 0
         return r
-    r = check_file_ext("/home/shafiullah/Documents/file/work/lipi/" + target)
-    if len(r) > 0
-        return r
-    r = check_file_ext("universe/" + target)
+
+    // 3. Relative to current file with universe/ or src/ prefix
+    r = check_file_ext(cur_dir + "/universe/" + target)
     if len(r) > 0
         return r
     r = check_file_ext(cur_dir + "/../universe/" + target)
     if len(r) > 0
         return r
-    r = check_file_ext("/home/shafiullah/.lipi/universe/" + target)
-    if len(r) > 0
-        return r
-    r = check_file_ext("src/" + target)
+    r = check_file_ext(cur_dir + "/src/" + target)
     if len(r) > 0
         return r
     r = check_file_ext(cur_dir + "/../src/" + target)
     if len(r) > 0
         return r
+
+    // 4. Working directory lookups
+    r = check_file_ext("universe/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext("src/" + target)
+    if len(r) > 0
+        return r
     r = check_file_ext("../" + target)
     if len(r) > 0
         return r
+
+    // 5. Dynamic Compiler Sysroot Discovery (via Linux /proc/self/exe)
+    // WHY: Enables true Zero-Symlink portability! Any project located anywhere
+    // on any machine will cleanly resolve universe/* without local symlinks.
+    sysroot = get_compiler_sysroot()
+    if len(sysroot) > 0
+        // Case A: target begins with "universe/" or is direct module
+        r = check_file_ext(sysroot + "/" + target)
+        if len(r) > 0
+            return r
+        // Case B: target is subpath under universe
+        r = check_file_ext(sysroot + "/universe/" + target)
+        if len(r) > 0
+            return r
+        // Case C: target under lib/lipi/ or share/lipi/
+        r = check_file_ext(sysroot + "/lib/lipi/" + target)
+        if len(r) > 0
+            return r
+        r = check_file_ext(sysroot + "/share/lipi/" + target)
+        if len(r) > 0
+            return r
+
+    // 6. Global FHS System Standards
+    r = check_file_ext("/usr/local/lib/lipi/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext("/usr/local/share/lipi/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext("/usr/share/lipi/" + target)
+    if len(r) > 0
+        return r
+
     return cur_dir + "/" + target
 
 fn check_inc_prefix content p clen
