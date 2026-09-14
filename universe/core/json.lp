@@ -77,6 +77,39 @@ fn json_unescape s
                                         if next_c == "f"
                                             res = res + chr(12)
                                         else
+                                            if next_c == "u" and i + 5 < slen
+                                                // WHY: RFC 8259 standard 4-digit hexadecimal unicode escape (\uXXXX)
+                                                // Decodes codepoint directly into 1-3 byte UTF-8 sequence.
+                                                u_val = 0
+                                                u_idx = 0
+                                                u_valid = 1
+                                                while u_idx < 4
+                                                    uc = char_at(s, i + 2 + u_idx)
+                                                    ucode = ord(uc)
+                                                    ud = -1
+                                                    if ucode >= 48 and ucode <= 57
+                                                        ud = ucode - 48
+                                                    else
+                                                        if ucode >= 65 and ucode <= 70
+                                                            ud = ucode - 55
+                                                        else
+                                                            if ucode >= 97 and ucode <= 102
+                                                                ud = ucode - 87
+                                                    if ud >= 0
+                                                        u_val = (u_val * 16) + ud
+                                                    else
+                                                        u_valid = 0
+                                                    u_idx = u_idx + 1
+                                                if u_valid == 1
+                                                    if u_val <= 127
+                                                        res = res + chr(u_val)
+                                                    else
+                                                        if u_val <= 2047
+                                                            res = res + chr(192 + (u_val / 64)) + chr(128 + (u_val % 64))
+                                                        else
+                                                            res = res + chr(224 + (u_val / 4096)) + chr(128 + ((u_val / 64) % 64)) + chr(128 + (u_val % 64))
+                                                    i = i + 6
+                                                    continue
                                             res = res + next_c
             i = i + 2
         else

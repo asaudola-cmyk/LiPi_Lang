@@ -12,10 +12,12 @@ include "universe/core/memory.lp"
 
 // ১. ব্যানার প্রদর্শন (Display Header)
 fn প্রিন্ট_কনভার্টার_ব্যানার
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPICONVERT — UNIVERSAL LEGACY TO LIPI MIGRATION (First 1.0.0)\033[0m    \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Instant Transpilation: C / Python / JS / Go ➔ 100% Sovereign Lipi\033[0m   \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+    // WHY: 72 visual columns (70 chars interior + 2 border chars).
+    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPICONVERT — UNIVERSAL LEGACY TO LIPI MIGRATION (First 1.0.0)\033[0m   \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Instant Transpilation: C / Python / JS / Go ➔ 100% Sovereign Lipi\033[0m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
 
 // ২. ডেমো সি/পাইথন code রূপান্তর টেস্ট (Transpilation Demonstration)

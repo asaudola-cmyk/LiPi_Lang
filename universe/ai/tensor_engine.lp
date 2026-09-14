@@ -209,6 +209,47 @@ fn ai_gemv output_vec weight_matrix input_vec column row
 fn এআই_ম্যাট্রিক্স_ভেক্টর_গুণন আউটপুট_ভেক্টর ওজন_ম্যাট্রিক্স ইনপুট_ভেক্টর কলাম সারি
     return ai_gemv(আউটপুট_ভেক্টর, ওজন_ম্যাট্রিক্স, ইনপুট_ভেক্টর, কলাম, সারি)
 
+// ── ৬.১ সার্বজনীন ২ডি ম্যাট্রিক্স গুণন (Universal 2D GEMM: C = A * B) ───────────
+// WHY: 2D General Matrix Multiplication C(M x N) = A(M x K) * B(K x N).
+// Standard dense tensor contraction enabling linear feedforward projections,
+// multi-head attention QK^T matrix multiplies, and batched linear transformations
+// with pure hardware-independent memory addressing.
+fn ai_gemm_2d mat_c mat_a mat_b m k n
+    if mat_c == 0
+        return 0
+    if mat_a == 0
+        return 0
+    if mat_b == 0
+        return 0
+    if m <= 0
+        return 0
+    if k <= 0
+        return 0
+    if n <= 0
+        return 0
+
+    r = 0
+    while r < m
+        c = 0
+        while c < n
+            sum = 0
+            p = 0
+            while p < k
+                a_idx = (r * k) + p
+                b_idx = (p * n) + c
+                val_a = mem_read_idx(mat_a, a_idx)
+                val_b = mem_read_idx(mat_b, b_idx)
+                sum = sum + (val_a * val_b)
+                p = p + 1
+            c_idx = (r * n) + c
+            mem_write_idx(mat_c, c_idx, sum)
+            c = c + 1
+        r = r + 1
+    return m * n
+
+fn এআই_ম্যাট্রিক্স_ম্যাট্রিক্স_গুণন ম্যাট্রিক্স_সি ম্যাট্রিক্স_এ ম্যাট্রিক্স_বি এম কে এন
+    return ai_gemm_2d(ম্যাট্রিক্স_সি, ম্যাট্রিক্স_এ, ম্যাট্রিক্স_বি, এম, কে, এন)
+
 // ── ৭. উচ্চ-ক্ষমতাসম্পন্ন কেভি-ক্যাশ বাফার স্টেট (High-Performance KV-Cache State Buffer) ──
 // WHY: In autoregressive decoding, recomputing Key and Value activations for all historical
 // tokens has O(N^2) quadratic computational complexity. The KV-Cache allocates a dedicated,

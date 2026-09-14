@@ -80,10 +80,14 @@ fn installer_deploy_all engine
 // ── 4. Banner & Diagnostics Presentation ──────────────────────────────────────
 
 fn installer_print_banner
-    say "╔════════════════════════════════════════════════════════════════════════╗"
-    say "║  👑 LIPI SOVEREIGN NATIVE INSTALLER (0% BASH / 0% C)                   ║"
-    say "║  ⚡ Direct Silicon Machine Code | First 1.0.0 (প্রথম ১.০.০) [FIXED]    ║"
-    say "╚════════════════════════════════════════════════════════════════════════╝"
+    // WHY: 72 visual columns (70 chars interior + 2 border chars).
+    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
+    // Preserves version invariant: First 1.0.0 (প্রথম ১.০.০).
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN NATIVE INSTALLER (0% BASH / 0% C)\033[0m                 \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Silicon Machine Code | First 1.0.0 (প্রথম ১.০.০)\033[0m           \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
+    say ""
 
 fn installer_print_summary engine
     say "\n================================================================="

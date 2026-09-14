@@ -72,9 +72,11 @@ fn run_single_test compiler test_path test_name
         return 0
 
 fn main
-    say "╔════════════════════════════════════════════════════════════════════════╗"
-    say "║  🧪 LIPI SUITE REGRESSION TEST ENGINE (100% PURE SILICON / 0% SHELL)   ║"
-    say "╚════════════════════════════════════════════════════════════════════════╝"
+    // WHY: 72 visual columns (70 chars interior + 2 border chars).
+    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
+    say "╔══════════════════════════════════════════════════════════════════════╗"
+    say "║  🧪 LIPI SUITE REGRESSION TEST ENGINE (100% PURE SILICON / 0% SHELL) ║"
+    say "╚══════════════════════════════════════════════════════════════════════╝"
 
     compiler = "bin/lipc_bin"
     passed = 0
@@ -637,6 +639,22 @@ fn main
     else
         failed = failed + 1
     if run_single_test(compiler, "tests/test_zero_shell_sovereignty.lp", "test_zero_shell_sovereignty") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_fiber_concurrency.lp", "test_fiber_concurrency") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_dynamic_c_abi.lp", "test_dynamic_c_abi") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_tensor_gemm.lp", "test_tensor_gemm") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_enterprise_packages.lp", "test_enterprise_packages") == 1
         passed = passed + 1
     else
         failed = failed + 1

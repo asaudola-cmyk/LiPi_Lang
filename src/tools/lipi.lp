@@ -12,11 +12,15 @@ include "universe/core/io.lp"
 include "universe/core/memory.lp"
 
 fn print_lipi_banner
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN PROGRAMMING LANGUAGE & COMPUTING UNIVERSE\033[0m          \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Silicon Machine Code | 0% C | 0% GCC | 0% Libc | First 1.0.0 (প্রথম ১.০.০)\033[0m  \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;255;215;0m🌌 Tri-Syntax: Bengali Indent + English Indent + Lipi Directive Syntax\033[0m   \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+    // WHY: 72 visual columns (70 chars interior + 2 border chars).
+    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
+    // Emoji 👑 (2 cells), ⚡ (2 cells), 🌌 (2 cells) and Bengali glyphs (9 visual cells)
+    // are strictly column-budgeted so the right border '║' aligns with absolute precision.
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN PROGRAMMING LANGUAGE & COMPUTING UNIVERSE\033[0m         \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Direct Silicon Machine Code | First 1.0.0 (প্রথম ১.০.০)\033[0m           \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;255;215;0m🌌 Tri-Syntax: Bengali Indent + English Indent + Directive Syntax\033[0m   \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
 
 fn print_usage
@@ -234,11 +238,13 @@ fn handle_self_build
 // WHY: 100% native repository artifact sanitizer without bash or rm dependencies.
 // Purges temporary scratch test binaries and caches while preserving release assets.
 fn handle_clean
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🧹 LIPI SOVEREIGN REPOSITORY CLEANUP (100% Pure Silicon / 0% Shell)\033[0m   \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+    say ""
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🧹 LIPI SOVEREIGN REPOSITORY CLEANUP (100% Pure Silicon / 0% Shell)\033[0m \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
     say "\033[1;33m⚡ Purging temporary scratch binaries and test memory...\033[0m"
+    say ""
 
     // Clean scratch binaries from /tmp and dist/ via direct SYS_unlink (87)
     syscall(87, "/tmp/lipi_tst_bin", 0, 0, 0, 0, 0)

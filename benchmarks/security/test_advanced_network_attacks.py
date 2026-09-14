@@ -63,6 +63,14 @@ def main():
     subprocess.run(["fuser", "-k", f"{TEST_PORT}/tcp"], stderr=subprocess.DEVNULL)
     time.sleep(0.3)
 
+    # Clean old database files from previous test suites to ensure isolated baseline
+    for old_file in ["apps/website/data/sovereign_store.db", "apps/website/data/sovereign_store.wal"]:
+        if os.path.exists(old_file):
+            try:
+                os.remove(old_file)
+            except OSError:
+                pass
+
     # 2. Launch server process
     print(f"{YELLOW}[ধাপ ০] টেস্ট সার্ভার শুরু করা হচ্ছে (Port: {TEST_PORT})...{NC}")
     server_proc = subprocess.Popen([SERVER_BIN, str(TEST_PORT)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

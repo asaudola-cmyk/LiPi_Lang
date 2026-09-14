@@ -1098,16 +1098,93 @@ fn wasm_tokenize_src src
                 push(tokens, wasm_tok_new(WASM_TOK_NL, "\n", 0))
             continue
 
-        // String literals: "..."
-        if c == "\""
+        // String literals: "..." or '...'
+        // WHY: Full support for standard escapes (\n, \t, \r, \e, \xNN, \033, \", \\)
+        // preventing escape sequence leakage into WebAssembly data segments.
+        if c == "\"" or c == "'"
+            quote = c
             p = p + 1
-            s_val = ""
-            while p < slen and char_at(src, p) != "\""
-                s_val = s_val + char_at(src, p)
+            str_acc = ""
+            while p < slen and char_at(src, p) != quote
+                sc = char_at(src, p)
+                if sc == "\\" and p + 1 < slen
+                    p = p + 1
+                    esc = char_at(src, p)
+                    ecode = ord(esc)
+                    if esc == "n"
+                        str_acc = str_acc + "\n"
+                    elif esc == "t"
+                        str_acc = str_acc + "\t"
+                    elif esc == "r"
+                        str_acc = str_acc + "\r"
+                    elif esc == "e"
+                        // ANSI Escape control byte (ASCII 27 / 0x1B)
+                        str_acc = str_acc + chr(27)
+                    elif esc == "a"
+                        str_acc = str_acc + chr(7)
+                    elif esc == "b"
+                        str_acc = str_acc + chr(8)
+                    elif esc == "f"
+                        str_acc = str_acc + chr(12)
+                    elif esc == "v"
+                        str_acc = str_acc + chr(11)
+                    elif esc == "\""
+                        str_acc = str_acc + "\""
+                    elif esc == "'"
+                        str_acc = str_acc + "'"
+                    elif esc == "\\"
+                        str_acc = str_acc + "\\"
+                    elif esc == "x" or esc == "X"
+                        // Hexadecimal byte escape (\x1b, \x7F, etc.)
+                        hex_val = 0
+                        hex_count = 0
+                        while hex_count < 2 and p + 1 < slen
+                            hc = char_at(src, p + 1)
+                            hcode = ord(hc)
+                            hdigit = -1
+                            if hcode >= 48 and hcode <= 57
+                                hdigit = hcode - 48
+                            elif hcode >= 65 and hcode <= 70
+                                hdigit = hcode - 55
+                            elif hcode >= 97 and hcode <= 102
+                                hdigit = hcode - 87
+                            if hdigit != -1
+                                hex_val = (hex_val * 16) + hdigit
+                                p = p + 1
+                                hex_count = hex_count + 1
+                            else
+                                break
+                        if hex_count > 0
+                            str_acc = str_acc + chr(hex_val)
+                        else
+                            str_acc = str_acc + "x"
+                    elif ecode >= 48 and ecode <= 55
+                        // Standard 1..3 digit octal escape (\0, \033 for ESC, \377, etc.)
+                        oct_val = ecode - 48
+                        oct_count = 1
+                        while oct_count < 3 and p + 1 < slen
+                            oc = char_at(src, p + 1)
+                            ocode = ord(oc)
+                            if ocode >= 48 and ocode <= 55
+                                next_oct = (oct_val * 8) + (ocode - 48)
+                                if next_oct <= 255
+                                    oct_val = next_oct
+                                    p = p + 1
+                                    oct_count = oct_count + 1
+                                else
+                                    break
+                            else
+                                break
+                        str_acc = str_acc + chr(oct_val)
+                    else
+                        str_acc = str_acc + esc
+                    p = p + 1
+                else
+                    str_acc = str_acc + sc
+                    p = p + 1
+            if p < slen and char_at(src, p) == quote
                 p = p + 1
-            if p < slen and char_at(src, p) == "\""
-                p = p + 1
-            push(tokens, wasm_tok_new(WASM_TOK_STRING, s_val, 0))
+            push(tokens, wasm_tok_new(WASM_TOK_STRING, str_acc, 0))
             continue
 
         // Numbers: 0..9

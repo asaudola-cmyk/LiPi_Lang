@@ -65,10 +65,12 @@ fn parse_hex_or_dec s
     return val
 
 fn প্রিন্ট_রেপল_ব্যানার
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPIREPL — SOVEREIGN INTERACTIVE LIPI SHELL (First 1.0.0)\033[0m          \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Live Silicon Evaluation | Hardware CPU Introspection | 0% Libc\033[0m      \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+    // WHY: 72 visual columns (70 chars interior + 2 border chars).
+    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPIREPL — SOVEREIGN INTERACTIVE LIPI SHELL (First 1.0.0)\033[0m        \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Live Silicon Evaluation | Hardware CPU Introspection | 0% Libc\033[0m    \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
     say ""
     say "Type :help for command reference, or :exit to quit."
     say "────────────────────────────────────────────────────────────────────────"

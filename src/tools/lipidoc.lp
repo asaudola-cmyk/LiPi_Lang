@@ -484,10 +484,13 @@ fn document_directory dir_path
 // ── 6. CLI Driver & Entry Point ──────────────────────────────────────────────
 
 fn print_banner
-    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📖 LIPIDOC — OFFICIAL SOVEREIGN DOCUMENTATION ENGINE (First 1.0.0)\033[0m   \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Automatic GitHub-Flavored Markdown Generation | 0% Libc\033[0m             \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m\n"
+    // WHY: 72 visual columns (70 chars interior + 2 border chars).
+    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m📖 LIPIDOC — OFFICIAL SOVEREIGN DOCUMENTATION ENGINE (First 1.0.0)\033[0m  \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Automatic GitHub-Flavored Markdown Generation | 0% Libc\033[0m          \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
+    say ""
 
 fn print_usage
     print_banner()
