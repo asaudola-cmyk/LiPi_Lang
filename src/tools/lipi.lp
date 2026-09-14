@@ -102,9 +102,9 @@ fn resolve_bin_path rel_name
     user_p = "/home/shafiullah/.local/bin/" + rel_name
     if syscall(21, user_p, 0, 0, 0, 0, 0) == 0
         return user_p
-    repo_p = "/home/shafiullah/Documents/file/work/lipi/bin/" + rel_name
-    if syscall(21, repo_p, 0, 0, 0, 0, 0) == 0
-        return repo_p
+    lipi_p = "/home/shafiullah/.lipi/bin/" + rel_name
+    if syscall(21, lipi_p, 0, 0, 0, 0, 0) == 0
+        return lipi_p
     return rel_name
 
 fn handle_run file_path a1 a2 a3 a4

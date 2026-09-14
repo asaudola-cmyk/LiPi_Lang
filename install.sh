@@ -112,7 +112,8 @@ create_command() {
 
     # 2. Native direct ELF machine code compiler
     ln -sf "$LIPI_INSTALL_DIR/bin/lipc" "$LIPI_BIN_DIR/lipc"
-    ok "Linked: $LIPI_BIN_DIR/lipc (Direct Silicon Machine Code Compiler)"
+    ln -sf "$LIPI_INSTALL_DIR/bin/lipc_bin" "$LIPI_BIN_DIR/lipc_bin"
+    ok "Linked: $LIPI_BIN_DIR/lipc & lipc_bin (Direct Silicon Machine Code Compiler)"
 
     # 3. Sovereign package manager
     ln -sf "$LIPI_INSTALL_DIR/bin/lipipkg" "$LIPI_BIN_DIR/lipipkg"
@@ -138,6 +139,12 @@ create_command() {
     # 8. Markdown documentation generator
     ln -sf "$LIPI_INSTALL_DIR/bin/lipidoc" "$LIPI_BIN_DIR/lipidoc"
     ok "Linked: $LIPI_BIN_DIR/lipidoc (Markdown Documentation Engine)"
+
+    # 9. Standalone engines
+    ln -sf "$LIPI_INSTALL_DIR/bin/lipi-test" "$LIPI_BIN_DIR/lipi-test"
+    ln -sf "$LIPI_INSTALL_DIR/bin/lipi-build" "$LIPI_BIN_DIR/lipi-build"
+    ln -sf "$LIPI_INSTALL_DIR/bin/lipirepl" "$LIPI_BIN_DIR/lipirepl"
+    ok "Linked: $LIPI_BIN_DIR/lipi-test, lipi-build, lipirepl (Native Engines)"
 }
 
 # ─── Add to PATH ─────────────────────────────────────────────────────────────
