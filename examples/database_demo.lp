@@ -1,117 +1,113 @@
-@! In-memory Key-Value store with B-Tree indexing simulation and WAL simulation
+// ==============================================================================
+// 👑 LIPI EXAMPLE: DATABASE ENGINE & WAL (examples/database_demo.lp)
+// ⚡ 100% Pure Lipi First 1.0.0
+// ==============================================================================
 
-@struct Database
-  keys: i64
-  vals: i64
-  wal: i64
-@end
+struct Database
+    keys
+    vals
+    wal
 
-@fn db_new()
-  db = Database { keys: [], vals: [], wal: [] }
-  return db
-@end
+fn db_new
+    db = Database()
+    db.keys = list()
+    db.vals = list()
+    db.wal = list()
+    return db
 
-@fn db_set(db, key, value)
-  @! simulate WAL append
-  log_entry = "SET " + key + "=" + value
-  db.wal = db.wal.push(log_entry)
-  
-  idx = -1
-  i = 0
-  @while i < db.keys.len()
-    @if db.keys[i] == key
-      idx = i
-    @end
-    i = i + 1
-  @end
-  
-  @if idx == -1
-    db.keys = db.keys.push(key)
-    db.vals = db.vals.push(value)
-  @else
-    db.vals[idx] = value
-  @end
-  
-  println("[WAL] " + log_entry)
-  return db
-@end
+fn db_set db key value
+    log_entry = "SET " + key + "=" + value
+    push(db.wal, log_entry)
+    
+    idx = -1
+    i = 0
+    klen = len(db.keys)
+    while i < klen
+        if get(db.keys, i) == key
+            idx = i
+        i = i + 1
+    
+    if idx == -1
+        push(db.keys, key)
+        push(db.vals, value)
+    else
+        list_set(db.vals, idx, value)
+    
+    say "[WAL] " + log_entry
+    return 1
 
-@fn db_get(db, key)
-  idx = -1
-  i = 0
-  @while i < db.keys.len()
-    @if db.keys[i] == key
-      idx = i
-    @end
-    i = i + 1
-  @end
-  
-  @if idx != -1
-    return db.vals[idx]
-  @end
-  return ""
-@end
+fn db_get db key
+    i = 0
+    klen = len(db.keys)
+    while i < klen
+        if get(db.keys, i) == key
+            return get(db.vals, i)
+        i = i + 1
+    return "(not found)"
 
-@fn db_delete(db, key)
-  log_entry = "DEL " + key
-  db.wal = db.wal.push(log_entry)
-  
-  idx = -1
-  i = 0
-  @while i < db.keys.len()
-    @if db.keys[i] == key
-      idx = i
-    @end
-    i = i + 1
-  @end
-  
-  @if idx != -1
-    db.vals[idx] = ""
-  @end
-  
-  println("[WAL] " + log_entry)
-  return db
-@end
+fn db_delete db key
+    log_entry = "DEL " + key
+    push(db.wal, log_entry)
+    
+    i = 0
+    klen = len(db.keys)
+    while i < klen
+        if get(db.keys, i) == key
+            list_set(db.keys, i, "")
+            list_set(db.vals, i, "")
+            say "[WAL] " + log_entry
+            return 1
+        i = i + 1
+    return 0
 
-@fn db_scan(db, prefix)
-  println("Scanning prefix: " + prefix)
-  i = 0
-  @while i < db.keys.len()
-    key = db.keys[i]
-    val = db.vals[i]
-    @if str_contains(key, prefix) == 1
-      @if str_len(val) > 0
-        println("  " + key + " => " + val)
-      @end
-    @end
-    i = i + 1
-  @end
-@end
+fn db_print db
+    say "=== Database Contents ==="
+    i = 0
+    klen = len(db.keys)
+    while i < klen
+        k = get(db.keys, i)
+        if len(k) > 0
+            v = get(db.vals, i)
+            say "  " + k + " => " + v
+        i = i + 1
+    say ""
 
-@fn db_commit(db)
-  println("[COMMIT] Flushing " + int_to_str(db.wal.len()) + " WAL entries to disk...")
-  db.wal = []
-  println("[COMMIT] Transaction durable.")
-  return db
-@end
+fn main
+    say "=== Lipi Database Engine Simulation ==="
+    say ""
+    
+    db = db_new()
+    
+    say "-- Inserting Records --"
+    db_set(db, "user:1001", "Shafiullah")
+    db_set(db, "user:1002", "Ada Lovelace")
+    db_set(db, "user:1003", "Alan Turing")
+    db_set(db, "config:mode", "production")
+    db_set(db, "config:threads", "8")
+    say ""
+    
+    db_print(db)
+    
+    say "-- Querying Records --"
+    say "user:1001 = " + db_get(db, "user:1001")
+    say "user:1002 = " + db_get(db, "user:1002")
+    say "user:9999 = " + db_get(db, "user:9999")
+    say ""
+    
+    say "-- Updating Records --"
+    db_set(db, "user:1001", "Shafiullah (Lead Architect)")
+    say "user:1001 after update = " + db_get(db, "user:1001")
+    say ""
+    
+    say "-- Deleting Record --"
+    db_delete(db, "user:1003")
+    say "user:1003 after delete = " + db_get(db, "user:1003")
+    say ""
+    
+    db_print(db)
+    
+    say "Total WAL entries: " + str(len(db.wal))
+    say "Database demo complete."
+    return 0
 
-@fn main()
-  println("=== Database Demo (B-Tree & WAL) ===")
-  db = db_new()
-  
-  db = db_set(db, "user:1", "Alice")
-  db = db_set(db, "user:2", "Bob")
-  db = db_set(db, "config:theme", "dark")
-  
-  db = db_commit(db)
-  
-  println("Get user:1 -> " + db_get(db, "user:1"))
-  
-  db = db_set(db, "user:3", "Charlie")
-  db = db_delete(db, "user:2")
-  
-  db_scan(db, "user:")
-  
-  db = db_commit(db)
-  return 0
-@end
+main()

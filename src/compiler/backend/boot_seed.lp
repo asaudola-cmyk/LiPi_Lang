@@ -81,7 +81,7 @@ import "universe/core/string"
   sys_syscall(1, memfd, exec_buf, num_bytes, 0, 0, 0)
   
   argv = sys_mmap(0, 16, 3, 34, 0 - 1, 0)
-  name = "maya_universe"
+  name = "lipi_universe"
   sys_poke(argv, name)
   sys_poke(argv + 8, 0)
   

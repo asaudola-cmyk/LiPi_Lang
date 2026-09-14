@@ -1,4 +1,4 @@
-import "universe/maya_universe"
+import "universe/lipi_universe"
 import "universe/core/fmt"
 
 @fn pad_right(s, width)

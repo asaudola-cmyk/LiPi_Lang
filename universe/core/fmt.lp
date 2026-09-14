@@ -310,3 +310,17 @@ fn প্রিন্ট_হেডার title
 
 fn প্রিন্ট_সফল msg
     print_ok(msg)
+
+// WHY: Renders a framed header box for CLI utilities and benchmarks
+fn fmt_box title width
+    w = width
+    if w <= 0
+        w = 40
+    line = ""
+    i = 0
+    while i < w
+        line = line + "="
+        i = i + 1
+    say line
+    say "  " + title
+    say line

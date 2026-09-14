@@ -1,5 +1,5 @@
-@! ============================================================================
-@! MAYA TCP SERVER — Real Linux TCP server using syscalls
+import \"universe/core/net\"\n@! ============================================================================
+@! LIPI TCP SERVER — Real Linux TCP server using syscalls
 @! ============================================================================
 
 @struct TcpServer

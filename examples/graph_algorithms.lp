@@ -1,183 +1,159 @@
-@@! Graph Algorithms in Lipi
-@@! Demonstrates Breadth-First Search (BFS), Depth-First Search (DFS), and Dijkstra's Shortest Path
+// ==============================================================================
+// 👑 LIPI EXAMPLE: GRAPH ALGORITHMS (examples/graph_algorithms.lp)
+// ⚡ 100% Pure Lipi First 1.0.0
+// Demonstrates Breadth-First Search (BFS), Depth-First Search (DFS), and Dijkstra
+// ==============================================================================
 
-@fn bfs(matrix, n, start_node, names)
-  visited = []
-  i = 0
-  @while i < n
-    visited = visited.push(0)
-    i = i + 1
-  @end
-  
-  q = []
-  q = q.push(start_node)
-  visited[start_node] = 1
-  
-  head = 0
-  order = ""
-  
-  @while head < q.len()
-    u = q[head]
-    head = head + 1
+fn make_zero_list count
+    lst = list()
+    i = 0
+    while i < count
+        push(lst, 0)
+        i = i + 1
+    return lst
+
+fn bfs matrix n start_node names
+    visited = make_zero_list(n)
+    q = list()
+    push(q, start_node)
+    list_set(visited, start_node, 1)
     
-    @if str_len(order) > 0
-      order = order + " -> "
-    @end
-    order = order + names[u]
+    head = 0
+    order = ""
+    while head < len(q)
+        u = get(q, head)
+        head = head + 1
+        
+        if len(order) > 0
+            order = order + " -> "
+        order = order + get(names, u)
+        
+        v = 0
+        while v < n
+            w = get(matrix, u * n + v)
+            if w > 0
+                if get(visited, v) == 0
+                    list_set(visited, v, 1)
+                    push(q, v)
+            v = v + 1
+    return order
+
+fn dfs_helper matrix n u visited names out_order
+    list_set(visited, u, 1)
+    if len(get(out_order, 0)) > 0
+        list_set(out_order, 0, get(out_order, 0) + " -> ")
+    list_set(out_order, 0, get(out_order, 0) + get(names, u))
     
     v = 0
-    @while v < n
-      w = matrix[u * n + v]
-      @if w > 0
-        @if visited[v] == 0
-          visited[v] = 1
-          q = q.push(v)
-        @end
-      @end
-      v = v + 1
-    @end
-  @end
-  
-  println("BFS Order: " + order)
-@end
-
-@fn dfs_recurse(matrix, n, u, visited, order_arr)
-  visited[u] = 1
-  order_arr = order_arr.push(u)
-  
-  v = 0
-  @while v < n
-    w = matrix[u * n + v]
-    @if w > 0
-      @if visited[v] == 0
-        dfs_recurse(matrix, n, v, visited, order_arr)
-      @end
-    @end
-    v = v + 1
-  @end
-@end
-
-@fn dfs(matrix, n, start_node, names)
-  visited = []
-  i = 0
-  @while i < n
-    visited = visited.push(0)
-    i = i + 1
-  @end
-  
-  order_arr = []
-  dfs_recurse(matrix, n, start_node, visited, order_arr)
-  
-  order_str = ""
-  i = 0
-  @while i < order_arr.len()
-    @if i > 0
-      order_str = order_str + " -> "
-    @end
-    order_str = order_str + names[order_arr[i]]
-    i = i + 1
-  @end
-  
-  println("DFS Order: " + order_str)
-@end
-
-@fn dijkstra(matrix, n, start_node, names)
-  dist = []
-  visited = []
-  
-  i = 0
-  @while i < n
-    dist = dist.push(999999)
-    visited = visited.push(0)
-    i = i + 1
-  @end
-  
-  dist[start_node] = 0
-  
-  i = 0
-  @while i < n
-    u = -1
-    min_d = 999999
-    
-    j = 0
-    @while j < n
-      @if visited[j] == 0
-        @if dist[j] < min_d
-          min_d = dist[j]
-          u = j
-        @end
-      @end
-      j = j + 1
-    @end
-    
-    @if u != -1
-      visited[u] = 1
-      v = 0
-      @while v < n
-        w = matrix[u * n + v]
-        @if w > 0
-          @if visited[v] == 0
-            alt = dist[u] + w
-            @if alt < dist[v]
-              dist[v] = alt
-            @end
-          @end
-        @end
+    while v < n
+        w = get(matrix, u * n + v)
+        if w > 0
+            if get(visited, v) == 0
+                dfs_helper(matrix, n, v, visited, names, out_order)
         v = v + 1
-      @end
-    @end
-    i = i + 1
-  @end
-  
-  println("Dijkstra Shortest Paths from " + names[start_node] + ":")
-  i = 0
-  @while i < n
-    @if dist[i] == 999999
-      println("  " + names[i] + ": unreachable")
-    @else
-      println("  " + names[i] + ": " + int_to_str(dist[i]))
-    @end
-    i = i + 1
-  @end
-@end
+    return 0
 
-@fn main()
-  println("=== Graph Algorithms ===")
-  names = ["A", "B", "C", "D", "E"]
-  n = 5
-  
-  @! Initialize 5x5 matrix with 0
-  matrix = []
-  i = 0
-  @while i < 25
-    matrix = matrix.push(0)
-    i = i + 1
-  @end
-  
-  @! Add edges (directed)
-  @! A -> B (10), A -> D (5)
-  matrix[0 * n + 1] = 10
-  matrix[0 * n + 3] = 5
-  
-  @! B -> C (1), B -> D (2)
-  matrix[1 * n + 2] = 1
-  matrix[1 * n + 3] = 2
-  
-  @! C -> E (4)
-  matrix[2 * n + 4] = 4
-  
-  @! D -> B (3), D -> C (9), D -> E (2)
-  matrix[3 * n + 1] = 3
-  matrix[3 * n + 2] = 9
-  matrix[3 * n + 4] = 2
-  
-  @! E -> A (7), E -> C (6)
-  matrix[4 * n + 0] = 7
-  matrix[4 * n + 2] = 6
-  
-  bfs(matrix, n, 0, names)
-  dfs(matrix, n, 0, names)
-  dijkstra(matrix, n, 0, names)
-  
-  return 0
-@end
+fn dfs matrix n start_node names
+    visited = make_zero_list(n)
+    out_order = list()
+    push(out_order, "")
+    dfs_helper(matrix, n, start_node, visited, names, out_order)
+    return get(out_order, 0)
+
+fn dijkstra matrix n start_node names
+    inf = 999999
+    dist = list()
+    i = 0
+    while i < n
+        push(dist, inf)
+        i = i + 1
+    list_set(dist, start_node, 0)
+    
+    visited = make_zero_list(n)
+    
+    count = 0
+    while count < n
+        min_d = inf
+        u = -1
+        i = 0
+        while i < n
+            if get(visited, i) == 0 and get(dist, i) < min_d
+                min_d = get(dist, i)
+                u = i
+            i = i + 1
+            
+        if u == -1
+            count = n
+        else
+            list_set(visited, u, 1)
+            v = 0
+            while v < n
+                w = get(matrix, u * n + v)
+                if w > 0 and get(visited, v) == 0
+                    new_d = get(dist, u) + w
+                    if new_d < get(dist, v)
+                        list_set(dist, v, new_d)
+                v = v + 1
+            count = count + 1
+            
+    say "Dijkstra Shortest Paths from " + get(names, start_node) + ":"
+    i = 0
+    while i < n
+        d = get(dist, i)
+        d_str = str(d)
+        if d >= inf
+            d_str = "INF"
+        say "  To " + get(names, i) + ": " + d_str + " km"
+        i = i + 1
+    return 0
+
+fn main
+    say "=== Lipi Graph Algorithms ==="
+    say ""
+    
+    names = list()
+    push(names, "Dhaka")
+    push(names, "Chittagong")
+    push(names, "Sylhet")
+    push(names, "Rajshahi")
+    push(names, "Khulna")
+    
+    n = 5
+    matrix = make_zero_list(25)
+    
+    // Distances
+    list_set(matrix, 0 * n + 1, 248)
+    list_set(matrix, 1 * n + 0, 248)
+    
+    list_set(matrix, 0 * n + 2, 240)
+    list_set(matrix, 2 * n + 0, 240)
+    
+    list_set(matrix, 0 * n + 3, 245)
+    list_set(matrix, 3 * n + 0, 245)
+    
+    list_set(matrix, 0 * n + 4, 180)
+    list_set(matrix, 4 * n + 0, 180)
+    
+    list_set(matrix, 1 * n + 2, 380)
+    list_set(matrix, 2 * n + 1, 380)
+    
+    list_set(matrix, 3 * n + 4, 270)
+    list_set(matrix, 4 * n + 3, 270)
+    
+    say "Cities: Dhaka, Chittagong, Sylhet, Rajshahi, Khulna"
+    say ""
+    
+    bfs_order = bfs(matrix, n, 0, names)
+    say "BFS Traversal from Dhaka:"
+    say "  " + bfs_order
+    say ""
+    
+    dfs_order = dfs(matrix, n, 0, names)
+    say "DFS Traversal from Dhaka:"
+    say "  " + dfs_order
+    say ""
+    
+    dijkstra(matrix, n, 0, names)
+    return 0
+
+main()

@@ -65,3 +65,17 @@ fn time_now_nano
 fn clock_ms
     return time_now_ms()
 
+
+// WHY: Benchmarking timer utilities
+fn timer_start label
+    return clock_ms()
+
+fn timer_stop start_ms
+    now = clock_ms()
+    elapsed = now - start_ms
+    if elapsed < 0
+        elapsed = 0
+    return elapsed
+
+fn time_format_ms ms
+    return str(ms) + " ms"

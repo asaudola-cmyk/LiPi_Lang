@@ -1142,3 +1142,9 @@ fn str_empty s
 
 fn খালি_কিনা s
     return str_empty(s)
+
+fn to_upper s
+    return upper(s)
+
+fn to_lower s
+    return lower(s)
