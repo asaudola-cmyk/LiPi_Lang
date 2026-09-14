@@ -21,6 +21,8 @@ O_TRUNC  = 512
 
 // ── ১. স্ট্যান্ডার্ড আউটপুট ও এরর স্ট্রিমিং (Standard Stream Printing) ─────────
 // WHY: কনসোল ও স্ট্যান্ডার্ড আউটপুটে স্ট্রিং প্রিন্ট করা।
+include "universe/core/memory.lp"
+
 fn write_out msg
     say msg
 
@@ -30,12 +32,45 @@ fn write_err msg
 fn println msg
     say msg
 
+fn print_raw msg
+    // WHY: Direct Linux SYS_write (syscall 1) to STDOUT (fd 1) without appending newline.
+    // 0% libc stdio dependency.
+    if msg == "" return 0
+    return syscall(1, 1, msg, len(msg), 0, 0, 0)
+
+fn প্রিন্ট_র msg
+    return print_raw(msg)
+
 fn print_inline msg
-    say msg
+    // WHY: High-performance inline printing without trailing newline.
+    return print_raw(msg)
+
+fn প্রিন্ট_ইনলাইন msg
+    return print_raw(msg)
 
 fn read_line prompt
-    say prompt
-    return ""
+    // WHY: 100% Native Linux SYS_read (syscall 0) from STDIN (fd 0) byte-by-byte until newline or EOF.
+    // Zero libc getline / stdio dependency.
+    if prompt != ""
+        print_raw(prompt)
+    
+    buf = malloc(16)
+    acc = ""
+    while 1 == 1
+        n = syscall(0, 0, buf, 1, 0, 0, 0)
+        if n <= 0
+            break
+        b = mem_byte_read(buf, 0)
+        if b == 10 // ASCII 10 = '\n' (Line Feed)
+            break
+        if b == 13 // ASCII 13 = '\r' (Carriage Return)
+            continue
+        acc = acc + chr(b)
+    free(buf, 16)
+    return acc
+
+fn রিড_লাইন prompt
+    return read_line(prompt)
 
 // ── ২. লিনাক্স কার্নেল ফাইল অপারেশন (Direct Linux AMD64 Kernel Syscalls) ────────
 // WHY: SYS_open (2), SYS_close (3), SYS_read (0), SYS_write (1), SYS_lseek (8) সরাসরি আহ্বান।

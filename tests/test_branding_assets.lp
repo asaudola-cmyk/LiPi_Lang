@@ -57,9 +57,9 @@ import "universe/gui/framebuffer"
   println("▶ Section 1: Canonical Master SVG Assets Verification...")
   total_tests = total_tests + 1
 
-  logo_svg = "assets/branding/lipi_logo.svg"
-  mark_svg = "assets/branding/lipi_mark.svg"
-  dark_svg = "assets/branding/lipi_logo_dark.svg"
+  logo_svg = "docs/branding/lipi_logo.svg"
+  mark_svg = "docs/branding/lipi_mark.svg"
+  dark_svg = "docs/branding/lipi_logo_dark.svg"
 
   ok_logo = file_exists(logo_svg)
   ok_mark = file_exists(mark_svg)
@@ -83,14 +83,14 @@ import "universe/gui/framebuffer"
   println("▶ Section 2: Multi-Resolution Raster PNG & ICO Verification...")
   total_tests = total_tests + 1
 
-  ico_path = "assets/branding/favicon.ico"
-  png_16 = "assets/branding/png/lipi_icon_16x16.png"
-  png_32 = "assets/branding/png/lipi_icon_32x32.png"
-  png_64 = "assets/branding/png/lipi_icon_64x64.png"
-  png_128 = "assets/branding/png/lipi_icon_128x128.png"
-  png_256 = "assets/branding/png/lipi_icon_256x256.png"
-  png_512 = "assets/branding/png/lipi_icon_512x512.png"
-  og_card = "assets/branding/png/og_image.png"
+  ico_path = "docs/branding/favicon.ico"
+  png_16 = "docs/branding/png/lipi_icon_16x16.png"
+  png_32 = "docs/branding/png/lipi_icon_32x32.png"
+  png_64 = "docs/branding/png/lipi_icon_64x64.png"
+  png_128 = "docs/branding/png/lipi_icon_128x128.png"
+  png_256 = "docs/branding/png/lipi_icon_256x256.png"
+  png_512 = "docs/branding/png/lipi_icon_512x512.png"
+  og_card = "docs/branding/png/og_image.png"
 
   ok_ico = file_exists(ico_path)
   ok_256 = file_exists(png_256)
@@ -117,8 +117,8 @@ import "universe/gui/framebuffer"
 
   vscode_icon = "editors/vscode/icons/icon.png"
   vscode_file_icon = "editors/vscode/icons/lipi_file_icon.svg"
-  web_favicon = "apps/website/public/favicon.svg"
-  web_logo = "apps/website/public/logo.svg"
+  web_favicon = "docs/branding/favicon.svg"
+  web_logo = "docs/branding/logo.svg"
 
   ok_vs1 = file_exists(vscode_icon)
   ok_vs2 = file_exists(vscode_file_icon)
@@ -172,12 +172,12 @@ import "universe/gui/framebuffer"
   println("▶ Section 5: Linux Desktop FreeDesktop MIME & Icon Assets...")
   total_tests = total_tests + 1
 
-  mime_xml = "assets/branding/lipi-mime.xml"
-  desktop_entry = "assets/branding/lipi.desktop"
-  mime_script = "scripts/install_desktop_mime.sh"
-  icon_48 = "assets/branding/desktop_icons/text-x-lipi-48.svg"
-  icon_64 = "assets/branding/desktop_icons/text-x-lipi-64.svg"
-  icon_sc = "assets/branding/desktop_icons/text-x-lipi-scalable.svg"
+  mime_xml = "docs/branding/lipi-mime.xml"
+  desktop_entry = "docs/branding/lipi.desktop"
+  mime_script = "install.sh"
+  icon_48 = "docs/branding/desktop_icons/text-x-lipi-48.svg"
+  icon_64 = "docs/branding/desktop_icons/text-x-lipi-64.svg"
+  icon_sc = "docs/branding/desktop_icons/text-x-lipi-scalable.svg"
 
   ok_mx = file_exists(mime_xml)
   ok_de = file_exists(desktop_entry)

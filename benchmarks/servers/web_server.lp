@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI FULL-STACK SOVEREIGN HTTP WEB SERVER & DATABASE BACKEND
-// File: apps/website/server.lp
+// File: benchmarks/servers/web_server.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero Libc | Zero PHP | Linux AMD64 Kernel Syscalls
 //
 // WHY: Full-stack sovereign engine handling HTTP 1.1 routing, REST API endpoints,
@@ -14,9 +14,9 @@ include "universe/core/string.lp"
 include "universe/web/engine.lp"
 include "universe/core/time.lp"
 include "universe/core/json.lp"
-include "apps/website/db_engine.lp"
-include "apps/website/db_wal.lp"
-include "apps/website/ws_engine.lp"
+include "universe/db/db_engine.lp"
+include "universe/db/db_wal.lp"
+include "universe/net/ws_engine.lp"
 
 // ── String to Integer Parser ──────────────────────────────────────────────────
 // WHY: Convert command-line port arguments and query parameters to integer values
@@ -769,12 +769,12 @@ say "\033[38;2;0;255;204m╚═════════════════�
 say ""
 
 // 1. Initialize persistent database storage and WAL recovery
-db_fd = db_open("apps/website/data/sovereign_store.db")
-wal_fd = wal_open("apps/website/data/sovereign_store.wal")
+db_fd = db_open("benchmarks/data/sovereign_store.db")
+wal_fd = wal_open("benchmarks/data/sovereign_store.wal")
 if db_fd < 0
-    say "Warning: Could not open database file: apps/website/data/sovereign_store.db"
+    say "Warning: Could not open database file: benchmarks/data/sovereign_store.db"
 else
-    replayed = wal_recover_database("apps/website/data/sovereign_store.wal", db_fd)
+    replayed = wal_recover_database("benchmarks/data/sovereign_store.wal", db_fd)
     if replayed > 0
         say "  ✔ ARIES Crash Recovery: Replayed " + str(replayed) + " pending WAL transactions"
     initial_records = db_total_records(db_fd)
@@ -859,17 +859,15 @@ while 1
                 if str_contains(req_str, "Upgrade: websocket") == 1
                     ws_serve_telemetry(client_fd, req_str, start_clock, req_count)
                 elif path == "/" or path == "/index.html"
-                    serve_static_file(client_fd, "apps/website/public/index.html", "text/html; charset=utf-8")
-                elif path == "/style.css"
-                    serve_static_file(client_fd, "apps/website/public/style.css", "text/css; charset=utf-8")
-                elif path == "/app.js"
-                    serve_static_file(client_fd, "apps/website/public/app.js", "application/javascript; charset=utf-8")
-                elif path == "/wasm_runner.js"
-                    serve_static_file(client_fd, "apps/website/public/wasm_runner.js", "application/javascript; charset=utf-8")
-                elif path == "/lipi_worker.js"
-                    serve_static_file(client_fd, "apps/website/public/lipi_worker.js", "application/javascript; charset=utf-8")
-                elif path == "/favicon.svg"
-                    serve_static_file(client_fd, "apps/website/public/favicon.svg", "image/svg+xml")
+                    body = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>LiPi Sovereign Server</title></head><body style='font-family:system-ui,sans-serif;background:#0d1117;color:#c9d1d9;padding:40px;text-align:center;'><h1>👑 LiPi Sovereign Silicon Web Server</h1><p>100% Pure LiPi First 1.0.0 | Zero Libc | Linux AMD64 Kernel Syscalls</p></body></html>\n"
+                    res = web_response_html(body)
+                    wire = web_serialize_response(res)
+                    syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                    socket_close(client_fd)
+                elif path == "/favicon.svg" or path == "/favicon.ico"
+                    serve_static_file(client_fd, "docs/branding/favicon.svg", "image/svg+xml")
+                elif path == "/logo.svg"
+                    serve_static_file(client_fd, "docs/branding/logo.svg", "image/svg+xml")
                 elif path == "/healthz"
                     // ── Dedicated Lightweight Healthcheck Endpoint ───────────────────────────
                     // WHY: Production orchestrators (Kubernetes liveness/readiness probes, AWS ALB,
@@ -923,11 +921,11 @@ while 1
                 elif path == "/api/benchmarks"
                     api_serve_benchmarks(client_fd)
                 elif path == "/og-image.png"
-                    serve_static_file(client_fd, "apps/website/public/og-image.png", "image/png")
+                    serve_static_file(client_fd, "docs/branding/png/og_image.png", "image/png")
                 elif path == "/logo.svg"
-                    serve_static_file(client_fd, "apps/website/public/logo.svg", "image/svg+xml")
+                    serve_static_file(client_fd, "docs/branding/logo.svg", "image/svg+xml")
                 elif path == "/favicon.ico"
-                    serve_static_file(client_fd, "apps/website/public/favicon.ico", "image/x-icon")
+                    serve_static_file(client_fd, "docs/branding/favicon.ico", "image/x-icon")
                 else
                     res = web_response_not_found()
                     wire = web_serialize_response(res)

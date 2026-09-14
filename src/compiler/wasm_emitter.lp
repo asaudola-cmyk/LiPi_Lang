@@ -838,6 +838,100 @@ fn wasm_module_write module out_path
     assembled_bytes = wasm_assemble(module)
     return wasm_write_file(out_path, assembled_bytes)
 
+// ── Zero-JS Standalone Web Emitter (স্বয়ংসম্পূর্ণ একক-ফাইল ওয়েব ইঞ্জিন) ──────
+// WHY: In accordance with LiPi computational sovereignty, deploying to the web
+// must never depend on external npm packages, webpack bundlers, CDN loaders, or
+// handcrafted JS glue scripts. This function emits a self-contained, single-file
+// HTML bundle embedding the raw WebAssembly virtual silicon bytecode directly
+// inside a typed buffer, complete with an autonomous runtime host interface.
+
+// ── RFC 4648 Base64 Stream Encoder for Standalone WASM Embedding ─────────────
+// WHY: Encoding raw byte streams into Base64 compacts the inline virtual silicon
+//      payload by 50-60% compared to decimal comma-separated integers, enabling
+//      ultra-dense single-file HTML distributions and concurrent browser streaming JIT.
+
+fn wasm_bytes_to_base64 bytes
+    tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    blen = len(bytes)
+    res = ""
+    chunk = ""
+    i = 0
+    rem_len = blen % 3
+    full_len = blen - rem_len
+
+    while i < full_len
+        b0 = get(bytes, i)
+        b1 = get(bytes, i + 1)
+        b2 = get(bytes, i + 2)
+        trip = (b0 * 65536) + (b1 * 256) + b2
+        c0 = char_at(tbl, (trip / 262144) % 64)
+        c1 = char_at(tbl, (trip / 4096) % 64)
+        c2 = char_at(tbl, (trip / 64) % 64)
+        c3 = char_at(tbl, trip % 64)
+        chunk = chunk + c0 + c1 + c2 + c3
+        if len(chunk) > 512
+            res = res + chunk
+            chunk = ""
+        i = i + 3
+
+    if rem_len == 1
+        b0 = get(bytes, i)
+        trip = b0 * 65536
+        c0 = char_at(tbl, (trip / 262144) % 64)
+        c1 = char_at(tbl, (trip / 4096) % 64)
+        chunk = chunk + c0 + c1 + "=="
+    elif rem_len == 2
+        b0 = get(bytes, i)
+        b1 = get(bytes, i + 1)
+        trip = (b0 * 65536) + (b1 * 256)
+        c0 = char_at(tbl, (trip / 262144) % 64)
+        c1 = char_at(tbl, (trip / 4096) % 64)
+        c2 = char_at(tbl, (trip / 64) % 64)
+        chunk = chunk + c0 + c1 + c2 + "="
+
+    res = res + chunk
+    return res
+
+// ── Zero-JS Standalone Web Emitter (স্বয়ংসম্পূর্ণ একক-ফাইল ওয়েব ইঞ্জিন) ──────
+// WHY: In accordance with LiPi computational sovereignty, deploying to the web
+// must never depend on external npm packages, webpack bundlers, CDN loaders, or
+// handcrafted JS glue scripts. This function emits a self-contained, single-file
+// HTML bundle embedding the raw WebAssembly virtual silicon bytecode directly
+// inside a typed buffer, complete with an autonomous runtime host interface.
+
+fn wasm_module_emit_standalone_html module out_path page_title
+    assembled = wasm_assemble(module)
+    blen = len(assembled)
+    if blen == 0
+        return 0 - 1
+
+    title = page_title
+    if len(title) == 0
+        title = "LiPi Sovereign Virtual Silicon"
+
+    // Convert assembled WASM bytecode into RFC 4648 Base64
+    b64_payload = wasm_bytes_to_base64(assembled)
+
+    // Open out_path with O_WRONLY | O_CREAT | O_TRUNC (577), mode 0644 (420)
+    fd = syscall(2, out_path, 577, 420, 0, 0, 0)
+    if fd < 0
+        return 0 - 1
+
+    part1 = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>" + title + "</title>\n<style>\nbody { background: #0a0e14; color: #00ffcc; font-family: 'Courier New', monospace; margin: 0; padding: 24px; }\n.container { max-width: 800px; margin: 0 auto; background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; box-shadow: 0 4px 20px rgba(0,255,204,0.1); }\nh1 { font-size: 20px; color: #ffffff; margin-top: 0; border-bottom: 1px solid #1f2937; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }\n.badge { background: #00ffcc22; color: #00ffcc; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: normal; }\n#status { font-size: 14px; margin: 12px 0; color: #fbbf24; }\n#terminal { background: #030712; border: 1px solid #1f2937; border-radius: 6px; padding: 16px; min-height: 140px; color: #e5e7eb; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }\n.btn { background: #00ffcc; color: #030712; font-weight: bold; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 14px; font-family: inherit; font-size: 13px; }\n.btn:hover { background: #00ddb3; }\n</style>\n</head>\n<body>\n<div class=\"container\">\n  <h1>👑 LiPi Sovereign Virtual Silicon <span class=\"badge\">First 1.0.0</span></h1>\n  <div id=\"status\">⚡ Instantiating Sovereign Virtual Machine...</div>\n  <div id=\"terminal\"></div>\n  <button class=\"btn\" onclick=\"executeModule()\">▶ Re-Execute WebAssembly</button>\n</div>\n<script>\n// ── Embedded Autonomous LiPi Base64 WebAssembly Virtual Silicon Stream ──\nconst wasmB64 = \""
+
+    syscall(1, fd, part1, len(part1), 0, 0, 0)
+    syscall(1, fd, b64_payload, len(b64_payload), 0, 0, 0)
+
+    part2 = "\";\n\nconst wasmBytecode = Uint8Array.from(atob(wasmB64), c => c.charCodeAt(0));\nconst term = document.getElementById('terminal');\nconst statusEl = document.getElementById('status');\nfunction termLog(msg) { term.innerText += msg + '\\n'; }\n\nasync function executeModule() {\n  term.innerText = '';\n  statusEl.innerText = '⚡ Synthesizing Silicon Host Environment...';\n  statusEl.style.color = '#fbbf24';\n  try {\n    const importObject = {\n      env: {\n        print_str: (ptr, len) => {\n          const mem = instance.exports.memory ? new Uint8Array(instance.exports.memory.buffer, ptr, len) : new Uint8Array(wasmBytecode.buffer, ptr, len);\n          termLog(new TextDecoder().decode(mem));\n        },\n        print_int: (val) => termLog(String(val)),\n        time_now: () => Date.now()\n      }\n    };\n    let instance = null;\n    try {\n      const streamRes = await WebAssembly.instantiateStreaming(fetch('data:application/wasm;base64,' + wasmB64), importObject);\n      instance = streamRes.instance;\n    } catch(stErr) {\n      const syncRes = await WebAssembly.instantiate(wasmBytecode.buffer, importObject);\n      instance = syncRes.instance;\n    }\n    statusEl.innerText = '✔ LiPi Virtual Silicon Active (Status: SOVEREIGN)';\n    statusEl.style.color = '#34d399';\n    termLog('================================================================');\n    termLog('👑 LIPI VIRTUAL SILICON ENGINE — First 1.0.0 (W3C WebAssembly)');\n    termLog('================================================================');\n    for (const exp of Object.keys(instance.exports)) {\n      if (typeof instance.exports[exp] === 'function') {\n        try {\n          const res = instance.exports[exp]();\n          termLog('  ✔ export: ' + exp + '() => ' + res);\n        } catch(e) {\n          termLog('  • export: ' + exp + ' (parametrized function)');\n        }\n      }\n    }\n    termLog('\\n✔ Computational Sovereignty: Zero JS Runtimes, 100% Autonomous Single File.');\n  } catch (err) {\n    statusEl.innerText = '❌ Instantiation Fault: ' + err.message;\n    statusEl.style.color = '#f87171';\n    termLog('Error: ' + err.stack);\n  }\n}\nwindow.addEventListener('DOMContentLoaded', executeModule);\n</script>\n</body>\n</html>\n"
+
+    syscall(1, fd, part2, len(part2), 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    return 0
+
+fn ওয়াসম_মডিউল_স্ট্যান্ডঅ্যালোন_এইচটিএমএল module out_path page_title
+    return wasm_module_emit_standalone_html(module, out_path, page_title)
+
+
 // ── High-Level Lipi Function Compilers (Sovereign WASM Synthesis) ──────────────
 // WHY: Equips the sovereign compiler with predefined code generators for
 //      fundamental arithmetic, recursion, and entry-point functions.

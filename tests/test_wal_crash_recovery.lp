@@ -3,8 +3,8 @@
 // ⚡ Tests 64-byte WAL record serialization, checksum verification, and ARIES REDO
 // ==============================================================================
 
-include "apps/website/db_engine.lp"
-include "apps/website/db_wal.lp"
+include "universe/db/db_engine.lp"
+include "universe/db/db_wal.lp"
 
 fn assert_true cond test_name
     if cond == 0

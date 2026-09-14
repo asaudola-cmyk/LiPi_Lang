@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN COMMERCE — COMPLETE FULL-STACK PRODUCTION SHOWCASE
-// Application: apps/sovereign_commerce/app.lp
+// Application: examples/sovereign_commerce.lp
 // Milestone: Grand Sovereign Showcase (Displacing Flutter, Swift, React, Next & Laravel)
 // 100% Pure LiPi Implementation — Zero External Dependencies
 // ==============================================================================

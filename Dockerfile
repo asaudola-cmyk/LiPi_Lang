@@ -11,13 +11,13 @@
 FROM scratch
 
 # Sovereign ELF64 server binary
-COPY apps/website/lipi_server /lipi_server
+COPY benchmarks/servers/web_server_bin /lipi_server
 
-# Production static assets (HTML, CSS, JS, SVG, WebAssembly runners)
-COPY apps/website/public /apps/website/public
+# Sovereign documentation & branding assets
+COPY docs/branding /docs/branding
 
 # Persistent NVMe/SSD binary database directory
-COPY apps/website/data /apps/website/data
+COPY benchmarks/data /benchmarks/data
 
 # Sovereign HTTP web server port
 EXPOSE 8088

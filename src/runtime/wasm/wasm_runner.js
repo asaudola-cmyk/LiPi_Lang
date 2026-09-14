@@ -1,7 +1,7 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN CLIENT-SIDE WEBASSEMBLY RUNTIME ENGINE (wasm_runner.js)
 // ⚡ Pure Client-Side Execution | 0% C | 0% Emscripten | 0% LLVM | 0% External Libs
-// 🏛️ File: apps/website/public/wasm_runner.js
+// 🏛️ File: src/runtime/wasm/wasm_runner.js
 //
 // WHY: WebAssembly (WASM) enables pure sovereign execution of Lipi binaries directly
 //      inside the user's browser sandbox without client-side plugins, backend calls,

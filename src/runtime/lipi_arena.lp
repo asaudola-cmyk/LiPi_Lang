@@ -45,6 +45,27 @@ fn arena_create capacity
     arena.alloc_count = 0
     return arena
 
+// WHY: 2MB Linux HugePages allocator (MAP_HUGETLB: 262178) with seamless fallback
+//      to standard 4KB pages. Eliminates CPU TLB misses for high-frequency workloads.
+fn arena_create_huge capacity
+    real_cap = capacity
+    if real_cap <= 0
+        real_cap = 2097152
+    real_cap = arena_align_up(real_cap, 2097152)
+
+    base_addr = syscall(9, 0, real_cap, 3, 262178, 0 - 1, 0)
+    if base_addr <= 0
+        base_addr = syscall(9, 0, real_cap, 3, 34, 0 - 1, 0)
+    if base_addr <= 0
+        return 0
+
+    arena = LipiArena()
+    arena.base = base_addr
+    arena.capacity = real_cap
+    arena.offset = 0
+    arena.alloc_count = 0
+    return arena
+
 // WHY: O(1) Bump Allocation with arbitrary alignment (typically 8 or 16 bytes).
 //      Executes in < 3 CPU instructions. Returns raw virtual address pointer or 0 on OOM.
 fn arena_alloc arena size align
@@ -63,6 +84,11 @@ fn arena_alloc arena size align
     arena.offset = aligned_off + size
     arena.alloc_count = arena.alloc_count + 1
     return ptr
+
+// WHY: Enforces strict 64-byte CPU cacheline alignment.
+//      Avoids cache false-sharing and maximizes hardware prefetcher efficiency.
+fn arena_alloc_cacheline arena size
+    return arena_alloc(arena, size, 64)
 
 // WHY: Instant O(1) bulk deallocation of all objects in the arena.
 //      Does NOT issue kernel syscalls; simply resets bump pointer to 0.

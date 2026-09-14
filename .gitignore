@@ -29,9 +29,9 @@ scratch/
 # Standalone package manager dependencies
 lipi_modules/
 
-# Compiled Application Binaries
-apps/**/lipi_server
-apps/**/site_builder
+# Compiled Benchmark & Server Binaries
+benchmarks/servers/web_server_bin
+benchmarks/servers/gateway_bin
 
 # Generic object files and binaries
 *.o
@@ -70,8 +70,9 @@ bin/test_*
 *.spv
 *.db
 *.wal
-apps/website/data/*
-!apps/website/data/.gitkeep
+benchmarks/data/*.db
+benchmarks/data/*.wal
+!benchmarks/data/.gitkeep
 /tmp/libtest_*
 __pycache__/
 *.py[cod]

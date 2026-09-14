@@ -16,7 +16,7 @@ import urllib.request
 import urllib.error
 
 TEST_PORT = 8099
-SERVER_BIN = "apps/website/lipi_server"
+SERVER_BIN = "benchmarks/servers/web_server_bin"
 TARGET_HOST = "127.0.0.1"
 
 # ANSI Colors
@@ -57,14 +57,14 @@ def main():
 
     # 1. Compile server binary if needed
     print(f"{YELLOW}[প্রস্তুতি] সার্ভার বাইনারি সংকলন করা হচ্ছে...{NC}")
-    subprocess.run(["./bin/lipc", "apps/website/server.lp", "-o", SERVER_BIN], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["./bin/lipc", "benchmarks/servers/web_server.lp", "-o", SERVER_BIN], check=True, stdout=subprocess.DEVNULL)
 
     # Free test port
     subprocess.run(["fuser", "-k", f"{TEST_PORT}/tcp"], stderr=subprocess.DEVNULL)
     time.sleep(0.3)
 
     # Clean old database files from previous test suites to ensure isolated baseline
-    for old_file in ["apps/website/data/sovereign_store.db", "apps/website/data/sovereign_store.wal"]:
+    for old_file in ["benchmarks/data/sovereign_store.db", "benchmarks/data/sovereign_store.wal"]:
         if os.path.exists(old_file):
             try:
                 os.remove(old_file)
@@ -338,7 +338,7 @@ def main():
                 db_fuzz_ok = False
 
         # Verify DB integrity
-        db_size = os.path.getsize("apps/website/data/sovereign_store.db")
+        db_size = os.path.getsize("benchmarks/data/sovereign_store.db")
         if db_fuzz_ok and db_size <= 256:
             print(f"  {GREEN}✔ PASS: ডাটাবেজ ফাজিং সফলভাবে হ্যান্ডেলড (ফাইল সাইজ: {db_size}B, কোনো করাপশন নেই)।{NC}")
             passes.append("Database API Fuzzing Safe")

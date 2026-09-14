@@ -79,7 +79,7 @@ android-arm64  = মিথ্যা               # Future: Android
     "crates/core",
     "crates/http",
     "crates/cli",
-    "apps/website"
+    "services/web"
 ]
 
 # ─── [স্ক্রিপ্ট] section — custom commands ──────────────────────

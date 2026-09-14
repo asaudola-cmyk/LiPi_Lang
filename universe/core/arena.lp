@@ -31,6 +31,36 @@ fn অ্যারিনা_তৈরি capacity
 fn arena_create capacity
     return অ্যারিনা_তৈরি(capacity)
 
+// ── ১.১. ২-মেগাবাইট লিনাক্স হিউজপেজ অ্যারিনা তৈরি (2MB Linux HugePages MAP_HUGETLB) ───
+// WHY: আধুনিক x86_64 প্রসেসরে প্রতি ৪KB পেজে একটি করে TLB (Translation Lookaside Buffer)
+// মিস হয় যা উচ্চ-গতির নেটওয়ার্কিং বা এআই ইনফারেন্সে ১৫-২০% পারফরম্যান্স লস করায়।
+// ২MB HugePages বরাদ্দ করলে ৫১২টি ৪KB পেজের স্থলে মাত্র ১টি TLB এন্ট্রি লাগে।
+// কার্নেলে HugePages এনাবল না থাকলে স্বয়ংক্রিয়ভাবে স্ট্যান্ডার্ড পেজে ফলব্যাক করে।
+fn অ্যারিনা_তৈরি_হিউজ capacity
+    real_cap = capacity
+    if real_cap <= 0
+        real_cap = 2097152 // 2MB default HugePage size
+    rem = real_cap % 2097152
+    if rem != 0
+        real_cap = real_cap + (2097152 - rem)
+
+    // Attempt Linux MAP_HUGETLB: MAP_PRIVATE (2) | MAP_ANONYMOUS (32) | 0x40000 = 262178
+    raw_mem = syscall(9, 0, real_cap, 3, 262178, -1, 0)
+    if raw_mem <= 0
+        // Seamless fallback to standard 4KB anonymous pages (flags: 34)
+        raw_mem = syscall(9, 0, real_cap, 3, 34, -1, 0)
+    if raw_mem <= 0
+        return 0
+
+    pool = malloc(24)
+    মেমরি_লেখো(pool, 0, raw_mem)
+    মেমরি_লেখো(pool, 8, real_cap)
+    মেমরি_লেখো(pool, 16, 0)
+    return pool
+
+fn arena_create_huge capacity
+    return অ্যারিনা_তৈরি_হিউজ(capacity)
+
 // ── ২. অ্যারিনা থেকে ৮-বাইট অ্যালাইন্ড মেমরি চাঙ্ক বরাদ্দ (O(1) Bump Allocation) ──
 fn অ্যারিনা_বরাদ্দ pool byte_size
     base = মেমরি_পড়ো(pool, 0)
@@ -83,6 +113,35 @@ fn অ্যারিনা_বরাদ্দ_অ্যালাইন্ড po
 
 fn arena_alloc_aligned pool byte_size alignment
     return অ্যারিনা_বরাদ্দ_অ্যালাইন্ড(pool, byte_size, alignment)
+
+// ── ২.২. ৬৪-বাইট হার্ডওয়্যার ক্যাশলাইন অ্যালাইন্ড বরাদ্দ (64-Byte CPU Cacheline Bump Alloc) ──
+// WHY: Intel/AMD x86_64 ও ARM64 প্রসেসরে প্রতিটি L1/L2 ডাটা ক্যাশলাইন ঠিক ৬৪ বাইট (64 bytes)।
+// ৬৪-বাইট অ্যালাইনমেন্ট কঠোরভাবে বজায় রাখলে সিপিইউ ক্যাশ ফলস-শেয়ারিং (False Sharing) শূন্যে নেমে আসে
+// এবং সিপিইউ প্রি-ফেচার ও AVX2/AVX-512 ভেক্টর রেজিস্টার একক মেমরি সাইকেলে সর্বোচ্চ গতিতে নির্বাহ হতে পারে।
+fn অ্যারিনা_বরাদ্দ_ক্যাশলাইন pool byte_size
+    return অ্যারিনা_বরাদ্দ_অ্যালাইন্ড(pool, byte_size, 64)
+
+fn arena_alloc_cacheline pool byte_size
+    return অ্যারিনা_বরাদ্দ_অ্যালাইন্ড(pool, byte_size, 64)
+
+// ── ২.৩. প্রথম শ্রেণির মেমরি অ্যারিনা দ্বিভাষিক নামাবলী (Bilingual Aliases) ───────────
+fn মেমরি_অ্যারিনা_তৈরি capacity
+    return অ্যারিনা_তৈরি(capacity)
+
+fn মেমরি_অ্যারিনা_তৈরি_হিউজ capacity
+    return arena_create_huge(capacity)
+
+fn মেমরি_অ্যারিনা_বরাদ্দ pool byte_size
+    return অ্যারিনা_বরাদ্দ(pool, byte_size)
+
+fn মেমরি_অ্যারিনা_বরাদ্দ_ক্যাশলাইন pool byte_size
+    return arena_alloc_cacheline(pool, byte_size)
+
+fn মেমরি_অ্যারিনা_রিসেট pool
+    return অ্যারিনা_রিসেট(pool)
+
+fn মেমরি_অ্যারিনা_ধ্বংস pool
+    return অ্যারিনা_ধ্বংস(pool)
 
 // ── ৩. বর্তমানে ব্যবহৃত মোট মেমরি বাইট সংখ্যা ──────────────────────────────────
 fn অ্যারিনা_ব্যবহৃত_মেমরি pool

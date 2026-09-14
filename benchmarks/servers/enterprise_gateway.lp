@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI ENTERPRISE ASYNCHRONOUS GATEWAY & REST MICROSERVICE
-// ⚡ File: apps/enterprise_gateway/server.lp
+// ⚡ File: benchmarks/servers/enterprise_gateway.lp
 //
 // WHY: Demonstrates a 100% sovereign, zero-libc enterprise microservice server
 //      built entirely in pure Lipi. Provides sub-millisecond REST API routing,

@@ -421,10 +421,10 @@ fn struct_get_var_type ctx vname
     if vname == "inst" or vname == "ir_inst"
         if struct_find(ctx, "IRInst") >= 0
             return "IRInst"
-    if vname == "fb" or vname == "framebuffer"
+    if vname == "framebuffer"
         if struct_find(ctx, "Framebuffer") >= 0
             return "Framebuffer"
-    if vname == "c" or vname == "canvas"
+    if vname == "canvas"
         if struct_find(ctx, "Canvas") >= 0
             return "Canvas"
     if vname == "clip" or vname == "clip_rect"
@@ -433,7 +433,7 @@ fn struct_get_var_type ctx vname
     if vname == "dirty" or vname == "dirty_rect"
         if struct_find(ctx, "DirtyRect") >= 0
             return "DirtyRect"
-    if vname == "t" or vname == "tensor"
+    if vname == "tensor"
         if struct_find(ctx, "Tensor") >= 0
             return "Tensor"
     if vname == "req" or vname == "req1" or vname == "req2" or vname == "request"
@@ -446,7 +446,7 @@ fn struct_get_var_type ctx vname
             return "SovereignResponse"
         if struct_find(ctx, "HttpResponse") >= 0
             return "HttpResponse"
-    if vname == "h" or vname == "header" or vname == "hdr"
+    if vname == "header" or vname == "hdr"
         if struct_find(ctx, "SovereignHeader") >= 0
             return "SovereignHeader"
         if struct_find(ctx, "HttpHeader") >= 0
@@ -744,6 +744,15 @@ fn x86_imul_rax_rbx ctx
     bb_put8(ctx, 195) // 0xC3
 
 fn x86_idiv_rbx ctx
+    // WHY: Direct-silicon division-by-zero protection.
+    // Guards against unhandled CPU #DE hardware fault by calling _lipi_div_zero_panic.
+    lbl_div_ok = make_anon_label(ctx, "div_ok")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 219) // test rbx, rbx
+    x86_jnz(ctx, lbl_div_ok)
+    x86_call(ctx, "_lipi_div_zero_panic")
+    label_define(ctx, lbl_div_ok)
     bb_put8(ctx, 72)  // 0x48
     bb_put8(ctx, 153) // 0x99 (cqo: sign-extend rax into rdx:rax)
     bb_put8(ctx, 72)  // 0x48
@@ -1042,6 +1051,35 @@ fn x86_jnz ctx target_name
     bb_put32(ctx, 0)
     reloc_add(ctx, pos + 2, target_name, 6)
 
+// WHY: Relational conditional jumps for direct silicon slab freelist and atomic loops
+fn x86_jle ctx target_name
+    pos = ctx_len(ctx)
+    bb_put8(ctx, 15)  // 0x0F
+    bb_put8(ctx, 142) // 0x8E (jle rel32)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, pos + 2, target_name, 6)
+
+fn x86_jg ctx target_name
+    pos = ctx_len(ctx)
+    bb_put8(ctx, 15)  // 0x0F
+    bb_put8(ctx, 143) // 0x8F (jg rel32)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, pos + 2, target_name, 6)
+
+fn x86_jge ctx target_name
+    pos = ctx_len(ctx)
+    bb_put8(ctx, 15)  // 0x0F
+    bb_put8(ctx, 141) // 0x8D (jge rel32)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, pos + 2, target_name, 6)
+
+fn x86_jnc ctx target_name
+    pos = ctx_len(ctx)
+    bb_put8(ctx, 15)  // 0x0F
+    bb_put8(ctx, 131) // 0x83 (jnc/jnb rel32)
+    bb_put32(ctx, 0)
+    reloc_add(ctx, pos + 2, target_name, 6)
+
 fn x86_call ctx target_name
     pos = ctx_len(ctx)
     bb_put8(ctx, 232) // 0xE8 (call rel32)
@@ -1146,19 +1184,144 @@ fn emit_runtime_stubs ctx
     x86_ret(ctx)
 
     // 3. _lipi_alloc: rdi = size -> rax = ptr
+    // WHY: Dual-tier allocator: Checks segregated slab freelist buckets for size <= 2048B
+    // in O(1) time before falling back to 8-byte aligned bump allocation from 1GB mmap arena.
     label_define(ctx, "_lipi_alloc")
     label_define(ctx, "lipi_fn_alloc")
     label_define(ctx, "lipi_fn_sys_alloc")
-    bb_put8(ctx, 83) // push rbx
-    bb_put8(ctx, 65)
-    bb_put8(ctx, 84) // push r12
-    bb_put8(ctx, 73)
+    label_define(ctx, "lipi_fn_বরাদ্দ")
+    x86_push_reg(ctx, 3)  // push rbx
+    x86_push_reg(ctx, 12) // push r12
+    x86_mov_reg_reg(ctx, 12, 7) // mov r12, rdi (save requested size)
+
+    lbl_do_bump = make_anon_label(ctx, "al_do_bump")
+    lbl_check_b1 = make_anon_label(ctx, "al_b1")
+    lbl_check_b2 = make_anon_label(ctx, "al_b2")
+    lbl_check_b3 = make_anon_label(ctx, "al_b3")
+    lbl_check_b4 = make_anon_label(ctx, "al_b4")
+    lbl_check_b5 = make_anon_label(ctx, "al_b5")
+    lbl_check_b6 = make_anon_label(ctx, "al_b6")
+    lbl_check_b7 = make_anon_label(ctx, "al_b7")
+    lbl_has_bucket = make_anon_label(ctx, "al_has_b")
+
+    // Check if rdi > 2048: if so, bypass slab freelist and go straight to bump
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 255)
+    bb_put32(ctx, 2048) // cmp rdi, 2048
+    x86_jg(ctx, lbl_do_bump)
+
+    // Map rdi to bucket offset in rcx (0, 8, 16, 24, 32, 40, 48, 56)
+    // if rdi <= 16: bucket 0 (offset 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 16)
+    x86_jg(ctx, lbl_check_b1)
+    x86_mov_reg_imm64(ctx, 1, 0)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b1)
+    // if rdi <= 32: bucket 1 (offset 8)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 32)
+    x86_jg(ctx, lbl_check_b2)
+    x86_mov_reg_imm64(ctx, 1, 8)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b2)
+    // if rdi <= 64: bucket 2 (offset 16)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 255)
+    bb_put8(ctx, 64)
+    x86_jg(ctx, lbl_check_b3)
+    x86_mov_reg_imm64(ctx, 1, 16)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b3)
+    // if rdi <= 128: bucket 3 (offset 24)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 255)
+    bb_put32(ctx, 128)
+    x86_jg(ctx, lbl_check_b4)
+    x86_mov_reg_imm64(ctx, 1, 24)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b4)
+    // if rdi <= 256: bucket 4 (offset 32)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 255)
+    bb_put32(ctx, 256)
+    x86_jg(ctx, lbl_check_b5)
+    x86_mov_reg_imm64(ctx, 1, 32)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b5)
+    // if rdi <= 512: bucket 5 (offset 40)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 255)
+    bb_put32(ctx, 512)
+    x86_jg(ctx, lbl_check_b6)
+    x86_mov_reg_imm64(ctx, 1, 40)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b6)
+    // if rdi <= 1024: bucket 6 (offset 48)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 255)
+    bb_put32(ctx, 1024)
+    x86_jg(ctx, lbl_check_b7)
+    x86_mov_reg_imm64(ctx, 1, 48)
+    x86_jmp(ctx, lbl_has_bucket)
+
+    label_define(ctx, lbl_check_b7)
+    // else <= 2048: bucket 7 (offset 56)
+    x86_mov_reg_imm64(ctx, 1, 56)
+
+    label_define(ctx, lbl_has_bucket)
+    // rcx has bucket offset (0..56)
+    // Check if _lipi_slab_buckets[rcx] has a recycled free slot
+    x86_lea_reg_rip(ctx, 3, "_lipi_slab_buckets")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 203) // add rbx, rcx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 3)   // mov rax, [rbx] (head pointer)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192) // test rax, rax
+    x86_jz(ctx, lbl_do_bump) // freelist empty -> fall back to bump allocator
+
+    // Freelist Hit! Pop slot: rdx = [rax], [rbx] = rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 16)  // mov rdx, [rax] (next free pointer)
+    bb_put8(ctx, 72)
     bb_put8(ctx, 137)
-    bb_put8(ctx, 252) // mov r12, rdi
+    bb_put8(ctx, 19)  // mov [rbx], rdx (update bucket head)
+    bb_put8(ctx, 76)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 96)
+    bb_put8(ctx, 248) // mov [rax - 8], r12 (restore requested size in header)
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_ret(ctx)
+
+    label_define(ctx, lbl_do_bump)
+    // Fallback: Bump allocator: rdi = (r12 + 7) & -8 + 8
+    x86_mov_reg_reg(ctx, 7, 12)
     bb_put8(ctx, 72)
     bb_put8(ctx, 131)
     bb_put8(ctx, 199)
-    bb_put8(ctx, 7)  // add rdi, 7
+    bb_put8(ctx, 7)   // add rdi, 7
     bb_put8(ctx, 72)
     bb_put8(ctx, 131)
     bb_put8(ctx, 231)
@@ -1166,27 +1329,161 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 72)
     bb_put8(ctx, 131)
     bb_put8(ctx, 199)
-    bb_put8(ctx, 8)  // add rdi, 8
+    bb_put8(ctx, 8)   // add rdi, 8
     x86_lea_reg_rip(ctx, 3, "_lipi_heap_ptr")
     bb_put8(ctx, 72)
     bb_put8(ctx, 139)
-    bb_put8(ctx, 3) // mov rax, [rbx]
+    bb_put8(ctx, 3)   // mov rax, [rbx]
     bb_put8(ctx, 72)
     bb_put8(ctx, 1)
     bb_put8(ctx, 199) // add rdi, rax
     bb_put8(ctx, 72)
     bb_put8(ctx, 137)
-    bb_put8(ctx, 59) // mov [rbx], rdi
+    bb_put8(ctx, 59)  // mov [rbx], rdi
     bb_put8(ctx, 76)
     bb_put8(ctx, 137)
-    bb_put8(ctx, 32) // mov [rax], r12
+    bb_put8(ctx, 32)  // mov [rax], r12
     bb_put8(ctx, 72)
     bb_put8(ctx, 131)
     bb_put8(ctx, 192)
-    bb_put8(ctx, 8) // add rax, 8
-    bb_put8(ctx, 65)
-    bb_put8(ctx, 92) // pop r12
-    bb_put8(ctx, 91) // pop rbx
+    bb_put8(ctx, 8)   // add rax, 8
+    x86_pop_reg(ctx, 12)
+    x86_pop_reg(ctx, 3)
+    x86_ret(ctx)
+
+    // 3b. _lipi_free / lipi_fn_free: rdi = ptr -> rax = 0
+    // WHY: O(1) memory reclamation into segregated slab buckets for allocations <= 2048 bytes.
+    // Preserves 100% zero-dependency sovereignty with 0% libc free() or external malloc.
+    label_define(ctx, "_lipi_free")
+    label_define(ctx, "lipi_fn_free")
+    label_define(ctx, "lipi_fn_sys_free")
+    label_define(ctx, "lipi_fn_মুক্ত")
+    lbl_fr_done = make_anon_label(ctx, "fr_done")
+
+    // Null pointer check: if ptr == 0, safe no-op
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 255) // test rdi, rdi
+    x86_jz(ctx, lbl_fr_done)
+
+    // Read allocation size header: rax = [rdi - 8]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 71)
+    bb_put8(ctx, 248) // mov rax, [rdi - 8]
+
+    // Validate size: must be > 0 and <= 2048
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 133)
+    bb_put8(ctx, 192) // test rax, rax
+    x86_jle(ctx, lbl_fr_done)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 2048) // cmp rax, 2048
+    x86_jg(ctx, lbl_fr_done)
+
+    // Calculate bucket offset in rcx (0, 8, 16, 24, 32, 40, 48, 56)
+    lbl_fr_b1 = make_anon_label(ctx, "fr_b1")
+    lbl_fr_b2 = make_anon_label(ctx, "fr_b2")
+    lbl_fr_b3 = make_anon_label(ctx, "fr_b3")
+    lbl_fr_b4 = make_anon_label(ctx, "fr_b4")
+    lbl_fr_b5 = make_anon_label(ctx, "fr_b5")
+    lbl_fr_b6 = make_anon_label(ctx, "fr_b6")
+    lbl_fr_b7 = make_anon_label(ctx, "fr_b7")
+    lbl_fr_has_b = make_anon_label(ctx, "fr_has_b")
+
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 248)
+    bb_put8(ctx, 16) // cmp rax, 16
+    x86_jg(ctx, lbl_fr_b1)
+    x86_mov_reg_imm64(ctx, 1, 0) // rcx = 0
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b1)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 248)
+    bb_put8(ctx, 32) // cmp rax, 32
+    x86_jg(ctx, lbl_fr_b2)
+    x86_mov_reg_imm64(ctx, 1, 8) // rcx = 8
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b2)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 248)
+    bb_put8(ctx, 64) // cmp rax, 64
+    x86_jg(ctx, lbl_fr_b3)
+    x86_mov_reg_imm64(ctx, 1, 16) // rcx = 16
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b3)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 128) // cmp rax, 128
+    x86_jg(ctx, lbl_fr_b4)
+    x86_mov_reg_imm64(ctx, 1, 24) // rcx = 24
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b4)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 256) // cmp rax, 256
+    x86_jg(ctx, lbl_fr_b5)
+    x86_mov_reg_imm64(ctx, 1, 32) // rcx = 32
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b5)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 512) // cmp rax, 512
+    x86_jg(ctx, lbl_fr_b6)
+    x86_mov_reg_imm64(ctx, 1, 40) // rcx = 40
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b6)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 129)
+    bb_put8(ctx, 248)
+    bb_put32(ctx, 1024) // cmp rax, 1024
+    x86_jg(ctx, lbl_fr_b7)
+    x86_mov_reg_imm64(ctx, 1, 48) // rcx = 48
+    x86_jmp(ctx, lbl_fr_has_b)
+
+    label_define(ctx, lbl_fr_b7)
+    x86_mov_reg_imm64(ctx, 1, 56) // rcx = 56
+
+    label_define(ctx, lbl_fr_has_b)
+    // Link rdi into _lipi_slab_buckets[rcx]:
+    // rbx = &_lipi_slab_buckets + rcx
+    // rdx = [rbx] (current head)
+    // [rdi] = rdx (rdi->next = current head)
+    // [rbx] = rdi (new head = rdi)
+    x86_push_reg(ctx, 3)
+    x86_lea_reg_rip(ctx, 3, "_lipi_slab_buckets")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 1)
+    bb_put8(ctx, 203) // add rbx, rcx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 19)  // mov rdx, [rbx]
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 23)  // mov [rdi], rdx
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 59)  // mov [rbx], rdi
+    x86_pop_reg(ctx, 3)
+
+    label_define(ctx, lbl_fr_done)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
     x86_ret(ctx)
 
     // 4. _lipi_str_concat: rdi = str1, rsi = str2 -> rax = new str
@@ -1800,6 +2097,25 @@ fn emit_runtime_stubs ctx
     bb_put8(ctx, 92) // pop r12
     x86_leave(ctx)
     x86_ret(ctx)
+
+    // ── Division by Zero Panic Handler ────────────────────────────────────────
+    // WHY: Gracefully catches zero divisor before hardware #DE fault, outputs diagnostic to stderr,
+    // and terminates cleanly with exit code 136 (128 + SIGFPE) without core dump.
+    label_define(ctx, "_lipi_div_zero_panic")
+    lbl_msg_dz = string_pool_get(ctx, "\n[লিপি প্যানিক] শূন্য দিয়ে ভাগ করা অসম্ভব (Division by zero panic)\n")
+    x86_lea_reg_rip(ctx, 7, lbl_msg_dz) // rdi = error message buffer
+    // Read dynamic byte length from [rdi - 8]
+    bb_put8(ctx, 139)
+    bb_put8(ctx, 87)
+    bb_put8(ctx, 248)                   // mov edx, [rdi - 8]
+    x86_mov_reg_reg(ctx, 6, 7)          // rsi = rdi (buf)
+    x86_mov_reg_imm64(ctx, 7, 2)        // rdi = 2 (STDERR)
+    x86_mov_reg_imm64(ctx, 0, 1)        // rax = 1 (SYS_write)
+    x86_syscall(ctx)
+    x86_mov_reg_imm64(ctx, 7, 136)      // rdi = 136 (128 + SIGFPE)
+    x86_mov_reg_imm64(ctx, 0, 60)       // rax = 60 (SYS_exit)
+    x86_syscall(ctx)
+    bb_put8(ctx, 244)                   // hlt
 
     // 12. _lipi_add_dynamic: rdi = left, rsi = right -> rax = sum
     label_define(ctx, "_lipi_add_dynamic")
@@ -3141,6 +3457,97 @@ fn emit_runtime_stubs ctx
     label_define(ctx, "lipi_fn_slab_buckets_ptr")
     label_define(ctx, "lipi_fn_স্ল্যাব_বাকেট_পয়েন্টার")
     x86_lea_reg_rip(ctx, 0, "_lipi_slab_buckets")
+    x86_ret(ctx)
+
+    // ── Hardware Silicon Atomic Spinlock (lock bts with pause) ─────────────────
+    // WHY: True multi-core thread safety via physical CPU bus serialization (0% pthreads).
+    // Uses CPU pause instruction for energy-efficient spinloop with zero cache thrashing.
+    label_define(ctx, "lipi_fn_atomic_lock")
+    label_define(ctx, "lipi_fn_অ্যাটমিক_লক")
+    lbl_as_loop = make_anon_label(ctx, "as_loop")
+    lbl_as_wait = make_anon_label(ctx, "as_wait")
+    lbl_as_done = make_anon_label(ctx, "as_done")
+
+    label_define(ctx, lbl_as_loop)
+    // lock bts qword [rdi], 0 -> F0 48 0F BA 2F 00
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 186)
+    bb_put8(ctx, 47)
+    bb_put8(ctx, 0)
+    x86_jnc(ctx, lbl_as_done)
+
+    label_define(ctx, lbl_as_wait)
+    // pause -> F3 90 (spinloop hint for SMT cores)
+    bb_put8(ctx, 243)
+    bb_put8(ctx, 144)
+    // cmp qword [rdi], 0 -> 48 83 3F 00
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 131)
+    bb_put8(ctx, 63)
+    bb_put8(ctx, 0)
+    x86_jnz(ctx, lbl_as_wait)
+    x86_jmp(ctx, lbl_as_loop)
+
+    label_define(ctx, lbl_as_done)
+    x86_mov_reg_imm64(ctx, 0, 1)
+    x86_ret(ctx)
+
+    // ── Hardware Silicon Atomic Spinlock Unlock (lock btr) ──────────────────────
+    // WHY: Atomically resets bit 0 of the lock word and serializes memory order.
+    label_define(ctx, "lipi_fn_atomic_unlock")
+    label_define(ctx, "lipi_fn_অ্যাটমিক_আনলক")
+    // lock btr qword [rdi], 0 -> F0 48 0F BA 37 00
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 186)
+    bb_put8(ctx, 55)
+    bb_put8(ctx, 0)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 49)
+    bb_put8(ctx, 192) // xor rax, rax
+    x86_ret(ctx)
+
+    // ── Hardware Silicon Atomic Compare-And-Swap (lock cmpxchg) ─────────────────
+    // WHY: Lock-free primitives, wait-free ringbuffers, and atomic reference counters.
+    // In: rdi = ptr, rsi = expected, rdx = new_val. Out: rax = 1 (success) or 0 (failed)
+    label_define(ctx, "lipi_fn_atomic_cas")
+    label_define(ctx, "lipi_fn_atomic_compare_swap")
+    label_define(ctx, "lipi_fn_অ্যাটমিক_ক্যাস")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 240) // mov rax, rsi (expected)
+    // lock cmpxchg [rdi], rdx -> F0 48 0F B1 17
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 177)
+    bb_put8(ctx, 23)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 148)
+    bb_put8(ctx, 192) // sete al
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 182)
+    bb_put8(ctx, 192) // movzx rax, al
+    x86_ret(ctx)
+
+    // ── Hardware Silicon Atomic Fetch-And-Add (lock xadd) ───────────────────────
+    // WHY: Lock-free counters, task IDs, and concurrent metric counters.
+    // In: rdi = ptr, rsi = delta. Out: rax = previous value
+    label_define(ctx, "lipi_fn_atomic_add")
+    label_define(ctx, "lipi_fn_অ্যাটমিক_যোগ")
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 137)
+    bb_put8(ctx, 240) // mov rax, rsi
+    // lock xadd [rdi], rax -> F0 48 0F C1 07
+    bb_put8(ctx, 240)
+    bb_put8(ctx, 72)
+    bb_put8(ctx, 15)
+    bb_put8(ctx, 193)
+    bb_put8(ctx, 7)
     x86_ret(ctx)
 
     // ── Physical Stack Pointer Introspection ───────────────────────────────────
@@ -4694,19 +5101,22 @@ fn tokenize_pure src
                     p = p + 1
                 else
                     break
-            // WHY: Gracefully consume optional fractional part (e.g., 1000.0, 0.5) to prevent accidental member access dereference
+            // WHY: Preserve fractional string for float representation, while computing integer component for fallback ALU operations.
+            flt_str = str(val)
             if p < slen and char_at(src, p) == "." and p + 1 < slen
                 next_c = ord(char_at(src, p + 1))
                 if next_c >= 48 and next_c <= 57
+                    flt_str = flt_str + "."
                     p = p + 1
                     while p < slen
                         dc = char_at(src, p)
                         dcode = ord(dc)
                         if dcode >= 48 and dcode <= 57
+                            flt_str = flt_str + dc
                             p = p + 1
                         else
                             break
-            push(tokens, tok_new(TOK_INT, str(val), val, cur_line))
+            push(tokens, tok_new(TOK_INT, flt_str, val, cur_line))
             continue
 
         if c == "("

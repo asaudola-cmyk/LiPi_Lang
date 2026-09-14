@@ -206,13 +206,14 @@ import "universe/core/collections"
 @end
 
 @fn ast_literal_float(val: f64) -> ASTNode
+  // WHY: Preserves exact floating-point value in AST node for IEEE-754 code generation
   return {
     kind: "LiteralFloat",
     name: "",
     params: [],
     body: [],
     ret_type: "f64",
-    val: 0,
+    val: val,
     op: "",
     left: 0,
     right: 0,

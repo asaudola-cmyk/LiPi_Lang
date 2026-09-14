@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/branding/lipi_logo.svg" alt="Lipi Language Logo" width="220" />
+<img src="docs/branding/lipi_logo.svg" alt="Lipi Language Logo" width="220" />
 
 # 👑 Lipi Sovereign Programming Language
 ### *Simpler than Python. Fast as C/Rust. 100% Self-Hosting & Zero-Dependency.*

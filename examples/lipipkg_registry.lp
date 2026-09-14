@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI DECENTRALIZED PACKAGE REGISTRY DAEMON (lipipkg hub)
-// File: apps/lipipkg_registry/main.lp
+// File: examples/lipipkg_registry.lp
 // Standard: HTTP REST API | Ed25519 Cryptographic Signatures | SHA-256 CAS
 // 100% Pure Lipi — Zero Libc | Zero C | Zero External Node/Python Runtimes
 // ==============================================================================

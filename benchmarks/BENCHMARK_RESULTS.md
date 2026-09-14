@@ -57,7 +57,7 @@
 ---
 
 ## 🌐 Benchmark 3: Enterprise Asynchronous Epoll Microservice
-*Target:* `apps/enterprise_gateway/server.lp` running on Port 8999  
+*Target:* `benchmarks/servers/enterprise_gateway.lp` running on Port 8999  
 *Architecture:* Pure Linux Kernel Epoll (Syscall 232/233), In-Memory KV Cache, AVX2 Accelerator, Zero-GC.  
 *Total Load:* 650 live requests across 5 distinct production endpoints.
 

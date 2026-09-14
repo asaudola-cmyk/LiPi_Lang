@@ -311,7 +311,7 @@ import "universe/ide/editor"
   println("🚀 MAYA STUDIO SOVEREIGN GRAPHICAL IDE 🚀")
   println("=================================================================")
   
-  app = studio_app_create(800, 600, "apps/demo.lp")
+  app = studio_app_create(800, 600, "examples/demo.lp")
   println("Master Maya Studio Application initialized (800x600).")
 
   demo_code = "@! Maya Sovereign Application Demo\n@struct Vector3\n  x: f64\n  y: f64\n  z: f64\n

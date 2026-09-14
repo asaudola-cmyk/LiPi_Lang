@@ -165,13 +165,14 @@ fn সকেট_সেন্ড_টাইমআউট fd সেকেন্ড
 
 // ১২. সকেট পোল রিড (Poll Socket Read Readiness via SYS_poll: syscall 7)
 // WHY: সকেট থেকে ডেটা আসার জন্য নন-ব্লকিং অপেক্ষা (POLLIN = 1)। টাইমআউট পার হলে ০ রিটার্ন করে।
+// struct pollfd layout: fd (4 bytes), events (2 bytes), revents (2 bytes) = 8 bytes
 fn socket_poll_read fd timeout_ms
     pfd = malloc(8)
     mem_byte_write(pfd, 0, fd % 256)
     mem_byte_write(pfd, 1, (fd / 256) % 256)
-    mem_byte_write(pfd, 2, 0)
-    mem_byte_write(pfd, 3, 0)
-    mem_byte_write(pfd, 4, 1)
+    mem_byte_write(pfd, 2, (fd / 65536) % 256)
+    mem_byte_write(pfd, 3, (fd / 16777216) % 256)
+    mem_byte_write(pfd, 4, 1) // POLLIN = 0x0001
     mem_byte_write(pfd, 5, 0)
     mem_byte_write(pfd, 6, 0)
     mem_byte_write(pfd, 7, 0)
@@ -181,3 +182,86 @@ fn socket_poll_read fd timeout_ms
 
 fn সকেট_পোল_রিড fd মিলিসেকেন্ড
     return socket_poll_read(fd, মিলিসেকেন্ড)
+
+// ── ১৩. লিনাক্স কার্নেল হাই-কনকারেন্সি ইপোল ইঞ্জিন (Pure Linux Kernel Epoll Engine) ───
+// WHY: $O(1)$ স্কেলেবিলিটির সাথে একসাথে হাজার হাজার সমান্তরাল সকেট সংযোগ পরিচালনা করা।
+// ০% Libc, ০% libevent/libuv — সরাসরি লিনাক্স কার্নেল সিসকল SYS_epoll_create1 (291),
+// SYS_epoll_ctl (233), এবং SYS_epoll_wait (232)।
+
+EPOLL_CTL_ADD = 1
+EPOLL_CTL_DEL = 2
+EPOLL_CTL_MOD = 3
+
+EPOLLIN      = 1
+EPOLLPRI     = 2
+EPOLLOUT     = 4
+EPOLLERR     = 8
+EPOLLHUP     = 16
+
+fn epoll_create
+    // WHY: SYS_epoll_create1 (291) কল করে নতুন কার্নেল ইপোল ইনস্ট্যান্স বরাদ্দ নেওয়া।
+    // flags = 0 (or EPOLL_CLOEXEC = 524288)
+    return syscall(291, 524288, 0, 0, 0, 0, 0)
+
+fn ইপোল_তৈরি
+    return epoll_create()
+
+fn epoll_add_fd epfd fd events_mask
+    // WHY: কার্নেল ইপোল তালিকায় নির্দিষ্ট সকেট ফাইল ডেসক্রিপ্টর ও ইভেন্ট মাস্ক যোগ করা।
+    // x86_64 struct epoll_event layout (16 bytes):
+    // offset 0..3: uint32 events
+    // offset 4..7: padding (4 bytes)
+    // offset 8..15: uint64 data (fd)
+    ev = malloc(16)
+    mem_write_u32(ev, 0, events_mask)
+    mem_write_u32(ev, 4, 0)
+    mem_write(ev, 8, fd)
+    res = syscall(233, epfd, 1, fd, ev, 0, 0) // EPOLL_CTL_ADD = 1
+    free(ev, 16)
+    return res
+
+fn ইপোল_যুক্ত epfd fd ইভেন্ট_মাস্ক
+    return epoll_add_fd(epfd, fd, ইভেন্ট_মাস্ক)
+
+fn epoll_del_fd epfd fd
+    // WHY: কার্নেল ইপোল তালিকা থেকে নির্দিষ্ট সকেট অপসারিত করা (EPOLL_CTL_DEL = 2)।
+    return syscall(233, epfd, 2, fd, 0, 0, 0)
+
+fn ইপোল_মুছ epfd fd
+    return epoll_del_fd(epfd, fd)
+
+fn epoll_mod_fd epfd fd events_mask
+    // WHY: চলমান সকেট মনিটরিং ইভেন্ট মাস্ক পরিবর্তন করা (EPOLL_CTL_MOD = 3)।
+    ev = malloc(16)
+    mem_write_u32(ev, 0, events_mask)
+    mem_write_u32(ev, 4, 0)
+    mem_write(ev, 8, fd)
+    res = syscall(233, epfd, 3, fd, ev, 0, 0) // EPOLL_CTL_MOD = 3
+    free(ev, 16)
+    return res
+
+fn ইপোল_পরিবর্তন epfd fd ইভেন্ট_মাস্ক
+    return epoll_mod_fd(epfd, fd, ইভেন্ট_মাস্ক)
+
+fn epoll_wait_events epfd events_buf maxevents timeout_ms
+    // WHY: কার্নেলে সক্রিয় সকেট ইভেন্ট আসার জন্য অপেক্ষা (SYS_epoll_wait: syscall 232)।
+    return syscall(232, epfd, events_buf, maxevents, timeout_ms, 0, 0)
+
+fn ইপোল_অপেক্ষা epfd ইভেন্টস_বাফার সর্বোচ্চ_ইভেন্ট টাইমআউট
+    return epoll_wait_events(epfd, ইভেন্টস_বাফার, সর্বোচ্চ_ইভেন্ট, টাইমআউট)
+
+fn epoll_event_get_fd events_buf idx
+    // WHY: ইপোল রেজাল্ট বাফার থেকে idx-তম সক্রিয় সকেটের ফাইল ডেসক্রিপ্টর নিষ্কাশন।
+    offset = (idx * 16) + 8
+    return mem_read(events_buf, offset)
+
+fn ইপোল_ঘটনা_এফডি ইভেন্টস_বাফার সূচক
+    return epoll_event_get_fd(ইভেন্টস_বাফার, সূচক)
+
+fn epoll_event_get_events events_buf idx
+    // WHY: ইপোল রেজাল্ট বাফার থেকে idx-তম ট্রিগার হওয়া ইভেন্ট ফ্ল্যাগ (EPOLLIN/EPOLLOUT) পড়া।
+    offset = idx * 16
+    return mem_read_u32(events_buf, offset)
+
+fn ইপোল_ঘটনা_ইভেন্টস ইভেন্টস_বাফার সূচক
+    return epoll_event_get_events(ইভেন্টস_বাফার, সূচক)

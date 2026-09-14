@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST SUITE: Client-Side WebAssembly Runner & Worker Verification
-// ⚡ Tests apps/website/public/wasm_runner.js & apps/website/public/lipi_worker.js
+// ⚡ Tests src/runtime/wasm/wasm_runner.js & src/runtime/wasm/lipi_worker.js
 // 🏛️ File: tests/test_wasm_runner.js
 //
 // WHY: Ensures the client-side JavaScript execution runtime and background WebWorker
@@ -13,8 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const { Worker } = require('worker_threads');
 
-const RUNNER_PATH = path.resolve(__dirname, '../apps/website/public/wasm_runner.js');
-const WORKER_PATH = path.resolve(__dirname, '../apps/website/public/lipi_worker.js');
+const RUNNER_PATH = path.resolve(__dirname, '../src/runtime/wasm/wasm_runner.js');
+const WORKER_PATH = path.resolve(__dirname, '../src/runtime/wasm/lipi_worker.js');
 const WASM_PATH = '/tmp/test.wasm';
 
 // Terminal formatting colors

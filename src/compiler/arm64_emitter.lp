@@ -742,6 +742,14 @@ fn arm64_emit_strings ctx
     arm64_label_define(ctx, "_lipi_initial_sp")
     arm64_bb_put64(ctx, 0)
 
+    // Segregated Slab Allocator Buckets (8 size classes: 16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B)
+    // WHY: Provides O(1) LIFO memory slot recycling for AArch64 baremetal silicon
+    arm64_label_define(ctx, "_lipi_slab_buckets")
+    sb_i = 0
+    while sb_i < 8
+        arm64_bb_put64(ctx, 0)
+        sb_i = sb_i + 1
+
 // ── Linux AArch64 Syscall Convention Helpers ─────────────────────────────────
 // WHY: Implements the Linux AArch64 ABI calling convention:
 //      - X8: Syscall number (e.g. 64 for write, 93 for exit)
@@ -1659,8 +1667,8 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit_ret(ctx)
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 9. _lipi_alloc: Bump pointer heap allocator with 16-byte alignment
-    // WHY: Returns payload pointer with 8 bytes reserved before it for STR0 tag/length.
+    // 9. _lipi_alloc: Segregated Slab Recycler & Bump Pointer Allocator
+    // WHY: O(1) segregated freelist recycling for <= 2048B chunks with bump fallback.
     // ──────────────────────────────────────────────────────────────────────────
     arm64_label_define(ctx, "_lipi_alloc")
     arm64_emit(ctx, 2847898621) // stp x29, x30, [sp, #-16]!
@@ -1668,6 +1676,83 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit(ctx, 2432711680) // add x0, x0, #15
     arm64_emit(ctx, 2457660416) // and x0, x0, #-16
     arm64_emit(ctx, 2432712704) // add x0, x0, #16
+
+    lbl_alc_bump = arm64_make_anon_label(ctx, "alc_bump")
+    lbl_alc_sb1  = arm64_make_anon_label(ctx, "alc_sb1")
+    lbl_alc_sb2  = arm64_make_anon_label(ctx, "alc_sb2")
+    lbl_alc_sb3  = arm64_make_anon_label(ctx, "alc_sb3")
+    lbl_alc_sb4  = arm64_make_anon_label(ctx, "alc_sb4")
+    lbl_alc_sb5  = arm64_make_anon_label(ctx, "alc_sb5")
+    lbl_alc_sb6  = arm64_make_anon_label(ctx, "alc_sb6")
+    lbl_alc_sb7  = arm64_make_anon_label(ctx, "alc_sb7")
+    lbl_alc_has_b = arm64_make_anon_label(ctx, "alc_has_b")
+
+    // Check if x0 <= 2048 for slab recycling
+    arm64_emit(ctx, 4045406303) // cmp x0, #2048
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_bump)
+
+    // Determine bucket offset in x3 (0, 8, 16, 24, 32, 40, 48, 56)
+    arm64_emit(ctx, 4043325535) // cmp x0, #16
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb1)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 0, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb1)
+    arm64_emit(ctx, 4043341919) // cmp x0, #32
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb2)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 8, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb2)
+    arm64_emit(ctx, 4043374687) // cmp x0, #64
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb3)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 16, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb3)
+    arm64_emit(ctx, 4043440223) // cmp x0, #128
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb4)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 24, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb4)
+    arm64_emit(ctx, 4043571295) // cmp x0, #256
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb5)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 32, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb5)
+    arm64_emit(ctx, 4043833439) // cmp x0, #512
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb6)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 40, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb6)
+    arm64_emit(ctx, 4044357727) // cmp x0, #1024
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb7)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 48, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb7)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 56, 0)
+
+    arm64_label_define(ctx, lbl_alc_has_b)
+    // Check bucket freelist head in _lipi_slab_buckets[x3]
+    arm64_emit_adr_label(ctx, ARM64_REG_X4, "_lipi_slab_buckets")
+    arm64_emit_add(ctx, ARM64_REG_X4, ARM64_REG_X4, ARM64_REG_X3)
+    arm64_emit_ldr_imm(ctx, ARM64_REG_X5, ARM64_REG_X4, 0) // x5 = head
+    arm64_emit_cbz_label(ctx, ARM64_REG_X5, lbl_alc_bump)  // if head == 0, bump allocate
+
+    // Pop from freelist: next = [head], buckets[x3] = next
+    arm64_emit_ldr_imm(ctx, ARM64_REG_X6, ARM64_REG_X5, 0)
+    arm64_emit_str_imm(ctx, ARM64_REG_X6, ARM64_REG_X4, 0)
+    // Return payload pointer = head + 8
+    arm64_emit(ctx, 2432704672) // add x0, x5, #8 (x0 = head + 8)
+    arm64_emit(ctx, 2831244285) // ldp x29, x30, [sp], #16
+    arm64_emit_ret(ctx)
+
+    // Fallback: Bump allocator
+    arm64_label_define(ctx, lbl_alc_bump)
     arm64_emit_adr_label(ctx, ARM64_REG_X1, "_lipi_heap_ptr")
     arm64_emit(ctx, 4181721122) // ldr x2, [x1]
 
@@ -1685,6 +1770,7 @@ fn arm64_emit_runtime_stubs ctx
 
     arm64_emit(ctx, 2332033091) // add x3, x2, x0
     arm64_emit(ctx, 4177526819) // str x3, [x1]
+    arm64_emit_str_imm(ctx, ARM64_REG_X0, ARM64_REG_X2, 0) // str x0, [x2] (header size)
     arm64_emit(ctx, 2432704576) // add x0, x2, #8
     arm64_emit(ctx, 2831244285) // ldp x29, x30, [sp], #16
     arm64_emit_ret(ctx)
@@ -2193,6 +2279,174 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit(ctx, 2833270421)                      // ldp x21, x22, [sp, #32]
     arm64_emit(ctx, 2833138835)                      // ldp x19, x20, [sp, #16]
     arm64_emit(ctx, 2831449085)                      // ldp x29, x30, [sp], #64
+    arm64_emit_ret(ctx)
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 25. _lipi_free / lipi_fn_free: Direct Silicon Segregated Slab Reclamation
+    // WHY: O(1) LIFO memory recycling for AArch64 baremetal silicon (<= 2048B chunks)
+    // ──────────────────────────────────────────────────────────────────────────
+    arm64_label_define(ctx, "_lipi_free")
+    arm64_label_define(ctx, "lipi_fn_free")
+    arm64_label_define(ctx, "lipi_fn_sys_free")
+    arm64_label_define(ctx, "lipi_fn_মুক্ত")
+    lbl_afr_done = arm64_make_anon_label(ctx, "afr_done")
+    lbl_afr_b1 = arm64_make_anon_label(ctx, "afr_b1")
+    lbl_afr_b2 = arm64_make_anon_label(ctx, "afr_b2")
+    lbl_afr_b3 = arm64_make_anon_label(ctx, "afr_b3")
+    lbl_afr_b4 = arm64_make_anon_label(ctx, "afr_b4")
+    lbl_afr_b5 = arm64_make_anon_label(ctx, "afr_b5")
+    lbl_afr_b6 = arm64_make_anon_label(ctx, "afr_b6")
+    lbl_afr_b7 = arm64_make_anon_label(ctx, "afr_b7")
+    lbl_afr_has_b = arm64_make_anon_label(ctx, "afr_has_b")
+
+    // Null pointer check
+    arm64_emit_cbz_label(ctx, ARM64_REG_X0, lbl_afr_done)
+
+    // Load size header: x2 = [x0 - 8]
+    arm64_emit(ctx, 3506446337) // sub x1, x0, #8
+    arm64_emit(ctx, 4181721122) // ldr x2, [x1]
+
+    // Validate size: 0 < size <= 2048
+    arm64_emit(ctx, arm64_cmp_imm(2, 0))
+    arm64_emit_b_cond_label(ctx, ARM64_COND_LE, lbl_afr_done)
+    arm64_emit(ctx, 4045406303) // cmp x2, #2048
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_done)
+
+    // Determine bucket offset in x3 (0, 8, 16, 24, 32, 40, 48, 56)
+    arm64_emit(ctx, 4043325535) // cmp x2, #16
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b1)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 0, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b1)
+    arm64_emit(ctx, 4043341919) // cmp x2, #32
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b2)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 8, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b2)
+    arm64_emit(ctx, 4043374687) // cmp x2, #64
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b3)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 16, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b3)
+    arm64_emit(ctx, 4043440223) // cmp x2, #128
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b4)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 24, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b4)
+    arm64_emit(ctx, 4043571295) // cmp x2, #256
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b5)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 32, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b5)
+    arm64_emit(ctx, 4043833439) // cmp x2, #512
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b6)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 40, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b6)
+    arm64_emit(ctx, 4044357727) // cmp x2, #1024
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b7)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 48, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b7)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 56, 0)
+
+    arm64_label_define(ctx, lbl_afr_has_b)
+    // Link x0 into _lipi_slab_buckets[x3]
+    arm64_emit_adr_label(ctx, ARM64_REG_X4, "_lipi_slab_buckets")
+    arm64_emit_add(ctx, ARM64_REG_X4, ARM64_REG_X4, ARM64_REG_X3)
+    arm64_emit_ldr_imm(ctx, ARM64_REG_X5, ARM64_REG_X4, 0) // current head
+    arm64_emit_str_imm(ctx, ARM64_REG_X5, ARM64_REG_X0, 0) // [x0] = current head
+    arm64_emit_str_imm(ctx, ARM64_REG_X0, ARM64_REG_X4, 0) // [x4] = x0 (new head)
+
+    arm64_label_define(ctx, lbl_afr_done)
+    arm64_emit_movz(ctx, ARM64_REG_X0, 0, 0)
+    arm64_emit_ret(ctx)
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 26. lipi_fn_atomic_lock / lipi_fn_পরমাণু_আটক: Hardware Silicon Spinlock
+    // WHY: Pure AArch64 load-exclusive / store-exclusive spinlock with memory barrier
+    // ──────────────────────────────────────────────────────────────────────────
+    arm64_label_define(ctx, "lipi_fn_atomic_lock")
+    arm64_label_define(ctx, "lipi_fn_পরমাণু_আটক")
+    arm64_label_define(ctx, "lipi_fn_পরমাণু_আটকা")
+    lbl_lck_loop = arm64_make_anon_label(ctx, "lck_loop")
+    lbl_lck_wait = arm64_make_anon_label(ctx, "lck_wait")
+
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_label_define(ctx, lbl_lck_loop)
+    arm64_emit(ctx, 3363798017) // ldaxr x1, [x0]
+    arm64_emit_cbnz_label(ctx, ARM64_REG_X1, lbl_lck_wait)
+    arm64_emit_movz(ctx, ARM64_REG_X2, 1, 0)
+    arm64_emit(ctx, 3357768706) // stlxr w3, x2, [x0]
+    arm64_emit_cbnz_label(ctx, ARM64_REG_X3, lbl_lck_loop)
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_emit_movz(ctx, ARM64_REG_X0, 1, 0)
+    arm64_emit_ret(ctx)
+
+    arm64_label_define(ctx, lbl_lck_wait)
+    arm64_emit(ctx, 3573751903) // wfe
+    arm64_emit_b_label(ctx, lbl_lck_loop)
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 27. lipi_fn_atomic_unlock / lipi_fn_পরমাণু_মুক্ত: Hardware Spinlock Release
+    // ──────────────────────────────────────────────────────────────────────────
+    arm64_label_define(ctx, "lipi_fn_atomic_unlock")
+    arm64_label_define(ctx, "lipi_fn_পরমাণু_মুক্ত")
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_emit(ctx, 4177526815) // str xzr, [x0]
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_emit(ctx, 3573751967) // sev
+    arm64_emit_movz(ctx, ARM64_REG_X0, 0, 0)
+    arm64_emit_ret(ctx)
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 28. lipi_fn_atomic_cas / lipi_fn_পরমাণু_সিএএস: Atomic Compare-and-Swap
+    // in: x0 = addr, x1 = expected, x2 = new_val. out: x0 = 1 (success) or 0 (fail)
+    // ──────────────────────────────────────────────────────────────────────────
+    arm64_label_define(ctx, "lipi_fn_atomic_cas")
+    arm64_label_define(ctx, "lipi_fn_পরমাণু_সিএএস")
+    lbl_cas_retry = arm64_make_anon_label(ctx, "cas_retry")
+    lbl_cas_fail  = arm64_make_anon_label(ctx, "cas_fail")
+
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_label_define(ctx, lbl_cas_retry)
+    arm64_emit(ctx, 3363798019) // ldaxr x3, [x0]
+    arm64_emit(ctx, arm64_cmp(3, 1)) // cmp x3, x1
+    arm64_emit_b_cond_label(ctx, ARM64_COND_NE, lbl_cas_fail)
+    arm64_emit(ctx, 3357834242) // stlxr w4, x2, [x0]
+    arm64_emit_cbnz_label(ctx, ARM64_REG_X4, lbl_cas_retry)
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_emit_movz(ctx, ARM64_REG_X0, 1, 0)
+    arm64_emit_ret(ctx)
+
+    arm64_label_define(ctx, lbl_cas_fail)
+    arm64_emit(ctx, 3573759839) // clrex
+    arm64_emit_movz(ctx, ARM64_REG_X0, 0, 0)
+    arm64_emit_ret(ctx)
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 29. lipi_fn_atomic_add / lipi_fn_পরমাণু_যোগ: Atomic Fetch-and-Add
+    // in: x0 = addr, x1 = delta. out: x0 = old_val
+    // ──────────────────────────────────────────────────────────────────────────
+    arm64_label_define(ctx, "lipi_fn_atomic_add")
+    arm64_label_define(ctx, "lipi_fn_পরমাণু_যোগ")
+    lbl_add_loop = arm64_make_anon_label(ctx, "add_loop")
+
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_label_define(ctx, lbl_add_loop)
+    arm64_emit(ctx, 3363798018) // ldaxr x2, [x0]
+    arm64_emit_add(ctx, ARM64_REG_X3, ARM64_REG_X2, ARM64_REG_X1) // x3 = x2 + x1
+    arm64_emit(ctx, 3357834243) // stlxr w4, x3, [x0]
+    arm64_emit_cbnz_label(ctx, ARM64_REG_X4, lbl_add_loop)
+    arm64_emit(ctx, 3573758911) // dmb ish
+    arm64_emit(ctx, 2852193280) // mov x0, x2 (return old val)
     arm64_emit_ret(ctx)
 
 // ==============================================================================

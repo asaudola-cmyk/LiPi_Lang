@@ -221,14 +221,14 @@ setup_desktop_mime() {
     local mime_dir="$HOME/.local/share/mime/packages"
     local icons_dir="$HOME/.local/share/icons/hicolor/scalable/mimetypes"
     mkdir -p "$mime_dir" "$icons_dir"
-    if [ -f "$LIPI_INSTALL_DIR/assets/branding/lipi-mime.xml" ]; then
-        cp -f "$LIPI_INSTALL_DIR/assets/branding/lipi-mime.xml" "$mime_dir/lipi.xml"
+    if [ -f "$LIPI_INSTALL_DIR/docs/branding/lipi-mime.xml" ]; then
+        cp -f "$LIPI_INSTALL_DIR/docs/branding/lipi-mime.xml" "$mime_dir/lipi.xml"
         if command -v update-mime-database &>/dev/null; then
             update-mime-database "$HOME/.local/share/mime" &>/dev/null || true
         fi
     fi
-    if [ -f "$LIPI_INSTALL_DIR/assets/branding/lipi_logo_bold.svg" ]; then
-        cp -f "$LIPI_INSTALL_DIR/assets/branding/lipi_logo_bold.svg" "$icons_dir/text-x-lipi.svg"
+    if [ -f "$LIPI_INSTALL_DIR/docs/branding/lipi_logo.svg" ]; then
+        cp -f "$LIPI_INSTALL_DIR/docs/branding/lipi_logo.svg" "$icons_dir/text-x-lipi.svg"
         if command -v gtk-update-icon-cache &>/dev/null; then
             gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" &>/dev/null || true
         fi

@@ -426,36 +426,43 @@ fn main
     if cmd == "help" or cmd == "-h" or cmd == "--help"
         say "Usage: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | version"
         return 0
-        if cmd == "attach"
-            if argc >= 3
-                target_pid = parse_hex_or_dec(get(args, 2))
-                dbg_attach(target_pid)
-                return 0
-            say "Usage: lipidbg attach <pid>"
-            return 1
-        if cmd == "break"
-            if argc >= 4
-                target_pid = parse_hex_or_dec(get(args, 2))
-                b_addr = parse_hex_or_dec(get(args, 3))
-                dbg_set_breakpoint(target_pid, b_addr)
-                return 0
-            say "Usage: lipidbg break <pid> <addr>"
-            return 1
-        if cmd == "stack"
-            dbg_stack_inspect()
+
+    if cmd == "attach"
+        if argc >= 3
+            target_pid = parse_hex_or_dec(get(args, 2))
+            dbg_attach(target_pid)
             return 0
-        if cmd == "inspect" or cmd == "hex"
-            taddr = stack_pointer()
-            if argc >= 3 taddr = parse_hex_or_dec(get(args, 2))
-            dbg_hex_dump(taddr, 32)
+        say "Usage: lipidbg attach <pid>"
+        return 1
+
+    if cmd == "break"
+        if argc >= 4
+            target_pid = parse_hex_or_dec(get(args, 2))
+            b_addr = parse_hex_or_dec(get(args, 3))
+            dbg_set_breakpoint(target_pid, b_addr)
             return 0
-        if cmd == "disasm" or cmd == "run"
-            tf = "bin/lipc_bin"
-            if argc >= 3 tf = get(args, 2)
-            বাইনারি_ডায়াগনস্টিক(tf)
-            return 0
-        বাইনারি_ডায়াগনস্টিক(cmd)
+        say "Usage: lipidbg break <pid> <addr>"
+        return 1
+
+    if cmd == "stack"
+        dbg_stack_inspect()
         return 0
+
+    if cmd == "inspect" or cmd == "hex"
+        taddr = stack_pointer()
+        if argc >= 3 taddr = parse_hex_or_dec(get(args, 2))
+        dbg_hex_dump(taddr, 32)
+        return 0
+
+    if cmd == "disasm" or cmd == "run"
+        tf = "bin/lipc_bin"
+        if argc >= 3 tf = get(args, 2)
+        বাইনারি_ডায়াগনস্টিক(tf)
+        return 0
+
+    // If given a file path, run binary diagnostic directly
+    বাইনারি_ডায়াগনস্টিক(cmd)
+    return 0
 
     say "=== [LIPIDBG Sovereign System Debugger] ==="
     say "[১] সিপিইউ স্ট্যাক ফ্রেম ইন্সপেকশন:"

@@ -122,13 +122,13 @@ fn main
 
     // Register all core sovereign targets
     build_pipeline_add_target(pipe, "Core Compiler Engine", "src/compiler/elf_emitter.lp", "bin/lipc_bin", 1)
-    build_pipeline_add_target(pipe, "Native Runner & REPL", "src/tools/lipi_cli.lp", "bin/lipi", 1)
+    build_pipeline_add_target(pipe, "Native Runner & REPL", "src/tools/lipi.lp", "bin/lipi", 1)
     build_pipeline_add_target(pipe, "Sovereign UI Engine", "universe/gui/sovereign_ui.lp", "dist/libsovereign_ui", 1)
     build_pipeline_add_target(pipe, "Sovereign Framework", "universe/web/sovereign_framework.lp", "dist/libsovereign_web", 1)
     build_pipeline_add_target(pipe, "Web Horizons Suite M1-M5", "tests/test_sovereign_web_horizons.lp", "dist/test_web_m1_m5", 1)
     build_pipeline_add_target(pipe, "Next-Gen Horizons M6-M11", "tests/test_nextgen_web_horizons.lp", "dist/test_web_m6_m11", 1)
     build_pipeline_add_target(pipe, "Framework v2 Suite", "tests/test_sovereign_framework_v2.lp", "dist/test_framework_v2", 1)
-    build_pipeline_add_target(pipe, "Commerce Application", "apps/sovereign_commerce/app.lp", "dist/sovereign_commerce", 1)
+    build_pipeline_add_target(pipe, "Commerce Application", "examples/sovereign_commerce.lp", "dist/sovereign_commerce", 1)
     build_pipeline_add_target(pipe, "Pure DNS Resolver", "universe/net/dns_pure.lp", "dist/dns_pure", 1)
     build_pipeline_add_target(pipe, "In-Process TLS 1.3 Server", "universe/net/tls13_server.lp", "dist/tls13_server", 1)
     build_pipeline_add_target(pipe, "Direct DRM/KMS Engine", "universe/gui/drm_kms.lp", "dist/drm_kms", 1)
@@ -141,6 +141,8 @@ fn main
     build_pipeline_add_target(pipe, "Planetary BFT Consensus", "universe/net/bft_consensus.lp", "dist/bft_consensus", 1)
     build_pipeline_add_target(pipe, "Supreme Frontiers Suite", "tests/test_supreme_frontiers.lp", "dist/test_supreme_frontiers", 1)
     build_pipeline_add_target(pipe, "Live Server Stress Suite", "tests/test_live_server_stress.lp", "dist/test_live_server_stress", 1)
+    build_pipeline_add_target(pipe, "Cellular Seed Replication", "tests/test_cellular_replication.lp", "dist/test_cellular_replication", 1)
+    build_pipeline_add_target(pipe, "Standalone WASM HTML Emitter", "tests/test_standalone_wasm_html.lp", "dist/test_standalone_wasm_html", 1)
 
     say "\n▶ Executing Native LiPi Build Pipeline (0% Bash)..."
     build_pipeline_run_all(pipe)

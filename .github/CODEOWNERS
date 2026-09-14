@@ -12,8 +12,6 @@
 /std/                   @asaudola-cmyk
 /universe/              @asaudola-cmyk
 
-# Flagship Applications
-/apps/                  @asaudola-cmyk
 
 # Toolchain binaries — lipipkg, lipidbg, lipirepl, lipiconvert
 /src/tools/             @asaudola-cmyk

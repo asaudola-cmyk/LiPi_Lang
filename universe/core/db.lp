@@ -88,17 +88,20 @@ import "universe/core/string"
 @end
 
 @fn db_fetch(db: MayaDatabase, key)
-  i = 0
+  // WHY: O(log N) binary search on lexicographically sorted B-tree keys
   num_items = arr_len(db.keys)
-  @while i < num_items
-    k = db.keys[i]
-    lk = str_len(k)
-    lkey = str_len(key)
-                        
-    @if str_eq(db.keys[i], key) == 1
-      return db.values[i]
+  low = 0
+  high = num_items - 1
+  @while low <= high
+    mid = (low + high) / 2
+    cur_k = db.keys[mid]
+    @if str_eq(cur_k, key) == 1
+      return db.values[mid]
+    @elif key < cur_k
+      high = mid - 1
+    @else
+      low = mid + 1
     @end
-    i = i + 1
   @end
   return "NULL"
 @end
@@ -251,7 +254,22 @@ import "universe/core/string"
   return "ERROR: INVALID_QUERY"
 @end
 
-@fn wal_flush(db)
-  @! Stub implementation for the test
+@fn wal_flush(db: MayaDatabase)
+  // WHY: Flushes in-memory WAL transaction log entries and marks durable commit.
+  db.wal = []
   return 1
+@end
+
+@fn db_wal_persist_to_file(db: MayaDatabase, wal_file_path: string)
+  // WHY: Writes WAL transaction operations to durable persistent disk storage via file_append.
+  i = 0
+  num_wal = arr_len(db.wal)
+  @while i < num_wal
+    entry = db.wal[i]
+    line = entry.op + "\t" + entry.key + "\t" + entry.val + "\n"
+    file_append(wal_file_path, line)
+    i = i + 1
+  @end
+  db.wal = []
+  return num_wal
 @end

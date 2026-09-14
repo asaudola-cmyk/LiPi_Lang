@@ -473,7 +473,7 @@ ldd আমার_প্রোগ্রাম   # → not a dynamic executable �
 - **আর্কিটেকচার:** `docs/ARCHITECTURE.md`
 - **stdlib ডক:** `docs/STANDARD_LIBRARY.md`
 - **উদাহরণ:** `tests/*.lp` (৪২টি প্রোগ্রাম)
-- **ওয়েবসাইট:** `apps/website/` চালিয়ে দেখুন
+- **লাইভ সার্ভার ও ডেমো:** `benchmarks/servers/web_server.lp` চালিয়ে দেখুন
 
 ---
 

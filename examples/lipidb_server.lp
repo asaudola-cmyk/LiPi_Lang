@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPIDB: SOVEREIGN IN-MEMORY REDIS-COMPATIBLE DATABASE SERVER
-// File: apps/lipidb/main.lp
+// File: examples/lipidb_server.lp
 // Standard: Redis Serialization Protocol (RESP 2 / RESP 3)
 // 100% Pure Lipi Implementation — Zero Libc | Zero External Dependencies
 // ==============================================================================

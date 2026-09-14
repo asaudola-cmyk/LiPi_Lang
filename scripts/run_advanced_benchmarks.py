@@ -137,7 +137,7 @@ def compile_all_targets():
     
     # 4. Enterprise Gateway
     print("► Compiling Enterprise Gateway ...")
-    subprocess.run(["./bin/lipc", "apps/enterprise_gateway/server.lp", "-o", "apps/enterprise_gateway/gateway_bin"], check=True)
+    subprocess.run(["./bin/lipc", "benchmarks/servers/enterprise_gateway.lp", "-o", "benchmarks/servers/gateway_bin"], check=True)
     
     print("✔ All targets compiled successfully!\n")
 
@@ -231,7 +231,7 @@ def run_suite_2():
 
 def run_suite_3_microservice():
     print("\n==================================================================")
-    print("⚡ SUITE 3: ENTERPRISE ASYNC MICROSERVICE (apps/enterprise_gateway)")
+    print("⚡ SUITE 3: ENTERPRISE ASYNC MICROSERVICE (benchmarks/servers/enterprise_gateway.lp)")
     print("==================================================================")
     
     port = 8999
@@ -240,7 +240,7 @@ def run_suite_3_microservice():
     time.sleep(0.2)
     
     # Launch gateway with 1000 requests capacity
-    server_cmd = ["./apps/enterprise_gateway/gateway_bin", str(port), "1000"]
+    server_cmd = ["./benchmarks/servers/gateway_bin", str(port), "1000"]
     proc = subprocess.Popen(server_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     time.sleep(0.4)
     
@@ -255,7 +255,7 @@ def run_suite_3_microservice():
             
     initial_rss = get_proc_rss(pid)
     print(f"  • Sovereign Gateway Online (PID: {pid}, Port: {port})")
-    print(f"  • Binary Size: {round(os.path.getsize('apps/enterprise_gateway/gateway_bin') / 1024.0, 1)} KB (100% Static ELF)")
+    print(f"  • Binary Size: {round(os.path.getsize('benchmarks/servers/gateway_bin') / 1024.0, 1)} KB (100% Static ELF)")
     print(f"  • Initial Resident Memory: {initial_rss} KB")
     
     workloads = [

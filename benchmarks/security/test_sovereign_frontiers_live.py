@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-SERVER_BIN = "apps/website/lipi_server"
+SERVER_BIN = "benchmarks/servers/web_server_bin"
 TEST_PORT = 8097
 HOST = "127.0.0.1"
 
@@ -63,7 +63,7 @@ def main():
 
     # Step 1: Ensure port free and compile
     subprocess.run(["fuser", "-k", f"{TEST_PORT}/tcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["./bin/lipc", "apps/website/server.lp", "-o", SERVER_BIN], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["./bin/lipc", "benchmarks/servers/web_server.lp", "-o", SERVER_BIN], check=True, stdout=subprocess.DEVNULL)
 
     # Step 2: Start server
     proc = subprocess.Popen([SERVER_BIN, str(TEST_PORT)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -92,7 +92,7 @@ def main():
         log_test("WAL-backed DB Delete (/api/db/delete)", code == 200 and "soft deleted" in body)
 
         # Verify WAL file exists and has content
-        wal_path = "apps/website/data/sovereign_store.wal"
+        wal_path = "benchmarks/data/sovereign_store.wal"
         log_test("Physical WAL persistence file", os.path.exists(wal_path) and os.path.getsize(wal_path) >= 64)
 
         # ── Test 3: RFC 6455 Real-Time WebSockets Engine ─────────────────────

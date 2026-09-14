@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN WEBSOCKET REAL-TIME ENGINE: RFC 6455
-// File: apps/website/ws_engine.lp
+// File: universe/net/ws_engine.lp
 // ⚡ 100% Pure Native Lipi First 1.0.0 | Zero Libc | Pure Silicon Machine Code
 //
 // WHY: Enables full-duplex, bi-directional real-time communication between browser

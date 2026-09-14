@@ -1148,3 +1148,17 @@ fn to_upper s
 
 fn to_lower s
     return lower(s)
+
+// ── ৭. ইউনিকোড ও বাংলা রুন ব্রিজ (Unicode & Bengali Rune Bridge) ───────────────
+// WHY: Exposes Unicode-safe character counting and slicing through canonical string API
+// without breaking legacy byte-level str_len or str_slice.
+include "universe/core/unicode.lp"
+
+fn str_rune_len s
+    return utf8_rune_len(s)
+
+fn str_rune_slice s start count
+    return utf8_rune_slice(s, start, count)
+
+fn str_rune_at s idx
+    return utf8_rune_at(s, idx)

@@ -1,7 +1,7 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN WEBASSEMBLY BACKGROUND WORKER (lipi_worker.js)
 // ⚡ Off-Thread Pure Client-Side Execution | 0% C | 0% Emscripten | 0% External Libs
-// 🏛️ File: apps/website/public/lipi_worker.js
+// 🏛️ File: src/runtime/wasm/lipi_worker.js
 //
 // WHY: WebAssembly programs in Lipi can perform computationally heavy tasks
 //      (e.g., recursive algorithms, raymarching, linear algebra, compiler passes).

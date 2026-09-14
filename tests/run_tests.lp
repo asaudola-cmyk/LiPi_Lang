@@ -658,6 +658,14 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
+    if run_single_test(compiler, "tests/test_cellular_replication.lp", "test_cellular_replication") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_standalone_wasm_html.lp", "test_standalone_wasm_html") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
 
     say ""
     say "========================================================================"

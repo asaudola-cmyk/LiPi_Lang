@@ -131,14 +131,14 @@ def benchmark_category(title, targets):
 
 def benchmark_web_engine():
     print(f"\n================================================================================")
-    print(f"  👑 BENCHMARK 3: LIPI SOVEREIGN WEB ENGINE (apps/website/server.lp)")
+    print(f"  👑 BENCHMARK 3: LIPI SOVEREIGN WEB ENGINE (benchmarks/servers/web_server.lp)")
     print(f"================================================================================")
     
     port = 8999
     server_bin = "dist/server/server"
     if not os.path.exists(server_bin):
         print("Compiling server...")
-        subprocess.run(["./bin/lipc", "apps/website/server.lp", "-o", server_bin], check=True)
+        subprocess.run(["./bin/lipc", "benchmarks/servers/web_server.lp", "-o", server_bin], check=True)
         
     server_size_kb = os.path.getsize(server_bin) / 1024.0
     

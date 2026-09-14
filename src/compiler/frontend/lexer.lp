@@ -126,21 +126,30 @@ import "compiler/frontend/ast"
     return { char_str: "", next_pos: pos }
   @end
   esc_c = str_char_at(source, pos)
-  @if esc_c == 110 @! 'n'
-    return { char_str: "", next_pos: pos + 1 }
-  @elif esc_c == 116 @! 't'
-    return { char_str: "", next_pos: pos + 1 }
-  @elif esc_c == 114 @! 'r'
-    return { char_str: "", next_pos: pos + 1 }
-  @elif esc_c == 48 @! '0'
-    return { char_str: "", next_pos: pos + 1 }
-  @elif esc_c == 92 @! '\\'
-    return { char_str: "", next_pos: pos + 1 }
-  @elif esc_c == 34 @! '"'
-    return { char_str: "", next_pos: pos + 1 }
-  @elif esc_c == 39 @! '\''
+  @if esc_c == 110 @! 'n' -> newline (0x0A)
+    return { char_str: str_from_char_code(10), next_pos: pos + 1 }
+  @elif esc_c == 116 @! 't' -> tab (0x09)
+    return { char_str: str_from_char_code(9), next_pos: pos + 1 }
+  @elif esc_c == 114 @! 'r' -> carriage return (0x0D)
+    return { char_str: str_from_char_code(13), next_pos: pos + 1 }
+  @elif esc_c == 101 @! 'e' -> ESC (0x1B)
+    return { char_str: str_from_char_code(27), next_pos: pos + 1 }
+  @elif esc_c == 48 @! '0' -> null (0x00) or octal escape \033
+    @if pos + 2 < num_items
+      c1 = str_char_at(source, pos + 1)
+      c2 = str_char_at(source, pos + 2)
+      @if c1 == 51 && c2 == 51 @! \033 -> ESC (0x1B)
+        return { char_str: str_from_char_code(27), next_pos: pos + 3 }
+      @end
+    @end
+    return { char_str: str_from_char_code(0), next_pos: pos + 1 }
+  @elif esc_c == 92 @! '\\' -> backslash
+    return { char_str: "\\", next_pos: pos + 1 }
+  @elif esc_c == 34 @! '"' -> double quote
+    return { char_str: "\"", next_pos: pos + 1 }
+  @elif esc_c == 39 @! '\'' -> single quote
     return { char_str: "'", next_pos: pos + 1 }
-  @elif esc_c == 120 && pos + 2 < num_items @! 'x'
+  @elif esc_c == 120 && pos + 2 < num_items @! 'x' -> hex escape \xNN
     h1 = str_char_at(source, pos + 1)
     h2 = str_char_at(source, pos + 2)
     @if lex_is_hex_digit(h1) == 1 && lex_is_hex_digit(h2) == 1

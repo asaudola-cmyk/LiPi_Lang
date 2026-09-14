@@ -330,4 +330,25 @@ fn obj_has_ptrs payload_ptr
     flags = obj_get_flags(payload_ptr)
     return (flags % 8) / 4
 
+// ── ১০. ৬৪-বাইট হার্ডওয়্যার ক্যাশলাইন মেমরি প্রিমাক্স (64-Byte Hardware Cacheline Primitives) ─
+// WHY: আধুনিক AMD64 ও AArch64 প্রসেসরে L1/L2 ক্যাশলাইন বাউন্ডারি হলো ৬৪ বাইট (64 bytes)।
+// এই প্রিমাক্সগুলো সরাসরি মেমরির পয়েন্টারকে ৬৪-বাইটে অ্যালাইন করে এবং কার্নেল পেজ বরাদ্দের
+// সাথে হার্ডওয়্যার লেভেল সিঙ্ক্রোনাইজেশন নিশ্চিত করে যাতে ফলস-শেয়ারিং শূন্য হয়।
+
+fn mem_cacheline_align_up val
+    rem = val % 64
+    if rem == 0
+        return val
+    return val + (64 - rem)
+
+fn মেমরি_ক্যাশলাইন_অ্যালাইন val
+    return mem_cacheline_align_up(val)
+
+fn mem_alloc_cacheline size
+    real_size = mem_cacheline_align_up(size)
+    return malloc(real_size)
+
+fn মেমরি_বরাদ্দ_ক্যাশলাইন সাইজ
+    return mem_alloc_cacheline(সাইজ)
+
 

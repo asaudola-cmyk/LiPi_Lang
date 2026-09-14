@@ -3,7 +3,7 @@
 // ⚡ Tests FIPS 180-1 SHA-1, RFC 4648 Base64, Handshake Derivation, and Frame Masking
 // ==============================================================================
 
-include "apps/website/ws_engine.lp"
+include "universe/net/ws_engine.lp"
 
 fn assert_true cond test_name
     if cond == 0

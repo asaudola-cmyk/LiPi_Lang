@@ -217,7 +217,11 @@ import "compiler/frontend/lexer"
   @elif tok.tok_type == "BIN_INT"
     return { node: ast_literal_int(tok.tok_int_val), next_pos: p + 1 }
   @elif tok.tok_type == "FLOAT"
-    return { node: ast_literal_float(0), next_pos: p + 1 }
+    f_val = tok.tok_float_val
+    @if f_val == 0 && tok.tok_val != "0" && tok.tok_val != "0.0"
+      f_val = tok.tok_val
+    @end
+    return { node: ast_literal_float(f_val), next_pos: p + 1 }
 
   @! 2. Strings & Interpolated Strings
   @elif tok.tok_type == "STR"

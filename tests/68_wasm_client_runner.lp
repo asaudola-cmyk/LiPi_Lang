@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧪 LIPI TEST 68: Client-Side WebAssembly Runner & Worker Suite
-// ⚡ Direct Verification of apps/website/public/wasm_runner.js & lipi_worker.js
+// ⚡ Direct Verification of src/runtime/wasm/wasm_runner.js & lipi_worker.js
 // 🏛️ File: tests/68_wasm_client_runner.lp
 //
 // WHY: Validates the client-side JavaScript execution runtime (wasm_runner.js)

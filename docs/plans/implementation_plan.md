@@ -407,7 +407,7 @@ graph TD
   - *Directive*: Upgrade VSCode extension TextMate grammar to highlight all 3 syntax styles and connect with Lipi's native LSP daemon.
 - **Agent 50 (Web Engine & In-Browser WASM Specialist)**:
   - *Role*: Full-Stack Web Specialist
-  - *Target*: `universe/web/` & `apps/website/`
+  - *Target*: `universe/web/` & `src/runtime/wasm/`
   - *Directive*: Ingest Maya's polymorphic web server (FastCGI + VPS Daemon) and ensure seamless operation with Lipi's in-browser WebAssembly virtual silicon.
 - **Agent 51 (Official Packages & Examples Specialist)**:
   - *Role*: Ecosystem Modules Specialist
@@ -628,7 +628,7 @@ The consolidated master repository at `/home/shafiullah/Documents/file/work/lipi
 │   ├── database_demo.lp                 # B+Tree ও ট্রানজ্যাকশন ডেমো
 │   └── unikernel_cloud.lp               # ৫ms ক্লাউড মাইক্রোভিম বুট
 ├── editors/vscode/                      # ভিজ্যুয়াল স্টুডিও কোড এক্সটেনশন (৩টি সিনট্যাক্স সাপোর্ট)
-├── apps/website/                        # অফিশিয়াল ফুল-স্ট্যাক ওয়েবসাইট ও ডুয়াল-ইঞ্জিন WASM প্লেগ্রাউন্ড
+├── src/runtime/wasm/                    # ক্লায়েন্ট-সাইড WASM রানার ও অফ-থ্রেড ওয়ার্কার
 ├── dist/                                # lipi-os.iso, lipi-unikernel.bin, kernel.elf
 ├── tests/                               # ৪৪টি ক্যাটাগরির ১১২,০০০+ লাইনের মেগা টেস্ট স্যুট
 ├── build.sh                             # ৩-স্টেজ সেলফ-হোস্টিং ডিটারমিনিস্টিক বুটস্ট্র্যাপ
