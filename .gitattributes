@@ -23,6 +23,7 @@
 *.sh text eol=lf
 
 # Canonical Bootstrap Binary Seed & Graphic Assets
+src/boot/lipi-seed binary
 boot/lipi-seed binary
 *.png binary
 *.jpg binary

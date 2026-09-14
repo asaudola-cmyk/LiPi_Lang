@@ -48,7 +48,7 @@ fn show_version
     print_lipi_banner()
     say "Lipi Sovereign Compiler & Universe Core — First 1.0.0 (প্রথম ১.০.০)"
     say "Target: x86_64-unknown-linux-musl-freestanding"
-    say "Bootstrap Seed: boot/lipi-seed (100% Native Silicon Machine Code)"
+    say "Bootstrap Seed: src/boot/lipi-seed (100% Native Silicon Machine Code)"
     say "Multi-Target Emitters: ELF64, PE32+ (Windows), Mach-O (macOS), WASM, RISC-V"
     say "Status: Sovereign, Independent, Bit-for-Bit Deterministic Closure"
 
@@ -305,7 +305,10 @@ fn handle_ai model_path prompt
 fn handle_spawn_seed target_path
     dest = target_path
     if len(dest) == 0
-        dest = "boot/lipi-seed"
+        dest = "src/boot/lipi-seed"
+
+    // Ensure src/boot directory exists via Linux sys_mkdir (39) with mode 0755
+    syscall(39, "src/boot", 493, 0, 0, 0, 0)
 
     say ""
     say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
@@ -316,7 +319,9 @@ fn handle_spawn_seed target_path
 
     // Locate the highest-fidelity compiler binary available on the local machine
     src_seed = ""
-    if dest != "boot/lipi-seed" and syscall(21, "boot/lipi-seed", 0, 0, 0, 0, 0) == 0
+    if dest != "src/boot/lipi-seed" and syscall(21, "src/boot/lipi-seed", 0, 0, 0, 0, 0) == 0
+        src_seed = "src/boot/lipi-seed"
+    elif dest != "boot/lipi-seed" and syscall(21, "boot/lipi-seed", 0, 0, 0, 0, 0) == 0
         src_seed = "boot/lipi-seed"
     elif syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0
         src_seed = "bin/lipc_bin"
@@ -517,7 +522,7 @@ fn main
         return handle_self_build()
 
     if cmd == "spawn-seed" or cmd == "replicate"
-        target_path = "boot/lipi-seed"
+        target_path = "src/boot/lipi-seed"
         if argc >= 3 target_path = get(args, 2)
         return handle_spawn_seed(target_path)
 

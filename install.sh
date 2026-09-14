@@ -96,9 +96,16 @@ create_command() {
     mkdir -p "$LIPI_BIN_DIR"
     
     # Ensure canonical compiler binary exists from bootstrap seed
+    # WHY: Fresh clones need the autonomous genesis seed to instantiate the compiler
     if [ ! -x "$LIPI_INSTALL_DIR/bin/lipc_bin" ]; then
-        if [ -f "$LIPI_INSTALL_DIR/boot/lipi-seed" ]; then
+        if [ -f "$LIPI_INSTALL_DIR/src/boot/lipi-seed" ]; then
+            cp "$LIPI_INSTALL_DIR/src/boot/lipi-seed" "$LIPI_INSTALL_DIR/bin/lipc_bin"
+            chmod +x "$LIPI_INSTALL_DIR/bin/lipc_bin"
+        elif [ -f "$LIPI_INSTALL_DIR/boot/lipi-seed" ]; then
             cp "$LIPI_INSTALL_DIR/boot/lipi-seed" "$LIPI_INSTALL_DIR/bin/lipc_bin"
+            chmod +x "$LIPI_INSTALL_DIR/bin/lipc_bin"
+        elif [ -f "$LIPI_INSTALL_DIR/src/boot/seed.b64" ]; then
+            base64 -d "$LIPI_INSTALL_DIR/src/boot/seed.b64" | gzip -d > "$LIPI_INSTALL_DIR/bin/lipc_bin"
             chmod +x "$LIPI_INSTALL_DIR/bin/lipc_bin"
         elif [ -f "$LIPI_INSTALL_DIR/boot/seed.b64" ]; then
             base64 -d "$LIPI_INSTALL_DIR/boot/seed.b64" | gzip -d > "$LIPI_INSTALL_DIR/bin/lipc_bin"

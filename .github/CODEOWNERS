@@ -17,6 +17,7 @@
 /src/tools/             @asaudola-cmyk
 
 # Bootstrap seed — CRITICAL: this is the single pre-compiled binary
+/src/boot/              @asaudola-cmyk
 /boot/                  @asaudola-cmyk
 
 # CI/CD — pipeline configuration

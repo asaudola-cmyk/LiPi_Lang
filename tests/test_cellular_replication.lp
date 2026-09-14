@@ -76,8 +76,10 @@ fn main
 
     // ── Phase 1: Replicate Genesis Seed via Direct Kernel Syscalls ─────────────
     say "\n[Phase 1]: Replicating Genesis Seed..."
-    src_binary = ""
-    if syscall(21, "boot/lipi-seed", 0, 0, 0, 0, 0) == 0
+    // WHY: In LiPi First 1.0.0, the genesis bootstrap seed resides in src/boot/
+    if syscall(21, "src/boot/lipi-seed", 0, 0, 0, 0, 0) == 0
+        src_binary = "src/boot/lipi-seed"
+    elif syscall(21, "boot/lipi-seed", 0, 0, 0, 0, 0) == 0
         src_binary = "boot/lipi-seed"
     elif syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0
         src_binary = "bin/lipc_bin"
