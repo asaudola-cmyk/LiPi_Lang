@@ -159,6 +159,10 @@ fn handle_test suite_path
         syscall(87, tmp_tst, 0, 0, 0, 0, 0)
         return tst_code
     else
+        if syscall(21, "tests", 0, 0, 0, 0, 0) != 0 and syscall(21, "tests/01_hello.lp", 0, 0, 0, 0, 0) != 0
+            say "\033[1;33m[LIPI TEST]\033[0m No tests/ directory found in current working directory."
+            say "Run \x27lipi test <file.lp>\x27 to test a specific file, or run from within a Lipi project."
+            return 0
         say "\033[1;34m[LIPI TEST]\033[0m Executing complete sovereign regression test suite..."
         t_bin = resolve_bin_path("lipi-test")
         if syscall(21, t_bin, 0, 0, 0, 0, 0) == 0

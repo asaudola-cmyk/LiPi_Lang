@@ -8572,25 +8572,44 @@ fn map_legacy_stdlib inc_name
     return ""
 
 fn resolve_inc_path cur_dir inc_name
+    target = inc_name
     legacy = map_legacy_stdlib(inc_name)
     if len(legacy) > 0
-        return legacy
-    r = check_file_ext(inc_name)
+        target = legacy
+    r = check_file_ext(target)
     if len(r) > 0
         return r
-    r = check_file_ext(cur_dir + "/" + inc_name)
+    r = check_file_ext(cur_dir + "/" + target)
     if len(r) > 0
         return r
-    r = check_file_ext("universe/" + inc_name)
+    r = check_file_ext(cur_dir + "/../" + target)
     if len(r) > 0
         return r
-    r = check_file_ext("src/" + inc_name)
+    r = check_file_ext("/home/shafiullah/.lipi/" + target)
     if len(r) > 0
         return r
-    r = check_file_ext("../" + inc_name)
+    r = check_file_ext("/home/shafiullah/Documents/file/work/lipi/" + target)
     if len(r) > 0
         return r
-    return cur_dir + "/" + inc_name
+    r = check_file_ext("universe/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext(cur_dir + "/../universe/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext("/home/shafiullah/.lipi/universe/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext("src/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext(cur_dir + "/../src/" + target)
+    if len(r) > 0
+        return r
+    r = check_file_ext("../" + target)
+    if len(r) > 0
+        return r
+    return cur_dir + "/" + target
 
 fn check_inc_prefix content p clen
     ch = char_at(content, p)
