@@ -706,6 +706,22 @@ fn main
     else
         failed = failed + 1
 
+    // ── Pure Sovereign Media & Network Protocols (Tests 155-157) ─────────────────
+    // WHY: Proves LiPi's complete autonomy from C/FFmpeg/ALSA/Libc resolvers:
+    // synthesizes PCM 44.1kHz audio, rasterizes 24-bit BMP frames, and resolves DNS queries directly.
+    if run_single_test(compiler, "tests/test_audio_wav.lp", "test_audio_wav") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_video_canvas.lp", "test_video_canvas") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_dns_resolver.lp", "test_dns_resolver") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
 
 
     say ""

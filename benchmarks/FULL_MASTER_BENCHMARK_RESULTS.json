@@ -1,0 +1,160 @@
+{
+  "timestamp": "2026-09-16 00:26:42",
+  "hardware": "Intel Core i3-8100 CPU @ 3.60GHz (4 Cores), Linux x86_64",
+  "suite1_loops": [
+    {
+      "lang": "C (GCC 13.3 -O3)",
+      "best_time_ms": 11.18,
+      "cycles": 40269860,
+      "bin_size": "15.7 KB"
+    },
+    {
+      "lang": "C++ (G++ 13.3 -O3)",
+      "best_time_ms": 10.7,
+      "cycles": "N/A",
+      "bin_size": "16.0 KB"
+    },
+    {
+      "lang": "Rust (rustc 1.97 -O3)",
+      "best_time_ms": 16.9,
+      "cycles": "N/A",
+      "bin_size": "4284.3 KB"
+    },
+    {
+      "lang": "Zig (zig 0.13 -O ReleaseFast)",
+      "best_time_ms": 3.99,
+      "cycles": "N/A",
+      "bin_size": "1706.8 KB"
+    },
+    {
+      "lang": "Go (go 1.22.5)",
+      "best_time_ms": 12.62,
+      "cycles": "N/A",
+      "bin_size": "1873.2 KB"
+    },
+    {
+      "lang": "Python 3.12 (CPython)",
+      "best_time_ms": 1536.4,
+      "cycles": "N/A",
+      "bin_size": "N/A"
+    },
+    {
+      "lang": "\ud83d\udc51 LiPi First 1.0.0",
+      "best_time_ms": 0.32,
+      "cycles": 72,
+      "bin_size": "6.5 KB"
+    }
+  ],
+  "suite2_columnstore": [
+    {
+      "lang": "C (AVX2 -O3)",
+      "best_time_ms": 1.43,
+      "throughput_m_rows_sec": 699.3,
+      "cycles": 5189314,
+      "bin_size": "15.7 KB"
+    },
+    {
+      "lang": "C++ (AVX2 -O3)",
+      "best_time_ms": 1.14,
+      "throughput_m_rows_sec": 873.71,
+      "cycles": 4146500,
+      "bin_size": "16.0 KB"
+    },
+    {
+      "lang": "Rust (AVX2 -O3)",
+      "best_time_ms": 0.32,
+      "throughput_m_rows_sec": 3125.0,
+      "cycles": "N/A",
+      "bin_size": "4284.7 KB"
+    },
+    {
+      "lang": "Zig (AVX2 ReleaseFast)",
+      "best_time_ms": 0.32,
+      "throughput_m_rows_sec": 3125.0,
+      "cycles": "N/A",
+      "bin_size": "1706.7 KB"
+    },
+    {
+      "lang": "Go (go 1.22.5)",
+      "best_time_ms": 1.12,
+      "throughput_m_rows_sec": 892.86,
+      "cycles": "N/A",
+      "bin_size": "1873.2 KB"
+    },
+    {
+      "lang": "\ud83d\udc51 LiPi First 1.0.0",
+      "best_time_ms": 16.18,
+      "throughput_m_rows_sec": 61.79,
+      "cycles": 4391632,
+      "bin_size": "32.7 KB"
+    }
+  ],
+  "suite3_network_rps": [
+    {
+      "rps": 146221.7,
+      "latency_avg": "24.65us",
+      "latency_p99": "108.00us",
+      "transfer_sec": "14.22MB",
+      "name": "C (GCC 13.3 -O3)",
+      "lang": "C",
+      "binary_size_kb": 16.23,
+      "ram_rss_kb": 1584,
+      "raw_output": "Running 10s test @ http://127.0.0.1:8001/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    24.65us   57.85us   6.41ms   98.70%\n    Req/Sec    73.94k    23.99k  111.27k    57.50%\n  Latency Distribution\n     50%   22.00us\n     75%   25.00us\n     90%   27.00us\n     99%  108.00us\n  1469389 requests in 10.05s, 142.93MB read\nRequests/sec: 146221.70\nTransfer/sec:     14.22MB\n"
+    },
+    {
+      "rps": 156591.19,
+      "latency_avg": "22.82us",
+      "latency_p99": "69.00us",
+      "transfer_sec": "15.23MB",
+      "name": "C++ (G++ 13.3 -O3)",
+      "lang": "C++",
+      "binary_size_kb": 22.53,
+      "ram_rss_kb": 3656,
+      "raw_output": "Running 10s test @ http://127.0.0.1:8002/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    22.82us   36.79us   4.37ms   98.80%\n    Req/Sec    79.23k    24.83k  115.41k    54.50%\n  Latency Distribution\n     50%   22.00us\n     75%   25.00us\n     90%   26.00us\n     99%   69.00us\n  1574272 requests in 10.05s, 153.14MB read\nRequests/sec: 156591.19\nTransfer/sec:     15.23MB\n"
+    },
+    {
+      "rps": 117677.57,
+      "latency_avg": "27.44us",
+      "latency_p99": "102.00us",
+      "transfer_sec": "11.45MB",
+      "name": "Rust (rustc 1.97 -O3)",
+      "lang": "Rust",
+      "binary_size_kb": 4304.92,
+      "ram_rss_kb": 2100,
+      "raw_output": "Running 10s test @ http://127.0.0.1:8003/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    27.44us   51.79us   3.13ms   98.70%\n    Req/Sec   119.16k    18.06k  133.49k    86.00%\n  Latency Distribution\n     50%   27.00us\n     75%   28.00us\n     90%   32.00us\n     99%  102.00us\n  1183520 requests in 10.06s, 115.13MB read\nRequests/sec: 117677.57\nTransfer/sec:     11.45MB\n"
+    },
+    {
+      "rps": 78267.53,
+      "latency_avg": "1.75ms",
+      "latency_p99": "9.14ms",
+      "transfer_sec": "10.38MB",
+      "name": "Go (go 1.22.5 std net/http)",
+      "lang": "Go",
+      "binary_size_kb": 6908.14,
+      "ram_rss_kb": 13868,
+      "raw_output": "Running 10s test @ http://127.0.0.1:8004/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency     1.75ms    2.03ms  24.58ms   86.49%\n    Req/Sec    19.70k     4.40k   29.94k    67.50%\n  Latency Distribution\n     50%    1.10ms\n     75%    2.53ms\n     90%    4.38ms\n     99%    9.14ms\n  785651 requests in 10.04s, 104.15MB read\nRequests/sec:  78267.53\nTransfer/sec:     10.38MB\n"
+    },
+    {
+      "rps": 123411.02,
+      "latency_avg": "25.84us",
+      "latency_p99": "74.00us",
+      "transfer_sec": "12.00MB",
+      "name": "Zig (zig 0.13 -O ReleaseFast)",
+      "lang": "Zig",
+      "binary_size_kb": 1692.76,
+      "ram_rss_kb": 220,
+      "raw_output": "Running 10s test @ http://127.0.0.1:8005/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    25.84us   35.85us   2.14ms   98.74%\n    Req/Sec   124.92k     6.03k  132.69k    77.00%\n  Latency Distribution\n     50%   27.00us\n     75%   28.00us\n     90%   30.00us\n     99%   74.00us\n  1240950 requests in 10.06s, 120.71MB read\nRequests/sec: 123411.02\nTransfer/sec:     12.00MB\n"
+    },
+    {
+      "rps": 123876.63,
+      "latency_avg": "25.84us",
+      "latency_p99": "72.00us",
+      "transfer_sec": "12.05MB",
+      "name": "LiPi (First 1.0.0 100% Sovereign)",
+      "lang": "LiPi",
+      "binary_size_kb": 8.74,
+      "ram_rss_kb": 48,
+      "raw_output": "Running 10s test @ http://127.0.0.1:8006/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    25.84us   34.77us   4.21ms   98.64%\n    Req/Sec   125.38k    11.38k  133.85k    89.00%\n  Latency Distribution\n     50%   27.00us\n     75%   28.00us\n     90%   30.00us\n     99%   72.00us\n  1246018 requests in 10.06s, 121.21MB read\nRequests/sec: 123876.63\nTransfer/sec:     12.05MB\n"
+    }
+  ]
+}

@@ -26,7 +26,8 @@ fn worker_loop port
     syscall(54, s_fd, 1, 2, opt_buf, 4, 0)
     // SOL_SOCKET = 1, SO_REUSEPORT = 15
     syscall(54, s_fd, 1, 15, opt_buf, 4, 0)
-    free(opt_buf, 8)
+    // IPPROTO_TCP = 6, TCP_NODELAY = 1
+    syscall(54, s_fd, 6, 1, opt_buf, 4, 0)
 
     addr_buf = malloc(16)
     i = 0
@@ -45,6 +46,7 @@ fn worker_loop port
     b_res = syscall(49, s_fd, addr_buf, 16, 0, 0, 0)
     free(addr_buf, 16)
     if b_res < 0
+        free(opt_buf, 8)
         syscall(3, s_fd, 0, 0, 0, 0, 0)
         return 0
 
@@ -57,6 +59,8 @@ fn worker_loop port
     while 1
         client_fd = syscall(43, s_fd, 0, 0, 0, 0, 0)
         if client_fd >= 0
+            // WHY: Disable Nagle on client socket for ultra-low latency
+            syscall(54, client_fd, 6, 1, opt_buf, 4, 0)
             while 1
                 nread = syscall(0, client_fd, buf, 2048, 0, 0, 0)
                 if nread <= 0
@@ -67,6 +71,7 @@ fn worker_loop port
             syscall(3, client_fd, 0, 0, 0, 0, 0)
 
     free(buf, 2048)
+    free(opt_buf, 8)
     syscall(3, s_fd, 0, 0, 0, 0, 0)
     return 0
 
