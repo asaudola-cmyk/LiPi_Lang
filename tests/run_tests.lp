@@ -695,6 +695,18 @@ fn main
     else
         failed = failed + 1
 
+    // ── Real-World Sovereign Flagship Showcases (Tests 153-154) ───────────────
+    // WHY: Continuous end-to-end verification of standalone microservices and TUI engines.
+    if run_single_test(compiler, "examples/cloudless_micro_universe.lp", "test_cloudless_micro_universe") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "examples/silicon_tui_dashboard.lp", "test_silicon_tui_dashboard") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+
 
     say ""
     say "========================================================================"

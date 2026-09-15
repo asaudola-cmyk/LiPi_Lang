@@ -36,7 +36,7 @@ fn print_usage
     say "  \033[1;32mlsp\033[0m                     Launch Language Server Protocol daemon (IDE Server)"
     say "  \033[1;32mpkg\033[0m <subcommand>        Sovereign Ed25519 cryptographic package manager (LPM)"
     say "  \033[1;32mdebug\033[0m <binary>          Launch sys_ptrace native system debugger (LipiDbg)"
-    say "  \033[1;32mos\033[0m [build|boot]         Bare-metal Multiboot kernel & 5ms cloud unikernel"
+    say "  \033[1;32mos|unikernel\033[0m [build|boot] Bare-metal Multiboot kernel & 5ms cloud unikernel"
     say "  \033[1;32munum\033[0m <file.lp>          Synthesize Gödel Universal Prime State Number"
     say "  \033[1;32mai\033[0m <model.gguf>         Direct silicon AVX2 SIMD GGUF local LLM inference"
     say "  \033[1;32mclean\033[0m                   Purge temporary build caches and scratch binaries (0% Shell)"
@@ -519,7 +519,7 @@ fn main
         if argc >= 4 to_s = get(args, 3)
         return handle_convert(get(args, 2), to_s)
 
-    if cmd == "os"
+    if cmd == "os" or cmd == "unikernel"
         act = "build"
         if argc >= 3 act = get(args, 2)
         return handle_os(act)

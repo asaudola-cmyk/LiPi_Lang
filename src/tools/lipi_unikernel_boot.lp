@@ -20,6 +20,9 @@
 //   `qemu-system-x86_64 -kernel lipi_kernel.bin -nographic -serial mon:stdio`
 // ==============================================================================
 
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
+
 // ── 1. Multiboot2 & x86 Hardware Constants ────────────────────────────────────
 MULTIBOOT2_MAGIC          = 3897741526 // 0xE85250D6
 MULTIBOOT2_ARCH_I386      = 0          // 32-bit protected mode entry
@@ -250,3 +253,43 @@ fn unikernel_build_image builder
     
     builder.ub_total_image_size = len(img) + 4096 // Header + 4KB Long Mode page tables
     return img
+
+fn main
+    say "════════════════════════════════════════════════════════════════════════"
+    say "  👑 LIPI SOVEREIGN OS: BARE-METAL RING-0 UNIKERNEL BUILD ENGINE"
+    say "  ⚡ Direct Multiboot2 (0xE85250D6) Silicon Image Builder"
+    say "════════════════════════════════════════════════════════════════════════"
+
+    builder = unikernel_builder_new("lipi_os_kernel")
+    img = unikernel_build_image(builder)
+
+    // Ensure dist directory exists via Linux sys_mkdir (83)
+    syscall(83, "dist", 493, 0, 0, 0, 0)
+
+    out_path = "dist/lipi_kernel.bin"
+    // Open for writing: O_WRONLY(1) | O_CREAT(64) | O_TRUNC(512) = 577, mode 0755 = 493
+    fd = syscall(2, out_path, 577, 493, 0, 0, 0)
+    if fd < 0
+        say "❌ Failed to open output kernel file: " + out_path
+        return 1
+
+    img_len = len(img)
+    buf = malloc(img_len)
+    i = 0
+    while i < img_len
+        b_val = get(img, i)
+        mem_byte_write(buf, i, b_val)
+        i = i + 1
+
+    syscall(1, fd, buf, img_len, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0) // SYS_fsync
+    syscall(3, fd, 0, 0, 0, 0, 0)  // SYS_close
+    free(buf, img_len)
+
+    say "  ✔ Output binary written: " + out_path + " (" + str(img_len) + " bytes Multiboot2 image)"
+    say "  ✔ Target: Ring-0 x86_64 Bare-Metal / QEMU MicroVM"
+    say "  ✔ Status: Autonomous Sovereign Unikernel Ready"
+    return 0
+
+main()
+
