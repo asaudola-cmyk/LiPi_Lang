@@ -32,6 +32,8 @@ lipi_modules/
 # Compiled Benchmark & Server Binaries
 benchmarks/servers/web_server_bin
 benchmarks/servers/gateway_bin
+benchmarks/rps/bin_*
+
 
 # Generic object files and binaries
 *.o
