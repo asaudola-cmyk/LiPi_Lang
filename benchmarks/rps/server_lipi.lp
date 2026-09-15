@@ -59,8 +59,6 @@ fn worker_loop port
     while 1
         client_fd = syscall(43, s_fd, 0, 0, 0, 0, 0)
         if client_fd >= 0
-            // WHY: Disable Nagle on client socket for ultra-low latency
-            syscall(54, client_fd, 6, 1, opt_buf, 4, 0)
             while 1
                 nread = syscall(0, client_fd, buf, 2048, 0, 0, 0)
                 if nread <= 0
@@ -77,19 +75,18 @@ fn worker_loop port
 
 fn main
     port = 8006
-    say "[LiPi] Sovereign HTTP Server starting on 0.0.0.0:8006 with 4 worker processes"
+    say "[LiPi] Sovereign HTTP Server starting on 0.0.0.0:8006 with 8 worker processes"
 
-    // Fork 3 child workers so we have 4 worker processes total across all 4 CPU cores
+    // WHY: 8 Kernel Worker Processes distribute across CPU cores and overlap I/O wait states
     w = 0
-    while w < 3
+    while w < 7
         pid = syscall(57, 0, 0, 0, 0, 0, 0) // sys_fork (57)
         if pid == 0
-            // Child worker process
             worker_loop(port)
             syscall(60, 0, 0, 0, 0, 0, 0) // sys_exit (60)
         w = w + 1
 
-    // Parent worker process runs as 4th worker
+    // Parent worker process runs as 8th worker
     worker_loop(port)
     return 0
 

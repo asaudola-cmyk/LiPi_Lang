@@ -19,12 +19,28 @@ while i < n
     sys_poke(buf + (i * 8), i % 100)
     i = i + 1
 
+ts = malloc(16)
+syscall(228, 1, ts, 0, 0, 0, 0)
+s_sec = mem_read(ts, 0)
+s_nsec = mem_read(ts, 8)
+
 start_c = cpu_clock()
 total = simd_avx2_sum(buf, n)
 end_c = cpu_clock()
 
-say "Lipi AVX2 256-Bit SIMD 1,000,000 Scan Complete!"
-say "Sum: " + str(total)
-say "CPU Cycles: " + str(end_c - start_c)
+syscall(228, 1, ts, 0, 0, 0, 0)
+e_sec = mem_read(ts, 0)
+e_nsec = mem_read(ts, 8)
 
 free(buf, n * 8)
+free(ts, 16)
+
+cycles = end_c - start_c
+delta_us = ((e_sec - s_sec) * 1000000) + ((e_nsec - s_nsec) / 1000)
+ms_int = delta_us / 1000
+ms_frac = (delta_us % 1000) / 10
+
+say "Lipi AVX2 256-Bit SIMD 1,000,000 Scan Complete!"
+say "Sum: " + str(total)
+say "Elapsed Time: " + str(ms_int) + "." + str(ms_frac) + " ms"
+say "CPU Cycles: " + str(cycles)

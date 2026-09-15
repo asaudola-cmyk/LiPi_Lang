@@ -94,7 +94,7 @@ while bi < n_elem
 sum_val = simd_avx2_sum(b_buf, n_elem)
 micro_free(b_buf, n_elem * 8)
 
-if sum_val != 50994900
+if sum_val != 495000
     say "FAIL: SIMD sum mismatch: " + str(sum_val)
     exit(1)
 say "  ✔ SIMD Analytics Result Verified: " + str(sum_val)

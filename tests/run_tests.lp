@@ -722,6 +722,42 @@ fn main
     else
         failed = failed + 1
 
+    // ── Enterprise Micro-Architectural Subsystem Suites (Tests 158-165) ───────────
+    // WHY: Verifies all 110 modular micro-files across Core, Diagnostics, Lexer/AST,
+    // Semantics, SSA IR & 12 Optimizers, RegAlloc & Targets, Formats, and Toolkit.
+    if run_single_test(compiler, "tests/31_core_silicon_primitives.lp", "test_core_silicon_primitives") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_diagnostics.lp", "test_diagnostics_subsystem") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_micro_lexer_ast.lp", "test_micro_lexer_ast") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_semantics_engine.lp", "test_semantics_engine") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_middleend_ssa_opt.lp", "test_middleend_ssa_opt") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_silicon_regalloc_targets.lp", "test_silicon_regalloc_targets") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/52_binary_formats_subsystem.lp", "test_binary_formats_subsystem") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_toolkit_subsystem.lp", "test_toolkit_subsystem") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
 
 
     say ""

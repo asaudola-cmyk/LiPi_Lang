@@ -1,68 +1,68 @@
 [
   {
-    "rps": 146221.7,
-    "latency_avg": "24.65us",
-    "latency_p99": "108.00us",
-    "transfer_sec": "14.22MB",
+    "rps": 135180.64,
+    "latency_avg": "26.66us",
+    "latency_p99": "148.00us",
+    "transfer_sec": "13.15MB",
     "name": "C (GCC 13.3 -O3)",
     "lang": "C",
     "binary_size_kb": 16.23,
-    "ram_rss_kb": 1584,
-    "raw_output": "Running 10s test @ http://127.0.0.1:8001/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    24.65us   57.85us   6.41ms   98.70%\n    Req/Sec    73.94k    23.99k  111.27k    57.50%\n  Latency Distribution\n     50%   22.00us\n     75%   25.00us\n     90%   27.00us\n     99%  108.00us\n  1469389 requests in 10.05s, 142.93MB read\nRequests/sec: 146221.70\nTransfer/sec:     14.22MB\n"
+    "ram_rss_kb": 1580,
+    "raw_output": "Running 10s test @ http://127.0.0.1:8001/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    26.66us   77.21us   6.61ms   98.64%\n    Req/Sec    68.45k    22.01k  111.47k    65.50%\n  Latency Distribution\n     50%   19.00us\n     75%   25.00us\n     90%   29.00us\n     99%  148.00us\n  1360258 requests in 10.06s, 132.32MB read\nRequests/sec: 135180.64\nTransfer/sec:     13.15MB\n"
   },
   {
-    "rps": 156591.19,
-    "latency_avg": "22.82us",
-    "latency_p99": "69.00us",
-    "transfer_sec": "15.23MB",
+    "rps": 138274.98,
+    "latency_avg": "26.35us",
+    "latency_p99": "132.00us",
+    "transfer_sec": "13.45MB",
     "name": "C++ (G++ 13.3 -O3)",
     "lang": "C++",
     "binary_size_kb": 22.53,
     "ram_rss_kb": 3656,
-    "raw_output": "Running 10s test @ http://127.0.0.1:8002/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    22.82us   36.79us   4.37ms   98.80%\n    Req/Sec    79.23k    24.83k  115.41k    54.50%\n  Latency Distribution\n     50%   22.00us\n     75%   25.00us\n     90%   26.00us\n     99%   69.00us\n  1574272 requests in 10.05s, 153.14MB read\nRequests/sec: 156591.19\nTransfer/sec:     15.23MB\n"
+    "raw_output": "Running 10s test @ http://127.0.0.1:8002/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    26.35us   77.37us   7.02ms   98.75%\n    Req/Sec    70.01k    23.91k  112.91k    63.50%\n  Latency Distribution\n     50%   20.00us\n     75%   24.00us\n     90%   28.00us\n     99%  132.00us\n  1391150 requests in 10.06s, 135.32MB read\nRequests/sec: 138274.98\nTransfer/sec:     13.45MB\n"
   },
   {
-    "rps": 117677.57,
-    "latency_avg": "27.44us",
-    "latency_p99": "102.00us",
-    "transfer_sec": "11.45MB",
+    "rps": 101003.75,
+    "latency_avg": "31.95us",
+    "latency_p99": "177.00us",
+    "transfer_sec": "9.83MB",
     "name": "Rust (rustc 1.97 -O3)",
     "lang": "Rust",
     "binary_size_kb": 4304.92,
-    "ram_rss_kb": 2100,
-    "raw_output": "Running 10s test @ http://127.0.0.1:8003/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    27.44us   51.79us   3.13ms   98.70%\n    Req/Sec   119.16k    18.06k  133.49k    86.00%\n  Latency Distribution\n     50%   27.00us\n     75%   28.00us\n     90%   32.00us\n     99%  102.00us\n  1183520 requests in 10.06s, 115.13MB read\nRequests/sec: 117677.57\nTransfer/sec:     11.45MB\n"
+    "ram_rss_kb": 2092,
+    "raw_output": "Running 10s test @ http://127.0.0.1:8003/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    31.95us   84.33us   8.00ms   98.58%\n    Req/Sec   102.37k    30.69k  130.71k    81.00%\n  Latency Distribution\n     50%   27.00us\n     75%   29.00us\n     90%   35.00us\n     99%  177.00us\n  1016244 requests in 10.06s, 98.85MB read\nRequests/sec: 101003.75\nTransfer/sec:      9.83MB\n"
   },
   {
-    "rps": 78267.53,
-    "latency_avg": "1.75ms",
-    "latency_p99": "9.14ms",
-    "transfer_sec": "10.38MB",
+    "rps": 86721.39,
+    "latency_avg": "1.65ms",
+    "latency_p99": "9.48ms",
+    "transfer_sec": "11.50MB",
     "name": "Go (go 1.22.5 std net/http)",
     "lang": "Go",
     "binary_size_kb": 6908.14,
-    "ram_rss_kb": 13868,
-    "raw_output": "Running 10s test @ http://127.0.0.1:8004/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency     1.75ms    2.03ms  24.58ms   86.49%\n    Req/Sec    19.70k     4.40k   29.94k    67.50%\n  Latency Distribution\n     50%    1.10ms\n     75%    2.53ms\n     90%    4.38ms\n     99%    9.14ms\n  785651 requests in 10.04s, 104.15MB read\nRequests/sec:  78267.53\nTransfer/sec:     10.38MB\n"
+    "ram_rss_kb": 14116,
+    "raw_output": "Running 10s test @ http://127.0.0.1:8004/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency     1.65ms    2.13ms  39.35ms   88.20%\n    Req/Sec    21.84k     5.69k   34.22k    69.50%\n  Latency Distribution\n     50%    0.97ms\n     75%    2.32ms\n     90%    4.11ms\n     99%    9.48ms\n  870292 requests in 10.04s, 115.37MB read\nRequests/sec:  86721.39\nTransfer/sec:     11.50MB\n"
   },
   {
-    "rps": 123411.02,
-    "latency_avg": "25.84us",
-    "latency_p99": "74.00us",
-    "transfer_sec": "12.00MB",
+    "rps": 141863.78,
+    "latency_avg": "25.26us",
+    "latency_p99": "116.00us",
+    "transfer_sec": "13.80MB",
     "name": "Zig (zig 0.13 -O ReleaseFast)",
     "lang": "Zig",
     "binary_size_kb": 1692.76,
-    "ram_rss_kb": 220,
-    "raw_output": "Running 10s test @ http://127.0.0.1:8005/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    25.84us   35.85us   2.14ms   98.74%\n    Req/Sec   124.92k     6.03k  132.69k    77.00%\n  Latency Distribution\n     50%   27.00us\n     75%   28.00us\n     90%   30.00us\n     99%   74.00us\n  1240950 requests in 10.06s, 120.71MB read\nRequests/sec: 123411.02\nTransfer/sec:     12.00MB\n"
+    "ram_rss_kb": 224,
+    "raw_output": "Running 10s test @ http://127.0.0.1:8005/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    25.26us   70.33us   5.51ms   98.78%\n    Req/Sec    71.79k    23.02k  115.98k    62.00%\n  Latency Distribution\n     50%   18.00us\n     75%   24.00us\n     90%   28.00us\n     99%  116.00us\n  1426491 requests in 10.06s, 138.76MB read\nRequests/sec: 141863.78\nTransfer/sec:     13.80MB\n"
   },
   {
-    "rps": 123876.63,
-    "latency_avg": "25.84us",
-    "latency_p99": "72.00us",
-    "transfer_sec": "12.05MB",
+    "rps": 129800.51,
+    "latency_avg": "52.54us",
+    "latency_p99": "598.00us",
+    "transfer_sec": "12.63MB",
     "name": "LiPi (First 1.0.0 100% Sovereign)",
     "lang": "LiPi",
-    "binary_size_kb": 8.74,
-    "ram_rss_kb": 48,
-    "raw_output": "Running 10s test @ http://127.0.0.1:8006/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    25.84us   34.77us   4.21ms   98.64%\n    Req/Sec   125.38k    11.38k  133.85k    89.00%\n  Latency Distribution\n     50%   27.00us\n     75%   28.00us\n     90%   30.00us\n     99%   72.00us\n  1246018 requests in 10.06s, 121.21MB read\nRequests/sec: 123876.63\nTransfer/sec:     12.05MB\n"
+    "binary_size_kb": 8.72,
+    "ram_rss_kb": 52,
+    "raw_output": "Running 10s test @ http://127.0.0.1:8006/\n  4 threads and 100 connections\n  Thread Stats   Avg      Stdev     Max   +/- Stdev\n    Latency    52.54us  146.89us   9.43ms   97.36%\n    Req/Sec    65.63k    17.81k  117.31k    68.66%\n  Latency Distribution\n     50%   30.00us\n     75%   43.00us\n     90%   64.00us\n     99%  598.00us\n  1310973 requests in 10.10s, 127.52MB read\nRequests/sec: 129800.51\nTransfer/sec:     12.63MB\n"
   }
 ]
