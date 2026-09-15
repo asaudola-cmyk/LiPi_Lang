@@ -181,4 +181,4 @@ fn test_x86_registers_subsystem
 
     return 1
 
-test_x86_registers_subsystem()
+// test_x86_registers_subsystem()

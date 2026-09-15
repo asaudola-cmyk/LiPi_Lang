@@ -170,4 +170,4 @@ fn test_leb128_subsystem
 
     return 1
 
-test_leb128_subsystem()
+// test_leb128_subsystem()

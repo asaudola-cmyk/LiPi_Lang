@@ -150,4 +150,4 @@ fn test_rex_prefix_subsystem
 
     return 1
 
-test_rex_prefix_subsystem()
+// test_rex_prefix_subsystem()

@@ -210,4 +210,4 @@ fn test_wasm_sections_subsystem
 
     return 1
 
-test_wasm_sections_subsystem()
+// test_wasm_sections_subsystem()

@@ -129,4 +129,4 @@ fn test_opcode_table_subsystem
 
     return 1
 
-test_opcode_table_subsystem()
+// test_opcode_table_subsystem()

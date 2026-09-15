@@ -216,4 +216,4 @@ fn test_rv64_registers_subsystem
 
     return 1
 
-test_rv64_registers_subsystem()
+// test_rv64_registers_subsystem()

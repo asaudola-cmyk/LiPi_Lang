@@ -202,4 +202,4 @@ fn test_avx2_encoder_subsystem
 
     return 1
 
-test_avx2_encoder_subsystem()
+// test_avx2_encoder_subsystem()

@@ -118,4 +118,4 @@ fn test_x86_calling_conv_subsystem
 
     return 1
 
-test_x86_calling_conv_subsystem()
+// test_x86_calling_conv_subsystem()

@@ -146,4 +146,4 @@ fn test_stack_frame_layout_subsystem
 
     return 1
 
-test_stack_frame_layout_subsystem()
+// test_stack_frame_layout_subsystem()

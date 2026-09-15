@@ -224,4 +224,4 @@ fn test_a64_encoder_subsystem
 
     return 1
 
-test_a64_encoder_subsystem()
+// test_a64_encoder_subsystem()

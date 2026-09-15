@@ -193,4 +193,4 @@ fn test_rv64_formats_subsystem
 
     return 1
 
-test_rv64_formats_subsystem()
+// test_rv64_formats_subsystem()

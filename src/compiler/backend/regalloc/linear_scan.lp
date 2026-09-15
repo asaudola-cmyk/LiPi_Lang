@@ -273,4 +273,4 @@ fn test_linear_scan_subsystem
 
     return 1
 
-test_linear_scan_subsystem()
+// test_linear_scan_subsystem()

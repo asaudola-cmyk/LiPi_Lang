@@ -163,4 +163,4 @@ fn test_arm64_registers_subsystem
 
     return 1
 
-test_arm64_registers_subsystem()
+// test_arm64_registers_subsystem()

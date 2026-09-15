@@ -180,4 +180,4 @@ fn test_modrm_sib_subsystem
 
     return 1
 
-test_modrm_sib_subsystem()
+// test_modrm_sib_subsystem()

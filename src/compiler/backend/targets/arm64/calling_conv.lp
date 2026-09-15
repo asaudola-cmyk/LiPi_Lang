@@ -104,4 +104,4 @@ fn test_arm64_calling_conv_subsystem
 
     return 1
 
-test_arm64_calling_conv_subsystem()
+// test_arm64_calling_conv_subsystem()

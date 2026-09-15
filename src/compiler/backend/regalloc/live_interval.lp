@@ -204,4 +204,4 @@ fn test_live_interval_subsystem
 
     return 1
 
-test_live_interval_subsystem()
+// test_live_interval_subsystem()

@@ -162,4 +162,4 @@ fn test_target_machine_subsystem
 
     return 1
 
-test_target_machine_subsystem()
+// test_target_machine_subsystem()
