@@ -667,6 +667,35 @@ fn main
     else
         failed = failed + 1
 
+    // ── Super-Advanced Sovereign Frontiers (Tests 147-152) ───────────────────
+    // WHY: Hardens ARM64 silicon parity, atomic concurrency, kernel epoll,
+    // memory reclamation, zero-division guards, and Unicode Bengali runes.
+    if run_single_test(compiler, "tests/test_arm64_parity.lp", "test_arm64_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_atomic_concurrency.lp", "test_atomic_concurrency") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_div_by_zero_guard.lp", "test_div_by_zero_guard") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_io_and_epoll.lp", "test_io_and_epoll") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_slab_memory_reclaim.lp", "test_slab_memory_reclaim") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_unicode_bengali_runes.lp", "test_unicode_bengali_runes") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+
     say ""
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed

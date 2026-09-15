@@ -58,6 +58,11 @@ assert_true(replayed == 1, "ARIES REDO replayed exactly 1 committed pending tran
 count_after = db_total_records(verify_fd)
 assert_true(count_after == 3, "Table recovered 3rd record successfully via WAL")
 
+// WHY: Verify direct O(1) record retrieval matches the replayed WAL payload (300)
+rec3_val = db_get_record(verify_fd, 3)
+assert_true(rec3_val == 300, "Recovered record 3 value is 300 via db_get_record")
+
+
 // Clean up
 file_close(verify_fd)
 syscall(87, test_db_path, 0, 0, 0, 0, 0)

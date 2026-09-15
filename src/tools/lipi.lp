@@ -116,13 +116,18 @@ fn handle_run file_path a1 a2 a3 a4
     if len(file_path) == 0
         say "❌ Error: Source file required: lipi run <file.lp> [args...]"
         return 1
-    tmp_bin = "/tmp/lipi_run_exec"
+    // WHY: Use PID-isolated temporary binary to prevent ETXTBSY collisions
+    // when running multiple Lipi programs or long-running servers concurrently.
+    cur_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    tmp_bin = "/tmp/lipi_run_" + str(cur_pid) + ".bin"
+    syscall(87, tmp_bin, 0, 0, 0, 0, 0)
     say "\033[1;34m[LIPI RUN]\033[0m Compiling " + file_path + "..."
     
     c_bin = resolve_bin_path("lipc_bin")
     code = spawn_exec_cmd(c_bin, file_path, tmp_bin, "", "")
     if code != 0
         say "❌ Compilation failed (Compiler exit code " + str(code) + ")"
+        syscall(87, tmp_bin, 0, 0, 0, 0, 0)
         return code
         
     say "⚡ Executing in-memory binary..."
@@ -154,11 +159,14 @@ fn handle_build file_path out_file target_flag
 fn handle_test suite_path
     if len(suite_path) > 0
         say "\033[1;34m[LIPI TEST]\033[0m Running test suite: " + suite_path
-        tmp_tst = "/tmp/lipi_tst_bin"
+        cur_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+        tmp_tst = "/tmp/lipi_tst_" + str(cur_pid) + ".bin"
+        syscall(87, tmp_tst, 0, 0, 0, 0, 0)
         c_bin = resolve_bin_path("lipc_bin")
         code = spawn_exec_cmd(c_bin, suite_path, tmp_tst, "", "")
         if code != 0
             say "❌ Test compilation failed."
+            syscall(87, tmp_tst, 0, 0, 0, 0, 0)
             return code
         tst_code = spawn_exec_cmd(tmp_tst, "", "", "", "")
         syscall(87, tmp_tst, 0, 0, 0, 0, 0)
@@ -307,8 +315,9 @@ fn handle_spawn_seed target_path
     if len(dest) == 0
         dest = "src/boot/lipi-seed"
 
-    // Ensure src/boot directory exists via Linux sys_mkdir (39) with mode 0755
-    syscall(39, "src/boot", 493, 0, 0, 0, 0)
+    // WHY: Ensure src/boot directory exists via Linux sys_mkdir (83) with mode 0755 (493 octal).
+    // Syscall 83 is sys_mkdir on Linux x86_64; returns 0 on success or -17 (EEXIST) if already present.
+    syscall(83, "src/boot", 493, 0, 0, 0, 0)
 
     say ""
     say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"

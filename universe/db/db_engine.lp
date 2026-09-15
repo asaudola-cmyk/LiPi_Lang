@@ -121,3 +121,34 @@ fn db_update_record fd target_id new_val
 
 fn ডিবি_রেকর্ড_আপডেট fd টার্গেট_আইডি নতুন_মান
     return db_update_record(fd, টার্গেট_আইডি, নতুন_মান)
+
+// ৮. আইডি দিয়ে সরাসরি রেকর্ড ভ্যালু পড়া (Direct O(1) Record Lookup by ID)
+// WHY: Seeks directly to the record offset without table scanning.
+// Returns the 8-byte value at offset 24 if record is active (status == 1).
+// Returns -1 if target_id <= 0, target_id > total, or record is soft-deleted.
+fn db_get_record fd target_id
+    if target_id <= 0
+        return -1
+    total = db_total_records(fd)
+    if target_id > total
+        return -1
+
+    offset = (target_id - 1) * 32
+    syscall(8, fd, offset, 0, 0, 0, 0) // SYS_lseek SEEK_SET = 0
+
+    buf = malloc(32)
+    n = syscall(0, fd, buf, 32, 0, 0, 0)
+    if n != 32
+        free(buf, 32)
+        return -1
+
+    st = mem_read(buf, 16)
+    val = -1
+    if st == 1
+        val = mem_read(buf, 24)
+    free(buf, 32)
+    return val
+
+fn ডিবি_রেকর্ড_পড়ো fd টার্গেট_আইডি
+    return db_get_record(fd, টার্গেট_আইডি)
+
