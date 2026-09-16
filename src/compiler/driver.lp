@@ -27,6 +27,20 @@ fn compiler_driver_print_banner
     say "║  ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign      ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
+fn compiler_driver_compile_file src_path out_path target_arch opt_level is_dry_run
+    // WHY: Reads source file from filesystem and routes through the decoupled pipeline.
+    source_code = file_read(src_path)
+    if len(source_code) == 0
+        res = compiler_result_new()
+        res.res_error_count = 1
+        res.res_error_msg = "Source file empty or not found: " + src_path
+        res.res_stage_reached = PIPELINE_STAGE_INIT
+        res.res_success = 0
+        return res
+    cfg = compiler_config_new(src_path, out_path, target_arch, opt_level, FORMAT_ELF, is_dry_run)
+    res = compiler_pipeline_execute(cfg, source_code)
+    return res
+
 fn compiler_driver_print_result res
     if res.res_success == 1
         say "✔ [COMPILATION SUCCESS]: All micro-subsystems completed successfully!"
@@ -36,3 +50,4 @@ fn compiler_driver_print_result res
     else
         say "❌ [COMPILATION ERROR at Stage " + res.res_stage_reached + "]: " + res.res_error_msg
     return res.res_success
+

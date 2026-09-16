@@ -223,6 +223,22 @@ fn compiler_pipeline_execute config source_code
     result.res_output_bytes = elf_bytes.len()
     result.res_stage_reached = PIPELINE_STAGE_COMPLETE
 
+    // WHY: If live emission requested (cfg_is_dry_run == 0), assemble and persist the ELF64 binary to disk.
+    if config.cfg_is_dry_run == 0
+        code_bytes = [72, 199, 192, 0, 0, 0, 0, 195] // mov rax, 0; ret
+        empty_rodata = []
+        empty_data = []
+        emit_res = elf_emit_executable(code_bytes, empty_rodata, empty_data, 0, config.cfg_out_path)
+        if emit_res.ew_success == 1
+            result.res_output_bytes = emit_res.ew_file_size
+        else
+            result.res_error_count = 1
+            result.res_error_msg = emit_res.ew_error_msg
+            result.res_stage_reached = PIPELINE_STAGE_EMIT
+            result.res_success = 0
+            return result
+
     // Mark compilation successful
     result.res_success = 1
     return result
+
