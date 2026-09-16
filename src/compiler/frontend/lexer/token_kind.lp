@@ -15,8 +15,6 @@
 //    directives, and block boundaries.
 // ============================================================================
 
-import "universe/core/string"
-
 // ── 1. Special & Control Tokens (0..9) ─────────────────────────────────────────
 @fn TOK_EOF() return 0 @end
 @fn TOK_NEWLINE() return 1 @end

@@ -19,8 +19,6 @@
 //    struct offset shadowing across compiler passes.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
 
 // Subsystem 1 & 2: Diagnostics
 import "src/compiler/diagnostics/error_codes.lp"
