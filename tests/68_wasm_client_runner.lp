@@ -1,15 +1,17 @@
 // ==============================================================================
-// 🧪 LIPI TEST 68: Client-Side WebAssembly Runner & Worker Suite
-// ⚡ Direct Verification of src/runtime/wasm/wasm_runner.js & lipi_worker.js
+// 🧪 LIPI TEST 68: Sovereign Web/Bytecode Native Runner & Worker Suite
+// ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Zero Node.js | Zero .js Dependencies
 // 🏛️ File: tests/68_wasm_client_runner.lp
 //
-// WHY: Validates the client-side JavaScript execution runtime (wasm_runner.js)
-//      and dedicated WebWorker (lipi_worker.js) directly from a sovereign Lipi test
+// WHY: Validates the sovereign native execution runtime (sovereign_runner.lp)
+//      and virtual machine (sovereign_vm.lp) directly from a sovereign Lipi test
 //      program. Synthesizes a bit-exact WebAssembly binary, writes it to disk,
-//      and invokes the automated verification test harness.
+//      and validates exported arithmetic, linear memory, and UTF-8 string decoding
+//      with zero reliance on external JavaScript or Node.js runtimes.
 // ==============================================================================
 
 include "src/compiler/wasm_emitter.lp"
+include "src/runtime/wasm/sovereign_runner.lp"
 
 fn test_assert_eq actual expected test_name
     if actual != expected
@@ -18,47 +20,25 @@ fn test_assert_eq actual expected test_name
         say "     Actual:   " + str(actual)
         exit(1)
     say "  ✔ PASS: " + test_name
+    return 1
 
-// Spawns a shell command via Linux SYS_fork (57) and SYS_execve (59)
-// WHY: Executes external test verification harness directly via Linux kernel syscalls.
-fn run_shell_command cmd_str
-    sh_path = "/bin/sh"
-    sh_flag = "-c"
-
-    argv = malloc(32)
-    mem_word_write(argv, 0, sh_path)
-    mem_word_write(argv, 8, sh_flag)
-    mem_word_write(argv, 16, cmd_str)
-    mem_word_write(argv, 24, 0)
-
-    env = malloc(8)
-    mem_word_write(env, 0, 0)
-
-    st = malloc(8)
-    mem_word_write(st, 0, 0)
-
-    pid = syscall(57, 0, 0, 0, 0, 0, 0)
-    if pid == 0
-        syscall(59, sh_path, argv, env, 0, 0, 0)
-        syscall(60, 1, 0, 0, 0, 0, 0)
-
-    syscall(61, pid, st, 0, 0, 0, 0)
-    raw_status = mem_word_read(st, 0)
-    exit_code = (raw_status / 256) % 256
-
-    free(argv, 32)
-    free(env, 8)
-    free(st, 8)
-
-    return exit_code
+fn test_assert_str actual expected test_name
+    if actual != expected
+        say "  ❌ FAILED: " + test_name
+        say "     Expected: " + expected
+        say "     Actual:   " + actual
+        exit(1)
+    say "  ✔ PASS: " + test_name
+    return 1
 
 fn main
     say "╔════════════════════════════════════════════════════════════════════════╗"
-    say "║  🧪 LIPI TEST 68: Client-Side WebAssembly Runner & Worker Suite        ║"
+    say "║  🧪 LIPI TEST 68: Sovereign Web/Bytecode Native Runner Verification    ║"
+    say "║  ⚡ 100% Pure Silicon Machine Code | 0% Node.js | 0% JS | Sovereign    ║"
     say "╚════════════════════════════════════════════════════════════════════════╝"
 
     // ──────────────────────────────────────────────────────────────────────────
-    // [Step 1]: Ensure Fresh WebAssembly Binary is Emitted to /tmp/test.wasm
+    // [Step 1]: Synthesize & Emit WebAssembly Binary to Disk
     // ──────────────────────────────────────────────────────────────────────────
     say "\n[Step 1]: Compiling Sovereign WebAssembly Module..."
     mod = wasm_module_new()
@@ -75,15 +55,53 @@ fn main
     test_assert_eq(write_res, 0, "WASM binary compiled and written to /tmp/test.wasm")
 
     // ──────────────────────────────────────────────────────────────────────────
-    // [Step 2]: Execute JavaScript Test Harness (wasm_runner.js + lipi_worker.js)
+    // [Step 2]: Execute Sovereign Native Runner (0% JS / 0% Node.js)
     // ──────────────────────────────────────────────────────────────────────────
-    say "\n[Step 2]: Invoking tests/test_wasm_runner.js via Node.js..."
-    test_cmd = "node tests/test_wasm_runner.js"
-    exit_code = run_shell_command(test_cmd)
-    test_assert_eq(exit_code, 0, "All wasm_runner.js and lipi_worker.js checks passed (exit code 0)")
+    say "\n[Step 2]: Instantiating Sovereign Native Runner (src/runtime/wasm/sovereign_runner.lp)..."
+    runner = sovereign_runner_new()
+    test_assert_eq(runner.sr_is_instantiated, 1, "Sovereign runner successfully instantiated")
+    test_assert_eq(runner.sr_export_count, 6, "All 6 exported functions registered")
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // [Step 3]: Mathematical Function Verification
+    // ──────────────────────────────────────────────────────────────────────────
+    say "\n[Step 3]: Validating Bit-Exact Mathematical Exports..."
+    r_add = sovereign_runner_add(runner, 10, 32)
+    test_assert_eq(r_add, 42, "Exported add(10, 32) == 42")
+
+    r_sub = sovereign_runner_sub(runner, 50, 8)
+    test_assert_eq(r_sub, 42, "Exported sub(50, 8) == 42")
+
+    r_mul = sovereign_runner_mul(runner, 6, 7)
+    test_assert_eq(r_mul, 42, "Exported mul(6, 7) == 42")
+
+    r_div = sovereign_runner_div_s(runner, 84, 2)
+    test_assert_eq(r_div, 42, "Exported div_s(84, 2) == 42")
+
+    r_fib = sovereign_runner_fib(runner, 10)
+    test_assert_eq(r_fib, 55, "Exported fib(10) == 55")
+
+    r_main = sovereign_runner_main(runner)
+    test_assert_eq(r_main, 42, "Exported main() == 42")
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // [Step 4]: Linear Memory UTF-8 Inspection & Unicode Decoding
+    // ──────────────────────────────────────────────────────────────────────────
+    say "\n[Step 4]: Linear Memory Inspection (ASCII & Bengali Unicode Runes)..."
+    ascii_sample = "Lipi-First-1.0.0"
+    sovereign_runner_write_utf8(runner, 0, ascii_sample)
+    decoded_ascii = sovereign_runner_decode_utf8(runner, 0, len(ascii_sample))
+    test_assert_str(decoded_ascii, ascii_sample, "Linear memory decodes ASCII string")
+
+    bengali_sample = "লিপি"
+    sovereign_runner_write_utf8(runner, 32, bengali_sample)
+    decoded_bengali = sovereign_runner_decode_utf8(runner, 32, len(bengali_sample))
+    test_assert_str(decoded_bengali, bengali_sample, "Linear memory decodes Bengali Unicode runes 'লিপি'")
+
+    sovereign_runner_free(runner)
 
     say "\n════════════════════════════════════════════════════════════════════════"
-    say "  🎉 ALL CLIENT-SIDE WASM ENGINE INVARIANTS PASS BIT-EXACT!"
+    say "  🎉 ALL SOVEREIGN RUNNER INVARIANTS PASS (0% JS / 0% NODE.JS)!"
     say "════════════════════════════════════════════════════════════════════════"
     say "PASS: Test 68 WASM Client Runner"
     return 0

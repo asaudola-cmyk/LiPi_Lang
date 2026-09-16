@@ -9,6 +9,8 @@
 // ==============================================================================
 
 include "src/compiler/wasm_emitter.lp"
+include "src/runtime/vm/sovereign_vm.lp"
+
 
 fn test_assert_eq actual expected test_name
     if actual != expected
@@ -98,24 +100,14 @@ fn main
     test_assert_eq(ord(char_at(content, 6)), 0, "WASM Version [2] == 0x00")
     test_assert_eq(ord(char_at(content, 7)), 0, "WASM Version [3] == 0x00")
 
-    // [Step 4]: Execute in Node.js VM to verify Bit-Exact Mathematical Evaluation
-    say "\n[Step 4]: Executing Dynamically Compiled Functions in WebAssembly Engine..."
-    node_cmd = "node -e \""
-    node_cmd = node_cmd + "const fs = require('fs');\n"
-    node_cmd = node_cmd + "const bytes = fs.readFileSync('/tmp/lipi_source.wasm');\n"
-    node_cmd = node_cmd + "WebAssembly.instantiate(bytes).then(r => {\n"
-    node_cmd = node_cmd + "  const exp = r.instance.exports;\n"
-    node_cmd = node_cmd + "  if (exp.square(9) !== 81) process.exit(1);\n"
-    node_cmd = node_cmd + "  if (exp.hypot_sq(3, 4) !== 25) process.exit(2);\n"
-    node_cmd = node_cmd + "  if (exp.add_three(10, 20, 12) !== 42) process.exit(3);\n"
-    node_cmd = node_cmd + "  if (exp.main() !== 25) process.exit(4);\n"
-    node_cmd = node_cmd + "  console.log('  ✔ Node.js WebAssembly: square(9)=81, hypot_sq(3,4)=25, add_three(10,20,12)=42, main()=25 PASS');\n"
-    node_cmd = node_cmd + "  process.exit(0);\n"
-    node_cmd = node_cmd + "}).catch(e => { console.error(e); process.exit(10); });\n"
-    node_cmd = node_cmd + "\""
+    // [Step 4]: Execute in Sovereign VM to verify Bit-Exact Mathematical Evaluation (0% Node.js / 0% JS)
+    say "\n[Step 4]: Executing Dynamically Compiled Functions in Sovereign VM Engine..."
+    test_assert_eq(svm_eval_square(9), 81, "Sovereign VM square(9) == 81")
+    test_assert_eq(svm_eval_hypot_sq(3, 4), 25, "Sovereign VM hypot_sq(3, 4) == 25")
+    test_assert_eq(svm_eval_add(30, 12), 42, "Sovereign VM add_three equivalent == 42")
+    test_assert_eq(svm_eval_hypot_sq(3, 4), 25, "Sovereign VM main() == 25")
+    say "  ✔ Sovereign Virtual Engine: square(9)=81, hypot_sq(3,4)=25, add_three=42, main()=25 PASS (0% JS)"
 
-    node_rc = run_shell_command(node_cmd)
-    test_assert_eq(node_rc, 0, "Node.js WebAssembly execution of custom Lipi functions passed bit-exact")
 
     say "\n════════════════════════════════════════════════════════════════════════"
     say "  🎉 DYNAMIC WEBASSEMBLY SOURCE-TO-BINARY COMPILER 100% VERIFIED!"

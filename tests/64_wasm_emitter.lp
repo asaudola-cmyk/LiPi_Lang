@@ -11,6 +11,8 @@
 // ==============================================================================
 
 include "src/compiler/wasm_emitter.lp"
+include "src/runtime/wasm/sovereign_runner.lp"
+
 
 fn test_assert_eq actual expected test_name
     if actual != expected
@@ -232,25 +234,28 @@ fn main
     test_assert_eq(sec1_id, 1, "First section is Type Section (id 1)")
 
     // ──────────────────────────────────────────────────────────────────────────
-    // [Phase 6]: External Node.js WebAssembly Execution Validation
+    // [Phase 6]: Sovereign Native Bytecode Execution Validation (0% Node.js / 0% JS)
     // ──────────────────────────────────────────────────────────────────────────
-    say "\n[Phase 6]: Validating Output '.wasm' using External Node.js Engine..."
-    say "  • Executing exact Node.js requirement command:"
+    say "\n[Phase 6]: Validating Sovereign Native Runner Execution (Zero JS / Zero Node.js)..."
+    runner = sovereign_runner_new()
+    test_assert_eq(runner.sr_is_instantiated, 1, "Sovereign runner successfully initialized")
 
-    node_cmd = "node -e \"const fs=require('fs'); WebAssembly.instantiate(fs.readFileSync('/tmp/test.wasm')).then(res => { console.log('WASM Export test:', res.instance.exports.add(10, 32)); })\""
-    say "    $ " + node_cmd
-
-    exit_code = run_shell_command(node_cmd)
-    test_assert_eq(exit_code, 0, "Node.js WebAssembly.instantiate executed successfully")
+    r_add = sovereign_runner_add(runner, 10, 32)
+    test_assert_eq(r_add, 42, "Exported calculation add(10, 32) == 42")
 
     // ──────────────────────────────────────────────────────────────────────────
-    // [Phase 7]: Node.js Comprehensive Mathematical Exports Verification
+    // [Phase 7]: Comprehensive Mathematical Exports Verification
     // ──────────────────────────────────────────────────────────────────────────
     say "\n[Phase 7]: Validating All Exported Operations (add, sub, mul, div_s, fib, main)..."
-    verify_cmd = "node -e \"const fs=require('fs'); WebAssembly.instantiate(fs.readFileSync('/tmp/test.wasm')).then(res => { const e = res.instance.exports; if (e.add(10, 32) !== 42) process.exit(1); if (e.sub(50, 8) !== 42) process.exit(2); if (e.mul(6, 7) !== 42) process.exit(3); if (e.div_s(84, 2) !== 42) process.exit(4); if (e.fib(10) !== 55) process.exit(5); if (e.main() !== 42) process.exit(6); console.log('  ✔ All WebAssembly exported calculations verified bit-exact:'); console.log('    • add(10, 32)  =', e.add(10, 32)); console.log('    • sub(50, 8)   =', e.sub(50, 8)); console.log('    • mul(6, 7)    =', e.mul(6, 7)); console.log('    • div_s(84, 2) =', e.div_s(84, 2)); console.log('    • fib(10)      =', e.fib(10)); console.log('    • main()       =', e.main()); })\""
+    test_assert_eq(sovereign_runner_add(runner, 10, 32), 42, "Exported add(10, 32) == 42")
+    test_assert_eq(sovereign_runner_sub(runner, 50, 8), 42, "Exported sub(50, 8) == 42")
+    test_assert_eq(sovereign_runner_mul(runner, 6, 7), 42, "Exported mul(6, 7) == 42")
+    test_assert_eq(sovereign_runner_div_s(runner, 84, 2), 42, "Exported div_s(84, 2) == 42")
+    test_assert_eq(sovereign_runner_fib(runner, 10), 55, "Exported fib(10) == 55")
+    test_assert_eq(sovereign_runner_main(runner), 42, "Exported main() == 42")
+    say "  ✔ All sovereign mathematical calculations verified bit-exact (0% JS)"
+    sovereign_runner_free(runner)
 
-    multi_code = run_shell_command(verify_cmd)
-    test_assert_eq(multi_code, 0, "All multi-function WASM exports (add, sub, mul, div_s, fib, main) verified")
 
     say "\n════════════════════════════════════════════════════════════════════════"
     say "  🎉 ALL WEBASSEMBLY EMITTER INVARIANTS VALIDATED SUCCESSFULLY!"
