@@ -1731,13 +1731,16 @@ fn x86_synth_compile_program tokens
 
         x86_synth_compile_statement(s, tokens, pos_box)
 
-    // 3. If there were NO top-level statements, but 'main' exists, call main() automatically!
+    // 3. If there were NO top-level statements, but 'main' or 'মূল' exists, call main() automatically!
     has_main = 0
+    main_name = ""
     if has_top_level == 0
         fi = 0
         while fi < s.synth_functions.len()
-            if s.synth_functions[fi].fn_name == "main"
+            fn_candidate = s.synth_functions[fi].fn_name
+            if fn_candidate == "main" or fn_candidate == "মূল"
                 has_main = 1
+                main_name = fn_candidate
             fi = fi + 1
         if has_main == 1
             call_off = s.synth_code.len()
@@ -1747,7 +1750,7 @@ fn x86_synth_compile_program tokens
             call_rel = X86CallReloc()
             call_rel.cr_patch_offset = patch_pos
             call_rel.cr_call_site_end = patch_pos + 4
-            call_rel.cr_target_name = "main"
+            call_rel.cr_target_name = main_name
             push(s.synth_call_relocs, call_rel)
 
     // 4. Top-level exit epilogue

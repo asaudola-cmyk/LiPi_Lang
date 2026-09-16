@@ -63,6 +63,8 @@ include "src/compiler/backend/regalloc/linear_scan.lp"
 // Subsystem 7: Multi-Target Hardware Encoders
 include "src/compiler/backend/targets/target_machine.lp"
 include "src/compiler/backend/targets/x86_64/synthesizer.lp"
+include "src/compiler/backend/targets/arm64/synthesizer.lp"
+include "src/compiler/backend/targets/wasm/synthesizer.lp"
 
 // Subsystem 8: Binary Container Formats
 import "src/compiler/backend/formats/elf/elf_header.lp"
@@ -236,8 +238,32 @@ fn compiler_pipeline_execute config source_code
                 result.res_stage_reached = PIPELINE_STAGE_EMIT
                 result.res_success = 0
                 return result
+        elif config.cfg_target_arch == TARGET_ID_ARM64
+            // Direct ARM64 Silicon Machine Code Synthesis
+            arm_synth = arm64_synth_compile_program(toks)
+            arm_res = arm64_elf_emit_executable(arm_synth.synth_code, arm_synth.synth_rodata, config.cfg_out_path)
+            if arm_res.ew_success == 1
+                result.res_output_bytes = arm_res.ew_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = arm_res.ew_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_success = 0
+                return result
+        elif config.cfg_target_arch == TARGET_ID_WASM
+            // Sovereign Zero-JS WebAssembly Bytecode Synthesis
+            wasm_bin = wasm_synth_compile_program(toks)
+            w_res = wasm_emit_binary_file(wasm_bin, config.cfg_out_path)
+            if w_res >= 0
+                result.res_output_bytes = wasm_bin.len()
+            else
+                result.res_error_count = 1
+                result.res_error_msg = "Failed to emit WASM binary file"
+                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_success = 0
+                return result
         else
-            // Cross-target container emission (ARM64, WASM, RISCV64 container framing)
+            // Fallback for experimental targets (e.g. RISCV64)
             code_bytes = [72, 199, 192, 0, 0, 0, 0, 195] // mov rax, 0; ret
             empty_rodata = []
             empty_data = []
