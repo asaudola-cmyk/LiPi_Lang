@@ -765,6 +765,10 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
+    if run_single_test(compiler, "tests/test_micro_compiler_parity.lp", "test_micro_compiler_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
 
 
 
