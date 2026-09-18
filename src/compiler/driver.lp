@@ -43,34 +43,91 @@ fn compiler_driver_streq s1 s2
         si = si + 1
     return 1
 
-fn compiler_driver_bundle_source file_path visited
+fn compiler_driver_has_include content
+    // WHY: High-speed zero-allocation prefix scanner to identify whether a source file contains
+    // any include or import statements. If zero include directives exist, file can be returned
+    // directly without slicing or heap churn.
+    p = 0
+    clen = len(content)
+    while p < clen
+        while p < clen and (mem_byte_read(content, p) == 32 or mem_byte_read(content, p) == 9)
+            p = p + 1
+        if p < clen
+            b0 = mem_byte_read(content, p)
+            if b0 == 105 // 'i'
+                if p + 8 <= clen and str_sub(content, p, p + 8) == "include "
+                    return 1
+                if p + 7 <= clen and str_sub(content, p, p + 7) == "import "
+                    return 1
+            elif b0 == 64 // '@'
+                if p + 9 <= clen and str_sub(content, p, p + 9) == "@include "
+                    return 1
+                if p + 5 <= clen and str_sub(content, p, p + 5) == "@use "
+                    return 1
+        while p < clen and mem_byte_read(content, p) != 10
+            p = p + 1
+        if p < clen and mem_byte_read(content, p) == 10
+            p = p + 1
+    return 0
+
+fn compiler_driver_join_chunks chunks
+    // WHY: Balanced pairwise tree merge reduces intermediate string allocation churn from O(N^2) to O(N log N).
+    // For 500 chunks totaling ~700KB, total memory allocated across all log2(500) passes is ~6.3MB instead of >1GB!
+    if chunks.len() == 0
+        return ""
+    cur = chunks
+    while cur.len() > 1
+        next_ch = list()
+        ci = 0
+        clen = cur.len()
+        while ci < clen
+            if ci + 1 < clen
+                c1 = cur[ci]
+                c2 = cur[ci + 1]
+                if len(c1) == 0
+                    push(next_ch, c2)
+                elif len(c2) == 0
+                    push(next_ch, c1)
+                else
+                    push(next_ch, c1 + c2)
+            else
+                push(next_ch, cur[ci])
+            ci = ci + 2
+        cur = next_ch
+    if cur.len() == 1
+        return cur[0]
+    return ""
+
+fn compiler_driver_bundle_into_chunks file_path visited chunks
     // WHY: Recursively traverses and consolidates all 'import' and 'include' dependencies
-    // into a unified compilation unit, guaranteeing topological declaration order and
-    // preventing cyclic dependency recursion. Uses direct memory byte reads to avoid heap churn.
+    // into a flat list of immutable chunks without quadratic string concatenation.
     if len(file_path) > 2 and mem_byte_read(file_path, 0) == 46 and mem_byte_read(file_path, 1) == 47
         file_path = str_sub(file_path, 2, len(file_path))
 
     i = 0
     while i < visited.len()
         if compiler_driver_streq(visited[i], file_path) == 1
-            return ""
+            return 0
         i = i + 1
     push(visited, file_path)
 
     if file_exists(file_path) == 0
-        return ""
+        return 0
 
     content = file_read(file_path)
-    cur_dir = compiler_driver_dirname(file_path)
+    if compiler_driver_has_include(content) == 0
+        push(chunks, content)
+        push(chunks, "\n")
+        return 0
 
-    out = ""
+    cur_dir = compiler_driver_dirname(file_path)
     chunk_start = 0
     p = 0
     clen = len(content)
 
     while p < clen
         line_start = p
-        // Skip leading spaces and tabs without heap allocation
+        // Skip leading whitespace without heap allocation
         while p < clen
             b = mem_byte_read(content, p)
             if b != 32 and b != 9
@@ -96,7 +153,7 @@ fn compiler_driver_bundle_source file_path visited
                     plen = 5
 
         if plen > 0 and p + plen < clen
-            // Skip any spaces between keyword and opening quote
+            // Skip spaces between keyword and opening quote
             p_scan = p + plen
             while p_scan < clen
                 qb = mem_byte_read(content, p_scan)
@@ -105,7 +162,7 @@ fn compiler_driver_bundle_source file_path visited
                 p_scan = p_scan + 1
             if p_scan < clen
                 q = mem_byte_read(content, p_scan)
-                if q == 34 or q == 39 // '"' (34) or '\'' (39)
+                if q == 34 or q == 39 // '"' or '\''
                     p_tstart = p_scan + 1
                     p_tend = p_tstart
                     while p_tend < clen
@@ -125,7 +182,7 @@ fn compiler_driver_bundle_source file_path visited
 
         if is_inc == 1
             if line_start > chunk_start
-                out = out + str_sub(content, chunk_start, line_start)
+                push(chunks, str_sub(content, chunk_start, line_start))
             resolved = cur_dir + "/" + inc_target
             if file_exists(resolved) == 0
                 resolved = inc_target
@@ -138,15 +195,19 @@ fn compiler_driver_bundle_source file_path visited
             if file_exists(resolved) == 0 and file_exists("src/" + inc_target + ".lp") == 1
                 resolved = "src/" + inc_target + ".lp"
 
-            bundled = compiler_driver_bundle_source(resolved, visited)
-            if len(bundled) > 0
-                out = out + bundled + "\n"
+            compiler_driver_bundle_into_chunks(resolved, visited, chunks)
+            push(chunks, "\n")
             chunk_start = p
 
     if chunk_start < clen
-        out = out + str_sub(content, chunk_start, clen)
+        push(chunks, str_sub(content, chunk_start, clen))
 
-    return out
+    return 0
+
+fn compiler_driver_bundle_source file_path visited
+    chunks = list()
+    compiler_driver_bundle_into_chunks(file_path, visited, chunks)
+    return compiler_driver_join_chunks(chunks)
 
 // ── 2. Driver Execution Wrapper ───────────────────────────────────────────────
 

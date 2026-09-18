@@ -65,6 +65,7 @@ include "src/compiler/backend/targets/target_machine.lp"
 include "src/compiler/backend/targets/x86_64/synthesizer.lp"
 include "src/compiler/backend/targets/arm64/synthesizer.lp"
 include "src/compiler/backend/targets/wasm/synthesizer.lp"
+include "src/compiler/backend/targets/riscv64/synthesizer.lp"
 
 // Subsystem 8: Binary Container Formats
 import "src/compiler/backend/formats/elf/elf_header.lp"
@@ -262,8 +263,20 @@ fn compiler_pipeline_execute config source_code
                 result.res_stage_reached = PIPELINE_STAGE_EMIT
                 result.res_success = 0
                 return result
+        elif config.cfg_target_arch == TARGET_ID_RISCV64
+            // Direct RISC-V 64 Silicon Machine Code Synthesis
+            rv_synth = riscv64_synth_compile_program(toks)
+            rv_res = riscv64_elf_emit_executable(rv_synth.rv_code, rv_synth.rv_rodata, config.cfg_out_path)
+            if rv_res.rv_ew_success == 1
+                result.res_output_bytes = rv_res.rv_ew_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = rv_res.rv_ew_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_success = 0
+                return result
         else
-            // Fallback for experimental targets (e.g. RISCV64)
+            // Fallback for unknown target architecture
             code_bytes = [72, 199, 192, 0, 0, 0, 0, 195] // mov rax, 0; ret
             empty_rodata = []
             empty_data = []
