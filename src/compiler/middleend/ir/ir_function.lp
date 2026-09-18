@@ -17,8 +17,9 @@ include "src/compiler/middleend/ir/basic_block.lp"
 // ── 1. IR Function Structure ──────────────────────────────────────────────────
 
 struct IRFunction
-    name           // string: function identifier (e.g. "main", "fibonacci")
-    params         // list: SSAValue objects representing formal parameters
+    fn_tag         // integer: alignment tag to ensure 'name' is at index 1 and 'params' is at index 2
+    name           // string: function identifier (e.g. "main", "fibonacci") - index 1
+    params         // list: SSAValue objects representing formal parameters - index 2
     return_type    // string: return type signature ("i64", "void", "ptr", etc.)
     entry_block    // BasicBlock: dedicated unique entry point into the function
     blocks         // list: all BasicBlock objects belonging to this function
@@ -30,9 +31,11 @@ struct IRFunction
 
 fn ir_function_new name return_type
     fn_obj = IRFunction()
+    fn_obj.fn_tag = 0
     fn_obj.name = name
     fn_obj.params = list()
     fn_obj.return_type = return_type
+    fn_obj.entry_block = 0
     fn_obj.blocks = list()
     fn_obj.allocas = list()
     fn_obj.val_counter = 0

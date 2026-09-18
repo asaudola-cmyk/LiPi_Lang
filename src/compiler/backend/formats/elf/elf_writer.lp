@@ -173,8 +173,8 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 // 5. STREAMLINED ELF64 EXECUTABLE EMITTER
 // ============================================================================
 
-@fn elf_emit_executable(code_bytes, rodata_bytes, data_bytes, bss_size, output_path)
-  // WHY: Comprehensive single-pass ELF64 executable assembler.
+@fn elf_emit_executable_with_debug(code_bytes, rodata_bytes, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, output_path)
+  // WHY: Comprehensive single-pass ELF64 executable assembler supporting optional DWARF v4/v5 debug sections.
   // 1. Layouts:
   //    Base Vaddr: 0x400000 (4194304)
   //    ELF Header: 64 bytes
@@ -184,8 +184,9 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   //    .text (Code): Immediately follows _start stub
   //    .rodata: Follows .text, aligned to 8 bytes
   //    .data / .bss: Handled in segment
+  //    .debug_line, .debug_info, .debug_abbrev (optional DWARF sections)
   //    .shstrtab: Section name string table
-  //    Section Header Table: 64 bytes * 5 sections
+  //    Section Header Table: 64 bytes * N sections
 
   base_vaddr = 4194304 // 0x400000
 
@@ -205,6 +206,18 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   rodata_name_off = elf_strtab_add(strtab, ".rodata")
   data_name_off   = elf_strtab_add(strtab, ".data")
   bss_name_off    = elf_strtab_add(strtab, ".bss")
+
+  has_debug = 0
+  dline_name_off = 0
+  dinfo_name_off = 0
+  dabbrev_name_off = 0
+  @if debug_line.len() > 0
+    has_debug = 1
+    dline_name_off   = elf_strtab_add(strtab, ".debug_line")
+    dinfo_name_off   = elf_strtab_add(strtab, ".debug_info")
+    dabbrev_name_off = elf_strtab_add(strtab, ".debug_abbrev")
+  @end
+
   shstr_name_off  = elf_strtab_add(strtab, ".shstrtab")
   shstr_bytes     = elf_strtab_get_bytes(strtab)
 
@@ -221,19 +234,34 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   data_size = data_bytes.len()
   data_vaddr = base_vaddr + data_file_offset
 
-  shstr_file_offset = data_file_offset + data_size
+  next_offset = data_file_offset + data_size
+
+  dline_file_offset = next_offset
+  dline_size = debug_line.len()
+  @if dline_size > 0 next_offset = next_offset + dline_size @end
+
+  dinfo_file_offset = next_offset
+  dinfo_size = debug_info.len()
+  @if dinfo_size > 0 next_offset = next_offset + dinfo_size @end
+
+  dabbrev_file_offset = next_offset
+  dabbrev_size = debug_abbrev.len()
+  @if dabbrev_size > 0 next_offset = next_offset + dabbrev_size @end
+
+  shstr_file_offset = next_offset
   shstr_size = shstr_bytes.len()
 
   // Section header table offset (placed right after .shstrtab)
   sh_offset = shstr_file_offset + shstr_size
-  num_sections = 6 // NULL, .text, .rodata, .data, .bss, .shstrtab
 
-  // Total file size before section headers
-  total_file_size = sh_offset + (num_sections * 64)
+  num_sections = 6
+  shstr_idx = 5
+  @if has_debug == 1
+    num_sections = 9
+    shstr_idx = 8
+  @end
 
   // 5. Program Headers (PT_LOAD and PT_GNU_STACK)
-  // PT_LOAD: Maps entire binary from file offset 0 to end of data
-  // Permissions: PF_R | PF_W | PF_X (7) for combined sovereign memory space
   total_load_filesz = data_file_offset + data_size
   total_load_memsz  = total_load_filesz + bss_size
 
@@ -244,7 +272,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   phdrs_bytes = elf_program_headers_serialize(phdrs) // 2 * 56 = 112 bytes
 
   // 6. ELF64 Header
-  elf_hdr = elf_header_x86_64(entry_point_vaddr, 64, sh_offset, 2, num_sections, 5)
+  elf_hdr = elf_header_x86_64(entry_point_vaddr, 64, sh_offset, 2, num_sections, shstr_idx)
   elf_hdr_bytes = elf_header_serialize(elf_hdr) // 64 bytes
 
   // 7. Section Headers
@@ -255,8 +283,51 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   sh_bss = elf_sh_bss(bss_name_off, data_vaddr + data_size, data_file_offset + data_size, bss_size)
   sh_shstr = elf_sh_shstrtab(shstr_name_off, shstr_file_offset, shstr_size)
 
-  shdrs = [sh_null, sh_text, sh_rodata, sh_data, sh_bss, sh_shstr]
-  shdrs_bytes = elf_section_headers_serialize(shdrs) // 6 * 64 = 384 bytes
+  shdrs = [sh_null, sh_text, sh_rodata, sh_data, sh_bss]
+  @if has_debug == 1
+    sh_dline = {
+      sh_name: dline_name_off,
+      sh_type: SHT_PROGBITS(),
+      sh_flags: 0,
+      sh_addr: 0,
+      sh_offset: dline_file_offset,
+      sh_size: dline_size,
+      sh_link: 0,
+      sh_info: 0,
+      sh_addralign: 1,
+      sh_entsize: 0
+    }
+    sh_dinfo = {
+      sh_name: dinfo_name_off,
+      sh_type: SHT_PROGBITS(),
+      sh_flags: 0,
+      sh_addr: 0,
+      sh_offset: dinfo_file_offset,
+      sh_size: dinfo_size,
+      sh_link: 0,
+      sh_info: 0,
+      sh_addralign: 1,
+      sh_entsize: 0
+    }
+    sh_dabbrev = {
+      sh_name: dabbrev_name_off,
+      sh_type: SHT_PROGBITS(),
+      sh_flags: 0,
+      sh_addr: 0,
+      sh_offset: dabbrev_file_offset,
+      sh_size: dabbrev_size,
+      sh_link: 0,
+      sh_info: 0,
+      sh_addralign: 1,
+      sh_entsize: 0
+    }
+    shdrs = shdrs.push(sh_dline)
+    shdrs = shdrs.push(sh_dinfo)
+    shdrs = shdrs.push(sh_dabbrev)
+  @end
+  shdrs = shdrs.push(sh_shstr)
+
+  shdrs_bytes = elf_section_headers_serialize(shdrs)
 
   // 8. Assemble Full Contiguous Binary
   binary = []
@@ -265,6 +336,11 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   binary = elf_concat(binary, text_payload)    // Offset 176 onwards
   binary = elf_concat(binary, rodata_bytes)
   binary = elf_concat(binary, data_bytes)
+  @if has_debug == 1
+    binary = elf_concat(binary, debug_line)
+    binary = elf_concat(binary, debug_info)
+    binary = elf_concat(binary, debug_abbrev)
+  @end
   binary = elf_concat(binary, shstr_bytes)
   binary = elf_concat(binary, shdrs_bytes)
 
@@ -289,4 +365,9 @@ import "src/compiler/backend/formats/elf/relocation.lp"
     ew_error_msg: "",
     ew_bytes: binary
   }
+@end
+
+@fn elf_emit_executable(code_bytes, rodata_bytes, data_bytes, bss_size, output_path)
+  // WHY: Canonical wrapper for live binaries without debug symbols
+  return elf_emit_executable_with_debug(code_bytes, rodata_bytes, data_bytes, bss_size, [], [], [], output_path)
 @end

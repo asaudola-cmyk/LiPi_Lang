@@ -222,8 +222,8 @@ fn compiler_driver_print_banner
     say "║  ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign      ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
-fn compiler_driver_compile_file src_path out_path target_arch opt_level is_dry_run
-    // WHY: Reads source file from filesystem, recursively resolves dependencies, and routes through decoupled pipeline.
+fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug is_dry_run
+    // WHY: Advanced compilation entry point supporting DWARF debug symbols (-g) and Shared Object (.so) format.
     visited = list()
     source_code = compiler_driver_bundle_source(src_path, visited)
     if len(source_code) == 0
@@ -235,9 +235,14 @@ fn compiler_driver_compile_file src_path out_path target_arch opt_level is_dry_r
         res.res_stage_reached = PIPELINE_STAGE_INIT
         res.res_success = 0
         return res
-    cfg = compiler_config_new(src_path, out_path, target_arch, opt_level, FORMAT_ELF, is_dry_run)
+    cfg = compiler_config_new(src_path, out_path, target_arch, opt_level, emit_fmt, is_dry_run)
+    cfg.cfg_debug_mode = is_debug
     res = compiler_pipeline_execute(cfg, source_code)
     return res
+
+fn compiler_driver_compile_file src_path out_path target_arch opt_level is_dry_run
+    // WHY: Reads source file from filesystem, recursively resolves dependencies, and routes through decoupled pipeline.
+    return compiler_driver_compile_file_advanced(src_path, out_path, target_arch, opt_level, FORMAT_ELF, 0, is_dry_run)
 
 fn compiler_driver_print_result res
     if res.res_success == 1

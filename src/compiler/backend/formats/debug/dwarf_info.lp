@@ -69,28 +69,28 @@ import "universe/core/string"
 // ============================================================================
 
 @struct DwarfFunctionInfo
-  name: string
-  low_pc: i64
-  high_pc: i64
-  decl_file: i64
-  decl_line: i64
+  dwf_name: string
+  dwf_low_pc: i64
+  dwf_high_pc: i64
+  dwf_decl_file: i64
+  dwf_decl_line: i64
 @end
 
 @struct DwarfBaseTypeInfo
-  name: string
-  byte_size: i64
-  encoding: i64
+  dwt_name: string
+  dwt_byte_size: i64
+  dwt_encoding: i64
 @end
 
 @struct DwarfUnitInfo
-  producer: string
-  source_file: string
-  comp_dir: string
-  low_pc: i64
-  high_pc: i64
-  stmt_list_offset: i64
-  functions: array
-  types: array
+  dwu_producer: string
+  dwu_source_file: string
+  dwu_comp_dir: string
+  dwu_low_pc: i64
+  dwu_high_pc: i64
+  dwu_stmt_list_offset: i64
+  dwu_functions: array
+  dwu_types: array
 @end
 
 // ============================================================================
@@ -164,35 +164,35 @@ import "universe/core/string"
 @fn dwarf_unit_create(producer, source_file, comp_dir, low_pc, high_pc, stmt_list_offset)
   // WHY: Constructs a compilation unit metadata container.
   return {
-    producer: producer,
-    source_file: source_file,
-    comp_dir: comp_dir,
-    low_pc: low_pc,
-    high_pc: high_pc,
-    stmt_list_offset: stmt_list_offset,
-    functions: [],
-    types: []
+    dwu_producer: producer,
+    dwu_source_file: source_file,
+    dwu_comp_dir: comp_dir,
+    dwu_low_pc: low_pc,
+    dwu_high_pc: high_pc,
+    dwu_stmt_list_offset: stmt_list_offset,
+    dwu_functions: [],
+    dwu_types: []
   }
 @end
 
 @fn dwarf_unit_add_function(unit, name, low_pc, high_pc, decl_file, decl_line)
   // WHY: Registers a subprogram function DIE descriptor.
-  unit.functions = unit.functions.push({
-    name: name,
-    low_pc: low_pc,
-    high_pc: high_pc,
-    decl_file: decl_file,
-    decl_line: decl_line
+  unit.dwu_functions = unit.dwu_functions.push({
+    dwf_name: name,
+    dwf_low_pc: low_pc,
+    dwf_high_pc: high_pc,
+    dwf_decl_file: decl_file,
+    dwf_decl_line: decl_line
   })
   return unit
 @end
 
 @fn dwarf_unit_add_base_type(unit, name, byte_size, encoding)
   // WHY: Registers a fundamental primitive type descriptor (e.g. i64, f64).
-  unit.types = unit.types.push({
-    name: name,
-    byte_size: byte_size,
-    encoding: encoding
+  unit.dwu_types = unit.dwu_types.push({
+    dwt_name: name,
+    dwt_byte_size: byte_size,
+    dwt_encoding: encoding
   })
   return unit
 @end
@@ -306,7 +306,7 @@ import "universe/core/string"
   dies_body = dies_body.push(1) // Abbrev code 1
 
   // DW_AT_producer (string)
-  p_str = dwarf_info_pack_string(unit.producer)
+  p_str = dwarf_info_pack_string(unit.dwu_producer)
   k = 0 @while k < p_str.len() dies_body = dies_body.push(p_str[k]) k = k + 1 @end
 
   // DW_AT_language (data2: 0x0C = C99)
@@ -315,50 +315,50 @@ import "universe/core/string"
   dies_body = dies_body.push(lang_bytes[1])
 
   // DW_AT_name (string)
-  n_str = dwarf_info_pack_string(unit.source_file)
+  n_str = dwarf_info_pack_string(unit.dwu_source_file)
   k = 0 @while k < n_str.len() dies_body = dies_body.push(n_str[k]) k = k + 1 @end
 
   // DW_AT_comp_dir (string)
-  cd_str = dwarf_info_pack_string(unit.comp_dir)
+  cd_str = dwarf_info_pack_string(unit.dwu_comp_dir)
   k = 0 @while k < cd_str.len() dies_body = dies_body.push(cd_str[k]) k = k + 1 @end
 
   // DW_AT_low_pc (addr: 8 bytes)
-  lp = dwarf_info_pack_u64(unit.low_pc)
+  lp = dwarf_info_pack_u64(unit.dwu_low_pc)
   k = 0 @while k < 8 dies_body = dies_body.push(lp[k]) k = k + 1 @end
 
   // DW_AT_high_pc (addr: 8 bytes)
-  hp = dwarf_info_pack_u64(unit.high_pc)
+  hp = dwarf_info_pack_u64(unit.dwu_high_pc)
   k = 0 @while k < 8 dies_body = dies_body.push(hp[k]) k = k + 1 @end
 
   // DW_AT_stmt_list (sec_offset: 4 bytes)
-  sl = dwarf_info_pack_u32(unit.stmt_list_offset)
+  sl = dwarf_info_pack_u32(unit.dwu_stmt_list_offset)
   k = 0 @while k < 4 dies_body = dies_body.push(sl[k]) k = k + 1 @end
 
   // --- Child DIEs: Functions (Abbrev 2) ---
   i = 0
-  num_fn = unit.functions.len()
+  num_fn = unit.dwu_functions.len()
   @while i < num_fn
-    fn_info = unit.functions[i]
+    fn_info = unit.dwu_functions[i]
     dies_body = dies_body.push(2) // Abbrev code 2
 
     // DW_AT_name (string)
-    fn_name = dwarf_info_pack_string(fn_info.name)
+    fn_name = dwarf_info_pack_string(fn_info.dwf_name)
     k = 0 @while k < fn_name.len() dies_body = dies_body.push(fn_name[k]) k = k + 1 @end
 
     // DW_AT_low_pc (addr: 8 bytes)
-    fn_lp = dwarf_info_pack_u64(fn_info.low_pc)
+    fn_lp = dwarf_info_pack_u64(fn_info.dwf_low_pc)
     k = 0 @while k < 8 dies_body = dies_body.push(fn_lp[k]) k = k + 1 @end
 
     // DW_AT_high_pc (addr: 8 bytes)
-    fn_hp = dwarf_info_pack_u64(fn_info.high_pc)
+    fn_hp = dwarf_info_pack_u64(fn_info.dwf_high_pc)
     k = 0 @while k < 8 dies_body = dies_body.push(fn_hp[k]) k = k + 1 @end
 
     // DW_AT_decl_file (udata)
-    df_uleb = dwarf_info_uleb128(fn_info.decl_file)
+    df_uleb = dwarf_info_uleb128(fn_info.dwf_decl_file)
     k = 0 @while k < df_uleb.len() dies_body = dies_body.push(df_uleb[k]) k = k + 1 @end
 
     // DW_AT_decl_line (udata)
-    dl_uleb = dwarf_info_uleb128(fn_info.decl_line)
+    dl_uleb = dwarf_info_uleb128(fn_info.dwf_decl_line)
     k = 0 @while k < dl_uleb.len() dies_body = dies_body.push(dl_uleb[k]) k = k + 1 @end
 
     i = i + 1
@@ -366,20 +366,20 @@ import "universe/core/string"
 
   // --- Child DIEs: Base Types (Abbrev 3) ---
   i = 0
-  num_ty = unit.types.len()
+  num_ty = unit.dwu_types.len()
   @while i < num_ty
-    ty_info = unit.types[i]
+    ty_info = unit.dwu_types[i]
     dies_body = dies_body.push(3) // Abbrev code 3
 
     // DW_AT_name (string)
-    ty_name = dwarf_info_pack_string(ty_info.name)
+    ty_name = dwarf_info_pack_string(ty_info.dwt_name)
     k = 0 @while k < ty_name.len() dies_body = dies_body.push(ty_name[k]) k = k + 1 @end
 
     // DW_AT_byte_size (data1: 1 byte)
-    dies_body = dies_body.push(ty_info.byte_size % 256)
+    dies_body = dies_body.push(ty_info.dwt_byte_size % 256)
 
     // DW_AT_encoding (data1: 1 byte)
-    dies_body = dies_body.push(ty_info.encoding % 256)
+    dies_body = dies_body.push(ty_info.dwt_encoding % 256)
 
     i = i + 1
   @end

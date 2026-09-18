@@ -19,9 +19,14 @@ include "src/compiler/middleend/ir/ssa_value.lp"
 //      control flow transfers, and n-ary phi confluence nodes uniformly.
 
 struct SSAInstr
-    id          // integer: unique monotonic instruction identifier
-    op          // integer: opcode constant (OP_*)
-    operands    // list: SSAValue objects consumed by this instruction
+    id          // integer: unique monotonic instruction identifier (index 0)
+    inst_pad1   // alignment padding (index 1)
+    inst_pad2   // alignment padding (index 2)
+    inst_pad3   // alignment padding (index 3)
+    inst_pad4   // alignment padding (index 4)
+    inst_pad5   // alignment padding (index 5)
+    op          // integer: opcode constant (OP_*) - index 6, perfectly aligned with ASTNode.op
+    operands    // list: SSAValue objects consumed by this instruction (index 7)
     result      // SSAValue reference: value defined by this instruction (0 if void/store/branch)
     parent_bb   // reference: BasicBlock containing this instruction
     extra_int   // integer: comparison predicate (CMP_*), immediate tag, or flags
@@ -34,6 +39,11 @@ struct SSAInstr
 fn ssa_instr_new id op result parent_bb
     inst = SSAInstr()
     inst.id = id
+    inst.inst_pad1 = 0
+    inst.inst_pad2 = 0
+    inst.inst_pad3 = 0
+    inst.inst_pad4 = 0
+    inst.inst_pad5 = 0
     inst.op = op
     inst.operands = list()
     inst.result = result

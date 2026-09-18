@@ -73,6 +73,9 @@ import "src/compiler/backend/formats/elf/program_header.lp"
 import "src/compiler/backend/formats/elf/section_header.lp"
 import "src/compiler/backend/formats/elf/relocation.lp"
 import "src/compiler/backend/formats/elf/elf_writer.lp"
+import "src/compiler/backend/formats/debug/dwarf_line.lp"
+import "src/compiler/backend/formats/debug/dwarf_info.lp"
+include "src/compiler/backend/so_emitter.lp"
 
 // ── 1. Pipeline Constants ─────────────────────────────────────────────────────
 
@@ -90,6 +93,7 @@ FORMAT_MACHO                = 2
 FORMAT_PE                   = 3
 FORMAT_UNIKERNEL            = 4
 FORMAT_WASM                 = 5
+FORMAT_SHARED               = 6
 
 // ── 2. Hardware-Aligned Models (Max 8 Fields) ─────────────────────────────────
 
@@ -98,9 +102,10 @@ struct CompilerConfig
     cfg_out_path            // Target output binary path
     cfg_target_arch         // TARGET_ID_X86_64, TARGET_ID_ARM64, etc.
     cfg_opt_level           // 0, 1, 2, or 3
-    cfg_emit_format         // FORMAT_ELF, FORMAT_PE, etc.
+    cfg_emit_format         // FORMAT_ELF, FORMAT_PE, FORMAT_SHARED, etc.
     cfg_is_dry_run          // 1 to skip disk emission, 0 to persist
     cfg_verbose             // 1 for verbose phase telemetry, 0 for quiet
+    cfg_debug_mode          // 1 for DWARF debug emission (-g), 0 for standard
 
 struct CompilerResult
     res_success             // 1 on success, 0 on failure
@@ -123,6 +128,7 @@ fn compiler_config_new src out_bin arch opt fmt dry_run
     cfg.cfg_emit_format = fmt
     cfg.cfg_is_dry_run = dry_run
     cfg.cfg_verbose = 0
+    cfg.cfg_debug_mode = 0
     return cfg
 
 fn compiler_result_new
@@ -227,10 +233,58 @@ fn compiler_pipeline_execute config source_code
 
     // WHY: If live emission requested (cfg_is_dry_run == 0), assemble and persist the binary to disk.
     if config.cfg_is_dry_run == 0
-        if config.cfg_target_arch == TARGET_ID_X86_64
+        if config.cfg_emit_format == FORMAT_SHARED
+            // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
+            synth = x86_synth_compile_program(toks)
+            exp_names = list()
+            exp_offs = list()
+            f_idx = 0
+            while f_idx < synth.synth_functions.len()
+                fn_item = synth.synth_functions[f_idx]
+                push(exp_names, fn_item.fn_name)
+                push(exp_offs, fn_item.fn_entry_offset)
+                f_idx = f_idx + 1
+            if exp_names.len() == 0
+                push(exp_names, "_start")
+                push(exp_offs, 0)
+            so_size = so_emit_shared_library(synth.synth_code, synth.synth_rodata, exp_names, exp_offs, config.cfg_out_path)
+            if so_size > 0
+                result.res_output_bytes = so_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = "Failed to emit shared library (.so)"
+                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_success = 0
+                return result
+        elif config.cfg_target_arch == TARGET_ID_X86_64
             // Synthesize AMD64 machine code instructions and rodata directly from tokens
             synth = x86_synth_compile_program(toks)
-            emit_res = elf_emit_executable(synth.synth_code, synth.synth_rodata, [], 0, config.cfg_out_path)
+            if config.cfg_debug_mode == 1
+                // Emit ELF64 executable with embedded DWARF v4/v5 debug metadata (-g)
+                line_builder = dwarf_line_builder_new(4)
+                dwarf_line_add_dir(line_builder, ".")
+                dwarf_line_add_file(line_builder, config.cfg_src_path, 1)
+                dwarf_line_emit_set_address(line_builder, 4194480)
+                dwarf_line_emit_advance_line(line_builder, 1)
+                dwarf_line_emit_copy(line_builder)
+                dwarf_line_emit_advance_pc(line_builder, synth.synth_code.len())
+                dwarf_line_emit_advance_line(line_builder, 1)
+                dwarf_line_end_sequence(line_builder, 4194480 + synth.synth_code.len())
+                line_bytes = dwarf_line_serialize(line_builder)
+
+                abbrev_bytes = dwarf_abbrev_build_standard()
+                cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", config.cfg_src_path, ".", 4194480, 4194480 + synth.synth_code.len(), 0)
+                f_idx = 0
+                while f_idx < synth.synth_functions.len()
+                    fn_item = synth.synth_functions[f_idx]
+                    dwarf_unit_add_function(cu, fn_item.fn_name, 4194480 + fn_item.fn_entry_offset, 4194480 + synth.synth_code.len(), 1, 1)
+                    f_idx = f_idx + 1
+                dwarf_unit_add_base_type(cu, "i64", 8, DW_ATE_signed())
+                info_bytes = dwarf_info_serialize(cu)
+
+                emit_res = elf_emit_executable_with_debug(synth.synth_code, synth.synth_rodata, [], 0, line_bytes, info_bytes, abbrev_bytes, config.cfg_out_path)
+            else
+                emit_res = elf_emit_executable(synth.synth_code, synth.synth_rodata, [], 0, config.cfg_out_path)
             if emit_res.ew_success == 1
                 result.res_output_bytes = emit_res.ew_file_size
             else

@@ -25,11 +25,15 @@ fn print_cli_usage
     say "  -o <file>                  আউটপুট বাইনারির পাথ (Output binary path)"
     say "  --target=<arch>            টার্গেট আর্কিটেকচার (Target: x86_64, arm64, wasm, riscv64)"
     say "  -O0, -O1, -O2              অপটিমাইজেশন লেভেল (Optimization level: 0, 1, or 2)"
+    say "  -g, --debug                সোর্স ডিবাগিং ইনফরমেশন (DWARF v4/v5 Debug symbols)"
+    say "  --shared                   ডাইনামিক শেয়ার্ড লাইব্রেরি (.so Shared Object)"
     say "  -h, --help                 সহায়তা বার্তা প্রদর্শন (Display this help manual)"
     say "  -v, --version              ভার্সন তথ্য (Display compiler version: First 1.0.0)"
     say ""
     say "উদাহরণ (Examples):"
     say "  lipc_micro main.lp -o app.bin"
+    say "  lipc_micro -g main.lp -o app_debug.bin"
+    say "  lipc_micro --shared math.lp -o libmath.so"
     say "  lipc_micro --target=arm64 app.lp -o app_arm.bin"
     say "  lipc_micro -O2 server.lp -o server.bin"
     return 0
@@ -46,6 +50,8 @@ fn main
     out_file = ""
     target_arch = TARGET_ID_X86_64
     opt_level = 1
+    debug_mode = 0
+    emit_format = FORMAT_ELF
     i = 1
 
     while i < argc
@@ -61,6 +67,10 @@ fn main
             i = i + 1
             if i < argc
                 out_file = get(args, i)
+        elif arg == "-g" or arg == "--debug"
+            debug_mode = 1
+        elif arg == "--shared"
+            emit_format = FORMAT_SHARED
         elif arg == "--target=arm64" or arg == "--target=aarch64"
             target_arch = TARGET_ID_ARM64
         elif arg == "--target=wasm" or arg == "--target=web"
@@ -89,14 +99,16 @@ fn main
         exit(1)
 
     if out_file == ""
-        if target_arch == TARGET_ID_WASM
+        if emit_format == FORMAT_SHARED
+            out_file = in_file + ".so"
+        elif target_arch == TARGET_ID_WASM
             out_file = in_file + ".wasm"
         else
             out_file = in_file + ".bin"
 
     // Execute compilation via micro-pipeline driver
     say "▶ Compiling " + in_file + " ──► " + out_file + " via Sovereign Micro-Pipeline..."
-    res = compiler_driver_compile_file(in_file, out_file, target_arch, opt_level, 0)
+    res = compiler_driver_compile_file_advanced(in_file, out_file, target_arch, opt_level, emit_format, debug_mode, 0)
     
     // Report detailed diagnostics
     compiler_driver_print_result(res)

@@ -782,6 +782,34 @@ fn main
     else
         failed = failed + 1
 
+    // ── Next-Gen Sovereign Compiler Frontiers (Tests 172-176) ───────────────────
+    // WHY: Validates the 5 sovereign micro-compiler frontiers:
+    // 172: AST-to-SSA IR Lowering Bridge (canonical Mem2Reg alloca, symmetric CFG, O2 Pass Manager).
+    // 173: Native DWARF v4/v5 Source-Level Debug Emission (-g line, info, abbrev tables).
+    // 174: Standalone Position-Independent Code (PIC) Shared Object (.so) Emitter.
+    // 175: Direct Sovereign ARM64 (AArch64) Silicon Machine Code Synthesizer.
+    // 176: Direct Sovereign Zero-JS WebAssembly (WASM) Binary Bytecode Synthesizer.
+    if run_single_test(compiler, "tests/test_ast_to_ssa_lowering.lp", "test_ast_to_ssa_lowering") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_dwarf_debug_emission.lp", "test_dwarf_debug_emission") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_micro_compiler_shared_so.lp", "test_micro_compiler_shared_so") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_arm64_synthesizer.lp", "test_arm64_synthesizer") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+    if run_single_test(compiler, "tests/test_wasm_synthesizer.lp", "test_wasm_synthesizer") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
 
 
 
