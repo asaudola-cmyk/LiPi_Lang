@@ -7,7 +7,7 @@
 @! SemVer 2.0.0 Constraint Resolution, Cryptographic Verification, Client API
 @! ============================================================================
 
-import "universe/p2p/mpm_server"
+import "universe/p2p/lipipkg_server_engine"
 
 // WHY: Provides canonical Lipi-branded naming while preserving full interoperability.
 @fn lipipkg_server_config_default()

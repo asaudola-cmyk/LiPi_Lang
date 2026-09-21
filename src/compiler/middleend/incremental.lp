@@ -652,7 +652,7 @@ _i_c_0 = 0
   return bytes
 @end
 
-@! Compiles source code string into AST, lowers to Maya IR, extracts types/symbols & serializes
+@! Compiles source code string into AST, lowers to Lipi IR, extracts types/symbols & serializes
 @fn inc_compile_source(file_path, source_code)
   content_hash = fnv1a_64_string(source_code)
   content_hash_hex = sha256_hex_string(source_code)
@@ -670,7 +670,7 @@ _i_c_0 = 0
   exports = extracted.exports
   type_env = extracted.type_env
 
-  @! 3. Genuine Maya IR Lowering
+  @! 3. Genuine Lipi IR Lowering
   ir_opts = { module_name: file_path, dump_ir: 0 }
   ir_res = ir_module_from_ast(ast_stmts, ir_opts)
   ir_mod = ir_res.module
@@ -733,8 +733,9 @@ _i_c_0 = 0
   @if string_contains(converted, ".") == 1
     converted = string_replace(converted, ".", "/")
   @end
-  @if str_ends_with(converted, ".maya") == 0
-    converted = converted + ".maya"
+  // WHY: Prioritizes canonical Lipi source extensions (.lp and .lipi)
+  @if str_ends_with(converted, ".lp") == 0 && str_ends_with(converted, ".lipi") == 0
+    converted = converted + ".lp"
   @end
   @if str_starts_with(converted, "/") == 1 || str_starts_with(converted, root_dir) == 1
     return converted

@@ -79,6 +79,8 @@ fn x86_synth_emit__lipi_malloc s
     // Prevents colliding with or unmapping the compiler's internal 1GB bump arena.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_malloc", off)
+    x86_synth_register_helper_fn(s, "lipi_alloc", off)
+    x86_synth_register_helper_fn(s, "lipi_gc_alloc", off)
     // mov rsi, rdi; xor edi, edi; mov edx, 3; mov r10d, 34
     // mov r8, -1; xor r9d, r9d; mov eax, 9; syscall; ret
     x86_synth_emit_bytes(s, [72, 137, 254, 49, 255, 186, 3, 0, 0, 0, 65, 186, 34, 0, 0, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0, 0, 0, 15, 5, 195])

@@ -1,4 +1,4 @@
-@! Maya helper library for import testing
+@! Lipi helper library for import testing
 
 @fn add_numbers(a, b)
   return a + b

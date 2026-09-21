@@ -1937,17 +1937,23 @@ _i_func_0 = 0
     @end
 
     mps_start = text_buf.bytes.len()
+    // WHY: Dual-register canonical Lipi symbols and legacy symbols to the exact same native offset.
+    fn_offsets_map = fn_offsets_map.push({
+      fn_sym: "lipi_print_str",
+      fn_byte_off: mps_start
+    })
     fn_offsets_map = fn_offsets_map.push({
       fn_sym: "maya_print_str",
       fn_byte_off: mps_start
     })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_print_str", sym_offset: mps_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_print_str", sym_offset: mps_start })
 
     mps_bytes = [85, 72, 137, 229, 72, 131, 236, 32, 72, 133, 255, 116, 34, 72, 137, 254, 72, 49, 210, 128, 60, 22, 0, 116, 5, 72, 255, 194, 235, 245, 72, 133, 210, 116, 12, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 72, 49, 192, 72, 137, 236, 93, 195]
     bytebuf_push_bytes(text_buf, mps_bytes)
 
     symbols = symbols.push({
-      name: "maya_print_str",
+      name: "lipi_print_str",
       offset: mps_start,
       size: mps_bytes.len(),
       section: ".text"
@@ -1962,16 +1968,21 @@ _i_func_0 = 0
 
     mpi_start = text_buf.bytes.len()
     fn_offsets_map = fn_offsets_map.push({
+      fn_sym: "lipi_print_int",
+      fn_byte_off: mpi_start
+    })
+    fn_offsets_map = fn_offsets_map.push({
       fn_sym: "maya_print_int",
       fn_byte_off: mpi_start
     })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_print_int", sym_offset: mpi_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_print_int", sym_offset: mpi_start })
 
     mpi_bytes = [85, 72, 137, 229, 72, 131, 236, 64, 72, 137, 248, 72, 141, 117, 255, 198, 6, 0, 72, 49, 201, 72, 133, 192, 121, 8, 72, 247, 216, 185, 1, 0, 0, 0, 65, 184, 10, 0, 0, 0, 72, 255, 206, 72, 49, 210, 73, 247, 240, 128, 194, 48, 136, 22, 72, 133, 192, 117, 237, 72, 133, 201, 116, 6, 72, 255, 206, 198, 6, 45, 72, 141, 85, 255, 72, 41, 242, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 72, 49, 192, 72, 137, 236, 93, 195]
     bytebuf_push_bytes(text_buf, mpi_bytes)
 
     symbols = symbols.push({
-      name: "maya_print_int",
+      name: "lipi_print_int",
       offset: mpi_start,
       size: mpi_bytes.len(),
       section: ".text"
@@ -1985,9 +1996,14 @@ _i_func_0 = 0
     @end
     @if mp_target_off >= 0
       fn_offsets_map = fn_offsets_map.push({
+        fn_sym: "lipi_print",
+        fn_byte_off: mp_target_off
+      })
+      fn_offsets_map = fn_offsets_map.push({
         fn_sym: "maya_print",
         fn_byte_off: mp_target_off
       })
+      symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_print", sym_offset: mp_target_off })
       symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_print", sym_offset: mp_target_off })
     @end
   @end
@@ -2208,17 +2224,19 @@ _i_func_0 = 0
       bytebuf_push(text_buf, 144)
     @end
     its_start = text_buf.bytes.len()
+    fn_offsets_map = fn_offsets_map.push({ fn_sym: "lipi_int_to_str", fn_byte_off: its_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "maya_int_to_str", fn_byte_off: its_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "int_to_str", fn_byte_off: its_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "int_to_string", fn_byte_off: its_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "to_str", fn_byte_off: its_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "to_string", fn_byte_off: its_start })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_int_to_str", sym_offset: its_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_int_to_str", sym_offset: its_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "int_to_str", sym_offset: its_start })
     its_bytes = [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 72, 131, 236, 40, 73, 137, 252, 72, 199, 199, 32, 0, 0, 0, 232, 0, 0, 0, 0, 72, 137, 195, 72, 141, 117, 255, 198, 6, 0, 77, 49, 237, 76, 137, 224, 72, 133, 192, 121, 10, 72, 247, 216, 73, 199, 197, 1, 0, 0, 0, 73, 199, 198, 10, 0, 0, 0, 72, 255, 206, 72, 49, 210, 73, 247, 246, 128, 194, 48, 136, 22, 72, 133, 192, 117, 237, 77, 133, 237, 116, 6, 72, 255, 206, 198, 6, 45, 72, 137, 223, 138, 6, 136, 7, 132, 192, 116, 8, 72, 255, 198, 72, 255, 199, 235, 240, 72, 137, 216, 72, 131, 196, 40, 65, 94, 65, 93, 65, 92, 91, 72, 137, 236, 93, 195]
     bytebuf_push_bytes(text_buf, its_bytes)
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: its_start + 26, target_id: -1, target_name: "maya_gc_alloc" })
-    symbols = symbols.push({ name: "maya_int_to_str", offset: its_start, size: its_bytes.len(), section: ".text" })
+    symbols = symbols.push({ name: "lipi_int_to_str", offset: its_start, size: its_bytes.len(), section: ".text" })
   @end
 
   @if has_maya_str_concat == 0
@@ -2226,10 +2244,12 @@ _i_func_0 = 0
       bytebuf_push(text_buf, 144)
     @end
     cat_start = text_buf.bytes.len()
+    fn_offsets_map = fn_offsets_map.push({ fn_sym: "lipi_str_concat", fn_byte_off: cat_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "maya_str_concat", fn_byte_off: cat_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "str_concat", fn_byte_off: cat_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "maya_string_concat", fn_byte_off: cat_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "string_concat", fn_byte_off: cat_start })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_str_concat", sym_offset: cat_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_str_concat", sym_offset: cat_start })
     cat_bytes = [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8, 73, 137, 252, 73, 137, 245, 76, 137, 231, 232, 0, 0, 0, 0, 73, 137, 198, 76, 137, 239, 232, 0, 0, 0, 0, 73, 137, 199, 76, 137, 247, 76, 1, 255, 72, 131, 199, 16, 232, 0, 0, 0, 0, 72, 137, 195, 72, 49, 201, 73, 57, 206, 126, 21, 76, 137, 231, 72, 137, 206, 81, 232, 0, 0, 0, 0, 89, 136, 4, 11, 72, 255, 193, 235, 230, 72, 49, 201, 73, 57, 207, 126, 25, 76, 137, 239, 72, 137, 206, 81, 232, 0, 0, 0, 0, 89, 73, 141, 20, 14, 136, 4, 19, 72, 255, 193, 235, 226, 75, 141, 20, 62, 198, 4, 19, 0, 72, 137, 216, 72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 72, 137, 236, 93, 195]
     bytebuf_push_bytes(text_buf, cat_bytes)
@@ -2238,7 +2258,7 @@ _i_func_0 = 0
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: cat_start + 56, target_id: -1, target_name: "maya_gc_alloc" })
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: cat_start + 79, target_id: -1, target_name: "str_char_at" })
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: cat_start + 108, target_id: -1, target_name: "str_char_at" })
-    symbols = symbols.push({ name: "maya_str_concat", offset: cat_start, size: cat_bytes.len(), section: ".text" })
+    symbols = symbols.push({ name: "lipi_str_concat", offset: cat_start, size: cat_bytes.len(), section: ".text" })
   @end
 
   @if has_maya_str_eq == 0
@@ -2246,16 +2266,18 @@ _i_func_0 = 0
       bytebuf_push(text_buf, 144)
     @end
     eq_start = text_buf.bytes.len()
+    fn_offsets_map = fn_offsets_map.push({ fn_sym: "lipi_str_eq", fn_byte_off: eq_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "maya_str_eq", fn_byte_off: eq_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "str_eq", fn_byte_off: eq_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "compiler_str_eq", fn_byte_off: eq_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "infinity_str_eq", fn_byte_off: eq_start })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_str_eq", sym_offset: eq_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_str_eq", sym_offset: eq_start })
     eq_bytes = [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 72, 131, 236, 8, 73, 137, 252, 73, 137, 245, 77, 57, 229, 116, 50, 77, 133, 228, 116, 54, 77, 133, 237, 116, 49, 77, 49, 246, 76, 137, 231, 76, 137, 246, 232, 0, 0, 0, 0, 136, 195, 76, 137, 239, 76, 137, 246, 232, 0, 0, 0, 0, 56, 216, 117, 18, 132, 192, 116, 5, 73, 255, 198, 235, 219, 72, 199, 192, 1, 0, 0, 0, 235, 3, 72, 49, 192, 72, 131, 196, 8, 65, 94, 65, 93, 65, 92, 91, 72, 137, 236, 93, 195]
     bytebuf_push_bytes(text_buf, eq_bytes)
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: eq_start + 46, target_id: -1, target_name: "str_char_at" })
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: eq_start + 59, target_id: -1, target_name: "str_char_at" })
-    symbols = symbols.push({ name: "maya_str_eq", offset: eq_start, size: eq_bytes.len(), section: ".text" })
+    symbols = symbols.push({ name: "lipi_str_eq", offset: eq_start, size: eq_bytes.len(), section: ".text" })
   @end
 
   @if has_maya_str_substr == 0
@@ -2263,16 +2285,18 @@ _i_func_0 = 0
       bytebuf_push(text_buf, 144)
     @end
     sub_start = text_buf.bytes.len()
+    fn_offsets_map = fn_offsets_map.push({ fn_sym: "lipi_str_substr", fn_byte_off: sub_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "maya_str_substr", fn_byte_off: sub_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "str_substr", fn_byte_off: sub_start })
     fn_offsets_map = fn_offsets_map.push({ fn_sym: "string_slice", fn_byte_off: sub_start })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_str_substr", sym_offset: sub_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_str_substr", sym_offset: sub_start })
     sub_bytes = [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8, 73, 137, 252, 73, 137, 245, 73, 137, 214, 77, 133, 228, 116, 77, 73, 131, 253, 0, 125, 3, 77, 49, 237, 77, 137, 247, 77, 41, 239, 73, 131, 255, 0, 126, 56, 76, 137, 255, 72, 131, 199, 16, 232, 0, 0, 0, 0, 72, 137, 195, 72, 49, 201, 73, 57, 207, 126, 23, 76, 137, 231, 73, 141, 116, 13, 0, 81, 232, 0, 0, 0, 0, 89, 136, 4, 11, 72, 255, 193, 235, 228, 66, 198, 4, 59, 0, 72, 137, 216, 235, 15, 72, 199, 199, 16, 0, 0, 0, 232, 0, 0, 0, 0, 198, 0, 0, 72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 72, 137, 236, 93, 195]
     bytebuf_push_bytes(text_buf, sub_bytes)
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: sub_start + 60, target_id: -1, target_name: "maya_gc_alloc" })
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: sub_start + 85, target_id: -1, target_name: "str_char_at" })
     all_fn_fixups = all_fn_fixups.push({ kind: "call", cond_code: "", fixup_offset: sub_start + 116, target_id: -1, target_name: "maya_gc_alloc" })
-    symbols = symbols.push({ name: "maya_str_substr", offset: sub_start, size: sub_bytes.len(), section: ".text" })
+    symbols = symbols.push({ name: "lipi_str_substr", offset: sub_start, size: sub_bytes.len(), section: ".text" })
   @end
 
   @if has_gc_alloc == 0
@@ -2280,6 +2304,14 @@ _i_func_0 = 0
       bytebuf_push(text_buf, 144) @! 0x90
     @end
     gc_alloc_start = text_buf.bytes.len()
+    fn_offsets_map = fn_offsets_map.push({
+      fn_sym: "lipi_gc_alloc",
+      fn_byte_off: gc_alloc_start
+    })
+    fn_offsets_map = fn_offsets_map.push({
+      fn_sym: "lipi_alloc",
+      fn_byte_off: gc_alloc_start
+    })
     fn_offsets_map = fn_offsets_map.push({
       fn_sym: "maya_gc_alloc",
       fn_byte_off: gc_alloc_start
@@ -2293,6 +2325,10 @@ _i_func_0 = 0
       fn_byte_off: gc_alloc_start
     })
     fn_offsets_map = fn_offsets_map.push({
+      fn_sym: "lipi_str_new",
+      fn_byte_off: gc_alloc_start
+    })
+    fn_offsets_map = fn_offsets_map.push({
       fn_sym: "maya_str_new",
       fn_byte_off: gc_alloc_start
     })
@@ -2300,6 +2336,8 @@ _i_func_0 = 0
       fn_sym: "maya_string_new",
       fn_byte_off: gc_alloc_start
     })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_gc_alloc", sym_offset: gc_alloc_start })
+    symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "lipi_alloc", sym_offset: gc_alloc_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_gc_alloc", sym_offset: gc_alloc_start })
     symbol_offsets = symbol_offsets.push({ sym_id: 0, name: "maya_alloc", sym_offset: gc_alloc_start })
     @! Standalone Linux x86-64 sys_mmap memory allocator (Syscall 9)
@@ -2331,7 +2369,7 @@ _i_call_fix_0 = 0
 _i_fn_entry_1 = 0
 @while _i_fn_entry_1 < fn_offsets_map.len()
   fn_entry = fn_offsets_map[_i_fn_entry_1]
-      @if str_eq(fn_entry.fn_sym, callee_name) == 1 || ((str_eq(callee_name, "maya_gc_alloc") == 1 || str_eq(callee_name, "maya_alloc") == 1 || str_eq(callee_name, "gc_alloc") == 1) && (str_eq(fn_entry.fn_sym, "maya_gc_alloc") == 1 || str_eq(fn_entry.fn_sym, "maya_alloc") == 1 || str_eq(fn_entry.fn_sym, "gc_alloc") == 1))
+      @if str_eq(fn_entry.fn_sym, callee_name) == 1 || ((str_eq(callee_name, "maya_gc_alloc") == 1 || str_eq(callee_name, "lipi_gc_alloc") == 1 || str_eq(callee_name, "maya_alloc") == 1 || str_eq(callee_name, "lipi_alloc") == 1 || str_eq(callee_name, "gc_alloc") == 1) && (str_eq(fn_entry.fn_sym, "maya_gc_alloc") == 1 || str_eq(fn_entry.fn_sym, "lipi_gc_alloc") == 1 || str_eq(fn_entry.fn_sym, "maya_alloc") == 1 || str_eq(fn_entry.fn_sym, "lipi_alloc") == 1 || str_eq(fn_entry.fn_sym, "gc_alloc") == 1))
         callee_off = fn_entry.fn_byte_off
       @end
   _i_fn_entry_1 = _i_fn_entry_1 + 1

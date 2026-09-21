@@ -13,7 +13,7 @@ import "universe/core/json"
 import "universe/crypto/sha256"
 import "universe/net/http"
 import "universe/p2p/registry"
-import "universe/p2p/mpm_server"
+import "universe/p2p/lipipkg_server_engine"
 import "universe/os/fs"
 
 @! ============================================================================

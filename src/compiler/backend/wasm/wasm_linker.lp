@@ -82,18 +82,18 @@ import "compiler/backend/lipi_ir"
   return body
 @end
 
-@fn compile_maya_func(maya_func, type_idx)
+@fn compile_lipi_func(lipi_func, type_idx)
   body = []
   
   @! Lower all instructions from function blocks or instruction list
   insts = []
-  @if maya_func != 0
-    @if maya_func.instructions != 0 && maya_func.instructions.len() > 0
-      insts = maya_func.instructions
-    @elif maya_func.blocks != 0 && maya_func.blocks.len() > 0
+  @if lipi_func != 0
+    @if lipi_func.instructions != 0 && lipi_func.instructions.len() > 0
+      insts = lipi_func.instructions
+    @elif lipi_func.blocks != 0 && lipi_func.blocks.len() > 0
       b_idx = 0
-      @while b_idx < maya_func.blocks.len()
-        blk = maya_func.blocks[b_idx]
+      @while b_idx < lipi_func.blocks.len()
+        blk = lipi_func.blocks[b_idx]
         @if blk != 0 && blk.instructions != 0
           i_idx = 0
           @while i_idx < blk.instructions.len()
@@ -228,7 +228,12 @@ import "compiler/backend/lipi_ir"
   return f
 @end
 
-@fn emit_wasm(maya_module)
+// WHY: Preserves backward compatibility for legacy callers while delegating to canonical compile_lipi_func.
+@fn compile_maya_func(maya_func, type_idx)
+  return compile_lipi_func(maya_func, type_idx)
+@end
+
+@fn emit_wasm(lipi_module)
   w_mod = wasm_module_new()
   
   w_mod.types = w_mod.types.push({ params: [wasm_type_i32()], results: [] })
@@ -240,12 +245,12 @@ import "compiler/backend/lipi_ir"
   w_mod = generate_imports(w_mod)
   w_mod = setup_memory(w_mod)
   
-  @! Process functions from maya_module if present
-  @if maya_module != 0 && maya_module.functions != 0 && maya_module.functions.len() > 0
+  @! Process functions from lipi_module if present
+  @if lipi_module != 0 && lipi_module.functions != 0 && lipi_module.functions.len() > 0
     fn_i = 0
-    @while fn_i < maya_module.functions.len()
-      m_fn = maya_module.functions[fn_i]
-      compiled_fn = compile_maya_func(m_fn, 4)
+    @while fn_i < lipi_module.functions.len()
+      m_fn = lipi_module.functions[fn_i]
+      compiled_fn = compile_lipi_func(m_fn, 4)
       w_mod.functions = w_mod.functions.push(compiled_fn)
       fn_i = fn_i + 1
     @end

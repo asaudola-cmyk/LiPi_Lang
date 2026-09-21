@@ -24,7 +24,7 @@ algorithms across 14 canonical domains, unified by Directed Acyclic Graph (DAG) 
 7. [Domain 7: FIPS Cryptography, True Kernel Entropy & TLS 1.3](#7-fips-cryptography-true-kernel-entropy--tls-13)
 8. [Domain 8: Direct Hardware Framebuffer GUI & 2D Rasterizer](#8-direct-hardware-framebuffer-gui--2d-rasterizer)
 9. [Domain 9: Operating System, Syscalls & Bare-Metal Unikernel](#9-operating-system-syscalls--bare-metal-unikernel)
-10. [Domain 10: Sovereign Package Management (MPM 2.0)](#10-sovereign-package-management-mpm-20)
+10. [Domain 10: Sovereign Package Management (LipiPkg 1.0)](#10-sovereign-package-management-lipipkg-10)
 11. [Domain 11: Direct GPU SPIR-V Compute & Shader Compiler](#11-direct-gpu-spir-v-compute--shader-compiler)
 12. [Domain 12: Silicon CPU Hardware Acceleration & SIMD (AVX2 / AVX-512)](#12-silicon-cpu-hardware-acceleration--simd-avx2--avx-512)
 13. [Domain 13: Autonomous Mobile Android DEX Synthesis](#13-autonomous-mobile-android-dex-synthesis)
@@ -215,13 +215,13 @@ Bare-metal Ring-0 execution and raw Linux kernel ABI bindings.
 ### Module: `universe/os/kernel_multiboot.lp`
 - `kernel_synthesize_multiboot2_image(output_bin)`: Generates raw x86_64 Multiboot2 bootable ELF image with VGA 0xB8000 and COM1 UART 0x3F8 drivers for QEMU bare-metal boot.
 
-## 10. Sovereign Package Management (MPM 2.0)
+## 10. Sovereign Package Management (LipiPkg 1.0)
 
 Deterministic package management with SHA-256 cryptographically locked dependency trees.
-- `mpm init`: Initializes a pristine `lipi.pkg` project manifest.
-- `mpm add <pkg>`: Registers package dependency and updates manifest.
-- `mpm install`: Resolves Directed Acyclic Graph (DAG) and generates bit-for-bit reproducible `lipi.lock`.
-- `mpm verify`: Validates hash integrity of all installed artifacts against lockfile.
+- `lipipkg init` (or `lipi pkg init`): Initializes a pristine `lipipkg.toml` project manifest.
+- `lipipkg add <pkg>` (or `lipi pkg add <pkg>`): Registers package dependency and updates manifest.
+- `lipipkg install` (or `lipi pkg install`): Resolves Directed Acyclic Graph (DAG) and generates bit-for-bit reproducible `lipipkg.lock`.
+- `lipipkg verify` (or `lipi pkg verify`): Validates hash integrity of all installed artifacts against lockfile.
 
 ---
 
