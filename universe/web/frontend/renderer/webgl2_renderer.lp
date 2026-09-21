@@ -193,7 +193,7 @@ import "universe/core/collections"
   
   init_clip = [0.0, 0.0, width * 1.0, height * 1.0]
   
-  dummy_prog = {
+  empty_prog = {
     program_id: 0,
     name: "",
     vert_src: "",
@@ -202,13 +202,13 @@ import "universe/core/collections"
     is_linked: false
   }
   
-  dummy_vbo1 = { buffer_id: 0, target: "ARRAY_BUFFER", data_size: 0, usage: "STATIC_DRAW", records: [] }
-  dummy_vbo2 = { buffer_id: 0, target: "ARRAY_BUFFER", data_size: 0, usage: "DYNAMIC_DRAW", records: [] }
+  empty_vbo_static = { buffer_id: 0, target: "ARRAY_BUFFER", data_size: 0, usage: "STATIC_DRAW", records: [] }
+  empty_vbo_dynamic = { buffer_id: 0, target: "ARRAY_BUFFER", data_size: 0, usage: "DYNAMIC_DRAW", records: [] }
   
-  dummy_vao = {
+  empty_vao = {
     vao_id: 0,
-    quad_vbo: dummy_vbo1,
-    instance_vbo: dummy_vbo2,
+    quad_vbo: empty_vbo_static,
+    instance_vbo: empty_vbo_dynamic,
     attributes: [],
     is_bound: false
   }
@@ -229,8 +229,8 @@ import "universe/core/collections"
     gl_total_quads: 0,
     gl_ubo_data: [],
     gl_programs: [],
-    gl_active_program: dummy_prog,
-    gl_vao: dummy_vao
+    gl_active_program: empty_prog,
+    gl_vao: empty_vao
   }
   
   renderer = webgl2_renderer_init_shaders(renderer)

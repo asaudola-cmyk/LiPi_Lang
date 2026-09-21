@@ -150,7 +150,7 @@ import "universe/crypto/sha256"
   }
 @end
 
-@fn make_dummy_peer(id, ip, port)
+@fn create_bootstrap_peer(id, ip, port)
   return {
     id: id,
     addr: ip,

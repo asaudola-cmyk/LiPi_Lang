@@ -231,7 +231,7 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
 
 // ── 4. Verification Self-Test ────────────────────────────────────────────────
 
-fn mock_interval name start_p end_p spans_c
+fn create_test_interval name start_p end_p spans_c
     iv = LiveInterval()
     iv.vreg_name = name
     iv.vreg_id = 0 - 1
@@ -256,10 +256,10 @@ fn test_linear_scan_subsystem
 
     // Create 4 overlapping intervals to force 1 spill
     intervals = list()
-    push(intervals, mock_interval("v0", 0, 10, 0))
-    push(intervals, mock_interval("v1", 2, 8, 1))  // spans call -> gets callee 12
-    push(intervals, mock_interval("v2", 4, 12, 0))
-    push(intervals, mock_interval("v3", 6, 14, 0)) // 4th concurrent -> spills!
+    push(intervals, create_test_interval("v0", 0, 10, 0))
+    push(intervals, create_test_interval("v1", 2, 8, 1))  // spans call -> gets callee 12
+    push(intervals, create_test_interval("v2", 4, 12, 0))
+    push(intervals, create_test_interval("v3", 6, 14, 0)) // 4th concurrent -> spills!
 
     res = linear_scan_allocate(intervals, callers, callees, 8)
 

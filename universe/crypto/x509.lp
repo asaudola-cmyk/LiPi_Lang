@@ -243,11 +243,43 @@ import "universe/crypto/sha256"
   
   // SubjectPublicKeyInfo: SEQUENCE (0x30) -> Algo (48, 2, 5, 0) + BIT STRING (0x03, len 33, unused 0, 32 bytes pubkey)
   spki = [48, 2, 5, 0, 3, 33, 0]
-  // Push 32 dummy bytes for pubkey if empty, or parse hex
+  // WHY: Parse the actual pubkey_hex_data instead of inserting dummy bytes.
+  // If no data provided, zero-initialize 32 bytes for deterministic fallback.
   p = 0
-  @while p < 32
-    spki = spki.push(170) // 0xAA dummy key byte
-    p = p + 1
+  hex_len = str_len(pubkey_hex_data)
+  @if hex_len == 64
+    @while p < 32
+      // Parse 2 hex characters into a byte
+      c1 = str_char_at(pubkey_hex_data, p * 2)
+      c2 = str_char_at(pubkey_hex_data, p * 2 + 1)
+      val1 = 0
+      val2 = 0
+      
+      @if c1 >= 48 and c1 <= 57
+        val1 = c1 - 48
+      @elif c1 >= 97 and c1 <= 102
+        val1 = c1 - 87
+      @elif c1 >= 65 and c1 <= 70
+        val1 = c1 - 55
+      @end
+      
+      @if c2 >= 48 and c2 <= 57
+        val2 = c2 - 48
+      @elif c2 >= 97 and c2 <= 102
+        val2 = c2 - 87
+      @elif c2 >= 65 and c2 <= 70
+        val2 = c2 - 55
+      @end
+      
+      spki = spki.push(val1 * 16 + val2)
+      p = p + 1
+    @end
+  @else
+    // Fallback to deterministic zeros if invalid or empty hex provided
+    @while p < 32
+      spki = spki.push(0)
+      p = p + 1
+    @end
   @end
   
   tbs_spki = [48, spki.len()]

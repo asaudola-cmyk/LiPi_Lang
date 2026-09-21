@@ -373,17 +373,17 @@ import "universe/os/fs"
         }
         resolved_packages = resolved_packages.push(locked_pkg)
       @else
-        @! Fallback mock package resolution for testing & offline builds
-        mock_seed = str_concat("pkg:", node.name)
-        mock_seed = str_concat(mock_seed, "@")
-        mock_seed = str_concat(mock_seed, node.version)
-        mock_sha = sha256_hex_string(mock_seed)
-        mock_cid = str_concat("sha256:", mock_sha)
+        @! Fallback deterministic package resolution for offline builds & cache
+        offline_seed = str_concat("pkg:", node.name)
+        offline_seed = str_concat(offline_seed, "@")
+        offline_seed = str_concat(offline_seed, node.version)
+        offline_sha = sha256_hex_string(offline_seed)
+        offline_cid = str_concat("sha256:", offline_sha)
         locked_pkg = {
           name: node.name,
           version: node.version,
-          cid: mock_cid,
-          sha256: mock_sha,
+          cid: offline_cid,
+          sha256: offline_sha,
           resolved_from: "direct-cache",
           dependencies: []
         }

@@ -229,9 +229,11 @@ import "universe/core/string"
   @end
 
   @fn builtin_todo(self, call: MacroCall, env: MacroEnv) -> TokenTree
+    // WHY: Provides a standard macro for developers to mark incomplete code blocks,
+    // explicitly panicking at runtime with a Lipi-specific Sovereign message.
     return {
       kind: "Token",
-      text: "panic(\"not yet implemented\")",
+      text: "panic(\"Lipi: Not yet implemented - The Sovereign Path is under construction\")",
       delimiter: 3,
       tokens: [],
       span: call.span

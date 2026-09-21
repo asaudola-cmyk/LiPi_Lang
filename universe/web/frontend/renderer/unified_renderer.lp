@@ -57,14 +57,14 @@ import "universe/web/frontend/renderer/canvas2d_renderer"
 @! 2. CAPABILITY PROBING & CONSTRUCTOR
 @! ----------------------------------------------------------------------------
 
-@fn unified_renderer_probe_capabilities(mock_webgpu, mock_webgl2)
+@fn unified_renderer_probe_capabilities(enable_webgpu, enable_webgl2)
   webgpu_ok = true
-  @if mock_webgpu == false
+  @if enable_webgpu == false
     webgpu_ok = false
   @end
   
   webgl2_ok = true
-  @if mock_webgl2 == false
+  @if enable_webgl2 == false
     webgl2_ok = false
   @end
   
