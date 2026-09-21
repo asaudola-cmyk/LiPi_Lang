@@ -14,7 +14,7 @@
 [![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](docs/HANDBOOK_BN.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[English Handbook](docs/HANDBOOK_EN.md) • [বাংলা হ্যান্ডবুক](docs/HANDBOOK_BN.md) • [Architecture Specification](docs/ARCHITECTURE.md) • [Standard Library API](docs/STANDARD_LIBRARY.md) • [Benchmarks](benchmarks/BENCHMARK_RESULTS.md)
+[English Handbook](docs/HANDBOOK_EN.md) • [বাংলা হ্যান্ডবুক](docs/HANDBOOK_BN.md) • [Architecture](docs/ARCHITECTURE.md) • [Codebase Map](docs/CODEBASE_MAP.md) • [Examples](examples/README.md) • [Standard Library](docs/STANDARD_LIBRARY.md)
 
 </div>
 
@@ -254,7 +254,7 @@ Lipi's standard library is consolidated under `universe/` across 14 canonical do
 | **AI & Vector SIMD** | `universe/ai/` (`tensor.lp`, `simd.lp`, `inference.lp`) | 1D/2D/3D Tensors, AVX2 / AVX-512 SIMD vectorization, GGUF quantized model inference |
 | **GUI & Framebuffer** | `universe/gui/` (`canvas.lp`, `raster.lp`, `font.lp`) | Bresenham 2D line rasterization, clipped rectangles, bitmap font rendering |
 | **Baremetal OS** | `universe/os/` (`multiboot2.lp`, `kernel.lp`, `uart.lp`) | Multiboot2 bootloader, 64-bit Long Mode Ring-0 entry, COM1 UART serial output |
-| **Package Engine** | `universe/pkg/` (`mpm_cli.lp`, `manifest.lp`, `semver.lp`) | TOML/JSON package manifest engine, SemVer 2.0.0 resolver, deterministic lockfiles |
+| **Package Engine** | `universe/pkg/` (`lipipkg_cli.lp`, `manifest.lp`, `semver.lp`) | TOML/JSON package manifest engine, SemVer 2.0.0 resolver, deterministic lockfiles |
 
 Explore the full API manual in [`docs/UNIVERSE_API_REFERENCE.md`](docs/UNIVERSE_API_REFERENCE.md) and [`docs/STANDARD_LIBRARY.md`](docs/STANDARD_LIBRARY.md).
 

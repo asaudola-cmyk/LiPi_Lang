@@ -255,7 +255,7 @@ fn handle_clean
     say "\033[1;33m⚡ Purging temporary scratch binaries and test memory...\033[0m"
     say ""
 
-    // Clean scratch binaries from /tmp and dist/ via direct SYS_unlink (87)
+    // Clean scratch binaries from /tmp, scratch/, tests/, and dist/ via direct SYS_unlink (87)
     syscall(87, "/tmp/lipi_tst_bin", 0, 0, 0, 0, 0)
     syscall(87, "/tmp/lipi_run_exec", 0, 0, 0, 0, 0)
     syscall(87, "/tmp/test_hello", 0, 0, 0, 0, 0)
@@ -269,8 +269,11 @@ fn handle_clean
     syscall(87, "/tmp/test_cr_bin", 0, 0, 0, 0, 0)
     syscall(87, "/tmp/test_wasm_html_bin", 0, 0, 0, 0, 0)
     syscall(87, "/tmp/test.wasm", 0, 0, 0, 0, 0)
+    syscall(87, "tests/01_hello.lp.bin", 0, 0, 0, 0, 0)
+    syscall(87, "tests/test_fast_json.lp.bin", 0, 0, 0, 0, 0)
+    syscall(87, "bin/test_diagnostics", 0, 0, 0, 0, 0)
 
-    say "\033[1;32m  ✔ Temporary artifacts in /tmp and dist/ successfully purged.\033[0m"
+    say "\033[1;32m  ✔ Temporary artifacts in /tmp, dist/, scratch/, and tests/ successfully purged.\033[0m"
     say "\033[1;32m  ✔ Repository is 100% clean and production-ready!\033[0m"
     say ""
     return 0
