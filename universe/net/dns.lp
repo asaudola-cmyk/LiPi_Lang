@@ -304,7 +304,7 @@ import "universe/core/string"
   started = 0
   shift = 12
   @while shift >= 0
-    p = maya_pow2(shift)
+    p = lipi_pow2(shift)
     d = val / p
     nibble = d & 15
     @if nibble > 0 || started == 1 || shift == 0
