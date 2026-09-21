@@ -37,11 +37,14 @@
 @end
 
 @fn profiler_find(pf, name)
+    // WHY: Searches registered profiling entries for matching symbol name using canonical str_eq
     i = 0
     @while i < pf.prf_entries.len()
-        // we assume simple exact match conceptually
-        // Maya strings might not support ==
-      i = i + 1
+        entry = pf.prf_entries[i]
+        @if str_eq(entry.pe_name, name) == 1
+            return entry
+        @end
+        i = i + 1
     @end
     return 0
 @end

@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI UNIVERSE SECURITY: ZERO-KNOWLEDGE PROOF — SCHNORR SIGNATURE
 @! Module: universe/security/zkp.lp
-@! 100% Pure Maya — Zero C / External Dependencies
+@! 100% Pure LiPi — Zero C / External Dependencies
 @! Protocol: Schnorr Identification / Signature (Discrete Logarithm ZKP)
 @!
 @! Schnorr ZKP over a prime-order group (mod p):
@@ -21,7 +21,7 @@
 @! ----------------------------------------------------------------------------
 @! 1. Small prime-field parameters (demonstration / test-scale)
 @!    For real deployment use 2048-bit NIST primes; here we use a safe 23-bit
-@!    prime that fits in Maya's integer arithmetic without overflow tricks.
+@!    prime that fits in LiPi's integer arithmetic without overflow tricks.
 @!    p = 8388617  (prime)
 @!    q = p - 1 = 8388616  (group order, simplified: g has order q here)
 @!    g = 3  (primitive root mod p)
@@ -36,7 +36,7 @@
 @! ----------------------------------------------------------------------------
 
 @fn mod_reduce(a, m)
-  @! Return a mod m  (handles Maya's integer division truncating toward zero)
+  @! Return a mod m  (handles integer division truncating toward zero)
   r = a - ((a / m) * m)
   @if r < 0
     r = r + m

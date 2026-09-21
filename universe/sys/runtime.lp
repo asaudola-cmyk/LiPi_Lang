@@ -275,7 +275,7 @@ import "universe/sys/syscalls"
 @end
 
 @fn sys_getenv(name)
-  @! Zero-libc pure Maya environment reader
+  @! Zero-libc pure LiPi environment reader
   @! Reads /proc/self/environ via direct raw syscalls without libc getenv()
   fd = sys_open("/proc/self/environ", 0, 0)
   @if fd < 0

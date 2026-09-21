@@ -618,7 +618,7 @@ import "universe/core/collections"
 @! ============================================================================
 
 @fn bit_xor32(a, b)
-  @! Pure arithmetic XOR for 32-bit values — Maya's ^ operator is broken
+  @! Pure arithmetic XOR for 32-bit values — zero host dependencies
   result = 0
   place = 1
   @while place < 4294967297

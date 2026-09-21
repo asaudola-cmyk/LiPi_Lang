@@ -140,6 +140,7 @@ import "universe/db/recovery"
   return btree_get(db.tree[0], key, "")
 @end
 
+// WHY: Retains maya_db_get as backward-compatible alias for legacy database callers
 @fn maya_db_get(db, key)
   return lipi_db_get(db, key)
 @end

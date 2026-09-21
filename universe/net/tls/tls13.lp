@@ -1,4 +1,4 @@
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -7,6 +7,11 @@
     i = i + 1
   @end
   return res
+@end
+
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @fn net_u16_be(buf, off)
@@ -159,7 +164,7 @@ import "universe/crypto/x25519"
   @while i < 128
     byte_idx = i / 8
     bit_idx = 7 - (i % 8)
-    p = maya_pow2(bit_idx)
+    p = lipi_pow2(bit_idx)
     d = x[byte_idx] / p
     bit_set = d & 1
 

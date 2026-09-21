@@ -47,7 +47,7 @@ import "universe/net/tcp_server"
     body = "<!DOCTYPE html><html><head><title>Lipi HTTP Server</title></head>"
     body = body + "<body><h1>Lipi is the Universe</h1>"
     body = body + "<p>This HTTP server is written entirely in Lipi.</p>"
-    body = body + "<p>Maya karo help ney na - Maya r help sobai ney. Even C.</p>"
+    body = body + "<p>Lipi karo help ney na - Lipi r help sobai ney. Even C.</p>"
     body = body + "<ul><li><a href='/api/status'>/api/status</a></li>"
     body = body + "<li><a href='/api/version'>/api/version</a></li>"
     body = body + "<li><a href='/hello'>/hello</a></li></ul>"
@@ -55,15 +55,15 @@ import "universe/net/tcp_server"
     return http_response("200 OK", "text/html", body)
   @end
   @if path == "/api/status"
-    body = "{\"status\": \"ok\", \"lang\": \"maya\", \"version\": \"2.0.0\", \"universe\": true}"
+    body = "{\"status\": \"ok\", \"lang\": \"lipi\", \"version\": \"2.0.0\", \"universe\": true}"
     return http_response("200 OK", "application/json", body)
   @end
   @if path == "/api/version"
-    body = "{\"name\": \"Maya\", \"version\": \"2.0.0\", \"codename\": \"Universe\", \"modules\": 612}"
+    body = "{\"name\": \"Lipi\", \"version\": \"2.0.0\", \"codename\": \"Universe\", \"modules\": 612}"
     return http_response("200 OK", "application/json", body)
   @end
   @if path == "/hello"
-    return http_response("200 OK", "text/plain", "Hello from Lipi! Maya is the Universe.")
+    return http_response("200 OK", "text/plain", "Hello from Lipi! Lipi is the Universe.")
   @end
   return http_response("404 Not Found", "text/plain", "Not found: " + path)
 @end

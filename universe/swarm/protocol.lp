@@ -31,7 +31,7 @@ import "universe/swarm/types"
   return res & 4294967295
 @end
 
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -40,6 +40,11 @@ import "universe/swarm/types"
     i = i + 1
   @end
   return res
+@end
+
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @fn SWARM_MAGIC() return 21335 @end        @! 0x5357 = "SW"
@@ -121,7 +126,7 @@ import "universe/swarm/types"
   i = 7
   @while i >= 0
     shift = i * 4
-    p = maya_pow2(shift)
+    p = lipi_pow2(shift)
     d = val / p
     nibble = d & 15
     res = string_concat(res, proto_hex_digit(nibble))

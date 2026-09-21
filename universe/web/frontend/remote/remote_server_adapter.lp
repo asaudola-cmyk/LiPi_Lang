@@ -59,7 +59,7 @@ import "universe/web/frontend/remote/video_blitter"
   @if max_sessions <= 0 max_sessions = 64 @end
   
   return {
-    gateway_id: "maya_webrtc_gateway_01",
+    gateway_id: "lipi_webrtc_gateway_01",
     sessions: [],
     active_session_count: 0,
     total_sessions_created: 0,

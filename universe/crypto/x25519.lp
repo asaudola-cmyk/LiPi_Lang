@@ -41,7 +41,9 @@ import "universe/crypto/ed25519"
   @! WHY: Computes point scalar multiplication via constant-time Montgomery ladder (RFC 7748).
   @! RFC 7748 Section 5: When receiving an array of 32 bytes for the u-coordinate,
   @! implementations MUST mask the most significant bit in the final byte to zero.
-  clamped = x25519_clamp_scalar(scalar)
+  @! WHY: Pre-access element 0 of both parameters to guarantee list structure resolution and register preservation across calls.
+  s0 = scalar[0]
+  p0 = point_u[0]
   masked_u = []
   i = 0
   @while i < 32
@@ -55,6 +57,7 @@ import "universe/crypto/ed25519"
     masked_u = masked_u.push(b)
     i = i + 1
   @end
+  clamped = x25519_clamp_scalar(scalar)
   x_1 = fe_from_bytes(masked_u)
   x_2 = fe_one()
   z_2 = fe_zero()
@@ -126,13 +129,15 @@ import "universe/crypto/ed25519"
 @fn x25519_public_key(priv_key)
   @! Generates RFC 7748 X25519 public key by multiplying clamped private key with base point 9
   @! Pre-evaluate base point into local variable to avoid nested subcall evaluation while priv_key is pushed on stack
+  k0 = priv_key[0]
   bp = x25519_base_point()
   return x25519_scalarmult(priv_key, bp)
 @end
 
 @fn x25519_shared_secret(priv_key, peer_pub_key)
   @! Computes ECDH shared secret: shared_secret = X25519(priv_key, peer_pub_key)
-  @! WHY: Pre-access element 0 to guarantee list structure resolution and register preservation across calls
+  @! WHY: Pre-access element 0 of both keys to guarantee list structure resolution and register preservation across calls
+  k0 = priv_key[0]
   p0 = peer_pub_key[0]
   return x25519_scalarmult(priv_key, peer_pub_key)
 @end

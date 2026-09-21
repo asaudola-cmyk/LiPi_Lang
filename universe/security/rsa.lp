@@ -131,7 +131,7 @@ import "universe/crypto/rsa"
   return res
 @end
 
-@! Native Maya Modular Exponentiation (base^exp % mod)
+@! Native LiPi Modular Exponentiation (base^exp % mod)
 @fn rsa_mod_exp(base, exp, modulus)
   result = 1
   base = base % modulus

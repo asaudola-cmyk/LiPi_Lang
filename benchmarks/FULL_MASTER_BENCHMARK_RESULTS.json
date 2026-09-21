@@ -1,63 +1,63 @@
 {
-  "timestamp": "2026-09-22 03:00:41",
+  "timestamp": "2026-09-22 03:16:51",
   "hardware": "Intel Core i3-8100 CPU @ 3.60GHz (4 Cores), Linux x86_64",
   "suite1_loops": [
     {
       "lang": "C (GCC 13.3 -O3)",
-      "best_time_ms": 11.26,
-      "cycles": 40547876,
+      "best_time_ms": 11.2,
+      "cycles": 40348194,
       "bin_size": "15.7 KB"
     },
     {
       "lang": "C++ (G++ 13.3 -O3)",
-      "best_time_ms": 10.69,
+      "best_time_ms": 10.68,
       "cycles": "N/A",
       "bin_size": "16.0 KB"
     },
     {
       "lang": "Rust (rustc 1.97 -O3)",
-      "best_time_ms": 16.92,
+      "best_time_ms": 16.95,
       "cycles": "N/A",
       "bin_size": "4284.3 KB"
     },
     {
       "lang": "Zig (zig 0.13 -O ReleaseFast)",
-      "best_time_ms": 3.99,
+      "best_time_ms": 3.98,
       "cycles": "N/A",
       "bin_size": "1706.8 KB"
     },
     {
       "lang": "Go (go 1.22.5)",
-      "best_time_ms": 12.63,
+      "best_time_ms": 12.6,
       "cycles": "N/A",
       "bin_size": "1873.2 KB"
     },
     {
       "lang": "Python 3.12 (CPython)",
-      "best_time_ms": 1550.45,
+      "best_time_ms": 1531.39,
       "cycles": "N/A",
       "bin_size": "N/A"
     },
     {
       "lang": "\ud83d\udc51 LiPi First 1.0.0",
-      "best_time_ms": 0.47,
-      "cycles": 5344,
+      "best_time_ms": 0.34,
+      "cycles": 5246,
       "bin_size": "4.7 KB"
     }
   ],
   "suite2_columnstore": [
     {
       "lang": "C (AVX2 -O3)",
-      "best_time_ms": 1.42,
-      "throughput_m_rows_sec": 704.23,
-      "cycles": 5140608,
+      "best_time_ms": 1.4,
+      "throughput_m_rows_sec": 714.29,
+      "cycles": 5053966,
       "bin_size": "15.7 KB"
     },
     {
       "lang": "C++ (AVX2 -O3)",
       "best_time_ms": 1.13,
-      "throughput_m_rows_sec": 886.45,
-      "cycles": 4090750,
+      "throughput_m_rows_sec": 884.13,
+      "cycles": 4095640,
       "bin_size": "16.0 KB"
     },
     {
@@ -76,16 +76,16 @@
     },
     {
       "lang": "Go (go 1.22.5)",
-      "best_time_ms": 1.12,
-      "throughput_m_rows_sec": 892.86,
+      "best_time_ms": 1.11,
+      "throughput_m_rows_sec": 900.9,
       "cycles": "N/A",
       "bin_size": "1873.2 KB"
     },
     {
       "lang": "\ud83d\udc51 LiPi First 1.0.0",
-      "best_time_ms": 0.6,
-      "throughput_m_rows_sec": 1666.67,
-      "cycles": 2177178,
+      "best_time_ms": 0.59,
+      "throughput_m_rows_sec": 1694.92,
+      "cycles": 2145126,
       "bin_size": "24.5 KB"
     }
   ],

@@ -17,6 +17,7 @@ import "universe/db/page"
 @fn DEFAULT_CAPACITY() return 64 @end
 // WHY: Direct ASCII "LIPI" (0x4C495049 = 1279873097) sovereign header magic
 @fn DB_MAGIC() return 0x4C495049 @end  @! ASCII "LIPI" (1279873097)
+// WHY: Retains DB_MAGIC_LEGACY ("MAYA") to maintain backward compatibility with legacy database files
 @fn DB_MAGIC_LEGACY() return 0x4D415941 @end  @! ASCII "MAYA" (1296128321) for backward compatibility
 @fn DB_VERSION() return 1 @end
 

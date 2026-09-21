@@ -1,5 +1,5 @@
 // ============================================================================
-// MAYA WEB FRONTEND ENGINE — WGSL UI DRAW SHADER
+// LIPI WEB FRONTEND ENGINE — WGSL UI DRAW SHADER
 // File: universe/web/frontend/renderer/shaders/ui_draw.wgsl
 // 100% Pure WGSL Shading Pipeline for WebGPU Tier-1 UI Acceleration
 // Features:

@@ -2,11 +2,11 @@ import "universe/web/router"
 import "universe/web/server"
 
 @fn handle_index(req)
-  return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello from Lipi!</h1><p>Maya is the Universe.</p>"
+  return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello from Lipi!</h1><p>Lipi is the Universe.</p>"
 @end
 
 @fn handle_api_status(req)
-  return "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\": \"ok\", \"lang\": \"maya\", \"version\": \"2.0.0\"}"
+  return "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\": \"ok\", \"lang\": \"lipi\", \"version\": \"2.0.0\"}"
 @end
 
 @fn handle_not_found(req)

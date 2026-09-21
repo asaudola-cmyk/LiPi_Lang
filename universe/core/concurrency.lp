@@ -29,7 +29,7 @@
 @! 1. Local Green Thread Spawning (sys_clone / Syscall 56)
 @! ----------------------------------------------------------------------------
 
-@fn maya_spawn(func, arg)
+@fn lipi_spawn(func, arg)
   size = 2097152
   p1 = PROT_READ()
   p2 = PROT_WRITE()
@@ -52,14 +52,14 @@
   flags = flags | f4
   flags = flags | f5
   
-  @! Our modified runtime intercepts syscall(56) and routes it to maya_clone_wrapper
+  @! Sovereign thread scheduler routes clone syscall (56) to thread dispatcher
   pid = syscall(56, flags, stack_top, func, arg, 0, 0)
   return pid
 @end
 
-// WHY: lipi_spawn provides the canonical sovereign green thread spawning API.
-@fn lipi_spawn(func, arg)
-  return maya_spawn(func, arg)
+// WHY: Retains maya_spawn as backward-compatible alias for legacy callers
+@fn maya_spawn(func, arg)
+  return lipi_spawn(func, arg)
 @end
 
 // WHY: thread_spawn provides standard cross-module naming for green thread creation.

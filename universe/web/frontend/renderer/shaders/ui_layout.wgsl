@@ -1,5 +1,5 @@
 // ============================================================================
-// MAYA WEB FRONTEND ENGINE — WGSL UI COMPUTE LAYOUT SHADER
+// LIPI WEB FRONTEND ENGINE — WGSL UI COMPUTE LAYOUT SHADER
 // File: universe/web/frontend/renderer/shaders/ui_layout.wgsl
 // 100% Pure WGSL Compute Pipeline for GPU-Accelerated Flexbox & Grid Layout
 // ============================================================================

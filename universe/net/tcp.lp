@@ -149,12 +149,12 @@ import "universe/os/syscalls"
 
 @fn tcp_recv(sockfd, max_len)
   @if sockfd < 0 || max_len <= 0 return "" @end
-  buf = maya_alloc(max_len + 1)
+  buf = lipi_alloc(max_len + 1)
   n = sys_read(sockfd, buf, max_len)
   @if n <= 0
     return ""
   @end
-  return maya_str_new(buf)
+  return lipi_str_new(buf)
 @end
 
 @fn tcp_close(sockfd)

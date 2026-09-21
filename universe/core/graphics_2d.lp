@@ -368,8 +368,7 @@ import "universe/sys/syscalls"
     inv_t = 1.0 - t
     
     @! B(t) = (1-t)^2*P0 + 2*(1-t)*t*P1 + t^2*P2
-    @! But Maya doesn't fully support float math natively in all loops easily without scaling,
-    @! so we simulate fixed point by scaling * 10000
+    @! Fixed-point scaled integer arithmetic (* 10000) for deterministic freestanding 2D rendering
     
     t_fixed = (i * 10000) / steps
     inv_t_fixed = 10000 - t_fixed

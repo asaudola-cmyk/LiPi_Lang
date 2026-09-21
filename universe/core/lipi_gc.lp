@@ -106,18 +106,28 @@ import "universe/os/syscalls"
 @! ----------------------------------------------------------------------------
 @! 5. Core Memory Allocation Fallbacks
 @! ----------------------------------------------------------------------------
-@fn maya_gc_alloc(size)
+@fn lipi_gc_alloc(size)
   @! Call sys_mmap: Syscall 9
   prot = 3
   flags = 34
   fd = 0 - 1
-  ptr = maya_syscall(9, 0, size, prot, flags, fd, 0)
+  ptr = lipi_syscall(9, 0, size, prot, flags, fd, 0)
   return ptr
 @end
 
-@fn maya_gc_free(ptr, size)
+// WHY: Retains maya_gc_alloc as backward-compatible alias for legacy callers
+@fn maya_gc_alloc(size)
+  return lipi_gc_alloc(size)
+@end
+
+@fn lipi_gc_free(ptr, size)
   @! Call sys_munmap: Syscall 11
-  maya_syscall(11, ptr, size, 0, 0, 0, 0)
+  lipi_syscall(11, ptr, size, 0, 0, 0, 0)
   return 0
+@end
+
+// WHY: Retains maya_gc_free as backward-compatible alias for legacy callers
+@fn maya_gc_free(ptr, size)
+  return lipi_gc_free(ptr, size)
 @end
 

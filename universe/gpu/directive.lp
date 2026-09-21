@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA @gpu DIRECTIVE — GPU Compute & SPIR-V Pipeline Runtime
+@! LIPI @gpu DIRECTIVE — GPU Compute & SPIR-V Pipeline Runtime
 @! Functions marked @gpu run with SPIR-V binary kernels & compute pipeline dispatch
 @! ============================================================================
 

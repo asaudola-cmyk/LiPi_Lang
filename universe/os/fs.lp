@@ -72,12 +72,12 @@ import "universe/core/string"
   @if max_len <= 0
     return ""
   @end
-  buf = maya_alloc(max_len + 1)
+  buf = lipi_alloc(max_len + 1)
   bytes_read = sys_read(fd, buf, max_len)
   @if bytes_read <= 0
     return ""
   @end
-  return maya_str_new(buf)
+  return lipi_str_new(buf)
 @end
 
 @! Writes string data to fd, returning number of bytes written
@@ -305,7 +305,7 @@ import "universe/core/string"
 
   entries = []
   buf_size = 4096
-  buf = maya_alloc(buf_size)
+  buf = lipi_alloc(buf_size)
 
   @while 1
     nread = sys_getdents64(fd, buf, buf_size)
@@ -317,7 +317,7 @@ import "universe/core/string"
     @while pos < nread
       entry_ptr = buf + pos
       name_ptr = entry_ptr + 19
-      name = maya_str_new(name_ptr)
+      name = lipi_str_new(name_ptr)
 
       reclen = entry_ptr.d_reclen_type & 65535
       @if reclen <= 0

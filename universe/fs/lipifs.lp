@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPIFS (NATIVE COPY-ON-WRITE FILE SYSTEM)
-@! Module: universe/fs/mayafs.lp
+@! Module: universe/fs/lipifs.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 4KB NVMe PCIe Block Driver, Copy-on-Write (CoW) Root Pointer Swapping,
@@ -12,7 +12,7 @@ import "universe/core/string"
 import "universe/crypto/sha256"
 
 @! ============================================================================
-@! 1. MAYAFS DATA STRUCTURES
+@! 1. LIPIFS DATA STRUCTURES
 @! ============================================================================
 
 @struct LipiFSBlock
@@ -41,7 +41,7 @@ import "universe/crypto/sha256"
 @end
 
 @! ============================================================================
-@! 2. MAYAFS INITIALIZATION & BLOCK ALLOCATOR
+@! 2. LIPIFS INITIALIZATION & BLOCK ALLOCATOR
 @! ============================================================================
 
 @fn lipifs_format(label, total_blocks)

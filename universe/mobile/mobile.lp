@@ -21,6 +21,8 @@ import "universe/crypto/sha256"
   app_title: string
   target_arch: string
   so_lib_name: string
+  liblipi_so_bytes: array
+  // WHY: Retains libmaya_so_bytes as backward-compatible alias for legacy callers
   libmaya_so_bytes: array
   classes_dex_bytes: array
   manifest_xml: string
@@ -199,19 +201,19 @@ import "universe/crypto/sha1"
 @end
 
 @! ============================================================================
-@! 3. GENUINE AARCH64 ELF64 SHARED OBJECT EMITTER (libmaya.so)
+@! 3. GENUINE AARCH64 ELF64 SHARED OBJECT EMITTER (liblipi.so)
 @! ============================================================================
 
-@fn mobile_emit_arm64_libmaya_so()
+@fn mobile_emit_arm64_liblipi_so()
   text_offset = 240
   text_size = 48
 
   @! .dynstr
   dynstr_offset = text_offset + text_size @! 288
   dynstr_bytes = [0]
-  dynstr_bytes = concat_arrays(dynstr_bytes, str_to_byte_array("libmaya.so"))
+  dynstr_bytes = concat_arrays(dynstr_bytes, str_to_byte_array("liblipi.so"))
   dynstr_bytes = dynstr_bytes.push(0)
-  dynstr_bytes = concat_arrays(dynstr_bytes, str_to_byte_array("Java_com_maya_MayaNativeActivity_nativeInit"))
+  dynstr_bytes = concat_arrays(dynstr_bytes, str_to_byte_array("Java_com_lipi_LipiNativeActivity_nativeInit"))
   dynstr_bytes = dynstr_bytes.push(0)
   dynstr_bytes = concat_arrays(dynstr_bytes, str_to_byte_array("ANativeActivity_onCreate"))
   dynstr_bytes = dynstr_bytes.push(0)
@@ -322,7 +324,7 @@ import "universe/crypto/sha1"
   @end
 
   @! --- 3. .text Section (ARM64 Machine Code: 48 bytes) ---
-  @! 3a. Java_com_maya_MayaNativeActivity_nativeInit (16 bytes)
+  @! 3a. Java_com_lipi_LipiNativeActivity_nativeInit (16 bytes)
   @! stp x29, x30, [sp, #-16]! ; mov x29, sp ; mov x0, #0 ; ldp x29, x30, [sp], #16 ; ret
   so = so.push(253.push)(123).push(191.push)(169)
   so = so.push(253.push)(3).push(0.push)(145)
@@ -360,7 +362,7 @@ import "universe/crypto/sha1"
     sym0_i = sym0_i + 1
   @end
 
-  @! Sym 1: Java_com_maya_MayaNativeActivity_nativeInit
+  @! Sym 1: Java_com_lipi_LipiNativeActivity_nativeInit
   so = push32_le(so, 12)
   so = so.push(18.push)(0)
   so = push16_le(so, 1)
@@ -492,6 +494,11 @@ import "universe/crypto/sha1"
   return so
 @end
 
+// WHY: Retains mobile_emit_arm64_libmaya_so as backward-compatible alias for legacy callers
+@fn mobile_emit_arm64_libmaya_so()
+  return mobile_emit_arm64_liblipi_so()
+@end
+
 @! ============================================================================
 @! 4. DALVIK CLASSES.DEX EMITTER (AUTHENTIC DEX 035 SYNTHESIZER)
 @! ============================================================================
@@ -515,7 +522,7 @@ import "universe/crypto/sha1"
     593, @! 11: V
     596, @! 12: VL
     600, @! 13: loadLibrary
-    613, @! 14: maya
+    613, @! 14: lipi
     619  @! 15: onCreate
   ]
 
@@ -560,12 +567,12 @@ import "universe/crypto/sha1"
   body = push16_le(body, 1)
   body = push32_le(body, 15)
 
-  @! Method 2: MayaNativeActivity.<clinit>:()V (class t2, proto 0, name s3)
+  @! Method 2: LipiNativeActivity.<clinit>:()V (class t2, proto 0, name s3)
   body = push16_le(body, 2)
   body = push16_le(body, 0)
   body = push32_le(body, 3)
 
-  @! Method 3: MayaNativeActivity.<init>:()V (class t2, proto 0, name s4)
+  @! Method 3: LipiNativeActivity.<init>:()V (class t2, proto 0, name s4)
   body = push16_le(body, 2)
   body = push16_le(body, 0)
   body = push32_le(body, 4)
@@ -576,7 +583,7 @@ import "universe/crypto/sha1"
   body = push32_le(body, 13)
 
   @! --- 6. Class Defs Table (1 * 32 = 32 bytes, at offset 276) ---
-  @! Class 0: MayaNativeActivity (class t2, access ACC_PUBLIC=1, super t0, interfaces 0, source s10, annot 0, data 632, static 0)
+  @! Class 0: LipiNativeActivity (class t2, access ACC_PUBLIC=1, super t0, interfaces 0, source s10, annot 0, data 632, static 0)
   body = push32_le(body, 2)
   body = push32_le(body, 1)
   body = push32_le(body, 0)
@@ -604,7 +611,7 @@ import "universe/crypto/sha1"
   body = push16_le(body, 0)  @! tries_size
   body = push32_le(body, 0)  @! debug_info_off
   body = push32_le(body, 6)  @! insns_size (6 code units = 12 bytes)
-  @! const-string v0, s14 ("maya"): 0x1A 0x00 0x0E 0x00
+  @! const-string v0, s14 ("lipi"): 0x1A 0x00 0x0E 0x00
   body = body.push(26.push)(0).push(14.push)(0)
   @! invoke-static {v0}, method 4 (System.loadLibrary): 0x71 0x10 0x04 0x00 0x00 0x00
   body = body.push(113.push)(16).push(4.push)(0).push(0.push)(0)
@@ -794,10 +801,10 @@ import "universe/crypto/sha1"
 @end
 
 @fn mobile_build_android_apk(pkg_id, app_name)
-  so_bytes = mobile_emit_arm64_libmaya_so()
+  so_bytes = mobile_emit_arm64_liblipi_so()
   dex_bytes = mobile_emit_classes_dex()
 
-  manifest_str = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<manifest package=\"" + pkg_id + "\">\n  <application android:label=\"" + app_name + "\" android:hasCode=\"true\">\n    <activity android:name=\".MayaNativeActivity\" android:exported=\"true\">\n      <intent-filter>\n        <action android:name=\"android.intent.action.MAIN\" />\n        <category android:name=\"android.intent.category.LAUNCHER\" />\n      </intent-filter>\n    </activity>\n  </application>\n</manifest>"
+  manifest_str = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<manifest package=\"" + pkg_id + "\">\n  <application android:label=\"" + app_name + "\" android:hasCode=\"true\">\n    <activity android:name=\".LipiNativeActivity\" android:exported=\"true\">\n      <intent-filter>\n        <action android:name=\"android.intent.action.MAIN\" />\n        <category android:name=\"android.intent.category.LAUNCHER\" />\n      </intent-filter>\n    </activity>\n  </application>\n</manifest>"
   manifest_bytes = str_to_byte_array(manifest_str)
 
   arsc_bytes = [2, 0, 12, 0, 12, 0, 0, 0, 0, 0, 0, 0]
@@ -805,7 +812,7 @@ import "universe/crypto/sha1"
   entries = [
     make_zip_entry("AndroidManifest.xml", manifest_bytes, 4),
     make_zip_entry("classes.dex", dex_bytes, 4),
-    make_zip_entry("lib/arm64-v8a/libmaya.so", so_bytes, 4096),
+    make_zip_entry("lib/arm64-v8a/liblipi.so", so_bytes, 4096),
     make_zip_entry("resources.arsc", arsc_bytes, 4)
   ]
 
@@ -906,7 +913,8 @@ import "universe/crypto/sha1"
     package_name: pkg_id,
     app_title: app_name,
     target_arch: "arm64-v8a",
-    so_lib_name: "libmaya.so",
+    so_lib_name: "liblipi.so",
+    liblipi_so_bytes: so_bytes,
     libmaya_so_bytes: so_bytes,
     classes_dex_bytes: dex_bytes,
     manifest_xml: manifest_str,
@@ -921,14 +929,14 @@ import "universe/crypto/sha1"
 @! ============================================================================
 
 @fn mobile_build_ios_ipa(bundle_id, app_name)
-  plist = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\">\n<dict>\n  <key>CFBundleIdentifier</key>\n  <string>" + bundle_id + "</string>\n  <key>CFBundleDisplayName</key>\n  <string>" + app_name + "</string>\n  <key>CFBundleExecutable</key>\n  <string>MayaApp_arm64</string>\n</dict>\n</plist>"
+  plist = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\">\n<dict>\n  <key>CFBundleIdentifier</key>\n  <string>" + bundle_id + "</string>\n  <key>CFBundleDisplayName</key>\n  <string>" + app_name + "</string>\n  <key>CFBundleExecutable</key>\n  <string>LipiApp_arm64</string>\n</dict>\n</plist>"
 
-  sig_hash = sha256_hex_string(bundle_id + ":" + app_name + ":MAYA_DEVELOPER_ID")
+  sig_hash = sha256_hex_string(bundle_id + ":" + app_name + ":LIPI_DEVELOPER_ID")
 
   return {
     bundle_identifier: bundle_id,
     display_name: app_name,
-    mach_o_binary_name: "MayaApp_arm64",
+    mach_o_binary_name: "LipiApp_arm64",
     info_plist_xml: plist,
     code_signature_hash: sig_hash,
     is_ipa_signed: 1,

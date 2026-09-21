@@ -1,4 +1,4 @@
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -9,8 +9,13 @@
   return res
 @end
 
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
+@end
+
 @fn pow2(n)
-  return maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @! ============================================================================
@@ -142,7 +147,7 @@ import "universe/core/string"
   @while curr < num_items && has_more == 1
     b = data[curr] & 255
     consumed = consumed + 1
-    p = maya_pow2(shift)
+    p = lipi_pow2(shift)
     m = b & 127
     term = m * p
     val = val + term

@@ -176,14 +176,14 @@ import "universe/core/string"
   @if sockfd < 0 || max_len <= 0
     return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
   @end
-  buf = maya_alloc(max_len + 1)
+  buf = lipi_alloc(max_len + 1)
   src_addr = { w0: 0, w1: 0 }
   src_len = { val: 16 }
   n = sys_recvfrom(sockfd, buf, max_len, 0, src_addr, src_len)
   @if n <= 0
     return { data: "", sender_host: "", sender_port: 0, bytes_read: n }
   @end
-  data_str = maya_str_new(buf)
+  data_str = lipi_str_new(buf)
   sender = udp_unpack_sender(src_addr.w0)
   return {
     data: data_str,
@@ -197,7 +197,7 @@ import "universe/core/string"
   @if sockfd < 0 || max_len <= 0
     return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
   @end
-  buf = maya_alloc(max_len + 1)
+  buf = lipi_alloc(max_len + 1)
   src_addr = { w0: 0, w1: 0 }
   src_len = { val: 16 }
   @! MSG_DONTWAIT = 64
@@ -205,7 +205,7 @@ import "universe/core/string"
   @if n <= 0
     return { data: "", sender_host: "", sender_port: 0, bytes_read: n }
   @end
-  data_str = maya_str_new(buf)
+  data_str = lipi_str_new(buf)
   sender = udp_unpack_sender(src_addr.w0)
   return {
     data: data_str,

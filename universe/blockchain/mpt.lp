@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LAYER-1 STATE TRIE & CRYPTOGRAPHIC PROOFS
 @! Module: universe/blockchain/mpt.lp
-@! Milestone: Layer-1 Sovereign Blockchain (MayaNet)
+@! Milestone: Layer-1 Sovereign Blockchain (LipiNet)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Merkle Patricia State Trie, Account State Records & SHA-256 State Roots
 @! ============================================================================

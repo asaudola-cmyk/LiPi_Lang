@@ -49,7 +49,7 @@ import "universe/web/frontend/dom_bypass/mod"
   @if width <= 0 width = 1280 @end
   @if height <= 0 height = 720 @end
   return {
-    canvas_id: "maya_canvas",
+    canvas_id: "lipi_canvas",
     width: width,
     height: height,
     dpr: 1.0,

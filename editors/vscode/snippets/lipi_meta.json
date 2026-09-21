@@ -6,7 +6,7 @@
       "\t$0",
       "}"
     ],
-    "description": "Maya Function"
+    "description": "LiPi Function"
   },
   "Struct": {
     "prefix": "struct",
@@ -15,7 +15,7 @@
       "\t$0",
       "}"
     ],
-    "description": "Maya Struct"
+    "description": "LiPi Struct"
   },
   "Enum": {
     "prefix": "enum",
@@ -24,7 +24,7 @@
       "\t$0",
       "}"
     ],
-    "description": "Maya Enum"
+    "description": "LiPi Enum"
   },
   "Match": {
     "prefix": "match",
@@ -34,7 +34,7 @@
       "\t_ => ${4:default},",
       "}"
     ],
-    "description": "Maya Match Expression"
+    "description": "LiPi Match Expression"
   },
   "Test Function": {
     "prefix": "test",
@@ -44,6 +44,6 @@
       "\t$0",
       "}"
     ],
-    "description": "Maya Test Function"
+    "description": "LiPi Test Function"
   }
 }

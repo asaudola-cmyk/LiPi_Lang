@@ -1,6 +1,11 @@
-@fn mpm_err_json(msg)
+@fn lipipkg_err_json(msg)
   t1 = string_concat("{\"error\": \"", msg)
   return string_concat(t1, "\"}")
+@end
+
+// WHY: Retains mpm_err_json as backward-compatible alias for legacy callers
+@fn mpm_err_json(msg)
+  return lipipkg_err_json(msg)
 @end
 
 @! ============================================================================
@@ -28,6 +33,17 @@ import "universe/p2p/registry"
 @! 1. DATA STRUCTURE DEFINITIONS
 @! ============================================================================
 
+@struct LipiPkgServerConfig
+  host: string
+  port: i64
+  p2p_peer_id: string
+  p2p_port: i64
+  p2p_enabled: i64
+  data_dir: string
+  max_body_bytes: i64
+@end
+
+// WHY: Retains MPMServerConfig as backward-compatible alias for legacy callers
 @struct MPMServerConfig
   host: string
   port: i64
@@ -78,6 +94,14 @@ import "universe/p2p/registry"
   total_downloads: i64
 @end
 
+@struct LipiPkgClientPublishResult
+  status_code: i64
+  body: string
+  sha256: string
+  verified: i64
+@end
+
+// WHY: Retains MPMClientPublishResult as backward-compatible alias
 @struct MPMClientPublishResult
   status_code: i64
   body: string
@@ -85,6 +109,15 @@ import "universe/p2p/registry"
   verified: i64
 @end
 
+@struct LipiPkgClientFetchResult
+  status_code: i64
+  payload: string
+  sha256: string
+  expected_sha: string
+  verified: i64
+@end
+
+// WHY: Retains MPMClientFetchResult as backward-compatible alias
 @struct MPMClientFetchResult
   status_code: i64
   payload: string
@@ -93,16 +126,43 @@ import "universe/p2p/registry"
   verified: i64
 @end
 
+@struct LipiPkgClientIndexResult
+  status_code: i64
+  body: string
+@end
+
+// WHY: Retains MPMClientIndexResult as backward-compatible alias
 @struct MPMClientIndexResult
   status_code: i64
   body: string
 @end
 
+@struct LipiPkgClientSearchResult
+  status_code: i64
+  body: string
+@end
+
+// WHY: Retains MPMClientSearchResult as backward-compatible alias
 @struct MPMClientSearchResult
   status_code: i64
   body: string
 @end
 
+@struct LipiPkgServer
+  config: LipiPkgServerConfig
+  web_app: WebApp
+  web_server: WebServer
+  p2p_registry: P2PRegistry
+  p2p_swarm: P2PSwarmNetwork
+  merkle_root: string
+  packages: array
+  is_running: i64
+  total_requests: i64
+  total_publishes: i64
+  total_downloads: i64
+@end
+
+// WHY: Retains MPMServer as backward-compatible alias
 @struct MPMServer
   config: MPMServerConfig
   web_app: WebApp
@@ -1257,3 +1317,21 @@ import "universe/p2p/registry"
   res = mpm_server_dispatch(target, req)
   return { status_code: res.res_status_code, body: res.res_body }
 @end
+
+// ── Sovereign LipiPkg Canonical Aliases ─────────────────────────────────────
+@fn lipipkg_server_config_default() return mpm_server_config_default() @end
+@fn lipipkg_server_new(config) return mpm_server_new(config) @end
+@fn lipipkg_server_handle_publish(server, req, res) return mpm_server_handle_publish(server, req, res) @end
+@fn lipipkg_server_handle_get_package(server, req, res, name, constraint) return mpm_server_handle_get_package(server, req, res, name, constraint) @end
+@fn lipipkg_server_handle_get_index(server, req, res) return mpm_server_handle_get_index(server, req, res) @end
+@fn lipipkg_server_handle_search(server, req, res) return mpm_server_handle_search(server, req, res) @end
+@fn lipipkg_server_handle_request(server, req) return mpm_server_handle_request(server, req) @end
+@fn lipipkg_server_dispatch(server, req) return mpm_server_dispatch(server, req) @end
+@fn lipipkg_server_listen(server, host, port) return mpm_server_listen(server, host, port) @end
+@fn lipipkg_server_listen_limited(server, host, port, max_reqs) return mpm_server_listen_limited(server, host, port, max_reqs) @end
+@fn lipipkg_server_stop(server) return mpm_server_stop(server) @end
+@fn lipipkg_server_sync_p2p(s_a, s_b) return mpm_server_sync_p2p(s_a, s_b) @end
+@fn lipipkg_client_publish(target, manifest_data, payload) return mpm_client_publish(target, manifest_data, payload) @end
+@fn lipipkg_client_fetch(target, name, constraint) return mpm_client_fetch(target, name, constraint) @end
+@fn lipipkg_client_get_index(target) return mpm_client_get_index(target) @end
+@fn lipipkg_client_search(target, query) return mpm_client_search(target, query) @end

@@ -7,7 +7,7 @@
 import "universe/quantum/superposition"
 import "universe/core/math"
 
-@! Shor's Algorithm (Conceptual Implementation for Maya Quantum Simulator)
+@! Shor's Algorithm (Conceptual Implementation for LiPi Quantum Simulator)
 @! Note: Factoring large numbers requires thousands of logical qubits.
 @! This implementation demonstrates the core quantum period finding logic.
 

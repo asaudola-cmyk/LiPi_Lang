@@ -1,4 +1,4 @@
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -7,6 +7,11 @@
     i = i + 1
   @end
   return res
+@end
+
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @! ============================================================================
@@ -527,7 +532,7 @@ import "universe/core/string"
     row_bits = font_get_glyph_row(code, row)
     col = 0
     @while col < font.char_width
-      p = maya_pow2(7 - col)
+      p = lipi_pow2(7 - col)
       d = row_bits / p
       bit = d & 1
       @if bit == 1

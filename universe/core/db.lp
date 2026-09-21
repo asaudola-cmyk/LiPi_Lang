@@ -34,7 +34,7 @@ import "universe/core/string"
 @end
 
 @fn db_new(name, order)
-  // WHY: Initializes MayaDatabase with keys and values as first fields to guarantee deterministic offset alignment
+  // WHY: Initializes LipiDatabase with keys and values as first fields to guarantee deterministic offset alignment
   return {
     keys: [],
     values: [],
@@ -46,7 +46,7 @@ import "universe/core/string"
   }
 @end
 
-@fn db_insert(db: MayaDatabase, key, val)
+@fn db_insert(db: LipiDatabase, key, val)
   entry = { op: "INSERT", key: key, val: val }
   @if db.in_tx == 1
     db.tx_wal = arr_push(db.tx_wal, entry)
@@ -98,7 +98,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_fetch(db: MayaDatabase, key)
+@fn db_fetch(db: LipiDatabase, key)
   // WHY: O(log N) binary search on lexicographically sorted B-tree keys
   num_items = arr_len(db.keys)
   low = 0
@@ -117,22 +117,22 @@ import "universe/core/string"
   return "NULL"
 @end
 
-@fn db_get(db: MayaDatabase, key)
+@fn db_get(db: LipiDatabase, key)
   // WHY: Canonical key-value retrieval alias mapping to db_fetch
   return db_fetch(db, key)
 @end
 
-@fn db_has(db: MayaDatabase, key)
+@fn db_has(db: LipiDatabase, key)
   v = db_fetch(db, key)
   @if v != "NULL" return 1 @end
   return 0
 @end
 
-@fn db_count(db: MayaDatabase)
+@fn db_count(db: LipiDatabase)
   return arr_len(db.keys)
 @end
 
-@fn db_delete(db: MayaDatabase, key)
+@fn db_delete(db: LipiDatabase, key)
   entry = { op: "DELETE", key: key, val: "" }
   @if db.in_tx == 1
     db.tx_wal = arr_push(db.tx_wal, entry)
@@ -157,7 +157,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_scan(db: MayaDatabase, start_key, end_key)
+@fn db_scan(db: LipiDatabase, start_key, end_key)
   res = []
   num_items = arr_len(db.keys)
   i = 0
@@ -171,13 +171,13 @@ import "universe/core/string"
   return res
 @end
 
-@fn db_begin_tx(db: MayaDatabase)
+@fn db_begin_tx(db: LipiDatabase)
   db.in_tx = 1
   db.tx_wal = []
   return db
 @end
 
-@fn db_commit_tx(db: MayaDatabase)
+@fn db_commit_tx(db: LipiDatabase)
   @if db.in_tx == 1
     i = 0
     @while i < arr_len(db.tx_wal)
@@ -190,7 +190,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_rollback_tx(db: MayaDatabase)
+@fn db_rollback_tx(db: LipiDatabase)
   @if db.in_tx == 1
     i = arr_len(db.tx_wal) - 1
     @while i >= 0
@@ -206,7 +206,7 @@ import "universe/core/string"
   return db
 @end
 
-@fn db_flush_wal(db: MayaDatabase)
+@fn db_flush_wal(db: LipiDatabase)
   db.wal = []
   return db
 @end
@@ -227,7 +227,7 @@ import "universe/core/string"
   return database
 @end
 
-@fn db_query(db: MayaDatabase, sql_query)
+@fn db_query(db: LipiDatabase, sql_query)
   @if starts_with(sql_query, "SELECT * WHERE key = ")
     key = str_substr(sql_query, 21, str_len(sql_query))
     @if str_len(key) >= 2 && str_char_at(key, 0) == 39
@@ -266,13 +266,13 @@ import "universe/core/string"
   return "ERROR: INVALID_QUERY"
 @end
 
-@fn wal_flush(db: MayaDatabase)
+@fn wal_flush(db: LipiDatabase)
   // WHY: Flushes in-memory WAL transaction log entries and marks durable commit.
   db.wal = []
   return 1
 @end
 
-@fn db_wal_persist_to_file(db: MayaDatabase, wal_file_path: string)
+@fn db_wal_persist_to_file(db: LipiDatabase, wal_file_path: string)
   // WHY: Writes WAL transaction operations to durable persistent disk storage via file_append.
   i = 0
   num_wal = arr_len(db.wal)

@@ -27,6 +27,7 @@ fn SPIRV_VERSION_1_5
     return 66816
 fn SPIRV_GENERATOR_LIPI
     return 4919
+// WHY: Retains SPIRV_GENERATOR_MAYA as backward-compatible alias for legacy callers
 fn SPIRV_GENERATOR_MAYA
     return SPIRV_GENERATOR_LIPI()
 

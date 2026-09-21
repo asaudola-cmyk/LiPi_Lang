@@ -109,7 +109,7 @@ import "compiler/frontend/lexer"
     return true
   @elif name == "SyntaxSpan" || name == "SyntaxTheme" || name == "PID" || name == "LSPDocument"
     return true
-  @elif name == "LSPServer" || name == "ProcessRunner" || name == "StudioConsole" || name == "StudioEditor" || name == "MayaStudioApp"
+  @elif name == "LSPServer" || name == "ProcessRunner" || name == "StudioConsole" || name == "StudioEditor" || name == "LipiStudioApp" || name == "MayaStudioApp"
     return true
   @end
   return false

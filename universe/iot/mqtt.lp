@@ -59,18 +59,15 @@ import "universe/core/collections"
 @end
 
 @fn mqtt_encode_utf8(s)
-  @! 2-byte length prefix + string byte count (simplified for Maya)
+  @! 2-byte length prefix + string byte values
+  @! WHY: Encodes actual string byte values directly using str_char_at for standard wire protocol conformance.
   n = str_len(s)
   hi = (n / 256) % 256
   lo = n % 256
-  @! We encode just the length prefix + approximate bytes (ASCII assumed)
-  @! Full byte-level encoding avoided due to Maya interpreter char limitations
   result = [hi, lo]
-  @! Push n placeholder bytes (value 65 = 'A') as size reservation
-  @! Real MQTT brokers use the actual string bytes, but for wire-size calculation this is correct
   i = 0
   @while i < n
-    result = result.push(65)
+    result = result.push(str_char_at(s, i))
     i = i + 1
   @end
   return result

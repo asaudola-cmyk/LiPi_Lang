@@ -32,7 +32,7 @@ import "universe/core/string"
     }
   @end
 
-  buf = maya_alloc(65536)
+  buf = lipi_alloc(65536)
   nread = sys_read(fd, buf, 65535)
   sys_close(fd)
 
@@ -46,7 +46,7 @@ import "universe/core/string"
     }
   @end
 
-  info = maya_str_new(buf)
+  info = lipi_str_new(buf)
 
   has_avx2 = 0
   @if contains(info, "avx2") == 1

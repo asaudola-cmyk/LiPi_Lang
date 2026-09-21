@@ -14,7 +14,7 @@ import "universe/net/tls/tls13"
 @end
 
 @fn record_layer_new()
-  return { seq_num: 0, key: "maya_tls13_key_0123456789abcdef", iv: "maya_tls_iv1" }
+  return { seq_num: 0, key: "lipi_tls13_key_0123456789abcdef", iv: "lipi_tls_iv1" }
 @end
 
 @fn record_layer_with_keys(key: string, iv: string) -> RecordLayer

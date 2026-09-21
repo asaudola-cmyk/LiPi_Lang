@@ -941,6 +941,7 @@ import "universe/core/string"
 @end
 
 // ── Sovereign Compatibility Aliases ──────────────────────────────────────────
+// WHY: Retains maya_* backward-compatible aliases for legacy callers
 @fn maya_alloc(size) return lipi_alloc(size) @end
 @fn maya_gc_alloc(size) return lipi_gc_alloc(size) @end
 @fn maya_free(ptr, size) return lipi_free(ptr, size) @end

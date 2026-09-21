@@ -55,12 +55,12 @@
 @end
 
 @fn substr(s, start, stop)
-  // WHY: Maya compiler lowers method calls s.substr(a, b) to substr(s, a, b)
+  // WHY: LiPi compiler lowers method calls s.substr(a, b) to substr(s, a, b)
   return str_sub(s, start, stop)
 @end
 
 @fn slice(s, start, stop)
-  // WHY: Maya compiler lowers method calls s.slice(a, b) to slice(s, a, b)
+  // WHY: LiPi compiler lowers method calls s.slice(a, b) to slice(s, a, b)
   return str_sub(s, start, stop)
 @end
 
@@ -207,6 +207,7 @@
   return str(n)
 @end
 
+// WHY: Retains maya_int_to_str as backward-compatible alias for legacy callers
 @fn maya_int_to_str(n)
   return str(n)
 @end
@@ -223,7 +224,7 @@
   return str_len(s)
 @end
 
-@fn maya_str_to_int(s)
+@fn lipi_str_to_int(s)
   @! Parse signed integer from string
   @! WHY: Uses str_char_at with ASCII byte values (48..57) for freestanding execution.
   result = 0
@@ -251,19 +252,24 @@
   return result
 @end
 
+// WHY: Retains maya_str_to_int as backward-compatible alias for legacy callers
+@fn maya_str_to_int(s)
+  return lipi_str_to_int(s)
+@end
+
 @fn str_to_int(s)
-  return maya_str_to_int(s)
+  return lipi_str_to_int(s)
 @end
 
 @fn int_from_str(s)
   // WHY: Alias for str_to_int providing standard numeric string parsing
-  return maya_str_to_int(s)
+  return lipi_str_to_int(s)
 @end
 
 @fn to_int(v)
   // WHY: Universal to_int method. If string, parses integer; otherwise returns numeric value.
   @if is_str(v) == 1
-    return maya_str_to_int(v)
+    return lipi_str_to_int(v)
   @end
   return v
 @end
