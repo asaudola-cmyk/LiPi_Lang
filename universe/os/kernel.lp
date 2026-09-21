@@ -33,8 +33,8 @@ import "universe/os/drivers/ps2"
   
   @! 4. Initialize Hardware Drivers
   vga = vga_text_buffer_new()
-  vga = vga_clear(vga, 15, 0)
-  vga = vga_print_str(vga, "Maya Sovereign OS Kernel booting...\n")
+  // WHY: Official VGA text buffer message for LiPi bare-metal kernel initialization
+  vga = vga_print_str(vga, "LiPi Sovereign OS Kernel booting...\n")
   
   com1 = serial_com1_init()
   com1 = serial_write_line(com1, "[KERNEL] Boot sequence initiated.")

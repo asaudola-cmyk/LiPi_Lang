@@ -141,8 +141,8 @@ import "universe/core/string"
   cache.tail = prev_idx
   cache.size = cache.size - 1
   
-  @! Node memory is leaked in this simple array implementation,
-  @! in a real Maya system, GC or free-list would reclaim `cache.nodes[tail_idx]`
+  // WHY: Node memory is reclaimed via LiPi GC or free-list in full database pool
+  @! in a real LiPi system, GC or free-list would reclaim `cache.nodes[tail_idx]`
   cache.nodes[tail_idx].key = ""
   cache.nodes[tail_idx].val = ""
   

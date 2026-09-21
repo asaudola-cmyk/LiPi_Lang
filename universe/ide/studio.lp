@@ -1,32 +1,42 @@
 @! ============================================================================
-@! LIPI SOVEREIGN IDE — MASTER MAYA STUDIO APPLICATION
+@! LIPI SOVEREIGN IDE — MASTER LIPI STUDIO APPLICATION
 @! Module: universe/ide/studio.lp
-@! Milestone: M3 (Maya Studio Sovereign IDE)
-@! 100% Pure Lipi Implementation — Zero External Dependencies
+@! Milestone: M3 (LiPi Studio Sovereign IDE)
+@! 100% Pure Lipi Architecture — Zero External Dependencies
+@! Features: Multi-Pane TUI/GUI Layout, Integrated Editor, Real-Time Console,
+@! Tool Ribbon, Status Bar Footer, Canvas Framebuffer Blitter, LSP Hook
 @! ============================================================================
 
 import "universe/core/collections"
 import "universe/core/string"
-import "universe/core/math"
 import "universe/gui/canvas"
 import "universe/gui/font"
-import "universe/gui/event"
 import "universe/gui/widget"
-import "compiler/frontend/lexer"
-import "universe/tools/lsp/protocol"
-import "universe/tools/lsp/server"
 import "universe/ide/syntax"
-import "universe/ide/lsp_client"
-import "universe/ide/ui_popup"
-import "universe/ide/console"
-import "universe/ide/runner"
-import "universe/ide/toolbar"
 import "universe/ide/editor"
+import "universe/ide/console"
+import "universe/ide/toolbar"
+import "universe/ide/runner"
+import "universe/ide/lsp_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. MASTER STUDIO DATA STRUCTURE
 @! ----------------------------------------------------------------------------
 
+@struct LipiStudioApp
+  window: Widget
+  width: i64
+  height: i64
+  editor: StudioEditor
+  console: StudioConsole
+  runner: ProcessRunner
+  toolbar: StudioToolbar
+  theme: SyntaxTheme
+  canvas: Canvas
+  is_running: bool
+@end
+
+// WHY: Retains MayaStudioApp as backward-compatible alias for legacy plugins
 @struct MayaStudioApp
   window: Widget
   width: i64
@@ -47,9 +57,9 @@ import "universe/ide/editor"
 @fn studio_app_create(width, height, file_path)
   @if width <= 0 width = 800 @end
   @if height <= 0 height = 600 @end
-  @if str_len(file_path) == 0 file_path = "src/main.lp" @end
+  @if str_len(file_path) == 0 file_path = "src/main.lp" @end  // WHY: Sovereign graphical IDE window identifier and title
 
-  win = widget_window_new("maya_studio_win", "Maya Studio — Sovereign IDE", 0, 0, width, height)
+  win = widget_window_new("lipi_studio_win", "LiPi Studio — Sovereign IDE", 0, 0, width, height)
   win.bg_color = 0xFF1E1E1E
 
   thm = syntax_theme_default()
@@ -61,7 +71,7 @@ import "universe/ide/editor"
   r = runner_new()
 
   @! Initial welcome log in console
-  con = console_append(con, "✦ Welcome to Maya Studio Sovereign IDE v1.0.0 (Pure Maya Stack)", "INFO")
+  con = console_append(con, "✦ Welcome to LiPi Studio Sovereign IDE v1.0.0 (Pure LiPi Stack)", "INFO")
   con = console_append(con, "✦ LSP Language Server active for " + file_path, "SUCCESS")
 
   return {
@@ -103,7 +113,7 @@ import "universe/ide/editor"
 @fn studio_app_run_code(app)
   app.toolbar = toolbar_set_status(app.toolbar, "Running...", 0xFFCCA700)
   app.console = console_set_tab(app.console, "OUTPUT")
-  app.console = console_append(app.console, "▶ [RUN] Executing " + app.editor.file_path + " with Maya Runtime...", "INFO")
+  app.console = console_append(app.console, "▶ [RUN] Executing " + app.editor.file_path + " with LiPi Runtime...", "INFO")
   out_msg = "Program output from " + app.editor.file_path + ":\n[OK] Executed main() entrypoint successfully."
   app.console = console_append(app.console, out_msg, "STDOUT")
   app.console = console_append(app.console, "✔ [DONE] Process finished with exit code 0.", "SUCCESS")
@@ -117,7 +127,7 @@ import "universe/ide/editor"
   out_elf = "bin/" + app.editor.file_name + ".elf"
   app.console = console_set_tab(app.console, "BUILD")
   app.console = console_append(app.console, "🔨 [BUILD] Compiling " + app.editor.file_path + " -> " + out_elf + "...", "BUILD")
-  app.console = console_append(app.console, "  [1/3] Parsing Maya AST frontend...", "BUILD")
+  app.console = console_append(app.console, "  [1/3] Parsing LiPi AST frontend...", "BUILD")
   app.console = console_append(app.console, "  [2/3] Generating native x86-64 machine code...", "BUILD")
   app.console = console_append(app.console, "  [3/3] Emitting sovereign ELF executable binary...", "BUILD")
   app.console = console_append(app.console, "✔ [SUCCESS] Build succeeded! Executable generated: " + out_elf, "SUCCESS")
@@ -262,8 +272,9 @@ import "universe/ide/editor"
   ed_h = con_y - ed_y
 
   @! 1. Window Title Bar (Top 24px)
+  // WHY: Window title bar reflects sovereign LiPi IDE
   c = canvas_fill_rect(c, 0, 0, w, hdr_h, 0xFF007ACC)
-  title_str = "Maya Studio — Sovereign Graphical IDE — [" + app.editor.file_name + "]"
+  title_str = "LiPi Studio — Sovereign Graphical IDE — [" + app.editor.file_name + "]"
   @if app.editor.is_dirty == true title_str = title_str + " *" @end
   c = font_draw_text_clipped(c, f, 8, 4, title_str, 0xFFFFFFFF, w - 40)
   
@@ -291,7 +302,7 @@ import "universe/ide/editor"
   cur_line = app.editor.cursor_line + 1
   cur_col = app.editor.cursor_col + 1
   tot_lines = app.editor.lines.len()
-  status_left = " Ln " + cur_line.to_str() + ", Col " + cur_col.to_str() + " | Total: " + tot_lines.to_str() + " lines | UTF-8 | Maya Mode"
+  status_left = " Ln " + cur_line.to_str() + ", Col " + cur_col.to_str() + " | Total: " + tot_lines.to_str() + " lines | UTF-8 | LiPi Mode"
   c = font_draw_text_clipped(c, f, 8, status_y + 2, status_left, 0xFFFFFFFF, w - 200)
 
   status_right = "LSP: Active | RAM JIT: Ready "
@@ -308,19 +319,18 @@ import "universe/ide/editor"
 
 @fn main()
   println("=================================================================")
-  println("🚀 MAYA STUDIO SOVEREIGN GRAPHICAL IDE 🚀")
+  println("🚀 LIPI STUDIO SOVEREIGN GRAPHICAL IDE 🚀")
   println("=================================================================")
   
   app = studio_app_create(800, 600, "examples/demo.lp")
-  println("Master Maya Studio Application initialized (800x600).")
+  println("Master LiPi Studio Application initialized (800x600).")
 
-  demo_code = "@! Maya Sovereign Application Demo\n@struct Vector3\n  x: f64\n  y: f64\n  z: f64\n
-@end\n\n@fn main()\n  v = { x: 1.0, y: 2.0, z: 3.0 }\n  println(\"Vector loaded: (\" + v.x.to_str() + \", \" + v.y.to_str() + \", \" + v.z.to_str() + \")\")\n  return 0\n@end"
+  demo_code = "@! LiPi Sovereign Application Demo\n@struct Vector3\n  x: f64\n  y: f64\n  z: f64\n@end\n\n@fn main()\n  v = { x: 1.0, y: 2.0, z: 3.0 }\n  println(\"Vector loaded: (\" + v.x.to_str() + \", \" + v.y.to_str() + \", \" + v.z.to_str() + \")\")\n  return 0\n@end"
   app.editor = studio_editor_set_text(app.editor, demo_code)
   println("Editor buffer populated with " + studio_editor_get_line_count(app.editor).to_str() + " lines.")
 
   app.canvas = studio_app_render_frame(app)
   println("Master UI frame rasterized successfully into 800x600 Framebuffer.")
-  println("🎉 Maya Studio Sovereign IDE is fully operational! 🎉")
+  println("🎉 LiPi Studio Sovereign IDE is fully operational! 🎉")
   return 0
 @end

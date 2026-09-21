@@ -13,7 +13,7 @@ import "universe/core/string"
 @! Word = [hi, lo] where 0 <= hi, lo <= 4294967295 (0xFFFFFFFF)
 @! ----------------------------------------------------------------------------
 
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -22,6 +22,11 @@ import "universe/core/string"
     i = i + 1
   @end
   return res
+@end
+
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @fn w64_new(hi, lo)
@@ -81,8 +86,8 @@ import "universe/core/string"
   @if n == 0 return [x[0] % 4294967296, x[1] % 4294967296] @end
   @if n == 32 return [x[1] % 4294967296, x[0] % 4294967296] @end
   @if n < 32
-    p1 = maya_pow2(n)
-    p2 = maya_pow2(32 - n)
+    p1 = lipi_pow2(n)
+    p2 = lipi_pow2(32 - n)
     t1 = (x[0] / p1) % 4294967296
     t2 = (x[1] * p2) % 4294967296
     t_hi = t1 | t2
@@ -94,16 +99,16 @@ import "universe/core/string"
     return [hi, lo]
   @end
   m = n - 32
-  p1 = maya_pow2(m)
-  p2 = maya_pow2(32 - m)
+  p1 = lipi_pow2(m)
+  p2 = lipi_pow2(32 - m)
   t1 = (x[1] / p1) % 4294967296
   t2 = (x[0] * p2) % 4294967296
   t_hi = t1 | t2
-    hi = t_hi % 4294967296
+  hi = t_hi % 4294967296
   t3 = (x[0] / p1) % 4294967296
   t4 = (x[1] * p2) % 4294967296
   t_lo = t3 | t4
-    lo = t_lo % 4294967296
+  lo = t_lo % 4294967296
   return [hi, lo]
 @end
 
@@ -111,8 +116,8 @@ import "universe/core/string"
   @if n == 0 return [x[0] % 4294967296, x[1] % 4294967296] @end
   @if n == 32 return [0, x[0] % 4294967296] @end
   @if n < 32
-    p1 = maya_pow2(n)
-    p2 = maya_pow2(32 - n)
+    p1 = lipi_pow2(n)
+    p2 = lipi_pow2(32 - n)
     hi = (x[0] / p1) % 4294967296
     t1 = (x[1] / p1) % 4294967296
     t2 = (x[0] * p2) % 4294967296
@@ -121,7 +126,7 @@ import "universe/core/string"
     return [hi, lo]
   @end
   m = n - 32
-  p1 = maya_pow2(m)
+  p1 = lipi_pow2(m)
   hi = 0
   lo = (x[0] / p1) % 4294967296
   return [hi, lo]

@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — LAYER-1 SOVEREIGN BLOCKCHAIN (MAYANET)
+@! LIPI UNIVERSAL ARCHITECTURE — LAYER-1 SOVEREIGN BLOCKCHAIN (LIPINET)
 @! Module: universe/blockchain/blockchain.lp
-@! Milestone: Layer-1 Sovereign Blockchain (MayaNet)
+@! Milestone: Layer-1 Sovereign Blockchain (LipiNet)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Transactions, SHA-256 Merkle Trees, Proof-of-Work (PoW) Mining,
-@! Block Validation, MayaVM Smart Contract Execution & Chain Ledger
+@! Block Validation, LipiVM Smart Contract Execution & Chain Ledger
 @! ============================================================================
 
 import "universe/core/collections"
@@ -17,6 +17,18 @@ import "universe/blockchain/vm"
 @! 1. BLOCKCHAIN DATA STRUCTURES
 @! ============================================================================
 
+@struct LipiTransaction
+  from_addr: string
+  to_addr: string
+  value: i64
+  nonce: i64
+  gas_limit: i64
+  gas_price: i64
+  data_payload: string
+  tx_hash: string
+@end
+
+// WHY: Retains MayaTransaction as backward-compatible alias for existing blockchain callers
 @struct MayaTransaction
   from_addr: string
   to_addr: string
@@ -28,6 +40,20 @@ import "universe/blockchain/vm"
   tx_hash: string
 @end
 
+@struct LipiBlock
+  index: i64
+  timestamp: i64
+  prev_hash: string
+  state_root: string
+  tx_merkle_root: string
+  transactions: array
+  miner: string
+  nonce: i64
+  difficulty: i64
+  block_hash: string
+@end
+
+// WHY: Retains MayaBlock as backward-compatible alias for existing blockchain callers
 @struct MayaBlock
   index: i64
   timestamp: i64
@@ -41,6 +67,14 @@ import "universe/blockchain/vm"
   block_hash: string
 @end
 
+@struct LipiBlockchain
+  chain: array
+  state_trie: StateTrie
+  pending_txs: array
+  difficulty: i64
+@end
+
+// WHY: Retains MayaBlockchain as backward-compatible alias for existing blockchain callers
 @struct MayaBlockchain
   chain: array
   state_trie: StateTrie
@@ -182,7 +216,7 @@ import "universe/blockchain/vm"
   idx = chain.chain.len()
   last_block = chain.chain[idx - 1]
   
-  @! Mining reward (50 MAYA)
+  // WHY: Mining reward credited to block producer (50 LIPI)
   miner_acc = state_trie_get_account(chain.state_trie, miner_addr)
   @if miner_acc == 0
     miner_acc = account_state_new(miner_addr, 50)
@@ -196,4 +230,34 @@ import "universe/blockchain/vm"
   chain.chain = chain.chain.push(new_block)
   chain.pending_txs = []
   return new_block
+@end
+
+// ── Canonical LiPi Blockchain API Forwarders ─────────────────────────────
+// WHY: Exposes canonical lipi_* API while maintaining full backward-compatibility with maya_*
+@fn lipi_tx_new(from_addr, to_addr, val, nonce, gas_limit, gas_price, data_str)
+  return maya_tx_new(from_addr, to_addr, val, nonce, gas_limit, gas_price, data_str)
+@end
+
+@fn lipi_txs_merkle_root(txs)
+  return maya_txs_merkle_root(txs)
+@end
+
+@fn lipi_block_compute_hash(idx, ts, prev_h, st_root, tx_root, miner, nonce)
+  return maya_block_compute_hash(idx, ts, prev_h, st_root, tx_root, miner, nonce)
+@end
+
+@fn lipi_block_mine(idx, ts, prev_h, st_root, txs, miner, difficulty)
+  return maya_block_mine(idx, ts, prev_h, st_root, txs, miner, difficulty)
+@end
+
+@fn lipi_blockchain_new(initial_miner, genesis_balance)
+  return maya_blockchain_new(initial_miner, genesis_balance)
+@end
+
+@fn lipi_blockchain_apply_tx(chain, tx)
+  return maya_blockchain_apply_tx(chain, tx)
+@end
+
+@fn lipi_blockchain_mine_pending(chain, miner_addr)
+  return maya_blockchain_mine_pending(chain, miner_addr)
 @end

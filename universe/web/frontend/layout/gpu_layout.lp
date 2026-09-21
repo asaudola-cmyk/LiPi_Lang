@@ -19,8 +19,9 @@ import "universe/web/frontend/layout/flexbox_solver"
 @! 1. WGSL COMPUTE SHADER SOURCE CODE EMBEDDING
 @! ============================================================================
 
+// WHY: WGSL compute shader for sovereign UI flexbox layout
 @fn gpu_layout_get_wgsl_shader_source()
-  s = "// MAYA WEB FRONTEND ENGINE — WGSL UI COMPUTE LAYOUT SHADER\n"
+  s = "// LIPI WEB FRONTEND ENGINE — WGSL UI COMPUTE LAYOUT SHADER\n"
   s = s + "struct {\n"
   s = s + "    node_count: u32,\n"
   s = s + "    viewport_width: f32,\n"

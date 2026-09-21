@@ -1319,7 +1319,7 @@ _i_entry_0 = 0
 
 
     @if str_eq(inst.callee, "maya_array_new") == 1
-      @! Call universe/core/gc.maya -> gc_alloc
+      @! Call universe/core/lipi_gc.lp -> gc_alloc
       x86_lower_load_val_to_reg(emitter, inst.args[0], 0) @! RAX = num_items
       emit_mov_reg_imm64(buf, 1, 8)
       emit_imul_reg_reg(buf, 0, 1)                  @! RAX = num_items * 8

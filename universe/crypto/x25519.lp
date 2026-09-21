@@ -69,7 +69,7 @@ import "universe/crypto/ed25519"
   @while t >= 0
     byte_idx = t / 8
     bit_idx = t % 8
-    b = (clamped[byte_idx] / maya_pow2(bit_idx)) & 1
+    b = (clamped[byte_idx] / lipi_pow2(bit_idx)) & 1
     k_bit = b ^ swap
 
     @if k_bit == 1

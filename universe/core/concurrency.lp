@@ -57,6 +57,16 @@
   return pid
 @end
 
+// WHY: lipi_spawn provides the canonical sovereign green thread spawning API.
+@fn lipi_spawn(func, arg)
+  return maya_spawn(func, arg)
+@end
+
+// WHY: thread_spawn provides standard cross-module naming for green thread creation.
+@fn thread_spawn(func, arg)
+  return lipi_spawn(func, arg)
+@end
+
 @! ----------------------------------------------------------------------------
 @! 2. Swarm Task & Concurrency Join
 @! ----------------------------------------------------------------------------

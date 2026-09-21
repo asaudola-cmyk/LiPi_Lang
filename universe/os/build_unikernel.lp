@@ -158,8 +158,8 @@ import "universe/core/string"
   stub = unikernel_append_bytes(stub, com1_init)
 
   @! 4. VGA Text Mode Banner (0xB8000)
-  @! Attribute 0x0A: Bright Green on Black background
-  vga_msg = str_concat("MAYA UNIKERNEL: ", str_concat(kernel_name, " [RING-0 OK]"))
+  // WHY: Displays sovereign LiPi unikernel title on VGA text mode framebuffer (0xB8000)
+  vga_msg = str_concat("LIPI UNIKERNEL: ", str_concat(kernel_name, " [RING-0 OK]"))
   vga_bytes = unikernel_build_vga_str_bytes(vga_msg, 0, 0, 10)
   stub = unikernel_append_bytes(stub, vga_bytes)
 

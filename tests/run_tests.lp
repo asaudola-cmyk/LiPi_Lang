@@ -816,6 +816,55 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
+
+    // 179: Sovereign Blockchain & LipiVM Engine (MPT, State Trié, EVM Opcodes)
+    if run_single_test(compiler, "tests/test_blockchain_evm.lp", "test_blockchain_evm") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 180: Closures & Trait Polymorphism Systems Architecture
+    if run_single_test(compiler, "tests/test_closure_and_traits.lp", "test_closure_and_traits") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 181: Sovereign Linux KVM Virtualization & Hypervisor Engine
+    if run_single_test(compiler, "tests/test_hypervisor_kvm.lp", "test_hypervisor_kvm") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 182: Full Native Language Server Protocol (LSP 3.17) Engine
+    if run_single_test(compiler, "tests/test_native_lsp_full.lp", "test_native_lsp_full") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 183: Multi-Qubit Quantum State Vector & Gate Matrix Engine
+    if run_single_test(compiler, "tests/test_quantum_state_vector.lp", "test_quantum_state_vector") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 184: Scoped Region & Transient Arena Allocation Architecture
+    if run_single_test(compiler, "tests/test_scoped_arena.lp", "test_scoped_arena") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 185: Silicon Direct Store-to-Load Forwarding & Peephole Optimizer
+    if run_single_test(compiler, "tests/test_silicon_optimizer.lp", "test_silicon_optimizer") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 186: Sovereign ASN.1 DER Encoding & X.509 PKI Engine
+    if run_single_test(compiler, "tests/test_x509_certificate.lp", "test_x509_certificate") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed
     say "========================================================================"

@@ -31,8 +31,8 @@ import "universe/iot/sensor"
 @end
 
 @fn gateway_register_sensor(gateway, sensor)
-  @! Subscribe to sensor's command topic
-  topic = "maya/iot/" + gateway.device_id + "/" + sensor.sensor_id + "/cmd"
+  // WHY: Subscribes to sensor command topic under sovereign lipi/iot namespace
+  topic = "lipi/iot/" + gateway.device_id + "/" + sensor.sensor_id + "/cmd"
   gateway.mqtt_client = mqtt_subscribe(gateway.mqtt_client, topic, 1)
   gateway.sensors = gateway.sensors.push(sensor)
   return gateway
@@ -46,7 +46,8 @@ import "universe/iot/sensor"
     s = sensor_read(s)
     gateway.sensors[i] = s
     json_payload = sensor_to_json(s)
-    topic = "maya/iot/" + gateway.device_id + "/" + s.sensor_id + "/data"
+    // WHY: Publishes sensor telemetry under sovereign lipi/iot namespace
+    topic = "lipi/iot/" + gateway.device_id + "/" + s.sensor_id + "/data"
     gateway.mqtt_client = mqtt_publish(gateway.mqtt_client, topic, json_payload, 1)
     gateway.message_queue = gateway.message_queue.push(json_payload)
     i = i + 1

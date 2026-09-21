@@ -128,7 +128,7 @@ import "universe/tools/lsp/protocol"
           @if open_braces > 0
             open_braces = open_braces - 1
           @else
-            diagnostics = diagnostics.push({range: { start_pos: {line: l_idx, character: col }, end_pos: { line: l_idx, character: col + 1 } }, severity: 1, code: "E001", source: "maya-lsp", message: "Unmatched closing brace '}'"
+            diagnostics = diagnostics.push({range: { start_pos: {line: l_idx, character: col }, end_pos: { line: l_idx, character: col + 1 } }, severity: 1, code: "E001", source: "lipi-lsp", message: "Unmatched closing brace '}'"
             })
           @end
         @elif ch == 40 @! '('
@@ -137,7 +137,7 @@ import "universe/tools/lsp/protocol"
           @if open_parens > 0
             open_parens = open_parens - 1
           @else
-            diagnostics = diagnostics.push({range: { start_pos: {line: l_idx, character: col }, end_pos: { line: l_idx, character: col + 1 } }, severity: 1, code: "E002", source: "maya-lsp", message: "Unmatched closing parenthesis ')'"
+            diagnostics = diagnostics.push({range: { start_pos: {line: l_idx, character: col }, end_pos: { line: l_idx, character: col + 1 } }, severity: 1, code: "E002", source: "lipi-lsp", message: "Unmatched closing parenthesis ')'"
             })
           @end
         @end
@@ -146,7 +146,7 @@ import "universe/tools/lsp/protocol"
     @end
 
     @if in_str == 1
-      diagnostics = diagnostics.push({range: { start_pos: {line: l_idx, character: str_start_col }, end_pos: { line: l_idx, character: c_len } }, severity: 1, code: "E003", source: "maya-lsp", message: "Unclosed string literal"
+      diagnostics = diagnostics.push({range: { start_pos: {line: l_idx, character: str_start_col }, end_pos: { line: l_idx, character: c_len } }, severity: 1, code: "E003", source: "lipi-lsp", message: "Unclosed string literal"
       })
     @end
 
@@ -185,8 +185,8 @@ import "universe/tools/lsp/protocol"
 
 @fn lsp_compute_completions(content, line, character)
   completions = [
-    { label: "@fn", kind: 14, detail: "Function definition keyword", documentation: "Defines a Maya function", insert_text: "@fn ${1:name}(${2: args})\n  $0\n@end" },
-    { label: "@struct", kind: 14, detail: "Struct definition keyword", documentation: "Defines a Maya struct layout", insert_text: "@struct ${1:Name}\n  $0\n@end" },
+    { label: "@fn", kind: 14, detail: "Function definition keyword", documentation: "Defines a LiPi function", insert_text: "@fn ${1:name}(${2: args})\n  $0\n@end" },
+    { label: "@struct", kind: 14, detail: "Struct definition keyword", documentation: "Defines a LiPi struct layout", insert_text: "@struct ${1:Name}\n  $0\n@end" },
     { label: "@if", kind: 14, detail: "Conditional branch", documentation: "Conditional branch statement", insert_text: "@if ${1:condition}\n  $0\n@end" },
     { label: "@while", kind: 14, detail: "While loop", documentation: "Iterative loop while condition is true", insert_text: "@while ${1:condition}\n  $0\n@end" },
     { label: "println", kind: 3, detail: "fn println(msg)", documentation: "Prints a message with newline to stdout", insert_text: "println($1)" },
@@ -296,11 +296,11 @@ import "universe/tools/lsp/protocol"
   @! Check built-in docs
   doc_text = ""
   @if str_eq(word, "println") == 1
-    doc_text = "```maya\nfn println(message = string)\n```\nPrints string to stdout with trailing newline."
+    doc_text = "```lipi\nfn println(message = string)\n```\nPrints string to stdout with trailing newline."
   @elif str_eq(word, "@fn") == 1
-    doc_text = "```maya\n@fn <name>(<args>) ... @end\n```\nDeclares a first-class function block."
+    doc_text = "```lipi\n@fn <name>(<args>) ... @end\n```\nDeclares a first-class function block."
   @elif str_eq(word, "@struct") == 1
-    doc_text = "```maya\n@struct <Name> <fields>\n@end\n```\nDeclares a native contiguous struct data layout."
+    doc_text = "```lipi\n@struct <Name> <fields>\n@end\n```\nDeclares a native contiguous struct data layout."
   @else
     @! Search for function or struct definition
     found_doc = 0
@@ -308,10 +308,10 @@ import "universe/tools/lsp/protocol"
     @while l_i < lines.len() && found_doc == 0
       l = str_trim(lines[l_i])
       @if str_starts_with(l, str_concat(str_concat("@fn ", word), "("))
-        doc_text = str_concat("```maya\n", str_concat(l, str_concat("\n```\nUser-defined function at line ", (l_i + 1).to_str())))
+        doc_text = str_concat("```lipi\n", str_concat(l, str_concat("\n```\nUser-defined function at line ", (l_i + 1).to_str())))
         found_doc = 1
       @elif str_starts_with(l, str_concat("@struct ", word))
-        doc_text = str_concat("```maya\n", str_concat(l, str_concat("\n```\nUser-defined struct at line ", (l_i + 1).to_str())))
+        doc_text = str_concat("```lipi\n", str_concat(l, str_concat("\n```\nUser-defined struct at line ", (l_i + 1).to_str())))
         found_doc = 1
       @end
       l_i = l_i + 1
@@ -319,7 +319,7 @@ import "universe/tools/lsp/protocol"
   @end
 
   @if str_len(doc_text) == 0
-    doc_text = str_concat("`", str_concat(word, "` (Maya symbol)"))
+    doc_text = str_concat("`", str_concat(word, "` (LiPi symbol)"))
   @end
 
   return str_concat("{\"contents\":{\"kind\":\"markdown\",\"value\":\"", str_concat(lsp_escape_json(doc_text), "\"}}"))
@@ -453,7 +453,7 @@ import "universe/tools/lsp/protocol"
     caps = str_concat(caps, "\"definitionProvider\":true,")
     caps = str_concat(caps, "\"documentSymbolProvider\":true")
     caps = str_concat(caps, "},")
-    caps = str_concat(caps, "\"serverInfo\":{\"name\":\"maya-lsp-server\",\"version\":\"1.0.0\"}")
+    caps = str_concat(caps, "\"serverInfo\":{\"name\":\"lipi-lsp-server\",\"version\":\"1.0.0\"}")
     caps = str_concat(caps, "}")
     return lsp_response_success(msg.id, caps)
   @elif str_eq(msg.method, "initialized") == 1
@@ -534,7 +534,7 @@ import "universe/tools/lsp/protocol"
 @! ============================================================================
 
 @fn lsp_run_stdio_server()
-  @! Runs the pure Maya JSON-RPC 2.0 LSP daemon over standard I/O (stdin/stdout)
+  // WHY: Runs the pure LiPi JSON-RPC 2.0 LSP daemon over standard I/O (stdin/stdout)
   @! WHY: Editors like VS Code, Neovim, Helix communicate with LSP servers over stdio.
   server = lsp_server_new()
   read_buf = ""

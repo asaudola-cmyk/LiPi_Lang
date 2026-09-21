@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE SHELL — universe/os/shell.lp
-@! A self-contained command interpreter written in 100% pure Maya.
+@! A self-contained command interpreter written in 100% pure LiPi.
 @! Zero dependency on bash / sh / libc.  All I/O via raw Linux syscalls.
 @!
 @! Syscall numbers (x86_64 Linux):
@@ -14,7 +14,7 @@
 @!   sys_wait4   =  61
 @!
 @! Architecture: REPL loop
-@!   1. Print prompt "maya> " via sys_write
+@!   1. Print prompt "lipi> " via sys_write
 @!   2. Read a line from stdin via sys_read
 @!   3. Parse the line into command + args
 @!   4. Handle built-in commands (exit, cd, help, echo)
@@ -209,7 +209,7 @@ g_history        = []
 @end
 
 @fn builtin_help()
-  shell_println("Maya Shell — Built-in commands:")
+  shell_println("LiPi Shell — Built-in commands:")
   shell_println("  echo [args...]   Print arguments to stdout")
   shell_println("  exit [code]      Exit the shell with optional exit code")
   shell_println("  help             Show this help message")
@@ -240,7 +240,7 @@ g_history        = []
 @end
 
 @fn builtin_env()
-  shell_println("SHELL=maya")
+  shell_println("SHELL=lipi")
   shell_println("PWD=" + g_cwd)
   shell_println("LANG=C.UTF-8")
   return 0
@@ -272,17 +272,17 @@ g_history        = []
 
   @if pid < 0
     @! Fork failed
-    shell_eprint("maya-shell: fork failed\n")
+    shell_eprint("lipi-shell: fork failed\n")
     return 1
   @end
 
   @if pid == 0
     @! ---- CHILD PROCESS ----
     @! sys_execve(path, argv, envp)
-    @! In the Maya runtime the syscall layer handles marshalling argv/envp.
+    // WHY: In the LiPi runtime the syscall layer handles marshalling argv/envp.
     ret = syscall(SYS_EXECVE(), cmd, full_argv, [])
     @! execve only returns on error
-    shell_eprint("maya-shell: execve failed for: " + cmd + "\n")
+    shell_eprint("lipi-shell: execve failed for: " + cmd + "\n")
     syscall(SYS_EXIT(), 127, 0, 0, 0, 0, 0)
     return 127
   @end
@@ -353,8 +353,8 @@ g_history        = []
   @! Reads from stdin, parses, dispatches, loops until "exit".
 
   @while g_shell_running == 1
-    @! Print prompt: "maya> "
-    shell_write(STDOUT_FD(), "maya> ")
+    // WHY: Sovereign LiPi interactive prompt
+    shell_write(STDOUT_FD(), "lipi> ")
 
     @! Read a line from stdin
     line = shell_read_line(SHELL_BUF_SIZE())

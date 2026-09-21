@@ -1,4 +1,4 @@
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -7,6 +7,11 @@
     i = i + 1
   @end
   return res
+@end
+
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @! ============================================================================
@@ -351,7 +356,7 @@ import "universe/crypto/sha512"
     bit_pos = bit_idx % 8
     in_bit = 0
     @if byte_pos < bytes_in.len()
-      in_bit = (bytes_in[byte_pos] / maya_pow2(bit_pos)) & 1
+      in_bit = (bytes_in[byte_pos] / lipi_pow2(bit_pos)) & 1
     @end
 
     @! Shift rem left by 1 and insert in_bit

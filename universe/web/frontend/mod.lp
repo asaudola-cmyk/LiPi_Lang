@@ -4,7 +4,7 @@
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
-@! - Sovereign Root Entry Point for the Maya Web Frontend Engine
+@! - Sovereign Root Entry Point for the LiPi Web Frontend Engine
 @! - Unified Lifecycle: Init, Tick, Submit UI, Dispatch Event, Render & Present
 @! - Seamless Integration: Unified GPU Renderer, GPU Flexbox Layout,
 @!   Lock-Free Multi-Threaded WASM Workers, Adaptive WebRTC Streaming & DOM Bypass Host

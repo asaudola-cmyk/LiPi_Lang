@@ -386,10 +386,11 @@ import "universe/p2p/registry"
   return {
     host: "127.0.0.1",
     port: 8080,
-    p2p_peer_id: "mpm-primary-node",
+    // WHY: Default sovereign peer identity and storage directory for package registry
+    p2p_peer_id: "lipipkg-primary-node",
     p2p_port: 9090,
     p2p_enabled: 1,
-    data_dir: ".lipi/mpm_registry",
+    data_dir: ".lipi/package_registry",
     max_body_bytes: 10485760
   }
 @end
@@ -678,6 +679,11 @@ import "universe/p2p/registry"
 
   res_status(res, 200)
   res_header(res, "Content-Type", "application/octet-stream")
+  // WHY: Emits official sovereign X-Lipi-Package headers with dual-compat X-Maya-Package headers
+  res_header(res, "X-Lipi-Package-Name", target_meta.name)
+  res_header(res, "X-Lipi-Package-Version", target_meta.version)
+  res_header(res, "X-Lipi-Package-CID", target_meta.cid)
+  res_header(res, "X-Lipi-Package-SHA256", target_meta.sha256)
   res_header(res, "X-Maya-Package-Name", target_meta.name)
   res_header(res, "X-Maya-Package-Version", target_meta.version)
   res_header(res, "X-Maya-Package-CID", target_meta.cid)
@@ -971,7 +977,7 @@ import "universe/p2p/registry"
 @fn mpm_server_listen(server, host, port)
   listener = tcp_listener_bind(host, port)
   @if listener.fd < 0
-    err_bind = string_concat("Failed to bind MPM Server on ", host)
+    err_bind = string_concat("Failed to bind LipiPkg Server on ", host)
     err_bind = string_concat(err_bind, ":")
     err_bind = string_concat(err_bind, to_str(port))
     println(err_bind)
@@ -993,7 +999,7 @@ import "universe/p2p/registry"
 @fn mpm_server_listen_limited(server, host, port, max_requests)
   listener = tcp_listener_bind(host, port)
   @if listener.fd < 0
-    println("Failed to bind MPM Server on " + host + ":" + port.to_str())
+    println("Failed to bind LipiPkg Server on " + host + ":" + port.to_str())
     return -1
   @end
 
@@ -1177,7 +1183,8 @@ import "universe/p2p/registry"
     h_len = resp.headers.len()
     @while i < h_len
       h = resp.headers[i]
-      @if str_to_lower(h.name) == "x-maya-package-sha256"
+      // WHY: Checks official X-Lipi-Package-SHA256 and falls back to legacy X-Maya-Package-SHA256
+      @if str_to_lower(h.name) == "x-lipi-package-sha256" || str_to_lower(h.name) == "x-maya-package-sha256"
         expected_sha = h.value
         break
       @end
@@ -1203,7 +1210,11 @@ import "universe/p2p/registry"
   @! Direct in-memory server dispatch
   req = req_new("GET", subpath, [], "", "127.0.0.1")
   res = mpm_server_dispatch(target, req)
-  expected_sha = res_get_header(res, "X-Maya-Package-SHA256", "")
+  // WHY: Retrieves sovereign X-Lipi-Package-SHA256 with legacy fallback
+  expected_sha = res_get_header(res, "X-Lipi-Package-SHA256", "")
+  @if str_len(expected_sha) == 0
+    expected_sha = res_get_header(res, "X-Maya-Package-SHA256", "")
+  @end
   actual_sha = sha256_hex_string(res.res_body)
 
   is_valid = 0

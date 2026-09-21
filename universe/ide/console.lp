@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — DOCKED MULTI-TAB OUTPUT CONSOLE PANE
 @! Module: universe/ide/console.lp
-@! Milestone: M3 (Maya Studio Sovereign IDE)
+@! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 

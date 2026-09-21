@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-16 02:02:18",
+  "timestamp": "2026-09-22 03:00:41",
   "hardware": "Intel Core i3-8100 CPU @ 3.60GHz (4 Cores), Linux x86_64",
   "suite1_loops": [
     {
       "lang": "C (GCC 13.3 -O3)",
-      "best_time_ms": 11.18,
-      "cycles": 40273948,
+      "best_time_ms": 11.26,
+      "cycles": 40547876,
       "bin_size": "15.7 KB"
     },
     {
@@ -16,7 +16,7 @@
     },
     {
       "lang": "Rust (rustc 1.97 -O3)",
-      "best_time_ms": 16.95,
+      "best_time_ms": 16.92,
       "cycles": "N/A",
       "bin_size": "4284.3 KB"
     },
@@ -28,36 +28,36 @@
     },
     {
       "lang": "Go (go 1.22.5)",
-      "best_time_ms": 12.66,
+      "best_time_ms": 12.63,
       "cycles": "N/A",
       "bin_size": "1873.2 KB"
     },
     {
       "lang": "Python 3.12 (CPython)",
-      "best_time_ms": 1485.32,
+      "best_time_ms": 1550.45,
       "cycles": "N/A",
       "bin_size": "N/A"
     },
     {
       "lang": "\ud83d\udc51 LiPi First 1.0.0",
-      "best_time_ms": 0.53,
-      "cycles": 68,
-      "bin_size": "6.5 KB"
+      "best_time_ms": 0.47,
+      "cycles": 5344,
+      "bin_size": "4.7 KB"
     }
   ],
   "suite2_columnstore": [
     {
       "lang": "C (AVX2 -O3)",
-      "best_time_ms": 1.4,
-      "throughput_m_rows_sec": 714.29,
-      "cycles": 5051438,
+      "best_time_ms": 1.42,
+      "throughput_m_rows_sec": 704.23,
+      "cycles": 5140608,
       "bin_size": "15.7 KB"
     },
     {
       "lang": "C++ (AVX2 -O3)",
-      "best_time_ms": 1.14,
-      "throughput_m_rows_sec": 878.6,
-      "cycles": 4125288,
+      "best_time_ms": 1.13,
+      "throughput_m_rows_sec": 886.45,
+      "cycles": 4090750,
       "bin_size": "16.0 KB"
     },
     {
@@ -76,17 +76,17 @@
     },
     {
       "lang": "Go (go 1.22.5)",
-      "best_time_ms": 1.13,
-      "throughput_m_rows_sec": 884.96,
+      "best_time_ms": 1.12,
+      "throughput_m_rows_sec": 892.86,
       "cycles": "N/A",
       "bin_size": "1873.2 KB"
     },
     {
       "lang": "\ud83d\udc51 LiPi First 1.0.0",
-      "best_time_ms": 0.65,
-      "throughput_m_rows_sec": 1538.46,
-      "cycles": 2329262,
-      "bin_size": "33.4 KB"
+      "best_time_ms": 0.6,
+      "throughput_m_rows_sec": 1666.67,
+      "cycles": 2177178,
+      "bin_size": "24.5 KB"
     }
   ],
   "suite3_network_rps": [

@@ -926,8 +926,8 @@ import "universe/os/syscalls"
     @end
   @end
   
-  @! 5. Deterministic fallback for in-memory / mock stream verification
-  res_msg = pb_encode_string(1, "Hello from Maya gRPC!")
+  // WHY: Deterministic fallback for in-memory / mock stream verification
+  res_msg = pb_encode_string(1, "Hello from LiPi gRPC!")
   return res_msg
 @end
 

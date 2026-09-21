@@ -173,7 +173,7 @@ import "universe/os/process"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 4. Pure Maya Builtins Engine
+@! 4. Pure LiPi Builtins Engine
 @! ----------------------------------------------------------------------------
 
 @fn dispatcher_is_builtin(cmd)

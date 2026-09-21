@@ -4,7 +4,7 @@
 @! Milestone: Grand Sovereign Pillar 3
 @! 100% Pure Lipi Implementation — Direct Unix Domain Socket / X11 Engine
 @! Features: Window Lifecycle, Direct Canvas Blitting via ZPixmap Framebuffer,
-@! Event Translation to Native Maya GUI Widgets
+@! Event Translation to Native LiPi GUI Widgets
 @! ============================================================================
 
 import "universe/core/collections"
@@ -124,13 +124,13 @@ import "universe/gui/x11/x11_protocol"
 @end
 
 @! ============================================================================
-@! 5. EVENT TRANSLATION TO NATIVE MAYA GUI
+@! 5. EVENT TRANSLATION TO NATIVE LIPI GUI
 @! ============================================================================
 
 @fn x11_translate_event(raw_32_bytes)
   ev = x11_parse_event(raw_32_bytes)
   
-  @! Map to Maya Widget Event constants:
+  // WHY: Maps X11 wire protocol events into sovereign LiPi Widget Event constants
   @! MOUSE_DOWN = 1, MOUSE_UP = 2, MOUSE_MOVE = 3, KEY_DOWN = 4, KEY_UP = 5
   @if ev.event_type == 4 @! ButtonPress
     return { event_type: 1, target_id: 0, mouse_x: ev.x, mouse_y: ev.y, key_code: 0, char_code: "", is_handled: 0 }

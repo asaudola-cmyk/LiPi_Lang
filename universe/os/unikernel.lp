@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — MAYA RING-0 UNIKERNEL ENGINE
+@! LIPI UNIVERSAL ARCHITECTURE — LIPI RING-0 UNIKERNEL ENGINE
 @! Module: universe/os/unikernel.lp
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
 @! 100% Pure Lipi Implementation — Zero External Dependencies
@@ -145,8 +145,12 @@ import "universe/os/boot/multiboot"
 @! ============================================================================
 
 @fn unikernel_banner_string()
-  @! Canonical Ring-0 kernel banner string emitted over COM1 UART serial port
-  @! WHY: Serves as the universal telemetry health-check token for cloud microVMs and test runners.
+  // WHY: Canonical Ring-0 kernel banner string emitted over COM1 UART serial port
+  return "[LIPI RING-0 UNIKERNEL BOOTED]"
+@end
+
+// WHY: Retains legacy banner for telemetry monitors requiring backward compatibility
+@fn unikernel_banner_string_legacy()
   return "[MAYA RING-0 UNIKERNEL BOOTED]"
 @end
 

@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA REGISTRY — Public Package Hosting System
-@! The Maya package registry: where Maya packages live
-@! Maya's own npm/crates.io/PyPI
+@! LIPI REGISTRY — Public Package Hosting System
+@! The LiPi package registry: where LiPi packages live
+@! LiPi's own sovereign package hub
 @! ============================================================================
 
 @struct Package
@@ -98,7 +98,8 @@
 @end
 
 @fn registry_stats(reg)
-  println("Maya Registry: " + reg.reg_url)
+  // WHY: Sovereign registry stats output banner
+  println("LiPi Registry: " + reg.reg_url)
   println("Total packages: " + int_to_str(reg.reg_total))
 @end
 

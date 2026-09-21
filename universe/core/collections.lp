@@ -1,6 +1,6 @@
 @! ============================================================
 @! LIPI UNIVERSE — Core Collections Library v2.0
-@! Pure Maya: Stack, Queue, Set, HashMap, list helpers
+@! Pure Lipi: Stack, Queue, Set, HashMap, list helpers
 @! Interpreter-compatible — no sys_peek8/sys_mmap/sys_poke
 @! ============================================================
 
@@ -243,7 +243,7 @@
 @end
 
 @fn list_sort_int(arr)
-  @! Insertion sort (pure Maya, interpreter-safe)
+  @! Insertion sort (pure Lipi, interpreter-safe)
   n = arr.len()
   sorted = arr
   i = 1
@@ -350,6 +350,12 @@
 
 @! ─── Set ────────────────────────────────────────────────────
 
+@struct LipiSet
+  ms_data: array
+  ms_size: i64
+@end
+
+// WHY: Retains MayaSet as backward-compatible alias for existing codebase callers
 @struct MayaSet
   ms_data: array
   ms_size: i64

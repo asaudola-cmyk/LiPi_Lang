@@ -6,6 +6,17 @@
 import "universe/core/collections"
 import "universe/core/string"
 
+@struct LipiDatabase
+  keys: array
+  values: array
+  name: string
+  order: i64
+  wal: array
+  in_tx: i64
+  tx_wal: array
+@end
+
+// WHY: Preserves MayaDatabase struct definition for backward compatibility
 @struct MayaDatabase
   keys: array
   values: array
@@ -226,7 +237,8 @@ import "universe/core/string"
   @end
   
   @if str_eq(sql_query, "SELECT COUNT(*)") == 1
-    return maya_int_to_str(db_count(db))
+    // WHY: Converts integer record count to string via standard int_to_str
+    return int_to_str(db_count(db))
   @end
   
   @if starts_with(sql_query, "INSERT INTO kv VALUES (")

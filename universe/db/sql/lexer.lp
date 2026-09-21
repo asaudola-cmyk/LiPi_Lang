@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE DB - SQL LEXER (universe/db/sql/lexer.lp)
-@! Standard: 100% Pure Maya SQL Tokenizer
+@! Standard: 100% Pure LiPi SQL Tokenizer
 @! ============================================================================
 
 import "universe/core/string"

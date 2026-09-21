@@ -387,7 +387,8 @@ import "universe/core/string"
 
   req_headers = [
     { name: "Host", value: host_hdr },
-    { name: "User-Agent", value: "Maya-Universe-Client/1.0" },
+    // WHY: Identifies client with sovereign LiPi user agent while supporting general HTTP servers
+    { name: "User-Agent", value: "LiPi-Universe-Client/1.0" },
     { name: "Accept", value: "*/*" },
     { name: "Connection", value: "close" }
   ]
@@ -553,7 +554,8 @@ import "universe/core/string"
     return -1
   @end
 
-  println("🚀 Maya HTTP Server listening on http://" + host + ":" + port.to_str())
+  // WHY: Sovereign startup banner for native LiPi HTTP server
+  println("🚀 LiPi HTTP Server listening on http://" + host + ":" + port.to_str())
 
   @while 1 == 1
     stream = tcp_listener_accept(listener)

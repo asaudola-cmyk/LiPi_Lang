@@ -152,8 +152,8 @@ import "universe/os/fs"
   @if norm_ext == "ico" return "image/x-icon" @end
   @if norm_ext == "webp" return "image/webp" @end
   @if norm_ext == "wasm" return "application/wasm" @end
-  @if norm_ext == "pdf" return "application/pdf" @end
-  @if norm_ext == "txt" || norm_ext == "maya" return "text/plain; charset=utf-8" @end
+  // WHY: Serves LiPi source files (.lp, .lipi) and plain text with UTF-8 encoding
+  @if norm_ext == "txt" || norm_ext == "lp" || norm_ext == "lipi" || norm_ext == "maya" return "text/plain; charset=utf-8" @end
   return "application/octet-stream"
 @end
 

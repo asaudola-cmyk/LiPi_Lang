@@ -42,8 +42,8 @@ import "universe/core/string"
 @! ----------------------------------------------------------------------------
 @fn sha256_rotr(x, n)
   v = x % 4294967296
-  p1 = maya_pow2(n)
-  p2 = maya_pow2(32 - n)
+  p1 = lipi_pow2(n)
+  p2 = lipi_pow2(32 - n)
   t1 = (v / p1) % 4294967296
   t2 = (v * p2) % 4294967296
   res = t1 | t2

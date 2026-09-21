@@ -493,7 +493,8 @@ import "universe/web/router"
   @end
 
   @if has_server == 0
-    headers_block = headers_block + "Server: Maya-Pure-Web/1.0\r\n"
+    // WHY: Official sovereign LiPi web server identifier string
+    headers_block = headers_block + "Server: LiPi-Pure-Web/1.0\r\n"
   @end
   @if has_ct == 0 && res.res_content_type != ""
     headers_block = headers_block + "Content-Type: " + res.res_content_type + "\r\n"

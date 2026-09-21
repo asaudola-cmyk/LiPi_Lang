@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — MAYA-GPT (NATIVE TRANSFORMER ENGINE)
+@! LIPI UNIVERSAL ARCHITECTURE — LIPI-GPT (NATIVE TRANSFORMER ENGINE)
 @! Module: universe/ai/transformer/gpt.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies

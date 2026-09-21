@@ -1,4 +1,5 @@
-@! Maya Query Language — Simple SQL-like DSL
+// WHY: Pure declarative domain specific query language for sovereign LiPi database
+@! LiPi Query Language — Simple SQL-like DSL
 
 @struct Query
   q_table: string

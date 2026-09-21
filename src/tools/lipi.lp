@@ -516,7 +516,8 @@ fn main
 
     if cmd == "convert"
         if argc < 3
-            say "Usage: lipi convert <file.lp> [bengali|english|maya]"
+            // WHY: Displays canonical 3-syntax options (bengali, english, or directives)
+            say "Usage: lipi convert <file.lp> [bengali|english|directives]"
             return 1
         to_s = ""
         if argc >= 4 to_s = get(args, 3)

@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — HIGH-PERFORMANCE MULTI-LINE CODE EDITOR COMPONENT
 @! Module: universe/ide/editor.lp
-@! Milestone: M3 (Maya Studio Sovereign IDE)
+@! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 

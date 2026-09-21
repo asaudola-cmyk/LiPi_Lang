@@ -9,7 +9,8 @@ import "universe/os/syscalls"
 @! ----------------------------------------------------------------------------
 @! 1. Allocator Constants & Metadata Configuration
 @! ----------------------------------------------------------------------------
-@fn GC_MAGIC() return 1296128321 @end             @! 0x4D415941 ("MAYA")
+// WHY: Matches src/runtime/lipi_gc.lp ASCII "LIPI" magic constant (0x4C495049 = 1279873097)
+@fn GC_MAGIC() return 1279873097 @end             @! 0x4C495049 ("LIPI")
 @fn ARENA_MAGIC() return 4706902967675712587 @end @! 0x4152454E4136344B ("ARENA64K")
 @fn ARENA_SIZE() return 65536 @end                @! 64 KB per Slab Arena
 @fn ARENA_HEADER_SIZE() return 64 @end            @! 64 Bytes Arena Header

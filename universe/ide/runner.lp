@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — BACKGROUND PROCESS RUNNER & COMPILER CONTROLLER
 @! Module: universe/ide/runner.lp
-@! Milestone: M3 (Maya Studio Sovereign IDE)
+@! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
@@ -53,13 +53,14 @@ import "universe/ide/console"
   runner.output_buffer = []
 
   con = console_set_tab(con, "OUTPUT")
-  con = console_append(con, "▶ [RUN] Executing " + file_path + " with Maya Runtime...", "INFO")
+  con = console_append(con, "▶ [RUN] Executing " + file_path + " with LiPi Runtime...", "INFO")
   
   pid = sys_fork()
   @if pid == 0
     tmp_out = "/tmp/_ide_runner_tmp.bin"
-    argv = ["./bin/maya_self_hosted", file_path, "-o", tmp_out, 0]
-    sys_execve("./bin/maya_self_hosted", argv, 0)
+    // WHY: Invokes canonical sovereign compiler bin/lipc to compile and run target file
+    argv = ["./bin/lipc", file_path, "-o", tmp_out, 0]
+    sys_execve("./bin/lipc", argv, 0)
     sys_exit(127)
   @end
 
@@ -110,8 +111,9 @@ import "universe/ide/console"
   
   pid = sys_fork()
   @if pid == 0
-    argv = ["./bin/maya_self_hosted", file_path, "-o", out_bin, 0]
-    sys_execve("./bin/maya_self_hosted", argv, 0)
+    // WHY: Invokes canonical sovereign compiler bin/lipc to emit target binary
+    argv = ["./bin/lipc", file_path, "-o", out_bin, 0]
+    sys_execve("./bin/lipc", argv, 0)
     sys_exit(127)
   @end
 

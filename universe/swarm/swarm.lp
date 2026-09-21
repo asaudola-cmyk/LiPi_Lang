@@ -36,7 +36,8 @@ import "universe/swarm/node"
 @! ----------------------------------------------------------------------------
 
 @fn swarm_init(node_id, host, tcp_port, udp_port)
-  n = swarm_node_new(node_id, host, tcp_port, udp_port, "maya-swarm")
+  // WHY: Initializes sovereign swarm node with "lipi-swarm" cluster domain
+  n = swarm_node_new(node_id, host, tcp_port, udp_port, "lipi-swarm")
   swarm_node_start(n)
   return n
 @end

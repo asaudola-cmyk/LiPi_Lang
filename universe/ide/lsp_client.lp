@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — NATIVE IN-PROCESS LSP CLIENT ENGINE
 @! Module: universe/ide/lsp_client.lp
-@! Milestone: M3 (Maya Studio Sovereign IDE)
+@! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
@@ -64,7 +64,8 @@ import "universe/tools/lsp/server"
 @! ----------------------------------------------------------------------------
 
 @fn lsp_client_open(client, uri, content)
-  open_req = "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + uri + "\",\"languageId\":\"maya\",\"version\":1,\"text\":\"" + lsp_escape_json(content) + "\"}}}"
+  // WHY: Registers document with official "lipi" language identifier in LSP server
+  open_req = "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + uri + "\",\"languageId\":\"lipi\",\"version\":1,\"text\":\"" + lsp_escape_json(content) + "\"}}}"
   notif_resp = lsp_server_dispatch(client.server, open_req)
 
   diags = lsp_compute_diagnostics(content)

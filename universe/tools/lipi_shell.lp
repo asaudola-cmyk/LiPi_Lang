@@ -1,8 +1,8 @@
 @! ============================================================================
 @! LIPI SHELL — The Sovereign Command Interpreter
 @! ============================================================================
-@! Maya does not rely on bash, sh, or cmd.exe.
-@! Maya has its own interactive shell and scripting engine.
+@! LiPi does not rely on bash, sh, or cmd.exe.
+@! LiPi has its own interactive shell and scripting engine.
 
 import "universe/os/process"
 import "universe/os/env"
@@ -31,7 +31,7 @@ import "universe/io/console"
   @end
 @end
 
-@! Execute a command in pure Maya logic, without invoking bash
+@! Execute a command in pure LiPi logic, without invoking bash
 @fn shell_execute(cmd_line)
   args = string.split(cmd_line, " ")
   cmd = args[0]
@@ -51,10 +51,10 @@ import "universe/io/console"
     @end
     println(string.trim(out))
   @else
-    @! Use Maya's native kernel execution, bypassing external shells
+    // WHY: Uses LiPi's native kernel execution, completely bypassing external shells
     result = process.sys_execve(cmd, args, env.get_all())
     @if result < 0
-      println("maya shell: command not found: " + cmd)
+      println("lipi shell: command not found: " + cmd)
     @end
   @end
 @end

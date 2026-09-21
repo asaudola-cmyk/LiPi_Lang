@@ -33,7 +33,7 @@
   is_infinity: i64
 @end
 
-@fn maya_pow2(n)
+@fn lipi_pow2(n)
   @if n <= 0 return 1 @end
   res = 1
   i = 0
@@ -42,6 +42,11 @@
     i = i + 1
   @end
   return res
+@end
+
+// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
+@fn maya_pow2(n)
+  return lipi_pow2(n)
 @end
 
 @! ============================================================================
@@ -462,7 +467,7 @@ import "universe/crypto/sha256"
     f = fp12_mul(f, l_dbl, p_mod)
     t = g2_point_add(t, t, p_mod)
 
-    p_b = maya_pow2(bit)
+    p_b = lipi_pow2(bit)
     d_b = loop_count / p_b
     bit_val = d_b & 1
     @if bit_val == 1

@@ -321,7 +321,7 @@ import "universe/ai/tensor"
     @if p < 0.0001
       p = 0.0001
     @end
-    @! Genuine Maya mathematical log approximation
+    // WHY: High-precision Taylor expansion approximation of natural log in pure LiPi floating-point math
     z = (p - 1.0) / (p + 1.0)
     z2 = z * z
     p_log = 2.0 * (z + (z * z2) / 3.0 + (z * z2 * z2) / 5.0)

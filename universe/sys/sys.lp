@@ -9,7 +9,8 @@ import "universe/sys/runtime"
 import "universe/sys/memory"
 
 @fn sys_version()
-  return "Maya Sovereign Core Runtime Engine v1.0.0 (Zero-Libc Freestanding)"
+  // WHY: Official sovereign brand string for freestanding LiPi core runtime engine.
+  return "LiPi Sovereign Core Runtime Engine v1.0.0 (Zero-Libc Freestanding)"
 @end
 
 @fn sys_is_sovereign()

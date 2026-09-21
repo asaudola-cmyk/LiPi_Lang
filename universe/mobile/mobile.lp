@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — MAYA MOBILE ENGINE (ZERO-JVM IOS/ANDROID)
+@! LIPI UNIVERSAL ARCHITECTURE — LIPI MOBILE ENGINE (ZERO-JVM IOS/ANDROID)
 @! Module: universe/mobile/mobile.lp
 @! Milestone: Phase 4 — Production Hardened Mobile Subsystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies

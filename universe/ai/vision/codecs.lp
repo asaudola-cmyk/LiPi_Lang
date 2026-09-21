@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI — VISION CODECS (universe/ai/vision/codecs.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
-@! Features: Pure Maya PPM (P2/P3/P5/P6) & BMP (24-bit/32-bit) Encoders & Decoders,
+@! Features: Pure LiPi PPM (P2/P3/P5/P6) & BMP (24-bit/32-bit) Encoders & Decoders,
 @! Synthetic Test Pattern Generators (Checkerboard, Gradients, Color Bars, Circles).
 @! ============================================================================
 
@@ -316,7 +316,7 @@ import "universe/ai/vision/image"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 4. Pure Maya BMP Codec (24-bit RGB & 32-bit RGBA)
+@! 4. Pure LiPi BMP Codec (24-bit RGB & 32-bit RGBA)
 @! ----------------------------------------------------------------------------
 
 @fn u16_to_le_bytes(val)

@@ -22,7 +22,7 @@ import "universe/web/frontend/renderer/canvas2d_renderer"
 @! Renderer Backend Tiers:
 @! 1 = WebGPU (Tier 1: WGSL, SDF, Compute)
 @! 2 = WebGL2 (Tier 2: GLSL ES 3.00, Instanced VAO/VBO)
-@! 3 = Canvas 2D (Tier 3: Pure Maya CPU ARGB Framebuffer)
+@! 3 = Canvas 2D (Tier 3: Pure LiPi CPU ARGB Framebuffer)
 
 @struct RendererCapabilities
   cap_has_webgpu: bool

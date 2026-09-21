@@ -431,8 +431,8 @@ import "universe/core/string"
 @end
 
 @fn ai_agent_execute_coder(agent: AIAgent, payload: string, feedback: string) -> string
-  @! Coder generates pure Maya code based on plan or critique feedback
-  code_output = "[CODE] Generated Pure Maya Implementation"
+  // WHY: AI Coder generates 100% pure sovereign LiPi code implementations
+  code_output = "[CODE] Generated Pure LiPi Implementation"
   @if feedback.len() > 0
     
   @end
@@ -456,7 +456,8 @@ import "universe/core/string"
     return "[CRITIQUE_REJECTED] Defect detected in artifact: invalid characters or purity violation. Please refine."
   @end
 
-  return "[CRITIQUE_APPROVED] All 100% Maya purity rules and assertions verified successfully."
+  // WHY: Telemetry affirmation that all sovereign LiPi purity rules and assertions passed
+  return "[CRITIQUE_APPROVED] All 100% LiPi purity rules and assertions verified successfully."
 @end
 
 @fn ai_agent_execute_synthesizer(agent: AIAgent, payload: string) -> string

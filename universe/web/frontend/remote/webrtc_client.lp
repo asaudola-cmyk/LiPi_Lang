@@ -342,7 +342,8 @@ import "universe/core/string"
 @! ============================================================================
 
 @fn webrtc_create_local_candidate(client, ip, port, cand_type)
-  cand_str = "candidate:maya" + client.local_ice_candidates.len().to_str() + " 1 udp 2122260223 " + ip + " " + port.to_str() + " typ " + cand_type + " generation 0"
+  // WHY: Synthesizes WebRTC local ICE candidate descriptor
+  cand_str = "candidate:lipi" + client.local_ice_candidates.len().to_str() + " 1 udp 2122260223 " + ip + " " + port.to_str() + " typ " + cand_type + " generation 0"
   c = {
     candidate_str: cand_str,
     sdp_mid: "0",

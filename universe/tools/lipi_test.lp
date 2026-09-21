@@ -292,7 +292,7 @@ import "universe/core/error"
 
   pid = sys_fork()
   @if pid == 0
-    @! Child Process: attempt direct execution or fallback to maya runner
+    // WHY: Child process attempts direct native execution or falls back to sovereign lipc compiler
     args = [test_path, 0]
     sys_execve(test_path, args, 0)
     
@@ -391,7 +391,7 @@ import "universe/core/error"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 5. Pure Maya XML & JSON Formatting Helpers
+@! 5. Pure LiPi XML & JSON Formatting Helpers
 @! ----------------------------------------------------------------------------
 
 @fn xml_escape(s)
@@ -463,7 +463,7 @@ import "universe/core/error"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 6. Pure Maya Report Generators (JUnit XML & JSON)
+@! 6. Pure LiPi Report Generators (JUnit XML & JSON)
 @! ----------------------------------------------------------------------------
 
 @! Serializes test results into standard JUnit XML format
@@ -623,7 +623,8 @@ import "universe/core/error"
 @! The native test runner for file lists
 @fn test_run_all(test_files)
   println("==================================================")
-  println("▶ Starting Maya Test Oracle (Process Isolated)")
+  // WHY: Sovereign test oracle banner for LiPi regression and isolation tests
+  println("▶ Starting LiPi Test Oracle (Process Isolated)")
   println("==================================================")
 
   results = []
@@ -658,8 +659,8 @@ import "universe/core/error"
   println("==================================================")
   println("Test Results: " + passed_count.to_str() + " passed, " + failed_count.to_str() + " failed, " + crashed_count.to_str() + " crashed (" + total_duration.to_str() + "ms)")
   
-  generate_junit_xml("maya_test_oracle", results, "build/reports/e2e_results.xml")
-  generate_json_report("maya_test_oracle", results, "build/reports/e2e_results.json")
+  generate_junit_xml("lipi_test_oracle", results, "build/reports/e2e_results.xml")
+  generate_json_report("lipi_test_oracle", results, "build/reports/e2e_results.json")
 
   @if failed_count == 0
     println("Status: UNIVERSAL HARMONY")
@@ -685,14 +686,15 @@ import "universe/core/error"
 
   @! 3. assert_eq
   assert_eq(42, 42, "Integer equality 42 == 42")
-  assert_str_eq("maya", "maya", "String equality 'maya' == 'maya'")
+  // WHY: Validates string equality assertion with sovereign language identifier
+  assert_str_eq("lipi", "lipi", "String equality 'lipi' == 'lipi'")
 
   @! 4. assert_ne
   assert_ne(42, 100, "Integer inequality 42 != 100")
   assert_str_ne("alpha", "beta", "String inequality 'alpha' != 'beta'")
 
   @! 5. assert_str_eq
-  assert_str_eq("maya_oracle", "maya_oracle", "Exact string matching")
+  assert_str_eq("lipi_oracle", "lipi_oracle", "Exact string matching")
 
   @! 6. assert_near
   assert_near(100, 103, 5, "100 is within tolerance 5 of 103")
@@ -717,7 +719,7 @@ import "universe/core/error"
   assert_lt(5, 10, "5 < 10")
 
   @! 12. assert_str_contains
-  assert_str_contains("maya sovereign test engine", "sovereign", "Substring check 'sovereign'")
+  assert_str_contains("lipi sovereign test engine", "sovereign", "Substring check 'sovereign'")
   assert_str_contains("Linux x86-64 syscalls", "syscalls", "Substring check 'syscalls'")
 @end
 
@@ -768,7 +770,8 @@ import "universe/core/error"
 
 @fn main()
   println("=================================================================")
-  println("▶ [MAYA TEST ORACLE] Sovereign Self-Verification Suite")
+  // WHY: Sovereign self-verification suite banner
+  println("▶ [LIPI TEST ORACLE] Sovereign Self-Verification Suite")
   println("=================================================================")
 
   results = []
@@ -880,8 +883,9 @@ import "universe/core/error"
   @! 6. Report Generation
   xml_path = "build/reports/e2e_results.xml"
   json_path = "build/reports/e2e_results.json"
-  generate_junit_xml("maya_self_test", results, xml_path)
-  generate_json_report("maya_self_test", results, json_path)
+  // WHY: Sovereign self-test reporting identifiers
+  generate_junit_xml("lipi_self_test", results, xml_path)
+  generate_json_report("lipi_self_test", results, json_path)
 
   passed_count = 0
   failed_count = 0

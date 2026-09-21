@@ -15,7 +15,9 @@ import "universe/db/page"
 @fn PAGE_SIZE() return 4096 @end
 @fn PAGE_HEADER_SIZE() return 32 @end
 @fn DEFAULT_CAPACITY() return 64 @end
-@fn DB_MAGIC() return 0x4D415941 @end  @! ASCII "MAYA" (1296128321)
+// WHY: Direct ASCII "LIPI" (0x4C495049 = 1279873097) sovereign header magic
+@fn DB_MAGIC() return 0x4C495049 @end  @! ASCII "LIPI" (1279873097)
+@fn DB_MAGIC_LEGACY() return 0x4D415941 @end  @! ASCII "MAYA" (1296128321) for backward compatibility
 @fn DB_VERSION() return 1 @end
 
 @! ----------------------------------------------------------------------------
@@ -215,7 +217,8 @@ import "universe/db/page"
   @end
 
   magic = page_read_u32(p0_buf, 0)
-  @if magic != DB_MAGIC()
+  // WHY: Validates against sovereign LIPI magic while retaining backward-compatibility with existing on-disk files.
+  @if magic != DB_MAGIC() && magic != DB_MAGIC_LEGACY()
     return 0
   @end
 

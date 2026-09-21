@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (universe/db/sql/parser.lp)
-@! Standard: 100% Pure Maya SQL AST Parser
+@! Standard: 100% Pure LiPi SQL AST Parser
 @! ============================================================================
 
 import "universe/db/sql/lexer"
