@@ -24,6 +24,7 @@ bin/lipils
 bin/lipc2
 bin/lipi-build
 bin/lipi-installer
+docs/archive/legacy_monolith/lipc_*
 scratch/
 
 # Standalone package manager dependencies

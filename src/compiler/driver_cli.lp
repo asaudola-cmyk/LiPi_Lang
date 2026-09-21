@@ -48,10 +48,10 @@ fn main
 
     in_file = ""
     out_file = ""
-    target_arch = TARGET_ID_X86_64
+    target_arch = TARGET_ID_X86_64()
     opt_level = 1
     debug_mode = 0
-    emit_format = FORMAT_ELF
+    emit_format = FORMAT_ELF()
     i = 1
 
     while i < argc
@@ -69,22 +69,28 @@ fn main
                 out_file = get(args, i)
         elif arg == "-g" or arg == "--debug"
             debug_mode = 1
-        elif arg == "--shared"
-            emit_format = FORMAT_SHARED
+        elif arg == "--shared" or arg == "-shared"
+            emit_format = FORMAT_SHARED()
+        elif arg == "--format=macho" or arg == "--macho" or arg == "--target=macos"
+            emit_format = FORMAT_MACHO()
+        elif arg == "--format=pe" or arg == "--pe" or arg == "--target=windows"
+            emit_format = FORMAT_PE()
         elif arg == "--target=arm64" or arg == "--target=aarch64"
-            target_arch = TARGET_ID_ARM64
+            target_arch = TARGET_ID_ARM64()
         elif arg == "--target=wasm" or arg == "--target=web"
-            target_arch = TARGET_ID_WASM
+            target_arch = TARGET_ID_WASM()
         elif arg == "--target=riscv64" or arg == "--target=riscv"
-            target_arch = TARGET_ID_RISCV64
+            target_arch = TARGET_ID_RISCV64()
         elif arg == "--target=x86_64" or arg == "--target=amd64"
-            target_arch = TARGET_ID_X86_64
+            target_arch = TARGET_ID_X86_64()
         elif arg == "-O0"
             opt_level = 0
         elif arg == "-O1"
             opt_level = 1
         elif arg == "-O2"
             opt_level = 2
+        elif arg == "-O3"
+            opt_level = 3
         else
             if in_file == ""
                 in_file = arg
@@ -99,25 +105,27 @@ fn main
         exit(1)
 
     if out_file == ""
-        if emit_format == FORMAT_SHARED
+        if emit_format == FORMAT_SHARED()
             out_file = in_file + ".so"
-        elif target_arch == TARGET_ID_WASM
+        elif emit_format == FORMAT_MACHO()
+            out_file = in_file + ".macho"
+        elif emit_format == FORMAT_PE()
+            out_file = in_file + ".exe"
+        elif target_arch == TARGET_ID_WASM()
             out_file = in_file + ".wasm"
         else
             out_file = in_file + ".bin"
 
     // Execute compilation via micro-pipeline driver
     say "▶ Compiling " + in_file + " ──► " + out_file + " via Sovereign Micro-Pipeline..."
-    res = compiler_driver_compile_file_advanced(in_file, out_file, target_arch, opt_level, emit_format, debug_mode, 0)
+    res = compiler_driver_compile_file_advanced(in_file, out_file, target_arch, opt_level, emit_format, debug_mode)
     
     // Report detailed diagnostics
     compiler_driver_print_result(res)
 
     if res.res_success == 1
         say "✔ Successfully generated: " + out_file + " (" + res.res_output_bytes + " bytes)"
-        return 0
+        exit(0)
     else
         say "❌ Compilation failed!"
         exit(1)
-
-main()

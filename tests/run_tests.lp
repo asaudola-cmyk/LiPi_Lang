@@ -78,7 +78,8 @@ fn main
     say "║  🧪 LIPI SUITE REGRESSION TEST ENGINE (100% PURE SILICON / 0% SHELL) ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
-    compiler = "bin/lipc_bin"
+    // WHY: Use sovereign self-hosted modular compiler (bin/lipc)
+    compiler = "bin/lipc"
     passed = 0
     failed = 0
 
@@ -782,13 +783,8 @@ fn main
     else
         failed = failed + 1
 
-    // ── Next-Gen Sovereign Compiler Frontiers (Tests 172-176) ───────────────────
-    // WHY: Validates the 5 sovereign micro-compiler frontiers:
-    // 172: AST-to-SSA IR Lowering Bridge (canonical Mem2Reg alloca, symmetric CFG, O2 Pass Manager).
-    // 173: Native DWARF v4/v5 Source-Level Debug Emission (-g line, info, abbrev tables).
-    // 174: Standalone Position-Independent Code (PIC) Shared Object (.so) Emitter.
-    // 175: Direct Sovereign ARM64 (AArch64) Silicon Machine Code Synthesizer.
-    // 176: Direct Sovereign Zero-JS WebAssembly (WASM) Binary Bytecode Synthesizer.
+    // ── Next-Gen Sovereign Compiler & Ecosystem Frontiers (Tests 172-178) ────────
+    // WHY: Validates SSA lowering, DWARF debug, PIC shared objects, ARM64/WASM, Option/Result, and Package Hub.
     if run_single_test(compiler, "tests/test_ast_to_ssa_lowering.lp", "test_ast_to_ssa_lowering") == 1
         passed = passed + 1
     else
@@ -809,11 +805,17 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
+    // 177: Algebraic Option & Monadic Result Zero-Cost Fault Handling.
+    if run_single_test(compiler, "tests/test_algebraic_option_result.lp", "test_algebraic_option_result") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
 
-
-
-
-    say ""
+    // 178: Sovereign Package Hub & SemVer 2.0.0 Lifecycle Engine
+    if run_single_test(compiler, "tests/test_package_hub_lifecycle.lp", "test_package_hub_lifecycle") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed
     say "========================================================================"

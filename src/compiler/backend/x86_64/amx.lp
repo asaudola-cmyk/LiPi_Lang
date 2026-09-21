@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — INTEL AMX (2D TILE MATRIX) ACCELERATOR
-@! Module: compiler/backend/x86_64/amx.maya
+@! LIPI UNIVERSAL ARCHITECTURE — INTEL AMX (2D TILE MATRIX) ACCELERATOR
+@! Module: compiler/backend/x86_64/amx.lp
 @! Milestone: Pinnacle Advanced Hyper-Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure LiPi Implementation — Zero External / C++ Dependencies
 @! Features: Intel AMX (Advanced Matrix Extensions), Tile Registers (TMM0-TMM7),
 @! LDTILECFG, TDPBSSD (Tile Dot Product) & 2D Hardware Matrix Acceleration
 @! ============================================================================

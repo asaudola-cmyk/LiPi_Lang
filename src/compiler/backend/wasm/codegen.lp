@@ -223,7 +223,7 @@ import "compiler/backend/wasm/wasm_emitter"
 
   @! If passed array of functions, construct valid wrapper module
   @! Check if functions_or_module is a list or module struct
-  @! In Maya, structs have field access. If module has .types, write directly:
+  @! In LiPi, structs have field access. If module has .types, write directly:
   res_buf = write_wasm_module(module)
   status = wasm_write_file(output_path, res_buf.bytes)
   @if status >= 0

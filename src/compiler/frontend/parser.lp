@@ -1,17 +1,11 @@
-@! ============================================================================
-@! MAYA COMPILER STAGE 2 — 100% PURE MAYA PRATT PARSER & LOWERING ENGINE
-@! Zero External Dependencies — Complete 13 Precedence Levels
-@! Handles All 26 Directives, Syntactic Desugaring, & Impl Method Injection
-@! ============================================================================
+@! LIPI STAGE 2 — PRATT PARSER & LOWERING ENGINE (0% Libc)
 
 import "universe/core/string"
 import "universe/core/collections"
 import "compiler/frontend/ast"
 import "compiler/frontend/lexer"
 
-@! ============================================================================
 @! 1. PARSER STRUCTS & HELPER STRUCTURES
-@! ============================================================================
 
 @struct ParseResult
   node: ASTNode
@@ -68,9 +62,27 @@ import "compiler/frontend/lexer"
   return p
 @end
 
-@! ============================================================================
+@! Parser Panic-Mode Error Recovery: Synchronize to next statement or block boundary
+@fn parser_synchronize(tokens, pos)
+  p = pos
+  num_items = tokens.len()
+  @while p < num_items
+    tok = tokens[p]
+    t = tok.tok_type
+    v = tok.tok_val
+    @if t == "SEMI" || t == "NEWLINE"
+      return p + 1
+    @elif t == "END" || (t == "DIRECTIVE" && (v == "@end" || v == "@fn" || v == "@struct" || v == "@enum" || v == "@impl"))
+      return p
+    @elif t == "FN" || t == "LET" || t == "VAR" || t == "MUT" || t == "RETURN" || t == "IF" || t == "WHILE" || t == "FOR" || t == "MATCH"
+      return p
+    @end
+    p = p + 1
+  @end
+  return p
+@end
+
 @! 2. 13 PRECEDENCE LEVELS MATRIX (10-Step Tiered Resolution)
-@! ============================================================================
 
 @fn get_token_precedence(tok)
   @if tok == 0 return 0 @end
@@ -116,9 +128,31 @@ import "compiler/frontend/lexer"
   return 0
 @end
 
-@! ============================================================================
 @! 3. STRING INTERPOLATION LOWERING ENGINE
-@! ============================================================================
+
+// WHY: Unescapes \{ and \} back into literal { and } after interpolation extraction.
+@fn unescape_braces(s: string) -> string
+  n = str_len(s)
+  res = ""
+  i = 0
+  @while i < n
+    c = str_char_at(s, i)
+    @if c == 92 && i + 1 < n
+      next_c = str_char_at(s, i + 1)
+      @if next_c == 123 || next_c == 125
+        res = res + chr(next_c)
+        i = i + 2
+      @else
+        res = res + chr(c)
+        i = i + 1
+      @end
+    @else
+      res = res + chr(c)
+      i = i + 1
+    @end
+  @end
+  return res
+@end
 
 @fn parse_string_interpolation(raw_str) -> ASTNode
   num_items = str_len(raw_str)
@@ -131,13 +165,21 @@ import "compiler/frontend/lexer"
     c_idx = curr_pos
     @while c_idx < num_items && brace_open == -1
       @if str_char_at(raw_str, c_idx) == 123 @! '{'
-        brace_open = c_idx
+        bs = 0
+        bi = c_idx - 1
+        @while bi >= curr_pos && str_char_at(raw_str, bi) == 92
+          bs = bs + 1
+          bi = bi - 1
+        @end
+        @if bs % 2 == 0
+          brace_open = c_idx
+        @end
       @end
       c_idx = c_idx + 1
     @end
 
     @if brace_open == -1
-      chunk = str_substr(raw_str, curr_pos, num_items)
+      chunk = unescape_braces(str_substr(raw_str, curr_pos, num_items))
       lit_node = ast_literal_str(chunk)
       @if has_root == 0
         root_node = lit_node
@@ -148,7 +190,7 @@ import "compiler/frontend/lexer"
       curr_pos = num_items
     @else
       @if brace_open > curr_pos
-        prefix = str_substr(raw_str, curr_pos, brace_open)
+        prefix = unescape_braces(str_substr(raw_str, curr_pos, brace_open))
         prefix_node = ast_literal_str(prefix)
         @if has_root == 0
           root_node = prefix_node
@@ -162,13 +204,21 @@ import "compiler/frontend/lexer"
       c_idx = brace_open + 1
       @while c_idx < num_items && brace_close == -1
         @if str_char_at(raw_str, c_idx) == 125 @! '}'
-          brace_close = c_idx
+          bs = 0
+          bi = c_idx - 1
+          @while bi > brace_open && str_char_at(raw_str, bi) == 92
+            bs = bs + 1
+            bi = bi - 1
+          @end
+          @if bs % 2 == 0
+            brace_close = c_idx
+          @end
         @end
         c_idx = c_idx + 1
       @end
 
       @if brace_close == -1
-        suffix = str_substr(raw_str, brace_open, num_items)
+        suffix = unescape_braces(str_substr(raw_str, brace_open, num_items))
         lit_node = ast_literal_str(suffix)
         @if has_root == 0
           root_node = lit_node
@@ -180,7 +230,7 @@ import "compiler/frontend/lexer"
       @else
         expr_str = str_substr(raw_str, brace_open + 1, brace_close)
         interp_var = ast_variable(expr_str)
-        to_str_call = ast_call(ast_member_access(interp_var, "to_str"), [])
+        to_str_call = ast_call(ast_variable("str"), [interp_var])
         @if has_root == 0
           root_node = to_str_call
           has_root = 1
@@ -195,9 +245,9 @@ import "compiler/frontend/lexer"
   return root_node
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 4. PRIMARY EXPRESSIONS
-@! ============================================================================
+@! ----------------------------------------
 
 @fn parse_primary(tokens, pos)
   p = pos
@@ -227,7 +277,13 @@ import "compiler/frontend/lexer"
   @elif tok.tok_type == "STR"
     return { node: ast_literal_str(tok.tok_val), next_pos: p + 1 }
   @elif tok.tok_type == "INTERP_STR"
-    return { node: parse_string_interpolation(tok.tok_val), next_pos: p + 1 }
+    raw_s = tok.tok_raw
+    raw_len = str_len(raw_s)
+    inner_s = tok.tok_val
+    @if raw_len >= 2
+      inner_s = str_substr(raw_s, 1, raw_len - 1)
+    @end
+    return { node: parse_string_interpolation(inner_s), next_pos: p + 1 }
 
   @! 3. Booleans & None
   @elif tok.tok_type == "BOOL"
@@ -398,9 +454,9 @@ import "compiler/frontend/lexer"
   return { node: ast_literal_none(), next_pos: p + 1 }
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 5. PRATT PARSER WITH PRECEDENCE CLIMBING
-@! ============================================================================
+@! ----------------------------------------
 
 @fn parse_expr(tokens, pos)
   return parse_expr_prec(tokens, pos, 0)
@@ -509,9 +565,9 @@ import "compiler/frontend/lexer"
   return { node: left, next_pos: p }
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 6. STATEMENT PARSER & AST LOWERING
-@! ============================================================================
+@! ----------------------------------------
 
 @fn parse_statement(tokens, pos, impl_struct)
   p = skip_newlines_parser(tokens, pos)
@@ -749,13 +805,20 @@ import "compiler/frontend/lexer"
       @end
     @end
 
+    // WHY: Parser panic-mode recovery — if expr parsing stalled without consuming tokens,
+    // advance cleanly to prevent infinite loops during recovery
+    @if p <= pos
+      p = parser_synchronize(tokens, pos + 1)
+      return { stmt: ast_literal_none(), next_pos: p }
+    @end
+
     return { stmt: ast_expression_stmt(expr_res.node), next_pos: p }
   @end
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 7. TOP-LEVEL DECLARATION PARSER & PROGRAM PARSER
-@! ============================================================================
+@! ----------------------------------------
 
 @fn parse_fn_declaration(tokens, pos, impl_struct)
   p = pos
@@ -930,9 +993,10 @@ import "compiler/frontend/lexer"
       prog.functions = prog.functions.push(fn_res.fn_node)
       p = fn_res.next_pos
 
-    @! 6. Fallback / Skip
+    @! 6. Panic-Mode Synchronization Fallback
     @else
-      p = p + 1
+      // WHY: Skip to next declaration boundary on unrecognized top-level tokens
+      p = parser_synchronize(tokens, p + 1)
     @end
   @end
 

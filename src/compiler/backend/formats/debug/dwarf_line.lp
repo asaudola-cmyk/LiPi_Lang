@@ -48,18 +48,25 @@ import "universe/core/string"
 // 1. DATA STRUCTURES
 // ============================================================================
 
+@struct DwarfLineFile
+  dlf_name: string
+  dlf_dir_idx: i64
+  dlf_mtime: i64
+  dlf_length: i64
+@end
+
 @struct DwarfLineBuilder
-  version: i64         // 2 bytes: 4 (DWARF v4) or 5 (DWARF v5)
-  default_is_stmt: i64 // 1 byte: 1
-  min_inst_len: i64    // 1 byte: 1 (x86_64) or 4 (AArch64)
-  include_dirs: array  // List of string directory paths
-  file_names: array    // List of { name: string, dir_idx: i64 }
-  opcodes: array       // Bytecode buffer for line number program
-  curr_pc: i64         // Current state machine virtual PC address
-  curr_line: i64       // Current state machine line (1-based)
-  curr_file: i64       // Current state machine file index (1-based)
-  curr_col: i64        // Current state machine column (0-based)
-  is_stmt: i64         // Statement flag
+  dlb_version: i64         // 2 bytes: 4 (DWARF v4) or 5 (DWARF v5)
+  dlb_default_is_stmt: i64 // 1 byte: 1
+  dlb_min_inst_len: i64    // 1 byte: 1 (x86_64) or 4 (AArch64)
+  dlb_include_dirs: array  // List of string directory paths
+  dlb_file_names: array    // List of DwarfLineFile structs
+  dlb_opcodes: array       // Bytecode buffer for line number program
+  dlb_curr_pc: i64         // Current state machine virtual PC address
+  dlb_curr_line: i64       // Current state machine line (1-based)
+  dlb_curr_file: i64       // Current state machine file index (1-based)
+  dlb_curr_col: i64        // Current state machine column (0-based)
+  dlb_is_stmt: i64         // Statement flag
 @end
 
 // ============================================================================
@@ -153,34 +160,37 @@ import "universe/core/string"
   @if ver <= 0 ver = 4 @end
 
   return {
-    version: ver,
-    default_is_stmt: 1,
-    min_inst_len: 1,
-    include_dirs: [],
-    file_names: [],
-    opcodes: [],
-    curr_pc: 0,
-    curr_line: 1,
-    curr_file: 1,
-    curr_col: 0,
-    is_stmt: 1
+    dlb_version: ver,
+    dlb_default_is_stmt: 1,
+    dlb_min_inst_len: 1,
+    dlb_include_dirs: [],
+    dlb_file_names: [],
+    dlb_opcodes: [],
+    dlb_curr_pc: 0,
+    dlb_curr_line: 1,
+    dlb_curr_file: 1,
+    dlb_curr_col: 0,
+    dlb_is_stmt: 1
   }
 @end
 
 @fn dwarf_line_add_dir(builder, dir_path)
   // WHY: Adds an include directory path to the header directory table.
-  builder.include_dirs = builder.include_dirs.push(dir_path)
-  return builder.include_dirs.len()
+  builder.dlb_include_dirs = builder.dlb_include_dirs.push(dir_path)
+  return builder.dlb_include_dirs.len()
 @end
 
 @fn dwarf_line_add_file(builder, file_name, dir_index)
-  // WHY: Registers a source file in the header file table.
+  // WHY: Registers a source file in the header file table using DwarfLineFile schema.
   // Returns 1-based file index as required by DWARF.
-  builder.file_names = builder.file_names.push({
-    name: file_name,
-    dir_idx: dir_index
-  })
-  return builder.file_names.len()
+  f = {
+    dlf_name: file_name,
+    dlf_dir_idx: dir_index,
+    dlf_mtime: 0,
+    dlf_length: 0
+  }
+  builder.dlb_file_names = builder.dlb_file_names.push(f)
+  return builder.dlb_file_names.len()
 @end
 
 // ============================================================================
@@ -190,49 +200,59 @@ import "universe/core/string"
 @fn dwarf_line_emit_set_address(builder, vaddr)
   // WHY: Emits DW_LNE_set_address (extended opcode 2) to set the initial PC address.
   // Opcode 0 (escape), length 9 (ULEB128), extended opcode 2, 8 bytes address.
-  builder.opcodes = builder.opcodes.push(DW_LNS_extended_op()) // 0
-  builder.opcodes = builder.opcodes.push(9)                    // length = 1 (for opcode) + 8 (for addr)
-  builder.opcodes = builder.opcodes.push(DW_LNE_set_address()) // 2
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNS_extended_op()) // 0
+  builder.dlb_opcodes = builder.dlb_opcodes.push(9)                    // length = 1 (for opcode) + 8 (for addr)
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNE_set_address()) // 2
   addr_bytes = dwarf_pack_u64(vaddr)
   i = 0
   @while i < 8
-    builder.opcodes = builder.opcodes.push(addr_bytes[i])
+    builder.dlb_opcodes = builder.dlb_opcodes.push(addr_bytes[i])
     i = i + 1
   @end
-  builder.curr_pc = vaddr
+  builder.dlb_curr_pc = vaddr
   return builder
 @end
 
 @fn dwarf_line_emit_advance_line(builder, line_delta)
   // WHY: Emits DW_LNS_advance_line with SLEB128 operand.
-  builder.opcodes = builder.opcodes.push(DW_LNS_advance_line())
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNS_advance_line())
   sleb = dwarf_encode_sleb128(line_delta)
   i = 0
   @while i < sleb.len()
-    builder.opcodes = builder.opcodes.push(sleb[i])
+    builder.dlb_opcodes = builder.dlb_opcodes.push(sleb[i])
     i = i + 1
   @end
-  builder.curr_line = builder.curr_line + line_delta
+  builder.dlb_curr_line = builder.dlb_curr_line + line_delta
   return builder
 @end
 
 @fn dwarf_line_emit_advance_pc(builder, pc_advance)
   // WHY: Emits DW_LNS_advance_pc with ULEB128 operand.
-  builder.opcodes = builder.opcodes.push(DW_LNS_advance_pc())
-  uleb = dwarf_encode_uleb128(pc_advance / builder.min_inst_len)
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNS_advance_pc())
+  uleb = dwarf_encode_uleb128(pc_advance / builder.dlb_min_inst_len)
   i = 0
   @while i < uleb.len()
-    builder.opcodes = builder.opcodes.push(uleb[i])
+    builder.dlb_opcodes = builder.dlb_opcodes.push(uleb[i])
     i = i + 1
   @end
-  builder.curr_pc = builder.curr_pc + pc_advance
+  builder.dlb_curr_pc = builder.dlb_curr_pc + pc_advance
   return builder
 @end
 
 @fn dwarf_line_emit_copy(builder)
   // WHY: Emits DW_LNS_copy to append current row to the debug matrix.
-  builder.opcodes = builder.opcodes.push(DW_LNS_copy())
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNS_copy())
   return builder
+@end
+
+@fn dwarf_line_append_bytes(dest, src)
+  // WHY: Safely append bytes from src to dest avoiding single-line loop AST anomalies.
+  k = 0
+  @while k < src.len()
+    dest = dest.push(src[k])
+    k = k + 1
+  @end
+  return dest
 @end
 
 @fn dwarf_line_emit_row(builder, target_pc, target_line, target_col)
@@ -243,15 +263,15 @@ import "universe/core/string"
   // If special_opcode <= 255 and line_delta fits within range, emit 1 byte!
   // Otherwise, emits standard DW_LNS_advance_line + DW_LNS_advance_pc + DW_LNS_copy.
 
-  pc_advance = target_pc - builder.curr_pc
-  line_delta = target_line - builder.curr_line
+  pc_advance = target_pc - builder.dlb_curr_pc
+  line_delta = target_line - builder.dlb_curr_line
 
   // Handle column update if changed
-  @if target_col != builder.curr_col
-    builder.opcodes = builder.opcodes.push(DW_LNS_set_column())
+  @if target_col != builder.dlb_curr_col
+    builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNS_set_column())
     uleb_col = dwarf_encode_uleb128(target_col)
-    k = 0 @while k < uleb_col.len() builder.opcodes = builder.opcodes.push(uleb_col[k]) k = k + 1 @end
-    builder.curr_col = target_col
+    builder.dlb_opcodes = dwarf_line_append_bytes(builder.dlb_opcodes, uleb_col)
+    builder.dlb_curr_col = target_col
   @end
 
   base = DWARF_LINE_BASE_VAL() // -5
@@ -261,12 +281,12 @@ import "universe/core/string"
   // Check if special opcode is valid
   can_use_special = 0
   @if line_delta >= base && line_delta < (base + range_val)
-    special_code = (line_delta - base) + (range_val * (pc_advance / builder.min_inst_len)) + op_base
+    special_code = (line_delta - base) + (range_val * (pc_advance / builder.dlb_min_inst_len)) + op_base
     @if special_code >= op_base && special_code <= 255
       can_use_special = 1
-      builder.opcodes = builder.opcodes.push(special_code)
-      builder.curr_pc = target_pc
-      builder.curr_line = target_line
+      builder.dlb_opcodes = builder.dlb_opcodes.push(special_code)
+      builder.dlb_curr_pc = target_pc
+      builder.dlb_curr_line = target_line
     @end
   @end
 
@@ -287,13 +307,13 @@ import "universe/core/string"
 @fn dwarf_line_end_sequence(builder, final_pc)
   // WHY: Terminates a contiguous code sequence.
   // Emits PC advance if needed, then DW_LNE_end_sequence (extended opcode 1).
-  pc_advance = final_pc - builder.curr_pc
+  pc_advance = final_pc - builder.dlb_curr_pc
   @if pc_advance > 0
     builder = dwarf_line_emit_advance_pc(builder, pc_advance)
   @end
-  builder.opcodes = builder.opcodes.push(DW_LNS_extended_op()) // 0
-  builder.opcodes = builder.opcodes.push(1)                    // length = 1
-  builder.opcodes = builder.opcodes.push(DW_LNE_end_sequence())// 1
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNS_extended_op()) // 0
+  builder.dlb_opcodes = builder.dlb_opcodes.push(1)                    // length = 1
+  builder.dlb_opcodes = builder.dlb_opcodes.push(DW_LNE_end_sequence())// 1
   return builder
 @end
 
@@ -322,11 +342,11 @@ import "universe/core/string"
   header_body = []
 
   // min_instruction_length
-  header_body = header_body.push(builder.min_inst_len)
+  header_body = header_body.push(builder.dlb_min_inst_len)
   // max_ops_per_instruction
   header_body = header_body.push(1)
   // default_is_stmt
-  header_body = header_body.push(builder.default_is_stmt)
+  header_body = header_body.push(builder.dlb_default_is_stmt)
   // line_base (signed -5 = 251)
   header_body = header_body.push(DWARF_LINE_BASE())
   // line_range (14)
@@ -336,13 +356,13 @@ import "universe/core/string"
 
   // standard_opcode_lengths (12 entries for opcodes 1..12)
   std_lens = [0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1]
-  k = 0 @while k < 12 header_body = header_body.push(std_lens[k]) k = k + 1 @end
+  header_body = dwarf_line_append_bytes(header_body, std_lens)
 
   // include_directories
   i = 0
-  num_dirs = builder.include_dirs.len()
+  num_dirs = builder.dlb_include_dirs.len()
   @while i < num_dirs
-    d_str = builder.include_dirs[i]
+    d_str = builder.dlb_include_dirs[i]
     j = 0
     len_d = d_str.len()
     @while j < len_d
@@ -356,10 +376,10 @@ import "universe/core/string"
 
   // file_names
   i = 0
-  num_files = builder.file_names.len()
+  num_files = builder.dlb_file_names.len()
   @while i < num_files
-    f_entry = builder.file_names[i]
-    fname = f_entry.name
+    f_entry = builder.dlb_file_names[i]
+    fname = f_entry.dlf_name
     j = 0
     len_f = fname.len()
     @while j < len_f
@@ -369,8 +389,8 @@ import "universe/core/string"
     header_body = header_body.push(0) // Null terminator
 
     // dir_idx (ULEB128)
-    d_uleb = dwarf_encode_uleb128(f_entry.dir_idx)
-    k = 0 @while k < d_uleb.len() header_body = header_body.push(d_uleb[k]) k = k + 1 @end
+    d_uleb = dwarf_encode_uleb128(f_entry.dlf_dir_idx)
+    header_body = dwarf_line_append_bytes(header_body, d_uleb)
 
     // mtime (ULEB128 = 0)
     header_body = header_body.push(0)
@@ -385,28 +405,28 @@ import "universe/core/string"
   header_length = header_body.len()
 
   // Calculate unit_length: version(2) + header_length_field(4) + header_body + opcodes
-  unit_length = 2 + 4 + header_length + builder.opcodes.len()
+  unit_length = 2 + 4 + header_length + builder.dlb_opcodes.len()
 
   // Assemble full .debug_line payload
   out = []
 
   // 1. unit_length (4 bytes)
   ul = dwarf_pack_u32(unit_length)
-  k = 0 @while k < 4 out = out.push(ul[k]) k = k + 1 @end
+  out = dwarf_line_append_bytes(out, ul)
 
   // 2. version (2 bytes)
-  ver_bytes = dwarf_pack_u16(builder.version)
+  ver_bytes = dwarf_pack_u16(builder.dlb_version)
   out = out.push(ver_bytes[0]) out = out.push(ver_bytes[1])
 
   // 3. header_length (4 bytes)
   hl = dwarf_pack_u32(header_length)
-  k = 0 @while k < 4 out = out.push(hl[k]) k = k + 1 @end
+  out = dwarf_line_append_bytes(out, hl)
 
   // 4. header_body
-  k = 0 @while k < header_body.len() out = out.push(header_body[k]) k = k + 1 @end
+  out = dwarf_line_append_bytes(out, header_body)
 
   // 5. opcodes
-  k = 0 @while k < builder.opcodes.len() out = out.push(builder.opcodes[k]) k = k + 1 @end
+  out = dwarf_line_append_bytes(out, builder.dlb_opcodes)
 
   return out
 @end

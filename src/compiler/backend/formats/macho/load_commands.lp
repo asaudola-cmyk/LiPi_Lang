@@ -334,6 +334,16 @@ import "universe/core/string"
 // 4. SERIALIZERS
 // ============================================================================
 
+@fn macho_append_bytes(out, src, count)
+  // WHY: Appends count elements from src array into out without fragile single-line while loops
+  i = 0
+  @while i < count
+    out = out.push(src[i])
+    i = i + 1
+  @end
+  return out
+@end
+
 @fn macho_header_serialize(hdr)
   // WHY: Serializes mach_header_64 to exactly 32 bytes.
   out = []
@@ -346,22 +356,14 @@ import "universe/core/string"
   fl_bytes = macho_pack_u32_le(hdr.mh_flags)
   res_bytes = macho_pack_u32_le(hdr.mh_reserved)
 
-  i = 0
-  @while i < 4 out = out.push(m_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(ct_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(cs_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(ft_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(nc_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(sc_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(fl_bytes[i]) i = i + 1 @end
-  i = 0
-  @while i < 4 out = out.push(res_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, m_bytes, 4)
+  out = macho_append_bytes(out, ct_bytes, 4)
+  out = macho_append_bytes(out, cs_bytes, 4)
+  out = macho_append_bytes(out, ft_bytes, 4)
+  out = macho_append_bytes(out, nc_bytes, 4)
+  out = macho_append_bytes(out, sc_bytes, 4)
+  out = macho_append_bytes(out, fl_bytes, 4)
+  out = macho_append_bytes(out, res_bytes, 4)
 
   return out
 @end
@@ -372,47 +374,47 @@ import "universe/core/string"
 
   // 1. cmd (4 bytes)
   c_bytes = macho_pack_u32_le(seg.seg_cmd)
-  i = 0 @while i < 4 out = out.push(c_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, c_bytes, 4)
 
   // 2. cmdsize (4 bytes)
   cs_bytes = macho_pack_u32_le(seg.seg_cmdsize)
-  i = 0 @while i < 4 out = out.push(cs_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, cs_bytes, 4)
 
   // 3. segname (16 bytes)
   s_bytes = macho_pack_str16(seg.seg_name)
-  i = 0 @while i < 16 out = out.push(s_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, s_bytes, 16)
 
   // 4. vmaddr (8 bytes)
   va_bytes = macho_pack_u64_le(seg.seg_vmaddr)
-  i = 0 @while i < 8 out = out.push(va_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, va_bytes, 8)
 
   // 5. vmsize (8 bytes)
   vs_bytes = macho_pack_u64_le(seg.seg_vmsize)
-  i = 0 @while i < 8 out = out.push(vs_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, vs_bytes, 8)
 
   // 6. fileoff (8 bytes)
   fo_bytes = macho_pack_u64_le(seg.seg_fileoff)
-  i = 0 @while i < 8 out = out.push(fo_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, fo_bytes, 8)
 
   // 7. filesize (8 bytes)
   fs_bytes = macho_pack_u64_le(seg.seg_filesize)
-  i = 0 @while i < 8 out = out.push(fs_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, fs_bytes, 8)
 
   // 8. maxprot (4 bytes)
   mp_bytes = macho_pack_u32_le(seg.seg_maxprot)
-  i = 0 @while i < 4 out = out.push(mp_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, mp_bytes, 4)
 
   // 9. initprot (4 bytes)
   ip_bytes = macho_pack_u32_le(seg.seg_initprot)
-  i = 0 @while i < 4 out = out.push(ip_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, ip_bytes, 4)
 
   // 10. nsects (4 bytes)
   ns_bytes = macho_pack_u32_le(seg.seg_nsects)
-  i = 0 @while i < 4 out = out.push(ns_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, ns_bytes, 4)
 
   // 11. flags (4 bytes)
   fl_bytes = macho_pack_u32_le(seg.seg_flags)
-  i = 0 @while i < 4 out = out.push(fl_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, fl_bytes, 4)
 
   return out
 @end
@@ -423,51 +425,51 @@ import "universe/core/string"
 
   // 1. sectname (16 bytes)
   sn_bytes = macho_pack_str16(sec.sec_sectname)
-  i = 0 @while i < 16 out = out.push(sn_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, sn_bytes, 16)
 
   // 2. segname (16 bytes)
   sgn_bytes = macho_pack_str16(sec.sec_segname)
-  i = 0 @while i < 16 out = out.push(sgn_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, sgn_bytes, 16)
 
   // 3. addr (8 bytes)
   a_bytes = macho_pack_u64_le(sec.sec_addr)
-  i = 0 @while i < 8 out = out.push(a_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, a_bytes, 8)
 
   // 4. size (8 bytes)
   sz_bytes = macho_pack_u64_le(sec.sec_size)
-  i = 0 @while i < 8 out = out.push(sz_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, sz_bytes, 8)
 
   // 5. offset (4 bytes)
   off_bytes = macho_pack_u32_le(sec.sec_offset)
-  i = 0 @while i < 4 out = out.push(off_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, off_bytes, 4)
 
   // 6. align (4 bytes)
   al_bytes = macho_pack_u32_le(sec.sec_align)
-  i = 0 @while i < 4 out = out.push(al_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, al_bytes, 4)
 
   // 7. reloff (4 bytes)
   ro_bytes = macho_pack_u32_le(sec.sec_reloff)
-  i = 0 @while i < 4 out = out.push(ro_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, ro_bytes, 4)
 
   // 8. nreloc (4 bytes)
   nr_bytes = macho_pack_u32_le(sec.sec_nreloc)
-  i = 0 @while i < 4 out = out.push(nr_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, nr_bytes, 4)
 
   // 9. flags (4 bytes)
   fl_bytes = macho_pack_u32_le(sec.sec_flags)
-  i = 0 @while i < 4 out = out.push(fl_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, fl_bytes, 4)
 
   // 10. reserved1 (4 bytes)
   r1_bytes = macho_pack_u32_le(sec.sec_reserved1)
-  i = 0 @while i < 4 out = out.push(r1_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, r1_bytes, 4)
 
   // 11. reserved2 (4 bytes)
   r2_bytes = macho_pack_u32_le(sec.sec_reserved2)
-  i = 0 @while i < 4 out = out.push(r2_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, r2_bytes, 4)
 
   // 12. reserved3 (4 bytes)
   r3_bytes = macho_pack_u32_le(sec.sec_reserved3)
-  i = 0 @while i < 4 out = out.push(r3_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, r3_bytes, 4)
 
   return out
 @end
@@ -481,16 +483,16 @@ import "universe/core/string"
   out = []
 
   c_bytes = macho_pack_u32_le(main_cmd.main_cmd)
-  i = 0 @while i < 4 out = out.push(c_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, c_bytes, 4)
 
   cs_bytes = macho_pack_u32_le(main_cmd.main_cmdsize)
-  i = 0 @while i < 4 out = out.push(cs_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, cs_bytes, 4)
 
   eo_bytes = macho_pack_u64_le(main_cmd.main_entryoff)
-  i = 0 @while i < 8 out = out.push(eo_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, eo_bytes, 8)
 
   ss_bytes = macho_pack_u64_le(main_cmd.main_stacksize)
-  i = 0 @while i < 8 out = out.push(ss_bytes[i]) i = i + 1 @end
+  out = macho_append_bytes(out, ss_bytes, 8)
 
   return out
 @end

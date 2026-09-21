@@ -70,7 +70,6 @@ import "universe/core/string"
   ok_alen = assert_eq_int(alice_pub.len(), 32, "Alice public key is 32 bytes")
   ok_blen = assert_eq_int(bob_pub.len(), 32, "Bob public key is 32 bytes")
 
-  @! Compute Diffie-Hellman shared secrets
   shared_alice = x25519_shared_secret(alice_priv, bob_pub)
   shared_bob = x25519_shared_secret(bob_priv, alice_pub)
 
@@ -81,8 +80,7 @@ import "universe/core/string"
   diff = 0
   i = 0
   @while i < 32
-    d = shared_alice[i] ^ shared_bob[i]
-    diff = diff | d
+    diff = diff | (shared_alice[i] ^ shared_bob[i])
     i = i + 1
   @end
   ok_comm = assert_eq_int(diff, 0, "X25519 Diffie-Hellman Commutativity: shared_alice == shared_bob")
@@ -189,3 +187,5 @@ import "universe/core/string"
     return 1
   @end
 @end
+
+main()

@@ -85,7 +85,7 @@ import "universe/crypto/x25519"
   @if klen <= 16
     @while i < klen
       b_push = key_bytes[i]  & 255
-    res = res.push(b_push)
+      res = res.push(b_push)
       i = i + 1
     @end
     @while res.len() < 16
@@ -95,7 +95,7 @@ import "universe/crypto/x25519"
   @elif klen <= 32
     @while i < klen
       b_push = key_bytes[i]  & 255
-    res = res.push(b_push)
+      res = res.push(b_push)
       i = i + 1
     @end
     @while res.len() < 32
@@ -105,7 +105,7 @@ import "universe/crypto/x25519"
   @else
     @while i < 32
       b_push = key_bytes[i]  & 255
-    res = res.push(b_push)
+      res = res.push(b_push)
       i = i + 1
     @end
     return res

@@ -21,39 +21,39 @@
 
 // ── 1. Register Numbers ───────────────────────────────────────────────────────
 
-RV64_REG_ZERO = 0   // Hardwired zero
-RV64_REG_RA   = 1   // Return address
-RV64_REG_SP   = 2   // Stack pointer
-RV64_REG_GP   = 3   // Global pointer
-RV64_REG_TP   = 4   // Thread pointer
-RV64_REG_T0   = 5   // Temporary 0
-RV64_REG_T1   = 6   // Temporary 1
-RV64_REG_T2   = 7   // Temporary 2
-RV64_REG_S0   = 8   // Saved 0 / Frame pointer (fp)
-RV64_REG_FP   = 8   // Frame pointer alias
-RV64_REG_S1   = 9   // Saved 1
-RV64_REG_A0   = 10  // Function arg 1 / Return value 1
-RV64_REG_A1   = 11  // Function arg 2 / Return value 2
-RV64_REG_A2   = 12  // Function arg 3
-RV64_REG_A3   = 13  // Function arg 4
-RV64_REG_A4   = 14  // Function arg 5
-RV64_REG_A5   = 15  // Function arg 6
-RV64_REG_A6   = 16  // Function arg 7
-RV64_REG_A7   = 17  // Function arg 8 / Linux ECALL syscall number
-RV64_REG_S2   = 18  // Saved 2
-RV64_REG_S3   = 19  // Saved 3
-RV64_REG_S4   = 20  // Saved 4
-RV64_REG_S5   = 21  // Saved 5
-RV64_REG_S6   = 22  // Saved 6
-RV64_REG_S7   = 23  // Saved 7
-RV64_REG_S8   = 24  // Saved 8
-RV64_REG_S9   = 25  // Saved 9
-RV64_REG_S10  = 26  // Saved 10
-RV64_REG_S11  = 27  // Saved 11
-RV64_REG_T3   = 28  // Temporary 3
-RV64_REG_T4   = 29  // Temporary 4
-RV64_REG_T5   = 30  // Temporary 5
-RV64_REG_T6   = 31  // Temporary 6
+@fn RV64_REG_ZERO() return 0 @end   // Hardwired zero
+@fn RV64_REG_RA()   return 1 @end   // Return address
+@fn RV64_REG_SP()   return 2 @end   // Stack pointer
+@fn RV64_REG_GP()   return 3 @end   // Global pointer
+@fn RV64_REG_TP()   return 4 @end   // Thread pointer
+@fn RV64_REG_T0()   return 5 @end   // Temporary 0
+@fn RV64_REG_T1()   return 6 @end   // Temporary 1
+@fn RV64_REG_T2()   return 7 @end   // Temporary 2
+@fn RV64_REG_S0()   return 8 @end   // Saved 0 / Frame pointer (fp)
+@fn RV64_REG_FP()   return 8 @end   // Frame pointer alias
+@fn RV64_REG_S1()   return 9 @end   // Saved 1
+@fn RV64_REG_A0()   return 10 @end  // Function arg 1 / Return value 1
+@fn RV64_REG_A1()   return 11 @end  // Function arg 2 / Return value 2
+@fn RV64_REG_A2()   return 12 @end  // Function arg 3
+@fn RV64_REG_A3()   return 13 @end  // Function arg 4
+@fn RV64_REG_A4()   return 14 @end  // Function arg 5
+@fn RV64_REG_A5()   return 15 @end  // Function arg 6
+@fn RV64_REG_A6()   return 16 @end  // Function arg 7
+@fn RV64_REG_A7()   return 17 @end  // Function arg 8 / Linux ECALL syscall number
+@fn RV64_REG_S2()   return 18 @end  // Saved 2
+@fn RV64_REG_S3()   return 19 @end  // Saved 3
+@fn RV64_REG_S4()   return 20 @end  // Saved 4
+@fn RV64_REG_S5()   return 21 @end  // Saved 5
+@fn RV64_REG_S6()   return 22 @end  // Saved 6
+@fn RV64_REG_S7()   return 23 @end  // Saved 7
+@fn RV64_REG_S8()   return 24 @end  // Saved 8
+@fn RV64_REG_S9()   return 25 @end  // Saved 9
+@fn RV64_REG_S10()  return 26 @end  // Saved 10
+@fn RV64_REG_S11()  return 27 @end  // Saved 11
+@fn RV64_REG_T3()   return 28 @end  // Temporary 3
+@fn RV64_REG_T4()   return 29 @end  // Temporary 4
+@fn RV64_REG_T5()   return 30 @end  // Temporary 5
+@fn RV64_REG_T6()   return 31 @end  // Temporary 6
 
 // ── 2. Register Classification Queries ────────────────────────────────────────
 

@@ -3,9 +3,9 @@
   imag: i64
 @end
 
+// WHY: Adds two complex numbers using standard anonymous struct literal syntax
 @fn complex_add(a, b)
-  res = Complex { real: a.real + b.real, imag: a.imag + b.imag }
-  return res
+  return { real: a.real + b.real, imag: a.imag + b.imag }
 @end
 
 @fn area_circle(radius)

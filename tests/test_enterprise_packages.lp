@@ -72,7 +72,7 @@ http_response_free(resp_obj)
 // ── ৩. Package 3: lipi_jwt ──────────────────────────────────────────────
 say "[3/5] Verifying lipi_jwt (RFC 7519 Cryptographic Tokens)..."
 jwt_secret = "enterprise_mesh_secret_key_42"
-sec_l = len jwt_secret
+sec_l = len(jwt_secret)
 tok_buf = sys_alloc(256)
 tok_len = jwt_create_token(tok_buf, jwt_secret, sec_l, 9001, 1900000000, 7)
 assert_true(tok_len > 70, "lipi_jwt: token created")

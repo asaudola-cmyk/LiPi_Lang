@@ -1,5 +1,5 @@
 @! ============================================================================
-@! Module: compiler/backend/unum_encoder.maya
+@! Module: compiler/backend/unum_encoder.lp
 @! Transforms semantic concepts (e.g., arithmetic addition) into
 @! a sequence of proof-carrying Universal Numbers.
 @! ============================================================================

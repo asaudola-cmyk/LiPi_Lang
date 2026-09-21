@@ -372,7 +372,7 @@ fn sha256_হ্যাশ মেসেজ_পয়েন্টার len output_bu
 // ── ৮. সরাসরি স্ট্রিং হ্যাশিং হেল্পার (Direct String SHA-256 Hex Digest) ─────────
 // WHY: যেকোনো লিপি স্ট্রিং ইনপুট নিয়ে সরাসরি ৬৪-ক্যারেক্টার হেক্স ডাইজেস্ট স্ট্রিং প্রদান করে।
 fn sha256_hex s
-    slen = len s
+    slen = len(s)
     out_buf = malloc(65)
     sha256_hash(s, slen, out_buf)
     res = ""

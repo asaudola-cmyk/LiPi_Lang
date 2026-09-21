@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA UNIVERSAL NUMBER BOOT-SEED (VM)
+@! LIPI UNIVERSAL NUMBER BOOT-SEED (VM)
 @! ============================================================================
 @! This program acts as the ultimate Universal Decoder.
 @! It reads its own binary payload, extracts the mathematical Universal Number,
@@ -16,7 +16,7 @@ import "universe/core/string"
 @end
 
 @! WHY: Renamed from main to boot_seed_main to prevent duplicate main definition
-@! from conflicting with compiler/backend/compiler.maya main entrypoint.
+@! from conflicting with compiler entrypoints.
 @fn boot_seed_main()
   fd = sys_syscall(2, "/proc/self/exe", 0, 0, 0, 0, 0)
   @if fd < 0

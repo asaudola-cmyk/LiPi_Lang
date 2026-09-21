@@ -21,10 +21,10 @@
 
 // ── 1. Target Architecture Identifiers ────────────────────────────────────────
 
-TARGET_ID_X86_64  = 1
-TARGET_ID_ARM64   = 2
-TARGET_ID_WASM    = 3
-TARGET_ID_RISCV64 = 4
+@fn TARGET_ID_X86_64()  return 1 @end
+@fn TARGET_ID_ARM64()   return 2 @end
+@fn TARGET_ID_WASM()    return 3 @end
+@fn TARGET_ID_RISCV64() return 4 @end
 
 // ── 2. Target Machine Descriptor ──────────────────────────────────────────────
 

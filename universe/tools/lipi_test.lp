@@ -297,9 +297,9 @@ import "universe/core/error"
     sys_execve(test_path, args, 0)
     
     @! Fallback to sovereign self-hosted compiler execution
-    tmp_bin = "/tmp/_maya_test_exec"
-    compiler_args = ["./bin/maya_self_hosted", test_path, "-o", tmp_bin, 0]
-    sys_execve("./bin/maya_self_hosted", compiler_args, 0)
+    tmp_bin = "/tmp/_lipi_test_exec"
+    compiler_args = ["./bin/lipc", test_path, "-o", tmp_bin, 0]
+    sys_execve("./bin/lipc", compiler_args, 0)
     
     sys_exit(127)
   @end

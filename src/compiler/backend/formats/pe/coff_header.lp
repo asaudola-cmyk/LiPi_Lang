@@ -101,7 +101,7 @@ import "universe/core/string"
 @end
 
 @struct ImageSectionHeader
-  name: string                 // 8 bytes: Section name ASCII (".text\0\0\0")
+  sec_name: string             // 8 bytes: Section name ASCII (".text\0\0\0")
   virtual_size: i64            // 4 bytes: Total size of section when loaded in memory
   virtual_address: i64         // 4 bytes: Relative Virtual Address (RVA) in memory
   size_of_raw_data: i64        // 4 bytes: Size of section data in disk file (multiple of file_align)
@@ -179,97 +179,91 @@ import "universe/core/string"
 @fn pe_coff_header_create(machine, num_sections)
   // WHY: Constructs the 20-byte COFF file header.
   // Characteristics 0x0022 = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE
-  return {
-    machine: machine,
-    num_sections: num_sections,
-    time_date_stamp: 1718000000, // Fixed canonical timestamp
-    pointer_to_symbol_table: 0,
-    num_symbols: 0,
-    size_of_optional_header: PE_OPT_HEADER64_SIZE(), // 240 bytes
-    characteristics: IMAGE_FILE_EXECUTABLE_IMAGE() | IMAGE_FILE_LARGE_ADDRESS_AWARE()
-  }
+  hdr = ImageFileHeader()
+  hdr.machine = machine
+  hdr.num_sections = num_sections
+  hdr.time_date_stamp = 1718000000 // Fixed canonical timestamp
+  hdr.pointer_to_symbol_table = 0
+  hdr.num_symbols = 0
+  hdr.size_of_optional_header = PE_OPT_HEADER64_SIZE() // 240 bytes
+  hdr.characteristics = IMAGE_FILE_EXECUTABLE_IMAGE() | IMAGE_FILE_LARGE_ADDRESS_AWARE()
+  return hdr
 @end
 
-@fn pe_optional_header64_create(entry_rva, code_base_rva, code_sz, data_sz, bss_sz, img_sz, hdr_sz, is_gui)
-  // WHY: Constructs the 240-byte PE32+ Optional Header.
-  subsystem = IMAGE_SUBSYSTEM_WINDOWS_CUI()
-  @if is_gui == 1
-    subsystem = IMAGE_SUBSYSTEM_WINDOWS_GUI()
-  @end
-
-  dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE() | IMAGE_DLLCHARACTERISTICS_NX_COMPAT() | IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE()
-
-  return {
-    magic: PE32PLUS_MAGIC(), // 0x020B (64-bit)
-    major_linker_version: 1,
-    minor_linker_version: 0,
-    size_of_code: code_sz,
-    size_of_initialized_data: data_sz,
-    size_of_uninitialized_data: bss_sz,
-    address_of_entry_point: entry_rva,
-    base_of_code: code_base_rva,
-    image_base: 5368709120, // 0x140000000: Windows standard 64-bit default image base
-    section_alignment: 4096, // 0x1000 (4KB page)
-    file_alignment: 512,    // 0x200 (512-byte sector)
-    major_os_version: 6,
-    minor_os_version: 0,
-    major_subsystem_version: 6,
-    minor_subsystem_version: 0,
-    size_of_image: img_sz,
-    size_of_headers: hdr_sz,
-    checksum: 0,
-    subsystem: subsystem,
-    dll_characteristics: dll_chars,
-    size_of_stack_reserve: 1048576, // 1MB
-    size_of_stack_commit: 4096,     // 4KB
-    size_of_heap_reserve: 1048576,  // 1MB
-    size_of_heap_commit: 4096       // 4KB
-  }
+@fn pe_optional_header64_default()
+  // WHY: Returns an ImageOptionalHeader64 initialized with canonical default Windows x86-64 parameters.
+  // Zero arguments ensures no stack overhead during construction.
+  hdr = ImageOptionalHeader64()
+  hdr.magic = PE32PLUS_MAGIC() // 0x020B (64-bit)
+  hdr.major_linker_version = 1
+  hdr.minor_linker_version = 0
+  hdr.size_of_code = 0
+  hdr.size_of_initialized_data = 0
+  hdr.size_of_uninitialized_data = 0
+  hdr.address_of_entry_point = 4096
+  hdr.base_of_code = 4096
+  hdr.image_base = 5368709120 // 0x140000000: Windows standard 64-bit default image base
+  hdr.section_alignment = 4096 // 0x1000 (4KB page)
+  hdr.file_alignment = 512    // 0x200 (512-byte sector)
+  hdr.major_os_version = 6
+  hdr.minor_os_version = 0
+  hdr.major_subsystem_version = 6
+  hdr.minor_subsystem_version = 0
+  hdr.size_of_image = 0
+  hdr.size_of_headers = 1024
+  hdr.checksum = 0
+  hdr.subsystem = IMAGE_SUBSYSTEM_WINDOWS_CUI()
+  hdr.dll_characteristics = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE() | IMAGE_DLLCHARACTERISTICS_NX_COMPAT() | IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE()
+  hdr.size_of_stack_reserve = 1048576 // 1MB
+  hdr.size_of_stack_commit = 4096     // 4KB
+  hdr.size_of_heap_reserve = 1048576  // 1MB
+  hdr.size_of_heap_commit = 4096       // 4KB
+  return hdr
 @end
 
 @fn pe_section_text_create(vsize, rva, raw_size, raw_ptr)
-  return {
-    name: ".text",
-    virtual_size: vsize,
-    virtual_address: rva,
-    size_of_raw_data: raw_size,
-    pointer_to_raw_data: raw_ptr,
-    pointer_to_relocations: 0,
-    pointer_to_linenumbers: 0,
-    num_relocations: 0,
-    num_linenumbers: 0,
-    characteristics: PE_FLAGS_TEXT()
-  }
+  sec = ImageSectionHeader()
+  sec.sec_name = ".text"
+  sec.virtual_size = vsize
+  sec.virtual_address = rva
+  sec.size_of_raw_data = raw_size
+  sec.pointer_to_raw_data = raw_ptr
+  sec.pointer_to_relocations = 0
+  sec.pointer_to_linenumbers = 0
+  sec.num_relocations = 0
+  sec.num_linenumbers = 0
+  sec.characteristics = PE_FLAGS_TEXT()
+  return sec
 @end
 
 @fn pe_section_rdata_create(vsize, rva, raw_size, raw_ptr)
-  return {
-    name: ".rdata",
-    virtual_size: vsize,
-    virtual_address: rva,
-    size_of_raw_data: raw_size,
-    pointer_to_raw_data: raw_ptr,
-    pointer_to_relocations: 0,
-    pointer_to_linenumbers: 0,
-    num_relocations: 0,
-    num_linenumbers: 0,
-    characteristics: PE_FLAGS_RDATA()
-  }
+  sec = ImageSectionHeader()
+  sec.sec_name = ".rdata"
+  sec.virtual_size = vsize
+  sec.virtual_address = rva
+  sec.size_of_raw_data = raw_size
+  sec.pointer_to_raw_data = raw_ptr
+  sec.pointer_to_relocations = 0
+  sec.pointer_to_linenumbers = 0
+  sec.num_relocations = 0
+  sec.num_linenumbers = 0
+  sec.characteristics = PE_FLAGS_RDATA()
+  return sec
 @end
 
 @fn pe_section_data_create(vsize, rva, raw_size, raw_ptr)
-  return {
-    name: ".data",
-    virtual_size: vsize,
-    virtual_address: rva,
-    size_of_raw_data: raw_size,
-    pointer_to_raw_data: raw_ptr,
-    pointer_to_relocations: 0,
-    pointer_to_linenumbers: 0,
-    num_relocations: 0,
-    num_linenumbers: 0,
-    characteristics: PE_FLAGS_DATA()
-  }
+  sec = ImageSectionHeader()
+  sec.sec_name = ".data"
+  sec.virtual_size = vsize
+  sec.virtual_address = rva
+  sec.size_of_raw_data = raw_size
+  sec.pointer_to_raw_data = raw_ptr
+  sec.pointer_to_relocations = 0
+  sec.pointer_to_linenumbers = 0
+  sec.num_relocations = 0
+  sec.num_linenumbers = 0
+  sec.characteristics = PE_FLAGS_DATA()
+  return sec
 @end
 
 // ============================================================================
@@ -334,7 +328,11 @@ import "universe/core/string"
 
   // 2. Windows-Specific Fields (88 bytes)
   ib = pe_pack_u64(opthdr.image_base)
-  k = 0 @while k < 8 out = out.push(ib[k]) k = k + 1 @end
+  k = 0
+  @while k < 8
+    out = out.push(ib[k])
+    k = k + 1
+  @end
 
   sa = pe_pack_u32(opthdr.section_alignment)
   out = out.push(sa[0]) out = out.push(sa[1]) out = out.push(sa[2]) out = out.push(sa[3])
@@ -361,7 +359,11 @@ import "universe/core/string"
   out = out.push(minsub[0]) out = out.push(minsub[1])
 
   // Win32VersionValue (4 bytes zero)
-  k = 0 @while k < 4 out = out.push(0) k = k + 1 @end
+  k = 0
+  @while k < 4
+    out = out.push(0)
+    k = k + 1
+  @end
 
   si = pe_pack_u32(opthdr.size_of_image)
   out = out.push(si[0]) out = out.push(si[1]) out = out.push(si[2]) out = out.push(si[3])
@@ -379,19 +381,39 @@ import "universe/core/string"
   out = out.push(dll[0]) out = out.push(dll[1])
 
   ssr = pe_pack_u64(opthdr.size_of_stack_reserve)
-  k = 0 @while k < 8 out = out.push(ssr[k]) k = k + 1 @end
+  k = 0
+  @while k < 8
+    out = out.push(ssr[k])
+    k = k + 1
+  @end
 
   ssc = pe_pack_u64(opthdr.size_of_stack_commit)
-  k = 0 @while k < 8 out = out.push(ssc[k]) k = k + 1 @end
+  k = 0
+  @while k < 8
+    out = out.push(ssc[k])
+    k = k + 1
+  @end
 
   shr = pe_pack_u64(opthdr.size_of_heap_reserve)
-  k = 0 @while k < 8 out = out.push(shr[k]) k = k + 1 @end
+  k = 0
+  @while k < 8
+    out = out.push(shr[k])
+    k = k + 1
+  @end
 
   shc = pe_pack_u64(opthdr.size_of_heap_commit)
-  k = 0 @while k < 8 out = out.push(shc[k]) k = k + 1 @end
+  k = 0
+  @while k < 8
+    out = out.push(shc[k])
+    k = k + 1
+  @end
 
   // LoaderFlags (4 bytes zero)
-  k = 0 @while k < 4 out = out.push(0) k = k + 1 @end
+  k = 0
+  @while k < 4
+    out = out.push(0)
+    k = k + 1
+  @end
 
   // NumberOfRvaAndSizes (4 bytes: 16)
   nrv = pe_pack_u32(16)
@@ -422,8 +444,12 @@ import "universe/core/string"
   out = []
 
   // 1. Name (8 bytes)
-  nb = pe_pack_name8(sec.name)
-  k = 0 @while k < 8 out = out.push(nb[k]) k = k + 1 @end
+  nb = pe_pack_name8(sec.sec_name)
+  k = 0
+  @while k < 8
+    out = out.push(nb[k])
+    k = k + 1
+  @end
 
   // 2. VirtualSize (4 bytes)
   vs = pe_pack_u32(sec.virtual_size)
@@ -442,10 +468,18 @@ import "universe/core/string"
   out = out.push(pr[0]) out = out.push(pr[1]) out = out.push(pr[2]) out = out.push(pr[3])
 
   // 6. PointerToRelocations (4 bytes zero)
-  k = 0 @while k < 4 out = out.push(0) k = k + 1 @end
+  k = 0
+  @while k < 4
+    out = out.push(0)
+    k = k + 1
+  @end
 
   // 7. PointerToLinenumbers (4 bytes zero)
-  k = 0 @while k < 4 out = out.push(0) k = k + 1 @end
+  k = 0
+  @while k < 4
+    out = out.push(0)
+    k = k + 1
+  @end
 
   // 8. NumberOfRelocations (2 bytes zero)
   out = out.push(0) out = out.push(0)

@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — THE UNIVERSAL NUMBER GENERATOR (BIGINT)
-@! Module: compiler/backend/universal_math.maya
-@! Description: Converts Maya IR / Opcodes into a single massive Gödel Integer.
+@! LIPI UNIVERSAL ARCHITECTURE — THE UNIVERSAL NUMBER GENERATOR (BIGINT)
+@! Module: compiler/backend/universal_math.lp
+@! Description: Converts LiPi IR / Opcodes into a single massive Gödel Integer.
 @! Architecture: Absolute Sovereign (Zero Binary)
 @! ============================================================================
 
@@ -155,7 +155,7 @@ import "universe/core/collections"
 
 @fn bigint_to_string(a)
   // WHY: Converts arbitrary-precision BigInt to canonical decimal string representation.
-  // Uses pure Lipi/Maya string concatenation to allocate on the runtime heap with valid STR0 tag headers,
+  // Uses pure LiPi string concatenation to allocate on the runtime heap with valid STR0 tag headers,
   // preventing pointer-as-integer interpretation bugs in _lipi_is_str.
   @if a.limbs.len() == 0
     return "0"

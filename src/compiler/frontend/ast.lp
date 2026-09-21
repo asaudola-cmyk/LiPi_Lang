@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA COMPILER — 100% PURE MAYA ABSTRACT SYNTAX TREE (AST) DEFINITIONS
+@! LIPI COMPILER — 100% PURE LIPI ABSTRACT SYNTAX TREE (AST) DEFINITIONS
 @! Zero External Dependencies — Full AST Node Set & Constructors
-@! 100% Compatible with compiler/backend/maya_ir.maya
+@! 100% Compatible with compiler/backend/lipi_ir.lp
 @! ============================================================================
 
 import "universe/core/string"

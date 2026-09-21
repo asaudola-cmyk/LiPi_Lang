@@ -3,7 +3,7 @@ import "compiler/infinity_syntax"
 import "compiler/backend/lipi_ir"
 import "compiler/middleend/ir_peephole"
 import "compiler/backend/x86_64/codegen"
-import "compiler/backend/elf_writer"
+import "src/compiler/backend/formats/elf/elf_writer"
 import "compiler/backend/omni_binary"
 
 @fn lex_is_space(c)
@@ -89,8 +89,8 @@ import "compiler/backend/omni_binary"
   return t[1]
 @end
 
-@! Module: compiler/backend/compiler.maya
-@! Architecture: 100% Pure Maya Self-Contained Native Compiler Pipeline
+@! Module: compiler/backend/compiler.lp
+@! Architecture: 100% Pure LiPi Self-Contained Native Compiler Pipeline
 @! Standard: Zero Foreign Dependencies (No gcc, clang, ld, or external tools)
 @! ============================================================================
 
@@ -286,7 +286,7 @@ import "compiler/backend/omni_binary"
 @end
 
 @! ============================================================================
-@! 2. PURE MAYA LEXICAL ANALYZER / TOKENIZER
+@! 2. PURE LIPI LEXICAL ANALYZER / TOKENIZER
 @! ============================================================================
 
 @fn parse_int_val(s)
@@ -711,7 +711,7 @@ import "compiler/backend/omni_binary"
 @end
 
 @! ============================================================================
-@! 3. PURE MAYA RECURSIVE DESCENT PRATT AST PARSER
+@! 3. PURE LIPI RECURSIVE DESCENT PRATT AST PARSER
 @! ============================================================================
 
 @fn parser_skip_newlines(tokens, pos)
@@ -1491,7 +1491,7 @@ import "compiler/backend/omni_binary"
 
 @! Compiles Maya source code into standalone Linux ELF64 binary with options
 @fn compile_source_with_options(source_code, output_filepath, options)
-  mod_name = "maya_program"
+  mod_name = "lipi_program"
   dump_ir = 0
   base_dir = "."
   @if options != 0
@@ -1671,7 +1671,7 @@ import "compiler/backend/omni_binary"
       opt_dump_ast: 0,
       opt_dump_ir: 0,
       opt_dump_asm: 0,
-      opt_module_name: "maya_program",
+      opt_module_name: "lipi_program",
       opt_opt_level: 0,
       opt_base_dir: file_dir
     }
@@ -1703,7 +1703,7 @@ import "compiler/backend/omni_binary"
 
 @fn main(argc, argv)
   @if argc < 2
-    println("Usage: maya_univ <input.maya> [-o output_binary] [--sovereign] [--elf]")
+    println("Usage: lipi_univ <input.lp> [-o output_binary] [--sovereign] [--elf]")
     return 1
   @end
   
@@ -1736,7 +1736,7 @@ import "compiler/backend/omni_binary"
     arg_i = arg_i + 1
   @end
   
-  println("Maya Sovereign Universal Compiler v2026")
+  println("LiPi Sovereign Universal Compiler v2026")
   
   options = {
     backend: backend_mode,

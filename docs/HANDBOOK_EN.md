@@ -314,11 +314,11 @@ When assigning zero to any register or initializing variables, the Lipi emitter 
 Lipi delivers true hardware multicore concurrency through direct Linux kernel syscalls without `pthreads` or external runtime schedulers.
 
 ### 6.1 Kernel Thread Creation via `SYS_clone`
-[`std/thread.lp`](../std/thread.lp) invokes `SYS_clone` (syscall 56 on x86_64, syscall 220 on AArch64) with flags `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD` (`69376` / `0x10F00`):
+[`universe/os/thread.lp`](../universe/os/thread.lp) invokes `SYS_clone` (syscall 56 on x86_64, syscall 220 on AArch64) with flags `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD` (`69376` / `0x10F00`):
 
 ```lipi
-include "std/thread.lp"
-include "std/mem.lp"
+include "universe/os/thread.lp"
+include "universe/core/memory.lp"
 
 // Allocate thread stack memory (64 KB) via SYS_mmap
 stack_size = 65536
@@ -354,10 +354,10 @@ shared_counter = shared_counter + 1
 ```
 During lock contention, the waiting thread issues `SYS_sched_yield` (syscall 24), preventing CPU thermal throttling and power waste.
 
-### 6.3 Bump-Pointer Arena Memory Allocator (`std/arena.lp`)
-High-performance workloads utilize [`std/arena.lp`](../std/arena.lp) for O(1) allocation and instant mass reclamation:
+### 6.3 Bump-Pointer Arena Memory Allocator (`universe/core/arena.lp`)
+High-performance workloads utilize [`universe/core/arena.lp`](../universe/core/arena.lp) for O(1) allocation and instant mass reclamation:
 ```lipi
-include "std/arena.lp"
+include "universe/core/arena.lp"
 
 // Create a 2 MB memory arena pool directly from kernel pages
 pool = অ্যারিনা_তৈরি(2097152)
@@ -375,9 +375,9 @@ buf2 = অ্যারিনা_বরাদ্দ(pool, 4096)
 
 ---
 
-## 7. First-Class Web Engine & HTTP Router (`std/web.lp`)
+## 7. First-Class Web Engine & HTTP Router (`universe/web/router.lp`)
 
-Lipi First 1.0.0 provides an enterprise-grade standard web engine in [`std/web.lp`](../std/web.lp), eliminating foreign web frameworks like Express, Flask, or Axum.
+Lipi First 1.0.0 provides an enterprise-grade standard web engine in [`universe/web/router.lp`](../universe/web/router.lp), eliminating foreign web frameworks like Express, Flask, or Axum.
 
 ### 7.1 Core Components
 - `WebRoute`: Record binding HTTP methods, path strings, and integer handler IDs.
@@ -386,7 +386,7 @@ Lipi First 1.0.0 provides an enterprise-grade standard web engine in [`std/web.l
 
 ### 7.2 Production REST Microservice Example
 ```lipi
-include "std/web.lp"
+include "universe/web/router.lp"
 
 // 1. Initialize router and register route handlers
 router = web_router_new()

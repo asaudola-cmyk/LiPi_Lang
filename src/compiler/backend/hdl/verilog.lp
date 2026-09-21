@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — HARDWARE SYNTHESIS & VERILOG HDL EMITTER
-@! Module: compiler/backend/hdl/verilog.maya
+@! LIPI UNIVERSAL ARCHITECTURE — HARDWARE SYNTHESIS & VERILOG HDL EMITTER
+@! Module: compiler/backend/hdl/verilog.lp
 @! Milestone: Frontier Sovereign Hardware Synthesis (FPGA / Silicon Tapeout)
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure LiPi Implementation — Zero External / C++ Dependencies
 @! Features: Verilog IEEE 1364-2001 Emitter, Combinational Logic Gates, Clocked
 @! Always Registers (@(posedge clk)), Arithmetic ALUs & Finite State Machines
 @! ============================================================================

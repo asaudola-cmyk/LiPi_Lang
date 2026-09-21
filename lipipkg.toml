@@ -27,5 +27,10 @@ members = [
     "packages/web_router",
     "packages/crypto_vault",
     "packages/json_toolkit",
-    "packages/sovereign_mesh"
+    "packages/sovereign_mesh",
+    "packages/lipi_dataframe",
+    "packages/lipi_grpc",
+    "packages/lipi_http_client",
+    "packages/lipi_jwt",
+    "packages/lipi_sql"
 ]

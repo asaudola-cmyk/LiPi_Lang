@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA JIT COMPILER BACKEND — IN-MEMORY COMPILATION & EXECUTION ENGINE
-@! Module: compiler/backend/jit/jit_engine.maya
+@! LIPI JIT COMPILER BACKEND — IN-MEMORY COMPILATION & EXECUTION ENGINE
+@! Module: compiler/backend/jit/jit_engine.lp
 @! Architecture: In-Memory AST -> IR -> x86-64 Machine Code Generation directly to RAM
 @! Standard: Zero Disk I/O, Instant Expression Evaluation, Persistent Functions & State
 @! ============================================================================
@@ -80,7 +80,7 @@ let g_global_jit_seq = 1000
   return g_global_jit_seq
 @end
 
-@! Creates a new instance of the sovereign Maya JIT Engine
+@! Creates a new instance of the sovereign LiPi JIT Engine
 @fn jit_engine_new()
   return {
     memory_blocks: [],
@@ -332,7 +332,7 @@ _i_sym_entry_0 = 0
   }
 @end
 
-@! Compiles full Maya source code directly into RAM without disk I/O
+@! Compiles full LiPi source code directly into RAM without disk I/O
 @fn jit_compile_source(engine, source_code)
   @! 1. Tokenize & Parse AST
   parsed = parser_parse_program(source_code)
@@ -350,7 +350,7 @@ _i_sym_entry_0 = 0
     }
   @end
 
-  @! 2. Lower AST to Maya IR
+  @! 2. Lower AST to LiPi IR
   engine.seq_id = engine.seq_id + 1
   mod_name = "jit_mod_" + int_to_str(engine.seq_id)
   ir_opts = { module_name: mod_name, dump_ir: 0 }
@@ -450,7 +450,7 @@ _i_sym_entry_0 = 0
     }
   @end
 
-  res_val = maya_jit_call0(comp_res.entry_addr)
+  res_val = lipi_jit_call0(comp_res.entry_addr)
   res_obj = {
     success: 1,
     value: res_val,
@@ -464,7 +464,7 @@ _i_sym_entry_0 = 0
 @! 6. CONVENIENCE HIGH-LEVEL JIT API
 @! ----------------------------------------------------------------------------
 
-@! Compiles and executes a Maya source string in a transient JIT engine with zero disk I/O
+@! Compiles and executes a LiPi source string in a transient JIT engine with zero disk I/O
 @fn jit_compile_and_exec(source_code)
   engine = jit_engine_new()
   comp_res = jit_compile_source(engine, source_code)

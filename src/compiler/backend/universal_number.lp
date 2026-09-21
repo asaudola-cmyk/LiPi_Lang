@@ -1,5 +1,5 @@
 @! ============================================================================
-@! Module: compiler/backend/universal_number.maya
+@! Module: compiler/backend/universal_number.lp
 @! Architecture: Universal Number Architecture (UMA)
 @! Defines the foundational mathematical object for isomorphic execution.
 @! ============================================================================

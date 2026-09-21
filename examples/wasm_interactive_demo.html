@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiPi Sovereign Virtual Silicon — Browser Demo</title>
+<style>
+body { background: #0a0e14; color: #00ffcc; font-family: 'Courier New', monospace; margin: 0; padding: 24px; }
+.container { max-width: 800px; margin: 0 auto; background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; box-shadow: 0 4px 20px rgba(0,255,204,0.1); }
+h1 { font-size: 20px; color: #ffffff; margin-top: 0; border-bottom: 1px solid #1f2937; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+.badge { background: #00ffcc22; color: #00ffcc; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: normal; }
+#status { font-size: 14px; margin: 12px 0; color: #fbbf24; }
+#terminal { background: #030712; border: 1px solid #1f2937; border-radius: 6px; padding: 16px; min-height: 140px; color: #e5e7eb; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+.btn { background: #00ffcc; color: #030712; font-weight: bold; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 14px; font-family: inherit; font-size: 13px; }
+.btn:hover { background: #00ddb3; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>👑 LiPi Sovereign Virtual Silicon <span class="badge">First 1.0.0</span></h1>
+  <div id="status">⚡ Instantiating Sovereign Virtual Machine...</div>
+  <div id="terminal"></div>
+  <button class="btn" onclick="executeModule()">▶ Re-Execute WebAssembly</button>
+</div>
+<script>
+// ── Embedded Autonomous LiPi Base64 WebAssembly Virtual Silicon Stream ──
+const wasmB64 = "AGFzbQEAAAABDAJgAn9/AX9gAX8BfwMFBAAAAAEHGQQDYWRkAAADc3ViAAEDbXVsAAIDZmliAAMKNgQHACAAIAFqCwcAIAAgAWsLBwAgACABbAscACAAQQFMBH8gAAUgAEEBaxADIABBAmsQA2oLCw==";
+
+const wasmBytecode = Uint8Array.from(atob(wasmB64), c => c.charCodeAt(0));
+const term = document.getElementById('terminal');
+const statusEl = document.getElementById('status');
+function termLog(msg) { term.innerText += msg + '\n'; }
+
+async function executeModule() {
+  term.innerText = '';
+  statusEl.innerText = '⚡ Synthesizing Silicon Host Environment...';
+  statusEl.style.color = '#fbbf24';
+  try {
+    const importObject = {
+      env: {
+        print_str: (ptr, len) => {
+          const mem = instance.exports.memory ? new Uint8Array(instance.exports.memory.buffer, ptr, len) : new Uint8Array(wasmBytecode.buffer, ptr, len);
+          termLog(new TextDecoder().decode(mem));
+        },
+        print_int: (val) => termLog(String(val)),
+        time_now: () => Date.now()
+      }
+    };
+    let instance = null;
+    try {
+      const streamRes = await WebAssembly.instantiateStreaming(fetch('data:application/wasm;base64,' + wasmB64), importObject);
+      instance = streamRes.instance;
+    } catch(stErr) {
+      const syncRes = await WebAssembly.instantiate(wasmBytecode.buffer, importObject);
+      instance = syncRes.instance;
+    }
+    statusEl.innerText = '✔ LiPi Virtual Silicon Active (Status: SOVEREIGN)';
+    statusEl.style.color = '#34d399';
+    termLog('================================================================');
+    termLog('👑 LIPI VIRTUAL SILICON ENGINE — First 1.0.0 (W3C WebAssembly)');
+    termLog('================================================================');
+    for (const exp of Object.keys(instance.exports)) {
+      if (typeof instance.exports[exp] === 'function') {
+        try {
+          const res = instance.exports[exp]();
+          termLog('  ✔ export: ' + exp + '() => ' + res);
+        } catch(e) {
+          termLog('  • export: ' + exp + ' (parametrized function)');
+        }
+      }
+    }
+    termLog('\n✔ Computational Sovereignty: Zero JS Runtimes, 100% Autonomous Single File.');
+  } catch (err) {
+    statusEl.innerText = '❌ Instantiation Fault: ' + err.message;
+    statusEl.style.color = '#f87171';
+    termLog('Error: ' + err.stack);
+  }
+}
+window.addEventListener('DOMContentLoaded', executeModule);
+</script>
+</body>
+</html>

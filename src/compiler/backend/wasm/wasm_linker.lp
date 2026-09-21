@@ -6,14 +6,15 @@ import "compiler/backend/wasm/wasm_emitter"
 import "compiler/backend/x86_64/codegen"
 import "compiler/backend/lipi_ir"
 
-@fn lower_maya_type(maya_type)
-  @! Maya Int -> I64, Bool -> I32, Float -> F64, Ptr -> I32
-  @if maya_type == 1 return wasm_type_i64() @end
-  @if maya_type == 2 return wasm_type_i32() @end
-  @if maya_type == 3 return wasm_type_f64() @end
-  @if maya_type == 4 return wasm_type_i32() @end
+@fn lower_lipi_type(lipi_type)
+  // WHY: Lowers LiPi primitive types into WebAssembly value types
+  @if lipi_type == 1 return wasm_type_i64() @end
+  @if lipi_type == 2 return wasm_type_i32() @end
+  @if lipi_type == 3 return wasm_type_f64() @end
+  @if lipi_type == 4 return wasm_type_i32() @end
   return wasm_type_i32()
 @end
+
 
 @fn generate_imports(w_mod)
   w_mod.imports = w_mod.imports.push({
@@ -32,9 +33,10 @@ import "compiler/backend/lipi_ir"
 @end
 
 @fn generate_exports(w_mod, funcs_len)
-  w_mod.exports = w_mod.exports.push({ name: "maya_main", kind: 0, index: funcs_len })
-  w_mod.exports = w_mod.exports.push({ name: "maya_alloc", kind: 0, index: funcs_len + 1 })
-  w_mod.exports = w_mod.exports.push({ name: "maya_gc_collect", kind: 0, index: funcs_len + 2 })
+  // Primary LiPi native runtime exports
+  w_mod.exports = w_mod.exports.push({ name: "lipi_main", kind: 0, index: funcs_len })
+  w_mod.exports = w_mod.exports.push({ name: "lipi_alloc", kind: 0, index: funcs_len + 1 })
+  w_mod.exports = w_mod.exports.push({ name: "lipi_gc_collect", kind: 0, index: funcs_len + 2 })
   w_mod.exports = w_mod.exports.push({ name: "memory", kind: 2, index: 0 })
   return w_mod
 @end

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! Module: compiler/backend/unum_projector.maya
+@! Module: compiler/backend/unum_projector.lp
 @! Isomorphically projects a Universal Number onto physical Silicon targets
 @! (x86_64 base projection) using algebraic mappings.
 @! ============================================================================

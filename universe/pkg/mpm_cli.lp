@@ -90,7 +90,7 @@ import "universe/os/fs"
     license: license,
     entry_file: "src/main.lp",
     dependencies: [],
-    tags: ["maya"],
+    tags: ["lipi"],
     scripts: [
       { name: "build", command: build_cmd },
       { name: "test", command: "lipi test tests/test_main.lp" }
@@ -618,10 +618,10 @@ import "universe/os/fs"
 
   cmd = args[1]
   @if str_eq(cmd, "init") == 1
-    name = "my-maya-app"
+    name = "my-lipi-app"
     ver = "0.1.0"
-    desc = "A Maya Project"
-    auth = "Maya Developer"
+    desc = "A LiPi Project"
+    auth = "LiPi Developer"
     lic = "MIT"
     @if args.len() > 2 name = args[2] @end
     @if args.len() > 3 ver = args[3] @end

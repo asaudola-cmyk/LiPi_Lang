@@ -209,9 +209,9 @@ fn x86_mov_reg_imm64 ctx reg val
 
 ---
 
-## 4. First-Class Web Standard Library (`std/web.lp`)
+## 4. First-Class Web Standard Library (`universe/web/router.lp`)
 
-Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`std/web.lp`](../std/web.lp).
+Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`universe/web/router.lp`](../universe/web/router.lp).
 
 ### 4.1 Architectural Foundations
 - **Direct Linux Socket Calls:** Binds directly to the operating system network stack via `SYS_socket` (syscall 41), `SYS_bind` (syscall 49), `SYS_listen` (syscall 50), and `SYS_accept` (syscall 43).
@@ -220,7 +220,7 @@ Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in
 - **Wire-Format Response Serialization:** Constructs standards-compliant HTTP/1.1 response envelopes with explicit `Content-Length`, `Content-Type`, CORS headers, and CRLF (`\r\n`) delimiters.
 
 ```lipi
-include "std/web.lp"
+include "universe/web/router.lp"
 
 router = web_router_new()
 web_get(router, "/", 1)
@@ -243,7 +243,7 @@ fn handle_request req
 Lipi implements high-concurrency systems programming directly against the Linux kernel without `pthreads` or external threading libraries.
 
 ### 5.1 Kernel Thread Creation via `SYS_clone`
-[`std/thread.lp`](../std/thread.lp) invokes the Linux `SYS_clone` syscall (56 on x86_64, 220 on AArch64):
+[`universe/os/thread.lp`](../universe/os/thread.lp) invokes the Linux `SYS_clone` syscall (56 on x86_64, 220 on AArch64):
 - **Clone Flags:**
   - `CLONE_VM` (`0x00000100` = 256): Shares virtual memory space with the parent process.
   - `CLONE_FS` (`0x00000200` = 512): Shares filesystem information.
@@ -259,7 +259,7 @@ Concurrency synchronization is managed through memory word locks:
 - **Release (`স্পিনলক_মুক্ত` / `spinlock_unlock`):** Writes `0` to the lock memory address, enabling waiting worker threads to claim the critical section.
 
 ### 5.3 O(1) Bump-Pointer Arena Memory Allocator
-[`std/arena.lp`](../std/arena.lp) implements linear bump allocation for high-throughput pipelines:
+[`universe/core/arena.lp`](../universe/core/arena.lp) implements linear bump allocation for high-throughput pipelines:
 - Allocates contiguous blocks of physical memory directly from the kernel via `SYS_mmap`.
 - Dispenses memory sequentially via an internal offset pointer aligned to 8-byte QWORD boundaries.
 - **Instant Mass Reclamation:** Resetting the arena (`used = 0`) reclaims all allocations in **0 cycles** with zero memory fragmentation and zero pointer chasing.

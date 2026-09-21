@@ -161,7 +161,11 @@
   out = out.push(ovno[0]) out = out.push(ovno[1])
 
   // 0x1C..0x23: e_res[4] (8 bytes zero)
-  k = 0 @while k < 8 out = out.push(0) k = k + 1 @end
+  k = 0
+  @while k < 8
+    out = out.push(0)
+    k = k + 1
+  @end
 
   // 0x24: e_oemid (2 bytes)
   out = out.push(0) out = out.push(0)
@@ -170,7 +174,11 @@
   out = out.push(0) out = out.push(0)
 
   // 0x28..0x3B: e_res2[10] (20 bytes zero)
-  k = 0 @while k < 20 out = out.push(0) k = k + 1 @end
+  k = 0
+  @while k < 20
+    out = out.push(0)
+    k = k + 1
+  @end
 
   // 0x3C: e_lfanew (4 bytes)
   lfn = pe_pack_u32_le(dhdr.e_lfanew)
@@ -248,7 +256,15 @@
   stub_bytes = pe_build_dos_stub()           // 64 bytes
 
   out = []
-  i = 0 @while i < 64 out = out.push(dhdr_bytes[i]) i = i + 1 @end
-  i = 0 @while i < 64 out = out.push(stub_bytes[i]) i = i + 1 @end
+  i = 0
+  @while i < 64
+    out = out.push(dhdr_bytes[i])
+    i = i + 1
+  @end
+  i = 0
+  @while i < 64
+    out = out.push(stub_bytes[i])
+    i = i + 1
+  @end
   return out
 @end

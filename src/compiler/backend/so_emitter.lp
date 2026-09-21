@@ -21,30 +21,30 @@ include "src/runtime/lipi_syscall.lp"
 
 // ── 1. ELF64 Constants ────────────────────────────────────────────────────────
 
-SO_ELF_ET_DYN   = 3  // Shared object file type
-SO_ELF_EM_AMD64 = 62 // AMD x86-64 architecture
+@fn SO_ELF_ET_DYN()   return 3 @end  // Shared object file type
+@fn SO_ELF_EM_AMD64() return 62 @end // AMD x86-64 architecture
 
 // Dynamic Array Tags (Elf64_Dyn.d_tag)
-SO_DT_NULL   = 0
-SO_DT_HASH   = 4
-SO_DT_STRTAB = 5
-SO_DT_SYMTAB = 6
-SO_DT_STRSZ  = 10
-SO_DT_SYMENT = 11
+@fn SO_DT_NULL()   return 0 @end
+@fn SO_DT_HASH()   return 4 @end
+@fn SO_DT_STRTAB() return 5 @end
+@fn SO_DT_SYMTAB() return 6 @end
+@fn SO_DT_STRSZ()  return 10 @end
+@fn SO_DT_SYMENT() return 11 @end
 
 // Section Header Types
-SO_SHT_NULL     = 0
-SO_SHT_PROGBITS = 1
-SO_SHT_SYMTAB   = 2
-SO_SHT_STRTAB   = 3
-SO_SHT_HASH     = 5
-SO_SHT_DYNAMIC  = 6
-SO_SHT_DYNSYM   = 11
+@fn SO_SHT_NULL()     return 0 @end
+@fn SO_SHT_PROGBITS() return 1 @end
+@fn SO_SHT_SYMTAB()   return 2 @end
+@fn SO_SHT_STRTAB()   return 3 @end
+@fn SO_SHT_HASH()     return 5 @end
+@fn SO_SHT_DYNAMIC()  return 6 @end
+@fn SO_SHT_DYNSYM()   return 11 @end
 
 // Section Header Flags
-SO_SHF_WRITE     = 1
-SO_SHF_ALLOC     = 2
-SO_SHF_EXECINSTR = 4
+@fn SO_SHF_WRITE()     return 1 @end
+@fn SO_SHF_ALLOC()     return 2 @end
+@fn SO_SHF_EXECINSTR() return 4 @end
 
 // ── 2. Integer Packing Helpers (Little Endian) ────────────────────────────────
 
@@ -78,7 +78,7 @@ fn so_elf_hash str_val
     i = 0
     slen = len(str_val)
     while i < slen
-        ch = ord(char_at(str_val, i))
+        ch = mem_byte_read(str_val, i)
         h = (h * 16) + ch
         g = h & 4026531840 // 0xF0000000
         if g != 0
@@ -93,13 +93,16 @@ fn so_emit_dyn_entry dyn_list tag val
     so_put64(dyn_list, val)
     return 0
 
-// Emits a 64-byte Elf64_Shdr section header record
-fn so_emit_shdr shdrs_list name_off stype flags addr offset size link info addralign entsize
+// WHY: Splitting section header serialization to satisfy SysV ABI 6-parameter register limit
+fn so_emit_shdr_base shdrs_list name_off stype flags addr offset
     so_put32(shdrs_list, name_off)
     so_put32(shdrs_list, stype)
     so_put64(shdrs_list, flags)
     so_put64(shdrs_list, addr)
     so_put64(shdrs_list, offset)
+    return 0
+
+fn so_emit_shdr_tail shdrs_list size link info addralign entsize
     so_put64(shdrs_list, size)
     so_put32(shdrs_list, link)
     so_put32(shdrs_list, info)
@@ -126,7 +129,7 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
         push(dynstr_name_offs, len(dynstr))
         ci = 0
         while ci < len(ename)
-            push(dynstr, ord(char_at(ename, ci)))
+            push(dynstr, mem_byte_read(ename, ci))
             ci = ci + 1
         push(dynstr, 0) // Null terminator
         ei = ei + 1
@@ -185,12 +188,12 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
 
     // 5. Build .dynamic array (16 bytes per entry)
     dynamic = list()
-    so_emit_dyn_entry(dynamic, SO_DT_HASH, hash_offset)
-    so_emit_dyn_entry(dynamic, SO_DT_STRTAB, dynstr_offset)
-    so_emit_dyn_entry(dynamic, SO_DT_SYMTAB, dynsym_offset)
-    so_emit_dyn_entry(dynamic, SO_DT_STRSZ, dynstr_len)
-    so_emit_dyn_entry(dynamic, SO_DT_SYMENT, 24)
-    so_emit_dyn_entry(dynamic, SO_DT_NULL, 0)
+    so_emit_dyn_entry(dynamic, SO_DT_HASH(), hash_offset)
+    so_emit_dyn_entry(dynamic, SO_DT_STRTAB(), dynstr_offset)
+    so_emit_dyn_entry(dynamic, SO_DT_SYMTAB(), dynsym_offset)
+    so_emit_dyn_entry(dynamic, SO_DT_STRSZ(), dynstr_len)
+    so_emit_dyn_entry(dynamic, SO_DT_SYMENT(), 24)
+    so_emit_dyn_entry(dynamic, SO_DT_NULL(), 0)
     dynamic_len = len(dynamic)
 
     // 6. Build .shstrtab section name string table
@@ -217,15 +220,32 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     sh_offset = shstrtab_offset + len(shstrtab)
 
     // 7. Build Section Header Table (8 sections * 64 = 512 bytes)
+    // WHY: Use 6-parameter max helpers for SysV AMD64 register parameter convention
     shdrs = list()
-    so_emit_shdr(shdrs, 0, SO_SHT_NULL, 0, 0, 0, 0, 0, 0, 0, 0)
-    so_emit_shdr(shdrs, 1, SO_SHT_PROGBITS, SO_SHF_ALLOC | SO_SHF_EXECINSTR, text_offset, text_offset, code_len, 0, 0, 16, 0)
-    so_emit_shdr(shdrs, 7, SO_SHT_PROGBITS, SO_SHF_ALLOC, rodata_offset, rodata_offset, rodata_len, 0, 0, 8, 0)
-    so_emit_shdr(shdrs, 15, SO_SHT_DYNSYM, SO_SHF_ALLOC, dynsym_offset, dynsym_offset, dynsym_len, 4, 1, 8, 24)
-    so_emit_shdr(shdrs, 23, SO_SHT_STRTAB, SO_SHF_ALLOC, dynstr_offset, dynstr_offset, dynstr_len, 0, 0, 1, 0)
-    so_emit_shdr(shdrs, 31, SO_SHT_HASH, SO_SHF_ALLOC, hash_offset, hash_offset, hash_len, 3, 0, 4, 4)
-    so_emit_shdr(shdrs, 37, SO_SHT_DYNAMIC, SO_SHF_ALLOC | SO_SHF_WRITE, dynamic_offset, dynamic_offset, dynamic_len, 4, 0, 8, 16)
-    so_emit_shdr(shdrs, 46, SO_SHT_STRTAB, 0, 0, shstrtab_offset, len(shstrtab), 0, 0, 1, 0)
+    // [0] NULL section
+    so_emit_shdr_base(shdrs, 0, SO_SHT_NULL(), 0, 0, 0)
+    so_emit_shdr_tail(shdrs, 0, 0, 0, 0, 0)
+    // [1] .text section
+    so_emit_shdr_base(shdrs, 1, SO_SHT_PROGBITS(), SO_SHF_ALLOC() | SO_SHF_EXECINSTR(), text_offset, text_offset)
+    so_emit_shdr_tail(shdrs, code_len, 0, 0, 16, 0)
+    // [2] .rodata section
+    so_emit_shdr_base(shdrs, 7, SO_SHT_PROGBITS(), SO_SHF_ALLOC(), rodata_offset, rodata_offset)
+    so_emit_shdr_tail(shdrs, rodata_len, 0, 0, 8, 0)
+    // [3] .dynsym section
+    so_emit_shdr_base(shdrs, 15, SO_SHT_DYNSYM(), SO_SHF_ALLOC(), dynsym_offset, dynsym_offset)
+    so_emit_shdr_tail(shdrs, dynsym_len, 4, 1, 8, 24)
+    // [4] .dynstr section
+    so_emit_shdr_base(shdrs, 23, SO_SHT_STRTAB(), SO_SHF_ALLOC(), dynstr_offset, dynstr_offset)
+    so_emit_shdr_tail(shdrs, dynstr_len, 0, 0, 1, 0)
+    // [5] .hash section
+    so_emit_shdr_base(shdrs, 31, SO_SHT_HASH(), SO_SHF_ALLOC(), hash_offset, hash_offset)
+    so_emit_shdr_tail(shdrs, hash_len, 3, 0, 4, 4)
+    // [6] .dynamic section
+    so_emit_shdr_base(shdrs, 37, SO_SHT_DYNAMIC(), SO_SHF_ALLOC() | SO_SHF_WRITE(), dynamic_offset, dynamic_offset)
+    so_emit_shdr_tail(shdrs, dynamic_len, 4, 0, 8, 16)
+    // [7] .shstrtab section
+    so_emit_shdr_base(shdrs, 46, SO_SHT_STRTAB(), 0, 0, shstrtab_offset)
+    so_emit_shdr_tail(shdrs, len(shstrtab), 0, 0, 1, 0)
 
     total_size = sh_offset + len(shdrs)
 
@@ -239,8 +259,8 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
         push(elf, get(ident, ii))
         ii = ii + 1
 
-    so_put16(elf, SO_ELF_ET_DYN)   // e_type: ET_DYN (3)
-    so_put16(elf, SO_ELF_EM_AMD64)  // e_machine: EM_X86_64 (62)
+    so_put16(elf, SO_ELF_ET_DYN())   // e_type: ET_DYN (3)
+    so_put16(elf, SO_ELF_EM_AMD64())  // e_machine: EM_X86_64 (62)
     so_put32(elf, 1)                // e_version: 1
     so_put64(elf, 0)                // e_entry: 0 (shared libraries have no entry point)
     so_put64(elf, 64)               // e_phoff: 64

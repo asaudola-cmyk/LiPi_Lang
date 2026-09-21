@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — AI-DRIVEN COMPILER OPTIMIZATION ENGINE
-@! Module: compiler/middleend/ai_opt.maya
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! LIPI UNIVERSAL ARCHITECTURE — AI-DRIVEN COMPILER OPTIMIZATION ENGINE
+@! Module: compiler/middleend/ai_opt.lp
+@! 100% Pure LiPi Implementation — Zero External / C++ Dependencies
 @! Features: In-Compiler Neural Heuristics, Loop Unroll & Vectorization Predictor,
 @! AI-Guided Register Pressure Optimization & Feedback-Directed Learning (FDO)
 @! ============================================================================

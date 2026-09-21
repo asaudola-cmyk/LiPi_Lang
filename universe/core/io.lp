@@ -130,6 +130,18 @@ fn read_file path
 fn write_file path content
     return file_write(path, content)
 
+fn file_append path content
+    // WHY: Appends content to a file via direct Linux kernel syscalls with 0% libc dependency.
+    // Flags: O_WRONLY | O_CREAT | O_APPEND = 1 | 64 | 1024 = 1089, mode = 0644 (420)
+    fd = syscall(2, path, 1089, 420, 0, 0, 0)
+    if fd < 0
+        return 0
+    clen = len(content)
+    if clen > 0
+        syscall(1, fd, content, clen, 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    return 1
+
 fn append_file path content
     return file_append(path, content)
 

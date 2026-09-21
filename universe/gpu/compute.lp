@@ -11,7 +11,8 @@
 @fn SPIRV_MAGIC() return 119734787 @end       @! 0x07230203
 @fn SPIRV_VERSION_1_0() return 65536 @end     @! 0x00010000
 @fn SPIRV_VERSION_1_5() return 66816 @end     @! 0x00010500
-@fn SPIRV_GENERATOR_MAYA() return 4919 @end   @! 0x00001337
+@fn SPIRV_GENERATOR_LIPI() return 4919 @end   @! 0x00001337
+@fn SPIRV_GENERATOR_MAYA() return SPIRV_GENERATOR_LIPI() @end
 
 @fn OP_NOP() return 0 @end
 @fn OP_SOURCE() return 3 @end
@@ -173,7 +174,7 @@
     words: [],
     bound: 1,
     version: SPIRV_VERSION_1_0(),
-    generator: SPIRV_GENERATOR_MAYA(),
+    generator: SPIRV_GENERATOR_LIPI(),
     schema: 0
   }
 @end

@@ -36,12 +36,7 @@ struct SSAValue
     uses        // list: SSAInstr references that consume this value as an operand
 
 // ── 3. Forward Dispatch Hooks ─────────────────────────────────────────────────
-// WHY: Standalone compilation of ssa_value.lp requires a default binding for
-//      replace_operand, which will be overridden with full instruction operand
-//      rewriting when ssa_instr.lp is loaded.
-fn ssa_instr_replace_operand inst old_val new_val
-    return 0
-
+// WHY: Delegates operand replacement to ssa_instr_replace_operand defined in ssa_instr.lp.
 fn replace_operand inst old_val new_val
     return ssa_instr_replace_operand(inst, old_val, new_val)
 

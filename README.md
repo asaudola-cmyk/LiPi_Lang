@@ -87,8 +87,8 @@ Lipi features a self-hosted 5-stage compiler pipeline with dual native silicon e
 2. **Object-Oriented Struct Methods:** Modern `fn Struct.method self arg1 arg2` syntax compiled to zero-cost static dispatch via System V AMD64 and ARM64 register passing ABI.
 3. **Peephole Machine Code Optimization:** Automatically replaces 10-byte immediate zero moves (`movabsq $0, %reg`) with 2-byte `xor reg32, reg32` instructions, achieving 80% code density reduction and 0-cycle silicon execution via register renaming.
 4. **Embedded Multiboot 1 Kernel Specification:** Embeds `0x1BADB002` headers at offset 124, allowing binaries to boot on baremetal hardware or QEMU without an underlying operating system.
-5. **First-Class Web Engine (`std/web.lp`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
-6. **Native Multithreading (`std/thread.lp`):** Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`std/arena.lp`).
+5. **First-Class Web Engine (`universe/web/`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
+6. **Native Multithreading (`universe/os/thread.lp`):** Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`universe/core/arena.lp`).
 
 For full technical specifications, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -295,8 +295,20 @@ cp -r editors/vscode/* ~/.vscode/extensions/lipi-lang-1.0.0/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Peak Memory (10M Iterations)** | **264 KB** | 1,632 KB | 1,636 KB | 2,180 KB | 1,696 KB | 9,440 KB |
-| **Test Suite Pass Rate** | **140/140 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **178/178 (100%)** | — | — | — | — | — |
+
+---
+
+## 🚀 Production Showcase & Demos
+
+### 1. Unified Sovereign Full-Stack Showcase
+Execute the enterprise full-stack service showcasing zero-copy Radix-Trie HTTP routing (`packages/web_router`), hardware-entropy salted password hashing (`packages/crypto_vault`), RFC 7519 JWT bearer tokens (`packages/lipi_jwt`), and in-memory relational SQL queries (`packages/lipi_sql`):
+```bash
+bin/lipc examples/sovereign_showcase/main.lp /tmp/sovereign_showcase && /tmp/sovereign_showcase
+```
+
+### 2. Standalone WebAssembly Interactive Browser Demo
+Open [`examples/wasm_interactive_demo.html`](examples/wasm_interactive_demo.html) directly in any modern web browser to execute autonomous virtual silicon machine code client-side with zero npm or external JavaScript dependencies.
 
 ---
 

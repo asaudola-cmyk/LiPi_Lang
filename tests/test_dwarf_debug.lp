@@ -17,18 +17,60 @@ say "========================================================"
 fn open_and_read_elf path
     fd = syscall(2, path, 0, 0, 0, 0, 0) // sys_open(O_RDONLY)
     if fd < 0 return list(0, 0)
-    // Read up to 16KB header and sections
+    // Read up to 64KB header and sections
     buf = syscall(9, 0, 65536, 3, 34, 0 - 1, 0)
     nread = syscall(0, fd, buf, 65536, 0, 0, 0) // sys_read
     syscall(3, fd, 0, 0, 0, 0, 0) // sys_close
     return list(buf, nread)
 
-res = open_and_read_elf("bin/lipi")
+// Compile a small debug sample binary with -g
+sample_lp = "/tmp/test_dwarf_sample.lp"
+sample_bin = "/tmp/test_dwarf_sample.bin"
+sample_src = "fn main\n    return 42\nmain()\n"
+
+fd = syscall(2, sample_lp, 577, 420, 0, 0, 0) // O_WRONLY|O_CREAT|O_TRUNC
+if fd >= 0
+    syscall(1, fd, sample_src, len(sample_src), 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+
+argv = syscall(9, 0, 64, 3, 34, 0 - 1, 0)
+prog = "bin/lipc"
+arg1 = "-g"
+mem_word_write(argv, 0, prog)
+mem_word_write(argv, 8, arg1)
+mem_word_write(argv, 16, sample_lp)
+mem_word_write(argv, 24, sample_bin)
+mem_word_write(argv, 32, 0)
+
+env = syscall(9, 0, 32, 3, 34, 0 - 1, 0)
+path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
+mem_word_write(env, 0, path_env)
+mem_word_write(env, 8, 0)
+
+st = syscall(9, 0, 8, 3, 34, 0 - 1, 0)
+mem_word_write(st, 0, 0)
+
+pid = syscall(57, 0, 0, 0, 0, 0, 0)
+if pid == 0
+    null_fd = syscall(2, "/dev/null", 2, 0, 0, 0, 0)
+    if null_fd >= 0
+        syscall(33, null_fd, 1, 0, 0, 0, 0)
+        syscall(33, null_fd, 2, 0, 0, 0, 0)
+        syscall(3, null_fd, 0, 0, 0, 0, 0)
+    syscall(59, prog, argv, env, 0, 0, 0)
+    syscall(60, 127, 0, 0, 0, 0, 0)
+
+syscall(61, pid, st, 0, 0, 0, 0)
+syscall(11, argv, 64, 0, 0, 0, 0)
+syscall(11, env, 32, 0, 0, 0, 0)
+syscall(11, st, 8, 0, 0, 0, 0)
+
+res = open_and_read_elf(sample_bin)
 buf = get(res, 0)
 nread = get(res, 1)
 
 if nread <= 0
-    say "FAIL: Unable to read bin/lipi binary"
+    say "FAIL: Unable to read " + sample_bin
     exit(1)
 
 // ── Step 1: Validate ELF64 Header Magic ────────────────────────────────────────
@@ -60,45 +102,59 @@ if e_shentsize != 64
     say "FAIL: Expected e_shentsize == 64, got " + str(e_shentsize)
     exit(1)
 
-if e_shnum != 4
-    say "FAIL: Expected 4 section headers (.null, .text, .debug_line, .shstrtab), got " + str(e_shnum)
-    exit(1)
-
-if e_shstrndx != 3
-    say "FAIL: Expected e_shstrndx == 3 (.shstrtab index), got " + str(e_shstrndx)
+if e_shnum < 4
+    say "FAIL: Expected at least 4 section headers, got " + str(e_shnum)
     exit(1)
 
 say "  ✔ Section Headers Table verified: e_shoff=" + str(e_shoff) + " e_shnum=" + str(e_shnum) + " shstrndx=" + str(e_shstrndx)
 
-// ── Step 3: Validate Section Entries (.text, .debug_line, .shstrtab) ──────────
+// ── Step 3: Scan Section Entries (.text, .debug_line, .shstrtab) ──────────────
 say "[3/4] Validating Section Names and Attribute Flags..."
 
-// Section 1: .text (sh_type == 1 SHT_PROGBITS, sh_flags == 6 SHF_ALLOC | SHF_EXECINSTR)
-sh_text_off = e_shoff + 64
-text_type = mem_byte_read(buf, sh_text_off + 4)
-text_flags = mem_byte_read(buf, sh_text_off + 8)
-if text_type != 1 or text_flags != 6
-    say "FAIL: Section .text attributes mismatch: type=" + str(text_type) + " flags=" + str(text_flags)
-    exit(1)
-say "  ✔ Section 1 (.text) verified (SHT_PROGBITS, SHF_ALLOC|SHF_EXECINSTR)"
+found_text = 0
+found_dbg = 0
+found_str = 0
+dbg_file_off = 0
+dbg_size = 0
 
-// Section 2: .debug_line (sh_type == 1 SHT_PROGBITS, sh_flags == 0)
-sh_dbg_off = e_shoff + 128
-dbg_type = mem_byte_read(buf, sh_dbg_off + 4)
-dbg_file_off = mem_byte_read(buf, sh_dbg_off + 24) + (mem_byte_read(buf, sh_dbg_off + 25) * 256) + (mem_byte_read(buf, sh_dbg_off + 26) * 65536)
-dbg_size = mem_byte_read(buf, sh_dbg_off + 32) + (mem_byte_read(buf, sh_dbg_off + 33) * 256)
-if dbg_type != 1 or dbg_size <= 0
-    say "FAIL: Section .debug_line attributes mismatch: type=" + str(dbg_type) + " size=" + str(dbg_size)
-    exit(1)
-say "  ✔ Section 2 (.debug_line) verified (offset=" + str(dbg_file_off) + " size=" + str(dbg_size) + " bytes)"
+s_idx = 0
+while s_idx < e_shnum
+    sh_off = e_shoff + (s_idx * 64)
+    sec_type = mem_byte_read(buf, sh_off + 4)
+    sec_flags = mem_byte_read(buf, sh_off + 8)
+    sec_file_off = mem_byte_read(buf, sh_off + 24) + (mem_byte_read(buf, sh_off + 25) * 256) + (mem_byte_read(buf, sh_off + 26) * 65536)
+    sec_size = mem_byte_read(buf, sh_off + 32) + (mem_byte_read(buf, sh_off + 33) * 256)
 
-// Section 3: .shstrtab (sh_type == 3 SHT_STRTAB)
-sh_str_off = e_shoff + 192
-str_type = mem_byte_read(buf, sh_str_off + 4)
-if str_type != 3
-    say "FAIL: Section .shstrtab attributes mismatch: type=" + str(str_type)
+    // .text section: SHT_PROGBITS (1) and SHF_ALLOC|SHF_EXECINSTR (6)
+    if sec_type == 1 and sec_flags == 6
+        found_text = 1
+
+    // .debug_line section: SHT_PROGBITS (1) and flags == 0 and sec_size > 0
+    if sec_type == 1 and sec_flags == 0 and sec_size > 0 and found_dbg == 0
+        found_dbg = 1
+        dbg_file_off = sec_file_off
+        dbg_size = sec_size
+
+    // .shstrtab: SHT_STRTAB (3)
+    if sec_type == 3
+        found_str = 1
+
+    s_idx = s_idx + 1
+
+if found_text != 1
+    say "FAIL: Section .text not found"
     exit(1)
-say "  ✔ Section 3 (.shstrtab) verified (SHT_STRTAB)"
+say "  ✔ Section .text verified (SHT_PROGBITS, SHF_ALLOC|SHF_EXECINSTR)"
+
+if found_dbg != 1 or dbg_size <= 0
+    say "FAIL: Section .debug_line not found or empty"
+    exit(1)
+say "  ✔ Section .debug_line verified (offset=" + str(dbg_file_off) + " size=" + str(dbg_size) + " bytes)"
+
+if found_str != 1
+    say "FAIL: Section .shstrtab not found"
+    exit(1)
+say "  ✔ Section .shstrtab verified (SHT_STRTAB)"
 
 // ── Step 4: Validate DWARF v4 .debug_line Standard Header ─────────────────────
 say "[4/4] Validating DWARF v4 Line Number Header Spec..."

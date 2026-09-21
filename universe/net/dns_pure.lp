@@ -347,9 +347,9 @@ fn dns_pure_resolve resolver domain
     ans = 0
     if domain == "lipi-lang.org"
         ans = dns_pure_answer_new(domain, DNS_TYPE_A, 3600, "185.199.108.153", 3116887193)
-    else if domain == "cloudflare.com"
+    elif domain == "cloudflare.com"
         ans = dns_pure_answer_new(domain, DNS_TYPE_A, 300, "104.16.132.229", 1745913061)
-    else if domain == "dns.google"
+    elif domain == "dns.google"
         ans = dns_pure_answer_new(domain, DNS_TYPE_A, 86400, "8.8.8.8", 134744072)
     else
         // Default sovereign fallback

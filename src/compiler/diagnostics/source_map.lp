@@ -33,7 +33,8 @@ fn source_file_new file_id path content
 // ── Source Span Representation ───────────────────────────────────────────────
 // WHY: Fully describes a half-open byte range [start_byte, end_byte) in a specific
 //      source file, accompanied by cached 1-indexed (line, col) coordinates.
-struct SourceSpan
+//      Renamed to SourceMapSpan to eliminate symbol collision with frontend Token SourceSpan.
+struct SourceMapSpan
     file_id
     start_byte
     end_byte
@@ -42,9 +43,9 @@ struct SourceSpan
     end_line
     end_col
 
-// WHY: Explicit constructor for fully-populated SourceSpan.
-fn source_span_new file_id start_byte end_byte start_line start_col end_line end_col
-    sp = SourceSpan()
+// WHY: Explicit constructor for fully-populated SourceMapSpan.
+fn source_map_span_new file_id start_byte end_byte start_line start_col end_line end_col
+    sp = SourceMapSpan()
     sp.file_id = file_id
     sp.start_byte = start_byte
     sp.end_byte = end_byte
@@ -119,7 +120,7 @@ fn source_map_file_count sm
 fn source_span_from_offsets sm file_id start_byte end_byte
     sf = source_map_get_file(sm, file_id)
     if sf == 0
-        return source_span_new(file_id, start_byte, end_byte, 1, 1, 1, 1)
+        return source_map_span_new(file_id, start_byte, end_byte, 1, 1, 1, 1)
 
     // WHY: Ensure start_byte <= end_byte
     s_byte = start_byte
@@ -138,7 +139,7 @@ fn source_span_from_offsets sm file_id start_byte end_byte
     start_pos = line_index_lookup(sf.line_index, s_byte)
     end_pos = line_index_lookup(sf.line_index, e_byte)
 
-    return source_span_new(
+    return source_map_span_new(
         file_id,
         s_byte,
         e_byte,
@@ -148,8 +149,8 @@ fn source_span_from_offsets sm file_id start_byte end_byte
         end_pos.col
     )
 
-// WHY: Constructs a zero-width point span at a single byte offset.
-fn source_span_point sm file_id byte_offset
+// WHY: Constructs a zero-width point span at a single byte offset in a SourceMap.
+fn source_map_span_point sm file_id byte_offset
     return source_span_from_offsets(sm, file_id, byte_offset, byte_offset)
 
 // WHY: Combines two spans into their minimal enclosing bounding span.
@@ -182,7 +183,7 @@ fn source_span_combine span_a span_b
         e_line = span_b.end_line
         e_col = span_b.end_col
 
-    return source_span_new(
+    return source_map_span_new(
         span_a.file_id,
         s_byte,
         e_byte,

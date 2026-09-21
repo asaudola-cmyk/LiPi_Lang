@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA SOVEREIGN INTERACTIVE REPL ENGINE
-@! Module: compiler/backend/jit/repl.maya
+@! LIPI SOVEREIGN INTERACTIVE REPL ENGINE
+@! Module: compiler/backend/jit/repl.lp
 @! Architecture: In-Memory JIT-Powered Interactive Read-Eval-Print Loop
 @! Features: Multiline Input Buffering, Metacommands, Persistent Variable & Function
 @! Environment, Machine Code Inspection, Syntax Error Reporting
@@ -53,7 +53,7 @@ import "compiler/backend/jit/jit_engine"
     history: [],
     multiline_buf: "",
     running: 1,
-    prompt: "maya > ",
+    prompt: "lipi > ",
     prompt_cont: "... ",
     vars: []
   }
@@ -206,7 +206,7 @@ import "compiler/backend/jit/jit_engine"
   @end
 
   @if trimmed == ":help" || trimmed == ".help" || trimmed == "help" || trimmed == ":h" || trimmed == "?"
-    help_text = "Maya Sovereign Interactive REPL (JIT Engine)\n"
+    help_text = "LiPi Sovereign Interactive REPL (JIT Engine)\n"
     help_text = help_text + "=============================================\n"
     help_text = help_text + "Metacommands:\n"
     help_text = help_text + "  :help, :h, ?         Show this command overview\n"
@@ -276,7 +276,7 @@ import "compiler/backend/jit/jit_engine"
     var_cnt = state.vars.len()
     total_mem = blk_cnt * 4096
 
-    env_info = "Maya JIT Engine Statistics:\n"
+    env_info = "LiPi JIT Engine Statistics:\n"
     env_info = env_info + "  Memory Pages Allocated : " + blk_cnt.to_str() + " (" + total_mem.to_str() + " bytes)\n"
     env_info = env_info + "  Registered Symbols     : " + sym_cnt.to_str() + "\n"
     env_info = env_info + "  Persistent Functions   : " + fn_cnt.to_str() + "\n"
@@ -543,10 +543,10 @@ import "compiler/backend/jit/jit_engine"
 @! 6. INTERACTIVE REPL LOOP RUNNER
 @! ----------------------------------------------------------------------------
 
-@! Runs the interactive sovereign Maya REPL loop on standard input/output
+@! Runs the interactive sovereign LiPi REPL loop on standard input/output
 @fn repl_run(state)
   println("=================================================================")
-  println("  Maya Interactive REPL & JIT Engine v2.0")
+  println("  LiPi Interactive REPL & JIT Engine v2.0")
   println("  Type :help for commands, :quit to exit.")
   println("=================================================================")
 
@@ -560,7 +560,7 @@ import "compiler/backend/jit/jit_engine"
     line = read_line(4096)
     @if line == 0 || (line.len() == 0 && state.multiline_buf.len() == 0)
       @! EOF reached
-      println("\nExiting Maya REPL.")
+      println("\nExiting LiPi REPL.")
       break
     @end
 

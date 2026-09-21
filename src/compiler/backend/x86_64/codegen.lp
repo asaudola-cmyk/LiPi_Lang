@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA COMPILER BACKEND — PURE MAYA X86-64 MACHINE CODE GENERATOR
-@! 100% Written in Pure Maya Language — Zero External Assembler Dependencies
-@! Target Architecture: Linux x86-64 (System V AMD64 ABI & Linux Kernel Syscalls)
+@! LIPI NATIVE X86-64 MACHINE CODE EMITTER & CODE GENERATOR (backend/codegen.lp)
+@! 100% Written in Pure LiPi Language — Zero External Assembler Dependencies
+@! Architecture: Direct Silicon Machine Code Generation (AMD64 ISA)
 @! ============================================================================
 
 import "universe/core/collections"
@@ -9,7 +9,7 @@ import "universe/core/string"
 import "compiler/backend/lipi_ir"
 
 @! ============================================================================
-@! 1. PURE MAYA BYTE BUFFER MANAGEMENT (ByteBuf)
+@! 1. PURE LIPI BYTE BUFFER MANAGEMENT (ByteBuf)
 @! ============================================================================
 
 @struct SymbolOffsetEntry
@@ -1479,7 +1479,7 @@ _i_entry_0 = 0
       return emitter
     @end
 
-    @if str_eq(inst.callee, "HACKED_ARGC") == 1 || str_eq(inst.callee, "maya_process_argc") == 1 || str_eq(inst.callee, "sys_argc") == 1
+    @if str_eq(inst.callee, "lipi_process_argc") == 1 || str_eq(inst.callee, "lipi_argc") == 1 || str_eq(inst.callee, "sys_argc") == 1 || str_eq(inst.callee, "maya_process_argc") == 1 || str_eq(inst.callee, "HACKED_ARGC") == 1
       @! Load argc from [4194472] into RAX
       emit_mov_reg_imm64(buf, 0, 4194472)
       emit_mov_reg_mem(buf, 0, 0, 0)
@@ -1487,7 +1487,7 @@ _i_entry_0 = 0
       return emitter
     @end
 
-    @if str_eq(inst.callee, "process_argv") == 1 || str_eq(inst.callee, "maya_process_argv") == 1 || str_eq(inst.callee, "sys_argv") == 1
+    @if str_eq(inst.callee, "process_argv") == 1 || str_eq(inst.callee, "lipi_process_argv") == 1 || str_eq(inst.callee, "lipi_argv") == 1 || str_eq(inst.callee, "sys_argv") == 1 || str_eq(inst.callee, "maya_process_argv") == 1
       @! Load index into RAX
       x86_lower_load_val_to_reg(emitter, inst.args[0], 0)
       @! Load argv pointer from [4194480] into RCX

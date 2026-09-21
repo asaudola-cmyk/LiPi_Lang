@@ -178,13 +178,15 @@
 // 4. ELF64 HEADER FACTORY
 // ============================================================================
 
-@fn elf_header_create(machine, entry_point, phoff, shoff, phnum, shnum, shstrndx, is_shared)
+@fn elf_header_create(machine, entry_point, phoff, shoff, phnum, shnum)
   // WHY: Construct a fully populated Elf64Header struct.
   // Distinguishes between fixed static executables (ET_EXEC = 2) and shared/PIE (ET_DYN = 3).
   // Automatically sets standard 64-bit header sizes (ehsize=64, phentsize=56, shentsize=64).
+  // Kept to <= 6 parameters for System V register calling convention compliance.
   file_type = ET_EXEC()
-  @if is_shared == 1
-    file_type = ET_DYN()
+  shstrndx = 0
+  @if shnum > 0
+    shstrndx = shnum - 1
   @end
 
   return {
@@ -205,14 +207,14 @@
   }
 @end
 
-@fn elf_header_x86_64(entry_point, phoff, shoff, phnum, shnum, shstrndx)
+@fn elf_header_x86_64(entry_point, phoff, shoff, phnum, shnum)
   // WHY: Convenience helper for AMD64 (x86-64) Linux binaries.
-  return elf_header_create(EM_X86_64(), entry_point, phoff, shoff, phnum, shnum, shstrndx, 0)
+  return elf_header_create(EM_X86_64(), entry_point, phoff, shoff, phnum, shnum)
 @end
 
-@fn elf_header_aarch64(entry_point, phoff, shoff, phnum, shnum, shstrndx)
+@fn elf_header_aarch64(entry_point, phoff, shoff, phnum, shnum)
   // WHY: Convenience helper for 64-bit ARM (AArch64) Linux binaries.
-  return elf_header_create(EM_AARCH64(), entry_point, phoff, shoff, phnum, shnum, shstrndx, 0)
+  return elf_header_create(EM_AARCH64(), entry_point, phoff, shoff, phnum, shnum)
 @end
 
 // ============================================================================

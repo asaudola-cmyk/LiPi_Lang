@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA RUNTIME ASYNC: EVENT LOOP & EPOLL ENGINE
+@! LIPI RUNTIME ASYNC: EVENT LOOP & EPOLL ENGINE
 @! Module: runtime/async/event_loop
-@! 100% Pure Maya Implementation
+@! 100% Pure LiPi Implementation — Direct Linux epoll Syscalls
 @! ============================================================================
 
 import "universe/core/collections"

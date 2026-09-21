@@ -13,6 +13,7 @@
 //      7. Unified Diagnostic Emitter (Terminal + JSON)
 // ==============================================================================
 
+include "src/compiler/frontend/lexer/token.lp"
 include "src/compiler/diagnostics/mod.lp"
 
 // ── Test Assertion Helpers ───────────────────────────────────────────────────

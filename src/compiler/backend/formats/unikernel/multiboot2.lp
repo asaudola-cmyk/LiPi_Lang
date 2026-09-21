@@ -182,6 +182,16 @@
   return out
 @end
 
+@fn mb2_append_bytes(dest, src)
+  // WHY: Appends bytes from src slice into dest slice safely avoiding single-line loop parser pitfalls.
+  k = 0
+  @while k < src.len()
+    dest = dest.push(src[k])
+    k = k + 1
+  @end
+  return dest
+@end
+
 // ============================================================================
 // 5. COMPLETE MULTIBOOT2 HEADER GENERATOR
 // ============================================================================
@@ -199,17 +209,17 @@
 
   // Entry address tag (16 bytes)
   entry_tag = mb2_tag_entry_address_serialize(entry_phys_addr)
-  i = 0 @while i < entry_tag.len() tags_blob = tags_blob.push(entry_tag[i]) i = i + 1 @end
+  tags_blob = mb2_append_bytes(tags_blob, entry_tag)
 
   // Optional Framebuffer tag (24 bytes)
   @if request_framebuffer == 1
     fb_tag = mb2_tag_framebuffer_serialize(fb_w, fb_h, fb_d)
-    i = 0 @while i < fb_tag.len() tags_blob = tags_blob.push(fb_tag[i]) i = i + 1 @end
+    tags_blob = mb2_append_bytes(tags_blob, fb_tag)
   @end
 
   // End tag (8 bytes)
   end_tag = mb2_tag_end_serialize()
-  i = 0 @while i < end_tag.len() tags_blob = tags_blob.push(end_tag[i]) i = i + 1 @end
+  tags_blob = mb2_append_bytes(tags_blob, end_tag)
 
   // Calculate total header length
   total_header_length = 16 + tags_blob.len()
@@ -226,13 +236,13 @@
   l = mb2_pack_u32(total_header_length)
   c = mb2_pack_u32(csum)
 
-  i = 0 @while i < 4 header = header.push(m[i]) i = i + 1 @end
-  i = 0 @while i < 4 header = header.push(a[i]) i = i + 1 @end
-  i = 0 @while i < 4 header = header.push(l[i]) i = i + 1 @end
-  i = 0 @while i < 4 header = header.push(c[i]) i = i + 1 @end
+  header = mb2_append_bytes(header, m)
+  header = mb2_append_bytes(header, a)
+  header = mb2_append_bytes(header, l)
+  header = mb2_append_bytes(header, c)
 
   // Append tags
-  i = 0 @while i < tags_blob.len() header = header.push(tags_blob[i]) i = i + 1 @end
+  header = mb2_append_bytes(header, tags_blob)
 
   return header
 @end

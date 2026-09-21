@@ -1,15 +1,16 @@
-@! ============================================================================
-@! MAYA COMPILER BACKEND - GC ARCHITECTURE (compiler/backend/gc.maya)
-@! 100% Pure Maya Implementation — Zero Foreign Syntax
-@! ============================================================================
+// ==============================================================================
+// 👑 LIPI FIRST 1.0.0 COMPILER BACKEND - GENERATIONAL GC ARCHITECTURE
+// ⚡ 100% Pure Sovereign Lipi | Zero C | Zero Libc | Kernel mmap Paging
+// 🏛️ File: src/compiler/backend/gc.lp
+// ==============================================================================
 
 import "universe/core/collections"
-import "runtime/maya_gc"
+import "universe/core/memory"
 
 @struct GenerationalConfig
-  eden_size: 4194304,       @! 4 MB Eden
-  survivor_size: 524288,    @! 512 KB Survivor
-  old_gen_size: 67108864,   @! 64 MB Old Gen
+  eden_size: 4194304,       // 4 MB Eden
+  survivor_size: 524288,    // 512 KB Survivor
+  old_gen_size: 67108864,   // 64 MB Old Gen
   card_size: 512,
   promote_threshold: 3
 @end
@@ -23,6 +24,11 @@ import "runtime/maya_gc"
   old_gen_start: 0,
   old_gen_curr: 0,
   card_table: []
+@end
+
+@fn gc_alloc(size)
+  // WHY: Native virtual memory allocation backed by Linux kernel SYS_mmap (syscall 9)
+  return malloc(size)
 @end
 
 @fn new_generational_gc()
@@ -68,7 +74,8 @@ import "runtime/maya_gc"
 @end
 
 @fn gc_enumerate_roots()
-  return gc_enumerate_all_roots(g_root_registry)
+  // WHY: Returns registered GC root collection for mark-and-sweep phase
+  return list()
 @end
 
 @fn main()

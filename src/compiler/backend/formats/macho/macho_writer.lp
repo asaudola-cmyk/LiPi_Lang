@@ -68,6 +68,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   // Sets file access mode to 0755 (493 decimal) for executable execution.
   total = byte_list.len()
   @if total <= 0 return 0 - 1 @end
+  @if output_path == "" return total @end
 
   fd = sys_open(output_path, 577, 493) // O_WRONLY | O_CREAT | O_TRUNC = 577, 0755
   @if fd < 0
@@ -225,23 +226,29 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
 
   // 6. Write to disk
   written = macho_write_to_disk(output_path, binary)
+  res = MachOWriteResult()
   @if written < 0
-    return {
-      mw_success: 0,
-      mw_out_path: output_path,
-      mw_file_size: 0,
-      mw_entry_vaddr: entry_vaddr,
-      mw_error_msg: "Failed to write Mach-O 64 binary to filesystem",
-      mw_bytes: binary
-    }
+    res.mw_success = 0
+    res.mw_out_path = output_path
+    res.mw_file_size = 0
+    res.mw_entry_vaddr = entry_vaddr
+    res.mw_error_msg = "Failed to write Mach-O 64 binary to filesystem"
+    res.mw_bytes = binary
+    return res
   @end
 
-  return {
-    mw_success: 1,
-    mw_out_path: output_path,
-    mw_file_size: binary.len(),
-    mw_entry_vaddr: entry_vaddr,
-    mw_error_msg: "",
-    mw_bytes: binary
-  }
+  res.mw_success = 1
+  res.mw_out_path = output_path
+  res.mw_file_size = binary.len()
+  res.mw_entry_vaddr = entry_vaddr
+  res.mw_error_msg = ""
+  res.mw_bytes = binary
+  return res
+@end
+
+@fn emit_macho_64_executable(machine_code_bytes, output_path)
+  // WHY: Compatibility bridge for omni-target executable synthesis
+  empty_data = []
+  res = macho_emit_executable(machine_code_bytes, empty_data, 0, CPU_TYPE_X86_64(), output_path)
+  return res.mw_success
 @end

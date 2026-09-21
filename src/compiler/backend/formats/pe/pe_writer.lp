@@ -61,6 +61,7 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   // Sets file permissions to 0755 (493 decimal) for execution support.
   total = byte_list.len()
   @if total <= 0 return 0 - 1 @end
+  @if output_path == "" return total @end
 
   fd = sys_open(output_path, 577, 493) // O_WRONLY | O_CREAT | O_TRUNC = 577
   @if fd < 0
@@ -183,16 +184,35 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   coff_bytes = pe_coff_header_serialize(coff_hdr)
 
   // 4. Build Optional Header 64 (240 bytes)
-  opt_hdr = pe_optional_header64_create(
-    entry_point_rva,
-    text_rva,
-    text_raw_size,
-    rdata_raw_size + data_raw_size,
-    bss_size,
-    size_of_image,
-    size_of_headers,
-    is_gui
-  )
+  // WHY: Instantiate ImageOptionalHeader64 directly to comply strictly with 6-register calling convention
+  opt_hdr = ImageOptionalHeader64()
+  opt_hdr.magic = PE32PLUS_MAGIC()
+  opt_hdr.major_linker_version = 1
+  opt_hdr.minor_linker_version = 0
+  opt_hdr.size_of_code = text_raw_size
+  opt_hdr.size_of_initialized_data = rdata_raw_size + data_raw_size
+  opt_hdr.size_of_uninitialized_data = bss_size
+  opt_hdr.address_of_entry_point = entry_point_rva
+  opt_hdr.base_of_code = text_rva
+  opt_hdr.image_base = 5368709120
+  opt_hdr.section_alignment = 4096
+  opt_hdr.file_alignment = 512
+  opt_hdr.major_os_version = 6
+  opt_hdr.minor_os_version = 0
+  opt_hdr.major_subsystem_version = 6
+  opt_hdr.minor_subsystem_version = 0
+  opt_hdr.size_of_image = size_of_image
+  opt_hdr.size_of_headers = size_of_headers
+  opt_hdr.checksum = 0
+  opt_hdr.subsystem = IMAGE_SUBSYSTEM_WINDOWS_CUI()
+  @if is_gui == 1
+    opt_hdr.subsystem = IMAGE_SUBSYSTEM_WINDOWS_GUI()
+  @end
+  opt_hdr.dll_characteristics = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE() | IMAGE_DLLCHARACTERISTICS_NX_COMPAT() | IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE()
+  opt_hdr.size_of_stack_reserve = 1048576
+  opt_hdr.size_of_stack_commit = 4096
+  opt_hdr.size_of_heap_reserve = 1048576
+  opt_hdr.size_of_heap_commit = 4096
   opt_bytes = pe_optional_header64_serialize(opt_hdr)
 
   // 5. Build Section Headers
@@ -256,23 +276,30 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 
   // 8. Write to disk
   written = pe_write_to_disk(output_path, binary)
+  res = PeWriteResult()
   @if written < 0
-    return {
-      pe_success: 0,
-      pe_out_path: output_path,
-      pe_file_size: 0,
-      pe_entry_vaddr: entry_vaddr,
-      pe_error_msg: "Failed to write PE64 binary to filesystem",
-      pe_bytes: binary
-    }
+    res.pe_success = 0
+    res.pe_out_path = output_path
+    res.pe_file_size = 0
+    res.pe_entry_vaddr = entry_vaddr
+    res.pe_error_msg = "Failed to write PE64 binary to filesystem"
+    res.pe_bytes = binary
+    return res
   @end
 
-  return {
-    pe_success: 1,
-    pe_out_path: output_path,
-    pe_file_size: binary.len(),
-    pe_entry_vaddr: entry_vaddr,
-    pe_error_msg: "",
-    pe_bytes: binary
-  }
+  res.pe_success = 1
+  res.pe_out_path = output_path
+  res.pe_file_size = binary.len()
+  res.pe_entry_vaddr = entry_vaddr
+  res.pe_error_msg = ""
+  res.pe_bytes = binary
+  return res
+@end
+
+@fn emit_pe_64_executable(output_path, machine_code_bytes)
+  // WHY: Compatibility bridge for omni-target executable synthesis
+  empty_rdata = []
+  empty_data = []
+  res = pe_emit_executable(machine_code_bytes, empty_rdata, empty_data, 0, 0, output_path)
+  return res.pe_success
 @end

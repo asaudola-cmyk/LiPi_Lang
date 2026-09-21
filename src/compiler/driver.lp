@@ -29,6 +29,18 @@ fn compiler_driver_dirname p
         i = i - 1
     return "."
 
+fn compiler_driver_match_kw content p kw
+    // WHY: Zero-allocation direct silicon byte comparison for keywords and directives.
+    kw_len = len(kw)
+    if p + kw_len > len(content)
+        return 0
+    k = 0
+    while k < kw_len
+        if mem_byte_read(content, p + k) != mem_byte_read(kw, k)
+            return 0
+        k = k + 1
+    return 1
+
 fn compiler_driver_streq s1 s2
     // WHY: Direct silicon byte-for-byte string comparison. Completely immune to pointer
     // inequality, virtual address offsets, and missing STR0 object headers.
@@ -55,14 +67,14 @@ fn compiler_driver_has_include content
         if p < clen
             b0 = mem_byte_read(content, p)
             if b0 == 105 // 'i'
-                if p + 8 <= clen and str_sub(content, p, p + 8) == "include "
+                if compiler_driver_match_kw(content, p, "include ") == 1
                     return 1
-                if p + 7 <= clen and str_sub(content, p, p + 7) == "import "
+                if compiler_driver_match_kw(content, p, "import ") == 1
                     return 1
             elif b0 == 64 // '@'
-                if p + 9 <= clen and str_sub(content, p, p + 9) == "@include "
+                if compiler_driver_match_kw(content, p, "@include ") == 1
                     return 1
-                if p + 5 <= clen and str_sub(content, p, p + 5) == "@use "
+                if compiler_driver_match_kw(content, p, "@use ") == 1
                     return 1
         while p < clen and mem_byte_read(content, p) != 10
             p = p + 1
@@ -98,6 +110,46 @@ fn compiler_driver_join_chunks chunks
         return cur[0]
     return ""
 
+fn compiler_driver_resolve_std target
+    // WHY: Seamlessly translates legacy 'std/*' import paths to sovereign 'universe/*' subsystem paths,
+    // ensuring 100% backward compatibility with all test harnesses and legacy code without code churn.
+    if target == "std/mem.lp" or target == "std/mem" return "universe/core/memory.lp"
+    if target == "std/io.lp" or target == "std/io" return "universe/core/io.lp"
+    if target == "std/str.lp" or target == "std/str" return "universe/core/string.lp"
+    if target == "std/math.lp" or target == "std/math" return "universe/core/math.lp"
+    if target == "std/arena.lp" or target == "std/arena" return "universe/core/arena.lp"
+    if target == "std/hashmap.lp" or target == "std/hashmap" return "universe/core/hashmap.lp"
+    if target == "std/fmt.lp" or target == "std/fmt" return "universe/core/fmt.lp"
+    if target == "std/time.lp" or target == "std/time" return "universe/core/time.lp"
+    if target == "std/json.lp" or target == "std/json" return "universe/core/json.lp"
+    if target == "std/regex.lp" or target == "std/regex" return "universe/core/regex.lp"
+    if target == "std/simd.lp" or target == "std/simd" return "universe/core/simd.lp"
+    if target == "std/crypto.lp" or target == "std/crypto" return "universe/crypto/crypto.lp"
+    if target == "std/crypto2.lp" or target == "std/crypto2" return "universe/crypto/advanced.lp"
+    if target == "std/tls.lp" or target == "std/tls" return "universe/crypto/tls.lp"
+    if target == "std/kernel.lp" or target == "std/kernel" return "universe/os/kernel_multiboot.lp"
+    if target == "std/thread.lp" or target == "std/thread" return "universe/os/thread.lp"
+    if target == "std/shm.lp" or target == "std/shm" return "universe/os/shm.lp"
+    if target == "std/event.lp" or target == "std/event" return "universe/os/event.lp"
+    if target == "std/cli.lp" or target == "std/cli" return "universe/tools/cli.lp"
+    if target == "std/debug.lp" or target == "std/debug" return "universe/tools/debug.lp"
+    if target == "std/test.lp" or target == "std/test" return "universe/tools/test_runner.lp"
+    if target == "std/ai.lp" or target == "std/ai" return "universe/ai/tensor_engine.lp"
+    if target == "std/gguf.lp" or target == "std/gguf" return "universe/ai/gguf.lp"
+    if target == "std/gfx.lp" or target == "std/gfx" return "universe/gui/gfx.lp"
+    if target == "std/x11.lp" or target == "std/x11" return "universe/gui/x11/x11.lp"
+    if target == "std/tui.lp" or target == "std/tui" return "universe/gui/tui.lp"
+    if target == "std/web.lp" or target == "std/web" return "universe/web/engine.lp"
+    if target == "std/http.lp" or target == "std/http" return "universe/web/http.lp"
+    if target == "std/net.lp" or target == "std/net" return "universe/net/socket.lp"
+    if target == "std/websocket.lp" or target == "std/websocket" return "universe/net/ws_wire.lp"
+    if target == "std/grpc.lp" or target == "std/grpc" return "universe/net/grpc_server.lp"
+    if target == "std/db.lp" or target == "std/db" return "universe/db/engine.lp"
+    if target == "std/kv.lp" or target == "std/kv" return "universe/db/kv.lp"
+    if target == "std/orm.lp" or target == "std/orm" return "universe/db/orm.lp"
+    if target == "std/columnstore.lp" or target == "std/columnstore" return "universe/db/column/columnstore.lp"
+    return target
+
 fn compiler_driver_bundle_into_chunks file_path visited chunks
     // WHY: Recursively traverses and consolidates all 'import' and 'include' dependencies
     // into a flat list of immutable chunks without quadratic string concatenation.
@@ -110,6 +162,7 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks
             return 0
         i = i + 1
     push(visited, file_path)
+    say "  [bundle] -> " + file_path
 
     if file_exists(file_path) == 0
         return 0
@@ -142,14 +195,14 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks
         if p < clen
             b0 = mem_byte_read(content, p)
             if b0 == 105 // 'i'
-                if p + 8 <= clen and str_sub(content, p, p + 8) == "include "
+                if compiler_driver_match_kw(content, p, "include ") == 1
                     plen = 8
-                elif p + 7 <= clen and str_sub(content, p, p + 7) == "import "
+                elif compiler_driver_match_kw(content, p, "import ") == 1
                     plen = 7
             elif b0 == 64 // '@'
-                if p + 9 <= clen and str_sub(content, p, p + 9) == "@include "
+                if compiler_driver_match_kw(content, p, "@include ") == 1
                     plen = 9
-                elif p + 5 <= clen and str_sub(content, p, p + 5) == "@use "
+                elif compiler_driver_match_kw(content, p, "@use ") == 1
                     plen = 5
 
         if plen > 0 and p + plen < clen
@@ -180,20 +233,27 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks
         if p < clen and mem_byte_read(content, p) == 10
             p = p + 1
 
+
         if is_inc == 1
             if line_start > chunk_start
                 push(chunks, str_sub(content, chunk_start, line_start))
-            resolved = cur_dir + "/" + inc_target
-            if file_exists(resolved) == 0
-                resolved = inc_target
-            if file_exists(resolved) == 0 and file_exists(inc_target + ".lp") == 1
+            inc_target = compiler_driver_resolve_std(inc_target)
+            resolved = ""
+            // Prioritize .lp extension to prevent matching filesystem directories
+            if file_exists(inc_target + ".lp") == 1
                 resolved = inc_target + ".lp"
-            if file_exists(resolved) == 0 and file_exists(cur_dir + "/" + inc_target + ".lp") == 1
+            elif file_exists(cur_dir + "/" + inc_target + ".lp") == 1
                 resolved = cur_dir + "/" + inc_target + ".lp"
-            if file_exists(resolved) == 0 and file_exists("src/" + inc_target) == 1
-                resolved = "src/" + inc_target
-            if file_exists(resolved) == 0 and file_exists("src/" + inc_target + ".lp") == 1
+            elif file_exists("src/" + inc_target + ".lp") == 1
                 resolved = "src/" + inc_target + ".lp"
+            elif file_exists(cur_dir + "/" + inc_target) == 1
+                resolved = cur_dir + "/" + inc_target
+            elif file_exists(inc_target) == 1
+                resolved = inc_target
+            elif file_exists("src/" + inc_target) == 1
+                resolved = "src/" + inc_target
+            else
+                resolved = inc_target
 
             compiler_driver_bundle_into_chunks(resolved, visited, chunks)
             push(chunks, "\n")
@@ -212,7 +272,7 @@ fn compiler_driver_bundle_source file_path visited
 // ── 2. Driver Execution Wrapper ───────────────────────────────────────────────
 
 fn compiler_driver_compile_string src_name source_code target_arch opt_level
-    cfg = compiler_config_new(src_name, "a.out", target_arch, opt_level, FORMAT_ELF, 1)
+    cfg = compiler_config_new(src_name, "a.out", target_arch, opt_level, FORMAT_ELF(), 1)
     res = compiler_pipeline_execute(cfg, source_code)
     return res
 
@@ -222,8 +282,9 @@ fn compiler_driver_print_banner
     say "║  ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign      ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
-fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug is_dry_run
+fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug
     // WHY: Advanced compilation entry point supporting DWARF debug symbols (-g) and Shared Object (.so) format.
+    // Constrained to <= 6 SysV parameters for zero register spilling across micro-pipelines.
     visited = list()
     source_code = compiler_driver_bundle_source(src_path, visited)
     if len(source_code) == 0
@@ -232,17 +293,17 @@ fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level
         res = compiler_result_new()
         res.res_error_count = 1
         res.res_error_msg = "Source file empty or not found: " + src_path
-        res.res_stage_reached = PIPELINE_STAGE_INIT
+        res.res_stage_reached = PIPELINE_STAGE_INIT()
         res.res_success = 0
         return res
-    cfg = compiler_config_new(src_path, out_path, target_arch, opt_level, emit_fmt, is_dry_run)
+    cfg = compiler_config_new(src_path, out_path, target_arch, opt_level, emit_fmt, 0)
     cfg.cfg_debug_mode = is_debug
     res = compiler_pipeline_execute(cfg, source_code)
     return res
 
-fn compiler_driver_compile_file src_path out_path target_arch opt_level is_dry_run
+fn compiler_driver_compile_file src_path out_path target_arch opt_level
     // WHY: Reads source file from filesystem, recursively resolves dependencies, and routes through decoupled pipeline.
-    return compiler_driver_compile_file_advanced(src_path, out_path, target_arch, opt_level, FORMAT_ELF, 0, is_dry_run)
+    return compiler_driver_compile_file_advanced(src_path, out_path, target_arch, opt_level, FORMAT_ELF(), 0)
 
 fn compiler_driver_print_result res
     if res.res_success == 1

@@ -271,7 +271,7 @@ import "universe/core/string"
 @end
 
 @! ============================================================================
-@! 2. MAYA IR TYPE SYSTEM
+@! 2. LIPI IR TYPE SYSTEM
 @! ============================================================================
 
 @fn ir_type(kind, size_bytes, elem_type, field_types, name)
@@ -291,7 +291,7 @@ import "universe/core/string"
 @fn ir_type_int(bits)
   @! Canonical integer IR type constructor with discrete literal dispatch
   @! WHY: Directly returns constant string literals to prevent string pointer addition (+ operator)
-  @! which in Maya bootstrap creates invalid arithmetic pointer addresses.
+  @! which in LiPi bootstrap creates invalid arithmetic pointer addresses.
   b = bits
   @if b == 0 b = 64 @end
   @if b == 64 return ir_type("i64", 8, 0, [], "i64") @end
@@ -481,7 +481,7 @@ import "universe/core/string"
 @end
 
 @! ============================================================================
-@! 3. MAYA IR VALUES & OPERANDS
+@! 3. LIPI IR VALUES & OPERANDS
 @! ============================================================================
 
 @fn ir_val_vreg(id, t_desc, name_hint)
@@ -677,7 +677,7 @@ import "universe/core/string"
 @end
 
 @! ============================================================================
-@! 4. MAYA IR INSTRUCTION SET & CONSTRUCTORS
+@! 4. LIPI IR INSTRUCTION SET & CONSTRUCTORS
 @! ============================================================================
 
 @fn ir_inst(op, dest, t_desc, args, is_term)
@@ -1885,12 +1885,12 @@ import "universe/core/string"
 @end
 
 @! ============================================================================
-@! 8. AST TO MAYA IR LOWERING ENGINE
+@! 8. AST TO LIPI IR LOWERING ENGINE
 @! ============================================================================
 
 @fn ast_kind_match(kind, name)
   @! Compare AST node kind strings byte by byte
-  @! WHY: String literals across modules have distinct memory addresses in bootstrap Maya.
+  @! WHY: String literals across modules have distinct memory addresses in bootstrap LiPi.
   @if kind == 0 || name == 0 return 0 @end
   return str_eq(kind, name)
 @end
@@ -3022,7 +3022,7 @@ import "universe/core/string"
     @if vexpr == 0 vexpr = stmt.value @end
 
     @! Check if target is member access (obj.field = val)
-    @! WHY: Maya V2 bootstrap compiler does not short-circuit boolean expressions.
+    @! WHY: LiPi V2 bootstrap compiler does not short-circuit boolean expressions.
     @! If stmt.left == 0, evaluating stmt.left.kind causes a null-pointer dereference (SIGSEGV).
     @! We must nest the condition so stmt.left.kind is only evaluated when stmt.left != 0.
     @if stmt.left != 0

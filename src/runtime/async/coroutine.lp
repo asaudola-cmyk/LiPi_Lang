@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA RUNTIME ASYNC: STACKFUL COROUTINE ENGINE
+@! LIPI RUNTIME ASYNC: STACKFUL COROUTINE ENGINE
 @! Module: runtime/async/coroutine
-@! 100% Pure Maya Implementation
+@! 100% Pure LiPi Implementation — Direct Silicon Concurrency
 @! ============================================================================
 
 import "universe/core/collections"

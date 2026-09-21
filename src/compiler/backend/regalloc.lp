@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER BACKEND — LINEAR SCAN REGISTER ALLOCATOR
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER BACKEND — LINEAR SCAN REGISTER ALLOCATOR
+@! 100% Written in Pure LiPi Language — Zero External Dependencies
 @! Target Architecture: Linux x86-64 (System V AMD64 ABI)
 @! ============================================================================
 

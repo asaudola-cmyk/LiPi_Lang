@@ -1,7 +1,4 @@
-@! ============================================================================
-@! LIPI COMPILER STAGE 3 — 100% PURE LIPI MULTI-PASS TYPECHECKER & IMPORT RESOLVER
-@! Zero External Dependencies — 4-Pass Semantic Validation & Cycle Detection
-@! ============================================================================
+@! LIPI STAGE 3 — MULTI-PASS TYPECHECKER (0% Libc)
 
 import "universe/core/collections"
 import "universe/core/string"
@@ -9,9 +6,7 @@ import "compiler/frontend/ast"
 import "compiler/frontend/lexer"
 import "compiler/frontend/parser"
 
-@! ============================================================================
 @! 1. TYPE SYSTEM DEFINITIONS & CONSTANTS
-@! ============================================================================
 
 @fn TYPE_VOID()    return 0  @end
 @fn TYPE_I64()     return 1  @end
@@ -27,18 +22,6 @@ import "compiler/frontend/parser"
 @fn TYPE_ANY()     return 11 @end
 
 @struct LipiType
-  kind: i64
-  name: string
-  elem_type: i64
-  err_type: i64
-  param_types: array
-  ret_type: i64
-  fields: array
-  size_bytes: i64
-  align_bytes: i64
-@end
-
-@struct MayaType
   kind: i64
   name: string
   elem_type: i64
@@ -141,13 +124,11 @@ import "compiler/frontend/parser"
   return "any"
 @end
 
-@! ============================================================================
 @! 2. SYMBOL TABLE & TYPE ENVIRONMENT
-@! ============================================================================
 
 @struct StructField
   name: string
-  field_type: MayaType
+  field_type: LipiType
   index: i64
   offset_bytes: i64
   size_bytes: i64
@@ -166,7 +147,7 @@ import "compiler/frontend/parser"
   return f.name
 @end
 
-@fn tc_field_get_type(f: StructField) -> MayaType
+@fn tc_field_get_type(f: StructField) -> LipiType
   return f.field_type
 @end
 
@@ -210,7 +191,7 @@ import "compiler/frontend/parser"
   name: string
   param_names: array
   param_types: array
-  ret_type: MayaType
+  ret_type: LipiType
   is_varargs: i64
   is_method: i64
   struct_name: string
@@ -219,7 +200,7 @@ import "compiler/frontend/parser"
 
 @struct VarSymbol
   name: string
-  var_type: MayaType
+  var_type: LipiType
   is_const: i64
   scope_depth: i64
   line: i64
@@ -241,7 +222,7 @@ import "compiler/frontend/parser"
   constants: array
   errors: array
   warnings: array
-  current_fn_ret: MayaType
+  current_fn_ret: LipiType
   current_fn_name: string
   in_loop_depth: i64
   te_vars: array
@@ -459,9 +440,9 @@ import "compiler/frontend/parser"
   return "unknown"
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 3. TYPE RESOLUTION
-@! ============================================================================
+@! ----------------------------------------
 
 @fn resolve_type_name(env, type_str)
   @if type_str == "" || type_str == "any" || type_str == "Any"
@@ -502,58 +483,31 @@ import "compiler/frontend/parser"
   return type_make_any()
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 4. PASS 1: GLOBAL DECLARATIONS & SYMBOL TABLE REGISTRATION
-@! ============================================================================
+@! ----------------------------------------
 
+// WHY: Data-driven builtin symbol table registration without libc dependencies
 @fn register_builtins(env)
-  @! IO Builtins
-  env = typeenv_define_fn(env, "print", "void")
-  env = typeenv_define_fn(env, "println", "void")
-  env = typeenv_define_fn(env, "read_line", "string")
-  env = typeenv_define_fn(env, "read_stdin", "string")
-  env = typeenv_define_fn(env, "print_err", "i64")
-
-  @! GC & Memory Builtins
-  env = typeenv_define_fn(env, "gc_init", "i64")
-  env = typeenv_define_fn(env, "gc_alloc", "i64")
-  env = typeenv_define_fn(env, "gc_realloc", "i64")
-  env = typeenv_define_fn(env, "gc_free", "i64")
-  env = typeenv_define_fn(env, "gc_base", "i64")
-  env = typeenv_define_fn(env, "gc_collect", "i64")
-  env = typeenv_define_fn(env, "maya_alloc", "i64")
-  env = typeenv_define_fn(env, "maya_free", "i64")
-
-  @! String Builtins
-  env = typeenv_define_fn(env, "str_len", "i64")
-  env = typeenv_define_fn(env, "str_concat", "string")
-  env = typeenv_define_fn(env, "str_substr", "string")
-  env = typeenv_define_fn(env, "str_split", "array")
-  env = typeenv_define_fn(env, "str_trim", "string")
-  env = typeenv_define_fn(env, "int_to_str", "string")
-  env = typeenv_define_fn(env, "str_to_int", "i64")
-  env = typeenv_define_fn(env, "char_at", "i64")
-  env = typeenv_define_fn(env, "char_from_code", "string")
-  env = typeenv_define_fn(env, "str_starts_with", "bool")
-  env = typeenv_define_fn(env, "str_ends_with", "bool")
-
-  @! Collection Builtins
-  env = typeenv_define_fn(env, "map_new", "any")
-  env = typeenv_define_fn(env, "map_get", "i64")
-  env = typeenv_define_fn(env, "map_set", "any")
-  env = typeenv_define_fn(env, "array_concat", "array")
-
-  @! Syscall Builtins
-  env = typeenv_define_fn(env, "syscall", "i64")
-  env = typeenv_define_fn(env, "sys_open", "i64")
-  env = typeenv_define_fn(env, "sys_read", "i64")
-  env = typeenv_define_fn(env, "sys_write", "i64")
-  env = typeenv_define_fn(env, "sys_close", "i64")
-  env = typeenv_define_fn(env, "sys_exit", "void")
-  env = typeenv_define_fn(env, "sys_mmap", "i64")
-  env = typeenv_define_fn(env, "sys_munmap", "i64")
-  env = typeenv_define_fn(env, "sys_chmod", "i64")
-
+  builtins = [
+    "print:void", "println:void", "read_line:string", "read_stdin:string", "print_err:i64",
+    "gc_init:i64", "gc_alloc:i64", "gc_realloc:i64", "gc_free:i64", "gc_base:i64", "gc_collect:i64",
+    "str_len:i64", "str_concat:string", "str_substr:string", "str_split:array", "str_trim:string",
+    "int_to_str:string", "str_to_int:i64", "char_at:i64", "char_from_code:string", "str_starts_with:bool", "str_ends_with:bool",
+    "map_new:any", "map_get:i64", "map_set:any", "array_concat:array",
+    "syscall:i64", "sys_open:i64", "sys_read:i64", "sys_write:i64", "sys_close:i64", "sys_exit:void", "sys_mmap:i64", "sys_munmap:i64", "sys_chmod:i64"
+  ]
+  bi = 0
+  @while bi < builtins.len()
+    item = builtins[bi]
+    cp = str_index_of(item, ":")
+    @if cp > 0
+      b_name = str_sub(item, 0, cp)
+      b_ret = str_sub(item, cp + 1, str_len(item))
+      env = typeenv_define_fn(env, b_name, b_ret)
+    @end
+    bi = bi + 1
+  @end
   return env
 @end
 
@@ -665,9 +619,9 @@ import "compiler/frontend/parser"
   return env
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 5. PASS 2: STRUCT LAYOUT & METHOD BINDING
-@! ============================================================================
+@! ----------------------------------------
 
 @fn pass2_compute_struct_layouts(env)
   s_idx = 0
@@ -719,9 +673,9 @@ import "compiler/frontend/parser"
   return env
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 6. PASS 3: STATEMENT & EXPRESSION TYPE INFERENCE
-@! ============================================================================
+@! ----------------------------------------
 
 @fn check_expression(expr, env)
   @if expr == 0
@@ -1114,9 +1068,9 @@ import "compiler/frontend/parser"
   return env
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 7. PASS 4: CONTROL-FLOW ANALYSIS & REACHABILITY
-@! ============================================================================
+@! ----------------------------------------
 
 @fn stmt_has_unconditional_return(stmt)
   @if stmt == 0 return 0 @end
@@ -1168,9 +1122,9 @@ import "compiler/frontend/parser"
   return env
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 8. MODULE IMPORT RESOLUTION WITH CYCLE DETECTION (Tri-Color DFS)
-@! ============================================================================
+@! ----------------------------------------
 
 @struct ImportGraphNode
   path: string
@@ -1188,9 +1142,9 @@ import "compiler/frontend/parser"
   return 0
 @end
 
-@! ============================================================================
+@! ----------------------------------------
 @! 9. TYPECHECKER MAIN ENTRY POINTS
-@! ============================================================================
+@! ----------------------------------------
 
 @fn typecheck_program(ast_nodes, env)
   @if env == 0 env = typeenv_new() @end

@@ -215,20 +215,149 @@ import "universe/core/math"
 @end
 
 @! ============================================================================
-@! 4. QUANTUM ENTANGLEMENT (Bell States) & MEASUREMENT PROBABILITIES
+@! 4. ADVANCED MULTI-QUBIT OPERATORS (SWAP, CZ, Phase Gates)
+@! ============================================================================
+
+@! Controlled-Z Gate (CZ)
+@fn qreg_apply_cz(reg, ctrl, target)
+  // WHY: Applies Pauli-Z phase flip to target only when control bit is 1.
+  i = 0
+  @while i < reg.dim
+    c = qreg_get_bit(i, ctrl)
+    t = qreg_get_bit(i, target)
+    @if c == 1 && t == 1
+      reg.amplitudes_real[i] = 0 - reg.amplitudes_real[i]
+      reg.amplitudes_imag[i] = 0 - reg.amplitudes_imag[i]
+    @end
+    i = i + 1
+  @end
+  return reg
+@end
+
+@! SWAP Gate (Exchanges states between qubit A and qubit B)
+@fn qreg_apply_swap(reg, q1, q2)
+  // WHY: Swaps amplitudes between basis states where bit(q1) != bit(q2).
+  @if q1 == q2
+    return reg
+  @end
+  new_re = []
+  new_im = []
+  i = 0
+  @while i < reg.dim
+    new_re = new_re.push(0)
+    new_im = new_im.push(0)
+    i = i + 1
+  @end
+
+  i = 0
+  @while i < reg.dim
+    b1 = qreg_get_bit(i, q1)
+    b2 = qreg_get_bit(i, q2)
+    @if b1 != b2
+      // Flip both bits to find partner index
+      swapped = qreg_flip_bit(qreg_flip_bit(i, q1), q2)
+      new_re[swapped] = reg.amplitudes_real[i]
+      new_im[swapped] = reg.amplitudes_imag[i]
+    @else
+      new_re[i] = reg.amplitudes_real[i]
+      new_im[i] = reg.amplitudes_imag[i]
+    @end
+    i = i + 1
+  @end
+
+  reg.amplitudes_real = new_re
+  reg.amplitudes_imag = new_im
+  return reg
+@end
+
+@! Phase Shift Gate (S-Gate: e^(i*pi/2) = i rotation on |1>)
+@fn qreg_apply_s_gate(reg, target)
+  // WHY: Multiplies the |1> state amplitudes by imaginary unit i: (re + i*im)*i = -im + i*re.
+  i = 0
+  @while i < reg.dim
+    t = qreg_get_bit(i, target)
+    @if t == 1
+      cur_re = reg.amplitudes_real[i]
+      cur_im = reg.amplitudes_imag[i]
+      reg.amplitudes_real[i] = 0 - cur_im
+      reg.amplitudes_imag[i] = cur_re
+    @end
+    i = i + 1
+  @end
+  return reg
+@end
+
+@! ============================================================================
+@! 5. QUANTUM ENTANGLEMENT (Complete 4-Bell State Basis)
 @! ============================================================================
 
 @fn qreg_create_bell_phi_plus()
-  @! |Phi+> = (|00> + |11>) / sqrt(2)
+  // WHY: |Phi+> = (|00> + |11>) / sqrt(2)
   reg = qreg_new(2)
   reg = qreg_apply_hadamard(reg, 0)
   reg = qreg_apply_cnot(reg, 0, 1)
   return reg
 @end
 
+@fn qreg_create_bell_phi_minus()
+  // WHY: |Phi-> = (|00> - |11>) / sqrt(2)
+  reg = qreg_new(2)
+  reg = qreg_apply_x(reg, 0)
+  reg = qreg_apply_hadamard(reg, 0)
+  reg = qreg_apply_cnot(reg, 0, 1)
+  return reg
+@end
+
+@fn qreg_create_bell_psi_plus()
+  // WHY: |Psi+> = (|01> + |10>) / sqrt(2)
+  reg = qreg_new(2)
+  reg = qreg_apply_x(reg, 1)
+  reg = qreg_apply_hadamard(reg, 0)
+  reg = qreg_apply_cnot(reg, 0, 1)
+  return reg
+@end
+
+@fn qreg_create_bell_psi_minus()
+  // WHY: |Psi-> = (|01> - |10>) / sqrt(2)
+  reg = qreg_new(2)
+  reg = qreg_apply_x(reg, 0)
+  reg = qreg_apply_x(reg, 1)
+  reg = qreg_apply_hadamard(reg, 0)
+  reg = qreg_apply_cnot(reg, 0, 1)
+  return reg
+@end
+
+@! ============================================================================
+@! 6. PROBABILITIES & QUANTUM FOURIER TRANSFORM (QFT)
+@! ============================================================================
+
 @fn qreg_get_probability_pct(reg, state_idx)
+  // WHY: Probability P = |re|^2 + |im|^2 scaled to percentage (0 - 100%).
   re = reg.amplitudes_real[state_idx]
   im = reg.amplitudes_imag[state_idx]
-  prob_scaled = ((re * re) + (im * im)) / 10000 @! 1000^2 / 10000 = 100%
+  prob_scaled = ((re * re) + (im * im)) / 10000
   return prob_scaled
 @end
+
+@! 2-Qubit Quantum Fourier Transform (QFT_2)
+@fn qreg_apply_qft2(reg)
+  // WHY: Standard 2-qubit QFT circuit: H(0) -> Controlled-S(1, 0) -> H(1) -> SWAP(0, 1).
+  reg = qreg_apply_hadamard(reg, 0)
+  // Controlled phase rotation
+  i = 0
+  @while i < reg.dim
+    b0 = qreg_get_bit(i, 0)
+    b1 = qreg_get_bit(i, 1)
+    @if b0 == 1 && b1 == 1
+      cur_re = reg.amplitudes_real[i]
+      cur_im = reg.amplitudes_imag[i]
+      reg.amplitudes_real[i] = 0 - cur_im
+      reg.amplitudes_imag[i] = cur_re
+    @end
+    i = i + 1
+  @end
+  reg = qreg_apply_hadamard(reg, 1)
+  reg = qreg_apply_swap(reg, 0, 1)
+  return reg
+@end
+

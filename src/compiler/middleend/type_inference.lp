@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI COMPILER MIDDLEEND: HINDLEY-MILNER TYPE INFERENCE (ALGORITHM W)
 @! Module: compiler/middleend/type_inference
-@! Canonical Maya Implementation
+@! Canonical LiPi Implementation
 @! ============================================================================
 
 import "universe/core/collections"
@@ -21,7 +21,7 @@ import "universe/core/string"
   id: i64
 @end
 
-@struct MayaType
+@struct LipiType
   kind: i64
   var_id: i64
   con_name: string
@@ -31,7 +31,7 @@ import "universe/core/string"
 
 @struct TypeScheme
   vars: array
-  ty: MayaType
+  ty: LipiType
 @end
 
 @struct TypeEnvEntry
@@ -45,7 +45,7 @@ import "universe/core/string"
 
 @struct SubstEntry
   var_id: i64
-  target_type: MayaType
+  target_type: LipiType
 @end
 
 @struct TypeSubstitution
@@ -60,7 +60,7 @@ import "universe/core/string"
   return { next_var: 1 }
 @end
 
-@fn fresh_var(state: InferState) -> MayaType
+@fn fresh_var(state: InferState) -> LipiType
   id = state.next_var
   state.next_var = state.next_var + 1
   return {
@@ -72,7 +72,7 @@ import "universe/core/string"
   }
 @end
 
-@fn type_con(name: string) -> MayaType
+@fn type_con(name: string) -> LipiType
   return {
     kind: 1,
     var_id: 0,
@@ -82,7 +82,7 @@ import "universe/core/string"
   }
 @end
 
-@fn type_fn(param_t: MayaType, ret_t: MayaType) -> MayaType
+@fn type_fn(param_t: LipiType, ret_t: LipiType) -> LipiType
   return {
     kind: 2,
     var_id: 0,
@@ -92,7 +92,7 @@ import "universe/core/string"
   }
 @end
 
-@fn apply_subst(subst: TypeSubstitution, ty: MayaType) -> MayaType
+@fn apply_subst(subst: TypeSubstitution, ty: LipiType) -> LipiType
   @if ty.kind == 0
     i = 0
     num_items = subst.entries.len()
@@ -114,7 +114,7 @@ import "universe/core/string"
   return ty
 @end
 
-@fn occurs_check(var_id: i64, ty: MayaType) -> i64
+@fn occurs_check(var_id: i64, ty: LipiType) -> i64
   @if ty.kind == 0
     @if ty.var_id == var_id
       return 1
@@ -131,7 +131,7 @@ import "universe/core/string"
   return 0
 @end
 
-@fn unify(t1: MayaType, t2: MayaType) -> TypeSubstitution
+@fn unify(t1: LipiType, t2: LipiType) -> TypeSubstitution
   @if t1.kind == 0 && t2.kind == 0 && t1.var_id == t2.var_id
     return { entries: [] }
   @end

@@ -142,7 +142,7 @@ import "compiler/frontend/lexer/comment_doc"
     // ── 2. Newline (LF) ──
     @elif b == 10
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, start_line, start_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, start_line, start_col, stream.cs_pos)
       tok = token_new(TOK_NEWLINE(), "NEWLINE", "\n", 0, 0.0, span)
       tokens = tokens.push(tok)
 
@@ -150,7 +150,7 @@ import "compiler/frontend/lexer/comment_doc"
     @elif (b == 47 && char_stream_peek_byte_ahead(stream, 1) == 47) || (b == 64 && char_stream_peek_byte_ahead(stream, 1) == 33)
       comm_res = comment_parse_line(source, start_pos)
       @if comm_res.comm_is_doc == 1
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, start_col + comm_res.comm_consumed, start_pos + comm_res.comm_consumed)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, start_col + comm_res.comm_consumed, start_pos + comm_res.comm_consumed)
         tok = token_new(TOK_COMMENT_DOC(), "COMMENT_DOC", comm_res.comm_content, 0, 0.0, span)
         tokens = tokens.push(tok)
       @end
@@ -160,7 +160,7 @@ import "compiler/frontend/lexer/comment_doc"
     @elif b == 47 && char_stream_peek_byte_ahead(stream, 1) == 42 // '/*'
       comm_res = comment_parse_block(source, start_pos)
       @if comm_res.comm_is_doc == 1
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line + comm_res.comm_lines_consumed, stream.cs_col, start_pos + comm_res.comm_consumed)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line + comm_res.comm_lines_consumed, stream.cs_col, start_pos + comm_res.comm_consumed)
         tok = token_new(TOK_COMMENT_DOC(), "COMMENT_DOC", comm_res.comm_content, 0, 0.0, span)
         tokens = tokens.push(tok)
       @end
@@ -178,7 +178,7 @@ import "compiler/frontend/lexer/comment_doc"
       @if num_res.num_is_valid == 1
         stream.cs_pos = stream.cs_pos + num_res.num_consumed
         stream.cs_col = stream.cs_col + num_res.num_consumed
-        span = source_span_new(filename, start_line, start_col, start_pos, start_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, start_line, stream.cs_col, stream.cs_pos)
         kind = TOK_INT()
         kind_name = "INT"
         @if num_res.num_is_float == 1
@@ -198,7 +198,7 @@ import "compiler/frontend/lexer/comment_doc"
         stream.cs_pos = stream.cs_pos + str_res.str_consumed
         stream.cs_line = stream.cs_line + str_res.str_lines_consumed
         stream.cs_col = str_res.str_end_col
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         kind = TOK_STR()
         kind_name = "STR"
         @if str_res.str_has_interp == 1
@@ -227,7 +227,7 @@ import "compiler/frontend/lexer/comment_doc"
         @end
       @end
       dir_kind = lexer_lookup_directive(dir_name)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       @if dir_kind >= 0
         tok = token_new(dir_kind, token_kind_name(dir_kind), dir_name, 0, 0.0, span)
         tokens = tokens.push(tok)
@@ -241,11 +241,11 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '+='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_PLUSEQ(), "PLUSEQ", "+=", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_PLUS(), "PLUS", "+", 0, 0.0, span))
       @end
 
@@ -253,16 +253,16 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 62 // '->'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_ARROW(), "ARROW", "->", 0, 0.0, span))
       @elif char_stream_peek_byte_ahead(stream, 1) == 61 // '-='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_MINUSEQ(), "MINUSEQ", "-=", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_MINUS(), "MINUS", "-", 0, 0.0, span))
       @end
 
@@ -270,16 +270,16 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '*='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_STAREQ(), "STAREQ", "*=", 0, 0.0, span))
       @elif char_stream_peek_byte_ahead(stream, 1) == 42 // '**'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_STARSTAR(), "STARSTAR", "**", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_STAR(), "STAR", "*", 0, 0.0, span))
       @end
 
@@ -287,11 +287,11 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '/='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_SLASHEQ(), "SLASHEQ", "/=", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_SLASH(), "SLASH", "/", 0, 0.0, span))
       @end
 
@@ -299,11 +299,11 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '%='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_PERCENTEQ(), "PERCENTEQ", "%=", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_PERCENT(), "PERCENT", "%", 0, 0.0, span))
       @end
 
@@ -311,16 +311,16 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '=='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_EQ(), "EQ", "==", 0, 0.0, span))
       @elif char_stream_peek_byte_ahead(stream, 1) == 62 // '=>'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_FAT_ARROW(), "FAT_ARROW", "=>", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_ASSIGN(), "ASSIGN", "=", 0, 0.0, span))
       @end
 
@@ -328,11 +328,11 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '!='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_NEQ(), "NEQ", "!=", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_BANG(), "BANG", "!", 0, 0.0, span))
       @end
 
@@ -340,16 +340,16 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '<='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_LTE(), "LTE", "<=", 0, 0.0, span))
       @elif char_stream_peek_byte_ahead(stream, 1) == 60 // '<<'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_SHL(), "SHL", "<<", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_LT(), "LT", "<", 0, 0.0, span))
       @end
 
@@ -357,16 +357,16 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 61 // '>='
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_GTE(), "GTE", ">=", 0, 0.0, span))
       @elif char_stream_peek_byte_ahead(stream, 1) == 62 // '>>'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_SHR(), "SHR", ">>", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_GT(), "GT", ">", 0, 0.0, span))
       @end
 
@@ -374,11 +374,11 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 38 // '&&'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_AND(), "AND", "&&", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_AMP(), "AMP", "&", 0, 0.0, span))
       @end
 
@@ -386,88 +386,88 @@ import "compiler/frontend/lexer/comment_doc"
       @if char_stream_peek_byte_ahead(stream, 1) == 124 // '||'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_OR(), "OR", "||", 0, 0.0, span))
       @elif char_stream_peek_byte_ahead(stream, 1) == 62 // '|>'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_PIPE(), "PIPE", "|>", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_BAR(), "BAR", "|", 0, 0.0, span))
       @end
 
     @elif b == 94 // '^'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_CARET(), "CARET", "^", 0, 0.0, span))
 
     @elif b == 126 // '~'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_TILDE(), "TILDE", "~", 0, 0.0, span))
 
     @elif b == 63 // '?'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_QUERY(), "QUERY", "?", 0, 0.0, span))
 
     @elif b == 40 // '('
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_LPAREN(), "LPAREN", "(", 0, 0.0, span))
 
     @elif b == 41 // ')'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_RPAREN(), "RPAREN", ")", 0, 0.0, span))
 
     @elif b == 91 // '['
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_LBRACKET(), "LBRACKET", "[", 0, 0.0, span))
 
     @elif b == 93 // ']'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_RBRACKET(), "RBRACKET", "]", 0, 0.0, span))
 
     @elif b == 123 // '{'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_LBRACE(), "LBRACE", "{", 0, 0.0, span))
 
     @elif b == 125 // '}'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_RBRACE(), "RBRACE", "}", 0, 0.0, span))
 
     @elif b == 44 // ','
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_COMMA(), "COMMA", ",", 0, 0.0, span))
 
     @elif b == 58 // ':'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_COLON(), "COLON", ":", 0, 0.0, span))
 
     @elif b == 59 // ';'
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_SEMI(), "SEMI", ";", 0, 0.0, span))
 
     @elif b == 46 // '.'
       @if char_stream_peek_byte_ahead(stream, 1) == 46 // '..'
         char_stream_advance_byte(stream)
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_DOTDOT(), "DOTDOT", "..", 0, 0.0, span))
       @else
         char_stream_advance_byte(stream)
-        span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         tokens = tokens.push(token_new(TOK_DOT(), "DOT", ".", 0, 0.0, span))
       @end
 
@@ -476,7 +476,7 @@ import "compiler/frontend/lexer/comment_doc"
       char_stream_advance_byte(stream)
       char_stream_advance_byte(stream)
       char_stream_advance_byte(stream)
-      span = source_span_new(filename, start_line, start_col, start_pos, stream.cs_line, stream.cs_col, stream.cs_pos)
+      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_DARI(), "DARI", "।", 0, 0.0, span))
 
     // ── 9. Identifiers & Bilingual Keywords (Bengali runes & ASCII) ──
@@ -498,7 +498,7 @@ import "compiler/frontend/lexer/comment_doc"
         @end
 
         ident_text = char_stream_slice(stream, ident_start, stream.cs_pos)
-        span = source_span_new(filename, start_line, ident_start_col, ident_start, stream.cs_line, stream.cs_col, stream.cs_pos)
+        span = source_span_new(filename, start_line, ident_start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
 
         // Boolean & Null literals
         @if ident_text == "true" || ident_text == "সত্য"

@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — NATIVE AVX-512 (512-BIT SIMD) CODE GENERATOR
-@! Module: compiler/backend/x86_64/avx512.maya
+@! LIPI UNIVERSAL ARCHITECTURE — NATIVE AVX-512 (512-BIT SIMD) CODE GENERATOR
+@! Module: compiler/backend/x86_64/avx512.lp
 @! Milestone: Undisputed #1 Hyper-Performance Weapon
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure LiPi Implementation — Zero External / C++ Dependencies
 @! Features: 4-Byte EVEX Binary Prefix (0x62), ZMM0-ZMM31 512-Bit Vector Registers,
 @! VPADDQ, VPMULLQ, VADDPD, VMULPD, VMOVDQU64 & 64-Byte/Cycle Parallel Math
 @! ============================================================================

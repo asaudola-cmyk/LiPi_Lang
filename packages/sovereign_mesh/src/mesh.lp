@@ -9,6 +9,8 @@
 // 100% Pure Lipi | 0% C | 0% GCC | 0% Libc | 0% Python
 // ==============================================================================
 
+import "universe/core/string"
+
 // ── 1. String Utilities ────────────────────────────────────────────────────────
 // WHY: Self-contained string splitting without reliance on external shared libraries.
 fn mesh_split_delim(s, delim)

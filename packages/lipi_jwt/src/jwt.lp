@@ -66,7 +66,7 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
 
     // 1. Write Header: {"alg":"HS256","typ":"JWT"}
     header_str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-    h_len = len header_str
+    h_len = len(header_str)
     h_idx = 0
     while h_idx < h_len
         // Direct string byte indexing via memory copy
@@ -82,7 +82,7 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
     // 2. Write Payload: {"sub":<user_id>,"exp":<exp_time>,"role":<role_id>}
     // Prefix: {"sub":
     p_prefix = "{\"sub\":"
-    p_pre_len = len p_prefix
+    p_pre_len = len(p_prefix)
     i = 0
     while i < p_pre_len
         mem_byte_write(out_buf, pos, mem_byte_read(p_prefix, i))
@@ -94,7 +94,7 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
 
     // Mid 1: ,"exp":
     mid1 = ",\"exp\":"
-    m1_len = len mid1
+    m1_len = len(mid1)
     i = 0
     while i < m1_len
         mem_byte_write(out_buf, pos, mem_byte_read(mid1, i))
@@ -106,7 +106,7 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
 
     // Mid 2: ,"role":
     mid2 = ",\"role\":"
-    m2_len = len mid2
+    m2_len = len(mid2)
     i = 0
     while i < m2_len
         mem_byte_write(out_buf, pos, mem_byte_read(mid2, i))

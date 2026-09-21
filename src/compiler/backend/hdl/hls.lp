@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — ADVANCED HIGH-LEVEL SYNTHESIS (HLS)
-@! Module: compiler/backend/hdl/hls.maya
+@! LIPI UNIVERSAL ARCHITECTURE — ADVANCED HIGH-LEVEL SYNTHESIS (HLS)
+@! Module: compiler/backend/hdl/hls.lp
 @! Milestone: Next-Gen Silicon Circuit Compiler
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! 100% Pure LiPi Implementation — Zero External / C++ Dependencies
 @! Features: Dynamic AST-to-Verilog Lowering, Dynamic FSM State Synthesis,
 @! Multi-Stage DSP Pipelining, AXI4 Memory-Mapped & AXI4-Stream SoC Wrappers
 @! ============================================================================

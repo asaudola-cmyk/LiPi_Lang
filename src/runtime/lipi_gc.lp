@@ -1,15 +1,15 @@
 @! ============================================================================
-@! MAYA NATIVE MEMORY ALLOCATOR & GARBAGE COLLECTOR (runtime/maya_gc.maya)
-@! 100% Written in Pure Maya Language — Zero C / Boehm GC Dependencies
+@! LIPI NATIVE MEMORY ALLOCATOR & GARBAGE COLLECTOR (runtime/lipi_gc.lp)
+@! 100% Written in Pure LiPi Language — Zero C / Boehm GC Dependencies
 @! Architecture: x86_64 Freestanding Dual-Tier Slab & Large Object Allocator
 @! Features:
 @!   1. 64KB Aligned Arenas with 8 Segregated Size Classes (16B - 2048B)
 @!   2. O(1) Segregated Freelist per Size Class (Instant LIFO Slot Reuse)
 @!   3. Large Chunk Allocator (>2048B) via Direct sys_mmap Page Allocations
-@!   4. Active O(1) Reclamation via maya_free / gc_free
+@!   4. Active O(1) Reclamation via lipi_free / gc_free
 @!   5. Precise gc_base Pointer Introspection & Interior Pointer Resolution
-@!   6. Memory Reallocation (gc_realloc / maya_realloc) with Payload Preservation
-@!   7. Tri-Color Mark & Sweep Garbage Collection (gc_collect / maya_gc_collect)
+@!   6. Memory Reallocation (gc_realloc / lipi_realloc) with Payload Preservation
+@!   7. Tri-Color Mark & Sweep Garbage Collection (gc_collect / lipi_gc_collect)
 @!   8. Shadow Stack Root Scanning & Frame Registration
 @!   9. Automatic 85% Arena Saturation Threshold Sweep
 @! ============================================================================
@@ -19,7 +19,7 @@ import "universe/core/string"
 @! ----------------------------------------------------------------------------
 @! 1. Allocator Constants & Metadata Configuration
 @! ----------------------------------------------------------------------------
-@fn GC_MAGIC() return 1296128321 @end             @! 0x4D415941 ("MAYA")
+@fn GC_MAGIC() return 1279873097 @end             @! 0x4C495049 ("LIPI")
 @fn ARENA_MAGIC() return 4706902967675712587 @end @! 0x4152454E4136344B ("ARENA64K")
 @fn ARENA_SIZE() return 65536 @end                @! 64 KB per Slab Arena
 @fn ARENA_HEADER_SIZE() return 64 @end            @! 64 Bytes Arena Header
@@ -36,11 +36,17 @@ import "universe/core/string"
 @fn GC_COLOR_BLACK() return 2 @end
 
 @fn TYPE_RAW_BYTES() return 0 @end
+@fn TYPE_LIPI_STRING() return 1 @end
 @fn TYPE_MAYA_STRING() return 1 @end
+@fn TYPE_LIPI_ARRAY() return 2 @end
 @fn TYPE_MAYA_ARRAY() return 2 @end
+@fn TYPE_LIPI_STRUCT() return 3 @end
 @fn TYPE_MAYA_STRUCT() return 3 @end
+@fn TYPE_LIPI_CLOSURE() return 4 @end
 @fn TYPE_MAYA_CLOSURE() return 4 @end
+@fn TYPE_LIPI_MAP() return 3 @end
 @fn TYPE_MAYA_MAP() return 3 @end
+@fn TYPE_LIPI_BOXED_FLOAT() return 6 @end
 @fn TYPE_MAYA_BOXED_FLOAT() return 6 @end
 
 @fn GC_TRIGGER_THRESHOLD_PERCENT() return 85 @end
@@ -187,8 +193,12 @@ g_next_fd = 100
   return 1
 @end
 
-@fn maya_init_gc()
+@fn lipi_init_gc()
   return gc_init()
+@end
+
+@fn maya_init_gc()
+  return lipi_init_gc()
 @end
 
 @! ----------------------------------------------------------------------------
@@ -323,12 +333,20 @@ g_next_fd = 100
   return user_ptr
 @end
 
-@fn maya_alloc(size)
+@fn lipi_alloc(size)
   return gc_alloc(size)
 @end
 
-@fn maya_gc_alloc(size)
+@fn lipi_gc_alloc(size)
   return gc_alloc(size)
+@end
+
+@fn maya_alloc(size)
+  return lipi_alloc(size)
+@end
+
+@fn maya_gc_alloc(size)
+  return lipi_gc_alloc(size)
 @end
 
 @fn gc_alloc_typed(size, type_id)
@@ -394,12 +412,20 @@ g_next_fd = 100
   return 0
 @end
 
-@fn maya_free(ptr)
+@fn lipi_free(ptr)
   return gc_free(ptr)
 @end
 
-@fn maya_gc_free(ptr, size)
+@fn lipi_gc_free(ptr, size)
   return gc_free(ptr)
+@end
+
+@fn maya_free(ptr)
+  return lipi_free(ptr)
+@end
+
+@fn maya_gc_free(ptr, size)
+  return lipi_gc_free(ptr, size)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -526,8 +552,12 @@ g_next_fd = 100
   return new_ptr
 @end
 
-@fn maya_realloc(ptr, new_size)
+@fn lipi_realloc(ptr, new_size)
   return gc_realloc(ptr, new_size)
+@end
+
+@fn maya_realloc(ptr, new_size)
+  return lipi_realloc(ptr, new_size)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -762,8 +792,12 @@ g_next_fd = 100
   return reclaimed_bytes
 @end
 
-@fn maya_gc_collect()
+@fn lipi_gc_collect()
   return gc_collect()
+@end
+
+@fn maya_gc_collect()
+  return lipi_gc_collect()
 @end
 
 @! ----------------------------------------------------------------------------
@@ -779,14 +813,18 @@ g_next_fd = 100
   }
 @end
 
-@fn maya_gc_stats()
+@fn lipi_gc_stats()
   return gc_stats()
+@end
+
+@fn maya_gc_stats()
+  return lipi_gc_stats()
 @end
 
 @! ----------------------------------------------------------------------------
 @! 14. Syscall Fallback & Dispatcher (Interpreter Compatibility)
 @! ----------------------------------------------------------------------------
-@fn maya_syscall(nr, a1, a2, a3, a4, a5, a6)
+@fn lipi_syscall(nr, a1, a2, a3, a4, a5, a6)
   @! Syscall 39: sys_getpid
   @if nr == 39
     return 1001
@@ -858,4 +896,8 @@ g_next_fd = 100
   @end
 
   return 0
+@end
+
+@fn maya_syscall(nr, a1, a2, a3, a4, a5, a6)
+  return lipi_syscall(nr, a1, a2, a3, a4, a5, a6)
 @end

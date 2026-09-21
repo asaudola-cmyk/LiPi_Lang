@@ -275,6 +275,16 @@ import "universe/core/string"
   return out
 @end
 
+@fn dwarf_info_append_bytes(dest, src)
+  // WHY: Safely append bytes from src to dest avoiding single-line loop AST anomalies.
+  k = 0
+  @while k < src.len()
+    dest = dest.push(src[k])
+    k = k + 1
+  @end
+  return dest
+@end
+
 // ============================================================================
 // 5. .debug_info EMITTER
 // ============================================================================
@@ -307,7 +317,7 @@ import "universe/core/string"
 
   // DW_AT_producer (string)
   p_str = dwarf_info_pack_string(unit.dwu_producer)
-  k = 0 @while k < p_str.len() dies_body = dies_body.push(p_str[k]) k = k + 1 @end
+  dies_body = dwarf_info_append_bytes(dies_body, p_str)
 
   // DW_AT_language (data2: 0x0C = C99)
   lang_bytes = dwarf_info_pack_u16(DW_LANG_C99())
@@ -316,23 +326,23 @@ import "universe/core/string"
 
   // DW_AT_name (string)
   n_str = dwarf_info_pack_string(unit.dwu_source_file)
-  k = 0 @while k < n_str.len() dies_body = dies_body.push(n_str[k]) k = k + 1 @end
+  dies_body = dwarf_info_append_bytes(dies_body, n_str)
 
   // DW_AT_comp_dir (string)
   cd_str = dwarf_info_pack_string(unit.dwu_comp_dir)
-  k = 0 @while k < cd_str.len() dies_body = dies_body.push(cd_str[k]) k = k + 1 @end
+  dies_body = dwarf_info_append_bytes(dies_body, cd_str)
 
   // DW_AT_low_pc (addr: 8 bytes)
   lp = dwarf_info_pack_u64(unit.dwu_low_pc)
-  k = 0 @while k < 8 dies_body = dies_body.push(lp[k]) k = k + 1 @end
+  dies_body = dwarf_info_append_bytes(dies_body, lp)
 
   // DW_AT_high_pc (addr: 8 bytes)
   hp = dwarf_info_pack_u64(unit.dwu_high_pc)
-  k = 0 @while k < 8 dies_body = dies_body.push(hp[k]) k = k + 1 @end
+  dies_body = dwarf_info_append_bytes(dies_body, hp)
 
   // DW_AT_stmt_list (sec_offset: 4 bytes)
   sl = dwarf_info_pack_u32(unit.dwu_stmt_list_offset)
-  k = 0 @while k < 4 dies_body = dies_body.push(sl[k]) k = k + 1 @end
+  dies_body = dwarf_info_append_bytes(dies_body, sl)
 
   // --- Child DIEs: Functions (Abbrev 2) ---
   i = 0
@@ -343,23 +353,23 @@ import "universe/core/string"
 
     // DW_AT_name (string)
     fn_name = dwarf_info_pack_string(fn_info.dwf_name)
-    k = 0 @while k < fn_name.len() dies_body = dies_body.push(fn_name[k]) k = k + 1 @end
+    dies_body = dwarf_info_append_bytes(dies_body, fn_name)
 
     // DW_AT_low_pc (addr: 8 bytes)
     fn_lp = dwarf_info_pack_u64(fn_info.dwf_low_pc)
-    k = 0 @while k < 8 dies_body = dies_body.push(fn_lp[k]) k = k + 1 @end
+    dies_body = dwarf_info_append_bytes(dies_body, fn_lp)
 
     // DW_AT_high_pc (addr: 8 bytes)
     fn_hp = dwarf_info_pack_u64(fn_info.dwf_high_pc)
-    k = 0 @while k < 8 dies_body = dies_body.push(fn_hp[k]) k = k + 1 @end
+    dies_body = dwarf_info_append_bytes(dies_body, fn_hp)
 
     // DW_AT_decl_file (udata)
     df_uleb = dwarf_info_uleb128(fn_info.dwf_decl_file)
-    k = 0 @while k < df_uleb.len() dies_body = dies_body.push(df_uleb[k]) k = k + 1 @end
+    dies_body = dwarf_info_append_bytes(dies_body, df_uleb)
 
     // DW_AT_decl_line (udata)
     dl_uleb = dwarf_info_uleb128(fn_info.dwf_decl_line)
-    k = 0 @while k < dl_uleb.len() dies_body = dies_body.push(dl_uleb[k]) k = k + 1 @end
+    dies_body = dwarf_info_append_bytes(dies_body, dl_uleb)
 
     i = i + 1
   @end
@@ -373,7 +383,7 @@ import "universe/core/string"
 
     // DW_AT_name (string)
     ty_name = dwarf_info_pack_string(ty_info.dwt_name)
-    k = 0 @while k < ty_name.len() dies_body = dies_body.push(ty_name[k]) k = k + 1 @end
+    dies_body = dwarf_info_append_bytes(dies_body, ty_name)
 
     // DW_AT_byte_size (data1: 1 byte)
     dies_body = dies_body.push(ty_info.dwt_byte_size % 256)
@@ -394,7 +404,7 @@ import "universe/core/string"
 
   // 1. unit_length (4 bytes)
   ul = dwarf_info_pack_u32(unit_length)
-  k = 0 @while k < 4 out = out.push(ul[k]) k = k + 1 @end
+  out = dwarf_info_append_bytes(out, ul)
 
   // 2. version (2 bytes: 4)
   ver = dwarf_info_pack_u16(4)
@@ -407,7 +417,7 @@ import "universe/core/string"
   out = out.push(8)
 
   // 5. dies_body
-  k = 0 @while k < dies_body.len() out = out.push(dies_body[k]) k = k + 1 @end
+  out = dwarf_info_append_bytes(out, dies_body)
 
   return out
 @end

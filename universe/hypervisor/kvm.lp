@@ -165,16 +165,20 @@ import "universe/os/syscalls"
 
 @fn kvm_load_guest_code(vm, code_bytes, load_address)
   needed_sz = load_address + code_bytes.len()
-  @while vm.guest_ram.len() < needed_sz
-    vm.guest_ram = vm.guest_ram.push(0)
+  ram = vm.guest_ram
+  @while ram.len() < needed_sz
+    ram = ram.push(0)
   @end
   i = 0
   n = code_bytes.len()
   @while i < n
-    vm.guest_ram[load_address + i] = code_bytes[i]
+    ram[load_address + i] = code_bytes[i]
     i = i + 1
   @end
-  vm.regs.rip = load_address
+  vm.guest_ram = ram
+  regs = vm.regs
+  regs.rip = load_address
+  vm.regs = regs
   return vm
 @end
 
@@ -191,32 +195,59 @@ import "universe/os/syscalls"
 
   opcode = vm.guest_ram[vm.regs.rip]
   
+  regs = vm.regs
+  
   @! Opcode: 0x90 (NOP)
   @if opcode == 144
-    vm.regs.rip = vm.regs.rip + 1
+    regs.rip = regs.rip + 1
   @! Opcode: 0xB8 (MOV EAX, imm32)
   @elif opcode == 184
-    b0 = vm.guest_ram[vm.regs.rip + 1]
-    b1 = vm.guest_ram[vm.regs.rip + 2]
-    b2 = vm.guest_ram[vm.regs.rip + 3]
-    b3 = vm.guest_ram[vm.regs.rip + 4]
+    b0 = vm.guest_ram[regs.rip + 1]
+    b1 = vm.guest_ram[regs.rip + 2]
+    b2 = vm.guest_ram[regs.rip + 3]
+    b3 = vm.guest_ram[regs.rip + 4]
     imm = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
-    vm.regs.rax = imm
-    vm.regs.rip = vm.regs.rip + 5
+    regs.rax = imm
+    regs.rip = regs.rip + 5
+  @! Opcode: 0xBB (MOV EBX, imm32)
+  @elif opcode == 187
+    b0 = vm.guest_ram[regs.rip + 1]
+    b1 = vm.guest_ram[regs.rip + 2]
+    b2 = vm.guest_ram[regs.rip + 3]
+    b3 = vm.guest_ram[regs.rip + 4]
+    imm = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+    regs.rbx = imm
+    regs.rip = regs.rip + 5
+  @! Opcode: 0x01 0xD8 (ADD EAX, EBX)
+  @elif opcode == 1 && vm.guest_ram[regs.rip + 1] == 216
+    regs.rax = regs.rax + regs.rbx
+    regs.rip = regs.rip + 2
+  @! Opcode: 0x29 0xD8 (SUB EAX, EBX)
+  @elif opcode == 41 && vm.guest_ram[regs.rip + 1] == 216
+    regs.rax = regs.rax - regs.rbx
+    regs.rip = regs.rip + 2
+  @! Opcode: 0xEB imm8 (JMP short rel8)
+  @elif opcode == 235
+    rel = vm.guest_ram[regs.rip + 1]
+    @if rel > 127
+      rel = rel - 256
+    @end
+    regs.rip = regs.rip + 2 + rel
   @! Opcode: 0xE7 (OUT imm8, EAX) -> Hypervisor I/O Interception Exit (KVM_EXIT_IO = 2)
   @elif opcode == 231
-    port = vm.guest_ram[vm.regs.rip + 1]
-    vm.last_exit = { exit_reason: 2, io_port: port, io_data: vm.regs.rax }
-    vm.regs.rip = vm.regs.rip + 2
+    port = vm.guest_ram[regs.rip + 1]
+    vm.last_exit = { exit_reason: 2, io_port: port, io_data: regs.rax }
+    regs.rip = regs.rip + 2
   @! Opcode: 0xF4 (HLT) -> Halt Exit (KVM_EXIT_HLT = 5)
   @elif opcode == 244
     vm.last_exit = { exit_reason: 5, io_port: 0, io_data: 0 }
     vm.is_running = 0
-    vm.regs.rip = vm.regs.rip + 1
+    regs.rip = regs.rip + 1
   @else
-    vm.regs.rip = vm.regs.rip + 1
+    regs.rip = regs.rip + 1
   @end
 
+  vm.regs = regs
   return vm
 @end
 

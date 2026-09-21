@@ -1,7 +1,7 @@
 @! ============================================================================
 @! LIPI COMPILER MIDDLEEND — INCREMENTAL BUILD & DEPENDENCY GRAPH ENGINE
-@! Module: compiler/middleend/incremental.maya
-@! 100% Pure Maya Implementation — Zero Foreign Dependencies
+@! Module: compiler/middleend/incremental.lp
+@! 100% Pure LiPi Implementation — Zero Foreign Dependencies
 @! Supports:
 @!   - 64-bit FNV-1a & FIPS 180-4 SHA-256 Content Hashing
 @!   - Dependency Graph Modeling with Import Path Resolution

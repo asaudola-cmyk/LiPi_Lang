@@ -296,7 +296,7 @@
 @end
 
 @! ----------------------------------------------------------------------------
-@! 6. Pure Maya Raw Syscall Wrappers (Uniform 7-Parameter Gateway)
+@! 6. Pure LiPi Raw Syscall Wrappers (Uniform 7-Parameter Gateway)
 @! ----------------------------------------------------------------------------
 
 @! Memory Management Syscalls

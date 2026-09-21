@@ -1,8 +1,8 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND: PATTERN MATCHING & EXHAUSTIVENESS ENGINE
+@! LIPI COMPILER MIDDLEEND: PATTERN MATCHING & EXHAUSTIVENESS ENGINE
 @! Module: compiler/middleend/pattern_match
 @! Matrix decomposition algorithm for exhaustiveness & decision tree generation
-@! 100% Pure Maya Implementation
+@! 100% Pure LiPi Implementation
 @! ============================================================================
 
 import "universe/core/collections"

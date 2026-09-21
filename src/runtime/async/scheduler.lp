@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA RUNTIME ASYNC: WORK-STEALING TASK SCHEDULER
+@! LIPI RUNTIME ASYNC: WORK-STEALING TASK SCHEDULER
 @! Module: runtime/async/scheduler
-@! 100% Pure Maya Implementation
+@! 100% Pure LiPi Implementation — Multi-Core Fiber Scheduler
 @! ============================================================================
 
 import "universe/core/collections"

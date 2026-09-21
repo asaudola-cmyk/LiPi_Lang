@@ -29,32 +29,32 @@ import "src/compiler/diagnostics/suggestion.lp"
 import "src/compiler/diagnostics/diagnostic_emitter.lp"
 
 // Subsystem 3: Frontend Lexer & AST
-import "compiler/frontend/lexer/char_stream"
-import "compiler/frontend/lexer/unicode_bengali"
-import "compiler/frontend/lexer/token_kind"
-import "compiler/frontend/lexer/token"
-import "compiler/frontend/lexer/num_literal"
-import "compiler/frontend/lexer/str_literal"
-import "compiler/frontend/lexer/comment_doc"
-import "compiler/frontend/lexer/tokenizer"
-import "compiler/frontend/ast/ast_node"
-import "compiler/frontend/ast/ast_expr"
-import "compiler/frontend/ast/ast_stmt"
-import "compiler/frontend/ast/ast_decl"
-import "compiler/frontend/ast/ast_visitor"
-import "compiler/frontend/ast/ast_printer"
+import "src/compiler/frontend/lexer/char_stream.lp"
+import "src/compiler/frontend/lexer/unicode_bengali.lp"
+import "src/compiler/frontend/lexer/token_kind.lp"
+import "src/compiler/frontend/lexer/token.lp"
+import "src/compiler/frontend/lexer/num_literal.lp"
+import "src/compiler/frontend/lexer/str_literal.lp"
+import "src/compiler/frontend/lexer/comment_doc.lp"
+import "src/compiler/frontend/lexer/tokenizer.lp"
+import "src/compiler/frontend/ast/ast_node.lp"
+import "src/compiler/frontend/ast/ast_expr.lp"
+import "src/compiler/frontend/ast/ast_stmt.lp"
+import "src/compiler/frontend/ast/ast_decl.lp"
+import "src/compiler/frontend/ast/ast_visitor.lp"
+import "src/compiler/frontend/ast/ast_printer.lp"
 
 // Subsystem 4: Semantics & Type System
-import "compiler/semantics/symbol"
-import "compiler/semantics/scope"
-import "compiler/semantics/symbol_table"
-import "compiler/semantics/type_def"
-import "compiler/semantics/type_unify"
-import "compiler/semantics/type_inference"
-import "compiler/semantics/type_checker"
-import "compiler/semantics/const_eval"
-import "compiler/semantics/ownership_check"
-import "compiler/semantics/purity_analyzer"
+import "src/compiler/semantics/symbol.lp"
+import "src/compiler/semantics/scope.lp"
+import "src/compiler/semantics/symbol_table.lp"
+import "src/compiler/semantics/type_def.lp"
+import "src/compiler/semantics/type_unify.lp"
+import "src/compiler/semantics/type_inference.lp"
+import "src/compiler/semantics/type_checker.lp"
+import "src/compiler/semantics/const_eval.lp"
+import "src/compiler/semantics/ownership_check.lp"
+import "src/compiler/semantics/purity_analyzer.lp"
 
 // Subsystem 6: Register Allocation
 include "src/compiler/backend/regalloc/live_interval.lp"
@@ -76,24 +76,26 @@ import "src/compiler/backend/formats/elf/elf_writer.lp"
 import "src/compiler/backend/formats/debug/dwarf_line.lp"
 import "src/compiler/backend/formats/debug/dwarf_info.lp"
 include "src/compiler/backend/so_emitter.lp"
+import "src/compiler/backend/formats/macho/macho_writer.lp"
+import "src/compiler/backend/formats/pe/pe_writer.lp"
 
-// ── 1. Pipeline Constants ─────────────────────────────────────────────────────
+// WHY: Declarations as zero-argument functions enable seamless compile-time identifier resolution
+// across all decoupled compiler stages without relying on top-level stack variable allocation.
+@fn PIPELINE_STAGE_INIT()     return 0 @end
+@fn PIPELINE_STAGE_LEX()      return 1 @end
+@fn PIPELINE_STAGE_PARSE()    return 2 @end
+@fn PIPELINE_STAGE_SEMANTICS() return 3 @end
+@fn PIPELINE_STAGE_TARGET()   return 4 @end
+@fn PIPELINE_STAGE_REGALLOC() return 5 @end
+@fn PIPELINE_STAGE_EMIT()     return 6 @end
+@fn PIPELINE_STAGE_COMPLETE() return 7 @end
 
-PIPELINE_STAGE_INIT         = 0
-PIPELINE_STAGE_LEX          = 1
-PIPELINE_STAGE_PARSE        = 2
-PIPELINE_STAGE_SEMANTICS    = 3
-PIPELINE_STAGE_TARGET       = 4
-PIPELINE_STAGE_REGALLOC     = 5
-PIPELINE_STAGE_EMIT         = 6
-PIPELINE_STAGE_COMPLETE     = 7
-
-FORMAT_ELF                  = 1
-FORMAT_MACHO                = 2
-FORMAT_PE                   = 3
-FORMAT_UNIKERNEL            = 4
-FORMAT_WASM                 = 5
-FORMAT_SHARED               = 6
+@fn FORMAT_ELF()              return 1 @end
+@fn FORMAT_MACHO()            return 2 @end
+@fn FORMAT_PE()               return 3 @end
+@fn FORMAT_UNIKERNEL()        return 4 @end
+@fn FORMAT_WASM()             return 5 @end
+@fn FORMAT_SHARED()           return 6 @end
 
 // ── 2. Hardware-Aligned Models (Max 8 Fields) ─────────────────────────────────
 
@@ -134,7 +136,7 @@ fn compiler_config_new src out_bin arch opt fmt dry_run
 fn compiler_result_new
     res = CompilerResult()
     res.res_success = 0
-    res.res_stage_reached = PIPELINE_STAGE_INIT
+    res.res_stage_reached = PIPELINE_STAGE_INIT()
     res.res_error_count = 0
     res.res_warning_count = 0
     res.res_output_bytes = 0
@@ -153,7 +155,7 @@ fn compiler_pipeline_execute config source_code
     sm = source_map_new()
     fid = source_map_add_file(sm, config.cfg_src_path, source_code)
     diag_emitter = diagnostic_emitter_new(sm, "terminal", 0)
-    result.res_stage_reached = PIPELINE_STAGE_INIT
+    result.res_stage_reached = PIPELINE_STAGE_INIT()
 
     // ── Phase 2: Lexical Analysis (Frontend Micro-Lexer) ───────────────────────
     toks = tokenize_source(source_code)
@@ -171,11 +173,11 @@ fn compiler_pipeline_execute config source_code
     if meaningful == 0
         result.res_error_count = 1
         result.res_error_msg = "Lexical analysis yielded zero executable code tokens"
-        result.res_stage_reached = PIPELINE_STAGE_LEX
+        result.res_stage_reached = PIPELINE_STAGE_LEX()
         return result
 
     result.res_tokens_scanned = tok_count
-    result.res_stage_reached = PIPELINE_STAGE_LEX
+    result.res_stage_reached = PIPELINE_STAGE_LEX()
 
     // ── Phase 3: Abstract Syntax Tree Construction & Verification ─────────────
     sp = source_span_point(config.cfg_src_path, 1, 1, 0)
@@ -188,7 +190,7 @@ fn compiler_pipeline_execute config source_code
     push(stmt_list, ret_stmt)
     fn_def = ast_decl_fn("main", param_list, "i64", stmt_list, 1, sp)
     node_count = ast_visitor_count_nodes(fn_def)
-    result.res_stage_reached = PIPELINE_STAGE_PARSE
+    result.res_stage_reached = PIPELINE_STAGE_PARSE()
 
     // ── Phase 4: Semantic Analysis, Type System & Ownership ───────────────────
     sym_table = symtab_new(64)
@@ -199,17 +201,17 @@ fn compiler_pipeline_execute config source_code
 
     g_sym = symbol_variable("__lipi_entry", 2, 0, span_default(), 1)
     scope_define(scope_stk, g_sym)
-    result.res_stage_reached = PIPELINE_STAGE_SEMANTICS
+    result.res_stage_reached = PIPELINE_STAGE_SEMANTICS()
 
     // ── Phase 5: Multi-Target Architecture Selection ──────────────────────────
     target = target_machine_from_name("x86_64")
-    if config.cfg_target_arch == TARGET_ID_ARM64
+    if config.cfg_target_arch == TARGET_ID_ARM64()
         target = target_machine_from_name("arm64")
-    if config.cfg_target_arch == TARGET_ID_WASM
+    if config.cfg_target_arch == TARGET_ID_WASM()
         target = target_machine_from_name("wasm")
-    if config.cfg_target_arch == TARGET_ID_RISCV64
+    if config.cfg_target_arch == TARGET_ID_RISCV64()
         target = target_machine_from_name("riscv64")
-    result.res_stage_reached = PIPELINE_STAGE_TARGET
+    result.res_stage_reached = PIPELINE_STAGE_TARGET()
 
     // ── Phase 6: Linear Scan Register Allocation ──────────────────────────────
     iv0 = live_interval_new("%ret", 0, 0, 5, 0)
@@ -223,17 +225,17 @@ fn compiler_pipeline_execute config source_code
     push(callee_regs, 3)
     ra_res = linear_scan_allocate(iv_list, caller_regs, callee_regs, 8)
     result.res_reg_alloc_spills = ra_res.spill_count
-    result.res_stage_reached = PIPELINE_STAGE_REGALLOC
+    result.res_stage_reached = PIPELINE_STAGE_REGALLOC()
 
     // ── Phase 7: Binary Container Packaging (ELF/PE/Mach-O) ───────────────────
     hdr_x86 = elf_header_x86_64(4198400, 64, 512, 2, 6, 5)
     elf_bytes = elf_header_serialize(hdr_x86)
     result.res_output_bytes = elf_bytes.len()
-    result.res_stage_reached = PIPELINE_STAGE_COMPLETE
+    result.res_stage_reached = PIPELINE_STAGE_COMPLETE()
 
     // WHY: If live emission requested (cfg_is_dry_run == 0), assemble and persist the binary to disk.
     if config.cfg_is_dry_run == 0
-        if config.cfg_emit_format == FORMAT_SHARED
+        if config.cfg_emit_format == FORMAT_SHARED()
             // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
             synth = x86_synth_compile_program(toks)
             exp_names = list()
@@ -253,10 +255,46 @@ fn compiler_pipeline_execute config source_code
             else
                 result.res_error_count = 1
                 result.res_error_msg = "Failed to emit shared library (.so)"
-                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
-        elif config.cfg_target_arch == TARGET_ID_X86_64
+        elif config.cfg_emit_format == FORMAT_MACHO()
+            // Sovereign Mach-O 64-bit Binary Emission (macOS Darwin x86_64 / ARM64 Apple Silicon)
+            if config.cfg_target_arch == TARGET_ID_ARM64()
+                arm_synth = arm64_synth_compile_program(toks)
+                m_res = macho_emit_executable(arm_synth.synth_code, arm_synth.synth_rodata, 0, 16777228, config.cfg_out_path)
+                if m_res.mw_success == 1
+                    result.res_output_bytes = m_res.mw_file_size
+                else
+                    result.res_error_count = 1
+                    result.res_error_msg = m_res.mw_error_msg
+                    result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                    result.res_success = 0
+                    return result
+            else
+                synth = x86_synth_compile_program(toks)
+                m_res = macho_emit_executable(synth.synth_code, synth.synth_rodata, 0, 16777223, config.cfg_out_path)
+                if m_res.mw_success == 1
+                    result.res_output_bytes = m_res.mw_file_size
+                else
+                    result.res_error_count = 1
+                    result.res_error_msg = m_res.mw_error_msg
+                    result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                    result.res_success = 0
+                    return result
+        elif config.cfg_emit_format == FORMAT_PE()
+            // Sovereign Windows PE32+ (.exe) Executable Emission (x86-64 COFF)
+            synth = x86_synth_compile_program(toks)
+            pe_res = pe_emit_executable(synth.synth_code, synth.synth_rodata, [], 0, 0, config.cfg_out_path)
+            if pe_res.pe_success == 1
+                result.res_output_bytes = pe_res.pe_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = pe_res.pe_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+        elif config.cfg_target_arch == TARGET_ID_X86_64()
             // Synthesize AMD64 machine code instructions and rodata directly from tokens
             synth = x86_synth_compile_program(toks)
             if config.cfg_debug_mode == 1
@@ -264,20 +302,20 @@ fn compiler_pipeline_execute config source_code
                 line_builder = dwarf_line_builder_new(4)
                 dwarf_line_add_dir(line_builder, ".")
                 dwarf_line_add_file(line_builder, config.cfg_src_path, 1)
-                dwarf_line_emit_set_address(line_builder, 4194480)
+                dwarf_line_emit_set_address(line_builder, 1073742000)
                 dwarf_line_emit_advance_line(line_builder, 1)
                 dwarf_line_emit_copy(line_builder)
                 dwarf_line_emit_advance_pc(line_builder, synth.synth_code.len())
                 dwarf_line_emit_advance_line(line_builder, 1)
-                dwarf_line_end_sequence(line_builder, 4194480 + synth.synth_code.len())
+                dwarf_line_end_sequence(line_builder, 1073742000 + synth.synth_code.len())
                 line_bytes = dwarf_line_serialize(line_builder)
 
                 abbrev_bytes = dwarf_abbrev_build_standard()
-                cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", config.cfg_src_path, ".", 4194480, 4194480 + synth.synth_code.len(), 0)
+                cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", config.cfg_src_path, ".", 1073742000, 1073742000 + synth.synth_code.len(), 0)
                 f_idx = 0
                 while f_idx < synth.synth_functions.len()
                     fn_item = synth.synth_functions[f_idx]
-                    dwarf_unit_add_function(cu, fn_item.fn_name, 4194480 + fn_item.fn_entry_offset, 4194480 + synth.synth_code.len(), 1, 1)
+                    dwarf_unit_add_function(cu, fn_item.fn_name, 1073742000 + fn_item.fn_entry_offset, 1073742000 + synth.synth_code.len(), 1, 1)
                     f_idx = f_idx + 1
                 dwarf_unit_add_base_type(cu, "i64", 8, DW_ATE_signed())
                 info_bytes = dwarf_info_serialize(cu)
@@ -290,10 +328,10 @@ fn compiler_pipeline_execute config source_code
             else
                 result.res_error_count = 1
                 result.res_error_msg = emit_res.ew_error_msg
-                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
-        elif config.cfg_target_arch == TARGET_ID_ARM64
+        elif config.cfg_target_arch == TARGET_ID_ARM64()
             // Direct ARM64 Silicon Machine Code Synthesis
             arm_synth = arm64_synth_compile_program(toks)
             arm_res = arm64_elf_emit_executable(arm_synth.synth_code, arm_synth.synth_rodata, config.cfg_out_path)
@@ -302,10 +340,10 @@ fn compiler_pipeline_execute config source_code
             else
                 result.res_error_count = 1
                 result.res_error_msg = arm_res.ew_error_msg
-                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
-        elif config.cfg_target_arch == TARGET_ID_WASM
+        elif config.cfg_target_arch == TARGET_ID_WASM()
             // Sovereign Zero-JS WebAssembly Bytecode Synthesis
             wasm_bin = wasm_synth_compile_program(toks)
             w_res = wasm_emit_binary_file(wasm_bin, config.cfg_out_path)
@@ -314,10 +352,10 @@ fn compiler_pipeline_execute config source_code
             else
                 result.res_error_count = 1
                 result.res_error_msg = "Failed to emit WASM binary file"
-                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
-        elif config.cfg_target_arch == TARGET_ID_RISCV64
+        elif config.cfg_target_arch == TARGET_ID_RISCV64()
             // Direct RISC-V 64 Silicon Machine Code Synthesis
             rv_synth = riscv64_synth_compile_program(toks)
             rv_res = riscv64_elf_emit_executable(rv_synth.rv_code, rv_synth.rv_rodata, config.cfg_out_path)
@@ -326,7 +364,7 @@ fn compiler_pipeline_execute config source_code
             else
                 result.res_error_count = 1
                 result.res_error_msg = rv_res.rv_ew_error_msg
-                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
         else
@@ -340,7 +378,7 @@ fn compiler_pipeline_execute config source_code
             else
                 result.res_error_count = 1
                 result.res_error_msg = emit_res.ew_error_msg
-                result.res_stage_reached = PIPELINE_STAGE_EMIT
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
 

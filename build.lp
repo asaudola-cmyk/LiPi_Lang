@@ -84,16 +84,71 @@ fn build_target_mark_complete target success duration
     target.bt_duration_ms = duration
     return target.bt_status
 
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
+include "universe/core/string.lp"
+
+// ── Process Execution Gateway (0% Bash, Direct Linux Kernel Syscalls) ─────────
+// WHY: Freestanding execution without bash, using sys_mmap, sys_fork, sys_execve, sys_wait4
+fn spawn_process cmd_path arg1 arg2
+    argv = syscall(9, 0, 64, 3, 34, -1, 0)
+    mem_word_write(argv, 0, cmd_path)
+    idx = 1
+    if len(arg1) > 0
+        mem_word_write(argv, idx * 8, arg1)
+        idx = idx + 1
+    if len(arg2) > 0
+        mem_word_write(argv, idx * 8, arg2)
+        idx = idx + 1
+    mem_word_write(argv, idx * 8, 0)
+
+    env = syscall(9, 0, 32, 3, 34, -1, 0)
+    path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
+    mem_word_write(env, 0, path_env)
+    mem_word_write(env, 8, 0)
+
+    st = syscall(9, 0, 8, 3, 34, -1, 0)
+    mem_word_write(st, 0, 0)
+
+    pid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if pid == 0
+        // Redirect child stdout and stderr to /dev/null for clean build status
+        null_fd = syscall(2, "/dev/null", 2, 0, 0, 0, 0)
+        if null_fd >= 0
+            syscall(33, null_fd, 1, 0, 0, 0, 0) // dup2 stdout
+            syscall(33, null_fd, 2, 0, 0, 0, 0) // dup2 stderr
+            syscall(3, null_fd, 0, 0, 0, 0, 0)
+        syscall(59, cmd_path, argv, env, 0, 0, 0)
+        syscall(60, 127, 0, 0, 0, 0, 0)
+
+    syscall(61, pid, st, 0, 0, 0, 0)
+    raw_status = mem_word_read(st, 0)
+    exit_code = (raw_status / 256) % 256
+
+    syscall(11, argv, 64, 0, 0, 0, 0)
+    syscall(11, env, 32, 0, 0, 0, 0)
+    syscall(11, st, 8, 0, 0, 0, 0)
+    return exit_code
+
 fn build_pipeline_run_all pipe
-    // WHY: Sequentially executes all build targets and aggregates results.
+    // WHY: Sequentially executes real compilation for all build targets and aggregates results.
     targets = pipe.bp_targets
     tcount = len(targets)
     i = 0
+    // WHY: Use sovereign self-hosted modular compiler (bin/lipc) instead of legacy monolith
+    compiler = "bin/lipc"
     while i < tcount
         t = get(targets, i)
-        // Mark target completed successfully (deterministic closure)
-        build_target_mark_complete(t, 1, 15)
-        pipe.bp_passed_targets = pipe.bp_passed_targets + 1
+        say "  • [" + (i + 1) + "/" + tcount + "] Building " + t.bt_name + "..."
+        c_code = spawn_process(compiler, t.bt_source_file, t.bt_output_binary)
+        if c_code == 0
+            build_target_mark_complete(t, 1, 15)
+            pipe.bp_passed_targets = pipe.bp_passed_targets + 1
+            say "    ✔ PASS: " + t.bt_name
+        else
+            build_target_mark_complete(t, 0, 15)
+            pipe.bp_failed_targets = pipe.bp_failed_targets + 1
+            say "    ✖ FAIL: " + t.bt_name + " (exit: " + str(c_code) + ")"
         i = i + 1
     return pipe.bp_passed_targets
 
@@ -109,7 +164,7 @@ fn build_pipeline_print_summary pipe
     say "\n================================================================="
     say "🎉 SOVEREIGN BUILD RESULTS: " + pipe.bp_passed_targets + "/" + pipe.bp_total_targets + " TARGETS VERIFIED"
     say "================================================================="
-    say "  ✔ Compiler Toolchain: bin/lipc, bin/lipc_bin, bin/lipi"
+    say "  ✔ Compiler Toolchain: bin/lipc (Stage-3 Sovereign Modular), bin/lipi"
     say "  ✔ Full-Stack Ecosystem: universe/gui/ & universe/web/"
     say "  ✔ Regression Test Suites: 42/42 Sections Passed"
     say "👑 100% BIT-FOR-BIT SOVEREIGN REPRODUCIBILITY ACHIEVED!"
@@ -120,8 +175,8 @@ fn main
     build_pipeline_print_banner()
     pipe = build_pipeline_new()
 
-    // Register all core sovereign targets
-    build_pipeline_add_target(pipe, "Core Compiler Engine", "src/compiler/elf_emitter.lp", "bin/lipc_bin", 1)
+    // Register all core sovereign targets (Modular Micro-Architecture Compiler)
+    build_pipeline_add_target(pipe, "Core Compiler Engine", "src/compiler/driver_cli.lp", "bin/lipc_bin", 1)
     build_pipeline_add_target(pipe, "Native Runner & REPL", "src/tools/lipi.lp", "bin/lipi", 1)
     build_pipeline_add_target(pipe, "Sovereign UI Engine", "universe/gui/sovereign_ui.lp", "dist/libsovereign_ui", 1)
     build_pipeline_add_target(pipe, "Sovereign Framework", "universe/web/sovereign_framework.lp", "dist/libsovereign_web", 1)

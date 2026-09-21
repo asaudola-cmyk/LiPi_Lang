@@ -17,7 +17,18 @@
 // ==============================================================================
 
 include "universe/core/memory.lp"
-include "universe/gpu/compute.lp"
+
+// ── 0. SPIR-V Architecture & Opcode Constants ───────────────────────────────
+fn SPIRV_MAGIC
+    return 119734787
+fn SPIRV_VERSION_1_0
+    return 65536
+fn SPIRV_VERSION_1_5
+    return 66816
+fn SPIRV_GENERATOR_LIPI
+    return 4919
+fn SPIRV_GENERATOR_MAYA
+    return SPIRV_GENERATOR_LIPI()
 
 // ── 1. Linux DRM IOCTL Constants & Struct Offsets ─────────────────────────────
 // WHY: Defined in <drm/drm.h> and <drm/drm_mode.h> in Linux kernel UAPI.

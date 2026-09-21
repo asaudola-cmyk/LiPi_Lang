@@ -5,8 +5,8 @@
 // 100% Pure Lipi Implementation — Zero External Assembler / Linker Libs
 // ==============================================================================
 
-import "src/compiler/backend/pe_writer"
-import "src/compiler/backend/macho_writer"
+import "src/compiler/backend/formats/pe/pe_writer"
+import "src/compiler/backend/formats/macho/macho_writer"
 import "src/compiler/backend/omni_binary"
 import "universe/core/string"
 import "universe/os/syscalls"

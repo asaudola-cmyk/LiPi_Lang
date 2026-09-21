@@ -1,7 +1,7 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — MAYAVM SMART CONTRACT EXECUTOR
+@! LIPI UNIVERSAL ARCHITECTURE — LIPIVM SMART CONTRACT EXECUTOR
 @! Module: universe/blockchain/vm.lp
-@! Milestone: Layer-1 Sovereign Blockchain (MayaNet)
+@! Milestone: Layer-1 Sovereign Blockchain (LipiNet)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Isolated Virtual Machine, Deterministic Gas Metering, Opcode Stack,
 @! Persistent Contract Storage & Transaction State Rollback on Revert
@@ -20,6 +20,18 @@ import "universe/crypto/sha256"
   value: string
 @end
 
+@struct LipiVMContext
+  caller: string
+  contract_address: string
+  call_value: i64
+  gas_limit: i64
+  gas_used: i64
+  gas_price: i64
+  is_reverted: i64
+  return_data: string
+  error_msg: string
+@end
+
 @struct MayaVMContext
   caller: string
   contract_address: string
@@ -30,6 +42,12 @@ import "universe/crypto/sha256"
   is_reverted: i64
   return_data: string
   error_msg: string
+@end
+
+@struct LipiVMState
+  stack: array
+  memory: array
+  storage: array
 @end
 
 @struct MayaVMState
@@ -176,6 +194,60 @@ import "universe/crypto/sha256"
       sum_val = a_val + b_val
       new_st = new_st.push(sum_val.to_str())
       vm_state.stack = new_st
+      pc = pc + 1
+    @! Opcode: SUB
+    @elif op == "SUB"
+      @if vm_consume_gas(ctx, 3) == 0 break @end
+      @if vm_state.stack.len() < 2
+        ctx.is_reverted = 1
+        ctx.error_msg = "Stack underflow on SUB"
+        break
+      @end
+      st_len = vm_state.stack.len()
+      b_val = str_to_int(vm_state.stack[st_len - 1])
+      a_val = str_to_int(vm_state.stack[st_len - 2])
+      new_st = []
+      i = 0
+      @while i < st_len - 2
+        new_st = new_st.push(vm_state.stack[i])
+        i = i + 1
+      @end
+      sub_val = a_val - b_val
+      new_st = new_st.push(sub_val.to_str())
+      vm_state.stack = new_st
+      pc = pc + 1
+    @! Opcode: MUL
+    @elif op == "MUL"
+      @if vm_consume_gas(ctx, 5) == 0 break @end
+      @if vm_state.stack.len() < 2
+        ctx.is_reverted = 1
+        ctx.error_msg = "Stack underflow on MUL"
+        break
+      @end
+      st_len = vm_state.stack.len()
+      b_val = str_to_int(vm_state.stack[st_len - 1])
+      a_val = str_to_int(vm_state.stack[st_len - 2])
+      new_st = []
+      i = 0
+      @while i < st_len - 2
+        new_st = new_st.push(vm_state.stack[i])
+        i = i + 1
+      @end
+      mul_val = a_val * b_val
+      new_st = new_st.push(mul_val.to_str())
+      vm_state.stack = new_st
+      pc = pc + 1
+    @! Opcode: DUP
+    @elif op == "DUP"
+      @if vm_consume_gas(ctx, 3) == 0 break @end
+      st_len = vm_state.stack.len()
+      @if st_len < 1
+        ctx.is_reverted = 1
+        ctx.error_msg = "Stack underflow on DUP"
+        break
+      @end
+      top_val = vm_state.stack[st_len - 1]
+      vm_state.stack = vm_state.stack.push(top_val)
       pc = pc + 1
     @! Opcode: SSTORE <key> <val> (Persistent Contract Storage)
     @elif op == "SSTORE"

@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSAL ARCHITECTURE — NATIVE RISC-V 64-BIT (RV64GC) CODE GENERATOR
-@! Module: compiler/backend/riscv64/codegen.maya
-@! 100% Pure Maya Implementation — Zero External / C++ Dependencies
+@! LIPI UNIVERSAL ARCHITECTURE — NATIVE RISC-V 64-BIT (RV64GC) CODE GENERATOR
+@! Module: compiler/backend/riscv64/codegen.lp
+@! 100% Pure LiPi Implementation — Zero External / C++ Dependencies
 @! Features: RV64I/RV64M Instruction Encoders (R/I/S/B/U/J-Types), Register
 @! Allocations (x0-x31), Prologue/Epilogue, System Calls (ECALL) & Machine Code Emitter
 @! ============================================================================

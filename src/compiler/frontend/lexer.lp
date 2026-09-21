@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 1 — 100% PURE MAYA ADVANCED DFA SCANNER & LEXER
+@! LIPI COMPILER STAGE 1 — 100% PURE LIPI ADVANCED DFA SCANNER & LEXER
 @! Zero External Dependencies — Complete 64-Token Set
 @! Native Byte-Level Character Scanner
 @! ============================================================================

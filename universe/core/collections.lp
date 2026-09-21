@@ -29,6 +29,12 @@
   return 0
 @end
 
+@fn str_eq(s1, s2)
+  @! Canonical string equality comparison
+  @! WHY: Directly uses native == which lowers to silicon _lipi_cmp_dynamic for zero-copy character comparison.
+  return s1 == s2
+@end
+
 @fn pop(arr)
   @! WHY: Returns a shallow copy excluding the final item using native Lipi list operations.
   n = len(arr)
@@ -638,6 +644,35 @@
 
 @fn map_has(m, k)
   return hashmap_has(m, k)
+@end
+
+@fn str_contains(haystack, needle)
+  // WHY: Substring check in pure Lipi with zero external runtime dependencies
+  hlen = len(haystack)
+  nlen = len(needle)
+  @if nlen == 0
+    return 1
+  @end
+  @if hlen < nlen
+    return 0
+  @end
+  i = 0
+  @while i <= hlen - nlen
+    match = 1
+    j = 0
+    @while j < nlen
+      @if char_at(haystack, i + j) != char_at(needle, j)
+        match = 0
+        break
+      @end
+      j = j + 1
+    @end
+    @if match == 1
+      return 1
+    @end
+    i = i + 1
+  @end
+  return 0
 @end
 
 @fn contains(m, k)

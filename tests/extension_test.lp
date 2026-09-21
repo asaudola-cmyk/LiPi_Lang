@@ -1,10 +1,9 @@
-@! ================================================================
-@! extension_test.my — Proves .my extension works with Maya compiler
-@! This file uses the .my short-form extension, functionally
-@! identical to .maya. The bootstrap compiler accepts both.
-@! ================================================================
+// ==============================================================================
+// 🧪 LIPI EXTENSION TEST: Proves .lp and sovereign syntax work with LiPi compiler
+// ⚡ 100% Pure LiPi Implementation — Zero External Dependencies
+// ==============================================================================
 
 @fn main()
-  println("Maya .my extension works")
-  println("Both .maya and .my are sovereign Maya source files")
+  println("LiPi .lp extension works")
+  println("Both .lp and sovereign files are verified LiPi source files")
 @end

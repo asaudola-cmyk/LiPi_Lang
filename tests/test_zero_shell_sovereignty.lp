@@ -40,7 +40,8 @@ fn main
     // ── Section 1: Build Target State Machine & Lifecycle ─────────────────────
     say "\n▶ Section 1: Build Target State Machine & Lifecycle..."
     total_tests = total_tests + 1
-    target = build_target_new("Native ELF Emitter", "src/compiler/elf_emitter.lp", "bin/lipc_bin", 1)
+    // WHY: Target canonical sovereign compiler binary (bin/lipc)
+    target = build_target_new("Native ELF Emitter", "src/compiler/driver_cli.lp", "bin/lipc", 1)
     
     ok_t1 = assert_eq(target.bt_status, BUILD_STATUS_PENDING, "Initial Target Status is PENDING")
     ok_t2 = assert_eq(target.bt_is_required, 1, "Target is Marked Required")
@@ -56,7 +57,7 @@ fn main
     say "\n▶ Section 2: Build Pipeline Orchestration & Closure..."
     total_tests = total_tests + 1
     pipe = build_pipeline_new()
-    build_pipeline_add_target(pipe, "Core Compiler", "src/compiler/elf_emitter.lp", "bin/lipc_bin", 1)
+    build_pipeline_add_target(pipe, "Core Compiler", "src/compiler/driver_cli.lp", "bin/lipc", 1)
     build_pipeline_add_target(pipe, "Sovereign Framework", "universe/web/sovereign_framework.lp", "dist/framework", 1)
     build_pipeline_add_target(pipe, "Ecosystem Tests", "tests/test_sovereign_fullstack_suite.lp", "dist/test", 1)
 
@@ -121,5 +122,3 @@ fn main
     else
         say "❌ SOME SECTIONS FAILED!"
         return 1
-
-main()

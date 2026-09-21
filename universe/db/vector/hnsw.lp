@@ -40,6 +40,12 @@ import "universe/core/string"
   total_documents: i64
 @end
 
+@struct HNSWMatch
+  doc_id: string
+  score: i64
+  text_content: string
+@end
+
 // ── 2. Vector Distance & Metric Kernels ───────────────────────────────────────
 // WHY: Cosine similarity: (A · B) / (||A|| * ||B||).
 // Scaled integer arithmetic (1000 = 1.0) eliminates floating-point instability.

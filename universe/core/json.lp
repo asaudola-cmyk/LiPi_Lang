@@ -19,7 +19,7 @@ JSON_OBJECT = 5
 fn json_escape s
     res = ""
     i = 0
-    slen = len s
+    slen = len(s)
     while i < slen
         c = char_at(s, i)
         if c == "\\"
@@ -42,13 +42,13 @@ fn json_escape s
     return res
 
 fn জেসন_এসকেপ s
-    return json_escape s
+    return json_escape(s)
 
 // WHY: এসকেপ সিকোয়েন্স বিশিষ্ট জেসন স্ট্রিংকে স্বাভাবিক মূল লিপিতে পুনরুদ্ধার করে।
 fn json_unescape s
     res = ""
     i = 0
-    slen = len s
+    slen = len(s)
     while i < slen
         c = char_at(s, i)
         if c == "\\" and i + 1 < slen
@@ -118,12 +118,12 @@ fn json_unescape s
     return res
 
 fn জেসন_আনএসকেপ s
-    return json_unescape s
+    return json_unescape(s)
 
 // ── ২. সংখ্যা যাচাইকরণ (Validate Number Representation) ───────────────────────
 // WHY: কঠোরভাবে যাচাই করে যে কোনো স্ট্রিং বৈধ জেসন সংখ্যা (চিহ্ন, দশমিক ও এক্সপোনেন্ট সহ) কিনা।
 fn json_is_num s
-    slen = len s
+    slen = len(s)
     if slen == 0
         return 0
     start = 0
@@ -161,14 +161,14 @@ fn json_is_num s
     return has_digit
 
 fn জেসন_কি_সংখ্যা s
-    return json_is_num s
+    return json_is_num(s)
 
 // ── ৩. মান ফরম্যাটিং হেল্পার (Format Value for JSON Insertion) ─────────────────
 // WHY: প্রি-ফরম্যাটেড জেসন অবজেক্ট/অ্যারে, সংখ্যা, বা র স্ট্রিংকে স্বয়ংক্রিয়ভাবে
 // শনাক্ত করে সঠিক উদ্ধৃতি ও এস্কেপ প্রদান করে।
 fn json_format_val val
-    s = str val
-    slen = len s
+    s = str(val)
+    slen = len(s)
     if slen == 0
         return "\"\""
     first = char_at(s, 0)
@@ -184,28 +184,28 @@ fn json_format_val val
     return "\"" + json_escape(s) + "\""
 
 fn জেসন_মান_ফরম্যাট val
-    return json_format_val val
+    return json_format_val(val)
 
 // ── ৩.৫ ইউনিভার্সাল জেসন স্ট্রিং রূপান্তর (Universal Stringifier) ──────────────
 // WHY: প্রিমিটিভ মানকে সরাসরি স্ট্রিং রিপ্রেজেন্টেশনে রূপান্তর করে যা ডকো বা টেস্টে ব্যবহৃত হয়।
 fn json_stringify val
-    return str val
+    return str(val)
 
 fn জেসন_স্ট্রিংফাই val
-    return json_stringify val
+    return json_stringify(val)
 
 // ── ৪. সাধারণ প্রিমিটিভ সিরিয়ালাইজেশন (Primitive Serializers) ──────────────────
 fn json_str s
     return "\"" + json_escape(s) + "\""
 
 fn জেসন_স্ট্রিং s
-    return json_str s
+    return json_str(s)
 
 fn json_num n
-    return str n
+    return str(n)
 
 fn জেসন_সংখ্যা n
-    return json_num n
+    return json_num(n)
 
 fn json_bool b
     if b
@@ -213,7 +213,7 @@ fn json_bool b
     return "false"
 
 fn জেসন_বুলিয়ান b
-    return json_bool b
+    return json_bool(b)
 
 fn json_null
     return "null"
@@ -224,7 +224,7 @@ fn জেসন_নাল
 // ── ৫. পার্সার ফাংশনসমূহ (JSON Parser Primitives) ─────────────────────────────
 // WHY: জেসন স্ট্রিং লিটারাল থেকে বাইরের কোট ও অভ্যন্তরীণ এসকেপ সিকোয়েন্স নিষ্কাশন করে।
 fn json_parse_str s
-    slen = len s
+    slen = len(s)
     if slen == 0
         return ""
     // হোয়াইটস্পেস এড়ানো
@@ -286,11 +286,11 @@ fn json_parse_str s
     return res
 
 fn জেসন_স্ট্রিং_পার্স s
-    return json_parse_str s
+    return json_parse_str(s)
 
 // WHY: স্ট্রিং থেকে চিহ্নযুক্ত ৬৪-বিট পূর্ণসংখ্যা (Signed 64-bit Integer) তৈরি করে।
 fn json_parse_num s
-    slen = len s
+    slen = len(s)
     if slen == 0
         return 0
     p = 0
@@ -329,12 +329,12 @@ fn json_parse_num s
     return val * sign
 
 fn জেসন_সংখ্যা_পার্স s
-    return json_parse_num s
+    return json_parse_num(s)
 
 // ── ৬. কালেকশন সিরিয়ালাইজারসমূহ (Collection Serializers) ──────────────────────
 // WHY: ডায়নামিক লিপি তালিকা (List) কে স্ট্যান্ডার্ড জেসন অ্যারেতে রূপান্তর করে।
 fn json_stringify_list items
-    count = len items
+    count = len(items)
     if count == 0
         return "[]"
     res = "["
@@ -351,11 +351,11 @@ fn json_stringify_list items
     return res
 
 fn জেসন_তালিকা_রূপান্তর items
-    return json_stringify_list items
+    return json_stringify_list(items)
 
 // WHY: ফ্ল্যাট কী-ভ্যালু জোড়া [k1, v1, k2, v2, ...] কে স্ট্যান্ডার্ড জেসন অবজেক্টে রূপান্তর করে।
 fn json_stringify_map pairs
-    count = len pairs
+    count = len(pairs)
     if count == 0
         return "{}"
     res = "{"
@@ -374,11 +374,11 @@ fn json_stringify_map pairs
     return res
 
 fn জেসন_ম্যাপ_রূপান্তর pairs
-    return json_stringify_map pairs
+    return json_stringify_map(pairs)
 
 // WHY: নেস্টেড সাব-লিস্ট জোড়া [[k1, v1], [k2, v2], ...] সিরিয়ালাইজ করার জন্য।
 fn json_stringify_nested pair_list
-    count = len pair_list
+    count = len(pair_list)
     if count == 0
         return "{}"
     res = "{"
@@ -398,12 +398,12 @@ fn json_stringify_nested pair_list
     return res
 
 fn জেসন_নেস্টেড_রূপান্তর pair_list
-    return json_stringify_nested pair_list
+    return json_stringify_nested(pair_list)
 
 // WHY: দুটি পৃথক কী এবং মান তালিকা থেকে সরাসরি জেসন অবজেক্ট প্রস্তুত করে।
 fn json_stringify_keys_values keys values
-    kcount = len keys
-    vcount = len values
+    kcount = len(keys)
+    vcount = len(values)
     limit = kcount
     if vcount < limit
         limit = vcount
@@ -425,33 +425,33 @@ fn json_stringify_keys_values keys values
     return res
 
 fn জেসন_কি_ভ্যালু_রূপান্তর keys values
-    return json_stringify_keys_values keys values
+    return json_stringify_keys_values(keys, values)
 
 // ── ৭. সুবিধাজনক শর্টকাট অবজেক্ট মেকার (Convenience Builders) ──────────────────
 fn json_obj2 k1 v1 k2 v2
     return "{\"" + k1 + "\": " + json_format_val(v1) + ", \"" + k2 + "\": " + json_format_val(v2) + "}"
 
 fn জেসন_অবজেক্ট২ k1 v1 k2 v2
-    return json_obj2 k1 v1 k2 v2
+    return json_obj2(k1, v1, k2, v2)
 
 fn json_arr2 a b
     return "[" + json_format_val(a) + ", " + json_format_val(b) + "]"
 
 fn জেসন_অ্যারে২ a b
-    return json_arr2 a b
+    return json_arr2(a, b)
 
 // ── ৮. এইচটিটিপি ও আরপিসি রেসপন্স (HTTP / RPC Standard Responses) ───────────────
 fn json_response_ok data
     return "{\"status\": \"ok\", \"data\": " + json_format_val(data) + "}"
 
 fn জেসন_রেসপন্স_সফল data
-    return json_response_ok data
+    return json_response_ok(data)
 
 fn json_response_err msg
     return "{\"status\": \"error\", \"message\": " + json_str(msg) + "}"
 
 fn জেসন_রেসপন্স_ব্যর্থ msg
-    return json_response_err msg
+    return json_response_err(msg)
 
 // ── ৯. ডিসপ্লে ও লগিং (Pretty Print & Output) ─────────────────────────────────
 fn json_pretty obj indent
@@ -459,4 +459,4 @@ fn json_pretty obj indent
     return 0
 
 fn জেসন_প্রিন্ট obj indent
-    return json_pretty obj indent
+    return json_pretty(obj, indent)

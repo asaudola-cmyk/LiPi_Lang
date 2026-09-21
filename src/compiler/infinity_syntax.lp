@@ -168,11 +168,12 @@ import "universe/core/string"
   @end
 @end
 
-// ── Compatibility Aliases ────────────────────────────────────────────────────
-@fn maya_power(base, exp) return lipi_power(base, exp) @end
-@fn maya_spaceship(a, b) return lipi_spaceship(a, b) @end
-@fn maya_xor(a, b) return lipi_xor(a, b) @end
-@fn maya_approx_eq(a, b, epsilon) return lipi_approx_eq(a, b, epsilon) @end
+// ── Sovereign Mathematical Primitives ─────────────────────────────────────────
+// WHY: Pure LiPi algebraic exponents, three-way spaceship comparisons, and bitwise XOR
+@fn lipi_compat_power(base, exp) return lipi_power(base, exp) @end
+@fn lipi_compat_spaceship(a, b) return lipi_spaceship(a, b) @end
+@fn lipi_compat_xor(a, b) return lipi_xor(a, b) @end
+@fn lipi_compat_approx_eq(a, b, epsilon) return lipi_approx_eq(a, b, epsilon) @end
 
 @! ----------------------------------------------------------------------------
 @! 4. PURE LIPI REPLACEMENT TOKENIZER & NUMERIC PARSER

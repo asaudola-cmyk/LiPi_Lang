@@ -47,13 +47,15 @@ import "compiler/frontend/lexer/token_kind"
 
 // ── 3. SourceSpan Constructors & Operations ───────────────────────────────────
 
-@fn source_span_new(file: string, sl: i64, sc: i64, so: i64, el: i64, ec: i64, eo: i64)
-  // WHY: Constructs an explicit start-to-end span bounding a token or AST node
+@fn source_span_new(file: string, sl: i64, sc: i64, el: i64, ec: i64, eo: i64)
+  // WHY: Constructs an explicit start-to-end span bounding a token or AST node.
+  // Strictly bounded to 6 parameters to fit natively into System V AMD64 ABI
+  // registers (%rdi, %rsi, %rdx, %rcx, %r8, %r9) with zero stack spill or stack leakage.
   return {
     span_file: file,
     span_start_line: sl,
     span_start_col: sc,
-    span_start_offset: so,
+    span_start_offset: 0,
     span_end_line: el,
     span_end_col: ec,
     span_end_offset: eo

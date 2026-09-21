@@ -421,7 +421,7 @@ import "universe/core/string"
 @! 7. MASTER OPTIMIZATION PASS
 @! ----------------------------------------------------------------------------
 @fn optimize_ast(ast)
-  println("▶ [OPT] Running Pure Maya Optimization Pipeline...")
+  println("▶ [OPT] Running Pure LiPi Optimization Pipeline...")
   
   optimized_funcs = []
   

@@ -24,7 +24,7 @@ say "================================================================="
 
 // Secret Key setup
 secret = "sovereign_secret_key_888"
-sec_len = len secret
+sec_len = len(secret)
 
 // Token buffer allocation (256 bytes)
 token_buf = sys_alloc(256)
@@ -63,7 +63,7 @@ mem_byte_write(token_buf, tok_len - 1, sig_tamper_char)
 
 // 6. Test Wrong Secret Key Rejection
 wrong_secret = "attacker_imposter_key_111"
-wrong_sec_len = len wrong_secret
+wrong_sec_len = len(wrong_secret)
 wrong_key_status = jwt_validate_token(token_buf, tok_len, wrong_secret, wrong_sec_len, 1700000000)
 assert_eq(wrong_key_status, 0 - 1, "Forged token with wrong key rejected with code -1")
 

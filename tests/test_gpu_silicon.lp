@@ -54,7 +54,7 @@ fn main
     spirv = list()
     push(spirv, SPIRV_MAGIC())          // Word 0: Magic 0x07230203
     push(spirv, SPIRV_VERSION_1_0())    // Word 1: Version 1.0 (0x00010000)
-    push(spirv, SPIRV_GENERATOR_MAYA()) // Word 2: Generator
+    push(spirv, SPIRV_GENERATOR_LIPI()) // Word 2: Generator (Sovereign LiPi Engine)
     push(spirv, 10)                     // Word 3: Bound ID
     push(spirv, 0)                      // Word 4: Schema
 

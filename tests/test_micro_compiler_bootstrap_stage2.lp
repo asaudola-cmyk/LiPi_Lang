@@ -96,10 +96,10 @@ fn main
     test_assert_eq(r2, 50, "While loop correctly computed sum without 5 up to 10 (returns 50)")
 
     // For range loop test
-    src2b = "sum = 0\nfor i in 1..11\n    sum = sum + i\nreturn sum\n"
+    src2b = "sum = 0\nfor i in 1..10\n    sum = sum + i\nreturn sum\n"
     file_write("/tmp/bootstrap_test_2b.lp", src2b)
     c2b = run_shell_command("./bin/lipc_micro /tmp/bootstrap_test_2b.lp -o /tmp/bootstrap_bin_2b > /dev/null")
-    test_assert_eq(c2b, 0, "lipc_micro compiles for range loop (1..11)")
+    test_assert_eq(c2b, 0, "lipc_micro compiles for range loop (1..10)")
     r2b = run_shell_command("/tmp/bootstrap_bin_2b > /dev/null")
     test_assert_eq(r2b, 55, "For loop computed Sum(1..10) == 55")
 

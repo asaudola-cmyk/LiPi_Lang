@@ -636,6 +636,12 @@ import "universe/core/string"
   return syscall(59, filename_ptr, argv_ptr, envp_ptr, 0, 0, 0)
 @end
 
+@fn sys_execve(filename_ptr, argv_ptr, envp_ptr)
+  // WHY: Canonical Linux SYS_execve (59) gateway matching lipi_syscall.lp ABI
+  return syscall(59, filename_ptr, argv_ptr, envp_ptr, 0, 0, 0)
+@end
+
+
 @fn sys_exit(status)
   return syscall(60, status, 0, 0, 0, 0, 0)
 @end

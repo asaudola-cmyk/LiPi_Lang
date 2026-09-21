@@ -142,18 +142,18 @@ fn bb_put32 ctx val
     bb_put8(ctx, floor(v / 16777216) % 256)
 
 fn bb_put64 ctx val
+    // WHY: Bit-exact 64-bit Little-Endian integer serialization supporting full positive and negative ranges.
+    // Iterative modular division extracts exact byte chunks without 32-bit truncation or floating-point precision loss.
     v = floor(val)
-    if v < 0
-        // WHY: 64-bit two's complement encoding for negative numbers
-        lo = v + 4294967296
-        hi = 4294967295
-        bb_put32(ctx, lo)
-        bb_put32(ctx, hi)
-        return 0
-    lo = v % 4294967296
-    hi = floor(v / 4294967296) % 4294967296
-    bb_put32(ctx, lo)
-    bb_put32(ctx, hi)
+    i = 0
+    while i < 8
+        b = v % 256
+        if b < 0
+            b = b + 256
+        bb_put8(ctx, b)
+        v = floor((v - b) / 256)
+        i = i + 1
+    return 0
 
 fn bb_set8 ctx pos val
     bb = get(ctx, 0)
@@ -961,11 +961,11 @@ fn emit_strength_reduced_mod ctx k
         bb_put8(ctx, 73)
         bb_put8(ctx, 137)
         bb_put8(ctx, 195) // mov r11, rax
-        x86_mov_reg_imm64(ctx, 3, -6640827889535070453) // movabs rbx, 0xa3d70a3d70a3d70b
+        x86_mov_reg_imm64(ctx, 3, -6640827866535438581) // movabs rbx, 0xa3d70a3d70a3d70b
         bb_put8(ctx, 72)
         bb_put8(ctx, 247)
         bb_put8(ctx, 235) // imul rbx
-        bb_put8(ctx, 73)
+        bb_put8(ctx, 76)
         bb_put8(ctx, 1)
         bb_put8(ctx, 218) // add rdx, r11
         bb_put8(ctx, 72)
@@ -9338,8 +9338,14 @@ while i < len(args)
         target_arch = "wasm"
     elif arg == "--target=x86_64" or arg == "--target=amd64" or arg == "-mx86_64"
         target_arch = "x86_64"
+    elif arg == "--target=riscv64" or arg == "--target=riscv" or arg == "-mriscv64"
+        target_arch = "riscv64"
     elif arg == "--direct-elf" or arg == "--baremetal"
         pass_noop = 0
+    elif arg == "--version" or arg == "-v" or arg == "version"
+        say "👑 Lipi Sovereign Compiler — First 1.0.0 (প্রথম ১.০.০)"
+        say "⚡ 100% Pure Lipi Source | Zero C | Zero GCC | Zero Libc | Zero Python"
+        exit(0)
     elif arg == "--help" or arg == "-h"
         say "👑 Lipi Sovereign Compiler — First 1.0.0 (প্রথম ১.০.০)"
         say "⚡ 100% Pure Lipi Source | Zero C | Zero GCC | Zero Libc | Zero Python"
@@ -9348,6 +9354,7 @@ while i < len(args)
         say "  lipc -shared <input.lp> [-o <output.so>]             Compile to Linux Shared Object (.so)"
         say "  lipc --target=arm64 <input.lp> [-o <output_binary>]  Compile to Linux AArch64 (ARM64) ELF64"
         say "  lipc --target=wasm <input.lp> [-o <output_binary>]   Compile to W3C WebAssembly (WASM)"
+        say "  lipc --target=riscv64 <input.lp> [-o <output_binary>] Compile to Linux RISC-V 64-bit ELF64"
         say "  lipc --target=x86_64 <input.lp> [-o <output_binary>] Compile to Linux x86_64 ELF64"
         exit(0)
     else

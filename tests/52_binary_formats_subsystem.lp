@@ -195,7 +195,7 @@ import "src/compiler/backend/formats/debug/dwarf_info.lp"
   coff_bytes = pe_coff_header_serialize(coff_hdr)
   all_passed = all_passed & assert_eq(coff_bytes.len(), 20, "COFF File Header exact size (20 bytes)")
 
-  opt_hdr = pe_optional_header64_create(4096, 4096, 512, 512, 0, 16384, 512, 0)
+  opt_hdr = pe_optional_header64_default()
   opt_bytes = pe_optional_header64_serialize(opt_hdr)
   all_passed = all_passed & assert_eq(opt_bytes.len(), 240, "PE32+ Optional Header exact size (240 bytes)")
   all_passed = all_passed & assert_eq(opt_hdr.magic, PE32PLUS_MAGIC(), "PE32+ Magic (0x020B)")

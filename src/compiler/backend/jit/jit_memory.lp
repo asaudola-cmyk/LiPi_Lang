@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA JIT COMPILER BACKEND — EXECUTABLE MEMORY ALLOCATOR & PROTECTION (W^X)
-@! Module: compiler/backend/jit/jit_memory.maya
+@! LIPI JIT COMPILER BACKEND — EXECUTABLE MEMORY ALLOCATOR & PROTECTION (W^X)
+@! Module: compiler/backend/jit/jit_memory.lp
 @! Architecture: Linux x86-64 Userspace Anonymous Memory Management
 @! Standard: sys_mmap (PROT_EXEC), sys_mprotect (W^X), sys_munmap, RAM Byte Writer
 @! ============================================================================
@@ -133,13 +133,15 @@ import "universe/os/syscalls"
 
 @! Writes a single byte into the JIT memory block at specified offset
 @fn jit_mem_write_byte(block, offset, byte_val)
+  // WHY: Direct byte-level RAM writing into the JIT memory region using
+  // sovereign freestanding memory write syscalls.
   @if block == 0 || block.addr == 0 || offset < 0 || offset >= block.capacity
     return 0
   @end
 
   dest_addr = block.addr + offset
   b_val = (byte_val % 256 + 256) % 256
-  maya_mem_write_u8(dest_addr, b_val)
+  lipi_mem_write_u8(dest_addr, b_val)
 
   @if offset + 1 > block.used
     block.used = offset + 1
@@ -154,11 +156,12 @@ import "universe/os/syscalls"
   @end
 
   src_addr = block.addr + offset
-  return maya_mem_read_u8(src_addr)
+  return lipi_mem_read_u8(src_addr)
 @end
 
 @! Writes a contiguous sequence of machine code bytes into the JIT memory block
 @fn jit_mem_write_bytes(block, offset, bytes)
+  // WHY: Bulk-emits compiled native machine instructions into executable memory.
   @if block == 0 || block.addr == 0 || offset < 0
     return 0
   @end
@@ -172,7 +175,7 @@ import "universe/os/syscalls"
   i = 0
   @while i < b_len
     b_val = (bytes[i] % 256 + 256) % 256
-    maya_mem_write_u8(dest_addr + i, b_val)
+    lipi_mem_write_u8(dest_addr + i, b_val)
     i = i + 1
   @end
 

@@ -954,27 +954,13 @@ fn str_ends_with s suffix
 fn শেষ_হয় s suffix
     return ends_with(s, suffix)
 
-// WHY: Extracts substring from [start, end) exclusive. Handles boundary clamps cleanly.
-fn str_sub s start end
-    slen = len(s)
-    if start < 0
-        start = 0
-    if end > slen
-        end = slen
-    if start >= end
-        return ""
-    res = ""
-    i = start
-    while i < end
-        res = res + char_at(s, i)
-        i = i + 1
-    return res
+// WHY: Substring aliases delegate directly to native silicon-intrinsic str_sub (_lipi_str_sub).
+// Eliminates software divide-and-conquer recursion and keyword collision with 'end'.
+fn substring s start end_pos
+    return str_sub(s, start, end_pos)
 
-fn substring s start end
-    return str_sub(s, start, end)
-
-fn উপস্ট্রিং s start end
-    return str_sub(s, start, end)
+fn উপস্ট্রিং s start end_pos
+    return str_sub(s, start, end_pos)
 
 // WHY: Replaces all occurrences of old_sub with new_sub throughout string s.
 fn replace s old_sub new_sub

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA ADVANCED INTERACTIVE REPL ENGINE
+@! LIPI ADVANCED INTERACTIVE REPL ENGINE
 @! 100% Written in Pure Lipi Language
 @! Features: Multi-operator Arithmetic Parsing, Parentheses, Variable Environment,
 @! REPL Metacommands (.help, .vars, .version, .exit, .clear)
@@ -199,7 +199,7 @@ import "universe/core/string"
   
   @! Metacommands
   @if trimmed == "help" || trimmed == ".help"
-    println("  Maya REPL Help:")
+    println("  LiPi REPL Help:")
     println("    .vars        List all environment variables")
     println("    .version     Display language version")
     println("    .clear       Clear terminal state")
@@ -214,7 +214,7 @@ import "universe/core/string"
   @end
   
   @if trimmed == "version" || trimmed == ".version"
-    println("  Maya Programming Language v2.0.0 (Universe Edition)")
+    println("  LiPi Programming Language v1.0.0 (Universe Edition)")
     return { output: "", env: env, exit_req: 0 }
   @end
   

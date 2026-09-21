@@ -202,4 +202,95 @@ fn test_avx2_encoder_subsystem
 
     return 1
 
-// test_avx2_encoder_subsystem()
+// ── 5. Silicon Native Hardware Intrinsics & Runtime Helpers ───────────────────
+
+fn x86_synth_emit_cpu_has_avx2 s
+    // WHY: In-silicon CPUID leaf 7, subleaf 0 probe for AVX2 feature flag (EBX bit 5).
+    // Protects vector execution pipelines against illegal instruction (SIGILL) traps.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "cpu_has_avx2", off)
+    x86_synth_register_helper_fn(s, "cpuid_avx2", off)
+    // push rbx; mov eax, 7; xor ecx, ecx; cpuid; shr ebx, 5; and ebx, 1; mov eax, ebx; pop rbx; ret
+    x86_synth_emit_bytes(s, [
+        83, 184, 7, 0, 0, 0, 49, 201, 15, 162,
+        193, 235, 5, 131, 227, 1, 137, 216, 91, 195
+    ])
+    return off
+
+fn x86_synth_emit_cpu_has_avx512 s
+    // WHY: In-silicon CPUID leaf 7, subleaf 0 probe for AVX-512 Foundation (EBX bit 16).
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "cpu_has_avx512", off)
+    x86_synth_register_helper_fn(s, "cpu_has_avx512f", off)
+    x86_synth_register_helper_fn(s, "cpuid_avx512", off)
+    // push rbx; mov eax, 7; xor ecx, ecx; cpuid; shr ebx, 16; and ebx, 1; mov eax, ebx; pop rbx; ret
+    x86_synth_emit_bytes(s, [
+        83, 184, 7, 0, 0, 0, 49, 201, 15, 162,
+        193, 235, 16, 131, 227, 1, 137, 216, 91, 195
+    ])
+    return off
+
+fn x86_synth_emit_simd_avx2_sum s
+    // WHY: Native 256-bit AVX2 SIMD vector horizontal sum kernel (130 machine code bytes).
+    // Processes 4x 64-bit integers per clock cycle with unrolled dual-pipeline execution.
+    // Signature: simd_avx2_sum(ptr: %rdi, count: %rsi) -> sum: %rax
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "simd_avx2_sum", off)
+    x86_synth_register_helper_fn(s, "simd_avx2_sum_u64", off)
+    x86_synth_register_helper_fn(s, "ভেক্টর_যোগ_২৫৬", off)
+    x86_synth_register_helper_fn(s, "ভেক্টর_যোগ", off)
+    x86_synth_emit_bytes(s, [
+        72, 133, 246, 127, 4, 72, 49, 192, 195, 72, 133, 255, 117, 4, 72, 49, 192, 195,
+        197, 253, 239, 192, 197, 245, 239, 201, 72, 131, 254, 8, 124, 27, 197, 254, 111, 23,
+        197, 253, 212, 194, 197, 254, 111, 95, 32, 197, 245, 212, 203, 72, 131, 199, 64, 72, 131, 238, 8,
+        235, 223, 72, 131, 254, 4, 124, 16, 197, 254, 111, 23, 197, 253, 212, 194, 72, 131, 199, 32,
+        72, 131, 238, 4, 197, 253, 212, 193, 196, 227, 125, 57, 193, 1, 197, 249, 212, 193, 196, 227,
+        249, 22, 194, 1, 196, 225, 249, 126, 192, 72, 1, 208, 72, 133, 246, 126, 12, 72, 3, 7,
+        72, 131, 199, 8, 72, 255, 206, 117, 244, 197, 248, 119, 195
+    ])
+    return off
+
+fn x86_synth_emit_simd_avx512_sum s
+    // WHY: 512-bit ZMM vector sum kernel processing 8x 64-bit integers per instruction.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "simd_avx512_sum", off)
+    x86_synth_register_helper_fn(s, "simd_avx512_sum_u64", off)
+    x86_synth_register_helper_fn(s, "ভেক্টর_যোগ_৫১২", off)
+    x86_synth_emit_bytes(s, [
+        72, 133, 246, 126, 89, 72, 133, 255, 116, 84, 98, 241, 125, 72, 239, 192,
+        72, 131, 254, 8, 124, 16, 98, 241, 253, 72, 212, 7, 72, 131, 199, 64,
+        72, 131, 238, 8, 235, 234, 98, 243, 253, 72, 59, 193, 1, 197, 253, 212,
+        193, 196, 227, 125, 57, 193, 1, 197, 249, 212, 193, 197, 241, 115, 216, 8,
+        197, 249, 212, 193, 196, 225, 249, 126, 192, 72, 133, 246, 126, 12, 72, 3,
+        7, 72, 131, 199, 8, 72, 255, 206, 117, 244, 197, 248, 119, 195, 72, 49,
+        192, 195
+    ])
+    return off
+
+fn x86_synth_emit_simd_avx512_dot s
+    // WHY: Hardware Silicon Dot Product (GEMM kernel step) via 512-bit ZMM execution.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "simd_avx512_dot", off)
+    x86_synth_register_helper_fn(s, "simd_avx512_dot_u64", off)
+    x86_synth_register_helper_fn(s, "ভেক্টর_ডট_৫১২", off)
+    x86_synth_emit_bytes(s, [
+        72, 133, 210, 126, 121, 72, 133, 255, 116, 116, 72, 133, 246, 116, 111, 98,
+        241, 125, 72, 239, 192, 72, 131, 250, 8, 124, 32, 98, 241, 254, 72, 111,
+        15, 98, 242, 245, 72, 64, 14, 98, 241, 253, 72, 212, 193, 72, 131, 199,
+        64, 72, 131, 198, 64, 72, 131, 234, 8, 235, 218, 98, 243, 253, 72, 59,
+        193, 1, 197, 253, 212, 193, 196, 227, 125, 57, 193, 1, 197, 249, 212, 193,
+        197, 241, 115, 216, 8, 197, 249, 212, 193, 196, 225, 249, 126, 192, 72, 133,
+        210, 126, 23, 76, 139, 7, 76, 15, 175, 6, 76, 1, 192, 72, 131, 199,
+        8, 72, 131, 198, 8, 72, 255, 202, 117, 233, 197, 248, 119, 195, 72, 49,
+        192, 195
+    ])
+    return off
+
+fn x86_synth_emit_all_avx2_helpers s
+    // WHY: Synthesizes all Silicon AVX2 / AVX-512 hardware extensions into binary
+    x86_synth_emit_cpu_has_avx2(s)
+    x86_synth_emit_cpu_has_avx512(s)
+    x86_synth_emit_simd_avx2_sum(s)
+    x86_synth_emit_simd_avx512_sum(s)
+    x86_synth_emit_simd_avx512_dot(s)
+    return 0
