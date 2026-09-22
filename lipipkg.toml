@@ -1,0 +1,36 @@
+# ==============================================================================
+# 👑 lipipkg.toml — লিপি মহাবিশ্ব সার্বভৌম প্যাকেজ ম্যানিফেস্ট
+# ⚡ 100% Pure Direct Silicon Machine Code | 0% C | 0% GCC | 0% Libc | 0% Python
+# ==============================================================================
+
+[package]
+name = "lipi"
+version = "1.0.0"
+authors = ["Shafiullah <shafiullah@lipi.dev>"]
+edition = "2026"
+description = "👑 Lipi Sovereign Programming Language & Computing Universe (Tri-Syntax: Bengali + English + Lipi Directive Syntax)"
+license = "MIT / Sovereign-Core-License"
+repository = "https://github.com/asaudola-cmyk/LiPi_Lang.git"
+entry = "src/tools/lipi.lp"
+
+[dependencies]
+# ⚡ Lipi Sovereign Universe — 0% Outside Help
+
+[build]
+target = "x86_64-unknown-linux-musl-freestanding"
+compiler = "bin/lipc"
+opt_level = 3
+
+[workspace]
+members = [
+    "packages/math_extra",
+    "packages/web_router",
+    "packages/crypto_vault",
+    "packages/json_toolkit",
+    "packages/sovereign_mesh",
+    "packages/lipi_dataframe",
+    "packages/lipi_grpc",
+    "packages/lipi_http_client",
+    "packages/lipi_jwt",
+    "packages/lipi_sql"
+]

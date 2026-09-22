@@ -1,0 +1,104 @@
+name: Lipi Sovereign Native CI
+
+# WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
+# CI verifies standalone native compilation, regression tests, and zero-python audit.
+# Triggered on every push/PR to main.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  native-regression-test:
+    name: "Lipi 140-Test Regression Suite (Native Toolchain)"
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup binary permissions
+        run: |
+          chmod +x bin/* install.sh 2>/dev/null || true
+
+      - name: Show Lipi Native Version
+        run: |
+          ./bin/lipi version
+
+      - name: Verify One-Liner Evaluation (Zero Python)
+        run: |
+          ./bin/lipi -e 'say "CI: Lipi Native Runner OK"'
+
+      - name: Run Full 140-Test Sovereign Regression Engine (0% Shell)
+        run: |
+          ./bin/lipi test
+
+      - name: Verify Direct Machine Code Compilation
+        run: |
+          ./bin/lipc tests/01_hello.lp -o /tmp/ci_hello
+          /tmp/ci_hello
+          rm -f /tmp/ci_hello
+
+      - name: Verify Fibonacci Execution
+        run: |
+          ./bin/lipc tests/59_minimal_fibonacci.lp -o /tmp/ci_fib
+          /tmp/ci_fib
+          rm -f /tmp/ci_fib
+
+      - name: Verify Unicode Execution
+        run: |
+          ./bin/lipc tests/56_minimal_unicode.lp -o /tmp/ci_unicode
+          /tmp/ci_unicode
+          rm -f /tmp/ci_unicode
+
+  zero-dependency-audit:
+    name: "Zero-Dependency Sovereignty Audit"
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Audit for Python Elimination in Core
+        run: |
+          echo "Auditing core directories (src, std, tests, bin) for Python files..."
+          py_files=$(find src std tests bin -name "*.py" 2>/dev/null || true)
+          if [ -n "$py_files" ]; then
+            echo "❌ Sovereignty breach: Found Python files in core tree:"
+            echo "$py_files"
+            exit 1
+          fi
+          echo "✔ 100% Pure: Zero Python files in src, std, tests, bin!"
+
+      - name: Audit for Bytecode Artifacts
+        run: |
+          pyc_files=$(find . -name "*.pyc" 2>/dev/null || true)
+          if [ -n "$pyc_files" ]; then
+            echo "❌ Found untracked or stale bytecode:"
+            echo "$pyc_files"
+            exit 1
+          fi
+          echo "✔ 100% Pure: Zero .pyc bytecode files!"
+
+  installer-test:
+    name: "Sovereign Installer Test"
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test install.sh syntax
+        run: |
+          bash -n install.sh
+          echo "install.sh syntax OK"
+
+      - name: Test scripts/install.sh syntax
+        run: |
+          bash -n scripts/install.sh
+          echo "scripts/install.sh syntax OK"

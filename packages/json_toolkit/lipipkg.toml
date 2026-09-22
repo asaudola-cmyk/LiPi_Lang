@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: json_toolkit
+# ==============================================================================
+
+name = "json_toolkit"
+version = "1.0.0"
+description = "High-performance streaming JSON serializer and parser for Lipi"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

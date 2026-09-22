@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_sql
+# ==============================================================================
+
+name = "lipi_sql"
+version = "1.0.0"
+description = "Pure sovereign in-memory SQL execution engine and relational store"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

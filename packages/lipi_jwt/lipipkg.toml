@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_jwt
+# ==============================================================================
+
+name = "lipi_jwt"
+version = "1.0.0"
+description = "Pure sovereign RFC 7519 JSON Web Token (JWT) generator and validator"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure LiPi NIST SHA-256 and Base64URL

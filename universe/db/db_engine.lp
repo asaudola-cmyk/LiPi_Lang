@@ -1,0 +1,154 @@
+// ==============================================================================
+// 👑 LIPI SOVEREIGN BINARY DATABASE ENGINE (universe/db/db_engine.lp)
+// ⚡ 100% Pure Lipi | Zero Libc | Zero External DBMS | Direct Silicon Storage
+//
+// WHY: Implements a standalone, persistent 32-byte binary record database engine
+// directly on Linux kernel filesystem syscalls (SYS_open, SYS_lseek, SYS_write,
+// SYS_read, SYS_fsync) with zero data loss guarantee.
+// ==============================================================================
+
+include "universe/core/io.lp"
+include "universe/core/memory.lp"
+
+// ১. ডাটাবেজ ফাইল খোলা বা তৈরি করা (Open or Create Binary DB File)
+// WHY: O_RDWR (2) | O_CREAT (64) = 66, Mode 0644o = 420
+fn db_open path
+    fd = syscall(2, path, 66, 420, 0, 0, 0)
+    return fd
+
+fn ডিবি_খোলো পাথ
+    return db_open(পাথ)
+
+// ২. ডাটাবেজে নতুন রেকর্ড ইনসার্ট করা (Insert Record with SYS_fsync)
+// WHY: 32-byte binary layout: [ID: 8B (off 0) | Timestamp: 8B (off 8) | Status: 8B (off 16) | Value: 8B (off 24)]
+// SYS_fsync (74) ensures the data is written directly to physical NVMe/SSD silicon.
+fn db_insert_record fd val
+    size = syscall(8, fd, 0, 2, 0, 0, 0)
+    next_id = (size / 32) + 1
+    buf = malloc(64)
+
+    mem_write(buf, 0, next_id)
+    mem_write(buf, 8, cpu_clock())
+    mem_write(buf, 16, 1)
+    mem_write(buf, 24, val)
+
+    syscall(1, fd, buf, 32, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0)
+    free(buf, 64)
+    return next_id
+
+fn ডিবি_রেকর্ড_যোগ fd মান
+    return db_insert_record(fd, মান)
+
+// ৩. রেকর্ড মুছে ফেলা (Soft Delete Record via Offset Mutation)
+// WHY: স্ট্যাটাস ফিল্ডকে ০ করে দিলে রেকর্ডটি নিষ্ক্রিয় হয়, ডাটাবেজের ইনডেক্স অখণ্ড থাকে।
+// বাউন্ডারি চেক: target_id > total হলে অবৈধ এক্সেস ঠেকানো হয় যাতে ডিস্কে স্পার্স ফাইল না বাড়ে।
+fn db_delete_record fd target_id
+    if target_id <= 0
+        return 0
+    total = db_total_records(fd)
+    if target_id > total
+        return 0
+
+    offset = (target_id - 1) * 32
+    syscall(8, fd, offset + 16, 0, 0, 0, 0)
+
+    buf = malloc(16)
+    mem_write(buf, 0, 0)
+    syscall(1, fd, buf, 8, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0)
+    free(buf, 16)
+    return 1
+
+fn ডিবি_রেকর্ড_মুছো fd টার্গেট_আইডি
+    return db_delete_record(fd, টার্গেট_আইডি)
+
+// ৪. মোট রেকর্ডের সংখ্যা গণনা
+fn db_total_records fd
+    size = syscall(8, fd, 0, 2, 0, 0, 0)
+    total = size / 32
+    return total
+
+fn ডিবি_মোট_রেকর্ড fd
+    return db_total_records(fd)
+
+// ৫. ডাটাবেজের বাইট সাইজ রিটার্ন করা
+fn db_file_size fd
+    size = syscall(8, fd, 0, 2, 0, 0, 0)
+    return size
+
+fn ডিবি_ফাইলের_সাইজ fd
+    return db_file_size(fd)
+
+// ৬. সক্রিয় রেকর্ডের সংখ্যা গণনা (Count Active Records where status == 1)
+// WHY: Computes live non-deleted records count without allocating intermediate structures
+fn db_active_count fd
+    total = db_total_records(fd)
+    syscall(8, fd, 0, 0, 0, 0, 0) // lseek SEEK_SET
+    buf = malloc(32)
+    active = 0
+    i = 0
+    while i < total
+        n = syscall(0, fd, buf, 32, 0, 0, 0)
+        if n == 32
+            st = mem_read(buf, 16)
+            if st == 1
+                active = active + 1
+        i = i + 1
+    free(buf, 32)
+    return active
+
+fn ডিবি_সক্রিয়_সংখ্যা fd
+    return db_active_count(fd)
+
+// ৭. ইন-প্লেস রেকর্ড আপডেট (Update Value of Record with SYS_fsync)
+// WHY: Modifies the 8-byte QWORD payload at offset 24 without altering ID or timestamp
+fn db_update_record fd target_id new_val
+    if target_id <= 0
+        return 0
+    total = db_total_records(fd)
+    if target_id > total
+        return 0
+
+    offset = (target_id - 1) * 32
+    syscall(8, fd, offset + 24, 0, 0, 0, 0)
+    buf = malloc(16)
+    mem_write(buf, 0, new_val)
+    syscall(1, fd, buf, 8, 0, 0, 0)
+    syscall(74, fd, 0, 0, 0, 0, 0)
+    free(buf, 16)
+    return 1
+
+fn ডিবি_রেকর্ড_আপডেট fd টার্গেট_আইডি নতুন_মান
+    return db_update_record(fd, টার্গেট_আইডি, নতুন_মান)
+
+// ৮. আইডি দিয়ে সরাসরি রেকর্ড ভ্যালু পড়া (Direct O(1) Record Lookup by ID)
+// WHY: Seeks directly to the record offset without table scanning.
+// Returns the 8-byte value at offset 24 if record is active (status == 1).
+// Returns -1 if target_id <= 0, target_id > total, or record is soft-deleted.
+fn db_get_record fd target_id
+    if target_id <= 0
+        return -1
+    total = db_total_records(fd)
+    if target_id > total
+        return -1
+
+    offset = (target_id - 1) * 32
+    syscall(8, fd, offset, 0, 0, 0, 0) // SYS_lseek SEEK_SET = 0
+
+    buf = malloc(32)
+    n = syscall(0, fd, buf, 32, 0, 0, 0)
+    if n != 32
+        free(buf, 32)
+        return -1
+
+    st = mem_read(buf, 16)
+    val = -1
+    if st == 1
+        val = mem_read(buf, 24)
+    free(buf, 32)
+    return val
+
+fn ডিবি_রেকর্ড_পড়ো fd টার্গেট_আইডি
+    return db_get_record(fd, টার্গেট_আইডি)
+

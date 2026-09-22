@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_grpc
+# ==============================================================================
+
+name = "lipi_grpc"
+version = "1.0.0"
+description = "Pure sovereign binary gRPC wire protocol & Protobuf Varint/TLV engine"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure LiPi binary wire framing

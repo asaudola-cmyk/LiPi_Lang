@@ -1,0 +1,57 @@
+// ==============================================================================
+// 👑 LIPI TEST SUITE: ARM64 EMITTER SILICON PARITY (tests/test_arm64_parity.lp)
+// Milestone: First 1.0.0 (প্রথম ১.০.০)
+// 100% Pure Lipi — Zero Foreign Dependencies
+// ==============================================================================
+
+include "src/compiler/arm64_emitter.lp"
+include "universe/core/io.lp"
+
+fn main
+    say "=== LIPI ARM64 SILICON EMITTER PARITY TEST ==="
+
+    bin_path = "/tmp/test_arm_bin"
+    // WHY: Use native ARM64 emitter to synthesize an autonomous ELF64 executable
+    // with entry point, registers, and Linux AArch64 syscalls.
+    ctx = arm64_ctx_new()
+    arm64_label_define(ctx, "_start")
+    arm64_emit_movz(ctx, ARM64_REG_X0, 42, 0)
+    arm64_emit_sys_exit(ctx, 0)
+    arm64_write_elf(ctx, bin_path)
+
+    if file_exists(bin_path) == 0
+        say "FAIL: ARM64 binary not generated"
+        exit(1)
+
+    // Read ELF magic: 0x7F 'E' 'L' 'F' (0x7F, 69, 76, 70)
+    buf = malloc(64)
+    fd = file_open(bin_path, 0) // O_RDONLY
+    if fd < 0
+        say "FAIL: cannot open ARM64 binary"
+        exit(1)
+
+    n = file_read_fd(fd, buf, 64)
+    file_close(fd)
+
+    b0 = mem_byte_read(buf, 0)
+    b1 = mem_byte_read(buf, 1)
+    b2 = mem_byte_read(buf, 2)
+    b3 = mem_byte_read(buf, 3)
+
+    if b0 != 127 or b1 != 69 or b2 != 76 or b3 != 70
+        say "FAIL: Invalid ELF magic header"
+        exit(1)
+    say "✔ ELF Magic verified: 0x7F 'ELF'"
+
+    // e_machine at offset 18: 183 (0xB7) = EM_AARCH64
+    mach_lo = mem_byte_read(buf, 18)
+    mach_hi = mem_byte_read(buf, 19)
+    e_machine = mach_lo + (mach_hi * 256)
+    if e_machine != 183
+        say "FAIL: Expected e_machine == 183 (AArch64), got: " + str(e_machine)
+        exit(1)
+    say "✔ ARM64 Silicon Architecture verified: e_machine = 183 (EM_AARCH64)"
+
+    free(buf, 64)
+    say "PASS: test_arm64_parity"
+    return 0

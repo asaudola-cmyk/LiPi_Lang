@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lipi
+GenericName=Programming Language & Development Environment
+Comment=Sovereign Bilingual Programming Language (Direct Silicon Machine Code)
+Exec=lipi repl
+Icon=lipi
+Terminal=true
+Categories=Development;IDE;TextEditor;
+Keywords=lipi;programming;compiler;bengali;silicon;
+StartupNotify=true

@@ -1,0 +1,67 @@
+# ==============================================================================
+# Lipi Programming Language — Git Ignore Configuration
+# WHY: Clean, standardized configuration without legacy 3rd-party/PHP debris.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Build Artifacts & Compiled Binaries
+# WHY: Binaries generated during native bootstrap, self-hosting, and compilation
+# should not be committed to source control (boot/lipi-seed is the canonical seed).
+# ------------------------------------------------------------------------------
+bin/
+dist/
+build/
+scratch/
+
+# Standalone package manager dependencies
+lipi_modules/
+
+# Compiled Benchmark & Server Binaries
+benchmarks/servers/web_server_bin
+benchmarks/servers/gateway_bin
+benchmarks/rps/bin_*
+benchmarks/competitors/bin_*
+
+
+# Generic object files and binaries
+*.o
+*.a
+*.so
+*.dylib
+*.bin
+*.out
+
+# ------------------------------------------------------------------------------
+# Editor & OS Artifacts
+# WHY: Prevent developer-specific environment clutter in repositories.
+# ------------------------------------------------------------------------------
+*~
+*.swp
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# VS Code / IDE development caches & Standalone Editor Repositories
+# WHY: Editor tooling (vscode-lipi) is hosted in a dedicated standalone repository.
+.vscode/
+.idea/
+editors/
+
+junit.out.xml
+.cache/
+iso_staging/
+
+
+
+# Test binaries and temporary silicon artifacts
+bin/test_*
+*.spv
+*.db
+*.wal
+benchmarks/data/*.db
+benchmarks/data/*.wal
+!benchmarks/data/.gitkeep
+/tmp/libtest_*
+__pycache__/
+*.py[cod]

@@ -1,0 +1,38 @@
+# ==============================================================================
+# 👑 LiPi Sovereign Programming Language — EditorConfig
+# ⚡ Standards configuration for LiPi source code, Markdown, and manifests
+# ==============================================================================
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# LiPi Sovereign Source Code (*.lp, *.lipi, *.লিপি)
+[*.{lp,lipi,লিপি}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# Markdown Documentation
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = 120
+
+# Configurations & Web Assets
+[*.{json,toml,yaml,yml,html,css,js}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# Shell & Automation Scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+tab_width = 2

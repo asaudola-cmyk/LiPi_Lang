@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_http_client
+# ==============================================================================
+
+name = "lipi_http_client"
+version = "1.0.0"
+description = "Zero-dependency pure sovereign HTTP/1.1 client for LiPi"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure LiPi Linux socket networking

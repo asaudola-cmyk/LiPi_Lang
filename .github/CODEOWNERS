@@ -1,0 +1,28 @@
+# Lipi Sovereign Programming Language — CODEOWNERS
+#
+# WHY: Defines who reviews changes to critical parts of the Lipi codebase.
+# These are the core contributors and maintainers of the Lipi project.
+#
+# GitHub reads this file to auto-assign reviewers on pull requests.
+
+# Core compiler — anyone touching the self-hosting compiler needs expert review
+/src/compiler/          @asaudola-cmyk
+
+# Standard library — changes affect all Lipi programs
+/std/                   @asaudola-cmyk
+/universe/              @asaudola-cmyk
+
+
+# Toolchain binaries — lipipkg, lipidbg, lipirepl, lipiconvert
+/src/tools/             @asaudola-cmyk
+
+# Bootstrap seed — CRITICAL: this is the single pre-compiled binary
+/src/boot/              @asaudola-cmyk
+/boot/                  @asaudola-cmyk
+
+# CI/CD — pipeline configuration
+/.github/               @asaudola-cmyk
+
+# Documentation
+/docs/                  @asaudola-cmyk
+/README.md              @asaudola-cmyk
