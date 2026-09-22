@@ -93,6 +93,24 @@ import "universe/core/collections"
   return res
 @end
 
+@fn assimilator_clean_expr(expr)
+  // WHY: Normalizes legacy boolean literals and NULL pointers into canonical Lipi integer values
+  res = expr
+  @if str_contains(res, "True") == 1
+    res = str_replace(res, "True", "1")
+  @end
+  @if str_contains(res, "False") == 1
+    res = str_replace(res, "False", "0")
+  @end
+  @if str_contains(res, "None") == 1
+    res = str_replace(res, "None", "0")
+  @end
+  @if str_contains(res, "NULL") == 1
+    res = str_replace(res, "NULL", "0")
+  @end
+  return res
+@end
+
 @! ----------------------------------------------------------------------------
 @! 2. LINE TRANSPILATION & INDENTATION-TO-BLOCK LOWERING
 @! ----------------------------------------------------------------------------
@@ -156,14 +174,24 @@ import "universe/core/collections"
       block_levels = block_levels.push(curr_indent)
 
     @! Rule B: C Function Definition: int name(a, b) or void name(...)
-    @elif (assimilator_starts_with(clean_content, "int ") == 1 || assimilator_starts_with(clean_content, "void ") == 1) && str_contains(clean_content, "(") == 1 && str_contains(clean_content, "=") == 0
+    @elif (assimilator_starts_with(clean_content, "int ") == 1 || assimilator_starts_with(clean_content, "void ") == 1 || assimilator_starts_with(clean_content, "long ") == 1 || assimilator_starts_with(clean_content, "char* ") == 1) && str_contains(clean_content, "(") == 1 && str_contains(clean_content, "=") == 0
       prefix_len = 4
       @if assimilator_starts_with(clean_content, "void ") == 1
         prefix_len = 5
+      @elif assimilator_starts_with(clean_content, "long ") == 1
+        prefix_len = 5
+      @elif assimilator_starts_with(clean_content, "char* ") == 1
+        prefix_len = 6
       @end
       rem = assimilator_trim(str_substr(clean_content, prefix_len, str_len(clean_content)))
       rem = str_replace(rem, "int ", "")
       rem = str_replace(rem, "void ", "")
+      rem = str_replace(rem, "void", "")
+      rem = str_replace(rem, "char* ", "")
+      rem = str_replace(rem, "char *", "")
+      rem = str_replace(rem, "long ", "")
+      rem = str_replace(rem, "float ", "")
+      rem = str_replace(rem, "double ", "")
       lipi_stmt = str_concat("@fn ", rem)
       block_levels = block_levels.push(curr_indent)
 
@@ -178,11 +206,13 @@ import "universe/core/collections"
       @if assimilator_starts_with(rem, "(") == 1 && str_ends_with(rem, ")") == 1
         rem = str_substr(rem, 1, str_len(rem) - 1)
       @end
+      rem = assimilator_clean_expr(rem)
       lipi_stmt = str_concat("@if ", rem)
       block_levels = block_levels.push(curr_indent)
 
     @elif assimilator_starts_with(clean_content, "elif ") == 1
       rem = assimilator_trim(str_substr(clean_content, 5, str_len(clean_content)))
+      rem = assimilator_clean_expr(rem)
       lipi_stmt = str_concat("@elif ", rem)
 
     @elif str_eq(clean_content, "else") == 1
@@ -199,34 +229,49 @@ import "universe/core/collections"
       @if assimilator_starts_with(rem, "(") == 1 && str_ends_with(rem, ")") == 1
         rem = str_substr(rem, 1, str_len(rem) - 1)
       @end
+      rem = assimilator_clean_expr(rem)
       lipi_stmt = str_concat("@while ", rem)
       block_levels = block_levels.push(curr_indent)
 
-    @! Rule E: Print Statements: print(...) -> println(...)
+    @! Rule E: Print Statements: print(...) / printf(...) -> println(...)
     @elif assimilator_starts_with(clean_content, "print(") == 1
       rem = str_substr(clean_content, 6, str_len(clean_content) - 1)
+      rem = assimilator_clean_expr(rem)
+      lipi_stmt = str_concat("println(", str_concat(rem, ")"))
+
+    @elif assimilator_starts_with(clean_content, "printf(") == 1
+      rem = str_substr(clean_content, 7, str_len(clean_content) - 1)
+      rem = assimilator_clean_expr(rem)
       lipi_stmt = str_concat("println(", str_concat(rem, ")"))
 
     @! Rule F: Return Statements
     @elif assimilator_starts_with(clean_content, "return") == 1
-      lipi_stmt = clean_content
+      lipi_stmt = assimilator_clean_expr(clean_content)
 
     @! Rule G: Variable Declarations / Assignments / Function Calls
     @else
       clean_assign = clean_content
       @if assimilator_starts_with(clean_assign, "int ") == 1
         clean_assign = str_substr(clean_assign, 4, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "long ") == 1
+        clean_assign = str_substr(clean_assign, 5, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "char* ") == 1
+        clean_assign = str_substr(clean_assign, 6, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "char ") == 1
+        clean_assign = str_substr(clean_assign, 5, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "float ") == 1
+        clean_assign = str_substr(clean_assign, 6, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "double ") == 1
+        clean_assign = str_substr(clean_assign, 7, str_len(clean_assign))
       @elif assimilator_starts_with(clean_assign, "let ") == 1
         clean_assign = str_substr(clean_assign, 4, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "auto ") == 1
+        clean_assign = str_substr(clean_assign, 5, str_len(clean_assign))
+      @elif assimilator_starts_with(clean_assign, "const ") == 1
+        clean_assign = str_substr(clean_assign, 6, str_len(clean_assign))
       @end
 
-      @if str_contains(clean_assign, "True") == 1
-        clean_assign = str_replace(clean_assign, "True", "1")
-      @end
-      @if str_contains(clean_assign, "False") == 1
-        clean_assign = str_replace(clean_assign, "False", "0")
-      @end
-
+      clean_assign = assimilator_clean_expr(clean_assign)
       lipi_stmt = clean_assign
     @end
 
@@ -292,21 +337,86 @@ import "universe/core/collections"
   return out_len
 @end
 
-@fn main(argc, argv)
+@fn assimilator_exec(cmd_path, arg1, arg2, arg3)
+  // WHY: Native process spawn via Linux syscalls 57 (fork), 59 (execve), and 61 (wait4) with zero libc
+  argv = sys_mmap(0, 64, 3, 34, 0 - 1, 0)
+  sys_poke(argv + 0, cmd_path)
+  idx = 1
+  @if str_len(arg1) > 0
+    sys_poke(argv + (idx * 8), arg1)
+    idx = idx + 1
+  @end
+  @if str_len(arg2) > 0
+    sys_poke(argv + (idx * 8), arg2)
+    idx = idx + 1
+  @end
+  @if str_len(arg3) > 0
+    sys_poke(argv + (idx * 8), arg3)
+    idx = idx + 1
+  @end
+  sys_poke(argv + (idx * 8), 0)
+
+  st = sys_mmap(0, 8, 3, 34, 0 - 1, 0)
+  sys_poke(st, 0)
+
+  pid = sys_fork()
+  @if pid == 0
+    sys_execve(cmd_path, argv, 0)
+    sys_exit(127)
+  @end
+
+  sys_wait4(pid, st, 0, 0)
+  raw_st = sys_peek(st)
+  exit_code = (raw_st / 256) & 255
+
+  sys_munmap(argv, 64)
+  sys_munmap(st, 8)
+  return exit_code
+@end
+
+@fn main()
+  args = argv()
+  argc = len(args)
+
   @if argc < 2
     println("================================================================================")
     println("👑 LIPI UNIVERSAL CODE ASSIMILATOR & TRANSPILER (lipiassimilate)")
     println("================================================================================")
-    println("Usage: lipiassimilate <input_file.py | input_file.c> [output_file.lp]")
+    println("Usage: lipiassimilate <input_file.py | input_file.c> [-o output.lp] [--run]")
     println("Transpiles Python & C control flow, recursion, and arithmetic into pure Lipi.")
     return 1
   @end
 
-  in_path = argv[1]
+  in_path = ""
   out_path = ""
-  @if argc >= 3
-    out_path = argv[2]
-  @else
+  run_after = 0
+
+  i = 1
+  @while i < argc
+    a = args[i]
+    @if str_eq(a, "--run") == 1
+      run_after = 1
+    @elif str_eq(a, "-o") == 1
+      i = i + 1
+      @if i < argc
+        out_path = args[i]
+      @end
+    @elif str_len(in_path) == 0
+      in_path = a
+    @else
+      @if str_len(out_path) == 0
+        out_path = a
+      @end
+    @end
+    i = i + 1
+  @end
+
+  @if str_len(in_path) == 0
+    println("❌ Error: No input file specified.")
+    return 1
+  @end
+
+  @if str_len(out_path) == 0
     out_path = str_concat(in_path, ".lp")
   @end
 
@@ -315,11 +425,28 @@ import "universe/core/collections"
   println(str_concat("  • Target : ", out_path))
 
   nbytes = assimilate_file(in_path, out_path)
-  @if nbytes > 0
-    println(str_concat("✔ Successfully assimilated ", str_concat(to_str(nbytes), " bytes of canonical Lipi code!")))
-    return 0
-  @else
+  @if nbytes <= 0
     println("❌ Error: Failed to assimilate source file.")
     return 1
   @end
+
+  println(str_concat("✔ Successfully assimilated ", str_concat(to_str(nbytes), " bytes of canonical Lipi code!")))
+
+  @if run_after == 1
+    tmp_bin = str_concat(out_path, ".bin")
+    println(str_concat("⚙️ Compiling assimilated source to ELF64: ", tmp_bin))
+    c_status = assimilator_exec("./bin/lipc_bin", out_path, "-o", tmp_bin)
+    @if c_status != 0
+      println("❌ Compilation of assimilated code failed.")
+      return 1
+    @end
+    println("🚀 Executing assimilated binary on bare silicon:")
+    println("──────────────────────────────────────────────────────────────────────")
+    r_status = assimilator_exec(tmp_bin, "", "", "")
+    println("──────────────────────────────────────────────────────────────────────")
+    sys_unlink(tmp_bin)
+    return r_status
+  @end
+
+  return 0
 @end

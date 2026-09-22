@@ -871,6 +871,24 @@ fn main
     else
         failed = failed + 1
 
+    // 188: Sovereign Package Hub CLI & Cache End-to-End Lifecycle
+    if run_single_test(compiler, "tests/test_lipipkg_cli_e2e.lp", "test_lipipkg_cli_e2e") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 189: Direct Linux io_uring Asynchronous Reactor (0% liburing)
+    if run_single_test(compiler, "tests/test_io_uring_pure_reactor.lp", "test_io_uring_pure_reactor") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 190: Universal Code Assimilator & Transpilation Silicon Pipeline
+    if run_single_test(compiler, "tests/test_assimilate_advanced.lp", "test_assimilate_advanced") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed
     say "========================================================================"

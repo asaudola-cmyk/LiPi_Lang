@@ -150,7 +150,7 @@ For full technical specifications, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTUR
 - **🛡️ Extreme Memory & Binary Density:** Lipi executables require only **5.8 KB** on disk (vs **4,284 KB** for Rust) and only **264 KB** peak RAM (vs **52,000 KB** for Node.js and **2,180 KB** for Rust) with **0 dynamic shared library dependencies (`0% libc`)**.
 - **🌐 Autonomous Microservice Performance:** Pure Linux Epoll async gateway achieves **7,270 req/s** with sub-millisecond p50 latency (**0.134 ms**) and **0% memory leaks**.
 
-See [`benchmarks/BENCHMARK_RESULTS.md`](benchmarks/BENCHMARK_RESULTS.md) for the complete benchmark methodology and raw datasets.
+See [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) for the complete benchmark methodology and raw datasets.
 
 ---
 
@@ -318,7 +318,7 @@ Open [`examples/wasm_interactive_demo.html`](examples/wasm_interactive_demo.html
 - [Universe Standard Library API Reference (`docs/UNIVERSE_API_REFERENCE.md`)](docs/UNIVERSE_API_REFERENCE.md)
 - [Standard Library Manual (`docs/STANDARD_LIBRARY.md`)](docs/STANDARD_LIBRARY.md)
 - [Package Manager Manifest Spec (`docs/LIPIPKG_TOML_SPEC.md`)](docs/LIPIPKG_TOML_SPEC.md)
-- [Multi-Language Benchmark Results (`benchmarks/BENCHMARK_RESULTS.md`)](benchmarks/BENCHMARK_RESULTS.md)
+- [Multi-Language Benchmark Results (`docs/BENCHMARK_RESULTS.md`)](docs/BENCHMARK_RESULTS.md)
 - [Sovereign Genesis & Evolution (`docs/SOVEREIGN_GENESIS.md`)](docs/SOVEREIGN_GENESIS.md)
 
 ---

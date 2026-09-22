@@ -12,15 +12,10 @@ bin/
 dist/
 build/
 scratch/
+benchmarks/
 
 # Standalone package manager dependencies
 lipi_modules/
-
-# Compiled Benchmark & Server Binaries
-benchmarks/servers/web_server_bin
-benchmarks/servers/gateway_bin
-benchmarks/rps/bin_*
-benchmarks/competitors/bin_*
 
 
 # Generic object files and binaries
@@ -59,9 +54,6 @@ bin/test_*
 *.spv
 *.db
 *.wal
-benchmarks/data/*.db
-benchmarks/data/*.wal
-!benchmarks/data/.gitkeep
 /tmp/libtest_*
 __pycache__/
 *.py[cod]

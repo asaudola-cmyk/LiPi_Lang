@@ -1,3 +1,4 @@
+import "universe/os/syscalls"
 @! ==================================================================
 @! LIPI UNIVERSE - Core Networking Library (Phase 9/10)
 @! ==================================================================
@@ -61,6 +62,18 @@
   return net_socket(2, 1, 0)
 @end
 
+@fn net_tcp_set_reuseaddr(sockfd)
+  // WHY: Sets SO_REUSEADDR (level 1, opt 2) via Linux sys_setsockopt (syscall 54) to eliminate TIME_WAIT bind failures.
+  opt_buf = sys_mmap(0, 8, 3, 34, -1, 0)
+  sys_poke8(opt_buf + 0, 1)
+  sys_poke8(opt_buf + 1, 0)
+  sys_poke8(opt_buf + 2, 0)
+  sys_poke8(opt_buf + 3, 0)
+  res = sys_syscall(54, sockfd, 1, 2, opt_buf, 4)
+  sys_munmap(opt_buf, 8)
+  return res
+@end
+
 @fn net_tcp_bind(sockfd, port)
   // WHY: Binds socket to sockaddr_in using raw Linux syscall 49.
   addr = sys_mmap(0, 16, 3, 34, -1, 0)
@@ -102,13 +115,20 @@
 @end
 
 @fn net_tcp_recv(sockfd, max_len)
-  // WHY: Reads raw incoming bytes into buffer via sys_read.
+  // WHY: Reads raw incoming bytes into buffer via sys_read and converts into a canonical STR0 Lipi string.
   buf = sys_mmap(0, max_len + 1, 3, 34, -1, 0)
   bytes_read = net_read(sockfd, buf, max_len)
   @if bytes_read <= 0
     sys_munmap(buf, max_len + 1)
     return ""
   @end
-  sys_poke8(buf + bytes_read, 0)
-  return buf
+  res = ""
+  i = 0
+  @while i < bytes_read
+    b = sys_peek8(buf + i) & 255
+    res = res + chr(b)
+    i = i + 1
+  @end
+  sys_munmap(buf, max_len + 1)
+  return res
 @end

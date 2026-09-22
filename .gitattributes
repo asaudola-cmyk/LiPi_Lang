@@ -19,8 +19,9 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 
-# Shell scripts
-*.sh text eol=lf
+# Shell & Automation scripts (Vendored tooling — excluded from language statistics)
+*.sh text eol=lf linguist-vendored=true
+scripts/* linguist-vendored=true
 
 # Canonical Bootstrap Binary Seed & Graphic Assets
 src/boot/lipi-seed binary

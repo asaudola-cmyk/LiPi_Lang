@@ -41,7 +41,6 @@ When exploring the LiPi codebase, code is organized into three distinct tiers ba
 ```
 lipi/
 ├── .github/             # GitHub configuration, CI workflows, CONTRIBUTING.md & SECURITY.md
-├── benchmarks/          # Empirical performance benchmarks vs C/C++/Go/Rust/Zig
 ├── build.lp             # Autonomous sovereign build pipeline (0% Shell, 0% Make)
 ├── docs/                # Architectural guides, handbooks, specifications, and books
 ├── examples/            # Ready-to-run showcase apps, tutorials, and benchmarks

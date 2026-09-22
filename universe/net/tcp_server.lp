@@ -1,4 +1,5 @@
-import \"universe/core/net\"\n@! ============================================================================
+import "universe/core/net"
+@! ============================================================================
 @! LIPI TCP SERVER — Real Linux TCP server using syscalls
 @! ============================================================================
 
@@ -14,6 +15,7 @@ import \"universe/core/net\"\n@! ===============================================
     println("Error: failed to create socket")
     return { ts_fd: -1, ts_port: port, ts_running: 0 }
   @end
+  net_tcp_set_reuseaddr(fd)
   r = net_tcp_bind(fd, port)
   @if r < 0
     println("Error: failed to bind port " + int_to_str(port))

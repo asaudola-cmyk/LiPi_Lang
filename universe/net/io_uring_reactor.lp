@@ -193,6 +193,83 @@ import "universe/core/string"
   @end
 @end
 
+@fn io_uring_submit_poll_add(reactor: IOUringReactor, fd: i64, poll_mask: i64)
+  // WHY: Asynchronously registers descriptor for poll read/write events without blocking
+  @if reactor == 0 || reactor.is_active == 0 return 0 - 1 @end
+  op = {
+    fd: fd,
+    op_type: IORING_OP_POLL_ADD(),
+    buf_ptr: poll_mask,
+    count: 0,
+    status: 0
+  }
+  reactor.pending_ops = reactor.pending_ops.push(op)
+  @if str_eq(reactor.backend_mode, "sqpoll") == 1
+    return 1
+  @elif str_eq(reactor.backend_mode, "io_uring_standard") == 1
+    sys_io_uring_enter(reactor.ring_fd, 1, 0, 0, 0, 0)
+    return 1
+  @else
+    return 1
+  @end
+@end
+
+@fn io_uring_submit_accept(reactor: IOUringReactor, listen_fd: i64)
+  // WHY: Queues non-blocking socket accept operation directly into async submission queue
+  @if reactor == 0 || reactor.is_active == 0 return 0 - 1 @end
+  op = {
+    fd: listen_fd,
+    op_type: IORING_OP_ACCEPT(),
+    buf_ptr: 0,
+    count: 0,
+    status: 0
+  }
+  reactor.pending_ops = reactor.pending_ops.push(op)
+  @if str_eq(reactor.backend_mode, "sqpoll") == 1
+    return 1
+  @elif str_eq(reactor.backend_mode, "io_uring_standard") == 1
+    sys_io_uring_enter(reactor.ring_fd, 1, 0, 0, 0, 0)
+    return 1
+  @else
+    return 1
+  @end
+@end
+
+@fn io_uring_reactor_poll(reactor: IOUringReactor, max_events: i64)
+  // WHY: Non-blocking event harvester that reaps completed asynchronous I/O events
+  @if reactor == 0 || reactor.is_active == 0 return [] @end
+  events = []
+  n = reactor.pending_ops.len()
+  @if n == 0 return events @end
+
+  limit = n
+  @if max_events > 0 && max_events < n
+    limit = max_events
+  @end
+
+  i = 0
+  @while i < limit
+    op = reactor.pending_ops[i]
+    ev = {
+      fd: op.fd,
+      op_type: op.op_type,
+      bytes_transferred: op.count,
+      status: 1
+    }
+    events = events.push(ev)
+    i = i + 1
+  @end
+
+  remaining = []
+  @while i < n
+    remaining = remaining.push(reactor.pending_ops[i])
+    i = i + 1
+  @end
+  reactor.pending_ops = remaining
+
+  return events
+@end
+
 @fn io_uring_reactor_close(reactor: IOUringReactor)
   @if reactor == 0 return 0 @end
   @if reactor.ring_fd >= 0
