@@ -53,11 +53,25 @@ import "universe/core/math"
   @! Simulate sensor reading with realistic values
   base = 0
   @if sensor.sensor_type == "temperature"
-    @! Returns value in range 20-30°C (simulated drift)
-    base = 250 @! 25.0°C × 10
-    drift = (sensor.sample_count * 3) % 50 @! ±5°C drift
-    @if drift > 25 drift = drift - 50 @end
-    base = base + drift
+    // WHY: Attempts to sample real hardware temperature via Linux thermal sysfs (/sys/class/thermal/thermal_zone0/temp).
+    // Thermal zone returns millidegrees Celsius (e.g. 45000 = 45.0 C). Dividing by 100 yields tenths of a degree (450).
+    // If running in an unprivileged container or VM where thermal sysfs is absent, falls back to deterministic drift model.
+    thermal_path = "/sys/class/thermal/thermal_zone0/temp"
+    sys_temp_read = 0
+    @if file_exists(thermal_path) == 1
+      raw_str = file_read(thermal_path)
+      milli_deg = str_to_int(str_trim(raw_str))
+      @if milli_deg > 0
+        base = milli_deg / 100
+        sys_temp_read = 1
+      @end
+    @end
+    @if sys_temp_read == 0
+      base = 250 @! 25.0°C × 10
+      drift = (sensor.sample_count * 3) % 50 @! ±5°C drift
+      @if drift > 25 drift = drift - 50 @end
+      base = base + drift
+    @end
   @end
   @if sensor.sensor_type == "humidity"
     base = 550 @! 55.0% × 10

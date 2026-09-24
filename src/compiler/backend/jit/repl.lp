@@ -8,9 +8,10 @@
 
 import "universe/core/collections"
 import "universe/core/string"
-import "compiler/backend/jit/jit_memory"
-import "compiler/backend/jit/jit_executor"
-import "compiler/backend/jit/jit_engine"
+import "universe/core/io"
+import "src/compiler/backend/jit/jit_memory"
+import "src/compiler/backend/jit/jit_executor"
+import "src/compiler/backend/jit/jit_engine"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURES & INTERFACES

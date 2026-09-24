@@ -115,19 +115,9 @@ import "universe/os/syscalls"
   return ptr
 @end
 
-// WHY: Retains maya_gc_alloc as backward-compatible alias for legacy callers
-@fn maya_gc_alloc(size)
-  return lipi_gc_alloc(size)
-@end
-
 @fn lipi_gc_free(ptr, size)
   @! Call sys_munmap: Syscall 11
   lipi_syscall(11, ptr, size, 0, 0, 0, 0)
   return 0
-@end
-
-// WHY: Retains maya_gc_free as backward-compatible alias for legacy callers
-@fn maya_gc_free(ptr, size)
-  return lipi_gc_free(ptr, size)
 @end
 

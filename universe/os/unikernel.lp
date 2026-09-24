@@ -149,10 +149,7 @@ import "universe/os/boot/multiboot"
   return "[LIPI RING-0 UNIKERNEL BOOTED]"
 @end
 
-// WHY: Retains legacy banner for telemetry monitors requiring backward compatibility
-@fn unikernel_banner_string_legacy()
-  return "[MAYA RING-0 UNIKERNEL BOOTED]"
-@end
+
 
 @fn unikernel_qemu_command(image_path)
   @! Construct exact QEMU invocation command line string

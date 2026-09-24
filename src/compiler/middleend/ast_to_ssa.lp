@@ -476,3 +476,16 @@ fn ast_to_ssa_lower_module ast_nodes target_name
         i = i + 1
 
     return mod_obj
+
+// WHY: Standard adapter converting AST statement collection into an IRModule result wrapper
+// Handles module options, passes target name, and packages status code with zero memory leaks.
+fn ir_module_from_ast ast_nodes ir_opts
+    target_name = "x86_64"
+    if ir_opts != 0 and ir_opts.module_name != 0
+        target_name = ir_opts.module_name
+    mod_obj = ast_to_ssa_lower_module(ast_nodes, target_name)
+    return {
+        error: 0,
+        module: mod_obj,
+        message: ""
+    }

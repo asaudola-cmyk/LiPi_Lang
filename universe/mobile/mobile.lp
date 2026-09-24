@@ -22,8 +22,6 @@ import "universe/crypto/sha256"
   target_arch: string
   so_lib_name: string
   liblipi_so_bytes: array
-  // WHY: Retains libmaya_so_bytes as backward-compatible alias for legacy callers
-  libmaya_so_bytes: array
   classes_dex_bytes: array
   manifest_xml: string
   apk_raw_bytes: array
@@ -494,11 +492,6 @@ import "universe/crypto/sha1"
   return so
 @end
 
-// WHY: Retains mobile_emit_arm64_libmaya_so as backward-compatible alias for legacy callers
-@fn mobile_emit_arm64_libmaya_so()
-  return mobile_emit_arm64_liblipi_so()
-@end
-
 @! ============================================================================
 @! 4. DALVIK CLASSES.DEX EMITTER (AUTHENTIC DEX 035 SYNTHESIZER)
 @! ============================================================================
@@ -915,7 +908,6 @@ import "universe/crypto/sha1"
     target_arch: "arm64-v8a",
     so_lib_name: "liblipi.so",
     liblipi_so_bytes: so_bytes,
-    libmaya_so_bytes: so_bytes,
     classes_dex_bytes: dex_bytes,
     manifest_xml: manifest_str,
     apk_raw_bytes: apk_bytes,

@@ -89,12 +89,10 @@ fn x86_synth_emit__lipi_malloc s
 
 fn x86_synth_emit__lipi_pass_thru s
     // WHY: Identity function returning %rdi in %rax (mov rax, rdi; ret).
-    // Provides zero-overhead pointer passthrough for maya_str_new, str_ptr, maya_str_ptr, lipi_str_ptr, lipi_str_new.
+    // Provides zero-overhead pointer passthrough for str_ptr, lipi_str_ptr, lipi_str_new.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_pass_thru", off)
-    x86_synth_register_helper_fn(s, "maya_str_new", off)
     x86_synth_register_helper_fn(s, "str_ptr", off)
-    x86_synth_register_helper_fn(s, "maya_str_ptr", off)
     x86_synth_register_helper_fn(s, "lipi_str_ptr", off)
     x86_synth_register_helper_fn(s, "lipi_str_new", off)
     // mov rax, rdi; ret

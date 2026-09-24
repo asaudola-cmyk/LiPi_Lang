@@ -1145,3 +1145,49 @@ import "universe/ai/tensor_core"
   attn_weights = tensor_softmax_scaled(scaled_scores)
   return tensor_matmul(attn_weights, v)
 @end
+
+@fn tensor_silu(t: Tensor) -> Tensor
+  // WHY: SiLU(x) = x * sigmoid(x) activation for SwiGLU FFN in modern LLMs (LLaMA/Mistral)
+  res_data = []
+  i = 0
+  @while i < t.size
+    x = tensor_get_flat(t, i)
+    sig_val = 500
+    @if x >= 0
+      sig_val = 1000000 / (1000 + math_exp_scaled(0 - x))
+    @else
+      ev = math_exp_scaled(x)
+      sig_val = (ev * 1000) / (1000 + ev)
+    @end
+    silu_val = (x * sig_val) / 1000
+    res_data = res_data.push(silu_val)
+    i = i + 1
+  @end
+  out = tensor_new(res_data, t.shape)
+  @if t.requires_grad == 1
+    out.requires_grad = 1
+    out.creator_op = "silu"
+    out.parents = [t]
+    out.ctx = tensor_context_new("silu", [t], [t.shape], [1000.0], [])
+  @end
+  return out
+@end
+
+@fn tensor_mul_scalar(t: Tensor, scalar: f64) -> Tensor
+  // WHY: Scales all tensor elements by a scalar value for LoRA scaling and layer normalization
+  res_data = []
+  i = 0
+  @while i < t.size
+    v = tensor_get_flat(t, i)
+    res_data = res_data.push(v * scalar)
+    i = i + 1
+  @end
+  out = tensor_new(res_data, t.shape)
+  @if t.requires_grad == 1
+    out.requires_grad = 1
+    out.creator_op = "mul_scalar"
+    out.parents = [t]
+    out.ctx = tensor_context_new("mul_scalar", [t], [t.shape], [scalar], [])
+  @end
+  return out
+@end

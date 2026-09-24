@@ -9,9 +9,6 @@
   return res
 @end
 
-@fn maya_pow2(n)
-  return lipi_pow2(n)
-@end
 
 @! ============================================================================
 @! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-4 SHA-256

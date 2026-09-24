@@ -3,8 +3,8 @@
   return string_concat(t1, "\"}")
 @end
 
-// WHY: Retains mpm_err_json as backward-compatible alias for legacy callers
-@fn mpm_err_json(msg)
+// WHY: Retains lipipkg_err_json as backward-compatible alias for legacy callers
+@fn lipipkg_err_json(msg)
   return lipipkg_err_json(msg)
 @end
 
@@ -34,17 +34,6 @@ import "universe/p2p/registry"
 @! ============================================================================
 
 @struct LipiPkgServerConfig
-  host: string
-  port: i64
-  p2p_peer_id: string
-  p2p_port: i64
-  p2p_enabled: i64
-  data_dir: string
-  max_body_bytes: i64
-@end
-
-// WHY: Retains MPMServerConfig as backward-compatible alias for legacy callers
-@struct MPMServerConfig
   host: string
   port: i64
   p2p_peer_id: string
@@ -101,24 +90,7 @@ import "universe/p2p/registry"
   verified: i64
 @end
 
-// WHY: Retains MPMClientPublishResult as backward-compatible alias
-@struct MPMClientPublishResult
-  status_code: i64
-  body: string
-  sha256: string
-  verified: i64
-@end
-
 @struct LipiPkgClientFetchResult
-  status_code: i64
-  payload: string
-  sha256: string
-  expected_sha: string
-  verified: i64
-@end
-
-// WHY: Retains MPMClientFetchResult as backward-compatible alias
-@struct MPMClientFetchResult
   status_code: i64
   payload: string
   sha256: string
@@ -131,19 +103,7 @@ import "universe/p2p/registry"
   body: string
 @end
 
-// WHY: Retains MPMClientIndexResult as backward-compatible alias
-@struct MPMClientIndexResult
-  status_code: i64
-  body: string
-@end
-
 @struct LipiPkgClientSearchResult
-  status_code: i64
-  body: string
-@end
-
-// WHY: Retains MPMClientSearchResult as backward-compatible alias
-@struct MPMClientSearchResult
   status_code: i64
   body: string
 @end
@@ -162,26 +122,11 @@ import "universe/p2p/registry"
   total_downloads: i64
 @end
 
-// WHY: Retains MPMServer as backward-compatible alias
-@struct MPMServer
-  config: MPMServerConfig
-  web_app: WebApp
-  web_server: WebServer
-  p2p_registry: P2PRegistry
-  p2p_swarm: P2PSwarmNetwork
-  merkle_root: string
-  packages: array
-  is_running: i64
-  total_requests: i64
-  total_publishes: i64
-  total_downloads: i64
-@end
-
 @! ============================================================================
 @! 2. STRING & JSON UTILITIES
 @! ============================================================================
 
-@fn mpm_escape_json(s)
+@fn lipipkg_escape_json(s)
   @! WHY: Escapes special characters for JSON encoding safely in chunked spans without excess allocations.
   res = ""
   i = 0
@@ -214,10 +159,10 @@ import "universe/p2p/registry"
   return res
 @end
 
-@fn mpm_json_field(key, val)
+@fn lipipkg_json_field(key, val)
   @! WHY: Constructs JSON key-value string safely with zero pointer additions.
-  k = mpm_escape_json(key)
-  v = mpm_escape_json(val)
+  k = lipipkg_escape_json(key)
+  v = lipipkg_escape_json(val)
   res = string_concat("\"", k)
   res = string_concat(res, "\":\"")
   res = string_concat(res, v)
@@ -225,16 +170,16 @@ import "universe/p2p/registry"
   return res
 @end
 
-@fn mpm_json_field_num(key, num_val)
+@fn lipipkg_json_field_num(key, num_val)
   @! WHY: Constructs JSON numeric field safely with to_str conversion.
-  k = mpm_escape_json(key)
+  k = lipipkg_escape_json(key)
   res = string_concat("\"", k)
   res = string_concat(res, "\":")
   res = string_concat(res, to_str(num_val))
   return res
 @end
 
-@fn mpm_extract_json_string(body, field_name)
+@fn lipipkg_extract_json_string(body, field_name)
   tmp_f = string_concat(field_name, "\"")
   target = string_concat("\"", tmp_f)
   pos = str_index_of(body, target)
@@ -331,7 +276,7 @@ import "universe/p2p/registry"
   return ""
 @end
 
-@fn mpm_extract_json_tags(body)
+@fn lipipkg_extract_json_tags(body)
   target = "\"tags\""
   pos = str_index_of(body, target)
   @if pos < 0
@@ -376,7 +321,7 @@ import "universe/p2p/registry"
   return tags
 @end
 
-@fn mpm_is_valid_identifier(name)
+@fn lipipkg_is_valid_identifier(name)
   n = str_len(name)
   @if n == 0
     return 0
@@ -396,7 +341,7 @@ import "universe/p2p/registry"
   return 1
 @end
 
-@fn mpm_is_valid_semver(ver_str)
+@fn lipipkg_is_valid_semver(ver_str)
   @if str_len(ver_str) == 0
     return 0
   @end
@@ -442,7 +387,7 @@ import "universe/p2p/registry"
 @! 3. SERVER CONSTRUCTOR & CONFIGURATION
 @! ============================================================================
 
-@fn mpm_server_config_default()
+@fn lipipkg_server_config_default()
   return {
     host: "127.0.0.1",
     port: 8080,
@@ -455,9 +400,9 @@ import "universe/p2p/registry"
   }
 @end
 
-@fn mpm_server_new(config)
+@fn lipipkg_server_new(config)
   @if config == 0
-    config = mpm_server_config_default()
+    config = lipipkg_server_config_default()
   @end
 
   app = web_new()
@@ -489,43 +434,43 @@ import "universe/p2p/registry"
 @! 4. REST ROUTE HANDLERS
 @! ============================================================================
 
-@fn mpm_server_handle_publish(server, req, res)
+@fn lipipkg_server_handle_publish(server, req, res)
   body = req.req_body
   @if str_len(body) == 0
     res_status(res, 400)
-    res_json(res, mpm_err_json("Request body cannot be empty"))
+    res_json(res, lipipkg_err_json("Request body cannot be empty"))
     return res
   @end
 
-  name = mpm_extract_json_string(body, "name")
-  version = mpm_extract_json_string(body, "version")
-  desc = mpm_extract_json_string(body, "description")
-  author = mpm_extract_json_string(body, "author")
-  license = mpm_extract_json_string(body, "license")
-  payload = mpm_extract_json_string(body, "payload")
-  client_sha = mpm_extract_json_string(body, "sha256")
-  sig = mpm_extract_json_string(body, "signature")
-  tags = mpm_extract_json_tags(body)
+  name = lipipkg_extract_json_string(body, "name")
+  version = lipipkg_extract_json_string(body, "version")
+  desc = lipipkg_extract_json_string(body, "description")
+  author = lipipkg_extract_json_string(body, "author")
+  license = lipipkg_extract_json_string(body, "license")
+  payload = lipipkg_extract_json_string(body, "payload")
+  client_sha = lipipkg_extract_json_string(body, "sha256")
+  sig = lipipkg_extract_json_string(body, "signature")
+  tags = lipipkg_extract_json_tags(body)
 
   @! Validation 1: Package Name
-  @if str_len(name) == 0 || mpm_is_valid_identifier(name) == 0
+  @if str_len(name) == 0 || lipipkg_is_valid_identifier(name) == 0
     res_status(res, 400)
-    res_json(res, mpm_err_json("Invalid or missing package name"))
+    res_json(res, lipipkg_err_json("Invalid or missing package name"))
     return res
   @end
 
   @! Validation 2: SemVer 2.0.0
-  @if str_len(version) == 0 || mpm_is_valid_semver(version) == 0
+  @if str_len(version) == 0 || lipipkg_is_valid_semver(version) == 0
     res_status(res, 400)
     err_v = string_concat("Invalid SemVer 2.0.0 version string: ", version)
-    res_json(res, mpm_err_json(err_v))
+    res_json(res, lipipkg_err_json(err_v))
     return res
   @end
 
   @! Validation 3: Payload
   @if str_len(payload) == 0
     res_status(res, 400)
-    res_json(res, mpm_err_json("Package payload is required"))
+    res_json(res, lipipkg_err_json("Package payload is required"))
     return res
   @end
 
@@ -538,7 +483,7 @@ import "universe/p2p/registry"
 
   @if str_len(clean_client_sha) > 0 && str_eq(str_to_lower(clean_client_sha), str_to_lower(actual_sha)) == 0
     res_status(res, 400)
-    res_json(res, mpm_err_json("SHA-256 integrity checksum verification failed"))
+    res_json(res, lipipkg_err_json("SHA-256 integrity checksum verification failed"))
     return res
   @end
 
@@ -550,7 +495,7 @@ import "universe/p2p/registry"
     @if str_eq(p.name, name) == 1 && str_eq(p.version, version) == 1
       res_status(res, 409)
       err_m = string_concat("Package version already exists: ", name)
-      res_json(res, mpm_err_json(err_m))
+      res_json(res, lipipkg_err_json(err_m))
       return res
     @end
     i = i + 1
@@ -611,14 +556,14 @@ import "universe/p2p/registry"
   @end
 
   resp_json = "{"
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("status", "ok"), ","))
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("message", "Package published successfully"), ","))
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("name", name), ","))
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("version", version), ","))
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("cid", cid), ","))
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("sha256", actual_sha), ","))
-  resp_json = string_concat(resp_json, string_concat(mpm_json_field("merkle_root", server.merkle_root), ","))
-  resp_json = string_concat(resp_json, mpm_json_field_num("published_at", 1756584000))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("status", "ok"), ","))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("message", "Package published successfully"), ","))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("name", name), ","))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("version", version), ","))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("cid", cid), ","))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("sha256", actual_sha), ","))
+  resp_json = string_concat(resp_json, string_concat(lipipkg_json_field("merkle_root", server.merkle_root), ","))
+  resp_json = string_concat(resp_json, lipipkg_json_field_num("published_at", 1756584000))
   resp_json = string_concat(resp_json, "}")
 
   res_status(res, 201)
@@ -626,7 +571,7 @@ import "universe/p2p/registry"
   return res
 @end
 
-@fn mpm_server_handle_get_package(server, req, res, name, version_constraint)
+@fn lipipkg_server_handle_get_package(server, req, res, name, version_constraint)
   @! Find matching packages for name
   matching_meta = []
   i = 0
@@ -642,7 +587,7 @@ import "universe/p2p/registry"
   @if matching_meta.len() == 0
     res_status(res, 404)
     err_nf = string_concat("Package not found: ", name)
-    res_json(res, mpm_err_json(err_nf))
+    res_json(res, lipipkg_err_json(err_nf))
     return res
   @end
 
@@ -680,7 +625,7 @@ import "universe/p2p/registry"
     @if satisfying.len() == 0
       res_status(res, 404)
       err_nv = string_concat("No matching version for: ", name)
-      res_json(res, mpm_err_json(err_nv))
+      res_json(res, lipipkg_err_json(err_nv))
       return res
     @end
 
@@ -715,7 +660,7 @@ import "universe/p2p/registry"
   @if target_meta == 0
     res_status(res, 404)
     err_vnf = string_concat("Package version not found: ", name)
-    res_json(res, mpm_err_json(err_vnf))
+    res_json(res, lipipkg_err_json(err_vnf))
     return res
   @end
 
@@ -729,7 +674,7 @@ import "universe/p2p/registry"
   @if str_len(blob_data) == 0
     res_status(res, 404)
     err_bnf = string_concat("Package blob not found for CID: ", target_meta.cid)
-    res_json(res, mpm_err_json(err_bnf))
+    res_json(res, lipipkg_err_json(err_bnf))
     return res
   @end
 
@@ -739,20 +684,16 @@ import "universe/p2p/registry"
 
   res_status(res, 200)
   res_header(res, "Content-Type", "application/octet-stream")
-  // WHY: Emits official sovereign X-Lipi-Package headers with dual-compat X-Maya-Package headers
+  // WHY: Emits official sovereign X-Lipi-Package headers
   res_header(res, "X-Lipi-Package-Name", target_meta.name)
   res_header(res, "X-Lipi-Package-Version", target_meta.version)
   res_header(res, "X-Lipi-Package-CID", target_meta.cid)
   res_header(res, "X-Lipi-Package-SHA256", target_meta.sha256)
-  res_header(res, "X-Maya-Package-Name", target_meta.name)
-  res_header(res, "X-Maya-Package-Version", target_meta.version)
-  res_header(res, "X-Maya-Package-CID", target_meta.cid)
-  res_header(res, "X-Maya-Package-SHA256", target_meta.sha256)
   res_send(res, blob_data)
   return res
 @end
 
-@fn mpm_server_handle_get_index(server, req, res)
+@fn lipipkg_server_handle_get_index(server, req, res)
   pkg_map = []
   i = 0
   n_pkgs = server.packages.len()
@@ -802,10 +743,10 @@ import "universe/p2p/registry"
 
   @! Build JSON Output
   json_res = "{"
-  json_res = string_concat(json_res, string_concat(mpm_json_field("merkle_root", server.merkle_root), ","))
-  json_res = string_concat(json_res, string_concat(mpm_json_field_num("total_packages", pkg_map.len()), ","))
-  json_res = string_concat(json_res, string_concat(mpm_json_field_num("total_versions", server.packages.len()), ","))
-  json_res = string_concat(json_res, string_concat(mpm_json_field_num("updated_at", 1756584000), ","))
+  json_res = string_concat(json_res, string_concat(lipipkg_json_field("merkle_root", server.merkle_root), ","))
+  json_res = string_concat(json_res, string_concat(lipipkg_json_field_num("total_packages", pkg_map.len()), ","))
+  json_res = string_concat(json_res, string_concat(lipipkg_json_field_num("total_versions", server.packages.len()), ","))
+  json_res = string_concat(json_res, string_concat(lipipkg_json_field_num("updated_at", 1756584000), ","))
   json_res = string_concat(json_res, "\"packages\":[")
 
   i = 0
@@ -814,21 +755,21 @@ import "universe/p2p/registry"
     p = pkg_map[i]
     @if i > 0 json_res = string_concat(json_res, ",") @end
     json_res = string_concat(json_res, "{")
-    json_res = string_concat(json_res, string_concat(mpm_json_field("name", p.name), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field("latest_version", p.latest_version), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field("description", p.description), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field("author", p.author), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field("license", p.license), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field("cid", p.cid), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field("sha256", p.sha256), ","))
-    json_res = string_concat(json_res, string_concat(mpm_json_field_num("downloads", p.total_downloads), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("name", p.name), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("latest_version", p.latest_version), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("description", p.description), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("author", p.author), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("license", p.license), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("cid", p.cid), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field("sha256", p.sha256), ","))
+    json_res = string_concat(json_res, string_concat(lipipkg_json_field_num("downloads", p.total_downloads), ","))
     json_res = string_concat(json_res, "\"versions\":[")
     v_idx = 0
     v_len = p.versions.len()
     @while v_idx < v_len
       @if v_idx > 0 json_res = string_concat(json_res, ",") @end
       json_res = string_concat(json_res, "\"")
-      json_res = string_concat(json_res, mpm_escape_json(p.versions[v_idx]))
+      json_res = string_concat(json_res, lipipkg_escape_json(p.versions[v_idx]))
       json_res = string_concat(json_res, "\"")
       v_idx = v_idx + 1
     @end
@@ -843,7 +784,7 @@ import "universe/p2p/registry"
   return res
 @end
 
-@fn mpm_server_handle_search(server, req, res)
+@fn lipipkg_server_handle_search(server, req, res)
   query = req_query(req, "q", "")
   @if str_len(query) == 0
     q_src = req.req_query_string
@@ -895,21 +836,21 @@ import "universe/p2p/registry"
     @if is_match == 1
       @if match_count > 0 results_json = string_concat(results_json, ",") @end
       results_json = string_concat(results_json, "{")
-      results_json = string_concat(results_json, string_concat(mpm_json_field("name", p.name), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field("version", p.version), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field("description", p.description), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field("author", p.author), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field("license", p.license), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field("cid", p.cid), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field("sha256", p.sha256), ","))
-      results_json = string_concat(results_json, string_concat(mpm_json_field_num("downloads", p.downloads), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("name", p.name), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("version", p.version), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("description", p.description), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("author", p.author), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("license", p.license), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("cid", p.cid), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field("sha256", p.sha256), ","))
+      results_json = string_concat(results_json, string_concat(lipipkg_json_field_num("downloads", p.downloads), ","))
       results_json = string_concat(results_json, "\"tags\":[")
       t_idx = 0
       t_len = p.tags.len()
       @while t_idx < t_len
         @if t_idx > 0 results_json = string_concat(results_json, ",") @end
         results_json = string_concat(results_json, "\"")
-        results_json = string_concat(results_json, mpm_escape_json(p.tags[t_idx]))
+        results_json = string_concat(results_json, lipipkg_escape_json(p.tags[t_idx]))
         results_json = string_concat(results_json, "\"")
         t_idx = t_idx + 1
       @end
@@ -920,8 +861,8 @@ import "universe/p2p/registry"
   @end
 
   json_res = "{"
-  json_res = string_concat(json_res, string_concat(mpm_json_field("query", query), ","))
-  json_res = string_concat(json_res, string_concat(mpm_json_field_num("count", match_count), ","))
+  json_res = string_concat(json_res, string_concat(lipipkg_json_field("query", query), ","))
+  json_res = string_concat(json_res, string_concat(lipipkg_json_field_num("count", match_count), ","))
   json_res = string_concat(json_res, "\"results\":[")
   json_res = string_concat(json_res, results_json)
   json_res = string_concat(json_res, "]}")
@@ -935,7 +876,7 @@ import "universe/p2p/registry"
 @! 5. REQUEST ROUTER & DISPATCH PIPELINE
 @! ============================================================================
 
-@fn mpm_server_handle_request(server, req)
+@fn lipipkg_server_handle_request(server, req)
   res = res_new()
   server.total_requests = server.total_requests + 1
 
@@ -951,7 +892,7 @@ import "universe/p2p/registry"
   @! Route 1: POST /api/v1/publish
   @if str_eq(path, "/api/v1/publish") == 1
     @if str_eq(method, "POST") == 1
-      return mpm_server_handle_publish(server, req, res)
+      return lipipkg_server_handle_publish(server, req, res)
     @else
       res_status(res, 405)
       res_header(res, "Allow", "POST")
@@ -963,7 +904,7 @@ import "universe/p2p/registry"
   @! Route 2: GET /api/v1/index
   @if str_eq(path, "/api/v1/index") == 1
     @if str_eq(method, "GET") == 1
-      return mpm_server_handle_get_index(server, req, res)
+      return lipipkg_server_handle_get_index(server, req, res)
     @else
       res_status(res, 405)
       res_header(res, "Allow", "GET")
@@ -975,7 +916,7 @@ import "universe/p2p/registry"
   @! Route 3: GET /api/v1/search
   @if str_eq(path, "/api/v1/search") == 1
     @if str_eq(method, "GET") == 1
-      return mpm_server_handle_search(server, req, res)
+      return lipipkg_server_handle_search(server, req, res)
     @else
       res_status(res, 405)
       res_header(res, "Allow", "GET")
@@ -992,7 +933,7 @@ import "universe/p2p/registry"
       name = str_substr(rest, 0, slash_pos)
       version = str_substr(rest, slash_pos + 1, str_len(rest))
       @if str_eq(method, "GET") == 1
-        return mpm_server_handle_get_package(server, req, res, name, version)
+        return lipipkg_server_handle_get_package(server, req, res, name, version)
       @else
         res_status(res, 405)
         res_header(res, "Allow", "GET")
@@ -1007,14 +948,14 @@ import "universe/p2p/registry"
   return res
 @end
 
-@fn mpm_server_dispatch(server, req)
-  return mpm_server_handle_request(server, req)
+@fn lipipkg_server_dispatch(server, req)
+  return lipipkg_server_handle_request(server, req)
 @end
 
-@fn mpm_server_handle_raw_request(server, raw_req_str)
+@fn lipipkg_server_handle_raw_request(server, raw_req_str)
   parsed = http_parse_request(raw_req_str)
   req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, "127.0.0.1")
-  res = mpm_server_dispatch(server, req)
+  res = lipipkg_server_dispatch(server, req)
   return res_format_http(res)
 @end
 
@@ -1022,19 +963,19 @@ import "universe/p2p/registry"
 @! 6. SERVER LIFECYCLE & TCP CONTAINER
 @! ============================================================================
 
-@fn mpm_server_handle_connection(server, stream)
+@fn lipipkg_server_handle_connection(server, stream)
   raw_req = tcp_stream_read(stream, 65536)
   @if str_len(raw_req) > 0
     parsed = http_parse_request(raw_req)
     req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, stream.peer_host)
-    res = mpm_server_dispatch(server, req)
+    res = lipipkg_server_dispatch(server, req)
     wire_resp = res_format_http(res)
     tcp_stream_write(stream, wire_resp)
   @end
   tcp_stream_close(stream)
 @end
 
-@fn mpm_server_listen(server, host, port)
+@fn lipipkg_server_listen(server, host, port)
   listener = tcp_listener_bind(host, port)
   @if listener.fd < 0
     err_bind = string_concat("Failed to bind LipiPkg Server on ", host)
@@ -1048,7 +989,7 @@ import "universe/p2p/registry"
   @while server.is_running == 1
     stream = tcp_listener_accept(listener)
     @if stream.fd >= 0
-      mpm_server_handle_connection(server, stream)
+      lipipkg_server_handle_connection(server, stream)
     @end
   @end
 
@@ -1056,7 +997,7 @@ import "universe/p2p/registry"
   return 0
 @end
 
-@fn mpm_server_listen_limited(server, host, port, max_requests)
+@fn lipipkg_server_listen_limited(server, host, port, max_requests)
   listener = tcp_listener_bind(host, port)
   @if listener.fd < 0
     println("Failed to bind LipiPkg Server on " + host + ":" + port.to_str())
@@ -1068,7 +1009,7 @@ import "universe/p2p/registry"
   @while server.is_running == 1
     stream = tcp_listener_accept(listener)
     @if stream.fd >= 0
-      mpm_server_handle_connection(server, stream)
+      lipipkg_server_handle_connection(server, stream)
       count = count + 1
       @if max_requests > 0 && count >= max_requests
         server.is_running = 0
@@ -1080,7 +1021,7 @@ import "universe/p2p/registry"
   return 0
 @end
 
-@fn mpm_server_stop(server)
+@fn lipipkg_server_stop(server)
   server.is_running = 0
   @if server.web_server != 0
     web_server_stop(server.web_server)
@@ -1091,7 +1032,7 @@ import "universe/p2p/registry"
 @! 7. P2P MERKLE DAG MULTI-NODE SYNCHRONIZATION
 @! ============================================================================
 
-@fn mpm_server_sync_p2p(server_a, server_b)
+@fn lipipkg_server_sync_p2p(server_a, server_b)
   @! 1. Synchronize P2P registries and CAS stores
   synced = p2p_sync_merkle_dag(server_a.p2p_registry, server_b.p2p_registry)
 
@@ -1151,187 +1092,3 @@ import "universe/p2p/registry"
 
   return synced
 @end
-
-@! ============================================================================
-@! 8. PURE LIPI SCRIPTABLE CLIENT API
-@! ============================================================================
-
-@fn mpm_client_publish(target, manifest_data, payload)
-  actual_sha = sha256_hex_string(payload)
-  
-  name = manifest_data.name
-  version = manifest_data.version
-  desc = manifest_data.description
-  author = manifest_data.author
-  license = manifest_data.license
-  tags = manifest_data.tags
-
-  req_body = "{"
-  f1 = mpm_json_field("name", name)
-  req_body = string_concat(req_body, f1)
-  req_body = string_concat(req_body, ",")
-  f2 = mpm_json_field("version", version)
-  req_body = string_concat(req_body, f2)
-  req_body = string_concat(req_body, ",")
-  f3 = mpm_json_field("description", desc)
-  req_body = string_concat(req_body, f3)
-  req_body = string_concat(req_body, ",")
-  f4 = mpm_json_field("author", author)
-  req_body = string_concat(req_body, f4)
-  req_body = string_concat(req_body, ",")
-  f5 = mpm_json_field("license", license)
-  req_body = string_concat(req_body, f5)
-  req_body = string_concat(req_body, ",")
-  f6 = mpm_json_field("payload", payload)
-  req_body = string_concat(req_body, f6)
-  req_body = string_concat(req_body, ",")
-  f7 = mpm_json_field("sha256", actual_sha)
-  req_body = string_concat(req_body, f7)
-  req_body = string_concat(req_body, ",")
-  req_body = string_concat(req_body, "\"tags\":[")
-  t_i = 0
-  t_len = tags.len()
-  @while t_i < t_len
-    @if t_i > 0 req_body = string_concat(req_body, ",") @end
-    esc_tag = mpm_escape_json(tags[t_i])
-    req_body = string_concat(req_body, "\"")
-    req_body = string_concat(req_body, esc_tag)
-    req_body = string_concat(req_body, "\"")
-    t_i = t_i + 1
-  @end
-  req_body = string_concat(req_body, "]}")
-
-  @! If target is string URL
-  @if str_starts_with(target, "http://") || str_starts_with(target, "https://")
-    hdrs = [{ name: "Content-Type", value: "application/json" }]
-    pub_url = string_concat(target, "/api/v1/publish")
-    resp = http_post(pub_url, hdrs, req_body)
-    is_ver = 0
-    @if resp.status_code == 201 is_ver = 1 @end
-    return {
-      status_code: resp.status_code,
-      body: resp.body,
-      sha256: actual_sha,
-      verified: is_ver
-    }
-  @end
-
-  @! Direct in-memory server dispatch
-  req = req_new("POST", "/api/v1/publish", [{ name: "Content-Type", value: "application/json" }], req_body, "127.0.0.1")
-  res = mpm_server_dispatch(target, req)
-  is_ver = 0
-  @if res.res_status_code == 201 is_ver = 1 @end
-  return {
-    status_code: res.res_status_code,
-    body: res.res_body,
-    sha256: actual_sha,
-    verified: is_ver
-  }
-@end
-
-@fn mpm_client_fetch(target, name, version_constraint)
-  t1 = string_concat("/api/v1/packages/", name)
-  t2 = string_concat(t1, "/")
-  subpath = string_concat(t2, version_constraint)
-
-  @! Network HTTP Fetch
-  @if str_starts_with(target, "http://") || str_starts_with(target, "https://")
-    fetch_url = string_concat(target, subpath)
-    resp = http_get(fetch_url)
-    expected_sha = ""
-    i = 0
-    h_len = resp.headers.len()
-    @while i < h_len
-      h = resp.headers[i]
-      // WHY: Checks official X-Lipi-Package-SHA256 and falls back to legacy X-Maya-Package-SHA256
-      @if str_to_lower(h.name) == "x-lipi-package-sha256" || str_to_lower(h.name) == "x-maya-package-sha256"
-        expected_sha = h.value
-        break
-      @end
-      i = i + 1
-    @end
-
-    actual_sha = sha256_hex_string(resp.body)
-    is_valid = 0
-    @if resp.status_code == 200 is_valid = 1 @end
-    @if str_len(expected_sha) > 0 && str_to_lower(expected_sha) != str_to_lower(actual_sha)
-      is_valid = 0
-    @end
-
-    return {
-      status_code: resp.status_code,
-      payload: resp.body,
-      sha256: actual_sha,
-      expected_sha: expected_sha,
-      verified: is_valid
-    }
-  @end
-
-  @! Direct in-memory server dispatch
-  req = req_new("GET", subpath, [], "", "127.0.0.1")
-  res = mpm_server_dispatch(target, req)
-  // WHY: Retrieves sovereign X-Lipi-Package-SHA256 with legacy fallback
-  expected_sha = res_get_header(res, "X-Lipi-Package-SHA256", "")
-  @if str_len(expected_sha) == 0
-    expected_sha = res_get_header(res, "X-Maya-Package-SHA256", "")
-  @end
-  actual_sha = sha256_hex_string(res.res_body)
-
-  is_valid = 0
-  @if res.res_status_code == 200 is_valid = 1 @end
-  @if str_len(expected_sha) > 0 && str_to_lower(expected_sha) != str_to_lower(actual_sha)
-    is_valid = 0
-  @end
-
-  return {
-    status_code: res.res_status_code,
-    payload: res.res_body,
-    sha256: actual_sha,
-    expected_sha: expected_sha,
-    verified: is_valid
-  }
-@end
-
-@fn mpm_client_get_index(target)
-  subpath = "/api/v1/index"
-  @if str_starts_with(target, "http://") || str_starts_with(target, "https://")
-    idx_url = string_concat(target, subpath)
-    resp = http_get(idx_url)
-    return { status_code: resp.status_code, body: resp.body }
-  @end
-
-  req = req_new("GET", subpath, [], "", "127.0.0.1")
-  res = mpm_server_dispatch(target, req)
-  return { status_code: res.res_status_code, body: res.res_body }
-@end
-
-@fn mpm_client_search(target, query)
-  subpath = string_concat("/api/v1/search?q=", query)
-  @if str_starts_with(target, "http://") || str_starts_with(target, "https://")
-    srch_url = string_concat(target, subpath)
-    resp = http_get(srch_url)
-    return { status_code: resp.status_code, body: resp.body }
-  @end
-
-  req = req_new("GET", subpath, [], "", "127.0.0.1")
-  res = mpm_server_dispatch(target, req)
-  return { status_code: res.res_status_code, body: res.res_body }
-@end
-
-// ── Sovereign LipiPkg Canonical Aliases ─────────────────────────────────────
-@fn lipipkg_server_config_default() return mpm_server_config_default() @end
-@fn lipipkg_server_new(config) return mpm_server_new(config) @end
-@fn lipipkg_server_handle_publish(server, req, res) return mpm_server_handle_publish(server, req, res) @end
-@fn lipipkg_server_handle_get_package(server, req, res, name, constraint) return mpm_server_handle_get_package(server, req, res, name, constraint) @end
-@fn lipipkg_server_handle_get_index(server, req, res) return mpm_server_handle_get_index(server, req, res) @end
-@fn lipipkg_server_handle_search(server, req, res) return mpm_server_handle_search(server, req, res) @end
-@fn lipipkg_server_handle_request(server, req) return mpm_server_handle_request(server, req) @end
-@fn lipipkg_server_dispatch(server, req) return mpm_server_dispatch(server, req) @end
-@fn lipipkg_server_listen(server, host, port) return mpm_server_listen(server, host, port) @end
-@fn lipipkg_server_listen_limited(server, host, port, max_reqs) return mpm_server_listen_limited(server, host, port, max_reqs) @end
-@fn lipipkg_server_stop(server) return mpm_server_stop(server) @end
-@fn lipipkg_server_sync_p2p(s_a, s_b) return mpm_server_sync_p2p(s_a, s_b) @end
-@fn lipipkg_client_publish(target, manifest_data, payload) return mpm_client_publish(target, manifest_data, payload) @end
-@fn lipipkg_client_fetch(target, name, constraint) return mpm_client_fetch(target, name, constraint) @end
-@fn lipipkg_client_get_index(target) return mpm_client_get_index(target) @end
-@fn lipipkg_client_search(target, query) return mpm_client_search(target, query) @end

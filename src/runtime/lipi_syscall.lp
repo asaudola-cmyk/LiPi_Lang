@@ -568,6 +568,3 @@
   return syscall(nr, a1, a2, a3, a4, a5, a6)
 @end
 
-@fn maya_syscall(nr, a1, a2, a3, a4, a5, a6)
-  return lipi_syscall(nr, a1, a2, a3, a4, a5, a6)
-@end

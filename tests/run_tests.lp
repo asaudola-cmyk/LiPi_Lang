@@ -889,6 +889,48 @@ fn main
     else
         failed = failed + 1
 
+    // 191: Sovereign Mobile Platform Hardware Bridge & Sensors
+    if run_single_test(compiler, "tests/mobile/test_mobile_platform.lp", "test_mobile_platform") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 192: Copy-on-Write Sovereign File System (LipiFS)
+    if run_single_test(compiler, "tests/fs/test_lipifs_cow.lp", "test_lipifs_cow") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 193: Sovereign 3D Raytracer & Spatial Kinematics Engine
+    if run_single_test(compiler, "tests/engine3d/test_engine3d_sovereign.lp", "test_engine3d_sovereign") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 194: Sovereign IoT MQTT Protocol & Telemetry Sensors
+    if run_single_test(compiler, "tests/iot/test_iot_mqtt_sensor.lp", "test_iot_mqtt_sensor") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 195: Core Silicon Hardware Primitives & Register Allocation
+    if run_single_test(compiler, "tests/31_core_silicon_primitives.lp", "31_core_silicon_primitives") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 196: Binary Formats Subsystem (ELF, PE, Mach-O, DWARF, Multiboot2)
+    if run_single_test(compiler, "tests/52_binary_formats_subsystem.lp", "52_binary_formats_subsystem") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 197: Sovereign Compiler Diagnostics & TrueColor Error Formatting
+    if run_single_test(compiler, "tests/test_diagnostics.lp", "test_diagnostics") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed
     say "========================================================================"

@@ -24,11 +24,6 @@ import "universe/core/string"
   return res
 @end
 
-// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
-@fn maya_pow2(n)
-  return lipi_pow2(n)
-@end
-
 @fn w64_new(hi, lo)
   return [hi % 4294967296, lo % 4294967296]
 @end

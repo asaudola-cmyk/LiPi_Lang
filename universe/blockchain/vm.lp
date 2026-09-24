@@ -32,27 +32,7 @@ import "universe/crypto/sha256"
   error_msg: string
 @end
 
-// WHY: Retains MayaVMContext as backward-compatible alias for legacy blockchain VM callers
-@struct MayaVMContext
-  caller: string
-  contract_address: string
-  call_value: i64
-  gas_limit: i64
-  gas_used: i64
-  gas_price: i64
-  is_reverted: i64
-  return_data: string
-  error_msg: string
-@end
-
 @struct LipiVMState
-  stack: array
-  memory: array
-  storage: array
-@end
-
-// WHY: Retains MayaVMState as backward-compatible alias for legacy blockchain VM callers
-@struct MayaVMState
   stack: array
   memory: array
   storage: array

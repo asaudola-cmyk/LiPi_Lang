@@ -144,7 +144,8 @@ import "universe/core/collections"
   @end
   payload_i = 0
   @while payload_i < payload_len
-    packet = packet.push(65)
+    // WHY: Encodes actual payload character byte into the wire packet
+    packet = packet.push(str_char_at(payload, payload_i))
     payload_i = payload_i + 1
   @end
   client.sent_packets = client.sent_packets.push(packet)

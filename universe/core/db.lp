@@ -16,17 +16,6 @@ import "universe/core/string"
   tx_wal: array
 @end
 
-// WHY: Preserves MayaDatabase struct definition for backward compatibility
-@struct MayaDatabase
-  keys: array
-  values: array
-  name: string
-  order: i64
-  wal: array
-  in_tx: i64
-  tx_wal: array
-@end
-
 @struct WALRecord
   op: string
   key: string

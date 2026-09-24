@@ -44,11 +44,6 @@
   return res
 @end
 
-// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
-@fn maya_pow2(n)
-  return lipi_pow2(n)
-@end
-
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — ADVANCED PLONK & ELLIPTIC CURVE ZK-SNARKS
 @! Module: universe/crypto/plonk.lp

@@ -11,45 +11,70 @@ import "compiler/backend/jit/jit_memory"
 @! 1. FUNCTION INVOCATION BRIDGES (0 - 4 ARGUMENTS)
 @! ----------------------------------------------------------------------------
 
-@! Invokes a 0-argument JIT-compiled function pointer in RAM
-@fn jit_invoke_fn0(fn_ptr)
+@! Low-level AMD64 indirect call bridges executing function pointers in RAM
+@fn lipi_jit_call0(fn_ptr)
   // WHY: Direct Silicon jump to executable JIT machine code page without
   // libc or trampolines, conforming strictly to System V AMD64 ABI.
   @if fn_ptr == 0
     return 0
   @end
+  return fn_ptr()
+@end
+
+@fn lipi_jit_call1(fn_ptr, a1)
+  // WHY: AMD64 indirect call passing a1 in %rdi
+  @if fn_ptr == 0
+    return 0
+  @end
+  return fn_ptr(a1)
+@end
+
+@fn lipi_jit_call2(fn_ptr, a1, a2)
+  // WHY: AMD64 indirect call passing a1 in %rdi, a2 in %rsi
+  @if fn_ptr == 0
+    return 0
+  @end
+  return fn_ptr(a1, a2)
+@end
+
+@fn lipi_jit_call3(fn_ptr, a1, a2, a3)
+  // WHY: AMD64 indirect call passing a1 in %rdi, a2 in %rsi, a3 in %rdx
+  @if fn_ptr == 0
+    return 0
+  @end
+  return fn_ptr(a1, a2, a3)
+@end
+
+@fn lipi_jit_call4(fn_ptr, a1, a2, a3, a4)
+  // WHY: AMD64 indirect call passing 4 arguments via System V ABI registers
+  @if fn_ptr == 0
+    return 0
+  @end
+  return fn_ptr(a1, a2, a3, a4)
+@end
+
+@! Invokes a 0-argument JIT-compiled function pointer in RAM
+@fn jit_invoke_fn0(fn_ptr)
   return lipi_jit_call0(fn_ptr)
 @end
 
 @! Invokes a 1-argument JIT-compiled function pointer in RAM
 @fn jit_invoke_fn1(fn_ptr, a1)
-  @if fn_ptr == 0
-    return 0
-  @end
   return lipi_jit_call1(fn_ptr, a1)
 @end
 
 @! Invokes a 2-argument JIT-compiled function pointer in RAM
 @fn jit_invoke_fn2(fn_ptr, a1, a2)
-  @if fn_ptr == 0
-    return 0
-  @end
   return lipi_jit_call2(fn_ptr, a1, a2)
 @end
 
 @! Invokes a 3-argument JIT-compiled function pointer in RAM
 @fn jit_invoke_fn3(fn_ptr, a1, a2, a3)
-  @if fn_ptr == 0
-    return 0
-  @end
   return lipi_jit_call3(fn_ptr, a1, a2, a3)
 @end
 
 @! Invokes a 4-argument JIT-compiled function pointer in RAM
 @fn jit_invoke_fn4(fn_ptr, a1, a2, a3, a4)
-  @if fn_ptr == 0
-    return 0
-  @end
   return lipi_jit_call4(fn_ptr, a1, a2, a3, a4)
 @end
 

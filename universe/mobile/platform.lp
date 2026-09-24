@@ -4,6 +4,9 @@
 @! Supports Orientation, Touch Event Queue, Safe Area, Status, & JNI Generator
 @! ============================================================================
 
+import "universe/core/collections"
+import "universe/core/string"
+
 @! ----------------------------------------------------------------------------
 @! 1. Platform & Orientation Constants
 @! ----------------------------------------------------------------------------
@@ -266,15 +269,91 @@
   return 0
 @end
 
+// WHY: Dispatches desktop and terminal notifications using ANSI OSC 9 / OSC 777 protocols
+// and writes to persistent notification log without requiring heavyweight native Java/Android frameworks.
 @fn app_show_notification(app: MobileApp, title, body)
+  @if len(title) == 0 && len(body) == 0
+    return 0
+  @end
+  
+  // Format ANSI OSC 9 escape sequence: ESC ] 9 ; <title> : <body> BEL
+  osc9 = chr(27) + "]9;" + title + ": " + body + chr(7)
+  println(osc9)
+  
+  // Append to notification spool file for IPC desktop daemon listeners
+  spool_entry = "[" + to_str(clock_ms()) + "] " + title + ": " + body + "\n"
+  log_path = "/tmp/lipi_notifications.log"
+  prev_log = ""
+  @if file_exists(log_path) == 1
+    prev_log = file_read(log_path)
+  @end
+  file_write(log_path, prev_log + spool_entry)
   return 1
 @end
 
+// WHY: Triggers haptic feedback via Linux sysfs timed_output or LED vibrator node,
+// falling back to terminal ASCII BEL (0x07) for cross-platform hardware feedback.
 @fn app_vibrate(app: MobileApp, ms)
+  @if ms <= 0
+    return 0
+  @end
+  // Safety clamp to prevent hardware burnout (max 5000 ms)
+  vibe_duration = ms
+  @if vibe_duration > 5000
+    vibe_duration = 5000
+  @end
+  
+  vibe_str = to_str(vibe_duration)
+  node_found = 0
+  
+  // 1. Android/Embedded Linux timed_output sysfs interface
+  timed_out_path = "/sys/class/timed_output/vibrator/enable"
+  @if file_exists(timed_out_path) == 1
+    file_write(timed_out_path, vibe_str)
+    node_found = 1
+  @end
+  
+  // 2. LED vibrator sysfs interface
+  led_vibe_path = "/sys/class/leds/vibrator/duration"
+  @if file_exists(led_vibe_path) == 1
+    file_write(led_vibe_path, vibe_str)
+    node_found = 1
+  @end
+  
+  // 3. Universal hardware bell fallback (auditory/tactile pulse)
+  println(chr(7))
   return 1
 @end
 
+// WHY: Validates URL format against standard sovereign web/resource protocols (http, https, mailto, tel, file)
+// and queues launch intent to IPC spool file for external system dispatcher.
 @fn app_open_url(app: MobileApp, url)
+  url_len = len(url)
+  @if url_len == 0
+    return 0
+  @end
+  
+  // Validate protocol prefix
+  is_valid = 0
+  @if str_starts_with(url, "http://") == 1 || str_starts_with(url, "https://") == 1
+    is_valid = 1
+  @elif str_starts_with(url, "mailto:") == 1 || str_starts_with(url, "tel:") == 1
+    is_valid = 1
+  @elif str_starts_with(url, "file://") == 1
+    is_valid = 1
+  @end
+  
+  @if is_valid == 0
+    return 0
+  @end
+  
+  // Record intent in system dispatcher spool file
+  queue_path = "/tmp/lipi_open_url.queue"
+  queue_prev = ""
+  @if file_exists(queue_path) == 1
+    queue_prev = file_read(queue_path)
+  @end
+  file_write(queue_path, queue_prev + url + "\n")
   return 1
 @end
 

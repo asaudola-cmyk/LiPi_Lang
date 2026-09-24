@@ -42,10 +42,7 @@ import "universe/swarm/types"
   return res
 @end
 
-// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
-@fn maya_pow2(n)
-  return lipi_pow2(n)
-@end
+
 
 @fn SWARM_MAGIC() return 21335 @end        @! 0x5357 = "SW"
 @fn SWARM_VERSION() return 1 @end

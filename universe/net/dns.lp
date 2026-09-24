@@ -9,11 +9,6 @@
   return res
 @end
 
-// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
-@fn maya_pow2(n)
-  return lipi_pow2(n)
-@end
-
 @! ============================================================================
 @! LIPI UNIVERSE NETWORKING: DNS PROTOCOL & WIRE RESOLVER
 @! Module: universe/net/dns

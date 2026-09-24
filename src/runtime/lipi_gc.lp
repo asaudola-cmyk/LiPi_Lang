@@ -37,17 +37,11 @@ import "universe/core/string"
 
 @fn TYPE_RAW_BYTES() return 0 @end
 @fn TYPE_LIPI_STRING() return 1 @end
-@fn TYPE_MAYA_STRING() return 1 @end
 @fn TYPE_LIPI_ARRAY() return 2 @end
-@fn TYPE_MAYA_ARRAY() return 2 @end
 @fn TYPE_LIPI_STRUCT() return 3 @end
-@fn TYPE_MAYA_STRUCT() return 3 @end
 @fn TYPE_LIPI_CLOSURE() return 4 @end
-@fn TYPE_MAYA_CLOSURE() return 4 @end
 @fn TYPE_LIPI_MAP() return 3 @end
-@fn TYPE_MAYA_MAP() return 3 @end
 @fn TYPE_LIPI_BOXED_FLOAT() return 6 @end
-@fn TYPE_MAYA_BOXED_FLOAT() return 6 @end
 
 @fn GC_TRIGGER_THRESHOLD_PERCENT() return 85 @end
 @fn MAX_ARENAS() return 65536 @end
@@ -197,10 +191,6 @@ g_next_fd = 100
   return gc_init()
 @end
 
-@fn maya_init_gc()
-  return lipi_init_gc()
-@end
-
 @! ----------------------------------------------------------------------------
 @! 6. Arena Creation & Management
 @! ----------------------------------------------------------------------------
@@ -232,7 +222,7 @@ g_next_fd = 100
 @end
 
 @! ----------------------------------------------------------------------------
-@! 7. Dual-Tier Allocation Frontend (gc_alloc / maya_alloc)
+@! 7. Dual-Tier Allocation Frontend (gc_alloc / lipi_alloc)
 @! ----------------------------------------------------------------------------
 @fn gc_alloc(size)
   @if g_gc_initialized == 0
@@ -341,21 +331,13 @@ g_next_fd = 100
   return gc_alloc(size)
 @end
 
-@fn maya_alloc(size)
-  return lipi_alloc(size)
-@end
-
-@fn maya_gc_alloc(size)
-  return lipi_gc_alloc(size)
-@end
-
 @fn gc_alloc_typed(size, type_id)
   ptr = gc_alloc(size)
   return ptr
 @end
 
 @! ----------------------------------------------------------------------------
-@! 8. Active Reclamation (gc_free / maya_free)
+@! 8. Active Reclamation (gc_free / lipi_free)
 @! ----------------------------------------------------------------------------
 @fn gc_free(ptr)
   @if ptr <= 0 return 0 @end
@@ -418,14 +400,6 @@ g_next_fd = 100
 
 @fn lipi_gc_free(ptr, size)
   return gc_free(ptr)
-@end
-
-@fn maya_free(ptr)
-  return lipi_free(ptr)
-@end
-
-@fn maya_gc_free(ptr, size)
-  return lipi_gc_free(ptr, size)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -502,7 +476,7 @@ g_next_fd = 100
 @end
 
 @! ----------------------------------------------------------------------------
-@! 10. Memory Reallocation (gc_realloc / maya_realloc)
+@! 10. Memory Reallocation (gc_realloc / lipi_realloc)
 @! ----------------------------------------------------------------------------
 @fn gc_realloc(ptr, new_size)
   @if ptr == 0
@@ -554,10 +528,6 @@ g_next_fd = 100
 
 @fn lipi_realloc(ptr, new_size)
   return gc_realloc(ptr, new_size)
-@end
-
-@fn maya_realloc(ptr, new_size)
-  return lipi_realloc(ptr, new_size)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -641,7 +611,7 @@ g_next_fd = 100
 @end
 
 @! ----------------------------------------------------------------------------
-@! 12. Tri-Color Mark & Sweep Garbage Collector (gc_collect / maya_gc_collect)
+@! 12. Tri-Color Mark & Sweep Garbage Collector (gc_collect / lipi_gc_collect)
 @! ----------------------------------------------------------------------------
 @fn gc_collect()
   @if g_gc_initialized == 0
@@ -796,10 +766,6 @@ g_next_fd = 100
   return gc_collect()
 @end
 
-@fn maya_gc_collect()
-  return lipi_gc_collect()
-@end
-
 @! ----------------------------------------------------------------------------
 @! 13. Diagnostics & Statistics
 @! ----------------------------------------------------------------------------
@@ -815,10 +781,6 @@ g_next_fd = 100
 
 @fn lipi_gc_stats()
   return gc_stats()
-@end
-
-@fn maya_gc_stats()
-  return lipi_gc_stats()
 @end
 
 @! ----------------------------------------------------------------------------
@@ -898,6 +860,3 @@ g_next_fd = 100
   return 0
 @end
 
-@fn maya_syscall(nr, a1, a2, a3, a4, a5, a6)
-  return lipi_syscall(nr, a1, a2, a3, a4, a5, a6)
-@end

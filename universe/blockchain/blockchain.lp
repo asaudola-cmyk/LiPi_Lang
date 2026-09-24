@@ -28,18 +28,6 @@ import "universe/blockchain/vm"
   tx_hash: string
 @end
 
-// WHY: Retains MayaTransaction as backward-compatible alias for existing blockchain callers
-@struct MayaTransaction
-  from_addr: string
-  to_addr: string
-  value: i64
-  nonce: i64
-  gas_limit: i64
-  gas_price: i64
-  data_payload: string
-  tx_hash: string
-@end
-
 @struct LipiBlock
   index: i64
   timestamp: i64
@@ -53,29 +41,7 @@ import "universe/blockchain/vm"
   block_hash: string
 @end
 
-// WHY: Retains MayaBlock as backward-compatible alias for existing blockchain callers
-@struct MayaBlock
-  index: i64
-  timestamp: i64
-  prev_hash: string
-  state_root: string
-  tx_merkle_root: string
-  transactions: array
-  miner: string
-  nonce: i64
-  difficulty: i64
-  block_hash: string
-@end
-
 @struct LipiBlockchain
-  chain: array
-  state_trie: StateTrie
-  pending_txs: array
-  difficulty: i64
-@end
-
-// WHY: Retains MayaBlockchain as backward-compatible alias for existing blockchain callers
-@struct MayaBlockchain
   chain: array
   state_trie: StateTrie
   pending_txs: array
@@ -102,11 +68,6 @@ import "universe/blockchain/vm"
   }
 @end
 
-// WHY: Retains maya_tx_new as backward-compatible alias for existing callers
-@fn maya_tx_new(from_addr, to_addr, val, nonce, gas_limit, gas_price, data_str)
-  return lipi_tx_new(from_addr, to_addr, val, nonce, gas_limit, gas_price, data_str)
-@end
-
 @fn lipi_txs_merkle_root(txs)
   @if txs.len() == 0
     return sha256_hex_string("empty_tx_root")
@@ -123,11 +84,6 @@ import "universe/blockchain/vm"
   return sha256_hex_string(concat_hashes)
 @end
 
-// WHY: Retains maya_txs_merkle_root backward-compatible alias
-@fn maya_txs_merkle_root(txs)
-  return lipi_txs_merkle_root(txs)
-@end
-
 @! ============================================================================
 @! 3. BLOCK MINING (Proof-of-Work / Hashcash) & HASHING
 @! ============================================================================
@@ -135,11 +91,6 @@ import "universe/blockchain/vm"
 @fn lipi_block_compute_hash(idx, ts, prev_h, st_root, tx_root, miner, nonce)
   raw = idx.to_str() + ":" + ts.to_str() + ":" + prev_h + ":" + st_root + ":" + tx_root + ":" + miner + ":" + nonce.to_str()
   return sha256_hex_string(raw)
-@end
-
-// WHY: Retains maya_block_compute_hash backward-compatible alias
-@fn maya_block_compute_hash(idx, ts, prev_h, st_root, tx_root, miner, nonce)
-  return lipi_block_compute_hash(idx, ts, prev_h, st_root, tx_root, miner, nonce)
 @end
 
 @fn lipi_block_mine(idx, ts, prev_h, st_root, txs, miner, difficulty)
@@ -182,11 +133,6 @@ import "universe/blockchain/vm"
   }
 @end
 
-// WHY: Retains maya_block_mine backward-compatible alias
-@fn maya_block_mine(idx, ts, prev_h, st_root, txs, miner, difficulty)
-  return lipi_block_mine(idx, ts, prev_h, st_root, txs, miner, difficulty)
-@end
-
 @! ============================================================================
 @! 4. CHAIN LEDGER INITIALIZATION & BLOCK ADDITION
 @! ============================================================================
@@ -206,11 +152,6 @@ import "universe/blockchain/vm"
     pending_txs: [],
     difficulty: 1
   }
-@end
-
-// WHY: Retains maya_blockchain_new backward-compatible alias
-@fn maya_blockchain_new(initial_miner, genesis_balance)
-  return lipi_blockchain_new(initial_miner, genesis_balance)
 @end
 
 @fn lipi_blockchain_apply_tx(chain, tx)
@@ -237,11 +178,6 @@ import "universe/blockchain/vm"
   return 1
 @end
 
-// WHY: Retains maya_blockchain_apply_tx backward-compatible alias
-@fn maya_blockchain_apply_tx(chain, tx)
-  return lipi_blockchain_apply_tx(chain, tx)
-@end
-
 @fn lipi_blockchain_mine_pending(chain, miner_addr)
   idx = chain.chain.len()
   last_block = chain.chain[idx - 1]
@@ -260,9 +196,4 @@ import "universe/blockchain/vm"
   chain.chain = chain.chain.push(new_block)
   chain.pending_txs = []
   return new_block
-@end
-
-// WHY: Retains maya_blockchain_mine_pending backward-compatible alias
-@fn maya_blockchain_mine_pending(chain, miner_addr)
-  return lipi_blockchain_mine_pending(chain, miner_addr)
 @end

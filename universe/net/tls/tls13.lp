@@ -9,11 +9,6 @@
   return res
 @end
 
-// WHY: Retains maya_pow2 as backward-compatible alias for legacy callers
-@fn maya_pow2(n)
-  return lipi_pow2(n)
-@end
-
 @fn net_u16_be(buf, off)
   b0 = buf[off] & 255
   t0 = b0 * 256

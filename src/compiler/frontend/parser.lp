@@ -1007,3 +1007,40 @@ import "compiler/frontend/lexer"
   tokens = tokenize_source(source)
   return parse_program_from_tokens(tokens)
 @end
+
+// WHY: Unified parser entry point returning AST statements, tokens, and structured program object.
+// Serves as the primary bridge for the incremental middle-end and in-memory JIT execution engine.
+@fn parser_parse_program(source)
+  tokens = tokenize_source(source)
+  prog = parse_program_from_tokens(tokens)
+  stmts = []
+  i = 0
+  num_c = prog.constants.len()
+  @while i < num_c
+    stmts = stmts.push(prog.constants[i])
+    i = i + 1
+  @end
+  i = 0
+  num_s = prog.structs.len()
+  @while i < num_s
+    stmts = stmts.push(prog.structs[i])
+    i = i + 1
+  @end
+  i = 0
+  num_f = prog.functions.len()
+  @while i < num_f
+    stmts = stmts.push(prog.functions[i])
+    i = i + 1
+  @end
+  i = 0
+  num_t = prog.top_level.len()
+  @while i < num_t
+    stmts = stmts.push(prog.top_level[i])
+    i = i + 1
+  @end
+  return {
+    ast_statements: stmts,
+    ast_tokens: tokens,
+    program: prog
+  }
+@end

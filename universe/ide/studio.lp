@@ -36,20 +36,6 @@ import "universe/ide/lsp_client"
   is_running: bool
 @end
 
-// WHY: Retains MayaStudioApp as backward-compatible alias for legacy plugins
-@struct MayaStudioApp
-  window: Widget
-  width: i64
-  height: i64
-  editor: StudioEditor
-  console: StudioConsole
-  runner: ProcessRunner
-  toolbar: StudioToolbar
-  theme: SyntaxTheme
-  canvas: Canvas
-  is_running: bool
-@end
-
 @! ----------------------------------------------------------------------------
 @! 2. MASTER APPLICATION FACTORY
 @! ----------------------------------------------------------------------------

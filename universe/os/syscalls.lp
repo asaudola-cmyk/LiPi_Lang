@@ -940,16 +940,7 @@ import "universe/core/string"
   return 1
 @end
 
-// ── Sovereign Compatibility Aliases ──────────────────────────────────────────
-// WHY: Retains maya_* backward-compatible aliases for legacy callers
-@fn maya_alloc(size) return lipi_alloc(size) @end
-@fn maya_gc_alloc(size) return lipi_gc_alloc(size) @end
-@fn maya_free(ptr, size) return lipi_free(ptr, size) @end
-@fn maya_gc_free(ptr, size) return lipi_gc_free(ptr, size) @end
-@fn maya_str_ptr(s) return lipi_str_ptr(s) @end
-@fn maya_str_new(ptr) return lipi_str_new(ptr) @end
-@fn maya_mem_read_u8(addr) return lipi_mem_read_u8(addr) @end
-@fn maya_mem_write_u8(addr, val) return lipi_mem_write_u8(addr, val) @end
+
 
 @fn file_write(path, content)
   @! Native direct write: O_WRONLY|O_CREAT|O_TRUNC (577), mode 0644 (420)

@@ -45,8 +45,8 @@ fn lsp_log msg
 fn str_find_from s sub start
     slen = len(s)
     sublen = len(sub)
-    if sublen == 0 { return start }
-    if slen < sublen { return -1 }
+    if sublen == 0 return start
+    if slen < sublen return -1
     i = start
     while i <= slen - sublen
         matched = 1
@@ -66,11 +66,11 @@ fn str_find_from s sub start
 fn json_extract_str_value json key
     needle = "\"" + key + "\""
     pos = str_find_from(json, needle, 0)
-    if pos < 0 { return "" }
+    if pos < 0 return ""
     colon = str_find_from(json, ":", pos + len(needle))
-    if colon < 0 { return "" }
+    if colon < 0 return ""
     q1 = str_find_from(json, "\"", colon + 1)
-    if q1 < 0 { return "" }
+    if q1 < 0 return ""
     
     // Find matching closing quote, respecting backslash escapes
     j = q1 + 1
@@ -86,26 +86,26 @@ fn json_extract_str_value json key
             else
                 j = j + 1
                 
-    if q2 < 0 { return "" }
+    if q2 < 0 return ""
     return str_sub(json, q1 + 1, q2)
 
 fn json_extract_id json
     needle = "\"id\""
     pos = str_find_from(json, needle, 0)
-    if pos < 0 { return "null" }
+    if pos < 0 return "null"
     colon = str_find_from(json, ":", pos + len(needle))
-    if colon < 0 { return "null" }
+    if colon < 0 return "null"
     
     j = colon + 1
     jlen = len(json)
     while j < jlen and (char_at(json, j) == " " or char_at(json, j) == "\t" or char_at(json, j) == "\r" or char_at(json, j) == "\n")
         j = j + 1
-    if j >= jlen { return "null" }
+    if j >= jlen return "null"
     
     first_c = char_at(json, j)
     if first_c == "\""
         q2 = str_find_from(json, "\"", j + 1)
-        if q2 < 0 { return "null" }
+        if q2 < 0 return "null"
         return str_sub(json, j, q2 + 1)
     
     k = j
@@ -119,9 +119,9 @@ fn json_extract_id json
 fn json_extract_int_value json key
     needle = "\"" + key + "\""
     pos = str_find_from(json, needle, 0)
-    if pos < 0 { return 0 }
+    if pos < 0 return 0
     colon = str_find_from(json, ":", pos + len(needle))
-    if colon < 0 { return 0 }
+    if colon < 0 return 0
     k = colon + 1
     jlen = len(json)
     while k < jlen and (char_at(json, k) == " " or char_at(json, k) == "\t" or char_at(json, k) == "\r" or char_at(json, k) == "\n")
@@ -316,13 +316,13 @@ fn workspace_close_file tracked_uris tracked_texts uri
 // WHY: Identifies the token under the editor cursor for hover and completion lookups.
 fn is_token_char ch
     code = ord(ch)
-    if code > 127 { return 1 } // Non-ASCII (UTF-8 Bengali characters)
-    if code >= 97 and code <= 122 { return 1 } // a-z
-    if code >= 65 and code <= 90 { return 1 } // A-Z
-    if code >= 48 and code <= 57 { return 1 } // 0-9
-    if code == 95 { return 1 } // _
-    if code == 47 { return 1 } // /
-    if code == 46 { return 1 } // .
+    if code > 127 return 1 // Non-ASCII (UTF-8 Bengali characters)
+    if code >= 97 and code <= 122 return 1 // a-z
+    if code >= 65 and code <= 90 return 1 // A-Z
+    if code >= 48 and code <= 57 return 1 // 0-9
+    if code == 95 return 1 // _
+    if code == 47 return 1 // /
+    if code == 46 return 1 // .
     return 0
 
 fn get_word_at_pos text target_line target_char
@@ -336,7 +336,7 @@ fn get_word_at_pos text target_line target_char
             line_start = i + 1
         i = i + 1
     
-    if cur_line != target_line { return "" }
+    if cur_line != target_line return ""
     
     line_end = line_start
     while line_end < tlen and char_at(text, line_end) != "\n"
@@ -356,14 +356,14 @@ fn get_word_at_pos text target_line target_char
     while w_end < line_end and is_token_char(char_at(text, w_end)) == 1
         w_end = w_end + 1
         
-    if w_start >= w_end { return "" }
+    if w_start >= w_end return ""
     return str_sub(text, w_start, w_end)
 
 // ─── Symbol Definition Locator ────────────────────────────────────────────────
 // WHY: Enables textDocument/definition (Go-to-Definition) for LSP clients (e.g. VS Code).
 // Scans lines in document for function, struct, or variable bindings matching the queried identifier.
 fn find_symbol_definition_in_text text symbol
-    if len(symbol) == 0 { return -1 }
+    if len(symbol) == 0 return -1
     tlen = len(text)
     cur_line = 0
     line_start = 0
@@ -385,33 +385,42 @@ fn find_symbol_definition_in_text text symbol
             // 1. Function declarations: fn, @fn, কাজ
             if starts_with_keyword(trimmed, "fn") == 1
                 rem = str_trim(str_sub(trimmed, 2, t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             elif starts_with_keyword(trimmed, "@fn") == 1
                 rem = str_trim(str_sub(trimmed, 3, t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             elif starts_with_keyword(trimmed, "কাজ") == 1
                 rem = str_trim(str_sub(trimmed, len("কাজ"), t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             // 2. Struct declarations: struct, @struct, কাঠামো, দল
             elif starts_with_keyword(trimmed, "struct") == 1
                 rem = str_trim(str_sub(trimmed, 6, t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             elif starts_with_keyword(trimmed, "@struct") == 1
                 rem = str_trim(str_sub(trimmed, 7, t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             elif starts_with_keyword(trimmed, "কাঠামো") == 1
                 rem = str_trim(str_sub(trimmed, len("কাঠামো"), t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             // 3. Variable declarations: let, @let, চলক, ধরি
             elif starts_with_keyword(trimmed, "let") == 1
                 rem = str_trim(str_sub(trimmed, 3, t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             elif starts_with_keyword(trimmed, "@let") == 1
                 rem = str_trim(str_sub(trimmed, 4, t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             elif starts_with_keyword(trimmed, "চলক") == 1
                 rem = str_trim(str_sub(trimmed, len("চলক"), t_len))
-                if starts_with_keyword(rem, symbol) == 1 { matched = 1 }
+                if starts_with_keyword(rem, symbol) == 1
+                    matched = 1
             // 4. Assignment bindings: symbol = ...
             elif starts_with_keyword(trimmed, symbol) == 1
                 rem = str_trim(str_sub(trimmed, s_len, t_len))

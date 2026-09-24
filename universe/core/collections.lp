@@ -355,10 +355,14 @@
   ms_size: i64
 @end
 
-// WHY: Retains MayaSet as backward-compatible alias for existing codebase callers
-@struct MayaSet
-  ms_data: array
-  ms_size: i64
+// WHY: Canonical constructor for an empty array instance
+@fn arr_new()
+  return []
+@end
+
+// WHY: Canonical push function for array manipulation across universe modules
+@fn array_push(arr, val)
+  return arr.push(val)
 @end
 
 @fn set_new()

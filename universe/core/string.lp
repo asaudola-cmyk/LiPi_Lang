@@ -207,11 +207,6 @@
   return str(n)
 @end
 
-// WHY: Retains maya_int_to_str as backward-compatible alias for legacy callers
-@fn maya_int_to_str(n)
-  return str(n)
-@end
-
 @fn int_to_str(n)
   return str(n)
 @end
@@ -252,9 +247,90 @@
   return result
 @end
 
-// WHY: Retains maya_str_to_int as backward-compatible alias for legacy callers
-@fn maya_str_to_int(s)
+// WHY: Canonical string_to_int parser returning integer representation of string s
+@fn string_to_int(s)
   return lipi_str_to_int(s)
+@end
+
+// WHY: Canonical string equality test returning 1 if equal, 0 otherwise
+@fn string_eq(s1, s2)
+  @if s1 == s2
+    return 1
+  @end
+  return 0
+@end
+
+// WHY: Verifies prefix match using character-by-character comparison bounded by prefix length
+@fn string_starts_with(s, prefix)
+  p_len = str_len(prefix)
+  s_len = str_len(s)
+  @if p_len > s_len
+    return 0
+  @end
+  i = 0
+  @while i < p_len
+    @if str_char_at(s, i) != str_char_at(prefix, i)
+      return 0
+    @end
+    i = i + 1
+  @end
+  return 1
+@end
+
+// WHY: Verifies suffix match by comparing trailing characters from s_len - suf_len to s_len
+@fn string_ends_with(s, suffix)
+  s_len = str_len(suffix)
+  target_len = str_len(s)
+  @if s_len > target_len
+    return 0
+  @end
+  offset = target_len - s_len
+  i = 0
+  @while i < s_len
+    @if str_char_at(s, offset + i) != str_char_at(suffix, i)
+      return 0
+    @end
+    i = i + 1
+  @end
+  return 1
+@end
+
+// WHY: Repeats string s count times into a newly accumulated string
+@fn string_repeat(s, count)
+  @if count <= 0
+    return ""
+  @end
+  res = ""
+  i = 0
+  @while i < count
+    res = res + s
+    i = i + 1
+  @end
+  return res
+@end
+
+// WHY: Returns the ASCII/byte value at idx in string s, or 0 if out of bounds
+@fn str_byte_at(s, idx)
+  @if idx < 0 || idx >= str_len(s)
+    return 0
+  @end
+  return str_char_at(s, idx)
+@end
+
+// WHY: Returns the integer ASCII codepoint of the first character in string ch
+@fn char_to_code(ch)
+  @if str_len(ch) == 0
+    return 0
+  @end
+  return str_char_at(ch, 0)
+@end
+
+// WHY: Canonical string_is_alphanum check returning 1 if character c is alphabetic or numeric
+@fn string_is_alphanum(c)
+  @if is_alpha(c) == 1 || is_digit(c) == 1
+    return 1
+  @end
+  return 0
 @end
 
 @fn str_to_int(s)

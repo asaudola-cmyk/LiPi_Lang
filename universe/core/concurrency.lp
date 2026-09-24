@@ -57,11 +57,6 @@
   return pid
 @end
 
-// WHY: Retains maya_spawn as backward-compatible alias for legacy callers
-@fn maya_spawn(func, arg)
-  return lipi_spawn(func, arg)
-@end
-
 // WHY: thread_spawn provides standard cross-module naming for green thread creation.
 @fn thread_spawn(func, arg)
   return lipi_spawn(func, arg)

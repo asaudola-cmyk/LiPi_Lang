@@ -14,6 +14,7 @@ import "universe/crypto/sha256"
 import "universe/net/http"
 import "universe/p2p/registry"
 import "universe/p2p/lipipkg_server_engine"
+import "universe/p2p/lipipkg_client"
 import "universe/os/fs"
 
 @! ============================================================================
@@ -69,62 +70,6 @@ import "universe/os/fs"
 @end
 
 @struct LipiPkgCLIResult
-  success: i64
-  exit_code: i64
-  output: string
-  error_msg: string
-@end
-
-@! Backward compatibility aliases
-@struct MPMDependency
-  name: string
-  version_req: string
-  resolved_version: string
-  cid: string
-  sha256: string
-@end
-
-@struct MPMManifest
-  name: string
-  version: string
-  description: string
-  author: string
-  license: string
-  entry_file: string
-  dependencies: array
-  tags: array
-  scripts: array
-@end
-
-@struct MPMScriptEntry
-  name: string
-  command: string
-@end
-
-@struct MPMLockedPackage
-  name: string
-  version: string
-  cid: string
-  sha256: string
-  resolved_from: string
-  dependencies: array
-@end
-
-@struct MPMLockfile
-  lockfile_version: i64
-  root_manifest_sha: string
-  locked_packages: array
-  generated_at: i64
-@end
-
-@struct MPMResolutionNode
-  name: string
-  version: string
-  depth: i64
-  parent_name: string
-@end
-
-@struct MPMCLIResult
   success: i64
   exit_code: i64
   output: string
@@ -207,18 +152,6 @@ import "universe/os/fs"
   return tags
 @end
 
-@! Backward compatibility helpers
-@fn mpm_escape_json(str_val)
-  return lipipkg_escape_json(str_val)
-@end
-
-@fn mpm_extract_json_string(json_str, key)
-  return lipipkg_extract_json_string(json_str, key)
-@end
-
-@fn mpm_extract_json_tags(json_str)
-  return lipipkg_extract_json_tags(json_str)
-@end
 
 @! ============================================================================
 @! 3. MANIFEST PARSER & BUILDER
@@ -490,7 +423,7 @@ import "universe/os/fs"
     @end
 
     @if already_resolved == 0
-      res_fetch = mpm_client_fetch(server_or_registry, node.name, node.version)
+      res_fetch = lipipkg_client_fetch(server_or_registry, node.name, node.version)
       @if res_fetch.status_code == 200
         actual_sha = res_fetch.sha256
         cid = res_fetch.expected_sha
@@ -660,7 +593,7 @@ import "universe/os/fs"
     tags: m.tags
   }
   
-  pub_res = mpm_client_publish(server_or_registry, manifest_pkg, payload)
+  pub_res = lipipkg_client_publish(server_or_registry, manifest_pkg, payload)
   @if pub_res.status_code == 201
     return {
       success: 1,
@@ -680,7 +613,7 @@ import "universe/os/fs"
 @end
 
 @fn lipipkg_cmd_search(server_or_registry, query)
-  search_res = mpm_client_search(server_or_registry, query)
+  search_res = lipipkg_client_search(server_or_registry, query)
   is_ok = 0
   code = 1
   @if search_res.status_code == 200
@@ -795,71 +728,3 @@ import "universe/os/fs"
   }
 @end
 
-@! Backward compatibility facade
-@fn mpm_manifest_new(name, version, description, author, license)
-  return lipipkg_manifest_new(name, version, description, author, license)
-@end
-
-@fn mpm_manifest_add_dep(manifest, name, version_req)
-  return lipipkg_manifest_add_dep(manifest, name, version_req)
-@end
-
-@fn mpm_manifest_add_tag(manifest, tag)
-  return lipipkg_manifest_add_tag(manifest, tag)
-@end
-
-@fn mpm_manifest_add_script(manifest, name, cmd)
-  return lipipkg_manifest_add_script(manifest, name, cmd)
-@end
-
-@fn mpm_manifest_to_json(manifest)
-  return lipipkg_manifest_to_json(manifest)
-@end
-
-@fn mpm_manifest_parse_json(json_str)
-  return lipipkg_manifest_parse_json(json_str)
-@end
-
-@fn mpm_resolve_dependency_tree(manifest, server_or_registry)
-  return lipipkg_resolve_dependency_tree(manifest, server_or_registry)
-@end
-
-@fn mpm_lockfile_create(manifest, resolved_packages)
-  return lipipkg_lockfile_create(manifest, resolved_packages)
-@end
-
-@fn mpm_lockfile_to_json(lockfile)
-  return lipipkg_lockfile_to_json(lockfile)
-@end
-
-@fn mpm_lockfile_verify(lockfile, manifest)
-  return lipipkg_lockfile_verify(lockfile, manifest)
-@end
-
-@fn mpm_cmd_init(name, version, description, author, license)
-  return lipipkg_cmd_init(name, version, description, author, license)
-@end
-
-@fn mpm_cmd_add(manifest_json, pkg_name, version_req)
-  return lipipkg_cmd_add(manifest_json, pkg_name, version_req)
-@end
-
-@fn mpm_cmd_install(manifest_json, server_or_registry)
-  return lipipkg_cmd_install(manifest_json, server_or_registry)
-@end
-
-@fn mpm_cmd_publish(manifest_json, payload, server_or_registry)
-  return lipipkg_cmd_publish(manifest_json, payload, server_or_registry)
-@end
-
-@fn mpm_cmd_search(server_or_registry, query)
-  return lipipkg_cmd_search(server_or_registry, query)
-@end
-
-@fn mpm_cmd_run(manifest_json, script_name)
-  return lipipkg_cmd_run(manifest_json, script_name)
-@end
-
-@fn mpm_cli_dispatch(args, server_or_registry)
-  return lipipkg_cli_dispatch(args, server_or_registry)
-@end
