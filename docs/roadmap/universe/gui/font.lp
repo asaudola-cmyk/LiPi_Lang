@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA NATIVE GUI — BITMAP FONT RENDERER
+@! LIPI NATIVE GUI — BITMAP FONT RENDERER
 @! ============================================================================
 
 import "universe/gui/framebuffer"

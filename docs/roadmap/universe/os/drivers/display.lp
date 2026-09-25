@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS - VESA & VGA GRAPHICS DRIVER
-@! 100% Written in Pure Maya Language
+@! LIPI OS - VESA & VGA GRAPHICS DRIVER
+@! 100% Written in Pure Lipi Language
 @! Features: VBE Mode Info parsing, Linear Framebuffer mapping, Double Buffering,
 @! 2D primitives (Line, Rect, Circle), and TrueType Font text rendering.
 @! ============================================================================

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE GPU — APPLE METAL SHADING LANGUAGE (MSL) EMITTER
-@! 100% Written in Pure Maya Language — Apple Silicon Acceleration
+@! LIPI UNIVERSE GPU — APPLE METAL SHADING LANGUAGE (MSL) EMITTER
+@! 100% Written in Pure Lipi Language — Apple Silicon Acceleration
 @! ============================================================================
 
 import "universe/core/string"

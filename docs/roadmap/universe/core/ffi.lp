@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CORE — FOREIGN FUNCTION INTERFACE (FFI) & C ABI ENGINE
-@! 100% Written in Pure Maya Language — Zero libffi / External Tool Dependencies
+@! LIPI UNIVERSE CORE — FOREIGN FUNCTION INTERFACE (FFI) & C ABI ENGINE
+@! 100% Written in Pure Lipi Language — Zero libffi / External Tool Dependencies
 @! Features: C ABI Calling Conventions, Struct Layout, Alignment, Trampoline Gen
 @! ============================================================================
 

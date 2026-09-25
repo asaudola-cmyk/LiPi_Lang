@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CLOUD - RAFT DISTRIBUTED CONSENSUS
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE CLOUD - RAFT DISTRIBUTED CONSENSUS
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

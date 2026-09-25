@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE 3D — RAY TRACER & PBR RENDERING ENGINE (universe/3d/raytracer.maya)
-@! 100% Written in Pure Maya Language — Zero External C/OpenGL Dependencies
+@! LIPI UNIVERSE 3D — RAY TRACER & PBR RENDERING ENGINE (universe/3d/raytracer.lipi)
+@! 100% Written in Pure Lipi Language — Zero External C/OpenGL Dependencies
 @! Features: 3D Vector Math, Ray-Sphere Intersection, BVH Tree, PBR Materials
 @! ============================================================================
 

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 1 — ADVANCED MACRO SYSTEM
-@! 100% Written in Pure Maya Language
+@! LIPI COMPILER STAGE 1 — ADVANCED MACRO SYSTEM
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

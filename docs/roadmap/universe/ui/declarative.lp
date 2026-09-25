@@ -1,10 +1,10 @@
 @! ============================================================================
-@! MAYA UNIVERSE UI - DECLARATIVE ENGINE
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE UI - DECLARATIVE ENGINE
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
-import "universe/ui/canvas" @! Assumes canvas.maya exists from earlier phase
+import "universe/ui/canvas" @! Assumes canvas.lipi exists from earlier phase
 
 @! UI Component Base
 @fn ui_component_new(type, props, children)

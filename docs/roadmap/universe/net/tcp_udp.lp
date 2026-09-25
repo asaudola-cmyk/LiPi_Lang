@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET — TCP & UDP TRANSPORT STACK
-@! 100% Written in Pure Maya Language — Raw Socket Abstraction
+@! LIPI UNIVERSE NET — TCP & UDP TRANSPORT STACK
+@! 100% Written in Pure Lipi Language — Raw Socket Abstraction
 @! ============================================================================
 
 import "universe/core/collections"

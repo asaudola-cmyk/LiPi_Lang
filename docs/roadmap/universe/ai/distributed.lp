@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI - DISTRIBUTED TRAINING ARCHITECTURE (RING-ALLREDUCE)
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE AI - DISTRIBUTED TRAINING ARCHITECTURE (RING-ALLREDUCE)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

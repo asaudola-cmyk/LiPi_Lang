@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA CODE FORMATTER & LINTER — tools/fmt.maya
-@! 100% Written in Pure Maya Language
+@! LIPI CODE FORMATTER & LINTER — tools/fmt.lipi
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

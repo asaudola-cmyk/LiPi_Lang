@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 1 — AFFINE OWNERSHIP & LINEAR BORROW CHECKER
-@! 100% Written in Pure Maya Language — Zero Rust/C/External Dependency
+@! LIPI COMPILER STAGE 1 — AFFINE OWNERSHIP & LINEAR BORROW CHECKER
+@! 100% Written in Pure Lipi Language — Zero Rust/C/External Dependency
 @! ============================================================================
 
 import "universe/core/collections"

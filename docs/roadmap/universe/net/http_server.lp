@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA STANDARD LIBRARY — FULL HTTP/1.1 ENGINE & SERVER FRAMEWORK (std.http)
-@! 100% Written in Pure Maya Language — Zero Libcurl/OpenSSL Dependencies
+@! LIPI STANDARD LIBRARY — FULL HTTP/1.1 ENGINE & SERVER FRAMEWORK (std.http)
+@! 100% Written in Pure Lipi Language — Zero Libcurl/OpenSSL Dependencies
 @! Features: Request Parser, URL Router, Middleware Stack, Status Handlers, MIME
 @! ============================================================================
 
@@ -31,7 +31,7 @@ import "universe/core/collections"
   @end
   
   @if has_server == 0
-    res = res + "Server: Maya-Native-HTTP/1.1\r\n"
+    res = res + "Server: Lipi-Native-HTTP/1.1\r\n"
   @end
   @if has_content_length == 0
     res = res + "Content-Length: " + body_content.len().to_str() + "\r\n"
@@ -244,7 +244,7 @@ import "universe/core/collections"
   @if file_extension == "jpg" || file_extension == "jpeg" return "image/jpeg" @end
   @if file_extension == "svg" return "image/svg+xml" @end
   @if file_extension == "wasm" return "application/wasm" @end
-  @if file_extension == "maya" return "text/plain" @end
+  @if file_extension == "lipi" return "text/plain" @end
   return "application/octet-stream"
 @end
 
@@ -353,7 +353,7 @@ import "universe/core/collections"
   res = "HTTP/1.1 200 OK\r\n"
   res = res + "Content-Type: " + content_type + "\r\n"
   res = res + "Transfer-Encoding: chunked\r\n"
-  res = res + "Server: Maya-Native-HTTP/1.1\r\n\r\n"
+  res = res + "Server: Lipi-Native-HTTP/1.1\r\n\r\n"
   return res
 @end
 

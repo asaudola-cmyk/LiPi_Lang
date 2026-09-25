@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA CODE FORMATTER (mayfmt) — AST PRETTY PRINTER & SOURCE NORMALIZER
-@! 100% Written in Pure Maya Language — Zero External Formatter Dependencies
+@! LIPI CODE FORMATTER (mayfmt) — AST PRETTY PRINTER & SOURCE NORMALIZER
+@! 100% Written in Pure Lipi Language — Zero External Formatter Dependencies
 @! Features: AST Pretty-Printing, Spacing Rules, Comment Preservation, Line Wrap
 @! ============================================================================
 

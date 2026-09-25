@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET — FULL QUIC PROTOCOL (RFC 9000) OVER UDP
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE NET — FULL QUIC PROTOCOL (RFC 9000) OVER UDP
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: Multiplexing, Flow Control, Packet Numbering, Handshake & TLS 1.3
 @! ============================================================================
 

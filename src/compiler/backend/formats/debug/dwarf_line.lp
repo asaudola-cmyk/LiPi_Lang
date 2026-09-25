@@ -154,24 +154,24 @@ import "universe/core/string"
 // ============================================================================
 
 @fn dwarf_line_builder_new(version)
-  // WHY: Initializes a fresh DWARF Line Builder.
+  // WHY: Initializes a fresh DWARF Line Builder using typed DwarfLineBuilder struct.
   // Defaults: version 4, default_is_stmt = 1, min_inst_len = 1.
   ver = version
   @if ver <= 0 ver = 4 @end
 
-  return {
-    dlb_version: ver,
-    dlb_default_is_stmt: 1,
-    dlb_min_inst_len: 1,
-    dlb_include_dirs: [],
-    dlb_file_names: [],
-    dlb_opcodes: [],
-    dlb_curr_pc: 0,
-    dlb_curr_line: 1,
-    dlb_curr_file: 1,
-    dlb_curr_col: 0,
-    dlb_is_stmt: 1
-  }
+  b = DwarfLineBuilder()
+  b.dlb_version = ver
+  b.dlb_default_is_stmt = 1
+  b.dlb_min_inst_len = 1
+  b.dlb_include_dirs = []
+  b.dlb_file_names = []
+  b.dlb_opcodes = []
+  b.dlb_curr_pc = 0
+  b.dlb_curr_line = 1
+  b.dlb_curr_file = 1
+  b.dlb_curr_col = 0
+  b.dlb_is_stmt = 1
+  return b
 @end
 
 @fn dwarf_line_add_dir(builder, dir_path)
@@ -183,12 +183,11 @@ import "universe/core/string"
 @fn dwarf_line_add_file(builder, file_name, dir_index)
   // WHY: Registers a source file in the header file table using DwarfLineFile schema.
   // Returns 1-based file index as required by DWARF.
-  f = {
-    dlf_name: file_name,
-    dlf_dir_idx: dir_index,
-    dlf_mtime: 0,
-    dlf_length: 0
-  }
+  f = DwarfLineFile()
+  f.dlf_name = file_name
+  f.dlf_dir_idx = dir_index
+  f.dlf_mtime = 0
+  f.dlf_length = 0
   builder.dlb_file_names = builder.dlb_file_names.push(f)
   return builder.dlb_file_names.len()
 @end

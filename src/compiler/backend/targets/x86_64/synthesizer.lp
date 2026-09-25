@@ -5,8 +5,10 @@
 // ==============================================================================
 
 include "src/compiler/backend/targets/x86_64/codegen_core.lp"
+include "src/compiler/backend/targets/x86_64/codegen_postfix.lp"
 include "src/compiler/backend/targets/x86_64/codegen_expr.lp"
 include "src/compiler/backend/targets/x86_64/codegen_operators.lp"
+include "src/compiler/backend/targets/x86_64/codegen_loops.lp"
 include "src/compiler/backend/targets/x86_64/codegen_stmt.lp"
 
 // ── Function Definition Synthesizer ───────────────────────────────────────────

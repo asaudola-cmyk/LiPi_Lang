@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — ADVANCED LLM INFERENCE ENGINE
+@! LIPI UNIVERSE AI — ADVANCED LLM INFERENCE ENGINE
 @! Greedy, Top-K, Top-P (Nucleus), Beam Search, Temperature Scaling
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -44,7 +44,7 @@ import "universe/ai/llm/tokenizer"
 
 @fn sample_top_k(logits, k)
   @! Sort logits descending, keep top k, zero out rest
-  @! For pure Maya emulation, we just find the kth largest
+  @! For pure Lipi emulation, we just find the kth largest
   @! and set everything below it to -infinity
   
   @! (Sorting implementation omitted for brevity)
@@ -92,7 +92,7 @@ import "universe/ai/llm/tokenizer"
     
     @! logits = gpt_net_forward(net, tokens, kv_cache)
     
-    @! Mock logic for pure Maya representation
+    @! Mock logic for pure Lipi representation
     next_tok = 10 + step
     
     @if next_tok == 3 @! <|endoftext|>

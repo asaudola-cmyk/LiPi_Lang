@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — ADVANCED ATTENTION MECHANISMS
+@! LIPI UNIVERSE AI — ADVANCED ATTENTION MECHANISMS
 @! Multi-Head Attention, Grouped-Query Attention (GQA), Flash Attention, KV-Cache
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -88,7 +88,7 @@ import "universe/ai/tensor"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 3. Flash Attention (Pure Maya Emulation)
+@! 3. Flash Attention (Pure Lipi Emulation)
 @! ----------------------------------------------------------------------------
 @! To emulate Flash Attention's memory efficiency, we compute attention block-by-block
 

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA ASSIMILATOR — PYTHON TO MAYA TRANSPILER (assimilator/python_parser.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI ASSIMILATOR — PYTHON TO LIPI TRANSPILER (assimilator/python_parser.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Python AST/syntax parsing, indentation analysis, keyword mapping
 @! ============================================================================
 
@@ -58,7 +58,7 @@ import "universe/core/string"
   return trimmed
 @end
 
-@fn py_transpile_to_maya(source_str)
+@fn py_transpile_to_lipi(source_str)
   lines = string_split(source_str, "\n")
   output_lines = []
   

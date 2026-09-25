@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS KERNEL — PROCESS SCHEDULER & CONTEXT SWITCHING (scheduler.my)
-@! 100% Written in Pure Maya Language — Multitasking Kernel Scheduler
+@! LIPI OS KERNEL — PROCESS SCHEDULER & CONTEXT SWITCHING (scheduler.my)
+@! 100% Written in Pure Lipi Language — Multitasking Kernel Scheduler
 @! ============================================================================
 
 @! Process State Constants:

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS - USB 3.0 xHCI CONTROLLER DRIVER
-@! 100% Written in Pure Maya Language
+@! LIPI OS - USB 3.0 xHCI CONTROLLER DRIVER
+@! 100% Written in Pure Lipi Language
 @! Features: Extensible Host Controller Interface, Device Enumeration, Hubs
 @! ============================================================================
 

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA 3D ENGINE - PBR MATERIAL SYSTEM
-@! 100% Written in Pure Maya Language
+@! LIPI 3D ENGINE - PBR MATERIAL SYSTEM
+@! 100% Written in Pure Lipi Language
 @! Features: Physically Based Rendering (PBR) metallic-roughness workflow,
 @! Albedo, Normal, Emissive, and Ambient Occlusion map handling,
 @! BRDF evaluation (Cook-Torrance).

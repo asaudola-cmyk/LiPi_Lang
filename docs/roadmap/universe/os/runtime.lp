@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA RUNTIME STAGE 2 — ULTRA HIGH PERFORMANCE ASYNC RUNTIME & FIBER ENGINE
-@! 100% Written in Pure Maya Language — Zero Tokio / Crossbeam / Libuv Dependency
+@! LIPI RUNTIME STAGE 2 — ULTRA HIGH PERFORMANCE ASYNC RUNTIME & FIBER ENGINE
+@! 100% Written in Pure Lipi Language — Zero Tokio / Crossbeam / Libuv Dependency
 @! ============================================================================
 
 import "universe/core/collections"
@@ -36,10 +36,10 @@ import "universe/os/syscalls"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 2. Maya Lockless MPMC Channels
+@! 2. Lipi Lockless MPMC Channels
 @! ----------------------------------------------------------------------------
 
-@fn maya_chan_new(capacity)
+@fn lipi_chan_new(capacity)
   return {
     buffer: [],
     capacity: capacity,
@@ -49,7 +49,7 @@ import "universe/os/syscalls"
   }
 @end
 
-@fn maya_chan_send(chan, msg)
+@fn lipi_chan_send(chan, msg)
   @if chan.closed == 1
     return 0
   @end
@@ -60,7 +60,7 @@ import "universe/os/syscalls"
   return -1 @! Channel full (non-blocking)
 @end
 
-@fn maya_chan_recv(chan)
+@fn lipi_chan_recv(chan)
   @if chan.buffer.len() > 0
     msg = chan.buffer[0]
     new_buf = []
@@ -124,7 +124,7 @@ import "universe/os/syscalls"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 4. Maya Async Event Loop
+@! 4. Lipi Async Event Loop
 @! ----------------------------------------------------------------------------
 
 @fn event_loop_new()

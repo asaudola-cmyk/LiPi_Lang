@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA 3D ENGINE - DEFERRED RENDERING PIPELINE
-@! 100% Written in Pure Maya Language
+@! LIPI 3D ENGINE - DEFERRED RENDERING PIPELINE
+@! 100% Written in Pure Lipi Language
 @! Features: G-Buffer generation, Deferred Shading Pass, HDR Tonemapping,
 @! Bloom, Screen Space Ambient Occlusion (SSAO), Temporal Anti-Aliasing (TAA)
 @! ============================================================================

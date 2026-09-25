@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 4 — MACH-O APPLE SILICON (ARM64) NATIVE BINARY EMITTER
-@! 100% Written in Pure Maya Language — Zero Xcode/Clang Dependency
+@! LIPI COMPILER STAGE 4 — MACH-O APPLE SILICON (ARM64) NATIVE BINARY EMITTER
+@! 100% Written in Pure Lipi Language — Zero Xcode/Clang Dependency
 import "universe/os/fs"
 @! ============================================================================
 

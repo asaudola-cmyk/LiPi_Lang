@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA OS ENV MODULE — universe/os/env.maya (Phase 6)
+@! LIPI OS ENV MODULE — universe/os/env.lipi (Phase 6)
 @! Process, environment variable, path helpers
 @! ============================================================================
 
@@ -107,7 +107,7 @@ import "universe/core/collections"
 @end
 
 @fn path_extension(path)
-  @! Returns the file extension including the dot, e.g. ".maya"
+  @! Returns the file extension including the dot, e.g. ".lipi"
   base = path_basename(path)
   last_dot = 0 - 1
   i = 0

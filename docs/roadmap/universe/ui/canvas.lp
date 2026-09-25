@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE UI - NATIVE WIDGET SYSTEM (CANVAS)
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE UI - NATIVE WIDGET SYSTEM (CANVAS)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET — FULL HTTP/2 (RFC 7540) & HPACK (RFC 7541) ENGINE
-@! 100% Written in Pure Maya Language — Zero nghttp2 / External C Library Deps
+@! LIPI UNIVERSE NET — FULL HTTP/2 (RFC 7540) & HPACK (RFC 7541) ENGINE
+@! 100% Written in Pure Lipi Language — Zero nghttp2 / External C Library Deps
 @! Features: HPACK Table, Binary Framing, Stream Multiplexing, Flow Control
 @! ============================================================================
 
@@ -33,7 +33,7 @@ import "universe/core/string"
     { key: "accept-language", val: "" },
     { key: "content-type", val: "application/json" },
     { key: "content-type", val: "text/html; charset=utf-8" },
-    { key: "user-agent", val: "Maya-Client/2.0" }
+    { key: "user-agent", val: "Lipi-Client/2.0" }
   ]
 @end
 

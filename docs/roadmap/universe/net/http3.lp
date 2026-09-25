@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET - HTTP/3 (QUIC) SERVER
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE NET - HTTP/3 (QUIC) SERVER
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -30,7 +30,7 @@ import "universe/core/string"
 @fn http3_handle_request(server, stream_id, data)
   req = http3_parse_headers(data)
   
-  response_body = "<html><body><h1>Welcome to Maya HTTP/3 Cloud</h1></body></html>"
+  response_body = "<html><body><h1>Welcome to Lipi HTTP/3 Cloud</h1></body></html>"
   
   @! Send response back on the stream
   @! quic_send_stream_data(stream_id, response_body)

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA DIRECT HEAP & SLAB MEMORY ALLOCATOR (allocator.my)
-@! 100% Written in Pure Maya Language — Zero malloc / free / libc.so
+@! LIPI DIRECT HEAP & SLAB MEMORY ALLOCATOR (allocator.my)
+@! 100% Written in Pure Lipi Language — Zero malloc / free / libc.so
 @! ============================================================================
 
 import "universe/os/syscalls"
@@ -10,7 +10,7 @@ import "universe/os/syscalls"
   return 4096
 @end
 
-@! Maya Heap Arena Structure
+@! Lipi Heap Arena Structure
 @fn arena_create(initial_pages)
   total_bytes = initial_pages * PAGE_SIZE()
   @! PROT_READ(1) | PROT_WRITE(2) = 3
@@ -25,7 +25,7 @@ import "universe/os/syscalls"
   }
 @end
 
-@! O(1) Bump Allocation inside Maya Arena
+@! O(1) Bump Allocation inside Lipi Arena
 @fn arena_alloc(arena, size)
   @! Align to 8-byte boundary
   aligned_size = (size + 7) / 8 * 8

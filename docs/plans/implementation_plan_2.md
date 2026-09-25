@@ -1,7 +1,7 @@
-# 👑 The Grand Convergence: মায়া (Maya) ও লিপি (Lipi)-র একক অস্তিত্বে সম্পূর্ণ রূপান্তর ও মহা-একত্রীকরণ মহাপরিকল্পনা
+# 👑 The Grand Convergence: মায়া (Lipi) ও লিপি (Lipi)-র একক অস্তিত্বে সম্পূর্ণ রূপান্তর ও মহা-একত্রীকরণ মহাপরিকল্পনা
 
 > **সর্বোচ্চ সার্বভৌম ঘোষণা (Supreme Sovereign Decree):**  
-> মায়া (Maya) এবং লিপি (Lipi) দুটি পৃথক প্রজেক্ট হিসেবে আর থাকবে না। মায়া নামের সমস্ত অস্তিত্ব স্থায়ীভাবে বিলুপ্ত হয়ে রূপান্তরিত হবে **একক ও অবিভাজ্য সুপার-প্ল্যাটফর্ম: "লিপি (Lipi)"**-তে।  
+> মায়া (Lipi) এবং লিপি (Lipi) দুটি পৃথক প্রজেক্ট হিসেবে আর থাকবে না। মায়া নামের সমস্ত অস্তিত্ব স্থায়ীভাবে বিলুপ্ত হয়ে রূপান্তরিত হবে **একক ও অবিভাজ্য সুপার-প্ল্যাটফর্ম: "লিপি (Lipi)"**-তে।  
 > মায়ার আত্মিক দর্শন—*"মায়া কারো নিয়ম মানে না, নিজের নিয়ম বানায়"*—এখন লিপির রক্তে প্রবাহিত হবে। লিপির নিজস্ব গতি, ডাইরেক্ট সিলিকন এমিটার ট্রায়ো এবং বাইলিঙ্গুয়াল ভিত্তি অক্ষুণ্ণ রেখে মায়ার পুরো আর্কিটেকচার, ডিজাইন, রানটাইম, কার্নেল, ইউনিভার্স এবং সুপ্রিম কাউন্সিল লিপির সার্বভৌমিকতায় একীভূত হবে।  
 > **চূড়ান্ত সার্বভৌম নীতি:** ০% সি (C), ০% জিওসিসি (GCC), ০% এলএলভিএম (LLVM), ০% লিবসি (libc), ১০০% খাঁটি সিলিকন মেশিন কোড।
 
@@ -62,7 +62,7 @@
                                      ┌──────────────────┐
                                      │ স্কোয়াড ১০: DX ও QA  │
                                      │ • lipi_cli_driver│
-                                     │ • lipi_pkg_mpm   │
+                                     │ • lipi_pkg_lpkg  │
                                      │ • lipi_tool_lsp  │
                                      │ • lipi_tool_fmt  │
                                      │ • lipi_tool_dbg  │
@@ -140,7 +140,7 @@
 
 #### স্কোয়াড ১০: ডেভেলপার এক্সপেরিয়েন্স, টুলচেন ও কিউএ (DX, Toolchain & Quality Assurance)
 46. `lipi_cli_driver`: একক কমান্ড-লাইন ডিসপ্যাচার (`lipi build`, `run`, `test`, `os`, `repl`)।
-47. `lipi_pkg_mpm`: Ed25519 সাইনিং ও ডিটারমিনিস্টিক `lipi.lock` সলভার সহ প্যাকেজ ম্যানেজার (`lipipkg`)।
+47. `lipi_pkg_lipipkg`: Ed25519 সাইনিং ও ডিটারমিনিস্টিক `lipi.lock` সলভার সহ প্যাকেজ ম্যানেজার (`lipipkg`)।
 48. `lipi_tool_lsp`: ত্রি-ভাষিক ল্যাঙ্গুয়েজ সার্ভার প্রোটোকল (`lipilsp`)।
 49. `lipi_tool_fmt`: ত্রি-ভাষিক ক্যানোনিকাল কোড ফরম্যাটার (`lipifmt`)।
 50. `lipi_tool_dbg`: নেটিভ `sys_ptrace` রিং-৩ ইন্টারেক্টিভ ডিবাগার (`lipidbg`)।
@@ -173,11 +173,11 @@
 ### লেক্সার ও পার্সার স্টেট ট্রানজিশন অ্যালগরিদম (`src/compiler/elf_emitter.lp`):
 1. **লেক্সার টোকেন স্ট্রিমিং (`tokenize_pure`):**
    - `@` ক্যারেক্টারকে একটি সংরক্ষিত প্রিফিক্স টোকেন হিসেবে রেজিস্টার করা হবে।
-   - লেক্সার যখন `@fn`, `@struct`, `@if`, `@elif`, `@else`, `@while`, `@end` দেখবে, সেগুলোকে বিশেষ `TOK_MAYA_DIRECTIVE` ক্যাটাগরিতে সংরক্ষণ করবে।
+   - লেক্সার যখন `@fn`, `@struct`, `@if`, `@elif`, `@else`, `@while`, `@end` দেখবে, সেগুলোকে বিশেষ `TOK_LIPI_DIRECTIVE` ক্যাটাগরিতে সংরক্ষণ করবে।
    - সাধারণ আইডেন্টিফায়ার লেক্সার বাংলা বা ইংরেজিতে স্বাভাবিক নিয়ম বজায় রাখবে।
 2. **পার্সার ব্লক বাউন্ডারি ট্র্যাকার (`compile_pure_stmt`):**
    - পার্সারের কাছে একটি ইন্টারনাল `block_mode_stack` থাকবে।
-   - যখন কোনো ফাংশন `@fn` দিয়ে শুরু হয়, স্ট্যাকে `BLOCK_MAYA` পুশ হবে। এই ব্লকে পার্সার স্পেস বা নিউলাইন অগ্রাহ্য করে এবং কেবলমাত্র পরবর্তী ম্যাচিং `@end` টোকেন পেলে ব্লক ক্লোজ করে।
+   - যখন কোনো ফাংশন `@fn` দিয়ে শুরু হয়, স্ট্যাকে `BLOCK_LIPI` পুশ হবে। এই ব্লকে পার্সার স্পেস বা নিউলাইন অগ্রাহ্য করে এবং কেবলমাত্র পরবর্তী ম্যাচিং `@end` টোকেন পেলে ব্লক ক্লোজ করে।
    - যখন কোনো ফাংশন `fn` বা `কাজ` দিয়ে শুরু হয়, স্ট্যাকে `BLOCK_LIPI` পুশ হবে। এই ব্লকে পার্সার স্বাভাবিক `TOK_INDENT` ও `TOK_DEDENT` নিয়ম অনুসরণ করে।
 3. **জিরো-কনভার্সন সরাসরি এক্সিকিউশন:**  
    এই দ্বৈত অ্যালগরিদমের ফলে মায়ার অতীত বা ভবিষ্যতের কোনো ফাইল কনভার্ট করতে হবে না; লিপি কম্পাইলার সরাসরি সেই ফাইলগুলোকে রিয়েল-টাইমে নেটিভ মেশিন কোডে রূপান্তর করবে।
@@ -187,7 +187,7 @@
 ## ⚡ ৩. ওমনি-টার্গেট সিলিকন কম্পাইলার ও অপ্টিমাইজেশন পাইপলাইন
 
 ```
-                          [ ত্রি-ভাষিক সোর্স কোড (.lp / .maya / .my) ]
+                          [ ত্রি-ভাষিক সোর্স কোড (.lp / .lipi / .my) ]
                                                │
                                                ▼
                               ┌─────────────────────────────────┐
@@ -321,18 +321,18 @@ lipi/universe/
 
 1. **একক ও সর্বজনীন কমান্ড-লাইন ইন্টারফেস (`lipi`):**
    ```bash
-   lipi build <file.lp|file.maya> [-o <out>] [--target=x86_64|arm64|wasm|pe|macho|ape]
-   lipi run <file.lp|file.maya>
-   lipi test <suite.lp|suite.maya>
+   lipi build <file.lp|file.lipi> [-o <out>] [--target=x86_64|arm64|wasm|pe|macho|ape]
+   lipi run <file.lp|file.lipi>
+   lipi test <suite.lp|suite.lipi>
    lipi fmt [-w] <file>
    lipi lsp
    lipi dbg <binary>
    lipi os build [--run-qemu]
-   lipi convert <file> [--to=bengali|english|maya]
+   lipi convert <file> [--to=bengali|english|lipi]
    lipi repl
    ```
 2. **প্যাকেজ ম্যানেজার (`lipipkg`):**
-   - ম্যানিফেস্ট ফাইল: `lipi.toml` (মায়ার `maya.toml` এর সুপারসেট)।
+   - ম্যানিফেস্ট ফাইল: `lipi.toml` (মায়ার `lipi.toml` এর সুপারসেট)।
    - লকফাইল: `lipi.lock` (ডিটারমিনিস্টিক ডিপেন্ডেন্সি রেজোলিউশন ও ক্রিপ্টোগ্রাফিক হ্যাশ)।
    - Ed25519 ডিজিটাল সিগনেচার: প্রতিটি প্যাকেজ অথর দ্বারা সাইন হবে এবং ইনস্টলের সময় ভেরিফাই হবে।
    - কমান্ডস: `lipipkg init`, `lipipkg add`, `lipipkg install`, `lipipkg publish`, `lipipkg sign`, `lipipkg verify`।
@@ -346,20 +346,20 @@ lipi/universe/
 ```
 [TEST MATRIX BREAKDOWN]
 ├── মায়ার মূল ফ্রন্টিয়ার টেস্ট সুইট (৮৯টি টেস্ট - ১০০% পাস হতে হবে):
-│   ├── tests/net/test_tls_crypto.maya         : ১০ / ১০ টেস্ট (TLS 1.3 & AES-GCM)
-│   ├── tests/io/test_io_uring.maya             :  ৩ /  ৩ টেস্ট (Linux io_uring)
-│   ├── tests/pkg/test_mpm_pure_cli.maya       :  ৮ /  ৮ টেস্ট (MPM 2.0 প্যাকেজ ম্যানেজার)
-│   ├── tests/tools/test_sovereign_debugger.maya:  ৬ /  ৬ টেস্ট (ptrace ডিবাগার)
-│   ├── tests/db/test_raft.maya                 :  ৬ /  ৬ টেস্ট (Raft কনসেনসাস)
-│   ├── tests/ai/test_simd_amx_matmul.maya      :  ৫ /  ৫ টেস্ট (AMX/SIMD GEMM)
-│   ├── tests/web/test_sovereign_web_engine.maya:  ৪ /  ৪ টেস্ট (ওয়েব ইঞ্জিন ও ডিবি)
-│   ├── tests/os/test_live_qemu_boot.maya       :  ৫ /  ৫ টেস্ট (Multiboot2 ইউনিকর্নেল)
-│   ├── tests/gui/test_gui_engine.maya          : ১৩ / ১৩ টেস্ট (ফ্রেমবাফার ২ডি ক্যানভাস)
-│   ├── tests/ai/test_ai_tensor.maya            : ১১ / ১১ টেস্ট (টেনসর অপারেশনস)
-│   ├── tests/lsp/test_lsp_server.maya          :  ৮ /  ৮ টেস্ট (LSP সার্ভার)
-│   ├── tests/backend/test_sovereign_targets.maya: ৪ / ৪ টেস্ট (PE, Mach-O, APE লিঙ্কার্স)
-│   ├── tests/backend/test_omni_binary.maya      : ৪ / ৪ টেস্ট (ওমনি বাইনারি)
-│   └── tests/self_hosting/test_self_hosting.maya: ২ / ২ টেস্ট (সেলফ-হোস্টিং লজিক)
+│   ├── tests/net/test_tls_crypto.lipi         : ১০ / ১০ টেস্ট (TLS 1.3 & AES-GCM)
+│   ├── tests/io/test_io_uring.lipi             :  ৩ /  ৩ টেস্ট (Linux io_uring)
+│   ├── tests/pkg/test_lipipkg_cli_e2e.lp       :  ৮ /  ৮ টেস্ট (Lipipkg প্যাকেজ ম্যানেজার)
+│   ├── tests/tools/test_sovereign_debugger.lipi:  ৬ /  ৬ টেস্ট (ptrace ডিবাগার)
+│   ├── tests/db/test_raft.lipi                 :  ৬ /  ৬ টেস্ট (Raft কনসেনসাস)
+│   ├── tests/ai/test_simd_amx_matmul.lipi      :  ৫ /  ৫ টেস্ট (AMX/SIMD GEMM)
+│   ├── tests/web/test_sovereign_web_engine.lipi:  ৪ /  ৪ টেস্ট (ওয়েব ইঞ্জিন ও ডিবি)
+│   ├── tests/os/test_live_qemu_boot.lipi       :  ৫ /  ৫ টেস্ট (Multiboot2 ইউনিকর্নেল)
+│   ├── tests/gui/test_gui_engine.lipi          : ১৩ / ১৩ টেস্ট (ফ্রেমবাফার ২ডি ক্যানভাস)
+│   ├── tests/ai/test_ai_tensor.lipi            : ১১ / ১১ টেস্ট (টেনসর অপারেশনস)
+│   ├── tests/lsp/test_lsp_server.lipi          :  ৮ /  ৮ টেস্ট (LSP সার্ভার)
+│   ├── tests/backend/test_sovereign_targets.lipi: ৪ / ৪ টেস্ট (PE, Mach-O, APE লিঙ্কার্স)
+│   ├── tests/backend/test_omni_binary.lipi      : ৪ / ৪ টেস্ট (ওমনি বাইনারি)
+│   └── tests/self_hosting/test_self_hosting.lipi: ২ / ২ টেস্ট (সেলফ-হোস্টিং লজিক)
 │
 └── লিপির রিগ্রেশন টেস্ট সুইট (৬৮টি টেস্ট - ১০০% পাস হতে হবে):
     ├── tests/01_hello.lp to tests/40_gguf_tensor_inference.lp : ৪০টি কোর টেস্ট
@@ -417,7 +417,7 @@ cmp bin/lipc_gen2 bin/lipc_gen3
   └── scripts/build_iso.sh দিয়ে dist/lipi-os.iso তৈরি ও QEMU রানার টেস্ট
 
 [Phase 6: প্যাকেজ ম্যানেজার ও ডেভেলপার টুলচেন সমন্বয়]
-  ├── MPM 2.0 এর লকফাইল অ্যালগরিদম লিপিপ্যাকেজে (lipipkg) যুক্ত করা
+  ├── লিপিপ্যাকেজের (lipipkg) লকফাইল অ্যালগরিদম ও ডিপেন্ডেন্সি রেজোলিউশন যুক্ত করা
   ├── Ed25519 সিগনেচার দিয়ে প্যাকেজ সাইনিং ও অটোমেটেড ট্র্যাভার্সাল নিশ্চিত করা
   └── lipifmt ও lipilsp কে ৩টি সিনট্যাক্সের উপযোগী করে আপগ্রেড করা
 
@@ -439,18 +439,18 @@ cmp bin/lipc_gen2 bin/lipc_gen3
 
 মায়ার প্রতিটি ডিরেক্টরি লিপির সুনির্দিষ্ট গন্তব্যে স্থানান্তরিত হবে:
 
-| মায়া ডিরেক্টরি / ফাইল (Maya Source) | লিপি গন্তব্য (Lipi Destination) | ভূমিকা ও উদ্দেশ্য |
+| মায়া ডিরেক্টরি / ফাইল (Lipi Source) | লিপি গন্তব্য (Lipi Destination) | ভূমিকা ও উদ্দেশ্য |
 | :--- | :--- | :--- |
 | `universe/net/tls/` | `lipi/universe/net/tls/` | খাঁটি RFC 8446 TLS 1.3 ক্রিপ্টোগ্রাফিক স্যুটের পূর্ণাঙ্গ স্থানান্তর |
-| `universe/io/uring.maya` | `lipi/universe/io/uring.lp` | লিনাক্স io_uring রিং বাফার জিরো-সিসকল আসিন্ক রিঅ্যাক্টর |
+| `universe/io/uring.lipi` | `lipi/universe/io/uring.lp` | লিনাক্স io_uring রিং বাফার জিরো-সিসকল আসিন্ক রিঅ্যাক্টর |
 | `universe/db/distributed/` | `lipi/universe/db/distributed/`| Raft ডিস্ট্রিবিউটেড কনসেনসাস ইঞ্জিন ও লগ রেপ্লিকেশন |
-| `universe/ai/tensor.maya` | `lipi/universe/ai/tensor.lp` | মাল্টি-ডাইমেনশনাল টেনসর ও ব্রডকাস্টিং ইঞ্জিন |
-| `universe/ai/simd_amx.maya` | `lipi/universe/ai/simd_amx.lp` | ইন্টেল AMX ও AVX-512 ১৬x১৬ টাইল্ড GEMM কার্নেল |
-| `universe/gui/canvas.maya` | `lipi/universe/gui/canvas.lp` | ফ্রেমবাফার ২ডি ক্যানভাস রাস্টারাইজার ও ফন্ট গ্লিফ |
-| `universe/gui/graphics_2d.maya` | `lipi/universe/gui/graphics_2d.lp` | ২ডি প্রিমিটিভস, শেপ ও ক্লিপিং বাউন্ডস |
-| `universe/os/shell.maya` | `lipi/universe/os/shell.lp` | নেটিভ লিনাক্স শেল (sys_fork, sys_execve, sys_wait4) |
-| `universe/security/sandbox.maya`| `lipi/universe/security/sandbox.lp` | BPF Seccomp ফিল্টার ও Schnorr ZKP স্যান্ডবক্স |
-| `universe/core/gc.maya` | `lipi/universe/core/gc.lp` | ট্রাই-কালার মার্ক-অ্যান্ড-সুইপ জিসি ইঞ্জিন |
+| `universe/ai/tensor.lipi` | `lipi/universe/ai/tensor.lp` | মাল্টি-ডাইমেনশনাল টেনসর ও ব্রডকাস্টিং ইঞ্জিন |
+| `universe/ai/simd_amx.lipi` | `lipi/universe/ai/simd_amx.lp` | ইন্টেল AMX ও AVX-512 ১৬x১৬ টাইল্ড GEMM কার্নেল |
+| `universe/gui/canvas.lipi` | `lipi/universe/gui/canvas.lp` | ফ্রেমবাফার ২ডি ক্যানভাস রাস্টারাইজার ও ফন্ট গ্লিফ |
+| `universe/gui/graphics_2d.lipi` | `lipi/universe/gui/graphics_2d.lp` | ২ডি প্রিমিটিভস, শেপ ও ক্লিপিং বাউন্ডস |
+| `universe/os/shell.lipi` | `lipi/universe/os/shell.lp` | নেটিভ লিনাক্স শেল (sys_fork, sys_execve, sys_wait4) |
+| `universe/security/sandbox.lipi`| `lipi/universe/security/sandbox.lp` | BPF Seccomp ফিল্টার ও Schnorr ZKP স্যান্ডবক্স |
+| `universe/core/gc.lipi` | `lipi/universe/core/gc.lp` | ট্রাই-কালার মার্ক-অ্যান্ড-সুইপ জিসি ইঞ্জিন |
 | `universe/quantum/` | `lipi/universe/quantum/` | কোয়ান্টাম গেট ও কিউবিট স্টেট ভেক্টর সিমুলেটর |
 | `universe/blockchain/` | `lipi/universe/blockchain/` | ক্রিপ্টোগ্রাফিক ডিস্ট্রিবিউটেড লেজার ও পিটুপি ব্লকচেইন |
 | `universe/engine3d/` | `lipi/universe/engine3d/` | সফটওয়্যার ৩ডি প্রজেকশন ও ম্যাট্রিক্স রাস্টারাইজার |
@@ -460,9 +460,9 @@ cmp bin/lipc_gen2 bin/lipc_gen3
 | `compiler/backend/pe/` | `lipi/src/compiler/linkers/pe.lp` | উইন্ডোজ PE32+ (.exe) এক্সিকিউটেবল লিঙ্কার |
 | `compiler/backend/macho/` | `lipi/src/compiler/linkers/macho.lp`| অ্যাপল macOS Mach-O 64 এক্সিকিউটেবল লিঙ্কার |
 | `compiler/backend/ape/` | `lipi/src/compiler/linkers/ape.lp` | Cosmopolitan Actually Portable Executable লিঙ্কার |
-| `cmd/maya/main.maya` | `lipi/src/tools/lipi_cli.lp` | ইউনিফাইড CLI ডিসপ্যাচার লজিক |
-| `tools/build_unikernel.maya` | `lipi/tools/build_unikernel.lp` | Multiboot 2 64-bit লং মোড ক্লাউড ইউনিকর্নেল বিল্ডার |
-| `tools/maya_fmt.maya` | `lipi/src/tools/lipifmt.lp` | ত্রি-ভাষিক কোড ফরম্যাটারে ইন্টিগ্রেশন |
+| `cmd/lipi/main.lipi` | `lipi/src/tools/lipi_cli.lp` | ইউনিফাইড CLI ডিসপ্যাচার লজিক |
+| `tools/build_unikernel.lipi` | `lipi/tools/build_unikernel.lp` | Multiboot 2 64-bit লং মোড ক্লাউড ইউনিকর্নেল বিল্ডার |
+| `tools/lipi_fmt.lipi` | `lipi/src/tools/lipifmt.lp` | ত্রি-ভাষিক কোড ফরম্যাটারে ইন্টিগ্রেশন |
 | `tests/net/` | `lipi/tests/universe/net/` | TLS 1.3 ও ক্রিপ্টো ইউনিট টেস্ট (১০টি টেস্ট) |
 | `tests/io/` | `lipi/tests/universe/io/` | io_uring আসিন্ক টেস্ট (৩টি টেস্ট) |
 | `tests/pkg/` | `lipi/tests/universe/pkg/` | প্যাকেজ ম্যানেজার টেস্ট (৮টি টেস্ট) |
@@ -483,9 +483,9 @@ cmp bin/lipc_gen2 bin/lipc_gen3
 ### ক. লেক্সার স্টেট মেশিন অ্যালগরিদম (Lexer Algorithm for `@`-Directives):
 ```lipi
 // Lipi Pure Lexer Extension (src/compiler/elf_emitter.lp)
-// WHY: Capture Maya '@' directives without breaking standard whitespace/indentation tokens
+// WHY: Capture Lipi '@' directives without breaking standard whitespace/indentation tokens
 
-TOK_MAYA_DIRECTIVE = 100 // New Token Type for '@'-directives
+TOK_LIPI_DIRECTIVE = 100 // New Token Type for '@'-directives
 
 if c == "@"
     p = p + 1
@@ -500,20 +500,20 @@ if c == "@"
         else
             break
     // Recognized directives: @fn, @struct, @if, @elif, @else, @while, @for, @end, @let, @match
-    push(tokens, tok_new(TOK_MAYA_DIRECTIVE, dir_acc, 0))
+    push(tokens, tok_new(TOK_LIPI_DIRECTIVE, dir_acc, 0))
     continue
 ```
 
 ### খ. পার্সার স্টেট মেশিন ও ব্লক টার্মিনেশন অ্যালগরিদম (Parser Block Resolution):
 ```lipi
 // Lipi Pure Parser Extension (src/compiler/elf_emitter.lp)
-// WHY: Seamlessly parse both indentation blocks and Maya '@end' delimited blocks
+// WHY: Seamlessly parse both indentation blocks and Lipi '@end' delimited blocks
 
 BLOCK_MODE_INDENT = 0
-BLOCK_MODE_MAYA   = 1
+BLOCK_MODE_LIPI   = 1
 
 // When entering @fn:
-if tt == TOK_MAYA_DIRECTIVE and txt == "@fn"
+if tt == TOK_LIPI_DIRECTIVE and txt == "@fn"
     ps_adv(ps) // consume @fn
     fn_name = ps_cur_text(ps)
     ps_adv(ps) // consume fn_name
@@ -521,8 +521,8 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@fn"
     // Parse parameters: (arg1, arg2) or arg1 arg2
     params = parse_fn_params(ps)
     
-    // Push Maya block marker to parser context stack
-    push(ctx_block_modes, BLOCK_MODE_MAYA)
+    // Push Lipi block marker to parser context stack
+    push(ctx_block_modes, BLOCK_MODE_LIPI)
     
     // Emit function prologue
     label_define(ctx, fn_name)
@@ -533,7 +533,7 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@fn"
     // Parse statements until matching @end
     ps_skip_nl(ps)
     while ps_cur_type(ps) != TOK_EOF
-        if ps_cur_type(ps) == TOK_MAYA_DIRECTIVE and ps_cur_text(ps) == "@end"
+        if ps_cur_type(ps) == TOK_LIPI_DIRECTIVE and ps_cur_text(ps) == "@end"
             ps_adv(ps) // consume @end
             pop(ctx_block_modes)
             break
@@ -549,7 +549,7 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@fn"
 
 ### গ. ডিরেক্টিভ ইফ-এলস রেজোলিউশন (@if ... @elif ... @else ... @end):
 ```lipi
-if tt == TOK_MAYA_DIRECTIVE and txt == "@if"
+if tt == TOK_LIPI_DIRECTIVE and txt == "@if"
     ps_adv(ps)
     compile_pure_expr(ctx, ps) // evaluates condition into %rax
     lbl_end  = make_anon_label(ctx, "mif_end")
@@ -564,7 +564,7 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@if"
     // Loop until @elif, @else, or @end
     ps_skip_nl(ps)
     while ps_cur_type(ps) != TOK_EOF
-        if ps_cur_type(ps) == TOK_MAYA_DIRECTIVE
+        if ps_cur_type(ps) == TOK_LIPI_DIRECTIVE
             dtxt = ps_cur_text(ps)
             if dtxt == "@elif" or dtxt == "@else" or dtxt == "@end"
                 break
@@ -575,7 +575,7 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@if"
     label_define(ctx, lbl_next)
     
     // Handle @elif chains
-    while ps_cur_type(ps) == TOK_MAYA_DIRECTIVE and ps_cur_text(ps) == "@elif"
+    while ps_cur_type(ps) == TOK_LIPI_DIRECTIVE and ps_cur_text(ps) == "@elif"
         ps_adv(ps)
         compile_pure_expr(ctx, ps)
         lbl_next = make_anon_label(ctx, "melif_next")
@@ -585,7 +585,7 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@if"
         x86_jz(ctx, lbl_next)
         ps_skip_nl(ps)
         while ps_cur_type(ps) != TOK_EOF
-            if ps_cur_type(ps) == TOK_MAYA_DIRECTIVE
+            if ps_cur_type(ps) == TOK_LIPI_DIRECTIVE
                 dtxt = ps_cur_text(ps)
                 if dtxt == "@elif" or dtxt == "@else" or dtxt == "@end"
                     break
@@ -595,17 +595,17 @@ if tt == TOK_MAYA_DIRECTIVE and txt == "@if"
         label_define(ctx, lbl_next)
         
     // Handle @else
-    if ps_cur_type(ps) == TOK_MAYA_DIRECTIVE and ps_cur_text(ps) == "@else"
+    if ps_cur_type(ps) == TOK_LIPI_DIRECTIVE and ps_cur_text(ps) == "@else"
         ps_adv(ps)
         ps_skip_nl(ps)
         while ps_cur_type(ps) != TOK_EOF
-            if ps_cur_type(ps) == TOK_MAYA_DIRECTIVE and ps_cur_text(ps) == "@end"
+            if ps_cur_type(ps) == TOK_LIPI_DIRECTIVE and ps_cur_text(ps) == "@end"
                 break
             compile_pure_stmt(ctx, ps)
             ps_skip_nl(ps)
             
     // Consume final @end
-    if ps_cur_type(ps) == TOK_MAYA_DIRECTIVE and ps_cur_text(ps) == "@end"
+    if ps_cur_type(ps) == TOK_LIPI_DIRECTIVE and ps_cur_text(ps) == "@end"
         ps_adv(ps)
         
     label_define(ctx, lbl_end)
@@ -650,8 +650,8 @@ cp -f bin/lipc_gen3 bin/lipc
 cp -f bin/lipc_gen3 bin/lipi
 
 # ৬. ট্রাই-সিনট্যাক্স টেস্ট (মায়া সিনট্যাক্স কম্পাইলেশন পরীক্ষা)
-./bin/lipi build tests/universe/self_hosting/test_self_hosting.maya -o /tmp/test_maya_syntax.bin
-/tmp/test_maya_syntax.bin
+./bin/lipi build tests/universe/self_hosting/test_self_hosting.lipi -o /tmp/test_lipi_syntax.bin
+/tmp/test_lipi_syntax.bin
 
 # ৭. লাইভ বুটেবল লিপিকর্নেল আইএসও টেস্ট (QEMU হেডলেস ড্রাইভ)
 qemu-system-x86_64 -cdrom dist/lipi-os.iso -nographic -serial mon:stdio -m 512M
@@ -663,13 +663,13 @@ qemu-system-x86_64 -cdrom dist/lipi-os.iso -nographic -serial mon:stdio -m 512M
 
 মায়া অবলুপ্ত হওয়ার পর সিস্টেমের সমস্ত পাথ লিপির গ্লোবাল পাথে স্থানান্তরিত হবে:
 
-| পূর্বের পাথ (Maya Path) | নতুন একক সার্বভৌম পাথ (Unified Lipi Path) | স্থিতি |
+| পূর্বের পাথ (Lipi Path) | নতুন একক সার্বভৌম পাথ (Unified Lipi Path) | স্থিতি |
 | :--- | :--- | :--- |
-| `~/.maya/bin/maya` | `~/.lipi/bin/lipi` (Primary Executable) | স্থানান্তরিত |
-| `~/.local/bin/maya` | `~/.local/bin/lipi` | সিম্বলিক রি-ডিরেক্ট |
-| `/usr/local/bin/maya` | `/usr/local/bin/lipi` (এবং `lipc`) | সার্বজনীন বাইনারি |
-| `~/.maya/packages/` | `~/.lipi/packages/` | প্যাকেজ রেজিস্ট্রি |
-| `~/.maya/config.toml` | `~/.lipi/config.toml` | কনফিগারেশন |
+| `~/.lipi/bin/lipi` | `~/.lipi/bin/lipi` (Primary Executable) | স্থানান্তরিত |
+| `~/.local/bin/lipi` | `~/.local/bin/lipi` | সিম্বলিক রি-ডিরেক্ট |
+| `/usr/local/bin/lipi` | `/usr/local/bin/lipi` (এবং `lipc`) | সার্বজনীন বাইনারি |
+| `~/.lipi/packages/` | `~/.lipi/packages/` | প্যাকেজ রেজিস্ট্রি |
+| `~/.lipi/config.toml` | `~/.lipi/config.toml` | কনফিগারেশন |
 
 ---
 

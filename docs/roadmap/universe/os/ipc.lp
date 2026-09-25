@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE OS — INTER-PROCESS COMMUNICATION (IPC) SUBSYSTEM
-@! 100% Written in Pure Maya Language — Microkernel & Userland Process Messaging
+@! LIPI UNIVERSE OS — INTER-PROCESS COMMUNICATION (IPC) SUBSYSTEM
+@! 100% Written in Pure Lipi Language — Microkernel & Userland Process Messaging
 @! Features: Named Pipes (FIFO), Shared Memory, Unix Sockets, Message Queues, Mutex
 @! ============================================================================
 

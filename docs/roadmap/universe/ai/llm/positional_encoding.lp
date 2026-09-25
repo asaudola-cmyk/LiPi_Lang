@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — POSITIONAL ENCODINGS (RoPE, ALiBi, Sinusoidal)
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE AI — POSITIONAL ENCODINGS (RoPE, ALiBi, Sinusoidal)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -51,7 +51,7 @@ import "universe/ai/tensor"
   @! q, k shape: [batch, seq_len, num_heads, head_dim]
   
   @! We rotate adjacent pairs: (x0, x1) -> (x0*cos - x1*sin, x1*cos + x0*sin)
-  @! Pure Maya emulation of the rotation
+  @! Pure Lipi emulation of the rotation
   return { q: q, k: k }
 @end
 

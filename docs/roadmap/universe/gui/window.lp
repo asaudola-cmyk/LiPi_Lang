@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA NATIVE GUI — WINDOW MANAGER & UI ELEMENTS
+@! LIPI NATIVE GUI — WINDOW MANAGER & UI ELEMENTS
 @! ============================================================================
 
 @fn window_new(id, title, x, y, width, height)

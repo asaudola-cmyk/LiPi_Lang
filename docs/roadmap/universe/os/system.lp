@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA OS SYSTEM MODULE — universe/os/system.maya
+@! LIPI OS SYSTEM MODULE — universe/os/system.lipi
 @! Operating system utilities & environment inspection
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
 import "universe/os/syscalls"

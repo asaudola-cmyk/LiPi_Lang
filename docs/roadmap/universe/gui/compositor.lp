@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA NATIVE GUI — WINDOW COMPOSITOR
+@! LIPI NATIVE GUI — WINDOW COMPOSITOR
 @! Handles Window Layering, Z-Index, and Alpha Blending
 @! ============================================================================
 

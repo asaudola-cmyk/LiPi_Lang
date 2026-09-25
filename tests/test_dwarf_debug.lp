@@ -36,11 +36,13 @@ if fd >= 0
 argv = syscall(9, 0, 64, 3, 34, 0 - 1, 0)
 prog = "bin/lipc"
 arg1 = "-g"
+arg_out = "-o"
 mem_word_write(argv, 0, prog)
 mem_word_write(argv, 8, arg1)
 mem_word_write(argv, 16, sample_lp)
-mem_word_write(argv, 24, sample_bin)
-mem_word_write(argv, 32, 0)
+mem_word_write(argv, 24, arg_out)
+mem_word_write(argv, 32, sample_bin)
+mem_word_write(argv, 40, 0)
 
 env = syscall(9, 0, 32, 3, 34, 0 - 1, 0)
 path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
@@ -61,9 +63,15 @@ if pid == 0
     syscall(60, 127, 0, 0, 0, 0, 0)
 
 syscall(61, pid, st, 0, 0, 0, 0)
+raw_status = mem_word_read(st, 0)
+exit_code = (raw_status / 256) % 256
 syscall(11, argv, 64, 0, 0, 0, 0)
 syscall(11, env, 32, 0, 0, 0, 0)
 syscall(11, st, 8, 0, 0, 0, 0)
+
+if exit_code != 0
+    say "FAIL: Compiler exited with error code: " + str(exit_code)
+    exit(1)
 
 res = open_and_read_elf(sample_bin)
 buf = get(res, 0)

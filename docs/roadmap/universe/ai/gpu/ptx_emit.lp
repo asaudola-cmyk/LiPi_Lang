@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE GPU — NVIDIA PTX MACHINE CODE EMITTER
-@! 100% Written in Pure Maya Language — Direct CUDA Hardware Execution
+@! LIPI UNIVERSE GPU — NVIDIA PTX MACHINE CODE EMITTER
+@! 100% Written in Pure Lipi Language — Direct CUDA Hardware Execution
 @! ============================================================================
 
 import "universe/core/string"

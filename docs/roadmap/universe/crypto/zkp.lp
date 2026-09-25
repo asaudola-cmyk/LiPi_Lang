@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CRYPTO — ZERO-KNOWLEDGE PROOFS (ZK-SNARK, SCHNORR & PEDERSEN)
-@! 100% Written in Pure Maya Language — Zero External Math/Crypto Lib Dependencies
+@! LIPI UNIVERSE CRYPTO — ZERO-KNOWLEDGE PROOFS (ZK-SNARK, SCHNORR & PEDERSEN)
+@! 100% Written in Pure Lipi Language — Zero External Math/Crypto Lib Dependencies
 @! Features: Schnorr ZKP, Fiat-Shamir Heuristic, Pedersen Commitments, R1CS System
 @! ============================================================================
 

@@ -17,7 +17,7 @@ import "universe/core/crypto"
 @! 1. BYTE & STRING UTILITIES
 @! ----------------------------------------------------------------------------
 
-@fn mpm_to_byte_array(data)
+@fn lpm_to_byte_array(data)
   @if data == 0 || data == none
     return []
   @end
@@ -42,19 +42,19 @@ import "universe/core/crypto"
 @! 2. FIPS SHA-256 INTEGRITY HASHING
 @! ----------------------------------------------------------------------------
 
-@fn mpm_calc_sha256(data)
-  data_bytes = mpm_to_byte_array(data)
+@fn lpm_calc_sha256(data)
+  data_bytes = lpm_to_byte_array(data)
   hash_hex = sha256_hex(data_bytes)
   return hash_hex
 @end
 
-@fn mpm_verify_checksum(data, expected_checksum)
+@fn lpm_verify_checksum(data, expected_checksum)
   exp = string_trim(expected_checksum)
   @if starts_with(exp, "sha256:")
     exp = string_slice(exp, 7, exp.len())
   @end
   
-  actual_hash = mpm_calc_sha256(data)
+  actual_hash = lpm_calc_sha256(data)
   
   @if actual_hash == exp
     return 1
@@ -67,24 +67,24 @@ import "universe/core/crypto"
 @! 3. ED25519 DIGITAL SIGNATURES & KEY MANAGEMENT
 @! ----------------------------------------------------------------------------
 
-@fn mpm_generate_keypair(seed_bytes)
-  s_bytes = mpm_to_byte_array(seed_bytes)
+@fn lpm_generate_keypair(seed_bytes)
+  s_bytes = lpm_to_byte_array(seed_bytes)
   kp = ed25519_keypair_from_seed(s_bytes)
   return kp
 @end
 
-@fn mpm_sign_package(secret_key, package_data)
-  data_bytes = mpm_to_byte_array(package_data)
+@fn lpm_sign_package(secret_key, package_data)
+  data_bytes = lpm_to_byte_array(package_data)
   sig = ed25519_sign(secret_key, data_bytes)
   return sig
 @end
 
-@fn mpm_verify_signature(public_key, package_data, signature)
+@fn lpm_verify_signature(public_key, package_data, signature)
   @if signature == "" || signature == 0 || signature == none
     return 0
   @end
   
-  data_bytes = mpm_to_byte_array(package_data)
+  data_bytes = lpm_to_byte_array(package_data)
   valid = ed25519_verify(public_key, data_bytes, signature)
   @if valid == 1
     return 1
@@ -96,10 +96,10 @@ import "universe/core/crypto"
 @! 4. FULL PACKAGE INTEGRITY VERIFICATION (CHECKSUM + SIGNATURE)
 @! ----------------------------------------------------------------------------
 
-@fn mpm_verify_package_integrity(package_bytes, expected_sha256, publisher_pubkey, signature)
+@fn lpm_verify_package_integrity(package_bytes, expected_sha256, publisher_pubkey, signature)
   @! 1. Verify FIPS 180-4 SHA-256 Checksum
   @if expected_sha256 != "" && expected_sha256 != none
-    chk_ok = mpm_verify_checksum(package_bytes, expected_sha256)
+    chk_ok = lpm_verify_checksum(package_bytes, expected_sha256)
     @if chk_ok != 1
       return {
         valid: 0,
@@ -113,7 +113,7 @@ import "universe/core/crypto"
   @! 2. Verify Ed25519 Digital Signature (if provided)
   sig_ok = 1
   @if signature != "" && signature != 0 && signature != none
-    sig_ok = mpm_verify_signature(publisher_pubkey, package_bytes, signature)
+    sig_ok = lpm_verify_signature(publisher_pubkey, package_bytes, signature)
     @if sig_ok != 1
       return {
         valid: 0,

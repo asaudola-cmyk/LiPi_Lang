@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS KERNEL — INTERRUPT DESCRIPTOR TABLE (idt.my)
-@! 100% Written in Pure Maya Language — x86-64 64-bit IDT Handler Setup
+@! LIPI OS KERNEL — INTERRUPT DESCRIPTOR TABLE (idt.my)
+@! 100% Written in Pure Lipi Language — x86-64 64-bit IDT Handler Setup
 @! ============================================================================
 
 @! IDT Gate Descriptor (16 bytes on x86-64)
@@ -23,13 +23,13 @@
   return gate
 @end
 
-@fn init_maya_idt()
+@fn init_lipi_idt()
   idt_entries = []
   
   @! Register 256 default interrupt gates
   @! 0-31: CPU Exceptions (Divide error, Page fault, General Protection Fault)
   @! 32-47: Hardware IRQs (Timer 32, Keyboard 33, Serial 36)
-  @! 128: Maya System Call Vector (0x80)
+  @! 128: Lipi System Call Vector (0x80)
   
   i = 0
   @while i < 256

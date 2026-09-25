@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND — VECTOR INTERMEDIATE REPRESENTATION (vector_ir.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER MIDDLEEND — VECTOR INTERMEDIATE REPRESENTATION (vector_ir.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Strongly-Typed Vector Types (VEC128, VEC256, VEC512),
 @!           Vector IR Opcodes (VLOAD, VSTORE, VADD, VMUL, VFMA, VREDUCE_SUM)
 @! ============================================================================

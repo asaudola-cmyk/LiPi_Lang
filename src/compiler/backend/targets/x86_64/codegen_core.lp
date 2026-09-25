@@ -38,6 +38,7 @@ struct X86LocalVar
     lv_name             // Variable name string
     lv_offset           // Positive offset in bytes: accessed as [rbp - lv_offset]
     lv_type             // Inferred struct type name string ("" if untyped)
+    lv_prim_type        // Inferred primitive silicon type: "int", "str", or "" if dynamic
 
 // WHY: Records a function definition entry point for call site resolution
 struct X86Function
@@ -77,6 +78,7 @@ struct X86Synthesizer
     synth_global_names  // List of top-level global / constant identifier names
     synth_global_vals   // List of top-level integer constant values
     synth_last_struct   // Struct type name of most recent constructor or record literal
+    synth_last_expr_type // Type of most recent expression ("int", "str", or "")
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -103,6 +105,7 @@ fn x86_synth_new
     s.synth_global_names = list()
     s.synth_global_vals = list()
     s.synth_last_struct = ""
+    s.synth_last_expr_type = ""
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -536,6 +539,7 @@ fn x86_synth_alloc_var s name
     lv.lv_name = name
     lv.lv_offset = off
     lv.lv_type = ""
+    lv.lv_prim_type = ""
     push(s.synth_locals, lv)
     return off
 
@@ -600,6 +604,31 @@ fn x86_synth_get_var_type s name
         if v.lv_name == name
             if v.lv_type != 0
                 return v.lv_type
+            return ""
+        i = i + 1
+    return ""
+
+fn x86_synth_set_prim_type s name prim_type
+    // WHY: Tracks primitive silicon types ("int", "str") for register allocation and 1-cycle ALU emission
+    i = 0
+    n = s.synth_locals.len()
+    while i < n
+        v = s.synth_locals[i]
+        if v.lv_name == name
+            v.lv_prim_type = prim_type
+            return 0
+        i = i + 1
+    return 0
+
+fn x86_synth_get_prim_type s name
+    // WHY: Returns the known primitive type of a variable, or "" if dynamic/unknown
+    i = 0
+    n = s.synth_locals.len()
+    while i < n
+        v = s.synth_locals[i]
+        if v.lv_name == name
+            if v.lv_prim_type != 0
+                return v.lv_prim_type
             return ""
         i = i + 1
     return ""

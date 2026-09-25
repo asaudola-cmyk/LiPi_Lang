@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET — TLS 1.3 ENGINE
+@! LIPI UNIVERSE NET — TLS 1.3 ENGINE
 @! Handshake State Machine, Key Exchange, AEAD Record Encryption
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/crypto"

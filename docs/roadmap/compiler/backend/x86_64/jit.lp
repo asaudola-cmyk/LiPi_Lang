@@ -1,4 +1,4 @@
-@! Maya Native x86-64 JIT Emitter (Extended)
+@! Lipi Native x86-64 JIT Emitter (Extended)
 @! Handles control flow, jumps, and ModRM encoding
 
 import "universe/core/collections"

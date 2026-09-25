@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — ADVANCED LLM TRAINING PIPELINE
+@! LIPI UNIVERSE AI — ADVANCED LLM TRAINING PIPELINE
 @! AdamW Optimizer, LR Schedulers, Gradient Clipping, Mixed Precision
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -134,7 +134,7 @@ import "universe/ai/llm/transformer"
 @fn train_net(net, dataset, config)
   epoch = 0
   global_step = 1
-  println("  [LLM] Starting Advanced Pure Maya Model Training Pipeline...")
+  println("  [LLM] Starting Advanced Pure Lipi Model Training Pipeline...")
   
   @while epoch < config.epochs
     step = 0

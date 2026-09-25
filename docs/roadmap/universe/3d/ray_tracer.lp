@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE 3D — ADVANCED RAY TRACER
+@! LIPI UNIVERSE 3D — ADVANCED RAY TRACER
 @! Bounding Volume Hierarchy (BVH), Path Tracing, Global Illumination
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

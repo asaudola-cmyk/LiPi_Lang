@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI - CNN & RNN ARCHITECTURES
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE AI - CNN & RNN ARCHITECTURES
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -12,7 +12,7 @@ import "universe/ai/autodiff"
 @! ----------------------------------------------------------------------------
 @fn conv2d_new(in_channels, out_channels, kernel_size, stride, padding)
   @! Kernels shape: [out_channels, in_channels, kernel_size, kernel_size]
-  @! For Maya, we flatten into 2D tensor abstractions
+  @! For Lipi, we flatten into 2D tensor abstractions
   kernel_elements = in_channels * kernel_size * kernel_size
   return {
     in_channels: in_channels,

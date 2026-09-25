@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA STAGE 3 — STANDALONE PURE MAYA CLI & DRIVER (maya)
-@! 100% Written in Pure Maya Language
+@! LIPI STAGE 3 — STANDALONE PURE LIPI CLI & DRIVER (lipi)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/os/fs"
@@ -13,7 +13,7 @@ import "compiler/frontend/parser"
 import "compiler/frontend/resolve"
 import "compiler/frontend/typecheck"
 import "compiler/frontend/borrowck"
-import "compiler/middleend/maya_ir"
+import "compiler/middleend/lipi_ir"
 import "compiler/middleend/optimizer"
 import "compiler/backend/c/codegen"
 import "compiler/backend/wasm32/codegen"
@@ -24,7 +24,7 @@ import "universe/os/runtime"
 
 @fn main()
   println("=================================================================")
-  println("🔮 MAYAC STAGE 3 SELF-HOSTED COMPILER CLI (100% PURE MAYA) 🔮")
+  println("🔮 LIPIC STAGE 3 SELF-HOSTED COMPILER CLI (100% PURE LIPI) 🔮")
   println("=================================================================")
   println("Compiled C Output:")
   println("int64_t main() { int64_t x = 200; int64_t y = x + 50; return y; }")
@@ -35,22 +35,22 @@ import "universe/os/runtime"
 @end
 
 @fn print_help()
-  println("🔮 Maya Omniscient Programming Language Compiler (maya)")
-  println("Usage: maya <subcommand> [options] [file]")
+  println("🔮 Lipi Omniscient Programming Language Compiler (lipi)")
+  println("Usage: lipi <subcommand> [options] [file]")
   println("")
   println("Subcommands:")
-  println("  build <file>   Compile a Maya source file to executable or bytecode")
-  println("  run <file>     Compile and execute Maya file directly")
+  println("  build <file>   Compile a Lipi source file to executable or bytecode")
+  println("  run <file>     Compile and execute Lipi file directly")
   println("  check <file>   Run semantic, type, and ownership analysis without codegen")
-  println("  repl           Launch the interactive Maya shell")
-  println("  version        Show current Maya compiler version")
+  println("  repl           Launch the interactive Lipi shell")
+  println("  version        Show current Lipi compiler version")
   println("")
   println("Options:")
   println("  -o <path>      Output artifact destination")
   println("  --target <t>   Target backend: native, wasm, llvm, c (default: native)")
 @end
 
-@fn maya_compile_source(source_text, target)
+@fn lipi_compile_source(source_text, target)
   tokens = tokenize_source(source_text)
   ast = parse_all(source_text)
   resolve_program(ast)
@@ -70,7 +70,7 @@ import "universe/os/runtime"
   return cgen_generate_program(opt_mir)
 @end
 
-@fn maya_main(args)
+@fn lipi_main(args)
   @if args.len() == 0
     print_help()
     return 0
@@ -81,7 +81,7 @@ import "universe/os/runtime"
 
   @if c0 == 118
     @! version
-    println("maya version 3.0.0 (Pure Maya Self-Hosting Compiler)")
+    println("lipi version 1.0.0 (Pure Lipi Self-Hosting Compiler)")
     return 0
   @elif c0 == 104 || c0 == 45
     @! help
@@ -90,7 +90,7 @@ import "universe/os/runtime"
   @elif c0 == 99
     @! check
     @if args.len() < 2
-      println("Error: 'maya check' requires a source file argument.")
+      println("Error: 'lipi check' requires a source file argument.")
       return 1
     @end
     file_path = args[1]
@@ -104,12 +104,12 @@ import "universe/os/runtime"
   @elif c0 == 98
     @! build
     @if args.len() < 2
-      println("Error: 'maya build' requires a source file argument.")
+      println("Error: 'lipi build' requires a source file argument.")
       return 1
     @end
     file_path = args[1]
     code = read_file(file_path)
-    compiled = maya_compile_source(code, 0)
+    compiled = lipi_compile_source(code, 0)
     write_file(file_path, compiled)
     println("✅ Compiled output ready")
     return 0

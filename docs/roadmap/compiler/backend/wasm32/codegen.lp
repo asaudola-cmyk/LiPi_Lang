@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 3 — WEBASSEMBLY (WASM32) CODEGEN ADAPTER
+@! LIPI COMPILER STAGE 3 — WEBASSEMBLY (WASM32) CODEGEN ADAPTER
 @! ============================================================================
 
 import "compiler/backend/wasm"

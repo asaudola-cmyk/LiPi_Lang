@@ -15,15 +15,15 @@ import "universe/core/collections"
 import "universe/core/string"
 import "universe/core/json"
 import "universe/os/fs"
-import "tools/mpm/semver"
-import "tools/mpm/security"
-import "tools/mpm/registry_client"
+import "tools/lipipkg/semver"
+import "tools/lipipkg/security"
+import "tools/lipipkg/registry_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. REGISTRY INITIALIZATION & CONTEXT
 @! ----------------------------------------------------------------------------
 
-@fn mpm_registry_init(registry_url)
+@fn lpm_registry_init(registry_url)
   client = registry_client_new(registry_url, "/home/shafiullah/.lipipkg/cache/", 0)
   return {
     url: registry_url,
@@ -37,21 +37,21 @@ import "tools/mpm/registry_client"
 @! 2. INTERFACE CONTRACTS (PROJECT.md & SURVEY COMPLIANCE)
 @! ----------------------------------------------------------------------------
 
-@fn mpm_fetch_cloud_package(name, semver_range)
-  reg = mpm_registry_init("https://registry.lipi.dev")
-  res = mpm_fetch_package(reg, name, semver_range)
+@fn lpm_fetch_cloud_package(name, semver_range)
+  reg = lpm_registry_init("https://registry.lipi.dev")
+  res = lpm_fetch_package(reg, name, semver_range)
   return res.buffer
 @end
 
-@fn mpm_verify_package_signature(pkg_buffer, pubkey, signature)
-  return mpm_verify_signature(pubkey, pkg_buffer, signature)
+@fn lpm_verify_package_signature(pkg_buffer, pubkey, signature)
+  return lpm_verify_signature(pubkey, pkg_buffer, signature)
 @end
 
 @! ----------------------------------------------------------------------------
 @! 3. HIGH-LEVEL PACKAGE FETCHING, RESOLUTION & CACHING
 @! ----------------------------------------------------------------------------
 
-@fn mpm_resolve_semver(req, available_versions)
+@fn lpm_resolve_semver(req, available_versions)
   best = semver_max_satisfying(available_versions, req)
   @if best != "" return best @end
   @if available_versions.len() > 0
@@ -60,7 +60,7 @@ import "tools/mpm/registry_client"
   return "1.0.0"
 @end
 
-@fn mpm_fetch_package(reg, pkg_name, version_req)
+@fn lpm_fetch_package(reg, pkg_name, version_req)
   client = reg.client
   
   @! 1. Check local cache
@@ -69,15 +69,15 @@ import "tools/mpm/registry_client"
     return {
       name: pkg_name,
       version: version_req,
-      path: reg.cache_dir + pkg_name + "_" + version_req + ".maya",
+      path: reg.cache_dir + pkg_name + "_" + version_req + ".lipi",
       buffer: cached_content,
       from_cache: 1
     }
   @end
   
   @! 2. Fetch metadata from registry
-  meta = mpm_registry_get_metadata(client, pkg_name)
-  resolved_ver = mpm_resolve_semver(version_req, meta.versions)
+  meta = lpm_registry_get_metadata(client, pkg_name)
+  resolved_ver = lpm_resolve_semver(version_req, meta.versions)
   
   @! 3. Check cache with resolved version
   @if cache_has_package(client, pkg_name, resolved_ver) == 1
@@ -85,18 +85,18 @@ import "tools/mpm/registry_client"
     return {
       name: pkg_name,
       version: resolved_ver,
-      path: reg.cache_dir + pkg_name + "_" + resolved_ver + ".maya",
+      path: reg.cache_dir + pkg_name + "_" + resolved_ver + ".lipi",
       buffer: cached_content,
       from_cache: 1
     }
   @end
   
   @! 4. Download package bundle from registry
-  pkg_ver_info = mpm_registry_get_version(client, pkg_name, resolved_ver)
-  bundle_data = mpm_registry_download(client, pkg_name, resolved_ver)
+  pkg_ver_info = lpm_registry_get_version(client, pkg_name, resolved_ver)
+  bundle_data = lpm_registry_download(client, pkg_name, resolved_ver)
   
   @! 5. Verify SHA-256 Checksum and Ed25519 Signature
-  integ = mpm_verify_package_integrity(bundle_data, pkg_ver_info.checksum, "pubkey_placeholder", pkg_ver_info.signature)
+  integ = lpm_verify_package_integrity(bundle_data, pkg_ver_info.checksum, "pubkey_placeholder", pkg_ver_info.signature)
   
   @! 6. Cache locally
   cache_put_package(client, pkg_name, resolved_ver, bundle_data)
@@ -104,7 +104,7 @@ import "tools/mpm/registry_client"
   return {
     name: pkg_name,
     version: resolved_ver,
-    path: reg.cache_dir + pkg_name + "_" + resolved_ver + ".maya",
+    path: reg.cache_dir + pkg_name + "_" + resolved_ver + ".lipi",
     buffer: bundle_data,
     from_cache: 0,
     integrity_verified: integ.valid
@@ -112,14 +112,14 @@ import "tools/mpm/registry_client"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 4. MANIFEST PARSING (mpm.json / maya.pkg / maya.toml)
+@! 4. MANIFEST PARSING (lipipkg.json / lipi.pkg / lipi.toml)
 @! ----------------------------------------------------------------------------
 
-@fn mpm_parse_manifest(manifest_content)
+@fn lpm_parse_manifest(manifest_content)
   @! Handles key = value or JSON format
   s = string_trim(manifest_content)
   @if starts_with(s, "{")
-    return mpm_parse_manifest_json(s)
+    return lpm_parse_manifest_json(s)
   @end
   
   lines = string_split(manifest_content, "\n")
@@ -148,7 +148,7 @@ import "tools/mpm/registry_client"
   }
 @end
 
-@fn mpm_parse_manifest_json(json_content)
+@fn lpm_parse_manifest_json(json_content)
   parsed = json_parse(json_content)
   @if parsed == 0 || parsed == none
     return { name: "unknown", version: "0.1.0", dependencies: [] }
@@ -196,10 +196,10 @@ import "tools/mpm/registry_client"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 5. DETERMINISTIC LOCKFILE GENERATION (Maya.lock)
+@! 5. DETERMINISTIC LOCKFILE GENERATION (Lipi.lock)
 @! ----------------------------------------------------------------------------
 
-@fn mpm_write_lockfile(deps, lockfile_path)
+@fn lpm_write_lockfile(deps, lockfile_path)
   content = "# Auto-generated by Lipi Package Manager (LipiPkg)\n"
   content = content + "# Manual edits will be overwritten\n\n"
   content = content + "version = 1\n\n"
@@ -216,7 +216,7 @@ import "tools/mpm/registry_client"
     content = content + "[[package]]\n"
     content = content + "name = \"" + dep.name + "\"\n"
     content = content + "version = \"" + dep.version + "\"\n"
-    content = content + "source = \"registry+https://registry.maya-lang.org\"\n"
+    content = content + "source = \"registry+https://registry.lipi-lang.org\"\n"
     content = content + "checksum = \"" + chk + "\"\n"
     content = content + "dependencies = []\n\n"
     i = i + 1
@@ -229,7 +229,7 @@ import "tools/mpm/registry_client"
   return content
 @end
 
-@fn mpm_read_lockfile(lockfile_content)
+@fn lpm_read_lockfile(lockfile_content)
   lines = string_split(lockfile_content, "\n")
   pkgs = []
   cur_name = ""
@@ -263,16 +263,16 @@ import "tools/mpm/registry_client"
 @! 6. PACKAGE PUBLISHING & DEPENDENCY GRAPH RESOLUTION
 @! ----------------------------------------------------------------------------
 
-@fn mpm_publish_package(reg, pkg_name, version, path, auth_token, pubkey, privkey)
+@fn lpm_publish_package(reg, pkg_name, version, path, auth_token, pubkey, privkey)
   manifest = "{\"name\":\"" + pkg_name + "\",\"version\":\"" + version + "\"}"
   payload = "@! " + pkg_name + " source code"
-  sig = mpm_sign_package(privkey, payload)
+  sig = lpm_sign_package(privkey, payload)
   
-  res = mpm_registry_publish(reg.client, manifest, payload, sig, auth_token)
+  res = lpm_registry_publish(reg.client, manifest, payload, sig, auth_token)
   return res.success
 @end
 
-@fn mpm_build_dependency_graph(root_deps)
+@fn lpm_build_dependency_graph(root_deps)
   graph = dep_graph_new()
   
   i = 0
@@ -286,16 +286,16 @@ import "tools/mpm/registry_client"
   return graph
 @end
 
-@fn mpm_resolve_and_install(reg, manifest_path, lockfile_path)
-  manifest_content = "{\"name\":\"sample_app\",\"version\":\"1.0.0\",\"dependencies\":{\"maya-math\":\"^1.4.0\",\"maya-tensor\":\"^2.0.0\"}}"
-  manifest = mpm_parse_manifest(manifest_content)
+@fn lpm_resolve_and_install(reg, manifest_path, lockfile_path)
+  manifest_content = "{\"name\":\"sample_app\",\"version\":\"1.0.0\",\"dependencies\":{\"lipi-math\":\"^1.4.0\",\"lipi-tensor\":\"^2.0.0\"}}"
+  manifest = lpm_parse_manifest(manifest_content)
   
   resolved_deps = []
   i = 0
   len = manifest.dependencies.len()
   @while i < len
     dep = manifest.dependencies[i]
-    pkg_res = mpm_fetch_package(reg, dep.name, dep.constraint)
+    pkg_res = lpm_fetch_package(reg, dep.name, dep.constraint)
     resolved_deps = resolved_deps.push({
       name: dep.name,
       version: pkg_res.version,
@@ -304,7 +304,7 @@ import "tools/mpm/registry_client"
     i = i + 1
   @end
   
-  lock_content = mpm_write_lockfile(resolved_deps, lockfile_path)
+  lock_content = lpm_write_lockfile(resolved_deps, lockfile_path)
   return {
     success: 1,
     dependencies: resolved_deps,

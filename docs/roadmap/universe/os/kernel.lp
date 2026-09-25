@@ -1,11 +1,11 @@
 @! ============================================================================
-@! MAYA UNIVERSE OS - MICROKERNEL & PROCESS MANAGER
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE OS - MICROKERNEL & PROCESS MANAGER
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
 
-@! Represents a Thread in Maya OS
+@! Represents a Thread in Lipi OS
 @fn thread_new(id, entry_func)
   return {
     id: id,

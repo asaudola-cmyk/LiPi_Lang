@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA NATIVE HTTP/1.1 WEBSERVER
-@! Zero Dependencies — Pure Maya Web Stack
+@! LIPI NATIVE HTTP/1.1 WEBSERVER
+@! Zero Dependencies — Pure Lipi Web Stack
 @! ============================================================================
 
 import "universe/net/tcp"
@@ -15,7 +15,7 @@ import "universe/core/string"
     return 0
   @end
   
-  println("🚀 Maya HTTP Server listening on http://0.0.0.0:" + port.to_str())
+  println("🚀 Lipi HTTP Server listening on http://0.0.0.0:" + port.to_str())
   
   @while 1 == 1
     client = tcp_accept_client(server)
@@ -40,7 +40,7 @@ import "universe/core/string"
       content_len = response_body.len().to_str()
       
       http_res = "HTTP/1.1 200 OK\r\n"
-      http_res = http_res + "Server: Maya Native Server\r\n"
+      http_res = http_res + "Server: Lipi Native Server\r\n"
       http_res = http_res + "Content-Type: text/html\r\n"
       http_res = http_res + "Content-Length: " + content_len + "\r\n"
       http_res = http_res + "Connection: close\r\n\r\n"
@@ -65,7 +65,7 @@ import "universe/core/string"
   epfd = epoll_new()
   epoll_add_fd(epfd, server.fd, 1)
   
-  println("🚀 Maya Non-Blocking Epoll HTTP Server listening on http://0.0.0.0:" + port.to_str())
+  println("🚀 Lipi Non-Blocking Epoll HTTP Server listening on http://0.0.0.0:" + port.to_str())
   
   @while 1 == 1
     events = epoll_poll(epfd, 32, 1000)
@@ -80,7 +80,7 @@ import "universe/core/string"
         @end
         response_body = route_handler_fn(path)
         content_len = response_body.len().to_str()
-        http_res = "HTTP/1.1 200 OK\r\nServer: Maya-Epoll\r\nContent-Type: text/html\r\nContent-Length: " + content_len + "\r\nConnection: close\r\n\r\n" + response_body
+        http_res = "HTTP/1.1 200 OK\r\nServer: Lipi-Epoll\r\nContent-Type: text/html\r\nContent-Length: " + content_len + "\r\nConnection: close\r\n\r\n" + response_body
         tcp_send(client, http_res)
         tcp_close_client(client)
       @end

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 3 — ADVANCED REGISTER ALLOCATOR (LINEAR SCAN)
-@! 100% Written in Pure Maya Language — Zero External C/LLVM Dependencies
+@! LIPI COMPILER STAGE 3 — ADVANCED REGISTER ALLOCATOR (LINEAR SCAN)
+@! 100% Written in Pure Lipi Language — Zero External C/LLVM Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

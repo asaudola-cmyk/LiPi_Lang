@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS STAGE 5 — BARE-METAL MULTIBOOT HEADER
-@! 100% Written in Pure Maya Language
+@! LIPI OS STAGE 5 — BARE-METAL MULTIBOOT HEADER
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 @fn generate_multiboot_header()

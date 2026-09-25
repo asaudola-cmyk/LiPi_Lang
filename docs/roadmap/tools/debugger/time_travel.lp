@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA ECOSYSTEM — ADVANCED TIME-TRAVEL DEBUGGER (maydebug / ttd)
-@! 100% Written in Pure Maya Language — Zero GDB / LLDB External Dependencies
+@! LIPI ECOSYSTEM — ADVANCED TIME-TRAVEL DEBUGGER (maydebug / ttd)
+@! 100% Written in Pure Lipi Language — Zero GDB / LLDB External Dependencies
 @! Features: VM State Snapshotting, Reverse Step, Watchpoints, Call Stack Replay
 @! ============================================================================
 

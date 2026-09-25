@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 3 — LLVM CODEGEN ADAPTER
+@! LIPI COMPILER STAGE 3 — LLVM CODEGEN ADAPTER
 @! ============================================================================
 
 import "compiler/backend/llvm_ir"

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA OMNIPOTENT X86-64 CODEGEN - 100% PURE MAYA
+@! LIPI OMNIPOTENT X86-64 CODEGEN - 100% PURE LIPI
 @! Features: System V AMD64 ABI, 16-Byte Stack Alignment, Register Allocation,
 @! Floating Point (XMM0-7), Caller/Callee Saved Regs, Variadic Functions.
 @! ============================================================================

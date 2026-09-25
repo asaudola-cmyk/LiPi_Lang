@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CRYPTO — MERKLE TREE & BLOCKCHAIN LEDGER (universe/crypto/merkle.maya)
-@! 100% Written in Pure Maya Language — Zero OpenSSL / Rust Dependencies
+@! LIPI UNIVERSE CRYPTO — MERKLE TREE & BLOCKCHAIN LEDGER (universe/crypto/merkle.lipi)
+@! 100% Written in Pure Lipi Language — Zero OpenSSL / Rust Dependencies
 @! Features: Cryptographic Merkle Trees, Inclusion Proofs, UTXO Ledger
 @! ============================================================================
 

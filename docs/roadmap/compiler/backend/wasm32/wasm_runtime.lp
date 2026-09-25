@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA STANDARD LIBRARY — WEBASSEMBLY RUNTIME (std.wasm)
-@! 100% Written in Pure Maya Language — Run .wasm directly in Maya!
+@! LIPI STANDARD LIBRARY — WEBASSEMBLY RUNTIME (std.wasm)
+@! 100% Written in Pure Lipi Language — Run .wasm directly in Lipi!
 @! ============================================================================
 
 import "universe/core/collections"

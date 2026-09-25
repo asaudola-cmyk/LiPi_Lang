@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA STANDARD LIBRARY — FILE SYSTEM MODULE (std.fs)
-@! 100% Written in Pure Maya Language
+@! LIPI STANDARD LIBRARY — FILE SYSTEM MODULE (std.fs)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/string"

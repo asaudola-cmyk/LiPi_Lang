@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER BACKEND — x86_64 AVX2 / AVX-512 SIMD CODEGEN (simd_codegen.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER BACKEND — x86_64 AVX2 / AVX-512 SIMD CODEGEN (simd_codegen.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: 2-Byte (0xC5) and 3-Byte (0xC4) VEX Prefix Byte Encoders,
 @!           YMM0-YMM15 Vector Register Model, AVX2 SIMD Instruction Synthesis
 @! ============================================================================

@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA OMNIPOTENT LANGUAGE SERVER (LSP)
+@! LIPI OMNIPOTENT LANGUAGE SERVER (LSP)
 @! Advanced Semantic Tokens, Code Actions, Quick Fixes, Go To Definition
-@! 100% Written in Pure Maya Language
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

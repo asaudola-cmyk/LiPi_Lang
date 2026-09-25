@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE GUI — VISUAL LAYOUT EDITOR & INTERACTIVE CANVAS
-@! Module: universe/gui/visual_editor.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! LIPI UNIVERSE GUI — VISUAL LAYOUT EDITOR & INTERACTIVE CANVAS
+@! Module: universe/gui/visual_editor.lipi
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Multi-viewport layout editor (Toolbar, Palette, Canvas, Property Inspector)
 @! - 8-Handle selection bounding box calculation & hit-testing (NW, N, NE, E, SE, S, SW, W)
@@ -23,7 +23,7 @@ import "universe/gui/builder"
 @! ----------------------------------------------------------------------------
 
 @fn visual_editor_new(width, height)
-  root_win = gui_window_new("root_window", "Maya GUI Workspace", 20, 20, 560, 420)
+  root_win = gui_window_new("root_window", "Lipi GUI Workspace", 20, 20, 560, 420)
   font = font_load_default()
   
   return {

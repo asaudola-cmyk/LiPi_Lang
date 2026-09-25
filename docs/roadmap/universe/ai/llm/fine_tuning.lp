@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — LLM FINE-TUNING & PARAMETER-EFFICIENT ADAPTATION (PEFT/LoRA)
-@! 100% Written in Pure Maya Language — Zero PyTorch / HuggingFace Dependencies
+@! LIPI UNIVERSE AI — LLM FINE-TUNING & PARAMETER-EFFICIENT ADAPTATION (PEFT/LoRA)
+@! 100% Written in Pure Lipi Language — Zero PyTorch / HuggingFace Dependencies
 @! Features: LoRA (Low-Rank Adaptation), QLoRA 4-bit Quantization Emulation,
 @! Gradient Checkpointing, Instruction Dataset Tokenizer, SFT & DPO Loss.
 @! ============================================================================

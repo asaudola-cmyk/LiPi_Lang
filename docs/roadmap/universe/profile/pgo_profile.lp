@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE PROFILE — PGO PROFILE SERIALIZATION & RUNTIME (.mprof)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE PROFILE — PGO PROFILE SERIALIZATION & RUNTIME (.mprof)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Binary/Text Format Serialization, Checksum Validation, Profile
 @!           Merging, Call Graph & Loop Profile Deserialization
 @! ============================================================================

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA NATIVE GUI — FRAMEBUFFER RENDERER
-@! 100% Pure Maya — Direct Pixel Manipulation
+@! LIPI NATIVE GUI — FRAMEBUFFER RENDERER
+@! 100% Pure Lipi — Direct Pixel Manipulation
 @! ============================================================================
 
 import "universe/os/syscalls"

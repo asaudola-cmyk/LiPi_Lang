@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 2 — ABSTRACT SYNTAX TREE (AST) DEFINITIONS
-@! 100% Written in Pure Maya Language
+@! LIPI COMPILER STAGE 2 — ABSTRACT SYNTAX TREE (AST) DEFINITIONS
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA STATIC ANALYSIS & LINTER (maylint)
-@! 100% Written in Pure Maya Language
+@! LIPI STATIC ANALYSIS & LINTER (maylint)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "compiler/frontend/parser"
@@ -8,7 +8,7 @@ import "compiler/frontend/typecheck"
 import "compiler/frontend/borrowck"
 
 @fn lint_source_file(source_code)
-  println("  [Linter] Running static analysis & lint passes on Maya source...")
+  println("  [Linter] Running static analysis & lint passes on Lipi source...")
   
   ast = parse_all(source_code)
   type_errs = typecheck_program(ast)

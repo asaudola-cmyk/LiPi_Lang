@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 2 — SCOPE ANALYSIS & NAME RESOLVER
-@! 100% Written in Pure Maya Language
+@! LIPI COMPILER STAGE 2 — SCOPE ANALYSIS & NAME RESOLVER
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

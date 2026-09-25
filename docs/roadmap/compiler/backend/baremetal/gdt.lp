@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS KERNEL — GLOBAL DESCRIPTOR TABLE (gdt.my)
-@! 100% Written in Pure Maya Language — x86-64 Long Mode GDT Setup
+@! LIPI OS KERNEL — GLOBAL DESCRIPTOR TABLE (gdt.my)
+@! 100% Written in Pure Lipi Language — x86-64 Long Mode GDT Setup
 @! ============================================================================
 
 @! GDT Entry Descriptor Structure (8 bytes per entry)
@@ -26,7 +26,7 @@
   return [b0, b1, b2, b3, b4, b5, b6, b7]
 @end
 
-@fn init_maya_gdt()
+@fn init_lipi_gdt()
   gdt_table = []
   
   @! 1. Null Descriptor

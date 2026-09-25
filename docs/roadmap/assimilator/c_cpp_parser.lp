@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA ASSIMILATOR — C/C++ TO MAYA TRANSPILER (assimilator/c_cpp_parser.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI ASSIMILATOR — C/C++ TO LIPI TRANSPILER (assimilator/c_cpp_parser.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: C/C++ AST/syntax parsing, type stripping, block normalization
 @! ============================================================================
 
@@ -155,7 +155,7 @@ import "universe/core/string"
   return trimmed
 @end
 
-@fn c_transpile_to_maya(source_str)
+@fn c_transpile_to_lipi(source_str)
   @! Pre-process: standardize braces to newlines
   normalized = source_str
   normalized = string_replace(normalized, "{", "\n{\n")

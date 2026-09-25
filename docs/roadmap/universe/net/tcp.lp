@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE NET - TCP/IP STACK (universe/net/tcp.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE NET - TCP/IP STACK (universe/net/tcp.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

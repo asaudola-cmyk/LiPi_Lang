@@ -1,5 +1,5 @@
 @! ============================================================================
-@! 👑 LIPI PACKAGE MANAGER (LIPIPKG) — docs/roadmap/tools/mpm.lp
+@! 👑 LIPI PACKAGE MANAGER (LIPIPKG) — docs/roadmap/tools/lipipkg_cli.lp
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
@@ -25,8 +25,8 @@ import "universe/os/fs"
   return { name: pkg_name, version: version }
 @end
 
-// WHY: Retains mpm_parse_manifest as backward-compatible alias
-@fn mpm_parse_manifest(manifest_content)
+// WHY: Sovereign LPM manifest parser alias
+@fn lpm_parse_manifest(manifest_content)
   return lipipkg_parse_manifest(manifest_content)
 @end
 
@@ -40,8 +40,8 @@ import "universe/os/fs"
   return 1
 @end
 
-// WHY: Retains mpm_install as backward-compatible alias
-@fn mpm_install(pkg_name)
+// WHY: Sovereign LPM install alias
+@fn lpm_install(pkg_name)
   return lipipkg_install(pkg_name)
 @end
 
@@ -49,10 +49,10 @@ import "universe/os/fs"
   println("🔨 [LIPIPKG] Building current project according to lipi.toml...")
   manifest = file_read("lipi.toml")
   @if manifest == ""
-    manifest = file_read("maya.toml")
+    manifest = file_read("lipipkg.toml")
   @end
   @if manifest == ""
-    println("❌ Error: lipi.toml not found")
+    println("❌ Error: lipi.toml or lipipkg.toml not found")
     return 0
   @end
   info = lipipkg_parse_manifest(manifest)
@@ -60,7 +60,7 @@ import "universe/os/fs"
   return 1
 @end
 
-// WHY: Retains mpm_build as backward-compatible alias
-@fn mpm_build()
+// WHY: Sovereign LPM build alias
+@fn lpm_build()
   return lipipkg_build()
 @end

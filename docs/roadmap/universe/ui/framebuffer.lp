@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE UI - FRAMEBUFFER (RAW PIXEL RENDERING)
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE UI - FRAMEBUFFER (RAW PIXEL RENDERING)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

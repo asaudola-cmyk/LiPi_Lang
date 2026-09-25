@@ -1,15 +1,15 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 3 — LLVM IR GENERATOR
-@! 100% Written in Pure Maya Language
+@! LIPI COMPILER STAGE 3 — LLVM IR GENERATOR
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
 import "universe/core/string"
 
-@! Converts a Maya MIR (Mid-Level IR) or AST program to LLVM IR textual representation.
+@! Converts a Lipi MIR (Mid-Level IR) or AST program to LLVM IR textual representation.
 @fn mir_to_llvm_ir(mir_prog)
-  llvm_code = "; ModuleID = 'Maya_Core'\n"
-  llvm_code = llvm_code + "source_filename = \"maya_program\"\n\n"
+  llvm_code = "; ModuleID = 'Lipi_Core'\n"
+  llvm_code = llvm_code + "source_filename = \"lipi_program\"\n\n"
 
   funcs = []
   @if mir_prog != 0

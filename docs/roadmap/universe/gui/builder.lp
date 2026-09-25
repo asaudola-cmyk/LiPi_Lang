@@ -1,7 +1,7 @@
 @! ============================================================================
-@! MAYA UNIVERSE GUI — DECLARATIVE COMPONENT TREE & LAYOUT SOLVER
-@! Module: universe/gui/builder.maya
-@! 100% Pure Maya Architecture — Zero External Dependencies
+@! LIPI UNIVERSE GUI — DECLARATIVE COMPONENT TREE & LAYOUT SOLVER
+@! Module: universe/gui/builder.lipi
+@! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Universal GuiNode declarative tree schema
 @! - 12+ built-in UI primitives & containers

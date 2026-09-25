@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPREHENSIVE SELF-HOSTING COMPILER CLI (compiler/cli/main.maya)
-@! 100% Written in Pure Maya Language — Zero C / Rust / External Dependencies
+@! LIPI COMPREHENSIVE SELF-HOSTING COMPILER CLI (compiler/cli/main.lp)
+@! 100% Written in Pure Lipi Language — Zero C / Rust / External Dependencies
 @! ============================================================================
 
 import "universe/core/string"
@@ -11,7 +11,7 @@ import "compiler/frontend/parser"
 import "compiler/frontend/resolve"
 import "compiler/frontend/typecheck"
 import "compiler/frontend/borrowck"
-import "compiler/middleend/maya_ir"
+import "compiler/middleend/lipi_ir"
 import "compiler/middleend/optimizer"
 import "compiler/backend/x86_64/codegen"
 import "compiler/backend/x86_64/jit"
@@ -22,8 +22,8 @@ import "compiler/backend/wasm32/codegen"
 
 @fn main()
   println("=================================================================")
-  println("🔱 MAYA SELF-HOSTING MASTER COMPILER ENGINE (V1.0.0-SOVEREIGN) 🔱")
-  println("   100% Pure Maya Architecture — Autonomous Self-Compilation")
+  println("👑 LIPI SELF-HOSTING MASTER COMPILER ENGINE (V1.0.0-SOVEREIGN) 👑")
+  println("   100% Pure Lipi Architecture — Autonomous Self-Compilation")
   println("=================================================================")
   println("Target Architecture : elf64")
   println("Optimization Level  : -O2")
@@ -82,8 +82,8 @@ import "compiler/backend/wasm32/codegen"
 
 @fn compiler_banner()
   println("=================================================================")
-  println("🔱 MAYA SELF-HOSTING MASTER COMPILER ENGINE (V1.0.0-SOVEREIGN) 🔱")
-  println("   100% Pure Maya Architecture — Autonomous Self-Compilation")
+  println("🔱 LIPI SELF-HOSTING MASTER COMPILER ENGINE (V1.0.0-SOVEREIGN) 🔱")
+  println("   100% Pure Lipi Architecture — Autonomous Self-Compilation")
   println("=================================================================")
 @end
 
@@ -171,7 +171,7 @@ import "compiler/backend/wasm32/codegen"
     println("▶ STAGE 4: Backend Code Generation (Target: " + config.target + ")...")
   @end
   
-  ir_functions = maya_ir_generate(ast)
+  ir_functions = lipi_ir_generate(ast)
   compiler_log_pass("IR Generation", "SUCCESS", ir_functions.len().to_str() + " functions translated to IR")
   machine_code = codegen_x86_64(ir_functions)
 
@@ -273,7 +273,7 @@ import "compiler/backend/wasm32/codegen"
 @! ----------------------------------------------------------------------------
 @fn compiler_cli_self_test()
   cfg_elf = compiler_config_new()
-  cfg_elf.output_path = "/tmp/maya_bootstrap_test.elf"
+  cfg_elf.output_path = "/tmp/lipi_bootstrap_test.elf"
   cfg_elf.target = "elf64"
   r1 = compiler_driver_compile_source("@fn main() return 0 @end", cfg_elf)
   return r1

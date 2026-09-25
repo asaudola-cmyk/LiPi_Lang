@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE GPU — SPIR-V BINARY SHADER EMITTER
-@! 100% Written in Pure Maya Language — Zero glslang / Vulkan-SDK Dependencies
+@! LIPI UNIVERSE GPU — SPIR-V BINARY SHADER EMITTER
+@! 100% Written in Pure Lipi Language — Zero glslang / Vulkan-SDK Dependencies
 @! ============================================================================
 
 import "universe/core/collections"
@@ -10,7 +10,7 @@ import "universe/core/collections"
   header = [
     0x03, 0x02, 0x23, 0x07, @! Magic Number (Little Endian)
     0x00, 0x03, 0x01, 0x00, @! Version 1.3
-    0x00, 0x00, 0x00, 0x00, @! Generator ID (Maya Core)
+    0x00, 0x00, 0x00, 0x00, @! Generator ID (Lipi Core)
     0x10, 0x00, 0x00, 0x00, @! Bound
     0x00, 0x00, 0x00, 0x00  @! Schema
   ]

@@ -439,80 +439,7 @@ fn x86_synth_compile_statement s toks pos_box
         base_col = t.tok_span.span_start_col
         base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, pos + 1) // Consume 'while'
-
-        loop_header = s.synth_code.len()
-        push(s.synth_loop_starts, loop_header)
-        loop_brks = list()
-        push(s.synth_loop_breaks, loop_brks)
-
-        // Evaluate condition into %rax
-        x86_synth_compile_expr(s, toks, pos_box)
-
-        // Emit test rax, rax
-        x86_synth_emit_byte(s, 72)
-        x86_synth_emit_byte(s, 133)
-        x86_synth_emit_byte(s, 192)
-
-        // Emit jz loop_exit (0x0F 0x84 disp32)
-        x86_synth_emit_byte(s, 15)
-        x86_synth_emit_byte(s, 132)
-        patch_loop_exit = s.synth_code.len()
-        x86_synth_emit_u32(s, 0)
-
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-
-        // Compile while body statements
-        while get(pos_box, 0) < toks.len()
-            x86_synth_skip_whitespace_tokens(toks, pos_box)
-            cur_p = get(pos_box, 0)
-            if cur_p >= toks.len()
-                break
-            cur_t = toks[cur_p]
-            cur_k = cur_t.tok_kind
-            cur_txt = cur_t.tok_text
-
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                break
-            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-                break
-
-            b_p = get(pos_box, 0)
-            x86_synth_compile_statement(s, toks, pos_box)
-            if get(pos_box, 0) == b_p
-                list_set(pos_box, 0, b_p + 1)
-
-            if cur_t.tok_span.span_start_line == base_line
-                break
-
-        // Consume optional end / @end / শেষ
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-        cur_p = get(pos_box, 0)
-        if cur_p < toks.len()
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                list_set(pos_box, 0, cur_p + 1)
-
-        // Emit backward jump to loop_header: jmp rel32 (0xE9 disp32)
-        x86_synth_emit_byte(s, 233)
-        next_ip = s.synth_code.len() + 4
-        disp32 = loop_header - next_ip
-        x86_synth_emit_u32(s, disp32)
-
-        // Backpatch loop_exit
-        loop_exit_off = s.synth_code.len()
-        rel32 = loop_exit_off - (patch_loop_exit + 4)
-        x86_synth_patch_u32(s, patch_loop_exit, rel32)
-
-        // Backpatch all break jumps
-        bi = 0
-        while bi < loop_brks.len()
-            brk_patch = loop_brks[bi]
-            b_rel32 = loop_exit_off - (brk_patch + 4)
-            x86_synth_patch_u32(s, brk_patch, b_rel32)
-            bi = bi + 1
-
-        s.synth_loop_starts = pop(s.synth_loop_starts)
-        s.synth_loop_breaks = pop(s.synth_loop_breaks)
-        return 0
+        return x86_synth_compile_while(s, toks, pos_box, base_col, base_line)
 
     // ── 8. Loops: for / প্রতিটি / @for ───────────────────────────────────────
     is_for = 0
@@ -525,123 +452,7 @@ fn x86_synth_compile_statement s toks pos_box
         base_col = t.tok_span.span_start_col
         base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, pos + 1) // Consume 'for'
-
-        var_tok = toks[get(pos_box, 0)]
-        var_name = var_tok.tok_text
-        list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume var_name
-
-        // Consume 'in' or 'মধ্যে' if present
-        if get(pos_box, 0) < toks.len()
-            in_t = toks[get(pos_box, 0)]
-            if in_t.tok_kind == TOK_KW_IN() or (in_t.tok_kind == TOK_IDENT() and (in_t.tok_text == "in" or in_t.tok_text == "মধ্যে"))
-                list_set(pos_box, 0, get(pos_box, 0) + 1)
-
-        // Compile start expression into %rax
-        x86_synth_compile_expr(s, toks, pos_box)
-        var_off = x86_synth_alloc_var(s, var_name)
-        x86_synth_emit_store_var(s, 0, var_off)
-
-        // Consume '..' if present
-        if get(pos_box, 0) < toks.len()
-            dot_t = toks[get(pos_box, 0)]
-            if dot_t.tok_kind == TOK_DOTDOT() or (dot_t.tok_kind != TOK_STR() and dot_t.tok_text == "..")
-                list_set(pos_box, 0, get(pos_box, 0) + 1)
-
-        // Compile end expression into %rax
-        x86_synth_compile_expr(s, toks, pos_box)
-        end_var_name = "__end_" + var_name
-        end_off = x86_synth_alloc_var(s, end_var_name)
-        x86_synth_emit_store_var(s, 0, end_off)
-
-        loop_header = s.synth_code.len()
-        push(s.synth_loop_starts, loop_header)
-        loop_brks = list()
-        push(s.synth_loop_breaks, loop_brks)
-
-        // Compare var and end: mov rax, [rbp - var_off]; cmp rax, [rbp - end_off]
-        x86_synth_emit_load_var(s, 0, var_off)
-
-        // cmp rax, [rbp - end_off]
-        if end_off <= 128
-            disp8 = (256 - (end_off % 256)) % 256
-            x86_synth_emit_byte(s, 72)
-            x86_synth_emit_byte(s, 59)
-            x86_synth_emit_byte(s, 69)
-            x86_synth_emit_byte(s, disp8)
-        else
-            disp32 = 0 - end_off
-            x86_synth_emit_byte(s, 72)
-            x86_synth_emit_byte(s, 59)
-            x86_synth_emit_byte(s, 133)
-            x86_synth_emit_u32(s, disp32)
-
-        // jg loop_exit (0x0F 0x8F disp32) — inclusive range [start..end]
-        x86_synth_emit_byte(s, 15)
-        x86_synth_emit_byte(s, 143)
-        patch_loop_exit = s.synth_code.len()
-        x86_synth_emit_u32(s, 0)
-
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-
-        // Compile for body statements
-        while get(pos_box, 0) < toks.len()
-            x86_synth_skip_whitespace_tokens(toks, pos_box)
-            cur_p = get(pos_box, 0)
-            if cur_p >= toks.len()
-                break
-            cur_t = toks[cur_p]
-            cur_k = cur_t.tok_kind
-            cur_txt = cur_t.tok_text
-
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                break
-            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-                break
-
-            b_p = get(pos_box, 0)
-            x86_synth_compile_statement(s, toks, pos_box)
-            if get(pos_box, 0) == b_p
-                list_set(pos_box, 0, b_p + 1)
-
-            if cur_t.tok_span.span_start_line == base_line
-                break
-
-        // Consume optional end / @end / শেষ
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-        cur_p = get(pos_box, 0)
-        if cur_p < toks.len()
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                list_set(pos_box, 0, cur_p + 1)
-
-        // Increment var: mov rax, [rbp - var_off]; inc rax; mov [rbp - var_off], rax
-        x86_synth_emit_load_var(s, 0, var_off)
-        x86_synth_emit_byte(s, 72)
-        x86_synth_emit_byte(s, 255)
-        x86_synth_emit_byte(s, 192) // inc rax
-        x86_synth_emit_store_var(s, 0, var_off)
-
-        // jmp loop_header
-        x86_synth_emit_byte(s, 233)
-        next_ip = s.synth_code.len() + 4
-        disp32 = loop_header - next_ip
-        x86_synth_emit_u32(s, disp32)
-
-        // Backpatch loop_exit
-        loop_exit_off = s.synth_code.len()
-        rel32 = loop_exit_off - (patch_loop_exit + 4)
-        x86_synth_patch_u32(s, patch_loop_exit, rel32)
-
-        // Backpatch breaks
-        bi = 0
-        while bi < loop_brks.len()
-            brk_patch = loop_brks[bi]
-            b_rel32 = loop_exit_off - (brk_patch + 4)
-            x86_synth_patch_u32(s, brk_patch, b_rel32)
-            bi = bi + 1
-
-        s.synth_loop_starts = pop(s.synth_loop_starts)
-        s.synth_loop_breaks = pop(s.synth_loop_breaks)
-        return 0
+        return x86_synth_compile_for(s, toks, pos_box, base_col, base_line)
 
     // ── 9. Variable Declaration: let / চলক / ধরি / var ─────────────────────────
     is_let = 0
@@ -672,6 +483,13 @@ fn x86_synth_compile_statement s toks pos_box
                 off = x86_synth_bind_var(s, var_name)
                 if is_int_lit == 1
                     x86_synth_set_global_const(s, var_name, int_lit_val)
+                    x86_synth_set_prim_type(s, var_name, "int")
+                elif s.synth_last_expr_type == "int"
+                    x86_synth_set_prim_type(s, var_name, "int")
+                elif s.synth_last_expr_type == "str"
+                    x86_synth_set_prim_type(s, var_name, "str")
+                else
+                    x86_synth_set_prim_type(s, var_name, "")
         return 0
 
     // ── 10. Assignment: <var> = <expr> or <var> <op>= <expr> ───────────────────
@@ -724,6 +542,13 @@ fn x86_synth_compile_statement s toks pos_box
                     off = x86_synth_bind_var(s, var_name)
                     if is_int_lit == 1
                         x86_synth_set_global_const(s, var_name, int_lit_val)
+                        x86_synth_set_prim_type(s, var_name, "int")
+                    elif s.synth_last_expr_type == "int"
+                        x86_synth_set_prim_type(s, var_name, "int")
+                    elif s.synth_last_expr_type == "str"
+                        x86_synth_set_prim_type(s, var_name, "str")
+                    else
+                        x86_synth_set_prim_type(s, var_name, "")
                     return 0
                 else
                     // Compound assignment: target += expr, target -= expr, etc.
@@ -738,14 +563,23 @@ fn x86_synth_compile_statement s toks pos_box
                     off = x86_synth_alloc_var(s, var_name)
                     x86_synth_emit_load_var(s, 0, off)
                     if comp_op == TOK_PLUS()
-                        // rdi = rax (left), rsi = rcx (right) -> call _lipi_add_dynamic
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 137)
-                        x86_synth_emit_byte(s, 199)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 137)
-                        x86_synth_emit_byte(s, 206)
-                        x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                        pt = x86_synth_get_prim_type(s, var_name)
+                        if pt == "int" and s.synth_last_expr_type == "int"
+                            // Native hardware add rax, rcx (0x48 0x01 0xC8) - 1 cycle silicon execution!
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 1)
+                            x86_synth_emit_byte(s, 200)
+                            x86_synth_set_prim_type(s, var_name, "int")
+                        else
+                            // Safe dynamic fallback for strings, lists, objects
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 137)
+                            x86_synth_emit_byte(s, 199)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 137)
+                            x86_synth_emit_byte(s, 206)
+                            x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                            x86_synth_set_prim_type(s, var_name, "")
                     elif comp_op == TOK_MINUS()
                         // sub rax, rcx
                         x86_synth_emit_byte(s, 72)

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA 3D ENGINE - MESH LOADER & PROCESSING
-@! 100% Written in Pure Maya Language
+@! LIPI 3D ENGINE - MESH LOADER & PROCESSING
+@! 100% Written in Pure Lipi Language
 @! Features: OBJ & GLTF mesh parsing, Vertex Normal Calculation, Tangent Space
 @! generation, and BVH Tree pre-computation for Ray Tracing.
 @! ============================================================================

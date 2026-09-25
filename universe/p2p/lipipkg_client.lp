@@ -25,25 +25,25 @@ import "universe/p2p/lipipkg_server_engine"
   tags = manifest_data.tags
 
   req_body = "{"
-  f1 = mpm_json_field("name", name)
+  f1 = lipipkg_json_field("name", name)
   req_body = string_concat(req_body, f1)
   req_body = string_concat(req_body, ",")
-  f2 = mpm_json_field("version", version)
+  f2 = lipipkg_json_field("version", version)
   req_body = string_concat(req_body, f2)
   req_body = string_concat(req_body, ",")
-  f3 = mpm_json_field("description", desc)
+  f3 = lipipkg_json_field("description", desc)
   req_body = string_concat(req_body, f3)
   req_body = string_concat(req_body, ",")
-  f4 = mpm_json_field("author", author)
+  f4 = lipipkg_json_field("author", author)
   req_body = string_concat(req_body, f4)
   req_body = string_concat(req_body, ",")
-  f5 = mpm_json_field("license", license)
+  f5 = lipipkg_json_field("license", license)
   req_body = string_concat(req_body, f5)
   req_body = string_concat(req_body, ",")
-  f6 = mpm_json_field("payload", payload)
+  f6 = lipipkg_json_field("payload", payload)
   req_body = string_concat(req_body, f6)
   req_body = string_concat(req_body, ",")
-  f7 = mpm_json_field("sha256", actual_sha)
+  f7 = lipipkg_json_field("sha256", actual_sha)
   req_body = string_concat(req_body, f7)
   req_body = string_concat(req_body, ",")
   req_body = string_concat(req_body, "\"tags\":[")
@@ -51,7 +51,7 @@ import "universe/p2p/lipipkg_server_engine"
   t_len = tags.len()
   @while t_i < t_len
     @if t_i > 0 req_body = string_concat(req_body, ",") @end
-    esc_tag = mpm_escape_json(tags[t_i])
+    esc_tag = lipipkg_escape_json(tags[t_i])
     req_body = string_concat(req_body, "\"")
     req_body = string_concat(req_body, esc_tag)
     req_body = string_concat(req_body, "\"")
@@ -102,8 +102,8 @@ import "universe/p2p/lipipkg_server_engine"
     h_len = resp.headers.len()
     @while i < h_len
       h = resp.headers[i]
-      // WHY: Checks official X-Lipi-Package-SHA256 and falls back to legacy X-Maya-Package-SHA256
-      @if str_to_lower(h.name) == "x-lipi-package-sha256" || str_to_lower(h.name) == "x-maya-package-sha256"
+      // WHY: Checks official sovereign X-Lipi-Package-SHA256 package verification header
+      @if str_to_lower(h.name) == "x-lipi-package-sha256"
         expected_sha = h.value
         break
       @end
@@ -129,11 +129,8 @@ import "universe/p2p/lipipkg_server_engine"
   @! Direct in-memory server dispatch
   req = req_new("GET", subpath, [], "", "127.0.0.1")
   res = lipipkg_server_dispatch(target, req)
-  // WHY: Retrieves sovereign X-Lipi-Package-SHA256 with legacy fallback
+  // WHY: Retrieves sovereign X-Lipi-Package-SHA256 package verification header
   expected_sha = res_get_header(res, "X-Lipi-Package-SHA256", "")
-  @if str_len(expected_sha) == 0
-    expected_sha = res_get_header(res, "X-Maya-Package-SHA256", "")
-  @end
   actual_sha = sha256_hex_string(res.res_body)
 
   is_valid = 0
@@ -179,19 +176,19 @@ import "universe/p2p/lipipkg_server_engine"
   return { status_code: res.res_status_code, body: res.res_body }
 @end
 
-// ── Backward-Compatibility Aliases ──────────────────────────────────────────
-@fn mpm_client_publish(target, manifest_data, payload)
+// ── Sovereign Lipi Package Manager Client Aliases ──────────────────────────
+@fn lpm_client_publish(target, manifest_data, payload)
   return lipipkg_client_publish(target, manifest_data, payload)
 @end
 
-@fn mpm_client_fetch(target, name, version_constraint)
+@fn lpm_client_fetch(target, name, version_constraint)
   return lipipkg_client_fetch(target, name, version_constraint)
 @end
 
-@fn mpm_client_get_index(target)
+@fn lpm_client_get_index(target)
   return lipipkg_client_get_index(target)
 @end
 
-@fn mpm_client_search(target, query)
+@fn lpm_client_search(target, query)
   return lipipkg_client_search(target, query)
 @end

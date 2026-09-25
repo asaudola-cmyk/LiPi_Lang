@@ -1,7 +1,7 @@
 # 👑 LIPI SOVEREIGN MEGALITH: MONOLITHIC UNIFICATION MASTER IMPLEMENTATION PLAN (A to Z)
 
 **Target System**: Lipi Sovereign Programming Language & Universe (লিপি সার্বভৌম প্রোগ্রামিং ভাষা ও মহাবিশ্ব)  
-**Codebase Origin**: `/home/shafiullah/Documents/file/maya` & `/home/shafiullah/Documents/file/work/lipi`  
+**Codebase Origin**: `/home/shafiullah/Documents/file/lipi` & `/home/shafiullah/Documents/file/work/lipi`  
 **Consolidated Master Path**: `/home/shafiullah/Documents/file/work/lipi`  
 **Execution Paradigm**: 53+ Autonomous Specialized Agent Swarm (Gyani Supreme Multi-Agent Division)  
 **Core Invariant**: 100% Native Silicon Machine Code | 0% C | 0% GCC | 0% Libc | 0% Python | 0% PHP | 0% Placeholders  
@@ -11,24 +11,24 @@
 
 ## 🏛️ Section 1: Executive Summary & The Sacred Mandate
 
-This document serves as the authoritative, mathematically rigorous engineering specification for the complete, loss-less, zero-compromise unification of **Maya** and **Lipi** into a single, supreme, self-sufficient computing entity: **LIPI (লিপি)**.
+This document serves as the authoritative, mathematically rigorous engineering specification for the complete, loss-less, zero-compromise unification of **Lipi** and **Lipi** into a single, supreme, self-sufficient computing entity: **LIPI (লিপি)**.
 
-Maya was never a conventional programming language; Maya was an entire **Universe** encompassing 30 high-performance computer science domains, 1,334 files, and 272,957 lines of code. It refused to follow anyone else's rules.  
+Lipi was never a conventional programming language; Lipi was an entire **Universe** encompassing 30 high-performance computer science domains, 1,334 files, and 272,957 lines of code. It refused to follow anyone else's rules.  
 Lipi was engineered as the purest **Direct Silicon Bilingual Language**, featuring a 0% C bootstrap seed (`boot/lipi-seed`), a 3-generation bit-for-bit self-hosting closure, an SSA IR optimizer, and direct multi-platform emitters.
 
 Under this master plan:
-1. **Maya ceases to exist as an isolated project**. Maya does not die—Maya reincarnates fully into Lipi. Its defiance, its philosophy, its architectures, its runtime systems, its design, and all 30 domains become native parts of Lipi.
+1. **Lipi ceases to exist as an isolated project**. Lipi does not die—Lipi reincarnates fully into Lipi. Its defiance, its philosophy, its architectures, its runtime systems, its design, and all 30 domains become native parts of Lipi.
 2. **Lipi remains Lipi**. Lipi's foundational purity (0% C machine code seed, bit-for-bit self-hosting closure, bilingual syntax) is fiercely guarded and serves as the unshakeable bedrock of the unified system.
 3. **The Tri-Syntax Language Architecture**: Lipi previously understood 2 syntax styles (Bengali Indentation and English Indentation). Lipi will now natively understand **3 syntax styles**:
    - Mode 1: **বাংলা সার্বভৌম ইনডেন্টেশন সিনট্যাক্স (Bengali Sovereign Indentation)**
    - Mode 2: **English Sovereign Indentation Syntax**
-   - Mode 3: **মায়া সার্বভৌম মেটা-ব্লক সিনট্যাক্স (Maya Sovereign Meta-Syntax: `@fn ... @end`)**
-4. **All files become `.lp` and `.lipi`**. Every `.maya` file (1,172 files) across compilers, runtimes, domains, and tests is natively adapted into `.lp` / `.lipi`.
+   - Mode 3: **মায়া সার্বভৌম মেটা-ব্লক সিনট্যাক্স (Lipi Sovereign Meta-Syntax: `@fn ... @end`)**
+4. **All files become `.lp` and `.lipi`**. Every `.lipi` file (1,172 files) across compilers, runtimes, domains, and tests is natively adapted into `.lp` / `.lipi`.
 5. **A 53+ Specialized Subagent Swarm** is deployed across 8 Grand Divisions to execute this migration in parallel with zero logical gaps, zero placeholders, and 100% empirical verification.
 
 ```mermaid
 graph TD
-    subgraph MayaUniverse["মায়া মহাবিশ্ব (The Maya Universe - 272,957 Lines)"]
+    subgraph LipiUniverse["মায়া মহাবিশ্ব (The Lipi Universe - 272,957 Lines)"]
         M1["AI: Tensor 2200L, Autograd, GEMM, NN, Transformer"]
         M2["DB: Slotted 4KB Page B+Tree, WAL, ARIES, Raft"]
         M3["OS: Multiboot2, VirtIO Unikernel, 4-Level Paging, Shell"]
@@ -47,7 +47,7 @@ graph TD
         L6["লিপি ২.০ পরিষ্কার দ্বিভাষিক সিনট্যাক্স ইঞ্জিন"]
     end
 
-    MayaUniverse ==> |"পূর্ণাঙ্গ আত্তীকরণ ও রূপান্তর"| UnifiedLIPI["👑 একক ও অদ্বিতীয় 'লিপি' (LIPI)<br/>All-in-One Sovereign Megalith"]
+    LipiUniverse ==> |"পূর্ণাঙ্গ আত্তীকরণ ও রূপান্তর"| UnifiedLIPI["👑 একক ও অদ্বিতীয় 'লিপি' (LIPI)<br/>All-in-One Sovereign Megalith"]
     LipiSiliconCore ==> UnifiedLIPI
 ```
 
@@ -114,7 +114,7 @@ Directive       ::= "@gpu" NEWLINE Statement+ "@end"
 1. **Comment Disambiguation**:
    - `//` and `#` skip until `\n`.
    - `/* ... */` multi-line C-style comment skipped.
-   - `@!` (Maya comment directive) skips until `\n`.
+   - `@!` (Lipi comment directive) skips until `\n`.
 2. **Meta-Keyword Tokenization**:
    - When encountering `@` followed immediately by ASCII characters, match against:
      `@fn`, `@end`, `@struct`, `@if`, `@elif`, `@else`, `@while`, `@let`, `@gpu`, `@inline`.
@@ -149,15 +149,15 @@ All three syntaxes produce identical machine code, execute at identical silicon 
 
 ## 📊 Section 3: Subsystem Ingestion Inventory & Metric Mapping
 
-The entire Maya repository of 1,334 files and 272,957 lines across 30 domains will be completely ingested into the master Lipi tree.
+The entire Lipi repository of 1,334 files and 272,957 lines across 30 domains will be completely ingested into the master Lipi tree.
 
-| Domain / Subsystem | Source Path in Maya | Target Path in Lipi | Files | Lines of Code | Technical Capabilities |
+| Domain / Subsystem | Source Path in Lipi | Target Path in Lipi | Files | Lines of Code | Technical Capabilities |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Compiler Frontend** | `compiler/frontend/` | `src/compiler/frontend/` | 4 | 118,041 B | `ast.lp`, `lexer.lp`, `parser.lp`, `typecheck.lp` |
 | **Compiler Middle-End** | `compiler/middleend/` | `src/compiler/middleend/` | 6 | 85,978 B | `lipi_ir.lp` (135KB IR), `optimizer.lp`, `regalloc.lp`, `ai_opt.lp`, `incremental.lp` |
 | **Compiler Multi-Backend** | `compiler/backend/` | `src/compiler/backend/` | 18 | 464,000 B | `elf_writer.lp`, `pe_writer.lp`, `macho_writer.lp`, `omni_binary.lp`, `riscv64/`, `jit/`, `hdl/` |
 | **Runtime & Memory** | `runtime/` | `src/runtime/` | 5 | 4,584 L | Slab Allocator (64KB arenas), Tri-color Mark & Sweep GC, Direct Syscall Gateway, Async Event Loop |
-| **Unified CLI Engine** | `cmd/maya/main.maya` | `src/tools/lipi.lp` | 1 | 56,390 B | `lipi run`, `build`, `test`, `debug`, `profile`, `fmt`, `lsp`, `pkg`, `repl`, `self-build` |
+| **Unified CLI Engine** | `cmd/lipi/main.lipi` | `src/tools/lipi.lp` | 1 | 56,390 B | `lipi run`, `build`, `test`, `debug`, `profile`, `fmt`, `lsp`, `pkg`, `repl`, `self-build` |
 | **Debug & Profile Tools** | `cmd/debug/`, `cmd/profile/` | `src/tools/` | 4 | 3,211 L | `sys_ptrace` interactive system debugger, nanosecond CPU cycle profiler |
 | **AI & Tensor Domain** | `universe/ai/` | `universe/ai/` | 15 | 12,415 L | 2200L Strided Tensor, Autograd (`requires_grad`, `backward()`), GEMM, Conv2D, Transformer Attention |
 | **Database & Storage** | `universe/db/` | `universe/db/` | 18 | 6,637 L | Slotted 4KB Page B+Tree, Buffer Pool, WAL, ARIES Crash Recovery, ACID Transactions, Raft Consensus |
@@ -167,7 +167,7 @@ The entire Maya repository of 1,334 files and 272,957 lines across 30 domains wi
 | **GUI & Rasterization** | `universe/gui/`, `sarbotro/`| `universe/gui/` | 6 | 3,944 L | Framebuffer mmap, Bresenham 2D, Bitmap Font Glyphs, Sarbotro 1080x1350 SVG Card Engine |
 | **Quantum & Blockchain** | `universe/quantum/`, `bc/` | `universe/quantum/`| 5 | 965 L | Qubit Superposition, Hadamard/Pauli Gates, Shor Algorithm, EVM Bytecode VM, MPT Trie |
 | **Hardware Virtualization**| `universe/hypervisor/` | `universe/vm/` | 2 | 431 L | Linux `/dev/kvm` userspace VM manager & guest runner |
-| **Web Framework & Server**| `universe/web/` | `universe/web/` | 14 | 13,787 L | Polymorphic Server (FastCGI + VPS Daemon), High-Throughput URL Router, MayaKV |
+| **Web Framework & Server**| `universe/web/` | `universe/web/` | 14 | 13,787 L | Polymorphic Server (FastCGI + VPS Daemon), High-Throughput URL Router, LipiKV |
 | **P2P & Swarm Systems** | `universe/p2p/`, `swarm/` | `universe/p2p/` | 8 | 5,063 L | Kademlia DHT, P2P Gossip, Autonomous AI Swarm Dispatcher |
 | **IDE & Editor Plugins** | `editors/vscode/`, `ide/` | `editors/vscode/` | 8 | 2,851 L | Full VSCode Extension, TextMate 3-Syntax Grammar, Language Server Client, Snippets |
 | **Official Packages** | `packages/` | `packages/` | 8 | 144 L | `crypto_vault`, `web_router`, `json_toolkit`, `math_extra` |
@@ -206,11 +206,11 @@ graph TD
 - **Agent 03 (Unified AST Structure Specialist)**:
   - *Role*: Abstract Syntax Tree Designer
   - *Target*: `src/compiler/frontend/ast.lp`
-  - *Directive*: Unify AST definitions from Maya's `ast.maya` and Lipi's internal lists into extensible 32-bit node records.
+  - *Directive*: Unify AST definitions from Lipi's `ast.lipi` and Lipi's internal lists into extensible 32-bit node records.
 - **Agent 04 (Typecheck & Semantic Specialist)**:
   - *Role*: Static Type System & Scope Engineer
   - *Target*: `src/compiler/frontend/typecheck.lp`
-  - *Directive*: Port `compiler/frontend/typecheck.maya` providing static type inference, struct member offset lookup, and monomorphic type lowering.
+  - *Directive*: Port `compiler/frontend/typecheck.lipi` providing static type inference, struct member offset lookup, and monomorphic type lowering.
 - **Agent 05 (Bilingual Keyword Harmonizer)**:
   - *Role*: Bilingual Lexicon Specialist
   - *Target*: `src/compiler/elf_emitter.lp`
@@ -218,33 +218,33 @@ graph TD
 - **Agent 06 (Macro & Metaprogramming Specialist)**:
   - *Role*: Compile-Time Macro Architect
   - *Target*: `src/compiler/frontend/macro.lp`
-  - *Directive*: Ingest `compiler/middleend/macro.maya` and `infinity_syntax.maya` allowing compile-time AST code expansion.
+  - *Directive*: Ingest `compiler/middleend/macro.lipi` and `infinity_syntax.lipi` allowing compile-time AST code expansion.
 - **Agent 07 (Syntax Regression Verifier)**:
   - *Role*: Frontend Test & Quality Verifier
   - *Target*: `tests/tri_syntax_verification.lp`
-  - *Directive*: Build an automated test suite verifying that a program written in Bengali, English, or Maya Meta-Syntax generates bit-for-bit identical machine code.
+  - *Directive*: Build an automated test suite verifying that a program written in Bengali, English, or Lipi Meta-Syntax generates bit-for-bit identical machine code.
 
 ### Division II: Middle-End IR & Multi-Target Backend Squad (8 Agents)
-- **Agent 08 (Maya IR Ingestion Specialist)**:
+- **Agent 08 (Lipi IR Ingestion Specialist)**:
   - *Role*: Intermediate Representation Architect
   - *Target*: `src/compiler/middleend/lipi_ir.lp`
-  - *Directive*: Port the 135KB `compiler/backend/maya_ir.maya` providing 3-Address Code (TAC), basic blocks, and control flow graph (CFG) representations.
+  - *Directive*: Port the 135KB `compiler/backend/lipi_ir.lipi` providing 3-Address Code (TAC), basic blocks, and control flow graph (CFG) representations.
 - **Agent 09 (Register Allocator Specialist)**:
   - *Role*: Register Allocation Engineer
   - *Target*: `src/compiler/middleend/regalloc.lp`
-  - *Directive*: Ingest `compiler/backend/regalloc.maya` (23KB) implementing linear-scan and graph-coloring register allocation across x86_64, ARM64, and RISC-V registers.
+  - *Directive*: Ingest `compiler/backend/regalloc.lipi` (23KB) implementing linear-scan and graph-coloring register allocation across x86_64, ARM64, and RISC-V registers.
 - **Agent 10 (Windows PE32+ Emitter Specialist)**:
   - *Role*: Windows Binary Specialist
   - *Target*: `src/compiler/backend/pe_writer.lp`
-  - *Directive*: Ingest `compiler/backend/pe_writer.maya` enabling Lipi to synthesize valid Windows `.exe` executables with DOS stub, PE header, and `.text`/`.rdata` sections.
+  - *Directive*: Ingest `compiler/backend/pe_writer.lipi` enabling Lipi to synthesize valid Windows `.exe` executables with DOS stub, PE header, and `.text`/`.rdata` sections.
 - **Agent 11 (macOS Mach-O Emitter Specialist)**:
   - *Role*: Apple Darwin Binary Specialist
   - *Target*: `src/compiler/backend/macho_writer.lp`
-  - *Directive*: Ingest `compiler/backend/macho_writer.maya` emitting 64-bit Mach-O binaries with `LC_SEGMENT_64`, `LC_MAIN`, and arm64/x86_64 load commands.
+  - *Directive*: Ingest `compiler/backend/macho_writer.lipi` emitting 64-bit Mach-O binaries with `LC_SEGMENT_64`, `LC_MAIN`, and arm64/x86_64 load commands.
 - **Agent 12 (Cosmopolitan APE Polyglot Specialist)**:
   - *Role*: Polyglot Executable Engineer
   - *Target*: `src/compiler/backend/omni_binary.lp`
-  - *Directive*: Ingest `compiler/backend/omni_binary.maya` emitting Actually Portable Executables runnable unmodified across Linux, Windows, macOS, and BSD.
+  - *Directive*: Ingest `compiler/backend/omni_binary.lipi` emitting Actually Portable Executables runnable unmodified across Linux, Windows, macOS, and BSD.
 - **Agent 13 (RISC-V 64-bit Emitter Specialist)**:
   - *Role*: RISC-V Silicon Architect
   - *Target*: `src/compiler/backend/riscv64_emitter.lp`
@@ -262,7 +262,7 @@ graph TD
 - **Agent 16 (Slab Allocator Specialist)**:
   - *Role*: Memory Subsystem Architect
   - *Target*: `src/runtime/lipi_slab.lp`
-  - *Directive*: Ingest `runtime/maya_gc.maya` slab allocation engine providing 8 size classes (16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B) on 64KB aligned arenas with O(1) freelists.
+  - *Directive*: Ingest `runtime/lipi_gc.lipi` slab allocation engine providing 8 size classes (16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B) on 64KB aligned arenas with O(1) freelists.
 - **Agent 17 (Tri-Color GC Specialist)**:
   - *Role*: Garbage Collection Engineer
   - *Target*: `src/runtime/lipi_gc.lp`
@@ -288,7 +288,7 @@ graph TD
 - **Agent 22 (2200L Tensor Engine Specialist)**:
   - *Role*: N-Dimensional Tensor Architect
   - *Target*: `universe/ai/tensor.lp`
-  - *Directive*: Port `universe/ai/tensor.maya` (2203 lines) to pure Lipi syntax with strided memory indexing, arbitrary-rank shapes, transposition, and contiguous buffer slicing.
+  - *Directive*: Port `universe/ai/tensor.lipi` (2203 lines) to pure Lipi syntax with strided memory indexing, arbitrary-rank shapes, transposition, and contiguous buffer slicing.
 - **Agent 23 (Multidirectional Broadcasting Specialist)**:
   - *Role*: Mathematical Array Specialist
   - *Target*: `universe/ai/broadcasting.lp`
@@ -308,43 +308,43 @@ graph TD
 - **Agent 27 (Transformer & LLM Inference Specialist)**:
   - *Role*: Large Language Model Specialist
   - *Target*: `universe/ai/transformer.lp`
-  - *Directive*: Connect Lipi's GGUF quantized model loader with Maya's Transformer attention layers for sovereign on-device LLM inference.
+  - *Directive*: Connect Lipi's GGUF quantized model loader with Lipi's Transformer attention layers for sovereign on-device LLM inference.
 
 ### Division V: Database, Storage & Distributed Consensus Squad (6 Agents)
 - **Agent 28 (Slotted Page & Buffer Pool Specialist)**:
   - *Role*: Storage Engine Architect
   - *Target*: `universe/db/page.lp` & `universe/db/buffer.lp`
-  - *Directive*: Port `universe/db/page.maya` and `buffer.maya` managing slotted 4096-byte binary disk pages with an LRU cache and pin/unpin locking.
+  - *Directive*: Port `universe/db/page.lipi` and `buffer.lipi` managing slotted 4096-byte binary disk pages with an LRU cache and pin/unpin locking.
 - **Agent 29 (Disk-Backed B+Tree Specialist)**:
   - *Role*: Indexing & Search Specialist
   - *Target*: `universe/db/btree.lp`
-  - *Directive*: Port `universe/db/btree.maya` (13,379 bytes) implementing B+Tree root splitting, internal node routing, leaf node traversal, and disk persistence.
+  - *Directive*: Port `universe/db/btree.lipi` (13,379 bytes) implementing B+Tree root splitting, internal node routing, leaf node traversal, and disk persistence.
 - **Agent 30 (Write-Ahead Logging Specialist)**:
   - *Role*: Transaction Durability Specialist
   - *Target*: `universe/db/wal.lp`
-  - *Directive*: Port `universe/db/wal.maya` implementing append-only write-ahead mutation logging with strict `fsync` guarantees.
+  - *Directive*: Port `universe/db/wal.lipi` implementing append-only write-ahead mutation logging with strict `fsync` guarantees.
 - **Agent 31 (ARIES Crash Recovery Specialist)**:
   - *Role*: Crash Recovery Specialist
   - *Target*: `universe/db/recovery.lp`
-  - *Directive*: Port `universe/db/recovery.maya` implementing the ARIES recovery algorithm (Analysis Pass, Redo Pass, Undo Pass) for zero-data-loss crash recovery.
+  - *Directive*: Port `universe/db/recovery.lipi` implementing the ARIES recovery algorithm (Analysis Pass, Redo Pass, Undo Pass) for zero-data-loss crash recovery.
 - **Agent 32 (ACID Transaction Specialist)**:
   - *Role*: Transaction Manager Specialist
   - *Target*: `universe/db/tx.lp`
-  - *Directive*: Port `universe/db/tx.maya` implementing ACID transactions with two-phase locking (2PL) and rollback mechanics.
+  - *Directive*: Port `universe/db/tx.lipi` implementing ACID transactions with two-phase locking (2PL) and rollback mechanics.
 - **Agent 33 (Raft Distributed Consensus Specialist)**:
   - *Role*: Distributed Systems Specialist
   - *Target*: `universe/db/raft.lp`
-  - *Directive*: Ingest `tests/db/test_raft.maya` implementing multi-node Raft consensus: election timeouts, RequestVote RPCs, quorum validation, and state machine log replication.
+  - *Directive*: Ingest `tests/db/test_raft.lipi` implementing multi-node Raft consensus: election timeouts, RequestVote RPCs, quorum validation, and state machine log replication.
 
 ### Division VI: OS Kernel, Drivers & Cloud Unikernel Squad (6 Agents)
 - **Agent 34 (Dual Multiboot 1 & 2 Header Specialist)**:
   - *Role*: Bootloader Specification Specialist
   - *Target*: `universe/os/multiboot.lp`
-  - *Directive*: Synthesize a universal dual-boot header combining Lipi's Multiboot 1 (0x1BADB002) and Maya's Multiboot 2 (0xE85250D6) with 44-byte framebuffer and end tags.
+  - *Directive*: Synthesize a universal dual-boot header combining Lipi's Multiboot 1 (0x1BADB002) and Lipi's Multiboot 2 (0xE85250D6) with 44-byte framebuffer and end tags.
 - **Agent 35 (VirtIO Network Unikernel Specialist)**:
   - *Role*: Cloud Hypervisor Driver Specialist
   - *Target*: `universe/os/unikernel.lp`
-  - *Directive*: Ingest `universe/os/unikernel.maya` implementing VirtIO Net header serialization, descriptor tables, available/used rings, and packet transmit/receive.
+  - *Directive*: Ingest `universe/os/unikernel.lipi` implementing VirtIO Net header serialization, descriptor tables, available/used rings, and packet transmit/receive.
 - **Agent 36 (Hardware Drivers Specialist)**:
   - *Role*: Baremetal Hardware Driver Specialist
   - *Target*: `universe/os/drivers.lp`
@@ -366,11 +366,11 @@ graph TD
 - **Agent 40 (Pure QUIC Protocol Specialist)**:
   - *Role*: Transport Protocol Specialist
   - *Target*: `universe/net/quic.lp`
-  - *Directive*: Port `universe/net/quic.maya` (39KB) implementing UDP-based multiplexed transport, connection IDs, stream framing, and cryptographic handshakes.
+  - *Directive*: Port `universe/net/quic.lipi` (39KB) implementing UDP-based multiplexed transport, connection IDs, stream framing, and cryptographic handshakes.
 - **Agent 41 (Raw Sockets & Packet Synthesizer Specialist)**:
   - *Role*: Raw Network Engineering Specialist
   - *Target*: `universe/net/raw.lp`
-  - *Directive*: Port `universe/net/raw.maya` (53KB) synthesizing raw Ethernet II frames, IPv4/IPv6 headers, TCP 3-way handshakes, and RFC 1071 internet checksums.
+  - *Directive*: Port `universe/net/raw.lipi` (53KB) synthesizing raw Ethernet II frames, IPv4/IPv6 headers, TCP 3-way handshakes, and RFC 1071 internet checksums.
 - **Agent 42 (HTTP/2, gRPC & Protobuf Specialist)**:
   - *Role*: Application Protocol Specialist
   - *Target*: `universe/net/http2.lp` & `universe/net/grpc.lp`
@@ -396,11 +396,11 @@ graph TD
 - **Agent 47 (Unified CLI Driver Specialist)**:
   - *Role*: Developer Experience & Toolchain Architect
   - *Target*: `src/tools/lipi.lp` & `bin/lipi`
-  - *Directive*: Port `cmd/maya/main.maya` (56KB) to create `bin/lipi` dispatching `run`, `build`, `test`, `debug`, `profile`, `fmt`, `lsp`, `pkg`, `repl`, and `self-build`.
+  - *Directive*: Port `cmd/lipi/main.lipi` (56KB) to create `bin/lipi` dispatching `run`, `build`, `test`, `debug`, `profile`, `fmt`, `lsp`, `pkg`, `repl`, and `self-build`.
 - **Agent 48 (Lipi Package Manager LPM Specialist)**:
   - *Role*: Package Ecosystem Specialist
   - *Target*: `src/tools/lipipkg.lp`
-  - *Directive*: Merge Maya's MPM with `lipipkg` supporting `lipi.toml`, dependency resolution, Ed25519 cryptographic signing, and verification.
+  - *Directive*: Canonical sovereign `lipipkg` supporting `lipi.toml`, dependency resolution, Ed25519 cryptographic signing, and verification.
 - **Agent 49 (VSCode Extension & LSP Specialist)**:
   - *Role*: IDE Integration Specialist
   - *Target*: `editors/vscode/` & `src/tools/lipilsp.lp`
@@ -408,7 +408,7 @@ graph TD
 - **Agent 50 (Web Engine & In-Browser WASM Specialist)**:
   - *Role*: Full-Stack Web Specialist
   - *Target*: `universe/web/` & `src/runtime/wasm/`
-  - *Directive*: Ingest Maya's polymorphic web server (FastCGI + VPS Daemon) and ensure seamless operation with Lipi's in-browser WebAssembly virtual silicon.
+  - *Directive*: Ingest Lipi's polymorphic web server (FastCGI + VPS Daemon) and ensure seamless operation with Lipi's in-browser WebAssembly virtual silicon.
 - **Agent 51 (Official Packages & Examples Specialist)**:
   - *Role*: Ecosystem Modules Specialist
   - *Target*: `packages/` & `examples/`
@@ -416,7 +416,7 @@ graph TD
 - **Agent 52 (4-Tier Test Suite Orchestrator)**:
   - *Role*: Quality Assurance Grandmaster
   - *Target*: `tests/`
-  - *Directive*: Integrate Maya's 44 test suites (112,796 lines) with Lipi's existing 68 tests, executing all tests in direct machine code mode with zero failures.
+  - *Directive*: Integrate Lipi's 44 test suites (112,796 lines) with Lipi's existing 68 tests, executing all tests in direct machine code mode with zero failures.
 - **Agent 53 (Forensic Zero-C & Quality Auditor)**:
   - *Role*: Compliance & Integrity Auditor
   - *Target*: Whole Codebase Audit
@@ -433,8 +433,8 @@ graph TD
           │
           ▼
 [Phase 2: Core Runtime, Slab Allocator & Syscall Unification]
-  ├── Port runtime/maya_gc.maya -> src/runtime/lipi_slab.lp & lipi_gc.lp
-  └── Port runtime/maya_syscall.maya -> src/runtime/lipi_syscall.lp
+  ├── Port runtime/lipi_gc.lipi -> src/runtime/lipi_slab.lp & lipi_gc.lp
+  └── Port runtime/lipi_syscall.lipi -> src/runtime/lipi_syscall.lp
           │
           ▼
 [Phase 3: Compiler Middle-End & Multi-Target Backend Ingestion]
@@ -466,7 +466,7 @@ graph TD
           │
           ▼
 [Phase 8: 4-Tier Mega Regression Test Engine & Sovereignty Audit]
-  ├── Run full regression suite (Lipi 68 tests + Maya 44 test suites)
+  ├── Run full regression suite (Lipi 68 tests + Lipi 44 test suites)
   └── Verify 0% C, 0% GCC, 0% Python, 0% PHP, 0% placeholders
 ```
 
@@ -484,7 +484,7 @@ graph TD
 #### Phase 2: Core Runtime, Slab Allocator & Syscall Unification
 - **Target**: `src/runtime/`
 - **Actions**:
-  1. Port `runtime/maya_gc.maya` to `src/runtime/lipi_slab.lp` and `src/runtime/lipi_gc.lp`.
+  1. Port `runtime/lipi_gc.lipi` to `src/runtime/lipi_slab.lp` and `src/runtime/lipi_gc.lp`.
   2. Maintain 8 size classes: 16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B.
   3. Align 64KB memory arenas with bump pointer allocators and bitmap freelists.
   4. Unify direct kernel syscall wrappers in `src/runtime/lipi_syscall.lp` (`sys_read`, `sys_write`, `sys_open`, `sys_mmap`, `sys_munmap`, `sys_ioctl`, `sys_socket`, `sys_bind`, `sys_ptrace`).
@@ -493,18 +493,18 @@ graph TD
 #### Phase 3: Compiler Middle-End & Multi-Target Backend Ingestion
 - **Target**: `src/compiler/middleend/` and `src/compiler/backend/`
 - **Actions**:
-  1. Ingest `compiler/backend/maya_ir.maya` (135KB) into `src/compiler/middleend/lipi_ir.lp`.
-  2. Ingest `compiler/backend/regalloc.maya` (23KB) into `src/compiler/middleend/regalloc.lp`.
-  3. Ingest `compiler/backend/pe_writer.maya` to `src/compiler/backend/pe_writer.lp` for native PE32+ `.exe` Windows generation.
-  4. Ingest `compiler/backend/macho_writer.maya` to `src/compiler/backend/macho_writer.lp` for macOS 64-bit binaries.
-  5. Ingest `compiler/backend/omni_binary.maya` to `src/compiler/backend/omni_binary.lp` for Cosmopolitan APE binaries.
+  1. Ingest `compiler/backend/lipi_ir.lipi` (135KB) into `src/compiler/middleend/lipi_ir.lp`.
+  2. Ingest `compiler/backend/regalloc.lipi` (23KB) into `src/compiler/middleend/regalloc.lp`.
+  3. Ingest `compiler/backend/pe_writer.lipi` to `src/compiler/backend/pe_writer.lp` for native PE32+ `.exe` Windows generation.
+  4. Ingest `compiler/backend/macho_writer.lipi` to `src/compiler/backend/macho_writer.lp` for macOS 64-bit binaries.
+  5. Ingest `compiler/backend/omni_binary.lipi` to `src/compiler/backend/omni_binary.lp` for Cosmopolitan APE binaries.
   6. Ingest `compiler/backend/riscv64/` to `src/compiler/backend/riscv64_emitter.lp`.
 
 #### Phase 4: Universe 30 Domains Ingestion (1,172 files to .lp/.lipi)
 - **Target**: `universe/`
 - **Actions**:
   1. Deploy Subagent Swarms across Divisions IV, V, VI, VII.
-  2. Port all `.maya` files to `.lp` / `.lipi` syntax:
+  2. Port all `.lipi` files to `.lp` / `.lipi` syntax:
      - `universe/ai/` (Tensor 2200L, Autograd, GEMM, NN, Transformer, Quantization)
      - `universe/db/` (4KB Page, Buffer Pool, B+Tree, WAL, ARIES, Transactions, Raft)
      - `universe/os/` (Dual Multiboot 1/2, VirtIO Unikernel, Drivers, IDT, Paging, Shell)
@@ -514,14 +514,14 @@ graph TD
      - `universe/quantum/` (Qubit, Quantum Gates, Shor's Algorithm)
      - `universe/blockchain/` (EVM Bytecode Interpreter, Merkle Patricia Trie)
      - `universe/vm/` (Direct KVM Hypervisor)
-     - `universe/web/` (Polymorphic Server, FastCGI, High-Speed Router, MayaKV)
+     - `universe/web/` (Polymorphic Server, FastCGI, High-Speed Router, LipiKV)
      - `universe/p2p/` (Kademlia DHT, Gossip, Swarm Dispatcher)
-  3. Ensure no `.maya` files remain in the target repository.
+  3. Ensure no `.lipi` files remain in the target repository.
 
 #### Phase 5: Developer Toolchain & CLI Omnipotence (`bin/lipi`)
 - **Target**: `src/tools/`
 - **Actions**:
-  1. Ingest `cmd/maya/main.maya` (56KB) to `src/tools/lipi.lp`.
+  1. Ingest `cmd/lipi/main.lipi` (56KB) to `src/tools/lipi.lp`.
   2. Compile `src/tools/lipi.lp` using `bin/lipc` to generate the sovereign executable `bin/lipi`.
   3. Support all subcommands:
      - `lipi run <file.lp>`: Compile to memory and execute immediately
@@ -563,7 +563,7 @@ graph TD
 #### Phase 8: 4-Tier Mega Regression Test Engine & Sovereignty Audit
 - **Target**: `tests/`
 - **Actions**:
-  1. Combine Lipi's 68 existing tests with Maya's 44 test suites (112,796 lines).
+  1. Combine Lipi's 68 existing tests with Lipi's 44 test suites (112,796 lines).
   2. Execute Tier 1: Unit & Feature Tests (syntax, control flow, arithmetic, arrays, strings).
   3. Execute Tier 2: Boundary & Stress Tests (recursion depth, large allocations, integer limits).
   4. Execute Tier 3: Integration Tests (database WAL + recovery, neural net training, network sockets).
@@ -653,7 +653,7 @@ Every single phase of execution must pass rigorous empirical verification gates 
 | **G6** | Baremetal OS & Drivers | `./bin/lipi run tests/os/test_baremetal_kernel_drivers.lp` | 6/6 tests pass (Dual Multiboot 1/2, VGA, COM1, PS/2, IDT, Paging) |
 | **G7** | Cloud MicroVM Unikernel | `./bin/lipi run tests/os/test_live_qemu_boot.lp` | QEMU cold boots unikernel image in <5ms with COM1 serial telemetry |
 | **G8** | Native GUI & Rasterizer | `./bin/lipi run tests/gui/test_gui_engine.lp` | 13/13 tests pass (Framebuffer mmap, Bresenham, glyph font rasterization) |
-| **G9** | Sovereign Web Engine | `./bin/lipi run tests/web/test_sovereign_web_engine.lp` | 4/4 sections pass (HTTP/1.1, HTTP/2, URL Router, MayaKV) |
+| **G9** | Sovereign Web Engine | `./bin/lipi run tests/web/test_sovereign_web_engine.lp` | 4/4 sections pass (HTTP/1.1, HTTP/2, URL Router, LipiKV) |
 | **G10**| Multi-Target Binary Output | `./bin/lipi build --target windows /tmp/test.exe` | Valid PE32+ header emitted without Windows SDK or cross-compilers |
 | **G11**| Full Regression Pass | `bash tests/run_tests.sh --direct-elf` | 100% of tests pass across all tiers with 0 failures |
 
@@ -666,9 +666,9 @@ Every single phase of execution must pass rigorous empirical verification gates 
    - Work proceeds on `bin/lipc_next`. Only after passing `cmp bin/lipc_next_gen2 bin/lipc_next_gen3` and running the test suite will `bin/lipc_bin` be atomically replaced.
 2. **Memory Layout Protection**:
    - `ELF_BASE_VADDR` remains anchored at `0x40000000` (1GB).
-   - Ingested Maya modules will utilize 64-bit pointers and 8-byte word alignments to eliminate heap/string address overlap.
+   - Ingested Lipi modules will utilize 64-bit pointers and 8-byte word alignments to eliminate heap/string address overlap.
 3. **Zero Placeholder Enforcement**:
-   - Any function, driver, or mathematical operation ported from Maya must contain its complete, production logic.
+   - Any function, driver, or mathematical operation ported from Lipi must contain its complete, production logic.
    - Code containing `todo`, `placeholder`, `stub`, or fake assertions (`assert(1 == 1)`) is strictly rejected by the automated quality gate.
 4. **Binary Hermeticity Protection**:
    - All builds must execute directly against native Linux kernel syscall interfaces without dynamic linker dependencies (`/lib64/ld-linux-x86-64.so.2`).
@@ -676,9 +676,9 @@ Every single phase of execution must pass rigorous empirical verification gates 
 
 ---
 
-## 📜 Section 9: The Philosophical Manifestation (Maya Reborn in Lipi)
+## 📜 Section 9: The Philosophical Manifestation (Lipi Reborn in Lipi)
 
-The soul, defiance, and cosmic ambition of Maya will be permanently codified into the master Lipi repository inside `docs/LIPI_UNIVERSE.md` and `docs/PHILOSOPHY.md`.
+The soul, defiance, and cosmic ambition of Lipi will be permanently codified into the master Lipi repository inside `docs/LIPI_UNIVERSE.md` and `docs/PHILOSOPHY.md`.
 
 ### The 7 Sacred Pillars of the Unified LIPI Universe:
 1. **Absolute Silicon Sovereignty (পরম সিলিকন সার্বভৌমত্ব)**: We do not accept foreign runtime chains, foreign C libraries, or foreign package managers. We communicate directly with silicon registers and kernel syscalls.
@@ -687,7 +687,7 @@ The soul, defiance, and cosmic ambition of Maya will be permanently codified int
 4. **Universal Computing Completeness (মহাবিশ্বের সর্বাঙ্গীণ পূর্ণতা)**: An operating system kernel, a slotted-page database, a strided tensor autograd engine, a QUIC transport protocol, a zero-knowledge proof system, and a microvm unikernel—all written in the single sovereign language.
 5. **Radical Zero-Abstraction Waste (শূন্য-অপচয় বিশুদ্ধতা)**: Zero hidden heap allocations, zero garbage collection overhead where deterministic stack memory suffices, zero foreign shim layers.
 6. **Cosmopolitan Portability (সার্বজনীন বহনযোগ্যতা)**: Native machine code emissions for Linux ELF64, Windows PE32+, Apple Mach-O 64, RISC-V RV64GC, Cosmopolitan APE, and WebAssembly W3C.
-7. **The Eternal Living Monolith (অনশ্বর জীবন্ত মনোলিথ)**: Maya is not dead; Lipi is not diminished. Together, they form a single eternal monument to self-reliance, engineering mastery, and uncompromising sovereign computing.
+7. **The Eternal Living Monolith (অনশ্বর জীবন্ত মনোলিথ)**: Lipi is not dead; Lipi is not diminished. Together, they form a single eternal monument to self-reliance, engineering mastery, and uncompromising sovereign computing.
 
 ---
 
@@ -698,7 +698,7 @@ The soul, defiance, and cosmic ambition of Maya will be permanently codified int
 > We propose that `./bin/lipi` is the sole unified CLI command for all developer operations (`lipi run`, `lipi build`, `lipi test`, `lipi debug`, `lipi pkg`, `lipi repl`). The legacy `./bin/lipc` compiler binary remains available as a low-level compiler interface.
 > 
 > **Decision 2: Universal File Extension Acceptance**
-> Both `.lp` and `.lipi` will be recognized natively by the compiler, language server, and IDE plugins. All 1,172 `.maya` files will be permanently converted to `.lp` / `.lipi`.
+> Both `.lp` and `.lipi` will be recognized natively by the compiler, language server, and IDE plugins. All 1,172 `.lipi` files will be permanently converted to `.lp` / `.lipi`.
 > 
-> **Decision 3: Retirement of the Standalone `/home/shafiullah/Documents/file/maya` Directory**
-> Once all files, architectures, tests, and documentation are verified and committed in `/home/shafiullah/Documents/file/work/lipi`, the separate `maya/` directory will be archived or retired, leaving **LIPI** as the sole, unified sovereign universe.
+> **Decision 3: Retirement of the Standalone `/home/shafiullah/Documents/file/lipi` Directory**
+> Once all files, architectures, tests, and documentation are verified and committed in `/home/shafiullah/Documents/file/work/lipi`, the separate `lipi/` directory will be archived or retired, leaving **LIPI** as the sole, unified sovereign universe.

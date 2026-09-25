@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 4 — ADVANCED JUST-IN-TIME (JIT) COMPILER
-@! 100% Written in Pure Maya Language
+@! LIPI COMPILER STAGE 4 — ADVANCED JUST-IN-TIME (JIT) COMPILER
+@! 100% Written in Pure Lipi Language
 @! Target: x86-64 Architecture
 @! ============================================================================
 
@@ -66,7 +66,7 @@ import "universe/os/syscalls"
   return jit_emit_byte(buf, val)
 @end
 
-@! JIT Compile a Maya MIR Function
+@! JIT Compile a Lipi MIR Function
 @fn jit_compile_func(engine, mir_func)
   buf = jit_buffer_new()
   

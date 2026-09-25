@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 4 — PE/COFF WINDOWS NATIVE BINARY EMITTER
-@! 100% Written in Pure Maya Language — Zero MSVC/MinGW Dependency
+@! LIPI COMPILER STAGE 4 — PE/COFF WINDOWS NATIVE BINARY EMITTER
+@! 100% Written in Pure Lipi Language — Zero MSVC/MinGW Dependency
 import "universe/os/fs"
 @! ============================================================================
 

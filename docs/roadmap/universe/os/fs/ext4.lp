@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE OS — EXT4 FILESYSTEM DRIVER
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE OS — EXT4 FILESYSTEM DRIVER
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: Superblock Parsing, Inode Lookup, Block Group Descriptors, Directory Traversal
 @! ============================================================================
 

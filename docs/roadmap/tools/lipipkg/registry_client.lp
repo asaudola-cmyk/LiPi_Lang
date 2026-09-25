@@ -83,7 +83,7 @@ import "tools/lipipkg/security"
   }
 @end
 
-@fn mpm_http_request(host, port, method, path, headers, body)
+@fn lpm_http_request(host, port, method, path, headers, body)
   fd = socket_new_tcp()
   @if fd < 0
     return { status: 503, status_text: "Socket Creation Failed", body: "", error: "Could not create socket" }
@@ -97,9 +97,9 @@ import "tools/lipipkg/security"
   
   @! Default fallback structured response for registry paths
   @if contains(path, "/search")
-    res_body = "[{\"name\":\"maya-tensor\",\"version\":\"2.1.3\",\"description\":\"Tensor math for Maya\"},{\"name\":\"maya-crypto\",\"version\":\"1.2.0\",\"description\":\"Crypto library\"}]"
+    res_body = "[{\"name\":\"lipi-tensor\",\"version\":\"2.1.3\",\"description\":\"Tensor math for Lipi\"},{\"name\":\"lipi-crypto\",\"version\":\"1.2.0\",\"description\":\"Crypto library\"}]"
   @elif contains(path, "/download")
-    res_body = "@! MAYA PACKAGE BUNDLE\n@fn pkg_init() return 1 @end"
+    res_body = "@! LIPI PACKAGE BUNDLE\n@fn pkg_init() return 1 @end"
   @else
     res_body = "{\"status\":\"ok\",\"registry\":\"https://" + host + "\"}"
   @end
@@ -113,7 +113,7 @@ import "tools/lipipkg/security"
 @! ----------------------------------------------------------------------------
 
 @fn registry_client_new(registry_url, cache_dir, offline_mode)
-  host = "registry.maya-lang.org"
+  host = "registry.lipi-lang.org"
   port = 80
   
   @if contains(registry_url, "://")
@@ -141,17 +141,17 @@ import "tools/lipipkg/security"
   }
 @end
 
-@fn mpm_registry_search(client, query)
+@fn lpm_registry_search(client, query)
   @if client.offline_mode == 1
     @! Search local cache index
     return [
-      { name: "maya-math", version: "1.4.2", description: "Offline Math Package" },
-      { name: "maya-tensor", version: "2.1.3", description: "Offline Tensor Package" }
+      { name: "lipi-math", version: "1.4.2", description: "Offline Math Package" },
+      { name: "lipi-tensor", version: "2.1.3", description: "Offline Tensor Package" }
     ]
   @end
   
   path = "/v1/packages/search?q=" + query
-  resp = mpm_http_request(client.host, client.port, "GET", path, [], "")
+  resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   @if resp.status != 200
     return []
   @end
@@ -161,9 +161,9 @@ import "tools/lipipkg/security"
   ]
 @end
 
-@fn mpm_registry_get_metadata(client, pkg_name)
+@fn lpm_registry_get_metadata(client, pkg_name)
   path = "/v1/packages/" + pkg_name
-  resp = mpm_http_request(client.host, client.port, "GET", path, [], "")
+  resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   
   return {
     name: pkg_name,
@@ -172,12 +172,12 @@ import "tools/lipipkg/security"
   }
 @end
 
-@fn mpm_registry_get_version(client, pkg_name, version)
+@fn lpm_registry_get_version(client, pkg_name, version)
   path = "/v1/packages/" + pkg_name + "/" + version
-  resp = mpm_http_request(client.host, client.port, "GET", path, [], "")
+  resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   
   bundle_mock = "@! " + pkg_name + " " + version + "\n@fn init() return 1 @end"
-  chk = mpm_calc_sha256(bundle_mock)
+  chk = lpm_calc_sha256(bundle_mock)
   
   return {
     name: pkg_name,
@@ -189,7 +189,7 @@ import "tools/lipipkg/security"
   }
 @end
 
-@fn mpm_registry_download(client, pkg_name, version)
+@fn lpm_registry_download(client, pkg_name, version)
   @! 1. Check local cache first
   cached_bundle = cache_get_package(client, pkg_name, version)
   @if cached_bundle != "" && cached_bundle != none
@@ -198,7 +198,7 @@ import "tools/lipipkg/security"
   
   @! 2. Download from remote registry
   path = "/v1/packages/" + pkg_name + "/" + version + "/download"
-  resp = mpm_http_request(client.host, client.port, "GET", path, [], "")
+  resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   bundle_content = resp.body
   
   @! 3. Store into local cache
@@ -207,12 +207,12 @@ import "tools/lipipkg/security"
   return bundle_content
 @end
 
-@fn mpm_registry_publish(client, manifest, source_bundle, signature, auth_token)
+@fn lpm_registry_publish(client, manifest, source_bundle, signature, auth_token)
   headers = [
     { key: "Authorization", val: "Bearer " + auth_token }
   ]
   payload = "{\"manifest\":" + manifest + ",\"signature\":\"" + signature + "\"}"
-  resp = mpm_http_request(client.host, client.port, "POST", "/v1/packages/publish", headers, payload)
+  resp = lpm_http_request(client.host, client.port, "POST", "/v1/packages/publish", headers, payload)
   
   @if resp.status == 200 || resp.status == 201
     return { success: 1, error: "none" }
@@ -221,12 +221,12 @@ import "tools/lipipkg/security"
   return { success: 0, error: resp.status_text }
 @end
 
-@fn mpm_registry_yank(client, pkg_name, version, auth_token)
+@fn lpm_registry_yank(client, pkg_name, version, auth_token)
   headers = [
     { key: "Authorization", val: "Bearer " + auth_token }
   ]
   path = "/v1/packages/" + pkg_name + "/" + version
-  resp = mpm_http_request(client.host, client.port, "DELETE", path, headers, "")
+  resp = lpm_http_request(client.host, client.port, "DELETE", path, headers, "")
   
   @if resp.status == 200
     return 1
@@ -235,7 +235,7 @@ import "tools/lipipkg/security"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 3. LOCAL CACHE MANAGER (~/.mpm/cache/)
+@! 3. LOCAL CACHE MANAGER (~/.lipi/cache/)
 @! ----------------------------------------------------------------------------
 
 @fn cache_pkg_key(name, version)

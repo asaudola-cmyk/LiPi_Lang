@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA LANGUAGE SERVER PROTOCOL (LSP) ENGINE
-@! 100% Written in Pure Maya Language
+@! LIPI LANGUAGE SERVER PROTOCOL (LSP) ENGINE
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

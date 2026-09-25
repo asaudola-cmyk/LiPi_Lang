@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE 3D - SCENE GRAPH & ANIMATION SYSTEM
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE 3D - SCENE GRAPH & ANIMATION SYSTEM
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"

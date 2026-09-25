@@ -162,38 +162,38 @@ import "universe/core/string"
 // ============================================================================
 
 @fn dwarf_unit_create(producer, source_file, comp_dir, low_pc, high_pc, stmt_list_offset)
-  // WHY: Constructs a compilation unit metadata container.
-  return {
-    dwu_producer: producer,
-    dwu_source_file: source_file,
-    dwu_comp_dir: comp_dir,
-    dwu_low_pc: low_pc,
-    dwu_high_pc: high_pc,
-    dwu_stmt_list_offset: stmt_list_offset,
-    dwu_functions: [],
-    dwu_types: []
-  }
+  // WHY: Constructs a compilation unit metadata container using typed DwarfUnitInfo struct.
+  u = DwarfUnitInfo()
+  u.dwu_producer = producer
+  u.dwu_source_file = source_file
+  u.dwu_comp_dir = comp_dir
+  u.dwu_low_pc = low_pc
+  u.dwu_high_pc = high_pc
+  u.dwu_stmt_list_offset = stmt_list_offset
+  u.dwu_functions = []
+  u.dwu_types = []
+  return u
 @end
 
 @fn dwarf_unit_add_function(unit, name, low_pc, high_pc, decl_file, decl_line)
-  // WHY: Registers a subprogram function DIE descriptor.
-  unit.dwu_functions = unit.dwu_functions.push({
-    dwf_name: name,
-    dwf_low_pc: low_pc,
-    dwf_high_pc: high_pc,
-    dwf_decl_file: decl_file,
-    dwf_decl_line: decl_line
-  })
+  // WHY: Registers a subprogram function DIE descriptor using typed DwarfFunctionInfo struct.
+  f = DwarfFunctionInfo()
+  f.dwf_name = name
+  f.dwf_low_pc = low_pc
+  f.dwf_high_pc = high_pc
+  f.dwf_decl_file = decl_file
+  f.dwf_decl_line = decl_line
+  unit.dwu_functions = unit.dwu_functions.push(f)
   return unit
 @end
 
 @fn dwarf_unit_add_base_type(unit, name, byte_size, encoding)
-  // WHY: Registers a fundamental primitive type descriptor (e.g. i64, f64).
-  unit.dwu_types = unit.dwu_types.push({
-    dwt_name: name,
-    dwt_byte_size: byte_size,
-    dwt_encoding: encoding
-  })
+  // WHY: Registers a fundamental primitive type descriptor using typed DwarfBaseTypeInfo struct.
+  t = DwarfBaseTypeInfo()
+  t.dwt_name = name
+  t.dwt_byte_size = byte_size
+  t.dwt_encoding = encoding
+  unit.dwu_types = unit.dwu_types.push(t)
   return unit
 @end
 

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND — PGO INSTRUMENTATION PASS (pgo_instrument.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER MIDDLEEND — PGO INSTRUMENTATION PASS (pgo_instrument.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Basic Block Entry Probes, Edge/Branch Profiling, Loop Trip Count
 @!           Counters, Indirect Call Site Probes, Counter Vector Allocation
 @! ============================================================================

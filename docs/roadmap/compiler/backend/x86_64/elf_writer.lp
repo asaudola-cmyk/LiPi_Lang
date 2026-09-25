@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 4 — COMPLETE ELF64 NATIVE BINARY EMITTER
-@! 100% Written in Pure Maya Language — Zero GCC / Clang / LLD Dependency
+@! LIPI COMPILER STAGE 4 — COMPLETE ELF64 NATIVE BINARY EMITTER
+@! 100% Written in Pure Lipi Language — Zero GCC / Clang / LLD Dependency
 import "universe/os/fs"
 @! ============================================================================
 

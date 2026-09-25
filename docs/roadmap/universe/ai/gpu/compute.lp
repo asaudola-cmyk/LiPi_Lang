@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI - GPU COMPUTE LAYER (CUDA/VULKAN ABSTRACTION)
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE AI - GPU COMPUTE LAYER (CUDA/VULKAN ABSTRACTION)
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -10,7 +10,7 @@ import "universe/core/string"
 @fn gpu_device_new(device_id)
   return {
     id: device_id,
-    name: "Maya Virtual Quantum GPU",
+    name: "Lipi Virtual Quantum GPU",
     vram_total: 24 * 1024 * 1024 * 1024, @! 24GB
     vram_used: 0,
     buffers: []
@@ -39,7 +39,7 @@ import "universe/core/string"
 @! Copy data from CPU RAM to GPU VRAM
 @fn gpu_memcpy_host_to_device(device_ptr, host_array)
   @! In a real engine, this calls the native graphics API (CUDA/Vulkan)
-  @! For Maya, this is an intrinsic stub.
+  @! For Lipi, this is an intrinsic stub.
   return 1
 @end
 
@@ -49,9 +49,9 @@ import "universe/core/string"
   return 1
 @end
 
-@! Compiles a Maya function into a GPU Compute Shader
-@fn gpu_compile_shader(maya_func_ast)
-  @! This would translate Maya AST to SPIR-V or PTX
+@! Compiles a Lipi function into a GPU Compute Shader
+@fn gpu_compile_shader(lipi_func_ast)
+  @! This translates Lipi AST to SPIR-V or PTX
   shader_binary = "SPIRV_MAGIC_BYTES..."
   return {
     binary: shader_binary,

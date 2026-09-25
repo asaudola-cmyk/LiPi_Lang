@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA ASSIMILATOR — JAVASCRIPT / TYPESCRIPT TO MAYA TRANSPILER
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI ASSIMILATOR — JAVASCRIPT / TYPESCRIPT TO LIPI TRANSPILER
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: JS/TS syntax parsing, type stripping, arrow fn conversion, console.log
 @! ============================================================================
 
@@ -142,7 +142,7 @@ import "universe/core/string"
   return res
 @end
 
-@fn js_transpile_to_maya(source_str)
+@fn js_transpile_to_lipi(source_str)
   @! Pre-process: standardize braces and semicolons to newlines
   normalized = source_str
   normalized = string_replace(normalized, "{", "\n{\n")

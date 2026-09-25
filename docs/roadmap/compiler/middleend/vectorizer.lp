@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND — AUTO-VECTORIZATION PASS (vectorizer.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER MIDDLEEND — AUTO-VECTORIZATION PASS (vectorizer.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: SIMD Loop Transformation, Vector Preamble, Vector Main Loop (8x/4x),
 @!           Horizontal Reduction Epilogue, Scalar Remainder Cleanup Loop
 @! ============================================================================

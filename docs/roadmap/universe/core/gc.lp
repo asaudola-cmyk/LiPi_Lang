@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CORE — GENERATIONAL & TRI-COLOR ZERO-PAUSE GARBAGE COLLECTOR
-@! 100% Written in Pure Maya Language — Zero C Runtime Dependencies
+@! LIPI UNIVERSE CORE — GENERATIONAL & TRI-COLOR ZERO-PAUSE GARBAGE COLLECTOR
+@! 100% Written in Pure Lipi Language — Zero C Runtime Dependencies
 @! Features: Tri-Color Mark-Sweep, Eden/Survivor/Tenured Generations, Card Table
 @! ============================================================================
 

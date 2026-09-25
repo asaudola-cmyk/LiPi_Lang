@@ -613,24 +613,137 @@ fn cmd_init proj_name
     say "\n\033[1;32m✅ Project initialized successfully!\033[0m"
     say "  To build: cd " + proj_name + " && lipipkg build"
 
+// ── Process Spawner & Toolchain Orchestration (0% Libc / 0% Bash) ─────────────
+// WHY: Freestanding package manager must spawn compilers and test binaries
+// natively via direct Linux kernel ABI: sys_mmap (9), sys_fork (57),
+// sys_execve (59), sys_wait4 (61), and sys_munmap (11).
+fn pkg_spawn_exec cmd_path arg1 arg2 arg3 arg4
+    argv = syscall(9, 0, 64, 3, 34, -1, 0)
+    mem_word_write(argv, 0, cmd_path)
+
+    idx = 1
+    if len(arg1) > 0
+        mem_word_write(argv, idx * 8, arg1)
+        idx = idx + 1
+    if len(arg2) > 0
+        mem_word_write(argv, idx * 8, arg2)
+        idx = idx + 1
+    if len(arg3) > 0
+        mem_word_write(argv, idx * 8, arg3)
+        idx = idx + 1
+    if len(arg4) > 0
+        mem_word_write(argv, idx * 8, arg4)
+        idx = idx + 1
+    mem_word_write(argv, idx * 8, 0)
+
+    env = syscall(9, 0, 32, 3, 34, -1, 0)
+    path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
+    mem_word_write(env, 0, path_env)
+    mem_word_write(env, 8, 0)
+
+    st = syscall(9, 0, 8, 3, 34, -1, 0)
+    mem_word_write(st, 0, 0)
+
+    pid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if pid == 0
+        syscall(59, cmd_path, argv, env, 0, 0, 0)
+        syscall(60, 127, 0, 0, 0, 0, 0)
+
+    syscall(61, pid, st, 0, 0, 0, 0)
+    raw_status = mem_word_read(st, 0)
+    exit_code = (raw_status / 256) % 256
+
+    syscall(11, argv, 64, 0, 0, 0, 0)
+    syscall(11, env, 32, 0, 0, 0, 0)
+    syscall(11, st, 8, 0, 0, 0, 0)
+
+    return exit_code
+
+fn pkg_resolve_compiler
+    // WHY: Locates available Lipi compiler binary in repository or system path
+    if syscall(21, "bin/lipc", 0, 0, 0, 0, 0) == 0
+        return "bin/lipc"
+    if syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0
+        return "bin/lipc_bin"
+    if syscall(21, "/home/shafiullah/.local/bin/lipc", 0, 0, 0, 0, 0) == 0
+        return "/home/shafiullah/.local/bin/lipc"
+    return "lipc"
+
 fn cmd_build target
     say "\033[1;36m⚙️  Compiling Lipi package project...\033[0m"
-    say "  • Compiler    : bin/lipc_bin (Sovereign Machine Code Compiler)"
-    say "  • Entry Point : src/main.lp"
-    say "  • Output      : build/app"
+    compiler = pkg_resolve_compiler()
 
+    // Determine entry point
+    entry_path = ""
+    if len(target) > 0 and target != "release" and target != "debug" and syscall(21, target, 0, 0, 0, 0, 0) == 0
+        entry_path = target
+    elif syscall(21, "src/main.lp", 0, 0, 0, 0, 0) == 0
+        entry_path = "src/main.lp"
+    elif syscall(21, "main.lp", 0, 0, 0, 0, 0) == 0
+        entry_path = "main.lp"
+    else
+        say "❌ [ত্রুটি / Error]: কোনো সোর্স ফাইল পাওয়া যায়নি (No entry point found: tried " + target + ", src/main.lp, main.lp)"
+        return 1
+
+    out_bin = "build/app"
+    say "  • Compiler    : " + compiler + " (Sovereign Machine Code Compiler)"
+    say "  • Entry Point : " + entry_path
+    say "  • Output      : " + out_bin
+
+    // Ensure build directory exists: sys_mkdir (83)
     syscall(83, "build", 509, 0, 0, 0, 0)
+
+    // Execute compilation: compiler entry_path -o out_bin
+    code = pkg_spawn_exec(compiler, entry_path, "-o", out_bin, "")
+    if code != 0
+        say "\n\033[1;31m❌ Build failed with exit code: " + str(code) + "\033[0m"
+        return code
+
     say "  ✔ Compilation finished!"
-    say "  • Output binary : build/app (Pure ELF64)"
+    say "  • Output binary : " + out_bin + " (Pure ELF64)"
     say "  • Dependencies  : 0% Libc | 0% GCC"
-    say "\n\033[1;32m✅ Build succeeded! -> build/app\033[0m"
+    say "\n\033[1;32m✅ Build succeeded! -> " + out_bin + "\033[0m"
+    return 0
 
 fn cmd_test
     say "\033[1;36m🧪 Running Lipi package test suite...\033[0m"
-    say "  \033[38;2;0;255;100m✔\033[0m 01_basic_syntax.lp      [PASS]"
-    say "  \033[38;2;0;255;100m✔\033[0m 02_hardware_syscalls.lp [PASS]"
-    say "  \033[38;2;0;255;100m✔\033[0m 03_memory_allocator.lp  [PASS]"
-    say "\n\033[1;32m✅ All package tests passed!\033[0m"
+    test_runner = ""
+    if syscall(21, "bin/lipi-test", 0, 0, 0, 0, 0) == 0
+        test_runner = "bin/lipi-test"
+    elif syscall(21, "bin/lipi", 0, 0, 0, 0, 0) == 0
+        test_runner = "bin/lipi"
+
+    if test_runner == "bin/lipi-test"
+        say "  • Invoking sovereign test runner: bin/lipi-test"
+        code = pkg_spawn_exec(test_runner, "", "", "", "")
+        if code == 0
+            say "\n\033[1;32m✅ All package tests passed!\033[0m"
+        else
+            say "\n\033[1;31m❌ Test suite failed with code: " + str(code) + "\033[0m"
+        return code
+    elif test_runner == "bin/lipi"
+        say "  • Invoking sovereign test dispatcher: bin/lipi test"
+        code = pkg_spawn_exec(test_runner, "test", "", "", "")
+        if code == 0
+            say "\n\033[1;32m✅ All package tests passed!\033[0m"
+        else
+            say "\n\033[1;31m❌ Test suite failed with code: " + str(code) + "\033[0m"
+        return code
+    else
+        if syscall(21, "tests/01_hello.lp", 0, 0, 0, 0, 0) == 0
+            compiler = pkg_resolve_compiler()
+            code = pkg_spawn_exec(compiler, "tests/01_hello.lp", "-o", "/tmp/lipi_pkg_tst", "")
+            if code == 0
+                run_code = pkg_spawn_exec("/tmp/lipi_pkg_tst", "", "", "", "")
+                syscall(87, "/tmp/lipi_pkg_tst", 0, 0, 0, 0, 0)
+                if run_code == 0
+                    say "  \033[38;2;0;255;100m✔\033[0m tests/01_hello.lp [PASS]"
+                    say "\n\033[1;32m✅ All package tests passed!\033[0m"
+                    return 0
+            say "\n\033[1;31m❌ Test failed!\033[0m"
+            return 1
+        say "  ⚠ No tests found in tests/ directory."
+        return 0
 
 fn cmd_clean
     say "🧹 Purging build/ directory artifacts..."
@@ -875,11 +988,13 @@ fn main
     if cmd == "build" or cmd == "বিল্ড"
         target = "release"
         if argc >= 3 target = get(args, 2)
-        cmd_build(target)
+        b_res = cmd_build(target)
+        if b_res != 0 syscall(60, b_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "test" or cmd == "পরীক্ষা"
-        cmd_test()
+        t_res = cmd_test()
+        if t_res != 0 syscall(60, t_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "clean" or cmd == "পরিষ্কার"

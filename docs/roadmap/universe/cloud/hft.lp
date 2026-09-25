@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CLOUD - HFT (HIGH-FREQUENCY TRADING) CORE (universe/cloud/hft.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI UNIVERSE CLOUD - HFT (HIGH-FREQUENCY TRADING) CORE (universe/cloud/hft.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
 import "universe/core/collections"

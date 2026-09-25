@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE CRYPTO — LAYER 1 BLOCKCHAIN CORE & UTXO LEDGER
-@! 100% Written in Pure Maya Language — Zero External Cryptographic Dependencies
+@! LIPI UNIVERSE CRYPTO — LAYER 1 BLOCKCHAIN CORE & UTXO LEDGER
+@! 100% Written in Pure Lipi Language — Zero External Cryptographic Dependencies
 @! Features: Merkle Trees, PoW Mining, UTXO State Machine, Longest-Chain Consensus
 @! ============================================================================
 
@@ -204,7 +204,7 @@ import "universe/core/string"
 @! ----------------------------------------------------------------------------
 
 @fn blockchain_new()
-  genesis_tx = transaction_new([], [tx_out_new("Maya_Genesis_Address", 50000000)], 0)
+  genesis_tx = transaction_new([], [tx_out_new("Lipi_Genesis_Address", 50000000)], 0)
   genesis_block = block_new(0, [0, 0, 0, 0, 0, 0, 0, 0], [genesis_tx])
   genesis_block = block_mine(genesis_block, 1)
   

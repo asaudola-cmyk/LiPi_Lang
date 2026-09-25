@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE OS — ADVANCED ASYNC RUNTIME & GREEN THREAD SCHEDULER
-@! 100% Written in Pure Maya Language — Zero External C / OS Runtime Dependencies
+@! LIPI UNIVERSE OS — ADVANCED ASYNC RUNTIME & GREEN THREAD SCHEDULER
+@! 100% Written in Pure Lipi Language — Zero External C / OS Runtime Dependencies
 @! Features: Coroutines, Green Threads, CSP Channels, Promises, Event Loop, Timers
 @! ============================================================================
 

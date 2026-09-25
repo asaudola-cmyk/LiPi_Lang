@@ -1,5 +1,5 @@
 @! ============================================================================
-@! MAYA OMNIPOTENT TYPE CHECKER - 100% PURE MAYA
+@! LIPI OMNIPOTENT TYPE CHECKER - 100% PURE LIPI
 @! Algorithm: Advanced Hindley-Milner Algorithm W with Row Polymorphism,
 @! Trait Bounds, Union Types, and Generic Monomorphization.
 @! ============================================================================

@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS KERNEL — 4-LEVEL x86-64 PAGING & VIRTUAL MEMORY (paging.my)
-@! 100% Written in Pure Maya Language — Complete MMU Page Table Architecture
+@! LIPI OS KERNEL — 4-LEVEL x86-64 PAGING & VIRTUAL MEMORY (paging.my)
+@! 100% Written in Pure Lipi Language — Complete MMU Page Table Architecture
 @! ============================================================================
 
 @! Page Entry Flags:

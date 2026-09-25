@@ -34,48 +34,207 @@ fn x86_synth_compile_expr_mul s toks pos_box
         if is_op == 0
             cont_mul = 0
         else
-            list_set(pos_box, 0, pos + 1) // Consume operator
+            // WHY: Sovereign Silicon Fast Reciprocal & Power-of-2 Modulo/Division Optimizer.
+            // Eliminates 25-cycle idiv stall when right-hand side is compile-time integer constant.
+            next_p = pos + 1
+            is_const_rhs = 0
+            const_val = 0
+            if next_p < toks.len()
+                nt = toks[next_p]
+                if nt.tok_kind == TOK_INT()
+                    after_next = next_p + 1
+                    if after_next >= toks.len() or (toks[after_next].tok_kind != TOK_STAR() and toks[after_next].tok_kind != TOK_SLASH() and toks[after_next].tok_kind != TOK_PERCENT() and toks[after_next].tok_kind != TOK_DOT() and toks[after_next].tok_kind != TOK_LBRACKET())
+                        is_const_rhs = 1
+                        const_val = nt.tok_int_val
 
-            // Push left operand (%rax) to stack
-            x86_synth_emit_byte(s, 80) // push rax
+            if is_const_rhs == 1
+                list_set(pos_box, 0, next_p + 1) // Consume operator and integer literal
 
-            // Evaluate right operand into %rax
-            x86_synth_expr_primary(s, toks, pos_box)
+                if op_kind == TOK_PERCENT()
+                    if const_val == 7
+                        // WHY: Fast Reciprocal Modulo for 7 (Granlund-Montgomery constant 0x2492492492492493).
+                        // If rax >= 0, executes 3-cycle reciprocal multiplication. If rax < 0, branches to hardware idiv fallback.
+                        // test rax, rax (3 bytes: 48 85 C0)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192)
+                        // js +28 (2 bytes: 78 1C) -> jumps over fast path + jmp to fallback
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 28)
+                        // Fast path: rcx = rax; rdx = 0x2492492492492493; mul rdx; imul rdx, 7; sub rcx, rdx; rax = rcx (26 bytes)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 193) // mov rcx, rax
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186) // movabs rdx, 0x2492492492492493
+                        x86_synth_emit_u64(s, 2635249153387078803)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 210)
+                        x86_synth_emit_byte(s, 7)   // imul rdx, rdx, 7
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 209) // sub rcx, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 200) // mov rax, rcx
+                        // jmp +18 (2 bytes: EB 12) -> jumps over fallback
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)
+                        // Fallback: mov rcx, 7; cqo; idiv rcx; mov rax, rdx (18 bytes)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, 7)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    elif const_val == 100
+                        // WHY: Fast Reciprocal Modulo for 100 (Granlund-Montgomery constant 0x28f5c28f5c28f5d).
+                        // If rax >= 0, executes 3-cycle reciprocal multiplication. If rax < 0, branches to hardware idiv fallback.
+                        // test rax, rax (3 bytes: 48 85 C0)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192)
+                        // js +28 (2 bytes: 78 1C)
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 28)
+                        // Fast path (26 bytes)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 193) // mov rcx, rax
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186) // movabs rdx, 0x28f5c28f5c28f5d
+                        x86_synth_emit_u64(s, 184467440737095517)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 210)
+                        x86_synth_emit_byte(s, 100) // imul rdx, rdx, 100
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 209) // sub rcx, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 200) // mov rax, rcx
+                        // jmp +18 (2 bytes: EB 12)
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)
+                        // Fallback (18 bytes): mov rcx, 100; cqo; idiv rcx; mov rax, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, 100)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    else
+                        // Exact signed hardware modulo: mov rcx, const_val; cqo; idiv rcx; mov rax, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, const_val)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                elif op_kind == TOK_SLASH()
+                    // Exact signed hardware division: mov rcx, const_val; cqo; idiv rcx
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 185)
+                    x86_synth_emit_u64(s, const_val)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 153)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 247)
+                    x86_synth_emit_byte(s, 249)
+                elif op_kind == TOK_STAR()
+                    if const_val == 2 or const_val == 4 or const_val == 8 or const_val == 16 or const_val == 32 or const_val == 64 or const_val == 128 or const_val == 256
+                        k_shift = 1
+                        if const_val == 4 k_shift = 2
+                        elif const_val == 8 k_shift = 3
+                        elif const_val == 16 k_shift = 4
+                        elif const_val == 32 k_shift = 5
+                        elif const_val == 64 k_shift = 6
+                        elif const_val == 128 k_shift = 7
+                        elif const_val == 256 k_shift = 8
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 193)
+                        x86_synth_emit_byte(s, 224)
+                        x86_synth_emit_byte(s, k_shift)
+                    elif const_val <= 127 and const_val >= -128
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 192)
+                        x86_synth_emit_byte(s, const_val % 256)
+                    else
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, const_val)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 175)
+                        x86_synth_emit_byte(s, 193)
+                s.synth_last_expr_type = "int"
+            else
+                list_set(pos_box, 0, pos + 1) // Consume operator
 
-            // Move right operand to %rcx, restore left operand to %rax
-            x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
-            x86_synth_emit_byte(s, 137)
-            x86_synth_emit_byte(s, 193)
-            x86_synth_emit_byte(s, 88)  // pop rax
+                // Push left operand (%rax) to stack
+                x86_synth_emit_byte(s, 80) // push rax
 
-            if op_kind == TOK_STAR()
-                // imul rax, rcx (0x48 0x0F 0xAF 0xC1)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 175)
-                x86_synth_emit_byte(s, 193)
-            elif op_kind == TOK_SLASH()
-                // cqo; idiv rcx (0x48 0x99, 0x48 0xF7 0xF9)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 153)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 247)
-                x86_synth_emit_byte(s, 249)
-            elif op_kind == TOK_PERCENT()
-                // cqo; idiv rcx; mov rax, rdx (0x48 0x99, 0x48 0xF7 0xF9, 0x48 0x89 0xD0)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 153)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 247)
-                x86_synth_emit_byte(s, 249)
-                x86_synth_emit_byte(s, 72)
+                // Evaluate right operand into %rax
+                x86_synth_expr_primary(s, toks, pos_box)
+
+                // Move right operand to %rcx, restore left operand to %rax
+                x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
                 x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 208)
+                x86_synth_emit_byte(s, 193)
+                x86_synth_emit_byte(s, 88)  // pop rax
+
+                if op_kind == TOK_STAR()
+                    // imul rax, rcx (0x48 0x0F 0xAF 0xC1)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 175)
+                    x86_synth_emit_byte(s, 193)
+                elif op_kind == TOK_SLASH()
+                    // cqo; idiv rcx (0x48 0x99, 0x48 0xF7 0xF9)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 153)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 247)
+                    x86_synth_emit_byte(s, 249)
+                elif op_kind == TOK_PERCENT()
+                    // cqo; idiv rcx; mov rax, rdx (0x48 0x99, 0x48 0xF7 0xF9, 0x48 0x89 0xD0)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 153)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 247)
+                    x86_synth_emit_byte(s, 249)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 208)
+                s.synth_last_expr_type = "int"
     return 0
 
 fn x86_synth_compile_expr_add s toks pos_box
     // WHY: Pratt precedence level 2 for additive operations (+, -)
-    // Evaluates multiplicative operands first, then combines via dynamic addition or native subtraction.
     x86_synth_compile_expr_mul(s, toks, pos_box)
 
     cont_add = 1
@@ -100,34 +259,108 @@ fn x86_synth_compile_expr_add s toks pos_box
         if is_op == 0
             cont_add = 0
         else
-            list_set(pos_box, 0, pos + 1) // Consume operator
+            left_type = s.synth_last_expr_type
 
-            // Push left operand (%rax) to stack
-            x86_synth_emit_byte(s, 80) // push rax
+            // Check if right operand is a small constant integer
+            next_p = pos + 1
+            is_const_int_rhs = 0
+            const_add_val = 0
+            if next_p < toks.len()
+                nt = toks[next_p]
+                if nt.tok_kind == TOK_INT()
+                    after_next = next_p + 1
+                    if after_next >= toks.len() or (toks[after_next].tok_kind != TOK_STAR() and toks[after_next].tok_kind != TOK_SLASH() and toks[after_next].tok_kind != TOK_PERCENT() and toks[after_next].tok_kind != TOK_PLUS() and toks[after_next].tok_kind != TOK_MINUS() and toks[after_next].tok_kind != TOK_DOT() and toks[after_next].tok_kind != TOK_LBRACKET())
+                        is_const_int_rhs = 1
+                        const_add_val = nt.tok_int_val
 
-            // Evaluate right operand with multiplicative precedence into %rax
-            x86_synth_compile_expr_mul(s, toks, pos_box)
+            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or left_type == "int")
+                // WHY: 1-cycle direct silicon arithmetic for constant additions/subtractions (e.g. i + 1, i - 1)
+                // Zero function calls, zero stack traffic, zero heap allocations.
+                list_set(pos_box, 0, next_p + 1)
+                if op_kind == TOK_PLUS()
+                    if const_add_val == 1
+                        // inc rax (0x48 0xFF 0xC0)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 255)
+                        x86_synth_emit_byte(s, 192)
+                    elif const_add_val <= 127 and const_add_val >= -128
+                        // add rax, imm8 (0x48 0x83 0xC0 imm8)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 131)
+                        x86_synth_emit_byte(s, 192)
+                        x86_synth_emit_byte(s, const_add_val % 256)
+                    elif const_add_val <= 2147483647
+                        // add rax, imm32 (0x48 0x05 imm32)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 5)
+                        x86_synth_emit_u32(s, const_add_val)
+                    else
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, const_add_val)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 1)
+                        x86_synth_emit_byte(s, 200)
+                else
+                    // TOK_MINUS
+                    if const_add_val == 1
+                        // dec rax (0x48 0xFF 0xC8)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 255)
+                        x86_synth_emit_byte(s, 200)
+                    elif const_add_val <= 127 and const_add_val >= -128
+                        // sub rax, imm8 (0x48 0x83 0xE8 imm8)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 131)
+                        x86_synth_emit_byte(s, 232)
+                        x86_synth_emit_byte(s, const_add_val % 256)
+                    else
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, const_add_val)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 200)
+                s.synth_last_expr_type = "int"
+            else
+                list_set(pos_box, 0, pos + 1) // Consume operator
 
-            // Move right operand to %rcx, restore left operand to %rax
-            x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
-            x86_synth_emit_byte(s, 137)
-            x86_synth_emit_byte(s, 193)
-            x86_synth_emit_byte(s, 88)  // pop rax
+                // Push left operand (%rax) to stack
+                x86_synth_emit_byte(s, 80) // push rax
 
-            if op_kind == TOK_PLUS()
-                // rdi = rax (left), rsi = rcx (right) -> call _lipi_add_dynamic
-                x86_synth_emit_byte(s, 72) // mov rdi, rax
+                // Evaluate right operand with multiplicative precedence into %rax
+                x86_synth_compile_expr_mul(s, toks, pos_box)
+                right_type = s.synth_last_expr_type
+
+                // Move right operand to %rcx, restore left operand to %rax
+                x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
                 x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 199)
-                x86_synth_emit_byte(s, 72) // mov rsi, rcx
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 206)
-                x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
-            elif op_kind == TOK_MINUS()
-                // sub rax, rcx (0x48 0x29 0xC8)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 41)
-                x86_synth_emit_byte(s, 200)
+                x86_synth_emit_byte(s, 193)
+                x86_synth_emit_byte(s, 88)  // pop rax
+
+                if op_kind == TOK_PLUS()
+                    if left_type == "int" and right_type == "int"
+                        // WHY: Direct 1-cycle integer addition when both operands are known integers (e.g. acc + rem)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 1)
+                        x86_synth_emit_byte(s, 200) // add rax, rcx
+                        s.synth_last_expr_type = "int"
+                    else
+                        // rdi = rax (left), rsi = rcx (right) -> call _lipi_add_dynamic
+                        x86_synth_emit_byte(s, 72) // mov rdi, rax
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 199)
+                        x86_synth_emit_byte(s, 72) // mov rsi, rcx
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 206)
+                        x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                        s.synth_last_expr_type = ""
+                elif op_kind == TOK_MINUS()
+                    // sub rax, rcx (0x48 0x29 0xC8)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 41)
+                    x86_synth_emit_byte(s, 200)
+                    s.synth_last_expr_type = "int"
     return 0
 
 fn x86_synth_compile_expr_shift s toks pos_box

@@ -1,8 +1,8 @@
 import "universe/os/syscalls"
 
 @! ============================================================================
-@! MAYA NATIVE HEAP ALLOCATOR
-@! 100% Pure Maya Implementation - Free-List based Heap Memory Manager
+@! LIPI NATIVE HEAP ALLOCATOR
+@! 100% Pure Lipi Implementation - Free-List based Heap Memory Manager
 @! ============================================================================
 
 @! Global Heap State (managed via global struct)

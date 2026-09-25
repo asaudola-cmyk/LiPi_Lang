@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND — PGO OPTIMIZATION PASSES (pgo_optimize.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER MIDDLEEND — PGO OPTIMIZATION PASSES (pgo_optimize.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Pettis-Hansen CFG Trace Layout, Hot/Cold Splitting, Branch
 @!           Probability Hinting & Fallthrough Inversion, Hot Function Inlining,
 @!           Trip-Count Hot Loop Full/Partial Unrolling

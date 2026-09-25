@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE AI — VISION TRANSFORMER (ViT)
-@! 100% Written in Pure Maya Language — Zero External C Dependencies
+@! LIPI UNIVERSE AI — VISION TRANSFORMER (ViT)
+@! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: Patch Embeddings, Positional Encoding, Multi-Head Self Attention
 @! ============================================================================
 

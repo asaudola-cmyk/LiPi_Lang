@@ -1,12 +1,12 @@
 @! ============================================================================
-@! MAYA COMPILER STAGE 3 — WEBASSEMBLY (WASM) GENERATOR
-@! 100% Written in Pure Maya Language
+@! LIPI COMPILER STAGE 3 — WEBASSEMBLY (WASM) GENERATOR
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
 import "universe/core/string"
 
-@! Converts a Maya MIR (Mid-Level IR) or AST program to WASM Text Format (WAT)
+@! Converts a Lipi MIR (Mid-Level IR) or AST program to WASM Text Format (WAT)
 @fn mir_to_wasm_wat(mir_prog)
   wat_code = "(module\n"
   wat_code = wat_code + "  (memory (export \"memory\") 1)\n"

@@ -62,11 +62,13 @@ fn x86_synth_expr_primary s toks pos_box
     elif k == TOK_INT()
         list_set(pos_box, 0, pos + 1)
         x86_synth_emit_mov_rax_imm64(s, t.tok_int_val)
+        s.synth_last_expr_type = "int"
 
     // 1b. Float Literal (lowered integer value representation)
     elif k == TOK_FLOAT()
         list_set(pos_box, 0, pos + 1)
         x86_synth_emit_mov_rax_imm64(s, t.tok_int_val)
+        s.synth_last_expr_type = "int"
 
     // 2. String Literal
     elif k == TOK_STR() or k == TOK_INTERP_STR()
@@ -80,6 +82,7 @@ fn x86_synth_expr_primary s toks pos_box
         rel.sr_patch_offset = patch_pos
         rel.sr_rodata_offset = ro_off
         push(s.synth_str_relocs, rel)
+        s.synth_last_expr_type = "str"
 
     // 3. Array / List Literal: [elem0, elem1, ...]
     elif k == TOK_LBRACKET() or (k == TOK_IDENT() and txt == "[")
@@ -147,6 +150,7 @@ fn x86_synth_expr_primary s toks pos_box
             x86_synth_emit_byte(s, 76)
             x86_synth_emit_byte(s, 137)
             x86_synth_emit_byte(s, 208)
+            s.synth_last_expr_type = ""
 
     // 3b. Struct / Map Literal: { key: val, key2: val2, ... }
     elif k == TOK_LBRACE() or (k == TOK_IDENT() and txt == "{") or txt == "{"
@@ -231,6 +235,7 @@ fn x86_synth_expr_primary s toks pos_box
 
         // Restore base struct pointer into %rax: pop rax (0x58)
         x86_synth_emit_byte(s, 88)
+        s.synth_last_expr_type = ""
 
     // 4. Parenthesized expression: ( expr )
     elif k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
@@ -293,6 +298,7 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_emit_byte(s, 88) // pop rax
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 5)  // syscall
+                s.synth_last_expr_type = "int"
             // Intrinsic 2: malloc
             elif var_name == "malloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ"
                 if arg_count >= 1
@@ -300,6 +306,7 @@ fn x86_synth_expr_primary s toks pos_box
                 else
                     x86_synth_emit_mov_rdi_imm64(s, 32)
                 x86_synth_emit_call_helper(s, "_lipi_malloc")
+                s.synth_last_expr_type = ""
             // Intrinsic 3: mem_word_read
             elif var_name == "mem_word_read" or var_name == "mem_read" or var_name == "মেমরি_পড়ো"
                 if arg_count >= 2
@@ -311,6 +318,7 @@ fn x86_synth_expr_primary s toks pos_box
                 x86_synth_emit_byte(s, 139)
                 x86_synth_emit_byte(s, 4)
                 x86_synth_emit_byte(s, 55)
+                s.synth_last_expr_type = "int"
             // Intrinsic 4: mem_word_write
             elif var_name == "mem_word_write" or var_name == "mem_write" or var_name == "মেমরি_লেখো"
                 if arg_count >= 3
@@ -328,6 +336,7 @@ fn x86_synth_expr_primary s toks pos_box
                 x86_synth_emit_byte(s, 72)
                 x86_synth_emit_byte(s, 137)
                 x86_synth_emit_byte(s, 208)
+                s.synth_last_expr_type = "int"
             // Intrinsic 5: mem_byte_read
             elif var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "মেমরি_বাইট_পড়ো" or var_name == "sys_peek8"
                 if arg_count >= 2
@@ -349,6 +358,7 @@ fn x86_synth_expr_primary s toks pos_box
                 else
                     x86_synth_emit_byte(s, 49) // xor eax, eax
                     x86_synth_emit_byte(s, 192)
+                s.synth_last_expr_type = "int"
             // ── Intrinsic 6: mem_byte_write / mem_write_byte / মেমরি_বাইট_লেখো / sys_poke8
             elif var_name == "mem_byte_write" or var_name == "mem_write_byte" or var_name == "মেমরি_বাইট_লেখো" or var_name == "sys_poke8"
                 if arg_count >= 3
@@ -377,6 +387,7 @@ fn x86_synth_expr_primary s toks pos_box
                 else
                     x86_synth_emit_byte(s, 49) // xor eax, eax
                     x86_synth_emit_byte(s, 192)
+                s.synth_last_expr_type = "int"
             // ── Intrinsic 7: exit / বিদায় ─────────────────────────────────────
             elif var_name == "exit" or var_name == "বিদায়"
                 if arg_count >= 1
@@ -388,6 +399,7 @@ fn x86_synth_expr_primary s toks pos_box
                 x86_synth_emit_u32(s, 60)  // mov eax, 60
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 5)   // syscall
+                s.synth_last_expr_type = ""
             // ── Intrinsic 8: list / তালিকা ─────────────────────────────────────
             elif var_name == "list" or var_name == "তালিকা"
                 if arg_count == 0
@@ -433,6 +445,7 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_emit_byte(s, 76)
                     x86_synth_emit_byte(s, 137)
                     x86_synth_emit_byte(s, 208)
+                s.synth_last_expr_type = ""
             else
                 // ── Struct Constructor or Regular Function Call ──────────────
                 sdef = x86_synth_find_struct(s, var_name)
@@ -468,11 +481,11 @@ fn x86_synth_expr_primary s toks pos_box
                         x86_synth_emit_byte(s, 76)  // REX.W + REX.R (0x4C)
                         x86_synth_emit_byte(s, 137) // mov r/m64, r64 (0x89)
                         x86_synth_emit_byte(s, 208) // ModR/M: rax <- r10 (0xD0)
+                    s.synth_last_expr_type = ""
                 else
                     // Regular Function Call: Pop arguments in reverse into calling convention registers
                     // Pop arguments in reverse into LiPi 12-register calling convention
                     x86_synth_emit_pop_args(s, arg_count)
-
 
                     var_off = x86_synth_lookup_var(s, var_name)
                     if var_off > 0
@@ -482,6 +495,7 @@ fn x86_synth_expr_primary s toks pos_box
                         x86_synth_emit_load_var(s, 0, var_off)
                         x86_synth_emit_byte(s, 255) // call rax (0xFF 0xD0)
                         x86_synth_emit_byte(s, 208)
+                        s.synth_last_expr_type = ""
                     else
                         // Direct Function Call: Emits call rel32 (0xE8) and queues relocation
                         call_off = s.synth_code.len()
@@ -495,17 +509,25 @@ fn x86_synth_expr_primary s toks pos_box
                         push(s.synth_call_relocs, call_rel)
                         if var_name == "main" or var_name == "মূল"
                             s.synth_called_top_level_main = 1
+                        if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
+                            s.synth_last_expr_type = "int"
+                        elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
+                            s.synth_last_expr_type = "str"
+                        else
+                            s.synth_last_expr_type = ""
         else
             // Plain variable load
             off = x86_synth_lookup_var(s, var_name)
             if off > 0
                 x86_synth_emit_load_var(s, 0, off)
                 s.synth_last_struct = x86_synth_get_var_type(s, var_name)
+                s.synth_last_expr_type = x86_synth_get_prim_type(s, var_name)
             else
                 // Check if var_name is a registered compile-time global constant
                 g_val = x86_synth_lookup_global_const(s, var_name)
                 if g_val != (0 - 999999999)
                     x86_synth_emit_mov_rax_imm64(s, g_val)
+                    s.synth_last_expr_type = "int"
                 else
                     // Check if var_name is a registered zero-arg constant function
                     is_fn_const = 0
@@ -527,125 +549,25 @@ fn x86_synth_expr_primary s toks pos_box
                         push(s.synth_call_relocs, call_rel)
                         if var_name == "main" or var_name == "মূল"
                             s.synth_called_top_level_main = 1
+                        if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
+                            s.synth_last_expr_type = "int"
+                        elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
+                            s.synth_last_expr_type = "str"
+                        else
+                            s.synth_last_expr_type = ""
                     else
                         // Unbound identifier defaults to 0
                         x86_synth_emit_byte(s, 49)
                         x86_synth_emit_byte(s, 192)
+                        s.synth_last_expr_type = ""
     else
         // Fallback: advance and clear %rax
         list_set(pos_box, 0, pos + 1)
         x86_synth_emit_byte(s, 49)
         x86_synth_emit_byte(s, 192)
+        s.synth_last_expr_type = ""
 
     // ── Postfix Chaining Loop: [index], .field, .method(...) ────────────────
-    cont_postfix = 1
-    while cont_postfix == 1 and get(pos_box, 0) < toks.len()
-        post_p = get(pos_box, 0)
-        ptok = toks[post_p]
-        pkind = ptok.tok_kind
-        ptxt = ptok.tok_text
-
-        // Case A: Bracket Indexing: obj[index]
-        if pkind == TOK_LBRACKET() or (pkind != TOK_STR() and ptxt == "[")
-            list_set(pos_box, 0, post_p + 1) // Consume '['
-            x86_synth_emit_byte(s, 80)        // push rax (save collection ptr)
-            x86_synth_compile_expr(s, toks, pos_box) // rax = index
-            cp = get(pos_box, 0)
-            if cp < toks.len() and (toks[cp].tok_kind == TOK_RBRACKET() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "]"))
-                list_set(pos_box, 0, cp + 1) // Consume ']'
-            // mov rsi, rax (index)
-            x86_synth_emit_byte(s, 72)
-            x86_synth_emit_byte(s, 137)
-            x86_synth_emit_byte(s, 198)
-            x86_synth_emit_byte(s, 95)        // pop rdi (collection ptr)
-            x86_synth_emit_call_helper(s, "_lipi_list_get")
-
-        // Case B: Dot Member Access or Method Call: obj.member or obj.method(...)
-        elif pkind == TOK_DOT() or (pkind != TOK_STR() and ptxt == ".")
-            list_set(pos_box, 0, post_p + 1) // Consume '.'
-            if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
-                fn_tok = toks[get(pos_box, 0)]
-                member_name = fn_tok.tok_text
-                list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume member name
-
-                // Check if this is a method call: obj.name(...)
-                cp = get(pos_box, 0)
-                if cp < toks.len() and (toks[cp].tok_kind == TOK_LPAREN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "("))
-                    list_set(pos_box, 0, cp + 1) // Consume '('
-                    // Save obj ptr on stack as first argument (SysV %rdi)
-                    x86_synth_emit_byte(s, 80) // push rax
-                    m_args = 1
-                    x86_synth_skip_whitespace_tokens(toks, pos_box)
-                    while get(pos_box, 0) < toks.len()
-                        x86_synth_skip_whitespace_tokens(toks, pos_box)
-                        cur_p = get(pos_box, 0)
-                        if cur_p >= toks.len() or toks[cur_p].tok_kind == TOK_RPAREN() or (toks[cur_p].tok_kind != TOK_STR() and toks[cur_p].tok_text == ")")
-                            break
-                        x86_synth_compile_expr(s, toks, pos_box)
-                        x86_synth_emit_byte(s, 80) // push rax
-                        m_args = m_args + 1
-                        x86_synth_skip_whitespace_tokens(toks, pos_box)
-                        np = get(pos_box, 0)
-                        if np < toks.len() and (toks[np].tok_kind == TOK_COMMA() or (toks[np].tok_kind != TOK_STR() and toks[np].tok_text == ","))
-                            list_set(pos_box, 0, np + 1)
-
-                    x86_synth_skip_whitespace_tokens(toks, pos_box)
-                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ")"))
-                        list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume ')'
-
-                    // Pop arguments in reverse into LiPi 12-register calling convention
-                    x86_synth_emit_pop_args(s, m_args)
-
-
-                    if member_name == "push" or member_name == "যোগ_করো"
-                        x86_synth_emit_call_helper(s, "_lipi_list_push")
-                    elif member_name == "get" or member_name == "নাও"
-                        x86_synth_emit_call_helper(s, "_lipi_list_get")
-                    elif member_name == "len" or member_name == "length" or member_name == "দৈর্ঘ্য"
-                        x86_synth_emit_call_helper(s, "_lipi_len")
-                    elif member_name == "pop" or member_name == "বাদ_দাও"
-                        x86_synth_emit_call_helper(s, "_lipi_list_pop")
-                    elif member_name == "list_set" or member_name == "set" or member_name == "সেট"
-                        x86_synth_emit_call_helper(s, "_lipi_list_set")
-                    elif member_name == "to_str" or member_name == "str" or member_name == "স্ট্রিং"
-                        x86_synth_emit_call_helper(s, "_lipi_ensure_str")
-                    else
-                        x86_synth_emit_call_helper(s, member_name)
-                else
-                    // Struct Field Read: obj.field
-                    f_off = x86_synth_get_field_offset(s, s.synth_last_struct, member_name)
-                    s.synth_last_struct = ""
-                    if f_off < 128
-                        // mov rax, [rax + f_off]: 0x48 0x8B 0x40 disp8
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 139)
-                        x86_synth_emit_byte(s, 64)
-                        x86_synth_emit_byte(s, f_off)
-                    else
-                        // mov rax, [rax + f_off]: 0x48 0x8B 0x80 disp32
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 139)
-                        x86_synth_emit_byte(s, 128)
-                        x86_synth_emit_u32(s, f_off)
-            else
-                cont_postfix = 0
-        // Case C: Postfix Query '?' (Error propagation / Early return on 0)
-        elif pkind == TOK_QUERY() or (pkind != TOK_STR() and ptxt == "?")
-            list_set(pos_box, 0, post_p + 1) // Consume '?'
-            // test rax, rax
-            x86_synth_emit_byte(s, 72)
-            x86_synth_emit_byte(s, 133)
-            x86_synth_emit_byte(s, 192)
-            // jne +5 (skip 5-byte epilogue if rax != 0)
-            x86_synth_emit_byte(s, 117)
-            x86_synth_emit_byte(s, 5)
-            // Function epilogue: mov rsp, rbp; pop rbp; ret
-            x86_synth_emit_byte(s, 72)
-            x86_synth_emit_byte(s, 137)
-            x86_synth_emit_byte(s, 236)
-            x86_synth_emit_byte(s, 93)
-            x86_synth_emit_byte(s, 195)
-        else
-            cont_postfix = 0
+    x86_synth_expr_postfix(s, toks, pos_box)
     return 0
 

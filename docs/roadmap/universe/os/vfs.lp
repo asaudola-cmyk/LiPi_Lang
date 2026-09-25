@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS KERNEL — VIRTUAL FILE SYSTEM & INODE LAYER (vfs.my)
-@! 100% Written in Pure Maya Language — RamFS & Inode File Operations
+@! LIPI OS KERNEL — VIRTUAL FILE SYSTEM & INODE LAYER (vfs.my)
+@! 100% Written in Pure Lipi Language — RamFS & Inode File Operations
 @! ============================================================================
 
 @! Inode Types: 1 = FILE, 2 = DIRECTORY, 3 = DEVICE_NODE

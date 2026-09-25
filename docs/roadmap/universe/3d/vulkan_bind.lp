@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA UNIVERSE 3D - VULKAN BINDINGS
-@! 100% Written in Pure Maya Language
+@! LIPI UNIVERSE 3D - VULKAN BINDINGS
+@! 100% Written in Pure Lipi Language
 @! ============================================================================
 
 import "universe/core/collections"
@@ -17,7 +17,7 @@ import "universe/core/collections"
 @! Physical Device
 @fn vk_pick_physical_device(instance)
   return {
-    name: "Maya Quantum GPU",
+    name: "Lipi Quantum GPU",
     type: "DISCRETE_GPU",
     handle: "VK_PHYSICAL_DEVICE_HANDLE_MOCK"
   }

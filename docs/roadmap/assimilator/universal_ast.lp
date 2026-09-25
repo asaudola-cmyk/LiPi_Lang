@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA ASSIMILATOR — UNIVERSAL ABSTRACT SYNTAX TREE (UAST)
-@! 100% Written in Pure Maya Language
+@! LIPI ASSIMILATOR — UNIVERSAL ABSTRACT SYNTAX TREE (UAST)
+@! 100% Written in Pure Lipi Language
 @! Provides intermediate representation for multi-language transpilation
 @! ============================================================================
 
@@ -65,8 +65,8 @@ import "universe/core/string"
   return node
 @end
 
-@! Convert Universal AST node tree to Maya Compiler AST
-@fn uast_to_maya_ast(uast_node)
+@! Convert Universal AST node tree to Lipi Compiler AST
+@fn uast_to_lipi_ast(uast_node)
   @if uast_node == 0 || uast_node == "none"
     return 0
   @end
@@ -79,7 +79,7 @@ import "universe/core/string"
     i = 0
     len = uast_node.children.len()
     @while i < len
-      child_ast = uast_to_maya_ast(uast_node.children[i])
+      child_ast = uast_to_lipi_ast(uast_node.children[i])
       @if child_ast != 0
         statements = statements.push(child_ast)
       @end
@@ -94,7 +94,7 @@ import "universe/core/string"
     i = 0
     blen = uast_node.body.len()
     @while i < blen
-      stmt_ast = uast_to_maya_ast(uast_node.body[i])
+      stmt_ast = uast_to_lipi_ast(uast_node.body[i])
       @if stmt_ast != 0
         body_statements = body_statements.push(stmt_ast)
       @end
@@ -106,7 +106,7 @@ import "universe/core/string"
       i = 0
       clen = uast_node.children.len()
       @while i < clen
-        c_ast = uast_to_maya_ast(uast_node.children[i])
+        c_ast = uast_to_lipi_ast(uast_node.children[i])
         @if c_ast != 0
           body_statements = body_statements.push(c_ast)
         @end
@@ -121,7 +121,7 @@ import "universe/core/string"
   @if kind == "U_Return"
     val = 0
     @if uast_node.children.len() > 0
-      val = uast_to_maya_ast(uast_node.children[0])
+      val = uast_to_lipi_ast(uast_node.children[0])
     @elif uast_node.value != 0
       val = ast_literal_int(uast_node.value)
     @end
@@ -132,7 +132,7 @@ import "universe/core/string"
   @if kind == "U_Assign" || kind == "U_VarDecl"
     val = 0
     @if uast_node.children.len() > 0
-      val = uast_to_maya_ast(uast_node.children[0])
+      val = uast_to_lipi_ast(uast_node.children[0])
     @elif uast_node.value != 0
       val = ast_literal_int(uast_node.value)
     @end
@@ -144,10 +144,10 @@ import "universe/core/string"
     left = 0
     right = 0
     @if uast_node.children.len() > 0
-      left = uast_to_maya_ast(uast_node.children[0])
+      left = uast_to_lipi_ast(uast_node.children[0])
     @end
     @if uast_node.children.len() > 1
-      right = uast_to_maya_ast(uast_node.children[1])
+      right = uast_to_lipi_ast(uast_node.children[1])
     @end
     return ast_binary_op(left, uast_node.op, right)
   @end
@@ -156,7 +156,7 @@ import "universe/core/string"
   @if kind == "U_UnaryOp"
     expr = 0
     @if uast_node.children.len() > 0
-      expr = uast_to_maya_ast(uast_node.children[0])
+      expr = uast_to_lipi_ast(uast_node.children[0])
     @end
     return ast_unary_op(uast_node.op, expr)
   @end
@@ -167,7 +167,7 @@ import "universe/core/string"
     i = 0
     len = uast_node.children.len()
     @while i < len
-      arg_ast = uast_to_maya_ast(uast_node.children[i])
+      arg_ast = uast_to_lipi_ast(uast_node.children[i])
       @if arg_ast != 0
         args = args.push(arg_ast)
       @end
@@ -212,13 +212,13 @@ import "universe/core/string"
     then_body = []
     else_body = []
     @if uast_node.children.len() > 0
-      cond = uast_to_maya_ast(uast_node.children[0])
+      cond = uast_to_lipi_ast(uast_node.children[0])
     @end
     @if uast_node.children.len() > 1
-      then_body = uast_to_maya_ast(uast_node.children[1])
+      then_body = uast_to_lipi_ast(uast_node.children[1])
     @end
     @if uast_node.children.len() > 2
-      else_body = uast_to_maya_ast(uast_node.children[2])
+      else_body = uast_to_lipi_ast(uast_node.children[2])
     @end
     return ast_if_stmt(cond, then_body, [], else_body)
   @end
@@ -228,10 +228,10 @@ import "universe/core/string"
     cond = 0
     body = []
     @if uast_node.children.len() > 0
-      cond = uast_to_maya_ast(uast_node.children[0])
+      cond = uast_to_lipi_ast(uast_node.children[0])
     @end
     @if uast_node.children.len() > 1
-      body = uast_to_maya_ast(uast_node.children[1])
+      body = uast_to_lipi_ast(uast_node.children[1])
     @end
     return ast_while_loop(cond, body)
   @end

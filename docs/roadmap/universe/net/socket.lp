@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA NATIVE NETWORK SOCKET ABSTRACTION
-@! 100% Pure Maya — Direct POSIX Socket Integration
+@! LIPI NATIVE NETWORK SOCKET ABSTRACTION
+@! 100% Pure Lipi — Direct POSIX Socket Integration
 @! ============================================================================
 
 import "universe/os/syscalls"

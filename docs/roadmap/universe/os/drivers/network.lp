@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA OS - INTEL E1000 GIGABIT NETWORK DRIVER
-@! 100% Written in Pure Maya Language
+@! LIPI OS - INTEL E1000 GIGABIT NETWORK DRIVER
+@! 100% Written in Pure Lipi Language
 @! Features: DMA Ring Buffers, TX/RX Descriptor parsing, Checksum Offloading
 @! ============================================================================
 

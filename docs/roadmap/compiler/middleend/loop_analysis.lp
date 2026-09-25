@@ -1,6 +1,6 @@
 @! ============================================================================
-@! MAYA COMPILER MIDDLEEND — SIMD LOOP & STRIDE ANALYSIS (loop_analysis.maya)
-@! 100% Written in Pure Maya Language — Zero External Dependencies
+@! LIPI COMPILER MIDDLEEND — SIMD LOOP & STRIDE ANALYSIS (loop_analysis.lipi)
+@! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Canonical Loop Induction Detection, Memory Access Stride Analysis,
 @!           Affine Borrow Checker Alias-Free Verification, Reduction Detection
 @! ============================================================================
@@ -125,9 +125,9 @@ import "universe/core/string"
 @! ----------------------------------------------------------------------------
 
 @fn analyze_alias_free(loop_desc, borrowck_env)
-  @! Maya Affine Borrow Checker guarantee:
+  @! Lipi Affine Borrow Checker guarantee:
   @! Mutable output buffer (&mut) cannot alias with any input buffer (&)
-  @! In Maya, distinct named array parameters with affine ownership are
+  @! In Lipi, distinct named array parameters with affine ownership are
   @! provably disjoint at compile-time with zero runtime alias checks needed.
   
   write_arrays = []
