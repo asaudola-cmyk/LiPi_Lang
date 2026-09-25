@@ -26,6 +26,7 @@ include "src/compiler/middleend/opt/passes/pass_unroll.lp"
 include "src/compiler/middleend/opt/passes/pass_inlining.lp"
 include "src/compiler/middleend/opt/passes/pass_dse.lp"
 include "src/compiler/middleend/opt/passes/pass_peephole.lp"
+include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
 
 // ── 1. Pass Manager Structure ─────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ struct PassManager
     stat_cse          // integer: total common subexpressions eliminated
     stat_licm         // integer: total loop invariants hoisted
     stat_unroll       // integer: total loops unrolled
+    stat_vectorize    // integer: total loops SIMD vectorized
     stat_inlined      // integer: total function call sites inlined
     stat_dse          // integer: total dead stores eliminated
     stat_peephole     // integer: total peephole algebraic simplifications
@@ -54,6 +56,7 @@ fn pass_manager_new opt_level
     pm.stat_cse = 0
     pm.stat_licm = 0
     pm.stat_unroll = 0
+    pm.stat_vectorize = 0
     pm.stat_inlined = 0
     pm.stat_dse = 0
     pm.stat_peephole = 0
@@ -95,12 +98,18 @@ fn pass_manager_run_on_function pm fn_obj
     max_iters = 4
     if pm.opt_level >= 3 max_iters = 8
 
-    // For O3: Run Loop Unrolling ahead of main pipeline
+    // For O3: Run Loop Unrolling & SIMD Vectorization ahead of main pipeline
     if pm.opt_level >= 3
         u_hits = pass_unroll_run(fn_obj)
         pm.stat_unroll = pm.stat_unroll + u_hits
         pm.stat_passes_run = pm.stat_passes_run + 1
         if u_hits > 0 and pm.verify_each_pass == 1
+            ir_verify_function(fn_obj)
+
+        vec_hits = pass_vectorize_run(fn_obj)
+        pm.stat_vectorize = pm.stat_vectorize + vec_hits
+        pm.stat_passes_run = pm.stat_passes_run + 1
+        if vec_hits > 0 and pm.verify_each_pass == 1
             ir_verify_function(fn_obj)
 
     iter = 0

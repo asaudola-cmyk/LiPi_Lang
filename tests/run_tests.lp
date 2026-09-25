@@ -931,6 +931,12 @@ fn main
     else
         failed = failed + 1
 
+    // 198: Next-Gen Production Modules (Ext4, RFC 9114 HTTP/3, TTD, Auto-Vectorizer)
+    if run_single_test(compiler, "tests/test_nextgen_production_modules.lp", "test_nextgen_production_modules") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed
     say "========================================================================"
