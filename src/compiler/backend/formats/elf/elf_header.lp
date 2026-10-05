@@ -151,25 +151,11 @@
 // ============================================================================
 
 @fn elf_ident_create(osabi, abiversion)
-  // WHY: Build the canonical 16-byte ELF identification sequence.
-  // Bytes 0-3:   Magic (0x7F, 'E', 'L', 'F')
-  // Byte 4:      64-bit architecture (ELFCLASS64 = 2)
-  // Byte 5:      Little Endian encoding (ELFDATA2LSB = 1)
-  // Byte 6:      ELF version (EV_CURRENT = 1)
-  // Byte 7:      Target OS ABI (e.g. System V = 0, Linux = 3)
-  // Byte 8:      ABI Version (0 for standard ELF)
-  // Bytes 9-15:  Reserved padding zeroes (7 bytes)
+  // WHY: Build canonical 16-byte ELF identification sequence using direct literals
+  // (0x7F, 'E', 'L', 'F', ELFCLASS64=2, ELFDATA2LSB=1, EV_CURRENT=1, osabi, abiversion, 7 zero bytes).
   ident = [
-    ELF_MAG0(),
-    ELF_MAG1(),
-    ELF_MAG2(),
-    ELF_MAG3(),
-    ELFCLASS64(),
-    ELFDATA2LSB(),
-    EV_CURRENT(),
-    osabi,
-    abiversion,
-    0, 0, 0, 0, 0, 0, 0 // 7 reserved bytes
+    127, 69, 76, 70, 2, 1, 1, osabi, abiversion,
+    0, 0, 0, 0, 0, 0, 0
   ]
   return ident
 @end
@@ -207,12 +193,12 @@
   }
 @end
 
-@fn elf_header_x86_64(entry_point, phoff, shoff, phnum, shnum)
+@fn elf_header_x86_64(entry_point, phoff, shoff, phnum, shnum, shstrndx)
   // WHY: Convenience helper for AMD64 (x86-64) Linux binaries.
   return elf_header_create(EM_X86_64(), entry_point, phoff, shoff, phnum, shnum)
 @end
 
-@fn elf_header_aarch64(entry_point, phoff, shoff, phnum, shnum)
+@fn elf_header_aarch64(entry_point, phoff, shoff, phnum, shnum, shstrndx)
   // WHY: Convenience helper for 64-bit ARM (AArch64) Linux binaries.
   return elf_header_create(EM_AARCH64(), entry_point, phoff, shoff, phnum, shnum)
 @end

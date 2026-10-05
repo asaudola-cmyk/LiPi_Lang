@@ -19,6 +19,7 @@ import "compiler/semantics/type_checker"
 import "compiler/semantics/const_eval"
 import "compiler/semantics/ownership_check"
 import "compiler/semantics/purity_analyzer"
+import "compiler/semantics/math_proof"
 
 @fn assert_true(cond, test_name)
   @if cond == 1
@@ -380,6 +381,65 @@ import "compiler/semantics/purity_analyzer"
   return 1
 @end
 
+@fn test_math_proof_engine()
+  say("── 11. Testing Mathematical Memory Safety & CFG Proof Engine (math_proof.lp) ──")
+
+  // Universal CFG Proofs
+  seq_bal = cfg_node_seq(cfg_node_alloc(), cfg_node_free())
+  assert_true(prove_memory_safety(seq_bal) == 1, "ALLOC + FREE proves memory safety (ΔMemory = 0)")
+
+  seq_bad = cfg_node_alloc()
+  assert_true(prove_memory_safety(seq_bad) == 0, "Unfreed ALLOC rejected (leak detected)")
+
+  br_sym = cfg_node_branch(seq_bal, seq_bal)
+  assert_true(prove_memory_safety(br_sym) == 1, "Symmetric balanced CFG branch proved safe")
+
+  br_asym = cfg_node_branch(cfg_node_alloc(), cfg_node_free())
+  assert_true(analyze_cfg_node(br_asym, 0) == -9999, "Asymmetric branch flagged with -9999 violation")
+
+  loop_bal = cfg_node_loop(seq_bal)
+  assert_true(prove_memory_safety(loop_bal) == 1, "Loop iteration invariance preserved (Δ=0)")
+
+  // AST Function Proofs
+  call_alloc = ast_node("Call")
+  call_alloc.name = "alloc"
+  call_alloc.args = []
+
+  assign_ptr = ast_node("Assign")
+  assign_ptr.target = "ptr"
+  assign_ptr.value = call_alloc
+
+  var_ptr = ast_node("Variable")
+  var_ptr.name = "ptr"
+
+  call_free = ast_node("Call")
+  call_free.name = "free"
+  call_free.args = [var_ptr]
+
+  ret_0 = ast_node("Return")
+
+  fn_bal = ast_node("FnDef")
+  fn_bal.name = "verified_alloc_free"
+  fn_bal.body = [assign_ptr, call_free, ret_0]
+
+  eng = math_proof_engine_new()
+  cert = math_proof_verify_fn(eng, fn_bal)
+  assert_true(cert.mpc_is_proven == 1, "AST alloc/free routine mathematically proved (Δ=0)")
+  assert_true(cert.mpc_net_delta == 0, "AST net delta is 0")
+
+  // AST Leak Detection
+  fn_leak = ast_node("FnDef")
+  fn_leak.name = "leaking_routine"
+  fn_leak.body = [assign_ptr, ret_0]
+
+  eng_leak = math_proof_engine_new()
+  cert_leak = math_proof_verify_fn(eng_leak, fn_leak)
+  assert_true(cert_leak.mpc_is_proven == 0, "AST leaking routine correctly rejected")
+  assert_true(cert_leak.mpc_violation_count > 0, "Leak violation recorded in certificate")
+
+  return 1
+@end
+
 @fn main()
   say("==================================================================")
   say("🏛️  LIPI FIRST 1.0.0: SEMANTICS & TYPE SYSTEM SOVEREIGN SUITE")
@@ -395,9 +455,10 @@ import "compiler/semantics/purity_analyzer"
   test_const_evaluator()
   test_ownership_analyzer()
   test_purity_analyzer()
+  test_math_proof_engine()
 
   say("==================================================================")
-  say("👑 ALL 10 SEMANTICS SUBSYSTEMS PASSED WITH 100% SOVEREIGN PURITY")
+  say("👑 ALL 11 SEMANTICS SUBSYSTEMS PASSED WITH 100% SOVEREIGN PURITY")
   say("==================================================================")
   return 0
 @end

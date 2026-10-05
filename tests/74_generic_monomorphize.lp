@@ -19,13 +19,7 @@ reg = monomorph_registry_new()
 // ── Test Part 1: Generic Template Registration ────────────────────────────────
 say "[1/3] Registering Generic Template max[T] a:T b:T -> T..."
 
-tmpl_max = generic_template_new(
-    "max",
-    list("T"),
-    list("a", "b"),
-    list("T", "T"),
-    "T"
-)
+tmpl_max = generic_template_new("max", list("T"), list("a", "b"), list("T", "T"), "T")
 monomorph_register_template(reg, tmpl_max)
 
 if monomorph_has_template(reg, "max") != 1

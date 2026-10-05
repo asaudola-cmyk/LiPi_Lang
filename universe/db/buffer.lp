@@ -329,7 +329,7 @@ import "universe/db/page"
 @end
 
 @! Fetches a page by ID (returns memory buffer, pinned with pin_count + 1)
-@fn buffer_pool_fetch_page(pool, page_id)
+@fn buffer_pool_fetch_page(pool: BufferPool, page_id)
   frame_id = page_table_lookup(pool, page_id)
 
   @! Cache Hit
@@ -403,7 +403,7 @@ import "universe/db/page"
 @end
 
 @! Allocates a new page on disk and returns { page_id, buffer, page_buf }
-@fn buffer_pool_allocate_page(pool)
+@fn buffer_pool_allocate_page(pool: BufferPool)
   new_page_id = pool.total_pages
   pool.total_pages = pool.total_pages + 1
 
@@ -469,7 +469,7 @@ import "universe/db/page"
 @end
 
 @! Unpins a page and updates dirty flag
-@fn buffer_pool_unpin_page(pool, page_id, is_dirty)
+@fn buffer_pool_unpin_page(pool: BufferPool, page_id, is_dirty)
   frame_id = page_table_lookup(pool, page_id)
   @if frame_id == (0 - 1)
     return 0
@@ -489,12 +489,12 @@ import "universe/db/page"
 @end
 
 @! Alias conforming to PROJECT.md
-@fn buffer_pool_unpin(pool, page_id)
+@fn buffer_pool_unpin(pool: BufferPool, page_id)
   return buffer_pool_unpin_page(pool, page_id, 0)
 @end
 
 @! Marks an in-memory page frame as dirty
-@fn buffer_pool_mark_dirty(pool, page_id)
+@fn buffer_pool_mark_dirty(pool: BufferPool, page_id)
   frame_id = page_table_lookup(pool, page_id)
   @if frame_id != (0 - 1)
     pool.frames[frame_id].dirty = 1
@@ -503,7 +503,7 @@ import "universe/db/page"
 @end
 
 @! Flushes a specific page to disk if dirty
-@fn buffer_pool_flush_page(pool, page_id)
+@fn buffer_pool_flush_page(pool: BufferPool, page_id)
   frame_id = page_table_lookup(pool, page_id)
   @if frame_id == (0 - 1)
     return 0

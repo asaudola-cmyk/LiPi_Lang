@@ -52,7 +52,7 @@ import "universe/core/string"
   println("▶ Section 1: Raft Cluster Quorum & Leader Election...")
   total_tests = total_tests + 1
 
-  cluster = raft_cluster_new(3)
+  cluster: RaftCluster = raft_cluster_new(3)
   ok_c1 = assert_eq_int(cluster.cluster_size, 3, "Cluster size is 3 nodes")
   ok_c2 = assert_eq_int(cluster.nodes.len(), 3, "Cluster topology initialized with 3 nodes")
 

@@ -51,11 +51,15 @@ fn gguf_version header_buffer
 // ── ৪. GGUF টেনসর ও মেটাডাটা কাউন্ট ──────────────────────────────────────────
 // WHY: মডেলের মোট টেনসর সংখ্যা (Offset 8, 64-bit integer) ও কেভি পেয়ার সংখ্যা লোড করা।
 fn gguf_tensor_count header_buffer
-    tensor_count = mem_read_u32(header_buffer, 1) // QWORD 1 (Offset 8)
+    if header_buffer == 0
+        return 0
+    tensor_count = mem_read_idx(header_buffer, 1) // QWORD 1 (Offset 8)
     return tensor_count
 
 fn gguf_metadata_kv_count header_buffer
-    kv_count = mem_read_u32(header_buffer, 2) // QWORD 2 (Offset 16)
+    if header_buffer == 0
+        return 0
+    kv_count = mem_read_idx(header_buffer, 2) // QWORD 2 (Offset 16)
     return kv_count
 
 // ── ৫. GGUF হেডার সার্বিক যাচাই ────────────────────────────────────────────────
@@ -159,6 +163,14 @@ fn gguf_gemv_silicon output_vec weight_matrix input_vec column row
 fn জিজিইউএফ_সিলিকন_ম্যাট্রিক্স_ভেক্টর_গুণন output_vec weight_matrix input_vec column row
     return gguf_gemv_silicon(output_vec, weight_matrix, input_vec, column, row)
 
+// ── ৮গ. হার্ডওয়্যার সিলিকন ফ্লোট ম্যাট্রিক্স-ভেক্টর গুণন (Silicon SSE2 Float GEMV) ────
+// WHY: Executes 64-bit hardware floating-point GEMV using %xmm SSE2 instructions (mulsd, addsd).
+fn gguf_gemv_f64 output_vec weight_matrix input_vec column row
+    return ai_gemv_f64(output_vec, weight_matrix, input_vec, column, row)
+
+fn জিজিইউএফ_সিলিকন_ফ্লোট_ম্যাট্রিক্স_ভেক্টর_গুণন output_vec weight_matrix input_vec column row
+    return ai_gemv_f64(output_vec, weight_matrix, input_vec, column, row)
+
 // ── ৯. আর্গম্যাক্স গ্রিডি টোকেন স্যাম্পলার (Greedy Next-Token ArgMax) ─────────────
 // WHY: Selects the token ID with the highest computed logit probability.
 fn gguf_token_argmax logit_addr vocab_size
@@ -177,6 +189,13 @@ fn gguf_token_argmax logit_addr vocab_size
         i = i + 1
 
     return best_token
+
+// WHY: Hardware SSE2 float argmax comparator for 64-bit float logits.
+fn gguf_token_argmax_f64 logit_addr vocab_size
+    return ai_sample_argmax(logit_addr, vocab_size)
+
+fn জিজিইউএফ_টোকেন_আর্গম্যাক্স_ফ্লোট logit_addr vocab_size
+    return ai_sample_argmax(logit_addr, vocab_size)
 
 // ── ১০. সার্বজনীন বাংলা ও কম্প্যাটিবিলিটি এলিয়াসসমূহ (Bilingual Aliases) ─────────
 // WHY: বাংলা ও ইংরেজি উভয় ভাষায় মডেল লোডিং এবং ইনফারেন্স ফাংশন নির্বিঘ্নে কল করার সুবিধা।
@@ -239,6 +258,22 @@ fn gguf_sample_top_k logits vocab_size top_k temperature seed
 
 fn জিজিইউএফ_টপ_কে_স্যাম্পল লজিটস ভোকাব_আকার টপ_কে তাপমাত্রা সিড
     return ai_sample_top_k(লজিটস, ভোকাব_আকার, টপ_কে, তাপমাত্রা, সিড)
+
+// ── ১২খ. জিজিইউএফ টপ-পি স্যাম্পলার (GGUF Top-P Nucleus Sampling) ───────────────
+// WHY: Dynamically truncates logits to smallest nucleus with cumulative probability >= top_p.
+fn gguf_sample_top_p logits vocab_size top_p temperature seed
+    return ai_sample_top_p(logits, vocab_size, top_p, temperature, seed)
+
+fn জিজিইউএফ_টপ_পি_স্যাম্পল লজিটস ভোকাব_আকার টপ_পি তাপমাত্রা সিড
+    return ai_sample_top_p(লজিটস, ভোকাব_আকার, টপ_পি, তাপমাত্রা, সিড)
+
+// ── ১২গ. জিজিইউএফ উন্নত বহুমুখী স্যাম্পলার (GGUF Advanced Sampler) ─────────────
+// WHY: Unified sampler combining temperature, Top-K, and Top-P nucleus filtering.
+fn gguf_sample_advanced logits vocab_size temperature top_k top_p
+    return ai_sample_advanced(logits, vocab_size, temperature, top_k, top_p)
+
+fn জিজিইউএফ_উন্নত_স্যাম্পল লজিটস ভোকাব_আকার তাপমাত্রা টপ_কে টপ_পি
+    return ai_sample_advanced(লজিটস, ভোকাব_আকার, তাপমাত্রা, টপ_কে, টপ_পি)
 
 // ── ১৩. জিজিইউএফ সার্বজনীন স্যাম্পলার (Unified GGUF Sampler) ───────────────────
 // WHY: Automatically chooses greedy ArgMax (T <= 0 or K <= 1) or hardware entropy Top-K.

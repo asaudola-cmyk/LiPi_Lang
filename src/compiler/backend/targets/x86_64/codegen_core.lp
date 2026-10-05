@@ -33,12 +33,14 @@ struct X86StringReloc
     sr_patch_offset     // Byte index in code_bytes where the 8-byte pointer is written
     sr_rodata_offset    // Byte index in rodata_bytes where the string payload starts
 
-// WHY: Maps a local variable identifier to an RBP-relative negative stack offset
+// WHY: Maps a local variable identifier to an RBP-relative stack offset or hardware register
 struct X86LocalVar
     lv_name             // Variable name string
     lv_offset           // Positive offset in bytes: accessed as [rbp - lv_offset]
     lv_type             // Inferred struct type name string ("" if untyped)
     lv_prim_type        // Inferred primitive silicon type: "int", "str", or "" if dynamic
+    lv_reg              // Assigned physical register ID (-1 if none or spilled)
+    lv_is_spilled       // 1 if spilled to stack frame slot, 0 if held in physical register
 
 // WHY: Records a function definition entry point for call site resolution
 struct X86Function
@@ -79,6 +81,8 @@ struct X86Synthesizer
     synth_global_vals   // List of top-level integer constant values
     synth_last_struct   // Struct type name of most recent constructor or record literal
     synth_last_expr_type // Type of most recent expression ("int", "str", or "")
+    synth_regalloc_names // List of variable names mapped by SSA register allocation
+    synth_regalloc_regs  // List of physical register IDs assigned by SSA register allocation
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -106,6 +110,8 @@ fn x86_synth_new
     s.synth_global_vals = list()
     s.synth_last_struct = ""
     s.synth_last_expr_type = ""
+    s.synth_regalloc_names = list()
+    s.synth_regalloc_regs = list()
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -206,6 +212,25 @@ fn x86_synth_add_rodata_str s str_text with_newline
     return start_off
 
 // ── 4. AMD64 Machine Instruction Primitives ───────────────────────────────────
+
+fn x86_synth_emit_mov_reg_reg s dst_reg src_reg
+    // WHY: Emits native AMD64 64-bit register-to-register move (mov r64_dst, r64_src).
+    // Calculates REX prefix for extended registers (r8..r15) and standard ModR/M byte.
+    // Self-moves (dst_reg == src_reg) are eliminated as 0-cycle no-ops.
+    if dst_reg == src_reg
+        return 0
+    rex = 72 // 0x48 (REX.W)
+    if src_reg >= 8
+        rex = rex + 4 // REX.R (bit 2) extends ModR/M reg field
+    if dst_reg >= 8
+        rex = rex + 1 // REX.B (bit 0) extends ModR/M r/m field
+    raw_src = src_reg % 8
+    raw_dst = dst_reg % 8
+    modrm = 192 + (raw_src * 8) + raw_dst // 0xC0 + (src * 8) + dst
+    x86_synth_emit_byte(s, rex)
+    x86_synth_emit_byte(s, 137) // 0x89: mov r/m64, r64
+    x86_synth_emit_byte(s, modrm)
+    return 0
 
 fn x86_synth_emit_mov_rax_imm64 s val
     // WHY: Emits 64-bit immediate load into %rax: movabs rax, imm64 (0x48 0xB8 <u64>)
@@ -385,7 +410,7 @@ fn x86_synth_emit_alloc_helper s
         87,                                   // push rdi
         82,                                   // push rdx
         49, 255,                              // xor edi, edi (addr = 0)
-        190, 0, 0, 0, 64,                     // mov esi, 1073741824 (1GB virtual memory arena)
+        190, 0, 240, 255, 127,                // mov esi, 2147479552 (2GB virtual memory arena, 0x7ffff000)
         186, 3, 0, 0, 0,                      // mov edx, 3 (PROT_READ | PROT_WRITE)
         65, 186, 34, 0, 0, 0,                 // mov r10d, 34 (MAP_PRIVATE | MAP_ANON)
         73, 199, 192, 255, 255, 255, 255,     // mov r8, -1
@@ -495,7 +520,26 @@ fn x86_synth_get_field_offset s sname fname
                     fi = fi + 1
             i = i + 1
 
-    // Fallback: search across all registered struct schemas
+    // Fallback pass 1: search declared named structs (prioritized over anonymous struct literals)
+    i = 0
+    while i < s.synth_structs.len()
+        sd = s.synth_structs[i]
+        is_anon = 0
+        if len(sd.sd_name) > 8 and str_sub(sd.sd_name, 0, 8) == "_anon_s_"
+            is_anon = 1
+        end
+        if is_anon == 0
+            fi = 0
+            while fi < sd.sd_fields.len()
+                if sd.sd_fields[fi] == fname
+                    return fi * 8
+                fi = fi + 1
+            end
+        end
+        i = i + 1
+    end
+
+    // Fallback pass 2: search across all registered struct schemas (including anonymous)
     i = 0
     while i < s.synth_structs.len()
         sd = s.synth_structs[i]
@@ -504,7 +548,9 @@ fn x86_synth_get_field_offset s sname fname
             if sd.sd_fields[fi] == fname
                 return fi * 8
             fi = fi + 1
+        end
         i = i + 1
+    end
 
     // Fallback: search or allocate in global fields
     fi = 0
@@ -528,11 +574,42 @@ fn x86_synth_lookup_var s name
         i = i + 1
     return 0
 
+fn x86_synth_find_local_var s name
+    // WHY: Searches current frame's local variable table and returns X86LocalVar object or 0
+    i = 0
+    n = s.synth_locals.len()
+    while i < n
+        v = s.synth_locals[i]
+        if v.lv_name == name
+            return v
+        i = i + 1
+    return 0
+
+fn x86_synth_set_var_reg s name reg_id
+    // WHY: Associates variable with physical hardware register from linear scan allocator
+    v = x86_synth_find_local_var(s, name)
+    if v != 0
+        v.lv_reg = reg_id
+        if reg_id >= 0
+            v.lv_is_spilled = 0
+        else
+            v.lv_is_spilled = 1
+        return 1
+    return 0
+
+fn x86_synth_lookup_var_reg s name
+    // WHY: Returns assigned physical register ID for variable, or -1 if spilled/unmapped
+    v = x86_synth_find_local_var(s, name)
+    if v != 0
+        return v.lv_reg
+    return 0 - 1
+
 fn x86_synth_alloc_var s name
     // WHY: Allocates next 8-byte stack slot for variable name or returns existing offset.
-    existing = x86_synth_lookup_var(s, name)
-    if existing > 0
-        return existing
+    // Checks if variable was assigned a physical register by SSA linear scan allocation.
+    existing = x86_synth_find_local_var(s, name)
+    if existing != 0
+        return existing.lv_offset
     off = s.synth_stack_offset
     s.synth_stack_offset = s.synth_stack_offset + 8
     lv = X86LocalVar()
@@ -540,6 +617,32 @@ fn x86_synth_alloc_var s name
     lv.lv_offset = off
     lv.lv_type = ""
     lv.lv_prim_type = ""
+    lv.lv_reg = 0 - 1
+    lv.lv_is_spilled = 1
+
+    // Cross-reference against SSA linear scan register allocation
+    // WHY: In the 1-pass AST token synthesizer, caller-saved registers (%rdx, %rcx, %r8..%r11)
+    // are clobbered by implicit runtime helper calls (_lipi_str_concat, _lipi_list_push, etc.).
+    // Only dedicated callee-saved physical registers (%r12..%r15, %rbx) are guaranteed to survive
+    // helper calls and can safely remain in silicon registers without stack spilling.
+    r_names = s.synth_regalloc_names
+    r_regs = s.synth_regalloc_regs
+    if r_names != 0 and r_regs != 0
+        ri = 0
+        r_len = len(r_names)
+        while ri < r_len
+            if get(r_names, ri) == name
+                assigned_reg = get(r_regs, ri)
+                if assigned_reg == 12 or assigned_reg == 13 or assigned_reg == 14 or assigned_reg == 15 or assigned_reg == 3
+                    lv.lv_reg = assigned_reg
+                    lv.lv_is_spilled = 0
+                end
+                break
+            end
+            ri = ri + 1
+        end
+    end
+
     push(s.synth_locals, lv)
     return off
 
@@ -634,9 +737,14 @@ fn x86_synth_get_prim_type s name
     return ""
 
 fn x86_synth_bind_var s var_name
-    // WHY: Binds expression result in %rax to local variable and records struct type if known
+    // WHY: Binds expression result in %rax to local variable. If variable is assigned a physical
+    // register by SSA linear scan, emits 1-cycle direct mov into that register; otherwise stores to stack frame slot.
     off = x86_synth_alloc_var(s, var_name)
-    x86_synth_emit_store_var(s, 0, off)
+    lv = x86_synth_find_local_var(s, var_name)
+    if lv != 0 and lv.lv_is_spilled == 0 and lv.lv_reg >= 0
+        x86_synth_emit_mov_reg_reg(s, lv.lv_reg, 0)
+    else
+        x86_synth_emit_store_var(s, 0, off)
     if s.synth_last_struct != ""
         x86_synth_set_var_type(s, var_name, s.synth_last_struct)
         s.synth_last_struct = ""

@@ -123,7 +123,12 @@ fn spawn_process cmd_path arg1 arg2
 
     syscall(61, pid, st, 0, 0, 0, 0)
     raw_status = mem_word_read(st, 0)
-    exit_code = (raw_status / 256) % 256
+    sig = raw_status & 127
+    if sig != 0
+        exit_code = 128 + sig
+    else
+        exit_code = (raw_status / 256) % 256
+    end
 
     syscall(11, argv, 64, 0, 0, 0, 0)
     syscall(11, env, 32, 0, 0, 0, 0)
@@ -167,7 +172,11 @@ fn build_pipeline_print_summary pipe
     say "  ✔ Compiler Toolchain: bin/lipc (Stage-3 Sovereign Modular), bin/lipi"
     say "  ✔ Full-Stack Ecosystem: universe/gui/ & universe/web/"
     say "  ✔ Regression Test Suites: 42/42 Sections Passed"
-    say "👑 100% BIT-FOR-BIT SOVEREIGN REPRODUCIBILITY ACHIEVED!"
+    if pipe.bp_failed_targets == 0
+        say "👑 100% BIT-FOR-BIT SOVEREIGN REPRODUCIBILITY ACHIEVED!"
+    else
+        say "❌ BUILD FAILED: " + str(pipe.bp_failed_targets) + " TARGETS FAILED!"
+    end
 
 // ── 6. Main Entry Point ───────────────────────────────────────────────────────
 

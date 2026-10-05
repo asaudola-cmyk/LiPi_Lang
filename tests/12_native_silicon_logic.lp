@@ -49,27 +49,27 @@ fn reverse_byte x
     return result
 
 say "Low nibble of 0xAB (171):"
-say low_nibble 171
+say low_nibble(171)
 
 say "Shift left 5:"
-say shift_left 5
+say shift_left(5)
 
 say "Shift right 20:"
-say shift_right 20
+say shift_right(20)
 
 say "Bit 3 set in 0b1000 (8):"
-say bit_set 8 3
+say bit_set(8, 3)
 
 say "Bit 0 set in 8:"
-say bit_set 8 0
+say bit_set(8, 0)
 
 say "Popcount of 255:"
-say popcount 255
+say popcount(255)
 
 say "Popcount of 170 (0b10101010):"
-say popcount 170
+say popcount(170)
 
 say "Reverse byte of 1 (should be 128):"
-say reverse_byte 1
+say reverse_byte(1)
 
 say "PASS: Test 12 Silicon Logic"

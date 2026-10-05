@@ -96,6 +96,9 @@ fn x86_synth_expr_postfix s toks pos_box
                     else
                         x86_synth_emit_call_helper(s, member_name)
                         s.synth_last_expr_type = ""
+                        if member_name == "restore_extract_single_file"
+                            s.synth_last_struct = "ExtractedSingleFile"
+                        end
                 else
                     // Struct Field Read: obj.field
                     f_off = x86_synth_get_field_offset(s, s.synth_last_struct, member_name)

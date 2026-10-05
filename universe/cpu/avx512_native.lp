@@ -65,6 +65,26 @@ fn vector_dot_accelerated ptr_a ptr_b count
 fn ভেক্টর_ডট_ত্বরান্বিত ptr_a ptr_b count
     return vector_dot_accelerated(ptr_a, ptr_b, count)
 
+// ── ৩.১ ত্বরান্বিত %xmm SSE2 ফ্লোটিং-পয়েন্ট ডট প্রোডাক্ট (Accelerated Float Dot Product) ─
+// WHY: 100% Native %xmm SSE2 hardware double-precision float vector dot product.
+fn vector_dot_f64_accelerated ptr_a ptr_b count
+    if ptr_a == 0 or ptr_b == 0 or count <= 0
+        return 0
+    return simd_sse2_dot_f64(ptr_a, ptr_b, count)
+
+fn ভেক্টর_ডট_ফ্লোট_ত্বরান্বিত ptr_a ptr_b count
+    return vector_dot_f64_accelerated(ptr_a, ptr_b, count)
+
+// ── ৩.২ ত্বরান্বিত %xmm SSE2 ফ্লোটিং-পয়েন্ট GEMV (Accelerated Float GEMV Matrix Math) ──
+// WHY: General Matrix-Vector Multiplication (Y = W * X) for 64-bit IEEE-754 floats via %xmm SSE2.
+fn gemv_f64_accelerated output_vec weight_matrix input_vec column row
+    if output_vec == 0 or weight_matrix == 0 or input_vec == 0 or column <= 0 or row <= 0
+        return 0
+    return simd_sse2_gemv_f64(output_vec, weight_matrix, input_vec, column, row)
+
+fn জিইএমভি_ফ্লোট_ত্বরান্বিত output_vec weight_matrix input_vec column row
+    return gemv_f64_accelerated(output_vec, weight_matrix, input_vec, column, row)
+
 // ── ৪. সিপিইউ আর্কিটেকচার ও ভেক্টর সক্ষমতা রিপোর্ট (Hardware Discovery Report) ──
 fn cpu_feature_report
     say "========================================================"

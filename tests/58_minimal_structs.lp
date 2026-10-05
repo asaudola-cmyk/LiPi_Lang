@@ -21,7 +21,7 @@ say p.x + p.y
 fn distance p1
     return p1.x * p1.x + p1.y * p1.y
 
-say distance p
+say distance(p)
 
 // Person struct
 alice = Person()

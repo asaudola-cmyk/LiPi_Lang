@@ -326,13 +326,13 @@ fn x86_synth_emit__lipi_sys_poke s
     return off
 
 fn x86_synth_emit__lipi_slab_buckets_ptr s
-    // WHY: Returns static 64-byte QWORD table address for segregated slab freelists in 1 CPU cycle
+    // WHY: Returns static 72-byte QWORD table address for 9 segregated slab freelists in 1 CPU cycle
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_slab_buckets_ptr", off)
     // lea rax, [rip + 1]; ret
     x86_synth_emit_bytes(s, [72, 141, 5, 1, 0, 0, 0, 195])
     zi = 0
-    while zi < 64
+    while zi < 72
         x86_synth_emit_byte(s, 0)
         zi = zi + 1
     return off
@@ -371,6 +371,34 @@ fn x86_synth_emit__lipi_stack_pointer s
     x86_synth_register_helper_fn(s, "_lipi_stack_pointer", off)
     // mov rax, rsp; ret
     x86_synth_emit_bytes(s, [72, 137, 224, 195])
+    return off
+
+fn x86_synth_emit__lipi_fiber_context_switch s
+    // WHY: True silicon-level cooperative context switch in System V AMD64 ABI:
+    // Saves callee-saved registers (%rbp, %rbx, %r12-%r15), stores %rsp to [%rdi],
+    // restores %rsp from %rsi, and restores callee-saved registers before returning.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_fiber_context_switch", off)
+    x86_synth_register_helper_fn(s, "fiber_context_switch", off)
+    x86_synth_register_helper_fn(s, "fiber_switch", off)
+    x86_synth_register_helper_fn(s, "ফাইবার_কনটেক্সট_সুইচ", off)
+    x86_synth_emit_bytes(s, [
+        85,                               // push rbp
+        83,                               // push rbx
+        65, 84,                           // push r12
+        65, 85,                           // push r13
+        65, 86,                           // push r14
+        65, 87,                           // push r15
+        72, 137, 39,                      // mov [rdi], rsp
+        72, 137, 244,                     // mov rsp, rsi
+        65, 95,                           // pop r15
+        65, 94,                           // pop r14
+        65, 93,                           // pop r13
+        65, 92,                           // pop r12
+        91,                               // pop rbx
+        93,                               // pop rbp
+        195                               // ret
+    ])
     return off
 
 fn x86_synth_emit__lipi_atomic_lock s
@@ -431,6 +459,7 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_clock_ms = x86_synth_emit__lipi_clock_ms(s)
     off__lipi_size_of = x86_synth_emit__lipi_size_of(s)
     off__lipi_stack_pointer = x86_synth_emit__lipi_stack_pointer(s)
+    off__lipi_fiber_context_switch = x86_synth_emit__lipi_fiber_context_switch(s)
     off__lipi_atomic_lock = x86_synth_emit__lipi_atomic_lock(s)
     off__lipi_atomic_unlock = x86_synth_emit__lipi_atomic_unlock(s)
     off__lipi_pass_thru = x86_synth_emit__lipi_pass_thru(s)
@@ -532,6 +561,9 @@ fn x86_synth_emit_all_runtime_helpers s
     // Stack pointer & Atomics
     x86_synth_register_helper_fn(s, "stack_pointer", off__lipi_stack_pointer)
     x86_synth_register_helper_fn(s, "স্ট্যাক_পয়েন্টার", off__lipi_stack_pointer)
+    x86_synth_register_helper_fn(s, "fiber_context_switch", off__lipi_fiber_context_switch)
+    x86_synth_register_helper_fn(s, "fiber_switch", off__lipi_fiber_context_switch)
+    x86_synth_register_helper_fn(s, "ফাইবার_কনটেক্সট_সুইচ", off__lipi_fiber_context_switch)
     x86_synth_register_helper_fn(s, "atomic_lock", off__lipi_atomic_lock)
     x86_synth_register_helper_fn(s, "অ্যাটমিক_লক", off__lipi_atomic_lock)
     x86_synth_register_helper_fn(s, "atomic_unlock", off__lipi_atomic_unlock)

@@ -742,11 +742,11 @@ fn arm64_emit_strings ctx
     arm64_label_define(ctx, "_lipi_initial_sp")
     arm64_bb_put64(ctx, 0)
 
-    // Segregated Slab Allocator Buckets (8 size classes: 16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B)
+    // Segregated Slab Allocator Buckets (9 size classes: 16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B, 4096B)
     // WHY: Provides O(1) LIFO memory slot recycling for AArch64 baremetal silicon
     arm64_label_define(ctx, "_lipi_slab_buckets")
     sb_i = 0
-    while sb_i < 8
+    while sb_i < 9
         arm64_bb_put64(ctx, 0)
         sb_i = sb_i + 1
 
@@ -1034,17 +1034,6 @@ fn arm64_cset rd cond
     elif c == ARM64_COND_LE
         cond_field = 12
     return 2594113504 + (cond_field * 4096) + d
-
-// B.cond: Conditional branch with signed 19-bit displacement (+/- 1MB)
-// Base: 0x54000000 = 1409286144
-fn arm64_b_cond cond disp
-    offset = floor(disp / 4)
-    if offset < 0
-        imm19 = offset + 524288
-    else
-        imm19 = offset % 524288
-    c = floor(cond) % 16
-    return 1409286144 + (imm19 * 32) + c
 
 // Push 64-bit register Xt onto stack (pre-index: str Xt, [sp, #-16]!)
 // WHY: AArch64 hardware requires the Stack Pointer (SP) to remain strictly 16-byte
@@ -1685,13 +1674,14 @@ fn arm64_emit_runtime_stubs ctx
     lbl_alc_sb5  = arm64_make_anon_label(ctx, "alc_sb5")
     lbl_alc_sb6  = arm64_make_anon_label(ctx, "alc_sb6")
     lbl_alc_sb7  = arm64_make_anon_label(ctx, "alc_sb7")
+    lbl_alc_sb8  = arm64_make_anon_label(ctx, "alc_sb8")
     lbl_alc_has_b = arm64_make_anon_label(ctx, "alc_has_b")
 
-    // Check if x0 <= 2048 for slab recycling
-    arm64_emit(ctx, 4045406303) // cmp x0, #2048
+    // Check if x0 <= 4096 for slab recycling (9 geometric size classes)
+    arm64_emit(ctx, 4047504415) // cmp x0, #4096
     arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_bump)
 
-    // Determine bucket offset in x3 (0, 8, 16, 24, 32, 40, 48, 56)
+    // Determine bucket offset in x3 (0, 8, 16, 24, 32, 40, 48, 56, 64)
     arm64_emit(ctx, 4043325535) // cmp x0, #16
     arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb1)
     arm64_emit_movz(ctx, ARM64_REG_X3, 0, 0)
@@ -1734,7 +1724,13 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit_b_label(ctx, lbl_alc_has_b)
 
     arm64_label_define(ctx, lbl_alc_sb7)
+    arm64_emit(ctx, 4045406303) // cmp x0, #2048
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_alc_sb8)
     arm64_emit_movz(ctx, ARM64_REG_X3, 56, 0)
+    arm64_emit_b_label(ctx, lbl_alc_has_b)
+
+    arm64_label_define(ctx, lbl_alc_sb8)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 64, 0)
 
     arm64_label_define(ctx, lbl_alc_has_b)
     // Check bucket freelist head in _lipi_slab_buckets[x3]
@@ -2283,7 +2279,7 @@ fn arm64_emit_runtime_stubs ctx
 
     // ──────────────────────────────────────────────────────────────────────────
     // 25. _lipi_free / lipi_fn_free: Direct Silicon Segregated Slab Reclamation
-    // WHY: O(1) LIFO memory recycling for AArch64 baremetal silicon (<= 2048B chunks)
+    // WHY: O(1) LIFO memory recycling for AArch64 baremetal silicon (<= 4096B chunks)
     // ──────────────────────────────────────────────────────────────────────────
     arm64_label_define(ctx, "_lipi_free")
     arm64_label_define(ctx, "lipi_fn_free")
@@ -2297,6 +2293,7 @@ fn arm64_emit_runtime_stubs ctx
     lbl_afr_b5 = arm64_make_anon_label(ctx, "afr_b5")
     lbl_afr_b6 = arm64_make_anon_label(ctx, "afr_b6")
     lbl_afr_b7 = arm64_make_anon_label(ctx, "afr_b7")
+    lbl_afr_b8 = arm64_make_anon_label(ctx, "afr_b8")
     lbl_afr_has_b = arm64_make_anon_label(ctx, "afr_has_b")
 
     // Null pointer check
@@ -2306,13 +2303,13 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit(ctx, 3506446337) // sub x1, x0, #8
     arm64_emit(ctx, 4181721122) // ldr x2, [x1]
 
-    // Validate size: 0 < size <= 2048
+    // Validate size: 0 < size <= 4096
     arm64_emit(ctx, arm64_cmp_imm(2, 0))
     arm64_emit_b_cond_label(ctx, ARM64_COND_LE, lbl_afr_done)
-    arm64_emit(ctx, 4045406303) // cmp x2, #2048
+    arm64_emit(ctx, 4047504479) // cmp x2, #4096
     arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_done)
 
-    // Determine bucket offset in x3 (0, 8, 16, 24, 32, 40, 48, 56)
+    // Determine bucket offset in x3 (0, 8, 16, 24, 32, 40, 48, 56, 64)
     arm64_emit(ctx, 4043325535) // cmp x2, #16
     arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b1)
     arm64_emit_movz(ctx, ARM64_REG_X3, 0, 0)
@@ -2355,7 +2352,13 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit_b_label(ctx, lbl_afr_has_b)
 
     arm64_label_define(ctx, lbl_afr_b7)
+    arm64_emit(ctx, 4045406303) // cmp x2, #2048
+    arm64_emit_b_cond_label(ctx, ARM64_COND_GT, lbl_afr_b8)
     arm64_emit_movz(ctx, ARM64_REG_X3, 56, 0)
+    arm64_emit_b_label(ctx, lbl_afr_has_b)
+
+    arm64_label_define(ctx, lbl_afr_b8)
+    arm64_emit_movz(ctx, ARM64_REG_X3, 64, 0)
 
     arm64_label_define(ctx, lbl_afr_has_b)
     // Link x0 into _lipi_slab_buckets[x3]

@@ -12,7 +12,8 @@
 import "universe/core/math"
 import "universe/core/collections"
 import "universe/core/string"
-import "universe/sys/syscalls"
+// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+import "universe/os/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

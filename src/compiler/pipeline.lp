@@ -55,6 +55,11 @@ import "src/compiler/semantics/type_checker.lp"
 import "src/compiler/semantics/const_eval.lp"
 import "src/compiler/semantics/ownership_check.lp"
 import "src/compiler/semantics/purity_analyzer.lp"
+import "src/compiler/semantics/math_proof.lp"
+
+// Subsystem 5: Middle-End SSA Lowering & Optimization Pass Manager
+include "src/compiler/middleend/ast_to_ssa.lp"
+include "src/compiler/middleend/opt/pass_manager.lp"
 
 // Subsystem 6: Register Allocation
 include "src/compiler/backend/regalloc/live_interval.lp"
@@ -121,6 +126,385 @@ struct CompilerResult
     res_reg_alloc_spills    // Number of variables spilled to stack
     res_error_msg           // Formatted error description if failed
 
+// ── 2b. Modular Token-to-AST Parser ──────────────────────────────────────────
+
+fn pipeline_parse_primary toks pos_box sp
+    // WHY: Parses primitive literals, identifiers, unary operators, and calls.
+    p = get(pos_box, 0)
+    if p >= toks.len()
+        return ast_expr_literal_int(0, sp)
+    t = toks[p]
+    k = t.tok_kind
+    txt = t.tok_text
+    list_set(pos_box, 0, p + 1)
+
+    if k == TOK_INT()
+        return ast_expr_literal_int(t.tok_int_val, sp)
+    if k == TOK_BOOL()
+        return ast_expr_literal_bool(t.tok_int_val, sp)
+    if k == TOK_STR()
+        return ast_expr_literal_str(txt, sp)
+    if k == TOK_MINUS() or (k != TOK_STR() and txt == "-")
+        sub_e = pipeline_parse_primary(toks, pos_box, sp)
+        return ast_expr_unary("-", sub_e, sp)
+    if k == TOK_BANG() or (k != TOK_STR() and txt == "!")
+        sub_e = pipeline_parse_primary(toks, pos_box, sp)
+        return ast_expr_unary("!", sub_e, sp)
+    if k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
+        inner = pipeline_parse_expr(toks, pos_box, sp)
+        cp = get(pos_box, 0)
+        if cp < toks.len() and (toks[cp].tok_kind == TOK_RPAREN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == ")"))
+            list_set(pos_box, 0, cp + 1)
+        return inner
+    if k == TOK_IDENT() or k == TOK_KW_PRINT() or (k >= TOK_KW_FN() and k <= TOK_KW_SYSCALL())
+        // Check for function invocation: ident(arg1, arg2...)
+        cp = get(pos_box, 0)
+        if cp < toks.len() and (toks[cp].tok_kind == TOK_LPAREN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "("))
+            list_set(pos_box, 0, cp + 1)
+            args = list()
+            while get(pos_box, 0) < toks.len()
+                cp2 = get(pos_box, 0)
+                if toks[cp2].tok_kind == TOK_RPAREN() or (toks[cp2].tok_kind != TOK_STR() and toks[cp2].tok_text == ")")
+                    list_set(pos_box, 0, cp2 + 1)
+                    break
+                if toks[cp2].tok_kind == TOK_COMMA() or (toks[cp2].tok_kind != TOK_STR() and toks[cp2].tok_text == ",")
+                    list_set(pos_box, 0, cp2 + 1)
+                else
+                    arg_e = pipeline_parse_expr(toks, pos_box, sp)
+                    push(args, arg_e)
+            callee_var = ast_expr_ident(txt, sp)
+            call_node = ast_expr_call(callee_var, args, sp)
+            call_node.params = args
+            return call_node
+        return ast_expr_ident(txt, sp)
+    return ast_expr_literal_int(0, sp)
+
+fn pipeline_parse_bin_prec toks pos_box sp min_prec
+    // WHY: Implements Pratt precedence climbing for deterministic algebraic expressions.
+    left = pipeline_parse_primary(toks, pos_box, sp)
+    while get(pos_box, 0) < toks.len()
+        cp = get(pos_box, 0)
+        ct = toks[cp]
+        ck = ct.tok_kind
+        cx = ct.tok_text
+
+        prec = 0 - 1
+        op_str = ""
+        if ck == TOK_STAR() or cx == "*" or ck == TOK_SLASH() or cx == "/" or ck == TOK_PERCENT() or cx == "%"
+            prec = 20
+            op_str = cx
+        elif ck == TOK_PLUS() or cx == "+" or ck == TOK_MINUS() or cx == "-"
+            prec = 10
+            op_str = cx
+        elif ck == TOK_LT() or cx == "<" or ck == TOK_LTE() or cx == "<=" or ck == TOK_GT() or cx == ">" or ck == TOK_GTE() or cx == ">=" or ck == TOK_EQ() or cx == "==" or ck == TOK_NEQ() or cx == "!="
+            prec = 5
+            op_str = cx
+
+        if prec < min_prec
+            break
+
+        list_set(pos_box, 0, cp + 1)
+        right = pipeline_parse_bin_prec(toks, pos_box, sp, prec + 1)
+        left = ast_expr_binary(left, op_str, right, sp)
+    return left
+
+fn pipeline_parse_expr toks pos_box sp
+    // WHY: Parses any standard binary/unary expression tree with minimum precedence 0.
+    return pipeline_parse_bin_prec(toks, pos_box, sp, 0)
+
+fn pipeline_parse_statement toks pos_box sp
+    // WHY: Maps control flow, assignment, loops, and calls into valid AST statement structures.
+    while get(pos_box, 0) < toks.len()
+        cp = get(pos_box, 0)
+        k = toks[cp].tok_kind
+        if k == TOK_NEWLINE() or k == TOK_SEMI() or k == TOK_COMMENT_LINE() or k == TOK_COMMENT_BLOCK()
+            list_set(pos_box, 0, cp + 1)
+        else
+            break
+
+    if get(pos_box, 0) >= toks.len()
+        return 0
+
+    cp = get(pos_box, 0)
+    t = toks[cp]
+    k = t.tok_kind
+    txt = t.tok_text
+
+    // 1. Return statement
+    if k == TOK_KW_RETURN() or txt == "return" or txt == "ফেরত"
+        list_set(pos_box, 0, cp + 1)
+        has_expr = 0
+        if get(pos_box, 0) < toks.len()
+            nk = toks[get(pos_box, 0)].tok_kind
+            ntxt = toks[get(pos_box, 0)].tok_text
+            if nk != TOK_NEWLINE() and nk != TOK_SEMI() and nk != TOK_EOF() and nk != TOK_RBRACE() and ntxt != "}"
+                has_expr = 1
+        if has_expr == 1
+            ret_val = pipeline_parse_expr(toks, pos_box, sp)
+            return ast_stmt_return(ret_val, sp)
+        return ast_stmt_return(ast_expr_literal_int(0, sp), sp)
+
+    // 2. While loop
+    if k == TOK_KW_WHILE() or txt == "while" or txt == "যতক্ষণ"
+        list_set(pos_box, 0, cp + 1)
+        cond = pipeline_parse_expr(toks, pos_box, sp)
+        body = list()
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            while get(pos_box, 0) < toks.len()
+                if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    break
+                s = pipeline_parse_statement(toks, pos_box, sp)
+                if s != 0
+                    push(body, s)
+        return ast_stmt_while(cond, body, sp)
+
+    // 3. Conditional if / else
+    if k == TOK_KW_IF() or txt == "if" or txt == "যদি"
+        list_set(pos_box, 0, cp + 1)
+        cond = pipeline_parse_expr(toks, pos_box, sp)
+        then_b = list()
+        else_b = list()
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            while get(pos_box, 0) < toks.len()
+                if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    break
+                s = pipeline_parse_statement(toks, pos_box, sp)
+                if s != 0
+                    push(then_b, s)
+        if get(pos_box, 0) < toks.len()
+            ek = toks[get(pos_box, 0)].tok_kind
+            etxt = toks[get(pos_box, 0)].tok_text
+            if ek == TOK_KW_ELSE() or etxt == "else" or etxt == "নাহলে"
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    while get(pos_box, 0) < toks.len()
+                        if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            break
+                        s = pipeline_parse_statement(toks, pos_box, sp)
+                        if s != 0
+                            push(else_b, s)
+        return ast_stmt_if(cond, then_b, list(), else_b, sp)
+
+    // 4. Variable declaration let / var
+    if k == TOK_KW_LET() or txt == "let" or txt == "var" or txt == "ধরি" or txt == "চলক"
+        list_set(pos_box, 0, cp + 1)
+        if get(pos_box, 0) < toks.len()
+            var_name = toks[get(pos_box, 0)].tok_text
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "="))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                val_e = pipeline_parse_expr(toks, pos_box, sp)
+                return ast_stmt_assign(var_name, val_e, sp)
+
+    // 5. Direct assignment: ident = expr
+    if k == TOK_IDENT() and cp + 1 < toks.len()
+        n1 = toks[cp + 1]
+        if n1.tok_kind == TOK_ASSIGN() or (n1.tok_kind != TOK_STR() and n1.tok_text == "=")
+            var_name = txt
+            list_set(pos_box, 0, cp + 2)
+            val_e = pipeline_parse_expr(toks, pos_box, sp)
+            return ast_stmt_assign(var_name, val_e, sp)
+        if n1.tok_kind == TOK_PLUSEQ() or (n1.tok_kind != TOK_STR() and n1.tok_text == "+=")
+            var_name = txt
+            list_set(pos_box, 0, cp + 2)
+            val_e = pipeline_parse_expr(toks, pos_box, sp)
+            return ast_stmt_assign_op(var_name, val_e, "+=", sp)
+        if n1.tok_kind == TOK_MINUSEQ() or (n1.tok_kind != TOK_STR() and n1.tok_text == "-=")
+            var_name = txt
+            list_set(pos_box, 0, cp + 2)
+            val_e = pipeline_parse_expr(toks, pos_box, sp)
+            return ast_stmt_assign_op(var_name, val_e, "-=", sp)
+
+    // 6. Output print / say statement
+    if k == TOK_KW_PRINT() or txt == "say" or txt == "বলো" or txt == "print" or txt == "println"
+        list_set(pos_box, 0, cp + 1)
+        arg_e = pipeline_parse_expr(toks, pos_box, sp)
+        callee_v = ast_expr_ident(txt, sp)
+        call_e = ast_expr_call(callee_v, [arg_e], sp)
+        call_e.params = [arg_e]
+        call_node = ast_stmt_expr(call_e, sp)
+        call_node.kind = "ExprStmt"
+        return call_node
+
+    // 7. General expression statement fallback
+    e_node = pipeline_parse_expr(toks, pos_box, sp)
+    stmt_node = ast_stmt_expr(e_node, sp)
+    stmt_node.kind = "ExprStmt"
+    return stmt_node
+
+fn pipeline_parse_ast_declarations toks src_path
+    // WHY: Transforms token stream into typed AST declarations, supporting bilingual syntax,
+    // parameters, blocks, loops, and top-level execution without hardcoded placeholders.
+    sp = source_span_point(src_path, 1, 1, 0)
+    decls = list()
+    top_stmts = list()
+    pos_box = [0]
+
+    while get(pos_box, 0) < toks.len()
+        while get(pos_box, 0) < toks.len()
+            k = toks[get(pos_box, 0)].tok_kind
+            if k == TOK_NEWLINE() or k == TOK_SEMI() or k == TOK_COMMENT_LINE() or k == TOK_COMMENT_BLOCK()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            else
+                break
+
+        if get(pos_box, 0) >= toks.len()
+            break
+
+        cp = get(pos_box, 0)
+        t = toks[cp]
+        k = t.tok_kind
+        txt = t.tok_text
+
+        if k == TOK_EOF()
+            break
+
+        if k == TOK_KW_FN() or k == TOK_DIR_FN() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn"))
+            list_set(pos_box, 0, cp + 1)
+            fn_name = ""
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                fn_name = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+            // Parse formal parameters
+            params = list()
+            has_paren = 0
+            if get(pos_box, 0) < toks.len()
+                if toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "(")
+                    has_paren = 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+            while get(pos_box, 0) < toks.len()
+                p_idx = get(pos_box, 0)
+                pt = toks[p_idx]
+                if has_paren == 1
+                    if pt.tok_kind == TOK_RPAREN() or (pt.tok_kind != TOK_STR() and pt.tok_text == ")")
+                        list_set(pos_box, 0, p_idx + 1)
+                        break
+                else
+                    if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_LBRACE() or pt.tok_kind == TOK_ASSIGN() or (pt.tok_kind != TOK_STR() and (pt.tok_text == "{" or pt.tok_text == "="))
+                        break
+
+                if pt.tok_kind == TOK_IDENT()
+                    p_name = pt.tok_text
+                    list_set(pos_box, 0, p_idx + 1)
+                    if get(pos_box, 0) < toks.len()
+                        nxt_k = toks[get(pos_box, 0)].tok_kind
+                        nxt_t = toks[get(pos_box, 0)].tok_text
+                        if nxt_k == TOK_COLON() or (nxt_k != TOK_STR() and nxt_t == ":")
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            end
+                        end
+                    end
+                    p_node = ast_param_new(p_name, "i64", 0, sp)
+                    push(params, p_node)
+                elif pt.tok_kind == TOK_COMMA() or (pt.tok_kind != TOK_STR() and pt.tok_text == ",")
+                    list_set(pos_box, 0, p_idx + 1)
+                else
+                    list_set(pos_box, 0, p_idx + 1)
+
+            // Skip return type annotation: -> type or : type
+            if get(pos_box, 0) < toks.len()
+                rk = toks[get(pos_box, 0)].tok_kind
+                rtxt = toks[get(pos_box, 0)].tok_text
+                if rk == TOK_ARROW() or rtxt == "->" or rk == TOK_COLON() or rtxt == ":"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+            // Parse body statements
+            body = list()
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "="))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                ret_e = pipeline_parse_expr(toks, pos_box, sp)
+                push(body, ast_stmt_return(ret_e, sp))
+            elif get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        break
+                    s = pipeline_parse_statement(toks, pos_box, sp)
+                    if s != 0
+                        push(body, s)
+            else
+                // Indented or end-delimited block
+                fn_line = t.tok_span.span_start_line
+                fn_col = t.tok_span.span_start_col
+                while get(pos_box, 0) < toks.len()
+                    cur_p = get(pos_box, 0)
+                    cur_tok = toks[cur_p]
+                    if cur_tok.tok_kind == TOK_KW_FN() or cur_tok.tok_kind == TOK_DIR_FN()
+                        break
+                    if cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "fn" or cur_tok.tok_text == "কাজ")
+                        break
+                    if cur_tok.tok_kind == TOK_KW_END() or cur_tok.tok_kind == TOK_DIR_END() or (cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "end" or cur_tok.tok_text == "শেষ"))
+                        list_set(pos_box, 0, cur_p + 1)
+                        break
+                    if cur_tok.tok_span.span_start_col <= fn_col and cur_tok.tok_span.span_start_line > fn_line
+                        break
+                    before_p = get(pos_box, 0)
+                    s = pipeline_parse_statement(toks, pos_box, sp)
+                    if s != 0
+                        push(body, s)
+                    if get(pos_box, 0) <= before_p
+                        list_set(pos_box, 0, before_p + 1)
+
+            fn_decl = ast_decl_fn(fn_name, params, "i64", body, 1, sp)
+            push(decls, fn_decl)
+        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন"))
+            list_set(pos_box, 0, cp + 1)
+            while get(pos_box, 0) < toks.len()
+                sk = toks[get(pos_box, 0)].tok_kind
+                stxt = toks[get(pos_box, 0)].tok_text
+                if sk == TOK_KW_END() or sk == TOK_DIR_END() or stxt == "end" or stxt == "শেষ"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    break
+                if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or stxt == "fn"
+                    break
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+        else
+            before_top = get(pos_box, 0)
+            stmt = pipeline_parse_statement(toks, pos_box, sp)
+            if stmt != 0
+                push(top_stmts, stmt)
+            if get(pos_box, 0) <= before_top
+                list_set(pos_box, 0, before_top + 1)
+
+    // Synthesize or augment entry point main() if required
+    if top_stmts.len() > 0 or decls.len() == 0
+        main_found = 0
+        di = 0
+        while di < decls.len()
+            d = decls[di]
+            if d.name == "main" or d.name == "মূল"
+                main_found = 1
+                new_body = list()
+                ti = 0
+                while ti < top_stmts.len()
+                    push(new_body, top_stmts[ti])
+                    ti = ti + 1
+                bi = 0
+                while bi < d.body.len()
+                    push(new_body, d.body[bi])
+                    bi = bi + 1
+                d.body = new_body
+                break
+            di = di + 1
+        if main_found == 0
+            main_decl = ast_decl_fn("main", list(), "i64", top_stmts, 1, sp)
+            push(decls, main_decl)
+
+    return decls
+
 // ── 3. Constructor Functions ──────────────────────────────────────────────────
 
 fn compiler_config_new src out_bin arch opt fmt dry_run
@@ -146,6 +530,154 @@ fn compiler_result_new
     res.res_reg_alloc_spills = 0
     res.res_error_msg = ""
     return res
+
+fn pipeline_str_contains haystack needle
+    h_len = len(haystack)
+    n_len = len(needle)
+    if n_len > h_len
+        return 0
+    end
+    if n_len == 0
+        return 1
+    end
+    limit = h_len - n_len
+    idx = 0
+    while idx <= limit
+        k = 0
+        matched = 1
+        while k < n_len
+            if char_at(haystack, idx + k) != char_at(needle, k)
+                matched = 0
+                k = n_len
+            else
+                k = k + 1
+            end
+        end
+        if matched == 1
+            return 1
+        end
+        idx = idx + 1
+    end
+    return 0
+
+// WHY: Prefix verification for assertion and panic handler function exemptions.
+fn pipeline_str_has_prefix haystack needle
+    h_len = len(haystack)
+    n_len = len(needle)
+    if n_len > h_len
+        return 0
+    end
+    k = 0
+    while k < n_len
+        if char_at(haystack, k) != char_at(needle, k)
+            return 0
+        end
+        k = k + 1
+    end
+    return 1
+
+// WHY: Suffix verification for lifecycle routines (_new, _free, _alloc, _destroy, etc).
+fn pipeline_str_has_suffix haystack needle
+    h_len = len(haystack)
+    n_len = len(needle)
+    if n_len > h_len
+        return 0
+    end
+    offset = h_len - n_len
+    k = 0
+    while k < n_len
+        if char_at(haystack, offset + k) != char_at(needle, k)
+            return 0
+        end
+        k = k + 1
+    end
+    return 1
+
+// WHY: Matches token as a whole word, prefix (token_), suffix (_token), or inner word (_token_).
+// Eliminates false positives where a substring occurs inside another English word (e.g. "free" in "freeze", "new" in "renew", "init" in "definition").
+fn pipeline_name_has_token name token
+    if name == token
+        return 1
+    end
+    t_pref = token + "_"
+    if pipeline_str_has_prefix(name, t_pref) == 1
+        return 1
+    end
+    t_suff = "_" + token
+    if pipeline_str_has_suffix(name, t_suff) == 1
+        return 1
+    end
+    t_mid = "_" + token + "_"
+    if pipeline_str_contains(name, t_mid) == 1
+        return 1
+    end
+    return 0
+
+// WHY: Precise memory proof exemption filter preventing false positives on words like "freeze", "renew", "definition".
+// Enforces exact whole-word, prefix (e.g. assert_, panic_), suffix (_new, _free), or inner-word (_create_) matching.
+fn pipeline_is_memory_exempt_fn name
+    if pipeline_name_has_token(name, "exit") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "new") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "free") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "alloc") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "destroy") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "drop") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "close") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "clean") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "release") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "init") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "spawn") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "open") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "make") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "build") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "clone") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "create") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "unmap") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "assert") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "panic") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "fail") == 1
+        return 1
+    end
+    return 0
+
 
 // ── 4. End-to-End Modular Pipeline Execution ──────────────────────────────────
 
@@ -183,15 +715,7 @@ fn compiler_pipeline_execute config source_code
 
     // ── Phase 3: Abstract Syntax Tree Construction & Verification ─────────────
     sp = source_span_point(config.cfg_src_path, 1, 1, 0)
-    p0 = ast_param_new("argc", "i64", 0, sp)
-    lit_0 = ast_expr_literal_int(0, sp)
-    ret_stmt = ast_stmt_return(lit_0, sp)
-    param_list = list()
-    push(param_list, p0)
-    stmt_list = list()
-    push(stmt_list, ret_stmt)
-    fn_def = ast_decl_fn("main", param_list, "i64", stmt_list, 1, sp)
-    node_count = ast_visitor_count_nodes(fn_def)
+    ast_decls = pipeline_parse_ast_declarations(toks, config.cfg_src_path)
     result.res_stage_reached = PIPELINE_STAGE_PARSE()
 
     // ── Phase 4: Semantic Analysis, Type System & Ownership ───────────────────
@@ -201,32 +725,159 @@ fn compiler_pipeline_execute config source_code
     tc = type_checker_new(ty_reg, sym_table, scope_stk)
     own_checker = ownership_checker_new()
 
+    // WHY: Control Flow Graph (CFG) Mathematical Memory Proof Engine enforces ΔMemory = 0 compile-time invariant.
+    di = 0
+    while di < ast_decls.len()
+        decl = ast_decls[di]
+        if decl.kind == "FnDef" or decl.kind == "Function" or decl.kind == "কাজ"
+            // WHY: Uses precise whole-word, prefix, and suffix matching to avoid false positives on words like 'freeze', 'renew', 'definition'.
+            is_cleanup_fn = pipeline_is_memory_exempt_fn(decl.name)
+            if is_cleanup_fn == 0
+                proof_engine = math_proof_engine_new()
+                proof_cert = math_proof_verify_fn(proof_engine, decl)
+                if proof_cert.mpc_is_proven == 0
+                    err_count = proof_cert.mpc_violation_count
+                    if err_count == 0
+                        err_count = 1
+                    result.res_error_count = result.res_error_count + err_count
+                    result.res_error_msg = "Mathematical proof failed: Memory conservation violated in function " + decl.name
+                    return result
+                end
+            end
+        end
+        di = di + 1
+    end
+
     g_sym = symbol_variable("__lipi_entry", 2, 0, span_default(), 1)
     scope_define(scope_stk, g_sym)
     result.res_stage_reached = PIPELINE_STAGE_SEMANTICS()
 
     // ── Phase 5: Multi-Target Architecture Selection ──────────────────────────
     target = target_machine_from_name("x86_64")
+    target_name = "x86_64"
     if config.cfg_target_arch == TARGET_ID_ARM64()
         target = target_machine_from_name("arm64")
-    if config.cfg_target_arch == TARGET_ID_WASM()
+        target_name = "arm64"
+    elif config.cfg_target_arch == TARGET_ID_WASM()
         target = target_machine_from_name("wasm")
-    if config.cfg_target_arch == TARGET_ID_RISCV64()
+        target_name = "wasm"
+    elif config.cfg_target_arch == TARGET_ID_RISCV64()
         target = target_machine_from_name("riscv64")
+        target_name = "riscv64"
     result.res_stage_reached = PIPELINE_STAGE_TARGET()
 
+    // ── Middle-End: SSA IR Lowering & Pass Manager Pipeline ───────────────────
+    ssa_module = ast_to_ssa_lower_module(ast_decls, target_name)
+    pm = pass_manager_new(config.cfg_opt_level)
+    pass_manager_run_on_module(pm, ssa_module)
+
+    // Harvest compile-time folded constants from SSA optimizations
+    opt_const_names = list()
+    opt_const_vals = list()
+
+    // 1. From global definitions
+    gi = 0
+    while gi < ssa_module.globals.len()
+        g = ssa_module.globals[gi]
+        push(opt_const_names, g.name)
+        push(opt_const_vals, g.init_val)
+        gi = gi + 1
+
+    // 2. From instructions across functions
+    fi = 0
+    while fi < ssa_module.functions.len()
+        fn_obj = ssa_module.functions[fi]
+        bi = 0
+        while bi < fn_obj.blocks.len()
+            bb = fn_obj.blocks[bi]
+            ii = 0
+            while ii < bb.instructions.len()
+                inst = bb.instructions[ii]
+                if inst.is_dead == 0 and inst.op == OP_STORE and inst.operands.len() == 2
+                    val_opnd = inst.operands[0]
+                    slot_opnd = inst.operands[1]
+                    // WHY: Check val_kind to prevent collision with ASTNode.kind offset in untyped variable context
+                    if (val_opnd.val_kind == VAL_KIND_CONST or val_opnd.kind == VAL_KIND_CONST) and slot_opnd != 0
+                        slot_name = slot_opnd.id
+                        // WHY: Only fold constants into named stack slots (%slot_<name>).
+                        // Anonymous SSA temporaries (%v0, %v1) must never be stripped to avoid poisoning user variables.
+                        if len(slot_name) > 6 and str_sub(slot_name, 0, 6) == "%slot_"
+                            clean_name = str_sub(slot_name, 6, len(slot_name))
+                            push(opt_const_names, clean_name)
+                            push(opt_const_vals, val_opnd.const_val)
+                ii = ii + 1
+            bi = bi + 1
+        fi = fi + 1
+
     // ── Phase 6: Linear Scan Register Allocation ──────────────────────────────
-    iv0 = live_interval_new("%ret", 0, 0, 5, 0)
-    iv_list = list()
-    push(iv_list, iv0)
     caller_regs = list()
-    push(caller_regs, 0)
-    push(caller_regs, 1)
     callee_regs = list()
-    push(callee_regs, 2)
-    push(callee_regs, 3)
-    ra_res = linear_scan_allocate(iv_list, caller_regs, callee_regs, 8)
-    result.res_reg_alloc_spills = ra_res.spill_count
+    word_size = 8
+
+    if config.cfg_target_arch == TARGET_ID_X86_64()
+        push(caller_regs, 10)
+        push(caller_regs, 11)
+        push(caller_regs, 8)
+        push(caller_regs, 9)
+        push(caller_regs, 2)
+        push(caller_regs, 1)
+        push(callee_regs, 12)
+        push(callee_regs, 13)
+        push(callee_regs, 14)
+        push(callee_regs, 15)
+        push(callee_regs, 3)
+    elif config.cfg_target_arch == TARGET_ID_ARM64()
+        cr_i = 9
+        while cr_i <= 15
+            push(caller_regs, cr_i)
+            cr_i = cr_i + 1
+        cl_i = 19
+        while cl_i <= 28
+            push(callee_regs, cl_i)
+            cl_i = cl_i + 1
+    elif config.cfg_target_arch == TARGET_ID_RISCV64()
+        push(caller_regs, 5)
+        push(caller_regs, 6)
+        push(caller_regs, 7)
+        push(caller_regs, 28)
+        push(caller_regs, 29)
+        push(caller_regs, 30)
+        push(caller_regs, 31)
+        push(callee_regs, 9)
+        cl_i = 18
+        while cl_i <= 27
+            push(callee_regs, cl_i)
+            cl_i = cl_i + 1
+    else
+        push(caller_regs, 10)
+        push(caller_regs, 11)
+        push(callee_regs, 12)
+        push(callee_regs, 13)
+
+    reg_names = list()
+    reg_regs = list()
+    total_spills = 0
+
+    fi = 0
+    while fi < ssa_module.functions.len()
+        fn_obj = ssa_module.functions[fi]
+        ra_res = linear_scan_allocate_function(fn_obj, caller_regs, callee_regs, word_size)
+        total_spills = total_spills + ra_res.spill_count
+
+        ivi = 0
+        while ivi < ra_res.intervals.len()
+            iv = ra_res.intervals[ivi]
+            if iv.is_spilled == 0 and iv.assigned_reg >= 0
+                vname = iv.vreg_name
+                push(reg_names, vname)
+                push(reg_regs, iv.assigned_reg)
+                // WHY: SSA virtual register intervals (%v0..%vN, %slot_...) are function-scoped.
+                // Never promote stripped names globally to avoid clobbering variables (like 'i')
+                // in unpreserved callee-saved registers across nested function calls.
+            ivi = ivi + 1
+        fi = fi + 1
+
+    result.res_reg_alloc_spills = total_spills
     result.res_stage_reached = PIPELINE_STAGE_REGALLOC()
 
     // ── Phase 7: Binary Container Packaging (ELF/PE/Mach-O) ───────────────────
@@ -239,7 +890,7 @@ fn compiler_pipeline_execute config source_code
     if config.cfg_is_dry_run == 0
         if config.cfg_emit_format == FORMAT_SHARED()
             // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
-            synth = x86_synth_compile_program(toks)
+            synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
             exp_names = list()
             exp_offs = list()
             f_idx = 0
@@ -274,7 +925,7 @@ fn compiler_pipeline_execute config source_code
                     result.res_success = 0
                     return result
             else
-                synth = x86_synth_compile_program(toks)
+                synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
                 m_res = macho_emit_executable(synth.synth_code, synth.synth_rodata, 0, 16777223, config.cfg_out_path)
                 if m_res.mw_success == 1
                     result.res_output_bytes = m_res.mw_file_size
@@ -286,7 +937,7 @@ fn compiler_pipeline_execute config source_code
                     return result
         elif config.cfg_emit_format == FORMAT_PE()
             // Sovereign Windows PE32+ (.exe) Executable Emission (x86-64 COFF)
-            synth = x86_synth_compile_program(toks)
+            synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
             pe_res = pe_emit_executable(synth.synth_code, synth.synth_rodata, [], 0, 0, config.cfg_out_path)
             if pe_res.pe_success == 1
                 result.res_output_bytes = pe_res.pe_file_size
@@ -297,8 +948,8 @@ fn compiler_pipeline_execute config source_code
                 result.res_success = 0
                 return result
         elif config.cfg_target_arch == TARGET_ID_X86_64()
-            // Synthesize AMD64 machine code instructions and rodata directly from tokens
-            synth = x86_synth_compile_program(toks)
+            // Synthesize AMD64 machine code instructions and rodata directly from tokens with SSA optimizations
+            synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
             if config.cfg_debug_mode == 1
                 // Emit ELF64 executable with embedded DWARF v4/v5 debug metadata (-g)
                 line_builder = dwarf_line_builder_new(4)

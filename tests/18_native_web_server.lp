@@ -59,17 +59,17 @@ fn process method path
     req = Request()
     req.method = method
     req.path = path
-    ok = mw_log req
+    ok = mw_log(req)
     if ok == 0
         say "Blocked by log"
         return 403
-    ok = mw_auth req
+    ok = mw_auth(req)
     if ok == 0
         res = make_403_resp()
         say res.status
         say res.body
         return 403
-    res = handle req
+    res = handle(req)
     say res.status
     say res.body
     return res.status

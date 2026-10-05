@@ -55,7 +55,6 @@ import "compiler/frontend/ast/ast_node"
   visited_count = 0
 
   @while work_stack.len() > 0
-    // Pop top node from worklist stack
     last_idx = work_stack.len() - 1
     cur_node = work_stack[last_idx]
     work_stack = pop(work_stack)
@@ -205,9 +204,7 @@ import "compiler/frontend/ast/ast_node"
   work_stack = work_stack.push(root)
 
   @while work_stack.len() > 0
-    last_idx = work_stack.len() - 1
-    cur_node = work_stack[last_idx]
-    work_stack = pop(work_stack)
+    cur_node = pop(work_stack)
 
     @if cur_node != 0
       @if cur_node.kind == "Call" && cur_node.name != ""

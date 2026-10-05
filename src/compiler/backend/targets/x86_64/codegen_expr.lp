@@ -515,11 +515,17 @@ fn x86_synth_expr_primary s toks pos_box
                             s.synth_last_expr_type = "str"
                         else
                             s.synth_last_expr_type = ""
+                        if var_name == "restore_extract_single_file"
+                            s.synth_last_struct = "ExtractedSingleFile"
+                        end
         else
             // Plain variable load
-            off = x86_synth_lookup_var(s, var_name)
-            if off > 0
-                x86_synth_emit_load_var(s, 0, off)
+            lv = x86_synth_find_local_var(s, var_name)
+            if lv != 0
+                if lv.lv_is_spilled == 0 and lv.lv_reg >= 0
+                    x86_synth_emit_mov_reg_reg(s, 0, lv.lv_reg)
+                else
+                    x86_synth_emit_load_var(s, 0, lv.lv_offset)
                 s.synth_last_struct = x86_synth_get_var_type(s, var_name)
                 s.synth_last_expr_type = x86_synth_get_prim_type(s, var_name)
             else

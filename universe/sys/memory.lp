@@ -4,7 +4,8 @@
 @! Direct Kernel MMAP, MUNMAP, MPROTECT, BRK Memory Primitives
 @! ============================================================================
 
-import "universe/sys/syscalls"
+// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+import "universe/os/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. Memory Architectural Constants

@@ -82,8 +82,8 @@ fn bft_proposal_new view seq block_hash proposer_id
     bp.bp_seq = seq
     bp.bp_block_hash = block_hash
     bp.bp_proposer_id = proposer_id
-    bp.bp_prepare_votes = list()
-    bp.bp_commit_votes = list()
+    bp.bp_prepare_votes = 0
+    bp.bp_commit_votes = 0
     return bp
 
 fn bft_validator_new id pubkey is_byz
@@ -166,6 +166,10 @@ fn bft_vote_prepare engine proposal validator_id
         return 0
     
     votes = proposal.bp_prepare_votes
+    if votes == 0
+        votes = list()
+        proposal.bp_prepare_votes = votes
+    end
     push(votes, validator_id)
     
     // Check if 2f + 1 Quorum is reached
@@ -178,6 +182,10 @@ fn bft_vote_prepare engine proposal validator_id
 fn bft_vote_commit engine proposal validator_id
     // WHY: Collects COMMIT votes and finalizes block upon reaching 2f+1 threshold.
     votes = proposal.bp_commit_votes
+    if votes == 0
+        votes = list()
+        proposal.bp_commit_votes = votes
+    end
     push(votes, validator_id)
     
     vote_count = len(votes)

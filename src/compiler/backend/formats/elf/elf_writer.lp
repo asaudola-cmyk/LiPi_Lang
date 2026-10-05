@@ -215,9 +215,10 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   return 0
 @end
 
-@fn elf_emit_header_direct(arr, entry_vaddr, sh_offset, num_sections, shstr_idx)
-  // WHY: Emits exact 64-byte ELF64 AMD64 header conforming to System V ABI without struct overhead.
-  // Constrained to 5 parameters for zero register spilling across SysV ABI calling convention.
+@fn elf_emit_header_machine(arr, entry_vaddr, sh_offset, num_sections, shstr_idx, machine)
+  // WHY: Emits exact 64-byte ELF64 header conforming to System V ABI for the specified
+  // target CPU architecture (EM_X86_64 = 62, EM_AARCH64 = 183, EM_RISCV = 243).
+  // Constrained to 6 parameters for zero register spilling across SysV ABI calling convention.
   // 1. e_ident (16 bytes)
   push(arr, 127) // 0x7F
   push(arr, 69)  // 'E'
@@ -240,9 +241,8 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   push(arr, 2)
   push(arr, 0)
 
-  // 3. e_machine: EM_X86_64 (62 = 0x3E) (2 bytes)
-  push(arr, 62)
-  push(arr, 0)
+  // 3. e_machine: (2 bytes)
+  elf_emit_u16_le(arr, machine)
 
   // 4. e_version: EV_CURRENT (1) (4 bytes)
   push(arr, 1)
@@ -287,6 +287,11 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   // 14. e_shstrndx: 2 bytes LE
   elf_emit_u16_le(arr, shstr_idx)
   return 0
+@end
+
+@fn elf_emit_header_direct(arr, entry_vaddr, sh_offset, num_sections, shstr_idx)
+  // WHY: Legacy convenience wrapper emitting AMD64 (EM_X86_64 = 62) ELF64 header
+  return elf_emit_header_machine(arr, entry_vaddr, sh_offset, num_sections, shstr_idx, 62)
 @end
 
 @fn elf_emit_phdrs_direct(arr, total_filesz, total_memsz)
@@ -370,17 +375,20 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   return 0
 @end
 
-@fn elf_emit_executable(code_bytes, rodata_bytes, data_bytes, bss_size, output_path)
-  // WHY: Sovereign standalone ELF64 emitter for pure AMD64 silicon execution.
-  // Constrained to 5 arguments, zero map literals, and zero register spilling.
+@fn elf_emit_executable_target(code_bytes, rodata_bytes, data_bytes, bss_size, machine, output_path)
+  // WHY: Sovereign standalone ELF64 emitter supporting AMD64, AArch64, and RISCV targets.
+  // Constrained to 6 arguments (passes cleanly in registers RDI, RSI, RDX, RCX, R8, R9).
   base_vaddr = 1073741824 // 0x40000000 (1GB)
-  start_stub = elf_build_start_stub(0) // 64 bytes
   start_stub_offset = 176 // 64 (ELF Header) + 112 (2 Phdrs)
-  entry_point_vaddr = base_vaddr + start_stub_offset // 1073742000 (0x400000b0)
+  entry_point_vaddr = base_vaddr + start_stub_offset
 
-  // 1. .text payload = _start stub + user code
+  // 1. .text payload
   text_payload = list()
-  elf_concat(text_payload, start_stub)
+  if machine == 0 || machine == 62
+    // x86-64 uses the SysV _start bootstrap stub
+    start_stub = elf_build_start_stub(0) // 64 bytes
+    elf_concat(text_payload, start_stub)
+  end
   elf_concat(text_payload, code_bytes)
 
   code_file_offset = start_stub_offset // 176
@@ -419,12 +427,16 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   binary = list()
 
   // 2.1 ELF Header (64 bytes)
-  elf_emit_header_direct(binary, entry_point_vaddr, sh_offset, num_sections, shstr_idx)
+  target_mach = 62
+  if machine != 0
+    target_mach = machine
+  end
+  elf_emit_header_machine(binary, entry_point_vaddr, sh_offset, num_sections, shstr_idx, target_mach)
 
   // 2.2 Program Headers (112 bytes)
   elf_emit_phdrs_direct(binary, total_load_filesz, total_load_memsz)
 
-  // 2.3 .text (code with _start stub)
+  // 2.3 .text (code payload)
   elf_concat(binary, text_payload)
 
   // 2.4 .rodata
@@ -442,6 +454,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   while k < 64
     push(binary, 0)
     k = k + 1
+  end
   // Section 1: .text (name 1, flags 6 = RX)
   elf_emit_shdr_bits(binary, 1, 6, code_vaddr, code_file_offset, code_size)
   // Section 2: .rodata (name 7, flags 2 = A)
@@ -465,6 +478,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
     res.ew_error_msg = "Failed to write ELF64 binary to filesystem"
     res.ew_bytes = binary
     return res
+  end
 
   res.ew_success = 1
   res.ew_out_path = output_path
@@ -473,6 +487,10 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   res.ew_error_msg = ""
   res.ew_bytes = binary
   return res
+@end
+
+@fn elf_emit_executable(code_bytes, rodata_bytes, data_bytes, bss_size, output_path)
+  return elf_emit_executable_target(code_bytes, rodata_bytes, data_bytes, bss_size, 62, output_path)
 @end
 
 @fn elf_emit_executable_with_debug(code_bytes, rodata_bytes, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, output_path)

@@ -161,9 +161,10 @@ import "universe/db/recovery"
   wal_append_put(db.wal, tx_id, key, val)
   wal_append_commit(db.wal, tx_id)
   wal_sync(db.wal)
-
   @! 2. Apply mutation to B+Tree
-  db.tree[0] = btree_insert(db.tree[0], key, val)
+  curr_tree = db.tree[0]
+  updated_tree = btree_insert(curr_tree, key, val)
+  list_set(db.tree, 0, updated_tree)
 
   db.stats_puts = db.stats_puts + 1
   db.ops_since_checkpoint = db.ops_since_checkpoint + 1
@@ -190,7 +191,9 @@ import "universe/db/recovery"
   wal_sync(db.wal)
 
   @! 2. Apply deletion to B+Tree
-  db.tree[0] = btree_delete(db.tree[0], key)
+  curr_tree = db.tree[0]
+  updated_tree = btree_delete(curr_tree, key)
+  list_set(db.tree, 0, updated_tree)
 
   db.stats_deletes = db.stats_deletes + 1
   db.ops_since_checkpoint = db.ops_since_checkpoint + 1

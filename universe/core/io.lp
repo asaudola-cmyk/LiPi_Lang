@@ -48,18 +48,28 @@ fn print_inline msg
 fn প্রিন্ট_ইনলাইন msg
     return print_raw(msg)
 
+g_io_last_read_bytes = 0
+
+fn io_last_read_bytes
+    return g_io_last_read_bytes
+
+fn আইও_সর্বশেষ_পঠিত_বাইট
+    return io_last_read_bytes()
+
 fn read_line prompt
     // WHY: 100% Native Linux SYS_read (syscall 0) from STDIN (fd 0) byte-by-byte until newline or EOF.
-    // Zero libc getline / stdio dependency.
+    // Zero libc getline / stdio dependency. Returns ":EOF:" when end-of-file is reached on empty input.
     if prompt != ""
         print_raw(prompt)
     
     buf = malloc(16)
     acc = ""
+    bytes_read = 0
     while 1 == 1
         n = syscall(0, 0, buf, 1, 0, 0, 0)
         if n <= 0
             break
+        bytes_read = bytes_read + n
         b = mem_byte_read(buf, 0)
         if b == 10 // ASCII 10 = '\n' (Line Feed)
             break
@@ -67,6 +77,8 @@ fn read_line prompt
             continue
         acc = acc + chr(b)
     free(buf, 16)
+    if bytes_read == 0
+        return ":EOF:"
     return acc
 
 fn রিড_লাইন prompt

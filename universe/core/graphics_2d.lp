@@ -7,7 +7,8 @@
 import "universe/core/math"
 import "universe/core/collections"
 import "universe/core/string"
-import "universe/sys/syscalls"
+// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+import "universe/os/syscalls"
 
 @struct ClipRect
   min_x: i64

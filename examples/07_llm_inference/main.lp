@@ -56,12 +56,14 @@ fn main
     // Version: 3 (Offset 4)
     mem_write_byte(header_buffer, 4, 3)
     mem_write_byte(header_buffer, 5, 0)
+    mem_write_byte(header_buffer, 6, 0)
+    mem_write_byte(header_buffer, 7, 0)
 
     // Tensor Count: 291 (QWORD 1 = offset 8)
-    mem_write_u32(header_buffer, 1, 291)
+    mem_write_idx(header_buffer, 1, 291)
 
     // Metadata KV Count: 0 (QWORD 2 = offset 16)
-    mem_write_u32(header_buffer, 2, 0)
+    mem_write_idx(header_buffer, 2, 0)
 
     ম্যাজিক_ঠিক = gguf_magic_verify(header_buffer)
     টেনসর_num = gguf_tensor_count(header_buffer)
@@ -84,35 +86,35 @@ fn main
     weights_W = malloc(gemv_vocab * gemv_dim * 8)
     logit_Y = malloc(gemv_vocab * 8)
 
-    mem_write_u32(অ্যাক্টিভেশন_X, 0, 1)
-    mem_write_u32(অ্যাক্টিভেশন_X, 1, 2)
-    mem_write_u32(অ্যাক্টিভেশন_X, 2, 3)
-    mem_write_u32(অ্যাক্টিভেশন_X, 3, 4)
+    mem_write_idx(অ্যাক্টিভেশন_X, 0, 1)
+    mem_write_idx(অ্যাক্টিভেশন_X, 1, 2)
+    mem_write_idx(অ্যাক্টিভেশন_X, 2, 3)
+    mem_write_idx(অ্যাক্টিভেশন_X, 3, 4)
 
-    mem_write_u32(weights_W, 0, 1)
-    mem_write_u32(weights_W, 1, 1)
-    mem_write_u32(weights_W, 2, 1)
-    mem_write_u32(weights_W, 3, 1)
+    mem_write_idx(weights_W, 0, 1)
+    mem_write_idx(weights_W, 1, 1)
+    mem_write_idx(weights_W, 2, 1)
+    mem_write_idx(weights_W, 3, 1)
 
-    mem_write_u32(weights_W, 4, 2)
-    mem_write_u32(weights_W, 5, 2)
-    mem_write_u32(weights_W, 6, 2)
-    mem_write_u32(weights_W, 7, 2)
+    mem_write_idx(weights_W, 4, 2)
+    mem_write_idx(weights_W, 5, 2)
+    mem_write_idx(weights_W, 6, 2)
+    mem_write_idx(weights_W, 7, 2)
 
-    mem_write_u32(weights_W, 8, 3)
-    mem_write_u32(weights_W, 9, 3)
-    mem_write_u32(weights_W, 10, 3)
-    mem_write_u32(weights_W, 11, 5)
+    mem_write_idx(weights_W, 8, 3)
+    mem_write_idx(weights_W, 9, 3)
+    mem_write_idx(weights_W, 10, 3)
+    mem_write_idx(weights_W, 11, 5)
 
-    gguf_gemv(logit_Y, weights_W, অ্যাক্টিভেশন_X, gemv_dim, gemv_vocab)
+    ai_gemv(logit_Y, weights_W, অ্যাক্টিভেশন_X, gemv_dim, gemv_vocab)
 
-    l0 = mem_read_u32(logit_Y, 0)
-    l1 = mem_read_u32(logit_Y, 1)
-    l2 = mem_read_u32(logit_Y, 2)
+    l0 = mem_read_idx(logit_Y, 0)
+    l1 = mem_read_idx(logit_Y, 1)
+    l2 = mem_read_idx(logit_Y, 2)
 
     say "  ✔ প্রেডিক্টেড logit score: [" + l0 + ", " + l1 + ", " + l2 + "] (Expected: [10, 20, 38])"
 
-    সেরা_টোকেন = gguf_token_argmax(logit_Y, gemv_vocab)
+    সেরা_টোকেন = ai_sample_argmax(logit_Y, gemv_vocab)
     say "  ✔ গ্রিডি স্যাম্পলার নির্বাচিত পরবর্তী টোকেন আইডি: " + সেরা_টোকেন + " (Expected: 2)"
 
     free(অ্যাক্টিভেশন_X, gemv_dim * 8)
@@ -134,8 +136,8 @@ fn main
 
     dummy_k = malloc(kv_layer_dim * 8)
     dummy_v = malloc(kv_layer_dim * 8)
-    mem_write_u32(dummy_k, 0, 777)
-    mem_write_u32(dummy_v, 0, 888)
+    mem_write_idx(dummy_k, 0, 777)
+    mem_write_idx(dummy_v, 0, 888)
 
     // লেয়ার ০ ও ১ এ কী ও ভ্যালু সংযোজন
     new_p0 = kv_cache_append(cache, 0, dummy_k, dummy_v)
@@ -144,8 +146,8 @@ fn main
 
     k_ptr0 = kv_cache_get_keys(cache, 0)
     v_ptr0 = kv_cache_get_values(cache, 0)
-    read_k = mem_read_u32(k_ptr0, 0)
-    read_v = mem_read_u32(v_ptr0, 0)
+    read_k = mem_read_idx(k_ptr0, 0)
+    read_v = mem_read_idx(v_ptr0, 0)
     say "  ✔ কেভি-ক্যাশ মেমরি রিড যাচাই: K[0]=" + read_k + ", V[0]=" + read_v + " (Expected: 777, 888)"
 
     free(dummy_k, kv_layer_dim * 8)

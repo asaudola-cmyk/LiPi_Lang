@@ -286,11 +286,59 @@ fn x86_synth_emit_simd_avx512_dot s
     ])
     return off
 
+fn x86_synth_emit_simd_sse2_dot_f64 s
+    // WHY: 100% Native %xmm SSE2 hardware double-precision float vector dot product.
+    // Executes 2x f64 multiplications and additions per iteration via SSE2 registers.
+    // Signature: simd_sse2_dot_f64(ptr_a: %rdi, ptr_b: %rsi, count: %rdx) -> float bits: %rax
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "simd_sse2_dot_f64", off)
+    x86_synth_register_helper_fn(s, "simd_sse2_dot", off)
+    x86_synth_register_helper_fn(s, "vector_dot_sse2_f64", off)
+    x86_synth_register_helper_fn(s, "ভেক্টর_ডট_এসএসই২_ফ্লোট", off)
+    x86_synth_emit_bytes(s, [
+        72, 133, 210, 126, 90, 72, 133, 255, 116, 85, 72, 133, 246, 116, 80, 102,
+        15, 87, 192, 72, 131, 250, 2, 124, 30, 102, 15, 16, 15, 102, 15, 16,
+        22, 102, 15, 89, 202, 102, 15, 88, 193, 72, 131, 199, 16, 72, 131, 198,
+        16, 72, 131, 234, 2, 235, 220, 102, 15, 40, 200, 102, 15, 21, 201, 242,
+        15, 88, 193, 72, 131, 250, 1, 124, 16, 242, 15, 16, 15, 242, 15, 16,
+        22, 242, 15, 89, 202, 242, 15, 88, 193, 102, 72, 15, 126, 192, 195, 72,
+        49, 192, 195
+    ])
+    return off
+
+fn x86_synth_emit_simd_sse2_gemv_f64 s
+    // WHY: 100% Native %xmm SSE2 hardware double-precision float GEMV matrix-vector multiplication.
+    // Iterates row-by-row, evaluating vector dot products with unrolled SSE2 %xmm pipelines.
+    // Signature: simd_sse2_gemv_f64(output_vec: %rdi, weight_matrix: %rsi, input_vec: %rdx, column: %rcx, row: %r8) -> rows: %rax
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "simd_sse2_gemv_f64", off)
+    x86_synth_register_helper_fn(s, "simd_sse2_gemv", off)
+    x86_synth_register_helper_fn(s, "gguf_gemv_sse2_f64", off)
+    x86_synth_register_helper_fn(s, "জিজিইউএফ_জিইএমভি_এসএসই২_ফ্লোট", off)
+    x86_synth_emit_bytes(s, [
+        77, 133, 192, 15, 142, 191, 0, 0, 0, 72, 133, 201, 15, 142, 182, 0, 0, 0,
+        72, 133, 255, 15, 132, 173, 0, 0, 0, 72, 133, 246, 15, 132, 164, 0, 0, 0,
+        72, 133, 210, 15, 132, 155, 0, 0, 0, 83, 65, 84, 65, 85, 65, 86, 65, 87,
+        73, 137, 252, 73, 137, 245, 73, 137, 214, 73, 137, 207, 76, 137, 195, 77,
+        49, 219, 73, 57, 219, 125, 110, 76, 137, 216, 73, 15, 175, 199, 72, 193,
+        224, 3, 73, 141, 124, 5, 0, 76, 137, 246, 76, 137, 250, 102, 15, 87,
+        192, 73, 137, 210, 73, 131, 250, 2, 124, 30, 102, 15, 16, 15, 102, 15,
+        16, 22, 102, 15, 89, 202, 102, 15, 88, 193, 72, 131, 199, 16, 72, 131,
+        198, 16, 73, 131, 234, 2, 235, 220, 102, 15, 40, 200, 102, 15, 21, 201,
+        242, 15, 88, 193, 73, 131, 250, 1, 124, 16, 242, 15, 16, 15, 242, 15,
+        16, 22, 242, 15, 89, 202, 242, 15, 88, 193, 242, 67, 15, 17, 4, 220,
+        73, 255, 195, 235, 141, 72, 137, 216, 65, 95, 65, 94, 65, 93, 65, 92,
+        91, 195, 72, 49, 192, 195
+    ])
+    return off
+
 fn x86_synth_emit_all_avx2_helpers s
-    // WHY: Synthesizes all Silicon AVX2 / AVX-512 hardware extensions into binary
+    // WHY: Synthesizes all Silicon AVX2 / AVX-512 / SSE2 hardware extensions into binary
     x86_synth_emit_cpu_has_avx2(s)
     x86_synth_emit_cpu_has_avx512(s)
     x86_synth_emit_simd_avx2_sum(s)
     x86_synth_emit_simd_avx512_sum(s)
     x86_synth_emit_simd_avx512_dot(s)
+    x86_synth_emit_simd_sse2_dot_f64(s)
+    x86_synth_emit_simd_sse2_gemv_f64(s)
     return 0

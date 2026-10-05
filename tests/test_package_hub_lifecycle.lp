@@ -92,6 +92,7 @@ fn main
     while i < m_len
         mem_byte_write(manifest_buf, i, str_char_at(manifest_data, i))
         i = i + 1
+    end
 
     digest_buf = sys_alloc(65)
     sha256_hash(manifest_buf, m_len, digest_buf)
@@ -100,13 +101,16 @@ fn main
     hex_len = 0
     while hex_len < 64
         b = mem_byte_read(digest_buf, hex_len)
-        if b >= 48 && b <= 57 // '0'-'9'
+        if b >= 48 and b <= 57
             hex_len = hex_len + 1
         else
-            if b >= 97 && b <= 102 // 'a'-'f'
+            if b >= 97 and b <= 102
                 hex_len = hex_len + 1
             else
-                hex_len = 65 // invalid character
+                hex_len = 65
+            end
+        end
+    end
     assert_eq(hex_len, 64, "SHA-256 64-character manifest hash produced")
 
     mem_free(manifest_buf, m_len)
@@ -136,7 +140,11 @@ fn main
                 v_best = semver_parse(best_match)
                 if semver_compare(v_cand, v_best) > 0
                     best_match = cand
+                end
+            end
+        end
         idx = idx + 1
+    end
 
     assert_true(best_match == "1.2.0", "Highest compatible version selected: 1.2.0 for ^1.1.0")
 
@@ -144,3 +152,6 @@ fn main
     say "🎉 ALL PACKAGE HUB & SEMVER LIFECYCLE TESTS PASSED (5/5) ✔"
     say "================================================================="
     return 0
+end
+
+main()

@@ -34,6 +34,7 @@ struct SSAValue
     const_val   // integer: literal value when kind == VAL_KIND_CONST
     def_inst    // reference: SSAInstr that computes this value (0 if arg/const/global)
     uses        // list: SSAInstr references that consume this value as an operand
+    val_kind    // integer: VAL_KIND_* (unique non-colliding field name avoiding collision with ASTNode.kind)
 
 // ── 3. Forward Dispatch Hooks ─────────────────────────────────────────────────
 // WHY: Delegates operand replacement to ssa_instr_replace_operand defined in ssa_instr.lp.
@@ -48,6 +49,7 @@ fn ssa_value_new id vtype kind
     val.id = id
     val.vtype = vtype
     val.kind = kind
+    val.val_kind = kind
     val.const_val = 0
     val.def_inst = 0
     val.uses = list()

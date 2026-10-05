@@ -4,7 +4,8 @@
 @! Process Lifecycle, CRT0 _start Vectors, Signal Handlers, Panic Recovery
 @! ============================================================================
 
-import "universe/sys/syscalls"
+// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+import "universe/os/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. Process Status Data Structures & Signal Definitions

@@ -29,11 +29,20 @@ fn generic_template_new name type_params params param_types ret_type
     push(t, ret_type)
     return t
 
-fn generic_template_name t = get(t, 0)
-fn generic_template_type_params t = get(t, 1)
-fn generic_template_params t = get(t, 2)
-fn generic_template_param_types t = get(t, 3)
-fn generic_template_ret_type t = get(t, 4)
+fn generic_template_name t
+    return get(t, 0)
+
+fn generic_template_type_params t
+    return get(t, 1)
+
+fn generic_template_params t
+    return get(t, 2)
+
+fn generic_template_param_types t
+    return get(t, 3)
+
+fn generic_template_ret_type t
+    return get(t, 4)
 
 // ── 2. Specialization Registry ────────────────────────────────────────────────
 // WHY: Caches generated specializations so identical type instantiations (e.g. max[i64])

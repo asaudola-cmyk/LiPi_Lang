@@ -42,10 +42,10 @@ struct LinearScanResult
 
 fn contains_int arr val
     // WHY: Checks if an integer already exists in a list (e.g. used callee registers).
-    cnt = len(arr)
+    cnt = arr.len()
     i = 0
     while i < cnt
-        if get(arr, i) == val
+        if arr[i] == val
             return 1
         i = i + 1
     return 0
@@ -53,11 +53,11 @@ fn contains_int arr val
 fn list_remove_at arr idx
     // WHY: Pure functional list extraction without modifying source buffer.
     res = list()
-    cnt = len(arr)
+    cnt = arr.len()
     i = 0
     while i < cnt
         if i != idx
-            push(res, get(arr, i))
+            push(res, arr[i])
         i = i + 1
     return res
 
@@ -69,17 +69,17 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
     
     // Clone register pools to mutable worklists
     free_caller = list()
-    c_count = len(caller_regs)
+    c_count = caller_regs.len()
     i = 0
     while i < c_count
-        push(free_caller, get(caller_regs, i))
+        push(free_caller, caller_regs[i])
         i = i + 1
 
     free_callee = list()
-    cl_count = len(callee_regs)
+    cl_count = callee_regs.len()
     i = 0
     while i < cl_count
-        push(free_callee, get(callee_regs, i))
+        push(free_callee, callee_regs[i])
         i = i + 1
 
     active = list()                 // Intervals currently holding a physical register
@@ -87,18 +87,18 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
     spill_count = 0
     spill_offset = 0 - word_size    // First spill slot (e.g. -8 on 64-bit)
 
-    count = len(intervals)
+    count = intervals.len()
     idx = 0
     while idx < count
-        cur = get(intervals, idx)
+        cur = intervals[idx]
 
         // ── Step 1: Expire Old Intervals ─────────────────────────────────────
         // Free registers belonging to intervals that ended before cur.start_pos
         new_active = list()
-        a_count = len(active)
+        a_count = active.len()
         a_i = 0
         while a_i < a_count
-            act = get(active, a_i)
+            act = active[a_i]
             if act.end_pos < cur.start_pos
                 // Register is now free; return it to the corresponding pool
                 reg_id = act.assigned_reg
@@ -116,33 +116,30 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
         allocated = 0
 
         if cur.spans_call == 1
-            // Call-crossing interval: Prefer Callee-Saved
-            if len(free_callee) > 0
-                last_idx = len(free_callee) - 1
-                assigned_reg = get(free_callee, last_idx)
+            // Call-crossing interval: Strictly allocate Callee-Saved registers.
+            // WHY: Caller-saved registers are clobbered across CALL instructions.
+            // If callee-saved registers are exhausted, the interval must spill to stack frame.
+            if free_callee.len() > 0
+                last_idx = free_callee.len() - 1
+                assigned_reg = free_callee[last_idx]
                 free_callee = list_remove_at(free_callee, last_idx)
                 allocated = 1
                 if contains_int(used_callee, assigned_reg) == 0
                     push(used_callee, assigned_reg)
-            else
-                // Fallback to Caller-Saved if no callee-saved available
-                if len(free_caller) > 0
-                    last_idx = len(free_caller) - 1
-                    assigned_reg = get(free_caller, last_idx)
-                    free_caller = list_remove_at(free_caller, last_idx)
-                    allocated = 1
+                end
+            end
         else
             // Leaf interval: Prefer Caller-Saved
-            if len(free_caller) > 0
-                last_idx = len(free_caller) - 1
-                assigned_reg = get(free_caller, last_idx)
+            if free_caller.len() > 0
+                last_idx = free_caller.len() - 1
+                assigned_reg = free_caller[last_idx]
                 free_caller = list_remove_at(free_caller, last_idx)
                 allocated = 1
             else
                 // Fallback to Callee-Saved if caller-saved registers exhausted
-                if len(free_callee) > 0
-                    last_idx = len(free_callee) - 1
-                    assigned_reg = get(free_callee, last_idx)
+                if free_callee.len() > 0
+                    last_idx = free_callee.len() - 1
+                    assigned_reg = free_callee[last_idx]
                     free_callee = list_remove_at(free_callee, last_idx)
                     allocated = 1
                     if contains_int(used_callee, assigned_reg) == 0
@@ -157,10 +154,10 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
             // Insert into active list sorted by end_pos ascending
             ins_act = list()
             inserted = 0
-            act_len = len(active)
+            act_len = active.len()
             k = 0
             while k < act_len
-                item = get(active, k)
+                item = active[k]
                 if inserted == 0 and cur.end_pos < item.end_pos
                     push(ins_act, cur)
                     inserted = 1
@@ -172,20 +169,21 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
         else
             // Register starvation: Must spill either cur or an active interval
             spill_cand_idx = 0 - 1
-            if len(active) > 0
-                spill_cand_idx = len(active) - 1
+            if active.len() > 0
+                spill_cand_idx = active.len() - 1
 
             if spill_cand_idx >= 0
-                cand = get(active, spill_cand_idx)
+                cand = active[spill_cand_idx]
                 if cand.end_pos > cur.end_pos
                     // Evict candidate: give candidate's physical register to cur
+                    cand_reg = cand.assigned_reg
                     cand.is_spilled = 1
                     cand.spill_slot = spill_offset
                     cand.assigned_reg = 0 - 1
                     spill_offset = spill_offset - word_size
                     spill_count = spill_count + 1
 
-                    cur.assigned_reg = cand.assigned_reg
+                    cur.assigned_reg = cand_reg
                     cur.is_spilled = 0
                     cur.spill_slot = 0
 
@@ -193,10 +191,10 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
                     trimmed_act = list_remove_at(active, spill_cand_idx)
                     ins_act = list()
                     inserted = 0
-                    t_len = len(trimmed_act)
+                    t_len = trimmed_act.len()
                     k = 0
                     while k < t_len
-                        item = get(trimmed_act, k)
+                        item = trimmed_act[k]
                         if inserted == 0 and cur.end_pos < item.end_pos
                             push(ins_act, cur)
                             inserted = 1
@@ -228,6 +226,95 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
     result.spill_count = spill_count
     result.max_spill_offset = 0 - spill_offset
     return result
+
+// ── 3b. IRFunction Linear Scan Allocator ──────────────────────────────────────
+
+fn linear_scan_allocate_function fn_obj caller_regs callee_regs word_size
+    // WHY: Performs full live-range analysis and Poletto-Sarkar linear scan allocation
+    // over all basic blocks and instructions of an SSA IRFunction.
+    // Skips dead instructions pruned by DCE, accurately reflects register pressure,
+    // and prioritizes call-crossing virtual registers into callee-saved registers.
+    if fn_obj == 0
+        res = LinearScanResult()
+        res.intervals = list()
+        res.used_callee_saved = list()
+        res.spill_count = 0
+        res.max_spill_offset = 0
+        return res
+
+    intervals = list()
+    call_positions = list()
+
+    // 1. Record incoming formal parameters at position 0
+    pi = 0
+    while pi < fn_obj.params.len()
+        p_val = fn_obj.params[pi]
+        if p_val != 0
+            live_interval_record_def(intervals, p_val.id, 0, 1)
+        pi = pi + 1
+
+    // 2. Monotonic traversal over all basic blocks and instructions
+    pos = 1
+    bi = 0
+    while bi < fn_obj.blocks.len()
+        bb = fn_obj.blocks[bi]
+        ii = 0
+        while ii < bb.instructions.len()
+            inst = bb.instructions[ii]
+            if inst.is_dead == 0
+                // Mark call positions for ABI caller-vs-callee saved prioritization (19 is OP_CALL)
+                if inst.op == 19 or inst.op == OP_CALL
+                    push(call_positions, pos)
+
+                // Record operand read accesses (1 is VAL_KIND_INST, 3 is VAL_KIND_ARG)
+                // WHY: Untyped field resolution in the 1-pass backend collides on 'kind' (matching ASTNode.kind at offset 0).
+                // Checking 'val_kind' and '%' register prefix ensures virtual registers/arguments are identified reliably.
+                oi = 0
+                while oi < inst.operands.len()
+                    opnd = inst.operands[oi]
+                    if opnd != 0
+                        is_reg_opnd = 0
+                        if opnd.val_kind == 1 or opnd.val_kind == 3
+                            is_reg_opnd = 1
+                        elif len(opnd.id) > 0 and mem_byte_read(opnd.id, 0) == 37
+                            is_reg_opnd = 1
+                        elif opnd.kind == 1 or opnd.kind == 3 or opnd.kind == VAL_KIND_INST or opnd.kind == VAL_KIND_ARG
+                            is_reg_opnd = 1
+                        end
+                        if is_reg_opnd == 1
+                            live_interval_record_use(intervals, opnd.id, pos)
+                        end
+                    end
+                    oi = oi + 1
+
+                // Record instruction result definition
+                // WHY: Instructions produce virtual registers. Checking val_kind, '%' prefix, or non-empty id registers def.
+                if inst.result != 0
+                    is_res_vreg = 0
+                    if inst.result.val_kind == 1
+                        is_res_vreg = 1
+                    elif len(inst.result.id) > 0 and mem_byte_read(inst.result.id, 0) == 37
+                        is_res_vreg = 1
+                    elif inst.result.kind == 1 or inst.result.kind == VAL_KIND_INST
+                        is_res_vreg = 1
+                    end
+                    if is_res_vreg == 1
+                        live_interval_record_def(intervals, inst.result.id, pos, 0)
+                    end
+                end
+
+                pos = pos + 1
+            ii = ii + 1
+        bi = bi + 1
+
+    // 3. Mark call-spanning intervals
+    live_interval_mark_calls(intervals, call_positions)
+
+    // 4. Sort intervals by start position for deterministic single-pass allocation
+    sorted = live_interval_sort_by_start(intervals)
+
+    // 5. Execute Linear Scan allocation algorithm
+    return linear_scan_allocate(sorted, caller_regs, callee_regs, word_size)
 
 // ── 4. Verification Self-Test ────────────────────────────────────────────────
 

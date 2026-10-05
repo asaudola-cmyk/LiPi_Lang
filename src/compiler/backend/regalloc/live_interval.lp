@@ -76,11 +76,11 @@ fn live_interval_record_def intervals name pos is_param
     if name == ""
         return intervals
 
-    count = len(intervals)
+    count = intervals.len()
     i = 0
     found = 0
     while i < count
-        iv = get(intervals, i)
+        iv = intervals[i]
         if iv.vreg_name == name
             if pos < iv.start_pos
                 iv.start_pos = pos
@@ -102,11 +102,11 @@ fn live_interval_record_use intervals name pos
     if name == ""
         return intervals
 
-    count = len(intervals)
+    count = intervals.len()
     i = 0
     found = 0
     while i < count
-        iv = get(intervals, i)
+        iv = intervals[i]
         if iv.vreg_name == name
             live_interval_add_use(iv, pos)
             found = 1
@@ -125,15 +125,15 @@ fn live_interval_mark_calls intervals call_positions
     // WHY: A register live across a subroutine CALL must either be preserved
     //      in a callee-saved register or spilled to the stack frame, because
     //      caller-saved (scratch) registers are clobbered by the call ABI.
-    iv_count = len(intervals)
-    call_count = len(call_positions)
+    iv_count = intervals.len()
+    call_count = call_positions.len()
     i = 0
     while i < iv_count
-        iv = get(intervals, i)
+        iv = intervals[i]
         spans = 0
         c = 0
         while c < call_count
-            cp = get(call_positions, c)
+            cp = call_positions[c]
             if cp >= iv.start_pos and cp <= iv.end_pos
                 spans = 1
             c = c + 1
@@ -147,17 +147,17 @@ fn live_interval_sort_by_start intervals
     // WHY: Linear scan register allocation processes intervals in increasing
     //      order of their start position. Stable insertion sort ensures O(N)
     //      performance for nearly sorted SSA linearizations.
-    count = len(intervals)
+    count = intervals.len()
     sorted = list()
     i = 0
     while i < count
-        item = get(intervals, i)
+        item = intervals[i]
         inserted = 0
         new_sorted = list()
-        s_count = len(sorted)
+        s_count = sorted.len()
         j = 0
         while j < s_count
-            curr = get(sorted, j)
+            curr = sorted[j]
             if inserted == 0
                 if item.start_pos < curr.start_pos or (item.start_pos == curr.start_pos and item.end_pos < curr.end_pos)
                     push(new_sorted, item)

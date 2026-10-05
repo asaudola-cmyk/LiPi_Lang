@@ -435,7 +435,11 @@ import "universe/core/collections"
   @if run_after == 1
     tmp_bin = str_concat(out_path, ".bin")
     println(str_concat("⚙️ Compiling assimilated source to ELF64: ", tmp_bin))
-    c_status = assimilator_exec("./bin/lipc_bin", out_path, "-o", tmp_bin)
+    comp_bin = "./bin/lipc"
+    @if sys_access("./bin/lipc_bin", 0) == 0
+      comp_bin = "./bin/lipc_bin"
+    @end
+    c_status = assimilator_exec(comp_bin, out_path, "-o", tmp_bin)
     @if c_status != 0
       println("❌ Compilation of assimilated code failed.")
       return 1

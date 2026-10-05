@@ -458,17 +458,34 @@ fn x86_synth_compile_statement s toks pos_box
     is_let = 0
     if k == TOK_KW_LET()
         is_let = 1
-    if k == TOK_IDENT() and (txt == "let" or txt == "চলক" or txt == "ধরি" or txt == "var")
+    if k == TOK_IDENT() and (txt == "let" or txt == "চলক" or txt == "ধরি" or txt == "var" or txt == "@reg" or txt == "রেজিস্টার")
         is_let = 1
+    if k == TOK_IDENT() and txt == "reg"
+        // WHY: Disambiguate 'reg x = expr' (register-hint declaration) from 'reg = expr'
+        // (direct assignment to variable named 'reg' such as registry objects).
+        next_p = pos + 1
+        if next_p < toks.len() and x86_synth_is_ident_token(toks[next_p].tok_kind) == 1
+            if toks[next_p].tok_text != "="
+                is_let = 1
+            end
+        end
+    end
 
     if is_let == 1
         list_set(pos_box, 0, pos + 1) // Consume let
         var_pos = get(pos_box, 0)
         if var_pos < toks.len() and x86_synth_is_ident_token(toks[var_pos].tok_kind) == 1
             var_name = toks[var_pos].tok_text
+            assigned_type = ""
             list_set(pos_box, 0, var_pos + 1)
+            next_p = get(pos_box, 0)
+            if next_p < toks.len() and (toks[next_p].tok_kind == TOK_COLON() or (toks[next_p].tok_kind != TOK_STR() and toks[next_p].tok_text == ":"))
+                type_p = next_p + 1
+                if type_p < toks.len() and x86_synth_is_ident_token(toks[type_p].tok_kind) == 1
+                    assigned_type = toks[type_p].tok_text
+                    list_set(pos_box, 0, type_p + 1)
             eq_pos = get(pos_box, 0)
-            if eq_pos < toks.len() and (toks[eq_pos].tok_kind == TOK_ASSIGN() or toks[eq_pos].tok_text == "=")
+            if eq_pos < toks.len() and (toks[eq_pos].tok_kind == TOK_ASSIGN() or (toks[eq_pos].tok_kind != TOK_STR() and toks[eq_pos].tok_text == "="))
                 is_int_lit = 0
                 int_lit_val = 0
                 if eq_pos + 1 < toks.len()
@@ -481,6 +498,12 @@ fn x86_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, eq_pos + 1)
                 x86_synth_compile_expr(s, toks, pos_box)
                 off = x86_synth_bind_var(s, var_name)
+                if assigned_type != ""
+                    x86_synth_set_var_type(s, var_name, assigned_type)
+                    if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
+                        x86_synth_set_prim_type(s, var_name, "int")
+                    elif assigned_type == "str" or assigned_type == "string"
+                        x86_synth_set_prim_type(s, var_name, "str")
                 if is_int_lit == 1
                     x86_synth_set_global_const(s, var_name, int_lit_val)
                     x86_synth_set_prim_type(s, var_name, "int")
@@ -488,13 +511,23 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_set_prim_type(s, var_name, "int")
                 elif s.synth_last_expr_type == "str"
                     x86_synth_set_prim_type(s, var_name, "str")
-                else
+                elif assigned_type == ""
                     x86_synth_set_prim_type(s, var_name, "")
         return 0
 
-    // ── 10. Assignment: <var> = <expr> or <var> <op>= <expr> ───────────────────
+    // ── 10. Assignment: <var> = <expr> or <var>: <type> = <expr> or <var> <op>= <expr> ───────────────────
     if x86_synth_is_ident_token(k) == 1
+        var_name = txt
+        assigned_type = ""
         next_pos = pos + 1
+        // WHY: Support typed variable declarations: name: Type = expr
+        if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_COLON() or (toks[next_pos].tok_kind != TOK_STR() and toks[next_pos].tok_text == ":"))
+            type_pos = next_pos + 1
+            if type_pos < toks.len() and x86_synth_is_ident_token(toks[type_pos].tok_kind) == 1
+                after_type = type_pos + 1
+                if after_type < toks.len() and (toks[after_type].tok_kind == TOK_ASSIGN() or (toks[after_type].tok_kind != TOK_STR() and toks[after_type].tok_text == "="))
+                    assigned_type = toks[type_pos].tok_text
+                    next_pos = after_type
         if next_pos < toks.len()
             ntk = toks[next_pos]
             nk = ntk.tok_kind
@@ -526,7 +559,6 @@ fn x86_synth_compile_statement s toks pos_box
                 comp_op = TOK_PERCENT()
 
             if is_assign == 1
-                var_name = txt
                 if is_compound == 0
                     is_int_lit = 0
                     int_lit_val = 0
@@ -537,9 +569,15 @@ fn x86_synth_compile_statement s toks pos_box
                             if after_rhs >= toks.len() or toks[after_rhs].tok_kind == TOK_NEWLINE() or toks[after_rhs].tok_kind == TOK_SEMI()
                                 is_int_lit = 1
                                 int_lit_val = rhs_tok.tok_int_val
-                    list_set(pos_box, 0, next_pos + 1) // Consume ident and '='
+                    list_set(pos_box, 0, next_pos + 1) // Consume ident [ : type ] and '='
                     x86_synth_compile_expr(s, toks, pos_box)
                     off = x86_synth_bind_var(s, var_name)
+                    if assigned_type != ""
+                        x86_synth_set_var_type(s, var_name, assigned_type)
+                        if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
+                            x86_synth_set_prim_type(s, var_name, "int")
+                        elif assigned_type == "str" or assigned_type == "string"
+                            x86_synth_set_prim_type(s, var_name, "str")
                     if is_int_lit == 1
                         x86_synth_set_global_const(s, var_name, int_lit_val)
                         x86_synth_set_prim_type(s, var_name, "int")
@@ -547,7 +585,7 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_prim_type(s, var_name, "int")
                     elif s.synth_last_expr_type == "str"
                         x86_synth_set_prim_type(s, var_name, "str")
-                    else
+                    elif assigned_type == ""
                         x86_synth_set_prim_type(s, var_name, "")
                     return 0
                 else

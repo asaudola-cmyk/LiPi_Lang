@@ -104,13 +104,14 @@ import "universe/core/string"
 g_gc_initialized = 0
 g_arenas = []
 g_arena_map = {}
-g_freelists = [[], [], [], [], [], [], [], [], []]
-g_active_arena_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+g_freelists = [[], [], [], [], [], [], [], [], [], []]
+g_active_arena_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 g_large_chunks = []
 g_allocated_slots = {}
 g_slot_size_class = {}
 g_slot_colors = {}
 g_ptr_payloads = {}
+g_slot_types = {}
 g_roots = []
 g_root_registry = { frames: [], global_roots: [] }
 g_arena_counter = 0
@@ -133,7 +134,8 @@ g_next_fd = 100
   @if size <= 512  return 6 @end
   @if size <= 1024 return 7 @end
   @if size <= 2048 return 8 @end
-  return 0 @! Large Object (> 2048B)
+  @if size <= 4096 return 9 @end
+  return 0 @! Large Object (> 4096B)
 @end
 
 @fn gc_get_class_payload_size(sc)
@@ -145,6 +147,7 @@ g_next_fd = 100
   @if sc == 6 return 512 @end
   @if sc == 7 return 1024 @end
   @if sc == 8 return 2048 @end
+  @if sc == 9 return 4096 @end
   return 0
 @end
 
@@ -166,8 +169,8 @@ g_next_fd = 100
 
   g_arenas = []
   g_arena_map = {}
-  g_freelists = [[], [], [], [], [], [], [], [], []]
-  g_active_arena_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  g_freelists = [[], [], [], [], [], [], [], [], [], []]
+  g_active_arena_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   g_large_chunks = []
   g_allocated_slots = {}
   g_slot_size_class = {}
@@ -323,17 +326,27 @@ g_next_fd = 100
   return user_ptr
 @end
 
-@fn lipi_alloc(size)
-  return gc_alloc(size)
-@end
-
 @fn lipi_gc_alloc(size)
   return gc_alloc(size)
 @end
 
 @fn gc_alloc_typed(size, type_id)
+  // WHY: Allocates slot and records runtime type tag in g_slot_types map.
   ptr = gc_alloc(size)
+  @if ptr > 0
+    g_slot_types[ptr.to_str()] = type_id
+  @end
   return ptr
+@end
+
+@fn gc_get_type_id(val)
+  // WHY: Resolves runtime type tag for allocated pointer with safety checks.
+  @if val <= 0 return -1 @end
+  key = val.to_str()
+  @if g_slot_types.contains(key)
+    return g_slot_types[key]
+  @end
+  return TYPE_RAW_BYTES()
 @end
 
 @! ----------------------------------------------------------------------------

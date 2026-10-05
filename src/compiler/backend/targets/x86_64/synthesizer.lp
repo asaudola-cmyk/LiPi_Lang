@@ -59,6 +59,7 @@ fn x86_synth_compile_fn_def s toks pos_box
 
     // Parse parameter names (supporting parentheses, commas, and type annotations)
     params = list()
+    param_types = list()
     has_paren = 0
     if get(pos_box, 0) < toks.len()
         first_p_tok = toks[get(pos_box, 0)]
@@ -89,6 +90,7 @@ fn x86_synth_compile_fn_def s toks pos_box
 
         if x86_synth_is_ident_token(pk) == 1
             push(params, ptxt)
+            param_type = ""
             list_set(pos_box, 0, cur_p_idx + 1) // Consume param name
             if has_paren == 1
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
@@ -98,8 +100,13 @@ fn x86_synth_compile_fn_def s toks pos_box
                 list_set(pos_box, 0, after_p + 1) // Consume ':'
                 if has_paren == 1
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
-                if get(pos_box, 0) < toks.len() and (x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1 or toks[get(pos_box, 0)].tok_text == "string" or toks[get(pos_box, 0)].tok_text == "i64" or toks[get(pos_box, 0)].tok_text == "f64" or toks[get(pos_box, 0)].tok_text == "bool" or toks[get(pos_box, 0)].tok_text == "array")
-                    list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume type name
+                type_p = get(pos_box, 0)
+                if type_p < toks.len() and (x86_synth_is_ident_token(toks[type_p].tok_kind) == 1 or toks[type_p].tok_text == "string" or toks[type_p].tok_text == "i64" or toks[type_p].tok_text == "f64" or toks[type_p].tok_text == "bool" or toks[type_p].tok_text == "array")
+                    param_type = toks[type_p].tok_text
+                    list_set(pos_box, 0, type_p + 1) // Consume type name
+                end
+            end
+            push(param_types, param_type)
             if has_paren == 1
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
             // Skip optional comma: ,
@@ -126,8 +133,13 @@ fn x86_synth_compile_fn_def s toks pos_box
     while pi < params.len()
         pname = params[pi]
         off = x86_synth_alloc_var(s, pname)
+        ptype = param_types[pi]
+        if ptype != ""
+            x86_synth_set_var_type(s, pname, ptype)
+        end
         x86_synth_emit_store_param(s, pi, off)
         pi = pi + 1
+    end
 
 
     // Check for one-liner expression function: fn name args = expr
@@ -192,11 +204,27 @@ fn x86_synth_compile_fn_def s toks pos_box
 
 // ── 8. Master Program Synthesizer Entry Point ──────────────────────────────────
 
-fn x86_synth_compile_program tokens
-    // WHY: Master orchestration entry point. Transforms complete token stream into
-    // relocatable AMD64 machine code, sets up top-level stack frames, patches string relocations
-    // against the Linux ELF virtual address space (0x400000+), and resolves call sites.
+fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names reg_regs
+    // WHY: Master optimization-aware synthesis entry point. Incorporates constants from
+    // SSA Constant Folding and physical registers from SSA Linear Scan Register Allocation
+    // directly into AMD64 silicon code generation, eliminating memory round-trips.
     s = x86_synth_new()
+
+    // 0a. Populate SSA constant-folded values
+    if opt_const_names != 0 and opt_const_vals != 0
+        ci = 0
+        while ci < opt_const_names.len()
+            c_name = opt_const_names[ci]
+            c_val = opt_const_vals[ci]
+            x86_synth_set_global_const(s, c_name, c_val)
+            ci = ci + 1
+
+    // 0b. Populate SSA linear scan physical register assignments
+    // WHY: Directly bind lists to synthesizer avoiding iterative copy overhead.
+    if reg_names != 0 and reg_regs != 0
+        s.synth_regalloc_names = reg_names
+        s.synth_regalloc_regs = reg_regs
+    end
 
     // 1. Emit top-level stack frame prologue at entry point (offset 0)
     x86_synth_emit_prologue(s)
@@ -204,30 +232,38 @@ fn x86_synth_compile_program tokens
     // 2. Synthesize all functions, structs, and statements
     pos_box = [0]
     has_top_level = 0
-    while get(pos_box, 0) < tokens.len()
+    t_total = tokens.len()
+    while get(pos_box, 0) < t_total
         cur_pos = get(pos_box, 0)
         cur_k = tokens[cur_pos].tok_kind
         if cur_k == TOK_EOF()
             break
+        end
 
         tok_item = tokens[cur_pos]
         is_fn_tok = 0
         if tok_item.tok_kind == TOK_KW_FN() or tok_item.tok_kind == TOK_DIR_FN()
             is_fn_tok = 1
+        end
         if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn")
             is_fn_tok = 1
+        end
         if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT()
             is_fn_tok = 1
+        end
         if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "struct" or tok_item.tok_text == "গঠন" or tok_item.tok_text == "@struct")
             is_fn_tok = 1
+        end
 
         if is_fn_tok == 0 and tok_item.tok_kind != TOK_NEWLINE() and tok_item.tok_kind != TOK_SEMI()
             has_top_level = 1
+        end
 
         before_top_stmt_p = get(pos_box, 0)
         x86_synth_compile_statement(s, tokens, pos_box)
         if get(pos_box, 0) <= before_top_stmt_p
             list_set(pos_box, 0, before_top_stmt_p + 1)
+        end
 
     // 3. If 'main' or 'মূল' exists, call main() automatically!
     // WHY: Search backwards so translation unit's main() takes precedence over imported modules
@@ -305,7 +341,10 @@ fn x86_synth_compile_program tokens
             say "  • Total registered functions: " + str(s.synth_functions.len())
             say "  • Call reloc target: " + cr.cr_target_name + " at patch offset " + str(cr.cr_patch_offset)
             i = 0
-            while i < s.synth_functions.len()
+            limit = 10
+            if s.synth_functions.len() < limit
+                limit = s.synth_functions.len()
+            while i < limit
                 say "    fn[" + str(i) + "]: " + s.synth_functions[i].fn_name
                 i = i + 1
             exit(1)
@@ -343,3 +382,7 @@ fn x86_synth_compile_program tokens
     x86_silicon_optimize_code(s)
 
     return s
+
+fn x86_synth_compile_program tokens
+    // WHY: Backward compatibility wrapper invoking optimization-aware machine code synthesizer
+    return x86_synth_compile_program_opt(tokens, list(), list(), list(), list())

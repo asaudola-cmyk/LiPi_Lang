@@ -63,7 +63,8 @@ fn ast_to_ssa_find_var ctx name
 fn ast_to_ssa_alloc_var ctx name elem_type
     // WHY: Allocates a dedicated alloca slot in the entry block for mutable local variable
     fn_obj = ctx.ctx_curr_fn
-    slot_ptr = fn_obj.new_val("ptr")
+    slot_id = "%slot_" + name
+    slot_ptr = ssa_value_new_inst(slot_id, "ptr", 0)
     alloca_inst = ir_build_alloca(ctx.ctx_inst_counter, slot_ptr, elem_type, 0)
     ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
 
@@ -140,6 +141,9 @@ fn ast_to_ssa_lower_expr ctx expr
     if ekind == "LiteralInt" or ekind == "LiteralBool" or ekind == "IntLiteral"
         return ssa_value_new_const(expr.val, "i64")
 
+    if ekind == "LiteralStr" or ekind == "StrLiteral" or ekind == "Literal"
+        return ssa_value_new_const(0, "ptr")
+
     // 2. Variable Reference
     if ekind == "Variable" or ekind == "Ident"
         var_name = expr.name
@@ -199,6 +203,8 @@ fn ast_to_ssa_lower_expr ctx expr
         
         // Lower all arguments monotonically
         arg_nodes = expr.params
+        if arg_nodes == 0
+            arg_nodes = expr.args
         if arg_nodes != 0
             ai = 0
             acnt = len(arg_nodes)
@@ -321,7 +327,7 @@ fn ast_to_ssa_lower_stmt ctx stmt
         return 1
 
     // 5. While Loop Statement
-    if skind == "WhileLoop"
+    if skind == "WhileLoop" or skind == "While"
         fn_obj = ctx.ctx_curr_fn
         hdr_bb = fn_obj.create_block("while_hdr")
         body_bb = fn_obj.create_block("while_body")
@@ -388,7 +394,7 @@ fn ast_to_ssa_lower_stmt ctx stmt
         return 1
 
     // 8. Expression Statement (e.g. standalone function call)
-    if skind == "ExprStmt"
+    if skind == "ExprStmt" or skind == "ExpressionStmt"
         ast_to_ssa_lower_expr(ctx, stmt.expr)
         return 1
 
@@ -417,8 +423,8 @@ fn ast_to_ssa_lower_fn mod_obj fn_decl
             pnode = get(params, pi)
             p_name = pnode.param_name
 
-            // Create SSA parameter register
-            arg_str = "%" + p_name
+            // Create SSA parameter register (prefixed with %arg_ to prevent collision with monotonic %vN temporaries)
+            arg_str = "%arg_" + p_name
             p_val = ssa_value_new_arg(arg_str, "i64")
             ir_function_add_param(fn_obj, p_val)
 

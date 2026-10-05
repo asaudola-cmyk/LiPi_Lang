@@ -70,6 +70,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   @if total <= 0 return 0 - 1 @end
   @if output_path == "" return total @end
 
+  sys_unlink(output_path)
   fd = sys_open(output_path, 577, 493) // O_WRONLY | O_CREAT | O_TRUNC = 577, 0755
   @if fd < 0
     return 0 - 1
@@ -116,19 +117,22 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   // Header: 32 bytes
   // Cmd 1: __PAGEZERO segment command = 72 bytes
   // Cmd 2: __TEXT segment command with 1 section (__text) = 72 + 80 = 152 bytes
-  // Cmd 3: LC_MAIN command = 24 bytes
-  // Optional Cmd 4: __DATA segment command with 2 sections (__data, __bss) = 72 + 80 + 80 = 232 bytes (if data or bss exists)
+  // Cmd 3: LC_LOAD_DYLINKER command (/usr/lib/dyld) = 32 bytes
+  // Cmd 4: LC_LOAD_DYLIB command (/usr/lib/libSystem.B.dylib) = 56 bytes
+  // Cmd 5: LC_MAIN command = 24 bytes
+  // Base sizeofcmds = 72 + 152 + 32 + 56 + 24 = 336 bytes (ncmds = 5)
+  // Optional Cmd 6: __DATA segment command with 2 sections (__data, __bss) = 72 + 80 + 80 = 232 bytes (if data or bss exists)
 
   has_data = 0
   @if data_bytes.len() > 0 || bss_size > 0
     has_data = 1
   @end
 
-  ncmds = 3
-  sizeofcmds = 72 + 152 + 24 // PAGEZERO (72) + TEXT (152) + LC_MAIN (24) = 248 bytes
+  ncmds = 5
+  sizeofcmds = 72 + 152 + 32 + 56 + 24 // PAGEZERO (72) + TEXT (152) + DYLINKER (32) + DYLIB (56) + LC_MAIN (24) = 336 bytes
   @if has_data == 1
-    ncmds = 4
-    sizeofcmds = sizeofcmds + 232 // DATA (232)
+    ncmds = 6
+    sizeofcmds = sizeofcmds + 232 // DATA (232) -> 568 bytes
   @end
 
   header_and_cmds_size = 32 + sizeofcmds
@@ -177,11 +181,19 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   sec_text = macho_section_text(text_vmaddr, text_size, text_offset)
   sec_text_bytes = macho_section_serialize(sec_text) // 80 bytes
 
-  // Cmd 3: LC_MAIN
+  // Cmd 3: LC_LOAD_DYLINKER (/usr/lib/dyld)
+  cmd_dylinker = macho_lc_dylinker_create("/usr/lib/dyld")
+  cmd_dylinker_bytes = macho_lc_dylinker_serialize(cmd_dylinker) // 32 bytes
+
+  // Cmd 4: LC_LOAD_DYLIB (/usr/lib/libSystem.B.dylib)
+  cmd_dylib = macho_lc_dylib_create("/usr/lib/libSystem.B.dylib")
+  cmd_dylib_bytes = macho_lc_dylib_serialize(cmd_dylib) // 56 bytes
+
+  // Cmd 5: LC_MAIN
   lc_main = macho_lc_main_create(text_offset, 0)
   lc_main_bytes = macho_lc_main_serialize(lc_main) // 24 bytes
 
-  // Optional Cmd 4: __DATA
+  // Optional Cmd 6: __DATA
   cmd_data_bytes = []
   @if has_data == 1
     seg_data = macho_segment_data(data_vmaddr, data_vmsize, data_offset, data_size, 2)
@@ -202,6 +214,8 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   binary = macho_concat(binary, cmd_pagezero_bytes)
   binary = macho_concat(binary, cmd_text_header_bytes)
   binary = macho_concat(binary, sec_text_bytes)
+  binary = macho_concat(binary, cmd_dylinker_bytes)
+  binary = macho_concat(binary, cmd_dylib_bytes)
   binary = macho_concat(binary, lc_main_bytes)
   @if has_data == 1
     binary = macho_concat(binary, cmd_data_bytes)

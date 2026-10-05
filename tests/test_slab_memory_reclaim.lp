@@ -20,7 +20,7 @@ if val1 != 12345678 or val2 != 87654321
 say "✔ Allocation and memory write verified"
 
 // 2. Freeing Slot
-res = free(p1)
+free(p1)
 say "✔ Slot successfully reclaimed via free()"
 
 // 3. Re-allocation should recycle from the same size-class slab bucket
@@ -29,6 +29,7 @@ if p2 == p1
     say "✔ Perfect O(1) Slab LIFO Recycling: p2 address identical to freed p1 (" + str(p2) + ")"
 else
     say "✔ Allocation succeeded: p2 = " + str(p2)
+free(p2)
 
 // 4. Repeated Allocation & Free Stress Loop (10,000 cycles)
 // WHY: In a bump-pointer only allocator, 10,000 * 64B would consume 640KB.

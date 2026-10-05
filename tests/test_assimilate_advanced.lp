@@ -80,7 +80,12 @@ import "universe/core/string"
   assert_true(nbytes > 0, "Python script assimilated into canonical Lipi source")
 
   // Compile assimilated Lipi to ELF64 machine code
-  c_res = assimilator_exec("./bin/lipc_bin", tmp_lp, "-o", tmp_bin)
+  // WHY: Resolve canonical compiler binary (bin/lipc or bin/lipc_bin)
+  comp_bin = "./bin/lipc"
+  if sys_access("./bin/lipc_bin", 0) == 0
+      comp_bin = "./bin/lipc_bin"
+  end
+  c_res = assimilator_exec(comp_bin, tmp_lp, "-o", tmp_bin)
   assert_eq_int(c_res, 0, "Assimilated Lipi code compiled cleanly to ELF64 binary")
 
   // Execute compiled binary on bare silicon

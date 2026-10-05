@@ -70,12 +70,17 @@
   @if lp > ls
     return 0
   @end
+  diff = 0
   i = 0
   @while i < lp
     @if str_char_at(s, i) != str_char_at(prefix, i)
-      return 0
+      diff = 1
+      i = lp
     @end
     i = i + 1
+  @end
+  @if diff == 1
+    return 0
   @end
   return 1
 @end
@@ -91,12 +96,17 @@
     return 0
   @end
   offset = ls - lx
+  diff = 0
   i = 0
   @while i < lx
     @if str_char_at(s, offset + i) != str_char_at(suffix, i)
-      return 0
+      diff = 1
+      i = lx
     @end
     i = i + 1
+  @end
+  @if diff == 1
+    return 0
   @end
   return 1
 @end
@@ -989,10 +999,14 @@ fn contains s sub
     return 0
 
 fn str_contains s sub
-    return contains(s, sub)
+    if index_of(s, sub) >= 0
+        return 1
+    return 0
 
 fn ধারণ_করে s sub
-    return contains(s, sub)
+    if index_of(s, sub) >= 0
+        return 1
+    return 0
 
 // WHY: Returns 1 if string s starts with prefix, 0 otherwise.
 fn starts_with s prefix

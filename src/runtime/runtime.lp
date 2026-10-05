@@ -6,6 +6,7 @@
 
 import "runtime/lipi_syscall"
 import "runtime/lipi_gc"
+import "runtime/lipi_slab"
 
 @! ----------------------------------------------------------------------------
 @! 1. Type Identifiers & Tags
@@ -46,11 +47,45 @@ import "runtime/lipi_gc"
 @end
 
 @! ----------------------------------------------------------------------------
-@! 3. Core Memory Allocation & GC Bridge
+@! 3. Core Memory Allocation & Slab/GC Bridge
 @! ----------------------------------------------------------------------------
 @fn lipi_runtime_init()
   // WHY: Initializes the sovereign slab/bump GC runtime arena on startup.
   lipi_init_gc()
+@end
+
+@fn lipi_alloc(size)
+  // WHY: Allocates memory backed by the 9-class geometric slab engine.
+  @if size <= 0
+    size = 1
+  @end
+  return gc_alloc(size)
+@end
+
+@fn lipi_free(ptr)
+  // WHY: Reclaims memory into the segregated slab freelist in O(1) time.
+  @if ptr == 0 return 0 @end
+  return gc_free(ptr)
+@end
+
+@fn lipi_realloc(ptr, new_size)
+  // WHY: Reallocates memory buffer, preserving existing contents.
+  return gc_realloc(ptr, new_size)
+@end
+
+@fn lipi_slab_alloc(size)
+  // WHY: Direct access to 9 size-class geometric slab allocator.
+  return lipi_alloc(size)
+@end
+
+@fn lipi_slab_free(ptr)
+  // WHY: Direct O(1) deallocation to geometric slab freelists.
+  return lipi_free(ptr)
+@end
+
+@fn lipi_slab_stats()
+  // WHY: Memory utilization and freelist telemetry.
+  return gc_stats()
 @end
 
 @fn lipi_alloc_typed(size, type_id)
@@ -131,12 +166,26 @@ import "runtime/lipi_gc"
       sys_mem_write_u8(new_data + i, b)
       i = i + 1
     @end
+    old_data = arr.data
     arr.data = new_data
     arr.capacity = new_cap
+    @if old_data != 0
+      lipi_free(old_data)
+    @end
   @end
   sys_mem_write_u64(arr.data + (arr.length * arr.element_size), val)
   arr.length = arr.length + 1
   return arr
+@end
+
+@fn lipi_array_free(arr)
+  // WHY: Deterministic deallocation of dynamic array and its underlying data buffer.
+  @if arr == 0 return 0 @end
+  @if arr.data != 0
+    lipi_free(arr.data)
+  @end
+  lipi_free(arr)
+  return 1
 @end
 
 @fn lipi_array_get(arr, idx)
@@ -300,9 +349,13 @@ import "runtime/lipi_gc"
   // WHY: High-resolution monotonic millisecond timer via sys_clock_gettime.
   ts_buf = lipi_alloc_typed(16, TYPE_RAW_BYTES())
   res = sys_clock_gettime(CLOCK_REALTIME(), ts_buf)
-  @if res != 0 return 0 @end
+  @if res != 0
+    lipi_free(ts_buf)
+    return 0
+  @end
   sec = sys_mem_read_u64(ts_buf)
   nsec = sys_mem_read_u64(ts_buf + 8)
+  lipi_free(ts_buf)
   return (sec * 1000) + (nsec / 1000000)
 @end
 

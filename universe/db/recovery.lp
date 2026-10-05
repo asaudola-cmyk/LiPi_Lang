@@ -227,7 +227,7 @@ import "universe/db/wal"
     @! Check if this record belongs to a committed transaction
     is_committed = 0
     t_idx = 0
-    @while t_idx < tx_count && is_committed == 0
+    @while t_idx < tx_count and is_committed == 0
       @if committed_txs[t_idx] == rec.tx_id
         is_committed = 1
       @end
@@ -236,10 +236,10 @@ import "universe/db/wal"
 
     @if is_committed == 1
       @if rec.op_type == OP_PUT()
-        tree_ref[0] = btree_insert(tree_ref[0], rec.key, rec.value)
+        tree_ref = list_set(tree_ref, 0, btree_insert(tree_ref[0], rec.key, rec.value))
         replayed_ops = replayed_ops + 1
       @elif rec.op_type == OP_DEL()
-        tree_ref[0] = btree_delete(tree_ref[0], rec.key)
+        tree_ref = list_set(tree_ref, 0, btree_delete(tree_ref[0], rec.key))
         replayed_ops = replayed_ops + 1
       @end
     @end

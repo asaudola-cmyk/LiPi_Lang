@@ -54,6 +54,17 @@ import "universe/core/string"
 @fn PE_FLAGS_RDATA() return 1073741888 @end // CNT_INITIALIZED_DATA | MEM_READ (0x40000040)
 @fn PE_FLAGS_DATA()  return 3221225536 @end // CNT_INITIALIZED_DATA | MEM_READ | MEM_WRITE (0xC0000040)
 @fn PE_FLAGS_BSS()   return 3221225600 @end // CNT_UNINITIALIZED_DATA | MEM_READ | MEM_WRITE (0xC0000080)
+@fn PE_FLAGS_IDATA() return 3221225536 @end // CNT_INITIALIZED_DATA | MEM_READ | MEM_WRITE (0xC0000040)
+
+// --- Optional Header Data Directory Indices ---
+@fn IMAGE_DIRECTORY_ENTRY_EXPORT()    return 0  @end // Export Directory
+@fn IMAGE_DIRECTORY_ENTRY_IMPORT()    return 1  @end // Import Directory Table (.idata)
+@fn IMAGE_DIRECTORY_ENTRY_RESOURCE()  return 2  @end // Resource Directory (.rsrc)
+@fn IMAGE_DIRECTORY_ENTRY_EXCEPTION() return 3  @end // Exception Directory (.pdata)
+@fn IMAGE_DIRECTORY_ENTRY_SECURITY()  return 4  @end // Security / Certificate Table
+@fn IMAGE_DIRECTORY_ENTRY_BASERELOC() return 5  @end // Base Relocation Table (.reloc)
+@fn IMAGE_DIRECTORY_ENTRY_DEBUG()     return 6  @end // Debug Directory
+@fn IMAGE_DIRECTORY_ENTRY_IAT()       return 12 @end // Import Address Table (IAT)
 
 @fn COFF_HEADER_SIZE()        return 20  @end // 20 bytes
 @fn PE_OPT_HEADER64_SIZE()    return 240 @end // 240 bytes
@@ -98,6 +109,18 @@ import "universe/core/string"
   size_of_stack_commit: i64        // 8 bytes: Stack commit size (4KB = 4096)
   size_of_heap_reserve: i64        // 8 bytes: Heap reserve size (1MB = 1048576)
   size_of_heap_commit: i64         // 8 bytes: Heap commit size (4KB = 4096)
+  opt_import_table_rva: i64        // 4 bytes: RVA of Import Directory Table
+  opt_import_table_size: i64       // 4 bytes: Size of Import Directory Table
+  opt_iat_rva: i64                 // 4 bytes: RVA of Import Address Table
+  opt_iat_size: i64                // 4 bytes: Size of Import Address Table
+@end
+
+@struct ImageImportDescriptor
+  iid_original_first_thunk: i64 // 4 bytes: RVA of Import Lookup Table (ILT / INT)
+  iid_time_date_stamp: i64      // 4 bytes: UTC timestamp (0 before binding)
+  iid_forwarder_chain: i64      // 4 bytes: Forwarder index (0 if none)
+  iid_name_rva: i64             // 4 bytes: RVA of ASCII DLL name
+  iid_first_thunk: i64          // 4 bytes: RVA of Import Address Table (IAT)
 @end
 
 @struct ImageSectionHeader
@@ -218,6 +241,10 @@ import "universe/core/string"
   hdr.size_of_stack_commit = 4096     // 4KB
   hdr.size_of_heap_reserve = 1048576  // 1MB
   hdr.size_of_heap_commit = 4096       // 4KB
+  hdr.opt_import_table_rva = 0
+  hdr.opt_import_table_size = 0
+  hdr.opt_iat_rva = 0
+  hdr.opt_iat_size = 0
   return hdr
 @end
 
@@ -266,9 +293,59 @@ import "universe/core/string"
   return sec
 @end
 
+@fn pe_section_idata_create(vsize, rva, raw_size, raw_ptr)
+  // WHY: .idata section contains Windows Import Tables (IDT, ILT, IAT, Hint/Name strings).
+  // Must be marked initialized data, readable, and writable so the Windows loader can
+  // bind resolved dynamic function addresses directly into the IAT at process startup.
+  sec = ImageSectionHeader()
+  sec.sec_name = ".idata"
+  sec.virtual_size = vsize
+  sec.virtual_address = rva
+  sec.size_of_raw_data = raw_size
+  sec.pointer_to_raw_data = raw_ptr
+  sec.pointer_to_relocations = 0
+  sec.pointer_to_linenumbers = 0
+  sec.num_relocations = 0
+  sec.num_linenumbers = 0
+  sec.characteristics = PE_FLAGS_IDATA()
+  return sec
+@end
+
 // ============================================================================
 // 4. SERIALIZATION
 // ============================================================================
+
+@fn pe_import_descriptor_serialize(desc)
+  // WHY: Serializes an IMAGE_IMPORT_DESCRIPTOR (20 bytes) to little-endian bytes:
+  // Offset 0x00: OriginalFirstThunk (4 bytes RVA -> ILT)
+  // Offset 0x04: TimeDateStamp (4 bytes, 0 before binding)
+  // Offset 0x08: ForwarderChain (4 bytes, 0)
+  // Offset 0x0C: Name (4 bytes RVA -> DLL ASCII name)
+  // Offset 0x10: FirstThunk (4 bytes RVA -> IAT)
+  out = []
+  oft = pe_pack_u32(desc.iid_original_first_thunk)
+  out = out.push(oft[0]) out = out.push(oft[1]) out = out.push(oft[2]) out = out.push(oft[3])
+  tds = pe_pack_u32(desc.iid_time_date_stamp)
+  out = out.push(tds[0]) out = out.push(tds[1]) out = out.push(tds[2]) out = out.push(tds[3])
+  fc = pe_pack_u32(desc.iid_forwarder_chain)
+  out = out.push(fc[0]) out = out.push(fc[1]) out = out.push(fc[2]) out = out.push(fc[3])
+  nm = pe_pack_u32(desc.iid_name_rva)
+  out = out.push(nm[0]) out = out.push(nm[1]) out = out.push(nm[2]) out = out.push(nm[3])
+  ft = pe_pack_u32(desc.iid_first_thunk)
+  out = out.push(ft[0]) out = out.push(ft[1]) out = out.push(ft[2]) out = out.push(ft[3])
+  return out
+@end
+
+@fn pe_import_descriptor_null()
+  // WHY: Constructs a 20-byte zero-filled null terminator for the Import Directory Table.
+  desc = ImageImportDescriptor()
+  desc.iid_original_first_thunk = 0
+  desc.iid_time_date_stamp = 0
+  desc.iid_forwarder_chain = 0
+  desc.iid_name_rva = 0
+  desc.iid_first_thunk = 0
+  return desc
+@end
 
 @fn pe_coff_header_serialize(chdr)
   // WHY: Serializes IMAGE_FILE_HEADER to exactly 20 bytes.
@@ -419,9 +496,51 @@ import "universe/core/string"
   nrv = pe_pack_u32(16)
   out = out.push(nrv[0]) out = out.push(nrv[1]) out = out.push(nrv[2]) out = out.push(nrv[3])
 
-  // 3. 16 Data Directories (16 * 8 = 128 bytes of zero for freestanding binary)
+  // 3. 16 Data Directories (16 * 8 = 128 bytes)
+  // WHY: Conforms to Microsoft PE/COFF specification:
+  // Directory 0: Export Table (8 bytes zero)
   k = 0
-  @while k < 128
+  @while k < 8
+    out = out.push(0)
+    k = k + 1
+  @end
+
+  // Directory 1: Import Table (.idata) -> RVA & Size
+  imp_rva = 0
+  imp_sz = 0
+  @if opthdr.opt_import_table_rva > 0
+    imp_rva = opthdr.opt_import_table_rva
+    imp_sz = opthdr.opt_import_table_size
+  @end
+  ir = pe_pack_u32(imp_rva)
+  out = out.push(ir[0]) out = out.push(ir[1]) out = out.push(ir[2]) out = out.push(ir[3])
+  isz = pe_pack_u32(imp_sz)
+  out = out.push(isz[0]) out = out.push(isz[1]) out = out.push(isz[2]) out = out.push(isz[3])
+
+  // Directories 2..11: Resource, Exception, Certificate, BaseReloc, Debug, Arch, GlobalPtr, TLS, LoadConfig, BoundImport
+  // 10 entries * 8 bytes = 80 bytes of zero
+  k = 0
+  @while k < 80
+    out = out.push(0)
+    k = k + 1
+  @end
+
+  // Directory 12: IAT (Import Address Table) -> RVA & Size
+  iat_rva_val = 0
+  iat_sz_val = 0
+  @if opthdr.opt_iat_rva > 0
+    iat_rva_val = opthdr.opt_iat_rva
+    iat_sz_val = opthdr.opt_iat_size
+  @end
+  iar = pe_pack_u32(iat_rva_val)
+  out = out.push(iar[0]) out = out.push(iar[1]) out = out.push(iar[2]) out = out.push(iar[3])
+  iasz = pe_pack_u32(iat_sz_val)
+  out = out.push(iasz[0]) out = out.push(iasz[1]) out = out.push(iasz[2]) out = out.push(iasz[3])
+
+  // Directories 13..15: DelayImport, CLR Runtime, Reserved
+  // 3 entries * 8 bytes = 24 bytes of zero
+  k = 0
+  @while k < 24
     out = out.push(0)
     k = k + 1
   @end

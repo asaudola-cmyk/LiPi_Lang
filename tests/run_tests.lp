@@ -41,9 +41,38 @@ fn spawn_process cmd_path arg1 arg2
         syscall(59, cmd_path, argv, env, 0, 0, 0)
         syscall(60, 127, 0, 0, 0, 0, 0)
 
-    syscall(61, pid, st, 0, 0, 0, 0)
-    raw_status = mem_word_read(st, 0)
-    exit_code = (raw_status / 256) % 256
+    // WHY: Use WNOHANG polling loop with sys_nanosleep and 10-second timeout.
+    // Prevents any rogue test or infinite loop from hanging the regression test suite indefinitely.
+    timeout_ms = 10000
+    elapsed_ms = 0
+    ts = syscall(9, 0, 16, 3, 34, -1, 0)
+    mem_word_write(ts, 0, 0)
+    mem_word_write(ts, 8, 20000000) // 20ms in nanoseconds
+    w_res = 0
+    while elapsed_ms < timeout_ms
+        w_res = syscall(61, pid, st, 1, 0, 0, 0) // wait4 with WNOHANG (1)
+        if w_res == pid or w_res < 0
+            break
+        end
+        syscall(35, ts, 0, 0, 0, 0, 0) // sys_nanosleep (20ms)
+        elapsed_ms = elapsed_ms + 20
+    end
+    syscall(11, ts, 16, 0, 0, 0, 0)
+
+    if w_res == 0
+        // Process exceeded 10-second execution budget! Kill with SIGKILL (syscall 62, signal 9)
+        syscall(62, pid, 9, 0, 0, 0, 0)
+        syscall(61, pid, st, 0, 0, 0, 0) // Reap child zombie
+        raw_status = 9 // SIGKILL exit marker
+    else
+        raw_status = mem_word_read(st, 0)
+    end
+    sig = raw_status & 127
+    if sig != 0
+        exit_code = 128 + sig
+    else
+        exit_code = (raw_status / 256) % 256
+    end
 
     syscall(11, argv, 64, 0, 0, 0, 0)
     syscall(11, env, 32, 0, 0, 0, 0)
@@ -78,8 +107,11 @@ fn main
     say "║  🧪 LIPI SUITE REGRESSION TEST ENGINE (100% PURE SILICON / 0% SHELL) ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
-    // WHY: Use sovereign self-hosted modular compiler (bin/lipc)
+    // WHY: Prefer the newly self-hosted compiler engine (bin/lipc_bin) if present, falling back to canonical bin/lipc.
     compiler = "bin/lipc"
+    if syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0
+        compiler = "bin/lipc_bin"
+    end
     passed = 0
     failed = 0
 
@@ -936,6 +968,37 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
+
+    // 199: Mathematical Memory Safety & CFG Proof Engine (100% Pure LiPi)
+    if run_single_test(compiler, "tests/test_semantics_math_proof.lp", "test_semantics_math_proof") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 200: Sovereign Bare-Metal Bootloader & Desktop Kernel (UEFI PE32+ & x86_64 Long Mode)
+    if run_single_test(compiler, "tests/test_baremetal_boot.lp", "test_baremetal_boot") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 201: Zero-Copy HTTP REST Microservice & io_uring Bypass
+    if run_single_test(compiler, "tests/test_http_rest_microservice.lp", "test_http_rest_microservice") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 202: Native %xmm SSE2 Float Dot Product & GEMV Engine
+    if run_single_test(compiler, "tests/test_sse2_gemv.lp", "test_sse2_gemv") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 203: Full Autoregressive Transformer with KV-Cache & GGUF Tensors
+    if run_single_test(compiler, "tests/test_full_tensor_engine.lp", "test_full_tensor_engine") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
 
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed

@@ -1,98 +1,90 @@
-@! ============================================================================
-@! LIPI RUNTIME ASYNC: STACKFUL COROUTINE ENGINE
-@! Module: runtime/async/coroutine
-@! 100% Pure LiPi Implementation — Direct Silicon Concurrency
-@! ============================================================================
+// ============================================================================
+// 👑 LIPI RUNTIME ASYNC: STACKFUL COROUTINE ENGINE
+// Module: src/runtime/async/coroutine.lp
+// 100% Pure LiPi Implementation — Direct Silicon Concurrency
+// ============================================================================
+// WHY: Stackful coroutines allow lightweight user-space execution contexts
+// with distinct register state and stack segments. This engine provides
+// explicit context lifecycle tracking (Created, Running, Suspended, Completed, Panicked)
+// and centralized registry coordination for fiber and task schedulers.
 
-import "universe/core/collections"
-import "universe/core/string"
 
-@enum CoroutineState
-  Created = 0
-  Running = 1
-  Suspended = 2
-  Completed = 3
-  Panicked = 4
-@end
 
-@struct CoroutineValue
-  kind: i64,
-  int_val: i64,
+// ── Coroutine Lifecycle States ───────────────────────────────────────────────
+CORO_CREATED   = 0
+CORO_RUNNING   = 1
+CORO_SUSPENDED = 2
+CORO_COMPLETED = 3
+CORO_PANICKED  = 4
+
+// ── Boxed Coroutine Value ───────────────────────────────────────────────────
+struct CoroutineValue
+  kind: i64
+  int_val: i64
   str_val: string
-@end
+end
 
-@struct CoroutineContext
-  rsp: i64,
-  rbp: i64,
-  rbx: i64,
-  r12: i64,
-  r13: i64,
-  r14: i64,
+// ── Saved CPU Context Registers (x86_64 Callee-Saved ABI) ───────────────────
+struct CoroutineContext
+  rsp: i64
+  rbp: i64
+  rbx: i64
+  r12: i64
+  r13: i64
+  r14: i64
   r15: i64
-@end
+end
 
-@struct Coroutine
-  id: i64,
-  state: i64,
-  stack_size: i64,
-  parent_id: i64,
+// ── Coroutine Instance Descriptor ───────────────────────────────────────────
+struct Coroutine
+  id: i64
+  state: i64
+  stack_size: i64
+  parent_id: i64
   context: CoroutineContext
-@end
+end
 
-@struct CoroutineRegistry
-  coroutines: array,
-  next_id: i64,
+// ── Coroutine Registry ──────────────────────────────────────────────────────
+struct CoroutineRegistry
+  coroutines: array
+  next_id: i64
   current_coro_id: i64
-@end
+end
 
-@fn coroutine_registry_new() -> CoroutineRegistry
-  return CoroutineRegistry {
-    coroutines: [],
-    next_id: 1,
-    current_coro_id: 0
-  }
-@end
+// Allocates and initializes a new empty coroutine registry.
+fn coroutine_registry_new() -> CoroutineRegistry
+  return CoroutineRegistry([], 1, 0)
+end
 
-@fn create_coroutine(reg: CoroutineRegistry, stack_size: i64) -> CoroutineRegistry
+// Spawns a new coroutine with specified stack size and registers it into the pool.
+fn create_coroutine(reg: CoroutineRegistry, stack_size: i64) -> CoroutineRegistry
   id = reg.next_id
   reg.next_id = reg.next_id + 1
 
-  ctx = CoroutineContext {
-    rsp: 0,
-    rbp: 0,
-    rbx: 0,
-    r12: 0,
-    r13: 0,
-    r14: 0,
-    r15: 0
-  }
-
-  coro = Coroutine {
-    id: id,
-    state: 0, @! Created
-    stack_size: stack_size,
-    parent_id: 0,
-    context: ctx
-  }
+  ctx = CoroutineContext(0, 0, 0, 0, 0, 0, 0)
+  coro = Coroutine(id, CORO_CREATED, stack_size, 0, ctx)
 
   reg.coroutines = reg.coroutines.push(coro)
   return reg
-@end
+end
 
-@fn coro_resume(coro: Coroutine) -> Coroutine
-  @if coro.state == 3 || coro.state == 4
+// Transitions a coroutine to running state, guarding against completed or panicked states.
+fn coro_resume(coro: Coroutine) -> Coroutine
+  if coro.state == CORO_COMPLETED or coro.state == CORO_PANICKED
     return coro
-  @end
-  coro.state = 1 @! Running
+  end
+  coro.state = CORO_RUNNING
   return coro
-@end
+end
 
-@fn coro_yield(coro: Coroutine) -> Coroutine
-  coro.state = 2 @! Suspended
+// Suspends an active coroutine.
+fn coro_yield(coro: Coroutine) -> Coroutine
+  coro.state = CORO_SUSPENDED
   return coro
-@end
+end
 
-@fn coro_complete(coro: Coroutine) -> Coroutine
-  coro.state = 3 @! Completed
+// Marks a coroutine as successfully finished.
+fn coro_complete(coro: Coroutine) -> Coroutine
+  coro.state = CORO_COMPLETED
   return coro
-@end
+end

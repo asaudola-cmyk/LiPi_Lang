@@ -54,7 +54,7 @@ fn ui_signal_new initial_val
     sig = UISignal()
     sig.sig_val = initial_val
     sig.sig_is_dirty = 0
-    sig.sig_subscribers = list()
+    sig.sig_subscribers = 0
     return sig
 
 fn ui_signal_get sig

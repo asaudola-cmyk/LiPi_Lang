@@ -115,6 +115,23 @@ import "universe/core/string"
   main_stacksize: i64 // 8 bytes: Initial stack size (0 for default)
 @end
 
+@struct MachODylinkerCommand
+  mdl_cmd: i64         // 4 bytes: LC_LOAD_DYLINKER (14)
+  mdl_cmdsize: i64     // 4 bytes: Total command size aligned to 8 bytes
+  mdl_name_offset: i64 // 4 bytes: Offset to path string from start of command (12)
+  mdl_path: string     // Path string (e.g. "/usr/lib/dyld")
+@end
+
+@struct MachODylibCommand
+  mdyb_cmd: i64                   // 4 bytes: LC_LOAD_DYLIB (12)
+  mdyb_cmdsize: i64               // 4 bytes: Total command size aligned to 8 bytes
+  mdyb_name_offset: i64           // 4 bytes: Offset to path string (24)
+  mdyb_timestamp: i64             // 4 bytes: Library timestamp
+  mdyb_current_version: i64       // 4 bytes: Current library version
+  mdyb_compatibility_version: i64 // 4 bytes: Compatibility version
+  mdyb_path: string               // Path string (e.g. "/usr/lib/libSystem.B.dylib")
+@end
+
 // ============================================================================
 // 2. INTEGER PACKING HELPERS (LITTLE ENDIAN)
 // ============================================================================
@@ -152,7 +169,7 @@ import "universe/core/string"
   // WHY: Encodes an ASCII string into exactly 16 bytes, padded with trailing zeros.
   bytes = []
   i = 0
-  len_str = name_str.len()
+  len_str = str_len(name_str)
   @while i < 16
     @if i < len_str
       bytes = bytes.push(str_char_at(name_str, i))
@@ -330,6 +347,53 @@ import "universe/core/string"
   }
 @end
 
+@fn macho_lc_dylinker_create(path_str)
+  // WHY: Constructs an LC_LOAD_DYLINKER load command.
+  // Darwin / macOS kernels require LC_LOAD_DYLINKER to locate and invoke dyld
+  // (the Apple dynamic linker, typically at "/usr/lib/dyld").
+  // Header: 12 bytes (cmd: 4, cmdsize: 4, name_offset: 4).
+  // Total size must be padded to an 8-byte boundary.
+  hdr_size = 12
+  path_len = str_len(path_str)
+  total = hdr_size + path_len + 1
+  rem = total % 8
+  cmdsize = total
+  @if rem != 0
+    cmdsize = total + (8 - rem)
+  @end
+  return {
+    mdl_cmd: LC_LOAD_DYLINKER(),
+    mdl_cmdsize: cmdsize,
+    mdl_name_offset: 12,
+    mdl_path: path_str
+  }
+@end
+
+@fn macho_lc_dylib_create(path_str)
+  // WHY: Constructs an LC_LOAD_DYLIB command declaring a dynamic library dependency.
+  // Standard macOS userland executables must link at least "/usr/lib/libSystem.B.dylib"
+  // to initialize thread-local storage, dyld closures, and POSIX syscall trampolines.
+  // Header: 24 bytes (cmd: 4, cmdsize: 4, name_offset: 4, timestamp: 4, current_version: 4, compatibility_version: 4).
+  // Total size must be padded to an 8-byte boundary.
+  hdr_size = 24
+  path_len = str_len(path_str)
+  total = hdr_size + path_len + 1
+  rem = total % 8
+  cmdsize = total
+  @if rem != 0
+    cmdsize = total + (8 - rem)
+  @end
+  return {
+    mdyb_cmd: LC_LOAD_DYLIB(),
+    mdyb_cmdsize: cmdsize,
+    mdyb_name_offset: 24,
+    mdyb_timestamp: 2,
+    mdyb_current_version: 65536,
+    mdyb_compatibility_version: 65536,
+    mdyb_path: path_str
+  }
+@end
+
 // ============================================================================
 // 4. SERIALIZERS
 // ============================================================================
@@ -496,3 +560,80 @@ import "universe/core/string"
 
   return out
 @end
+
+@fn macho_lc_dylinker_serialize(dl_cmd)
+  // WHY: Serializes LC_LOAD_DYLINKER load command into exactly dl_cmd.mdl_cmdsize bytes.
+  // Layout:
+  // Offset 0x00: cmd         (4 bytes: LC_LOAD_DYLINKER = 14)
+  // Offset 0x04: cmdsize     (4 bytes: padded to 8-byte boundary)
+  // Offset 0x08: name_offset (4 bytes: 12)
+  // Offset 0x0C: path string + null terminator + zero padding to cmdsize
+  out = []
+
+  c_bytes = macho_pack_u32_le(dl_cmd.mdl_cmd)
+  out = macho_append_bytes(out, c_bytes, 4)
+
+  cs_bytes = macho_pack_u32_le(dl_cmd.mdl_cmdsize)
+  out = macho_append_bytes(out, cs_bytes, 4)
+
+  no_bytes = macho_pack_u32_le(dl_cmd.mdl_name_offset)
+  out = macho_append_bytes(out, no_bytes, 4)
+
+  i = 0
+  p_len = str_len(dl_cmd.mdl_path)
+  @while i < p_len
+    out = out.push(str_char_at(dl_cmd.mdl_path, i))
+    i = i + 1
+  @end
+
+  @while out.len() < dl_cmd.mdl_cmdsize
+    out = out.push(0)
+  @end
+
+  return out
+@end
+
+@fn macho_lc_dylib_serialize(dylib_cmd)
+  // WHY: Serializes LC_LOAD_DYLIB load command into exactly dylib_cmd.mdyb_cmdsize bytes.
+  // Layout:
+  // Offset 0x00: cmd                    (4 bytes: LC_LOAD_DYLIB = 12)
+  // Offset 0x04: cmdsize                (4 bytes: padded to 8-byte boundary)
+  // Offset 0x08: name_offset            (4 bytes: 24)
+  // Offset 0x0C: timestamp              (4 bytes)
+  // Offset 0x10: current_version        (4 bytes)
+  // Offset 0x14: compatibility_version  (4 bytes)
+  // Offset 0x18: path string + null terminator + zero padding to cmdsize
+  out = []
+
+  c_bytes = macho_pack_u32_le(dylib_cmd.mdyb_cmd)
+  out = macho_append_bytes(out, c_bytes, 4)
+
+  cs_bytes = macho_pack_u32_le(dylib_cmd.mdyb_cmdsize)
+  out = macho_append_bytes(out, cs_bytes, 4)
+
+  no_bytes = macho_pack_u32_le(dylib_cmd.mdyb_name_offset)
+  out = macho_append_bytes(out, no_bytes, 4)
+
+  ts_bytes = macho_pack_u32_le(dylib_cmd.mdyb_timestamp)
+  out = macho_append_bytes(out, ts_bytes, 4)
+
+  cv_bytes = macho_pack_u32_le(dylib_cmd.mdyb_current_version)
+  out = macho_append_bytes(out, cv_bytes, 4)
+
+  cp_bytes = macho_pack_u32_le(dylib_cmd.mdyb_compatibility_version)
+  out = macho_append_bytes(out, cp_bytes, 4)
+
+  i = 0
+  p_len = str_len(dylib_cmd.mdyb_path)
+  @while i < p_len
+    out = out.push(str_char_at(dylib_cmd.mdyb_path, i))
+    i = i + 1
+  @end
+
+  @while out.len() < dylib_cmd.mdyb_cmdsize
+    out = out.push(0)
+  @end
+
+  return out
+@end
+

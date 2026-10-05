@@ -4,7 +4,8 @@
 @! Domain: universe/sys (Freestanding Core Runtime Engineer)
 @! ============================================================================
 
-import "universe/sys/syscalls"
+// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+import "universe/os/syscalls"
 import "universe/sys/runtime"
 import "universe/sys/memory"
 
