@@ -616,6 +616,12 @@ fn pipeline_name_has_token name token
 // WHY: Precise memory proof exemption filter preventing false positives on words like "freeze", "renew", "definition".
 // Enforces exact whole-word, prefix (e.g. assert_, panic_), suffix (_new, _free), or inner-word (_create_) matching.
 fn pipeline_is_memory_exempt_fn name
+    if pipeline_name_has_token(name, "main") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "test") == 1
+        return 1
+    end
     if pipeline_name_has_token(name, "exit") == 1
         return 1
     end

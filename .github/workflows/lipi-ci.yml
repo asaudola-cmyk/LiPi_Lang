@@ -1,7 +1,8 @@
 name: Lipi Sovereign Native CI
 
 # WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
-# CI verifies standalone native compilation, regression tests, and zero-python audit.
+# CI verifies standalone native bootstrap, 203 regression tests, zero-python audit,
+# and end-to-end installer validation on clean Ubuntu environments.
 # Triggered on every push/PR to main.
 
 on:
@@ -15,44 +16,45 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi 140-Test Regression Suite (Native Toolchain)"
+    name: "Lipi 203-Test Regression Suite (Native Toolchain)"
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup binary permissions
+      - name: Bootstrap Compiler and Developer Tools from Source
         run: |
-          chmod +x bin/* install.sh 2>/dev/null || true
+          chmod +x src/boot/lipi-seed install.sh build.sh
+          make
 
       - name: Show Lipi Native Version
         run: |
           ./bin/lipi version
 
-      - name: Verify One-Liner Evaluation (Zero Python)
+      - name: Verify One-Liner Evaluation (Zero Foreign Runtime)
         run: |
           ./bin/lipi -e 'say "CI: Lipi Native Runner OK"'
 
-      - name: Run Full 140-Test Sovereign Regression Engine (0% Shell)
+      - name: Run Full 203-Test Sovereign Regression Engine (0% Shell)
         run: |
           ./bin/lipi test
 
       - name: Verify Direct Machine Code Compilation
         run: |
-          ./bin/lipc tests/01_hello.lp -o /tmp/ci_hello
+          ./bin/lipc tests/01_hello.lp /tmp/ci_hello
           /tmp/ci_hello
           rm -f /tmp/ci_hello
 
       - name: Verify Fibonacci Execution
         run: |
-          ./bin/lipc tests/59_minimal_fibonacci.lp -o /tmp/ci_fib
+          ./bin/lipc tests/59_minimal_fibonacci.lp /tmp/ci_fib
           /tmp/ci_fib
           rm -f /tmp/ci_fib
 
       - name: Verify Unicode Execution
         run: |
-          ./bin/lipc tests/56_minimal_unicode.lp -o /tmp/ci_unicode
+          ./bin/lipc tests/56_minimal_unicode.lp /tmp/ci_unicode
           /tmp/ci_unicode
           rm -f /tmp/ci_unicode
 
@@ -93,12 +95,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Test install.sh syntax
+      - name: Test install.sh bash & dash POSIX syntax
         run: |
           bash -n install.sh
-          echo "install.sh syntax OK"
+          dash -n install.sh
+          echo "install.sh syntax OK across bash and dash"
 
-      - name: Test scripts/install.sh syntax
+      - name: Test End-to-End Fresh Installation
         run: |
-          bash -n scripts/install.sh
-          echo "scripts/install.sh syntax OK"
+          chmod +x install.sh
+          ./install.sh
+          "$HOME/.local/bin/lipi" version
+          "$HOME/.local/bin/lipc" --version
+          echo "Fresh install test passed successfully!"

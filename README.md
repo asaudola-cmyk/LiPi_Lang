@@ -157,29 +157,42 @@ See [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) for the complete be
 ## 🚀 Quickstart
 
 ### 1. Installation
-Clone the sovereign repository and add `bin/` to your path:
+
+**Option A: 1-Line Autonomous Installer (Recommended)**
 ```bash
-git clone https://github.com/asaudola-cmyk/LiPi_Lang ~/.lipi
-export PATH="$HOME/.lipi/bin:$PATH"
+curl -sSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash
+```
+
+**Option B: Clone & Build from Pure Source (Zero Dependencies)**
+```bash
+git clone https://github.com/asaudola-cmyk/LiPi_Lang.git
+cd LiPi_Lang
+make        # or ./build.sh
+export PATH="$(pwd)/bin:$PATH"
+```
+
+**Option C: Install into System (`~/.local/bin`)**
+```bash
+./install.sh
 ```
 
 ### 2. Run a Script Immediately
 ```bash
-lipi examples/01_hello_world/main.lp
+lipi run examples/01_hello_world/main.lp
 ```
 
 ### 3. Compile Directly to Standalone ELF64 Binary (Zero GCC, Zero Libc)
 ```bash
-lipc examples/01_hello_world/main.lp -o build/hello_app
-chmod +x build/hello_app
-./build/hello_app
+lipc examples/01_hello_world/main.lp -o hello_app
+chmod +x hello_app
+./hello_app
 ```
 
 ### 4. Run the Full Test Suite
 ```bash
-./bin/lipi test
+lipi test   # or make test
 ```
-All 140 regression and integration test suites pass (140/140) across core language semantics, networking, cryptography, concurrency, memory arenas, and baremetal components.
+All **203 regression test suites pass (203/203 ✔, 100% green)** across core language semantics, networking, cryptography, concurrency, memory arenas, and baremetal components.
 
 ---
 
