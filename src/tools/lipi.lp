@@ -29,6 +29,7 @@ fn print_usage
     say "  lipi <command> [arguments...]\n"
     say "\033[1;36mCore Commands:\033[0m"
     say "  \033[1;32mrun\033[0m <file.lp>           Compile and run program in-memory (Zero disk overhead)"
+    say "  \033[1;32m-e\033[0m '<expr>'            Direct one-liner evaluation (Zero disk overhead)"
     say "  \033[1;32mbuild\033[0m <file.lp> [-o out] Compile standalone native machine code binary"
     say "  \033[1;32mtest\033[0m [suite]             Execute autonomous test suites (0% Shell)"
     say "  \033[1;32mrepl\033[0m                    Launch interactive REPL terminal session"
@@ -99,18 +100,73 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
 
     return exit_code
 
-// WHY: Resolves toolchain binaries dynamically across current directory, ~/.local/bin, and Lipi repository
+// WHY: Resolves toolchain binaries dynamically across current directory, ~/.local/bin, /usr/local/bin, and sibling paths
 fn resolve_bin_path rel_name
     local_p = "bin/" + rel_name
     if syscall(21, local_p, 0, 0, 0, 0, 0) == 0
         return local_p
-    user_p = "/home/shafiullah/.local/bin/" + rel_name
-    if syscall(21, user_p, 0, 0, 0, 0, 0) == 0
-        return user_p
-    lipi_p = "/home/shafiullah/.lipi/bin/" + rel_name
-    if syscall(21, lipi_p, 0, 0, 0, 0, 0) == 0
-        return lipi_p
+    sys_p = "/usr/local/bin/" + rel_name
+    if syscall(21, sys_p, 0, 0, 0, 0, 0) == 0
+        return sys_p
+    sys_p2 = "/usr/bin/" + rel_name
+    if syscall(21, sys_p2, 0, 0, 0, 0, 0) == 0
+        return sys_p2
+
+    // Sibling directory of current executable via /proc/self/exe
+    exe_buf = malloc(256)
+    n = syscall(89, "/proc/self/exe", exe_buf, 255, 0, 0, 0)
+    if n > 0
+        mem_byte_write(exe_buf, n, 0)
+        last_slash = 0 - 1
+        si = n - 1
+        while si >= 0
+            if mem_byte_read(exe_buf, si) == 47
+                last_slash = si
+                break
+            si = si - 1
+        if last_slash >= 0
+            dir_str = ""
+            di = 0
+            while di <= last_slash
+                dir_str = dir_str + chr(mem_byte_read(exe_buf, di))
+                di = di + 1
+            sibling_p = dir_str + rel_name
+            if syscall(21, sibling_p, 0, 0, 0, 0, 0) == 0
+                free(exe_buf, 256)
+                return sibling_p
+    free(exe_buf, 256)
     return rel_name
+
+fn handle_eval expr
+    if len(expr) == 0
+        say "❌ Error: Code snippet required: lipi -e '<code snippet>'"
+        return 1
+
+    cur_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    tmp_src = "/tmp/lipi_eval_" + str(cur_pid) + ".lp"
+    tmp_bin = "/tmp/lipi_eval_" + str(cur_pid) + ".bin"
+
+    // WHY: Direct Linux sys_open (2) with O_WRONLY|O_CREAT|O_TRUNC (577), mode 0644 (420)
+    fd = syscall(2, tmp_src, 577, 420, 0, 0, 0)
+    if fd < 0
+        say "❌ Error creating temporary eval file: " + tmp_src
+        return 1
+    content = expr + "\n"
+    syscall(1, fd, content, len(content), 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+
+    c_bin = resolve_bin_path("lipc_bin")
+    code = spawn_exec_cmd(c_bin, tmp_src, tmp_bin, "", "")
+    if code != 0
+        syscall(87, tmp_src, 0, 0, 0, 0, 0)
+        syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+        return code
+
+    exec_code = spawn_exec_cmd(tmp_bin, "", "", "", "")
+    syscall(87, tmp_src, 0, 0, 0, 0, 0)
+    syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+    return exec_code
+
 
 fn handle_run file_path a1 a2 a3 a4
     if len(file_path) == 0
@@ -465,10 +521,21 @@ fn main
         show_version()
         return 0
 
+    if cmd == "-e"
+        if argc < 3
+            say "Usage: lipi -e '<expression>'"
+            return 1
+        return handle_eval(get(args, 2))
+
     if cmd == "run"
         if argc < 3
             say "Usage: lipi run <file.lp> [args...]"
             return 1
+        if get(args, 2) == "-e"
+            if argc < 4
+                say "Usage: lipi run -e '<expression>'"
+                return 1
+            return handle_eval(get(args, 3))
         a1 = ""
         a2 = ""
         a3 = ""

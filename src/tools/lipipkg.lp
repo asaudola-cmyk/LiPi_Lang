@@ -660,13 +660,15 @@ fn pkg_spawn_exec cmd_path arg1 arg2 arg3 arg4
     return exit_code
 
 fn pkg_resolve_compiler
-    // WHY: Locates available Lipi compiler binary in repository or system path
+    // WHY: Locates available Lipi compiler binary across repo, system, and local paths
     if syscall(21, "bin/lipc", 0, 0, 0, 0, 0) == 0
         return "bin/lipc"
     if syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0
         return "bin/lipc_bin"
-    if syscall(21, "/home/shafiullah/.local/bin/lipc", 0, 0, 0, 0, 0) == 0
-        return "/home/shafiullah/.local/bin/lipc"
+    if syscall(21, "/usr/local/bin/lipc", 0, 0, 0, 0, 0) == 0
+        return "/usr/local/bin/lipc"
+    if syscall(21, "/usr/bin/lipc", 0, 0, 0, 0, 0) == 0
+        return "/usr/bin/lipc"
     return "lipc"
 
 fn cmd_build target
