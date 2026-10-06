@@ -3,6 +3,7 @@
 # ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign Build Automation
 # ==============================================================================
 
+SHELL := /bin/bash
 .PHONY: all bootstrap build test clean install uninstall
 
 all: bootstrap build
@@ -16,7 +17,7 @@ bootstrap:
 		if [ -f src/boot/lipi-seed ]; then \
 			./src/boot/lipi-seed src/compiler/driver_cli.lp bin/lipc_bin && \
 			chmod +x bin/lipc_bin && \
-			(printf '\x00\x00\x00\x00\x01\x00\x00\x00' | dd of=bin/lipc_bin bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true) && \
+			(printf '\000\000\000\000\001\000\000\000' | dd of=bin/lipc_bin bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true) && \
 			cp -f bin/lipc_bin bin/lipc && \
 			cp -f bin/lipc_bin bin/lipc_micro && \
 			chmod +x bin/lipc bin/lipc_micro; \
@@ -24,7 +25,7 @@ bootstrap:
 			(base64 -d src/boot/seed.b64 > bin/lipc 2>/dev/null || \
 			 base64 --decode src/boot/seed.b64 > bin/lipc 2>/dev/null || \
 			 base64 -D src/boot/seed.b64 > bin/lipc 2>/dev/null) && \
-			(printf '\x00\x00\x00\x00\x01\x00\x00\x00' | dd of=bin/lipc bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true) && \
+			(printf '\000\000\000\000\001\000\000\000' | dd of=bin/lipc bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true) && \
 			chmod +x bin/lipc && \
 			cp -f bin/lipc bin/lipc_bin && \
 			cp -f bin/lipc bin/lipc_micro && \
