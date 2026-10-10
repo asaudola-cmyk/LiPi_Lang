@@ -83,7 +83,13 @@ install_lipi() {
     if [ -f "$LIPI_INSTALL_DIR/src/compiler/driver_cli.lp" ]; then
         if [ -d "$LIPI_INSTALL_DIR/.git" ] && command -v git >/dev/null 2>&1; then
             info "Updating existing installation in $LIPI_INSTALL_DIR..."
+            OLD_REV=$(git -C "$LIPI_INSTALL_DIR" rev-parse HEAD 2>/dev/null || echo "")
             git -C "$LIPI_INSTALL_DIR" pull --quiet 2>/dev/null || true
+            NEW_REV=$(git -C "$LIPI_INSTALL_DIR" rev-parse HEAD 2>/dev/null || echo "")
+            if [ "$OLD_REV" != "$NEW_REV" ]; then
+                info "New commits detected in $LIPI_INSTALL_DIR. Upgrading toolchain..."
+                IS_UPDATE=1
+            fi
         fi
         ok "Valid LiPi installation directory ready: $LIPI_INSTALL_DIR"
         return 0
@@ -129,8 +135,19 @@ create_command() {
         # Ensure seed file has execute permissions
         [ -f "src/boot/lipi-seed" ] && chmod +x "src/boot/lipi-seed" 2>/dev/null || true
 
-        # 1. Ensure canonical compiler binary exists from bootstrap seed
-        if [ ! -x "bin/lipc" ] && [ ! -x "bin/lipc_bin" ]; then
+        # 1. Ensure canonical compiler binary exists from bootstrap seed OR is rebuilt if updating
+        if [ "$IS_UPDATE" = "1" ] && [ -x "bin/lipc" ]; then
+            info "Recompiling Stage-3 Modular Silicon Compiler from updated source..."
+            if ./bin/lipc src/compiler/driver_cli.lp bin/lipc_bin; then
+                chmod +x bin/lipc_bin
+                cp -f bin/lipc_bin bin/lipc
+                cp -f bin/lipc_bin bin/lipc_micro
+                chmod +x bin/lipc bin/lipc_micro
+                ok "Stage-3 Compiler successfully upgraded from source"
+            else
+                warn "Recompilation failed, preserving existing compiler binary"
+            fi
+        elif [ ! -x "bin/lipc" ] && [ ! -x "bin/lipc_bin" ]; then
             SEED_EXEC="/tmp/lipi_genesis_seed_$$"
             if [ -f "src/boot/lipi-seed" ]; then
                 cp "src/boot/lipi-seed" "$SEED_EXEC"
@@ -183,7 +200,7 @@ create_command() {
             build_tool() {
                 t_src="$1"
                 t_dst="$2"
-                if [ ! -x "$t_dst" ]; then
+                if [ "$IS_UPDATE" = "1" ] || [ ! -x "$t_dst" ]; then
                     if ./bin/lipc "$t_src" "$t_dst" >/dev/null 2>&1; then
                         chmod +x "$t_dst"
                     else
@@ -353,11 +370,13 @@ uninstall() {
 main() {
     header
     
+    IS_UPDATE=0
     if [ "${1:-}" = "--uninstall" ]; then
         uninstall
     fi
 
-    if [ "${1:-}" = "--update" ] || [ "${1:-}" = "-u" ]; then
+    if [ "${1:-}" = "--update" ] || [ "${1:-}" = "-u" ] || [ "${1:-}" = "--rebuild" ]; then
+        IS_UPDATE=1
         info "Updating LiPi Sovereign Toolchain to latest version..."
         check_system
         check_toolchain
