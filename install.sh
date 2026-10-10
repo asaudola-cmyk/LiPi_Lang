@@ -356,6 +356,19 @@ main() {
     if [ "${1:-}" = "--uninstall" ]; then
         uninstall
     fi
+
+    if [ "${1:-}" = "--update" ] || [ "${1:-}" = "-u" ]; then
+        info "Updating LiPi Sovereign Toolchain to latest version..."
+        check_system
+        check_toolchain
+        install_lipi
+        create_command
+        setup_path
+        setup_desktop_mime
+        verify_install
+        ok "LiPi successfully updated!"
+        exit 0
+    fi
     
     check_system
     check_toolchain

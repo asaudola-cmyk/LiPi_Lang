@@ -150,7 +150,150 @@ fn compiler_driver_resolve_std target
     if target == "std/columnstore.lp" or target == "std/columnstore" return "universe/db/column/columnstore.lp"
     return target
 
-fn compiler_driver_bundle_into_chunks file_path visited chunks
+fn compiler_driver_get_env name
+    // WHY: Reads environment variables directly from Linux /proc/self/environ using pure syscalls (0% libc).
+    // Uses direct sys_open (2), sys_mmap (9), sys_read (0), sys_close (3), sys_munmap (11).
+    fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
+    if fd < 0
+        return ""
+    buf = syscall(9, 0, 32768, 3, 34, -1, 0)
+    nr = syscall(0, fd, buf, 32768, 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    if nr <= 0
+        syscall(11, buf, 32768, 0, 0, 0, 0)
+        return ""
+    prefix = name + "="
+    plen = len(prefix)
+    p = 0
+    start = 0
+    while p < nr
+        b = mem_byte_read(buf, p)
+        if b == 0
+            entry_len = p - start
+            if entry_len > plen
+                match = 1
+                k = 0
+                while k < plen
+                    if mem_byte_read(buf, start + k) != mem_byte_read(prefix, k)
+                        match = 0
+                        break
+                    k = k + 1
+                if match == 1
+                    val = ""
+                    vi = start + plen
+                    while vi < p
+                        val = val + chr(mem_byte_read(buf, vi))
+                        vi = vi + 1
+                    syscall(11, buf, 32768, 0, 0, 0, 0)
+                    return val
+            start = p + 1
+        p = p + 1
+    syscall(11, buf, 32768, 0, 0, 0, 0)
+    return ""
+
+fn compiler_driver_get_lipi_root
+    // WHY: Sovereign self-location of LiPi compiler installation root (0% libc / 0% external tools).
+    // Discovers the canonical root directory containing 'universe/' and 'src/' so any project
+    // across the entire operating system can compile without manual symlinks.
+
+    // 1. Check environment variables LIPI_ROOT, LIPI_HOME, LIPI_PATH (explicit user override)
+    r_env = compiler_driver_get_env("LIPI_ROOT")
+    if len(r_env) > 0 and file_exists(r_env + "/universe/core/memory.lp") == 1
+        return r_env
+
+    r_home = compiler_driver_get_env("LIPI_HOME")
+    if len(r_home) > 0 and file_exists(r_home + "/universe/core/memory.lp") == 1
+        return r_home
+
+    r_path = compiler_driver_get_env("LIPI_PATH")
+    if len(r_path) > 0 and file_exists(r_path + "/universe/core/memory.lp") == 1
+        return r_path
+
+    // 2. Inspect Linux /proc/self/exe via direct sys_readlink (Syscall 89)
+    exe_buf = syscall(9, 0, 1024, 3, 34, -1, 0)
+    n = syscall(89, "/proc/self/exe", exe_buf, 1024, 0, 0, 0)
+    if n > 0
+        exe_path = ""
+        ei = 0
+        while ei < n
+            exe_path = exe_path + chr(mem_byte_read(exe_buf, ei))
+            ei = ei + 1
+        syscall(11, exe_buf, 1024, 0, 0, 0, 0)
+
+        bin_dir = compiler_driver_dirname(exe_path)
+        cand_root = compiler_driver_dirname(bin_dir)
+        if file_exists(cand_root + "/universe/core/memory.lp") == 1
+            return cand_root
+        if file_exists(bin_dir + "/universe/core/memory.lp") == 1
+            return bin_dir
+    else
+        syscall(11, exe_buf, 1024, 0, 0, 0, 0)
+
+    // 3. Check user home installation directory (~/.lipi)
+    u_home = compiler_driver_get_env("HOME")
+    if len(u_home) > 0 and file_exists(u_home + "/.lipi/universe/core/memory.lp") == 1
+        return u_home + "/.lipi"
+
+    // 4. Standard global system paths
+    if file_exists("/usr/local/lib/lipi/universe/core/memory.lp") == 1
+        return "/usr/local/lib/lipi"
+    if file_exists("/usr/lib/lipi/universe/core/memory.lp") == 1
+        return "/usr/lib/lipi"
+    if file_exists("/opt/lipi/universe/core/memory.lp") == 1
+        return "/opt/lipi"
+
+    // 5. Current working directory fallback
+    if file_exists("universe/core/memory.lp") == 1
+        return "."
+
+    return ""
+
+fn compiler_driver_resolve_path inc_target cur_dir lipi_root
+    // WHY: Deterministic 4-tier module path resolution engine.
+    // Tier 1: Local directory relative to the current file (project-level module imports)
+    // Tier 2: Current working directory / absolute filesystem path
+    // Tier 3: Sovereign LiPi root (universe standard library and compiler subsystems)
+    // Tier 4: Fallback to raw inc_target for unified compiler diagnostic error reporting
+
+    // Prioritize .lp extension to prevent matching filesystem directories
+    if cur_dir != "." and len(cur_dir) > 0
+        if file_exists(cur_dir + "/" + inc_target + ".lp") == 1
+            return cur_dir + "/" + inc_target + ".lp"
+        if file_exists(cur_dir + "/" + inc_target) == 1
+            return cur_dir + "/" + inc_target
+
+    // Tier 2: CWD & Absolute paths
+    if file_exists(inc_target + ".lp") == 1
+        return inc_target + ".lp"
+    if file_exists(inc_target) == 1
+        return inc_target
+    if file_exists("src/" + inc_target + ".lp") == 1
+        return "src/" + inc_target + ".lp"
+    if file_exists("src/" + inc_target) == 1
+        return "src/" + inc_target
+    if file_exists("universe/" + inc_target + ".lp") == 1
+        return "universe/" + inc_target + ".lp"
+    if file_exists("universe/" + inc_target) == 1
+        return "universe/" + inc_target
+
+    // Tier 3: Sovereign LiPi root
+    if len(lipi_root) > 0 and lipi_root != "."
+        if file_exists(lipi_root + "/" + inc_target + ".lp") == 1
+            return lipi_root + "/" + inc_target + ".lp"
+        if file_exists(lipi_root + "/" + inc_target) == 1
+            return lipi_root + "/" + inc_target
+        if file_exists(lipi_root + "/universe/" + inc_target + ".lp") == 1
+            return lipi_root + "/universe/" + inc_target + ".lp"
+        if file_exists(lipi_root + "/universe/" + inc_target) == 1
+            return lipi_root + "/universe/" + inc_target
+        if file_exists(lipi_root + "/src/" + inc_target + ".lp") == 1
+            return lipi_root + "/src/" + inc_target + ".lp"
+        if file_exists(lipi_root + "/src/" + inc_target) == 1
+            return lipi_root + "/src/" + inc_target
+
+    return inc_target
+
+fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
     // WHY: Recursively traverses and consolidates all 'import' and 'include' dependencies
     // into a flat list of immutable chunks without quadratic string concatenation.
     if len(file_path) > 2 and mem_byte_read(file_path, 0) == 46 and mem_byte_read(file_path, 1) == 47
@@ -233,29 +376,13 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks
         if p < clen and mem_byte_read(content, p) == 10
             p = p + 1
 
-
         if is_inc == 1
             if line_start > chunk_start
                 push(chunks, str_sub(content, chunk_start, line_start))
             inc_target = compiler_driver_resolve_std(inc_target)
-            resolved = ""
-            // Prioritize .lp extension to prevent matching filesystem directories
-            if file_exists(inc_target + ".lp") == 1
-                resolved = inc_target + ".lp"
-            elif file_exists(cur_dir + "/" + inc_target + ".lp") == 1
-                resolved = cur_dir + "/" + inc_target + ".lp"
-            elif file_exists("src/" + inc_target + ".lp") == 1
-                resolved = "src/" + inc_target + ".lp"
-            elif file_exists(cur_dir + "/" + inc_target) == 1
-                resolved = cur_dir + "/" + inc_target
-            elif file_exists(inc_target) == 1
-                resolved = inc_target
-            elif file_exists("src/" + inc_target) == 1
-                resolved = "src/" + inc_target
-            else
-                resolved = inc_target
+            resolved = compiler_driver_resolve_path(inc_target, cur_dir, lipi_root)
 
-            compiler_driver_bundle_into_chunks(resolved, visited, chunks)
+            compiler_driver_bundle_into_chunks(resolved, visited, chunks, lipi_root)
             push(chunks, "\n")
             chunk_start = p
 
@@ -266,7 +393,12 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks
 
 fn compiler_driver_bundle_source file_path visited
     chunks = list()
-    compiler_driver_bundle_into_chunks(file_path, visited, chunks)
+    lipi_root = compiler_driver_get_lipi_root()
+    real_path = file_path
+    if file_exists(real_path) == 0 and len(lipi_root) > 0 and lipi_root != "."
+        if file_exists(lipi_root + "/" + file_path) == 1
+            real_path = lipi_root + "/" + file_path
+    compiler_driver_bundle_into_chunks(real_path, visited, chunks, lipi_root)
     return compiler_driver_join_chunks(chunks)
 
 // ── 2. Driver Execution Wrapper ───────────────────────────────────────────────

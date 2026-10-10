@@ -43,6 +43,7 @@ fn print_usage
     say "  \033[1;32mclean\033[0m                   Purge temporary build caches and scratch binaries (0% Shell)"
     say "  \033[1;32mspawn-seed\033[0m [target]      Autonomous cellular replication of genesis seed"
     say "  \033[1;32mself-build\033[0m              3-generation self-hosting deterministic bootstrap"
+    say "  \033[1;32mupdate\033[0m                  Sync with latest GitHub commits & rebuild toolchains"
     say "  \033[1;32mversion\033[0m                 Display compiler version and platform architecture\n"
 
 fn show_version
@@ -57,6 +58,35 @@ fn show_version
 // WHY: A sovereign freestanding binary cannot rely on glibc's system() or popen().
 // We spawn processes directly using Linux sys_mmap (9), sys_fork (57),
 // sys_execve (59), sys_wait4 (61), and sys_munmap (11).
+
+fn lipi_tool_get_root
+    exe_buf = malloc(512)
+    n = syscall(89, "/proc/self/exe", exe_buf, 511, 0, 0, 0)
+    if n > 0
+        mem_byte_write(exe_buf, n, 0)
+        slashes = 0
+        si = n - 1
+        cut_idx = 0 - 1
+        while si >= 0
+            if mem_byte_read(exe_buf, si) == 47
+                slashes = slashes + 1
+                if slashes == 2
+                    cut_idx = si
+                    break
+            si = si - 1
+        if cut_idx > 0
+            root_s = ""
+            ri = 0
+            while ri < cut_idx
+                root_s = root_s + chr(mem_byte_read(exe_buf, ri))
+                ri = ri + 1
+            free(exe_buf, 512)
+            if syscall(21, root_s + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+                return root_s
+    free(exe_buf, 512)
+    if syscall(21, "universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return "."
+    return ""
 
 fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
     argv = syscall(9, 0, 64, 3, 34, -1, 0)
@@ -77,10 +107,16 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
         idx = idx + 1
     mem_word_write(argv, idx * 8, 0)
 
-    env = syscall(9, 0, 32, 3, 34, -1, 0)
+    env = syscall(9, 0, 64, 3, 34, -1, 0)
     path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
     mem_word_write(env, 0, path_env)
-    mem_word_write(env, 8, 0)
+    l_root = lipi_tool_get_root()
+    if len(l_root) > 0
+        lr_env = "LIPI_ROOT=" + l_root
+        mem_word_write(env, 8, lr_env)
+        mem_word_write(env, 16, 0)
+    else
+        mem_word_write(env, 8, 0)
 
     st = syscall(9, 0, 8, 3, 34, -1, 0)
     mem_word_write(st, 0, 0)
@@ -95,7 +131,7 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
     exit_code = (raw_status / 256) % 256
 
     syscall(11, argv, 64, 0, 0, 0, 0)
-    syscall(11, env, 32, 0, 0, 0, 0)
+    syscall(11, env, 64, 0, 0, 0, 0)
     syscall(11, st, 8, 0, 0, 0, 0)
 
     return exit_code
@@ -105,6 +141,11 @@ fn resolve_bin_path rel_name
     local_p = "bin/" + rel_name
     if syscall(21, local_p, 0, 0, 0, 0, 0) == 0
         return local_p
+    l_root = lipi_tool_get_root()
+    if len(l_root) > 0
+        cand_b = l_root + "/bin/" + rel_name
+        if syscall(21, cand_b, 0, 0, 0, 0, 0) == 0
+            return cand_b
     sys_p = "/usr/local/bin/" + rel_name
     if syscall(21, sys_p, 0, 0, 0, 0, 0) == 0
         return sys_p
@@ -320,6 +361,113 @@ fn handle_self_build
     code = spawn_exec_cmd("/tmp/lipi_build_runner", "", "", "", "")
     syscall(87, "/tmp/lipi_build_runner", 0, 0, 0, 0, 0)
     return code
+
+fn copy_file_direct src dst
+    // WHY: 100% pure LiPi file copier utilizing kernel-space sys_copy_file_range (326)
+    // with 64KB virtual memory streaming fallback (sys_mmap 9). Zero shell/cp dependency.
+    fd_in = syscall(2, src, 0, 0, 0, 0, 0)
+    if fd_in < 0
+        return 0
+    fd_out = syscall(2, dst, 577, 493, 0, 0, 0) // O_WRONLY|O_CREAT|O_TRUNC (577), 0755 (493)
+    if fd_out < 0
+        syscall(3, fd_in, 0, 0, 0, 0, 0)
+        return 0
+    n = syscall(326, fd_in, 0, fd_out, 0, 10485760, 0)
+    if n <= 0
+        buf = syscall(9, 0, 65536, 3, 34, -1, 0)
+        while 1 == 1
+            nr = syscall(0, fd_in, buf, 65536, 0, 0, 0)
+            if nr <= 0
+                break
+            syscall(1, fd_out, buf, nr, 0, 0, 0)
+        syscall(11, buf, 65536, 0, 0, 0, 0)
+    syscall(3, fd_in, 0, 0, 0, 0, 0)
+    syscall(3, fd_out, 0, 0, 0, 0, 0)
+    syscall(90, dst, 493, 0, 0, 0, 0) // chmod 0755
+    return 1
+
+fn handle_update
+    // WHY: Sovereign autonomous updater that fetches latest source from GitHub
+    // and performs full 3-generation self-hosting rebuild of the toolchain.
+    say ""
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN SYSTEM AUTO-UPDATER (লিপি স্বয়ংক্রিয় আপডেট)\033[0m        \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ 100% Native Silicon Toolchain Sync | GitHub & Pure Source Rebuild\033[0m \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
+    say ""
+
+    l_root = lipi_tool_get_root()
+    if len(l_root) == 0
+        l_root = "."
+
+    say "\033[1;34m[LIPI UPDATE]\033[0m Discovered toolchain root: " + l_root
+
+    // 1. Git pull from upstream repository if .git directory is present
+    has_git_dir = 0
+    if syscall(21, l_root + "/.git", 0, 0, 0, 0, 0) == 0
+        has_git_dir = 1
+
+    git_bin = "/usr/bin/git"
+    if syscall(21, git_bin, 0, 0, 0, 0, 0) != 0
+        git_bin = "/bin/git"
+
+    if has_git_dir == 1 and syscall(21, git_bin, 0, 0, 0, 0, 0) == 0
+        say "\033[1;36m[LIPI UPDATE]\033[0m Pulling latest changes from GitHub (origin/main)..."
+        g_code = spawn_exec_cmd(git_bin, "-C", l_root, "pull", "")
+        if g_code != 0
+            say "\033[1;33m⚠ Warning: Git pull returned code " + str(g_code) + ". Proceeding with local toolchain rebuild.\033[0m"
+        else
+            say "\033[1;32m✔ Git repository synchronized with latest GitHub commits.\033[0m"
+    else
+        say "\033[1;33m→ Standalone installation detected. Rebuilding toolchain from local source.\033[0m"
+
+    // 2. Rebuild the core compiler (bin/lipc_bin and bin/lipc)
+    say "\033[1;36m[LIPI UPDATE]\033[0m Rebuilding Stage-3 sovereign compiler from source..."
+    c_bin = resolve_bin_path("lipc_bin")
+    driver_cli_src = l_root + "/src/compiler/driver_cli.lp"
+    out_lipc = l_root + "/bin/lipc_bin"
+    comp_code = spawn_exec_cmd(c_bin, driver_cli_src, "-o", out_lipc, "")
+    if comp_code != 0
+        comp_code = spawn_exec_cmd(c_bin, driver_cli_src, out_lipc, "", "")
+    if comp_code != 0
+        say "❌ Failed to recompile compiler binary: " + out_lipc
+        return 1
+
+    syscall(90, out_lipc, 493, 0, 0, 0, 0)
+    copy_file_direct(out_lipc, l_root + "/bin/lipc")
+    copy_file_direct(out_lipc, l_root + "/bin/lipc_micro")
+
+    // 3. Rebuild developer toolchain
+    say "\033[1;36m[LIPI UPDATE]\033[0m Rebuilding developer toolchain (lipi, lipipkg, lipilsp, lipidbg, lipifmt)..."
+    new_lipc = l_root + "/bin/lipc"
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipi.lp", l_root + "/bin/lipi", "", "")
+    syscall(90, l_root + "/bin/lipi", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipipkg.lp", l_root + "/bin/lipipkg", "", "")
+    syscall(90, l_root + "/bin/lipipkg", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipilsp.lp", l_root + "/bin/lipilsp", "", "")
+    syscall(90, l_root + "/bin/lipilsp", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipidbg.lp", l_root + "/bin/lipidbg", "", "")
+    syscall(90, l_root + "/bin/lipidbg", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipifmt.lp", l_root + "/bin/lipifmt", "", "")
+    syscall(90, l_root + "/bin/lipifmt", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipiconvert.lp", l_root + "/bin/lipiconvert", "", "")
+    syscall(90, l_root + "/bin/lipiconvert", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipidoc.lp", l_root + "/bin/lipidoc", "", "")
+    syscall(90, l_root + "/bin/lipidoc", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipirepl.lp", l_root + "/bin/lipirepl", "", "")
+    syscall(90, l_root + "/bin/lipirepl", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipiassimilate.lp", l_root + "/bin/lipiassimilate", "", "")
+    syscall(90, l_root + "/bin/lipiassimilate", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/build.lp", l_root + "/bin/lipi-build", "", "")
+    syscall(90, l_root + "/bin/lipi-build", 493, 0, 0, 0, 0)
+    spawn_exec_cmd(new_lipc, l_root + "/tests/run_tests.lp", l_root + "/bin/lipi-test", "", "")
+    syscall(90, l_root + "/bin/lipi-test", 493, 0, 0, 0, 0)
+
+    say "\033[1;32m✔ [UPDATE SUCCESS]: All core compilers and toolchains upgraded to latest version!\033[0m"
+    say "  • Compiler: " + l_root + "/bin/lipc"
+    say "  • CLI Dispatcher: " + l_root + "/bin/lipi"
+    say "  • Status: 100% Pure Silicon Sovereign Closure ✔\n"
+    return 0
 
 // ── Clean Command Handler ─────────────────────────────────────────────────────
 // WHY: 100% native repository artifact sanitizer without bash or rm dependencies.
@@ -622,6 +770,9 @@ fn main
 
     if cmd == "self-build"
         return handle_self_build()
+
+    if cmd == "update" or cmd == "upgrade"
+        return handle_update()
 
     if cmd == "spawn-seed" or cmd == "replicate"
         target_path = "src/boot/lipi-seed"

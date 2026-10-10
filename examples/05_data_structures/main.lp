@@ -13,7 +13,7 @@ fn stack_new
     return s
 
 fn stack_push s item
-    s.data = push(s.data, item)
+    push(s.data, item)
     s.size = s.size + 1
 
 fn stack_pop s
@@ -43,7 +43,7 @@ fn queue_new
     return q
 
 fn enqueue q item
-    q.data = push(q.data, item)
+    push(q.data, item)
     q.size = q.size + 1
 
 fn dequeue q
@@ -55,7 +55,7 @@ fn dequeue q
     new_data = list()
     i = 1
     while i < len(q.data)
-        new_data = push(new_data, get(q.data, i))
+        push(new_data, get(q.data, i))
         i = i + 1
     q.data = new_data
     return item
@@ -125,15 +125,15 @@ fn set_contains s item
 fn set_add s item
     if set_contains(s, item) == 1
         return s
-    s.items = push(s.items, item)
+    push(s.items, item)
     s.size = s.size + 1
     return s
 
 // ─── 5. Map (Key-Value Store) ─────────────────────────────────
 struct Map
     keys
-    values
     size
+    values
 
 fn map_new
     m = Map()
@@ -157,8 +157,8 @@ fn map_put m key val
             list_set(m.values, i, val)
             return m
         i = i + 1
-    m.keys = push(m.keys, key)
-    m.values = push(m.values, val)
+    push(m.keys, key)
+    push(m.values, val)
     m.size = m.size + 1
     return m
 

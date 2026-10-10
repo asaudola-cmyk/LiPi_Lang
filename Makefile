@@ -4,7 +4,7 @@
 # ==============================================================================
 
 SHELL := /bin/bash
-.PHONY: all bootstrap build test clean install uninstall
+.PHONY: all bootstrap build test clean install uninstall update
 
 all: bootstrap build
 
@@ -68,6 +68,13 @@ test: bootstrap
 # Install toolchain into user's environment (~/.local/bin)
 install:
 	@./install.sh
+
+# Update toolchain from GitHub repository
+update:
+	@echo "🔄 Updating LiPi repository from GitHub..."
+	@git pull origin main
+	@$(MAKE) build
+	@echo "✔ LiPi updated and rebuilt successfully!"
 
 # Uninstall toolchain from user's environment
 uninstall:
