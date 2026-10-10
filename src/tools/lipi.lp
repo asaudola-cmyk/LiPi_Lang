@@ -59,33 +59,116 @@ fn show_version
 // We spawn processes directly using Linux sys_mmap (9), sys_fork (57),
 // sys_execve (59), sys_wait4 (61), and sys_munmap (11).
 
+fn lipi_get_env name
+    // WHY: Reads process environment variables directly from /proc/self/environ using pure Linux syscalls (0% libc).
+    fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
+    if fd < 0
+        return ""
+    buf = syscall(9, 0, 32768, 3, 34, -1, 0)
+    nr = syscall(0, fd, buf, 32768, 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    if nr <= 0
+        syscall(11, buf, 32768, 0, 0, 0, 0)
+        return ""
+    prefix = name + "="
+    plen = len(prefix)
+    p = 0
+    start = 0
+    while p < nr
+        b = mem_byte_read(buf, p)
+        if b == 0
+            entry_len = p - start
+            if entry_len > plen
+                match = 1
+                k = 0
+                while k < plen
+                    if mem_byte_read(buf, start + k) != mem_byte_read(prefix, k)
+                        match = 0
+                        break
+                    k = k + 1
+                if match == 1
+                    val = ""
+                    vi = start + plen
+                    while vi < p
+                        val = val + chr(mem_byte_read(buf, vi))
+                        vi = vi + 1
+                    syscall(11, buf, 32768, 0, 0, 0, 0)
+                    return val
+            start = p + 1
+        p = p + 1
+    syscall(11, buf, 32768, 0, 0, 0, 0)
+    return ""
+
 fn lipi_tool_get_root
+    // WHY: 5-Tier dynamic resolution for LiPi root directory containing 'universe/' and 'src/'.
+    // Enables the CLI runner to execute flawlessly from ~/.local/bin, /usr/local/bin, or any folder.
+
+    // 1. Environment variables override
+    r_env = lipi_get_env("LIPI_ROOT")
+    if len(r_env) > 0 and syscall(21, r_env + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return r_env
+    r_home = lipi_get_env("LIPI_HOME")
+    if len(r_home) > 0 and syscall(21, r_home + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return r_home
+    r_path = lipi_get_env("LIPI_PATH")
+    if len(r_path) > 0 and syscall(21, r_path + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return r_path
+
+    // 2. Direct /proc/self/exe parent and grandparent inspect
     exe_buf = malloc(512)
     n = syscall(89, "/proc/self/exe", exe_buf, 511, 0, 0, 0)
     if n > 0
         mem_byte_write(exe_buf, n, 0)
         slashes = 0
         si = n - 1
-        cut_idx = 0 - 1
+        cut_parent = 0 - 1
+        cut_grandparent = 0 - 1
         while si >= 0
             if mem_byte_read(exe_buf, si) == 47
                 slashes = slashes + 1
+                if slashes == 1
+                    cut_parent = si
                 if slashes == 2
-                    cut_idx = si
+                    cut_grandparent = si
                     break
             si = si - 1
-        if cut_idx > 0
+        if cut_grandparent > 0
             root_s = ""
             ri = 0
-            while ri < cut_idx
+            while ri < cut_grandparent
                 root_s = root_s + chr(mem_byte_read(exe_buf, ri))
                 ri = ri + 1
-            free(exe_buf, 512)
             if syscall(21, root_s + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+                free(exe_buf, 512)
                 return root_s
+        if cut_parent > 0
+            root_s2 = ""
+            ri2 = 0
+            while ri2 < cut_parent
+                root_s2 = root_s2 + chr(mem_byte_read(exe_buf, ri2))
+                ri2 = ri2 + 1
+            if syscall(21, root_s2 + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+                free(exe_buf, 512)
+                return root_s2
     free(exe_buf, 512)
+
+    // 3. User home installation ~/.lipi
+    u_home = lipi_get_env("HOME")
+    if len(u_home) > 0 and syscall(21, u_home + "/.lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return u_home + "/.lipi"
+
+    // 4. Standard global system paths
+    if syscall(21, "/usr/local/lib/lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return "/usr/local/lib/lipi"
+    if syscall(21, "/usr/lib/lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return "/usr/lib/lipi"
+    if syscall(21, "/opt/lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+        return "/opt/lipi"
+
+    // 5. Current working directory fallback
     if syscall(21, "universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
         return "."
+
     return ""
 
 fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
@@ -136,7 +219,7 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
 
     return exit_code
 
-// WHY: Resolves toolchain binaries dynamically across current directory, ~/.local/bin, /usr/local/bin, and sibling paths
+// WHY: Resolves toolchain binaries dynamically across current directory, discovered root, ~/.local/bin, ~/.lipi/bin, and system paths
 fn resolve_bin_path rel_name
     local_p = "bin/" + rel_name
     if syscall(21, local_p, 0, 0, 0, 0, 0) == 0
@@ -146,6 +229,16 @@ fn resolve_bin_path rel_name
         cand_b = l_root + "/bin/" + rel_name
         if syscall(21, cand_b, 0, 0, 0, 0, 0) == 0
             return cand_b
+
+    u_home = lipi_get_env("HOME")
+    if len(u_home) > 0
+        cand_user = u_home + "/.local/bin/" + rel_name
+        if syscall(21, cand_user, 0, 0, 0, 0, 0) == 0
+            return cand_user
+        cand_lipi = u_home + "/.lipi/bin/" + rel_name
+        if syscall(21, cand_lipi, 0, 0, 0, 0, 0) == 0
+            return cand_lipi
+
     sys_p = "/usr/local/bin/" + rel_name
     if syscall(21, sys_p, 0, 0, 0, 0, 0) == 0
         return sys_p
@@ -365,6 +458,8 @@ fn handle_self_build
 fn copy_file_direct src dst
     // WHY: 100% pure LiPi file copier utilizing kernel-space sys_copy_file_range (326)
     // with 64KB virtual memory streaming fallback (sys_mmap 9). Zero shell/cp dependency.
+    // Unlinks dst first so any existing broken symlink or running executable inode is freed.
+    syscall(87, dst, 0, 0, 0, 0, 0) // sys_unlink (87) to break symlinks or text-busy locks
     fd_in = syscall(2, src, 0, 0, 0, 0, 0)
     if fd_in < 0
         return 0
@@ -462,6 +557,28 @@ fn handle_update
     syscall(90, l_root + "/bin/lipi-build", 493, 0, 0, 0, 0)
     spawn_exec_cmd(new_lipc, l_root + "/tests/run_tests.lp", l_root + "/bin/lipi-test", "", "")
     syscall(90, l_root + "/bin/lipi-test", 493, 0, 0, 0, 0)
+
+    // 4. Synchronize standalone binaries to ~/.local/bin to guarantee unbroken CLI paths (0% symlinks)
+    u_home = lipi_get_env("HOME")
+    if len(u_home) > 0
+        local_b = u_home + "/.local/bin"
+        if syscall(21, local_b, 0, 0, 0, 0, 0) == 0
+            copy_file_direct(l_root + "/bin/lipc", local_b + "/lipc")
+            copy_file_direct(l_root + "/bin/lipc_bin", local_b + "/lipc_bin")
+            copy_file_direct(l_root + "/bin/lipc_micro", local_b + "/lipc_micro")
+            copy_file_direct(l_root + "/bin/lipi", local_b + "/lipi")
+            copy_file_direct(l_root + "/bin/lipipkg", local_b + "/lipipkg")
+            copy_file_direct(l_root + "/bin/lipilsp", local_b + "/lipilsp")
+            copy_file_direct(l_root + "/bin/lipilsp", local_b + "/lipils")
+            copy_file_direct(l_root + "/bin/lipidbg", local_b + "/lipidbg")
+            copy_file_direct(l_root + "/bin/lipifmt", local_b + "/lipifmt")
+            copy_file_direct(l_root + "/bin/lipiconvert", local_b + "/lipiconvert")
+            copy_file_direct(l_root + "/bin/lipidoc", local_b + "/lipidoc")
+            copy_file_direct(l_root + "/bin/lipirepl", local_b + "/lipirepl")
+            copy_file_direct(l_root + "/bin/lipiassimilate", local_b + "/lipiassimilate")
+            copy_file_direct(l_root + "/bin/lipi-build", local_b + "/lipi-build")
+            copy_file_direct(l_root + "/bin/lipi-test", local_b + "/lipi-test")
+            say "\033[1;32m✔ Synchronized standalone binaries to " + local_b + " (0% symlinks)\033[0m"
 
     say "\033[1;32m✔ [UPDATE SUCCESS]: All core compilers and toolchains upgraded to latest version!\033[0m"
     say "  • Compiler: " + l_root + "/bin/lipc"

@@ -223,33 +223,73 @@ create_command() {
         fi
     )
     
-    # Safely symlink all built binaries into user's bin dir
-    link_tool() {
+    # Install standalone direct binaries into user's bin dir (NOT fragile symlinks)
+    # WHY: Cargo, Go, and modern package managers install direct standalone binaries
+    # rather than symlinks. This completely eliminates "Broken Symlink" (Dangling Symlink)
+    # failure modes if directories are moved, cleaned, or referenced across users/systems.
+    install_tool_binary() {
         t_name="$1"
         t_desc="$2"
-        if [ -x "$LIPI_INSTALL_DIR/bin/$t_name" ]; then
-            ln -sf "$LIPI_INSTALL_DIR/bin/$t_name" "$LIPI_BIN_DIR/$t_name"
-            ok "Linked: $LIPI_BIN_DIR/$t_name ($t_desc)"
+        src="$LIPI_INSTALL_DIR/bin/$t_name"
+        dst="$LIPI_BIN_DIR/$t_name"
+        if [ -x "$src" ]; then
+            if [ "$src" != "$dst" ]; then
+                # Remove existing symlink or older binary first to prevent text-busy locks or broken links
+                rm -f "$dst" 2>/dev/null || true
+                cp -f "$src" "$dst"
+                chmod 755 "$dst"
+            fi
+            ok "Installed binary: $dst ($t_desc)"
         fi
     }
 
-    link_tool "lipi" "Sovereign CLI Driver & Runner"
-    link_tool "lipc" "Direct Silicon Machine Code Compiler"
-    link_tool "lipc_bin" "Native Machine Code Compiler Engine"
-    link_tool "lipc_micro" "Micro-Architectural Compiler Engine"
-    link_tool "lipipkg" "Ed25519 Cryptographic Package Manager"
-    link_tool "lipilsp" "LSP IDE Engine"
-    link_tool "lipidbg" "Native System Debugger"
-    link_tool "lipifmt" "Canonical Code Formatter"
-    link_tool "lipiconvert" "Universal Legacy Transpiler"
-    link_tool "lipidoc" "Markdown Documentation Engine"
-    link_tool "lipirepl" "Interactive Real-Time REPL"
-    link_tool "lipiassimilate" "AI Architecture Assimilator"
-    link_tool "lipi-build" "Native Build Orchestrator"
-    link_tool "lipi-test" "Regression Test Engine"
-    if [ -x "$LIPI_INSTALL_DIR/bin/lipilsp" ]; then
-        ln -sf "$LIPI_INSTALL_DIR/bin/lipilsp" "$LIPI_BIN_DIR/lipils"
+    mkdir -p "$LIPI_BIN_DIR" 2>/dev/null || true
+
+    install_tool_binary "lipi" "Sovereign CLI Driver & Runner"
+    install_tool_binary "lipc" "Direct Silicon Machine Code Compiler"
+    install_tool_binary "lipc_bin" "Native Machine Code Compiler Engine"
+    install_tool_binary "lipc_micro" "Micro-Architectural Compiler Engine"
+    install_tool_binary "lipipkg" "Ed25519 Cryptographic Package Manager"
+    install_tool_binary "lipilsp" "LSP IDE Engine"
+    install_tool_binary "lipidbg" "Native System Debugger"
+    install_tool_binary "lipifmt" "Canonical Code Formatter"
+    install_tool_binary "lipiconvert" "Universal Legacy Transpiler"
+    install_tool_binary "lipidoc" "Markdown Documentation Engine"
+    install_tool_binary "lipirepl" "Interactive Real-Time REPL"
+    install_tool_binary "lipiassimilate" "AI Architecture Assimilator"
+    install_tool_binary "lipi-build" "Native Build Orchestrator"
+    install_tool_binary "lipi-test" "Regression Test Engine"
+    if [ -x "$LIPI_INSTALL_DIR/bin/lipilsp" ] && [ "$LIPI_INSTALL_DIR/bin/lipilsp" != "$LIPI_BIN_DIR/lipils" ]; then
+        rm -f "$LIPI_BIN_DIR/lipils" 2>/dev/null || true
+        cp -f "$LIPI_INSTALL_DIR/bin/lipilsp" "$LIPI_BIN_DIR/lipils"
+        chmod 755 "$LIPI_BIN_DIR/lipils"
     fi
+}
+
+# ─── Self-Healing System Health Check ───────────────────────────────────────
+heal_system_links() {
+    # WHY: Scans /usr/local/bin for dangling/broken symlinks or legacy pointers
+    # to individual user home folders. Self-heals if permissions permit, or provides
+    # clear, actionable diagnostics so the user never faces "command not found".
+    for tool in lipi lipc lipc_bin lipc_micro lipipkg lipilsp lipils lipidbg lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi-build lipi-test; do
+        sys_target="/usr/local/bin/$tool"
+        if [ -L "$sys_target" ]; then
+            target_dst=$(readlink "$sys_target" 2>/dev/null || true)
+            # Check if symlink is broken (target does not exist)
+            if [ ! -e "$sys_target" ]; then
+                warn "Detected broken system symlink: $sys_target -> $target_dst"
+                if [ -w "/usr/local/bin" ] || [ -w "$sys_target" ]; then
+                    rm -f "$sys_target" 2>/dev/null && ok "Auto-healed: removed broken system symlink $sys_target" || true
+                elif [ -x "$LIPI_BIN_DIR/$tool" ]; then
+                    info "Note: $sys_target is a dangling system link. To clean it, run: sudo rm -f $sys_target"
+                fi
+            elif [ -w "/usr/local/bin" ] && [ -x "$LIPI_BIN_DIR/$tool" ]; then
+                # If /usr/local/bin is writable, replace symlink with direct standalone binary
+                rm -f "$sys_target" 2>/dev/null || true
+                cp -f "$LIPI_BIN_DIR/$tool" "$sys_target" 2>/dev/null && ok "Upgraded $sys_target to standalone binary" || true
+            fi
+        fi
+    done
 }
 
 # ─── Add to PATH ─────────────────────────────────────────────────────────────
@@ -281,13 +321,16 @@ setup_path() {
         added=1
     fi
     
-    # Export for current session
-    export PATH="$LIPI_BIN_DIR:$PATH"
+    # Export for current session (prepend if not already the leading entry)
+    case ":$PATH:" in
+        *":$LIPI_BIN_DIR:"*) ;;
+        *) export PATH="$LIPI_BIN_DIR:$PATH" ;;
+    esac
     
     if [ "$added" -eq 1 ]; then
         ok "Added $LIPI_BIN_DIR to PATH in shell config"
     else
-        ok "$LIPI_BIN_DIR already configured in PATH"
+        ok "$LIPI_BIN_DIR configured in PATH"
     fi
 }
 
@@ -382,6 +425,7 @@ main() {
         check_toolchain
         install_lipi
         create_command
+        heal_system_links
         setup_path
         setup_desktop_mime
         verify_install
@@ -393,6 +437,7 @@ main() {
     check_toolchain
     install_lipi
     create_command
+    heal_system_links
     setup_path
     setup_desktop_mime
     verify_install
