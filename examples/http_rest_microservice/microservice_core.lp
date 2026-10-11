@@ -1080,8 +1080,19 @@ end
 @fn microservice_run_server(port, max_requests)
   server_fd = bypass_create_server_socket(port)
   if server_fd < 0
-    println("❌ [FATAL]: Failed to bind server socket on port " + int_to_str(port))
-    return 1
+    port_try = port + 1
+    server_fd = bypass_create_server_socket(port_try)
+    if server_fd < 0
+      port_try = 8089
+      server_fd = bypass_create_server_socket(port_try)
+    end
+    if server_fd >= 0
+      println("⚠ Note: Port " + int_to_str(port) + " occupied, automatically bound to free port: " + int_to_str(port_try))
+      port = port_try
+    else
+      println("❌ [FATAL]: Failed to bind server socket on port " + int_to_str(port))
+      return 1
+    end
   end
 
   engine = io_uring_bypass_new(1024, 1, 32, 65536)
