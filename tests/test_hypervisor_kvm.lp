@@ -88,5 +88,6 @@ import "universe/hypervisor/kvm"
     println("==================================================================")
     println("PASS: Lipi Sovereign Hypervisor & Virtualization Verified 100%!")
     println("==================================================================")
+    kvm_close_vm(vm)
     return 0
 @end

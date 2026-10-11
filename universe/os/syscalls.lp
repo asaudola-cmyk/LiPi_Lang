@@ -940,6 +940,115 @@ import "universe/core/string"
   return 1
 @end
 
+@fn sys_peek16(addr)
+  // WHY: Read 16-bit integer from memory in little-endian byte order
+  b0 = sys_peek8(addr)
+  b1 = sys_peek8(addr + 1)
+  return b0 + (b1 * 256)
+@end
+
+@fn sys_peek32(addr)
+  // WHY: Read 32-bit integer from memory in little-endian byte order
+  b0 = sys_peek8(addr)
+  b1 = sys_peek8(addr + 1)
+  b2 = sys_peek8(addr + 2)
+  b3 = sys_peek8(addr + 3)
+  return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+@end
+
+@fn sys_peek64(addr)
+  // WHY: Read 64-bit integer from memory in little-endian byte order
+  lo = sys_peek32(addr)
+  hi = sys_peek32(addr + 4)
+  return lo + (hi * 4294967296)
+@end
+
+@fn sys_poke16(addr, val)
+  // WHY: Write 16-bit integer to memory in little-endian byte order
+  sys_poke8(addr, val % 256)
+  sys_poke8(addr + 1, (val / 256) % 256)
+  return 2
+@end
+
+@fn sys_poke32(addr, val)
+  // WHY: Write 32-bit integer to memory in little-endian byte order
+  sys_poke8(addr, val % 256)
+  sys_poke8(addr + 1, (val / 256) % 256)
+  sys_poke8(addr + 2, (val / 65536) % 256)
+  sys_poke8(addr + 3, (val / 16777216) % 256)
+  return 4
+@end
+
+@fn sys_poke64(addr, val)
+  // WHY: Write 64-bit integer to memory in little-endian byte order
+  v = val
+  i = 0
+  @while i < 8
+    sys_poke8(addr + i, v % 256)
+    v = v / 256
+    i = i + 1
+  @end
+  return 8
+@end
+
+// ── Multi-Target Syscall Mappings (Darwin BSD Class 0x2000000, ARM64, Windows) ──
+
+@fn darwin_syscall_nr(generic_nr)
+  // WHY: macOS Darwin BSD system call class is encoded with high nibble 0x2 (0x2000000)
+  bsd_base = 33554432 // 0x2000000
+  @if generic_nr == 0  return bsd_base + 3   @end // sys_read
+  @if generic_nr == 1  return bsd_base + 4   @end // sys_write
+  @if generic_nr == 2  return bsd_base + 5   @end // sys_open
+  @if generic_nr == 3  return bsd_base + 6   @end // sys_close
+  @if generic_nr == 4  return bsd_base + 189 @end // sys_stat
+  @if generic_nr == 5  return bsd_base + 190 @end // sys_fstat
+  @if generic_nr == 9  return bsd_base + 197 @end // sys_mmap
+  @if generic_nr == 10 return bsd_base + 74  @end // sys_mprotect
+  @if generic_nr == 11 return bsd_base + 73  @end // sys_munmap
+  @if generic_nr == 60 return bsd_base + 1   @end // sys_exit
+  return generic_nr
+@end
+
+@fn arm64_syscall_nr(generic_nr)
+  // WHY: ARM64 Linux syscall numbering (asm-generic) differs from x86-64
+  @if generic_nr == 0   return 63  @end // sys_read
+  @if generic_nr == 1   return 64  @end // sys_write
+  @if generic_nr == 2   return 56  @end // sys_openat
+  @if generic_nr == 3   return 57  @end // sys_close
+  @if generic_nr == 9   return 222 @end // sys_mmap
+  @if generic_nr == 10  return 226 @end // sys_mprotect
+  @if generic_nr == 11  return 215 @end // sys_munmap
+  @if generic_nr == 12  return 214 @end // sys_brk
+  @if generic_nr == 60  return 93  @end // sys_exit
+  @if generic_nr == 257 return 56  @end // sys_openat
+  return generic_nr
+@end
+
+@fn windows_syscall_id(generic_nr)
+  // WHY: Windows NT native system service dispatch IDs
+  @if generic_nr == 0  return 6  @end // NtReadFile (0x0006)
+  @if generic_nr == 1  return 8  @end // NtWriteFile (0x0008)
+  @if generic_nr == 3  return 15 @end // NtClose (0x000F)
+  @if generic_nr == 9  return 24 @end // NtAllocateVirtualMemory (0x0018)
+  @if generic_nr == 11 return 30 @end // NtFreeVirtualMemory (0x001E)
+  @if generic_nr == 60 return 44 @end // NtTerminateProcess (0x002C)
+  return generic_nr
+@end
+
+@fn sys_multi_target_nr(target_arch, linux_nr)
+  // WHY: Unified gateway routing generic POSIX/Linux syscall numbers to target architecture
+  @if target_arch == "darwin" || target_arch == "macos"
+    return darwin_syscall_nr(linux_nr)
+  @end
+  @if target_arch == "arm64" || target_arch == "aarch64"
+    return arm64_syscall_nr(linux_nr)
+  @end
+  @if target_arch == "windows" || target_arch == "win32"
+    return windows_syscall_id(linux_nr)
+  @end
+  return linux_nr
+@end
+
 
 
 @fn file_write(path, content)

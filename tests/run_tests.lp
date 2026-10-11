@@ -32,12 +32,13 @@ fn spawn_process cmd_path arg1 arg2
 
     pid = syscall(57, 0, 0, 0, 0, 0, 0)
     if pid == 0
-        // Redirect stdout and stderr to /dev/null to keep test summary clean
-        null_fd = syscall(2, "/dev/null", 2, 0, 0, 0, 0)
-        if null_fd >= 0
-            syscall(33, null_fd, 1, 0, 0, 0, 0) // dup2 stdout
-            syscall(33, null_fd, 2, 0, 0, 0, 0) // dup2 stderr
-            syscall(3, null_fd, 0, 0, 0, 0, 0)
+        // WHY: Honest test engine captures child output to log file rather than discarding to /dev/null
+        log_fd = syscall(2, "/tmp/lipi_test_log.txt", 577, 493) // O_WRONLY | O_CREAT | O_TRUNC = 577, 0755 = 493
+        if log_fd >= 0
+            syscall(33, log_fd, 1, 0, 0, 0, 0) // dup2 stdout
+            syscall(33, log_fd, 2, 0, 0, 0, 0) // dup2 stderr
+            syscall(3, log_fd, 0, 0, 0, 0, 0)
+        end
         syscall(59, cmd_path, argv, env, 0, 0, 0)
         syscall(60, 127, 0, 0, 0, 0, 0)
 
@@ -86,7 +87,13 @@ fn run_single_test compiler test_path test_name
     c_code = spawn_process(compiler, test_path, out_bin)
     if c_code != 0
         say "  • Testing " + test_name + "... [1;31mCOMPILE FAIL ✖[0m"
+        log_txt = file_read("/tmp/lipi_test_log.txt")
+        if len(log_txt) > 0
+            say "    [Compiler Diagnostic]:"
+            say log_txt
+        end
         return 0
+    end
 
     // Execute compiled test binary
     r_code = spawn_process(out_bin, "", "")
@@ -98,7 +105,13 @@ fn run_single_test compiler test_path test_name
         return 1
     else
         say "  • Testing " + test_name + "... [1;31mRUNTIME FAIL ✖[0m"
+        log_txt = file_read("/tmp/lipi_test_log.txt")
+        if len(log_txt) > 0
+            say "    [Runtime Diagnostic]:"
+            say log_txt
+        end
         return 0
+    end
 
 fn main
     // WHY: 72 visual columns (70 chars interior + 2 border chars).
@@ -1008,6 +1021,7 @@ fn main
         return 0
     else
         say "❌ SOME TESTS FAILED!"
-        return 1
+        exit(1)
+    end
 
 main()

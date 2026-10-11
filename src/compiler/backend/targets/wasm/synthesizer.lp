@@ -16,9 +16,26 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
 
     if is_print == 1
         list_set(pos_box, 0, pos + 1) // Consume print keyword
+        s.ws_needs_wasi_print = 1
         wasm_synth_compile_expr(s, toks, pos_box)
-        // Discard value from stack to maintain stack neutrality in standalone binary
-        wasm_emit_drop(s.ws_code)
+        // WHY: Route output to WASI fd_write(fd=1 STDOUT, iovs=0, iovs_len=1, nwritten=8)
+        // 1. Prepare ciovec structure in linear memory at offset 0:
+        //    [0..3] = 16 (pointer to string/payload buffer)
+        //    [4..7] = 8  (buffer length in bytes)
+        wasm_emit_i32_const(s.ws_code, 0)
+        wasm_emit_i32_const(s.ws_code, 16)
+        wasm_emit_i32_store(s.ws_code, 2, 0)
+        wasm_emit_i32_const(s.ws_code, 4)
+        wasm_emit_i32_const(s.ws_code, 8)
+        wasm_emit_i32_store(s.ws_code, 2, 0)
+        wasm_emit_drop(s.ws_code) // Discard expr from stack
+        // 2. Invoke WASI fd_write: param1(fd=1), param2(iovs=0), param3(iovs_len=1), param4(nwritten=8)
+        wasm_emit_i32_const(s.ws_code, 1) // STDOUT
+        wasm_emit_i32_const(s.ws_code, 0) // iovs
+        wasm_emit_i32_const(s.ws_code, 1) // iovs_len
+        wasm_emit_i32_const(s.ws_code, 8) // nwritten
+        wasm_emit_call(s.ws_code, 0)      // call fd_write (imported func index 0)
+        wasm_emit_drop(s.ws_code)          // drop result errno
         return 0
 
     // ── 2. Control Flow: return / ফেরত ─────────────────────────────────────────
@@ -643,8 +660,18 @@ fn wasm_synth_compile_program tokens
 
     // ── Phase 4: Construct W3C Binary Sections ─────────────────────────────────
 
-    // Section 1: Type Section
+    // Section 1: Type Section & Section 2: Import Section
+    import_list = list()
+    import_fn_count = 0
+    if s.ws_needs_wasi_print == 1
+        wasi_type_idx = s.ws_types.len()
+        push(s.ws_types, 0 - 4)
+        push(import_list, ["wasi_snapshot_preview1", "fd_write", 0, wasi_type_idx])
+        import_fn_count = 1
+    end
+
     sec1 = wasm_emit_type_section(s.ws_types)
+    sec2 = wasm_emit_import_section(import_list)
 
     // Section 3: Function Section
     func_types = list()
@@ -660,21 +687,21 @@ fn wasm_synth_compile_program tokens
     // Section 7: Export Section
     export_list = list()
 
-    // Export 1: main (Function index 0)
-    push(export_list, ["main", 0, 0])
+    // Export 1: main (Function index 0 + import_fn_count)
+    push(export_list, ["main", 0, import_fn_count])
 
-    // Export 2: _start (Function index 0 for standard runtime compatibility)
-    push(export_list, ["_start", 0, 0])
+    // Export 2: _start (Function index 0 + import_fn_count for standard runtime compatibility)
+    push(export_list, ["_start", 0, import_fn_count])
 
     if main_fn.wfn_name == "মূল"
-        push(export_list, ["মূল", 0, 0])
+        push(export_list, ["মূল", 0, import_fn_count])
 
     // Export 3: Export other user functions by name
     fi = 1
     while fi < s.ws_functions.len()
         u_fn = s.ws_functions[fi]
         if u_fn.wfn_name != "main" and u_fn.wfn_name != "_start" and u_fn.wfn_name != "মূল" and len(u_fn.wfn_name) > 0
-            push(export_list, [u_fn.wfn_name, 0, u_fn.wfn_index])
+            push(export_list, [u_fn.wfn_name, 0, u_fn.wfn_index + import_fn_count])
         fi = fi + 1
 
     // Export 4: memory (Memory index 0)
@@ -717,6 +744,8 @@ fn wasm_synth_compile_program tokens
     // ── Phase 5: Assemble Complete W3C WebAssembly Binary Container ────────────
     wasm_bytes = wasm_emit_header()
     wasm_append_bytes(wasm_bytes, sec1)
+    if sec2.len() > 0
+        wasm_append_bytes(wasm_bytes, sec2)
     wasm_append_bytes(wasm_bytes, sec3)
     wasm_append_bytes(wasm_bytes, sec5)
     wasm_append_bytes(wasm_bytes, sec7)

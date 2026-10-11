@@ -83,6 +83,7 @@ struct X86Synthesizer
     synth_last_expr_type // Type of most recent expression ("int", "str", or "")
     synth_regalloc_names // List of variable names mapped by SSA register allocation
     synth_regalloc_regs  // List of physical register IDs assigned by SSA register allocation
+    synth_in_function   // 1 if currently compiling inside a function body, 0 at top level
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -112,6 +113,7 @@ fn x86_synth_new
     s.synth_last_expr_type = ""
     s.synth_regalloc_names = list()
     s.synth_regalloc_regs = list()
+    s.synth_in_function = 0
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -517,8 +519,13 @@ fn x86_synth_get_field_offset s sname fname
                 while fi < sd.sd_fields.len()
                     if sd.sd_fields[fi] == fname
                         return fi * 8
+                    end
                     fi = fi + 1
+                end
+            end
             i = i + 1
+        end
+    end
 
     // Fallback pass 1: search declared named structs (prioritized over anonymous struct literals)
     i = 0

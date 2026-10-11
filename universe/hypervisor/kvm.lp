@@ -108,42 +108,49 @@ import "universe/os/syscalls"
         @! Allocate guest physical memory region (PROT_READ|PROT_WRITE=3, MAP_PRIVATE|MAP_ANONYMOUS=34)
         mmap_ram = sys_mmap(0, ram_bytes_count, 3, 34, 0 - 1, 0)
         
-        mem_reg = {
-          slot_id: 0,
-          mem_flags: 0,
-          guest_phys_addr: 0,
-          memory_size: ram_bytes_count,
-          userspace_addr: mmap_ram
-        }
+        reg_buf = sys_mmap(0, 32, 3, 34, 0 - 1, 0)
+        sys_poke32(reg_buf, 0)
+        sys_poke32(reg_buf + 4, 0)
+        sys_poke64(reg_buf + 8, 0)
+        sys_poke64(reg_buf + 16, ram_bytes_count)
+        sys_poke64(reg_buf + 24, mmap_ram)
+
         @! KVM_SET_USER_MEMORY_REGION (0x4020AE46 = 1075883590)
-        sys_ioctl(v_fd, 1075883590, mem_reg)
+        mem_ret = sys_ioctl(v_fd, 1075883590, reg_buf)
+        sys_munmap(reg_buf, 32)
 
-        @! Create vCPU 0 (0xAE41 = 44609)
-        vc_fd = sys_ioctl(v_fd, 44609, 0)
-        
-        @! Get vCPU mmap size (0xAE04 = 44548)
-        vcpu_mmap_sz = sys_ioctl(kvm_dev_fd, 44548, 0)
-        @if vcpu_mmap_sz <= 0
-          vcpu_mmap_sz = 12288
+        @if mem_ret == 0
+          @! Create vCPU 0 (0xAE41 = 44609)
+          vc_fd = sys_ioctl(v_fd, 44609, 0)
+          @if vc_fd >= 0
+            @! Get vCPU mmap size (0xAE04 = 44548)
+            vcpu_mmap_sz = sys_ioctl(kvm_dev_fd, 44548, 0)
+            @if vcpu_mmap_sz <= 0
+              vcpu_mmap_sz = 12288
+            @end
+            
+            @! Map struct kvm_run (MAP_SHARED = 1)
+            kvm_run_mem = sys_mmap(0, vcpu_mmap_sz, 3, 1, vc_fd, 0)
+
+            return {
+              kvm_fd: kvm_dev_fd,
+              vm_fd: v_fd,
+              vcpu_fd: vc_fd,
+              guest_ram_size: ram_bytes_count,
+              guest_ram: ram,
+              regs: init_regs,
+              is_running: 1,
+              last_exit: init_exit,
+              guest_ram_ptr: mmap_ram,
+              kvm_run_ptr: kvm_run_mem,
+              is_hardware: 1
+            }
+          @end
         @end
-        
-        @! Map struct kvm_run (MAP_SHARED = 1)
-        kvm_run_mem = sys_mmap(0, vcpu_mmap_sz, 3, 1, vc_fd, 0)
-
-        return {
-          kvm_fd: kvm_dev_fd,
-          vm_fd: v_fd,
-          vcpu_fd: vc_fd,
-          guest_ram_size: ram_bytes_count,
-          guest_ram: ram,
-          regs: init_regs,
-          is_running: 1,
-          last_exit: init_exit,
-          guest_ram_ptr: mmap_ram,
-          kvm_run_ptr: kvm_run_mem,
-          is_hardware: 1
-        }
+        sys_munmap(mmap_ram, ram_bytes_count)
+        sys_close(v_fd)
       @end
+      sys_close(kvm_dev_fd)
     @end
   @end
 
@@ -173,6 +180,9 @@ import "universe/os/syscalls"
   n = code_bytes.len()
   @while i < n
     ram[load_address + i] = code_bytes[i]
+    @if vm.is_hardware == 1 && vm.guest_ram_ptr > 0
+      sys_poke8(vm.guest_ram_ptr + load_address + i, code_bytes[i])
+    @end
     i = i + 1
   @end
   vm.guest_ram = ram
@@ -187,6 +197,26 @@ import "universe/os/syscalls"
 @! ============================================================================
 
 @fn kvm_step_vcpu(vm)
+  @! 1. Hardware KVM Execution Path via Linux Kernel KVM_RUN ioctl
+  @if vm.is_hardware == 1 && vm.vcpu_fd >= 0 && vm.kvm_run_ptr > 0
+    @! KVM_RUN = 0xAE80 = 44672
+    ret = sys_ioctl(vm.vcpu_fd, 44672, 0)
+    @if ret >= 0
+      @! Read exit_reason from struct kvm_run (offset 8, 32-bit uint)
+      exit_reason = sys_peek32(vm.kvm_run_ptr + 8)
+      @if exit_reason == 2 @! KVM_EXIT_IO
+        io_port = sys_peek16(vm.kvm_run_ptr + 34)
+        vm.last_exit = { exit_reason: 2, io_port: io_port, io_data: vm.regs.rax }
+        return vm
+      @elif exit_reason == 5 || exit_reason == 8 @! KVM_EXIT_HLT (5) or KVM_EXIT_SHUTDOWN (8)
+        vm.last_exit = { exit_reason: exit_reason, io_port: 0, io_data: 0 }
+        vm.is_running = 0
+        return vm
+      @end
+    @end
+  @end
+
+  @! 2. Sovereign Software Emulation Fallback
   @if vm.regs.rip >= vm.guest_ram_size || vm.regs.rip >= vm.guest_ram.len()
     vm.last_exit = { exit_reason: 8, io_port: 0, io_data: 0 } @! Shutdown exit
     vm.is_running = 0
@@ -282,3 +312,30 @@ import "universe/os/syscalls"
 @fn kvm_set_sregs(vm, sregs)
   return vm
 @end
+
+@fn kvm_close_vm(vm)
+  @if vm.is_hardware == 1
+    @if vm.kvm_run_ptr > 0
+      sys_munmap(vm.kvm_run_ptr, 12288)
+      vm.kvm_run_ptr = 0
+    @end
+    @if vm.guest_ram_ptr > 0
+      sys_munmap(vm.guest_ram_ptr, vm.guest_ram_size)
+      vm.guest_ram_ptr = 0
+    @end
+    @if vm.vcpu_fd >= 0
+      sys_close(vm.vcpu_fd)
+      vm.vcpu_fd = -1
+    @end
+    @if vm.vm_fd >= 0
+      sys_close(vm.vm_fd)
+      vm.vm_fd = -1
+    @end
+    @if vm.kvm_fd >= 0
+      sys_close(vm.kvm_fd)
+      vm.kvm_fd = -1
+    @end
+  @end
+  return 0
+@end
+

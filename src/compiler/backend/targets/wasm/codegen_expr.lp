@@ -13,6 +13,7 @@ fn wasm_synth_new
     s.ws_types = list()
     s.ws_block_depth = 0
     s.ws_data_bytes = list()
+    s.ws_needs_wasi_print = 0
     return s
 
 fn wasm_synth_get_or_add_type s param_count

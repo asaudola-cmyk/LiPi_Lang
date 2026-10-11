@@ -17,7 +17,6 @@ if [ ! -x "bin/lipc" ]; then
     if [ -f "src/boot/lipi-seed" ]; then
         ./src/boot/lipi-seed src/compiler/driver_cli.lp bin/lipc_bin
         chmod +x bin/lipc_bin
-        (printf '\000\000\000\000\001\000\000\000' | dd of=bin/lipc_bin bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true)
         cp -f bin/lipc_bin bin/lipc
         cp -f bin/lipc_bin bin/lipc_micro
         chmod +x bin/lipc bin/lipc_micro

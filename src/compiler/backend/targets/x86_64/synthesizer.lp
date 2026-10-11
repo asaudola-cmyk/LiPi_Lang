@@ -25,8 +25,10 @@ fn x86_synth_compile_fn_def s toks pos_box
     name_pos = get(pos_box, 0)
     fn_name = ""
     method_alias = ""
+    target_sname = ""
     if name_pos < toks.len() and toks[name_pos].tok_kind == TOK_IDENT()
         fn_name = toks[name_pos].tok_text
+        target_sname = fn_name
         list_set(pos_box, 0, name_pos + 1)
         next_p = get(pos_box, 0)
         if next_p + 1 < toks.len() and (toks[next_p].tok_kind == TOK_DOT() or (toks[next_p].tok_kind != TOK_STR() and toks[next_p].tok_text == "."))
@@ -34,6 +36,10 @@ fn x86_synth_compile_fn_def s toks pos_box
                 method_alias = toks[next_p + 1].tok_text
                 list_set(pos_box, 0, next_p + 2)
                 fn_name = fn_name + "_" + method_alias
+            end
+        end
+    end
+    s.synth_in_function = 1
 
     // Emit jump over function so top-level execution doesn't fall through into it!
     x86_synth_emit_byte(s, 233) // jmp rel32 (0xE9)
@@ -125,7 +131,14 @@ fn x86_synth_compile_fn_def s toks pos_box
         if get(pos_box, 0) < toks.len() and (x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1 or toks[get(pos_box, 0)].tok_kind == TOK_IDENT())
             list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume return type name
 
+    if method_alias != "" and params.len() > 0
+        if param_types[0] == ""
+            list_set(param_types, 0, target_sname)
+        end
+    end
+
     // Emit function prologue
+    prologue_sub_patch = s.synth_code.len() + 7
     x86_synth_emit_prologue(s)
 
     // Save incoming argument registers to local stack slots (supports up to 12 registers)
@@ -154,8 +167,15 @@ fn x86_synth_compile_fn_def s toks pos_box
             after_fn_offset = s.synth_code.len()
             rel32 = after_fn_offset - (fn_jmp_patch + 4)
             x86_synth_patch_u32(s, fn_jmp_patch, rel32)
+            needed_stack = s.synth_stack_offset
+            frame_sz = ((needed_stack + 256 + 15) / 16) * 16
+            if frame_sz < 512
+                frame_sz = 512
+            end
+            x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
             s.synth_locals = saved_locals
             s.synth_stack_offset = saved_stack_offset
+            s.synth_in_function = 0
             return 0
 
     // Parse function body statements until next function, EOF, or dedent
@@ -198,8 +218,15 @@ fn x86_synth_compile_fn_def s toks pos_box
     after_fn_offset = s.synth_code.len()
     rel32 = after_fn_offset - (fn_jmp_patch + 4)
     x86_synth_patch_u32(s, fn_jmp_patch, rel32)
+    needed_stack = s.synth_stack_offset
+    frame_sz = ((needed_stack + 256 + 15) / 16) * 16
+    if frame_sz < 512
+        frame_sz = 512
+    end
+    x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
     s.synth_locals = saved_locals
     s.synth_stack_offset = saved_stack_offset
+    s.synth_in_function = 0
     return 0
 
 // ── 8. Master Program Synthesizer Entry Point ──────────────────────────────────

@@ -38,6 +38,7 @@ fn x86_synth_expr_postfix s toks pos_box
             x86_synth_emit_byte(s, 95)        // pop rdi (collection ptr)
             x86_synth_emit_call_helper(s, "_lipi_list_get")
             s.synth_last_expr_type = ""
+            s.synth_last_struct = ""
 
         // Case B: Dot Member Access or Method Call: obj.member or obj.method(...)
         elif pkind == TOK_DOT() or (pkind != TOK_STR() and ptxt == ".")
@@ -98,6 +99,8 @@ fn x86_synth_expr_postfix s toks pos_box
                         s.synth_last_expr_type = ""
                         if member_name == "restore_extract_single_file"
                             s.synth_last_struct = "ExtractedSingleFile"
+                        else
+                            s.synth_last_struct = ""
                         end
                 else
                     // Struct Field Read: obj.field

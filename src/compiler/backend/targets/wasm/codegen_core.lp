@@ -69,6 +69,7 @@ struct WasmSynthesizer
     ws_types         // List of unique param counts (Type signatures)
     ws_block_depth   // Current structured block nesting depth (for relative labels)
     ws_data_bytes    // Linear memory initial data bytes (.rodata)
+    ws_needs_wasi_print // 1 if WASI fd_write import is required
 
 // ==============================================================================
 // ── 2. W3C WebAssembly Opcode & Type Constants ─────────────────────────────────
@@ -279,6 +280,12 @@ fn wasm_emit_local_tee byte_list local_idx
     wasm_emit_u32_leb(byte_list, local_idx)
     return byte_list.len()
 
+fn wasm_emit_i32_const byte_list val
+    // WHY: Emits 0x41 <val>. Pushes 32-bit integer immediate onto evaluation stack.
+    push(byte_list, WASM_OP_I32_CONST)
+    wasm_emit_i32_leb(byte_list, val)
+    return byte_list.len()
+
 fn wasm_emit_i64_const byte_list val
     // WHY: Emits 0x42 <val>. Pushes 64-bit integer immediate onto evaluation stack.
     push(byte_list, WASM_OP_I64_CONST)
@@ -364,6 +371,13 @@ fn wasm_emit_i64_store byte_list align offset
     wasm_emit_u32_leb(byte_list, offset)
     return byte_list.len()
 
+// WHY: Stores 32-bit integer into linear memory at [i32 address, i32 value] (0x36)
+fn wasm_emit_i32_store byte_list align offset
+    push(byte_list, 54)
+    wasm_emit_u32_leb(byte_list, align)
+    wasm_emit_u32_leb(byte_list, offset)
+    return byte_list.len()
+
 // WHY: Loads 8-bit unsigned byte from linear memory at [i32 address] -> i64 (0x30)
 fn wasm_emit_i64_load8_u byte_list align offset
     push(byte_list, 48)
@@ -440,18 +454,31 @@ fn wasm_emit_type_section type_param_counts
         pcount = type_param_counts[ti]
         push(payload, WASM_TYPE_FUNC) // 0x60
 
-        // Parameter vector: pcount items of type i64 (0x7E)
-        wasm_emit_u32_leb(payload, pcount)
-        pi = 0
-        while pi < pcount
-            push(payload, WASM_TYPE_I64)
-            pi = pi + 1
+        if pcount == (0 - 4)
+            // WASI fd_write signature: (i32, i32, i32, i32) -> i32
+            wasm_emit_u32_leb(payload, 4)
+            push(payload, WASM_TYPE_I32)
+            push(payload, WASM_TYPE_I32)
+            push(payload, WASM_TYPE_I32)
+            push(payload, WASM_TYPE_I32)
+            wasm_emit_u32_leb(payload, 1)
+            push(payload, WASM_TYPE_I32)
+        else
+            // Parameter vector: pcount items of type i64 (0x7E)
+            wasm_emit_u32_leb(payload, pcount)
+            pi = 0
+            while pi < pcount
+                push(payload, WASM_TYPE_I64)
+                pi = pi + 1
+            end
 
-        // Return vector: 1 result of type i64 (0x7E)
-        wasm_emit_u32_leb(payload, 1)
-        push(payload, WASM_TYPE_I64)
+            // Return vector: 1 result of type i64 (0x7E)
+            wasm_emit_u32_leb(payload, 1)
+            push(payload, WASM_TYPE_I64)
+        end
 
         ti = ti + 1
+    end
 
     return wasm_emit_section(WASM_SEC_TYPE, payload)
 
@@ -537,4 +564,27 @@ fn wasm_emit_data_section mem_offset data_bytes
     wasm_append_bytes(payload, data_bytes)
 
     return wasm_emit_section(WASM_SEC_DATA, payload)
+
+// Section 2: Import Section
+fn wasm_emit_import_section import_entries
+    // WHY: Emits W3C Section 2 (Import Section) for external WASI environment functions.
+    // Format: [mod_name: string, field_name: string, kind: int (0=func), type_idx: int]
+    if import_entries.len() == 0
+        return list()
+    payload = list()
+    wasm_emit_u32_leb(payload, import_entries.len())
+    ii = 0
+    while ii < import_entries.len()
+        entry = import_entries[ii]
+        mod_name = get(entry, 0)
+        field_name = get(entry, 1)
+        kind = get(entry, 2)
+        type_idx = get(entry, 3)
+        wasm_emit_string(payload, mod_name)
+        wasm_emit_string(payload, field_name)
+        push(payload, kind)
+        wasm_emit_u32_leb(payload, type_idx)
+        ii = ii + 1
+    end
+    return wasm_emit_section(WASM_SEC_IMPORT, payload)
 

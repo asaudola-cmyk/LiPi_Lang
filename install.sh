@@ -165,8 +165,6 @@ create_command() {
                 info "Bootstrapping Stage-3 Modular Silicon Compiler from genesis seed..."
                 if "$SEED_EXEC" src/compiler/driver_cli.lp bin/lipc_bin; then
                     chmod +x bin/lipc_bin
-                    # Expand arena to 4GB (0x100000000) at offset 202 (0xca) for self-hosting stability
-                    printf '\000\000\000\000\001\000\000\000' | dd of=bin/lipc_bin bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true
                     cp -f bin/lipc_bin bin/lipc
                     cp -f bin/lipc_bin bin/lipc_micro
                     chmod +x bin/lipc bin/lipc_micro

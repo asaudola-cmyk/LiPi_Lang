@@ -464,10 +464,164 @@ import "universe/ai/autodiff"
 @! 9. FLASH ATTENTION / MEMORY-EFFICIENT ATTENTION
 @! ----------------------------------------------------------------------------
 
+@fn flash_math_exp(x)
+  // WHY: High-precision Taylor expansion of exp(x) clamped to prevent float underflow/overflow
+  @if x < 0.0 - 40.0 return 0.0 @end
+  clamped_x = x
+  @if clamped_x > 40.0 clamped_x = 40.0 @end
+  term = 1.0
+  sum = 1.0
+  k = 1
+  @while k <= 16
+    term = (term * clamped_x) / (k * 1.0)
+    sum = sum + term
+    k = k + 1
+  @end
+  return sum
+@end
+
+@fn flash_float_sqrt(val)
+  // WHY: Float square root via Newton-Raphson approximation
+  @if val <= 0.0 return 0.0 @end
+  guess = val
+  iter = 0
+  @while iter < 12
+    guess = 0.5 * (guess + (val / guess))
+    iter = iter + 1
+  @end
+  return guess
+@end
+
 @fn flash_attention_forward(q, k, v, block_size)
-  @! Blocked matrix multiplication to keep Q, K, V in SRAM
-  println("  [FlashAttention] Executing SRAM-fused attention block_size=" + block_size.to_str())
-  out = llm_tensor_zeros(q.shape[0], v.shape[1])
-  @! Simulated tiling
-  return out
+  // WHY: Genuine Tiled FlashAttention with online softmax scaling (Dao et al.).
+  // Evaluates Q*K^T/sqrt(d)*V in tiled SRAM blocks without materializing
+  // full N x M attention matrix in memory, guaranteeing O(N) memory complexity.
+  n_rows = q.shape[0]
+  d_k = q.shape[1]
+  m_cols = k.shape[0]
+  d_v = v.shape[1]
+
+  b_size = block_size
+  @if b_size <= 0
+    b_size = 16
+  @end
+
+  sqrt_d = flash_float_sqrt(d_k * 1.0)
+  scale = 1.0
+  @if sqrt_d > 0.000001
+    scale = 1.0 / sqrt_d
+  @end
+
+  out_data = []
+  total_out = n_rows * d_v
+  zi = 0
+  @while zi < total_out
+    out_data = out_data.push(0.0)
+    zi = zi + 1
+  @end
+
+  // Iterate over row tiles
+  i_start = 0
+  @while i_start < n_rows
+    i_end = i_start + b_size
+    @if i_end > n_rows
+      i_end = n_rows
+    @end
+
+    i = i_start
+    @while i < i_end
+      // Per-row online softmax accumulators
+      m_i = 0.0 - 100000000.0 // running max
+      l_i = 0.0               // running sum of exponentials
+      
+      row_acc = []
+      ci = 0
+      @while ci < d_v
+        row_acc = row_acc.push(0.0)
+        ci = ci + 1
+      @end
+
+      // Iterate over column tiles (K and V blocks)
+      j_start = 0
+      @while j_start < m_cols
+        j_end = j_start + b_size
+        @if j_end > m_cols
+          j_end = m_cols
+        @end
+
+        // 1. Compute tile scores S[j] = Q[i] dot K[j] * scale
+        s_tile = []
+        tile_max = 0.0 - 100000000.0
+        j = j_start
+        @while j < j_end
+          dot = 0.0
+          di = 0
+          @while di < d_k
+            dot = dot + (q.data[i * d_k + di] * k.data[j * d_k + di])
+            di = di + 1
+          @end
+          score = dot * scale
+          s_tile = s_tile.push(score)
+          @if score > tile_max
+            tile_max = score
+          @end
+          j = j + 1
+        @end
+
+        // 2. Online softmax update
+        m_new = m_i
+        @if tile_max > m_new
+          m_new = tile_max
+        @end
+
+        alpha = flash_math_exp(m_i - m_new)
+        l_i = l_i * alpha
+
+        // Rescale existing accumulator
+        ci = 0
+        @while ci < d_v
+          row_acc[ci] = row_acc[ci] * alpha
+          ci = ci + 1
+        @end
+
+        // 3. Accumulate P_ij * V[j]
+        j = j_start
+        tj = 0
+        @while j < j_end
+          p_val = flash_math_exp(s_tile[tj] - m_new)
+          l_i = l_i + p_val
+
+          ci = 0
+          @while ci < d_v
+            row_acc[ci] = row_acc[ci] + (p_val * v.data[j * d_v + ci])
+            ci = ci + 1
+          @end
+
+          j = j + 1
+          tj = tj + 1
+        @end
+
+        m_i = m_new
+        j_start = j_end
+      @end
+
+      // 4. Final normalization: O[i] = row_acc / l_i
+      inv_l = 1.0
+      @if l_i > 0.0000001
+        inv_l = 1.0 / l_i
+      @end
+
+      ci = 0
+      @while ci < d_v
+        out_data[i * d_v + ci] = row_acc[ci] * inv_l
+        ci = ci + 1
+      @end
+
+      i = i + 1
+    @end
+
+    i_start = i_end
+  @end
+
+  return tensor_new(out_data, [n_rows, d_v])
 @end

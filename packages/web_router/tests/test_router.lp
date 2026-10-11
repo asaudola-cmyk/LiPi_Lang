@@ -12,6 +12,7 @@ import "packages/web_router/src/lib"
     println("  [PASS] " + msg)
   @else
     println("  [FAIL] " + msg)
+    exit(1)
   @end
 @end
 
@@ -20,6 +21,7 @@ import "packages/web_router/src/lib"
     println("  [PASS] " + msg)
   @else
     println("  [FAIL] " + msg + " (expected: " + expected + ", got: " + actual + ")")
+    exit(1)
   @end
 @end
 

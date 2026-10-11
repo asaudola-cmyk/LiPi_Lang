@@ -517,6 +517,8 @@ fn x86_synth_expr_primary s toks pos_box
                             s.synth_last_expr_type = ""
                         if var_name == "restore_extract_single_file"
                             s.synth_last_struct = "ExtractedSingleFile"
+                        else
+                            s.synth_last_struct = ""
                         end
         else
             // Plain variable load

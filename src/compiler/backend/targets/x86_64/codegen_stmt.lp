@@ -505,7 +505,9 @@ fn x86_synth_compile_statement s toks pos_box
                     elif assigned_type == "str" or assigned_type == "string"
                         x86_synth_set_prim_type(s, var_name, "str")
                 if is_int_lit == 1
-                    x86_synth_set_global_const(s, var_name, int_lit_val)
+                    if s.synth_in_function == 0
+                        x86_synth_set_global_const(s, var_name, int_lit_val)
+                    end
                     x86_synth_set_prim_type(s, var_name, "int")
                 elif s.synth_last_expr_type == "int"
                     x86_synth_set_prim_type(s, var_name, "int")
@@ -579,7 +581,9 @@ fn x86_synth_compile_statement s toks pos_box
                         elif assigned_type == "str" or assigned_type == "string"
                             x86_synth_set_prim_type(s, var_name, "str")
                     if is_int_lit == 1
-                        x86_synth_set_global_const(s, var_name, int_lit_val)
+                        if s.synth_in_function == 0
+                            x86_synth_set_global_const(s, var_name, int_lit_val)
+                        end
                         x86_synth_set_prim_type(s, var_name, "int")
                     elif s.synth_last_expr_type == "int"
                         x86_synth_set_prim_type(s, var_name, "int")

@@ -17,7 +17,6 @@ bootstrap:
 		if [ -f src/boot/lipi-seed ]; then \
 			./src/boot/lipi-seed src/compiler/driver_cli.lp bin/lipc_bin && \
 			chmod +x bin/lipc_bin && \
-			(printf '\000\000\000\000\001\000\000\000' | dd of=bin/lipc_bin bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true) && \
 			cp -f bin/lipc_bin bin/lipc && \
 			cp -f bin/lipc_bin bin/lipc_micro && \
 			chmod +x bin/lipc bin/lipc_micro; \
@@ -25,7 +24,6 @@ bootstrap:
 			(base64 -d src/boot/seed.b64 > bin/lipc 2>/dev/null || \
 			 base64 --decode src/boot/seed.b64 > bin/lipc 2>/dev/null || \
 			 base64 -D src/boot/seed.b64 > bin/lipc 2>/dev/null) && \
-			(printf '\000\000\000\000\001\000\000\000' | dd of=bin/lipc bs=1 seek=202 count=8 conv=notrunc >/dev/null 2>&1 || true) && \
 			chmod +x bin/lipc && \
 			cp -f bin/lipc bin/lipc_bin && \
 			cp -f bin/lipc bin/lipc_micro && \
