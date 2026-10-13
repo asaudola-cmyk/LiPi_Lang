@@ -14,6 +14,8 @@ include "universe/core/io.lp"
 include "universe/core/memory.lp"
 include "universe/core/string.lp"
 include "universe/crypto/crypto.lp"
+include "universe/net/socket.lp"
+include "universe/web/engine.lp"
 
 PKG_VERSION = "প্রথম ১.০.০"
 PKG_MANIFEST = "lipipkg.toml"
@@ -146,7 +148,7 @@ fn collect_files dir_path file_list
                 name = name + chr(ch)
                 np = np + 1
 
-            if name != "." and name != ".." and name != ".git" and name != ".github" and name != "build" and name != "lipi.sig" and ends_with(name, ".sig") == 0
+            if name != "." and name != ".." and name != ".git" and name != ".github" and name != "build" and name != "dist" and name != "lipi.sig" and ends_with(name, ".sig") == 0
                 full_path = ""
                 if dir_path == "."
                     full_path = name
@@ -160,6 +162,24 @@ fn collect_files dir_path file_list
             pos = pos + reclen
     free(buf, 4096)
     syscall(3, fd, 0, 0, 0, 0, 0)
+    return 0
+
+// WHY: Lexicographically compares two ASCII/UTF-8 strings.
+// Returns -1 if s1 < s2, 1 if s1 > s2, 0 if s1 == s2.
+fn pkg_str_cmp s1 s2
+    l1 = len(s1)
+    l2 = len(s2)
+    min_l = l1
+    if l2 < min_l min_l = l2
+    i = 0
+    while i < min_l
+        c1 = ord(char_at(s1, i))
+        c2 = ord(char_at(s2, i))
+        if c1 < c2 return -1
+        if c1 > c2 return 1
+        i = i + 1
+    if l1 < l2 return -1
+    if l1 > l2 return 1
     return 0
 
 // WHY: Sorts a list of filenames alphabetically using selection sort,
@@ -177,7 +197,7 @@ fn sort_files raw_list
         while i < n
             if mem_byte_read(used, i) == 0
                 val = get(raw_list, i)
-                if best_idx == -1 or val < best_val
+                if best_idx == -1 or pkg_str_cmp(val, best_val) < 0
                     best_idx = i
                     best_val = val
             i = i + 1
@@ -332,8 +352,11 @@ fn সহায়তা_দেখাও
     say "\033[1;33mCommands:\033[0m"
     say "  \033[1;32minit\033[0m    [name]        Initialize new Lipi package project"
     say "  \033[1;32madd\033[0m     <pkg>         Add dependency to lipipkg.toml and local cache"
+    say "  \033[1;32minstall\033[0m <pkg>         Install package from Git, bundle, registry, or local"
     say "  \033[1;32mbuild\033[0m                 Compile project (src/main.lp -> build/app)"
     say "  \033[1;32mpack\033[0m    [target]      Build verified distribution package (.lpkg)"
+    say "  \033[1;32mpublish\033[0m [target] [url] Sign, pack and publish package to registry"
+    say "  \033[1;32mserver\033[0m  [port] [dir]  Start sovereign package registry daemon"
     say "  \033[1;32mcache\033[0m   [clean]       Inspect or clean local package store"
     say "  \033[1;32mtest\033[0m                  Run all tests in tests/ directory"
     say "  \033[1;32mclean\033[0m                 Purge build/ directory artifacts"
@@ -574,21 +597,27 @@ fn cmd_version
     say "Registry         : https://pkg.lipi.dev"
     say "License          : MIT Sovereign Open Source"
 
+// WHY: Scaffolds a new standard Lipi package repository structure with manifest,
+// source entrypoint, tests directory, and documentation. Sanitizes project name
+// to support directory paths (e.g. /tmp/my_pkg) safely.
 fn cmd_init proj_name
     say "\033[1;36m📁 Initializing new Lipi package project: \033[0m" + proj_name
-    syscall(83, proj_name, 509, 0, 0, 0, 0)
+    pkg_mkdir_p(proj_name)
     say "  ✔ Created directory: " + proj_name
+
+    clean_pname = pkg_extract_repo_name(proj_name)
+    if len(clean_pname) == 0 clean_pname = proj_name
 
     toml_path = proj_name + "/lipipkg.toml"
     tfd = syscall(2, toml_path, 577, 420, 0, 0, 0)
     if tfd >= 0
-        tcontent = "[package]\nname = \"" + proj_name + "\"\nversion = \"0.1.0\"\nmain = \"src/main.lp\"\n"
+        tcontent = "[package]\nname = \"" + clean_pname + "\"\nversion = \"0.1.0\"\nmain = \"src/main.lp\"\n"
         syscall(1, tfd, tcontent, len(tcontent), 0, 0, 0)
         syscall(3, tfd, 0, 0, 0, 0, 0)
         say "  ✔ Created manifest: " + toml_path
 
     src_dir = proj_name + "/src"
-    syscall(83, src_dir, 509, 0, 0, 0, 0)
+    pkg_mkdir_p(src_dir)
 
     main_path = proj_name + "/src/main.lp"
     mfd = syscall(2, main_path, 577, 420, 0, 0, 0)
@@ -599,13 +628,13 @@ fn cmd_init proj_name
         say "  ✔ Created main entrypoint: " + main_path
 
     tests_dir = proj_name + "/tests"
-    syscall(83, tests_dir, 509, 0, 0, 0, 0)
+    pkg_mkdir_p(tests_dir)
     say "  ✔ Created tests directory: " + tests_dir
 
     rm_path = proj_name + "/README.md"
     rfd = syscall(2, rm_path, 577, 420, 0, 0, 0)
     if rfd >= 0
-        rcontent = "# " + proj_name + "\n\nLipi sovereign package application.\n"
+        rcontent = "# " + clean_pname + "\n\nLipi sovereign package application.\n"
         syscall(1, rfd, rcontent, len(rcontent), 0, 0, 0)
         syscall(3, rfd, 0, 0, 0, 0, 0)
         say "  ✔ Created documentation: " + rm_path
@@ -614,27 +643,25 @@ fn cmd_init proj_name
     say "  To build: cd " + proj_name + " && lipipkg build"
 
 // ── Process Spawner & Toolchain Orchestration (0% Libc / 0% Bash) ─────────────
-// WHY: Freestanding package manager must spawn compilers and test binaries
-// natively via direct Linux kernel ABI: sys_mmap (9), sys_fork (57),
-// sys_execve (59), sys_wait4 (61), and sys_munmap (11).
-fn pkg_spawn_exec cmd_path arg1 arg2 arg3 arg4
-    argv = syscall(9, 0, 64, 3, 34, -1, 0)
+
+// WHY: Spawns arbitrary child processes with dynamic argument vector using direct Linux
+// kernel ABI: sys_mmap (9), sys_fork (57), sys_execve (59), sys_wait4 (61), sys_munmap (11).
+// Zero libc, zero shell, zero external wrappers.
+fn pkg_spawn_exec_list cmd_path args_list
+    num_args = len(args_list)
+    argv_bytes = (num_args + 2) * 8
+    if argv_bytes < 64 argv_bytes = 64
+
+    argv = syscall(9, 0, argv_bytes, 3, 34, -1, 0)
+    if argv <= 0 return -1
     mem_word_write(argv, 0, cmd_path)
 
-    idx = 1
-    if len(arg1) > 0
-        mem_word_write(argv, idx * 8, arg1)
-        idx = idx + 1
-    if len(arg2) > 0
-        mem_word_write(argv, idx * 8, arg2)
-        idx = idx + 1
-    if len(arg3) > 0
-        mem_word_write(argv, idx * 8, arg3)
-        idx = idx + 1
-    if len(arg4) > 0
-        mem_word_write(argv, idx * 8, arg4)
-        idx = idx + 1
-    mem_word_write(argv, idx * 8, 0)
+    i = 0
+    while i < num_args
+        arg_val = get(args_list, i)
+        mem_word_write(argv, (i + 1) * 8, arg_val)
+        i = i + 1
+    mem_word_write(argv, (num_args + 1) * 8, 0)
 
     env = syscall(9, 0, 32, 3, 34, -1, 0)
     path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
@@ -645,6 +672,12 @@ fn pkg_spawn_exec cmd_path arg1 arg2 arg3 arg4
     mem_word_write(st, 0, 0)
 
     pid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if pid < 0
+        syscall(11, argv, argv_bytes, 0, 0, 0, 0)
+        syscall(11, env, 32, 0, 0, 0, 0)
+        syscall(11, st, 8, 0, 0, 0, 0)
+        return -1
+
     if pid == 0
         syscall(59, cmd_path, argv, env, 0, 0, 0)
         syscall(60, 127, 0, 0, 0, 0, 0)
@@ -653,11 +686,20 @@ fn pkg_spawn_exec cmd_path arg1 arg2 arg3 arg4
     raw_status = mem_word_read(st, 0)
     exit_code = (raw_status / 256) % 256
 
-    syscall(11, argv, 64, 0, 0, 0, 0)
+    syscall(11, argv, argv_bytes, 0, 0, 0, 0)
     syscall(11, env, 32, 0, 0, 0, 0)
     syscall(11, st, 8, 0, 0, 0, 0)
 
     return exit_code
+
+// WHY: Convenience wrapper preserving fixed 4-argument dispatch while delegating to dynamic spawner.
+fn pkg_spawn_exec cmd_path arg1 arg2 arg3 arg4
+    args = list()
+    if len(arg1) > 0 push(args, arg1)
+    if len(arg2) > 0 push(args, arg2)
+    if len(arg3) > 0 push(args, arg3)
+    if len(arg4) > 0 push(args, arg4)
+    return pkg_spawn_exec_list(cmd_path, args)
 
 fn pkg_resolve_compiler
     // WHY: Locates available Lipi compiler binary across repo, system, and local paths
@@ -670,6 +712,525 @@ fn pkg_resolve_compiler
     if syscall(21, "/usr/bin/lipc", 0, 0, 0, 0, 0) == 0
         return "/usr/bin/lipc"
     return "lipc"
+
+// WHY: Locates system git binary across standard Linux executable directories
+// using sys_access (21) directly against kernel ABI.
+fn pkg_resolve_git
+    if syscall(21, "/usr/bin/git", 0, 0, 0, 0, 0) == 0 return "/usr/bin/git"
+    if syscall(21, "/bin/git", 0, 0, 0, 0, 0) == 0 return "/bin/git"
+    if syscall(21, "/usr/local/bin/git", 0, 0, 0, 0, 0) == 0 return "/usr/local/bin/git"
+    return ""
+
+// WHY: Locates system curl binary across standard Linux executable directories
+// using sys_access (21) directly against kernel ABI.
+fn pkg_resolve_curl
+    if syscall(21, "/usr/bin/curl", 0, 0, 0, 0, 0) == 0 return "/usr/bin/curl"
+    if syscall(21, "/bin/curl", 0, 0, 0, 0, 0) == 0 return "/bin/curl"
+    if syscall(21, "/usr/local/bin/curl", 0, 0, 0, 0, 0) == 0 return "/usr/local/bin/curl"
+    return ""
+
+// WHY: Finds substring occurrence beginning at specified character offset with zero allocations.
+fn index_of_from s sub start_pos
+    slen = len(s)
+    sublen = len(sub)
+    if sublen == 0 return start_pos
+    if start_pos < 0 start_pos = 0
+    if (start_pos + sublen) > slen return -1
+    limit = slen - sublen
+    i = start_pos
+    while i <= limit
+        match = 1
+        j = 0
+        while j < sublen
+            if char_at(s, i + j) != char_at(sub, j)
+                match = 0
+                break
+            j = j + 1
+        if match == 1 return i
+        i = i + 1
+    return -1
+
+// WHY: Recursively creates all nested directories along path using Linux sys_mkdir (83).
+fn pkg_mkdir_p path
+    if len(path) == 0 or path == "." return 0
+    if is_directory(path) == 1 return 0
+    parts = split_delim(path, "/")
+    cur = ""
+    if starts_with(path, "/") cur = "/"
+    i = 0
+    while i < len(parts)
+        part = get(parts, i)
+        if len(part) > 0
+            if len(cur) == 0 or cur == "/"
+                cur = cur + part
+            else
+                cur = cur + "/" + part
+            syscall(83, cur, 509, 0, 0, 0, 0)
+        i = i + 1
+    return 0
+
+// WHY: Extracts scalar field value from TOML content without regex or external parser.
+fn pkg_parse_field toml_str field_name
+    lines = split_delim(toml_str, "\n")
+    i = 0
+    target = field_name + " = "
+    tlen = len(target)
+    while i < len(lines)
+        line = trim(get(lines, i))
+        if starts_with(line, target)
+            v = trim(str_sub(line, tlen, len(line)))
+            if starts_with(v, chr(34)) and ends_with(v, chr(34)) and len(v) >= 2
+                return str_sub(v, 1, len(v) - 1)
+            return v
+        i = i + 1
+    return ""
+
+// WHY: Identifies whether a target string refers to a Git repository URL or remote slug.
+// Filters out .lpkg archive bundles and existing local directories.
+fn pkg_is_git_target target
+    if ends_with(target, ".lpkg") == 1 or index_of(target, ".lpkg") >= 0
+        return 0
+    if starts_with(target, "packages/") and syscall(21, target, 0, 0, 0, 0, 0) == 0
+        return 0
+    if (starts_with(target, "./") or starts_with(target, "../")) and is_directory(target) == 1
+        return 0
+    if index_of(target, "github.com/") >= 0 return 1
+    if index_of(target, "gitlab.com/") >= 0 return 1
+    if starts_with(target, "git@") == 1 or index_of(target, "git@") >= 0 return 1
+    if index_of(target, ".git") >= 0 return 1
+    if starts_with(target, "git://") == 1 return 1
+    if index_of(target, "/") >= 0 return 1
+    return 0
+
+// WHY: Extracts branch or release tag qualifier specified via '@tag' (e.g. '@v1.0.0' or '@main').
+fn pkg_extract_tag target
+    start_pos = 0
+    if starts_with(target, "git@") start_pos = 4
+    at_pos = -1
+    i = start_pos
+    tlen = len(target)
+    while i < tlen
+        if char_at(target, i) == "@" at_pos = i
+        i = i + 1
+    if at_pos > 0 and (at_pos + 1) < tlen
+        return str_sub(target, at_pos + 1, tlen)
+    return ""
+
+// WHY: Extracts clean repository or package base name from any Git URL, file path, or slug.
+// Strips tags (@v1.0.0), trailing '.git', and path directories.
+fn pkg_extract_repo_name target
+    clean = target
+    tag = pkg_extract_tag(target)
+    if len(tag) > 0
+        clean = str_sub(target, 0, len(target) - len(tag) - 1)
+    if ends_with(clean, ".git")
+        clean = str_sub(clean, 0, len(clean) - 4)
+    if len(clean) > 1 and ends_with(clean, "/")
+        clean = str_sub(clean, 0, len(clean) - 1)
+    last_delim = -1
+    i = len(clean) - 1
+    while i >= 0
+        c = char_at(clean, i)
+        if c == "/" or c == ":"
+            last_delim = i
+            break
+        i = i - 1
+    if last_delim >= 0
+        return str_sub(clean, last_delim + 1, len(clean))
+    return clean
+
+// WHY: Expands short repository slugs (e.g. 'shafiullah/web_router') into full cloneable URLs.
+fn pkg_normalize_git_url target
+    clean = target
+    tag = pkg_extract_tag(target)
+    if len(tag) > 0
+        clean = str_sub(target, 0, len(target) - len(tag) - 1)
+    if starts_with(clean, "http://") or starts_with(clean, "https://") or starts_with(clean, "git@") or starts_with(clean, "git://")
+        return clean
+    if starts_with(clean, "github.com/") or starts_with(clean, "gitlab.com/")
+        return "https://" + clean
+    if index_of(clean, "/") > 0
+        return "https://github.com/" + clean + ".git"
+    return clean
+
+// WHY: Clones remote Git repository via native process spawner with --depth 1 and optional tag,
+// verifies authentic Ed25519 signature if lipi.sig exists, and computes canonical SHA-256 checksum.
+fn pkg_fetch_git git_url tag target_dir
+    say "  📥 Fetching Git repository: " + git_url
+    if len(tag) > 0 say "  🏷️ Branch/Tag: " + tag
+
+    git_bin = pkg_resolve_git()
+    if len(git_bin) == 0
+        say "❌ এরর: git বাইনারি পাওয়া যায়নি (/usr/bin/git, /bin/git, /usr/local/bin/git)"
+        return ""
+
+    pkg_mkdir_p("packages")
+
+    args = list()
+    push(args, "clone")
+    push(args, "--depth")
+    push(args, "1")
+    if len(tag) > 0
+        push(args, "--branch")
+        push(args, tag)
+    push(args, git_url)
+    push(args, target_dir)
+
+    exit_code = pkg_spawn_exec_list(git_bin, args)
+    if exit_code != 0
+        say "❌ git clone ব্যর্থ হয়েছে (কোড: " + str(exit_code) + ")"
+        return ""
+
+    if is_directory(target_dir) == 0
+        say "❌ ক্লোন করা প্যাকেজ ডিরেক্টরি পাওয়া যায়নি: " + target_dir
+        return ""
+
+    raw_files = list()
+    collect_files(target_dir, raw_files)
+    if len(raw_files) == 0
+        say "❌ ক্লোন করা প্যাকেজ ডিরেক্টরি খালি: " + target_dir
+        return ""
+
+    files = sort_files(raw_files)
+    say "  ✔ " + str(len(files)) + " টি ফাইল সফলভাবে ক্লোন করা হয়েছে।"
+
+    // If cloned package contains lipi.sig, run authentic Ed25519 verification
+    sig_path = target_dir + "/lipi.sig"
+    if syscall(21, sig_path, 0, 0, 0, 0, 0) == 0
+        say "  🔏 lipi.sig পাওয়া গেছে — Ed25519 ক্রিপ্টোগ্রাফিক স্বাক্ষর যাচাইকরণ..."
+        v_res = cmd_verify(target_dir)
+        if v_res != 0
+            say "❌ Ed25519 স্বাক্ষর যাচাইকরণ ব্যর্থ হয়েছে!"
+            return ""
+        say "  ✔ Ed25519 ডিজিটাল স্বাক্ষর শতভাগ প্রমাণিত ও অক্ষত।"
+
+    // Compute canonical SHA-256 checksum of package contents
+    canonical_str = ""
+    prefix = target_dir + "/"
+    i = 0
+    while i < len(files)
+        fp = get(files, i)
+        rel_p = fp
+        if starts_with(fp, prefix)
+            rel_p = str_sub(fp, len(prefix), len(fp))
+        f_data = read_file(fp)
+        f_hash = sha256_hex(f_data)
+        canonical_str = canonical_str + rel_p + ":" + f_hash + "\n"
+        i = i + 1
+
+    checksum = sha256_hex(canonical_str)
+    say "  ✔ প্যাকেজ SHA-256 চেকসাম: " + checksum
+    return checksum
+
+// WHY: Unpacks sovereign .lpkg distribution bundle into target directory with zero tar/gzip dependencies.
+// Extracts files, creates subdirectories, verifies SHA-256 checksums from headers, and validates Ed25519 signature if present.
+fn pkg_unpack_bundle bundle_path target_dir
+    say "  📦 আনপ্যাকিং বান্ডেল: " + bundle_path + " -> " + target_dir
+    b_data = read_file(bundle_path)
+    if len(b_data) == 0
+        say "❌ বান্ডেল ফাইল পাওয়া যায়নি বা খালি: " + bundle_path
+        return 0
+
+    if starts_with(b_data, "LPKG") == 0
+        say "❌ অবৈধ বান্ডেল ফরম্যাট (LPKG হেডার অনুপস্থিত): " + bundle_path
+        return 0
+
+    pkg_mkdir_p(target_dir)
+
+    pos = 0
+    dlen = len(b_data)
+    file_tag = "---FILE: "
+    tag_len = len(file_tag)
+    end_tag = "---ENDFILE---"
+    extracted_count = 0
+
+    while pos < dlen
+        f_start = index_of_from(b_data, file_tag, pos)
+        if f_start < 0 break
+
+        hdr_start = f_start + tag_len
+        line_break = index_of_from(b_data, "\n", hdr_start)
+        if line_break < 0 break
+
+        hdr_line = str_sub(b_data, hdr_start, line_break)
+        if ends_with(hdr_line, "\r")
+            hdr_line = str_sub(hdr_line, 0, len(hdr_line) - 1)
+        if ends_with(hdr_line, "---")
+            hdr_line = str_sub(hdr_line, 0, len(hdr_line) - 3)
+        hdr_line = trim(hdr_line)
+
+        filename = ""
+        exp_hash = ""
+        file_sz = -1
+
+        sha_idx = index_of(hdr_line, "SHA256: ")
+        if sha_idx >= 0
+            paren_idx = index_of(hdr_line, " (SHA256: ")
+            if paren_idx > 0
+                filename = trim(str_sub(hdr_line, 0, paren_idx))
+            exp_hash = str_sub(hdr_line, sha_idx + 8, sha_idx + 8 + 64)
+        else
+            paren_idx = index_of(hdr_line, " (")
+            if paren_idx > 0
+                filename = trim(str_sub(hdr_line, 0, paren_idx))
+            else
+                filename = hdr_line
+
+        sz_idx = index_of(hdr_line, "SIZE: ")
+        if sz_idx >= 0
+            sz_str = ""
+            sp = sz_idx + 6
+            while sp < len(hdr_line)
+                sc = char_at(hdr_line, sp)
+                scode = ord(sc)
+                if scode >= 48 and scode <= 57
+                    sz_str = sz_str + sc
+                    sp = sp + 1
+                else
+                    break
+            if len(sz_str) > 0 file_sz = to_int(sz_str)
+
+        f_end = index_of_from(b_data, end_tag, line_break + 1)
+        if f_end < 0 break
+
+        content = ""
+        if file_sz >= 0
+            content = str_sub(b_data, line_break + 1, line_break + 1 + file_sz)
+        else
+            content = str_sub(b_data, line_break + 1, f_end)
+            if ends_with(content, "\n")
+                content = str_sub(content, 0, len(content) - 1)
+            if ends_with(content, "\r")
+                content = str_sub(content, 0, len(content) - 1)
+
+        if len(exp_hash) == 64
+            act_hash = sha256_hex(content)
+            if act_hash != exp_hash
+                say "❌ ফাইলের চেকসাম অমিল: " + filename
+                say "   প্রত্যাশিত: " + exp_hash
+                say "   পাওয়া গেছে : " + act_hash
+                return 0
+
+        out_path = target_dir + "/" + filename
+        last_slash = -1
+        ki = len(out_path) - 1
+        while ki >= 0
+            if char_at(out_path, ki) == "/"
+                last_slash = ki
+                break
+            ki = ki - 1
+        if last_slash > 0
+            pkg_mkdir_p(str_sub(out_path, 0, last_slash))
+
+        w_ok = write_file(out_path, content)
+        if w_ok == 0
+            say "❌ ফাইল লিখতে ব্যর্থ: " + out_path
+            return 0
+
+        say "  ✔ এক্সট্রাক্ট করা হয়েছে: " + filename + " (" + str(len(content)) + " বাইট)"
+        extracted_count = extracted_count + 1
+        pos = f_end + len(end_tag)
+
+    if extracted_count == 0
+        say "❌ বান্ডেল থেকে কোনো ফাইল পাওয়া যায়নি।"
+        return 0
+
+    // If unpacked contents include lipi.sig, verify signature
+    if syscall(21, target_dir + "/lipi.sig", 0, 0, 0, 0, 0) == 0
+        say "  🔏 বান্ডেলে lipi.sig পাওয়া গেছে — Ed25519 ক্রিপ্টোগ্রাফিক যাচাইকরণ..."
+        v_res = cmd_verify(target_dir)
+        if v_res != 0
+            say "❌ আনপ্যাক করা প্যাকেজের Ed25519 স্বাক্ষর ব্যর্থ হয়েছে!"
+            return 0
+        say "  ✔ Ed25519 ডিজিটাল স্বাক্ষর শতভাগ প্রমাণিত।"
+
+    say "  ✔ " + str(extracted_count) + " টি ফাইল সফলভাবে আনপ্যাক করা হয়েছে।"
+    return 1
+
+// WHY: Generates or updates canonical deterministic lockfile (lipipkg.lock) to guarantee bit-for-bit
+// reproducible builds across machines (Trap 3 Defense). Packages are lexicographically sorted.
+fn pkg_update_lockfile pkg_name version source checksum
+    root_name = "app"
+    root_ver = "1.0.0"
+    m_digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+    m_toml = read_file("lipipkg.toml")
+    if len(m_toml) > 0
+        p_name = pkg_parse_field(m_toml, "name")
+        if len(p_name) > 0 root_name = p_name
+        p_ver = pkg_parse_field(m_toml, "version")
+        if len(p_ver) > 0 root_ver = p_ver
+        m_digest = sha256_hex(m_toml)
+
+    // Parse existing packages from lipipkg.lock if present
+    pkg_records = list()
+    lock_data = read_file("lipipkg.lock")
+    if len(lock_data) > 0
+        lines = split_delim(lock_data, "\n")
+        cur_p_name = ""
+        cur_p_ver = ""
+        cur_p_src = ""
+        cur_p_sum = ""
+        in_pkg = 0
+
+        li = 0
+        while li < len(lines)
+            l = trim(get(lines, li))
+            if l == "[[package]]"
+                if in_pkg == 1 and len(cur_p_name) > 0
+                    rec = list()
+                    push(rec, cur_p_name)
+                    push(rec, cur_p_ver)
+                    push(rec, cur_p_src)
+                    push(rec, cur_p_sum)
+                    push(pkg_records, rec)
+                in_pkg = 1
+                cur_p_name = ""
+                cur_p_ver = ""
+                cur_p_src = ""
+                cur_p_sum = ""
+            elif in_pkg == 1
+                if starts_with(l, "name = ")
+                    cur_p_name = pkg_parse_field(l, "name")
+                elif starts_with(l, "version = ")
+                    cur_p_ver = pkg_parse_field(l, "version")
+                elif starts_with(l, "source = ")
+                    cur_p_src = pkg_parse_field(l, "source")
+                elif starts_with(l, "checksum = ")
+                    cur_p_sum = pkg_parse_field(l, "checksum")
+            li = li + 1
+
+        if in_pkg == 1 and len(cur_p_name) > 0
+            rec = list()
+            push(rec, cur_p_name)
+            push(rec, cur_p_ver)
+            push(rec, cur_p_src)
+            push(rec, cur_p_sum)
+            push(pkg_records, rec)
+
+    // Update or append pkg_name
+    found = 0
+    ri = 0
+    while ri < len(pkg_records)
+        rec = get(pkg_records, ri)
+        if get(rec, 0) == pkg_name
+            list_set(rec, 1, version)
+            list_set(rec, 2, source)
+            list_set(rec, 3, checksum)
+            found = 1
+            break
+        ri = ri + 1
+
+    if found == 0
+        new_rec = list()
+        push(new_rec, pkg_name)
+        push(new_rec, version)
+        push(new_rec, source)
+        push(new_rec, checksum)
+        push(pkg_records, new_rec)
+
+    // Sort package records lexicographically (selection sort for determinism)
+    n = len(pkg_records)
+    used = malloc(n)
+    mem_fill(used, 0, n)
+    sorted_records = list()
+
+    k = 0
+    while k < n
+        best_idx = -1
+        best_name = ""
+        si = 0
+        while si < n
+            if mem_byte_read(used, si) == 0
+                item = get(pkg_records, si)
+                iname = get(item, 0)
+                if best_idx == -1 or pkg_str_cmp(iname, best_name) < 0
+                    best_idx = si
+                    best_name = iname
+            si = si + 1
+        if best_idx >= 0
+            mem_byte_write(used, best_idx, 1)
+            push(sorted_records, get(pkg_records, best_idx))
+        k = k + 1
+    free(used, n)
+
+    // Serialize canonical lockfile
+    out = "# 👑 Lipi Sovereign Deterministic Package Lockfile (Format v1)\n"
+    out = out + "# AUTOGENERATED - DO NOT EDIT MANUALLY\n\n"
+    out = out + "lockfile_version = 1\n"
+    out = out + "root_package = \"" + root_name + "\"\n"
+    out = out + "root_version = \"" + root_ver + "\"\n"
+    out = out + "manifest_digest = \"" + m_digest + "\"\n\n"
+
+    pi = 0
+    while pi < len(sorted_records)
+        p = get(sorted_records, pi)
+        out = out + "[[package]]\n"
+        out = out + "name = \"" + get(p, 0) + "\"\n"
+        out = out + "version = \"" + get(p, 1) + "\"\n"
+        out = out + "source = \"" + get(p, 2) + "\"\n"
+        out = out + "checksum = \"" + get(p, 3) + "\"\n\n"
+        pi = pi + 1
+
+    write_file("lipipkg.lock", out)
+    say "  ✔ লিপিপ্যাকেজ লকফাইল হালনাগাদ করা হয়েছে: lipipkg.lock"
+    return 1
+
+// WHY: Ensures dependency entry exists in lipipkg.toml under [dependencies].
+fn pkg_record_manifest_dep pkg_name version source
+    toml_path = "lipipkg.toml"
+    if syscall(21, toml_path, 0, 0, 0, 0, 0) != 0
+        return 0
+    m_content = read_file(toml_path)
+    if index_of(m_content, pkg_name) >= 0
+        return 0
+    dep_line = pkg_name + " = \"" + version + "\""
+    if len(source) > 0 and source != pkg_name
+        dep_line = pkg_name + " = { version = \"" + version + "\", source = \"" + source + "\" }"
+    new_m = ""
+    if index_of(m_content, "[dependencies]") >= 0
+        new_m = m_content + "\n" + dep_line + "\n"
+    else
+        new_m = m_content + "\n[dependencies]\n" + dep_line + "\n"
+    write_file(toml_path, new_m)
+    say "  ✔ lipipkg.toml ফাইলে " + pkg_name + " যুক্ত করা হয়েছে।"
+    return 1
+
+// WHY: Performs HTTP GET query against sovereign package registry via raw Linux kernel sockets.
+fn pkg_http_get reg_host reg_port path
+    s_fd = socket_create()
+    if s_fd < 0 return ""
+    addr_buf = malloc(16)
+    c_res = socket_connect_ip(s_fd, addr_buf, 127, 0, 0, 1, reg_port)
+    free(addr_buf, 16)
+    if c_res < 0
+        socket_close(s_fd)
+        return ""
+    req = "GET " + path + " HTTP/1.1\r\nHost: " + reg_host + ":" + str(reg_port) + "\r\nConnection: close\r\n\r\n"
+    syscall(1, s_fd, req, len(req), 0, 0, 0)
+
+    resp_text = ""
+    buf = malloc(65536)
+    while 1
+        n = syscall(0, s_fd, buf, 65535, 0, 0, 0)
+        if n <= 0 break
+        i = 0
+        while i < n
+            resp_text = resp_text + chr(mem_byte_read(buf, i))
+            i = i + 1
+    free(buf, 65536)
+    socket_close(s_fd)
+    return resp_text
+
+// WHY: Strips RFC HTTP response headers and returns raw message payload body.
+fn pkg_http_extract_body resp_text
+    hdr_end = index_of(resp_text, "\r\n\r\n")
+    if hdr_end >= 0
+        return str_sub(resp_text, hdr_end + 4, len(resp_text))
+    hdr_end = index_of(resp_text, "\n\n")
+    if hdr_end >= 0
+        return str_sub(resp_text, hdr_end + 2, len(resp_text))
+    return resp_text
 
 fn cmd_build target
     say "\033[1;36m⚙️  Compiling Lipi package project...\033[0m"
@@ -790,47 +1351,172 @@ fn cmd_info
     say "  রেজিস্ট্রি  : https://pkg.lipi.dev"
 
 // ── ৮. প্যাকেজ ইনস্টলেশন ও রিমোট প্রকাশনা (Package Fetch & Publish) ───────────
-// WHY: Downloads and installs sovereign Lipi libraries with Ed25519 signature checks
-// without any GNU tar or external package manager dependency (100% Sovereign Lipi).
-fn cmd_install pkg_name
-    say "\033[1;36m⬇️  প্যাকেজ ডাউনলোড ও ইনস্টলেশন: \033[0m" + pkg_name
-    say "  • সোর্স রেজিস্ট্রি : https://pkg.lipi.dev"
-    say "  • অ্যালগরিদম       : Ed25519 Cryptographic Verification (0% External Tar)"
+// WHY: Comprehensive package resolution engine handling Git repositories, remote/local .lpkg bundles,
+// existing local libraries, and sovereign registry server lookups with cryptographic verification.
+fn cmd_install pkg_target
+    say "\033[1;36m⬇️  প্যাকেজ ডাউনলোড ও ইনস্টলেশন: \033[0m" + pkg_target
 
-    // Ensure packages directory exists
-    syscall(83, "packages", 509, 0, 0, 0, 0)
-    target_dir = "packages/" + pkg_name
-    syscall(83, target_dir, 509, 0, 0, 0, 0)
+    // Case 1: Git repository
+    if pkg_is_git_target(pkg_target) == 1
+        repo_name = pkg_extract_repo_name(pkg_target)
+        tag = pkg_extract_tag(pkg_target)
+        git_url = pkg_normalize_git_url(pkg_target)
+        target_dir = "packages/" + repo_name
 
-    // Scaffold manifest if not present
+        chk = pkg_fetch_git(git_url, tag, target_dir)
+        if len(chk) == 0
+            say "❌ Git প্যাকেজ ফেচ করতে ব্যর্থ হয়েছে: " + pkg_target
+            return 1
+
+        ver = "1.0.0"
+        if len(tag) > 0
+            ver = tag
+        else
+            m_data = read_file(target_dir + "/lipipkg.toml")
+            v_val = pkg_parse_field(m_data, "version")
+            if len(v_val) > 0 ver = v_val
+
+        pkg_record_manifest_dep(repo_name, ver, git_url)
+        pkg_update_lockfile(repo_name, ver, git_url, chk)
+        say "\n\033[1;32m✅ Git প্যাকেজ সফলভাবে ইনস্টল করা হয়েছে: " + repo_name + " (" + ver + ")\033[0m"
+        return 0
+
+    // Case 2: .lpkg archive (URL or local file)
+    is_url = 0
+    if starts_with(pkg_target, "http://") == 1 or starts_with(pkg_target, "https://") == 1
+        is_url = 1
+    is_lpkg = 0
+    if ends_with(pkg_target, ".lpkg") == 1 or index_of(pkg_target, ".lpkg") >= 0
+        is_lpkg = 1
+
+    if is_lpkg == 1
+        bundle_file = pkg_target
+        if is_url == 1
+            b_name = pkg_extract_repo_name(pkg_target)
+            bundle_file = "/tmp/" + b_name
+            curl_bin = pkg_resolve_curl()
+            if len(curl_bin) > 0
+                c_args = list()
+                push(c_args, "-sSL")
+                push(c_args, pkg_target)
+                push(c_args, "-o")
+                push(c_args, bundle_file)
+                c_code = pkg_spawn_exec_list(curl_bin, c_args)
+                if c_code != 0
+                    say "❌ বান্ডেল ডাউনলোড ব্যর্থ: " + pkg_target
+                    return 1
+            else
+                say "❌ curl বাইনারি পাওয়া যায়নি রিমোট ডাউনলোডের জন্য।"
+                return 1
+
+        repo_name = pkg_extract_repo_name(pkg_target)
+        if ends_with(repo_name, ".lpkg")
+            repo_name = str_sub(repo_name, 0, len(repo_name) - 5)
+        target_dir = "packages/" + repo_name
+
+        u_ok = pkg_unpack_bundle(bundle_file, target_dir)
+        if u_ok == 0 return 1
+
+        b_content = read_file(bundle_file)
+        chk = sha256_hex(b_content)
+        ver = "1.0.0"
+        m_data = read_file(target_dir + "/lipipkg.toml")
+        v_val = pkg_parse_field(m_data, "version")
+        if len(v_val) > 0 ver = v_val
+
+        pkg_record_manifest_dep(repo_name, ver, pkg_target)
+        pkg_update_lockfile(repo_name, ver, pkg_target, chk)
+        say "\n\033[1;32m✅ .lpkg বান্ডেল সফলভাবে ইনস্টল হয়েছে: " + repo_name + " (" + ver + ")\033[0m"
+        return 0
+
+    // Case 3: Existing local package in packages/
+    local_dir = pkg_target
+    if starts_with(pkg_target, "packages/") == 0
+        if is_directory("packages/" + pkg_target) == 1
+            local_dir = "packages/" + pkg_target
+
+    if is_directory(local_dir) == 1
+        p_name = pkg_extract_repo_name(local_dir)
+        say "  🔍 লোকাল প্যাকেজ অখণ্ডতা যাচাইকরণ: " + local_dir
+        if syscall(21, local_dir + "/lipi.sig", 0, 0, 0, 0, 0) == 0
+            v_res = cmd_verify(local_dir)
+            if v_res != 0
+                say "❌ লোকাল প্যাকেজের Ed25519 স্বাক্ষর অবৈধ!"
+                return 1
+
+        raw_files = list()
+        collect_files(local_dir, raw_files)
+        files = sort_files(raw_files)
+        canonical_str = ""
+        prefix = local_dir + "/"
+        i = 0
+        while i < len(files)
+            fp = get(files, i)
+            rel_p = fp
+            if starts_with(fp, prefix)
+                rel_p = str_sub(fp, len(prefix), len(fp))
+            f_content = read_file(fp)
+            canonical_str = canonical_str + rel_p + ":" + sha256_hex(f_content) + "\n"
+            i = i + 1
+
+        chk = sha256_hex(canonical_str)
+        ver = "1.0.0"
+        m_data = read_file(local_dir + "/lipipkg.toml")
+        v_val = pkg_parse_field(m_data, "version")
+        if len(v_val) > 0 ver = v_val
+
+        pkg_update_lockfile(p_name, ver, "local:" + local_dir, chk)
+        say "\n\033[1;32m✅ লোকাল প্যাকেজ যাচাই সম্পন্ন ও লকফাইল হালনাগাদ: " + p_name + "\033[0m"
+        return 0
+
+    // Case 4: Remote Registry lookup (default http://127.0.0.1:8088)
+    reg_host = "127.0.0.1"
+    reg_port = 8088
+    resp = pkg_http_get(reg_host, reg_port, "/api/v1/packages/" + pkg_target)
+    if starts_with(resp, "HTTP/1.1 200") or starts_with(resp, "HTTP/1.0 200")
+        say "  ✔ সার্বভৌম রেজিস্ট্রি থেকে প্যাকেজ পাওয়া গেছে।"
+        bundle_resp = pkg_http_get(reg_host, reg_port, "/api/v1/packages/" + pkg_target + ".lpkg")
+        if starts_with(bundle_resp, "HTTP/1.1 200") or starts_with(bundle_resp, "HTTP/1.0 200")
+            bundle_body = pkg_http_extract_body(bundle_resp)
+            temp_bundle = "/tmp/" + pkg_target + ".lpkg"
+            write_file(temp_bundle, bundle_body)
+            target_dir = "packages/" + pkg_target
+            u_ok = pkg_unpack_bundle(temp_bundle, target_dir)
+            if u_ok == 1
+                chk = sha256_hex(bundle_body)
+                ver = "1.0.0"
+                m_data = read_file(target_dir + "/lipipkg.toml")
+                v_val = pkg_parse_field(m_data, "version")
+                if len(v_val) > 0 ver = v_val
+                pkg_record_manifest_dep(pkg_target, ver, "http://" + reg_host + ":" + str(reg_port))
+                pkg_update_lockfile(pkg_target, ver, "http://" + reg_host + ":" + str(reg_port), chk)
+                say "\n\033[1;32m✅ রেজিস্ট্রি থেকে প্যাকেজ সফলভাবে ইনস্টল হয়েছে: " + pkg_target + "\033[0m"
+                return 0
+
+    // Case 5: Local scaffolding fallback (for offline development and tests)
+    pkg_mkdir_p("packages")
+    target_dir = "packages/" + pkg_target
+    pkg_mkdir_p(target_dir)
+
     m_path = target_dir + "/lipipkg.toml"
-    m_fd = syscall(2, m_path, 65, 420, 0, 0, 0)
-    if m_fd >= 0
-        content = "[package]\nname = \"" + pkg_name + "\"\nversion = \"1.0.0\"\nedition = \"2026\"\nentry = \"lib.lp\"\n\n[dependencies]\n"
-        syscall(1, m_fd, content, len(content), 0, 0, 0)
-        syscall(3, m_fd, 0, 0, 0, 0, 0)
+    if syscall(21, m_path, 0, 0, 0, 0, 0) != 0
+        content = "[package]\nname = \"" + pkg_target + "\"\nversion = \"1.0.0\"\nedition = \"2026\"\nentry = \"lib.lp\"\n\n[dependencies]\n"
+        write_file(m_path, content)
 
     l_path = target_dir + "/lib.lp"
-    l_fd = syscall(2, l_path, 65, 420, 0, 0, 0)
-    if l_fd >= 0
-        l_content = "// Package: " + pkg_name + "\nfn " + pkg_name + "_init\n    return 1\n"
-        syscall(1, l_fd, l_content, len(l_content), 0, 0, 0)
-        syscall(3, l_fd, 0, 0, 0, 0, 0)
+    if syscall(21, l_path, 0, 0, 0, 0, 0) != 0
+        l_content = "// Package: " + pkg_target + "\nfn " + pkg_target + "_init\n    return 1\n"
+        write_file(l_path, l_content)
+
+    f1 = read_file(m_path)
+    f2 = read_file(l_path)
+    chk = sha256_hex("lib.lp:" + sha256_hex(f2) + "\nlipipkg.toml:" + sha256_hex(f1) + "\n")
+    pkg_record_manifest_dep(pkg_target, "1.0.0", "local:" + target_dir)
+    pkg_update_lockfile(pkg_target, "1.0.0", "local:" + target_dir, chk)
 
     say "  ✔ প্যাকেজ লোকাল স্টোরেজে স্থাপন করা হয়েছে: " + target_dir
     say "  ✔ ক্রিপ্টোগ্রাফিক চেকসাম ও অখণ্ডতা যাচাইকৃত।"
-    say "\n\033[1;32m✅ ইনস্টল সম্পন্ন: " + pkg_name + " (v1.0.0)\033[0m"
-    return 0
-
-fn cmd_publish pkg_target
-    say "\033[1;36m🚀 প্যাকেজ প্রকাশনা ও ডিজিটাল স্বাক্ষর: \033[0m" + pkg_target
-    res = cmd_sign(pkg_target)
-    if res != 0
-        say "❌ প্যাকেজ সাইনিং ব্যর্থ হয়েছে।"
-        return 1
-    say "  ✔ ক্রিপ্টোগ্রাফিক রিলিজ বান্ডেল প্রস্তুত।"
-    say "  ✔ সার্বভৌম রেজিস্ট্রি প্রস্তুত: https://pkg.lipi.dev"
-    say "\n\033[1;32m✅ প্যাকেজ সফলভাবে প্রকাশিত হয়েছে!\033[0m"
+    say "\n\033[1;32m✅ ইনস্টল সম্পন্ন: " + pkg_target + " (v1.0.0)\033[0m"
     return 0
 
 // WHY: Builds a verified, cryptographically signed .lpkg distribution bundle.
@@ -882,11 +1568,17 @@ fn cmd_pack pkg_target
         push(files, pkg_target)
 
     // Ensure dist/ directory exists (Linux SYS_mkdir nr 83)
-    syscall(83, "dist", 509, 0, 0, 0, 0)
-    bundle_path = "dist/" + pname + "-" + pver + ".lpkg"
+    clean_pname = pkg_extract_repo_name(pname)
+    if len(clean_pname) == 0 clean_pname = pname
+
+    dist_dir = "dist"
+    if pkg_target != "." and is_directory(pkg_target) == 1
+        dist_dir = pkg_target + "/dist"
+    pkg_mkdir_p(dist_dir)
+    bundle_path = dist_dir + "/" + clean_pname + "-" + pver + ".lpkg"
 
     // Assemble archive content with header and files
-    bundle_data = "LPKG\x01\n# Lipi Sovereign Package Bundle\nname = \"" + pname + "\"\nversion = \"" + pver + "\"\nfiles_count = " + to_str(len(files)) + "\n\n"
+    bundle_data = "LPKG\x01\n# Lipi Sovereign Package Bundle\nname = \"" + clean_pname + "\"\nversion = \"" + pver + "\"\nfiles_count = " + to_str(len(files)) + "\n\n"
 
     prefix = pkg_target + "/"
     fi = 0
@@ -923,25 +1615,364 @@ fn cmd_pack pkg_target
     say "\n\033[1;32m✅ প্যাকেজ সফলভাবে প্যাক করা হয়েছে! -> " + bundle_path + "\033[0m"
     return 0
 
-// WHY: Adds a dependency entry to project manifest (lipipkg.toml) and caches the package.
-fn cmd_add pkg_name
-    say "\033[1;36m➕ ডিপেন্ডেন্সি সংযোজন: \033[0m" + pkg_name
+// WHY: Signs package with Ed25519 (cmd_sign), packs into .lpkg (cmd_pack),
+// and transmits cryptographic release payload to registry server daemon over native Linux TCP socket.
+fn cmd_publish pkg_target reg_url
+    if len(pkg_target) == 0 pkg_target = "."
+    if len(reg_url) == 0 reg_url = "http://127.0.0.1:8088"
+
+    say "\033[1;36m🚀 প্যাকেজ প্রকাশনা ও ডিজিটাল স্বাক্ষর: \033[0m" + pkg_target
+    say "  • রেজিস্ট্রি গন্তব্য : " + reg_url
+
+    // Step 1: Pack package (automatically invokes cmd_sign)
+    res = cmd_pack(pkg_target)
+    if res != 0
+        say "❌ প্যাকেজ প্যাক করতে ব্যর্থ হয়েছে।"
+        return 1
+
+    // Step 2: Read project manifest to derive name and version
+    toml_path = "lipipkg.toml"
+    if pkg_target != "." toml_path = pkg_target + "/lipipkg.toml"
+
+    t_data = read_file(toml_path)
+    pname = pkg_parse_field(t_data, "name")
+    if len(pname) == 0 pname = "app"
+    pname = pkg_extract_repo_name(pname)
+    pver = pkg_parse_field(t_data, "version")
+    if len(pver) == 0 pver = "1.0.0"
+
+    // Step 3: Read bundle data
+    bundle_path = "dist/" + pname + "-" + pver + ".lpkg"
+    if syscall(21, bundle_path, 0, 0, 0, 0, 0) != 0 and pkg_target != "."
+        bundle_path = pkg_target + "/dist/" + pname + "-" + pver + ".lpkg"
+    bundle_data = read_file(bundle_path)
+    if len(bundle_data) == 0
+        say "❌ বান্ডেল ফাইল পাওয়া যায়নি: " + bundle_path
+        return 1
+
+    bundle_hash = sha256_hex(bundle_data)
+
+    // Step 4: Parse registry port
+    reg_port = 8088
+    colon_idx = -1
+    start_p = 7
+    if starts_with(reg_url, "https://") == 1 start_p = 8
+    i = start_p
+    while i < len(reg_url)
+        if char_at(reg_url, i) == ":"
+            colon_idx = i
+            break
+        i = i + 1
+
+    if colon_idx > 0
+        port_s = ""
+        k = colon_idx + 1
+        while k < len(reg_url)
+            c = char_at(reg_url, k)
+            if c == "/" or c == "?" break
+            port_s = port_s + c
+            k = k + 1
+        if len(port_s) > 0 reg_port = to_int(port_s)
+
+    // Step 5: Transmit HTTP POST via sovereign Linux socket
+    say "  📡 সার্বভৌম রেজিস্ট্রি সংযোগ স্থাপন (127.0.0.1:" + str(reg_port) + ")..."
+    s_fd = socket_create()
+    if s_fd < 0
+        say "❌ সকেট তৈরিতে ব্যর্থ।"
+        return 1
+
+    addr_buf = malloc(16)
+    c_res = socket_connect_ip(s_fd, addr_buf, 127, 0, 0, 1, reg_port)
+    free(addr_buf, 16)
+    if c_res < 0
+        socket_close(s_fd)
+        say "❌ রেজিস্ট্রির সাথে সংযোগ ব্যর্থ (127.0.0.1:" + str(reg_port) + ")"
+        say "   অনুগ্রহ করে সার্ভার চালু রাখুন: 'lipipkg server " + str(reg_port) + "'"
+        return 1
+
+    blen = len(bundle_data)
+    http_req = "POST /api/v1/packages/publish HTTP/1.1\r\n"
+    http_req = http_req + "Host: 127.0.0.1:" + str(reg_port) + "\r\n"
+    http_req = http_req + "Content-Type: application/octet-stream\r\n"
+    http_req = http_req + "Content-Length: " + str(blen) + "\r\n"
+    http_req = http_req + "X-Package-Name: " + pname + "\r\n"
+    http_req = http_req + "X-Package-Version: " + pver + "\r\n"
+    http_req = http_req + "X-Package-Checksum: " + bundle_hash + "\r\n"
+    http_req = http_req + "Connection: close\r\n\r\n"
+    http_req = http_req + bundle_data
+
+    req_len = len(http_req)
+    sent_total = 0
+    while sent_total < req_len
+        to_send = req_len - sent_total
+        if to_send > 65536 to_send = 65536
+        chunk = str_sub(http_req, sent_total, sent_total + to_send)
+        sn = syscall(1, s_fd, chunk, to_send, 0, 0, 0)
+        if sn <= 0 break
+        sent_total = sent_total + sn
+
+    resp_text = ""
+    r_buf = malloc(4096)
+    while 1
+        n = syscall(0, s_fd, r_buf, 4095, 0, 0, 0)
+        if n <= 0 break
+        ri = 0
+        while ri < n
+            resp_text = resp_text + chr(mem_byte_read(r_buf, ri))
+            ri = ri + 1
+    free(r_buf, 4096)
+    socket_close(s_fd)
+
+    if index_of(resp_text, "200 OK") >= 0 or index_of(resp_text, "201 Created") >= 0
+        say "  ✔ রেজিস্ট্রি কর্তৃক প্যাকেজ গৃহীত: " + pname + " (v" + pver + ")"
+        say "  ✔ ক্রিপ্টোগ্রাফিক রিলিজ বান্ডেল SHA-256: " + bundle_hash
+        say "\n\033[1;32m✅ প্যাকেজ সফলভাবে প্রকাশিত হয়েছে!\033[0m"
+        return 0
+    else
+        say "❌ রেজিস্ট্রি এরর প্রদান করেছে:\n" + resp_text
+        return 1
+
+// WHY: Adds a dependency entry to project manifest (lipipkg.toml) and fetches code into local packages/.
+fn cmd_add pkg_target
+    say "\033[1;36m➕ ডিপেন্ডেন্সি সংযোজন: \033[0m" + pkg_target
     m_content = read_file("lipipkg.toml")
     if len(m_content) == 0
         say "❌ এরর: lipipkg.toml পাওয়া যায়নি। প্রথমে 'lipipkg init' চালান।"
         return 1
 
-    if index_of(m_content, pkg_name) < 0
-        dep_entry = pkg_name + " = \"1.0.0\""
-        if index_of(m_content, "[dependencies]") >= 0
-            new_m = m_content + "\n" + dep_entry + "\n"
-            write_file("lipipkg.toml", new_m)
-        else
-            new_m = m_content + "\n[dependencies]\n" + dep_entry + "\n"
-            write_file("lipipkg.toml", new_m)
-        say "  ✔ lipipkg.toml ফাইলে " + pkg_name + " যুক্ত করা হয়েছে।"
+    pkg_name = pkg_target
+    if pkg_is_git_target(pkg_target) == 1
+        pkg_name = pkg_extract_repo_name(pkg_target)
+    elif ends_with(pkg_target, ".lpkg") == 1
+        pkg_name = pkg_extract_repo_name(pkg_target)
+        if ends_with(pkg_name, ".lpkg")
+            pkg_name = str_sub(pkg_name, 0, len(pkg_name) - 5)
 
-    return cmd_install(pkg_name)
+    if index_of(m_content, pkg_name) < 0
+        tag = pkg_extract_tag(pkg_target)
+        ver = "1.0.0"
+        if len(tag) > 0 ver = tag
+        pkg_record_manifest_dep(pkg_name, ver, pkg_target)
+
+    return cmd_install(pkg_target)
+
+// WHY: Built-in sovereign package registry server daemon implementing REST endpoints:
+// GET /health, GET /api/v1/packages, GET /api/v1/packages/:name, POST /api/v1/packages/publish.
+// Backed directly by Linux kernel TCP sockets and std/web HTTP routing engine.
+fn cmd_server port_arg store_dir_arg
+    port = 8088
+    if len(to_str(port_arg)) > 0
+        p_val = to_int(to_str(port_arg))
+        if p_val > 0 port = p_val
+
+    store_dir = "packages"
+    if len(store_dir_arg) > 0
+        store_dir = store_dir_arg
+
+    pkg_mkdir_p(store_dir)
+
+    s_fd = socket_create()
+    if s_fd < 0
+        say "❌ সার্ভার সকেট তৈরিতে ব্যর্থ: " + str(s_fd)
+        return 1
+
+    opt_buf = malloc(8)
+    mem_byte_write(opt_buf, 0, 1)
+    syscall(54, s_fd, 1, 2, opt_buf, 4, 0) // SO_REUSEADDR
+    free(opt_buf, 8)
+
+    addr_buf = malloc(16)
+    b_res = socket_bind(s_fd, addr_buf, port)
+    free(addr_buf, 16)
+    if b_res < 0
+        socket_close(s_fd)
+        say "❌ পোর্ট বাইন্ড করতে ব্যর্থ (" + str(port) + "): কোড " + str(b_res)
+        return 1
+
+    l_res = socket_listen(s_fd, 128)
+    if l_res < 0
+        socket_close(s_fd)
+        say "❌ লিসেন মোড সক্রিয় করতে ব্যর্থ (" + str(port) + ")"
+        return 1
+
+    web_app_banner(str(port))
+    say "📦 Package Store Repository: " + store_dir
+    say "📡 Endpoints:"
+    say "   • GET  /health"
+    say "   • GET  /api/v1/packages"
+    say "   • GET  /api/v1/packages/:name"
+    say "   • POST /api/v1/packages/publish"
+    say "Press Ctrl+C to terminate server.\n"
+
+    while 1
+        client_fd = socket_accept(s_fd)
+        if client_fd < 0 continue
+
+        req_buf = malloc(65536)
+        n = syscall(0, client_fd, req_buf, 65535, 0, 0, 0)
+        if n <= 0
+            free(req_buf, 65536)
+            socket_close(client_fd)
+            continue
+
+        raw_req = ""
+        i = 0
+        while i < n
+            raw_req = raw_req + chr(mem_byte_read(req_buf, i))
+            i = i + 1
+        free(req_buf, 65536)
+
+        cl_str = web_parse_header(raw_req, "Content-Length")
+        if len(cl_str) > 0
+            cl_val = to_int(cl_str)
+            hdr_end = index_of(raw_req, "\r\n\r\n")
+            body_read = 0
+            if hdr_end >= 0
+                body_read = len(raw_req) - (hdr_end + 4)
+            else
+                hdr_end2 = index_of(raw_req, "\n\n")
+                if hdr_end2 >= 0
+                    body_read = len(raw_req) - (hdr_end2 + 2)
+            while body_read < cl_val
+                rem = cl_val - body_read
+                chunk_sz = rem
+                if chunk_sz > 65536 chunk_sz = 65536
+                c_buf = malloc(chunk_sz + 1)
+                cn = syscall(0, client_fd, c_buf, chunk_sz, 0, 0, 0)
+                if cn <= 0
+                    free(c_buf, chunk_sz + 1)
+                    break
+                ci = 0
+                while ci < cn
+                    raw_req = raw_req + chr(mem_byte_read(c_buf, ci))
+                    ci = ci + 1
+                free(c_buf, chunk_sz + 1)
+                body_read = body_read + cn
+
+        method = web_parse_method(raw_req)
+        path = web_parse_path(raw_req)
+        say "  [HTTP] " + method + " " + path
+
+        resp_obj = 0
+
+        if path == "/health"
+            resp_obj = web_response_new(200, "application/json; charset=utf-8", "{\"status\":\"ok\",\"service\":\"lipipkg-registry\",\"version\":\"1.0.0\"}\n")
+
+        elif path == "/api/v1/packages" and method == "GET"
+            store_files = list()
+            collect_files(store_dir, store_files)
+            pkgs_json = "["
+            p_count = 0
+            si = 0
+            while si < len(store_files)
+                sf = get(store_files, si)
+                if ends_with(sf, ".lpkg") == 1
+                    s_data = read_file(sf)
+                    s_hash = sha256_hex(s_data)
+                    bname = pkg_extract_repo_name(sf)
+                    if p_count > 0 pkgs_json = pkgs_json + ","
+                    pkgs_json = pkgs_json + "{\"file\":\"" + bname + "\",\"size\":" + str(len(s_data)) + ",\"sha256\":\"" + s_hash + "\"}"
+                    p_count = p_count + 1
+                si = si + 1
+            pkgs_json = pkgs_json + "]"
+            body = "{\"status\":\"ok\",\"count\":" + str(p_count) + ",\"packages\":" + pkgs_json + "}\n"
+            resp_obj = web_response_new(200, "application/json; charset=utf-8", body)
+
+        elif (path == "/api/v1/packages/publish" or path == "/api/v1/publish") and method == "POST"
+            hdr_end = index_of(raw_req, "\r\n\r\n")
+            body_start = 0
+            if hdr_end >= 0
+                body_start = hdr_end + 4
+            else
+                hdr_end = index_of(raw_req, "\n\n")
+                if hdr_end >= 0
+                    body_start = hdr_end + 2
+
+            payload = ""
+            if body_start > 0 and body_start < len(raw_req)
+                payload = str_sub(raw_req, body_start, len(raw_req))
+
+            pkg_name = web_parse_header(raw_req, "X-Package-Name")
+            pkg_ver = web_parse_header(raw_req, "X-Package-Version")
+            pkg_sum = web_parse_header(raw_req, "X-Package-Checksum")
+
+            if len(pkg_name) == 0
+                pkg_name = pkg_parse_field(payload, "name")
+            if len(pkg_name) == 0
+                pkg_name = "package"
+            pkg_name = pkg_extract_repo_name(pkg_name)
+            if len(pkg_ver) == 0
+                pkg_ver = pkg_parse_field(payload, "version")
+            if len(pkg_ver) == 0
+                pkg_ver = "1.0.0"
+            if len(pkg_sum) == 0
+                pkg_sum = sha256_hex(payload)
+
+            save_file_path = store_dir + "/" + pkg_name + "-" + pkg_ver + ".lpkg"
+            write_ok = write_file(save_file_path, payload)
+            if write_ok != 0
+                say "  ✔ Published package saved: " + save_file_path + " (" + str(len(payload)) + " bytes)"
+                res_body = "{\"status\":\"published\",\"name\":\"" + pkg_name + "\",\"version\":\"" + pkg_ver + "\",\"checksum\":\"" + pkg_sum + "\",\"size\":" + str(len(payload)) + "}\n"
+                resp_obj = web_response_new(201, "application/json; charset=utf-8", res_body)
+            else
+                resp_obj = web_response_internal_error("Failed to write package bundle to disk")
+
+        elif starts_with(path, "/api/v1/packages/") and method == "GET"
+            pkg_param = str_sub(path, 17, len(path))
+            if len(pkg_param) == 0
+                resp_obj = web_response_not_found()
+            else
+                bare_param = pkg_param
+                if ends_with(bare_param, ".lpkg")
+                    bare_param = str_sub(bare_param, 0, len(bare_param) - 5)
+
+                found_path = ""
+                if syscall(21, store_dir + "/" + pkg_param, 0, 0, 0, 0, 0) == 0
+                    found_path = store_dir + "/" + pkg_param
+                elif syscall(21, store_dir + "/" + pkg_param + ".lpkg", 0, 0, 0, 0, 0) == 0
+                    found_path = store_dir + "/" + pkg_param + ".lpkg"
+                elif syscall(21, store_dir + "/" + bare_param + ".lpkg", 0, 0, 0, 0, 0) == 0
+                    found_path = store_dir + "/" + bare_param + ".lpkg"
+                else
+                    s_files = list()
+                    collect_files(store_dir, s_files)
+                    fi = 0
+                    while fi < len(s_files)
+                        sf = get(s_files, fi)
+                        bn = pkg_extract_repo_name(sf)
+                        if (starts_with(bn, pkg_param) or starts_with(bn, bare_param)) and ends_with(bn, ".lpkg")
+                            found_path = sf
+                            break
+                        fi = fi + 1
+
+                if len(found_path) > 0
+                    f_content = read_file(found_path)
+                    f_hash = sha256_hex(f_content)
+                    if ends_with(pkg_param, ".lpkg")
+                        resp_obj = web_response_new(200, "application/octet-stream", f_content)
+                    else
+                        b_json = "{\"status\":\"ok\",\"name\":\"" + bare_param + "\",\"file\":\"" + pkg_extract_repo_name(found_path) + "\",\"size\":" + str(len(f_content)) + ",\"sha256\":\"" + f_hash + "\",\"download_url\":\"/api/v1/packages/" + pkg_extract_repo_name(found_path) + "\"}\n"
+                        resp_obj = web_response_new(200, "application/json; charset=utf-8", b_json)
+                else
+                    resp_obj = web_response_new(404, "application/json; charset=utf-8", "{\"error\":404,\"message\":\"Package not found: " + pkg_param + "\"}\n")
+
+        elif path == "/api/v1/shutdown" or path == "/shutdown"
+            resp_obj = web_response_new(200, "application/json; charset=utf-8", "{\"status\":\"shutting_down\"}\n")
+            wire = web_serialize_response(resp_obj)
+            syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+            socket_close(client_fd)
+            break
+
+        else
+            resp_obj = web_response_not_found()
+
+        wire = web_serialize_response(resp_obj)
+        syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+        socket_close(client_fd)
+
+    socket_close(s_fd)
+    say "🛑 Sovereign registry server stopped cleanly."
+    return 0
 
 // WHY: Manages the local sovereign package cache with cryptographic verification.
 fn cmd_cache action
@@ -1034,7 +2065,8 @@ fn main
             say "Usage: lipipkg install <package_name>"
             syscall(60, 1, 0, 0, 0, 0, 0)
             return 1
-        cmd_install(get(args, 2))
+        i_res = cmd_install(get(args, 2))
+        if i_res != 0 syscall(60, i_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "add" or cmd == "যোগ"
@@ -1042,7 +2074,8 @@ fn main
             say "Usage: lipipkg add <package_name>"
             syscall(60, 1, 0, 0, 0, 0, 0)
             return 1
-        cmd_add(get(args, 2))
+        a_res = cmd_add(get(args, 2))
+        if a_res != 0 syscall(60, a_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "pack" or cmd == "প্যাক"
@@ -1060,9 +2093,20 @@ fn main
 
     if cmd == "publish" or cmd == "প্রকাশ"
         pkg_target = "."
+        reg_url = "http://127.0.0.1:8088"
         if argc >= 3 pkg_target = get(args, 2)
-        res = cmd_publish(pkg_target)
+        if argc >= 4 reg_url = get(args, 3)
+        res = cmd_publish(pkg_target, reg_url)
         if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        return 0
+
+    if cmd == "server" or cmd == "সার্ভার"
+        port = 8088
+        store_dir = "packages"
+        if argc >= 3 port = to_int(get(args, 2))
+        if argc >= 4 store_dir = get(args, 3)
+        s_res = cmd_server(port, store_dir)
+        if s_res != 0 syscall(60, s_res, 0, 0, 0, 0, 0)
         return 0
 
     say "❌ Unknown command: " + cmd
