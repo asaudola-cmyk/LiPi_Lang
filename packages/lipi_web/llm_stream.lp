@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN AI LLM TOKEN STREAMING ADAPTER
-// Module: universe/web/llm_stream.lp
+// Module: packages/lipi_web/llm_stream.lp
 // Milestone: Sovereign Full-Stack Framework v2 (Real-Time LLM Token Streaming to Wire-Signals)
 // Version: 1.0.0 (Fixed)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies

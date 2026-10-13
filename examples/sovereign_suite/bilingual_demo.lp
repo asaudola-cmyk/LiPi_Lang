@@ -116,7 +116,7 @@ fn run_english_suite()
     else
         say "  ✘ Target not found in dataset"
 
-    // Cryptographic SHA-256 hash from universe/crypto/sha256
+    // Cryptographic SHA-256 hash from utso/crypto/sha256
     let payload = "Lipi-Enterprise-2026-Sovereign-Mesh"
     let sha_digest = crypto_sha256_hex(payload)
     say "  ✔ SHA-256 Digest for '" + payload + "':"

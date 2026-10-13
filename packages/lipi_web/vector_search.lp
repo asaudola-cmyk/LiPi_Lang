@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN EMBEDDED EDGE VECTOR SEARCH ENGINE
-// Module: universe/web/vector_search.lp
+// Module: packages/lipi_web/vector_search.lp
 // Milestone: Sovereign Full-Stack Horizon 10 (Replacing Pinecone, Milvus, and Cloud Vector APIs)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

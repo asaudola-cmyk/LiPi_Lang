@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN DISTRIBUTED CONSENSUS: PLANETARY BFT & P2P STORAGE ENGINE
-// Module: universe/net/bft_consensus.lp
+// Module: utso/net/bft_consensus.lp
 // Milestone: Supreme Sovereign Frontier E (0% AWS S3, 0% Centralized Cloud)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Cloud Dependencies

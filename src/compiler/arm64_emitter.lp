@@ -3190,16 +3190,17 @@ fn arm64_map_legacy_stdlib inc_name
     if inc_name == "utso/concurrency" or inc_name == "utso/concurrency.lp" return "utso/concurrency.lp"
     if inc_name == "utso/channel" or inc_name == "utso/channel.lp" return "utso/channel.lp"
 
-    // 2. Legacy 'universe/core/*' mapping to sovereign primitives:
-    if inc_name == "utso/memory" or inc_name == "utso/memory" return "utso/memory.lp"
-    if inc_name == "utso/io" or inc_name == "utso/io" return "utso/io.lp"
-    if inc_name == "utso/string" or inc_name == "utso/string" return "utso/string.lp"
+    // 2. Legacy 'universe/*' mapping to sovereign primitives:
+    if inc_name == "universe/core/memory.lp" or inc_name == "universe/core/memory" return "utso/memory.lp"
+    if inc_name == "universe/core/io.lp" or inc_name == "universe/core/io" return "utso/io.lp"
+    if inc_name == "universe/core/string.lp" or inc_name == "universe/core/string" return "utso/string.lp"
     if inc_name == "universe/core/unicode.lp" or inc_name == "universe/core/unicode" return "utso/unicode.lp"
-    if inc_name == "utso/math" or inc_name == "utso/math" return "utso/math.lp"
-    if inc_name == "universe/core/collections.lp" or inc_name == "utso/collections" return "utso/collections.lp"
-    if inc_name == "utso/syscalls" or inc_name == "utso/syscalls" return "utso/syscalls.lp"
-    if inc_name == "utso/crypto" or inc_name == "universe/crypto/crypto" return "utso/crypto.lp"
-    if inc_name == "utso/socket" or inc_name == "universe/net/socket" return "utso/socket.lp"
+    if inc_name == "universe/core/math.lp" or inc_name == "universe/core/math" return "utso/math.lp"
+    if inc_name == "universe/core/collections.lp" or inc_name == "universe/core/collections" return "utso/collections.lp"
+    if inc_name == "universe/os/syscalls.lp" or inc_name == "universe/os/syscalls" return "utso/syscalls.lp"
+    if inc_name == "universe/crypto/crypto.lp" or inc_name == "universe/crypto/crypto" return "utso/crypto.lp"
+    if inc_name == "universe/net/socket.lp" or inc_name == "universe/net/socket" return "utso/socket.lp"
+    if inc_name == "universe/os/kernel_multiboot.lp" or inc_name == "universe/os/kernel_multiboot" return "utso/os/kernel_multiboot.lp"
 
     // 3. Legacy 'std/*' standard aliases:
     if inc_name == "std/crypto.lp" or inc_name == "std/crypto" return "utso/crypto.lp"

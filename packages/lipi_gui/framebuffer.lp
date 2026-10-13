@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🖥️ লিপি ডিরেক্ট লিনাক্স ফ্রেমবাফার জিইউআই ইঞ্জিন (Lipi Linux Framebuffer GUI Engine)
-// Module: universe/gui/framebuffer.lp
+// Module: packages/lipi_gui/framebuffer.lp
 // Standard: Linux Framebuffer (/dev/fb0) & FBIOGET_VSCREENINFO / FSCREENINFO ABI
 // 100% Pure Lipi Implementation — 0% C | 0% Libc | 0% X11 | 0% Wayland | 0% GTK
 // ==============================================================================

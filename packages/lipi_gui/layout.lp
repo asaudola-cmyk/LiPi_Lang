@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — FLEXBOX LAYOUT ENGINE
-@! Module: universe/gui/layout.lp
+@! Module: packages/lipi_gui/layout.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Multi-pass Flexbox layout engine

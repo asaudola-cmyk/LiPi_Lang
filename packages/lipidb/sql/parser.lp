@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (universe/db/sql/parser.lp)
+@! LIPI UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (packages/lipidb/sql/parser.lp)
 @! Standard: 100% Pure LiPi SQL AST Parser
 @! ============================================================================
 

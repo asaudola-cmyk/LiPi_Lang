@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN NETWORKING: BARE-METAL VIRTIO-NET NETWORK CARD DRIVER
-// Module: universe/net/virtio_net.lp
+// Module: utso/net/virtio_net.lp
 // Milestone: Supreme Sovereign Frontier B (0% Linux Network Stack, 0% sk_buff)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Linux Dependencies

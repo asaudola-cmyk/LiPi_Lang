@@ -5,7 +5,7 @@
 ---
 
 ## ৬.১ সার্বভৌম SPIR-V জেনারেশন (Pure SPIR-V Binary Generation)
-লিপি কোনো GLSL কম্পাইলার বা বাহ্যিক সি বাইন্ডার (যেমন `glslangValidator`) ছাড়াই সরাসরি খাঁটি বাইনারি SPIR-V মেশিন বাইট তৈরি করতে সক্ষম (`universe/gpu/spirv_native.lp`)।
+লিপি কোনো GLSL কম্পাইলার বা বাহ্যিক সি বাইন্ডার (যেমন `glslangValidator`) ছাড়াই সরাসরি খাঁটি বাইনারি SPIR-V মেশিন বাইট তৈরি করতে সক্ষম (`packages/lipi_gpu/spirv_native.lp`)।
 - **ম্যাজিক নম্বর**: `0x07230203`
 - **ভার্সন ১.০**: `0x00010000`
 - **জেনারেটর আইডি**: `0x00140000` (Lipi Sovereign Generator)
@@ -31,7 +31,7 @@
 নিচে একটি সমান্তরাল ভেক্টর অ্যাডিশন জিপিইউ কম্পিউট কার্নেল তৈরি ও ডিস্কে রাইট করার পূর্ণাঙ্গ লিপি উদাহরণ:
 
 ```lipi
-include "universe/gpu/spirv_native.lp"
+include "packages/lipi_gpu/spirv_native.lp"
 
 fn main
     say "সার্বভৌম SPIR-V জিপিইউ মডিউল তৈরি হচ্ছে..."

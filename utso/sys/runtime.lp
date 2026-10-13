@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI SOVEREIGN PROCESS LIFECYCLE & CORE RUNTIME ENGINE (universe/sys/runtime.lp)
+@! LIPI SOVEREIGN PROCESS LIFECYCLE & CORE RUNTIME ENGINE (utso/sys/runtime.lp)
 @! 100% Written in Pure Lipi Language — Absolute Zero-Libc Independence
 @! Process Lifecycle, CRT0 _start Vectors, Signal Handlers, Panic Recovery
 @! ============================================================================
 
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/os/syscalls"
 
 @! ----------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI PACKAGE REGISTRY: SEMANTIC VERSIONING 2.0.0 ENGINE (universe/registry/semver.lp)
+// 👑 LIPI PACKAGE REGISTRY: SEMANTIC VERSIONING 2.0.0 ENGINE (packages/lipi_registry/semver.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | Full SemVer 2.0.0 Parsing, Comparison & Satisfaction
 // ==============================================================================
 

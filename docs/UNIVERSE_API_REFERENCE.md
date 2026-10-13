@@ -1,15 +1,15 @@
-# 👑 Lipi Universe Standard Library — Complete API Reference
+# 👑 Lipi Standard Library — Complete API Reference
 
 > **Version:** First 1.0.0 (প্রথম ১.০.০) — Sovereign  
 > **Architecture:** Direct Machine Code (x86_64, ARM64, WASM)  
 > **Zero-Libc / Zero-C / Zero-Python:** 100% Guaranteed Native Silicon  
 
-Welcome to the official, authoritative API reference for **Lipi Universe** (`universe/`).
+Welcome to the official, authoritative API reference for **Lipi Standard Library** (`utso/` & `packages/`).
 Lipi is an autonomous, bilingual, high-performance systems and application language
 designed from scratch without reliance on GCC, LLVM, Clang, POSIX libc, or external runtimes.
 
-The **Universe** standard library consolidates over 280 modules and 73,000 lines of pure machine-code
-algorithms across 14 canonical domains, unified by Directed Acyclic Graph (DAG) layering.
+The **Lipi Standard Library** consolidates pure machine-code algorithms into `utso/` Genesis Primitives
+and `packages/` Sovereign Packages across 14 canonical domains, unified by Directed Acyclic Graph (DAG) layering.
 
 ---
 
@@ -24,7 +24,7 @@ algorithms across 14 canonical domains, unified by Directed Acyclic Graph (DAG) 
 7. [Domain 7: FIPS Cryptography, True Kernel Entropy & TLS 1.3](#7-fips-cryptography-true-kernel-entropy--tls-13)
 8. [Domain 8: Direct Hardware Framebuffer GUI & 2D Rasterizer](#8-direct-hardware-framebuffer-gui--2d-rasterizer)
 9. [Domain 9: Operating System, Syscalls & Bare-Metal Unikernel](#9-operating-system-syscalls--bare-metal-unikernel)
-10. [Domain 10: Sovereign Package Management (LipiPkg 1.0)](#10-sovereign-package-management-lipipkg-10)
+10. [Domain 10: Sovereign Package Management (LipiPkg / LPM)](#10-sovereign-package-management-lipipkg--lpm)
 11. [Domain 11: Direct GPU SPIR-V Compute & Shader Compiler](#11-direct-gpu-spir-v-compute--shader-compiler)
 12. [Domain 12: Silicon CPU Hardware Acceleration & SIMD (AVX2 / AVX-512)](#12-silicon-cpu-hardware-acceleration--simd-avx2--avx-512)
 13. [Domain 13: Autonomous Mobile Android DEX Synthesis](#13-autonomous-mobile-android-dex-synthesis)
@@ -35,7 +35,7 @@ algorithms across 14 canonical domains, unified by Directed Acyclic Graph (DAG) 
 
 ## 1. Grand Prelude & Unified Umbrella Gateways
 
-The Lipi standard library provides 7 domain umbrella gateways at `universe/*.lp`.
+The Lipi standard library provides Genesis Primitives under `utso/` and Sovereign Packages under `packages/`.
 Instead of manually remembering hundreds of deep internal submodule paths, developers can
 import domain gateways directly:
 
@@ -91,7 +91,7 @@ Lipi never relies on C malloc/free or POSIX sbrk.
 - `float_from_str(s) -> f64`: Pure software IEEE-754 decimal parser.
 - `str_split(s, sep) -> array`: High-speed string splitter.
 
-### Module: `universe/core/json_fast.lp`
+### Module: `utso/core/json_fast.lp`
 - `fast_json_parse(json_str) -> doc`: Zero-copy linear-time JSON deserializer.
 - `fast_json_get(doc, obj_idx, key) -> node_idx`: Fast key lookup.
 - `fast_json_get_str(doc, node_idx) -> string`: Extracts unescaped string payload.
@@ -102,7 +102,7 @@ Lipi never relies on C malloc/free or POSIX sbrk.
 
 100% native asynchronous HTTP/1.1 and HTTP/2 engine with zero external dependencies.
 
-### Module: `universe/web.lp` & `universe/web/engine.lp`
+### Module: `packages/lipi_web/web.lp` & `packages/lipi_web/engine.lp`
 - `web_app_create() -> WebApp`: Constructs an asynchronous HTTP web application.
 - `web_route(app, method, path, handler_fn) -> i64`: Registers high-speed router endpoints with exact and wildcard prefix support.
 - `web_listen_and_serve(app, port) -> i64`: Binds non-blocking TCP socket and processes connections via Linux epoll reactor.
@@ -111,7 +111,7 @@ Lipi never relies on C malloc/free or POSIX sbrk.
 - `http_response_not_found() -> string`: Packages `404 Not Found` response.
 
 ```lipi
-import "universe/web"
+import "packages/lipi_web/web"
 
 app = web_app_create()
 web_route(app, "GET", "/api/health", @fn(req) return http_response_json("{\"status\":\"ok\"}") @end)
@@ -123,7 +123,7 @@ web_listen_and_serve(app, 8080)
 Autonomous embedded transactional database engine combining disk B+Tree indexing,
 LRU Buffer Pool page cache, and Write-Ahead Logging (WAL).
 
-### Module: `universe/db.lp` & `universe/db/engine.lp`
+### Module: `packages/lipidb/db.lp` & `packages/lipidb/engine.lp`
 - `lipi_db_open(path, frame_capacity) -> Database`: Opens or initializes ACID database.
 - `db_put(db, key, value) -> i64`: Atomically writes entry to WAL, syncs to disk, and updates memory B+Tree.
 - `db_get(db, key) -> string`: Queries value by key through B+Tree and Page Cache.
@@ -131,7 +131,7 @@ LRU Buffer Pool page cache, and Write-Ahead Logging (WAL).
 - `db_checkpoint(db) -> i64`: Flushes dirty buffer frames to disk and safely truncates WAL.
 - `db_close(db) -> i64`: Syncs pages, closes file descriptors, and releases resources.
 
-### Module: `universe/db/kv.lp` (In-Memory Key-Value Store)
+### Module: `packages/lipidb/kv.lp` (In-Memory Key-Value Store)
 - `KV_create(bucket_count) -> KV`: Instantiates lock-free in-memory key-value dictionary.
 - `KV_set(kv, key, val) -> i64`: Stores key-value mapping.
 - `KV_get(kv, key) -> string`: Retrieves value.
@@ -142,14 +142,14 @@ LRU Buffer Pool page cache, and Write-Ahead Logging (WAL).
 Direct machine code vector arithmetic, SIMD GEMM matrix multiplication,
 activation functions, and native GGUF LLM weight ingestion.
 
-### Module: `universe/ai.lp` & `universe/ai/tensor_engine.lp`
+### Module: `packages/lipi_ai/ai.lp` & `packages/lipi_ai/tensor_engine.lp`
 - `tensor_new(rows, cols) -> Tensor`: Allocates 2D tensor in aligned memory.
 - `tensor_matmul(A, B) -> Tensor`: Computes General Matrix Multiplication (GEMM) via AVX2 / AVX-512 register tiling.
 - `tensor_dot(v1, v2, len) -> i64`: Computes vector dot product in single-instruction SIMD.
 - `tensor_relu(t) -> Tensor`: In-place Rectified Linear Unit activation.
 - `tensor_sigmoid(t) -> Tensor`: Pure software polynomial Sigmoid transformation.
 
-### Module: `universe/ai/gguf.lp`
+### Module: `packages/lipi_ai/gguf.lp`
 - `gguf_open(path) -> GgufModel`: Ingests binary GGUF LLM model headers and tensor metadata.
 - `gguf_get_tensor(model, name) -> TensorRef`: Direct zero-copy memory mapped tensor slice.
 
@@ -157,7 +157,7 @@ activation functions, and native GGUF LLM weight ingestion.
 
 Raw Linux Berkeley Socket abstraction with direct Linux AMD64 syscall dispatching.
 
-### Module: `universe/net.lp` & `universe/net/socket.lp`
+### Module: `utso/net.lp` & `utso/socket.lp`
 - `socket_tcp() -> fd`: Creates raw `AF_INET (2)`, `SOCK_STREAM (1)` socket.
 - `socket_bind(fd, port) -> i64`: Binds network interface without libc `sockaddr_in` overhead.
 - `socket_listen(fd, backlog) -> i64`: Places socket into passive listening state.
@@ -172,14 +172,14 @@ Raw Linux Berkeley Socket abstraction with direct Linux AMD64 syscall dispatchin
 
 FIPS 180-4 compliant cryptographic suite with zero OpenSSL or external C dependencies.
 
-### Module: `universe/crypto.lp` & `universe/crypto/sha256.lp`
+### Module: `utso/crypto.lp` & `utso/crypto/sha256.lp`
 - `lipi_sha256(s) -> string`: Computes deterministic 64-character hex SHA-256 digest.
 - `sha256_init() -> Sha256Context`: Initializes streaming hashing state.
 - `sha256_update(ctx, data) -> Sha256Context`: Feeds arbitrary byte streams or strings.
 - `sha256_final(ctx) -> array`: Finalizes block padding and returns 32 raw digest bytes.
 - `crypto_random_bytes(count) -> array`: Gathers true cryptographic entropy directly from Linux `SYS_getrandom (318)`.
 
-### Module: `universe/crypto/advanced.lp` (NIST SP 800-38D)
+### Module: `utso/crypto/advanced.lp` (NIST SP 800-38D)
 - `aes_gcm_encrypt(key, iv, plaintext, aad) -> CipherResult`: Authenticated AES-GCM encryption with 128-bit GHASH authentication tag.
 - `aes_gcm_decrypt(key, iv, ciphertext, tag, aad) -> PlainResult`: Constant-time authentication tag verification and decryption.
 
@@ -188,7 +188,7 @@ FIPS 180-4 compliant cryptographic suite with zero OpenSSL or external C depende
 Renders graphics directly onto Linux hardware `/dev/fb0` or virtual double-buffered memory.
 Zero X11, Zero Wayland, Zero GPU driver dependencies.
 
-### Module: `universe/gui.lp` & `universe/gui/framebuffer.lp`
+### Module: `packages/lipi_gui/gui.lp` & `packages/lipi_gui/framebuffer.lp`
 - `lipi_gui_open(width, height) -> LipiFramebuffer`: Queries hardware screen info via `SYS_ioctl (16)` and establishes double-buffered backbuffer.
 - `fb_draw_pixel(fb, x, y, color) -> i64`: Draws 32-bit ARGB pixel at dynamic stride offset.
 - `fb_read_pixel(fb, x, y) -> i64`: Inspects color value of backbuffer pixel.
@@ -203,7 +203,7 @@ Zero X11, Zero Wayland, Zero GPU driver dependencies.
 
 Bare-metal Ring-0 execution and raw Linux kernel ABI bindings.
 
-### Module: `universe/os/syscalls.lp`
+### Module: `utso/syscalls.lp` (utso/os/syscalls.lp)
 - `sys_open(path, flags, mode) -> fd`: Linux SYS_open (syscall 2).
 - `sys_close(fd) -> i64`: Linux SYS_close (syscall 3).
 - `sys_read(fd, buf, count) -> i64`: Linux SYS_read (syscall 0).
@@ -212,16 +212,16 @@ Bare-metal Ring-0 execution and raw Linux kernel ABI bindings.
 - `sys_munmap(addr, len) -> i64`: Linux SYS_munmap (syscall 11).
 - `sys_exit(code)`: Terminates process via Linux SYS_exit (syscall 60).
 
-### Module: `universe/os/kernel_multiboot.lp`
+### Module: `utso/os/kernel_multiboot.lp`
 - `kernel_synthesize_multiboot2_image(output_bin)`: Generates raw x86_64 Multiboot2 bootable ELF image with VGA 0xB8000 and COM1 UART 0x3F8 drivers for QEMU bare-metal boot.
 
-## 10. Sovereign Package Management (LipiPkg 1.0)
+## 10. Sovereign Package Management (LipiPkg / LPM)
 
 Deterministic package management with SHA-256 cryptographically locked dependency trees.
-- `lipipkg init` (or `lipi pkg init`): Initializes a pristine `lipipkg.toml` project manifest.
-- `lipipkg add <pkg>` (or `lipi pkg add <pkg>`): Registers package dependency and updates manifest.
-- `lipipkg install` (or `lipi pkg install`): Resolves Directed Acyclic Graph (DAG) and generates bit-for-bit reproducible `lipipkg.lock`.
-- `lipipkg verify` (or `lipi pkg verify`): Validates hash integrity of all installed artifacts against lockfile.
+- `lipi-pkg init`: Initializes a pristine `lipipkg.toml` project manifest.
+- `lipi-pkg add <pkg>`: Registers package dependency and updates manifest.
+- `lipi-pkg install`: Resolves Directed Acyclic Graph (DAG) and generates bit-for-bit reproducible lockfile.
+- `lipi-pkg verify`: Validates hash integrity of all installed artifacts against lockfile.
 
 ---
 

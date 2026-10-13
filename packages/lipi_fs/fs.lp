@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE FS — GRAND UMBRELLA PRELUDE (universe/fs.lp)
+// 👑 LIPI UNIVERSE FS — GRAND UMBRELLA PRELUDE (packages/lipi_fs/fs.lp)
 // ⚡ Sovereign In-Memory Virtual File System (LipiFS)
 // ==============================================================================
 import "packages/lipi_fs/lipifs"

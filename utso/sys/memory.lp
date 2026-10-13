@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI FREESTANDING VIRTUAL MEMORY SUBSYSTEM (universe/sys/memory.lp)
+@! LIPI FREESTANDING VIRTUAL MEMORY SUBSYSTEM (utso/sys/memory.lp)
 @! 100% Written in Pure Lipi Language — Complete Independence from libc malloc/free
 @! Direct Kernel MMAP, MUNMAP, MPROTECT, BRK Memory Primitives
 @! ============================================================================
 
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/os/syscalls"
 
 @! ----------------------------------------------------------------------------

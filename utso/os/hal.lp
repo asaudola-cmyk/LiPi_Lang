@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE OS — HARDWARE ABSTRACTION LAYER (HAL) (universe/os/hal)
+@! LIPI UNIVERSE OS — HARDWARE ABSTRACTION LAYER (HAL) (utso/os/hal)
 @! 100% Written in Pure Lipi Language — Authentic Linux Hardware Introspection
 @! Zero Mocks / No Fake CPUID Stubs
 @! ============================================================================

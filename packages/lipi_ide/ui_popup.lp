@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — UI POPUP & TOOLTIP OVERLAY RENDERING
-@! Module: universe/ide/ui_popup.lp
+@! Module: packages/lipi_ide/ui_popup.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

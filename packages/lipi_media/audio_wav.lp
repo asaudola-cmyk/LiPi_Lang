@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI UNIVERSE MEDIA: SOVEREIGN RIFF/WAVE PCM AUDIO ENGINE
-// File: universe/media/audio_wav.lp
+// File: packages/lipi_media/audio_wav.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | 0% C | 0% FFmpeg | 0% Libsndfile
 // ==============================================================================
 //

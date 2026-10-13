@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI CRYPTOGRAPHY ENGINE: MASTER UNIFIED CRYPTO FACADE (universe/crypto/crypto.lp)
+// 👑 LIPI CRYPTOGRAPHY ENGINE: MASTER UNIFIED CRYPTO FACADE (utso/crypto/crypto.lp)
 // ⚡ 100% Sovereign NIST FIPS 180-4 Engine | Hardware CPU Entropy | Zero Libc
 // ==============================================================================
 

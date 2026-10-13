@@ -243,7 +243,6 @@ fn compiler_driver_is_lipi_dir dir
     if len(dir) == 0 return 0
     if file_exists(dir + "/utso/memory.lp") == 1 return 1
     if file_exists(dir + "/utso/core/memory.lp") == 1 return 1
-    if file_exists(dir + "/universe/core/memory.lp") == 1 return 1
     return 0
 
 fn compiler_driver_get_lipi_root

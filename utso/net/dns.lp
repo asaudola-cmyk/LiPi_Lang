@@ -11,7 +11,7 @@
 
 @! ============================================================================
 @! LIPI UNIVERSE NETWORKING: DNS PROTOCOL & WIRE RESOLVER
-@! Module: universe/net/dns
+@! Module: utso/net/dns
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: DNS Wire Format, Label Compression/Decompression, Record Parser
 @! ============================================================================

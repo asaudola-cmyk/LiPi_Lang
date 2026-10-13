@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN GRAPHICS: DIRECT FRAMEBUFFER & DRM KMS (universe/gui/fbdev.lp)
+// 👑 LIPI SOVEREIGN GRAPHICS: DIRECT FRAMEBUFFER & DRM KMS (packages/lipi_gui/fbdev.lp)
 // Standard: Linux Framebuffer (/dev/fb0) & FBIOGET_VSCREENINFO / FSCREENINFO ABI
 // 100% Pure Lipi Implementation — Zero C | Zero Libc | Zero X11 | Zero Wayland
 // ==============================================================================

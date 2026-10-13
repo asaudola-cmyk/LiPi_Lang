@@ -1,12 +1,12 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE GUI — GRAND UMBRELLA PRELUDE (universe/gui.lp)
+// 👑 LIPI UNIVERSE GUI — GRAND UMBRELLA PRELUDE (packages/lipi_gui/gui.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero X11 | Zero Wayland
 // ==============================================================================
 //
 // WHY: Provides a unified gateway for all graphical rendering, windowing,
 // 2D primitives, and terminal user interfaces (TUI) in pure Lipi.
 // Developers can simply write:
-//     import "universe/gui"
+//     import "packages/lipi_gui/gui"
 // to access direct Linux /dev/fb0 hardware framebuffer rendering, Bresenham canvas,
 // desktop windows, buttons, and ANSI curses-like terminal interfaces.
 // ==============================================================================

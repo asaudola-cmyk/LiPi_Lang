@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN CRYPTOGRAPHIC PACKAGE HUB & LOCKFILE ENGINE
-// ⚡ Module: universe/pkg/lipipkg_hub.lp
+// ⚡ Module: packages/lipi_registry/lipipkg_hub.lp
 // ⚡ 100% Pure Lipi | Zero Libc / Zero C / Zero Python / Zero Cargo / Zero npm
 // ==============================================================================
 //

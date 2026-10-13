@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — MASTER LIPI STUDIO APPLICATION
-@! Module: universe/ide/studio.lp
+@! Module: packages/lipi_ide/studio.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Multi-Pane TUI/GUI Layout, Integrated Editor, Real-Time Console,

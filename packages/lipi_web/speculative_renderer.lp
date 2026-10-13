@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN ANTICIPATORY SPECULATIVE PRE-RENDERER
-// Module: universe/web/speculative_renderer.lp
+// Module: packages/lipi_web/speculative_renderer.lp
 // Milestone: Sovereign Full-Stack Horizon 11 (Replacing Next.js Link Prefetch & Zero-Click Latency)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

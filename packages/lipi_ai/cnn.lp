@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI: CONVOLUTIONAL NEURAL NETWORK LAYERS
-@! Module: universe/ai/cnn
+@! Module: packages/lipi_ai/cnn
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 

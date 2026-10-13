@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI DIRECT SILICON GPU DRM & COMPUTE DRIVER (universe/gpu/drm.lp)
+// 👑 LIPI DIRECT SILICON GPU DRM & COMPUTE DRIVER (packages/lipi_gpu/drm.lp)
 // Standard: Linux Direct Rendering Manager (DRM) & Kernel Mode Setting (KMS)
 // 100% Pure Lipi Implementation — Zero C | Zero Libc | Zero libdrm | Zero Vulkan SDK
 // ==============================================================================

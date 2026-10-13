@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — SYNTAX HIGHLIGHTING ENGINE & THEME PALETTE
-@! Module: universe/ide/syntax.lp
+@! Module: packages/lipi_ide/syntax.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

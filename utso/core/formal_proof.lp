@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN VERIFICATION: MATHEMATICAL FORMAL PROOF ENGINE
-// Module: universe/core/formal_proof.lp
+// Module: utso/core/formal_proof.lp
 // Milestone: Supreme Sovereign Frontier D (Formal Verification & Zero-Bug Proofs)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Python Dependencies

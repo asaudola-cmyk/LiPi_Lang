@@ -15,7 +15,7 @@
 
 @! ============================================================================
 @! LIPI UNIVERSE NETWORKING: HPACK HEADER COMPRESSION (RFC 7541)
-@! Module: universe/net/http2/hpack
+@! Module: utso/net/http2/hpack
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Integer Encoding/Decoding with Prefix Bits, Static Header Table, Zero Synthetic Comments
 @! ============================================================================

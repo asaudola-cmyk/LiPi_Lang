@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — NETWORKING
-@! Module: universe/net/p2p_gossip.lp
+@! Module: utso/net/p2p_gossip.lp
 @! Features: Epidemic Gossip Protocol for Decentralized P2P Networks
 @! ============================================================================
 
@@ -96,6 +96,6 @@ import "utso/net/udp"
 
 @! Stub for UDP sending
 @fn _send_gossip_udp(target: string, msg_id: string, sender: string, payload: string, ttl: i64) -> i64
-  @! Implementation would serialize to bytes and use universe/net/udp
+  @! Implementation would serialize to bytes and use utso/net/udp
   return 1
 @end

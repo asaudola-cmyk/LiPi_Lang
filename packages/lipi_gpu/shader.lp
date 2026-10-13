@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI GPU SHADER COMPILER & SPIR-V EMISSION (universe/gpu/shader.lp)
+@! LIPI GPU SHADER COMPILER & SPIR-V EMISSION (packages/lipi_gpu/shader.lp)
 @! 100% Pure Lipi Implementation — Zero External Compiler / C++ Dependencies
 @! Supports Vertex, Fragment, and Compute Stage SPIR-V Generation
 @! ============================================================================

@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SWARM: AUTONOMOUS P2P SWARM & LipRPC PROTOCOL (universe/swarm/liprpc.lp)
+// 👑 LIPI SWARM: AUTONOMOUS P2P SWARM & LipRPC PROTOCOL (packages/lipi_swarm/liprpc.lp)
 // ⚡ 100% Pure Native Lipi Language | 16-Byte Header | Work-Stealing Scheduler
 // Zero External C | Zero Libc | Zero Dependencies
 // ==============================================================================

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN WEBRTC REAL-TIME DATACHANNEL MESH & SIGNALING
-// Module: universe/web/webrtc_mesh.lp
+// Module: packages/lipi_web/webrtc_mesh.lp
 // Milestone: Sovereign Full-Stack Horizon 9 (Replacing Centralized Media Relays & Twilio)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

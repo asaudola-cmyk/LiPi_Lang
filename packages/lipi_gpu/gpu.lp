@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE GPU — GRAND UMBRELLA PRELUDE (universe/gpu.lp)
+// 👑 LIPI UNIVERSE GPU — GRAND UMBRELLA PRELUDE (packages/lipi_gpu/gpu.lp)
 // ⚡ Compute Shaders, SPIR-V Native Lowering, Direct DRM/KMS Dumb-Buffers
 // ==============================================================================
 import "packages/lipi_gpu/compute"

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI TEST ORACLE — The Sovereign Testing Framework (universe/tools/lipi_test.lp)
+@! LIPI TEST ORACLE — The Sovereign Testing Framework (utso/tools/lipi_test.lp)
 @! 100% Written in Pure Lipi Language — Zero Foreign Code / Zero C / Zero Python
 @! Operating System: Linux x86-64 Native Syscall Process Isolation
 @! ============================================================================

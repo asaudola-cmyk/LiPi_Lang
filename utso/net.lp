@@ -1,12 +1,12 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE NET — GRAND UMBRELLA PRELUDE (universe/net.lp)
+// 👑 LIPI UNIVERSE NET — GRAND UMBRELLA PRELUDE (utso/net.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero C | Zero External Tools
 // ==============================================================================
 //
 // WHY: Provides a unified gateway for all networking, socket protocols,
 // encryption, and asynchronous I/O engines in pure Lipi.
 // Developers can simply write:
-//     import "universe/net"
+//     import "utso/net"
 // to access raw POSIX sockets, HTTP/1.1 & HTTP/2, RFC 6455 WebSockets,
 // TLS 1.3 cryptographic transport, and Linux io_uring zero-syscall ring buffers.
 // ==============================================================================

@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE CORE: LOCK-FREE RING-BUFFER CHANNEL (universe/core/channel.lp)
+// 👑 LIPI UNIVERSE CORE: LOCK-FREE RING-BUFFER CHANNEL (utso/core/channel.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | High-Throughput Inter-Fiber Communication
 //
 // WHY: In modern high-concurrency systems (competing with Go channels), thread synchronization

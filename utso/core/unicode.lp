@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE — Canonical Unicode & Bengali Rune Engine (universe/core/unicode.lp)
+// 👑 LIPI UNIVERSE — Canonical Unicode & Bengali Rune Engine (utso/core/unicode.lp)
 // ⚡ 100% Pure Lipi | Zero External Dependencies (0% C / 0% Libc / 0% ICU)
 // 🏛️ Version: First 1.0.0 (প্রথম ১.০.০) — Sovereign
 //

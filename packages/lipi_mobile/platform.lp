@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI MOBILE PLATFORM ABSTRACTION (universe/mobile/platform.lp)
+@! LIPI MOBILE PLATFORM ABSTRACTION (packages/lipi_mobile/platform.lp)
 @! 100% Pure Lipi Implementation — Zero Native C/Java Framework Dependencies
 @! Supports Orientation, Touch Event Queue, Safe Area, Status, & JNI Generator
 @! ============================================================================

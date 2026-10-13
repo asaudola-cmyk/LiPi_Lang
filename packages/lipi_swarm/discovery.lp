@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — P2P DISCOVERY & CLUSTER FORMATION (universe/swarm/discovery.lp)
+@! LIPI SWARM — P2P DISCOVERY & CLUSTER FORMATION (packages/lipi_swarm/discovery.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! UDP Broadcast Beacons (SO_REUSEPORT), TCP Gossip, Heartbeat & Failure Detector
 @! ============================================================================

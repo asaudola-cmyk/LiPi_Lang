@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — REVERSE-MODE AUTOMATIC DIFFERENTIATION ENGINE (universe/ai/autograd.lp)
+@! LIPI UNIVERSE AI — REVERSE-MODE AUTOMATIC DIFFERENTIATION ENGINE (packages/lipi_ai/autograd.lp)
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Computation DAG, Topological Sorting, Gradient Accumulation,
 @! Backward Propagators for all Ops, Gradient Unbroadcasting, Activations,

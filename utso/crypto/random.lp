@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI CRYPTOGRAPHY ENGINE: HARDWARE ENTROPY & CSPRNG (universe/crypto/random.lp)
+// 👑 LIPI CRYPTOGRAPHY ENGINE: HARDWARE ENTROPY & CSPRNG (utso/crypto/random.lp)
 // ⚡ 100% Sovereign NIST SP 800-90A/B Architecture | SYS_getrandom (318) | RDTSC
 // ==============================================================================
 

@@ -1,6 +1,6 @@
 // ==============================================================================
 // ⚡ লিপি কার্নেল-বাইপাস জিরো-সিসকল রিং বাফার (Lipi io_uring Ring Buffer Engine)
-// Module: universe/net/io_uring_ring.lp
+// Module: utso/net/io_uring_ring.lp
 // Standard: Linux io_uring Kernel Submission & Completion Ring Buffer Architecture
 // 100% Pure Lipi Implementation — 0% C | 0% Libc | 0% External Libraries
 // ==============================================================================

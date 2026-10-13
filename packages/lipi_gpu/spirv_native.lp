@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN NATIVE SILICON GPU COMPUTE & SPIR-V EMITTER
-// ⚡ Module: universe/gpu/spirv_native.lp
+// ⚡ Module: packages/lipi_gpu/spirv_native.lp
 // ⚡ 100% Pure Lipi | Zero C / Zero Vulkan SDK / Zero LLVM | Direct Khronos SPIR-V Binary
 // ==============================================================================
 //

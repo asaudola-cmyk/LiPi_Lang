@@ -1,12 +1,12 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE AI — GRAND UMBRELLA PRELUDE (universe/ai.lp)
+// 👑 LIPI UNIVERSE AI — GRAND UMBRELLA PRELUDE (packages/lipi_ai/ai.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero Python | Zero PyTorch
 // ==============================================================================
 //
 // WHY: Provides a unified gateway for all AI, Machine Learning, Tensor Math,
 // and Neural Network operations in pure Lipi.
 // Developers can simply write:
-//     import "universe/ai"
+//     import "packages/lipi_ai/ai"
 // to access N-dimensional tensors, reverse-mode autograd, GGUF model parsing,
 // AVX-512 GEMM matrix math, and LLM transformer inference.
 // ==============================================================================

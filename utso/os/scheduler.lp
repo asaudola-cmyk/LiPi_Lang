@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI COROUTINE & TASK SCHEDULER — universe/os/scheduler.lp
+@! LIPI COROUTINE & TASK SCHEDULER — utso/os/scheduler.lp
 @! 100% Pure Lipi Implementation — Zero C / Libc Dependencies
 @! Features: TCB, x86-64 Context Save, Round-Robin & 3-Tier MLFQ Scheduler
 @! ============================================================================

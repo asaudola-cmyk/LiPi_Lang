@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIFIED IO_URING ASYNC EVENT REACTOR (universe/io/reactor.lp)
+// 👑 LIPI UNIFIED IO_URING ASYNC EVENT REACTOR (utso/io/reactor.lp)
 // Standard: Linux io_uring (Syscalls 425, 426, 427) High-Volume Reactor Engine
 // 100% Pure Lipi Implementation — Zero Libc | Zero C | Zero Node.js Event Loop
 // ==============================================================================

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI UNIVERSE NET: SOVEREIGN RFC 1035 PURE DNS CLIENT & PROTOCOL ENCODER
-// File: universe/net/dns_client.lp
+// File: utso/net/dns_client.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | 0% Libc | 0% getaddrinfo | 0% Foreign Resolvers
 // ==============================================================================
 //

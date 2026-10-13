@@ -1,6 +1,6 @@
 @! ============================================================================
 @! 👑 LIPI UNIVERSAL ARCHITECTURE — LIPIPKG PACKAGE MANAGER CLI
-@! Module: universe/pkg/lipipkg_cli.lp
+@! Module: packages/lipi_registry/lipipkg_cli.lp
 @! Milestone: 100% Sovereign Lipi Package Ecosystem
 @! 100% Pure Lipi Implementation — Zero External / C / Python Dependencies
 @! Features: TOML/JSON Manifests, SemVer 2.0.0 Resolver, Deterministic Lockfile,

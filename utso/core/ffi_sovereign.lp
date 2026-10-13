@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN IN-MEMORY ELF FFI BRIDGE (universe/core/ffi_sovereign.lp)
+// 👑 LIPI SOVEREIGN IN-MEMORY ELF FFI BRIDGE (utso/core/ffi_sovereign.lp)
 // ⚡ 100% Pure Lipi | Zero dlopen / Zero Libc | Direct System V AMD64 ABI Invoker
 // ==============================================================================
 //

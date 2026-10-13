@@ -1,6 +1,6 @@
 // ==============================================================================
 // 💾 LIPI SOVEREIGN REDIS PROTOCOL ENGINE (RESP 2 / RESP 3)
-// Module: universe/db/redis_protocol.lp
+// Module: packages/lipidb/redis_protocol.lp
 // Standard: Redis Serialization Protocol Specification (RFC compliant)
 // 100% Pure Lipi Implementation — Zero Libc | Zero External Dependencies
 // ==============================================================================

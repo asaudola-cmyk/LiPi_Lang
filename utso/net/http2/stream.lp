@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE NETWORKING: HTTP/2 STREAM STATE MACHINE
-@! Module: universe/net/http2/stream
+@! Module: utso/net/http2/stream
 @! 100% Pure Lipi Implementation — RFC 7540
 @! ============================================================================
 

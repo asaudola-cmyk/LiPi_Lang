@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE NET - PURE LIPI UDP SOCKET STACK (universe/net/udp.lp)
+@! LIPI UNIVERSE NET - PURE LIPI UDP SOCKET STACK (utso/net/udp.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Complete Linux x86-64 BSD Sockets Datagram & Broadcast Implementation
 @! ============================================================================

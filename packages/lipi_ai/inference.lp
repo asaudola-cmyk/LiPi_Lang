@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI: FAST INFERENCE ENGINE
-@! Module: universe/ai/inference
+@! Module: packages/lipi_ai/inference
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 

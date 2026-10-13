@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI DECLARATIVE REACTIVE UI ENGINE (universe/gui/ui_declarative.lp)
+// 👑 LIPI DECLARATIVE REACTIVE UI ENGINE (packages/lipi_gui/ui_declarative.lp)
 // ⚡ 100% Pure Lipi | 0% HTML | 0% CSS | 0% JavaScript | Zero Web Dependencies
 // ==============================================================================
 //

@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI FREESTANDING CORE RUNTIME SUBSYSTEM (universe/sys/sys.lp)
+@! LIPI FREESTANDING CORE RUNTIME SUBSYSTEM (utso/sys/sys.lp)
 @! 100% Written in Pure Lipi Language — Absolute Zero-Libc Independence
-@! Domain: universe/sys (Freestanding Core Runtime Engineer)
+@! Domain: utso/sys (Freestanding Core Runtime Engineer)
 @! ============================================================================
 
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/os/syscalls"
 import "utso/sys/runtime"
 import "utso/sys/memory"

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - TIMESERIES ENGINE (universe/db/timeseries.lp)
+@! LIPI UNIVERSE DB - TIMESERIES ENGINE (packages/lipidb/timeseries.lp)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

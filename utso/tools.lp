@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE TOOLS — GRAND UMBRELLA PRELUDE (universe/tools.lp)
+// 👑 LIPI UNIVERSE TOOLS — GRAND UMBRELLA PRELUDE (utso/tools.lp)
 // ⚡ Interactive REPL, Debugger, Profiler, and Test Framework
 // ==============================================================================
 import "utso/tools/cli"

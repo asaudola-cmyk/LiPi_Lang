@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN MONADIC RESULT (universe/core/result.lp)
+// 👑 LIPI SOVEREIGN MONADIC RESULT (utso/core/result.lp)
 // ⚡ 100% Pure Direct Silicon Machine Code | 0% C | 0% Libc | 0% External Helpers
 //    Zero-overhead monadic Result container for typed failure handling without
 //    stack unwinding or runtime penalty. 100% Safe for Bare-Metal Ring-0.

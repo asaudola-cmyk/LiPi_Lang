@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (universe/ai/tensor.lp)
+@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (packages/lipi_ai/tensor.lp)
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Strided Memory Views, Reshaping, Transposition, Permutation,
 @! Slicing, Multidirectional Broadcasting, 2D/Batched GEMM, Reductions,
@@ -9,7 +9,7 @@
 import "utso/math"
 import "utso/collections"
 import "utso/string"
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/syscalls"
 import "packages/lipi_ai/simd_gemm"
 

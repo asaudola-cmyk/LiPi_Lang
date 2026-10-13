@@ -1,6 +1,6 @@
 @! ============================================================================
 @! PURE LIPI CRYPTOGRAPHIC STANDARD: RFC 7748 X25519 KEY EXCHANGE
-@! Module: universe/crypto/x25519
+@! Module: utso/crypto/x25519
 @! Standard: RFC 7748 Elliptic Curve Diffie-Hellman on Curve25519
 @! Curve: y^2 = x^3 + 486662*x^2 + x over F(2^255 - 19)
 @! 100% Pure Lipi Implementation — Zero External C / Libc Dependencies

@@ -36,24 +36,24 @@
 
 # ─── [নির্ভরতা] section — নির্ভরতাসমূহ ─────────────────────────
 [নির্ভরতা]
-universe         = "প্রথম ১.০"              # built-in standard library (always available)
-universe/web     = "২.০"                    # HTTP & web framework
-universe/cli     = "১.০"                    # CLI argument parser
-universe/fmt     = "১.০"                    # String formatting
-universe/crypto  = "১.৫"                    # Cryptography (SHA-256, ChaCha20)
-universe/db      = "১.০"                    # Sovereign DB engine
-universe/ai      = "১.০"                    # GGUF AI inference
+utso             = "প্রথম ১.০"              # built-in genesis primitives (always available)
+lipi_web         = "২.০"                    # HTTP & web framework
+lipi_cli         = "১.০"                    # CLI argument parser
+utso/fmt         = "১.০"                    # String formatting
+utso/crypto      = "১.৫"                    # Cryptography (SHA-256, ChaCha20)
+lipidb           = "১.০"                    # Sovereign DB engine
+lipi_ai          = "১.০"                    # GGUF AI inference
 
 # ─── [dev-নির্ভরতা] section — শুধু development এ ───────────────
 [dev-নির্ভরতা]
-universe/test    = "১.০"                    # Testing framework
-universe/bench   = "১.০"                    # Benchmarking
+utso/test        = "১.০"                    # Testing framework
+utso/bench       = "১.০"                    # Benchmarking
 
 # ─── [বৈশিষ্ট্য] section — conditional compilation ──────────────
 [বৈশিষ্ট্য]
 default     = ["http", "cli"]          # enabled by default
-http        = ["universe/web"]         # optional HTTP support
-ai          = ["universe/ai"]          # optional AI support
+http        = ["lipi_web"]             # optional HTTP support
+ai          = ["lipi_ai"]              # optional AI support
 full        = ["http", "ai", "db"]     # full feature set
 
 # ─── [প্রোফাইল.release] section — build optimization ───────────

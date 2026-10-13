@@ -12,7 +12,7 @@
 
 @! ============================================================================
 @! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-4 SHA-256
-@! Module: universe/crypto/sha256
+@! Module: utso/crypto/sha256
 @! 100% Pure Lipi Implementation - Zero External / C Dependencies
 @! ============================================================================
 

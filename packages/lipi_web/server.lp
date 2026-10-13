@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (universe/web/server.lp)
+@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (packages/lipi_web/server.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! BSD TCP Socket Container, Request Ingestion, Response Serialization, Lifecycle
 @! ============================================================================

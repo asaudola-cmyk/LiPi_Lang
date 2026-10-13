@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — DEEP SERIALIZATION ENGINE (universe/swarm/serializer.lp)
+@! LIPI SWARM — DEEP SERIALIZATION ENGINE (packages/lipi_swarm/serializer.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Serializes/Deserializes Values, Structs, Arrays, Maps, and Swarm Descriptors
 @! ============================================================================

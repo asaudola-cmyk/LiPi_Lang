@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI ZERO-COPY BINARY RPC & P2P SWARM MESH PROTOCOL (universe/net/lipirpc.lp)
+// 👑 LIPI ZERO-COPY BINARY RPC & P2P SWARM MESH PROTOCOL (utso/net/lipirpc.lp)
 // ⚡ 100% Pure Lipi | 16-Byte Compact Frame | P2P Gossip Consensus | Zero External C
 // ==============================================================================
 //

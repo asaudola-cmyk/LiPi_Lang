@@ -1,7 +1,7 @@
 // ==============================================================================
 // 👑 LIPI EXAMPLE: JSON PARSER & SERIALIZER (examples/json_parser.lp)
 // ⚡ 100% Pure Lipi First 1.0.0
-// Uses universe/core/json.lp
+// Uses utso/core/json.lp
 // ==============================================================================
 
 import "utso/core/json"

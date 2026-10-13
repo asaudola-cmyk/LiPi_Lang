@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI CORE I/O ENGINE: SOVEREIGN DIRECT KERNEL SYSCALL I/O (universe/core/io.lp)
+// 👑 LIPI CORE I/O ENGINE: SOVEREIGN DIRECT KERNEL SYSCALL I/O (utso/core/io.lp)
 // ⚡ 100% Native Linux Kernel AMD64 ABI | SYS_read/SYS_write/SYS_open/SYS_close | Zero Libc
 // ==============================================================================
 

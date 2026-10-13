@@ -1,12 +1,12 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — TENSOR REDUCTIONS, GEMM & ACTIVATIONS (universe/ai/tensor_ops.lp)
+@! LIPI UNIVERSE AI — TENSOR REDUCTIONS, GEMM & ACTIVATIONS (packages/lipi_ai/tensor_ops.lp)
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! ============================================================================
 
 import "utso/math"
 import "utso/collections"
 import "utso/string"
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/syscalls"
 import "packages/lipi_ai/simd_gemm"
 import "packages/lipi_ai/tensor_core"

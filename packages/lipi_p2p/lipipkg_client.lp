@@ -1,6 +1,6 @@
 @! ============================================================================
 @! 👑 LIPI UNIVERSAL ARCHITECTURE — LIPIPKG SCRIPTABLE CLIENT API
-@! Module: universe/p2p/lipipkg_client.lp
+@! Module: packages/lipi_p2p/lipipkg_client.lp
 @! Milestone: 100% Sovereign Lipi Package Ecosystem
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Publish, Fetch, Index, and Search against HTTP & In-Memory Registry

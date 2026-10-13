@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — STANDARD WIDGET SUITE
-@! Module: universe/gui/widget.lp
+@! Module: packages/lipi_gui/widget.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Complete Widget data structure (Window, Button, Label, TextInput, ScrollView, Slider, Container)

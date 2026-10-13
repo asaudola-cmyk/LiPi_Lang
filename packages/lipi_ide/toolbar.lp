@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — SOVEREIGN ACTION TOOLBAR RIBBON
-@! Module: universe/ide/toolbar.lp
+@! Module: packages/lipi_ide/toolbar.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

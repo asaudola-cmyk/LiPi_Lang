@@ -1,7 +1,7 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN CLOSURE & HIGHER-ORDER FUNCTION ENGINE (closure.lp)
 // ⚡ 100% Pure LiPi Implementation | Zero C | Zero GC | First-Class Environment Capture
-// 🏛️ Module: universe/core/closure.lp
+// 🏛️ Module: utso/core/closure.lp
 // ==============================================================================
 //
 // WHY THIS MODULE:

@@ -7,7 +7,7 @@
 import "utso/core/math"
 import "utso/core/collections"
 import "utso/core/string"
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/os/syscalls"
 
 @struct ClipRect

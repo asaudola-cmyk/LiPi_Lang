@@ -1,6 +1,6 @@
 @! ============================================================================
 @! 👑 LIPI UNIVERSAL ARCHITECTURE — DECENTRALIZED LIPIPKG PACKAGE SERVER & REGISTRY
-@! Module: universe/p2p/lipipkg_server.lp
+@! Module: packages/lipi_p2p/lipipkg_server.lp
 @! Milestone: 100% Sovereign Lipi Package Ecosystem
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Full HTTP REST Server, P2P CAS Storage, Merkle DAG Sync,

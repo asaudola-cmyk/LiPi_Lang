@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN ALGEBRAIC OPTION TYPE (universe/core/option.lp)
+// 👑 LIPI SOVEREIGN ALGEBRAIC OPTION TYPE (utso/core/option.lp)
 // ⚡ 100% Pure Direct Silicon Machine Code | 0% C | 0% Libc | 0% External Helpers
 //    Zero-overhead, panic-safe monadic container for nullable state representation.
 //    Null-guarded: passing raw 0/none literal is safely recognized as empty None.

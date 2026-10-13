@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN COMPILE-TIME STYLE BITMASK ENGINE (TAILWIND KILLER)
-// Module: universe/gui/style_bitmask.lp
+// Module: packages/lipi_gui/style_bitmask.lp
 // Milestone: Sovereign Full-Stack Horizon 3 (Zero-CSS Parsing, Single-Cycle Bitwise Resolving)
 // 100% Pure LiPi Implementation — Zero External / PostCSS / Tailwind Dependencies
 // ==============================================================================

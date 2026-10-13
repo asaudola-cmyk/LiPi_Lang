@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN GRAPHICS: DIRECT DRM/KMS GPU MODESETTING ENGINE
-// Module: universe/gui/drm_kms.lp
+// Module: packages/lipi_gui/drm_kms.lp
 // Milestone: Sovereign Full-Stack Frontier 3 (0% X11, 0% Wayland, 0% Mesa)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Production Standard
 // 100% Pure LiPi Implementation — Zero External / C / Xorg / Wayland Dependencies
@@ -21,7 +21,7 @@
 // - Physical VRAM direct mapping via SYS_mmap (syscall 9) with MAP_SHARED.
 // - Hardware CRTC display modesetting (DRM_IOCTL_MODE_SETCRTC = 0xC06864A2).
 // - Tear-free hardware double buffering and page flipping (DRM_IOCTL_MODE_PAGE_FLIP = 0xC01864B0).
-// - Graceful, zero-crash fallback to /dev/fb0 in universe/gui/fbdev.lp.
+// - Graceful, zero-crash fallback to /dev/fb0 in packages/lipi_gui/fbdev.lp.
 // - Zero placeholders. 100% pure LiPi.
 // ==============================================================================
 

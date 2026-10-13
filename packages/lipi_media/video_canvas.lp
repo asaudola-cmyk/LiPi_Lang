@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI UNIVERSE MEDIA: SOVEREIGN VIDEO CANVAS & FRAME COMPOSITOR
-// File: universe/media/video_canvas.lp
+// File: packages/lipi_media/video_canvas.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | 0% C | 0% SDL | 0% FFmpeg
 // ==============================================================================
 //

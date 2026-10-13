@@ -50,7 +50,7 @@ To ensure scientific honesty and transparency, benchmarks must distinguish betwe
 
 ## ⚡ Benchmark 2: High-Throughput I/O (`io_uring` vs Traditional `epoll`)
 
-LiPi includes pure-metal drivers for the Linux `io_uring` subsystem (`universe/net/io_uring/`):
+LiPi includes pure-metal drivers for the Linux `io_uring` subsystem (`utso/net/io_uring.lp`):
 - Single-ring submission and completion queues mapped into userspace with `mmap`.
 - Zero context switch cost per batch of network packet reads/writes.
 - Throughput: Up to **1,250,000 requests/second** on modern NVMe and 10GbE network interfaces.

@@ -1,6 +1,6 @@
 // ==============================================================================
 // ⚡ লিপি কার্নেল-বাইপাস হাই-পারফরম্যান্স আই/ও রিঅ্যাক্টর (Lipi io_uring SQPOLL Reactor)
-// Module: universe/net/io_uring_reactor.lp
+// Module: utso/net/io_uring_reactor.lp
 // Target: High-Concurrency Linux Kernel-Bypass Async Networking (10M req/sec Tier)
 // 100% Pure Lipi Implementation — Zero External / C++ Dependencies
 // ==============================================================================

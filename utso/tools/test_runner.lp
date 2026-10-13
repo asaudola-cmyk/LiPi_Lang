@@ -10,7 +10,7 @@
 //   timing benchmarks, and JUnit XML test reporting with Zero Libc.
 //
 // ব্যবহার:
-//   include "universe/tools/std_test.lp"
+//   include "utso/tools/std_test.lp"
 //   suite = test_suite_new("আমার টেস্ট স্যুট")
 //   test_assert_eq(suite, 2 + 2, 4, "যোগ ঠিক আছে")
 //   test_assert_str_eq(suite, "lipi", "lipi", "স্ট্রিং মিলছে")

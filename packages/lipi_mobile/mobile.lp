@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPI MOBILE ENGINE (ZERO-JVM IOS/ANDROID)
-@! Module: universe/mobile/mobile.lp
+@! Module: packages/lipi_mobile/mobile.lp
 @! Milestone: Phase 4 — Production Hardened Mobile Subsystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Authentic AArch64 ELF64 .so Shared Object Emitter with Dynamic Symbols,

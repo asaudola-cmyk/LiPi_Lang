@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: universe/web/frontend/remote/mod.lp
+@! Module: packages/lipi_web/frontend/remote/mod.lp
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Root Aggregator Subsystem Exporting AST @remote Directive Parser,

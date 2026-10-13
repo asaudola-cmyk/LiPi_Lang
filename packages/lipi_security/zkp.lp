@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE SECURITY: ZERO-KNOWLEDGE PROOF — SCHNORR SIGNATURE
-@! Module: universe/security/zkp.lp
+@! Module: packages/lipi_security/zkp.lp
 @! 100% Pure LiPi — Zero C / External Dependencies
 @! Protocol: Schnorr Identification / Signature (Discrete Logarithm ZKP)
 @!

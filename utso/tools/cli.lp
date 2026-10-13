@@ -13,7 +13,7 @@
 //   - Auto-generated help formatting
 //
 // ব্যবহার:
-//   include "universe/tools/std_cli.lp"
+//   include "utso/tools/std_cli.lp"
 //   app = cli_create("my-tool", "আমার টুলের বিবরণ")
 //   cli_bool_flag(app, "--verbose", "-v", "বিস্তারিত আউটপুট")
 //   cli_string_flag(app, "--output", "-o", "আউটপুট ফাইল", "out.bin")

@@ -1,7 +1,7 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN STRUCTURAL TRAIT & PROTOCOL ENGINE (trait.lp)
 // ⚡ 100% Pure LiPi Implementation | Zero Inheritance Bloat | Duck-Typed Protocols
-// 🏛️ Module: universe/core/trait.lp
+// 🏛️ Module: utso/core/trait.lp
 // ==============================================================================
 //
 // WHY THIS MODULE:

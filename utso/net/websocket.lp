@@ -1,6 +1,6 @@
 @! ============================================================================
 @! PURE LIPI WEBSOCKET PROTOCOL ENGINE: RFC 6455
-@! Module: universe/net/websocket
+@! Module: utso/net/websocket
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

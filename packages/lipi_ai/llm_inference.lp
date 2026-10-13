@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI NATIVE SILICON AI & LOCAL LLM INFERENCE ENGINE (universe/ai/llm_inference.lp)
+// 👑 LIPI NATIVE SILICON AI & LOCAL LLM INFERENCE ENGINE (packages/lipi_ai/llm_inference.lp)
 // ⚡ 100% Pure Lipi | GGUF v3 Parser | Q4_0 / Q8_0 Quantization | Zero Libc / PyTorch
 // ==============================================================================
 //

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE NETWORKING: HTTP/2 FRAME CODEC
-@! Module: universe/net/http2/frame
+@! Module: utso/net/http2/frame
 @! 100% Pure Lipi Implementation — RFC 7540
 @! ============================================================================
 

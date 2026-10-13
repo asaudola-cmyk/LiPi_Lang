@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE OS — HIGH-LEVEL BLOCK STORAGE INTERFACE (universe/os/storage)
+@! LIPI UNIVERSE OS — HIGH-LEVEL BLOCK STORAGE INTERFACE (utso/os/storage)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — RFC 7519 JSON WEB TOKEN (JWT) AUTHENTICATION (universe/web/auth/jwt.lp)
+@! LIPI UNIVERSE WEB — RFC 7519 JSON WEB TOKEN (JWT) AUTHENTICATION (packages/lipi_web/auth/jwt.lp)
 @! 100% Written in Pure Sovereign Lipi — Zero C / Libc / External Dependencies
 @!
 @! Standards Implemented:

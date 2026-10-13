@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI BARE-METAL SOVEREIGN UEFI BOOTLOADER & EFI PAYLOAD ENGINE
-// Module: universe/boot/uefi_boot.lp
+// Module: packages/lipi_boot/uefi_boot.lp
 // Standard: UEFI Specification 2.10 & PE32+ (x86_64) EFI Application Standard
 // 100% Pure LiPi Implementation — Zero Libc | Zero GNU-EFI | Zero EDK2 | Zero C
 // ==============================================================================
@@ -622,7 +622,7 @@ fn uefi_boot_main
     if argc > 1
         a1 = get(args, 1)
         if a1 == "--help" or a1 == "-h"
-            say "Usage: lipi run universe/boot/uefi_boot.lp [options]"
+            say "Usage: lipi run packages/lipi_boot/uefi_boot.lp [options]"
             say ""
             say "Options:"
             say "  -o, --out <path>    Assemble and export PE32+ BOOTX64.EFI application"

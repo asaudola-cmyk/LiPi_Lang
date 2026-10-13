@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPI VECTOR DB (AI MEMORY ENGINE)
-@! Module: universe/db/vector/vectordb.lp
+@! Module: packages/lipidb/vector/vectordb.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: AVX-512 512-Bit Cosine Similarity, Multi-Layer HNSW Graph Index,

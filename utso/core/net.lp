@@ -2,7 +2,7 @@ import "utso/os/syscalls"
 import "utso/core/string"
 
 @! ==============================================================================
-@! 👑 LIPI UNIVERSE — CORE BAREMETAL NETWORKING & WIRE ENGINE (universe/core/net.lp)
+@! 👑 LIPI UNIVERSE — CORE BAREMETAL NETWORKING & WIRE ENGINE (utso/core/net.lp)
 @! ⚡ 100% Native Linux Kernel AMD64 ABI | Direct Syscalls | 0% Libc | 0% C Dependencies
 @! Features:
 @!   - Raw TCP & UDP Socket Lifecycle Management

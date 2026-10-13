@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN HARDWARE: DIRECT PCIE NVMe MMIO STORAGE CONTROLLER
-// Module: universe/io/nvme_direct.lp
+// Module: utso/io/nvme_direct.lp
 // Milestone: Supreme Sovereign Frontier A (0% Linux VFS, 0% Ext4, 0% Block Layer)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Linux Dependencies

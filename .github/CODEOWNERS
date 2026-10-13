@@ -10,7 +10,8 @@
 
 # Standard library — changes affect all Lipi programs
 /std/                   @asaudola-cmyk
-/universe/              @asaudola-cmyk
+/utso/                  @asaudola-cmyk
+/packages/              @asaudola-cmyk
 
 
 # Toolchain binaries — lipipkg, lipidbg, lipirepl, lipiconvert

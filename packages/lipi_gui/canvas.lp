@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — CANVAS & 2D RASTERIZER
-@! Module: universe/gui/canvas.lp
+@! Module: packages/lipi_gui/canvas.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flat ARGB pixel array Framebuffer
@@ -12,7 +12,7 @@
 import "utso/math"
 import "utso/collections"
 import "utso/string"
-// WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
+// WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/syscalls"
 
 @! ----------------------------------------------------------------------------

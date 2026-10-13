@@ -1,6 +1,6 @@
 // 👑 LIPI UNIVERSE AI: MODEL SERIALIZATION & DESERIALIZATION (.lipimodel)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero Python | Zero PyTorch
-// Module: universe/ai/model_io.lp
+// Module: packages/lipi_ai/model_io.lp
 // WHY: Native binary checkpointing and hyperparameter persistence for Lipi AI models.
 
 import "utso/string"

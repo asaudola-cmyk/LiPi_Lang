@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE CORE: HIGH-CONCURRENCY FIBER REACTOR (universe/core/fiber_reactor.lp)
+// 👑 LIPI UNIVERSE CORE: HIGH-CONCURRENCY FIBER REACTOR (utso/core/fiber_reactor.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | Cooperative Green-Thread Event Dispatcher
 //
 // WHY: Go's goroutines rely on a complex runtime and preemptive signal interruptions.

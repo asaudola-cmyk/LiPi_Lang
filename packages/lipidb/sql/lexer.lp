@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL LEXER (universe/db/sql/lexer.lp)
+@! LIPI UNIVERSE DB - SQL LEXER (packages/lipidb/sql/lexer.lp)
 @! Standard: 100% Pure LiPi SQL Tokenizer
 @! ============================================================================
 

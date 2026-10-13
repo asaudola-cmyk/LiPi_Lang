@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LRU CACHE
-@! Module: universe/db/lru.lp
+@! Module: packages/lipidb/lru.lp
 @! Features: Least Recently Used (LRU) In-Memory Cache for DB & Web
 @! ============================================================================
 

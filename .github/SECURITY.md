@@ -9,14 +9,14 @@
 LiPi operates directly on silicon without intermediary runtimes, libc wrappers, or C runtime hooks. Consequently, LiPi eliminates entire classes of vulnerabilities that plague conventional languages:
 
 1. **Zero Libc Hijacking**: No `LD_PRELOAD` exploitation, dynamic linker interception, or glibc vulnerability vectors.
-2. **Deterministic Memory Boundaries**: Heap memory is allocated via direct `sys_mmap` (anonymous, private) and managed using deterministic scoped arenas (`universe/core/arena.lp`) with instant rollback, preventing memory leakage and dangling pointer vulnerabilities.
+2. **Deterministic Memory Boundaries**: Heap memory is allocated via direct `sys_mmap` (anonymous, private) and managed using deterministic scoped arenas (`utso/core/arena.lp`) with instant rollback, preventing memory leakage and dangling pointer vulnerabilities.
 3. **No Hidden Runtime Unwinding**: Zero exception tables or dynamic stack unwinding engines that could be hijacked by Return-Oriented Programming (ROP) attacks.
 
 ---
 
 ## 🛡️ Supported Cryptographic Invariants
 
-All cryptographic modules inside `universe/crypto/` are written from first principles and enforce strict mathematical and side-channel security guarantees:
+All cryptographic modules inside `utso/crypto/` are written from first principles and enforce strict mathematical and side-channel security guarantees:
 
 | Primitive | Standard | Invariant / Security Property |
 | :--- | :--- | :--- |
@@ -36,7 +36,7 @@ All cryptographic modules inside `universe/crypto/` are written from first princ
 2. **Ring-0 Unikernel Isolation**:
    - Bare-metal multiboot2 unikernels (`src/compiler/backend/formats/unikernel/multiboot2.lp`) initialize the Global Descriptor Table (GDT) and Interrupt Descriptor Table (IDT) with hardware page privilege boundaries.
 3. **Null Pointer Safety**:
-   - The algebraic `Option` and `Result` containers (`universe/core/option.lp` and `universe/core/result.lp`) provide null-guarded extraction (`is_some`, `is_none`, `unwrap_option_or`), safely intercepting null literal pointers (`0`, `none`) before memory dereference.
+   - The algebraic `Option` and `Result` containers (`utso/option.lp` and `utso/result.lp`) provide null-guarded extraction (`is_some`, `is_none`, `unwrap_option_or`), safely intercepting null literal pointers (`0`, `none`) before memory dereference.
 
 ---
 

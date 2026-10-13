@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI UNIVERSE NET: RFC 9114 HTTP/3 & RFC 9204 QPACK PROTOCOL STACK
-// Module: universe/net/http3.lp
+// Module: utso/net/http3.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Zero Libc | Direct QUIC Integration
 //
 // WHY: HTTP/3 over QUIC eliminates Head-of-Line blocking inherent in TCP,

@@ -1,5 +1,5 @@
 // ============================================================================
-// 📜 LIPI OS ENV MODULE — universe/os/env.lp
+// 📜 LIPI OS ENV MODULE — utso/os/env.lp
 // ⚡ 100% Pure Lipi Sovereign Operating System Environment Interface
 // ============================================================================
 

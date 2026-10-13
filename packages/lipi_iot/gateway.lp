@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE IoT — GATEWAY (universe/iot/gateway.lp)
+@! LIPI UNIVERSE IoT — GATEWAY (packages/lipi_iot/gateway.lp)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 

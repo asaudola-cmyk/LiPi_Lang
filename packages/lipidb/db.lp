@@ -1,11 +1,11 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE DB — GRAND UMBRELLA PRELUDE (universe/db.lp)
+// 👑 LIPI UNIVERSE DB — GRAND UMBRELLA PRELUDE (packages/lipidb/db.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero C | Zero External Tools
 // ==============================================================================
 //
 // WHY: Provides a unified gateway for all database engines in Lipi.
 // Developers can simply write:
-//     import "universe/db"
+//     import "packages/lipidb/db"
 // to access LipiKV storage, B+Tree indexing, Write-Ahead Logging (WAL),
 // ACID transactions, columnar analytics, and vector embeddings.
 // ==============================================================================

@@ -32,7 +32,7 @@ import "utso/os/fs"
 
 @fn lipipkg_install(pkg_name)
   println("📦 [LIPIPKG] Resolving package: " + pkg_name + "...")
-  target_dir = "universe/deps/" + pkg_name
+  target_dir = "packages/deps/" + pkg_name
   dir_create(target_dir)
   pkg_info = "name = \"" + pkg_name + "\"\ninstalled = true\n"
   file_write(target_dir + "/package.toml", pkg_info)

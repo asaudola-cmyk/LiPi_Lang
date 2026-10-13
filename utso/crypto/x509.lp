@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN CRYPTOGRAPHY: ASN.1 DER X.509 CERTIFICATE PARSER
-// ⚡ Module: universe/crypto/x509.lp
+// ⚡ Module: utso/crypto/x509.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero Libc / Zero OpenSSL / Zero C Dependencies
 // ==============================================================================
 //

@@ -24,7 +24,7 @@ LiPi supports three syntax dialects simultaneously mapped to the same Abstract S
 2. **English Canonical Syntax**: `struct`, `fn`, `if`, `else`, `while`, `return`
 3. **Directive System Syntax**: `@struct`, `@fn`, `@if`, `@else`, `@while`, `@end`
 
-New features in standard libraries (`universe/`) should provide both canonical English and native Bengali aliases.
+New features in standard libraries (`utso/` and `packages/`) should provide both canonical English and native Bengali aliases.
 
 ### 4. Deterministic 4-Stage Bootstrap Closure
 Any change to `src/compiler/` must maintain 100% bit-for-bit reproducibility across self-hosting compiler stages:
@@ -72,7 +72,7 @@ To verify all 22 sovereign ecosystem targets:
 lipi/
 ├── bin/                   # Compiled sovereign binaries (lipc, lipi, lipi-build)
 ├── docs/                  # Architectural specs, handbook, and tutorials
-├── packages/              # Sovereign package ecosystem (10 enterprise packages)
+├── packages/              # Sovereign package ecosystem (Web, DB, AI, GUI, Engine3D, etc.)
 ├── src/
 │   ├── compiler/          # Micro-pipeline compiler modules (strictly <= 35KB each)
 │   │   ├── diagnostics/   # Color themes, line index, source map, suggestions
@@ -84,8 +84,8 @@ lipi/
 │   │       └── targets/   # x86_64, ARM64, WASM, RISC-V direct synthesizers
 │   ├── runtime/           # Bare-metal syscall stubs and arena allocators
 │   └── tools/             # CLI drivers, LSP server, and code formatters
-├── tests/                 # Master regression suite (177+ automated tests)
-└── universe/              # Sovereign standard library (Web, Net, Crypto, AI, OS, DB)
+├── tests/                 # Master regression suite (203+ automated tests)
+└── utso/                  # Sovereign genesis primitives (IO, Memory, String, Math, Net, Crypto, Syscalls)
 ```
 
 ---

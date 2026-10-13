@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN DESKTOP ENVIRONMENT & GRAPHICAL APPLICATION
-// Module: universe/gui/desktop_demo.lp
+// Module: packages/lipi_gui/desktop_demo.lp
 // Standard: Direct DRM/KMS GPU Modesetting (/dev/dri/card0) + Linux Framebuffer (/dev/fb0)
 // 100% Pure LiPi Implementation — Zero X11 | Zero Wayland | Zero Mesa | Zero Qt
 // ==============================================================================

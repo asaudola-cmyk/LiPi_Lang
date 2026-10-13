@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🏛️ লিপি এভিএক্স-৫১২ ৪x৪ টাইল্ড সিলিকন ম্যাট্রিক্স ইঞ্জিন (Lipi AVX-512 GEMM Engine)
-// Module: universe/cpu/avx512_gemm.lp
+// Module: utso/cpu/avx512_gemm.lp
 // Standard: IEEE 754 Floating-Point & 64-bit Integer BLAS Level-3 GEMM Specification
 // 100% Pure Lipi Implementation — 0% C | 0% Libc | 0% OpenBLAS | 0% PyTorch
 // ==============================================================================

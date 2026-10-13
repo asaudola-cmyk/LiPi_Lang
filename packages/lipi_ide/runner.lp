@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — BACKGROUND PROCESS RUNNER & COMPILER CONTROLLER
-@! Module: universe/ide/runner.lp
+@! Module: packages/lipi_ide/runner.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

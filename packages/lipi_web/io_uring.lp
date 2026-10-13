@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN IO_URING MEGA-CONCURRENCY DRIVER
-// Module: universe/web/io_uring.lp
+// Module: packages/lipi_web/io_uring.lp
 // Milestone: Sovereign Full-Stack Horizon 2 (Direct Kernel Ring I/O, 1.5M+ Req/sec)
 // 100% Pure LiPi Implementation — Zero External / C / Libuv Dependencies
 // ==============================================================================

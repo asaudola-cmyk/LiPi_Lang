@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN UNIVERSE UMBRELLA MODULE & GRAND PRELUDE (universe/lipi_universe.lp)
+// 👑 LIPI SOVEREIGN UNIVERSE UMBRELLA MODULE & GRAND PRELUDE (utso/lipi_universe.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | 0% C | 0% Libc | 0% External Tools
 //
 // WHY: Serves as the central Grand Prelude for the Lipi programming language.
@@ -33,7 +33,7 @@ import "utso/crypto/sha256"
 @fn lipi_universe_stats()
     println("==================================================================")
     println("  👑 LIPI UNIVERSE First 1.0.0 (SOVEREIGN UNIFIED STANDARD LIBRARY)")
-    println("  Unified Standard Library: 100% Consolidated under universe/")
+    println("  Sovereign Primitives & Packages: 100% Consolidated under utso/ & packages/")
     println("  Total Modules Active: 250+ | Subsystems: 9 Canonical Domains")
     println("  Core Subsystems: Collections, Hashmap, Arena, JSON, SIMD, Crypto")
     println("  Direct Silicon AMD64 / ARM64 / WASM: 100% Verified")

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN BARE-METAL X86_64 KERNEL ENTRY & BOOTSTRAP ENGINE
-// Module: universe/boot/baremetal_kernel.lp
+// Module: packages/lipi_boot/baremetal_kernel.lp
 // Standard: x86_64 Long Mode Architecture & Bare-Metal Linear Framebuffer MMIO
 // 100% Pure LiPi Implementation — Zero Linux | Zero Windows | Zero Libc | Zero C
 // ==============================================================================
@@ -348,7 +348,7 @@ fn baremetal_fb_flush fb
 // ── 6. Direct Boot Into Sovereign Desktop Graphics ───────────────────────────
 
 // WHY: Constructs compatibility wrapper linking baremetal framebuffer to
-// universe/gui/desktop_demo.lp and initializes sovereign desktop UI state.
+// packages/lipi_gui/desktop_demo.lp and initializes sovereign desktop UI state.
 fn baremetal_boot_desktop fb
     // Construct fbdev-compatible list object [fd, width, height, bpp, pitch, size, front, back, is_virtual]
     gui_fb = list()
@@ -652,7 +652,7 @@ fn baremetal_kernel_main
     if argc > 1
         a1 = get(args, 1)
         if a1 == "--help" or a1 == "-h"
-            say "Usage: lipi run universe/boot/baremetal_kernel.lp [options]"
+            say "Usage: lipi run packages/lipi_boot/baremetal_kernel.lp [options]"
             say ""
             say "Options:"
             say "  -o, --out <path>    Emit and export raw x86_64 kernel payload binary"

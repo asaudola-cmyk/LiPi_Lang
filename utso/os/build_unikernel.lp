@@ -527,7 +527,7 @@ import "utso/core/string"
 
   @if help_requested == 1
     println("================================================================================")
-    println("🔮 LIPI SOVEREIGN RING-0 UNIKERNEL & ISO GENERATOR (universe/os/build_unikernel.lp)")
+    println("🔮 LIPI SOVEREIGN RING-0 UNIKERNEL & ISO GENERATOR (utso/os/build_unikernel.lp)")
     println("================================================================================")
     println("Usage: build_unikernel <kernel_name> [output_image] [--iso] [--run-qemu]")
     println("Emits bootable bare-metal unikernel image or hybrid El Torito ISO (Multiboot2).")

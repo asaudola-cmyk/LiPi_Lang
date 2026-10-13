@@ -1,6 +1,6 @@
 @! ============================================================================
 @! PURE LIPI MOBILE PERSISTENT KEY-VALUE STORAGE ENGINE
-@! Module: universe/mobile/storage
+@! Module: packages/lipi_mobile/storage
 @! 100% Pure Lipi Implementation — File-Backed Durable Persistence
 @! ============================================================================
 

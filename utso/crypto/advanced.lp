@@ -308,7 +308,7 @@ fn SHA3_512 input input_len output
 // WHY: Ed25519 (RFC 8032) provides high-performance signature generation and
 // verification over Twisted Edwards Curve25519.
 
-// WHY: Canonical Ed25519 digital signature functions are unified in universe/crypto/crypto.lp
+// WHY: Canonical Ed25519 digital signature functions are unified in utso/crypto/crypto.lp
 
 // ─── AES-256-GCM ─────────────────────────────────────────────────────────────
 // WHY: AES-GCM provides authenticated symmetric encryption (AEAD).

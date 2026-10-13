@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — P2P BINARY & WIRE PROTOCOL CODEC (universe/swarm/protocol.lp)
+@! LIPI SWARM — P2P BINARY & WIRE PROTOCOL CODEC (packages/lipi_swarm/protocol.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 

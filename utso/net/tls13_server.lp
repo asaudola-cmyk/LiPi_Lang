@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN PROTOCOL: EMBEDDED IN-PROCESS TLS 1.3 SERVER ENGINE
-// Module: universe/net/tls13_server.lp
+// Module: utso/net/tls13_server.lp
 // Milestone: Sovereign Full-Stack Frontier 2 (0% NGINX, 0% OpenSSL, 0% C)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / Libc / C Dependencies

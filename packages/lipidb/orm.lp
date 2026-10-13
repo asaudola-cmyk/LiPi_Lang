@@ -9,7 +9,7 @@
 //   SQLAlchemy (Python), Prisma (JS), GORM (Go) — এদের replace করবে।
 //
 // ব্যবহার:
-//   include "universe/db/std_orm.lp"
+//   include "packages/lipidb/std_orm.lp"
 //   conn = ORM_connection_open("/tmp/app.db")
 //   qb = ORM_query(conn, "users")
 //   ORM_select(qb, "id")

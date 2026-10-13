@@ -1,5 +1,5 @@
 // ==============================================================================
-// 🛡️ LIPI POST-QUANTUM CRYPTOGRAPHY (PQC) ENGINE (universe/crypto/pqc.lp)
+// 🛡️ LIPI POST-QUANTUM CRYPTOGRAPHY (PQC) ENGINE (utso/crypto/pqc.lp)
 // Standard: NIST FIPS 203 ML-KEM / Kyber Lattice Ring Arithmetic (Rq, q=3329)
 // 100% Pure Lipi Implementation — Zero OpenSSL | Zero C | Zero Libc
 // ==============================================================================

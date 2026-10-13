@@ -52,11 +52,11 @@ if prev_val != 250 or curr_val != 300
     exit(1)
 say "✔ Atomic Fetch-And-Add (250 + 50 -> 300, prev 250) verified"
 
-// 5. High-Level Thread Spinlock Integration from universe/os/thread.lp
+// 5. High-Level Thread Spinlock Integration from utso/os/thread.lp
 spinlock_lock(lock_word)
-say "✔ universe/os/thread.lp spinlock_lock acquired via hardware atomics"
+say "✔ utso/os/thread.lp spinlock_lock acquired via hardware atomics"
 spinlock_unlock(lock_word)
-say "✔ universe/os/thread.lp spinlock_unlock released cleanly"
+say "✔ utso/os/thread.lp spinlock_unlock released cleanly"
 
 free(lock_word)
 free(counter_word)

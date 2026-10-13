@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN PROTOCOL: PURE RFC 1035 UDP DNS RESOLVER
-// Module: universe/net/dns_pure.lp
+// Module: utso/net/dns_pure.lp
 // Milestone: Sovereign Full-Stack Frontier 1 (0% libc /etc/resolv.conf & 0% C)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / Libc / C Dependencies

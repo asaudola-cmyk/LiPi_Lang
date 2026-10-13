@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧠 LIPI HNSW MULTI-LAYER VECTOR DATABASE & LOCAL RAG ENGINE
-// File: universe/db/vector/hnsw.lp
+// File: packages/lipidb/vector/hnsw.lp
 // Standard: Hierarchical Navigable Small World (HNSW) Multi-Layer Graph Index
 // 100% Pure Lipi Implementation — Zero Python | Zero PyTorch | Zero Faiss / Chroma
 // ==============================================================================
@@ -205,7 +205,7 @@ import "utso/string"
 
 // ── 6. Local RAG (Retrieval-Augmented Generation) Prompt Synthesizer ──────────
 // WHY: Gathers top-k semantic passages and synthesizes an augmented contextual
-// prompt ready for local LLM inference via universe/ai/llm_inference.lp.
+// prompt ready for local LLM inference via packages/lipi_ai/llm_inference.lp.
 @fn hnsw_rag_synthesize_prompt(index, query_vec, query_text, top_k)
   matches = hnsw_search_knn(index, query_vec, top_k)
 

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN LOCAL-FIRST CRDT & VECTOR-CLOCK SYNC ENGINE
-// Module: universe/web/crdt_sync.lp
+// Module: packages/lipi_web/crdt_sync.lp
 // Milestone: Sovereign Full-Stack Horizon 6 (Replacing Automerge, Yjs, and Centralized DB Locks)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

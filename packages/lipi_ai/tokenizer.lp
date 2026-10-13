@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI: BYTE PAIR ENCODING (BPE) TOKENIZER
-@! Module: universe/ai/tokenizer
+@! Module: packages/lipi_ai/tokenizer
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 

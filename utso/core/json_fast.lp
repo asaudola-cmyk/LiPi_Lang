@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN ZERO-COPY JSON ENGINE (universe/core/json_fast.lp)
+// 👑 LIPI SOVEREIGN ZERO-COPY JSON ENGINE (utso/core/json_fast.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | In-Place Slices | Linear-Time Parsing
 // ==============================================================================
 //

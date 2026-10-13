@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI DATABASE: MULTI-VERSION CONCURRENCY CONTROL (MVCC) (universe/db/mvcc.lp)
+// 👑 LIPI DATABASE: MULTI-VERSION CONCURRENCY CONTROL (MVCC) (packages/lipidb/mvcc.lp)
 // ⚡ 100% Pure Native Lipi Language | Snapshot Isolation | Lock-Free Reads
 // Zero External C | Zero Libc | Zero Dependencies
 // ==============================================================================

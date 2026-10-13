@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SOVEREIGN OS MICROKERNEL — universe/os/kernel.lp
+@! LIPI SOVEREIGN OS MICROKERNEL — utso/os/kernel.lp
 @! 100% Written in Pure Lipi Language — Complete Zero libc / Zero C Dependencies
 @! Master Kernel Entry Point, Subsystem Orchestration, and Event Loop
 @! ============================================================================

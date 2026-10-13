@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI CORE SYSTEM MEMORY: SOVEREIGN ALLOCATOR & MEMORY OPS (universe/core/memory.lp)
+// 👑 LIPI CORE SYSTEM MEMORY: SOVEREIGN ALLOCATOR & MEMORY OPS (utso/core/memory.lp)
 // ⚡ 100% Native Linux Kernel AMD64 ABI | SYS_mmap (9) & SYS_munmap (11) | Zero Libc
 // ==============================================================================
 

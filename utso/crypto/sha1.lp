@@ -11,7 +11,7 @@
 
 @! ============================================================================
 @! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: FIPS 180-1 SHA-1
-@! Module: universe/crypto/sha1
+@! Module: utso/crypto/sha1
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

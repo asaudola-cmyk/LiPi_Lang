@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI NATIVE SHELL — universe/os/shell.lp
+@! LIPI NATIVE SHELL — utso/os/shell.lp
 @! A self-contained command interpreter written in 100% pure LiPi.
 @! Zero dependency on bash / sh / libc.  All I/O via raw Linux syscalls.
 @!

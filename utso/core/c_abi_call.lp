@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE CORE: UNIVERSAL C-ABI DYNAMIC INVOCATION (universe/core/c_abi_call.lp)
+// 👑 LIPI UNIVERSE CORE: UNIVERSAL C-ABI DYNAMIC INVOCATION (utso/core/c_abi_call.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | Zero C Compiler | Direct AMD64 Register Marshalling
 //
 // WHY: To truly replace C, C++, and Zig, LiPi must effortlessly invoke existing shared

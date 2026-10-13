@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE CPU — GRAND UMBRELLA PRELUDE (universe/cpu.lp)
+// 👑 LIPI UNIVERSE CPU — GRAND UMBRELLA PRELUDE (utso/cpu.lp)
 // ⚡ AVX-512 GEMM, SIMD Vectorization, Hardware Silicon Acceleration
 // ==============================================================================
 import "utso/cpu/avx512_gemm"

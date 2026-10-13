@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN ACCESSIBLE WEBGPU CANVAS & FONT SHAPING ENGINE
-// Module: universe/web/accessible_canvas.lp
+// Module: packages/lipi_web/accessible_canvas.lp
 // Milestone: Sovereign Full-Stack Horizon 4 (Accessible GPU DOM-Bypass & Bengali Font Shaping)
 // 100% Pure LiPi Implementation — Zero External / HarfBuzz / Chromium Dependencies
 // ==============================================================================

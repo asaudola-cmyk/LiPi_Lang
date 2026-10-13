@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — AI LoRA (Low-Rank Adaptation)
-@! Module: universe/ai/lora.lp
+@! Module: packages/lipi_ai/lora.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! Features: Parameter Efficient Fine-Tuning for LLMs
 @! ============================================================================

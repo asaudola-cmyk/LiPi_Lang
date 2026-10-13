@@ -36,7 +36,7 @@
 বুট নেওয়ার সাথে সাথে এটি COM1 UART (পোর্ট `0x3F8`) ইনিশিয়ালাইজ করে এবং সরাসরি স্ক্রিন ও টার্মিনালে টেক্সট প্রিন্ট করে:
 
 ```lipi
-include "universe/os/build_unikernel.lp"
+include "utso/os/build_unikernel.lp"
 
 fn main
     say "সার্বভৌম বেয়ার-মেটাল ইউনিকার্নেল বিল্ডার চালনা..."

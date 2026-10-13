@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPI RING-0 UNIKERNEL ENGINE
-@! Module: universe/os/unikernel.lp
+@! Module: utso/os/unikernel.lp
 @! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Multiboot2 Header Emitter, VirtIO Network Ring Transmit/Receive,
@@ -66,7 +66,7 @@ import "utso/os/boot/multiboot"
 
 @fn unikernel_emit_multiboot2_full_header(fb_w, fb_h, fb_d)
   @! Emit full 44-byte Multiboot2 header with Framebuffer and End tags
-  @! WHY: Directly links universe/os/unikernel with universe/os/boot/multiboot specification.
+  @! WHY: Directly links utso/os/unikernel with utso/os/boot/multiboot specification.
   @! Emits 16-byte base header (magic 0xE85250D6, arch 0, length 44, checksum) +
   @! 20-byte Framebuffer request tag + 8-byte End tag = 44 bytes total.
   hdr = multiboot2_create_header(fb_w, fb_h, fb_d)

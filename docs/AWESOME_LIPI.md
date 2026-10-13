@@ -52,18 +52,18 @@ The following packages are pre-verified, cryptographically signed with RFC 8032 
 
 ## 🌐 Web & Networking
 
-- [`universe/net/socket.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/net/socket.lp) — Direct Linux kernel raw TCP/UDP socket driver without libc.
-- [`universe/net/http.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/net/http.lp) — Pure RFC 7230 / RFC 7231 HTTP/1.1 client (`http_get`, `http_post`) and request serializer.
-- [`universe/web/engine.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/web/engine.lp) — High-throughput HTTP web engine with response streaming and JSON serialization.
-- [`universe/net/websocket.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/net/websocket.lp) — RFC 6455 full-duplex WebSocket server protocol implementation.
+- [`utso/net/socket.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/net/socket.lp) — Direct Linux kernel raw TCP/UDP socket driver without libc.
+- [`utso/net/http.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/net/http.lp) — Pure RFC 7230 / RFC 7231 HTTP/1.1 client (`http_get`, `http_post`) and request serializer.
+- [`packages/lipi_web/engine.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_web/engine.lp) — High-throughput HTTP web engine with response streaming and JSON serialization.
+- [`utso/net/websocket.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/net/websocket.lp) — RFC 6455 full-duplex WebSocket server protocol implementation.
 
 ---
 
 ## 💾 Database & Storage
 
-- [`universe/db/pg_wire.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/db/pg_wire.lp) — Pure PostgreSQL 3.0 binary wire protocol client connecting to live Postgres servers over raw TCP.
-- [`universe/db/mysql_wire.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/db/mysql_wire.lp) — Native MySQL wire protocol client implementation.
-- [`universe/db/btree.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/db/btree.lp) — Slotted-page 4KB B+Tree storage engine with disk serialization.
+- [`packages/lipidb/pg_wire.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipidb/pg_wire.lp) — Pure PostgreSQL 3.0 binary wire protocol client connecting to live Postgres servers over raw TCP.
+- [`packages/lipidb/mysql_wire.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipidb/mysql_wire.lp) — Native MySQL wire protocol client implementation.
+- [`packages/lipidb/btree.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipidb/btree.lp) — Slotted-page 4KB B+Tree storage engine with disk serialization.
 - [`examples/lipidkv_cache/`](file:///home/shafiullah/Documents/file/work/lipi/examples/lipidkv_cache) — Production in-memory Redis-compatible key-value cache and store.
 
 ---
@@ -71,25 +71,25 @@ The following packages are pre-verified, cryptographically signed with RFC 8032 
 ## ⚙️ Systems, Runtimes & Concurrency
 
 - [`src/runtime/async/fiber.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/runtime/async/fiber.lp) — M:N lightweight fiber scheduler with 8KB user-space stacks and 9-register fast context switching.
-- [`universe/os/syscalls.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/os/syscalls.lp) — Multi-OS native system call table (Linux, macOS Darwin `0x2000000`, Windows PE64).
-- [`universe/hypervisor/kvm.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/hypervisor/kvm.lp) — Linux Kernel-based Virtual Machine (KVM) hypervisor controller and vCPU manager.
-- [`universe/os/kernel_multiboot.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/os/kernel_multiboot.lp) — Bare-metal x86_64 Multiboot2 unikernel entry point.
+- [`utso/os/syscalls.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/os/syscalls.lp) — Multi-OS native system call table (Linux, macOS Darwin `0x2000000`, Windows PE64).
+- [`packages/lipi_hypervisor/kvm.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_hypervisor/kvm.lp) — Linux Kernel-based Virtual Machine (KVM) hypervisor controller and vCPU manager.
+- [`utso/os/kernel_multiboot.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/os/kernel_multiboot.lp) — Bare-metal x86_64 Multiboot2 unikernel entry point.
 
 ---
 
 ## 🔐 Cryptography & Security
 
-- [`universe/crypto/crypto.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/crypto/crypto.lp) — NIST FIPS 180-4 SHA-256 and SHA-512 cryptographic digests.
-- [`universe/crypto/advanced.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/crypto/advanced.lp) — RFC 8032 Ed25519 digital signature generation and verification.
-- [`universe/crypto/tls.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/crypto/tls.lp) — Pure LiPi TLS 1.3 record layer and AES-128-GCM authentication.
+- [`utso/crypto.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/crypto.lp) — NIST FIPS 180-4 SHA-256 and SHA-512 cryptographic digests.
+- [`utso/crypto/advanced.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/crypto/advanced.lp) — RFC 8032 Ed25519 digital signature generation and verification.
+- [`utso/crypto/tls.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/crypto/tls.lp) — Pure LiPi TLS 1.3 record layer and AES-128-GCM authentication.
 
 ---
 
 ## 🧠 Silicon AI & Scientific Computing
 
-- [`universe/ai/tensor.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/ai/tensor.lp) — N-dimensional tensor engine with AVX2 SIMD matrix multiplication (GEMM).
-- [`universe/ai/llm/transformer.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/ai/llm/transformer.lp) — Scaled Dot-Product Attention, Softmax, and Rotary Position Embeddings (RoPE).
-- [`universe/quantum/shor.lp`](file:///home/shafiullah/Documents/file/work/lipi/universe/quantum/shor.lp) — Shor's quantum period-finding with continued fraction expansion.
+- [`packages/lipi_ai/tensor.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_ai/tensor.lp) — N-dimensional tensor engine with AVX2 SIMD matrix multiplication (GEMM).
+- [`packages/lipi_ai/llm/transformer.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_ai/llm/transformer.lp) — Scaled Dot-Product Attention, Softmax, and Rotary Position Embeddings (RoPE).
+- [`packages/lipi_quantum/shor.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_quantum/shor.lp) — Shor's quantum period-finding with continued fraction expansion.
 
 ---
 

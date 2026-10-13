@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE FS: EXT4 SOVEREIGN FILESYSTEM ENGINE (universe/fs/ext4.lp)
+// 👑 LIPI UNIVERSE FS: EXT4 SOVEREIGN FILESYSTEM ENGINE (packages/lipi_fs/ext4.lp)
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Zero Libc | Sovereign OS Kernel Layer
 //
 // WHY: Native Ext4 parser enables Lipi bare-metal unikernels and microVMs to mount

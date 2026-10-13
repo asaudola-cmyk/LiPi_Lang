@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — NODE DAEMON & CLUSTER COORDINATOR (universe/swarm/node.lp)
+@! LIPI SWARM — NODE DAEMON & CLUSTER COORDINATOR (packages/lipi_swarm/node.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Integrates UDP Discovery, TCP RPC Server, Actor Routing & Task Execution
 @! ============================================================================

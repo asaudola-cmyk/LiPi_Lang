@@ -4,7 +4,8 @@
 লিপির স্বয়ংসম্পূর্ণ ইউনিভার্স ইকোসিস্টেমের দূরদর্শী পরিকল্পনাগুলো এখানে বর্ণিত হয়েছে।
 
 ## ডিরেক্টরি পরিচিতি:
-- `universe/` — Standard Library (AI, Net, Crypto, OS, GUI, 3D)
+- `utso/` — Genesis Primitives (Pure silicon core, memory, string, math, io, net, os, crypto)
+- `packages/` — Sovereign Packages (AI, DB, Web, GUI, 3D, Quantum, Blockchain, Hypervisor)
 - `compiler/` — Self-hosting compiler (লিপিতে লেখা)
 - `tools/` — LSP, Formatter, Package Manager (LipiPkg), Debugger
 - `assimilator/` — Universal Code Assimilator (Python, C, JS → LiPi)
