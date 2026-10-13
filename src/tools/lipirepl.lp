@@ -9,6 +9,7 @@
 // WHY: Canonical standard library modules unified under universe/ for clean architecture.
 include "universe/core/io.lp"
 include "universe/core/memory.lp"
+include "universe/core/string.lp"
 include "universe/tools/debug.lp"
 
 fn hex_digit n
@@ -256,6 +257,99 @@ fn repl_dispatch_command cmd
         say "অজানা কমান্ড: " + cmd + " (টাইপ করুন :help সহায়তার জন্য)"
     return 1
 
+// ─── Process Execution & Compilation Helpers (0% Libc) ────────────────────────
+// WHY: Pure Linux kernel ABI invocation without libc or bash dependencies
+fn repl_spawn_exec cmd_path arg1 arg2 arg3
+    argv = syscall(9, 0, 64, 3, 34, -1, 0)
+    mem_word_write(argv, 0, cmd_path)
+    idx = 1
+    if len(arg1) > 0
+        mem_word_write(argv, idx * 8, arg1)
+        idx = idx + 1
+    if len(arg2) > 0
+        mem_word_write(argv, idx * 8, arg2)
+        idx = idx + 1
+    if len(arg3) > 0
+        mem_word_write(argv, idx * 8, arg3)
+        idx = idx + 1
+    mem_word_write(argv, idx * 8, 0)
+
+    env = syscall(9, 0, 32, 3, 34, -1, 0)
+    path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
+    mem_word_write(env, 0, path_env)
+    mem_word_write(env, 8, 0)
+
+    st = syscall(9, 0, 8, 3, 34, -1, 0)
+    mem_word_write(st, 0, 0)
+
+    pid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if pid == 0
+        syscall(59, cmd_path, argv, env, 0, 0, 0)
+        syscall(60, 127, 0, 0, 0, 0, 0)
+
+    syscall(61, pid, st, 0, 0, 0, 0)
+    raw_status = mem_word_read(st, 0)
+    exit_code = (raw_status / 256) % 256
+
+    syscall(11, argv, 64, 0, 0, 0, 0)
+    syscall(11, env, 32, 0, 0, 0, 0)
+    syscall(11, st, 8, 0, 0, 0, 0)
+    return exit_code
+
+fn repl_resolve_compiler
+    if syscall(21, "bin/lipc", 0, 0, 0, 0, 0) == 0 return "bin/lipc"
+    if syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0 return "bin/lipc_bin"
+    if syscall(21, "/usr/local/bin/lipc", 0, 0, 0, 0, 0) == 0 return "/usr/local/bin/lipc"
+    if syscall(21, "/usr/bin/lipc", 0, 0, 0, 0, 0) == 0 return "/usr/bin/lipc"
+    return "lipc"
+
+fn repl_write_file path content
+    fd = syscall(2, path, 577, 420, 0, 0, 0)
+    if fd < 0 return 0
+    clen = len(content)
+    if clen > 0
+        syscall(1, fd, content, clen, 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    return 1
+
+// WHY: Executes general LiPi expressions, statements, and prints dynamically on the fly
+fn repl_dynamic_eval cmd
+    trimmed = trim(cmd)
+    if len(trimmed) == 0 return 1
+
+    code = ""
+    if starts_with(trimmed, "fn ") or starts_with(trimmed, "কাজ ") or starts_with(trimmed, "@fn ")
+        code = cmd + "\n"
+    elif starts_with(trimmed, "struct ") or starts_with(trimmed, "কাঠামো ") or starts_with(trimmed, "@struct ")
+        code = cmd + "\n"
+    elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "print ")
+        code = "fn main\n    " + cmd + "\n    return 0\nmain()\n"
+    elif starts_with(trimmed, "for ") or starts_with(trimmed, "while ") or starts_with(trimmed, "যদি ") or starts_with(trimmed, "if ")
+        code = "fn main\n    " + cmd + "\n    return 0\nmain()\n"
+    elif index_of(trimmed, "=") >= 0
+        code = "fn main\n    " + cmd + "\n    return 0\nmain()\n"
+    else
+        code = "fn main\n    say " + cmd + "\n    return 0\nmain()\n"
+
+    tmp_src = "/tmp/lipi_repl_tmp.lp"
+    tmp_bin = "/tmp/lipi_repl_tmp.bin"
+    w_ok = repl_write_file(tmp_src, code)
+    if w_ok == 1
+        compiler = repl_resolve_compiler()
+        res = repl_spawn_exec(compiler, tmp_src, "-o", tmp_bin)
+        if res == 0
+            t_start = cpu_clock()
+            repl_spawn_exec(tmp_bin, "", "", "")
+            t_end = cpu_clock()
+            elapsed = t_end - t_start
+            say "  [Hardware Cycle Timing: " + str(elapsed) + " cycles]"
+            syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+            syscall(87, tmp_src, 0, 0, 0, 0, 0)
+            return 1
+        syscall(87, tmp_src, 0, 0, 0, 0, 0)
+    say "  ❌ সংকলন বা মূল্যায়ন ত্রুটি: " + cmd
+    return 1
+
 // ─── Direct Interactive Expression Evaluator ──────────────────────────────────
 // WHY: Evaluates numeric and arithmetic expressions instantly in-memory without compiling to disk
 fn repl_eval_expr_string s
@@ -272,8 +366,7 @@ fn repl_eval_expr_string s
         p = p + 1
 
     if len(num_str1) == 0
-        say "অজানা ইনপুট: " + s + " (টাইপ করুন :help সহায়তার জন্য)"
-        return 1
+        return repl_dynamic_eval(s)
 
     v1 = parse_hex_or_dec(num_str1)
 
@@ -298,8 +391,7 @@ fn repl_eval_expr_string s
         op_id = 5
 
     if op_id == 0
-        say "  => ফলাফল: " + str(v1)
-        return 1
+        return repl_dynamic_eval(s)
 
     p = p + 1
     while p < slen and (char_at(s, p) == " " or char_at(s, p) == "\t")
@@ -311,8 +403,7 @@ fn repl_eval_expr_string s
         p = p + 1
 
     if len(num_str2) == 0
-        say "  => ফলাফল: " + str(v1)
-        return 1
+        return repl_dynamic_eval(s)
 
     v2 = parse_hex_or_dec(num_str2)
     রেপল_ইভ্যাল(v1, v2, op_id)

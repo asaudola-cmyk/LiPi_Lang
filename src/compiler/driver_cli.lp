@@ -75,6 +75,25 @@ fn main
             debug_mode = 1
         elif arg == "--shared" or arg == "-shared"
             emit_format = FORMAT_SHARED()
+        elif arg == "-target" or arg == "--target"
+            i = i + 1
+            if i < argc
+                t_arg = get(args, i)
+                if t_arg == "windows" or t_arg == "pe" or t_arg == "win"
+                    emit_format = FORMAT_PE()
+                elif t_arg == "macos" or t_arg == "macho" or t_arg == "darwin" or t_arg == "mac"
+                    emit_format = FORMAT_MACHO()
+                elif t_arg == "arm64" or t_arg == "aarch64"
+                    target_arch = TARGET_ID_ARM64()
+                elif t_arg == "wasm" or t_arg == "web"
+                    target_arch = TARGET_ID_WASM()
+                elif t_arg == "riscv64" or t_arg == "riscv"
+                    target_arch = TARGET_ID_RISCV64()
+                elif t_arg == "verilog" or t_arg == "hdl"
+                    target_arch = TARGET_ID_VERILOG()
+                    emit_format = FORMAT_VERILOG()
+                elif t_arg == "x86_64" or t_arg == "amd64" or t_arg == "linux"
+                    target_arch = TARGET_ID_X86_64()
         elif arg == "--format=macho" or arg == "--macho" or arg == "--target=macos"
             emit_format = FORMAT_MACHO()
         elif arg == "--format=pe" or arg == "--pe" or arg == "--target=windows"

@@ -4,7 +4,7 @@
 # ==============================================================================
 
 SHELL := /bin/bash
-.PHONY: all bootstrap build test clean install uninstall update
+.PHONY: all bootstrap build test clean install uninstall update release
 
 all: bootstrap build
 
@@ -51,6 +51,13 @@ build: bootstrap
 	@./bin/lipc build.lp bin/lipi-build && chmod +x bin/lipi-build
 	@./bin/lipc tests/run_tests.lp bin/lipi-test && chmod +x bin/lipi-test
 	@echo "👑 100% Native LiPi Developer Toolchain Ready!"
+
+# Package standalone pre-built release archive for Linux x86_64
+release: build
+	@echo "📦 Packaging sovereign standalone release distribution..."
+	@mkdir -p dist
+	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ universe/ packages/ examples/ install.sh LICENSE README.md
+	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
 # Run autonomous 203 regression test suite
 test: bootstrap
