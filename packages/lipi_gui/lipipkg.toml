@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_gui
+# ==============================================================================
+
+name = "lipi_gui"
+version = "1.0.0"
+description = "Direct framebuffer, X11, TUI, and declarative UI primitives"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

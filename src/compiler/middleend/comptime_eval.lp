@@ -10,8 +10,8 @@
 // এবং লুকআপ টেবিল (LUT) মূল্যায়ন করে সরাসরি বাইনারিতে কনস্ট্যান্ট হিসেবে বসিয়ে দেয়,
 // যার ফলে রানটাইম এক্সিকিউশন টাইম ঠিক ০.০০ ন্যানোসেকেন্ড (0.00 ns) হয়।
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. COMPTIME ENVIRONMENT & CONSTANT BINDINGS

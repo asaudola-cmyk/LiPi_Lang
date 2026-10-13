@@ -7,8 +7,8 @@
 @! LDTILECFG, TDPBSSD (Tile Dot Product) & 2D Hardware Matrix Acceleration
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. AMX TILE CONFIGURATION & INSTRUCTION STRUCTURES

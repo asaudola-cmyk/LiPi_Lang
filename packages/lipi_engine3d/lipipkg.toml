@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_engine3d
+# ==============================================================================
+
+name = "lipi_engine3d"
+version = "1.0.0"
+description = "Pure LiPi 3D software rasterizer, linear algebra, and scene graph"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

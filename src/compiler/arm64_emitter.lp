@@ -3166,95 +3166,93 @@ fn arm64_list_has lst item
         i = i + 1
     return 0
 
-// WHY: Transparent backward compatibility mapping for legacy std/* includes
+// WHY: Transparent backward compatibility mapping for legacy std/* includes and short utso primitives
 // on ARM64 emitter to ensure identical behavior with x86-64 elf_emitter.
 fn arm64_map_legacy_stdlib inc_name
-    if inc_name == "std/crypto.lp" or inc_name == "std/crypto"
-        return "universe/crypto/crypto.lp"
-    if inc_name == "std/crypto2.lp" or inc_name == "std/crypto2"
-        return "universe/crypto/advanced.lp"
-    if inc_name == "std/tls.lp" or inc_name == "std/tls"
-        return "universe/crypto/tls.lp"
-    if inc_name == "std/mem.lp" or inc_name == "std/mem"
-        return "universe/core/memory.lp"
-    if inc_name == "std/io.lp" or inc_name == "std/io"
-        return "universe/core/io.lp"
-    if inc_name == "std/str.lp" or inc_name == "std/str"
-        return "universe/core/string.lp"
-    if inc_name == "std/math.lp" or inc_name == "std/math"
-        return "universe/core/math.lp"
-    if inc_name == "std/arena.lp" or inc_name == "std/arena"
-        return "universe/core/arena.lp"
-    if inc_name == "std/hashmap.lp" or inc_name == "std/hashmap"
-        return "universe/core/hashmap.lp"
-    if inc_name == "std/fmt.lp" or inc_name == "std/fmt"
-        return "universe/core/fmt.lp"
-    if inc_name == "std/time.lp" or inc_name == "std/time"
-        return "universe/core/time.lp"
-    if inc_name == "std/json.lp" or inc_name == "std/json"
-        return "universe/core/json.lp"
-    if inc_name == "std/regex.lp" or inc_name == "std/regex"
-        return "universe/core/regex.lp"
-    if inc_name == "std/simd.lp" or inc_name == "std/simd"
-        return "universe/core/simd.lp"
-    if inc_name == "std/multilang.lp" or inc_name == "std/multilang"
-        return "universe/core/multilang.lp"
-    if inc_name == "std/version.lp" or inc_name == "std/version"
-        return "universe/core/version.lp"
-    if inc_name == "std/web.lp" or inc_name == "std/web"
-        return "universe/web/engine.lp"
-    if inc_name == "std/http.lp" or inc_name == "std/http"
-        return "universe/web/http.lp"
-    if inc_name == "std/net.lp" or inc_name == "std/net"
-        return "universe/net/socket.lp"
-    if inc_name == "std/websocket.lp" or inc_name == "std/websocket"
-        return "universe/net/ws_wire.lp"
-    if inc_name == "std/grpc.lp" or inc_name == "std/grpc"
-        return "universe/net/grpc_server.lp"
-    if inc_name == "std/db.lp" or inc_name == "std/db"
-        return "universe/db/engine.lp"
-    if inc_name == "std/kv.lp" or inc_name == "std/kv"
-        return "universe/db/kv.lp"
-    if inc_name == "std/orm.lp" or inc_name == "std/orm"
-        return "universe/db/orm.lp"
-    if inc_name == "std/columnstore.lp" or inc_name == "std/columnstore"
-        return "universe/db/column/columnstore.lp"
-    if inc_name == "std/kernel.lp" or inc_name == "std/kernel"
-        return "universe/os/kernel_multiboot.lp"
-    if inc_name == "std/thread.lp" or inc_name == "std/thread"
-        return "universe/os/thread.lp"
-    if inc_name == "std/shm.lp" or inc_name == "std/shm"
-        return "universe/os/shm.lp"
-    if inc_name == "std/event.lp" or inc_name == "std/event"
-        return "universe/os/event.lp"
-    if inc_name == "std/cli.lp" or inc_name == "std/cli"
-        return "universe/tools/cli.lp"
-    if inc_name == "std/debug.lp" or inc_name == "std/debug"
-        return "universe/tools/debug.lp"
-    if inc_name == "std/test.lp" or inc_name == "std/test"
-        return "universe/tools/test_runner.lp"
-    if inc_name == "std/ai.lp" or inc_name == "std/ai"
-        return "universe/ai/tensor_engine.lp"
-    if inc_name == "std/gguf.lp" or inc_name == "std/gguf"
-        return "universe/ai/gguf.lp"
-    if inc_name == "std/gfx.lp" or inc_name == "std/gfx"
-        return "universe/gui/gfx.lp"
-    if inc_name == "std/x11.lp" or inc_name == "std/x11"
-        return "universe/gui/x11/x11.lp"
-    if inc_name == "std/tui.lp" or inc_name == "std/tui"
-        return "universe/gui/tui.lp"
+    // 1. Short Developer-Friendly Sovereign Primitives:
+    if inc_name == "utso/io" or inc_name == "utso/io.lp" return "utso/io.lp"
+    if inc_name == "utso/mem" or inc_name == "utso/memory" or inc_name == "utso/memory.lp" return "utso/memory.lp"
+    if inc_name == "utso/str" or inc_name == "utso/string" or inc_name == "utso/string.lp" return "utso/string.lp"
+    if inc_name == "utso/unicode" or inc_name == "utso/unicode.lp" return "utso/unicode.lp"
+    if inc_name == "utso/math" or inc_name == "utso/math.lp" return "utso/math.lp"
+    if inc_name == "utso/collections" or inc_name == "utso/collections.lp" return "utso/collections.lp"
+    if inc_name == "utso/socket" or inc_name == "utso/socket.lp" or inc_name == "utso/net" return "utso/socket.lp"
+    if inc_name == "utso/crypto" or inc_name == "utso/crypto.lp" return "utso/crypto.lp"
+    if inc_name == "utso/syscalls" or inc_name == "utso/syscalls.lp" or inc_name == "utso/os" return "utso/syscalls.lp"
+    if inc_name == "utso/time" or inc_name == "utso/time.lp" return "utso/time.lp"
+    if inc_name == "utso/fmt" or inc_name == "utso/fmt.lp" return "utso/fmt.lp"
+    if inc_name == "utso/hashmap" or inc_name == "utso/hashmap.lp" return "utso/hashmap.lp"
+    if inc_name == "utso/arena" or inc_name == "utso/arena.lp" return "utso/arena.lp"
+    if inc_name == "utso/error" or inc_name == "utso/error.lp" return "utso/error.lp"
+    if inc_name == "utso/option" or inc_name == "utso/option.lp" return "utso/option.lp"
+    if inc_name == "utso/result" or inc_name == "utso/result.lp" return "utso/result.lp"
+    if inc_name == "utso/ffi" or inc_name == "utso/ffi.lp" return "utso/ffi.lp"
+    if inc_name == "utso/concurrency" or inc_name == "utso/concurrency.lp" return "utso/concurrency.lp"
+    if inc_name == "utso/channel" or inc_name == "utso/channel.lp" return "utso/channel.lp"
+
+    // 2. Legacy 'universe/core/*' mapping to sovereign primitives:
+    if inc_name == "utso/memory" or inc_name == "utso/memory" return "utso/memory.lp"
+    if inc_name == "utso/io" or inc_name == "utso/io" return "utso/io.lp"
+    if inc_name == "utso/string" or inc_name == "utso/string" return "utso/string.lp"
+    if inc_name == "universe/core/unicode.lp" or inc_name == "universe/core/unicode" return "utso/unicode.lp"
+    if inc_name == "utso/math" or inc_name == "utso/math" return "utso/math.lp"
+    if inc_name == "universe/core/collections.lp" or inc_name == "utso/collections" return "utso/collections.lp"
+    if inc_name == "utso/syscalls" or inc_name == "utso/syscalls" return "utso/syscalls.lp"
+    if inc_name == "utso/crypto" or inc_name == "universe/crypto/crypto" return "utso/crypto.lp"
+    if inc_name == "utso/socket" or inc_name == "universe/net/socket" return "utso/socket.lp"
+
+    // 3. Legacy 'std/*' standard aliases:
+    if inc_name == "std/crypto.lp" or inc_name == "std/crypto" return "utso/crypto.lp"
+    if inc_name == "std/crypto2.lp" or inc_name == "std/crypto2" return "utso/crypto.lp"
+    if inc_name == "std/tls.lp" or inc_name == "std/tls" return "packages/crypto_vault/crypto_vault.lp"
+    if inc_name == "std/mem.lp" or inc_name == "std/mem" return "utso/memory.lp"
+    if inc_name == "std/io.lp" or inc_name == "std/io" return "utso/io.lp"
+    if inc_name == "std/str.lp" or inc_name == "std/str" return "utso/string.lp"
+    if inc_name == "std/math.lp" or inc_name == "std/math" return "utso/math.lp"
+    if inc_name == "std/arena.lp" or inc_name == "std/arena" return "utso/arena.lp"
+    if inc_name == "std/hashmap.lp" or inc_name == "std/hashmap" return "utso/hashmap.lp"
+    if inc_name == "std/fmt.lp" or inc_name == "std/fmt" return "utso/fmt.lp"
+    if inc_name == "std/time.lp" or inc_name == "std/time" return "utso/time.lp"
+    if inc_name == "std/json.lp" or inc_name == "std/json" return "packages/json_toolkit/json.lp"
+    if inc_name == "std/regex.lp" or inc_name == "std/regex" return "utso/core/regex.lp"
+    if inc_name == "std/simd.lp" or inc_name == "std/simd" return "utso/core/simd.lp"
+    if inc_name == "std/web.lp" or inc_name == "std/web" return "packages/lipi_web/engine.lp"
+    if inc_name == "std/http.lp" or inc_name == "std/http" return "packages/lipi_web/http.lp"
+    if inc_name == "std/net.lp" or inc_name == "std/net" return "utso/socket.lp"
+    if inc_name == "std/db.lp" or inc_name == "std/db" return "packages/lipidb/engine.lp"
+    if inc_name == "std/ai.lp" or inc_name == "std/ai" return "packages/lipi_ai/tensor_engine.lp"
+    if inc_name == "std/gfx.lp" or inc_name == "std/gfx" return "packages/lipi_gui/gfx.lp"
+    if inc_name == "std/tui.lp" or inc_name == "std/tui" return "packages/lipi_gui/tui.lp"
     return ""
 
 fn arm64_resolve_inc_path cur_dir inc_name
     legacy = arm64_map_legacy_stdlib(inc_name)
     if len(legacy) > 0
         return legacy
+    if file_exists(inc_name + ".lp") == 1
+        return inc_name + ".lp"
     if file_exists(inc_name) == 1
         return inc_name
+    cand_utso = "utso/" + inc_name + ".lp"
+    if file_exists(cand_utso) == 1
+        return cand_utso
+    cand_utso_raw = "utso/" + inc_name
+    if file_exists(cand_utso_raw) == 1
+        return cand_utso_raw
+    cand_pkg = "packages/" + inc_name + ".lp"
+    if file_exists(cand_pkg) == 1
+        return cand_pkg
+    cand_pkg_raw = "packages/" + inc_name
+    if file_exists(cand_pkg_raw) == 1
+        return cand_pkg_raw
     cand1 = cur_dir + "/" + inc_name
+    if file_exists(cand1 + ".lp") == 1
+        return cand1 + ".lp"
     if file_exists(cand1) == 1
         return cand1
     cand_uni = "universe/" + inc_name
+    if file_exists(cand_uni + ".lp") == 1
+        return cand_uni + ".lp"
     if file_exists(cand_uni) == 1
         return cand_uni
     cand3 = "../" + inc_name

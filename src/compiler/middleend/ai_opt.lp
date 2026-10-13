@@ -6,8 +6,8 @@
 @! AI-Guided Register Pressure Optimization & Feedback-Directed Learning (FDO)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/collections"
+import "utso/math"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES & LOOP METRICS

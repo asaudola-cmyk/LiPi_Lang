@@ -18,8 +18,8 @@
 //    register alignment and prevents field offset collisions across compiler modules.
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/lexer/token"
 
 // ── 1. AST Tag Enumeration ───────────────────────────────────────────────────

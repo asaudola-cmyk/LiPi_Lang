@@ -5,7 +5,7 @@
 @! ============================================================================
 
 import "compiler/backend/universal_number"
-import "universe/core/collections"
+import "utso/collections"
 
 @! Encodes an addition operation: load A, add B, return result
 @fn encode_addition_program(val_a, val_b)

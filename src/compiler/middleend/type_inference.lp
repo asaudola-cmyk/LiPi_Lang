@@ -4,8 +4,8 @@
 @! Canonical LiPi Implementation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @enum TypeKind
   Var = 0

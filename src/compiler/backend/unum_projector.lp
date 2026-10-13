@@ -5,7 +5,7 @@
 @! ============================================================================
 
 import "compiler/backend/universal_number"
-import "universe/core/collections"
+import "utso/collections"
 
 @! Helper to push 4 bytes (little-endian)
 @fn push_i32_le(bytes_list, val)

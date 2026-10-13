@@ -4,9 +4,9 @@
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
+include "utso/io"
+include "utso/memory"
+include "utso/string"
 
 // ── Process Execution Gateway ────────────────────────────────────────────────
 // WHY: Freestanding execution without bash, using sys_mmap, sys_fork, sys_execve, sys_wait4

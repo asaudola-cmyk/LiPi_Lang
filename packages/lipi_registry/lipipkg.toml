@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_registry
+# ==============================================================================
+
+name = "lipi_registry"
+version = "1.0.0"
+description = "Sovereign decentralized package registry and SemVer specification engine"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -5,8 +5,8 @@
 @! 100% Pure LiPi Implementation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @enum PatternKind
   Wildcard = 0

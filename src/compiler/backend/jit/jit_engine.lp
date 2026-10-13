@@ -5,8 +5,8 @@
 @! Standard: Zero Disk I/O, Instant Expression Evaluation, Persistent Functions & State
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "src/compiler/frontend/parser"
 import "src/compiler/middleend/ast_to_ssa"
 import "src/compiler/backend/jit/jit_memory"

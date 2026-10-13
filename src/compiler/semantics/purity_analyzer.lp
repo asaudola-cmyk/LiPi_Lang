@@ -19,9 +19,9 @@
 // 5. Sovereign Prefixed Fields (`pv_`, `pr_`, `pa_`) eliminate struct collisions.
 // ==============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 import "compiler/frontend/ast/ast_node"
-import "universe/core/string"
+import "utso/string"
 import "compiler/semantics/symbol"
 
 // ── 1. PURITY LEVELS & VIOLATION CLASSIFICATIONS ─────────────────────────────

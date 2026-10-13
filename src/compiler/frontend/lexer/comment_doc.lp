@@ -18,8 +18,8 @@
 //    safe field offset resolution across untyped compiler call boundaries.
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 // ── 1. Result Data Structure ──────────────────────────────────────────────────
 

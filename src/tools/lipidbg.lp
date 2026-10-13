@@ -7,9 +7,9 @@
 // lipidbg inspects physical CPU stacks, validates ELF64 binaries, disassembles
 // machine instructions, and renders memory dumps without any C or GDB dependencies.
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/tools/debug.lp"
+include "utso/io"
+include "utso/memory"
+include "utso/tools/debug.lp"
 
 fn hex_digit n
     val = n % 16

@@ -5,7 +5,7 @@
 // Zero External Dependencies — 100% Pure Lipi First 1.0.0
 // ============================================================================
 
-import "universe/core/string"
+import "utso/string"
 
 // WHY: The COFF (Common Object File Format) header and PE32+ Optional Header
 // define the target CPU architecture, execution entry point RVA (Relative Virtual Address),

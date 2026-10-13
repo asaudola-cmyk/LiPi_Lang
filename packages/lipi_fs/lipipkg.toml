@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_fs
+# ==============================================================================
+
+name = "lipi_fs"
+version = "1.0.0"
+description = "Sovereign copy-on-write filesystem and virtual file table"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

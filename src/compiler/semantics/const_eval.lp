@@ -19,8 +19,8 @@
 //    binary layout without struct collisions via `cv_` and `ce_` prefixes.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/semantics/symbol"
 import "compiler/frontend/ast/ast_node"
 

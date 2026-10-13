@@ -20,8 +20,8 @@
 //    and Linux kernel SYS_mmap/SYS_exit/SYS_write syscalls with zero C runtime.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 import "compiler/frontend/lexer/token_kind"
 import "compiler/frontend/lexer/token"

@@ -8,8 +8,8 @@
 // uniform operator spacing (e.g. 'a + b', 'x = 10', 'i == 0'), trailing whitespace removal,
 // and normalization of consecutive blank lines.
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io"
+include "utso/memory"
 
 // ── 1. Helper Utilities ──────────────────────────────────────────────────────
 

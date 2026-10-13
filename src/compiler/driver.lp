@@ -55,6 +55,19 @@ fn compiler_driver_streq s1 s2
         si = si + 1
     return 1
 
+fn compiler_driver_starts_with s prefix
+    // WHY: Zero-allocation direct silicon byte prefix comparison.
+    slen = len(s)
+    plen = len(prefix)
+    if slen < plen
+        return 0
+    k = 0
+    while k < plen
+        if mem_byte_read(s, k) != mem_byte_read(prefix, k)
+            return 0
+        k = k + 1
+    return 1
+
 fn compiler_driver_has_include content
     // WHY: High-speed zero-allocation prefix scanner to identify whether a source file contains
     // any include or import statements. If zero include directives exist, file can be returned
@@ -111,43 +124,78 @@ fn compiler_driver_join_chunks chunks
     return ""
 
 fn compiler_driver_resolve_std target
-    // WHY: Seamlessly translates legacy 'std/*' import paths to sovereign 'universe/*' subsystem paths,
-    // ensuring 100% backward compatibility with all test harnesses and legacy code without code churn.
-    if target == "std/mem.lp" or target == "std/mem" return "universe/core/memory.lp"
-    if target == "std/io.lp" or target == "std/io" return "universe/core/io.lp"
-    if target == "std/str.lp" or target == "std/str" return "universe/core/string.lp"
-    if target == "std/math.lp" or target == "std/math" return "universe/core/math.lp"
-    if target == "std/arena.lp" or target == "std/arena" return "universe/core/arena.lp"
-    if target == "std/hashmap.lp" or target == "std/hashmap" return "universe/core/hashmap.lp"
-    if target == "std/fmt.lp" or target == "std/fmt" return "universe/core/fmt.lp"
-    if target == "std/time.lp" or target == "std/time" return "universe/core/time.lp"
-    if target == "std/json.lp" or target == "std/json" return "universe/core/json.lp"
-    if target == "std/regex.lp" or target == "std/regex" return "universe/core/regex.lp"
-    if target == "std/simd.lp" or target == "std/simd" return "universe/core/simd.lp"
-    if target == "std/crypto.lp" or target == "std/crypto" return "universe/crypto/crypto.lp"
-    if target == "std/crypto2.lp" or target == "std/crypto2" return "universe/crypto/advanced.lp"
-    if target == "std/tls.lp" or target == "std/tls" return "universe/crypto/tls.lp"
-    if target == "std/kernel.lp" or target == "std/kernel" return "universe/os/kernel_multiboot.lp"
-    if target == "std/thread.lp" or target == "std/thread" return "universe/os/thread.lp"
-    if target == "std/shm.lp" or target == "std/shm" return "universe/os/shm.lp"
-    if target == "std/event.lp" or target == "std/event" return "universe/os/event.lp"
-    if target == "std/cli.lp" or target == "std/cli" return "universe/tools/cli.lp"
-    if target == "std/debug.lp" or target == "std/debug" return "universe/tools/debug.lp"
-    if target == "std/test.lp" or target == "std/test" return "universe/tools/test_runner.lp"
-    if target == "std/ai.lp" or target == "std/ai" return "universe/ai/tensor_engine.lp"
-    if target == "std/gguf.lp" or target == "std/gguf" return "universe/ai/gguf.lp"
-    if target == "std/gfx.lp" or target == "std/gfx" return "universe/gui/gfx.lp"
-    if target == "std/x11.lp" or target == "std/x11" return "universe/gui/x11/x11.lp"
-    if target == "std/tui.lp" or target == "std/tui" return "universe/gui/tui.lp"
-    if target == "std/web.lp" or target == "std/web" return "universe/web/engine.lp"
-    if target == "std/http.lp" or target == "std/http" return "universe/web/http.lp"
-    if target == "std/net.lp" or target == "std/net" return "universe/net/socket.lp"
-    if target == "std/websocket.lp" or target == "std/websocket" return "universe/net/ws_wire.lp"
-    if target == "std/grpc.lp" or target == "std/grpc" return "universe/net/grpc_server.lp"
-    if target == "std/db.lp" or target == "std/db" return "universe/db/engine.lp"
-    if target == "std/kv.lp" or target == "std/kv" return "universe/db/kv.lp"
-    if target == "std/orm.lp" or target == "std/orm" return "universe/db/orm.lp"
-    if target == "std/columnstore.lp" or target == "std/columnstore" return "universe/db/column/columnstore.lp"
+    // WHY: Seamlessly translates developer-friendly short primitive syntax ('utso/io', 'utso/memory')
+    // and legacy paths ('std/*', 'universe/*') into canonical sovereign paths without breaking changes.
+    // 1. Short Developer-Friendly Sovereign Primitives:
+    if target == "utso/io" or target == "utso/io.lp" return "utso/io.lp"
+    if target == "utso/mem" or target == "utso/memory" or target == "utso/memory.lp" return "utso/memory.lp"
+    if target == "utso/str" or target == "utso/string" or target == "utso/string.lp" return "utso/string.lp"
+    if target == "utso/unicode" or target == "utso/unicode.lp" return "utso/unicode.lp"
+    if target == "utso/math" or target == "utso/math.lp" return "utso/math.lp"
+    if target == "utso/collections" or target == "utso/collections.lp" return "utso/collections.lp"
+    if target == "utso/socket" or target == "utso/socket.lp" or target == "utso/net" return "utso/socket.lp"
+    if target == "utso/crypto" or target == "utso/crypto.lp" return "utso/crypto.lp"
+    if target == "utso/syscalls" or target == "utso/syscalls.lp" or target == "utso/os" return "utso/syscalls.lp"
+    if target == "utso/time" or target == "utso/time.lp" return "utso/time.lp"
+    if target == "utso/fmt" or target == "utso/fmt.lp" return "utso/fmt.lp"
+    if target == "utso/hashmap" or target == "utso/hashmap.lp" return "utso/hashmap.lp"
+    if target == "utso/arena" or target == "utso/arena.lp" return "utso/arena.lp"
+    if target == "utso/error" or target == "utso/error.lp" return "utso/error.lp"
+    if target == "utso/option" or target == "utso/option.lp" return "utso/option.lp"
+    if target == "utso/result" or target == "utso/result.lp" return "utso/result.lp"
+    if target == "utso/ffi" or target == "utso/ffi.lp" return "utso/ffi.lp"
+    if target == "utso/concurrency" or target == "utso/concurrency.lp" return "utso/concurrency.lp"
+    if target == "utso/channel" or target == "utso/channel.lp" return "utso/channel.lp"
+
+    // 2. Legacy 'universe/core/*' and 'universe/os/*' mapping to sovereign primitives:
+    if target == "universe/core/memory.lp" or target == "universe/core/memory" return "utso/memory.lp"
+    if target == "universe/core/io.lp" or target == "universe/core/io" return "utso/io.lp"
+    if target == "universe/core/string.lp" or target == "universe/core/string" return "utso/string.lp"
+    if target == "universe/core/unicode.lp" or target == "universe/core/unicode" return "utso/unicode.lp"
+    if target == "universe/core/math.lp" or target == "universe/core/math" return "utso/math.lp"
+    if target == "universe/core/collections.lp" or target == "universe/core/collections" return "utso/collections.lp"
+    if target == "universe/os/syscalls.lp" or target == "universe/os/syscalls" return "utso/syscalls.lp"
+    if target == "universe/crypto/crypto.lp" or target == "universe/crypto/crypto" return "utso/crypto.lp"
+    if target == "universe/net/socket.lp" or target == "universe/net/socket" return "utso/socket.lp"
+    if target == "universe/os/kernel_multiboot.lp" or target == "universe/os/kernel_multiboot" return "utso/os/kernel_multiboot.lp"
+
+    // 3. Complete legacy 'std/*' standard library mappings:
+    if target == "std/mem.lp" or target == "std/mem" return "utso/memory.lp"
+    if target == "std/io.lp" or target == "std/io" return "utso/io.lp"
+    if target == "std/str.lp" or target == "std/str" return "utso/string.lp"
+    if target == "std/math.lp" or target == "std/math" return "utso/math.lp"
+    if target == "std/arena.lp" or target == "std/arena" return "utso/arena.lp"
+    if target == "std/hashmap.lp" or target == "std/hashmap" return "utso/hashmap.lp"
+    if target == "std/fmt.lp" or target == "std/fmt" return "utso/fmt.lp"
+    if target == "std/time.lp" or target == "std/time" return "utso/time.lp"
+    if target == "std/json.lp" or target == "std/json" return "packages/json_toolkit/json.lp"
+    if target == "std/regex.lp" or target == "std/regex" return "utso/core/regex.lp"
+    if target == "std/simd.lp" or target == "std/simd" return "utso/core/simd.lp"
+    if target == "std/crypto.lp" or target == "std/crypto" return "utso/crypto.lp"
+    if target == "std/crypto2.lp" or target == "std/crypto2" return "utso/crypto/advanced.lp"
+    if target == "std/tls.lp" or target == "std/tls" return "utso/crypto/tls.lp"
+    if target == "std/kernel.lp" or target == "std/kernel" return "utso/os/kernel_multiboot.lp"
+    if target == "std/thread.lp" or target == "std/thread" return "utso/os/thread.lp"
+    if target == "std/shm.lp" or target == "std/shm" return "utso/os/shm.lp"
+    if target == "std/event.lp" or target == "std/event" return "utso/os/event.lp"
+    if target == "std/cli.lp" or target == "std/cli" return "utso/tools/cli.lp"
+    if target == "std/debug.lp" or target == "std/debug" return "utso/tools/debug.lp"
+    if target == "std/test.lp" or target == "std/test" return "utso/tools/test_runner.lp"
+    if target == "std/ai.lp" or target == "std/ai" return "packages/lipi_ai/tensor_engine.lp"
+    if target == "std/gguf.lp" or target == "std/gguf" return "packages/lipi_ai/gguf.lp"
+    if target == "std/gfx.lp" or target == "std/gfx" return "packages/lipi_gui/gfx.lp"
+    if target == "std/x11.lp" or target == "std/x11" return "packages/lipi_gui/x11/x11.lp"
+    if target == "std/tui.lp" or target == "std/tui" return "packages/lipi_gui/tui.lp"
+    if target == "std/web.lp" or target == "std/web" return "packages/lipi_web/engine.lp"
+    if target == "std/http.lp" or target == "std/http" return "packages/lipi_web/http.lp"
+    if target == "std/net.lp" or target == "std/net" return "utso/socket.lp"
+    if target == "std/websocket.lp" or target == "std/websocket" return "packages/lipi_web/ws_wire.lp"
+    if target == "std/grpc.lp" or target == "std/grpc" return "packages/lipi_grpc/grpc_server.lp"
+    if target == "std/db.lp" or target == "std/db" return "packages/lipidb/engine.lp"
+    if target == "std/kv.lp" or target == "std/kv" return "packages/lipidb/kv.lp"
+    if target == "std/orm.lp" or target == "std/orm" return "packages/lipidb/orm.lp"
+    if target == "std/columnstore.lp" or target == "std/columnstore" return "packages/lipidb/column/columnstore.lp"
+
     return target
 
 fn compiler_driver_get_env name
@@ -191,22 +239,28 @@ fn compiler_driver_get_env name
     syscall(11, buf, 32768, 0, 0, 0, 0)
     return ""
 
+fn compiler_driver_is_lipi_dir dir
+    if len(dir) == 0 return 0
+    if file_exists(dir + "/utso/memory.lp") == 1 return 1
+    if file_exists(dir + "/utso/core/memory.lp") == 1 return 1
+    if file_exists(dir + "/universe/core/memory.lp") == 1 return 1
+    return 0
+
 fn compiler_driver_get_lipi_root
     // WHY: Sovereign self-location of LiPi compiler installation root (0% libc / 0% external tools).
-    // Discovers the canonical root directory containing 'universe/' and 'src/' so any project
-    // across the entire operating system can compile without manual symlinks.
+    // Discovers canonical root containing 'utso/', 'packages/', 'universe/', and 'src/' across all OS paths.
 
     // 1. Check environment variables LIPI_ROOT, LIPI_HOME, LIPI_PATH (explicit user override)
     r_env = compiler_driver_get_env("LIPI_ROOT")
-    if len(r_env) > 0 and file_exists(r_env + "/universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir(r_env) == 1
         return r_env
 
     r_home = compiler_driver_get_env("LIPI_HOME")
-    if len(r_home) > 0 and file_exists(r_home + "/universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir(r_home) == 1
         return r_home
 
     r_path = compiler_driver_get_env("LIPI_PATH")
-    if len(r_path) > 0 and file_exists(r_path + "/universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir(r_path) == 1
         return r_path
 
     // 2. Inspect Linux /proc/self/exe via direct sys_readlink (Syscall 89)
@@ -222,28 +276,28 @@ fn compiler_driver_get_lipi_root
 
         bin_dir = compiler_driver_dirname(exe_path)
         cand_root = compiler_driver_dirname(bin_dir)
-        if file_exists(cand_root + "/universe/core/memory.lp") == 1
+        if compiler_driver_is_lipi_dir(cand_root) == 1
             return cand_root
-        if file_exists(bin_dir + "/universe/core/memory.lp") == 1
+        if compiler_driver_is_lipi_dir(bin_dir) == 1
             return bin_dir
     else
         syscall(11, exe_buf, 1024, 0, 0, 0, 0)
 
     // 3. Check user home installation directory (~/.lipi)
     u_home = compiler_driver_get_env("HOME")
-    if len(u_home) > 0 and file_exists(u_home + "/.lipi/universe/core/memory.lp") == 1
+    if len(u_home) > 0 and compiler_driver_is_lipi_dir(u_home + "/.lipi") == 1
         return u_home + "/.lipi"
 
     // 4. Standard global system paths
-    if file_exists("/usr/local/lib/lipi/universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir("/usr/local/lib/lipi") == 1
         return "/usr/local/lib/lipi"
-    if file_exists("/usr/lib/lipi/universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir("/usr/lib/lipi") == 1
         return "/usr/lib/lipi"
-    if file_exists("/opt/lipi/universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir("/opt/lipi") == 1
         return "/opt/lipi"
 
     // 5. Current working directory fallback
-    if file_exists("universe/core/memory.lp") == 1
+    if compiler_driver_is_lipi_dir(".") == 1
         return "."
 
     return ""
@@ -251,8 +305,8 @@ fn compiler_driver_get_lipi_root
 fn compiler_driver_resolve_path inc_target cur_dir lipi_root
     // WHY: Deterministic 4-tier module path resolution engine.
     // Tier 1: Local directory relative to the current file (project-level module imports)
-    // Tier 2: Current working directory / absolute filesystem path
-    // Tier 3: Sovereign LiPi root (universe standard library and compiler subsystems)
+    // Tier 2: Current working directory, 'utso/' primitives, and 'packages/' repositories
+    // Tier 3: Sovereign LiPi root (utso standard library, packages, and compiler subsystems)
     // Tier 4: Fallback to raw inc_target for unified compiler diagnostic error reporting
 
     // Prioritize .lp extension to prevent matching filesystem directories
@@ -267,10 +321,110 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
         return inc_target + ".lp"
     if file_exists(inc_target) == 1
         return inc_target
+    if file_exists("utso/" + inc_target + ".lp") == 1
+        return "utso/" + inc_target + ".lp"
+    if file_exists("utso/" + inc_target) == 1
+        return "utso/" + inc_target
+    if file_exists("packages/" + inc_target + ".lp") == 1
+        return "packages/" + inc_target + ".lp"
+    if file_exists("packages/" + inc_target) == 1
+        return "packages/" + inc_target
     if file_exists("src/" + inc_target + ".lp") == 1
         return "src/" + inc_target + ".lp"
     if file_exists("src/" + inc_target) == 1
         return "src/" + inc_target
+
+    // Dynamic translation for legacy universe/ paths:
+    if compiler_driver_starts_with(inc_target, "universe/") == 1
+        sub_p = str_sub(inc_target, 9, len(inc_target))
+        // 1. Try utso/
+        if file_exists("utso/" + sub_p + ".lp") == 1
+            return "utso/" + sub_p + ".lp"
+        if file_exists("utso/" + sub_p) == 1
+            return "utso/" + sub_p
+        // 2. Try packages/
+        if file_exists("packages/" + sub_p + ".lp") == 1
+            return "packages/" + sub_p + ".lp"
+        if file_exists("packages/" + sub_p) == 1
+            return "packages/" + sub_p
+        // 3. Domain mappings in packages/
+        if compiler_driver_starts_with(sub_p, "ai/") == 1
+            cand = "packages/lipi_ai/" + str_sub(sub_p, 3, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "db/") == 1
+            cand = "packages/lipidb/" + str_sub(sub_p, 3, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "web/") == 1
+            cand = "packages/lipi_web/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "gui/") == 1
+            cand = "packages/lipi_gui/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "engine3d/") == 1
+            cand = "packages/lipi_engine3d/" + str_sub(sub_p, 9, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "quantum/") == 1
+            cand = "packages/lipi_quantum/" + str_sub(sub_p, 8, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "blockchain/") == 1
+            cand = "packages/lipi_blockchain/" + str_sub(sub_p, 11, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "hypervisor/") == 1
+            cand = "packages/lipi_hypervisor/" + str_sub(sub_p, 11, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "swarm/") == 1
+            cand = "packages/lipi_swarm/" + str_sub(sub_p, 6, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "iot/") == 1
+            cand = "packages/lipi_iot/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "media/") == 1
+            cand = "packages/lipi_media/" + str_sub(sub_p, 6, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "gpu/") == 1
+            cand = "packages/lipi_gpu/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "fs/") == 1
+            cand = "packages/lipi_fs/" + str_sub(sub_p, 3, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "mobile/") == 1
+            cand = "packages/lipi_mobile/" + str_sub(sub_p, 7, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "p2p/") == 1
+            cand = "packages/lipi_p2p/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "security/") == 1
+            cand = "packages/lipi_security/" + str_sub(sub_p, 9, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "boot/") == 1
+            cand = "packages/lipi_boot/" + str_sub(sub_p, 5, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "ide/") == 1
+            cand = "packages/lipi_ide/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "registry/") == 1
+            cand = "packages/lipi_registry/" + str_sub(sub_p, 9, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+
     if file_exists("universe/" + inc_target + ".lp") == 1
         return "universe/" + inc_target + ".lp"
     if file_exists("universe/" + inc_target) == 1
@@ -282,6 +436,14 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
             return lipi_root + "/" + inc_target + ".lp"
         if file_exists(lipi_root + "/" + inc_target) == 1
             return lipi_root + "/" + inc_target
+        if file_exists(lipi_root + "/utso/" + inc_target + ".lp") == 1
+            return lipi_root + "/utso/" + inc_target + ".lp"
+        if file_exists(lipi_root + "/utso/" + inc_target) == 1
+            return lipi_root + "/utso/" + inc_target
+        if file_exists(lipi_root + "/packages/" + inc_target + ".lp") == 1
+            return lipi_root + "/packages/" + inc_target + ".lp"
+        if file_exists(lipi_root + "/packages/" + inc_target) == 1
+            return lipi_root + "/packages/" + inc_target
         if file_exists(lipi_root + "/universe/" + inc_target + ".lp") == 1
             return lipi_root + "/universe/" + inc_target + ".lp"
         if file_exists(lipi_root + "/universe/" + inc_target) == 1

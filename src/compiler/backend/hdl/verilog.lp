@@ -7,8 +7,8 @@
 @! Always Registers (@(posedge clk)), Arithmetic ALUs & Finite State Machines
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. VERILOG HDL AST DATA STRUCTURES

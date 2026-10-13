@@ -19,8 +19,8 @@
 //    `TypeChecker()`) and prefixed fields (`sd_`, `tc_`) prevent struct collisions.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/semantics/symbol"
 import "compiler/semantics/scope"
 import "compiler/semantics/symbol_table"

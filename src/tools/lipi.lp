@@ -8,8 +8,8 @@
 // like `go` or `cargo`. Developers should never invoke foreign build systems.
 // `bin/lipi` serves as the universal dispatcher for run, build, test, debug, fmt, lsp, pkg, repl, and os.
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io"
+include "utso/memory"
 
 fn print_lipi_banner
     // WHY: 72 visual columns (70 chars interior + 2 border chars).
@@ -99,19 +99,26 @@ fn lipi_get_env name
     syscall(11, buf, 32768, 0, 0, 0, 0)
     return ""
 
+fn lipi_is_root_dir dir
+    if len(dir) == 0 return 0
+    if syscall(21, dir + "/utso/memory.lp", 0, 0, 0, 0, 0) == 0 return 1
+    if syscall(21, dir + "/utso/core/memory.lp", 0, 0, 0, 0, 0) == 0 return 1
+    if syscall(21, dir + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0 return 1
+    return 0
+
 fn lipi_tool_get_root
-    // WHY: 5-Tier dynamic resolution for LiPi root directory containing 'universe/' and 'src/'.
+    // WHY: 5-Tier dynamic resolution for LiPi root directory containing 'utso/', 'packages/', 'universe/' and 'src/'.
     // Enables the CLI runner to execute flawlessly from ~/.local/bin, /usr/local/bin, or any folder.
 
     // 1. Environment variables override
     r_env = lipi_get_env("LIPI_ROOT")
-    if len(r_env) > 0 and syscall(21, r_env + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir(r_env) == 1
         return r_env
     r_home = lipi_get_env("LIPI_HOME")
-    if len(r_home) > 0 and syscall(21, r_home + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir(r_home) == 1
         return r_home
     r_path = lipi_get_env("LIPI_PATH")
-    if len(r_path) > 0 and syscall(21, r_path + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir(r_path) == 1
         return r_path
 
     // 2. Direct /proc/self/exe parent and grandparent inspect
@@ -138,7 +145,7 @@ fn lipi_tool_get_root
             while ri < cut_grandparent
                 root_s = root_s + chr(mem_byte_read(exe_buf, ri))
                 ri = ri + 1
-            if syscall(21, root_s + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+            if lipi_is_root_dir(root_s) == 1
                 free(exe_buf, 512)
                 return root_s
         if cut_parent > 0
@@ -147,26 +154,26 @@ fn lipi_tool_get_root
             while ri2 < cut_parent
                 root_s2 = root_s2 + chr(mem_byte_read(exe_buf, ri2))
                 ri2 = ri2 + 1
-            if syscall(21, root_s2 + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+            if lipi_is_root_dir(root_s2) == 1
                 free(exe_buf, 512)
                 return root_s2
     free(exe_buf, 512)
 
     // 3. User home installation ~/.lipi
     u_home = lipi_get_env("HOME")
-    if len(u_home) > 0 and syscall(21, u_home + "/.lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if len(u_home) > 0 and lipi_is_root_dir(u_home + "/.lipi") == 1
         return u_home + "/.lipi"
 
     // 4. Standard global system paths
-    if syscall(21, "/usr/local/lib/lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir("/usr/local/lib/lipi") == 1
         return "/usr/local/lib/lipi"
-    if syscall(21, "/usr/lib/lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir("/usr/lib/lipi") == 1
         return "/usr/lib/lipi"
-    if syscall(21, "/opt/lipi/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir("/opt/lipi") == 1
         return "/opt/lipi"
 
     // 5. Current working directory fallback
-    if syscall(21, "universe/core/memory.lp", 0, 0, 0, 0, 0) == 0
+    if lipi_is_root_dir(".") == 1
         return "."
 
     return ""

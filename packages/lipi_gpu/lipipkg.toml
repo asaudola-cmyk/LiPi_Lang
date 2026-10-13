@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_gpu
+# ==============================================================================
+
+name = "lipi_gpu"
+version = "1.0.0"
+description = "SPIR-V binary generator and compute pipeline primitives"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

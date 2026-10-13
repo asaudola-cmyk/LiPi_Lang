@@ -1,7 +1,7 @@
 @! LIPI STAGE 3 — MULTI-PASS TYPECHECKER (0% Libc)
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/frontend/ast"
 import "compiler/frontend/lexer"
 import "compiler/frontend/parser"

@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_mobile
+# ==============================================================================
+
+name = "lipi_mobile"
+version = "1.0.0"
+description = "Mobile touch event dispatcher and responsive layout engine"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

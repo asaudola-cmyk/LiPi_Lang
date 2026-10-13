@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_media
+# ==============================================================================
+
+name = "lipi_media"
+version = "1.0.0"
+description = "Pure WAV audio synthesis, video canvas, and multimedia primitives"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -4,8 +4,8 @@
 // 🏛️ File: src/compiler/backend/gc.lp
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/memory"
+import "utso/collections"
+import "utso/memory"
 
 @struct GenerationalConfig
   eden_size: 4194304,       // 4 MB Eden

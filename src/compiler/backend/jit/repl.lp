@@ -6,9 +6,9 @@
 @! Environment, Machine Code Inspection, Syntax Error Reporting
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/io"
+import "utso/collections"
+import "utso/string"
+import "utso/io"
 import "src/compiler/backend/jit/jit_memory"
 import "src/compiler/backend/jit/jit_executor"
 import "src/compiler/backend/jit/jit_engine"

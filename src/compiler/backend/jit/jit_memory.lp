@@ -5,7 +5,7 @@
 @! Standard: sys_mmap (PROT_EXEC), sys_mprotect (W^X), sys_munmap, RAM Byte Writer
 @! ============================================================================
 
-import "universe/os/syscalls"
+import "utso/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURES

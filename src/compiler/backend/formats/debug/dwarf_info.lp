@@ -12,7 +12,7 @@
 // To conserve space, each DIE references an abbreviation code in the .debug_abbrev
 // section which defines its tag, whether it has child DIEs, and the schema of its attributes.
 
-import "universe/core/string"
+import "utso/string"
 
 // --- DWARF Tags (DW_TAG) ---
 @fn DW_TAG_formal_parameter() return 5  @end // 0x05: Function argument

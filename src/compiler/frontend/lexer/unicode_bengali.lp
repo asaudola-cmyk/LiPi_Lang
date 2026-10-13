@@ -15,8 +15,8 @@
 //    nuktas, and Bengali digits (০-৯).
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 // ── 1. General Bengali Unicode Range Invariant ────────────────────────────────
 

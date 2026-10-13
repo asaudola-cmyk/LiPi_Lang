@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_ai
+# ==============================================================================
+
+name = "lipi_ai"
+version = "1.0.0"
+description = "Pure sovereign tensor engine, GGUF loader, and neural network primitives"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -6,9 +6,9 @@
 @! e_lfanew PE Pointer Shifting, Shellscript/ELF Hybrid Header & Authenticode Signer
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/collections"
+import "utso/string"
+import "utso/syscalls"
 import "universe/crypto/sha256"
 
 @! ============================================================================

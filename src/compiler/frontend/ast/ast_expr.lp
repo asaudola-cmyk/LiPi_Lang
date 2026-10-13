@@ -14,8 +14,8 @@
 //    (`ast_expr_*`) and canonical legacy shorthands (`ast_binary_op`, `ast_call`, etc.).
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/lexer/token"
 import "compiler/frontend/ast/ast_node"
 

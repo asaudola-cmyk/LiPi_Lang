@@ -18,8 +18,8 @@
 //    namespaced field accessors across all constituent sub-models.
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/lexer/char_stream"
 import "compiler/frontend/lexer/unicode_bengali"
 import "compiler/frontend/lexer/token_kind"

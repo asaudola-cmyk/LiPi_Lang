@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_p2p
+# ==============================================================================
+
+name = "lipi_p2p"
+version = "1.0.0"
+description = "Decentralized peer-to-peer networking and DHT discovery"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

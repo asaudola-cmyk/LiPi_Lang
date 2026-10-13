@@ -5,9 +5,9 @@
 // Zero External Dependencies — 100% Pure Lipi First 1.0.0
 // ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/string"
 
 import "src/compiler/backend/formats/pe/dos_header.lp"
 import "src/compiler/backend/formats/pe/coff_header.lp"

@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipidb
+# ==============================================================================
+
+name = "lipidb"
+version = "1.0.0"
+description = "Sovereign in-memory relational store, MVCC transaction engine, and wire clients"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

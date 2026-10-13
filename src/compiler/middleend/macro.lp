@@ -4,8 +4,8 @@
 @! Canonical Pure Lipi Implementation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! Delimiters used in TokenTree grouping
 @enum Delimiter

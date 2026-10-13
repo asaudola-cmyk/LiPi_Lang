@@ -20,8 +20,8 @@
 // - Sovereign Prefixed Fields (`se_`, `subst_`, `ty_`) eliminate all collisions.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/semantics/type_def"
 
 // ── 1. TYPE SUBSTITUTION ENVIRONMENT ─────────────────────────────────────────

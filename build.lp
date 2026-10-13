@@ -84,9 +84,9 @@ fn build_target_mark_complete target success duration
     target.bt_duration_ms = duration
     return target.bt_status
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
+include "utso/io"
+include "utso/memory"
+include "utso/string"
 
 // ── Process Execution Gateway (0% Bash, Direct Linux Kernel Syscalls) ─────────
 // WHY: Freestanding execution without bash, using sys_mmap, sys_fork, sys_execve, sys_wait4

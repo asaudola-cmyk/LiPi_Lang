@@ -23,8 +23,8 @@
 //    file_write primitives with zero external shell scripts.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 import "compiler/frontend/lexer/token_kind"
 import "compiler/frontend/lexer/token"

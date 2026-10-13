@@ -22,9 +22,9 @@
 //   - shutdown / exit
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/io.lp"
-include "universe/core/string.lp"
+include "utso/memory"
+include "utso/io"
+include "utso/string"
 
 // ─── LSP Identity & Protocol ──────────────────────────────────────────────────
 fn lsp_protocol_version = "3.17"
@@ -489,8 +489,9 @@ fn build_completion_items
     push(items, make_item("std/thread.lp", 9, "Native Threads", "Linux Clone Syscall Multithreading"))
     push(items, make_item("std/hashmap.lp", 9, "Hash Map", "Fast Robin-Hood Hash Map"))
     push(items, make_item("std/arena.lp", 9, "Arena Allocator", "High-speed Bump Allocator"))
-    push(items, make_item("universe/core/io.lp", 9, "Direct Syscall I/O", "Linux AMD64 Kernel Syscalls"))
-    push(items, make_item("universe/core/string.lp", 9, "Unicode String", "String Utilities & Slicing"))
+    push(items, make_item("utso/io", 9, "Direct Syscall I/O", "Linux AMD64 Kernel Syscalls"))
+    push(items, make_item("utso/string", 9, "Unicode String", "String Utilities & Slicing"))
+    push(items, make_item("utso/memory", 9, "Kernel Allocator", "Virtual Memory & Slab Operations"))
     push(items, make_item("std/math.lp", 9, "Fast Math", "Mathematical Operations"))
     push(items, make_item("std/simd.lp", 9, "SIMD Acceleration", "AVX2 & SSE Vector Math"))
     push(items, make_item("std/crypto.lp", 9, "Sovereign Cryptography", "AES-256-GCM & SHA-256"))
@@ -554,10 +555,12 @@ fn get_hover_documentation word
         return "### `std/hashmap.lp` (Robin Hood Hash Map)\nFast O(1) key-value hash map data structure.\n- `hashmap_new()`\n- `hashmap_set(hm, key, val)`\n- `hashmap_get(hm, key)`"
     if word == "std/arena.lp" or word == "arena_create"
         return "### `std/arena.lp` (Arena Allocator)\nUltra-fast bump memory allocator for batch allocations.\n- `arena_create(size)`\n- `arena_alloc(ar, size)`\n- `arena_reset(ar)`"
-    if word == "universe/core/io.lp" or word == "syscall"
-        return "### `std/io.lp` (Direct Syscall I/O)\nLow-level I/O via direct Linux AMD64 kernel syscalls (0% Libc).\n- `write_out(msg)`\n- `file_open(path, flags)`"
-    if word == "universe/core/string.lp"
-        return "### `std/str.lp` (Unicode String Library)\nString manipulation, padding, repeat, and substring slicing.\n- `str_repeat(s, n)`\n- `str_sub(s, start, end)`"
+    if word == "utso/io" or word == "universe/core/io.lp" or word == "syscall"
+        return "### `utso/io` (Direct Syscall I/O)\nLow-level I/O via direct Linux AMD64 kernel syscalls (0% Libc).\n- `write_out(msg)`\n- `file_open(path, flags)`"
+    if word == "utso/string" or word == "universe/core/string.lp"
+        return "### `utso/string` (Unicode String Library)\nString manipulation, padding, repeat, and substring slicing.\n- `str_repeat(s, n)`\n- `str_sub(s, start, end)`"
+    if word == "utso/memory"
+        return "### `utso/memory` (Kernel Memory Allocator)\nPage-aligned virtual memory via direct SYS_mmap & SYS_munmap.\n- `malloc(size)`\n- `free(addr, size)`\n- `mem_copy(dest, src, len)`"
     if word == "std/math.lp"
         return "### `std/math.lp` (Mathematical Library)\nFast integer and float arithmetic, powers, and trigonometry.\n- `abs(x)`, `min(a, b)`, `max(a, b)`"
     if word == "std/simd.lp"

@@ -22,8 +22,8 @@
 // 5. Sovereign Prefixed Fields (`rb_`, `od_`, `oc_`) eliminate struct collisions.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/semantics/symbol"
 
 import "compiler/frontend/ast/ast_node"

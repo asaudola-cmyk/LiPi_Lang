@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_iot
+# ==============================================================================
+
+name = "lipi_iot"
+version = "1.0.0"
+description = "MQTT protocol engine, sensor telemetry, and GPIO hardware driver"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -13,7 +13,7 @@
 // symbols (.symtab), and string tables (.strtab, .shstrtab).
 // Each Elf64_Shdr entry is strictly 64 bytes in size.
 
-import "universe/core/string"
+import "utso/string"
 
 // --- Section Header Types (sh_type) ---
 // WHY: Defines the semantic categorization of the section's contents.

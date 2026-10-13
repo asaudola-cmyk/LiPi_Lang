@@ -5,7 +5,7 @@
 @! Architecture: Absolute Sovereign (Zero Binary)
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! ─── BigInt Core ────────────────────────────────────────────────────────────
 

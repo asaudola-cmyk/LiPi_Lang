@@ -7,8 +7,8 @@
 // empowered to migrate legacy codebases into sovereign Lipi code with zero friction.
 // lipiconvert parses input source tokens and emits production-ready idiomatic Lipi.
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io"
+include "utso/memory"
 
 // ১. ব্যানার প্রদর্শন (Display Header)
 fn প্রিন্ট_কনভার্টার_ব্যানার
@@ -48,7 +48,7 @@ fn ডেমো_রূপান্তর_test
 
     say "\n[3] Generated 100% Sovereign Lipi Source Code (.lp):"
     say "\033[1;32m  ------------------------------------"
-    say "  include \"universe/core/io.lp\""
+    say "  include \"utso/io\""
     say "  "
     say "  fn main() {"
     say "      total = 0"

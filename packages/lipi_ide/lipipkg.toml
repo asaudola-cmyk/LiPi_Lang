@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_ide
+# ==============================================================================
+
+name = "lipi_ide"
+version = "1.0.0"
+description = "Language Server Protocol engine and IDE workspace indexer"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

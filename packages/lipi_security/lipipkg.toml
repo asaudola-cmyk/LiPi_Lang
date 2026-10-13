@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_security
+# ==============================================================================
+
+name = "lipi_security"
+version = "1.0.0"
+description = "Zero-trust sandbox, seccomp syscall filtering, and security policies"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

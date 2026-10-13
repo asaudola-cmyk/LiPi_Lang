@@ -1,7 +1,7 @@
 @! LIPI STAGE 2 — PRATT PARSER & LOWERING ENGINE (0% Libc)
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/ast"
 import "compiler/frontend/lexer"
 

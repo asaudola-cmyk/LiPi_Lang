@@ -11,8 +11,8 @@
 // যার ফলে ব্যাকএন্ড কোডজেনকে কম x86_64/ARM64 মেশিন কোড নির্গমন করতে হয়।
 
 import "compiler/backend/lipi_ir"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 // ── ১. স্ট্রিং তুলনা হেল্পার (Safe String Equality) ───────────────────────────
 @fn ir_opt_str_eq(s1: string, s2: string) -> i64

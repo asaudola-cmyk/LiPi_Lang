@@ -28,8 +28,8 @@
 //      and entry point at 0x400078 with executable permissions (0755).
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 import "compiler/frontend/lexer/token_kind"
 import "compiler/frontend/lexer/token"

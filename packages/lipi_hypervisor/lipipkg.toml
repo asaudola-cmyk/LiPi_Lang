@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_hypervisor
+# ==============================================================================
+
+name = "lipi_hypervisor"
+version = "1.0.0"
+description = "Linux KVM virtualization interface and sovereign hypervisor"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

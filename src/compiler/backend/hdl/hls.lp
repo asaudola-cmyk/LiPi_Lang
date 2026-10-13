@@ -7,8 +7,8 @@
 @! Multi-Stage DSP Pipelining, AXI4 Memory-Mapped & AXI4-Stream SoC Wrappers
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/frontend/ast"
 import "compiler/backend/hdl/verilog"
 

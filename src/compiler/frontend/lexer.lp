@@ -4,8 +4,8 @@
 @! Native Byte-Level Character Scanner
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/ast"
 
 @! ============================================================================

@@ -16,8 +16,8 @@
 //    to guarantee deterministic offset resolution across untyped compiler call boundaries.
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/lexer/token_kind"
 
 // ── 1. Source Span Data Structure ─────────────────────────────────────────────

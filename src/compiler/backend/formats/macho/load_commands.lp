@@ -11,7 +11,7 @@
 // These load commands define the memory map (LC_SEGMENT_64), execution entry
 // point (LC_MAIN), runtime dynamic linker path (LC_LOAD_DYLINKER), and code signatures.
 
-import "universe/core/string"
+import "utso/string"
 
 // --- Mach-O 64-Bit Magic Signatures ---
 // WHY: 0xFEEDFACF identifies a 64-bit Little-Endian Mach-O binary.

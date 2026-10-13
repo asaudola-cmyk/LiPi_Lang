@@ -8,8 +8,8 @@
 // WHY: আধুনিক ব্রাউজার এবং ক্লাউড এজ স্যান্ডবক্সে লিপি কোড সরাসরি চালানোর জন্য
 // লিপির সিনট্যাক্স ট্রি (AST) কে ডিরেক্ট WASM স্ট্যাক-বেসড বাইটকোড নির্দেশনায় রূপান্তর করা।
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
+include "utso/memory"
+include "utso/string"
 
 // ── ১. লোকাল ভেরিয়েবল টেবিল ম্যানেজমেন্ট (Local Variable Scope Management) ─────
 // WHY: WASM ফাংশনে প্যারামিটারগুলো প্রথম N টি লোকাল ইনডেক্স দখল করে (0 .. N-1),

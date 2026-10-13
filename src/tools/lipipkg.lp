@@ -9,13 +9,13 @@
 // signing package releases with authentic Ed25519/SHA-256 signatures, and verifying
 // distribution integrity with zero external libc or build tool dependencies.
 
-// WHY: Canonical standard library modules unified under universe/ for clean architecture.
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/crypto/crypto.lp"
-include "universe/net/socket.lp"
-include "universe/web/engine.lp"
+// WHY: Canonical sovereign primitives unified under utso/ for developer-friendly architecture.
+include "utso/io"
+include "utso/memory"
+include "utso/string"
+include "utso/crypto"
+include "utso/socket"
+include "packages/lipi_web/engine.lp"
 
 PKG_VERSION = "প্রথম ১.০.০"
 PKG_MANIFEST = "lipipkg.toml"
@@ -622,7 +622,7 @@ fn cmd_init proj_name
     main_path = proj_name + "/src/main.lp"
     mfd = syscall(2, main_path, 577, 420, 0, 0, 0)
     if mfd >= 0
-        mcontent = "include \"universe/core/io.lp\"\n\nfn main\n    say \"Hello from Lipi!\"\n    return 0\n\nmain()\n"
+        mcontent = "include \"utso/io\"\n\nfn main\n    say \"Hello from Lipi!\"\n    return 0\n\nmain()\n"
         syscall(1, mfd, mcontent, len(mcontent), 0, 0, 0)
         syscall(3, mfd, 0, 0, 0, 0, 0)
         say "  ✔ Created main entrypoint: " + main_path

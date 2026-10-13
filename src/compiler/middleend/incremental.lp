@@ -12,8 +12,8 @@
 @!   - Genuine AST-to-IR Generation, Lowering, and Serialization
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "universe/crypto/sha256"
 import "compiler/backend/lipi_ir"
 import "compiler/backend/compiler"

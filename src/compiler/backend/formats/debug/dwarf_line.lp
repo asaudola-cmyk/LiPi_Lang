@@ -11,7 +11,7 @@
 // Instead of storing a bloated raw lookup table, DWARF defines a compact,
 // bytecode-driven finite state machine using standard, extended, and special opcodes.
 
-import "universe/core/string"
+import "utso/string"
 
 // --- DWARF Standard Opcodes (DW_LNS) ---
 @fn DW_LNS_extended_op()        return 0  @end // Escape to extended opcode sequence

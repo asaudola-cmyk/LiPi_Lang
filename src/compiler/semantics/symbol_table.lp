@@ -18,8 +18,8 @@
 // 4. Collision Resistance: Bucket chaining guarantees deterministic correctness.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/semantics/symbol"
 
 // ── 1. FAST HASHING ALGORITHM (DJB2 VARIANT) ─────────────────────────────────

@@ -20,8 +20,8 @@
 //    up to Global root.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/semantics/symbol"
 
 // ── 1. SCOPE KIND CONSTANTS ──────────────────────────────────────────────────

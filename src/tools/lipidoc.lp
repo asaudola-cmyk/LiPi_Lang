@@ -8,8 +8,8 @@
 // and doc comments ('// Doc:', '// WHY:', '// বিবরণ:', '// কেন:'), and automatically
 // renders clean, standardized GitHub-Flavored Markdown documentation.
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io"
+include "utso/memory"
 
 // ── 1. Data Structures ───────────────────────────────────────────────────────
 

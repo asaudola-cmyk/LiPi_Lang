@@ -12,8 +12,8 @@
 //      via prime factorization and fractal unfolding.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/math.lp"
+include "utso/memory"
+include "utso/math"
 
 // ── Gödel Semantic Operator Codes ─────────────────────────────────────────────
 UNUM_OP_HALT        = 0

@@ -6,11 +6,11 @@
 // WHY: A sovereign language requires an interactive environment to experiment with
 // expressions, inspect CPU registers, and measure hardware latency with zero libc.
 
-// WHY: Canonical standard library modules unified under universe/ for clean architecture.
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/tools/debug.lp"
+// WHY: Canonical sovereign primitives unified under utso/ for developer-friendly architecture.
+include "utso/io"
+include "utso/memory"
+include "utso/string"
+include "utso/tools/debug.lp"
 
 fn hex_digit n
     val = n % 16

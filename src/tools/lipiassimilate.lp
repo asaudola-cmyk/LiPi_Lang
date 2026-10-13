@@ -5,9 +5,9 @@
 @! Transpiles Legacy Python & C Source Code into 100% Sovereign Lipi First 1.0.0
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/syscalls"
+import "utso/string"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. LEXICAL & STRING HELPERS

@@ -15,8 +15,8 @@
 //    units, cleanly rendering imports, struct definitions, functions, and top-level code.
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/lexer/token"
 import "compiler/frontend/ast/ast_node"
 import "compiler/frontend/ast/ast_decl"

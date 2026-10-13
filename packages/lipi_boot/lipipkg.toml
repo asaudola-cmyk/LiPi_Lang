@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_boot
+# ==============================================================================
+
+name = "lipi_boot"
+version = "1.0.0"
+description = "Multiboot x86 ELF kernel entry and baremetal boot orchestrator"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

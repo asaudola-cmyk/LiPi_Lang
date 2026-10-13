@@ -21,8 +21,8 @@
 // - 4-byte (0xF0..0xF7): Supplementary planes (emojis, ancient symbols).
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 // ── 1. Data Structures ────────────────────────────────────────────────────────
 

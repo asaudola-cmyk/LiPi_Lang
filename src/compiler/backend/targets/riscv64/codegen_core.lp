@@ -30,8 +30,8 @@
 //      global struct field offset collisions with X86Synthesizer and Arm64Synthesizer.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 import "compiler/frontend/lexer/token_kind"
 import "compiler/frontend/lexer/token"

@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_quantum
+# ==============================================================================
+
+name = "lipi_quantum"
+version = "1.0.0"
+description = "Quantum state vector simulator, multi-qubit gates, and Shor algorithm"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -23,8 +23,8 @@
 //    purity status (sym_is_pure), and static value tracking (sym_init_val).
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 // ── 1. SYMBOL KIND ENUMERATION ───────────────────────────────────────────────
 // WHY: Discrete integer constants enable single-cycle equality checks in compiler passes.

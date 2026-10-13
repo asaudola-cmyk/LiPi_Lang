@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (lipipkg.toml)
+# Package: lipi_swarm
+# ==============================================================================
+
+name = "lipi_swarm"
+version = "1.0.0"
+description = "Autonomous multi-agent RPC mesh and decentralized swarm consensus"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -4,8 +4,8 @@
 @! 100% Compatible with compiler/backend/lipi_ir.lp
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 @! ============================================================================
 @! 1. SOURCE LOCATION TRACKING

@@ -7,8 +7,8 @@
 @! VPADDQ, VPMULLQ, VADDPD, VMULPD, VMOVDQU64 & 64-Byte/Cycle Parallel Math
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. AVX-512 INSTRUCTION & EVEX ENCODING STRUCTURES

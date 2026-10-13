@@ -16,8 +16,8 @@
 //    legacy helpers (`ast_assign`, `ast_if_stmt`, `ast_while_loop`, etc.).
 // ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/lexer/token"
 import "compiler/frontend/ast/ast_node"
 
