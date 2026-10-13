@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! LSP Workspace State
 @fn lsp_workspace_new()

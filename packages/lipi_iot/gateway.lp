@@ -3,9 +3,9 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/iot/mqtt"
-import "universe/iot/sensor"
+import "utso/string"
+import "packages/lipi_iot/mqtt"
+import "packages/lipi_iot/sensor"
 
 @struct IoTGateway
   device_id: "",

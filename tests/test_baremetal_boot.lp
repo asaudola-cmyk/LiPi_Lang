@@ -16,8 +16,8 @@
 // 8. Raw machine code bootstrap payload emission for firmware/hypervisor boot.
 // ==============================================================================
 
-include "universe/boot/uefi_boot.lp"
-include "universe/boot/baremetal_kernel.lp"
+include "packages/lipi_boot/uefi_boot.lp"
+include "packages/lipi_boot/baremetal_kernel.lp"
 
 fn main
     say "================================================================="

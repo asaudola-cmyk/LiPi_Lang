@@ -5,7 +5,7 @@
 //    provenance envelope verification, and standalone zero-config source bundler.
 // ==============================================================================
 
-include "universe/pkg/lipipkg_hub.lp"
+include "packages/lipi_registry/lipipkg_hub.lp"
 
 fn assert_eq actual expected test_name
     if actual != expected

@@ -6,8 +6,8 @@
 @! BRDF evaluation (Cook-Torrance).
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/collections"
+import "utso/math"
 
 @fn material_new_pbr(name)
   println("  [3D MAT] Creating new PBR Material: " + name)

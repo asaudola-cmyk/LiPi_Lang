@@ -5,9 +5,9 @@
 @! Flips, 90-Degree & Affine Rotations, Normalization, Brightness/Contrast/Gamma.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/vision/image"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/vision/image"
 
 @! ----------------------------------------------------------------------------
 @! 1. Spatial Resizing (Nearest Neighbor & Bilinear Interpolation)

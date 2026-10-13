@@ -19,10 +19,10 @@
 //   ORM_connection_close(conn)
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
-include "universe/db/facade.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
+include "packages/lipidb/facade.lp"
 
 // ─── ORM Constants ────────────────────────────────────────────────────────────
 ORM_MAX_COLUMNS    = 32   // table columns per query

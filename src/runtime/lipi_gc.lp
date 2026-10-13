@@ -13,8 +13,8 @@
 @!   8. Shadow Stack Root Scanning & Frame Registration
 @!   9. Automatic 85% Arena Saturation Threshold Sweep
 @! ============================================================================
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Allocator Constants & Metadata Configuration

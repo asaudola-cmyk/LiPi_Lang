@@ -22,10 +22,10 @@
 //    - Complete automated verification test harness. Zero placeholders.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/math.lp"
-include "universe/gui/drm_kms.lp"
-include "universe/gui/fbdev.lp"
+include "utso/memory.lp"
+include "utso/math.lp"
+include "packages/lipi_gui/drm_kms.lp"
+include "packages/lipi_gui/fbdev.lp"
 
 // ── 1. Color Palette Constants (32-bit ARGB Little-Endian) ────────────────────
 // Format: 0xAARRGGBB encoded as positive 32-bit integers.

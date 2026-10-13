@@ -3,9 +3,9 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ai/tensor"
-import "universe/ai/autodiff"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autodiff"
 
 @! ----------------------------------------------------------------------------
 @! Convolutional Neural Network (CNN) 2D Layer

@@ -4,9 +4,9 @@
 @! Features: Cryptographic Merkle Trees, Inclusion Proofs, UTXO Ledger
 @! ============================================================================
 
-import "universe/core/crypto"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/core/crypto"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Merkle Tree Construction

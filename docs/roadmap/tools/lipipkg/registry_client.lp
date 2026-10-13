@@ -9,12 +9,12 @@
 @! - Deterministic Offline Mode with Local Cache Fallback
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json"
-import "universe/net/socket"
-import "universe/net/tcp"
-import "universe/os/fs"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json"
+import "utso/socket"
+import "utso/net/tcp"
+import "utso/os/fs"
 import "tools/lipipkg/semver"
 import "tools/lipipkg/security"
 

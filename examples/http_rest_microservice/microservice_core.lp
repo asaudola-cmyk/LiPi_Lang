@@ -14,10 +14,10 @@
 // ==============================================================================
 
 import "src/runtime/io_uring_bypass.lp"
-import "universe/os/syscalls.lp"
-import "universe/core/collections.lp"
-import "universe/core/string.lp"
-import "universe/core/net.lp"
+import "utso/syscalls.lp"
+import "utso/collections.lp"
+import "utso/string.lp"
+import "utso/core/net.lp"
 
 // ── 1. HTTP Protocol Constants & Zero-Collision Models ────────────────────────
 // WHY: Unique field name prefixes (req_, resp_, met_, u_) prevent schema collision

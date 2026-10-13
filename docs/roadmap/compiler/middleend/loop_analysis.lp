@@ -5,8 +5,8 @@
 @!           Affine Borrow Checker Alias-Free Verification, Reduction Detection
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. ANALYSIS STATE CONSTRUCTOR

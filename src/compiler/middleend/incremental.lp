@@ -14,7 +14,7 @@
 
 import "utso/collections"
 import "utso/string"
-import "universe/crypto/sha256"
+import "utso/crypto/sha256"
 import "compiler/backend/lipi_ir"
 import "compiler/backend/compiler"
 

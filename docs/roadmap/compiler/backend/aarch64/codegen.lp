@@ -3,8 +3,8 @@
 @! Emits native ARM64 machine code directly (Apple Silicon / Raspberry Pi).
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/middleend/lipi_ir"
 
 @fn get_arm_reg(mir_reg_idx)

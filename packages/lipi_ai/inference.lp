@@ -4,10 +4,10 @@
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
-import "universe/ai/tensor"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
+import "packages/lipi_ai/tensor"
 
 @struct QuantTensor
   data: array

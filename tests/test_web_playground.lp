@@ -5,11 +5,11 @@
 // 100% Pure Lipi — Zero Libc | Zero PHP | Zero Node.js
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/json.lp"
-include "universe/web/engine.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/core/json.lp"
+include "packages/lipi_web/engine.lp"
 
 fn assert_true cond msg
     if cond == 0

@@ -7,8 +7,8 @@
 @! Quantum Entanglement (Bell States), and Measurement Probabilities
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/collections"
+import "utso/math"
 
 @! ============================================================================
 @! 1. QUANTUM REGISTER DATA STRUCTURE (Scale: 1000 fixed-point)

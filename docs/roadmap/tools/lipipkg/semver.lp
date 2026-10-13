@@ -10,9 +10,9 @@
 @! - Topological dependency graph builder with 3-color DFS cycle detection
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
 
 @! ----------------------------------------------------------------------------
 @! 1. SEMVER 2.0.0 PARSER & DATA STRUCTURE

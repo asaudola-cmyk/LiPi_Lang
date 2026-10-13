@@ -5,11 +5,11 @@
 @! Gradient Checkpointing, Instruction Dataset Tokenizer, SFT & DPO Loss.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/ai/tensor"
-import "universe/ai/autodiff"
-import "universe/ai/llm/tokenizer"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autodiff"
+import "packages/lipi_ai/llm/tokenizer"
 
 @! ----------------------------------------------------------------------------
 @! 1. LoRA (LOW-RANK ADAPTATION) LAYER

@@ -1,10 +1,10 @@
 @! ============================================================================
 @! LIPI COMPILER STAGE 4 — MACH-O APPLE SILICON (ARM64) NATIVE BINARY EMITTER
 @! 100% Written in Pure Lipi Language — Zero Xcode/Clang Dependency
-import "universe/os/fs"
+import "utso/os/fs"
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn u32_to_bytes(v)
   return [v % 256, (v / 256) % 256, (v / 65536) % 256, (v / 16777216) % 256]

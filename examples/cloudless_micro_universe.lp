@@ -19,11 +19,11 @@
 //   4. 100% Direct Silicon Execution — zero external dependencies.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/db/db_engine.lp"
-include "universe/db/db_wal.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "packages/lipidb/db_engine.lp"
+include "packages/lipidb/db_wal.lp"
 
 // ── ১. টেলিমেট্রি ও স্টেট মডেল (Telemetry & Engine State) ──────────────────────
 struct MicroEngineState

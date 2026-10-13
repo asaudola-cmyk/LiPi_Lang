@@ -5,8 +5,8 @@
 // 100% Pure Lipi Implementation — Zero External C / Libc Dependencies
 // ==============================================================================
 
-import "universe/db/distributed/raft_cluster_net"
-import "universe/core/string"
+import "packages/lipidb/distributed/raft_cluster_net"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

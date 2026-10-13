@@ -10,7 +10,7 @@
 //    6. Real-Time Telemetry & Zero-Dependency Execution Guarantee
 // ==============================================================================
 
-import "universe/lipi_universe"
+import "utso/lipi_universe"
 
 // ==============================================================================
 // পর্ব ১: বাংলা সিনট্যাক্স মডিউল (Bengali Syntax Module)

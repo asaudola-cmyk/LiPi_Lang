@@ -5,11 +5,11 @@
 // 100% Pure Lipi — Zero Libc | Zero C | Zero External Dependencies
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/json.lp"
-include "universe/pkg/lipipkg_hub.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/core/json.lp"
+include "packages/lipi_registry/lipipkg_hub.lp"
 
 struct PkgRecord
     name

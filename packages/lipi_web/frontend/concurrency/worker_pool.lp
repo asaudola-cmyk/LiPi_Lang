@@ -8,10 +8,10 @@
 @! Lifecycle Management, Event Dispatching & Diagnostics Telemetry
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/web/frontend/concurrency/message_protocol"
-import "universe/web/frontend/concurrency/ring_buffer"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_web/frontend/concurrency/message_protocol"
+import "packages/lipi_web/frontend/concurrency/ring_buffer"
 
 @! ============================================================================
 @! 1. WORKER IDS & LIFECYCLE STATES

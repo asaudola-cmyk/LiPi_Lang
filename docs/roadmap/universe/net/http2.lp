@@ -4,9 +4,9 @@
 @! Features: HPACK Table, Binary Framing, Stream Multiplexing, Flow Control
 @! ============================================================================
 
-import "universe/net/tcp_udp"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/net/tcp_udp"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. HPACK STATIC & DYNAMIC TABLE (RFC 7541)

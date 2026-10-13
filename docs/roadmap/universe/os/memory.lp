@@ -1,4 +1,4 @@
-import "universe/os/syscalls"
+import "utso/syscalls"
 
 @! ============================================================================
 @! LIPI NATIVE HEAP ALLOCATOR

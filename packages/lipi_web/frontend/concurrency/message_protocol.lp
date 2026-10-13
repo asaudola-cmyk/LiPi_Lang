@@ -7,8 +7,8 @@
 @! High-Level UI / Network / Input / Layout Message Structs & Serialization
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. BINARY OPCODES DEFINITION (SQE COMMANDS)

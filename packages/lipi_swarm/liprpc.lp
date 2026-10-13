@@ -15,7 +15,7 @@
 // optimal cluster CPU utilization without any centralized orchestrator.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── 1. Protocol Constants ─────────────────────────────────────────────────────
 LIPRPC_MAGIC_0         = 76  // 'L' (0x4C)

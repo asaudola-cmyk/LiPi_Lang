@@ -3,8 +3,8 @@
 // Module: universe/ai/model_io.lp
 // WHY: Native binary checkpointing and hyperparameter persistence for Lipi AI models.
 
-import "universe/core/string"
-import "universe/os/fs"
+import "utso/string"
+import "utso/os/fs"
 
 @struct ModelMeta
   model_name: string

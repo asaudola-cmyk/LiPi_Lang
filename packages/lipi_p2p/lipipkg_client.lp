@@ -6,12 +6,12 @@
 @! Features: Publish, Fetch, Index, and Search against HTTP & In-Memory Registry
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
-import "universe/net/http"
-import "universe/web/context"
-import "universe/p2p/lipipkg_server_engine"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
+import "utso/net/http"
+import "packages/lipi_web/context"
+import "packages/lipi_p2p/lipipkg_server_engine"
 
 // WHY: Publishes package payload to network HTTP server or in-memory registry instance
 @fn lipipkg_client_publish(target, manifest_data, payload)

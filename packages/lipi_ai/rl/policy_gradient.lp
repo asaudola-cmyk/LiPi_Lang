@@ -5,12 +5,12 @@
 @! Advantage Actor-Critic (A2C) with GAE & Entropy Regularization.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/tensor"
-import "universe/ai/autodiff"
-import "universe/ai/rl/policy"
-import "universe/ai/rl/buffer"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autodiff"
+import "packages/lipi_ai/rl/policy"
+import "packages/lipi_ai/rl/buffer"
 
 @! ----------------------------------------------------------------------------
 @! 1. REINFORCE (Monte Carlo Policy Gradient)

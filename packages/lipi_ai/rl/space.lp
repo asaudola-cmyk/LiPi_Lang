@@ -5,8 +5,8 @@
 @! Value Containment & Bound Clamping.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
+import "utso/math"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. Discrete Space

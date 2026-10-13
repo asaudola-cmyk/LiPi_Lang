@@ -5,18 +5,18 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
-import "universe/gui/canvas"
-import "universe/gui/font"
-import "universe/gui/event"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/font"
+import "packages/lipi_gui/event"
 import "compiler/frontend/lexer"
-import "universe/tools/lsp/protocol"
-import "universe/tools/lsp/server"
-import "universe/ide/syntax"
-import "universe/ide/lsp_client"
-import "universe/ide/ui_popup"
+import "utso/tools/lsp/protocol"
+import "utso/tools/lsp/server"
+import "packages/lipi_ide/syntax"
+import "packages/lipi_ide/lsp_client"
+import "packages/lipi_ide/ui_popup"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

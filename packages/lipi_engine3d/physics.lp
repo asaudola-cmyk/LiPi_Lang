@@ -7,8 +7,8 @@
 @! Elastic Collision Impulses & Gravity Simulation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/engine3d/vec3"
+import "utso/collections"
+import "packages/lipi_engine3d/vec3"
 
 @! ============================================================================
 @! 1. RIGID BODY STRUCTURE

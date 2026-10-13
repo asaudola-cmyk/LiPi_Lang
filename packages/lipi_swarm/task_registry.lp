@@ -4,9 +4,9 @@
 @! Maps String Identifiers to Executable Function Pointers Across Cluster Nodes
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/swarm/types"
+import "utso/string"
+import "utso/collections"
+import "packages/lipi_swarm/types"
 
 @struct TaskEntry
   name: string

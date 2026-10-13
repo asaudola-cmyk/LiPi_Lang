@@ -4,10 +4,10 @@
 // 🏛️ File: tests/test_closure_and_traits.lp
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/string.lp"
-include "universe/core/closure.lp"
-include "universe/core/trait.lp"
+include "utso/io.lp"
+include "utso/string.lp"
+include "utso/core/closure.lp"
+include "utso/core/trait.lp"
 
 fn assert_eq_num actual expected msg
     if actual != expected

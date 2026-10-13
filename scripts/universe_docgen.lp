@@ -10,8 +10,8 @@
 // generating a pristine, production-grade GitHub-Flavored Markdown reference manual.
 // ==============================================================================
 
-import "universe/core/string"
-import "universe/core/io"
+import "utso/string"
+import "utso/io"
 
 @fn build_header()
     h = ""

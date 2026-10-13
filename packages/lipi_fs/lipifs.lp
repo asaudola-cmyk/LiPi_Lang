@@ -7,9 +7,9 @@
 @! Merkle Tree SHA-256 Block Integrity & Self-Healing Crash Recovery
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
 
 @! ============================================================================
 @! 1. LIPIFS DATA STRUCTURES

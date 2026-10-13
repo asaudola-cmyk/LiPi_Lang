@@ -3,8 +3,8 @@
 @! Replaces central servers with a peer-to-peer Distributed Hash Table
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @struct Peer
   id: string

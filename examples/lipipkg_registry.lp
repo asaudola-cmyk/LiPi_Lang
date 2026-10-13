@@ -20,13 +20,13 @@
 //      - POST /api/v1/packages/publish (Publish signed package envelope)
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/net/socket.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/web/engine.lp"
-include "universe/core/json.lp"
-include "universe/pkg/lipipkg_hub.lp"
+include "utso/io.lp"
+include "utso/socket.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "packages/lipi_web/engine.lp"
+include "utso/core/json.lp"
+include "packages/lipi_registry/lipipkg_hub.lp"
 
 // ── 1. Package Catalog Entry Structure ────────────────────────────────────────
 // WHY: In-memory structured representation of a verified sovereign package.

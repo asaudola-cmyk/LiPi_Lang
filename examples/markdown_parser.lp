@@ -3,7 +3,7 @@
 // ⚡ 100% Pure Lipi First 1.0.0
 // ==============================================================================
 
-import "universe/core/string"
+import "utso/string"
 
 fn parse_inline line
     out = ""

@@ -9,10 +9,10 @@
 @! - Bidirectional serialization / deserialization roundtrip
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json"
-import "universe/gui/builder"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json"
+import "packages/lipi_gui/builder"
 
 @! ----------------------------------------------------------------------------
 @! 1. PURE LIPI CODE GENERATOR (TRANSPILER)

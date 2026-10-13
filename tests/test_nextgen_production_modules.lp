@@ -4,11 +4,11 @@
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Zero Libc | Sovereign Verification
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/fs/ext4.lp"
-include "universe/net/http3.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "packages/lipi_fs/ext4.lp"
+include "utso/net/http3.lp"
 include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
 
 fn test_assert cond msg

@@ -1,7 +1,7 @@
 // tests/test_io_uring_reactor.lp
 // Validates Linux io_uring SQPOLL and graceful fallback reactor
-import "universe/net/io_uring_reactor"
-import "universe/core/io"
+import "utso/net/io_uring_reactor"
+import "utso/io"
 
 @fn main()
   say("Testing io_uring SQPOLL Reactor...")

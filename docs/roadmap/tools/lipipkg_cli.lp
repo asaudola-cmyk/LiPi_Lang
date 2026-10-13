@@ -3,9 +3,9 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/fs"
+import "utso/collections"
+import "utso/string"
+import "utso/os/fs"
 
 @fn lipipkg_parse_manifest(manifest_content)
   println("  [LIPIPKG] Parsing lipi.toml manifest...")

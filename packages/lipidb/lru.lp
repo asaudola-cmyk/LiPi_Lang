@@ -4,7 +4,7 @@
 @! Features: Least Recently Used (LRU) In-Memory Cache for DB & Web
 @! ============================================================================
 
-import "universe/core/string"
+import "utso/string"
 
 @struct LRUNode
   key: string

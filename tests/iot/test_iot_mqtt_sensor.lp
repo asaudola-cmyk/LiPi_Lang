@@ -1,5 +1,5 @@
-import "universe/iot/mqtt"
-import "universe/iot/sensor"
+import "packages/lipi_iot/mqtt"
+import "packages/lipi_iot/sensor"
 
 @fn main()
   println("--- IoT MQTT & Sensor Test Suite ---")

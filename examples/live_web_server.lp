@@ -8,8 +8,8 @@
 // (sys_socket, sys_bind, sys_listen, sys_accept, sys_read, sys_write, sys_close)
 // with SO_REUSEADDR port binding and sub-millisecond response latency.
 
-import "universe/net/tcp_server"
-import "universe/core/string"
+import "utso/net/tcp_server"
+import "utso/string"
 
 // ── 1. HTTP Request Lexer & Parser ──────────────────────────────────────────
 

@@ -17,17 +17,17 @@
 @! SemVer 2.0.0 Constraint Resolution, Cryptographic Verification, Client API
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json"
-import "universe/crypto/sha256"
-import "universe/net/http"
-import "universe/net/tcp"
-import "universe/web/app"
-import "universe/web/router"
-import "universe/web/context"
-import "universe/web/server"
-import "universe/p2p/registry"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json"
+import "utso/crypto/sha256"
+import "utso/net/http"
+import "utso/net/tcp"
+import "packages/lipi_web/app"
+import "packages/lipi_web/router"
+import "packages/lipi_web/context"
+import "packages/lipi_web/server"
+import "packages/lipi_p2p/registry"
 
 @! ============================================================================
 @! 1. DATA STRUCTURE DEFINITIONS

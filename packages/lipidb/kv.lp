@@ -17,9 +17,9 @@
 //   KV_free(kv)
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ─── KV Types ─────────────────────────────────────────────────────────────────
 KV_TYPE_STRING   = 1

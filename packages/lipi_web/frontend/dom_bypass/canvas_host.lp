@@ -11,9 +11,9 @@
 @! - Unified renderer presentation pipeline & pixel readback
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/web/frontend/renderer/unified_renderer"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_web/frontend/renderer/unified_renderer"
 
 @! ============================================================================
 @! 1. DIRTY RECT DATA STRUCTURES & COMPOSITOR

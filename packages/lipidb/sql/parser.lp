@@ -3,9 +3,9 @@
 @! Standard: 100% Pure LiPi SQL AST Parser
 @! ============================================================================
 
-import "universe/db/sql/lexer"
-import "universe/core/string"
-import "universe/core/collections"
+import "packages/lipidb/sql/lexer"
+import "utso/string"
+import "utso/collections"
 
 @struct Parser
   lexer: 0

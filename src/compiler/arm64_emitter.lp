@@ -3250,11 +3250,6 @@ fn arm64_resolve_inc_path cur_dir inc_name
         return cand1 + ".lp"
     if file_exists(cand1) == 1
         return cand1
-    cand_uni = "universe/" + inc_name
-    if file_exists(cand_uni + ".lp") == 1
-        return cand_uni + ".lp"
-    if file_exists(cand_uni) == 1
-        return cand_uni
     cand3 = "../" + inc_name
     if file_exists(cand3) == 1
         return cand3

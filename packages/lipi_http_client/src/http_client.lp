@@ -8,7 +8,7 @@
 // lipi_http_client implements RFC 7230 compliant HTTP/1.1 wire framing, response
 // status parsing, and header/body demultiplexing directly over Linux socket syscalls.
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // Syscall constants
 HTTP_SYS_READ    = 0

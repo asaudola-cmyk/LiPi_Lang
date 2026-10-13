@@ -4,8 +4,8 @@
 @! Simulates: Temperature, Humidity, Pressure sensors with calibration
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/math"
+import "utso/string"
+import "utso/math"
 
 @struct Sensor
   sensor_id: "",

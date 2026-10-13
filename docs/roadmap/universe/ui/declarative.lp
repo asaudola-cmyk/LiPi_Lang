@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ui/canvas" @! Assumes canvas.lipi exists from earlier phase
+import "utso/collections"
+import "packages/lipi_ui/canvas" @! Assumes canvas.lipi exists from earlier phase
 
 @! UI Component Base
 @fn ui_component_new(type, props, children)

@@ -3,9 +3,9 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/ai/tensor"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_ai/tensor"
 
 @! ----------------------------------------------------------------------------
 @! 1. Rotary Positional Embeddings (RoPE)

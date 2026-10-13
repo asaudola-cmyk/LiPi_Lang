@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! Converts a Lipi MIR (Mid-Level IR) or AST program to WASM Text Format (WAT)
 @fn mir_to_wasm_wat(mir_prog)

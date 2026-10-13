@@ -3,9 +3,9 @@
 @! Standard: Sovereign Native BigInt & RSA Engine
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/rsa"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/rsa"
 
 @struct RsaKey
   n: i64

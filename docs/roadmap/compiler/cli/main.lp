@@ -3,9 +3,9 @@
 @! 100% Written in Pure Lipi Language — Zero C / Rust / External Dependencies
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/os/fs"
+import "utso/string"
+import "utso/collections"
+import "utso/os/fs"
 import "compiler/frontend/lexer"
 import "compiler/frontend/parser"
 import "compiler/frontend/resolve"

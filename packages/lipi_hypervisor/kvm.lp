@@ -8,8 +8,8 @@
 @! with Graceful Automatic Software Interpreter Fallback
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/os/syscalls"
+import "utso/collections"
+import "utso/syscalls"
 
 @! ============================================================================
 @! 1. KVM CONSTANTS & IOCTL OPCODES

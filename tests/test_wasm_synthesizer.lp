@@ -5,8 +5,8 @@
 // 🏛️ File: tests/test_wasm_synthesizer.lp
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/backend/targets/wasm/synthesizer"
 
 fn test_assert_eq actual expected test_name

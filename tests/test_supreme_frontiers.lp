@@ -11,11 +11,11 @@
 // 100% Pure LiPi Implementation — Zero External / C / Linux Dependencies
 // ==============================================================================
 
-include "universe/io/nvme_direct.lp"
-include "universe/net/virtio_net.lp"
-include "universe/ai/llm_engine_pure.lp"
-include "universe/core/formal_proof.lp"
-include "universe/net/bft_consensus.lp"
+include "utso/io/nvme_direct.lp"
+include "utso/net/virtio_net.lp"
+include "packages/lipi_ai/llm_engine_pure.lp"
+include "utso/core/formal_proof.lp"
+include "utso/net/bft_consensus.lp"
 include "build.lp"
 include "src/tools/installer.lp"
 

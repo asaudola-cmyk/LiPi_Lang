@@ -3,8 +3,8 @@
 // ⚡ 100% Pure Lipi First 1.0.0
 // ==============================================================================
 
-import "universe/core/string"
-import "universe/core/io"
+import "utso/string"
+import "utso/io"
 
 fn count_chars text
     return len(text)

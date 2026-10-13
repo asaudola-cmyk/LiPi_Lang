@@ -4,7 +4,7 @@
 // 🏛️ File: tests/test_micro_compiler_bootstrap.lp
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 fn test_assert_eq actual expected test_name
     if actual != expected

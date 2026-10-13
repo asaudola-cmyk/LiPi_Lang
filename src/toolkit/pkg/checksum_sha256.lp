@@ -13,10 +13,10 @@
 // 3. Constant-time string comparison for checksum validation to protect against timing attacks.
 // 4. Multi-file integrity manifests (checksums.txt) generator and validator.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
-include "universe/crypto/sha256.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
+include "utso/crypto/sha256.lp"
 
 // ── 1. Constant-Time Hash Comparison ──────────────────────────────────────────
 

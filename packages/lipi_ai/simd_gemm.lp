@@ -11,8 +11,8 @@
 // এই কার্নেলটি ৪x৪ টাইল্ড ব্লকিং এবং ২৫৬-বিট ভেক্টর অপারেশনের মাধ্যমে মেমরি ব্যান্ডউইথ
 // পূর্ণ ব্যবহার করে এবং গণনার গতি ১০x-৩০x বৃদ্ধি করে।
 
-include "universe/core/memory.lp"
-include "universe/core/simd.lp"
+include "utso/memory.lp"
+include "utso/core/simd.lp"
 
 // ── ১. ভেক্টর ২৫৬-বিট ফিউজড ডট প্রোডাক্ট হেল্পার (256-bit 4-Lane Fused Vector Dot) ─
 // WHY: ৪টি সমান্তরাল কলাম উপাদান একসাথে গুণ করে যোগফল বের করা

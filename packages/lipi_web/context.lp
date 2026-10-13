@@ -4,10 +4,10 @@
 @! RFC 7230 / RFC 7231 Compliant Request / Response / Context Engine
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/json"
-import "universe/web/url"
-import "universe/web/router"
+import "utso/string"
+import "utso/core/json"
+import "packages/lipi_web/url"
+import "packages/lipi_web/router"
 
 @! ----------------------------------------------------------------------------
 @! 1. HTTP Status Codes & Reason Phrase Resolver

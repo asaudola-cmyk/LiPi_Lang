@@ -5,8 +5,8 @@
 @! ============================================================================
 
 import "compiler/frontend/ast"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! Create a new Universal AST node
 @fn uast_node_new(kind)

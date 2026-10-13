@@ -5,9 +5,9 @@
 @! 2D primitives (Line, Rect, Circle), and TrueType Font text rendering.
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/math"
 
 @fn display_init(width, height, bpp)
   println("  [DISPLAY] Initializing VESA Framebuffer " + width.to_str() + "x" + height.to_str() + "x" + bpp.to_str())

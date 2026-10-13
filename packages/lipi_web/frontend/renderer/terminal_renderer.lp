@@ -9,11 +9,11 @@
 @! - Direct LayoutNode wireframe box-drawing & character-mode renderer
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/core/string"
-import "universe/web/frontend/renderer/canvas2d_renderer"
-import "universe/web/frontend/layout/layout_types"
+import "utso/collections"
+import "utso/math"
+import "utso/string"
+import "packages/lipi_web/frontend/renderer/canvas2d_renderer"
+import "packages/lipi_web/frontend/layout/layout_types"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES & INITIALIZATION

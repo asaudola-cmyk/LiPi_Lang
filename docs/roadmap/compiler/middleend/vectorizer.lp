@@ -5,8 +5,8 @@
 @!           Horizontal Reduction Epilogue, Scalar Remainder Cleanup Loop
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/middleend/loop_analysis"
 import "compiler/middleend/vector_ir"
 

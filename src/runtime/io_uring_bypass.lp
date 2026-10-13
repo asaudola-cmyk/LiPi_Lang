@@ -1,7 +1,7 @@
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/net"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/string"
+import "utso/core/net"
 
 @! ==============================================================================
 @! ⚡ LIPI SOVEREIGN BAREMETAL NETWORK WIRE ENGINE (src/runtime/io_uring_bypass.lp)

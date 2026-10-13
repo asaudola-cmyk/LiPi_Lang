@@ -4,7 +4,7 @@
 // Milestone: First 1.0.0 (প্রথম ১.০.০) | Zero Libc | Zero External Codecs
 // ==============================================================================
 
-include "universe/media/audio_wav.lp"
+include "packages/lipi_media/audio_wav.lp"
 
 fn assert_true cond msg
     if cond == 0

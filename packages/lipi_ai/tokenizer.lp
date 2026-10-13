@@ -4,8 +4,8 @@
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @struct TokenEntry
   token: string

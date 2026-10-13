@@ -1,5 +1,5 @@
-include "universe/core/io.lp"
-include "universe/core/string.lp"
+include "utso/io.lp"
+include "utso/string.lp"
 
 fn str_sub_s s start_i end_i
     if start_i < 0

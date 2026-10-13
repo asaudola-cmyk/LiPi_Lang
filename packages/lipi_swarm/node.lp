@@ -4,18 +4,18 @@
 @! Integrates UDP Discovery, TCP RPC Server, Actor Routing & Task Execution
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/core/time"
-import "universe/net/udp"
-import "universe/net/tcp"
-import "universe/swarm/types"
-import "universe/swarm/protocol"
-import "universe/swarm/serializer"
-import "universe/swarm/discovery"
-import "universe/swarm/task_registry"
-import "universe/swarm/router"
-import "universe/swarm/actor"
+import "utso/string"
+import "utso/collections"
+import "utso/time"
+import "utso/net/udp"
+import "utso/net/tcp"
+import "packages/lipi_swarm/types"
+import "packages/lipi_swarm/protocol"
+import "packages/lipi_swarm/serializer"
+import "packages/lipi_swarm/discovery"
+import "packages/lipi_swarm/task_registry"
+import "packages/lipi_swarm/router"
+import "packages/lipi_swarm/actor"
 
 @! ----------------------------------------------------------------------------
 @! 1. SwarmNode Data Structure & Construction

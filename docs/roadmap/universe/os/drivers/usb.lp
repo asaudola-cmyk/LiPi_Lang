@@ -4,8 +4,8 @@
 @! Features: Extensible Host Controller Interface, Device Enumeration, Hubs
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
+import "utso/syscalls"
+import "utso/collections"
 
 @fn xhci_init()
   println("  [USB] Initializing xHCI Host Controller...")

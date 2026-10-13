@@ -8,7 +8,7 @@
 // pinning bugs and dependency hell. This module implements zero-dependency parsing,
 // precedence comparison, and caret (^), tilde (~), and range constraint resolution.
 
-include "universe/core/string.lp"
+include "utso/string.lp"
 
 @struct SemVer
   major: i64

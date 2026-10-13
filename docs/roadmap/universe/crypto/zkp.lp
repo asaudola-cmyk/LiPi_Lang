@@ -4,9 +4,9 @@
 @! Features: Schnorr ZKP, Fiat-Shamir Heuristic, Pedersen Commitments, R1CS System
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/crypto"
-import "universe/core/math"
+import "utso/collections"
+import "utso/core/crypto"
+import "utso/math"
 
 @! ----------------------------------------------------------------------------
 @! 1. SCHNORR ZERO-KNOWLEDGE IDENTIFICATION & PROOF SYSTEM

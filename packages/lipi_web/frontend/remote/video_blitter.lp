@@ -7,8 +7,8 @@
 @! Dirty-Rect Tracking & Framebuffer Compositing with Local WASM UI
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. CONSTANTS & FORMATS

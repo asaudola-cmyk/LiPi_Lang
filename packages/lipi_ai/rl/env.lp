@@ -5,9 +5,9 @@
 @! GridWorld, CartPole Physics ODE (Euler Integration), Multi-Armed Bandit.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/rl/space"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/rl/space"
 
 @! ----------------------------------------------------------------------------
 @! 1. Unified MDP Environment Interface Dispatchers

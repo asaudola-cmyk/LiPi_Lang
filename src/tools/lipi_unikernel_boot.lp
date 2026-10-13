@@ -20,8 +20,8 @@
 //   `qemu-system-x86_64 -kernel lipi_kernel.bin -nographic -serial mon:stdio`
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 // ── 1. Multiboot2 & x86 Hardware Constants ────────────────────────────────────
 MULTIBOOT2_MAGIC          = 3897741526 // 0xE85250D6

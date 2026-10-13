@@ -8,16 +8,16 @@
 // standard library across Memory, SIMD, Database, Crypto, JSON, and Framebuffer.
 // ==============================================================================
 
-import "universe/lipi_universe"
-import "universe/core/memory"
-import "universe/core/arena"
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json_fast"
-import "universe/core/simd"
-import "universe/db"
-import "universe/crypto"
-import "universe/gui"
+import "utso/lipi_universe"
+import "utso/memory"
+import "utso/arena"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json_fast"
+import "utso/core/simd"
+import "packages/lipidb/db"
+import "utso/crypto"
+import "packages/lipi_gui/gui"
 
 fn assert_eq_int actual expected test_name
     if actual == expected

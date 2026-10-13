@@ -17,7 +17,7 @@
 //   6. Non-blocking Vacuum reclaims tuple versions obscured past min_active_tx.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── 1. Transaction States & Sentinels ─────────────────────────────────────────
 MVCC_TX_ACTIVE    = 1

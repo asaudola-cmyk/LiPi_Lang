@@ -5,7 +5,7 @@
 // 100% Pure Lipi — Zero OpenSSL | Zero C | Zero Libc
 // ==============================================================================
 
-include "universe/crypto/pqc.lp"
+include "utso/crypto/pqc.lp"
 
 fn assert_true cond msg
     if cond == 0

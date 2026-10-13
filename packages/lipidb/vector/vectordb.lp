@@ -7,8 +7,8 @@
 @! WAL Persistence & Sub-Millisecond AI Semantic Search
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. VECTOR DB DATA STRUCTURES

@@ -8,9 +8,9 @@
 @! Atomic Load/Store/CAS, Wait-Free Submission & Reaping, High Throughput (100k+ ops)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/web/frontend/concurrency/message_protocol"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_web/frontend/concurrency/message_protocol"
 
 @! ============================================================================
 @! 1. CONSTANTS & QUEUE MODES

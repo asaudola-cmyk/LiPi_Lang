@@ -4,9 +4,9 @@
 @! Features: Patch Embeddings, Positional Encoding, Multi-Head Self Attention
 @! ============================================================================
 
-import "universe/ai/tensor"
-import "universe/ai/llm/transformer"
-import "universe/core/math"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/llm/transformer"
+import "utso/math"
 
 @! ----------------------------------------------------------------------------
 @! 1. VISION TRANSFORMER CONFIGURATION

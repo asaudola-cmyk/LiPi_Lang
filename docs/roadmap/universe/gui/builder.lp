@@ -11,9 +11,9 @@
 @! - Reactive State Management Store with subscription & tree binding
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
 
 @! ----------------------------------------------------------------------------
 @! 1. DECLARATIVE COMPONENT NODE SCHEMA & CONSTRUCTORS

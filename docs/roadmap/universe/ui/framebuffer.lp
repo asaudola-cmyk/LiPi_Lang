@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! Framebuffer Object
 @fn fb_new(width, height)

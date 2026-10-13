@@ -3,9 +3,9 @@
 @! Zero Dependencies — Pure Lipi Web Stack
 @! ============================================================================
 
-import "universe/net/tcp"
-import "universe/net/socket"
-import "universe/core/string"
+import "utso/net/tcp"
+import "utso/socket"
+import "utso/string"
 
 @! Starts a blocking HTTP server loop
 @fn http_server_serve(port, route_handler_fn)

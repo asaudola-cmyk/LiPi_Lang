@@ -4,9 +4,9 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ai/llm/transformer"
-import "universe/ai/llm/tokenizer"
+import "utso/collections"
+import "packages/lipi_ai/llm/transformer"
+import "packages/lipi_ai/llm/tokenizer"
 
 @! ----------------------------------------------------------------------------
 @! 1. Temperature Scaling

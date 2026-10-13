@@ -9,11 +9,11 @@
 // std/web.lp delivers sub-microsecond HTTP routing, request parsing, and wire-protocol
 // serialization with zero memory leaks, zero external dependencies, and zero libc overhead.
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/net/socket.lp"
-include "universe/core/string.lp"
-include "universe/core/json.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/socket.lp"
+include "utso/string.lp"
+include "utso/core/json.lp"
 
 // ── HTTP Status Codes ─────────────────────────────────────────────────────────
 // WHY: Standard RFC 7231 status codes enable clean semantic status management.

@@ -6,8 +6,8 @@
 @! and Composable Route Grouping
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/web/url"
+import "utso/string"
+import "packages/lipi_web/url"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Discriminators

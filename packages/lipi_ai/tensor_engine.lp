@@ -5,9 +5,9 @@
 // ⚡ 100% Pure Sovereign LiPi Code | Zero Placeholders | Zero C/C++ Runtime
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/simd.lp"
-include "universe/cpu/avx512_native.lp"
+include "utso/memory.lp"
+include "utso/core/simd.lp"
+include "utso/cpu/avx512_native.lp"
 
 // ── ০. পূর্ণসংখ্যা ও ফ্লোটিং-পয়েন্ট রূপান্তর (Integer to IEEE-754 Float Synthesizer) ─
 // WHY: Converts 64-bit integers to IEEE-754 double precision float without libc runtime.

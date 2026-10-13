@@ -1,6 +1,6 @@
 // tests/test_gauss_loop.lp
 // Validates O(1) Gauss Closed-Form Symbolic Loop Induction & Modulo Folding
-include "universe/core/io.lp"
+include "utso/io.lp"
 
 fn test_gauss_basic
     total = 0

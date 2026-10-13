@@ -12,9 +12,9 @@
 // 3. Balanced brace/bracket extraction for nested parameter objects and AST payloads.
 // 4. Canonical JSON-RPC error definitions conforming strictly to specification.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Protocol Error Constants ───────────────────────────────────────────────
 

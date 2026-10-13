@@ -1,5 +1,5 @@
-import "universe/lipi_universe"
-import "universe/core/fmt"
+import "utso/lipi_universe"
+import "utso/fmt"
 
 @fn pad_right(s, width)
   @while str_len(s) < width

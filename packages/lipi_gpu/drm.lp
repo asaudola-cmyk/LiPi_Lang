@@ -16,7 +16,7 @@
 //      and maps memory buffers for parallel hardware vector and matrix acceleration.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── 0. SPIR-V Architecture & Opcode Constants ───────────────────────────────
 fn SPIRV_MAGIC

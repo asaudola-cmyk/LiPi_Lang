@@ -7,9 +7,9 @@
 @! and Worker Pool for Multi-Threaded WASM Frontend Engine
 @! ============================================================================
 
-import "universe/web/frontend/concurrency/message_protocol"
-import "universe/web/frontend/concurrency/ring_buffer"
-import "universe/web/frontend/concurrency/worker_pool"
+import "packages/lipi_web/frontend/concurrency/message_protocol"
+import "packages/lipi_web/frontend/concurrency/ring_buffer"
+import "packages/lipi_web/frontend/concurrency/worker_pool"
 
 @fn frontend_concurrency_init(queue_capacity)
   return worker_pool_init(queue_capacity)

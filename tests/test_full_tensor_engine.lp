@@ -1,6 +1,6 @@
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/ai/tensor_engine.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "packages/lipi_ai/tensor_engine.lp"
 
 fn main
     say "=== Testing Full Autoregressive Transformer with KV-Cache ==="

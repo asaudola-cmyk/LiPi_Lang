@@ -4,11 +4,11 @@
 @! Sovereign Slotted 4096-byte Binary Pages with LRU Cache & Syscall Persistence
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/db/page"
-import "universe/db/buffer"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/string"
+import "packages/lipidb/page"
+import "packages/lipidb/buffer"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

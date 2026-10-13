@@ -1,7 +1,7 @@
 @! Lipi Native x86-64 JIT Emitter (Extended)
 @! Handles control flow, jumps, and ModRM encoding
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn emit_rex(buf, w, r, x, b)
   @! REX prefix is 0100WRXB (0x40 + w<<3 + r<<2 + x<<1 + b)

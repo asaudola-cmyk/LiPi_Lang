@@ -9,8 +9,8 @@
 // replays committed WAL entries upon restart, guaranteeing ZERO DATA LOSS.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 // ── WAL Operation Type Identifiers ────────────────────────────────────────────
 WAL_OP_INSERT     = 1

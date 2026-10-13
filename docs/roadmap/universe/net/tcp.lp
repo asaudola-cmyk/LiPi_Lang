@@ -3,10 +3,10 @@
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/syscalls"
-import "universe/net/socket"
+import "utso/collections"
+import "utso/string"
+import "utso/syscalls"
+import "utso/socket"
 
 @! Represents a TCP Socket
 @fn tcp_socket_new(port)

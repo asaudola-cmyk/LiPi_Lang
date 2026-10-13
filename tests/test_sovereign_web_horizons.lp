@@ -18,11 +18,11 @@
 // Section 10: Distributed Edge Session Store (Zero-Hop Reads & Invalidation)
 // ==============================================================================
 
-include "universe/web/wire_signals.lp"
-include "universe/web/io_uring.lp"
-include "universe/gui/style_bitmask.lp"
-include "universe/web/accessible_canvas.lp"
-include "universe/web/cluster.lp"
+include "packages/lipi_web/wire_signals.lp"
+include "packages/lipi_web/io_uring.lp"
+include "packages/lipi_gui/style_bitmask.lp"
+include "packages/lipi_web/accessible_canvas.lp"
+include "packages/lipi_web/cluster.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 

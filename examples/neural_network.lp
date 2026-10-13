@@ -1,5 +1,5 @@
-import "universe/lipi_universe"
-import "universe/core/fmt"
+import "utso/lipi_universe"
+import "utso/fmt"
 
 @fn math_abs(x)
   @if x < 0 return -x @end

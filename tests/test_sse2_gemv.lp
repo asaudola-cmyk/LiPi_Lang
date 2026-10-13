@@ -1,5 +1,5 @@
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 fn main
     say "=== Testing Native %xmm SSE2 Float Dot Product & GEMV ==="

@@ -1,5 +1,5 @@
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @fn fib_iterative(n)
   @if n <= 1

@@ -4,8 +4,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/collections"
+import "utso/math"
 
 @! ----------------------------------------------------------------------------
 @! 1. Vector Math & Ray Definitions

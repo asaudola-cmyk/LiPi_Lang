@@ -1,7 +1,7 @@
 // tests/test_comptime_eval.lp
 // Validates Comptime Supercompilation & Partial Evaluation
 import "compiler/middleend/comptime_eval"
-import "universe/core/io"
+import "utso/io"
 
 @fn main()
   say("Testing Comptime Supercompilation...")

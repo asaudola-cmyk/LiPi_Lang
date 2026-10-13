@@ -4,8 +4,8 @@
 @! 100% Pure Lipi Implementation — File-Backed Durable Persistence
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 @! Default storage file path
 @fn default_storage_path() -> string

@@ -13,9 +13,9 @@
 // 3. GitHub alert callouts (`> [!NOTE]`, `> [!TIP]`) highlighting architectural WHY rationale.
 // 4. Clean Table of Contents with jump links and standardized parameter breakdown tables.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Data Structures ────────────────────────────────────────────────────────
 

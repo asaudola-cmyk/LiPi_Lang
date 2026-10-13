@@ -12,9 +12,9 @@
 // 4. Executes Kahn's topological sort algorithm to determine deterministic build ordering.
 // 5. Propagates file changes through transitive dependents to calculate minimal rebuild sets.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Data Structures ────────────────────────────────────────────────────────
 

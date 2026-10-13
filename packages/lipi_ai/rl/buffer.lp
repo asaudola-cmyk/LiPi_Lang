@@ -5,8 +5,8 @@
 @! On-Policy Trajectory Buffer, Generalized Advantage Estimation (GAE).
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
+import "utso/math"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. Uniform Experience Replay Buffer

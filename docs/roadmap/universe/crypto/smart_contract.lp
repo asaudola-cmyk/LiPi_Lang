@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! Smart Contract VM State
 @fn sc_vm_new()

@@ -10,8 +10,8 @@
 //      and multi-head attention forward passes without any foreign runtime dependencies.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/math.lp"
+include "utso/memory.lp"
+include "utso/math.lp"
 
 // ── GGUF Specification Constants ──────────────────────────────────────────────
 GGUF_MAGIC_LE       = 1179998023 // 'GGUF' -> 0x46554747

@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! Converts a Lipi MIR (Mid-Level IR) or AST program to LLVM IR textual representation.
 @fn mir_to_llvm_ir(mir_prog)

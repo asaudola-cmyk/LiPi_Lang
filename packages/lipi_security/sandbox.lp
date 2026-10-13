@@ -5,9 +5,9 @@
 @! Standard: Linux Kernel BPF Seccomp (PR_SET_NO_NEW_PRIVS & SECCOMP_SET_MODE_FILTER)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/collections"
+import "utso/string"
+import "utso/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. Linux BPF Instruction & Filter Program Data Structures

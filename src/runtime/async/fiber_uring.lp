@@ -8,7 +8,7 @@
 // concurrent fibers across a minimal number of OS threads.
 
 import "src/runtime/async/fiber.lp"
-import "universe/io/uring.lp"
+import "utso/io/uring.lp"
 import "src/runtime/async/event_loop.lp"
 
 struct FiberUringContext

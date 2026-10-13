@@ -12,9 +12,9 @@
 // 3. Exact POSIX exit code extraction and termination signal reporting.
 // 4. Guaranteed zero zombie process leaks through synchronous wait4 reaping.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Data Structures ────────────────────────────────────────────────────────
 

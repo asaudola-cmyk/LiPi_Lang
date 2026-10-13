@@ -5,8 +5,8 @@
 // 100% Pure Lipi — Zero External / C / Libc / X11 / Wayland Dependencies
 // ==============================================================================
 
-include "universe/gui/drm_kms.lp"
-include "universe/gui/fbdev.lp"
+include "packages/lipi_gui/drm_kms.lp"
+include "packages/lipi_gui/fbdev.lp"
 
 fn assert_true cond msg
     if cond == 0

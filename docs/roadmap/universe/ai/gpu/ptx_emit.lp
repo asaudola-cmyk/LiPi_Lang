@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language — Direct CUDA Hardware Execution
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 @fn ptx_program_new(kernel_name)
   code = ".version 7.0\n"

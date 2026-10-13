@@ -4,10 +4,10 @@
 // 100% Pure Lipi Implementation — Zero External / BLAS Dependencies
 // ==============================================================================
 
-import "universe/cpu/avx512_gemm"
-import "universe/cpu/avx512_native"
-import "universe/core/memory"
-import "universe/core/string"
+import "utso/cpu/avx512_gemm"
+import "utso/cpu/avx512_native"
+import "utso/memory"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

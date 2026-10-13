@@ -1,5 +1,5 @@
-import "universe/core/time"
-import "universe/core/fmt"
+import "utso/time"
+import "utso/fmt"
 
 @fn bench_fibonacci(n)
   a = 0

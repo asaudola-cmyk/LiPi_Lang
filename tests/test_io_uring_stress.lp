@@ -4,9 +4,9 @@
 // 100% Pure Lipi Implementation — Zero Libc | Zero External Dependencies
 // ==============================================================================
 
-import "universe/net/io_uring_reactor"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/net/io_uring_reactor"
+import "utso/string"
+import "utso/syscalls"
 
 @fn assert_true(cond, msg)
   @if cond == 0

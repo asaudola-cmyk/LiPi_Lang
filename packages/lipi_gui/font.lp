@@ -20,8 +20,8 @@
 @! - Clipped and Ellipsis text rasterization
 @! ============================================================================
 
-import "universe/gui/canvas"
-import "universe/core/string"
+import "packages/lipi_gui/canvas"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

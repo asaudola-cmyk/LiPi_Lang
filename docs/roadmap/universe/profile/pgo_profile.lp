@@ -5,8 +5,8 @@
 @!           Merging, Call Graph & Loop Profile Deserialization
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. HASHING & PROFILE CREATION

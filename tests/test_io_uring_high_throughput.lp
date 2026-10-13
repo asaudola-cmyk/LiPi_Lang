@@ -5,8 +5,8 @@
 // 100% Pure Lipi — Zero Libc | Zero C | Zero External Dependencies
 // ==============================================================================
 
-import "universe/io/reactor"
-import "universe/core/string"
+import "utso/io/reactor"
+import "utso/string"
 
 @fn assert_true(cond: i64, msg: string)
   @if cond == 0

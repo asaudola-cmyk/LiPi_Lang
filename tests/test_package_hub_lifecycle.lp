@@ -7,11 +7,11 @@
 //      resolution, manifest cryptographic signing, and hash verification without
 //      relying on cargo, npm, pip, or external dynamic libraries.
 
-include "universe/core/io.lp"
-include "universe/core/string.lp"
-include "universe/core/memory.lp"
-include "universe/crypto/crypto.lp"
-include "universe/registry/semver.lp"
+include "utso/io.lp"
+include "utso/string.lp"
+include "utso/memory.lp"
+include "utso/crypto.lp"
+include "packages/lipi_registry/semver.lp"
 
 fn assert_true cond msg
     if cond == 0

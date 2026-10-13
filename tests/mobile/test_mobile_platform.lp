@@ -1,4 +1,4 @@
-import "universe/mobile/platform"
+import "packages/lipi_mobile/platform"
 
 @fn main()
   println("--- Mobile Platform Test ---")

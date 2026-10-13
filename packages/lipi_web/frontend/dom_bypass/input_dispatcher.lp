@@ -11,12 +11,12 @@
 @! - Dynamic routing to Layout Worker (Worker Pool) or @remote WebRTC DataChannel
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/core/string"
-import "universe/web/frontend/concurrency/message_protocol"
-import "universe/web/frontend/concurrency/worker_pool"
-import "universe/web/frontend/remote/mod"
+import "utso/collections"
+import "utso/math"
+import "utso/string"
+import "packages/lipi_web/frontend/concurrency/message_protocol"
+import "packages/lipi_web/frontend/concurrency/worker_pool"
+import "packages/lipi_web/frontend/remote/mod"
 
 @! ============================================================================
 @! 1. GESTURE & DOM EVENT CONSTANTS

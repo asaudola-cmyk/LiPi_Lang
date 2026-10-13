@@ -4,8 +4,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ai/tensor"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
 
 @! ----------------------------------------------------------------------------
 @! 1. KV Cache Management

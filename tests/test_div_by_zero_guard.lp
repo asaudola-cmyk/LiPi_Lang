@@ -4,7 +4,7 @@
 // 100% Pure Lipi — Zero Foreign Dependencies
 // ==============================================================================
 
-include "universe/core/io.lp"
+include "utso/io.lp"
 
 fn main
     say "=== LIPI DIVISION BY ZERO GUARD TEST ==="

@@ -4,8 +4,8 @@
 @! Features: VM State Snapshotting, Reverse Step, Watchpoints, Call Stack Replay
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. VM STATE SNAPSHOT & DELTA COMPRESSION

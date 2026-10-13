@@ -4,8 +4,8 @@
 @! Trait Bounds, Union Types, and Generic Monomorphization.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. TYPE REPRESENTATIONS

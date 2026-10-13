@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/3d/physics"
+import "utso/collections"
+import "packages/lipi_3d/physics"
 
 @! Scene Graph Node
 @fn scene_node_new(name)

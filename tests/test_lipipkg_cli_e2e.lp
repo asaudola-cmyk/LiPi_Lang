@@ -11,10 +11,10 @@
 // 4. Ed25519 cryptographic digital signature & SHA-256 integrity check (`verify`).
 // 5. Local cache repository query and maintenance (`cache`).
 
-include "universe/core/io.lp"
-include "universe/core/string.lp"
-include "universe/core/memory.lp"
-include "universe/crypto/crypto.lp"
+include "utso/io.lp"
+include "utso/string.lp"
+include "utso/memory.lp"
+include "utso/crypto.lp"
 
 fn assert_true(cond, msg)
     if cond == 0

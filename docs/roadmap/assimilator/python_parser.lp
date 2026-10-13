@@ -4,8 +4,8 @@
 @! Features: Python AST/syntax parsing, indentation analysis, keyword mapping
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @fn py_list_pop(arr)
   len = arr.len()

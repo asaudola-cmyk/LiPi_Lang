@@ -4,8 +4,8 @@
 @! Serializes/Deserializes Values, Structs, Arrays, Maps, and Swarm Descriptors
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/swarm/types"
+import "utso/string"
+import "packages/lipi_swarm/types"
 
 @! ----------------------------------------------------------------------------
 @! 1. Internal Fast JSON Tokenizer & Model

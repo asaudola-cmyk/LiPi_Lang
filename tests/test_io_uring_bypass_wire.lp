@@ -1,6 +1,6 @@
 import "src/runtime/io_uring_bypass"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/string"
+import "utso/syscalls"
 
 @! ==============================================================================
 @! 🧪 LIPI TEST SUITE: IO_URING BAREMETAL NETWORK WIRE ENGINE RUNTIME

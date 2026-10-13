@@ -2,7 +2,7 @@
 @! LIPI NATIVE GUI — BITMAP FONT RENDERER
 @! ============================================================================
 
-import "universe/gui/framebuffer"
+import "packages/lipi_gui/framebuffer"
 
 @fn font_load_default()
   return {

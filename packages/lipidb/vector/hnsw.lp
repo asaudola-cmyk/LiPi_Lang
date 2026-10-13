@@ -11,8 +11,8 @@
 // local Retrieval-Augmented Generation (RAG) directly on bare-metal silicon.
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 // ── 1. HNSW Vector & Graph Node Structures ────────────────────────────────────
 @struct HNSWDoc

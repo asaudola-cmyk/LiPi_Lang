@@ -3,11 +3,11 @@
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
-import "universe/net/tcp"
-import "universe/net/udp"
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/swarm/types"
+import "utso/net/tcp"
+import "utso/net/udp"
+import "utso/string"
+import "utso/collections"
+import "packages/lipi_swarm/types"
 
 @fn net_u16_be(buf, off)
   b0 = buf[off] & 255

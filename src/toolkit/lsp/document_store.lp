@@ -13,9 +13,9 @@
 // 3. Robust token extraction at cursor coordinates for hover, definition, and autocompletion.
 // 4. Memory-safe buffer updates with automatic line boundary re-indexing.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Data Structures ────────────────────────────────────────────────────────
 

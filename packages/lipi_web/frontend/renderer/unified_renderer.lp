@@ -9,11 +9,11 @@
 @! - State preservation across backend transitions
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/web/frontend/renderer/webgpu_renderer"
-import "universe/web/frontend/renderer/webgl2_renderer"
-import "universe/web/frontend/renderer/canvas2d_renderer"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_web/frontend/renderer/webgpu_renderer"
+import "packages/lipi_web/frontend/renderer/webgl2_renderer"
+import "packages/lipi_web/frontend/renderer/canvas2d_renderer"
 
 @! ----------------------------------------------------------------------------
 @! 1. CONSTANTS & ENUMS

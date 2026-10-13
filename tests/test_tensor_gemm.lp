@@ -4,8 +4,8 @@
 //    Verifies General Matrix Multiplication (GEMM) & Columnar Feature Projection
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/ai/tensor_engine.lp"
+include "utso/memory.lp"
+include "packages/lipi_ai/tensor_engine.lp"
 include "packages/lipi_dataframe/src/dataframe.lp"
 
 fn assert_true cond test_name

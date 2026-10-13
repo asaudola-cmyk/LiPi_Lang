@@ -7,8 +7,8 @@
 // lipi_jwt provides zero-dependency RFC 7519 token signing, parsing, and cryptographic
 // validation using LiPi's native SHA-256 engine and constant-time signature verification.
 
-include "universe/core/memory.lp"
-include "universe/crypto/crypto.lp"
+include "utso/memory.lp"
+include "utso/crypto.lp"
 
 // Helper: writes integer val as ASCII decimal into buf at offset
 // Returns number of characters written

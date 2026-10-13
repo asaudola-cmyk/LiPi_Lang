@@ -3,8 +3,8 @@
 @! Bypasses traditional SQL for a direct memory-mapped graph relationship
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @struct GraphNode
   id: i64

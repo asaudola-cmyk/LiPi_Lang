@@ -1,6 +1,6 @@
-import "universe/core/net"
-import "universe/os/syscalls"
-import "universe/core/string"
+import "utso/core/net"
+import "utso/syscalls"
+import "utso/string"
 
 @! ==============================================================================
 @! 🧪 LIPI TEST SUITE: BAREMETAL NETWORK WIRE ENGINE & CORE NETWORKING

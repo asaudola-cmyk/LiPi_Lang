@@ -6,9 +6,9 @@
 @! Features: Merkle Patricia State Trie, Account State Records & SHA-256 State Roots
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
 
 @! ============================================================================
 @! 1. ACCOUNT STATE & TRIE NODE DATA STRUCTURES

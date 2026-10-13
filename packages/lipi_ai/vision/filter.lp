@@ -5,9 +5,9 @@
 @! Laplacian, 5-Stage Canny Edge Detection (NMS + Hysteresis), Morphology.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/vision/image"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/vision/image"
 
 @! ----------------------------------------------------------------------------
 @! 1. 2D Spatial Convolution Engine

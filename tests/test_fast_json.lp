@@ -8,8 +8,8 @@
 //      production server reactor lifecycle.
 // ==============================================================================
 
-include "universe/core/json_fast.lp"
-include "universe/net/server_production.lp"
+include "utso/core/json_fast.lp"
+include "utso/net/server_production.lp"
 
 say "========================================================"
 say "👑 Testing Lipi Zero-Copy Fast JSON & Concurrent Server"

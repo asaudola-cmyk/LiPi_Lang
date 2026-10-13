@@ -10,10 +10,10 @@
 @! - Seamless GPU / CPU Flexbox fallback and parity validation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/web/frontend/layout/layout_types"
-import "universe/web/frontend/layout/flexbox_solver"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_web/frontend/layout/layout_types"
+import "packages/lipi_web/frontend/layout/flexbox_solver"
 
 @! ============================================================================
 @! 1. WGSL COMPUTE SHADER SOURCE CODE EMBEDDING

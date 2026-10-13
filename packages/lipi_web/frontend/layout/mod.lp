@@ -8,11 +8,11 @@
 @! - Aggregates layout_types, gpu_layout, and flexbox_solver
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/web/frontend/layout/layout_types"
-import "universe/web/frontend/layout/flexbox_solver"
-import "universe/web/frontend/layout/gpu_layout"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_web/frontend/layout/layout_types"
+import "packages/lipi_web/frontend/layout/flexbox_solver"
+import "packages/lipi_web/frontend/layout/gpu_layout"
 
 @! ============================================================================
 @! 1. UNIFIED FRONTEND LAYOUT API

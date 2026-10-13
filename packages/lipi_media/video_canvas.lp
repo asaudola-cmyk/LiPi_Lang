@@ -13,8 +13,8 @@
 // rasterization and direct standard Netpbm (P6) & BMP bitmap file output.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 struct VideoCanvas
     vc_width

@@ -7,17 +7,17 @@
 @! Tool Ribbon, Status Bar Footer, Canvas Framebuffer Blitter, LSP Hook
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/gui/canvas"
-import "universe/gui/font"
-import "universe/gui/widget"
-import "universe/ide/syntax"
-import "universe/ide/editor"
-import "universe/ide/console"
-import "universe/ide/toolbar"
-import "universe/ide/runner"
-import "universe/ide/lsp_client"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/font"
+import "packages/lipi_gui/widget"
+import "packages/lipi_ide/syntax"
+import "packages/lipi_ide/editor"
+import "packages/lipi_ide/console"
+import "packages/lipi_ide/toolbar"
+import "packages/lipi_ide/runner"
+import "packages/lipi_ide/lsp_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. MASTER STUDIO DATA STRUCTURE

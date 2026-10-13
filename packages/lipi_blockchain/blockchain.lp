@@ -7,11 +7,11 @@
 @! Block Validation, LipiVM Smart Contract Execution & Chain Ledger
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
-import "universe/blockchain/mpt"
-import "universe/blockchain/vm"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
+import "packages/lipi_blockchain/mpt"
+import "packages/lipi_blockchain/vm"
 
 @! ============================================================================
 @! 1. BLOCKCHAIN DATA STRUCTURES

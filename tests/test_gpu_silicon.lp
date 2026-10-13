@@ -5,7 +5,7 @@
 // 100% Pure Lipi — Zero C | Zero Vulkan SDK | Zero External Drivers
 // ==============================================================================
 
-include "universe/gpu/drm.lp"
+include "packages/lipi_gpu/drm.lp"
 
 fn assert_true cond msg
     if cond == 0

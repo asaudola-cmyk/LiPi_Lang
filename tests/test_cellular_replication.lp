@@ -14,8 +14,8 @@
 // 3. The spawned seed can compile new LiPi programs independently.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 // Process spawner via Linux AMD64 SYS_fork (57) and SYS_execve (59)
 fn test_spawn_process cmd_path arg1 arg2 arg3

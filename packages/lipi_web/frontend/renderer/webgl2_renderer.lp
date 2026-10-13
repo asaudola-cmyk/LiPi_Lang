@@ -6,8 +6,8 @@
 @! Uniform Buffer Objects (UBOs), and scissor clipping commands.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
+import "utso/math"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

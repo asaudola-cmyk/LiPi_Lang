@@ -4,8 +4,8 @@
 @! Implements: MQTT 3.1.1 wire protocol simulation (CONNECT/PUBLISH/SUBSCRIBE)
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 @struct MqttClient
   host: "",

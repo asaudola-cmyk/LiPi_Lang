@@ -18,7 +18,7 @@
 // 3. Zero Foreign Dependencies: 0% C, 0% GCC, 0% Libc, 0% Python, 0% Node.js.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 fn test_assert_eq actual expected test_name
     // WHY: Verifies actual execution status matches expected result or aborts with failure.

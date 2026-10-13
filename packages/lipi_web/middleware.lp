@@ -4,11 +4,11 @@
 @! Features: Onion Chain, Logger, JSON Parser, CORS, Recovery, Static Server
 @! ============================================================================
 
-import "universe/web/context"
-import "universe/core/string"
-import "universe/core/json"
-import "universe/os/syscalls"
-import "universe/os/fs"
+import "packages/lipi_web/context"
+import "utso/string"
+import "utso/core/json"
+import "utso/syscalls"
+import "utso/os/fs"
 
 @! ----------------------------------------------------------------------------
 @! 1. High-Resolution Monotonic Time Helper

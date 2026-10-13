@@ -3,10 +3,10 @@
 @! 100% Pure Lipi — Direct Pixel Manipulation
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/os/memory"
-import "universe/core/math"
-import "universe/core/collections"
+import "utso/syscalls"
+import "utso/os/memory"
+import "utso/math"
+import "utso/collections"
 
 
 @fn framebuffer_new(width, height)

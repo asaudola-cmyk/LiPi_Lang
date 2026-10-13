@@ -5,8 +5,8 @@
 @! Complete Reversible Token-to-String Decoding & Vocabulary Indexing
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @fn bpe_tokenizer_new(vocab_size)
   return {

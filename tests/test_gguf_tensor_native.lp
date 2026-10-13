@@ -7,8 +7,8 @@
 // জিজিইউএফ ওপেন-সোর্স এলএলএম মডেলের ওজন ডিকোয়ান্টাইজেশন ও এভিএক্স-৫১২
 // ম্যাট্রিক্স-ভেক্টর গুণনের নিখুঁত কার্যকারিতা যাচাইকরণ।
 
-include "universe/core/memory.lp"
-include "universe/ai/gguf.lp"
+include "utso/memory.lp"
+include "packages/lipi_ai/gguf.lp"
 
 fn assert_eq_int actual expected test_name
     if actual == expected

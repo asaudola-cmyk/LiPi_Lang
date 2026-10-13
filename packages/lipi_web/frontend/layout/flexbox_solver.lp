@@ -12,10 +12,10 @@
 @! - Static, Relative, and Absolute positioning with offset constraints
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/core/string"
-import "universe/web/frontend/layout/layout_types"
+import "utso/collections"
+import "utso/math"
+import "utso/string"
+import "packages/lipi_web/frontend/layout/layout_types"
 
 @! ============================================================================
 @! 1. INTRINSIC MEASUREMENT

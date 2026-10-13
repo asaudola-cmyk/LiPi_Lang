@@ -8,7 +8,7 @@
 // RGBA framebuffer canvas with native rasterization primitives, 2D blitting, and
 // 54-byte uncompressed BMP file serialization. Zero Libc, zero C dependencies.
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ১. ৩২-বিট আরজিবিএ (RGBA) কালার কম্পোজিশন
 // WHY: Packs 8-bit Red, Green, Blue, Alpha channels into a 32-bit color word.

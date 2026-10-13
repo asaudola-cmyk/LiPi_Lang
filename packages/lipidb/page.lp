@@ -5,9 +5,9 @@
 @! Variable-Length Leaf & Internal Cell Heaps, Zero-Fragmentation Defragmentation
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/os/syscalls"
+import "utso/string"
+import "utso/collections"
+import "utso/syscalls"
 
 @fn PAGE_SIZE() return 4096 @end
 @fn PAGE_HEADER_SIZE() return 32 @end

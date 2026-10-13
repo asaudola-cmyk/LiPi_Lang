@@ -4,7 +4,7 @@
 @! RFC 3986 URL Percent-Decoding, Component Encoding, and Query String Parser
 @! ============================================================================
 
-import "universe/core/string"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

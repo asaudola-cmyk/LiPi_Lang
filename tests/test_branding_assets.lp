@@ -8,11 +8,11 @@
 // রিপোজিটরির প্রতি স্তরে (ভিএস কোড, ওয়েবসাইট, ডকুমেন্টেশন, ওএস ডেস্কটপ ও জিইউআই)
 // সঠিকভাবে সংরক্ষিত ও লোডযোগ্য কিনা তা স্বয়ংক্রিয়ভাবে যাচাই করা।
 
-import "universe/os/syscalls"
-import "universe/core/memory"
-import "universe/core/io"
-import "universe/core/string"
-import "universe/gui/framebuffer"
+import "utso/syscalls"
+import "utso/memory"
+import "utso/io"
+import "utso/string"
+import "packages/lipi_gui/framebuffer"
 
 @fn assert_true(cond, msg)
   @if cond == 0

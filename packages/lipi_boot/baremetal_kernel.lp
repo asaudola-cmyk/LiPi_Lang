@@ -19,10 +19,10 @@
 //    - Complete autonomous regression test suite with zero placeholders.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/math.lp"
-include "universe/gui/desktop_demo.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/math.lp"
+include "packages/lipi_gui/desktop_demo.lp"
 
 // ── 1. x86_64 Hardware & Segment Selector Constants ──────────────────────────
 

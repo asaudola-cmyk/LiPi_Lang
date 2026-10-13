@@ -5,7 +5,7 @@
 //    and reference CPU compute engines.
 // ==============================================================================
 
-include "universe/gpu/spirv_native.lp"
+include "packages/lipi_gpu/spirv_native.lp"
 
 fn assert_eq actual expected test_name
     if actual != expected

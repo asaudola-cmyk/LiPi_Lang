@@ -4,14 +4,14 @@
 @! UDP Broadcast Beacons (SO_REUSEPORT), TCP Gossip, Heartbeat & Failure Detector
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/core/time"
-import "universe/net/udp"
-import "universe/net/tcp"
-import "universe/swarm/types"
-import "universe/swarm/protocol"
-import "universe/swarm/serializer"
+import "utso/string"
+import "utso/collections"
+import "utso/time"
+import "utso/net/udp"
+import "utso/net/tcp"
+import "packages/lipi_swarm/types"
+import "packages/lipi_swarm/protocol"
+import "packages/lipi_swarm/serializer"
 
 @! ----------------------------------------------------------------------------
 @! 1. Peer Table Data Structure & Management

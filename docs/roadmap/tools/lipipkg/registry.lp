@@ -11,10 +11,10 @@
 @! - End-to-end dependency resolution & topological build ordering
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json"
-import "universe/os/fs"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json"
+import "utso/os/fs"
 import "tools/lipipkg/semver"
 import "tools/lipipkg/security"
 import "tools/lipipkg/registry_client"

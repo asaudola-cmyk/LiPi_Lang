@@ -424,11 +424,18 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
             cand = "packages/lipi_registry/" + str_sub(sub_p, 9, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
-
-    if file_exists("universe/" + inc_target + ".lp") == 1
-        return "universe/" + inc_target + ".lp"
-    if file_exists("universe/" + inc_target) == 1
-        return "universe/" + inc_target
+        elif compiler_driver_starts_with(sub_p, "pkg/") == 1
+            cand = "packages/lipi_registry/" + str_sub(sub_p, 4, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "tools/") == 1
+            cand = "utso/tools/" + str_sub(sub_p, 6, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_p, "io/") == 1
+            cand = "utso/io/" + str_sub(sub_p, 3, len(sub_p))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
 
     // Tier 3: Sovereign LiPi root
     if len(lipi_root) > 0 and lipi_root != "."
@@ -444,10 +451,6 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
             return lipi_root + "/packages/" + inc_target + ".lp"
         if file_exists(lipi_root + "/packages/" + inc_target) == 1
             return lipi_root + "/packages/" + inc_target
-        if file_exists(lipi_root + "/universe/" + inc_target + ".lp") == 1
-            return lipi_root + "/universe/" + inc_target + ".lp"
-        if file_exists(lipi_root + "/universe/" + inc_target) == 1
-            return lipi_root + "/universe/" + inc_target
         if file_exists(lipi_root + "/src/" + inc_target + ".lp") == 1
             return lipi_root + "/src/" + inc_target + ".lp"
         if file_exists(lipi_root + "/src/" + inc_target) == 1

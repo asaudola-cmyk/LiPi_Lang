@@ -4,9 +4,9 @@
 @! Features: Request Parser, URL Router, Middleware Stack, Status Handlers, MIME
 @! ============================================================================
 
-import "universe/net/tcp_udp"
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/net/tcp_udp"
+import "utso/string"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. HTTP RESPONSE BUILDERS

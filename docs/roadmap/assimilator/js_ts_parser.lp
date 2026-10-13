@@ -4,8 +4,8 @@
 @! Features: JS/TS syntax parsing, type stripping, arrow fn conversion, console.log
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @fn js_index_of(s, substr, from_pos)
   s_len = s.len()

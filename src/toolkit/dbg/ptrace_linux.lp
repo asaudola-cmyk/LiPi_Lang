@@ -12,9 +12,9 @@
 // 3. Modifies instruction memory via PTRACE_PEEKTEXT and PTRACE_POKETEXT.
 // 4. Enables step-by-step CPU single stepping (PTRACE_SINGLESTEP).
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Linux x86_64 Ptrace Constants ──────────────────────────────────────────
 

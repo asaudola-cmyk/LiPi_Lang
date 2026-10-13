@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language — Raw Socket Abstraction
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. TCP Socket Management

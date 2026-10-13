@@ -15,8 +15,8 @@
 //   4. System Hardware Resource Gauge Widget (Memory & Fiber Gauges)
 //   5. Hardware Arrow Mouse Cursor Rasterization with Alpha Blending
 
-import "universe/gui/framebuffer"
-import "universe/core/string"
+import "packages/lipi_gui/framebuffer"
+import "utso/string"
 
 @fn color_rgb(r: i64, g: i64, b: i64)
   // WHY: Encodes 24-bit RGB into 32-bit ARGB framebuffer color integer

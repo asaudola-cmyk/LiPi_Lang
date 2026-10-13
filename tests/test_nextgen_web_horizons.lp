@@ -20,12 +20,12 @@
 // Section 12: Zero-Click Latency Pre-Rendering & Instantaneous Fetch
 // ==============================================================================
 
-include "universe/web/crdt_sync.lp"
-include "universe/web/quic_udp.lp"
-include "universe/web/passkey_auth.lp"
-include "universe/web/webrtc_mesh.lp"
-include "universe/web/vector_search.lp"
-include "universe/web/speculative_renderer.lp"
+include "packages/lipi_web/crdt_sync.lp"
+include "packages/lipi_web/quic_udp.lp"
+include "packages/lipi_web/passkey_auth.lp"
+include "packages/lipi_web/webrtc_mesh.lp"
+include "packages/lipi_web/vector_search.lp"
+include "packages/lipi_web/speculative_renderer.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 

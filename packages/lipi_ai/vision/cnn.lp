@@ -5,10 +5,10 @@
 @! AvgPool2D, BatchNorm2D, ResNet Blocks, SimpleCNN / LeNet Backbone.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/tensor"
-import "universe/ai/autodiff"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autodiff"
 
 @! ----------------------------------------------------------------------------
 @! 1. im2col and col2im Matrix Unfolding Primitives

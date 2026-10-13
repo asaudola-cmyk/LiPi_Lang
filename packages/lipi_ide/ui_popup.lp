@@ -5,12 +5,12 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/gui/canvas"
-import "universe/gui/font"
-import "universe/tools/lsp/protocol"
-import "universe/ide/lsp_client"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/font"
+import "utso/tools/lsp/protocol"
+import "packages/lipi_ide/lsp_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. AUTOCOMPLETE COMPLETION DROPDOWN POPUP

@@ -10,24 +10,24 @@
 @!   Lock-Free Multi-Threaded WASM Workers, Adaptive WebRTC Streaming & DOM Bypass Host
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/core/string"
+import "utso/collections"
+import "utso/math"
+import "utso/string"
 
 @! Subsystems
-import "universe/web/markup_parser"
-import "universe/web/frontend/renderer/unified_renderer"
-import "universe/web/frontend/renderer/canvas2d_renderer"
-import "universe/web/frontend/renderer/terminal_renderer"
-import "universe/web/frontend/layout/mod"
-import "universe/web/frontend/layout/layout_types"
-import "universe/web/frontend/layout/flexbox_solver"
-import "universe/web/frontend/layout/gpu_layout"
-import "universe/web/frontend/concurrency/mod"
-import "universe/web/frontend/concurrency/message_protocol"
-import "universe/web/frontend/concurrency/worker_pool"
-import "universe/web/frontend/remote/mod"
-import "universe/web/frontend/dom_bypass/mod"
+import "packages/lipi_web/markup_parser"
+import "packages/lipi_web/frontend/renderer/unified_renderer"
+import "packages/lipi_web/frontend/renderer/canvas2d_renderer"
+import "packages/lipi_web/frontend/renderer/terminal_renderer"
+import "packages/lipi_web/frontend/layout/mod"
+import "packages/lipi_web/frontend/layout/layout_types"
+import "packages/lipi_web/frontend/layout/flexbox_solver"
+import "packages/lipi_web/frontend/layout/gpu_layout"
+import "packages/lipi_web/frontend/concurrency/mod"
+import "packages/lipi_web/frontend/concurrency/message_protocol"
+import "packages/lipi_web/frontend/concurrency/worker_pool"
+import "packages/lipi_web/frontend/remote/mod"
+import "packages/lipi_web/frontend/dom_bypass/mod"
 
 @! ============================================================================
 @! 1. CONFIGURATION & ENGINE STRUCTS

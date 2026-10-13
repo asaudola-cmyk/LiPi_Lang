@@ -5,9 +5,9 @@
 @! generation, and BVH Tree pre-computation for Ray Tracing.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
 
 @fn mesh_load_obj(file_path)
   println("  [3D MESH] Loading OBJ 3D Model from: " + file_path)

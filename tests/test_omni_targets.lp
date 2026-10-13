@@ -8,8 +8,8 @@
 import "src/compiler/backend/formats/pe/pe_writer"
 import "src/compiler/backend/formats/macho/macho_writer"
 import "src/compiler/backend/omni_binary"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/string"
+import "utso/syscalls"
 
 @fn assert_true(cond, msg)
   @if cond == 0

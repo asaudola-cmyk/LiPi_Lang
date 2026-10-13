@@ -3,7 +3,7 @@
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero Libc | ITU-T X.690 ASN.1 DER & X.509 PKI Test
 // ==============================================================================
 
-import "universe/crypto/x509"
+import "utso/crypto/x509"
 
 @fn main()
     println("==================================================================")

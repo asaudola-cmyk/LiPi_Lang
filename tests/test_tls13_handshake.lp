@@ -5,9 +5,9 @@
 @! 100% Pure Lipi Implementation — Zero Libc / Zero OpenSSL Dependencies
 @! ============================================================================
 
-import "universe/crypto/x25519"
-import "universe/net/tls/tls13"
-import "universe/core/string"
+import "utso/crypto/x25519"
+import "utso/net/tls/tls13"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

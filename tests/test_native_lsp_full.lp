@@ -4,8 +4,8 @@
 // 🏛️ File: tests/test_native_lsp_full.lp
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/string.lp"
+include "utso/io.lp"
+include "utso/string.lp"
 include "src/toolkit/lsp/lsp_server.lp"
 
 fn assert_true cond msg

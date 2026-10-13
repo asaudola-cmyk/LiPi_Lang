@@ -4,9 +4,9 @@
 @! Target: x86-64 Architecture
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/collections"
+import "utso/string"
+import "utso/syscalls"
 
 @! Memory protection flags (PROT_READ | PROT_WRITE | PROT_EXEC)
 @! We need mmap to allocate executable memory

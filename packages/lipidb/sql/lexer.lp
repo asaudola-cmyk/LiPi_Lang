@@ -3,8 +3,8 @@
 @! Standard: 100% Pure LiPi SQL Tokenizer
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 @struct Token
   kind: string

@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! Raft Node State
 @fn raft_node_new(id, peers)

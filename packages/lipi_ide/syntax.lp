@@ -5,8 +5,8 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/frontend/lexer"
 
 @! ----------------------------------------------------------------------------

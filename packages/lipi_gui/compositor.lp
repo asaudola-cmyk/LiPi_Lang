@@ -9,12 +9,12 @@
 @! - Compositor-level event routing & dispatching
 @! ============================================================================
 
-import "universe/gui/canvas"
-import "universe/gui/font"
-import "universe/gui/widget"
-import "universe/gui/event"
-import "universe/core/collections"
-import "universe/core/string"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/font"
+import "packages/lipi_gui/widget"
+import "packages/lipi_gui/event"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

@@ -4,8 +4,8 @@
 @! Supports Orientation, Touch Event Queue, Safe Area, Status, & JNI Generator
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Platform & Orientation Constants

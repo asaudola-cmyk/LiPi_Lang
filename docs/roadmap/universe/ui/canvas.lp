@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ui/framebuffer"
+import "utso/collections"
+import "packages/lipi_ui/framebuffer"
 
 @! Base Window System
 @fn ui_window_new(title, width, height)

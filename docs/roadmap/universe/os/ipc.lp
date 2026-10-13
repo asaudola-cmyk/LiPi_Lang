@@ -4,9 +4,9 @@
 @! Features: Named Pipes (FIFO), Shared Memory, Unix Sockets, Message Queues, Mutex
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. NAMED PIPES & FIFOS

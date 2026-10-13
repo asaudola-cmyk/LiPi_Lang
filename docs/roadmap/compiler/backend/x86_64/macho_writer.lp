@@ -1,5 +1,5 @@
-import "universe/core/collections"
-import "universe/os/fs"
+import "utso/collections"
+import "utso/os/fs"
 
 @fn macho_u16(v)
   return [v % 256, (v / 256) % 256]

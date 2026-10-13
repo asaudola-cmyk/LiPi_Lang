@@ -6,8 +6,8 @@
 @! ============================================================================
 
 import "src/tools/lipiassimilate"
-import "universe/os/syscalls"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

@@ -10,9 +10,9 @@
 // 3. User-space non-blocking event harvesting via io_uring_reactor_poll.
 // 4. Memory-mapped parameters unmapping and kernel descriptor cleanup.
 
-import "universe/net/io_uring_reactor"
-import "universe/core/io"
-import "universe/core/string"
+import "utso/net/io_uring_reactor"
+import "utso/io"
+import "utso/string"
 
 @fn assert_true(cond: i64, test_name: string)
   @if cond == 0

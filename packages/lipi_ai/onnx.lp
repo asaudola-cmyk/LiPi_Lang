@@ -7,9 +7,9 @@
 @! 64-bit, Length-Delimited, 32-bit Float), ONNX Graph Parser & Execution Engine
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
 
 @! ============================================================================
 @! 1. PROTOBUF & ONNX AST DATA STRUCTURES

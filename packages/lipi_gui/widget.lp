@@ -9,13 +9,13 @@
 @! - Canvas rasterization rendering engine
 @! ============================================================================
 
-import "universe/gui/canvas"
-import "universe/gui/font"
-import "universe/gui/layout"
-import "universe/gui/event"
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/font"
+import "packages/lipi_gui/layout"
+import "packages/lipi_gui/event"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
 
 @! ----------------------------------------------------------------------------
 @! 1. WIDGET DATA STRUCTURE (x, y, width, height aligned to indices 0, 1, 2, 3)

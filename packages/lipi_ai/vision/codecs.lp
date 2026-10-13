@@ -5,10 +5,10 @@
 @! Synthetic Test Pattern Generators (Checkerboard, Gradients, Color Bars, Circles).
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/ai/vision/image"
+import "utso/math"
+import "utso/string"
+import "utso/collections"
+import "packages/lipi_ai/vision/image"
 
 @! ----------------------------------------------------------------------------
 @! 1. ASCII Tokenizer for Netpbm Decoders

@@ -4,7 +4,7 @@
 //    cryptographic authentication, P2P gossip peer discovery, and node failure detection.
 // ==============================================================================
 
-include "universe/net/lipirpc.lp"
+include "utso/net/lipirpc.lp"
 
 fn assert_eq actual expected test_name
     if actual != expected

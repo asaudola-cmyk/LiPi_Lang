@@ -5,8 +5,8 @@
 @!           Counters, Indirect Call Site Probes, Counter Vector Allocation
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. COUNTER ALLOCATION & INSTRUMENTATION DESCRIPTOR

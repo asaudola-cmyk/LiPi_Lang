@@ -128,7 +128,7 @@ create_command() {
     mkdir -p "$LIPI_INSTALL_DIR/dist"
     
     # WHY: Execute compilation inside $LIPI_INSTALL_DIR because LiPi's compiler
-    # resolves relative includes (src/compiler/..., universe/...) from the working directory.
+    # resolves relative includes (src/compiler/..., utso/..., packages/...) from the working directory.
     (
         cd "$LIPI_INSTALL_DIR" || exit 1
 

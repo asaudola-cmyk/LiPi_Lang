@@ -1,10 +1,10 @@
 @! ============================================================================
 @! LIPI COMPILER STAGE 4 — COMPLETE ELF64 NATIVE BINARY EMITTER
 @! 100% Written in Pure Lipi Language — Zero GCC / Clang / LLD Dependency
-import "universe/os/fs"
+import "utso/os/fs"
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn u16_to_bytes(v)
   return [v % 256, (v / 256) % 256]

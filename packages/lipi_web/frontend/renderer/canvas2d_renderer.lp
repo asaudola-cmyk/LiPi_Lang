@@ -11,9 +11,9 @@
 @! - Netpbm PPM (P3) export and raw ARGB buffer serialization
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/math"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. ARGB COLOR PACKING & ALPHA BLENDING (PORTER-DUFF OVER)

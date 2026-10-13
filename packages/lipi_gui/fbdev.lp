@@ -11,7 +11,7 @@
 // 100% crash-free execution in headless CI, sandbox, or unprivileged environments.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── 1. Linux Framebuffer IOCTL Constants ──────────────────────────────────────
 FBIOGET_VSCREENINFO = 17920 // 0x4600: Variable screen info

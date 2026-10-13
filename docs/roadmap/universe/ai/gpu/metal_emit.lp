@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language — Apple Silicon Acceleration
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 @fn msl_kernel_new(name)
   code = "#include <metal_stdlib>\n"

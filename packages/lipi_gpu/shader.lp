@@ -4,7 +4,7 @@
 @! Supports Vertex, Fragment, and Compute Stage SPIR-V Generation
 @! ============================================================================
 
-import "universe/gpu/compute"
+import "packages/lipi_gpu/compute"
 
 @struct ShaderUniform
   name: string

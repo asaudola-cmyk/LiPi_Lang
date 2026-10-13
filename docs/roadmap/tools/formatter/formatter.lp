@@ -4,8 +4,8 @@
 @! Features: AST Pretty-Printing, Spacing Rules, Comment Preservation, Line Wrap
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/parser"
 
 @! ----------------------------------------------------------------------------

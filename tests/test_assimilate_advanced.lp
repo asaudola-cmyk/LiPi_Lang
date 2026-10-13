@@ -11,8 +11,8 @@
 // 3. Execution of assimilated code directly on bare Linux silicon.
 
 import "src/tools/lipiassimilate"
-import "universe/os/syscalls"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/string"
 
 @fn assert_true(cond: i64, msg: string)
   @if cond == 0

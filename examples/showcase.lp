@@ -3,9 +3,9 @@
 // ⚡ 100% Pure Silicon Machine Code | First 1.0.0 (প্রথম ১.০.০)
 // ==============================================================================
 
-import "universe/core/string"
-import "universe/core/io"
-import "universe/lipi_universe"
+import "utso/string"
+import "utso/io"
+import "utso/lipi_universe"
 
 struct Feature
     feat_name

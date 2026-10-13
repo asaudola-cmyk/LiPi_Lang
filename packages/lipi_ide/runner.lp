@@ -5,11 +5,11 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/syscalls"
-import "universe/os/process"
-import "universe/ide/console"
+import "utso/collections"
+import "utso/string"
+import "utso/syscalls"
+import "utso/os/process"
+import "packages/lipi_ide/console"
 
 @! ----------------------------------------------------------------------------
 @! 1. PROCESS RUNNER DATA STRUCTURE

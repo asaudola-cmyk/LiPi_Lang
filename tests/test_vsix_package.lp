@@ -4,10 +4,10 @@
 // 100% Pure Lipi Implementation — Zero External / Node.js Dependencies
 // ==============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/memory"
-import "universe/core/io"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/memory"
+import "utso/io"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

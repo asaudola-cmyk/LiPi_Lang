@@ -4,9 +4,9 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ai/autodiff"
-import "universe/ai/llm/transformer"
+import "utso/collections"
+import "packages/lipi_ai/autodiff"
+import "packages/lipi_ai/llm/transformer"
 
 @! ----------------------------------------------------------------------------
 @! 1. Training Configuration & State

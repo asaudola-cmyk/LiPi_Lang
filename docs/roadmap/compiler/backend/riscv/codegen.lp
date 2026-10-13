@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @fn riscv_generate_function(node)
   fn_name = node.name

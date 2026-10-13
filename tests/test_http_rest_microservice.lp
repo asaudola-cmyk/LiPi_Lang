@@ -18,10 +18,10 @@
 
 import "examples/http_rest_microservice/microservice_core.lp"
 import "src/runtime/io_uring_bypass.lp"
-import "universe/os/syscalls.lp"
-import "universe/core/collections.lp"
-import "universe/core/string.lp"
-import "universe/core/net.lp"
+import "utso/syscalls.lp"
+import "utso/collections.lp"
+import "utso/string.lp"
+import "utso/core/net.lp"
 
 @fn assert_true(cond: i64, test_name: string)
   if cond == 0

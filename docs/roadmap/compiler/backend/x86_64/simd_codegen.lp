@@ -5,8 +5,8 @@
 @!           YMM0-YMM15 Vector Register Model, AVX2 SIMD Instruction Synthesis
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. VEX PREFIX ENCODERS

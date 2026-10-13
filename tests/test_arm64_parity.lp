@@ -5,7 +5,7 @@
 // ==============================================================================
 
 include "src/compiler/arm64_emitter.lp"
-include "universe/core/io.lp"
+include "utso/io.lp"
 
 fn main
     say "=== LIPI ARM64 SILICON EMITTER PARITY TEST ==="

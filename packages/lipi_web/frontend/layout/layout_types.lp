@@ -10,8 +10,8 @@
 @! - Hierarchical LayoutNode tree representation for declarative UI construction
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/collections"
+import "utso/math"
 
 @! ============================================================================
 @! 1. CONSTANTS & ENUMS

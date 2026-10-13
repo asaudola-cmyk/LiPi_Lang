@@ -6,9 +6,9 @@
 // 100% Pure LiPi Implementation — Zero External / Libc / Dynamic Dependencies
 // ==============================================================================
 
-include "universe/net/dns_pure.lp"
-include "universe/net/tls13_server.lp"
-include "universe/gui/drm_kms.lp"
+include "utso/net/dns_pure.lp"
+include "utso/net/tls13_server.lp"
+include "packages/lipi_gui/drm_kms.lp"
 include "src/tools/lipi_unikernel_boot.lp"
 include "build.lp"
 include "src/tools/installer.lp"
@@ -231,9 +231,9 @@ fn main
     total_tests = total_tests + 1
     
     pipe = build_pipeline_new()
-    t_x86 = build_pipeline_add_target(pipe, "x86_64 ELF Emitter", "universe/net/dns_pure.lp", "dist/dns_x86", 1)
-    t_arm = build_pipeline_add_target(pipe, "ARM64 ELF Emitter", "universe/net/tls13_server.lp", "dist/tls_arm", 1)
-    t_wsm = build_pipeline_add_target(pipe, "WASM Emitter", "universe/gui/drm_kms.lp", "dist/drm_wasm", 1)
+    t_x86 = build_pipeline_add_target(pipe, "x86_64 ELF Emitter", "utso/net/dns_pure.lp", "dist/dns_x86", 1)
+    t_arm = build_pipeline_add_target(pipe, "ARM64 ELF Emitter", "utso/net/tls13_server.lp", "dist/tls_arm", 1)
+    t_wsm = build_pipeline_add_target(pipe, "WASM Emitter", "packages/lipi_gui/drm_kms.lp", "dist/drm_wasm", 1)
     
     ok_b1 = assert_eq(pipe.bp_total_targets, 3, "Registered 3 Multi-Target Native Pipelines")
     build_pipeline_run_all(pipe)

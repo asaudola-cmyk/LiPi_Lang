@@ -4,10 +4,10 @@
 @! Features: Multiplexing, Flow Control, Packet Numbering, Handshake & TLS 1.3
 @! ============================================================================
 
-import "universe/net/tcp_udp"
-import "universe/core/collections"
-import "universe/core/crypto"
-import "universe/core/string"
+import "utso/net/tcp_udp"
+import "utso/collections"
+import "utso/core/crypto"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. QUIC CONNECTION AND STATE MACHINE

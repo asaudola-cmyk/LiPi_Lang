@@ -3,7 +3,7 @@
 @! Handles Window Layering, Z-Index, and Alpha Blending
 @! ============================================================================
 
-import "universe/gui/framebuffer"
+import "packages/lipi_gui/framebuffer"
 
 @fn compositor_init(fb)
   return {

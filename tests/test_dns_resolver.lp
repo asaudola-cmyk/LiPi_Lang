@@ -4,7 +4,7 @@
 // Milestone: First 1.0.0 (প্রথম ১.০.০) | Zero Libc | Zero getaddrinfo
 // ==============================================================================
 
-include "universe/net/dns_client.lp"
+include "utso/net/dns_client.lp"
 
 fn assert_true cond msg
     if cond == 0

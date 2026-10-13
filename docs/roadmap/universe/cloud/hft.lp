@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn array_shift(arr)
   res = []

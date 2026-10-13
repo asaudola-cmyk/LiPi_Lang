@@ -4,7 +4,7 @@
 @! 100% Written in Pure Sovereign Lipi — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/string"
+import "utso/string"
 import "packages/web_router/src/lib"
 
 @fn assert_true(val, msg)

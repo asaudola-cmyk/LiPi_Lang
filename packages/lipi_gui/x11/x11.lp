@@ -7,7 +7,7 @@
 // with the display server over /tmp/.X11-unix/X0 using raw binary X11 protocol packets.
 // Zero C library dependencies, zero wrappers, 100% pure Lipi machine code.
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ১. X11 প্রোটোকল কনস্ট্যান্টস (X11 Protocol Wire Opcodes)
 X11_OP_CREATE_WINDOW      = 1

@@ -1,7 +1,7 @@
 import "src/runtime/io_uring_bypass"
-import "universe/core/net"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/core/net"
+import "utso/string"
+import "utso/syscalls"
 
 @fn assert_true(cond, msg)
   @if cond == 0

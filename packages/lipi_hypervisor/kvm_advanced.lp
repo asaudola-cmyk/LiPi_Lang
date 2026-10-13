@@ -7,9 +7,9 @@
 @! BIOS/GRUB Bypass, VirtIO-Block & VirtIO-Net Shared vring Buffers, EPT Paging
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/hypervisor/kvm"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_hypervisor/kvm"
 
 @! ============================================================================
 @! 1. LINUX ZERO-PAGE & E820 BOOT STRUCTURES

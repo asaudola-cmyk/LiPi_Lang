@@ -4,8 +4,8 @@
 // 🏛️ Version: First 1.0.0 (প্রথম ১.০.০) — 100% Pure Lipi / Zero External Libs
 // ==============================================================================
 
-include "universe/core/unicode.lp"
-include "universe/core/string.lp"
+include "utso/unicode.lp"
+include "utso/string.lp"
 
 say "=== LIPI UNICODE & BENGALI RUNE TEST ==="
 

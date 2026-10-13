@@ -36,32 +36,35 @@
 
 ## ৩. ইউনিভার্সের ৩০টি সার্বভৌম ডোমেন (Universe Domains)
 
-| ডোমেন (Domain) | মডিউল সংখ্যা | সিলিকন প্রযুক্তি ও সক্ষমতা |
+| ক্যাটাগরি ও অবস্থান | ডোমেন / প্যাকেজ | সিলিকন প্রযুক্তি ও সক্ষমতা |
 | :--- | :--- | :--- |
-| `universe/ai/` | ১৮ | AMX/AVX-512 GEMM, Autograd, টেনসর ব্রডকাস্টিং, GGUF/Transformer |
-| `universe/db/` | ১৫ | Raft কনসেনসাস, WAL ট্রানজ্যাকশন, ColumnStore, LipiKV মেমোরি ডিবি |
-| `universe/os/` | ১৬ | Multiboot 1 & 2, IDT/PIC কার্নেল, VirtIO ড্রাইভার, Unikernel বুট |
-| `universe/net/` | ১২ | RFC 8446 TLS 1.3, HTTP/1.1 & HTTP/2, WebSocket, gRPC ওয়্যার |
-| `universe/crypto/` | ১৪ | AES-128/256-GCM, GHASH GF(2^128), Ed25519, ChaCha20 |
-| `universe/gui/` | ৮ | ফ্রেমবাফার ২ডি ভেক্টর ক্যানভাস, Bresenham রাস্টারাইজার, নেটিভ X11 |
-| `universe/quantum/` | ৬ | কোয়ান্টাম গেটস (Hadamard, CNOT), স্টেট ভেক্টর সিমুলেটর |
-| `universe/blockchain/`| ৭ | Merkle Tree, Proof-of-Work, ক্রিপ্টোকারেন্সি লেজার ট্রানজ্যাকশন |
-| `universe/security/` | ৯ | BPF Seccomp ফিল্টার, Schnorr ZKP জিরো-নলেজ প্রুফ স্যান্ডবক্স |
-| `universe/core/` | ৮ | গণিত, স্ট্রিং, এরর হ্যান্ডলিং, কালেকশনস, আই/ও, টাইম, ফরম্যাটিং |
-| `universe/fs/` | ৪ | LipiFS ইন-মেমোরি ফাইলসিস্টেম ও ভিএফএস লেয়ার |
-| `universe/gpu/` | ৩ | কম্পিউট শেডার, শেডার কমপোজার, `@gpu` ডিরেক্টিভ লোয়ারিং |
-| `universe/engine3d/` | ৩ | ৩ডি ভেক্টর ক্যালকুলাস, রে-ট্রেসার, ফিজিক্স সিমুলেটর |
-| `universe/hypervisor/`| ২ | Linux KVM হার্ডওয়্যার অ্যাসিস্টেড ভার্চুয়ালাইজেশন |
-| `universe/swarm/` | ৯ | ডিসেন্ট্রালাইজড মাল্টি-এজেন্ট অ্যাক্টর মডেল ও মেসেজিং |
-| `universe/web/` | ২০ | ওয়্যার-সিগন্যালস, io_uring রিং, সিগন্যাল-রিয়্যাক্টিভ এফডাব্লিউ, লোকাল CRDT, QUIC, পাসকি, ওয়েবরটিসি |
-| `universe/io/` | ৫ | ডিরেক্ট PCIe NVMe MMIO কন্ট্রোলার (০% লিনাক্স VFS), ডিরেক্ট ডিএমএ ব্লক লেয়ার |
-| `universe/gui/` | ১১ | সভরেন ইউআই, ডিরেক্ট DRM/KMS জিপিইউ ডাম্ব-বাফার (০% X11/Wayland), স্টাইল বিটমাস্ক |
-| `universe/net/` | ১৬ | পিওর RFC 1035 UDP ডিএনএস, ইন-প্রসেস TLS 1.3 (০% NGINX), বেয়ার-মেটাল VirtIO-Net, BFT কনসেনসাস |
-| `universe/ai/` | ২০ | ইন-প্রসেস লোকাল LLM ও GGUF v3 কোয়ান্টাইজড টেনসর কোর (০% পাইথন/PyTorch), RoPE, RMSNorm |
-| `universe/core/`| ১০ | ম্যাথমেটিক্যাল ফর্মাল ভেরিফিকেশন ও সেফটি প্রুফ ইঞ্জিন, মেমোরি বাউন্ডস ও কনস্ট্যান্ট-টাইম থিওরেম |
-| `tools/` | ৪ | রিং-০ Multiboot2 ইউনিকার্নেল জেনারেটর (০% লিনাক্স ওএস), ১৬৫৫০ UART, ভিজিএ কনসোল, নেটিভ ইনস্টলার |
-| `build.lp` | ১ | ১০০% পিওর লিপি সিলিকন বিল্ড ইঞ্জিন (০% ব্যাশ / ০% Make) |
-| **অন্যান্য ডোমেন** | ৯৪ | `fs/`, `sys/`, `ide/`, `iot/`, `p2p/`, ইত্যাদি |
+| `packages/lipi_ai/` | lipi_ai | AMX/AVX-512 GEMM, Autograd, টেনসর ব্রডকাস্টিং, GGUF/Transformer |
+| `packages/lipidb/` | lipidb | Raft কনসেনসাস, WAL ট্রানজ্যাকশন, ColumnStore, LipiKV মেমোরি ডিবি |
+| `utso/os/` | os (উৎস) | Multiboot 1 & 2, IDT/PIC কার্নেল, VirtIO ড্রাইভার, Unikernel বুট |
+| `utso/net/` | net (উৎস) | RFC 8446 TLS 1.3, HTTP/1.1 & HTTP/2, WebSocket, gRPC ওয়্যার, BFT |
+| `utso/crypto/` | crypto (উৎস) | AES-128/256-GCM, GHASH GF(2^128), Ed25519, ChaCha20 |
+| `packages/lipi_gui/` | lipi_gui | ফ্রেমবাফার ২ডি ভেক্টর ক্যানভাস, Bresenham রাস্টারাইজার, DRM/KMS |
+| `packages/lipi_quantum/` | lipi_quantum | কোয়ান্টাম গেটস (Hadamard, CNOT), স্টেট ভেক্টর সিমুলেটর |
+| `packages/lipi_blockchain/`| lipi_blockchain | Merkle Tree, Proof-of-Work, ক্রিপ্টোকারেন্সি লেজার ট্রানজ্যাকশন |
+| `packages/lipi_security/` | lipi_security | BPF Seccomp ফিল্টার, Schnorr ZKP জিরো-নলেজ প্রুফ স্যান্ডবক্স |
+| `utso/core/` | core (উৎস) | মেমরি, স্ট্রিং, এরর হ্যান্ডলিং, কালেকশনস, আই/ও, টাইম, ফরম্যাটিং, ম্যাথমেটিক্যাল ফর্মাল ভেরিফিকেশন |
+| `packages/lipi_fs/` | lipi_fs | LipiFS ইন-মেমোরি ফাইলসিস্টেম ও ভিএফএস লেয়ার, Ext4 |
+| `packages/lipi_gpu/` | lipi_gpu | কম্পিউট শেডার, শেডার কমপোজার, SPIR-V নেটিভ লোয়ারিং |
+| `packages/lipi_engine3d/` | lipi_engine3d | ৩ডি ভেক্টর ক্যালকুলাস, রে-ট্রেসার, ফিজিক্স সিমুলেটর |
+| `packages/lipi_hypervisor/`| lipi_hypervisor | Linux KVM হার্ডওয়্যার অ্যাসিস্টেড ভার্চুয়ালাইজেশন |
+| `packages/lipi_swarm/` | lipi_swarm | ডিসেন্ট্রালাইজড মাল্টি-এজেন্ট অ্যাক্টর মডেল ও মেসেজিং |
+| `packages/lipi_web/` | lipi_web | ওয়্যার-সিগন্যালস, io_uring রিং, সিগন্যাল-রিয়্যাক্টিভ এফডাব্লিউ, লোকাল CRDT, QUIC, পাসকি, ওয়েবরটিসি |
+| `utso/io/` | io (উৎস) | ডিরেক্ট PCIe NVMe MMIO কন্ট্রোলার (০% লিনাক্স VFS), ডিরেক্ট ডিএমএ ব্লক লেয়ার, io_uring |
+| `utso/cpu/` | cpu (উৎস) | AVX-512 GEMM, হার্ডওয়্যার ভেক্টরাইজেশন |
+| `utso/tools/` | tools (উৎস) | সিলিকন ডিবাগার, প্রোফাইলার, রিপল, টেস্ট রানার, এলএসপি সার্ভার |
+| `packages/lipi_registry/` | lipi_registry | ডিসেন্ট্রালাইজড লিপিপ্যাকেজ হাব, SemVer 2.0.0, ক্রিপ্টোগ্রাফিক ম্যানিফেস্ট |
+| `packages/lipi_iot/` | lipi_iot | MQTT ক্লায়েন্ট, হার্ডওয়্যার সেন্সর টেলিমেট্রি |
+| `packages/lipi_media/` | lipi_media | বিশুদ্ধ WAV অডিও সিন্থেসিস, ভিডিও ক্যানভাস |
+| `packages/lipi_mobile/` | lipi_mobile | মোবাইল প্ল্যাটফর্ম রানটাইম ও স্যান্ডবক্স স্টোরেজ |
+| `packages/lipi_p2p/` | lipi_p2p | Kademlia DHT, পিয়ার-টু-পিয়ার ডিস্ট্রিবিউশন |
+| `packages/lipi_boot/` | lipi_boot | UEFI বুটলোডার ও বেয়ার-মেটাল ফ্রিস্ট্যান্ডিং কার্নেল |
+| `packages/lipi_ide/` | lipi_ide | সভরেন স্টুডিও, সিনট্যাক্স হাইলাইটার, এলএসপি ক্লায়েন্ট |
+| `build.lp` | বিল্ড ইঞ্জিন | ১০০% পিওর লিপি সিলিকন বিল্ড ইঞ্জিন (০% ব্যাশ / ০% Make) |
 
 ---
 

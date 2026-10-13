@@ -87,8 +87,8 @@ Lipi features a self-hosted 5-stage compiler pipeline with dual native silicon e
 2. **Object-Oriented Struct Methods:** Modern `fn Struct.method self arg1 arg2` syntax compiled to zero-cost static dispatch via System V AMD64 and ARM64 register passing ABI.
 3. **Peephole Machine Code Optimization:** Automatically replaces 10-byte immediate zero moves (`movabsq $0, %reg`) with 2-byte `xor reg32, reg32` instructions, achieving 80% code density reduction and 0-cycle silicon execution via register renaming.
 4. **Embedded Multiboot 1 Kernel Specification:** Embeds `0x1BADB002` headers at offset 124, allowing binaries to boot on baremetal hardware or QEMU without an underlying operating system.
-5. **First-Class Web Engine (`universe/web/`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
-6. **Native Multithreading (`universe/os/thread.lp`):** Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`universe/core/arena.lp`).
+5. **First-Class Web Engine (`packages/lipi_web/`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
+6. **Native Multithreading (`utso/os/thread.lp`):** Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`utso/arena.lp`).
 
 For full technical specifications, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -254,22 +254,50 @@ lipi/
 
 ---
 
-## 🌐 Canonical Standard Library (`universe/`)
+## 🌐 Dual Architecture: Genesis Primitives (`utso/`) & Sovereign Packages (`packages/`)
 
-Lipi's standard library is consolidated under `universe/` across 14 canonical domains and 40+ production modules, written in 100% pure Lipi code and communicating directly with Linux kernel syscalls:
+LiPi's modular ecosystem is organized into two sovereign, highly decoupled tiers with zero external C/libc dependencies:
 
-| Domain | Modules & Location | Key Capabilities |
+### 1. `utso/` (উৎস — Genesis Silicon Primitives)
+Pure silicon primitives that directly interface with the hardware and Linux kernel syscalls:
+- **Core Memory & Primitives:** `utso/memory.lp`, `utso/arena.lp`, `utso/io.lp`, `utso/string.lp`, `utso/unicode.lp`, `utso/math.lp`, `utso/fmt.lp`
+- **Data Structures & Types:** `utso/collections.lp`, `utso/hashmap.lp`, `utso/option.lp`, `utso/result.lp`, `utso/error.lp`
+- **Concurrency & OS:** `utso/concurrency.lp`, `utso/channel.lp`, `utso/time.lp`, `utso/syscalls.lp`, `utso/os/`
+- **Networking & Cryptography:** `utso/socket.lp`, `utso/crypto.lp`, `utso/net/`, `utso/crypto/`
+- **Hardware Acceleration & Developer Tools:** `utso/cpu/` (AVX-512 GEMM), `utso/io/` (io_uring, PCIe NVMe MMIO), `utso/tools/` (debugger, profiler, LSP server, test runner)
+
+Developer-friendly short includes:
+```lipi
+include "utso/io"
+include "utso/memory"
+include "utso/string"
+```
+
+### 2. `packages/` (Domain Modules with `lipipkg.toml` Manifests)
+Domain modules organized as sovereign packages with cryptographic package manifests (`lipipkg.toml`):
+
+| Sovereign Package | Core Modules | Key Capabilities |
 |---|---|---|
-| **Core & Memory** | `universe/core/` (`memory.lp`, `arena.lp`, `io.lp`, `string.lp`, `json.lp`) | Virtual memory paging (`mmap`/`munmap`), bump arena allocators, RFC 8259 JSON parser & serializer |
-| **Web & Networking** | `universe/web/`, `universe/net/` (`router.lp`, `server.lp`, `socket.lp`) | Sub-microsecond HTTP/1.1 & HTTP/2 routing, zero-allocation radix tree, raw kernel TCP sockets |
-| **Cryptography** | `universe/crypto/`, `universe/net/tls/` (`crypto.lp`, `tls13.lp`) | NIST SP 800-38D AES-256-GCM, Ed25519 digital signatures, FIPS SHA-256, TLS 1.3 record layer |
-| **Database & Storage** | `universe/db/` (`engine.lp`, `kv.lp`, `btree.lp`) | LipiKV embedded key-value database, B+Tree indexing, WAL write-ahead log, ACID crash resilience |
-| **AI & Vector SIMD** | `universe/ai/` (`tensor.lp`, `simd.lp`, `inference.lp`) | 1D/2D/3D Tensors, AVX2 / AVX-512 SIMD vectorization, GGUF quantized model inference |
-| **GUI & Framebuffer** | `universe/gui/` (`canvas.lp`, `raster.lp`, `font.lp`) | Bresenham 2D line rasterization, clipped rectangles, bitmap font rendering |
-| **Baremetal OS** | `universe/os/` (`multiboot2.lp`, `kernel.lp`, `uart.lp`) | Multiboot2 bootloader, 64-bit Long Mode Ring-0 entry, COM1 UART serial output |
-| **Package Engine** | `universe/pkg/` (`lipipkg_cli.lp`, `manifest.lp`, `semver.lp`) | TOML/JSON package manifest engine, SemVer 2.0.0 resolver, deterministic lockfiles |
+| **`lipi_ai`** | `tensor.lp`, `autograd.lp`, `llm_inference.lp`, `gguf.lp` | N-dimensional Tensors, reverse-mode autodiff, GGUF quantized local LLM transformer inference |
+| **`lipidb`** | `engine.lp`, `kv.lp`, `btree.lp`, `mvcc.lp`, `wal.lp` | ACID LipiKV embedded database, B+Tree indexing, WAL crash recovery, Redis-compatible protocol |
+| **`lipi_web`** | `engine.lp`, `router.lp`, `sovereign_framework.lp` | Sub-microsecond HTTP/1.1 & HTTP/2 routing, reactive DOM-bypass framework, WebSockets |
+| **`lipi_gui`** | `canvas.lp`, `window.lp`, `tui.lp`, `drm_kms.lp` | Linux `/dev/fb0` hardware framebuffer, Bresenham canvas, DRM/KMS, sovereign desktop UI |
+| **`lipi_gpu`** | `compute.lp`, `shader.lp`, `spirv_native.lp` | Compute shaders, native SPIR-V binary code emission, DRM dumb-buffers |
+| **`lipi_fs`** | `lipifs.lp`, `ext4.lp` | Copy-On-Write LipiFS, raw Ext4 filesystem driver |
+| **`lipi_blockchain`** | `blockchain.lp`, `mpt.lp`, `vm.lp` | Sovereign EVM-compatible execution, Merkle Patricia Trie |
+| **`lipi_quantum`** | `superposition.lp`, `multi_qubit.lp`, `shor.lp` | Qubit state vectors, quantum gates, Shor algorithm simulation |
+| **`lipi_hypervisor`** | `kvm.lp`, `kvm_advanced.lp` | Linux KVM ioctl hardware virtualization, guest vCPU execution |
+| **`lipi_swarm`** | `swarm.lp`, `actor.lp`, `protocol.lp` | Actor model concurrency, distributed swarm consensus |
+| **`lipi_iot`** | `mqtt.lp`, `sensor.lp`, `gateway.lp` | MQTT client, hardware sensor telemetry, embedded edge gateway |
+| **`lipi_media`** | `audio_wav.lp`, `video_canvas.lp` | Pure WAV audio synthesis, video canvas blitting |
+| **`lipi_mobile`** | `mobile.lp`, `platform.lp`, `storage.lp` | Sovereign mobile application runtime and sandbox storage |
+| **`lipi_p2p`** | `dht.lp`, `lipipkg_client.lp`, `registry.lp` | Kademlia DHT, peer-to-peer package distribution |
+| **`lipi_security`** | `jwt.lp`, `zkp.lp`, `sandbox.lp` | Zero-knowledge proofs, JWT auth, seccomp sandbox |
+| **`lipi_boot`** | `uefi_boot.lp`, `baremetal_kernel.lp` | Bare-metal Multiboot & UEFI bootloader, freestanding kernel |
+| **`lipi_ide`** | `studio.lp`, `editor.lp`, `lsp_client.lp` | Sovereign IDE studio, syntax highlighter, integrated LSP client |
+| **`lipi_registry`** | `registry.lp`, `semver.lp`, `lipipkg_hub.lp` | Decentralized package registry, SemVer 2.0.0 resolver, deterministic lockfiles |
 
-Explore the full API manual in [`docs/UNIVERSE_API_REFERENCE.md`](docs/UNIVERSE_API_REFERENCE.md) and [`docs/STANDARD_LIBRARY.md`](docs/STANDARD_LIBRARY.md).
+Explore the full API manual in [`docs/STANDARD_LIBRARY.md`](docs/STANDARD_LIBRARY.md).
 
 ---
 
@@ -305,7 +333,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Test Suite Pass Rate** | **178/178 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **203/203 (100%)** | — | — | — | — | — |
 
 ---
 

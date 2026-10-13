@@ -7,7 +7,7 @@
 // std/debug.lp provides assertion primitives, stack inspection, and debugging utilities
 // without external runtime or libc dependency.
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ১. রানটাইম এসার্শন যাচাই (assert_val / assert)
 // WHY: Ensures invariant correctness. If condition evaluates to 0 (false),

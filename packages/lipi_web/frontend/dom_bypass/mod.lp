@@ -8,9 +8,9 @@
 @! - Integrates Canvas Presentation Target, Frame Loop, HiDPI Scaling, and Input Dispatcher
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/web/frontend/dom_bypass/canvas_host"
-import "universe/web/frontend/dom_bypass/input_dispatcher"
+import "utso/collections"
+import "packages/lipi_web/frontend/dom_bypass/canvas_host"
+import "packages/lipi_web/frontend/dom_bypass/input_dispatcher"
 
 @struct DomBypassHost
   host_canvas: CanvasPresentationTarget

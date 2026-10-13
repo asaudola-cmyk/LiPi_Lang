@@ -1,7 +1,7 @@
 // tests/test_simd_gemm.lp
 // Validates 256-bit AVX2 Tiled GEMM Matrix Multiplication kernel
-include "universe/core/io.lp"
-include "universe/ai/simd_gemm.lp"
+include "utso/io.lp"
+include "packages/lipi_ai/simd_gemm.lp"
 
 fn test_gemm_4x4
     a = [

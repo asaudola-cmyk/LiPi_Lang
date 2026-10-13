@@ -4,10 +4,10 @@
 @! Features: RoPE, GQA, SwiGLU, RMSNorm, KV-Cache, Auto-Regressive Decoding
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/ai/tensor"
-import "universe/ai/autodiff"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autodiff"
 
 @! ----------------------------------------------------------------------------
 @! 1. TENSOR & MATRIX INITIALIZERS

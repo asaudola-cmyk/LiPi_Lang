@@ -5,10 +5,10 @@
 @! Enforces Strict Write-Ahead Invariant (WAL fsync before in-memory tree mutation)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/db/btree"
-import "universe/db/wal"
+import "utso/collections"
+import "utso/string"
+import "packages/lipidb/btree"
+import "packages/lipidb/wal"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Transaction States

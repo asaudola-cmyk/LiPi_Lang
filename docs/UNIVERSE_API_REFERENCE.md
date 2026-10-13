@@ -40,14 +40,14 @@ Instead of manually remembering hundreds of deep internal submodule paths, devel
 import domain gateways directly:
 
 ```lipi
-import "universe/lipi_universe" // Master prelude (Collections, Arena, SIMD, Crypto, JSON)
-import "universe/web"           // High-concurrency web server and routing
-import "universe/db"            // Embedded LipiKV, B+Tree, and WAL storage
-import "universe/ai"            // AI Tensors, Matrix Multiplication, GGUF
-import "universe/net"           // Sockets, HTTP/2, WebSocket, gRPC
-import "universe/crypto"        // SHA-256, AES-GCM, TLS 1.3, Entropy
-import "universe/gui"           // Direct /dev/fb0 framebuffer and UI chrome
-import "universe/os"            // Bare-metal kernel, direct syscalls, threads
+import "utso/lipi_universe"     // Master prelude (Collections, Arena, SIMD, Crypto, JSON)
+import "packages/lipi_web/web" // High-concurrency web server and routing
+import "packages/lipidb/db"    // Embedded LipiKV, B+Tree, and WAL storage
+import "packages/lipi_ai/ai"   // AI Tensors, Matrix Multiplication, GGUF
+import "utso/net"              // Sockets, HTTP/2, WebSocket, gRPC
+import "utso/crypto"           // SHA-256, AES-GCM, TLS 1.3, Entropy
+import "packages/lipi_gui/gui" // Direct /dev/fb0 framebuffer and UI chrome
+import "utso/os"               // Bare-metal kernel, direct syscalls, threads
 ```
 
 ### Gateway Functions
@@ -66,7 +66,7 @@ import "universe/os"            // Bare-metal kernel, direct syscalls, threads
 Direct 64-bit address manipulation and deterministic memory allocation.
 Lipi never relies on C malloc/free or POSIX sbrk.
 
-### Module: `universe/core/memory.lp`
+### Module: `utso/memory.lp`
 - `mem_alloc(bytes) -> ptr`: Allocates contiguous memory via raw Linux kernel SYS_mmap.
 - `mem_free(ptr, bytes) -> i64`: Releases memory pages directly to the kernel via SYS_munmap.
 - `mem_read_u8(ptr, offset) -> i64`: Reads single unsigned 8-bit byte.
@@ -76,13 +76,13 @@ Lipi never relies on C malloc/free or POSIX sbrk.
 - `mem_read_u64(ptr, offset) -> i64`: Reads 64-bit unsigned integer.
 - `mem_write_u64(ptr, offset, val) -> i64`: Writes 64-bit unsigned integer.
 
-### Module: `universe/core/arena.lp`
+### Module: `utso/arena.lp`
 - `arena_create(capacity) -> Arena`: Initializes a high-speed bump-pointer memory arena.
 - `arena_alloc(arena, size) -> ptr`: Rapid O(1) contiguous allocation without page fragmentation.
 - `arena_alloc_aligned(arena, size, alignment) -> ptr`: Allocates memory strictly aligned to hardware boundaries (e.g. 64-byte AVX-512 cachelines).
 - `arena_reset(arena) -> i64`: Rewinds bump offset to 0 for instant bulk reclamation.
 
-### Module: `universe/core/string.lp`
+### Module: `utso/string.lp`
 - `str_len(s) -> i64`: Instant O(1) STR0 length lookup.
 - `str_concat(s1, s2) -> string`: Zero-copy concatenator with STR0 capacity expansion.
 - `str_sub(s, start, end) -> string`: In-place string slice.

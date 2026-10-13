@@ -10,9 +10,9 @@
 // management, and damage-tracked (dirty rect) composition on bare-metal silicon.
 // ==============================================================================
 
-import "universe/gui/framebuffer"
-import "universe/core/collections"
-import "universe/core/string"
+import "packages/lipi_gui/framebuffer"
+import "utso/collections"
+import "utso/string"
 
 // ── 1. Window & Window Manager Data Structures ────────────────────────────────
 @struct TilingWindow

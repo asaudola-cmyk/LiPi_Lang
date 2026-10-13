@@ -4,8 +4,8 @@
 // 100% Pure Lipi Implementation — Zero External / C Dependencies
 // ==============================================================================
 
-import "universe/net/io_uring_ring"
-import "universe/core/string"
+import "utso/net/io_uring_ring"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

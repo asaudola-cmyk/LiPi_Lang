@@ -5,8 +5,8 @@
 // 100% Pure Lipi Implementation — Zero External Libs | Zero Libc
 // ==============================================================================
 
-import "universe/db/distributed/raft_cluster_net"
-import "universe/core/string"
+import "packages/lipidb/distributed/raft_cluster_net"
+import "utso/string"
 
 @fn print_banner()
   println("╔════════════════════════════════════════════════════════════════════════╗")

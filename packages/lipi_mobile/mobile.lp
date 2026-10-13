@@ -8,9 +8,9 @@
 @! Central Directory Records, and 4096-Byte Page Alignment for .so Libraries.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
 
 @! ============================================================================
 @! 1. MOBILE DATA STRUCTURES
@@ -160,7 +160,7 @@ import "universe/crypto/sha256"
 @! 3. GENUINE AARCH64 ELF64 SHARED OBJECT EMITTER (liblipi.so)
 @! ============================================================================
 
-import "universe/crypto/sha1"
+import "utso/crypto/sha1"
 
 @! ============================================================================
 @! 2.5 ULEB128 & ADLER32 HELPERS

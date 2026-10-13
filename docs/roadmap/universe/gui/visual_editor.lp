@@ -11,12 +11,12 @@
 @! - Direct rendering integration with universe/gui/framebuffer & compositor
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/math"
-import "universe/gui/framebuffer"
-import "universe/gui/font"
-import "universe/gui/builder"
+import "utso/collections"
+import "utso/string"
+import "utso/math"
+import "packages/lipi_gui/framebuffer"
+import "packages/lipi_gui/font"
+import "packages/lipi_gui/builder"
 
 @! ----------------------------------------------------------------------------
 @! 1. VISUAL EDITOR INSTANTIATION & STATE

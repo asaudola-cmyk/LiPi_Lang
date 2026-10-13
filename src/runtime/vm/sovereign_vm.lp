@@ -15,8 +15,8 @@
 // 4. Deterministic Opcode Engine: Constant-time arithmetic and branch dispatch.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
 
 // ── 1. Sovereign VM Opcode Set ────────────────────────────────────────────────
 

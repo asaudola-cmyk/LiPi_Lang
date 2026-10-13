@@ -11,9 +11,9 @@
 // 2. Exact 72-column double-line box layouts matching modern high-DPI consoles.
 // 3. Status spinners and dynamic inline progress bars for long-running builds.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. TrueColor & Style Primitives ───────────────────────────────────────────
 

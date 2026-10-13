@@ -5,9 +5,9 @@
 @! Advanced Optimizers (Adam, SGD, RMSprop), LR Schedulers, and Loss Functions.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
-import "universe/ai/tensor"
+import "utso/collections"
+import "utso/math"
+import "packages/lipi_ai/tensor"
 @fn int_to_float(n)
   return n * 1.0
 @end

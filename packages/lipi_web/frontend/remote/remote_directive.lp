@@ -7,8 +7,8 @@
 @! Component Partitioning (Local WASM UI vs Remote Streaming Components)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES & AST METADATA

@@ -13,9 +13,9 @@
 // 3. Flexible file extension filtering (e.g. only ".lp" source files).
 // 4. Guaranteed deterministic lexicographical or sequential traversal.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Directory Entry Layout Constants ───────────────────────────────────────
 // Linux kernel struct linux_dirent64 layout:

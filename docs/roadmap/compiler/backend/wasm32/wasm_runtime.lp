@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language — Run .wasm directly in Lipi!
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn list_pop(arr)
   res = []

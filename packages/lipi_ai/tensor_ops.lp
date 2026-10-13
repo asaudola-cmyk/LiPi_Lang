@@ -3,13 +3,13 @@
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/math"
+import "utso/collections"
+import "utso/string"
 // WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
-import "universe/os/syscalls"
-import "universe/ai/simd_gemm"
-import "universe/ai/tensor_core"
+import "utso/syscalls"
+import "packages/lipi_ai/simd_gemm"
+import "packages/lipi_ai/tensor_core"
 
 @! ----------------------------------------------------------------------------
 @! 9. Statistical Reductions (Sum, Mean, Max, Min, Variance)

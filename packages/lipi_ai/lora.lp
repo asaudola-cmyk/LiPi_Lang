@@ -5,7 +5,7 @@
 @! Features: Parameter Efficient Fine-Tuning for LLMs
 @! ============================================================================
 
-import "universe/ai/tensor"
+import "packages/lipi_ai/tensor"
 
 @struct LoRALayer
   in_features: i64

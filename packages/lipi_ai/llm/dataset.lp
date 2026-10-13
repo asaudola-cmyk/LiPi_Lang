@@ -4,9 +4,9 @@
 @! Features: Token Packing, BPE Tokenization Integration, Mini-batching
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/ai/tensor"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_ai/tensor"
 
 // WHY: Explicit struct definition ensures deterministic field offsets (file_path at offset 0, block_size at offset 8, etc.) across compilation units
 @struct Dataset

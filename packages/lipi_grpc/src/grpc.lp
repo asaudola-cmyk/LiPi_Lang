@@ -8,7 +8,7 @@
 // lipi_grpc provides zero-dependency wire serialization, varint encoding/decoding,
 // length-delimited byte framing, and RFC-compliant 5-byte gRPC message envelopes.
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // Protobuf Wire Type Enums
 GRPC_WIRE_VARINT           = 0

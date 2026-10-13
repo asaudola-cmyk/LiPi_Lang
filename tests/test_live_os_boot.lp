@@ -5,11 +5,11 @@
 @! 100% Pure Lipi Implementation — Zero Libc / Zero External Dependencies
 @! ============================================================================
 
-import "universe/os/boot/multiboot"
-import "universe/os/unikernel"
-import "universe/os/build_unikernel"
-import "universe/os/syscalls"
-import "universe/core/string"
+import "utso/os/boot/multiboot"
+import "utso/os/unikernel"
+import "utso/os/build_unikernel"
+import "utso/syscalls"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

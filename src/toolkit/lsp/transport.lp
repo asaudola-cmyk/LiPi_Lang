@@ -13,9 +13,9 @@
 // 4. All diagnostic logs MUST be routed strictly to STDERR (fd 2) to avoid
 //    corrupting the IDE client's JSON-RPC frame parser.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Header Parsing Utilities ───────────────────────────────────────────────
 

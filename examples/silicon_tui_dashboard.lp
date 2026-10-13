@@ -14,11 +14,11 @@
 // bilingual (বাংলা & English) system telemetry in <1 millisecond.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/arena.lp"
-include "universe/core/string.lp"
-include "universe/db/db_engine.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/arena.lp"
+include "utso/string.lp"
+include "packages/lipidb/db_engine.lp"
 
 fn render_dashboard_frame tick_count mem_alloc_bytes db_records
     // Clear screen and move cursor home

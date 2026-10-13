@@ -170,7 +170,7 @@ fn build_pipeline_print_summary pipe
     say "🎉 SOVEREIGN BUILD RESULTS: " + pipe.bp_passed_targets + "/" + pipe.bp_total_targets + " TARGETS VERIFIED"
     say "================================================================="
     say "  ✔ Compiler Toolchain: bin/lipc (Stage-3 Sovereign Modular), bin/lipi"
-    say "  ✔ Full-Stack Ecosystem: universe/gui/ & universe/web/"
+    say "  ✔ Full-Stack Ecosystem: packages/lipi_gui/ & packages/lipi_web/"
     say "  ✔ Regression Test Suites: 42/42 Sections Passed"
     if pipe.bp_failed_targets == 0
         say "👑 100% BIT-FOR-BIT SOVEREIGN REPRODUCIBILITY ACHIEVED!"
@@ -198,22 +198,22 @@ fn main
     build_pipeline_add_target(pipe, "Language Server Protocol Daemon", "src/tools/lipilsp.lp", "bin/lipilsp", 1)
     build_pipeline_add_target(pipe, "Interactive REPL", "src/tools/lipirepl.lp", "bin/lipirepl", 1)
     build_pipeline_add_target(pipe, "Documentation Generator", "src/tools/lipidoc.lp", "bin/lipidoc", 1)
-    build_pipeline_add_target(pipe, "Sovereign UI Engine", "universe/gui/sovereign_ui.lp", "dist/libsovereign_ui", 1)
-    build_pipeline_add_target(pipe, "Sovereign Framework", "universe/web/sovereign_framework.lp", "dist/libsovereign_web", 1)
+    build_pipeline_add_target(pipe, "Sovereign UI Engine", "packages/lipi_gui/sovereign_ui.lp", "dist/libsovereign_ui", 1)
+    build_pipeline_add_target(pipe, "Sovereign Framework", "packages/lipi_web/sovereign_framework.lp", "dist/libsovereign_web", 1)
     build_pipeline_add_target(pipe, "Web Horizons Suite M1-M5", "tests/test_sovereign_web_horizons.lp", "dist/test_web_m1_m5", 1)
     build_pipeline_add_target(pipe, "Next-Gen Horizons M6-M11", "tests/test_nextgen_web_horizons.lp", "dist/test_web_m6_m11", 1)
     build_pipeline_add_target(pipe, "Framework v2 Suite", "tests/test_sovereign_framework_v2.lp", "dist/test_framework_v2", 1)
     build_pipeline_add_target(pipe, "Commerce Application", "examples/sovereign_commerce.lp", "dist/sovereign_commerce", 1)
-    build_pipeline_add_target(pipe, "Pure DNS Resolver", "universe/net/dns_pure.lp", "dist/dns_pure", 1)
-    build_pipeline_add_target(pipe, "In-Process TLS 1.3 Server", "universe/net/tls13_server.lp", "dist/tls13_server", 1)
-    build_pipeline_add_target(pipe, "Direct DRM/KMS Engine", "universe/gui/drm_kms.lp", "dist/drm_kms", 1)
+    build_pipeline_add_target(pipe, "Pure DNS Resolver", "utso/net/dns_pure.lp", "dist/dns_pure", 1)
+    build_pipeline_add_target(pipe, "In-Process TLS 1.3 Server", "utso/net/tls13_server.lp", "dist/tls13_server", 1)
+    build_pipeline_add_target(pipe, "Direct DRM/KMS Engine", "packages/lipi_gui/drm_kms.lp", "dist/drm_kms", 1)
     build_pipeline_add_target(pipe, "Bare-Metal Ring-0 Unikernel", "src/tools/lipi_unikernel_boot.lp", "dist/lipi_unikernel_boot", 1)
     build_pipeline_add_target(pipe, "Absolute Sovereignty Suite", "tests/test_absolute_sovereignty.lp", "dist/test_absolute_sovereignty", 1)
-    build_pipeline_add_target(pipe, "PCIe NVMe Storage Controller", "universe/io/nvme_direct.lp", "dist/nvme_direct", 1)
-    build_pipeline_add_target(pipe, "VirtIO-Net Card Driver", "universe/net/virtio_net.lp", "dist/virtio_net", 1)
-    build_pipeline_add_target(pipe, "In-Process LLM GGUF Engine", "universe/ai/llm_engine_pure.lp", "dist/llm_engine_pure", 1)
-    build_pipeline_add_target(pipe, "Formal Verification Engine", "universe/core/formal_proof.lp", "dist/formal_proof", 1)
-    build_pipeline_add_target(pipe, "Planetary BFT Consensus", "universe/net/bft_consensus.lp", "dist/bft_consensus", 1)
+    build_pipeline_add_target(pipe, "PCIe NVMe Storage Controller", "utso/io/nvme_direct.lp", "dist/nvme_direct", 1)
+    build_pipeline_add_target(pipe, "VirtIO-Net Card Driver", "utso/net/virtio_net.lp", "dist/virtio_net", 1)
+    build_pipeline_add_target(pipe, "In-Process LLM GGUF Engine", "packages/lipi_ai/llm_engine_pure.lp", "dist/llm_engine_pure", 1)
+    build_pipeline_add_target(pipe, "Formal Verification Engine", "utso/core/formal_proof.lp", "dist/formal_proof", 1)
+    build_pipeline_add_target(pipe, "Planetary BFT Consensus", "utso/net/bft_consensus.lp", "dist/bft_consensus", 1)
     build_pipeline_add_target(pipe, "Supreme Frontiers Suite", "tests/test_supreme_frontiers.lp", "dist/test_supreme_frontiers", 1)
     build_pipeline_add_target(pipe, "Live Server Stress Suite", "tests/test_live_server_stress.lp", "dist/test_live_server_stress", 1)
     build_pipeline_add_target(pipe, "Cellular Seed Replication", "tests/test_cellular_replication.lp", "dist/test_cellular_replication", 1)

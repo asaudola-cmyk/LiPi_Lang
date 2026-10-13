@@ -4,8 +4,8 @@
 @! Floating Point (XMM0-7), Caller/Callee Saved Regs, Variadic Functions.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. X86-64 SYSTEM V ABI REGISTER DEFINITIONS

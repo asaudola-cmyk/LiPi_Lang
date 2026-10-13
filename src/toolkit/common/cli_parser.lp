@@ -13,9 +13,9 @@
 // 4. Integrated POSIX double-dash (`--`) positional escape terminator.
 // 5. Automatic column-aligned terminal help manual generator.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Data Structures ────────────────────────────────────────────────────────
 

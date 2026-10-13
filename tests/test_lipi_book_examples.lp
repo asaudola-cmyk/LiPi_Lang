@@ -7,12 +7,12 @@
 // বইয়ে লেখা কোডের সাথে মূল ইঞ্জিনের কোড মিলেনা। এই টেস্ট স্যুটের মাধ্যমে নিশ্চিত
 // করা হচ্ছে যে লিপি পুস্তকের প্রতিটি অধ্যায়ের কোড জীবন্ত, সক্রিয় এবং ১০০% সঠিক।
 
-include "universe/core/memory.lp"
-include "universe/db/engine.lp"
-include "universe/gpu/spirv_native.lp"
-include "universe/cpu/avx512_native.lp"
-include "universe/crypto/crypto.lp"
-include "universe/os/build_unikernel.lp"
+include "utso/memory.lp"
+include "packages/lipidb/engine.lp"
+include "packages/lipi_gpu/spirv_native.lp"
+include "utso/cpu/avx512_native.lp"
+include "utso/crypto.lp"
+include "utso/os/build_unikernel.lp"
 
 fn assert_eq_int actual expected test_name
     if actual == expected

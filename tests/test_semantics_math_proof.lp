@@ -5,8 +5,8 @@
 // 100% Pure LiPi Implementation — Zero External Dependencies
 // ==============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 import "compiler/frontend/ast/ast_node"
 import "compiler/semantics/symbol"
 import "compiler/semantics/math_proof"

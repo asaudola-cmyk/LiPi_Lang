@@ -6,8 +6,8 @@
 @! Features: Quorum Election, Log Replication, Term Progression, State Machine
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @struct RaftLogEntry
   term: i64

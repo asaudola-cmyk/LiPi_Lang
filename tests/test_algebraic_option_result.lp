@@ -4,9 +4,9 @@
 // 🏛️ File: tests/test_algebraic_option_result.lp
 // ==============================================================================
 
-include "universe/core/error.lp"
-include "universe/core/option.lp"
-include "universe/core/result.lp"
+include "utso/error.lp"
+include "utso/option.lp"
+include "utso/result.lp"
 
 fn assert_eq actual expected msg
     if actual != expected

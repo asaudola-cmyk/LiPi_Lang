@@ -7,9 +7,9 @@
 @! Offscreen 3D Frame Generator & DataChannel Input Event Processor
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/web/frontend/remote/video_blitter"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_web/frontend/remote/video_blitter"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES

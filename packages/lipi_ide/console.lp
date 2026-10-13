@@ -5,10 +5,10 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/gui/canvas"
-import "universe/gui/font"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/font"
 
 @! ----------------------------------------------------------------------------
 @! 1. CONSOLE DATA STRUCTURES

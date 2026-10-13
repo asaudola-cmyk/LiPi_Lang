@@ -4,8 +4,8 @@
 @! Features: Tri-Color Mark-Sweep, Eden/Survivor/Tenured Generations, Card Table
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/memory"
+import "utso/collections"
+import "utso/memory"
 
 @! ----------------------------------------------------------------------------
 @! 1. HEAP SPACES & MEMORY BLOCKS

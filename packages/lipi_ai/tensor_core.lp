@@ -6,12 +6,12 @@
 @! Transcendental Mathematics, and Numerically Stable Activations.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/math"
+import "utso/collections"
+import "utso/string"
 // WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
-import "universe/os/syscalls"
-import "universe/ai/simd_gemm"
+import "utso/syscalls"
+import "packages/lipi_ai/simd_gemm"
 
 @! ----------------------------------------------------------------------------
 @! 1. Core Struct Definitions

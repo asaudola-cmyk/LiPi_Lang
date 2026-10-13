@@ -1,10 +1,10 @@
 @! ============================================================================
 @! LIPI COMPILER STAGE 4 — PE/COFF WINDOWS NATIVE BINARY EMITTER
 @! 100% Written in Pure Lipi Language — Zero MSVC/MinGW Dependency
-import "universe/os/fs"
+import "utso/os/fs"
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn u16_to_bytes(v)
   return [v % 256, (v / 256) % 256]

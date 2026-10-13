@@ -6,9 +6,9 @@
 @! Reductions, GEMM, Views, and Finite-Difference Numerical Gradient Checking.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/tensor"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
 
 @! ----------------------------------------------------------------------------
 @! 1. Gradient Buffer & Leaf Node Helpers

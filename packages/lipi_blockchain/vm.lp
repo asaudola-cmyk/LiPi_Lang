@@ -7,9 +7,9 @@
 @! Persistent Contract Storage & Transaction State Rollback on Revert
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
 
 @! ============================================================================
 @! 1. VM STATE & STORAGE STRUCTURES

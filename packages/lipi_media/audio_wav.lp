@@ -14,8 +14,8 @@
 // system, hardware DAC, web browser, or phone without foreign dependencies.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 // ── ১. অডিও স্ট্রাকচার ও মডেল (Audio Buffer Model) ──────────────────────────
 struct WavAudioBuffer

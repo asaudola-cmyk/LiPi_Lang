@@ -4,8 +4,8 @@
 // 🏛️ File: tests/test_scoped_arena.lp
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/string.lp"
+include "utso/io.lp"
+include "utso/string.lp"
 
 fn assert_eq_num actual expected msg
     if actual != expected

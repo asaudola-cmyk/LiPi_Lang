@@ -8,8 +8,8 @@
 @! Persistent Worker Loop & Standalone io_uring Fallback
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ============================================================================
 @! 1. FASTCGI PROTOCOL CONSTANTS & RECORD HEADERS (RFC 3875)

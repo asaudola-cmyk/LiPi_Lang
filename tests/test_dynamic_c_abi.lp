@@ -4,9 +4,9 @@
 //    and scoped arena memory lifecycle (Challenging C, C++, and Zig).
 // ==============================================================================
 
-include "universe/core/ffi_sovereign.lp"
-include "universe/core/c_abi_call.lp"
-include "universe/core/arena.lp"
+include "utso/core/ffi_sovereign.lp"
+include "utso/core/c_abi_call.lp"
+include "utso/arena.lp"
 
 fn assert_true cond test_name
     if cond == 0

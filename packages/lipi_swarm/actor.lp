@@ -4,14 +4,14 @@
 @! Erlang/Elixir-Style Actors, Mailboxes, PIDs, actor_send(), actor_ask() RPC
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/core/time"
-import "universe/net/tcp"
-import "universe/swarm/types"
-import "universe/swarm/protocol"
-import "universe/swarm/serializer"
-import "universe/swarm/discovery"
+import "utso/string"
+import "utso/collections"
+import "utso/time"
+import "utso/net/tcp"
+import "packages/lipi_swarm/types"
+import "packages/lipi_swarm/protocol"
+import "packages/lipi_swarm/serializer"
+import "packages/lipi_swarm/discovery"
 
 @! ----------------------------------------------------------------------------
 @! 1. Swarm Actor & Future Data Structures

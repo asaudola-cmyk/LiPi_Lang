@@ -3,7 +3,7 @@
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Hardware Virtualization & VCPU Test
 // ==============================================================================
 
-import "universe/hypervisor/kvm"
+import "packages/lipi_hypervisor/kvm"
 
 @fn main()
     println("==================================================================")

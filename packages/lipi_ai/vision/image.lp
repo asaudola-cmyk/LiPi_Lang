@@ -5,9 +5,9 @@
 @! (RGB, Grayscale, HSV, RGBA), Channel Slicing, Tensor & Framebuffer Interop.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/tensor"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
 
 @! ----------------------------------------------------------------------------
 @! 1. Core Image Data Structure

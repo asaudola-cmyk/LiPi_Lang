@@ -5,10 +5,10 @@
 @! 100% Pure Lipi Implementation — Zero External C / Libc Dependencies
 @! ============================================================================
 
-import "universe/db/distributed/raft"
-import "universe/db/wal"
-import "universe/os/syscalls"
-import "universe/core/string"
+import "packages/lipidb/distributed/raft"
+import "packages/lipidb/wal"
+import "utso/syscalls"
+import "utso/string"
 
 @fn assert_true(cond, msg)
   @if cond == 0

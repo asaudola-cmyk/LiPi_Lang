@@ -6,7 +6,7 @@
 // অতি-দ্রুত এবং নির্ভরযোগ্য এমবেডেড কি-ভ্যালু স্টোরেজ ইঞ্জিন।
 // রেকর্ড ফরম্যাট: প্রতিটি রেকর্ড ঠিক ১৬ বাইট (৮ বাইট কি + ৮ বাইট ভ্যালু)।
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ১. ডাটাবেস ফাইল খোলা বা তৈরি করা (Open/Create DB via SYS_open: syscall 2)
 // WHY: O_RDWR (2) | O_CREAT (64) = 66, মোড 0644 (420 decimal)

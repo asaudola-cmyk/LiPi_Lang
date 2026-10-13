@@ -17,8 +17,8 @@
 //   '$' -> Bulk String: "$6\r\nfoobar\r\n" or "$-1\r\n" (Null Bulk String)
 //   '*' -> Array: "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"
 
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/string"
+import "utso/collections"
 
 // ── 1. RESP Serializers ───────────────────────────────────────────────────────
 

@@ -6,8 +6,8 @@
 @! SDF rounded rectangles, drop shadows, gradients, and glyph pipelines.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
+import "utso/math"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

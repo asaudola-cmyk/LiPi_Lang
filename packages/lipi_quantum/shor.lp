@@ -4,8 +4,8 @@
 @! Features: Shor's Algorithm Simulation for Integer Factorization
 @! ============================================================================
 
-import "universe/quantum/superposition"
-import "universe/core/math"
+import "packages/lipi_quantum/superposition"
+import "utso/math"
 
 @! Shor's Algorithm (Conceptual Implementation for LiPi Quantum Simulator)
 @! Note: Factoring large numbers requires thousands of logical qubits.
@@ -42,7 +42,7 @@ import "universe/core/math"
   return res
 @end
 
-import "universe/quantum/multi_qubit"
+import "packages/lipi_quantum/multi_qubit"
 
 @fn q_cos(angle: f64) -> f64
   // Taylor approximation: cos(x) = 1 - x^2/2 + x^4/24 - x^6/720

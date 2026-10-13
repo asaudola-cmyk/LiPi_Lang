@@ -16,7 +16,7 @@
 //    - Stage 5: Integer Formatting & Dynamic Terminal Output.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 fn test_assert_eq actual expected test_name
     if actual != expected

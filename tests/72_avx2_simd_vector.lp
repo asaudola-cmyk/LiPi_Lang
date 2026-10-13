@@ -7,8 +7,8 @@
 // ==============================================================================
 
 import "src/compiler/backend/x86_64/avx2.lp"
-import "universe/core/memory.lp"
-import "universe/core/simd.lp"
+import "utso/memory.lp"
+import "utso/core/simd.lp"
 
 say "========================================================"
 say "👑 Testing Lipi Sovereign AVX2 256-Bit SIMD Engine"

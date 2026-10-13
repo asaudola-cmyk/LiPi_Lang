@@ -6,8 +6,8 @@
 @! F19 Dynamic Task Routing & Multi-Stage DAG Workflow Execution with Reflection Loops.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Role Definitions

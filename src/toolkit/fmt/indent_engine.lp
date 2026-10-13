@@ -12,9 +12,9 @@
 // 4. Strips trailing whitespace and collapses consecutive redundant blank lines.
 // 5. 100% pure sovereign Lipi implementation without external formatting tools.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. Whitespace & Indentation Primitives ─────────────────────────────────────
 

@@ -3,8 +3,8 @@
 @! 100% Pure Lipi — Direct POSIX Socket Integration
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/os/memory"
+import "utso/syscalls"
+import "utso/os/memory"
 
 @! Constants for IPv4 / TCP
 @fn AF_INET() return 2 @end

@@ -2,7 +2,7 @@
 // Validates 3AC IR-level Peephole Optimizer
 import "compiler/backend/lipi_ir"
 import "compiler/middleend/ir_peephole"
-import "universe/core/io"
+import "utso/io"
 
 @fn main()
   say("Testing IR Peephole Optimizer...")

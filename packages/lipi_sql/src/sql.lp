@@ -7,7 +7,7 @@
 // lipi_sql delivers a pure LiPi in-memory relational table store with
 // deterministic O(1) row access, indexed filtering, and atomic row-level mutations.
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // Table Descriptor Offsets (64 bytes total)
 // Offset 0:  table_id (i64)

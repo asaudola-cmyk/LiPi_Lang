@@ -3,9 +3,9 @@
 @! 100% Written in Pure Lipi Language — Zero CUDA SDK / ROCm / OpenCL C++ Libs
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/fs"
+import "utso/collections"
+import "utso/string"
+import "utso/os/fs"
 
 @! ----------------------------------------------------------------------------
 @! 1. NVIDIA PTX (Parallel Thread Execution) Code Generator

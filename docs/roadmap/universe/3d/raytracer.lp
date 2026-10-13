@@ -4,8 +4,8 @@
 @! Features: 3D Vector Math, Ray-Sphere Intersection, BVH Tree, PBR Materials
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
+import "utso/math"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! 1. 3D Vector Operations

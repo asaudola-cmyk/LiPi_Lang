@@ -13,13 +13,13 @@ When exploring the LiPi codebase, code is organized into three distinct tiers ba
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           LIPI REPOSITORY ARCHITECTURE                      │
 ├─────────────────────────┬─────────────────────────┬─────────────────────────┤
-│          src/           │        universe/        │        packages/        │
-│   COMPILER & TOOLCHAIN  │    STANDARD LIBRARY     │   ENTERPRISE MODULES    │
+│          src/           │          utso/          │        packages/        │
+│   COMPILER & TOOLCHAIN  │   GENESIS PRIMITIVES    │   SOVEREIGN PACKAGES    │
 ├─────────────────────────┼─────────────────────────┼─────────────────────────┤
-│ • 79 Modular Subsystems │ • 29 Universal Domains  │ • 10 Standalone Modules │
-│ • 0% Libc / 0% C        │ • OS & Hardware Direct  │ • lipipkg.toml Manifest │
-│ • Stage-3 Self-Hosting  │ • High-Level Abstraction│ • Decentralized P2P Hub │
-│ • Emits ELF64/WASM/MachO│ • Crypto, Net, DB, GUI  │ • Router, JWT, Vault    │
+│ • 79 Modular Subsystems │ • Silicon Primitives    │ • 18+ Sovereign Packages│
+│ • 0% Libc / 0% C        │ • OS & Syscall Gateway  │ • lipipkg.toml Manifest │
+│ • Stage-3 Self-Hosting  │ • High-Speed Allocators │ • Decentralized P2P Hub │
+│ • Emits ELF64/WASM/MachO│ • Crypto, Net, IO, CPU  │ • AI, DB, Web, GUI, FS  │
 └─────────────────────────┴─────────────────────────┴─────────────────────────┘
 ```
 
@@ -27,12 +27,14 @@ When exploring the LiPi codebase, code is organized into three distinct tiers ba
    - Contains the compiler itself, the minimal freestanding runtime, and toolchain CLI tools.
    - Used **only** during compilation and building of executables.
    - Built with strict adherence to the **Golden $\le 35,000$ bytes** per-module invariant.
-2. **[`universe/`](file:///home/shafiullah/Documents/file/work/lipi/universe/) — The LiPi Universal Standard Library (Stdlib)**
-   - The rich standard library that developers `import` and `include` when writing LiPi programs.
-   - Provides direct, zero-overhead hardware and OS abstractions across 29 specialized domains (Crypto, Networking, GUI, In-Memory DB, AI/Tensors, Quantum, KVM Hypervisor).
-3. **[`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) — Enterprise Ecosystem Packages**
-   - Independent, versioned modules managed by the sovereign package manager (`lipi-pkg`).
-   - Each package contains its own `lipipkg.toml` manifest, `src/` library code, and unit `tests/`.
+2. **[`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) — Genesis Silicon Primitives (`উৎস`)**
+   - Pure silicon primitives that directly interface with hardware and Linux kernel syscalls.
+   - Single-file genesis modules (`memory.lp`, `io.lp`, `string.lp`, `math.lp`, `socket.lp`, `crypto.lp`, `syscalls.lp`, `collections.lp`, `hashmap.lp`, `arena.lp`, `error.lp`, `option.lp`, `result.lp`, `channel.lp`, `concurrency.lp`, `time.lp`, `fmt.lp`, `unicode.lp`, `ffi.lp`).
+   - Deep sub-layers in `utso/core/`, `utso/os/`, `utso/sys/`, `utso/net/`, `utso/crypto/`, `utso/cpu/`, `utso/io/`, `utso/tools/`.
+3. **[`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) — Sovereign Domain Packages**
+   - Independent, versioned domain packages managed by the sovereign package manager (`lipipkg`).
+   - Each package contains its own `lipipkg.toml` manifest, sovereign modules, and unit tests.
+   - Domain packages include `lipi_ai`, `lipidb`, `lipi_web`, `lipi_gui`, `lipi_engine3d`, `lipi_quantum`, `lipi_blockchain`, `lipi_hypervisor`, `lipi_swarm`, `lipi_iot`, `lipi_media`, `lipi_gpu`, `lipi_fs`, `lipi_mobile`, `lipi_p2p`, `lipi_security`, `lipi_boot`, `lipi_ide`, `lipi_registry`.
 
 ---
 
@@ -47,12 +49,12 @@ lipi/
 ├── install.sh           # Standalone curl installer for Linux x86_64
 ├── LICENSE              # MIT Open Source License
 ├── lipipkg.toml         # Root project package and workspace manifest
-├── packages/            # Reusable ecosystem packages (crypto_vault, web_router, ...)
+├── packages/            # Sovereign domain packages (lipi_ai, lipidb, lipi_web, ...)
 ├── README.md            # Primary repository entry point and quickstart guide
 ├── scripts/             # Automation, benchmarking, and documentation generator scripts
 ├── src/                 # Compiler micro-pipeline, runtime, and tool implementations
-├── tests/               # 187 master regression, hardware HDL, and AI parity test suites
-└── universe/            # LiPi 30-domain standard library and hardware universe
+├── tests/               # 203 master regression, hardware HDL, and AI parity test suites
+└── utso/                # Genesis silicon primitives (উৎস: memory, io, net, os, crypto, cpu, tools)
 ```
 
 ---
@@ -89,35 +91,42 @@ lipi/
 
 ---
 
-### 2. [`universe/`](file:///home/shafiullah/Documents/file/work/lipi/universe/) — Standard Library
+### 2. [`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) — Genesis Silicon Primitives (`উৎস`)
 
-The Standard Library is organized by capability domain:
-- **`universe/core/`**: Memory primitives, string operations, UTF-8 Bengali runes, collections, traits, and options.
-- **`universe/crypto/`**: Hardware entropy (`SYS_getrandom`), SHA-256, AES-256-GCM, X25519, Ed25519, and X.509 PKI certificates.
-- **`universe/net/`**: Direct silicon sockets, epoll event loops, TLS 1.3 in-process server, DNS resolver, and WebSocket.
-- **`universe/os/`**: Direct POSIX/Linux syscall bindings, process execution, thread scheduler, and virtual filesystem (VFS).
-- **`universe/db/`**: In-memory relational SQL engine, B+Tree, Write-Ahead Logging (WAL), and vector similarity search (HNSW).
-- **`universe/gui/`**: Zero-X11 direct Linux framebuffer renderer, DRM/KMS graphics, ANSI TUI dashboard, and declarative UI.
-- **`universe/ai/`**: Tensor compute engine, AVX2 SIMD matrix GEMM, and GGUF local LLM inference.
-- **`universe/hypervisor/`**: Linux KVM direct virtualization and Ring-0 bare-metal unikernel launcher.
-- **`universe/quantum/`**: Multi-qubit state vector simulation, Hadamard/CNOT gates, and quantum measurement.
+The Genesis Primitives are pure silicon building blocks:
+- **`utso/` (Root Primitives):** `memory.lp`, `io.lp`, `string.lp`, `unicode.lp`, `math.lp`, `fmt.lp`, `collections.lp`, `hashmap.lp`, `arena.lp`, `error.lp`, `option.lp`, `result.lp`, `channel.lp`, `concurrency.lp`, `time.lp`, `syscalls.lp`, `socket.lp`, `crypto.lp`, `ffi.lp`.
+- **`utso/core/`**: Memory paging, string operations, UTF-8 Bengali runes, collections, traits, and options.
+- **`utso/crypto/`**: Hardware entropy (`SYS_getrandom`), SHA-256, AES-256-GCM, X25519, Ed25519, and X.509 PKI certificates.
+- **`utso/net/`**: Direct silicon sockets, epoll event loops, TLS 1.3 in-process server, DNS resolver, and WebSocket.
+- **`utso/os/`**: Direct POSIX/Linux syscall bindings, process execution, thread scheduler, and virtual filesystem (VFS).
+- **`utso/cpu/`**: Direct AVX-512 GEMM matrix engine and hardware silicon acceleration.
+- **`utso/io/`**: Direct Linux io_uring asynchronous ring buffers, PCIe NVMe MMIO storage controller, DMA engine.
+- **`utso/tools/`**: In-engine debugger, profiler, interactive REPL, LSP server protocol, and test runner.
 
 ---
 
-### 3. [`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) — Enterprise Ecosystem Modules
+### 3. [`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) — Sovereign Domain Packages
 
 | Package | Description | Key Capabilities |
 | :--- | :--- | :--- |
-| `packages/crypto_vault` | Enterprise Secret Management | Hardware entropy, salted password hashing, session tokens |
-| `packages/web_router` | Zero-Copy Radix-Trie Routing | Parameterized URLs, path matching, middleware chains |
-| `packages/lipi_jwt` | RFC 7519 JSON Web Tokens | Cryptographic token generation, expiration checks, tamper rejection |
-| `packages/lipi_sql` | Embedded Relational Engine | In-memory relational tables, multi-column queries, transaction safety |
-| `packages/json_toolkit` | High-Speed JSON Parser | Zero-copy JSON serialization, object extraction, array validation |
-| `packages/lipi_dataframe` | Tabular Data Processing | Columnar slicing, statistics, filtering, data transformations |
-| `packages/lipi_grpc` | High-Throughput RPC Engine | Protocol buffer serialization, framing, streaming RPCs |
-| `packages/lipi_http_client` | Native HTTP/HTTPS Client | TLS-backed requests, header parsing, connection pooling |
-| `packages/math_extra` | Advanced Mathematics | Complex numbers, vector mathematics, clamped operations |
-| `packages/sovereign_mesh` | P2P Cluster Mesh | Peer discovery, distributed state synchronization |
+| `packages/lipi_ai` | Autonomous AI & Tensor Engine | N-D tensors, reverse-mode autodiff, GGUF local LLM inference |
+| `packages/lipidb` | Embedded ACID Database | LipiKV, B+Tree indexing, WAL crash recovery, Redis protocol |
+| `packages/lipi_web` | Sovereign Full-Stack Web Framework | Sub-microsecond HTTP/1.1 & HTTP/2 routing, WebSockets, DOM-bypass |
+| `packages/lipi_gui` | Sovereign GUI & Graphics | Linux `/dev/fb0` framebuffer, DRM/KMS, Bresenham canvas, desktop UI |
+| `packages/lipi_gpu` | GPU Compute & SPIR-V Engine | Native SPIR-V binary code emission, compute shaders, DRM dumb-buffers |
+| `packages/lipi_fs` | Filesystem Engine | Copy-on-Write LipiFS, raw Ext4 filesystem driver |
+| `packages/lipi_blockchain` | Sovereign Blockchain Core | EVM-compatible VM, Merkle Patricia Trie, cryptographic ledger |
+| `packages/lipi_quantum` | Quantum Computing Simulator | State vectors, superposition, quantum gates, Shor algorithm |
+| `packages/lipi_hypervisor`| Bare-Metal Hypervisor | Linux KVM ioctl hardware virtualization, guest vCPU execution |
+| `packages/lipi_swarm` | Distributed Swarm Engine | Actor concurrency model, distributed consensus, mesh routing |
+| `packages/lipi_iot` | Embedded IoT & Edge Gateway | MQTT client, hardware sensor telemetry, edge gateway |
+| `packages/lipi_media` | Pure Audio & Video Canvas | Pure WAV audio synthesis, video canvas blitting |
+| `packages/lipi_mobile` | Mobile Platform Runtime | Mobile application engine, sandbox storage, event system |
+| `packages/lipi_p2p` | P2P Network & Distribution | Kademlia DHT, peer-to-peer package distribution, registry |
+| `packages/lipi_security` | Advanced Security & Proofs | Zero-knowledge proofs, JWT auth, seccomp sandbox |
+| `packages/lipi_boot` | Bare-Metal Bootloader | UEFI and Multiboot bootloader, freestanding kernel |
+| `packages/lipi_ide` | Sovereign IDE & Studio | IDE studio, syntax highlighter, integrated LSP client |
+| `packages/lipi_registry` | Package Registry Hub | Decentralized package registry, SemVer 2.0.0 resolver |
 
 ---
 
@@ -159,6 +168,6 @@ bin/lipc tests/run_tests.lp /tmp/run_tests && /tmp/run_tests
 
 ### Where to Add New Features
 - **Compiler features**: Add modular passes in [`src/compiler/`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/). Keep every file $\le 35,000$ bytes!
-- **Standard library primitives**: Add domain files in [`universe/`](file:///home/shafiullah/Documents/file/work/lipi/universe/).
+- **Standard library primitives**: Add genesis primitives in [`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) or sovereign domain modules in [`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/).
 - **Reusable community libraries**: Create a new package in [`packages/<name>/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) with a valid `lipipkg.toml`.
 - **Regression tests**: Add tests in [`tests/`](file:///home/shafiullah/Documents/file/work/lipi/tests/) and register them in [`tests/run_tests.lp`](file:///home/shafiullah/Documents/file/work/lipi/tests/run_tests.lp).

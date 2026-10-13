@@ -5,11 +5,11 @@
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json"
-import "universe/tools/lsp/protocol"
-import "universe/tools/lsp/server"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json"
+import "utso/tools/lsp/protocol"
+import "utso/tools/lsp/server"
 
 @! ----------------------------------------------------------------------------
 @! 1. LSP CLIENT DATA STRUCTURE

@@ -4,9 +4,9 @@
 @! Features: Merkle Trees, PoW Mining, UTXO State Machine, Longest-Chain Consensus
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/crypto"
-import "universe/core/string"
+import "utso/collections"
+import "utso/core/crypto"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. MERKLE TREE IMPLEMENTATION

@@ -103,11 +103,11 @@ fn lipi_is_root_dir dir
     if len(dir) == 0 return 0
     if syscall(21, dir + "/utso/memory.lp", 0, 0, 0, 0, 0) == 0 return 1
     if syscall(21, dir + "/utso/core/memory.lp", 0, 0, 0, 0, 0) == 0 return 1
-    if syscall(21, dir + "/universe/core/memory.lp", 0, 0, 0, 0, 0) == 0 return 1
+    if syscall(21, dir + "/utso/io.lp", 0, 0, 0, 0, 0) == 0 return 1
     return 0
 
 fn lipi_tool_get_root
-    // WHY: 5-Tier dynamic resolution for LiPi root directory containing 'utso/', 'packages/', 'universe/' and 'src/'.
+    // WHY: 5-Tier dynamic resolution for LiPi root directory containing 'utso/', 'packages/', and 'src/'.
     // Enables the CLI runner to execute flawlessly from ~/.local/bin, /usr/local/bin, or any folder.
 
     // 1. Environment variables override

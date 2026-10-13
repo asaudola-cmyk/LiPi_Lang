@@ -4,8 +4,8 @@
 //    and zero-allocation green concurrency (Challenging Go & PHP).
 // ==============================================================================
 
-include "universe/core/channel.lp"
-include "universe/core/fiber_reactor.lp"
+include "utso/channel.lp"
+include "utso/core/fiber_reactor.lp"
 
 fn assert_true cond test_name
     if cond == 0

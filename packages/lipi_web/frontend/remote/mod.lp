@@ -7,10 +7,10 @@
 @! WebRTC Client, Video Blitter, and Remote Server Streaming Adapter
 @! ============================================================================
 
-import "universe/web/frontend/remote/remote_directive"
-import "universe/web/frontend/remote/webrtc_client"
-import "universe/web/frontend/remote/video_blitter"
-import "universe/web/frontend/remote/remote_server_adapter"
+import "packages/lipi_web/frontend/remote/remote_directive"
+import "packages/lipi_web/frontend/remote/webrtc_client"
+import "packages/lipi_web/frontend/remote/video_blitter"
+import "packages/lipi_web/frontend/remote/remote_server_adapter"
 
 @! ============================================================================
 @! 1. HIGH-LEVEL HYBRID PIPELINE COORDINATOR

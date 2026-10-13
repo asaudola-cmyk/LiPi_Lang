@@ -6,8 +6,8 @@
 @! Features: Fixed-Point 3D Vectors (Scale: 1000), Ray, Sphere, Triangle & AABB
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/math"
+import "utso/collections"
+import "utso/math"
 
 @! ============================================================================
 @! 1. 3D VECTOR STRUCTURE & BASIC MATH (Scale: 1000)

@@ -5,9 +5,9 @@
 @! Zero-Copy Dynamic NativeArray Buffers, Atomic fsync & Safe Truncation
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/string"
-import "universe/db/page"
+import "utso/syscalls"
+import "utso/string"
+import "packages/lipidb/page"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Operation Discriminators

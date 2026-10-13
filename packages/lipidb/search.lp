@@ -3,8 +3,8 @@
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @struct InvertedIndex
   doc_count: 0,

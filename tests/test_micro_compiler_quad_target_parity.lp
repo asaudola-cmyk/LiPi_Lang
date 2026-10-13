@@ -22,7 +22,7 @@
 //    into all four architectural targets without regression.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── Assertion Utility ─────────────────────────────────────────────────────────
 fn test_assert_eq actual expected test_name

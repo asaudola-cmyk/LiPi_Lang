@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language — Zero malloc / free / libc.so
 @! ============================================================================
 
-import "universe/os/syscalls"
+import "utso/syscalls"
 
 @! Page size constant (4096 bytes)
 @fn PAGE_SIZE()

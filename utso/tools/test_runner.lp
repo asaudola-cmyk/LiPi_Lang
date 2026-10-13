@@ -17,9 +17,9 @@
 //   test_finish(suite)
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ─── Pure Lipi First 1.0.0 Struct Declarations (No Commas) ───────────────────────────
 // WHY: TestSuite struct encapsulates per-suite test metrics cleanly on heap/stack.

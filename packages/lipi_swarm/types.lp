@@ -4,7 +4,7 @@
 @! Defines PID, NodeInfo, TaskDescriptor, SwarmJoinHandle, ActorMessage, SwarmPacket
 @! ============================================================================
 
-import "universe/core/string"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Node Identification & Cluster Types

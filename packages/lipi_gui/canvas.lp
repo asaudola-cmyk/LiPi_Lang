@@ -9,11 +9,11 @@
 @! - 2D Drawing Primitives: Bresenham lines, circles, rects, rounded rects, blit
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/math"
+import "utso/collections"
+import "utso/string"
 // WHY: Consolidated to canonical universe/os/syscalls kernel gateway.
-import "universe/os/syscalls"
+import "utso/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

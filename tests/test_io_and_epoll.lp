@@ -4,8 +4,8 @@
 // 100% Pure Lipi — Zero Foreign Dependencies
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/net/socket.lp"
+include "utso/io.lp"
+include "utso/socket.lp"
 
 fn main
     say "=== LIPI KERNEL I/O & EPOLL TEST ==="

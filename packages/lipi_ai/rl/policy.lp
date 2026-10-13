@@ -5,10 +5,10 @@
 @! Categorical Policy Network, State-Value V(s) Network, Continuous Gaussian Policy.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/tensor"
-import "universe/ai/autodiff"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autodiff"
 
 @! ----------------------------------------------------------------------------
 @! 1. Tabular Q-Table

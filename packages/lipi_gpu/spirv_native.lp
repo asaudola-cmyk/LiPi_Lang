@@ -20,7 +20,7 @@
 //      guaranteeing 100% strict compliance with the Khronos SPIR-V binary specification.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── 1. Khronos SPIR-V Core Specification Constants ────────────────────────────
 SPIRV_MAGIC_NUMBER       = 119734787  // 0x07230203 (Little-Endian: 0x03, 0x02, 0x23, 0x07)

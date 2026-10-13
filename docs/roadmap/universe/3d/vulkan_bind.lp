@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! Vulkan Instance
 @fn vk_create_instance(app_name)

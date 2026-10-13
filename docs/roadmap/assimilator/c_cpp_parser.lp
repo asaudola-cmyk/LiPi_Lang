@@ -4,8 +4,8 @@
 @! Features: C/C++ AST/syntax parsing, type stripping, block normalization
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @fn c_index_of(s, substr, from_pos)
   s_len = s.len()

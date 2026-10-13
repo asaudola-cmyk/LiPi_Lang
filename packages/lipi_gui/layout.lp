@@ -12,9 +12,9 @@
 @! - Proportional flex grow and flex shrink space distribution
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/math"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

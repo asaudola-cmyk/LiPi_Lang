@@ -7,10 +7,10 @@
 @! SGD Optimizer with Momentum & Weight Decay, Adam Optimizer with Moments.
 @! ============================================================================
 
-import "universe/core/math"
-import "universe/core/collections"
-import "universe/ai/tensor"
-import "universe/ai/autograd"
+import "utso/math"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
+import "packages/lipi_ai/autograd"
 
 @! ----------------------------------------------------------------------------
 @! 1. Parameter & Module Abstractions

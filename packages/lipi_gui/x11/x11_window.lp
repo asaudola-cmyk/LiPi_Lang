@@ -7,11 +7,11 @@
 @! Event Translation to Native LiPi GUI Widgets
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/gui/canvas"
-import "universe/gui/widget"
-import "universe/gui/x11/x11_protocol"
+import "utso/collections"
+import "utso/string"
+import "packages/lipi_gui/canvas"
+import "packages/lipi_gui/widget"
+import "packages/lipi_gui/x11/x11_protocol"
 
 @! ============================================================================
 @! 1. X11 CONNECTION & WINDOW STRUCTS

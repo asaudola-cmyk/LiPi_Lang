@@ -8,8 +8,8 @@
 // JSON serialization, syntactic validation, and dot-notation path extraction
 // in pure native LiPi with zero external dependencies.
 
-include "universe/core/collections.lp"
-include "universe/core/string.lp"
+include "utso/collections.lp"
+include "utso/string.lp"
 
 // ── ১. জেসন টোকেন ও নোড টাইপসমূহ (JSON Constants) ───────────────────────────
 JSON_TYPE_NULL   = 0

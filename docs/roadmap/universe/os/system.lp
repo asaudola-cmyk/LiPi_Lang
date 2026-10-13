@@ -4,8 +4,8 @@
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/string"
 
 @fn get_os_family()
   return "linux"

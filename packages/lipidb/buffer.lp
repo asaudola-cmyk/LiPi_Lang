@@ -4,10 +4,10 @@
 @! Complete Sovereign Linux x86-64 Native Syscalls (sys_open, sys_lseek, sys_read, sys_write, sys_fsync)
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/db/page"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/string"
+import "packages/lipidb/page"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants

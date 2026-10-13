@@ -4,12 +4,12 @@
 @! High-Performance Sovereign Web & REST API Framework
 @! ============================================================================
 
-import "universe/web/url"
-import "universe/web/router"
-import "universe/web/context"
-import "universe/web/middleware"
-import "universe/web/server"
-import "universe/web/app"
-import "universe/web/markup_parser"
-import "universe/web/frontend/mod"
+import "packages/lipi_web/url"
+import "packages/lipi_web/router"
+import "packages/lipi_web/context"
+import "packages/lipi_web/middleware"
+import "packages/lipi_web/server"
+import "packages/lipi_web/app"
+import "packages/lipi_web/markup_parser"
+import "packages/lipi_web/frontend/mod"
 

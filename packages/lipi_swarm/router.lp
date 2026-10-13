@@ -4,10 +4,10 @@
 @! Load Metrics, Green Thread vs Remote P2P Node Routing Heuristics
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/collections"
-import "universe/swarm/types"
-import "universe/swarm/discovery"
+import "utso/string"
+import "utso/collections"
+import "packages/lipi_swarm/types"
+import "packages/lipi_swarm/discovery"
 
 @! ----------------------------------------------------------------------------
 @! 1. Load Monitor & Metrics

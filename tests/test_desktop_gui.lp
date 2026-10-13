@@ -5,8 +5,8 @@
 // 100% Pure Lipi Implementation — Zero External / GUI Libraries
 // ==============================================================================
 
-import "universe/gui/framebuffer"
-import "universe/core/string"
+import "packages/lipi_gui/framebuffer"
+import "utso/string"
 
 @fn assert_true(cond: i64, msg: string)
   @if cond == 0

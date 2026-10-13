@@ -6,22 +6,22 @@
 
 ## 🏛️ মূল সূচিপত্র (Domain Index)
 
-1. [🌟 গ্র্যান্ড প্রিলিউড (Grand Prelude - universe/lipi_universe)](#1-গ্র্যান্ড-প্রিলিউড-universe-prelude)
-2. [📦 কোর ডোমেন (universe/core)](#2-কোর-ডোমেন-universe-core)
-3. [🌐 নেটওয়ার্কিং ডোমেন (universe/net)](#3-নেটওয়ার্কিং-ডোমেন-universe-net)
-4. [💾 ডেটাবেস ডোমেন (universe/db)](#4-ডেটাবেস-ডোমেন-universe-db)
-5. [🔐 ক্রিপ্টোগ্রাফি ও সিকিউরিটি ডোমেন (universe/crypto)](#5-ক্রিপ্টোগ্রাফি-ডোমেন-universe-crypto)
-6. [🧠 এআই ও টেনসর ডোমেন (universe/ai)](#6-এআই-ও-টেনসর-ডোমেন-universe-ai)
-7. [⚡ ওয়েব ফ্রেমওয়ার্ক ডোমেন (universe/web)](#7-ওয়েব-ফ্রেমওয়ার্ক-ডোমেন-universe-web)
-8. [🎨 গ্রাফিক্স ও ইউআই ডোমেন (universe/gui & engine3d)](#8-গ্রাফিক্স-ও-ইউআই-ডোমেন-universe-gui--engine3d)
-9. [🖥️ ওএস ও জিপিইউ ডোমেন (universe/os & gpu)](#9-ওএস-ও-জিপিইউ-ডোমেন-universe-os--gpu)
+1. [🌟 গ্র্যান্ড প্রিলিউড (Grand Prelude - utso/lipi_universe)](#1-গ্র্যান্ড-প্রিলিউড-universe-prelude)
+2. [📦 কোর ডোমেন (utso/core)](#2-কোর-ডোমেন-universe-core)
+3. [🌐 নেটওয়ার্কিং ডোমেন (utso/net)](#3-নেটওয়ার্কিং-ডোমেন-universe-net)
+4. [💾 ডেটাবেস ডোমেন (packages/lipidb)](#4-ডেটাবেস-ডোমেন-universe-db)
+5. [🔐 ক্রিপ্টোগ্রাফি ও সিকিউরিটি ডোমেন (utso/crypto)](#5-ক্রিপ্টোগ্রাফি-ডোমেন-universe-crypto)
+6. [🧠 এআই ও টেনসর ডোমেন (packages/lipi_ai)](#6-এআই-ও-টেনসর-ডোমেন-universe-ai)
+7. [⚡ ওয়েব ফ্রেমওয়ার্ক ডোমেন (packages/lipi_web)](#7-ওয়েব-ফ্রেমওয়ার্ক-ডোমেন-universe-web)
+8. [🎨 গ্রাফিক্স ও ইউআই ডোমেন (packages/lipi_gui & lipi_engine3d)](#8-গ্রাফিক্স-ও-ইউআই-ডোমেন-universe-gui--engine3d)
+9. [🖥️ ওএস ও জিপিইউ ডোমেন (utso/os & packages/lipi_gpu)](#9-ওএস-ও-জিপিইউ-ডোমেন-universe-os--gpu)
 
 ---
 
 ## 1. 🌟 গ্র্যান্ড প্রিলিউড (Universe Prelude)
-**ফাইল**: `universe/lipi_universe.lp`
+**ফাইল**: `utso/lipi_universe.lp`
 
-লিপির একক এন্ট্রি পয়েন্ট। শুধু `import "universe/lipi_universe"` লিখলেই সম্পূর্ণ কোর সিস্টেম (Collections, Hashmap, String, 64-bit Aligned Arena, Fast JSON, SIMD Vector, SHA-256) গ্লোবালি এক্সপোর্ট হয়।
+লিপির একক এন্ট্রি পয়েন্ট। শুধু `import "utso/lipi_universe"` লিখলেই সম্পূর্ণ কোর সিস্টেম (Collections, Hashmap, String, 64-bit Aligned Arena, Fast JSON, SIMD Vector, SHA-256) গ্লোবালি এক্সপোর্ট হয়।
 
 ### প্রধান এপিআই (Functions):
 * `lipi_universe_stats()` / `লিপি_ইউনিভার্স_পরিসংখ্যান()`: লাইব্রেরি পরিসংখ্যান ও আর্কিটেকচার মেট্রিক্স প্রদর্শন করে।
@@ -31,7 +31,7 @@
 
 #### ব্যবহারের উদাহরণ (Usage):
 ```lipi
-import "universe/lipi_universe"
+import "utso/lipi_universe"
 
 fn main()
     lipi_universe_stats()

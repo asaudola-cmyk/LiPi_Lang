@@ -4,9 +4,9 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/crypto"
-import "universe/core/collections"
-import "universe/net/tcp"
+import "utso/core/crypto"
+import "utso/collections"
+import "utso/net/tcp"
 
 @! ----------------------------------------------------------------------------
 @! 1. TLS 1.3 Constants & Types

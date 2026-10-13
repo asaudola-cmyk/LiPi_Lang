@@ -25,8 +25,8 @@
 // - Zero placeholders. 100% pure LiPi.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/gui/fbdev.lp"
+include "utso/memory.lp"
+include "packages/lipi_gui/fbdev.lp"
 
 fn mem_write_u16 addr offset value
     mem_write_byte(addr, offset, value % 256)

@@ -18,7 +18,7 @@
 //    unpacks the fiber descriptor, and executes the target fiber task in silicon.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── Fiber Lifecycle State Constants ───────────────────────────────────────────
 FIBER_READY   = 0

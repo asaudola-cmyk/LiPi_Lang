@@ -10,9 +10,9 @@
 // এই মডিউলে বাস্তব নেটওয়ার্ক সকেট প্যাকেট ফ্রেমিং, কোরাম নির্বাচন (Strict Quorum: N/2 + 1),
 // টার্ম প্রগ্রেশন, স্টেট মেশিন রেপ্লিকেশন এবং নেটওয়ার্ক পার্টিশন ডিফেন্স বাস্তবায়ন করা হয়েছে।
 
-import "universe/os/syscalls"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/collections"
+import "utso/string"
 
 // ── ১. রাফট প্রোটোকল কনস্ট্যান্টস ও মেসেজ টাইপ ─────────────────────────────────
 @fn RAFT_MSG_REQUEST_VOTE()     return 1 @end

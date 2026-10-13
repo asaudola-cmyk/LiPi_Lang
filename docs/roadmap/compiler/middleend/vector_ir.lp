@@ -5,8 +5,8 @@
 @!           Vector IR Opcodes (VLOAD, VSTORE, VADD, VMUL, VFMA, VREDUCE_SUM)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. VECTOR TYPE DEFINITIONS

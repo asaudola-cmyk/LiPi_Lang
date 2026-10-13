@@ -4,7 +4,7 @@
 //    synchronous method dispatch, and Chase-Lev distributed work-stealing scheduler.
 // ==============================================================================
 
-include "universe/swarm/liprpc.lp"
+include "packages/lipi_swarm/liprpc.lp"
 
 fn assert_true cond test_name
     if cond == 0

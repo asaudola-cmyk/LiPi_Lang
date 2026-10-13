@@ -7,9 +7,9 @@
 //    4. Pure Linux Kernel epoll Async Event Loop Reactor (Syscall 291 / C10K)
 // ==============================================================================
 
-import "universe/core/memory.lp"
-import "universe/tools/debug.lp"
-import "universe/os/event.lp"
+import "utso/memory.lp"
+import "utso/tools/debug.lp"
+import "utso/os/event.lp"
 
 // ── 1. Result/Option `?` Operator Test Functions ──────────────────────────────
 fn validate_positive num

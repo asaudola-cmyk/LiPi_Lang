@@ -14,8 +14,8 @@
 // 100% Pure Lipi | 0% C | 0% GCC | 0% Libc | Direct Machine Code
 // ==============================================================================
 
-import "universe/lipi_universe"
-import "universe/db/kv"
+import "utso/lipi_universe"
+import "packages/lipidb/kv"
 
 fn main()
     say "=================================================================="

@@ -10,7 +10,7 @@
 //      and rasterizing pixels directly into a 32-bit RGBA memory framebuffer.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // ── Widget Type Constants ─────────────────────────────────────────────────────
 UI_CONTAINER = 1

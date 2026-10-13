@@ -5,8 +5,8 @@
 @! Bloom, Screen Space Ambient Occlusion (SSAO), Temporal Anti-Aliasing (TAA)
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/os/syscalls"
+import "utso/collections"
+import "utso/syscalls"
 
 @fn renderer_init(width, height)
   println("  [3D RENDER] Initializing Deferred Renderer Pipeline (" + width.to_str() + "x" + height.to_str() + ")")

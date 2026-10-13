@@ -3,9 +3,9 @@
 @! Process, environment variable, path helpers
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/syscalls"
+import "utso/string"
+import "utso/collections"
 
 @! ----------------------------------------------------------------------------
 @! SECTION 1 — PROCESS INFO

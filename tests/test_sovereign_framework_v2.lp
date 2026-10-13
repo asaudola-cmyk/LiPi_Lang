@@ -19,11 +19,11 @@
 // Section 10: Nested App Router: Persistent Layout Shell & Error Boundary
 // ==============================================================================
 
-include "universe/web/schema_validator.lp"
-include "universe/web/job_queue.lp"
-include "universe/web/edge_cache.lp"
-include "universe/web/llm_stream.lp"
-include "universe/web/app_router.lp"
+include "packages/lipi_web/schema_validator.lp"
+include "packages/lipi_web/job_queue.lp"
+include "packages/lipi_web/edge_cache.lp"
+include "packages/lipi_web/llm_stream.lp"
+include "packages/lipi_web/app_router.lp"
 
 // ── Test Assertion Utilities ──────────────────────────────────────────────────
 

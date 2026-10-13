@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language — Zero glslang / Vulkan-SDK Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! SPIR-V Magic Number: 0x07230203
 @fn spirv_builder_new()

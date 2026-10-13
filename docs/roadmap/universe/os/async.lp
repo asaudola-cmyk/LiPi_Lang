@@ -4,8 +4,8 @@
 @! Features: Coroutines, Green Threads, CSP Channels, Promises, Event Loop, Timers
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. GREEN THREAD / COROUTINE CONTEXT

@@ -19,9 +19,9 @@
 //    - FAT32/FAT16 EFI System Partition (ESP) image layout containing /EFI/BOOT/BOOTX64.EFI.
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
 
 // ── 1. UEFI & PE32+ Architecture Constants ────────────────────────────────────
 

@@ -6,8 +6,8 @@
 @! indexing, ACID transactions, graph traversals, and native Raft consensus.
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Core Data Structures

@@ -9,9 +9,9 @@
 // কার্নেলের /dev/fb0 ওপেন করে মেমরি ম্যাপ (mmap) করা এবং ডাইরেক্ট মেশিন কোড দিয়ে
 // ফুল-স্ক্রিন উইন্ডো ম্যানেজার, বাটন, টেক্সট এবং গ্রাফিক্স রেন্ডার করা।
 
-import "universe/os/syscalls"
-import "universe/core/memory"
-import "universe/core/string"
+import "utso/syscalls"
+import "utso/memory"
+import "utso/string"
 
 // ── ১. লিনাক্স ফ্রেমবাফার আইওসিটিএল (ioctl) কনস্ট্যান্টস ─────────────────────────
 @fn FBIOGET_VSCREENINFO()       return 17920 @end      // 0x4600

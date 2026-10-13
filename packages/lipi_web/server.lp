@@ -4,10 +4,10 @@
 @! BSD TCP Socket Container, Request Ingestion, Response Serialization, Lifecycle
 @! ============================================================================
 
-import "universe/net/tcp"
-import "universe/net/http"
-import "universe/web/context"
-import "universe/web/app"
+import "utso/net/tcp"
+import "utso/net/http"
+import "packages/lipi_web/context"
+import "packages/lipi_web/app"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

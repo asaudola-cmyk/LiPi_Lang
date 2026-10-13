@@ -15,9 +15,9 @@
 // 4. Directory Traversal (ext4_dir_entry_2): Parses variable-length directory entries.
 // ==============================================================================
 
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
 
 // ── 1. Ext4 Hardware Constants ────────────────────────────────────────────────
 EXT4_SUPERBLOCK_OFFSET     = 1024

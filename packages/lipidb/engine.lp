@@ -5,14 +5,14 @@
 @! Redo Crash Recovery, Auto-Commit Durability, and Checkpointing
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/os/fs"
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/db/page"
-import "universe/db/buffer"
-import "universe/db/btree"
-import "universe/db/wal"
+import "utso/syscalls"
+import "utso/os/fs"
+import "utso/collections"
+import "utso/string"
+import "packages/lipidb/page"
+import "packages/lipidb/buffer"
+import "packages/lipidb/btree"
+import "packages/lipidb/wal"
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures
 @! ----------------------------------------------------------------------------
@@ -45,8 +45,8 @@ import "universe/db/wal"
   wal_last_lsn: i64
 @end
 
-import "universe/db/tx"
-import "universe/db/recovery"
+import "packages/lipidb/tx"
+import "packages/lipidb/recovery"
 
 @! ----------------------------------------------------------------------------
 @! 2. Database Lifecycle API

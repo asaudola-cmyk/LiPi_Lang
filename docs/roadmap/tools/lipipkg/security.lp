@@ -9,9 +9,9 @@
 @! - Deterministic Checksum Assertion for Package Supply Chain Safety
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/crypto"
+import "utso/collections"
+import "utso/string"
+import "utso/core/crypto"
 
 @! ----------------------------------------------------------------------------
 @! 1. BYTE & STRING UTILITIES

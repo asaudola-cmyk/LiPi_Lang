@@ -8,7 +8,7 @@
 // or plain returns are severe vulnerabilities. This package leverages LiPi's
 // sovereign NIST FIPS 180-4 SHA-256 and silicon hardware entropy.
 
-include "universe/crypto/crypto.lp"
+include "utso/crypto.lp"
 
 @struct Token
   value: string

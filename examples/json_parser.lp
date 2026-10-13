@@ -4,7 +4,7 @@
 // Uses universe/core/json.lp
 // ==============================================================================
 
-import "universe/core/json"
+import "utso/core/json"
 
 fn main
     say "=== Lipi JSON Parser & Serializer ==="

@@ -4,12 +4,12 @@
 @! Application Container, Route Registration, Groups, Pipeline Dispatcher
 @! ============================================================================
 
-import "universe/web/url"
-import "universe/web/router"
-import "universe/web/context"
-import "universe/web/middleware"
-import "universe/net/http"
-import "universe/core/string"
+import "packages/lipi_web/url"
+import "packages/lipi_web/router"
+import "packages/lipi_web/context"
+import "packages/lipi_web/middleware"
+import "utso/net/http"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

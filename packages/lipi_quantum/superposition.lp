@@ -3,8 +3,8 @@
 @! Standard: Sovereign Non-Binary Logic Subsystem
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/ai/tensor"
+import "utso/collections"
+import "packages/lipi_ai/tensor"
 
 @struct Qubit
   alpha: f64 @! Probability amplitude |0>

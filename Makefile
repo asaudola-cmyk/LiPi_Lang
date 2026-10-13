@@ -56,7 +56,7 @@ build: bootstrap
 release: build
 	@echo "📦 Packaging sovereign standalone release distribution..."
 	@mkdir -p dist
-	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ universe/ packages/ examples/ install.sh LICENSE README.md
+	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ packages/ examples/ install.sh LICENSE README.md
 	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
 # Run autonomous 203 regression test suite

@@ -4,9 +4,9 @@
 @! Features: Superblock Parsing, Inode Lookup, Block Group Descriptors, Directory Traversal
 @! ============================================================================
 
-import "universe/os/drivers/disk"
-import "universe/core/collections"
-import "universe/core/string"
+import "utso/os/drivers/disk"
+import "utso/collections"
+import "utso/string"
 
 @! ----------------------------------------------------------------------------
 @! 1. EXT4 SUPERBLOCK PARSING

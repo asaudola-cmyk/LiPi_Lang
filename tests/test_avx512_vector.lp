@@ -8,7 +8,7 @@
 // মেশিন কোডে দ্রুততম গতিতে চলে, এবং অসঙ্গত প্রসেসরে SIGILL ছাড়া স্বয়ংক্রিয়
 // নিরাপদ ফলব্যাক নিশ্চিত করে।
 
-include "universe/cpu/avx512_native.lp"
+include "utso/cpu/avx512_native.lp"
 
 fn assert_eq_int actual expected test_name
     if actual == expected

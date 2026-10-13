@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @fn scope_new()
   return { parent: "none", symbols: [] }

@@ -11,11 +11,11 @@
 // Any standard Redis client (redis-cli, Jedis, redis-py, go-redis) can connect
 // directly without needing third-party libraries or C runtime environments.
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/core/io.lp"
-include "universe/net/socket.lp"
-include "universe/db/kv.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/io.lp"
+include "utso/socket.lp"
+include "packages/lipidb/kv.lp"
 
 // ── 1. RESP Wire Protocol Serializers ─────────────────────────────────────────
 

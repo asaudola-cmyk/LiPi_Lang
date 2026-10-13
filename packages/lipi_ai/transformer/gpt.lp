@@ -7,9 +7,9 @@
 @! KV-Cache Ring Buffer, Softmax/Top-K/Top-P Token Sampler
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/core/json"
+import "utso/collections"
+import "utso/string"
+import "utso/core/json"
 
 @! ============================================================================
 @! 1. TRANSFORMER TENSOR & KV-CACHE DATA STRUCTURES

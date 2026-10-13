@@ -3,8 +3,8 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/net/tcp" @! Assumes we have TCP networking
+import "utso/collections"
+import "utso/net/tcp" @! Assumes we have TCP networking
 
 @! Represents a node in the distributed training cluster
 @fn cluster_node_new(ip, port, rank)

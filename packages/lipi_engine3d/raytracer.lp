@@ -7,8 +7,8 @@
 @! Diffuse & Specular Lighting, Shadow Rays and Framebuffer Rendering
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/engine3d/vec3"
+import "utso/collections"
+import "packages/lipi_engine3d/vec3"
 
 @! ============================================================================
 @! 1. HIT RECORD & SCENE STRUCTURES

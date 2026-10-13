@@ -4,8 +4,8 @@
 @! Features: DMA Ring Buffers, TX/RX Descriptor parsing, Checksum Offloading
 @! ============================================================================
 
-import "universe/os/syscalls"
-import "universe/core/collections"
+import "utso/syscalls"
+import "utso/collections"
 
 @fn e1000_init()
   println("  [NETWORK] Initializing Intel 8254x Gigabit Ethernet Controller...")

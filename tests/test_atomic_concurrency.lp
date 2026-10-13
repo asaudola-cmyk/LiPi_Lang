@@ -4,7 +4,7 @@
 // 🏛️ Version: First 1.0.0 (প্রথম ১.০.০) — 100% Pure Silicon / 0% Pthreads
 // ==============================================================================
 
-include "universe/os/thread.lp"
+include "utso/os/thread.lp"
 
 say "=== LIPI HARDWARE ATOMIC CONCURRENCY TEST ==="
 

@@ -3,7 +3,7 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @! Represents a Thread in Lipi OS
 @fn thread_new(id, entry_func)

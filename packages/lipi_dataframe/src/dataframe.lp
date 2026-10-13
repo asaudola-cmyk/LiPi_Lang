@@ -7,7 +7,7 @@
 // in cache-friendly memory, executing aggregations, filtering, and scans 20x-50x faster.
 // ==============================================================================
 
-include "universe/core/memory.lp"
+include "utso/memory.lp"
 
 // Column Type Identifiers
 COL_TYPE_INT    = 1

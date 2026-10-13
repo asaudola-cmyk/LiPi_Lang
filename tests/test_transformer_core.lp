@@ -1,5 +1,5 @@
-include "universe/core/io.lp"
-include "universe/core/memory.lp"
+include "utso/io.lp"
+include "utso/memory.lp"
 
 // WHY: High-performance square root and RMSNorm normalization kernel in pure LiPi
 fn ai_sqrt_f64 x

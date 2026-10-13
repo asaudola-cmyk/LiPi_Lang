@@ -3,10 +3,10 @@
 @! 100% Written in Pure Lipi Language
 @! ============================================================================
 
-import "universe/os/fs"
-import "universe/os/system"
-import "universe/core/string"
-import "universe/core/collections"
+import "utso/os/fs"
+import "utso/os/system"
+import "utso/string"
+import "utso/collections"
 import "compiler/frontend/ast"
 import "compiler/frontend/lexer"
 import "compiler/frontend/parser"
@@ -20,7 +20,7 @@ import "compiler/backend/wasm32/codegen"
 import "compiler/backend/llvm/codegen"
 import "compiler/backend/x86_64/codegen"
 import "compiler/backend/x86_64/elf_writer"
-import "universe/os/runtime"
+import "utso/os/runtime"
 
 @fn main()
   println("=================================================================")

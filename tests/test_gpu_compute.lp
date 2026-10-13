@@ -1,5 +1,5 @@
-import "universe/gpu/compute"
-import "universe/core/io"
+import "packages/lipi_gpu/compute"
+import "utso/io"
 
 @fn main()
   say("Testing GPU Compute & SPIR-V Pipeline...")

@@ -23,9 +23,9 @@
 //   out_file = cli_string_read(app, "--output")
 // ==============================================================================
 
-include "universe/core/memory.lp"
-include "universe/core/string.lp"
-include "universe/os/kernel_multiboot.lp"
+include "utso/memory.lp"
+include "utso/string.lp"
+include "utso/os/kernel_multiboot.lp"
 
 // ─── ধ্রুবক (Constants) ───────────────────────────────────────────────────────
 CLI_MAX_FLAGS    = 64    // সর্বোচ্চ ৬৪টি flag

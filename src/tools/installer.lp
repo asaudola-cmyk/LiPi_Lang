@@ -131,11 +131,8 @@ fn main
     installer_add_file(engine, "bin/lipidbg", bin_dir + "/lipidbg", 1)
     installer_add_file(engine, "bin/lipilsp", bin_dir + "/lipilsp", 1)
     installer_add_file(engine, "bin/lipidb_server", bin_dir + "/lipidb_server", 1)
-    installer_add_file(engine, "universe/web/", home_dir + "/universe/web/", 0)
-    installer_add_file(engine, "universe/gui/", home_dir + "/universe/gui/", 0)
-    installer_add_file(engine, "universe/net/", home_dir + "/universe/net/", 0)
-    installer_add_file(engine, "universe/io/", home_dir + "/universe/io/", 0)
-    installer_add_file(engine, "universe/ai/", home_dir + "/universe/ai/", 0)
+    installer_add_file(engine, "utso/", home_dir + "/utso/", 0)
+    installer_add_file(engine, "packages/", home_dir + "/packages/", 0)
     installer_add_file(engine, "src/tools/lipi_unikernel_boot.lp", home_dir + "/src/tools/lipi_unikernel_boot.lp", 0)
 
     say "\n▶ Deploying Sovereign Toolchain and Standard Universe..."

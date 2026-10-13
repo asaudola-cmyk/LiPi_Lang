@@ -15,9 +15,9 @@ import "packages/web_router/src/lib"
 import "packages/crypto_vault/src/lib"
 include "packages/lipi_jwt/src/jwt.lp"
 include "packages/lipi_sql/src/sql.lp"
-import "universe/core/io"
-import "universe/core/string"
-import "universe/core/memory"
+import "utso/io"
+import "utso/string"
+import "utso/memory"
 
 @fn assert_condition(cond: i64, message: string)
   @if cond == 0

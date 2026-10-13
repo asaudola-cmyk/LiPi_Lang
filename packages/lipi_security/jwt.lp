@@ -5,10 +5,10 @@
 @! Standard: RFC 7519 (JWT), RFC 2104 (HMAC), FIPS 198-1
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/crypto/sha256"
-import "universe/crypto/base64"
+import "utso/collections"
+import "utso/string"
+import "utso/crypto/sha256"
+import "utso/crypto/base64"
 
 @enum JwtAlg
   HS256

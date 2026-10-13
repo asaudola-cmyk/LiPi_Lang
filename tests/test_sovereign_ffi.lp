@@ -4,7 +4,7 @@
 //    dynamic symbol lookup, 16-byte System V ABI alignment guard, and register setup.
 // ==============================================================================
 
-include "universe/core/ffi_sovereign.lp"
+include "utso/core/ffi_sovereign.lp"
 
 fn assert_eq actual expected test_name
     if actual != expected

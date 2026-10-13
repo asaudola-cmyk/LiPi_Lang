@@ -9,11 +9,11 @@
 @!   • RFC 6750: The OAuth 2.0 Bearer Token Usage Pattern
 @! ============================================================================
 
-import "universe/core/string"
-import "universe/core/json"
-import "universe/crypto/sha256"
-import "universe/crypto/base64"
-import "universe/web/context"
+import "utso/string"
+import "utso/core/json"
+import "utso/crypto/sha256"
+import "utso/crypto/base64"
+import "packages/lipi_web/context"
 
 @! ----------------------------------------------------------------------------
 @! 1. Base64URL Encoding & Decoding (RFC 4648 Section 5)

@@ -9,7 +9,7 @@
 import "utso/collections"
 import "utso/string"
 import "utso/syscalls"
-import "universe/crypto/sha256"
+import "utso/crypto/sha256"
 
 @! ============================================================================
 @! 1. OMNI-BINARY STRUCTS & OFFSETS

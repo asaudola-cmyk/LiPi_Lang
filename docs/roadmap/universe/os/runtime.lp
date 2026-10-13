@@ -3,9 +3,9 @@
 @! 100% Written in Pure Lipi Language — Zero Tokio / Crossbeam / Libuv Dependency
 @! ============================================================================
 
-import "universe/core/collections"
-import "universe/core/string"
-import "universe/os/syscalls"
+import "utso/collections"
+import "utso/string"
+import "utso/syscalls"
 
 @! ----------------------------------------------------------------------------
 @! 1. Arena & Bump Memory Allocator (Sub-Nanosecond Allocations)

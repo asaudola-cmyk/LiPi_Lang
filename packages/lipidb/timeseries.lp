@@ -3,7 +3,7 @@
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 
-import "universe/core/collections"
+import "utso/collections"
 
 @struct TimeSeries
   metric_name: "",
