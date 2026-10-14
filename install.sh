@@ -208,7 +208,9 @@ create_command() {
             }
 
             build_tool "src/tools/lipi.lp" "bin/lipi"
-            build_tool "src/tools/lipipkg.lp" "bin/lipipkg"
+            build_tool "src/tools/aati.lp" "bin/aati"
+            [ -x "bin/aati" ] && cp -f "bin/aati" "bin/haat" && chmod +x "bin/haat"
+            [ -x "bin/aati" ] && cp -f "bin/aati" "bin/lipipkg" && chmod +x "bin/lipipkg"
             build_tool "src/tools/lipilsp.lp" "bin/lipilsp"
             build_tool "src/tools/lipidbg.lp" "bin/lipidbg"
             build_tool "src/tools/lipifmt.lp" "bin/lipifmt"
@@ -247,7 +249,9 @@ create_command() {
     install_tool_binary "lipc" "Direct Silicon Machine Code Compiler"
     install_tool_binary "lipc_bin" "Native Machine Code Compiler Engine"
     install_tool_binary "lipc_micro" "Micro-Architectural Compiler Engine"
-    install_tool_binary "lipipkg" "Ed25519 Cryptographic Package Manager"
+    install_tool_binary "aati" "Sovereign Aati Package Manager"
+    install_tool_binary "haat" "Sovereign Haat Distributed Package Registry"
+    install_tool_binary "lipipkg" "Ed25519 Cryptographic Package Manager (Legacy Alias)"
     install_tool_binary "lipilsp" "LSP IDE Engine"
     install_tool_binary "lipidbg" "Native System Debugger"
     install_tool_binary "lipifmt" "Canonical Code Formatter"
@@ -269,7 +273,7 @@ heal_system_links() {
     # WHY: Scans /usr/local/bin for dangling/broken symlinks or legacy pointers
     # to individual user home folders. Self-heals if permissions permit, or provides
     # clear, actionable diagnostics so the user never faces "command not found".
-    for tool in lipi lipc lipc_bin lipc_micro lipipkg lipilsp lipils lipidbg lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi-build lipi-test; do
+    for tool in lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi-build lipi-test; do
         sys_target="/usr/local/bin/$tool"
         if [ -L "$sys_target" ]; then
             target_dst=$(readlink "$sys_target" 2>/dev/null || true)
@@ -391,6 +395,8 @@ uninstall() {
          "$LIPI_BIN_DIR/lipc" \
          "$LIPI_BIN_DIR/lipc_bin" \
          "$LIPI_BIN_DIR/lipc_micro" \
+         "$LIPI_BIN_DIR/aati" \
+         "$LIPI_BIN_DIR/haat" \
          "$LIPI_BIN_DIR/lipipkg" \
          "$LIPI_BIN_DIR/lipils" \
          "$LIPI_BIN_DIR/lipilsp" \

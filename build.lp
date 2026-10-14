@@ -147,6 +147,24 @@ fn build_pipeline_run_all pipe
         say "  • [" + (i + 1) + "/" + tcount + "] Building " + t.bt_name + "..."
         c_code = spawn_process(compiler, t.bt_source_file, t.bt_output_binary)
         if c_code == 0
+            if t.bt_output_binary == "bin/aati"
+                rfd = syscall(2, "bin/aati", 0, 0, 0, 0, 0)
+                if rfd >= 0
+                    cbuf = syscall(9, 0, 1048576, 3, 34, -1, 0)
+                    rlen = syscall(0, rfd, cbuf, 1048576, 0, 0, 0)
+                    syscall(3, rfd, 0, 0, 0, 0, 0)
+                    if rlen > 0
+                        wfd1 = syscall(2, "bin/haat", 577, 493, 0, 0, 0)
+                        if wfd1 >= 0
+                            syscall(1, wfd1, cbuf, rlen, 0, 0, 0)
+                            syscall(3, wfd1, 0, 0, 0, 0, 0)
+                            syscall(90, "bin/haat", 493, 0, 0, 0, 0)
+                        wfd2 = syscall(2, "bin/lipipkg", 577, 493, 0, 0, 0)
+                        if wfd2 >= 0
+                            syscall(1, wfd2, cbuf, rlen, 0, 0, 0)
+                            syscall(3, wfd2, 0, 0, 0, 0, 0)
+                            syscall(90, "bin/lipipkg", 493, 0, 0, 0, 0)
+                    syscall(11, cbuf, 1048576, 0, 0, 0, 0)
             build_target_mark_complete(t, 1, 15)
             pipe.bp_passed_targets = pipe.bp_passed_targets + 1
             say "    ✔ PASS: " + t.bt_name
@@ -170,7 +188,7 @@ fn build_pipeline_print_summary pipe
     say "🎉 SOVEREIGN BUILD RESULTS: " + pipe.bp_passed_targets + "/" + pipe.bp_total_targets + " TARGETS VERIFIED"
     say "================================================================="
     say "  ✔ Compiler Toolchain: bin/lipc (Stage-3 Sovereign Modular), bin/lipi"
-    say "  ✔ Full-Stack Ecosystem: packages/lipi_gui/ & packages/lipi_web/"
+    say "  ✔ Full-Stack Ecosystem: aati/lipi_gui/ & aati/lipi_web/"
     say "  ✔ Regression Test Suites: 42/42 Sections Passed"
     if pipe.bp_failed_targets == 0
         say "👑 100% BIT-FOR-BIT SOVEREIGN REPRODUCIBILITY ACHIEVED!"
@@ -191,27 +209,27 @@ fn main
     // Register all core sovereign targets (Modular Micro-Architecture Compiler)
     build_pipeline_add_target(pipe, "Core Compiler Engine", "src/compiler/driver_cli.lp", "bin/lipc_bin", 1)
     build_pipeline_add_target(pipe, "Native Runner & REPL", "src/tools/lipi.lp", "bin/lipi", 1)
-    build_pipeline_add_target(pipe, "Sovereign Package Hub", "src/tools/lipipkg.lp", "bin/lipipkg", 1)
+    build_pipeline_add_target(pipe, "Sovereign Aati Manager", "src/tools/aati.lp", "bin/aati", 1)
     build_pipeline_add_target(pipe, "Regression Test Engine", "tests/run_tests.lp", "bin/lipi-test", 1)
     build_pipeline_add_target(pipe, "Sovereign System Debugger", "src/tools/lipidbg.lp", "bin/lipidbg", 1)
     build_pipeline_add_target(pipe, "Code Formatter", "src/tools/lipifmt.lp", "bin/lipifmt", 1)
     build_pipeline_add_target(pipe, "Language Server Protocol Daemon", "src/tools/lipilsp.lp", "bin/lipilsp", 1)
     build_pipeline_add_target(pipe, "Interactive REPL", "src/tools/lipirepl.lp", "bin/lipirepl", 1)
     build_pipeline_add_target(pipe, "Documentation Generator", "src/tools/lipidoc.lp", "bin/lipidoc", 1)
-    build_pipeline_add_target(pipe, "Sovereign UI Engine", "packages/lipi_gui/sovereign_ui.lp", "dist/libsovereign_ui", 1)
-    build_pipeline_add_target(pipe, "Sovereign Framework", "packages/lipi_web/sovereign_framework.lp", "dist/libsovereign_web", 1)
+    build_pipeline_add_target(pipe, "Sovereign UI Engine", "aati/lipi_gui/sovereign_ui.lp", "dist/libsovereign_ui", 1)
+    build_pipeline_add_target(pipe, "Sovereign Framework", "aati/lipi_web/sovereign_framework.lp", "dist/libsovereign_web", 1)
     build_pipeline_add_target(pipe, "Web Horizons Suite M1-M5", "tests/test_sovereign_web_horizons.lp", "dist/test_web_m1_m5", 1)
     build_pipeline_add_target(pipe, "Next-Gen Horizons M6-M11", "tests/test_nextgen_web_horizons.lp", "dist/test_web_m6_m11", 1)
     build_pipeline_add_target(pipe, "Framework v2 Suite", "tests/test_sovereign_framework_v2.lp", "dist/test_framework_v2", 1)
     build_pipeline_add_target(pipe, "Commerce Application", "examples/sovereign_commerce.lp", "dist/sovereign_commerce", 1)
     build_pipeline_add_target(pipe, "Pure DNS Resolver", "utso/net/dns_pure.lp", "dist/dns_pure", 1)
     build_pipeline_add_target(pipe, "In-Process TLS 1.3 Server", "utso/net/tls13_server.lp", "dist/tls13_server", 1)
-    build_pipeline_add_target(pipe, "Direct DRM/KMS Engine", "packages/lipi_gui/drm_kms.lp", "dist/drm_kms", 1)
+    build_pipeline_add_target(pipe, "Direct DRM/KMS Engine", "aati/lipi_gui/drm_kms.lp", "dist/drm_kms", 1)
     build_pipeline_add_target(pipe, "Bare-Metal Ring-0 Unikernel", "src/tools/lipi_unikernel_boot.lp", "dist/lipi_unikernel_boot", 1)
     build_pipeline_add_target(pipe, "Absolute Sovereignty Suite", "tests/test_absolute_sovereignty.lp", "dist/test_absolute_sovereignty", 1)
     build_pipeline_add_target(pipe, "PCIe NVMe Storage Controller", "utso/io/nvme_direct.lp", "dist/nvme_direct", 1)
     build_pipeline_add_target(pipe, "VirtIO-Net Card Driver", "utso/net/virtio_net.lp", "dist/virtio_net", 1)
-    build_pipeline_add_target(pipe, "In-Process LLM GGUF Engine", "packages/lipi_ai/llm_engine_pure.lp", "dist/llm_engine_pure", 1)
+    build_pipeline_add_target(pipe, "In-Process LLM GGUF Engine", "aati/lipi_ai/llm_engine_pure.lp", "dist/llm_engine_pure", 1)
     build_pipeline_add_target(pipe, "Formal Verification Engine", "utso/core/formal_proof.lp", "dist/formal_proof", 1)
     build_pipeline_add_target(pipe, "Planetary BFT Consensus", "utso/net/bft_consensus.lp", "dist/bft_consensus", 1)
     build_pipeline_add_target(pipe, "Supreme Frontiers Suite", "tests/test_supreme_frontiers.lp", "dist/test_supreme_frontiers", 1)

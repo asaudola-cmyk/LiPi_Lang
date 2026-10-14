@@ -58,7 +58,7 @@ fn main
     total_tests = total_tests + 1
     pipe = build_pipeline_new()
     build_pipeline_add_target(pipe, "Core Compiler", "src/compiler/driver_cli.lp", "bin/lipc", 1)
-    build_pipeline_add_target(pipe, "Sovereign Framework", "packages/lipi_web/sovereign_framework.lp", "dist/framework", 1)
+    build_pipeline_add_target(pipe, "Sovereign Framework", "aati/lipi_web/sovereign_framework.lp", "dist/framework", 1)
     build_pipeline_add_target(pipe, "Ecosystem Tests", "tests/test_sovereign_fullstack_suite.lp", "dist/test", 1)
 
     ok_p1 = assert_eq(pipe.bp_total_targets, 3, "Pipeline Registered 3 Targets")
@@ -76,7 +76,7 @@ fn main
     
     f1 = installer_add_file(inst, "bin/lipi", "/home/test/.local/bin/lipi", 1)
     f2 = installer_add_file(inst, "bin/lipc", "/home/test/.local/bin/lipc", 1)
-    f3 = installer_add_file(inst, "packages/lipi_web/", "/home/test/.lipi/packages/lipi_web/", 0)
+    f3 = installer_add_file(inst, "aati/lipi_web/", "/home/test/.lipi/aati/lipi_web/", 0)
 
     ok_i1 = assert_eq(f1.if_is_executable, 1, "Binary Marked Executable")
     ok_i2 = assert_eq(f3.if_is_executable, 0, "Library Folder Marked Non-Executable")

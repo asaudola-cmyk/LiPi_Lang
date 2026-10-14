@@ -89,6 +89,10 @@ fn compiler_driver_has_include content
                     return 1
                 if compiler_driver_match_kw(content, p, "@use ") == 1
                     return 1
+                if compiler_driver_match_kw(content, p, "@অন্তর্ভুক্ত ") == 1
+                    return 1
+            elif compiler_driver_match_kw(content, p, "অন্তর্ভুক্ত ") == 1
+                return 1
         while p < clen and mem_byte_read(content, p) != 10
             p = p + 1
         if p < clen and mem_byte_read(content, p) == 10
@@ -168,7 +172,7 @@ fn compiler_driver_resolve_std target
     if target == "std/hashmap.lp" or target == "std/hashmap" return "utso/hashmap.lp"
     if target == "std/fmt.lp" or target == "std/fmt" return "utso/fmt.lp"
     if target == "std/time.lp" or target == "std/time" return "utso/time.lp"
-    if target == "std/json.lp" or target == "std/json" return "packages/json_toolkit/json.lp"
+    if target == "std/json.lp" or target == "std/json" return "aati/json_toolkit/json.lp"
     if target == "std/regex.lp" or target == "std/regex" return "utso/core/regex.lp"
     if target == "std/simd.lp" or target == "std/simd" return "utso/core/simd.lp"
     if target == "std/crypto.lp" or target == "std/crypto" return "utso/crypto.lp"
@@ -181,20 +185,30 @@ fn compiler_driver_resolve_std target
     if target == "std/cli.lp" or target == "std/cli" return "utso/tools/cli.lp"
     if target == "std/debug.lp" or target == "std/debug" return "utso/tools/debug.lp"
     if target == "std/test.lp" or target == "std/test" return "utso/tools/test_runner.lp"
-    if target == "std/ai.lp" or target == "std/ai" return "packages/lipi_ai/tensor_engine.lp"
-    if target == "std/gguf.lp" or target == "std/gguf" return "packages/lipi_ai/gguf.lp"
-    if target == "std/gfx.lp" or target == "std/gfx" return "packages/lipi_gui/gfx.lp"
-    if target == "std/x11.lp" or target == "std/x11" return "packages/lipi_gui/x11/x11.lp"
-    if target == "std/tui.lp" or target == "std/tui" return "packages/lipi_gui/tui.lp"
-    if target == "std/web.lp" or target == "std/web" return "packages/lipi_web/engine.lp"
-    if target == "std/http.lp" or target == "std/http" return "packages/lipi_web/http.lp"
+    if target == "std/ai.lp" or target == "std/ai" return "aati/lipi_ai/tensor_engine.lp"
+    if target == "std/gguf.lp" or target == "std/gguf" return "aati/lipi_ai/gguf.lp"
+    if target == "std/gfx.lp" or target == "std/gfx" return "aati/lipi_gui/gfx.lp"
+    if target == "std/x11.lp" or target == "std/x11" return "aati/lipi_gui/x11/x11.lp"
+    if target == "std/tui.lp" or target == "std/tui" return "aati/lipi_gui/tui.lp"
+    if target == "std/web.lp" or target == "std/web" return "aati/lipi_web/engine.lp"
+    if target == "std/http.lp" or target == "std/http" return "aati/lipi_web/http.lp"
     if target == "std/net.lp" or target == "std/net" return "utso/socket.lp"
-    if target == "std/websocket.lp" or target == "std/websocket" return "packages/lipi_web/ws_wire.lp"
-    if target == "std/grpc.lp" or target == "std/grpc" return "packages/lipi_grpc/grpc_server.lp"
-    if target == "std/db.lp" or target == "std/db" return "packages/lipidb/engine.lp"
-    if target == "std/kv.lp" or target == "std/kv" return "packages/lipidb/kv.lp"
-    if target == "std/orm.lp" or target == "std/orm" return "packages/lipidb/orm.lp"
-    if target == "std/columnstore.lp" or target == "std/columnstore" return "packages/lipidb/column/columnstore.lp"
+    if target == "std/websocket.lp" or target == "std/websocket" return "aati/lipi_web/ws_wire.lp"
+    if target == "std/grpc.lp" or target == "std/grpc" return "aati/lipi_grpc/grpc_server.lp"
+    if target == "std/db.lp" or target == "std/db" return "aati/lipidb/engine.lp"
+    if target == "std/kv.lp" or target == "std/kv" return "aati/lipidb/kv.lp"
+    if target == "std/orm.lp" or target == "std/orm" return "aati/lipidb/orm.lp"
+    if target == "std/columnstore.lp" or target == "std/columnstore" return "aati/lipidb/column/columnstore.lp"
+
+    // 3. Sovereign Aati Primary Shortcuts
+    if target == "aati/web.lp" or target == "aati/web" return "aati/lipi_web/engine.lp"
+    if target == "aati/http.lp" or target == "aati/http" return "aati/lipi_web/http.lp"
+    if target == "aati/db.lp" or target == "aati/db" return "aati/lipidb/engine.lp"
+    if target == "aati/ai.lp" or target == "aati/ai" return "aati/lipi_ai/tensor_engine.lp"
+    if target == "aati/gui.lp" or target == "aati/gui" return "aati/lipi_gui/gfx.lp"
+    if target == "aati/json.lp" or target == "aati/json" return "aati/json_toolkit/json.lp"
+    if target == "aati/tui.lp" or target == "aati/tui" return "aati/lipi_gui/tui.lp"
+    if target == "aati/gfx.lp" or target == "aati/gfx" return "aati/lipi_gui/gfx.lp"
 
     return target
 
@@ -308,6 +322,37 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
     // Tier 3: Sovereign LiPi root (utso standard library, packages, and compiler subsystems)
     // Tier 4: Fallback to raw inc_target for unified compiler diagnostic error reporting
 
+    // Bi-directional dual-alias normalization:
+    // If referencing packages/... and aati/... exists, or vice versa, seamlessly resolve without breaking legacy references.
+    if compiler_driver_starts_with(inc_target, "packages/") == 1
+        aati_equiv = "aati/" + str_sub(inc_target, 9, len(inc_target))
+        if file_exists(aati_equiv + ".lp") == 1 return aati_equiv + ".lp"
+        if file_exists(aati_equiv) == 1 return aati_equiv
+        if cur_dir != "." and len(cur_dir) > 0
+            if file_exists(cur_dir + "/" + aati_equiv + ".lp") == 1 return cur_dir + "/" + aati_equiv + ".lp"
+            if file_exists(cur_dir + "/" + aati_equiv) == 1 return cur_dir + "/" + aati_equiv
+        if len(lipi_root) > 0 and lipi_root != "."
+            if file_exists(lipi_root + "/" + aati_equiv + ".lp") == 1 return lipi_root + "/" + aati_equiv + ".lp"
+            if file_exists(lipi_root + "/" + aati_equiv) == 1 return lipi_root + "/" + aati_equiv
+        if file_exists(inc_target + ".lp") == 0 and file_exists(inc_target) == 0
+            inc_target = aati_equiv
+    elif compiler_driver_starts_with(inc_target, "aati/") == 1
+        pkg_equiv = "packages/" + str_sub(inc_target, 5, len(inc_target))
+        if file_exists(inc_target + ".lp") == 1 return inc_target + ".lp"
+        if file_exists(inc_target) == 1 return inc_target
+        if file_exists(pkg_equiv + ".lp") == 1 return pkg_equiv + ".lp"
+        if file_exists(pkg_equiv) == 1 return pkg_equiv
+        if cur_dir != "." and len(cur_dir) > 0
+            if file_exists(cur_dir + "/" + inc_target + ".lp") == 1 return cur_dir + "/" + inc_target + ".lp"
+            if file_exists(cur_dir + "/" + inc_target) == 1 return cur_dir + "/" + inc_target
+            if file_exists(cur_dir + "/" + pkg_equiv + ".lp") == 1 return cur_dir + "/" + pkg_equiv + ".lp"
+            if file_exists(cur_dir + "/" + pkg_equiv) == 1 return cur_dir + "/" + pkg_equiv
+        if len(lipi_root) > 0 and lipi_root != "."
+            if file_exists(lipi_root + "/" + inc_target + ".lp") == 1 return lipi_root + "/" + inc_target + ".lp"
+            if file_exists(lipi_root + "/" + inc_target) == 1 return lipi_root + "/" + inc_target
+            if file_exists(lipi_root + "/" + pkg_equiv + ".lp") == 1 return lipi_root + "/" + pkg_equiv + ".lp"
+            if file_exists(lipi_root + "/" + pkg_equiv) == 1 return lipi_root + "/" + pkg_equiv
+
     // Prioritize .lp extension to prevent matching filesystem directories
     if cur_dir != "." and len(cur_dir) > 0
         if file_exists(cur_dir + "/" + inc_target + ".lp") == 1
@@ -324,6 +369,10 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
         return "utso/" + inc_target + ".lp"
     if file_exists("utso/" + inc_target) == 1
         return "utso/" + inc_target
+    if file_exists("aati/" + inc_target + ".lp") == 1
+        return "aati/" + inc_target + ".lp"
+    if file_exists("aati/" + inc_target) == 1
+        return "aati/" + inc_target
     if file_exists("packages/" + inc_target + ".lp") == 1
         return "packages/" + inc_target + ".lp"
     if file_exists("packages/" + inc_target) == 1
@@ -333,6 +382,98 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
     if file_exists("src/" + inc_target) == 1
         return "src/" + inc_target
 
+    // Domain mappings for aati/ (e.g. aati/web, aati/db, aati/ai, aati/gui, aati/json, etc.)
+    if compiler_driver_starts_with(inc_target, "aati/") == 1
+        sub_aati = str_sub(inc_target, 5, len(inc_target))
+        if compiler_driver_starts_with(sub_aati, "ai/") == 1
+            cand = "aati/lipi_ai/" + str_sub(sub_aati, 3, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "db/") == 1
+            cand = "aati/lipidb/" + str_sub(sub_aati, 3, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "web/") == 1
+            cand = "aati/lipi_web/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "gui/") == 1
+            cand = "aati/lipi_gui/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "json/") == 1
+            cand = "aati/json_toolkit/" + str_sub(sub_aati, 5, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "crypto/") == 1
+            cand = "aati/crypto_vault/" + str_sub(sub_aati, 7, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "engine3d/") == 1
+            cand = "aati/lipi_engine3d/" + str_sub(sub_aati, 9, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "quantum/") == 1
+            cand = "aati/lipi_quantum/" + str_sub(sub_aati, 8, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "blockchain/") == 1
+            cand = "aati/lipi_blockchain/" + str_sub(sub_aati, 11, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "hypervisor/") == 1
+            cand = "aati/lipi_hypervisor/" + str_sub(sub_aati, 11, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "swarm/") == 1
+            cand = "aati/lipi_swarm/" + str_sub(sub_aati, 6, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "iot/") == 1
+            cand = "aati/lipi_iot/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "media/") == 1
+            cand = "aati/lipi_media/" + str_sub(sub_aati, 6, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "gpu/") == 1
+            cand = "aati/lipi_gpu/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "fs/") == 1
+            cand = "aati/lipi_fs/" + str_sub(sub_aati, 3, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "mobile/") == 1
+            cand = "aati/lipi_mobile/" + str_sub(sub_aati, 7, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "p2p/") == 1
+            cand = "aati/lipi_p2p/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "security/") == 1
+            cand = "aati/lipi_security/" + str_sub(sub_aati, 9, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "boot/") == 1
+            cand = "aati/lipi_boot/" + str_sub(sub_aati, 5, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "ide/") == 1
+            cand = "aati/lipi_ide/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "registry/") == 1
+            cand = "aati/lipi_registry/" + str_sub(sub_aati, 9, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+        elif compiler_driver_starts_with(sub_aati, "pkg/") == 1
+            cand = "aati/lipi_registry/" + str_sub(sub_aati, 4, len(sub_aati))
+            if file_exists(cand + ".lp") == 1 return cand + ".lp"
+            if file_exists(cand) == 1 return cand
+
     // Dynamic translation for legacy universe/ paths:
     if compiler_driver_starts_with(inc_target, "universe/") == 1
         sub_p = str_sub(inc_target, 9, len(inc_target))
@@ -341,90 +482,94 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
             return "utso/" + sub_p + ".lp"
         if file_exists("utso/" + sub_p) == 1
             return "utso/" + sub_p
-        // 2. Try packages/
+        // 2. Try aati/ and packages/
+        if file_exists("aati/" + sub_p + ".lp") == 1
+            return "aati/" + sub_p + ".lp"
+        if file_exists("aati/" + sub_p) == 1
+            return "aati/" + sub_p
         if file_exists("packages/" + sub_p + ".lp") == 1
             return "packages/" + sub_p + ".lp"
         if file_exists("packages/" + sub_p) == 1
             return "packages/" + sub_p
-        // 3. Domain mappings in packages/
+        // 3. Domain mappings in aati/
         if compiler_driver_starts_with(sub_p, "ai/") == 1
-            cand = "packages/lipi_ai/" + str_sub(sub_p, 3, len(sub_p))
+            cand = "aati/lipi_ai/" + str_sub(sub_p, 3, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "db/") == 1
-            cand = "packages/lipidb/" + str_sub(sub_p, 3, len(sub_p))
+            cand = "aati/lipidb/" + str_sub(sub_p, 3, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "web/") == 1
-            cand = "packages/lipi_web/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_web/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "gui/") == 1
-            cand = "packages/lipi_gui/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_gui/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "engine3d/") == 1
-            cand = "packages/lipi_engine3d/" + str_sub(sub_p, 9, len(sub_p))
+            cand = "aati/lipi_engine3d/" + str_sub(sub_p, 9, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "quantum/") == 1
-            cand = "packages/lipi_quantum/" + str_sub(sub_p, 8, len(sub_p))
+            cand = "aati/lipi_quantum/" + str_sub(sub_p, 8, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "blockchain/") == 1
-            cand = "packages/lipi_blockchain/" + str_sub(sub_p, 11, len(sub_p))
+            cand = "aati/lipi_blockchain/" + str_sub(sub_p, 11, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "hypervisor/") == 1
-            cand = "packages/lipi_hypervisor/" + str_sub(sub_p, 11, len(sub_p))
+            cand = "aati/lipi_hypervisor/" + str_sub(sub_p, 11, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "swarm/") == 1
-            cand = "packages/lipi_swarm/" + str_sub(sub_p, 6, len(sub_p))
+            cand = "aati/lipi_swarm/" + str_sub(sub_p, 6, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "iot/") == 1
-            cand = "packages/lipi_iot/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_iot/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "media/") == 1
-            cand = "packages/lipi_media/" + str_sub(sub_p, 6, len(sub_p))
+            cand = "aati/lipi_media/" + str_sub(sub_p, 6, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "gpu/") == 1
-            cand = "packages/lipi_gpu/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_gpu/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "fs/") == 1
-            cand = "packages/lipi_fs/" + str_sub(sub_p, 3, len(sub_p))
+            cand = "aati/lipi_fs/" + str_sub(sub_p, 3, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "mobile/") == 1
-            cand = "packages/lipi_mobile/" + str_sub(sub_p, 7, len(sub_p))
+            cand = "aati/lipi_mobile/" + str_sub(sub_p, 7, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "p2p/") == 1
-            cand = "packages/lipi_p2p/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_p2p/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "security/") == 1
-            cand = "packages/lipi_security/" + str_sub(sub_p, 9, len(sub_p))
+            cand = "aati/lipi_security/" + str_sub(sub_p, 9, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "boot/") == 1
-            cand = "packages/lipi_boot/" + str_sub(sub_p, 5, len(sub_p))
+            cand = "aati/lipi_boot/" + str_sub(sub_p, 5, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "ide/") == 1
-            cand = "packages/lipi_ide/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_ide/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "registry/") == 1
-            cand = "packages/lipi_registry/" + str_sub(sub_p, 9, len(sub_p))
+            cand = "aati/lipi_registry/" + str_sub(sub_p, 9, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "pkg/") == 1
-            cand = "packages/lipi_registry/" + str_sub(sub_p, 4, len(sub_p))
+            cand = "aati/lipi_registry/" + str_sub(sub_p, 4, len(sub_p))
             if file_exists(cand + ".lp") == 1 return cand + ".lp"
             if file_exists(cand) == 1 return cand
         elif compiler_driver_starts_with(sub_p, "tools/") == 1
@@ -446,6 +591,10 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
             return lipi_root + "/utso/" + inc_target + ".lp"
         if file_exists(lipi_root + "/utso/" + inc_target) == 1
             return lipi_root + "/utso/" + inc_target
+        if file_exists(lipi_root + "/aati/" + inc_target + ".lp") == 1
+            return lipi_root + "/aati/" + inc_target + ".lp"
+        if file_exists(lipi_root + "/aati/" + inc_target) == 1
+            return lipi_root + "/aati/" + inc_target
         if file_exists(lipi_root + "/packages/" + inc_target + ".lp") == 1
             return lipi_root + "/packages/" + inc_target + ".lp"
         if file_exists(lipi_root + "/packages/" + inc_target) == 1
@@ -498,7 +647,7 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
         inc_target = ""
         plen = 0
 
-        // Fast prefix check: only check include/import if line starts with 'i' (105) or '@' (64)
+        // Fast prefix check: only check include/import if line starts with 'i' (105) or '@' (64) or Bengali 'অ'
         if p < clen
             b0 = mem_byte_read(content, p)
             if b0 == 105 // 'i'
@@ -511,6 +660,10 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
                     plen = 9
                 elif compiler_driver_match_kw(content, p, "@use ") == 1
                     plen = 5
+                elif compiler_driver_match_kw(content, p, "@অন্তর্ভুক্ত ") == 1
+                    plen = 35
+            elif compiler_driver_match_kw(content, p, "অন্তর্ভুক্ত ") == 1
+                plen = 34
 
         if plen > 0 and p + plen < clen
             // Skip spaces between keyword and opening quote
@@ -559,9 +712,22 @@ fn compiler_driver_bundle_source file_path visited
     chunks = list()
     lipi_root = compiler_driver_get_lipi_root()
     real_path = file_path
-    if file_exists(real_path) == 0 and len(lipi_root) > 0 and lipi_root != "."
-        if file_exists(lipi_root + "/" + file_path) == 1
-            real_path = lipi_root + "/" + file_path
+    if file_exists(real_path) == 0
+        if compiler_driver_starts_with(real_path, "packages/") == 1
+            cand_aati = "aati/" + str_sub(real_path, 9, len(real_path))
+            if file_exists(cand_aati) == 1
+                real_path = cand_aati
+            elif len(lipi_root) > 0 and file_exists(lipi_root + "/" + cand_aati) == 1
+                real_path = lipi_root + "/" + cand_aati
+        elif compiler_driver_starts_with(real_path, "aati/") == 1
+            cand_pkg = "packages/" + str_sub(real_path, 5, len(real_path))
+            if file_exists(cand_pkg) == 1
+                real_path = cand_pkg
+            elif len(lipi_root) > 0 and file_exists(lipi_root + "/" + cand_pkg) == 1
+                real_path = lipi_root + "/" + cand_pkg
+        elif len(lipi_root) > 0 and lipi_root != "."
+            if file_exists(lipi_root + "/" + file_path) == 1
+                real_path = lipi_root + "/" + file_path
     compiler_driver_bundle_into_chunks(real_path, visited, chunks, lipi_root)
     return compiler_driver_join_chunks(chunks)
 
@@ -581,6 +747,23 @@ fn compiler_driver_print_banner
 fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug
     // WHY: Advanced compilation entry point supporting DWARF debug symbols (-g) and Shared Object (.so) format.
     // Constrained to <= 6 SysV parameters for zero register spilling across micro-pipelines.
+    lipi_root = compiler_driver_get_lipi_root()
+    if file_exists(src_path) == 0
+        if compiler_driver_starts_with(src_path, "packages/") == 1
+            cand_aati = "aati/" + str_sub(src_path, 9, len(src_path))
+            if file_exists(cand_aati) == 1
+                src_path = cand_aati
+            elif len(lipi_root) > 0 and file_exists(lipi_root + "/" + cand_aati) == 1
+                src_path = lipi_root + "/" + cand_aati
+        elif compiler_driver_starts_with(src_path, "aati/") == 1
+            cand_pkg = "packages/" + str_sub(src_path, 5, len(src_path))
+            if file_exists(cand_pkg) == 1
+                src_path = cand_pkg
+            elif len(lipi_root) > 0 and file_exists(lipi_root + "/" + cand_pkg) == 1
+                src_path = lipi_root + "/" + cand_pkg
+        elif len(lipi_root) > 0 and lipi_root != "."
+            if file_exists(lipi_root + "/" + src_path) == 1
+                src_path = lipi_root + "/" + src_path
     visited = list()
     source_code = compiler_driver_bundle_source(src_path, visited)
     if len(source_code) == 0

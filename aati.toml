@@ -1,0 +1,37 @@
+# ==============================================================================
+# 👑 aati.toml — লিপি মহাবিশ্ব সার্বভৌম আঁটি ম্যানিফেস্ট
+# ⚡ 100% Pure Direct Silicon Machine Code | 0% C | 0% GCC | 0% Libc | 0% Python
+# ==============================================================================
+
+[package]
+name = "lipi"
+version = "1.0.0"
+authors = ["Shafiullah <shafiullah@lipi.dev>"]
+edition = "2026"
+description = "👑 Lipi Sovereign Programming Language & Computing Universe (Tri-Syntax: Bengali + English + Lipi Directive Syntax)"
+license = "MIT / Sovereign-Core-License"
+repository = "https://github.com/asaudola-cmyk/LiPi_Lang.git"
+entry = "src/tools/lipi.lp"
+
+[dependencies]
+# ⚡ Lipi Sovereign Universe — 0% Outside Help
+
+[build]
+target = "x86_64-unknown-linux-musl-freestanding"
+compiler = "bin/lipc"
+opt_level = 3
+
+[workspace]
+members = [
+    "aati/math_extra",
+    "aati/web_router",
+    "aati/crypto_vault",
+    "aati/json_toolkit",
+    "aati/sovereign_mesh",
+    "aati/lipi_dataframe",
+    "aati/lipi_grpc",
+    "aati/lipi_http_client",
+    "aati/lipi_jwt",
+    "aati/lipi_sql"
+]
+

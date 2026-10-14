@@ -108,7 +108,8 @@ fn installer_print_summary engine
     say "\nCommands available system-wide:"
     say "  • lipi      -> Native Runner & Interactive REPL"
     say "  • lipc      -> Direct Machine Code ELF Compiler"
-    say "  • lipipkg   -> Sovereign Package Manager"
+    say "  • aati/haat -> Sovereign Package Manager & Haat Registry"
+    say "  • lipipkg   -> Sovereign Package Manager (Legacy Alias)"
     say "  • lipifmt   -> Canonical Code Formatter"
     say "  • lipidbg   -> Kernel & System Debugger"
 
@@ -126,13 +127,15 @@ fn main
     installer_add_file(engine, "bin/lipi", bin_dir + "/lipi", 1)
     installer_add_file(engine, "bin/lipc", bin_dir + "/lipc", 1)
     installer_add_file(engine, "bin/lipc_bin", bin_dir + "/lipc_bin", 1)
+    installer_add_file(engine, "bin/aati", bin_dir + "/aati", 1)
+    installer_add_file(engine, "bin/haat", bin_dir + "/haat", 1)
     installer_add_file(engine, "bin/lipipkg", bin_dir + "/lipipkg", 1)
     installer_add_file(engine, "bin/lipifmt", bin_dir + "/lipifmt", 1)
     installer_add_file(engine, "bin/lipidbg", bin_dir + "/lipidbg", 1)
     installer_add_file(engine, "bin/lipilsp", bin_dir + "/lipilsp", 1)
     installer_add_file(engine, "bin/lipidb_server", bin_dir + "/lipidb_server", 1)
     installer_add_file(engine, "utso/", home_dir + "/utso/", 0)
-    installer_add_file(engine, "packages/", home_dir + "/packages/", 0)
+    installer_add_file(engine, "aati/", home_dir + "/aati/", 0)
     installer_add_file(engine, "src/tools/lipi_unikernel_boot.lp", home_dir + "/src/tools/lipi_unikernel_boot.lp", 0)
 
     say "\n▶ Deploying Sovereign Toolchain and Standard Universe..."

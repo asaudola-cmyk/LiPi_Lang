@@ -40,7 +40,9 @@ build: bootstrap
 		(cd editors/vscode && zip -rq ../../dist/lipi-language-1.0.0.vsix . >/dev/null 2>&1 || true); \
 	fi
 	@./bin/lipc src/tools/lipi.lp bin/lipi && chmod +x bin/lipi
-	@./bin/lipc src/tools/lipipkg.lp bin/lipipkg && chmod +x bin/lipipkg
+	@./bin/lipc src/tools/aati.lp bin/aati && chmod +x bin/aati
+	@cp -f bin/aati bin/haat && chmod +x bin/haat
+	@cp -f bin/aati bin/lipipkg && chmod +x bin/lipipkg
 	@./bin/lipc src/tools/lipilsp.lp bin/lipilsp && chmod +x bin/lipilsp
 	@./bin/lipc src/tools/lipidbg.lp bin/lipidbg && chmod +x bin/lipidbg
 	@./bin/lipc src/tools/lipifmt.lp bin/lipifmt && chmod +x bin/lipifmt
@@ -56,7 +58,7 @@ build: bootstrap
 release: build
 	@echo "📦 Packaging sovereign standalone release distribution..."
 	@mkdir -p dist
-	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ packages/ examples/ install.sh LICENSE README.md
+	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
 	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
 # Run autonomous 203 regression test suite

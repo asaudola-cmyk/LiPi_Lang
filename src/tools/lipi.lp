@@ -34,8 +34,9 @@ fn print_usage
     say "  \033[1;32mtest\033[0m [suite]             Execute autonomous test suites (0% Shell)"
     say "  \033[1;32mrepl\033[0m                    Launch interactive REPL terminal session"
     say "  \033[1;32mfmt\033[0m <file.lp>            Format source code to canonical 3-syntax standard"
-    say "  \033[1;32mlsp\033[0m                     Launch Language Server Protocol daemon (IDE Server)"
-    say "  \033[1;32mpkg\033[0m <subcommand>        Sovereign Ed25519 cryptographic package manager (LPM)"
+    say "  \033[1;32maati|আঁটি\033[0m <subcommand>   Sovereign Ed25519 cryptographic package manager (Aati/LPM)"
+    say "  \033[1;32mhaat|হাট\033[0m [cmd|port]     Sovereign distributed package registry daemon & hub"
+    say "  \033[1;32mpkg\033[0m <subcommand>        Legacy alias for 'aati' package manager"
     say "  \033[1;32mdebug\033[0m <binary>          Launch sys_ptrace native system debugger (LipiDbg)"
     say "  \033[1;32mos|unikernel\033[0m [build|boot] Bare-metal Multiboot kernel & 5ms cloud unikernel"
     say "  \033[1;32munum\033[0m <file.lp>          Synthesize Gödel Universal Prime State Number"
@@ -423,8 +424,31 @@ fn handle_debug target
         return 1
     return spawn_exec_cmd(resolve_bin_path("lipidbg"), target, "", "", "")
 
-fn handle_pkg subcmd arg1 arg2
-    return spawn_exec_cmd(resolve_bin_path("lipipkg"), subcmd, arg1, arg2, "")
+fn handle_aati subcmd arg1 arg2 arg3
+    bin_path = resolve_bin_path("aati")
+    if syscall(21, bin_path, 0, 0, 0, 0, 0) != 0
+        bin_path = resolve_bin_path("haat")
+    if syscall(21, bin_path, 0, 0, 0, 0, 0) != 0
+        bin_path = resolve_bin_path("lipipkg")
+    return spawn_exec_cmd(bin_path, subcmd, arg1, arg2, arg3)
+
+fn handle_haat subcmd arg1 arg2 arg3
+    bin_path = resolve_bin_path("haat")
+    if syscall(21, bin_path, 0, 0, 0, 0, 0) != 0
+        bin_path = resolve_bin_path("aati")
+    if syscall(21, bin_path, 0, 0, 0, 0, 0) != 0
+        bin_path = resolve_bin_path("lipipkg")
+    if len(subcmd) == 0
+        subcmd = "chalu"
+    elif len(subcmd) > 0 and ord(char_at(subcmd, 0)) >= 48 and ord(char_at(subcmd, 0)) <= 57
+        arg3 = arg2
+        arg2 = arg1
+        arg1 = subcmd
+        subcmd = "chalu"
+    return spawn_exec_cmd(bin_path, subcmd, arg1, arg2, arg3)
+
+fn handle_pkg subcmd arg1 arg2 arg3
+    return handle_aati(subcmd, arg1, arg2, arg3)
 
 fn handle_repl
     say "⚡ Launching Lipi Interactive REPL..."
@@ -540,11 +564,15 @@ fn handle_update
     copy_file_direct(out_lipc, l_root + "/bin/lipc_micro")
 
     // 3. Rebuild developer toolchain
-    say "\033[1;36m[LIPI UPDATE]\033[0m Rebuilding developer toolchain (lipi, lipipkg, lipilsp, lipidbg, lipifmt)..."
+    say "\033[1;36m[LIPI UPDATE]\033[0m Rebuilding developer toolchain (lipi, aati, haat, lipilsp, lipidbg, lipifmt)..."
     new_lipc = l_root + "/bin/lipc"
     spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipi.lp", l_root + "/bin/lipi", "", "")
     syscall(90, l_root + "/bin/lipi", 493, 0, 0, 0, 0)
-    spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipipkg.lp", l_root + "/bin/lipipkg", "", "")
+    spawn_exec_cmd(new_lipc, l_root + "/src/tools/aati.lp", l_root + "/bin/aati", "", "")
+    syscall(90, l_root + "/bin/aati", 493, 0, 0, 0, 0)
+    copy_file_direct(l_root + "/bin/aati", l_root + "/bin/haat")
+    syscall(90, l_root + "/bin/haat", 493, 0, 0, 0, 0)
+    copy_file_direct(l_root + "/bin/aati", l_root + "/bin/lipipkg")
     syscall(90, l_root + "/bin/lipipkg", 493, 0, 0, 0, 0)
     spawn_exec_cmd(new_lipc, l_root + "/src/tools/lipilsp.lp", l_root + "/bin/lipilsp", "", "")
     syscall(90, l_root + "/bin/lipilsp", 493, 0, 0, 0, 0)
@@ -574,6 +602,8 @@ fn handle_update
             copy_file_direct(l_root + "/bin/lipc_bin", local_b + "/lipc_bin")
             copy_file_direct(l_root + "/bin/lipc_micro", local_b + "/lipc_micro")
             copy_file_direct(l_root + "/bin/lipi", local_b + "/lipi")
+            copy_file_direct(l_root + "/bin/aati", local_b + "/aati")
+            copy_file_direct(l_root + "/bin/haat", local_b + "/haat")
             copy_file_direct(l_root + "/bin/lipipkg", local_b + "/lipipkg")
             copy_file_direct(l_root + "/bin/lipilsp", local_b + "/lipilsp")
             copy_file_direct(l_root + "/bin/lipilsp", local_b + "/lipils")
@@ -863,14 +893,18 @@ fn main
             return 1
         return handle_debug(get(args, 2))
 
-    if cmd == "pkg"
+    if cmd == "pkg" or cmd == "aati" or cmd == "haat" or cmd == "আঁটি" or cmd == "হাট"
         sub = ""
         a1 = ""
         a2 = ""
+        a3 = ""
         if argc >= 3 sub = get(args, 2)
         if argc >= 4 a1 = get(args, 3)
         if argc >= 5 a2 = get(args, 4)
-        return handle_pkg(sub, a1, a2)
+        if argc >= 6 a3 = get(args, 5)
+        if cmd == "haat" or cmd == "হাট"
+            return handle_haat(sub, a1, a2, a3)
+        return handle_aati(sub, a1, a2, a3)
 
     if cmd == "repl"
         return handle_repl()

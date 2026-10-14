@@ -3205,7 +3205,7 @@ fn arm64_map_legacy_stdlib inc_name
     // 3. Legacy 'std/*' standard aliases:
     if inc_name == "std/crypto.lp" or inc_name == "std/crypto" return "utso/crypto.lp"
     if inc_name == "std/crypto2.lp" or inc_name == "std/crypto2" return "utso/crypto.lp"
-    if inc_name == "std/tls.lp" or inc_name == "std/tls" return "packages/crypto_vault/crypto_vault.lp"
+    if inc_name == "std/tls.lp" or inc_name == "std/tls" return "aati/crypto_vault/crypto_vault.lp"
     if inc_name == "std/mem.lp" or inc_name == "std/mem" return "utso/memory.lp"
     if inc_name == "std/io.lp" or inc_name == "std/io" return "utso/io.lp"
     if inc_name == "std/str.lp" or inc_name == "std/str" return "utso/string.lp"
@@ -3214,22 +3214,47 @@ fn arm64_map_legacy_stdlib inc_name
     if inc_name == "std/hashmap.lp" or inc_name == "std/hashmap" return "utso/hashmap.lp"
     if inc_name == "std/fmt.lp" or inc_name == "std/fmt" return "utso/fmt.lp"
     if inc_name == "std/time.lp" or inc_name == "std/time" return "utso/time.lp"
-    if inc_name == "std/json.lp" or inc_name == "std/json" return "packages/json_toolkit/json.lp"
+    if inc_name == "std/json.lp" or inc_name == "std/json" return "aati/json_toolkit/json.lp"
     if inc_name == "std/regex.lp" or inc_name == "std/regex" return "utso/core/regex.lp"
     if inc_name == "std/simd.lp" or inc_name == "std/simd" return "utso/core/simd.lp"
-    if inc_name == "std/web.lp" or inc_name == "std/web" return "packages/lipi_web/engine.lp"
-    if inc_name == "std/http.lp" or inc_name == "std/http" return "packages/lipi_web/http.lp"
+    if inc_name == "std/web.lp" or inc_name == "std/web" return "aati/lipi_web/engine.lp"
+    if inc_name == "std/http.lp" or inc_name == "std/http" return "aati/lipi_web/http.lp"
     if inc_name == "std/net.lp" or inc_name == "std/net" return "utso/socket.lp"
-    if inc_name == "std/db.lp" or inc_name == "std/db" return "packages/lipidb/engine.lp"
-    if inc_name == "std/ai.lp" or inc_name == "std/ai" return "packages/lipi_ai/tensor_engine.lp"
-    if inc_name == "std/gfx.lp" or inc_name == "std/gfx" return "packages/lipi_gui/gfx.lp"
-    if inc_name == "std/tui.lp" or inc_name == "std/tui" return "packages/lipi_gui/tui.lp"
+    if inc_name == "std/db.lp" or inc_name == "std/db" return "aati/lipidb/engine.lp"
+    if inc_name == "std/ai.lp" or inc_name == "std/ai" return "aati/lipi_ai/tensor_engine.lp"
+    if inc_name == "std/gfx.lp" or inc_name == "std/gfx" return "aati/lipi_gui/gfx.lp"
+    if inc_name == "std/tui.lp" or inc_name == "std/tui" return "aati/lipi_gui/tui.lp"
+
+    // 4. Sovereign Aati Shortcuts:
+    if inc_name == "aati/web.lp" or inc_name == "aati/web" return "aati/lipi_web/engine.lp"
+    if inc_name == "aati/db.lp" or inc_name == "aati/db" return "aati/lipidb/engine.lp"
+    if inc_name == "aati/ai.lp" or inc_name == "aati/ai" return "aati/lipi_ai/tensor_engine.lp"
+    if inc_name == "aati/gui.lp" or inc_name == "aati/gui" return "aati/lipi_gui/gfx.lp"
+    if inc_name == "aati/json.lp" or inc_name == "aati/json" return "aati/json_toolkit/json.lp"
     return ""
 
 fn arm64_resolve_inc_path cur_dir inc_name
     legacy = arm64_map_legacy_stdlib(inc_name)
     if len(legacy) > 0
         return legacy
+
+    // Dual-alias normalization: packages/ <-> aati/
+    if len(inc_name) > 9 and arm64_str_sub(inc_name, 0, 9) == "packages/"
+        aati_target = "aati/" + arm64_str_sub(inc_name, 9, len(inc_name))
+        if file_exists(aati_target + ".lp") == 1 return aati_target + ".lp"
+        if file_exists(aati_target) == 1 return aati_target
+        if cur_dir != "." and len(cur_dir) > 0
+            if file_exists(cur_dir + "/" + aati_target + ".lp") == 1 return cur_dir + "/" + aati_target + ".lp"
+            if file_exists(cur_dir + "/" + aati_target) == 1 return cur_dir + "/" + aati_target
+        if file_exists(inc_name + ".lp") == 0 and file_exists(inc_name) == 0
+            inc_name = aati_target
+    elif len(inc_name) > 5 and arm64_str_sub(inc_name, 0, 5) == "aati/"
+        pkg_target = "packages/" + arm64_str_sub(inc_name, 5, len(inc_name))
+        if file_exists(inc_name + ".lp") == 1 return inc_name + ".lp"
+        if file_exists(inc_name) == 1 return inc_name
+        if file_exists(pkg_target + ".lp") == 1 return pkg_target + ".lp"
+        if file_exists(pkg_target) == 1 return pkg_target
+
     if file_exists(inc_name + ".lp") == 1
         return inc_name + ".lp"
     if file_exists(inc_name) == 1
@@ -3240,6 +3265,12 @@ fn arm64_resolve_inc_path cur_dir inc_name
     cand_utso_raw = "utso/" + inc_name
     if file_exists(cand_utso_raw) == 1
         return cand_utso_raw
+    cand_aati = "aati/" + inc_name + ".lp"
+    if file_exists(cand_aati) == 1
+        return cand_aati
+    cand_aati_raw = "aati/" + inc_name
+    if file_exists(cand_aati_raw) == 1
+        return cand_aati_raw
     cand_pkg = "packages/" + inc_name + ".lp"
     if file_exists(cand_pkg) == 1
         return cand_pkg
@@ -3271,6 +3302,12 @@ fn arm64_has_include content
             if ord(char_at(content, p)) == 224
                 if arm64_str_sub(content, p, p + 34) == "অন্তর্ভুক্ত "
                     q = char_at(content, p+34)
+                    if q == "\"" or q == "'"
+                        return 1
+        if p + 36 < clen
+            if char_at(content, p) == "@" and ord(char_at(content, p+1)) == 224
+                if arm64_str_sub(content, p+1, p + 35) == "অন্তর্ভুক্ত "
+                    q = char_at(content, p+35)
                     if q == "\"" or q == "'"
                         return 1
         while p < clen and char_at(content, p) != "\n"
@@ -3320,6 +3357,19 @@ fn arm64_bundle_source file_path visited
                     q = char_at(content, p+34)
                     if q == "\"" or q == "'"
                         p_tstart = p + 35
+                        p_tend = p_tstart
+                        while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
+                            p_tend = p_tend + 1
+                        if p_tend < clen and char_at(content, p_tend) == q
+                            is_inc = 1
+                            inc_target = arm64_str_sub(content, p_tstart, p_tend)
+
+        if is_inc == 0 and p + 36 < clen
+            if char_at(content, p) == "@" and ord(char_at(content, p+1)) == 224
+                if arm64_str_sub(content, p+1, p + 35) == "অন্তর্ভুক্ত "
+                    q = char_at(content, p+35)
+                    if q == "\"" or q == "'"
+                        p_tstart = p + 36
                         p_tend = p_tstart
                         while p_tend < clen and char_at(content, p_tend) != q and char_at(content, p_tend) != "\n"
                             p_tend = p_tend + 1

@@ -1,0 +1,13 @@
+# ==============================================================================
+# 👑 LIPI SOVEREIGN PACKAGE MANIFEST (aati.toml)
+# Package: lipi_torch
+# ==============================================================================
+
+name = "lipi_torch"
+version = "1.0.0"
+description = "Pure sovereign deep learning tensor framework and neural autograd"
+author = "Shafiullah"
+license = "MIT"
+
+[dependencies]
+# Zero external dependencies — 100% pure Lipi

@@ -232,7 +232,7 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
-    if run_single_test(compiler, "tests/27_lipipkg_project_lifecycle.lp", "27_lipipkg_project_lifecycle") == 1
+    if run_single_test(compiler, "tests/27_aati_project_lifecycle.lp", "27_aati_project_lifecycle") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -300,7 +300,7 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
-    if run_single_test(compiler, "tests/44_lipipkg_manifest.lp", "44_lipipkg_manifest") == 1
+    if run_single_test(compiler, "tests/44_aati_manifest.lp", "44_aati_manifest") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -388,7 +388,7 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
-    if run_single_test(compiler, "tests/67_package_security_ed25519.lp", "67_package_security_ed25519") == 1
+    if run_single_test(compiler, "tests/67_aati_security_ed25519.lp", "67_aati_security_ed25519") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -544,7 +544,7 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
-    if run_single_test(compiler, "tests/test_lipipkg_hub.lp", "test_lipipkg_hub") == 1
+    if run_single_test(compiler, "tests/test_aati_hub.lp", "test_aati_hub") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -600,7 +600,7 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
-    if run_single_test(compiler, "tests/test_registry_server.lp", "test_registry_server") == 1
+    if run_single_test(compiler, "tests/test_haat_server.lp", "test_haat_server") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -700,7 +700,7 @@ fn main
         passed = passed + 1
     else
         failed = failed + 1
-    if run_single_test(compiler, "tests/test_enterprise_packages.lp", "test_enterprise_packages") == 1
+    if run_single_test(compiler, "tests/test_enterprise_aati.lp", "test_enterprise_aati") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -856,8 +856,8 @@ fn main
     else
         failed = failed + 1
 
-    // 178: Sovereign Package Hub & SemVer 2.0.0 Lifecycle Engine
-    if run_single_test(compiler, "tests/test_package_hub_lifecycle.lp", "test_package_hub_lifecycle") == 1
+    // 178: Sovereign Aati Hub & SemVer 2.0.0 Lifecycle Engine
+    if run_single_test(compiler, "tests/test_aati_hub_lifecycle.lp", "test_aati_hub_lifecycle") == 1
         passed = passed + 1
     else
         failed = failed + 1
@@ -916,8 +916,8 @@ fn main
     else
         failed = failed + 1
 
-    // 188: Sovereign Package Hub CLI & Cache End-to-End Lifecycle
-    if run_single_test(compiler, "tests/test_lipipkg_cli_e2e.lp", "test_lipipkg_cli_e2e") == 1
+    // 188: Sovereign Aati CLI & Cache End-to-End Lifecycle
+    if run_single_test(compiler, "tests/test_aati_cli_e2e.lp", "test_aati_cli_e2e") == 1
         passed = passed + 1
     else
         failed = failed + 1
