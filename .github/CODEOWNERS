@@ -11,10 +11,10 @@
 # Standard library — changes affect all Lipi programs
 /std/                   @asaudola-cmyk
 /utso/                  @asaudola-cmyk
-/packages/              @asaudola-cmyk
+/aati/                  @asaudola-cmyk
 
 
-# Toolchain binaries — lipipkg, lipidbg, lipirepl, lipiconvert
+# Toolchain binaries — aati, lipidbg, lipirepl, lipiconvert
 /src/tools/             @asaudola-cmyk
 
 # Bootstrap seed — CRITICAL: this is the single pre-compiled binary

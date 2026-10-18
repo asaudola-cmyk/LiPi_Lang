@@ -24,7 +24,7 @@ LiPi supports three syntax dialects simultaneously mapped to the same Abstract S
 2. **English Canonical Syntax**: `struct`, `fn`, `if`, `else`, `while`, `return`
 3. **Directive System Syntax**: `@struct`, `@fn`, `@if`, `@else`, `@while`, `@end`
 
-New features in standard libraries (`utso/` and `packages/`) should provide both canonical English and native Bengali aliases.
+New features in standard libraries (`utso/` and `aati/`) should provide both canonical English and native Bengali aliases.
 
 ### 4. Deterministic 4-Stage Bootstrap Closure
 Any change to `src/compiler/` must maintain 100% bit-for-bit reproducibility across self-hosting compiler stages:
@@ -59,7 +59,7 @@ bin/lipc tests/run_tests.lp /tmp/run_tests && /tmp/run_tests
 ```
 
 ### 4. Running the Ecosystem Build
-To verify all 22 sovereign ecosystem targets:
+To verify all 29 sovereign ecosystem targets:
 ```bash
 ./bin/lipi-build
 ```
@@ -72,7 +72,7 @@ To verify all 22 sovereign ecosystem targets:
 lipi/
 ├── bin/                   # Compiled sovereign binaries (lipc, lipi, lipi-build)
 ├── docs/                  # Architectural specs, handbook, and tutorials
-├── packages/              # Sovereign package ecosystem (Web, DB, AI, GUI, Engine3D, etc.)
+├── aati/                  # Sovereign bundle ecosystem (Web, DB, AI, GUI, Engine3D, etc.)
 ├── src/
 │   ├── compiler/          # Micro-pipeline compiler modules (strictly <= 35KB each)
 │   │   ├── diagnostics/   # Color themes, line index, source map, suggestions

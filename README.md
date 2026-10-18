@@ -87,7 +87,7 @@ Lipi features a self-hosted 5-stage compiler pipeline with dual native silicon e
 2. **Object-Oriented Struct Methods:** Modern `fn Struct.method self arg1 arg2` syntax compiled to zero-cost static dispatch via System V AMD64 and ARM64 register passing ABI.
 3. **Peephole Machine Code Optimization:** Automatically replaces 10-byte immediate zero moves (`movabsq $0, %reg`) with 2-byte `xor reg32, reg32` instructions, achieving 80% code density reduction and 0-cycle silicon execution via register renaming.
 4. **Embedded Multiboot 1 Kernel Specification:** Embeds `0x1BADB002` headers at offset 124, allowing binaries to boot on baremetal hardware or QEMU without an underlying operating system.
-5. **First-Class Web Engine (`packages/lipi_web/`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
+5. **First-Class Web Engine (`aati/lipi_web/`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
 6. **Native Multithreading (`utso/os/thread.lp`):** Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`utso/arena.lp`).
 
 For full technical specifications, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -206,7 +206,8 @@ lipi/
 │   ├── lipc             # Sovereign compiler driver (direct ELF64, ARM64, WASM)
 │   ├── lipc_bin         # Native silicon machine code compiler engine
 │   ├── lipi             # Universal CLI driver, runner & REPL evaluator
-│   ├── lipipkg          # Sovereign package manager with Ed25519 cryptographic signing
+│   ├── aati             # Sovereign Ed25519 package manager & bundle builder (legacy alias: lipipkg)
+│   ├── haat             # Sovereign decentralized package registry daemon & hub
 │   ├── lipidbg          # Native hardware stack, register & breakpoint (INT3) debugger
 │   ├── lipirepl         # Live silicon REPL with RDTSC CPU timer & memory hex inspection
 │   ├── lipifmt          # Idiomatic 4-space code formatter
@@ -235,13 +236,13 @@ lipi/
   ```bash
   lipidbg build/hello_app
   ```
-- **Package Manager (`lipipkg`):** Scaffolding, builds, tests, and Ed25519 authentic package signing:
+- **Sovereign Package Manager (`aati` / `আঁটি`):** Scaffolding, dependency management, `.aati` bundle builds, and Ed25519 authentic cryptographic signing (with `lipipkg` preserved as legacy alias):
   ```bash
-  lipipkg init my_project
-  lipipkg build
-  lipipkg test
-  lipipkg sign my_project
-  lipipkg verify my_project
+  aati init my_project
+  aati build
+  aati test
+  aati sign my_project
+  aati verify my_project
   ```
 - **Code Formatter (`lipifmt`):** Format code with deterministic 4-space indentation:
   ```bash
@@ -254,7 +255,7 @@ lipi/
 
 ---
 
-## 🌐 Dual Architecture: Genesis Primitives (`utso/`) & Sovereign Packages (`packages/`)
+## 🌐 Dual Architecture: Genesis Primitives (`utso/`) & Sovereign Bundles (`aati/`)
 
 LiPi's modular ecosystem is organized into two sovereign, highly decoupled tiers with zero external C/libc dependencies:
 
@@ -273,10 +274,10 @@ include "utso/memory"
 include "utso/string"
 ```
 
-### 2. `packages/` (Domain Modules with `lipipkg.toml` Manifests)
-Domain modules organized as sovereign packages with cryptographic package manifests (`lipipkg.toml`):
+### 2. `aati/` (আঁটি — Sovereign Bundles with `aati.toml` Manifests)
+Domain modules organized as sovereign packages with cryptographic package manifests (`aati.toml`):
 
-| Sovereign Package | Core Modules | Key Capabilities |
+| Sovereign Bundle | Core Modules | Key Capabilities |
 |---|---|---|
 | **`lipi_ai`** | `tensor.lp`, `autograd.lp`, `llm_inference.lp`, `gguf.lp` | N-dimensional Tensors, reverse-mode autodiff, GGUF quantized local LLM transformer inference |
 | **`lipidb`** | `engine.lp`, `kv.lp`, `btree.lp`, `mvcc.lp`, `wal.lp` | ACID LipiKV embedded database, B+Tree indexing, WAL crash recovery, Redis-compatible protocol |
@@ -291,11 +292,11 @@ Domain modules organized as sovereign packages with cryptographic package manife
 | **`lipi_iot`** | `mqtt.lp`, `sensor.lp`, `gateway.lp` | MQTT client, hardware sensor telemetry, embedded edge gateway |
 | **`lipi_media`** | `audio_wav.lp`, `video_canvas.lp` | Pure WAV audio synthesis, video canvas blitting |
 | **`lipi_mobile`** | `mobile.lp`, `platform.lp`, `storage.lp` | Sovereign mobile application runtime and sandbox storage |
-| **`lipi_p2p`** | `dht.lp`, `lipipkg_client.lp`, `registry.lp` | Kademlia DHT, peer-to-peer package distribution |
+| **`lipi_p2p`** | `dht.lp`, `aati_client.lp`, `registry.lp` | Kademlia DHT, peer-to-peer package distribution |
 | **`lipi_security`** | `jwt.lp`, `zkp.lp`, `sandbox.lp` | Zero-knowledge proofs, JWT auth, seccomp sandbox |
 | **`lipi_boot`** | `uefi_boot.lp`, `baremetal_kernel.lp` | Bare-metal Multiboot & UEFI bootloader, freestanding kernel |
 | **`lipi_ide`** | `studio.lp`, `editor.lp`, `lsp_client.lp` | Sovereign IDE studio, syntax highlighter, integrated LSP client |
-| **`lipi_registry`** | `registry.lp`, `semver.lp`, `lipipkg_hub.lp` | Decentralized package registry, SemVer 2.0.0 resolver, deterministic lockfiles |
+| **`lipi_registry`** | `registry.lp`, `semver.lp`, `aati_hub.lp` | Decentralized package registry, SemVer 2.0.0 resolver, deterministic lockfiles |
 
 Explore the full API manual in [`docs/STANDARD_LIBRARY.md`](docs/STANDARD_LIBRARY.md).
 
@@ -340,7 +341,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 ## 🚀 Production Showcase & Demos
 
 ### 1. Unified Sovereign Full-Stack Showcase
-Execute the enterprise full-stack service showcasing zero-copy Radix-Trie HTTP routing (`packages/web_router`), hardware-entropy salted password hashing (`packages/crypto_vault`), RFC 7519 JWT bearer tokens (`packages/lipi_jwt`), and in-memory relational SQL queries (`packages/lipi_sql`):
+Execute the enterprise full-stack service showcasing zero-copy Radix-Trie HTTP routing (`aati/web_router`), hardware-entropy salted password hashing (`aati/crypto_vault`), RFC 7519 JWT bearer tokens (`aati/lipi_jwt`), and in-memory relational SQL queries (`aati/lipi_sql`):
 ```bash
 bin/lipc examples/sovereign_showcase/main.lp /tmp/sovereign_showcase && /tmp/sovereign_showcase
 ```
