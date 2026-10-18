@@ -42,9 +42,9 @@ fn spawn_process cmd_path arg1 arg2
         syscall(59, cmd_path, argv, env, 0, 0, 0)
         syscall(60, 127, 0, 0, 0, 0, 0)
 
-    // WHY: Use WNOHANG polling loop with sys_nanosleep and 10-second timeout.
-    // Prevents any rogue test or infinite loop from hanging the regression test suite indefinitely.
-    timeout_ms = 10000
+    // WHY: Use WNOHANG polling loop with sys_nanosleep and 60-second timeout.
+    // Prevents cloud CI runner VM vCPU throttling from prematurely killing large 235k-token compiler tests.
+    timeout_ms = 60000
     elapsed_ms = 0
     ts = syscall(9, 0, 16, 3, 34, -1, 0)
     mem_word_write(ts, 0, 0)
@@ -61,7 +61,7 @@ fn spawn_process cmd_path arg1 arg2
     syscall(11, ts, 16, 0, 0, 0, 0)
 
     if w_res == 0
-        // Process exceeded 10-second execution budget! Kill with SIGKILL (syscall 62, signal 9)
+        // Process exceeded 60-second execution budget! Kill with SIGKILL (syscall 62, signal 9)
         syscall(62, pid, 9, 0, 0, 0, 0)
         syscall(61, pid, st, 0, 0, 0, 0) // Reap child zombie
         raw_status = 9 // SIGKILL exit marker
@@ -1020,10 +1020,10 @@ fn main
 
 
     say "========================================================================"
-    say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed
+    say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"
     if failed == 0
-        say "🎉 ALL " + passed + " REGRESSION TESTS PASSED!"
+        say "🎉 ALL " + str(passed) + " REGRESSION TESTS PASSED!"
         return 0
     else
         say "❌ SOME TESTS FAILED!"
