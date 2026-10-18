@@ -21,9 +21,9 @@ import "utso/collections"
 import "utso/string"
 import "utso/core/json_fast"
 import "utso/core/simd"
-import "packages/lipidb/db"
+import "aati/lipidb/db"
 import "utso/crypto"
-import "packages/lipi_gui/gui"
+import "aati/lipi_gui/gui"
 
 @fn showcase_banner()
     println("==================================================================")

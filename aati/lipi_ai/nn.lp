@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — NEURAL NETWORK MODULES & OPTIMIZERS (packages/lipi_ai/nn.lp)
+@! LIPI UNIVERSE AI — NEURAL NETWORK MODULES & OPTIMIZERS (aati/lipi_ai/nn.lp)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Parameter & Module Abstraction, Linear Layer with Xavier/He Init,
 @! LayerNorm with Affine Scale/Shift, Inverted Dropout, Multi-Head Attention,
@@ -9,8 +9,8 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/tensor"
-import "packages/lipi_ai/autograd"
+import "aati/lipi_ai/tensor"
+import "aati/lipi_ai/autograd"
 
 @! ----------------------------------------------------------------------------
 @! 1. Parameter & Module Abstractions

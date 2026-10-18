@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB ENGINE — SOVEREIGN MARKUP PARSER & TOKENIZER (F09)
-@! Module: packages/lipi_web/markup_parser.lp
+@! Module: aati/lipi_web/markup_parser.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-speed lexical tokenizer for HTML5/XML sovereign tags & attributes
@@ -13,7 +13,7 @@
 import "utso/collections"
 import "utso/math"
 import "utso/string"
-import "packages/lipi_web/frontend/layout/layout_types"
+import "aati/lipi_web/frontend/layout/layout_types"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES
@@ -1240,7 +1240,7 @@ import "packages/lipi_web/frontend/layout/layout_types"
 @end
 
 @fn desugar_to_ui_element(node)
-  @! Create UIElement matching struct in packages/lipi_web/frontend/mod.lp
+  @! Create UIElement matching struct in aati/lipi_web/frontend/mod.lp
   elem_text = ""
   @if node.is_text
     elem_text = node.text_content

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — HIGH-PERFORMANCE MULTI-LINE CODE EDITOR COMPONENT
-@! Module: packages/lipi_ide/editor.lp
+@! Module: aati/lipi_ide/editor.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
@@ -8,15 +8,15 @@
 import "utso/collections"
 import "utso/string"
 import "utso/math"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
-import "packages/lipi_gui/event"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
+import "aati/lipi_gui/event"
 import "compiler/frontend/lexer"
 import "utso/tools/lsp/protocol"
 import "utso/tools/lsp/server"
-import "packages/lipi_ide/syntax"
-import "packages/lipi_ide/lsp_client"
-import "packages/lipi_ide/ui_popup"
+import "aati/lipi_ide/syntax"
+import "aati/lipi_ide/lsp_client"
+import "aati/lipi_ide/ui_popup"
 
 @! ----------------------------------------------------------------------------
 @! 1. DATA STRUCTURE DEFINITIONS

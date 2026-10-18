@@ -4,7 +4,7 @@
 //    flexbox layout resolution, 32-bit RGBA pixel buffer rasterization, and hit-testing.
 // ==============================================================================
 
-include "packages/lipi_gui/ui_declarative.lp"
+include "aati/lipi_gui/ui_declarative.lp"
 
 fn assert_eq actual expected test_name
     if actual != expected

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — CANVAS & 2D RASTERIZER
-@! Module: packages/lipi_gui/canvas.lp
+@! Module: aati/lipi_gui/canvas.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flat ARGB pixel array Framebuffer

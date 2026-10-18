@@ -5,16 +5,16 @@
 //
 // WHY: This production showcase demonstrates LiPi's autonomous capability to run
 //      an entire enterprise-grade full-stack backend directly on silicon:
-//      1. Zero-copy Radix-Trie HTTP request routing (packages/web_router)
-//      2. Hardware-entropy salted password hashing & session tokens (packages/crypto_vault)
-//      3. RFC 7519 Cryptographic Token generation & signature verification (packages/lipi_jwt)
-//      4. O(1) in-memory Relational Storage Engine with indexed queries (packages/lipi_sql)
+//      1. Zero-copy Radix-Trie HTTP request routing (aati/web_router)
+//      2. Hardware-entropy salted password hashing & session tokens (aati/crypto_vault)
+//      3. RFC 7519 Cryptographic Token generation & signature verification (aati/lipi_jwt)
+//      4. O(1) in-memory Relational Storage Engine with indexed queries (aati/lipi_sql)
 //      5. Real-time CPU clock telemetry and ANSI TUI operational dashboard
 
-import "packages/web_router/src/lib"
-import "packages/crypto_vault/src/lib"
-include "packages/lipi_jwt/src/jwt.lp"
-include "packages/lipi_sql/src/sql.lp"
+import "aati/web_router/src/lib"
+import "aati/crypto_vault/src/lib"
+include "aati/lipi_jwt/src/jwt.lp"
+include "aati/lipi_sql/src/sql.lp"
 import "utso/io"
 import "utso/string"
 import "utso/memory"

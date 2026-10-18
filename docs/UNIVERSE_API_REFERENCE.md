@@ -4,12 +4,12 @@
 > **Architecture:** Direct Machine Code (x86_64, ARM64, WASM)  
 > **Zero-Libc / Zero-C / Zero-Python:** 100% Guaranteed Native Silicon  
 
-Welcome to the official, authoritative API reference for **Lipi Standard Library** (`utso/` & `packages/`).
+Welcome to the official, authoritative API reference for **Lipi Standard Library** (`utso/` & `aati/`).
 Lipi is an autonomous, bilingual, high-performance systems and application language
 designed from scratch without reliance on GCC, LLVM, Clang, POSIX libc, or external runtimes.
 
 The **Lipi Standard Library** consolidates pure machine-code algorithms into `utso/` Genesis Primitives
-and `packages/` Sovereign Packages across 14 canonical domains, unified by Directed Acyclic Graph (DAG) layering.
+and `aati/` Sovereign Packages across 14 canonical domains, unified by Directed Acyclic Graph (DAG) layering.
 
 ---
 
@@ -35,18 +35,18 @@ and `packages/` Sovereign Packages across 14 canonical domains, unified by Direc
 
 ## 1. Grand Prelude & Unified Umbrella Gateways
 
-The Lipi standard library provides Genesis Primitives under `utso/` and Sovereign Packages under `packages/`.
+The Lipi standard library provides Genesis Primitives under `utso/` and Sovereign Packages under `aati/`.
 Instead of manually remembering hundreds of deep internal submodule paths, developers can
 import domain gateways directly:
 
 ```lipi
 import "utso/lipi_universe"     // Master prelude (Collections, Arena, SIMD, Crypto, JSON)
-import "packages/lipi_web/web" // High-concurrency web server and routing
-import "packages/lipidb/db"    // Embedded LipiKV, B+Tree, and WAL storage
-import "packages/lipi_ai/ai"   // AI Tensors, Matrix Multiplication, GGUF
+import "aati/lipi_web/web" // High-concurrency web server and routing
+import "aati/lipidb/db"    // Embedded LipiKV, B+Tree, and WAL storage
+import "aati/lipi_ai/ai"   // AI Tensors, Matrix Multiplication, GGUF
 import "utso/net"              // Sockets, HTTP/2, WebSocket, gRPC
 import "utso/crypto"           // SHA-256, AES-GCM, TLS 1.3, Entropy
-import "packages/lipi_gui/gui" // Direct /dev/fb0 framebuffer and UI chrome
+import "aati/lipi_gui/gui" // Direct /dev/fb0 framebuffer and UI chrome
 import "utso/os"               // Bare-metal kernel, direct syscalls, threads
 ```
 
@@ -102,7 +102,7 @@ Lipi never relies on C malloc/free or POSIX sbrk.
 
 100% native asynchronous HTTP/1.1 and HTTP/2 engine with zero external dependencies.
 
-### Module: `packages/lipi_web/web.lp` & `packages/lipi_web/engine.lp`
+### Module: `aati/lipi_web/web.lp` & `aati/lipi_web/engine.lp`
 - `web_app_create() -> WebApp`: Constructs an asynchronous HTTP web application.
 - `web_route(app, method, path, handler_fn) -> i64`: Registers high-speed router endpoints with exact and wildcard prefix support.
 - `web_listen_and_serve(app, port) -> i64`: Binds non-blocking TCP socket and processes connections via Linux epoll reactor.
@@ -111,7 +111,7 @@ Lipi never relies on C malloc/free or POSIX sbrk.
 - `http_response_not_found() -> string`: Packages `404 Not Found` response.
 
 ```lipi
-import "packages/lipi_web/web"
+import "aati/lipi_web/web"
 
 app = web_app_create()
 web_route(app, "GET", "/api/health", @fn(req) return http_response_json("{\"status\":\"ok\"}") @end)
@@ -123,7 +123,7 @@ web_listen_and_serve(app, 8080)
 Autonomous embedded transactional database engine combining disk B+Tree indexing,
 LRU Buffer Pool page cache, and Write-Ahead Logging (WAL).
 
-### Module: `packages/lipidb/db.lp` & `packages/lipidb/engine.lp`
+### Module: `aati/lipidb/db.lp` & `aati/lipidb/engine.lp`
 - `lipi_db_open(path, frame_capacity) -> Database`: Opens or initializes ACID database.
 - `db_put(db, key, value) -> i64`: Atomically writes entry to WAL, syncs to disk, and updates memory B+Tree.
 - `db_get(db, key) -> string`: Queries value by key through B+Tree and Page Cache.
@@ -131,7 +131,7 @@ LRU Buffer Pool page cache, and Write-Ahead Logging (WAL).
 - `db_checkpoint(db) -> i64`: Flushes dirty buffer frames to disk and safely truncates WAL.
 - `db_close(db) -> i64`: Syncs pages, closes file descriptors, and releases resources.
 
-### Module: `packages/lipidb/kv.lp` (In-Memory Key-Value Store)
+### Module: `aati/lipidb/kv.lp` (In-Memory Key-Value Store)
 - `KV_create(bucket_count) -> KV`: Instantiates lock-free in-memory key-value dictionary.
 - `KV_set(kv, key, val) -> i64`: Stores key-value mapping.
 - `KV_get(kv, key) -> string`: Retrieves value.
@@ -142,14 +142,14 @@ LRU Buffer Pool page cache, and Write-Ahead Logging (WAL).
 Direct machine code vector arithmetic, SIMD GEMM matrix multiplication,
 activation functions, and native GGUF LLM weight ingestion.
 
-### Module: `packages/lipi_ai/ai.lp` & `packages/lipi_ai/tensor_engine.lp`
+### Module: `aati/lipi_ai/ai.lp` & `aati/lipi_ai/tensor_engine.lp`
 - `tensor_new(rows, cols) -> Tensor`: Allocates 2D tensor in aligned memory.
 - `tensor_matmul(A, B) -> Tensor`: Computes General Matrix Multiplication (GEMM) via AVX2 / AVX-512 register tiling.
 - `tensor_dot(v1, v2, len) -> i64`: Computes vector dot product in single-instruction SIMD.
 - `tensor_relu(t) -> Tensor`: In-place Rectified Linear Unit activation.
 - `tensor_sigmoid(t) -> Tensor`: Pure software polynomial Sigmoid transformation.
 
-### Module: `packages/lipi_ai/gguf.lp`
+### Module: `aati/lipi_ai/gguf.lp`
 - `gguf_open(path) -> GgufModel`: Ingests binary GGUF LLM model headers and tensor metadata.
 - `gguf_get_tensor(model, name) -> TensorRef`: Direct zero-copy memory mapped tensor slice.
 
@@ -188,7 +188,7 @@ FIPS 180-4 compliant cryptographic suite with zero OpenSSL or external C depende
 Renders graphics directly onto Linux hardware `/dev/fb0` or virtual double-buffered memory.
 Zero X11, Zero Wayland, Zero GPU driver dependencies.
 
-### Module: `packages/lipi_gui/gui.lp` & `packages/lipi_gui/framebuffer.lp`
+### Module: `aati/lipi_gui/gui.lp` & `aati/lipi_gui/framebuffer.lp`
 - `lipi_gui_open(width, height) -> LipiFramebuffer`: Queries hardware screen info via `SYS_ioctl (16)` and establishes double-buffered backbuffer.
 - `fb_draw_pixel(fb, x, y, color) -> i64`: Draws 32-bit ARGB pixel at dynamic stride offset.
 - `fb_read_pixel(fb, x, y) -> i64`: Inspects color value of backbuffer pixel.

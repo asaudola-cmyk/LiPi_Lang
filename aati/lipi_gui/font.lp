@@ -11,7 +11,7 @@
 
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — BITMAP FONT & TEXT RENDERER
-@! Module: packages/lipi_gui/font.lp
+@! Module: aati/lipi_gui/font.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Monospace 8x16 ASCII Bitmap Font Table (ASCII 32..126)
@@ -20,7 +20,7 @@
 @! - Clipped and Ellipsis text rasterization
 @! ============================================================================
 
-import "packages/lipi_gui/canvas"
+import "aati/lipi_gui/canvas"
 import "utso/string"
 
 @! ----------------------------------------------------------------------------

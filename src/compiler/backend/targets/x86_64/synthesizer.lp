@@ -137,7 +137,7 @@ fn x86_synth_compile_fn_def s toks pos_box
         end
     end
 
-    // Emit function prologue
+    // Emit standard function prologue: push rbp; mov rbp, rsp; sub rsp, imm32
     prologue_sub_patch = s.synth_code.len() + 7
     x86_synth_emit_prologue(s)
 

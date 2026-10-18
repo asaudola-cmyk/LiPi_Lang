@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN MESH: DISTRIBUTED ROUTING & PEER-TO-PEER ENGINE
-// ⚡ File: packages/sovereign_mesh/src/mesh.lp
+// ⚡ File: aati/sovereign_mesh/src/mesh.lp
 //
 // WHY: Provides an enterprise peer-to-peer mesh networking protocol entirely in pure Lipi.
 //      Implements dynamic node routing, packet serialization, TTL loop prevention,

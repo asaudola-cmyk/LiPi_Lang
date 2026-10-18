@@ -209,9 +209,9 @@ fn x86_mov_reg_imm64 ctx reg val
 
 ---
 
-## 4. First-Class Web Standard Library (`packages/lipi_web/router.lp`)
+## 4. First-Class Web Standard Library (`aati/lipi_web/router.lp`)
 
-Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`packages/lipi_web/router.lp`](../packages/lipi_web/router.lp).
+Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`aati/lipi_web/router.lp`](../aati/lipi_web/router.lp).
 
 ### 4.1 Architectural Foundations
 - **Direct Linux Socket Calls:** Binds directly to the operating system network stack via `SYS_socket` (syscall 41), `SYS_bind` (syscall 49), `SYS_listen` (syscall 50), and `SYS_accept` (syscall 43).
@@ -220,7 +220,7 @@ Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in
 - **Wire-Format Response Serialization:** Constructs standards-compliant HTTP/1.1 response envelopes with explicit `Content-Length`, `Content-Type`, CORS headers, and CRLF (`\r\n`) delimiters.
 
 ```lipi
-include "packages/lipi_web/router.lp"
+include "aati/lipi_web/router.lp"
 
 router = web_router_new()
 web_get(router, "/", 1)

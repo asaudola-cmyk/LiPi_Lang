@@ -4,7 +4,7 @@
 // Milestone: First 1.0.0 (প্রথম ১.০.০) | Zero Libc | Zero External Graphics
 // ==============================================================================
 
-include "packages/lipi_media/video_canvas.lp"
+include "aati/lipi_media/video_canvas.lp"
 
 fn assert_true cond msg
     if cond == 0

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — STANDARD WIDGET SUITE
-@! Module: packages/lipi_gui/widget.lp
+@! Module: aati/lipi_gui/widget.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Complete Widget data structure (Window, Button, Label, TextInput, ScrollView, Slider, Container)
@@ -9,10 +9,10 @@
 @! - Canvas rasterization rendering engine
 @! ============================================================================
 
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
-import "packages/lipi_gui/layout"
-import "packages/lipi_gui/event"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
+import "aati/lipi_gui/layout"
+import "aati/lipi_gui/event"
 import "utso/collections"
 import "utso/string"
 import "utso/math"

@@ -1,9 +1,9 @@
 // ==============================================================================
-// 👑 LIPI CRYPTO VAULT RIGOROUS TEST SUITE (packages/crypto_vault/tests/test_vault.lp)
+// 👑 LIPI CRYPTO VAULT RIGOROUS TEST SUITE (aati/crypto_vault/tests/test_vault.lp)
 // ⚡ Tests real SHA-256 password hashing, salt verification, and session tokens
 // ==============================================================================
 
-import "packages/crypto_vault/src/lib"
+import "aati/crypto_vault/src/lib"
 
 @fn main()
   println("--- Crypto Vault Rigorous Test Suite ---")

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — PURE LIPI DIRECT X11 WINDOW ENGINE
-@! Module: packages/lipi_gui/x11/x11_window.lp
+@! Module: aati/lipi_gui/x11/x11_window.lp
 @! Milestone: Grand Sovereign Pillar 3
 @! 100% Pure Lipi Implementation — Direct Unix Domain Socket / X11 Engine
 @! Features: Window Lifecycle, Direct Canvas Blitting via ZPixmap Framebuffer,
@@ -9,9 +9,9 @@
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/widget"
-import "packages/lipi_gui/x11/x11_protocol"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/widget"
+import "aati/lipi_gui/x11/x11_protocol"
 
 @! ============================================================================
 @! 1. X11 CONNECTION & WINDOW STRUCTS

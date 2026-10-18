@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — REVERSE-MODE AUTOMATIC DIFFERENTIATION ENGINE (packages/lipi_ai/autograd.lp)
+@! LIPI UNIVERSE AI — REVERSE-MODE AUTOMATIC DIFFERENTIATION ENGINE (aati/lipi_ai/autograd.lp)
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Computation DAG, Topological Sorting, Gradient Accumulation,
 @! Backward Propagators for all Ops, Gradient Unbroadcasting, Activations,
@@ -8,7 +8,7 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 @! ----------------------------------------------------------------------------
 @! 1. Gradient Buffer & Leaf Node Helpers
@@ -62,6 +62,7 @@ import "packages/lipi_ai/tensor"
 @end
 
 @fn tensor_accumulate_grad(p, d_grad)
+  // WHY: Extract grad array reference to ensure in-place mutation persists in struct slot
   @if p.requires_grad == 0
     return 0
   @end
@@ -73,10 +74,12 @@ import "packages/lipi_ai/tensor"
   @if d_grad.len() < sz
     sz = d_grad.len()
   @end
+  g = p.grad
   @while i < sz
-    p.grad[i] = p.grad[i] + d_grad[i]
+    g[i] = g[i] + d_grad[i]
     i = i + 1
   @end
+  p.grad = g
   return 0
 @end
 
@@ -176,17 +179,19 @@ import "packages/lipi_ai/tensor"
 @! ----------------------------------------------------------------------------
 
 @fn tensor_backward(root)
-  @! 1. Seed root gradient with 1s
+  // WHY: Seed root gradient with 1.0s using local array pointer to ensure persistence
   @if root.grad.len() < root.size
     tensor_ensure_grad(root)
   @end
+  g = root.grad
   i = 0
   @while i < root.size
-    @if root.grad[i] == 0
-      root.grad[i] = 1
+    @if g[i] == 0
+      g[i] = 1.0
     @end
     i = i + 1
   @end
+  root.grad = g
 
   @! 2. Topological sort (DFS Post-Order)
   topo_nodes = tensor_topological_sort(root)

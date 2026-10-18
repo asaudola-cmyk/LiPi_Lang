@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — AWS FIRECRACKER-STYLE ADVANCED KVM HYPERVISOR
-@! Module: packages/lipi_hypervisor/kvm_advanced.lp
+@! Module: aati/lipi_hypervisor/kvm_advanced.lp
 @! Milestone: Next-Gen Sovereign Cloud MicroVM
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Direct Linux Kernel Booting (Zero-Page / E820 / bzImage Parser),
@@ -9,7 +9,7 @@
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_hypervisor/kvm"
+import "aati/lipi_hypervisor/kvm"
 
 @! ============================================================================
 @! 1. LINUX ZERO-PAGE & E820 BOOT STRUCTURES

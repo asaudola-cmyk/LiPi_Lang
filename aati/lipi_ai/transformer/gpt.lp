@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPI-GPT (NATIVE TRANSFORMER ENGINE)
-@! Module: packages/lipi_ai/transformer/gpt.lp
+@! Module: aati/lipi_ai/transformer/gpt.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: SafeTensors/GGUF Zero-Copy Weights Ingestion, FlashAttention,
@@ -195,6 +195,23 @@ import "utso/core/json"
 @! 3. FLASHATTENTION (MULTI-HEAD TILE ATTENTION)
 @! ============================================================================
 
+@fn gpt_fixed_exp(diff: i64) -> i64
+  // WHY: High-precision fixed-point exponential e^diff normalized to scale 1000.
+  // Precomputed discrete Taylor-Maclaurin expansion points for non-positive differences (diff <= 0).
+  @if diff <= -8
+    return 1
+  @end
+  @if diff == 0 return 1000 @end
+  @if diff == -1 return 368 @end
+  @if diff == -2 return 135 @end
+  @if diff == -3 return 50 @end
+  @if diff == -4 return 18 @end
+  @if diff == -5 return 7 @end
+  @if diff == -6 return 2 @end
+  @if diff == -7 return 1 @end
+  return 1
+@end
+
 @fn flash_attention_forward_head(q_vec, k_cache, v_cache, seq_len, head_dim)
   @! FlashAttention online softmax computation
   scores = []
@@ -214,17 +231,28 @@ import "utso/core/json"
     i = i + 1
   @end
 
-  @! Softmax scores
+  @! Softmax scores with numerical stability (subtract max_score)
+  max_score = 0 - 999999
+  m_i = 0
+  @while m_i < seq_len
+    @if scores[m_i] > max_score
+      max_score = scores[m_i]
+    @end
+    m_i = m_i + 1
+  @end
+
   exp_sum = 0
   exp_scores = []
   j = 0
   @while j < seq_len
-    @! Fixed-point approximation for exp
-    e_val = scores[j] + 100
-    @if e_val < 1 e_val = 1 @end
+    diff = scores[j] - max_score
+    e_val = gpt_fixed_exp(diff)
     exp_scores = exp_scores.push(e_val)
     exp_sum = exp_sum + e_val
     j = j + 1
+  @end
+  @if exp_sum <= 0
+    exp_sum = 1
   @end
 
   @! Weighted sum of V

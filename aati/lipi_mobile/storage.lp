@@ -1,6 +1,6 @@
 @! ============================================================================
 @! PURE LIPI MOBILE PERSISTENT KEY-VALUE STORAGE ENGINE
-@! Module: packages/lipi_mobile/storage
+@! Module: aati/lipi_mobile/storage
 @! 100% Pure Lipi Implementation — File-Backed Durable Persistence
 @! ============================================================================
 

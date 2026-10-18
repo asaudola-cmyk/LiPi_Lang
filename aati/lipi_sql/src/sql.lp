@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN RELATIONAL SQL ENGINE (packages/lipi_sql/src/sql.lp)
+// 👑 LIPI SOVEREIGN RELATIONAL SQL ENGINE (aati/lipi_sql/src/sql.lp)
 // ⚡ Zero Libc | Zero SQLite | Pure Sovereign In-Memory Query Planner & Storage
 // ==============================================================================
 //

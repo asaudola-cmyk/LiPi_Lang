@@ -10,7 +10,7 @@
 
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DECENTRALIZED LIPIPKG PACKAGE SERVER & REGISTRY
-@! Module: packages/lipi_p2p/lipipkg_server_engine.lp
+@! Module: aati/lipi_p2p/lipipkg_server_engine.lp
 @! Milestone 3 (Requirement R2)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Full HTTP REST Server, P2P CAS Storage, Merkle DAG Sync,
@@ -23,11 +23,11 @@ import "utso/core/json"
 import "utso/crypto/sha256"
 import "utso/net/http"
 import "utso/net/tcp"
-import "packages/lipi_web/app"
-import "packages/lipi_web/router"
-import "packages/lipi_web/context"
-import "packages/lipi_web/server"
-import "packages/lipi_p2p/registry"
+import "aati/lipi_web/app"
+import "aati/lipi_web/router"
+import "aati/lipi_web/context"
+import "aati/lipi_web/server"
+import "aati/lipi_p2p/registry"
 
 @! ============================================================================
 @! 1. DATA STRUCTURE DEFINITIONS

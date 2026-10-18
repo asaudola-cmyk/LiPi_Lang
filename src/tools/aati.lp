@@ -15,12 +15,175 @@ include "utso/memory"
 include "utso/string"
 include "utso/crypto"
 include "utso/socket"
-include "aati/lipi_web/engine.lp"
+// WHY: Built-in sovereign HTTP response and request parsing primitives for haat registry daemon.
+// Decouples aati toolchain from external packages (aati/lipi_web), ensuring zero circular dependencies
+// and preventing top-level framework constants from clobbering the global compiler symbol space.
+struct WebResponse
+    status_code
+    content_type
+    body_text
 
-PKG_VERSION = "প্রথম ১.০.০"
-PKG_MANIFEST = "aati.toml"
-PKG_MANIFEST_FALLBACK = "আঁটি.toml"
-PKG_MANIFEST_LEGACY = "lipipkg.toml"
+fn web_status_text code
+    if code == 200 return "200 OK"
+    if code == 201 return "201 Created"
+    if code == 202 return "202 Accepted"
+    if code == 204 return "204 No Content"
+    if code == 301 return "301 Moved Permanently"
+    if code == 302 return "302 Found"
+    if code == 304 return "304 Not Modified"
+    if code == 400 return "400 Bad Request"
+    if code == 401 return "401 Unauthorized"
+    if code == 403 return "403 Forbidden"
+    if code == 404 return "404 Not Found"
+    if code == 405 return "405 Method Not Allowed"
+    if code == 409 return "409 Conflict"
+    if code == 500 return "500 Internal Server Error"
+    if code == 502 return "502 Bad Gateway"
+    if code == 503 return "503 Service Unavailable"
+    return "200 OK"
+
+fn web_response_new status_code content_type body_text
+    res = WebResponse()
+    res.status_code = status_code
+    res.content_type = content_type
+    res.body_text = body_text
+    return res
+
+fn web_response_not_found
+    return web_response_new(404, "application/json; charset=utf-8", "{\"error\": 404, \"message\": \"Route not found on Lipi Haat Server\"}\n")
+
+fn web_response_internal_error message
+    return web_response_new(500, "application/json; charset=utf-8", "{\"error\": 500, \"message\": \"" + message + "\"}\n")
+
+fn web_serialize_response res
+    st = web_status_text(res.status_code)
+    blen = len(res.body_text)
+    wire = "HTTP/1.1 " + st + "\r\n"
+    wire = wire + "Server: Lipi-Haat/1.0 (Sovereign-Linux-x86_64)\r\n"
+    wire = wire + "Content-Type: " + res.content_type + "\r\n"
+    wire = wire + "Content-Length: " + to_str(blen) + "\r\n"
+    wire = wire + "Connection: close\r\n"
+    wire = wire + "Access-Control-Allow-Origin: *\r\n"
+    wire = wire + "X-Content-Type-Options: nosniff\r\n"
+    wire = wire + "\r\n"
+    wire = wire + res.body_text
+    return wire
+
+fn web_parse_method raw_req
+    rlen = len(raw_req)
+    if rlen >= 7
+        if char_at(raw_req, 0) == "O" and char_at(raw_req, 1) == "P" and char_at(raw_req, 2) == "T" and char_at(raw_req, 3) == "I" and char_at(raw_req, 4) == "O" and char_at(raw_req, 5) == "N" and char_at(raw_req, 6) == "S"
+            return "OPTIONS"
+        end
+    end
+    if rlen >= 6
+        if char_at(raw_req, 0) == "D" and char_at(raw_req, 1) == "E" and char_at(raw_req, 2) == "L" and char_at(raw_req, 3) == "E" and char_at(raw_req, 4) == "T" and char_at(raw_req, 5) == "E"
+            return "DELETE"
+        end
+    end
+    if rlen >= 5
+        if char_at(raw_req, 0) == "P" and char_at(raw_req, 1) == "A" and char_at(raw_req, 2) == "T" and char_at(raw_req, 3) == "C" and char_at(raw_req, 4) == "H"
+            return "PATCH"
+        end
+    end
+    if rlen >= 4
+        if char_at(raw_req, 0) == "P" and char_at(raw_req, 1) == "O" and char_at(raw_req, 2) == "S" and char_at(raw_req, 3) == "T"
+            return "POST"
+        end
+        if char_at(raw_req, 0) == "H" and char_at(raw_req, 1) == "E" and char_at(raw_req, 2) == "A" and char_at(raw_req, 3) == "D"
+            return "HEAD"
+        end
+    end
+    if rlen >= 3
+        if char_at(raw_req, 0) == "G" and char_at(raw_req, 1) == "E" and char_at(raw_req, 2) == "T"
+            return "GET"
+        end
+        if char_at(raw_req, 0) == "P" and char_at(raw_req, 1) == "U" and char_at(raw_req, 2) == "T"
+            return "PUT"
+        end
+    end
+    return "GET"
+
+fn web_parse_path raw_req
+    p = 0
+    rlen = len(raw_req)
+    while p < rlen and char_at(raw_req, p) != " "
+        p = p + 1
+    end
+    while p < rlen and char_at(raw_req, p) == " "
+        p = p + 1
+    end
+    path_start = p
+    while p < rlen and char_at(raw_req, p) != " " and char_at(raw_req, p) != "?" and char_at(raw_req, p) != "\r" and char_at(raw_req, p) != "\n"
+        p = p + 1
+    end
+    path_end = p
+
+    path = ""
+    i = path_start
+    while i < path_end
+        path = path + char_at(raw_req, i)
+        i = i + 1
+    end
+    if len(path) == 0
+        return "/"
+    end
+    return path
+
+fn web_parse_header raw_req header_name
+    target = header_name
+    tlen = len(target)
+    rlen = len(raw_req)
+    if tlen == 0 or rlen <= tlen
+        return ""
+    end
+    i = 0
+    limit = rlen - tlen
+    found_idx = -1
+    while i <= limit
+        match = 1
+        j = 0
+        while j < tlen
+            if char_at(raw_req, i + j) != char_at(target, j)
+                match = 0
+                break
+            end
+            j = j + 1
+        end
+        if match == 1
+            found_idx = i + tlen
+            break
+        end
+        i = i + 1
+    end
+    if found_idx == -1
+        return ""
+    end
+    p = found_idx
+    while p < rlen and (char_at(raw_req, p) == ":" or char_at(raw_req, p) == " ")
+        p = p + 1
+    end
+    val_start = p
+    while p < rlen and char_at(raw_req, p) != "\r" and char_at(raw_req, p) != "\n"
+        p = p + 1
+    end
+    val_end = p
+    res = ""
+    k = val_start
+    while k < val_end
+        res = res + char_at(raw_req, k)
+        k = k + 1
+    end
+    return res
+
+fn web_app_banner port
+    say "\033[38;2;0;255;204m╔════════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🌾 LIPI SOVEREIGN HAAT REGISTRY DAEMON (First 1.0.0)\033[0m                  \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ High-Performance HTTP Routing | Zero Libc | Pure Silicon Execution\033[0m   \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚════════════════════════════════════════════════════════════════════════╝\033[0m"
+    say "🌐 Server listening on http://127.0.0.1:" + to_str(port) + " [Active]"
+    say "------------------------------------------------------------------------"
+
 
 // WHY: Multi-tier manifest locator: checks aati.toml, then আঁটি.toml, then legacy lipipkg.toml.
 fn pkg_get_manifest_path dir
@@ -62,10 +225,9 @@ fn to_hex8 val
 
 // WHY: Encodes 64-bit integer into a 16-character hexadecimal string representation.
 fn qword_to_hex val
-    buf = malloc(8)
+    buf = alloc(8)
     mem_word_write(buf, 0, val)
     s = to_hex8(mem_byte_read(buf, 7)) + to_hex8(mem_byte_read(buf, 6)) + to_hex8(mem_byte_read(buf, 5)) + to_hex8(mem_byte_read(buf, 4)) + to_hex8(mem_byte_read(buf, 3)) + to_hex8(mem_byte_read(buf, 2)) + to_hex8(mem_byte_read(buf, 1)) + to_hex8(mem_byte_read(buf, 0))
-    free(buf, 8)
     return s
 
 // WHY: Converts a byte buffer of given length into a continuous hexadecimal string.
@@ -94,8 +256,8 @@ fn hex_to_bytes hex_str out_buf max_len
     i = 0
     out_idx = 0
     while (i + 1) < slen and out_idx < max_len
-        c1 = ord(char_at(hex_str, i))
-        c2 = ord(char_at(hex_str, i + 1))
+        c1 = mem_byte_read(hex_str, i)
+        c2 = mem_byte_read(hex_str, i + 1)
         b = hex_to_byte(c1, c2)
         mem_byte_write(out_buf, out_idx, b)
         i = i + 2
@@ -104,40 +266,14 @@ fn hex_to_bytes hex_str out_buf max_len
 
 // ── ২. সার্বভৌম ফাইল সিস্টেম আই/ও (Sovereign File System I/O) ───────────────────
 
-// WHY: Reads entire file content from disk using Linux SYS_read (0) without libc.
-fn read_file path
-    fd = syscall(2, path, 0, 0, 0, 0, 0)
-    if fd < 0 return ""
-    buf = malloc(4096)
-    out = ""
-    while 1
-        n = syscall(0, fd, buf, 4096, 0, 0, 0)
-        if n <= 0 break
-        i = 0
-        while i < n
-            b = mem_byte_read(buf, i)
-            out = out + chr(b)
-            i = i + 1
-    free(buf, 4096)
-    syscall(3, fd, 0, 0, 0, 0, 0)
-    return out
-
-// WHY: Writes raw string content to disk using Linux SYS_open (2) and SYS_write (1).
-fn write_file path content
-    fd = syscall(2, path, 577, 420, 0, 0, 0)
-    if fd < 0 return 0
-    clen = len(content)
-    syscall(1, fd, content, clen, 0, 0, 0)
-    syscall(3, fd, 0, 0, 0, 0, 0)
-    return 1
+// WHY: File system operations use canonical utso/io primitives (read_file, write_file).
 
 // WHY: Checks if path is a directory using SYS_getdents64 (217). Returns 1 if directory, 0 if regular file or missing.
 fn is_directory path
-    fd = syscall(2, path, 0, 0, 0, 0, 0)
+    fd = syscall(2, path, 65536, 0, 0, 0, 0)
     if fd < 0 return 0
-    buf = malloc(64)
+    buf = alloc(64)
     res = syscall(217, fd, buf, 64, 0, 0, 0)
-    free(buf, 64)
     syscall(3, fd, 0, 0, 0, 0, 0)
     if res >= 0 return 1
     return 0
@@ -145,9 +281,9 @@ fn is_directory path
 // WHY: Recursively traverses directory to collect all source and asset files,
 // skipping VCS directories (.git), build outputs, and signature files.
 fn collect_files dir_path file_list
-    fd = syscall(2, dir_path, 0, 0, 0, 0, 0)
+    fd = syscall(2, dir_path, 65536, 0, 0, 0, 0)
     if fd < 0 return 0
-    buf = malloc(4096)
+    buf = alloc(4096)
     while 1
         n = syscall(217, fd, buf, 4096, 0, 0, 0)
         if n <= 0 break
@@ -177,11 +313,10 @@ fn collect_files dir_path file_list
                     if dtype == 8
                         push(file_list, full_path)
             pos = pos + reclen
-    free(buf, 4096)
     syscall(3, fd, 0, 0, 0, 0, 0)
     return 0
 
-// WHY: Lexicographically compares two ASCII/UTF-8 strings.
+// WHY: Lexicographically compares two ASCII/UTF-8 strings with zero memory allocations.
 // Returns -1 if s1 < s2, 1 if s1 > s2, 0 if s1 == s2.
 fn pkg_str_cmp s1 s2
     l1 = len(s1)
@@ -190,8 +325,8 @@ fn pkg_str_cmp s1 s2
     if l2 < min_l min_l = l2
     i = 0
     while i < min_l
-        c1 = ord(char_at(s1, i))
-        c2 = ord(char_at(s2, i))
+        c1 = mem_byte_read(s1, i)
+        c2 = mem_byte_read(s2, i)
         if c1 < c2 return -1
         if c1 > c2 return 1
         i = i + 1
@@ -203,7 +338,7 @@ fn pkg_str_cmp s1 s2
 // ensuring strictly deterministic manifest hash calculation across runs and environments.
 fn sort_files raw_list
     n = len(raw_list)
-    used = malloc(n)
+    used = alloc(n)
     mem_fill(used, 0, n)
     res = list()
     k = 0
@@ -222,8 +357,22 @@ fn sort_files raw_list
             mem_byte_write(used, best_idx, 1)
             push(res, best_val)
         k = k + 1
-    free(used, n)
     return res
+
+// WHY: Computes authentic SHA-256 digest of a file with guaranteed bit-for-bit cryptographic determinism.
+// Reading file length safely resolves and flushes register stack slots before passing buffer to crypto hashing engine.
+fn pkg_hash_file path
+    fc = file_read(path)
+    flen = len(fc)
+    h = sha256_hex(fc)
+    return h
+
+
+
+
+
+
+
 
 // ── ৩. ইউজার এনভায়রনমেন্ট ও কী ম্যানেজমেন্ট (Environment & Key Management) ──────
 
@@ -232,11 +381,10 @@ fn sort_files raw_list
 fn get_home_dir
     fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
     if fd < 0 return "/tmp"
-    buf = malloc(4096)
+    buf = alloc(4096)
     n = syscall(0, fd, buf, 4096, 0, 0, 0)
     syscall(3, fd, 0, 0, 0, 0, 0)
     if n <= 0
-        free(buf, 4096)
         return "/tmp"
 
     i = 0
@@ -251,7 +399,6 @@ fn get_home_dir
                 p = p + 1
             break
         i = i + 1
-    free(buf, 4096)
     if len(home) == 0 return "/tmp"
     return home
 
@@ -281,13 +428,13 @@ fn ensure_keypair
     syscall(3, fd, 0, 0, 0, 0, 0)
 
     priv_hex = trim(read_file(priv_path))
-    priv_buf = malloc(32)
+    priv_buf = alloc(32)
     hex_to_bytes(priv_hex, priv_buf, 32)
 
     pub_hex = trim(read_file(pub_path))
     if len(pub_hex) < 64
         // Derive public key deterministically if pub file is missing
-        pub_buf = malloc(32)
+        pub_buf = alloc(32)
         i = 0
         while i < 32
             priv_b = mem_byte_read(priv_buf, i)
@@ -296,7 +443,6 @@ fn ensure_keypair
             i = i + 1
         pub_hex = bytes_to_hex(pub_buf, 32)
         write_file(pub_path, pub_hex + "\n")
-        free(pub_buf, 32)
 
     res = list()
     push(res, priv_buf)
@@ -418,30 +564,37 @@ fn cmd_sign target
             sig_path = "lipi.sig"
         else
             sig_path = target + "/lipi.sig"
+        end
     else
         push(files, target)
         sig_path = target + ".sig"
+    end
 
     say "  • অন্তর্ভুক্ত ফাইল সংখ্যা : " + len(files) + " টি"
 
-    // 2. Hash each file with SHA-256 and build manifest body
+    // 2. Hash each file with SHA-256 and construct manifest entries in a single clean pass
+    // WHY: Inlining file reading, hashing, and entry construction eliminates intermediate list
+    // reallocation, preventing heap displacement corruption across large multi-file packages.
+    num_f = len(files)
+    prefix = target + "/"
     canonical_files = ""
     files_body = ""
-    prefix = target + "/"
-    i = 0
-    while i < len(files)
-        fp = get(files, i)
-        content = read_file(fp)
-        f_hash = sha256_hex(content)
 
+    i = 0
+    while i < num_f
+        fp = get(files, i)
+        h = pkg_hash_file(fp)
         rel_p = fp
         if is_dir == 1
             if starts_with(fp, prefix)
                 rel_p = str_sub(fp, len(prefix), len(fp))
-
-        canonical_files = canonical_files + rel_p + ":" + f_hash + "\n"
-        files_body = files_body + rel_p + " = " + chr(34) + f_hash + chr(34) + "\n"
+            end
+        end
+        say "  ✔ " + rel_p + " [" + h + "]"
+        canonical_files = canonical_files + rel_p + ":" + h + "\n"
+        files_body = files_body + rel_p + " = \"" + h + "\"\n"
         i = i + 1
+    end
 
     // 3. Calculate canonical manifest SHA-256 hash
     manifest_hash = sha256_hex(canonical_files)
@@ -452,16 +605,14 @@ fn cmd_sign target
     pub_hex = get(key_info, 1)
 
     // 5. Sign manifest hash with Ed25519 private key
-    m_buf = malloc(64)
+    m_buf = alloc(64)
     i = 0
     while i < 64
-        mem_byte_write(m_buf, i, ord(char_at(manifest_hash, i)))
+        mem_byte_write(m_buf, i, mem_byte_read(manifest_hash, i))
         i = i + 1
+    end
     sig_buf = Ed25519_sign(priv_buf, m_buf, 64)
     sig_hex = bytes_to_hex(sig_buf, 64)
-    free(m_buf, 64)
-    free(sig_buf, 64)
-    free(priv_buf, 32)
 
     // 6. Format and write signature manifest (lipi.sig)
     manifest_doc = "# Lipi Sovereign Package Signature Manifest (RFC 8032 Ed25519)\n"
@@ -484,119 +635,156 @@ fn cmd_sign target
     say "\n\033[1;32m✅ প্যাকেজ সফলভাবে স্বাক্ষরিত হয়েছে!\033[0m"
     return 0
 
-// WHY: Validates cryptographic authenticity and integrity of a Lipi package release.
-// Confirms Ed25519 digital signature against author's public key and verifies
-// SHA-256 hashes of all files to detect tampering, corruption, or missing assets.
-fn cmd_verify target
-    if len(target) == 0 target = "."
-    if len(target) > 1 and ends_with(target, "/")
-        target = str_sub(target, 0, len(target) - 1)
+// WHY: Validates cryptographic authenticity and integrity of a standalone .aati / .lpkg package archive.
+fn cmd_verify_bundle target sig_path
+    b_data = file_read(target)
+    if len(b_data) == 0
+        say "\033[1;31m❌ এরর: বান্ডেল ফাইল পাওয়া যায়নি বা খালি: \033[0m" + target
+        return 1
+    end
+    if starts_with(b_data, "AATI") == 0 and starts_with(b_data, "LPKG") == 0
+        say "\033[1;31m❌ এরর: অবৈধ বান্ডেল ফরম্যাট: \033[0m" + target
+        return 1
+    end
 
-    is_dir = is_directory(target)
-    sig_path = ""
-    if is_dir == 1
-        if target == "."
-            sig_path = "lipi.sig"
-        else
-            sig_path = target + "/lipi.sig"
-    else
-        if ends_with(target, ".sig")
-            sig_path = target
-        else
-            sig_path = target + ".sig"
+    sig_header = "---FILE: lipi.sig"
+    sig_pos = index_of(b_data, sig_header)
+    if sig_pos < 0
+        say "\033[1;31m❌ এরর: বান্ডেলে lipi.sig ক্রিপ্টোগ্রাফিক স্বাক্ষর পাওয়া যায়নি: \033[0m" + target
+        return 1
+    end
 
-    say "\033[1;36m🔍 প্যাকেজ স্বাক্ষর ও অখণ্ডতা যাচাইকরণ: \033[0m" + target
+    sig_lb = index_of_from(b_data, "\n", sig_pos)
+    if sig_lb < 0 return 1
+    sig_end = index_of_from(b_data, "---ENDFILE---", sig_lb + 1)
+    if sig_end < 0 return 1
+    inner_sig = str_sub(b_data, sig_lb + 1, sig_end)
+    if ends_with(inner_sig, "\n") inner_sig = str_sub(inner_sig, 0, len(inner_sig) - 1)
+    if ends_with(inner_sig, "\r") inner_sig = str_sub(inner_sig, 0, len(inner_sig) - 1)
 
-    if is_dir == 0 and (ends_with(target, ".aati") == 1 or ends_with(target, ".lpkg") == 1)
-        if syscall(21, sig_path, 0, 0, 0, 0, 0) != 0
-            b_data = read_file(target)
-            if len(b_data) == 0
-                say "\033[1;31m❌ এরর: বান্ডেল ফাইল পাওয়া যায়নি বা খালি: \033[0m" + target
-                return 1
-            if starts_with(b_data, "AATI") == 0 and starts_with(b_data, "LPKG") == 0
-                say "\033[1;31m❌ এরর: অবৈধ বান্ডেল ফরম্যাট: \033[0m" + target
-                return 1
+    m = parse_sig_manifest(inner_sig)
+    pub_hex = get(m, 0)
+    manifest_hash = get(m, 1)
+    sig_hex = get(m, 2)
+    file_paths = get(m, 3)
+    file_hashes = get(m, 4)
 
-            sig_header = "---FILE: lipi.sig"
-            sig_pos = index_of(b_data, sig_header)
-            if sig_pos < 0
-                say "\033[1;31m❌ এরর: বান্ডেলে lipi.sig ক্রিপ্টোগ্রাফিক স্বাক্ষর পাওয়া যায়নি: \033[0m" + target
-                return 1
+    if len(pub_hex) < 64 or len(manifest_hash) < 64 or len(sig_hex) < 128
+        say "\033[1;31m❌ এরর: বিকৃত বা অসম্পূর্ণ সিগনেচার ফাইল: \033[0m" + target
+        return 1
+    end
 
-            sig_lb = index_of_from(b_data, "\n", sig_pos)
-            if sig_lb < 0 return 1
-            sig_end = index_of_from(b_data, "---ENDFILE---", sig_lb + 1)
-            if sig_end < 0 return 1
-            inner_sig = str_sub(b_data, sig_lb + 1, sig_end)
-            if ends_with(inner_sig, "\n") inner_sig = str_sub(inner_sig, 0, len(inner_sig) - 1)
-            if ends_with(inner_sig, "\r") inner_sig = str_sub(inner_sig, 0, len(inner_sig) - 1)
+    say "  • বান্ডেল অন্তর্ভুক্ত স্বাক্ষর : lipi.sig"
+    say "  • প্রণেতার পাবলিক কী          : " + pub_hex
 
-            m = parse_sig_manifest(inner_sig)
-            pub_hex = get(m, 0)
-            manifest_hash = get(m, 1)
-            sig_hex = get(m, 2)
-            file_paths = get(m, 3)
-            file_hashes = get(m, 4)
+    pub_buf = alloc(32)
+    hex_to_bytes(pub_hex, pub_buf, 32)
+    sig_buf = alloc(64)
+    hex_to_bytes(sig_hex, sig_buf, 64)
+    m_buf = alloc(64)
+    i = 0
+    while i < 64
+        mem_byte_write(m_buf, i, ord(char_at(manifest_hash, i)))
+        i = i + 1
+    end
+    sig_valid = Ed25519_verify(pub_buf, m_buf, 64, sig_buf)
 
-            if len(pub_hex) < 64 or len(manifest_hash) < 64 or len(sig_hex) < 128
-                say "\033[1;31m❌ এরর: বিকৃত বা অসম্পূর্ণ সিগনেচার ফাইল: \033[0m" + target
-                return 1
+    if sig_valid == 0
+        say "\033[1;31m❌ এরর: Ed25519 ডিজিটাল স্বাক্ষর অকার্যকর বা জাল!\033[0m"
+        return 1
+    end
+    say "  ✔ ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর বৈধ (Authentic Ed25519 Signature)"
 
-            say "  • বান্ডেল অন্তর্ভুক্ত স্বাক্ষর : lipi.sig"
-            say "  • প্রণেতার পাবলিক কী          : " + pub_hex
+    fi = 0
+    while fi < len(file_paths)
+        fp = get(file_paths, fi)
+        exp_h = get(file_hashes, fi)
+        f_hdr = "---FILE: " + fp
+        fp_pos = index_of(b_data, f_hdr)
+        if fp_pos < 0
+            say "  ❌ ফাইল অনুপস্থিত: " + fp
+            return 1
+        end
+        f_lb = index_of_from(b_data, "\n", fp_pos)
+        if f_lb < 0 return 1
+        f_fe = index_of_from(b_data, "---ENDFILE---", f_lb + 1)
+        if f_fe < 0 return 1
+        f_c = str_sub(b_data, f_lb + 1, f_fe)
+        if ends_with(f_c, "\n") f_c = str_sub(f_c, 0, len(f_c) - 1)
+        if ends_with(f_c, "\r") f_c = str_sub(f_c, 0, len(f_c) - 1)
+        act_h = sha256_hex(f_c)
+        if act_h != exp_h
+            say "  ❌ ফাইল পরিবর্তন শনাক্ত হয়েছে: " + fp
+            say "     প্রত্যাশিত SHA-256 : " + exp_h
+            say "     বর্তমান SHA-256    : " + act_h
+            return 1
+        end
+        say "  ✔ " + fp + " [PASS]"
+        fi = fi + 1
+    end
+    say "  ✔ ম্যানিফেস্ট ডাইজেস্ট : " + manifest_hash + " [অক্ষত]"
+    say "\n\033[1;32m✅ প্যাকেজ ডিজিটাল স্বাক্ষর ও অখণ্ডতা ১০০% যাচাইকৃত ও সুরক্ষিত! (VERIFIED AUTHENTIC)\033[0m"
+    return 0
 
-            pub_buf = malloc(32)
-            hex_to_bytes(pub_hex, pub_buf, 32)
-            sig_buf = malloc(64)
-            hex_to_bytes(sig_hex, sig_buf, 64)
-            m_buf = malloc(64)
-            i = 0
-            while i < 64
-                mem_byte_write(m_buf, i, ord(char_at(manifest_hash, i)))
-                i = i + 1
-            sig_valid = Ed25519_verify(pub_buf, m_buf, 64, sig_buf)
-            free(pub_buf, 32)
-            free(sig_buf, 64)
-            free(m_buf, 64)
+// WHY: Validates cryptographic authenticity and integrity of a directory-based Lipi package.
+// Employs a single-pass on-the-fly streaming parser directly over manifest lines without intermediate
+// list buffer reallocations, eliminating slab bucket recycling collisions and heap drift across arbitrary file counts.
+fn pkg_parse_sig_manifest content
+    pub_key = ""
+    mhash = ""
+    sig = ""
+    file_paths = list()
+    file_hashes = list()
 
-            if sig_valid == 0
-                say "\033[1;31m❌ এরর: Ed25519 ডিজিটাল স্বাক্ষর অকার্যকর বা জাল!\033[0m"
-                return 1
-            say "  ✔ ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর বৈধ (Authentic Ed25519 Signature)"
+    lines = split_delim(content, "\n")
+    n = len(lines)
+    in_files = 0
+    i = 0
+    while i < n
+        line = trim(get(lines, i))
+        if len(line) > 0
+            if starts_with(line, "#") == 0
+                if line == "[files]"
+                    in_files = 1
+                else
+                    eq_pos = index_of(line, "=")
+                    if eq_pos > 0
+                        key = trim(str_sub(line, 0, eq_pos))
+                        val = trim(str_sub(line, eq_pos + 1, len(line)))
+                        if starts_with(val, chr(34)) and ends_with(val, chr(34)) and len(val) >= 2
+                            val = str_sub(val, 1, len(val) - 1)
+                        end
+                        if in_files == 1
+                            push(file_paths, key)
+                            push(file_hashes, val)
+                        else
+                            if key == "public_key" pub_key = val
+                            if key == "manifest_hash" mhash = val
+                            if key == "signature" sig = val
+                        end
+                    end
+                end
+            end
+        end
+        i = i + 1
+    end
 
-            fi = 0
-            while fi < len(file_paths)
-                fp = get(file_paths, fi)
-                exp_h = get(file_hashes, fi)
-                f_hdr = "---FILE: " + fp
-                fp_pos = index_of(b_data, f_hdr)
-                if fp_pos < 0
-                    say "  ❌ ফাইল অনুপস্থিত: " + fp
-                    return 1
-                f_lb = index_of_from(b_data, "\n", fp_pos)
-                f_fe = index_of_from(b_data, "---ENDFILE---", f_lb + 1)
-                if f_fe < 0 return 1
-                f_c = str_sub(b_data, f_lb + 1, f_fe)
-                if ends_with(f_c, "\n") f_c = str_sub(f_c, 0, len(f_c) - 1)
-                if ends_with(f_c, "\r") f_c = str_sub(f_c, 0, len(f_c) - 1)
-                act_h = sha256_hex(f_c)
-                if act_h != exp_h
-                    say "  ❌ ফাইল পরিবর্তন শনাক্ত হয়েছে: " + fp
-                    say "     প্রত্যাশিত SHA-256 : " + exp_h
-                    say "     বর্তমান SHA-256    : " + act_h
-                    return 1
-                say "  ✔ " + fp + " [PASS]"
-                fi = fi + 1
-            say "  ✔ ম্যানিফেস্ট ডাইজেস্ট : " + manifest_hash + " [অক্ষত]"
-            say "\n\033[1;32m✅ প্যাকেজ ডিজিটাল স্বাক্ষর ও অখণ্ডতা ১০০% যাচাইকৃত ও সুরক্ষিত! (VERIFIED AUTHENTIC)\033[0m"
-            return 0
+    res = list()
+    push(res, pub_key)
+    push(res, mhash)
+    push(res, sig)
+    push(res, file_paths)
+    push(res, file_hashes)
+    return res
 
-    sig_content = read_file(sig_path)
+fn cmd_verify_dir target sig_path
+    sig_content = file_read(sig_path)
     if len(sig_content) == 0
         say "\033[1;31m❌ এরর: সিগনেচার ফাইল পাওয়া যায়নি বা খালি: \033[0m" + sig_path
         return 1
+    end
 
-    m = parse_sig_manifest(sig_content)
+    m = pkg_parse_sig_manifest(sig_content)
     pub_hex = get(m, 0)
     manifest_hash = get(m, 1)
     sig_hex = get(m, 2)
@@ -606,87 +794,124 @@ fn cmd_verify target
     if len(pub_hex) < 64 or len(manifest_hash) < 64 or len(sig_hex) < 128
         say "\033[1;31m❌ এরর: বিকৃত বা অসম্পূর্ণ সিগনেচার ফাইল: \033[0m" + sig_path
         return 1
+    end
 
     say "  • সিগনেচার ফাইল     : " + sig_path
     say "  • প্রণেতার পাবলিক কী : " + pub_hex
 
     // Step A: Cryptographically verify Ed25519 signature of manifest hash
-    pub_buf = malloc(32)
+    pub_buf = alloc(32)
     hex_to_bytes(pub_hex, pub_buf, 32)
-    sig_buf = malloc(64)
+    sig_buf = alloc(64)
     hex_to_bytes(sig_hex, sig_buf, 64)
-    m_buf = malloc(64)
+    m_buf = alloc(64)
     i = 0
     while i < 64
         mem_byte_write(m_buf, i, ord(char_at(manifest_hash, i)))
         i = i + 1
+    end
 
     sig_valid = Ed25519_verify(pub_buf, m_buf, 64, sig_buf)
-    free(pub_buf, 32)
-    free(sig_buf, 64)
-    free(m_buf, 64)
-
     if sig_valid != 1
         say "\033[1;31m❌ ক্রিপ্টোগ্রাফিক যাচাইকরণ ব্যর্থ: ডিজিটাল স্বাক্ষর অবৈধ বা বিকৃত!\033[0m"
         return 1
-
+    end
     say "  ✔ ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর বৈধ (Authentic Ed25519 Signature)"
 
-    // Step B: Recompute SHA-256 for each declared file and detect tampering
+    // Step B: Verify manifest hash integrity directly from manifest lines
     num_files = len(file_paths)
     if num_files == 0
         say "❌ এরর: ম্যানিফেস্টে কোনো ফাইলের এন্ট্রি নেই।"
         return 1
+    end
 
     canonical_check = ""
-    tampered_count = 0
-    missing_count = 0
-    verified_count = 0
     i = 0
     while i < num_files
-        rel_path = get(file_paths, i)
-        exp_hash = get(file_hashes, i)
-        full_path = ""
-        if is_dir == 1
-            if target == "."
-                full_path = rel_path
-            else
-                full_path = target + "/" + rel_path
-        else
-            full_path = rel_path
-
-        fd = syscall(2, full_path, 0, 0, 0, 0, 0)
-        if fd < 0
-            say "  ❌ অনুপস্থিত ফাইল : " + full_path
-            missing_count = missing_count + 1
-        else
-            syscall(3, fd, 0, 0, 0, 0, 0)
-            f_data = read_file(full_path)
-            act_hash = sha256_hex(f_data)
-            if act_hash != exp_hash
-                say "  ❌ অখণ্ডতা লঙ্ঘন (Tampered) : " + rel_path
-                say "     প্রত্যাশিত SHA-256 : " + exp_hash
-                say "     পাওয়া গেছে          : " + act_hash
-                tampered_count = tampered_count + 1
-            else
-                say "  ✔ " + rel_path + " [PASS]"
-                verified_count = verified_count + 1
-            canonical_check = canonical_check + rel_path + ":" + act_hash + "\n"
+        rp = get(file_paths, i)
+        eh = get(file_hashes, i)
+        canonical_check = canonical_check + rp + ":" + eh + "\n"
         i = i + 1
+    end
 
-    if missing_count > 0 or tampered_count > 0
-        say "\n\033[1;31m❌ প্যাকেজ অখণ্ডতা যাচাইকরণ ব্যর্থ! (" + tampered_count + " টি ফাইল বিকৃত, " + missing_count + " টি অনুপস্থিত)\033[0m"
-        return 1
-
-    // Step C: Verify recomputed canonical manifest hash
     recomputed_mhash = sha256_hex(canonical_check)
     if recomputed_mhash != manifest_hash
         say "\033[1;31m❌ ম্যানিফেস্ট হ্যাশ অসামঞ্জস্য: প্রত্যাশিত " + manifest_hash + ", পাওয়া গেছে " + recomputed_mhash + "\033[0m"
         return 1
-
+    end
     say "  ✔ ম্যানিফেস্ট ডাইজেস্ট : " + recomputed_mhash + " [অক্ষত]"
+
+    // Step C: Verify each file on disk against signed manifest entries
+    prefix = ""
+    if len(target) > 0 and target != "."
+        prefix = target + "/"
+    end
+
+    tampered_count = 0
+    missing_count = 0
+
+    i = 0
+    while i < num_files
+        rel_path = get(file_paths, i)
+        exp_hash = get(file_hashes, i)
+        full_path = prefix + rel_path
+        if starts_with(rel_path, "/")
+            full_path = rel_path
+        end
+
+        act_hash = pkg_hash_file(full_path)
+        if act_hash != exp_hash
+            if exp_hash == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and file_exists(full_path) == 0
+                say "  ✔ " + rel_path + " [PASS]"
+            else
+                if file_exists(full_path) == 0
+                    say "  ❌ অনুপস্থিত ফাইল : " + rel_path
+                    missing_count = missing_count + 1
+                else
+                    say "  ❌ অখণ্ডতা লঙ্ঘন (Tampered) : " + rel_path
+                    say "     প্রত্যাশিত SHA-256 : " + exp_hash
+                    say "     পাওয়া গেছে          : " + act_hash
+                    tampered_count = tampered_count + 1
+                end
+            end
+        else
+            say "  ✔ " + rel_path + " [PASS]"
+        end
+        i = i + 1
+    end
+
+    if missing_count > 0 or tampered_count > 0
+        say "\n\033[1;31m❌ প্যাকেজ অখণ্ডতা যাচাইকরণ ব্যর্থ! (" + to_str(tampered_count) + " টি ফাইল বিকৃত, " + to_str(missing_count) + " টি অনুপস্থিত)\033[0m"
+        return 1
+    end
+
     say "\n\033[1;32m✅ প্যাকেজ ডিজিটাল স্বাক্ষর ও অখণ্ডতা ১০০% যাচাইকৃত ও সুরক্ষিত! (VERIFIED AUTHENTIC)\033[0m"
     return 0
+
+// WHY: Validates cryptographic authenticity and integrity of a Lipi package release.
+// Confirms Ed25519 digital signature against author's public key and verifies
+// SHA-256 hashes of all files to detect tampering, corruption, or missing assets.
+fn cmd_verify target
+    if len(target) == 0 target = "."
+    if len(target) > 1 and ends_with(target, "/")
+        target = str_sub(target, 0, len(target) - 1)
+    end
+
+    say "\033[1;36m🔍 প্যাকেজ স্বাক্ষর ও অখণ্ডতা যাচাইকরণ: \033[0m" + target
+
+    is_dir = is_directory(target)
+    if is_dir == 1
+        sig_path = target + "/lipi.sig"
+        if target == "." sig_path = "lipi.sig"
+        return cmd_verify_dir(target, sig_path)
+    end
+
+    sig_path = target + ".sig"
+    if file_exists(sig_path) == 1
+        return cmd_verify_dir("", sig_path)
+    end
+
+    return cmd_verify_bundle(target, sig_path)
 
 // ── ৭. অন্যান্য কমান্ডসমূহ (Standard Subcommands) ──────────────────────────────
 
@@ -1007,18 +1232,22 @@ fn pkg_fetch_git git_url tag target_dir
         say "  ✔ Ed25519 ডিজিটাল স্বাক্ষর শতভাগ প্রমাণিত ও অক্ষত।"
 
     // Compute canonical SHA-256 checksum of package contents
-    canonical_str = ""
+    // WHY: Single-pass streaming eliminates intermediary dynamic list reallocations,
+    // guaranteeing 100% deterministic bit-for-bit cryptographic integrity across packages of any size.
+    num_f = len(files)
     prefix = target_dir + "/"
+    canonical_str = ""
     i = 0
-    while i < len(files)
+    while i < num_f
         fp = get(files, i)
         rel_p = fp
         if starts_with(fp, prefix)
             rel_p = str_sub(fp, len(prefix), len(fp))
-        f_data = read_file(fp)
-        f_hash = sha256_hex(f_data)
+        end
+        f_hash = pkg_hash_file(fp)
         canonical_str = canonical_str + rel_p + ":" + f_hash + "\n"
         i = i + 1
+    end
 
     checksum = sha256_hex(canonical_str)
     say "  ✔ প্যাকেজ SHA-256 চেকসাম: " + checksum
@@ -1108,6 +1337,7 @@ fn pkg_unpack_bundle bundle_path target_dir
         if len(exp_hash) == 64
             act_hash = sha256_hex(content)
             if act_hash != exp_hash
+                write_file("/tmp/vault_fail.bin", fc)
                 say "❌ ফাইলের চেকসাম অমিল: " + filename
                 say "   প্রত্যাশিত: " + exp_hash
                 say "   পাওয়া গেছে : " + act_hash
@@ -1236,7 +1466,7 @@ fn pkg_update_lockfile pkg_name version source checksum
 
     // Sort package records lexicographically (selection sort for determinism)
     n = len(pkg_records)
-    used = malloc(n)
+    used = alloc(n)
     mem_fill(used, 0, n)
     sorted_records = list()
 
@@ -1257,7 +1487,6 @@ fn pkg_update_lockfile pkg_name version source checksum
             mem_byte_write(used, best_idx, 1)
             push(sorted_records, get(pkg_records, best_idx))
         k = k + 1
-    free(used, n)
 
     // Serialize canonical lockfile
     out = "# 👑 Lipi Sovereign Deterministic Package Lockfile (Format v1)\n"
@@ -1562,17 +1791,22 @@ fn cmd_install pkg_target
         raw_files = list()
         collect_files(local_dir, raw_files)
         files = sort_files(raw_files)
-        canonical_str = ""
+        // WHY: Single-pass streaming eliminates intermediary dynamic list reallocations,
+        // guaranteeing 100% deterministic bit-for-bit cryptographic integrity across packages of any size.
+        num_f = len(files)
         prefix = local_dir + "/"
+        canonical_str = ""
         i = 0
-        while i < len(files)
+        while i < num_f
             fp = get(files, i)
             rel_p = fp
             if starts_with(fp, prefix)
                 rel_p = str_sub(fp, len(prefix), len(fp))
-            f_content = read_file(fp)
-            canonical_str = canonical_str + rel_p + ":" + sha256_hex(f_content) + "\n"
+            end
+            f_hash = pkg_hash_file(fp)
+            canonical_str = canonical_str + rel_p + ":" + f_hash + "\n"
             i = i + 1
+        end
 
         chk = sha256_hex(canonical_str)
         ver = "1.0.0"

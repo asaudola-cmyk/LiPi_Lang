@@ -1,4 +1,4 @@
-import "packages/json_toolkit/src/lib"
+import "aati/json_toolkit/src/lib"
 
 @fn main()
   println("--- JSON Toolkit Test Suite ---")

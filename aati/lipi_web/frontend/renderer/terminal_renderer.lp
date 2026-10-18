@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — ANSI TERMINAL TRUECOLOR RASTERIZER (F13)
-@! Module: packages/lipi_web/frontend/renderer/terminal_renderer.lp
+@! Module: aati/lipi_web/frontend/renderer/terminal_renderer.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Direct 24-bit TrueColor ANSI escape sequence generator
@@ -12,8 +12,8 @@
 import "utso/collections"
 import "utso/math"
 import "utso/string"
-import "packages/lipi_web/frontend/renderer/canvas2d_renderer"
-import "packages/lipi_web/frontend/layout/layout_types"
+import "aati/lipi_web/frontend/renderer/canvas2d_renderer"
+import "aati/lipi_web/frontend/layout/layout_types"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES & INITIALIZATION

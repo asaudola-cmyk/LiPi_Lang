@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE — ADVANCED MATHEMATICS & NUMERICS (packages/math_extra/src/lib.lp)
+// 👑 LIPI UNIVERSE — ADVANCED MATHEMATICS & NUMERICS (aati/math_extra/src/lib.lp)
 // ⚡ 100% Pure Lipi Implementation — Zero C / Zero External Runtime Dependencies
 // ==============================================================================
 

@@ -17,7 +17,7 @@
 //   5. Autoregressive multi-token generation with greedy argmax decoding.
 // ==============================================================================
 
-include "packages/lipi_ai/llm_inference.lp"
+include "aati/lipi_ai/llm_inference.lp"
 
 // ── 1. Sovereign Token Vocabulary Dictionary ─────────────────────────────────
 // WHY: Maps integer token IDs to human-readable Bengali tokens.

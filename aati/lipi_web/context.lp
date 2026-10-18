@@ -1,13 +1,13 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — HTTP CONTEXT, REQUEST & RESPONSE (packages/lipi_web/context.lp)
+@! LIPI UNIVERSE WEB — HTTP CONTEXT, REQUEST & RESPONSE (aati/lipi_web/context.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! RFC 7230 / RFC 7231 Compliant Request / Response / Context Engine
 @! ============================================================================
 
 import "utso/string"
 import "utso/core/json"
-import "packages/lipi_web/url"
-import "packages/lipi_web/router"
+import "aati/lipi_web/url"
+import "aati/lipi_web/router"
 
 @! ----------------------------------------------------------------------------
 @! 1. HTTP Status Codes & Reason Phrase Resolver

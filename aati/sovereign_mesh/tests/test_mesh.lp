@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN MESH: VERIFICATION & COMPLIANCE TEST SUITE
-// ⚡ File: packages/sovereign_mesh/tests/test_mesh.lp
+// ⚡ File: aati/sovereign_mesh/tests/test_mesh.lp
 //
 // WHY: Validates packet framing, multi-hop routing, loop prevention, and
 //      deduplication guarantees of sovereign mesh peer-to-peer networking.
@@ -8,7 +8,7 @@
 // 100% Pure Lipi | 0% C | 0% Libc | Direct Silicon
 // ==============================================================================
 
-import "packages/sovereign_mesh/src/mesh"
+import "aati/sovereign_mesh/src/mesh"
 
 fn assert_eq(actual, expected, test_name)
     if actual == expected

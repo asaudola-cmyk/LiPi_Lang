@@ -1,4 +1,4 @@
-import "packages/lipi_gpu/compute"
+import "aati/lipi_gpu/compute"
 import "utso/io"
 
 @fn main()

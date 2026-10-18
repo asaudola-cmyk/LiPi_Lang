@@ -949,12 +949,7 @@ fn trim s
             end = end - 1
         else
             break
-    res = ""
-    i = start
-    while i <= end
-        res = res + char_at(s, i)
-        i = i + 1
-    return res
+    return str_sub(s, start, end + 1)
 
 fn str_trim s
     return trim(s)

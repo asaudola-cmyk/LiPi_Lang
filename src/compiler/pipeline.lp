@@ -731,7 +731,11 @@ fn compiler_pipeline_execute config source_code
     tc = type_checker_new(ty_reg, sym_table, scope_stk)
     own_checker = ownership_checker_new()
 
-    // WHY: Control Flow Graph (CFG) Mathematical Memory Proof Engine enforces ΔMemory = 0 compile-time invariant.
+    // WHY: Actively runs semantic type checking and symbol table binding on all AST declarations.
+    tc_check_program(tc, ast_decls)
+    if tc_has_errors(tc) == 1
+        result.res_warning_count = result.res_warning_count + tc.tc_errors.len()
+    end
     di = 0
     while di < ast_decls.len()
         decl = ast_decls[di]
@@ -875,11 +879,14 @@ fn compiler_pipeline_execute config source_code
             iv = ra_res.intervals[ivi]
             if iv.is_spilled == 0 and iv.assigned_reg >= 0
                 vname = iv.vreg_name
-                push(reg_names, vname)
-                push(reg_regs, iv.assigned_reg)
                 // WHY: SSA virtual register intervals (%v0..%vN, %slot_...) are function-scoped.
-                // Never promote stripped names globally to avoid clobbering variables (like 'i')
+                // Never promote user variables globally to avoid clobbering variables (like 'i')
                 // in unpreserved callee-saved registers across nested function calls.
+                if starts_with(vname, "%") == 1
+                    push(reg_names, vname)
+                    push(reg_regs, iv.assigned_reg)
+                end
+            end
             ivi = ivi + 1
         fi = fi + 1
 

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — 3D RIGID BODY PHYSICS SIMULATION ENGINE
-@! Module: packages/lipi_engine3d/physics.lp
+@! Module: aati/lipi_engine3d/physics.lp
 @! Milestone: 3D Raytracing & Physics Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Rigid Body Dynamics, Numerical Time Integration (Euler/Verlet),
@@ -8,7 +8,7 @@
 @! ============================================================================
 
 import "utso/collections"
-import "packages/lipi_engine3d/vec3"
+import "aati/lipi_engine3d/vec3"
 
 @! ============================================================================
 @! 1. RIGID BODY STRUCTURE

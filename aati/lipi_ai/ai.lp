@@ -1,22 +1,22 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE AI — GRAND UMBRELLA PRELUDE (packages/lipi_ai/ai.lp)
+// 👑 LIPI UNIVERSE AI — GRAND UMBRELLA PRELUDE (aati/lipi_ai/ai.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero Python | Zero PyTorch
 // ==============================================================================
 //
 // WHY: Provides a unified gateway for all AI, Machine Learning, Tensor Math,
 // and Neural Network operations in pure Lipi.
 // Developers can simply write:
-//     import "packages/lipi_ai/ai"
+//     import "aati/lipi_ai/ai"
 // to access N-dimensional tensors, reverse-mode autograd, GGUF model parsing,
 // AVX-512 GEMM matrix math, and LLM transformer inference.
 // ==============================================================================
-import "packages/lipi_ai/tensor"
-import "packages/lipi_ai/tensor_engine"
-import "packages/lipi_ai/gguf"
-import "packages/lipi_ai/autograd"
-import "packages/lipi_ai/nn"
-import "packages/lipi_ai/llm_inference"
-import "packages/lipi_ai/simd_gemm"
+import "aati/lipi_ai/tensor"
+import "aati/lipi_ai/tensor_engine"
+import "aati/lipi_ai/gguf"
+import "aati/lipi_ai/autograd"
+import "aati/lipi_ai/nn"
+import "aati/lipi_ai/llm_inference"
+import "aati/lipi_ai/simd_gemm"
 
 // ── Tensor Creation Intrinsic ─────────────────────────────────────────────────
 // WHY: Creates an N-dimensional tensor from array data and shape specifications.

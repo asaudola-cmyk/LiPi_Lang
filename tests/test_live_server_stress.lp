@@ -14,8 +14,8 @@
 //    LiPi silicon engine.
 // ==============================================================================
 
-include "packages/lipi_gui/sovereign_ui.lp"
-include "packages/lipi_web/sovereign_framework.lp"
+include "aati/lipi_gui/sovereign_ui.lp"
+include "aati/lipi_web/sovereign_framework.lp"
 include "build.lp"
 include "src/tools/installer.lp"
 

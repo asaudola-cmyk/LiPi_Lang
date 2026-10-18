@@ -1,5 +1,5 @@
 // Test fbdev direct
-include "packages/lipi_gui/fbdev.lp"
+include "aati/lipi_gui/fbdev.lp"
 
 fn main
     say "Testing fbdev..."

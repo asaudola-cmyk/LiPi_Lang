@@ -13,7 +13,7 @@
 
 include "utso/io/nvme_direct.lp"
 include "utso/net/virtio_net.lp"
-include "packages/lipi_ai/llm_engine_pure.lp"
+include "aati/lipi_ai/llm_engine_pure.lp"
 include "utso/core/formal_proof.lp"
 include "utso/net/bft_consensus.lp"
 include "build.lp"

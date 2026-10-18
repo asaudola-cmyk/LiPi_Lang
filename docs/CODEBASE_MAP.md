@@ -13,7 +13,7 @@ When exploring the LiPi codebase, code is organized into three distinct tiers ba
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           LIPI REPOSITORY ARCHITECTURE                      │
 ├─────────────────────────┬─────────────────────────┬─────────────────────────┤
-│          src/           │          utso/          │        packages/        │
+│          src/           │          utso/          │        aati/        │
 │   COMPILER & TOOLCHAIN  │   GENESIS PRIMITIVES    │   SOVEREIGN PACKAGES    │
 ├─────────────────────────┼─────────────────────────┼─────────────────────────┤
 │ • 79 Modular Subsystems │ • Silicon Primitives    │ • 18+ Sovereign Packages│
@@ -31,7 +31,7 @@ When exploring the LiPi codebase, code is organized into three distinct tiers ba
    - Pure silicon primitives that directly interface with hardware and Linux kernel syscalls.
    - Single-file genesis modules (`memory.lp`, `io.lp`, `string.lp`, `math.lp`, `socket.lp`, `crypto.lp`, `syscalls.lp`, `collections.lp`, `hashmap.lp`, `arena.lp`, `error.lp`, `option.lp`, `result.lp`, `channel.lp`, `concurrency.lp`, `time.lp`, `fmt.lp`, `unicode.lp`, `ffi.lp`).
    - Deep sub-layers in `utso/core/`, `utso/os/`, `utso/sys/`, `utso/net/`, `utso/crypto/`, `utso/cpu/`, `utso/io/`, `utso/tools/`.
-3. **[`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) — Sovereign Domain Packages**
+3. **[`aati/`](file:///home/shafiullah/Documents/file/work/lipi/aati/) — Sovereign Domain Packages**
    - Independent, versioned domain packages managed by the sovereign package manager (`lipipkg`).
    - Each package contains its own `lipipkg.toml` manifest, sovereign modules, and unit tests.
    - Domain packages include `lipi_ai`, `lipidb`, `lipi_web`, `lipi_gui`, `lipi_engine3d`, `lipi_quantum`, `lipi_blockchain`, `lipi_hypervisor`, `lipi_swarm`, `lipi_iot`, `lipi_media`, `lipi_gpu`, `lipi_fs`, `lipi_mobile`, `lipi_p2p`, `lipi_security`, `lipi_boot`, `lipi_ide`, `lipi_registry`.
@@ -49,7 +49,7 @@ lipi/
 ├── install.sh           # Standalone curl installer for Linux x86_64
 ├── LICENSE              # MIT Open Source License
 ├── lipipkg.toml         # Root project package and workspace manifest
-├── packages/            # Sovereign domain packages (lipi_ai, lipidb, lipi_web, ...)
+├── aati/            # Sovereign domain packages (lipi_ai, lipidb, lipi_web, ...)
 ├── README.md            # Primary repository entry point and quickstart guide
 ├── scripts/             # Automation, benchmarking, and documentation generator scripts
 ├── src/                 # Compiler micro-pipeline, runtime, and tool implementations
@@ -105,28 +105,28 @@ The Genesis Primitives are pure silicon building blocks:
 
 ---
 
-### 3. [`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) — Sovereign Domain Packages
+### 3. [`aati/`](file:///home/shafiullah/Documents/file/work/lipi/aati/) — Sovereign Domain Packages
 
 | Package | Description | Key Capabilities |
 | :--- | :--- | :--- |
-| `packages/lipi_ai` | Autonomous AI & Tensor Engine | N-D tensors, reverse-mode autodiff, GGUF local LLM inference |
-| `packages/lipidb` | Embedded ACID Database | LipiKV, B+Tree indexing, WAL crash recovery, Redis protocol |
-| `packages/lipi_web` | Sovereign Full-Stack Web Framework | Sub-microsecond HTTP/1.1 & HTTP/2 routing, WebSockets, DOM-bypass |
-| `packages/lipi_gui` | Sovereign GUI & Graphics | Linux `/dev/fb0` framebuffer, DRM/KMS, Bresenham canvas, desktop UI |
-| `packages/lipi_gpu` | GPU Compute & SPIR-V Engine | Native SPIR-V binary code emission, compute shaders, DRM dumb-buffers |
-| `packages/lipi_fs` | Filesystem Engine | Copy-on-Write LipiFS, raw Ext4 filesystem driver |
-| `packages/lipi_blockchain` | Sovereign Blockchain Core | EVM-compatible VM, Merkle Patricia Trie, cryptographic ledger |
-| `packages/lipi_quantum` | Quantum Computing Simulator | State vectors, superposition, quantum gates, Shor algorithm |
-| `packages/lipi_hypervisor`| Bare-Metal Hypervisor | Linux KVM ioctl hardware virtualization, guest vCPU execution |
-| `packages/lipi_swarm` | Distributed Swarm Engine | Actor concurrency model, distributed consensus, mesh routing |
-| `packages/lipi_iot` | Embedded IoT & Edge Gateway | MQTT client, hardware sensor telemetry, edge gateway |
-| `packages/lipi_media` | Pure Audio & Video Canvas | Pure WAV audio synthesis, video canvas blitting |
-| `packages/lipi_mobile` | Mobile Platform Runtime | Mobile application engine, sandbox storage, event system |
-| `packages/lipi_p2p` | P2P Network & Distribution | Kademlia DHT, peer-to-peer package distribution, registry |
-| `packages/lipi_security` | Advanced Security & Proofs | Zero-knowledge proofs, JWT auth, seccomp sandbox |
-| `packages/lipi_boot` | Bare-Metal Bootloader | UEFI and Multiboot bootloader, freestanding kernel |
-| `packages/lipi_ide` | Sovereign IDE & Studio | IDE studio, syntax highlighter, integrated LSP client |
-| `packages/lipi_registry` | Package Registry Hub | Decentralized package registry, SemVer 2.0.0 resolver |
+| `aati/lipi_ai` | Autonomous AI & Tensor Engine | N-D tensors, reverse-mode autodiff, GGUF local LLM inference |
+| `aati/lipidb` | Embedded ACID Database | LipiKV, B+Tree indexing, WAL crash recovery, Redis protocol |
+| `aati/lipi_web` | Sovereign Full-Stack Web Framework | Sub-microsecond HTTP/1.1 & HTTP/2 routing, WebSockets, DOM-bypass |
+| `aati/lipi_gui` | Sovereign GUI & Graphics | Linux `/dev/fb0` framebuffer, DRM/KMS, Bresenham canvas, desktop UI |
+| `aati/lipi_gpu` | GPU Compute & SPIR-V Engine | Native SPIR-V binary code emission, compute shaders, DRM dumb-buffers |
+| `aati/lipi_fs` | Filesystem Engine | Copy-on-Write LipiFS, raw Ext4 filesystem driver |
+| `aati/lipi_blockchain` | Sovereign Blockchain Core | EVM-compatible VM, Merkle Patricia Trie, cryptographic ledger |
+| `aati/lipi_quantum` | Quantum Computing Simulator | State vectors, superposition, quantum gates, Shor algorithm |
+| `aati/lipi_hypervisor`| Bare-Metal Hypervisor | Linux KVM ioctl hardware virtualization, guest vCPU execution |
+| `aati/lipi_swarm` | Distributed Swarm Engine | Actor concurrency model, distributed consensus, mesh routing |
+| `aati/lipi_iot` | Embedded IoT & Edge Gateway | MQTT client, hardware sensor telemetry, edge gateway |
+| `aati/lipi_media` | Pure Audio & Video Canvas | Pure WAV audio synthesis, video canvas blitting |
+| `aati/lipi_mobile` | Mobile Platform Runtime | Mobile application engine, sandbox storage, event system |
+| `aati/lipi_p2p` | P2P Network & Distribution | Kademlia DHT, peer-to-peer package distribution, registry |
+| `aati/lipi_security` | Advanced Security & Proofs | Zero-knowledge proofs, JWT auth, seccomp sandbox |
+| `aati/lipi_boot` | Bare-Metal Bootloader | UEFI and Multiboot bootloader, freestanding kernel |
+| `aati/lipi_ide` | Sovereign IDE & Studio | IDE studio, syntax highlighter, integrated LSP client |
+| `aati/lipi_registry` | Package Registry Hub | Decentralized package registry, SemVer 2.0.0 resolver |
 
 ---
 
@@ -168,6 +168,6 @@ bin/lipc tests/run_tests.lp /tmp/run_tests && /tmp/run_tests
 
 ### Where to Add New Features
 - **Compiler features**: Add modular passes in [`src/compiler/`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/). Keep every file $\le 35,000$ bytes!
-- **Standard library primitives**: Add genesis primitives in [`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) or sovereign domain modules in [`packages/`](file:///home/shafiullah/Documents/file/work/lipi/packages/).
-- **Reusable community libraries**: Create a new package in [`packages/<name>/`](file:///home/shafiullah/Documents/file/work/lipi/packages/) with a valid `lipipkg.toml`.
+- **Standard library primitives**: Add genesis primitives in [`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) or sovereign domain modules in [`aati/`](file:///home/shafiullah/Documents/file/work/lipi/aati/).
+- **Reusable community libraries**: Create a new package in [`aati/<name>/`](file:///home/shafiullah/Documents/file/work/lipi/aati/) with a valid `lipipkg.toml`.
 - **Regression tests**: Add tests in [`tests/`](file:///home/shafiullah/Documents/file/work/lipi/tests/) and register them in [`tests/run_tests.lp`](file:///home/shafiullah/Documents/file/work/lipi/tests/run_tests.lp).

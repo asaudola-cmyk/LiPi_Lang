@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — TIER 3 CPU CANVAS 2D SOFTWARE RASTERIZER (F11)
-@! Module: packages/lipi_web/frontend/renderer/canvas2d_renderer.lp
+@! Module: aati/lipi_web/frontend/renderer/canvas2d_renderer.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - 32-bit ARGB Flat Framebuffer Software Rasterizer with Alpha Blending

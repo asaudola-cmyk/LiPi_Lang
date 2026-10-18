@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — MASTER LIPI STUDIO APPLICATION
-@! Module: packages/lipi_ide/studio.lp
+@! Module: aati/lipi_ide/studio.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Multi-Pane TUI/GUI Layout, Integrated Editor, Real-Time Console,
@@ -9,15 +9,15 @@
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
-import "packages/lipi_gui/widget"
-import "packages/lipi_ide/syntax"
-import "packages/lipi_ide/editor"
-import "packages/lipi_ide/console"
-import "packages/lipi_ide/toolbar"
-import "packages/lipi_ide/runner"
-import "packages/lipi_ide/lsp_client"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
+import "aati/lipi_gui/widget"
+import "aati/lipi_ide/syntax"
+import "aati/lipi_ide/editor"
+import "aati/lipi_ide/console"
+import "aati/lipi_ide/toolbar"
+import "aati/lipi_ide/runner"
+import "aati/lipi_ide/lsp_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. MASTER STUDIO DATA STRUCTURE

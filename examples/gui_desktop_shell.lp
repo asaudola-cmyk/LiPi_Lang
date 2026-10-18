@@ -15,7 +15,7 @@
 //   4. System Hardware Resource Gauge Widget (Memory & Fiber Gauges)
 //   5. Hardware Arrow Mouse Cursor Rasterization with Alpha Blending
 
-import "packages/lipi_gui/framebuffer"
+import "aati/lipi_gui/framebuffer"
 import "utso/string"
 
 @fn color_rgb(r: i64, g: i64, b: i64)

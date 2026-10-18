@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — FAST PREFIX TRIE ROUTER (packages/lipi_web/router.lp)
+@! LIPI UNIVERSE WEB — FAST PREFIX TRIE ROUTER (aati/lipi_web/router.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Supports Static Segments, :param Variables, *wildcard Catch-Alls,
 @! HTTP Method Dispatch, 404 Not Found, 405 Method Not Allowed with Allow Header,
@@ -7,7 +7,7 @@
 @! ============================================================================
 
 import "utso/string"
-import "packages/lipi_web/url"
+import "aati/lipi_web/url"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Discriminators

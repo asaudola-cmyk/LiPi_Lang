@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN WEBAUTHN & FIDO2 PASSKEY AUTHENTICATOR
-// Module: packages/lipi_web/passkey_auth.lp
+// Module: aati/lipi_web/passkey_auth.lp
 // Milestone: Sovereign Full-Stack Horizon 8 (Replacing Passwords, Auth0, Okta, and SMS OTP)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

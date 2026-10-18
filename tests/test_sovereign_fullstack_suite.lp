@@ -5,8 +5,8 @@
 // 100% Pure LiPi Implementation — Zero External / C / NPM Dependencies
 // ==============================================================================
 
-include "packages/lipi_gui/sovereign_ui.lp"
-include "packages/lipi_web/sovereign_framework.lp"
+include "aati/lipi_gui/sovereign_ui.lp"
+include "aati/lipi_web/sovereign_framework.lp"
 
 fn assert_eq actual expected label
     if actual == expected

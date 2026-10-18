@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🌐 লিপি মাল্টি-নোড ডিস্ট্রিবিউটেড রাফট ক্লাস্টার (Lipi Multi-Node Raft Cluster)
-// Module: packages/lipidb/distributed/raft_cluster_net.lp
+// Module: aati/lipidb/distributed/raft_cluster_net.lp
 // Standard: Ongaro & Ousterhout Raft Consensus Algorithm with Real Socket Transport
 // 100% Pure Lipi Implementation — 0% C | 0% Libc | 0% External Networking Libs
 // ==============================================================================

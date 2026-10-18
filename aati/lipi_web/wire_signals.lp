@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN WIRE-SIGNALS ENGINE (REPLACING REACT RSC & HTMX)
-// Module: packages/lipi_web/wire_signals.lp
+// Module: aati/lipi_web/wire_signals.lp
 // Milestone: Sovereign Full-Stack Horizon 1 (Zero-JS Ultra-Fast Wire State Sync)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

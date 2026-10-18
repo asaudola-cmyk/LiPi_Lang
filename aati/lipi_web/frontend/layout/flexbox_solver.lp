@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — HIGH-PRECISION CPU FLEXBOX & GRID SOLVER (F10)
-@! Module: packages/lipi_web/frontend/layout/flexbox_solver.lp
+@! Module: aati/lipi_web/frontend/layout/flexbox_solver.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-precision 7-pass integer-conserving flexbox and grid layout solver
@@ -15,7 +15,7 @@
 import "utso/collections"
 import "utso/math"
 import "utso/string"
-import "packages/lipi_web/frontend/layout/layout_types"
+import "aati/lipi_web/frontend/layout/layout_types"
 
 @! ============================================================================
 @! 1. INTRINSIC MEASUREMENT

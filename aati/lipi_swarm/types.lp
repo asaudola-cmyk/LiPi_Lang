@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — CORE TYPES & DATA STRUCTURES (packages/lipi_swarm/types.lp)
+@! LIPI SWARM — CORE TYPES & DATA STRUCTURES (aati/lipi_swarm/types.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Defines PID, NodeInfo, TaskDescriptor, SwarmJoinHandle, ActorMessage, SwarmPacket
 @! ============================================================================

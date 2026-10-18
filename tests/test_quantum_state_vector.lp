@@ -3,7 +3,7 @@
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Zero Python | Non-Binary Silicon Logic
 // ==============================================================================
 
-import "packages/lipi_quantum/multi_qubit"
+import "aati/lipi_quantum/multi_qubit"
 
 @fn main()
     println("==================================================================")

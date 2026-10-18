@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (packages/lipi_ai/tensor.lp)
+@! LIPI UNIVERSE AI — HIGH-PERFORMANCE N-DIMENSIONAL TENSOR ENGINE (aati/lipi_ai/tensor.lp)
 @! 100% Pure Lipi Implementation — Zero External Python/C++/CUDA Dependencies
 @! Features: Strided Memory Views, Reshaping, Transposition, Permutation,
 @! Slicing, Multidirectional Broadcasting, 2D/Batched GEMM, Reductions,
@@ -11,7 +11,7 @@ import "utso/collections"
 import "utso/string"
 // WHY: Consolidated to canonical utso/os/syscalls kernel gateway.
 import "utso/syscalls"
-import "packages/lipi_ai/simd_gemm"
+import "aati/lipi_ai/simd_gemm"
 
 @! ----------------------------------------------------------------------------
 @! 1. Core Struct Definitions
@@ -400,8 +400,11 @@ import "packages/lipi_ai/simd_gemm"
 @end
 
 @fn tensor_set_flat(t: Tensor, flat_idx: i64, val: i64) -> i64
+  // WHY: Extract array reference before indexing to ensure memory mutation persists in struct slot
   off = tensor_flat_to_offset(t, flat_idx)
-  t.data[off] = val
+  d = t.data
+  d[off] = val
+  t.data = d
   return 0
 @end
 
@@ -449,8 +452,11 @@ import "packages/lipi_ai/simd_gemm"
 @end
 
 @fn tensor_set(t: Tensor, coords: array, val: i64) -> Tensor
+  // WHY: Extract array reference before indexing to ensure memory mutation persists in struct slot
   phys_idx = tensor_get_offset(t, coords)
-  t.data[phys_idx] = val
+  d = t.data
+  d[phys_idx] = val
+  t.data = d
   return t
 @end
 

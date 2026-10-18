@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — P2P DISCOVERY & CLUSTER FORMATION (packages/lipi_swarm/discovery.lp)
+@! LIPI SWARM — P2P DISCOVERY & CLUSTER FORMATION (aati/lipi_swarm/discovery.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! UDP Broadcast Beacons (SO_REUSEPORT), TCP Gossip, Heartbeat & Failure Detector
 @! ============================================================================
@@ -9,9 +9,9 @@ import "utso/collections"
 import "utso/time"
 import "utso/net/udp"
 import "utso/net/tcp"
-import "packages/lipi_swarm/types"
-import "packages/lipi_swarm/protocol"
-import "packages/lipi_swarm/serializer"
+import "aati/lipi_swarm/types"
+import "aati/lipi_swarm/protocol"
+import "aati/lipi_swarm/serializer"
 
 @! ----------------------------------------------------------------------------
 @! 1. Peer Table Data Structure & Management

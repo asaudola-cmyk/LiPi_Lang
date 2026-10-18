@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN gRPC & PROTOBUF PROTOCOL ENGINE (packages/lipi_grpc/src/grpc.lp)
+// 👑 LIPI SOVEREIGN gRPC & PROTOBUF PROTOCOL ENGINE (aati/lipi_grpc/src/grpc.lp)
 // ⚡ Zero Libc | Zero Protoc | Sovereign Binary Wire Framing & Varint Engine
 // ==============================================================================
 //

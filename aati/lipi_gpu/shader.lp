@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI GPU SHADER COMPILER & SPIR-V EMISSION (packages/lipi_gpu/shader.lp)
+@! LIPI GPU SHADER COMPILER & SPIR-V EMISSION (aati/lipi_gpu/shader.lp)
 @! 100% Pure Lipi Implementation — Zero External Compiler / C++ Dependencies
 @! Supports Vertex, Fragment, and Compute Stage SPIR-V Generation
 @! ============================================================================
 
-import "packages/lipi_gpu/compute"
+import "aati/lipi_gpu/compute"
 
 @struct ShaderUniform
   name: string

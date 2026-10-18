@@ -1,0 +1,11 @@
+# Lipi Sovereign Package Signature Manifest (RFC 8032 Ed25519)
+version = "1.0"
+algorithm = "Ed25519-SHA256"
+public_key = "1bfb9f88c2d8753914f6ae208d192d5357860f61523b3568ba14413bbbb8df1d"
+manifest_hash = "b46d4d1f8c549e3c62d24f44f4a4f00e121d10addecb8ced8ea32268ffdc1d0b"
+signature = "4f28d5cb8ca942722e6253ab4c6b94412f69433a0c46a507a2616a1ef7bd73cd90eab4ea8086a6c238b0ea1aca704288985aa852a06e38e264ae4e96b09e58fc"
+
+[files]
+aati.toml = "206c7d55b0889d83718418ca82b737d9315d03612efb4f2081f96910d5edf5ee"
+baremetal_kernel.lp = "b2ce7222121f02d7727e0dff2b22935fc3202d7ac7394dfc3c9cb7df0f596363"
+uefi_boot.lp = "10346061b6367e787b462f00bac998bd97b4d1c4b8c243c5e259d89992086740"

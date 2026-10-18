@@ -4,7 +4,7 @@
 //    First-Committer-Wins Write Conflict Detection, Instant Rollback, and Vacuum.
 // ==============================================================================
 
-include "packages/lipidb/mvcc.lp"
+include "aati/lipidb/mvcc.lp"
 
 fn assert_true cond test_name
     if cond == 0

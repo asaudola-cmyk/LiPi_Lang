@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - KV NODE (packages/lipidb/distributed/kv_node.lp)
+@! LIPI UNIVERSE DB - KV NODE (aati/lipidb/distributed/kv_node.lp)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

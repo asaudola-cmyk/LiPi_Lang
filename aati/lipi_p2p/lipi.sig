@@ -1,0 +1,16 @@
+# Lipi Sovereign Package Signature Manifest (RFC 8032 Ed25519)
+version = "1.0"
+algorithm = "Ed25519-SHA256"
+public_key = "1bfb9f88c2d8753914f6ae208d192d5357860f61523b3568ba14413bbbb8df1d"
+manifest_hash = "19e4492af841bed97e806fde99de6976e13e3a79a8348a87256d564156a4de3a"
+signature = "0e7df49b8cce531d3c874278056bd57740cc57182e46d548a5b69d5fc756eaae8a68eeca80e48c448c0e0468a07048cc7e2c20866c6e58e8f62c009c90b4a2c2"
+
+[files]
+aati.toml = "fa9d81acae4463fefa938e219b209538ab2e503d3c80d15bdfa0d7528a9f6a76"
+aati_client.lp = "772fce80b3d846dfa3ca3b5fa5b2f2c3cb06322e3524f28396cf9d7c45322dd2"
+dht.lp = "d4768dbf04d7a768638092e6d0e5534c6bf2ecd5cf56f89a4eee7fcad52c49f1"
+haat_server.lp = "455eee5ebeaf0d802fa152c5f80a093610a92dcdee9d8cd69104a484f9c9bc8b"
+lipipkg_client.lp = "8c2c0e17d1c96b4b61bec051b3df4e30d0a34734cbac6e26f5d68191e3f9b1d7"
+lipipkg_server.lp = "6e9907e282796bd04c1c4eeecb16ed9be02e06486fcc6b0ee2be6f2c4c5b6aa3"
+lipipkg_server_engine.lp = "539be9b19b4147f93f55b4c53fba653f25979cd80779071586e0ab170d4c0d41"
+registry.lp = "b20d3b66b5c97f6efe710b1da6252ec53c672c1d389f3277b7ad7c91246b9e44"

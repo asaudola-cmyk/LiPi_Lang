@@ -1,9 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (packages/lipidb/sql/parser.lp)
+@! LIPI UNIVERSE DB - SQL RECURSIVE-DESCENT PARSER (aati/lipidb/sql/parser.lp)
 @! Standard: 100% Pure LiPi SQL AST Parser
 @! ============================================================================
 
-import "packages/lipidb/sql/lexer"
+import "aati/lipidb/sql/lexer"
 import "utso/string"
 import "utso/collections"
 

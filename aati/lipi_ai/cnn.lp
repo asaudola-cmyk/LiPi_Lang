@@ -1,13 +1,13 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI: CONVOLUTIONAL NEURAL NETWORK LAYERS
-@! Module: packages/lipi_ai/cnn
+@! Module: aati/lipi_ai/cnn
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "utso/collections"
 import "utso/string"
 import "utso/math"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 @struct Conv2D
   in_channels: i64

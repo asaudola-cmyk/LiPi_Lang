@@ -43,17 +43,17 @@ fn main():
 
 ## ৩. লিপির মৌলিক উৎস ও ডোমেইন প্যাকেজ (Genesis Primitives & Sovereign Packages)
 
-লিপির সকল মৌলিক প্রিম্যাটিভস শতভাগ পিওর লিপি কোডে (`.lp`) `utso/` ডিরেক্টরিতে এবং ডোমেন মডিউলসমূহ `packages/` ডিরেক্টরিতে সমৃদ্ধ:
+লিপির সকল মৌলিক প্রিম্যাটিভস শতভাগ পিওর লিপি কোডে (`.lp`) `utso/` ডিরেক্টরিতে এবং ডোমেন মডিউলসমূহ `aati/` ডিরেক্টরিতে সমৃদ্ধ:
 
 1. **Genesis Core Primitives (`utso/`, `utso/core/`):** মেমরি (`memory.lp`), স্ট্রিং (`string.lp`), আই/ও (`io.lp`), সিসকল (`syscalls.lp`), এরিনা (`arena.lp`), হ্যাশম্যাপ (`hashmap.lp`)।
-2. **AI & Machine Learning (`packages/lipi_ai/`):** Tensor অপারেশন, GGUF কোয়ান্টাইজড ইনফারেন্স ইঞ্জিন, AVX-512 ভেক্টর এক্সিকিউশন।
-3. **Database Engine (`packages/lipidb/`):** LipiKV, B-Tree ইনডেক্সিং, WAL (Write-Ahead Logging), ক্র্যাশ-রেসিলিয়েন্ট স্টোরেজ।
-4. **OS & Baremetal (`utso/os/`, `packages/lipi_boot/`):** Multiboot2 কার্নেল, Ring-0 মোড, VGA ফ্রেমবাফার, IDT / GDT ইন্টারাপ্ট হ্যান্ডলার, পেজিং।
-5. **Network & Web (`utso/net/`, `packages/lipi_web/`):** কাঁচা লিনাক্স সিসকল সকেট, HTTP/1.1 & HTTP/2 হাই-থ্রুপুট সার্ভার ও পলিমরফিক রাউটার।
+2. **AI & Machine Learning (`aati/lipi_ai/`):** Tensor অপারেশন, GGUF কোয়ান্টাইজড ইনফারেন্স ইঞ্জিন, AVX-512 ভেক্টর এক্সিকিউশন।
+3. **Database Engine (`aati/lipidb/`):** LipiKV, B-Tree ইনডেক্সিং, WAL (Write-Ahead Logging), ক্র্যাশ-রেসিলিয়েন্ট স্টোরেজ।
+4. **OS & Baremetal (`utso/os/`, `aati/lipi_boot/`):** Multiboot2 কার্নেল, Ring-0 মোড, VGA ফ্রেমবাফার, IDT / GDT ইন্টারাপ্ট হ্যান্ডলার, পেজিং।
+5. **Network & Web (`utso/net/`, `aati/lipi_web/`):** কাঁচা লিনাক্স সিসকল সকেট, HTTP/1.1 & HTTP/2 হাই-থ্রুপুট সার্ভার ও পলিমরফিক রাউটার।
 6. **Cryptography (`utso/crypto/`):** NIST SP 800-38D AES-GCM, ChaCha20-Poly1305, Ed25519 ডিজিটাল সাইনিং, TLS 1.3 রেকর্ড লেয়ার।
-7. **GUI & Graphics (`packages/lipi_gui/`):** Bresenham লাইন রেন্ডারিং, ক্লিপড রেক্ট্যাঙ্গেল, বিটম্যাপ ফন্ট রাস্টারাইজার।
-8. **Quantum & Blockchain (`packages/lipi_quantum/`, `packages/lipi_blockchain/`):** স্টেট-ভেক্টর কোয়ান্টাম সিমুলেটর, মারকেল ট্রি, কনসেনসাস ইঞ্জিন।
-9. **Package Management (`packages/` ও `src/tools/lipipkg.lp`):** সম্পূর্ণ সার্বভৌম ও ক্রিপ্টোগ্রাফিক লিপি প্যাকেজ ম্যানেজার (`lipipkg`)।
+7. **GUI & Graphics (`aati/lipi_gui/`):** Bresenham লাইন রেন্ডারিং, ক্লিপড রেক্ট্যাঙ্গেল, বিটম্যাপ ফন্ট রাস্টারাইজার।
+8. **Quantum & Blockchain (`aati/lipi_quantum/`, `aati/lipi_blockchain/`):** স্টেট-ভেক্টর কোয়ান্টাম সিমুলেটর, মারকেল ট্রি, কনসেনসাস ইঞ্জিন।
+9. **Package Management (`aati/` ও `src/tools/lipipkg.lp`):** সম্পূর্ণ সার্বভৌম ও ক্রিপ্টোগ্রাফিক লিপি প্যাকেজ ম্যানেজার (`lipipkg`)।
 
 ---
 

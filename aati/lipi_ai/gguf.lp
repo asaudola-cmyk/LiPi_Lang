@@ -8,7 +8,7 @@
 // GGUF model headers, Q4_0/Q8_0 tensor unpackers, and hardware vector-matrix multiplication.
 
 include "utso/memory.lp"
-include "packages/lipi_ai/tensor_engine.lp"
+include "aati/lipi_ai/tensor_engine.lp"
 include "utso/cpu/avx512_native.lp"
 
 // ── ১. GGUF ফরম্যাট কনস্ট্যান্টস ──────────────────────────────────────────────

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — URL DECODER & QUERY PARSER (packages/lipi_web/url.lp)
+@! LIPI UNIVERSE WEB — URL DECODER & QUERY PARSER (aati/lipi_web/url.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! RFC 3986 URL Percent-Decoding, Component Encoding, and Query String Parser
 @! ============================================================================

@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN HTTP/1.1 CLIENT (packages/lipi_http_client/src/http_client.lp)
+// 👑 LIPI SOVEREIGN HTTP/1.1 CLIENT (aati/lipi_http_client/src/http_client.lp)
 // ⚡ Zero Libc | Zero cURL | Direct Kernel Syscalls & Wire Framing
 // ==============================================================================
 //

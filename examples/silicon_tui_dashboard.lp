@@ -18,7 +18,7 @@ include "utso/io.lp"
 include "utso/memory.lp"
 include "utso/arena.lp"
 include "utso/string.lp"
-include "packages/lipidb/db_engine.lp"
+include "aati/lipidb/db_engine.lp"
 
 fn render_dashboard_frame tick_count mem_alloc_bytes db_records
     // Clear screen and move cursor home

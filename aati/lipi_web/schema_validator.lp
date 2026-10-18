@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN ZERO-REFLECTION SCHEMA & RPC VALIDATOR
-// Module: packages/lipi_web/schema_validator.lp
+// Module: aati/lipi_web/schema_validator.lp
 // Milestone: Sovereign Full-Stack Framework v2 (Replacing Zod, Yup, and tRPC Reflection)
 // Version: 1.0.0 (Fixed)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — UNIFIED DATABASE ENGINE (packages/lipidb/engine.lp)
+@! LIPI UNIVERSE DB — UNIFIED DATABASE ENGINE (aati/lipidb/engine.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Unifies BufferPool, B+Tree, Write-Ahead Log (WAL), ACID Transactions,
 @! Redo Crash Recovery, Auto-Commit Durability, and Checkpointing
@@ -9,10 +9,10 @@ import "utso/syscalls"
 import "utso/os/fs"
 import "utso/collections"
 import "utso/string"
-import "packages/lipidb/page"
-import "packages/lipidb/buffer"
-import "packages/lipidb/btree"
-import "packages/lipidb/wal"
+import "aati/lipidb/page"
+import "aati/lipidb/buffer"
+import "aati/lipidb/btree"
+import "aati/lipidb/wal"
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures
 @! ----------------------------------------------------------------------------
@@ -45,8 +45,8 @@ import "packages/lipidb/wal"
   wal_last_lsn: i64
 @end
 
-import "packages/lipidb/tx"
-import "packages/lipidb/recovery"
+import "aati/lipidb/tx"
+import "aati/lipidb/recovery"
 
 @! ----------------------------------------------------------------------------
 @! 2. Database Lifecycle API

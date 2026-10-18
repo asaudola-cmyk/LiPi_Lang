@@ -1,14 +1,14 @@
 @! ============================================================================
 @! 👑 LIPI UNIVERSAL ARCHITECTURE — DECENTRALIZED LIPIPKG PACKAGE SERVER & REGISTRY
-@! Module: packages/lipi_p2p/lipipkg_server.lp
+@! Module: aati/lipi_p2p/lipipkg_server.lp
 @! Milestone: 100% Sovereign Lipi Package Ecosystem
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Features: Full HTTP REST Server, P2P CAS Storage, Merkle DAG Sync,
 @! SemVer 2.0.0 Constraint Resolution, Cryptographic Verification, Client API
 @! ============================================================================
 
-import "packages/lipi_p2p/lipipkg_server_engine"
-import "packages/lipi_p2p/lipipkg_client"
+import "aati/lipi_p2p/lipipkg_server_engine"
+import "aati/lipi_p2p/lipipkg_client"
 
 // WHY: Provides canonical Lipi-branded naming for package server configurations
 @fn lipipkg_server_config_default()

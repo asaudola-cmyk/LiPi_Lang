@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN JSON WEB TOKEN (JWT) ENGINE (packages/lipi_jwt/src/jwt.lp)
+// 👑 LIPI SOVEREIGN JSON WEB TOKEN (JWT) ENGINE (aati/lipi_jwt/src/jwt.lp)
 // ⚡ Zero Libc | Zero PyJWT | RFC 7519 Cryptographic Token Generator & Validator
 // ==============================================================================
 //

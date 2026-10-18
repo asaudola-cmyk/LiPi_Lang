@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE AI — VISION CODECS (packages/lipi_ai/vision/codecs.lp)
+@! LIPI UNIVERSE AI — VISION CODECS (aati/lipi_ai/vision/codecs.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Pure LiPi PPM (P2/P3/P5/P6) & BMP (24-bit/32-bit) Encoders & Decoders,
 @! Synthetic Test Pattern Generators (Checkerboard, Gradients, Color Bars, Circles).
@@ -8,7 +8,7 @@
 import "utso/math"
 import "utso/string"
 import "utso/collections"
-import "packages/lipi_ai/vision/image"
+import "aati/lipi_ai/vision/image"
 
 @! ----------------------------------------------------------------------------
 @! 1. ASCII Tokenizer for Netpbm Decoders

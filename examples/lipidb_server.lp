@@ -15,7 +15,7 @@ include "utso/memory.lp"
 include "utso/string.lp"
 include "utso/io.lp"
 include "utso/socket.lp"
-include "packages/lipidb/kv.lp"
+include "aati/lipidb/kv.lp"
 
 // ── 1. RESP Wire Protocol Serializers ─────────────────────────────────────────
 

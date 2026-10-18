@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — BACKGROUND PROCESS RUNNER & COMPILER CONTROLLER
-@! Module: packages/lipi_ide/runner.lp
+@! Module: aati/lipi_ide/runner.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
@@ -9,7 +9,7 @@ import "utso/collections"
 import "utso/string"
 import "utso/syscalls"
 import "utso/os/process"
-import "packages/lipi_ide/console"
+import "aati/lipi_ide/console"
 
 @! ----------------------------------------------------------------------------
 @! 1. PROCESS RUNNER DATA STRUCTURE

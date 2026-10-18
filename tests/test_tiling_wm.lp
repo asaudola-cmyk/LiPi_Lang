@@ -5,8 +5,8 @@
 // 100% Pure Lipi — Zero External GUI Libraries
 // ==============================================================================
 
-import "packages/lipi_gui/window_manager"
-import "packages/lipi_gui/framebuffer"
+import "aati/lipi_gui/window_manager"
+import "aati/lipi_gui/framebuffer"
 import "utso/string"
 
 @fn assert_true(cond: i64, msg: string)

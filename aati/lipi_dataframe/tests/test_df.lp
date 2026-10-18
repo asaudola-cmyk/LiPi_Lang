@@ -2,7 +2,7 @@
 // 🧪 LIPI PACKAGE TEST: Columnar DataFrame Engine Unit Test
 // ==============================================================================
 
-include "packages/lipi_dataframe/src/dataframe.lp"
+include "aati/lipi_dataframe/src/dataframe.lp"
 
 fn assert_true cond test_name
     if cond == 0

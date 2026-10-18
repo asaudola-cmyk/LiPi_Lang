@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE DB — SOVEREIGN DISTRIBUTED RAFT CONSENSUS ENGINE
-@! File: packages/lipidb/distributed/raft.lp
+@! File: aati/lipidb/distributed/raft.lp
 @! Standard: Ongaro & Ousterhout Raft Consensus Algorithm
 @! 100% Pure Lipi Implementation — Zero External C / libc Dependencies
 @! Features: Quorum Election, Log Replication, Term Progression, State Machine

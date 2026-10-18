@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — LAYOUT SUBSYSTEM ROOT AGGREGATOR
-@! Module: packages/lipi_web/frontend/layout/mod.lp
+@! Module: aati/lipi_web/frontend/layout/mod.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - High-level layout engine coordinator
@@ -10,9 +10,9 @@
 
 import "utso/collections"
 import "utso/math"
-import "packages/lipi_web/frontend/layout/layout_types"
-import "packages/lipi_web/frontend/layout/flexbox_solver"
-import "packages/lipi_web/frontend/layout/gpu_layout"
+import "aati/lipi_web/frontend/layout/layout_types"
+import "aati/lipi_web/frontend/layout/flexbox_solver"
+import "aati/lipi_web/frontend/layout/gpu_layout"
 
 @! ============================================================================
 @! 1. UNIFIED FRONTEND LAYOUT API

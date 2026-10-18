@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI UNIVERSE QUANTUM - SUPERPOSITION ENGINE (packages/lipi_quantum/superposition.lp)
+@! LIPI UNIVERSE QUANTUM - SUPERPOSITION ENGINE (aati/lipi_quantum/superposition.lp)
 @! Standard: Sovereign Non-Binary Logic Subsystem
 @! ============================================================================
 
 import "utso/collections"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 @struct Qubit
   alpha: f64 @! Probability amplitude |0>

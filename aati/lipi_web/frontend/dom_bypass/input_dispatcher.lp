@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/dom_bypass/input_dispatcher.lp
+@! Module: aati/lipi_web/frontend/dom_bypass/input_dispatcher.lp
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
@@ -14,9 +14,9 @@
 import "utso/collections"
 import "utso/math"
 import "utso/string"
-import "packages/lipi_web/frontend/concurrency/message_protocol"
-import "packages/lipi_web/frontend/concurrency/worker_pool"
-import "packages/lipi_web/frontend/remote/mod"
+import "aati/lipi_web/frontend/concurrency/message_protocol"
+import "aati/lipi_web/frontend/concurrency/worker_pool"
+import "aati/lipi_web/frontend/remote/mod"
 
 @! ============================================================================
 @! 1. GESTURE & DOM EVENT CONSTANTS

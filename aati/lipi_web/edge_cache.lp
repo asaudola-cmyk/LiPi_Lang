@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN INCREMENTAL STATIC REGENERATION (ISR) & EDGE CACHING
-// Module: packages/lipi_web/edge_cache.lp
+// Module: aati/lipi_web/edge_cache.lp
 // Milestone: Sovereign Full-Stack Framework v2 (Replacing Next.js ISR & Cloudflare Cache)
 // Version: 1.0.0 (Fixed)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies

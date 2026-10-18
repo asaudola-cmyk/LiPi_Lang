@@ -7,7 +7,7 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 @! ----------------------------------------------------------------------------
 @! 1. Core Image Data Structure

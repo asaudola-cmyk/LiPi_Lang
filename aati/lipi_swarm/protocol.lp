@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — P2P BINARY & WIRE PROTOCOL CODEC (packages/lipi_swarm/protocol.lp)
+@! LIPI SWARM — P2P BINARY & WIRE PROTOCOL CODEC (aati/lipi_swarm/protocol.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================
 
@@ -7,7 +7,7 @@ import "utso/net/tcp"
 import "utso/net/udp"
 import "utso/string"
 import "utso/collections"
-import "packages/lipi_swarm/types"
+import "aati/lipi_swarm/types"
 
 @fn net_u16_be(buf, off)
   b0 = buf[off] & 255

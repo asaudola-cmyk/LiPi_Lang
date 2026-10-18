@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — NATIVE IN-PROCESS LSP CLIENT ENGINE
-@! Module: packages/lipi_ide/lsp_client.lp
+@! Module: aati/lipi_ide/lsp_client.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================

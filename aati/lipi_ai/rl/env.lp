@@ -7,7 +7,7 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/rl/space"
+import "aati/lipi_ai/rl/space"
 
 @! ----------------------------------------------------------------------------
 @! 1. Unified MDP Environment Interface Dispatchers

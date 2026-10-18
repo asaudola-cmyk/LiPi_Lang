@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — 3D RAYTRACER & BVH ACCELERATION ENGINE
-@! Module: packages/lipi_engine3d/raytracer.lp
+@! Module: aati/lipi_engine3d/raytracer.lp
 @! Milestone: 3D Raytracing & Physics Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Ray-Sphere, Möller–Trumbore Ray-Triangle, AABB BVH Traversal,
@@ -8,7 +8,7 @@
 @! ============================================================================
 
 import "utso/collections"
-import "packages/lipi_engine3d/vec3"
+import "aati/lipi_engine3d/vec3"
 
 @! ============================================================================
 @! 1. HIT RECORD & SCENE STRUCTURES

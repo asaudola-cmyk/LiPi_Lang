@@ -7,10 +7,10 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/tensor"
-import "packages/lipi_ai/autodiff"
-import "packages/lipi_ai/rl/policy"
-import "packages/lipi_ai/rl/buffer"
+import "aati/lipi_ai/tensor"
+import "aati/lipi_ai/autodiff"
+import "aati/lipi_ai/rl/policy"
+import "aati/lipi_ai/rl/buffer"
 
 @! ----------------------------------------------------------------------------
 @! 1. REINFORCE (Monte Carlo Policy Gradient)

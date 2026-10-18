@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN HTTP/3 QUIC & 0-RTT UDP TRANSPORT DRIVER
-// Module: packages/lipi_web/quic_udp.lp
+// Module: aati/lipi_web/quic_udp.lp
 // Milestone: Sovereign Full-Stack Horizon 7 (Replacing TCP Head-of-Line Blocking & NGINX)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies
 // ==============================================================================

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI: BYTE PAIR ENCODING (BPE) TOKENIZER
-@! Module: packages/lipi_ai/tokenizer
+@! Module: aati/lipi_ai/tokenizer
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 
@@ -54,6 +54,35 @@ import "utso/string"
   return ""
 @end
 
+@fn bpe_add_merge(vocab: BPEVocab, p_first: i64, p_second: i64, new_id: i64) -> BPEVocab
+  vocab.merges = vocab.merges.push({ p_first: p_first, p_second: p_second, new_id: new_id })
+  return vocab
+@end
+
+@fn bpe_apply_merges(tokens: array, merges: array) -> array
+  // WHY: Iteratively applies ordered BPE merge rules across token sequence
+  m_idx = 0
+  m_count = merges.len()
+  @while m_idx < m_count
+    m = merges[m_idx]
+    new_tokens = []
+    i = 0
+    t_count = tokens.len()
+    @while i < t_count
+      @if i < t_count - 1 && tokens[i] == m.p_first && tokens[i+1] == m.p_second
+        new_tokens = new_tokens.push(m.new_id)
+        i = i + 2
+      @else
+        new_tokens = new_tokens.push(tokens[i])
+        i = i + 1
+      @end
+    @end
+    tokens = new_tokens
+    m_idx = m_idx + 1
+  @end
+  return tokens
+@end
+
 @fn bpe_encode(text: string, vocab: BPEVocab) -> array
   ids = []
   num_items = str_len(text)
@@ -68,6 +97,10 @@ import "utso/string"
     @end
     i = i + 1
   @end
+
+  @if vocab.merges.len() > 0
+    ids = bpe_apply_merges(ids, vocab.merges)
+  @end
   return ids
 @end
 
@@ -81,7 +114,7 @@ import "utso/string"
     @if str_len(tok_str) > 0
       res = res + tok_str
     @else
-      res = res + str_from_char_code(tok_id) & 255
+      res = res + str_from_char_code(tok_id & 255)
     @end
     i = i + 1
   @end

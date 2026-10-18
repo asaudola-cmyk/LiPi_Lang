@@ -18,14 +18,25 @@ fn x86_synth_emit__lipi_file_write s
     return off
 
 fn x86_synth_emit__lipi_file_read s
-    // WHY: Silicon-direct file reader via SYS_open (2), SYS_lseek (8), __alloc, SYS_read (0), SYS_close (3)
+    // WHY: Silicon-direct file reader via SYS_open (2), SYS_lseek (8), __alloc, robust multi-chunk SYS_read (0) loop, SYS_close (3).
+    // Maintains 16-byte stack alignment across calls and handles arbitrary file sizes with zero uninitialized memory.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_file_read", off)
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 49, 246, 49, 210, 184, 2, 0, 0, 0, 15, 5, 72, 133, 192, 120, 114, 73, 137, 196, 76, 137, 231, 49, 246, 186, 2, 0, 0, 0, 184, 8, 0, 0, 0, 15, 5, 73, 137, 197, 77, 133, 237, 120, 76, 76, 137, 231, 49, 246, 49, 210, 184, 8, 0, 0, 0, 15, 5, 73, 141, 125, 9])
+    x86_synth_register_helper_fn(s, "file_read", off)
+    x86_synth_register_helper_fn(s, "read_file", off)
+    x86_synth_register_helper_fn(s, "ফাইল_পড়ো", off)
+    x86_synth_register_helper_fn(s, "ফাইল_পড়ো", off)
+
+    // Chunk 1: Open, get file size via lseek, rewind, allocate file_size + 9 bytes
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 65, 87, 49, 246, 49, 210, 184, 2, 0, 0, 0, 15, 5, 72, 133, 192, 15, 136, 144, 0, 0, 0, 73, 137, 196, 76, 137, 231, 49, 246, 186, 2, 0, 0, 0, 184, 8, 0, 0, 0, 15, 5, 73, 137, 197, 77, 133, 237, 120, 106, 76, 137, 231, 49, 246, 49, 210, 184, 8, 0, 0, 0, 15, 5, 73, 141, 125, 9])
     x86_synth_emit_call_helper(s, "__alloc")
-    x86_synth_emit_bytes(s, [73, 137, 198, 69, 137, 46, 65, 199, 70, 4, 48, 82, 84, 83, 76, 137, 231, 73, 141, 118, 8, 76, 137, 234, 184, 0, 0, 0, 0, 15, 5, 67, 198, 68, 46, 8, 0, 76, 137, 231, 184, 3, 0, 0, 0, 15, 5, 73, 141, 70, 8, 235, 45, 76, 137, 231, 184, 3, 0, 0, 0, 15, 5, 72, 199, 199, 9, 0, 0, 0])
+
+    // Chunk 2: Read loop until all bytes read, null-terminate, update header len, close fd
+    x86_synth_emit_bytes(s, [73, 137, 198, 69, 137, 46, 65, 199, 70, 4, 48, 82, 84, 83, 77, 49, 255, 77, 57, 239, 115, 28, 76, 137, 231, 75, 141, 116, 62, 8, 76, 137, 234, 76, 41, 250, 49, 192, 15, 5, 72, 133, 192, 126, 5, 73, 1, 199, 235, 223, 67, 198, 68, 62, 8, 0, 69, 137, 62, 76, 137, 231, 184, 3, 0, 0, 0, 15, 5, 73, 141, 70, 8, 65, 95, 65, 94, 65, 93, 65, 92, 93, 195, 76, 137, 231, 184, 3, 0, 0, 0, 15, 5, 191, 9, 0, 0, 0])
     x86_synth_emit_call_helper(s, "__alloc")
-    x86_synth_emit_bytes(s, [199, 0, 0, 0, 0, 0, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 198, 7, 0, 72, 137, 248, 65, 94, 65, 93, 65, 92, 93, 195])
+
+    // Chunk 3: Fallback empty string if open/read fails
+    x86_synth_emit_bytes(s, [199, 0, 0, 0, 0, 0, 199, 64, 4, 48, 82, 84, 83, 198, 64, 8, 0, 72, 141, 64, 8, 65, 95, 65, 94, 65, 93, 65, 92, 93, 195])
     return off
 
 fn x86_synth_emit__lipi_file_write_bytes s

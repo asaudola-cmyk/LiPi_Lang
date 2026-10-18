@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI NATIVE GUI FRAMEWORK — WINDOW COMPOSITOR & DESKTOP MANAGER
-@! Module: packages/lipi_gui/compositor.lp
+@! Module: aati/lipi_gui/compositor.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Multi-Window Layering & Z-Index Management
@@ -9,10 +9,10 @@
 @! - Compositor-level event routing & dispatching
 @! ============================================================================
 
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
-import "packages/lipi_gui/widget"
-import "packages/lipi_gui/event"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
+import "aati/lipi_gui/widget"
+import "aati/lipi_gui/event"
 import "utso/collections"
 import "utso/string"
 

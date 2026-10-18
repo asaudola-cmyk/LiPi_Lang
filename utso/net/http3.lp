@@ -202,17 +202,52 @@ fn h3_serialize_settings_frame settings stream_id out_list
 fn qpack_static_lookup idx
     // Selected core entries from RFC 9204 99-entry static table:
     if idx == 0 return ":authority"
-    if idx == 1 return ":path"
+    if idx == 1 return ":path:/"
+    if idx == 2 return "age:0"
+    if idx == 3 return "content-disposition"
+    if idx == 4 return "content-length:0"
+    if idx == 5 return "cookie"
+    if idx == 6 return "date"
+    if idx == 7 return "etag"
+    if idx == 8 return "if-modified-since"
+    if idx == 9 return "if-none-match"
+    if idx == 10 return "last-modified"
+    if idx == 11 return "link"
+    if idx == 12 return "location"
+    if idx == 13 return "referer"
+    if idx == 14 return "set-cookie"
+    if idx == 15 return ":method:CONNECT"
+    if idx == 16 return ":method:DELETE"
     if idx == 17 return ":method:GET"
+    if idx == 18 return ":method:HEAD"
+    if idx == 19 return ":method:OPTIONS"
     if idx == 20 return ":method:POST"
+    if idx == 21 return ":method:PUT"
+    if idx == 22 return ":scheme:http"
+    if idx == 23 return ":scheme:https"
     if idx == 24 return ":status:200"
     if idx == 25 return ":status:204"
+    if idx == 26 return ":status:304"
+    if idx == 27 return ":status:400"
     if idx == 28 return ":status:404"
     if idx == 29 return ":status:500"
+    if idx == 30 return "accept:*/*"
     if idx == 31 return "accept-encoding:gzip, deflate, br"
+    if idx == 32 return "accept-ranges:bytes"
+    if idx == 33 return "access-control-allow-headers:cache-control"
+    if idx == 34 return "access-control-allow-headers:content-type"
+    if idx == 35 return "access-control-allow-origin:*"
     if idx == 36 return "content-length:0"
     if idx == 37 return "content-type:application/json"
     if idx == 38 return "content-type:text/html; charset=utf-8"
+    if idx == 39 return "content-type:text/plain"
+    if idx == 40 return "content-type:text/plain;charset=utf-8"
+    if idx == 41 return "cache-control:max-age=0"
+    if idx == 42 return "cache-control:no-cache"
+    if idx == 43 return "cache-control:no-store"
+    if idx == 44 return "content-encoding:gzip"
+    if idx == 45 return "content-encoding:br"
+    if idx == 46 return "server:lipi"
     return ""
 
 fn h3_header_field_new name val
@@ -235,16 +270,87 @@ fn h3_request_new stream_id
     req.hr_body = ""
     return req
 
+fn h3_serialize_headers_frame status_code content_type stream_id out_list
+    // WHY: Emits RFC 9114 HEADERS frame (Type 0x01) with RFC 9204 QPACK field block.
+    // Encoded field section prefix (RFC 9204 Section 4.5.1):
+    // Required Insert Count = 0 (1 byte: 0x00)
+    // Base = 0, S bit = 0 (1 byte: 0x00)
+    payload = list()
+    push(payload, 0)
+    push(payload, 0)
+
+    // 1. Status Code: Indexed static table entry (RFC 9204 Section 4.5.2)
+    // Pattern: 1 T Index (T=1 static -> 192 | index)
+    if status_code == 200
+        push(payload, 192 | 24) // :status:200
+    elif status_code == 204
+        push(payload, 192 | 25) // :status:204
+    elif status_code == 404
+        push(payload, 192 | 28) // :status:404
+    elif status_code == 500
+        push(payload, 192 | 29) // :status:500
+    else
+        // Literal field with literal name ":status" (Pattern: 00100000 = 32)
+        push(payload, 32)
+        push(payload, 7) // name len = 7
+        push(payload, 58) // ':'
+        push(payload, 115) // 's'
+        push(payload, 116) // 't'
+        push(payload, 97) // 'a'
+        push(payload, 116) // 't'
+        push(payload, 117) // 'u'
+        push(payload, 115) // 's'
+        s_str = to_str(status_code)
+        push(payload, len(s_str))
+        si = 0
+        while si < len(s_str)
+            push(payload, ord(char_at(s_str, si)))
+            si = si + 1
+        end
+    end
+
+    // 2. Content-Type Header
+    if content_type == "application/json"
+        push(payload, 192 | 37) // content-type:application/json
+    elif content_type == "text/html; charset=utf-8"
+        push(payload, 192 | 38) // content-type:text/html; charset=utf-8
+    elif content_type == "text/plain"
+        push(payload, 192 | 39) // content-type:text/plain
+    elif len(content_type) > 0
+        // Literal with literal name "content-type"
+        push(payload, 32)
+        ct_hdr = "content-type"
+        push(payload, len(ct_hdr))
+        ci = 0
+        while ci < len(ct_hdr)
+            push(payload, ord(char_at(ct_hdr, ci)))
+            ci = ci + 1
+        end
+        push(payload, len(content_type))
+        vi = 0
+        while vi < len(content_type)
+            push(payload, ord(char_at(content_type, vi)))
+            vi = vi + 1
+        end
+    end
+
+    // Serialize HEADERS frame: [Type 0x01] [Length] [Payload]
+    h3_write_varint(out_list, H3_FRAME_HEADERS)
+    h3_write_varint(out_list, len(payload))
+    pi = 0
+    while pi < len(payload)
+        push(out_list, get(payload, pi))
+        pi = pi + 1
+    end
+    return len(out_list)
+
 fn h3_build_response_bytes status_code content_type body_str out_bytes
-    // WHY: Formulates complete HTTP/3 response including HEADERS and DATA frames.
-    // 1. Data payload
-    data_frame = list()
-    h3_serialize_data_frame(body_str, 0, data_frame)
-    
-    // Append to master output stream
-    i = 0
-    cnt = len(data_frame)
-    while i < cnt
-        push(out_bytes, get(data_frame, i))
-        i = i + 1
+    // WHY: Formulates complete HTTP/3 response containing RFC 9114 HEADERS frame followed by DATA frame.
+    // 1. HEADERS frame (RFC 9114 Section 7.2.2)
+    h3_serialize_headers_frame(status_code, content_type, 0, out_bytes)
+
+    // 2. DATA frame (RFC 9114 Section 7.2.1)
+    if len(body_str) > 0
+        h3_serialize_data_frame(body_str, 0, out_bytes)
+    end
     return len(out_bytes)

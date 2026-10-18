@@ -1,12 +1,12 @@
 @! ============================================================================
-@! LIPI SWARM — TASK REGISTRY & INVOCATION DISPATCHER (packages/lipi_swarm/task_registry.lp)
+@! LIPI SWARM — TASK REGISTRY & INVOCATION DISPATCHER (aati/lipi_swarm/task_registry.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Maps String Identifiers to Executable Function Pointers Across Cluster Nodes
 @! ============================================================================
 
 import "utso/string"
 import "utso/collections"
-import "packages/lipi_swarm/types"
+import "aati/lipi_swarm/types"
 
 @struct TaskEntry
   name: string

@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — WRITE-AHEAD LOG ENGINE (packages/lipidb/wal.lp)
+@! LIPI UNIVERSE DB — WRITE-AHEAD LOG ENGINE (aati/lipidb/wal.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! 32-Byte Binary Record Framing, Table-Driven IEEE 802.3 CRC-32 Checksum,
 @! Zero-Copy Dynamic NativeArray Buffers, Atomic fsync & Safe Truncation
@@ -7,7 +7,7 @@
 
 import "utso/syscalls"
 import "utso/string"
-import "packages/lipidb/page"
+import "aati/lipidb/page"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Operation Discriminators

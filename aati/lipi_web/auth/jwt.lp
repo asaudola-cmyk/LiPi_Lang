@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — RFC 7519 JSON WEB TOKEN (JWT) AUTHENTICATION (packages/lipi_web/auth/jwt.lp)
+@! LIPI UNIVERSE WEB — RFC 7519 JSON WEB TOKEN (JWT) AUTHENTICATION (aati/lipi_web/auth/jwt.lp)
 @! 100% Written in Pure Sovereign Lipi — Zero C / Libc / External Dependencies
 @!
 @! Standards Implemented:
@@ -13,7 +13,7 @@ import "utso/string"
 import "utso/core/json"
 import "utso/crypto/sha256"
 import "utso/crypto/base64"
-import "packages/lipi_web/context"
+import "aati/lipi_web/context"
 
 @! ----------------------------------------------------------------------------
 @! 1. Base64URL Encoding & Decoding (RFC 4648 Section 5)

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! 👑 LIPI UNIVERSAL ARCHITECTURE — LIPIPKG PACKAGE MANAGER CLI
-@! Module: packages/lipi_registry/lipipkg_cli.lp
+@! Module: aati/lipi_registry/lipipkg_cli.lp
 @! Milestone: 100% Sovereign Lipi Package Ecosystem
 @! 100% Pure Lipi Implementation — Zero External / C / Python Dependencies
 @! Features: TOML/JSON Manifests, SemVer 2.0.0 Resolver, Deterministic Lockfile,
@@ -11,9 +11,9 @@ import "utso/core/string"
 import "utso/core/json"
 import "utso/crypto/sha256"
 import "utso/net/http"
-import "packages/lipi_p2p/registry"
-import "packages/lipi_p2p/lipipkg_server_engine"
-import "packages/lipi_p2p/lipipkg_client"
+import "aati/lipi_p2p/registry"
+import "aati/lipi_p2p/lipipkg_server_engine"
+import "aati/lipi_p2p/lipipkg_client"
 import "utso/os/fs"
 
 @! ============================================================================

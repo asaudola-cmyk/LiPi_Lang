@@ -70,7 +70,7 @@ fn x86_synth_emit_arena_helpers s
         72, 57, 199,                                   // 13..15: cmp rdi, rax
         114, 25,                                       // 16..17: jb .invalid (+25 -> index 43)
         72, 186, 0, 0, 0, 0, 0, 0, 0, 0,               // 18..27: movabs rdx, <heap_ptr_addr> (patch at reset_off + 20)
-        72, 139, 8,                                    // 28..30: mov rcx, [rdx] (current _heap_ptr)
+        72, 139, 10,                                   // 28..30: mov rcx, [rdx] (current _heap_ptr)
         72, 57, 207,                                   // 31..33: cmp rdi, rcx
         119, 9,                                        // 34..35: ja .invalid (+9 -> index 45)
         72, 137, 58,                                   // 36..38: mov [rdx], rdi (update _heap_ptr = saved_mark!)

@@ -7,7 +7,7 @@
 
 import "utso/collections"
 import "utso/math"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 @fn int_to_float(n)
   return n * 1.0
 @end

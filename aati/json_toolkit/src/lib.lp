@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN JSON TOOLKIT (packages/json_toolkit/src/lib.lp)
+// 👑 LIPI SOVEREIGN JSON TOOLKIT (aati/json_toolkit/src/lib.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | High-Performance Serialization, Validation & Query
 // ==============================================================================
 //

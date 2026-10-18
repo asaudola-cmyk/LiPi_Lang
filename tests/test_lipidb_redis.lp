@@ -5,7 +5,7 @@
 // 100% Pure Lipi Implementation — Zero External Libs | Zero Libc
 // ==============================================================================
 
-import "packages/lipidb/redis_protocol"
+import "aati/lipidb/redis_protocol"
 import "utso/string"
 
 @fn assert_true(cond, msg)

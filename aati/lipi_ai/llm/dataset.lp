@@ -6,7 +6,7 @@
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 // WHY: Explicit struct definition ensures deterministic field offsets (file_path at offset 0, block_size at offset 8, etc.) across compilation units
 @struct Dataset

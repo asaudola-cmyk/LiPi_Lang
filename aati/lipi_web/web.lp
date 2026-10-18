@@ -1,15 +1,15 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — MASTER AGGREGATOR MODULE (packages/lipi_web/web.lp)
+@! LIPI UNIVERSE WEB — MASTER AGGREGATOR MODULE (aati/lipi_web/web.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! High-Performance Sovereign Web & REST API Framework
 @! ============================================================================
 
-import "packages/lipi_web/url"
-import "packages/lipi_web/router"
-import "packages/lipi_web/context"
-import "packages/lipi_web/middleware"
-import "packages/lipi_web/server"
-import "packages/lipi_web/app"
-import "packages/lipi_web/markup_parser"
-import "packages/lipi_web/frontend/mod"
+import "aati/lipi_web/url"
+import "aati/lipi_web/router"
+import "aati/lipi_web/context"
+import "aati/lipi_web/middleware"
+import "aati/lipi_web/server"
+import "aati/lipi_web/app"
+import "aati/lipi_web/markup_parser"
+import "aati/lipi_web/frontend/mod"
 

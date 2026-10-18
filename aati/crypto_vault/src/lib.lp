@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI ENTERPRISE CRYPTO VAULT (packages/crypto_vault/src/lib.lp)
+// 👑 LIPI ENTERPRISE CRYPTO VAULT (aati/crypto_vault/src/lib.lp)
 // ⚡ 100% Pure Lipi | Zero Libc | Cryptographically Secure Password Hashing & Tokens
 // ==============================================================================
 

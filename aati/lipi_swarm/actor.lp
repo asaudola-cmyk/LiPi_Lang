@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SWARM — DISTRIBUTED ACTOR MODEL (packages/lipi_swarm/actor.lp)
+@! LIPI SWARM — DISTRIBUTED ACTOR MODEL (aati/lipi_swarm/actor.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Erlang/Elixir-Style Actors, Mailboxes, PIDs, actor_send(), actor_ask() RPC
 @! ============================================================================
@@ -8,10 +8,10 @@ import "utso/string"
 import "utso/collections"
 import "utso/time"
 import "utso/net/tcp"
-import "packages/lipi_swarm/types"
-import "packages/lipi_swarm/protocol"
-import "packages/lipi_swarm/serializer"
-import "packages/lipi_swarm/discovery"
+import "aati/lipi_swarm/types"
+import "aati/lipi_swarm/protocol"
+import "aati/lipi_swarm/serializer"
+import "aati/lipi_swarm/discovery"
 
 @! ----------------------------------------------------------------------------
 @! 1. Swarm Actor & Future Data Structures

@@ -7,7 +7,7 @@ import "utso/os/process"
 import "utso/os/env"
 import "utso/core/string"
 import "utso/core/error"
-import "packages/lipi_ide/console"
+import "aati/lipi_ide/console"
 
 @! The main shell loop
 @fn shell_run()

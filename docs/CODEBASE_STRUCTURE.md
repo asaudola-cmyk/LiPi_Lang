@@ -20,7 +20,7 @@
 lipi/
 ├── docs/           # 📚 পূর্ণাঙ্গ দ্বিভাষিক হ্যান্ডবুক, আর্কিটেকচার স্পেক ও ম্যানিফেস্টো
 ├── examples/       # 💡 বাস্তব জীবনের উৎপাদনমুখী লিপির নমুনা কোড
-├── packages/       # 🌐 সার্বভৌম ডোমেন প্যাকেজ (lipi_ai, lipidb, lipi_web, lipi_gui, lipi_registry ইত্যাদি)
+├── aati/       # 🌐 সার্বভৌম ডোমেন প্যাকেজ (lipi_ai, lipidb, lipi_web, lipi_gui, lipi_registry ইত্যাদি)
 ├── scripts/        # ⚡ অটোমেশন, বেঞ্চমার্ক ও ভেরিফিকেশন সহায়ক স্ক্রিপ্ট
 ├── src/            # 🧠 লিপির মূল কম্পাইলার ও টুলচেন ইঞ্জিন (The Core Compiler)
 │   ├── compiler/   # মডুলার মাইক্রো-কম্পাইলার (Frontend, Middleend, Backend)
@@ -54,7 +54,7 @@ lipi/
 
 ### ৩.৩. প্যাকেজ ম্যানেজমেন্টের ক্যানোনিকাল নাম
 লিপি ইকোসিস্টেমে প্যাকেজ ম্যানেজমেন্টের একমাত্র ক্যানোনিকাল নাম হলো **`lipipkg`**।
-- সিএলআই এন্ট্রি পয়েন্ট: `src/tools/lipipkg.lp` ও `packages/lipi_registry/lipipkg_cli.lp`
+- সিএলআই এন্ট্রি পয়েন্ট: `src/tools/lipipkg.lp` ও `aati/lipi_registry/lipipkg_cli.lp`
 - সমস্ত লিগ্যাসি রেফারেন্স সম্পূর্ণ বিলুপ্ত করে ১০০% ক্যানোনিকাল `lipipkg` প্রতিষ্ঠা করা হয়েছে।
 
 ---

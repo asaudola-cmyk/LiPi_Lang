@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — DISK-BACKED B+TREE ENGINE (packages/lipidb/btree.lp)
+@! LIPI UNIVERSE DB — DISK-BACKED B+TREE ENGINE (aati/lipidb/btree.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Sovereign Slotted 4096-byte Binary Pages with LRU Cache & Syscall Persistence
 @! ============================================================================
@@ -7,8 +7,8 @@
 import "utso/syscalls"
 import "utso/collections"
 import "utso/string"
-import "packages/lipidb/page"
-import "packages/lipidb/buffer"
+import "aati/lipidb/page"
+import "aati/lipidb/buffer"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

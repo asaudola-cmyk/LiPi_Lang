@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPIFS (NATIVE COPY-ON-WRITE FILE SYSTEM)
-@! Module: packages/lipi_fs/lipifs.lp
+@! Module: aati/lipi_fs/lipifs.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 4KB NVMe PCIe Block Driver, Copy-on-Write (CoW) Root Pointer Swapping,

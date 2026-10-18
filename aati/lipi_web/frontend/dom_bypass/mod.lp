@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/dom_bypass/mod.lp
+@! Module: aati/lipi_web/frontend/dom_bypass/mod.lp
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
@@ -9,8 +9,8 @@
 @! ============================================================================
 
 import "utso/collections"
-import "packages/lipi_web/frontend/dom_bypass/canvas_host"
-import "packages/lipi_web/frontend/dom_bypass/input_dispatcher"
+import "aati/lipi_web/frontend/dom_bypass/canvas_host"
+import "aati/lipi_web/frontend/dom_bypass/input_dispatcher"
 
 @struct DomBypassHost
   host_canvas: CanvasPresentationTarget

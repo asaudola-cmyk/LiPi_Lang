@@ -9,7 +9,7 @@ include "utso/io.lp"
 include "utso/memory.lp"
 include "utso/string.lp"
 include "utso/core/json.lp"
-include "packages/lipi_web/engine.lp"
+include "aati/lipi_web/engine.lp"
 
 fn assert_true cond msg
     if cond == 0

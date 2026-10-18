@@ -1,5 +1,5 @@
 // ==============================================================================
-// 👑 LIPI SOVEREIGN COLUMNAR DATAFRAME ENGINE (packages/lipi_dataframe/src/dataframe.lp)
+// 👑 LIPI SOVEREIGN COLUMNAR DATAFRAME ENGINE (aati/lipi_dataframe/src/dataframe.lp)
 // ⚡ 100% Pure Lipi | Zero Python | Zero GIL | High-Throughput Analytics Engine
 //
 // WHY: Python's Pandas dominates data science despite extreme memory bloat and GIL locking.

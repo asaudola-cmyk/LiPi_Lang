@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN DESKTOP ENVIRONMENT & GRAPHICAL APPLICATION
-// Module: packages/lipi_gui/desktop_demo.lp
+// Module: aati/lipi_gui/desktop_demo.lp
 // Standard: Direct DRM/KMS GPU Modesetting (/dev/dri/card0) + Linux Framebuffer (/dev/fb0)
 // 100% Pure LiPi Implementation — Zero X11 | Zero Wayland | Zero Mesa | Zero Qt
 // ==============================================================================
@@ -24,8 +24,8 @@
 
 include "utso/memory.lp"
 include "utso/math.lp"
-include "packages/lipi_gui/drm_kms.lp"
-include "packages/lipi_gui/fbdev.lp"
+include "aati/lipi_gui/drm_kms.lp"
+include "aati/lipi_gui/fbdev.lp"
 
 // ── 1. Color Palette Constants (32-bit ARGB Little-Endian) ────────────────────
 // Format: 0xAARRGGBB encoded as positive 32-bit integers.

@@ -1,6 +1,6 @@
 // ============================================================================
 // LIPI WEB FRONTEND ENGINE — WGSL UI DRAW SHADER
-// File: packages/lipi_web/frontend/renderer/shaders/ui_draw.wgsl
+// File: aati/lipi_web/frontend/renderer/shaders/ui_draw.wgsl
 // 100% Pure WGSL Shading Pipeline for WebGPU Tier-1 UI Acceleration
 // Features:
 // - Instanced Quad Vertex Generation (Zero VBO Upload)

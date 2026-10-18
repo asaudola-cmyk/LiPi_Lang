@@ -1,16 +1,16 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/remote/mod.lp
+@! Module: aati/lipi_web/frontend/remote/mod.lp
 @! Milestone: M5 — Adaptive WebRTC Hybrid Rendering
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features: Root Aggregator Subsystem Exporting AST @remote Directive Parser,
 @! WebRTC Client, Video Blitter, and Remote Server Streaming Adapter
 @! ============================================================================
 
-import "packages/lipi_web/frontend/remote/remote_directive"
-import "packages/lipi_web/frontend/remote/webrtc_client"
-import "packages/lipi_web/frontend/remote/video_blitter"
-import "packages/lipi_web/frontend/remote/remote_server_adapter"
+import "aati/lipi_web/frontend/remote/remote_directive"
+import "aati/lipi_web/frontend/remote/webrtc_client"
+import "aati/lipi_web/frontend/remote/video_blitter"
+import "aati/lipi_web/frontend/remote/remote_server_adapter"
 
 @! ============================================================================
 @! 1. HIGH-LEVEL HYBRID PIPELINE COORDINATOR

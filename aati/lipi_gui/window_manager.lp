@@ -1,5 +1,5 @@
 // ==============================================================================
-// 🖥️ LIPI SOVEREIGN TILING WINDOW MANAGER & COMPOSITOR (packages/lipi_gui/window_manager.lp)
+// 🖥️ LIPI SOVEREIGN TILING WINDOW MANAGER & COMPOSITOR (aati/lipi_gui/window_manager.lp)
 // Standard: Direct Linear Framebuffer (1024x768) Auto-Tiling & Damage Compositor
 // 100% Pure Lipi Implementation — Zero X11 | Zero Wayland | Zero libmwm
 // ==============================================================================
@@ -10,7 +10,7 @@
 // management, and damage-tracked (dirty rect) composition on bare-metal silicon.
 // ==============================================================================
 
-import "packages/lipi_gui/framebuffer"
+import "aati/lipi_gui/framebuffer"
 import "utso/collections"
 import "utso/string"
 

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — TIER 1 WEBGPU RENDERER
-@! Module: packages/lipi_web/frontend/renderer/webgpu_renderer.lp
+@! Module: aati/lipi_web/frontend/renderer/webgpu_renderer.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Emits WGSL draw commands, vertex/index buffers, uniform bind groups,
 @! SDF rounded rectangles, drop shadows, gradients, and glyph pipelines.
@@ -151,7 +151,7 @@ import "utso/collections"
 @fn webgpu_renderer_init_pipelines(renderer)
   sdf_pipe = {
     pipe_name: "sdf_rounded_rect",
-    shader_code: "packages/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
+    shader_code: "aati/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
     vertex_entry: "vs_main",
     fragment_entry: "fs_main",
     bind_group_layout: ["uniforms", "instances", "font_texture", "font_sampler"],
@@ -160,7 +160,7 @@ import "utso/collections"
   
   shadow_pipe = {
     pipe_name: "sdf_drop_shadow",
-    shader_code: "packages/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
+    shader_code: "aati/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
     vertex_entry: "vs_main",
     fragment_entry: "fs_main",
     bind_group_layout: ["uniforms", "instances"],
@@ -169,7 +169,7 @@ import "utso/collections"
   
   text_pipe = {
     pipe_name: "text_glyph_mask",
-    shader_code: "packages/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
+    shader_code: "aati/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
     vertex_entry: "vs_main",
     fragment_entry: "fs_main",
     bind_group_layout: ["uniforms", "instances", "font_texture", "font_sampler"],
@@ -178,7 +178,7 @@ import "utso/collections"
   
   image_pipe = {
     pipe_name: "image_blit",
-    shader_code: "packages/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
+    shader_code: "aati/lipi_web/frontend/renderer/shaders/ui_draw.wgsl",
     vertex_entry: "vs_main",
     fragment_entry: "fs_main",
     bind_group_layout: ["uniforms", "instances", "image_texture", "image_sampler"],
@@ -187,7 +187,7 @@ import "utso/collections"
   
   pipes = [sdf_pipe, shadow_pipe, text_pipe, image_pipe]
   renderer.gpu_pipelines = pipes
-  renderer.gpu_wgsl_shader_source = "packages/lipi_web/frontend/renderer/shaders/ui_draw.wgsl"
+  renderer.gpu_wgsl_shader_source = "aati/lipi_web/frontend/renderer/shaders/ui_draw.wgsl"
   return renderer
 @end
 

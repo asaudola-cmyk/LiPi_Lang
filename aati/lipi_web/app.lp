@@ -1,13 +1,13 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — APPLICATION DEVELOPER API (packages/lipi_web/app.lp)
+@! LIPI UNIVERSE WEB — APPLICATION DEVELOPER API (aati/lipi_web/app.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Application Container, Route Registration, Groups, Pipeline Dispatcher
 @! ============================================================================
 
-import "packages/lipi_web/url"
-import "packages/lipi_web/router"
-import "packages/lipi_web/context"
-import "packages/lipi_web/middleware"
+import "aati/lipi_web/url"
+import "aati/lipi_web/router"
+import "aati/lipi_web/context"
+import "aati/lipi_web/middleware"
 import "utso/net/http"
 import "utso/string"
 

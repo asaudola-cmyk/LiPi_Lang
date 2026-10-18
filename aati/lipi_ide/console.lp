@@ -1,14 +1,14 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — DOCKED MULTI-TAB OUTPUT CONSOLE PANE
-@! Module: packages/lipi_ide/console.lp
+@! Module: aati/lipi_ide/console.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
 
 @! ----------------------------------------------------------------------------
 @! 1. CONSOLE DATA STRUCTURES

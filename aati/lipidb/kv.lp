@@ -9,7 +9,7 @@
 //   লিপি KV = same process, zero network, 10x faster than Redis.
 //
 // ব্যবহার:
-//   include "packages/lipidb/std_kv.lp"
+//   include "aati/lipidb/std_kv.lp"
 //   kv = KV_create(1024)  // 1024 bucket hashmap
 //   KV_set(kv, "user:42", "রফিক আহমেদ")
 //   value = KV_get(kv, "user:42")

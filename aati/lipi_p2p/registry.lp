@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — SOVEREIGN P2P PACKAGE REGISTRY & CAS ENGINE
-@! Module: packages/lipi_p2p/registry.lp
+@! Module: aati/lipi_p2p/registry.lp
 @! Milestone 2 (Requirement R2)
 @! 100% Pure Lipi Implementation — Zero External / C Standard Library Dependencies
 @! ============================================================================

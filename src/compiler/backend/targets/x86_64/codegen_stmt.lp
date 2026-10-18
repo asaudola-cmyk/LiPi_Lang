@@ -606,7 +606,7 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_load_var(s, 0, off)
                     if comp_op == TOK_PLUS()
                         pt = x86_synth_get_prim_type(s, var_name)
-                        if pt == "int" and s.synth_last_expr_type == "int"
+                        if (pt == "int" or s.synth_last_expr_type == "int") and pt != "str" and s.synth_last_expr_type != "str"
                             // Native hardware add rax, rcx (0x48 0x01 0xC8) - 1 cycle silicon execution!
                             x86_synth_emit_byte(s, 72)
                             x86_synth_emit_byte(s, 1)

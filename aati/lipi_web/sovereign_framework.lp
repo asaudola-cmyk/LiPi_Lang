@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN WEB FRAMEWORK & EMBEDDED ORM ENGINE
-// Module: packages/lipi_web/sovereign_framework.lp
+// Module: aati/lipi_web/sovereign_framework.lp
 // Milestone: Sovereign Full-Stack Paradigm (Displacing Next.js, Nest.js, Express & Laravel)
 // 100% Pure LiPi Implementation — Zero External / Node.js / PHP Dependencies
 // ==============================================================================

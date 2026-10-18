@@ -150,7 +150,7 @@ import "tools/lipipkg/security"
     ]
   @end
   
-  path = "/v1/packages/search?q=" + query
+  path = "/v1/aati/search?q=" + query
   resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   @if resp.status != 200
     return []
@@ -162,7 +162,7 @@ import "tools/lipipkg/security"
 @end
 
 @fn lpm_registry_get_metadata(client, pkg_name)
-  path = "/v1/packages/" + pkg_name
+  path = "/v1/aati/" + pkg_name
   resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   
   return {
@@ -173,7 +173,7 @@ import "tools/lipipkg/security"
 @end
 
 @fn lpm_registry_get_version(client, pkg_name, version)
-  path = "/v1/packages/" + pkg_name + "/" + version
+  path = "/v1/aati/" + pkg_name + "/" + version
   resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   
   bundle_mock = "@! " + pkg_name + " " + version + "\n@fn init() return 1 @end"
@@ -182,7 +182,7 @@ import "tools/lipipkg/security"
   return {
     name: pkg_name,
     version: version,
-    tarball_url: client.url + "/v1/packages/" + pkg_name + "/" + version + "/download",
+    tarball_url: client.url + "/v1/aati/" + pkg_name + "/" + version + "/download",
     checksum: "sha256:" + chk,
     signature: "ed25519_valid_signature_placeholder",
     dependencies: []
@@ -197,7 +197,7 @@ import "tools/lipipkg/security"
   @end
   
   @! 2. Download from remote registry
-  path = "/v1/packages/" + pkg_name + "/" + version + "/download"
+  path = "/v1/aati/" + pkg_name + "/" + version + "/download"
   resp = lpm_http_request(client.host, client.port, "GET", path, [], "")
   bundle_content = resp.body
   
@@ -212,7 +212,7 @@ import "tools/lipipkg/security"
     { key: "Authorization", val: "Bearer " + auth_token }
   ]
   payload = "{\"manifest\":" + manifest + ",\"signature\":\"" + signature + "\"}"
-  resp = lpm_http_request(client.host, client.port, "POST", "/v1/packages/publish", headers, payload)
+  resp = lpm_http_request(client.host, client.port, "POST", "/v1/aati/publish", headers, payload)
   
   @if resp.status == 200 || resp.status == 201
     return { success: 1, error: "none" }
@@ -225,7 +225,7 @@ import "tools/lipipkg/security"
   headers = [
     { key: "Authorization", val: "Bearer " + auth_token }
   ]
-  path = "/v1/packages/" + pkg_name + "/" + version
+  path = "/v1/aati/" + pkg_name + "/" + version
   resp = lpm_http_request(client.host, client.port, "DELETE", path, headers, "")
   
   @if resp.status == 200

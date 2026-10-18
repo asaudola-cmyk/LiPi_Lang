@@ -6,8 +6,8 @@
 
 import "utso/collections"
 import "utso/math"
-import "packages/lipi_ai/tensor"
-import "packages/lipi_ai/autodiff"
+import "aati/lipi_ai/tensor"
+import "aati/lipi_ai/autodiff"
 
 @! ----------------------------------------------------------------------------
 @! 1. TENSOR & MATRIX INITIALIZERS

@@ -7,8 +7,8 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/tensor"
-import "packages/lipi_ai/autodiff"
+import "aati/lipi_ai/tensor"
+import "aati/lipi_ai/autodiff"
 
 @! ----------------------------------------------------------------------------
 @! 1. Tabular Q-Table

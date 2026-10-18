@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN DECLARATIVE UI & REACTIVE SIGNALS ENGINE
-// Module: packages/lipi_gui/sovereign_ui.lp
+// Module: aati/lipi_gui/sovereign_ui.lp
 // Milestone: Sovereign Full-Stack Paradigm (Displacing Flutter, Swift, React & Next.js)
 // 100% Pure LiPi Implementation — Zero External / C / NPM Dependencies
 // ==============================================================================

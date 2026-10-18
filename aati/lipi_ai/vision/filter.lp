@@ -7,7 +7,7 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_ai/vision/image"
+import "aati/lipi_ai/vision/image"
 
 @! ----------------------------------------------------------------------------
 @! 1. 2D Spatial Convolution Engine

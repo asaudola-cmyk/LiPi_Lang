@@ -5,7 +5,7 @@
 // 100% Pure Lipi — Zero Python | Zero PyTorch | Zero C++ | Zero llama.cpp
 // ==============================================================================
 
-include "packages/lipi_ai/llm_inference.lp"
+include "aati/lipi_ai/llm_inference.lp"
 
 fn assert_true cond msg
     if cond == 0

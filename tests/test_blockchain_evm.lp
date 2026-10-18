@@ -3,8 +3,8 @@
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero C | Merkle Patricia Trie & EVM Engine Test
 // ==============================================================================
 
-import "packages/lipi_blockchain/mpt"
-import "packages/lipi_blockchain/vm"
+import "aati/lipi_blockchain/mpt"
+import "aati/lipi_blockchain/vm"
 
 @fn main()
     println("==================================================================")

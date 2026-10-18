@@ -150,12 +150,20 @@ fn main
     if ai_opt_enabled == 1
         say "🤖 [AI OPTIMIZER]: Neural heuristic loop & register pressure analyzer active."
         opt_weights = ai_opt_default_weights()
-        feat = LoopFeatureVector(1000, 16, 4, 0, 1, 1, 0)
+        src_text = file_read(in_file)
+        if len(src_text) > 0
+            feat = ai_opt_extract_features_from_source(src_text)
+        else
+            feat = LoopFeatureVector(100, 16, 4, 0, 1, 1, 0)
+        end
         decision = ai_opt_evaluate_loop(opt_weights, feat)
-        say "  • Recommended Loop Unroll Factor: " + str(decision.recommended_unroll_factor)
-        say "  • SIMD Vectorization Affinity:    " + str(decision.should_vectorize)
-        say "  • Predicted Execution Speedup:    " + str(decision.predicted_speedup_pct) + "%"
-        say "  • Estimated Register Pressure:    " + str(decision.register_pressure_score) + "/100"
+        say "  • Analyzed Instructions in Source: " + str(feat.body_instruction_count)
+        say "  • Detected Loop Trip Bound Hint:   " + str(feat.trip_count_hint)
+        say "  • Memory References in Code:       " + str(feat.memory_access_count)
+        say "  • Recommended Loop Unroll Factor:  " + str(decision.recommended_unroll_factor)
+        say "  • SIMD Vectorization Affinity:     " + str(decision.should_vectorize)
+        say "  • Predicted Execution Speedup:     " + str(decision.predicted_speedup_pct) + "%"
+        say "  • Estimated Register Pressure:     " + str(decision.register_pressure_score) + "/100"
 
     // Execute compilation via micro-pipeline driver
     say "▶ Compiling " + in_file + " ──► " + out_file + " via Sovereign Micro-Pipeline..."

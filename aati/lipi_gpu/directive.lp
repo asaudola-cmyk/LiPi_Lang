@@ -3,7 +3,7 @@
 @! Functions marked @gpu run with SPIR-V binary kernels & compute pipeline dispatch
 @! ============================================================================
 
-import "packages/lipi_gpu/compute"
+import "aati/lipi_gpu/compute"
 
 @struct GpuTask
   gt_name: string

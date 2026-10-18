@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — ACID TRANSACTION ENGINE (packages/lipidb/tx.lp)
+@! LIPI UNIVERSE DB — ACID TRANSACTION ENGINE (aati/lipidb/tx.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Staged Write-Set, Read-Your-Own-Writes, Atomic Commit & Instant Rollback
 @! Enforces Strict Write-Ahead Invariant (WAL fsync before in-memory tree mutation)
@@ -7,8 +7,8 @@
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipidb/btree"
-import "packages/lipidb/wal"
+import "aati/lipidb/btree"
+import "aati/lipidb/wal"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Transaction States

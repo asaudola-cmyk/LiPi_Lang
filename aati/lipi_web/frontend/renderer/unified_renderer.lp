@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — UNIFIED AUTO-DOWNGRADING GPU RENDERER
-@! Module: packages/lipi_web/frontend/renderer/unified_renderer.lp
+@! Module: aati/lipi_web/frontend/renderer/unified_renderer.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Unified frontend rendering interface
@@ -11,9 +11,9 @@
 
 import "utso/math"
 import "utso/collections"
-import "packages/lipi_web/frontend/renderer/webgpu_renderer"
-import "packages/lipi_web/frontend/renderer/webgl2_renderer"
-import "packages/lipi_web/frontend/renderer/canvas2d_renderer"
+import "aati/lipi_web/frontend/renderer/webgpu_renderer"
+import "aati/lipi_web/frontend/renderer/webgl2_renderer"
+import "aati/lipi_web/frontend/renderer/canvas2d_renderer"
 
 @! ----------------------------------------------------------------------------
 @! 1. CONSTANTS & ENUMS

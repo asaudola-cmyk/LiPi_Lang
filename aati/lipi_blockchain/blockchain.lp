@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LAYER-1 SOVEREIGN BLOCKCHAIN (LIPINET)
-@! Module: packages/lipi_blockchain/blockchain.lp
+@! Module: aati/lipi_blockchain/blockchain.lp
 @! Milestone: Layer-1 Sovereign Blockchain (LipiNet)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Transactions, SHA-256 Merkle Trees, Proof-of-Work (PoW) Mining,
@@ -10,8 +10,8 @@
 import "utso/collections"
 import "utso/string"
 import "utso/crypto/sha256"
-import "packages/lipi_blockchain/mpt"
-import "packages/lipi_blockchain/vm"
+import "aati/lipi_blockchain/mpt"
+import "aati/lipi_blockchain/vm"
 
 @! ============================================================================
 @! 1. BLOCKCHAIN DATA STRUCTURES

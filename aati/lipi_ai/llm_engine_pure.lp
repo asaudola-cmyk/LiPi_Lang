@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN AI: IN-PROCESS LOCAL LLM & GGUF QUANTIZED TENSOR ENGINE
-// Module: packages/lipi_ai/llm_engine_pure.lp
+// Module: aati/lipi_ai/llm_engine_pure.lp
 // Milestone: Supreme Sovereign Frontier C (0% Python, 0% PyTorch, 0% llama.cpp)
 // Version: First 1.0.0 (প্রথম ১.০.০) — Fixed
 // 100% Pure LiPi Implementation — Zero External / C / Python Dependencies

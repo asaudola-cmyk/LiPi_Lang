@@ -1,16 +1,16 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — UI POPUP & TOOLTIP OVERLAY RENDERING
-@! Module: packages/lipi_ide/ui_popup.lp
+@! Module: aati/lipi_ide/ui_popup.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
 import "utso/tools/lsp/protocol"
-import "packages/lipi_ide/lsp_client"
+import "aati/lipi_ide/lsp_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. AUTOCOMPLETE COMPLETION DROPDOWN POPUP

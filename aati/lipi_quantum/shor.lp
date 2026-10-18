@@ -1,10 +1,10 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — QUANTUM COMPUTING
-@! Module: packages/lipi_quantum/shor.lp
+@! Module: aati/lipi_quantum/shor.lp
 @! Features: Shor's Algorithm Simulation for Integer Factorization
 @! ============================================================================
 
-import "packages/lipi_quantum/superposition"
+import "aati/lipi_quantum/superposition"
 import "utso/math"
 
 @! Shor's Algorithm (Conceptual Implementation for LiPi Quantum Simulator)
@@ -42,7 +42,7 @@ import "utso/math"
   return res
 @end
 
-import "packages/lipi_quantum/multi_qubit"
+import "aati/lipi_quantum/multi_qubit"
 
 @fn q_cos(angle: f64) -> f64
   // Taylor approximation: cos(x) = 1 - x^2/2 + x^4/24 - x^6/720

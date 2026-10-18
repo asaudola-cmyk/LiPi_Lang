@@ -1,11 +1,11 @@
 @! ============================================================================
-@! LIPI UNIVERSE IoT — GATEWAY (packages/lipi_iot/gateway.lp)
+@! LIPI UNIVERSE IoT — GATEWAY (aati/lipi_iot/gateway.lp)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "utso/string"
-import "packages/lipi_iot/mqtt"
-import "packages/lipi_iot/sensor"
+import "aati/lipi_iot/mqtt"
+import "aati/lipi_iot/sensor"
 
 @struct IoTGateway
   device_id: "",

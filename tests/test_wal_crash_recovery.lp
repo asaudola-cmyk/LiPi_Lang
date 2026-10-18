@@ -3,8 +3,8 @@
 // ⚡ Tests 64-byte WAL record serialization, checksum verification, and ARIES REDO
 // ==============================================================================
 
-include "packages/lipidb/db_engine.lp"
-include "packages/lipidb/db_wal.lp"
+include "aati/lipidb/db_engine.lp"
+include "aati/lipidb/db_wal.lp"
 
 fn assert_true cond test_name
     if cond == 0

@@ -1,11 +1,11 @@
 @! ============================================================================
 @! LIPI SOVEREIGN PACKAGE: ENTERPRISE WEB ROUTER TEST SUITE
-@! File: packages/web_router/tests/test_router.lp
+@! File: aati/web_router/tests/test_router.lp
 @! 100% Written in Pure Sovereign Lipi — Zero External Dependencies
 @! ============================================================================
 
 import "utso/string"
-import "packages/web_router/src/lib"
+import "aati/web_router/src/lib"
 
 @fn assert_true(val, msg)
   @if val == 1

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN DATABASE WRITE-AHEAD LOGGING (WAL) & ARIES CRASH RECOVERY
-// File: packages/lipidb/db_wal.lp
+// File: aati/lipidb/db_wal.lp
 // ⚡ 100% Pure Lipi First 1.0.0 | Zero Libc | Linux AMD64 Kernel Syscalls
 //
 // WHY: Enterprise ACID durability requires Write-Ahead Logging (WAL) where mutation

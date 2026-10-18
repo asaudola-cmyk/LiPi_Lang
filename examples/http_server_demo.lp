@@ -1,5 +1,5 @@
-import "packages/lipi_web/router"
-import "packages/lipi_web/server"
+import "aati/lipi_web/router"
+import "aati/lipi_web/server"
 
 @fn handle_index(req)
   return "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello from Lipi!</h1><p>Lipi is the Universe.</p>"

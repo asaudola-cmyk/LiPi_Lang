@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧠 LIPI HNSW MULTI-LAYER VECTOR DATABASE & LOCAL RAG ENGINE
-// File: packages/lipidb/vector/hnsw.lp
+// File: aati/lipidb/vector/hnsw.lp
 // Standard: Hierarchical Navigable Small World (HNSW) Multi-Layer Graph Index
 // 100% Pure Lipi Implementation — Zero Python | Zero PyTorch | Zero Faiss / Chroma
 // ==============================================================================
@@ -47,7 +47,24 @@ import "utso/string"
 @end
 
 // ── 2. Vector Distance & Metric Kernels ───────────────────────────────────────
-// WHY: Cosine similarity: (A · B) / (||A|| * ||B||).
+// WHY: Integer square root via Newton-Raphson method for exact fixed-point Euclidean norm
+@fn hnsw_isqrt(val: i64) -> i64
+  @if val <= 0
+    return 0
+  @end
+  @if val < 4
+    return 1
+  @end
+  x0 = val / 2
+  x1 = (x0 + (val / x0)) / 2
+  @while x1 < x0
+    x0 = x1
+    x1 = (x0 + (val / x0)) / 2
+  @end
+  return x0
+@end
+
+// WHY: Authentic symmetric Cosine similarity: (A · B) / (||A|| * ||B||).
 // Scaled integer arithmetic (1000 = 1.0) eliminates floating-point instability.
 @fn hnsw_cosine_similarity(vec_a, vec_b)
   dot_prod = 0
@@ -69,8 +86,27 @@ import "utso/string"
     return 0
   @end
 
-  // Fixed-point scaling (normalized to 1000)
-  return (dot_prod * 1000) / (norm_a + 1)
+  // Compute denominator with zero overflow risk and maximum precision
+  denom = 0
+  @if norm_a < 2000000000 && norm_b < 2000000000
+    norm_prod = norm_a * norm_b
+    denom = hnsw_isqrt(norm_prod)
+  @else
+    denom = hnsw_isqrt(norm_a) * hnsw_isqrt(norm_b)
+  @end
+
+  @if denom <= 0
+    return 0
+  @end
+
+  // Fixed-point scaling (normalized to 1000 = 1.0)
+  sim = (dot_prod * 1000) / denom
+  @if sim > 1000
+    sim = 1000
+  @elif sim < (0 - 1000)
+    sim = 0 - 1000
+  @end
+  return sim
 @end
 
 @fn hnsw_euclidean_distance(vec_a, vec_b)
@@ -205,7 +241,7 @@ import "utso/string"
 
 // ── 6. Local RAG (Retrieval-Augmented Generation) Prompt Synthesizer ──────────
 // WHY: Gathers top-k semantic passages and synthesizes an augmented contextual
-// prompt ready for local LLM inference via packages/lipi_ai/llm_inference.lp.
+// prompt ready for local LLM inference via aati/lipi_ai/llm_inference.lp.
 @fn hnsw_rag_synthesize_prompt(index, query_vec, query_text, top_k)
   matches = hnsw_search_knn(index, query_vec, top_k)
 

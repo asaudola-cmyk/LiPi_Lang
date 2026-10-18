@@ -1,20 +1,20 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE GUI — GRAND UMBRELLA PRELUDE (packages/lipi_gui/gui.lp)
+// 👑 LIPI UNIVERSE GUI — GRAND UMBRELLA PRELUDE (aati/lipi_gui/gui.lp)
 // ⚡ 100% Pure Sovereign Lipi Machine Code Engine | Zero X11 | Zero Wayland
 // ==============================================================================
 //
 // WHY: Provides a unified gateway for all graphical rendering, windowing,
 // 2D primitives, and terminal user interfaces (TUI) in pure Lipi.
 // Developers can simply write:
-//     import "packages/lipi_gui/gui"
+//     import "aati/lipi_gui/gui"
 // to access direct Linux /dev/fb0 hardware framebuffer rendering, Bresenham canvas,
 // desktop windows, buttons, and ANSI curses-like terminal interfaces.
 // ==============================================================================
-import "packages/lipi_gui/framebuffer"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/window"
-import "packages/lipi_gui/tui"
-import "packages/lipi_gui/font"
+import "aati/lipi_gui/framebuffer"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/window"
+import "aati/lipi_gui/tui"
+import "aati/lipi_gui/font"
 
 // ── Virtual / Hardware Framebuffer Factory ────────────────────────────────────
 // WHY: Opens Linux /dev/fb0 or seamlessly creates a 64-byte aligned virtual buffer.

@@ -1,11 +1,11 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — AI LoRA (Low-Rank Adaptation)
-@! Module: packages/lipi_ai/lora.lp
+@! Module: aati/lipi_ai/lora.lp
 @! Milestone: Grand Sovereign Ecosystem
 @! Features: Parameter Efficient Fine-Tuning for LLMs
 @! ============================================================================
 
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 @struct LoRALayer
   in_features: i64

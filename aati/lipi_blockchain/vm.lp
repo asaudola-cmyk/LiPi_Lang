@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — LIPIVM SMART CONTRACT EXECUTOR
-@! Module: packages/lipi_blockchain/vm.lp
+@! Module: aati/lipi_blockchain/vm.lp
 @! Milestone: Layer-1 Sovereign Blockchain (LipiNet)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: Isolated Virtual Machine, Deterministic Gas Metering, Opcode Stack,

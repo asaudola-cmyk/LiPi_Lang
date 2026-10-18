@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — CRASH RECOVERY & REDO SCANNER (packages/lipidb/recovery.lp)
+@! LIPI UNIVERSE DB — CRASH RECOVERY & REDO SCANNER (aati/lipidb/recovery.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! 5-Phase Durability Protocol: Scan, Header Verify, CRC Check, Extract Committed,
 @! Redo Replay Mutations into B+Tree Pages, and Buffer Pool Sync
@@ -10,10 +10,10 @@ import "utso/syscalls"
 import "utso/os/fs"
 import "utso/collections"
 import "utso/string"
-import "packages/lipidb/page"
-import "packages/lipidb/buffer"
-import "packages/lipidb/btree"
-import "packages/lipidb/wal"
+import "aati/lipidb/page"
+import "aati/lipidb/buffer"
+import "aati/lipidb/btree"
+import "aati/lipidb/wal"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

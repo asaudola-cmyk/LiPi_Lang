@@ -1,13 +1,13 @@
 @! ============================================================================
-@! LIPI SWARM — DYNAMIC LOAD ROUTER & SCHEDULER (packages/lipi_swarm/router.lp)
+@! LIPI SWARM — DYNAMIC LOAD ROUTER & SCHEDULER (aati/lipi_swarm/router.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Load Metrics, Green Thread vs Remote P2P Node Routing Heuristics
 @! ============================================================================
 
 import "utso/string"
 import "utso/collections"
-import "packages/lipi_swarm/types"
-import "packages/lipi_swarm/discovery"
+import "aati/lipi_swarm/types"
+import "aati/lipi_swarm/discovery"
 
 @! ----------------------------------------------------------------------------
 @! 1. Load Monitor & Metrics

@@ -1,6 +1,6 @@
-import "packages/lipi_engine3d/vec3"
-import "packages/lipi_engine3d/raytracer"
-import "packages/lipi_engine3d/physics"
+import "aati/lipi_engine3d/vec3"
+import "aati/lipi_engine3d/raytracer"
+import "aati/lipi_engine3d/physics"
 
 @fn main()
   println("--- 3D Engine & Raytracer Test Suite ---")

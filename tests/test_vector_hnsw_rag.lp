@@ -5,7 +5,7 @@
 // 100% Pure Lipi — Zero Python | Zero Faiss | Zero External Runtimes
 // ==============================================================================
 
-import "packages/lipidb/vector/hnsw"
+import "aati/lipidb/vector/hnsw"
 import "utso/string"
 
 @fn assert_true(cond: i64, msg: string)

@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN DISTRIBUTED EDGE CLUSTERING & RAFT STATE SYNC
-// Module: packages/lipi_web/cluster.lp
+// Module: aati/lipi_web/cluster.lp
 // Milestone: Sovereign Full-Stack Horizon 5 (Replacing Redis, Consul, etcd, and Microservice Queues)
 // 100% Pure LiPi Implementation — Zero External / C / Go / Node.js Dependencies
 // ==============================================================================

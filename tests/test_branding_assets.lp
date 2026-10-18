@@ -12,7 +12,7 @@ import "utso/syscalls"
 import "utso/memory"
 import "utso/io"
 import "utso/string"
-import "packages/lipi_gui/framebuffer"
+import "aati/lipi_gui/framebuffer"
 
 @fn assert_true(cond, msg)
   @if cond == 0

@@ -157,3 +157,102 @@ import "utso/math"
     register_pressure_score: reg_pressure
   }
 @end
+
+// ── 4. Empirical Source Code Feature Extraction ───────────────────────────────
+
+@fn ai_opt_extract_features_from_source(src: string) -> LoopFeatureVector
+  // WHY: Extracts real empirical loop metrics, instruction densities, memory operations,
+  // and branch counts directly from input source code to guide neural heuristic optimization.
+  n = src.len()
+  trip_hint = 0
+  instr_count = 0
+  mem_ops = 0
+  fp_ops = 0
+  branches = 0
+  max_depth = 1
+  curr_depth = 1
+  has_cross_dep = 0
+
+  i = 0
+  @while i < n
+    c = ord(char_at(src, i))
+    
+    // Check for 'while' or 'for' loop keyword (w=119, h=104, i=105, l=108, e=101)
+    @if c == 119 && (i + 5 < n)
+      @if ord(char_at(src, i+1)) == 104 && ord(char_at(src, i+2)) == 105 && ord(char_at(src, i+3)) == 108 && ord(char_at(src, i+4)) == 101
+        curr_depth = curr_depth + 1
+        @if curr_depth > max_depth
+          max_depth = curr_depth
+        @end
+        // Scan ahead for loop limit like '< 1000'
+        scan_p = i + 5
+        @while scan_p < n && ord(char_at(src, scan_p)) != 10 && ord(char_at(src, scan_p)) != 59
+          @if ord(char_at(src, scan_p)) == 60 // '<'
+            num_start = scan_p + 1
+            @while num_start < n && ord(char_at(src, num_start)) == 32
+              num_start = num_start + 1
+            @end
+            val = 0
+            @while num_start < n && ord(char_at(src, num_start)) >= 48 && ord(char_at(src, num_start)) <= 57
+              val = (val * 10) + (ord(char_at(src, num_start)) - 48)
+              num_start = num_start + 1
+            @end
+            @if val > 0 && trip_hint == 0
+              trip_hint = val
+            @end
+          @end
+          scan_p = scan_p + 1
+        @end
+      @end
+    @end
+
+    // Branch detection: 'if' (i=105, f=102)
+    @if c == 105 && (i + 2 < n)
+      @if ord(char_at(src, i+1)) == 102 && (ord(char_at(src, i+2)) == 32 || ord(char_at(src, i+2)) == 40)
+        branches = branches + 1
+      @end
+    @end
+
+    // Memory access detection: '[' (91) or '.' (46)
+    @if c == 91 || c == 46
+      mem_ops = mem_ops + 1
+    @end
+
+    // Arithmetic / instruction counts: '+', '-', '*', '/', '='
+    @if c == 43 || c == 45 || c == 42 || c == 47 || c == 61
+      instr_count = instr_count + 1
+      @if c == 47 // Division
+        fp_ops = fp_ops + 1
+      @end
+    @end
+
+    // Block nesting / unnesting: 'end' (e=101, n=110, d=100)
+    @if c == 101 && (i + 3 < n)
+      @if ord(char_at(src, i+1)) == 110 && ord(char_at(src, i+2)) == 100
+        @if curr_depth > 1
+          curr_depth = curr_depth - 1
+        @end
+      @end
+    @end
+
+    i = i + 1
+  @end
+
+  // Normalize defaults if code had no loops
+  @if trip_hint <= 0
+    trip_hint = 100
+  @end
+  @if instr_count < 4
+    instr_count = 4
+  @end
+
+  return {
+    trip_count_hint: trip_hint,
+    body_instruction_count: instr_count,
+    memory_access_count: mem_ops,
+    floating_point_ops: fp_ops,
+    branch_count: branches,
+    nesting_depth: max_depth,
+    has_cross_iter_dependency: has_cross_dep
+  }
+@end

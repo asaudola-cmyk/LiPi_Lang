@@ -5,8 +5,8 @@
 // ==============================================================================
 
 include "utso/memory.lp"
-include "packages/lipi_ai/tensor_engine.lp"
-include "packages/lipi_dataframe/src/dataframe.lp"
+include "aati/lipi_ai/tensor_engine.lp"
+include "aati/lipi_dataframe/src/dataframe.lp"
 
 fn assert_true cond test_name
     if cond == 0

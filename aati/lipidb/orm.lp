@@ -9,7 +9,7 @@
 //   SQLAlchemy (Python), Prisma (JS), GORM (Go) — এদের replace করবে।
 //
 // ব্যবহার:
-//   include "packages/lipidb/std_orm.lp"
+//   include "aati/lipidb/std_orm.lp"
 //   conn = ORM_connection_open("/tmp/app.db")
 //   qb = ORM_query(conn, "users")
 //   ORM_select(qb, "id")
@@ -22,7 +22,7 @@
 include "utso/memory.lp"
 include "utso/string.lp"
 include "utso/io.lp"
-include "packages/lipidb/facade.lp"
+include "aati/lipidb/facade.lp"
 
 // ─── ORM Constants ────────────────────────────────────────────────────────────
 ORM_MAX_COLUMNS    = 32   // table columns per query

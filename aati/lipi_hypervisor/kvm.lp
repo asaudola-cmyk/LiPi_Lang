@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — NATIVE LINUX KVM HYPERVISOR ENGINE
-@! Module: packages/lipi_hypervisor/kvm.lp
+@! Module: aati/lipi_hypervisor/kvm.lp
 @! Milestone: Frontier Sovereign Virtualization
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: /dev/kvm ioctl Command Serialization (KVM_CREATE_VM, KVM_CREATE_VCPU),
@@ -256,6 +256,135 @@ import "utso/syscalls"
   @elif opcode == 41 && vm.guest_ram[regs.rip + 1] == 216
     regs.rax = regs.rax - regs.rbx
     regs.rip = regs.rip + 2
+  @! Opcode: 0x39 0xD8 (CMP EAX, EBX)
+  @elif opcode == 57 && vm.guest_ram[regs.rip + 1] == 216
+    diff = regs.rax - regs.rbx
+    flags = 2
+    @if diff == 0
+      flags = flags | 64
+    @end
+    @if diff < 0
+      flags = flags | 129
+    @end
+    regs.rflags = flags
+    regs.rip = regs.rip + 2
+  @! Opcode: 0x3D imm32 (CMP EAX, imm32)
+  @elif opcode == 61
+    b0 = vm.guest_ram[regs.rip + 1]
+    b1 = vm.guest_ram[regs.rip + 2]
+    b2 = vm.guest_ram[regs.rip + 3]
+    b3 = vm.guest_ram[regs.rip + 4]
+    imm = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+    diff = regs.rax - imm
+    flags = 2
+    @if diff == 0
+      flags = flags | 64
+    @end
+    @if diff < 0
+      flags = flags | 129
+    @end
+    regs.rflags = flags
+    regs.rip = regs.rip + 5
+  @! Opcode: 0x74 imm8 (JE / JZ rel8)
+  @elif opcode == 116
+    rel = vm.guest_ram[regs.rip + 1]
+    @if rel > 127
+      rel = rel - 256
+    @end
+    @if (regs.rflags & 64) != 0
+      regs.rip = regs.rip + 2 + rel
+    @else
+      regs.rip = regs.rip + 2
+    @end
+  @! Opcode: 0x75 imm8 (JNE / JNZ rel8)
+  @elif opcode == 117
+    rel = vm.guest_ram[regs.rip + 1]
+    @if rel > 127
+      rel = rel - 256
+    @end
+    @if (regs.rflags & 64) == 0
+      regs.rip = regs.rip + 2 + rel
+    @else
+      regs.rip = regs.rip + 2
+    @end
+  @! Opcode: 0x31 0xD8 (XOR EAX, EBX) / 0x31 0xC0 (XOR EAX, EAX)
+  @elif opcode == 49
+    sub_op = vm.guest_ram[regs.rip + 1]
+    @if sub_op == 216
+      regs.rax = regs.rax ^ regs.rbx
+      @if regs.rax == 0
+        regs.rflags = regs.rflags | 64
+      @end
+    @elif sub_op == 192
+      regs.rax = 0
+      regs.rflags = regs.rflags | 64
+    @end
+    regs.rip = regs.rip + 2
+  @! Opcode: 0xFF 0xC0 (INC EAX) / 0xFF 0xC8 (DEC EAX)
+  @elif opcode == 255
+    sub_op = vm.guest_ram[regs.rip + 1]
+    @if sub_op == 192
+      regs.rax = regs.rax + 1
+      @if regs.rax == 0
+        regs.rflags = regs.rflags | 64
+      @end
+    @elif sub_op == 200
+      regs.rax = regs.rax - 1
+      @if regs.rax == 0
+        regs.rflags = regs.rflags | 64
+      @end
+    @end
+    regs.rip = regs.rip + 2
+  @! Opcode: 0x50 (PUSH RAX)
+  @elif opcode == 80
+    sp = regs.rsp - 8
+    val = regs.rax
+    ram = vm.guest_ram
+    @while ram.len() <= sp + 8
+      ram = ram.push(0)
+    @end
+    ram[sp] = val & 255
+    ram[sp + 1] = (val >> 8) & 255
+    ram[sp + 2] = (val >> 16) & 255
+    ram[sp + 3] = (val >> 24) & 255
+    ram[sp + 4] = (val >> 32) & 255
+    ram[sp + 5] = (val >> 40) & 255
+    ram[sp + 6] = (val >> 48) & 255
+    ram[sp + 7] = (val >> 56) & 255
+    vm.guest_ram = ram
+    regs.rsp = sp
+    regs.rip = regs.rip + 1
+  @! Opcode: 0x58 (POP RAX)
+  @elif opcode == 88
+    sp = regs.rsp
+    ram = vm.guest_ram
+    b0 = ram[sp]
+    b1 = ram[sp + 1]
+    b2 = ram[sp + 2]
+    b3 = ram[sp + 3]
+    b4 = ram[sp + 4]
+    b5 = ram[sp + 5]
+    b6 = ram[sp + 6]
+    b7 = ram[sp + 7]
+    val = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    regs.rax = val
+    regs.rsp = sp + 8
+    regs.rip = regs.rip + 1
+  @! Opcode: 0xC3 (RET)
+  @elif opcode == 195
+    sp = regs.rsp
+    ram = vm.guest_ram
+    b0 = ram[sp]
+    b1 = ram[sp + 1]
+    b2 = ram[sp + 2]
+    b3 = ram[sp + 3]
+    b4 = ram[sp + 4]
+    b5 = ram[sp + 5]
+    b6 = ram[sp + 6]
+    b7 = ram[sp + 7]
+    ret_addr = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    regs.rip = ret_addr
+    regs.rsp = sp + 8
   @! Opcode: 0xEB imm8 (JMP short rel8)
   @elif opcode == 235
     rel = vm.guest_ram[regs.rip + 1]

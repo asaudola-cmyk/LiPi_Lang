@@ -8,8 +8,8 @@
 // করা হচ্ছে যে লিপি পুস্তকের প্রতিটি অধ্যায়ের কোড জীবন্ত, সক্রিয় এবং ১০০% সঠিক।
 
 include "utso/memory.lp"
-include "packages/lipidb/engine.lp"
-include "packages/lipi_gpu/spirv_native.lp"
+include "aati/lipidb/engine.lp"
+include "aati/lipi_gpu/spirv_native.lp"
 include "utso/cpu/avx512_native.lp"
 include "utso/crypto.lp"
 include "utso/os/build_unikernel.lp"

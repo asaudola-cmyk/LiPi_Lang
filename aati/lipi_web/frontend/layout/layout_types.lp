@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE & FLEXBOX SOLVER
-@! Module: packages/lipi_web/frontend/layout/layout_types.lp
+@! Module: aati/lipi_web/frontend/layout/layout_types.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Linear GpuLayoutNode structure for WebGPU storage buffers

@@ -1,4 +1,4 @@
-import "packages/math_extra/src/lib"
+import "aati/math_extra/src/lib"
 
 @fn main()
   println("--- Math Extra Test Suite ---")

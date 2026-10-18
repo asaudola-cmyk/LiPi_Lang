@@ -1,6 +1,6 @@
 // ==============================================================================
 // 👑 LIPI SOVEREIGN NESTED APP ROUTER & LAYOUT ENGINE
-// Module: packages/lipi_web/app_router.lp
+// Module: aati/lipi_web/app_router.lp
 // Milestone: Sovereign Full-Stack Framework v2 (Replacing Next.js App Router & Layout Thrashing)
 // Version: 1.0.0 (Fixed)
 // 100% Pure LiPi Implementation — Zero External / C / Node.js Dependencies

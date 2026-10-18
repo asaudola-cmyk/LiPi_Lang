@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB - SQL PLANNER (packages/lipidb/sql/planner.lp)
+@! LIPI UNIVERSE DB - SQL PLANNER (aati/lipidb/sql/planner.lp)
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! ============================================================================
 

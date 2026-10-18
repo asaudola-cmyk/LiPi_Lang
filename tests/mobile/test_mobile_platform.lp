@@ -1,4 +1,4 @@
-import "packages/lipi_mobile/platform"
+import "aati/lipi_mobile/platform"
 
 @fn main()
   println("--- Mobile Platform Test ---")

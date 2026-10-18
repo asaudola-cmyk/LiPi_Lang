@@ -1,4 +1,4 @@
-import "packages/lipi_fs/lipifs"
+import "aati/lipi_fs/lipifs"
 
 @fn main()
   println("--- LipiFS CoW File System Test ---")

@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSE SECURITY: JSON WEB TOKEN (JWT) RFC 7519 & RFC 2104 HMAC-SHA256
-@! Module: packages/lipi_security/jwt
+@! Module: aati/lipi_security/jwt
 @! 100% Pure Lipi Implementation — Zero External / C Dependencies
 @! Standard: RFC 7519 (JWT), RFC 2104 (HMAC), FIPS 198-1
 @! ============================================================================

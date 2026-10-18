@@ -1,10 +1,10 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — ONION MIDDLEWARE PIPELINE (packages/lipi_web/middleware.lp)
+@! LIPI UNIVERSE WEB — ONION MIDDLEWARE PIPELINE (aati/lipi_web/middleware.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! Features: Onion Chain, Logger, JSON Parser, CORS, Recovery, Static Server
 @! ============================================================================
 
-import "packages/lipi_web/context"
+import "aati/lipi_web/context"
 import "utso/string"
 import "utso/core/json"
 import "utso/syscalls"

@@ -2,7 +2,7 @@
 // 🧪 LIPI PACKAGE TEST: Sovereign gRPC & Protobuf Protocol Unit Test
 // ==============================================================================
 
-include "packages/lipi_grpc/src/grpc.lp"
+include "aati/lipi_grpc/src/grpc.lp"
 
 fn assert_true cond test_name
     if cond == 0

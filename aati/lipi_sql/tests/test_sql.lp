@@ -2,7 +2,7 @@
 // 🧪 LIPI PACKAGE TEST: Pure Relational SQL Engine Unit Test
 // ==============================================================================
 
-include "packages/lipi_sql/src/sql.lp"
+include "aati/lipi_sql/src/sql.lp"
 
 fn assert_true cond test_name
     if cond == 0

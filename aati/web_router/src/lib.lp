@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI SOVEREIGN PACKAGE: ENTERPRISE WEB ROUTER (packages/web_router/src/lib.lp)
+@! LIPI SOVEREIGN PACKAGE: ENTERPRISE WEB ROUTER (aati/web_router/src/lib.lp)
 @! 100% Written in Pure Sovereign Lipi — Zero External / C Dependencies
 @!
 @! Features:
@@ -13,7 +13,7 @@
 @! ============================================================================
 
 import "utso/string"
-import "packages/lipi_web/url"
+import "aati/lipi_web/url"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants & Discriminators

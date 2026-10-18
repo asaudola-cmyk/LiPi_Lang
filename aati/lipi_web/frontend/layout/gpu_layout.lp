@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI WEB FRONTEND ENGINE — GPU COMPUTE LAYOUT ENGINE
-@! Module: packages/lipi_web/frontend/layout/gpu_layout.lp
+@! Module: aati/lipi_web/frontend/layout/gpu_layout.lp
 @! 100% Pure Lipi Architecture — Zero External Dependencies
 @! Features:
 @! - Flattens hierarchical widget trees into linear GPU storage buffers
@@ -12,8 +12,8 @@
 
 import "utso/collections"
 import "utso/math"
-import "packages/lipi_web/frontend/layout/layout_types"
-import "packages/lipi_web/frontend/layout/flexbox_solver"
+import "aati/lipi_web/frontend/layout/layout_types"
+import "aati/lipi_web/frontend/layout/flexbox_solver"
 
 @! ============================================================================
 @! 1. WGSL COMPUTE SHADER SOURCE CODE EMBEDDING

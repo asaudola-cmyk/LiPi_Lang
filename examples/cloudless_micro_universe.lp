@@ -22,8 +22,8 @@
 include "utso/io.lp"
 include "utso/memory.lp"
 include "utso/string.lp"
-include "packages/lipidb/db_engine.lp"
-include "packages/lipidb/db_wal.lp"
+include "aati/lipidb/db_engine.lp"
+include "aati/lipidb/db_wal.lp"
 
 // ── ১. টেলিমেট্রি ও স্টেট মডেল (Telemetry & Engine State) ──────────────────────
 struct MicroEngineState

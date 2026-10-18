@@ -5,7 +5,7 @@
 ---
 
 ## ৫.১ পলিমরফিক ওয়েব ইঞ্জিন আর্কিটেকচার (Polymorphic Server)
-লিপির স্ট্যান্ডার্ড লাইব্রেরিতে অন্তর্ভুক্ত রয়েছে সার্বভৌম এইচটিটিপি ও এইচটিটিপি/২ ইঞ্জিন (`packages/lipi_web/polymorphic_server.lp`), যা সরাসরি লিনাক্স নেটওয়ার্ক সকেট (`socket`, `bind`, `listen`, `epoll_wait`) এর ওপর বাস্তবায়িত।
+লিপির স্ট্যান্ডার্ড লাইব্রেরিতে অন্তর্ভুক্ত রয়েছে সার্বভৌম এইচটিটিপি ও এইচটিটিপি/২ ইঞ্জিন (`aati/lipi_web/polymorphic_server.lp`), যা সরাসরি লিনাক্স নেটওয়ার্ক সকেট (`socket`, `bind`, `listen`, `epoll_wait`) এর ওপর বাস্তবায়িত।
 
 ```
     Client HTTP Request
@@ -31,12 +31,12 @@
 ---
 
 ## ৫.২ সার্বভৌম এমবেডেড ডাটাবেজ ইঞ্জিন (Lipi Sovereign DB)
-লিপিতে রয়েছে খাঁটি B-Tree এবং কলামনার মেমরি ডাটাবেজ ইঞ্জিন (`packages/lipidb/engine.lp` ও `packages/lipidb/column/columnstore.lp`):
+লিপিতে রয়েছে খাঁটি B-Tree এবং কলামনার মেমরি ডাটাবেজ ইঞ্জিন (`aati/lipidb/engine.lp` ও `aati/lipidb/column/columnstore.lp`):
 - **Write-Ahead Logging (WAL)**: পাওয়ার বন্ধ বা আকস্মিক ক্র্যাশের বিরুদ্ধে সরাসরি ডিস্ক ডিসপ্যাচ ও ACID গ্যারান্টি।
 - **SIMD অ্যাক্সেলারেটেড কলামনার কোয়েরি**: কোটি কোটি রেকর্ডের সমাহার থেকে মিলি-সেকেন্ডে ডেটা ফিল্টারিং।
 
 ```lipi
-include "packages/lipidb/engine.lp"
+include "aati/lipidb/engine.lp"
 
 fn main
     // সার্বভৌম ডেটাবেজ ইনিশিয়ালাইজ করা (path, capacity)

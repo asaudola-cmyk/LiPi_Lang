@@ -2,7 +2,7 @@
 // 🧪 LIPI PACKAGE TEST: Sovereign JSON Web Token (JWT) Engine Unit Test
 // ==============================================================================
 
-include "packages/lipi_jwt/src/jwt.lp"
+include "aati/lipi_jwt/src/jwt.lp"
 
 fn assert_true cond test_name
     if cond == 0

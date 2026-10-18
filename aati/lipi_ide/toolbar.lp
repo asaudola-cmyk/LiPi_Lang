@@ -1,14 +1,14 @@
 @! ============================================================================
 @! LIPI SOVEREIGN IDE — SOVEREIGN ACTION TOOLBAR RIBBON
-@! Module: packages/lipi_ide/toolbar.lp
+@! Module: aati/lipi_ide/toolbar.lp
 @! Milestone: M3 (LiPi Studio Sovereign IDE)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! ============================================================================
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_gui/canvas"
-import "packages/lipi_gui/font"
+import "aati/lipi_gui/canvas"
+import "aati/lipi_gui/font"
 
 @! ----------------------------------------------------------------------------
 @! 1. TOOLBAR DATA STRUCTURES

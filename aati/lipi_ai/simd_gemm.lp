@@ -1,6 +1,6 @@
 // ==============================================================================
 // 🧠 লিপি এআই হাই-পারফরম্যান্স সিমডি জিইএমএম ইঞ্জিন (Lipi AI AVX2 SIMD GEMM Kernel)
-// ⚡ Module: packages/lipi_ai/simd_gemm.lp
+// ⚡ Module: aati/lipi_ai/simd_gemm.lp
 // 🏛️ Architecture: Cache-Blocked 256-bit SIMD Tiled Matrix Multiplication
 // ০% Libc, ০% BLAS, ০% NumPy, ০% C++ — ১০০% খাঁটি লিপি সিলিকন ভেক্টর এক্সিকিউশন
 // ==============================================================================

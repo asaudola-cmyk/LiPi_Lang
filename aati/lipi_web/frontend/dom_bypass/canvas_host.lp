@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/dom_bypass/canvas_host.lp
+@! Module: aati/lipi_web/frontend/dom_bypass/canvas_host.lp
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
@@ -13,7 +13,7 @@
 
 import "utso/collections"
 import "utso/math"
-import "packages/lipi_web/frontend/renderer/unified_renderer"
+import "aati/lipi_web/frontend/renderer/unified_renderer"
 
 @! ============================================================================
 @! 1. DIRTY RECT DATA STRUCTURES & COMPOSITOR

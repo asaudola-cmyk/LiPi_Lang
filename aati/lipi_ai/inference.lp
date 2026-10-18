@@ -1,13 +1,13 @@
 @! ============================================================================
 @! LIPI UNIVERSE AI: FAST INFERENCE ENGINE
-@! Module: packages/lipi_ai/inference
+@! Module: aati/lipi_ai/inference
 @! 100% Pure Lipi Implementation
 @! ============================================================================
 
 import "utso/collections"
 import "utso/string"
 import "utso/math"
-import "packages/lipi_ai/tensor"
+import "aati/lipi_ai/tensor"
 
 @struct QuantTensor
   data: array

@@ -1,13 +1,13 @@
 @! ============================================================================
-@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (packages/lipi_web/server.lp)
+@! LIPI UNIVERSE WEB — SOVEREIGN WEB SERVER CONTAINER (aati/lipi_web/server.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! BSD TCP Socket Container, Request Ingestion, Response Serialization, Lifecycle
 @! ============================================================================
 
 import "utso/net/tcp"
 import "utso/net/http"
-import "packages/lipi_web/context"
-import "packages/lipi_web/app"
+import "aati/lipi_web/context"
+import "aati/lipi_web/app"
 
 @! ----------------------------------------------------------------------------
 @! 1. Data Structures

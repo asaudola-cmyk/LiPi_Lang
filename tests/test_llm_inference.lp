@@ -4,7 +4,7 @@
 //    RoPE embeddings, SwiGLU activation, and autoregressive next-token prediction.
 // ==============================================================================
 
-include "packages/lipi_ai/llm_inference.lp"
+include "aati/lipi_ai/llm_inference.lp"
 
 fn assert_eq actual expected test_name
     if actual != expected

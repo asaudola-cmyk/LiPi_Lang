@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/mod.lp
+@! Module: aati/lipi_web/frontend/mod.lp
 @! Milestone: M6 — DOM-Bypass Host Runtime & Full E2E Integration
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features:
@@ -15,19 +15,19 @@ import "utso/math"
 import "utso/string"
 
 @! Subsystems
-import "packages/lipi_web/markup_parser"
-import "packages/lipi_web/frontend/renderer/unified_renderer"
-import "packages/lipi_web/frontend/renderer/canvas2d_renderer"
-import "packages/lipi_web/frontend/renderer/terminal_renderer"
-import "packages/lipi_web/frontend/layout/mod"
-import "packages/lipi_web/frontend/layout/layout_types"
-import "packages/lipi_web/frontend/layout/flexbox_solver"
-import "packages/lipi_web/frontend/layout/gpu_layout"
-import "packages/lipi_web/frontend/concurrency/mod"
-import "packages/lipi_web/frontend/concurrency/message_protocol"
-import "packages/lipi_web/frontend/concurrency/worker_pool"
-import "packages/lipi_web/frontend/remote/mod"
-import "packages/lipi_web/frontend/dom_bypass/mod"
+import "aati/lipi_web/markup_parser"
+import "aati/lipi_web/frontend/renderer/unified_renderer"
+import "aati/lipi_web/frontend/renderer/canvas2d_renderer"
+import "aati/lipi_web/frontend/renderer/terminal_renderer"
+import "aati/lipi_web/frontend/layout/mod"
+import "aati/lipi_web/frontend/layout/layout_types"
+import "aati/lipi_web/frontend/layout/flexbox_solver"
+import "aati/lipi_web/frontend/layout/gpu_layout"
+import "aati/lipi_web/frontend/concurrency/mod"
+import "aati/lipi_web/frontend/concurrency/message_protocol"
+import "aati/lipi_web/frontend/concurrency/worker_pool"
+import "aati/lipi_web/frontend/remote/mod"
+import "aati/lipi_web/frontend/dom_bypass/mod"
 
 @! ============================================================================
 @! 1. CONFIGURATION & ENGINE STRUCTS

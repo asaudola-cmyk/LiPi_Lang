@@ -7,7 +7,7 @@
 include "utso/io.lp"
 include "utso/memory.lp"
 include "utso/string.lp"
-include "packages/lipi_fs/ext4.lp"
+include "aati/lipi_fs/ext4.lp"
 include "utso/net/http3.lp"
 include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
 

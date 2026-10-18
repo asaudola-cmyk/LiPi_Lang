@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE DB — LRU BUFFER POOL & PAGE CACHE (packages/lipidb/buffer.lp)
+@! LIPI UNIVERSE DB — LRU BUFFER POOL & PAGE CACHE (aati/lipidb/buffer.lp)
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Complete Sovereign Linux x86-64 Native Syscalls (sys_open, sys_lseek, sys_read, sys_write, sys_fsync)
 @! ============================================================================
@@ -7,7 +7,7 @@
 import "utso/syscalls"
 import "utso/collections"
 import "utso/string"
-import "packages/lipidb/page"
+import "aati/lipidb/page"
 
 @! ----------------------------------------------------------------------------
 @! 1. Constants

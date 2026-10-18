@@ -1,5 +1,5 @@
 @! ============================================================================
-@! LIPI UNIVERSE IoT — SENSOR ABSTRACTION (packages/lipi_iot/sensor.lp)
+@! LIPI UNIVERSE IoT — SENSOR ABSTRACTION (aati/lipi_iot/sensor.lp)
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Simulates: Temperature, Humidity, Pressure sensors with calibration
 @! ============================================================================

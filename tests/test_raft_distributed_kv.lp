@@ -5,8 +5,8 @@
 @! 100% Pure Lipi Implementation — Zero External C / Libc Dependencies
 @! ============================================================================
 
-import "packages/lipidb/distributed/raft"
-import "packages/lipidb/wal"
+import "aati/lipidb/distributed/raft"
+import "aati/lipidb/wal"
 import "utso/syscalls"
 import "utso/string"
 

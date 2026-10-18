@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/concurrency/ring_buffer.lp
+@! Module: aati/lipi_web/frontend/concurrency/ring_buffer.lp
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: io_uring-Style SQ/CQ Ring Buffers over SharedArrayBuffer / Atomics,
@@ -10,7 +10,7 @@
 
 import "utso/collections"
 import "utso/math"
-import "packages/lipi_web/frontend/concurrency/message_protocol"
+import "aati/lipi_web/frontend/concurrency/message_protocol"
 
 @! ============================================================================
 @! 1. CONSTANTS & QUEUE MODES

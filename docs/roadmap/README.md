@@ -5,7 +5,7 @@
 
 ## ডিরেক্টরি পরিচিতি:
 - `utso/` — Genesis Primitives (Pure silicon core, memory, string, math, io, net, os, crypto)
-- `packages/` — Sovereign Packages (AI, DB, Web, GUI, 3D, Quantum, Blockchain, Hypervisor)
+- `aati/` — Sovereign Packages (AI, DB, Web, GUI, 3D, Quantum, Blockchain, Hypervisor)
 - `compiler/` — Self-hosting compiler (লিপিতে লেখা)
 - `tools/` — LSP, Formatter, Package Manager (LipiPkg), Debugger
 - `assimilator/` — Universal Code Assimilator (Python, C, JS → LiPi)

@@ -2,7 +2,7 @@
 // 🧪 LIPI PACKAGE TEST: Sovereign HTTP/1.1 Client Unit Test
 // ==============================================================================
 
-include "packages/lipi_http_client/src/http_client.lp"
+include "aati/lipi_http_client/src/http_client.lp"
 
 fn assert_true cond test_name
     if cond == 0

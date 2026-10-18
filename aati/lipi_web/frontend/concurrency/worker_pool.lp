@@ -1,6 +1,6 @@
 @! ============================================================================
 @! LIPI UNIVERSAL ARCHITECTURE — DOM-BYPASS WEB FRONTEND ENGINE
-@! Module: packages/lipi_web/frontend/concurrency/worker_pool.lp
+@! Module: aati/lipi_web/frontend/concurrency/worker_pool.lp
 @! Milestone: M3 — Lock-Free WASM Concurrency Engine
 @! 100% Pure Lipi Implementation — Zero External Dependencies
 @! Features: 3-Worker Multi-Threaded WASM Architecture (Layout Worker, Network
@@ -10,8 +10,8 @@
 
 import "utso/collections"
 import "utso/string"
-import "packages/lipi_web/frontend/concurrency/message_protocol"
-import "packages/lipi_web/frontend/concurrency/ring_buffer"
+import "aati/lipi_web/frontend/concurrency/message_protocol"
+import "aati/lipi_web/frontend/concurrency/ring_buffer"
 
 @! ============================================================================
 @! 1. WORKER IDS & LIFECYCLE STATES

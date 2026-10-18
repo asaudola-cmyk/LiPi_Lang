@@ -627,28 +627,11 @@ fn x86_synth_alloc_var s name
     lv.lv_reg = 0 - 1
     lv.lv_is_spilled = 1
 
-    // Cross-reference against SSA linear scan register allocation
-    // WHY: In the 1-pass AST token synthesizer, caller-saved registers (%rdx, %rcx, %r8..%r11)
-    // are clobbered by implicit runtime helper calls (_lipi_str_concat, _lipi_list_push, etc.).
-    // Only dedicated callee-saved physical registers (%r12..%r15, %rbx) are guaranteed to survive
-    // helper calls and can safely remain in silicon registers without stack spilling.
-    r_names = s.synth_regalloc_names
-    r_regs = s.synth_regalloc_regs
-    if r_names != 0 and r_regs != 0
-        ri = 0
-        r_len = len(r_names)
-        while ri < r_len
-            if get(r_names, ri) == name
-                assigned_reg = get(r_regs, ri)
-                if assigned_reg == 12 or assigned_reg == 13 or assigned_reg == 14 or assigned_reg == 15 or assigned_reg == 3
-                    lv.lv_reg = assigned_reg
-                    lv.lv_is_spilled = 0
-                end
-                break
-            end
-            ri = ri + 1
-        end
-    end
+    // WHY: In the 1-pass AST token synthesizer, local variables must remain strictly isolated
+    // in their dedicated stack frame slots [rbp - off]. Global register name matching without
+    // per-activation prologue preservation causes inter-procedural callee-saved clobbering.
+    lv.lv_reg = 0 - 1
+    lv.lv_is_spilled = 1
 
     push(s.synth_locals, lv)
     return off
@@ -910,6 +893,12 @@ fn x86_synth_emit_pop_args s arg_count
         else
             x86_synth_emit_byte(s, 88) // pop rax (discard extra stack arguments)
         ai = ai - 1
+    if arg_count == 1
+        // WHY: For single-argument function calls, explicitly zero %rsi (xor esi, esi: 0x31, 0xF6).
+        // This guarantees that functions supporting optional second arguments (like free(ptr [, size]))
+        // or varargs don't inherit non-zero garbage in %rsi from previous computations.
+        x86_synth_emit_byte(s, 49) // xor esi, esi (0x31)
+        x86_synth_emit_byte(s, 246) // 0xF6
     return 0
 
 

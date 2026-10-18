@@ -9,12 +9,12 @@
 1. [🌟 গ্র্যান্ড প্রিলিউড (Grand Prelude - utso/lipi_universe)](#1-গ্র্যান্ড-প্রিলিউড-universe-prelude)
 2. [📦 কোর ডোমেন (utso/core)](#2-কোর-ডোমেন-universe-core)
 3. [🌐 নেটওয়ার্কিং ডোমেন (utso/net)](#3-নেটওয়ার্কিং-ডোমেন-universe-net)
-4. [💾 ডেটাবেস ডোমেন (packages/lipidb)](#4-ডেটাবেস-ডোমেন-universe-db)
+4. [💾 ডেটাবেস ডোমেন (aati/lipidb)](#4-ডেটাবেস-ডোমেন-universe-db)
 5. [🔐 ক্রিপ্টোগ্রাফি ও সিকিউরিটি ডোমেন (utso/crypto)](#5-ক্রিপ্টোগ্রাফি-ডোমেন-universe-crypto)
-6. [🧠 এআই ও টেনসর ডোমেন (packages/lipi_ai)](#6-এআই-ও-টেনসর-ডোমেন-universe-ai)
-7. [⚡ ওয়েব ফ্রেমওয়ার্ক ডোমেন (packages/lipi_web)](#7-ওয়েব-ফ্রেমওয়ার্ক-ডোমেন-universe-web)
-8. [🎨 গ্রাফিক্স ও ইউআই ডোমেন (packages/lipi_gui & lipi_engine3d)](#8-গ্রাফিক্স-ও-ইউআই-ডোমেন-universe-gui--engine3d)
-9. [🖥️ ওএস ও জিপিইউ ডোমেন (utso/os & packages/lipi_gpu)](#9-ওএস-ও-জিপিইউ-ডোমেন-universe-os--gpu)
+6. [🧠 এআই ও টেনসর ডোমেন (aati/lipi_ai)](#6-এআই-ও-টেনসর-ডোমেন-universe-ai)
+7. [⚡ ওয়েব ফ্রেমওয়ার্ক ডোমেন (aati/lipi_web)](#7-ওয়েব-ফ্রেমওয়ার্ক-ডোমেন-universe-web)
+8. [🎨 গ্রাফিক্স ও ইউআই ডোমেন (aati/lipi_gui & lipi_engine3d)](#8-গ্রাফিক্স-ও-ইউআই-ডোমেন-universe-gui--engine3d)
+9. [🖥️ ওএস ও জিপিইউ ডোমেন (utso/os & aati/lipi_gpu)](#9-ওএস-ও-জিপিইউ-ডোমেন-universe-os--gpu)
 
 ---
 
@@ -88,7 +88,7 @@ fn main()
 ---
 
 ## 4. 💾 ডেটাবেস ডোমেন (Sovereign DB - lipidb)
-**ডিরেক্টরি**: `packages/lipidb/`
+**ডিরেক্টরি**: `aati/lipidb/`
 
 সম্পূর্ণ নিজস্ব স্টোরেজ ইঞ্জিন ও রিলেশনাল/নোএসকিউএল ডেটাবেস কোর।
 
@@ -119,7 +119,7 @@ fn main()
 ---
 
 ## 6. 🧠 এআই ও টেনসর ডোমেন (Sovereign AI - lipi_ai)
-**ডিরেক্টরি**: `packages/lipi_ai/`
+**ডিরেক্টরি**: `aati/lipi_ai/`
 
 নেটিভ মেশিন লার্নিং, ডিপ লার্নিং ও লোকাল লার্জ ল্যাঙ্গুয়েজ মডেল (LLM) ইনফ্যারেন্স।
 
@@ -132,7 +132,7 @@ fn main()
 ---
 
 ## 7. ⚡ ওয়েব ফ্রেমওয়ার্ক ডোমেন (Sovereign Web - lipi_web)
-**ডিরেক্টরি**: `packages/lipi_web/`
+**ডিরেক্টরি**: `aati/lipi_web/`
 
 ফুল-স্ট্যাক ওয়েব সার্ভার ও ব্রাউজার ফ্রন্টএন্ড ইঞ্জিন।
 
@@ -144,7 +144,7 @@ fn main()
 ---
 
 ## 8. 🎨 গ্রাফিক্স ও ইউআই ডোমেন (lipi_gui & lipi_engine3d)
-**ডিরেক্টরি**: `packages/lipi_gui/` এবং `packages/lipi_engine3d/`
+**ডিরেক্টরি**: `aati/lipi_gui/` এবং `aati/lipi_engine3d/`
 
 টার্মিনাল টিইউআই, এক্স১১ উইন্ডো এবং থ্রিডি ফিজিক্স ইঞ্জিন।
 
@@ -157,7 +157,7 @@ fn main()
 ---
 
 ## 9. 🖥️ ওএস ও জিপিইউ ডোমেন (utso/os & lipi_gpu)
-**ডিরেক্টরি**: `utso/os/` এবং `packages/lipi_gpu/`
+**ডিরেক্টরি**: `utso/os/` এবং `aati/lipi_gpu/`
 
 বেয়ারমেটাল ওএস, ক্লাউড ইউনিকার্নেল এবং নেটিভ জিপিইউ কম্পিউটিং।
 
