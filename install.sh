@@ -163,11 +163,12 @@ create_command() {
             
             if [ -x "$SEED_EXEC" ]; then
                 info "Bootstrapping Stage-3 Modular Silicon Compiler from genesis seed..."
-                if "$SEED_EXEC" src/compiler/driver_cli.lp bin/lipc_bin; then
-                    chmod +x bin/lipc_bin
-                    cp -f bin/lipc_bin bin/lipc
-                    cp -f bin/lipc_bin bin/lipc_micro
-                    chmod +x bin/lipc bin/lipc_micro
+                if "$SEED_EXEC" src/compiler/driver_cli.lp bin/lipc_stage1 && chmod +x bin/lipc_stage1 && ./bin/lipc_stage1 src/compiler/driver_cli.lp bin/lipc; then
+                    chmod +x bin/lipc
+                    cp -f bin/lipc bin/lipc_bin
+                    cp -f bin/lipc bin/lipc_micro
+                    chmod +x bin/lipc_bin bin/lipc_micro
+                    rm -f bin/lipc_stage1
                     ok "Stage-3 Compiler successfully instantiated from source"
                 else
                     warn "Seed driver compilation failed, falling back to direct genesis seed"

@@ -15,19 +15,25 @@ bootstrap:
 		echo "🌱 Bootstrapping Stage-3 Compiler from genesis seed..."; \
 		chmod +x src/boot/lipi-seed 2>/dev/null || true; \
 		if [ -f src/boot/lipi-seed ]; then \
-			./src/boot/lipi-seed src/compiler/driver_cli.lp bin/lipc_bin && \
-			chmod +x bin/lipc_bin && \
-			cp -f bin/lipc_bin bin/lipc && \
-			cp -f bin/lipc_bin bin/lipc_micro && \
-			chmod +x bin/lipc bin/lipc_micro; \
-		elif [ -f src/boot/seed.b64 ]; then \
-			(base64 -d src/boot/seed.b64 > bin/lipc 2>/dev/null || \
-			 base64 --decode src/boot/seed.b64 > bin/lipc 2>/dev/null || \
-			 base64 -D src/boot/seed.b64 > bin/lipc 2>/dev/null) && \
+			./src/boot/lipi-seed src/compiler/driver_cli.lp bin/lipc_stage1 && \
+			chmod +x bin/lipc_stage1 && \
+			./bin/lipc_stage1 src/compiler/driver_cli.lp bin/lipc && \
 			chmod +x bin/lipc && \
 			cp -f bin/lipc bin/lipc_bin && \
 			cp -f bin/lipc bin/lipc_micro && \
-			chmod +x bin/lipc_bin bin/lipc_micro; \
+			chmod +x bin/lipc_bin bin/lipc_micro && \
+			rm -f bin/lipc_stage1; \
+		elif [ -f src/boot/seed.b64 ]; then \
+			(base64 -d src/boot/seed.b64 > bin/lipc_seed 2>/dev/null || \
+			 base64 --decode src/boot/seed.b64 > bin/lipc_seed 2>/dev/null || \
+			 base64 -D src/boot/seed.b64 > bin/lipc_seed 2>/dev/null) && \
+			chmod +x bin/lipc_seed && \
+			./bin/lipc_seed src/compiler/driver_cli.lp bin/lipc && \
+			chmod +x bin/lipc && \
+			cp -f bin/lipc bin/lipc_bin && \
+			cp -f bin/lipc bin/lipc_micro && \
+			chmod +x bin/lipc_bin bin/lipc_micro && \
+			rm -f bin/lipc_seed; \
 		fi; \
 		echo "✔ Compiler bootstrapped: bin/lipc"; \
 	fi
