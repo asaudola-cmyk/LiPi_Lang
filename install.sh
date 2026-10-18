@@ -218,6 +218,7 @@ create_command() {
             build_tool "src/tools/lipidoc.lp" "bin/lipidoc"
             build_tool "src/tools/lipirepl.lp" "bin/lipirepl"
             build_tool "src/tools/lipiassimilate.lp" "bin/lipiassimilate"
+            build_tool "src/tools/lipi_unikernel_boot.lp" "bin/lipi_unikernel_boot"
             build_tool "build.lp" "bin/lipi-build"
             build_tool "tests/run_tests.lp" "bin/lipi-test"
         fi
@@ -259,6 +260,7 @@ create_command() {
     install_tool_binary "lipidoc" "Markdown Documentation Engine"
     install_tool_binary "lipirepl" "Interactive Real-Time REPL"
     install_tool_binary "lipiassimilate" "AI Architecture Assimilator"
+    install_tool_binary "lipi_unikernel_boot" "Bare-Metal Unikernel Boot Engine"
     install_tool_binary "lipi-build" "Native Build Orchestrator"
     install_tool_binary "lipi-test" "Regression Test Engine"
     if [ -x "$LIPI_INSTALL_DIR/bin/lipilsp" ] && [ "$LIPI_INSTALL_DIR/bin/lipilsp" != "$LIPI_BIN_DIR/lipils" ]; then
@@ -273,7 +275,7 @@ heal_system_links() {
     # WHY: Scans /usr/local/bin for dangling/broken symlinks or legacy pointers
     # to individual user home folders. Self-heals if permissions permit, or provides
     # clear, actionable diagnostics so the user never faces "command not found".
-    for tool in lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi-build lipi-test; do
+    for tool in lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi_unikernel_boot lipi-build lipi-test; do
         sys_target="/usr/local/bin/$tool"
         if [ -L "$sys_target" ]; then
             target_dst=$(readlink "$sys_target" 2>/dev/null || true)
