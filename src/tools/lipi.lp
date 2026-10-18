@@ -365,7 +365,18 @@ fn handle_build file_path out_file target_flag
         return 1
     dest = out_file
     if len(dest) == 0
-        dest = file_path + ".bin"
+        if target_flag == "--target=wasm" or target_flag == "--target=web"
+            dest = file_path + ".wasm"
+        elif target_flag == "--target=verilog" or target_flag == "--target=hdl"
+            dest = file_path + ".v"
+        elif target_flag == "--target=unikernel" or target_flag == "--format=multiboot2"
+            dest = file_path + ".kernel.bin"
+        elif target_flag == "--shared"
+            dest = file_path + ".so"
+        else
+            dest = file_path + ".bin"
+        end
+    end
         
     say "\033[1;34m[LIPI BUILD]\033[0m " + file_path + " ➔ " + dest
     c_bin = resolve_bin_path("lipc_bin")
@@ -850,7 +861,7 @@ fn main
 
     if cmd == "build"
         if argc < 3
-            say "Usage: lipi build <file.lp> [-o <out>]"
+            say "Usage: lipi build <file.lp> [-o <out>] [--target=<arch>]"
             return 1
         src_file = get(args, 2)
         out_f = ""
@@ -865,8 +876,18 @@ fn main
                 target_f = "--target=arm64"
             elif cur == "--target=wasm" or cur == "--target=web"
                 target_f = "--target=wasm"
-            elif cur == "--target=x86_64"
+            elif cur == "--target=riscv64" or cur == "--target=riscv"
+                target_f = "--target=riscv64"
+            elif cur == "--target=verilog" or cur == "--target=hdl"
+                target_f = "--target=verilog"
+            elif cur == "--target=unikernel" or cur == "--format=multiboot2"
+                target_f = "--target=unikernel"
+            elif cur == "--target=x86_64" or cur == "--target=amd64"
                 target_f = "--target=x86_64"
+            elif cur == "--shared"
+                target_f = "--shared"
+            elif cur == "--ai-opt"
+                target_f = "--ai-opt"
             ai = ai + 1
         return handle_build(src_file, out_f, target_f)
 

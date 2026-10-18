@@ -4,7 +4,7 @@
 # ==============================================================================
 
 SHELL := /bin/bash
-.PHONY: all bootstrap build test clean install uninstall update release
+.PHONY: all bootstrap build test clean install uninstall update release unikernel
 
 all: bootstrap build
 
@@ -50,12 +50,19 @@ build: bootstrap
 	@./bin/lipc src/tools/lipidoc.lp bin/lipidoc && chmod +x bin/lipidoc
 	@./bin/lipc src/tools/lipirepl.lp bin/lipirepl && chmod +x bin/lipirepl
 	@./bin/lipc src/tools/lipiassimilate.lp bin/lipiassimilate && chmod +x bin/lipiassimilate
+	@./bin/lipc src/tools/lipi_unikernel_boot.lp bin/lipi_unikernel_boot && chmod +x bin/lipi_unikernel_boot
 	@./bin/lipc build.lp bin/lipi-build && chmod +x bin/lipi-build
 	@./bin/lipc tests/run_tests.lp bin/lipi-test && chmod +x bin/lipi-test
 	@echo "👑 100% Native LiPi Developer Toolchain Ready!"
 
+# Build sovereign bare-metal Multiboot2 unikernel image
+unikernel: build
+	@echo "👑 Synthesizing Sovereign Ring-0 Bare-Metal Multiboot2 Unikernel image..."
+	@./bin/lipi_unikernel_boot
+	@echo "✔ Unikernel image ready at dist/lipi_kernel.bin"
+
 # Package standalone pre-built release archive for Linux x86_64
-release: build
+release: build unikernel
 	@echo "📦 Packaging sovereign standalone release distribution..."
 	@mkdir -p dist
 	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md

@@ -1012,6 +1012,12 @@ fn main
     else
         failed = failed + 1
 
+    // 204: Sovereign Multi-Silicon Target Generation (ARM64, RISC-V 64, WASM, Unikernel)
+    if run_single_test(compiler, "tests/test_multi_silicon_targets.lp", "test_multi_silicon_targets") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
 
     say "========================================================================"
     say "Total Tests: " + (passed + failed) + " | Passed: " + passed + " | Failed: " + failed

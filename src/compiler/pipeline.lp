@@ -960,6 +960,53 @@ fn compiler_pipeline_execute config source_code
                 result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
+        elif config.cfg_emit_format == FORMAT_UNIKERNEL()
+            // Sovereign Ring-0 Bare-Metal Multiboot2 Unikernel Emission
+            synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
+            // Multiboot2 Header: 0xE85250D6 (3897741526), arch=0, length=24, checksum, end tag (type=0, size=8)
+            mb2_code = list()
+            // Magic: 0xE85250D6
+            push(mb2_code, 214)
+            push(mb2_code, 80)
+            push(mb2_code, 82)
+            push(mb2_code, 232)
+            // Architecture: 0 (i386 / x86_64 Long Mode)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            // Length: 24 bytes
+            push(mb2_code, 24)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            // Checksum: -(magic + arch + length) & 0xFFFFFFFF = 0x17AD2F12
+            push(mb2_code, 18)
+            push(mb2_code, 47)
+            push(mb2_code, 173)
+            push(mb2_code, 23)
+            // Tag End: type=0, flags=0, size=8
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 8)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            si = 0
+            while si < synth.synth_code.len()
+                push(mb2_code, synth.synth_code[si])
+                si = si + 1
+            emit_res = elf_emit_executable(mb2_code, synth.synth_rodata, [], 0, config.cfg_out_path)
+            if emit_res.ew_success == 1
+                result.res_output_bytes = emit_res.ew_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = emit_res.ew_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
         elif config.cfg_target_arch == TARGET_ID_X86_64()
             // Synthesize AMD64 machine code instructions and rodata directly from tokens with SSA optimizations
             synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)

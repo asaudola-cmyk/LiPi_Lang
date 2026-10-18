@@ -92,6 +92,8 @@ fn main
                 elif t_arg == "verilog" or t_arg == "hdl"
                     target_arch = TARGET_ID_VERILOG()
                     emit_format = FORMAT_VERILOG()
+                elif t_arg == "unikernel" or t_arg == "multiboot2" or t_arg == "baremetal"
+                    emit_format = FORMAT_UNIKERNEL()
                 elif t_arg == "x86_64" or t_arg == "amd64" or t_arg == "linux"
                     target_arch = TARGET_ID_X86_64()
         elif arg == "--format=macho" or arg == "--macho" or arg == "--target=macos"
@@ -107,6 +109,8 @@ fn main
         elif arg == "--target=verilog" or arg == "--target=hdl" or arg == "--emit=verilog"
             target_arch = TARGET_ID_VERILOG()
             emit_format = FORMAT_VERILOG()
+        elif arg == "--target=unikernel" or arg == "--format=multiboot2" or arg == "--unikernel"
+            emit_format = FORMAT_UNIKERNEL()
         elif arg == "--target=x86_64" or arg == "--target=amd64"
             target_arch = TARGET_ID_X86_64()
         elif arg == "--ai-opt" or arg == "-ai"
@@ -139,6 +143,8 @@ fn main
             out_file = in_file + ".macho"
         elif emit_format == FORMAT_PE()
             out_file = in_file + ".exe"
+        elif emit_format == FORMAT_UNIKERNEL()
+            out_file = in_file + ".kernel.bin"
         elif target_arch == TARGET_ID_WASM()
             out_file = in_file + ".wasm"
         elif target_arch == TARGET_ID_VERILOG() or emit_format == FORMAT_VERILOG()
