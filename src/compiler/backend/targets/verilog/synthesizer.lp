@@ -13,6 +13,8 @@
 //    Verilog files (compatible with Yosys, Vivado, Quartus, and Verilator) purely in LiPi.
 // ==============================================================================
 
+include "src/compiler/frontend/lexer/token_kind.lp"
+
 struct VerilogSynthResult
     vs_success              // 1 on success, 0 on error
     vs_module_name          // Top-level module name

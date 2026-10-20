@@ -51,6 +51,8 @@
 @fn ELFOSABI_FREEBSD()    return 9 @end
 @fn ELFOSABI_OPENBSD()    return 12 @end
 @fn ELFOSABI_ARM_AEABI()   return 64 @end
+@fn ELFOSABI_OPENHARMONY() return 97 @end // OpenHarmony / HarmonyOS ABI
+@fn ELFOSABI_ANDROID()     return 0  @end // Android Bionic System V ABI
 @fn ELFOSABI_STANDALONE() return 255 @end
 
 // --- e_type: Object File Type ---

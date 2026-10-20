@@ -47,6 +47,13 @@ import "utso/string"
 @fn LC_LOAD_DYLINKER() return 14         @end // 0x0E: Path to dyld (/usr/lib/dyld)
 @fn LC_LOAD_DYLIB()    return 12         @end // 0x0C: Load dynamic library dependency
 @fn LC_MAIN()          return 2147483688 @end // 0x80000028: Modern replacement for LC_UNIXTHREAD
+@fn LC_BUILD_VERSION() return 50         @end // 0x32: Target OS platform & SDK version
+
+// Apple Platform Identifiers for LC_BUILD_VERSION
+@fn PLATFORM_MACOS()   return 1          @end // macOS Darwin
+@fn PLATFORM_IOS()     return 2          @end // iOS iPhone / iPad
+@fn PLATFORM_TVOS()    return 3          @end // Apple tvOS
+@fn PLATFORM_WATCHOS() return 4          @end // Apple watchOS
 
 // --- VM Protection Flags ---
 @fn VM_PROT_NONE()    return 0 @end

@@ -1018,6 +1018,11 @@ fn main
     else
         failed = failed + 1
 
+    // 205: Sovereign Omniverse Multi-OS & Cross-Silicon Matrix (Win/Mac/Android/iOS/Harmony/RV64/GPU/FPGA)
+    if run_single_test(compiler, "tests/test_omniverse_cross_silicon.lp", "test_omniverse_cross_silicon") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
 
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
