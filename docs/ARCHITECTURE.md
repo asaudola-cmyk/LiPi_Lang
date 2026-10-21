@@ -352,3 +352,63 @@ Sovereign GPU compute discovery directly against the Linux Direct Rendering Mana
 - Resolves GPU vendor IDs (NVIDIA `0x10DE`, AMD `0x1002`, Intel `0x8086`) and memory heaps without proprietary user-space driver stacks.
 - Automatically falls back to high-throughput containerized CPU emulation when running in constrained CI environments.
 
+---
+
+## 9. Sovereign Portable Executable (PE32+) Windows Direct Synthesis (`src/compiler/backend/formats/pe/pe_writer.lp`)
+
+Lipi compiles high-level source directly into native Microsoft Windows x86-64 console and GUI executables (`.exe`) without needing MinGW, MSVC, or Wine.
+
+### 9.1 Header Structure & Virtual Memory Layout
+- **MS-DOS 2.0 Header (64 bytes) & Stub:**
+  - Standard magic `0x5A4D` (`MZ`).
+  - Pointer to PE Header at offset `0x3C` (`e_lfanew` = `0x80`).
+- **PE32+ Signature & COFF File Header:**
+  - 4-byte signature `0x00004550` (`PE\0\0`).
+  - Machine: `0x8664` (`IMAGE_FILE_MACHINE_AMD64`).
+  - TimeDateStamp: bit-for-bit deterministic zero or build timestamp.
+  - Characteristics: `0x0022` (`IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE`).
+- **Optional Header PE32+ (240 bytes):**
+  - Magic: `0x020B` (PE32+ 64-bit).
+  - ImageBase: `0x140000000` (5,368,709,120).
+  - SectionAlignment: `4,096` bytes (4 KB).
+  - FileAlignment: `512` bytes.
+  - Subsystem: `0x0003` (`IMAGE_SUBSYSTEM_WINDOWS_CUI`).
+  - Data Directories: 16 directories including Import Directory (Index 1) and IAT (Index 12).
+
+### 9.2 Zero-Dependency KERNEL32 Import Directory Table & IAT
+The PE writer synthesizes a bit-perfect `.idata` section containing:
+1. `IMAGE_IMPORT_DESCRIPTOR` targeting `KERNEL32.dll`.
+2. Import Lookup Table (ILT) and Import Address Table (IAT) thunks for `ExitProcess`, `GetStdHandle`, and `WriteFile`.
+3. Hint/Name entries with ASCII name strings.
+
+### 9.3 Windows x64 Entry Bootstrap Stub
+A 64-byte entry bootstrap stub conforms to Microsoft x64 calling conventions:
+```asm
+sub rsp, 40                ; 0x48 0x83 0xEC 0x28 (allocate shadow space & 16-byte align)
+call user_main             ; 0xE8 rel32
+mov ecx, eax               ; 0x89 0xC1 (pass exit code in ECX)
+call [rip + disp32]        ; 0xFF 0x15 disp32 (call ExitProcess via IAT)
+add rsp, 40                ; 0x48 0x83 0xC4 0x28
+ret                        ; 0xC3
+```
+
+---
+
+## 10. Native Hardware & Kernel Bypass Subsystems
+
+1. **DRM/KMS Hardware Graphics & Modesetting (`aati/lipi_gui/drm_kms.lp`):**
+   - Interacts with Linux DRM subsystem directly via ioctls (`DRM_IOCTL_MODE_GETRESOURCES`, `DRM_IOCTL_MODE_CREATE_DUMB`, `DRM_IOCTL_MODE_MAP_DUMB`, `DRM_IOCTL_MODE_PAGE_FLIP`).
+   - Implements hardware double-buffering with atomic VBLANK synchronization and damage rectangle clipping.
+2. **Framebuffer Direct Driver (`aati/lipi_gui/fbdev.lp`):**
+   - Accesses physical display framebuffers (`/dev/fb0`) directly with Bresenham line and circle algorithms.
+3. **High-Performance Fiber Reactor with io_uring (`utso/os/fiber.lp`, `utso/io/io_uring.lp`):**
+   - Cooperative user-space green threads (fibers) with independent stacks swapped via register context switching (`%rsp`, `%rbp`, callee-saved registers).
+   - Direct kernel submission queue (`sq`) and completion queue (`cq`) polling for zero-syscall I/O throughput.
+4. **Zero-Copy Network Wire Framing (`utso/net/wire.lp`, `utso/net/tcp.lp`):**
+   - Raw Ethernet II (DIX) frames, IPv4 packet decoding, TCP state machine with sliding window flow control.
+5. **Sovereign 9-Class Slab Memory Allocator (`utso/memory/slab.lp`):**
+   - Power-of-two size classes (16, 32, 64, 128, 256, 512, 1024, 2048, 4096 bytes) for O(1) alloc/free with zero memory fragmentation.
+6. **Autoregressive Transformer Core (`aati/lipi_ai/transformer.lp`):**
+   - Full Multi-Head Self-Attention (Q, K, V projections), RMSNorm layer normalization, and rotary position embeddings (RoPE) executed directly on silicon.
+
+

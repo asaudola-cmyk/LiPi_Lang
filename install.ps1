@@ -56,37 +56,54 @@ if (Test-Path "$PSScriptRoot\src\compiler\driver_cli.lp") {
 $binPath = "$InstallDir\bin"
 if (!(Test-Path $binPath)) { New-Item -ItemType Directory -Path $binPath -Force | Out-Null }
 
-# 4. Generate Windows Command and PowerShell Shims for transparent execution
+# 4. Install Native Windows PE32+ (.exe) Binaries if present in dist/
+if (Test-Path "$InstallDir\dist") {
+    Get-ChildItem -Path "$InstallDir\dist\*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item -Path $_.FullName -Destination "$binPath\$($_.Name)" -Force
+        Write-Host "  ✔ Installed native Windows PE32+ binary: $($_.Name)" -ForegroundColor Green
+    }
+}
+
+# 5. Generate Windows Command and PowerShell Hybrid Execution Bridges
 $tools = @("lipi", "lipc", "aati", "haat", "lipils", "lipifmt", "lipidoc", "lipirepl", "lipi-test")
 
 foreach ($t in $tools) {
-    # .cmd shim for Windows CMD / Terminal
+    # .cmd hybrid bridge (Prioritizes native .exe, falls back to WSL for ELF utilities)
     $cmdContent = @"
 @echo off
+if exist "%~dp0$t.exe" (
+    "%~dp0$t.exe" %*
+    exit /b %ERRORLEVEL%
+)
 where wsl.exe >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     wsl.exe -e "%~dp0$t" %*
 ) else (
-    echo [LiPi Error] WSL2 is required to run LiPi freestanding engine on Windows.
+    echo [LiPi Error] WSL2 is required to run LiPi ELF binaries on Windows when $t.exe is not found.
     echo Run 'wsl --install' in an elevated PowerShell terminal to install WSL2.
     exit /b 1
 )
 "@
     Set-Content -Path "$binPath\$t.cmd" -Value $cmdContent -Force
 
-    # .ps1 shim for PowerShell
+    # .ps1 hybrid bridge
     $psContent = @"
+`$exePath = Join-Path `$PSScriptRoot "$t.exe"
+if (Test-Path `$exePath) {
+    & `$exePath @args
+    exit `$LASTEXITCODE
+}
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
     & wsl.exe -e "`$PSScriptRoot/$t" @args
 } else {
-    Write-Error "LiPi requires WSL2 on Windows. Run 'wsl --install' in PowerShell to enable WSL2."
+    Write-Error "LiPi requires WSL2 on Windows when $t.exe is not found. Run 'wsl --install' in PowerShell."
 }
 "@
     Set-Content -Path "$binPath\$t.ps1" -Value $psContent -Force
 }
-Write-Host "  ✔ Created Windows execution bridge shims (CMD & PowerShell) in $binPath" -ForegroundColor Green
+Write-Host "  ✔ Configured Windows execution bridges (Native PE32+ & WSL fallbacks) in $binPath" -ForegroundColor Green
 
-# 5. Add to User Environment Path
+# 6. Add to User Environment Path
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$binPath*") {
     [Environment]::SetEnvironmentVariable("Path", "$binPath;$userPath", "User")
@@ -97,10 +114,10 @@ if ($userPath -notlike "*$binPath*") {
 }
 
 Write-Host "`n  🎉 LiPi successfully installed on Windows!" -ForegroundColor Green
-Write-Host "  • Compiler:     lipc (generates PE32+ .exe, WASM, ELF64, Mach-O)" -ForegroundColor Cyan
-Write-Host "  • CLI Runner:   lipi (runs scripts and interactive REPL)" -ForegroundColor Cyan
-Write-Host "  • Package Tool: aati (manage packages and cryptographically sign bundles)" -ForegroundColor Cyan
-Write-Host "  • Example Run:  lipi run examples\01_hello_world\main.lp" -ForegroundColor Yellow
-Write-Host "  • Build Binary: lipc examples\01_hello_world\main.lp -o app.exe" -ForegroundColor Yellow
-Write-Host "  • Test Suite:   lipi test" -ForegroundColor Yellow
+Write-Host "  • Native Compiler: lipc.exe (Direct PE32+ .exe, WASM, ELF64, Mach-O)" -ForegroundColor Cyan
+Write-Host "  • Native CLI:      lipi.exe (Direct program runner & in-memory evaluator)" -ForegroundColor Cyan
+Write-Host "  • Package Tool:    aati.exe (Cryptographically sign & verify packages)" -ForegroundColor Cyan
+Write-Host "  • Example Run:     lipi run examples\01_hello_world\main.lp" -ForegroundColor Yellow
+Write-Host "  • Build EXE:       lipc examples\01_hello_world\main.lp -o app.exe --target windows" -ForegroundColor Yellow
+Write-Host "  • Run Test Suite:  lipi test" -ForegroundColor Yellow
 Write-Host "`n  Note: Restart your terminal session to ensure PATH updates take effect." -ForegroundColor Gray

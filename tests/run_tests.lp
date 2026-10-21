@@ -1036,6 +1036,72 @@ fn main
     else
         failed = failed + 1
 
+    // 208: Direct DRM/KMS Hardware Graphics & Modesetting Subsystem
+    if run_single_test(compiler, "tests/test_drm_kms_direct.lp", "test_drm_kms_direct") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 209: Linux Framebuffer Direct Canvas & Modesetting Driver
+    if run_single_test(compiler, "tests/test_fbdev_direct.lp", "test_fbdev_direct") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 210: High-Performance Fiber Scheduler with io_uring Reactor
+    if run_single_test(compiler, "tests/test_fiber_uring.lp", "test_fiber_uring") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 211: Zero-Copy io_uring Bypass Wire Kernel Rings
+    if run_single_test(compiler, "tests/test_io_uring_bypass_wire.lp", "test_io_uring_bypass_wire") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 212: Sovereign Raw Ethernet & IP Packet Wire Framing
+    if run_single_test(compiler, "tests/test_net_core_wire.lp", "test_net_core_wire") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 213: Network Wire Edge Cases & Boundary Validation
+    if run_single_test(compiler, "tests/test_net_wire_edge_cases.lp", "test_net_wire_edge_cases") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 214: Native Silicon Green-Thread Fiber Context Switcher
+    if run_single_test(compiler, "tests/test_silicon_fiber_core.lp", "test_silicon_fiber_core") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 215: Sovereign 9-Class Slab Memory Allocator
+    if run_single_test(compiler, "tests/test_slab_9_classes.lp", "test_slab_9_classes") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 216: Basic Slab Memory Allocation & Lifecycle
+    if run_single_test(compiler, "tests/test_slab_basic.lp", "test_slab_basic") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 217: TCP Kernel Bypass Wire Protocol State Machine
+    if run_single_test(compiler, "tests/test_tcp_wire_bypass.lp", "test_tcp_wire_bypass") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 218: Autoregressive Transformer Core & Tensor Attention
+    if run_single_test(compiler, "tests/test_transformer_core.lp", "test_transformer_core") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

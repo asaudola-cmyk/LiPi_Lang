@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi 207-Test Regression Suite (Native Toolchain)"
+    name: "Lipi 218-Test Regression Suite (Native Toolchain)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -40,7 +40,7 @@ jobs:
         run: |
           ./bin/lipi run examples/01_hello_world/main.lp
 
-      - name: Run Full 207-Test Sovereign Regression Engine (0% Shell)
+      - name: Run Full 218-Test Sovereign Regression Engine (0% Shell)
         run: |
           ./bin/lipi test
 
@@ -49,6 +49,12 @@ jobs:
           ./bin/lipc tests/01_hello.lp /tmp/ci_hello
           /tmp/ci_hello
           rm -f /tmp/ci_hello
+
+      - name: Verify Windows PE32+ Native Silicon Emission
+        run: |
+          ./bin/lipc examples/01_hello_world/main.lp /tmp/ci_win.exe --target windows
+          test -f /tmp/ci_win.exe
+          rm -f /tmp/ci_win.exe
 
       - name: Verify Fibonacci Execution
         run: |

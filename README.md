@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/Compiler-Zero%20C%20%7C%20Zero%20Libc%20%7C%20Zero%20LLVM-blue.svg)](#architecture)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/Silicon-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 207/207 Passing](https://img.shields.io/badge/Tests-207%2F207%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 218/218 Passing](https://img.shields.io/badge/Tests-218%2F218%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](README.bn.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -185,14 +185,14 @@ Or using `sh`:
 curl -fsSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | sh
 ```
 
-### Windows (PowerShell)
+### Windows (PowerShell & Native PE32+ .exe)
 
 Open Windows PowerShell and run:
 ```powershell
 # 1-Line Windows Sovereign Setup
 irm https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.ps1 | iex
 ```
-*Note: Installs transparent `.cmd` and `.ps1` execution bridges in your PATH, enabling seamless use from Command Prompt, PowerShell, and Windows Terminal.*
+*Note: Installs native standalone Windows PE32+ binaries (`lipc.exe`, `lipi.exe`, `aati.exe`) directly into your PATH, with automatic WSL fallback bridges for seamless execution across CMD, PowerShell, and Windows Terminal.*
 
 ### Update Toolchain
 
@@ -210,7 +210,8 @@ lipi update
 ```bash
 git clone https://github.com/asaudola-cmyk/LiPi_Lang.git
 cd LiPi_Lang
-make
+make            # Builds native Linux toolchain
+make windows    # Synthesizes native Windows PE32+ binaries (lipc.exe, lipi.exe, aati.exe)
 export PATH="$(pwd)/bin:$PATH"
 ```
 
@@ -227,13 +228,16 @@ lipi run examples/01_hello_world/main.lp
 ```bash
 lipc examples/01_hello_world/main.lp -o hello_app
 ./hello_app
+
+# Or compile to native Windows PE32+ executable:
+lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```
 
 ### 3. Run the Autonomous Test Suite
 ```bash
 lipi test
 ```
-All **207 regression test suites pass (207/207 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, networking, cryptography, concurrency, memory arenas, and baremetal unikernels.
+All **218 regression test suites pass (218/218 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, DRM/KMS hardware modesetting, Linux framebuffer canvas, io_uring fibers, raw wire packet framing, 9-class slab memory managers, and autoregressive transformers.
 
 ---
 
@@ -378,7 +382,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Test Suite Pass Rate** | **207/207 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **218/218 (100%)** | — | — | — | — | — |
 
 ---
 

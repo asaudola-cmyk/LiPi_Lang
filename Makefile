@@ -67,16 +67,26 @@ unikernel: build
 	@./bin/lipi_unikernel_boot
 	@echo "✔ Unikernel image ready at dist/lipi_kernel.bin"
 
-# Package standalone pre-built release archive for Linux x86_64
-release: build unikernel
+# Build sovereign Windows PE32+ native release binaries
+windows: build
+	@echo "🪟 Synthesizing Native Windows PE32+ binaries..."
+	@mkdir -p dist
+	@./bin/lipc src/compiler/driver_cli.lp dist/lipc.exe --target windows
+	@./bin/lipc src/tools/lipi.lp dist/lipi.exe --target windows
+	@./bin/lipc src/tools/aati.lp dist/aati.exe --target windows
+	@zip -q -r dist/lipi-1.0.0-windows-x86_64.zip dist/*.exe install.ps1 README.md LICENSE utso/ aati/ examples/
+	@echo "✔ Native Windows PE32+ binaries and archive created in dist/"
+
+# Package standalone pre-built release archive for Linux x86_64 and Windows
+release: build unikernel windows
 	@echo "📦 Packaging sovereign standalone release distribution..."
 	@mkdir -p dist
 	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
 	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
-# Run autonomous 207 regression test suite
+# Run autonomous 218 regression test suite
 test: bootstrap
-	@echo "🧪 Running full 207 regression test suite..."
+	@echo "🧪 Running full 218 regression test suite..."
 	@if [ -x bin/lipi ]; then \
 		./bin/lipi test; \
 	elif [ -x bin/lipi-test ]; then \
