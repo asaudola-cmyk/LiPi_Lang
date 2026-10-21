@@ -7,6 +7,7 @@
 include "src/compiler/backend/targets/riscv64/codegen_core.lp"
 include "src/compiler/backend/targets/riscv64/codegen_expr.lp"
 include "src/compiler/backend/targets/riscv64/codegen_stmt.lp"
+include "src/compiler/backend/targets/riscv64/riscv64_vector.lp"
 
 // ── 12. Master Program Synthesizer Entry Point ─────────────────────────────────
 

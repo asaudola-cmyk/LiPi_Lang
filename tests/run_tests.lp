@@ -1030,6 +1030,12 @@ fn main
     else
         failed = failed + 1
 
+    // 207: Sovereign Direct SSA Lowering & Multi-Silicon Hardware Engine
+    if run_single_test(compiler, "tests/test_sovereign_ssa_machine_lowering.lp", "test_sovereign_ssa_machine_lowering") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

@@ -7,6 +7,7 @@
 include "src/compiler/backend/targets/arm64/codegen_core.lp"
 include "src/compiler/backend/targets/arm64/codegen_expr.lp"
 include "src/compiler/backend/targets/arm64/codegen_stmt.lp"
+include "src/compiler/backend/targets/arm64/arm64_simd.lp"
 
 // ── 9. Master Program Synthesizer Entry Point ──────────────────────────────────
 

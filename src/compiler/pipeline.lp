@@ -67,6 +67,7 @@ include "src/compiler/backend/regalloc/linear_scan.lp"
 
 // Subsystem 7: Multi-Target Hardware Encoders
 include "src/compiler/backend/targets/target_machine.lp"
+include "src/compiler/backend/ssa_lowerer.lp"
 include "src/compiler/backend/targets/x86_64/synthesizer.lp"
 include "src/compiler/backend/targets/arm64/synthesizer.lp"
 include "src/compiler/backend/targets/wasm/synthesizer.lp"
