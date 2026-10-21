@@ -74,9 +74,9 @@ release: build unikernel
 	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
 	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
-# Run autonomous 203 regression test suite
+# Run autonomous 207 regression test suite
 test: bootstrap
-	@echo "🧪 Running full 203 regression test suite..."
+	@echo "🧪 Running full 207 regression test suite..."
 	@if [ -x bin/lipi ]; then \
 		./bin/lipi test; \
 	elif [ -x bin/lipi-test ]; then \

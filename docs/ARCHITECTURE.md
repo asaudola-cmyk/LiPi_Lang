@@ -295,3 +295,60 @@ Concurrency synchronization is managed through memory word locks:
 3. **Stage 3: SSA IR & Algebraic Optimization:** Converts expressions into Static Single Assignment form. Performs compile-time constant folding and converts expensive division operations into reciprocal multiplications via Granlund-Montgomery algorithms.
 4. **Stage 4: Linear Scan Register Allocation:** Computes live ranges for inner-loop induction variables and accumulators. Maps hot variables directly to callee-saved registers (`%r12`–`%r15` on AMD64, `X19`–`X28` on AArch64), avoiding round-trips to the stack frame.
 5. **Stage 5: Silicon Machine Code Synthesis:** Encodes raw opcodes, resolves jump labels via relocation backpatching, constructs standard ELF64 headers, embeds the Multiboot 1 specification header, and commits the binary to disk with `0755` executable permissions.
+
+---
+
+## 7. Sovereign Direct SSA-to-Silicon Lowering Engine (`src/compiler/backend/ssa_lowerer.lp`)
+
+Lipi First 1.0.0 eliminates intermediate multi-pass conversions by lowering the SSA Control Flow Graph (CFG) directly into silicon machine code.
+
+### 7.1 CFG Traversal & Block Offset Mapping
+The lowering engine (`SSALowerer`) operates across basic block graphs:
+- **Block Layout:** Sequentially emits basic blocks into the code buffer while recording entry offsets in a hash map (`block_offsets`).
+- **Instruction Lowering:** Maps individual SSA instructions to CPU opcodes:
+  - `OP_ALLOCA`: Adjusts the virtual stack frame pointer via `sub %rsp, imm32` (`48 81 EC`).
+  - `OP_STORE` / `OP_LOAD`: Emits frame-relative memory transfers `mov [rbp - disp], rax` (`48 89 85`) and `mov rax, [rbp - disp]` (`48 8B 85`).
+  - `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`: Direct 64-bit arithmetic opcodes.
+  - `OP_CMP`: Emits `cmp rax, rbx` (`48 39 D8`).
+  - `OP_RET`: Restores stack frame (`mov %rsp, %rbp; pop %rbp; ret`).
+- **Control Flow & Conditional Branching:**
+  - `OP_BR`: Conditional branch using `jne rel32` (`0F 85 rel32`) or `je rel32` (`0F 84 rel32`).
+  - `OP_JMP`: Unconditional near jump `jmp rel32` (`E9 rel32`).
+
+### 7.2 Label Backpatching without Relocation Engines
+When a branch targets a basic block that has not yet been emitted (forward jump), the lowerer registers a backpatch entry in `patch_table`:
+```lipi
+fn ssa_lowerer_patch_jumps self
+    // Computes relative jump displacement: target_offset - (inst_offset + 4)
+    // and writes 32-bit little-endian value into the opcode stream.
+```
+This guarantees single-pass code emission with zero external linker or object file requirements.
+
+---
+
+## 8. Multi-Silicon Vectorization & Direct Hardware Interfacing
+
+### 8.1 ARM64 128-Bit NEON Vector Emitter (`src/compiler/backend/targets/arm64/arm64_simd.lp`)
+Delivers vector parallelism on 64-bit ARM microarchitectures:
+- `arm64_emit_fadd_4s(v_dest, v_src1, v_src2)`: Emits 128-bit `add.4s` (`0x4E208400`).
+- `arm64_emit_fsub_4s(v_dest, v_src1, v_src2)`: Emits 128-bit `sub.4s` (`0x4E208400`).
+- `arm64_emit_fmul_4s(v_dest, v_src1, v_src2)`: Emits 128-bit `mul.4s` (`0x4E209C00`).
+- `arm64_emit_ld1_4s(v_dest, r_addr)`: 128-bit vector load `ld1.4s {vt.4s}, [xn]` (`0x4C407000`).
+- `arm64_emit_st1_4s(v_src, r_addr)`: 128-bit vector store `st1.4s {vt.4s}, [xn]` (`0x4C007000`).
+- `arm64_emit_dup_4s(v_dest, r_val)`: Vector scalar broadcast `dup.4s vt, wn` (`0x4E040C00`).
+
+### 8.2 RISC-V RV64V Vector Extension 1.0 (`src/compiler/backend/targets/riscv64/riscv64_vector.lp`)
+Direct vector instruction generation for modern RISC-V silicon:
+- `riscv64_emit_vsetvli(rd, rs1, vtype)`: Configures vector length and type (`0x00007057`).
+- `riscv64_emit_vle32_v(vd, rs1, vm)`: Vector unit-stride 32-bit load (`0x02000007`).
+- `riscv64_emit_vse32_v(vs3, rs1, vm)`: Vector unit-stride 32-bit store (`0x02000027`).
+- `riscv64_emit_vadd_vv(vd, vs2, vs1, vm)`: Vector integer vector-vector addition (`0x00000057`).
+- `riscv64_emit_vsub_vv(vd, vs2, vs1, vm)`: Vector integer vector-vector subtraction (`0x08000057`).
+- `riscv64_emit_vmul_vv(vd, vs2, vs1, vm)`: Vector integer vector-vector multiplication (`0x94000057`).
+
+### 8.3 Linux DRM/KMS Hardware GPU Interfacing (`aati/lipi_gpu/compute.lp`)
+Sovereign GPU compute discovery directly against the Linux Direct Rendering Manager (DRM):
+- Probes `/dev/dri/renderD128` (primary render node) and `/dev/dri/card0` via raw syscalls (`sys_openat`, `sys_fstat`).
+- Resolves GPU vendor IDs (NVIDIA `0x10DE`, AMD `0x1002`, Intel `0x8086`) and memory heaps without proprietary user-space driver stacks.
+- Automatically falls back to high-throughput containerized CPU emulation when running in constrained CI environments.
+

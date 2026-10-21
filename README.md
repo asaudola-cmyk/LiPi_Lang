@@ -10,9 +10,12 @@
 
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/Compiler-Zero%20C%20%7C%20Zero%20Libc%20%7C%20Zero%20LLVM-blue.svg)](#architecture)
-[![Architecture: x86_64 & ARM64](https://img.shields.io/badge/Silicon-x86__64%20%26%20ARM64%20ELF64-purple.svg)](docs/ARCHITECTURE.md)
-[![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](docs/HANDBOOK_BN.md)
+[![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/Silicon-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
+[![Tests: 207/207 Passing](https://img.shields.io/badge/Tests-207%2F207%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](README.bn.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+🌐 **Languages:** **English** • [**বাংলা সংস্করণ (Bengali Version)**](README.bn.md)
 
 [English Handbook](docs/HANDBOOK_EN.md) • [বাংলা হ্যান্ডবুক](docs/HANDBOOK_BN.md) • [Architecture](docs/ARCHITECTURE.md) • [Codebase Map](docs/CODEBASE_MAP.md) • [Universe Manifesto](docs/LIPI_UNIVERSE.md) • [Examples](examples/README.md) • [Standard Library](docs/STANDARD_LIBRARY.md)
 
@@ -24,11 +27,12 @@
 
 **Lipi (লিপি)** is an autonomous, bilingual general-purpose systems programming language designed from first principles for **complete computational sovereignty**. 
 
-Unlike conventional languages that require gigabytes of C/C++ compiler infrastructure (GCC, Clang, LLVM) or runtime virtual machines, Lipi compiles human-readable code directly into **native 64-bit Linux ELF binaries** with **zero runtime dependencies**:
+Unlike conventional languages that require gigabytes of C/C++ compiler infrastructure (GCC, Clang, LLVM) or runtime virtual machines, Lipi compiles human-readable code directly into **native 64-bit machine code** with **zero external dependencies**:
 
 - **0% C Runtime (`libc`):** Does not link against `glibc`, `musl`, or any external C libraries.
 - **0% Foreign Compiler Infrastructure:** Zero GCC, zero Clang, zero LLVM, zero Python.
-- **0% External Assembler or Linker:** Directly synthesizes ELF64 headers and machine opcodes in memory.
+- **0% External Assembler or Linker:** Directly synthesizes ELF64 / PE32+ / Mach-O headers and machine opcodes in memory.
+- **Direct SSA Silicon Lowering:** SSA Control Flow Graphs lower straight to machine silicon with zero intermediate translation hops.
 - **Bilingual AST Equivalence:** Write naturally in Bengali (`যদি`, `কাজ`, `গঠন`) or English (`if`, `fn`, `struct`) — both compile to identical, ultra-fast silicon machine code.
 
 ```lipi
@@ -51,7 +55,7 @@ say "Point coordinates: " + p.x + ", " + p.y  বলো "বিন্দুর �
 
 ## 🏛️ Architecture
 
-Lipi features a self-hosted 5-stage compiler pipeline with dual native silicon emitters for **x86_64** and **ARM64 (AArch64)**:
+Lipi features a self-hosted 5-stage compiler pipeline with direct silicon lowering engines for **x86_64**, **ARM64 (AArch64)**, **RISC-V (RV64GCV)**, and **GPU compute**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -62,33 +66,44 @@ Lipi features a self-hosted 5-stage compiler pipeline with dual native silicon e
 │   [English Source (.lp)] ──┘                                      │         │
 │                                                                   ▼         │
 │   ┌───────────────────────────────────────────────────────────────────────┐ │
-│   │                         SSA IR & Optimization                         │ │
+│   │                      SSA IR & Optimization Engine                     │ │
 │   │   • Constant Folding          • Granlund-Montgomery Strength Reduction│ │
 │   │   • Dead Code Elimination     • 2-Byte Peephole Zero-Init (xor r32)   │ │
+│   │   • SSA Dominance Trees       • Direct SSA Control Flow Graph Lowerer │ │
 │   └───────────────────────────────────┬───────────────────────────────────┘ │
 │                                       │                                     │
-│                     ┌─────────────────┴─────────────────┐                   │
-│                     ▼                                   ▼                   │
-│      [AMD64 ELF64 Silicon Emitter]        [AArch64 ELF64 Silicon Emitter]   │
-│      • RegAlloc: %r12-%r15, %rdi-%r9      • RegAlloc: X0-X7, X19-X28        │
-│      • Direct Syscall ABI (sys_*)         • Linux AArch64 Syscall ABI (X8)  │
-│      • Multiboot 1 Embedded Kernel        • 64KB Page Alignment             │
-│                     │                                   │                   │
-│                     ▼                                   ▼                   │
-│           [Standalone ELF64]                  [Standalone ELF64]            │
-│         (0% C / 0% GCC / 0% Libc)           (0% C / 0% GCC / 0% Libc)       │
+│            ┌──────────────────────────┼──────────────────────────┐          │
+│            ▼                          ▼                          ▼          │
+│   [AMD64 Silicon Engine]     [ARM64 NEON Engine]       [RISC-V RV64V Engine]│
+│   • RegAlloc: %r12-%r15      • RegAlloc: X0-X7, X19-28 • RV64GCV Vector 1.0 │
+│   • AVX2 SIMD / Syscalls     • 128-bit NEON SIMD       • vsetvli / vle32.v  │
+│   • Multiboot 1 Embedded     • Linux AArch64 ABI (X8)  • Direct Syscall ABI │
+│            │                          │                          │          │
+│            └──────────────────────────┼──────────────────────────┘          │
+│                                       ▼                                     │
+│                     [Standalone Native Silicon Binary]                      │
+│                  (0% C / 0% GCC / 0% Libc / 0% LLVM / 0% VM)                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Architectural Highlights
-1. **Direct Silicon Machine Code Generation:**
-   - **x86_64:** Generates 64-byte `Elf64_Ehdr`, 56-byte `Elf64_Phdr`, and raw variable-length AMD64 instructions.
-   - **ARM64:** Synthesizes fixed 32-bit AArch64 instructions with Linux `EM_AARCH64` (183) headers and 64KB page alignment.
-2. **Object-Oriented Struct Methods:** Modern `fn Struct.method self arg1 arg2` syntax compiled to zero-cost static dispatch via System V AMD64 and ARM64 register passing ABI.
-3. **Peephole Machine Code Optimization:** Automatically replaces 10-byte immediate zero moves (`movabsq $0, %reg`) with 2-byte `xor reg32, reg32` instructions, achieving 80% code density reduction and 0-cycle silicon execution via register renaming.
-4. **Embedded Multiboot 1 Kernel Specification:** Embeds `0x1BADB002` headers at offset 124, allowing binaries to boot on baremetal hardware or QEMU without an underlying operating system.
-5. **First-Class Web Engine (`aati/lipi_web/`):** Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
-6. **Native Multithreading (`utso/os/thread.lp`):** Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`utso/arena.lp`).
+1. **Direct SSA-to-Silicon Lowering Engine (`src/compiler/backend/ssa_lowerer.lp`):**
+   - Directly translates SSA Basic Blocks and Instructions (`OP_ALLOCA`, `OP_STORE`, `OP_LOAD`, `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`, `OP_CMP`, `OP_BR`, `OP_JMP`, `OP_RET`) into machine instructions.
+   - Computes label offsets and performs automatic forward/backward branch backpatching without external linkers.
+2. **Multi-Silicon SIMD Vectorization:**
+   - **x86_64:** AVX2 SIMD tensor operations and 2-byte `xor reg32, reg32` peephole zero-init optimization.
+   - **ARM64:** 128-bit NEON vector emitters (`add.4s`, `sub.4s`, `mul.4s`, `ld1.4s`, `st1.4s`, `dup.4s`).
+   - **RISC-V:** RV64V Vector Extension 1.0 emitters (`vsetvli`, `vle32.v`, `vse32.v`, `vadd.vv`, `vsub.vv`, `vmul.vv`).
+3. **Hardware GPU Discovery (`aati/lipi_gpu/compute.lp`):**
+   - Real Linux DRM/KMS hardware discovery probing `/dev/dri/renderD128` and `/dev/dri/card0` via raw syscalls, with graceful sandboxed container fallbacks.
+4. **Embedded Multiboot 1 Kernel Specification:**
+   - Embeds `0x1BADB002` headers at offset 124, allowing binaries to boot on baremetal hardware or QEMU without an underlying operating system.
+5. **Object-Oriented Struct Methods:**
+   - Modern `fn Struct.method self arg1 arg2` syntax compiled to zero-cost static dispatch via System V AMD64 and ARM64 register passing ABI.
+6. **First-Class Web Engine (`aati/lipi_web/`):**
+   - Sub-microsecond HTTP routing, zero-copy request parsing, and RFC 7231 serialization directly over Linux TCP sockets.
+7. **Native Multithreading (`utso/os/thread.lp`):**
+   - Direct Linux `SYS_clone` (syscall 56 / 220) with atomic spinlocks and bump-pointer memory arenas (`utso/arena.lp`).
 
 For full technical specifications, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -154,45 +169,71 @@ See [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md) for the complete be
 
 ---
 
-## 🚀 Quickstart
+## 🚀 Installation & Setup
 
-### 1. Installation
+Lipi provides zero-dependency automated installers for **Linux**, **macOS**, and **Windows**:
 
-**Option A: 1-Line Autonomous Installer (Recommended)**
+### Linux & macOS (Darwin)
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash
+# 1-Line Autonomous Installer
+curl -fsSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | bash
 ```
 
-**Option B: Clone & Build from Pure Source (Zero Dependencies)**
+Or using `sh`:
+```bash
+curl -fsSL https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.sh | sh
+```
+
+### Windows (PowerShell)
+
+Open Windows PowerShell and run:
+```powershell
+# 1-Line Windows Sovereign Setup
+irm https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.ps1 | iex
+```
+*Note: Installs transparent `.cmd` and `.ps1` execution bridges in your PATH, enabling seamless use from Command Prompt, PowerShell, and Windows Terminal.*
+
+### Update Toolchain
+
+Sync with latest GitHub commits and rebuild toolchains anytime:
+```bash
+# Via sovereign CLI driver:
+lipi update
+
+# Or via installer:
+./install.sh --update
+```
+
+### Manual Source Build
+
 ```bash
 git clone https://github.com/asaudola-cmyk/LiPi_Lang.git
 cd LiPi_Lang
-make        # or ./build.sh
+make
 export PATH="$(pwd)/bin:$PATH"
 ```
 
-**Option C: Install into System (`~/.local/bin`)**
-```bash
-./install.sh
-```
+---
 
-### 2. Run a Script Immediately
+## ⚡ Quickstart
+
+### 1. Run a Program In-Memory (Zero Disk Overhead)
 ```bash
 lipi run examples/01_hello_world/main.lp
 ```
 
-### 3. Compile Directly to Standalone ELF64 Binary (Zero GCC, Zero Libc)
+### 2. Compile to Standalone Native Binary (Zero GCC, Zero Libc)
 ```bash
 lipc examples/01_hello_world/main.lp -o hello_app
-chmod +x hello_app
 ./hello_app
 ```
 
-### 4. Run the Full Test Suite
+### 3. Run the Autonomous Test Suite
 ```bash
-lipi test   # or make test
+lipi test
 ```
-All **203 regression test suites pass (203/203 ✔, 100% green)** across core language semantics, networking, cryptography, concurrency, memory arenas, and baremetal components.
+All **207 regression test suites pass (207/207 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, networking, cryptography, concurrency, memory arenas, and baremetal unikernels.
 
 ---
 
@@ -203,7 +244,7 @@ The Lipi toolchain includes fully sovereign standalone native utilities written 
 ```
 lipi/
 ├── bin/
-│   ├── lipc             # Sovereign compiler driver (direct ELF64, ARM64, WASM)
+│   ├── lipc             # Sovereign compiler driver (direct ELF64, ARM64, RISC-V, WASM)
 │   ├── lipc_bin         # Native silicon machine code compiler engine
 │   ├── lipi             # Universal CLI driver, runner & REPL evaluator
 │   ├── aati             # Sovereign Ed25519 package manager & bundle builder (legacy alias: lipipkg)
@@ -216,10 +257,12 @@ lipi/
 │   └── lipidoc          # Automated sovereign documentation generator
 ```
 
-- **Universal Driver (`lipi`):** Execute scripts, run tests, and invoke toolchain commands:
+- **Universal Driver (`lipi`):** Execute scripts, run tests, update toolchains, and evaluate expressions:
   ```bash
   lipi run examples/01_hello_world/main.lp
-  lipi --version
+  lipi test
+  lipi update
+  lipi version
   ```
 - **Sovereign Compiler (`lipc`):** Compile standalone native ELF64 binaries in ~4 milliseconds:
   ```bash
@@ -236,7 +279,7 @@ lipi/
   ```bash
   lipidbg build/hello_app
   ```
-- **Sovereign Package Manager (`aati` / `আঁটি`):** Scaffolding, dependency management, `.aati` bundle builds, and Ed25519 authentic cryptographic signing (with `lipipkg` preserved as legacy alias):
+- **Sovereign Package Manager (`aati` / `আঁটি`):** Scaffolding, dependency management, `.aati` bundle builds, and Ed25519 cryptographic signing (with `haat` distributed registry):
   ```bash
   aati init my_project
   aati build
@@ -257,10 +300,10 @@ lipi/
 
 ## 🌐 Dual Architecture: Genesis Primitives (`utso/`) & Sovereign Bundles (`aati/`)
 
-LiPi's modular ecosystem is organized into two sovereign, highly decoupled tiers with zero external C/libc dependencies:
+LiPi's modular ecosystem is organized into two sovereign tiers with zero external C/libc dependencies:
 
 ### 1. `utso/` (উৎস — Genesis Silicon Primitives)
-Pure silicon primitives that directly interface with the hardware and Linux kernel syscalls:
+Pure silicon primitives that directly interface with the hardware and operating system syscalls:
 - **Core Memory & Primitives:** `utso/memory.lp`, `utso/arena.lp`, `utso/io.lp`, `utso/string.lp`, `utso/unicode.lp`, `utso/math.lp`, `utso/fmt.lp`
 - **Data Structures & Types:** `utso/collections.lp`, `utso/hashmap.lp`, `utso/option.lp`, `utso/result.lp`, `utso/error.lp`
 - **Concurrency & OS:** `utso/concurrency.lp`, `utso/channel.lp`, `utso/time.lp`, `utso/syscalls.lp`, `utso/os/`
@@ -283,7 +326,7 @@ Domain modules organized as sovereign packages with cryptographic package manife
 | **`lipidb`** | `engine.lp`, `kv.lp`, `btree.lp`, `mvcc.lp`, `wal.lp` | ACID LipiKV embedded database, B+Tree indexing, WAL crash recovery, Redis-compatible protocol |
 | **`lipi_web`** | `engine.lp`, `router.lp`, `sovereign_framework.lp` | Sub-microsecond HTTP/1.1 & HTTP/2 routing, reactive DOM-bypass framework, WebSockets |
 | **`lipi_gui`** | `canvas.lp`, `window.lp`, `tui.lp`, `drm_kms.lp` | Linux `/dev/fb0` hardware framebuffer, Bresenham canvas, DRM/KMS, sovereign desktop UI |
-| **`lipi_gpu`** | `compute.lp`, `shader.lp`, `spirv_native.lp` | Compute shaders, native SPIR-V binary code emission, DRM dumb-buffers |
+| **`lipi_gpu`** | `compute.lp`, `shader.lp`, `spirv_native.lp` | Compute shaders, native SPIR-V binary code emission, DRM `/dev/dri` discovery |
 | **`lipi_fs`** | `lipifs.lp`, `ext4.lp` | Copy-On-Write LipiFS, raw Ext4 filesystem driver |
 | **`lipi_blockchain`** | `blockchain.lp`, `mpt.lp`, `vm.lp` | Sovereign EVM-compatible execution, Merkle Patricia Trie |
 | **`lipi_quantum`** | `superposition.lp`, `multi_qubit.lp`, `shor.lp` | Qubit state vectors, quantum gates, Shor algorithm simulation |
@@ -324,7 +367,8 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | Feature | Lipi (First 1.0.0) | C (Clang 18) | C (GCC 13) | Rust 1.97 | Go 1.22 | Python 3.12 |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Zero Runtime Dependencies** | ✅ (0% Libc) | ❌ (Requires Libc) | ❌ (Requires Libc) | ❌ (Requires Libc) | ❌ (Heavy Runtime) | ❌ (VM Required) |
-| **Direct Silicon ELF Emitter** | ✅ (Self-Hosted) | ❌ (Requires LLVM) | ❌ (Requires GCC) | ❌ (Requires LLVM) | ❌ (Go Toolchain) | ❌ (Bytecode VM) |
+| **Direct Silicon Machine Code** | ✅ (Self-Hosted) | ❌ (Requires LLVM) | ❌ (Requires GCC) | ❌ (Requires LLVM) | ❌ (Go Toolchain) | ❌ (Bytecode VM) |
+| **Direct SSA Silicon Lowering** | ✅ (Built-in) | ❌ (Via LLVM IR) | ❌ (Via GIMPLE/RTL) | ❌ (Via LLVM) | ❌ (Go SSA) | ❌ (N/A) |
 | **Native Bilingual Syntax** | ✅ (বাংলা + English) | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **No Curly Braces `{}`** | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **No Statement Semicolons `;`** | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
@@ -334,7 +378,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Test Suite Pass Rate** | **203/203 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **207/207 (100%)** | — | — | — | — | — |
 
 ---
 

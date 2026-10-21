@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi 203-Test Regression Suite (Native Toolchain)"
+    name: "Lipi 207-Test Regression Suite (Native Toolchain)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -40,7 +40,7 @@ jobs:
         run: |
           ./bin/lipi run examples/01_hello_world/main.lp
 
-      - name: Run Full 203-Test Sovereign Regression Engine (0% Shell)
+      - name: Run Full 207-Test Sovereign Regression Engine (0% Shell)
         run: |
           ./bin/lipi test
 
