@@ -1024,6 +1024,12 @@ fn main
     else
         failed = failed + 1
 
+    // 206: Sovereign Omniverse CLI Multi-Target & Binary Audit Pipeline
+    if run_single_test(compiler, "tests/test_omniverse_cli_pipeline.lp", "test_omniverse_cli_pipeline") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"
