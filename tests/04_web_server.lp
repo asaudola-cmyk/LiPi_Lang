@@ -20,9 +20,9 @@ fn dispatch path req
         return handle_not_found req
 
 // Simulate HTTP requests
-result1 = dispatch "/" ""
-result2 = dispatch "/about" ""
-result3 = dispatch "/unknown" ""
+result1 = dispatch("/", "")
+result2 = dispatch("/about", "")
+result3 = dispatch("/unknown", "")
 
 say result1
 say result2

@@ -250,10 +250,14 @@ fn lipi_slab_free(eng, ptr)
     // ── Large Object Deallocation (Class 0) ──────────────────────────────────
     if sc == SLAB_LARGE_CLASS()
         raw = ptr - 16
+        req_sz = mem_word_read(raw, 0)
+        total_large = req_sz + 16
         eng.large_active = eng.large_active - 1
         eng.large_frees = eng.large_frees + 1
         eng.total_free_ops = eng.total_free_ops + 1
-        free(raw)
+        // WHY: alloc() maps raw page memory via SYS_mmap (syscall 9). Deallocating requires SYS_munmap (syscall 11).
+        // Calling general-purpose free(raw) would read [raw - 8] (unmapped page guard), causing SEGV_MAPERR.
+        syscall(11, raw, total_large, 0, 0, 0, 0)
         return 1
 
     // Corrupted or unrecognized memory slot
@@ -355,7 +359,7 @@ fn lipi_slab_destroy(eng)
         curr_arena = b.arena_head
         while curr_arena != 0
             next_arena = mem_word_read(curr_arena, 0)
-            free(curr_arena)
+            syscall(11, curr_arena, SLAB_ARENA_SIZE(), 0, 0, 0, 0)
             curr_arena = next_arena
 
         b.arena_head = 0
@@ -417,7 +421,7 @@ fn lipi_slab_pool_destroy(pool)
     curr = pool.arena_head
     while curr != 0
         nxt = mem_word_read(curr, 0)
-        free(curr)
+        syscall(11, curr, SLAB_ARENA_SIZE(), 0, 0, 0, 0)
         curr = nxt
     pool.arena_head = 0
     pool.free_head = 0

@@ -254,7 +254,7 @@ fn unikernel_build_image builder
     builder.ub_total_image_size = len(img) + 4096 // Header + 4KB Long Mode page tables
     return img
 
-fn main
+fn unikernel_boot_main
     say "════════════════════════════════════════════════════════════════════════"
     say "  👑 LIPI SOVEREIGN OS: BARE-METAL RING-0 UNIKERNEL BUILD ENGINE"
     say "  ⚡ Direct Multiboot2 (0xE85250D6) Silicon Image Builder"
@@ -291,5 +291,5 @@ fn main
     say "  ✔ Status: Autonomous Sovereign Unikernel Ready"
     return 0
 
-main()
+unikernel_boot_main()
 

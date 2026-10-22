@@ -186,8 +186,9 @@ import "compiler/frontend/ast/ast_node"
   // WHY: Allocates dot member access expression `target.member`
   node = ast_node_new(AST_TAG_MEMBER_ACCESS(), "MemberAccess", span)
   node.left = target
+  node.target = target
   node.name = member_name
-  node.ret_type = "i64"
+  node.ret_type = ""
   return node
 @end
 

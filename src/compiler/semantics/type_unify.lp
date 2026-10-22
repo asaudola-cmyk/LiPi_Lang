@@ -191,7 +191,7 @@ import "compiler/semantics/type_def"
 
 @fn type_is_assignable(reg, target_id, src_id)
   @if target_id == src_id return 1 @end
-  @if target_id == TYPE_ID_ANY() return 1 @end
+  @if target_id == TYPE_ID_ANY() || src_id == TYPE_ID_ANY() return 1 @end
   @if src_id == TYPE_ID_NEVER() return 1 @end
 
   @if type_is_equal(reg, target_id, src_id) == 1 return 1 @end

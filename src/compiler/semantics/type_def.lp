@@ -48,6 +48,7 @@ import "utso/string"
 @fn TYPE_ID_BYTE()   return 6 @end
 @fn TYPE_ID_ANY()    return 7 @end
 @fn TYPE_ID_NEVER()  return 8 @end
+@fn TYPE_ID_UNKNOWN() return 0 @end
 
 // ── 2. STRUCT FIELD & TYPE DEFINITIONS ───────────────────────────────────────
 
@@ -298,9 +299,10 @@ import "utso/string"
 @end
 
 @fn type_is_numeric(reg, type_id)
+  @if type_id == TYPE_ID_ANY() return 1 @end
   ty = type_registry_get(reg, type_id)
   @if ty == 0 return 0 @end
-  @if ty.ty_kind == TYPE_KIND_I64() || ty.ty_kind == TYPE_KIND_F64() || ty.ty_kind == TYPE_KIND_BYTE()
+  @if ty.ty_kind == TYPE_KIND_I64() || ty.ty_kind == TYPE_KIND_F64() || ty.ty_kind == TYPE_KIND_BYTE() || ty.ty_kind == TYPE_KIND_ANY()
     return 1
   @end
   return 0

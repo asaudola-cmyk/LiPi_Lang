@@ -59,7 +59,7 @@ fn main
 
     // ── Phase 1: Direct SSA Graph Construction & Lowering ────────────────────
     say "\n▶ [Phase 1]: Constructing SSA IR Module with CFG & Operations..."
-    ir_mod = ir_module_new("test_direct_ssa", "x86_64")
+    ir_mod = ir_module_new("test_direct_ssa")
     fn_compute = ir_function_new("compute_total", "i64")
     ir_module_add_function(ir_mod, fn_compute)
 

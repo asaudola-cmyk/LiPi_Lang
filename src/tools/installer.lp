@@ -115,7 +115,7 @@ fn installer_print_summary engine
 
 // ── 5. Main Entry Point ───────────────────────────────────────────────────────
 
-fn main
+fn installer_main
     installer_print_banner()
 
     home_dir = "/home/shafiullah/.lipi"
@@ -143,4 +143,4 @@ fn main
     installer_print_summary(engine)
     return 0
 
-main()
+installer_main()

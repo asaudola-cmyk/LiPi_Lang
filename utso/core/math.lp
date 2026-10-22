@@ -40,7 +40,7 @@ fn gcd a b
 
 // Least common multiple
 fn lcm a b
-    return a / gcd a b * b
+    return (a / gcd(a, b)) * b
 
 // Check if prime
 fn is_prime n
@@ -117,10 +117,10 @@ E  = 2
 // WHY: Provides standard aliases and fixed-point trigonometric functions.
 
 fn sqrt_int n
-    return sqrt n
+    return sqrt(n)
 
 fn pow_int base exp
-    return power base exp
+    return power(base, exp)
 
 fn sin_fixed_deg deg scale
     d = deg % 360

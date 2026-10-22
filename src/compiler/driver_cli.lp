@@ -209,6 +209,7 @@ fn main
     run_rv64_mode = 0
     verify_only_mode = 0
     verify_target_file = ""
+    code = 0
     i = 1
 
     while i < argc

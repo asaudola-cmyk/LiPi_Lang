@@ -458,8 +458,12 @@ fn x86_synth_compile_statement s toks pos_box
     is_let = 0
     if k == TOK_KW_LET()
         is_let = 1
-    if k == TOK_IDENT() and (txt == "let" or txt == "চলক" or txt == "ধরি" or txt == "var" or txt == "@reg" or txt == "রেজিস্টার")
+    is_reg = 0
+    if k == TOK_IDENT() and (txt == "let" or txt == "চলক" or txt == "ধরি" or txt == "var")
         is_let = 1
+    if k == TOK_IDENT() and (txt == "@reg" or txt == "রেজিস্টার")
+        is_let = 1
+        is_reg = 1
     if k == TOK_IDENT() and txt == "reg"
         // WHY: Disambiguate 'reg x = expr' (register-hint declaration) from 'reg = expr'
         // (direct assignment to variable named 'reg' such as registry objects).
@@ -467,6 +471,7 @@ fn x86_synth_compile_statement s toks pos_box
         if next_p < toks.len() and x86_synth_is_ident_token(toks[next_p].tok_kind) == 1
             if toks[next_p].tok_text != "="
                 is_let = 1
+                is_reg = 1
             end
         end
     end
@@ -497,7 +502,7 @@ fn x86_synth_compile_statement s toks pos_box
                             int_lit_val = rhs_tok.tok_int_val
                 list_set(pos_box, 0, eq_pos + 1)
                 x86_synth_compile_expr(s, toks, pos_box)
-                off = x86_synth_bind_var(s, var_name)
+                off = x86_synth_bind_reg_var(s, var_name, is_reg)
                 if assigned_type != ""
                     x86_synth_set_var_type(s, var_name, assigned_type)
                     if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
@@ -602,8 +607,15 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_byte(s, 137)
                     x86_synth_emit_byte(s, 193)
                     // Load current value of target var into %rax
-                    off = x86_synth_alloc_var(s, var_name)
-                    x86_synth_emit_load_var(s, 0, off)
+                    lv_tgt = x86_synth_find_local_var(s, var_name)
+                    off = 0
+                    if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                        x86_synth_emit_mov_reg_reg(s, 0, lv_tgt.lv_reg)
+                        off = lv_tgt.lv_offset
+                    else
+                        off = x86_synth_alloc_var(s, var_name)
+                        x86_synth_emit_load_var(s, 0, off)
+                    end
                     if comp_op == TOK_PLUS()
                         pt = x86_synth_get_prim_type(s, var_name)
                         if (pt == "int" or s.synth_last_expr_type == "int") and pt != "str" and s.synth_last_expr_type != "str"
@@ -651,7 +663,12 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 208)
                     // Store updated value back to target
-                    x86_synth_emit_store_var(s, 0, off)
+                    if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                        x86_synth_emit_mov_reg_reg(s, lv_tgt.lv_reg, 0)
+                        x86_synth_emit_store_var(s, 0, off)
+                    else
+                        x86_synth_emit_store_var(s, 0, off)
+                    end
                     return 0
 
     // ── 11. Function Definition: fn / কাজ / @fn ────────────────────────────────

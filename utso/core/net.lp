@@ -312,9 +312,9 @@ import "utso/core/string"
 @! 4. DIRECT RAW SYSCALL WRAPPERS (0% LIBC LINUX SOVEREIGNTY)
 @! ------------------------------------------------------------------------------
 
-@fn net_socket(domain, type, protocol)
+@fn net_socket(domain, sock_type, protocol)
   // WHY: Allocates a new kernel socket descriptor via Linux syscall 41
-  return syscall(41, domain, type, protocol, 0, 0, 0)
+  return syscall(41, domain, sock_type, protocol, 0, 0, 0)
 @end
 
 @fn net_bind(sockfd, addr_ptr, addrlen)
@@ -387,9 +387,9 @@ import "utso/core/string"
   return syscall(52, sockfd, addr_ptr, addrlen_ptr, 0, 0, 0)
 @end
 
-@fn net_socketpair(domain, type, protocol, sv_ptr)
+@fn net_socketpair(domain, sock_type, protocol, sv_ptr)
   // WHY: Allocates a pair of connected sockets via Linux syscall 53
-  return syscall(53, domain, type, protocol, sv_ptr, 0, 0)
+  return syscall(53, domain, sock_type, protocol, sv_ptr, 0, 0)
 @end
 
 @fn net_setsockopt(sockfd, level, optname, optval, optlen)

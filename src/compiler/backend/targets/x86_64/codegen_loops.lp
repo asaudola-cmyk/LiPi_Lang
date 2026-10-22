@@ -169,6 +169,10 @@ fn x86_synth_try_fold_for_residue s var_name end_off toks body_start body_end
 
     // Store new acc: mov [rbp - acc_off], rax
     x86_synth_emit_store_var(s, 0, acc_off)
+    lv_acc = x86_synth_find_local_var(s, acc_name)
+    if lv_acc != 0 and lv_acc.lv_is_spilled == 0 and lv_acc.lv_reg >= 0
+        x86_synth_emit_mov_reg_reg(s, lv_acc.lv_reg, 0)
+    end
 
     // Update induction variable to N + 1:
     x86_synth_emit_load_var(s, 0, end_off)
@@ -176,6 +180,10 @@ fn x86_synth_try_fold_for_residue s var_name end_off toks body_start body_end
     x86_synth_emit_byte(s, 255)
     x86_synth_emit_byte(s, 192) // inc rax
     x86_synth_emit_store_var(s, 0, var_off)
+    lv_var = x86_synth_find_local_var(s, var_name)
+    if lv_var != 0 and lv_var.lv_is_spilled == 0 and lv_var.lv_reg >= 0
+        x86_synth_emit_mov_reg_reg(s, lv_var.lv_reg, 0)
+    end
 
     // Backpatch skip jump
     skip_dest = s.synth_code.len()

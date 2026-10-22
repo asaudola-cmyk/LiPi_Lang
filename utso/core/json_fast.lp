@@ -19,18 +19,18 @@ FAST_JSON_OBJECT = 5
 
 // ── Fast Substring Extractor ──────────────────────────────────────────────────
 // WHY: Divide-and-conquer string slice reduces memory allocations from O(N^2) to O(N log N)
-fn fast_json_slice s start end
+fn fast_json_slice s start stop
     slen = len(s)
     if start < 0 start = 0
-    if end > slen end = slen
-    if start >= end return ""
-    span = end - start
+    if stop > slen stop = slen
+    if start >= stop return ""
+    span = stop - start
     if span == 1 return char_at(s, start)
     if span == 2 return char_at(s, start) + char_at(s, start + 1)
     if span == 3 return char_at(s, start) + char_at(s, start + 1) + char_at(s, start + 2)
     if span == 4 return char_at(s, start) + char_at(s, start + 1) + char_at(s, start + 2) + char_at(s, start + 3)
     mid = start + (span / 2)
-    return fast_json_slice(s, start, mid) + fast_json_slice(s, mid, end)
+    return fast_json_slice(s, start, mid) + fast_json_slice(s, mid, stop)
 
 // ── Unescape JSON String ──────────────────────────────────────────────────────
 fn fast_json_unescape s

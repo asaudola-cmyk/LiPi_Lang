@@ -16,12 +16,12 @@ fn is_prime n
 
 say "Primes up to 30:"
 for n in 2..30
-    if is_prime n
+    if is_prime(n)
         say n
 
 count = 0
 for n in 2..100
-    if is_prime n
+    if is_prime(n)
         count = count + 1
 say "Count of primes up to 100:"
 say count

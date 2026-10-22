@@ -40,6 +40,7 @@ fn x86_synth_compile_fn_def s toks pos_box
         end
     end
     s.synth_in_function = 1
+    s.synth_current_fn = fn_name
 
     // Emit jump over function so top-level execution doesn't fall through into it!
     x86_synth_emit_byte(s, 233) // jmp rel32 (0xE9)
@@ -61,7 +62,7 @@ fn x86_synth_compile_fn_def s toks pos_box
     saved_locals = s.synth_locals
     saved_stack_offset = s.synth_stack_offset
     s.synth_locals = list()
-    s.synth_stack_offset = 8
+    s.synth_stack_offset = 64
 
     // Parse parameter names (supporting parentheses, commas, and type annotations)
     params = list()
@@ -137,11 +138,12 @@ fn x86_synth_compile_fn_def s toks pos_box
         end
     end
 
-    // Emit standard function prologue: push rbp; mov rbp, rsp; sub rsp, imm32
-    prologue_sub_patch = s.synth_code.len() + 7
-    x86_synth_emit_prologue(s)
+    // Emit standard function prologue: push rbp; mov rbp, rsp; push r12-r15, rbx; sub rsp, imm32
+    prologue_sub_patch = x86_synth_emit_prologue(s)
 
-    // Save incoming argument registers to local stack slots (supports up to 12 registers)
+    // WHY: Two-pass parameter initialization prevents clobbering incoming argument registers.
+    // In Pass 1, save ALL incoming argument registers (0..11) to local stack slots [rbp - off]
+    // before modifying any hardware registers.
     pi = 0
     while pi < params.len()
         pname = params[pi]
@@ -151,6 +153,20 @@ fn x86_synth_compile_fn_def s toks pos_box
             x86_synth_set_var_type(s, pname, ptype)
         end
         x86_synth_emit_store_param(s, pi, off)
+        pi = pi + 1
+    end
+
+    // In Pass 2, now that all incoming argument registers are preserved on the stack frame,
+    // load variables assigned to hardware registers by linear scan regalloc into their target registers.
+    pi = 0
+    while pi < params.len()
+        pname = params[pi]
+        off = x86_synth_lookup_var(s, pname)
+        lv_param = x86_synth_find_local_var(s, pname)
+        if lv_param != 0 and lv_param.lv_is_spilled == 0 and lv_param.lv_reg >= 0
+            x86_synth_emit_load_var(s, 0, off)
+            x86_synth_emit_mov_reg_reg(s, lv_param.lv_reg, 0)
+        end
         pi = pi + 1
     end
 
@@ -227,16 +243,16 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_locals = saved_locals
     s.synth_stack_offset = saved_stack_offset
     s.synth_in_function = 0
+    s.synth_current_fn = ""
     return 0
 
 // ── 8. Master Program Synthesizer Entry Point ──────────────────────────────────
 
 fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names reg_regs
-    // WHY: Master optimization-aware synthesis entry point. Incorporates constants from
-    // SSA Constant Folding and physical registers from SSA Linear Scan Register Allocation
-    // directly into AMD64 silicon code generation, eliminating memory round-trips.
+    say "    [x86_synth] Initializing synthesizer..."
     s = x86_synth_new()
 
+    say "    [x86_synth] Populating " + str(opt_const_names.len()) + " folded constants..."
     // 0a. Populate SSA constant-folded values
     if opt_const_names != 0 and opt_const_vals != 0
         ci = 0
@@ -245,7 +261,10 @@ fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names
             c_val = opt_const_vals[ci]
             x86_synth_set_global_const(s, c_name, c_val)
             ci = ci + 1
+        end
+    end
 
+    say "    [x86_synth] Binding " + str(reg_names.len()) + " register mappings..."
     // 0b. Populate SSA linear scan physical register assignments
     // WHY: Directly bind lists to synthesizer avoiding iterative copy overhead.
     if reg_names != 0 and reg_regs != 0
@@ -254,9 +273,11 @@ fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names
     end
 
     // 1. Emit top-level stack frame prologue at entry point (offset 0)
+    say "    [x86_synth] Emitting top-level prologue..."
     x86_synth_emit_prologue(s)
 
     // 2. Synthesize all functions, structs, and statements
+    say "    [x86_synth] Synthesizing top-level declarations & statements..."
     pos_box = [0]
     has_top_level = 0
     t_total = tokens.len()

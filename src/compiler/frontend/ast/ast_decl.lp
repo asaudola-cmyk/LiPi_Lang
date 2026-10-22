@@ -68,8 +68,11 @@ import "compiler/frontend/ast/ast_node"
 @fn ast_param_new(name: string, type_name: string, default_val: ASTNode, span: SourceSpan)
   // WHY: Allocates parameter specification with name, type constraint, and optional default
   return {
+    name: name,
     param_name: name,
+    type_name: type_name,
     param_type: type_name,
+    ret_type: type_name,
     param_default: default_val,
     param_span: span
   }
@@ -137,10 +140,11 @@ import "compiler/frontend/ast/ast_node"
 @end
 
 @fn ast_decl_struct(name: string, fields: array, span: SourceSpan)
-  // WHY: Allocates structured composite type definition storing fields in params
+  // WHY: Allocates structured composite type definition storing fields in params and elements
   node = ast_node_new(AST_TAG_STRUCT_DEF(), "StructDef", span)
   node.name = name
   node.params = fields
+  node.elements = fields
   node.ret_type = name
   return node
 @end

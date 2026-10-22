@@ -524,10 +524,15 @@ fn x86_synth_emit_all_runtime_helpers s
     x86_synth_register_helper_fn(s, "is_str", off__lipi_is_str)
     x86_synth_register_helper_fn(s, "is_string", off__lipi_is_str)
 
-    // Builtin Memory Allocator Stubs
+    // WHY: Builtin Memory Allocator Stubs.
+    // 'malloc' delegates directly to kernel SYS_mmap (_lipi_malloc) for raw page mappings.
+    // 'alloc' / 'বরাদ্দ' delegates to segregated slab recycler (_lipi_user_alloc) inside the bump heap,
+    // ensuring O(1) freelist recycling with 'free' and STR0 header detection in _lipi_is_str.
     x86_synth_register_helper_fn(s, "malloc", off__lipi_malloc)
-    x86_synth_register_helper_fn(s, "mem_alloc", off__lipi_malloc)
-    x86_synth_register_helper_fn(s, "মেমরি_বরাদ্দ", off__lipi_malloc)
+    x86_synth_register_helper_fn(s, "alloc", off__lipi_user_alloc)
+    x86_synth_register_helper_fn(s, "sys_alloc", off__lipi_user_alloc)
+    x86_synth_register_helper_fn(s, "mem_alloc", off__lipi_user_alloc)
+    x86_synth_register_helper_fn(s, "মেমরি_বরাদ্দ", off__lipi_user_alloc)
 
     // 64-bit Memory word read / write
     x86_synth_register_helper_fn(s, "mem_word_read", off__lipi_mem_word_read)

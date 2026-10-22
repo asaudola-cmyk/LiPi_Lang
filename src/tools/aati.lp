@@ -385,7 +385,9 @@ fn get_home_dir
     n = syscall(0, fd, buf, 4096, 0, 0, 0)
     syscall(3, fd, 0, 0, 0, 0, 0)
     if n <= 0
+        free(buf, 4096)
         return "/tmp"
+    end
 
     i = 0
     home = ""
@@ -399,6 +401,7 @@ fn get_home_dir
                 p = p + 1
             break
         i = i + 1
+    free(buf, 4096)
     if len(home) == 0 return "/tmp"
     return home
 

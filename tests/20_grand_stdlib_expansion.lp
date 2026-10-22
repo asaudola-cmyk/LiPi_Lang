@@ -34,7 +34,7 @@ fn is_prime n
 fn count_primes n
     count = 0
     for k in 2..n
-        if is_prime k
+        if is_prime(k)
             count = count + 1
     return count
 
@@ -74,7 +74,7 @@ say lcm(12, 18)
 
 say "Primes up to 30:"
 for n in 2..30
-    if is_prime n
+    if is_prime(n)
         say n
 
 say "PASS: Test 20 Algorithm Showcase"

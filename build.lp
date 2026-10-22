@@ -198,7 +198,7 @@ fn build_pipeline_print_summary pipe
 
 // ── 6. Main Entry Point ───────────────────────────────────────────────────────
 
-fn main
+fn build_main
     build_pipeline_print_banner()
     // WHY: Ensure output artifact directories exist dynamically via Linux sys_mkdir (syscall 83, 0755).
     // In pure source repositories (Go, Rust, Zig model), bin/ and dist/ are not tracked in git.
@@ -242,4 +242,4 @@ fn main
     build_pipeline_print_summary(pipe)
     return 0
 
-main()
+build_main()

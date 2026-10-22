@@ -84,6 +84,7 @@ struct X86Synthesizer
     synth_regalloc_names // List of variable names mapped by SSA register allocation
     synth_regalloc_regs  // List of physical register IDs assigned by SSA register allocation
     synth_in_function   // 1 if currently compiling inside a function body, 0 at top level
+    synth_current_fn    // Name string of currently compiling function ("" at top level)
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -96,7 +97,7 @@ fn x86_synth_new
     s.synth_call_relocs = list()
     s.synth_locals = list()
     s.synth_functions = list()
-    s.synth_stack_offset = 8
+    s.synth_stack_offset = 64
     s.synth_needs_print_int = 0
     s.synth_print_int_off = 0
     s.synth_loop_starts = list()
@@ -114,6 +115,7 @@ fn x86_synth_new
     s.synth_regalloc_names = list()
     s.synth_regalloc_regs = list()
     s.synth_in_function = 0
+    s.synth_current_fn = ""
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -249,28 +251,63 @@ fn x86_synth_emit_mov_rdi_imm64 s val
     return 0
 
 fn x86_synth_emit_prologue s
-    // WHY: Sets up standard 16-byte aligned AMD64 stack frame:
+    // WHY: Sets up standard 16-byte aligned AMD64 stack frame with full callee-saved register preservation:
     //      push rbp          (0x55)
     //      mov rbp, rsp      (0x48 0x89 0xE5)
-    //      sub rsp, 4096     (0x48 0x81 0xEC 0x00 0x10 0x00 0x00) -> 4KB stack frame per activation
+    //      push r12          (0x41 0x54) - Callee-saved register 12
+    //      push r13          (0x41 0x55) - Callee-saved register 13
+    //      push r14          (0x41 0x56) - Callee-saved register 14
+    //      push r15          (0x41 0x57) - Callee-saved register 15
+    //      push rbx          (0x53)       - Callee-saved register 3
+    //      sub rsp, 8        (0x48 0x83 0xEC 0x08) - 16-byte stack alignment (6 * 8 = 48 bytes pushed)
+    //      sub rsp, 4096     (0x48 0x81 0xEC <disp32>) -> Per-activation local frame space
     x86_synth_emit_byte(s, 85)
     x86_synth_emit_byte(s, 72)
     x86_synth_emit_byte(s, 137)
     x86_synth_emit_byte(s, 229)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 84)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 85)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 86)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 87)
+    x86_synth_emit_byte(s, 83)
+    x86_synth_emit_byte(s, 72)
+    x86_synth_emit_byte(s, 131)
+    x86_synth_emit_byte(s, 236)
+    x86_synth_emit_byte(s, 8)
     x86_synth_emit_byte(s, 72)
     x86_synth_emit_byte(s, 129)
     x86_synth_emit_byte(s, 236)
+    patch_pos = s.synth_code.len()
     x86_synth_emit_u32(s, 4096)
-    return 0
+    return patch_pos
 
 fn x86_synth_emit_epilogue s
-    // WHY: Restores stack pointer and caller frame:
-    //      mov rsp, rbp      (0x48 0x89 0xEC)
-    //      pop rbp           (0x5D)
-    //      ret               (0xC3)
+    // WHY: Restores stack pointer, callee-saved registers, and caller frame:
+    //      lea rsp, [rbp - 40] (0x48 0x8D 0x65 0xD8) - Points rsp to saved rbx without clobbering rax
+    //      pop rbx             (0x5B)
+    //      pop r15             (0x41 0x5F)
+    //      pop r14             (0x41 0x5E)
+    //      pop r13             (0x41 0x5D)
+    //      pop r12             (0x41 0x5C)
+    //      pop rbp             (0x5D)
+    //      ret                 (0xC3)
     x86_synth_emit_byte(s, 72)
-    x86_synth_emit_byte(s, 137)
-    x86_synth_emit_byte(s, 236)
+    x86_synth_emit_byte(s, 141)
+    x86_synth_emit_byte(s, 101)
+    x86_synth_emit_byte(s, 216)
+    x86_synth_emit_byte(s, 91)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 95)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 94)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 93)
+    x86_synth_emit_byte(s, 65)
+    x86_synth_emit_byte(s, 92)
     x86_synth_emit_byte(s, 93)
     x86_synth_emit_byte(s, 195)
     return 0
@@ -611,12 +648,38 @@ fn x86_synth_lookup_var_reg s name
         return v.lv_reg
     return 0 - 1
 
-fn x86_synth_alloc_var s name
+fn x86_synth_alloc_reg_var s name is_reg_hint
     // WHY: Allocates next 8-byte stack slot for variable name or returns existing offset.
-    // Checks if variable was assigned a physical register by SSA linear scan allocation.
+    // Assigns an authentic AMD64 callee-saved hardware register (%r12-%r15, %rbx) if:
+    // 1. Matched to an SSA linear scan register allocation interval.
+    // 2. Explicitly requested via 'reg', '@reg', or 'রেজিস্টার' declaration keywords.
     existing = x86_synth_find_local_var(s, name)
     if existing != 0
+        if is_reg_hint == 1 and existing.lv_reg < 0
+            cand_regs = [12, 13, 14, 15, 3]
+            ci = 0
+            while ci < cand_regs.len()
+                cr = cand_regs[ci]
+                reg_conflict = 0
+                li = 0
+                while li < s.synth_locals.len()
+                    other = s.synth_locals[li]
+                    if other.lv_is_spilled == 0 and other.lv_reg == cr
+                        reg_conflict = 1
+                    end
+                    li = li + 1
+                end
+                if reg_conflict == 0
+                    existing.lv_reg = cr
+                    existing.lv_is_spilled = 0
+                    break
+                end
+                ci = ci + 1
+            end
+        end
         return existing.lv_offset
+    end
+
     off = s.synth_stack_offset
     s.synth_stack_offset = s.synth_stack_offset + 8
     lv = X86LocalVar()
@@ -627,14 +690,65 @@ fn x86_synth_alloc_var s name
     lv.lv_reg = 0 - 1
     lv.lv_is_spilled = 1
 
-    // WHY: In the 1-pass AST token synthesizer, local variables must remain strictly isolated
-    // in their dedicated stack frame slots [rbp - off]. Global register name matching without
-    // per-activation prologue preservation causes inter-procedural callee-saved clobbering.
-    lv.lv_reg = 0 - 1
-    lv.lv_is_spilled = 1
+    // 1. Check if variable was assigned a physical register by SSA linear scan allocation
+    target_key = name
+    if s.synth_in_function == 1 and len(s.synth_current_fn) > 0
+        target_key = s.synth_current_fn + "::" + name
+    end
+    ri = 0
+    while ri < s.synth_regalloc_names.len()
+        rname = s.synth_regalloc_names[ri]
+        if rname == target_key
+            assigned_r = s.synth_regalloc_regs[ri]
+            if assigned_r == 12 or assigned_r == 13 or assigned_r == 14 or assigned_r == 15 or assigned_r == 3
+                reg_conflict = 0
+                ci = 0
+                while ci < s.synth_locals.len()
+                    other_lv = s.synth_locals[ci]
+                    if other_lv.lv_is_spilled == 0 and other_lv.lv_reg == assigned_r
+                        reg_conflict = 1
+                    end
+                    ci = ci + 1
+                end
+                if reg_conflict == 0
+                    lv.lv_reg = assigned_r
+                    lv.lv_is_spilled = 0
+                    break
+                end
+            end
+        end
+        ri = ri + 1
+    end
+
+    // 2. If explicitly declared as register variable, allocate next available callee-saved register
+    if lv.lv_reg < 0 and is_reg_hint == 1
+        cand_regs = [12, 13, 14, 15, 3]
+        ci = 0
+        while ci < cand_regs.len()
+            cr = cand_regs[ci]
+            reg_conflict = 0
+            li = 0
+            while li < s.synth_locals.len()
+                other = s.synth_locals[li]
+                if other.lv_is_spilled == 0 and other.lv_reg == cr
+                    reg_conflict = 1
+                end
+                li = li + 1
+            end
+            if reg_conflict == 0
+                lv.lv_reg = cr
+                lv.lv_is_spilled = 0
+                break
+            end
+            ci = ci + 1
+        end
+    end
 
     push(s.synth_locals, lv)
     return off
+
+fn x86_synth_alloc_var s name
+    return x86_synth_alloc_reg_var(s, name, 0)
 
 fn x86_synth_emit_load_var s reg_id off
     // WHY: Emits machine code to load a 64-bit local variable from [rbp - off] into specified register.
@@ -726,19 +840,25 @@ fn x86_synth_get_prim_type s name
         i = i + 1
     return ""
 
-fn x86_synth_bind_var s var_name
+fn x86_synth_bind_reg_var s var_name is_reg
     // WHY: Binds expression result in %rax to local variable. If variable is assigned a physical
-    // register by SSA linear scan, emits 1-cycle direct mov into that register; otherwise stores to stack frame slot.
-    off = x86_synth_alloc_var(s, var_name)
+    // register by SSA linear scan or explicit register declaration, emits 1-cycle direct mov into that register;
+    // otherwise stores to stack frame slot.
+    off = x86_synth_alloc_reg_var(s, var_name, is_reg)
     lv = x86_synth_find_local_var(s, var_name)
     if lv != 0 and lv.lv_is_spilled == 0 and lv.lv_reg >= 0
         x86_synth_emit_mov_reg_reg(s, lv.lv_reg, 0)
+        x86_synth_emit_store_var(s, 0, off)
     else
         x86_synth_emit_store_var(s, 0, off)
+    end
     if s.synth_last_struct != ""
         x86_synth_set_var_type(s, var_name, s.synth_last_struct)
         s.synth_last_struct = ""
     return off
+
+fn x86_synth_bind_var s var_name
+    return x86_synth_bind_reg_var(s, var_name, 0)
 
 // ── 6. Global Constant Registry ───────────────────────────────────────────────
 

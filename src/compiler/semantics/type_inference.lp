@@ -67,25 +67,30 @@ import "compiler/frontend/ast/ast_node"
   @if lit_ast == 0 return TYPE_ID_VOID() @end
 
   k = lit_ast.kind
-  @if str_eq(k, "Integer") == 1 || str_eq(k, "INT") == 1 || str_eq(k, "HEX_INT") == 1 || str_eq(k, "BIN_INT") == 1
+  @if str_eq(k, "LiteralInt") == 1 || str_eq(k, "Integer") == 1 || str_eq(k, "INT") == 1 || str_eq(k, "HEX_INT") == 1 || str_eq(k, "BIN_INT") == 1
     return TYPE_ID_I64()
   @end
 
-  @if str_eq(k, "Float") == 1 || str_eq(k, "FLOAT") == 1
+  @if str_eq(k, "LiteralFloat") == 1 || str_eq(k, "Float") == 1 || str_eq(k, "FLOAT") == 1
     return TYPE_ID_F64()
   @end
 
-  @if str_eq(k, "String") == 1 || str_eq(k, "STRING") == 1
+  @if str_eq(k, "LiteralStr") == 1 || str_eq(k, "String") == 1 || str_eq(k, "STRING") == 1
     return TYPE_ID_STRING()
   @end
 
-  @if str_eq(k, "Bool") == 1 || str_eq(k, "BOOL") == 1
+  @if str_eq(k, "LiteralBool") == 1 || str_eq(k, "Bool") == 1 || str_eq(k, "BOOL") == 1
     return TYPE_ID_BOOL()
   @end
 
-  @if str_eq(k, "None") == 1 || str_eq(k, "NONE") == 1 || str_eq(k, "NIL") == 1
+  @if str_eq(k, "LiteralNone") == 1 || str_eq(k, "None") == 1 || str_eq(k, "NONE") == 1 || str_eq(k, "NIL") == 1
     return TYPE_ID_VOID()
   @end
+
+  @if str_eq(lit_ast.ret_type, "string") == 1 return TYPE_ID_STRING() @end
+  @if str_eq(lit_ast.ret_type, "i64") == 1    return TYPE_ID_I64()    @end
+  @if str_eq(lit_ast.ret_type, "f64") == 1    return TYPE_ID_F64()    @end
+  @if str_eq(lit_ast.ret_type, "bool") == 1   return TYPE_ID_BOOL()   @end
 
   return TYPE_ID_ANY()
 @end
@@ -160,7 +165,7 @@ import "compiler/frontend/ast/ast_node"
   k = expr.kind
 
   // 1. Literals
-  @if str_eq(k, "Integer") == 1 || str_eq(k, "Float") == 1 || str_eq(k, "String") == 1 || str_eq(k, "Bool") == 1 || str_eq(k, "None") == 1 || str_eq(k, "INT") == 1 || str_eq(k, "HEX_INT") == 1 || str_eq(k, "STRING") == 1 || str_eq(k, "BOOL") == 1
+  @if str_eq(k, "LiteralInt") == 1 || str_eq(k, "LiteralFloat") == 1 || str_eq(k, "LiteralStr") == 1 || str_eq(k, "LiteralBool") == 1 || str_eq(k, "LiteralNone") == 1 || str_eq(k, "Integer") == 1 || str_eq(k, "Float") == 1 || str_eq(k, "String") == 1 || str_eq(k, "Bool") == 1 || str_eq(k, "None") == 1 || str_eq(k, "INT") == 1 || str_eq(k, "HEX_INT") == 1 || str_eq(k, "STRING") == 1 || str_eq(k, "BOOL") == 1
     return infer_literal_type(ctx, expr)
   @end
 
@@ -266,7 +271,9 @@ import "compiler/frontend/ast/ast_node"
 
   // 8. Field Access: target.member
   @if str_eq(k, "MemberAccess") == 1 || str_eq(k, "FieldAccess") == 1
-    target_t = infer_expr_type(ctx, expr.target)
+    target_node = expr.target
+    @if target_node == 0 target_node = expr.left @end
+    target_t = infer_expr_type(ctx, target_node)
     f_def = type_find_field(ctx.ic_reg, target_t, expr.name)
     @if f_def != 0
       return f_def.fd_type_id

@@ -53,20 +53,24 @@ fn is_bin_op op
         return 1
     return 0
 
-// WHY: Extracts substring [start, end) without external string library dependencies.
-fn str_sub s start end
+// WHY: Extracts substring [start, stop) without external string library dependencies.
+fn str_sub s start stop
     slen = len(s)
     if start < 0
         start = 0
-    if end > slen
-        end = slen
-    if start >= end
+    end
+    if stop > slen
+        stop = slen
+    end
+    if start >= stop
         return ""
+    end
     res = ""
     i = start
-    while i < end
+    while i < stop
         res = res + char_at(s, i)
         i = i + 1
+    end
     return res
 
 // WHY: Removes trailing whitespace and carriage returns from the end of a line.
@@ -74,20 +78,25 @@ fn trim_right s
     slen = len(s)
     if slen == 0
         return ""
-    end = slen - 1
-    while end >= 0
-        c = char_at(s, end)
+    end
+    last_idx = slen - 1
+    while last_idx >= 0
+        c = char_at(s, last_idx)
         if c == " " or c == "\t" or c == "\r" or c == "\n"
-            end = end - 1
+            last_idx = last_idx - 1
         else
             break
-    if end < 0
+        end
+    end
+    if last_idx < 0
         return ""
+    end
     res = ""
     i = 0
-    while i <= end
+    while i <= last_idx
         res = res + char_at(s, i)
         i = i + 1
+    end
     return res
 
 // WHY: Strips leading indentation whitespace to isolate code content.

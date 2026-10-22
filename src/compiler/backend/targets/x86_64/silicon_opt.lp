@@ -66,6 +66,7 @@ fn x86_silicon_optimize_code s
     // Basic-block invariant preservation: Until full basic block graph is partitioned,
     // blind machine-code replacement across arbitrary jump targets violates CFG invariants.
     stats = silicon_opt_stats_new()
+    code_len = s.synth_code.len()
     return stats
 
     i = 0

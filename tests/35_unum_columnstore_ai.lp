@@ -28,10 +28,10 @@ fn col_avg first count stride
         i = i + 1
     return total / count
 
-fn count_divisible start end divisor
+fn count_divisible start stop divisor
     cnt = 0
     i = start
-    while i <= end
+    while i <= stop
         if i % divisor == 0
             cnt = cnt + 1
         i = i + 1

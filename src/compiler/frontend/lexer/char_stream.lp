@@ -186,6 +186,7 @@ import "utso/collections"
     @end
     b1 = str_char_at(stream.cs_source, stream.cs_pos + 1)
     b2 = str_char_at(stream.cs_source, stream.cs_pos + 2)
+    b3 = str_char_at(stream.cs_source, stream.cs_pos + 3)
     cp = ((b0 - 240) * 262144) + ((b1 - 128) * 4096) + ((b2 - 128) * 64) + (b3 - 128)
     return cp
   @end

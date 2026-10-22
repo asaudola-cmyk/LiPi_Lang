@@ -147,8 +147,8 @@ fn test_source_map
     assert_eq_str(loc_str, "src/math/add.lp:1:4", "Location string format")
 
     // Combining spans
-    span1 = source_span_new(id_a, 0, 2, 1, 1, 1, 3)
-    span2 = source_span_new(id_a, 7, 10, 1, 8, 1, 11)
+    span1 = source_map_span_new(id_a, 0, 2, 1, 1, 1, 3)
+    span2 = source_map_span_new(id_a, 7, 10, 1, 8, 1, 11)
     comb = source_span_combine(span1, span2)
     assert_eq_int(comb.start_byte, 0, "Combined start byte is 0")
     assert_eq_int(comb.end_byte, 10, "Combined end byte is 10")
@@ -304,7 +304,7 @@ fn test_multiline_snippet
     // Line 1: "fn outer\n" (0..8)
     // Line 2 starts at 9: "    if cond == 1\n"
     // Line 5: "        z = 300\n"
-    span_multi = source_span_new(fid, 13, 64, 2, 5, 5, 16)
+    span_multi = source_map_span_new(fid, 13, 64, 2, 5, 5, 16)
     assert_true(source_span_is_multiline(span_multi), "Span is multi-line")
 
     ct_plain = color_theme_plain()

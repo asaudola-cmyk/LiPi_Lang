@@ -299,13 +299,22 @@ fn x86_synth_expr_primary s toks pos_box
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 5)  // syscall
                 s.synth_last_expr_type = "int"
-            // Intrinsic 2: malloc
-            elif var_name == "malloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ"
+            // Intrinsic 2: malloc (raw direct kernel SYS_mmap page allocator)
+            elif var_name == "malloc"
                 if arg_count >= 1
                     x86_synth_emit_byte(s, 95) // pop rdi
                 else
                     x86_synth_emit_mov_rdi_imm64(s, 32)
                 x86_synth_emit_call_helper(s, "_lipi_malloc")
+                s.synth_last_expr_type = ""
+            // Intrinsic 2b: alloc / mem_alloc / মেমরি_বরাদ্দ (segregated slab freelist bump allocator)
+            // WHY: Uses O(1) segregated slab freelist recycling and stores valid size/STR0 headers within [_heap_base, _heap_ptr)
+            elif var_name == "alloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ" or var_name == "sys_alloc"
+                if arg_count >= 1
+                    x86_synth_emit_byte(s, 95) // pop rdi
+                else
+                    x86_synth_emit_mov_rdi_imm64(s, 32)
+                x86_synth_emit_call_helper(s, "_lipi_user_alloc")
                 s.synth_last_expr_type = ""
             // Intrinsic 3: mem_word_read
             elif var_name == "mem_word_read" or var_name == "mem_read" or var_name == "মেমরি_পড়ো"

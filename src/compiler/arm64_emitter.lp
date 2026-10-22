@@ -3123,15 +3123,15 @@ fn arm64_compile_stmt ctx ps
 // 🏛️ PART VI: Pure Lipi ARM64 Multi-File Bundler & Compiler Pipeline Entry Point
 // ==============================================================================
 
-fn arm64_str_sub s start end
+fn arm64_str_sub s start stop
     slen = len(s)
     if start < 0
         start = 0
-    if end > slen
-        end = slen
-    if start >= end
+    if stop > slen
+        stop = slen
+    if start >= stop
         return ""
-    span = end - start
+    span = stop - start
     if span == 1
         return char_at(s, start)
     if span == 2
@@ -3141,7 +3141,7 @@ fn arm64_str_sub s start end
     if span == 4
         return char_at(s, start) + char_at(s, start + 1) + char_at(s, start + 2) + char_at(s, start + 3)
     mid = start + (span / 2)
-    return arm64_str_sub(s, start, mid) + arm64_str_sub(s, mid, end)
+    return arm64_str_sub(s, start, mid) + arm64_str_sub(s, mid, stop)
 
 fn arm64_path_dirname p
     last_slash = -1

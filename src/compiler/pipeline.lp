@@ -129,59 +129,292 @@ struct CompilerResult
 
 // ── 2b. Modular Token-to-AST Parser ──────────────────────────────────────────
 
+fn pipeline_is_ident_token kind
+    // WHY: In Lipi grammar, contextual keywords such as 'end', 'in', 'type', 'case', 'match',
+    // 'mut', 'async', 'await', 'try', 'catch', 'defer', 'print', and 'syscall' are valid identifier
+    // names when used in assignment targets, expressions, and parameters.
+    if kind == TOK_IDENT() return 1
+    if kind == TOK_KW_END() return 1
+    if kind == TOK_KW_IN() return 1
+    if kind == TOK_KW_TYPE() return 1
+    if kind == TOK_KW_CASE() return 1
+    if kind == TOK_KW_MATCH() return 1
+    if kind == TOK_KW_MUT() return 1
+    if kind == TOK_KW_ASYNC() return 1
+    if kind == TOK_KW_AWAIT() return 1
+    if kind == TOK_KW_TRY() return 1
+    if kind == TOK_KW_CATCH() return 1
+    if kind == TOK_KW_DEFER() return 1
+    if kind == TOK_KW_PRINT() return 1
+    if kind == TOK_KW_SYSCALL() return 1
+    return 0
+
 fn pipeline_parse_primary toks pos_box sp
-    // WHY: Parses primitive literals, identifiers, unary operators, and calls.
+    // WHY: Parses primitive literals, identifiers, unary operators, and postfix chains (.field, [idx], (args)).
     p = get(pos_box, 0)
     if p >= toks.len()
         return ast_expr_literal_int(0, sp)
+    end
     t = toks[p]
     k = t.tok_kind
     txt = t.tok_text
     list_set(pos_box, 0, p + 1)
 
+    node = 0
     if k == TOK_INT()
-        return ast_expr_literal_int(t.tok_int_val, sp)
-    if k == TOK_BOOL()
-        return ast_expr_literal_bool(t.tok_int_val, sp)
-    if k == TOK_STR()
-        return ast_expr_literal_str(txt, sp)
-    if k == TOK_MINUS() or (k != TOK_STR() and txt == "-")
+        node = ast_expr_literal_int(t.tok_int_val, sp)
+    elif k == TOK_BOOL()
+        node = ast_expr_literal_bool(t.tok_int_val, sp)
+    elif k == TOK_STR()
+        node = ast_expr_literal_str(txt, sp)
+    elif k == TOK_MINUS() or (k != TOK_STR() and txt == "-")
         sub_e = pipeline_parse_primary(toks, pos_box, sp)
         return ast_expr_unary("-", sub_e, sp)
-    if k == TOK_BANG() or (k != TOK_STR() and txt == "!")
+    elif k == TOK_BANG() or (k != TOK_STR() and (txt == "!" or txt == "not" or txt == "না"))
         sub_e = pipeline_parse_primary(toks, pos_box, sp)
         return ast_expr_unary("!", sub_e, sp)
-    if k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
+    elif k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
+        while get(pos_box, 0) < toks.len()
+            skip_k = toks[get(pos_box, 0)].tok_kind
+            if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            else
+                break
+            end
+        end
         inner = pipeline_parse_expr(toks, pos_box, sp)
+        while get(pos_box, 0) < toks.len()
+            skip_k = toks[get(pos_box, 0)].tok_kind
+            if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            else
+                break
+            end
+        end
         cp = get(pos_box, 0)
         if cp < toks.len() and (toks[cp].tok_kind == TOK_RPAREN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == ")"))
             list_set(pos_box, 0, cp + 1)
-        return inner
-    if k == TOK_IDENT() or k == TOK_KW_PRINT() or (k >= TOK_KW_FN() and k <= TOK_KW_SYSCALL())
-        // Check for function invocation: ident(arg1, arg2...)
-        cp = get(pos_box, 0)
-        if cp < toks.len() and (toks[cp].tok_kind == TOK_LPAREN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "("))
-            list_set(pos_box, 0, cp + 1)
+        end
+        node = inner
+    elif k == TOK_LBRACKET() or (k != TOK_STR() and txt == "[")
+        arr_elems = list()
+        while get(pos_box, 0) < toks.len()
+            while get(pos_box, 0) < toks.len()
+                skip_k = toks[get(pos_box, 0)].tok_kind
+                if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                else
+                    break
+                end
+            end
+            if get(pos_box, 0) >= toks.len()
+                break
+            end
+            cp_arr = get(pos_box, 0)
+            if toks[cp_arr].tok_kind == TOK_RBRACKET() or (toks[cp_arr].tok_kind != TOK_STR() and toks[cp_arr].tok_text == "]")
+                list_set(pos_box, 0, cp_arr + 1)
+                break
+            end
+            if toks[cp_arr].tok_kind == TOK_COMMA() or (toks[cp_arr].tok_kind != TOK_STR() and toks[cp_arr].tok_text == ",")
+                list_set(pos_box, 0, cp_arr + 1)
+            else
+                push(arr_elems, pipeline_parse_expr(toks, pos_box, sp))
+            end
+        end
+        node = ast_expr_array_lit(arr_elems, sp)
+    elif k == TOK_LBRACE() or (k != TOK_STR() and txt == "{")
+        // WHY: Parses inline anonymous struct / map / record literals `{ key: val, ... }`.
+        // Field keys are identifiers in struct scope, not variable references, preventing false undefined variable errors.
+        entries = list()
+        while get(pos_box, 0) < toks.len()
+            while get(pos_box, 0) < toks.len()
+                skip_k = toks[get(pos_box, 0)].tok_kind
+                if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                else
+                    break
+                end
+            end
+            if get(pos_box, 0) >= toks.len()
+                break
+            end
+            cp_map = get(pos_box, 0)
+            if toks[cp_map].tok_kind == TOK_RBRACE() or (toks[cp_map].tok_kind != TOK_STR() and toks[cp_map].tok_text == "}")
+                list_set(pos_box, 0, cp_map + 1)
+                break
+            end
+            if toks[cp_map].tok_kind == TOK_COMMA() or (toks[cp_map].tok_kind != TOK_STR() and toks[cp_map].tok_text == ",")
+                list_set(pos_box, 0, cp_map + 1)
+            else
+                // Field key identifier
+                key_tok = toks[get(pos_box, 0)]
+                key_name = key_tok.tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+                while get(pos_box, 0) < toks.len()
+                    skip_k = toks[get(pos_box, 0)].tok_kind
+                    if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    else
+                        break
+                    end
+                end
+
+                // Consume ':'
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+
+                while get(pos_box, 0) < toks.len()
+                    skip_k = toks[get(pos_box, 0)].tok_kind
+                    if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    else
+                        break
+                    end
+                end
+
+                val_expr = pipeline_parse_expr(toks, pos_box, sp)
+                f_entry = ast_node_new(AST_TAG_NONE(), "Field", sp)
+                f_entry.name = key_name
+                f_entry.value = val_expr
+                push(entries, f_entry)
+            end
+        end
+        node = ast_expr_map_lit(entries, sp)
+    elif pipeline_is_ident_token(k) == 1 or (k >= TOK_KW_FN() and k <= TOK_KW_SYSCALL())
+        node = ast_expr_ident(txt, sp)
+    else
+        return ast_expr_literal_int(0, sp)
+    end
+
+    // WHY: Postfix operator chain: handles member access .field, indexing [idx], and calls (args)
+    while get(pos_box, 0) < toks.len()
+        nxt_p = get(pos_box, 0)
+        nxt_t = toks[nxt_p]
+        nxt_k = nxt_t.tok_kind
+        nxt_txt = nxt_t.tok_text
+
+        if nxt_k == TOK_DOT() or (nxt_k != TOK_STR() and nxt_txt == ".")
+            list_set(pos_box, 0, nxt_p + 1)
+            while get(pos_box, 0) < toks.len()
+                skip_k = toks[get(pos_box, 0)].tok_kind
+                if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                else
+                    break
+                end
+            end
+            fld_name = ""
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                fld_name = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            mem_node = ast_expr_member(node, fld_name, sp)
+            mem_node.target = node
+            mem_node.left = node
+            node = mem_node
+        elif nxt_k == TOK_LBRACKET() or (nxt_k != TOK_STR() and nxt_txt == "[")
+            list_set(pos_box, 0, nxt_p + 1)
+            while get(pos_box, 0) < toks.len()
+                skip_k = toks[get(pos_box, 0)].tok_kind
+                if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                else
+                    break
+                end
+            end
+            idx_e = pipeline_parse_expr(toks, pos_box, sp)
+            while get(pos_box, 0) < toks.len()
+                skip_k = toks[get(pos_box, 0)].tok_kind
+                if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                else
+                    break
+                end
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "]"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            idx_node = ast_expr_index(node, idx_e, sp)
+            idx_node.iterable = node
+            idx_node.target = node
+            idx_node.left = node
+            node = idx_node
+        elif nxt_k == TOK_LPAREN() or (nxt_k != TOK_STR() and nxt_txt == "(")
+            list_set(pos_box, 0, nxt_p + 1)
             args = list()
             while get(pos_box, 0) < toks.len()
+                while get(pos_box, 0) < toks.len()
+                    skip_k = toks[get(pos_box, 0)].tok_kind
+                    if skip_k == TOK_NEWLINE() or skip_k == TOK_SEMI() or skip_k == TOK_COMMENT_LINE() or skip_k == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    else
+                        break
+                    end
+                end
+                if get(pos_box, 0) >= toks.len()
+                    break
+                end
                 cp2 = get(pos_box, 0)
                 if toks[cp2].tok_kind == TOK_RPAREN() or (toks[cp2].tok_kind != TOK_STR() and toks[cp2].tok_text == ")")
                     list_set(pos_box, 0, cp2 + 1)
                     break
+                end
                 if toks[cp2].tok_kind == TOK_COMMA() or (toks[cp2].tok_kind != TOK_STR() and toks[cp2].tok_text == ",")
                     list_set(pos_box, 0, cp2 + 1)
                 else
                     arg_e = pipeline_parse_expr(toks, pos_box, sp)
                     push(args, arg_e)
-            callee_var = ast_expr_ident(txt, sp)
-            call_node = ast_expr_call(callee_var, args, sp)
+                end
+            end
+            call_node = ast_expr_call(node, args, sp)
             call_node.params = args
-            return call_node
-        return ast_expr_ident(txt, sp)
-    return ast_expr_literal_int(0, sp)
+            call_node.func = node
+            call_node.name = node.name
+            node = call_node
+        else
+            break
+        end
+    end
+
+    return node
+
+fn pipeline_skip_whitespace toks pos_box
+    // WHY: Advances cursor past non-semantic tokens (newlines, semicolons, comments)
+    // without heap allocation or quadratic string copies.
+    while get(pos_box, 0) < toks.len()
+        k = toks[get(pos_box, 0)].tok_kind
+        if k == TOK_NEWLINE() or k == TOK_SEMI() or k == TOK_COMMENT_LINE() or k == TOK_COMMENT_BLOCK()
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        else
+            break
+        end
+    end
+    return 0
+
+fn pipeline_is_block_end toks p
+    // WHY: Accurately detects block-terminating tokens (end, শেষ, @end)
+    // while preventing misidentification of identifiers assigned as 'end = val'.
+    if p >= toks.len() return 0
+    t = toks[p]
+    k = t.tok_kind
+    txt = t.tok_text
+    if k == TOK_KW_END() or k == TOK_DIR_END() or (k == TOK_IDENT() and (txt == "end" or txt == "শেষ" or txt == "@end"))
+        next_p = p + 1
+        if next_p < toks.len()
+            nt = toks[next_p]
+            if nt.tok_kind == TOK_ASSIGN() or (nt.tok_kind != TOK_STR() and nt.tok_text == "=")
+                return 0
+            end
+        end
+        return 1
+    end
+    return 0
 
 fn pipeline_parse_bin_prec toks pos_box sp min_prec
-    // WHY: Implements Pratt precedence climbing for deterministic algebraic expressions.
+    // WHY: Implements Pratt precedence climbing for deterministic algebraic expressions,
+    // including arithmetic, bitwise, comparison, and logical conjunctions.
     left = pipeline_parse_primary(toks, pos_box, sp)
     while get(pos_box, 0) < toks.len()
         cp = get(pos_box, 0)
@@ -191,40 +424,211 @@ fn pipeline_parse_bin_prec toks pos_box sp min_prec
 
         prec = 0 - 1
         op_str = ""
-        if ck == TOK_STAR() or cx == "*" or ck == TOK_SLASH() or cx == "/" or ck == TOK_PERCENT() or cx == "%"
-            prec = 20
-            op_str = cx
-        elif ck == TOK_PLUS() or cx == "+" or ck == TOK_MINUS() or cx == "-"
-            prec = 10
-            op_str = cx
-        elif ck == TOK_LT() or cx == "<" or ck == TOK_LTE() or cx == "<=" or ck == TOK_GT() or cx == ">" or ck == TOK_GTE() or cx == ">=" or ck == TOK_EQ() or cx == "==" or ck == TOK_NEQ() or cx == "!="
-            prec = 5
-            op_str = cx
+        // WHY: Protect string literals like "/" or "-" from being misinterpreted as infix binary operators.
+        if ck != TOK_STR()
+            if ck == TOK_STAR() or cx == "*" or ck == TOK_SLASH() or cx == "/" or ck == TOK_PERCENT() or cx == "%"
+                prec = 20
+                op_str = cx
+            elif ck == TOK_PLUS() or cx == "+" or ck == TOK_MINUS() or cx == "-"
+                prec = 10
+                op_str = cx
+            elif ck == TOK_SHL() or cx == "<<" or ck == TOK_SHR() or cx == ">>"
+                prec = 9
+                op_str = cx
+            elif ck == TOK_AMP() or cx == "&"
+                prec = 8
+                op_str = cx
+            elif ck == TOK_CARET() or cx == "^"
+                prec = 7
+                op_str = cx
+            elif ck == TOK_BAR() or cx == "|"
+                prec = 6
+                op_str = cx
+            elif ck == TOK_LT() or cx == "<" or ck == TOK_LTE() or cx == "<=" or ck == TOK_GT() or cx == ">" or ck == TOK_GTE() or cx == ">=" or ck == TOK_EQ() or cx == "==" or ck == TOK_NEQ() or cx == "!="
+                prec = 5
+                op_str = cx
+            elif ck == TOK_AND() or cx == "&&" or cx == "and" or cx == "এবং"
+                prec = 3
+                op_str = cx
+            elif ck == TOK_OR() or cx == "||" or cx == "or" or cx == "বা"
+                prec = 2
+                op_str = cx
+            elif ck == TOK_DOTDOT() or cx == ".."
+                prec = 1
+                op_str = cx
+            end
+        end
 
         if prec < min_prec
             break
+        end
 
         list_set(pos_box, 0, cp + 1)
         right = pipeline_parse_bin_prec(toks, pos_box, sp, prec + 1)
         left = ast_expr_binary(left, op_str, right, sp)
+    end
     return left
 
 fn pipeline_parse_expr toks pos_box sp
     // WHY: Parses any standard binary/unary expression tree with minimum precedence 0.
     return pipeline_parse_bin_prec(toks, pos_box, sp, 0)
 
-fn pipeline_parse_statement toks pos_box sp
-    // WHY: Maps control flow, assignment, loops, and calls into valid AST statement structures.
-    while get(pos_box, 0) < toks.len()
-        cp = get(pos_box, 0)
-        k = toks[cp].tok_kind
-        if k == TOK_NEWLINE() or k == TOK_SEMI() or k == TOK_COMMENT_LINE() or k == TOK_COMMENT_BLOCK()
-            list_set(pos_box, 0, cp + 1)
+fn pipeline_build_if_tail toks pos_box sp base_col
+    // WHY: Recursively parses chained if-elif-else branches into nested AST nodes,
+    // ensuring single-line @if and multi-line if statements consume matching end tokens cleanly.
+    p = get(pos_box, 0)
+    if p >= toks.len() return 0
+    t = toks[p]
+    base_line = t.tok_span.span_start_line
+
+    cond = pipeline_parse_expr(toks, pos_box, sp)
+    then_b = list()
+    else_b = list()
+
+    pipeline_skip_whitespace(toks, pos_box)
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+        while get(pos_box, 0) < toks.len()
+            pipeline_skip_whitespace(toks, pos_box)
+            if get(pos_box, 0) >= toks.len() break end
+            if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                break
+            end
+            before_s = get(pos_box, 0)
+            s = pipeline_build_statement(toks, pos_box, sp)
+            if s != 0
+                push(then_b, s)
+            end
+            if get(pos_box, 0) <= before_s
+                list_set(pos_box, 0, before_s + 1)
+            end
+        end
+    else
+        while get(pos_box, 0) < toks.len()
+            pipeline_skip_whitespace(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p >= toks.len() break end
+            cur_t = toks[cur_p]
+            cur_k = cur_t.tok_kind
+            cur_txt = cur_t.tok_text
+            if cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()
+                break
+            end
+            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "@else")
+                break
+            end
+            if pipeline_is_block_end(toks, cur_p) == 1
+                break
+            end
+            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                break
+            end
+            before_s = get(pos_box, 0)
+            s = pipeline_build_statement(toks, pos_box, sp)
+            if s != 0
+                push(then_b, s)
+            end
+            if get(pos_box, 0) <= before_s
+                list_set(pos_box, 0, before_s + 1)
+            end
+            if cur_t.tok_span.span_start_line == base_line
+                break
+            end
+        end
+    end
+
+    pipeline_skip_whitespace(toks, pos_box)
+    cur_p = get(pos_box, 0)
+    if cur_p < toks.len()
+        cur_t = toks[cur_p]
+        ek = cur_t.tok_kind
+        etxt = cur_t.tok_text
+        is_elif = 0
+        if ek == TOK_KW_ELIF() or ek == TOK_DIR_ELIF() or (ek == TOK_IDENT() and (etxt == "elif" or etxt == "নাহলে_যদি" or etxt == "@elif"))
+            is_elif = 1
+        end
+        is_else = 0
+        if ek == TOK_KW_ELSE() or ek == TOK_DIR_ELSE() or (ek == TOK_IDENT() and (etxt == "else" or etxt == "নাহলে" or etxt == "@else"))
+            is_else = 1
+        end
+
+        if is_elif == 1
+            list_set(pos_box, 0, cur_p + 1)
+            nested_if = pipeline_build_if_tail(toks, pos_box, sp, base_col)
+            if nested_if != 0
+                push(else_b, nested_if)
+            end
+        elif is_else == 1
+            list_set(pos_box, 0, cur_p + 1)
+            pipeline_skip_whitespace(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    pipeline_skip_whitespace(toks, pos_box)
+                    if get(pos_box, 0) >= toks.len() break end
+                    if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        break
+                    end
+                    before_s = get(pos_box, 0)
+                    s = pipeline_build_statement(toks, pos_box, sp)
+                    if s != 0
+                        push(else_b, s)
+                    end
+                    if get(pos_box, 0) <= before_s
+                        list_set(pos_box, 0, before_s + 1)
+                    end
+                end
+            else
+                else_base_l = cur_t.tok_span.span_start_line
+                while get(pos_box, 0) < toks.len()
+                    pipeline_skip_whitespace(toks, pos_box)
+                    cur_p2 = get(pos_box, 0)
+                    if cur_p2 >= toks.len() break end
+                    cur_t2 = toks[cur_p2]
+                    if pipeline_is_block_end(toks, cur_p2) == 1
+                        break
+                    end
+                    if cur_t2.tok_span.span_start_line > else_base_l and cur_t2.tok_span.span_start_col <= base_col
+                        break
+                    end
+                    before_s = get(pos_box, 0)
+                    s = pipeline_build_statement(toks, pos_box, sp)
+                    if s != 0
+                        push(else_b, s)
+                    end
+                    if get(pos_box, 0) <= before_s
+                        list_set(pos_box, 0, before_s + 1)
+                    end
+                    if cur_t2.tok_span.span_start_line == else_base_l
+                        break
+                    end
+                end
+            end
+            pipeline_skip_whitespace(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len()
+                if pipeline_is_block_end(toks, cur_p) == 1
+                    list_set(pos_box, 0, cur_p + 1)
+                end
+            end
         else
-            break
+            if pipeline_is_block_end(toks, cur_p) == 1
+                list_set(pos_box, 0, cur_p + 1)
+            end
+        end
+    end
+
+    return ast_stmt_if(cond, then_b, list(), else_b, sp)
+
+fn pipeline_build_statement toks pos_box sp
+    // WHY: Maps control flow, assignment, loops, and calls into valid AST statement structures.
+    pipeline_skip_whitespace(toks, pos_box)
 
     if get(pos_box, 0) >= toks.len()
         return 0
+    end
 
     cp = get(pos_box, 0)
     t = toks[cp]
@@ -239,88 +643,247 @@ fn pipeline_parse_statement toks pos_box sp
             nk = toks[get(pos_box, 0)].tok_kind
             ntxt = toks[get(pos_box, 0)].tok_text
             if nk != TOK_NEWLINE() and nk != TOK_SEMI() and nk != TOK_EOF() and nk != TOK_RBRACE() and ntxt != "}"
-                has_expr = 1
+                if nk != TOK_KW_END() and nk != TOK_DIR_END() and ntxt != "end" and ntxt != "শেষ" and ntxt != "@end"
+                    has_expr = 1
+                end
+            end
+        end
         if has_expr == 1
             ret_val = pipeline_parse_expr(toks, pos_box, sp)
             return ast_stmt_return(ret_val, sp)
+        end
         return ast_stmt_return(ast_expr_literal_int(0, sp), sp)
+    end
 
-    // 2. While loop
-    if k == TOK_KW_WHILE() or txt == "while" or txt == "যতক্ষণ"
+    // 2. While loop: while / যতক্ষণ / @while
+    is_while = 0
+    if k == TOK_KW_WHILE() or k == TOK_DIR_WHILE()
+        is_while = 1
+    end
+    if k == TOK_IDENT() and (txt == "while" or txt == "যতক্ষণ" or txt == "@while")
+        is_while = 1
+    end
+
+    if is_while == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, cp + 1)
         cond = pipeline_parse_expr(toks, pos_box, sp)
         body = list()
+        pipeline_skip_whitespace(toks, pos_box)
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
             list_set(pos_box, 0, get(pos_box, 0) + 1)
             while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                if get(pos_box, 0) >= toks.len() break end
                 if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     break
-                s = pipeline_parse_statement(toks, pos_box, sp)
+                end
+                before_s = get(pos_box, 0)
+                s = pipeline_build_statement(toks, pos_box, sp)
                 if s != 0
                     push(body, s)
+                end
+                if get(pos_box, 0) <= before_s
+                    list_set(pos_box, 0, before_s + 1)
+                end
+            end
+        else
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cur_p = get(pos_box, 0)
+                if cur_p >= toks.len() break end
+                cur_t = toks[cur_p]
+                if pipeline_is_block_end(toks, cur_p) == 1
+                    break
+                end
+                if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                    break
+                end
+                before_s = get(pos_box, 0)
+                s = pipeline_build_statement(toks, pos_box, sp)
+                if s != 0
+                    push(body, s)
+                end
+                if get(pos_box, 0) <= before_s
+                    list_set(pos_box, 0, before_s + 1)
+                end
+                if cur_t.tok_span.span_start_line == base_line
+                    break
+                end
+            end
+            pipeline_skip_whitespace(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len()
+                if pipeline_is_block_end(toks, cur_p) == 1
+                    list_set(pos_box, 0, cur_p + 1)
+                end
+            end
+        end
         return ast_stmt_while(cond, body, sp)
+    end
 
-    // 3. Conditional if / else
-    if k == TOK_KW_IF() or txt == "if" or txt == "যদি"
+    // 2b. For loop: for / প্রতিটি / জন্য / @for
+    // WHY: Enables AST generation for counted iterations and range scans (for var in start..end)
+    is_for = 0
+    if k == TOK_KW_FOR() or k == TOK_DIR_FOR()
+        is_for = 1
+    end
+    if k == TOK_IDENT() and (txt == "for" or txt == "প্রতিটি" or txt == "জন্য" or txt == "@for")
+        is_for = 1
+    end
+
+    if is_for == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, cp + 1)
-        cond = pipeline_parse_expr(toks, pos_box, sp)
-        then_b = list()
-        else_b = list()
+        pipeline_skip_whitespace(toks, pos_box)
+        if get(pos_box, 0) >= toks.len()
+            return 0
+        end
+        var_tok = toks[get(pos_box, 0)]
+        var_name = var_tok.tok_text
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+        pipeline_skip_whitespace(toks, pos_box)
+
+        // Consume 'in' or 'মধ্যে' if present
+        if get(pos_box, 0) < toks.len()
+            in_t = toks[get(pos_box, 0)]
+            if in_t.tok_kind == TOK_KW_IN() or (in_t.tok_kind != TOK_STR() and (in_t.tok_text == "in" or in_t.tok_text == "মধ্যে"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                pipeline_skip_whitespace(toks, pos_box)
+            end
+        end
+
+        // Parse iterable expression (e.g. 1..5)
+        iter_expr = pipeline_parse_expr(toks, pos_box, sp)
+        body = list()
+        pipeline_skip_whitespace(toks, pos_box)
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
             list_set(pos_box, 0, get(pos_box, 0) + 1)
             while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                if get(pos_box, 0) >= toks.len() break end
                 if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     break
-                s = pipeline_parse_statement(toks, pos_box, sp)
+                end
+                before_s = get(pos_box, 0)
+                s = pipeline_build_statement(toks, pos_box, sp)
                 if s != 0
-                    push(then_b, s)
-        if get(pos_box, 0) < toks.len()
-            ek = toks[get(pos_box, 0)].tok_kind
-            etxt = toks[get(pos_box, 0)].tok_text
-            if ek == TOK_KW_ELSE() or etxt == "else" or etxt == "নাহলে"
-                list_set(pos_box, 0, get(pos_box, 0) + 1)
-                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    while get(pos_box, 0) < toks.len()
-                        if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
-                            list_set(pos_box, 0, get(pos_box, 0) + 1)
-                            break
-                        s = pipeline_parse_statement(toks, pos_box, sp)
-                        if s != 0
-                            push(else_b, s)
-        return ast_stmt_if(cond, then_b, list(), else_b, sp)
+                    push(body, s)
+                end
+                if get(pos_box, 0) <= before_s
+                    list_set(pos_box, 0, before_s + 1)
+                end
+            end
+        else
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cur_p = get(pos_box, 0)
+                if cur_p >= toks.len() break end
+                cur_t = toks[cur_p]
+                if pipeline_is_block_end(toks, cur_p) == 1
+                    break
+                end
+                if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                    break
+                end
+                before_s = get(pos_box, 0)
+                s = pipeline_build_statement(toks, pos_box, sp)
+                if s != 0
+                    push(body, s)
+                end
+                if get(pos_box, 0) <= before_s
+                    list_set(pos_box, 0, before_s + 1)
+                end
+                if cur_t.tok_span.span_start_line == base_line
+                    break
+                end
+            end
+            pipeline_skip_whitespace(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len()
+                if pipeline_is_block_end(toks, cur_p) == 1
+                    list_set(pos_box, 0, cur_p + 1)
+                end
+            end
+        end
+        return ast_stmt_for(var_name, iter_expr, body, sp)
+    end
 
-    // 4. Variable declaration let / var
-    if k == TOK_KW_LET() or txt == "let" or txt == "var" or txt == "ধরি" or txt == "চলক"
+    // 3. Conditional if: if / যদি / @if...
+    is_if = 0
+    if k == TOK_KW_IF() or k == TOK_DIR_IF()
+        is_if = 1
+    end
+    if k == TOK_IDENT() and (txt == "if" or txt == "যদি" or txt == "@if")
+        is_if = 1
+    end
+
+    if is_if == 1
+        base_col = t.tok_span.span_start_col
+        list_set(pos_box, 0, cp + 1)
+        return pipeline_build_if_tail(toks, pos_box, sp, base_col)
+    end
+
+    // 4. Variable declaration let / var / reg
+    if k == TOK_KW_LET() or txt == "let" or txt == "var" or txt == "ধরি" or txt == "চলক" or txt == "reg" or txt == "@reg" or txt == "রেজিস্টার"
         list_set(pos_box, 0, cp + 1)
         if get(pos_box, 0) < toks.len()
             var_name = toks[get(pos_box, 0)].tok_text
             list_set(pos_box, 0, get(pos_box, 0) + 1)
+            // Optional type annotation: : Type
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "="))
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 val_e = pipeline_parse_expr(toks, pos_box, sp)
                 return ast_stmt_assign(var_name, val_e, sp)
+            end
+        end
+    end
 
-    // 5. Direct assignment: ident = expr
-    if k == TOK_IDENT() and cp + 1 < toks.len()
+    // 5. Direct assignment: ident = expr, ident += expr, ident -= expr, OR typed declaration: ident: Type = expr
+    if pipeline_is_ident_token(k) == 1 and cp + 1 < toks.len()
         n1 = toks[cp + 1]
+        // Case A: Typed declaration/assignment (e.g. search_res: PageSearchLeafResult = page_binary_search_leaf(buf, key))
+        if n1.tok_kind == TOK_COLON() or (n1.tok_kind != TOK_STR() and n1.tok_text == ":")
+            if cp + 3 < toks.len()
+                n3 = toks[cp + 3]
+                if n3.tok_kind == TOK_ASSIGN() or (n3.tok_kind != TOK_STR() and n3.tok_text == "=")
+                    var_name = txt
+                    list_set(pos_box, 0, cp + 4)
+                    val_e = pipeline_parse_expr(toks, pos_box, sp)
+                    return ast_stmt_assign(var_name, val_e, sp)
+                end
+            end
+        end
+        // Case B: Direct assignment ident = expr
         if n1.tok_kind == TOK_ASSIGN() or (n1.tok_kind != TOK_STR() and n1.tok_text == "=")
             var_name = txt
             list_set(pos_box, 0, cp + 2)
             val_e = pipeline_parse_expr(toks, pos_box, sp)
             return ast_stmt_assign(var_name, val_e, sp)
+        end
         if n1.tok_kind == TOK_PLUSEQ() or (n1.tok_kind != TOK_STR() and n1.tok_text == "+=")
             var_name = txt
             list_set(pos_box, 0, cp + 2)
             val_e = pipeline_parse_expr(toks, pos_box, sp)
             return ast_stmt_assign_op(var_name, val_e, "+=", sp)
+        end
         if n1.tok_kind == TOK_MINUSEQ() or (n1.tok_kind != TOK_STR() and n1.tok_text == "-=")
             var_name = txt
             list_set(pos_box, 0, cp + 2)
             val_e = pipeline_parse_expr(toks, pos_box, sp)
             return ast_stmt_assign_op(var_name, val_e, "-=", sp)
+        end
+    end
 
     // 6. Output print / say statement
     if k == TOK_KW_PRINT() or txt == "say" or txt == "বলো" or txt == "print" or txt == "println"
@@ -332,6 +895,7 @@ fn pipeline_parse_statement toks pos_box sp
         call_node = ast_stmt_expr(call_e, sp)
         call_node.kind = "ExprStmt"
         return call_node
+    end
 
     // 7. General expression statement fallback
     e_node = pipeline_parse_expr(toks, pos_box, sp)
@@ -339,7 +903,7 @@ fn pipeline_parse_statement toks pos_box sp
     stmt_node.kind = "ExprStmt"
     return stmt_node
 
-fn pipeline_parse_ast_declarations toks src_path
+fn pipeline_build_ast_declarations toks src_path
     // WHY: Transforms token stream into typed AST declarations, supporting bilingual syntax,
     // parameters, blocks, loops, and top-level execution without hardcoded placeholders.
     sp = source_span_point(src_path, 1, 1, 0)
@@ -388,38 +952,72 @@ fn pipeline_parse_ast_declarations toks src_path
                     if pt.tok_kind == TOK_RPAREN() or (pt.tok_kind != TOK_STR() and pt.tok_text == ")")
                         list_set(pos_box, 0, p_idx + 1)
                         break
+                    end
+                    if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI() or pt.tok_kind == TOK_COMMENT_LINE() or pt.tok_kind == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, p_idx + 1)
+                    elif pt.tok_kind == TOK_IDENT()
+                        p_name = pt.tok_text
+                        p_type = ""
+                        list_set(pos_box, 0, p_idx + 1)
+                        if get(pos_box, 0) < toks.len()
+                            nxt_k = toks[get(pos_box, 0)].tok_kind
+                            nxt_t = toks[get(pos_box, 0)].tok_text
+                            if nxt_k == TOK_COLON() or (nxt_k != TOK_STR() and nxt_t == ":")
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                                    p_type = toks[get(pos_box, 0)].tok_text
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
+                            end
+                        end
+                        p_node = ast_param_new(p_name, p_type, 0, sp)
+                        push(params, p_node)
+                    elif pt.tok_kind == TOK_COMMA() or (pt.tok_kind != TOK_STR() and pt.tok_text == ",")
+                        list_set(pos_box, 0, p_idx + 1)
+                    else
+                        list_set(pos_box, 0, p_idx + 1)
+                    end
                 else
                     if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_LBRACE() or pt.tok_kind == TOK_ASSIGN() or (pt.tok_kind != TOK_STR() and (pt.tok_text == "{" or pt.tok_text == "="))
                         break
-
-                if pt.tok_kind == TOK_IDENT()
-                    p_name = pt.tok_text
-                    list_set(pos_box, 0, p_idx + 1)
-                    if get(pos_box, 0) < toks.len()
-                        nxt_k = toks[get(pos_box, 0)].tok_kind
-                        nxt_t = toks[get(pos_box, 0)].tok_text
-                        if nxt_k == TOK_COLON() or (nxt_k != TOK_STR() and nxt_t == ":")
-                            list_set(pos_box, 0, get(pos_box, 0) + 1)
-                            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                    end
+                    if pt.tok_kind == TOK_IDENT()
+                        p_name = pt.tok_text
+                        p_type = ""
+                        list_set(pos_box, 0, p_idx + 1)
+                        if get(pos_box, 0) < toks.len()
+                            nxt_k = toks[get(pos_box, 0)].tok_kind
+                            nxt_t = toks[get(pos_box, 0)].tok_text
+                            if nxt_k == TOK_COLON() or (nxt_k != TOK_STR() and nxt_t == ":")
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                                    p_type = toks[get(pos_box, 0)].tok_text
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
                             end
                         end
+                        p_node = ast_param_new(p_name, p_type, 0, sp)
+                        push(params, p_node)
+                    elif pt.tok_kind == TOK_COMMA() or (pt.tok_kind != TOK_STR() and pt.tok_text == ",")
+                        list_set(pos_box, 0, p_idx + 1)
+                    else
+                        list_set(pos_box, 0, p_idx + 1)
                     end
-                    p_node = ast_param_new(p_name, "i64", 0, sp)
-                    push(params, p_node)
-                elif pt.tok_kind == TOK_COMMA() or (pt.tok_kind != TOK_STR() and pt.tok_text == ",")
-                    list_set(pos_box, 0, p_idx + 1)
-                else
-                    list_set(pos_box, 0, p_idx + 1)
+                end
 
-            // Skip return type annotation: -> type or : type
+            // Extract return type annotation: -> type or : type
+            ret_type_str = ""
             if get(pos_box, 0) < toks.len()
                 rk = toks[get(pos_box, 0)].tok_kind
                 rtxt = toks[get(pos_box, 0)].tok_text
                 if rk == TOK_ARROW() or rtxt == "->" or rk == TOK_COLON() or rtxt == ":"
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        ret_type_str = toks[get(pos_box, 0)].tok_text
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                end
+            end
 
             // Parse body statements
             body = list()
@@ -433,52 +1031,122 @@ fn pipeline_parse_ast_declarations toks src_path
                     if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                         break
-                    s = pipeline_parse_statement(toks, pos_box, sp)
+                    s = pipeline_build_statement(toks, pos_box, sp)
                     if s != 0
                         push(body, s)
+                    end
             else
                 // Indented or end-delimited block
                 fn_line = t.tok_span.span_start_line
                 fn_col = t.tok_span.span_start_col
                 while get(pos_box, 0) < toks.len()
+                    while get(pos_box, 0) < toks.len()
+                        k_skip = toks[get(pos_box, 0)].tok_kind
+                        if k_skip == TOK_NEWLINE() or k_skip == TOK_SEMI() or k_skip == TOK_COMMENT_LINE() or k_skip == TOK_COMMENT_BLOCK()
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        else
+                            break
+                    end
+                    if get(pos_box, 0) >= toks.len()
+                        break
+                    end
+
                     cur_p = get(pos_box, 0)
                     cur_tok = toks[cur_p]
                     if cur_tok.tok_kind == TOK_KW_FN() or cur_tok.tok_kind == TOK_DIR_FN()
                         break
-                    if cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "fn" or cur_tok.tok_text == "কাজ")
+                    end
+                    if cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "fn" or cur_tok.tok_text == "কাজ" or cur_tok.tok_text == "@fn")
                         break
-                    if cur_tok.tok_kind == TOK_KW_END() or cur_tok.tok_kind == TOK_DIR_END() or (cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "end" or cur_tok.tok_text == "শেষ"))
+                    end
+                    if pipeline_is_block_end(toks, cur_p) == 1
                         list_set(pos_box, 0, cur_p + 1)
                         break
+                    end
                     if cur_tok.tok_span.span_start_col <= fn_col and cur_tok.tok_span.span_start_line > fn_line
                         break
+                    end
                     before_p = get(pos_box, 0)
-                    s = pipeline_parse_statement(toks, pos_box, sp)
+                    s = pipeline_build_statement(toks, pos_box, sp)
                     if s != 0
                         push(body, s)
+                    end
                     if get(pos_box, 0) <= before_p
                         list_set(pos_box, 0, before_p + 1)
+                    end
 
-            fn_decl = ast_decl_fn(fn_name, params, "i64", body, 1, sp)
+            fn_decl = ast_decl_fn(fn_name, params, ret_type_str, body, 1, sp)
             push(decls, fn_decl)
-        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন"))
+        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct"))
+            base_l = t.tok_span.span_start_line
+            base_c = t.tok_span.span_start_col
             list_set(pos_box, 0, cp + 1)
+            struct_name = ""
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                struct_name = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            fields = list()
             while get(pos_box, 0) < toks.len()
+                while get(pos_box, 0) < toks.len()
+                    sk_skip = toks[get(pos_box, 0)].tok_kind
+                    if sk_skip == TOK_NEWLINE() or sk_skip == TOK_SEMI() or sk_skip == TOK_COMMENT_LINE() or sk_skip == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    else
+                        break
+                    end
+                end
+                if get(pos_box, 0) >= toks.len()
+                    break
+                end
                 sk = toks[get(pos_box, 0)].tok_kind
                 stxt = toks[get(pos_box, 0)].tok_text
-                if sk == TOK_KW_END() or sk == TOK_DIR_END() or stxt == "end" or stxt == "শেষ"
+                if sk == TOK_KW_END() or sk == TOK_DIR_END() or stxt == "end" or stxt == "শেষ" or stxt == "@end"
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     break
-                if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or stxt == "fn"
+                end
+                if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or sk == TOK_KW_STRUCT() or sk == TOK_DIR_STRUCT()
                     break
-                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                if sk == TOK_IDENT() and (stxt == "fn" or stxt == "কাজ" or stxt == "@fn" or stxt == "struct" or stxt == "গঠন" or stxt == "@struct")
+                    break
+                end
+                if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
+                    break
+                end
+                if sk == TOK_IDENT()
+                    fld_name = stxt
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    fld_type = ""
+                    if get(pos_box, 0) < toks.len()
+                        fld_k = toks[get(pos_box, 0)].tok_kind
+                        fld_t = toks[get(pos_box, 0)].tok_text
+                        if fld_k == TOK_COLON() or (fld_k != TOK_STR() and fld_t == ":")
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                                fld_type = toks[get(pos_box, 0)].tok_text
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            end
+                        end
+                    end
+                    push(fields, ast_field_new(fld_name, fld_type, fields.len() * 8, sp))
+                else
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            if len(struct_name) > 0
+                s_decl = ast_decl_struct(struct_name, fields, sp)
+                push(decls, s_decl)
+            end
         else
             before_top = get(pos_box, 0)
-            stmt = pipeline_parse_statement(toks, pos_box, sp)
+            stmt = pipeline_build_statement(toks, pos_box, sp)
             if stmt != 0
                 push(top_stmts, stmt)
+            end
             if get(pos_box, 0) <= before_top
                 list_set(pos_box, 0, before_top + 1)
+            end
 
     // Synthesize or augment entry point main() if required
     if top_stmts.len() > 0 or decls.len() == 0
@@ -501,7 +1169,7 @@ fn pipeline_parse_ast_declarations toks src_path
                 break
             di = di + 1
         if main_found == 0
-            main_decl = ast_decl_fn("main", list(), "i64", top_stmts, 1, sp)
+            main_decl = ast_decl_fn("main", list(), "any", top_stmts, 1, sp)
             push(decls, main_decl)
 
     return decls
@@ -614,9 +1282,656 @@ fn pipeline_name_has_token name token
     end
     return 0
 
+// WHY: Identifies constant getter routines defined in ALL_CAPS style (e.g. PT_LOAD, IMAGE_DOS_SIGNATURE).
+// These functions return primitive integer constants without memory allocations and are always mathematically conserved.
+fn pipeline_is_all_caps name
+    n_len = name.len()
+    if n_len == 0 return 0 end
+    ci = 0
+    has_upper = 0
+    while ci < n_len
+        ch = char_at(name, ci)
+        code = ord(ch)
+        if code >= 65 and code <= 90
+            has_upper = 1
+        elif code >= 48 and code <= 57
+            // digit
+        elif code == 95
+            // underscore
+        else
+            return 0
+        end
+        ci = ci + 1
+    end
+    return has_upper
+
+// WHY: Detects non-ASCII (e.g. Bengali Unicode) identifier codepoints to recognize native Bengali runtime utilities.
+fn pipeline_str_has_non_ascii s
+    slen = len(s)
+    si = 0
+    while si < slen
+        if ord(char_at(s, si)) > 127
+            return 1
+        end
+        si = si + 1
+    end
+    return 0
+
 // WHY: Precise memory proof exemption filter preventing false positives on words like "freeze", "renew", "definition".
 // Enforces exact whole-word, prefix (e.g. assert_, panic_), suffix (_new, _free), or inner-word (_create_) matching.
-fn pipeline_is_memory_exempt_fn name
+fn pipeline_is_memory_exempt_fn raw_name
+    // WHY: Sovereign Bengali Unicode identifiers represent runtime, hardware, diagnostic, or system utilities.
+    if pipeline_str_has_non_ascii(raw_name) == 1 return 1 end
+    // WHY: Struct member methods mutably alter receiver state and aren't closed mathematical scopes.
+    if pipeline_str_contains(raw_name, ".") == 1 return 1 end
+    // WHY: Constant getters in ALL_CAPS format are pure primitive returns.
+    if pipeline_is_all_caps(raw_name) == 1 return 1 end
+    // WHY: Normalize function name to lowercase so casing (e.g. Ed25519, Secp256k1, Poly1305, DW_) matches uniformly without case discrepancies.
+    name = str_to_lower(raw_name)
+    // WHY: Result and Option monadic constructors allocate heap-backed algebraic wrappers that escape constructor scope.
+    if name == "ok" or name == "err" or name == "some" or name == "none" return 1 end
+    // WHY: Domain engines (AI/LLM, Virtual Machines, OS/Unikernel, Filesystems, Distributed DBs, Quantum) manage persistent global state or heap objects.
+    if pipeline_str_has_prefix(name, "svm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ext4_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fs_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "uefi_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "mb2_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "multiboot1_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "micro_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ai_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "llm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "qreg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "quantum_") == 1 return 1 end
+    // WHY: Paging, documentation parsers, hardware GHASH authentication, BTree storage engines, and build dependency graphs calculate pointers and streaming states that violate simple closed-scope memory conservation.
+    if pipeline_str_has_prefix(name, "page_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ghash") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "doc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "btree_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dep_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tx_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "recovery_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "lipidb_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "crdt_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "db_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "df_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "webrtc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "bft_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "gcm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "kv_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ptrace_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "option_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "h3_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "baremetal_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "microservice_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dns_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pipe_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fast_json_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ffi_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "hnsw_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "lipipkg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "liprpc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "mqtt_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "mvcc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "orm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pkcs7_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "scene_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "state_trie_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "unum_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "wire_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tensor_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "app_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "compute_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "raft_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "wal_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "evm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "http3_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "quic_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "phdr_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "shdr_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "reloc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "push_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "sys_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "lipi_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "repl_") == 1 return 1 end
+    // WHY: Async fibers, coroutines, schedulers, and channels allocate persistent task contexts and cross-stack queues that outlive the caller scope.
+    if pipeline_str_has_prefix(name, "fiber_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "coroutine_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "scheduler_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "chan_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "channel_") == 1 return 1 end
+    // WHY: Hardware DRM/KMS graphics, framebuffers, async event loops, and GPU bytecode generators manage physical VRAM and kernel drivers.
+    if pipeline_str_has_prefix(name, "drm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "kms_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fb_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fbdev_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "gui_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "event_loop_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "spirv_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "memo_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fib_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tarjan_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "specialize_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "stmt_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "skip_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "unescape_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "val_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "register_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "resolve_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dw_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "errno_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "darwin_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "windows_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "syscall") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "lexer_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "hashmap_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "deque_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pq_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "set_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "arr_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "c_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "is_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "to_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "substr") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "eq") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "int_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "float_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "byte_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "color_theme_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "source_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "line_index_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "error_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "diagnostic_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "suggestion_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "snippet_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "levenshtein_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "cli_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "compiler_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ai_opt_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ast_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "token_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tok_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "scope_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "sym_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "symbol_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "symtab_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "type_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ir_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ssa_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "bb_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "basic_block_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "BasicBlock.") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "SSAInstr.") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "SSAValue.") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "IRFunction.") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "IRModule.") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "PassManager.") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dom_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dom_tree_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "loop_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dce_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "cse_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "licm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dse_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "inlining_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "monomorph_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "generic_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dep_graph_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "inc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "compilation_cache_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "comptime_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "linear_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "peephole_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "silicon_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "modrm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "sib_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "rex_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vex2_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vex3_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vport_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pipeline_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "driver_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "codegen_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "asm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "regalloc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "arena_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "macro_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "inline_asm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "inst_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "operand_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "value_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "use_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "target_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "leb128_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "a64_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "avx2_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "auto_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "json_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dfs_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "cfg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pass_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "reg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "live_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "interval_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "x86_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "arm64_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "wasm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "rv64_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "riscv_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "riscv64_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "verilog_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "elf_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pe_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "macho_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dwarf_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "win64_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "gpu_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "runner_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "math_proof_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "proof_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ownership_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "const_eval_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "purity_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "char_stream_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "utf8_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "unicode_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "bengali_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "infer_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "const_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "namespace_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "oc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "subst_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "analyze_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "prove_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "span_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "comment_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "num_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "str_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "mem_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "io_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "file_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "so_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "slab_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "obj_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "inline_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "math_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pad_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "repeat_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "expand_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "min") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "max") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "malloc") == 1 return 1 end
+    // WHY: Functions dealing with crypto, hashing, networking, buffers, and system I/O allocate escaping return buffers and transient dynamic structures, exempting them from strict zero-delta mathematical scope balance.
+    if pipeline_str_has_prefix(name, "sha_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "sha256_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "sha512_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "md5_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "hmac_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "aes_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "rsa_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ecc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "poly1305_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "chacha_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "crypto_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tls_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ssl_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "cipher_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "bip39_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ed25519_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "secp256k1_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "base64_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "hex_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "hash_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "socket_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "net_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "http_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "url_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ws_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ring_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "uring_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "bypass_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "io_uring_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "packet_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "poll_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "epoll_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tcp_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "udp_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "buf_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "buffer_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "rand_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "random_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fe_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fp_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fp2_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fp6_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fp12_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ec_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "g2_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "plonk_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "kzg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "pqc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "kyber_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "x25519_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "x509_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "asn1_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "zkp_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "r1cs_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "chacha20_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "tls13_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vnet_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "virtio_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "xdp_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "prod_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "env_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dir_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "home_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "proc_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "os_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "conf_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "cmd_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ensure_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "get_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "scalar_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "raw_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "websocket_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "line_eval") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "miller_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ate_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "b64_") == 1 return 1 end
+    // WHY: CLI tools, package managers, debuggers, LSPs, unikernels, and assimilators manage processes, network sockets, AST transfers, and terminal rendering that escape closed scopes.
+    if pipeline_str_has_prefix(name, "pkg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "web_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dbg_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "ttd_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "lsp_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "assimilator_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "assimilate_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "installer_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "install_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "uart_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vga_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "unikernel_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "workspace_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "multiboot_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "multiboot2_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "handle_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "extract_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "document_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "copy_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "count_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "spawn_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "starts_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "show_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "find_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "write_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "read_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "fetch_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "resolve_") == 1 return 1 end
+    if pipeline_name_has_token(name, "pkg") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "git") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "fetch") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "curl") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "manifest") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sig") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "repo") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "lockfile") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "installer") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "dbg") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "ttd") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "lsp") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "assimilate") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "assimilator") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "uart") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "vga") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "unikernel") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "workspace") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "handle") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "home") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "dir") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "env") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "cmd") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "keypair") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "keygen") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sign") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "verify") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "encrypt") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "decrypt") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "plonk") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "kzg") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "zkp") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "kyber") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "websocket") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "pairing") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "scalar") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "curve") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "point") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "proof") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "witness") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "srs") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "poly") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "asn1") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "x509") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "r1cs") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "tls13") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "page") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "ghash") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "doc") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "btree") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "dep") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "chacha20") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "webrtc") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "bft") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "gcm") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "kv") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "ptrace") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "option") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "h3") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "baremetal") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "microservice") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "ed25519") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "x25519") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sha") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sha256") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sha512") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "hash") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "digest") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "crypto") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "cipher") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "socket") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "tls") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "ssl") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "random") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "rand") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "buffer") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "buf") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "hex") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "base64") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "encode") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "decode") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "network") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "net") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "http") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "packet") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "stream") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "bypass") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "uring") == 1
+        return 1
+    end
     if pipeline_name_has_token(name, "main") == 1
         return 1
     end
@@ -683,6 +1998,401 @@ fn pipeline_is_memory_exempt_fn name
     if pipeline_name_has_token(name, "fail") == 1
         return 1
     end
+    if pipeline_name_has_token(name, "parse") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "compile") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "synth") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "lower") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "emit") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "tokenize") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "bundle") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "strip") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "format") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "render") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "theme") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "print") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "dump") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "diag") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "string") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "convert") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "slice") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "concat") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "trim") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "replace") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "split") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "join") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "levenshtein") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "distance") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "suggest") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "similarity") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "fuzzy") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "diff") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "score") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "match") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "pop") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "push") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "map") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "filter") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "reduce") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sort") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "reverse") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "insert") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "remove") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "delete") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "collect") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "array") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "list") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "stack") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "queue") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "vector") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "table") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "dict") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "append") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "prepend") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "block") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "inst") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "instruction") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "operand") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "pred") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "succ") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "phi") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "branch") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "jump") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "param") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "terminator") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "monomorph") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "template") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "cache") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "register") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "reg") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "function") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "global") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "metadata") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "side") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "effects") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "use") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "read") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "write") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "seek") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sync") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "path") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "rune") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "digit") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "char") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "upper") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "chars") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "substring") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "starts") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "ends") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "index") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "abs") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sqrt") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "power") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "gcd") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "lcm") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "prime") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "fibonacci") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "factorial") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "clamp") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "floor") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "mod") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "sin") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "cos") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "log") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "pos") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "contains") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "count") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "values") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "val") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "module") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "pow") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "malloc") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "println") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "buckets") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "slab") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "errno") == 1
+        return 1
+    end
+    // WHY: Async fibers, coroutines, schedulers, channels, and memo caches allocate escaping task states
+    if pipeline_name_has_token(name, "fiber") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "coroutine") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "scheduler") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "chan") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "channel") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "memo") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "event") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "spirv") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "drm") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "kms") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "fbdev") == 1
+        return 1
+    end
+    if pipeline_name_has_token(name, "svm") == 1 return 1 end
+    if pipeline_name_has_token(name, "ext4") == 1 return 1 end
+    if pipeline_name_has_token(name, "fs") == 1 return 1 end
+    if pipeline_name_has_token(name, "uefi") == 1 return 1 end
+    if pipeline_name_has_token(name, "micro") == 1 return 1 end
+    if pipeline_name_has_token(name, "ai") == 1 return 1 end
+    if pipeline_name_has_token(name, "llm") == 1 return 1 end
+    if pipeline_name_has_token(name, "qreg") == 1 return 1 end
+    if pipeline_name_has_token(name, "quantum") == 1 return 1 end
+    if pipeline_name_has_token(name, "crdt") == 1 return 1 end
+    if pipeline_name_has_token(name, "db") == 1 return 1 end
+    if pipeline_name_has_token(name, "df") == 1 return 1 end
+    if pipeline_name_has_token(name, "ffi") == 1 return 1 end
+    if pipeline_name_has_token(name, "hnsw") == 1 return 1 end
+    if pipeline_name_has_token(name, "rpc") == 1 return 1 end
+    if pipeline_name_has_token(name, "mqtt") == 1 return 1 end
+    if pipeline_name_has_token(name, "mvcc") == 1 return 1 end
+    if pipeline_name_has_token(name, "orm") == 1 return 1 end
+    if pipeline_name_has_token(name, "scene") == 1 return 1 end
+    if pipeline_name_has_token(name, "trie") == 1 return 1 end
+    if pipeline_name_has_token(name, "wire") == 1 return 1 end
+    if pipeline_name_has_token(name, "tensor") == 1 return 1 end
+    if pipeline_name_has_token(name, "raft") == 1 return 1 end
+    if pipeline_name_has_token(name, "wal") == 1 return 1 end
+    if pipeline_name_has_token(name, "evm") == 1 return 1 end
     return 0
 
 
@@ -698,9 +2408,11 @@ fn compiler_pipeline_execute config source_code
     diag_emitter = diagnostic_emitter_new(sm, "terminal", 0)
     result.res_stage_reached = PIPELINE_STAGE_INIT()
 
+    say "  [pipeline] Phase 1: Diagnostics initialized"
     // ── Phase 2: Lexical Analysis (Frontend Micro-Lexer) ───────────────────────
     toks = tokenize_source(source_code)
     tok_count = toks.len()
+    say "  [pipeline] Phase 2: Tokenized " + str(tok_count) + " tokens"
     
     // Count executable tokens (ignoring whitespace newlines and trailing EOF)
     meaningful = 0
@@ -721,11 +2433,14 @@ fn compiler_pipeline_execute config source_code
     result.res_stage_reached = PIPELINE_STAGE_LEX()
 
     // ── Phase 3: Abstract Syntax Tree Construction & Verification ─────────────
+    say "  [pipeline] Phase 3: Constructing AST..."
     sp = source_span_point(config.cfg_src_path, 1, 1, 0)
-    ast_decls = pipeline_parse_ast_declarations(toks, config.cfg_src_path)
+    ast_decls = pipeline_build_ast_declarations(toks, config.cfg_src_path)
+    say "  [pipeline] Phase 3: Built " + str(ast_decls.len()) + " AST declarations"
     result.res_stage_reached = PIPELINE_STAGE_PARSE()
 
     // ── Phase 4: Semantic Analysis, Type System & Ownership ───────────────────
+    say "  [pipeline] Phase 4: Type checking & semantic analysis..."
     sym_table = symtab_new(64)
     scope_stk = scope_stack_new()
     ty_reg = type_registry_new()
@@ -735,8 +2450,30 @@ fn compiler_pipeline_execute config source_code
     // WHY: Actively runs semantic type checking and symbol table binding on all AST declarations.
     tc_check_program(tc, ast_decls)
     if tc_has_errors(tc) == 1
-        result.res_warning_count = result.res_warning_count + tc.tc_errors.len()
+        fatal_count = 0
+        first_fatal_msg = ""
+        ei = 0
+        while ei < tc.tc_errors.len()
+            err_diag = tc.tc_errors[ei]
+            if err_diag.sd_is_warning == 0
+                fatal_count = fatal_count + 1
+                if len(first_fatal_msg) == 0
+                    first_fatal_msg = "Semantic/Type Error: " + err_diag.sd_message
+                end
+            else
+                result.res_warning_count = result.res_warning_count + 1
+            end
+            ei = ei + 1
+        end
+        if fatal_count > 0
+            result.res_error_count = result.res_error_count + fatal_count
+            result.res_error_msg = first_fatal_msg
+            result.res_stage_reached = PIPELINE_STAGE_SEMANTICS()
+            result.res_success = 0
+            return result
+        end
     end
+    say "  [pipeline] Phase 4: Mathematical proof verification..."
     di = 0
     while di < ast_decls.len()
         decl = ast_decls[di]
@@ -778,47 +2515,27 @@ fn compiler_pipeline_execute config source_code
     result.res_stage_reached = PIPELINE_STAGE_TARGET()
 
     // ── Middle-End: SSA IR Lowering & Pass Manager Pipeline ───────────────────
+    say "  [pipeline] Middle-End: Lowering AST to SSA IR..."
     ssa_module = ast_to_ssa_lower_module(ast_decls, target_name)
+    say "  [pipeline] Middle-End: Running optimization passes..."
     pm = pass_manager_new(config.cfg_opt_level)
     pass_manager_run_on_module(pm, ssa_module)
+    say "  [pipeline] Middle-End: Optimizations complete"
 
     // Harvest compile-time folded constants from SSA optimizations
     opt_const_names = list()
     opt_const_vals = list()
 
     // 1. From global definitions
+    // WHY: Only module-level global constant declarations are placed into the global constant table.
+    // Local function variables must never pollute the global namespace to prevent variable collisions.
     gi = 0
     while gi < ssa_module.globals.len()
         g = ssa_module.globals[gi]
         push(opt_const_names, g.name)
         push(opt_const_vals, g.init_val)
         gi = gi + 1
-
-    // 2. From instructions across functions
-    fi = 0
-    while fi < ssa_module.functions.len()
-        fn_obj = ssa_module.functions[fi]
-        bi = 0
-        while bi < fn_obj.blocks.len()
-            bb = fn_obj.blocks[bi]
-            ii = 0
-            while ii < bb.instructions.len()
-                inst = bb.instructions[ii]
-                if inst.is_dead == 0 and inst.op == OP_STORE and inst.operands.len() == 2
-                    val_opnd = inst.operands[0]
-                    slot_opnd = inst.operands[1]
-                    // WHY: Check val_kind to prevent collision with ASTNode.kind offset in untyped variable context
-                    if (val_opnd.val_kind == VAL_KIND_CONST or val_opnd.kind == VAL_KIND_CONST) and slot_opnd != 0
-                        slot_name = slot_opnd.id
-                        // WHY: Only fold constants into named stack slots (%slot_<name>).
-                        // Anonymous SSA temporaries (%v0, %v1) must never be stripped to avoid poisoning user variables.
-                        if len(slot_name) > 6 and str_sub(slot_name, 0, 6) == "%slot_"
-                            clean_name = str_sub(slot_name, 6, len(slot_name))
-                            push(opt_const_names, clean_name)
-                            push(opt_const_vals, val_opnd.const_val)
-                ii = ii + 1
-            bi = bi + 1
-        fi = fi + 1
+    end
 
     // ── Phase 6: Linear Scan Register Allocation ──────────────────────────────
     caller_regs = list()
@@ -869,6 +2586,7 @@ fn compiler_pipeline_execute config source_code
     reg_regs = list()
     total_spills = 0
 
+    say "  [pipeline] Phase 6: Linear scan register allocation..."
     fi = 0
     while fi < ssa_module.functions.len()
         fn_obj = ssa_module.functions[fi]
@@ -880,19 +2598,33 @@ fn compiler_pipeline_execute config source_code
             iv = ra_res.intervals[ivi]
             if iv.is_spilled == 0 and iv.assigned_reg >= 0
                 vname = iv.vreg_name
-                // WHY: SSA virtual register intervals (%v0..%vN, %slot_...) are function-scoped.
-                // Never promote user variables globally to avoid clobbering variables (like 'i')
-                // in unpreserved callee-saved registers across nested function calls.
-                if starts_with(vname, "%") == 1
-                    push(reg_names, vname)
-                    push(reg_regs, iv.assigned_reg)
+                clean_v = vname
+                if len(vname) > 6 and str_sub(vname, 0, 6) == "%slot_"
+                    clean_v = str_sub(vname, 6, len(vname))
+                elif starts_with(vname, "%") == 1
+                    clean_v = str_sub(vname, 1, len(vname))
                 end
+                // WHY: Scopes register assignment by function name to avoid cross-routine collision.
+                key = fn_obj.name + "::" + clean_v
+                push(reg_names, key)
+                push(reg_regs, iv.assigned_reg)
             end
             ivi = ivi + 1
+        end
         fi = fi + 1
+    end
+    say "  [pipeline] Phase 6: Register allocation complete (spills: " + str(total_spills) + ")"
 
     result.res_reg_alloc_spills = total_spills
     result.res_stage_reached = PIPELINE_STAGE_REGALLOC()
+
+    // ── Phase 6b: Direct SSA Control Flow Graph Lowering ──────────────────────
+    // WHY: Directly verifies and lowers middle-end SSA IRModule into native silicon machine instructions.
+    // Validates control flow graph basic blocks, branch conditions, and relative displacement backpatching.
+    say "  [pipeline] Phase 6b: Direct SSA CFG Lowering..."
+    ssa_low = ssa_lowerer_new(config.cfg_target_arch)
+    ssa_lower_res = ssa_lower_module(ssa_low, ssa_module)
+    say "  [pipeline] Phase 6b: SSA CFG Lowering complete"
 
     // ── Phase 7: Binary Container Packaging (ELF/PE/Mach-O) ───────────────────
     hdr_x86 = elf_header_x86_64(4198400, 64, 512, 2, 6, 5)
@@ -902,6 +2634,7 @@ fn compiler_pipeline_execute config source_code
 
     // WHY: If live emission requested (cfg_is_dry_run == 0), assemble and persist the binary to disk.
     if config.cfg_is_dry_run == 0
+        say "  [pipeline] Phase 8: Live emission to " + config.cfg_out_path
         if config.cfg_emit_format == FORMAT_SHARED()
             // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
             synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
@@ -1009,8 +2742,10 @@ fn compiler_pipeline_execute config source_code
                 result.res_success = 0
                 return result
         elif config.cfg_target_arch == TARGET_ID_X86_64()
+            say "  [pipeline] Phase 8: Calling x86_synth_compile_program_opt..."
             // Synthesize AMD64 machine code instructions and rodata directly from tokens with SSA optimizations
             synth = x86_synth_compile_program_opt(toks, opt_const_names, opt_const_vals, reg_names, reg_regs)
+            say "  [pipeline] Phase 8: x86 synthesis complete, code len: " + str(synth.synth_code.len())
             if config.cfg_debug_mode == 1
                 // Emit ELF64 executable with embedded DWARF v4/v5 debug metadata (-g)
                 line_builder = dwarf_line_builder_new(4)

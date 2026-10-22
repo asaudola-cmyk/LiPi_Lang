@@ -157,14 +157,34 @@ import "compiler/semantics/symbol"
 
 // ── 4. SYMBOL REGISTRATION & LOOKUP ──────────────────────────────────────────
 
-@fn scope_define(stack, sym)
-  // WHY: Registers a symbol in the current lexical scope
-  curr = scope_stack_current(stack)
+@fn scope_define_in_scope_id(stack, scope_id, sym)
+  // WHY: Registers a symbol in a specific scope node and writes it back to stack.stk_scopes arena
+  @if stack == 0 || sym == 0 || scope_id < 0 || scope_id >= stack.stk_scopes.len()
+    return 0
+  @end
+  sc = stack.stk_scopes[scope_id]
+  i = 0
+  num_symbols = sc.sc_symbol_names.len()
+  @while i < num_symbols
+    @if str_eq(sc.sc_symbol_names[i], sym.sym_name) == 1
+      return 0
+    @end
+    i = i + 1
+  @end
+
+  sym.sym_scope_id = scope_id
+  sc.sc_symbols = sc.sc_symbols.push(sym)
+  sc.sc_symbol_names = sc.sc_symbol_names.push(sym.sym_name)
+  list_set(stack.stk_scopes, scope_id, sc)
+  return 1
+@end
+
+@fn scope_define_in_scope(curr, sym)
+  // WHY: Registers a symbol in a specific scope node (e.g. enclosing function scope)
   @if curr == 0 || sym == 0
     return 0
   @end
 
-  // Check if symbol already exists in THIS specific scope
   i = 0
   num_symbols = curr.sc_symbol_names.len()
   @while i < num_symbols
@@ -178,6 +198,12 @@ import "compiler/semantics/symbol"
   curr.sc_symbols = curr.sc_symbols.push(sym)
   curr.sc_symbol_names = curr.sc_symbol_names.push(sym.sym_name)
   return 1
+@end
+
+@fn scope_define(stack, sym)
+  // WHY: Registers a symbol in the current lexical scope with persistent arena writeback
+  @if stack == 0 || sym == 0 return 0 @end
+  return scope_define_in_scope_id(stack, stack.stk_current_id, sym)
 @end
 
 @fn scope_lookup_current(stack, name)
@@ -256,6 +282,22 @@ import "compiler/semantics/symbol"
   @end
 
   return 0
+@end
+
+@fn scope_get_enclosing_function_id(stack)
+  // WHY: Climbs active chain to find the containing function scope ID
+  @if stack == 0 return 0 - 1 @end
+  chain_idx = stack.stk_chain.len() - 1
+  @while chain_idx >= 0
+    sid = stack.stk_chain[chain_idx]
+    sc = stack.stk_scopes[sid]
+    @if sc.sc_kind == SCOPE_FUNCTION()
+      return sid
+    @end
+    chain_idx = chain_idx - 1
+  @end
+
+  return 0 - 1
 @end
 
 @fn scope_is_inside_loop(stack)
