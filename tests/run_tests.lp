@@ -100,12 +100,33 @@ fn run_single_test compiler test_path test_name
     // Clean up temporary test binary immediately
     syscall(87, out_bin, 0, 0, 0, 0, 0)
 
+    log_txt = file_read("/tmp/lipi_test_log.txt")
+
     if r_code == 0
+        // WHY: Inspect test runtime execution log to ensure genuine assertions succeeded.
+        // A test must not pass if output is empty, or if explicit failure markers (FAIL, FAILED, ❌) are present.
+        if len(log_txt) == 0
+            say "  • Testing " + test_name + "... [1;31mEMPTY OUTPUT FAIL ✖[0m"
+            say "    [Runtime Diagnostic]: Binary exited with code 0 but produced no stdout/stderr output."
+            return 0
+        end
+
+        has_failure = 0
+        if str_contains(log_txt, "FAIL") == 1 or str_contains(log_txt, "FAILED") == 1 or str_contains(log_txt, "❌") == 1
+            has_failure = 1
+        end
+
+        if has_failure == 1
+            say "  • Testing " + test_name + "... [1;31mASSERTION FAIL ✖[0m"
+            say "    [Runtime Diagnostic]:"
+            say log_txt
+            return 0
+        end
+
         say "  • Testing " + test_name + "... [1;32mPASS ✔[0m"
         return 1
     else
         say "  • Testing " + test_name + "... [1;31mRUNTIME FAIL ✖[0m"
-        log_txt = file_read("/tmp/lipi_test_log.txt")
         if len(log_txt) > 0
             say "    [Runtime Diagnostic]:"
             say log_txt
@@ -1098,6 +1119,12 @@ fn main
 
     // 218: Autoregressive Transformer Core & Tensor Attention
     if run_single_test(compiler, "tests/test_transformer_core.lp", "test_transformer_core") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 219: Loop Control & Algebraic Recurrence Edge Cases (continue in for/repeat, boundaries, nesting)
+    if run_single_test(compiler, "tests/test_loop_control_edge_cases.lp", "test_loop_control_edge_cases") == 1
         passed = passed + 1
     else
         failed = failed + 1

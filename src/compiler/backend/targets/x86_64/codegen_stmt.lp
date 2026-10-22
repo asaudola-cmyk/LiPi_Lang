@@ -92,12 +92,19 @@ fn x86_synth_compile_statement s toks pos_box
 
     if k == TOK_KW_CONTINUE() or (k == TOK_IDENT() and (txt == "continue" or txt == "চলুক" or txt == "চলো"))
         list_set(pos_box, 0, pos + 1)
-        if s.synth_loop_starts.len() > 0
+        if s.synth_loop_continues.len() > 0
+            x86_synth_emit_byte(s, 233) // jmp rel32
+            p_off = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            curr_cont_list = s.synth_loop_continues[s.synth_loop_continues.len() - 1]
+            push(curr_cont_list, p_off)
+        elif s.synth_loop_starts.len() > 0
             loop_hdr = s.synth_loop_starts[s.synth_loop_starts.len() - 1]
             x86_synth_emit_byte(s, 233) // jmp rel32
             next_ip = s.synth_code.len() + 4
             disp32 = loop_hdr - next_ip
             x86_synth_emit_u32(s, disp32)
+        end
         return 0
 
     // ── 4. Struct Definition: struct / গঠন / @struct ──────────────────────────
@@ -138,14 +145,20 @@ fn x86_synth_compile_statement s toks pos_box
                 x86_synth_emit_byte(s, 80)
 
                 // Load obj pointer into %rcx
-                obj_off = x86_synth_lookup_var(s, obj_name)
-                if obj_off > 0
-                    x86_synth_emit_load_var(s, 1, obj_off)
+                lv_obj = x86_synth_find_local_var(s, obj_name)
+                if lv_obj != 0 and lv_obj.lv_is_spilled == 0 and lv_obj.lv_reg >= 0
+                    x86_synth_emit_mov_reg_reg(s, 1, lv_obj.lv_reg)
                 else
-                    // mov rcx, 0
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 49)
-                    x86_synth_emit_byte(s, 201)
+                    obj_off = x86_synth_lookup_var(s, obj_name)
+                    if obj_off > 0
+                        x86_synth_emit_load_var(s, 1, obj_off)
+                    else
+                        // mov rcx, 0
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 49)
+                        x86_synth_emit_byte(s, 201)
+                    end
+                end
 
                 // Pop value into %rax
                 x86_synth_emit_byte(s, 88)
@@ -210,13 +223,19 @@ fn x86_synth_compile_statement s toks pos_box
                 x86_synth_emit_byte(s, 137)
                 x86_synth_emit_byte(s, 194)
                 x86_synth_emit_byte(s, 94)  // pop rsi (idx)
-                off = x86_synth_lookup_var(s, arr_name)
-                if off > 0
-                    x86_synth_emit_load_var(s, 7, off)
+                lv_arr = x86_synth_find_local_var(s, arr_name)
+                if lv_arr != 0 and lv_arr.lv_is_spilled == 0 and lv_arr.lv_reg >= 0
+                    x86_synth_emit_mov_reg_reg(s, 7, lv_arr.lv_reg)
                 else
-                    // mov rdi, 0
-                    x86_synth_emit_byte(s, 49)
-                    x86_synth_emit_byte(s, 255)
+                    off = x86_synth_lookup_var(s, arr_name)
+                    if off > 0
+                        x86_synth_emit_load_var(s, 7, off)
+                    else
+                        // mov rdi, 0
+                        x86_synth_emit_byte(s, 49)
+                        x86_synth_emit_byte(s, 255)
+                    end
+                end
                 x86_synth_emit_call_helper(s, "_lipi_list_set")
                 return 0
 
@@ -263,7 +282,7 @@ fn x86_synth_compile_statement s toks pos_box
             // Check if we hit elif, else, or end
             if cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()
                 break
-            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "@else")
+            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else")
                 break
             if x86_synth_is_block_end(toks, cur_p) == 1
                 break
@@ -290,7 +309,7 @@ fn x86_synth_compile_statement s toks pos_box
             cur_txt = cur_t.tok_text
             if (cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()) and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 has_subsequent = 1
-            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "@else") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 has_subsequent = 1
 
         if has_subsequent == 1
@@ -352,7 +371,7 @@ fn x86_synth_compile_statement s toks pos_box
                 cx2 = ct2.tok_text
                 if ck2 == TOK_KW_ELIF() or ck2 == TOK_DIR_ELIF() or ck2 == TOK_KW_ELSE() or ck2 == TOK_DIR_ELSE()
                     break
-                if ck2 == TOK_IDENT() and (cx2 == "elif" or cx2 == "নাহলে_যদি" or cx2 == "@elif" or cx2 == "else" or cx2 == "নাহলে" or cx2 == "@else")
+                if ck2 == TOK_IDENT() and (cx2 == "elif" or cx2 == "নাহলে_যদি" or cx2 == "নতুবা_যদি" or cx2 == "@elif" or cx2 == "else" or cx2 == "নাহলে" or cx2 == "অন্যথায়" or cx2 == "নতুবা" or cx2 == "@else")
                     break
                 if x86_synth_is_block_end(toks, cur_p2) == 1
                     break
@@ -386,7 +405,7 @@ fn x86_synth_compile_statement s toks pos_box
             is_else = 0
             if (cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()) and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 is_else = 1
-            if cur_k == TOK_IDENT() and (cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "@else") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if cur_k == TOK_IDENT() and (cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 is_else = 1
             if is_else == 1
                 else_line = cur_t.tok_span.span_start_line
@@ -454,12 +473,22 @@ fn x86_synth_compile_statement s toks pos_box
         list_set(pos_box, 0, pos + 1) // Consume 'for'
         return x86_synth_compile_for(s, toks, pos_box, base_col, base_line)
 
+    // ── 8b. Loops: repeat / বার / @repeat ─────────────────────────────────────
+    is_repeat = 0
+    if k == TOK_IDENT() and (txt == "repeat" or txt == "বার" or txt == "@repeat")
+        is_repeat = 1
+    if is_repeat == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1) // Consume 'repeat'
+        return x86_synth_compile_repeat(s, toks, pos_box, base_col, base_line)
+
     // ── 9. Variable Declaration: let / চলক / ধরি / var ─────────────────────────
     is_let = 0
     if k == TOK_KW_LET()
         is_let = 1
     is_reg = 0
-    if k == TOK_IDENT() and (txt == "let" or txt == "চলক" or txt == "ধরি" or txt == "var")
+    if k == TOK_IDENT() and (txt == "let" or txt == "চলক" or txt == "ধরি" or txt == "var" or txt == "@let")
         is_let = 1
     if k == TOK_IDENT() and (txt == "@reg" or txt == "রেজিস্টার")
         is_let = 1
@@ -664,6 +693,7 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_byte(s, 208)
                     // Store updated value back to target
                     if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                        // WHY: Update physical register directly and keep stack slot synchronized.
                         x86_synth_emit_mov_reg_reg(s, lv_tgt.lv_reg, 0)
                         x86_synth_emit_store_var(s, 0, off)
                     else

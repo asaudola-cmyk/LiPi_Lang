@@ -248,7 +248,7 @@ fn x86_synth_compile_fn_def s toks pos_box
 
 // ── 8. Master Program Synthesizer Entry Point ──────────────────────────────────
 
-fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names reg_regs
+fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals reg_names reg_regs ssa_lower_res
     say "    [x86_synth] Initializing synthesizer..."
     s = x86_synth_new()
 
@@ -350,6 +350,13 @@ fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names
     x86_synth_emit_all_avx2_helpers(s)
     arena_offs = x86_synth_emit_arena_helpers(s)
 
+    // 5b. Attach and integrate direct SSA IR Lowering machine code & functions
+    // WHY: Lowered SSA functions must be merged into s.synth_functions and s.synth_code
+    // BEFORE call relocations and rodata base addresses are resolved.
+    if ssa_lower_res != 0
+        x86_synth_attach_ssa_lower_res(s, ssa_lower_res)
+    end
+
     // 6. Resolve Inter-Procedural Call Relocations
     ci = 0
     while ci < s.synth_call_relocs.len()
@@ -431,6 +438,68 @@ fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names
 
     return s
 
+fn x86_synth_attach_ssa_lower_res s ssa_lower_res
+    // WHY: Connects middle-end SSA IR Lowering results (machine code, rodata, resolved functions)
+    // to the backend silicon synthesizer, bridging the SSA CFG directly into executable image generation.
+    // Integrates SSA-lowered functions that are not already present in the AST function symbol table,
+    // avoiding duplicate function definitions while appending their machine code bytes before relocation resolution.
+    s.synth_ssa_lower_res = ssa_lower_res
+    if ssa_lower_res != 0
+        if ssa_lower_res.slr_code.len() > 0
+            base_off = s.synth_code.len()
+            has_new_fns = 0
+            fi = 0
+            while fi < ssa_lower_res.slr_fn_names.len()
+                fn_name = ssa_lower_res.slr_fn_names[fi]
+                fn_off = base_off + ssa_lower_res.slr_fn_offsets[fi]
+                already_exists = 0
+                k = 0
+                while k < s.synth_functions.len()
+                    item = s.synth_functions[k]
+                    if item.fn_name == fn_name
+                        already_exists = 1
+                        break
+                    end
+                    k = k + 1
+                end
+                if already_exists == 0
+                    fn_item = X86Function()
+                    fn_item.fn_name = fn_name
+                    fn_item.fn_entry_offset = fn_off
+                    push(s.synth_functions, fn_item)
+                    has_new_fns = 1
+                end
+                fi = fi + 1
+            end
+
+            // Only append code bytes if new SSA-unique functions were registered,
+            // or if the synthesizer has no functions (pure SSA IR compilation)
+            if has_new_fns == 1 or s.synth_functions.len() == 0
+                bi = 0
+                while bi < ssa_lower_res.slr_code.len()
+                    push(s.synth_code, ssa_lower_res.slr_code[bi])
+                    bi = bi + 1
+                end
+
+                ri = 0
+                while ri < ssa_lower_res.slr_rodata.len()
+                    push(s.synth_rodata, ssa_lower_res.slr_rodata[ri])
+                    ri = ri + 1
+                end
+            end
+        end
+    end
+    return 0
+
+fn x86_synth_compile_program_full tokens opt_const_names opt_const_vals reg_names reg_regs ssa_lower_res
+    // WHY: Full compiler pipeline entry point integrating tokens, harvested SSA constants,
+    // linear scan register allocations, and lowered SSA CFG artifacts into silicon AMD64 binary.
+    return x86_synth_compile_program_opt_internal(tokens, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+
+fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names reg_regs
+    // WHY: Backward compatibility wrapper invoking optimization-aware machine code synthesizer
+    return x86_synth_compile_program_opt_internal(tokens, opt_const_names, opt_const_vals, reg_names, reg_regs, 0)
+
 fn x86_synth_compile_program tokens
     // WHY: Backward compatibility wrapper invoking optimization-aware machine code synthesizer
-    return x86_synth_compile_program_opt(tokens, list(), list(), list(), list())
+    return x86_synth_compile_program_opt_internal(tokens, list(), list(), list(), list(), 0)

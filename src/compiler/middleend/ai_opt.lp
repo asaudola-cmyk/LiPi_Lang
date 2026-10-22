@@ -8,6 +8,8 @@
 
 import "utso/collections"
 import "utso/math"
+include "src/compiler/middleend/opt/passes/pass_unroll.lp"
+include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
 
 @! ============================================================================
 @! 1. DATA STRUCTURES & LOOP METRICS
@@ -255,4 +257,86 @@ import "utso/math"
     nesting_depth: max_depth,
     has_cross_iter_dependency: has_cross_dep
   }
+@end
+
+// ── 5. Functional Optimization Heuristics & Transformation Engine ────────────
+
+@fn ai_opt_compute_unroll_factor(feat)
+  // WHY: Deterministic compiler heuristic estimating profitable loop unroll factor (1, 2, 4, 8, 16)
+  // balancing instruction cache locality against loop branch penalty and register pressure.
+  @if feat.has_cross_iter_dependency == 1
+    return 1
+  @end
+  @if feat.body_instruction_count > 64
+    return 1
+  @end
+  // Target unroll budget: ~64 instructions per unrolled iteration block
+  budget = 64 / feat.body_instruction_count
+  @if budget <= 1
+    return 1
+  @end
+  @if feat.trip_count_hint > 0
+    // Do not unroll past trip count hint
+    @if budget > feat.trip_count_hint
+      budget = feat.trip_count_hint
+    @end
+  @end
+  // Clamp to power of 2: 1, 2, 4, 8, 16
+  @if budget >= 16 return 16 @end
+  @if budget >= 8  return 8  @end
+  @if budget >= 4  return 4  @end
+  @if budget >= 2  return 2  @end
+  return 1
+@end
+
+@fn ai_opt_compute_vectorization(feat)
+  // WHY: Analyzes loop memory access density and dependence invariants to guide SIMD vectorization.
+  @if feat.has_cross_iter_dependency == 1
+    return 0
+  @end
+  @if feat.memory_access_count <= 0
+    return 0
+  @end
+  @if feat.body_instruction_count > 128
+    return 0
+  @end
+  @if feat.trip_count_hint > 0 && feat.trip_count_hint < 4
+    return 0
+  @end
+  return 1
+@end
+
+@fn ai_opt_estimate_register_pressure(feat)
+  // WHY: Predicts silicon register spilling risk (0..100) using instruction density and memory access counts.
+  pressure = (feat.body_instruction_count * 2) + (feat.memory_access_count * 5) + (feat.nesting_depth * 10)
+  @if pressure > 100
+    return 100
+  @end
+  @if pressure < 0
+    return 0
+  @end
+  return pressure
+@end
+
+@fn ai_opt_apply_transforms(decision, ssa_module)
+  // WHY: Applies AI optimizer decisions to the middle-end SSA IR module.
+  // When SIMD vectorization is recommended, applies pass_vectorize_run to convert scalar loops to AVX2/SIMD operations.
+  // When loop unrolling is recommended (unroll factor > 1), applies pass_unroll_run to replicate loop bodies
+  // and eliminate branching overhead.
+  @if ssa_module == 0 return 0 @end
+  transformed_count = 0
+  fi = 0
+  @while fi < ssa_module.functions.len()
+    fn_obj = ssa_module.functions[fi]
+    @if decision.should_vectorize == 1
+      vec_hits = pass_vectorize_run(fn_obj)
+      transformed_count = transformed_count + vec_hits
+    @end
+    @if decision.recommended_unroll_factor > 1
+      u_hits = pass_unroll_run(fn_obj)
+      transformed_count = transformed_count + u_hits
+    @end
+    fi = fi + 1
+  @end
+  return transformed_count
 @end

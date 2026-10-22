@@ -121,12 +121,13 @@ import "compiler/frontend/ast/ast_node"
 // WHY: Identifies native Silicon runtime helpers, freestanding kernel intrinsics,
 // and language primitives that do not require user-defined AST function prototypes.
 @fn tc_is_builtin_call(fn_name)
-  @if fn_name == "" return 1 @end
+  // WHY: Unresolved or empty function identifiers are never builtins; return 0 so undefined/mismatched calls halt compilation.
+  @if fn_name == "" return 0 @end
   @if str_eq(fn_name, "syscall") == 1 || str_eq(fn_name, "সিসকল") == 1 || str_eq(fn_name, "sys_syscall") == 1 return 1 @end
   @if str_eq(fn_name, "exit") == 1 || str_eq(fn_name, "বিদায়") == 1 || str_eq(fn_name, "sys_exit") == 1 || str_eq(fn_name, "sys_exit_group") == 1 || str_eq(fn_name, "প্রস্থান") == 1 return 1 @end
   @if str_eq(fn_name, "floor") == 1 || str_eq(fn_name, "মেঝে") == 1 return 1 @end
   @if str_eq(fn_name, "argv") == 1 || str_eq(fn_name, "আর্গস") == 1 return 1 @end
-  @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return 1 @end
+  @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলো") == 1 || str_eq(fn_name, "দেখাও") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return 1 @end
   @if str_eq(fn_name, "len") == 1 || str_eq(fn_name, "length") == 1 || str_eq(fn_name, "দৈর্ঘ্য") == 1 || str_eq(fn_name, "str_len") == 1 || str_eq(fn_name, "list_len") == 1 return 1 @end
   @if str_eq(fn_name, "to_str") == 1 || str_eq(fn_name, "str") == 1 || str_eq(fn_name, "স্ট্রিং") == 1 || str_eq(fn_name, "is_str") == 1 || str_eq(fn_name, "is_string") == 1 return 1 @end
   @if str_eq(fn_name, "malloc") == 1 || str_eq(fn_name, "alloc") == 1 || str_eq(fn_name, "mem_alloc") == 1 || str_eq(fn_name, "মেমরি_বরাদ্দ") == 1 || str_eq(fn_name, "user_alloc") == 1 || str_eq(fn_name, "user_free") == 1 || str_eq(fn_name, "free") == 1 return 1 @end
@@ -157,7 +158,7 @@ import "compiler/frontend/ast/ast_node"
 // WHY: Assigns concrete return types to built-in system intrinsics for static type propagation.
 @fn tc_builtin_ret_type(fn_name)
   @if str_eq(fn_name, "ভেক্টর_যোগ_২৫৬") == 1 || (len(fn_name) >= 5 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "i" && char_at(fn_name, 2) == "m" && char_at(fn_name, 3) == "d" && char_at(fn_name, 4) == "_") return TYPE_ID_I64() @end
-  @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return TYPE_ID_VOID() @end
+  @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলো") == 1 || str_eq(fn_name, "দেখাও") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return TYPE_ID_VOID() @end
   @if str_eq(fn_name, "len") == 1 || str_eq(fn_name, "length") == 1 || str_eq(fn_name, "দৈর্ঘ্য") == 1 || str_eq(fn_name, "str_len") == 1 || str_eq(fn_name, "list_len") == 1 || str_eq(fn_name, "file_size") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "floor") == 1 || str_eq(fn_name, "মেঝে") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "clock_ms") == 1 || str_eq(fn_name, "cpu_clock") == 1 || str_eq(fn_name, "time_now") == 1 || str_eq(fn_name, "time_now_ms") == 1 || str_eq(fn_name, "stack_pointer") == 1 || str_eq(fn_name, "ord") == 1 || str_eq(fn_name, "ascii") == 1 || str_eq(fn_name, "কোড") == 1 || str_eq(fn_name, "str_char_at") == 1 || str_eq(fn_name, "str_find") == 1 || str_eq(fn_name, "str_index_of") == 1 return TYPE_ID_I64() @end
@@ -177,6 +178,16 @@ import "compiler/frontend/ast/ast_node"
 
   k = expr.kind
 
+  // 0. Expression Statement Unpacking
+  // WHY: AST expression statements wrap expressions inside an ExprStmt/ExpressionStmt node.
+  // Unpacking stmt.expr guarantees calls, operators, and method invocations are inspected.
+  @if str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1
+    @if expr.expr != 0
+      return tc_check_expr(tc, expr.expr)
+    @end
+    return TYPE_ID_VOID()
+  @end
+
   // 1. Literals
   @if str_eq(k, "LiteralInt") == 1 || str_eq(k, "LiteralFloat") == 1 || str_eq(k, "LiteralStr") == 1 || str_eq(k, "LiteralBool") == 1 || str_eq(k, "LiteralNone") == 1 || str_eq(k, "Integer") == 1 || str_eq(k, "Float") == 1 || str_eq(k, "String") == 1 || str_eq(k, "Bool") == 1 || str_eq(k, "None") == 1 || str_eq(k, "INT") == 1 || str_eq(k, "HEX_INT") == 1 || str_eq(k, "STRING") == 1 || str_eq(k, "BOOL") == 1
     return infer_literal_type(tc.tc_infer_ctx, expr)
@@ -190,6 +201,7 @@ import "compiler/frontend/ast/ast_node"
     @end
     @if str_eq(v_name, "true") == 1 || str_eq(v_name, "false") == 1 || str_eq(v_name, "সত্য") == 1 || str_eq(v_name, "মিথ্যা") == 1 return TYPE_ID_BOOL() @end
     @if str_eq(v_name, "null") == 1 || str_eq(v_name, "nil") == 1 || str_eq(v_name, "শূন্য") == 1 return TYPE_ID_VOID() @end
+    @if str_eq(v_name, "break") == 1 || str_eq(v_name, "continue") == 1 || str_eq(v_name, "থামো") == 1 || str_eq(v_name, "চালিয়ে_যাও") == 1 return TYPE_ID_VOID() @end
 
     sym = scope_lookup(tc.tc_scopes, v_name)
     @if sym == 0
@@ -312,6 +324,8 @@ import "compiler/frontend/ast/ast_node"
       fn_name = expr.name
     @elif expr.func != 0 && expr.func.name != ""
       fn_name = expr.func.name
+    @elif expr.func != 0 && expr.func.target != ""
+      fn_name = expr.func.target
     @end
 
     // WHY: Built-in system intrinsics and hardware runtime primitives are validated directly
@@ -387,6 +401,8 @@ import "compiler/frontend/ast/ast_node"
       @if is_method_call == 1 && num_args == num_params
         effective_args = num_args
         is_method_call = 0
+      @elif str_eq(fn_name, "main") == 1 || str_eq(fn_name, "মূল") == 1
+        // Entry point main may be called by runtime with 0 arguments or argc/argv
       @else
         tc_error(tc, ERR_INVALID_ARG_COUNT(), "Function '" + fn_name + "' expects " + to_str(num_params) + " arguments, got " + to_str(effective_args), span_default())
       @end
@@ -506,13 +522,19 @@ import "compiler/frontend/ast/ast_node"
 
     rhs_t = tc_check_expr(tc, val_expr)
 
+    // WHY: Struct field assignments (obj.field = expr) or array element updates (arr[i] = expr)
+    // modify properties or heap buffers rather than declaring a new scalar symbol in the current scope.
+    @if str_contains(target_name, ".") == 1 || str_contains(target_name, "[") == 1
+      return 1
+    @end
+
     sym = scope_lookup(tc.tc_scopes, target_name)
     @if sym != 0 && sym.sym_kind == SYM_KIND_FUNCTION()
       sym = scope_lookup_current(tc.tc_scopes, target_name)
     @end
 
     @if sym != 0
-      @if sym.sym_is_const == 1 && sym.sym_kind == SYM_KIND_VARIABLE()
+      @if sym.sym_is_const == 1 || sym.sym_kind == SYM_KIND_CONSTANT()
         tc_error(tc, ERR_CANNOT_ASSIGN_CONST(), "Cannot reassign to constant '" + target_name + "'", span_default())
       @end
 
@@ -659,6 +681,14 @@ import "compiler/frontend/ast/ast_node"
   @end
 
   // 6. Standalone Expression Statement
+  // WHY: Checks the underlying expression within the expression statement wrapper
+  @if str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1
+    @if stmt.expr != 0
+      tc_check_expr(tc, stmt.expr)
+    @end
+    return 1
+  @end
+
   tc_check_expr(tc, stmt)
   return 1
 @end
@@ -686,12 +716,12 @@ import "compiler/frontend/ast/ast_node"
       @end
     @end
     @if p_t_str != ""
-      @if str_eq(p_t_str, "i64") == 1    p_type_id = TYPE_ID_I64()    @end
-      @if str_eq(p_t_str, "f64") == 1    p_type_id = TYPE_ID_F64()    @end
-      @if str_eq(p_t_str, "bool") == 1   p_type_id = TYPE_ID_BOOL()   @end
-      @if str_eq(p_t_str, "string") == 1 p_type_id = TYPE_ID_STRING() @end
-      @if str_eq(p_t_str, "byte") == 1   p_type_id = TYPE_ID_BYTE()   @end
-      @if str_eq(p_t_str, "any") == 1    p_type_id = TYPE_ID_ANY()    @end
+      @if str_eq(p_t_str, "i64") == 1 || str_eq(p_t_str, "int") == 1 || str_eq(p_t_str, "i32") == 1 || str_eq(p_t_str, "u64") == 1 || str_eq(p_t_str, "u32") == 1 || str_eq(p_t_str, "সংখ্যা") == 1 || str_eq(p_t_str, "পূর্ণসংখ্যা") == 1 p_type_id = TYPE_ID_I64() @end
+      @if str_eq(p_t_str, "f64") == 1 || str_eq(p_t_str, "float") == 1 || str_eq(p_t_str, "দশমিক") == 1 p_type_id = TYPE_ID_F64() @end
+      @if str_eq(p_t_str, "bool") == 1 || str_eq(p_t_str, "boolean") == 1 || str_eq(p_t_str, "বুলিয়ান") == 1 p_type_id = TYPE_ID_BOOL() @end
+      @if str_eq(p_t_str, "string") == 1 || str_eq(p_t_str, "str") == 1 || str_eq(p_t_str, "স্ট্রিং") == 1 || str_eq(p_t_str, "বর্ণমালা") == 1 p_type_id = TYPE_ID_STRING() @end
+      @if str_eq(p_t_str, "byte") == 1 || str_eq(p_t_str, "বাইট") == 1 p_type_id = TYPE_ID_BYTE() @end
+      @if str_eq(p_t_str, "any") == 1 || str_eq(p_t_str, "যেকোনো") == 1 p_type_id = TYPE_ID_ANY() @end
       @if p_type_id == TYPE_ID_ANY()
         st_sym = symtab_get(tc.tc_symtab, p_t_str)
         @if st_sym != 0 && st_sym.sym_kind == SYM_KIND_STRUCT()
@@ -705,11 +735,12 @@ import "compiler/frontend/ast/ast_node"
 
   ret_type_id = TYPE_ID_ANY()
   @if fn_node.ret_type != ""
-    @if str_eq(fn_node.ret_type, "void") == 1   ret_type_id = TYPE_ID_VOID()   @end
-    @if str_eq(fn_node.ret_type, "i64") == 1    ret_type_id = TYPE_ID_I64()    @end
-    @if str_eq(fn_node.ret_type, "f64") == 1    ret_type_id = TYPE_ID_F64()    @end
-    @if str_eq(fn_node.ret_type, "bool") == 1   ret_type_id = TYPE_ID_BOOL()   @end
-    @if str_eq(fn_node.ret_type, "string") == 1 ret_type_id = TYPE_ID_STRING() @end
+    @if str_eq(fn_node.ret_type, "void") == 1 || str_eq(fn_node.ret_type, "শূন্য") == 1 ret_type_id = TYPE_ID_VOID() @end
+    @if str_eq(fn_node.ret_type, "i64") == 1 || str_eq(fn_node.ret_type, "int") == 1 || str_eq(fn_node.ret_type, "i32") == 1 || str_eq(fn_node.ret_type, "u64") == 1 || str_eq(fn_node.ret_type, "u32") == 1 || str_eq(fn_node.ret_type, "সংখ্যা") == 1 || str_eq(fn_node.ret_type, "পূর্ণসংখ্যা") == 1 ret_type_id = TYPE_ID_I64() @end
+    @if str_eq(fn_node.ret_type, "f64") == 1 || str_eq(fn_node.ret_type, "float") == 1 || str_eq(fn_node.ret_type, "দশমিক") == 1 ret_type_id = TYPE_ID_F64() @end
+    @if str_eq(fn_node.ret_type, "bool") == 1 || str_eq(fn_node.ret_type, "boolean") == 1 || str_eq(fn_node.ret_type, "বুলিয়ান") == 1 ret_type_id = TYPE_ID_BOOL() @end
+    @if str_eq(fn_node.ret_type, "string") == 1 || str_eq(fn_node.ret_type, "str") == 1 || str_eq(fn_node.ret_type, "স্ট্রিং") == 1 || str_eq(fn_node.ret_type, "বর্ণমালা") == 1 ret_type_id = TYPE_ID_STRING() @end
+    @if str_eq(fn_node.ret_type, "byte") == 1 || str_eq(fn_node.ret_type, "বাইট") == 1 ret_type_id = TYPE_ID_BYTE() @end
   @end
 
   fn_type_id = type_make_function(tc.tc_reg, param_types, ret_type_id)
@@ -748,8 +779,8 @@ import "compiler/frontend/ast/ast_node"
     param = fn_node.params[j]
     p_name = ""
     @if param != 0
-      p_name = param.name
-      @if len(p_name) == 0 p_name = param.param_name @end
+      p_name = param.param_name
+      @if len(p_name) == 0 p_name = param.name @end
     @end
     p_tid = TYPE_ID_ANY()
     @if j < param_types.len() p_tid = param_types[j] @end
@@ -790,13 +821,17 @@ import "compiler/frontend/ast/ast_node"
     @while i < n
       f_node = elems[i]
       f_t_id = TYPE_ID_ANY()
-      @if str_eq(f_node.ret_type, "i64") == 1    f_t_id = TYPE_ID_I64()    @end
-      @if str_eq(f_node.ret_type, "f64") == 1    f_t_id = TYPE_ID_F64()    @end
-      @if str_eq(f_node.ret_type, "bool") == 1   f_t_id = TYPE_ID_BOOL()   @end
-      @if str_eq(f_node.ret_type, "string") == 1 f_t_id = TYPE_ID_STRING() @end
-      @if str_eq(f_node.ret_type, "byte") == 1   f_t_id = TYPE_ID_BYTE()   @end
+      f_t_str = f_node.ret_type
+      @if len(f_t_str) == 0 f_t_str = f_node.field_type @end
+      @if str_eq(f_t_str, "i64") == 1 || str_eq(f_t_str, "int") == 1 || str_eq(f_t_str, "i32") == 1 || str_eq(f_t_str, "u64") == 1 || str_eq(f_t_str, "u32") == 1 || str_eq(f_t_str, "সংখ্যা") == 1 || str_eq(f_t_str, "পূর্ণসংখ্যা") == 1 f_t_id = TYPE_ID_I64() @end
+      @if str_eq(f_t_str, "f64") == 1 || str_eq(f_t_str, "float") == 1 || str_eq(f_t_str, "দশমিক") == 1 f_t_id = TYPE_ID_F64() @end
+      @if str_eq(f_t_str, "bool") == 1 || str_eq(f_t_str, "boolean") == 1 || str_eq(f_t_str, "বুলিয়ান") == 1 f_t_id = TYPE_ID_BOOL() @end
+      @if str_eq(f_t_str, "string") == 1 || str_eq(f_t_str, "str") == 1 || str_eq(f_t_str, "স্ট্রিং") == 1 || str_eq(f_t_str, "বর্ণমালা") == 1 f_t_id = TYPE_ID_STRING() @end
+      @if str_eq(f_t_str, "byte") == 1 || str_eq(f_t_str, "বাইট") == 1 f_t_id = TYPE_ID_BYTE() @end
 
-      f_def = type_make_field(f_node.name, f_t_id, 0, 8, 1)
+      f_name = f_node.name
+      @if len(f_name) == 0 f_name = f_node.field_name @end
+      f_def = type_make_field(f_name, f_t_id, 0, 8, 1)
       fields = fields.push(f_def)
       i = i + 1
     @end

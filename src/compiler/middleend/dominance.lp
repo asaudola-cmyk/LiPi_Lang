@@ -75,8 +75,17 @@ fn compute_dominators cfg
     dfs_order = list() // 1-indexed array of labels in discovery order
     push(dfs_order, "") // dummy at index 0
 
-    // Iterative DFS to avoid stack overflow on deep CFGs
-    dfs_rec(cfg, entry_label, "", dfs_counter, dfs_num_map, vertex_map, parent_map, semi_map, best_map, dfs_order)
+    // Iterative/recursive DFS using compact context list to preserve register stability
+    dom_ctx = list()
+    push(dom_ctx, dfs_counter)
+    push(dom_ctx, dfs_num_map)
+    push(dom_ctx, vertex_map)
+    push(dom_ctx, parent_map)
+    push(dom_ctx, semi_map)
+    push(dom_ctx, best_map)
+    push(dom_ctx, dfs_order)
+
+    dfs_rec(cfg, entry_label, "", dom_ctx)
 
     n = get(dfs_counter, 0)
     if n <= 1
@@ -157,7 +166,15 @@ fn compute_dominators cfg
     return idom_map
 
 // DFS helper for pre-order tree traversal
-fn dfs_rec cfg current_lbl parent_lbl dfs_counter dfs_num_map vertex_map parent_map semi_map best_map dfs_order
+fn dfs_rec cfg current_lbl parent_lbl dom_ctx
+    dfs_counter = get(dom_ctx, 0)
+    dfs_num_map = get(dom_ctx, 1)
+    vertex_map  = get(dom_ctx, 2)
+    parent_map  = get(dom_ctx, 3)
+    semi_map    = get(dom_ctx, 4)
+    best_map    = get(dom_ctx, 5)
+    dfs_order   = get(dom_ctx, 6)
+
     if ssa_map_has(dfs_num_map, current_lbl) == 1
         return 0
 
@@ -180,7 +197,7 @@ fn dfs_rec cfg current_lbl parent_lbl dfs_counter dfs_num_map vertex_map parent_
     slen = len(succs)
     while s_i < slen
         succ = get(succs, s_i)
-        dfs_rec(cfg, succ, current_lbl, dfs_counter, dfs_num_map, vertex_map, parent_map, semi_map, best_map, dfs_order)
+        dfs_rec(cfg, succ, current_lbl, dom_ctx)
         s_i = s_i + 1
     return 1
 

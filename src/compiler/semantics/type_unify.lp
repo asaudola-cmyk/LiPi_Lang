@@ -206,6 +206,16 @@ import "compiler/semantics/type_def"
   // Numeric widening: byte -> f64, i64 -> f64
   @if t_target.ty_kind == TYPE_KIND_F64() && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
 
+  // WHY: Boolean / Integer interoperability (bool evaluates to 0 or 1 in AMD64/ARM64 machine registers)
+  @if (t_target.ty_kind == TYPE_KIND_I64() || t_target.ty_kind == TYPE_KIND_BYTE()) && t_src.ty_kind == TYPE_KIND_BOOL() return 1 @end
+  @if t_target.ty_kind == TYPE_KIND_BOOL() && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
+  @if t_target.ty_kind == TYPE_KIND_F64() && t_src.ty_kind == TYPE_KIND_BOOL() return 1 @end
+
+  // WHY: Raw silicon memory interoperability: Struct references and pointers are 64-bit addresses in machine registers;
+  // allowing raw integers (such as 0 for null object references) to interoperate with struct and pointer types.
+  @if (t_target.ty_kind == TYPE_KIND_POINTER() || t_target.ty_kind == TYPE_KIND_STRUCT()) && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
+  @if (t_target.ty_kind == TYPE_KIND_I64() || t_target.ty_kind == TYPE_KIND_BYTE()) && (t_src.ty_kind == TYPE_KIND_POINTER() || t_src.ty_kind == TYPE_KIND_STRUCT()) return 1 @end
+
   // Slice coercion: Fixed array [T; N] can be passed to dynamic slice []T
   @if t_target.ty_kind == TYPE_KIND_ARRAY() && t_target.ty_array_len == -1
     @if t_src.ty_kind == TYPE_KIND_ARRAY()

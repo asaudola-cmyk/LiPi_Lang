@@ -1056,6 +1056,10 @@ import "aati/lipi_ai/tensor_core"
   @if t.ndim < 1
     return t
   @end
+  // WHY: Default scale to 1.0 to prevent division by zero when unscaled or called with default temperature.
+  @if scale <= 0.0
+    scale = 1.0
+  @end
   last_dim_size = t.shape[t.ndim - 1]
   num_slices = t.size / last_dim_size
   res_data = []

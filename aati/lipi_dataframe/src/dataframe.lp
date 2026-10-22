@@ -232,7 +232,24 @@ fn df_row_count df
     return mem_read(df, 24)
 
 // ১৩. ডেটাফ্রেম ক্লিনআপ (Free DataFrame and Column Buffers)
-fn df_free df capacity
+fn df_free df
+    // WHY: Standard 1-argument destructor for columnar DataFrames freeing column buffers and header.
+    if df <= 0
+        return 0
+    buffers = mem_read(df, 16)
+    col_count = mem_read(df, 32)
+    i = 0
+    while i < col_count
+        buf = get(buffers, i)
+        if buf > 0
+            free(buf, 1024 * 8)
+        i = i + 1
+
+    free(df, DF_HDR_SIZE)
+    return 1
+
+fn df_free_capacity df capacity
+    // WHY: Explicit-capacity destructor for custom-sized preallocated DataFrames.
     if df <= 0
         return 0
     buffers = mem_read(df, 16)

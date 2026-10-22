@@ -385,6 +385,60 @@ fn ssa_lower_instruction_x86 low inst
                 push(low.low_patches, jp_else)
         return 0
 
+    if op == OP_CALL
+        // WHY: Lowers function invocation under System V AMD64 ABI:
+        // passes up to 6 parameters in %rdi, %rsi, %rdx, %rcx, %r8, %r9.
+        arg_i = 0
+        while arg_i < inst.operands.len() and arg_i < 6
+            arg_op = inst.operands[arg_i]
+            ssa_lower_x86_load_val_to_rax(low, arg_op)
+            if arg_i == 0
+                // mov rdi, rax (0x48 0x89 0xC7)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 137)
+                ssa_lowerer_emit_byte(low, 199)
+            elif arg_i == 1
+                // mov rsi, rax (0x48 0x89 0xC6)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 137)
+                ssa_lowerer_emit_byte(low, 198)
+            elif arg_i == 2
+                // mov rdx, rax (0x48 0x89 0xC2)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 137)
+                ssa_lowerer_emit_byte(low, 194)
+            elif arg_i == 3
+                // mov rcx, rax (0x48 0x89 0xC1)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 137)
+                ssa_lowerer_emit_byte(low, 193)
+            elif arg_i == 4
+                // mov r8, rax (0x49 0x89 0xC0)
+                ssa_lowerer_emit_byte(low, 73)
+                ssa_lowerer_emit_byte(low, 137)
+                ssa_lowerer_emit_byte(low, 192)
+            elif arg_i == 5
+                // mov r9, rax (0x49 0x89 0xC1)
+                ssa_lowerer_emit_byte(low, 73)
+                ssa_lowerer_emit_byte(low, 137)
+                ssa_lowerer_emit_byte(low, 193)
+            end
+            arg_i = arg_i + 1
+        end
+        // Emit call rel32 (0xE8, disp32)
+        ssa_lowerer_emit_byte(low, 232)
+        patch_call = low.low_code.len()
+        ssa_lowerer_emit_u32(low, 0)
+        jp_call = SsaJumpPatch()
+        jp_call.sjp_offset = patch_call
+        jp_call.sjp_target = inst.extra_str
+        jp_call.sjp_kind = 10
+        push(low.low_patches, jp_call)
+        if inst.result != 0
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
     if op == OP_RET
         // ret %val
         if inst.operands.len() >= 1
@@ -402,13 +456,26 @@ fn ssa_lowerer_resolve_jumps low
     while pi < low.low_patches.len()
         patch = low.low_patches[pi]
         tgt_offset = 0 - 1
-        bi = 0
-        while bi < low.low_blocks.len()
-            b = low.low_blocks[bi]
-            if b.sbo_label == patch.sjp_target
-                tgt_offset = b.sbo_offset
-                break
-            bi = bi + 1
+        if patch.sjp_kind == 10
+            fi = 0
+            while fi < low.low_fn_names.len()
+                if low.low_fn_names[fi] == patch.sjp_target
+                    tgt_offset = low.low_fn_offsets[fi]
+                    break
+                end
+                fi = fi + 1
+            end
+        else
+            bi = 0
+            while bi < low.low_blocks.len()
+                b = low.low_blocks[bi]
+                if b.sbo_label == patch.sjp_target
+                    tgt_offset = b.sbo_offset
+                    break
+                end
+                bi = bi + 1
+            end
+        end
 
         if tgt_offset >= 0
             // Relative displacement from end of jump instruction

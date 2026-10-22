@@ -255,7 +255,7 @@ import "compiler/frontend/ast/ast_node"
     @if str_eq(fn_name, "str_eq") == 1 || str_eq(fn_name, "str_starts_with") == 1 || str_eq(fn_name, "str_ends_with") == 1
       return TYPE_ID_BOOL()
     @end
-    @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1
+    @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলো") == 1 || str_eq(fn_name, "দেখাও") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1
       return TYPE_ID_VOID()
     @end
 

@@ -26,6 +26,9 @@ import "compiler/frontend/ast/ast_node"
 @struct ASTParam
   param_name: string
   param_type: string
+  name: string
+  type_name: string
+  ret_type: string
   param_default: ASTNode
   param_span: SourceSpan
 @end
@@ -65,17 +68,18 @@ import "compiler/frontend/ast/ast_node"
 
 // ── 2. Descriptor Constructors ───────────────────────────────────────────────
 
-@fn ast_param_new(name: string, type_name: string, default_val: ASTNode, span: SourceSpan)
-  // WHY: Allocates parameter specification with name, type constraint, and optional default
-  return {
-    name: name,
-    param_name: name,
-    type_name: type_name,
-    param_type: type_name,
-    ret_type: type_name,
-    param_default: default_val,
-    param_span: span
-  }
+// WHY: default_val is typed as 'any' to accept both ASTNode default expressions and scalar 0 (null sentinel)
+@fn ast_param_new(name: string, type_name: string, default_val: any, span: SourceSpan)
+  // WHY: Allocates typed ASTParam descriptor with exact layout matching @struct ASTParam
+  p = ASTParam()
+  p.param_name = name
+  p.param_type = type_name
+  p.name = name
+  p.type_name = type_name
+  p.ret_type = type_name
+  p.param_default = default_val
+  p.param_span = span
+  return p
 @end
 
 @fn ast_param(name, type_name, default_val)
@@ -83,7 +87,7 @@ import "compiler/frontend/ast/ast_node"
   return ast_param_new(name, type_name, default_val, source_span_zero())
 @end
 
-@fn ast_field_new(name: string, type_name: string, default_val: ASTNode, index: i64, span: SourceSpan)
+@fn ast_field_new(name: string, type_name: string, default_val: any, index: i64, span: SourceSpan)
   // WHY: Allocates struct field specification with hardware field offset index
   return {
     field_name: name,

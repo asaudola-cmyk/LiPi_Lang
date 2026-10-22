@@ -36,7 +36,9 @@ import "aati/lipi_ai/autodiff"
   return tensor_new(arr, [r, c])
 @end
 
-@fn tensor_ones(r, c)
+@fn llm_tensor_ones(r, c)
+  // WHY: Allocates 2D tensor of ones for transformer weight initializations (RMSNorm, LayerNorm).
+  // Named llm_tensor_ones to eliminate symbol collision with 1-arg tensor_ones(shape: array) in tensor_core.lp.
   arr = []
   i = 0
   total = r * c
@@ -55,13 +57,16 @@ import "aati/lipi_ai/autodiff"
   return {
     dim: dim,
     eps: eps,
-    weight: tensor_ones(1, dim)
+    weight: llm_tensor_ones(1, dim)
   }
 @end
 
 @fn rmsnorm_forward(norm, x)
-  @! RMSNorm(x) = x / sqrt(mean(x^2) + eps) * weight
-  sum_sq = 0.0
+  // WHY: Normalizes activations using Root Mean Square (RMS) normalization:
+  // RMSNorm(x) = (x / sqrt(mean(x^2) + eps)) * weight.
+  // Uses fixed-point scaling factor of 1000 to maintain 3 decimal places of precision
+  // under 64-bit integer arithmetic without truncation to zero.
+  sum_sq = 0
   i = 0
   x_len = x.data.len()
   @while i < x_len
@@ -70,13 +75,17 @@ import "aati/lipi_ai/autodiff"
     i = i + 1
   @end
   
-  mean_sq = sum_sq / (x_len * 1.0)
-  rms = 1.0 / (mean_sq + norm.eps)
+  mean_sq = sum_sq / x_len
+  denom = math_sqrt(mean_sq + norm.eps)
+  @if denom <= 0
+    denom = 1
+  @end
   
   out_data = []
   i = 0
   @while i < x_len
-    out_data = out_data.push(x.data[i] * rms)
+    norm_val = (x.data[i] * 1000) / denom
+    out_data = out_data.push(norm_val)
     i = i + 1
   @end
   
@@ -87,7 +96,7 @@ import "aati/lipi_ai/autodiff"
   return {
     dim: dim,
     eps: eps,
-    gamma: tensor_ones(1, dim),
+    gamma: llm_tensor_ones(1, dim),
     beta: llm_tensor_zeros(1, dim)
   }
 @end
@@ -109,8 +118,8 @@ import "aati/lipi_ai/autodiff"
     var_sum = var_sum + (diff * diff)
     i = i + 1
   @end
-  var = var_sum / (x_len * 1.0)
-  inv_std = 1.0 / (var + norm.eps)
+  variance = var_sum / (x_len * 1.0)
+  inv_std = 1.0 / (variance + norm.eps)
   
   out = []
   i = 0
@@ -126,9 +135,112 @@ import "aati/lipi_ai/autodiff"
 @! 3. ROTARY POSITIONAL EMBEDDINGS (RoPE)
 @! ----------------------------------------------------------------------------
 
+@fn rope_math_sin_cos(rad)
+  // WHY: Computes trigonometric sine and cosine for rotary positional embeddings scaled by 1000.
+  // Uses Bhaskara I rational trigonometry with 1000-scale fixed-point precision to avoid integer
+  // underflow and deliver accurate rotation coordinates.
+  @if rad == 0
+    return { sin: 0, cos: 1000 }
+  @end
+  deg = rad * 57
+  d = deg % 360
+  @if d < 0
+    d = d + 360
+  @end
+  sign = 1
+  @if d > 180
+    sign = 0 - 1
+    d = d - 180
+  @end
+  @if d > 90
+    d = 180 - d
+  @end
+  term = d * (180 - d)
+  denom = 40500 - term
+  s = 0
+  @if denom != 0
+    s = ((4 * term * 1000) / denom) * sign
+  @end
+
+  // Cosine via cos(theta) = sin(theta + 90 deg)
+  deg_c = (rad * 57) + 90
+  d_c = deg_c % 360
+  @if d_c < 0
+    d_c = d_c + 360
+  @end
+  sign_c = 1
+  @if d_c > 180
+    sign_c = 0 - 1
+    d_c = d_c - 180
+  @end
+  @if d_c > 90
+    d_c = 180 - d_c
+  @end
+  term_c = d_c * (180 - d_c)
+  denom_c = 40500 - term_c
+  c = 0
+  @if denom_c != 0
+    c = ((4 * term_c * 1000) / denom_c) * sign_c
+  @end
+  return { sin: s, cos: c }
+@end
+
+@fn rope_apply_tensor(t, seq_pos, head_dim)
+  // WHY: Rotates pairs of head coordinates (x_{2i}, x_{2i+1}) by angle alpha = seq_pos * theta_i
+  // where theta_i = base^(-2i / d) with standard base = 10000.0.
+  // Performs 2D rotary embedding matrix multiplication with 1000-scale fixed-point precision:
+  // [x_{2i}', x_{2i+1}'] = [x_{2i}*cos - x_{2i+1}*sin, x_{2i}*sin + x_{2i+1}*cos] / 1000
+  @if t == 0 return 0 @end
+  @if head_dim <= 1 return t @end
+
+  t_data = t.data
+  total_len = t_data.len()
+  out_data = []
+  idx = 0
+  @while idx < total_len
+    out_data = out_data.push(t_data[idx])
+    idx = idx + 1
+  @end
+
+  half_dim = head_dim / 2
+  chunk_start = 0
+  @while chunk_start < total_len
+    i = 0
+    @while i < half_dim
+      // theta_i frequency approximation: base = 10000.0, exponent = -2.0 * i / head_dim
+      freq = 1.0 / (1.0 + ((i * 10000.0) / (half_dim * 1.0)))
+      angle = (seq_pos * 1.0) * freq
+      trig = rope_math_sin_cos(angle)
+      sin_val = trig.sin
+      cos_val = trig.cos
+
+      idx0 = chunk_start + (i * 2)
+      idx1 = idx0 + 1
+      @if idx1 < total_len
+        x0 = t_data[idx0]
+        x1 = t_data[idx1]
+        rot0 = ((x0 * cos_val) - (x1 * sin_val)) / 1000
+        rot1 = ((x0 * sin_val) + (x1 * cos_val)) / 1000
+        out_data = list_set(out_data, idx0, rot0)
+        out_data = list_set(out_data, idx1, rot1)
+      @end
+      i = i + 1
+    @end
+    chunk_start = chunk_start + head_dim
+  @end
+
+  return tensor_new(out_data, t.shape)
+@end
+
 @fn rope_apply(q, k, seq_pos, head_dim)
-  @! Apply rotary rotation to Q and K tensors
-  return { q: q, k: k }
+  // WHY: Applies rotary positional embeddings (RoPE) to query and key projection tensors.
+  // Rotates vector pairs in complex plane according to token sequence position.
+  @if q == 0 || k == 0
+    return { q: q, k: k }
+  @end
+  new_q = rope_apply_tensor(q, seq_pos, head_dim)
+  new_k = rope_apply_tensor(k, seq_pos, head_dim)
+  return { q: new_q, k: new_k }
 @end
 
 @! ----------------------------------------------------------------------------
@@ -155,7 +267,7 @@ import "aati/lipi_ai/autodiff"
   
   k_t = tensor_new([k.data[0], k.data[2], k.data[1], k.data[3]], [2, 2])
   scores = tensor_matmul_2x2(q, k_t)
-  attn_weights = tensor_softmax(scores)
+  attn_weights = tensor_softmax(scores, 1.0)
   out = tensor_matmul_2x2(attn_weights, v)
   final_out = tensor_matmul_2x2(out, layer.w_o)
   return final_out
@@ -172,7 +284,7 @@ import "aati/lipi_ai/autodiff"
   
   k_t = tensor_new([k.data[0], k.data[2], k.data[1], k.data[3]], [2, 2])
   scores = tensor_matmul_2x2(q, k_t)
-  attn_weights = tensor_softmax(scores)
+  attn_weights = tensor_softmax(scores, 1.0)
   out = tensor_matmul_2x2(attn_weights, v)
   final_out = tensor_matmul_2x2(out, layer.w_o)
   
@@ -343,7 +455,7 @@ import "aati/lipi_ai/autodiff"
   x_len = logits.data.len()
   
   @! Softmax to get probabilities
-  probs = tensor_softmax(logits)
+  probs = tensor_softmax(logits, 1.0)
   
   vals = []
   i = 0

@@ -496,12 +496,18 @@ fn x86_synth_expr_primary s toks pos_box
                     // Pop arguments in reverse into LiPi 12-register calling convention
                     x86_synth_emit_pop_args(s, arg_count)
 
-                    var_off = x86_synth_lookup_var(s, var_name)
-                    if var_off > 0
+                    lv_fn = x86_synth_find_local_var(s, var_name)
+                    if lv_fn != 0 and lv_fn.lv_is_spilled == 0 and lv_fn.lv_reg >= 0
+                        // WHY: Function pointer held in physical register; move directly to %rax and invoke.
+                        x86_synth_emit_mov_reg_reg(s, 0, lv_fn.lv_reg)
+                        x86_synth_emit_byte(s, 255) // call rax (0xFF 0xD0)
+                        x86_synth_emit_byte(s, 208)
+                        s.synth_last_expr_type = ""
+                    elif lv_fn != 0 and lv_fn.lv_offset > 0
                         // WHY: Indirect Function Call / Callback:
-                        // The callee is a function pointer stored in a local variable (e.g. f(x), pred(x)).
-                        // Load function pointer from [rbp - var_off] into %rax and call dynamically.
-                        x86_synth_emit_load_var(s, 0, var_off)
+                        // The callee is a function pointer stored in a local stack slot (e.g. callback parameter f or pred).
+                        // Load function pointer from [rbp - lv_offset] into %rax and call dynamically.
+                        x86_synth_emit_load_var(s, 0, lv_fn.lv_offset)
                         x86_synth_emit_byte(s, 255) // call rax (0xFF 0xD0)
                         x86_synth_emit_byte(s, 208)
                         s.synth_last_expr_type = ""
@@ -529,6 +535,7 @@ fn x86_synth_expr_primary s toks pos_box
                         else
                             s.synth_last_struct = ""
                         end
+                    end
         else
             // Plain variable load
             lv = x86_synth_find_local_var(s, var_name)

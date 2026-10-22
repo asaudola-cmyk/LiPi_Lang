@@ -63,7 +63,7 @@ assert_eq(df_row_count(filtered_df), 3, "Filtered row count is 3 (3.5k, 4.5k, 5.
 assert_eq(df_get(filtered_df, 0, 1), 3500, "First filtered row is 3500")
 assert_eq(df_get(filtered_df, 2, 1), 5500, "Last filtered row is 5500")
 
-df_free(filtered_df, 10)
-df_free(df, 100)
+df_free_capacity(filtered_df, 10)
+df_free_capacity(df, 100)
 
 say "🎉 ALL COLUMNAR DATAFRAME TESTS PASSED!"

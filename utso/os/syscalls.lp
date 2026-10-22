@@ -907,7 +907,13 @@ import "utso/core/string"
   return syscall(9, 0, size, 3, 34, 0 - 1, 0)
 @end
 
-@fn lipi_free(ptr, size)
+@fn lipi_free(ptr)
+  // WHY: Default 1-argument runtime free primitive releasing allocated buffer with standard page size.
+  return syscall(11, ptr, 4096, 0, 0, 0, 0)
+@end
+
+@fn lipi_free_sized(ptr, size)
+  // WHY: Sized memory unmapping helper delegating to Linux SYS_munmap (syscall 11).
   return syscall(11, ptr, size, 0, 0, 0, 0)
 @end
 

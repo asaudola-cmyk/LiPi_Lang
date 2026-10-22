@@ -101,9 +101,12 @@ import "utso/os/syscalls"
 
 @fn tcp_bind(sockfd, host, port)
   @if sockfd < 0 return -1 @end
-  @! Enable SO_REUSEADDR
-  optval = { val: 1 }
-  sys_setsockopt(sockfd, 1, 2, optval, 4)
+  @! Enable SO_REUSEADDR (2) & SO_REUSEPORT (15)
+  opt_buf = lipi_alloc(8)
+  sys_poke32(opt_buf, 1)
+  sys_setsockopt(sockfd, 1, 2, opt_buf, 4)
+  sys_setsockopt(sockfd, 1, 15, opt_buf, 4)
+  lipi_free(opt_buf)
 
   addr = sockaddr_in_pack(host, port)
   res = sys_bind(sockfd, addr, 16)

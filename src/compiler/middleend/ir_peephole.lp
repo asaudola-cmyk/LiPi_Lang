@@ -14,6 +14,34 @@ import "compiler/backend/lipi_ir"
 import "utso/collections"
 import "utso/string"
 
+// ── ০. আইআর নির্দেশনার গঠন (IR Instruction Structure) ─────────────────────────
+@struct IRInst
+  inst_op: string
+  dest: string
+  inst_type: i64
+  op: string
+  left: i64
+  right: i64
+  ptr: i64
+  inst_val: i64
+  target: i64
+  cond: i64
+  true_target: i64
+  false_target: i64
+  nr: i64
+  stride: i64
+  args: any
+  incoming: any
+  is_terminator: i64
+  cmp_op: string
+  align: i64
+  inst_elem_type: i64
+  target_label: string
+  then_label: string
+  else_label: string
+  callee: string
+@end
+
 // ── ১. স্ট্রিং তুলনা হেল্পার (Safe String Equality) ───────────────────────────
 @fn ir_opt_str_eq(s1: string, s2: string) -> i64
   @if s1 == s2 return 1 @end
@@ -48,6 +76,7 @@ import "utso/string"
   op = inst.op
   @if op == 0 op = inst.inst_op @end
   @if op == 0 return inst @end
+
   
   // Rule 1: Addition with zero: x + 0 -> x, 0 + x -> x
   @if ir_opt_str_eq(op, "+") == 1 || ir_opt_str_eq(op, "ADD") == 1

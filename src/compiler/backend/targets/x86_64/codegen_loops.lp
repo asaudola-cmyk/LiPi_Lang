@@ -16,11 +16,14 @@
 //    - Avoids stack spilling for induction counters and ensures 1-cycle ALU additions.
 // ==============================================================================
 
-fn x86_synth_try_fold_for_residue s var_name end_off toks body_start body_end
+fn x86_synth_try_fold_for_residue s var_name end_off start_is_one toks body_start body_end
     // WHY: Detects if loop body is of the form:
     //      acc = acc + (var % K)
     // where var matches the induction variable and K is a positive constant integer.
     // If detected, emits O(1) closed-form arithmetic in ~5 CPU cycles instead of O(N) iterations.
+    // Verifies start_is_one == 1 to preserve exact arithmetic for arbitrary ranges [start..end].
+    if start_is_one != 1
+        return 0
     p = body_start
     if p >= body_end
         return 0
@@ -161,17 +164,23 @@ fn x86_synth_try_fold_for_residue s var_name end_off toks body_start body_end
     x86_synth_emit_byte(s, 1)
     x86_synth_emit_byte(s, 200)
 
-    // Add to initial acc: mov rbx, [rbp - acc_off]; add rax, rbx
-    x86_synth_emit_load_var(s, 3, acc_off) // load to rbx
-    x86_synth_emit_byte(s, 72)
-    x86_synth_emit_byte(s, 1)
-    x86_synth_emit_byte(s, 216) // add rax, rbx
-
-    // Store new acc: mov [rbp - acc_off], rax
-    x86_synth_emit_store_var(s, 0, acc_off)
+    // Add to initial acc: mov rcx, [rbp - acc_off]; add rax, rcx
     lv_acc = x86_synth_find_local_var(s, acc_name)
     if lv_acc != 0 and lv_acc.lv_is_spilled == 0 and lv_acc.lv_reg >= 0
+        // WHY: Accumulator resides in physical register; perform ALU using caller-saved %rcx scratch register
+        // to avoid clobbering %rbx which may be allocated to another local variable.
+        x86_synth_emit_mov_reg_reg(s, 1, lv_acc.lv_reg) // load to rcx
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 1)
+        x86_synth_emit_byte(s, 200) // add rax, rcx
         x86_synth_emit_mov_reg_reg(s, lv_acc.lv_reg, 0)
+        x86_synth_emit_store_var(s, 0, acc_off)
+    else
+        x86_synth_emit_load_var(s, 1, acc_off) // load to rcx
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 1)
+        x86_synth_emit_byte(s, 200) // add rax, rcx
+        x86_synth_emit_store_var(s, 0, acc_off)
     end
 
     // Update induction variable to N + 1:
@@ -179,10 +188,12 @@ fn x86_synth_try_fold_for_residue s var_name end_off toks body_start body_end
     x86_synth_emit_byte(s, 72)
     x86_synth_emit_byte(s, 255)
     x86_synth_emit_byte(s, 192) // inc rax
-    x86_synth_emit_store_var(s, 0, var_off)
     lv_var = x86_synth_find_local_var(s, var_name)
     if lv_var != 0 and lv_var.lv_is_spilled == 0 and lv_var.lv_reg >= 0
         x86_synth_emit_mov_reg_reg(s, lv_var.lv_reg, 0)
+        x86_synth_emit_store_var(s, 0, var_off)
+    else
+        x86_synth_emit_store_var(s, 0, var_off)
     end
 
     // Backpatch skip jump
@@ -201,6 +212,8 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
     push(s.synth_loop_starts, loop_header)
     loop_brks = list()
     push(s.synth_loop_breaks, loop_brks)
+    loop_conts = list()
+    push(s.synth_loop_continues, loop_conts)
 
     // Evaluate condition into %rax
     x86_synth_compile_expr(s, toks, pos_box)
@@ -246,6 +259,14 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
         if x86_synth_is_block_end(toks, cur_p) == 1
             list_set(pos_box, 0, cur_p + 1)
 
+    // Backpatch all continue jumps to loop_header (condition re-evaluation)
+    ci = 0
+    while ci < loop_conts.len()
+        cont_patch = loop_conts[ci]
+        c_rel32 = loop_header - (cont_patch + 4)
+        x86_synth_patch_u32(s, cont_patch, c_rel32)
+        ci = ci + 1
+
     // Emit backward jump to loop_header: jmp rel32 (0xE9 disp32)
     x86_synth_emit_byte(s, 233)
     next_ip = s.synth_code.len() + 4
@@ -267,32 +288,64 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
 
     s.synth_loop_starts = pop(s.synth_loop_starts)
     s.synth_loop_breaks = pop(s.synth_loop_breaks)
+    s.synth_loop_continues = pop(s.synth_loop_continues)
     return 0
 
 fn x86_synth_compile_for s toks pos_box base_col base_line
     // WHY: Dedicated For Loop Synthesizer with Closed-Form Recurrence Folding
     // and Register-Pinned Induction variable acceleration.
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
     var_tok = toks[get(pos_box, 0)]
     var_name = var_tok.tok_text
     list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume var_name
 
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
     // Consume 'in' or 'মধ্যে' if present
     if get(pos_box, 0) < toks.len()
         in_t = toks[get(pos_box, 0)]
         if in_t.tok_kind == TOK_KW_IN() or (in_t.tok_kind == TOK_IDENT() and (in_t.tok_text == "in" or in_t.tok_text == "মধ্যে"))
             list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+    end
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+
+    // Inspect start expression to check if it is constant 1
+    start_is_one = 0
+    start_p = get(pos_box, 0)
+    if start_p < toks.len()
+        stk = toks[start_p]
+        if stk.tok_kind == TOK_INT() and stk.tok_int_val == 1
+            peek_p = start_p + 1
+            while peek_p < toks.len()
+                ptk = toks[peek_p]
+                if ptk.tok_kind == TOK_NEWLINE() or ptk.tok_kind == TOK_SEMI() or ptk.tok_kind == TOK_COMMENT_LINE() or ptk.tok_kind == TOK_COMMENT_BLOCK()
+                    peek_p = peek_p + 1
+                else
+                    break
+                end
+            end
+            if peek_p < toks.len()
+                ntk = toks[peek_p]
+                if ntk.tok_kind == TOK_DOTDOT() or (ntk.tok_kind != TOK_STR() and ntk.tok_text == "..")
+                    start_is_one = 1
+                end
+            end
+        end
+    end
 
     // Compile start expression into %rax
     x86_synth_compile_expr(s, toks, pos_box)
-    var_off = x86_synth_alloc_var(s, var_name)
-    x86_synth_emit_store_var(s, 0, var_off)
+    // WHY: Use x86_synth_bind_reg_var with register hint 1 to assign callee-saved register (%r12-%r15, %rbx)
+    var_off = x86_synth_bind_reg_var(s, var_name, 1)
     x86_synth_set_prim_type(s, var_name, "int")
 
     // Consume '..' if present
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
     if get(pos_box, 0) < toks.len()
         dot_t = toks[get(pos_box, 0)]
         if dot_t.tok_kind == TOK_DOTDOT() or (dot_t.tok_kind != TOK_STR() and dot_t.tok_text == "..")
             list_set(pos_box, 0, get(pos_box, 0) + 1)
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
 
     // Compile end expression into %rax
     x86_synth_compile_expr(s, toks, pos_box)
@@ -316,7 +369,7 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
     body_end_p = scan_p
 
     // Attempt Sovereign Closed-Form Recurrence Folding
-    folded = x86_synth_try_fold_for_residue(s, var_name, end_off, toks, body_start_p, body_end_p)
+    folded = x86_synth_try_fold_for_residue(s, var_name, end_off, start_is_one, toks, body_start_p, body_end_p)
     if folded == 1
         // Skip past the folded body tokens
         list_set(pos_box, 0, body_end_p)
@@ -332,9 +385,17 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
     push(s.synth_loop_starts, loop_header)
     loop_brks = list()
     push(s.synth_loop_breaks, loop_brks)
+    loop_conts = list()
+    push(s.synth_loop_continues, loop_conts)
 
     // Compare var and end: mov rax, [rbp - var_off]; cmp rax, [rbp - end_off]
-    x86_synth_emit_load_var(s, 0, var_off)
+    lv_var = x86_synth_find_local_var(s, var_name)
+    if lv_var != 0 and lv_var.lv_is_spilled == 0 and lv_var.lv_reg >= 0
+        // WHY: Induction variable is held in physical register; read directly without stack load
+        x86_synth_emit_mov_reg_reg(s, 0, lv_var.lv_reg)
+    else
+        x86_synth_emit_load_var(s, 0, var_off)
+    end
 
     // cmp rax, [rbp - end_off]
     if end_off <= 128
@@ -386,12 +447,38 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
         if x86_synth_is_block_end(toks, cur_p) == 1
             list_set(pos_box, 0, cur_p + 1)
 
-    // Increment var: mov rax, [rbp - var_off]; inc rax; mov [rbp - var_off], rax
-    x86_synth_emit_load_var(s, 0, var_off)
-    x86_synth_emit_byte(s, 72)
-    x86_synth_emit_byte(s, 255)
-    x86_synth_emit_byte(s, 192) // inc rax
-    x86_synth_emit_store_var(s, 0, var_off)
+    // Loop latch: backpatch continue jumps to latch offset (variable increment)
+    latch_off = s.synth_code.len()
+    ci = 0
+    while ci < loop_conts.len()
+        cont_patch = loop_conts[ci]
+        c_rel32 = latch_off - (cont_patch + 4)
+        x86_synth_patch_u32(s, cont_patch, c_rel32)
+        ci = ci + 1
+    end
+
+    // Increment var: direct 1-cycle in-register inc r64 for unspilled registers, or stack load/inc/store
+    lv_var = x86_synth_find_local_var(s, var_name)
+    if lv_var != 0 and lv_var.lv_is_spilled == 0 and lv_var.lv_reg >= 0
+        // WHY: Direct 1-cycle AMD64 in-register inc r64 (REX.W 0xFF 0xC0+r) eliminates 9-byte stack round-trip.
+        if lv_var.lv_reg < 8
+            x86_synth_emit_byte(s, 72) // REX.W (0x48)
+            x86_synth_emit_byte(s, 255) // 0xFF
+            x86_synth_emit_byte(s, 192 + lv_var.lv_reg) // 0xC0 + reg
+        else
+            x86_synth_emit_byte(s, 73) // REX.W | REX.B (0x49)
+            x86_synth_emit_byte(s, 255) // 0xFF
+            x86_synth_emit_byte(s, 192 + (lv_var.lv_reg - 8)) // 0xC0 + (reg - 8)
+        end
+        x86_synth_emit_mov_reg_reg(s, 0, lv_var.lv_reg)
+        x86_synth_emit_store_var(s, 0, var_off)
+    else
+        x86_synth_emit_load_var(s, 0, var_off)
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 255)
+        x86_synth_emit_byte(s, 192) // inc rax
+        x86_synth_emit_store_var(s, 0, var_off)
+    end
 
     // jmp loop_header
     x86_synth_emit_byte(s, 233)
@@ -411,7 +498,171 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
         b_rel32 = loop_exit_off - (brk_patch + 4)
         x86_synth_patch_u32(s, brk_patch, b_rel32)
         bi = bi + 1
+    end
 
     s.synth_loop_starts = pop(s.synth_loop_starts)
     s.synth_loop_breaks = pop(s.synth_loop_breaks)
+    s.synth_loop_continues = pop(s.synth_loop_continues)
+    return 0
+
+fn x86_synth_compile_repeat s toks pos_box base_col base_line
+    // WHY: Dedicated Repeat Loop Synthesizer: executes loop body N times.
+    // Allocates unique counter variable initialized to 0 and limit variable holding count.
+    rep_id = s.synth_code.len()
+    cnt_var = "__rep_cnt_" + str(rep_id)
+    lim_var = "__rep_lim_" + str(rep_id)
+
+    // Evaluate count expression into %rax
+    x86_synth_compile_expr(s, toks, pos_box)
+    lim_off = x86_synth_alloc_var(s, lim_var)
+    x86_synth_emit_store_var(s, 0, lim_off)
+    x86_synth_set_prim_type(s, lim_var, "int")
+
+    // Initialize counter to 0 with register hint for direct inc r64 execution
+    cnt_off = x86_synth_alloc_reg_var(s, cnt_var, 1)
+    x86_synth_emit_mov_rax_imm64(s, 0)
+    lv_cnt = x86_synth_find_local_var(s, cnt_var)
+    if lv_cnt != 0 and lv_cnt.lv_is_spilled == 0 and lv_cnt.lv_reg >= 0
+        x86_synth_emit_mov_reg_reg(s, lv_cnt.lv_reg, 0)
+    end
+    x86_synth_emit_store_var(s, 0, cnt_off)
+    x86_synth_set_prim_type(s, cnt_var, "int")
+
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+
+    loop_header = s.synth_code.len()
+    push(s.synth_loop_starts, loop_header)
+    loop_brks = list()
+    push(s.synth_loop_breaks, loop_brks)
+    loop_conts = list()
+    push(s.synth_loop_continues, loop_conts)
+
+    // Compare counter with limit: load cnt into %rax; cmp rax, [rbp - lim_off]
+    lv_cnt = x86_synth_find_local_var(s, cnt_var)
+    if lv_cnt != 0 and lv_cnt.lv_is_spilled == 0 and lv_cnt.lv_reg >= 0
+        // WHY: Counter resides in physical register; read directly without stack load
+        x86_synth_emit_mov_reg_reg(s, 0, lv_cnt.lv_reg)
+    else
+        x86_synth_emit_load_var(s, 0, cnt_off)
+    end
+    if lim_off <= 128
+        disp8 = (256 - (lim_off % 256)) % 256
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 59)
+        x86_synth_emit_byte(s, 69)
+        x86_synth_emit_byte(s, disp8)
+    else
+        disp32 = 0 - lim_off
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 59)
+        x86_synth_emit_byte(s, 133)
+        x86_synth_emit_u32(s, disp32)
+    end
+
+    // jge loop_exit (0x0F 0x8D disp32) — run while counter < limit
+    x86_synth_emit_byte(s, 15)
+    x86_synth_emit_byte(s, 141)
+    patch_loop_exit = s.synth_code.len()
+    x86_synth_emit_u32(s, 0)
+
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+
+    // Compile repeat body statements
+    while get(pos_box, 0) < toks.len()
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cur_p = get(pos_box, 0)
+        if cur_p >= toks.len()
+            break
+        end
+        cur_t = toks[cur_p]
+
+        if x86_synth_is_block_end(toks, cur_p) == 1
+            break
+        end
+        if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+            break
+        end
+
+        b_p = get(pos_box, 0)
+        x86_synth_compile_statement(s, toks, pos_box)
+        if get(pos_box, 0) == b_p
+            list_set(pos_box, 0, b_p + 1)
+        end
+
+        if cur_t.tok_span.span_start_line == base_line
+            break
+        end
+    end
+
+    // Consume optional end / @end / শেষ
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    cur_p = get(pos_box, 0)
+    if cur_p < toks.len()
+        if x86_synth_is_block_end(toks, cur_p) == 1
+            list_set(pos_box, 0, cur_p + 1)
+        end
+    end
+
+    // Loop latch: backpatch continue jumps to latch offset (counter increment)
+    latch_off = s.synth_code.len()
+    ci = 0
+    while ci < loop_conts.len()
+        cont_patch = loop_conts[ci]
+        c_rel32 = latch_off - (cont_patch + 4)
+        x86_synth_patch_u32(s, cont_patch, c_rel32)
+        ci = ci + 1
+    end
+
+    // Increment counter: direct in-register inc r64 if unspilled, or stack load/inc/store
+    lv_cnt = x86_synth_find_local_var(s, cnt_var)
+    if lv_cnt != 0 and lv_cnt.lv_is_spilled == 0 and lv_cnt.lv_reg >= 0
+        // WHY: Direct in-register inc eliminates stack load/store on each repeat loop iteration.
+        if lv_cnt.lv_reg < 8
+            x86_synth_emit_byte(s, 72)
+            x86_synth_emit_byte(s, 255)
+            x86_synth_emit_byte(s, 192 + lv_cnt.lv_reg)
+        else
+            x86_synth_emit_byte(s, 73)
+            x86_synth_emit_byte(s, 255)
+            x86_synth_emit_byte(s, 192 + (lv_cnt.lv_reg - 8))
+        end
+        // WHY: Synchronize stack slot with register to guarantee stack consistency
+        x86_synth_emit_mov_reg_reg(s, 0, lv_cnt.lv_reg)
+        x86_synth_emit_store_var(s, 0, cnt_off)
+    else
+        x86_synth_emit_load_var(s, 0, cnt_off)
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 255)
+        x86_synth_emit_byte(s, 192) // inc rax
+        x86_synth_emit_store_var(s, 0, cnt_off)
+    end
+
+    // jmp loop_header
+    x86_synth_emit_byte(s, 233)
+    next_ip = s.synth_code.len() + 4
+    disp32 = loop_header - next_ip
+    x86_synth_emit_u32(s, disp32)
+
+    // Backpatch loop_exit
+    loop_exit_off = s.synth_code.len()
+    rel32 = loop_exit_off - (patch_loop_exit + 4)
+    x86_synth_patch_u32(s, patch_loop_exit, rel32)
+
+    // Backpatch breaks
+    bi = 0
+    while bi < loop_brks.len()
+        brk_patch = loop_brks[bi]
+        b_rel32 = loop_exit_off - (brk_patch + 4)
+        x86_synth_patch_u32(s, brk_patch, b_rel32)
+        bi = bi + 1
+    end
+
+    s.synth_loop_starts = pop(s.synth_loop_starts)
+    s.synth_loop_breaks = pop(s.synth_loop_breaks)
+    s.synth_loop_continues = pop(s.synth_loop_continues)
+    // WHY: Release hardware register allocated to internal loop temporary so subsequent loops can use it
+    if lv_cnt != 0
+        lv_cnt.lv_is_spilled = 1
+        lv_cnt.lv_reg = 0 - 1
+    end
     return 0

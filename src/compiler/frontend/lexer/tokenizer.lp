@@ -48,7 +48,7 @@ import "compiler/frontend/lexer/comment_doc"
   // 3. Conditionals & Branching
   @if text == "if" || text == "যদি" return TOK_KW_IF() @end
   @if text == "elif" || text == "নাহলে_যদি" || text == "নতুবা_যদি" return TOK_KW_ELIF() @end
-  @if text == "else" || text == "নাহলে" || text == "অন্যথায়" return TOK_KW_ELSE() @end
+  @if text == "else" || text == "নাহলে" || text == "অন্যথায়" || text == "নতুবা" return TOK_KW_ELSE() @end
 
   // 4. Loops & Iteration
   @if text == "while" || text == "যতক্ষণ" return TOK_KW_WHILE() @end

@@ -71,6 +71,7 @@ struct X86Synthesizer
     synth_print_int_off // Byte offset where print_int helper is located
     synth_loop_starts   // Stack of loop header byte offsets for 'continue'
     synth_loop_breaks   // Stack of lists of break patch offsets
+    synth_loop_continues // Stack of lists of continue patch offsets
     synth_structs       // List of X86StructDef structs
     synth_global_fields // List of global field name strings
     synth_needs_alloc   // Flag: 1 if bump allocator helper must be emitted
@@ -85,6 +86,7 @@ struct X86Synthesizer
     synth_regalloc_regs  // List of physical register IDs assigned by SSA register allocation
     synth_in_function   // 1 if currently compiling inside a function body, 0 at top level
     synth_current_fn    // Name string of currently compiling function ("" at top level)
+    synth_ssa_lower_res // SsaLowerResult attached from Phase 6b SSA lowering
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -102,6 +104,7 @@ fn x86_synth_new
     s.synth_print_int_off = 0
     s.synth_loop_starts = list()
     s.synth_loop_breaks = list()
+    s.synth_loop_continues = list()
     s.synth_structs = list()
     s.synth_global_fields = list()
     s.synth_needs_alloc = 0
@@ -116,6 +119,7 @@ fn x86_synth_new
     s.synth_regalloc_regs = list()
     s.synth_in_function = 0
     s.synth_current_fn = ""
+    s.synth_ssa_lower_res = 0
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -720,7 +724,8 @@ fn x86_synth_alloc_reg_var s name is_reg_hint
         ri = ri + 1
     end
 
-    // 2. If explicitly declared as register variable, allocate next available callee-saved register
+    // 2. If explicitly declared as register variable or pinned induction variable,
+    // allocate next available callee-saved register (%r12-%r15, %rbx)
     if lv.lv_reg < 0 and is_reg_hint == 1
         cand_regs = [12, 13, 14, 15, 3]
         ci = 0
@@ -847,6 +852,8 @@ fn x86_synth_bind_reg_var s var_name is_reg
     off = x86_synth_alloc_reg_var(s, var_name, is_reg)
     lv = x86_synth_find_local_var(s, var_name)
     if lv != 0 and lv.lv_is_spilled == 0 and lv.lv_reg >= 0
+        // WHY: When allocated to a hardware register (%r12-%r15, %rbx) and unspilled,
+        // move directly into physical register and synchronize stack slot to prevent desync.
         x86_synth_emit_mov_reg_reg(s, lv.lv_reg, 0)
         x86_synth_emit_store_var(s, 0, off)
     else
