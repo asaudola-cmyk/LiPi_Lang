@@ -128,7 +128,7 @@ import "tools/lipipkg/security"
   @end
   
   @if cache_dir == "" || cache_dir == none
-    cache_dir = "/home/shafiullah/.lipipkg/cache/"
+    cache_dir = "~/.lipipkg/cache/"
   @end
   
   return {

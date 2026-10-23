@@ -62,10 +62,35 @@ check_toolchain() {
 
 # ─── Install Repository ──────────────────────────────────────────────────────
 install_lipi() {
-    # 1. If already running inside an existing LiPi repository, use current directory directly
+    # 1. If running inside a local development repository, use it as source
+    # WHY: The local repository is the development workspace (source).
+    # The global installation directory MUST be isolated ($HOME/.lipi)
+    # so that experimental changes in the workspace never break the global system toolchain.
     if [ -f "./src/compiler/driver_cli.lp" ] && [ -f "./src/boot/lipi-seed" ]; then
-        LIPI_INSTALL_DIR="$(pwd)"
-        ok "Running inside local LiPi repository: $LIPI_INSTALL_DIR"
+        LIPI_SOURCE_DIR="$(pwd)"
+        LIPI_INSTALL_DIR="${LIPI_INSTALL_DIR:-$HOME/.lipi}"
+        ok "Running inside local LiPi repository (Source: $LIPI_SOURCE_DIR)"
+        info "Target isolated installation directory: $LIPI_INSTALL_DIR"
+        mkdir -p "$LIPI_INSTALL_DIR/bin" "$LIPI_INSTALL_DIR/dist"
+        
+        info "Synchronizing repository runtime and libraries to isolated installation..."
+        # Copy built binaries if present
+        if [ -d "$LIPI_SOURCE_DIR/bin" ]; then
+            cp -f "$LIPI_SOURCE_DIR/bin/"* "$LIPI_INSTALL_DIR/bin/" 2>/dev/null || true
+            chmod +x "$LIPI_INSTALL_DIR/bin/"* 2>/dev/null || true
+        fi
+        # Copy standard libraries & packages
+        cp -rf "$LIPI_SOURCE_DIR/utso" "$LIPI_INSTALL_DIR/"
+        cp -rf "$LIPI_SOURCE_DIR/aati" "$LIPI_INSTALL_DIR/"
+        [ -d "$LIPI_SOURCE_DIR/src" ] && cp -rf "$LIPI_SOURCE_DIR/src" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -d "$LIPI_SOURCE_DIR/dist" ] && cp -rf "$LIPI_SOURCE_DIR/dist" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -d "$LIPI_SOURCE_DIR/examples" ] && cp -rf "$LIPI_SOURCE_DIR/examples" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -d "$LIPI_SOURCE_DIR/docs" ] && cp -rf "$LIPI_SOURCE_DIR/docs" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -f "$LIPI_SOURCE_DIR/build.lp" ] && cp -f "$LIPI_SOURCE_DIR/build.lp" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -f "$LIPI_SOURCE_DIR/aati.toml" ] && cp -f "$LIPI_SOURCE_DIR/aati.toml" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -f "$LIPI_SOURCE_DIR/LICENSE" ] && cp -f "$LIPI_SOURCE_DIR/LICENSE" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        [ -f "$LIPI_SOURCE_DIR/README.md" ] && cp -f "$LIPI_SOURCE_DIR/README.md" "$LIPI_INSTALL_DIR/" 2>/dev/null || true
+        ok "Isolated installation directory synchronized: $LIPI_INSTALL_DIR"
         return 0
     fi
 
@@ -225,13 +250,11 @@ create_command() {
         src="$LIPI_INSTALL_DIR/bin/$t_name"
         dst="$LIPI_BIN_DIR/$t_name"
         if [ -x "$src" ]; then
-            if [ "$src" != "$dst" ]; then
-                # Remove existing symlink or older binary first to prevent text-busy locks or broken links
-                rm -f "$dst" 2>/dev/null || true
-                cp -f "$src" "$dst"
-                chmod 755 "$dst"
-            fi
-            ok "Installed binary: $dst ($t_desc)"
+            # Remove existing symlink or older binary to ensure standalone isolated binary
+            rm -f "$dst" 2>/dev/null || true
+            cp -f "$src" "$dst"
+            chmod 755 "$dst"
+            ok "Installed standalone binary: $dst ($t_desc)"
         fi
     }
 
@@ -246,6 +269,7 @@ create_command() {
     install_tool_binary "lipipkg" "Ed25519 Cryptographic Package Manager (Legacy Alias)"
     install_tool_binary "lipilsp" "LSP IDE Engine"
     install_tool_binary "lipidbg" "Native System Debugger"
+    install_tool_binary "lipidb_server" "LipiDB Storage Engine Server"
     install_tool_binary "lipifmt" "Canonical Code Formatter"
     install_tool_binary "lipiconvert" "Universal Legacy Transpiler"
     install_tool_binary "lipidoc" "Markdown Documentation Engine"
@@ -254,7 +278,7 @@ create_command() {
     install_tool_binary "lipi_unikernel_boot" "Bare-Metal Unikernel Boot Engine"
     install_tool_binary "lipi-build" "Native Build Orchestrator"
     install_tool_binary "lipi-test" "Regression Test Engine"
-    if [ -x "$LIPI_INSTALL_DIR/bin/lipilsp" ] && [ "$LIPI_INSTALL_DIR/bin/lipilsp" != "$LIPI_BIN_DIR/lipils" ]; then
+    if [ -x "$LIPI_INSTALL_DIR/bin/lipilsp" ]; then
         rm -f "$LIPI_BIN_DIR/lipils" 2>/dev/null || true
         cp -f "$LIPI_INSTALL_DIR/bin/lipilsp" "$LIPI_BIN_DIR/lipils"
         chmod 755 "$LIPI_BIN_DIR/lipils"
@@ -263,14 +287,31 @@ create_command() {
 
 # ─── Self-Healing System Health Check ───────────────────────────────────────
 heal_system_links() {
-    # WHY: Scans /usr/local/bin for dangling/broken symlinks or legacy pointers
-    # to individual user home folders. Self-heals if permissions permit, or provides
-    # clear, actionable diagnostics so the user never faces "command not found".
-    for tool in lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi_unikernel_boot lipi-build lipi-test; do
+    # WHY: Scans $LIPI_BIN_DIR (~/.local/bin) and /usr/local/bin for symlinks pointing
+    # directly into development workspaces. Replaces them with pristine standalone binaries
+    # to enforce total isolation and eliminate broken symlink traps.
+    ALL_TOOLS="lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipidb_server lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi_unikernel_boot lipi-build lipi-test"
+    
+    # 1. Clean and decouple user local bin (~/.local/bin)
+    for tool in $ALL_TOOLS; do
+        user_target="$LIPI_BIN_DIR/$tool"
+        if [ -L "$user_target" ]; then
+            target_dst=$(readlink "$user_target" 2>/dev/null || true)
+            warn "Detected symlink in $user_target -> $target_dst"
+            rm -f "$user_target" 2>/dev/null || true
+            if [ -x "$LIPI_INSTALL_DIR/bin/$tool" ]; then
+                cp -f "$LIPI_INSTALL_DIR/bin/$tool" "$user_target"
+                chmod 755 "$user_target"
+                ok "Auto-healed: Decoupled $user_target from development workspace (standalone binary)"
+            fi
+        fi
+    done
+
+    # 2. Check /usr/local/bin for system-wide links
+    for tool in $ALL_TOOLS; do
         sys_target="/usr/local/bin/$tool"
         if [ -L "$sys_target" ]; then
             target_dst=$(readlink "$sys_target" 2>/dev/null || true)
-            # Check if symlink is broken (target does not exist)
             if [ ! -e "$sys_target" ]; then
                 warn "Detected broken system symlink: $sys_target -> $target_dst"
                 if [ -w "/usr/local/bin" ] || [ -w "$sys_target" ]; then
@@ -279,7 +320,6 @@ heal_system_links() {
                     info "Note: $sys_target is a dangling system link. To clean it, run: sudo rm -f $sys_target"
                 fi
             elif [ -w "/usr/local/bin" ] && [ -x "$LIPI_BIN_DIR/$tool" ]; then
-                # If /usr/local/bin is writable, replace symlink with direct standalone binary
                 rm -f "$sys_target" 2>/dev/null || true
                 cp -f "$LIPI_BIN_DIR/$tool" "$sys_target" 2>/dev/null && ok "Upgraded $sys_target to standalone binary" || true
             fi

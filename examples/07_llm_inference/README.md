@@ -8,8 +8,8 @@ A 100% Python-free, PyTorch-free, CUDA-free local LLM tensor inference engine an
 
 | Application | File | Description |
 |---|---|---|
-| **Core LLM Engine & Demo** | [`main.lp`](file:///home/shafiullah/Documents/file/work/lipi/examples/07_llm_inference/main.lp) | End-to-end benchmark demonstrating GGUF binary header verification, hardware GEMV, KV-cache allocation, and multi-step autoregressive generation. |
-| **Interactive Terminal Chat App** | [`chat_app.lp`](file:///home/shafiullah/Documents/file/work/lipi/examples/07_llm_inference/chat_app.lp) | Standalone interactive REPL chat engine with bilingual vocabulary (English/Bengali), dynamic context window management, sliding history pruning, and live token streaming. |
+| **Core LLM Engine & Demo** | [`main.lp`](main.lp) | End-to-end benchmark demonstrating GGUF binary header verification, hardware GEMV, KV-cache allocation, and multi-step autoregressive generation. |
+| **Interactive Terminal Chat App** | [`chat_app.lp`](chat_app.lp) | Standalone interactive REPL chat engine with bilingual vocabulary (English/Bengali), dynamic context window management, sliding history pruning, and live token streaming. |
 
 ---
 
@@ -37,7 +37,7 @@ A 100% Python-free, PyTorch-free, CUDA-free local LLM tensor inference engine an
 
 ## ⚡ Terminal REPL Slash-Commands
 
-When running [`chat_app.lp`](file:///home/shafiullah/Documents/file/work/lipi/examples/07_llm_inference/chat_app.lp), interact directly using natural language or slash-commands:
+When running [`chat_app.lp`](chat_app.lp), interact directly using natural language or slash-commands:
 
 | Command | Description |
 |---|---|

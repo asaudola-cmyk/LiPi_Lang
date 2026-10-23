@@ -360,6 +360,13 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
         if file_exists(cur_dir + "/" + inc_target) == 1
             return cur_dir + "/" + inc_target
 
+    // Tier 1b: If lipi_root is explicit and not ".", resolve canonical system libraries (utso/, aati/, packages/, src/)
+    // directly from lipi_root to prevent accidental leakage from current working directory
+    if len(lipi_root) > 0 and lipi_root != "."
+        if compiler_driver_starts_with(inc_target, "utso/") == 1 or compiler_driver_starts_with(inc_target, "aati/") == 1 or compiler_driver_starts_with(inc_target, "packages/") == 1 or compiler_driver_starts_with(inc_target, "src/") == 1
+            if file_exists(lipi_root + "/" + inc_target + ".lp") == 1 return lipi_root + "/" + inc_target + ".lp"
+            if file_exists(lipi_root + "/" + inc_target) == 1 return lipi_root + "/" + inc_target
+
     // Tier 2: CWD & Absolute paths
     if file_exists(inc_target + ".lp") == 1
         return inc_target + ".lp"

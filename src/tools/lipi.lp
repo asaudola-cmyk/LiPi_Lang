@@ -45,6 +45,7 @@ fn print_usage
     say "  \033[1;32mspawn-seed\033[0m [target]      Autonomous cellular replication of genesis seed"
     say "  \033[1;32mself-build\033[0m              3-generation self-hosting deterministic bootstrap"
     say "  \033[1;32mupdate\033[0m                  Sync with latest GitHub commits & rebuild toolchains"
+    say "  \033[1;32minstall\033[0m                 Install/promote toolchain to isolated ~/.lipi & ~/.local/bin"
     say "  \033[1;32mversion\033[0m                 Display compiler version and platform architecture\n"
 
 fn show_version
@@ -198,16 +199,37 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
         idx = idx + 1
     mem_word_write(argv, idx * 8, 0)
 
-    env = syscall(9, 0, 64, 3, 34, -1, 0)
-    path_env = "PATH=/usr/bin:/bin:/usr/local/bin"
-    mem_word_write(env, 0, path_env)
-    l_root = lipi_tool_get_root()
+    env = syscall(9, 0, 128, 3, 34, -1, 0)
+    e_idx = 0
+    u_home = lipi_get_env("HOME")
+    if len(u_home) > 0
+        home_env = "HOME=" + u_home
+        mem_word_write(env, e_idx * 8, home_env)
+        e_idx = e_idx + 1
+        path_env = "PATH=" + u_home + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    else
+        path_env = "PATH=/usr/local/bin:/usr/bin:/bin"
+    end
+    mem_word_write(env, e_idx * 8, path_env)
+    e_idx = e_idx + 1
+
+    u_user = lipi_get_env("USER")
+    if len(u_user) > 0
+        user_env = "USER=" + u_user
+        mem_word_write(env, e_idx * 8, user_env)
+        e_idx = e_idx + 1
+    end
+
+    l_root = lipi_get_env("LIPI_ROOT")
+    if len(l_root) == 0
+        l_root = lipi_tool_get_root()
+    end
     if len(l_root) > 0
         lr_env = "LIPI_ROOT=" + l_root
-        mem_word_write(env, 8, lr_env)
-        mem_word_write(env, 16, 0)
-    else
-        mem_word_write(env, 8, 0)
+        mem_word_write(env, e_idx * 8, lr_env)
+        e_idx = e_idx + 1
+    end
+    mem_word_write(env, e_idx * 8, 0)
 
     st = syscall(9, 0, 8, 3, 34, -1, 0)
     mem_word_write(st, 0, 0)
@@ -227,16 +249,17 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
 
     return exit_code
 
-// WHY: Resolves toolchain binaries dynamically across current directory, discovered root, ~/.local/bin, ~/.lipi/bin, and system paths
+// WHY: Resolves toolchain binaries dynamically prioritizing canonical root, ~/.local/bin, ~/.lipi/bin, and system paths
 fn resolve_bin_path rel_name
-    local_p = "bin/" + rel_name
-    if syscall(21, local_p, 0, 0, 0, 0, 0) == 0
-        return local_p
     l_root = lipi_tool_get_root()
-    if len(l_root) > 0
+    if len(l_root) > 0 and l_root != "."
         cand_b = l_root + "/bin/" + rel_name
         if syscall(21, cand_b, 0, 0, 0, 0, 0) == 0
             return cand_b
+
+    local_p = "bin/" + rel_name
+    if syscall(21, local_p, 0, 0, 0, 0, 0) == 0
+        return local_p
 
     u_home = lipi_get_env("HOME")
     if len(u_home) > 0
@@ -523,6 +546,34 @@ fn copy_file_direct src dst
     syscall(90, dst, 493, 0, 0, 0, 0) // chmod 0755
     return 1
 
+// ── Install Command Handler ───────────────────────────────────────────────────
+// WHY: Promotes/installs the current repository toolchain into isolated user home (~/.lipi)
+// and installs standalone binaries into ~/.local/bin (0% workspace symlinks).
+// This guarantees that active development in the workspace never breaks the global system toolchain.
+fn handle_install
+    say ""
+    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m👑 LIPI SOVEREIGN TOOLCHAIN INSTALLER (লিপি গ্লোবাল ইনস্টল)\033[0m         \033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m⚡ Isolated System Toolchain | 100% Standalone (0% Workspace Symlinks)\033[0m\033[38;2;0;255;204m║\033[0m"
+    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
+    say ""
+
+    l_root = lipi_tool_get_root()
+    if len(l_root) == 0
+        l_root = "."
+
+    inst_sh = l_root + "/install.sh"
+    if syscall(21, inst_sh, 0, 0, 0, 0, 0) == 0
+        say "\033[1;36m[LIPI INSTALL]\033[0m Executing sovereign installer from: " + inst_sh
+        sh_bin = "/bin/sh"
+        if syscall(21, sh_bin, 0, 0, 0, 0, 0) != 0
+            sh_bin = "/usr/bin/sh"
+        ret = spawn_exec_cmd(sh_bin, inst_sh, "", "", "")
+        return ret
+
+    say "❌ Could not locate install.sh in root: " + l_root
+    return 1
+
 fn handle_update
     // WHY: Sovereign autonomous updater that fetches latest source from GitHub
     // and performs full 3-generation self-hosting rebuild of the toolchain.
@@ -537,7 +588,20 @@ fn handle_update
     if len(l_root) == 0
         l_root = "."
 
-    say "\033[1;34m[LIPI UPDATE]\033[0m Discovered toolchain root: " + l_root
+    // Prefer ~/.lipi as target for global update to guarantee total workspace isolation
+    // WHY: 'lipi update' is intended to sync and rebuild the global system toolchain.
+    // It must strictly target ~/.lipi and never mutate the active developer workspace.
+    u_home = lipi_get_env("HOME")
+    if len(u_home) > 0 and lipi_is_root_dir(u_home + "/.lipi") == 1
+        l_root = u_home + "/.lipi"
+
+    say "\033[1;34m[LIPI UPDATE]\033[0m Target System Toolchain: " + l_root + " (Isolated)"
+    say "\033[1;32m✔ Workspace Protection: Active (Local development workspace is untouched)\033[0m"
+
+    // Switch process working directory to l_root via Linux sys_chdir (Syscall 80)
+    // WHY: Guarantees that compilation and include resolution run strictly inside l_root (~/.lipi)
+    // and never inadvertently inherit or touch the active development workspace (CWD).
+    syscall(80, l_root, 0, 0, 0, 0, 0)
 
     // 1. Git pull from upstream repository if .git directory is present
     has_git_dir = 0
@@ -559,8 +623,10 @@ fn handle_update
         say "\033[1;33m→ Standalone installation detected. Rebuilding toolchain from local source.\033[0m"
 
     // 2. Rebuild the core compiler (bin/lipc_bin and bin/lipc)
-    say "\033[1;36m[LIPI UPDATE]\033[0m Rebuilding Stage-3 sovereign compiler from source..."
-    c_bin = resolve_bin_path("lipc_bin")
+    say "\033[1;36m[LIPI UPDATE]\033[0m Rebuilding Stage-3 sovereign compiler from source in " + l_root + "..."
+    c_bin = l_root + "/bin/lipc_bin"
+    if syscall(21, c_bin, 0, 0, 0, 0, 0) != 0
+        c_bin = resolve_bin_path("lipc_bin")
     driver_cli_src = l_root + "/src/compiler/driver_cli.lp"
     out_lipc = l_root + "/bin/lipc_bin"
     comp_code = spawn_exec_cmd(c_bin, driver_cli_src, "-o", out_lipc, "")
@@ -952,6 +1018,9 @@ fn main
 
     if cmd == "update" or cmd == "upgrade"
         return handle_update()
+
+    if cmd == "install" or cmd == "ইনস্টল"
+        return handle_install()
 
     if cmd == "spawn-seed" or cmd == "replicate"
         target_path = "src/boot/lipi-seed"

@@ -24,10 +24,10 @@ import "tools/lipipkg/registry_client"
 @! ----------------------------------------------------------------------------
 
 @fn lpm_registry_init(registry_url)
-  client = registry_client_new(registry_url, "/home/shafiullah/.lipipkg/cache/", 0)
+  client = registry_client_new(registry_url, "~/.lipipkg/cache/", 0)
   return {
     url: registry_url,
-    cache_dir: "/home/shafiullah/.lipipkg/cache/",
+    cache_dir: "~/.lipipkg/cache/",
     client: client,
     installed_pkgs: []
   }

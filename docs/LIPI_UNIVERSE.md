@@ -72,9 +72,9 @@
 
 লিপি তার ওমনি-টার্গেট লিঙ্কারের মাধ্যমে একই সোর্স কোড থেকে যেকোনো প্রধান প্ল্যাটফর্মের এক্সিকিউটেবল বাইনারি তৈরি করতে পারে:
 1. **Linux x86_64 ELF64**: `0x40000000` হাই-মেমোরি সেগমেন্টে সরাসরি স্ট্যাটিক লিনাক্স বাইনারি।
-2. **Windows x86_64 PE32+**: সরাসরি ডস ও পে হেডারসহ `.exe` বাইনারি রাইটার ([pe_writer.lp](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/backend/pe_writer.lp))।
-3. **Apple macOS Mach-O 64**: ম্যাকওএস 64-বিট নেটিভ এক্সিকিউটেবল লিঙ্কার ([macho_writer.lp](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/backend/macho_writer.lp))।
-4. **Cosmopolitan APE**: Actually Portable Executable—একই বাইনারি ফাইল লিনাক্স, উইন্ডোজ ও ম্যাকওএসে নির্বিঘ্নে চলে ([omni_binary.lp](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/backend/omni_binary.lp))।
+2. **Windows x86_64 PE32+**: সরাসরি ডস ও পে হেডারসহ `.exe` বাইনারি রাইটার ([pe_writer.lp](../src/compiler/backend/pe_writer.lp))।
+3. **Apple macOS Mach-O 64**: ম্যাকওএস 64-বিট নেটিভ এক্সিকিউটেবল লিঙ্কার ([macho_writer.lp](../src/compiler/backend/macho_writer.lp))।
+4. **Cosmopolitan APE**: Actually Portable Executable—একই বাইনারি ফাইল লিনাক্স, উইন্ডোজ ও ম্যাকওএসে নির্বিঘ্নে চলে ([omni_binary.lp](../src/compiler/backend/omni_binary.lp))।
 5. **W3C WebAssembly 1.0**: সরাসরি ব্রাউজারে চালনাযোগ্য ও নোড.জেএস ফ্রেন্ডলি WASM বাইটকোড।
 6. **ARM64 (AArch64)**: মোবাইল ও ক্লাউড প্রসেসরের জন্য ৩২-বিট ইন্সট্রাকশন এনকোডার।
 

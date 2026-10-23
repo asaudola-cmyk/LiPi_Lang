@@ -26,13 +26,13 @@
 
 ## 🛠️ Official Developer Toolchain
 
-- [`lipi`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipi.lp) — Universal sovereign master CLI driver (replaces gcc, cargo, make, and go).
-- [`lipc`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/driver_cli.lp) — Direct silicon machine code compiler with multi-target emitters (ELF64, PE32+, Mach-O, WASM).
-- [`lipipkg`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipipkg.lp) — Autonomous Ed25519 cryptographic package manager, Git resolver, and built-in registry daemon.
-- [`lipilsp`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipilsp.lp) — High-performance Language Server Protocol daemon for IDE integration.
-- [`lipidbg`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipidbg.lp) — Pure `sys_ptrace` native machine code debugger with hardware register introspection.
-- [`lipirepl`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipirepl.lp) — Interactive REPL shell with instant hardware cycle evaluation and JIT statement execution.
-- [`lipifmt`](file:///home/shafiullah/Documents/file/work/lipi/src/tools/lipifmt.lp) — Canonical Tri-Syntax code formatter.
+- [`lipi`](../src/tools/lipi.lp) — Universal sovereign master CLI driver (replaces gcc, cargo, make, and go).
+- [`lipc`](../src/compiler/driver_cli.lp) — Direct silicon machine code compiler with multi-target emitters (ELF64, PE32+, Mach-O, WASM).
+- [`lipipkg`](../src/tools/lipipkg.lp) — Autonomous Ed25519 cryptographic package manager, Git resolver, and built-in registry daemon.
+- [`lipilsp`](../src/tools/lipilsp.lp) — High-performance Language Server Protocol daemon for IDE integration.
+- [`lipidbg`](../src/tools/lipidbg.lp) — Pure `sys_ptrace` native machine code debugger with hardware register introspection.
+- [`lipirepl`](../src/tools/lipirepl.lp) — Interactive REPL shell with instant hardware cycle evaluation and JIT statement execution.
+- [`lipifmt`](../src/tools/lipifmt.lp) — Canonical Tri-Syntax code formatter.
 
 ---
 
@@ -42,60 +42,60 @@ The following packages are pre-verified, cryptographically signed with RFC 8032 
 
 | Package | Description | Status | Installation |
 |---|---|---|---|
-| [`web_router`](file:///home/shafiullah/Documents/file/work/lipi/packages/web_router) | Zero-allocation radix-tree HTTP request router with parameter decoding | ✅ Verified | `lipipkg add web_router` |
-| [`crypto_vault`](file:///home/shafiullah/Documents/file/work/lipi/packages/crypto_vault) | NIST FIPS 180-4 SHA-256 and Ed25519 cryptographic authentication suite | ✅ Verified | `lipipkg add crypto_vault` |
-| [`lipi_sql`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_sql) | Pure LiPi relational query engine, table algebra, and in-memory indexing | ✅ Verified | `lipipkg add lipi_sql` |
-| [`json_toolkit`](file:///home/shafiullah/Documents/file/work/lipi/packages/json_toolkit) | Zero-leak JSON parser, serializer, and JSONPath querying engine | ✅ Verified | `lipipkg add json_toolkit` |
-| [`math_extra`](file:///home/shafiullah/Documents/file/work/lipi/packages/math_extra) | High-precision complex numbers, trigonometry, matrix algebra, and geometry | ✅ Verified | `lipipkg add math_extra` |
+| [`web_router`](../packages/web_router) | Zero-allocation radix-tree HTTP request router with parameter decoding | ✅ Verified | `lipipkg add web_router` |
+| [`crypto_vault`](../packages/crypto_vault) | NIST FIPS 180-4 SHA-256 and Ed25519 cryptographic authentication suite | ✅ Verified | `lipipkg add crypto_vault` |
+| [`lipi_sql`](../packages/lipi_sql) | Pure LiPi relational query engine, table algebra, and in-memory indexing | ✅ Verified | `lipipkg add lipi_sql` |
+| [`json_toolkit`](../packages/json_toolkit) | Zero-leak JSON parser, serializer, and JSONPath querying engine | ✅ Verified | `lipipkg add json_toolkit` |
+| [`math_extra`](../packages/math_extra) | High-precision complex numbers, trigonometry, matrix algebra, and geometry | ✅ Verified | `lipipkg add math_extra` |
 
 ---
 
 ## 🌐 Web & Networking
 
-- [`utso/net/socket.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/net/socket.lp) — Direct Linux kernel raw TCP/UDP socket driver without libc.
-- [`utso/net/http.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/net/http.lp) — Pure RFC 7230 / RFC 7231 HTTP/1.1 client (`http_get`, `http_post`) and request serializer.
-- [`packages/lipi_web/engine.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_web/engine.lp) — High-throughput HTTP web engine with response streaming and JSON serialization.
-- [`utso/net/websocket.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/net/websocket.lp) — RFC 6455 full-duplex WebSocket server protocol implementation.
+- [`utso/net/socket.lp`](../utso/net/socket.lp) — Direct Linux kernel raw TCP/UDP socket driver without libc.
+- [`utso/net/http.lp`](../utso/net/http.lp) — Pure RFC 7230 / RFC 7231 HTTP/1.1 client (`http_get`, `http_post`) and request serializer.
+- [`packages/lipi_web/engine.lp`](../packages/lipi_web/engine.lp) — High-throughput HTTP web engine with response streaming and JSON serialization.
+- [`utso/net/websocket.lp`](../utso/net/websocket.lp) — RFC 6455 full-duplex WebSocket server protocol implementation.
 
 ---
 
 ## 💾 Database & Storage
 
-- [`packages/lipidb/pg_wire.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipidb/pg_wire.lp) — Pure PostgreSQL 3.0 binary wire protocol client connecting to live Postgres servers over raw TCP.
-- [`packages/lipidb/mysql_wire.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipidb/mysql_wire.lp) — Native MySQL wire protocol client implementation.
-- [`packages/lipidb/btree.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipidb/btree.lp) — Slotted-page 4KB B+Tree storage engine with disk serialization.
-- [`examples/lipidkv_cache/`](file:///home/shafiullah/Documents/file/work/lipi/examples/lipidkv_cache) — Production in-memory Redis-compatible key-value cache and store.
+- [`packages/lipidb/pg_wire.lp`](../packages/lipidb/pg_wire.lp) — Pure PostgreSQL 3.0 binary wire protocol client connecting to live Postgres servers over raw TCP.
+- [`packages/lipidb/mysql_wire.lp`](../packages/lipidb/mysql_wire.lp) — Native MySQL wire protocol client implementation.
+- [`packages/lipidb/btree.lp`](../packages/lipidb/btree.lp) — Slotted-page 4KB B+Tree storage engine with disk serialization.
+- [`examples/lipidkv_cache/`](../examples/lipidkv_cache) — Production in-memory Redis-compatible key-value cache and store.
 
 ---
 
 ## ⚙️ Systems, Runtimes & Concurrency
 
-- [`src/runtime/async/fiber.lp`](file:///home/shafiullah/Documents/file/work/lipi/src/runtime/async/fiber.lp) — M:N lightweight fiber scheduler with 8KB user-space stacks and 9-register fast context switching.
-- [`utso/os/syscalls.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/os/syscalls.lp) — Multi-OS native system call table (Linux, macOS Darwin `0x2000000`, Windows PE64).
-- [`packages/lipi_hypervisor/kvm.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_hypervisor/kvm.lp) — Linux Kernel-based Virtual Machine (KVM) hypervisor controller and vCPU manager.
-- [`utso/os/kernel_multiboot.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/os/kernel_multiboot.lp) — Bare-metal x86_64 Multiboot2 unikernel entry point.
+- [`src/runtime/async/fiber.lp`](../src/runtime/async/fiber.lp) — M:N lightweight fiber scheduler with 8KB user-space stacks and 9-register fast context switching.
+- [`utso/os/syscalls.lp`](../utso/os/syscalls.lp) — Multi-OS native system call table (Linux, macOS Darwin `0x2000000`, Windows PE64).
+- [`packages/lipi_hypervisor/kvm.lp`](../packages/lipi_hypervisor/kvm.lp) — Linux Kernel-based Virtual Machine (KVM) hypervisor controller and vCPU manager.
+- [`utso/os/kernel_multiboot.lp`](../utso/os/kernel_multiboot.lp) — Bare-metal x86_64 Multiboot2 unikernel entry point.
 
 ---
 
 ## 🔐 Cryptography & Security
 
-- [`utso/crypto.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/crypto.lp) — NIST FIPS 180-4 SHA-256 and SHA-512 cryptographic digests.
-- [`utso/crypto/advanced.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/crypto/advanced.lp) — RFC 8032 Ed25519 digital signature generation and verification.
-- [`utso/crypto/tls.lp`](file:///home/shafiullah/Documents/file/work/lipi/utso/crypto/tls.lp) — Pure LiPi TLS 1.3 record layer and AES-128-GCM authentication.
+- [`utso/crypto.lp`](../utso/crypto.lp) — NIST FIPS 180-4 SHA-256 and SHA-512 cryptographic digests.
+- [`utso/crypto/advanced.lp`](../utso/crypto/advanced.lp) — RFC 8032 Ed25519 digital signature generation and verification.
+- [`utso/crypto/tls.lp`](../utso/crypto/tls.lp) — Pure LiPi TLS 1.3 record layer and AES-128-GCM authentication.
 
 ---
 
 ## 🧠 Silicon AI & Scientific Computing
 
-- [`packages/lipi_ai/tensor.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_ai/tensor.lp) — N-dimensional tensor engine with AVX2 SIMD matrix multiplication (GEMM).
-- [`packages/lipi_ai/llm/transformer.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_ai/llm/transformer.lp) — Scaled Dot-Product Attention, Softmax, and Rotary Position Embeddings (RoPE).
-- [`packages/lipi_quantum/shor.lp`](file:///home/shafiullah/Documents/file/work/lipi/packages/lipi_quantum/shor.lp) — Shor's quantum period-finding with continued fraction expansion.
+- [`packages/lipi_ai/tensor.lp`](../packages/lipi_ai/tensor.lp) — N-dimensional tensor engine with AVX2 SIMD matrix multiplication (GEMM).
+- [`packages/lipi_ai/llm/transformer.lp`](../packages/lipi_ai/llm/transformer.lp) — Scaled Dot-Product Attention, Softmax, and Rotary Position Embeddings (RoPE).
+- [`packages/lipi_quantum/shor.lp`](../packages/lipi_quantum/shor.lp) — Shor's quantum period-finding with continued fraction expansion.
 
 ---
 
 ## 💻 Editor & IDE Extensions
 
-- [`editors/vscode/`](file:///home/shafiullah/Documents/file/work/lipi/editors/vscode) — Official Visual Studio Code extension:
+- [`editors/vscode/`](../editors/vscode) — Official Visual Studio Code extension:
   - Full Tri-Syntax highlighting (Bengali indentation, English indentation, `@fn` meta-syntax).
   - Code snippets, language configuration, and Language Server Protocol client.
   - VSIX package: `dist/lipi-language-1.0.0.vsix`.

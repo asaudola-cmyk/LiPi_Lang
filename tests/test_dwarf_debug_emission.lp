@@ -42,7 +42,7 @@ fn main
     // 2. Build DWARF .debug_line section
     say "\n[Step 1]: Generating DWARF .debug_line Program..."
     line_builder = dwarf_line_builder_new(4)
-    dwarf_line_add_dir(line_builder, "/home/shafiullah/Documents/file/work/lipi")
+    dwarf_line_add_dir(line_builder, "/workspace/project")
     dwarf_line_add_file(line_builder, "main.lp", 1)
     dwarf_line_emit_set_address(line_builder, 4194480) // base + start stub
     dwarf_line_emit_advance_line(line_builder, 10)
@@ -59,7 +59,7 @@ fn main
     abbrev_bytes = dwarf_abbrev_build_standard()
     test_assert(abbrev_bytes.len() > 10, ".debug_abbrev section constructed (" + str(abbrev_bytes.len()) + " bytes)")
 
-    cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", "main.lp", "/home/shafiullah/Documents/file/work/lipi", 4194480, 4194488, 0)
+    cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", "main.lp", "/workspace/project", 4194480, 4194488, 0)
     dwarf_unit_add_function(cu, "main", 4194480, 4194488, 1, 10)
     dwarf_unit_add_base_type(cu, "i64", 8, DW_ATE_signed())
 

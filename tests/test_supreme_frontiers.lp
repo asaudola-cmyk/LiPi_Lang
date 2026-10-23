@@ -218,7 +218,7 @@ fn main
     total_tests = total_tests + 1
     
     pipe = build_pipeline_new()
-    inst = installer_engine_new("/home/shafiullah/.lipi", "/home/shafiullah/.local/bin")
+    inst = installer_engine_new("/home/test/.lipi", "/home/test/.local/bin")
     ok_ver1 = assert_eq(pipe.bp_version_code, 100, "Build Pipeline Version Code is 100 (First 1.0.0)")
     ok_ver2 = assert_eq(inst.ie_version_code, 100, "Installer Engine Version Code is 100 (First 1.0.0)")
     

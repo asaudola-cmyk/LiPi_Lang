@@ -23,15 +23,15 @@ When exploring the LiPi codebase, code is organized into three distinct tiers ba
 └─────────────────────────┴─────────────────────────┴─────────────────────────┘
 ```
 
-1. **[`src/`](file:///home/shafiullah/Documents/file/work/lipi/src/) — The Sovereign Compiler & Toolchain Engine**
+1. **[`src/`](../src/) — The Sovereign Compiler & Toolchain Engine**
    - Contains the compiler itself, the minimal freestanding runtime, and toolchain CLI tools.
    - Used **only** during compilation and building of executables.
    - Built with strict adherence to the **Golden $\le 35,000$ bytes** per-module invariant.
-2. **[`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) — Genesis Silicon Primitives (`উৎস`)**
+2. **[`utso/`](../utso/) — Genesis Silicon Primitives (`উৎস`)**
    - Pure silicon primitives that directly interface with hardware and Linux kernel syscalls.
    - Single-file genesis modules (`memory.lp`, `io.lp`, `string.lp`, `math.lp`, `socket.lp`, `crypto.lp`, `syscalls.lp`, `collections.lp`, `hashmap.lp`, `arena.lp`, `error.lp`, `option.lp`, `result.lp`, `channel.lp`, `concurrency.lp`, `time.lp`, `fmt.lp`, `unicode.lp`, `ffi.lp`).
    - Deep sub-layers in `utso/core/`, `utso/os/`, `utso/sys/`, `utso/net/`, `utso/crypto/`, `utso/cpu/`, `utso/io/`, `utso/tools/`.
-3. **[`aati/`](file:///home/shafiullah/Documents/file/work/lipi/aati/) — Sovereign Domain Packages**
+3. **[`aati/`](../aati/) — Sovereign Domain Packages**
    - Independent, versioned domain packages managed by the sovereign package manager (`lipipkg`).
    - Each package contains its own `lipipkg.toml` manifest, sovereign modules, and unit tests.
    - Domain packages include `lipi_ai`, `lipidb`, `lipi_web`, `lipi_gui`, `lipi_engine3d`, `lipi_quantum`, `lipi_blockchain`, `lipi_hypervisor`, `lipi_swarm`, `lipi_iot`, `lipi_media`, `lipi_gpu`, `lipi_fs`, `lipi_mobile`, `lipi_p2p`, `lipi_security`, `lipi_boot`, `lipi_ide`, `lipi_registry`.
@@ -61,7 +61,7 @@ lipi/
 
 ## 🔬 Deep Dive: Directory Subsystems
 
-### 1. [`src/`](file:///home/shafiullah/Documents/file/work/lipi/src/) — Compiler & Toolchain
+### 1. [`src/`](../src/) — Compiler & Toolchain
 
 - **`src/compiler/`**: The 79-module sovereign compiler pipeline:
   - `src/compiler/driver_cli.lp`: CLI entrypoint handling arguments (`-o`, `--target`, `-O2`, `-g`, `--shared`).
@@ -91,7 +91,7 @@ lipi/
 
 ---
 
-### 2. [`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) — Genesis Silicon Primitives (`উৎস`)
+### 2. [`utso/`](../utso/) — Genesis Silicon Primitives (`উৎস`)
 
 The Genesis Primitives are pure silicon building blocks:
 - **`utso/` (Root Primitives):** `memory.lp`, `io.lp`, `string.lp`, `unicode.lp`, `math.lp`, `fmt.lp`, `collections.lp`, `hashmap.lp`, `arena.lp`, `error.lp`, `option.lp`, `result.lp`, `channel.lp`, `concurrency.lp`, `time.lp`, `syscalls.lp`, `socket.lp`, `crypto.lp`, `ffi.lp`.
@@ -105,7 +105,7 @@ The Genesis Primitives are pure silicon building blocks:
 
 ---
 
-### 3. [`aati/`](file:///home/shafiullah/Documents/file/work/lipi/aati/) — Sovereign Domain Packages
+### 3. [`aati/`](../aati/) — Sovereign Domain Packages
 
 | Package | Description | Key Capabilities |
 | :--- | :--- | :--- |
@@ -130,7 +130,7 @@ The Genesis Primitives are pure silicon building blocks:
 
 ---
 
-### 4. [`bin/`](file:///home/shafiullah/Documents/file/work/lipi/bin/) — Standalone Toolchain Binaries
+### 4. [`bin/`](../bin/) — Standalone Toolchain Binaries
 
 All binaries follow the standardized `lipi-<tool>` naming convention, while preserving legacy short forms as symlinks:
 
@@ -167,7 +167,7 @@ bin/lipc tests/run_tests.lp /tmp/run_tests && /tmp/run_tests
 ```
 
 ### Where to Add New Features
-- **Compiler features**: Add modular passes in [`src/compiler/`](file:///home/shafiullah/Documents/file/work/lipi/src/compiler/). Keep every file $\le 35,000$ bytes!
-- **Standard library primitives**: Add genesis primitives in [`utso/`](file:///home/shafiullah/Documents/file/work/lipi/utso/) or sovereign domain modules in [`aati/`](file:///home/shafiullah/Documents/file/work/lipi/aati/).
-- **Reusable community libraries**: Create a new package in [`aati/<name>/`](file:///home/shafiullah/Documents/file/work/lipi/aati/) with a valid `lipipkg.toml`.
-- **Regression tests**: Add tests in [`tests/`](file:///home/shafiullah/Documents/file/work/lipi/tests/) and register them in [`tests/run_tests.lp`](file:///home/shafiullah/Documents/file/work/lipi/tests/run_tests.lp).
+- **Compiler features**: Add modular passes in [`src/compiler/`](../src/compiler/). Keep every file $\le 35,000$ bytes!
+- **Standard library primitives**: Add genesis primitives in [`utso/`](../utso/) or sovereign domain modules in [`aati/`](../aati/).
+- **Reusable community libraries**: Create a new package in [`aati/<name>/`](../aati/) with a valid `lipipkg.toml`.
+- **Regression tests**: Add tests in [`tests/`](../tests/) and register them in [`tests/run_tests.lp`](../tests/run_tests.lp).
