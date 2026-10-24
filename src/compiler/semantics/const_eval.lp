@@ -197,6 +197,7 @@ import "compiler/frontend/ast/ast_node"
     @if op == "+" return const_val_int(l + r) @end
     @if op == "-" return const_val_int(l - r) @end
     @if op == "*" return const_val_int(l * r) @end
+    @if op == "@" return const_val_int(l * r) @end
 
     @if op == "/"
       @if r == 0

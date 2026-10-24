@@ -135,6 +135,8 @@
 @fn TOK_COMMENT_LINE() return 104 @end// // or @!
 @fn TOK_COMMENT_BLOCK() return 105 @end// /* */
 @fn TOK_ERROR() return 106 @end
+@fn TOK_MATMUL() return 107 @end       // @ (Matrix/Tensor Multiplication)
+@fn TOK_MATMULEQ() return 108 @end     // @= (Matrix/Tensor Multiplication Assignment)
 
 // ── 8. Token Kind Metadata Lookup ─────────────────────────────────────────────
 
@@ -247,6 +249,8 @@
   @if kind == 104 return "COMMENT_LINE" @end
   @if kind == 105 return "COMMENT_BLOCK" @end
   @if kind == 106 return "ERROR" @end
+  @if kind == 107 return "MATMUL" @end
+  @if kind == 108 return "MATMULEQ" @end
   return "UNKNOWN"
 @end
 
@@ -270,7 +274,7 @@
 
 @fn token_kind_is_operator(kind: i64)
   // WHY: Checks whether token is a binary, unary, or assignment operator
-  @if (kind >= 11 && kind <= 38) || kind == 7 || kind == 8
+  @if (kind >= 11 && kind <= 38) || kind == 7 || kind == 8 || kind == 107 || kind == 108
     return 1
   @end
   return 0

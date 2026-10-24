@@ -1129,6 +1129,12 @@ fn main
     else
         failed = failed + 1
 
+    // 220: First-Class Tensor & Matrix Infix '@' Operator
+    if run_single_test(compiler, "tests/test_matrix_operator_at.lp", "test_matrix_operator_at") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

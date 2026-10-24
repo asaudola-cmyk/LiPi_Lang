@@ -148,6 +148,7 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "অ্যারেনা_চিহ্ন") == 1 || str_eq(fn_name, "অ্যারেনা_রিসেট") == 1 || str_eq(fn_name, "অ্যারেনা_সব_খালি") == 1 || str_eq(fn_name, "অ্যারেনা_ব্যবহৃত") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_has_avx2") == 1 || str_eq(fn_name, "cpuid_avx2") == 1 || str_eq(fn_name, "cpu_has_avx512") == 1 || str_eq(fn_name, "cpu_has_avx512f") == 1 || str_eq(fn_name, "cpuid_avx512") == 1 return 1 @end
   @if str_eq(fn_name, "simd_avx2_sum") == 1 || str_eq(fn_name, "simd_avx512_sum") == 1 || str_eq(fn_name, "simd_avx512_sum_u64") == 1 || str_eq(fn_name, "ভেক্টর_যোগ_২৫৬") == 1 || str_eq(fn_name, "simd_avx512_dot") == 1 || str_eq(fn_name, "simd_sse2_dot_f64") == 1 || str_eq(fn_name, "simd_sse2_gemv_f64") == 1 return 1 @end
+  @if str_eq(fn_name, "matmul") == 1 || str_eq(fn_name, "ম্যাট্রিক্স_গুণ") == 1 || str_eq(fn_name, "_lipi_matmul") == 1 return 1 @end
   @if len(fn_name) >= 5 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "i" && char_at(fn_name, 2) == "m" && char_at(fn_name, 3) == "d" && char_at(fn_name, 4) == "_" return 1 @end
   @if str_eq(fn_name, "str_ptr") == 1 || str_eq(fn_name, "lipi_str_ptr") == 1 || str_eq(fn_name, "lipi_str_new") == 1 return 1 @end
   @if len(fn_name) >= 4 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "y" && char_at(fn_name, 2) == "s" && char_at(fn_name, 3) == "_" return 1 @end
@@ -157,6 +158,7 @@ import "compiler/frontend/ast/ast_node"
 
 // WHY: Assigns concrete return types to built-in system intrinsics for static type propagation.
 @fn tc_builtin_ret_type(fn_name)
+  @if str_eq(fn_name, "matmul") == 1 || str_eq(fn_name, "ম্যাট্রিক্স_গুণ") == 1 || str_eq(fn_name, "_lipi_matmul") == 1 return TYPE_ID_ANY() @end
   @if str_eq(fn_name, "ভেক্টর_যোগ_২৫৬") == 1 || (len(fn_name) >= 5 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "i" && char_at(fn_name, 2) == "m" && char_at(fn_name, 3) == "d" && char_at(fn_name, 4) == "_") return TYPE_ID_I64() @end
   @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলো") == 1 || str_eq(fn_name, "দেখাও") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return TYPE_ID_VOID() @end
   @if str_eq(fn_name, "len") == 1 || str_eq(fn_name, "length") == 1 || str_eq(fn_name, "দৈর্ঘ্য") == 1 || str_eq(fn_name, "str_len") == 1 || str_eq(fn_name, "list_len") == 1 || str_eq(fn_name, "file_size") == 1 return TYPE_ID_I64() @end
@@ -242,9 +244,13 @@ import "compiler/frontend/ast/ast_node"
       return infer_binary_op_type(tc.tc_infer_ctx, op, t_left, t_right)
     @end
 
-    @if op == "-" || op == "*" || op == "/" || op == "%"
+    @if op == "-" || op == "*" || op == "/" || op == "%" || op == "@"
       // WHY: Allow dynamic/untyped values in arithmetic expressions for gradual typing
       @if t_left == TYPE_ID_ANY() || t_right == TYPE_ID_ANY() || t_left == TYPE_ID_UNKNOWN() || t_right == TYPE_ID_UNKNOWN() || t_left == 0 || t_right == 0
+        return TYPE_ID_ANY()
+      @end
+      @if op == "@"
+        // WHY: Matrix/Tensor multiplication accepts vectors, 2D arrays, tensors, or numeric scalars
         return TYPE_ID_ANY()
       @end
       @if type_is_numeric(tc.tc_reg, t_left) == 0 || type_is_numeric(tc.tc_reg, t_right) == 0

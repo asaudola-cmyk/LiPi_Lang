@@ -108,9 +108,12 @@ import "compiler/frontend/ast/ast_node"
     return TYPE_ID_I64()
   @end
 
-  @if op == "-" || op == "*" || op == "/" || op == "%"
+  @if op == "-" || op == "*" || op == "/" || op == "%" || op == "@"
     @if left_t == TYPE_ID_F64() || right_t == TYPE_ID_F64()
       return TYPE_ID_F64()
+    @end
+    @if op == "@"
+      return TYPE_ID_ANY()
     @end
     return TYPE_ID_I64()
   @end

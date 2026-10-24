@@ -88,7 +88,7 @@ import "compiler/frontend/lexer"
   @if tok == 0 return 0 @end
   t = tok.tok_type
 
-  @if t == "ASSIGN" || t == "PLUSEQ" || t == "MINUSEQ" || t == "STAREQ" || t == "SLASHEQ" || t == "PERCENTEQ"
+  @if t == "ASSIGN" || t == "PLUSEQ" || t == "MINUSEQ" || t == "STAREQ" || t == "SLASHEQ" || t == "PERCENTEQ" || t == "MATMULEQ"
     return 10
   @elif t == "OR"
     return 20
@@ -108,7 +108,7 @@ import "compiler/frontend/lexer"
     return 90
   @elif t == "PLUS" || t == "MINUS"
     return 100
-  @elif t == "STAR" || t == "SLASH" || t == "PERCENT"
+  @elif t == "STAR" || t == "SLASH" || t == "PERCENT" || t == "MATMUL"
     return 110
   @elif t == "PIPE"
     return 120
@@ -122,7 +122,7 @@ import "compiler/frontend/lexer"
 @fn is_right_associative(tok)
   @if tok == 0 return 0 @end
   t = tok.tok_type
-  @if t == "ASSIGN" || t == "PLUSEQ" || t == "MINUSEQ" || t == "STAREQ" || t == "SLASHEQ" || t == "PERCENTEQ"
+  @if t == "ASSIGN" || t == "PLUSEQ" || t == "MINUSEQ" || t == "STAREQ" || t == "SLASHEQ" || t == "PERCENTEQ" || t == "MATMULEQ"
     return 1
   @end
   return 0

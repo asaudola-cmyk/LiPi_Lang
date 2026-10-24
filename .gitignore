@@ -12,7 +12,8 @@ bin/
 dist/
 build/
 scratch/
-benchmarks/
+benchmarks/*
+!benchmarks/sovereign_ai_benchmark.lp
 
 # Standalone package manager dependencies
 lipi_modules/

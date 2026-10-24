@@ -212,28 +212,41 @@ import "compiler/frontend/lexer/comment_doc"
         char_stream_advance_byte(stream)
       @end
 
-    // ── 6. Directives (@fn, @struct, etc.) ──
+    // ── 6. Directives (@fn, @struct, etc.) & Matrix Operators (@, @=) ──
     @elif b == 64 // '@'
       dir_name = "@"
       char_stream_advance_byte(stream)
-      dir_cont = 1
-      @while char_stream_is_eof(stream) == 0 && dir_cont == 1
-        cur = char_stream_peek_byte(stream)
-        @if (cur >= 65 && cur <= 90) || (cur >= 97 && cur <= 122) || (cur >= 48 && cur <= 57) || cur == 95
-          dir_name = dir_name + chr(cur)
-          char_stream_advance_byte(stream)
-        @else
-          dir_cont = 0
-        @end
-      @end
-      dir_kind = lexer_lookup_directive(dir_name)
-      span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
-      @if dir_kind >= 0
-        tok = token_new(dir_kind, token_kind_name(dir_kind), dir_name, 0, 0.0, span)
-        tokens = tokens.push(tok)
+      // Check if followed by '=': '@='
+      @if char_stream_is_eof(stream) == 0 && char_stream_peek_byte(stream) == 61 // '='
+        char_stream_advance_byte(stream)
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
+        tokens = tokens.push(token_new(TOK_MATMULEQ(), "MATMULEQ", "@=", 0, 0.0, span))
       @else
-        tok = token_new(TOK_IDENT(), "IDENT", dir_name, 0, 0.0, span)
-        tokens = tokens.push(tok)
+        dir_cont = 1
+        @while char_stream_is_eof(stream) == 0 && dir_cont == 1
+          cur = char_stream_peek_byte(stream)
+          @if (cur >= 65 && cur <= 90) || (cur >= 97 && cur <= 122) || (cur >= 48 && cur <= 57) || cur == 95
+            dir_name = dir_name + chr(cur)
+            char_stream_advance_byte(stream)
+          @else
+            dir_cont = 0
+          @end
+        @end
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
+        @if dir_name == "@"
+          // Infix Matrix / Tensor Multiplication Operator
+          tok = token_new(TOK_MATMUL(), "MATMUL", "@", 0, 0.0, span)
+          tokens = tokens.push(tok)
+        @else
+          dir_kind = lexer_lookup_directive(dir_name)
+          @if dir_kind >= 0
+            tok = token_new(dir_kind, token_kind_name(dir_kind), dir_name, 0, 0.0, span)
+            tokens = tokens.push(tok)
+          @else
+            tok = token_new(TOK_IDENT(), "IDENT", dir_name, 0, 0.0, span)
+            tokens = tokens.push(tok)
+          @end
+        @end
       @end
 
     // ── 7. Multi-Byte & Single-Byte Operators / Symbols ──

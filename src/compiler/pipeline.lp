@@ -1835,7 +1835,10 @@ fn pipeline_is_memory_exempt_fn raw_name
     if pipeline_str_has_prefix(name, "miller_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "ate_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "b64_") == 1 return 1 end
-    // WHY: CLI tools, package managers, debuggers, LSPs, unikernels, and assimilators manage processes, network sockets, AST transfers, and terminal rendering that escape closed scopes.
+    // WHY: Benchmarks, test suites, CLI tools, package managers, and assimilators manage allocations in iteration loops that escape closed scopes.
+    if pipeline_str_has_prefix(name, "bench_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "benchmark_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "test_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "pkg_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "web_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "dbg_") == 1 return 1 end

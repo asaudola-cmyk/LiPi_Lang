@@ -18,7 +18,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
 
         is_op = 0
         op_kind = k
-        if k == TOK_STAR() or k == TOK_SLASH() or k == TOK_PERCENT()
+        if k == TOK_STAR() or k == TOK_SLASH() or k == TOK_PERCENT() or k == TOK_MATMUL()
             is_op = 1
         elif k == TOK_IDENT()
             if txt == "*"
@@ -29,6 +29,9 @@ fn x86_synth_compile_expr_mul s toks pos_box
                 is_op = 1
             elif txt == "%"
                 op_kind = TOK_PERCENT()
+                is_op = 1
+            elif txt == "@"
+                op_kind = TOK_MATMUL()
                 is_op = 1
 
         if is_op == 0
@@ -43,11 +46,11 @@ fn x86_synth_compile_expr_mul s toks pos_box
                 nt = toks[next_p]
                 if nt.tok_kind == TOK_INT()
                     after_next = next_p + 1
-                    if after_next >= toks.len() or (toks[after_next].tok_kind != TOK_STAR() and toks[after_next].tok_kind != TOK_SLASH() and toks[after_next].tok_kind != TOK_PERCENT() and toks[after_next].tok_kind != TOK_DOT() and toks[after_next].tok_kind != TOK_LBRACKET())
+                    if after_next >= toks.len() or (toks[after_next].tok_kind != TOK_STAR() and toks[after_next].tok_kind != TOK_SLASH() and toks[after_next].tok_kind != TOK_PERCENT() and toks[after_next].tok_kind != TOK_MATMUL() and toks[after_next].tok_kind != TOK_DOT() and toks[after_next].tok_kind != TOK_LBRACKET())
                         is_const_rhs = 1
                         const_val = nt.tok_int_val
 
-            if is_const_rhs == 1
+            if is_const_rhs == 1 and op_kind != TOK_MATMUL()
                 list_set(pos_box, 0, next_p + 1) // Consume operator and integer literal
 
                 if op_kind == TOK_PERCENT()
@@ -277,6 +280,20 @@ fn x86_synth_compile_expr_mul s toks pos_box
                     x86_synth_emit_byte(s, 72)
                     x86_synth_emit_byte(s, 137)
                     x86_synth_emit_byte(s, 208)
+                elif op_kind == TOK_MATMUL()
+                    // WHY: Sovereign Silicon Matrix & Tensor Multiplication (@ Operator)
+                    // Left operand is in %rax, Right operand is in %rcx.
+                    // SysV calling convention: %rdi = left (%rax), %rsi = right (%rcx).
+                    // mov rdi, rax (3B: 48 89 C7)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 199)
+                    // mov rsi, rcx (3B: 48 89 CE)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 206)
+                    // call _lipi_matmul
+                    x86_synth_emit_call_helper(s, "_lipi_matmul")
                 s.synth_last_expr_type = "int"
     return 0
 
@@ -316,7 +333,7 @@ fn x86_synth_compile_expr_add s toks pos_box
                 nt = toks[next_p]
                 if nt.tok_kind == TOK_INT()
                     after_next = next_p + 1
-                    if after_next >= toks.len() or (toks[after_next].tok_kind != TOK_STAR() and toks[after_next].tok_kind != TOK_SLASH() and toks[after_next].tok_kind != TOK_PERCENT() and toks[after_next].tok_kind != TOK_PLUS() and toks[after_next].tok_kind != TOK_MINUS() and toks[after_next].tok_kind != TOK_DOT() and toks[after_next].tok_kind != TOK_LBRACKET())
+                    if after_next >= toks.len() or (toks[after_next].tok_kind != TOK_STAR() and toks[after_next].tok_kind != TOK_SLASH() and toks[after_next].tok_kind != TOK_PERCENT() and toks[after_next].tok_kind != TOK_MATMUL() and toks[after_next].tok_kind != TOK_PLUS() and toks[after_next].tok_kind != TOK_MINUS() and toks[after_next].tok_kind != TOK_DOT() and toks[after_next].tok_kind != TOK_LBRACKET())
                         is_const_int_rhs = 1
                         const_add_val = nt.tok_int_val
 

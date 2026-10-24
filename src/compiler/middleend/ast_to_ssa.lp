@@ -98,6 +98,7 @@ fn ast_to_ssa_map_binop op_str
     if op_str == "+" or op_str == "যোগ" return OP_ADD
     if op_str == "-" or op_str == "বিয়োগ" return OP_SUB
     if op_str == "*" or op_str == "গুণ" return OP_MUL
+    if op_str == "@" or op_str == "ম্যাট্রিক্স_গুণ" return OP_MUL
     if op_str == "/" or op_str == "ভাগ" return OP_DIV
     if op_str == "%" or op_str == "ভাগশেষ" return OP_MOD
     if op_str == "&" or op_str == "এবং" return OP_AND
