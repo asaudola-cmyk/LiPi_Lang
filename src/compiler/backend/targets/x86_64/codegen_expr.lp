@@ -529,6 +529,8 @@ fn x86_synth_expr_primary s toks pos_box
                             s.synth_last_expr_type = "int"
                         elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
                             s.synth_last_expr_type = "str"
+                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect"
+                            s.synth_last_expr_type = "int"
                         else
                             s.synth_last_expr_type = ""
                         if var_name == "restore_extract_single_file"
@@ -586,6 +588,11 @@ fn x86_synth_expr_primary s toks pos_box
                         x86_synth_emit_byte(s, 192)
                         s.synth_last_expr_type = ""
     else
+        // WHY: Syntax error guard against unexpected delimiters inside expression operands
+        if k == TOK_SEMI() or k == TOK_RBRACE() or k == TOK_RPAREN() or txt == ";" or txt == "}" or txt == ")"
+            say "❌ [Syntax Error]: Unexpected delimiter '" + txt + "' in expression at line " + str(t.tok_span.span_start_line)
+            exit(1)
+        end
         // Fallback: advance and clear %rax
         list_set(pos_box, 0, pos + 1)
         x86_synth_emit_byte(s, 49)
