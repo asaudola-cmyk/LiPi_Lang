@@ -1573,6 +1573,9 @@ fn pipeline_is_memory_exempt_fn raw_name
     if pipeline_str_has_prefix(name, "scene_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "state_trie_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "unum_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "amx_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "vnni_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "cpu_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "wire_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "tensor_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "app_") == 1 return 1 end

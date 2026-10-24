@@ -187,6 +187,7 @@ fn x86_synth_patch_u64 s offset val
 include "src/compiler/backend/targets/x86_64/runtime_helpers.lp"
 include "src/compiler/backend/targets/x86_64/runtime_io.lp"
 include "src/compiler/backend/targets/x86_64/avx2_encoder.lp"
+include "src/compiler/backend/targets/x86_64/amx_vnni_encoder.lp"
 include "src/compiler/backend/targets/x86_64/runtime_arena.lp"
 include "src/compiler/backend/targets/x86_64/silicon_opt.lp"
 

@@ -244,6 +244,20 @@ fn x86_synth_emit_cpu_has_amx s
     ])
     return off
 
+fn x86_synth_emit_cpu_has_vnni s
+    // WHY: In-silicon CPUID leaf 7, subleaf 0 probe for AVX-512 VNNI (ECX bit 11).
+    // Probes Vector Neural Network Instructions support directly on physical silicon.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "cpu_has_vnni", off)
+    x86_synth_register_helper_fn(s, "cpuid_vnni", off)
+    x86_synth_register_helper_fn(s, "সিপিইউ_ভিএনএনআই", off)
+    // push rbx; mov eax, 7; xor ecx, ecx; cpuid; shr ecx, 11; and ecx, 1; mov eax, ecx; pop rbx; ret
+    x86_synth_emit_bytes(s, [
+        83, 184, 7, 0, 0, 0, 49, 201, 15, 162,
+        193, 233, 11, 131, 225, 1, 137, 200, 91, 195
+    ])
+    return off
+
 fn x86_synth_emit_simd_avx2_sum s
     // WHY: Native 256-bit AVX2 SIMD vector horizontal sum kernel (130 machine code bytes).
     // Processes 4x 64-bit integers per clock cycle with unrolled dual-pipeline execution.
@@ -367,10 +381,11 @@ fn x86_synth_emit__lipi_matmul s
     return off
 
 fn x86_synth_emit_all_avx2_helpers s
-    // WHY: Synthesizes all Silicon AVX2 / AVX-512 / SSE2 hardware extensions into binary
+    // WHY: Synthesizes all Silicon AVX2 / AVX-512 / AMX / VNNI / SSE2 hardware extensions into binary
     x86_synth_emit_cpu_has_avx2(s)
     x86_synth_emit_cpu_has_avx512(s)
     x86_synth_emit_cpu_has_amx(s)
+    x86_synth_emit_cpu_has_vnni(s)
     x86_synth_emit_simd_avx2_sum(s)
     x86_synth_emit_simd_avx512_sum(s)
     x86_synth_emit_simd_avx512_dot(s)

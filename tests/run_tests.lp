@@ -1159,6 +1159,18 @@ fn main
     else
         failed = failed + 1
 
+    // 225: Intel AMX 2D Tile & AVX-512 VNNI Silicon Accelerator
+    if run_single_test(compiler, "tests/test_amx_vnni_silicon.lp", "test_amx_vnni_silicon") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 226: WebAssembly (WASM) SIMD128 AI Silicon Engine & Standalone Runner
+    if run_single_test(compiler, "tests/test_wasm_simd128_ai.lp", "test_wasm_simd128_ai") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"
