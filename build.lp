@@ -247,13 +247,14 @@ args = argv()
 is_direct_build = 0
 if len(args) >= 1
     p0 = get(args, 0)
-    if p0 == "build.lp.bin" or p0 == "./build.lp.bin" or p0 == "lipi-build" or p0 == "./bin/lipi-build"
+    // WHY: Support invocation via bare command, relative path, or absolute path (/path/to/bin/lipi-build)
+    if p0 == "build.lp.bin" or p0 == "./build.lp.bin" or p0 == "lipi-build" or p0 == "./bin/lipi-build" or ends_with(p0, "lipi-build") == 1 or ends_with(p0, "build.lp.bin") == 1
         is_direct_build = 1
     end
 end
 if len(args) >= 3
     p2 = get(args, 2)
-    if p2 == "build.lp" or p2 == "./build.lp"
+    if p2 == "build.lp" or p2 == "./build.lp" or ends_with(p2, "build.lp") == 1
         is_direct_build = 1
     end
 end
