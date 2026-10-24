@@ -56,11 +56,11 @@ import "utso/core/json"
   parsed = json_parse(header_json_str)
   @if parsed == 0 || parsed.len() == 0
     return {
-      tensor_name: "model.layers.0.self_attn.q_proj.weight",
-      data_type: "F16",
-      shape_dims: [4096, 4096],
-      data_offset: 2048,
-      data_size_bytes: 33554432
+      tensor_name: "",
+      data_type: "",
+      shape_dims: [],
+      data_offset: 0,
+      data_size_bytes: 0
     }
   @end
 
@@ -109,11 +109,11 @@ import "utso/core/json"
   @end
 
   return {
-    tensor_name: "model.layers.0.self_attn.q_proj.weight",
-    data_type: "F16",
-    shape_dims: [4096, 4096],
-    data_offset: 2048,
-    data_size_bytes: 33554432
+    tensor_name: "",
+    data_type: "",
+    shape_dims: [],
+    data_offset: 0,
+    data_size_bytes: 0
   }
 @end
 

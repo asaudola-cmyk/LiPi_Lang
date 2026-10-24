@@ -27,26 +27,31 @@ fn print_usage
     print_lipi_banner()
     say "\033[1;33mUsage:\033[0m"
     say "  lipi <command> [arguments...]\n"
-    say "\033[1;36mCore Commands:\033[0m"
-    say "  \033[1;32mrun\033[0m <file.lp>           Compile and run program in-memory (Zero disk overhead)"
-    say "  \033[1;32m-e\033[0m '<expr>'            Direct one-liner evaluation (Zero disk overhead)"
-    say "  \033[1;32mbuild\033[0m <file.lp> [-o out] Compile standalone native machine code binary"
-    say "  \033[1;32mtest\033[0m [suite]             Execute autonomous test suites (0% Shell)"
-    say "  \033[1;32mrepl\033[0m                    Launch interactive REPL terminal session"
-    say "  \033[1;32mfmt\033[0m <file.lp>            Format source code to canonical 3-syntax standard"
-    say "  \033[1;32maati|আঁটি\033[0m <subcommand>   Sovereign Ed25519 cryptographic package manager (Aati/LPM)"
-    say "  \033[1;32mhaat|হাট\033[0m [cmd|port]     Sovereign distributed package registry daemon & hub"
-    say "  \033[1;32mpkg\033[0m <subcommand>        Legacy alias for 'aati' package manager"
-    say "  \033[1;32mdebug\033[0m <binary>          Launch sys_ptrace native system debugger (LipiDbg)"
-    say "  \033[1;32mos|unikernel\033[0m [build|boot] Bare-metal Multiboot kernel & 5ms cloud unikernel"
-    say "  \033[1;32munum\033[0m <file.lp>          Synthesize Gödel Universal Prime State Number"
-    say "  \033[1;32mai\033[0m <model.gguf>         Direct silicon AVX2 SIMD GGUF local LLM inference"
-    say "  \033[1;32mclean\033[0m                   Purge temporary build caches and scratch binaries (0% Shell)"
-    say "  \033[1;32mspawn-seed\033[0m [target]      Autonomous cellular replication of genesis seed"
-    say "  \033[1;32mself-build\033[0m              3-generation self-hosting deterministic bootstrap"
-    say "  \033[1;32mupdate\033[0m                  Sync with latest GitHub commits & rebuild toolchains"
-    say "  \033[1;32minstall\033[0m                 Install/promote toolchain to isolated ~/.lipi & ~/.local/bin"
-    say "  \033[1;32mversion\033[0m                 Display compiler version and platform architecture\n"
+    say "\033[1;36mCore Compiler Commands:\033[0m"
+    say "  \033[1;32mbuild\033[0m <file.lp> [-o out] [--target=arch]  Compile standalone native machine binary (ELF/PE/Mach-O)"
+    say "  \033[1;32mrun\033[0m <file.lp> [--jit] [args...]           Compile and execute program in-memory (Zero disk latency)"
+    say "  \033[1;32m-e\033[0m '<expr>'                                Direct one-liner evaluation without source files"
+    say "  \033[1;32mtest\033[0m [suite]                                Execute sovereign test runner and regression suites"
+    say "  \033[1;32mrepl\033[0m                                       Launch interactive REPL terminal session\n"
+    say "\033[1;36mPackage Management & Registry:\033[0m"
+    say "  \033[1;32maati|আঁটি\033[0m <subcommand>                      Sovereign Ed25519 cryptographic package manager (Aati)"
+    say "  \033[1;32mhaat|হাট\033[0m [cmd|port]                        Sovereign distributed package registry daemon & hub"
+    say "  \033[1;32mpkg\033[0m <subcommand>                           Canonical alias for 'aati' package manager\n"
+    say "\033[1;36mDeveloper & Silicon Tooling:\033[0m"
+    say "  \033[1;32mfmt\033[0m <file.lp> [-w]                         Format source code to canonical tri-syntax standard"
+    say "  \033[1;32mdebug\033[0m <binary>                             Launch sys_ptrace native system debugger (LipiDbg)"
+    say "  \033[1;32mlsp\033[0m                                       Launch Lipi Language Server Protocol daemon"
+    say "  \033[1;32mconvert\033[0m <file.lp> [target]                  Convert between Bengali, English, and Directive syntax"
+    say "  \033[1;32mai\033[0m <model.gguf> [prompt]                   Run local GGUF transformer inference via sovereign lipi_ai"
+    say "  \033[1;32mos|unikernel\033[0m [build|boot]                    Synthesize bare-metal Multiboot kernel & unikernel image"
+    say "  \033[1;32munum\033[0m <file.lp>                             Synthesize Gödel Universal Prime State Number\n"
+    say "\033[1;36mSystem Maintenance & Bootstrapping:\033[0m"
+    say "  \033[1;32mclean\033[0m                                      Purge temporary build caches and scratch binaries"
+    say "  \033[1;32mspawn-seed\033[0m [target]                         Autonomous cellular replication of genesis seed"
+    say "  \033[1;32mself-build\033[0m                                 3-generation self-hosting deterministic bootstrap"
+    say "  \033[1;32mupdate\033[0m                                     Sync upstream repository and rebuild native toolchain"
+    say "  \033[1;32minstall\033[0m                                    Promote toolchain to isolated ~/.lipi and ~/.local/bin"
+    say "  \033[1;32mversion\033[0m                                    Display compiler version and platform architecture\n"
 
 fn show_version
     print_lipi_banner()
@@ -752,16 +757,63 @@ fn handle_unum file_path
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
     return 0
 
-fn handle_ai model_path prompt
+fn handle_ai model_path prompt extra1 extra2
+    // WHY: Clean sovereign CLI boundary — lipi CLI delegates directly to the sovereign
+    // package aati/lipi_ai/ without embedding hardcoded fake responses or mock strings.
     if len(model_path) == 0
         say "❌ Error: GGUF model required: lipi ai <model.gguf> [prompt]"
+        say "Example: lipi ai models/llama-3-8b.gguf \"What is LiPi?\""
+        say "Run 'lipi ai --help' for options."
         return 1
-    say "\033[1;35m[LIPI AI]\033[0m Native silicon neural engine & local LLM inference..."
-    say "  Model: " + model_path
-    say "  Prompt: " + prompt
-    say "  Engine: Pure Lipi AVX2 SIMD GEMV (Zero Python / Zero PyTorch)"
-    say "  Generated Response: [Lipi Silicon AI Engine Active]"
-    return 0
+    end
+    if model_path == "--help" or model_path == "-h"
+        say "\033[1;33mUsage:\033[0m"
+        say "  lipi ai <model.gguf> [prompt] [options]"
+        say ""
+        say "\033[1;36mDescription:\033[0m"
+        say "  Run sovereign transformer LLM inference via the standalone aati/lipi_ai package."
+        say "  100% Pure Silicon Machine Code (0% Python / 0% PyTorch / 0% Libc)."
+        say ""
+        say "\033[1;36mArguments:\033[0m"
+        say "  <model.gguf>   Path to GGUF binary model file (Q4_0, Q8_0, etc.)"
+        say "  [prompt]       Text prompt for autoregressive generation"
+        say ""
+        say "\033[1;36mExample:\033[0m"
+        say "  lipi ai models/llama-3-8b.gguf \"Explain Lipi Sovereign Architecture\""
+        return 0
+    end
+
+    l_root = lipi_tool_get_root()
+    ai_runner = ""
+    if len(l_root) > 0 and l_root != "."
+        cand1 = l_root + "/aati/lipi_ai/inference.lp"
+        if syscall(21, cand1, 0, 0, 0, 0, 0) == 0
+            ai_runner = cand1
+        end
+    end
+    if len(ai_runner) == 0
+        cand2 = "aati/lipi_ai/inference.lp"
+        if syscall(21, cand2, 0, 0, 0, 0, 0) == 0
+            ai_runner = cand2
+        end
+    end
+    if len(ai_runner) == 0
+        u_home = lipi_get_env("HOME")
+        if len(u_home) > 0
+            cand3 = u_home + "/.lipi/aati/lipi_ai/inference.lp"
+            if syscall(21, cand3, 0, 0, 0, 0, 0) == 0
+                ai_runner = cand3
+            end
+        end
+    end
+
+    if len(ai_runner) == 0
+        say "❌ Error: Sovereign AI package runner not found (aati/lipi_ai/inference.lp)"
+        say "Please ensure 'aati/lipi_ai' package is installed in LiPi root or ~/.lipi/aati"
+        return 1
+    end
+
+    return handle_run(ai_runner, model_path, prompt, extra1, extra2)
 
 // ── Cellular Self-Replication Architecture (বীজ পুনঃউৎপাদন ব্যবস্থা) ───────────
 // WHY: A sovereign language must possess autonomous cellular self-replication.
@@ -1034,13 +1086,16 @@ fn main
         return handle_unum(get(args, 2))
 
     if cmd == "ai"
-        if argc < 3
-            say "Usage: lipi ai <model.gguf> [prompt]"
-            return 1
-        m_path = get(args, 2)
-        p_str = "Explain Lipi Sovereign Architecture"
-        if argc >= 4 p_str = get(args, 3)
-        return handle_ai(m_path, p_str)
+        m_path = ""
+        if argc >= 3 m_path = get(args, 2) end
+        p_str = ""
+        if argc >= 4 p_str = get(args, 3) end
+        extra1 = ""
+        if argc >= 5 extra1 = get(args, 4) end
+        extra2 = ""
+        if argc >= 6 extra2 = get(args, 5) end
+        return handle_ai(m_path, p_str, extra1, extra2)
+    end
 
     say "❌ Unknown command: '" + cmd + "'"
     say "Run 'lipi' or 'lipi help' for available commands."

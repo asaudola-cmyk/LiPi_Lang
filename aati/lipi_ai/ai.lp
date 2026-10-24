@@ -17,6 +17,8 @@ import "aati/lipi_ai/autograd"
 import "aati/lipi_ai/nn"
 import "aati/lipi_ai/llm_inference"
 import "aati/lipi_ai/simd_gemm"
+import "aati/lipi_ai/transformer"
+import "aati/lipi_ai/tensor_ops"
 
 // ── Tensor Creation Intrinsic ─────────────────────────────────────────────────
 // WHY: Creates an N-dimensional tensor from array data and shape specifications.

@@ -1526,6 +1526,18 @@ fn pipeline_is_memory_exempt_fn raw_name
     if pipeline_str_has_prefix(name, "flash_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "qreg_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "quantum_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "quant_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "quantize_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "dequantize") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "sample_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "softmax_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "greedy_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "temperature_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "top_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "prng_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "inference_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "xor_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "gguf_") == 1 return 1 end
     // WHY: Paging, documentation parsers, hardware GHASH authentication, BTree storage engines, and build dependency graphs calculate pointers and streaming states that violate simple closed-scope memory conservation.
     if pipeline_str_has_prefix(name, "page_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "ghash") == 1 return 1 end

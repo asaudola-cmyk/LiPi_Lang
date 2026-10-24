@@ -1,7 +1,7 @@
 include "utso/io.lp"
 include "utso/memory.lp"
 include "utso/math.lp"
-include "aati/lipi_ai/llm/transformer.lp"
+include "aati/lipi_ai/transformer.lp"
 
 // WHY: Rigorous regression test asserting real mathematical outputs of the transformer core,
 // RMSNorm, RoPE rotary positional embedding kernels, and multi-head self-attention mechanisms.
