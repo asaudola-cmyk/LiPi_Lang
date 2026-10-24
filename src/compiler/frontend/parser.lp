@@ -860,6 +860,27 @@ import "compiler/frontend/lexer"
     @if p < tokens.len() && tokens[p].tok_type == "RPAREN"
       p = p + 1
     @end
+  @else
+    @! Bracketless parameter list (e.g., fn add a: i64 b: i64 -> i64)
+    @while p < tokens.len() && tokens[p].tok_type != "NEWLINE" && tokens[p].tok_type != "ARROW" && tokens[p].tok_type != "LBRACE" && tokens[p].tok_type != "EOF"
+      @if tokens[p].tok_type == "IDENT"
+        p_name = tokens[p].tok_val
+        p = p + 1
+        p_type = ""
+        @if p < tokens.len() && tokens[p].tok_type == "COLON"
+          p = p + 1
+          @if p < tokens.len() && (tokens[p].tok_type == "IDENT" || tokens[p].tok_type == "TYPE")
+            p_type = tokens[p].tok_val
+            p = p + 1
+          @end
+        @end
+        params = params.push(ast_param(p_name, p_type, 0))
+      @elif tokens[p].tok_type == "COMMA"
+        p = p + 1
+      @else
+        p = p + 1
+      @end
+    @end
   @end
 
   ret_type = "void"
