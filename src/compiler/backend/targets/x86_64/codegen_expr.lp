@@ -64,11 +64,12 @@ fn x86_synth_expr_primary s toks pos_box
         x86_synth_emit_mov_rax_imm64(s, t.tok_int_val)
         s.synth_last_expr_type = "int"
 
-    // 1b. Float Literal (lowered integer value representation)
+    // 1b. Float Literal: IEEE-754 binary64 64-bit precision
     elif k == TOK_FLOAT()
         list_set(pos_box, 0, pos + 1)
-        x86_synth_emit_mov_rax_imm64(s, t.tok_int_val)
-        s.synth_last_expr_type = "int"
+        fbits = x86_synth_parse_float_bits(t.tok_text)
+        x86_synth_emit_mov_rax_imm64(s, fbits)
+        s.synth_last_expr_type = "float"
 
     // 2. String Literal
     elif k == TOK_STR() or k == TOK_INTERP_STR()

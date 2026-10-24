@@ -91,6 +91,8 @@ fn x86_synth_compile_fn_def s toks pos_box
         else
             if pk == TOK_ASSIGN() or (pk != TOK_STR() and ptxt == "=")
                 break
+            if pk == TOK_ARROW() or (pk != TOK_STR() and ptxt == "->")
+                break
             if pk == TOK_NEWLINE() or pk == TOK_SEMI() or (pk != TOK_STR() and (ptxt == "\n" or ptxt == ";"))
                 list_set(pos_box, 0, cur_p_idx + 1)
                 break

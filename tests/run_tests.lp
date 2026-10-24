@@ -1171,6 +1171,24 @@ fn main
     else
         failed = failed + 1
 
+    // 227: IEEE-754 64-bit Floating Point Arithmetic & Native SSE2 Printing
+    if run_single_test(compiler, "tests/test_float_arithmetic.lp", "test_float_arithmetic") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 228: Bracketless Function Definitions with Return Arrow (->)
+    if run_single_test(compiler, "tests/test_bracketless_fn_arrow.lp", "test_bracketless_fn_arrow") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 229: Automatic GC Safepoints, Heap Watermarks & Allocator Recycling
+    if run_single_test(compiler, "tests/test_gc_safepoints.lp", "test_gc_safepoints") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

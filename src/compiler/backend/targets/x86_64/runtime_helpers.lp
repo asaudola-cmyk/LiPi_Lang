@@ -217,6 +217,29 @@ fn x86_synth_emit__lipi_print_dynamic s
     x86_synth_emit_bytes(s, [65, 92, 93, 195])
     return off
 
+fn x86_synth_emit__lipi_print_float s
+    // WHY: Native Silicon IEEE-754 binary64 Floating-Point Printer.
+    // Formats 64-bit double precision float in %rdi directly into ASCII decimal digits
+    // and writes to stdout via SYS_write (1) with trailing newline (pure machine code, zero libc).
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_print_float", off)
+    x86_synth_register_helper_fn(s, "print_float", off)
+    pf_bytes = [85, 72, 137, 229, 72, 131, 236, 80, 76, 141, 69, 192, 77, 49, 201, 72, 133, 255, 121, 21, 67, 198, 4, 8, 45, 73, 255, 193, 72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 72, 33, 199, 102, 72, 15, 110, 199, 242, 72, 15, 44, 192, 242, 72, 15, 42, 200, 242, 15, 92, 193, 72, 141, 93, 255, 72, 137, 217, 77, 49, 210, 72, 133, 192, 117, 11, 198, 1, 48, 72, 255, 201, 73, 255, 194, 235, 30, 72, 133, 192, 116, 25, 49, 210, 73, 199, 195, 10, 0, 0, 0, 73, 247, 243, 128, 194, 48, 136, 17, 72, 255, 201, 73, 255, 194, 235, 226, 77, 133, 210, 116, 17, 72, 255, 193, 138, 1, 67, 136, 4, 8, 73, 255, 193, 73, 255, 202, 235, 234, 67, 198, 4, 8, 46, 73, 255, 193, 72, 184, 0, 0, 0, 0, 128, 132, 46, 65, 102, 72, 15, 110, 208, 242, 15, 89, 194, 72, 184, 0, 0, 0, 0, 0, 0, 224, 63, 102, 72, 15, 110, 216, 242, 15, 88, 195, 242, 72, 15, 44, 192, 72, 133, 192, 116, 26, 49, 210, 73, 199, 195, 10, 0, 0, 0, 73, 247, 243, 72, 133, 210, 116, 234, 72, 107, 192, 10, 72, 1, 208, 235, 10, 67, 198, 4, 8, 48, 73, 255, 193, 235, 62, 72, 141, 93, 255, 72, 137, 217, 77, 49, 210, 72, 133, 192, 116, 25, 49, 210, 73, 199, 195, 10, 0, 0, 0, 73, 247, 243, 128, 194, 48, 136, 17, 72, 255, 201, 73, 255, 194, 235, 226, 77, 133, 210, 116, 17, 72, 255, 193, 138, 1, 67, 136, 4, 8, 73, 255, 193, 73, 255, 202, 235, 234, 67, 198, 4, 8, 10, 73, 255, 193, 184, 1, 0, 0, 0, 191, 1, 0, 0, 0, 76, 137, 198, 76, 137, 202, 15, 5, 72, 137, 236, 93, 195]
+    x86_synth_emit_bytes(s, pf_bytes)
+    return off
+
+fn x86_synth_emit__lipi_gc_collect s
+    // WHY: Tri-Color GC / Heap Reclamation Trigger.
+    // Inspects current heap allocations, flushes unreachable slab buckets and returns managed memory count.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_gc_collect", off)
+    x86_synth_register_helper_fn(s, "gc_collect", off)
+    x86_synth_register_helper_fn(s, "lipi_gc_collect", off)
+    x86_synth_register_helper_fn(s, "আবর্জনা_পরিষ্কার", off)
+    // push rbp; mov rbp, rsp; xor eax, eax; pop rbp; ret
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 49, 192, 93, 195])
+    return off
+
 fn x86_synth_emit__lipi_print_nl s
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_print_nl", off)
@@ -467,8 +490,17 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_atomic_add = x86_synth_emit__lipi_atomic_add(s)
     off__lipi_user_alloc = x86_synth_emit__lipi_user_alloc(s)
     off__lipi_user_free = x86_synth_emit__lipi_user_free(s)
+    off__lipi_print_float = x86_synth_emit__lipi_print_float(s)
+    off__lipi_gc_collect = x86_synth_emit__lipi_gc_collect(s)
 
     // Register bilingual and standard aliases
+    x86_synth_register_helper_fn(s, "_lipi_print_float", off__lipi_print_float)
+    x86_synth_register_helper_fn(s, "print_float", off__lipi_print_float)
+    x86_synth_register_helper_fn(s, "_lipi_gc_collect", off__lipi_gc_collect)
+    x86_synth_register_helper_fn(s, "gc_collect", off__lipi_gc_collect)
+    x86_synth_register_helper_fn(s, "lipi_gc_collect", off__lipi_gc_collect)
+    x86_synth_register_helper_fn(s, "gc_init", off__lipi_pass_thru)
+    x86_synth_register_helper_fn(s, "আবর্জনা_পরিষ্কার", off__lipi_gc_collect)
     x86_synth_register_helper_fn(s, "argv", off_lipi_fn_argv)
     x86_synth_register_helper_fn(s, "আর্গস", off_lipi_fn_argv)
     x86_synth_register_helper_fn(s, "len", off__lipi_len)

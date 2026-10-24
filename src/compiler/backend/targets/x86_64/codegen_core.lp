@@ -1029,4 +1029,107 @@ fn x86_synth_emit_pop_args s arg_count
         x86_synth_emit_byte(s, 246) // 0xF6
     return 0
 
+fn x86_synth_parse_float_bits s_text
+    // WHY: Converts floating-point string literal (e.g. "1.9", "2.9", "100.5", "-0.25")
+    // directly into standard IEEE-754 binary64 64-bit integer bit representation.
+    // Pure integer arithmetic: zero libc, zero external dependencies, bit-exact.
+    s_len = len(s_text)
+    if s_len == 0
+        return 0
+    end
+
+    sign = 0
+    start = 0
+    c0 = char_at(s_text, 0)
+    if c0 == "-"
+        sign = 1
+        start = 1
+    elif c0 == "+"
+        start = 1
+    end
+
+    // Split into integer and fractional parts
+    int_part = 0
+    frac_part = 0
+    frac_digits = 0
+    dot_seen = 0
+
+    idx = start
+    while idx < s_len
+        c = char_at(s_text, idx)
+        if c == "."
+            dot_seen = 1
+        else
+            code = ord(c)
+            if code >= 48 and code <= 57
+                d = code - 48
+                if dot_seen == 0
+                    int_part = (int_part * 10) + d
+                else
+                    frac_part = (frac_part * 10) + d
+                    frac_digits = frac_digits + 1
+                end
+            end
+        end
+        idx = idx + 1
+    end
+
+    if int_part == 0 and frac_part == 0
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
+    end
+
+    // Compute denominator = 10^frac_digits
+    den = 1
+    k = 0
+    while k < frac_digits
+        den = den * 10
+        k = k + 1
+    end
+
+    num = (int_part * den) + frac_part
+
+    exp = 1023
+    while num >= (den * 2)
+        den = den * 2
+        exp = exp + 1
+    end
+    while num < den
+        num = num * 2
+        exp = exp - 1
+    end
+
+    rem = num - den
+    mantissa = 0
+    b = 0
+    while b < 52
+        rem = rem * 2
+        bit = 0
+        if rem >= den
+            bit = 1
+            rem = rem - den
+        end
+        mantissa = (mantissa * 2) + bit
+        b = b + 1
+    end
+
+    // Rounding: check guard bit
+    rem = rem * 2
+    if rem >= den
+        mantissa = mantissa + 1
+        if mantissa >= 4503599627370496
+            mantissa = 0
+            exp = exp + 1
+        end
+    end
+
+    res = (exp * 4503599627370496) + mantissa
+    if sign == 1
+        res = res + 9223372036854775808
+    end
+    return res
+
+
 

@@ -212,6 +212,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 193)
                 s.synth_last_expr_type = "int"
             else
+                left_type = s.synth_last_expr_type
                 list_set(pos_box, 0, pos + 1) // Consume operator
 
                 // Push left operand (%rax) to stack
@@ -219,6 +220,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
 
                 // Evaluate right operand into %rax
                 x86_synth_expr_primary(s, toks, pos_box)
+                right_type = s.synth_last_expr_type
 
                 // Move right operand to %rcx, restore left operand to %rax
                 x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
@@ -226,7 +228,64 @@ fn x86_synth_compile_expr_mul s toks pos_box
                 x86_synth_emit_byte(s, 193)
                 x86_synth_emit_byte(s, 88)  // pop rax
 
-                if op_kind == TOK_STAR()
+                if (left_type == "float" or right_type == "float") and (op_kind == TOK_STAR() or op_kind == TOK_SLASH())
+                    // WHY: SSE2 64-bit Double-Precision Floating Point Multiplication & Division.
+                    // Transfers 64-bit IEEE-754 bit patterns from GPRs (%rax, %rcx) to SSE2 registers (%xmm0, %xmm1).
+                    // Mixed integer-float arithmetic promotes integers to double precision via cvtsi2sd.
+                    if left_type == "float"
+                        // movq xmm0, rax (66 48 0F 6E C0)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 110)
+                        x86_synth_emit_byte(s, 192)
+                    else
+                        // cvtsi2sd xmm0, rax (F2 48 0F 2A C0)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 42)
+                        x86_synth_emit_byte(s, 192)
+                    end
+
+                    if right_type == "float"
+                        // movq xmm1, rcx (66 48 0F 6E C9)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 110)
+                        x86_synth_emit_byte(s, 201)
+                    else
+                        // cvtsi2sd xmm1, rcx (F2 48 0F 2A C9)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 42)
+                        x86_synth_emit_byte(s, 201)
+                    end
+
+                    if op_kind == TOK_STAR()
+                        // mulsd xmm0, xmm1 (F2 0F 59 C1)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 89)
+                        x86_synth_emit_byte(s, 193)
+                    elif op_kind == TOK_SLASH()
+                        // divsd xmm0, xmm1 (F2 0F 5E C1)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 94)
+                        x86_synth_emit_byte(s, 193)
+                    end
+
+                    // movq rax, xmm0 (66 48 0F 7E C0)
+                    x86_synth_emit_byte(s, 102)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 126)
+                    x86_synth_emit_byte(s, 192)
+                    s.synth_last_expr_type = "float"
+                elif op_kind == TOK_STAR()
                     // imul rax, rcx (0x48 0x0F 0xAF 0xC1)
                     x86_synth_emit_byte(s, 72)
                     x86_synth_emit_byte(s, 15)
@@ -292,9 +351,11 @@ fn x86_synth_compile_expr_mul s toks pos_box
                     x86_synth_emit_byte(s, 72)
                     x86_synth_emit_byte(s, 137)
                     x86_synth_emit_byte(s, 206)
-                    // call _lipi_matmul
                     x86_synth_emit_call_helper(s, "_lipi_matmul")
-                s.synth_last_expr_type = "int"
+                    s.synth_last_expr_type = "int"
+                if left_type != "float" and right_type != "float"
+                    s.synth_last_expr_type = "int"
+                end
     return 0
 
 fn x86_synth_compile_expr_add s toks pos_box
@@ -402,7 +463,64 @@ fn x86_synth_compile_expr_add s toks pos_box
                 x86_synth_emit_byte(s, 193)
                 x86_synth_emit_byte(s, 88)  // pop rax
 
-                if op_kind == TOK_PLUS()
+                if left_type == "float" or right_type == "float"
+                    // WHY: SSE2 64-bit Double-Precision Floating Point Addition & Subtraction.
+                    // Transfers 64-bit IEEE-754 bit patterns from GPRs (%rax, %rcx) to SSE2 registers (%xmm0, %xmm1).
+                    // Mixed integer-float arithmetic promotes integers to double precision via cvtsi2sd.
+                    if left_type == "float"
+                        // movq xmm0, rax (66 48 0F 6E C0)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 110)
+                        x86_synth_emit_byte(s, 192)
+                    else
+                        // cvtsi2sd xmm0, rax (F2 48 0F 2A C0)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 42)
+                        x86_synth_emit_byte(s, 192)
+                    end
+
+                    if right_type == "float"
+                        // movq xmm1, rcx (66 48 0F 6E C9)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 110)
+                        x86_synth_emit_byte(s, 201)
+                    else
+                        // cvtsi2sd xmm1, rcx (F2 48 0F 2A C9)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 42)
+                        x86_synth_emit_byte(s, 201)
+                    end
+
+                    if op_kind == TOK_PLUS()
+                        // addsd xmm0, xmm1 (F2 0F 58 C1)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 88)
+                        x86_synth_emit_byte(s, 193)
+                    elif op_kind == TOK_MINUS()
+                        // subsd xmm0, xmm1 (F2 0F 5C C1)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 92)
+                        x86_synth_emit_byte(s, 193)
+                    end
+
+                    // movq rax, xmm0 (66 48 0F 7E C0)
+                    x86_synth_emit_byte(s, 102)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 126)
+                    x86_synth_emit_byte(s, 192)
+                    s.synth_last_expr_type = "float"
+                elif op_kind == TOK_PLUS()
                     if (left_type == "int" or right_type == "int") and left_type != "str" and right_type != "str"
                         // WHY: Direct 1-cycle integer addition when at least one operand is a known integer
                         // and neither operand is statically a string (e.g. prod[idx] + (ai * b[j]), acc + rem).

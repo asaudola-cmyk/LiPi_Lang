@@ -544,11 +544,29 @@ fn wasm_synth_compile_program tokens
                 pp = name_p + 1
                 while pp < toks.len()
                     pt = toks[pp]
-                    if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI() or pt.tok_kind == TOK_COLON()
+                    if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI()
                         break
+                    end
+                    if pt.tok_kind == TOK_ARROW() or (pt.tok_kind != TOK_STR() and pt.tok_text == "->")
+                        pp = pp + 1
+                        if pp < toks.len() and toks[pp].tok_kind == TOK_IDENT()
+                            pp = pp + 1
+                        end
+                        break
+                    end
                     if pt.tok_kind == TOK_IDENT()
                         push(param_names, pt.tok_text)
-                    pp = pp + 1
+                        pp = pp + 1
+                        if pp < toks.len() and (toks[pp].tok_kind == TOK_COLON() or (toks[pp].tok_kind != TOK_STR() and toks[pp].tok_text == ":"))
+                            pp = pp + 1
+                            if pp < toks.len() and toks[pp].tok_kind == TOK_IDENT()
+                                pp = pp + 1
+                            end
+                        end
+                    else
+                        pp = pp + 1
+                    end
+                end
 
                 entry = [fn_name, param_names, scan_p]
                 push(fn_headers, entry)
@@ -608,13 +626,22 @@ fn wasm_synth_compile_program tokens
                 fn_name = toks[name_p].tok_text
                 list_set(pos_box, 0, name_p + 1)
 
-            // Skip parameter tokens until newline / colon
+            // Skip parameter tokens until newline or return arrow
             while get(pos_box, 0) < toks.len()
                 pt = toks[get(pos_box, 0)]
-                if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI() or pt.tok_kind == TOK_COLON()
+                if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI()
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     break
+                end
+                if pt.tok_kind == TOK_ARROW() or (pt.tok_kind != TOK_STR() and pt.tok_text == "->")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                    break
+                end
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
 
             target_fn = wasm_synth_find_function(s, fn_name)
             if target_fn != 0

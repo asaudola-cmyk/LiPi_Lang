@@ -1147,6 +1147,9 @@ fn pipeline_build_ast_declarations toks src_path
                     if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_LBRACE() or pt.tok_kind == TOK_ASSIGN() or (pt.tok_kind != TOK_STR() and (pt.tok_text == "{" or pt.tok_text == "="))
                         break
                     end
+                    if pt.tok_kind == TOK_ARROW() or (pt.tok_kind != TOK_STR() and pt.tok_text == "->")
+                        break
+                    end
                     if pipeline_is_ident_token(pt.tok_kind) == 1
                         p_name = pt.tok_text
                         p_type = ""

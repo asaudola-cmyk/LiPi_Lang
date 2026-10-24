@@ -56,7 +56,11 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_emit_byte(s, 72)
         x86_synth_emit_byte(s, 137)
         x86_synth_emit_byte(s, 199)
-        x86_synth_emit_call_helper(s, "_lipi_print_dynamic")
+        if s.synth_last_expr_type == "float"
+            x86_synth_emit_call_helper(s, "_lipi_print_float")
+        else
+            x86_synth_emit_call_helper(s, "_lipi_print_dynamic")
+        end
         return 0
 
     // ── 2. Control Flow: return / ফেরত ─────────────────────────────────────────
@@ -536,6 +540,8 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_set_var_type(s, var_name, assigned_type)
                     if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
                         x86_synth_set_prim_type(s, var_name, "int")
+                    elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
+                        x86_synth_set_prim_type(s, var_name, "float")
                     elif assigned_type == "str" or assigned_type == "string"
                         x86_synth_set_prim_type(s, var_name, "str")
                 if is_int_lit == 1
@@ -545,6 +551,8 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_set_prim_type(s, var_name, "int")
                 elif s.synth_last_expr_type == "int"
                     x86_synth_set_prim_type(s, var_name, "int")
+                elif s.synth_last_expr_type == "float"
+                    x86_synth_set_prim_type(s, var_name, "float")
                 elif s.synth_last_expr_type == "str"
                     x86_synth_set_prim_type(s, var_name, "str")
                 elif assigned_type == ""
@@ -612,6 +620,8 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_var_type(s, var_name, assigned_type)
                         if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
                             x86_synth_set_prim_type(s, var_name, "int")
+                        elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
+                            x86_synth_set_prim_type(s, var_name, "float")
                         elif assigned_type == "str" or assigned_type == "string"
                             x86_synth_set_prim_type(s, var_name, "str")
                     if is_int_lit == 1
@@ -621,6 +631,8 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_prim_type(s, var_name, "int")
                     elif s.synth_last_expr_type == "int"
                         x86_synth_set_prim_type(s, var_name, "int")
+                    elif s.synth_last_expr_type == "float"
+                        x86_synth_set_prim_type(s, var_name, "float")
                     elif s.synth_last_expr_type == "str"
                         x86_synth_set_prim_type(s, var_name, "str")
                     elif assigned_type == ""

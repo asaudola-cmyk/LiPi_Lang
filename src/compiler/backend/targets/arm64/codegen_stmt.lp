@@ -646,16 +646,33 @@ fn arm64_synth_compile_statement s toks pos_box
         s.synth_stack_offset = 16
         s.synth_in_function = 1
 
-        // Parse parameter names until newline
+        // Parse parameter names until newline or return arrow
         params = list()
         while get(pos_box, 0) < toks.len()
             p_tok = toks[get(pos_box, 0)]
             if p_tok.tok_kind == TOK_NEWLINE() or p_tok.tok_kind == TOK_SEMI()
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 break
+            if p_tok.tok_kind == TOK_ARROW() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "->")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                break
             if p_tok.tok_kind == TOK_IDENT()
-                push(params, p_tok.tok_text)
-            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                pname = p_tok.tok_text
+                push(params, pname)
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                // Skip optional type annotation: : type
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                end
+            else
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
 
         // Emit function prologue
         arm64_emit_prologue(s)
