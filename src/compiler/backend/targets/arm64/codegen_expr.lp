@@ -23,6 +23,13 @@ fn arm64_synth_expr_primary s toks pos_box
         arm64_emit_mov_imm64(s, 0, t.tok_int_val)
         return 0
 
+    // 1b. Float Literal: IEEE-754 binary64 64-bit precision
+    if k == TOK_FLOAT()
+        list_set(pos_box, 0, pos + 1)
+        fbits = arm64_parse_float_bits(t.tok_text)
+        arm64_emit_mov_imm64(s, 0, fbits)
+        return 0
+
     // 2. String Literal
     if k == TOK_STR()
         list_set(pos_box, 0, pos + 1)

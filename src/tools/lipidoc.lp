@@ -37,18 +37,18 @@ fn trim_right s
     slen = len(s)
     if slen == 0
         return ""
-    end = slen - 1
-    while end >= 0
-        c = char_at(s, end)
+    last_idx = slen - 1
+    while last_idx >= 0
+        c = char_at(s, last_idx)
         if c == " " or c == "\t" or c == "\r" or c == "\n"
-            end = end - 1
+            last_idx = last_idx - 1
         else
             break
-    if end < 0
+    if last_idx < 0
         return ""
     res = ""
     i = 0
-    while i <= end
+    while i <= last_idx
         res = res + char_at(s, i)
         i = i + 1
     return res
@@ -121,17 +121,17 @@ fn ends_with s suffix
     return 1
 
 // WHY: Extracts substring [start, end) without external string dependencies.
-fn str_sub s start end
+fn str_sub s start end_pos
     slen = len(s)
     if start < 0
         start = 0
-    if end > slen
-        end = slen
-    if start >= end
+    if end_pos > slen
+        end_pos = slen
+    if start >= end_pos
         return ""
     res = ""
     i = start
-    while i < end
+    while i < end_pos
         res = res + char_at(s, i)
         i = i + 1
     return res

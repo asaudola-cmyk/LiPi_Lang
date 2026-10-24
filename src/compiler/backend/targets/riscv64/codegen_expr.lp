@@ -23,6 +23,13 @@ fn riscv64_synth_expr_primary s toks pos_box
         riscv64_emit_li(s, 10, t.tok_int_val)
         return 0
 
+    // 1b. Float Literal: IEEE-754 binary64 64-bit precision
+    if k == TOK_FLOAT()
+        list_set(pos_box, 0, pos + 1)
+        fbits = riscv64_parse_float_bits(t.tok_text)
+        riscv64_emit_li(s, 10, fbits)
+        return 0
+
     // 2. String Literal
     if k == TOK_STR()
         list_set(pos_box, 0, pos + 1)

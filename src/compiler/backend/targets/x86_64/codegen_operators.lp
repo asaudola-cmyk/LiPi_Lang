@@ -215,6 +215,21 @@ fn x86_synth_compile_expr_mul s toks pos_box
                 left_type = s.synth_last_expr_type
                 list_set(pos_box, 0, pos + 1) // Consume operator
 
+                // WHY: Syntax error guard against dangling binary operators (*, /, %, @)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                chk_pos = get(pos_box, 0)
+                if chk_pos >= toks.len()
+                    say "❌ [Syntax Error]: Dangling binary operator without right-hand operand"
+                    exit(1)
+                end
+                chk_tok = toks[chk_pos]
+                chk_k = chk_tok.tok_kind
+                chk_x = chk_tok.tok_text
+                if chk_k != TOK_STR() and (chk_k == TOK_SEMI() or chk_k == TOK_RBRACE() or chk_k == TOK_RPAREN() or chk_k == TOK_EOF() or chk_x == ";" or chk_x == "}" or chk_x == ")")
+                    say "❌ [Syntax Error]: Dangling binary operator followed by '" + chk_x + "' at line " + str(chk_tok.tok_span.span_start_line)
+                    exit(1)
+                end
+
                 // Push left operand (%rax) to stack
                 x86_synth_emit_byte(s, 80) // push rax
 
@@ -449,6 +464,21 @@ fn x86_synth_compile_expr_add s toks pos_box
                 s.synth_last_expr_type = "int"
             else
                 list_set(pos_box, 0, pos + 1) // Consume operator
+
+                // WHY: Syntax error guard against dangling binary operators (+, -)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                chk_pos = get(pos_box, 0)
+                if chk_pos >= toks.len()
+                    say "❌ [Syntax Error]: Dangling binary operator without right-hand operand"
+                    exit(1)
+                end
+                chk_tok = toks[chk_pos]
+                chk_k = chk_tok.tok_kind
+                chk_x = chk_tok.tok_text
+                if chk_k != TOK_STR() and (chk_k == TOK_SEMI() or chk_k == TOK_RBRACE() or chk_k == TOK_RPAREN() or chk_k == TOK_EOF() or chk_x == ";" or chk_x == "}" or chk_x == ")")
+                    say "❌ [Syntax Error]: Dangling binary operator '" + txt + "' followed by '" + chk_x + "' at line " + str(chk_tok.tok_span.span_start_line)
+                    exit(1)
+                end
 
                 // Push left operand (%rax) to stack
                 x86_synth_emit_byte(s, 80) // push rax

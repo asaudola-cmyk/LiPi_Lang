@@ -28,6 +28,15 @@ fn main()
     end
     free(p2)
 
+    // Verify gc_collect inspects and reports reclaimed bytes in slab freelists
+    let reclaimed = gc_collect()
+    say "Reclaimed bytes in slab freelists:"
+    say reclaimed
+    if reclaimed < 320
+        say "FAIL: gc_collect failed to quantify reclaimed slab memory"
+        return 1
+    end
+
     // Test 3: Arena mark and reset
     let mark = arena_mark()
     let p3 = alloc(128)

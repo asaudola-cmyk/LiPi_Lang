@@ -37,6 +37,23 @@ fn main()
     say "Testing 2.5 + 3:"
     say m
 
+    // Test 6: Float Floor rounding intrinsic (floor(3.7) -> 3, floor(10) -> 10)
+    let fl1 = floor(3.7)
+    say "Testing floor(3.7):"
+    say fl1
+    if fl1 != 3
+        say "FAIL: floor(3.7) expected 3"
+        return 1
+    end
+
+    let fl2 = floor(10)
+    say "Testing floor(10):"
+    say fl2
+    if fl2 != 10
+        say "FAIL: floor(10) expected 10"
+        return 1
+    end
+
     say "FLOAT ARITHMETIC TESTS PASSED ✔"
     return 0
 end

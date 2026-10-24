@@ -145,6 +145,13 @@ fn wasm_synth_expr_primary s toks pos_box
         wasm_emit_i64_const(s.ws_code, int_val)
         return 0
 
+    // 1b. Float Literal: IEEE-754 binary64 64-bit precision
+    if k == TOK_FLOAT()
+        list_set(pos_box, 0, pos + 1)
+        fbits = wasm_parse_float_bits(t.tok_text)
+        wasm_emit_i64_const(s.ws_code, fbits)
+        return 0
+
     // 2. String Literal
     if k == TOK_STR()
         list_set(pos_box, 0, pos + 1)

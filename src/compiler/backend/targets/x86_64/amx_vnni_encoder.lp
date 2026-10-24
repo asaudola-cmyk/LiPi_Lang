@@ -147,7 +147,31 @@ fn x86_synth_emit_vnni_vpdpbusd s zmm_dst zmm_src1 zmm_src2
     push(bytes, 80) // 0x50 (VPDPBUSD opcode)
 
     modrm = 192 | ((zd % 8) * 8) | (zs2 % 8) // 11 zd zs2
-    push(bytes, modrm)
+    x86_synth_emit_bytes(s, bytes)
+    return 6
 
+// ── 4. AMX 2D Tile Load and Store Emitters (TILELOADD / TILESTORED) ───────────
+
+fn x86_synth_emit_amx_tileloadd s tmm_dst base_reg stride_reg
+    // WHY: TILELOADD loads a 2D tile from memory [base_reg + stride_reg*1] into tmm_dst.
+    // Encoding: VEX.128.F2.0F38.W0 4B /r (ModR/M SIB)
+    td = tmm_dst % 8
+    br = base_reg % 8
+    sr = stride_reg % 8
+    modrm = 0 | (td * 8) | 4 // 00 td 100 (SIB follows)
+    sib = 0 | (sr * 8) | br   // 00 sr br (scale 1)
+    bytes = [196, 226, 123, 75, modrm, sib]
+    x86_synth_emit_bytes(s, bytes)
+    return 6
+
+fn x86_synth_emit_amx_tilestored s base_reg stride_reg tmm_src
+    // WHY: TILESTORED stores a 2D tile from tmm_src into memory [base_reg + stride_reg*1].
+    // Encoding: VEX.128.F3.0F38.W0 4B /r (ModR/M SIB)
+    ts = tmm_src % 8
+    br = base_reg % 8
+    sr = stride_reg % 8
+    modrm = 0 | (ts * 8) | 4 // 00 ts 100 (SIB follows)
+    sib = 0 | (sr * 8) | br   // 00 sr br (scale 1)
+    bytes = [196, 226, 122, 75, modrm, sib]
     x86_synth_emit_bytes(s, bytes)
     return 6

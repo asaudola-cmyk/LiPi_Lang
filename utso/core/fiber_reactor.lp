@@ -141,6 +141,21 @@ fn fiber_execute_slice desc
         mem_write(desc, 8, FIBER_STATE_DONE)
         return 1
 
+    // Task Type 4: Hardware Silicon Stack-Swapping Fiber (True Green Thread)
+    elif task_type == 4
+        // WHY: True silicon green thread.
+        // arg points to a fiber stack context [saved_sp, target_sp].
+        // Invokes native hardware fiber_context_switch to perform callee-saved register
+        // preservation and RSP stack pivot without userspace state-machine emulation.
+        if arg > 0
+            target_sp = mem_read(arg, 8)
+            if target_sp > 0
+                fiber_context_switch(arg, target_sp)
+            end
+        end
+        mem_write(desc, 8, FIBER_STATE_DONE)
+        return 1
+
     // Default: Mark complete
     mem_write(desc, 8, FIBER_STATE_DONE)
     return 1
@@ -231,3 +246,16 @@ fn reactor_free r
         free(table, max_fibers * FIBER_DESC_SIZE)
     free(r, REACTOR_HDR_SIZE)
     return 1
+
+// ৮. ট্রু গ্রিন থ্রেড কনটেক্সট সুইচ (True Silicon Stack Switch)
+fn reactor_yield_to old_sp_ptr new_sp
+    // WHY: Invokes native machine instruction context switch:
+    // saves %rbp, %rbx, %r12-%r15, stores %rsp to old_sp_ptr, sets %rsp to new_sp,
+    // and pops saved registers from new stack.
+    if old_sp_ptr <= 0 or new_sp <= 0 return 0 end
+    return fiber_context_switch(old_sp_ptr, new_sp)
+
+// ৯. গ্রিন থ্রেড স্পন করা (Spawn Silicon Green Thread with Dedicated Stack)
+fn reactor_spawn_green_thread r stack_context
+    // WHY: Spawns a task type 4 fiber backed by real register frames and dedicated stack.
+    return reactor_spawn(r, 4, stack_context, 0, 0)

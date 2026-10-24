@@ -99,4 +99,13 @@ channel_free(pipe_ch)
 channel_free(result_ch)
 reactor_free(reactor)
 
+// ── Test 3: Green Thread Task Dispatch ───────────────────────────────────────
+say "\n▶ Test 3: Testing Silicon Green Thread Task Dispatch..."
+reactor2 = reactor_new(4)
+f_green = reactor_spawn(reactor2, 4, 0, 0, 0)
+assert_true(f_green > 0, "Green thread fiber descriptor spawned")
+drained2 = reactor_run_until_idle(reactor2, 10)
+assert_eq(drained2, 1, "Green thread successfully scheduled and completed")
+reactor_free(reactor2)
+
 say "\n🎉 ALL FIBER REACTOR & RING CHANNEL TESTS PASSED!"

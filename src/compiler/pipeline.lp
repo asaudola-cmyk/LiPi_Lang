@@ -495,7 +495,7 @@ fn pipeline_parse_bin_prec toks pos_box sp min_prec
         end
 
         if is_dangling == 1
-            say "❌ [Syntax Error]: Dangling binary operator '" + op_str + "' without valid right-hand operand!"
+            say "❌ [Syntax Error]: Dangling binary operator '" + op_str + "' at line " + str(ct.tok_span.span_start_line) + " without valid right-hand operand!"
             exit(1)
         end
 
