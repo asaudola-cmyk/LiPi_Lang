@@ -464,6 +464,41 @@ fn pipeline_parse_bin_prec toks pos_box sp min_prec
             break
         end
 
+        // WHY: Syntax error guard against dangling binary operators (e.g. `1 + ;`, `1 + end`, `(1 + )`).
+        // Scans forward past comments and newlines to ensure a valid right-hand expression token exists.
+        chk_p = cp + 1
+        while chk_p < toks.len()
+            chk_k = toks[chk_p].tok_kind
+            if chk_k == TOK_COMMENT_LINE() or chk_k == TOK_COMMENT_BLOCK() or chk_k == TOK_NEWLINE()
+                chk_p = chk_p + 1
+            else
+                break
+            end
+        end
+
+        is_dangling = 0
+        if chk_p >= toks.len()
+            is_dangling = 1
+        else
+            chk_tok = toks[chk_p]
+            chk_k = chk_tok.tok_kind
+            chk_txt = chk_tok.tok_text
+            if chk_k != TOK_STR()
+                if chk_k == TOK_SEMI() or chk_k == TOK_EOF() or chk_k == TOK_RBRACE() or chk_txt == "}"
+                    is_dangling = 1
+                elif chk_k == TOK_KW_END() or chk_k == TOK_DIR_END() or chk_txt == "end" or chk_txt == "শেষ" or chk_txt == "@end"
+                    is_dangling = 1
+                elif chk_k == TOK_RPAREN() or chk_txt == ")" or chk_k == TOK_RBRACKET() or chk_txt == "]" or chk_k == TOK_COMMA() or chk_txt == ","
+                    is_dangling = 1
+                end
+            end
+        end
+
+        if is_dangling == 1
+            say "❌ [Syntax Error]: Dangling binary operator '" + op_str + "' without valid right-hand operand!"
+            exit(1)
+        end
+
         list_set(pos_box, 0, cp + 1)
         right = pipeline_parse_bin_prec(toks, pos_box, sp, prec + 1)
         left = ast_expr_binary(left, op_str, right, sp)

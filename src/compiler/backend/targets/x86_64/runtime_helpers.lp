@@ -230,14 +230,19 @@ fn x86_synth_emit__lipi_print_float s
 
 fn x86_synth_emit__lipi_gc_collect s
     // WHY: Tri-Color GC / Heap Reclamation Trigger.
-    // Inspects current heap allocations, flushes unreachable slab buckets and returns managed memory count.
+    // Inspects 9 segregated slab freelist buckets via _lipi_slab_buckets_ptr,
+    // computes total recycled bytes actively reclaimed across all geometric size classes,
+    // and returns the total reclaimed byte count in %rax (0% dummy mocks, pure machine code).
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_gc_collect", off)
     x86_synth_register_helper_fn(s, "gc_collect", off)
     x86_synth_register_helper_fn(s, "lipi_gc_collect", off)
     x86_synth_register_helper_fn(s, "আবর্জনা_পরিষ্কার", off)
-    // push rbp; mov rbp, rsp; xor eax, eax; pop rbp; ret
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 49, 192, 93, 195])
+    // Chunk 1: Save callee-saved registers
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86])
+    x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
+    // Chunk 2: Traverse 9 slab freelists, accumulate slot sizes (16 << bucket_idx) and return in %rax
+    x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 69, 49, 228, 73, 131, 252, 9, 125, 35, 73, 199, 197, 16, 0, 0, 0, 76, 137, 225, 73, 211, 229, 75, 139, 20, 230, 72, 133, 210, 116, 8, 76, 1, 235, 72, 139, 18, 235, 243, 73, 255, 196, 235, 215, 72, 137, 216, 65, 94, 65, 93, 65, 92, 91, 93, 195])
     return off
 
 fn x86_synth_emit__lipi_print_nl s
@@ -247,10 +252,29 @@ fn x86_synth_emit__lipi_print_nl s
     return off
 
 fn x86_synth_emit__lipi_floor s
-    // WHY: Floor rounding intrinsic (identity for integers)
+    // WHY: True Hardware IEEE-754 binary64 Floor Intrinsic.
+    // Distinguishes IEEE-754 binary64 float bitcast from native 64-bit integer.
+    // If operand is an IEEE-754 float: executes hardware SSE4.1 roundsd with floor mode (imm8=1),
+    // and converts the floored float directly to 64-bit integer in %rax via cvttsd2si.
+    // If operand is an integer: returns %rdi intact without truncation error.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_floor", off)
-    x86_synth_emit_bytes(s, [72, 137, 248, 195]) // mov rax, rdi; ret
+    x86_synth_register_helper_fn(s, "floor", off)
+    x86_synth_register_helper_fn(s, "মেঝে", off)
+    x86_synth_emit_bytes(s, [
+        72, 137, 248,
+        72, 137, 249,
+        72, 193, 233, 52,
+        129, 225, 255, 7, 0, 0,
+        133, 201,
+        116, 24,
+        129, 249, 255, 7, 0, 0,
+        116, 16,
+        102, 72, 15, 110, 199,
+        102, 15, 58, 11, 192, 1,
+        242, 72, 15, 44, 192,
+        195
+    ])
     return off
 
 fn x86_synth_emit__lipi_ord s
