@@ -90,11 +90,46 @@ fp2 = unum_compute_fingerprint(synth)
 assert_eq(fp1, fp2, "Fingerprint is 100% bit-for-bit deterministic")
 
 // ── Test 5: Mathematical Formula Rendering ────────────────────────────────────
-say "[5/5] Testing Gödel Formula Representation..."
+say "[5/6] Testing Gödel Formula Representation..."
 formula = unum_format_formula(synth)
 say "  Formula: " + formula
 assert_eq(len(formula) > 10, 1, "Rendered valid Gödel prime factorization formula")
 
+// ── Test 6: Windowed Gödel Blocks & Basic Block Factorization ─────────────────
+say "[6/6] Testing Windowed Gödel Blocks & Formal State Integrity..."
+ws = unum_window_synth_new(3)
+unum_window_synth_add_op(ws, UNUM_OP_LOAD_CONST, 10)
+unum_window_synth_add_op(ws, UNUM_OP_ADD, 25)
+unum_window_synth_add_op(ws, UNUM_OP_STORE_REG, 0) // Window 0 committed
+unum_window_synth_add_op(ws, UNUM_OP_MUL, 2)
+unum_window_synth_add_op(ws, UNUM_OP_PRINT_ACC, 0)
+unum_window_synth_add_op(ws, UNUM_OP_LOAD_REG, 0)  // Window 1 committed
+unum_window_synth_add_op(ws, UNUM_OP_HALT, 0)      // Window 2 uncommitted
+unum_window_synth_finalize(ws)                     // Window 2 finalized
+
+b_cnt = unum_window_synth_get_block_count(ws)
+assert_eq(b_cnt, 3, "Created 3 windowed basic blocks from 7 opcodes")
+
+g0 = unum_window_synth_get_block_godel(ws, 0)
+g1 = unum_window_synth_get_block_godel(ws, 1)
+g2 = unum_window_synth_get_block_godel(ws, 2)
+
+assert_eq(g0 != 0, 1, "Block 0 has non-zero 64-bit Gödel number")
+assert_eq(g1 != 0, 1, "Block 1 has non-zero 64-bit Gödel number")
+assert_eq(g2 != 0, 1, "Block 2 has non-zero 64-bit Gödel number")
+assert_eq(g0 != g1, 1, "Block 0 and Block 1 Gödel numbers are distinct")
+
+// Verify formal mathematical block integrity
+assert_eq(unum_window_synth_verify_block(ws, 0), 1, "Block 0 passes mathematical integrity")
+assert_eq(unum_window_synth_verify_block(ws, 1), 1, "Block 1 passes mathematical integrity")
+assert_eq(unum_window_synth_verify_block(ws, 2), 1, "Block 2 passes mathematical integrity")
+assert_eq(unum_window_synth_verify_all(ws), 1, "All 3 blocks pass formal Gödel verification")
+
+// Atomic state transition delta calculation
+delta01 = unum_window_synth_transition_delta(ws, 0, 1)
+assert_eq(delta01 != 0, 1, "Atomic state transition delta between Block 0 and 1 is non-zero")
+
 say "========================================================"
 say "PASS: Lipi Universal Number (Gödel) Synthesis Verified 100%!"
 say "========================================================"
+

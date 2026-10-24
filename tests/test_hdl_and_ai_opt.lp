@@ -105,6 +105,19 @@ fn main
     test_assert(decision.should_vectorize == 1, "AI vectorization heuristic recommends SIMD acceleration")
     test_assert(decision.predicted_speedup_pct > 100, "AI speedup prediction model indicates positive speedup")
 
+    // Hardware instruction cache bound verification
+    bound_small = ai_opt_cache_aware_unroll_bound(4, 16, 512)
+    test_assert(bound_small == 4, "Small loop body fits within L1 instruction cache budget")
+    bound_large = ai_opt_cache_aware_unroll_bound(8, 80, 512)
+    test_assert(bound_large == 1, "Large loop body clamped to factor 1 to avoid L1i cache eviction stalls")
+
+    // Profile-guided telemetry evaluation (PGO)
+    telem = ai_opt_telemetry_new(100, 50000, 10)
+    test_assert(telem.average_trip_count == 500, "Telemetry correctly computes average trip count 500")
+    dec_pgo = ai_opt_evaluate_with_telemetry(weights, feat, telem)
+    test_assert(dec_pgo.recommended_unroll_factor >= 2, "PGO evaluation confirms profitable unrolling")
+    test_assert(dec_pgo.should_vectorize == 1, "PGO evaluation confirms SIMD vectorization")
+
     // ── Phase 3: Verilog RTL Silicon Synthesis CLI Integration ───────────────
     say "\n[Phase 3]: Testing Verilog RTL CLI Code Generation (--target=verilog)..."
     out_v = "/tmp/test_hdl_out.v"

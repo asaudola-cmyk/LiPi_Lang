@@ -143,6 +143,10 @@ include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
     @end
   @end
 
+  // WHY: Hardware L1 Instruction Cache Line & Budget Guard (typically 512 bytes per loop nest).
+  // Clamps unroll factor if unrolled body footprint would cause L1i cache eviction stalls.
+  factor = ai_opt_cache_aware_unroll_bound(factor, feat.body_instruction_count, 512)
+
   @! Determine vectorization
   do_vectorize = 0
   @if vec_score > 50 && feat.has_cross_iter_dependency == 0 && feat.memory_access_count > 0
@@ -155,6 +159,80 @@ include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
   return {
     recommended_unroll_factor: factor,
     should_vectorize: do_vectorize,
+    predicted_speedup_pct: speedup,
+    register_pressure_score: reg_pressure
+  }
+@end
+
+// ── 3b. Hardware Instruction Cache & Profile Telemetry Guidance ───────────────
+
+@fn ai_opt_cache_aware_unroll_bound(factor, instr_count, l1_budget_bytes)
+  // WHY: Prevents loop unrolling from thrashing the CPU L1 instruction cache.
+  // Average x86 instruction is ~4 bytes. If unrolled size exceeds budget, clamps down factor.
+  @if factor <= 1
+    return 1
+  @end
+  est_bytes = instr_count * factor * 4
+  @if est_bytes > l1_budget_bytes
+    max_f = l1_budget_bytes / (instr_count * 4)
+    @if max_f >= 8 return 8 @end
+    @if max_f >= 4 return 4 @end
+    @if max_f >= 2 return 2 @end
+    return 1
+  @end
+  return factor
+@end
+
+@struct ProfileTelemetryData
+  loop_invocation_count: i64
+  total_iterations: i64
+  branch_mispredict_count: i64
+  average_trip_count: i64
+@end
+
+@fn ai_opt_telemetry_new(invocations, total_iters, mispredicts)
+  // WHY: Constructs runtime profiling feedback telemetry (PGO) for feedback-guided optimization.
+  avg_trip = 0
+  @if invocations > 0
+    avg_trip = total_iters / invocations
+  @end
+  return {
+    loop_invocation_count: invocations,
+    total_iterations: total_iters,
+    branch_mispredict_count: mispredicts,
+    average_trip_count: avg_trip
+  }
+@end
+
+@fn ai_opt_evaluate_with_telemetry(opt_model, feat, telemetry)
+  // WHY: Merges static neural heuristics with empirical runtime profile telemetry (PGO).
+  // Confirmed high-trip loops receive SIMD boost, while mispredict-heavy loops reduce unrolling.
+  base_dec = ai_opt_evaluate_loop(opt_model, feat)
+  factor = base_dec.recommended_unroll_factor
+  do_vec = base_dec.should_vectorize
+  reg_pressure = base_dec.register_pressure_score
+
+  @if telemetry.average_trip_count >= 100 && feat.has_cross_iter_dependency == 0
+    @if factor < 4 && feat.body_instruction_count <= 32
+      factor = 4
+    @end
+    @if feat.memory_access_count > 0
+      do_vec = 1
+    @end
+  @end
+
+  @if telemetry.branch_mispredict_count > 1000
+    @if factor > 2
+      factor = 2
+    @end
+  @end
+
+  factor = ai_opt_cache_aware_unroll_bound(factor, feat.body_instruction_count, 512)
+  speedup = 100 + (factor * 18) + (do_vec * 50)
+
+  return {
+    recommended_unroll_factor: factor,
+    should_vectorize: do_vec,
     predicted_speedup_pct: speedup,
     register_pressure_score: reg_pressure
   }

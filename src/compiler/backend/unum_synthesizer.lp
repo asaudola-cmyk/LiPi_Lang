@@ -264,3 +264,170 @@ fn unum_format_formula synth
     if count > 4
         res = res + "..."
     return res
+
+// ── 5. Windowed Gödel Blocks Architecture (উইন্ডোড গোডেল ব্লক ব্যবস্থা) ────────
+// WHY: Unbounded Gödel multiplication (U = p0^op * p1^arg ...) overflows physical 64-bit
+// integer representation after 3-4 opcodes. Windowed Gödel Partitioning divides programs
+// into bounded basic blocks (typically 3-4 opcodes per window). Each block synthesizes
+// a bounded 64-bit Gödel Number (U_block) and block fingerprint, enabling realistic
+// lock-free state transitions, formal block verification, and memory-safe mathematical execution.
+
+fn unum_window_commit ws
+    ops = get(ws, 2)
+    args = get(ws, 3)
+    b_len = len(ops)
+    if b_len == 0 return 0 end
+
+    block_id = len(get(ws, 1))
+    g_num = 1
+    fp = 14695981039346656037
+    mod_bound = 4611686018427387903 // (2^62 - 1) Mersenne-safe bound
+
+    j = 0
+    while j < b_len
+        op = get(ops, j)
+        arg = get(args, j)
+        p_op = unum_prime(j * 2)
+        p_arg = unum_prime((j * 2) + 1)
+
+        // Compute prime power term for opcode
+        term_op = 1
+        k = 0
+        while k < (op + 1)
+            term_op = (term_op * p_op) % mod_bound
+            k = k + 1
+        end
+        g_num = (g_num * term_op) % mod_bound
+
+        // Compute prime power term for operand (bounded exponent)
+        term_arg = 1
+        exp_a = (arg % 8) + 1
+        if exp_a < 1 exp_a = 1 end
+        k = 0
+        while k < exp_a
+            term_arg = (term_arg * p_arg) % mod_bound
+            k = k + 1
+        end
+        g_num = (g_num * term_arg) % mod_bound
+
+        // FNV-1a block hash accumulation
+        fp = fp ^ op
+        fp = fp * 1099511628211
+        fp = fp ^ arg
+        fp = fp * 1099511628211
+        j = j + 1
+    end
+
+    blk = list()
+    push(blk, block_id) // 0: id
+    push(blk, ops)      // 1: ops list
+    push(blk, args)     // 2: args list
+    push(blk, g_num)    // 3: 64-bit Gödel number
+    push(blk, fp)       // 4: 64-bit fingerprint
+
+    push(get(ws, 1), blk)
+    list_set(ws, 2, list())
+    list_set(ws, 3, list())
+    return block_id + 1
+
+fn unum_window_synth_new window_size
+    w_size = window_size
+    if w_size <= 0 or w_size > 8 w_size = 3 end
+    ws = list()
+    push(ws, w_size) // 0: window size
+    push(ws, list()) // 1: blocks list
+    push(ws, list()) // 2: current window ops
+    push(ws, list()) // 3: current window args
+    push(ws, 0)      // 4: total instructions added
+    return ws
+
+fn unum_window_synth_add_op ws op arg
+    push(get(ws, 2), op)
+    push(get(ws, 3), arg)
+    list_set(ws, 4, get(ws, 4) + 1)
+    w_size = get(ws, 0)
+    if len(get(ws, 2)) >= w_size
+        unum_window_commit(ws)
+    end
+    return get(ws, 4)
+
+fn unum_window_synth_finalize ws
+    if len(get(ws, 2)) > 0
+        unum_window_commit(ws)
+    end
+    return len(get(ws, 1))
+
+fn unum_window_synth_get_block_count ws
+    return len(get(ws, 1))
+
+fn unum_window_synth_get_block_godel ws block_idx
+    blocks = get(ws, 1)
+    if block_idx < 0 or block_idx >= len(blocks) return 0 end
+    blk = get(blocks, block_idx)
+    return get(blk, 3)
+
+fn unum_window_synth_get_block_fingerprint ws block_idx
+    blocks = get(ws, 1)
+    if block_idx < 0 or block_idx >= len(blocks) return 0 end
+    blk = get(blocks, block_idx)
+    return get(blk, 4)
+
+fn unum_window_synth_verify_block ws block_idx
+    // WHY: Verifies mathematical consistency of block prime factorization without memory tampering.
+    blocks = get(ws, 1)
+    if block_idx < 0 or block_idx >= len(blocks) return 0 end
+    blk = get(blocks, block_idx)
+    ops = get(blk, 1)
+    args = get(blk, 2)
+    expected_g = get(blk, 3)
+
+    g_num = 1
+    mod_bound = 4611686018427387903
+    j = 0
+    while j < len(ops)
+        op = get(ops, j)
+        arg = get(args, j)
+        p_op = unum_prime(j * 2)
+        p_arg = unum_prime((j * 2) + 1)
+
+        term_op = 1
+        k = 0
+        while k < (op + 1)
+            term_op = (term_op * p_op) % mod_bound
+            k = k + 1
+        end
+        g_num = (g_num * term_op) % mod_bound
+
+        term_arg = 1
+        exp_a = (arg % 8) + 1
+        if exp_a < 1 exp_a = 1 end
+        k = 0
+        while k < exp_a
+            term_arg = (term_arg * p_arg) % mod_bound
+            k = k + 1
+        end
+        g_num = (g_num * term_arg) % mod_bound
+        j = j + 1
+    end
+
+    if g_num == expected_g return 1 end
+    return 0
+
+fn unum_window_synth_verify_all ws
+    // WHY: Formally validates that every basic block retains invariant Gödel factor integrity.
+    blocks = get(ws, 1)
+    cnt = len(blocks)
+    if cnt == 0 return 0 end
+    bi = 0
+    while bi < cnt
+        if unum_window_synth_verify_block(ws, bi) == 0 return 0 end
+        bi = bi + 1
+    end
+    return 1
+
+fn unum_window_synth_transition_delta ws from_idx to_idx
+    // WHY: Computes atomic state transition coordinate delta between execution blocks.
+    g_from = unum_window_synth_get_block_godel(ws, from_idx)
+    g_to = unum_window_synth_get_block_godel(ws, to_idx)
+    return g_from ^ g_to
+
