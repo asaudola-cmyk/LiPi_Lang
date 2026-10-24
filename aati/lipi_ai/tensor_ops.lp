@@ -466,8 +466,11 @@ import "aati/lipi_ai/tensor_core"
 @end
 
 @fn tensor_detect_simd_capabilities() -> TensorSIMDCapabilities
-  @! WHY: Automatically enables 256-bit AVX2 SIMD acceleration for matrix multiplication
-  return { has_amx: 0, has_avx512: 0, has_avx2: 1, has_fma: 1 }
+  @! WHY: Automatically discovers Silicon AMX, AVX-512, and AVX2 hardware features via CPUID
+  amx_val = cpu_has_amx()
+  avx512_val = cpu_has_avx512()
+  avx2_val = cpu_has_avx2()
+  return { has_amx: amx_val, has_avx512: avx512_val, has_avx2: avx2_val, has_fma: 1 }
 @end
 
 @! ----------------------------------------------------------------------------

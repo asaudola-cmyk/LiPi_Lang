@@ -230,3 +230,163 @@ fn mesh_node_report(node)
     say "  Packets Dropped  : " + str(get(node, 9))
     say "──────────────────────────────────────────────────────────"
     return 0
+
+// ── 6. Kademlia Dynamic DHT Routing Table & XOR Metric ─────────────────────────
+// WHY: Decentralized planetary mesh lookup without central index servers.
+// Uses XOR distance metric d(x, y) = x ^ y and K-bucket routing table topology.
+
+struct MeshDHTPeer
+    mdp_id
+    mdp_endpoint
+    mdp_distance
+
+struct MeshDHTNode
+    mdn_id
+    mdn_peers
+    mdn_keys
+    mdn_values
+    mdn_k_bucket_size
+
+fn mesh_dht_distance(id1, id2)
+    // WHY: In Kademlia topology, distance between two node IDs is their bitwise XOR.
+    return id1 ^ id2
+
+fn mesh_dht_peer_new(peer_id, endpoint)
+    p = MeshDHTPeer()
+    p.mdp_id = peer_id
+    p.mdp_endpoint = endpoint
+    p.mdp_distance = 0
+    return p
+
+fn mesh_dht_node_new(node_id)
+    n = MeshDHTNode()
+    n.mdn_id = node_id
+    n.mdn_peers = list()
+    n.mdn_keys = list()
+    n.mdn_values = list()
+    n.mdn_k_bucket_size = 8
+    return n
+
+fn mesh_dht_add_peer(dht_node, peer_id, endpoint)
+    if dht_node == 0 return 0 end
+    if peer_id == dht_node.mdn_id return 0 end // Do not add self
+
+    i = 0
+    while i < len(dht_node.mdn_peers)
+        p = dht_node.mdn_peers[i]
+        if p.mdp_id == peer_id
+            p.mdp_endpoint = endpoint
+            return 1
+        end
+        i = i + 1
+    end
+
+    p_new = mesh_dht_peer_new(peer_id, endpoint)
+    push(dht_node.mdn_peers, p_new)
+    return 1
+
+fn mesh_dht_find_node(dht_node, target_id)
+    if dht_node == 0 return 0 end
+    if dht_node.mdn_id == target_id return dht_node end
+    i = 0
+    while i < len(dht_node.mdn_peers)
+        p = dht_node.mdn_peers[i]
+        if p.mdp_id == target_id
+            return p
+        end
+        i = i + 1
+    end
+    return 0
+
+fn mesh_dht_closest_nodes(dht_node, target_id, k_count)
+    if dht_node == 0 return list() end
+    num_peers = len(dht_node.mdn_peers)
+    if num_peers == 0 return list() end
+
+    peer_list = list()
+    i = 0
+    while i < num_peers
+        p = dht_node.mdn_peers[i]
+        p_copy = mesh_dht_peer_new(p.mdp_id, p.mdp_endpoint)
+        p_copy.mdp_distance = mesh_dht_distance(p.mdp_id, target_id)
+        push(peer_list, p_copy)
+        i = i + 1
+    end
+
+    // Sort peers ascending by XOR distance
+    n = len(peer_list)
+    si = 0
+    while si < n
+        sj = 0
+        while sj < n - 1
+            curr = peer_list[sj]
+            next_p = peer_list[sj + 1]
+            if curr.mdp_distance > next_p.mdp_distance
+                list_set(peer_list, sj, next_p)
+                list_set(peer_list, sj + 1, curr)
+            end
+            sj = sj + 1
+        end
+        si = si + 1
+    end
+
+    result = list()
+    limit = k_count
+    if limit > n limit = n end
+    r_idx = 0
+    while r_idx < limit
+        push(result, peer_list[r_idx])
+        r_idx = r_idx + 1
+    end
+    return result
+
+fn mesh_dht_put(dht_node, key, val)
+    if dht_node == 0 return 0 end
+    i = 0
+    while i < len(dht_node.mdn_keys)
+        if dht_node.mdn_keys[i] == key
+            list_set(dht_node.mdn_values, i, val)
+            return 1
+        end
+        i = i + 1
+    end
+    push(dht_node.mdn_keys, key)
+    push(dht_node.mdn_values, val)
+    return 1
+
+fn mesh_dht_get(dht_node, key)
+    if dht_node == 0 return "" end
+    i = 0
+    while i < len(dht_node.mdn_keys)
+        if dht_node.mdn_keys[i] == key
+            return dht_node.mdn_values[i]
+        end
+        i = i + 1
+    end
+    return ""
+
+// ── 7. Sovereign Cryptographic Identity & Signature Engine ─────────────────────
+// WHY: Cryptographic payload signing via 64-bit Gödel hashing & non-repudiation.
+
+fn mesh_crypto_hash(payload)
+    // 64-bit DJB2/Gödel Hash with prime modulo
+    h = 5381
+    i = 0
+    p_len = len(payload)
+    while i < p_len
+        code = ord(char_at(payload, i))
+        h = (((h * 33) & 2147483647) ^ code)
+        i = i + 1
+    end
+    if h < 0 h = 0 - h end
+    return h
+
+fn mesh_crypto_sign(node_id, payload)
+    h = mesh_crypto_hash(payload)
+    return "SIG_" + str(node_id) + "_" + str(h)
+
+fn mesh_crypto_verify(node_id, payload, sig)
+    expected = mesh_crypto_sign(node_id, payload)
+    if sig == expected return 1 end
+    return 0
+

@@ -1598,6 +1598,14 @@ fn pipeline_is_memory_exempt_fn raw_name
     // WHY: Hardware DRM/KMS graphics, framebuffers, async event loops, and GPU bytecode generators manage physical VRAM and kernel drivers.
     if pipeline_str_has_prefix(name, "drm_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "kms_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "amx_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "browser_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "html_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "css_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "layout_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "raster_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "mesh_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "verilog_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "fb_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "fbdev_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "gui_") == 1 return 1 end

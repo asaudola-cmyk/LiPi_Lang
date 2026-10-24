@@ -1135,6 +1135,30 @@ fn main
     else
         failed = failed + 1
 
+    // 221: Intel AMX 2D Silicon Hardware Matrix Tiling Engine
+    if run_single_test(compiler, "tests/test_amx_silicon.lp", "test_amx_silicon") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 222: Sovereign Web Browser Engine (HTML5, CSS Cascading, Box Model, Pixel Rasterizer)
+    if run_single_test(compiler, "tests/test_sovereign_browser.lp", "test_sovereign_browser") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 223: Planetary Mesh DHT (XOR Metric) & Byzantine Fault Tolerant (BFT) Quorum Consensus
+    if run_single_test(compiler, "tests/test_bft_planetary_mesh.lp", "test_bft_planetary_mesh") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 224: Synthesizable Verilog RTL Chip Emitter & Systolic GEMM Hardware Tile
+    if run_single_test(compiler, "tests/test_verilog_synthesis.lp", "test_verilog_synthesis") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"
