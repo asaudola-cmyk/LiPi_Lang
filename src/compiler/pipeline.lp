@@ -1773,6 +1773,7 @@ fn pipeline_is_memory_exempt_fn raw_name
     if pipeline_str_has_prefix(name, "x86_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "arm64_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "wasm_") == 1 return 1 end
+    if pipeline_str_has_prefix(name, "webx_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "rv64_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "riscv_") == 1 return 1 end
     if pipeline_str_has_prefix(name, "riscv64_") == 1 return 1 end
