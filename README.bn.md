@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/সার্বভৌমত্ব-১০০%25%20খাঁটি%20সিলিকন-brightgreen.svg)](#১০০-সার্বভৌম-অবস্থা)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/কম্পাইলার-জিরো%20C%20%7C%20জিরো%20Libc%20%7C%20জিরো%20LLVM-blue.svg)](#আর্কিটেকচার)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/সিলিকন-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 230/230 Passing](https://img.shields.io/badge/টেস্ট-২৩০%2F২৩০%20উত্তীর্ণ%20(১০০%25)-brightgreen.svg)](tests/)
+[![Tests: 232/232 Passing](https://img.shields.io/badge/টেস্ট-২৩২%2F২৩২%20উত্তীর্ণ%20(১০০%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/দ্বিভাষিক-বাংলা%20%2B%20English-orange.svg)](README.md)
 [![License: MIT](https://img.shields.io/badge/লাইসেন্স-MIT-green.svg)](LICENSE)
 
@@ -363,7 +363,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **১০ লাখ কলামস্ক্যান মেমোরি স্ক্যান** | **০.৩৮ মি.সে. (২৬১০ MElem/s)** | ১.৫১ মি.সে. | ১.৯৪ মি.সে. | ১.৬৬ মি.সে. | ৮.৫০ মি.সে. | ৭৮.৩৮ মি.সে. |
 | **কোল্ড-স্টার্ট কম্পাইল সময়** | **৪.২৮ মি.সে.** | ১৭৩.২৫ মি.সে. | ২২৫.৮৪ মি.সে. | ৫৭.৪৫ মি.সে. | ~৮০ মি.সে. | N/A (ইন্টারপ্রেটেড) |
 | **স্ট্যান্ডঅ্যালোন ফাইলের সাইজ** | **৫.৮ KB** | ১৫.৭ KB | ১৫.৭ KB | ৪২৮৪ KB | ১২২০ KB | স্ক্রিপ্ট |
-| **টেস্ট স্যুট পাসের হার** | **২১৮/২১৮ (১০০%)** | — | — | — | — | — |
+| **টেস্ট স্যুট পাসের হার** | **২৩২/২৩২ (১০০%)** | — | — | — | — | — |
 
 ---
 

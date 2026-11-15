@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/Compiler-Zero%20C%20%7C%20Zero%20Libc%20%7C%20Zero%20LLVM-blue.svg)](#architecture)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/Silicon-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 230/230 Passing](https://img.shields.io/badge/Tests-230%2F230%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 232/232 Passing](https://img.shields.io/badge/Tests-232%2F232%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](README.bn.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -237,7 +237,7 @@ lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```bash
 lipi test
 ```
-All **230 regression test suites pass (230/230 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, DRM/KMS hardware modesetting, Linux framebuffer canvas, io_uring fibers, raw wire packet framing, 9-class slab memory managers, and autoregressive transformers.
+All **232 regression test suites pass (232/232 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, DRM/KMS hardware modesetting, Linux framebuffer canvas, io_uring fibers, raw wire packet framing, 9-class slab memory managers, autoregressive transformers, and the complete LiPi WebX sovereign frontend & islands ecosystem.
 
 ---
 
@@ -382,7 +382,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Test Suite Pass Rate** | **230/230 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **232/232 (100%)** | — | — | — | — | — |
 
 ---
 

@@ -33,6 +33,12 @@ WEBX_NODE_MODAL     = 6
 WEBX_NODE_TABS      = 7
 WEBX_NODE_BADGE     = 8
 WEBX_NODE_TEXT      = 9
+WEBX_NODE_RAW       = 10
+WEBX_NODE_ICON      = 11
+WEBX_NODE_PROGRESS  = 12
+WEBX_NODE_DRAWER    = 13
+WEBX_NODE_LISTBOX   = 14
+WEBX_NODE_OPTION    = 15
 
 struct WebXNode
     node_type       // Integer enum (WEBX_NODE_*)
@@ -149,10 +155,17 @@ fn webx_text id text class_str
     // WHY: Text node primitive (<p>)
     return webx_node_new(WEBX_NODE_TEXT, id, "p", text, class_str, 0)
 
+fn webx_raw id raw_html
+    // WHY: Direct unescaped raw markup container for SVG graphics and custom micro-widgets
+    return webx_node_new(WEBX_NODE_RAW, id, "raw", raw_html, "", 0)
+
 // Semantic HTML5 serialization
 fn webx_render_node node
     // WHY: Recursively generates valid HTML5 string with accessibility attributes
     if node == 0 return ""
+    if node.node_type == WEBX_NODE_RAW or node.node_tag == "raw"
+        return node.node_text
+    end
     tag = node.node_tag
     id_str = node.node_id
     cls = node.node_class
@@ -166,6 +179,13 @@ fn webx_render_node node
         out = out + " type=\"button\""
         if node.node_action_id > 0
             out = out + " data-action=\"" + str(node.node_action_id) + "\""
+        end
+        props = node.node_props
+        pi = 0
+        while pi < len(props)
+            p = get(props, pi)
+            out = out + " " + p
+            pi = pi + 1
         end
     elif node.node_type == WEBX_NODE_INPUT
         out = out + " type=\"text\" value=\"" + node.node_text + "\""
@@ -190,6 +210,35 @@ fn webx_render_node node
         out = out + " role=\"dialog\" aria-modal=\"true\""
     elif node.node_type == WEBX_NODE_BADGE
         out = out + " role=\"status\""
+    elif node.node_type == WEBX_NODE_PROGRESS
+        props = node.node_props
+        cur_v = 0
+        max_v = 100
+        if len(props) > 0 cur_v = get(props, 0) end
+        if len(props) > 1 max_v = get(props, 1) end
+        out = out + " role=\"progressbar\" aria-valuenow=\"" + str(cur_v) + "\" aria-valuemin=\"0\" aria-valuemax=\"" + str(max_v) + "\""
+    elif node.node_type == WEBX_NODE_DRAWER
+        props = node.node_props
+        out = out + " role=\"dialog\" aria-modal=\"true\""
+        if len(props) > 0 and get(props, 0) == 1
+            out = out + " data-open=\"true\""
+        else
+            out = out + " data-open=\"false\" style=\"display: none;\""
+        end
+    elif node.node_type == WEBX_NODE_LISTBOX
+        out = out + " role=\"listbox\""
+    elif node.node_type == WEBX_NODE_OPTION
+        out = out + " role=\"option\""
+        if node.node_action_id > 0
+            out = out + " data-action=\"" + str(node.node_action_id) + "\""
+        end
+        props = node.node_props
+        pi = 0
+        while pi < len(props)
+            p = get(props, pi)
+            out = out + " " + p
+            pi = pi + 1
+        end
     end
     out = out + ">"
 
@@ -525,8 +574,82 @@ fn webx_class_to_css_rule token
     if token == "w-full" return ".w-full { width: 100%; }"
     if token == "h-full" return ".h-full { height: 100%; }"
     if token == "max-w-md" return ".max-w-md { max-width: 28rem; }"
+    if token == "max-w-lg" return ".max-w-lg { max-width: 32rem; }"
+    if token == "max-w-xl" return ".max-w-xl { max-width: 36rem; }"
+    if token == "max-w-2xl" return ".max-w-2xl { max-width: 42rem; }"
     if token == "shadow-md" return ".shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }"
     if token == "shadow-lg" return ".shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }"
+
+    // Positioning & Layout
+    if token == "fixed" return ".fixed { position: fixed; }"
+    if token == "relative" return ".relative { position: relative; }"
+    if token == "absolute" return ".absolute { position: absolute; }"
+    if token == "inset-0" return ".inset-0 { top: 0; right: 0; bottom: 0; left: 0; }"
+    if token == "top-0" return ".top-0 { top: 0; }"
+    if token == "bottom-0" return ".bottom-0 { bottom: 0; }"
+    if token == "left-0" return ".left-0 { left: 0; }"
+    if token == "right-0" return ".right-0 { right: 0; }"
+    if token == "top-4" return ".top-4 { top: 1rem; }"
+    if token == "right-4" return ".right-4 { right: 1rem; }"
+    if token == "bottom-4" return ".bottom-4 { bottom: 1rem; }"
+    if token == "left-4" return ".left-4 { left: 1rem; }"
+    if token == "z-10" return ".z-10 { z-index: 10; }"
+    if token == "z-40" return ".z-40 { z-index: 40; }"
+    if token == "z-50" return ".z-50 { z-index: 50; }"
+    if token == "overflow-hidden" return ".overflow-hidden { overflow: hidden; }"
+    if token == "cursor-pointer" return ".cursor-pointer { cursor: pointer; }"
+    if token == "transition-all" return ".transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }"
+    if token == "flex-wrap" return ".flex-wrap { flex-wrap: wrap; }"
+    if token == "inline-flex" return ".inline-flex { display: inline-flex; }"
+
+    // Extended Spacing & Sizing
+    if token == "p-1" return ".p-1 { padding: 0.25rem; }"
+    if token == "p-3" return ".p-3 { padding: 0.75rem; }"
+    if token == "px-3" return ".px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }"
+    if token == "px-4" return ".px-4 { padding-left: 1rem; padding-right: 1rem; }"
+    if token == "py-1" return ".py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }"
+    if token == "py-2" return ".py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }"
+    if token == "mb-2" return ".mb-2 { margin-bottom: 0.5rem; }"
+    if token == "mb-4" return ".mb-4 { margin-bottom: 1rem; }"
+    if token == "mt-2" return ".mt-2 { margin-top: 0.5rem; }"
+    if token == "mt-4" return ".mt-4 { margin-top: 1rem; }"
+    if token == "gap-1" return ".gap-1 { gap: 0.25rem; }"
+    if token == "gap-3" return ".gap-3 { gap: 0.75rem; }"
+    if token == "w-4" return ".w-4 { width: 1rem; }"
+    if token == "h-4" return ".h-4 { height: 1rem; }"
+    if token == "w-5" return ".w-5 { width: 1.25rem; }"
+    if token == "h-5" return ".h-5 { height: 1.25rem; }"
+    if token == "w-6" return ".w-6 { width: 1.5rem; }"
+    if token == "h-6" return ".h-6 { height: 1.5rem; }"
+    if token == "w-64" return ".w-64 { width: 16rem; }"
+    if token == "w-80" return ".w-80 { width: 20rem; }"
+    if token == "h-2" return ".h-2 { height: 0.5rem; }"
+    if token == "h-3" return ".h-3 { height: 0.75rem; }"
+
+    // Extended Colors & Dark/Light Themes
+    if token == "bg-slate-800" return ".bg-slate-800 { background-color: #1e293b; }"
+    if token == "bg-slate-900" return ".bg-slate-900 { background-color: #0f172a; }"
+    if token == "bg-slate-950" return ".bg-slate-950 { background-color: #020617; }"
+    if token == "bg-gray-800" return ".bg-gray-800 { background-color: #1f2937; }"
+    if token == "bg-amber-500" return ".bg-amber-500 { background-color: #f59e0b; }"
+    if token == "bg-rose-500" return ".bg-rose-500 { background-color: #f43f5e; }"
+    if token == "bg-rose-600" return ".bg-rose-600 { background-color: #e11d48; }"
+    if token == "bg-white" return ".bg-white { background-color: #ffffff; }"
+    if token == "text-slate-300" return ".text-slate-300 { color: #cbd5e1; }"
+    if token == "text-slate-400" return ".text-slate-400 { color: #94a3b8; }"
+    if token == "text-gray-400" return ".text-gray-400 { color: #9ca3af; }"
+    if token == "text-gray-500" return ".text-gray-500 { color: #6b7280; }"
+    if token == "text-amber-400" return ".text-amber-400 { color: #fbbf24; }"
+    if token == "text-rose-400" return ".text-rose-400 { color: #fb7185; }"
+    if token == "text-blue-400" return ".text-blue-400 { color: #60a5fa; }"
+    if token == "border-slate-700" return ".border-slate-700 { border-color: #334155; }"
+    if token == "border-emerald-500" return ".border-emerald-500 { border-color: #10b981; }"
+    if token == "border-rose-500" return ".border-rose-500 { border-color: #f43f5e; }"
+    if token == "border-amber-500" return ".border-amber-500 { border-color: #f59e0b; }"
+    if token == "border-b" return ".border-b { border-bottom-width: 1px; border-style: solid; }"
+    if token == "font-medium" return ".font-medium { font-weight: 500; }"
+    if token == "font-semibold" return ".font-semibold { font-weight: 600; }"
+    if token == "text-xs" return ".text-xs { font-size: 0.75rem; }"
 
     return ""
 

@@ -1189,8 +1189,20 @@ fn main
     else
         failed = failed + 1
 
-    // 230: Sovereign LiPi WebX Full-Stack Framework (10 Pillars Verified)
+    // 230: Sovereign LiPi WebX Full-Stack Framework (16 Pillars Verified)
     if run_single_test(compiler, "tests/test_webx_fullstack.lp", "test_webx_fullstack") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 231: Sovereign Islands Architecture & Offline ESM Assimilator
+    if run_single_test(compiler, "tests/test_webx_islands.lp", "test_webx_islands") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 232: Sovereign Pure SVG & Canvas Chart Engine (webx_charts)
+    if run_single_test(compiler, "tests/test_webx_charts.lp", "test_webx_charts") == 1
         passed = passed + 1
     else
         failed = failed + 1
