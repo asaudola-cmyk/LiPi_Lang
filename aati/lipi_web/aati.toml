@@ -4,10 +4,11 @@
 # ==============================================================================
 
 name = "lipi_web"
-version = "1.0.0"
-description = "Pure LiPi HTTP web server, routing, middleware, and sovereign framework"
+version = "1.1.0"
+description = "Pure LiPi HTTP web server, routing, middleware, and sovereign LiPi WebX full-stack frontend framework (0% Node.js, 0% React)"
 author = "Shafiullah"
 license = "MIT"
+keywords = ["webx", "frontend", "fullstack", "resumable", "wasm-dom", "react-killer"]
 
 [dependencies]
 # Zero external dependencies — 100% pure Lipi

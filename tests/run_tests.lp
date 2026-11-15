@@ -1189,6 +1189,12 @@ fn main
     else
         failed = failed + 1
 
+    // 230: Sovereign LiPi WebX Full-Stack Framework (10 Pillars Verified)
+    if run_single_test(compiler, "tests/test_webx_fullstack.lp", "test_webx_fullstack") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

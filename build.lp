@@ -236,6 +236,7 @@ fn build_main
     build_pipeline_add_target(pipe, "Live Server Stress Suite", "tests/test_live_server_stress.lp", "dist/test_live_server_stress", 1)
     build_pipeline_add_target(pipe, "Cellular Seed Replication", "tests/test_cellular_replication.lp", "dist/test_cellular_replication", 1)
     build_pipeline_add_target(pipe, "Standalone WASM HTML Emitter", "tests/test_standalone_wasm_html.lp", "dist/test_standalone_wasm_html", 1)
+    build_pipeline_add_target(pipe, "WebX Full-Stack Suite", "tests/test_webx_fullstack.lp", "dist/test_webx_fullstack", 1)
 
     say "\n▶ Executing Native LiPi Build Pipeline (0% Bash)..."
     build_pipeline_run_all(pipe)

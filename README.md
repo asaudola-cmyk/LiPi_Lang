@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/Compiler-Zero%20C%20%7C%20Zero%20Libc%20%7C%20Zero%20LLVM-blue.svg)](#architecture)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/Silicon-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 218/218 Passing](https://img.shields.io/badge/Tests-218%2F218%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 230/230 Passing](https://img.shields.io/badge/Tests-230%2F230%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](README.bn.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -237,7 +237,7 @@ lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```bash
 lipi test
 ```
-All **218 regression test suites pass (218/218 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, DRM/KMS hardware modesetting, Linux framebuffer canvas, io_uring fibers, raw wire packet framing, 9-class slab memory managers, and autoregressive transformers.
+All **230 regression test suites pass (230/230 ✔, 100% green)** across core language semantics, direct SSA silicon lowering, DRM/KMS hardware modesetting, Linux framebuffer canvas, io_uring fibers, raw wire packet framing, 9-class slab memory managers, and autoregressive transformers.
 
 ---
 
@@ -328,7 +328,7 @@ Domain modules organized as sovereign packages with cryptographic package manife
 |---|---|---|
 | **`lipi_ai`** | `tensor.lp`, `autograd.lp`, `llm_inference.lp`, `gguf.lp` | N-dimensional Tensors, reverse-mode autodiff, GGUF quantized local LLM transformer inference |
 | **`lipidb`** | `engine.lp`, `kv.lp`, `btree.lp`, `mvcc.lp`, `wal.lp` | ACID LipiKV embedded database, B+Tree indexing, WAL crash recovery, Redis-compatible protocol |
-| **`lipi_web`** | `engine.lp`, `router.lp`, `sovereign_framework.lp` | Sub-microsecond HTTP/1.1 & HTTP/2 routing, reactive DOM-bypass framework, WebSockets |
+| **`lipi_web`** | `engine.lp`, `router.lp`, `webx_primitives.lp`, `webx_resumable.lp`, `esm_assimilator.lp` | Sovereign **LiPi WebX** Full-Stack Frontend (Zero Node.js/React), Resumable SSR, WASM direct DOM mutations, Headless UI, Spring physics, Atomic CSS |
 | **`lipi_gui`** | `canvas.lp`, `window.lp`, `tui.lp`, `drm_kms.lp` | Linux `/dev/fb0` hardware framebuffer, Bresenham canvas, DRM/KMS, sovereign desktop UI |
 | **`lipi_gpu`** | `compute.lp`, `shader.lp`, `spirv_native.lp` | Compute shaders, native SPIR-V binary code emission, DRM `/dev/dri` discovery |
 | **`lipi_fs`** | `lipifs.lp`, `ext4.lp` | Copy-On-Write LipiFS, raw Ext4 filesystem driver |
@@ -382,7 +382,7 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Test Suite Pass Rate** | **218/218 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **230/230 (100%)** | — | — | — | — | — |
 
 ---
 

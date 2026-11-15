@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/সার্বভৌমত্ব-১০০%25%20খাঁটি%20সিলিকন-brightgreen.svg)](#১০০-সার্বভৌম-অবস্থা)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/কম্পাইলার-জিরো%20C%20%7C%20জিরো%20Libc%20%7C%20জিরো%20LLVM-blue.svg)](#আর্কিটেকচার)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/সিলিকন-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 218/218 Passing](https://img.shields.io/badge/টেস্ট-২১৮%2F২১৮%20উত্তীর্ণ%20(১০০%25)-brightgreen.svg)](tests/)
+[![Tests: 230/230 Passing](https://img.shields.io/badge/টেস্ট-২৩০%2F২৩০%20উত্তীর্ণ%20(১০০%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/দ্বিভাষিক-বাংলা%20%2B%20English-orange.svg)](README.md)
 [![License: MIT](https://img.shields.io/badge/লাইসেন্স-MIT-green.svg)](LICENSE)
 
@@ -229,7 +229,7 @@ lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```bash
 lipi test
 ```
-সকল **২১৮টি রিগ্রেশন টেস্ট (২১৮/২১৮ ✔, ১০০% সফল)** সফলভাবে উত্তীর্ণ হয়েছে।
+সকল **২৩০টি রিগ্রেশন টেস্ট (২৩০/২৩০ ✔, ১০০% সফল)** সফলভাবে উত্তীর্ণ হয়েছে।
 
 ---
 
@@ -313,7 +313,7 @@ lipi/
 |---|---|---|
 | **`lipi_ai`** | `tensor.lp`, `autograd.lp`, `llm_inference.lp`, `gguf.lp` | এন-ডাইমেনশনাল টেনসর, রিভার্স অটোডিফ, GGUF লোকাল এলএলএম ইনফ্যারেন্স |
 | **`lipidb`** | `engine.lp`, `kv.lp`, `btree.lp`, `mvcc.lp`, `wal.lp` | এসিড (ACID) LipiKV এমবেডেড ডাটাবেজ, B+Tree ইনডেক্সিং, WAL ক্র্যাশ রিকভারি |
-| **`lipi_web`** | `engine.lp`, `router.lp`, `sovereign_framework.lp` | সাব-মাইক্রোসেকেন্ড এইচটিটিপি রাউটিং, ডম-বাইপাস ফ্রেমওয়ার্ক, ওয়েবসকেট |
+| **`lipi_web`** | `engine.lp`, `router.lp`, `webx_primitives.lp`, `webx_resumable.lp`, `esm_assimilator.lp` | সার্বভৌম **LiPi WebX** ফ্রন্টএন্ড (০% Node.js / React), রেজুমেবল SSR, সরাসরি WASM DOM মিউটেশন, হেডলেস ইউআই, স্প্রিং ফিজিক্স |
 | **`lipi_gui`** | `canvas.lp`, `window.lp`, `tui.lp`, `drm_kms.lp` | লিনাক্স ফ্রেমবাফার, ব্রেসেনহ্যাম ক্যানভাস, DRM/KMS ডেস্কটপ ইউআই |
 | **`lipi_gpu`** | `compute.lp`, `shader.lp`, `spirv_native.lp` | কম্পিউট শেডার, সরাসরি SPIR-V বাইনারি নির্গমন, DRM `/dev/dri` সাপোর্ট |
 | **`lipi_fs`** | `lipifs.lp`, `ext4.lp` | কপি-অন-রাইট LipiFS, রুটহীন Ext4 ফাইলসিস্টেম ড্রাইভার |
