@@ -211,9 +211,9 @@ fn x86_synth_compile_fn_def s toks pos_box
         if is_fn_block_end == 1
             list_set(pos_box, 0, cur_pos + 1)
             break
-        if ct.tok_kind == TOK_KW_FN() or ct.tok_kind == TOK_DIR_FN()
+        if ct.tok_kind == TOK_KW_FN() or ct.tok_kind == TOK_DIR_FN() or ct.tok_kind == TOK_KW_COMPONENT()
             break
-        if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn")
+        if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn" or ct.tok_text == "component" or ct.tok_text == "উপাদান")
             break
         if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT()
             break
@@ -292,10 +292,10 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
 
         tok_item = tokens[cur_pos]
         is_fn_tok = 0
-        if tok_item.tok_kind == TOK_KW_FN() or tok_item.tok_kind == TOK_DIR_FN()
+        if tok_item.tok_kind == TOK_KW_FN() or tok_item.tok_kind == TOK_DIR_FN() or tok_item.tok_kind == TOK_KW_COMPONENT()
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn")
+        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn" or tok_item.tok_text == "component" or tok_item.tok_text == "উপাদান")
             is_fn_tok = 1
         end
         if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT()

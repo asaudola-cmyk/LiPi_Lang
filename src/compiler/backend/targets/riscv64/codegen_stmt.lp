@@ -596,11 +596,11 @@ fn riscv64_synth_compile_statement s toks pos_box
             riscv64_emit_sd(s, 10, 2, off)
             return 0
 
-    // ── 11. Function Definition: fn / কাজ / @fn ────────────────────────────────
+    // ── 11. Function & Component Definition: fn / কাজ / @fn / component / উপাদান ──
     is_fn = 0
-    if k == TOK_KW_FN() or k == TOK_DIR_FN()
+    if k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT()
         is_fn = 1
-    if k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn")
+    if k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান")
         is_fn = 1
 
     if is_fn == 1

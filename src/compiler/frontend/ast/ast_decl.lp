@@ -143,6 +143,17 @@ import "compiler/frontend/ast/ast_node"
   return ast_decl_fn(name, params, ret_type, body, 1, source_span_zero())
 @end
 
+@fn ast_decl_component(name: string, params: array, ret_type: string, body: array, span: SourceSpan)
+  // WHY: Allocates component declaration AST node for sovereign reactive UI components in LiPi WebX.
+  //      Treated as a top-level callable rendering constructor with typed parameters and reactive tree body.
+  return ast_decl_fn(name, params, ret_type, body, 1, span)
+@end
+
+@fn ast_component_def(name: string, params: array, body: array)
+  // WHY: Compatibility constructor for component definitions with default zero span
+  return ast_decl_component(name, params, "Component", body, source_span_zero())
+@end
+
 @fn ast_decl_struct(name: string, fields: array, span: SourceSpan)
   // WHY: Allocates structured composite type definition storing fields in params and elements
   node = ast_node_new(AST_TAG_STRUCT_DEF(), "StructDef", span)

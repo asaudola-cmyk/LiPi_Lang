@@ -36,6 +36,7 @@ import "compiler/frontend/lexer/comment_doc"
 
   // 1. Functions & Definitions
   @if text == "fn" || text == "কাজ" || text == "ফাংশন" return TOK_KW_FN() @end
+  @if text == "component" || text == "উপাদান" return TOK_KW_COMPONENT() @end
   @if text == "struct" || text == "গঠন" || text == "কাঠামো" return TOK_KW_STRUCT() @end
   @if text == "impl" return TOK_KW_IMPL() @end
   @if text == "enum" return TOK_KW_ENUM() @end

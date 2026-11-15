@@ -159,8 +159,21 @@ fn compiler_driver_resolve_std target
     if target == "universe/core/math.lp" or target == "universe/core/math" return "utso/math.lp"
     if target == "universe/core/collections.lp" or target == "universe/core/collections" return "utso/collections.lp"
     if target == "universe/os/syscalls.lp" or target == "universe/os/syscalls" return "utso/syscalls.lp"
+    if target == "universe/os/fs.lp" or target == "universe/os/fs" return "utso/os/fs.lp"
     if target == "universe/crypto/crypto.lp" or target == "universe/crypto/crypto" return "utso/crypto.lp"
+    if target == "universe/crypto/sha256.lp" or target == "universe/crypto/sha256" return "utso/crypto/sha256.lp"
+    if target == "universe/crypto/base64.lp" or target == "universe/crypto/base64" return "utso/crypto/base64.lp"
+    if target == "universe/core/json.lp" or target == "universe/core/json" return "utso/core/json.lp"
+    if target == "universe/core/net.lp" or target == "universe/core/net" return "utso/core/net.lp"
     if target == "universe/net/socket.lp" or target == "universe/net/socket" return "utso/socket.lp"
+    if target == "universe/net/http.lp" or target == "universe/net/http" return "utso/net/http.lp"
+    if target == "universe/net/tcp.lp" or target == "universe/net/tcp" return "utso/net/tcp.lp"
+    if target == "universe/net/tcp_server.lp" or target == "universe/net/tcp_server" return "utso/net/tcp_server.lp"
+    if target == "universe/net/udp.lp" or target == "universe/net/udp" return "utso/net/udp.lp"
+    if target == "universe/db/engine.lp" or target == "universe/db/engine" return "aati/lipidb/engine.lp"
+    if target == "universe/web/context.lp" or target == "universe/web/context" return "aati/lipi_web/context.lp"
+    if target == "universe/web/url.lp" or target == "universe/web/url" return "aati/lipi_web/url.lp"
+    if target == "universe/hypervisor/kvm.lp" or target == "universe/hypervisor/kvm" return "aati/lipi_hypervisor/kvm.lp"
     if target == "universe/os/kernel_multiboot.lp" or target == "universe/os/kernel_multiboot" return "utso/os/kernel_multiboot.lp"
 
     // 3. Complete legacy 'std/*' standard library mappings:
@@ -353,6 +366,12 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
             if file_exists(lipi_root + "/" + pkg_equiv + ".lp") == 1 return lipi_root + "/" + pkg_equiv + ".lp"
             if file_exists(lipi_root + "/" + pkg_equiv) == 1 return lipi_root + "/" + pkg_equiv
 
+    // Tier 1: CWD & relative project path first (user application source files ALWAYS take precedence)
+    if file_exists(inc_target + ".lp") == 1
+        return inc_target + ".lp"
+    if file_exists(inc_target) == 1
+        return inc_target
+
     // Prioritize .lp extension to prevent matching filesystem directories
     if cur_dir != "." and len(cur_dir) > 0
         if file_exists(cur_dir + "/" + inc_target + ".lp") == 1
@@ -360,18 +379,14 @@ fn compiler_driver_resolve_path inc_target cur_dir lipi_root
         if file_exists(cur_dir + "/" + inc_target) == 1
             return cur_dir + "/" + inc_target
 
-    // Tier 1b: If lipi_root is explicit and not ".", resolve canonical system libraries (utso/, aati/, packages/, src/)
-    // directly from lipi_root to prevent accidental leakage from current working directory
+    // Tier 1b: If lipi_root is explicit and not ".", resolve canonical system libraries (utso/, aati/, packages/)
+    // directly from lipi_root. NOTE: 'src/' is reserved for user applications and never resolved from lipi_root.
     if len(lipi_root) > 0 and lipi_root != "."
-        if compiler_driver_starts_with(inc_target, "utso/") == 1 or compiler_driver_starts_with(inc_target, "aati/") == 1 or compiler_driver_starts_with(inc_target, "packages/") == 1 or compiler_driver_starts_with(inc_target, "src/") == 1
+        if compiler_driver_starts_with(inc_target, "utso/") == 1 or compiler_driver_starts_with(inc_target, "aati/") == 1 or compiler_driver_starts_with(inc_target, "packages/") == 1
             if file_exists(lipi_root + "/" + inc_target + ".lp") == 1 return lipi_root + "/" + inc_target + ".lp"
             if file_exists(lipi_root + "/" + inc_target) == 1 return lipi_root + "/" + inc_target
 
-    // Tier 2: CWD & Absolute paths
-    if file_exists(inc_target + ".lp") == 1
-        return inc_target + ".lp"
-    if file_exists(inc_target) == 1
-        return inc_target
+    // Tier 2: Canonical fallback paths
     if file_exists("utso/" + inc_target + ".lp") == 1
         return "utso/" + inc_target + ".lp"
     if file_exists("utso/" + inc_target) == 1

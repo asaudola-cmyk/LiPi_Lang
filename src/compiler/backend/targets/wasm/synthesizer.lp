@@ -529,7 +529,7 @@ fn wasm_synth_compile_program tokens
         ttxt = tok.tok_text
 
         is_fn = 0
-        if tk == TOK_KW_FN() or tk == TOK_DIR_FN() or (tk == TOK_IDENT() and (ttxt == "fn" or ttxt == "কাজ" or ttxt == "@fn"))
+        if tk == TOK_KW_FN() or tk == TOK_DIR_FN() or tk == TOK_KW_COMPONENT() or (tk == TOK_IDENT() and (ttxt == "fn" or ttxt == "কাজ" or ttxt == "@fn" or ttxt == "component" or ttxt == "উপাদান"))
             is_fn = 1
 
         if is_fn == 1
@@ -614,7 +614,7 @@ fn wasm_synth_compile_program tokens
             break
 
         is_fn = 0
-        if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or (cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "@fn"))
+        if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or cur_k == TOK_KW_COMPONENT() or (cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "@fn" or cur_txt == "component" or cur_txt == "উপাদান"))
             is_fn = 1
 
         if is_fn == 1
@@ -656,7 +656,7 @@ fn wasm_synth_compile_program tokens
                     ck = ct.tok_kind
                     cx = ct.tok_text
 
-                    if ck == TOK_KW_FN() or ck == TOK_DIR_FN() or (ck == TOK_IDENT() and (cx == "fn" or cx == "কাজ" or cx == "@fn"))
+                    if ck == TOK_KW_FN() or ck == TOK_DIR_FN() or ck == TOK_KW_COMPONENT() or (ck == TOK_IDENT() and (cx == "fn" or cx == "কাজ" or cx == "@fn" or cx == "component" or cx == "উপাদান"))
                         break
 
                     b_p = get(pos_box, 0)

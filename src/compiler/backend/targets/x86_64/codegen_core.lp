@@ -454,7 +454,7 @@ fn x86_synth_emit_alloc_helper s
         87,                                   // push rdi
         82,                                   // push rdx
         49, 255,                              // xor edi, edi (addr = 0)
-        190, 0, 240, 255, 127,                // mov esi, 2147479552 (2GB virtual memory arena, 0x7ffff000)
+        190, 0, 240, 255, 255,                // mov esi, 4294963200 (4GB virtual memory arena, 0xfffff000)
         186, 3, 0, 0, 0,                      // mov edx, 3 (PROT_READ | PROT_WRITE)
         65, 186, 34, 0, 0, 0,                 // mov r10d, 34 (MAP_PRIVATE | MAP_ANON)
         73, 199, 192, 255, 255, 255, 255,     // mov r8, -1

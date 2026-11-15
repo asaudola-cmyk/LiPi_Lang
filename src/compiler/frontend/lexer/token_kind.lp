@@ -128,6 +128,7 @@
 @fn TOK_KW_PRINT() return 99 @end     // print, println, দেখাও
 @fn TOK_KW_SYSCALL() return 100 @end  // syscall, সিসকল
 @fn TOK_KW_END() return 101 @end      // end, শেষ
+@fn TOK_KW_COMPONENT() return 109 @end // component, উপাদান (LiPi WebX Declarative Reactive UI)
 
 // ── 7. General Identifiers, Comments & Error (102..106) ──────────────────────
 @fn TOK_IDENT() return 102 @end
@@ -251,6 +252,7 @@
   @if kind == 106 return "ERROR" @end
   @if kind == 107 return "MATMUL" @end
   @if kind == 108 return "MATMULEQ" @end
+  @if kind == 109 return "KW_COMPONENT" @end
   return "UNKNOWN"
 @end
 
@@ -258,7 +260,7 @@
 
 @fn token_kind_is_keyword(kind: i64)
   // WHY: Fast branch check whether token belongs to keyword class
-  @if kind >= 74 && kind <= 101
+  @if (kind >= 74 && kind <= 101) || kind == 109
     return 1
   @end
   return 0
