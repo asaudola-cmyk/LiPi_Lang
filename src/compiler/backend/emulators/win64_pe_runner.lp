@@ -200,6 +200,24 @@ fn win64_pe_runner_load_bytes runner bytes_list
                 if str_contains(idata_ascii, "VirtualAlloc") == 1
                     push(runner.wpr_import_functions, "VirtualAlloc")
                 end
+                if str_contains(idata_ascii, "CreateFileA") == 1
+                    push(runner.wpr_import_functions, "CreateFileA")
+                end
+                if str_contains(idata_ascii, "ReadFile") == 1
+                    push(runner.wpr_import_functions, "ReadFile")
+                end
+                if str_contains(idata_ascii, "CloseHandle") == 1
+                    push(runner.wpr_import_functions, "CloseHandle")
+                end
+                if str_contains(idata_ascii, "GetTickCount64") == 1
+                    push(runner.wpr_import_functions, "GetTickCount64")
+                end
+                if str_contains(idata_ascii, "SetFilePointer") == 1
+                    push(runner.wpr_import_functions, "SetFilePointer")
+                end
+                if str_contains(idata_ascii, "GetFileAttributesA") == 1
+                    push(runner.wpr_import_functions, "GetFileAttributesA")
+                end
             end
         end
         s_idx = s_idx + 1

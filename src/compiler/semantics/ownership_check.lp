@@ -326,58 +326,171 @@ import "compiler/frontend/ast/ast_node"
   return 1
 @end
 
-// ── 6. AST STATEMENT ANALYSIS PASS ───────────────────────────────────────────
+// ── 6. AST STATEMENT & EXPRESSION OWNERSHIP ANALYSIS PASS ─────────────────────
+
+@fn oc_force_move(oc, var_name, span)
+  // WHY: Explicit affine ownership transfer triggered by `move(x)` or `drop(x)` / `free(x)`.
+  b = oc_lookup(oc, var_name)
+  @if b == 0 return 1 @end
+  @if b.rb_state == OWN_STATE_MOVED()
+    oc_record_error(oc, ERR_USE_AFTER_MOVE(), "Attempt to move or drop already-moved value: '" + var_name + "'", span)
+    return 0
+  @end
+  @if b.rb_shared_borrow_count > 0 || b.rb_state == OWN_STATE_BORROWED_SHARED() || b.rb_state == OWN_STATE_BORROWED_MUT()
+    oc_record_error(oc, ERR_MOVE_WHILE_BORROWED(), "Cannot move out of '" + var_name + "' because it is currently borrowed", span)
+    return 0
+  @end
+  b.rb_state = OWN_STATE_MOVED()
+  sp = span
+  @if sp == 0 sp = span_default() @end
+  b.rb_moved_span = sp
+  return 1
+@end
+
+@fn oc_analyze_expr(oc, expr)
+  @if expr == 0 return 1 @end
+  k = expr.kind
+  @if str_eq(k, "Variable") == 1 || str_eq(k, "IDENT") == 1 || str_eq(k, "Identifier") == 1
+    vname = expr.name
+    @if vname == "" vname = expr.target @end
+    oc_check_read(oc, vname, span_default())
+    return 1
+  @end
+  @if str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1
+    return oc_analyze_expr(oc, expr.expr)
+  @end
+  @if str_eq(k, "Call") == 1 || str_eq(k, "CallExpr") == 1
+    cname = ""
+    @if expr.callee != 0
+      cname = expr.callee.name
+    @end
+    @if cname == "" cname = expr.name @end
+    @if (str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1) && expr.params != 0 && expr.params.len() >= 1
+      a0 = expr.params[0]
+      @if a0 != 0 && (str_eq(a0.kind, "Variable") == 1 || str_eq(a0.kind, "IDENT") == 1 || str_eq(a0.kind, "Identifier") == 1)
+        aname = a0.name
+        @if aname == "" aname = a0.target @end
+        oc_check_read(oc, aname, span_default())
+        oc_force_move(oc, aname, span_default())
+        return 1
+      @end
+    @end
+    @if expr.params != 0
+      pi = 0
+      @while pi < expr.params.len()
+        oc_analyze_expr(oc, expr.params[pi])
+        pi = pi + 1
+      @end
+    @end
+    return 1
+  @end
+  @if str_eq(k, "Binary") == 1 || str_eq(k, "BinaryExpr") == 1
+    oc_analyze_expr(oc, expr.left)
+    oc_analyze_expr(oc, expr.right)
+    return 1
+  @end
+  @if str_eq(k, "Unary") == 1
+    oc_analyze_expr(oc, expr.expr)
+    return 1
+  @end
+  @if str_eq(k, "Index") == 1 || str_eq(k, "Member") == 1
+    oc_analyze_expr(oc, expr.left)
+    oc_analyze_expr(oc, expr.right)
+    return 1
+  @end
+  return 1
+@end
+
+@fn oc_analyze_stmt_list(oc, stmts)
+  @if stmts == 0 return 1 @end
+  i = 0
+  n = stmts.len()
+  @while i < n
+    oc_analyze_statement(oc, stmts[i])
+    i = i + 1
+  @end
+  return 1
+@end
 
 @fn oc_analyze_statement(oc, stmt)
   @if stmt == 0 return 1 @end
 
   k = stmt.kind
 
-  // 1. Assignment: target = value
+  // 1. Function Definition: create isolated function scope
+  @if str_eq(k, "FnDef") == 1 || str_eq(k, "Function") == 1 || str_eq(k, "কাজ") == 1
+    oc_enter_scope(oc)
+    @if stmt.params != 0
+      pi = 0
+      @while pi < stmt.params.len()
+        pm = stmt.params[pi]
+        pname = pm.name
+        @if pname != "" oc_declare(oc, pname, 1, span_default()) @end
+        pi = pi + 1
+      @end
+    @end
+    oc_analyze_stmt_list(oc, stmt.body)
+    oc_exit_scope(oc)
+    return 1
+  @end
+
+  // 2. Assignment: target = value (Copy by default in Lipi unless RHS is move(x))
   @if str_eq(k, "Assign") == 1
     target = stmt.target
     val_node = stmt.value
     @if val_node == 0 val_node = stmt.expr @end
-
-    @if val_node != 0
-      @if str_eq(val_node.kind, "Variable") == 1 || str_eq(val_node.kind, "IDENT") == 1
-        src_name = val_node.name
-        @if src_name == "" src_name = val_node.target @end
-        oc_check_read(oc, src_name, span_default())
-        oc_mark_move(oc, src_name, span_default())
-      @end
-    @end
+    oc_analyze_expr(oc, val_node)
 
     b = oc_lookup(oc, target)
     @if b == 0
-      is_cp = 0
-      @if val_node != 0 && (str_eq(val_node.kind, "Integer") == 1 || str_eq(val_node.kind, "Bool") == 1)
-        is_cp = 1
-      @end
-      oc_declare(oc, target, is_cp, span_default())
+      oc_declare(oc, target, 1, span_default())
     @else
       oc_check_write(oc, target, span_default())
     @end
     return 1
   @end
 
-  // 2. Variable Read / Expression Check
-  @if str_eq(k, "Variable") == 1 || str_eq(k, "IDENT") == 1
-    oc_check_read(oc, stmt.name, span_default())
+  // 3. Expression statement / Call
+  @if str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1 || str_eq(k, "Call") == 1 || str_eq(k, "CallExpr") == 1 || str_eq(k, "Variable") == 1 || str_eq(k, "IDENT") == 1
+    oc_analyze_expr(oc, stmt)
     return 1
   @end
 
-  // 3. Block
-  @if str_eq(k, "Block") == 1 || str_eq(k, "If") == 1
+  // 4. Return statement
+  @if str_eq(k, "Return") == 1 || str_eq(k, "ফেরত") == 1
+    @if stmt.expr != 0 oc_analyze_expr(oc, stmt.expr) @end
+    @if stmt.value != 0 oc_analyze_expr(oc, stmt.value) @end
+    return 1
+  @end
+
+  // 5. While / For / Block / If scopes
+  @if str_eq(k, "While") == 1 || str_eq(k, "যতক্ষণ") == 1
+    oc_analyze_expr(oc, stmt.expr)
     oc_enter_scope(oc)
-    @if stmt.then_body != 0
-      i = 0
-      @while i < stmt.then_body.len()
-        oc_analyze_statement(oc, stmt.then_body[i])
-        i = i + 1
-      @end
-    @end
+    oc_analyze_stmt_list(oc, stmt.body)
     oc_exit_scope(oc)
+    return 1
+  @end
+
+  @if str_eq(k, "For") == 1 || str_eq(k, "প্রতিটি") == 1
+    oc_analyze_expr(oc, stmt.expr)
+    oc_enter_scope(oc)
+    @if stmt.target != "" oc_declare(oc, stmt.target, 1, span_default()) @end
+    oc_analyze_stmt_list(oc, stmt.body)
+    oc_exit_scope(oc)
+    return 1
+  @end
+
+  @if str_eq(k, "Block") == 1 || str_eq(k, "If") == 1 || str_eq(k, "যদি") == 1
+    oc_analyze_expr(oc, stmt.expr)
+    oc_enter_scope(oc)
+    oc_analyze_stmt_list(oc, stmt.then_body)
+    oc_exit_scope(oc)
+    @if stmt.else_body != 0
+      oc_enter_scope(oc)
+      oc_analyze_stmt_list(oc, stmt.else_body)
+      oc_exit_scope(oc)
+    @end
     return 1
   @end
 

@@ -12,6 +12,7 @@
 
 include "src/runtime/lipi_syscall.lp"
 include "utso/core/json_fast.lp"
+include "utso/net/ws_engine.lp"
 
 // ── Kernel Syscall Numbers for x86_64 ─────────────────────────────────────────
 SYS_READ         = 0
@@ -225,9 +226,25 @@ fn prod_send_json_response fd status_code json_payload
     syscall(SYS_WRITE, fd, r_buf, resp_len, 0, 0, 0)
     prod_free(r_buf, resp_len)
 
-fn prod_send_ws_upgrade_response fd
-    // RFC 6455 101 Switching Protocols stub
-    resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n"
+fn prod_buf_to_str buf buf_len
+    s = ""
+    i = 0
+    limit = buf_len
+    if limit > 4096 limit = 4096
+    while i < limit
+        b = mem_byte_read(buf, i)
+        if b <= 0 break
+        s = s + chr(b)
+        i = i + 1
+    return s
+
+fn prod_send_ws_upgrade_response_key fd client_key
+    // WHY: Computes authentic RFC 6455 Sec-WebSocket-Accept = Base64(SHA1(key + GUID)).
+    use_key = client_key
+    if len(use_key) == 0
+        use_key = "dGhlIHNhbXBsZSBub25jZQ=="
+    accept_tok = ws_compute_accept_key(use_key)
+    resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept_tok + "\r\n\r\n"
     rlen = len(resp)
     w_buf = prod_malloc(rlen)
     wi = 0
@@ -236,6 +253,9 @@ fn prod_send_ws_upgrade_response fd
         wi = wi + 1
     syscall(SYS_WRITE, fd, w_buf, rlen, 0, 0, 0)
     prod_free(w_buf, rlen)
+
+fn prod_send_ws_upgrade_response fd
+    prod_send_ws_upgrade_response_key(fd, "dGhlIHNhbXBsZSBub25jZQ==")
 
 // ── Epoll Reactor Tick ────────────────────────────────────────────────────────
 // WHY: Executes single non-blocking event-loop cycle without spinning CPU
@@ -271,7 +291,9 @@ fn prod_server_tick srv timeout_ms
             else
                 // Inspect Request
                 if prod_is_websocket_upgrade(req_buf, nread) == 1
-                    prod_send_ws_upgrade_response(c_fd)
+                    ws_req = prod_buf_to_str(req_buf, nread)
+                    ws_k = ws_extract_key(ws_req)
+                    prod_send_ws_upgrade_response_key(c_fd, ws_k)
                 else
                     path = prod_parse_http_method_path(req_buf, nread)
                     if path == "/health"

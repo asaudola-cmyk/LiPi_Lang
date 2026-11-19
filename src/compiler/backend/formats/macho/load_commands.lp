@@ -46,6 +46,7 @@ import "utso/string"
 @fn LC_DYSYMTAB()      return 11         @end // 0x0B: Dynamic symbol table info
 @fn LC_LOAD_DYLINKER() return 14         @end // 0x0E: Path to dyld (/usr/lib/dyld)
 @fn LC_LOAD_DYLIB()    return 12         @end // 0x0C: Load dynamic library dependency
+@fn LC_CODE_SIGNATURE() return 29        @end // 0x1D: Embedded SuperBlob / SHA-256 CodeDirectory
 @fn LC_MAIN()          return 2147483688 @end // 0x80000028: Modern replacement for LC_UNIXTHREAD
 @fn LC_BUILD_VERSION() return 50         @end // 0x32: Target OS platform & SDK version
 
@@ -153,6 +154,20 @@ import "utso/string"
     (v / 256) % 256,
     (v / 65536) % 256,
     (v / 16777216) % 256
+  ]
+@end
+
+@fn macho_pack_u32_be(val)
+  // WHY: Big-endian 32-bit serializer used inside Apple CS_SuperBlob & CS_CodeDirectory headers.
+  v = val
+  @if v < 0
+    v = v + 4294967296
+  @end
+  return [
+    (v / 16777216) % 256,
+    (v / 65536) % 256,
+    (v / 256) % 256,
+    v % 256
   ]
 @end
 
@@ -597,6 +612,33 @@ import "utso/string"
     out = out.push(0)
   @end
 
+  return out
+@end
+
+@fn macho_segment_linkedit(vmaddr, vmsize, fileoff, filesize)
+  // WHY: __LINKEDIT read-only segment storing LC_CODE_SIGNATURE ad-hoc SHA-256 CodeDirectory for Apple Silicon.
+  return {
+    seg_cmd: LC_SEGMENT_64(),
+    seg_cmdsize: 72,
+    seg_name: "__LINKEDIT",
+    seg_vmaddr: vmaddr,
+    seg_vmsize: vmsize,
+    seg_fileoff: fileoff,
+    seg_filesize: filesize,
+    seg_maxprot: VM_PROT_READ(),
+    seg_initprot: VM_PROT_READ(),
+    seg_nsects: 0,
+    seg_flags: 0
+  }
+@end
+
+@fn macho_lc_code_signature_serialize(dataoff, datasize)
+  // WHY: Serializes 16-byte LC_CODE_SIGNATURE (0x1D) load command pointing to SuperBlob in __LINKEDIT.
+  out = []
+  out = macho_append_bytes(out, macho_pack_u32_le(LC_CODE_SIGNATURE()), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(16), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(dataoff), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(datasize), 4)
   return out
 @end
 

@@ -233,7 +233,9 @@ fn wasm_synth_expr_primary s toks pos_box
             // Lookup target function in registry
             target_fn = wasm_synth_find_function(s, ident_name)
             if target_fn != 0
-                wasm_emit_call(s.ws_code, target_fn.wfn_index)
+                // WHY: WASI import fd_write occupies function index 0 when ws_needs_wasi_print == 1,
+                // shifting all module-defined WASM function indices up by +1.
+                wasm_emit_call(s.ws_code, target_fn.wfn_index + s.ws_needs_wasi_print)
             elif ident_name == "mem_read" or ident_name == "mem_word_read" or ident_name == "মেমরি_পড়ো"
                 if arg_count >= 2
                     wasm_emit_i64_add(s.ws_code)

@@ -191,3 +191,63 @@ fn channel_destroy chan
 
 fn চ্যানেল_ধ্বংস chan
     return channel_destroy(chan)
+
+// ── ৭. শেয়ার্ড-মেমরি থ্রেড ও কার্নেল ফিউটেক্স মিউটেক্স (CLONE_VM + SYS_futex) ──────
+fn thread_spawn_shared fn_entry arg
+    // WHY: Ensures bump heap is initialized before spawning a CLONE_VM OS thread
+    // with an isolated 64KB anonymous stack executing fn_entry(arg).
+    _heap_init = list()
+    stack_sz = 65536
+    stack_base = syscall(9, 0, stack_sz, 3, 34, 0 - 1, 0)
+    if stack_base <= 0
+        return 0 - 1
+    end
+    tid = thread_spawn_vm(fn_entry, arg, stack_base + stack_sz)
+    return tid
+
+fn থ্রেড_শেয়ার্ড_চালু fn_entry arg
+    return thread_spawn_shared(fn_entry, arg)
+
+fn futex_mutex_new
+    // WHY: Allocates a zero-initialized 16B shared futex mutex state word (0=free, 1=locked, 2=contended).
+    m = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    মেমরি_লেখো(m, 0, 0)
+    মেমরি_লেখো(m, 8, 0)
+    return m
+
+fn futex_mutex_lock mtx
+    // WHY: Drepper 3-state lock: 1-instruction lock cmpxchg fast path; kernel SYS_futex sleep on contention.
+    if atomic_cas(mtx, 0, 1) == 1
+        return 1
+    end
+    while atomic_cas(mtx, 0, 2) == 0
+        atomic_cas(mtx, 1, 2)
+        futex_wait(mtx, 2)
+    end
+    return 1
+
+fn futex_mutex_unlock mtx
+    // WHY: Uncontended fast unlock via atomic_cas(1->0); wakes kernel futex waiter when state==2.
+    if atomic_cas(mtx, 1, 0) == 1
+        return 0
+    end
+    while atomic_cas(mtx, 2, 0) == 0
+        if atomic_cas(mtx, 1, 0) == 1
+            return 0
+        end
+    end
+    futex_wake(mtx, 1)
+    return 0
+
+fn ফিউটেক্স_লক mtx
+    return futex_mutex_lock(mtx)
+
+fn ফিউটেক্স_আনলক mtx
+    return futex_mutex_unlock(mtx)
+
+fn thread_wait_counter counter_ptr target
+    // WHY: Cooperatively waits until worker threads reach the target completion count.
+    while মেমরি_পড়ো(counter_ptr, 0) < target
+        thread_yield()
+    end
+    return target

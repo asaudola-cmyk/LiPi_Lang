@@ -94,8 +94,41 @@ import "utso/net/udp"
   return node
 @end
 
-@! Stub for UDP sending
+@struct GossipEndpoint
+  host: string
+  port: i64
+@end
+
+@fn _gossip_parse_target(target: string) -> GossipEndpoint
+  tlen = target.len()
+  colon_pos = 0 - 1
+  i = 0
+  @while i < tlen
+    @if char_at(target, i) == ":"
+      colon_pos = i
+      @break
+    @end
+    i = i + 1
+  @end
+  @if colon_pos > 0 && colon_pos + 1 < tlen
+    h = str_sub(target, 0, colon_pos)
+    p = to_int(str_sub(target, colon_pos + 1, tlen))
+    @if p <= 0 p = 9000 @end
+    return { host: h, port: p }
+  @end
+  @if tlen > 0
+    return { host: target, port: 9000 }
+  @end
+  return { host: "127.0.0.1", port: 9000 }
+@end
+
+@! Real UDP datagram gossip frame transmission via utso/net/udp
 @fn _send_gossip_udp(target: string, msg_id: string, sender: string, payload: string, ttl: i64) -> i64
-  @! Implementation would serialize to bytes and use utso/net/udp
-  return 1
+  ep = _gossip_parse_target(target)
+  wire = "GOSSIP|" + msg_id + "|" + sender + "|" + to_str(ttl) + "|" + payload
+  fd = udp_socket_new()
+  @if fd < 0 return 0 - 1 @end
+  sent = udp_send_to(fd, ep.host, ep.port, wire)
+  udp_close(fd)
+  return sent
 @end

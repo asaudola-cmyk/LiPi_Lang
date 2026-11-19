@@ -28,6 +28,7 @@ fn x86_synth_register_helper_fn s name off
     fn_info = X86Function()
     fn_info.fn_name = name
     fn_info.fn_entry_offset = off
+    fn_info.fn_ret_type = ""
     push(s.synth_functions, fn_info)
     return 0
 
@@ -462,6 +463,102 @@ fn x86_synth_emit__lipi_atomic_unlock s
     x86_synth_emit_bytes(s, [240, 72, 15, 186, 55, 0, 72, 49, 192, 195])
     return off
 
+fn x86_synth_emit__lipi_exc_push s
+    // WHY: Pushes a 72-byte cross-frame exception handler onto g_exc_top (rw_vaddr + 104).
+    // Inputs: %rdi=frame_ptr, %rsi=catch_rip, %rdx=saved_rbp, %rcx=saved_rsp.
+    off = s.synth_code.len()
+    s.synth_exc_push_off = off
+    x86_synth_register_helper_fn(s, "_lipi_exc_push", off)
+    x86_synth_emit_bytes(s, [
+        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
+        76, 139, 16,
+        76, 137, 23,
+        72, 137, 119, 8,
+        72, 137, 87, 16,
+        72, 137, 79, 24,
+        72, 137, 95, 32,
+        76, 137, 103, 40,
+        76, 137, 111, 48,
+        76, 137, 119, 56,
+        76, 137, 127, 64,
+        72, 137, 56,
+        195
+    ])
+    return off
+
+fn x86_synth_emit__lipi_exc_pop s
+    // WHY: Pops active exception handler frame from g_exc_top (rw_vaddr + 104) on normal try exit.
+    off = s.synth_code.len()
+    s.synth_exc_pop_off = off
+    x86_synth_register_helper_fn(s, "_lipi_exc_pop", off)
+    x86_synth_emit_bytes(s, [
+        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
+        72, 139, 16,
+        72, 133, 210,
+        116, 6,
+        72, 139, 18,
+        72, 137, 16,
+        195
+    ])
+    return off
+
+fn x86_synth_emit__lipi_exc_throw s
+    // WHY: Cross-frame stack unwinding throw(%rdi = err_val). Restores callee-saved
+    // registers, rbp, rsp from active g_exc_top handler and jumps to catch_rip with err in %rax.
+    off = s.synth_code.len()
+    s.synth_exc_throw_off = off
+    x86_synth_register_helper_fn(s, "_lipi_exc_throw", off)
+    x86_synth_register_helper_fn(s, "exc_throw", off)
+    x86_synth_emit_bytes(s, [
+        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
+        72, 139, 16,
+        72, 133, 210,
+        116, 44,
+        76, 139, 18,
+        76, 137, 16,
+        76, 139, 90, 8,
+        72, 139, 90, 32,
+        76, 139, 98, 40,
+        76, 139, 106, 48,
+        76, 139, 114, 56,
+        76, 139, 122, 64,
+        72, 139, 106, 16,
+        72, 139, 98, 24,
+        72, 137, 248,
+        65, 255, 227,
+        191, 1, 0, 0, 0,
+        184, 60, 0, 0, 0,
+        15, 5
+    ])
+    return off
+
+fn x86_synth_emit__lipi_stack_bottom s
+    // WHY: Returns process initial RSP captured at _start (rw_vaddr + 112) for stack-scanning GC.
+    off = s.synth_code.len()
+    s.synth_stack_bottom_off = off
+    x86_synth_register_helper_fn(s, "_lipi_stack_bottom", off)
+    x86_synth_register_helper_fn(s, "stack_bottom", off)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 72, 139, 0, 195])
+    return off
+
+fn x86_synth_emit__lipi_heap_base s
+    // WHY: Returns bump arena _heap_base (rw_vaddr + 16) for conservative GC pointer bounds.
+    off = s.synth_code.len()
+    s.synth_heap_base_fn_off = off
+    x86_synth_register_helper_fn(s, "_lipi_heap_base", off)
+    x86_synth_register_helper_fn(s, "heap_base_ptr", off)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 72, 139, 0, 195])
+    return off
+
+fn x86_synth_emit__lipi_heap_ptr s
+    // WHY: Returns current bump arena watermark _heap_ptr (rw_vaddr + 24) for conservative GC bounds.
+    off = s.synth_code.len()
+    s.synth_heap_ptr_fn_off = off
+    x86_synth_register_helper_fn(s, "_lipi_heap_ptr", off)
+    x86_synth_register_helper_fn(s, "heap_curr_ptr", off)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 72, 139, 0, 195])
+    return off
+
 fn x86_synth_emit_all_runtime_helpers s
     // WHY: Emits all fundamental runtime helpers and registers their primary and alias names
     off__lipi_is_str = x86_synth_emit__lipi_is_str(s)
@@ -513,8 +610,19 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_user_free = x86_synth_emit__lipi_user_free(s)
     off__lipi_print_float = x86_synth_emit__lipi_print_float(s)
     off__lipi_gc_collect = x86_synth_emit__lipi_gc_collect(s)
+    off__lipi_thread_spawn_vm = x86_synth_emit__lipi_thread_spawn_vm(s)
+    off__lipi_futex_wait = x86_synth_emit__lipi_futex_wait(s)
+    off__lipi_futex_wake = x86_synth_emit__lipi_futex_wake(s)
+    off__lipi_exc_push = x86_synth_emit__lipi_exc_push(s)
+    off__lipi_exc_pop = x86_synth_emit__lipi_exc_pop(s)
+    off__lipi_exc_throw = x86_synth_emit__lipi_exc_throw(s)
+    off__lipi_stack_bottom = x86_synth_emit__lipi_stack_bottom(s)
+    off__lipi_heap_base = x86_synth_emit__lipi_heap_base(s)
+    off__lipi_heap_ptr = x86_synth_emit__lipi_heap_ptr(s)
 
     // Register bilingual and standard aliases
+    x86_synth_register_helper_fn(s, "move", off__lipi_pass_thru)
+    x86_synth_register_helper_fn(s, "drop", off__lipi_pass_thru)
     x86_synth_register_helper_fn(s, "_lipi_print_float", off__lipi_print_float)
     x86_synth_register_helper_fn(s, "print_float", off__lipi_print_float)
     x86_synth_register_helper_fn(s, "_lipi_gc_collect", off__lipi_gc_collect)

@@ -151,6 +151,8 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "matmul") == 1 || str_eq(fn_name, "ম্যাট্রিক্স_গুণ") == 1 || str_eq(fn_name, "_lipi_matmul") == 1 return 1 @end
   @if len(fn_name) >= 5 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "i" && char_at(fn_name, 2) == "m" && char_at(fn_name, 3) == "d" && char_at(fn_name, 4) == "_" return 1 @end
   @if str_eq(fn_name, "str_ptr") == 1 || str_eq(fn_name, "lipi_str_ptr") == 1 || str_eq(fn_name, "lipi_str_new") == 1 return 1 @end
+  @if str_eq(fn_name, "thread_spawn_vm") == 1 || str_eq(fn_name, "থ্রেড_চালু_ভিএম") == 1 || str_eq(fn_name, "futex_wait") == 1 || str_eq(fn_name, "ফিউটেক্স_অপেক্ষা") == 1 || str_eq(fn_name, "futex_wake") == 1 || str_eq(fn_name, "ফিউটেক্স_জাগাও") == 1 return 1 @end
+  @if str_eq(fn_name, "stack_bottom") == 1 || str_eq(fn_name, "heap_base_ptr") == 1 || str_eq(fn_name, "heap_curr_ptr") == 1 || str_eq(fn_name, "exc_throw") == 1 || str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1 || str_eq(fn_name, "move") == 1 || str_eq(fn_name, "drop") == 1 return 1 @end
   @if len(fn_name) >= 4 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "y" && char_at(fn_name, 2) == "s" && char_at(fn_name, 3) == "_" return 1 @end
   @if len(fn_name) >= 6 && char_at(fn_name, 0) == "_" && char_at(fn_name, 1) == "l" && char_at(fn_name, 2) == "i" && char_at(fn_name, 3) == "p" && char_at(fn_name, 4) == "i" && char_at(fn_name, 5) == "_" return 1 @end
   return 0
@@ -163,7 +165,7 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলো") == 1 || str_eq(fn_name, "দেখাও") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return TYPE_ID_VOID() @end
   @if str_eq(fn_name, "len") == 1 || str_eq(fn_name, "length") == 1 || str_eq(fn_name, "দৈর্ঘ্য") == 1 || str_eq(fn_name, "str_len") == 1 || str_eq(fn_name, "list_len") == 1 || str_eq(fn_name, "file_size") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "floor") == 1 || str_eq(fn_name, "মেঝে") == 1 return TYPE_ID_I64() @end
-  @if str_eq(fn_name, "clock_ms") == 1 || str_eq(fn_name, "cpu_clock") == 1 || str_eq(fn_name, "time_now") == 1 || str_eq(fn_name, "time_now_ms") == 1 || str_eq(fn_name, "stack_pointer") == 1 || str_eq(fn_name, "ord") == 1 || str_eq(fn_name, "ascii") == 1 || str_eq(fn_name, "কোড") == 1 || str_eq(fn_name, "str_char_at") == 1 || str_eq(fn_name, "str_find") == 1 || str_eq(fn_name, "str_index_of") == 1 return TYPE_ID_I64() @end
+  @if str_eq(fn_name, "clock_ms") == 1 || str_eq(fn_name, "cpu_clock") == 1 || str_eq(fn_name, "time_now") == 1 || str_eq(fn_name, "time_now_ms") == 1 || str_eq(fn_name, "stack_pointer") == 1 || str_eq(fn_name, "stack_bottom") == 1 || str_eq(fn_name, "heap_base_ptr") == 1 || str_eq(fn_name, "heap_curr_ptr") == 1 || str_eq(fn_name, "thread_spawn_vm") == 1 || str_eq(fn_name, "futex_wait") == 1 || str_eq(fn_name, "futex_wake") == 1 || str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1 || str_eq(fn_name, "ord") == 1 || str_eq(fn_name, "ascii") == 1 || str_eq(fn_name, "কোড") == 1 || str_eq(fn_name, "str_char_at") == 1 || str_eq(fn_name, "str_find") == 1 || str_eq(fn_name, "str_index_of") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "to_str") == 1 || str_eq(fn_name, "str") == 1 || str_eq(fn_name, "স্ট্রিং") == 1 || str_eq(fn_name, "file_read") == 1 || str_eq(fn_name, "str_sub") == 1 || str_eq(fn_name, "char_at") == 1 || str_eq(fn_name, "অক্ষর") == 1 || str_eq(fn_name, "str_concat") == 1 || str_eq(fn_name, "str_from_byte") == 1 || str_eq(fn_name, "chr") == 1 || str_eq(fn_name, "অক্ষর_চিহ্ন") == 1 || str_eq(fn_name, "str_slice") == 1 || str_eq(fn_name, "str_substr") == 1 return TYPE_ID_STRING() @end
   @if str_eq(fn_name, "is_str") == 1 || str_eq(fn_name, "is_string") == 1 || str_eq(fn_name, "file_exists") == 1 || str_eq(fn_name, "str_eq") == 1 || str_eq(fn_name, "str_starts_with") == 1 || str_eq(fn_name, "str_ends_with") == 1 return TYPE_ID_BOOL() @end
   @if str_eq(fn_name, "syscall") == 1 || str_eq(fn_name, "সিসকল") == 1 || str_eq(fn_name, "sys_syscall") == 1 || str_eq(fn_name, "exit") == 1 || str_eq(fn_name, "বিদায়") == 1 || str_eq(fn_name, "sys_mmap") == 1 return TYPE_ID_I64() @end
@@ -336,6 +338,9 @@ import "compiler/frontend/ast/ast_node"
 
     // WHY: Built-in system intrinsics and hardware runtime primitives are validated directly
     @if tc_is_builtin_call(fn_name) == 1
+      @if str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1
+        return TYPE_ID_I64()
+      @end
       i = 0
       @while i < expr.args.len()
         tc_check_expr(tc, expr.args[i])
@@ -507,6 +512,29 @@ import "compiler/frontend/ast/ast_node"
       i = i + 1
     @end
     return infer_expr_type(tc.tc_infer_ctx, expr)
+  @end
+
+  // 10. Closure / Lambda Expression
+  @if str_eq(k, "Closure") == 1
+    scope_stack_push(tc.tc_scopes, SCOPE_BLOCK(), "closure")
+    @if expr.params != 0
+      pi = 0
+      @while pi < expr.params.len()
+        pname = expr.params[pi]
+        p_sym = symbol_variable(pname, TYPE_ID_ANY(), 0, span_default(), tc.tc_scopes.stk_current_id)
+        scope_define_in_scope_id(tc.tc_scopes, tc.tc_scopes.stk_current_id, p_sym)
+        pi = pi + 1
+      @end
+    @end
+    @if expr.body != 0
+      bi = 0
+      @while bi < expr.body.len()
+        tc_check_statement(tc, expr.body[bi])
+        bi = bi + 1
+      @end
+    @end
+    scope_stack_pop(tc.tc_scopes)
+    return TYPE_ID_I64()
   @end
 
   return infer_expr_type(tc.tc_infer_ctx, expr)

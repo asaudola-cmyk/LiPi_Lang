@@ -1207,6 +1207,12 @@ fn main
     else
         failed = failed + 1
 
+    // 233: Tier 1-4 Sovereign Capabilities (Static-PIE, Closures, Exceptions, Match, Threads, GC, Cross-Platform, Net/FFI)
+    if run_single_test(compiler, "tests/test_tier1_to_tier4_sovereignty.lp", "test_tier1_to_tier4_sovereignty") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

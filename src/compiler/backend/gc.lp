@@ -81,9 +81,60 @@ import "utso/memory"
 @fn gc_register_root(gc, obj_ptr)
   // WHY: Adds an active stack or global object reference to the generational card/root table
   @if obj_ptr > 65536
+    ri = 0
+    rn = gc.card_table.len()
+    @while ri < rn
+      @if gc.card_table[ri] == obj_ptr
+        return rn
+      @end
+      ri = ri + 1
+    @end
     gc.card_table = gc.card_table.push(obj_ptr)
   @end
   return gc.card_table.len()
+@end
+
+@fn gc_scan_stack_roots(gc, alloc_objects)
+  // WHY: Conservative hardware stack-root scanner inspecting [stack_pointer() .. stack_bottom())
+  // in 8-byte words to detect live pointers within [heap_base_ptr(), heap_curr_ptr()) or Eden.
+  sp = stack_pointer()
+  sb = stack_bottom()
+  hb = heap_base_ptr()
+  hp = heap_curr_ptr()
+  rem8 = sp % 8
+  @if rem8 != 0
+    sp = sp + (8 - rem8)
+  @end
+  @if sb <= sp || (sb - sp) > 1048576
+    sb = sp + 65536
+  @end
+  eden_lo = gc.eden_start
+  eden_hi = gc.eden_start + gc.config.eden_size
+  found = 0
+  cur = sp
+  @while cur + 8 <= sb
+    w = mem_read(cur, 0)
+    in_heap = 0
+    @if hb > 65536 && hp > hb && w >= hb && w < hp
+      in_heap = 1
+    @elif eden_lo > 65536 && w >= eden_lo && w < eden_hi
+      in_heap = 1
+    @end
+    @if in_heap == 1 && alloc_objects != 0
+      oi = 0
+      on = alloc_objects.len()
+      @while oi < on
+        obj_p = alloc_objects[oi]
+        @if obj_p > 65536 && (w == obj_p || (w > obj_p && w < obj_p + 64))
+          gc_register_root(gc, obj_p)
+          found = found + 1
+        @end
+        oi = oi + 1
+      @end
+    @end
+    cur = cur + 8
+  @end
+  return found
 @end
 
 @fn gc_mark_from_roots(gc)
@@ -136,6 +187,13 @@ import "utso/memory"
 
 @fn gc_collect_cycle(gc, alloc_objects)
   // WHY: Executes full Stop-The-World / Incremental Mark-and-Sweep cycle over Eden & Survivor spaces
+  gc_mark_from_roots(gc)
+  return gc_sweep_eden(gc, alloc_objects)
+@end
+
+@fn gc_collect_conservative(gc, alloc_objects)
+  // WHY: Conservative GC cycle scanning hardware stack frames [rsp..stack_bottom) before marking & sweeping.
+  gc_scan_stack_roots(gc, alloc_objects)
   gc_mark_from_roots(gc)
   return gc_sweep_eden(gc, alloc_objects)
 @end

@@ -177,22 +177,28 @@ create_command() {
             fi
             
             if [ -x "$SEED_EXEC" ]; then
-                info "Bootstrapping Stage-3 Modular Silicon Compiler from genesis seed..."
-                if "$SEED_EXEC" src/compiler/driver_cli.lp bin/lipc_stage1 && chmod +x bin/lipc_stage1 && ./bin/lipc_stage1 src/compiler/driver_cli.lp bin/lipc; then
-                    chmod +x bin/lipc
-                    cp -f bin/lipc bin/lipc_bin
-                    cp -f bin/lipc bin/lipc_micro
-                    chmod +x bin/lipc_bin bin/lipc_micro
-                    rm -f bin/lipc_stage1
-                    ok "Stage-3 Compiler successfully instantiated from source"
+                SEED_HDR="$(od -An -tx1 -N4 "$SEED_EXEC" 2>/dev/null | tr -d ' \n')"
+                if [ "$(uname -s 2>/dev/null)" = "Darwin" ] && [ "$SEED_HDR" != "cffaedfe" ] && [ "$SEED_HDR" != "cefaedfe" ]; then
+                    warn "Genesis seed is Linux ELF ($SEED_HDR); Darwin requires a Mach-O host seed (or cross-compile from Linux via 'lipc --target macos <file>')."
+                    rm -f "$SEED_EXEC"
                 else
-                    warn "Seed driver compilation failed, falling back to direct genesis seed"
-                    cp "$SEED_EXEC" bin/lipc
-                    cp "$SEED_EXEC" bin/lipc_bin
-                    cp "$SEED_EXEC" bin/lipc_micro
-                    chmod +x bin/lipc bin/lipc_bin bin/lipc_micro
+                    info "Bootstrapping Stage-3 Modular Silicon Compiler from genesis seed..."
+                    if "$SEED_EXEC" src/compiler/driver_cli.lp bin/lipc_stage1 && chmod +x bin/lipc_stage1 && ./bin/lipc_stage1 src/compiler/driver_cli.lp bin/lipc; then
+                        chmod +x bin/lipc
+                        cp -f bin/lipc bin/lipc_bin
+                        cp -f bin/lipc bin/lipc_micro
+                        chmod +x bin/lipc_bin bin/lipc_micro
+                        rm -f bin/lipc_stage1
+                        ok "Stage-3 Compiler successfully instantiated from source"
+                    else
+                        warn "Seed driver compilation failed, falling back to direct genesis seed"
+                        cp "$SEED_EXEC" bin/lipc
+                        cp "$SEED_EXEC" bin/lipc_bin
+                        cp "$SEED_EXEC" bin/lipc_micro
+                        chmod +x bin/lipc bin/lipc_bin bin/lipc_micro
+                    fi
+                    rm -f "$SEED_EXEC"
                 fi
-                rm -f "$SEED_EXEC"
             else
                 fail "Could not find or decode bootstrap seed in src/boot/"
             fi

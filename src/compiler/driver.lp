@@ -766,9 +766,9 @@ fn compiler_driver_print_banner
     say "║  ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign      ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
-fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug
-    // WHY: Advanced compilation entry point supporting DWARF debug symbols (-g) and Shared Object (.so) format.
-    // Constrained to <= 6 SysV parameters for zero register spilling across micro-pipelines.
+fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emit_fmt mode_flags
+    // WHY: Sovereign compilation entry point supporting packed mode flags while staying within <= 6 SysV registers:
+    // bit 0 (1): DWARF debug (-g), bit 1 (2): --no-pie, bit 2 (4): --strict-ownership, bit 3 (8): --strict-proof.
     lipi_root = compiler_driver_get_lipi_root()
     if file_exists(src_path) == 0
         if compiler_driver_starts_with(src_path, "packages/") == 1
@@ -798,9 +798,19 @@ fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level
         res.res_success = 0
         return res
     cfg = compiler_config_new(src_path, out_path, target_arch, opt_level, emit_fmt, 0)
-    cfg.cfg_debug_mode = is_debug
+    cfg.cfg_debug_mode = mode_flags % 2
+    cfg.cfg_no_pie = (mode_flags / 2) % 2
+    cfg.cfg_strict_ownership = (mode_flags / 4) % 2
+    cfg.cfg_strict_proof = (mode_flags / 8) % 2
     res = compiler_pipeline_execute(cfg, source_code)
     return res
+
+fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug
+    // WHY: Backward-compatible compilation entry point supporting DWARF debug symbols (-g) and Shared Object (.so) format.
+    flag_dbg = 0
+    if is_debug != 0
+        flag_dbg = 1
+    return compiler_driver_compile_file_full(src_path, out_path, target_arch, opt_level, emit_fmt, flag_dbg)
 
 fn compiler_driver_compile_file src_path out_path target_arch opt_level
     // WHY: Reads source file from filesystem, recursively resolves dependencies, and routes through decoupled pipeline.

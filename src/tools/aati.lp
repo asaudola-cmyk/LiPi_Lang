@@ -919,6 +919,144 @@ fn cmd_verify target
 
     return cmd_verify_bundle(target, sig_path)
 
+// ── ৬খ. লকফাইল জেনারেশন ও যাচাইকরণ (aati lock / aati verify-lock) ───────────────
+
+fn aati_list_pkg_dirs store_dir
+    dirs = list()
+    fd = syscall(2, store_dir, 65536, 0, 0, 0, 0)
+    if fd < 0 return dirs
+    buf = alloc(4096)
+    while 1
+        n = syscall(217, fd, buf, 4096, 0, 0, 0)
+        if n <= 0 break
+        pos = 0
+        while pos < n
+            r0 = mem_byte_read(buf, pos + 16)
+            r1 = mem_byte_read(buf, pos + 17)
+            reclen = r0 + (r1 * 256)
+            dtype = mem_byte_read(buf, pos + 18)
+            name = ""
+            np = pos + 19
+            while 1
+                ch = mem_byte_read(buf, np)
+                if ch == 0 break
+                name = name + chr(ch)
+                np = np + 1
+            if dtype == 4 and name != "." and name != ".."
+                push(dirs, name)
+            end
+            pos = pos + reclen
+        end
+    end
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    free(buf, 4096)
+    return sort_files(dirs)
+
+fn aati_hash_package pkg_dir
+    raw_files = list()
+    collect_files(pkg_dir, raw_files)
+    sorted_files = sort_files(raw_files)
+    acc = ""
+    i = 0
+    n = len(sorted_files)
+    while i < n
+        fpath = get(sorted_files, i)
+        fhash = pkg_hash_file(fpath)
+        acc = acc + fpath + ":" + fhash + "\n"
+        i = i + 1
+    end
+    return sha256_hex(acc)
+
+fn cmd_lock store_target
+    store_dir = store_target
+    if len(store_dir) == 0 store_dir = "aati"
+    if is_directory(store_dir) == 0 and is_directory("packages") == 1
+        store_dir = "packages"
+    end
+    if is_directory(store_dir) == 0
+        say "❌ Package store directory not found: " + store_dir
+        return 1
+    end
+    pkgs = aati_list_pkg_dirs(store_dir)
+    out = "# LiPi Sovereign Lockfile (aati.lock v1)\n"
+    out = out + "store=" + store_dir + "\n"
+    i = 0
+    n = len(pkgs)
+    while i < n
+        pname = get(pkgs, i)
+        phash = aati_hash_package(store_dir + "/" + pname)
+        out = out + pname + "=" + phash + "\n"
+        i = i + 1
+    end
+    write_file("aati.lock", out)
+    say "✔ Generated deterministic aati.lock (" + str(n) + " packages locked from " + store_dir + "/)"
+    return 0
+
+fn cmd_verify_lock lock_path
+    lpath = lock_path
+    if len(lpath) == 0 lpath = "aati.lock"
+    if file_exists(lpath) == 0
+        say "❌ Lockfile not found: " + lpath
+        return 1
+    end
+    content = file_read(lpath)
+    clen = len(content)
+    store_dir = "aati"
+    verified = 0
+    mismatches = 0
+    pos = 0
+    while pos < clen
+        end_pos = pos
+        while end_pos < clen and char_at(content, end_pos) != "\n"
+            end_pos = end_pos + 1
+        end
+        line = str_sub(content, pos, end_pos)
+        llen = len(line)
+        if llen > 0 and char_at(line, llen - 1) == "\r"
+            line = str_sub(line, 0, llen - 1)
+            llen = len(line)
+        end
+        pos = end_pos + 1
+        if llen > 0 and char_at(line, 0) != "#"
+            eq_pos = 0 - 1
+            k = 0
+            while k < llen
+                if char_at(line, k) == "="
+                    eq_pos = k
+                    break
+                end
+                k = k + 1
+            end
+            if eq_pos > 0 and eq_pos + 1 < llen
+                lhs = str_sub(line, 0, eq_pos)
+                rhs = str_sub(line, eq_pos + 1, llen)
+                if lhs == "store"
+                    store_dir = rhs
+                else
+                    pkg_path = store_dir + "/" + lhs
+                    if is_directory(pkg_path) == 0
+                        say "  ❌ Missing locked package: " + pkg_path
+                        mismatches = mismatches + 1
+                    else
+                        actual = aati_hash_package(pkg_path)
+                        if actual != rhs
+                            say "  ❌ Lockfile checksum mismatch for " + lhs
+                            mismatches = mismatches + 1
+                        else
+                            verified = verified + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if mismatches > 0 or verified == 0
+        say "❌ Lockfile verification failed (" + str(mismatches) + " mismatches, " + str(verified) + " verified)"
+        return 1
+    end
+    say "✔ Lockfile verified cleanly: " + str(verified) + "/" + str(verified) + " packages match " + lpath
+    return 0
+
 // ── ৭. অন্যান্য কমান্ডসমূহ (Standard Subcommands) ──────────────────────────────
 
 fn cmd_version
@@ -2422,6 +2560,20 @@ fn main
         pkg_target = "."
         if argc >= 3 pkg_target = get(args, 2)
         res = cmd_verify(pkg_target)
+        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        return 0
+
+    if cmd == "lock" or cmd == "লক"
+        store_target = "aati"
+        if argc >= 3 store_target = get(args, 2)
+        res = cmd_lock(store_target)
+        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        return 0
+
+    if cmd == "verify-lock" or cmd == "যাচাই-লক"
+        l_target = "aati.lock"
+        if argc >= 3 l_target = get(args, 2)
+        res = cmd_verify_lock(l_target)
         if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
         return 0
 

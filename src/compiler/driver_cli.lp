@@ -203,6 +203,9 @@ fn main
     target_arch = TARGET_ID_X86_64()
     opt_level = 1
     debug_mode = 0
+    no_pie_mode = 0
+    strict_ownership_mode = 0
+    strict_proof_mode = 0
     emit_format = FORMAT_ELF()
     ai_opt_enabled = 0
     omni_mode = 0
@@ -280,6 +283,14 @@ fn main
             target_arch = TARGET_ID_X86_64()
         elif arg == "--ai-opt" or arg == "-ai"
             ai_opt_enabled = 1
+        elif arg == "--no-pie"
+            no_pie_mode = 1
+        elif arg == "--pie"
+            no_pie_mode = 0
+        elif arg == "--strict-ownership"
+            strict_ownership_mode = 1
+        elif arg == "--strict-proof"
+            strict_proof_mode = 1
         elif arg == "-O0"
             opt_level = 0
         elif arg == "-O1"
@@ -365,7 +376,16 @@ fn main
 
     // Execute compilation via micro-pipeline driver
     say "▶ Compiling " + in_file + " ──► " + out_file + " via Sovereign Micro-Pipeline..."
-    res = compiler_driver_compile_file_advanced(in_file, out_file, target_arch, opt_level, emit_format, debug_mode)
+    mode_flags = 0
+    if debug_mode != 0
+        mode_flags = mode_flags + 1
+    if no_pie_mode != 0
+        mode_flags = mode_flags + 2
+    if strict_ownership_mode != 0
+        mode_flags = mode_flags + 4
+    if strict_proof_mode != 0
+        mode_flags = mode_flags + 8
+    res = compiler_driver_compile_file_full(in_file, out_file, target_arch, opt_level, emit_format, mode_flags)
     
     // Report detailed diagnostics
     compiler_driver_print_result(res)

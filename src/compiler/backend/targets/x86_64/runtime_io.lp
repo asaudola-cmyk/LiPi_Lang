@@ -167,3 +167,73 @@ fn x86_synth_emit__lipi_user_free s
     // Free Chunk 2: LIFO push ptr into bucket head
     x86_synth_emit_bytes(s, [89, 72, 141, 28, 8, 72, 139, 19, 73, 137, 20, 36, 76, 137, 35, 49, 192, 65, 92, 91, 195])
     return off
+
+fn x86_synth_emit__lipi_thread_spawn_vm s
+    // WHY: True shared-memory OS thread spawner via Linux SYS_clone (56) with
+    // CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD (0x10F00 = 69376).
+    // Inputs: %rdi = fn_ptr, %rsi = arg, %rdx = stack_top. Parent returns child TID in %rax;
+    // child executes fn_ptr(arg) on isolated aligned stack and exits via SYS_exit (60).
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_thread_spawn_vm", off)
+    x86_synth_register_helper_fn(s, "thread_spawn_vm", off)
+    x86_synth_register_helper_fn(s, "থ্রেড_চালু_ভিএম", off)
+    x86_synth_emit_bytes(s, [
+        72, 131, 226, 240,
+        72, 131, 234, 16,
+        72, 137, 50,
+        72, 137, 122, 8,
+        72, 137, 214,
+        191, 0, 15, 1, 0,
+        49, 210,
+        69, 49, 210,
+        69, 49, 192,
+        184, 56, 0, 0, 0,
+        15, 5,
+        72, 133, 192,
+        117, 16,
+        49, 237,
+        95,
+        88,
+        255, 208,
+        72, 137, 199,
+        184, 60, 0, 0, 0,
+        15, 5,
+        195
+    ])
+    return off
+
+fn x86_synth_emit__lipi_futex_wait s
+    // WHY: Linux kernel zero-spin futex wait via SYS_futex(addr, FUTEX_WAIT_PRIVATE=128, expected, NULL, NULL, 0)
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_futex_wait", off)
+    x86_synth_register_helper_fn(s, "futex_wait", off)
+    x86_synth_register_helper_fn(s, "ফিউটেক্স_অপেক্ষা", off)
+    x86_synth_emit_bytes(s, [
+        72, 137, 242,
+        190, 128, 0, 0, 0,
+        69, 49, 210,
+        69, 49, 192,
+        69, 49, 201,
+        184, 202, 0, 0, 0,
+        15, 5,
+        195
+    ])
+    return off
+
+fn x86_synth_emit__lipi_futex_wake s
+    // WHY: Linux kernel futex wakeup via SYS_futex(addr, FUTEX_WAKE_PRIVATE=129, count, NULL, NULL, 0)
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_futex_wake", off)
+    x86_synth_register_helper_fn(s, "futex_wake", off)
+    x86_synth_register_helper_fn(s, "ফিউটেক্স_জাগাও", off)
+    x86_synth_emit_bytes(s, [
+        72, 137, 242,
+        190, 129, 0, 0, 0,
+        69, 49, 210,
+        69, 49, 192,
+        69, 49, 201,
+        184, 202, 0, 0, 0,
+        15, 5,
+        195
+    ])
+    return off

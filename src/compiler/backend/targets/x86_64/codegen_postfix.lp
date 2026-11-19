@@ -100,7 +100,7 @@ fn x86_synth_expr_postfix s toks pos_box
                         if member_name == "restore_extract_single_file"
                             s.synth_last_struct = "ExtractedSingleFile"
                         else
-                            s.synth_last_struct = ""
+                            s.synth_last_struct = x86_synth_lookup_fn_ret_type(s, member_name)
                         end
                 else
                     // Struct Field Read: obj.field

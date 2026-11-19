@@ -591,6 +591,9 @@ fn wasm_synth_compile_program tokens
                 push(fn_headers, entry)
                 scan_p = pp
         else
+            if tk == TOK_KW_PRINT() or (tk == TOK_IDENT() and (ttxt == "say" or ttxt == "বলো" or ttxt == "print" or ttxt == "println" or ttxt == "show" or ttxt == "দেখাও"))
+                s.ws_needs_wasi_print = 1
+            end
             if tk != TOK_NEWLINE() and tk != TOK_SEMI() and tk != TOK_EOF() and tk != TOK_COMMENT_DOC() and tk != TOK_COMMENT_LINE() and tk != TOK_COMMENT_BLOCK()
                 has_top_level_code = 1
         scan_p = scan_p + 1
@@ -638,6 +641,8 @@ fn wasm_synth_compile_program tokens
 
         if is_fn == 1
             // Function Definition header
+            fn_base_col = cur_t.tok_span.span_start_col
+            fn_header_line = cur_t.tok_span.span_start_line
             list_set(pos_box, 0, cur_p + 1)
             name_p = get(pos_box, 0)
             fn_name = ""
@@ -668,20 +673,32 @@ fn wasm_synth_compile_program tokens
                 s.ws_code = target_fn.wfn_code
                 s.ws_block_depth = 0
 
-                // Compile function body until next function or EOF
+                // Compile function body until explicit end marker, next function, dedent, or EOF
                 while get(pos_box, 0) < toks.len()
                     cp = get(pos_box, 0)
                     ct = toks[cp]
                     ck = ct.tok_kind
                     cx = ct.tok_text
 
-                    if ck == TOK_KW_FN() or ck == TOK_DIR_FN() or ck == TOK_KW_COMPONENT() or (ck == TOK_IDENT() and (cx == "fn" or cx == "কাজ" or cx == "@fn" or cx == "component" or cx == "উপাদান"))
+                    if ck == TOK_EOF()
                         break
-
-                    b_p = get(pos_box, 0)
-                    wasm_synth_compile_statement(s, toks, pos_box)
-                    if get(pos_box, 0) == b_p
-                        list_set(pos_box, 0, b_p + 1)
+                    end
+                    if ck == TOK_NEWLINE() or ck == TOK_SEMI() or ck == TOK_COMMENT_DOC() or ck == TOK_COMMENT_LINE() or ck == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, cp + 1)
+                    elif ck == TOK_KW_END() or ck == TOK_DIR_END() or (ck == TOK_IDENT() and (cx == "end" or cx == "@end" or cx == "শেষ"))
+                        list_set(pos_box, 0, cp + 1)
+                        break
+                    elif ck == TOK_KW_FN() or ck == TOK_DIR_FN() or ck == TOK_KW_COMPONENT() or (ck == TOK_IDENT() and (cx == "fn" or cx == "কাজ" or cx == "@fn" or cx == "component" or cx == "উপাদান"))
+                        break
+                    elif ct.tok_span.span_start_line > fn_header_line and ct.tok_span.span_start_col <= fn_base_col
+                        break
+                    else
+                        b_p = get(pos_box, 0)
+                        wasm_synth_compile_statement(s, toks, pos_box)
+                        if get(pos_box, 0) == b_p
+                            list_set(pos_box, 0, b_p + 1)
+                        end
+                    end
 
                 // Guarantee default return 0 at end of function if not explicitly returned
                 if target_fn.wfn_has_returned == 0

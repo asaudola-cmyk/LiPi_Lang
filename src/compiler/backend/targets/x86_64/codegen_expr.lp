@@ -6,6 +6,224 @@
 
 // ── 6. Recursive-Descent Expression Synthesizer ────────────────────────────────
 
+fn x86_synth_emit_fn_ptr_lea s target_fn_name
+    // WHY: Emits RIP-relative `lea rax, [rip + disp32]` (48 8D 05 <0>) with X86CallReloc
+    // so taking `&fn` or `fn_ptr(fn)` is 100% Static-PIE ASLR safe.
+    x86_synth_emit_bytes(s, [72, 141, 5])
+    patch_pos = s.synth_code.len()
+    x86_synth_emit_u32(s, 0)
+    call_rel = X86CallReloc()
+    call_rel.cr_patch_offset = patch_pos
+    call_rel.cr_call_site_end = patch_pos + 4
+    call_rel.cr_target_name = target_fn_name
+    push(s.synth_call_relocs, call_rel)
+    s.synth_last_struct = ""
+    s.synth_last_expr_type = "int"
+    return 0
+
+fn x86_synth_emit_indirect_call_rax s
+    // WHY: Dispatches both capturing heap closures (`CLOS` 0x434C4F53 header passing env_ptr in %r10
+    // and calling [env_ptr+8]) AND raw function pointers in %rax without clobbering SysV %rdi..%r9.
+    x86_synth_emit_bytes(s, [
+        73, 137, 195,
+        65, 186, 83, 79, 76, 67,
+        77, 57, 19,
+        117, 7,
+        77, 137, 218,
+        77, 139, 91, 8,
+        65, 255, 211
+    ])
+    s.synth_last_store_end = 0 - 1
+    s.synth_last_expr_type = ""
+    s.synth_last_struct = ""
+    return 0
+
+fn x86_synth_emit_closure_literal s toks pos_box c_params
+    // WHY: Synthesizes a first-class capturing closure (`|params| => expr` / `fn(params) => expr`).
+    // Emits isolated closure machine code inline (skipped via jmp), scans free outer locals
+    // to pack into a 24B+`CLOS` heap environment object, and binds captures via %r10.
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>")
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+
+    // Scan closure body tokens for free outer local variables
+    cap_names = list()
+    cap_types = list()
+    cap_prims = list()
+    scan_i = get(pos_box, 0)
+    paren_d = 0
+    while scan_i < toks.len()
+        stk = toks[scan_i]
+        sk = stk.tok_kind
+        stxt = stk.tok_text
+        if sk == TOK_LPAREN() or stxt == "(" or sk == TOK_LBRACKET() or stxt == "["
+            paren_d = paren_d + 1
+        elif sk == TOK_RPAREN() or stxt == ")" or sk == TOK_RBRACKET() or stxt == "]"
+            if paren_d == 0
+                break
+            end
+            paren_d = paren_d - 1
+        elif (sk == TOK_COMMA() or stxt == ",") and paren_d == 0
+            break
+        elif (sk == TOK_NEWLINE() or sk == TOK_SEMI() or sk == TOK_EOF()) and paren_d == 0
+            break
+        elif x86_synth_is_ident_token(sk) == 1
+            is_member_or_call = 0
+            if scan_i > 0 and (toks[scan_i - 1].tok_kind == TOK_DOT() or toks[scan_i - 1].tok_text == ".")
+                is_member_or_call = 1
+            end
+            if scan_i + 1 < toks.len() and (toks[scan_i + 1].tok_kind == TOK_LPAREN() or toks[scan_i + 1].tok_text == "(")
+                is_member_or_call = 1
+            end
+            if is_member_or_call == 0
+                is_param = 0
+                pi = 0
+                while pi < c_params.len()
+                    if c_params[pi] == stxt
+                        is_param = 1
+                        break
+                    end
+                    pi = pi + 1
+                end
+                if is_param == 0
+                    already_cap = 0
+                    ci = 0
+                    while ci < cap_names.len()
+                        if cap_names[ci] == stxt
+                            already_cap = 1
+                            break
+                        end
+                        ci = ci + 1
+                    end
+                    if already_cap == 0
+                        lv_o = x86_synth_find_local_var(s, stxt)
+                        if lv_o != 0
+                            push(cap_names, stxt)
+                            lt = ""
+                            if lv_o.lv_type != 0
+                                lt = lv_o.lv_type
+                            end
+                            lp = ""
+                            if lv_o.lv_prim_type != 0
+                                lp = lv_o.lv_prim_type
+                            end
+                            push(cap_types, lt)
+                            push(cap_prims, lp)
+                        end
+                    end
+                end
+            end
+        end
+        scan_i = scan_i + 1
+    end
+
+    // Emit jump over closure body + record closure code entry offset
+    x86_synth_emit_byte(s, 233)
+    skip_jmp_patch = s.synth_code.len()
+    x86_synth_emit_u32(s, 0)
+    clos_code_off = s.synth_code.len()
+
+    // Isolate compiler frame/regalloc state for closure body
+    saved_locals = s.synth_locals
+    saved_stack_offset = s.synth_stack_offset
+    saved_in_fn = s.synth_in_function
+    saved_cur_fn = s.synth_current_fn
+    saved_ra_names = s.synth_regalloc_names
+    saved_ra_regs = s.synth_regalloc_regs
+    s.synth_locals = list()
+    s.synth_stack_offset = 64
+    s.synth_in_function = 1
+    s.synth_current_fn = "__closure"
+    s.synth_regalloc_names = list()
+    s.synth_regalloc_regs = list()
+    s.synth_last_store_end = 0 - 1
+
+    prologue_patch = x86_synth_emit_prologue(s)
+    pi = 0
+    while pi < c_params.len()
+        p_off = x86_synth_alloc_var(s, c_params[pi])
+        x86_synth_emit_store_param(s, pi, p_off)
+        pi = pi + 1
+    end
+
+    // Load captured outer values from [r10 + 24 + ci*8] into closure local slots
+    ci = 0
+    while ci < cap_names.len()
+        disp_c = 24 + (ci * 8)
+        if disp_c < 128
+            x86_synth_emit_bytes(s, [73, 139, 66, disp_c])
+        else
+            x86_synth_emit_bytes(s, [73, 139, 130])
+            x86_synth_emit_u32(s, disp_c)
+        end
+        c_off = x86_synth_alloc_var(s, cap_names[ci])
+        x86_synth_emit_store_var(s, 0, c_off)
+        if cap_types[ci] != ""
+            x86_synth_set_var_type(s, cap_names[ci], cap_types[ci])
+        end
+        if cap_prims[ci] != ""
+            x86_synth_set_prim_type(s, cap_names[ci], cap_prims[ci])
+        end
+        ci = ci + 1
+    end
+
+    x86_synth_compile_expr(s, toks, pos_box)
+    x86_synth_emit_epilogue(s)
+    frame_sz = ((s.synth_stack_offset + 256 + 15) / 16) * 16
+    if frame_sz < 512
+        frame_sz = 512
+    end
+    x86_synth_patch_u32(s, prologue_patch, frame_sz)
+
+    // Restore enclosing compiler state
+    s.synth_locals = saved_locals
+    s.synth_stack_offset = saved_stack_offset
+    s.synth_in_function = saved_in_fn
+    s.synth_current_fn = saved_cur_fn
+    s.synth_regalloc_names = saved_ra_names
+    s.synth_regalloc_regs = saved_ra_regs
+    s.synth_last_store_end = 0 - 1
+
+    after_clos = s.synth_code.len()
+    x86_synth_patch_u32(s, skip_jmp_patch, after_clos - (skip_jmp_patch + 4))
+
+    // Allocate heap CLOS object: [magic=0x434C4F53, code_ptr (RIP-relative), n_caps, cap0, ...]
+    obj_sz = 24 + (cap_names.len() * 8)
+    x86_synth_emit_byte(s, 191)
+    x86_synth_emit_u32(s, obj_sz)
+    x86_synth_emit_call_helper(s, "_lipi_malloc")
+    x86_synth_emit_bytes(s, [72, 199, 0, 83, 79, 76, 67])
+    x86_synth_emit_bytes(s, [72, 141, 21])
+    disp_clos = clos_code_off - (s.synth_code.len() + 4)
+    x86_synth_emit_u32(s, disp_clos)
+    x86_synth_emit_bytes(s, [72, 137, 80, 8])
+    x86_synth_emit_bytes(s, [72, 199, 64, 16])
+    x86_synth_emit_u32(s, cap_names.len())
+
+    ci = 0
+    while ci < cap_names.len()
+        lv_outer = x86_synth_find_local_var(s, cap_names[ci])
+        if lv_outer != 0 and lv_outer.lv_is_spilled == 0 and lv_outer.lv_reg >= 0
+            x86_synth_emit_mov_reg_reg(s, 1, lv_outer.lv_reg)
+        elif lv_outer != 0
+            x86_synth_emit_load_var(s, 1, lv_outer.lv_offset)
+        else
+            x86_synth_emit_bytes(s, [72, 49, 201])
+        end
+        disp_c = 24 + (ci * 8)
+        if disp_c < 128
+            x86_synth_emit_bytes(s, [72, 137, 72, disp_c])
+        else
+            x86_synth_emit_bytes(s, [72, 137, 136])
+            x86_synth_emit_u32(s, disp_c)
+        end
+        ci = ci + 1
+    end
+
+    s.synth_last_struct = ""
+    s.synth_last_expr_type = ""
+    return 0
+
 fn x86_synth_expr_primary s toks pos_box
     // WHY: Parses and synthesizes primary operands (integers, strings, lists, identifiers, grouping).
     // Result is always computed into %rax, followed by postfix chained evaluation for [index] and .member.
@@ -58,11 +276,87 @@ fn x86_synth_expr_primary s toks pos_box
         x86_synth_emit_byte(s, 208)
         return 0
 
+    // 0d. Address-of function / local (&fn_name)
+    elif (k == TOK_AMP() or (k != TOK_STR() and txt == "&")) and pos + 1 < toks.len()
+        list_set(pos_box, 0, pos + 1)
+        np_a = get(pos_box, 0)
+        if np_a < toks.len() and x86_synth_is_ident_token(toks[np_a].tok_kind) == 1
+            tname = toks[np_a].tok_text
+            list_set(pos_box, 0, np_a + 1)
+            is_reg_fn = 0
+            fi = 0
+            while fi < s.synth_functions.len()
+                if s.synth_functions[fi].fn_name == tname
+                    is_reg_fn = 1
+                    break
+                end
+                fi = fi + 1
+            end
+            lv_amp = x86_synth_find_local_var(s, tname)
+            if is_reg_fn == 1 or lv_amp == 0
+                x86_synth_emit_fn_ptr_lea(s, tname)
+            else
+                // lea rax, [rbp - off] (48 8D 85 disp32)
+                x86_synth_emit_bytes(s, [72, 141, 133])
+                x86_synth_emit_u32(s, 0 - lv_amp.lv_offset)
+                s.synth_last_struct = ""
+                s.synth_last_expr_type = "int"
+            end
+            return 0
+        end
+        x86_synth_expr_primary(s, toks, pos_box)
+        return 0
+
+    // 0e. Closure literal: |p1, p2| => expr
+    elif k == TOK_BAR() or (k != TOK_STR() and txt == "|")
+        list_set(pos_box, 0, pos + 1)
+        c_params = list()
+        while get(pos_box, 0) < toks.len()
+            cp_c = get(pos_box, 0)
+            ct_c = toks[cp_c]
+            if ct_c.tok_kind == TOK_BAR() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == "|")
+                list_set(pos_box, 0, cp_c + 1)
+                break
+            elif ct_c.tok_kind == TOK_COMMA() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ",")
+                list_set(pos_box, 0, cp_c + 1)
+            elif x86_synth_is_ident_token(ct_c.tok_kind) == 1
+                push(c_params, ct_c.tok_text)
+                list_set(pos_box, 0, cp_c + 1)
+            else
+                list_set(pos_box, 0, cp_c + 1)
+            end
+        end
+        x86_synth_emit_closure_literal(s, toks, pos_box, c_params)
+        return 0
+
+    // 0f. Lambda literal: fn(p1, p2) => expr
+    elif (k == TOK_KW_FN() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ"))) and pos + 1 < toks.len() and (toks[pos + 1].tok_kind == TOK_LPAREN() or toks[pos + 1].tok_text == "(")
+        list_set(pos_box, 0, pos + 2)
+        c_params = list()
+        while get(pos_box, 0) < toks.len()
+            cp_c = get(pos_box, 0)
+            ct_c = toks[cp_c]
+            if ct_c.tok_kind == TOK_RPAREN() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ")")
+                list_set(pos_box, 0, cp_c + 1)
+                break
+            elif ct_c.tok_kind == TOK_COMMA() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ",")
+                list_set(pos_box, 0, cp_c + 1)
+            elif x86_synth_is_ident_token(ct_c.tok_kind) == 1
+                push(c_params, ct_c.tok_text)
+                list_set(pos_box, 0, cp_c + 1)
+            else
+                list_set(pos_box, 0, cp_c + 1)
+            end
+        end
+        x86_synth_emit_closure_literal(s, toks, pos_box, c_params)
+        return 0
+
     // 1. Integer Literal
     elif k == TOK_INT()
         list_set(pos_box, 0, pos + 1)
         x86_synth_emit_mov_rax_imm64(s, t.tok_int_val)
         s.synth_last_expr_type = "int"
+        s.synth_last_struct = ""
 
     // 1b. Float Literal: IEEE-754 binary64 64-bit precision
     elif k == TOK_FLOAT()
@@ -70,6 +364,7 @@ fn x86_synth_expr_primary s toks pos_box
         fbits = x86_synth_parse_float_bits(t.tok_text)
         x86_synth_emit_mov_rax_imm64(s, fbits)
         s.synth_last_expr_type = "float"
+        s.synth_last_struct = ""
 
     // 2. String Literal
     elif k == TOK_STR() or k == TOK_INTERP_STR()
@@ -84,6 +379,7 @@ fn x86_synth_expr_primary s toks pos_box
         rel.sr_rodata_offset = ro_off
         push(s.synth_str_relocs, rel)
         s.synth_last_expr_type = "str"
+        s.synth_last_struct = ""
 
     // 3. Array / List Literal: [elem0, elem1, ...]
     elif k == TOK_LBRACKET() or (k == TOK_IDENT() and txt == "[")
@@ -258,6 +554,29 @@ fn x86_synth_expr_primary s toks pos_box
         // Function or intrinsic call: name(...)
         if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_LPAREN() or (toks[next_pos].tok_kind != TOK_STR() and toks[next_pos].tok_text == "("))
             list_set(pos_box, 0, next_pos + 1) // Consume '('
+            if (var_name == "fn_ptr" or var_name == "fn_addr") and x86_synth_find_local_var(s, var_name) == 0
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                fp_idx = get(pos_box, 0)
+                fp_name = ""
+                if fp_idx < toks.len() and x86_synth_is_ident_token(toks[fp_idx].tok_kind) == 1
+                    fp_name = toks[fp_idx].tok_text
+                    list_set(pos_box, 0, fp_idx + 1)
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ")"))
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                if fp_name != ""
+                    x86_synth_emit_fn_ptr_lea(s, fp_name)
+                else
+                    x86_synth_emit_byte(s, 49)
+                    x86_synth_emit_byte(s, 192)
+                    s.synth_last_expr_type = "int"
+                    s.synth_last_struct = ""
+                end
+                x86_synth_expr_postfix(s, toks, pos_box)
+                return 0
+            end
             // Parse arguments into caller registers (%rdi, %rsi, %rdx, %rcx, %r8, %r9)
             // WHY: Multi-line argument lists (e.g. error_code_new(\n "E0001",\n ...)) contain
             // TOK_NEWLINE() tokens that must be skipped so they are not evaluated as spurious 0 arguments.
@@ -495,25 +814,19 @@ fn x86_synth_expr_primary s toks pos_box
                     s.synth_last_expr_type = ""
                 else
                     // Regular Function Call: Pop arguments in reverse into calling convention registers
-                    // Pop arguments in reverse into LiPi 12-register calling convention
-                    x86_synth_emit_pop_args(s, arg_count)
-
                     lv_fn = x86_synth_find_local_var(s, var_name)
-                    if lv_fn != 0 and lv_fn.lv_is_spilled == 0 and lv_fn.lv_reg >= 0
-                        // WHY: Function pointer held in physical register; move directly to %rax and invoke.
-                        x86_synth_emit_mov_reg_reg(s, 0, lv_fn.lv_reg)
-                        x86_synth_emit_byte(s, 255) // call rax (0xFF 0xD0)
-                        x86_synth_emit_byte(s, 208)
-                        s.synth_last_expr_type = ""
-                    elif lv_fn != 0 and lv_fn.lv_offset > 0
-                        // WHY: Indirect Function Call / Callback:
-                        // The callee is a function pointer stored in a local stack slot (e.g. callback parameter f or pred).
-                        // Load function pointer from [rbp - lv_offset] into %rax and call dynamically.
-                        x86_synth_emit_load_var(s, 0, lv_fn.lv_offset)
-                        x86_synth_emit_byte(s, 255) // call rax (0xFF 0xD0)
-                        x86_synth_emit_byte(s, 208)
-                        s.synth_last_expr_type = ""
+                    if lv_fn != 0 and ((lv_fn.lv_is_spilled == 0 and lv_fn.lv_reg >= 0) or lv_fn.lv_offset > 0)
+                        // WHY: Load target fn_ptr/closure into %rax before pop_args so popping
+                        // %rdi/%rsi/etc. cannot clobber a register-allocated callee variable.
+                        if lv_fn.lv_is_spilled == 0 and lv_fn.lv_reg >= 0
+                            x86_synth_emit_mov_reg_reg(s, 0, lv_fn.lv_reg)
+                        else
+                            x86_synth_emit_load_var(s, 0, lv_fn.lv_offset)
+                        end
+                        x86_synth_emit_pop_args(s, arg_count)
+                        x86_synth_emit_indirect_call_rax(s)
                     else
+                        x86_synth_emit_pop_args(s, arg_count)
                         // Direct Function Call: Emits call rel32 (0xE8) and queues relocation
                         call_off = s.synth_code.len()
                         x86_synth_emit_byte(s, 232)
@@ -526,6 +839,7 @@ fn x86_synth_expr_primary s toks pos_box
                         push(s.synth_call_relocs, call_rel)
                         if var_name == "main" or var_name == "মূল"
                             s.synth_called_top_level_main = 1
+                        rt_name = x86_synth_lookup_fn_ret_type(s, var_name)
                         if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
                             s.synth_last_expr_type = "int"
                         elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
@@ -536,8 +850,17 @@ fn x86_synth_expr_primary s toks pos_box
                             s.synth_last_expr_type = ""
                         if var_name == "restore_extract_single_file"
                             s.synth_last_struct = "ExtractedSingleFile"
-                        else
+                        elif rt_name == "int" or rt_name == "i64" or rt_name == "i32" or rt_name == "u64" or rt_name == "u32"
+                            s.synth_last_expr_type = "int"
                             s.synth_last_struct = ""
+                        elif rt_name == "float" or rt_name == "f64" or rt_name == "f32"
+                            s.synth_last_expr_type = "float"
+                            s.synth_last_struct = ""
+                        elif rt_name == "str" or rt_name == "string"
+                            s.synth_last_expr_type = "str"
+                            s.synth_last_struct = ""
+                        else
+                            s.synth_last_struct = rt_name
                         end
                     end
         else

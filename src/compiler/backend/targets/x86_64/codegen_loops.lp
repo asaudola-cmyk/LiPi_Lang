@@ -329,7 +329,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
         if get(pos_box, 0) == b_p
             list_set(pos_box, 0, b_p + 1)
 
-        if cur_t.tok_span.span_start_line == base_line
+        if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
             break
 
     // Consume optional end / @end / শেষ
@@ -518,7 +518,7 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
         if get(pos_box, 0) == b_p
             list_set(pos_box, 0, b_p + 1)
 
-        if cur_t.tok_span.span_start_line == base_line
+        if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
             break
 
     // Consume optional end / @end / শেষ

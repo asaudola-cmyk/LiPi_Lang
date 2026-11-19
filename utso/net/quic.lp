@@ -25,7 +25,7 @@
 @! 100% Written in Pure Lipi Language — Zero External C Dependencies
 @! Features: RFC 9000 Long/Short Headers, Variable-Length Integers, Frame Types,
 @!           Connection State Machine, Packet Tracking, TLS 1.3 Crypto Dispatch,
-@!           RFC 9002 Congestion Control Stub, Stream Multiplexing
+@!           RFC 9002 Congestion Control, Pacing & PTO, Stream Multiplexing
 @! ============================================================================
 
 import "utso/core/string"
@@ -1211,12 +1211,22 @@ import "utso/net/tls/tls13"
     conn.congestion.cwnd = conn.congestion.cwnd + inc
   @end
   
-  @! Decrease bytes in flight
+  @! Decrease bytes in flight & update pacing rate (bytes/sec)
   @if conn.congestion.bytes_in_flight > 1472
     conn.congestion.bytes_in_flight = conn.congestion.bytes_in_flight - 1472
   @else
     conn.congestion.bytes_in_flight = 0
   @end
+  srtt = conn.congestion.smoothed_rtt
+  @if srtt < 1 srtt = 1 @end
+  conn.congestion.pacing_rate = (conn.congestion.cwnd * 1000) / srtt
+@end
+
+@fn quic_connection_compute_pto(conn)
+  // WHY: Computes RFC 9002 Probe Timeout: smoothed_rtt + max(4 * rttvar, kGranularity=1ms) + max_ack_delay(25ms).
+  four_var = conn.congestion.rttvar * 4
+  @if four_var < 1 four_var = 1 @end
+  return conn.congestion.smoothed_rtt + four_var + 25
 @end
 
 @fn quic_connection_on_congestion_event(conn)

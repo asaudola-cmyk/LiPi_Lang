@@ -51,11 +51,14 @@ fn x86_synth_compile_fn_def s toks pos_box
     fn_entry = X86Function()
     fn_entry.fn_name = fn_name
     fn_entry.fn_entry_offset = s.synth_code.len()
+    fn_entry.fn_ret_type = ""
     push(s.synth_functions, fn_entry)
+    fn_alias = 0
     if method_alias != ""
         fn_alias = X86Function()
         fn_alias.fn_name = method_alias
         fn_alias.fn_entry_offset = s.synth_code.len()
+        fn_alias.fn_ret_type = ""
         push(s.synth_functions, fn_alias)
 
     // Reset frame locals (saving enclosing scope to restore when function definition completes)
@@ -125,13 +128,17 @@ fn x86_synth_compile_fn_def s toks pos_box
         else
             list_set(pos_box, 0, cur_p_idx + 1)
 
-    // Skip optional return type: -> return_type or : return_type
+    // Parse optional return type: -> return_type or : return_type
     x86_synth_skip_whitespace_tokens(toks, pos_box)
     ret_p = get(pos_box, 0)
     if ret_p < toks.len() and (toks[ret_p].tok_kind == TOK_ARROW() or (toks[ret_p].tok_kind != TOK_STR() and toks[ret_p].tok_text == "->") or toks[ret_p].tok_kind == TOK_COLON() or (toks[ret_p].tok_kind != TOK_STR() and toks[ret_p].tok_text == ":"))
         list_set(pos_box, 0, ret_p + 1) // Consume '->' or ':'
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         if get(pos_box, 0) < toks.len() and (x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1 or toks[get(pos_box, 0)].tok_kind == TOK_IDENT())
+            fn_entry.fn_ret_type = toks[get(pos_box, 0)].tok_text
+            if fn_alias != 0
+                fn_alias.fn_ret_type = fn_entry.fn_ret_type
+            end
             list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume return type name
 
     if method_alias != "" and params.len() > 0
@@ -418,18 +425,23 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     rodata_end_vaddr = rodata_base_vaddr - (0 - ro_len)
 
     // Compute exact 4KB page-aligned RW data segment address (PT_LOAD[1], PF_R | PF_W)
+    ro_file_off = 304 + total_code_size
+    ro_end_file_off = ro_file_off + ro_len
     text_ro_end = 304 - (0 - total_code_size) - (0 - ro_len)
     rem_page = text_ro_end % 4096
     pad_bytes = 0
     if rem_page != 0
         pad_bytes = 4096 - rem_page
     end
+    rw_file_off = text_ro_end + pad_bytes
     rw_vaddr = 1073741824 - (0 - text_ro_end) - (0 - pad_bytes)
     g_argc_vaddr = rw_vaddr
     g_argv_vaddr = rw_vaddr - (0 - 8)
     heap_base_vaddr = rw_vaddr - (0 - 16)
     heap_ptr_vaddr = rw_vaddr - (0 - 24)
     slab_vaddr = rw_vaddr - (0 - 32)
+    exc_top_vaddr = rw_vaddr - (0 - 104)
+    stack_bottom_vaddr = rw_vaddr - (0 - 112)
 
     ri = 0
     while ri < s.synth_str_relocs.len()
@@ -438,22 +450,66 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u64(s, rel.sr_patch_offset, target_vaddr)
         ri = ri + 1
 
-    // 8. Backpatch Strict W^X RW Runtime Globals (zero writes to .text)
+    // 8. Backpatch Strict W^X RW Runtime Globals (zero writes to .text) & Record Static-PIE Fixups
     if s.synth_alloc_off > 0
         x86_synth_patch_u64(s, s.synth_alloc_off + 10, heap_base_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_alloc_off + 10, rw_file_off + 16)
     if s.synth_argv_off > 0
         x86_synth_patch_u64(s, s.synth_argv_off + 15, g_argc_vaddr)
         x86_synth_patch_u64(s, s.synth_argv_off + 28, g_argv_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_argv_off + 15, rw_file_off)
+        x86_synth_record_reloc_patch(s, s.synth_argv_off + 28, rw_file_off + 8)
     if s.synth_slab_off > 0
         x86_synth_patch_u64(s, s.synth_slab_off + 2, slab_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_slab_off + 2, rw_file_off + 32)
     if s.synth_is_str_off > 0
         x86_synth_patch_u64(s, s.synth_is_str_off + 19, rodata_base_vaddr)
         x86_synth_patch_u64(s, s.synth_is_str_off + 34, rodata_end_vaddr)
         x86_synth_patch_u64(s, s.synth_is_str_off + 49, heap_base_vaddr)
         x86_synth_patch_u64(s, s.synth_is_str_off + 72, heap_ptr_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_is_str_off + 19, ro_file_off)
+        x86_synth_record_reloc_patch(s, s.synth_is_str_off + 34, ro_end_file_off)
+        x86_synth_record_reloc_patch(s, s.synth_is_str_off + 49, rw_file_off + 16)
+        x86_synth_record_reloc_patch(s, s.synth_is_str_off + 72, rw_file_off + 24)
+    if s.synth_exc_push_off > 0
+        x86_synth_patch_u64(s, s.synth_exc_push_off + 2, exc_top_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_exc_push_off + 2, rw_file_off + 104)
+    if s.synth_exc_pop_off > 0
+        x86_synth_patch_u64(s, s.synth_exc_pop_off + 2, exc_top_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_exc_pop_off + 2, rw_file_off + 104)
+    if s.synth_exc_throw_off > 0
+        x86_synth_patch_u64(s, s.synth_exc_throw_off + 2, exc_top_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_exc_throw_off + 2, rw_file_off + 104)
+    if s.synth_stack_bottom_off > 0
+        x86_synth_patch_u64(s, s.synth_stack_bottom_off + 2, stack_bottom_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_stack_bottom_off + 2, rw_file_off + 112)
+    if s.synth_heap_base_fn_off > 0
+        x86_synth_patch_u64(s, s.synth_heap_base_fn_off + 2, heap_base_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_heap_base_fn_off + 2, rw_file_off + 16)
+    if s.synth_heap_ptr_fn_off > 0
+        x86_synth_patch_u64(s, s.synth_heap_ptr_fn_off + 2, heap_ptr_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_heap_ptr_fn_off + 2, rw_file_off + 24)
 
-    // 9. Backpatch Scoped Arena Virtual Addresses
+    // 9. Backpatch Scoped Arena Virtual Addresses & Record PIE Fixups
     x86_synth_patch_arena_helpers(s, arena_offs, heap_base_vaddr, heap_ptr_vaddr)
+    if arena_offs.len() >= 4
+        if arena_offs[0] > 0
+            x86_synth_record_reloc_patch(s, arena_offs[0] + 6, rw_file_off + 16)
+            x86_synth_record_reloc_patch(s, arena_offs[0] + 36, rw_file_off + 24)
+        end
+        if arena_offs[1] > 0
+            x86_synth_record_reloc_patch(s, arena_offs[1] + 2, rw_file_off + 16)
+            x86_synth_record_reloc_patch(s, arena_offs[1] + 20, rw_file_off + 24)
+        end
+        if arena_offs[2] > 0
+            x86_synth_record_reloc_patch(s, arena_offs[2] + 2, rw_file_off + 16)
+            x86_synth_record_reloc_patch(s, arena_offs[2] + 15, rw_file_off + 24)
+        end
+        if arena_offs[3] > 0
+            x86_synth_record_reloc_patch(s, arena_offs[3] + 2, rw_file_off + 16)
+            x86_synth_record_reloc_patch(s, arena_offs[3] + 15, rw_file_off + 24)
+        end
+    end
 
     // 10. Sovereign Silicon Direct Peephole Optimizer (Guarded)
     x86_silicon_optimize_code(s)
@@ -488,6 +544,7 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
                     fn_item = X86Function()
                     fn_item.fn_name = fn_name
                     fn_item.fn_entry_offset = fn_off
+                    fn_item.fn_ret_type = ""
                     push(s.synth_functions, fn_item)
                     has_new_fns = 1
                 end

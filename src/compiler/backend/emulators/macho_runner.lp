@@ -31,6 +31,7 @@ struct MachORunner
     mor_segment_names       // List of segments ("__PAGEZERO", "__TEXT", "__DATA", "__LINKEDIT")
     mor_segment_vaddrs      // List of segment VM addresses
     mor_segment_vsizes      // List of segment VM sizes
+    mor_has_codesig         // 1 if valid LC_CODE_SIGNATURE SuperBlob (0xFADE0CC0) present
     mor_validation_status   // Diagnostic report
 end
 
@@ -48,6 +49,7 @@ fn macho_runner_new
     r.mor_segment_names = list()
     r.mor_segment_vaddrs = list()
     r.mor_segment_vsizes = list()
+    r.mor_has_codesig = 0
     r.mor_validation_status = "UNINITIALIZED"
     return r
 
@@ -140,6 +142,16 @@ fn macho_runner_load_bytes runner bytes_list
                 runner.mor_platform_name = "iOS"
             else
                 runner.mor_platform_name = "macOS"
+            end
+
+        // LC_CODE_SIGNATURE == 29 (0x1D)
+        elif cmd_type == 29
+            cs_off = macho_read_u32(bytes_list, cmd_cursor + 8)
+            cs_sz = macho_read_u32(bytes_list, cmd_cursor + 12)
+            if cs_off + 20 <= blen and cs_sz >= 20
+                if bytes_list[cs_off] == 250 and bytes_list[cs_off + 1] == 222 and bytes_list[cs_off + 2] == 12 and bytes_list[cs_off + 3] == 192
+                    runner.mor_has_codesig = 1
+                end
             end
         end
 

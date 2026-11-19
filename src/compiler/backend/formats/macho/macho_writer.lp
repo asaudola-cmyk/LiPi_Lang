@@ -9,6 +9,7 @@
 import "utso/syscalls"
 import "utso/collections"
 import "utso/string"
+import "utso/crypto/sha256"
 
 import "src/compiler/backend/formats/macho/load_commands.lp"
 
@@ -223,6 +224,60 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   return macho_patch_darwin_code_full(code_bytes, data_vmaddr, 0)
 @end
 
+@fn macho_build_adhoc_codesig(binary_prefix, code_limit)
+  // WHY: Generates a real Apple CS_SuperBlob (0xFADE0CC0) + SHA-256 CS_CodeDirectory (0xFADE0C02)
+  // covering every 4KB page of binary_prefix[0..code_limit) so Apple Silicon / macOS validates ad-hoc signing.
+  n_slots = (code_limit + 4095) / 4096
+  @if n_slots < 1 n_slots = 1 @end
+  cd_len = 44 + 9 + (n_slots * 32)
+  total_len = 20 + cd_len
+
+  blob = []
+  blob = macho_concat(blob, macho_pack_u32_be(4208856256))
+  blob = macho_concat(blob, macho_pack_u32_be(total_len))
+  blob = macho_concat(blob, macho_pack_u32_be(1))
+  blob = macho_concat(blob, macho_pack_u32_be(0))
+  blob = macho_concat(blob, macho_pack_u32_be(20))
+
+  blob = macho_concat(blob, macho_pack_u32_be(4208856066))
+  blob = macho_concat(blob, macho_pack_u32_be(cd_len))
+  blob = macho_concat(blob, macho_pack_u32_be(132096))
+  blob = macho_concat(blob, macho_pack_u32_be(131074))
+  blob = macho_concat(blob, macho_pack_u32_be(53))
+  blob = macho_concat(blob, macho_pack_u32_be(44))
+  blob = macho_concat(blob, macho_pack_u32_be(0))
+  blob = macho_concat(blob, macho_pack_u32_be(n_slots))
+  blob = macho_concat(blob, macho_pack_u32_be(code_limit))
+  blob = blob.push(32)
+  blob = blob.push(2)
+  blob = blob.push(0)
+  blob = blob.push(12)
+  blob = macho_concat(blob, macho_pack_u32_be(0))
+
+  ident_bytes = [108, 105, 112, 105, 95, 98, 105, 110, 0]
+  blob = macho_concat(blob, ident_bytes)
+
+  si = 0
+  @while si < n_slots
+    p_start = si * 4096
+    p_end = p_start + 4096
+    @if p_end > code_limit
+      p_end = code_limit
+    @end
+    chunk = []
+    bi = p_start
+    @while bi < p_end
+      chunk = chunk.push(binary_prefix[bi])
+      bi = bi + 1
+    @end
+    digest = sha256_hash_bytes(chunk)
+    blob = macho_concat(blob, digest)
+    si = si + 1
+  @end
+
+  return blob
+@end
+
 @fn macho_emit_executable(code_bytes, data_bytes, bss_size, cputype, output_path)
   // WHY: Comprehensive Mach-O 64 binary generator.
   // Supported architectures:
@@ -233,6 +288,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   // 1. [0x000000000 .. 0x0FFFFFFFF]: __PAGEZERO (4GB protected zone)
   // 2. [0x100000000 .. text_end]:   __TEXT Segment (Header + Cmds + __text)
   // 3. [data_start  .. data_end]:   __DATA Segment (__data + __bss)
+  // 4. [linkedit_start ..]:         __LINKEDIT (LC_CODE_SIGNATURE ad-hoc SHA-256)
 
   page_size = 4096
 
@@ -243,10 +299,10 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   // Cmd 3: LC_LOAD_DYLINKER command (/usr/lib/dyld) = 32 bytes
   // Cmd 4: LC_LOAD_DYLIB command (/usr/lib/libSystem.B.dylib) = 56 bytes
   // Cmd 5: LC_MAIN command = 24 bytes
-  // Base sizeofcmds = 72 + 152 + 32 + 56 + 24 = 336 bytes (ncmds = 5)
-  // Optional Cmd 6: __DATA segment command with 2 sections (__data, __bss) = 72 + 80 + 80 = 232 bytes (if data or bss exists)
+  // Cmd 6: __DATA segment command with 2 sections (__data, __bss) = 72 + 80 + 80 = 232 bytes
+  // Cmd 7: __LINKEDIT segment command = 72 bytes; Cmd 8: LC_CODE_SIGNATURE = 16 bytes
 
-  // Always emit __DATA with rodata + 128B RW runtime globals (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets)
+  // Always emit __DATA with rodata + 128B RW runtime globals + __LINKEDIT (LC_CODE_SIGNATURE)
   ro_orig_len = data_bytes.len()
   full_data_bytes = []
   full_data_bytes = macho_concat(full_data_bytes, data_bytes)
@@ -257,8 +313,8 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   @end
   has_data = 1
 
-  ncmds = 6
-  sizeofcmds = 72 + 152 + 32 + 56 + 24 + 232 // PAGEZERO + TEXT + DYLINKER + DYLIB + LC_MAIN + DATA = 568 bytes
+  ncmds = 8
+  sizeofcmds = 72 + 152 + 32 + 56 + 24 + 232 + 72 + 16 // + __LINKEDIT + LC_CODE_SIGNATURE = 656 bytes
 
   header_and_cmds_size = 32 + sizeofcmds
 
@@ -289,6 +345,23 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   rem_dpage = data_vmsize % page_size
   @if rem_dpage != 0
     data_vmsize = data_vmsize + (page_size - rem_dpage)
+  @end
+  data_file_aligned = data_size
+  rem_dfp = data_file_aligned % page_size
+  @if rem_dfp != 0
+    data_file_aligned = data_file_aligned + (page_size - rem_dfp)
+  @end
+
+  // 2b. Configure __LINKEDIT + LC_CODE_SIGNATURE ad-hoc SHA-256 CodeDirectory layout
+  linkedit_offset = data_offset + data_file_aligned
+  linkedit_vmaddr = data_vmaddr + data_vmsize
+  n_cs_slots = (linkedit_offset + 4095) / 4096
+  @if n_cs_slots < 1 n_cs_slots = 1 @end
+  codesig_size = 20 + 44 + 9 + (n_cs_slots * 32)
+  linkedit_vmsize = codesig_size
+  rem_lpage = linkedit_vmsize % page_size
+  @if rem_lpage != 0
+    linkedit_vmsize = linkedit_vmsize + (page_size - rem_lpage)
   @end
 
   // Relocate x86_64 Linux .rodata, RW globals, and ALL Linux syscalls to Darwin BSD Mach-O ABI
@@ -323,7 +396,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   lc_main = macho_lc_main_create(text_offset, 0)
   lc_main_bytes = macho_lc_main_serialize(lc_main) // 24 bytes
 
-  // Optional Cmd 6: __DATA
+  // Cmd 6: __DATA
   cmd_data_bytes = []
   @if has_data == 1
     seg_data = macho_segment_data(data_vmaddr, data_vmsize, data_offset, data_size, 2)
@@ -338,6 +411,11 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     cmd_data_bytes = macho_concat(cmd_data_bytes, sec_bss_bytes)
   @end
 
+  // Cmd 7: __LINKEDIT & Cmd 8: LC_CODE_SIGNATURE
+  seg_linkedit = macho_segment_linkedit(linkedit_vmaddr, linkedit_vmsize, linkedit_offset, codesig_size)
+  cmd_linkedit_bytes = macho_segment_header_serialize(seg_linkedit) // 72 bytes
+  cmd_codesig_bytes = macho_lc_code_signature_serialize(linkedit_offset, codesig_size) // 16 bytes
+
   // 5. Assemble Binary Stream
   binary = []
   binary = macho_concat(binary, hdr_bytes)
@@ -350,6 +428,8 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   @if has_data == 1
     binary = macho_concat(binary, cmd_data_bytes)
   @end
+  binary = macho_concat(binary, cmd_linkedit_bytes)
+  binary = macho_concat(binary, cmd_codesig_bytes)
 
   // Pad up to text_offset
   @while binary.len() < text_offset
@@ -367,6 +447,13 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     @end
     binary = macho_concat(binary, full_data_bytes)
   @end
+
+  // Pad up to linkedit_offset and append SHA-256 ad-hoc SuperBlob CodeDirectory
+  @while binary.len() < linkedit_offset
+    binary = binary.push(0)
+  @end
+  codesig_blob = macho_build_adhoc_codesig(binary, linkedit_offset)
+  binary = macho_concat(binary, codesig_blob)
 
   // 6. Write to disk
   written = macho_write_to_disk(output_path, binary)

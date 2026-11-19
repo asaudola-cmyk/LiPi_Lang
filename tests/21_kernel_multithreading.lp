@@ -13,6 +13,25 @@ fn mt_worker_entry shared_ptr
     mem_write(shared_ptr, 0, 777)
     return 0
 
+fn mt_stress_worker ctrl_ptr
+    mtx = ctrl_ptr + 16
+    done_ptr = ctrl_ptr + 32
+    i = 0
+    while i < 10000
+        atomic_add(ctrl_ptr, 1)
+        i = i + 1
+    end
+    j = 0
+    while j < 1000
+        futex_mutex_lock(mtx)
+        cur = mem_read(ctrl_ptr, 8)
+        mem_write(ctrl_ptr, 8, cur + 1)
+        futex_mutex_unlock(mtx)
+        j = j + 1
+    end
+    atomic_add(done_ptr, 1)
+    return 0
+
 fn test_assert actual expected test_name
     if actual != expected
         say "  ❌ FAILED: " + test_name
@@ -202,5 +221,24 @@ channel_send(ch, 999)
 ch_val = channel_recv(ch)
 test_assert(ch_val, 999, "Thread-safe channel_send & channel_recv roundtrip verified")
 channel_close(ch)
+
+// Step 5: 8-thread CLONE_VM shared-memory stress test (80,000 atomic_add + 8,000 futex_mutex ops)
+ctrl_ptr = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+mem_write(ctrl_ptr, 0, 0)
+mem_write(ctrl_ptr, 8, 0)
+mem_write(ctrl_ptr, 16, 0)
+mem_write(ctrl_ptr, 24, 0)
+mem_write(ctrl_ptr, 32, 0)
+wi = 0
+while wi < 8
+    ctid = thread_spawn_shared(fn_ptr(mt_stress_worker), ctrl_ptr)
+    if ctid <= 0
+        test_assert(ctid > 0, 1, "CLONE_VM worker thread spawned")
+    end
+    wi = wi + 1
+end
+thread_wait_counter(ctrl_ptr + 32, 8)
+test_assert(mem_read(ctrl_ptr, 0), 80000, "8x10,000 CLONE_VM atomic_add stress test == 80000")
+test_assert(mem_read(ctrl_ptr, 8), 8000, "8x1,000 CLONE_VM futex_mutex stress test == 8000")
 
 say "PASS: Test 21 Data Structures"

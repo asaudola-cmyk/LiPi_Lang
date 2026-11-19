@@ -46,6 +46,7 @@ struct X86LocalVar
 struct X86Function
     fn_name             // Function identifier
     fn_entry_offset     // Byte offset in code_bytes where the function prologue starts
+    fn_ret_type         // Declared return type name string ("" if untyped)
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -93,6 +94,14 @@ struct X86Synthesizer
     synth_peep_kinds    // Peephole pattern kinds (2=redundant disp8 load, 3=redundant disp32 load)
     synth_last_store_end // End offset of immediately preceding mov [rbp-off], rax in same basic block
     synth_last_store_off // Stack offset of immediately preceding mov [rbp-off], rax
+    synth_rw_patch_offs // Byte offsets of u64 movabs immediates for RW globals & _is_str bounds
+    synth_rw_patch_targets // File-relative (base 0) target offsets for Static-PIE RIP-relative conversion
+    synth_exc_push_off  // Byte offset where _lipi_exc_push helper starts
+    synth_exc_pop_off   // Byte offset where _lipi_exc_pop helper starts
+    synth_exc_throw_off // Byte offset where _lipi_exc_throw helper starts
+    synth_stack_bottom_off // Byte offset where _lipi_stack_bottom helper starts
+    synth_heap_base_fn_off // Byte offset where _lipi_heap_base helper starts
+    synth_heap_ptr_fn_off  // Byte offset where _lipi_heap_ptr helper starts
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -132,6 +141,14 @@ fn x86_synth_new
     s.synth_peep_kinds = list()
     s.synth_last_store_end = 0 - 1
     s.synth_last_store_off = 0
+    s.synth_rw_patch_offs = list()
+    s.synth_rw_patch_targets = list()
+    s.synth_exc_push_off = 0
+    s.synth_exc_pop_off = 0
+    s.synth_exc_throw_off = 0
+    s.synth_stack_bottom_off = 0
+    s.synth_heap_base_fn_off = 0
+    s.synth_heap_ptr_fn_off = 0
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -197,6 +214,75 @@ fn x86_synth_patch_u64 s offset val
         v = (v - b) / 256
         i = i + 1
     return 0
+
+fn x86_synth_record_reloc_patch s u64_patch_off file_target_off
+    // WHY: Records exact relocated movabs imm64 sites (RW globals & .rodata bounds)
+    // so Static-PIE conversion transforms ONLY verified relocations, never literal constants.
+    push(s.synth_rw_patch_offs, u64_patch_off)
+    push(s.synth_rw_patch_targets, file_target_off)
+    return 0
+
+fn x86_synth_patch_lea_rip s u64_patch_off target_file_off text_file_off
+    // WHY: Rewrites a 10-byte movabs r64, imm64 (48/49 B8..BF <u64>) into an ASLR-safe
+    // 10-byte RIP-relative lea r64, [rip + disp32]; nop; nop; nop sequence for Static-PIE.
+    inst_off = u64_patch_off - 2
+    if inst_off < 0 or u64_patch_off + 8 > s.synth_code.len()
+        return 0
+    end
+    rex = s.synth_code[inst_off]
+    op = s.synth_code[inst_off + 1]
+    if (rex == 72 or rex == 73) and op >= 184 and op <= 191
+        reg = op - 184
+        new_rex = 72
+        if rex == 73
+            new_rex = 76
+        end
+        disp32 = target_file_off - (text_file_off + inst_off + 7)
+        list_set(s.synth_code, inst_off + 0, new_rex)
+        list_set(s.synth_code, inst_off + 1, 141)
+        list_set(s.synth_code, inst_off + 2, 5 + (reg * 8))
+        x86_synth_patch_u32(s, inst_off + 3, disp32)
+        list_set(s.synth_code, inst_off + 7, 144)
+        list_set(s.synth_code, inst_off + 8, 144)
+        list_set(s.synth_code, inst_off + 9, 144)
+    end
+    return 0
+
+fn x86_synth_convert_to_pie s
+    // WHY: Converts all recorded .rodata and RW global relocations in s.synth_code to
+    // position-independent RIP-relative addressing for strict W^X ET_DYN (Static-PIE) ASLR.
+    text_file_off = 304
+    ro_file_off = text_file_off + s.synth_code.len()
+    ri = 0
+    while ri < s.synth_str_relocs.len()
+        rel = s.synth_str_relocs[ri]
+        x86_synth_patch_lea_rip(s, rel.sr_patch_offset, ro_file_off + rel.sr_rodata_offset, text_file_off)
+        ri = ri + 1
+    end
+    gi = 0
+    while gi < s.synth_rw_patch_offs.len()
+        p_off = s.synth_rw_patch_offs[gi]
+        t_off = s.synth_rw_patch_targets[gi]
+        x86_synth_patch_lea_rip(s, p_off, t_off, text_file_off)
+        gi = gi + 1
+    end
+    return 0
+
+fn x86_synth_lookup_fn_ret_type s fn_name
+    // WHY: Returns the declared return type name of fn_name for struct-aware field resolution.
+    k = 0
+    while k < s.synth_functions.len()
+        fn_item = s.synth_functions[k]
+        if fn_item.fn_name == fn_name
+            rt = fn_item.fn_ret_type
+            if rt != 0 and rt != ""
+                return rt
+            end
+            return ""
+        end
+        k = k + 1
+    end
+    return ""
 
 include "src/compiler/backend/targets/x86_64/runtime_helpers.lp"
 include "src/compiler/backend/targets/x86_64/runtime_io.lp"
@@ -954,6 +1040,23 @@ fn x86_synth_is_ident_token kind
     if kind == TOK_KW_DEFER() return 1
     if kind == TOK_KW_PRINT() return 1
     if kind == TOK_KW_SYSCALL() return 1
+    return 0
+
+fn x86_synth_should_stop_inline toks pos_box start_line
+    // WHY: Allows single-line multi-statement directive blocks (`@while cond s1 s2 @end`)
+    // to continue consuming statements on start_line until `@end` or line end.
+    np = get(pos_box, 0)
+    if np >= toks.len()
+        return 1
+    end
+    nt = toks[np]
+    nk = nt.tok_kind
+    if nk == TOK_NEWLINE() or nk == TOK_SEMI() or nk == TOK_COMMENT_LINE() or nk == TOK_EOF()
+        return 1
+    end
+    if nt.tok_span.span_start_line > start_line
+        return 1
+    end
     return 0
 
 fn x86_synth_is_block_end toks p

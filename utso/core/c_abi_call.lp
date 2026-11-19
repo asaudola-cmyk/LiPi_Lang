@@ -16,14 +16,14 @@ include "utso/core/arena.lp"
 // Holds base address of mmapped executable trampoline page
 TRAMPOLINE_PAGE_ADDR = 0
 
-// ১. এক্সিকিউটেবল ট্রাম্পোলাইন ইনিশিয়ালাইজেশন (Initialize Executable JIT Trampoline)
-// WHY: PROT_READ (1) | PROT_WRITE (2) | PROT_EXEC (4) = 7
-// MAP_PRIVATE (2) | MAP_ANONYMOUS (32) = 34
+// ১. এক্সিকিউটেবল ট্রাম্পোলাইন ইনিশিয়ালাইজেশন (Initialize Strict W^X JIT Trampoline)
+// WHY: Allocates RW page (PROT_READ|PROT_WRITE=3), emits machine code, then flips
+// permissions via SYS_mprotect (10) to PROT_READ|PROT_EXEC=5 so memory is NEVER simultaneously RWX.
 fn c_abi_init_trampoline
     if TRAMPOLINE_PAGE_ADDR > 0
         return TRAMPOLINE_PAGE_ADDR
 
-    page = syscall(9, 0, 4096, 7, 34, -1, 0)
+    page = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
     if page <= 0
         return 0
 
@@ -82,6 +82,12 @@ fn c_abi_init_trampoline
     mem_byte_write(page, 30, 8)   // 0x08
 
     mem_byte_write(page, 31, 195) // 0xC3 (ret)
+
+    // Strict W^X transition: remove write permission, enable execute (PROT_READ|PROT_EXEC = 5)
+    mret = syscall(10, page, 4096, 5, 0, 0, 0)
+    if mret < 0
+        syscall(11, page, 4096, 0, 0, 0, 0)
+        return 0
 
     TRAMPOLINE_PAGE_ADDR = page
     return page

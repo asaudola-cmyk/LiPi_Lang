@@ -12,6 +12,7 @@
 // ==============================================================================
 
 include "utso/core/memory.lp"
+include "utso/core/c_abi_call.lp"
 
 // ── ELF64 Specification Constants ─────────────────────────────────────────────
 ELF_MAGIC_0         = 127 // 0x7F
@@ -229,3 +230,10 @@ fn ffi_call_simulated call_pkg
     r8  = get(call_pkg, 6)
     r9  = get(call_pkg, 7)
     return rdi + rsi + rdx + rcx + r8 + r9
+
+fn ffi_call_native fn_ptr a0 a1 a2 a3 a4
+    // WHY: Dispatches a real native SysV ABI call through the W^X mprotect JIT trampoline.
+    if fn_ptr <= 0
+        return 0 - 2
+    end
+    return c_abi_invoke(fn_ptr, a0, a1, a2, a3, a4)
