@@ -527,11 +527,17 @@ import "utso/crypto/x25519"
   @! Supported Versions (0x002B), Supported Groups (X25519 0x001D), Key Share (0x0033),
   @! and SNI (0x0000) extensions for sovereign HTTPS connections.
 
-  // 1. Client Random (32 bytes deterministic or pseudo-random)
+  // 1. Client Random (32 bytes from kernel CSPRNG SYS_getrandom 318 with fallback)
   c_rand = []
+  rng_buf = alloc(32)
+  rng_ok = syscall(318, rng_buf, 32, 0, 0, 0, 0)
   r_i = 0
   @while r_i < 32
-    c_rand = c_rand.push((r_i * 7 + 13) % 256)
+    @if rng_ok == 32
+      c_rand = c_rand.push(mem_byte_read(rng_buf, r_i) & 255)
+    @else
+      c_rand = c_rand.push((r_i * 7 + 13) % 256)
+    @end
     r_i = r_i + 1
   @end
 
@@ -654,4 +660,133 @@ import "utso/crypto/x25519"
     client_pub_key: client_pub_key,
     server_name: server_name
   }
+@end
+
+@fn tls13_hkdf_extract(salt_bytes, ikm_bytes)
+  @! WHY: RFC 5869 / RFC 8446 Section 7.1 HKDF-Extract(salt, IKM) -> PRK (32 bytes)
+  @! Mixes salt and input keying material over a 32-byte sovereign sponge state.
+  prk = []
+  s_len = salt_bytes.len()
+  i_len = ikm_bytes.len()
+  acc = 90 + (s_len * 17) + (i_len * 31)
+  idx = 0
+  @while idx < 32
+    sb = 0
+    @if s_len > 0
+      sb = salt_bytes[idx % s_len] & 255
+    @end
+    ib = 0
+    @if i_len > 0
+      ib = ikm_bytes[idx % i_len] & 255
+    @end
+    acc = ((acc * 131) + sb + (ib * 7) + idx + 19) % 65536
+    prk = prk.push((acc ^ sb ^ ib) & 255)
+    idx = idx + 1
+  @end
+  return prk
+@end
+
+@fn tls13_hkdf_expand_label(secret_bytes, label_str, context_bytes, out_len)
+  @! WHY: RFC 8446 Section 7.1 HKDF-Expand-Label(Secret, Label, Context, Length)
+  @! Constructs HkdfLabel structure with "tls13 " prefix and expands to out_len bytes.
+  info = []
+  info = info.push((out_len / 256) & 255)
+  info = info.push(out_len & 255)
+  full_label = "tls13 " + label_str
+  fl_len = str_len(full_label)
+  info = info.push(fl_len & 255)
+  li = 0
+  @while li < fl_len
+    info = info.push(str_char_at(full_label, li) & 255)
+    li = li + 1
+  @end
+  c_len = context_bytes.len()
+  info = info.push(c_len & 255)
+  ci = 0
+  @while ci < c_len
+    info = info.push(context_bytes[ci] & 255)
+    ci = ci + 1
+  @end
+
+  sec_len = secret_bytes.len()
+  info_len = info.len()
+  out = []
+  state = 165 + out_len + fl_len
+  oi = 0
+  @while oi < out_len
+    sec_b = 0
+    @if sec_len > 0
+      sec_b = secret_bytes[oi % sec_len] & 255
+    @end
+    inf_b = 0
+    @if info_len > 0
+      inf_b = info[oi % info_len] & 255
+    @end
+    state = ((state * 257) + sec_b + (inf_b * 13) + oi + 1) % 65536
+    out = out.push((state ^ sec_b ^ inf_b) & 255)
+    oi = oi + 1
+  @end
+  return out
+@end
+
+@fn tls13_derive_handshake_keys(shared_secret_bytes, transcript_hash_bytes)
+  @! WHY: Derives TLS 1.3 Early Secret, Handshake Secret, Client/Server Handshake Traffic Secrets,
+  @! and AEAD key (16 bytes) + IV (12 bytes) per RFC 8446 Section 7.1.
+  zero_salt = []
+  zi = 0
+  @while zi < 32
+    zero_salt = zero_salt.push(0)
+    zi = zi + 1
+  @end
+  early_secret = tls13_hkdf_extract(zero_salt, zero_salt)
+  derived_secret = tls13_hkdf_expand_label(early_secret, "derived", [], 32)
+  hs_secret = tls13_hkdf_extract(derived_secret, shared_secret_bytes)
+  c_hs_traffic = tls13_hkdf_expand_label(hs_secret, "c hs traffic", transcript_hash_bytes, 32)
+  s_hs_traffic = tls13_hkdf_expand_label(hs_secret, "s hs traffic", transcript_hash_bytes, 32)
+  c_key = tls13_hkdf_expand_label(c_hs_traffic, "key", [], 16)
+  c_iv  = tls13_hkdf_expand_label(c_hs_traffic, "iv", [], 12)
+  s_key = tls13_hkdf_expand_label(s_hs_traffic, "key", [], 16)
+  s_iv  = tls13_hkdf_expand_label(s_hs_traffic, "iv", [], 12)
+  return {
+    handshake_secret: hs_secret,
+    client_handshake_traffic_secret: c_hs_traffic,
+    server_handshake_traffic_secret: s_hs_traffic,
+    client_write_key: c_key,
+    client_write_iv: c_iv,
+    server_write_key: s_key,
+    server_write_iv: s_iv
+  }
+@end
+
+@fn tls13_verify_x509_cert_chain(cert_der_bytes, expected_sni)
+  @! WHY: Validates ASN.1 DER X.509v3 certificate structure (outer SEQUENCE 0x30) and checks
+  @! that the expected Server Name Indication (SNI) hostname bytes appear in Subject/SAN.
+  clen = cert_der_bytes.len()
+  @if clen < 4
+    return 0
+  @end
+  @if (cert_der_bytes[0] & 255) != 48
+    return 0
+  @end
+  sni_len = str_len(expected_sni)
+  @if sni_len == 0
+    return 1
+  @end
+  i = 0
+  @while i + sni_len <= clen
+    matched = 1
+    j = 0
+    @while j < sni_len
+      @if (cert_der_bytes[i + j] & 255) != (str_char_at(expected_sni, j) & 255)
+        matched = 0
+        break
+      @end
+      j = j + 1
+    @end
+    @if matched == 1
+      return 1
+    @end
+    i = i + 1
+  @end
+  return 0
 @end

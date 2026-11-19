@@ -188,8 +188,11 @@ import "utso/core/string"
   return res
 @end
 
-@fn kzg_commit_polynomial_at(coeffs, g1_point, eval_pt, p_mod)
-  tau = 5
+@fn kzg_commit_polynomial_with_tau(coeffs, g1_point, eval_pt, tau_val, p_mod)
+  tau = tau_val
+  @if tau <= 0
+    tau = 5
+  @end
   tau_pwr = 1
   c_pt = ec_point_infinity()
 
@@ -212,6 +215,10 @@ import "utso/core/string"
     eval_point: eval_pt,
     proof_eval: eval_val
   }
+@end
+
+@fn kzg_commit_polynomial_at(coeffs, g1_point, eval_pt, p_mod)
+  return kzg_commit_polynomial_with_tau(coeffs, g1_point, eval_pt, 5, p_mod)
 @end
 
 @fn kzg_commit_polynomial(coeffs, g1_point, p_mod)

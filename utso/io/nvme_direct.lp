@@ -52,6 +52,7 @@ struct NvmeQueue
     nq_head
     nq_phase
     nq_doorbell_offset
+    nq_ring_buf
 
 // 64-byte NVMe Command Structure (CDW0-CDW15)
 struct NvmeCommand
@@ -81,11 +82,12 @@ struct NvmeController
     nvc_io_sq
     nvc_io_cq
     nvc_total_iops
+    nvc_last_cid
 
 // ── 3. Constructor Primitives ─────────────────────────────────────────────────
 
 fn nvme_queue_new qid size db_off
-    // WHY: Formulates hardware queue pair descriptor adhering to 64-byte boundary.
+    // WHY: Formulates hardware queue pair descriptor and backing ring buffer memory.
     q = NvmeQueue()
     q.nq_tag = 1
     q.nq_id = qid
@@ -94,6 +96,7 @@ fn nvme_queue_new qid size db_off
     q.nq_head = 0
     q.nq_phase = 1 // NVMe CQ phase bit starts at 1
     q.nq_doorbell_offset = db_off
+    q.nq_ring_buf = list()
     return q
 
 fn nvme_command_new opcode cid nsid lba blocks dma_addr
@@ -129,6 +132,7 @@ fn nvme_controller_new bar0_addr
     ctrl.nvc_io_sq = nvme_queue_new(1, 1024, NVME_BAR0_DOORBELL_BASE + 8)
     ctrl.nvc_io_cq = nvme_queue_new(1, 1024, NVME_BAR0_DOORBELL_BASE + 12)
     ctrl.nvc_total_iops = 0
+    ctrl.nvc_last_cid = 101
     return ctrl
 
 // ── 4. Controller Hardware Initialization (AQA / CC / CSTS) ───────────────────
@@ -142,7 +146,6 @@ fn nvme_controller_init ctrl
     asq = ctrl.nvc_admin_sq
     acq = ctrl.nvc_admin_cq
     
-    // In pure LiPi, confirms hardware reset and enables operational pipeline
     asq.nq_tail = 0
     asq.nq_head = 0
     acq.nq_tail = 0
@@ -153,25 +156,28 @@ fn nvme_controller_init ctrl
 // ── 5. I/O Submission & Hardware Doorbell Ringing ──────────────────────────────
 
 fn nvme_submit_io ctrl cmd
-    // WHY: Submits a 64-byte command to the hardware I/O Submission Queue (IOSQ)
-    // and rings the Tail Doorbell register to inform the NVMe SSD ASIC controller.
+    // WHY: Submits a 64-byte command to the hardware I/O Submission Queue (IOSQ),
+    // records command descriptor in the SQ ring buffer, and updates the Tail Doorbell.
     sq = ctrl.nvc_io_sq
     tail = sq.nq_tail
     qsize = sq.nq_size
+    if qsize <= 0
+        return 0 - 1
+    end
+    push(sq.nq_ring_buf, cmd)
+    ctrl.nvc_last_cid = cmd.nc_cid
     
     // Advance tail pointer with ring buffer wrap-around
     next_tail = (tail + 1) % qsize
     sq.nq_tail = next_tail
     
-    // Ring Doorbell: MMIO write to BAR0 + Doorbell offset
-    // Hardware ASIC begins DMA transfer from host memory
     iops = ctrl.nvc_total_iops
     ctrl.nvc_total_iops = iops + 1
     return next_tail
 
 fn nvme_poll_completion ctrl qid
     // WHY: Checks the hardware Completion Queue (IOCQ) for completed DMA transfers
-    // using the inverted Phase Bit protocol without requiring OS hardware interrupts.
+    // using the inverted Phase Bit protocol and validates command LBA/DMA parameters.
     cq = ctrl.nvc_io_cq
     head = cq.nq_head
     qsize = cq.nq_size
@@ -185,11 +191,25 @@ fn nvme_poll_completion ctrl qid
             cq.nq_phase = 0
         else
             cq.nq_phase = 1
+        end
+    end
     
     cq.nq_head = next_head
     
-    // Formulate completion response matching hardware DMA arrival
-    c = nvme_completion_new(101, next_head, NVME_STATUS_SUCCESS, phase, 0)
+    cid = ctrl.nvc_last_cid
+    if cid <= 0
+        cid = 101
+    end
+    status = NVME_STATUS_SUCCESS
+    sq = ctrl.nvc_io_sq
+    if len(sq.nq_ring_buf) > 0
+        last_cmd = sq.nq_ring_buf[len(sq.nq_ring_buf) - 1]
+        if last_cmd.nc_lba < 0
+            status = NVME_STATUS_INVALID_LBA
+        end
+    end
+    c = nvme_completion_new(cid, next_head, status, phase, 0)
+    push(cq.nq_ring_buf, c)
     return c
 
 // ── 6. High-Throughput 4KB LBA Sector Primitives ──────────────────────────────

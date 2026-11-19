@@ -56,6 +56,13 @@ import "utso/syscalls"
   buf: array
 @end
 
+@struct PageSplitResult
+  promoted_key: string
+  split_page_id: i64
+  src_buf: array
+  dst_buf: array
+@end
+
 @fn page_new()
   arr = []
   i = 0
@@ -283,13 +290,14 @@ import "utso/syscalls"
   v_len = page_read_u32(buf, offset + 2)
   k = page_read_str(buf, offset + 6, k_len)
   v = page_read_str(buf, offset + 6 + k_len, v_len)
-  return {
+  res: PageLeafCell = {
     key: k,
     value: v,
     cell_size: 6 + k_len + v_len,
     k_len: k_len,
     v_len: v_len
   }
+  return res
 @end
 
 @fn page_read_internal_cell(buf, offset)
@@ -495,7 +503,8 @@ import "utso/syscalls"
     old_vlen = page_read_u32(buf, old_offset + 2)
     @if old_vlen == v_len
       buf = page_write_str(buf, old_offset + 6 + k_len, value)
-      return { ok: 1, offset: old_offset, buf: buf }
+      res_ok1: PageInsertResult = { ok: 1, offset: old_offset, buf: buf }
+      return res_ok1
     @else
       del_res: PageOpResult = page_delete_leaf_cell(buf, key)
       buf = del_res.buf
@@ -503,7 +512,8 @@ import "utso/syscalls"
       buf = df_res.buf
       avail = page_free_space(buf)
       @if avail < req_space
-        return { ok: 0, offset: 0, buf: buf }
+        res_fail1: PageInsertResult = { ok: 0, offset: 0, buf: buf }
+        return res_fail1
       @end
       return page_insert_leaf_cell(buf, key, value)
     @end
@@ -515,7 +525,8 @@ import "utso/syscalls"
     buf = df_res2.buf
     avail = page_free_space(buf)
     @if avail < req_space
-      return { ok: 0, offset: 0, buf: buf }
+      res_fail2: PageInsertResult = { ok: 0, offset: 0, buf: buf }
+      return res_fail2
     @end
   @end
 
@@ -540,7 +551,8 @@ import "utso/syscalls"
   buf = page_set_free_lower(buf, 32 + ((cnt + 1) * 2))
   buf = page_set_free_upper(buf, new_upper)
 
-  return { ok: 1, offset: new_upper, buf: buf }
+  res_ok2: PageInsertResult = { ok: 1, offset: new_upper, buf: buf }
+  return res_ok2
 @end
 
 @fn page_delete_leaf_cell(buf, key)
@@ -585,11 +597,12 @@ import "utso/syscalls"
 
   avail = page_free_space(buf)
   @if avail < req_space
-    df_res = page_defrag(buf)
+    df_res: PageOpResult = page_defrag(buf)
     buf = df_res.buf
     avail = page_free_space(buf)
     @if avail < req_space
-      return { ok: 0, offset: 0, buf: buf }
+      res_fail_int: PageInsertResult = { ok: 0, offset: 0, buf: buf }
+      return res_fail_int
     @end
   @end
 
@@ -616,7 +629,8 @@ import "utso/syscalls"
   buf = page_set_free_lower(buf, 32 + ((cnt + 1) * 2))
   buf = page_set_free_upper(buf, new_upper)
 
-  return { ok: 1, offset: new_upper, buf: buf }
+  res_ok_int: PageInsertResult = { ok: 1, offset: new_upper, buf: buf }
+  return res_ok_int
 @end
 
 @fn page_delete_internal_cell(buf, key)
@@ -658,9 +672,7 @@ import "utso/syscalls"
   cnt = page_get_cell_count(src_buf)
   split_idx = cnt / 2
 
-  split_offset = page_get_slot(src_buf, split_idx)
-  split_cell = page_read_leaf_cell(src_buf, split_offset)
-  promoted_key = split_cell.key
+  promoted_key = page_get_leaf_key(src_buf, split_idx)
 
   dst_id = page_get_id(dst_buf)
   src_id = page_get_id(src_buf)
@@ -673,73 +685,74 @@ import "utso/syscalls"
   move_vals = []
   i = split_idx
   @while i < cnt
-    off = page_get_slot(src_buf, i)
-    c = page_read_leaf_cell(src_buf, off)
-    move_keys = move_keys.push(c.key)
-    move_vals = move_vals.push(c.value)
+    k = page_get_leaf_key(src_buf, i)
+    v = page_get_leaf_val(src_buf, i)
+    move_keys = move_keys.push(k)
+    move_vals = move_vals.push(v)
     i = i + 1
   @end
 
   i = 0
   @while i < move_keys.len()
-    ins_res = page_insert_leaf_cell(dst_buf, move_keys[i], move_vals[i])
+    ins_res: PageInsertResult = page_insert_leaf_cell(dst_buf, move_keys[i], move_vals[i])
     dst_buf = ins_res.buf
     i = i + 1
   @end
 
   src_buf = page_set_cell_count(src_buf, split_idx)
   src_buf = page_set_free_lower(src_buf, 32 + (split_idx * 2))
-  df_res = page_defrag(src_buf)
+  df_res: PageOpResult = page_defrag(src_buf)
   src_buf = df_res.buf
 
-  return {
+  split_res: PageSplitResult = {
     promoted_key: promoted_key,
     split_page_id: dst_id,
     src_buf: src_buf,
     dst_buf: dst_buf
   }
+  return split_res
 @end
 
 @fn page_split_internal(src_buf, dst_buf)
   cnt = page_get_cell_count(src_buf)
   split_idx = cnt / 2
 
-  split_offset = page_get_slot(src_buf, split_idx)
-  split_cell = page_read_internal_cell(src_buf, split_offset)
-  promoted_key = split_cell.key
+  promoted_key = page_get_internal_key(src_buf, split_idx)
+  split_child_id = page_get_internal_child_page_id(src_buf, split_idx)
 
   dst_id = page_get_id(dst_buf)
   dst_buf = page_format_internal(dst_buf, dst_id)
 
-  dst_buf = page_set_first_child_page_id(dst_buf, split_cell.child_page_id)
+  dst_buf = page_set_first_child_page_id(dst_buf, split_child_id)
 
   move_keys = []
   move_children = []
   i = split_idx + 1
   @while i < cnt
-    off = page_get_slot(src_buf, i)
-    c = page_read_internal_cell(src_buf, off)
-    move_keys = move_keys.push(c.key)
-    move_children = move_children.push(c.child_page_id)
+    k = page_get_internal_key(src_buf, i)
+    ch = page_get_internal_child_page_id(src_buf, i)
+    move_keys = move_keys.push(k)
+    move_children = move_children.push(ch)
     i = i + 1
   @end
 
   i = 0
   @while i < move_keys.len()
-    ins_res = page_insert_internal_cell(dst_buf, move_keys[i], move_children[i])
+    ins_res: PageInsertResult = page_insert_internal_cell(dst_buf, move_keys[i], move_children[i])
     dst_buf = ins_res.buf
     i = i + 1
   @end
 
   src_buf = page_set_cell_count(src_buf, split_idx)
   src_buf = page_set_free_lower(src_buf, 32 + (split_idx * 2))
-  df_res = page_defrag(src_buf)
+  df_res: PageOpResult = page_defrag(src_buf)
   src_buf = df_res.buf
 
-  return {
+  split_res_int: PageSplitResult = {
     promoted_key: promoted_key,
     split_page_id: dst_id,
     src_buf: src_buf,
     dst_buf: dst_buf
   }
+  return split_res_int
 @end

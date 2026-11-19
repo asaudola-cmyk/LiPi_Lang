@@ -17,18 +17,37 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
     if is_print == 1
         list_set(pos_box, 0, pos + 1) // Consume print keyword
         s.ws_needs_wasi_print = 1
-        wasm_synth_compile_expr(s, toks, pos_box)
-        // WHY: Route output to WASI fd_write(fd=1 STDOUT, iovs=0, iovs_len=1, nwritten=8)
-        // 1. Prepare ciovec structure in linear memory at offset 0:
-        //    [0..3] = 16 (pointer to string/payload buffer)
-        //    [4..7] = 8  (buffer length in bytes)
-        wasm_emit_i32_const(s.ws_code, 0)
-        wasm_emit_i32_const(s.ws_code, 16)
-        wasm_emit_i32_store(s.ws_code, 2, 0)
-        wasm_emit_i32_const(s.ws_code, 4)
-        wasm_emit_i32_const(s.ws_code, 8)
-        wasm_emit_i32_store(s.ws_code, 2, 0)
-        wasm_emit_drop(s.ws_code) // Discard expr from stack
+        cur_p = get(pos_box, 0)
+        is_direct_str = 0
+        if cur_p < toks.len() and toks[cur_p].tok_kind == TOK_STR()
+            next_p = cur_p + 1
+            if next_p >= toks.len() or toks[next_p].tok_kind == TOK_NEWLINE() or toks[next_p].tok_kind == TOK_SEMI() or toks[next_p].tok_kind == TOK_EOF()
+                is_direct_str = 1
+            end
+        end
+        if is_direct_str == 1
+            str_payload = toks[cur_p].tok_text + "\n"
+            str_len = len(str_payload)
+            str_off = wasm_synth_add_string_constant(s, str_payload)
+            list_set(pos_box, 0, cur_p + 1)
+            wasm_emit_i32_const(s.ws_code, 0)
+            wasm_emit_i32_const(s.ws_code, str_off)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+            wasm_emit_i32_const(s.ws_code, 4)
+            wasm_emit_i32_const(s.ws_code, str_len)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+        else
+            // Store evaluated i64 expression into linear memory at offset 16
+            wasm_emit_i32_const(s.ws_code, 16)
+            wasm_synth_compile_expr(s, toks, pos_box)
+            wasm_emit_i64_store(s.ws_code, 3, 0)
+            wasm_emit_i32_const(s.ws_code, 0)
+            wasm_emit_i32_const(s.ws_code, 16)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+            wasm_emit_i32_const(s.ws_code, 4)
+            wasm_emit_i32_const(s.ws_code, 8)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+        end
         // 2. Invoke WASI fd_write: param1(fd=1), param2(iovs=0), param3(iovs_len=1), param4(nwritten=8)
         wasm_emit_i32_const(s.ws_code, 1) // STDOUT
         wasm_emit_i32_const(s.ws_code, 0) // iovs

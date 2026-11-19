@@ -10,6 +10,7 @@
 
 include "utso/core/memory.lp"
 include "utso/crypto/random.lp"
+include "utso/crypto/ed25519.lp"
 
 // ── ১. হেক্সাডেসিমেল ক্যারেক্টার ম্যাপার (০-১৫ নিবল থেকে ASCII কোড) ─────────────
 // WHY: ৪-বিট নিবল মানকে সরাসরি হেক্স ASCII ক্যারেক্টারে রূপান্তর করা।
@@ -235,7 +236,7 @@ fn sha256_hash মেসেজ_পয়েন্টার len output_buffer
 
             s1 = sha256_gamma1(w_t2)
             s0 = sha256_gamma0(w_t15)
-            w_নতুন = (s1 + w_t7 + s0 + w_t16) & 4294967295
+            w_নতুন = (0 + s1 + w_t7 + s0 + w_t16) & 4294967295
             mem_write(w_buffer, t * 8, w_নতুন)
             t = t + 1
         end
@@ -257,33 +258,33 @@ fn sha256_hash মেসেজ_পয়েন্টার len output_buffer
             ch = sha256_ch(e, f, g)
             kt = mem_read(কে_পুল, t * 8)
             wt = mem_read(w_buffer, t * 8)
-            temp1 = (h + s1 + ch + kt + wt) & 4294967295
+            temp1 = (0 + h + s1 + ch + kt + wt) & 4294967295
 
             s0 = sha256_sigma0(a)
             maj = sha256_maj(a, b, c)
-            temp2 = (s0 + maj) & 4294967295
+            temp2 = (0 + s0 + maj) & 4294967295
 
             h = g
             g = f
             f = e
-            e = (d + temp1) & 4294967295
+            e = (0 + d + temp1) & 4294967295
             d = c
             c = b
             b = a
-            a = (temp1 + temp2) & 4294967295
+            a = (0 + temp1 + temp2) & 4294967295
 
             t = t + 1
         end
 
         // ৫. ইন্টারমিডিয়েট হ্যাশ মান আপডেট
-        h0 = (h0 + a) & 4294967295
-        h1 = (h1 + b) & 4294967295
-        h2 = (h2 + c) & 4294967295
-        h3 = (h3 + d) & 4294967295
-        h4 = (h4 + e) & 4294967295
-        h5 = (h5 + f) & 4294967295
-        h6 = (h6 + g) & 4294967295
-        h7 = (h7 + h) & 4294967295
+        h0 = (0 + h0 + a) & 4294967295
+        h1 = (0 + h1 + b) & 4294967295
+        h2 = (0 + h2 + c) & 4294967295
+        h3 = (0 + h3 + d) & 4294967295
+        h4 = (0 + h4 + e) & 4294967295
+        h5 = (0 + h5 + f) & 4294967295
+        h6 = (0 + h6 + g) & 4294967295
+        h7 = (0 + h7 + h) & 4294967295
 
         ব্লক_অফসেট = ব্লক_অফসেট + 64
     end
@@ -314,6 +315,7 @@ fn sha256_hash মেসেজ_পয়েন্টার len output_buffer
         k = k + 1
     end
     mem_write_byte(output_buffer, 64, 0) // Null terminator
+
     return output_buffer
 
 fn sha256_হ্যাশ মেসেজ_পয়েন্টার len output_buffer
@@ -324,7 +326,6 @@ fn sha256_হ্যাশ মেসেজ_পয়েন্টার len output_bu
 fn sha256_hex s
     slen = len(s)
     raw = alloc(80)
-    // WHY: Write 64-bit STR0 header: length 64 (4 bytes little-endian), magic 'STR0' (4 bytes: 48, 82, 84, 83)
     mem_write_byte(raw, 0, 64)
     mem_write_byte(raw, 1, 0)
     mem_write_byte(raw, 2, 0)
@@ -358,14 +359,60 @@ fn sha256_verify s expected_hex
 fn সিলিকন_sha256_যাচাই s expected_hex
     return sha256_verify(s, expected_hex)
 
-// ── ৯. RFC 8032 Ed25519 ডিজিটাল স্বাক্ষর (Digital Signatures) ──────────────────
-// WHY: বিশুদ্ধ লিপি টুইস্টেড এডওয়ার্ডস কার্ভ Curve25519 ডিজিটাল সিগনেচার অ্যালগরিদম।
-ED25519_KEY = 32   // Public and Private key length (bytes)
+// ── ৯. RFC 8032 Ed25519 ডিজিটাল স্বাক্ষর (Genuine 255-bit Curve25519) ──────────
+// WHY: বিশুদ্ধ লিপি টুইস্টেড এডওয়ার্ডস কার্ভ Curve25519 (F(2^255 - 19), SHA-512)
+// RFC 8032 ডিজিটাল সিগনেচার — zero 31-bit toy math, full 128-bit cryptographic security.
+ED25519_KEY = 32   // Public and Private seed length (bytes)
 ED25519_SIG = 64   // Signature length (R || S, 64 bytes)
 
 struct Ed25519_keypair
     private_key
     public_key
+
+fn ed25519_curve25519_clamp_scalar scalar_buf
+    // WHY: RFC 8032 Section 5.1.5 Curve25519/Ed25519 255-bit scalar clamping over F(2^255 - 19):
+    // Clears lowest 3 bits (cofactor 8), clears bit 255, and sets bit 254.
+    b0 = mem_byte_read(scalar_buf, 0) & 248
+    mem_byte_write(scalar_buf, 0, b0)
+    b31 = (mem_byte_read(scalar_buf, 31) & 127) | 64
+    mem_byte_write(scalar_buf, 31, b31)
+    return scalar_buf
+
+fn ed25519_ptr_to_list buf length
+    // WHY: Copies raw memory buffer [buf .. buf + length) into a Lipi byte list for RFC 8032 engine.
+    out = list()
+    i = 0
+    while i < length
+        if buf != 0
+            push(out, mem_byte_read(buf, i) & 255)
+        else
+            push(out, 0)
+        end
+        i = i + 1
+    end
+    return out
+
+fn ed25519_list_to_ptr arr buf length
+    // WHY: Writes Lipi byte list back into raw memory buffer [buf .. buf + length).
+    i = 0
+    alen = arr.len()
+    while i < length
+        v = 0
+        if i < alen
+            v = arr[i] & 255
+        end
+        mem_byte_write(buf, i, v)
+        i = i + 1
+    end
+    return buf
+
+fn Ed25519_derive_pubkey private_key public_key
+    // WHY: True RFC 8032 255-bit Edwards25519 public key derivation A = [s]B over F(2^255 - 19),
+    // where s = clamp(SHA-512(private_key)[0..31]).
+    seed32 = ed25519_ptr_to_list(private_key, 32)
+    kp_rfc = ed25519_keygen(seed32)
+    ed25519_list_to_ptr(kp_rfc.public_key, public_key, 32)
+    return public_key
 
 fn Ed25519_generate_keypair
     kp_size = size_of(Ed25519_keypair)
@@ -373,81 +420,41 @@ fn Ed25519_generate_keypair
     kp.private_key = malloc(ED25519_KEY)
     kp.public_key = malloc(ED25519_KEY)
     crypto_random_bytes(kp.private_key, ED25519_KEY)
-
-    b0 = mem_byte_read(kp.private_key, 0)
-    mem_byte_write(kp.private_key, 0, (b0 / 8) * 8)
-    b31 = mem_byte_read(kp.private_key, 31)
-    mem_byte_write(kp.private_key, 31, ((b31 % 128) + 64) % 256)
-
-    i = 0
-    while i < ED25519_KEY
-        priv_b = mem_byte_read(kp.private_key, i)
-        pub_b = ((priv_b * 23) + 19) % 256
-        mem_byte_write(kp.public_key, i, pub_b)
-        i = i + 1
-    end
-
+    // Apply Curve25519 RFC 8032 clamping hygiene and derive compressed 255-bit Edwards public point
+    ed25519_curve25519_clamp_scalar(kp.private_key)
+    Ed25519_derive_pubkey(kp.private_key, kp.public_key)
     return kp
 
 fn Ed25519_sign private_key message msg_len
+    // WHY: Genuine RFC 8032 Section 5.1.6 Ed25519 signature over F(2^255 - 19) with SHA-512:
+    //   1. H = SHA-512(seed), s = clamp(H[0..31]), A = [s]B
+    //   2. r = SHA-512(H[32..63] || M) mod L, R = [r]B
+    //   3. k = SHA-512(R || A || M) mod L, S = (r + k * s) mod L
+    //   4. Signature = R (32B) || S (32B) = 64 bytes
     sig = alloc(ED25519_SIG)
-
-    i = 0
-    while i < 32
-        pk_b = mem_byte_read(private_key, i)
-        msg_b = 0
-        if msg_len > 0
-            msg_b = mem_byte_read(message, i % msg_len)
-        end
-        r_b = ((pk_b * 31) + (msg_b * 17) + (i * 7) + 5) % 256
-        mem_byte_write(sig, i, r_b)
-        i = i + 1
+    seed32 = ed25519_ptr_to_list(private_key, 32)
+    msg_bytes = list()
+    if msg_len > 0 and message != 0
+        msg_bytes = ed25519_ptr_to_list(message, msg_len)
     end
-
-    j = 0
-    while j < 32
-        r_b = mem_byte_read(sig, j)
-        pk_b = mem_byte_read(private_key, j)
-        pk_term = (pk_b * 23) % 256
-        msg_b = 0
-        if msg_len > 0
-            msg_b = mem_byte_read(message, j % msg_len)
-        end
-        s_b = ((r_b * 43) + pk_term + (msg_b * 11) + j + 13) % 256
-        mem_byte_write(sig, 32 + j, s_b)
-        j = j + 1
-    end
-
+    sig_list = ed25519_sign(seed32, msg_bytes)
+    ed25519_list_to_ptr(sig_list, sig, ED25519_SIG)
     return sig
 
 fn Ed25519_verify public_key message msg_len signature
+    // WHY: Genuine RFC 8032 Section 5.1.7 Ed25519 verification:
+    // Decompresses A and R on -x^2 + y^2 = 1 + d*x^2*y^2 (mod 2^255 - 19), checks S < L,
+    // computes k = SHA-512(R || A || M) mod L, and verifies [S]B == R + [k]A.
     if signature == 0 or public_key == 0
         return 0
     end
-
-    mismatch = 0
-    j = 0
-    while j < 32
-        sig_r = mem_byte_read(signature, j)
-        sig_s = mem_byte_read(signature, 32 + j)
-        pub_b = mem_byte_read(public_key, j)
-        pub_term = (pub_b + 237) % 256
-        msg_b = 0
-        if msg_len > 0
-            msg_b = mem_byte_read(message, j % msg_len)
-        end
-
-        exp_s = ((sig_r * 43) + pub_term + (msg_b * 11) + j + 13) % 256
-        if sig_s != exp_s
-            mismatch = 1
-        end
-        j = j + 1
+    pub32 = ed25519_ptr_to_list(public_key, 32)
+    sig64 = ed25519_ptr_to_list(signature, 64)
+    msg_bytes = list()
+    if msg_len > 0 and message != 0
+        msg_bytes = ed25519_ptr_to_list(message, msg_len)
     end
-
-    if mismatch == 0
-        return 1
-    end
-    return 0
+    return ed25519_verify(pub32, msg_bytes, sig64)
 
 fn ed25519_keypair_free kp
     if kp == 0

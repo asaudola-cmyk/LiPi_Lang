@@ -236,6 +236,7 @@ fn x86_synth_expr_primary s toks pos_box
 
         // Restore base struct pointer into %rax: pop rax (0x58)
         x86_synth_emit_byte(s, 88)
+        s.synth_last_struct = sname
         s.synth_last_expr_type = ""
 
     // 4. Parenthesized expression: ( expr )
@@ -529,7 +530,7 @@ fn x86_synth_expr_primary s toks pos_box
                             s.synth_last_expr_type = "int"
                         elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
                             s.synth_last_expr_type = "str"
-                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect"
+                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect" or var_name == "ord" or var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "mem_read" or var_name == "mem_word_read" or var_name == "str_char_at" or var_name == "ror32" or var_name == "rol32" or var_name == "clock_ms" or var_name == "cpu_clock" or var_name == "arena_mark" or var_name == "arena_allocated" or var_name == "file_exists" or var_name == "sha256_ch" or var_name == "sha256_maj" or var_name == "sha256_sigma0" or var_name == "sha256_sigma1" or var_name == "sha256_gamma0" or var_name == "sha256_gamma1"
                             s.synth_last_expr_type = "int"
                         else
                             s.synth_last_expr_type = ""
@@ -565,6 +566,18 @@ fn x86_synth_expr_primary s toks pos_box
                             break
                         fi = fi + 1
                     if is_fn_const == 1
+                        // Check for parenthesis-less argument on the same line (e.g. say bench_loop 10000000)
+                        if next_pos < toks.len() and toks[next_pos].tok_span.span_start_line == t.tok_span.span_start_line
+                            nk = toks[next_pos].tok_kind
+                            ntxt = toks[next_pos].tok_text
+                            if nk == TOK_INT() or nk == TOK_FLOAT() or nk == TOK_STR() or nk == TOK_INTERP_STR() or (nk == TOK_IDENT() and x86_synth_find_local_var(s, ntxt) != 0)
+                                x86_synth_compile_expr(s, toks, pos_box)
+                                // mov rdi, rax (pass argument 0 in %rdi)
+                                x86_synth_emit_byte(s, 72)
+                                x86_synth_emit_byte(s, 137)
+                                x86_synth_emit_byte(s, 199)
+                            end
+                        end
                         // Emit direct call: call var_name (leaves return value in %rax)
                         x86_synth_emit_byte(s, 232)
                         patch_pos = s.synth_code.len()

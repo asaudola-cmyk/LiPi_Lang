@@ -1,0 +1,84 @@
+{
+  "Lipi Function (English)": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:args}):",
+      "\t$0"
+    ],
+    "description": "Lipi English Function Definition"
+  },
+  "Lipi Function (Bengali)": {
+    "prefix": "kaj",
+    "body": [
+      "কাজ ${1:নাম}(${2:চলক}):",
+      "\t$0"
+    ],
+    "description": "Lipi Bengali Function Definition (কাজ)"
+  },
+  "Lipi Directive Function": {
+    "prefix": "@fn",
+    "body": [
+      "@fn ${1:name}(${2:args})",
+      "\t$0",
+      "@end"
+    ],
+    "description": "Lipi Directive Function Definition (@fn)"
+  },
+  "Lipi Struct (English)": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name}:",
+      "\t${2:field1}",
+      "\t${3:field2}"
+    ],
+    "description": "Lipi English Struct Definition"
+  },
+  "Lipi Struct (Bengali)": {
+    "prefix": "dhach",
+    "body": [
+      "গঠন ${1:নাম}:",
+      "\t${2:ক্ষেত্র১}",
+      "\t${3:ক্ষেত্র২}"
+    ],
+    "description": "Lipi Bengali Struct Definition (গঠন)"
+  },
+  "Lipi Directive Struct": {
+    "prefix": "@struct",
+    "body": [
+      "@struct ${1:Name}",
+      "\t${2:field1}",
+      "\t${3:field2}",
+      "@end"
+    ],
+    "description": "Lipi Directive Struct Definition (@struct)"
+  },
+  "Lipi Variable (Bengali)": {
+    "prefix": "cholok",
+    "body": [
+      "চলক ${1:নাম} = ${2:মান}"
+    ],
+    "description": "Lipi Bengali Variable Declaration (চলক)"
+  },
+  "Lipi Print (Bengali)": {
+    "prefix": "bolo",
+    "body": [
+      "বলো \"${1:বার্তা}\""
+    ],
+    "description": "Lipi Bengali Print Statement (বলো)"
+  },
+  "Lipi If (Bengali)": {
+    "prefix": "jodi",
+    "body": [
+      "যদি ${1:শর্ত}:",
+      "\t$0"
+    ],
+    "description": "Lipi Bengali If Statement (যদি)"
+  },
+  "Lipi Return (Bengali)": {
+    "prefix": "ferot",
+    "body": [
+      "ফেরত ${1:মান}"
+    ],
+    "description": "Lipi Bengali Return Statement (ফেরত)"
+  }
+}

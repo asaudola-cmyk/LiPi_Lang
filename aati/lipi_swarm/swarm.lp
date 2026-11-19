@@ -88,7 +88,7 @@ import "aati/lipi_swarm/node"
 
 @fn swarm_register_task(node, name, func_ptr)
   @if node != 0
-    task_registry_register(node.task_registry, name, func_ptr)
+    node.task_registry = task_registry_register(node.task_registry, name, func_ptr)
     return 1
   @end
   return 0

@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # 👑 Lipi Programming Language — Windows PowerShell Sovereign Installer
 # GitHub: https://github.com/asaudola-cmyk/LiPi_Lang
 # Usage:  irm https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.ps1 | iex
@@ -53,22 +53,29 @@ if (Test-Path "$PSScriptRoot\src\compiler\driver_cli.lp") {
 }
 
 # 3. Setup bin directory
-$binPath = "$InstallDir\bin"
+$binPath = if ($PSBoundParameters.ContainsKey('BinDir')) { $BinDir } else { "$InstallDir\bin" }
 if (!(Test-Path $binPath)) { New-Item -ItemType Directory -Path $binPath -Force | Out-Null }
 
-# 4. Install Native Windows PE32+ (.exe) Binaries if present in dist/
+# 4. Install Native Windows PE32+ (.exe) Binaries if present in dist/ or bootstrap via WSL
 if (Test-Path "$InstallDir\dist") {
     Get-ChildItem -Path "$InstallDir\dist\*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
         Copy-Item -Path $_.FullName -Destination "$binPath\$($_.Name)" -Force
         Write-Host "  ✔ Installed native Windows PE32+ binary: $($_.Name)" -ForegroundColor Green
     }
 }
+if ((!(Test-Path "$InstallDir\bin\lipc")) -and (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+    Write-Host "  → Bootstrapping LiPi native toolchain inside WSL2..." -ForegroundColor Cyan
+    $wslInstallDir = (& wsl.exe wslpath -a "$InstallDir" 2>$null)
+    if ($wslInstallDir) {
+        & wsl.exe sh -c "cd '$wslInstallDir' && make"
+    }
+}
 
 # 5. Generate Windows Command and PowerShell Hybrid Execution Bridges
-$tools = @("lipi", "lipc", "aati", "haat", "lipils", "lipifmt", "lipidoc", "lipirepl", "lipi-test")
+$tools = @("lipi", "lipc", "aati", "haat", "lipilsp", "lipils", "lipifmt", "lipidoc", "lipirepl", "lipi-test")
 
 foreach ($t in $tools) {
-    # .cmd hybrid bridge (Prioritizes native .exe, falls back to WSL for ELF utilities)
+    # .cmd hybrid bridge (Prioritizes native .exe, falls back to WSL with wslpath translation)
     $cmdContent = @"
 @echo off
 if exist "%~dp0$t.exe" (
@@ -77,7 +84,8 @@ if exist "%~dp0$t.exe" (
 )
 where wsl.exe >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    wsl.exe -e "%~dp0$t" %*
+    for /f "delims=" %%i in ('wsl.exe wslpath -a "%~dp0$t"') do set "WSL_TOOL=%%i"
+    wsl.exe "%WSL_TOOL%" %*
 ) else (
     echo [LiPi Error] WSL2 is required to run LiPi ELF binaries on Windows when $t.exe is not found.
     echo Run 'wsl --install' in an elevated PowerShell terminal to install WSL2.
@@ -94,7 +102,8 @@ if (Test-Path `$exePath) {
     exit `$LASTEXITCODE
 }
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
-    & wsl.exe -e "`$PSScriptRoot/$t" @args
+    `$wslTool = (& wsl.exe wslpath -a (Join-Path `$PSScriptRoot "$t"))
+    & wsl.exe `$wslTool @args
 } else {
     Write-Error "LiPi requires WSL2 on Windows when $t.exe is not found. Run 'wsl --install' in PowerShell."
 }

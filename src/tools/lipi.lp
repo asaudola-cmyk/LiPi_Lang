@@ -246,10 +246,15 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
 
     syscall(61, pid, st, 0, 0, 0, 0)
     raw_status = mem_word_read(st, 0)
-    exit_code = (raw_status / 256) % 256
+    sig_num = raw_status % 128
+    if sig_num != 0
+        exit_code = 128 + sig_num
+    else
+        exit_code = (raw_status / 256) % 256
+    end
 
     syscall(11, argv, 64, 0, 0, 0, 0)
-    syscall(11, env, 64, 0, 0, 0, 0)
+    syscall(11, env, 128, 0, 0, 0, 0)
     syscall(11, st, 8, 0, 0, 0, 0)
 
     return exit_code

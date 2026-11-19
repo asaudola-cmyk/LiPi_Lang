@@ -133,7 +133,7 @@ import "utso/string"
   pointer_to_linenumbers: i64  // 4 bytes: 0
   num_relocations: i64         // 2 bytes: 0
   num_linenumbers: i64         // 2 bytes: 0
-  characteristics: i64         // 4 bytes: PE_FLAGS_TEXT, PE_FLAGS_DATA, etc.
+  sec_characteristics: i64     // 4 bytes: PE_FLAGS_TEXT, PE_FLAGS_DATA, etc. (distinct from ImageFileHeader.characteristics)
 @end
 
 // ============================================================================
@@ -259,7 +259,7 @@ import "utso/string"
   sec.pointer_to_linenumbers = 0
   sec.num_relocations = 0
   sec.num_linenumbers = 0
-  sec.characteristics = PE_FLAGS_TEXT()
+  sec.sec_characteristics = PE_FLAGS_TEXT()
   return sec
 @end
 
@@ -274,7 +274,7 @@ import "utso/string"
   sec.pointer_to_linenumbers = 0
   sec.num_relocations = 0
   sec.num_linenumbers = 0
-  sec.characteristics = PE_FLAGS_RDATA()
+  sec.sec_characteristics = PE_FLAGS_RDATA()
   return sec
 @end
 
@@ -289,7 +289,7 @@ import "utso/string"
   sec.pointer_to_linenumbers = 0
   sec.num_relocations = 0
   sec.num_linenumbers = 0
-  sec.characteristics = PE_FLAGS_DATA()
+  sec.sec_characteristics = PE_FLAGS_DATA()
   return sec
 @end
 
@@ -307,7 +307,7 @@ import "utso/string"
   sec.pointer_to_linenumbers = 0
   sec.num_relocations = 0
   sec.num_linenumbers = 0
-  sec.characteristics = PE_FLAGS_IDATA()
+  sec.sec_characteristics = PE_FLAGS_IDATA()
   return sec
 @end
 
@@ -607,7 +607,7 @@ import "utso/string"
   out = out.push(0) out = out.push(0)
 
   // 10. Characteristics (4 bytes)
-  ch = pe_pack_u32(sec.characteristics)
+  ch = pe_pack_u32(sec.sec_characteristics)
   out = out.push(ch[0]) out = out.push(ch[1]) out = out.push(ch[2]) out = out.push(ch[3])
 
   return out

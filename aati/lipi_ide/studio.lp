@@ -9,6 +9,7 @@
 
 import "utso/collections"
 import "utso/string"
+import "utso/os/fs"
 import "aati/lipi_gui/canvas"
 import "aati/lipi_gui/font"
 import "aati/lipi_gui/widget"
@@ -82,6 +83,13 @@ import "aati/lipi_ide/lsp_client"
   ed = app.editor
   ed.file_path = path
   ed.file_name = path
+  @if str_len(path) > 0 && file_exists(path) == 1
+    disk_content = file_read(path)
+    loaded_lines = string_split(disk_content, "\n")
+    @if loaded_lines.len() > 0
+      ed.lines = loaded_lines
+    @end
+  @end
   app.editor = ed
   app.console = console_append(app.console, "📂 [OPEN] Loaded workspace file: " + path, "INFO")
   return app
@@ -89,6 +97,19 @@ import "aati/lipi_ide/lsp_client"
 
 @fn studio_app_save_file(app)
   ed = app.editor
+  @if str_len(ed.file_path) > 0 && file_exists(ed.file_path) == 1
+    out_text = ""
+    li = 0
+    ln = ed.lines.len()
+    @while li < ln
+      @if li > 0
+        out_text = str_concat(out_text, "\n")
+      @end
+      out_text = str_concat(out_text, ed.lines[li])
+      li = li + 1
+    @end
+    file_write(ed.file_path, out_text)
+  @end
   ed.is_dirty = false
   app.editor = ed
   app.console = console_append(app.console, "💾 [SAVE] Buffer synchronized to " + ed.file_path, "SUCCESS")

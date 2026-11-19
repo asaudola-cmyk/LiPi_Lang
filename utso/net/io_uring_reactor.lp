@@ -238,6 +238,10 @@ import "utso/core/string"
 @fn io_uring_reactor_poll(reactor: IOUringReactor, max_events: i64)
   // WHY: Non-blocking event harvester that reaps completed asynchronous I/O events
   @if reactor == 0 || reactor.is_active == 0 return [] @end
+  @if reactor.ring_fd >= 0 && str_eq(reactor.backend_mode, "io_uring_standard") == 1
+    // Issue IORING_ENTER_GETEVENTS (1) to flush kernel CQ ring
+    sys_io_uring_enter(reactor.ring_fd, 0, 0, 1, 0, 0)
+  @end
   events = []
   n = reactor.pending_ops.len()
   @if n == 0 return events @end
@@ -250,11 +254,27 @@ import "utso/core/string"
   i = 0
   @while i < limit
     op = reactor.pending_ops[i]
+    transferred = op.count
+    st_code = 1
+    // When a real mapped memory buffer (> 65536) and valid file descriptor are supplied, execute actual kernel I/O
+    @if op.fd >= 0 && op.buf_ptr > 65536 && op.count > 0
+      @if op.op_type == IORING_OP_READ()
+        r_bytes = sys_read(op.fd, op.buf_ptr, op.count)
+        @if r_bytes >= 0
+          transferred = r_bytes
+        @end
+      @elif op.op_type == IORING_OP_WRITE()
+        w_bytes = sys_write(op.fd, op.buf_ptr, op.count)
+        @if w_bytes >= 0
+          transferred = w_bytes
+        @end
+      @end
+    @end
     ev = {
       fd: op.fd,
       op_type: op.op_type,
-      bytes_transferred: op.count,
-      status: 1
+      bytes_transferred: transferred,
+      status: st_code
     }
     events = events.push(ev)
     i = i + 1

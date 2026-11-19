@@ -207,7 +207,9 @@ fn x86_synth_try_fold_for_residue s var_name end_off start_is_one toks body_star
     return 1
 
 fn x86_synth_compile_while s toks pos_box base_col base_line
-    // WHY: Dedicated While Loop Synthesizer with jump patching and nested break support.
+    // WHY: Dedicated While Loop Synthesizer with fused compare-and-branch fast path
+    // for integer loops (eliminates stack push/pop + setcc + movzx + test overhead).
+    s.synth_last_store_end = 0 - 1
     loop_header = s.synth_code.len()
     push(s.synth_loop_starts, loop_header)
     loop_brks = list()
@@ -215,19 +217,97 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
     loop_conts = list()
     push(s.synth_loop_continues, loop_conts)
 
-    // Evaluate condition into %rax
-    x86_synth_compile_expr(s, toks, pos_box)
+    // Fused compare-and-branch fast path: while lhs (< | <= | > | >=) rhs
+    fused_cond = 0
+    patch_loop_exit = 0
+    c_p0 = get(pos_box, 0)
+    if c_p0 + 2 < toks.len()
+        c_lhs = toks[c_p0]
+        c_op = toks[c_p0 + 1]
+        c_rhs = toks[c_p0 + 2]
+        c_ok_after = 0
+        if c_p0 + 3 >= toks.len()
+            c_ok_after = 1
+        else
+            c_ak = toks[c_p0 + 3].tok_kind
+            if c_ak == TOK_NEWLINE() or c_ak == TOK_SEMI() or c_ak == TOK_COMMENT_LINE() or c_ak == TOK_COMMENT_BLOCK()
+                c_ok_after = 1
+            end
+        end
+        c_jcc = 0
+        if c_op.tok_kind == TOK_LT() or c_op.tok_text == "<"
+            c_jcc = 141 // jge (0x8D)
+        elif c_op.tok_kind == TOK_LTE() or c_op.tok_text == "<="
+            c_jcc = 143 // jg (0x8F)
+        elif c_op.tok_kind == TOK_GT() or c_op.tok_text == ">"
+            c_jcc = 142 // jle (0x8E)
+        elif c_op.tok_kind == TOK_GTE() or c_op.tok_text == ">="
+            c_jcc = 140 // jl (0x8C)
+        end
+        if c_ok_after == 1 and c_jcc > 0 and x86_synth_is_ident_token(c_lhs.tok_kind) == 1
+            lv_cl = x86_synth_find_local_var(s, c_lhs.tok_text)
+            if lv_cl != 0 and lv_cl.lv_prim_type != "float" and lv_cl.lv_prim_type != "str"
+                if c_rhs.tok_kind == TOK_INT()
+                    if lv_cl.lv_is_spilled == 0 and lv_cl.lv_reg >= 0
+                        x86_synth_emit_mov_reg_reg(s, 0, lv_cl.lv_reg)
+                    else
+                        x86_synth_emit_load_var(s, 0, lv_cl.lv_offset)
+                    end
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 185)
+                    x86_synth_emit_u64(s, c_rhs.tok_int_val)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 57)
+                    x86_synth_emit_byte(s, 200) // cmp rax, rcx
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, c_jcc)
+                    patch_loop_exit = s.synth_code.len()
+                    x86_synth_emit_u32(s, 0)
+                    list_set(pos_box, 0, c_p0 + 3)
+                    fused_cond = 1
+                elif x86_synth_is_ident_token(c_rhs.tok_kind) == 1
+                    lv_cr = x86_synth_find_local_var(s, c_rhs.tok_text)
+                    if lv_cr != 0 and lv_cr.lv_prim_type != "float" and lv_cr.lv_prim_type != "str"
+                        if lv_cl.lv_is_spilled == 0 and lv_cl.lv_reg >= 0
+                            x86_synth_emit_mov_reg_reg(s, 0, lv_cl.lv_reg)
+                        else
+                            x86_synth_emit_load_var(s, 0, lv_cl.lv_offset)
+                        end
+                        if lv_cr.lv_is_spilled == 0 and lv_cr.lv_reg >= 0
+                            x86_synth_emit_mov_reg_reg(s, 1, lv_cr.lv_reg)
+                        else
+                            x86_synth_emit_load_var(s, 1, lv_cr.lv_offset)
+                        end
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 57)
+                        x86_synth_emit_byte(s, 200) // cmp rax, rcx
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, c_jcc)
+                        patch_loop_exit = s.synth_code.len()
+                        x86_synth_emit_u32(s, 0)
+                        list_set(pos_box, 0, c_p0 + 3)
+                        fused_cond = 1
+                    end
+                end
+            end
+        end
+    end
 
-    // Emit test rax, rax (0x48 0x85 0xC0)
-    x86_synth_emit_byte(s, 72)
-    x86_synth_emit_byte(s, 133)
-    x86_synth_emit_byte(s, 192)
+    if fused_cond == 0
+        // General condition path: evaluate expression into %rax
+        x86_synth_compile_expr(s, toks, pos_box)
 
-    // Emit jz loop_exit (0x0F 0x84 disp32)
-    x86_synth_emit_byte(s, 15)
-    x86_synth_emit_byte(s, 132)
-    patch_loop_exit = s.synth_code.len()
-    x86_synth_emit_u32(s, 0)
+        // Emit test rax, rax (0x48 0x85 0xC0)
+        x86_synth_emit_byte(s, 72)
+        x86_synth_emit_byte(s, 133)
+        x86_synth_emit_byte(s, 192)
+
+        // Emit jz loop_exit (0x0F 0x84 disp32)
+        x86_synth_emit_byte(s, 15)
+        x86_synth_emit_byte(s, 132)
+        patch_loop_exit = s.synth_code.len()
+        x86_synth_emit_u32(s, 0)
+    end
 
     x86_synth_skip_whitespace_tokens(toks, pos_box)
 
@@ -381,6 +461,7 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
         return 0
 
     // Standard High-Performance Loop Pipeline
+    s.synth_last_store_end = 0 - 1
     loop_header = s.synth_code.len()
     push(s.synth_loop_starts, loop_header)
     loop_brks = list()
@@ -470,8 +551,6 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
             x86_synth_emit_byte(s, 255) // 0xFF
             x86_synth_emit_byte(s, 192 + (lv_var.lv_reg - 8)) // 0xC0 + (reg - 8)
         end
-        x86_synth_emit_mov_reg_reg(s, 0, lv_var.lv_reg)
-        x86_synth_emit_store_var(s, 0, var_off)
     else
         x86_synth_emit_load_var(s, 0, var_off)
         x86_synth_emit_byte(s, 72)
@@ -530,6 +609,7 @@ fn x86_synth_compile_repeat s toks pos_box base_col base_line
 
     x86_synth_skip_whitespace_tokens(toks, pos_box)
 
+    s.synth_last_store_end = 0 - 1
     loop_header = s.synth_code.len()
     push(s.synth_loop_starts, loop_header)
     loop_brks = list()

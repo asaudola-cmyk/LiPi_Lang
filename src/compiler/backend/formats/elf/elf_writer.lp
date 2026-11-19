@@ -141,6 +141,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   // Permissions: 0755 = 493 decimal (rwxr-xr-x).
   total = byte_list.len()
   @if total <= 0 return 0 - 1 @end
+  @if output_path == "" return total @end
 
   // WHY: Self-hosting binaries may be currently mapped and executing in memory.
   // Overwriting an executing binary directly causes the Linux kernel to reject the open
@@ -273,8 +274,8 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   push(arr, 56)
   push(arr, 0)
 
-  // 11. e_phnum: 2 (2 bytes LE)
-  push(arr, 2)
+  // 11. e_phnum: 3 (2 bytes LE: PT_LOAD RX, PT_LOAD RW, PT_GNU_STACK RW)
+  push(arr, 3)
   push(arr, 0)
 
   // 12. e_shentsize: 64 (2 bytes LE)
@@ -294,39 +295,63 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   return elf_emit_header_machine(arr, entry_vaddr, sh_offset, num_sections, shstr_idx, 62)
 @end
 
-@fn elf_emit_phdrs_direct(arr, total_filesz, total_memsz)
-  // WHY: Emits 2 program headers (112 bytes total): PT_LOAD (RX) and PT_GNU_STACK (RW NX).
-  // Phdr 1: PT_LOAD
-  push(arr, 1) // PT_LOAD
-  push(arr, 0)
-  push(arr, 0)
-  push(arr, 0)
-  push(arr, 7) // PF_R | PF_W | PF_X
-  push(arr, 0)
-  push(arr, 0)
-  push(arr, 0)
-  elf_emit_u64_le(arr, 0)         // p_offset = 0
-  elf_emit_u64_le(arr, 1073741824) // p_vaddr = 0x40000000 (1GB)
-  elf_emit_u64_le(arr, 1073741824) // p_paddr = 0x40000000 (1GB)
-  elf_emit_u64_le(arr, total_filesz) // p_filesz
-  elf_emit_u64_le(arr, total_memsz)  // p_memsz
-  elf_emit_u64_le(arr, 4096)      // p_align = 4KB
+@fn elf_build_start_stub_wx(main_entry_offset, rw_vaddr)
+  // WHY: Strict W^X SysV AMD64 _start bootstrap stub (exact 64 bytes, ZERO writable data in .text).
+  // Stores kernel-supplied [rsp]=argc and [rsp+8]=argv into page-aligned RW PT_LOAD[1] at rw_vaddr+0/8,
+  // calls user entry point at stub+64+main_entry_offset, and exits cleanly via Linux SYS_exit (60).
+  rel32 = 31 + main_entry_offset
+  stub = [49, 237, 72, 186]
+  elf_emit_u64_le(stub, rw_vaddr)
+  push(stub, 72) push(stub, 139) push(stub, 4) push(stub, 36)
+  push(stub, 72) push(stub, 137) push(stub, 2)
+  push(stub, 72) push(stub, 141) push(stub, 68) push(stub, 36) push(stub, 8)
+  push(stub, 72) push(stub, 137) push(stub, 66) push(stub, 8)
+  push(stub, 232)
+  elf_emit_u32_le(stub, rel32)
+  push(stub, 72) push(stub, 137) push(stub, 199)
+  push(stub, 184) push(stub, 60) push(stub, 0) push(stub, 0) push(stub, 0)
+  push(stub, 15) push(stub, 5)
+  push(stub, 244)
+  @while stub.len() < 64
+    push(stub, 144)
+  @end
+  return stub
+@end
 
-  // Phdr 2: PT_GNU_STACK
-  push(arr, 81)  // 0x51
-  push(arr, 229) // 0xE5
-  push(arr, 116) // 0x74
-  push(arr, 100) // 0x64 (0x6474e551 = PT_GNU_STACK)
-  push(arr, 6)   // PF_R | PF_W = 6 (non-executable NX stack)
-  push(arr, 0)
-  push(arr, 0)
-  push(arr, 0)
+@fn elf_emit_wx_split_phdrs(arr, text_ro_filesz, data_offset, data_vaddr, data_filesz, data_memsz)
+  // WHY: Emits strict W^X (Write XOR Execute) separated ELF64 Program Headers (168 bytes):
+  //   1. PT_LOAD (1) for .text + .rodata with PF_R | PF_X (5) at base 0x40000000
+  //   2. PT_LOAD (1) for .data + .bss    with PF_R | PF_W (6) at 4KB page-aligned data_vaddr
+  //   3. PT_GNU_STACK (1685382481)       with PF_R | PF_W (6) enforcing non-executable stack
+  // Program Header 0: .text + .rodata (R E)
+  elf_emit_u32_le(arr, 1)
+  elf_emit_u32_le(arr, 5)
+  elf_emit_u64_le(arr, 0)
+  elf_emit_u64_le(arr, 1073741824)
+  elf_emit_u64_le(arr, 1073741824)
+  elf_emit_u64_le(arr, text_ro_filesz)
+  elf_emit_u64_le(arr, text_ro_filesz)
+  elf_emit_u64_le(arr, 4096)
+
+  // Program Header 1: .data + .bss (RW)
+  elf_emit_u32_le(arr, 1)
+  elf_emit_u32_le(arr, 6)
+  elf_emit_u64_le(arr, data_offset)
+  elf_emit_u64_le(arr, data_vaddr)
+  elf_emit_u64_le(arr, data_vaddr)
+  elf_emit_u64_le(arr, data_filesz)
+  elf_emit_u64_le(arr, data_memsz)
+  elf_emit_u64_le(arr, 4096)
+
+  // Program Header 2: PT_GNU_STACK (RW, non-executable stack)
+  elf_emit_u32_le(arr, 1685382481)
+  elf_emit_u32_le(arr, 6)
   elf_emit_u64_le(arr, 0)
   elf_emit_u64_le(arr, 0)
   elf_emit_u64_le(arr, 0)
   elf_emit_u64_le(arr, 0)
   elf_emit_u64_le(arr, 0)
-  elf_emit_u64_le(arr, 8) // align 8
+  elf_emit_u64_le(arr, 16)
   return 0
 @end
 
@@ -376,36 +401,62 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 @end
 
 @fn elf_emit_executable_target(code_bytes, rodata_bytes, data_bytes, bss_size, machine, output_path)
-  // WHY: Sovereign standalone ELF64 emitter supporting AMD64, AArch64, and RISCV targets.
-  // Constrained to 6 arguments (passes cleanly in registers RDI, RSI, RDX, RCX, R8, R9).
+  // WHY: Sovereign standalone strict W^X ELF64 emitter (zero RWE segments).
+  // Layout:
+  //   0x000..0x03F (64B):  ELF64 Header (e_phnum = 3)
+  //   0x040..0x0E7 (168B): 3 Program Headers (PT_LOAD RX, PT_LOAD RW, PT_GNU_STACK RW)
+  //   0x0E8..0x0EF (8B):   16-byte alignment padding
+  //   0x0F0..0x12F (64B):  _start stub (x86_64) at 0x400000F0
+  //   0x130..:             user .text at 0x40000130 (1073742128), followed by .rodata
+  //   [4KB page boundary]: PT_LOAD[1] RW segment (128B runtime globals + user .data + .bss)
   base_vaddr = 1073741824 // 0x40000000 (1GB)
-  start_stub_offset = 176 // 64 (ELF Header) + 112 (2 Phdrs)
-  entry_point_vaddr = base_vaddr + start_stub_offset
+  start_stub_offset = 240 // 64 (ELF Header) + 168 (3 Phdrs) + 8 (align pad)
+  entry_point_vaddr = base_vaddr + start_stub_offset // 1073742064 (0x400000F0)
 
-  // 1. .text payload
-  text_payload = list()
+  stub_size = 0
   if machine == 0 || machine == 62
-    // x86-64 uses the SysV _start bootstrap stub
-    start_stub = elf_build_start_stub(0) // 64 bytes
-    elf_concat(text_payload, start_stub)
+    stub_size = 64
   end
-  elf_concat(text_payload, code_bytes)
 
-  code_file_offset = start_stub_offset // 176
-  code_size = text_payload.len()
+  code_file_offset = start_stub_offset
+  code_size = stub_size + code_bytes.len()
   code_vaddr = base_vaddr + code_file_offset
 
   rodata_file_offset = code_file_offset + code_size
   rodata_size = rodata_bytes.len()
   rodata_vaddr = base_vaddr + rodata_file_offset
 
-  data_file_offset = rodata_file_offset + rodata_size
-  data_size = data_bytes.len()
+  text_ro_end = rodata_file_offset + rodata_size
+  rem_page = text_ro_end % 4096
+  pad_bytes = 0
+  @if rem_page != 0
+    pad_bytes = 4096 - rem_page
+  @end
+
+  data_file_offset = text_ro_end + pad_bytes
   data_vaddr = base_vaddr + data_file_offset
 
+  // 1. Build .text payload (W^X _start stub pointing to data_vaddr + user code)
+  text_payload = list()
+  if machine == 0 || machine == 62
+    start_stub = elf_build_start_stub_wx(0, data_vaddr)
+    elf_concat(text_payload, start_stub)
+  end
+  elf_concat(text_payload, code_bytes)
+
+  // 1b. Build RW .data payload: 128-byte runtime globals (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets) + user .data
+  rw_payload = list()
+  gi = 0
+  @while gi < 128
+    push(rw_payload, 0)
+    gi = gi + 1
+  @end
+  elf_concat(rw_payload, data_bytes)
+  data_size = rw_payload.len()
+  data_memsz = data_size + bss_size
+
   shstr_file_offset = data_file_offset + data_size
-  // .shstrtab content:
-  // \0.text\0.rodata\0.data\0.bss\0.shstrtab\0
+  // .shstrtab content: \0.text\0.rodata\0.data\0.bss\0.shstrtab\0
   shstr_bytes = [
     0,
     46, 116, 101, 120, 116, 0,                      // .text\0 (offset 1)
@@ -414,27 +465,29 @@ import "src/compiler/backend/formats/elf/relocation.lp"
     46, 98, 115, 115, 0,                            // .bss\0 (offset 21)
     46, 115, 104, 115, 116, 114, 116, 97, 98, 0     // .shstrtab\0 (offset 26)
   ]
-  shstr_size = shstr_bytes.len() // 36 bytes
+  shstr_size = shstr_bytes.len()
 
   sh_offset = shstr_file_offset + shstr_size
   num_sections = 6
   shstr_idx = 5
 
-  total_load_filesz = data_file_offset + data_size
-  total_load_memsz = total_load_filesz + bss_size
-
-  // 2. Assemble complete binary
+  // 2. Assemble complete W^X binary
   binary = list()
 
-  // 2.1 ELF Header (64 bytes)
+  // 2.1 ELF Header (64 bytes, e_phnum = 3)
   target_mach = 62
   if machine != 0
     target_mach = machine
   end
   elf_emit_header_machine(binary, entry_point_vaddr, sh_offset, num_sections, shstr_idx, target_mach)
 
-  // 2.2 Program Headers (112 bytes)
-  elf_emit_phdrs_direct(binary, total_load_filesz, total_load_memsz)
+  // 2.2 Strict W^X Program Headers (168 bytes) + 8-byte alignment pad
+  elf_emit_wx_split_phdrs(binary, text_ro_end, data_file_offset, data_vaddr, data_size, data_memsz)
+  pi = 0
+  @while pi < 8
+    push(binary, 0)
+    pi = pi + 1
+  @end
 
   // 2.3 .text (code payload)
   elf_concat(binary, text_payload)
@@ -442,28 +495,29 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   // 2.4 .rodata
   elf_concat(binary, rodata_bytes)
 
-  // 2.5 .data
-  elf_concat(binary, data_bytes)
+  // 2.4b Pad to 4KB page boundary for hardware W^X page isolation
+  pi = 0
+  @while pi < pad_bytes
+    push(binary, 0)
+    pi = pi + 1
+  @end
+
+  // 2.5 .data (RW runtime globals + user .data)
+  elf_concat(binary, rw_payload)
 
   // 2.6 .shstrtab
   elf_concat(binary, shstr_bytes)
 
   // 2.7 Section Headers (6 * 64 = 384 bytes)
-  // Section 0: NULL (64 zero bytes)
   k = 0
   while k < 64
     push(binary, 0)
     k = k + 1
   end
-  // Section 1: .text (name 1, flags 6 = RX)
   elf_emit_shdr_bits(binary, 1, 6, code_vaddr, code_file_offset, code_size)
-  // Section 2: .rodata (name 7, flags 2 = A)
   elf_emit_shdr_bits(binary, 7, 2, rodata_vaddr, rodata_file_offset, rodata_size)
-  // Section 3: .data (name 15, flags 3 = WA)
   elf_emit_shdr_bits(binary, 15, 3, data_vaddr, data_file_offset, data_size)
-  // Section 4: .bss (name 21)
   elf_emit_shdr_nobits(binary, 21, data_vaddr + data_size, data_file_offset + data_size, bss_size)
-  // Section 5: .shstrtab (name 26)
   elf_emit_shdr_strtab(binary, 26, shstr_file_offset, shstr_size)
 
   // 3. Write binary to disk and apply chmod +x (0755)
@@ -494,31 +548,47 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 @end
 
 @fn elf_emit_executable_with_debug(code_bytes, rodata_bytes, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, output_path)
-  // WHY: Sovereign standalone ELF64 emitter embedding native DWARF v4/v5 metadata.
-  // Directly constructs standard ELF64 headers, PT_LOAD and PT_GNU_STACK program headers,
+  // WHY: Sovereign standalone strict W^X ELF64 emitter embedding native DWARF v4/v5 metadata.
+  // Directly constructs standard ELF64 headers, 3 W^X Program Headers (PT_LOAD RX, PT_LOAD RW, PT_GNU_STACK RW),
   // 9 section headers (.null, .text, .rodata, .data, .bss, .debug_line, .debug_info, .debug_abbrev, .shstrtab),
   // and writes the complete executable to disk with 0755 permissions with zero C or toolchain dependencies.
   base_vaddr = 1073741824 // 0x40000000 (1GB)
-  start_stub = elf_build_start_stub(0) // 64 bytes
-  start_stub_offset = 176 // 64 (ELF Header) + 112 (2 Phdrs)
-  entry_point_vaddr = base_vaddr + start_stub_offset // 1073742000 (0x400000b0)
+  start_stub_offset = 240 // 64 (ELF Header) + 168 (3 Phdrs) + 8 (align pad)
+  entry_point_vaddr = base_vaddr + start_stub_offset // 1073742064 (0x400000F0)
 
-  // 1. .text payload = _start stub + user code
-  text_payload = list()
-  elf_concat(text_payload, start_stub)
-  elf_concat(text_payload, code_bytes)
-
-  code_file_offset = start_stub_offset // 176
-  code_size = text_payload.len()
+  code_file_offset = start_stub_offset
+  code_size = 64 + code_bytes.len()
   code_vaddr = base_vaddr + code_file_offset
 
   rodata_file_offset = code_file_offset + code_size
   rodata_size = rodata_bytes.len()
   rodata_vaddr = base_vaddr + rodata_file_offset
 
-  data_file_offset = rodata_file_offset + rodata_size
-  data_size = data_bytes.len()
+  text_ro_end = rodata_file_offset + rodata_size
+  rem_page = text_ro_end % 4096
+  pad_bytes = 0
+  @if rem_page != 0
+    pad_bytes = 4096 - rem_page
+  @end
+
+  data_file_offset = text_ro_end + pad_bytes
   data_vaddr = base_vaddr + data_file_offset
+
+  // 1. .text payload = W^X _start stub + user code
+  start_stub = elf_build_start_stub_wx(0, data_vaddr)
+  text_payload = list()
+  elf_concat(text_payload, start_stub)
+  elf_concat(text_payload, code_bytes)
+
+  rw_payload = list()
+  gi = 0
+  @while gi < 128
+    push(rw_payload, 0)
+    gi = gi + 1
+  @end
+  elf_concat(rw_payload, data_bytes)
+  data_size = rw_payload.len()
+  data_memsz = data_size + bss_size
 
   // DWARF debug sections: placed after loadable segments on disk
   debug_line_file_offset = data_file_offset + data_size
@@ -550,26 +620,35 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   num_sections = 9
   shstr_idx = 8
 
-  total_load_filesz = data_file_offset + data_size
-  total_load_memsz = total_load_filesz + bss_size
-
-  // 2. Assemble complete binary
+  // 2. Assemble complete W^X + DWARF binary
   binary = list()
 
-  // 2.1 ELF Header (64 bytes)
+  // 2.1 ELF Header (64 bytes, e_phnum = 3)
   elf_emit_header_direct(binary, entry_point_vaddr, sh_offset, num_sections, shstr_idx)
 
-  // 2.2 Program Headers (112 bytes)
-  elf_emit_phdrs_direct(binary, total_load_filesz, total_load_memsz)
+  // 2.2 Strict W^X Program Headers (168 bytes) + 8-byte alignment pad
+  elf_emit_wx_split_phdrs(binary, text_ro_end, data_file_offset, data_vaddr, data_size, data_memsz)
+  pi = 0
+  @while pi < 8
+    push(binary, 0)
+    pi = pi + 1
+  @end
 
-  // 2.3 .text (code with _start stub)
+  // 2.3 .text (code with W^X _start stub)
   elf_concat(binary, text_payload)
 
   // 2.4 .rodata
   elf_concat(binary, rodata_bytes)
 
-  // 2.5 .data
-  elf_concat(binary, data_bytes)
+  // 2.4b Pad to 4KB page boundary for W^X isolation
+  pi = 0
+  @while pi < pad_bytes
+    push(binary, 0)
+    pi = pi + 1
+  @end
+
+  // 2.5 .data (RW runtime globals + user .data)
+  elf_concat(binary, rw_payload)
 
   // 2.6 .debug_line
   elf_concat(binary, debug_line)
@@ -641,4 +720,9 @@ import "src/compiler/backend/formats/elf/relocation.lp"
     end
   end
   return elf_emit_executable(text_src, rodata_src, list(), 0, output_path)
+@end
+
+@fn elf_emit_executable_wx(code_bytes, rodata_bytes, data_bytes, bss_size, output_path)
+  // WHY: Strict W^X ELF64 emitter (unified with default elf_emit_executable_target).
+  return elf_emit_executable_target(code_bytes, rodata_bytes, data_bytes, bss_size, 62, output_path)
 @end

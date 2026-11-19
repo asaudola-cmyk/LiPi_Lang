@@ -135,6 +135,7 @@ fn x86_synth_emit__lipi_list_push s
 
 fn x86_synth_emit_lipi_fn_argv s
     off = s.synth_code.len()
+    s.synth_argv_off = off
     x86_synth_register_helper_fn(s, "lipi_fn_argv", off)
     x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 65, 87, 83, 72, 184, 224, 0, 0, 64, 0, 0, 0, 0, 76, 139, 32, 72, 184, 232, 0, 0, 64, 0, 0, 0, 0, 76, 139, 40, 77, 133, 228, 127, 11, 49, 255, 49, 246])
     x86_synth_emit_call_helper(s, "_lipi_list_create") // call   1c0 <lipi_fn_argv+0x35>
@@ -229,10 +230,10 @@ fn x86_synth_emit__lipi_print_float s
     return off
 
 fn x86_synth_emit__lipi_gc_collect s
-    // WHY: Tri-Color GC / Heap Reclamation Trigger.
-    // Inspects 9 segregated slab freelist buckets via _lipi_slab_buckets_ptr,
-    // computes total recycled bytes actively reclaimed across all geometric size classes,
-    // and returns the total reclaimed byte count in %rax (0% dummy mocks, pure machine code).
+    // WHY: Tri-Color GC / Heap Reclamation & Slab Sweep-and-Scrub Engine.
+    // Traverses all 9 segregated slab freelist buckets via _lipi_slab_buckets_ptr,
+    // actively scrubs/zeroes dead payload words ([rdx + 8] = 0) of recycled slots to prevent
+    // stale pointer retention, and returns total reclaimed byte capacity in %rax.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_gc_collect", off)
     x86_synth_register_helper_fn(s, "gc_collect", off)
@@ -241,8 +242,8 @@ fn x86_synth_emit__lipi_gc_collect s
     // Chunk 1: Save callee-saved registers
     x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86])
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Chunk 2: Traverse 9 slab freelists, accumulate slot sizes (16 << bucket_idx) and return in %rax
-    x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 69, 49, 228, 73, 131, 252, 9, 125, 35, 73, 199, 197, 16, 0, 0, 0, 76, 137, 225, 73, 211, 229, 75, 139, 20, 230, 72, 133, 210, 116, 8, 76, 1, 235, 72, 139, 18, 235, 243, 73, 255, 196, 235, 215, 72, 137, 216, 65, 94, 65, 93, 65, 92, 91, 93, 195])
+    // Chunk 2: Traverse 9 slab freelists, zero dead payload [rdx+8], accumulate slot sizes (16 << bucket_idx) and return in %rax
+    x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 69, 49, 228, 73, 131, 252, 9, 125, 43, 73, 199, 197, 16, 0, 0, 0, 76, 137, 225, 73, 211, 229, 75, 139, 20, 230, 72, 133, 210, 116, 16, 76, 1, 235, 72, 199, 66, 8, 0, 0, 0, 0, 72, 139, 18, 235, 235, 73, 255, 196, 235, 207, 72, 137, 216, 65, 94, 65, 93, 65, 92, 91, 93, 195])
     return off
 
 fn x86_synth_emit__lipi_print_nl s
@@ -262,18 +263,17 @@ fn x86_synth_emit__lipi_floor s
     x86_synth_register_helper_fn(s, "floor", off)
     x86_synth_register_helper_fn(s, "মেঝে", off)
     x86_synth_emit_bytes(s, [
-        72, 137, 248,
-        72, 137, 249,
-        72, 193, 233, 52,
-        129, 225, 255, 7, 0, 0,
-        133, 201,
-        116, 24,
-        129, 249, 255, 7, 0, 0,
-        116, 16,
-        102, 72, 15, 110, 199,
-        102, 15, 58, 11, 192, 1,
-        242, 72, 15, 44, 192,
-        195
+        72, 137, 248,              // mov rax, rdi
+        72, 137, 249,              // mov rcx, rdi
+        72, 193, 233, 52,          // shr rcx, 52
+        129, 225, 255, 7, 0, 0,    // and ecx, 0x7FF
+        129, 233, 191, 3, 0, 0,    // sub ecx, 959 (0x3BF: 2^-64 exponent lower bound)
+        131, 249, 127,             // cmp ecx, 127 (959..1086 covers 2^-64..2^63 floats)
+        119, 16,                   // ja .ret_int (preserves all 64-bit integers >= 2^52 up to 4.318e18)
+        102, 72, 15, 110, 199,     // movq xmm0, rdi
+        102, 15, 58, 11, 192, 1,   // roundsd xmm0, xmm0, 1
+        242, 72, 15, 44, 192,      // cvttsd2si rax, xmm0
+        195                        // .ret_int: ret
     ])
     return off
 
@@ -373,15 +373,12 @@ fn x86_synth_emit__lipi_sys_poke s
     return off
 
 fn x86_synth_emit__lipi_slab_buckets_ptr s
-    // WHY: Returns static 72-byte QWORD table address for 9 segregated slab freelists in 1 CPU cycle
+    // WHY: Returns static 72-byte QWORD table address in page-aligned RW data segment (strict W^X safe)
     off = s.synth_code.len()
+    s.synth_slab_off = off
     x86_synth_register_helper_fn(s, "_lipi_slab_buckets_ptr", off)
-    // lea rax, [rip + 1]; ret
-    x86_synth_emit_bytes(s, [72, 141, 5, 1, 0, 0, 0, 195])
-    zi = 0
-    while zi < 72
-        x86_synth_emit_byte(s, 0)
-        zi = zi + 1
+    // movabs rax, <rw_vaddr + 32> (patched at off + 2); ret
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 195])
     return off
 
 fn x86_synth_emit__lipi_cpu_clock s

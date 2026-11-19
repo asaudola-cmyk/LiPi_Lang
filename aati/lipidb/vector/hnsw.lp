@@ -162,16 +162,29 @@ import "utso/string"
     neighbors_layer2: []
   }
 
-  // Connect bidirectional edges to previous nodes on matching layers
+  // Connect bidirectional skip-list edges up to m_connections across layers
   @if node_id > 0
-    prev_id = node_id - 1
-    new_node.neighbors_layer0 = new_node.neighbors_layer0.push(prev_id)
-
-    @if assigned_level >= 1 && (prev_id % 4) == 0
-      new_node.neighbors_layer1 = new_node.neighbors_layer1.push(prev_id)
-    @end
-    @if assigned_level >= 2 && (prev_id % 8) == 0
-      new_node.neighbors_layer2 = new_node.neighbors_layer2.push(prev_id)
+    max_links = index.m_connections
+    @if max_links <= 0 max_links = 4 @end
+    cand_id = node_id - 1
+    links_added = 0
+    @while cand_id >= 0 && links_added < max_links
+      new_node.neighbors_layer0 = new_node.neighbors_layer0.push(cand_id)
+      prev_n = index.nodes[cand_id]
+      @if prev_n.neighbors_layer0.len() < max_links
+        prev_n.neighbors_layer0 = prev_n.neighbors_layer0.push(node_id)
+      @end
+      @if assigned_level >= 1 && prev_n.level >= 1
+        new_node.neighbors_layer1 = new_node.neighbors_layer1.push(cand_id)
+        prev_n.neighbors_layer1 = prev_n.neighbors_layer1.push(node_id)
+      @end
+      @if assigned_level >= 2 && prev_n.level >= 2
+        new_node.neighbors_layer2 = new_node.neighbors_layer2.push(cand_id)
+        prev_n.neighbors_layer2 = prev_n.neighbors_layer2.push(node_id)
+      @end
+      index.nodes = list_set(index.nodes, cand_id, prev_n)
+      links_added = links_added + 1
+      cand_id = cand_id - 1
     @end
   @end
 

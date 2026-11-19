@@ -59,25 +59,29 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 49)
                         x86_synth_emit_byte(s, 192)
                     elif const_val == 7
-                        // WHY: Fast Reciprocal Modulo for 7 (Granlund-Montgomery constant 0x2492492492492493).
-                        // If rax >= 0, executes 3-cycle reciprocal multiplication. If rax < 0, branches to hardware idiv fallback.
+                        // WHY: Exact 64-bit Fast Reciprocal Modulo for 7 (Granlund-Montgomery M = ceil(2^65 / 7) = 0x4924924924924925).
+                        // Mathematically exact for all non-negative signed 64-bit integers 0 <= rax < 2^63 via post-mul shr rdx, 1.
+                        // If rax < 0, branches to hardware signed idiv fallback.
                         // test rax, rax (3 bytes: 48 85 C0)
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 133)
                         x86_synth_emit_byte(s, 192)
-                        // js +28 (2 bytes: 78 1C) -> jumps over fast path + jmp to fallback
+                        // js +31 (2 bytes: 78 1F) -> jumps over 29-byte fast path + 2-byte jmp
                         x86_synth_emit_byte(s, 120)
-                        x86_synth_emit_byte(s, 28)
-                        // Fast path: rcx = rax; rdx = 0x2492492492492493; mul rdx; imul rdx, 7; sub rcx, rdx; rax = rcx (26 bytes)
+                        x86_synth_emit_byte(s, 31)
+                        // Fast path (29 bytes): rcx = rax; rdx = 0x4924924924924925; mul rdx; shr rdx, 1; imul rdx, 7; sub rcx, rdx; rax = rcx
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 193) // mov rcx, rax
                         x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 186) // movabs rdx, 0x2492492492492493
-                        x86_synth_emit_u64(s, 2635249153387078803)
+                        x86_synth_emit_byte(s, 186) // movabs rdx, 0x4924924924924925 (5270498306774157605)
+                        x86_synth_emit_u64(s, 5270498306774157605)
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 247)
                         x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 209)
+                        x86_synth_emit_byte(s, 234) // shr rdx, 1
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 107)
                         x86_synth_emit_byte(s, 210)
@@ -103,26 +107,78 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 208)
-                    elif const_val == 100
-                        // WHY: Fast Reciprocal Modulo for 100 (Granlund-Montgomery constant 0x28f5c28f5c28f5d).
-                        // If rax >= 0, executes 3-cycle reciprocal multiplication. If rax < 0, branches to hardware idiv fallback.
-                        // test rax, rax (3 bytes: 48 85 C0)
+                    elif const_val == 10
+                        // WHY: Exact 64-bit Fast Reciprocal Modulo for 10 (10 = 2 * 5, M = ceil(2^64 / 5) = 0x3333333333333334).
+                        // Pre-shifts rax >> 1 so y < 2^62 and 4*y < 2^64, guaranteeing 100% exact quotient for all 0 <= rax < 2^63.
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 133)
-                        x86_synth_emit_byte(s, 192)
-                        // js +28 (2 bytes: 78 1C)
+                        x86_synth_emit_byte(s, 192) // test rax, rax
                         x86_synth_emit_byte(s, 120)
-                        x86_synth_emit_byte(s, 28)
-                        // Fast path (26 bytes)
+                        x86_synth_emit_byte(s, 31)  // js +31
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 193) // mov rcx, rax
                         x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 186) // movabs rdx, 0x28f5c28f5c28f5d
-                        x86_synth_emit_u64(s, 184467440737095517)
+                        x86_synth_emit_byte(s, 209)
+                        x86_synth_emit_byte(s, 232) // shr rax, 1
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186) // movabs rdx, 3689348814741910324
+                        x86_synth_emit_u64(s, 3689348814741910324)
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 247)
                         x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 210)
+                        x86_synth_emit_byte(s, 10)  // imul rdx, rdx, 10
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 209) // sub rcx, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 200) // mov rax, rcx
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)  // jmp +18
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, 10)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    elif const_val == 100
+                        // WHY: Exact 64-bit Fast Reciprocal Modulo for 100 (100 = 4 * 25, M = ceil(2^66 / 25) = 0x28F5C28F5C28F5C3).
+                        // Pre-shifts rax >> 2 and post-shifts rdx >> 2, guaranteeing 100% exact quotient for all 0 <= rax < 2^63.
+                        // Eliminates overflow at x >= 219,604,096,115,589,900 while keeping 3-cycle reciprocal latency.
+                        // test rax, rax (3 bytes: 48 85 C0)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192)
+                        // js +36 (2 bytes: 78 24)
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 36)
+                        // Fast path (34 bytes)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 193) // mov rcx, rax
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 193)
+                        x86_synth_emit_byte(s, 232)
+                        x86_synth_emit_byte(s, 2)   // shr rax, 2
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186) // movabs rdx, 0x28F5C28F5C28F5C3 (2951479051793528259)
+                        x86_synth_emit_u64(s, 2951479051793528259)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 193)
+                        x86_synth_emit_byte(s, 234)
+                        x86_synth_emit_byte(s, 2)   // shr rdx, 2
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 107)
                         x86_synth_emit_byte(s, 210)
@@ -140,6 +196,154 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 185)
                         x86_synth_emit_u64(s, 100)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    elif const_val == 3
+                        // WHY: Exact 64-bit Granlund-Montgomery reciprocal modulo for % 3 (M_3 = ceil(2^64 / 3) = 6148914691236517206)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192)
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 27) // js +27
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 193) // mov rcx, rax
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186)
+                        x86_synth_emit_u64(s, 6148914691236517206)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 210)
+                        x86_synth_emit_byte(s, 3)   // imul rdx, rdx, 3
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 209) // sub rcx, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 200) // mov rax, rcx
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)  // jmp +18
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, 3)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    elif const_val == 5
+                        // WHY: Exact 64-bit Granlund-Montgomery reciprocal modulo for % 5 (M_5 = ceil(2^65 / 5) = 7378697629483820647, shr rdx, 1)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192)
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 31) // js +31
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 193) // mov rcx, rax
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186)
+                        x86_synth_emit_u64(s, 7378697629483820647)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 193)
+                        x86_synth_emit_byte(s, 234)
+                        x86_synth_emit_byte(s, 1)   // shr rdx, 1
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 210)
+                        x86_synth_emit_byte(s, 5)   // imul rdx, rdx, 5
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 209) // sub rcx, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 200) // mov rax, rcx
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)  // jmp +18
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, 5)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    elif const_val == 9
+                        // WHY: Exact 64-bit Granlund-Montgomery reciprocal modulo for % 9 (M_9 = ceil(2^65 / 9) = 4099276460824344804, shr rdx, 1)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192)
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 31) // js +31
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 193) // mov rcx, rax
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 186)
+                        x86_synth_emit_u64(s, 4099276460824344804)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 226) // mul rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 193)
+                        x86_synth_emit_byte(s, 234)
+                        x86_synth_emit_byte(s, 1)   // shr rdx, 1
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 107)
+                        x86_synth_emit_byte(s, 210)
+                        x86_synth_emit_byte(s, 9)   // imul rdx, rdx, 9
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 209) // sub rcx, rdx
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 200) // mov rax, rcx
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)  // jmp +18
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, 9)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 153)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 247)
+                        x86_synth_emit_byte(s, 249)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 208)
+                    elif const_val > 1 and (const_val & (const_val - 1)) == 0 and const_val <= 1073741824
+                        // WHY: 1-cycle bitwise mask modulo for all positive powers of 2 up to 2^30 with signed negative idiv fallback.
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 133)
+                        x86_synth_emit_byte(s, 192) // test rax, rax
+                        x86_synth_emit_byte(s, 120)
+                        x86_synth_emit_byte(s, 8)   // js +8
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 37)  // and rax, imm32 (const_val - 1)
+                        x86_synth_emit_u32(s, const_val - 1)
+                        x86_synth_emit_byte(s, 235)
+                        x86_synth_emit_byte(s, 18)  // jmp +18
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 185)
+                        x86_synth_emit_u64(s, const_val)
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 153)
                         x86_synth_emit_byte(s, 72)

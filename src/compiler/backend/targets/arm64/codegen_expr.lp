@@ -163,13 +163,16 @@ fn arm64_synth_expr_primary s toks pos_box
 
             // ── Intrinsic 8: list / তালিকা ─────────────────────────────────────
             if var_name == "list" or var_name == "তালিকা"
-                if arg_count == 0
-                    arm64_emit_mov_imm64(s, 0, 32)
-                    arm64_synth_emit_call_alloc(s)
-                else
-                    total_alloc = 32 + (arg_count * 8)
-                    arm64_emit_mov_imm64(s, 0, total_alloc)
-                    arm64_synth_emit_call_alloc(s)
+                s.synth_needs_list_create = 1
+                s.synth_needs_alloc = 1
+                arm64_emit_mov_imm64(s, 0, arg_count)
+                lc_call_off = s.synth_code.len()
+                arm64_emit_bl(s, 0)
+                lc_rel = Arm64CallReloc()
+                lc_rel.cr_patch_offset = lc_call_off
+                lc_rel.cr_target_name = "__list_create"
+                push(s.synth_call_relocs, lc_rel)
+                if arg_count > 0
                     arm64_push_reg(s, 0)
                     ai = arg_count - 1
                     while ai >= 0
@@ -181,6 +184,29 @@ fn arm64_synth_expr_primary s toks pos_box
                         arm64_synth_emit32(s, st_item)
                         ai = ai - 1
                     arm64_pop_reg(s, 0)
+                return 0
+
+            // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────────
+            if var_name == "file_write" or var_name == "ফাইল_লেখো"
+                s.synth_needs_file_write = 1
+                if arg_count >= 3
+                    arm64_pop_reg(s, 2)
+                else
+                    arm64_emit_movz_x(s, 2, 0, 0)
+                if arg_count >= 2
+                    arm64_pop_reg(s, 1)
+                else
+                    arm64_emit_movz_x(s, 1, 0, 0)
+                if arg_count >= 1
+                    arm64_pop_reg(s, 0)
+                else
+                    arm64_emit_movz_x(s, 0, 0, 0)
+                fw_call_off = s.synth_code.len()
+                arm64_emit_bl(s, 0)
+                fw_rel = Arm64CallReloc()
+                fw_rel.cr_patch_offset = fw_call_off
+                fw_rel.cr_target_name = "__file_write"
+                push(s.synth_call_relocs, fw_rel)
                 return 0
 
             // ── Struct Constructor: StructName(...) ─────────────────────────

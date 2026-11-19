@@ -1,0 +1,102 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "LiPi",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#macros"
+    },
+    {
+      "include": "#annotations"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.lipi",
+          "match": "\\b(if|else|while|for|return|match|import|pub)\\b"
+        },
+        {
+          "name": "keyword.declaration.lipi",
+          "match": "\\b(fn|let|struct|enum|impl)\\b"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.lipi",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.double-slash.lipi",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.lipi",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.lipi",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.lipi",
+          "match": "\\\\([nrt\\\\\"']|x[0-9a-fA-F]{2})"
+        },
+        {
+          "name": "meta.interpolation.lipi",
+          "match": "#\\{[^}]+\\}"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.lipi",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.lipi",
+          "match": "\\b0b[01]+\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.lipi",
+          "match": "\\b[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "types": {
+      "name": "entity.name.type.lipi",
+      "match": "\\b(Int|Float|Bool|String|Bytes|List|Map|Option|Result|Any|u8|u16|u32|u64|i8|i16|i32|i64)\\b"
+    },
+    "macros": {
+      "name": "entity.name.function.macro.lipi",
+      "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*!\\b"
+    },
+    "annotations": {
+      "name": "entity.name.function.decorator.lipi",
+      "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+    }
+  },
+  "scopeName": "source.lipi_meta"
+}

@@ -126,12 +126,14 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
     mem_byte_write(out_buf, pos, 46) // '.'
     pos = pos + 1
 
-    // 4. Compute Signature:
-    // We sign: secret_buf + "." + payload
-    sign_input_len = secret_len + 1 + payload_len
+    // 4. Compute Envelope HMAC-style Signature over Full Header + "." + Payload:
+    // WHY: Signs secret || "." || header || "." || payload || "." || secret to bind header & payload
+    // and defeat Merkle-Damgard length-extension attacks.
+    header_and_payload_len = pos - 1
+    sign_input_len = secret_len + 1 + header_and_payload_len + 1 + secret_len
     sign_input = sys_alloc(sign_input_len)
 
-    // Copy secret
+    // Copy leading secret
     i = 0
     while i < secret_len
         b = mem_byte_read(secret_buf, i)
@@ -140,11 +142,20 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
 
     mem_byte_write(sign_input, secret_len, 46) // '.'
 
-    // Copy payload
+    // Copy header + '.' + payload
     i = 0
-    while i < payload_len
-        b = mem_byte_read(out_buf, payload_start + i)
+    while i < header_and_payload_len
+        b = mem_byte_read(out_buf, i)
         mem_byte_write(sign_input, secret_len + 1 + i, b)
+        i = i + 1
+
+    mem_byte_write(sign_input, secret_len + 1 + header_and_payload_len, 46) // '.'
+
+    // Copy trailing secret (envelope MAC)
+    i = 0
+    while i < secret_len
+        b = mem_byte_read(secret_buf, i)
+        mem_byte_write(sign_input, secret_len + 1 + header_and_payload_len + 1 + i, b)
         i = i + 1
 
     // Hash to 64-char hex digest
@@ -200,8 +211,9 @@ fn jwt_validate_token token_buf token_len secret_buf secret_len current_time
     if sig_len != 64
         return 0 - 1
 
-    // 2. Recompute Expected Signature
-    sign_input_len = secret_len + 1 + payload_len
+    // 2. Recompute Expected Envelope Signature over Header + "." + Payload
+    header_and_payload_len = dot2
+    sign_input_len = secret_len + 1 + header_and_payload_len + 1 + secret_len
     sign_input = sys_alloc(sign_input_len)
 
     i = 0
@@ -213,9 +225,17 @@ fn jwt_validate_token token_buf token_len secret_buf secret_len current_time
     mem_byte_write(sign_input, secret_len, 46)
 
     i = 0
-    while i < payload_len
-        b = mem_byte_read(token_buf, payload_start + i)
+    while i < header_and_payload_len
+        b = mem_byte_read(token_buf, i)
         mem_byte_write(sign_input, secret_len + 1 + i, b)
+        i = i + 1
+
+    mem_byte_write(sign_input, secret_len + 1 + header_and_payload_len, 46)
+
+    i = 0
+    while i < secret_len
+        b = mem_byte_read(secret_buf, i)
+        mem_byte_write(sign_input, secret_len + 1 + header_and_payload_len + 1 + i, b)
         i = i + 1
 
     expected_sig = sys_alloc(65)

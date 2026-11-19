@@ -199,6 +199,17 @@ fn ffi_prepare_call fn_ptr a0 a1 a2 a3 a4 a5 simulated_sp
     push(call_pkg, 0)  // 8: RAX (AL = 0 for variadic safety)
     return call_pkg
 
+// Inspects mapped x86_64 machine code at fn_ptr when fn_ptr points to a live ELF .text section
+fn ffi_inspect_machine_opcode fn_ptr
+    if fn_ptr <= 65536
+        return 0
+    b0 = mem_byte_read(fn_ptr, 0)
+    b1 = mem_byte_read(fn_ptr, 1)
+    // Detect standard x86_64 prologues: push rbp (0x55), endbr64 (0xF3 0x0F), or direct mov eax, imm32 (0xB8)
+    if b0 == 85 or b0 == 243 or b0 == 184 or b0 == 72
+        return (b0 * 256) + b1
+    return b0
+
 fn ffi_call_simulated call_pkg
     fn_ptr = get(call_pkg, 0)
     aligned_sp = get(call_pkg, 1)
@@ -207,8 +218,14 @@ fn ffi_call_simulated call_pkg
     if ffi_check_abi_alignment(aligned_sp) == 0
         return -1 // Alignment trap!
 
-    // Compute synthetic result based on System V registers
+    if fn_ptr <= 0
+        return -2 // Null function pointer trap!
+
+    // Extract System V AMD64 ABI registers (RDI, RSI, RDX, RCX, R8, R9)
     rdi = get(call_pkg, 2)
     rsi = get(call_pkg, 3)
     rdx = get(call_pkg, 4)
-    return rdi + rsi + rdx
+    rcx = get(call_pkg, 5)
+    r8  = get(call_pkg, 6)
+    r9  = get(call_pkg, 7)
+    return rdi + rsi + rdx + rcx + r8 + r9

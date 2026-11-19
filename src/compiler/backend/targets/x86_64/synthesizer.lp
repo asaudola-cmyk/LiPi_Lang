@@ -410,11 +410,26 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u32(s, cr.cr_patch_offset, rel32)
         ci = ci + 1
 
-    // 7. Resolve 64-Bit Virtual Memory String Relocations
+    // 7. Resolve 64-Bit Virtual Memory String Relocations & Strict W^X RW Segment Globals
+    // Layout: ELF Header(64) + 3 PHDRs(168) + Pad(8) + _start(64) = 304 (0x130) -> 0x40000130 = 1073742128
     total_code_size = s.synth_code.len()
-    rodata_base_vaddr = 1073742064 - (0 - total_code_size)
+    rodata_base_vaddr = 1073742128 - (0 - total_code_size)
     ro_len = s.synth_rodata.len()
     rodata_end_vaddr = rodata_base_vaddr - (0 - ro_len)
+
+    // Compute exact 4KB page-aligned RW data segment address (PT_LOAD[1], PF_R | PF_W)
+    text_ro_end = 304 - (0 - total_code_size) - (0 - ro_len)
+    rem_page = text_ro_end % 4096
+    pad_bytes = 0
+    if rem_page != 0
+        pad_bytes = 4096 - rem_page
+    end
+    rw_vaddr = 1073741824 - (0 - text_ro_end) - (0 - pad_bytes)
+    g_argc_vaddr = rw_vaddr
+    g_argv_vaddr = rw_vaddr - (0 - 8)
+    heap_base_vaddr = rw_vaddr - (0 - 16)
+    heap_ptr_vaddr = rw_vaddr - (0 - 24)
+    slab_vaddr = rw_vaddr - (0 - 32)
 
     ri = 0
     while ri < s.synth_str_relocs.len()
@@ -423,9 +438,14 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u64(s, rel.sr_patch_offset, target_vaddr)
         ri = ri + 1
 
-    // 8. Backpatch _lipi_is_str precise virtual memory bounds (zero SEGV_MAPERR)
-    heap_base_vaddr = 1073742064 - (0 - s.synth_alloc_off) - (0 - 78)
-    heap_ptr_vaddr = 1073742064 - (0 - s.synth_alloc_off) - (0 - 86)
+    // 8. Backpatch Strict W^X RW Runtime Globals (zero writes to .text)
+    if s.synth_alloc_off > 0
+        x86_synth_patch_u64(s, s.synth_alloc_off + 10, heap_base_vaddr)
+    if s.synth_argv_off > 0
+        x86_synth_patch_u64(s, s.synth_argv_off + 15, g_argc_vaddr)
+        x86_synth_patch_u64(s, s.synth_argv_off + 28, g_argv_vaddr)
+    if s.synth_slab_off > 0
+        x86_synth_patch_u64(s, s.synth_slab_off + 2, slab_vaddr)
     if s.synth_is_str_off > 0
         x86_synth_patch_u64(s, s.synth_is_str_off + 19, rodata_base_vaddr)
         x86_synth_patch_u64(s, s.synth_is_str_off + 34, rodata_end_vaddr)

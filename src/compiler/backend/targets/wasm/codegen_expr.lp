@@ -111,6 +111,34 @@ fn wasm_synth_add_string_constant s str_text
     push(s.ws_data_bytes, 0) // Null terminator
     return base_offset
 
+fn wasm_synth_emit_list_create_opcodes code_buf heap_offset initial_len
+    // WHY: Emits W3C WebAssembly linear-memory 24-byte list header {len, cap, data_ptr} initialization:
+    //   [heap_offset + 0]  = initial_len (i64)
+    //   [heap_offset + 8]  = 16          (i64 capacity)
+    //   [heap_offset + 16] = heap_offset + 24 (i64 data_ptr)
+    wasm_emit_i32_const(code_buf, heap_offset)
+    wasm_emit_i64_const(code_buf, initial_len)
+    wasm_emit_i64_store(code_buf, 3, 0)
+
+    wasm_emit_i32_const(code_buf, heap_offset + 8)
+    wasm_emit_i64_const(code_buf, 16)
+    wasm_emit_i64_store(code_buf, 3, 0)
+
+    wasm_emit_i32_const(code_buf, heap_offset + 16)
+    wasm_emit_i64_const(code_buf, heap_offset + 24)
+    wasm_emit_i64_store(code_buf, 3, 0)
+
+    wasm_emit_i64_const(code_buf, heap_offset)
+    return heap_offset + 160
+
+fn wasm_synth_emit_str_concat_opcodes s str_a str_b
+    // WHY: Interns concatenated string constant into WASM linear memory data segment
+    // and pushes its 64-bit linear memory pointer onto the WASM value stack.
+    joined = str_a + str_b
+    off = wasm_synth_add_string_constant(s, joined)
+    wasm_emit_i64_const(s.ws_code, off)
+    return off
+
 // ==============================================================================
 // ── 7. Recursive-Descent Expression Synthesizer ────────────────────────────────
 // ==============================================================================
@@ -244,6 +272,14 @@ fn wasm_synth_expr_primary s toks pos_box
                 else
                     wasm_emit_i64_const(s.ws_code, 65536)
                     wasm_emit_i64_add(s.ws_code)
+            elif ident_name == "list" or ident_name == "তালিকা"
+                // WHY: Allocates real 24-byte linear-memory list header {len, cap, data_ptr}
+                ai = 0
+                while ai < arg_count
+                    wasm_emit_drop(s.ws_code)
+                    ai = ai + 1
+                list_heap_off = 16384 + (s.ws_code.len() * 16)
+                wasm_synth_emit_list_create_opcodes(s.ws_code, list_heap_off, arg_count)
             else
                 // Intrinsic / Unknown function fallback: discard args, push 0
                 ai = 0
@@ -293,6 +329,15 @@ fn wasm_synth_expr_multiplicative s toks pos_box
 
 fn wasm_synth_expr_additive s toks pos_box
     // WHY: Pratt level for standard arithmetic operators: +, -
+    // Also folds compile-time string literal concatenation ("a" + "b") directly into linear memory.
+    p_lhs = get(pos_box, 0)
+    if p_lhs + 2 < toks.len() and toks[p_lhs].tok_kind == TOK_STR() and toks[p_lhs + 1].tok_kind == TOK_PLUS() and toks[p_lhs + 2].tok_kind == TOK_STR()
+        str_a = toks[p_lhs].tok_text
+        str_b = toks[p_lhs + 2].tok_text
+        list_set(pos_box, 0, p_lhs + 3)
+        wasm_synth_emit_str_concat_opcodes(s, str_a, str_b)
+        return 0
+
     wasm_synth_expr_multiplicative(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">
+  <defs>
+    <!-- Deep Sapphire Blue Gradient (High-Contrast for Light Themes) -->
+    <linearGradient id="lipiSapphire" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0066CC" />
+      <stop offset="100%" stop-color="#004499" />
+    </linearGradient>
+    
+    <!-- Rich Crimson to Amber Gradient -->
+    <linearGradient id="lipiAmber" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C2185B" />
+      <stop offset="45%" stop-color="#E64A19" />
+      <stop offset="100%" stop-color="#E65100" />
+    </linearGradient>
+  </defs>
+
+  <!-- Left Code Bracket '<' -->
+  <path d="M 10 8.5 L 2.5 18.5 L 10 28.5" 
+        fill="none" 
+        stroke="url(#lipiSapphire)" 
+        stroke-width="3.4" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" />
+        
+  <!-- Right LiPi 'P' / Bengali 'ল' Loop -->
+  <path d="M 16 28.5 L 16 8.5 L 22.5 8.5 C 26.5 8.5 29.5 11 29.5 15.5 C 29.5 20 26.5 22.5 22.5 22.5 L 16 22.5" 
+        fill="none" 
+        stroke="url(#lipiAmber)" 
+        stroke-width="3.4" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" />
+        
+  <!-- Top Diacritic Dot / Sovereign Bindu -->
+  <circle cx="16" cy="3.6" r="2.2" fill="url(#lipiAmber)" />
+</svg>

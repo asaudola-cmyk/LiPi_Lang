@@ -110,6 +110,71 @@ fn so_emit_shdr_tail shdrs_list size link info addralign entsize
     so_put64(shdrs_list, entsize)
     return 0
 
+// =============================================================================
+// Position-Independent Code (PIC) RIP-Relative .rodata + RW Globals Patcher
+// =============================================================================
+// WHY: Shared libraries (ET_DYN .so) can be mapped at any virtual base address via ASLR/dlopen.
+// This pass rewrites 10-byte absolute `movabs r64, <linux_vaddr>` instructions targeting either
+// `.rodata` (1073742128 + code_len + off) or W^X RW runtime globals (g_argc, g_argv, _heap_base,
+// _heap_ptr, _slab_buckets at page-aligned rw_vaddr) into 10-byte position-independent
+// `lea r64, [rip + disp32]; nop; nop; nop` sequences in-place with ZERO absolute 0x4000xxxx refs.
+fn so_patch_pic_rodata code_bytes rodata_len
+    code_len = len(code_bytes)
+    if code_len < 10
+        return code_bytes
+    linux_rodata_base = 1073742128 + code_len
+    linux_rodata_end = linux_rodata_base + rodata_len
+    text_ro_end = 304 + code_len + rodata_len
+    rem_page = text_ro_end % 4096
+    pad_bytes = 0
+    if rem_page != 0
+        pad_bytes = 4096 - rem_page
+    linux_rw_base = 1073741824 + text_ro_end + pad_bytes
+    linux_rw_end = linux_rw_base + 128
+
+    out = list()
+    i = 0
+    while i < code_len
+        b0 = get(code_bytes, i)
+        if i + 10 <= code_len and b0 == 72
+            b1 = get(code_bytes, i + 1)
+            if (b1 >= 184 and b1 <= 191) and get(code_bytes, i + 6) == 0 and get(code_bytes, i + 7) == 0 and get(code_bytes, i + 8) == 0 and get(code_bytes, i + 9) == 0
+                imm32 = get(code_bytes, i + 2) + (get(code_bytes, i + 3) << 8) + (get(code_bytes, i + 4) << 16) + (get(code_bytes, i + 5) << 24)
+                modrm = 5 + ((b1 - 184) * 8)
+                if imm32 >= linux_rodata_base and imm32 <= linux_rodata_end
+                    ro_off = imm32 - linux_rodata_base
+                    disp32 = (code_len + ro_off) - (i + 7)
+                    push(out, 72)
+                    push(out, 141)
+                    push(out, modrm)
+                    push(out, disp32 & 255)
+                    push(out, (disp32 >> 8) & 255)
+                    push(out, (disp32 >> 16) & 255)
+                    push(out, (disp32 >> 24) & 255)
+                    push(out, 144)
+                    push(out, 144)
+                    push(out, 144)
+                    i = i + 10
+                    continue
+                elif imm32 >= linux_rw_base and imm32 <= linux_rw_end
+                    rw_off = imm32 - linux_rw_base
+                    disp32 = (code_len + rodata_len + rw_off) - (i + 7)
+                    push(out, 72)
+                    push(out, 141)
+                    push(out, modrm)
+                    push(out, disp32 & 255)
+                    push(out, (disp32 >> 8) & 255)
+                    push(out, (disp32 >> 16) & 255)
+                    push(out, (disp32 >> 24) & 255)
+                    push(out, 144)
+                    push(out, 144)
+                    push(out, 144)
+                    i = i + 10
+                    continue
+        push(out, b0)
+        i = i + 1
+    return out
+
 // ── 3. Standalone Shared Library Assembler & Emitter ──────────────────────────
 
 fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
@@ -179,9 +244,11 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
         ck = ck + 1
     hash_len = len(hashtab)
 
-    // 4. Calculate Section File Offsets
+    // 4. Calculate Section File Offsets & Patch Position-Independent (PIC) RIP-relative .rodata + RW globals
+    code_bytes = so_patch_pic_rodata(code_bytes, rodata_len)
+    rw_globals_len = 128
     rodata_offset  = text_offset + code_len
-    dynstr_offset  = rodata_offset + rodata_len
+    dynstr_offset  = rodata_offset + rodata_len + rw_globals_len
     dynsym_offset  = dynstr_offset + dynstr_len
     hash_offset    = dynsym_offset + dynsym_len
     dynamic_offset = hash_offset + hash_len
@@ -305,6 +372,12 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
         push(elf, get(rodata_bytes, ii))
         ii = ii + 1
 
+    // Append 128-byte zeroed PIC runtime globals slot (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets)
+    ii = 0
+    while ii < rw_globals_len
+        push(elf, 0)
+        ii = ii + 1
+
     // Concatenate .dynstr
     ii = 0
     while ii < dynstr_len
@@ -363,3 +436,4 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     syscall(90, out_path, 493, 0, 0, 0, 0) // sys_chmod 0755
 
     return written_total
+

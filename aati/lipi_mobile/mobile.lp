@@ -264,7 +264,7 @@ import "utso/crypto/sha1"
   so = []
 
   @! --- 1. ELF Header (64 bytes) ---
-  so = so.push(127.push)(69).push(76.push)(70).push(2.push)(1).push(1.push)(0)
+  so = so.push(127).push(69).push(76).push(70).push(2).push(1).push(1).push(0)
   pad_i = 0
   @while pad_i < 8
     so = so.push(0)
@@ -324,26 +324,26 @@ import "utso/crypto/sha1"
   @! --- 3. .text Section (ARM64 Machine Code: 48 bytes) ---
   @! 3a. Java_com_lipi_LipiNativeActivity_nativeInit (16 bytes)
   @! stp x29, x30, [sp, #-16]! ; mov x29, sp ; mov x0, #0 ; ldp x29, x30, [sp], #16 ; ret
-  so = so.push(253.push)(123).push(191.push)(169)
-  so = so.push(253.push)(3).push(0.push)(145)
-  so = so.push(0.push)(0).push(128.push)(210)
-  so = so.push(253.push)(123).push(193.push)(168)
-  so = so.push(192.push)(3).push(95.push)(214)
+  so = so.push(253).push(123).push(191).push(169)
+  so = so.push(253).push(3).push(0).push(145)
+  so = so.push(0).push(0).push(128).push(210)
+  so = so.push(253).push(123).push(193).push(168)
+  so = so.push(192).push(3).push(95).push(214)
 
   @! 3b. ANativeActivity_onCreate (20 bytes)
   @! stp x29, x30, [sp, #-16]! ; mov x29, sp ; ldr x1, [x0, #8] ; cbz x1, #8 ; mov x0, #0 ; ldp x29, x30, [sp], #16 ; ret
-  so = so.push(253.push)(123).push(191.push)(169)
-  so = so.push(253.push)(3).push(0.push)(145)
-  so = so.push(1.push)(4).push(64.push)(249)
-  so = so.push(0.push)(0).push(128.push)(210)
-  so = so.push(253.push)(123).push(193.push)(168)
-  so = so.push(192.push)(3).push(95.push)(214)
+  so = so.push(253).push(123).push(191).push(169)
+  so = so.push(253).push(3).push(0).push(145)
+  so = so.push(1).push(4).push(64).push(249)
+  so = so.push(0).push(0).push(128).push(210)
+  so = so.push(253).push(123).push(193).push(168)
+  so = so.push(192).push(3).push(95).push(214)
 
   @! 3c. JNI_OnLoad (12 bytes)
   @! movz w0, #0x0006 ; movk w0, #0x0001, lsl #16 ; ret
-  so = so.push(192.push)(0).push(128.push)(82)
-  so = so.push(32.push)(0).push(160.push)(114)
-  so = so.push(192.push)(3).push(95.push)(214)
+  so = so.push(192).push(0).push(128).push(82)
+  so = so.push(32).push(0).push(160).push(114)
+  so = so.push(192).push(3).push(95).push(214)
 
   @! Pad text to text_size (48 bytes)
   @while so.len() < (text_offset + text_size)
@@ -362,21 +362,21 @@ import "utso/crypto/sha1"
 
   @! Sym 1: Java_com_lipi_LipiNativeActivity_nativeInit
   so = push32_le(so, 12)
-  so = so.push(18.push)(0)
+  so = so.push(18).push(0)
   so = push16_le(so, 1)
   so = push64_le(so, text_offset)
   so = push64_le(so, 20)
 
   @! Sym 2: ANativeActivity_onCreate
   so = push32_le(so, 56)
-  so = so.push(18.push)(0)
+  so = so.push(18).push(0)
   so = push16_le(so, 1)
   so = push64_le(so, text_offset + 20)
   so = push64_le(so, 24)
 
   @! Sym 3: JNI_OnLoad
   so = push32_le(so, 81)
-  so = so.push(18.push)(0)
+  so = so.push(18).push(0)
   so = push16_le(so, 1)
   so = push64_le(so, text_offset + 44)
   so = push64_le(so, 12)
@@ -605,11 +605,11 @@ import "utso/crypto/sha1"
   body = push32_le(body, 0)  @! debug_info_off
   body = push32_le(body, 6)  @! insns_size (6 code units = 12 bytes)
   @! const-string v0, s14 ("lipi"): 0x1A 0x00 0x0E 0x00
-  body = body.push(26.push)(0).push(14.push)(0)
+  body = body.push(26).push(0).push(14).push(0)
   @! invoke-static {v0}, method 4 (System.loadLibrary): 0x71 0x10 0x04 0x00 0x00 0x00
-  body = body.push(113.push)(16).push(4.push)(0).push(0.push)(0)
+  body = body.push(113).push(16).push(4).push(0).push(0).push(0)
   @! return-void: 0x0E 0x00
-  body = body.push(14.push)(0)
+  body = body.push(14).push(0)
 
   @! 7d. Code Item 1 (<init>) at offset 352 (24 bytes)
   body = push16_le(body, 1)  @! registers_size
@@ -619,9 +619,9 @@ import "utso/crypto/sha1"
   body = push32_le(body, 0)  @! debug_info_off
   body = push32_le(body, 4)  @! insns_size (4 code units = 8 bytes)
   @! invoke-direct {v0}, method 0 (NativeActivity.<init>): 0x70 0x10 0x00 0x00 0x00 0x00
-  body = body.push(112.push)(16).push(0.push)(0).push(0.push)(0)
+  body = body.push(112).push(16).push(0).push(0).push(0).push(0)
   @! return-void: 0x0E 0x00
-  body = body.push(14.push)(0)
+  body = body.push(14).push(0)
 
   @! 7e. String Data Items at offset 376 (253 bytes + 3 padding = 256 bytes)
   raw_strings = [
@@ -769,7 +769,7 @@ import "utso/crypto/sha1"
   @! Assemble Full DEX binary
   dex = []
   @! Magic: 'dex\n035\0'
-  dex = dex.push(100.push)(101).push(120.push)(10).push(48.push)(51).push(53.push)(0)
+  dex = dex.push(100).push(101).push(120).push(10).push(48).push(51).push(53).push(0)
   dex = push32_le(dex, adler_val)
   dex = concat_arrays(dex, sha1_sig)
   dex = concat_arrays(dex, sha1_payload)
@@ -832,7 +832,7 @@ import "utso/crypto/sha1"
     entry.extra_padding_len = extra_len
 
     @! Local File Header: PK\x03\x04
-    apk_bytes = apk_bytes.push(80.push)(75).push(3.push)(4)
+    apk_bytes = apk_bytes.push(80).push(75).push(3).push(4)
     apk_bytes = push16_le(apk_bytes, 20)           @! Version needed: 2.0
     apk_bytes = push16_le(apk_bytes, 0)            @! Flags: 0
     apk_bytes = push16_le(apk_bytes, 0)            @! Compression: 0 (Stored)
@@ -866,7 +866,7 @@ import "utso/crypto/sha1"
     c_name_len = str_len(centry.filename)
     c_data_size = centry.data_bytes.len()
 
-    apk_bytes = apk_bytes.push(80.push)(75).push(1.push)(2)
+    apk_bytes = apk_bytes.push(80).push(75).push(1).push(2)
     apk_bytes = push16_le(apk_bytes, 20)                 @! Version made by
     apk_bytes = push16_le(apk_bytes, 20)                 @! Version needed
     apk_bytes = push16_le(apk_bytes, 0)                  @! Flags
@@ -893,7 +893,7 @@ import "utso/crypto/sha1"
   cd_total_size = cd_end_offset - cd_start_offset
 
   @! Phase 3: Emit End of Central Directory Record (PK\x05\x06)
-  apk_bytes = apk_bytes.push(80.push)(75).push(5.push)(6)
+  apk_bytes = apk_bytes.push(80).push(75).push(5).push(6)
   apk_bytes = push16_le(apk_bytes, 0)
   apk_bytes = push16_le(apk_bytes, 0)
   apk_bytes = push16_le(apk_bytes, num_entries)

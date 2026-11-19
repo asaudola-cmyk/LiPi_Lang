@@ -104,14 +104,19 @@ import "utso/math"
       @! |1> -> (|0> - |1>) / sqrt(2)
       a_re = reg.amplitudes_real[i]
       b_re = reg.amplitudes_real[paired_idx]
+      a_im = reg.amplitudes_imag[i]
+      b_im = reg.amplitudes_imag[paired_idx]
       
       new_re[i] = ((a_re + b_re) * inv_sqrt2) / 1000
       new_re[paired_idx] = ((a_re - b_re) * inv_sqrt2) / 1000
+      new_im[i] = ((a_im + b_im) * inv_sqrt2) / 1000
+      new_im[paired_idx] = ((a_im - b_im) * inv_sqrt2) / 1000
     @end
     i = i + 1
   @end
 
   reg.amplitudes_real = new_re
+  reg.amplitudes_imag = new_im
   return reg
 @end
 
@@ -273,17 +278,21 @@ import "utso/math"
 @! Phase Shift Gate (S-Gate: e^(i*pi/2) = i rotation on |1>)
 @fn qreg_apply_s_gate(reg, target)
   // WHY: Multiplies the |1> state amplitudes by imaginary unit i: (re + i*im)*i = -im + i*re.
+  re_arr = reg.amplitudes_real
+  im_arr = reg.amplitudes_imag
   i = 0
   @while i < reg.dim
     t = qreg_get_bit(i, target)
     @if t == 1
-      cur_re = reg.amplitudes_real[i]
-      cur_im = reg.amplitudes_imag[i]
-      reg.amplitudes_real[i] = 0 - cur_im
-      reg.amplitudes_imag[i] = cur_re
+      cur_re = re_arr[i]
+      cur_im = im_arr[i]
+      re_arr[i] = 0 - cur_im
+      im_arr[i] = cur_re
     @end
     i = i + 1
   @end
+  reg.amplitudes_real = re_arr
+  reg.amplitudes_imag = im_arr
   return reg
 @end
 

@@ -246,12 +246,25 @@ def run_suite_3_microservice():
     
     pid = proc.pid
     
-    def get_proc_rss(p):
+    def get_single_pid_rss(target_pid):
         try:
-            with open(f"/proc/{p}/statm") as f:
+            with open(f"/proc/{target_pid}/statm") as f:
                 return int(f.read().split()[1]) * 4
         except Exception:
             return 0
+
+    def get_proc_rss(p):
+        total_rss = get_single_pid_rss(p)
+        try:
+            children_path = f"/proc/{p}/task/{p}/children"
+            if os.path.exists(children_path):
+                with open(children_path) as cf:
+                    for cpid in cf.read().split():
+                        if cpid.isdigit():
+                            total_rss += get_single_pid_rss(int(cpid))
+        except Exception:
+            pass
+        return total_rss
             
     initial_rss = get_proc_rss(pid)
     print(f"  • Sovereign Gateway Online (PID: {pid}, Port: {port})")

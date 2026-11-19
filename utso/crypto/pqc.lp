@@ -17,8 +17,8 @@
 //   5. Noise-tolerant Decapsulation recovering shared secrets.
 // ==============================================================================
 
-KYBER_Q     = 3329 // Standard Kyber modulus
-KYBER_N     = 16   // Dimension parameter for algebraic ring vectors
+KYBER_Q     = 3329 // Standard NIST FIPS 203 ML-KEM / Kyber prime modulus
+KYBER_N     = 256  // Full NIST FIPS 203 ML-KEM ring dimension Z_3329[X]/(X^256 + 1)
 KYBER_HALF_Q = 1665 // Rounding threshold q / 2
 
 // ── 1. Polynomial Ring Vector Allocator ────────────────────────────────────────
@@ -81,6 +81,62 @@ fn poly_mul_rq p1 p2 n
         i = i + 1
     return res
 
+// ── 4b. Number Theoretic Transform (NTT) Butterfly Kernels over Z_3329 ────────
+// WHY: Fast polynomial ring transform using primitive 256th root of unity zeta = 17 mod 3329.
+fn kyber_mod_exp base exp
+    res = 1
+    b = kyber_mod(base)
+    e = exp
+    while e > 0
+        if (e & 1) == 1
+            res = kyber_mod(res * b)
+        end
+        b = kyber_mod(b * b)
+        e = e >> 1
+    end
+    return res
+
+fn poly_ntt p n
+    out = poly_new(n)
+    i = 0
+    while i < n
+        list_set(out, i, get(p, i))
+        i = i + 1
+    end
+    len_step = n / 2
+    k = 1
+    while len_step >= 1
+        start = 0
+        while start < n
+            zeta = kyber_mod_exp(17, k)
+            k = k + 1
+            j = start
+            while j < (start + len_step)
+                t = kyber_mod(zeta * get(out, j + len_step))
+                u = get(out, j)
+                list_set(out, j, kyber_mod(u + t))
+                list_set(out, j + len_step, kyber_mod(u - t))
+                j = j + 1
+            end
+            start = start + (2 * len_step)
+        end
+        len_step = len_step / 2
+    end
+    return out
+
+fn pqc_entropy_word idx salt
+    // WHY: Draws hardware/kernel entropy via SYS_getrandom (318) with algebraic mixing fallback
+    buf = alloc(16)
+    r = syscall(318, buf, 8, 0, 0, 0, 0)
+    v = 0
+    if r > 0
+        v = mem_word_read(buf, 0)
+    else
+        v = cpu_clock() ^ (idx * 2654435761)
+    end
+    v = (v ^ ((idx + 1) * 2654435761) ^ (salt * 2246822519)) & 1073741823
+    return v
+
 // ── 5. Kyber-512 Key Generation (A * s + e = t) ───────────────────────────────
 // WHY: Generates public matrix A, secret vector s, error vector e with small noise.
 // Computes public key t. Recovering s from (A, t) is the intractable LWE problem.
@@ -94,10 +150,10 @@ fn pqc_keygen n
 
     i = 0
     while i < n
-        list_set(poly_A, i, kyber_mod((i * 313) + 71))
-        // Deterministic pseudo-random small secret and error
-        list_set(poly_s, i, kyber_mod((i % 3) - 1))
-        list_set(poly_e, i, kyber_mod(((i * 7) % 3) - 1))
+        ent = pqc_entropy_word(i, 71)
+        list_set(poly_A, i, kyber_mod((ent % 3328) + 1))
+        list_set(poly_s, i, kyber_mod(((ent >> 16) % 3) - 1))
+        list_set(poly_e, i, kyber_mod(((ent >> 32) % 3) - 1))
         i = i + 1
 
     // t = A * s + e
@@ -126,9 +182,10 @@ fn pqc_encaps keys msg_bit n
 
     i = 0
     while i < n
-        list_set(poly_r, i, kyber_mod(((i * 13) % 3) - 1))
-        list_set(poly_e1, i, kyber_mod(((i * 5) % 3) - 1))
-        list_set(poly_e2, i, kyber_mod(((i * 11) % 3) - 1))
+        ent = pqc_entropy_word(i, 313)
+        list_set(poly_r, i, kyber_mod((ent % 3) - 1))
+        list_set(poly_e1, i, kyber_mod(((ent >> 12) % 3) - 1))
+        list_set(poly_e2, i, kyber_mod(((ent >> 24) % 3) - 1))
         i = i + 1
 
     // u = A * r + e1

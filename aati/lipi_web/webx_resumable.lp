@@ -258,6 +258,11 @@ fn webx_render_full_page title root_node class_tokens serialized_state wasm_app_
     html = html + "    // 👑 Sovereign LiPi WebX Resumable Loader (0% Node.js, 0ms Hydration)\n"
     html = html + "    const stateRaw = document.getElementById('__WEBX_STATE__').textContent.trim();\n"
     html = html + "    console.log('[LiPi WebX] Resuming app from server state snapshot:', stateRaw);\n"
+    if len(wasm_app_path) > 0
+        html = html + "    if (typeof WebAssembly !== 'undefined' && typeof fetch !== 'undefined') {\n"
+        html = html + "      fetch('" + wasm_app_path + "').then(r => r.arrayBuffer()).then(b => WebAssembly.instantiate(b, {})).catch(() => {});\n"
+        html = html + "    }\n"
+    end
     html = html + "  </script>\n"
     html = html + "</body>\n"
     html = html + "</html>"

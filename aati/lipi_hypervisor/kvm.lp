@@ -425,6 +425,24 @@ import "utso/syscalls"
 
 @fn kvm_set_regs(vm, new_regs)
   vm.regs = new_regs
+  @if vm.is_hardware == 1 && vm.vcpu_fd >= 0
+    @! Serialize struct kvm_regs (144 bytes) and invoke KVM_SET_REGS (0x4090AE82 = 1083223682)
+    rbuf = sys_mmap(0, 144, 3, 34, 0 - 1, 0)
+    @if rbuf > 0
+      sys_poke64(rbuf + 0, new_regs.rax)
+      sys_poke64(rbuf + 8, new_regs.rbx)
+      sys_poke64(rbuf + 16, new_regs.rcx)
+      sys_poke64(rbuf + 24, new_regs.rdx)
+      sys_poke64(rbuf + 32, new_regs.rsi)
+      sys_poke64(rbuf + 40, new_regs.rdi)
+      sys_poke64(rbuf + 48, new_regs.rsp)
+      sys_poke64(rbuf + 56, new_regs.rbp)
+      sys_poke64(rbuf + 128, new_regs.rip)
+      sys_poke64(rbuf + 136, new_regs.rflags)
+      sys_ioctl(vm.vcpu_fd, 1083223682, rbuf)
+      sys_munmap(rbuf, 144)
+    @end
+  @end
   return vm
 @end
 
@@ -439,6 +457,19 @@ import "utso/syscalls"
 @end
 
 @fn kvm_set_sregs(vm, sregs)
+  @if vm.is_hardware == 1 && vm.vcpu_fd >= 0
+    @! Serialize struct kvm_sregs (312 bytes) and invoke KVM_SET_SREGS (0x4138AE84 = 1094233732)
+    sbuf = sys_mmap(0, 312, 3, 34, 0 - 1, 0)
+    @if sbuf > 0
+      @! KVM_GET_SREGS = 0x8138AE83 = 2167975555
+      sys_ioctl(vm.vcpu_fd, 2167975555, sbuf)
+      sys_poke64(sbuf + 0, sregs.base_addr)
+      sys_poke32(sbuf + 8, sregs.seg_limit)
+      sys_poke16(sbuf + 12, sregs.selector)
+      sys_ioctl(vm.vcpu_fd, 1094233732, sbuf)
+      sys_munmap(sbuf, 312)
+    @end
+  @end
   return vm
 @end
 

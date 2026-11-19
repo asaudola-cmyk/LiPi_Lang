@@ -156,6 +156,32 @@ JSON_TYPE_OBJECT = 5
   slen = len(json_str)
   search_key = "\"" + path_str + "\""
   k_idx = str_index_of(json_str, search_key)
+
+  // If path_str contains '.' and is not a literal key, traverse segments sequentially
+  @if k_idx < 0 && str_index_of(path_str, ".") >= 0
+    cur_pos = 0
+    plen = len(path_str)
+    seg_start = 0
+    si = 0
+    @while si <= plen
+      @if si == plen || char_at(path_str, si) == "."
+        seg_name = str_sub(path_str, seg_start, si)
+        seg_key = "\"" + seg_name + "\""
+        sub_json = str_sub(json_str, cur_pos, slen)
+        rel_k = str_index_of(sub_json, seg_key)
+        @if rel_k < 0 return "" @end
+        cur_pos = cur_pos + rel_k
+        @if si == plen
+          k_idx = cur_pos
+        @else
+          cur_pos = cur_pos + len(seg_key)
+        @end
+        seg_start = si + 1
+      @end
+      si = si + 1
+    @end
+  @end
+
   @if k_idx < 0
     k_idx = str_index_of(json_str, path_str)
     @if k_idx < 0 return "" @end

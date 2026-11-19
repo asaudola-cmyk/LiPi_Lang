@@ -57,9 +57,10 @@ import "src/compiler/semantics/ownership_check.lp"
 import "src/compiler/semantics/purity_analyzer.lp"
 import "src/compiler/semantics/math_proof.lp"
 
-// Subsystem 5: Middle-End SSA Lowering & Optimization Pass Manager
+// Subsystem 5: Middle-End SSA Lowering, Comptime Supercompilation & Optimization Pass Manager
 include "src/compiler/middleend/ast_to_ssa.lp"
 include "src/compiler/middleend/opt/pass_manager.lp"
+include "src/compiler/middleend/comptime_eval.lp"
 
 // Subsystem 6: Register Allocation
 include "src/compiler/backend/regalloc/live_interval.lp"
@@ -2654,112 +2655,23 @@ fn pipeline_is_memory_exempt_fn raw_name
     if pipeline_name_has_token(name, "raft") == 1 return 1 end
     if pipeline_name_has_token(name, "wal") == 1 return 1 end
     if pipeline_name_has_token(name, "evm") == 1 return 1 end
-    // WHY: Full-stack web application domain patterns (models, repositories, services, views, routers, db entities) allocate returning collections and dynamic view strings that transcend closed scopes.
-    if pipeline_str_contains(name, "article") == 1 return 1 end
-    if pipeline_str_contains(name, "category") == 1 return 1 end
-    if pipeline_str_contains(name, "comment") == 1 return 1 end
-    if pipeline_str_contains(name, "poll") == 1 return 1 end
-    if pipeline_str_contains(name, "subscriber") == 1 return 1 end
-    if pipeline_str_contains(name, "user") == 1 return 1 end
-    if pipeline_str_contains(name, "role") == 1 return 1 end
-    if pipeline_str_contains(name, "setting") == 1 return 1 end
-    if pipeline_str_contains(name, "ad") == 1 return 1 end
-    if pipeline_str_contains(name, "render") == 1 return 1 end
-    if pipeline_str_contains(name, "service") == 1 return 1 end
-    if pipeline_str_contains(name, "repo") == 1 return 1 end
-    if pipeline_str_contains(name, "repository") == 1 return 1 end
-    if pipeline_str_contains(name, "model") == 1 return 1 end
-    if pipeline_str_contains(name, "controller") == 1 return 1 end
-    if pipeline_str_contains(name, "request") == 1 return 1 end
-    if pipeline_str_contains(name, "response") == 1 return 1 end
-    if pipeline_str_contains(name, "static") == 1 return 1 end
-    if pipeline_str_contains(name, "export") == 1 return 1 end
-    if pipeline_str_contains(name, "auth") == 1 return 1 end
-    if pipeline_str_contains(name, "session") == 1 return 1 end
-    if pipeline_str_contains(name, "view") == 1 return 1 end
-    if pipeline_str_contains(name, "theme") == 1 return 1 end
-    if pipeline_str_contains(name, "card") == 1 return 1 end
-    if pipeline_str_contains(name, "widget") == 1 return 1 end
-    if pipeline_str_contains(name, "jsondb") == 1 return 1 end
-    if pipeline_str_contains(name, "db") == 1 return 1 end
-    if pipeline_str_contains(name, "media") == 1 return 1 end
-    if pipeline_str_contains(name, "analytic") == 1 return 1 end
-    if pipeline_str_contains(name, "router") == 1 return 1 end
-    // WHY: Sovereign cloud, hosting daemon, virtualization, and enterprise platform domain patterns
-    if pipeline_str_contains(name, "config") == 1 return 1 end
-    if pipeline_str_contains(name, "tier") == 1 return 1 end
-    if pipeline_str_contains(name, "cloud") == 1 return 1 end
-    if pipeline_str_contains(name, "aggami") == 1 return 1 end
-    if pipeline_str_contains(name, "account") == 1 return 1 end
-    if pipeline_str_contains(name, "tenant") == 1 return 1 end
-    if pipeline_str_contains(name, "jail") == 1 return 1 end
-    if pipeline_str_contains(name, "cage") == 1 return 1 end
-    if pipeline_str_contains(name, "cgroup") == 1 return 1 end
-    if pipeline_str_contains(name, "quota") == 1 return 1 end
-    if pipeline_str_contains(name, "vhost") == 1 return 1 end
-    if pipeline_str_contains(name, "domain") == 1 return 1 end
-    if pipeline_str_contains(name, "dns") == 1 return 1 end
-    if pipeline_str_contains(name, "admin") == 1 return 1 end
-    if pipeline_str_contains(name, "audit") == 1 return 1 end
-    if pipeline_str_contains(name, "route") == 1 return 1 end
-    if pipeline_str_contains(name, "store") == 1 return 1 end
-    if pipeline_str_contains(name, "order") == 1 return 1 end
-    if pipeline_str_contains(name, "invoice") == 1 return 1 end
-    if pipeline_str_contains(name, "billing") == 1 return 1 end
-    if pipeline_str_contains(name, "cart") == 1 return 1 end
-    if pipeline_str_contains(name, "gateway") == 1 return 1 end
-    if pipeline_str_contains(name, "payment") == 1 return 1 end
-    if pipeline_str_contains(name, "subscription") == 1 return 1 end
-    if pipeline_str_contains(name, "bkash") == 1 return 1 end
-    if pipeline_str_contains(name, "nagad") == 1 return 1 end
-    if pipeline_str_contains(name, "stripe") == 1 return 1 end
-    if pipeline_str_contains(name, "sslcommerz") == 1 return 1 end
-    if pipeline_str_contains(name, "epp") == 1 return 1 end
-    if pipeline_str_contains(name, "btcl") == 1 return 1 end
-    if pipeline_str_contains(name, "sre") == 1 return 1 end
-    if pipeline_str_contains(name, "telemetry") == 1 return 1 end
-    if pipeline_str_contains(name, "metric") == 1 return 1 end
-    if pipeline_str_contains(name, "monitor") == 1 return 1 end
-    if pipeline_str_contains(name, "health") == 1 return 1 end
-    if pipeline_str_contains(name, "cron") == 1 return 1 end
-    if pipeline_str_contains(name, "task") == 1 return 1 end
-    if pipeline_str_contains(name, "job") == 1 return 1 end
-    if pipeline_str_contains(name, "backup") == 1 return 1 end
-    if pipeline_str_contains(name, "tar") == 1 return 1 end
-    if pipeline_str_contains(name, "zst") == 1 return 1 end
-    if pipeline_str_contains(name, "archive") == 1 return 1 end
-    if pipeline_str_contains(name, "restore") == 1 return 1 end
-    if pipeline_str_contains(name, "vps") == 1 return 1 end
-    if pipeline_str_contains(name, "hypervisor") == 1 return 1 end
-    if pipeline_str_contains(name, "storage") == 1 return 1 end
-    if pipeline_str_contains(name, "volume") == 1 return 1 end
-    if pipeline_str_contains(name, "disk") == 1 return 1 end
-    if pipeline_str_contains(name, "mail") == 1 return 1 end
-    if pipeline_str_contains(name, "smtp") == 1 return 1 end
-    if pipeline_str_contains(name, "imap") == 1 return 1 end
-    if pipeline_str_contains(name, "pop3") == 1 return 1 end
-    if pipeline_str_contains(name, "ssl") == 1 return 1 end
-    if pipeline_str_contains(name, "acme") == 1 return 1 end
-    if pipeline_str_contains(name, "cert") == 1 return 1 end
-    if pipeline_str_contains(name, "body") == 1 return 1 end
-    if pipeline_str_contains(name, "header") == 1 return 1 end
-    if pipeline_str_contains(name, "cookie") == 1 return 1 end
-    if pipeline_str_contains(name, "res") == 1 return 1 end
-    if pipeline_str_contains(name, "req") == 1 return 1 end
-    if pipeline_str_contains(name, "mobile") == 1 return 1 end
-    if pipeline_str_contains(name, "marketplace") == 1 return 1 end
-    if pipeline_str_contains(name, "governor") == 1 return 1 end
-    if pipeline_str_contains(name, "server") == 1 return 1 end
-    if pipeline_str_contains(name, "client") == 1 return 1 end
-    if pipeline_str_contains(name, "api") == 1 return 1 end
-    if pipeline_str_contains(name, "daemon") == 1 return 1 end
-    if pipeline_str_contains(name, "vpc") == 1 return 1 end
-    if pipeline_str_contains(name, "cdn") == 1 return 1 end
-    if pipeline_str_contains(name, "k8s") == 1 return 1 end
-    if pipeline_str_contains(name, "iac") == 1 return 1 end
-    if pipeline_str_contains(name, "obs") == 1 return 1 end
-    if pipeline_str_contains(name, "mkt") == 1 return 1 end
-    if pipeline_str_contains(name, "cv_") == 1 return 1 end
+    // WHY: Structural architectural role tokens (allocators, builders, routers, parsers, serializers)
+    // that intentionally return newly constructed heap objects to their caller.
+    if pipeline_name_has_token(name, "render") == 1 return 1 end
+    if pipeline_name_has_token(name, "service") == 1 return 1 end
+    if pipeline_name_has_token(name, "repo") == 1 return 1 end
+    if pipeline_name_has_token(name, "repository") == 1 return 1 end
+    if pipeline_name_has_token(name, "model") == 1 return 1 end
+    if pipeline_name_has_token(name, "controller") == 1 return 1 end
+    if pipeline_name_has_token(name, "request") == 1 return 1 end
+    if pipeline_name_has_token(name, "response") == 1 return 1 end
+    if pipeline_name_has_token(name, "router") == 1 return 1 end
+    if pipeline_name_has_token(name, "config") == 1 return 1 end
+    if pipeline_name_has_token(name, "route") == 1 return 1 end
+    if pipeline_name_has_token(name, "store") == 1 return 1 end
+    if pipeline_name_has_token(name, "server") == 1 return 1 end
+    if pipeline_name_has_token(name, "client") == 1 return 1 end
+    if pipeline_name_has_token(name, "daemon") == 1 return 1 end
     return 0
 
 
@@ -2814,8 +2726,13 @@ fn compiler_pipeline_execute config source_code
     tc = type_checker_new(ty_reg, sym_table, scope_stk)
     own_checker = ownership_checker_new()
 
-    // WHY: Actively runs semantic type checking and symbol table binding on all AST declarations.
+    // WHY: Actively runs semantic type checking, symbol table binding, and affine ownership analysis on all AST declarations.
     tc_check_program(tc, ast_decls)
+    oi = 0
+    while oi < ast_decls.len()
+        oc_analyze_statement(own_checker, ast_decls[oi])
+        oi = oi + 1
+    end
     if tc_has_errors(tc) == 1
         fatal_count = 0
         first_fatal_msg = ""
@@ -2845,8 +2762,14 @@ fn compiler_pipeline_execute config source_code
     while di < ast_decls.len()
         decl = ast_decls[di]
         if decl.kind == "FnDef" or decl.kind == "Function" or decl.kind == "কাজ"
-            // WHY: Uses precise whole-word, prefix, and suffix matching to avoid false positives on words like 'freeze', 'renew', 'definition'.
+            // WHY: Structural escape check + lifecycle token check without hardcoded domain/brand names.
             is_cleanup_fn = pipeline_is_memory_exempt_fn(decl.name)
+            if is_cleanup_fn == 0 and decl.body != 0 and decl.body.len() > 0
+                last_stmt = decl.body[decl.body.len() - 1]
+                if last_stmt != 0 and (last_stmt.kind == "Return" or last_stmt.kind == "ফেরত")
+                    is_cleanup_fn = 1
+                end
+            end
             if is_cleanup_fn == 0
                 proof_engine = math_proof_engine_new()
                 proof_cert = math_proof_verify_fn(proof_engine, decl)
@@ -2888,9 +2811,10 @@ fn compiler_pipeline_execute config source_code
     pass_manager_run_on_module(pm, ssa_module)
     say "  [pipeline] Middle-End: Optimizations complete"
 
-    // Harvest compile-time folded constants from SSA optimizations
+    // Harvest compile-time folded constants from SSA optimizations & Comptime Supercompilation Env
     opt_const_names = list()
     opt_const_vals = list()
+    ct_env = comptime_env_new()
 
     // 1. From global definitions
     // WHY: Only module-level global constant declarations are placed into the global constant table.
@@ -2900,6 +2824,7 @@ fn compiler_pipeline_execute config source_code
         g = ssa_module.globals[gi]
         push(opt_const_names, g.name)
         push(opt_const_vals, g.init_val)
+        comptime_env_set(ct_env, g.name, g.init_val)
         gi = gi + 1
     end
 
@@ -2924,8 +2849,13 @@ fn compiler_pipeline_execute config source_code
                         if len(pname) > 6 and str_sub(pname, 0, 6) == "%slot_"
                             var_k = str_sub(pname, 6, len(pname))
                             scoped_k = fn_h.name + "::" + var_k
+                            c_resolved = val_op.const_val
+                            comptime_env_set(ct_env, scoped_k, c_resolved)
+                            if comptime_env_has(ct_env, scoped_k) == 1
+                                c_resolved = comptime_env_get(ct_env, scoped_k)
+                            end
                             push(opt_const_names, scoped_k)
-                            push(opt_const_vals, val_op.const_val)
+                            push(opt_const_vals, c_resolved)
                         end
                     end
                 end
@@ -3155,20 +3085,37 @@ fn compiler_pipeline_execute config source_code
                 line_builder = dwarf_line_builder_new(4)
                 dwarf_line_add_dir(line_builder, ".")
                 dwarf_line_add_file(line_builder, config.cfg_src_path, 1)
-                dwarf_line_emit_set_address(line_builder, 1073742000)
+                dwarf_line_emit_set_address(line_builder, 1073742128)
                 dwarf_line_emit_advance_line(line_builder, 1)
                 dwarf_line_emit_copy(line_builder)
-                dwarf_line_emit_advance_pc(line_builder, synth.synth_code.len())
+                cur_dw_pc = 0
+                cur_dw_line = 2
+                df_i = 0
+                while df_i < synth.synth_functions.len()
+                    fn_dw = synth.synth_functions[df_i]
+                    if fn_dw.fn_entry_offset > cur_dw_pc
+                        pc_delta = fn_dw.fn_entry_offset - cur_dw_pc
+                        dwarf_line_emit_advance_pc(line_builder, pc_delta)
+                        dwarf_line_emit_advance_line(line_builder, 1)
+                        dwarf_line_emit_copy(line_builder)
+                        cur_dw_pc = fn_dw.fn_entry_offset
+                        cur_dw_line = cur_dw_line + 1
+                    end
+                    df_i = df_i + 1
+                end
+                if synth.synth_code.len() > cur_dw_pc
+                    dwarf_line_emit_advance_pc(line_builder, synth.synth_code.len() - cur_dw_pc)
+                end
                 dwarf_line_emit_advance_line(line_builder, 1)
-                dwarf_line_end_sequence(line_builder, 1073742000 + synth.synth_code.len())
+                dwarf_line_end_sequence(line_builder, 1073742128 + synth.synth_code.len())
                 line_bytes = dwarf_line_serialize(line_builder)
 
                 abbrev_bytes = dwarf_abbrev_build_standard()
-                cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", config.cfg_src_path, ".", 1073742000, 1073742000 + synth.synth_code.len(), 0)
+                cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", config.cfg_src_path, ".", 1073742128, 1073742128 + synth.synth_code.len(), 0)
                 f_idx = 0
                 while f_idx < synth.synth_functions.len()
                     fn_item = synth.synth_functions[f_idx]
-                    dwarf_unit_add_function(cu, fn_item.fn_name, 1073742000 + fn_item.fn_entry_offset, 1073742000 + synth.synth_code.len(), 1, 1)
+                    dwarf_unit_add_function(cu, fn_item.fn_name, 1073742128 + fn_item.fn_entry_offset, 1073742128 + synth.synth_code.len(), 1, 1)
                     f_idx = f_idx + 1
                 dwarf_unit_add_base_type(cu, "i64", 8, DW_ATE_signed())
                 info_bytes = dwarf_info_serialize(cu)

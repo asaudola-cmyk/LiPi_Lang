@@ -100,6 +100,129 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
 // 4. MACH-O 64 EXECUTABLE EMITTER
 // ============================================================================
 
+@fn macho_darwin_sys_nr(linux_nr)
+  // WHY: Translates Linux x86-64 syscall numbers to Darwin BSD class-2 syscall low bytes (0x020000xx).
+  // Returns -1 if not a mapped syscall.
+  @if linux_nr == 0  return 3   @end // SYS_read
+  @if linux_nr == 1  return 4   @end // SYS_write
+  @if linux_nr == 2  return 5   @end // SYS_open
+  @if linux_nr == 3  return 6   @end // SYS_close
+  @if linux_nr == 8  return 199 @end // SYS_lseek (0xC7)
+  @if linux_nr == 9  return 197 @end // SYS_mmap (0xC5)
+  @if linux_nr == 11 return 73  @end // SYS_munmap (0x49)
+  @if linux_nr == 21 return 33  @end // SYS_access (0x21)
+  @if linux_nr == 60 return 1   @end // SYS_exit
+  @if linux_nr == 90 return 15  @end // SYS_chmod (0x0F)
+  return 0 - 1
+@end
+
+@fn macho_patch_darwin_code_full(code_bytes, data_vmaddr, rodata_len)
+  // WHY: Relocates ALL Linux ELF64 .rodata (1073742128 + code_len + off) and W^X RW runtime
+  // globals (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets) into Mach-O __DATA segment
+  // addresses, translates Linux MAP_ANON (0x22 -> 0x1002), and lowers ALL Linux x86_64 syscalls
+  // into Darwin BSD class-2 syscalls (0x020000xx) in-place without shifting instruction offsets.
+  code_len = code_bytes.len()
+  @if code_len < 7
+    return code_bytes
+  @end
+  linux_rodata_base = 1073742128 + code_len
+  linux_rodata_limit = linux_rodata_base + rodata_len + 64
+  text_ro_end = 304 + code_len + rodata_len
+  rem_page = text_ro_end % 4096
+  pad_bytes = 0
+  @if rem_page != 0
+    pad_bytes = 4096 - rem_page
+  @end
+  linux_rw_base = 1073741824 + text_ro_end + pad_bytes
+  linux_rw_end = linux_rw_base + 128
+
+  out = list()
+  i = 0
+  @while i < code_len
+    b0 = code_bytes[i]
+    // 1. 15-byte clock_ms Linux SYS_clock_gettime (228) -> Darwin SYS_gettimeofday (0x02000074)
+    @if i + 15 <= code_len && b0 == 72 && code_bytes[i + 1] == 199 && code_bytes[i + 2] == 192 && code_bytes[i + 3] == 228 && code_bytes[i + 4] == 0 && code_bytes[i + 13] == 15 && code_bytes[i + 14] == 5
+      // mov rdi, rsp (3B); xor rsi, rsi (3B); mov eax, 0x02000074 (5B); syscall (2B); nop; nop (2B)
+      push(out, 72) push(out, 137) push(out, 231)
+      push(out, 72) push(out, 49) push(out, 246)
+      push(out, 184) push(out, 116) push(out, 0) push(out, 0) push(out, 2)
+      push(out, 15) push(out, 5)
+      push(out, 144) push(out, 144)
+      i = i + 15
+      continue
+    @end
+    // 2. 10-byte movabs r64, imm64 -> relocate .rodata AND W^X RW runtime globals into __DATA
+    @if i + 10 <= code_len && b0 == 72
+      b1 = code_bytes[i + 1]
+      @if (b1 >= 184 && b1 <= 191) && code_bytes[i + 6] == 0 && code_bytes[i + 7] == 0 && code_bytes[i + 8] == 0 && code_bytes[i + 9] == 0
+        imm32 = code_bytes[i + 2] + (code_bytes[i + 3] * 256) + (code_bytes[i + 4] * 65536) + (code_bytes[i + 5] * 16777216)
+        new_addr = 0
+        @if imm32 >= linux_rodata_base && imm32 < linux_rodata_limit
+          new_addr = data_vmaddr + (imm32 - linux_rodata_base)
+        @elif imm32 >= linux_rw_base && imm32 <= linux_rw_end
+          new_addr = data_vmaddr + rodata_len + (imm32 - linux_rw_base)
+        @end
+        @if new_addr > 0
+          low32 = new_addr % 4294967296
+          high32 = new_addr / 4294967296
+          push(out, 72)
+          push(out, b1)
+          push(out, low32 % 256)
+          push(out, (low32 / 256) % 256)
+          push(out, (low32 / 65536) % 256)
+          push(out, (low32 / 16777216) % 256)
+          push(out, high32 % 256)
+          push(out, (high32 / 256) % 256)
+          push(out, (high32 / 65536) % 256)
+          push(out, (high32 / 16777216) % 256)
+          i = i + 10
+          continue
+        @end
+      @end
+    @end
+    // 3. 6-byte Linux MAP_PRIVATE|MAP_ANON (mov r10d, 34) -> Darwin MAP_PRIVATE|MAP_ANON (mov r10d, 0x1002)
+    @if i + 6 <= code_len && b0 == 65 && code_bytes[i + 1] == 186 && code_bytes[i + 2] == 34 && code_bytes[i + 3] == 0 && code_bytes[i + 4] == 0 && code_bytes[i + 5] == 0
+      push(out, 65) push(out, 186) push(out, 2) push(out, 16) push(out, 0) push(out, 0)
+      i = i + 6
+      continue
+    @end
+    // 4. 9-byte mov rax, imm32; syscall (48 C7 C0 <nr> 00 00 00 0F 05) -> Darwin 0x020000xx
+    @if i + 9 <= code_len && b0 == 72 && code_bytes[i + 1] == 199 && code_bytes[i + 2] == 192 && code_bytes[i + 4] == 0 && code_bytes[i + 5] == 0 && code_bytes[i + 6] == 0 && code_bytes[i + 7] == 15 && code_bytes[i + 8] == 5
+      dnr9 = macho_darwin_sys_nr(code_bytes[i + 3])
+      @if dnr9 >= 0
+        push(out, 72) push(out, 199) push(out, 192)
+        push(out, dnr9) push(out, 0) push(out, 0) push(out, 2)
+        push(out, 15) push(out, 5)
+        i = i + 9
+        continue
+      @end
+    @end
+    // 5. 18-byte print_float & 27-byte inline say: mov eax, 1; mov edi, 1 ... syscall -> Darwin SYS_write (0x02000004)
+    @if i + 10 <= code_len && b0 == 184 && code_bytes[i + 1] == 1 && code_bytes[i + 2] == 0 && code_bytes[i + 3] == 0 && code_bytes[i + 4] == 0 && code_bytes[i + 5] == 191 && code_bytes[i + 6] == 1 && code_bytes[i + 7] == 0 && code_bytes[i + 8] == 0 && code_bytes[i + 9] == 0
+      push(out, 184) push(out, 4) push(out, 0) push(out, 0) push(out, 2)
+      i = i + 5
+      continue
+    @end
+    // 6. 7-byte mov eax, <nr>; syscall (B8 <nr> 00 00 00 0F 05) -> Darwin BSD class-2 syscall
+    @if i + 7 <= code_len && b0 == 184 && code_bytes[i + 2] == 0 && code_bytes[i + 3] == 0 && code_bytes[i + 4] == 0 && code_bytes[i + 5] == 15 && code_bytes[i + 6] == 5
+      dnr7 = macho_darwin_sys_nr(code_bytes[i + 1])
+      @if dnr7 >= 0
+        push(out, 184) push(out, dnr7) push(out, 0) push(out, 0) push(out, 2)
+        push(out, 15) push(out, 5)
+        i = i + 7
+        continue
+      @end
+    @end
+    push(out, b0)
+    i = i + 1
+  @end
+  return out
+@end
+
+@fn macho_patch_darwin_code(code_bytes, data_vmaddr)
+  return macho_patch_darwin_code_full(code_bytes, data_vmaddr, 0)
+@end
+
 @fn macho_emit_executable(code_bytes, data_bytes, bss_size, cputype, output_path)
   // WHY: Comprehensive Mach-O 64 binary generator.
   // Supported architectures:
@@ -123,17 +246,19 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   // Base sizeofcmds = 72 + 152 + 32 + 56 + 24 = 336 bytes (ncmds = 5)
   // Optional Cmd 6: __DATA segment command with 2 sections (__data, __bss) = 72 + 80 + 80 = 232 bytes (if data or bss exists)
 
-  has_data = 0
-  @if data_bytes.len() > 0 || bss_size > 0
-    has_data = 1
+  // Always emit __DATA with rodata + 128B RW runtime globals (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets)
+  ro_orig_len = data_bytes.len()
+  full_data_bytes = []
+  full_data_bytes = macho_concat(full_data_bytes, data_bytes)
+  gi = 0
+  @while gi < 128
+    full_data_bytes = full_data_bytes.push(0)
+    gi = gi + 1
   @end
+  has_data = 1
 
-  ncmds = 5
-  sizeofcmds = 72 + 152 + 32 + 56 + 24 // PAGEZERO (72) + TEXT (152) + DYLINKER (32) + DYLIB (56) + LC_MAIN (24) = 336 bytes
-  @if has_data == 1
-    ncmds = 6
-    sizeofcmds = sizeofcmds + 232 // DATA (232) -> 568 bytes
-  @end
+  ncmds = 6
+  sizeofcmds = 72 + 152 + 32 + 56 + 24 + 232 // PAGEZERO + TEXT + DYLINKER + DYLIB + LC_MAIN + DATA = 568 bytes
 
   header_and_cmds_size = 32 + sizeofcmds
 
@@ -156,14 +281,19 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     text_vmsize = text_vmsize + (page_size - rem_page)
   @end
 
-  // 2. Configure __DATA Segment (if present)
+  // 2. Configure __DATA Segment (rodata + 128B RW runtime globals + bss)
   data_offset = text_vmsize
-  data_size = data_bytes.len()
+  data_size = full_data_bytes.len()
   data_vmaddr = 4294967296 + text_vmsize
   data_vmsize = data_size + bss_size
   rem_dpage = data_vmsize % page_size
   @if rem_dpage != 0
     data_vmsize = data_vmsize + (page_size - rem_dpage)
+  @end
+
+  // Relocate x86_64 Linux .rodata, RW globals, and ALL Linux syscalls to Darwin BSD Mach-O ABI
+  @if cputype == 16777223
+    code_bytes = macho_patch_darwin_code_full(code_bytes, data_vmaddr, ro_orig_len)
   @end
 
   // 3. Build Mach-O Header
@@ -235,7 +365,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     @while binary.len() < data_offset
       binary = binary.push(0)
     @end
-    binary = macho_concat(binary, data_bytes)
+    binary = macho_concat(binary, full_data_bytes)
   @end
 
   // 6. Write to disk

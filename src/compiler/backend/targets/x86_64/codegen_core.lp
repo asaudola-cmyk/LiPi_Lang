@@ -77,6 +77,8 @@ struct X86Synthesizer
     synth_needs_alloc   // Flag: 1 if bump allocator helper must be emitted
     synth_alloc_off     // Byte offset where bump allocator starts
     synth_is_str_off    // Byte offset where _lipi_is_str helper starts
+    synth_argv_off      // Byte offset where lipi_fn_argv helper starts
+    synth_slab_off      // Byte offset where _lipi_slab_buckets_ptr helper starts
     synth_called_top_level_main // Flag: 1 if main() or মূল() was called in top-level code
     synth_global_names  // List of top-level global / constant identifier names
     synth_global_vals   // List of top-level integer constant values
@@ -87,6 +89,10 @@ struct X86Synthesizer
     synth_in_function   // 1 if currently compiling inside a function body, 0 at top level
     synth_current_fn    // Name string of currently compiling function ("" at top level)
     synth_ssa_lower_res // SsaLowerResult attached from Phase 6b SSA lowering
+    synth_peep_offsets  // Verified basic-block instruction offsets eligible for peephole opt
+    synth_peep_kinds    // Peephole pattern kinds (2=redundant disp8 load, 3=redundant disp32 load)
+    synth_last_store_end // End offset of immediately preceding mov [rbp-off], rax in same basic block
+    synth_last_store_off // Stack offset of immediately preceding mov [rbp-off], rax
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -110,6 +116,8 @@ fn x86_synth_new
     s.synth_needs_alloc = 0
     s.synth_alloc_off = 0
     s.synth_is_str_off = 0
+    s.synth_argv_off = 0
+    s.synth_slab_off = 0
     s.synth_called_top_level_main = 0
     s.synth_global_names = list()
     s.synth_global_vals = list()
@@ -120,6 +128,10 @@ fn x86_synth_new
     s.synth_in_function = 0
     s.synth_current_fn = ""
     s.synth_ssa_lower_res = 0
+    s.synth_peep_offsets = list()
+    s.synth_peep_kinds = list()
+    s.synth_last_store_end = 0 - 1
+    s.synth_last_store_off = 0
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -162,6 +174,8 @@ fn x86_synth_emit_u64 s val
 
 fn x86_synth_patch_u32 s offset val
     // WHY: Backpatches 4 bytes at a predetermined location in code_bytes.
+    // Also invalidates basic-block store-forwarding state since a jump target was bound here.
+    s.synth_last_store_end = 0 - 1
     v = val
     if v < 0
         v = v + 4294967296
@@ -257,6 +271,7 @@ fn x86_synth_emit_mov_rdi_imm64 s val
 
 fn x86_synth_emit_prologue s
     // WHY: Sets up standard 16-byte aligned AMD64 stack frame with full callee-saved register preservation:
+    s.synth_last_store_end = 0 - 1
     //      push rbp          (0x55)
     //      mov rbp, rsp      (0x48 0x89 0xE5)
     //      push r12          (0x41 0x54) - Callee-saved register 12
@@ -440,22 +455,22 @@ fn x86_synth_emit_call_alloc s
 
 fn x86_synth_emit_alloc_helper s
     // WHY: Emits pure AMD64 silicon bump-arena memory allocator with zero libc dependency.
-    // Preserves both _heap_base (offset 78) and _heap_ptr (offset 86) so runtime helpers
-    // like _lipi_is_str can verify pointer validity with 100% mathematical precision.
+    // Strict W^X compliant: _heap_base ([rdx]) and _heap_ptr ([rdx+8]) live in the page-aligned
+    // RW PT_LOAD[1] data segment (patched at s.synth_alloc_off + 10), never inside .text.
     // Inputs: %rdi = requested byte size. Output: %rax = pointer to allocated memory.
     s.synth_alloc_off = s.synth_code.len()
     alloc_bytes = [
         72, 131, 199, 15,                     // add rdi, 15 (align up to 16 bytes)
         72, 131, 231, 240,                    // and rdi, -16
-        72, 141, 21, 63, 0, 0, 0,             // lea rdx, [rip + 63] (points to _heap_base at index 78)
+        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,      // movabs rdx, <rw_vaddr + 16> (patched at +10)
         72, 139, 2,                           // mov rax, [rdx]
         72, 133, 192,                         // test rax, rax
-        117, 46,                              // jnz .allocated (+46 bytes to index 69)
+        117, 45,                              // jnz .allocated (+45 bytes to index 71)
         87,                                   // push rdi
         82,                                   // push rdx
         49, 255,                              // xor edi, edi (addr = 0)
         190, 0, 240, 255, 255,                // mov esi, 4294963200 (4GB virtual memory arena, 0xfffff000)
-        186, 3, 0, 0, 0,                      // mov edx, 3 (PROT_READ | PROT_WRITE)
+        106, 3, 90, 144,                      // push 3; pop rdx; nop (PROT_READ | PROT_WRITE = 3)
         65, 186, 34, 0, 0, 0,                 // mov r10d, 34 (MAP_PRIVATE | MAP_ANON)
         73, 199, 192, 255, 255, 255, 255,     // mov r8, -1
         69, 49, 201,                          // xor r9d, r9d
@@ -465,11 +480,9 @@ fn x86_synth_emit_alloc_helper s
         95,                                   // pop rdi
         72, 137, 2,                           // mov [rdx], rax (save arena base to _heap_base)
         72, 137, 66, 8,                       // mov [rdx + 8], rax (initialize _heap_ptr)
-        72, 139, 66, 8,                       // .allocated: mov rax, [rdx + 8]
-        72, 1, 122, 8,                        // add [rdx + 8], rdi (bump pointer)
-        195,                                  // ret
-        0, 0, 0, 0, 0, 0, 0, 0,               // _heap_base: 8 bytes zero-initialized storage (index 78)
-        0, 0, 0, 0, 0, 0, 0, 0                // _heap_ptr: 8 bytes zero-initialized storage (index 86)
+        72, 137, 248,                         // .allocated: mov rax, rdi (index 71)
+        240, 72, 15, 193, 66, 8,              // lock xadd [rdx + 8], rax (atomic bump allocation)
+        195                                   // ret (index 80)
     ]
     x86_synth_emit_bytes(s, alloc_bytes)
     return 0
@@ -525,11 +538,14 @@ fn x86_synth_scan_brace_keys toks start_pos
     return keys
 
 fn x86_synth_find_matching_struct s keys
-    // WHY: Matches a set of field names against all declared struct schemas to deduce the exact struct type
+    // WHY: Matches a set of field names against all declared struct schemas.
+    // Prefers exact field-count matches on declared named structs while preserving
+    // forward schema order for unified anonymous AST node layouts.
     if keys.len() == 0
         return ""
     best_name = ""
     best_match_count = 0
+    best_exact_named = 0
     i = 0
     while i < s.synth_structs.len()
         sd = s.synth_structs[i]
@@ -544,17 +560,28 @@ fn x86_synth_find_matching_struct s keys
                     break
                 f = f + 1
             k = k + 1
-        if match_count == keys.len() and match_count > best_match_count
-            best_match_count = match_count
-            best_name = sd.sd_name
+        if match_count == keys.len()
+            is_anon = 0
+            if len(sd.sd_name) > 8 and str_sub(sd.sd_name, 0, 8) == "_anon_s_"
+                is_anon = 1
+            end
+            is_exact_named = 0
+            if is_anon == 0 and sd.sd_fields.len() == keys.len()
+                is_exact_named = 1
+            end
+            if (is_exact_named == 1 and best_exact_named == 0) or (is_exact_named == best_exact_named and match_count > best_match_count)
+                best_match_count = match_count
+                best_exact_named = is_exact_named
+                best_name = sd.sd_name
+            end
         i = i + 1
     return best_name
 
 fn x86_synth_get_field_offset s sname fname
     // WHY: Determines the 8-byte aligned memory offset for struct field access.
     if sname != ""
-        i = 0
-        while i < s.synth_structs.len()
+        i = s.synth_structs.len() - 1
+        while i >= 0
             sd = s.synth_structs[i]
             if sd.sd_name == sname
                 fi = 0
@@ -565,11 +592,11 @@ fn x86_synth_get_field_offset s sname fname
                     fi = fi + 1
                 end
             end
-            i = i + 1
+            i = i - 1
         end
     end
 
-    // Fallback pass 1: search declared named structs (prioritized over anonymous struct literals)
+    // Fallback pass 1: search declared named structs first (skip _anon_s_*)
     i = 0
     while i < s.synth_structs.len()
         sd = s.synth_structs[i]
@@ -759,7 +786,13 @@ fn x86_synth_alloc_var s name
 fn x86_synth_emit_load_var s reg_id off
     // WHY: Emits machine code to load a 64-bit local variable from [rbp - off] into specified register.
     // Seamlessly handles arbitrary stack frame sizes via ModR/M disp8 (off <= 128) or disp32 (off > 128).
-    // Register mapping: 0=%rax, 1=%rcx, 2=%rdx, 6=%rsi, 7=%rdi
+    // Records basic-block-verified redundant store-to-load pairs for silicon_opt.lp O(K) elimination.
+    load_start = s.synth_code.len()
+    is_redundant = 0
+    if reg_id == 0 and s.synth_last_store_end == load_start and s.synth_last_store_off == off
+        is_redundant = 1
+    end
+    s.synth_last_store_end = 0 - 1
     if off <= 128
         disp8 = (256 - (off % 256)) % 256
         x86_synth_emit_byte(s, 72)
@@ -767,6 +800,10 @@ fn x86_synth_emit_load_var s reg_id off
         modrm = 64 + (reg_id * 8) + 5
         x86_synth_emit_byte(s, modrm)
         x86_synth_emit_byte(s, disp8)
+        if is_redundant == 1
+            push(s.synth_peep_offsets, load_start)
+            push(s.synth_peep_kinds, 2)
+        end
     else
         disp32 = 0 - off
         x86_synth_emit_byte(s, 72)
@@ -774,6 +811,10 @@ fn x86_synth_emit_load_var s reg_id off
         modrm = 128 + (reg_id * 8) + 5
         x86_synth_emit_byte(s, modrm)
         x86_synth_emit_u32(s, disp32)
+        if is_redundant == 1
+            push(s.synth_peep_offsets, load_start)
+            push(s.synth_peep_kinds, 3)
+        end
     return 0
 
 fn x86_synth_emit_store_var s reg_id off
@@ -794,6 +835,11 @@ fn x86_synth_emit_store_var s reg_id off
         modrm = 128 + (reg_id * 8) + 5
         x86_synth_emit_byte(s, modrm)
         x86_synth_emit_u32(s, disp32)
+    if reg_id == 0
+        s.synth_last_store_end = s.synth_code.len()
+        s.synth_last_store_off = off
+    else
+        s.synth_last_store_end = 0 - 1
     return 0
 
 fn x86_synth_set_var_type s name type_name
@@ -854,9 +900,8 @@ fn x86_synth_bind_reg_var s var_name is_reg
     lv = x86_synth_find_local_var(s, var_name)
     if lv != 0 and lv.lv_is_spilled == 0 and lv.lv_reg >= 0
         // WHY: When allocated to a hardware register (%r12-%r15, %rbx) and unspilled,
-        // move directly into physical register and synchronize stack slot to prevent desync.
+        // move directly into physical register without redundant shadow stack writes.
         x86_synth_emit_mov_reg_reg(s, lv.lv_reg, 0)
-        x86_synth_emit_store_var(s, 0, off)
     else
         x86_synth_emit_store_var(s, 0, off)
     end

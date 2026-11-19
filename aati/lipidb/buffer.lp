@@ -28,6 +28,12 @@ import "aati/lipidb/page"
   pte_frame_id: i64
 @end
 
+@struct PageAllocResult
+  page_id: i64
+  buffer: array
+  page_buf: array
+@end
+
 @struct PageFrame
   frame_id: i64
   page_id: i64
@@ -135,19 +141,21 @@ import "aati/lipidb/page"
 @! ----------------------------------------------------------------------------
 
 @fn lru_remove(pool, frame_id)
-  frame = pool.frames[frame_id]
+  frame: PageFrame = pool.frames[frame_id]
   @if frame.prev_lru == (0 - 1) && frame.next_lru == (0 - 1) && pool.lru_head != frame_id && pool.lru_tail != frame_id
     return 0
   @end
 
   @if frame.prev_lru != (0 - 1)
-    pool.frames[frame.prev_lru].next_lru = frame.next_lru
+    prev_f: PageFrame = pool.frames[frame.prev_lru]
+    prev_f.next_lru = frame.next_lru
   @else
     pool.lru_head = frame.next_lru
   @end
 
   @if frame.next_lru != (0 - 1)
-    pool.frames[frame.next_lru].prev_lru = frame.prev_lru
+    next_f: PageFrame = pool.frames[frame.next_lru]
+    next_f.prev_lru = frame.prev_lru
   @else
     pool.lru_tail = frame.prev_lru
   @end
@@ -159,12 +167,13 @@ import "aati/lipidb/page"
 
 @fn lru_push_front(pool, frame_id)
   lru_remove(pool, frame_id)
-  frame = pool.frames[frame_id]
+  frame: PageFrame = pool.frames[frame_id]
   frame.prev_lru = 0 - 1
   frame.next_lru = pool.lru_head
 
   @if pool.lru_head != (0 - 1)
-    pool.frames[pool.lru_head].prev_lru = frame_id
+    head_f: PageFrame = pool.frames[pool.lru_head]
+    head_f.prev_lru = frame_id
   @end
   pool.lru_head = frame_id
 
@@ -177,7 +186,7 @@ import "aati/lipidb/page"
 @fn lru_find_victim(pool)
   curr = pool.lru_tail
   @while curr != (0 - 1)
-    frame = pool.frames[curr]
+    frame: PageFrame = pool.frames[curr]
     @if frame.pin_count == 0
       return curr
     @end
@@ -334,7 +343,7 @@ import "aati/lipidb/page"
 
   @! Cache Hit
   @if frame_id != (0 - 1)
-    frame = pool.frames[frame_id]
+    frame: PageFrame = pool.frames[frame_id]
     frame.pin_count = frame.pin_count + 1
     frame.access_count = frame.access_count + 1
     lru_push_front(pool, frame_id)
@@ -362,7 +371,7 @@ import "aati/lipidb/page"
       return page_new()
     @end
 
-    victim = pool.frames[target_frame_id]
+    victim: PageFrame = pool.frames[target_frame_id]
     @if victim.dirty == 1
       sys_lseek(pool.fd, victim.page_id * 4096, 0)
       sys_write(pool.fd, page_data_ptr(victim.buffer), 4096)
@@ -374,12 +383,15 @@ import "aati/lipidb/page"
     pool.stats_evictions = pool.stats_evictions + 1
   @end
 
-  frame = pool.frames[target_frame_id]
+  frame: PageFrame = pool.frames[target_frame_id]
   sys_lseek(pool.fd, page_id * 4096, 0)
   bytes_read = page_read_from_fd(pool.fd, frame.buffer)
   @if bytes_read < 4096
     @! Zero remainder of page buffer if file read was shorter than 4KB
     j = bytes_read
+    @if j < 0
+      j = 0
+    @end
     @while j < 4096
       frame.buffer[j] = 0
       j = j + 1
@@ -421,10 +433,11 @@ import "aati/lipidb/page"
     target_frame_id = lru_find_victim(pool)
     @if target_frame_id == (0 - 1)
       println("  [BufferPool] FATAL: All page frames pinned! Cannot allocate page.")
-      return { page_id: 0 - 1, buffer: page_new(), page_buf: page_new() }
+      res_err: PageAllocResult = { page_id: 0 - 1, buffer: page_new(), page_buf: page_new() }
+      return res_err
     @end
 
-    victim = pool.frames[target_frame_id]
+    victim: PageFrame = pool.frames[target_frame_id]
     @if victim.dirty == 1
       sys_lseek(pool.fd, victim.page_id * 4096, 0)
       sys_write(pool.fd, page_data_ptr(victim.buffer), 4096)
@@ -436,7 +449,7 @@ import "aati/lipidb/page"
     pool.stats_evictions = pool.stats_evictions + 1
   @end
 
-  frame = pool.frames[target_frame_id]
+  frame: PageFrame = pool.frames[target_frame_id]
   @! Zero the new page frame buffer
   j = 0
   @while j < 4096
@@ -456,11 +469,12 @@ import "aati/lipidb/page"
   @! Update Page 0 on disk
   bp_write_page_0(pool)
 
-  return {
+  res_alloc: PageAllocResult = {
     page_id: new_page_id,
     buffer: frame.buffer,
     page_buf: frame.buffer
   }
+  return res_alloc
 @end
 
 @! Alias conforming to PROJECT.md
@@ -475,7 +489,7 @@ import "aati/lipidb/page"
     return 0
   @end
 
-  frame = pool.frames[frame_id]
+  frame: PageFrame = pool.frames[frame_id]
   @if is_dirty == 1
     frame.dirty = 1
   @end
@@ -497,7 +511,8 @@ import "aati/lipidb/page"
 @fn buffer_pool_mark_dirty(pool: BufferPool, page_id)
   frame_id = page_table_lookup(pool, page_id)
   @if frame_id != (0 - 1)
-    pool.frames[frame_id].dirty = 1
+    frame: PageFrame = pool.frames[frame_id]
+    frame.dirty = 1
     return 1
   @end
 @end
@@ -509,7 +524,7 @@ import "aati/lipidb/page"
     return 0
   @end
 
-  frame = pool.frames[frame_id]
+  frame: PageFrame = pool.frames[frame_id]
   @if frame.dirty == 1
     sys_lseek(pool.fd, page_id * 4096, 0)
     sys_write(pool.fd, page_data_ptr(frame.buffer), 4096)

@@ -435,10 +435,12 @@ uninstall() {
          "$LIPI_BIN_DIR/lipilsp" \
          "$LIPI_BIN_DIR/lipifmt" \
          "$LIPI_BIN_DIR/lipidbg" \
+         "$LIPI_BIN_DIR/lipidb_server" \
          "$LIPI_BIN_DIR/lipiconvert" \
          "$LIPI_BIN_DIR/lipidoc" \
          "$LIPI_BIN_DIR/lipirepl" \
          "$LIPI_BIN_DIR/lipiassimilate" \
+         "$LIPI_BIN_DIR/lipi_unikernel_boot" \
          "$LIPI_BIN_DIR/lipi-build" \
          "$LIPI_BIN_DIR/lipi-test"
     rm -rf "$LIPI_INSTALL_DIR"

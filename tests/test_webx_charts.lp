@@ -154,6 +154,33 @@ push(single_line_val, 100)
 svg_single_line = webx_chart_line("line_single", "Single Data Point", single_line_lbl, single_line_val, 500, 300, "#38bdf8", 0)
 assert_true(contains(svg_single_line, "M 267 147 L 267 147"), "Single-point line chart emits valid M x y L x y path for crisp round cap point")
 
+// ── 4b. Pure SVG Sparkline Chart Tests ────────────────────────────────────────
+say "\n── [Pillar 4b]: Testing Pure SVG Sparkline Engine (webx_chart_line_sparkline) ──"
+
+spark_vals = list()
+push(spark_vals, 6)
+push(spark_vals, 8)
+push(spark_vals, 5)
+push(spark_vals, 6)
+push(spark_vals, 7)
+push(spark_vals, 6)
+
+svg_spark = webx_chart_line_sparkline("bdix_spark", spark_vals, 120, 28, "#00e5ff", 1)
+assert_true(contains(svg_spark, "<svg id=\"bdix_spark\""), "Sparkline contains SVG root with id")
+assert_true(contains(svg_spark, "viewBox=\"0 0 120 28\""), "Sparkline has exact viewBox")
+assert_true(contains(svg_spark, "<path d=\"M "), "Sparkline contains polyline stroke path")
+assert_true(contains(svg_spark, "linearGradient id=\"bdix_spark_spark_grad\""), "Sparkline with fill_area contains gradient def")
+assert_true(contains(svg_spark, "<circle cx="), "Sparkline renders latest point marker circle")
+
+// Sparkline edge cases: empty and single value
+empty_spark = webx_chart_line_sparkline("empty_spark", list(), 100, 20, "#bef238", 0)
+assert_true(contains(empty_spark, "<line x1=\"0\""), "Empty sparkline emits clean baseline rule")
+
+single_spark_vals = list()
+push(single_spark_vals, 6)
+single_spark = webx_chart_line_sparkline("single_spark", single_spark_vals, 80, 20, "#10b981", 0)
+assert_true(contains(single_spark, "<circle cx="), "Single-value sparkline renders point marker")
+
 // ── 5. Pure SVG Pie & Donut Chart Tests ────────────────────────────────────────
 say "\n── [Pillar 5]: Testing Pure SVG Pie & Donut Chart Engine (webx_chart_pie) ──"
 
@@ -294,6 +321,9 @@ assert_eq(line_node.node_type, WEBX_NODE_RAW, "webx_chart_line_node returns WEBX
 
 pie_node = webx_chart_pie_node("ui_pie", "V-Node Pie", pie_labels, pie_values, 400, 260, 1)
 assert_eq(pie_node.node_type, WEBX_NODE_RAW, "webx_chart_pie_node returns WEBX_NODE_RAW virtual node")
+
+spark_node = webx_chart_line_sparkline_node("ui_spark", spark_vals, 100, 24, "#00e5ff", 1)
+assert_eq(spark_node.node_type, WEBX_NODE_RAW, "webx_chart_line_sparkline_node returns WEBX_NODE_RAW virtual node")
 
 rendered_node_svg = webx_render_node(bar_node)
 assert_true(contains(rendered_node_svg, "<svg id=\"ui_bar\""), "Rendered WebXNode produces valid SVG markup")

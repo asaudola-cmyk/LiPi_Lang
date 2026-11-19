@@ -87,6 +87,10 @@ struct Arm64Synthesizer
     synth_global_fields // List of global field name strings
     synth_needs_alloc   // Flag: 1 if bump allocator helper must be emitted
     synth_alloc_off     // Byte offset where bump allocator starts
+    synth_needs_list_create // Flag: 1 if list constructor helper must be emitted
+    synth_list_create_off   // Byte offset where list constructor helper starts
+    synth_needs_file_write  // Flag: 1 if file_write helper must be emitted
+    synth_file_write_off    // Byte offset where file_write helper starts
     synth_in_function   // 1 if currently synthesizing inside a function, 0 if top-level
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
@@ -109,6 +113,10 @@ fn arm64_synth_new
     s.synth_global_fields = list()
     s.synth_needs_alloc = 0
     s.synth_alloc_off = 0
+    s.synth_needs_list_create = 0
+    s.synth_list_create_off = 0
+    s.synth_needs_file_write = 0
+    s.synth_file_write_off = 0
     s.synth_in_function = 0
     return s
 

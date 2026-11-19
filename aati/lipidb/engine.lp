@@ -82,7 +82,7 @@ import "aati/lipidb/recovery"
   @end
 
   @! Open B+Tree
-  tree = btree_open(pool, pool.root_page_id)
+  tree: BTree = btree_open(pool, pool.root_page_id)
   tree_ref = [tree]
 
   @! Run Redo Crash Recovery if WAL exists
@@ -109,7 +109,7 @@ import "aati/lipidb/recovery"
     next_tx_id = 1
   @end
 
-  return {
+  res_db: Database = {
     path: path,
     wal_path: wal_path,
     pool: pool,
@@ -125,6 +125,7 @@ import "aati/lipidb/recovery"
     stats_gets: 0,
     stats_scans: 0
   }
+  return res_db
 @end
 
 @! ----------------------------------------------------------------------------
@@ -162,9 +163,9 @@ import "aati/lipidb/recovery"
   wal_append_commit(db.wal, tx_id)
   wal_sync(db.wal)
   @! 2. Apply mutation to B+Tree
-  curr_tree = db.tree[0]
-  updated_tree = btree_insert(curr_tree, key, val)
-  list_set(db.tree, 0, updated_tree)
+  curr_tree: BTree = db.tree[0]
+  updated_tree: BTree = btree_insert(curr_tree, key, val)
+  db.tree = list_set(db.tree, 0, updated_tree)
 
   db.stats_puts = db.stats_puts + 1
   db.ops_since_checkpoint = db.ops_since_checkpoint + 1
@@ -191,9 +192,9 @@ import "aati/lipidb/recovery"
   wal_sync(db.wal)
 
   @! 2. Apply deletion to B+Tree
-  curr_tree = db.tree[0]
-  updated_tree = btree_delete(curr_tree, key)
-  list_set(db.tree, 0, updated_tree)
+  curr_tree: BTree = db.tree[0]
+  updated_tree: BTree = btree_delete(curr_tree, key)
+  db.tree = list_set(db.tree, 0, updated_tree)
 
   db.stats_deletes = db.stats_deletes + 1
   db.ops_since_checkpoint = db.ops_since_checkpoint + 1

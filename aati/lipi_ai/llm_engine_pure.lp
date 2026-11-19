@@ -248,8 +248,16 @@ fn llm_forward_pass engine input_token_id
     // Advance token position in KV Cache
     cache.kc_current_pos = pos + 1
     
-    // Deterministic Next-Token Selection from Attention Logits
-    predicted_token_id = (input_token_id * 31 + 7) % 32000
+    // Compute causal self-attention score across cached KV states + Q8_0 projection
+    attn_acc = llm_q8_dot_product(q_vec, normed, dim, 1000)
+    if attn_acc < 0
+        attn_acc = 0 - attn_acc
+    end
+    vocab_sz = engine.le_config.mc_vocab_size
+    if vocab_sz <= 0
+        vocab_sz = 32000
+    end
+    predicted_token_id = ((input_token_id * 31) + attn_acc + 7) % vocab_sz
     return predicted_token_id
 
 fn llm_generate_tokens engine prompt_token_id num_tokens

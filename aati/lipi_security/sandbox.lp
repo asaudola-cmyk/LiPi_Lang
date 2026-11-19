@@ -134,13 +134,40 @@ import "utso/syscalls"
   }
 @end
 
+@fn pack_raw_sock_fprog(bpf_prog: array) -> i64
+  @! WHY: Linux kernel seccomp ABI requires a flat C struct sock_fprog { u16 len; pad[6]; struct sock_filter *filter; }
+  @! pointing to a contiguous array of 8-byte struct sock_filter { u16 code; u8 jt; u8 jf; u32 k; } elements.
+  prog_len = bpf_prog.len()
+  filter_buf = alloc((prog_len * 8) + 16)
+  i = 0
+  @while i < prog_len
+    insn = bpf_prog[i]
+    base_off = i * 8
+    c_val = insn.code
+    k_val = insn.k
+    mem_byte_write(filter_buf, base_off + 0, c_val & 255)
+    mem_byte_write(filter_buf, base_off + 1, (c_val / 256) & 255)
+    mem_byte_write(filter_buf, base_off + 2, insn.jt & 255)
+    mem_byte_write(filter_buf, base_off + 3, insn.jf & 255)
+    mem_byte_write(filter_buf, base_off + 4, k_val & 255)
+    mem_byte_write(filter_buf, base_off + 5, (k_val / 256) & 255)
+    mem_byte_write(filter_buf, base_off + 6, (k_val / 65536) & 255)
+    mem_byte_write(filter_buf, base_off + 7, (k_val / 16777216) & 255)
+    i = i + 1
+  @end
+
+  fprog_buf = alloc(16)
+  mem_word_write(fprog_buf, 0, prog_len)
+  mem_word_write(fprog_buf, 8, filter_buf)
+  return fprog_buf
+@end
+
 @fn apply_syscall_filter(filter: SyscallFilter) -> i64
   @if filter.allowed_syscalls.len() == 0
     return 0 - 22 @! EINVAL
   @end
 
   bpf_prog = compile_bpf_filter(filter)
-  prog_len = bpf_prog.len()
 
   @! 1. Linux mandate: PR_SET_NO_NEW_PRIVS must be set before unprivileged seccomp
   res_privs = syscall(157, 38, 1, 0, 0, 0, 0)
@@ -148,14 +175,11 @@ import "utso/syscalls"
     return res_privs
   @end
 
-  @! 2. Construct sock_fprog filter pointer structure
-  fprog = {
-    len: prog_len,
-    filter: bpf_prog
-  }
+  @! 2. Construct raw binary sock_fprog & sock_filter buffer for kernel ABI
+  fprog_buf = pack_raw_sock_fprog(bpf_prog)
 
   @! 3. Call sys_seccomp(SECCOMP_SET_MODE_FILTER = 1, flags = 0, &fprog)
-  res_seccomp = syscall(317, 1, 0, fprog, 0, 0, 0)
+  res_seccomp = syscall(317, 1, 0, fprog_buf, 0, 0, 0)
   return res_seccomp
 @end
 
@@ -184,17 +208,13 @@ import "utso/syscalls"
     return ret_no_new_privs @! Propagate kernel error (e.g. -EPERM)
   @end
 
-  @! Step 2 — Serialize filter as sock_fprog in memory
-  @! fprog = { unsigned short len; struct sock_filter *filter; }
-  fprog = {
-    len:    prog_len,
-    filter: bpf_prog
-  }
+  @! Step 2 — Serialize filter as raw binary sock_fprog in memory
+  fprog_buf = pack_raw_sock_fprog(bpf_prog)
 
   @! Step 3 — PR_SET_SECCOMP / SECCOMP_MODE_FILTER
   @! Option 22 (PR_SET_SECCOMP), arg2 = 2 (SECCOMP_MODE_FILTER), arg3 = &fprog
   @! We call sys_prctl (157) rather than sys_seccomp (317) per the phase spec.
-  ret_seccomp = syscall(SYS_PRCTL(), 22, 2, fprog, 0, 0)
+  ret_seccomp = syscall(SYS_PRCTL(), 22, 2, fprog_buf, 0, 0)
   return ret_seccomp
 @end
 
@@ -207,17 +227,6 @@ import "utso/syscalls"
   @! Convenience: apply compute-only (exit-only) filter
   return sandbox_apply(compute_only_filter())
 @end
-
-@fn main()
-  filter = strict_io_filter()
-  prog = compile_bpf_filter(filter)
-  valid = validate_bpf_program(prog)
-  @if valid == 1
-    return 0
-  @end
-  return 1
-@end
-
 
 @fn validate_bpf_program(prog: array) -> i64
   @if prog.len() < 5

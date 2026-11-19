@@ -38,12 +38,17 @@ fn silicon_random_int
 fn crypto_random_bytes buffer size
     bytes_read = syscall(318, buffer, size, 0, 0, 0, 0)
     if bytes_read < 0
-        // ফলব্যাক: সিপিউ সাইকেল টাইমার থেকে ডিটারমিনিস্টিক হাই-মিক্সিং এন্ট্রপি
+        // ফলব্যাক: সিপিউ সাইকেল টাইমার + xorshift64* নন-লিনিয়ার অ্যাভালাঞ্চ মিক্সিং
+        state = ক্লক() ^ 88172645463325252
         i = 0
         while i < size
-            c = ক্লক() + (i * 104729)
+            state = state ^ (state >> 12)
+            state = state ^ (state << 25)
+            state = state ^ (state >> 27)
+            c = state + (i * 2654435761)
             if c < 0
                 c = 0 - c
+            end
             মেমরি_বাইট_লেখো(buffer, i, c % 256)
             i = i + 1
         return size
@@ -71,11 +76,21 @@ fn CRYPTO_random_u64
     return crypto_random_u64()
 
 // ── ৪. বাউন্ডেড রেঞ্জ র‍্যান্ডম ইন্টিজার (Uniform Bounded Integer) ─────────────
-// WHY: নির্দিষ্ট সীমা [min, max] এর মধ্যে সুষম বিন্যাসে সংখ্যা নির্বাচন।
+// WHY: রিজেকশন স্যাম্পলিংয়ের মাধ্যমে মডুলো বায়াস মুক্ত সুষম বিন্যাসে [min, max] সীমায় সংখ্যা নির্বাচন।
 fn crypto_random_range min max
     range = max - min + 1
     if range <= 0
         return min
+    max_u63 = 9223372036854775807
+    limit = (max_u63 / range) * range
+    tries = 0
+    while tries < 16
+        n = crypto_random_u64()
+        if n < limit or limit <= 0
+            return min + (n % range)
+        end
+        tries = tries + 1
+    end
     n = crypto_random_u64()
     return min + (n % range)
 

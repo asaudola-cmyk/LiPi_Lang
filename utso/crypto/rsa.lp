@@ -54,15 +54,36 @@
   return inv
 @end
 
+@fn rsa_mul_mod_64(a, b, mod)
+  // WHY: Overflow-safe 64-bit modular multiplication (a * b) % mod via binary doubling,
+  // supporting full 62-bit RSA moduli without signed i64 overflow.
+  res = 0
+  x = a % mod
+  @if x < 0 x = x + mod @end
+  y = b
+  @while y > 0
+    @if (y & 1) == 1
+      res = res + x
+      @if res >= mod res = res - mod @end
+    @end
+    x = x + x
+    @if x >= mod x = x - mod @end
+    y = y >> 1
+  @end
+  return res
+@end
+
 @fn rsa_mod_pow(base, exp, mod)
   result = 1
-  base = base % mod
-  @while exp > 0
-    @if (exp % 2) == 1
-      result = (result * base) % mod
+  b = base % mod
+  @if b < 0 b = b + mod @end
+  e = exp
+  @while e > 0
+    @if (e & 1) == 1
+      result = rsa_mul_mod_64(result, b, mod)
     @end
-    exp = exp / 2
-    base = (base * base) % mod
+    e = e >> 1
+    b = rsa_mul_mod_64(b, b, mod)
   @end
   return result
 @end

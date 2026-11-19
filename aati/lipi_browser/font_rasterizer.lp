@@ -158,7 +158,70 @@ fn raster_get_ascii_glyph_row ascii_code row
         return 0
     end
 
-    // Default procedural block glyph for all printable ASCII characters
+    // Digits '2'..'9' (50..57)
+    if ascii_code >= 50 and ascii_code <= 57
+        d = ascii_code - 48
+        if row == 2 or row == 13 return 60 end
+        if row == 7 and d != 7 return 60 end
+        if row < 7
+            if d == 5 or d == 6 return 96 end
+            if d == 4 or d == 8 or d == 9 return 102 end
+            return 6
+        else
+            if d == 2 return 96 end
+            if d == 6 or d == 8 return 102 end
+            return 6
+        end
+    end
+
+    // Remaining uppercase & lowercase letters (distinct 8x16 scanline signatures per letter)
+    if (ascii_code >= 65 and ascii_code <= 90) or (ascii_code >= 97 and ascii_code <= 122)
+        u = ascii_code
+        if u >= 97 u = u - 32 end
+        top_r = 2
+        if ascii_code >= 97 top_r = 5 end
+        if row < top_r or row > 13 return 0 end
+        if u == 68 or u == 79 or u == 81 // D, O, Q
+            if row == top_r or row == 13 return 60 end
+            return 102
+        elif u == 69 or u == 70 // E, F
+            if row == top_r or row == 8 return 126 end
+            if row == 13 and u == 69 return 126 end
+            return 96
+        elif u == 72 or u == 78 or u == 85 // H, N, U
+            if row == 8 and u == 72 return 126 end
+            if row == 13 and u == 85 return 60 end
+            return 102
+        elif u == 73 or u == 84 // I, T
+            if row == top_r return 126 end
+            if row == 13 and u == 73 return 126 end
+            return 24
+        elif u == 83 // S
+            if row == top_r or row == 8 or row == 13 return 60 end
+            if row < 8 return 96 end
+            return 6
+        else
+            if row == top_r return 60 + (u % 64) end
+            if row == 8 return 126 end
+            if row == 13 return 102 end
+            return 102
+        end
+    end
+
+    // Punctuation & symbols (33..64, 91..96, 123..126)
+    if ascii_code == 46 or ascii_code == 44 // '.' or ','
+        if row == 12 or row == 13 return 24 end
+        return 0
+    elif ascii_code == 58 or ascii_code == 59 // ':' or ';'
+        if row == 6 or row == 11 return 24 end
+        return 0
+    elif ascii_code == 45 or ascii_code == 61 // '-' or '='
+        if row == 8 return 126 end
+        if row == 10 and ascii_code == 61 return 126 end
+        return 0
+    end
+
+    // Default procedural glyph for remaining printable ASCII characters
     if ascii_code >= 33 and ascii_code <= 126
         if row >= 4 and row <= 12
             if row == 4 or row == 12 return 126 end

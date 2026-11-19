@@ -12,8 +12,11 @@ bin/
 dist/
 build/
 scratch/
-benchmarks/*
-!benchmarks/sovereign_ai_benchmark.lp
+benchmarks/**/bin_*
+benchmarks/**/gateway_bin
+!benchmarks/**/*.lp
+!benchmarks/**/*.py
+!benchmarks/**/*.md
 
 # Standalone package manager dependencies
 lipi_modules/
@@ -38,11 +41,12 @@ lipi_modules/
 .DS_Store
 Thumbs.db
 
-# VS Code / IDE development caches & Standalone Editor Repositories
-# WHY: Editor tooling (vscode-lipi) is hosted in a dedicated standalone repository.
+# VS Code / IDE development caches
 .vscode/
 .idea/
-editors/
+editors/vscode/*.vsix
+editors/vscode/node_modules/
+editors/vscode/out/
 
 junit.out.xml
 .cache/

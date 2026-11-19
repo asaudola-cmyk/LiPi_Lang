@@ -9,6 +9,59 @@ include "src/compiler/backend/targets/arm64/codegen_expr.lp"
 include "src/compiler/backend/targets/arm64/codegen_stmt.lp"
 include "src/compiler/backend/targets/arm64/arm64_simd.lp"
 
+// ── 8b. AArch64 Dynamic Runtime Helpers (List, File I/O) ─────────────────────
+
+fn arm64_synth_emit_list_create_helper s
+    // WHY: Native AArch64 24-byte list header {len, cap, data_ptr} constructor backed by __alloc.
+    // Input: X0 = initial len. Output: X0 = pointer to 24-byte list header.
+    off = s.synth_code.len()
+    s.synth_list_create_off = off
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 32)
+    arm64_emit_mov_reg(s, 19, 0)         // X19 = initial len
+    arm64_emit_movz_x(s, 0, 160, 0)      // 24B header + 136B data buffer
+    arm64_synth_emit_call_alloc(s)
+    // Store [X0 + 0] = X19 (len), [X0 + 8] = 16 (cap), [X0 + 16] = X0 + 24 (data_ptr)
+    arm64_emit_movz_x(s, 1, 16, 0)
+    // str x19, [x0, #0] (0xF9000013 = 4177526803)
+    arm64_synth_emit32(s, 4177526803)
+    // str x1, [x0, #8]  (0xF9000401 = 4177527809)
+    arm64_synth_emit32(s, 4177527809)
+    // add x2, x0, #24   (0x91006002 = 2432720898)
+    arm64_synth_emit32(s, 2432720898)
+    // str x2, [x0, #16] (0xF9000802 = 4177528834)
+    arm64_synth_emit32(s, 4177528834)
+    arm64_emit_ldp_post(s, 29, 30, 31, 32)
+    arm64_emit_ret(s)
+    return off
+
+fn arm64_synth_emit_file_write_helper s
+    // WHY: Native Linux AArch64 file writer using SYS_openat (56), SYS_write (64), SYS_close (57).
+    // Inputs: X0 = path_ptr, X1 = data_ptr, X2 = data_len.
+    off = s.synth_code.len()
+    s.synth_file_write_off = off
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 32)
+    arm64_emit_mov_reg(s, 19, 1)         // X19 = data_ptr
+    arm64_emit_mov_reg(s, 20, 2)         // X20 = data_len
+    arm64_emit_mov_reg(s, 1, 0)          // X1 = pathname
+    // mov x0, #-100 (AT_FDCWD: 0x92800C60 = 2457865312)
+    arm64_synth_emit32(s, 2457865312)
+    arm64_emit_movz_x(s, 2, 577, 0)      // O_WRONLY|O_CREAT|O_TRUNC
+    arm64_emit_movz_x(s, 3, 420, 0)      // 0644
+    arm64_emit_movz_x(s, 8, 56, 0)       // SYS_openat = 56
+    arm64_emit_svc(s, 0)
+    arm64_emit_mov_reg(s, 21, 0)         // X21 = fd
+    arm64_emit_mov_reg(s, 1, 19)         // X1 = data_ptr
+    arm64_emit_mov_reg(s, 2, 20)         // X2 = data_len
+    arm64_emit_movz_x(s, 8, 64, 0)       // SYS_write = 64
+    arm64_emit_svc(s, 0)
+    arm64_emit_mov_reg(s, 0, 21)         // X0 = fd
+    arm64_emit_movz_x(s, 8, 57, 0)       // SYS_close = 57
+    arm64_emit_svc(s, 0)
+    arm64_emit_mov_reg(s, 0, 20)         // Return bytes written
+    arm64_emit_ldp_post(s, 29, 30, 31, 32)
+    arm64_emit_ret(s)
+    return off
+
 // ── 9. Master Program Synthesizer Entry Point ──────────────────────────────────
 
 fn arm64_synth_compile_program tokens
@@ -75,7 +128,12 @@ fn arm64_synth_compile_program tokens
     if s.synth_needs_print_int == 1
         arm64_synth_emit_print_int_helper(s)
 
-    // 5b. Emit sovereign alloc helper if required
+    // 5b. Emit sovereign alloc, list_create, and file_write helpers if required
+    if s.synth_needs_list_create == 1
+        s.synth_needs_alloc = 1
+        arm64_synth_emit_list_create_helper(s)
+    if s.synth_needs_file_write == 1
+        arm64_synth_emit_file_write_helper(s)
     if s.synth_needs_alloc == 1
         arm64_synth_emit_alloc_helper(s)
 
@@ -88,6 +146,10 @@ fn arm64_synth_compile_program tokens
             resolved_addr = s.synth_print_int_off
         elif cr.cr_target_name == "__alloc"
             resolved_addr = s.synth_alloc_off
+        elif cr.cr_target_name == "__list_create"
+            resolved_addr = s.synth_list_create_off
+        elif cr.cr_target_name == "__file_write"
+            resolved_addr = s.synth_file_write_off
         else
             k = 0
             while k < s.synth_functions.len()

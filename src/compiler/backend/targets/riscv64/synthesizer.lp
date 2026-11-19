@@ -9,6 +9,59 @@ include "src/compiler/backend/targets/riscv64/codegen_expr.lp"
 include "src/compiler/backend/targets/riscv64/codegen_stmt.lp"
 include "src/compiler/backend/targets/riscv64/riscv64_vector.lp"
 
+// ── 11b. RV64G Dynamic Runtime Helpers (List, File I/O) ──────────────────────
+
+fn riscv64_synth_emit_list_create_helper s
+    // WHY: Native RV64G 24-byte list header {len, cap, data_ptr} constructor backed by __alloc.
+    // Input: a0 (x10) = initial len. Output: a0 (x10) = pointer to 24-byte list header.
+    off = s.rv_code.len()
+    s.rv_list_create_off = off
+    riscv64_emit_addi(s, 2, 2, 0 - 32)
+    riscv64_emit_sd(s, 1, 2, 24)
+    riscv64_emit_sd(s, 9, 2, 16)
+    riscv64_emit_mv(s, 9, 10)            // s1 (x9) = initial len
+    riscv64_emit_li(s, 10, 160)          // 24B header + 136B data buffer
+    riscv64_synth_emit_call_alloc(s)
+    riscv64_emit_sd(s, 9, 10, 0)         // [a0 + 0] = len
+    riscv64_emit_li(s, 5, 16)
+    riscv64_emit_sd(s, 5, 10, 8)         // [a0 + 8] = cap (16)
+    riscv64_emit_addi(s, 6, 10, 24)
+    riscv64_emit_sd(s, 6, 10, 16)        // [a0 + 16] = a0 + 24 (data_ptr)
+    riscv64_emit_ld(s, 9, 2, 16)
+    riscv64_emit_ld(s, 1, 2, 24)
+    riscv64_emit_addi(s, 2, 2, 32)
+    riscv64_emit_ret(s)
+    return off
+
+fn riscv64_synth_emit_file_write_helper s
+    // WHY: Native Linux RISC-V 64 file writer using SYS_openat (56), SYS_write (64), SYS_close (57).
+    // Inputs: a0 (x10) = path_ptr, a1 (x11) = data_ptr, a2 (x12) = data_len.
+    off = s.rv_code.len()
+    s.rv_file_write_off = off
+    riscv64_emit_addi(s, 2, 2, 0 - 32)
+    riscv64_emit_sd(s, 1, 2, 24)
+    riscv64_emit_mv(s, 5, 11)            // t0 = data_ptr
+    riscv64_emit_mv(s, 6, 12)            // t1 = data_len
+    riscv64_emit_mv(s, 11, 10)           // a1 = pathname
+    riscv64_emit_addi(s, 10, 0, 0 - 100) // a0 = AT_FDCWD (-100)
+    riscv64_emit_li(s, 12, 577)          // a2 = O_WRONLY|O_CREAT|O_TRUNC
+    riscv64_emit_li(s, 13, 420)          // a3 = 0644
+    riscv64_emit_li(s, 17, 56)           // a7 = SYS_openat (56)
+    riscv64_emit_ecall(s)
+    riscv64_emit_mv(s, 7, 10)            // t2 = fd
+    riscv64_emit_mv(s, 11, 5)            // a1 = data_ptr
+    riscv64_emit_mv(s, 12, 6)            // a2 = data_len
+    riscv64_emit_li(s, 17, 64)           // a7 = SYS_write (64)
+    riscv64_emit_ecall(s)
+    riscv64_emit_mv(s, 10, 7)            // a0 = fd
+    riscv64_emit_li(s, 17, 57)           // a7 = SYS_close (57)
+    riscv64_emit_ecall(s)
+    riscv64_emit_mv(s, 10, 6)            // a0 = bytes written
+    riscv64_emit_ld(s, 1, 2, 24)
+    riscv64_emit_addi(s, 2, 2, 32)
+    riscv64_emit_ret(s)
+    return off
+
 // ── 12. Master Program Synthesizer Entry Point ─────────────────────────────────
 
 fn riscv64_synth_compile_program tokens
@@ -75,7 +128,12 @@ fn riscv64_synth_compile_program tokens
     if s.rv_needs_print_int == 1
         riscv64_synth_emit_print_int_helper(s)
 
-    // 5b. Emit sovereign alloc helper if required
+    // 5b. Emit sovereign alloc, list_create, and file_write helpers if required
+    if s.rv_needs_list_create == 1
+        s.rv_needs_alloc = 1
+        riscv64_synth_emit_list_create_helper(s)
+    if s.rv_needs_file_write == 1
+        riscv64_synth_emit_file_write_helper(s)
     if s.rv_needs_alloc == 1
         riscv64_synth_emit_alloc_helper(s)
 
@@ -88,6 +146,10 @@ fn riscv64_synth_compile_program tokens
             resolved_addr = s.rv_print_int_off
         elif cr.rv_cr_target_name == "__alloc"
             resolved_addr = s.rv_alloc_off
+        elif cr.rv_cr_target_name == "__list_create"
+            resolved_addr = s.rv_list_create_off
+        elif cr.rv_cr_target_name == "__file_write"
+            resolved_addr = s.rv_file_write_off
         else
             k = 0
             while k < s.rv_functions.len()

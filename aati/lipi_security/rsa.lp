@@ -8,26 +8,28 @@ import "utso/string"
 import "utso/crypto/rsa"
 
 @struct RsaKey
-  n: i64
-  e: i64
-  d: i64
+  rsa_n: i64
+  rsa_e: i64
+  rsa_d: i64
 @end
 
 @fn rsa_key_new()
-  return {
-    n: 3233, @! Example small primes p=61, q=53
-    e: 17,
-    d: 2753
-  }
+  // WHY: Real 60-bit RSA modulus (p=1000000007, q=1000000009, e=65537) replacing 12-bit toy n=3233.
+  // Overflow-safe under 64-bit signed arithmetic via binary modular multiplication rsa_mul_mod_64().
+  k = RsaKey()
+  k.rsa_n = 1000000016000000063
+  k.rsa_e = 65537
+  k.rsa_d = 648946405777194593
+  return k
 @end
 
 @fn rsa_key_from_primes(p, q)
   res = rsa_keygen(p, q)
-  return {
-    n: res[2],
-    e: res[0],
-    d: res[1]
-  }
+  k = RsaKey()
+  k.rsa_n = res[2]
+  k.rsa_e = res[0]
+  k.rsa_d = res[1]
+  return k
 @end
 
 @struct BigInt
@@ -131,45 +133,57 @@ import "utso/crypto/rsa"
   return res
 @end
 
-@! Native LiPi Modular Exponentiation (base^exp % mod)
+@! Overflow-safe 64-bit Modular Multiplication: (a * b) % modulus without i64 overflow
+@fn rsa_mul_mod(a, b, modulus)
+  res = 0
+  x = a % modulus
+  @if x < 0 x = x + modulus @end
+  y = b
+  @while y > 0
+    @if (y & 1) == 1
+      res = res + x
+      @if res >= modulus res = res - modulus @end
+    @end
+    x = x + x
+    @if x >= modulus x = x - modulus @end
+    y = y >> 1
+  @end
+  return res
+@end
+
+@! Native LiPi Modular Exponentiation (base^exp % mod) — overflow-safe up to 62-bit moduli
 @fn rsa_mod_exp(base, exp, modulus)
   result = 1
-  base = base % modulus
-  @while exp > 0
-    @if (exp % 2) == 1
-      result = (result * base) % modulus
+  b = base % modulus
+  @if b < 0 b = b + modulus @end
+  e = exp
+  @while e > 0
+    @if (e & 1) == 1
+      result = rsa_mul_mod(result, b, modulus)
     @end
-    exp = exp / 2
-    base = (base * base) % modulus
+    e = e >> 1
+    b = rsa_mul_mod(b, b, modulus)
   @end
   return result
 @end
 
-@fn rsa_encrypt(key, m)
-  b_m = bigint_from_int(m)
-  b_e = bigint_from_int(key.e)
-  b_n = bigint_from_int(key.n)
-  b_res = bigint_mod_exp(b_m, b_e, b_n)
-  return bigint_to_int(b_res)
+@fn rsa_sec_encrypt(key, m)
+  return rsa_mod_exp(m, key.rsa_e, key.rsa_n)
 @end
 
-@fn rsa_decrypt(key, c)
-  b_c = bigint_from_int(c)
-  b_d = bigint_from_int(key.d)
-  b_n = bigint_from_int(key.n)
-  b_res = bigint_mod_exp(b_c, b_d, b_n)
-  return bigint_to_int(b_res)
+@fn rsa_sec_decrypt(key, c)
+  return rsa_mod_exp(c, key.rsa_d, key.rsa_n)
 @end
 
 @fn rsa_encrypt_bigint(key, b_m)
-  b_e = bigint_from_int(key.e)
-  b_n = bigint_from_int(key.n)
+  b_e = bigint_from_int(key.rsa_e)
+  b_n = bigint_from_int(key.rsa_n)
   return bigint_mod_exp(b_m, b_e, b_n)
 @end
 
 @fn rsa_decrypt_bigint(key, b_c)
-  b_d = bigint_from_int(key.d)
-  b_n = bigint_from_int(key.n)
+  b_d = bigint_from_int(key.rsa_d)
+  b_n = bigint_from_int(key.rsa_n)
   return bigint_mod_exp(b_c, b_d, b_n)
 @end
 

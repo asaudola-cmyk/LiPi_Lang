@@ -170,6 +170,17 @@ fn bft_vote_prepare engine proposal validator_id
         votes = list()
         proposal.bp_prepare_votes = votes
     end
+    // Reject duplicate PREPARE votes from the same validator
+    vi = 0
+    while vi < len(votes)
+        if get(votes, vi) == validator_id
+            if len(votes) >= engine.be_quorum_size
+                return 1
+            end
+            return 2
+        end
+        vi = vi + 1
+    end
     push(votes, validator_id)
     
     // Check if 2f + 1 Quorum is reached
@@ -180,21 +191,60 @@ fn bft_vote_prepare engine proposal validator_id
     return 2 // Vote accepted, awaiting quorum
 
 fn bft_vote_commit engine proposal validator_id
-    // WHY: Collects COMMIT votes and finalizes block upon reaching 2f+1 threshold.
+    // WHY: Verifies validator honesty, rejects duplicate COMMIT votes, and finalizes block upon reaching 2f+1 threshold.
+    validators = engine.be_validators
+    total_val = len(validators)
+    is_valid_node = 0
+    is_malicious = 0
+    i = 0
+    while i < total_val
+        v = get(validators, i)
+        if v.bv_id == validator_id
+            is_valid_node = 1
+            if v.bv_is_byzantine == 1
+                is_malicious = 1
+            end
+        end
+        i = i + 1
+    end
+    if is_valid_node == 0 or is_malicious == 1
+        return 0
+    end
+
     votes = proposal.bp_commit_votes
     if votes == 0
         votes = list()
         proposal.bp_commit_votes = votes
+    end
+    vi = 0
+    while vi < len(votes)
+        if get(votes, vi) == validator_id
+            if len(votes) >= engine.be_quorum_size
+                return 1
+            end
+            return 2
+        end
+        vi = vi + 1
     end
     push(votes, validator_id)
     
     vote_count = len(votes)
     quorum = engine.be_quorum_size
     if vote_count >= quorum
-        // Quorum finalized: append to committed blocks
+        // Quorum finalized: append to committed blocks (avoiding duplicate commits)
         committed = engine.be_committed_blocks
         bhash = proposal.bp_block_hash
-        push(committed, bhash)
+        already_committed = 0
+        ci = 0
+        while ci < len(committed)
+            if get(committed, ci) == bhash
+                already_committed = 1
+            end
+            ci = ci + 1
+        end
+        if already_committed == 0
+            push(committed, bhash)
+        end
         return 1 // FINALIZED
     return 2
 

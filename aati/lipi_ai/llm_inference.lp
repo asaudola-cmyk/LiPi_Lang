@@ -14,7 +14,7 @@ include "utso/memory.lp"
 include "utso/math.lp"
 
 // ── GGUF Specification Constants ──────────────────────────────────────────────
-GGUF_MAGIC_LE       = 1179998023 // 'GGUF' -> 0x46554747
+GGUF_MAGIC_LE       = 1179993927 // 'GGUF' -> 0x46554747
 GGUF_VERSION_V3     = 3
 GGML_TYPE_F32       = 0
 GGML_TYPE_F16       = 1
@@ -304,3 +304,40 @@ fn llm_forward_token_step token_id pos dim vocab_size w_embed w_head out_logits
     // Step 4: Sample next token
     next_tok = llm_sample_token(out_logits, vocab_size, 70, 40)
     return next_tok
+
+fn llm_bpe_decode_token vocab_list token_id
+    // WHY: Maps integer token IDs back to human-readable BPE subword strings from the model vocabulary.
+    if vocab_list == 0 or token_id < 0 or token_id >= len(vocab_list)
+        return "<tok#" + str(token_id) + ">"
+    return get(vocab_list, token_id)
+
+fn llm_multi_layer_forward token_id pos num_layers dim vocab_size w_embed w_head out_logits
+    // WHY: Executes multi-layer Transformer forward pass with RoPE rotary positional encoding,
+    // RMSNorm, SwiGLU feed-forward residual connections across num_layers layers, and final GEMV projection.
+    hidden = list()
+    offset = token_id * dim
+    i = 0
+    while i < dim
+        push(hidden, get(w_embed, offset + i))
+        i = i + 1
+
+    layer = 0
+    while layer < num_layers
+        llm_rope(hidden, dim, pos + layer)
+        normed = list()
+        w_ones = list()
+        wi = 0
+        while wi < dim
+            push(w_ones, 1000)
+            wi = wi + 1
+        llm_rmsnorm(hidden, w_ones, dim, normed)
+        ffn_out = list()
+        llm_swiglu(normed, hidden, dim, ffn_out)
+        ri = 0
+        while ri < dim
+            list_set(hidden, ri, get(hidden, ri) + get(ffn_out, ri))
+            ri = ri + 1
+        layer = layer + 1
+
+    llm_gemv(w_head, hidden, vocab_size, dim, out_logits)
+    return llm_sample_token(out_logits, vocab_size, 70, 40)

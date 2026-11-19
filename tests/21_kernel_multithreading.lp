@@ -7,6 +7,11 @@
 // ==============================================================================
 
 include "std/mem.lp"
+include "utso/os/thread.lp"
+
+fn mt_worker_entry shared_ptr
+    mem_write(shared_ptr, 0, 777)
+    return 0
 
 fn test_assert actual expected test_name
     if actual != expected
@@ -179,5 +184,23 @@ test_assert(deq4, 4000, "Fourth dequeue is 4000")
 test_assert(q.count, 0, "Queue is empty")
 
 queue_free(q)
+
+// Step 4: Kernel Multithreading (thread_create, spinlock, channel & shared memory) verification
+shared_box = syscall(9, 0, 4096, 3, 33, 0 - 1, 0)
+mem_write(shared_box, 0, 111)
+st_buf = malloc(65536)
+tid = thread_create(st_buf + 65536 - 64)
+if tid == 0
+    mt_worker_entry(shared_box)
+    thread_exit(0)
+status_buf = alloc(16)
+syscall(61, tid, status_buf, 1073741824, 0, 0, 0)
+test_assert(mem_read(shared_box, 0), 777, "Kernel thread_create executed worker and mutated shared memory to 777")
+
+ch = channel_create()
+channel_send(ch, 999)
+ch_val = channel_recv(ch)
+test_assert(ch_val, 999, "Thread-safe channel_send & channel_recv roundtrip verified")
+channel_close(ch)
 
 say "PASS: Test 21 Data Structures"

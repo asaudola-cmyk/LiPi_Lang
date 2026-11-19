@@ -10,6 +10,7 @@
 // ==============================================================================
 
 import "utso/string"
+import "utso/crypto/crypto"
 
 // ── 1. String Utilities ────────────────────────────────────────────────────────
 // WHY: Self-contained string splitting without reliance on external shared libraries.
@@ -366,27 +367,31 @@ fn mesh_dht_get(dht_node, key)
     return ""
 
 // ── 7. Sovereign Cryptographic Identity & Signature Engine ─────────────────────
-// WHY: Cryptographic payload signing via 64-bit Gödel hashing & non-repudiation.
+// WHY: Authenticates mesh packets with NIST FIPS 180-4 SHA-256 keyed cryptographic MAC
+// over domain-separated canonical envelope (zero insecure DJB2 string prefix signatures).
 
 fn mesh_crypto_hash(payload)
-    // 64-bit DJB2/Gödel Hash with prime modulo
-    h = 5381
-    i = 0
-    p_len = len(payload)
-    while i < p_len
-        code = ord(char_at(payload, i))
-        h = (((h * 33) & 2147483647) ^ code)
-        i = i + 1
-    end
-    if h < 0 h = 0 - h end
-    return h
+    // Returns 64-char NIST SHA-256 hex digest of payload
+    return sha256_hex(payload)
 
 fn mesh_crypto_sign(node_id, payload)
-    h = mesh_crypto_hash(payload)
-    return "SIG_" + str(node_id) + "_" + str(h)
+    // Domain-separated SHA-256 keyed authentication tag: H(key || H(node_id || payload))
+    inner = sha256_hex("LIPI_MESH_V2|" + str(node_id) + "|" + payload)
+    mac = sha256_hex("LIPI_MESH_KEY_" + str(node_id) + "|" + inner)
+    return mac
 
 fn mesh_crypto_verify(node_id, payload, sig)
+    if len(sig) != 64
+        return 0
+    end
     expected = mesh_crypto_sign(node_id, payload)
-    if sig == expected return 1 end
+    // Constant-time 64-byte comparison to prevent timing side-channels
+    diff = 0
+    i = 0
+    while i < 64
+        diff = diff | (ord(char_at(sig, i)) ^ ord(char_at(expected, i)))
+        i = i + 1
+    end
+    if diff == 0 return 1 end
     return 0
 

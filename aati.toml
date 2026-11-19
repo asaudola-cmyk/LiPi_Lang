@@ -23,15 +23,36 @@ opt_level = 3
 
 [workspace]
 members = [
-    "aati/math_extra",
-    "aati/web_router",
     "aati/crypto_vault",
     "aati/json_toolkit",
-    "aati/sovereign_mesh",
+    "aati/lipi_ai",
+    "aati/lipi_blockchain",
+    "aati/lipi_boot",
+    "aati/lipi_browser",
     "aati/lipi_dataframe",
+    "aati/lipi_engine3d",
+    "aati/lipi_fs",
+    "aati/lipi_gpu",
     "aati/lipi_grpc",
+    "aati/lipi_gui",
     "aati/lipi_http_client",
+    "aati/lipi_hypervisor",
+    "aati/lipi_ide",
+    "aati/lipi_iot",
     "aati/lipi_jwt",
-    "aati/lipi_sql"
+    "aati/lipi_media",
+    "aati/lipi_mobile",
+    "aati/lipi_p2p",
+    "aati/lipi_quantum",
+    "aati/lipi_registry",
+    "aati/lipi_security",
+    "aati/lipi_sql",
+    "aati/lipi_swarm",
+    "aati/lipi_torch",
+    "aati/lipi_web",
+    "aati/lipidb",
+    "aati/math_extra",
+    "aati/sovereign_mesh",
+    "aati/web_router"
 ]
 

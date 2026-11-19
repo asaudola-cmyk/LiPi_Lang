@@ -372,7 +372,11 @@ fn webx_chart_line id title labels values width height stroke_color fill_area
     max_val = webx_chart_max(values)
     if min_val == max_val
         max_val = min_val + 10
-        min_val = min_val - 10
+        if min_val >= 10
+            min_val = min_val - 10
+        else
+            min_val = 0
+        end
     end
 
     val_range = max_val - min_val
@@ -457,6 +461,116 @@ fn webx_chart_line id title labels values width height stroke_color fill_area
         svg = svg + "<text x=\"" + str(cx_val) + "\" y=\"" + str(pad_top + plot_h + 20) + "\" text-anchor=\"middle\" fill=\"#94a3b8\" font-size=\"12\">" + escaped_lbl + "</text>\n"
 
         i = i + 1
+    end
+
+    svg = svg + "</svg>"
+    return svg
+
+// ==============================================================================
+// ── 4b. Pure SVG Sparkline Chart Engine (webx_chart_line_sparkline) ───────────
+// ==============================================================================
+
+fn webx_chart_line_sparkline id values width height stroke_color fill_area
+    // WHY: Emits lightweight, zero-dependency sovereign SVG sparkline trendlines for high-density
+    // telemetry ribbons, latency monitors, and KPI metrics. Renders zero client JS and zero external CSS.
+    w_str = str(width)
+    h_str = str(height)
+
+    str_col = stroke_color
+    if len(str_col) == 0 or str_col == "auto"
+        str_col = "#38bdf8"
+    end
+
+    svg = "<svg id=\"" + id + "\" viewBox=\"0 0 " + w_str + " " + h_str + "\" width=\"100%\" height=\"" + h_str + "\" "
+    svg = svg + "xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Sparkline Trend\">\n"
+
+    // Optional subtle gradient definition for area fill
+    if fill_area == 1
+        svg = svg + "  <defs>\n"
+        svg = svg + "    <linearGradient id=\"" + id + "_spark_grad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n"
+        svg = svg + "      <stop offset=\"0%\" stop-color=\"" + str_col + "\" stop-opacity=\"0.35\" />\n"
+        svg = svg + "      <stop offset=\"100%\" stop-color=\"" + str_col + "\" stop-opacity=\"0.0\" />\n"
+        svg = svg + "    </linearGradient>\n"
+        svg = svg + "  </defs>\n"
+    end
+
+    n = len(values)
+    if n == 0
+        // Baseline dashed rule when dataset is empty
+        mid_y = height / 2
+        svg = svg + "  <line x1=\"0\" y1=\"" + str(mid_y) + "\" x2=\"" + w_str + "\" y2=\"" + str(mid_y) + "\" stroke=\"#334155\" stroke-dasharray=\"2,2\" />\n"
+        svg = svg + "</svg>"
+        return svg
+    end
+
+    pad_y = 3
+    if pad_y * 2 >= height
+        pad_y = 1
+    end
+    plot_h = height - (pad_y * 2)
+    if plot_h < 2
+        plot_h = 2
+    end
+
+    min_val = webx_chart_min(values)
+    max_val = webx_chart_max(values)
+
+    val_range = max_val - min_val
+    if val_range <= 0
+        val_range = 1
+    end
+
+    x_coords = list()
+    y_coords = list()
+    i = 0
+    while i < n
+        if n == 1
+            px = width / 2
+        else
+            px = (i * width) / (n - 1)
+        end
+        v = get(values, i)
+        if max_val == min_val
+            if max_val == 0
+                py = height - pad_y
+            else
+                py = height / 2
+            end
+        else
+            py = pad_y + ((max_val - v) * plot_h) / val_range
+        end
+        push(x_coords, px)
+        push(y_coords, py)
+        i = i + 1
+    end
+
+    first_x = get(x_coords, 0)
+    first_y = get(y_coords, 0)
+    if n == 1
+        line_path = "M " + str(first_x) + " " + str(first_y) + " L " + str(first_x) + " " + str(first_y)
+    else
+        line_path = "M " + str(first_x) + " " + str(first_y)
+        i = 1
+        while i < n
+            line_path = line_path + " L " + str(get(x_coords, i)) + " " + str(get(y_coords, i))
+            i = i + 1
+        end
+    end
+
+    if fill_area == 1 and n > 1
+        last_x = get(x_coords, n - 1)
+        bottom_y = height
+        area_path = line_path + " L " + str(last_x) + " " + str(bottom_y) + " L " + str(first_x) + " " + str(bottom_y) + " Z"
+        svg = svg + "  <path d=\"" + area_path + "\" fill=\"url(#" + id + "_spark_grad)\" />\n"
+    end
+
+    svg = svg + "  <path d=\"" + line_path + "\" fill=\"none\" stroke=\"" + str_col + "\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+
+    // Latest endpoint marker for real-time beacon pulse
+    if n > 0
+        last_px = get(x_coords, n - 1)
+        last_py = get(y_coords, n - 1)
+        svg = svg + "  <circle cx=\"" + str(last_px) + "\" cy=\"" + str(last_py) + "\" r=\"3\" fill=\"" + str_col + "\" />\n"
     end
 
     svg = svg + "</svg>"
@@ -1071,3 +1185,7 @@ fn webx_chart_line_node id title labels values width height stroke_color fill_ar
 fn webx_chart_pie_node id title labels values width height is_donut
     // WHY: Wraps SVG pie/donut chart markup into a WebX virtual DOM node (UIX node tree)
     return webx_raw(id, webx_chart_pie(id, title, labels, values, width, height, is_donut))
+
+fn webx_chart_line_sparkline_node id values width height stroke_color fill_area
+    // WHY: Wraps SVG sparkline markup into a WebX virtual DOM node (UIX node tree)
+    return webx_raw(id, webx_chart_line_sparkline(id, values, width, height, stroke_color, fill_area))

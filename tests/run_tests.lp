@@ -979,20 +979,20 @@ fn main
     else
         failed = failed + 1
 
-    // 195: Core Silicon Hardware Primitives & Register Allocation
-    if run_single_test(compiler, "tests/31_core_silicon_primitives.lp", "31_core_silicon_primitives") == 1
+    // 195: SSA Optimization Machine Emission Verification
+    if run_single_test(compiler, "tests/test_ssa_emission_opt.lp", "test_ssa_emission_opt") == 1
         passed = passed + 1
     else
         failed = failed + 1
 
-    // 196: Binary Formats Subsystem (ELF, PE, Mach-O, DWARF, Multiboot2)
-    if run_single_test(compiler, "tests/52_binary_formats_subsystem.lp", "52_binary_formats_subsystem") == 1
+    // 196: Forensic Audit Comprehensive Regression Suite
+    if run_single_test(compiler, "tests/test_forensic_audit_fixes.lp", "test_forensic_audit_fixes") == 1
         passed = passed + 1
     else
         failed = failed + 1
 
-    // 197: Sovereign Compiler Diagnostics & TrueColor Error Formatting
-    if run_single_test(compiler, "tests/test_diagnostics.lp", "test_diagnostics") == 1
+    // 197: Sovereign Ecosystem & Package Fixes Verification Suite
+    if run_single_test(compiler, "tests/test_sovereign_ecosystem_fixes.lp", "test_sovereign_ecosystem_fixes") == 1
         passed = passed + 1
     else
         failed = failed + 1

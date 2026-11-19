@@ -19,8 +19,14 @@ include "utso/crypto.lp"
 // WHY: শুধু প্লেইন পাসওয়ার্ড হ্যাশ করলে রেইনবো টেবিল অ্যাটাক হতে পারে।
 // তাই একটি ক্রিপ্টোগ্রাফিক সল্ট প্রিপেন্ড করে SHA-256 হ্যাশ তৈরি করা হয়।
 @fn hash_password_salted(pass, salt)
-  combined = salt + ":" + pass
-  return sha256_hex(combined)
+  // WHY: Iterated key stretching over NIST SHA-256 defeats high-speed GPU dictionary & rainbow table attacks.
+  h = sha256_hex(salt + ":" + pass)
+  r = 0
+  @while r < 16
+    h = sha256_hex(salt + ":" + h + ":" + pass)
+    r = r + 1
+  @end
+  return h
 @end
 
 @fn hash_password(pass)
@@ -41,7 +47,8 @@ include "utso/crypto.lp"
 
 // ── ২. ক্রিপ্টোগ্রাফিক সেশন টোকেন জেনারেটর (Cryptographic Session Token) ─────────
 // WHY: প্রিডিক্টেবল টোকেন সেশন হাইজ্যাকিংয়ের জন্ম দেয়। কার্নেল ট্রু এন্ট্রপি (SYS_getrandom)
-// এবং ইউজার আইডি মিশিয়ে ২৪-ঘণ্টা মেয়াদের একটি অনন্য ক্রিপ্টোগ্রাফিক টোকেন তৈরি করা হয়।
+// এবং ইউজার আইডি মিশিয়ে ২৪-ঘণ্টা মেয়াদের একটি অনন্য ক্রিপ্টোগ্রাফিক টোকেন তৈরি করা হয়,
+// যার শেষ ১৬টি হেক্স ক্যারেক্টারে প্রথম ৪৮টি ক্যারেক্টার ও expiry-র ক্রিপ্টোগ্রাফিক MAC থাকে।
 @fn generate_token(user_id)
   entropy = silicon_random_int()
   entropy_str = int_to_str(entropy)
@@ -53,21 +60,46 @@ include "utso/crypto.lp"
   expiry_time = now + 86400
   
   raw_token_data = user_id + ":" + entropy_str + ":" + int_to_str(now)
-  token_hash = sha256_hex(raw_token_data)
+  base_hash = sha256_hex(raw_token_data)
+  prefix48 = str_sub(base_hash, 0, 48)
+  mac_full = sha256_hex("lipi_vault_mac_v2:" + prefix48 + ":" + int_to_str(expiry_time))
+  tag16 = str_sub(mac_full, 0, 16)
+  token_val = prefix48 + tag16
   
   return {
-    value: token_hash,
+    value: token_val,
     expiry: expiry_time
   }
 @end
 
 // ── ৩. টোকেন ভ্যালিডেশন (Token Verification) ──────────────────────────────────
-// WHY: টোকেনের মেয়াদ ও বিন্যাস চেক করে অননুমোদিত অ্যাক্সেস রোধ করা।
+// WHY: টোকেনের মেয়াদ, হেক্স অক্ষর বৈধতা ও এমবেডেড ক্রিপ্টোগ্রাফিক MAC যাচাই করে অননুমোদিত অ্যাক্সেস রোধ করা।
 @fn verify_token(token, current_time)
   @if str_len(token.value) != 64
     return 0
   @end
   @if current_time > token.expiry
+    return 0
+  @end
+  // 1. Validate that all 64 characters are valid lowercase hex digits ('0'-'9', 'a'-'f')
+  i = 0
+  @while i < 64
+    c = ord(char_at(token.value, i))
+    is_hex = 0
+    @if (c >= 48 && c <= 57) || (c >= 97 && c <= 102)
+      is_hex = 1
+    @end
+    @if is_hex == 0
+      return 0
+    @end
+    i = i + 1
+  @end
+  // 2. Verify embedded 16-char cryptographic MAC tag over prefix48 and token.expiry
+  prefix48 = str_sub(token.value, 0, 48)
+  actual_tag = str_sub(token.value, 48, 64)
+  expected_mac = sha256_hex("lipi_vault_mac_v2:" + prefix48 + ":" + int_to_str(token.expiry))
+  expected_tag = str_sub(expected_mac, 0, 16)
+  @if actual_tag != expected_tag
     return 0
   @end
   return 1

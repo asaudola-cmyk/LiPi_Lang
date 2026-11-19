@@ -145,7 +145,12 @@ fn build_pipeline_run_all pipe
     while i < tcount
         t = get(targets, i)
         say "  • [" + (i + 1) + "/" + tcount + "] Building " + t.bt_name + "..."
+        t_start_ms = clock_ms()
         c_code = spawn_process(compiler, t.bt_source_file, t.bt_output_binary)
+        t_elapsed_ms = clock_ms() - t_start_ms
+        if t_elapsed_ms < 1
+            t_elapsed_ms = 1
+        end
         if c_code == 0
             if t.bt_output_binary == "bin/aati"
                 rfd = syscall(2, "bin/aati", 0, 0, 0, 0, 0)
@@ -165,13 +170,13 @@ fn build_pipeline_run_all pipe
                             syscall(3, wfd2, 0, 0, 0, 0, 0)
                             syscall(90, "bin/lipipkg", 493, 0, 0, 0, 0)
                     syscall(11, cbuf, 1048576, 0, 0, 0, 0)
-            build_target_mark_complete(t, 1, 15)
+            build_target_mark_complete(t, 1, t_elapsed_ms)
             pipe.bp_passed_targets = pipe.bp_passed_targets + 1
-            say "    ✔ PASS: " + t.bt_name
+            say "    ✔ PASS: " + t.bt_name + " (" + str(t_elapsed_ms) + " ms)"
         else
-            build_target_mark_complete(t, 0, 15)
+            build_target_mark_complete(t, 0, t_elapsed_ms)
             pipe.bp_failed_targets = pipe.bp_failed_targets + 1
-            say "    ✖ FAIL: " + t.bt_name + " (exit: " + str(c_code) + ")"
+            say "    ✖ FAIL: " + t.bt_name + " (exit: " + str(c_code) + ", " + str(t_elapsed_ms) + " ms)"
         i = i + 1
     return pipe.bp_passed_targets
 

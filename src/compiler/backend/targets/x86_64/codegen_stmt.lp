@@ -604,6 +604,119 @@ fn x86_synth_compile_statement s toks pos_box
 
             if is_assign == 1
                 if is_compound == 0
+                    // Fast Path A & B: Direct 1-cycle in-register increment/accumulate for unspilled integer locals:
+                    //   1) `x = x + k` or `x = x - k` (0 <= k <= 127) -> single `add/sub reg, imm8`
+                    //   2) `x = x + (pure_int_expr)` -> evaluate `(expr)` into %rax, then single `add reg, rax`
+                    if assigned_type == "" and next_pos + 3 < toks.len()
+                        lv_fast = x86_synth_find_local_var(s, var_name)
+                        if lv_fast != 0 and lv_fast.lv_is_spilled == 0 and lv_fast.lv_reg >= 0 and lv_fast.lv_prim_type == "int"
+                            ft1 = toks[next_pos + 1]
+                            ft2 = toks[next_pos + 2]
+                            ft3 = toks[next_pos + 3]
+                            if x86_synth_is_ident_token(ft1.tok_kind) == 1 and ft1.tok_text == var_name
+                                is_fplus = 0
+                                is_fminus = 0
+                                if ft2.tok_kind == TOK_PLUS() or ft2.tok_text == "+"
+                                    is_fplus = 1
+                                elif ft2.tok_kind == TOK_MINUS() or ft2.tok_text == "-"
+                                    is_fminus = 1
+                                end
+                                // Case 1: x = x + k / x = x - k
+                                if (is_fplus == 1 or is_fminus == 1) and ft3.tok_kind == TOK_INT()
+                                    fk = ft3.tok_int_val
+                                    f_ok_end = 0
+                                    if next_pos + 4 >= toks.len()
+                                        f_ok_end = 1
+                                    else
+                                        fak = toks[next_pos + 4].tok_kind
+                                        if fak == TOK_NEWLINE() or fak == TOK_SEMI() or fak == TOK_COMMENT_LINE() or fak == TOK_COMMENT_BLOCK()
+                                            f_ok_end = 1
+                                        end
+                                    end
+                                    if f_ok_end == 1 and fk >= 0 and fk <= 127
+                                        freg = lv_fast.lv_reg
+                                        fmod = 192
+                                        if is_fminus == 1
+                                            fmod = 232
+                                        end
+                                        if freg < 8
+                                            x86_synth_emit_byte(s, 72)
+                                            x86_synth_emit_byte(s, 131)
+                                            x86_synth_emit_byte(s, fmod + freg)
+                                            x86_synth_emit_byte(s, fk)
+                                        else
+                                            x86_synth_emit_byte(s, 73)
+                                            x86_synth_emit_byte(s, 131)
+                                            x86_synth_emit_byte(s, fmod + (freg - 8))
+                                            x86_synth_emit_byte(s, fk)
+                                        end
+                                        list_set(pos_box, 0, next_pos + 4)
+                                        return 0
+                                    end
+                                end
+                                // Case 2: x = x + (pure_int_expr) with matching ')' at end of statement
+                                if is_fplus == 1 and (ft3.tok_kind == TOK_LPAREN() or ft3.tok_text == "(")
+                                    sp_i = next_pos + 4
+                                    sp_depth = 1
+                                    sp_pure = 1
+                                    while sp_i < toks.len() and sp_depth > 0
+                                        stk = toks[sp_i]
+                                        sk = stk.tok_kind
+                                        if sk == TOK_LPAREN() or stk.tok_text == "("
+                                            sp_depth = sp_depth + 1
+                                        elif sk == TOK_RPAREN() or stk.tok_text == ")"
+                                            sp_depth = sp_depth - 1
+                                            if sp_depth == 0
+                                                break
+                                            end
+                                        elif sk == TOK_STR() or sk == TOK_FLOAT()
+                                            sp_pure = 0
+                                            break
+                                        elif x86_synth_is_ident_token(sk) == 1
+                                            if sp_i + 1 < toks.len() and (toks[sp_i + 1].tok_kind == TOK_LPAREN() or toks[sp_i + 1].tok_text == "(" or toks[sp_i + 1].tok_kind == TOK_DOT() or toks[sp_i + 1].tok_kind == TOK_LBRACKET())
+                                                sp_pure = 0
+                                                break
+                                            end
+                                            lv_inner = x86_synth_find_local_var(s, stk.tok_text)
+                                            if lv_inner != 0 and (lv_inner.lv_prim_type == "str" or lv_inner.lv_prim_type == "float")
+                                                sp_pure = 0
+                                                break
+                                            end
+                                        end
+                                        sp_i = sp_i + 1
+                                    end
+                                    if sp_pure == 1 and sp_depth == 0
+                                        sp_end_ok = 0
+                                        if sp_i + 1 >= toks.len()
+                                            sp_end_ok = 1
+                                        else
+                                            se_k = toks[sp_i + 1].tok_kind
+                                            if se_k == TOK_NEWLINE() or se_k == TOK_SEMI() or se_k == TOK_COMMENT_LINE() or se_k == TOK_COMMENT_BLOCK()
+                                                sp_end_ok = 1
+                                            end
+                                        end
+                                        if sp_end_ok == 1
+                                            list_set(pos_box, 0, next_pos + 3)
+                                            x86_synth_compile_expr(s, toks, pos_box)
+                                            freg2 = lv_fast.lv_reg
+                                            // add freg2, rax (REX.W + 01 /0)
+                                            if freg2 < 8
+                                                x86_synth_emit_byte(s, 72)
+                                                x86_synth_emit_byte(s, 1)
+                                                x86_synth_emit_byte(s, 192 + freg2)
+                                            else
+                                                x86_synth_emit_byte(s, 73)
+                                                x86_synth_emit_byte(s, 1)
+                                                x86_synth_emit_byte(s, 192 + (freg2 - 8))
+                                            end
+                                            return 0
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+
                     is_int_lit = 0
                     int_lit_val = 0
                     if next_pos + 1 < toks.len()

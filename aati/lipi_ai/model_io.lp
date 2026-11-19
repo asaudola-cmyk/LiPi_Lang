@@ -20,6 +20,53 @@ import "utso/os/fs"
   step: i64
 @end
 
+@fn save_model_weights(model_name: string, step: i64, weights: array, path: string) -> i64
+  w_str = ""
+  i = 0
+  n = weights.len()
+  @while i < n
+    @if i > 0
+      w_str = str_concat(w_str, ",")
+    @end
+    w_str = str_concat(w_str, to_str(weights[i]))
+    i = i + 1
+  @end
+  hdr = str_concat("LIPIMDL\nmodel=", str_concat(model_name, str_concat("\nstep=", str_concat(to_str(step), "\nweights="))))
+  content = str_concat(hdr, str_concat(w_str, "\n"))
+  file_write(path, content)
+  return 1
+@end
+
+@fn load_model_weights(path: string) -> array
+  @if file_exists(path) == 0
+    return []
+  @end
+  content = file_read(path)
+  lines = string_split(content, "\n")
+  i = 0
+  num_items = lines.len()
+  @while i < num_items
+    line = lines[i]
+    @if string_starts_with(line, "weights=")
+      raw_w = str_substr(line, 8, str_len(line))
+      @if str_len(raw_w) == 0
+        return []
+      @end
+      parts = string_split(raw_w, ",")
+      out = []
+      pi = 0
+      pn = parts.len()
+      @while pi < pn
+        out = out.push(str_to_int(parts[pi]))
+        pi = pi + 1
+      @end
+      return out
+    @end
+    i = i + 1
+  @end
+  return []
+@end
+
 @fn model_dtype_to_code(dtype: string) -> i64
   @if str_eq(dtype, "f32") return 1 @end
   @if str_eq(dtype, "f64") return 2 @end

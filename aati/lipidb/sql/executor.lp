@@ -28,9 +28,9 @@ import "utso/string"
   n = table_rows.len()
   @while i < n
     row = table_rows[i]
-    @if filter_col == "" || filter_val == 0
+    @if filter_col < 0
       res = res.push(row)
-    @elif row.contains(filter_col) && row[filter_col] == filter_val
+    @elif filter_col < row.len() && row[filter_col] == filter_val
       res = res.push(row)
     @end
     i = i + 1
@@ -77,7 +77,7 @@ import "utso/string"
   @while i < left_rows.len()
     l_row = left_rows[i]
     @if l_row.contains(left_col)
-      k = l_row[left_col].to_str()
+      k = l_row[left_col]
       @if !hash_table.contains(k)
         hash_table[k] = []
       @end
@@ -92,7 +92,7 @@ import "utso/string"
   @while j < right_rows.len()
     r_row = right_rows[j]
     @if r_row.contains(right_col)
-      rk = r_row[right_col].to_str()
+      rk = r_row[right_col]
       @if hash_table.contains(rk)
         matches = hash_table[rk]
         m = 0
@@ -117,4 +117,52 @@ import "utso/string"
   @end
 
   return joined
+@end
+
+@struct KvIndexEntry
+  kv_key: i64
+  kv_val: i64
+@end
+
+@fn kv_index_entry_new(k, v)
+  e = KvIndexEntry()
+  e.kv_key = k
+  e.kv_val = v
+  return e
+@end
+
+@fn executor_kv_index_lookup(index_entries, target_key)
+  // WHY: Connects relational SQL execution directly to B+Tree / KV storage scan entries (KvIndexEntry).
+  @if index_entries == 0
+    return []
+  @end
+  matches = []
+  i = 0
+  n = index_entries.len()
+  @while i < n
+    entry = index_entries[i]
+    @if entry.kv_key == target_key
+      matches = matches.push(entry.kv_val)
+    @end
+    i = i + 1
+  @end
+  return matches
+@end
+
+@fn executor_aggregate_sum(rows, col_idx)
+  // WHY: Executes vectorized SUM(col) aggregation over scanned table rows.
+  @if rows == 0 || col_idx < 0
+    return 0
+  @end
+  total = 0
+  i = 0
+  n = rows.len()
+  @while i < n
+    row = rows[i]
+    @if col_idx < row.len()
+      total = total + row[col_idx]
+    @end
+    i = i + 1
+  @end
+  return total
 @end

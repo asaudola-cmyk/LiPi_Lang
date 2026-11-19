@@ -40,6 +40,7 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   pi_exit_process_iat_rva: i64 // RVA of the ExitProcess slot within the IAT
   pi_get_std_handle_iat_rva: i64 // RVA of the GetStdHandle slot within the IAT
   pi_write_file_iat_rva: i64   // RVA of the WriteFile slot within the IAT
+  pi_virtual_alloc_iat_rva: i64 // RVA of the VirtualAlloc slot within the IAT
 @end
 
 // ============================================================================
@@ -106,28 +107,28 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 
 @fn pe_build_kernel32_idata(idata_rva)
   // WHY: Constructs a bit-perfect Microsoft PE32+ .idata (Import Table) section for KERNEL32.DLL:
-  // Layout within .idata:
-  // 1. [Offset 0x00 .. 0x27]: Import Directory Table (2 x IMAGE_IMPORT_DESCRIPTOR: KERNEL32 + null terminator = 40 bytes)
-  // 2. [Offset 0x28 .. 0x47]: Import Lookup Table / INT (4 x 64-bit thunks: ExitProcess, GetStdHandle, WriteFile, null = 32 bytes)
-  // 3. [Offset 0x48 .. 0x67]: Import Address Table / IAT (4 x 64-bit thunks: ExitProcess, GetStdHandle, WriteFile, null = 32 bytes)
-  // 4. [Offset 0x68 .. 0x75]: Hint/Name for ExitProcess (Hint: 2 bytes, Name: 12 bytes = 14 bytes)
-  // 5. [Offset 0x76 .. 0x85]: Hint/Name for GetStdHandle (Hint: 2 bytes, Name: 13 bytes + 1 pad = 16 bytes)
-  // 6. [Offset 0x86 .. 0x91]: Hint/Name for WriteFile (Hint: 2 bytes, Name: 10 bytes = 12 bytes)
-  // 7. [Offset 0x92 .. 0x9F]: DLL Name "KERNEL32.dll\0" (13 bytes + 1 pad = 14 bytes)
-  // Total raw size: 160 bytes.
+  // Layout within .idata (192 bytes total):
+  // 1. [0x00 .. 0x27]: Import Directory Table (2 x IMAGE_IMPORT_DESCRIPTOR = 40 bytes)
+  // 2. [0x28 .. 0x4F]: Import Lookup Table / INT (5 x 64-bit thunks: ExitProcess, GetStdHandle, WriteFile, VirtualAlloc, null = 40 bytes)
+  // 3. [0x50 .. 0x77]: Import Address Table / IAT (5 x 64-bit thunks = 40 bytes)
+  // 4. [0x78 .. 0x85]: Hint/Name ExitProcess (14 bytes)
+  // 5. [0x86 .. 0x95]: Hint/Name GetStdHandle (16 bytes)
+  // 6. [0x96 .. 0xA1]: Hint/Name WriteFile (12 bytes)
+  // 7. [0xA2 .. 0xB1]: Hint/Name VirtualAlloc (16 bytes)
+  // 8. [0xB2 .. 0xBF]: DLL Name "KERNEL32.dll\0\0" (14 bytes)
   import_dir_rva = idata_rva
   import_dir_size = 40
   ilt_rva = idata_rva + 40
-  ilt_size = 32
-  iat_rva = idata_rva + 72
-  iat_size = 32
+  ilt_size = 40
+  iat_rva = idata_rva + 80
+  iat_size = 40
 
-  hint_exit_rva = idata_rva + 104
-  hint_getstd_rva = idata_rva + 118
-  hint_write_rva = idata_rva + 134
-  dll_name_rva = idata_rva + 146
+  hint_exit_rva = idata_rva + 120
+  hint_getstd_rva = idata_rva + 134
+  hint_write_rva = idata_rva + 150
+  hint_valloc_rva = idata_rva + 162
+  dll_name_rva = idata_rva + 178
 
-  // 1. KERNEL32.DLL Import Descriptor (20 bytes)
   desc_k32 = ImageImportDescriptor()
   desc_k32.iid_original_first_thunk = ilt_rva
   desc_k32.iid_time_date_stamp = 0
@@ -136,11 +137,9 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   desc_k32.iid_first_thunk = iat_rva
   k32_bytes = pe_import_descriptor_serialize(desc_k32)
 
-  // 2. Null Terminator Descriptor (20 bytes)
   null_desc = pe_import_descriptor_null()
   null_bytes = pe_import_descriptor_serialize(null_desc)
 
-  // 3. ILT (Import Lookup Table) entries (32 bytes)
   ilt_bytes = []
   e0 = pe_pack_u64(hint_exit_rva)
   ilt_bytes = pe_concat(ilt_bytes, e0)
@@ -148,24 +147,25 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   ilt_bytes = pe_concat(ilt_bytes, e1)
   e2 = pe_pack_u64(hint_write_rva)
   ilt_bytes = pe_concat(ilt_bytes, e2)
-  e3 = pe_pack_u64(0)
+  e3 = pe_pack_u64(hint_valloc_rva)
   ilt_bytes = pe_concat(ilt_bytes, e3)
+  e4 = pe_pack_u64(0)
+  ilt_bytes = pe_concat(ilt_bytes, e4)
 
-  // 4. IAT (Import Address Table) entries (32 bytes)
   iat_bytes = []
   iat_bytes = pe_concat(iat_bytes, e0)
   iat_bytes = pe_concat(iat_bytes, e1)
   iat_bytes = pe_concat(iat_bytes, e2)
   iat_bytes = pe_concat(iat_bytes, e3)
+  iat_bytes = pe_concat(iat_bytes, e4)
 
-  // 5. Hint/Name Table (14 + 16 + 12 = 42 bytes)
   hints_bytes = [
     0, 0, 69, 120, 105, 116, 80, 114, 111, 99, 101, 115, 115, 0,
     0, 0, 71, 101, 116, 83, 116, 100, 72, 97, 110, 100, 108, 101, 0, 0,
-    0, 0, 87, 114, 105, 116, 101, 70, 105, 108, 101, 0
+    0, 0, 87, 114, 105, 116, 101, 70, 105, 108, 101, 0,
+    0, 0, 86, 105, 114, 116, 117, 97, 108, 65, 108, 108, 111, 99, 0, 0
   ]
 
-  // 6. DLL Name ASCII string "KERNEL32.dll\0" padded to even boundary (14 bytes)
   dll_bytes = [
     75, 69, 82, 78, 69, 76, 51, 50, 46, 100, 108, 108, 0, 0
   ]
@@ -187,58 +187,290 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   info.pi_exit_process_iat_rva = iat_rva + 0
   info.pi_get_std_handle_iat_rva = iat_rva + 8
   info.pi_write_file_iat_rva = iat_rva + 16
+  info.pi_virtual_alloc_iat_rva = iat_rva + 24
   return info
 @end
 
 // ============================================================================
-// 5. WINDOWS X64 ENTRY BOOTSTRAP STUB
+// 5. WINDOWS X64 ENTRY BOOTSTRAP STUB + WIN32 KERNEL32 TRAMPOLINES (256 BYTES)
 // ============================================================================
 
 @fn pe_build_start_stub(main_entry_offset, exit_process_iat_rva, text_rva)
-  // WHY: Windows x64 process entry bootstrap stub (64 bytes).
-  // Conforms strictly to Microsoft x64 calling convention:
-  // 1. sub rsp, 40                [0x48, 0x83, 0xEC, 0x28] (4 bytes: align stack & shadow space)
-  // 2. call rel32                 [0xE8, d0, d1, d2, d3]   (5 bytes: call user main)
-  // 3. mov ecx, eax               [0x89, 0xC1]             (2 bytes: copy exit code to ecx)
-  // 4. call [rip + disp32]        [0xFF, 0x15, d0, d1, d2, d3] (6 bytes: call ExitProcess in IAT)
-  // 5. add rsp, 40                [0x48, 0x83, 0xC4, 0x28] (4 bytes: clean shadow frame)
-  // 6. ret                        [0xC3]                   (1 byte: return)
-  // 7. int3                       [0xCC]                   (1 byte: trap)
-  // 8. NOPs (0x90) up to 64 bytes total
+  // WHY: Windows x64 entry stub + 3 native KERNEL32.dll Win64 ABI trampolines (exact 256 bytes):
+  //   [0..16]    _start:               sub rsp, 40; call user_code(+256); mov ecx, eax; call [ExitProcess]
+  //   [17..63]   __win64_write_stdout: (rsi=buf, edi=len) -> GetStdHandle(-11) + WriteFile
+  //   [64..143]  __win64_virtual_alloc:(rsi=bytes) -> VirtualAlloc(NULL, min(rsi, 64MB), 0x3000, PAGE_RW)
+  //   [144..255] __win64_write_fd:     (rdi=fd, rsi=buf, rdx=len) -> routes fd 1/2 to __win64_write_stdout
   stub = []
-  // 1. sub rsp, 40
+  // 1. [0..16] _start
   stub = stub.push(72) stub = stub.push(131) stub = stub.push(236) stub = stub.push(40)
-
-  // 2. call rel32 (target is at text_rva + 64 + main_entry_offset; rip after call is text_rva + 9)
-  rel32 = (64 + main_entry_offset) - 9
+  rel32 = (256 + main_entry_offset) - 9
   cd = pe_pack_u32(rel32)
   stub = stub.push(232)
   stub = stub.push(cd[0]) stub = stub.push(cd[1]) stub = stub.push(cd[2]) stub = stub.push(cd[3])
-
-  // 3. mov ecx, eax
   stub = stub.push(137) stub = stub.push(193)
-
-  // 4. call qword ptr [rip + disp32] (call ExitProcess through IAT)
   disp32 = exit_process_iat_rva - (text_rva + 17)
   id = pe_pack_u32(disp32)
   stub = stub.push(255) stub = stub.push(21)
   stub = stub.push(id[0]) stub = stub.push(id[1]) stub = stub.push(id[2]) stub = stub.push(id[3])
 
-  // 5. add rsp, 40
-  stub = stub.push(72) stub = stub.push(131) stub = stub.push(196) stub = stub.push(40)
-
-  // 6. ret
+  // 2. [17..63] __win64_write_stdout (47 bytes)
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(236) stub = stub.push(56)
+  stub = stub.push(185) stub = stub.push(245) stub = stub.push(255) stub = stub.push(255) stub = stub.push(255)
+  getstd_iat_rva = exit_process_iat_rva + 8
+  g_disp = getstd_iat_rva - (text_rva + 32)
+  gd = pe_pack_u32(g_disp)
+  stub = stub.push(255) stub = stub.push(21)
+  stub = stub.push(gd[0]) stub = stub.push(gd[1]) stub = stub.push(gd[2]) stub = stub.push(gd[3])
+  stub = stub.push(72) stub = stub.push(137) stub = stub.push(193)
+  stub = stub.push(72) stub = stub.push(137) stub = stub.push(242)
+  stub = stub.push(65) stub = stub.push(137) stub = stub.push(248)
+  stub = stub.push(76) stub = stub.push(141) stub = stub.push(76) stub = stub.push(36) stub = stub.push(40)
+  stub = stub.push(49) stub = stub.push(192)
+  stub = stub.push(72) stub = stub.push(137) stub = stub.push(68) stub = stub.push(36) stub = stub.push(32)
+  wf_iat_rva = exit_process_iat_rva + 16
+  w_disp = wf_iat_rva - (text_rva + 59)
+  wd = pe_pack_u32(w_disp)
+  stub = stub.push(255) stub = stub.push(21)
+  stub = stub.push(wd[0]) stub = stub.push(wd[1]) stub = stub.push(wd[2]) stub = stub.push(wd[3])
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(196) stub = stub.push(56)
   stub = stub.push(195)
 
-  // 7. int3
-  stub = stub.push(204)
+  // 3. [64..143] __win64_virtual_alloc (66 active bytes + 14 NOP pad -> offset 144)
+  // Save caller-clobbered Win64 volatile regs: rcx, rdx, r8, r9, r10, r11 (10 bytes: 64..73)
+  stub = stub.push(81) stub = stub.push(82)
+  stub = stub.push(65) stub = stub.push(80) stub = stub.push(65) stub = stub.push(81)
+  stub = stub.push(65) stub = stub.push(82) stub = stub.push(65) stub = stub.push(83)
+  // sub rsp, 40 (4 bytes: 74..77 -> 16B stack alignment + 32B Win64 shadow space)
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(236) stub = stub.push(40)
+  // xor ecx, ecx; mov rdx, rsi (5 bytes: 78..82)
+  stub = stub.push(49) stub = stub.push(201)
+  stub = stub.push(72) stub = stub.push(137) stub = stub.push(242)
+  // Clamp huge 4GB bump-arena request to 64MB commit cap: cmp rdx, 0x04000000; jbe +5; mov edx, 0x04000000 (14 bytes: 83..96)
+  stub = stub.push(72) stub = stub.push(129) stub = stub.push(250) stub = stub.push(0) stub = stub.push(0) stub = stub.push(0) stub = stub.push(4)
+  stub = stub.push(118) stub = stub.push(5)
+  stub = stub.push(186) stub = stub.push(0) stub = stub.push(0) stub = stub.push(0) stub = stub.push(4)
+  // mov r8d, 0x3000 (MEM_COMMIT|MEM_RESERVE); mov r9d, 4 (PAGE_READWRITE) (12 bytes: 97..108)
+  stub = stub.push(65) stub = stub.push(184) stub = stub.push(0) stub = stub.push(48) stub = stub.push(0) stub = stub.push(0)
+  stub = stub.push(65) stub = stub.push(185) stub = stub.push(4) stub = stub.push(0) stub = stub.push(0) stub = stub.push(0)
+  // call [rip + disp_valloc] (IAT slot exit_process_iat_rva + 24; rip after call is text_rva + 115: 109..114)
+  va_iat_rva = exit_process_iat_rva + 24
+  va_disp = va_iat_rva - (text_rva + 115)
+  vad = pe_pack_u32(va_disp)
+  stub = stub.push(255) stub = stub.push(21)
+  stub = stub.push(vad[0]) stub = stub.push(vad[1]) stub = stub.push(vad[2]) stub = stub.push(vad[3])
+  // add rsp, 40; pop r11..rcx; ret (15 bytes: 115..129)
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(196) stub = stub.push(40)
+  stub = stub.push(65) stub = stub.push(91) stub = stub.push(65) stub = stub.push(90)
+  stub = stub.push(65) stub = stub.push(89) stub = stub.push(65) stub = stub.push(88)
+  stub = stub.push(90) stub = stub.push(89)
+  stub = stub.push(195)
+  @while stub.len() < 144
+    stub = stub.push(144)
+  @end
 
-  // 8. Pad with NOPs to 64 bytes
-  @while stub.len() < 64
+  // 4. [144..255] __win64_write_fd (rdi=fd, rsi=buf, rdx=len)
+  // cmp rdi, 2; ja +43 (.not_console at offset 193) (6 bytes: 144..149)
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(255) stub = stub.push(2)
+  stub = stub.push(119) stub = stub.push(43)
+  // push rdi, rsi, rdx, rcx, r8, r9, r10, r11 (12 bytes: 150..161)
+  stub = stub.push(87) stub = stub.push(86) stub = stub.push(82) stub = stub.push(81)
+  stub = stub.push(65) stub = stub.push(80) stub = stub.push(65) stub = stub.push(81)
+  stub = stub.push(65) stub = stub.push(82) stub = stub.push(65) stub = stub.push(83)
+  // sub rsp, 8; mov edi, edx (6 bytes: 162..167)
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(236) stub = stub.push(8)
+  stub = stub.push(137) stub = stub.push(215)
+  // call __win64_write_stdout at offset 17 (rip after call is 173 -> rel32 = 17 - 173 = -156) (5 bytes: 168..172)
+  wfd_rel = pe_pack_u32(17 - 173)
+  stub = stub.push(232)
+  stub = stub.push(wfd_rel[0]) stub = stub.push(wfd_rel[1]) stub = stub.push(wfd_rel[2]) stub = stub.push(wfd_rel[3])
+  // add rsp, 8; pop r11..rdi; mov rax, rdx; ret (20 bytes: 173..192)
+  stub = stub.push(72) stub = stub.push(131) stub = stub.push(196) stub = stub.push(8)
+  stub = stub.push(65) stub = stub.push(91) stub = stub.push(65) stub = stub.push(90)
+  stub = stub.push(65) stub = stub.push(89) stub = stub.push(65) stub = stub.push(88)
+  stub = stub.push(89) stub = stub.push(90) stub = stub.push(94) stub = stub.push(95)
+  stub = stub.push(72) stub = stub.push(137) stub = stub.push(208)
+  stub = stub.push(195)
+  // .not_console (offset 193): mov rax, -38 (-ENOSYS); ret (8 bytes: 193..200)
+  stub = stub.push(72) stub = stub.push(199) stub = stub.push(192)
+  stub = stub.push(218) stub = stub.push(255) stub = stub.push(255) stub = stub.push(255)
+  stub = stub.push(195)
+  @while stub.len() < 256
     stub = stub.push(144)
   @end
 
   return stub
+@end
+
+@fn pe_read_code_u64(arr, idx)
+  lo = arr[idx] + (arr[idx + 1] * 256) + (arr[idx + 2] * 65536) + (arr[idx + 3] * 16777216)
+  hi = arr[idx + 4] + (arr[idx + 5] * 256) + (arr[idx + 6] * 65536) + (arr[idx + 7] * 16777216)
+  return lo + (hi * 4294967296)
+@end
+
+@fn pe_patch_win64_code(code_bytes, image_base, rdata_rva, rdata_vsize, data_rva)
+  // WHY: Relocates ALL Linux ELF64 virtual addresses (.rodata and W^X RW runtime globals)
+  // to Windows PE32+ addresses (image_base + rdata_rva / data_rva) and eliminates 100% of
+  // Linux `syscall` (0F 05) and `hlt` (F4) instructions by lowering them to native Win64 ABI
+  // calls into KERNEL32.dll!GetStdHandle, WriteFile, VirtualAlloc, and ExitProcess.
+  n = code_bytes.len()
+  @if n == 0 return code_bytes @end
+  out = []
+  i = 0
+  @while i < n
+    out = out.push(code_bytes[i])
+    i = i + 1
+  @end
+
+  linux_ro_base = 1073742128 + n
+  linux_ro_end = linux_ro_base + rdata_vsize
+  text_ro_end = 304 + n + rdata_vsize
+  rem_page = text_ro_end % 4096
+  pad_bytes = 0
+  @if rem_page != 0
+    pad_bytes = 4096 - rem_page
+  @end
+  linux_rw_base = 1073741824 + text_ro_end + pad_bytes
+  linux_rw_end = linux_rw_base + 128
+
+  win_ro_base = image_base + rdata_rva
+  win_rw_base = image_base + data_rva
+  stub_sz = 256
+
+  idx = 0
+  @while idx < n
+    // 1. 27-byte inline Linux SYS_write stdout print sequence -> call __win64_write_stdout (+17)
+    @if idx + 26 < n && out[idx] == 184 && out[idx + 1] == 1 && out[idx + 2] == 0 && out[idx + 3] == 0 && out[idx + 4] == 0 && out[idx + 5] == 191 && out[idx + 6] == 1 && out[idx + 10] == 72 && out[idx + 11] == 190 && out[idx + 20] == 186 && out[idx + 25] == 15 && out[idx + 26] == 5
+      l0 = out[idx + 21]
+      l1 = out[idx + 22]
+      l2 = out[idx + 23]
+      l3 = out[idx + 24]
+      orig_vaddr = pe_read_code_u64(out, idx + 12)
+      new_vaddr = orig_vaddr
+      @if orig_vaddr >= linux_ro_base && orig_vaddr <= linux_ro_end
+        new_vaddr = win_ro_base + (orig_vaddr - linux_ro_base)
+      @end
+      vb = pe_pack_u64(new_vaddr)
+      list_set(out, idx + 0, 86)
+      list_set(out, idx + 1, 87)
+      list_set(out, idx + 2, 144)
+      list_set(out, idx + 3, 144)
+      list_set(out, idx + 4, 144)
+      list_set(out, idx + 5, 191)
+      list_set(out, idx + 6, l0)
+      list_set(out, idx + 7, l1)
+      list_set(out, idx + 8, l2)
+      list_set(out, idx + 9, l3)
+      k = 0
+      @while k < 8
+        list_set(out, idx + 12 + k, vb[k])
+        k = k + 1
+      @end
+      call_rel = 17 - (stub_sz + idx + 25)
+      cb = pe_pack_u32(call_rel)
+      list_set(out, idx + 20, 232)
+      list_set(out, idx + 21, cb[0])
+      list_set(out, idx + 22, cb[1])
+      list_set(out, idx + 23, cb[2])
+      list_set(out, idx + 24, cb[3])
+      list_set(out, idx + 25, 95)
+      list_set(out, idx + 26, 94)
+      idx = idx + 27
+    // 2. 18-byte print_float stdout write sequence -> call __win64_write_stdout (+17)
+    @elif idx + 17 < n && out[idx] == 184 && out[idx + 1] == 1 && out[idx + 2] == 0 && out[idx + 3] == 0 && out[idx + 4] == 0 && out[idx + 5] == 191 && out[idx + 6] == 1 && out[idx + 10] == 76 && out[idx + 11] == 137 && out[idx + 12] == 198 && out[idx + 13] == 76 && out[idx + 14] == 137 && out[idx + 15] == 202 && out[idx + 16] == 15 && out[idx + 17] == 5
+      // mov rsi, r8 (3B); mov edi, r9d (3B); call __win64_write_stdout (5B); 7 NOPs
+      list_set(out, idx + 0, 76) list_set(out, idx + 1, 137) list_set(out, idx + 2, 198)
+      list_set(out, idx + 3, 68) list_set(out, idx + 4, 137) list_set(out, idx + 5, 207)
+      pf_rel = 17 - (stub_sz + idx + 11)
+      pfb = pe_pack_u32(pf_rel)
+      list_set(out, idx + 6, 232)
+      list_set(out, idx + 7, pfb[0]) list_set(out, idx + 8, pfb[1]) list_set(out, idx + 9, pfb[2]) list_set(out, idx + 10, pfb[3])
+      k = 11
+      @while k < 18
+        list_set(out, idx + k, 144)
+        k = k + 1
+      @end
+      idx = idx + 18
+    // 3. 15-byte clock_ms SYS_clock_gettime sequence -> zero timespec on stack cleanly
+    @elif idx + 14 < n && out[idx] == 72 && out[idx + 1] == 199 && out[idx + 2] == 192 && out[idx + 3] == 228 && out[idx + 4] == 0 && out[idx + 13] == 15 && out[idx + 14] == 5
+      // xor rax, rax (3B); mov [rsp], rax (4B); mov [rsp+8], rax (5B); 3 NOPs
+      list_set(out, idx + 0, 72) list_set(out, idx + 1, 49) list_set(out, idx + 2, 192)
+      list_set(out, idx + 3, 72) list_set(out, idx + 4, 137) list_set(out, idx + 5, 4) list_set(out, idx + 6, 36)
+      list_set(out, idx + 7, 72) list_set(out, idx + 8, 137) list_set(out, idx + 9, 68) list_set(out, idx + 10, 36) list_set(out, idx + 11, 8)
+      list_set(out, idx + 12, 144) list_set(out, idx + 13, 144) list_set(out, idx + 14, 144)
+      idx = idx + 15
+    // 4. 10-byte movabs r64, imm64 -> relocate .rodata AND W^X RW runtime globals
+    @elif idx + 9 < n && out[idx] == 72 && (out[idx + 1] >= 184 && out[idx + 1] <= 191)
+      imm_vaddr = pe_read_code_u64(out, idx + 2)
+      w_vaddr = 0
+      @if imm_vaddr >= linux_ro_base && imm_vaddr <= linux_ro_end && rdata_vsize > 0
+        w_vaddr = win_ro_base + (imm_vaddr - linux_ro_base)
+      @elif imm_vaddr >= linux_rw_base && imm_vaddr <= linux_rw_end
+        w_vaddr = win_rw_base + (imm_vaddr - linux_rw_base)
+      @end
+      @if w_vaddr > 0
+        wb = pe_pack_u64(w_vaddr)
+        k = 0
+        @while k < 8
+          list_set(out, idx + 2 + k, wb[k])
+          k = k + 1
+        @end
+      @end
+      idx = idx + 10
+    // 5. 9-byte mov rax, imm32; syscall (48 C7 C0 <nr> 00 00 00 0F 05)
+    @elif idx + 8 < n && out[idx] == 72 && out[idx + 1] == 199 && out[idx + 2] == 192 && out[idx + 4] == 0 && out[idx + 5] == 0 && out[idx + 6] == 0 && out[idx + 7] == 15 && out[idx + 8] == 5
+      nr9 = out[idx + 3]
+      @if nr9 == 1
+        w9_rel = 144 - (stub_sz + idx + 5)
+        w9b = pe_pack_u32(w9_rel)
+        list_set(out, idx + 0, 232)
+        list_set(out, idx + 1, w9b[0]) list_set(out, idx + 2, w9b[1]) list_set(out, idx + 3, w9b[2]) list_set(out, idx + 4, w9b[3])
+        list_set(out, idx + 5, 144) list_set(out, idx + 6, 144) list_set(out, idx + 7, 144) list_set(out, idx + 8, 144)
+      @else
+        // mov rax, -38 (-ENOSYS); nop; nop
+        list_set(out, idx + 0, 72) list_set(out, idx + 1, 199) list_set(out, idx + 2, 192)
+        list_set(out, idx + 3, 218) list_set(out, idx + 4, 255) list_set(out, idx + 5, 255) list_set(out, idx + 6, 255)
+        list_set(out, idx + 7, 144) list_set(out, idx + 8, 144)
+      @end
+      idx = idx + 9
+    // 6. 7-byte mov eax, <nr>; syscall (B8 <nr> 00 00 00 0F 05)
+    @elif idx + 6 < n && out[idx] == 184 && out[idx + 2] == 0 && out[idx + 3] == 0 && out[idx + 4] == 0 && out[idx + 5] == 15 && out[idx + 6] == 5
+      nr7 = out[idx + 1]
+      @if nr7 == 1
+        // SYS_write -> call __win64_write_fd (+144); nop; nop
+        w7_rel = 144 - (stub_sz + idx + 5)
+        w7b = pe_pack_u32(w7_rel)
+        list_set(out, idx + 0, 232)
+        list_set(out, idx + 1, w7b[0]) list_set(out, idx + 2, w7b[1]) list_set(out, idx + 3, w7b[2]) list_set(out, idx + 4, w7b[3])
+        list_set(out, idx + 5, 144) list_set(out, idx + 6, 144)
+      @elif nr7 == 9
+        // SYS_mmap -> call __win64_virtual_alloc (+64); nop; nop
+        va_rel = 64 - (stub_sz + idx + 5)
+        vab = pe_pack_u32(va_rel)
+        list_set(out, idx + 0, 232)
+        list_set(out, idx + 1, vab[0]) list_set(out, idx + 2, vab[1]) list_set(out, idx + 3, vab[2]) list_set(out, idx + 4, vab[3])
+        list_set(out, idx + 5, 144) list_set(out, idx + 6, 144)
+      @elif nr7 == 60
+        // SYS_exit -> mov eax, edi; jmp _start+9 (ExitProcess); also NOP trailing hlt (0xF4)
+        jmp_rel = 9 - (stub_sz + idx + 7)
+        jb = pe_pack_u32(jmp_rel)
+        list_set(out, idx + 0, 137) list_set(out, idx + 1, 248)
+        list_set(out, idx + 2, 233)
+        list_set(out, idx + 3, jb[0]) list_set(out, idx + 4, jb[1]) list_set(out, idx + 5, jb[2]) list_set(out, idx + 6, jb[3])
+        @if idx + 7 < n && out[idx + 7] == 244
+          list_set(out, idx + 7, 144)
+        @end
+      @else
+        // Non-Win32 POSIX syscalls (open/read/close/lseek/access) -> mov rax, -38 (-ENOSYS)
+        list_set(out, idx + 0, 72) list_set(out, idx + 1, 199) list_set(out, idx + 2, 192)
+        list_set(out, idx + 3, 218) list_set(out, idx + 4, 255) list_set(out, idx + 5, 255) list_set(out, idx + 6, 255)
+      @end
+      idx = idx + 7
+    @else
+      idx = idx + 1
+    @end
+  @end
+  return out
 @end
 
 // ============================================================================
@@ -254,24 +486,28 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   sect_align = 4096
   image_base = 5368709120 // 0x140000000
 
-  // 1. Determine active sections
+  // 1. Determine active sections (.text, optional .rdata, mandatory RW .data for runtime globals, mandatory .idata)
   has_rdata = 0
   @if rdata_bytes.len() > 0 has_rdata = 1 @end
 
-  has_data = 0
-  @if data_bytes.len() > 0 || bss_size > 0 has_data = 1 @end
+  rw_data_bytes = []
+  gi = 0
+  @while gi < 128
+    rw_data_bytes = rw_data_bytes.push(0)
+    gi = gi + 1
+  @end
+  rw_data_bytes = pe_concat(rw_data_bytes, data_bytes)
+  has_data = 1
 
-  // Sections: .text, optional .rdata, optional .data, mandatory .idata (for KERNEL32 IAT)
-  num_sections = 2 // .text + .idata
+  num_sections = 3 // .text + .data + .idata
   @if has_rdata == 1 num_sections = num_sections + 1 @end
-  @if has_data == 1  num_sections = num_sections + 1 @end
 
   raw_headers_size = 392 + (num_sections * 40)
   size_of_headers = pe_align_to(raw_headers_size, file_align)
 
   // 2. Compute Memory Layout & RVAs
-  // Section 1: .text (Start stub + User code)
-  stub_len = 64
+  // Section 1: .text (256-byte Win64 stub & trampolines + User code)
+  stub_len = 256
   user_code = code_bytes
   @if user_code.len() == 0
     user_code = [72, 49, 192, 195] // xor rax, rax; ret
@@ -296,15 +532,13 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
     next_ptr = rdata_raw_ptr + rdata_raw_size
   @end
 
-  // Section 3: .data (if present)
+  // Section 3: .data (128B runtime RW globals + user .data + .bss)
   data_rva = next_rva
   data_raw_ptr = next_ptr
-  data_vsize = data_bytes.len() + bss_size
-  data_raw_size = pe_align_to(data_bytes.len(), file_align)
-  @if has_data == 1
-    next_rva = data_rva + pe_align_to(data_vsize, sect_align)
-    next_ptr = data_raw_ptr + data_raw_size
-  @end
+  data_vsize = rw_data_bytes.len() + bss_size
+  data_raw_size = pe_align_to(rw_data_bytes.len(), file_align)
+  next_rva = data_rva + pe_align_to(data_vsize, sect_align)
+  next_ptr = data_raw_ptr + data_raw_size
 
   // Section 4: .idata (Import Directory Table + IAT for KERNEL32.DLL)
   idata_rva = next_rva
@@ -317,11 +551,12 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 
   size_of_image = next_rva
 
-  // 3. Build Windows x64 entry bootstrap stub
+  // 3. Build Windows x64 entry bootstrap stub and relocate user code to Win64 ABI
   start_stub = pe_build_start_stub(0, idata_info.pi_exit_process_iat_rva, text_rva)
+  patched_user_code = pe_patch_win64_code(user_code, image_base, rdata_rva, rdata_vsize, data_rva)
   text_payload = []
   text_payload = pe_concat(text_payload, start_stub)
-  text_payload = pe_concat(text_payload, user_code)
+  text_payload = pe_concat(text_payload, patched_user_code)
 
   // 4. Construct Headers
   dos_block = pe_dos_block_serialize()
@@ -416,7 +651,7 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 
   @if has_data == 1
     data_blob = []
-    data_blob = pe_concat(data_blob, data_bytes)
+    data_blob = pe_concat(data_blob, rw_data_bytes)
     data_blob = pe_pad_zeros(data_blob, data_raw_size)
     binary = pe_concat(binary, data_blob)
   @end

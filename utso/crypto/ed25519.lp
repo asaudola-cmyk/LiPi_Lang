@@ -710,7 +710,7 @@ import "utso/crypto/sha512"
     s_bytes = s_bytes.push(h[i])
     i = i + 1
   @end
-  s_bytes = list_set(s_bytes, 0, s_bytes[0] % 248)
+  s_bytes = list_set(s_bytes, 0, s_bytes[0] & 248)
   s31 = s_bytes[31] & 127
   s_bytes = list_set(s_bytes, 31, s31 | 64)
 
@@ -734,7 +734,7 @@ import "utso/crypto/sha512"
     s_bytes = s_bytes.push(h[i])
     i = i + 1
   @end
-  s_bytes = list_set(s_bytes, 0, s_bytes[0] % 248)
+  s_bytes = list_set(s_bytes, 0, s_bytes[0] & 248)
   s31 = s_bytes[31] & 127
   s_bytes = list_set(s_bytes, 31, s31 | 64)
   s_limbs = fe_from_bytes(s_bytes)

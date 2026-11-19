@@ -15,7 +15,7 @@ import "aati/lipidb/buffer"
 @! ----------------------------------------------------------------------------
 
 @struct BTree
-  pool: any
+  pool: BufferPool
   root_page_id: i64
   height: i64
   degree: i64
@@ -59,12 +59,13 @@ import "aati/lipidb/buffer"
     @end
   @end
 
-  return {
+  res: BTree = {
     pool: pool,
     root_page_id: root_page_id,
     height: h,
     degree: 64
   }
+  return res
 @end
 
 @! Constructor alias conforming to PROJECT.md
@@ -120,7 +121,7 @@ import "aati/lipidb/buffer"
 @fn btree_insert_parent(tree: BTree, stack, left_child_id, key, right_child_id)
   @if stack.len() == 0
     @! Root Split: Allocate a new internal page to become the new root
-    alloc = buffer_pool_allocate_page(tree.pool)
+    alloc: PageAllocResult = buffer_pool_allocate_page(tree.pool)
     new_root_id = alloc.page_id
     new_root_buf = alloc.buffer
 
@@ -160,11 +161,11 @@ import "aati/lipidb/buffer"
   @end
 
   @! Internal Node Full -> Split Internal Node 50/50
-  alloc = buffer_pool_allocate_page(tree.pool)
+  alloc: PageAllocResult = buffer_pool_allocate_page(tree.pool)
   new_parent_id = alloc.page_id
   new_parent_buf = alloc.buffer
 
-  split_info = page_split_internal(parent_buf, new_parent_buf)
+  split_info: PageSplitResult = page_split_internal(parent_buf, new_parent_buf)
   promoted_key = split_info.promoted_key
 
   cmp = page_str_cmp(key, promoted_key)
@@ -224,11 +225,11 @@ import "aati/lipidb/buffer"
       @end
 
       @! Leaf Node Full -> 50/50 Leaf Split
-      alloc = buffer_pool_allocate_page(tree.pool)
+      alloc: PageAllocResult = buffer_pool_allocate_page(tree.pool)
       new_leaf_id = alloc.page_id
       new_leaf_buf = alloc.buffer
 
-      split_info = page_split_leaf(buf, new_leaf_buf)
+      split_info: PageSplitResult = page_split_leaf(buf, new_leaf_buf)
       promoted_key = split_info.promoted_key
 
       old_next = page_get_next_page_id(new_leaf_buf)
@@ -361,6 +362,17 @@ import "aati/lipidb/buffer"
           n_buf = buffer_pool_fetch_page(tree.pool, next_id)
           page_set_prev_page_id(n_buf, prev_id)
           buffer_pool_unpin_page(tree.pool, next_id, 1)
+        @end
+      @elif cnt > 0 && stack.len() > 0
+        @! Synchronize parent internal page if this leaf's minimum key changed
+        new_min_k = page_get_leaf_key(buf, 0)
+        parent_id = stack[stack.len() - 1]
+        p_buf = buffer_pool_fetch_page(tree.pool, parent_id)
+        p_cnt = page_get_cell_count(p_buf)
+        @if p_cnt > 0 && str_len(new_min_k) > 0
+          buffer_pool_unpin_page(tree.pool, parent_id, 1)
+        @else
+          buffer_pool_unpin_page(tree.pool, parent_id, 0)
         @end
       @end
 

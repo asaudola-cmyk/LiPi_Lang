@@ -252,3 +252,99 @@ fn sql_engine_free engine
         i = i + 1
     mem_free(engine, 136)
     return 0
+
+// ── SQL Text Query Tokenizer & Execution Planner ─────────────────────────────
+// WHY: Parses and executes real textual SQL statements directly against the in-memory
+// relational storage engine (CREATE TABLE, INSERT INTO, SELECT ... FROM ... WHERE,
+// DELETE FROM ... WHERE, COUNT FROM) with zero external SQLite or C dependencies.
+
+fn sql_tokenize_text q
+    toks = list()
+    cur = ""
+    i = 0
+    qlen = len(q)
+    while i < qlen
+        ch = mem_byte_read(q, i)
+        // Delimiters: space(32), tab(9), newline(10), comma(44), '(', ')', ';', '='
+        if ch == 32 or ch == 9 or ch == 10 or ch == 13 or ch == 44 or ch == 40 or ch == 41 or ch == 59
+            if len(cur) > 0
+                push(toks, cur)
+                cur = ""
+            end
+        elif ch == 61 // '='
+            if len(cur) > 0
+                push(toks, cur)
+                cur = ""
+            end
+            push(toks, "=")
+        else
+            cur = cur + chr(ch)
+        end
+        i = i + 1
+    end
+    if len(cur) > 0
+        push(toks, cur)
+    end
+    return toks
+
+fn sql_parse_int_tok s
+    if len(s) == 0 return 0 end
+    neg = 0
+    i = 0
+    if mem_byte_read(s, 0) == 45 // '-'
+        neg = 1
+        i = 1
+    end
+    val = 0
+    while i < len(s)
+        c = mem_byte_read(s, i)
+        if c >= 48 and c <= 57
+            val = (val * 10) + (c - 48)
+        end
+        i = i + 1
+    end
+    if neg == 1 return 0 - val end
+    return val
+
+fn sql_execute_query engine query_str
+    // WHY: Executes textual SQL statements:
+    //   "CREATE TABLE <tid> (<cols>, <max_rows>)" -> returns table ptr
+    //   "INSERT INTO <tid> VALUES (<v0>, <v1> [, <v2>])" -> returns new row count
+    //   "SELECT <ret_col> FROM <tid> WHERE <filter_col> = <val>" -> returns matched cell
+    //   "DELETE FROM <tid> WHERE <filter_col> = <val>" -> returns deleted row count
+    //   "COUNT FROM <tid>" -> returns active row count
+    toks = sql_tokenize_text(query_str)
+    n = toks.len()
+    if n < 2 return 0 - 1 end
+    cmd = get(toks, 0)
+
+    if cmd == "CREATE" and n >= 5
+        tid = sql_parse_int_tok(get(toks, 2))
+        cols = sql_parse_int_tok(get(toks, 3))
+        mrows = sql_parse_int_tok(get(toks, 4))
+        return sql_create_table(engine, tid, cols, mrows)
+    elif cmd == "INSERT" and n >= 6
+        tid = sql_parse_int_tok(get(toks, 2))
+        v0 = sql_parse_int_tok(get(toks, 4))
+        v1 = sql_parse_int_tok(get(toks, 5))
+        if n >= 7
+            v2 = sql_parse_int_tok(get(toks, 6))
+            return sql_insert_3(engine, tid, v0, v1, v2)
+        end
+        return sql_insert_2(engine, tid, v0, v1)
+    elif cmd == "SELECT" and n >= 8
+        ret_col = sql_parse_int_tok(get(toks, 1))
+        tid = sql_parse_int_tok(get(toks, 3))
+        filter_col = sql_parse_int_tok(get(toks, 5))
+        target_val = sql_parse_int_tok(get(toks, 7))
+        return sql_select_first_where_eq(engine, tid, filter_col, target_val, ret_col)
+    elif cmd == "DELETE" and n >= 7
+        tid = sql_parse_int_tok(get(toks, 2))
+        filter_col = sql_parse_int_tok(get(toks, 4))
+        target_val = sql_parse_int_tok(get(toks, 6))
+        return sql_delete_where_eq(engine, tid, filter_col, target_val)
+    elif cmd == "COUNT" and n >= 3
+        tid = sql_parse_int_tok(get(toks, 2))
+        return sql_count_active(engine, tid)
+    end
+    return 0 - 1

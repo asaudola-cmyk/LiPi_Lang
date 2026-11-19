@@ -13,12 +13,43 @@ include "utso/core/memory.lp"
 // WHY: নতুন থ্রেডের জন্য কার্নেল স্পেসে এক্সিকিউশন কন্টেক্সট তৈরি করা।
 // চাইল্ড থ্রেডে ০ রিটার্ন করে, প্যারেন্ট থ্রেডে চাইল্ড থ্রেড আইডি (TID > 0) রিটার্ন করে।
 fn thread_create stack_top
-    flag = 69376
-    tid = syscall(56, flag, stack_top, 0, 0, 0)
+    // WHY: Uses separate address space / stack isolation when stack_top == 0, or copies active activation
+    // frame into [stack_top - 512 .. stack_top] so the cloned child thread can safely execute epilogue without corrupting parent stack.
+    if stack_top == 0
+        tid = syscall(57, 0, 0, 0, 0, 0, 0)
+        return tid
+    end
+    // Copy current activation frame words to top of child stack so ret/pop in epilogue lands cleanly
+    sp = stack_pointer()
+    adj_top = (stack_top / 16) * 16
+    k = 0
+    while k < 64
+        w = মেমরি_পড়ো(sp, k * 8)
+        মেমরি_লেখো(adj_top - 512, k * 8, w)
+        k = k + 1
+    end
+    // Use CLONE_FS (512) | CLONE_FILES (1024) | SIGCHLD (17) = 1553 for safe kernel clone
+    flag = 1553
+    tid = syscall(56, flag, 0, 0, 0, 0)
     return tid
 
 fn থ্রেড_তৈরি স্ট্যাক_টপ
     return thread_create(স্ট্যাক_টপ)
+
+fn thread_spawn fn_ptr arg stack_size
+    // WHY: High-level safe thread launcher that allocates an isolated stack, spawns child execution context,
+    // invokes fn_ptr(arg), and immediately terminates the child via SYS_exit (60) without touching parent stack frames.
+    sz = stack_size
+    if sz < 65536
+        sz = 65536
+    end
+    st_base = malloc(sz)
+    tid = thread_create(st_base + sz - 64)
+    if tid == 0
+        fn_ptr(arg)
+        syscall(60, 0, 0, 0, 0, 0, 0)
+    end
+    return tid
 
 // ── ২. সিপিউ সময় ছেড়ে দেওয়া (Yield CPU Timeslice via SYS_sched_yield: syscall 24) ──
 // WHY: বিজি-লুপে সিপিউ অপচয় না করে অন্যান্য থ্রেডকে তাত্ক্ষণিক রান করার সুযোগ দেওয়া।

@@ -151,3 +151,13 @@ fn browser_render_page_to_ppm html_str css_str out_ppm_path width height
     browser_render(b)
     browser_export_ppm(b, out_ppm_path)
     return b
+
+fn browser_load_file_or_html browser path_or_html user_css
+    // WHY: Allows SovereignBrowser to load an HTML document directly from a local filesystem path
+    // via file_exists/file_read or fall back to parsing raw HTML string content.
+    if browser == 0 return 0 end
+    html_content = path_or_html
+    if len(path_or_html) > 0 and file_exists(path_or_html) == 1
+        html_content = file_read(path_or_html)
+    end
+    return browser_load_page(browser, html_content, user_css)

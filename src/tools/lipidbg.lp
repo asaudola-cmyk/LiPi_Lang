@@ -371,15 +371,50 @@ fn dbg_stack_inspect
 // ─── Linux sys_ptrace (Syscall 101) Diagnostics Engine ────────────────────────
 // WHY: Enables process attachment, register extraction, and software breakpoint insertion
 // on Linux without GDB or C runtime dependencies.
-PTRACE_PEEKDATA = 2
-PTRACE_POKEDATA = 5
-PTRACE_CONT     = 7
-PTRACE_GETREGS  = 12
-PTRACE_ATTACH   = 16
-PTRACE_DETACH   = 17
+PTRACE_TRACEME    = 0
+PTRACE_PEEKTEXT   = 1
+PTRACE_PEEKDATA   = 2
+PTRACE_POKETEXT   = 4
+PTRACE_POKEDATA   = 5
+PTRACE_CONT       = 7
+PTRACE_SINGLESTEP = 9
+PTRACE_GETREGS    = 12
+PTRACE_SETREGS    = 13
+PTRACE_ATTACH     = 16
+PTRACE_DETACH     = 17
 
 fn dbg_ptrace req pid addr data
     return syscall(101, req, pid, addr, data, 0, 0)
+
+fn dbg_get_regs pid
+    // WHY: Reads Linux x86_64 user_regs_struct (216 bytes = 27 qwords) via PTRACE_GETREGS (12)
+    regs_buf = alloc(256)
+    res = dbg_ptrace(PTRACE_GETREGS, pid, 0, regs_buf)
+    if res < 0
+        say "  ⚠ [PTRACE_GETREGS] রেজিস্টার পড়া সম্ভব হয়নি (PID: " + str(pid) + ")"
+        return 0 - 1
+    // Linux x86_64 user_regs_struct offsets:
+    //rax=10*8(80), rbx=5*8(40), rcx=11*8(88), rdx=12*8(96), rsi=13*8(104), rdi=14*8(112), rip=16*8(128), rsp=19*8(152)
+    rip_val = mem_word_read(regs_buf, 16)
+    rsp_val = mem_word_read(regs_buf, 19)
+    rax_val = mem_word_read(regs_buf, 10)
+    rbx_val = mem_word_read(regs_buf, 5)
+    rcx_val = mem_word_read(regs_buf, 11)
+    rdx_val = mem_word_read(regs_buf, 12)
+    say "  • [PTRACE_GETREGS] RIP: 0x" + qword_to_hex(rip_val) + " | RSP: 0x" + qword_to_hex(rsp_val)
+    say "  • [PTRACE_GETREGS] RAX: 0x" + qword_to_hex(rax_val) + " | RBX: 0x" + qword_to_hex(rbx_val)
+    say "  • [PTRACE_GETREGS] RCX: 0x" + qword_to_hex(rcx_val) + " | RDX: 0x" + qword_to_hex(rdx_val)
+    return rip_val
+
+fn dbg_single_step pid
+    // WHY: Executes single hardware instruction step via PTRACE_SINGLESTEP (9) and waits via wait4 (61)
+    res = dbg_ptrace(PTRACE_SINGLESTEP, pid, 0, 0)
+    if res < 0
+        say "  ❌ [PTRACE_SINGLESTEP] সিঙ্গেল স্টেপ ব্যর্থ (PID: " + str(pid) + ")"
+        return 0 - 1
+    status_buf = alloc(16)
+    syscall(61, pid, status_buf, 0, 0, 0, 0)
+    return dbg_get_regs(pid)
 
 fn dbg_attach pid
     say "⚡ অ্যাটাচ করা হচ্ছে পিআইডি (PID): " + pid
@@ -387,10 +422,10 @@ fn dbg_attach pid
     if res < 0
         say "❌ পিআইডিতে অ্যাটাচ ব্যর্থ (পারমিশন এরর বা অবৈধ পিআইডি)"
         return 0 - 1
-    status_buf = malloc(8)
+    status_buf = alloc(16)
     w_res = syscall(61, pid, status_buf, 0, 0, 0, 0)
-    free(status_buf, 8)
     say "  ✔ সফলভাবে সংযুক্ত! প্রসেস ইন্টারাপ্ট প্রাপ্ত।"
+    dbg_get_regs(pid)
     return 0
 
 fn dbg_detach pid
@@ -570,6 +605,22 @@ fn main
             dbg_attach(target_pid)
             return 0
         say "Usage: lipidbg attach <pid>"
+        return 1
+
+    if cmd == "regs"
+        if argc >= 3
+            target_pid = parse_hex_or_dec(get(args, 2))
+            dbg_get_regs(target_pid)
+            return 0
+        say "Usage: lipidbg regs <pid>"
+        return 1
+
+    if cmd == "step"
+        if argc >= 3
+            target_pid = parse_hex_or_dec(get(args, 2))
+            dbg_single_step(target_pid)
+            return 0
+        say "Usage: lipidbg step <pid>"
         return 1
 
     if cmd == "break"

@@ -177,3 +177,33 @@ fn quic_packet_format_wire pkt
     // Produces standardized debug header representation
     s = "QUIC[" + pkt.qp_type + "] CID:" + pkt.qp_conn_id + " PKT#" + pkt.qp_packet_num + " LEN:" + pkt.qp_payload_len
     return s
+
+fn quic_udp_open_socket port
+    // WHY: Opens a non-blocking Linux kernel UDP datagram socket (AF_INET = 2, SOCK_DGRAM = 2)
+    // via direct SYS_socket (41) for real HTTP/3 QUIC datagram I/O.
+    fd = syscall(41, 2, 2, 0, 0, 0, 0)
+    return fd
+
+fn quic_packet_serialize_wire pkt
+    // WHY: Serializes QuicPacket into RFC 9000 binary wire bytes:
+    //   Byte 0: Header Form + Fixed Bit (0xC0 | pkt_type)
+    //   Bytes 1..4: 32-bit Connection ID (big-endian)
+    //   Bytes 5..8: 32-bit Packet Number (big-endian)
+    //   Bytes 9..10: 16-bit Payload Length
+    wire = list()
+    hdr_byte = 192 | (pkt.qp_type & 15)
+    push(wire, hdr_byte)
+    cid = pkt.qp_conn_id
+    push(wire, (cid / 16777216) % 256)
+    push(wire, (cid / 65536) % 256)
+    push(wire, (cid / 256) % 256)
+    push(wire, cid % 256)
+    pnum = pkt.qp_packet_num
+    push(wire, (pnum / 16777216) % 256)
+    push(wire, (pnum / 65536) % 256)
+    push(wire, (pnum / 256) % 256)
+    push(wire, pnum % 256)
+    plen = pkt.qp_payload_len
+    push(wire, (plen / 256) % 256)
+    push(wire, plen % 256)
+    return wire

@@ -3,8 +3,8 @@
   return string_concat(t1, "\"}")
 @end
 
-// WHY: Retains lipipkg_err_json as backward-compatible alias for legacy callers
-@fn lipipkg_err_json(msg)
+// WHY: Canonical Haat-branded error JSON formatter alias
+@fn haat_err_json(msg)
   return lipipkg_err_json(msg)
 @end
 

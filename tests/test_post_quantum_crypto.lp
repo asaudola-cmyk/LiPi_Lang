@@ -67,11 +67,11 @@ fn main
     assert_eq_int(get(prod, 3), 0, "Degree 3 is 0")
     passed_tests = passed_tests + 1
 
-    // ── Section 3: Kyber Key Generation (A * s + e = t) ───────────────────────
-    say "\n▶ Section 3: Kyber-512 Key Generation (A * s + e = t)..."
+    // ── Section 3: Kyber Key Generation (A * s + e = t) at full NIST FIPS 203 N=256 ──
+    say "\n▶ Section 3: Kyber-512 Key Generation (A * s + e = t, N=256)..."
     total_tests = total_tests + 1
 
-    n = 16
+    n = KYBER_N
     keys = pqc_keygen(n)
     assert_eq_int(len(keys), 3, "Generated key container [A, t, s]")
 
@@ -79,9 +79,11 @@ fn main
     poly_t = get(keys, 1)
     poly_s = get(keys, 2)
 
-    assert_eq_int(len(poly_A), n, "Public matrix vector A length is 16")
-    assert_eq_int(len(poly_t), n, "Public key vector t length is 16")
-    assert_eq_int(len(poly_s), n, "Secret key vector s length is 16")
+    assert_eq_int(len(poly_A), 256, "Public matrix vector A length is 256 (NIST FIPS 203)")
+    assert_eq_int(len(poly_t), 256, "Public key vector t length is 256 (NIST FIPS 203)")
+    assert_eq_int(len(poly_s), 256, "Secret key vector s length is 256 (NIST FIPS 203)")
+    ntt_a = poly_ntt(poly_A, 256)
+    assert_eq_int(len(ntt_a), 256, "256-point NTT butterfly transform over Z_3329 verified")
     passed_tests = passed_tests + 1
 
     // ── Section 4: IND-CPA Lattice Encapsulation & Decapsulation Roundtrip ────

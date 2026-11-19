@@ -39,7 +39,8 @@ import "aati/lipi_swarm/types"
   @if found == 0
     updated = updated.push({ name: name, func_ptr: func_ptr })
   @end
-  return { tasks: updated }
+  reg.tasks = updated
+  return reg
 @end
 
 @fn task_registry_get(reg, name)

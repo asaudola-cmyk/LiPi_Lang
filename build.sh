@@ -54,7 +54,13 @@ elif [ "$1" = "clean" ]; then
     echo "🧹 Cleaned build artifacts."
 else
     # Compile core toolchain
-    [ -x "bin/lipipkg" ] || (./bin/lipc src/tools/lipipkg.lp bin/lipipkg && chmod +x bin/lipipkg)
+    if [ ! -x "bin/aati" ]; then
+        ./bin/lipc src/tools/aati.lp bin/aati
+        chmod +x bin/aati
+        cp -f bin/aati bin/haat
+        cp -f bin/aati bin/lipipkg
+        chmod +x bin/haat bin/lipipkg
+    fi
     [ -x "bin/lipi-build" ] || (./bin/lipc build.lp bin/lipi-build && chmod +x bin/lipi-build)
     [ -x "bin/lipi-test" ] || (./bin/lipc tests/run_tests.lp bin/lipi-test && chmod +x bin/lipi-test)
     echo "👑 100% Native LiPi Developer Toolchain Ready in bin/!"

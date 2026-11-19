@@ -103,18 +103,51 @@ fn verilog_synth_compile_program tokens file_path
     push(ports, vport_new("done", "output", "reg", 1))
     push(ports, vport_new("result_out", "output", "reg", 64))
     
-    // Scan for arithmetic markers
+    // Scan tokens to extract program constants, loop bounds, and ALU operators
     n_toks = tokens.len()
     t_idx = 0
     found_ops = 0
     has_math = 0
+    init_val = 42
+    step_val = 1
+    max_cycles = 10
+    alu_op_sym = "+"
+    seen_init = 0
     
     while t_idx < n_toks
         t = tokens[t_idx]
         tk = t.tok_kind
         txt = t.tok_text
-        if tk == TOK_PLUS() or tk == TOK_MINUS() or tk == TOK_STAR() or tk == TOK_SLASH()
+        if tk == TOK_PLUS() or (tk == TOK_IDENT() and txt == "+")
             has_math = 1
+            alu_op_sym = "+"
+        elif tk == TOK_MINUS() or (tk == TOK_IDENT() and txt == "-")
+            has_math = 1
+            alu_op_sym = "-"
+        elif tk == TOK_STAR() or (tk == TOK_IDENT() and txt == "*")
+            has_math = 1
+            alu_op_sym = "*"
+        elif tk == TOK_AMP() or (tk == TOK_IDENT() and txt == "&")
+            has_math = 1
+            alu_op_sym = "&"
+        elif tk == TOK_PIPE() or (tk == TOK_IDENT() and txt == "|")
+            has_math = 1
+            alu_op_sym = "|"
+        elif tk == TOK_CARET() or (tk == TOK_IDENT() and txt == "^")
+            has_math = 1
+            alu_op_sym = "^"
+        elif tk == TOK_INT()
+            ival = t.tok_int_val
+            if ival > 0
+                if seen_init == 0
+                    init_val = ival
+                    seen_init = 1
+                elif ival <= 65535 and max_cycles == 10
+                    max_cycles = ival
+                else
+                    step_val = ival
+                end
+            end
         elif tk == TOK_IDENT() and (txt == "acc" or txt == "sum" or txt == "ans" or txt == "count")
             found_ops = 1
         t_idx = t_idx + 1
@@ -170,14 +203,14 @@ fn verilog_synth_compile_program tokens file_path
     datapath = datapath + "          if (start) begin\n"
     datapath = datapath + "            state       <= STATE_EXEC;\n"
     datapath = datapath + "            ready       <= 1'b0;\n"
-    datapath = datapath + "            alu_reg     <= 64'd42;\n"
+    datapath = datapath + "            alu_reg     <= 64'd" + str(init_val) + ";\n"
     datapath = datapath + "            cycle_count <= 32'd0;\n"
     datapath = datapath + "          end\n"
     datapath = datapath + "        end\n"
     datapath = datapath + "        STATE_EXEC: begin\n"
-    datapath = datapath + "          alu_reg     <= alu_reg + 64'd1;\n"
+    datapath = datapath + "          alu_reg     <= alu_reg " + alu_op_sym + " 64'd" + str(step_val) + ";\n"
     datapath = datapath + "          cycle_count <= cycle_count + 32'd1;\n"
-    datapath = datapath + "          if (cycle_count >= 32'd10) begin\n"
+    datapath = datapath + "          if (cycle_count >= 32'd" + str(max_cycles) + ") begin\n"
     datapath = datapath + "            result_out <= alu_reg;\n"
     datapath = datapath + "            done       <= 1'b1;\n"
     datapath = datapath + "            state      <= STATE_DONE;\n"

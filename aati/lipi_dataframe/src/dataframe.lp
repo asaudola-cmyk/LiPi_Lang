@@ -14,13 +14,14 @@ COL_TYPE_INT    = 1
 COL_TYPE_FLOAT  = 2
 COL_TYPE_STRING = 3
 
-// DataFrame Header Layout (40 Bytes)
+// DataFrame Header Layout (48 Bytes)
 // Offset 0  : Column Names List (8B)
 // Offset 8  : Column Types List (8B)
 // Offset 16 : Column Buffers List (8B)
 // Offset 24 : Number of Rows (8B)
 // Offset 32 : Number of Columns (8B)
-DF_HDR_SIZE = 40
+// Offset 40 : Column Capacities List (8B)
+DF_HDR_SIZE = 48
 
 // ১. নতুন ডেটাফ্রেম তৈরি (Create New Columnar DataFrame)
 fn df_new
@@ -30,6 +31,7 @@ fn df_new
     mem_write(df, 16, list()) // Col buffers
     mem_write(df, 24, 0) // Row count
     mem_write(df, 32, 0) // Col count
+    mem_write(df, 40, list()) // Col capacities
     return df
 
 // ২. নতুন কলাম যোগ করা (Add Column with Pre-Allocated Storage)
@@ -43,6 +45,7 @@ fn df_add_column df col_name col_type capacity
     types = mem_read(df, 8)
     buffers = mem_read(df, 16)
     col_count = mem_read(df, 32)
+    caps = mem_read(df, 40)
 
     push(names, col_name)
     push(types, col_type)
@@ -52,17 +55,45 @@ fn df_add_column df col_name col_type capacity
     buf = malloc(buf_size)
     mem_zero(buf, buf_size)
     push(buffers, buf)
+    push(caps, capacity)
 
     mem_write(df, 32, col_count + 1)
     return col_count // returns column index
+
+// ২.০ ডাইনামিক কলাম ক্যাপাসিটি সম্প্রসারণ (Dynamic Capacity Growth)
+fn df_ensure_capacity df target_row
+    if df <= 0
+        return 0
+    buffers = mem_read(df, 16)
+    col_count = mem_read(df, 32)
+    caps = mem_read(df, 40)
+    ci = 0
+    while ci < col_count
+        old_cap = get(caps, ci)
+        if target_row >= old_cap
+            new_cap = old_cap * 2
+            if new_cap <= target_row
+                new_cap = target_row + 1024
+            old_buf = get(buffers, ci)
+            new_buf = malloc(new_cap * 8)
+            mem_zero(new_buf, new_cap * 8)
+            ri = 0
+            while ri < old_cap
+                mem_write(new_buf, ri * 8, mem_read(old_buf, ri * 8))
+                ri = ri + 1
+            list_set(buffers, ci, new_buf)
+            list_set(caps, ci, new_cap)
+        ci = ci + 1
+    return 1
 
 // ২.১ একক কলামের রো অ্যাপেন্ড করা (Append 1-Column Row)
 // WHY: 1D vectors, target labels, and single-column feature stores.
 fn df_append_row_1 df v0
     if df <= 0
         return 0
-    buffers = mem_read(df, 16)
     row_idx = mem_read(df, 24)
+    df_ensure_capacity(df, row_idx)
+    buffers = mem_read(df, 16)
 
     b0 = get(buffers, 0)
     mem_write(b0, row_idx * 8, v0)
@@ -74,8 +105,9 @@ fn df_append_row_1 df v0
 fn df_append_row_2 df v0 v1
     if df <= 0
         return 0
-    buffers = mem_read(df, 16)
     row_idx = mem_read(df, 24)
+    df_ensure_capacity(df, row_idx)
+    buffers = mem_read(df, 16)
 
     b0 = get(buffers, 0)
     b1 = get(buffers, 1)
@@ -90,8 +122,9 @@ fn df_append_row_2 df v0 v1
 fn df_append_row_3 df v0 v1 v2
     if df <= 0
         return 0
-    buffers = mem_read(df, 16)
     row_idx = mem_read(df, 24)
+    df_ensure_capacity(df, row_idx)
+    buffers = mem_read(df, 16)
 
     b0 = get(buffers, 0)
     b1 = get(buffers, 1)

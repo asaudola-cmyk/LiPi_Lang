@@ -215,7 +215,7 @@
     b6 = (val / 281474976710656) & 255
     b7 = (val / 72057594037927936) & 255
     
-    bytes = bytes.push(b0.push)(b1).push(b2.push)(b3).push(b4.push)(b5).push(b6.push)(b7)
+    bytes = bytes.push(b0).push(b1).push(b2).push(b3).push(b4).push(b5).push(b6).push(b7)
     i = i + 1
   @end
   

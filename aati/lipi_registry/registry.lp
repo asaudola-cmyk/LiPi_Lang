@@ -104,12 +104,23 @@
 @end
 
 @fn registry_install(reg, name, version, install_path)
+  // WHY: Persists real installed package manifest (aati.toml) to disk at install_path
+  // instead of a print-only stub, and verifies write integrity via file_exists().
   pkg = registry_find(reg, name, version)
   @if str_len(pkg.pkg_name) == 0
     println("Error: package not found: " + name + "@" + version)
     return 0
   @end
   println("Installing " + name + "@" + version + " to " + install_path)
+  manifest = "[package]\nname = \"" + pkg.pkg_name + "\"\nversion = \"" + pkg.pkg_version + "\"\nauthor = \"" + pkg.pkg_author + "\"\ndescription = \"" + pkg.pkg_description + "\"\nlicense = \"" + pkg.pkg_license + "\"\nregistry = \"" + reg.reg_url + "\"\n"
+  out_file = install_path
+  @if str_len(install_path) > 0
+    file_write(out_file, manifest)
+    @if file_exists(out_file) == 0
+      return 0
+    @end
+  @end
+  pkg.pkg_downloads = pkg.pkg_downloads + 1
   return 1
 @end
 

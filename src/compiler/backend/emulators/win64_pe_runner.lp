@@ -33,6 +33,8 @@ struct Win64PERunner
     wpr_section_vsizes      // List of section virtual sizes
     wpr_has_kernel32_import // 1 if KERNEL32.dll imports are resolved
     wpr_import_functions    // List of imported function names
+    wpr_text_characteristics // Characteristics flags of .text section (must be 0x60000020)
+    wpr_linux_syscall_count // Count of raw Linux 0F 05 syscall opcodes found in .text (must be 0)
     wpr_validation_status   // Status message
 end
 
@@ -50,6 +52,8 @@ fn win64_pe_runner_new
     r.wpr_section_vsizes = list()
     r.wpr_has_kernel32_import = 0
     r.wpr_import_functions = list()
+    r.wpr_text_characteristics = 0
+    r.wpr_linux_syscall_count = 0
     r.wpr_validation_status = "UNINITIALIZED"
     return r
 
@@ -145,15 +149,57 @@ fn win64_pe_runner_load_bytes runner bytes_list
             end
             v_size = pe_read_u32(bytes_list, cur_sec + 8)
             v_rva = pe_read_u32(bytes_list, cur_sec + 12)
+            s_chars = pe_read_u32(bytes_list, cur_sec + 36)
             push(runner.wpr_section_names, sname)
             push(runner.wpr_section_vsizes, v_size)
             push(runner.wpr_section_vaddrs, v_rva)
 
+            if sname == ".text"
+                runner.wpr_text_characteristics = s_chars
+                t_raw_ptr = pe_read_u32(bytes_list, cur_sec + 20)
+                t_scan_end = t_raw_ptr + v_size
+                if t_scan_end > blen
+                    t_scan_end = blen
+                end
+                ti = t_raw_ptr
+                while ti + 1 < t_scan_end
+                    if bytes_list[ti] == 15 and bytes_list[ti + 1] == 5
+                        runner.wpr_linux_syscall_count = runner.wpr_linux_syscall_count + 1
+                    end
+                    ti = ti + 1
+                end
+            end
+
             if sname == ".idata"
-                runner.wpr_has_kernel32_import = 1
-                push(runner.wpr_import_functions, "ExitProcess")
-                push(runner.wpr_import_functions, "WriteFile")
-                push(runner.wpr_import_functions, "GetStdHandle")
+                raw_ptr = pe_read_u32(bytes_list, cur_sec + 20)
+                raw_sz = pe_read_u32(bytes_list, cur_sec + 16)
+                // Parse actual ASCII import symbol table inside .idata section payload
+                idata_ascii = ""
+                id_i = 0
+                while id_i < raw_sz and (raw_ptr + id_i) < blen
+                    ib = bytes_list[raw_ptr + id_i]
+                    if ib >= 32 and ib <= 126
+                        idata_ascii = idata_ascii + chr(ib)
+                    else
+                        idata_ascii = idata_ascii + " "
+                    end
+                    id_i = id_i + 1
+                end
+                if str_contains(idata_ascii, "KERNEL32.dll") == 1
+                    runner.wpr_has_kernel32_import = 1
+                end
+                if str_contains(idata_ascii, "ExitProcess") == 1
+                    push(runner.wpr_import_functions, "ExitProcess")
+                end
+                if str_contains(idata_ascii, "WriteFile") == 1
+                    push(runner.wpr_import_functions, "WriteFile")
+                end
+                if str_contains(idata_ascii, "GetStdHandle") == 1
+                    push(runner.wpr_import_functions, "GetStdHandle")
+                end
+                if str_contains(idata_ascii, "VirtualAlloc") == 1
+                    push(runner.wpr_import_functions, "VirtualAlloc")
+                end
             end
         end
         s_idx = s_idx + 1

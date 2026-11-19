@@ -56,7 +56,7 @@ Production-grade applications integrating multiple ecosystem packages:
 | [`sovereign_showcase/`](sovereign_showcase/) | **Unified Full-Stack Showcase**: `web_router` + `crypto_vault` + `lipi_jwt` + `lipi_sql` + CPU Telemetry | `bin/lipc examples/sovereign_showcase/main.lp /tmp/ex && /tmp/ex` |
 | [`sovereign_commerce.lp`](sovereign_commerce.lp) | E-commerce engine with inventory, cart, and transactions | `bin/lipc examples/sovereign_commerce.lp /tmp/ex && /tmp/ex` |
 | [`lipidb_server.lp`](lipidb_server.lp) | Standalone In-Memory Database server with Redis protocol | `bin/lipc examples/lipidb_server.lp /tmp/ex && /tmp/ex` |
-| [`lipipkg_registry.lp`](lipipkg_registry.lp) | P2P Package Registry server with SHA-256 manifest verification | `bin/lipc examples/lipipkg_registry.lp /tmp/ex && /tmp/ex` |
+| [`haat_registry.lp`](haat_registry.lp) | P2P Package Registry server with SHA-256 manifest verification | `bin/lipc examples/haat_registry.lp /tmp/ex && /tmp/ex` |
 
 ---
 
@@ -65,7 +65,7 @@ Direct silicon graphics, Linux framebuffer, TUI dashboards, and Ring-0 kernels:
 
 | Directory / File | Description | Execution Command |
 | :--- | :--- | :--- |
-| [`08_baremetal_os/`](08_baremetal_os/) | Ring-0 Multiboot2 x86_64 kernel booted on bare metal | `bin/lipc examples/08_baremetal_os/kernel.lp /tmp/kernel.bin` |
+| [`08_baremetal_os/`](08_baremetal_os/) | Ring-0 Multiboot2 x86_64 kernel booted on bare metal | `bin/lipc examples/08_baremetal_os/main.lp /tmp/kernel.bin` |
 | [`silicon_tui_dashboard.lp`](silicon_tui_dashboard.lp) | ANSI terminal dashboard with live CPU/RAM gauges | `bin/lipc examples/silicon_tui_dashboard.lp /tmp/ex && /tmp/ex` |
 | [`gui_desktop_shell.lp`](gui_desktop_shell.lp) | Zero-X11 Linux framebuffer GUI desktop shell | `bin/lipc examples/gui_desktop_shell.lp /tmp/ex && /tmp/ex` |
 

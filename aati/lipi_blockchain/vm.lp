@@ -142,6 +142,15 @@ import "utso/crypto/sha256"
 @end
 
 @fn vm_execute_bytecode(ctx, vm_state, opcodes)
+  // Snapshot initial storage so REVERT or Out-of-Gas rolls back uncommitted state mutations
+  saved_storage = []
+  si = 0
+  @while si < vm_state.storage.len()
+    s_item = vm_state.storage[si]
+    saved_storage = saved_storage.push({ key: s_item.key, value: s_item.value })
+    si = si + 1
+  @end
+
   pc = 0
   n_ops = opcodes.len()
   
@@ -296,6 +305,7 @@ import "utso/crypto/sha256"
   is_ok = 1
   @if ctx.is_reverted == 1
     is_ok = 0
+    vm_state.storage = saved_storage
   @end
 
   st_root = vm_storage_root(vm_state)

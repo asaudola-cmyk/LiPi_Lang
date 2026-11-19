@@ -87,9 +87,9 @@ fn gpu_device_open
         name_buf = malloc(32)
         mem_fill(name_buf, 0, 32)
 
-        // drm_version: name_len=31, name_ptr=name_buf
-        mem_write(ver_buf, 8, 31)
-        mem_write(ver_buf, 16, name_buf)
+        // drm_version (Linux x86_64 UAPI): major@0(4B), minor@4(4B), patch@8(4B), name_len@16(8B), name_ptr@24(8B)
+        mem_write(ver_buf, 16, 31)
+        mem_write(ver_buf, 24, name_buf)
 
         r = syscall(16, dev_fd, DRM_IOCTL_VERSION, ver_buf, 0, 0, 0) // ioctl
         if r == 0
@@ -97,7 +97,7 @@ fn gpu_device_open
             dev.is_hardware = 1
             dev.driver_name = "Linux-DRM-Silicon"
             dev.driver_version_major = mem_read_u32(ver_buf, 0)
-            dev.driver_version_minor = mem_read_u32(ver_buf, 1)
+            dev.driver_version_minor = mem_read_u32(ver_buf, 4)
 
         free(name_buf, 32)
         free(ver_buf, 64)
@@ -126,13 +126,13 @@ fn gpu_buffer_alloc dev size_bytes
     if dev.is_hardware == 1 and dev.fd >= 0
         dumb_req = malloc(32)
         mem_fill(dumb_req, 0, 32)
-        mem_write_u32(dumb_req, 0, 1024)                  // width
-        mem_write_u32(dumb_req, 1, alloc_size / 4096)     // height
-        mem_write_u32(dumb_req, 2, 32)                    // bpp
+        mem_write_u32(dumb_req, 0, 1024)                  // height (u32 @ byte offset 0)
+        mem_write_u32(dumb_req, 4, alloc_size / 4096)     // width  (u32 @ byte offset 4)
+        mem_write_u32(dumb_req, 8, 32)                    // bpp    (u32 @ byte offset 8)
 
         ret = syscall(16, dev.fd, DRM_IOCTL_MODE_CREATE_DUMB, dumb_req, 0, 0, 0)
         if ret == 0
-            handle = mem_read_u32(dumb_req, 4)
+            handle = mem_read_u32(dumb_req, 16)           // handle (u32 @ byte offset 16)
             map_req = malloc(16)
             mem_fill(map_req, 0, 16)
             mem_write_u32(map_req, 0, handle)

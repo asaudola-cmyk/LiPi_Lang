@@ -38,15 +38,9 @@ import "utso/string"
 
   vscode_pkg = "editors/vscode/package.json"
   has_vscode_pkg = file_exists(vscode_pkg)
-  // WHY: LiPi adheres to language sovereignty standards (like Go, Rust, Zig)
-  // where IDE extensions (vscode-lipi) reside in dedicated standalone repositories.
-  // When running in the pure core compiler tree without editors/, verify decoupling and pass.
   @if has_vscode_pkg == 0
-    println("ℹ [STANDALONE REPO] Editor tooling hosted in dedicated repository (vscode-lipi).")
-    println("  ✔ [PASS] Core compiler tree cleanly decoupled from editor extensions.")
-    println("=================================================================")
-    println("🎉 ALL VS CODE EXTENSION VSIX TESTS PASSED (4/4) ✔")
-    return 0
+    println("  [FAIL] Missing required VS Code extension manifest: " + vscode_pkg)
+    return 1
   @end
 
   // ── Section 1: VSIX Package Generation & Existence Verification ───────────

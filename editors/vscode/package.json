@@ -1,0 +1,109 @@
+{
+  "name": "lipi-language",
+  "displayName": "Lipi Sovereign Programming Language",
+  "description": "Official Language Support for Lipi (Bilingual English & Bengali, Direct Silicon Compiler)",
+  "version": "1.0.0",
+  "publisher": "lipi-lang",
+  "author": {
+    "name": "Lipi Language Project",
+    "url": "https://github.com/asaudola-cmyk/LiPi_Lang"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asaudola-cmyk/LiPi_Lang.git"
+  },
+  "homepage": "https://github.com/asaudola-cmyk/LiPi_Lang",
+  "license": "MIT",
+  "icon": "icons/icon.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "lipi",
+    "লিপি",
+    "bengali",
+    "language",
+    "compiler",
+    "multilingual",
+    "sovereign"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:lipi"
+  ],
+  "contributes": {
+    "iconThemes": [
+      {
+        "id": "lipi-icons",
+        "label": "Lipi (লিপি Seti Icons)",
+        "path": "./icons/lipi-icon-theme.json"
+      }
+    ],
+    "languages": [
+      {
+        "id": "lipi",
+        "aliases": [
+          "Lipi",
+          "lipi",
+          "লিপি"
+        ],
+        "extensions": [
+          ".lp",
+          ".লিপি",
+          ".lipi"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lipi",
+        "scopeName": "source.lipi",
+        "path": "./syntaxes/lipi.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "lipi",
+        "path": "./snippets/lipi.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "lipi.restartLsp",
+        "title": "Lipi: Restart Language Server (lipilsp)",
+        "category": "Lipi"
+      },
+      {
+        "command": "lipi.runFile",
+        "title": "Lipi: Run Active File in Terminal",
+        "category": "Lipi"
+      },
+      {
+        "command": "lipi.buildFile",
+        "title": "Lipi: Build Executable Binary",
+        "category": "Lipi"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Lipi Language Server",
+      "properties": {
+        "lipi.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Lipi Language Server (lipilsp) integration"
+        },
+        "lipi.lsp.path": {
+          "type": "string",
+          "default": "bin/lipilsp",
+          "description": "Path to the lipilsp executable"
+        }
+      }
+    }
+  }
+}

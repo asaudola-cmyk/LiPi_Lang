@@ -364,6 +364,13 @@ fn sort_files raw_list
 fn pkg_hash_file path
     fc = file_read(path)
     flen = len(fc)
+    if flen <= 0
+        return "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    end
+    b_end = mem_byte_read(fc, flen - 1)
+    if b_end < 0
+        return ""
+    end
     h = sha256_hex(fc)
     return h
 
@@ -434,18 +441,14 @@ fn ensure_keypair
     priv_buf = alloc(32)
     hex_to_bytes(priv_hex, priv_buf, 32)
 
+    pub_buf = alloc(32)
+    Ed25519_derive_pubkey(priv_buf, pub_buf)
+    derived_pub_hex = bytes_to_hex(pub_buf, 32)
     pub_hex = trim(read_file(pub_path))
-    if len(pub_hex) < 64
-        // Derive public key deterministically if pub file is missing
-        pub_buf = alloc(32)
-        i = 0
-        while i < 32
-            priv_b = mem_byte_read(priv_buf, i)
-            pub_b = ((priv_b * 23) + 19) % 256
-            mem_byte_write(pub_buf, i, pub_b)
-            i = i + 1
-        pub_hex = bytes_to_hex(pub_buf, 32)
+    if pub_hex != derived_pub_hex
+        pub_hex = derived_pub_hex
         write_file(pub_path, pub_hex + "\n")
+    end
 
     res = list()
     push(res, priv_buf)
@@ -611,7 +614,7 @@ fn cmd_sign target
     m_buf = alloc(64)
     i = 0
     while i < 64
-        mem_byte_write(m_buf, i, mem_byte_read(manifest_hash, i))
+        mem_byte_write(m_buf, i, ord(char_at(manifest_hash, i)))
         i = i + 1
     end
     sig_buf = Ed25519_sign(priv_buf, m_buf, 64)

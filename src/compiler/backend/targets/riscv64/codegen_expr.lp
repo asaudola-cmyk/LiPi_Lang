@@ -157,13 +157,16 @@ fn riscv64_synth_expr_primary s toks pos_box
 
             // ── Intrinsic 8: list / তালিকা ─────────────────────────────────
             if var_name == "list" or var_name == "তালিকা"
-                if arg_count == 0
-                    riscv64_emit_li(s, 10, 32)
-                    riscv64_synth_emit_call_alloc(s)
-                else
-                    total_alloc = 32 + (arg_count * 8)
-                    riscv64_emit_li(s, 10, total_alloc)
-                    riscv64_synth_emit_call_alloc(s)
+                s.rv_needs_list_create = 1
+                s.rv_needs_alloc = 1
+                riscv64_emit_li(s, 10, arg_count)
+                lc_call_off = s.rv_code.len()
+                riscv64_emit_jal(s, 1, 0)
+                lc_rel = Riscv64CallReloc()
+                lc_rel.rv_cr_patch_offset = lc_call_off
+                lc_rel.rv_cr_target_name = "__list_create"
+                push(s.rv_call_relocs, lc_rel)
+                if arg_count > 0
                     riscv64_push_reg(s, 10)
                     ai = arg_count - 1
                     while ai >= 0
@@ -173,6 +176,29 @@ fn riscv64_synth_expr_primary s toks pos_box
                         riscv64_emit_sd(s, 11, 12, item_off)
                         ai = ai - 1
                     riscv64_pop_reg(s, 10)
+                return 0
+
+            // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────
+            if var_name == "file_write" or var_name == "ফাইল_লেখো"
+                s.rv_needs_file_write = 1
+                if arg_count >= 3
+                    riscv64_pop_reg(s, 12)
+                else
+                    riscv64_emit_addi(s, 12, 0, 0)
+                if arg_count >= 2
+                    riscv64_pop_reg(s, 11)
+                else
+                    riscv64_emit_addi(s, 11, 0, 0)
+                if arg_count >= 1
+                    riscv64_pop_reg(s, 10)
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                fw_call_off = s.rv_code.len()
+                riscv64_emit_jal(s, 1, 0)
+                fw_rel = Riscv64CallReloc()
+                fw_rel.rv_cr_patch_offset = fw_call_off
+                fw_rel.rv_cr_target_name = "__file_write"
+                push(s.rv_call_relocs, fw_rel)
                 return 0
 
             // ── Struct Constructor: StructName(...) ─────────────────────────

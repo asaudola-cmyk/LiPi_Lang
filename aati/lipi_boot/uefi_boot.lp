@@ -448,6 +448,16 @@ fn uefi_build_fat_esp_image app_name efi_bytes
     push(esp_image, 85)
     push(esp_image, 170)
 
+    // Append EFI application payload sectors if provided (preserving 512-byte sector alignment)
+    efi_len = len(efi_bytes)
+    if efi_len > 0 and len(esp_image) > 512
+        bi = 0
+        while bi < efi_len
+            push(esp_image, get(efi_bytes, bi))
+            bi = bi + 1
+        end
+    end
+
     return esp_image
 
 // ── 8. Verification & Autonomous Test Suite ───────────────────────────────────

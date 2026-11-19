@@ -1,0 +1,10 @@
+[package]
+name = "lipi_browser"
+version = "1.0.0"
+edition = "2026"
+authors = ["Lipi Core Team <core@lipi-lang.org>"]
+description = "Sovereign Web Browser Engine (HTML5 DOM Parser, CSS Flexbox Layout, 8x16 Bitmap Font Rasterizer, PPM/Framebuffer Renderer)"
+license = "MIT"
+entry = "browser.lp"
+
+[dependencies]

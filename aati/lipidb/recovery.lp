@@ -274,6 +274,9 @@ import "aati/lipidb/wal"
   redo_res = recovery_apply_redo(tree_ref, scan_res.valid_records, scan_res.committed_txs)
   @if redo_res.replayed_ops > 0
     buffer_pool_flush_all(pool)
+    w_trunc: Wal = wal_open(wal_path)
+    wal_truncate(w_trunc)
+    wal_close(w_trunc)
   @end
 
   return redo_res

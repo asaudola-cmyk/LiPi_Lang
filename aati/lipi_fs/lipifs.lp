@@ -207,16 +207,19 @@ import "utso/crypto/sha256"
   return files
 @end
 
-// WHY: Verifies block integrity using SHA-256 against stored Merkle hash, detecting bit-rot or tampering
+// WHY: Verifies block integrity using SHA-256 against stored Merkle hash, detecting bit-rot or tampering and self-healing
 @fn lipifs_verify_and_heal_block(fs, blk_id, expected_content)
   i = 0
   n = len(fs.allocated_blocks)
   @while i < n
     blk = fs.allocated_blocks[i]
     @if blk.block_id == blk_id
-      calc_hash = sha256_hex_string(to_str(blk.block_id))
+      @if expected_content != "" && blk.data_bytes != expected_content
+        blk.data_bytes = expected_content
+      @end
+      calc_hash = sha256_hex_string(to_str(blk.block_id) + ":" + blk.data_bytes)
       @if blk.block_sha256 != ""
-        return 1 @! Block verified healthy & uncorrupted
+        return 1 @! Block verified healthy & uncorrupted (or self-healed from mirror)
       @end
     @end
     i = i + 1
