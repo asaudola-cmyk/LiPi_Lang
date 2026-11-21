@@ -1,9 +1,29 @@
-@struct KZG_SRS
-  tau: i64
-  g1_gen: G1Point
-  g2_gen: G2Point
-  g2_tau: G2Point
+@fn lipi_pow2(n)
+  @if n <= 0 return 1 @end
+  res = 1
+  i = 0
+  @while i < n
+    res = res * 2
+    i = i + 1
+  @end
+  return res
 @end
+
+@! ============================================================================
+@! LIPI UNIVERSAL ARCHITECTURE — BN254 FIELD TOWER & BILINEAR PAIRING
+@! Module: utso/crypto/pairing.lp
+@! 100% Pure Lipi Implementation — Zero External Dependencies
+@! Features: BN254 Elliptic Curve Field Tower (Fp -> Fp2 -> Fp6 -> Fp12),
+@! Overflow-Safe Modular Arithmetic, Miller Loop, Bilinear Pairing e(G1, G2)
+@! ============================================================================
+
+import "utso/core/collections"
+import "utso/core/string"
+import "utso/crypto/sha256"
+
+@! ----------------------------------------------------------------------------
+@! 1. UNIFIED DATA STRUCTURES & FIELD TOWER
+@! ----------------------------------------------------------------------------
 
 @struct Fp2
   c0: i64
@@ -21,63 +41,6 @@
   w1: Fp6
 @end
 
-@struct G1Point
-  x: i64
-  y: i64
-  is_infinity: i64
-@end
-
-@struct G2Point
-  x: Fp2
-  y: Fp2
-  is_infinity: i64
-@end
-
-@fn lipi_pow2(n)
-  @if n <= 0 return 1 @end
-  res = 1
-  i = 0
-  @while i < n
-    res = res * 2
-    i = i + 1
-  @end
-  return res
-@end
-
-@! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — ADVANCED PLONK & ELLIPTIC CURVE ZK-SNARKS
-@! Module: utso/crypto/plonk.lp
-@! Milestone: Next-Gen Universal Zero-Knowledge Cryptography
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: BN254 Elliptic Curve Field Tower (Fp -> Fp2 -> Fp6 -> Fp12),
-@! Miller Loop, Bilinear Pairing e(G1, G2), Universal PLONK Custom Gates,
-@! and Genuine KZG Polynomial Commitment Verification
-@! ============================================================================
-
-import "utso/core/collections"
-import "utso/core/string"
-import "utso/crypto/sha256"
-
-@! ============================================================================
-@! 1. DATA STRUCTURES & FIELD TOWER
-@! ============================================================================
-
-@struct Fp2
-  c0: i64
-  c1: i64
-@end
-
-@struct Fp6
-  c0: Fp2
-  c1: Fp2
-  c2: Fp2
-@end
-
-@struct Fp12
-  c0: Fp6
-  c1: Fp6
-@end
-
 @struct ECPoint
   x_coord: i64
   y_coord: i64
@@ -85,17 +48,17 @@ import "utso/crypto/sha256"
 @end
 
 @struct G2Point
-  x: Fp2
-  y: Fp2
+  gx: Fp2
+  gy: Fp2
   is_inf: i64
 @end
 
 @struct PlonkGate
-  ql: i64 @! Left selector
-  qr: i64 @! Right selector
-  qo: i64 @! Output selector
-  qm: i64 @! Multiplication selector
-  qc: i64  @! Constant selector
+  ql: i64
+  qr: i64
+  qo: i64
+  qm: i64
+  qc: i64
 @end
 
 @struct KZGCommitment
@@ -121,9 +84,9 @@ import "utso/crypto/sha256"
   proof_size_bytes: i64
 @end
 
-@! ============================================================================
+@! ----------------------------------------------------------------------------
 @! 2. BASE & EXTENSION FIELD ARITHMETIC
-@! ============================================================================
+@! ----------------------------------------------------------------------------
 
 @fn fp_add(a: i64, b: i64, p: i64) -> i64
   res = (a + b) % p
@@ -138,8 +101,24 @@ import "utso/crypto/sha256"
 @end
 
 @fn fp_mul(a: i64, b: i64, p: i64) -> i64
-  res = (a * b) % p
-  @if res < 0 res = res + p @end
+  @! WHY: Avoid signed i64 overflow when operands exceed 30 bits via Russian peasant doubling.
+  x = a % p
+  @if x < 0 x = x + p @end
+  y = b % p
+  @if y < 0 y = y + p @end
+  @if x < 1073741824 && y < 1073741824
+    return (x * y) % p
+  @end
+  res = 0
+  @while y > 0
+    @if (y & 1) == 1
+      res = res + x
+      @if res >= p res = res - p @end
+    @end
+    x = x + x
+    @if x >= p x = x - p @end
+    y = y >> 1
+  @end
   return res
 @end
 
@@ -151,9 +130,9 @@ import "utso/crypto/sha256"
   exp = p - 2
   @while exp > 0
     @if (exp % 2) == 1
-      res = (res * base) % p
+      res = fp_mul(res, base, p)
     @end
-    base = (base * base) % p
+    base = fp_mul(base, base, p)
     exp = exp / 2
   @end
   return res
@@ -274,9 +253,9 @@ import "utso/crypto/sha256"
 @fn fp12_mul(a, b, p)
   a0b0 = fp6_mul(a.w0, b.w0, p)
   a1b1 = fp6_mul(a.w1, b.w1, p)
-  
-  @! v * a1b1: if a1b1 = (c0, c1, c2), then v*(c0 + c1*v + c2*v^2) = xi*c2 + c0*v + c1*v^2
-  v_a1b1 = fp6_new(fp2_mul_xi(a1b1.c2, p), a1b1.w0, a1b1.w1)
+
+  @! v * a1b1: if a1b1 = (v0, v1, v2), then v*(v0 + v1*v + v2*v^2) = xi*v2 + v0*v + v1*v^2
+  v_a1b1 = fp6_new(fp2_mul_xi(a1b1.v2, p), a1b1.v0, a1b1.v1)
   c0 = fp6_add(a0b0, v_a1b1, p)
   c1 = fp6_sub(fp6_sub(fp6_mul(fp6_add(a.w0, a.w1, p), fp6_add(b.w0, b.w1, p), p), a0b0, p), a1b1, p)
   return fp12_new(c0, c1)
@@ -354,7 +333,7 @@ import "utso/crypto/sha256"
 
 @! G2 Point Operations over Fp2
 @fn g2_point_infinity()
-  return { x: fp2_zero(), y: fp2_zero(), is_inf: 1 }
+  return { gx: fp2_zero(), gy: fp2_zero(), is_inf: 1 }
 @end
 
 @fn g2_point_new(x, y)
@@ -363,7 +342,7 @@ import "utso/crypto/sha256"
 
 @fn g2_point_neg(pt, p)
   @if pt.is_inf == 1 return pt @end
-  return { x: pt.gx, y: fp2_sub(fp2_zero(), pt.gy, p), is_inf: 0 }
+  return { gx: pt.gx, gy: fp2_sub(fp2_zero(), pt.gy, p), is_inf: 0 }
 @end
 
 @fn g2_point_add(p1, p2, p_mod)
@@ -415,8 +394,8 @@ import "utso/crypto/sha256"
   y1 = t_pt.gy
   x2 = q_pt.gx
   y2 = q_pt.gy
-  xp = fp2_new(p_aff.gx, 0)
-  yp = fp2_new(p_aff.gy, 0)
+  xp = fp2_new(p_aff.x_coord, 0)
+  yp = fp2_new(p_aff.y_coord, 0)
 
   lam = fp2_zero()
   @if fp2_eq(x1, x2) == 1
@@ -448,14 +427,15 @@ import "utso/crypto/sha256"
 @end
 
 @fn miller_loop(p_g1, q_g2, p_mod)
-  @if p_g1.is_infinity == 1 || q_g2.is_infinity == 1
+  @if p_g1.is_inf == 1 || q_g2.is_inf == 1
     return fp12_one()
   @end
   t = q_g2
   f = fp12_one()
   loop_count = 31
 
-  bit = 15
+  @! Loop from MSB-1 (bit 3) down to 0 so T initializes at MSB (bit 4) without spurious doubling
+  bit = 3
   @while bit >= 0
     f = fp12_mul(f, f, p_mod)
     l_dbl = line_eval(t, t, p_g1, p_mod)

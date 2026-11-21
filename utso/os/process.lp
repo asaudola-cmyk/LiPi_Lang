@@ -108,10 +108,17 @@ import "utso/os/syscalls"
 @end
 
 @fn process_sleep_ms(ms)
+  @if ms <= 0 return 0 @end
+  // WHY: Passes a 16-byte Linux struct timespec [tv_sec, tv_nsec] in raw memory to sys_nanosleep.
+  ts = lipi_alloc(16)
+  @if ts <= 0 return 0 - 12 @end
   sec = ms / 1000
   nsec = (ms % 1000) * 1000000
-  ts = [sec, nsec]
-  return sys_nanosleep(ts, 0)
+  sys_poke64(ts, sec)
+  sys_poke64(ts + 8, nsec)
+  res = sys_nanosleep(ts, 0)
+  lipi_free_sized(ts, 16)
+  return res
 @end
 
 @fn process_fork()
@@ -119,21 +126,30 @@ import "utso/os/syscalls"
 @end
 
 @fn process_wait(pid)
-  ws = { val: 0 }
-  res = sys_wait4(pid, ws, 0, 0)
+  // WHY: Passes a real writable 4-byte int* buffer to Linux sys_wait4 and reads kernel status word.
+  ws_buf = lipi_alloc(16)
+  @if ws_buf <= 0 return 0 - 12 @end
+  sys_poke64(ws_buf, 0)
+  res = sys_wait4(pid, ws_buf, 0, 0)
+  st = sys_peek32(ws_buf)
+  lipi_free_sized(ws_buf, 16)
   @if res < 0
     return res
   @end
-  return ws.val
+  return st
 @end
 
 @fn process_waitpid(pid, options)
-  ws = { val: 0 }
-  res = sys_wait4(pid, ws, options, 0)
+  ws_buf = lipi_alloc(16)
+  @if ws_buf <= 0 return 0 - 12 @end
+  sys_poke64(ws_buf, 0)
+  res = sys_wait4(pid, ws_buf, options, 0)
+  st = sys_peek32(ws_buf)
+  lipi_free_sized(ws_buf, 16)
   @if res < 0
     return res
   @end
-  return ws.val
+  return st
 @end
 
 @fn process_kill(pid, sig)
@@ -144,8 +160,61 @@ import "utso/os/syscalls"
   sys_exit(code)
 @end
 
+@fn _proc_build_argv(command, args)
+  // WHY: Converts a Lipi string list (or 0) into a NULL-terminated char** vector for Linux SYS_execve.
+  @if args == 0
+    vec = lipi_alloc(16)
+    mem_word_write(vec, 0, command)
+    mem_word_write(vec, 8, 0)
+    return vec
+  @end
+  first_q = sys_peek64(args)
+  @if first_q < 0 || first_q > 4096
+    return args
+  @end
+  n = len(args)
+  prepend_cmd = 1
+  @if n > 0 && args[0] == command
+    prepend_cmd = 0
+  @end
+  total = n + prepend_cmd + 1
+  vec = lipi_alloc(total * 8)
+  idx = 0
+  @if prepend_cmd == 1
+    mem_word_write(vec, 0, command)
+    idx = 1
+  @end
+  i = 0
+  @while i < n
+    mem_word_write(vec, idx * 8, args[i])
+    idx = idx + 1
+    i = i + 1
+  @end
+  mem_word_write(vec, idx * 8, 0)
+  return vec
+@end
+
+@fn _proc_build_envp(envp)
+  @if envp == 0 return 0 @end
+  first_q = sys_peek64(envp)
+  @if first_q < 0 || first_q > 4096
+    return envp
+  @end
+  n = len(envp)
+  vec = lipi_alloc((n + 1) * 8)
+  i = 0
+  @while i < n
+    mem_word_write(vec, i * 8, envp[i])
+    i = i + 1
+  @end
+  mem_word_write(vec, n * 8, 0)
+  return vec
+@end
+
 @fn process_execve(filename_ptr, argv_ptr, envp_ptr)
-  return sys_execve(filename_ptr, argv_ptr, envp_ptr)
+  c_argv = _proc_build_argv(filename_ptr, argv_ptr)
+  c_envp = _proc_build_envp(envp_ptr)
+  return sys_execve(filename_ptr, c_argv, c_envp)
 @end
 
 @fn process_spawn(command, args)
@@ -164,6 +233,55 @@ import "utso/os/syscalls"
     process_exit(127)
   @end
   return child_pid
+@end
+
+@fn process_capture(command, args)
+  // WHY: Captures child stdout/stderr via SYS_pipe2 + fork + SYS_dup2 + execve into a real STR0 string.
+  pbuf = lipi_alloc(16)
+  @if pbuf <= 0 return { exit_code: -1, output: "" } @end
+  @if syscall(293, pbuf, 0, 0, 0, 0, 0) < 0
+    lipi_free_sized(pbuf, 16)
+    return { exit_code: -1, output: "" }
+  @end
+  rfd = sys_peek32(pbuf)
+  wfd = sys_peek32(pbuf + 4)
+  lipi_free_sized(pbuf, 16)
+
+  pid = process_fork()
+  @if pid == 0
+    sys_close(rfd)
+    syscall(33, wfd, 1, 0, 0, 0, 0)
+    syscall(33, wfd, 2, 0, 0, 0, 0)
+    sys_close(wfd)
+    process_execve(command, args, 0)
+    process_exit(127)
+  @end
+
+  sys_close(wfd)
+  @if pid < 0
+    sys_close(rfd)
+    return { exit_code: -1, output: "" }
+  @end
+
+  rbuf = lipi_alloc(4096)
+  out = ""
+  @while 1 == 1
+    nr = sys_read(rfd, rbuf, 4096)
+    @if nr <= 0 break @end
+    k = 0
+    @while k < nr
+      out = out + chr(sys_peek8(rbuf + k))
+      k = k + 1
+    @end
+  @end
+  lipi_free_sized(rbuf, 4096)
+  sys_close(rfd)
+  st = process_wait(pid)
+  code = st
+  @if process_wifexited(st) == 1
+    code = process_wexitstatus(st)
+  @end
+  return { exit_code: code, output: out }
 @end
 
 @fn process_run(command, args)

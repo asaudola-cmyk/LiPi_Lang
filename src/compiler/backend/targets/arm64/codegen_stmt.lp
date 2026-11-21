@@ -8,6 +8,7 @@
 
 fn arm64_synth_compile_statement s toks pos_box
     // WHY: Synthesizes execution bytes for statements (control flow, structs, loops, calls).
+    s.a64_sp_delta = 0
     pos = get(pos_box, 0)
     if pos >= toks.len()
         return 0
@@ -70,7 +71,7 @@ fn arm64_synth_compile_statement s toks pos_box
         else
             arm64_emit_movz_x(s, 0, 0, 0)
 
-        if s.synth_in_function == 1
+        if s.a64_in_function == 1
             arm64_emit_epilogue(s)
         else
             // Top-level return: exit with code in X0 via Linux SYS_exit (93)
@@ -93,8 +94,14 @@ fn arm64_synth_compile_statement s toks pos_box
         if s.synth_loop_starts.len() > 0
             loop_hdr = s.synth_loop_starts[s.synth_loop_starts.len() - 1]
             cur_off = s.synth_code.len()
-            rel_words = (loop_hdr - cur_off) / 4
-            arm64_emit_b(s, rel_words)
+            if loop_hdr < 0 and s.a64_for_conts.len() > 0
+                arm64_emit_b(s, 0)
+                fc_list = s.a64_for_conts[s.a64_for_conts.len() - 1]
+                push(fc_list, cur_off)
+            else
+                rel_words = (loop_hdr - cur_off) / 4
+                arm64_emit_b(s, rel_words)
+            end
         return 0
 
     // ── 4. Struct Definition: struct / গঠন / @struct ──────────────────────────
@@ -166,7 +173,7 @@ fn arm64_synth_compile_statement s toks pos_box
             if t3.tok_kind == TOK_ASSIGN() or t3.tok_text == "="
                 is_assign = 1
 
-            if is_dot == 1 and t2.tok_kind == TOK_IDENT() and is_assign == 1
+            if is_dot == 1 and arm64_is_ident_token(t2.tok_kind) == 1 and is_assign == 1
                 obj_name = txt
                 field_name = t2.tok_text
                 list_set(pos_box, 0, p3 + 1) // Consume obj, '.', field, '='
@@ -188,11 +195,57 @@ fn arm64_synth_compile_statement s toks pos_box
                 arm64_pop_reg(s, 0)
 
                 // Store value to field: str X0, [X1, #f_off]
-                f_off = arm64_synth_get_field_offset(s, "", field_name)
+                obj_sname = arm64_synth_get_var_struct(s, obj_name)
+                f_off = arm64_synth_get_field_offset(s, obj_sname, field_name)
                 scaled_fo = (f_off / 8) & 4095
                 st_word = 4177526784 | (scaled_fo << 10) | (1 << 5) | 0
                 arm64_synth_emit32(s, st_word)
                 return 0
+
+    // ── 5b. Indexed Element Assignment: arr[idx] = expr ────────────────────────
+    if k == TOK_IDENT()
+        if pos + 2 < toks.len() and toks[pos + 1].tok_kind == TOK_LBRACKET()
+            scan_p = pos + 2
+            brk_depth = 1
+            while scan_p < toks.len() and brk_depth > 0
+                sk = toks[scan_p].tok_kind
+                if sk == TOK_LBRACKET()
+                    brk_depth = brk_depth + 1
+                elif sk == TOK_RBRACKET()
+                    brk_depth = brk_depth - 1
+                end
+                scan_p = scan_p + 1
+            end
+            if brk_depth == 0 and scan_p < toks.len() and toks[scan_p].tok_kind == TOK_ASSIGN()
+                arr_name = txt
+                list_set(pos_box, 0, pos + 2)
+                arm64_synth_compile_expr(s, toks, pos_box) // X0 = idx
+                arm64_push_reg(s, 0)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                arm64_synth_compile_expr(s, toks, pos_box) // X0 = rhs
+                arm64_push_reg(s, 0)
+                arr_off = arm64_synth_lookup_var(s, arr_name)
+                if arr_off > 0
+                    arm64_emit_ldr_reg_sp(s, 0, arr_off) // X0 = hdr
+                    arm64_synth_emit32(s, 4181723139)    // ldr x3, [x0, #16] (data_ptr)
+                    arm64_pop_reg(s, 2)                  // X2 = val
+                    arm64_pop_reg(s, 1)                  // X1 = idx
+                    arm64_emit_add_x(s, 1, 1, 1)
+                    arm64_emit_add_x(s, 1, 1, 1)
+                    arm64_emit_add_x(s, 1, 1, 1)
+                    arm64_emit_add_x(s, 3, 3, 1)         // &data[idx]
+                    arm64_synth_emit32(s, 4177526882)    // str x2, [x3, #0]
+                else
+                    arm64_pop_reg(s, 2)
+                    arm64_pop_reg(s, 1)
+                end
+                return 0
+            end
+        end
+    end
 
     // ── 6. Conditionals: if / elif / else (যদি / নাহলে_যদি / নাহলে / @if...) ──
     is_if = 0
@@ -400,6 +453,7 @@ fn arm64_synth_compile_statement s toks pos_box
         push(s.synth_loop_starts, loop_header)
         loop_brks = list()
         push(s.synth_loop_breaks, loop_brks)
+        push(s.a64_for_conts, list())
 
         // Evaluate condition into X0
         arm64_synth_compile_expr(s, toks, pos_box)
@@ -464,6 +518,7 @@ fn arm64_synth_compile_statement s toks pos_box
 
         s.synth_loop_starts = pop(s.synth_loop_starts)
         s.synth_loop_breaks = pop(s.synth_loop_breaks)
+        s.a64_for_conts = pop(s.a64_for_conts)
         return 0
 
     // ── 8. Loops: for / প্রতিটি / @for ───────────────────────────────────────
@@ -506,18 +561,20 @@ fn arm64_synth_compile_statement s toks pos_box
         arm64_emit_str_reg_sp(s, 0, end_off)
 
         loop_header = s.synth_code.len()
-        push(s.synth_loop_starts, loop_header)
+        push(s.synth_loop_starts, 0 - 1)
         loop_brks = list()
         push(s.synth_loop_breaks, loop_brks)
+        for_conts = list()
+        push(s.a64_for_conts, for_conts)
 
         // Compare var and end: ldr x0, [sp, #var_off]; ldr x1, [sp, #end_off]; cmp x0, x1
         arm64_emit_ldr_reg_sp(s, 0, var_off)
         arm64_emit_ldr_reg_sp(s, 1, end_off)
         arm64_emit_cmp_x(s, 0, 1)
 
-        // b.ge loop_exit (exit if var >= end)
+        // b.gt loop_exit (cond=12: exit if var > end — inclusive a..b)
         patch_loop_exit = s.synth_code.len()
-        arm64_emit_b_cond(s, 10, 0)
+        arm64_emit_b_cond(s, 12, 0)
 
         arm64_synth_skip_whitespace_tokens(toks, pos_box)
 
@@ -554,6 +611,16 @@ fn arm64_synth_compile_statement s toks pos_box
             if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
                 list_set(pos_box, 0, cur_p + 1)
 
+        // Patch continue targets directly to loop step increment
+        step_off = s.synth_code.len()
+        fci = 0
+        while fci < for_conts.len()
+            fc_patch = for_conts[fci]
+            fc_words = (step_off - fc_patch) / 4
+            arm64_synth_patch_u32(s, fc_patch, 335544320 | (fc_words & 67108863))
+            fci = fci + 1
+        end
+
         // Increment var: ldr x0, [sp, #var_off]; mov x1, 1; add x0, x0, x1; str x0, [sp, #var_off]
         arm64_emit_ldr_reg_sp(s, 0, var_off)
         arm64_emit_movz_x(s, 1, 1, 0)
@@ -565,10 +632,10 @@ fn arm64_synth_compile_statement s toks pos_box
         rel_words = (loop_header - cur_off) / 4
         arm64_emit_b(s, rel_words)
 
-        // Backpatch loop_exit
+        // Backpatch loop_exit (b.gt cond=12)
         loop_exit_off = s.synth_code.len()
         exit_words = (loop_exit_off - patch_loop_exit) / 4
-        arm64_synth_patch_u32(s, patch_loop_exit, 1409286144 | ((exit_words & 524287) << 5) | 10)
+        arm64_synth_patch_u32(s, patch_loop_exit, 1409286144 | ((exit_words & 524287) << 5) | 12)
 
         // Backpatch breaks
         bi = 0
@@ -580,6 +647,7 @@ fn arm64_synth_compile_statement s toks pos_box
 
         s.synth_loop_starts = pop(s.synth_loop_starts)
         s.synth_loop_breaks = pop(s.synth_loop_breaks)
+        s.a64_for_conts = pop(s.a64_for_conts)
         return 0
 
     // ── 8b. Pattern Match: match / মিল / মেলাও / @match ────────────────────────
@@ -730,12 +798,12 @@ fn arm64_synth_compile_statement s toks pos_box
         arm64_synth_compile_expr(s, toks, pos_box)
         arm64_emit_mov_reg(s, 28, 0)
         arm64_emit_movz_x(s, 27, 1, 0)
-        if s.synth_try_patches.len() > 0
+        if s.a64_try_patches.len() > 0
             p_off = s.synth_code.len()
             arm64_emit_b(s, 0)
-            active_tp = s.synth_try_patches[s.synth_try_patches.len() - 1]
+            active_tp = s.a64_try_patches[s.a64_try_patches.len() - 1]
             push(active_tp, [p_off, 0])
-        elif s.synth_in_function == 1
+        elif s.a64_in_function == 1
             arm64_emit_epilogue(s)
         return 0
 
@@ -755,7 +823,7 @@ fn arm64_synth_compile_statement s toks pos_box
         // Reset X27 exception flag before entering try block
         arm64_emit_movz_x(s, 27, 0, 0)
         tp_list = list()
-        push(s.synth_try_patches, tp_list)
+        push(s.a64_try_patches, tp_list)
 
         while get(pos_box, 0) < toks.len()
             arm64_synth_skip_whitespace_tokens(toks, pos_box)
@@ -776,8 +844,8 @@ fn arm64_synth_compile_statement s toks pos_box
             if get(pos_box, 0) == bp_t
                 list_set(pos_box, 0, bp_t + 1)
 
-        cur_tp = s.synth_try_patches[s.synth_try_patches.len() - 1]
-        s.synth_try_patches = pop(s.synth_try_patches)
+        cur_tp = s.a64_try_patches[s.a64_try_patches.len() - 1]
+        s.a64_try_patches = pop(s.a64_try_patches)
 
         jmp_after_catch = s.synth_code.len()
         arm64_emit_b(s, 0)
@@ -879,9 +947,11 @@ fn arm64_synth_compile_statement s toks pos_box
             eq_pos = get(pos_box, 0)
             if eq_pos < toks.len() and toks[eq_pos].tok_kind == TOK_ASSIGN()
                 list_set(pos_box, 0, eq_pos + 1)
+                s.a64_last_struct = ""
                 arm64_synth_compile_expr(s, toks, pos_box)
                 off = arm64_synth_alloc_var(s, var_name)
                 arm64_emit_str_reg_sp(s, 0, off)
+                arm64_synth_set_var_struct(s, var_name, s.a64_last_struct)
         return 0
 
     // ── 10. Assignment: <var> = <expr> ─────────────────────────────────────────
@@ -890,9 +960,11 @@ fn arm64_synth_compile_statement s toks pos_box
         if next_pos < toks.len() and toks[next_pos].tok_kind == TOK_ASSIGN()
             var_name = txt
             list_set(pos_box, 0, next_pos + 1) // Consume ident and '='
+            s.a64_last_struct = ""
             arm64_synth_compile_expr(s, toks, pos_box)
             off = arm64_synth_alloc_var(s, var_name)
             arm64_emit_str_reg_sp(s, 0, off)
+            arm64_synth_set_var_struct(s, var_name, s.a64_last_struct)
             return 0
 
     // ── 11. Function & Component Definition: fn / কাজ / @fn / component / উপাদান ──
@@ -922,12 +994,16 @@ fn arm64_synth_compile_statement s toks pos_box
         fn_entry.fn_entry_offset = s.synth_code.len()
         push(s.synth_functions, fn_entry)
 
-        // Reset frame locals
-        saved_arm_try_patches = s.synth_try_patches
+        // Save enclosing scope (e.g. top-level _start locals) and reset function frame locals
+        saved_arm_locals = s.synth_locals
+        saved_arm_stack_off = s.synth_stack_offset
+        saved_arm_sp_delta = s.a64_sp_delta
+        saved_arm_try_patches = s.a64_try_patches
         s.synth_locals = list()
         s.synth_stack_offset = 16
-        s.synth_in_function = 1
-        s.synth_try_patches = list()
+        s.a64_sp_delta = 0
+        s.a64_in_function = 1
+        s.a64_try_patches = list()
 
         // Parse parameter names until newline or return arrow
         params = list()
@@ -1007,8 +1083,11 @@ fn arm64_synth_compile_statement s toks pos_box
         // Default epilogue at end of function
         arm64_emit_movz_x(s, 0, 0, 0)
         arm64_emit_epilogue(s)
-        s.synth_in_function = 0
-        s.synth_try_patches = saved_arm_try_patches
+        s.synth_locals = saved_arm_locals
+        s.synth_stack_offset = saved_arm_stack_off
+        s.a64_sp_delta = saved_arm_sp_delta
+        s.a64_in_function = 0
+        s.a64_try_patches = saved_arm_try_patches
 
         // Patch jump to bypass function body during top-level execution
         after_fn_offset = s.synth_code.len()

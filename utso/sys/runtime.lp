@@ -159,11 +159,17 @@ import "utso/os/syscalls"
 @end
 
 @fn process_sleep_ms(ms)
-  @! Nanosecond precision sleep via direct sys_nanosleep
+  @! Nanosecond precision sleep via raw 16-byte Linux timespec passed to sys_nanosleep
+  @if ms <= 0 return 0 @end
+  ts = lipi_alloc(16)
+  @if ts <= 0 return 0 - 12 @end
   sec = ms / 1000
   nsec = (ms % 1000) * 1000000
-  ts = [sec, nsec]
-  return sys_nanosleep(ts, 0)
+  sys_poke64(ts, sec)
+  sys_poke64(ts + 8, nsec)
+  res = sys_nanosleep(ts, 0)
+  lipi_free_sized(ts, 16)
+  return res
 @end
 
 @! ----------------------------------------------------------------------------
@@ -176,23 +182,31 @@ import "utso/os/syscalls"
 @end
 
 @fn process_wait(pid)
-  @! Wait for child process exit using raw sys_wait4 (syscall 61)
-  ws = { val: 0 }
-  res = sys_wait4(pid, ws, 0, 0)
+  @! Wait for child process exit using writable memory status buffer passed to sys_wait4 (syscall 61)
+  ws_buf = lipi_alloc(16)
+  @if ws_buf <= 0 return 0 - 12 @end
+  sys_poke64(ws_buf, 0)
+  res = sys_wait4(pid, ws_buf, 0, 0)
+  st = sys_peek32(ws_buf)
+  lipi_free_sized(ws_buf, 16)
   @if res < 0
     return res
   @end
-  return ws.val
+  return st
 @end
 
 @fn process_waitpid(pid, options)
   @! Wait for specific process with options (WNOHANG, WUNTRACED)
-  ws = { val: 0 }
-  res = sys_wait4(pid, ws, options, 0)
+  ws_buf = lipi_alloc(16)
+  @if ws_buf <= 0 return 0 - 12 @end
+  sys_poke64(ws_buf, 0)
+  res = sys_wait4(pid, ws_buf, options, 0)
+  st = sys_peek32(ws_buf)
+  lipi_free_sized(ws_buf, 16)
   @if res < 0
     return res
   @end
-  return ws.val
+  return st
 @end
 
 @fn process_kill(pid, sig)
@@ -210,9 +224,60 @@ import "utso/os/syscalls"
   sys_exit_group(code)
 @end
 
+@fn _rt_build_argv(command, args)
+  @if args == 0
+    vec = lipi_alloc(16)
+    mem_word_write(vec, 0, command)
+    mem_word_write(vec, 8, 0)
+    return vec
+  @end
+  first_q = sys_peek64(args)
+  @if first_q < 0 || first_q > 4096
+    return args
+  @end
+  n = len(args)
+  prepend_cmd = 1
+  @if n > 0 && args[0] == command
+    prepend_cmd = 0
+  @end
+  vec = lipi_alloc((n + prepend_cmd + 1) * 8)
+  idx = 0
+  @if prepend_cmd == 1
+    mem_word_write(vec, 0, command)
+    idx = 1
+  @end
+  i = 0
+  @while i < n
+    mem_word_write(vec, idx * 8, args[i])
+    idx = idx + 1
+    i = i + 1
+  @end
+  mem_word_write(vec, idx * 8, 0)
+  return vec
+@end
+
+@fn _rt_build_envp(envp)
+  @if envp == 0 return 0 @end
+  first_q = sys_peek64(envp)
+  @if first_q < 0 || first_q > 4096
+    return envp
+  @end
+  n = len(envp)
+  vec = lipi_alloc((n + 1) * 8)
+  i = 0
+  @while i < n
+    mem_word_write(vec, i * 8, envp[i])
+    i = i + 1
+  @end
+  mem_word_write(vec, n * 8, 0)
+  return vec
+@end
+
 @fn process_execve(filename_ptr, argv_ptr, envp_ptr)
   @! Execute new program replacing current address space via raw sys_execve (syscall 59)
-  return sys_execve(filename_ptr, argv_ptr, envp_ptr)
+  c_argv = _rt_build_argv(filename_ptr, argv_ptr)
+  c_envp = _rt_build_envp(envp_ptr)
+  return sys_execve(filename_ptr, c_argv, c_envp)
 @end
 
 @fn process_spawn(command, args)

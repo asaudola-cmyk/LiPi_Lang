@@ -95,7 +95,7 @@ fn slab_pool_destroy(p)
     while i < num_chunks
         base = get(p.slab_chunks, i)
         if base != 0 and p.slab_byte_size > 0
-            free(base, p.slab_byte_size)
+            free(base)
         i = i + 1
 
     p.slab_chunks = list()

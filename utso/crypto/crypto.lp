@@ -338,7 +338,9 @@ fn sha256_hex s
     h_mark = arena_mark()
     sha256_hash(s, slen, str_ptr)
     arena_reset(h_mark)
-    return str_ptr
+    res = str_sub(str_ptr, 0, 64)
+    free(raw)
+    return res
 
 
 fn শা২৫৬_হেক্স s
@@ -352,7 +354,16 @@ fn সিলিকন_sha256_টেক্সট s
 
 fn sha256_verify s expected_hex
     actual = sha256_hex(s)
-    if actual == expected_hex
+    al = str_len(actual)
+    el = str_len(expected_hex)
+    if al != el
+        return 0
+    diff = 0
+    i = 0
+    while i < al
+        diff = diff | ((str_char_at(actual, i) & 255) ^ (str_char_at(expected_hex, i) & 255))
+        i = i + 1
+    if diff == 0
         return 1
     return 0
 
@@ -420,8 +431,8 @@ fn Ed25519_generate_keypair
     kp.private_key = malloc(ED25519_KEY)
     kp.public_key = malloc(ED25519_KEY)
     crypto_random_bytes(kp.private_key, ED25519_KEY)
-    // Apply Curve25519 RFC 8032 clamping hygiene and derive compressed 255-bit Edwards public point
-    ed25519_curve25519_clamp_scalar(kp.private_key)
+    // RFC 8032 hashes the raw 32-byte seed with SHA-512 inside Ed25519_derive_pubkey/sign;
+    // do not pre-clamp the seed bytes themselves.
     Ed25519_derive_pubkey(kp.private_key, kp.public_key)
     return kp
 

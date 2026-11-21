@@ -45,6 +45,18 @@ import "utso/string"
 @! 2. AVX-512 SIMD COSINE SIMILARITY MATH (512-bit Batch Dot-Product)
 @! ============================================================================
 
+@fn vectordb_isqrt(n)
+  @if n <= 0 return 0 @end
+  @if n == 1 return 1 @end
+  x = n
+  y = (x + 1) / 2
+  @while y < x
+    x = y
+    y = (x + (n / x)) / 2
+  @end
+  return x
+@end
+
 @fn vector_cosine_similarity(vec_a, vec_b)
   dot_prod = 0
   norm_a = 0
@@ -52,6 +64,7 @@ import "utso/string"
   
   i = 0
   n = vec_a.len()
+  @if vec_b.len() < n n = vec_b.len() @end
   @while i < n
     va = vec_a[i]
     vb = vec_b[i]
@@ -61,13 +74,25 @@ import "utso/string"
     i = i + 1
   @end
 
-  @! Return fixed-point similarity scaled by 1000
   @if norm_a == 0 || norm_b == 0
     return 0
   @end
-  
-  @! Integer approximation for cosine similarity (1000 = 1.0)
-  return (dot_prod * 1000) / (norm_a + 1)
+
+  denom = 1
+  @if norm_a < 1000000000 && norm_b < 1000000000
+    denom = vectordb_isqrt(norm_a * norm_b)
+  @else
+    denom = vectordb_isqrt(norm_a) * vectordb_isqrt(norm_b)
+  @end
+  @if denom <= 0
+    return 0
+  @end
+
+  @! Return fixed-point similarity scaled by 1000 (1000 = 1.0)
+  sim = (dot_prod * 1000) / denom
+  @if sim > 1000 sim = 1000 @end
+  @if sim < (0 - 1000) sim = 0 - 1000 @end
+  return sim
 @end
 
 @! ============================================================================
@@ -112,6 +137,9 @@ import "utso/string"
 @end
 
 @fn vector_index_search_knn(idx, query_vec, top_k)
+  @if top_k <= 0
+    return []
+  @end
   best_results = []
   
   i = 0
@@ -129,5 +157,32 @@ import "utso/string"
     i = i + 1
   @end
 
-  return best_results
+  @! Sort candidates descending by score_similarity
+  si = 0
+  @while si < n
+    best_idx = si
+    sj = si + 1
+    @while sj < n
+      @if best_results[sj].score_similarity > best_results[best_idx].score_similarity
+        best_idx = sj
+      @end
+      sj = sj + 1
+    @end
+    @if best_idx != si
+      tmp = best_results[si]
+      best_results = list_set(best_results, si, best_results[best_idx])
+      best_results = list_set(best_results, best_idx, tmp)
+    @end
+    si = si + 1
+  @end
+
+  limit = top_k
+  @if limit > n limit = n @end
+  out = []
+  ki = 0
+  @while ki < limit
+    out = out.push(best_results[ki])
+    ki = ki + 1
+  @end
+  return out
 @end

@@ -1199,3 +1199,26 @@ import "aati/lipi_ai/tensor_core"
   @end
   return out
 @end
+
+@fn tensor_div_scalar(t: Tensor, divisor: f64) -> Tensor
+  // WHY: Divides all tensor elements by a non-zero scalar (e.g. fixed-point de-scaling in LoRA)
+  safe_div = divisor
+  @if safe_div == 0.0
+    safe_div = 1.0
+  @end
+  res_data = []
+  i = 0
+  @while i < t.size
+    v = tensor_get_flat(t, i)
+    res_data = res_data.push(v / safe_div)
+    i = i + 1
+  @end
+  out = tensor_new(res_data, t.shape)
+  @if t.requires_grad == 1
+    out.requires_grad = 1
+    out.creator_op = "mul_scalar"
+    out.parents = [t]
+    out.ctx = tensor_context_new("mul_scalar", [t], [t.shape], [1.0 / safe_div], [])
+  @end
+  return out
+@end

@@ -251,10 +251,8 @@ fn slab_alloc req_size
     if slab_page <= 0
         return 0
 
-    // Carve slab into slots and build LIFO freelist
+    // Carve slab into slots and build LIFO freelist (slot 0 returned directly to caller)
     total_slots = slab_capacity / slot_size
-    // First slot is allocated to caller
-    ret_ptr = slab_page
 
     // Link remaining slots into freelist
     if total_slots > 1
@@ -271,8 +269,8 @@ fn slab_alloc req_size
         // Last slot points to 0 (end of freelist)
         mem_write(curr_slot, 0, 0)
 
-    mem_zero(ret_ptr, slot_size)
-    return ret_ptr
+    mem_zero(slab_page, slot_size)
+    return slab_page
 
 fn স্ল্যাব_বরাদ্দ req_size
     return slab_alloc(req_size)

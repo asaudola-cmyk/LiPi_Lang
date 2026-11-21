@@ -4,6 +4,10 @@
 @! LiPi's own sovereign package hub
 @! ============================================================================
 
+import "utso/core/io"
+import "utso/core/string"
+import "utso/os/fs"
+
 @struct Package
   pkg_name: string
   pkg_version: string

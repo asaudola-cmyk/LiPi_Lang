@@ -38,6 +38,9 @@ fn silicon_close_fd fd
 fn silicon_exit code
     return syscall(60, code, 0, 0, 0, 0, 0)
 
+fn silicon_mem_byte_read ptr off
+    return mem_byte_read(ptr, off)
+
 // WHY: Allocates memory pages directly via kernel SYS_mmap for file buffer operations.
 fn alloc_buf size
     return silicon_mmap_buf(size)
@@ -54,27 +57,27 @@ fn is_space c
 
 // WHY: Identifies operator characters for tokenizer boundary segmentation.
 fn is_op_char c
-    if c == "=" or c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "<" or c == ">" or c == "!"
+    if c == "=" or c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or c == "<" or c == ">" or c == "!" or c == "&" or c == "|" or c == "^" or c == "~"
         return 1
     return 0
 
 // WHY: Identifies punctuation characters that require specific spacing rules.
 fn is_punct c
-    if c == "(" or c == ")" or c == "[" or c == "]" or c == "," or c == ":" or c == ";"
+    if c == "(" or c == ")" or c == "[" or c == "]" or c == "{" or c == "}" or c == "," or c == ":" or c == ";"
         return 1
     return 0
 
 // WHY: Control flow keywords must have a space before parentheses (e.g. 'if (cond)').
 fn is_keyword_before_paren w
-    if w == "if" or w == "while" or w == "return" or w == "elif" or w == "say"
+    if w == "if" or w == "while" or w == "for" or w == "return" or w == "elif" or w == "say" or w == "@if" or w == "@while" or w == "@elif" or w == "যদি" or w == "যতক্ষণ" or w == "ফেরত" or w == "বলো"
         return 1
     return 0
 
 // WHY: Binary operators require a single space on both left and right sides.
 fn is_bin_op op
-    if op == "=" or op == "==" or op == "!=" or op == "<=" or op == ">=" or op == "<" or op == ">"
+    if op == "=" or op == "==" or op == "!=" or op == "<=" or op == ">=" or op == "<" or op == ">" or op == "&&" or op == "||" or op == "&" or op == "|" or op == "^" or op == "<<" or op == ">>"
         return 1
-    if op == "+" or op == "-" or op == "*" or op == "/" or op == "%" or op == "+=" or op == "-=" or op == "*=" or op == "/=" or op == "->"
+    if op == "+" or op == "-" or op == "*" or op == "**" or op == "/" or op == "%" or op == "+=" or op == "-=" or op == "*=" or op == "/=" or op == "%=" or op == "->" or op == "=>" or op == "|>" or op == "and" or op == "or"
         return 1
     return 0
 
@@ -208,24 +211,37 @@ fn contains s sub
 
 // ── 2. Tokenizer & Code Formatter ─────────────────────────────────────────────
 
-// WHY: Finds start index of a line comment ('//'), skipping '//' inside string literals.
+// WHY: Finds start index of a line comment ('//'), skipping '//' inside escaped string literals.
 fn find_comment_start s
     slen = len(s)
     in_quote = 0
     i = 0
     while i < slen
         c = char_at(s, i)
+        if in_quote == 1 and c == "\\" and i + 1 < slen
+            i = i + 2
+            continue
         if c == "\""
             in_quote = 1 - in_quote
-        else
-            if in_quote == 0 and c == "/" and i + 1 < slen
-                if char_at(s, i + 1) == "/"
-                    return i
+        elif in_quote == 0 and c == "/" and i + 1 < slen
+            if char_at(s, i + 1) == "/"
+                return i
         i = i + 1
     return -1
 
-// WHY: Tokenizes code into semantic units (literals, operators, words, punctuation)
-// while strictly preserving string contents and multi-character operators intact.
+fn _fmt_is_digit ch
+    o = ord(ch)
+    if o >= 48 and o <= 57
+        return 1
+    return 0
+
+fn _fmt_is_unary_prefix_ctx prev
+    if prev == "" or prev == "=" or prev == "(" or prev == "[" or prev == "{" or prev == "," or prev == ":" or prev == "return" or prev == "ফেরত" or prev == "if" or prev == "@if" or prev == "while" or prev == "@while" or prev == "elif" or prev == "@elif" or is_bin_op(prev) == 1
+        return 1
+    return 0
+
+// WHY: Tokenizes code into semantic units (strings with escapes, numbers incl. 1e-5/0x/0b/0o,
+// compound multi-char operators, directives, and UTF-8 identifiers).
 fn tokenize_code code
     tokens = list()
     clen = len(code)
@@ -234,100 +250,113 @@ fn tokenize_code code
         c = char_at(code, i)
         if c == " " or c == "\t" or c == "\r" or c == "\n"
             i = i + 1
-        else
-            if c == "\""
-                // String literal: preserve character sequence including escapes
-                tok = "\""
+        elif c == "\""
+            tok = "\""
+            i = i + 1
+            while i < clen
+                sc = char_at(code, i)
+                tok = tok + sc
+                if sc == "\\" and i + 1 < clen
+                    i = i + 1
+                    tok = tok + char_at(code, i)
+                elif sc == "\""
+                    i = i + 1
+                    break
                 i = i + 1
-                while i < clen
-                    sc = char_at(code, i)
-                    tok = tok + sc
-                    if sc == "\""
-                        i = i + 1
-                        break
-                    if sc == "\\" and i + 1 < clen
-                        i = i + 1
-                        tok = tok + char_at(code, i)
-                    i = i + 1
-                tokens = push(tokens, tok)
+            tokens = push(tokens, tok)
+        elif c == "."
+            if i + 1 < clen and char_at(code, i + 1) == "."
+                tokens = push(tokens, "..")
+                i = i + 2
             else
-                if c == "."
-                    tokens = push(tokens, ".")
-                    i = i + 1
+                tokens = push(tokens, ".")
+                i = i + 1
+        elif is_op_char(c)
+            if i + 1 < clen
+                c2 = char_at(code, i + 1)
+                op2 = c + c2
+                if op2 == "==" or op2 == "!=" or op2 == "<=" or op2 == ">=" or op2 == "&&" or op2 == "||" or op2 == "<<" or op2 == ">>" or op2 == "+=" or op2 == "-=" or op2 == "*=" or op2 == "/=" or op2 == "%=" or op2 == "->" or op2 == "=>" or op2 == "|>" or op2 == "**"
+                    tokens = push(tokens, op2)
+                    i = i + 2
                 else
-                    if is_op_char(c)
-                        // Compound 2-character operators
-                        if i + 1 < clen
-                            c2 = char_at(code, i + 1)
-                            op2 = c + c2
-                            if op2 == "==" or op2 == "!=" or op2 == "<=" or op2 == ">=" or op2 == "+=" or op2 == "-=" or op2 == "*=" or op2 == "/=" or op2 == "->"
-                                tokens = push(tokens, op2)
-                                i = i + 2
-                            else
-                                tokens = push(tokens, c)
-                                i = i + 1
-                        else
-                            tokens = push(tokens, c)
-                            i = i + 1
-                    else
-                        if is_punct(c)
-                            tokens = push(tokens, c)
-                            i = i + 1
-                        else
-                            // Word / identifier / number
-                            tok = ""
-                            while i < clen
-                                ch = char_at(code, i)
-                                if ch == " " or ch == "\t" or ch == "\r" or ch == "\n" or is_op_char(ch) or is_punct(ch) or ch == "\"" or ch == "."
-                                    break
-                                tok = tok + ch
-                                i = i + 1
-                            tokens = push(tokens, tok)
+                    tokens = push(tokens, c)
+                    i = i + 1
+            else
+                tokens = push(tokens, c)
+                i = i + 1
+        elif is_punct(c)
+            tokens = push(tokens, c)
+            i = i + 1
+        elif _fmt_is_digit(c) == 1
+            tok = ""
+            saw_dot = 0
+            saw_exp = 0
+            while i < clen
+                ch = char_at(code, i)
+                if _fmt_is_digit(ch) == 1 or ch == "x" or ch == "X" or ch == "b" or ch == "B" or ch == "o" or ch == "O" or ch == "a" or ch == "A" or ch == "c" or ch == "C" or ch == "d" or ch == "D" or ch == "f" or ch == "F" or ch == "_"
+                    tok = tok + ch
+                    i = i + 1
+                elif ch == "." and saw_dot == 0 and (i + 1 >= clen or char_at(code, i + 1) != ".")
+                    saw_dot = 1
+                    tok = tok + ch
+                    i = i + 1
+                elif (ch == "e" or ch == "E") and saw_exp == 0
+                    saw_exp = 1
+                    tok = tok + ch
+                    i = i + 1
+                    if i < clen and (char_at(code, i) == "+" or char_at(code, i) == "-")
+                        tok = tok + char_at(code, i)
+                        i = i + 1
+                else
+                    break
+            tokens = push(tokens, tok)
+        else
+            tok = ""
+            while i < clen
+                ch = char_at(code, i)
+                if ch == " " or ch == "\t" or ch == "\r" or ch == "\n" or is_op_char(ch) or is_punct(ch) or ch == "\"" or ch == "."
+                    break
+                tok = tok + ch
+                i = i + 1
+            tokens = push(tokens, tok)
     return tokens
 
-// WHY: Assembles token sequence into idiomatic Lipi code with standardized spacing:
-// - 1 space around binary operators ('a + b', 'x = 10', 'i == 0')
-// - 1 space after commas (', ')
-// - Tight bindings on function calls ('foo(x)') and property accesses ('pt.x')
-// - Tight binding on unary negative numbers ('-1')
 fn format_tokens tokens
     tlen = len(tokens)
     if tlen == 0
         return ""
     out = ""
     prev = ""
+    pprev = ""
     i = 0
     while i < tlen
         tok = get(tokens, i)
         need_space = 1
         if i == 0
             need_space = 0
-        else
-            if tok == "," or tok == ";" or tok == ")" or tok == "]"
+        elif tok == "," or tok == ";" or tok == ")" or tok == "]" or tok == ":"
+            need_space = 0
+        elif tok == "{"
+            need_space = 1
+            if prev == "(" or prev == "["
                 need_space = 0
-            else
-                if tok == "(" or tok == "["
-                    if is_keyword_before_paren(prev) == 0 and prev != "" and is_bin_op(prev) == 0 and prev != "," and prev != "(" and prev != "[" and prev != "="
-                        need_space = 0
-                else
-                    if prev == "(" or prev == "["
-                        need_space = 0
-                    else
-                        if prev == "." or tok == "."
-                            need_space = 0
-                        else
-                            if prev == "-" and i >= 2
-                                pprev = get(tokens, i - 2)
-                                if pprev == "=" or pprev == "(" or pprev == "[" or pprev == "," or is_bin_op(pprev)
-                                    need_space = 0
-                            else
-                                if prev == "-" and i == 1
-                                    need_space = 0
+        elif tok == "(" or tok == "["
+            if is_keyword_before_paren(prev) == 0 and prev != "" and is_bin_op(prev) == 0 and prev != "," and prev != "(" and prev != "[" and prev != "{" and prev != "=" and prev != "!" and prev != "~"
+                need_space = 0
+        elif prev == "(" or prev == "[" or prev == ".." or tok == ".."
+            need_space = 0
+        elif prev == "." or tok == "."
+            need_space = 0
+        elif prev == "!" or prev == "~"
+            need_space = 0
+        elif prev == "-" and _fmt_is_unary_prefix_ctx(pprev) == 1
+            need_space = 0
 
         if need_space == 1
             out = out + " " + tok
         else
             out = out + tok
+        pprev = prev
         prev = tok
         i = i + 1
     return out
@@ -356,22 +385,49 @@ fn format_line_content line
 // 1. Enforces 4-space indentation per nesting level.
 // 2. Normalizes consecutive blank lines to maximum 2 blank lines.
 // 3. Removes trailing whitespace on all lines.
+fn _fmt_is_block_opener trimmed
+    if (starts_with(trimmed, "fn ") or starts_with(trimmed, "@fn ") or starts_with(trimmed, "কাজ ")) and contains(trimmed, "=") == 0
+        return 1
+    if starts_with(trimmed, "struct ") or starts_with(trimmed, "@struct ") or starts_with(trimmed, "গঠন ") or starts_with(trimmed, "কাঠামো ")
+        return 1
+    if starts_with(trimmed, "if ") or starts_with(trimmed, "@if ") or starts_with(trimmed, "যদি ") or starts_with(trimmed, "while ") or starts_with(trimmed, "@while ") or starts_with(trimmed, "যতক্ষণ ") or starts_with(trimmed, "for ") or starts_with(trimmed, "@for ") or starts_with(trimmed, "প্রতিটি ")
+        return 1
+    if trimmed == "else" or trimmed == "@else" or trimmed == "নাহলে" or starts_with(trimmed, "else ") or starts_with(trimmed, "@else ") or starts_with(trimmed, "elif ") or starts_with(trimmed, "@elif ") or starts_with(trimmed, "নাহলে_যদি ")
+        return 1
+    if len(trimmed) > 0 and char_at(trimmed, len(trimmed) - 1) == "{"
+        return 1
+    return 0
+
+fn _fmt_is_block_closer trimmed
+    if trimmed == "end" or trimmed == "@end" or trimmed == "শেষ" or trimmed == "}"
+        return 1
+    if starts_with(trimmed, "}")
+        return 1
+    return 0
+
+fn _fmt_has_inline_closer trimmed
+    if contains(trimmed, " @end") or contains(trimmed, " end") or contains(trimmed, " শেষ")
+        return 1
+    return 0
+
 fn format_source_lines lines
     out_lines = list()
     total = len(lines)
     if total == 0
         return out_lines
 
-    // Determine if the file possesses existing indentation
     max_indent = 0
+    has_explicit_end = 0
     li = 0
     while li < total
         l = get(lines, li)
-        tl = trim_left(l)
+        tl = trim_right(trim_left(l))
         if len(tl) > 0
             sp = count_leading_spaces(l)
             if sp > max_indent
                 max_indent = sp
+            if _fmt_is_block_closer(tl) == 1
+                has_explicit_end = 1
         li = li + 1
 
     indent_stack = list()
@@ -383,7 +439,7 @@ fn format_source_lines lines
     while li < total
         raw_l = get(lines, li)
         trimmed = trim_right(trim_left(raw_l))
-        
+
         if len(trimmed) == 0
             consecutive_blank = consecutive_blank + 1
             if consecutive_blank <= 2
@@ -391,41 +447,38 @@ fn format_source_lines lines
         else
             consecutive_blank = 0
             fmt_content = format_line_content(trimmed)
-            
+
             level = 0
-            if max_indent > 0
-                // Indented file: map indentation hierarchy to 4-space standard
+            if max_indent > 0 and has_explicit_end == 0
                 sp = count_leading_spaces(raw_l)
                 top_sp = get(indent_stack, len(indent_stack) - 1)
                 if sp > top_sp
                     indent_stack = push(indent_stack, sp)
-                else
-                    if sp < top_sp
-                        while len(indent_stack) > 1 and sp < get(indent_stack, len(indent_stack) - 1)
-                            nstack = list()
-                            ni = 0
-                            nlen = len(indent_stack) - 1
-                            while ni < nlen
-                                nstack = push(nstack, get(indent_stack, ni))
-                                ni = ni + 1
-                            indent_stack = nstack
+                elif sp < top_sp
+                    while len(indent_stack) > 1 and sp < get(indent_stack, len(indent_stack) - 1)
+                        nstack = list()
+                        ni = 0
+                        nlen = len(indent_stack) - 1
+                        while ni < nlen
+                            nstack = push(nstack, get(indent_stack, ni))
+                            ni = ni + 1
+                        indent_stack = nstack
                 level = len(indent_stack) - 1
             else
-                // Flat file: deduce block depth from syntax keywords
-                if starts_with(trimmed, "else") or starts_with(trimmed, "elif ")
+                if _fmt_is_block_closer(trimmed) == 1
+                    if block_depth > 0
+                        block_depth = block_depth - 1
+                    level = block_depth
+                elif trimmed == "else" or trimmed == "@else" or trimmed == "নাহলে" or starts_with(trimmed, "else ") or starts_with(trimmed, "@else ") or starts_with(trimmed, "elif ") or starts_with(trimmed, "@elif ") or starts_with(trimmed, "নাহলে_যদি ")
                     if block_depth > 0
                         level = block_depth - 1
                     else
                         level = 0
-                else
-                    level = block_depth
-
-                if (starts_with(trimmed, "fn ") and contains(trimmed, "=") == 0) or starts_with(trimmed, "struct ") or starts_with(trimmed, "if ") or starts_with(trimmed, "while ") or starts_with(trimmed, "for ") or starts_with(trimmed, "else") or starts_with(trimmed, "elif ")
                     block_depth = level + 1
                 else
-                    if starts_with(trimmed, "return")
-                        if block_depth > 1
-                            block_depth = block_depth - 1
+                    level = block_depth
+                    if _fmt_is_block_opener(trimmed) == 1 and _fmt_has_inline_closer(trimmed) == 0
+                        block_depth = level + 1
 
             line_out = make_indent(level) + fmt_content
             out_lines = push(out_lines, line_out)
@@ -448,7 +501,7 @@ fn read_file_lines path
             break
         i = 0
         while i < n
-            b = mem_byte_read(buf, i)
+            b = silicon_mem_byte_read(buf, i)
             if b == 10
                 lines = push(lines, cur_line)
                 cur_line = ""
@@ -507,27 +560,36 @@ fn main
         print_usage()
         return 0
 
-    arg1 = get(args, 1)
+    mode = 0 // 0=stdout, 1=check, 2=write
+    target_path = ""
+    ai = 1
+    while ai < argc
+        a = get(args, ai)
+        if a == "-h" or a == "--help" or a == "help"
+            print_usage()
+            return 0
+        elif a == "--check"
+            mode = 1
+        elif a == "-w" or a == "--write"
+            mode = 2
+        elif len(target_path) == 0
+            target_path = a
+        ai = ai + 1
 
-    if arg1 == "-h" or arg1 == "--help" or arg1 == "help"
-        print_usage()
-        return 0
+    if len(target_path) == 0
+        say "❌ Error: File path required."
+        silicon_exit(1)
 
-    // Mode 1: --check <file.lp>
-    if arg1 == "--check"
-        if argc < 3
-            say "❌ Error: File path required: lipifmt --check <file.lp>"
-            silicon_exit(1)
-        target_path = get(args, 2)
-        raw_lines = read_file_lines(target_path)
-        if len(raw_lines) == 0
-            say "❌ Error: Failed to read file or file is empty: " + target_path
-            silicon_exit(1)
+    raw_lines = read_file_lines(target_path)
+    if len(raw_lines) == 0
+        say "❌ Error: File not found or empty: " + target_path
+        silicon_exit(1)
 
-        formatted_lines = format_source_lines(raw_lines)
+    formatted_lines = format_source_lines(raw_lines)
+
+    if mode == 1
         rlen = len(raw_lines)
         flen = len(formatted_lines)
-        
         is_identical = 1
         if rlen != flen
             is_identical = 0
@@ -536,10 +598,8 @@ fn main
             while ci < rlen
                 if get(raw_lines, ci) != get(formatted_lines, ci)
                     is_identical = 0
-                    ci = rlen
-                else
-                    ci = ci + 1
-
+                    break
+                ci = ci + 1
         if is_identical == 1
             say "✔ " + target_path + " is formatted properly."
             silicon_exit(0)
@@ -548,18 +608,7 @@ fn main
             silicon_exit(1)
         return 0
 
-    // Mode 2: -w or --write <file.lp>
-    if arg1 == "-w" or arg1 == "--write"
-        if argc < 3
-            say "❌ Error: File path required: lipifmt -w <file.lp>"
-            silicon_exit(1)
-        target_path = get(args, 2)
-        raw_lines = read_file_lines(target_path)
-        if len(raw_lines) == 0
-            say "❌ Error: File not found or empty: " + target_path
-            silicon_exit(1)
-
-        formatted_lines = format_source_lines(raw_lines)
+    if mode == 2
         write_ok = write_file_lines(target_path, formatted_lines)
         if write_ok == 1
             say "✔ " + target_path + " formatted and written successfully."
@@ -569,14 +618,6 @@ fn main
             silicon_exit(1)
         return 0
 
-    // Mode 3: Default stdout format
-    target_path = arg1
-    raw_lines = read_file_lines(target_path)
-    if len(raw_lines) == 0
-        say "❌ Error: File not found or empty: " + target_path
-        silicon_exit(1)
-
-    formatted_lines = format_source_lines(raw_lines)
     flen = len(formatted_lines)
     fi = 0
     while fi < flen

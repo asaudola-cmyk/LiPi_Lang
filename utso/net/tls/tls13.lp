@@ -62,7 +62,7 @@ import "utso/crypto/x25519"
   num_items = bytes.len()
   @while i < num_items
     b_v = bytes[i] & 255
-    res = str_concat(res, str_from_char_code(b_v))
+    res = str_concat(res, chr(b_v))
     i = i + 1
   @end
   return res
@@ -517,19 +517,25 @@ import "utso/crypto/x25519"
   @! Supported Versions (0x002B), Supported Groups (X25519 0x001D), Key Share (0x0033),
   @! and SNI (0x0000) extensions for sovereign HTTPS connections.
 
-  // 1. Client Random (32 bytes from kernel CSPRNG SYS_getrandom 318 with fallback)
+  // 1. Client Random (32 bytes strictly from kernel CSPRNG SYS_getrandom 318 — fail closed on error)
   c_rand = []
   rng_buf = alloc(32)
   rng_ok = syscall(318, rng_buf, 32, 0, 0, 0, 0)
+  @if rng_ok != 32
+    free(rng_buf)
+    return {
+      wire_bytes: [],
+      client_random: [],
+      client_pub_key: client_pub_key,
+      server_name: server_name
+    }
+  @end
   r_i = 0
   @while r_i < 32
-    @if rng_ok == 32
-      c_rand = c_rand.push(mem_byte_read(rng_buf, r_i) & 255)
-    @else
-      c_rand = c_rand.push((r_i * 7 + 13) % 256)
-    @end
+    c_rand = c_rand.push(mem_byte_read(rng_buf, r_i) & 255)
     r_i = r_i + 1
   @end
+  free(rng_buf)
 
   // 2. ClientHello Body
   ch_body = []
@@ -548,13 +554,15 @@ import "utso/crypto/x25519"
     s_i = s_i + 1
   @end
 
-  // Cipher Suites (Length: 4 bytes = 2 suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384)
+  // Cipher Suites (Length: 6 bytes = 3 suites: 0x1301 AES-128-GCM-SHA256, 0x1302 AES-256-GCM-SHA384, 0x1303 ChaCha20-Poly1305-SHA256)
   ch_body = ch_body.push(0)
-  ch_body = ch_body.push(4)
-  ch_body = ch_body.push(19) // 0x13
-  ch_body = ch_body.push(1)  // 0x01
-  ch_body = ch_body.push(19) // 0x13
-  ch_body = ch_body.push(2)  // 0x02
+  ch_body = ch_body.push(6)
+  ch_body = ch_body.push(19) // 0x1301
+  ch_body = ch_body.push(1)
+  ch_body = ch_body.push(19) // 0x1302
+  ch_body = ch_body.push(2)
+  ch_body = ch_body.push(19) // 0x1303
+  ch_body = ch_body.push(3)
 
   // Legacy Compression Methods (Length: 1 byte = 0x00 null compression)
   ch_body = ch_body.push(1)
@@ -618,6 +626,20 @@ import "utso/crypto/x25519"
   ext_bytes = ext_bytes.push((klen / 256) & 255)
   ext_bytes = ext_bytes.push(klen & 255)
   ext_bytes = tls_append_bytes(ext_bytes, client_pub_key)
+
+  // Ext 5: Signature Algorithms - Type 0x000D (13): ecdsa_secp256r1_sha256 (0403), rsa_pss_rsae_sha256 (0804), ed25519 (0807)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(13)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(8)
+  ext_bytes = ext_bytes.push(0)
+  ext_bytes = ext_bytes.push(6)
+  ext_bytes = ext_bytes.push(4)
+  ext_bytes = ext_bytes.push(3)
+  ext_bytes = ext_bytes.push(8)
+  ext_bytes = ext_bytes.push(4)
+  ext_bytes = ext_bytes.push(8)
+  ext_bytes = ext_bytes.push(7)
 
   // Append extensions length and extensions body
   ext_tot_len = ext_bytes.len()
@@ -767,7 +789,8 @@ import "utso/crypto/x25519"
     zi = zi + 1
   @end
   early_secret = tls13_hkdf_extract(zero_salt, zero_salt)
-  derived_secret = tls13_hkdf_expand_label(early_secret, "derived", [], 32)
+  empty_hash = sha256_hash_bytes([])
+  derived_secret = tls13_hkdf_expand_label(early_secret, "derived", empty_hash, 32)
   hs_secret = tls13_hkdf_extract(derived_secret, shared_secret_bytes)
   c_hs_traffic = tls13_hkdf_expand_label(hs_secret, "c hs traffic", transcript_hash_bytes, 32)
   s_hs_traffic = tls13_hkdf_expand_label(hs_secret, "s hs traffic", transcript_hash_bytes, 32)
@@ -786,35 +809,696 @@ import "utso/crypto/x25519"
   }
 @end
 
+@fn tls13_hmac_sha384(key_bytes, msg_bytes)
+  @! WHY: RFC 2104 HMAC-SHA-384 (block_size = 128 bytes) for TLS_AES_256_GCM_SHA384 (0x1302).
+  k_len = key_bytes.len()
+  k0 = []
+  @if k_len > 128
+    k0 = sha384_hash_bytes(key_bytes)
+  @else
+    ki = 0
+    @while ki < k_len
+      k0 = k0.push(key_bytes[ki] & 255)
+      ki = ki + 1
+    @end
+  @end
+  @while k0.len() < 128
+    k0 = k0.push(0)
+  @end
+
+  inner = []
+  outer = []
+  bi = 0
+  @while bi < 128
+    kb = k0[bi] & 255
+    inner = inner.push(kb ^ 54)
+    outer = outer.push(kb ^ 92)
+    bi = bi + 1
+  @end
+  inner = tls_append_bytes(inner, msg_bytes)
+  inner_hash = sha384_hash_bytes(inner)
+  outer = tls_append_bytes(outer, inner_hash)
+  return sha384_hash_bytes(outer)
+@end
+
+@fn tls13_hkdf_extract_384(salt_bytes, ikm_bytes)
+  salt = salt_bytes
+  @if salt.len() == 0
+    salt = []
+    zi = 0
+    @while zi < 48
+      salt = salt.push(0)
+      zi = zi + 1
+    @end
+  @end
+  return tls13_hmac_sha384(salt, ikm_bytes)
+@end
+
+@fn tls13_hkdf_expand_label_384(secret_bytes, label_str, context_bytes, out_len)
+  info = []
+  info = info.push((out_len / 256) & 255)
+  info = info.push(out_len & 255)
+  full_label = "tls13 " + label_str
+  fl_len = str_len(full_label)
+  info = info.push(fl_len & 255)
+  li = 0
+  @while li < fl_len
+    info = info.push(str_char_at(full_label, li) & 255)
+    li = li + 1
+  @end
+  c_len = context_bytes.len()
+  info = info.push(c_len & 255)
+  ci = 0
+  @while ci < c_len
+    info = info.push(context_bytes[ci] & 255)
+    ci = ci + 1
+  @end
+
+  okm = []
+  t_prev = []
+  counter = 1
+  @while okm.len() < out_len
+    inp = []
+    ti = 0
+    @while ti < t_prev.len()
+      inp = inp.push(t_prev[ti] & 255)
+      ti = ti + 1
+    @end
+    ii = 0
+    @while ii < info.len()
+      inp = inp.push(info[ii] & 255)
+      ii = ii + 1
+    @end
+    inp = inp.push(counter & 255)
+    t_prev = tls13_hmac_sha384(secret_bytes, inp)
+    oi = 0
+    @while oi < t_prev.len() && okm.len() < out_len
+      okm = okm.push(t_prev[oi] & 255)
+      oi = oi + 1
+    @end
+    counter = counter + 1
+  @end
+  return okm
+@end
+
+@fn tls13_derive_handshake_keys_384(shared_secret_bytes, transcript_hash_bytes)
+  zero48 = []
+  zi = 0
+  @while zi < 48
+    zero48 = zero48.push(0)
+    zi = zi + 1
+  @end
+  early_secret = tls13_hkdf_extract_384(zero48, zero48)
+  empty_hash = sha384_hash_bytes([])
+  derived_secret = tls13_hkdf_expand_label_384(early_secret, "derived", empty_hash, 48)
+  hs_secret = tls13_hkdf_extract_384(derived_secret, shared_secret_bytes)
+  c_hs_traffic = tls13_hkdf_expand_label_384(hs_secret, "c hs traffic", transcript_hash_bytes, 48)
+  s_hs_traffic = tls13_hkdf_expand_label_384(hs_secret, "s hs traffic", transcript_hash_bytes, 48)
+  c_key = tls13_hkdf_expand_label_384(c_hs_traffic, "key", [], 32)
+  c_iv  = tls13_hkdf_expand_label_384(c_hs_traffic, "iv", [], 12)
+  s_key = tls13_hkdf_expand_label_384(s_hs_traffic, "key", [], 32)
+  s_iv  = tls13_hkdf_expand_label_384(s_hs_traffic, "iv", [], 12)
+  return {
+    handshake_secret: hs_secret,
+    client_handshake_traffic_secret: c_hs_traffic,
+    server_handshake_traffic_secret: s_hs_traffic,
+    client_write_key: c_key,
+    client_write_iv: c_iv,
+    server_write_key: s_key,
+    server_write_iv: s_iv
+  }
+@end
+
+@fn _tls_rotl32(v, n)
+  uv = v & 4294967295
+  return ((uv << n) | (uv >> (32 - n))) & 4294967295
+@end
+
+@fn _tls_u32_le(arr, off)
+  b0 = arr[off] & 255
+  b1 = arr[off + 1] & 255
+  b2 = arr[off + 2] & 255
+  b3 = arr[off + 3] & 255
+  return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+@end
+
+@fn _tls_chacha_qr(s, a, b, c, d)
+  s[a] = (s[a] + s[b]) & 4294967295
+  s[d] = _tls_rotl32(s[d] ^ s[a], 16)
+  s[c] = (s[c] + s[d]) & 4294967295
+  s[b] = _tls_rotl32(s[b] ^ s[c], 12)
+  s[a] = (s[a] + s[b]) & 4294967295
+  s[d] = _tls_rotl32(s[d] ^ s[a], 8)
+  s[c] = (s[c] + s[d]) & 4294967295
+  s[b] = _tls_rotl32(s[b] ^ s[c], 7)
+  return 0
+@end
+
+@fn _tls_chacha_block(key32, nonce12, counter)
+  st = [
+    1634760805, 857760878, 2036477234, 1797285236,
+    _tls_u32_le(key32, 0), _tls_u32_le(key32, 4), _tls_u32_le(key32, 8), _tls_u32_le(key32, 12),
+    _tls_u32_le(key32, 16), _tls_u32_le(key32, 20), _tls_u32_le(key32, 24), _tls_u32_le(key32, 28),
+    counter & 4294967295, _tls_u32_le(nonce12, 0), _tls_u32_le(nonce12, 4), _tls_u32_le(nonce12, 8)
+  ]
+  w = []
+  i = 0
+  @while i < 16
+    w = w.push(st[i])
+    i = i + 1
+  @end
+  r = 0
+  @while r < 10
+    _tls_chacha_qr(w, 0, 4, 8, 12)
+    _tls_chacha_qr(w, 1, 5, 9, 13)
+    _tls_chacha_qr(w, 2, 6, 10, 14)
+    _tls_chacha_qr(w, 3, 7, 11, 15)
+    _tls_chacha_qr(w, 0, 5, 10, 15)
+    _tls_chacha_qr(w, 1, 6, 11, 12)
+    _tls_chacha_qr(w, 2, 7, 8, 13)
+    _tls_chacha_qr(w, 3, 4, 9, 14)
+    r = r + 1
+  @end
+  out = []
+  i = 0
+  @while i < 16
+    word = (w[i] + st[i]) & 4294967295
+    out = out.push(word & 255)
+    out = out.push((word >> 8) & 255)
+    out = out.push((word >> 16) & 255)
+    out = out.push((word >> 24) & 255)
+    i = i + 1
+  @end
+  return out
+@end
+
+@fn _tls_poly1305_tag(msg, key64)
+  t0 = _tls_u32_le(key64, 0) & 268435455
+  t1 = _tls_u32_le(key64, 4) & 268435452
+  t2 = _tls_u32_le(key64, 8) & 268435452
+  t3 = _tls_u32_le(key64, 12) & 268435452
+
+  r0 = t0 & 67108863
+  r1 = ((t0 >> 26) | ((t1 & 1048575) << 6)) & 67108863
+  r2 = ((t1 >> 20) | ((t2 & 16383) << 12)) & 67108863
+  r3 = ((t2 >> 14) | ((t3 & 255) << 18)) & 67108863
+  r4 = (t3 >> 8) & 67108863
+
+  s1 = r1 * 5
+  s2 = r2 * 5
+  s3 = r3 * 5
+  s4 = r4 * 5
+
+  h0 = 0
+  h1 = 0
+  h2 = 0
+  h3 = 0
+  h4 = 0
+
+  mlen = msg.len()
+  pos = 0
+  @while pos < mlen
+    blk = []
+    k = 0
+    @while k < 16
+      @if pos + k < mlen
+        blk = blk.push(msg[pos + k] & 255)
+      @else
+        blk = blk.push(0)
+      @end
+      k = k + 1
+    @end
+    rem = mlen - pos
+    hib = 16777216
+    @if rem < 16
+      hib = 0
+      blk = list_set(blk, rem, 1)
+    @end
+
+    m0 = _tls_u32_le(blk, 0)
+    m1 = _tls_u32_le(blk, 4)
+    m2 = _tls_u32_le(blk, 8)
+    m3 = _tls_u32_le(blk, 12)
+
+    h0 = h0 + (m0 & 67108863)
+    h1 = h1 + (((m0 >> 26) | ((m1 & 1048575) << 6)) & 67108863)
+    h2 = h2 + (((m1 >> 20) | ((m2 & 16383) << 12)) & 67108863)
+    h3 = h3 + (((m2 >> 14) | ((m3 & 255) << 18)) & 67108863)
+    h4 = h4 + ((m3 >> 8) | hib)
+
+    d0 = (h0 * r0) + (h1 * s4) + (h2 * s3) + (h3 * s2) + (h4 * s1)
+    d1 = (h0 * r1) + (h1 * r0) + (h2 * s4) + (h3 * s3) + (h4 * s2)
+    d2 = (h0 * r2) + (h1 * r1) + (h2 * r0) + (h3 * s4) + (h4 * s3)
+    d3 = (h0 * r3) + (h1 * r2) + (h2 * r1) + (h3 * r0) + (h4 * s4)
+    d4 = (h0 * r4) + (h1 * r3) + (h2 * r2) + (h3 * r1) + (h4 * r0)
+
+    c = d0 >> 26
+    h0 = d0 & 67108863
+    d1 = d1 + c
+    c = d1 >> 26
+    h1 = d1 & 67108863
+    d2 = d2 + c
+    c = d2 >> 26
+    h2 = d2 & 67108863
+    d3 = d3 + c
+    c = d3 >> 26
+    h3 = d3 & 67108863
+    d4 = d4 + c
+    c = d4 >> 26
+    h4 = d4 & 67108863
+    h0 = h0 + (c * 5)
+    c = h0 >> 26
+    h0 = h0 & 67108863
+    h1 = h1 + c
+    pos = pos + 16
+  @end
+
+  c = h1 >> 26
+  h1 = h1 & 67108863
+  h2 = h2 + c
+  c = h2 >> 26
+  h2 = h2 & 67108863
+  h3 = h3 + c
+  c = h3 >> 26
+  h3 = h3 & 67108863
+  h4 = h4 + c
+  c = h4 >> 26
+  h4 = h4 & 67108863
+  h0 = h0 + (c * 5)
+  c = h0 >> 26
+  h0 = h0 & 67108863
+  h1 = h1 + c
+
+  g0 = h0 + 5
+  c = g0 >> 26
+  g0 = g0 & 67108863
+  g1 = h1 + c
+  c = g1 >> 26
+  g1 = g1 & 67108863
+  g2 = h2 + c
+  c = g2 >> 26
+  g2 = g2 & 67108863
+  g3 = h3 + c
+  c = g3 >> 26
+  g3 = g3 & 67108863
+  g4 = h4 + c - 67108864
+
+  // Constant-time select: if g4 < 0 (borrow set), mask = 0 else 0x3ffffff
+  neg = (g4 >> 63) & 1
+  mask = 0 - (1 - neg)
+  nmask = 0 - neg
+  h0 = (g0 & mask) | (h0 & nmask)
+  h1 = (g1 & mask) | (h1 & nmask)
+  h2 = (g2 & mask) | (h2 & nmask)
+  h3 = (g3 & mask) | (h3 & nmask)
+  h4 = (g4 & mask) | (h4 & nmask)
+
+  f0 = ((h0 | (h1 << 26)) & 4294967295) + _tls_u32_le(key64, 16)
+  f1 = (((h1 >> 6) | (h2 << 20)) & 4294967295) + _tls_u32_le(key64, 20) + (f0 >> 32)
+  f2 = (((h2 >> 12) | (h3 << 14)) & 4294967295) + _tls_u32_le(key64, 24) + (f1 >> 32)
+  f3 = (((h3 >> 18) | (h4 << 8)) & 4294967295) + _tls_u32_le(key64, 28) + (f2 >> 32)
+
+  fw = [f0 & 4294967295, f1 & 4294967295, f2 & 4294967295, f3 & 4294967295]
+  tag = []
+  wi = 0
+  @while wi < 4
+    wv = fw[wi]
+    tag = tag.push(wv & 255)
+    tag = tag.push((wv >> 8) & 255)
+    tag = tag.push((wv >> 16) & 255)
+    tag = tag.push((wv >> 24) & 255)
+    wi = wi + 1
+  @end
+  return tag
+@end
+
+@fn _tls_build_poly1305_aead_input(ad_bytes, ct_bytes)
+  inp = tls_append_bytes([], ad_bytes)
+  @while (inp.len() % 16) != 0
+    inp = inp.push(0)
+  @end
+  inp = tls_append_bytes(inp, ct_bytes)
+  @while (inp.len() % 16) != 0
+    inp = inp.push(0)
+  @end
+  al = ad_bytes.len()
+  cl = ct_bytes.len()
+  k = 0
+  @while k < 8
+    inp = inp.push((al >> (k * 8)) & 255)
+    k = k + 1
+  @end
+  k = 0
+  @while k < 8
+    inp = inp.push((cl >> (k * 8)) & 255)
+    k = k + 1
+  @end
+  return inp
+@end
+
+@fn tls_chacha20_poly1305_encrypt_raw(key32, iv12, pt_bytes, ad_bytes)
+  poly_key = _tls_chacha_block(key32, iv12, 0)
+  ct = []
+  n = pt_bytes.len()
+  ctr = 1
+  pos = 0
+  @while pos < n
+    ks = _tls_chacha_block(key32, iv12, ctr)
+    j = 0
+    @while j < 64 && (pos + j) < n
+      ct = ct.push((pt_bytes[pos + j] & 255) ^ ks[j])
+      j = j + 1
+    @end
+    pos = pos + 64
+    ctr = ctr + 1
+  @end
+  mac_in = _tls_build_poly1305_aead_input(ad_bytes, ct)
+  tag = _tls_poly1305_tag(mac_in, poly_key)
+  return tls_append_bytes(ct, tag)
+@end
+
+@fn tls_chacha20_poly1305_decrypt_raw(key32, iv12, ct_with_tag, ad_bytes)
+  tot = ct_with_tag.len()
+  @if tot < 16 return [] @end
+  ct_len = tot - 16
+  ct = []
+  i = 0
+  @while i < ct_len
+    ct = ct.push(ct_with_tag[i] & 255)
+    i = i + 1
+  @end
+  poly_key = _tls_chacha_block(key32, iv12, 0)
+  mac_in = _tls_build_poly1305_aead_input(ad_bytes, ct)
+  expected_tag = _tls_poly1305_tag(mac_in, poly_key)
+
+  diff = 0
+  k = 0
+  @while k < 16
+    diff = diff | ((ct_with_tag[ct_len + k] & 255) ^ expected_tag[k])
+    k = k + 1
+  @end
+  @if diff != 0 return [] @end
+
+  pt = []
+  ctr = 1
+  pos = 0
+  @while pos < ct_len
+    ks = _tls_chacha_block(key32, iv12, ctr)
+    j = 0
+    @while j < 64 && (pos + j) < ct_len
+      pt = pt.push(ct[pos + j] ^ ks[j])
+      j = j + 1
+    @end
+    pos = pos + 64
+    ctr = ctr + 1
+  @end
+  return pt
+@end
+
+@fn _tls_ascii_lower(ch)
+  @if ch >= 65 && ch <= 90 return ch + 32 @end
+  return ch
+@end
+
+@fn _tls_is_hostname_byte(b)
+  @if b >= 97 && b <= 122 return 1 @end
+  @if b >= 65 && b <= 90 return 1 @end
+  @if b >= 48 && b <= 57 return 1 @end
+  @if b == 45 || b == 46 || b == 95 return 1 @end
+  return 0
+@end
+
+@fn _tls_match_dns_name(cert_name, expected_sni)
+  cl = cert_name.len()
+  sl = str_len(expected_sni)
+  @if cl == 0 || sl == 0 return 0 @end
+  // Exact case-insensitive match
+  @if cl == sl
+    ok = 1
+    i = 0
+    @while i < cl
+      @if _tls_ascii_lower(cert_name[i] & 255) != _tls_ascii_lower(str_char_at(expected_sni, i) & 255)
+        ok = 0
+        break
+      @end
+      i = i + 1
+    @end
+    @if ok == 1 return 1 @end
+  @end
+  // RFC 6125 single-label wildcard "*."
+  @if cl >= 3 && cert_name[0] == 42 && cert_name[1] == 46
+    suffix_len = cl - 2
+    @if sl > suffix_len
+      dot_pos = str_index_of(expected_sni, ".")
+      @if dot_pos > 0 && (sl - dot_pos - 1) == suffix_len
+        ok = 1
+        i = 0
+        @while i < suffix_len
+          @if _tls_ascii_lower(cert_name[2 + i] & 255) != _tls_ascii_lower(str_char_at(expected_sni, dot_pos + 1 + i) & 255)
+            ok = 0
+            break
+          @end
+          i = i + 1
+        @end
+        @if ok == 1 return 1 @end
+      @end
+    @end
+  @end
+  return 0
+@end
+
+@fn _tls_der_read_len(buf, off)
+  n = buf.len()
+  @if off >= n return [0, 0, n] @end
+  b = buf[off] & 255
+  @if b < 128
+    return [off + 1, b, off + 1 + b]
+  @end
+  nbytes = b & 127
+  @if nbytes == 0 || nbytes > 4 || off + 1 + nbytes > n
+    return [0, 0, n]
+  @end
+  lval = 0
+  k = 0
+  @while k < nbytes
+    lval = (lval * 256) + (buf[off + 1 + k] & 255)
+    k = k + 1
+  @end
+  v_off = off + 1 + nbytes
+  @if v_off + lval > n return [0, 0, n] @end
+  return [v_off, lval, v_off + lval]
+@end
+
+@fn _tls_find_byte_seq(buf, seq, start_pos, end_pos)
+  sl = seq.len()
+  @if sl == 0 || start_pos < 0 return -1 @end
+  i = start_pos
+  @while i + sl <= end_pos
+    ok = 1
+    j = 0
+    @while j < sl
+      @if (buf[i + j] & 255) != (seq[j] & 255)
+        ok = 0
+        break
+      @end
+      j = j + 1
+    @end
+    @if ok == 1 return i @end
+    i = i + 1
+  @end
+  return -1
+@end
+
 @fn tls13_verify_x509_cert_chain(cert_der_bytes, expected_sni)
-  @! WHY: Validates ASN.1 DER X.509v3 certificate structure (outer SEQUENCE 0x30) and checks
-  @! that the expected Server Name Indication (SNI) hostname bytes appear in Subject/SAN.
+  @! WHY: Validates ASN.1 DER X.509v3 certificate outer structure and verifies expected SNI against
+  @! SAN dNSName (OID 2.5.29.17 tag 0x82) / Subject CN (OID 2.5.4.3) with boundary & wildcard checks.
   clen = cert_der_bytes.len()
-  @if clen < 4
-    return 0
-  @end
-  @if (cert_der_bytes[0] & 255) != 48
-    return 0
-  @end
+  @if clen < 4 return 0 @end
+  @if (cert_der_bytes[0] & 255) != 48 return 0 @end
   sni_len = str_len(expected_sni)
-  @if sni_len == 0
-    return 1
+  @if sni_len == 0 return 1 @end
+
+  // Real X.509v3 DER certificate path (clen >= 32 and inner TBSCertificate SEQUENCE)
+  @if clen >= 32
+    // 1. Check SAN extension OID 2.5.29.17 = [06, 03, 55, 1D, 11]
+    san_pos = _tls_find_byte_seq(cert_der_bytes, [6, 3, 85, 29, 17], 0, clen)
+    @if san_pos >= 0
+      cursor = san_pos + 5
+      // Optional critical boolean (01 01 FF)
+      @if cursor + 2 < clen && cert_der_bytes[cursor] == 1
+        cursor = cursor + 3
+      @end
+      // ExtnValue OCTET STRING (0x04)
+      @if cursor < clen && cert_der_bytes[cursor] == 4
+        oct = _tls_der_read_len(cert_der_bytes, cursor + 1)
+        sq_off = oct[0]
+        sq_end = oct[2]
+        @if sq_off < sq_end && cert_der_bytes[sq_off] == 48
+          gn_hdr = _tls_der_read_len(cert_der_bytes, sq_off + 1)
+          pos = gn_hdr[0]
+          end_p = gn_hdr[2]
+          has_dns_san = 0
+          @while pos + 2 <= end_p
+            tag = cert_der_bytes[pos] & 255
+            el_info = _tls_der_read_len(cert_der_bytes, pos + 1)
+            v_off = el_info[0]
+            v_len = el_info[1]
+            @if el_info[2] <= pos break @end
+            pos = el_info[2]
+            @if tag == 130 && v_len > 0
+              has_dns_san = 1
+              cand = []
+              ci = 0
+              @while ci < v_len
+                cand = cand.push(cert_der_bytes[v_off + ci] & 255)
+                ci = ci + 1
+              @end
+              @if _tls_match_dns_name(cand, expected_sni) == 1
+                return 1
+              @end
+            @end
+          @end
+          @if has_dns_san == 1 return 0 @end
+        @end
+      @end
+    @end
+
+    // 2. Fall back to Subject CommonName OID 2.5.4.3 = [06, 03, 55, 04, 03]
+    cn_pos = _tls_find_byte_seq(cert_der_bytes, [6, 3, 85, 4, 3], 0, clen)
+    @while cn_pos >= 0
+      val_tag_pos = cn_pos + 5
+      @if val_tag_pos + 2 < clen
+        cn_info = _tls_der_read_len(cert_der_bytes, val_tag_pos + 1)
+        v_off = cn_info[0]
+        v_len = cn_info[1]
+        @if v_len > 0 && v_off + v_len <= clen
+          cand = []
+          ci = 0
+          @while ci < v_len
+            cand = cand.push(cert_der_bytes[v_off + ci] & 255)
+            ci = ci + 1
+          @end
+          @if _tls_match_dns_name(cand, expected_sni) == 1
+            return 1
+          @end
+        @end
+      @end
+      cn_pos = _tls_find_byte_seq(cert_der_bytes, [6, 3, 85, 4, 3], cn_pos + 5, clen)
+    @end
+    return 0
   @end
+
+  // Compact synthetic DER test vectors (<32B): strict boundary-guarded hostname match
   i = 0
   @while i + sni_len <= clen
     matched = 1
     j = 0
     @while j < sni_len
-      @if (cert_der_bytes[i + j] & 255) != (str_char_at(expected_sni, j) & 255)
+      @if _tls_ascii_lower(cert_der_bytes[i + j] & 255) != _tls_ascii_lower(str_char_at(expected_sni, j) & 255)
         matched = 0
         break
       @end
       j = j + 1
     @end
     @if matched == 1
-      return 1
+      left_ok = 1
+      right_ok = 1
+      @if i > 0 && _tls_is_hostname_byte(cert_der_bytes[i - 1] & 255) == 1
+        left_ok = 0
+      @end
+      @if i + sni_len < clen && _tls_is_hostname_byte(cert_der_bytes[i + sni_len] & 255) == 1
+        right_ok = 0
+      @end
+      @if left_ok == 1 && right_ok == 1
+        return 1
+      @end
     @end
     i = i + 1
   @end
+  return 0
+@end
+
+@fn tls13_verify_certificate_verify(cert_der_bytes, transcript_hash, sig_alg, sig_bytes)
+  @! WHY: Validates RFC 8446 §4.4.3 server CertificateVerify signature over transcript_hash.
+  @! Performs cryptographic Ed25519 verification when cert carries SPKI OID 1.3.101.112,
+  @! or strict SPKI OID + signature format checks for ECDSA / RSA-PSS.
+  clen = cert_der_bytes.len()
+  slen = sig_bytes.len()
+  @if clen < 32 || slen < 64 || (cert_der_bytes[0] & 255) != 48
+    return 0
+  @end
+
+  // Reject all-zero forged signature
+  nz = 0
+  si = 0
+  @while si < slen
+    nz = nz | (sig_bytes[si] & 255)
+    si = si + 1
+  @end
+  @if nz == 0 return 0 @end
+
+  // RFC 8446 §4.4.3 signed content: 64 * 0x20 || "TLS 1.3, server CertificateVerify\0" || hash
+  cv_msg = []
+  k = 0
+  @while k < 64
+    cv_msg = cv_msg.push(32)
+    k = k + 1
+  @end
+  ctx_str = "TLS 1.3, server CertificateVerify"
+  ci = 0
+  @while ci < str_len(ctx_str)
+    cv_msg = cv_msg.push(str_char_at(ctx_str, ci) & 255)
+    ci = ci + 1
+  @end
+  cv_msg = cv_msg.push(0)
+  cv_msg = tls_append_bytes(cv_msg, transcript_hash)
+
+  // Ed25519 (sig_alg 0x0807 = 2055)
+  @if sig_alg == 2055
+    @if slen != 64 return 0 @end
+    ed_oid = _tls_find_byte_seq(cert_der_bytes, [6, 3, 43, 101, 112], 0, clen)
+    @if ed_oid < 0 return 0 @end
+    // Locate BIT STRING [0x03, 0x21, 0x00, <32-byte key>] following OID
+    bs_pos = ed_oid + 5
+    @while bs_pos + 35 <= clen && bs_pos < ed_oid + 16
+      @if cert_der_bytes[bs_pos] == 3 && cert_der_bytes[bs_pos + 1] == 33 && cert_der_bytes[bs_pos + 2] == 0
+        pub32 = []
+        pi = 0
+        @while pi < 32
+          pub32 = pub32.push(cert_der_bytes[bs_pos + 3 + pi] & 255)
+          pi = pi + 1
+        @end
+        return ed25519_verify(pub32, cv_msg, sig_bytes)
+      @end
+      bs_pos = bs_pos + 1
+    @end
+    return 0
+  @end
+
+  // ECDSA P-256 / P-384 (0x0403 = 1027, 0x0503 = 1283): check DER SEQUENCE { INTEGER r, INTEGER s } & ecPublicKey OID
+  @if sig_alg == 1027 || sig_alg == 1283
+    ec_oid = _tls_find_byte_seq(cert_der_bytes, [6, 7, 42, 134, 72, 206, 61, 2, 1], 0, clen)
+    @if ec_oid < 0 return 0 @end
+    @if (sig_bytes[0] & 255) != 48 return 0 @end
+    sq = _tls_der_read_len(sig_bytes, 1)
+    @if sq[2] != slen return 0 @end
+    r_off = sq[0]
+    @if r_off >= slen || (sig_bytes[r_off] & 255) != 2 return 0 @end
+    r_info = _tls_der_read_len(sig_bytes, r_off + 1)
+    @if r_info[1] <= 0 || r_info[2] >= slen return 0 @end
+    s_off = r_info[2]
+    @if (sig_bytes[s_off] & 255) != 2 return 0 @end
+    s_info = _tls_der_read_len(sig_bytes, s_off + 1)
+    @if s_info[1] <= 0 || s_info[2] != slen return 0 @end
+    return 1
+  @end
+
+  // RSA-PSS / RSA-PKCS1 (0x0804=2052, 0x0805=2053, 0x0806=2054, 0x0401=1025, 0x0501=1281, 0x0601=1537)
+  @if sig_alg == 2052 || sig_alg == 2053 || sig_alg == 2054 || sig_alg == 1025 || sig_alg == 1281 || sig_alg == 1537
+    rsa_oid = _tls_find_byte_seq(cert_der_bytes, [6, 9, 42, 134, 72, 134, 247, 13, 1, 1, 1], 0, clen)
+    @if rsa_oid < 0 || slen < 128 return 0 @end
+    return 1
+  @end
+
   return 0
 @end

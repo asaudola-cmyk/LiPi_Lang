@@ -1325,6 +1325,16 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_sovereign_audit_fixes.lp", "test_sovereign_audit_fixes") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_deep_audit_master.lp", "test_deep_audit_master") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

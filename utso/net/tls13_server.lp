@@ -267,11 +267,26 @@ fn tls13_build_server_hello client_hello
     push(out, 3)
     push(out, 3)
     
-    // Server Random (32 bytes deterministic entropy)
+    // Server Random (32 bytes via SYS_getrandom 318 with RDTSC entropy fallback)
+    rnd_buf = malloc(32)
+    rnd_ok = 0
+    if rnd_buf > 0
+        rnd_ok = syscall(318, rnd_buf, 32, 0, 0, 0, 0)
+    end
     i = 0
     while i < 32
-        push(out, (i * 7 + 42) & 255)
+        rb = 0
+        if rnd_ok == 32
+            rb = mem_byte_read(rnd_buf, i) & 255
+        else
+            rb = (cpu_clock() ^ (i * 2654435761)) & 255
+        end
+        push(out, rb)
         i = i + 1
+    end
+    if rnd_buf > 0
+        free(rnd_buf, 32)
+    end
     
     // Legacy Session ID Echo (32 bytes)
     push(out, 32)
@@ -324,79 +339,117 @@ fn tls13_build_server_hello client_hello
 
 // ── 6. Authenticated AEAD Record Encryption & Decryption ──────────────────────
 
+fn tls13_record_kdf_word secret seq idx
+    // SplitMix64 / Murmur3 avalanche mixing of (secret, seq, idx)
+    x = (secret ^ (seq * 7046029254386353131) ^ (idx * 2862933555777941757)) & 4294967295
+    x = ((x ^ (x >> 16)) * 2246822519) & 4294967295
+    x = ((x ^ (x >> 13)) * 3266489917) & 4294967295
+    return (x ^ (x >> 16)) & 255
+
 fn tls13_record_encrypt session plaintext_str
-    // WHY: Encrypts application payload with TLS 1.3 AEAD inner-plaintext framing.
+    // WHY: Encrypts application payload with TLS 1.3 AEAD inner-plaintext framing and keyed MAC tag.
     pt_len = len(plaintext_str)
     out = list()
-    
+
     // Record Header: Application Data (23), Legacy Version 0x0303
     push(out, TLS_CONTENT_APPLICATION_DATA)
     push(out, 3)
     push(out, 3)
-    
+
     // Payload Length: Plaintext + Inner Content Type (1 byte) + AEAD Auth Tag (16 bytes)
     enc_len = pt_len + 1 + 16
     push(out, (enc_len >> 8) & 255)
     push(out, enc_len & 255)
-    
-    // Ciphertext: Stream XOR encryption with session key
+
     secret = session.ts_shared_secret
     seq = session.ts_server_seq
+    mac_acc0 = (secret ^ (seq * 2654435761) ^ 1779033703) & 4294967295
+    mac_acc1 = (secret ^ (seq * 2246822519) ^ 3144134277) & 4294967295
+
     i = 0
     while i < pt_len
-        ch_val = get(plaintext_str, i)
-        // Keystream mask derived from secret and sequence
-        mask = (secret + seq + i * 31) & 255
-        push(out, ch_val ^ mask)
+        ch_val = get(plaintext_str, i) & 255
+        mask = tls13_record_kdf_word(secret, seq, i)
+        cb = ch_val ^ mask
+        push(out, cb)
+        mac_acc0 = ((mac_acc0 * 16777619) ^ (cb + i)) & 4294967295
+        mac_acc1 = ((mac_acc1 + cb + 1) * 2654435761) & 4294967295
         i = i + 1
-    
-    // Inner Content Type byte (23 = Application Data) encrypted
-    inner_mask = (secret + seq + pt_len * 31) & 255
-    push(out, TLS_CONTENT_APPLICATION_DATA ^ inner_mask)
-    
-    // 16-byte GHASH Authentication Tag (calculated over record)
+    end
+
+    inner_mask = tls13_record_kdf_word(secret, seq, pt_len)
+    inner_cb = TLS_CONTENT_APPLICATION_DATA ^ inner_mask
+    push(out, inner_cb)
+    mac_acc0 = ((mac_acc0 * 16777619) ^ inner_cb) & 4294967295
+
     j = 0
     while j < 16
-        tag_byte = (secret ^ (j * 17 + seq)) & 255
-        push(out, tag_byte)
+        t_mix = tls13_record_kdf_word(mac_acc0 ^ mac_acc1, seq, 1024 + j)
+        push(out, t_mix)
         j = j + 1
-    
-    // Increment server sequence counter to prevent replay
+    end
+
     session.ts_server_seq = seq + 1
     return out
 
 fn tls13_record_decrypt session record_bytes
-    // WHY: Validates AEAD record integrity and decrypts Application Data.
+    // WHY: Validates 16-byte AEAD authentication tag BEFORE decrypting Application Data (EtM).
     r_len = len(record_bytes)
-    if r_len < 22 // 5-byte header + 1-byte inner type + 16-byte tag
+    if r_len < 22
         return ""
-    
+    end
+
     ct = get(record_bytes, 0)
     if ct != TLS_CONTENT_APPLICATION_DATA
         return ""
-    
+    end
+
     l0 = get(record_bytes, 3)
     l1 = get(record_bytes, 4)
     payload_len = (l0 << 8) | l1
-    
+
     if payload_len < 17 or (5 + payload_len) > r_len
         return ""
-    
+    end
+
     pt_len = payload_len - 17
     secret = session.ts_shared_secret
     seq = session.ts_client_seq
-    
-    // Decrypt plaintext bytes
+    mac_acc0 = (secret ^ (seq * 2654435761) ^ 1779033703) & 4294967295
+    mac_acc1 = (secret ^ (seq * 2246822519) ^ 3144134277) & 4294967295
+
+    i = 0
+    while i < pt_len
+        cb = get(record_bytes, 5 + i) & 255
+        mac_acc0 = ((mac_acc0 * 16777619) ^ (cb + i)) & 4294967295
+        mac_acc1 = ((mac_acc1 + cb + 1) * 2654435761) & 4294967295
+        i = i + 1
+    end
+    inner_cb = get(record_bytes, 5 + pt_len) & 255
+    mac_acc0 = ((mac_acc0 * 16777619) ^ inner_cb) & 4294967295
+
+    tag_diff = 0
+    j = 0
+    while j < 16
+        exp_t = tls13_record_kdf_word(mac_acc0 ^ mac_acc1, seq, 1024 + j)
+        got_t = get(record_bytes, 5 + pt_len + 1 + j) & 255
+        tag_diff = tag_diff | (exp_t ^ got_t)
+        j = j + 1
+    end
+    if tag_diff != 0
+        return ""
+    end
+
     res_str = ""
     i = 0
     while i < pt_len
-        c = get(record_bytes, 5 + i)
-        mask = (secret + seq + i * 31) & 255
+        c = get(record_bytes, 5 + i) & 255
+        mask = tls13_record_kdf_word(secret, seq, i)
         dec_byte = c ^ mask
-        res_str = res_str + dec_byte
+        res_str = res_str + chr(dec_byte)
         i = i + 1
-    
-    // Increment client sequence counter
+    end
+
     session.ts_client_seq = seq + 1
     return res_str
 

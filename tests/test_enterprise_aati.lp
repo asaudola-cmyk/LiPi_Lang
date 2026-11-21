@@ -68,6 +68,7 @@ resp_obj = http_parse_response(http_buf, 21)
 assert_eq(http_response_status(resp_obj), 200, "lipi_http_client: status is 200")
 assert_eq(http_response_body_len(resp_obj), 2, "lipi_http_client: body len is 2")
 http_response_free(resp_obj)
+mem_free(http_buf)
 
 // ── ৩. Package 3: lipi_jwt ──────────────────────────────────────────────
 say "[3/5] Verifying lipi_jwt (RFC 7519 Cryptographic Tokens)..."
@@ -80,7 +81,7 @@ jwt_val = jwt_validate_token(tok_buf, tok_len, jwt_secret, sec_l, 1700000000)
 assert_eq(jwt_val, 1, "lipi_jwt: cryptographic signature verified")
 assert_eq(jwt_extract_sub(tok_buf, tok_len), 9001, "lipi_jwt: sub claim is 9001")
 assert_eq(jwt_extract_role(tok_buf, tok_len), 7, "lipi_jwt: role claim is 7")
-mem_free(tok_buf, 256)
+mem_free(tok_buf)
 
 // ── ৪. Package 4: lipi_dataframe ────────────────────────────────────────
 say "[4/5] Verifying lipi_dataframe (Columnar Analytics Engine)..."
@@ -103,9 +104,9 @@ assert_eq(flen, 13, "lipi_grpc: framed length 5 + 8 = 13")
 grpc_meta = sys_alloc(24)
 unframed_len = grpc_unframe_message(grpc_frame, flen, grpc_meta)
 assert_eq(unframed_len, 8, "lipi_grpc: unframed length == 8")
-mem_free(grpc_frame, 32)
-mem_free(grpc_payload, 8)
-mem_free(grpc_meta, 24)
+mem_free(grpc_frame)
+mem_free(grpc_payload)
+mem_free(grpc_meta)
 
 say "================================================================="
 say "🎉 ALL 5 ENTERPRISE SOVEREIGN PACKAGES FULLY VERIFIED! 🎉"

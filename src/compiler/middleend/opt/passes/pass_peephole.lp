@@ -54,10 +54,13 @@ fn peephole_simplify_inst inst
         l_val = l.const_val
         r_val = r.const_val
 
-        // Rule: Self-operations (x - x -> 0, x ^ x -> 0)
+        // Rule: Self-operations (x - x -> 0, x ^ x -> 0) — skip float/f64 to preserve NaN
         if l == r
-            if op == OP_SUB return ssa_value_new_const(0, inst.result.vtype)
-            if op == OP_XOR return ssa_value_new_const(0, inst.result.vtype)
+            vt = inst.result.vtype
+            if vt != "f64" and vt != "float"
+                if op == OP_SUB return ssa_value_new_const(0, inst.result.vtype)
+                if op == OP_XOR return ssa_value_new_const(0, inst.result.vtype)
+            end
             if op == OP_AND or op == OP_OR return l
 
         // Addition: x + 0 -> x, 0 + x -> x
@@ -97,21 +100,11 @@ fn peephole_simplify_inst inst
                     ssa_value_add_use(const_k, inst)
                     return 0
 
-        // Division: x / 1 -> x, 0 / x -> 0
+        // Division: x / 1 -> x (skip signed x / 2^k -> shr and 0 / x -> 0 to preserve negative truncation and div-by-zero traps)
         if op == OP_DIV
             if is_r_const == 1
                 if r_val == 1 return l
-                // Strength reduction: x / 2^k -> x >> k
-                if r_val > 1 and peephole_is_power_of_two(r_val) == 1
-                    shift_k = peephole_log2(r_val)
-                    inst.op = OP_SHR
-                    const_k = ssa_value_new_const(shift_k, "i64")
-                    ssa_value_remove_use(r, inst)
-                    list_set(inst.operands, 1, const_k)
-                    ssa_value_add_use(const_k, inst)
-                    return 0
-            if is_l_const == 1 and l_val == 0
-                return ssa_value_new_const(0, inst.result.vtype)
+            end
 
         // Bitwise AND: x & 0 -> 0, 0 & x -> 0
         if op == OP_AND
@@ -133,13 +126,16 @@ fn peephole_simplify_inst inst
             if is_r_const == 1 and r_val == 0 return l
             if is_l_const == 1 and l_val == 0 return ssa_value_new_const(0, inst.result.vtype)
 
-        // Comparisons on self: cmp pred x, x
+        // Comparisons on self: cmp pred x, x (integers only; preserve IEEE-754 NaN comparisons)
         if op == OP_CMP and l == r
-            pred = inst.extra_int
-            if pred == CMP_EQ or pred == CMP_SLE or pred == CMP_SGE
-                return ssa_value_new_const(1, inst.result.vtype)
-            if pred == CMP_NE or pred == CMP_SLT or pred == CMP_SGT
-                return ssa_value_new_const(0, inst.result.vtype)
+            vt_c = inst.result.vtype
+            if vt_c != "f64" and vt_c != "float"
+                pred = inst.extra_int
+                if pred == CMP_EQ or pred == CMP_SLE or pred == CMP_SGE
+                    return ssa_value_new_const(1, inst.result.vtype)
+                if pred == CMP_NE or pred == CMP_SLT or pred == CMP_SGT
+                    return ssa_value_new_const(0, inst.result.vtype)
+            end
 
     // ── Pattern 3: Phi Node Simplification ────────────────────────────────────
     // WHY: If all non-self incoming values to a Phi node are the same value v,

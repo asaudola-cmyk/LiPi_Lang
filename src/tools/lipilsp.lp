@@ -63,31 +63,61 @@ fn str_find_from s sub start
 // ─── JSON Value Extractors ────────────────────────────────────────────────────
 // WHY: Efficiently parses JSON-RPC headers, methods, IDs, URIs, and parameters
 // without external C JSON library dependencies (100% Sovereign Lipi).
+fn _lsp_hex_digit_val ch
+    o = ord(ch)
+    if o >= 48 and o <= 57 return o - 48
+    if o >= 65 and o <= 70 return o - 55
+    if o >= 97 and o <= 102 return o - 87
+    return -1
+
+fn _lsp_utf8_encode cp
+    if cp < 0 return ""
+    if cp < 128 return chr(cp)
+    if cp < 2048
+        return chr(192 | ((cp >> 6) & 31)) + chr(128 | (cp & 63))
+    if cp < 65536
+        return chr(224 | ((cp >> 12) & 15)) + chr(128 | ((cp >> 6) & 63)) + chr(128 | (cp & 63))
+    return chr(240 | ((cp >> 18) & 7)) + chr(128 | ((cp >> 12) & 63)) + chr(128 | ((cp >> 6) & 63)) + chr(128 | (cp & 63))
+
+fn _lsp_parse_hex4 s pos
+    if pos + 4 > len(s) return -1
+    v0 = _lsp_hex_digit_val(char_at(s, pos))
+    v1 = _lsp_hex_digit_val(char_at(s, pos + 1))
+    v2 = _lsp_hex_digit_val(char_at(s, pos + 2))
+    v3 = _lsp_hex_digit_val(char_at(s, pos + 3))
+    if v0 < 0 or v1 < 0 or v2 < 0 or v3 < 0 return -1
+    return (v0 * 4096) + (v1 * 256) + (v2 * 16) + v3
+
 fn json_extract_str_value json key
     needle = "\"" + key + "\""
-    pos = str_find_from(json, needle, 0)
-    if pos < 0 return ""
-    colon = str_find_from(json, ":", pos + len(needle))
-    if colon < 0 return ""
-    q1 = str_find_from(json, "\"", colon + 1)
-    if q1 < 0 return ""
-    
-    // Find matching closing quote, respecting backslash escapes
-    j = q1 + 1
+    nlen = len(needle)
     jlen = len(json)
-    q2 = -1
-    while j < jlen and q2 < 0
-        c = char_at(json, j)
-        if c == "\\"
-            j = j + 2
-        else
-            if c == "\""
-                q2 = j
-            else
-                j = j + 1
-                
-    if q2 < 0 return ""
-    return str_sub(json, q1 + 1, q2)
+    search_from = 0
+    while search_from < jlen
+        pos = str_find_from(json, needle, search_from)
+        if pos < 0 return ""
+        k = pos + nlen
+        while k < jlen and (char_at(json, k) == " " or char_at(json, k) == "\t" or char_at(json, k) == "\r" or char_at(json, k) == "\n")
+            k = k + 1
+        if k < jlen and char_at(json, k) == ":"
+            q1 = k + 1
+            while q1 < jlen and (char_at(json, q1) == " " or char_at(json, q1) == "\t" or char_at(json, q1) == "\r" or char_at(json, q1) == "\n")
+                q1 = q1 + 1
+            if q1 < jlen and char_at(json, q1) == "\""
+                j = q1 + 1
+                q2 = -1
+                while j < jlen and q2 < 0
+                    c = char_at(json, j)
+                    if c == "\\"
+                        j = j + 2
+                    elif c == "\""
+                        q2 = j
+                    else
+                        j = j + 1
+                if q2 >= 0
+                    return str_sub(json, q1 + 1, q2)
+        search_from = pos + nlen
+    return ""
 
 fn json_extract_id json
     needle = "\"id\""
@@ -171,28 +201,80 @@ fn json_unescape s
             next_c = char_at(s, i + 1)
             if next_c == "n"
                 res = res + "\n"
-            else
-                if next_c == "r"
-                    res = res + "\r"
+                i = i + 2
+            elif next_c == "r"
+                res = res + "\r"
+                i = i + 2
+            elif next_c == "t"
+                res = res + "\t"
+                i = i + 2
+            elif next_c == "\""
+                res = res + "\""
+                i = i + 2
+            elif next_c == "\\"
+                res = res + "\\"
+                i = i + 2
+            elif next_c == "/"
+                res = res + "/"
+                i = i + 2
+            elif next_c == "u" and i + 6 <= slen
+                cp = _lsp_parse_hex4(s, i + 2)
+                if cp >= 55296 and cp <= 56319 and i + 12 <= slen and char_at(s, i + 6) == "\\" and char_at(s, i + 7) == "u"
+                    lo = _lsp_parse_hex4(s, i + 8)
+                    if lo >= 56320 and lo <= 57343
+                        full_cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320)
+                        res = res + _lsp_utf8_encode(full_cp)
+                        i = i + 12
+                        continue
+                if cp >= 0
+                    res = res + _lsp_utf8_encode(cp)
+                    i = i + 6
                 else
-                    if next_c == "t"
-                        res = res + "\t"
-                    else
-                        if next_c == "\""
-                            res = res + "\""
-                        else
-                            if next_c == "\\"
-                                res = res + "\\"
-                            else
-                                res = res + next_c
-            i = i + 2
+                    res = res + next_c
+                    i = i + 2
+            else
+                res = res + next_c
+                i = i + 2
         else
             res = res + c
             i = i + 1
     return res
 
+fn _lsp_utf8_step_bytes b
+    if b < 128 return 1
+    if b < 224 return 2
+    if b < 240 return 3
+    return 4
+
+fn _lsp_byte_col_to_utf16 text line_start target_byte
+    u16 = 0
+    p = line_start
+    n = len(text)
+    while p < target_byte and p < n
+        b = ord(char_at(text, p)) & 255
+        step = _lsp_utf8_step_bytes(b)
+        if b >= 240
+            u16 = u16 + 2
+        else
+            u16 = u16 + 1
+        p = p + step
+    return u16
+
+fn _lsp_utf16_col_to_byte text line_start line_end target_u16
+    u16 = 0
+    p = line_start
+    while p < line_end and u16 < target_u16
+        b = ord(char_at(text, p)) & 255
+        step = _lsp_utf8_step_bytes(b)
+        if b >= 240
+            u16 = u16 + 2
+        else
+            u16 = u16 + 1
+        p = p + step
+    return p
+
 // ─── Sovereign Diagnostics & Symbol Collector ─────────────────────────────────
-// WHY: Validates literal quote termination and delimiter balance on bare-metal LSP edits.
+// WHY: Validates literal quote termination, brackets/parens/braces balance, and unmatched block closers with exact UTF-16 LSP columns.
 fn lsp_compute_diagnostics text
     n = len(text)
     if n == 0
@@ -201,104 +283,139 @@ fn lsp_compute_diagnostics text
     diags = "["
     diag_cnt = 0
     line = 0
-    col = 0
+    line_start = 0
     in_str = 0
-    str_start_col = 0
+    str_start_byte = 0
     in_comment = 0
     paren_depth = 0
     paren_line = 0
     paren_col = 0
+    brace_depth = 0
+    brace_line = 0
+    brace_col = 0
+    bracket_depth = 0
+    bracket_line = 0
+    bracket_col = 0
     i = 0
 
     while i < n
+        b = ord(char_at(text, i)) & 255
+        step = _lsp_utf8_step_bytes(b)
         c = char_at(text, i)
         if in_comment == 1
             if c == "\n"
                 in_comment = 0
                 line = line + 1
-                col = 0
-            else
-                col = col + 1
-            i = i + 1
+                line_start = i + 1
+            i = i + step
             continue
 
         if in_str == 1
             if c == "\\" and i + 1 < n
                 nx = char_at(text, i + 1)
                 if nx == "\n"
-                    if diag_cnt > 0
-                        diags = diags + ","
-                    diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(str_start_col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal\"}"
+                    sc_u16 = _lsp_byte_col_to_utf16(text, line_start, str_start_byte)
+                    ec_u16 = _lsp_byte_col_to_utf16(text, line_start, i + 1)
+                    if diag_cnt > 0 diags = diags + ","
+                    diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal\"}"
                     diag_cnt = diag_cnt + 1
                     in_str = 0
                     line = line + 1
-                    col = 0
-                else
-                    col = col + 2
+                    line_start = i + 2
                 i = i + 2
                 continue
             if c == "\""
                 in_str = 0
-                col = col + 1
                 i = i + 1
                 continue
             if c == "\n"
-                if diag_cnt > 0
-                    diags = diags + ","
-                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(str_start_col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal\"}"
+                sc_u16 = _lsp_byte_col_to_utf16(text, line_start, str_start_byte)
+                ec_u16 = _lsp_byte_col_to_utf16(text, line_start, i)
+                if diag_cnt > 0 diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal\"}"
                 diag_cnt = diag_cnt + 1
                 in_str = 0
                 line = line + 1
-                col = 0
+                line_start = i + 1
                 i = i + 1
                 continue
-            col = col + 1
-            i = i + 1
+            i = i + step
             continue
 
-        // Outside strings and comments
         if c == "/" and i + 1 < n and char_at(text, i + 1) == "/"
             in_comment = 1
-            col = col + 2
             i = i + 2
             continue
         if c == "\""
             in_str = 1
-            str_start_col = col
-            col = col + 1
+            str_start_byte = i
             i = i + 1
             continue
         if c == "("
             if paren_depth == 0
                 paren_line = line
-                paren_col = col
+                paren_col = _lsp_byte_col_to_utf16(text, line_start, i)
             paren_depth = paren_depth + 1
         elif c == ")"
             if paren_depth <= 0
-                if diag_cnt > 0
-                    diags = diags + ","
-                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unmatched closing parenthesis ')'\"}"
+                c16 = _lsp_byte_col_to_utf16(text, line_start, i)
+                if diag_cnt > 0 diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(c16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(c16 + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unmatched closing parenthesis ')'\"}"
                 diag_cnt = diag_cnt + 1
             else
                 paren_depth = paren_depth - 1
+        elif c == "["
+            if bracket_depth == 0
+                bracket_line = line
+                bracket_col = _lsp_byte_col_to_utf16(text, line_start, i)
+            bracket_depth = bracket_depth + 1
+        elif c == "]"
+            if bracket_depth <= 0
+                c16 = _lsp_byte_col_to_utf16(text, line_start, i)
+                if diag_cnt > 0 diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(c16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(c16 + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unmatched closing bracket ']'\"}"
+                diag_cnt = diag_cnt + 1
+            else
+                bracket_depth = bracket_depth - 1
+        elif c == "{"
+            if brace_depth == 0
+                brace_line = line
+                brace_col = _lsp_byte_col_to_utf16(text, line_start, i)
+            brace_depth = brace_depth + 1
+        elif c == "}"
+            if brace_depth <= 0
+                c16 = _lsp_byte_col_to_utf16(text, line_start, i)
+                if diag_cnt > 0 diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(c16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(c16 + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unmatched closing brace '}'\"}"
+                diag_cnt = diag_cnt + 1
+            else
+                brace_depth = brace_depth - 1
 
         if c == "\n"
             line = line + 1
-            col = 0
-        else
-            col = col + 1
-        i = i + 1
+            line_start = i + 1
+        i = i + step
 
     if in_str == 1
-        if diag_cnt > 0
-            diags = diags + ","
-        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(str_start_col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal at EOF\"}"
+        sc_u16 = _lsp_byte_col_to_utf16(text, line_start, str_start_byte)
+        ec_u16 = _lsp_byte_col_to_utf16(text, line_start, n)
+        if diag_cnt > 0 diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal at EOF\"}"
         diag_cnt = diag_cnt + 1
 
     if paren_depth > 0
-        if diag_cnt > 0
-            diags = diags + ","
+        if diag_cnt > 0 diags = diags + ","
         diags = diags + "{\"range\":{\"start\":{\"line\":" + str(paren_line) + ",\"character\":" + str(paren_col) + "},\"end\":{\"line\":" + str(paren_line) + ",\"character\":" + str(paren_col + 1) + "}},\"severity\":2,\"source\":\"lipilsp\",\"message\":\"Unclosed opening parenthesis '('\"}"
+        diag_cnt = diag_cnt + 1
+
+    if bracket_depth > 0
+        if diag_cnt > 0 diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(bracket_line) + ",\"character\":" + str(bracket_col) + "},\"end\":{\"line\":" + str(bracket_line) + ",\"character\":" + str(bracket_col + 1) + "}},\"severity\":2,\"source\":\"lipilsp\",\"message\":\"Unclosed opening bracket '['\"}"
+        diag_cnt = diag_cnt + 1
+
+    if brace_depth > 0
+        if diag_cnt > 0 diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(brace_line) + ",\"character\":" + str(brace_col) + "},\"end\":{\"line\":" + str(brace_line) + ",\"character\":" + str(brace_col + 1) + "}},\"severity\":2,\"source\":\"lipilsp\",\"message\":\"Unclosed opening brace '{'\"}"
         diag_cnt = diag_cnt + 1
 
     return diags + "]"
@@ -340,12 +457,21 @@ fn lsp_collect_document_symbols text
             if lsp_sub_eq(text, p, "fn ") == 1
                 kind = 12
                 kw_len = 3
+            elif lsp_sub_eq(text, p, "@fn ") == 1
+                kind = 12
+                kw_len = 4
             elif lsp_sub_eq(text, p, "কাজ ") == 1
                 kind = 12
                 kw_len = len("কাজ ")
             elif lsp_sub_eq(text, p, "struct ") == 1
                 kind = 23
                 kw_len = 7
+            elif lsp_sub_eq(text, p, "@struct ") == 1
+                kind = 23
+                kw_len = 8
+            elif lsp_sub_eq(text, p, "গঠন ") == 1
+                kind = 23
+                kw_len = len("গঠন ")
             elif lsp_sub_eq(text, p, "কাঠামো ") == 1
                 kind = 23
                 kw_len = len("কাঠামো ")
@@ -366,12 +492,13 @@ fn lsp_collect_document_symbols text
                 name = name + ch
                 ne = ne + 1
             if len(name) > 0
-                col_s = ns - pos
-                col_e = ne - pos
+                col_s = _lsp_byte_col_to_utf16(text, pos, ns)
+                col_e = _lsp_byte_col_to_utf16(text, pos, ne)
+                line_u16_end = _lsp_byte_col_to_utf16(text, pos, eol)
                 if sym_cnt > 0
                     out = out + ","
                 out = out + "{\"name\":\"" + json_escape(name) + "\",\"kind\":" + str(kind)
-                out = out + ",\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":0},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(line_len) + "}}"
+                out = out + ",\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":0},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(line_u16_end) + "}}"
                 out = out + ",\"selectionRange\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(col_s) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col_e) + "}}}"
                 sym_cnt = sym_cnt + 1
 
@@ -530,8 +657,8 @@ fn get_word_at_pos text target_line target_char
     line_end = line_start
     while line_end < tlen and char_at(text, line_end) != "\n"
         line_end = line_end + 1
-        
-    cursor = line_start + target_char
+
+    cursor = _lsp_utf16_col_to_byte(text, line_start, line_end, target_char)
     if cursor >= line_end and cursor > line_start
         cursor = line_end - 1
     if cursor >= tlen or cursor < line_start
@@ -834,55 +961,109 @@ fn format_lipi_code text
     indent = 0
     line_start = 0
     i = 0
-    
+
     while i <= tlen
         is_eol = 0
         if i == tlen
             is_eol = 1
-        else
-            if char_at(text, i) == "\n"
-                is_eol = 1
-                
+        elif char_at(text, i) == "\n"
+            is_eol = 1
+
         if is_eol == 1
             raw_line = str_sub(text, line_start, i)
             line = str_trim(raw_line)
-            
+
             if len(line) == 0
                 result = result + "\n"
             else
-                // Dedent for closing blocks
                 is_dedent = 0
-                if starts_with_keyword(line, "else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "নাহলে_যদি") or char_at(line, 0) == "}"
+                is_full_close = 0
+                if starts_with_keyword(line, "else") or starts_with_keyword(line, "@else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "@elif") or starts_with_keyword(line, "নাহলে_যদি")
                     is_dedent = 1
-                    
+                elif line == "end" or line == "@end" or line == "শেষ" or char_at(line, 0) == "}"
+                    is_dedent = 1
+                    is_full_close = 1
+
                 print_indent = indent
                 if is_dedent == 1 and print_indent > 0
                     print_indent = print_indent - 1
-                    
+
                 sp = ""
                 s_i = 0
                 while s_i < print_indent * 4
                     sp = sp + " "
                     s_i = s_i + 1
-                    
+
                 result = result + sp + line + "\n"
-                
-                // Indent for block openers
+
                 is_indent = 0
-                if starts_with_keyword(line, "fn") or starts_with_keyword(line, "কাজ") or starts_with_keyword(line, "if") or starts_with_keyword(line, "যদি") or starts_with_keyword(line, "while") or starts_with_keyword(line, "যতক্ষণ") or starts_with_keyword(line, "for") or starts_with_keyword(line, "প্রতিটি") or starts_with_keyword(line, "struct") or starts_with_keyword(line, "গঠন") or starts_with_keyword(line, "কাঠামো") or starts_with_keyword(line, "else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "নাহলে_যদি")
-                    is_indent = 1
-                if char_at(line, len(line) - 1) == "{"
-                    is_indent = 1
-                    
+                if is_full_close == 0
+                    if starts_with_keyword(line, "fn") or starts_with_keyword(line, "@fn") or starts_with_keyword(line, "কাজ") or starts_with_keyword(line, "if") or starts_with_keyword(line, "@if") or starts_with_keyword(line, "যদি") or starts_with_keyword(line, "while") or starts_with_keyword(line, "@while") or starts_with_keyword(line, "যতক্ষণ") or starts_with_keyword(line, "for") or starts_with_keyword(line, "@for") or starts_with_keyword(line, "প্রতিটি") or starts_with_keyword(line, "struct") or starts_with_keyword(line, "@struct") or starts_with_keyword(line, "গঠন") or starts_with_keyword(line, "কাঠামো") or starts_with_keyword(line, "else") or starts_with_keyword(line, "@else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "@elif") or starts_with_keyword(line, "নাহলে_যদি")
+                        is_indent = 1
+                    if char_at(line, len(line) - 1) == "{"
+                        is_indent = 1
+
                 if is_dedent == 1
                     indent = print_indent
                 if is_indent == 1
                     indent = indent + 1
-                    
+
             line_start = i + 1
         i = i + 1
-        
+
     return result
+
+fn _lsp_resolve_include_paths text
+    paths = list()
+    tlen = len(text)
+    pos = 0
+    while pos < tlen
+        eol = pos
+        while eol < tlen and char_at(text, eol) != "\n"
+            eol = eol + 1
+        line = str_trim(str_sub(text, pos, eol))
+        if starts_with_keyword(line, "import") == 1 or starts_with_keyword(line, "include") == 1
+            q1 = str_find_from(line, "\"", 0)
+            if q1 >= 0
+                q2 = str_find_from(line, "\"", q1 + 1)
+                if q2 > q1 + 1
+                    raw_p = str_sub(line, q1 + 1, q2)
+                    if str_find_from(raw_p, ".lp", 0) < 0
+                        raw_p = raw_p + ".lp"
+                    push(paths, raw_p)
+        pos = eol + 1
+    return paths
+
+fn _lsp_collect_refs_in_text text symbol uri
+    out = ""
+    if len(symbol) == 0 or len(text) == 0 return ""
+    tlen = len(text)
+    slen = len(symbol)
+    cur_line = 0
+    line_start = 0
+    i = 0
+    while i < tlen
+        if char_at(text, i) == "\n"
+            cur_line = cur_line + 1
+            line_start = i + 1
+            i = i + 1
+            continue
+        if i + slen <= tlen and lsp_sub_eq(text, i, symbol) == 1
+            left_ok = 1
+            if i > line_start and is_token_char(char_at(text, i - 1)) == 1
+                left_ok = 0
+            right_ok = 1
+            if i + slen < tlen and is_token_char(char_at(text, i + slen)) == 1
+                right_ok = 0
+            if left_ok == 1 and right_ok == 1
+                cs = _lsp_byte_col_to_utf16(text, line_start, i)
+                ce = _lsp_byte_col_to_utf16(text, line_start, i + slen)
+                if len(out) > 0 out = out + ","
+                out = out + "{\"uri\":\"" + json_escape(uri) + "\",\"range\":{\"start\":{\"line\":" + str(cur_line) + ",\"character\":" + str(cs) + "},\"end\":{\"line\":" + str(cur_line) + ",\"character\":" + str(ce) + "}}}"
+                i = i + slen
+                continue
+        i = i + 1
+    return out
 
 // ─── Main LSP Event Loop ──────────────────────────────────────────────────────
 fn lsp_main_loop
@@ -978,21 +1159,20 @@ fn lsp_main_loop
                 resp = "{\"contents\":{\"kind\":\"markdown\",\"value\":\"" + json_escape(docstring) + "\"}}"
                 lsp_send_response(req_id, resp)
 
-            // ── 8. textDocument/definition (Go-to-Definition) ──
+            // ── 8. textDocument/definition (Go-to-Definition + Include Resolution) ──
             elif method == "textDocument/definition"
                 uri = json_extract_str_value(raw_msg, "uri")
                 line = json_extract_int_value(raw_msg, "line")
                 char_pos = json_extract_int_value(raw_msg, "character")
-                
+
                 doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)
                 word = get_word_at_pos(doc_text, line, char_pos)
                 lsp_log("Definition lookup for: [" + word + "] in " + uri)
-                
+
                 found_line = find_symbol_definition_in_text(doc_text, word)
                 found_uri = uri
-                
+
                 if found_line < 0
-                    // Search in other tracked workspace files
                     t_idx = 0
                     num_tracked = len(tracked_uris)
                     while t_idx < num_tracked and found_line < 0
@@ -1004,12 +1184,45 @@ fn lsp_main_loop
                                 found_line = other_l
                                 found_uri = other_u
                         t_idx = t_idx + 1
-                        
+
+                if found_line < 0
+                    inc_paths = _lsp_resolve_include_paths(doc_text)
+                    ii = 0
+                    while ii < len(inc_paths) and found_line < 0
+                        ip = get(inc_paths, ii)
+                        if file_exists(ip) == 1
+                            inc_txt = file_read(ip)
+                            il = find_symbol_definition_in_text(inc_txt, word)
+                            if il >= 0
+                                found_line = il
+                                found_uri = "file://" + ip
+                        ii = ii + 1
+
                 if found_line >= 0
                     resp = "{\"uri\":\"" + found_uri + "\",\"range\":{\"start\":{\"line\":" + str(found_line) + ",\"character\":0},\"end\":{\"line\":" + str(found_line) + ",\"character\":0}}}"
                     lsp_send_response(req_id, resp)
                 else
                     lsp_send_response(req_id, "null")
+
+            // ── 8b. textDocument/references ──
+            elif method == "textDocument/references"
+                uri = json_extract_str_value(raw_msg, "uri")
+                line = json_extract_int_value(raw_msg, "line")
+                char_pos = json_extract_int_value(raw_msg, "character")
+                doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)
+                word = get_word_at_pos(doc_text, line, char_pos)
+                refs = _lsp_collect_refs_in_text(doc_text, word, uri)
+                t_idx = 0
+                while t_idx < len(tracked_uris)
+                    other_u = get(tracked_uris, t_idx)
+                    if other_u != uri
+                        other_t = get(tracked_texts, t_idx)
+                        r2 = _lsp_collect_refs_in_text(other_t, word, other_u)
+                        if len(r2) > 0
+                            if len(refs) > 0 refs = refs + ","
+                            refs = refs + r2
+                    t_idx = t_idx + 1
+                lsp_send_response(req_id, "[" + refs + "]")
 
             // ── 9. textDocument/formatting ──
             elif method == "textDocument/formatting"

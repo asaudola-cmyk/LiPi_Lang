@@ -64,7 +64,7 @@ fn test_types()
     assert_true(slice_length(sub) == 1, "subslice length 1")
     assert_true(slice_read_word(sub, 0) == 33334444, "subslice read word 0")
 
-    free(raw_mem, 64)
+    free(raw_mem)
     say "      types.lp PASS"
     return 1
 
@@ -135,7 +135,7 @@ fn test_endian()
     mem_write_u32_be(mem, 16, 987654321)
     assert_true(mem_read_u32_be(mem, 16) == 987654321, "mem u32 be roundtrip")
 
-    free(mem, 64)
+    free(mem)
     say "      endian.lp PASS"
     return 1
 

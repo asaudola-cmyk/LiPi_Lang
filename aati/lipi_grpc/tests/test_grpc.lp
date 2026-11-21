@@ -104,11 +104,11 @@ assert_eq(GRPC_STATUS_OK, 0, "GRPC_STATUS_OK is 0")
 assert_eq(GRPC_STATUS_NOT_FOUND, 5, "GRPC_STATUS_NOT_FOUND is 5")
 assert_eq(GRPC_STATUS_UNAUTHENTICATED, 16, "GRPC_STATUS_UNAUTHENTICATED is 16")
 
-mem_free(v_buf, 32)
-mem_free(meta, 24)
-mem_free(msg_buf, 64)
-mem_free(raw_payload, 10)
-mem_free(frame_buf, 32)
-mem_free(unframe_meta, 24)
+sys_free(v_buf)
+sys_free(meta)
+sys_free(msg_buf)
+sys_free(raw_payload)
+sys_free(frame_buf)
+sys_free(unframe_meta)
 
 say "🎉 ALL SOVEREIGN gRPC & PROTOBUF TESTS PASSED!"

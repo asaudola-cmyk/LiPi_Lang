@@ -85,22 +85,28 @@ import "utso/syscalls"
 @end
 
 @fn page_write_to_fd(fd, buf)
-  // WHY: Writes 4096-element page array to file descriptor via contiguous serialized buffer
+  // WHY: Writes 4096-element page array to file descriptor via contiguous serialized buffer and frees temporary heap block
   ptr = page_data_ptr(buf)
-  return sys_write(fd, ptr, 4096)
+  n = sys_write(fd, ptr, 4096)
+  free(ptr)
+  return n
 @end
 
 @fn page_read_from_fd(fd, buf)
-  // WHY: Reads 4096 bytes from file descriptor directly into 4096-element page array
+  // WHY: Reads 4096 bytes from file descriptor directly into 4096-element page array without leaking temporary allocation
   raw_mem = alloc(4096)
   n = sys_read(fd, raw_mem, 4096)
-  @if n < 4096 return n @end
+  @if n < 4096
+    free(raw_mem)
+    return n
+  @end
   i = 0
   @while i < 4096
     val = sys_peek8(raw_mem + i) & 255
     buf = list_set(buf, i, val)
     i = i + 1
   @end
+  free(raw_mem)
   return n
 @end
 

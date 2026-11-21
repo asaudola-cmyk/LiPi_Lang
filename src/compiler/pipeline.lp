@@ -187,9 +187,14 @@ fn pipeline_parse_primary toks pos_box sp
     node = ast_expr_literal_int(0, sp)
     if k == TOK_INT()
         node = ast_expr_literal_int(t.tok_int_val, sp)
+    elif k == TOK_FLOAT()
+        node = ast_expr_literal_float(t.tok_float_val, sp)
+        node.name = txt
     elif k == TOK_BOOL()
         node = ast_expr_literal_bool(t.tok_int_val, sp)
-    elif k == TOK_STR()
+    elif k == TOK_NONE()
+        node = ast_expr_literal_none(sp)
+    elif k == TOK_STR() or k == TOK_INTERP_STR()
         node = ast_expr_literal_str(txt, sp)
     elif k == TOK_MINUS() or (k != TOK_STR() and txt == "-")
         sub_e = pipeline_parse_primary(toks, pos_box, sp)
@@ -227,7 +232,7 @@ fn pipeline_parse_primary toks pos_box sp
                 list_set(pos_box, 0, cp_c + 1)
             end
         end
-        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>")
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>" or toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or toks[get(pos_box, 0)].tok_text == "->")
             list_set(pos_box, 0, get(pos_box, 0) + 1)
         end
         lam_expr = pipeline_parse_expr(toks, pos_box, sp)
@@ -250,7 +255,7 @@ fn pipeline_parse_primary toks pos_box sp
                 list_set(pos_box, 0, cp_c + 1)
             end
         end
-        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>")
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>" or toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or toks[get(pos_box, 0)].tok_text == "->")
             list_set(pos_box, 0, get(pos_box, 0) + 1)
         end
         lam_expr = pipeline_parse_expr(toks, pos_box, sp)
@@ -388,7 +393,7 @@ fn pipeline_parse_primary toks pos_box sp
                 end
             end
             fld_name = ""
-            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+            if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                 fld_name = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
@@ -801,6 +806,13 @@ fn pipeline_build_statement toks pos_box sp
         return ast_stmt_continue(sp)
     end
 
+    // 1d. Defer statement: defer / @defer / বিলম্ব
+    if (k == TOK_KW_DEFER() or txt == "defer" or txt == "@defer" or txt == "বিলম্ব") and (cp + 1 >= toks.len() or (toks[cp + 1].tok_kind != TOK_ASSIGN() and toks[cp + 1].tok_text != "=" and toks[cp + 1].tok_kind != TOK_LPAREN() and toks[cp + 1].tok_text != "(" and toks[cp + 1].tok_kind != TOK_DOT() and toks[cp + 1].tok_text != "."))
+        list_set(pos_box, 0, cp + 1)
+        deferred_stmt = pipeline_build_statement(toks, pos_box, sp)
+        return ast_stmt_defer(deferred_stmt, sp)
+    end
+
     // 2. While loop: while / যতক্ষণ / @while
     is_while = 0
     if k == TOK_KW_WHILE() or k == TOK_DIR_WHILE()
@@ -1058,18 +1070,24 @@ fn pipeline_build_statement toks pos_box sp
         scan_p = cp + 1
         if scan_p < toks.len() and pipeline_is_ident_token(toks[scan_p].tok_kind) == 1
             var_name = toks[scan_p].tok_text
+            decl_type = ""
             scan_p = scan_p + 1
             // Optional type annotation: : Type
             if scan_p < toks.len() and (toks[scan_p].tok_kind == TOK_COLON() or (toks[scan_p].tok_kind != TOK_STR() and toks[scan_p].tok_text == ":"))
                 scan_p = scan_p + 1
                 if scan_p < toks.len() and pipeline_is_ident_token(toks[scan_p].tok_kind) == 1
+                    decl_type = toks[scan_p].tok_text
                     scan_p = scan_p + 1
                 end
             end
             if scan_p < toks.len() and (toks[scan_p].tok_kind == TOK_ASSIGN() or (toks[scan_p].tok_kind != TOK_STR() and toks[scan_p].tok_text == "="))
                 list_set(pos_box, 0, scan_p + 1)
                 val_e = pipeline_parse_expr(toks, pos_box, sp)
-                return ast_stmt_assign(var_name, val_e, sp)
+                as_n = ast_stmt_assign(var_name, val_e, sp)
+                if len(decl_type) > 0
+                    as_n.op = decl_type
+                end
+                return as_n
             end
         end
     end
@@ -1134,13 +1152,21 @@ fn pipeline_build_statement toks pos_box sp
                 ek = eq_tok.tok_kind
                 etx = eq_tok.tok_text
                 if ek == TOK_ASSIGN() or (ek != TOK_STR() and etx == "=")
+                    idx_box = [cp + 2]
+                    idx_e = pipeline_parse_expr(toks, idx_box, sp)
                     list_set(pos_box, 0, scan_i + 1)
                     val_e = pipeline_parse_expr(toks, pos_box, sp)
-                    return ast_stmt_assign(txt, val_e, sp)
+                    arr_as = ast_stmt_assign(txt, val_e, sp)
+                    arr_as.index = idx_e
+                    return arr_as
                 elif ek == TOK_PLUSEQ() or ek == TOK_MINUSEQ() or ek == TOK_STAREQ() or ek == TOK_SLASHEQ() or ek == TOK_PERCENTEQ() or etx == "+=" or etx == "-=" or etx == "*=" or etx == "/=" or etx == "%="
+                    idx_box = [cp + 2]
+                    idx_e = pipeline_parse_expr(toks, idx_box, sp)
                     list_set(pos_box, 0, scan_i + 1)
                     val_e = pipeline_parse_expr(toks, pos_box, sp)
-                    return ast_stmt_assign_op(txt, val_e, etx, sp)
+                    arr_aop = ast_stmt_assign_op(txt, val_e, etx, sp)
+                    arr_aop.index = idx_e
+                    return arr_aop
                 end
             end
         end
@@ -1176,9 +1202,12 @@ fn pipeline_build_statement toks pos_box sp
                 n3 = toks[cp + 3]
                 if n3.tok_kind == TOK_ASSIGN() or (n3.tok_kind != TOK_STR() and n3.tok_text == "=")
                     var_name = txt
+                    decl_type = toks[cp + 2].tok_text
                     list_set(pos_box, 0, cp + 4)
                     val_e = pipeline_parse_expr(toks, pos_box, sp)
-                    return ast_stmt_assign(var_name, val_e, sp)
+                    td_n = ast_stmt_assign(var_name, val_e, sp)
+                    td_n.op = decl_type
+                    return td_n
                 end
             end
         end
@@ -1424,9 +1453,19 @@ fn pipeline_build_ast_declarations toks src_path
         if k == TOK_KW_FN() or k == TOK_DIR_FN() or is_comp == 1 or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn"))
             list_set(pos_box, 0, cp + 1)
             fn_name = ""
+            method_recv_type = ""
             if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
                 fn_name = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+                mp = get(pos_box, 0)
+                if mp + 1 < toks.len() and (toks[mp].tok_kind == TOK_DOT() or (toks[mp].tok_kind != TOK_STR() and toks[mp].tok_text == "."))
+                    if pipeline_is_ident_token(toks[mp + 1].tok_kind) == 1
+                        method_recv_type = fn_name
+                        fn_name = fn_name + "_" + toks[mp + 1].tok_text
+                        list_set(pos_box, 0, mp + 2)
+                    end
+                end
+            end
 
             // Parse formal parameters
             params = list()
@@ -1522,13 +1561,23 @@ fn pipeline_build_ast_declarations toks src_path
             elif get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 while get(pos_box, 0) < toks.len()
+                    pipeline_skip_whitespace(toks, pos_box)
+                    if get(pos_box, 0) >= toks.len()
+                        break
+                    end
                     if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "}")
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                         break
+                    end
+                    before_bp = get(pos_box, 0)
                     s = pipeline_build_statement(toks, pos_box, sp)
                     if s != 0
                         push(body, s)
                     end
+                    if get(pos_box, 0) <= before_bp
+                        list_set(pos_box, 0, before_bp + 1)
+                    end
+                end
             else
                 // Indented or end-delimited block
                 fn_line = t.tok_span.span_start_line
@@ -1569,6 +1618,11 @@ fn pipeline_build_ast_declarations toks src_path
                         list_set(pos_box, 0, before_p + 1)
                     end
 
+            if method_recv_type != "" and params.len() > 0
+                if params[0].param_type == ""
+                    params[0].param_type = method_recv_type
+                end
+            end
             if is_comp == 1
                 if len(ret_type_str) == 0
                     ret_type_str = "Component"
@@ -1879,14 +1933,19 @@ fn pipeline_str_has_non_ascii s
 // WHY: Precise memory proof exemption filter preventing false positives on words like "freeze", "renew", "definition".
 // Enforces exact whole-word, prefix (e.g. assert_, panic_), suffix (_new, _free), or inner-word (_create_) matching.
 fn pipeline_is_memory_exempt_fn raw_name
-    // WHY: Sovereign Bengali Unicode identifiers represent runtime, hardware, diagnostic, or system utilities.
-    if pipeline_str_has_non_ascii(raw_name) == 1 return 1 end
     // WHY: Struct member methods mutably alter receiver state and aren't closed mathematical scopes.
     if pipeline_str_contains(raw_name, ".") == 1 return 1 end
+    // Exact stdlib Bengali allocator/wrapper names
+    if raw_name == "মেমরি_বরাদ্দ" or raw_name == "স্ল্যাব_বরাদ্দ" or raw_name == "মেমরি_বরাদ্দ_ক্যাশলাইন" or raw_name == "বরাদ্দ" or raw_name == "তালিকা"
+        return 1
+    end
     // WHY: Constant getters in ALL_CAPS format are pure primitive returns.
     if pipeline_is_all_caps(raw_name) == 1 return 1 end
     // WHY: Normalize function name to lowercase so casing (e.g. Ed25519, Secp256k1, Poly1305, DW_) matches uniformly without case discrepancies.
     name = str_to_lower(raw_name)
+    if pipeline_str_has_prefix(name, "basicblock_") == 1 or pipeline_str_has_prefix(name, "ssainstr_") == 1 or pipeline_str_has_prefix(name, "ssavalue_") == 1 or pipeline_str_has_prefix(name, "irfunction_") == 1 or pipeline_str_has_prefix(name, "irmodule_") == 1 or pipeline_str_has_prefix(name, "passmanager_") == 1
+        return 1
+    end
     // WHY: Result and Option monadic constructors allocate heap-backed algebraic wrappers that escape constructor scope.
     if name == "ok" or name == "err" or name == "some" or name == "none" return 1 end
     // WHY: Domain engines (AI/LLM, Virtual Machines, OS/Unikernel, Filesystems, Distributed DBs, Quantum, Hardware/GUI) manage persistent global state or heap objects.
@@ -3017,6 +3076,17 @@ fn pipeline_is_memory_exempt_fn raw_name
     return 0
 
 
+fn pipeline_is_strict_proof_exempt_fn raw_name
+    if raw_name == "main" or raw_name == "মূল" return 1 end
+    if pipeline_str_has_prefix(raw_name, "_lipi_") == 1 return 1 end
+    if pipeline_str_has_prefix(raw_name, "silicon_") == 1 or pipeline_str_has_prefix(raw_name, "সিলিকন_") == 1 return 1 end
+    if raw_name == "ok" or raw_name == "err" or raw_name == "some" or raw_name == "none" return 1 end
+    if raw_name == "malloc" or raw_name == "মেমরি_বরাদ্দ" or raw_name == "mem_alloc" or raw_name == "alloc" or raw_name == "বরাদ্দ" return 1 end
+    if raw_name == "slab_alloc" or raw_name == "স্ল্যাব_বরাদ্দ" or raw_name == "mem_alloc_cacheline" or raw_name == "মেমরি_বরাদ্দ_ক্যাশলাইন" return 1 end
+    if raw_name == "free" or raw_name == "মেমরি_মুক্তি" or raw_name == "mem_free" or raw_name == "মুক্ত" or raw_name == "slab_free" or raw_name == "স্ল্যাব_মুক্তি" return 1 end
+    return 0
+end
+
 // ── 4. End-to-End Modular Pipeline Execution ──────────────────────────────────
 
 fn compiler_pipeline_execute config source_code
@@ -3130,7 +3200,11 @@ fn compiler_pipeline_execute config source_code
             // WHY: Top-level script wrapper main()/মূল and trusted factory/allocator utilities are exempt;
             // user routines must prove ΔMemory = 0 (frees or returns allocated handles cleanly).
             is_cleanup_fn = 0
-            if decl.name == "main" or decl.name == "মূল" or pipeline_is_memory_exempt_fn(decl.name) == 1
+            if config.cfg_strict_proof == 1 and config.cfg_kavach_mode == 0
+                if pipeline_is_strict_proof_exempt_fn(decl.name) == 1
+                    is_cleanup_fn = 1
+                end
+            elif decl.name == "main" or decl.name == "মূল" or pipeline_is_memory_exempt_fn(decl.name) == 1
                 is_cleanup_fn = 1
             end
             if is_cleanup_fn == 0
@@ -3505,6 +3579,13 @@ fn compiler_pipeline_execute config source_code
             // Sovereign Mach-O 64-bit Binary Emission (macOS Darwin x86_64 / ARM64 Apple Silicon)
             if config.cfg_target_arch == TARGET_ID_ARM64()
                 arm_synth = arm64_synth_compile_program(toks)
+                if arm_synth.a64_error_count > 0
+                    result.res_error_count = arm_synth.a64_error_count
+                    result.res_error_msg = arm_synth.a64_error_msg
+                    result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                    result.res_success = 0
+                    return result
+                end
                 m_res = macho_emit_executable(arm_synth.synth_code, arm_synth.synth_rodata, 0, 16777228, config.cfg_out_path)
                 if m_res.mw_success == 1
                     result.res_output_bytes = m_res.mw_file_size
@@ -3540,7 +3621,8 @@ fn compiler_pipeline_execute config source_code
         elif config.cfg_emit_format == FORMAT_UNIKERNEL()
             // Sovereign Ring-0 Bare-Metal Multiboot2 Unikernel Emission
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
-            // Multiboot2 Header: 0xE85250D6 (3897741526), arch=0, length=24, checksum, end tag (type=0, size=8)
+            // Multiboot2 Header starts at offset 0 of user .text (ELF file offset 304 = 0x130, 8-byte aligned):
+            // 16B header + 16B padded ENTRY_ADDRESS tag (0x400158 = 0x400130 + 40) + 8B END tag = 40 bytes.
             mb2_code = list()
             // Magic: 0xE85250D6
             push(mb2_code, 214)
@@ -3552,16 +3634,33 @@ fn compiler_pipeline_execute config source_code
             push(mb2_code, 0)
             push(mb2_code, 0)
             push(mb2_code, 0)
-            // Length: 24 bytes
-            push(mb2_code, 24)
+            // Length: 40 bytes
+            push(mb2_code, 40)
             push(mb2_code, 0)
             push(mb2_code, 0)
             push(mb2_code, 0)
-            // Checksum: -(magic + arch + length) & 0xFFFFFFFF = 0x17AD2F12
-            push(mb2_code, 18)
-            push(mb2_code, 47)
+            // Checksum: -(0xE85250D6 + 0 + 40) & 0xFFFFFFFF = 0x17ADAF02
+            push(mb2_code, 2)
+            push(mb2_code, 175)
             push(mb2_code, 173)
             push(mb2_code, 23)
+            // Tag 3: Entry Address (type=3, flags=0, size=12, entry=0x00400158, 4B align pad)
+            push(mb2_code, 3)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 12)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 88)
+            push(mb2_code, 1)
+            push(mb2_code, 64)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
+            push(mb2_code, 0)
             // Tag End: type=0, flags=0, size=8
             push(mb2_code, 0)
             push(mb2_code, 0)
@@ -3634,6 +3733,10 @@ fn compiler_pipeline_execute config source_code
 
                 abbrev_bytes = dwarf_abbrev_build_standard()
                 cu = dwarf_unit_create("LiPi First 1.0.0 (প্রথম ১.০.০)", config.cfg_src_path, ".", dw_base, dw_base + synth.synth_code.len(), 0)
+                if synth.synth_code.len() > 0
+                    // WHY: Top-level scripts without explicit fn declarations still expose _start in .debug_info.
+                    dwarf_unit_add_function(cu, "_start", dw_base, dw_base + synth.synth_code.len(), 1, 1)
+                end
                 f_idx = 0
                 while f_idx < synth.synth_functions.len()
                     fn_item = synth.synth_functions[f_idx]
@@ -3673,6 +3776,13 @@ fn compiler_pipeline_execute config source_code
         elif config.cfg_target_arch == TARGET_ID_ARM64()
             // Direct ARM64 Silicon Machine Code Synthesis
             arm_synth = arm64_synth_compile_program(toks)
+            if arm_synth.a64_error_count > 0
+                result.res_error_count = arm_synth.a64_error_count
+                result.res_error_msg = arm_synth.a64_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
             arm_res = arm64_elf_emit_executable(arm_synth.synth_code, arm_synth.synth_rodata, config.cfg_out_path)
             if arm_res.ew_success == 1
                 result.res_output_bytes = arm_res.ew_file_size
@@ -3697,6 +3807,13 @@ fn compiler_pipeline_execute config source_code
         elif config.cfg_target_arch == TARGET_ID_RISCV64()
             // Direct RISC-V 64 Silicon Machine Code Synthesis
             rv_synth = riscv64_synth_compile_program(toks)
+            if rv_synth.rv_error_count > 0
+                result.res_error_count = rv_synth.rv_error_count
+                result.res_error_msg = rv_synth.rv_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
             rv_res = riscv64_elf_emit_executable(rv_synth.rv_code, rv_synth.rv_rodata, config.cfg_out_path)
             if rv_res.rv_ew_success == 1
                 result.res_output_bytes = rv_res.rv_ew_file_size

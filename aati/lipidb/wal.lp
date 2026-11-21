@@ -209,7 +209,11 @@ import "aati/lipidb/page"
 
   @! 4. Append to file descriptor at SEEK_END
   sys_lseek(wal.fd, 0, 2)
-  sys_write(wal.fd, wal_data_ptr(buf), total_len)
+  raw_ptr = wal_data_ptr(buf)
+  @if raw_ptr > 0
+    sys_write(wal.fd, raw_ptr, total_len)
+    sys_free(raw_ptr)
+  @end
 
   return lsn
 @end
@@ -294,6 +298,7 @@ import "aati/lipidb/page"
   bytes_read = sys_read(fd, raw_buf, file_sz)
   sys_close(fd)
 
+  crc_tbl = crc32_table_init()
   records = []
   offset = 0
 
@@ -324,8 +329,27 @@ import "aati/lipidb/page"
     v_b3 = sys_peek8(raw_buf + offset + 27) & 255
     v_len = v_b0 | (v_b1 * 256) | (v_b2 * 65536) | (v_b3 * 16777216)
 
+    stored_crc = (sys_peek8(raw_buf + offset + 28) & 255) | ((sys_peek8(raw_buf + offset + 29) & 255) * 256) | ((sys_peek8(raw_buf + offset + 30) & 255) * 65536) | ((sys_peek8(raw_buf + offset + 31) & 255) * 16777216)
+
     total_rec_len = 32 + k_len + v_len
     @if (offset + total_rec_len) > bytes_read
+      break
+    @end
+
+    @! Verify IEEE 802.3 CRC-32 checksum over header [4..27] + payload [32..total_rec_len-1]
+    calc_crc = 4294967295
+    ci = 4
+    @while ci < 28
+      calc_crc = crc32_update_u8(crc_tbl, calc_crc, sys_peek8(raw_buf + offset + ci))
+      ci = ci + 1
+    @end
+    ci = 32
+    @while ci < total_rec_len
+      calc_crc = crc32_update_u8(crc_tbl, calc_crc, sys_peek8(raw_buf + offset + ci))
+      ci = ci + 1
+    @end
+    calc_crc = (calc_crc ^ 4294967295) & 4294967295
+    @if calc_crc != stored_crc
       break
     @end
 

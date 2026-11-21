@@ -123,12 +123,15 @@ import "utso/core/string"
   i = 0
   @while i < 16
     idx = i * 4
-    @if idx + 3 >= block.len()
-      @end
-    b0 = block[idx] & 255
-    b1 = block[idx + 1] & 255
-    b2 = block[idx + 2] & 255
-    b3 = block[idx + 3] & 255
+    blen = block.len()
+    b0 = 0
+    b1 = 0
+    b2 = 0
+    b3 = 0
+    @if idx < blen b0 = block[idx] & 255 @end
+    @if idx + 1 < blen b1 = block[idx + 1] & 255 @end
+    @if idx + 2 < blen b2 = block[idx + 2] & 255 @end
+    @if idx + 3 < blen b3 = block[idx + 3] & 255 @end
     w0 = b0 * 16777216
     w1 = b1 * 65536
     w2 = b2 * 256

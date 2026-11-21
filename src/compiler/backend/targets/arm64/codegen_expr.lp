@@ -16,22 +16,83 @@ fn arm64_synth_expr_primary s toks pos_box
 
     t = toks[pos]
     k = t.tok_kind
+    handled = 0
+    cur_struct = ""
 
-    // 1. Integer Literal
-    if k == TOK_INT()
+    // 0. Unary Operators (-, !, ~, not, না)
+    if k == TOK_MINUS()
         list_set(pos_box, 0, pos + 1)
-        arm64_emit_mov_imm64(s, 0, t.tok_int_val)
+        arm64_synth_expr_primary(s, toks, pos_box)
+        arm64_emit_sub_x(s, 0, 31, 0) // sub x0, xzr, x0
+        s.a64_last_struct = ""
+        return 0
+    if k == TOK_BANG() or (k == TOK_IDENT() and (t.tok_text == "not" or t.tok_text == "না"))
+        list_set(pos_box, 0, pos + 1)
+        arm64_synth_expr_primary(s, toks, pos_box)
+        arm64_emit_cmp_x(s, 0, 31)
+        arm64_emit_b_cond(s, 0, 3)     // b.eq +3 (if 0 -> set 1)
+        arm64_emit_movz_x(s, 0, 0, 0)
+        arm64_emit_b(s, 2)
+        arm64_emit_movz_x(s, 0, 1, 0)
+        s.a64_last_struct = ""
+        return 0
+    if k == TOK_TILDE()
+        list_set(pos_box, 0, pos + 1)
+        arm64_synth_expr_primary(s, toks, pos_box)
+        arm64_emit_orn_x(s, 0, 31, 0) // mvn x0, x0 (orn x0, xzr, x0)
+        s.a64_last_struct = ""
         return 0
 
+    // 1. Integer / Boolean / Null Literal
+    if k == TOK_INT() or k == TOK_BOOL() or k == TOK_NONE()
+        list_set(pos_box, 0, pos + 1)
+        arm64_emit_mov_imm64(s, 0, t.tok_int_val)
+        handled = 1
+
     // 1b. Float Literal: IEEE-754 binary64 64-bit precision
-    if k == TOK_FLOAT()
+    if handled == 0 and k == TOK_FLOAT()
         list_set(pos_box, 0, pos + 1)
         fbits = arm64_parse_float_bits(t.tok_text)
         arm64_emit_mov_imm64(s, 0, fbits)
-        return 0
+        handled = 1
+
+    // 1c. Array / List Literal: [e0, e1, ...]
+    if handled == 0 and k == TOK_LBRACKET()
+        list_set(pos_box, 0, pos + 1)
+        arr_cnt = 0
+        while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RBRACKET()
+            arm64_synth_compile_expr(s, toks, pos_box)
+            arm64_push_reg(s, 0)
+            arr_cnt = arr_cnt + 1
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len() and toks[cur_p].tok_kind == TOK_COMMA()
+                list_set(pos_box, 0, cur_p + 1)
+        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        s.a64_needs_list_create = 1
+        s.synth_needs_alloc = 1
+        arm64_emit_mov_imm64(s, 0, arr_cnt)
+        arr_call_off = s.synth_code.len()
+        arm64_emit_bl(s, 0)
+        arr_rel = Arm64CallReloc()
+        arr_rel.a64_cr_patch_offset = arr_call_off
+        arr_rel.a64_cr_target_name = "__list_create"
+        push(s.synth_call_relocs, arr_rel)
+        if arr_cnt > 0
+            arm64_emit_mov_reg(s, 9, 0)              // X9 = hdr
+            arm64_synth_emit32(s, 4181721088 | (2 << 10) | (9 << 5) | 10) // ldr x10, [x9, #16]
+            ai = arr_cnt - 1
+            while ai >= 0
+                arm64_pop_reg(s, 1)
+                arm64_emit_mov_imm64(s, 2, ai * 8)
+                arm64_emit_add_x(s, 2, 10, 2)
+                arm64_synth_emit32(s, 4177526784 | (0 << 10) | (2 << 5) | 1) // str x1, [x2, #0]
+                ai = ai - 1
+            arm64_emit_mov_reg(s, 0, 9)
+        handled = 1
 
     // 2. String Literal
-    if k == TOK_STR()
+    if handled == 0 and k == TOK_STR()
         list_set(pos_box, 0, pos + 1)
         ro_off = arm64_synth_add_rodata_str(s, t.tok_text, 0)
         patch_pos = s.synth_code.len()
@@ -45,13 +106,14 @@ fn arm64_synth_expr_primary s toks pos_box
         rel.sr_rodata_offset = ro_off
         rel.sr_reg = 0
         push(s.synth_str_relocs, rel)
-        return 0
+        handled = 1
 
     // 3. Identifier or Call (Variable lookup, Field access, or Function Call)
     is_ident_or_call = 0
-    if k == TOK_IDENT() or k == TOK_KW_SYSCALL() or k == TOK_KW_PRINT()
+    if handled == 0 and (k == TOK_IDENT() or k == TOK_KW_SYSCALL() or k == TOK_KW_PRINT())
         is_ident_or_call = 1
     if is_ident_or_call == 1
+        handled = 1
         list_set(pos_box, 0, pos + 1)
         var_name = t.tok_text
         next_pos = get(pos_box, 0)
@@ -172,14 +234,14 @@ fn arm64_synth_expr_primary s toks pos_box
 
             // ── Intrinsic 8: list / তালিকা ─────────────────────────────────────
             if var_name == "list" or var_name == "তালিকা"
-                s.synth_needs_list_create = 1
+                s.a64_needs_list_create = 1
                 s.synth_needs_alloc = 1
                 arm64_emit_mov_imm64(s, 0, arg_count)
                 lc_call_off = s.synth_code.len()
                 arm64_emit_bl(s, 0)
                 lc_rel = Arm64CallReloc()
-                lc_rel.cr_patch_offset = lc_call_off
-                lc_rel.cr_target_name = "__list_create"
+                lc_rel.a64_cr_patch_offset = lc_call_off
+                lc_rel.a64_cr_target_name = "__list_create"
                 push(s.synth_call_relocs, lc_rel)
                 if arg_count > 0
                     arm64_emit_mov_reg(s, 9, 0) // X9 = list header ptr (keep SP pointing to args)
@@ -250,9 +312,32 @@ fn arm64_synth_expr_primary s toks pos_box
                     arm64_emit_movz_x(s, 0, 0, 0)
                 return 0
 
+            // ── Intrinsic 8e: push / list_push / ঠেলো (hdr, val -> hdr) ──────────
+            if var_name == "push" or var_name == "list_push" or var_name == "ঠেলো"
+                while arg_count > 2
+                    arm64_pop_reg(s, 1)
+                    arg_count = arg_count - 1
+                if arg_count == 2
+                    s.a64_needs_list_push = 1
+                    s.synth_needs_alloc = 1
+                    arm64_pop_reg(s, 1) // X1 = val
+                    arm64_pop_reg(s, 0) // X0 = hdr
+                    lp_call_off = s.synth_code.len()
+                    arm64_emit_bl(s, 0)
+                    lp_rel = Arm64CallReloc()
+                    lp_rel.a64_cr_patch_offset = lp_call_off
+                    lp_rel.a64_cr_target_name = "__list_push"
+                    push(s.synth_call_relocs, lp_rel)
+                else
+                    while arg_count > 0
+                        arm64_pop_reg(s, 1)
+                        arg_count = arg_count - 1
+                    arm64_emit_movz_x(s, 0, 0, 0)
+                return 0
+
             // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────────
             if var_name == "file_write" or var_name == "ফাইল_লেখো"
-                s.synth_needs_file_write = 1
+                s.a64_needs_file_write = 1
                 if arg_count >= 3
                     arm64_pop_reg(s, 2)
                 else
@@ -268,8 +353,8 @@ fn arm64_synth_expr_primary s toks pos_box
                 fw_call_off = s.synth_code.len()
                 arm64_emit_bl(s, 0)
                 fw_rel = Arm64CallReloc()
-                fw_rel.cr_patch_offset = fw_call_off
-                fw_rel.cr_target_name = "__file_write"
+                fw_rel.a64_cr_patch_offset = fw_call_off
+                fw_rel.a64_cr_target_name = "__file_write"
                 push(s.synth_call_relocs, fw_rel)
                 return 0
 
@@ -294,6 +379,7 @@ fn arm64_synth_expr_primary s toks pos_box
                         arm64_synth_emit32(s, st_word)
                         ai = ai - 1
                     arm64_emit_mov_reg(s, 0, 9) // return struct pointer in X0
+                s.a64_last_struct = var_name
                 return 0
 
             // ── Normal Function Call: Pop arguments into AAPCS64 registers X0..X7
@@ -315,23 +401,26 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_pop_reg(s, 0)
 
             // Emit BL instruction with relocation placeholder
+            if var_name == "main" or var_name == "মূল"
+                if s.a64_in_function == 0
+                    s.a64_called_main = 1
             call_off = s.synth_code.len()
             arm64_emit_bl(s, 0)
 
             call_rel = Arm64CallReloc()
-            call_rel.cr_patch_offset = call_off
-            call_rel.cr_target_name = var_name
+            call_rel.a64_cr_patch_offset = call_off
+            call_rel.a64_cr_target_name = var_name
             push(s.synth_call_relocs, call_rel)
 
             // WHY: Check callee-saved X27 exception flag after call returns. If active, jump to
             // the innermost try/catch handler or immediately unwind the current stack frame.
-            if s.synth_try_patches.len() > 0
+            if s.a64_try_patches.len() > 0
                 arm64_emit_cmp_x(s, 27, 31)
                 exc_bne_off = s.synth_code.len()
                 arm64_emit_b_cond(s, 1, 0)
-                active_tp = s.synth_try_patches[s.synth_try_patches.len() - 1]
+                active_tp = s.a64_try_patches[s.a64_try_patches.len() - 1]
                 push(active_tp, [exc_bne_off, 1])
-            elif s.synth_in_function == 1
+            elif s.a64_in_function == 1
                 arm64_emit_cmp_x(s, 27, 31)
                 skip_eq_off = s.synth_code.len()
                 arm64_emit_b_cond(s, 0, 0)
@@ -340,50 +429,113 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_synth_patch_u32(s, skip_eq_off, 1409286144 | ((skip_words & 524287) << 5) | 0)
             return 0
 
-        // ── Struct Field Access: obj.field ──────────────────────────────────
-        if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_DOT() or toks[next_pos].tok_text == ".")
-            // Load base object pointer from local stack into X0
-            off = arm64_synth_lookup_var(s, var_name)
-            if off > 0
-                arm64_emit_ldr_reg_sp(s, 0, off)
-            else
-                arm64_emit_movz_x(s, 0, 0, 0)
-
-            while get(pos_box, 0) < toks.len()
-                cp = get(pos_box, 0)
-                if toks[cp].tok_kind != TOK_DOT() and toks[cp].tok_text != "."
-                    break
-                list_set(pos_box, 0, cp + 1) // Consume '.'
-                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
-                    fn_tok = toks[get(pos_box, 0)]
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    f_off = arm64_synth_get_field_offset(s, "", fn_tok.tok_text)
-                    // ldr x0, [x0, #f_off]: 0xF9400000 | (((f_off/8) & 0xFFF) << 10) | (0 << 5) | 0
-                    scaled_fo = (f_off / 8) & 4095
-                    ldr_word = 4181721088 | (scaled_fo << 10)
-                    arm64_synth_emit32(s, ldr_word)
-            return 0
-
         // Variable load: ldr x0, [sp, #off]
         off = arm64_synth_lookup_var(s, var_name)
         if off > 0
             arm64_emit_ldr_reg_sp(s, 0, off)
+            cur_struct = arm64_synth_get_var_struct(s, var_name)
         else
             arm64_emit_movz_x(s, 0, 0, 0)
-        return 0
 
     // 4. Parenthesized expression: ( expr )
-    if k == TOK_LPAREN()
+    if handled == 0 and k == TOK_LPAREN()
         list_set(pos_box, 0, pos + 1)
         arm64_synth_compile_expr(s, toks, pos_box)
         cur_pos = get(pos_box, 0)
         if cur_pos < toks.len() and toks[cur_pos].tok_kind == TOK_RPAREN()
             list_set(pos_box, 0, cur_pos + 1)
+        handled = 1
+        cur_struct = s.a64_last_struct
+
+    if handled == 0
+        // Fallback: advance and clear X0
+        list_set(pos_box, 0, pos + 1)
+        arm64_emit_movz_x(s, 0, 0, 0)
+        s.a64_last_struct = ""
         return 0
 
-    // Fallback: advance and clear X0
-    list_set(pos_box, 0, pos + 1)
-    arm64_emit_movz_x(s, 0, 0, 0)
+    // 5. Postfix operations: .field, .len(), .push(x), [index]
+    while get(pos_box, 0) < toks.len()
+        cp = get(pos_box, 0)
+        ct = toks[cp]
+        if ct.tok_kind == TOK_DOT() or ct.tok_text == "."
+            list_set(pos_box, 0, cp + 1)
+            if get(pos_box, 0) < toks.len() and arm64_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                fn_tok = toks[get(pos_box, 0)]
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                np = get(pos_box, 0)
+                if np < toks.len() and toks[np].tok_kind == TOK_LPAREN()
+                    list_set(pos_box, 0, np + 1)
+                    m_args = 0
+                    while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
+                        if m_args == 0
+                            arm64_push_reg(s, 0)
+                        arm64_synth_compile_expr(s, toks, pos_box)
+                        arm64_push_reg(s, 0)
+                        m_args = m_args + 1
+                        cur_mp = get(pos_box, 0)
+                        if cur_mp < toks.len() and toks[cur_mp].tok_kind == TOK_COMMA()
+                            list_set(pos_box, 0, cur_mp + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RPAREN()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if fn_tok.tok_text == "len" or fn_tok.tok_text == "length"
+                        while m_args > 0
+                            arm64_pop_reg(s, 1)
+                            if m_args == 1
+                                arm64_pop_reg(s, 0)
+                            m_args = m_args - 1
+                        arm64_synth_emit32(s, 4181721088) // ldr x0, [x0, #0]
+                    elif fn_tok.tok_text == "push"
+                        while m_args > 1
+                            arm64_pop_reg(s, 1)
+                            m_args = m_args - 1
+                        if m_args == 1
+                            s.a64_needs_list_push = 1
+                            s.synth_needs_alloc = 1
+                            arm64_pop_reg(s, 1)
+                            arm64_pop_reg(s, 0)
+                            mp_off = s.synth_code.len()
+                            arm64_emit_bl(s, 0)
+                            mp_rel = Arm64CallReloc()
+                            mp_rel.a64_cr_patch_offset = mp_off
+                            mp_rel.a64_cr_target_name = "__list_push"
+                            push(s.synth_call_relocs, mp_rel)
+                        else
+                            arm64_emit_movz_x(s, 0, 0, 0)
+                    else
+                        while m_args > 0
+                            arm64_pop_reg(s, 1)
+                            if m_args == 1
+                                arm64_pop_reg(s, 0)
+                            m_args = m_args - 1
+                        arm64_emit_movz_x(s, 0, 0, 0)
+                    cur_struct = ""
+                else
+                    f_off = arm64_synth_get_field_offset(s, cur_struct, fn_tok.tok_text)
+                    scaled_fo = (f_off / 8) & 4095
+                    ldr_word = 4181721088 | (scaled_fo << 10)
+                    arm64_synth_emit32(s, ldr_word)
+                    cur_struct = ""
+            else
+                break
+        elif ct.tok_kind == TOK_LBRACKET()
+            list_set(pos_box, 0, cp + 1)
+            arm64_push_reg(s, 0) // Save hdr
+            arm64_synth_compile_expr(s, toks, pos_box) // X0 = idx
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            arm64_emit_mov_reg(s, 1, 0)     // X1 = idx
+            arm64_pop_reg(s, 0)             // X0 = hdr
+            arm64_synth_emit32(s, 4181723138) // ldr x2, [x0, #16] (data_ptr)
+            arm64_emit_add_x(s, 1, 1, 1)
+            arm64_emit_add_x(s, 1, 1, 1)
+            arm64_emit_add_x(s, 1, 1, 1)
+            arm64_emit_add_x(s, 0, 2, 1)
+            arm64_synth_emit32(s, 4181721088) // ldr x0, [x0, #0]
+            cur_struct = ""
+        else
+            break
+    s.a64_last_struct = cur_struct
     return 0
 
 // ── 7. Expression Synthesizer (Pratt / Operator Precedence Hierarchy) ──────────
@@ -447,9 +599,30 @@ fn arm64_synth_expr_additive s toks pos_box
             arm64_emit_sub_x(s, 0, 0, 1)
     return 0
 
+fn arm64_synth_expr_shift s toks pos_box
+    // WHY: Pratt precedence level 3a for bitwise shifts (<<, >>)
+    arm64_synth_expr_additive(s, toks, pos_box)
+
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        k = toks[pos].tok_kind
+        if k != TOK_SHL() and k != TOK_SHR()
+            break
+        list_set(pos_box, 0, pos + 1)
+        arm64_push_reg(s, 0)
+        arm64_synth_expr_additive(s, toks, pos_box)
+        arm64_emit_mov_reg(s, 1, 0)
+        arm64_pop_reg(s, 0)
+        if k == TOK_SHL()
+            arm64_emit_lslv_x(s, 0, 0, 1)
+        else
+            arm64_emit_asrv_x(s, 0, 0, 1)
+        s.a64_last_struct = ""
+    return 0
+
 fn arm64_synth_expr_relational s toks pos_box
     // WHY: Pratt precedence level 3 for comparison operators (==, !=, <, <=, >, >=)
-    arm64_synth_expr_additive(s, toks, pos_box)
+    arm64_synth_expr_shift(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
         pos = get(pos_box, 0)
@@ -462,7 +635,7 @@ fn arm64_synth_expr_relational s toks pos_box
         arm64_push_reg(s, 0)
 
         // Evaluate right operand into X0
-        arm64_synth_expr_additive(s, toks, pos_box)
+        arm64_synth_expr_shift(s, toks, pos_box)
 
         // Move right operand to X1, pop left operand back into X0
         arm64_emit_mov_reg(s, 1, 0)
@@ -507,9 +680,54 @@ fn arm64_synth_expr_relational s toks pos_box
             arm64_emit_movz_x(s, 0, 1, 0)
     return 0
 
+fn arm64_synth_expr_bit_and s toks pos_box
+    arm64_synth_expr_relational(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        if toks[pos].tok_kind != TOK_AMP()
+            break
+        list_set(pos_box, 0, pos + 1)
+        arm64_push_reg(s, 0)
+        arm64_synth_expr_relational(s, toks, pos_box)
+        arm64_emit_mov_reg(s, 1, 0)
+        arm64_pop_reg(s, 0)
+        arm64_emit_and_x(s, 0, 0, 1)
+        s.a64_last_struct = ""
+    return 0
+
+fn arm64_synth_expr_bit_xor s toks pos_box
+    arm64_synth_expr_bit_and(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        if toks[pos].tok_kind != TOK_CARET()
+            break
+        list_set(pos_box, 0, pos + 1)
+        arm64_push_reg(s, 0)
+        arm64_synth_expr_bit_and(s, toks, pos_box)
+        arm64_emit_mov_reg(s, 1, 0)
+        arm64_pop_reg(s, 0)
+        arm64_emit_eor_x(s, 0, 0, 1)
+        s.a64_last_struct = ""
+    return 0
+
+fn arm64_synth_expr_bit_or s toks pos_box
+    arm64_synth_expr_bit_xor(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        if toks[pos].tok_kind != TOK_BAR()
+            break
+        list_set(pos_box, 0, pos + 1)
+        arm64_push_reg(s, 0)
+        arm64_synth_expr_bit_xor(s, toks, pos_box)
+        arm64_emit_mov_reg(s, 1, 0)
+        arm64_pop_reg(s, 0)
+        arm64_emit_orr_x(s, 0, 0, 1)
+        s.a64_last_struct = ""
+    return 0
+
 fn arm64_synth_expr_and s toks pos_box
     // WHY: Pratt precedence level 4 for logical AND (and, &&, এবং)
-    arm64_synth_expr_relational(s, toks, pos_box)
+    arm64_synth_expr_bit_or(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
         pos = get(pos_box, 0)
@@ -527,7 +745,7 @@ fn arm64_synth_expr_and s toks pos_box
         arm64_push_reg(s, 0)
 
         // Evaluate right operand into X0
-        arm64_synth_expr_relational(s, toks, pos_box)
+        arm64_synth_expr_bit_or(s, toks, pos_box)
 
         // Move right operand to X1, pop left operand back into X0
         arm64_emit_mov_reg(s, 1, 0)

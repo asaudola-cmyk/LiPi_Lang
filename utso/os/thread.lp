@@ -37,17 +37,20 @@ fn থ্রেড_তৈরি স্ট্যাক_টপ
     return thread_create(স্ট্যাক_টপ)
 
 fn thread_spawn fn_ptr arg stack_size
-    // WHY: High-level safe thread launcher that allocates an isolated stack, spawns child execution context,
-    // invokes fn_ptr(arg), and immediately terminates the child via SYS_exit (60) without touching parent stack frames.
+    // WHY: High-level VM-shared thread launcher using anonymous mmap stack and native CLONE_VM thread_spawn_vm trampoline.
+    _heap_init = list()
     sz = stack_size
     if sz < 65536
         sz = 65536
     end
-    st_base = malloc(sz)
-    tid = thread_create(st_base + sz - 64)
-    if tid == 0
-        fn_ptr(arg)
-        syscall(60, 0, 0, 0, 0, 0, 0)
+    st_base = syscall(9, 0, sz, 3, 34, 0 - 1, 0)
+    if st_base <= 0
+        return 0
+    end
+    tid = thread_spawn_vm(fn_ptr, arg, st_base + sz)
+    if tid <= 0
+        syscall(11, st_base, sz, 0, 0, 0, 0)
+        return 0
     end
     return tid
 
@@ -281,10 +284,10 @@ fn thread_join handle
     if handle == 0
         return 0
     end
-    cur_tid = মেমরি_পড়ো(handle, 0)
+    cur_tid = মেমরি_পড়ো(handle, 0) & 4294967295
     while cur_tid != 0
         futex_wait(handle, cur_tid)
-        cur_tid = মেমরি_পড়ো(handle, 0)
+        cur_tid = মেমরি_পড়ো(handle, 0) & 4294967295
     end
     stack_base = মেমরি_পড়ো(handle, 8)
     sz = মেমরি_পড়ো(handle, 16)

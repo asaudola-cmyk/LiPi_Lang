@@ -210,7 +210,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 133)
                         x86_synth_emit_byte(s, 192)
                         x86_synth_emit_byte(s, 120)
-                        x86_synth_emit_byte(s, 27) // js +27
+                        x86_synth_emit_byte(s, 28) // js +28
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 193) // mov rcx, rax
@@ -249,7 +249,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 133)
                         x86_synth_emit_byte(s, 192)
                         x86_synth_emit_byte(s, 120)
-                        x86_synth_emit_byte(s, 31) // js +31
+                        x86_synth_emit_byte(s, 32) // js +32
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 193) // mov rcx, rax
@@ -292,7 +292,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 133)
                         x86_synth_emit_byte(s, 192)
                         x86_synth_emit_byte(s, 120)
-                        x86_synth_emit_byte(s, 31) // js +31
+                        x86_synth_emit_byte(s, 32) // js +32
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 193) // mov rcx, rax
@@ -376,6 +376,9 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         // Zero divisor guard: xor eax, eax
                         x86_synth_emit_byte(s, 49)
                         x86_synth_emit_byte(s, 192)
+                    elif const_val == -1
+                        // neg rax (handles both normal signs and INT64_MIN / -1 without #DE)
+                        x86_synth_emit_bytes(s, [72, 247, 216])
                     else
                         // Exact signed hardware division: mov rcx, const_val; cqo; idiv rcx
                         x86_synth_emit_byte(s, 72)
@@ -447,7 +450,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                 x86_synth_emit_byte(s, 193)
                 x86_synth_emit_byte(s, 88)  // pop rax
 
-                if (left_type == "float" or right_type == "float") and (op_kind == TOK_STAR() or op_kind == TOK_SLASH())
+                if (left_type == "float" or right_type == "float") and (op_kind == TOK_STAR() or op_kind == TOK_SLASH() or op_kind == TOK_PERCENT())
                     // WHY: SSE2 64-bit Double-Precision Floating Point Multiplication & Division.
                     // Transfers 64-bit IEEE-754 bit patterns from GPRs (%rax, %rcx) to SSE2 registers (%xmm0, %xmm1).
                     // Mixed integer-float arithmetic promotes integers to double precision via cvtsi2sd.
@@ -495,6 +498,40 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 15)
                         x86_synth_emit_byte(s, 94)
                         x86_synth_emit_byte(s, 193)
+                    elif op_kind == TOK_PERCENT()
+                        // WHY: IEEE-754 fmod(a, b) = a - trunc(a / b) * b via roundsd imm8=3
+                        // movapd xmm2, xmm0 (66 0F 28 D0)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 40)
+                        x86_synth_emit_byte(s, 208)
+                        // divsd xmm0, xmm1 (F2 0F 5E C1)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 94)
+                        x86_synth_emit_byte(s, 193)
+                        // roundsd xmm0, xmm0, 3 (66 0F 3A 0B C0 03)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 58)
+                        x86_synth_emit_byte(s, 11)
+                        x86_synth_emit_byte(s, 192)
+                        x86_synth_emit_byte(s, 3)
+                        // mulsd xmm0, xmm1 (F2 0F 59 C1)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 89)
+                        x86_synth_emit_byte(s, 193)
+                        // subsd xmm2, xmm0 (F2 0F 5C D0)
+                        x86_synth_emit_byte(s, 242)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 92)
+                        x86_synth_emit_byte(s, 208)
+                        // movapd xmm0, xmm2 (66 0F 28 C2)
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 40)
+                        x86_synth_emit_byte(s, 194)
                     end
 
                     // movq rax, xmm0 (66 48 0F 7E C0)
@@ -511,53 +548,11 @@ fn x86_synth_compile_expr_mul s toks pos_box
                     x86_synth_emit_byte(s, 175)
                     x86_synth_emit_byte(s, 193)
                 elif op_kind == TOK_SLASH()
-                    // WHY: Division-by-Zero hardware protection.
-                    // test rcx, rcx (3B: 48 85 C9)
-                    // jnz +4 (2B: 75 04) -> jumps over zero-handler
-                    // xor eax, eax (2B: 31 C0)
-                    // jmp +5 (2B: EB 05) -> jumps over cqo + idiv
-                    // cqo (2B: 48 99)
-                    // idiv rcx (3B: 48 F7 F9)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 133)
-                    x86_synth_emit_byte(s, 201)
-                    x86_synth_emit_byte(s, 117)
-                    x86_synth_emit_byte(s, 4)
-                    x86_synth_emit_byte(s, 49)
-                    x86_synth_emit_byte(s, 192)
-                    x86_synth_emit_byte(s, 235)
-                    x86_synth_emit_byte(s, 5)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 153)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 247)
-                    x86_synth_emit_byte(s, 249)
+                    // WHY: Division-by-Zero and INT64_MIN / -1 hardware protection.
+                    x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
                 elif op_kind == TOK_PERCENT()
-                    // WHY: Modulo-by-Zero hardware protection.
-                    // test rcx, rcx (3B: 48 85 C9)
-                    // jnz +4 (2B: 75 04) -> jumps over zero-handler
-                    // xor eax, eax (2B: 31 C0)
-                    // jmp +8 (2B: EB 08) -> jumps over cqo + idiv + mov
-                    // cqo (2B: 48 99)
-                    // idiv rcx (3B: 48 F7 F9)
-                    // mov rax, rdx (3B: 48 89 D0)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 133)
-                    x86_synth_emit_byte(s, 201)
-                    x86_synth_emit_byte(s, 117)
-                    x86_synth_emit_byte(s, 4)
-                    x86_synth_emit_byte(s, 49)
-                    x86_synth_emit_byte(s, 192)
-                    x86_synth_emit_byte(s, 235)
-                    x86_synth_emit_byte(s, 8)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 153)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 247)
-                    x86_synth_emit_byte(s, 249)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 137)
-                    x86_synth_emit_byte(s, 208)
+                    // WHY: Modulo-by-Zero and INT64_MIN % -1 hardware protection.
+                    x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
                 elif op_kind == TOK_MATMUL()
                     // WHY: Sovereign Silicon Matrix & Tensor Multiplication (@ Operator)
                     // Left operand is in %rax, Right operand is in %rcx.
@@ -810,7 +805,10 @@ fn x86_synth_compile_expr_add s toks pos_box
                         x86_synth_emit_byte(s, 137)
                         x86_synth_emit_byte(s, 206)
                         x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
-                        s.synth_last_expr_type = ""
+                        if left_type == "str" or right_type == "str"
+                            s.synth_last_expr_type = "str"
+                        else
+                            s.synth_last_expr_type = ""
                     // mov rax, rcx
                 elif op_kind == TOK_MINUS()
                     // sub rax, rcx (0x48 0x29 0xC8)

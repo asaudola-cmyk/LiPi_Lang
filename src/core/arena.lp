@@ -96,7 +96,7 @@ fn arena_destroy(a)
     while i < num_chunks
         c = get(a.arena_chunks, i)
         if c.chunk_base != 0 and c.chunk_capacity > 0
-            free(c.chunk_base, c.chunk_capacity)
+            free(c.chunk_base)
             c.chunk_base = 0
             c.chunk_capacity = 0
             c.chunk_offset = 0

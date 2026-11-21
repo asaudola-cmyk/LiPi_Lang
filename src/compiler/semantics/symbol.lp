@@ -94,6 +94,7 @@ import "utso/string"
   sym_init_val: i64
   sym_usage_count: i64
   sym_is_public: i64
+  sym_is_annotated: i64
 @end
 
 @fn symbol_new(name, kind, type_ref, is_const, span, scope_id)
@@ -115,6 +116,7 @@ import "utso/string"
   sym.sym_init_val = 0
   sym.sym_usage_count = 0
   sym.sym_is_public = 0
+  sym.sym_is_annotated = 0
   return sym
 @end
 

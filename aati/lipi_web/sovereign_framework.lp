@@ -18,6 +18,8 @@
 // - Built-in Security Middleware: Token-Bucket Rate Limiter, CORS, and Bearer JWT Guard.
 // ==============================================================================
 
+include "utso/crypto.lp"
+
 // ── 1. HTTP Protocol & Status Constants (Integer Enums) ───────────────────────
 HTTP_STATUS_200 = 200
 HTTP_STATUS_201 = 201
@@ -66,6 +68,145 @@ fn sf_str_find s sub
 
 fn sf_str_has s sub
     if sf_str_find(s, sub) >= 0 return 1
+    return 0
+
+fn sf_strip_crlf s
+    out = ""
+    i = 0
+    n = len(s)
+    while i < n
+        c = char_at(s, i)
+        if c != "\r" and c != "\n"
+            out = out + c
+        i = i + 1
+    return out
+
+fn sf_html_escape s
+    out = ""
+    i = 0
+    n = len(s)
+    while i < n
+        c = char_at(s, i)
+        if c == "&"
+            out = out + "&amp;"
+        elif c == "<"
+            out = out + "&lt;"
+        elif c == ">"
+            out = out + "&gt;"
+        elif c == "\""
+            out = out + "&quot;"
+        elif c == "'"
+            out = out + "&#39;"
+        else
+            out = out + c
+        i = i + 1
+    return out
+
+fn sf_json_escape s
+    out = ""
+    i = 0
+    n = len(s)
+    while i < n
+        c = char_at(s, i)
+        if c == "\\"
+            out = out + "\\\\"
+        elif c == "\""
+            out = out + "\\\""
+        elif c == "\n"
+            out = out + "\\n"
+        elif c == "\r"
+            out = out + "\\r"
+        elif c == "\t"
+            out = out + "\\t"
+        else
+            out = out + c
+        i = i + 1
+    return out
+
+fn sf_hex_nibble ch
+    if ch >= 48 and ch <= 57 return ch - 48
+    if ch >= 97 and ch <= 102 return ch - 97 + 10
+    if ch >= 65 and ch <= 70 return ch - 65 + 10
+    return 0
+
+fn sf_hmac_sha256_hex secret message
+    // WHY: Real RFC 2104 HMAC-SHA256 using raw byte buffers directly over NIST SHA-256
+    key_buf = alloc(64)
+    klen = len(secret)
+    i = 0
+    while i < 64
+        mem_write_byte(key_buf, i, 0)
+        i = i + 1
+    if klen > 64
+        khash = sha256_hex(secret)
+        i = 0
+        while i < 32
+            h1 = sf_hex_nibble(ord(char_at(khash, i * 2)))
+            h2 = sf_hex_nibble(ord(char_at(khash, i * 2 + 1)))
+            mem_write_byte(key_buf, i, (h1 * 16) + h2)
+            i = i + 1
+    else
+        i = 0
+        while i < klen
+            mem_write_byte(key_buf, i, ord(char_at(secret, i)) & 255)
+            i = i + 1
+
+    mlen = len(message)
+    inner_len = 64 + mlen
+    inner_buf = alloc(inner_len)
+    i = 0
+    while i < 64
+        mem_write_byte(inner_buf, i, (mem_read_byte(key_buf, i) ^ 54) & 255)
+        i = i + 1
+    i = 0
+    while i < mlen
+        mem_write_byte(inner_buf, 64 + i, ord(char_at(message, i)) & 255)
+        i = i + 1
+
+    inner_hex_ptr = alloc(80)
+    sha256_hash(inner_buf, inner_len, inner_hex_ptr)
+
+    outer_buf = alloc(96)
+    i = 0
+    while i < 64
+        mem_write_byte(outer_buf, i, (mem_read_byte(key_buf, i) ^ 92) & 255)
+        i = i + 1
+    i = 0
+    while i < 32
+        h1 = sf_hex_nibble(mem_read_byte(inner_hex_ptr, i * 2))
+        h2 = sf_hex_nibble(mem_read_byte(inner_hex_ptr, i * 2 + 1))
+        mem_write_byte(outer_buf, 64 + i, (h1 * 16) + h2)
+        i = i + 1
+
+    out_raw = alloc(80)
+    mem_write_byte(out_raw, 0, 64)
+    mem_write_byte(out_raw, 1, 0)
+    mem_write_byte(out_raw, 2, 0)
+    mem_write_byte(out_raw, 3, 0)
+    mem_write_byte(out_raw, 4, 48)
+    mem_write_byte(out_raw, 5, 82)
+    mem_write_byte(out_raw, 6, 84)
+    mem_write_byte(out_raw, 7, 83)
+    out_str_ptr = out_raw + 8
+    sha256_hash(outer_buf, 96, out_str_ptr)
+    res = str_sub(out_str_ptr, 0, 64)
+
+    free(key_buf)
+    free(inner_buf)
+    free(inner_hex_ptr)
+    free(outer_buf)
+    free(out_raw)
+    return res
+
+fn sf_ct_equals a b
+    la = len(a)
+    if la != len(b) return 0
+    diff = 0
+    i = 0
+    while i < la
+        diff = diff | ((ord(char_at(a, i)) & 255) ^ (ord(char_at(b, i)) & 255))
+        i = i + 1
+    if diff == 0 return 1
     return 0
 
 fn sf_parse_trailing_id s prefix_len
@@ -138,15 +279,18 @@ fn response_html status_code html_payload
     return res
 
 fn response_error status_code message
-    err_json = "{\"error\":true,\"message\":\"" + message + "\",\"status\":" + status_code + "}"
+    safe_msg = sf_json_escape(message)
+    err_json = "{\"error\":true,\"message\":\"" + safe_msg + "\",\"status\":" + status_code + "}"
     return response_json(status_code, err_json)
 
 fn http_response_serialize res
+    safe_ct = sf_strip_crlf(res.res_content_type)
+    safe_hdr = sf_strip_crlf(res.res_extra_hdr)
     raw = "HTTP/1.1 " + http_status_text(res.res_status) + "\r\n"
-    raw = raw + "Content-Type: " + res.res_content_type + "\r\n"
+    raw = raw + "Content-Type: " + safe_ct + "\r\n"
     raw = raw + "Content-Length: " + len(res.res_body) + "\r\n"
     raw = raw + "Access-Control-Allow-Origin: *\r\n"
-    raw = raw + res.res_extra_hdr + "\r\n\r\n"
+    raw = raw + safe_hdr + "\r\n\r\n"
     raw = raw + res.res_body
     return raw
 
@@ -221,14 +365,42 @@ fn rate_limiter_acquire rl
         return 1 // Allowed
     return 0 // Rate-limited (HTTP 429)
 
-// Zero-dependency JWT Bearer Validator
-// Expects header format: "Bearer <token>" containing secret key signature
+// Cryptographic RFC 2104 HMAC-SHA256 JWT Bearer Helpers & Validator
+fn sf_jwt_create_bearer user_id secret
+    signing_input = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." + str(user_id)
+    sig_hex = sf_hmac_sha256_hex(secret, signing_input)
+    return "Bearer " + signing_input + "." + sig_hex
+
 fn jwt_auth_guard auth_header expected_secret
-    if len(auth_header) < 10 return 0
-    if sf_str_has(auth_header, "Bearer ") == 0 return 0
-    if sf_str_has(auth_header, expected_secret) == 1
-        return 1001 // Valid user session ID
-    return 0
+    hlen = len(auth_header)
+    if hlen < 80 return 0
+    if sf_str_find(auth_header, "Bearer ") != 0 return 0
+    tok = str_sub(auth_header, 7, hlen)
+    tlen = len(tok)
+
+    // Find first and second '.' delimiters
+    dot1 = sf_str_find(tok, ".")
+    if dot1 <= 0 return 0
+    rest = str_sub(tok, dot1 + 1, tlen)
+    dot2_rel = sf_str_find(rest, ".")
+    if dot2_rel <= 0 return 0
+    dot2 = dot1 + 1 + dot2_rel
+    if dot2 + 1 >= tlen return 0
+
+    // Reject trailing dots or wrong MAC digest lengths
+    signing_input = str_sub(tok, 0, dot2)
+    payload_seg = str_sub(tok, dot1 + 1, dot2)
+    provided_sig = str_sub(tok, dot2 + 1, tlen)
+    if len(provided_sig) != 64 return 0
+
+    expected_sig = sf_hmac_sha256_hex(expected_secret, signing_input)
+    if sf_ct_equals(provided_sig, expected_sig) != 1
+        return 0
+    end
+
+    uid = sf_parse_trailing_id(payload_seg, 0)
+    if uid > 0 return uid
+    return 1001
 
 // ── 6. Embedded LipiKV In-Memory & Append-Only WAL ORM ────────────────────────
 // WHY: Eliminates external database TCP round-trips for high-throughput reads/writes.
@@ -342,9 +514,10 @@ fn orm_count tbl
 //      for lightning-fast crawler indexing and instantaneous first paint.
 
 fn ssr_render_page title body_content
+    safe_title = sf_html_escape(title)
     html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">"
     html = html + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">"
-    html = html + "<title>" + title + " — LiPi Sovereign Web</title>"
+    html = html + "<title>" + safe_title + " — LiPi Sovereign Web</title>"
     html = html + "<style>"
     html = html + "body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;}"
     html = html + "header{padding:16px 24px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;}"

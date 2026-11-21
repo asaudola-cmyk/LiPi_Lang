@@ -47,44 +47,68 @@ fn kavach_is_silicon_crowned fn_name
   if str_starts_with(fn_name, "_lipi_") == 1
     return 1
   end
-  // Trusted utso core OS/memory primitive namespaces
-  if str_starts_with(fn_name, "sys_") == 1 or str_starts_with(fn_name, "mem_") == 1
-    return 1
-  end
-  if str_starts_with(fn_name, "মেমরি_") == 1 or str_starts_with(fn_name, "file_") == 1 or str_starts_with(fn_name, "ফাইল_") == 1
-    return 1
-  end
-  if str_starts_with(fn_name, "slab_") == 1 or str_starts_with(fn_name, "স্ল্যাব_") == 1 or str_starts_with(fn_name, "obj_") == 1 or str_starts_with(fn_name, "অবজেক্ট_") == 1
-    return 1
-  end
-  if fn_name == "malloc" or fn_name == "free" or fn_name == "alloc" or fn_name == "বরাদ্দ" or fn_name == "মুক্ত"
-    return 1
-  end
-  if fn_name == "write_out" or fn_name == "write_err" or fn_name == "write_file" or fn_name == "read_file"
-    return 1
-  end
-  if fn_name == "println" or fn_name == "print_raw" or fn_name == "প্রিন্ট_র" or fn_name == "print_inline" or fn_name == "প্রিন্ট_ইনলাইন"
-    return 1
-  end
-  if fn_name == "read_line" or fn_name == "রিড_লাইন" or fn_name == "path_exists"
-    return 1
+  // Exact-name allowlist of authentic utso/core/io.lp and utso/core/memory.lp primitives
+  // (Prevents spoofable user prefixes like mem_pwn or sys_backdoor from bypassing --kavach)
+  allowed_utso = [
+    "malloc", "মেমরি_বরাদ্দ", "mem_alloc", "alloc", "বরাদ্দ",
+    "free", "মেমরি_মুক্তি", "mem_free", "মুক্ত",
+    "mem_copy", "মেমরি_কপি", "mem_fill", "মেমরি_ভরাট", "mem_zero", "মেমরি_শূন্য",
+    "mem_read", "mem_write", "মেমরি_লেখো", "মেমরি_পড়ো",
+    "mem_word_read", "mem_word_write", "মেমরি_শব্দ_পড়ো", "মেমরি_শব্দ_লেখো",
+    "mem_read_byte", "mem_byte_read", "mem_write_byte", "mem_byte_write", "মেমরি_বাইট_লেখো",
+    "mem_write_idx", "মেমরি_সূচক_লেখো", "mem_read_idx", "মেমরি_সূচক_পড়ো",
+    "mem_read_u32", "mem_write_u32", "mem_read_u64", "mem_write_u64",
+    "mem_cacheline_align_up", "মেমরি_ক্যাশলাইন_অ্যালাইন", "mem_alloc_cacheline", "মেমরি_বরাদ্দ_ক্যাশলাইন",
+    "slab_alloc", "স্ল্যাব_বরাদ্দ", "slab_free", "স্ল্যাব_মুক্তি",
+    "slab_get_class_index", "slab_get_slot_size", "get_slab_buckets",
+    "obj_header_init", "অবজেক্ট_হেডার_তৈরি", "obj_set_color", "অবজেক্ট_রং_নির্ধারণ",
+    "obj_get_size", "অবজেক্ট_সাইজ", "obj_get_type", "অবজেক্ট_টাইপ",
+    "obj_get_color", "অবজেক্ট_রং", "obj_get_flags", "অবজেক্ট_ফ্ল্যাগ", "obj_has_ptrs",
+    "print_raw", "প্রিন্ট_র", "print_inline", "প্রিন্ট_ইনলাইন", "write_out", "write_err", "println",
+    "read_line", "রিড_লাইন", "write_file", "read_file", "path_exists", "ফাইল_বিদ্যমান",
+    "file_open", "ফাইল_খোলো", "ফাইল_তৈরি", "ফাইল_খোলো_যুক্ত",
+    "file_close", "ফাইল_বন্ধ", "file_read_fd", "ফাইল_পড়ো",
+    "file_write_fd", "ফাইল_লেখো", "file_seek", "ফাইল_সিক",
+    "file_sync", "ফাইল_সিঙ্ক", "file_append", "append_file",
+    "sys_exit", "sys_mmap", "sys_peek", "sys_peek8", "sys_poke", "sys_poke8"
+  ]
+  ai = 0
+  while ai < allowed_utso.len()
+    if fn_name == allowed_utso[ai]
+      return 1
+    end
+    ai = ai + 1
   end
   return 0
+end
 
 fn kavach_is_raw_hw_op call_name
-  if call_name == "syscall" or call_name == "সিসকল"
+  if call_name == "syscall" or call_name == "সিসকল" or call_name == "sys_syscall"
     return 1
   end
-  if call_name == "mem_write" or call_name == "mem_word_write" or call_name == "মেমরি_লেখো" or call_name == "মেমরি_শব্দ_লেখো"
+  if call_name == "mem_write" or call_name == "mem_word_write" or call_name == "মেমরি_লেখো" or call_name == "মেমরি_শব্দ_লেখো" or call_name == "mem_write_word"
     return 1
   end
-  if call_name == "mem_byte_write" or call_name == "mem_write_byte" or call_name == "মেমরি_বাইট_লেখো"
+  if call_name == "mem_byte_write" or call_name == "mem_write_byte" or call_name == "মেমরি_বাইট_লেখো" or call_name == "mem_byte_লেখো"
     return 1
   end
-  if call_name == "sys_poke" or call_name == "sys_poke8"
+  if call_name == "mem_write_u64" or call_name == "mem_write_u32" or call_name == "mem_write_idx" or call_name == "মেমরি_সূচক_লেখো"
+    return 1
+  end
+  if call_name == "mem_copy" or call_name == "মেমরি_কপি" or call_name == "mem_fill" or call_name == "মেমরি_ভরাট" or call_name == "mem_zero" or call_name == "মেমরি_শূন্য"
+    return 1
+  end
+  if call_name == "mem_read" or call_name == "mem_word_read" or call_name == "মেমরি_পড়ো" or call_name == "মেমরি_শব্দ_পড়ো" or call_name == "mem_read_word"
+    return 1
+  end
+  if call_name == "mem_byte_read" or call_name == "mem_read_byte" or call_name == "মেমরি_বাইট_পড়ো" or call_name == "mem_read_u64" or call_name == "mem_read_u32" or call_name == "mem_read_idx" or call_name == "মেমরি_সূচক_পড়ো"
+    return 1
+  end
+  if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap"
     return 1
   end
   return 0
+end
 
 fn kavach_scan_expr kv fn_name expr
   if expr == 0
@@ -95,6 +119,27 @@ fn kavach_scan_expr kv fn_name expr
 
   if k == "ExprStmt" or k == "ExpressionStmt" or tag == AST_TAG_EXPR_STMT()
     return kavach_scan_expr(kv, fn_name, expr.expr)
+  end
+
+  if k == "Variable" or k == "IDENT" or k == "Identifier" or tag == AST_TAG_VARIABLE()
+    vname = expr.name
+    if vname == ""
+      vname = expr.target
+    end
+    if kavach_is_raw_hw_op(vname) == 1
+      kavach_record_error(kv, fn_name, vname)
+    end
+    return 0
+  end
+
+  if k == "Field"
+    if expr.value != 0
+      kavach_scan_expr(kv, fn_name, expr.value)
+    end
+    if expr.expr != 0
+      kavach_scan_expr(kv, fn_name, expr.expr)
+    end
+    return 0
   end
 
   if k == "Call" or k == "CallExpr" or tag == AST_TAG_CALL()
@@ -122,7 +167,7 @@ fn kavach_scan_expr kv fn_name expr
     return 0
   end
 
-  if k == "Binary" or k == "BinaryExpr" or k == "BinaryOp" or tag == AST_TAG_BINARY_OP()
+  if k == "Binary" or k == "BinaryExpr" or k == "BinaryOp" or tag == AST_TAG_BINARY_OP() or k == "Pipeline" or tag == AST_TAG_PIPELINE()
     kavach_scan_expr(kv, fn_name, expr.left)
     kavach_scan_expr(kv, fn_name, expr.right)
     return 0
@@ -133,8 +178,11 @@ fn kavach_scan_expr kv fn_name expr
     return 0
   end
 
-  if k == "Index" or k == "Member" or k == "MemberAccess" or tag == AST_TAG_INDEX() or tag == AST_TAG_MEMBER_ACCESS()
+  if k == "Index" or k == "Member" or k == "MemberAccess" or k == "FieldAccess" or tag == AST_TAG_INDEX() or tag == AST_TAG_MEMBER_ACCESS()
     kavach_scan_expr(kv, fn_name, expr.left)
+    if expr.target != 0 and expr.target != expr.left
+      kavach_scan_expr(kv, fn_name, expr.target)
+    end
     if expr.right != 0
       kavach_scan_expr(kv, fn_name, expr.right)
     end
@@ -144,7 +192,7 @@ fn kavach_scan_expr kv fn_name expr
     return 0
   end
 
-  if k == "ArrayLit" or k == "MapLit" or tag == AST_TAG_ARRAY_LIT() or tag == AST_TAG_MAP_LIT()
+  if k == "ArrayLit" or k == "MapLit" or k == "StructLit" or tag == AST_TAG_ARRAY_LIT() or tag == AST_TAG_MAP_LIT()
     if expr.elements != 0
       ei = 0
       while ei < expr.elements.len()
@@ -161,6 +209,7 @@ fn kavach_scan_expr kv fn_name expr
   end
 
   return 0
+end
 
 fn kavach_scan_stmt kv fn_name stmt
   if stmt == 0
@@ -170,6 +219,9 @@ fn kavach_scan_stmt kv fn_name stmt
   tag = stmt.tag
 
   if k == "Assign" or k == "AssignOp" or tag == AST_TAG_ASSIGN() or tag == AST_TAG_ASSIGN_OP()
+    if stmt.index != 0
+      kavach_scan_expr(kv, fn_name, stmt.index)
+    end
     rhs = stmt.value
     if rhs == 0
       rhs = stmt.expr
@@ -290,10 +342,14 @@ fn kavach_verify_program ast_decls
   while di < n
     decl = ast_decls[di]
     if decl != 0
-      if decl.kind == "FnDef" or decl.kind == "Function" or decl.kind == "কাজ" or decl.tag == AST_TAG_FN_DEF()
+      dk = decl.kind
+      dtag = decl.tag
+      if dk == "FnDef" or dk == "Function" or dk == "কাজ" or dk == "Component" or dtag == AST_TAG_FN_DEF()
         if kavach_is_silicon_crowned(decl.name) == 0
           kavach_scan_stmt_list(kv, decl.name, decl.body)
         end
+      elif dk != "StructDef" and dk != "EnumDef" and dtag != AST_TAG_STRUCT_DEF() and dtag != AST_TAG_ENUM_DEF()
+        kavach_scan_stmt(kv, "<toplevel>", decl)
       end
     end
     di = di + 1

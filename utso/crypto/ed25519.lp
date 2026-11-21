@@ -578,7 +578,33 @@ import "utso/crypto/sha512"
   return { x: x3, y: y3, z: z3, t: t3 }
 @end
 
+@fn _ed25519_pt_cselect(a, b, cond)
+  ax = a.x
+  ay = a.y
+  az = a.z
+  at = a.t
+  bx = b.x
+  by = b.y
+  bz = b.z
+  bt = b.t
+  nx = []
+  ny = []
+  nz = []
+  nt = []
+  i = 0
+  @while i < 16
+    nx = nx.push(ax[i] + cond * (bx[i] - ax[i]))
+    ny = ny.push(ay[i] + cond * (by[i] - ay[i]))
+    nz = nz.push(az[i] + cond * (bz[i] - az[i]))
+    nt = nt.push(at[i] + cond * (bt[i] - at[i]))
+    i = i + 1
+  @end
+  return { x: nx, y: ny, z: nz, t: nt }
+@end
+
 @fn ed25519_scalar_mult(scalar_limbs, pt)
+  @! WHY: Fixed-schedule constant-time double-and-add always evaluates point addition
+  @! and blends projective limbs without secret-dependent branches.
   res = ed25519_point_infinity()
   curr = pt
   i = 0
@@ -587,9 +613,8 @@ import "utso/crypto/sha512"
     bit = 0
     @while bit < 16
       low_b = limb & 1
-      @if low_b == 1
-        res = ed25519_point_add(res, curr)
-      @end
+      added = ed25519_point_add(res, curr)
+      res = _ed25519_pt_cselect(res, added, low_b)
       curr = ed25519_point_double(curr)
       limb = (limb / 2)
       bit = bit + 1
@@ -668,6 +693,10 @@ import "utso/crypto/sha512"
 
   @if valid == 0
     return { x: fe_zero(), y: fe_zero(), z: fe_zero(), t: fe_zero() } @! Point not on curve
+  @end
+
+  @if fe_is_zero(x) == 1 && sign == 1
+    return { x: fe_zero(), y: fe_zero(), z: fe_zero(), t: fe_zero() } @! RFC 8032 Section 5.1.3 rejects x == 0 with sign bit 1
   @end
 
   x0_bit = x[0] & 1

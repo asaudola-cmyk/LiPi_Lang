@@ -116,8 +116,8 @@ fn http_response_free res
     cap = mem_read(res, 40)
     if raw_buf > 0
         if cap > 0
-            mem_free(raw_buf, cap)
-    mem_free(res, 48)
+            sys_free(raw_buf)
+    sys_free(res)
     return 0
 
 // Client Networking: connect to IP and execute request
@@ -142,7 +142,7 @@ fn http_client_execute ip0 ip1 ip2 ip3 port req_buf req_len
 
     // Connect
     c_res = syscall(HTTP_SYS_CONNECT, fd, addr, 16, 0, 0, 0)
-    mem_free(addr, 16)
+    sys_free(addr)
     if c_res < 0
         syscall(HTTP_SYS_CLOSE, fd, 0, 0, 0, 0, 0)
         return 0
@@ -160,7 +160,7 @@ fn http_client_execute ip0 ip1 ip2 ip3 port req_buf req_len
     syscall(HTTP_SYS_CLOSE, fd, 0, 0, 0, 0, 0)
 
     if bytes_read <= 0
-        mem_free(resp_buf, 8192)
+        sys_free(resp_buf)
         return 0
 
     // Wrap in response descriptor

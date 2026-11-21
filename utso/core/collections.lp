@@ -430,48 +430,212 @@
   keys: array
   vals: array
   hm_size: i64
+  hm_buckets: array
+  hm_cap: i64
+@end
+
+@fn _hm_hash_key(key)
+  @if is_str(key) == 1
+    h = 2166136261
+    n = len(key)
+    i = 0
+    @while i < n
+      b = ord(char_at(key, i))
+      h = ((h ^ b) * 16777619) & 2147483647
+      i = i + 1
+    @end
+    return h
+  @end
+  lo = key & 2147483647
+  hi = (key >> 31) & 2147483647
+  h = (((lo ^ (hi * 2654435761)) * 2246822519) & 2147483647)
+  h = (h ^ (h >> 15)) & 2147483647
+  return h
+@end
+
+@fn _hm_eq(k1, k2)
+  @if is_str(k1) != is_str(k2)
+    return 0
+  @end
+  return k1 == k2
+@end
+
+@fn _hm_make_buckets(cap)
+  b = []
+  i = 0
+  @while i < cap
+    b = b.push(0)
+    i = i + 1
+  @end
+  return b
+@end
+
+@fn _hm_rehash(keys, new_cap)
+  buckets = _hm_make_buckets(new_cap)
+  mask = new_cap - 1
+  n = keys.len()
+  i = 0
+  @while i < n
+    h = _hm_hash_key(keys[i])
+    slot = h & mask
+    probes = 0
+    @while probes < new_cap
+      @if buckets[slot] == 0
+        list_set(buckets, slot, i + 1)
+        break
+      @end
+      slot = (slot + 1) & mask
+      probes = probes + 1
+    @end
+    i = i + 1
+  @end
+  return buckets
+@end
+
+@fn _hm_ensure_buckets(map)
+  @if map.hm_cap > 0 && map.hm_buckets != 0
+    return map
+  @end
+  c = 16
+  need = (map.keys.len() * 2) + 4
+  @while c < need
+    c = c * 2
+  @end
+  b = _hm_rehash(map.keys, c)
+  return { keys: map.keys, vals: map.vals, hm_size: map.hm_size, hm_buckets: b, hm_cap: c }
+@end
+
+@fn _hm_find_slot(map, key)
+  buckets = map.hm_buckets
+  cap = map.hm_cap
+  mask = cap - 1
+  h = _hm_hash_key(key)
+  slot = h & mask
+  probes = 0
+  @while probes < cap
+    sv = buckets[slot]
+    @if sv == 0
+      return -1
+    @end
+    @if sv > 0
+      @if _hm_eq(map.keys[sv - 1], key) == 1
+        return slot
+      @end
+    @end
+    slot = (slot + 1) & mask
+    probes = probes + 1
+  @end
+  return -1
 @end
 
 @fn hashmap_new()
-  return { keys: [], vals: [], hm_size: 0 }
+  return { keys: [], vals: [], hm_size: 0, hm_buckets: _hm_make_buckets(16), hm_cap: 16 }
 @end
 
 @fn hashmap_set(map, key, val)
-  @! Check if key already exists
-  idx = list_index_of(map.keys, key)
-  @if idx >= 0
-    new_vals = list_set(map.vals, idx, val)
-    return { keys: map.keys, vals: new_vals, hm_size: map.hm_size }
+  m = map
+  @if m == 0
+    m = hashmap_new()
+  @else
+    m = _hm_ensure_buckets(m)
   @end
-  new_keys = map.keys.push(key)
-  new_vals = map.vals.push(val)
-  return { keys: new_keys, vals: new_vals, hm_size: map.hm_size + 1 }
+  buckets = m.hm_buckets
+  cap = m.hm_cap
+  mask = cap - 1
+  h = _hm_hash_key(key)
+  slot = h & mask
+  first_tomb = -1
+  first_empty = -1
+  probes = 0
+  @while probes < cap
+    sv = buckets[slot]
+    @if sv == 0
+      first_empty = slot
+      break
+    @elif sv == -1
+      @if first_tomb < 0
+        first_tomb = slot
+      @end
+    @else
+      kidx = sv - 1
+      @if _hm_eq(m.keys[kidx], key) == 1
+        new_vals = list_set(m.vals, kidx, val)
+        return { keys: m.keys, vals: new_vals, hm_size: m.hm_size, hm_buckets: buckets, hm_cap: cap }
+      @end
+    @end
+    slot = (slot + 1) & mask
+    probes = probes + 1
+  @end
+
+  new_keys = m.keys.push(key)
+  new_vals = m.vals.push(val)
+  new_sz = m.hm_size + 1
+  @if ((new_keys.len() * 4) >= (cap * 3)) || first_empty < 0 || probes > (cap / 2)
+    new_cap = cap
+    @if ((new_keys.len() * 4) >= (new_cap * 3)) || first_empty < 0
+      new_cap = cap * 2
+    @end
+    new_b = _hm_rehash(new_keys, new_cap)
+    return { keys: new_keys, vals: new_vals, hm_size: new_sz, hm_buckets: new_b, hm_cap: new_cap }
+  @end
+  target = first_empty
+  @if first_tomb >= 0
+    target = first_tomb
+  @end
+  list_set(buckets, target, new_keys.len())
+  return { keys: new_keys, vals: new_vals, hm_size: new_sz, hm_buckets: buckets, hm_cap: cap }
 @end
 
 @fn hashmap_get(map, key)
-  idx = list_index_of(map.keys, key)
-  @if idx < 0
+  @if map == 0 || map.keys == 0 || map.hm_size == 0
     return 0
   @end
-  return map.vals[idx]
+  m = _hm_ensure_buckets(map)
+  slot = _hm_find_slot(m, key)
+  @if slot < 0
+    return 0
+  @end
+  return m.vals[m.hm_buckets[slot] - 1]
 @end
 
 @fn hashmap_has(map, key)
-  idx = list_index_of(map.keys, key)
-  @if idx >= 0
+  @if map == 0 || map.keys == 0 || map.hm_size == 0
+    return 0
+  @end
+  m = _hm_ensure_buckets(map)
+  slot = _hm_find_slot(m, key)
+  @if slot >= 0
     return 1
   @end
   return 0
 @end
 
 @fn hashmap_delete(map, key)
-  idx = list_index_of(map.keys, key)
-  @if idx < 0
+  @if map == 0 || map.keys == 0 || map.keys.len() == 0
     return map
   @end
-  new_keys = list_concat(list_slice(map.keys, 0, idx), list_slice(map.keys, idx + 1, map.keys.len()))
-  new_vals = list_concat(list_slice(map.vals, 0, idx), list_slice(map.vals, idx + 1, map.vals.len()))
-  return { keys: new_keys, vals: new_vals, hm_size: map.hm_size - 1 }
+  m = _hm_ensure_buckets(map)
+  slot = _hm_find_slot(m, key)
+  @if slot < 0
+    return m
+  @end
+  buckets = m.hm_buckets
+  idx = buckets[slot] - 1
+  list_set(buckets, slot, -1)
+  last = m.keys.len() - 1
+  @if idx < last
+    last_k = m.keys[last]
+    last_v = m.vals[last]
+    lslot = _hm_find_slot(m, last_k)
+    list_set(m.keys, idx, last_k)
+    list_set(m.vals, idx, last_v)
+    @if lslot >= 0
+      list_set(buckets, lslot, idx + 1)
+    @end
+  @end
+  new_keys = list_slice(m.keys, 0, last)
+  new_vals = list_slice(m.vals, 0, last)
+  return { keys: new_keys, vals: new_vals, hm_size: m.hm_size - 1, hm_buckets: buckets, hm_cap: m.hm_cap }
 @end
 
 @fn hashmap_keys(map)
@@ -558,7 +722,7 @@
 @! ─── Priority Queue (min-heap via sorted insert) ────────────
 
 @fn pq_new()
-  return { keys: [], vals: [], hm_size: 0 }
+  return { keys: [], vals: [], hm_size: 0, hm_buckets: [], hm_cap: 0 }
 @end
 
 @fn pq_push(pq, priority, val)
@@ -581,7 +745,7 @@
     new_keys = new_keys.push(priority)
     new_vals = new_vals.push(val)
   @end
-  return { keys: new_keys, vals: new_vals, hm_size: new_keys.len() }
+  return { keys: new_keys, vals: new_vals, hm_size: new_keys.len(), hm_buckets: [], hm_cap: 0 }
 @end
 
 @fn pq_pop(pq)
@@ -590,7 +754,7 @@
   @end
   new_keys = list_slice(pq.keys, 1, pq.keys.len())
   new_vals = list_slice(pq.vals, 1, pq.vals.len())
-  return { keys: new_keys, vals: new_vals, hm_size: new_keys.len() }
+  return { keys: new_keys, vals: new_vals, hm_size: new_keys.len(), hm_buckets: [], hm_cap: 0 }
 @end
 
 @fn pq_peek(pq)
@@ -627,6 +791,25 @@
 
 @fn arr_len(arr)
   return arr.len()
+@end
+
+@fn array_len(arr)
+  return arr.len()
+@end
+
+@fn array_get(arr, idx)
+  @if arr == 0 || idx < 0 || idx >= arr.len()
+    return 0
+  @end
+  return arr[idx]
+@end
+
+@fn delete(m, key)
+  // WHY: Removes key from map collection safely using hashmap_delete while guarding null maps.
+  @if m == 0
+    return 0
+  @end
+  return hashmap_delete(m, key)
 @end
 
 @fn map_new()
@@ -694,8 +877,13 @@
 @end
 
 @fn open_hashmap_new(capacity)
-  @! Open addressing hashmap — alias backed by list-based hashmap
-  return { keys: [], vals: [], hm_size: 0 }
+  @! Real O(1) open addressing hashmap initialized with power-of-2 bucket capacity
+  c = 16
+  need = capacity * 2
+  @while c < need
+    c = c * 2
+  @end
+  return { keys: [], vals: [], hm_size: 0, hm_buckets: _hm_make_buckets(c), hm_cap: c }
 @end
 
 @fn open_hashmap_set(map, key, val)

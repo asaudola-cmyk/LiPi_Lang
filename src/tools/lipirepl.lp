@@ -292,6 +292,7 @@ fn repl_spawn_exec cmd_path arg1 arg2 arg3
     exit_code = (raw_status / 256) % 256
 
     syscall(11, argv, 64, 0, 0, 0, 0)
+    syscall(11, argv, 64, 0, 0, 0, 0)
     syscall(11, env, 32, 0, 0, 0, 0)
     syscall(11, st, 8, 0, 0, 0, 0)
     return exit_code
@@ -312,46 +313,74 @@ fn repl_write_file path content
     syscall(3, fd, 0, 0, 0, 0, 0)
     return 1
 
-// WHY: Executes general LiPi expressions, statements, and prints dynamically on the fly
-fn repl_dynamic_eval cmd
-    trimmed = trim(cmd)
-    if len(trimmed) == 0 return 1
+fn _repl_trim s
+    n = len(s)
+    a = 0
+    while a < n and (char_at(s, a) == " " or char_at(s, a) == "\t" or char_at(s, a) == "\r")
+        a = a + 1
+    b = n
+    while b > a and (char_at(s, b - 1) == " " or char_at(s, b - 1) == "\t" or char_at(s, b - 1) == "\r")
+        b = b - 1
+    return str_sub(s, a, b)
 
-    code = ""
-    if starts_with(trimmed, "fn ") or starts_with(trimmed, "কাজ ") or starts_with(trimmed, "@fn ")
-        code = cmd + "\n"
-    elif starts_with(trimmed, "struct ") or starts_with(trimmed, "কাঠামো ") or starts_with(trimmed, "@struct ")
-        code = cmd + "\n"
-    elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "print ")
-        code = "fn main\n    " + cmd + "\n    return 0\nmain()\n"
-    elif starts_with(trimmed, "for ") or starts_with(trimmed, "while ") or starts_with(trimmed, "যদি ") or starts_with(trimmed, "if ")
-        code = "fn main\n    " + cmd + "\n    return 0\nmain()\n"
-    elif index_of(trimmed, "=") >= 0
-        code = "fn main\n    " + cmd + "\n    return 0\nmain()\n"
-    else
-        code = "fn main\n    say " + cmd + "\n    return 0\nmain()\n"
+fn _repl_is_def_header t
+    if starts_with(t, "fn ") or starts_with(t, "@fn ") or starts_with(t, "কাজ ") or starts_with(t, "struct ") or starts_with(t, "@struct ") or starts_with(t, "গঠন ") or starts_with(t, "কাঠামো ") or starts_with(t, "import ") or starts_with(t, "include ")
+        return 1
+    return 0
 
-    tmp_src = "/tmp/lipi_repl_tmp.lp"
-    tmp_bin = "/tmp/lipi_repl_tmp.bin"
-    w_ok = repl_write_file(tmp_src, code)
-    if w_ok == 1
-        compiler = repl_resolve_compiler()
-        res = repl_spawn_exec(compiler, tmp_src, "-o", tmp_bin)
-        if res == 0
+fn _repl_block_delta t
+    if t == "@end" or t == "end" or t == "শেষ" or t == "}"
+        return 0 - 1
+    if starts_with(t, "@fn ") or starts_with(t, "@struct ") or starts_with(t, "@if ") or starts_with(t, "@while ") or starts_with(t, "@for ")
+        if contains(t, "@end") == 0
+            return 1
+    if len(t) > 0 and char_at(t, len(t) - 1) == "{"
+        return 1
+    return 0
+
+fn _repl_run_program defs_str body_str eval_tail is_def
+    pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    tmp_src = "/tmp/lipi_repl_" + str(pid) + ".lp"
+    tmp_bin = "/tmp/lipi_repl_bin_" + str(pid)
+    full_code = defs_str + "\n@fn _repl_entry()\n" + body_str + eval_tail + "\n  return 0\n@end\n\n_repl_entry()\n"
+    if is_def == 1
+        full_code = defs_str + "\n" + eval_tail + "\n"
+    w_ok = repl_write_file(tmp_src, full_code)
+    if w_ok != 1
+        return 0
+    compiler = repl_resolve_compiler()
+    res = repl_spawn_exec(compiler, tmp_src, "-o", tmp_bin)
+    if res == 0
+        if is_def == 0
             t_start = cpu_clock()
             repl_spawn_exec(tmp_bin, "", "", "")
             t_end = cpu_clock()
-            elapsed = t_end - t_start
-            say "  [Hardware Cycle Timing: " + str(elapsed) + " cycles]"
-            syscall(87, tmp_bin, 0, 0, 0, 0, 0)
-            syscall(87, tmp_src, 0, 0, 0, 0, 0)
-            return 1
+            say "  [Hardware Cycle Timing: " + str(t_end - t_start) + " cycles]"
+        syscall(87, tmp_bin, 0, 0, 0, 0, 0)
         syscall(87, tmp_src, 0, 0, 0, 0, 0)
+        return 1
+    syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+    syscall(87, tmp_src, 0, 0, 0, 0, 0)
+    return 0
+
+// WHY: Executes general LiPi expressions, statements, and prints dynamically with session history.
+fn repl_dynamic_eval cmd
+    trimmed = _repl_trim(cmd)
+    if len(trimmed) == 0 return 1
+    is_d = _repl_is_def_header(trimmed)
+    tail = ""
+    if is_d == 1
+        tail = trimmed + "\n"
+    elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "print(") or starts_with(trimmed, "println(") or starts_with(trimmed, "for ") or starts_with(trimmed, "@for ") or starts_with(trimmed, "while ") or starts_with(trimmed, "@while ") or starts_with(trimmed, "if ") or starts_with(trimmed, "@if ") or starts_with(trimmed, "যদি ") or index_of(trimmed, "=") >= 0
+        tail = "  " + trimmed + "\n"
+    else
+        tail = "  say " + trimmed + "\n"
+    if _repl_run_program("", "", tail, is_d) == 1
+        return 1
     say "  ❌ সংকলন বা মূল্যায়ন ত্রুটি: " + cmd
     return 1
 
 // ─── Direct Interactive Expression Evaluator ──────────────────────────────────
-// WHY: Evaluates numeric and arithmetic expressions instantly in-memory without compiling to disk
 fn repl_eval_expr_string s
     slen = len(s)
     p = 0
@@ -379,16 +408,11 @@ fn repl_eval_expr_string s
 
     op_char = char_at(s, p)
     op_id = 0
-    if op_char == "+"
-        op_id = 1
-    if op_char == "*"
-        op_id = 2
-    if op_char == "-"
-        op_id = 3
-    if op_char == "/"
-        op_id = 4
-    if op_char == "%"
-        op_id = 5
+    if op_char == "+" op_id = 1
+    if op_char == "*" op_id = 2
+    if op_char == "-" op_id = 3
+    if op_char == "/" op_id = 4
+    if op_char == "%" op_id = 5
 
     if op_id == 0
         return repl_dynamic_eval(s)
@@ -403,6 +427,13 @@ fn repl_eval_expr_string s
         p = p + 1
 
     if len(num_str2) == 0
+        return repl_dynamic_eval(s)
+
+    while p < slen and (char_at(s, p) == " " or char_at(s, p) == "\t")
+        p = p + 1
+
+    // Trailing operators/tokens (e.g. "1 + 2 * 3") delegate cleanly to full compiler
+    if p < slen
         return repl_dynamic_eval(s)
 
     v2 = parse_hex_or_dec(num_str2)
@@ -429,10 +460,74 @@ fn main
             return 0
 
     প্রিন্ট_রেপল_ব্যানার()
+    session_defs = ""
+    session_body = ""
+    pending_buf = ""
+    pending_depth = 0
     running = 1
     while running == 1
         input_line = repl_read_line()
-        running = repl_dispatch_command(input_line)
+        trimmed = _repl_trim(input_line)
+        if pending_depth == 0
+            if trimmed == ":clear" or trimmed == ":reset"
+                session_defs = ""
+                session_body = ""
+                say "✔ REPL সেশন রিসেট সম্পন্ন।"
+                continue
+            if trimmed == ":exit" or trimmed == ":quit" or trimmed == ":বিদায়" or trimmed == ":q"
+                running = repl_dispatch_command(trimmed)
+                continue
+            if repl_str_starts(":", trimmed) == 1
+                running = repl_dispatch_command(trimmed)
+                continue
+            if len(trimmed) == 0
+                continue
+
+        d = _repl_block_delta(trimmed)
+        if pending_depth > 0 or d > 0
+            pending_buf = pending_buf + input_line + "\n"
+            pending_depth = pending_depth + d
+            if pending_depth > 0
+                continue
+            trimmed_blk = _repl_trim(pending_buf)
+            is_d = _repl_is_def_header(trimmed_blk)
+            if is_d == 1
+                cand_defs = session_defs + pending_buf + "\n"
+                if _repl_run_program(cand_defs, "", "", 1) == 1
+                    session_defs = cand_defs
+                    say "✔ সংজ্ঞা সংরক্ষিত।"
+                else
+                    say "  ❌ সংকলন ত্রুটি"
+            else
+                if _repl_run_program(session_defs, session_body, "  " + pending_buf + "\n", 0) == 1
+                    session_body = session_body + "  " + pending_buf + "\n"
+                else
+                    say "  ❌ সংকলন বা মূল্যায়ন ত্রুটি"
+            pending_buf = ""
+            pending_depth = 0
+            continue
+
+        if _repl_is_def_header(trimmed) == 1
+            cand_defs = session_defs + trimmed + "\n"
+            if _repl_run_program(cand_defs, "", "", 1) == 1
+                session_defs = cand_defs
+                say "✔ সংজ্ঞা সংরক্ষিত।"
+            else
+                say "  ❌ সংকলন ত্রুটি: " + trimmed
+        elif starts_with(trimmed, "let ") or starts_with(trimmed, "@let ") or (index_of(trimmed, "=") >= 0 and index_of(trimmed, "==") < 0 and index_of(trimmed, "!=") < 0 and index_of(trimmed, "<=") < 0 and index_of(trimmed, ">=") < 0)
+            if _repl_run_program(session_defs, session_body, "  " + trimmed + "\n", 0) == 1
+                session_body = session_body + "  " + trimmed + "\n"
+            else
+                say "  ❌ সংকলন ত্রুটি: " + trimmed
+        elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "println(") or starts_with(trimmed, "print(")
+            if _repl_run_program(session_defs, session_body, "  " + trimmed + "\n", 0) != 1
+                say "  ❌ মূল্যায়ন ত্রুটি: " + trimmed
+        else
+            if len(session_defs) > 0 or len(session_body) > 0
+                if _repl_run_program(session_defs, session_body, "  say (" + trimmed + ")\n", 0) != 1
+                    say "  ❌ মূল্যায়ন ত্রুটি: " + trimmed
+            else
+                repl_eval_expr_string(trimmed)
 
     return 0
 

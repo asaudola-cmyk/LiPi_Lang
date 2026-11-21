@@ -24,10 +24,11 @@ include "utso/io.lp"
 include "utso/memory.lp"
 
 // ── 1. Multiboot2 & x86 Hardware Constants ────────────────────────────────────
-MULTIBOOT2_MAGIC          = 3897741526 // 0xE85250D6
+MULTIBOOT2_MAGIC          = 3897708758 // 0xE85250D6
 MULTIBOOT2_ARCH_I386      = 0          // 32-bit protected mode entry
 MULTIBOOT2_TAG_END        = 0          // Tag Type 0 (End)
 MULTIBOOT2_TAG_INFO_REQ   = 1
+MULTIBOOT2_TAG_ENTRY_ADDR = 3          // Tag Type 3 (Entry Address)
 
 // 16550 UART Port Offsets (COM1 = 0x3F8)
 UART_COM1_BASE            = 1016       // 0x3F8
@@ -84,14 +85,14 @@ struct UnikernelBuilder
 // ── 3. Constructor Primitives ─────────────────────────────────────────────────
 
 fn multiboot2_header_new entry_addr
-    // WHY: Formulates 44-byte Multiboot2 header satisfying GRUB2 / QEMU spec.
+    // WHY: Formulates 40-byte Multiboot2 header (16B base + 16B aligned ENTRY_ADDRESS tag + 8B END tag).
     h = Multiboot2Header()
     h.mh_tag = 1
     h.mh_magic = MULTIBOOT2_MAGIC
     h.mh_arch = MULTIBOOT2_ARCH_I386
     
-    // Header length: 16 bytes base + 8 bytes end tag = 24 bytes (or 44 with tags)
-    hdr_len = 24
+    // Header length: 16B base + 16B aligned ENTRY_ADDRESS tag (12B + 4B pad) + 8B END tag = 40 bytes
+    hdr_len = 40
     h.mh_length = hdr_len
     
     // Checksum: -(magic + arch + length) & 0xFFFFFFFF
@@ -125,7 +126,7 @@ fn unikernel_builder_new name
     ub.ub_tag = 1
     ub.ub_name = name
     ub.ub_target_arch = 1 // x86_64 Long Mode
-    ub.ub_header = multiboot2_header_new(1048576) // 1MB physical entry point (0x100000)
+    ub.ub_header = multiboot2_header_new(1048616) // 1MB + 40B header = 0x100028
     ub.ub_uart = uart_16550_new()
     ub.ub_vga = vga_text_buffer_new()
     ub.ub_total_image_size = 0
@@ -158,6 +159,25 @@ fn multiboot2_serialize_header hdr out_bytes
     push(out_bytes, (csum >> 8) & 255)
     push(out_bytes, (csum >> 16) & 255)
     push(out_bytes, (csum >> 24) & 255)
+
+    // Tag Type 3 (Entry Address: type=3, flags=0, size=12, entry_addr, 4B align pad)
+    push(out_bytes, MULTIBOOT2_TAG_ENTRY_ADDR)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
+    push(out_bytes, 12)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
+    eaddr = hdr.mh_entry_addr
+    push(out_bytes, eaddr & 255)
+    push(out_bytes, (eaddr >> 8) & 255)
+    push(out_bytes, (eaddr >> 16) & 255)
+    push(out_bytes, (eaddr >> 24) & 255)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
+    push(out_bytes, 0)
     
     // Tag Type 0 (End Tag: type=0, flags=0, size=8)
     push(out_bytes, 0)
@@ -235,14 +255,21 @@ fn vga_write_str vga s
 // ── 7. Sovereign Unikernel Boot Image Assembler ───────────────────────────────
 
 fn unikernel_build_image builder
-    // WHY: Emits binary payload containing Multiboot2 header and boot stub.
+    // WHY: Emits binary payload containing Multiboot2 40B header and real 32-bit x86 COM1+VGA boot stub.
     img = list()
     
-    // Multiboot2 Header
+    // Multiboot2 Header (40 bytes)
     hdr = builder.ub_header
     multiboot2_serialize_header(hdr, img)
-    
-    // 64-bit Entry Stub (Boot Banner: "[LIPI SOVEREIGN RING-0 UNIKERNEL BOOTED]\n")
+
+    // Real 32-bit x86 Ring-0 COM1 0x3F8 115200 8N1 + VGA 0xB8000 boot loop + cli;hlt
+    boot_code = [250, 102, 186, 249, 3, 48, 192, 238, 102, 186, 251, 3, 176, 128, 238, 102, 186, 248, 3, 176, 1, 238, 102, 186, 249, 3, 48, 192, 238, 102, 186, 251, 3, 176, 3, 238, 102, 186, 250, 3, 176, 199, 238, 102, 186, 252, 3, 176, 11, 238, 232, 0, 0, 0, 0, 94, 129, 198, 53, 0, 0, 0, 191, 0, 128, 11, 0, 172, 132, 192, 116, 32, 102, 186, 253, 3, 236, 168, 32, 116, 247, 138, 70, 255, 102, 186, 248, 3, 238, 60, 10, 116, 230, 136, 7, 198, 71, 1, 10, 131, 199, 2, 235, 219, 250, 244, 235, 252, 91, 76, 73, 80, 73, 32, 83, 79, 86, 69, 82, 69, 73, 71, 78, 32, 82, 73, 78, 71, 45, 48, 32, 85, 78, 73, 75, 69, 82, 78, 69, 76, 32, 66, 79, 79, 84, 69, 68, 93, 10, 0]
+    bi = 0
+    while bi < len(boot_code)
+        push(img, get(boot_code, bi))
+        bi = bi + 1
+
+    // Update model telemetry matching emitted COM1 & VGA banner
     uart = builder.ub_uart
     uart_16550_init(uart)
     banner = "[LIPI SOVEREIGN RING-0 UNIKERNEL BOOTED]\n"
@@ -251,7 +278,7 @@ fn unikernel_build_image builder
     vga = builder.ub_vga
     vga_write_str(vga, "LIPI UNIKERNEL 1.0.0")
     
-    builder.ub_total_image_size = len(img) + 4096 // Header + 4KB Long Mode page tables
+    builder.ub_total_image_size = len(img) + 4096 // Header+code + 4KB Long Mode page tables
     return img
 
 fn unikernel_boot_main

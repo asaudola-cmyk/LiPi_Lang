@@ -34,17 +34,17 @@ import "utso/net/tls/tls13"
     i = i + 1
   @end
   seq = layer.seq_num
-  val11 = nonce[11] ^ (seq & 255)
-  nonce[11] = val11
-  val10 = nonce[10] ^ ((seq / 256) & 255)
-  nonce[10] = val10
-  val9 = nonce[9] ^ ((seq / 65536) & 255)
-  nonce[9] = val9
-  val8 = nonce[8] ^ ((seq / 16777216) & 255)
-  nonce[8] = val8
+  nonce[11] = nonce[11] ^ (seq & 255)
+  nonce[10] = nonce[10] ^ ((seq >> 8) & 255)
+  nonce[9] = nonce[9] ^ ((seq >> 16) & 255)
+  nonce[8] = nonce[8] ^ ((seq >> 24) & 255)
+  nonce[7] = nonce[7] ^ ((seq >> 32) & 255)
+  nonce[6] = nonce[6] ^ ((seq >> 40) & 255)
+  nonce[5] = nonce[5] ^ ((seq >> 48) & 255)
+  nonce[4] = nonce[4] ^ ((seq >> 56) & 255)
 
   @! 2. Inner Plaintext: pt + [ct_type] (RFC 8446 §5.2)
-  ct_char = str_from_char_code(ct_type & 255)
+  ct_char = chr(ct_type & 255)
   inner = str_concat(pt, ct_char)
 
   @! 3. Outer header: [0x17 (application_data), 0x03, 0x03 (TLS 1.2 legacy version), len_hi, len_lo]
@@ -87,14 +87,14 @@ import "utso/net/tls/tls13"
     i = i + 1
   @end
   seq = layer.seq_num
-  val11 = nonce[11] ^ (seq & 255)
-  nonce[11] = val11
-  val10 = nonce[10] ^ ((seq / 256) & 255)
-  nonce[10] = val10
-  val9 = nonce[9] ^ ((seq / 65536) & 255)
-  nonce[9] = val9
-  val8 = nonce[8] ^ ((seq / 16777216) & 255)
-  nonce[8] = val8
+  nonce[11] = nonce[11] ^ (seq & 255)
+  nonce[10] = nonce[10] ^ ((seq >> 8) & 255)
+  nonce[9] = nonce[9] ^ ((seq >> 16) & 255)
+  nonce[8] = nonce[8] ^ ((seq >> 24) & 255)
+  nonce[7] = nonce[7] ^ ((seq >> 32) & 255)
+  nonce[6] = nonce[6] ^ ((seq >> 40) & 255)
+  nonce[5] = nonce[5] ^ ((seq >> 48) & 255)
+  nonce[4] = nonce[4] ^ ((seq >> 56) & 255)
   nonce_str = tls_bytes_to_string(nonce)
 
   inner = tls_aes_gcm_decrypt(layer.key, nonce_str, enc_payload, hdr_hex)

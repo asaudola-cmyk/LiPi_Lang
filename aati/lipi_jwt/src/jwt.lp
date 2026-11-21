@@ -35,7 +35,7 @@ fn jwt_write_u64_ascii buf offset val
         mem_byte_write(buf, offset + written, d_char)
         written = written + 1
 
-    mem_free(temp_buf, 32)
+    sys_free(temp_buf)
     return written
 
 // Helper: parses ASCII decimal integer from buf
@@ -169,8 +169,8 @@ fn jwt_create_token out_buf secret_buf secret_len user_id exp_time role_id
         i = i + 1
     pos = pos + 64
 
-    mem_free(sign_input, sign_input_len)
-    mem_free(sig_hex, 65)
+    sys_free(sign_input)
+    sys_free(sig_hex)
 
     return pos
 
@@ -201,6 +201,20 @@ fn jwt_validate_token token_buf token_len secret_buf secret_len current_time
     if dot1 < 0
         return 0 - 1
     if dot2 < 0
+        return 0 - 1
+
+    // Enforce HS256 header prefix ("eyJhbGciOiJIUzI1NiI") — reject alg:none or algorithm confusion
+    expected_hdr_prefix = "eyJhbGciOiJIUzI1NiI"
+    if dot1 < 19
+        return 0 - 1
+    h_chk = 0
+    h_i = 0
+    while h_i < 19
+        hb = mem_byte_read(token_buf, h_i)
+        eh = mem_byte_read(expected_hdr_prefix, h_i)
+        h_chk = h_chk | (hb ^ eh)
+        h_i = h_i + 1
+    if h_chk != 0
         return 0 - 1
 
     payload_start = dot1 + 1
@@ -241,18 +255,17 @@ fn jwt_validate_token token_buf token_len secret_buf secret_len current_time
     expected_sig = sys_alloc(65)
     sha256_hash(sign_input, sign_input_len, expected_sig)
 
-    // Constant-time signature comparison
+    // Constant-time bitwise signature comparison
     diff = 0
     i = 0
     while i < 64
         b_actual = mem_byte_read(token_buf, sig_start + i)
         b_expected = mem_byte_read(expected_sig, i)
-        if b_actual != b_expected
-            diff = diff + 1
+        diff = diff | (b_actual ^ b_expected)
         i = i + 1
 
-    mem_free(sign_input, sign_input_len)
-    mem_free(expected_sig, 65)
+    sys_free(sign_input)
+    sys_free(expected_sig)
 
     if diff != 0
         return 0 - 1 // Invalid signature

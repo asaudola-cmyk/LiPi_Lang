@@ -76,7 +76,7 @@ fn parse_command_tokens raw_req
     first_c = char_at(raw_req, 0)
     if first_c == "*"
         // RESP Multi-Bulk Array Parser
-        lines = str_split(raw_req)
+        lines = str_split(raw_req, "\n")
         i = 1
         n_lines = len(lines)
         while i < n_lines
@@ -99,7 +99,7 @@ fn parse_command_tokens raw_req
     clean = str_replace(clean, "\r", "")
     clean = str_replace(clean, "\n", "")
 
-    parts = str_split(clean)
+    parts = str_split(clean, " ")
     p_idx = 0
     num_p = len(parts)
     while p_idx < num_p
@@ -328,10 +328,9 @@ fn start_lipidb_server port
     say ""
 
     recv_buf = malloc(8192)
-    client_addr = malloc(32)
 
     while 1
-        client_fd = socket_accept(server_fd, client_addr)
+        client_fd = socket_accept(server_fd)
         if client_fd >= 0
             n_read = syscall(0, client_fd, recv_buf, 8192, 0, 0, 0)
             if n_read > 0

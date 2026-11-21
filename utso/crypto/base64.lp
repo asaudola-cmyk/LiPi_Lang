@@ -171,7 +171,7 @@ import "utso/core/string"
   num_items = bytes.len()
   @while i < num_items
     b = bytes[i] & 255
-    res = string_concat(res, str_from_char_code(b))
+    res = string_concat(res, chr(b))
     i = i + 1
   @end
   return res

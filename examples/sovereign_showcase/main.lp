@@ -107,7 +107,7 @@ import "utso/memory"
 
   extracted_role_id = jwt_extract_role(token_buffer, tok_len)
   assert_condition(extracted_role_id == 1, "Extracted Role ID from JWT payload matches Admin role (1)")
-  mem_free(token_buffer, 256)
+  sys_free(token_buffer)
 
   // --------------------------------------------------------------------------
   // Phase 5: Simulated Full-Stack End-to-End Request Pipeline

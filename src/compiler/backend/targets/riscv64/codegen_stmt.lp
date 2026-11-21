@@ -8,6 +8,7 @@
 
 fn riscv64_synth_compile_statement s toks pos_box
     // WHY: Synthesizes execution bytes for statements (control flow, structs, loops, calls).
+    s.rv_sp_delta = 0
     pos = get(pos_box, 0)
     if pos >= toks.len()
         return 0
@@ -92,9 +93,16 @@ fn riscv64_synth_compile_statement s toks pos_box
         list_set(pos_box, 0, pos + 1)
         if s.rv_loop_starts.len() > 0
             loop_hdr = s.rv_loop_starts[s.rv_loop_starts.len() - 1]
-            cur_off = s.rv_code.len()
-            rel_bytes = loop_hdr - cur_off
-            riscv64_emit_jal(s, 0, rel_bytes)
+            if loop_hdr < 0
+                cont_patch = s.rv_code.len()
+                riscv64_emit_jal(s, 0, 0)
+                if s.rv_for_conts.len() > 0
+                    curr_cont_list = s.rv_for_conts[s.rv_for_conts.len() - 1]
+                    push(curr_cont_list, cont_patch)
+            else
+                cur_off = s.rv_code.len()
+                rel_bytes = loop_hdr - cur_off
+                riscv64_emit_jal(s, 0, rel_bytes)
         return 0
 
     // ── 4. Struct Definition: struct / গঠন / @struct ──────────────────────────
@@ -166,7 +174,7 @@ fn riscv64_synth_compile_statement s toks pos_box
             if t3.tok_kind == TOK_ASSIGN() or t3.tok_text == "="
                 is_assign = 1
 
-            if is_dot == 1 and t2.tok_kind == TOK_IDENT() and is_assign == 1
+            if is_dot == 1 and riscv64_is_ident_token(t2.tok_kind) == 1 and is_assign == 1
                 obj_name = txt
                 field_name = t2.tok_text
                 list_set(pos_box, 0, p3 + 1) // Consume obj, '.', field, '='
@@ -180,7 +188,7 @@ fn riscv64_synth_compile_statement s toks pos_box
                 // Load obj pointer into a1
                 obj_off = riscv64_synth_lookup_var(s, obj_name)
                 if obj_off > 0
-                    riscv64_emit_ld(s, 11, 2, obj_off)
+                    riscv64_emit_local_ld(s, 11, obj_off)
                 else
                     riscv64_emit_addi(s, 11, 0, 0)
 
@@ -191,6 +199,49 @@ fn riscv64_synth_compile_statement s toks pos_box
                 f_off = riscv64_synth_get_field_offset(s, "", field_name)
                 riscv64_emit_sd(s, 10, 11, f_off)
                 return 0
+
+    // ── 5b. Indexed Element Assignment: arr[idx] = expr ────────────────────────
+    if k == TOK_IDENT()
+        if pos + 2 < toks.len() and toks[pos + 1].tok_kind == TOK_LBRACKET()
+            scan_p = pos + 2
+            brk_depth = 1
+            while scan_p < toks.len() and brk_depth > 0
+                sk = toks[scan_p].tok_kind
+                if sk == TOK_LBRACKET()
+                    brk_depth = brk_depth + 1
+                elif sk == TOK_RBRACKET()
+                    brk_depth = brk_depth - 1
+                end
+                scan_p = scan_p + 1
+            end
+            if brk_depth == 0 and scan_p < toks.len() and toks[scan_p].tok_kind == TOK_ASSIGN()
+                arr_name = txt
+                list_set(pos_box, 0, pos + 2) // Consume arr and '['
+                riscv64_synth_compile_expr(s, toks, pos_box) // a0 = idx
+                riscv64_push_reg(s, 10)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                riscv64_synth_compile_expr(s, toks, pos_box) // a0 = rhs
+                riscv64_push_reg(s, 10)
+                arr_off = riscv64_synth_lookup_var(s, arr_name)
+                if arr_off > 0
+                    riscv64_emit_local_ld(s, 10, arr_off) // a0 = hdr
+                    riscv64_emit_ld(s, 13, 10, 16)        // a3 = data_ptr
+                    riscv64_pop_reg(s, 12)                // a2 = val
+                    riscv64_pop_reg(s, 11)                // a1 = idx
+                    riscv64_emit_slli(s, 11, 11, 3)       // idx * 8
+                    riscv64_emit_add(s, 13, 13, 11)       // &data[idx]
+                    riscv64_emit_sd(s, 12, 13, 0)
+                else
+                    riscv64_pop_reg(s, 12)
+                    riscv64_pop_reg(s, 11)
+                end
+                return 0
+            end
+        end
+    end
 
     // ── 6. Conditionals: if / elif / else (যদি / নাহলে_যদি / নাহলে / @if...) ──
     is_if = 0
@@ -389,6 +440,8 @@ fn riscv64_synth_compile_statement s toks pos_box
         push(s.rv_loop_starts, loop_header)
         loop_brks = list()
         push(s.rv_loop_breaks, loop_brks)
+        while_conts = list()
+        push(s.rv_for_conts, while_conts)
 
         // Evaluate condition into a0
         riscv64_synth_compile_expr(s, toks, pos_box)
@@ -450,6 +503,7 @@ fn riscv64_synth_compile_statement s toks pos_box
 
         s.rv_loop_starts = pop(s.rv_loop_starts)
         s.rv_loop_breaks = pop(s.rv_loop_breaks)
+        s.rv_for_conts = pop(s.rv_for_conts)
         return 0
 
     // ── 8. Loops: for / প্রতিটি / @for ───────────────────────────────────────
@@ -477,7 +531,7 @@ fn riscv64_synth_compile_statement s toks pos_box
         // Compile start expression into a0
         riscv64_synth_compile_expr(s, toks, pos_box)
         var_off = riscv64_synth_alloc_var(s, var_name)
-        riscv64_emit_sd(s, 10, 2, var_off)
+        riscv64_emit_local_sd(s, 10, var_off)
 
         // Consume '..' if present
         if get(pos_box, 0) < toks.len()
@@ -489,20 +543,22 @@ fn riscv64_synth_compile_statement s toks pos_box
         riscv64_synth_compile_expr(s, toks, pos_box)
         end_var_name = "__end_" + var_name
         end_off = riscv64_synth_alloc_var(s, end_var_name)
-        riscv64_emit_sd(s, 10, 2, end_off)
+        riscv64_emit_local_sd(s, 10, end_off)
 
         loop_header = s.rv_code.len()
-        push(s.rv_loop_starts, loop_header)
+        push(s.rv_loop_starts, 0 - 1)
         loop_brks = list()
         push(s.rv_loop_breaks, loop_brks)
+        for_conts = list()
+        push(s.rv_for_conts, for_conts)
 
-        // Compare var and end: ld a0, var_off(sp); ld a1, end_off(sp); bge a0, a1, loop_exit
-        riscv64_emit_ld(s, 10, 2, var_off)
-        riscv64_emit_ld(s, 11, 2, end_off)
+        // Compare var and end inclusive (a..b): exit if end < var (blt a1, a0)
+        riscv64_emit_local_ld(s, 10, var_off)
+        riscv64_emit_local_ld(s, 11, end_off)
 
-        // bge a0, a1, loop_exit (exit if var >= end)
+        // blt a1, a0, loop_exit (exit if var > end)
         patch_loop_exit = s.rv_code.len()
-        riscv64_emit_bge(s, 10, 11, 0)
+        riscv64_emit_blt(s, 11, 10, 0)
 
         riscv64_synth_skip_whitespace_tokens(toks, pos_box)
 
@@ -539,10 +595,17 @@ fn riscv64_synth_compile_statement s toks pos_box
             if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
                 list_set(pos_box, 0, cur_p + 1)
 
+        // Step target for continue statements inside for-loop
+        step_off = s.rv_code.len()
+        fci = 0
+        while fci < for_conts.len()
+            riscv64_synth_patch_jal(s, for_conts[fci], 0, step_off)
+            fci = fci + 1
+
         // Increment var: ld a0, var_off(sp); addi a0, a0, 1; sd a0, var_off(sp)
-        riscv64_emit_ld(s, 10, 2, var_off)
+        riscv64_emit_local_ld(s, 10, var_off)
         riscv64_emit_addi(s, 10, 10, 1)
-        riscv64_emit_sd(s, 10, 2, var_off)
+        riscv64_emit_local_sd(s, 10, var_off)
 
         // jal x0, loop_header
         cur_off = s.rv_code.len()
@@ -551,7 +614,7 @@ fn riscv64_synth_compile_statement s toks pos_box
 
         // Backpatch loop_exit
         loop_exit_off = s.rv_code.len()
-        riscv64_synth_patch_b(s, patch_loop_exit, 5, 10, 11, loop_exit_off)
+        riscv64_synth_patch_b(s, patch_loop_exit, 4, 11, 10, loop_exit_off)
 
         // Backpatch breaks
         bi = 0
@@ -562,6 +625,7 @@ fn riscv64_synth_compile_statement s toks pos_box
 
         s.rv_loop_starts = pop(s.rv_loop_starts)
         s.rv_loop_breaks = pop(s.rv_loop_breaks)
+        s.rv_for_conts = pop(s.rv_for_conts)
         return 0
 
     // ── 8b. Pattern Match: match / মিল / মেলাও / @match ────────────────────────
@@ -579,7 +643,7 @@ fn riscv64_synth_compile_statement s toks pos_box
 
         riscv64_synth_compile_expr(s, toks, pos_box)
         m_off = riscv64_synth_alloc_var(s, "__rv64_match_" + str(pos))
-        riscv64_emit_sd(s, 10, 2, m_off)
+        riscv64_emit_local_sd(s, 10, m_off)
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
             list_set(pos_box, 0, get(pos_box, 0) + 1)
         riscv64_synth_skip_whitespace_tokens(toks, pos_box)
@@ -653,7 +717,7 @@ fn riscv64_synth_compile_statement s toks pos_box
                     sep_t2 = toks[get(pos_box, 0)].tok_text
                     if sep_k2 == TOK_FAT_ARROW() or sep_k2 == TOK_COLON() or sep_k2 == TOK_ARROW() or sep_t2 == "=>" or sep_t2 == ":" or sep_t2 == "->"
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
-                riscv64_emit_ld(s, 11, 2, m_off)
+                riscv64_emit_local_ld(s, 11, m_off)
                 patch_miss = s.rv_code.len()
                 riscv64_emit_bne(s, 11, 10, 0) // bne a1, a0, miss
 
@@ -810,7 +874,7 @@ fn riscv64_synth_compile_statement s toks pos_box
 
                 if catch_var != ""
                     cv_off = riscv64_synth_alloc_var(s, catch_var)
-                    riscv64_emit_sd(s, 27, 2, cv_off)
+                    riscv64_emit_local_sd(s, 27, cv_off)
 
                 while get(pos_box, 0) < toks.len()
                     riscv64_synth_skip_whitespace_tokens(toks, pos_box)
@@ -859,7 +923,7 @@ fn riscv64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, eq_pos + 1)
                 riscv64_synth_compile_expr(s, toks, pos_box)
                 off = riscv64_synth_alloc_var(s, var_name)
-                riscv64_emit_sd(s, 10, 2, off)
+                riscv64_emit_local_sd(s, 10, off)
         return 0
 
     // ── 10. Assignment: <var> = <expr> ─────────────────────────────────────────
@@ -870,7 +934,7 @@ fn riscv64_synth_compile_statement s toks pos_box
             list_set(pos_box, 0, next_pos + 1) // Consume ident and '='
             riscv64_synth_compile_expr(s, toks, pos_box)
             off = riscv64_synth_alloc_var(s, var_name)
-            riscv64_emit_sd(s, 10, 2, off)
+            riscv64_emit_local_sd(s, 10, off)
             return 0
 
     // ── 11. Function & Component Definition: fn / কাজ / @fn / component / উপাদান ──
@@ -904,10 +968,12 @@ fn riscv64_synth_compile_statement s toks pos_box
         saved_rv_locals = s.rv_locals
         saved_rv_stack_off = s.rv_stack_offset
         saved_rv_try_patches = s.rv_try_patches
+        saved_rv_sp_delta = s.rv_sp_delta
         s.rv_locals = list()
         s.rv_stack_offset = 16
         s.rv_in_function = 1
         s.rv_try_patches = list()
+        s.rv_sp_delta = 0
 
         // Parse parameter names until newline or return arrow
         params = list()
@@ -947,7 +1013,7 @@ fn riscv64_synth_compile_statement s toks pos_box
             off = riscv64_synth_alloc_var(s, pname)
             if pi < 8
                 arg_reg = 10 + pi
-                riscv64_emit_sd(s, arg_reg, 2, off)
+                riscv64_emit_local_sd(s, arg_reg, off)
             pi = pi + 1
 
         // Parse function body statements until explicit end, next fn, dedent, or EOF
@@ -986,6 +1052,7 @@ fn riscv64_synth_compile_statement s toks pos_box
         s.rv_locals = saved_rv_locals
         s.rv_stack_offset = saved_rv_stack_off
         s.rv_try_patches = saved_rv_try_patches
+        s.rv_sp_delta = saved_rv_sp_delta
         s.rv_in_function = 0
 
         // Patch jump to bypass function body during top-level execution

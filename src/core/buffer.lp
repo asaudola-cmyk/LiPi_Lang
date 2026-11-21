@@ -37,7 +37,7 @@ fn buffer_new(initial_cap)
 fn buffer_free(buf)
     if buf == 0 return 0
     if buf.buf_data != 0 and buf.buf_capacity > 0
-        free(buf.buf_data, buf.buf_capacity)
+        free(buf.buf_data)
         buf.buf_data = 0
         buf.buf_capacity = 0
         buf.buf_len = 0
@@ -81,7 +81,7 @@ fn buffer_ensure_capacity(buf, additional_bytes)
 
     // Free previous memory block
     if old_data != 0 and buf.buf_capacity > 0
-        free(old_data, buf.buf_capacity)
+        free(old_data)
 
     buf.buf_data = new_data
     buf.buf_capacity = new_cap

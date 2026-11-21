@@ -251,7 +251,7 @@ import "aati/lipi_ai/autodiff"
 @fn policy_net_forward(net, state_tensor)
   h1 = autodiff_relu(mlp_forward(net.l1, state_tensor))
   logits = mlp_forward(net.l2, h1)
-  probs = tensor_softmax(logits)
+  probs = tensor_softmax(logits, 1.0)
   return probs
 @end
 

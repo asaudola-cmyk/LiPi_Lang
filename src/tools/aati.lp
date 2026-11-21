@@ -359,9 +359,74 @@ fn sort_files raw_list
         k = k + 1
     return res
 
-// WHY: Computes authentic SHA-256 digest of a file with guaranteed bit-for-bit cryptographic determinism.
-// Reading file length safely resolves and flushes register stack slots before passing buffer to crypto hashing engine.
+// WHY: Validates relative bundle/package paths to eliminate directory traversal (..),
+// absolute paths, backslashes, drive prefixes, and NUL injection.
+fn _aati_is_safe_rel_path p
+    plen = len(p)
+    if plen == 0 return 0
+    c0 = char_at(p, 0)
+    if c0 == "/" or c0 == "\\" return 0
+    i = 0
+    seg_start = 0
+    while i <= plen
+        at_end = 0
+        ch = ""
+        if i == plen
+            at_end = 1
+        else
+            ch = char_at(p, i)
+            if ord(ch) == 0 or ch == "\\" or ch == ":" return 0
+        if at_end == 1 or ch == "/"
+            seg = str_sub(p, seg_start, i)
+            if seg == ".." or seg == "."
+                return 0
+            seg_start = i + 1
+        i = i + 1
+    return 1
+
+fn _aati_get_env target_key
+    fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
+    if fd < 0 return ""
+    buf = alloc(16384)
+    n = syscall(0, fd, buf, 16384, 0, 0, 0)
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    if n <= 0
+        free(buf)
+        return ""
+    klen = len(target_key)
+    out = ""
+    pos = 0
+    while pos < n
+        end_p = pos
+        while end_p < n and mem_byte_read(buf, end_p) != 0
+            end_p = end_p + 1
+        eq_p = pos
+        while eq_p < end_p and mem_byte_read(buf, eq_p) != 61
+            eq_p = eq_p + 1
+        if (eq_p - pos) == klen
+            m = 1
+            ki = 0
+            while ki < klen
+                if mem_byte_read(buf, pos + ki) != ord(char_at(target_key, ki))
+                    m = 0
+                    break
+                ki = ki + 1
+            if m == 1
+                vi = eq_p + 1
+                while vi < end_p
+                    out = out + chr(mem_byte_read(buf, vi))
+                    vi = vi + 1
+                free(buf)
+                return out
+        pos = end_p + 1
+    free(buf)
+    return ""
+
+// WHY: Computes authentic SHA-256 digest of an existing file; fails closed on missing files.
 fn pkg_hash_file path
+    if file_exists(path) == 0
+        return ""
+    end
     fc = file_read(path)
     flen = len(fc)
     if flen <= 0
@@ -392,7 +457,7 @@ fn get_home_dir
     n = syscall(0, fd, buf, 4096, 0, 0, 0)
     syscall(3, fd, 0, 0, 0, 0, 0)
     if n <= 0
-        free(buf, 4096)
+        free(buf)
         return "/tmp"
     end
 
@@ -408,7 +473,7 @@ fn get_home_dir
                 p = p + 1
             break
         i = i + 1
-    free(buf, 4096)
+    free(buf)
     if len(home) == 0 return "/tmp"
     return home
 
@@ -702,6 +767,9 @@ fn cmd_verify_bundle target sig_path
         i = i + 1
     end
     sig_valid = Ed25519_verify(pub_buf, m_buf, 64, sig_buf)
+    free(pub_buf)
+    free(sig_buf)
+    free(m_buf)
 
     if sig_valid == 0
         say "\033[1;31m❌ এরর: Ed25519 ডিজিটাল স্বাক্ষর অকার্যকর বা জাল!\033[0m"
@@ -709,8 +777,46 @@ fn cmd_verify_bundle target sig_path
     end
     say "  ✔ ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর বৈধ (Authentic Ed25519 Signature)"
 
+    num_fp = len(file_paths)
+    if num_fp == 0
+        say "❌ এরর: বান্ডেল ম্যানিফেস্টে কোনো ফাইল নেই।"
+        return 1
+    end
+
+    // Step B: Recompute canonical manifest hash so tampered manifests cannot forge matches
+    canonical_check = ""
+    ci = 0
+    while ci < num_fp
+        fp_c = get(file_paths, ci)
+        eh_c = get(file_hashes, ci)
+        if _aati_is_safe_rel_path(fp_c) == 0
+            say "❌ এরর: বান্ডেল ম্যানিফেস্টে অবৈধ পাথ: " + fp_c
+            return 1
+        end
+        canonical_check = canonical_check + fp_c + ":" + eh_c + "\n"
+        ci = ci + 1
+    end
+    if sha256_hex(canonical_check) != manifest_hash
+        say "\033[1;31m❌ বান্ডেল ম্যানিফেস্ট ডাইজেস্ট অমিল!\033[0m"
+        return 1
+    end
+
+    // Count total ---FILE: headers in bundle to detect un-manifested injected entries
+    total_entries = 0
+    scan_p = 0
+    while scan_p < len(b_data)
+        found_t = index_of_from(b_data, "---FILE: ", scan_p)
+        if found_t < 0 break
+        total_entries = total_entries + 1
+        scan_p = found_t + 9
+    end
+    if total_entries != num_fp + 1
+        say "\033[1;31m❌ এরর: বান্ডেলে অননুমোদিত অতিরিক্ত ফাইল পাওয়া গেছে!\033[0m"
+        return 1
+    end
+
     fi = 0
-    while fi < len(file_paths)
+    while fi < num_fp
         fp = get(file_paths, fi)
         exp_h = get(file_hashes, fi)
         f_hdr = "---FILE: " + fp
@@ -721,11 +827,31 @@ fn cmd_verify_bundle target sig_path
         end
         f_lb = index_of_from(b_data, "\n", fp_pos)
         if f_lb < 0 return 1
-        f_fe = index_of_from(b_data, "---ENDFILE---", f_lb + 1)
-        if f_fe < 0 return 1
-        f_c = str_sub(b_data, f_lb + 1, f_fe)
-        if ends_with(f_c, "\n") f_c = str_sub(f_c, 0, len(f_c) - 1)
-        if ends_with(f_c, "\r") f_c = str_sub(f_c, 0, len(f_c) - 1)
+        hdr_line = str_sub(b_data, fp_pos + 9, f_lb)
+        file_sz = -1
+        sz_pos = index_of(hdr_line, "SIZE: ")
+        if sz_pos >= 0
+            sz_s = ""
+            sp = sz_pos + 6
+            while sp < len(hdr_line)
+                sc = ord(char_at(hdr_line, sp))
+                if sc >= 48 and sc <= 57
+                    sz_s = sz_s + chr(sc)
+                    sp = sp + 1
+                else
+                    break
+            if len(sz_s) > 0 file_sz = to_int(sz_s)
+        f_c = ""
+        if file_sz >= 0 and (f_lb + 1 + file_sz) <= len(b_data)
+            f_fe = index_of_from(b_data, "---ENDFILE---", f_lb + 1 + file_sz)
+            if f_fe < 0 return 1
+            f_c = str_sub(b_data, f_lb + 1, f_lb + 1 + file_sz)
+        else
+            f_fe = index_of_from(b_data, "---ENDFILE---", f_lb + 1)
+            if f_fe < 0 return 1
+            f_c = str_sub(b_data, f_lb + 1, f_fe)
+            if ends_with(f_c, "\n") f_c = str_sub(f_c, 0, len(f_c) - 1)
+            if ends_with(f_c, "\r") f_c = str_sub(f_c, 0, len(f_c) - 1)
         act_h = sha256_hex(f_c)
         if act_h != exp_h
             say "  ❌ ফাইল পরিবর্তন শনাক্ত হয়েছে: " + fp
@@ -826,6 +952,9 @@ fn cmd_verify_dir target sig_path
     end
 
     sig_valid = Ed25519_verify(pub_buf, m_buf, 64, sig_buf)
+    free(pub_buf)
+    free(sig_buf)
+    free(m_buf)
     if sig_valid != 1
         say "\033[1;31m❌ ক্রিপ্টোগ্রাফিক যাচাইকরণ ব্যর্থ: ডিজিটাল স্বাক্ষর অবৈধ বা বিকৃত!\033[0m"
         return 1
@@ -844,6 +973,10 @@ fn cmd_verify_dir target sig_path
     while i < num_files
         rp = get(file_paths, i)
         eh = get(file_hashes, i)
+        if len(target) > 0 and _aati_is_safe_rel_path(rp) == 0
+            say "\033[1;31m❌ অবৈধ ম্যানিফেস্ট পাথ: " + rp + "\033[0m"
+            return 1
+        end
         canonical_check = canonical_check + rp + ":" + eh + "\n"
         i = i + 1
     end
@@ -869,29 +1002,55 @@ fn cmd_verify_dir target sig_path
         rel_path = get(file_paths, i)
         exp_hash = get(file_hashes, i)
         full_path = prefix + rel_path
-        if starts_with(rel_path, "/")
+        if len(target) == 0 and starts_with(rel_path, "/")
             full_path = rel_path
         end
 
-        act_hash = pkg_hash_file(full_path)
-        if act_hash != exp_hash
-            if exp_hash == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and file_exists(full_path) == 0
-                say "  ✔ " + rel_path + " [PASS]"
+        if file_exists(full_path) == 0
+            say "  ❌ অনুপস্থিত ফাইল : " + rel_path
+            missing_count = missing_count + 1
+        else
+            act_hash = pkg_hash_file(full_path)
+            if act_hash != exp_hash
+                say "  ❌ অখণ্ডতা লঙ্ঘন (Tampered) : " + rel_path
+                say "     প্রত্যাশিত SHA-256 : " + exp_hash
+                say "     পাওয়া গেছে          : " + act_hash
+                tampered_count = tampered_count + 1
             else
-                if file_exists(full_path) == 0
-                    say "  ❌ অনুপস্থিত ফাইল : " + rel_path
-                    missing_count = missing_count + 1
-                else
-                    say "  ❌ অখণ্ডতা লঙ্ঘন (Tampered) : " + rel_path
-                    say "     প্রত্যাশিত SHA-256 : " + exp_hash
-                    say "     পাওয়া গেছে          : " + act_hash
+                say "  ✔ " + rel_path + " [PASS]"
+            end
+        end
+        i = i + 1
+    end
+
+    // Reject un-manifested extra files injected into a signed package directory
+    if len(target) > 0 and is_directory(target) == 1
+        disk_raw = list()
+        collect_files(target, disk_raw)
+        di = 0
+        while di < len(disk_raw)
+            dfp = get(disk_raw, di)
+            drel = dfp
+            if len(prefix) > 0 and starts_with(dfp, prefix)
+                drel = str_sub(dfp, len(prefix), len(dfp))
+            end
+            if drel != "lipi.sig"
+                seen = 0
+                si = 0
+                while si < num_files
+                    if get(file_paths, si) == drel
+                        seen = 1
+                        break
+                    end
+                    si = si + 1
+                end
+                if seen == 0
+                    say "  ❌ অননুমোদিত অতিরিক্ত ফাইল : " + drel
                     tampered_count = tampered_count + 1
                 end
             end
-        else
-            say "  ✔ " + rel_path + " [PASS]"
+            di = di + 1
         end
-        i = i + 1
     end
 
     if missing_count > 0 or tampered_count > 0
@@ -957,7 +1116,7 @@ fn aati_list_pkg_dirs store_dir
         end
     end
     syscall(3, fd, 0, 0, 0, 0, 0)
-    free(buf, 4096)
+    free(buf)
     return sort_files(dirs)
 
 fn aati_hash_package pkg_dir
@@ -1011,50 +1170,109 @@ fn cmd_verify_lock lock_path
     content = file_read(lpath)
     clen = len(content)
     store_dir = "aati"
+    if is_directory("packages") == 1 and is_directory("aati") == 0
+        store_dir = "packages"
+    end
     verified = 0
     mismatches = 0
+    in_toml_pkg = 0
+    toml_name = ""
+    toml_sum = ""
     pos = 0
     while pos < clen
         end_pos = pos
         while end_pos < clen and char_at(content, end_pos) != "\n"
             end_pos = end_pos + 1
         end
-        line = str_sub(content, pos, end_pos)
+        line = trim(str_sub(content, pos, end_pos))
         llen = len(line)
-        if llen > 0 and char_at(line, llen - 1) == "\r"
-            line = str_sub(line, 0, llen - 1)
-            llen = len(line)
-        end
         pos = end_pos + 1
         if llen > 0 and char_at(line, 0) != "#"
-            eq_pos = 0 - 1
-            k = 0
-            while k < llen
-                if char_at(line, k) == "="
-                    eq_pos = k
-                    break
-                end
-                k = k + 1
-            end
-            if eq_pos > 0 and eq_pos + 1 < llen
-                lhs = str_sub(line, 0, eq_pos)
-                rhs = str_sub(line, eq_pos + 1, llen)
-                if lhs == "store"
-                    store_dir = rhs
-                else
-                    pkg_path = store_dir + "/" + lhs
-                    if is_directory(pkg_path) == 0
-                        say "  ❌ Missing locked package: " + pkg_path
+            if line == "[[aati]]" or line == "[[package]]"
+                if in_toml_pkg == 1 and len(toml_name) > 0
+                    if _aati_is_safe_rel_path(toml_name) == 0
                         mismatches = mismatches + 1
                     else
-                        actual = aati_hash_package(pkg_path)
-                        if actual != rhs
-                            say "  ❌ Lockfile checksum mismatch for " + lhs
+                        p_dir = store_dir + "/" + toml_name
+                        if is_directory(p_dir) == 0
+                            say "  ❌ Missing locked package: " + p_dir
                             mismatches = mismatches + 1
                         else
-                            verified = verified + 1
+                            act_h = aati_hash_package(p_dir)
+                            if len(toml_sum) > 0 and act_h != toml_sum
+                                say "  ❌ Lockfile checksum mismatch for " + toml_name
+                                mismatches = mismatches + 1
+                            elif file_exists(p_dir + "/lipi.sig") == 1 and cmd_verify_dir(p_dir, p_dir + "/lipi.sig") != 0
+                                say "  ❌ Signature verification failed for locked package " + toml_name
+                                mismatches = mismatches + 1
+                            else
+                                verified = verified + 1
+                            end
                         end
                     end
+                end
+                in_toml_pkg = 1
+                toml_name = ""
+                toml_sum = ""
+                continue
+            end
+            eq_pos = index_of(line, "=")
+            if eq_pos > 0 and eq_pos + 1 < llen
+                lhs = trim(str_sub(line, 0, eq_pos))
+                rhs = trim(str_sub(line, eq_pos + 1, llen))
+                if starts_with(rhs, chr(34)) and ends_with(rhs, chr(34)) and len(rhs) >= 2
+                    rhs = str_sub(rhs, 1, len(rhs) - 1)
+                end
+                if in_toml_pkg == 1
+                    if lhs == "name" toml_name = rhs
+                    elif lhs == "checksum" toml_sum = rhs
+                elif lhs == "store"
+                    store_dir = rhs
+                elif lhs == "lockfile_version" or lhs == "root_package" or lhs == "root_version" or lhs == "manifest_digest"
+                    // Header metadata lines in TOML lockfile
+                else
+                    if _aati_is_safe_rel_path(lhs) == 0
+                        mismatches = mismatches + 1
+                    else
+                        pkg_path = store_dir + "/" + lhs
+                        if is_directory(pkg_path) == 0
+                            say "  ❌ Missing locked package: " + pkg_path
+                            mismatches = mismatches + 1
+                        else
+                            actual = aati_hash_package(pkg_path)
+                            if actual != rhs
+                                say "  ❌ Lockfile checksum mismatch for " + lhs
+                                mismatches = mismatches + 1
+                            elif file_exists(pkg_path + "/lipi.sig") == 1 and cmd_verify_dir(pkg_path, pkg_path + "/lipi.sig") != 0
+                                say "  ❌ Signature verification failed for locked package " + lhs
+                                mismatches = mismatches + 1
+                            else
+                                verified = verified + 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if in_toml_pkg == 1 and len(toml_name) > 0
+        if _aati_is_safe_rel_path(toml_name) == 0
+            mismatches = mismatches + 1
+        else
+            p_dir = store_dir + "/" + toml_name
+            if is_directory(p_dir) == 0
+                say "  ❌ Missing locked package: " + p_dir
+                mismatches = mismatches + 1
+            else
+                act_h = aati_hash_package(p_dir)
+                if len(toml_sum) > 0 and act_h != toml_sum
+                    say "  ❌ Lockfile checksum mismatch for " + toml_name
+                    mismatches = mismatches + 1
+                elif file_exists(p_dir + "/lipi.sig") == 1 and cmd_verify_dir(p_dir, p_dir + "/lipi.sig") != 0
+                    say "  ❌ Signature verification failed for locked package " + toml_name
+                    mismatches = mismatches + 1
+                else
+                    verified = verified + 1
                 end
             end
         end
@@ -1474,13 +1692,27 @@ fn pkg_unpack_bundle bundle_path target_dir
                     break
             if len(sz_str) > 0 file_sz = to_int(sz_str)
 
-        f_end = index_of_from(b_data, end_tag, line_break + 1)
-        if f_end < 0 break
+        if _aati_is_safe_rel_path(filename) == 0
+            say "❌ পাথ ট্রাভার্সাল ব্লক করা হয়েছে: " + filename
+            return 0
+        end
 
         content = ""
+        f_end = 0
         if file_sz >= 0
+            if (line_break + 1 + file_sz) > dlen
+                say "❌ বান্ডেল সাইজ সীমা লঙ্ঘন: " + filename
+                return 0
+            end
             content = str_sub(b_data, line_break + 1, line_break + 1 + file_sz)
+            f_end = index_of_from(b_data, end_tag, line_break + 1 + file_sz)
+            if f_end < 0
+                say "❌ অসম্পূর্ণ ---ENDFILE--- মার্কার: " + filename
+                return 0
+            end
         else
+            f_end = index_of_from(b_data, end_tag, line_break + 1)
+            if f_end < 0 break
             content = str_sub(b_data, line_break + 1, f_end)
             if ends_with(content, "\n")
                 content = str_sub(content, 0, len(content) - 1)
@@ -1490,7 +1722,6 @@ fn pkg_unpack_bundle bundle_path target_dir
         if len(exp_hash) == 64
             act_hash = sha256_hex(content)
             if act_hash != exp_hash
-                write_file("/tmp/vault_fail.bin", fc)
                 say "❌ ফাইলের চেকসাম অমিল: " + filename
                 say "   প্রত্যাশিত: " + exp_hash
                 say "   পাওয়া গেছে : " + act_hash
@@ -1973,6 +2204,10 @@ fn cmd_install pkg_target
         return 0
 
     // Case 4: Remote Registry lookup (default http://127.0.0.1:8088)
+    if _aati_is_safe_rel_path(pkg_target) == 0 or index_of(pkg_target, "/") >= 0
+        say "❌ অবৈধ প্যাকেজের নাম: " + pkg_target
+        return 1
+    end
     reg_host = "127.0.0.1"
     reg_port = 8088
     resp = pkg_http_get(reg_host, reg_port, "/api/v1/packages/" + pkg_target)
@@ -1988,6 +2223,7 @@ fn cmd_install pkg_target
             target_dir = "aati/" + pkg_target
             if is_directory("packages") == 1 and is_directory("aati") == 0 target_dir = "packages/" + pkg_target
             u_ok = pkg_unpack_bundle(temp_bundle, target_dir)
+            syscall(87, temp_bundle, 0, 0, 0, 0, 0)
             if u_ok == 1
                 chk = sha256_hex(bundle_body)
                 ver = "1.0.0"
@@ -1999,34 +2235,8 @@ fn cmd_install pkg_target
                 say "\n\033[1;32m✅ রেজিস্ট্রি থেকে প্যাকেজ সফলভাবে ইনস্টল হয়েছে: " + pkg_target + "\033[0m"
                 return 0
 
-    // Case 5: Local scaffolding fallback (for offline development and tests)
-    base_store = "aati"
-    if is_directory("packages") == 1 and is_directory("aati") == 0 base_store = "packages"
-    pkg_mkdir_p(base_store)
-    target_dir = base_store + "/" + pkg_target
-    pkg_mkdir_p(target_dir)
-
-    m_path = target_dir + "/aati.toml"
-    if syscall(21, m_path, 0, 0, 0, 0, 0) != 0 and syscall(21, target_dir + "/lipipkg.toml", 0, 0, 0, 0, 0) != 0
-        content = "[package]\nname = \"" + pkg_target + "\"\nversion = \"1.0.0\"\nedition = \"2026\"\nentry = \"lib.lp\"\n\n[dependencies]\n"
-        write_file(m_path, content)
-
-    l_path = target_dir + "/lib.lp"
-    if syscall(21, l_path, 0, 0, 0, 0, 0) != 0
-        l_content = "// Package: " + pkg_target + "\nfn " + pkg_target + "_init\n    return 1\n"
-        write_file(l_path, l_content)
-
-    act_m_path = pkg_get_manifest_path(target_dir)
-    f1 = read_file(act_m_path)
-    f2 = read_file(l_path)
-    chk = sha256_hex("lib.lp:" + sha256_hex(f2) + "\n" + pkg_extract_repo_name(act_m_path) + ":" + sha256_hex(f1) + "\n")
-    pkg_record_manifest_dep(pkg_target, "1.0.0", "local:" + target_dir)
-    pkg_update_lockfile(pkg_target, "1.0.0", "local:" + target_dir, chk)
-
-    say "  ✔ প্যাকেজ লোকাল স্টোরেজে স্থাপন করা হয়েছে: " + target_dir
-    say "  ✔ ক্রিপ্টোগ্রাফিক চেকসাম ও অখণ্ডতা যাচাইকৃত।"
-    say "\n\033[1;32m✅ ইনস্টল সম্পন্ন: " + pkg_target + " (v1.0.0)\033[0m"
-    return 0
+    say "❌ প্যাকেজ খুঁজে পাওয়া যায়নি (স্থানীয় স্টোর বা রেজিস্ট্রিতে নেই): " + pkg_target
+    return 1
 
 // WHY: Builds a verified, cryptographically signed .aati distribution bundle.
 // Uses zero GNU tar or external compression; packages all project assets with Ed25519
@@ -2398,6 +2608,15 @@ fn cmd_server port_arg store_dir_arg
             resp_obj = web_response_new(200, "application/json; charset=utf-8", body)
 
         elif (path == "/api/v1/packages/publish" or path == "/api/v1/publish") and method == "POST"
+            req_token = _aati_get_env("AATI_TOKEN")
+            if len(req_token) > 0
+                auth_hdr = web_parse_header(raw_req, "Authorization")
+                if auth_hdr != ("Bearer " + req_token)
+                    resp_obj = web_response_new(401, "application/json; charset=utf-8", "{\"error\":401,\"message\":\"Unauthorized publish token\"}\n")
+                    wire = web_serialize_response(resp_obj)
+                    syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                    socket_close(client_fd)
+                    continue
             hdr_end = index_of(raw_req, "\r\n\r\n")
             body_start = 0
             if hdr_end >= 0
@@ -2424,8 +2643,22 @@ fn cmd_server port_arg store_dir_arg
                 pkg_ver = pkg_parse_field(payload, "version")
             if len(pkg_ver) == 0
                 pkg_ver = "1.0.0"
-            if len(pkg_sum) == 0
-                pkg_sum = sha256_hex(payload)
+
+            if _aati_is_safe_rel_path(pkg_name) == 0 or _aati_is_safe_rel_path(pkg_ver) == 0
+                resp_obj = web_response_new(400, "application/json; charset=utf-8", "{\"error\":400,\"message\":\"Invalid package name or version\"}\n")
+                wire = web_serialize_response(resp_obj)
+                syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                socket_close(client_fd)
+                continue
+
+            act_sum = sha256_hex(payload)
+            if len(pkg_sum) > 0 and pkg_sum != act_sum
+                resp_obj = web_response_new(400, "application/json; charset=utf-8", "{\"error\":400,\"message\":\"Checksum mismatch\"}\n")
+                wire = web_serialize_response(resp_obj)
+                syscall(1, client_fd, wire, len(wire), 0, 0, 0)
+                socket_close(client_fd)
+                continue
+            pkg_sum = act_sum
 
             save_file_path = store_dir + "/" + pkg_name + "-" + pkg_ver + ".aati"
             write_ok = write_file(save_file_path, payload)
@@ -2438,7 +2671,7 @@ fn cmd_server port_arg store_dir_arg
 
         elif starts_with(path, "/api/v1/packages/") and method == "GET"
             pkg_param = str_sub(path, 17, len(path))
-            if len(pkg_param) == 0
+            if len(pkg_param) == 0 or _aati_is_safe_rel_path(pkg_param) == 0 or index_of(pkg_param, "/") >= 0
                 resp_obj = web_response_not_found()
             else
                 bare_param = pkg_param
@@ -2481,13 +2714,6 @@ fn cmd_server port_arg store_dir_arg
                 else
                     resp_obj = web_response_new(404, "application/json; charset=utf-8", "{\"error\":404,\"message\":\"Package not found: " + pkg_param + "\"}\n")
 
-        elif path == "/api/v1/shutdown" or path == "/shutdown"
-            resp_obj = web_response_new(200, "application/json; charset=utf-8", "{\"status\":\"shutting_down\"}\n")
-            wire = web_serialize_response(resp_obj)
-            syscall(1, client_fd, wire, len(wire), 0, 0, 0)
-            socket_close(client_fd)
-            break
-
         else
             resp_obj = web_response_not_found()
 
@@ -2501,18 +2727,24 @@ fn cmd_server port_arg store_dir_arg
 
 // WHY: Manages the local sovereign package cache with cryptographic verification.
 fn cmd_cache action
-    say "\033[1;36m💾 লিপিপ্যাকেজ লোকাল স্টোরেজ ও ক্যাশ: \033[0m"
+    cache_dir = get_home_dir() + "/.lipi/cache"
+    pkg_mkdir_p(cache_dir)
+    say "\033[1;36m💾 লিপিপ্যাকেজ লোকাল স্টোরেজ ও ক্যাশ: \033[0m" + cache_dir
+    files = list()
+    collect_files(cache_dir, files)
     if action == "clean" or action == "পরিষ্কার"
-        say "🧹 প্যাকেজ ক্যাশ পরিষ্কার করা হচ্ছে..."
-        say "  ✔ ক্যাশ ডিরেক্টরি রিসেট সম্পন্ন।"
-        say "\033[1;32m✅ ক্যাশ সফলভাবে পরিষ্কার করা হয়েছে!\033[0m"
+        removed = 0
+        i = 0
+        while i < len(files)
+            fp = get(files, i)
+            if syscall(87, fp, 0, 0, 0, 0, 0) == 0
+                removed = removed + 1
+            i = i + 1
+        say "🧹 ক্যাশ পরিষ্কার করা হয়েছে (" + str(removed) + " টি ফাইল মুছে ফেলা হয়েছে)।"
         return 0
-
-    say "  • ক্যাশ ডিরেক্টরি : packages/"
-    say "  • রেজিস্ট্রি      : https://pkg.lipi.dev"
-    say "  • ক্যাশ ইঞ্জিন    : 100% Sovereign Lipi (0% Libc)"
-    say "  • নিরাপত্তা গ্রেড: Ed25519 Cryptographic Verification"
-    say "\n\033[1;32m✅ লোকাল ক্যাশ সক্রিয় ও প্রস্তুত!\033[0m"
+    say "  • ক্যাশ ডিরেক্টরি : " + cache_dir
+    say "  • সংরক্ষিত ফাইল  : " + str(len(files))
+    say "  • নিরাপত্তা গ্রেড: Ed25519 + SHA-256"
     return 0
 
 // ── ৮. প্রধান এন্ট্রি পয়েন্ট (Main CLI Entry Point) ────────────────────────────

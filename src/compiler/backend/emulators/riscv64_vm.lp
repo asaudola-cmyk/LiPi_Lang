@@ -122,18 +122,18 @@ fn riscv64_mem_read_u32 vm vaddr
 fn riscv64_mem_read_u64 vm vaddr
     lo = riscv64_mem_read_u32(vm, vaddr)
     hi = riscv64_mem_read_u32(vm, vaddr + 4)
-    return lo + (hi * 4294967296)
+    return lo | (hi << 32)
 
 fn riscv64_mem_write_u32 vm vaddr val
     riscv64_mem_write_u8(vm, vaddr, val & 255)
-    riscv64_mem_write_u8(vm, vaddr + 1, (val / 256) & 255)
-    riscv64_mem_write_u8(vm, vaddr + 2, (val / 65536) & 255)
-    riscv64_mem_write_u8(vm, vaddr + 3, (val / 16777216) & 255)
+    riscv64_mem_write_u8(vm, vaddr + 1, (val >> 8) & 255)
+    riscv64_mem_write_u8(vm, vaddr + 2, (val >> 16) & 255)
+    riscv64_mem_write_u8(vm, vaddr + 3, (val >> 24) & 255)
     return 1
 
 fn riscv64_mem_write_u64 vm vaddr val
     lo = val & 4294967295
-    hi = (val / 4294967296) & 4294967295
+    hi = (val >> 32) & 4294967295
     riscv64_mem_write_u32(vm, vaddr, lo)
     riscv64_mem_write_u32(vm, vaddr + 4, hi)
     return 1
@@ -269,6 +269,20 @@ fn riscv64_vm_step vm
         if funct3 == 0 // ADDI
             res = src_val + imm12
             riscv64_reg_write(vm, rd, res)
+        elif funct3 == 2 // SLTI
+            if src_val < imm12
+                riscv64_reg_write(vm, rd, 1)
+            else
+                riscv64_reg_write(vm, rd, 0)
+            end
+        elif funct3 == 3 // SLTIU
+            u_lt = 0
+            if (src_val >= 0 and imm12 >= 0) or (src_val < 0 and imm12 < 0)
+                if src_val < imm12 u_lt = 1 end
+            elif src_val >= 0 and imm12 < 0
+                u_lt = 1
+            end
+            riscv64_reg_write(vm, rd, u_lt)
         elif funct3 == 4 // XORI
             res = src_val ^ imm12
             riscv64_reg_write(vm, rd, res)
@@ -339,6 +353,14 @@ fn riscv64_vm_step vm
             else
                 riscv64_reg_write(vm, rd, 0)
             end
+        elif funct3 == 3 // SLTU
+            u_lt = 0
+            if (val1 >= 0 and val2 >= 0) or (val1 < 0 and val2 < 0)
+                if val1 < val2 u_lt = 1 end
+            elif val1 >= 0 and val2 < 0
+                u_lt = 1
+            end
+            riscv64_reg_write(vm, rd, u_lt)
         elif funct3 == 4 // XOR
             riscv64_reg_write(vm, rd, val1 ^ val2)
         elif funct3 == 5 // SRL / SRA
@@ -398,6 +420,16 @@ fn riscv64_vm_step vm
             if val1 < val2 take_branch = 1
         elif funct3 == 5 // BGE
             if val1 >= val2 take_branch = 1
+        elif funct3 == 6 // BLTU
+            if (val1 >= 0 and val2 >= 0) or (val1 < 0 and val2 < 0)
+                if val1 < val2 take_branch = 1
+            elif val1 >= 0 and val2 < 0
+                take_branch = 1
+        elif funct3 == 7 // BGEU
+            if (val1 >= 0 and val2 >= 0) or (val1 < 0 and val2 < 0)
+                if val1 >= val2 take_branch = 1
+            elif val1 < 0 and val2 >= 0
+                take_branch = 1
         end
 
         if take_branch == 1

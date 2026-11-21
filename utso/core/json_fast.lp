@@ -32,6 +32,43 @@ fn fast_json_slice s start stop
     mid = start + (span / 2)
     return fast_json_slice(s, start, mid) + fast_json_slice(s, mid, stop)
 
+// WHY: Decodes 4 hexadecimal characters at s[off..off+4) into 0..65535 or -1 if invalid.
+fn fast_json_hex4 s off
+    if off + 4 > len(s)
+        return 0 - 1
+    acc = 0
+    k = 0
+    while k < 4
+        c = ord(char_at(s, off + k))
+        d = 0 - 1
+        if c >= 48 and c <= 57
+            d = c - 48
+        elif c >= 65 and c <= 70
+            d = c - 55
+        elif c >= 97 and c <= 102
+            d = c - 87
+        else
+            return 0 - 1
+        acc = (acc * 16) + d
+        k = k + 1
+    return acc
+
+// WHY: Encodes a Unicode scalar codepoint (U+0000..U+10FFFF) as 1..4 UTF-8 bytes.
+fn fast_json_encode_cp cp
+    if cp < 0 or cp > 1114111
+        return chr(239) + chr(191) + chr(189)
+    if cp <= 127
+        return chr(cp)
+    if cp <= 2047
+        return chr(192 + (cp / 64)) + chr(128 + (cp % 64))
+    if cp <= 65535
+        return chr(224 + (cp / 4096)) + chr(128 + ((cp / 64) % 64)) + chr(128 + (cp % 64))
+    b1 = 240 + (cp / 262144)
+    b2 = 128 + ((cp / 4096) % 64)
+    b3 = 128 + ((cp / 64) % 64)
+    b4 = 128 + (cp % 64)
+    return chr(b1) + chr(b2) + chr(b3) + chr(b4)
+
 // ── Unescape JSON String ──────────────────────────────────────────────────────
 fn fast_json_unescape s
     res = ""
@@ -50,6 +87,12 @@ fn fast_json_unescape s
             elif nc == "/"
                 res = res + "/"
                 i = i + 2
+            elif nc == "b"
+                res = res + chr(8)
+                i = i + 2
+            elif nc == "f"
+                res = res + chr(12)
+                i = i + 2
             elif nc == "n"
                 res = res + "\n"
                 i = i + 2
@@ -59,6 +102,21 @@ fn fast_json_unescape s
             elif nc == "r"
                 res = res + "\r"
                 i = i + 2
+            elif nc == "u" and i + 5 < slen
+                u_val = fast_json_hex4(s, i + 2)
+                if u_val >= 0
+                    if u_val >= 55296 and u_val <= 56319 and i + 11 < slen and char_at(s, i + 6) == "\\" and char_at(s, i + 7) == "u"
+                        lo_val = fast_json_hex4(s, i + 8)
+                        if lo_val >= 56320 and lo_val <= 57343
+                            full_cp = 65536 + ((u_val - 55296) * 1024) + (lo_val - 56320)
+                            res = res + fast_json_encode_cp(full_cp)
+                            i = i + 12
+                            continue
+                    res = res + fast_json_encode_cp(u_val)
+                    i = i + 6
+                else
+                    res = res + "u"
+                    i = i + 2
             else
                 res = res + nc
                 i = i + 2
@@ -186,6 +244,8 @@ fn fast_json_parse_val doc pos_ref
             elif p < slen and char_at(src, p) == "}"
                 p = p + 1
                 break
+            else
+                break
 
         list_set(pos_ref, 0, p)
         payload = list(keys, vals)
@@ -213,6 +273,8 @@ fn fast_json_parse_val doc pos_ref
             elif p < slen and char_at(src, p) == "]"
                 p = p + 1
                 break
+            else
+                break
 
         list_set(pos_ref, 0, p)
         return fast_json_add_node(doc, FAST_JSON_ARRAY, 0, 0, 0, items)
@@ -230,27 +292,48 @@ fn fast_json_parse_val doc pos_ref
         list_set(pos_ref, 0, p + 4)
         return fast_json_add_node(doc, FAST_JSON_NULL, p, p + 4, 0, "")
 
-    // Case 6: Number (Integer)
+    // Case 6: Number (Integer, Fractional, or Scientific Notation)
+    num_start = p
     is_neg = 0
     if c == "-"
         is_neg = 1
         p = p + 1
 
-    code = ord(char_at(src, p))
-    if code >= 48 and code <= 57
-        num_val = 0
-        num_start = p
-        while p < slen
-            nc = ord(char_at(src, p))
-            if nc >= 48 and nc <= 57
-                num_val = (num_val * 10) + (nc - 48)
+    if p < slen
+        code = ord(char_at(src, p))
+        if code >= 48 and code <= 57
+            num_val = 0
+            while p < slen
+                nc = ord(char_at(src, p))
+                if nc >= 48 and nc <= 57
+                    num_val = (num_val * 10) - (nc - 48)
+                    p = p + 1
+                else
+                    break
+            if is_neg == 0
+                num_val = 0 - num_val
+            // Consume optional fractional component (.digits) per RFC 8259
+            if p < slen and char_at(src, p) == "."
                 p = p + 1
-            else
-                break
-        if is_neg == 1
-            num_val = 0 - num_val
-        list_set(pos_ref, 0, p)
-        return fast_json_add_node(doc, FAST_JSON_INT, num_start, p, num_val, "")
+                while p < slen
+                    fc = ord(char_at(src, p))
+                    if fc >= 48 and fc <= 57
+                        p = p + 1
+                    else
+                        break
+            // Consume optional exponent ([eE][+-]?digits) per RFC 8259
+            if p < slen and (char_at(src, p) == "e" or char_at(src, p) == "E")
+                p = p + 1
+                if p < slen and (char_at(src, p) == "+" or char_at(src, p) == "-")
+                    p = p + 1
+                while p < slen
+                    ec = ord(char_at(src, p))
+                    if ec >= 48 and ec <= 57
+                        p = p + 1
+                    else
+                        break
+            list_set(pos_ref, 0, p)
+            return fast_json_add_node(doc, FAST_JSON_INT, num_start, p, num_val, fast_json_slice(src, num_start, p))
 
     // Fallback: Skip 1 char on malformed input
     list_set(pos_ref, 0, p + 1)

@@ -347,6 +347,35 @@ import "compiler/frontend/ast/ast_node"
   return 1
 @end
 
+@fn oc_expr_is_owned_alloc(expr)
+  // WHY: Identifies raw heap allocator expressions that confer non-Copy affine ownership.
+  @if expr == 0 return 0 @end
+  @if str_eq(expr.kind, "Call") == 1 || str_eq(expr.kind, "CallExpr") == 1
+    cn = ""
+    @if expr.func != 0 cn = expr.func.name @end
+    @if cn == "" && expr.callee != 0 cn = expr.callee.name @end
+    @if cn == "" cn = expr.name @end
+    @if str_eq(cn, "alloc") == 1 || str_eq(cn, "malloc") == 1 || str_eq(cn, "sys_alloc") == 1 || str_eq(cn, "mem_alloc") == 1 || str_eq(cn, "slab_alloc") == 1 || str_eq(cn, "heap_alloc") == 1 || str_eq(cn, "buffer_alloc") == 1 || str_eq(cn, "বরাদ্দ") == 1 || str_eq(cn, "মেমরি_বরাদ্দ") == 1
+      return 1
+    @end
+  @end
+  return 0
+@end
+
+@fn oc_extract_root_var(name)
+  @if name == "" return "" @end
+  i = 0
+  n = len(name)
+  @while i < n
+    c = str_char_at(name, i)
+    @if c == 46 || c == 91
+      return str_slice(name, 0, i)
+    @end
+    i = i + 1
+  @end
+  return name
+@end
+
 @fn oc_analyze_expr(oc, expr)
   @if expr == 0 return 1 @end
   k = expr.kind
@@ -369,13 +398,20 @@ import "compiler/frontend/ast/ast_node"
     @if cname == "" cname = expr.name @end
     call_args = expr.args
     @if call_args == 0 call_args = expr.params @end
-    @if (str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1) && call_args != 0 && call_args.len() >= 1
+    @if (str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1 || str_eq(cname, "free") == 1 || str_eq(cname, "mem_free") == 1 || str_eq(cname, "sys_free") == 1 || str_eq(cname, "মুক্ত") == 1 || str_eq(cname, "মেমরি_মুক্তি") == 1) && call_args != 0 && call_args.len() >= 1
       a0 = call_args[0]
       @if a0 != 0 && (str_eq(a0.kind, "Variable") == 1 || str_eq(a0.kind, "IDENT") == 1 || str_eq(a0.kind, "Identifier") == 1)
         aname = a0.name
         @if aname == "" aname = a0.target @end
         oc_check_read(oc, aname, span_default())
         oc_force_move(oc, aname, span_default())
+        @if call_args.len() > 1
+          pi2 = 1
+          @while pi2 < call_args.len()
+            oc_analyze_expr(oc, call_args[pi2])
+            pi2 = pi2 + 1
+          @end
+        @end
         return 1
       @end
     @end
@@ -394,6 +430,21 @@ import "compiler/frontend/ast/ast_node"
     return 1
   @end
   @if str_eq(k, "Unary") == 1 || str_eq(k, "UnaryOp") == 1
+    @if (str_eq(expr.op, "&") == 1 || str_eq(expr.op, "&mut") == 1) && expr.expr != 0
+      inner = expr.expr
+      @if str_eq(inner.kind, "Variable") == 1 || str_eq(inner.kind, "IDENT") == 1 || str_eq(inner.kind, "Identifier") == 1
+        bn = inner.name
+        @if bn == "" bn = inner.target @end
+        oc_check_read(oc, bn, span_default())
+        @if str_eq(expr.op, "&mut") == 1
+          oc_borrow_mut(oc, bn, span_default())
+        @else
+          oc_borrow_shared(oc, bn, span_default())
+        @end
+        oc_release_borrow(oc, bn)
+        return 1
+      @end
+    @end
     oc_analyze_expr(oc, expr.expr)
     return 1
   @end
@@ -403,7 +454,12 @@ import "compiler/frontend/ast/ast_node"
     @if expr.index != 0 oc_analyze_expr(oc, expr.index) @end
     return 1
   @end
-  @if str_eq(k, "ArrayLit") == 1 || str_eq(k, "MapLit") == 1
+  @if str_eq(k, "Field") == 1
+    @if expr.value != 0 oc_analyze_expr(oc, expr.value) @end
+    @if expr.expr != 0 oc_analyze_expr(oc, expr.expr) @end
+    return 1
+  @end
+  @if str_eq(k, "ArrayLit") == 1 || str_eq(k, "MapLit") == 1 || str_eq(k, "StructLit") == 1
     @if expr.elements != 0
       ei = 0
       @while ei < expr.elements.len()
@@ -443,13 +499,59 @@ import "compiler/frontend/ast/ast_node"
   return 1
 @end
 
+@fn oc_snapshot_states(oc)
+  // WHY: Captures current moved/borrow state for each binding before branching control flow.
+  snap = []
+  i = 0
+  n = oc.oc_bindings.len()
+  @while i < n
+    b = oc.oc_bindings[i]
+    snap = snap.push(b.rb_state)
+    i = i + 1
+  @end
+  return snap
+@end
+
+@fn oc_restore_states(oc, snap)
+  // WHY: Restores prior binding states across mutually exclusive control-flow branches.
+  i = 0
+  n = snap.len()
+  @if oc.oc_bindings.len() < n n = oc.oc_bindings.len() @end
+  @while i < n
+    b = oc.oc_bindings[i]
+    b.rb_state = snap[i]
+    i = i + 1
+  @end
+  return 1
+@end
+
+@fn oc_block_terminates(stmts)
+  // WHY: Detects unconditional early-exit blocks (`return`, `break`, `continue`) so fallthrough
+  // after `if cond { free(x); return }` does not falsely treat `x` as moved on the normal path.
+  @if stmts == 0 || stmts.len() == 0 return 0 @end
+  last = stmts[stmts.len() - 1]
+  @if last == 0 return 0 @end
+  lk = last.kind
+  @if str_eq(lk, "Return") == 1 || str_eq(lk, "ফেরত") == 1 || str_eq(lk, "Break") == 1 || str_eq(lk, "Continue") == 1
+    return 1
+  @end
+  @if str_eq(lk, "If") == 1 || str_eq(lk, "IfStmt") == 1 || str_eq(lk, "যদি") == 1
+    @if last.else_body != 0 && last.else_body.len() > 0
+      @if oc_block_terminates(last.then_body) == 1 && oc_block_terminates(last.else_body) == 1
+        return 1
+      @end
+    @end
+  @end
+  return 0
+@end
+
 @fn oc_analyze_statement(oc, stmt)
   @if stmt == 0 return 1 @end
 
   k = stmt.kind
 
   // 1. Function Definition: create isolated function scope
-  @if str_eq(k, "FnDef") == 1 || str_eq(k, "Function") == 1 || str_eq(k, "কাজ") == 1
+  @if str_eq(k, "FnDef") == 1 || str_eq(k, "Function") == 1 || str_eq(k, "কাজ") == 1 || str_eq(k, "Component") == 1
     oc_enter_scope(oc)
     @if stmt.params != 0
       pi = 0
@@ -468,16 +570,51 @@ import "compiler/frontend/ast/ast_node"
 
   // 2. Assignment & Compound Assignment: target = value, target <op>= value
   @if str_eq(k, "Assign") == 1 || str_eq(k, "AssignOp") == 1
+    @if stmt.index != 0
+      oc_analyze_expr(oc, stmt.index)
+    @end
     target = stmt.target
     val_node = stmt.value
     @if val_node == 0 val_node = stmt.expr @end
+
+    // Detect alias move: q = p when p holds a non-Copy owned heap handle
+    move_src = ""
+    rhs_is_copy = 1
+    @if oc_expr_is_owned_alloc(val_node) == 1
+      rhs_is_copy = 0
+    @elif str_eq(k, "Assign") == 1 && val_node != 0 && (str_eq(val_node.kind, "Variable") == 1 || str_eq(val_node.kind, "IDENT") == 1 || str_eq(val_node.kind, "Identifier") == 1)
+      rhs_vn = val_node.name
+      @if rhs_vn == "" rhs_vn = val_node.target @end
+      rb_src = oc_lookup(oc, rhs_vn)
+      @if rb_src != 0 && rb_src.rb_is_copy == 0
+        move_src = rhs_vn
+        rhs_is_copy = 0
+      @end
+    @end
+
     oc_analyze_expr(oc, val_node)
+    @if move_src != "" && str_eq(move_src, target) == 0
+      oc_mark_move(oc, move_src, span_default())
+    @end
+
+    @if stmt.index != 0 || str_contains(target, ".") == 1 || str_contains(target, "[") == 1
+      root_t = oc_extract_root_var(target)
+      rb_root = oc_lookup(oc, root_t)
+      @if rb_root != 0
+        oc_check_read(oc, root_t, span_default())
+        @if rb_root.rb_shared_borrow_count > 0 || rb_root.rb_state == OWN_STATE_BORROWED_SHARED()
+          oc_record_error(oc, ERR_MUTATE_WHILE_BORROWED(), "Cannot mutate '" + root_t + "' through field/index while borrowed", span_default())
+        @end
+      @end
+      return 1
+    @end
 
     b = oc_lookup(oc, target)
     @if b == 0
-      oc_declare(oc, target, 1, span_default())
+      oc_declare(oc, target, rhs_is_copy, span_default())
     @else
       oc_check_write(oc, target, span_default())
+      b.rb_is_copy = rhs_is_copy
     @end
     return 1
   @end
@@ -488,10 +625,16 @@ import "compiler/frontend/ast/ast_node"
     return 1
   @end
 
-  // 4. Return statement
+  // 4. Return / Defer statements
   @if str_eq(k, "Return") == 1 || str_eq(k, "ফেরত") == 1
     @if stmt.expr != 0 oc_analyze_expr(oc, stmt.expr) @end
     @if stmt.value != 0 oc_analyze_expr(oc, stmt.value) @end
+    return 1
+  @end
+
+  @if str_eq(k, "Defer") == 1
+    @if stmt.expr != 0 oc_analyze_expr(oc, stmt.expr) @end
+    oc_analyze_stmt_list(oc, stmt.body)
     return 1
   @end
 
@@ -499,6 +642,7 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(k, "While") == 1 || str_eq(k, "WhileLoop") == 1 || str_eq(k, "যতক্ষণ") == 1
     @if stmt.condition != 0 oc_analyze_expr(oc, stmt.condition) @else oc_analyze_expr(oc, stmt.expr) @end
     oc_enter_scope(oc)
+    oc_analyze_stmt_list(oc, stmt.body)
     oc_analyze_stmt_list(oc, stmt.body)
     oc_exit_scope(oc)
     return 1
@@ -511,19 +655,52 @@ import "compiler/frontend/ast/ast_node"
     @if fvar == "" fvar = stmt.target @end
     @if fvar != "" oc_declare(oc, fvar, 1, span_default()) @end
     oc_analyze_stmt_list(oc, stmt.body)
+    oc_analyze_stmt_list(oc, stmt.body)
     oc_exit_scope(oc)
     return 1
   @end
 
   @if str_eq(k, "Block") == 1 || str_eq(k, "If") == 1 || str_eq(k, "IfStmt") == 1 || str_eq(k, "যদি") == 1
     @if stmt.condition != 0 oc_analyze_expr(oc, stmt.condition) @else oc_analyze_expr(oc, stmt.expr) @end
+    pre_snap = oc_snapshot_states(oc)
     oc_enter_scope(oc)
     oc_analyze_stmt_list(oc, stmt.then_body)
     oc_exit_scope(oc)
-    @if stmt.else_body != 0
+    then_terms = oc_block_terminates(stmt.then_body)
+    then_snap = oc_snapshot_states(oc)
+
+    has_else = 0
+    else_terms = 0
+    @if stmt.else_body != 0 && stmt.else_body.len() > 0
+      has_else = 1
+      oc_restore_states(oc, pre_snap)
       oc_enter_scope(oc)
       oc_analyze_stmt_list(oc, stmt.else_body)
       oc_exit_scope(oc)
+      else_terms = oc_block_terminates(stmt.else_body)
+    @end
+
+    @if then_terms == 1 && has_else == 0
+      // Only fallthrough path is when condition was false (pre-branch ownership intact)
+      oc_restore_states(oc, pre_snap)
+    @elif then_terms == 1 && else_terms == 1
+      // Both branches terminate; fallthrough is unreachable
+      oc_restore_states(oc, pre_snap)
+    @elif then_terms == 0 && else_terms == 1
+      // Only fallthrough path is from then_body
+      oc_restore_states(oc, then_snap)
+    @elif has_else == 1 && then_terms == 0 && else_terms == 0
+      // Conservative merge: moved if moved in either path
+      mi = 0
+      mlen = pre_snap.len()
+      @if oc.oc_bindings.len() < mlen mlen = oc.oc_bindings.len() @end
+      @if then_snap.len() < mlen mlen = then_snap.len() @end
+      @while mi < mlen
+        @if then_snap[mi] == OWN_STATE_MOVED()
+          oc.oc_bindings[mi].rb_state = OWN_STATE_MOVED()
+        @end
+        mi = mi + 1
+      @end
     @end
     return 1
   @end

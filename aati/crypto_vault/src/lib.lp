@@ -29,6 +29,25 @@ include "utso/crypto.lp"
   return h
 @end
 
+@fn vault_ct_equals(a, b)
+  la = str_len(a)
+  @if la != str_len(b)
+    return 0
+  @end
+  diff = 0
+  i = 0
+  @while i < la
+    c1 = ord(char_at(a, i)) & 255
+    c2 = ord(char_at(b, i)) & 255
+    diff = diff | (c1 ^ c2)
+    i = i + 1
+  @end
+  @if diff == 0
+    return 1
+  @end
+  return 0
+@end
+
 @fn hash_password(pass)
   // ডিফল্ট সভরেন সল্ট ভেক্টর
   salt = "lipi_sovereign_vault_salt_v2"
@@ -37,12 +56,31 @@ include "utso/crypto.lp"
 
 @fn verify_password(pass, expected_hash)
   h = hash_password(pass)
-  return h == expected_hash
+  return vault_ct_equals(h, expected_hash)
 @end
 
 @fn verify_password_salted(pass, salt, expected_hash)
   h = hash_password_salted(pass, salt)
-  return h == expected_hash
+  return vault_ct_equals(h, expected_hash)
+@end
+
+@fn hash_password_random_salt(pass)
+  // Per-password kernel CSPRNG salt formatted as "<salt_hex>$<digest_hex>"
+  r0 = silicon_random_int()
+  r1 = silicon_random_int()
+  salt = str_sub(sha256_hex(int_to_str(r0) + ":" + int_to_str(r1)), 0, 32)
+  digest = hash_password_salted(pass, salt)
+  return salt + "$" + digest
+@end
+
+@fn verify_password_random_salt(pass, record)
+  dpos = str_index_of(record, "$")
+  @if dpos <= 0
+    return 0
+  @end
+  salt = str_sub(record, 0, dpos)
+  expected = str_sub(record, dpos + 1, str_len(record))
+  return verify_password_salted(pass, salt, expected)
 @end
 
 // ── ২. ক্রিপ্টোগ্রাফিক সেশন টোকেন জেনারেটর (Cryptographic Session Token) ─────────
@@ -99,7 +137,7 @@ include "utso/crypto.lp"
   actual_tag = str_sub(token.value, 48, 64)
   expected_mac = sha256_hex("lipi_vault_mac_v2:" + prefix48 + ":" + int_to_str(token.expiry))
   expected_tag = str_sub(expected_mac, 0, 16)
-  @if actual_tag != expected_tag
+  @if vault_ct_equals(actual_tag, expected_tag) != 1
     return 0
   @end
   return 1

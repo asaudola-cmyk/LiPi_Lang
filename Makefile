@@ -41,10 +41,16 @@ bootstrap:
 # Build sovereign developer toolchain using native compiler
 build: bootstrap
 	@echo "🔨 Building core developer toolchain..."
-	@mkdir -p dist
+	@mkdir -p dist dist/vscode
 	@if [ -d editors/vscode ] && command -v zip >/dev/null 2>&1; then \
-		rm -f dist/lipi-language-1.0.0.vsix && \
-		(cd editors/vscode && zip -rq ../../dist/lipi-language-1.0.0.vsix . >/dev/null 2>&1 || true); \
+		rm -rf /tmp/lipi_vsix_stage dist/lipi-language-1.0.0.vsix dist/vscode/lipi-language-1.0.0.vsix && \
+		mkdir -p /tmp/lipi_vsix_stage/extension && \
+		cp -a editors/vscode/. /tmp/lipi_vsix_stage/extension/ && \
+		printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json"/><Default Extension=".vsixmanifest" ContentType="text/xml"/><Default Extension=".js" ContentType="application/javascript"/><Default Extension=".ts" ContentType="text/plain"/><Default Extension=".md" ContentType="text/markdown"/><Default Extension=".png" ContentType="image/png"/><Default Extension=".svg" ContentType="image/svg+xml"/><Default Extension=".woff" ContentType="font/woff"/></Types>' > '/tmp/lipi_vsix_stage/[Content_Types].xml' && \
+		printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"><Metadata><Identity Language="en-US" Id="lipi-language" Version="1.0.0" Publisher="lipi-lang"/><DisplayName>Lipi Sovereign Programming Language</DisplayName><Description xml:space="preserve">Official Language Support for Lipi (Bilingual English &amp; Bengali, Direct Silicon Compiler)</Description><Tags>lipi,bengali,compiler,sovereign</Tags><Categories>Programming Languages,Snippets</Categories><Icon>extension/icons/icon.png</Icon></Metadata><Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true"/></Assets></PackageManifest>' > /tmp/lipi_vsix_stage/extension.vsixmanifest && \
+		(cd /tmp/lipi_vsix_stage && zip -rq "$(CURDIR)/dist/lipi-language-1.0.0.vsix" '[Content_Types].xml' extension.vsixmanifest extension) && \
+		cp -f dist/lipi-language-1.0.0.vsix dist/vscode/lipi-language-1.0.0.vsix && \
+		rm -rf /tmp/lipi_vsix_stage; \
 	fi
 	@./bin/lipc src/tools/lipi.lp bin/lipi && chmod +x bin/lipi
 	@./bin/lipc src/tools/aati.lp bin/aati && chmod +x bin/aati
@@ -87,9 +93,9 @@ release: build unikernel windows
 	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
 	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
-# Run autonomous 255 regression test suite
+# Run autonomous 257 regression test suite
 test: bootstrap
-	@echo "🧪 Running full 255 regression test suite..."
+	@echo "🧪 Running full 257 regression test suite..."
 	@if [ -x bin/lipi ]; then \
 		./bin/lipi test; \
 	elif [ -x bin/lipi-test ]; then \

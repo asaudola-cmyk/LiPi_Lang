@@ -13,6 +13,7 @@ import "utso/string"
 import "utso/core/json"
 import "utso/crypto/sha256"
 import "utso/crypto/base64"
+import "utso/syscalls"
 import "aati/lipi_web/context"
 
 @! ----------------------------------------------------------------------------
@@ -277,8 +278,8 @@ import "aati/lipi_web/context"
 @! 4. JWT Token Verification & Claim Extraction
 @! ----------------------------------------------------------------------------
 
-@! Verifies JWT signature and structure
-@fn jwt_verify(token, secret)
+@! Verifies JWT signature and HS256 header algorithm (rejecting alg:none), independent of timestamps
+@fn jwt_verify_sig(token, secret)
   p1 = str_index_of(token, ".")
   @if p1 < 0
     return 0
@@ -294,11 +295,74 @@ import "aati/lipi_web/context"
   enc_pay = str_substr(rest, 0, p2)
   enc_sig = str_substr(rest, p2 + 1, str_len(rest))
 
+  hdr_json = base64url_decode_str(enc_hdr)
+  @if str_index_of(hdr_json, "\"HS256\"") < 0
+    return 0
+  @end
+  @if str_index_of(hdr_json, "\"none\"") >= 0 || str_index_of(hdr_json, "\"None\"") >= 0 || str_index_of(hdr_json, "\"NONE\"") >= 0
+    return 0
+  @end
+
   signing_input = enc_hdr + "." + enc_pay
   expected_sig_bytes = jwt_hmac_sha256(secret, signing_input)
   expected_sig = base64url_encode(expected_sig_bytes)
 
   return jwt_constant_time_equals(enc_sig, expected_sig)
+@end
+
+@fn jwt_parse_i64_str(s)
+  n = str_len(s)
+  @if n == 0 return -1 @end
+  val = 0
+  i = 0
+  @while i < n
+    c = str_char_at(s, i) & 255
+    @if c < 48 || c > 57
+      return -1
+    @end
+    val = (val * 10) + (c - 48)
+    i = i + 1
+  @end
+  return val
+@end
+
+@fn jwt_now_unix()
+  tp = lipi_alloc(16)
+  @if tp <= 0 return 0 @end
+  mem_write(tp, 0, 0)
+  mem_write(tp, 8, 0)
+  res = sys_clock_gettime(0, tp)
+  sec = mem_read(tp, 0)
+  lipi_free_sized(tp, 16)
+  @if res != 0 return 0 @end
+  return sec
+@end
+
+@fn jwt_verify_at(token, secret, now_ts)
+  @if jwt_verify_sig(token, secret) != 1
+    return 0
+  @end
+  exp_s = jwt_get_claim(token, "exp")
+  @if str_len(exp_s) > 0
+    exp_v = jwt_parse_i64_str(exp_s)
+    @if exp_v < 0 || now_ts >= exp_v
+      return 0
+    @end
+  @end
+  nbf_s = jwt_get_claim(token, "nbf")
+  @if str_len(nbf_s) > 0
+    nbf_v = jwt_parse_i64_str(nbf_s)
+    @if nbf_v < 0 || now_ts < nbf_v
+      return 0
+    @end
+  @end
+  return 1
+@end
+
+@! Verifies JWT signature, HS256 header algorithm, and exp/nbf time claims against current system time
+@fn jwt_verify(token, secret)
+  now_ts = jwt_now_unix()
+  return jwt_verify_at(token, secret, now_ts)
 @end
 
 @! Extracts and decodes the payload JSON string from a JWT token

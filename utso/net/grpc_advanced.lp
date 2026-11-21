@@ -151,7 +151,7 @@ import "utso/os/syscalls"
   i = 0
   num_items = bytes.len()
   @while i < num_items
-    s = s + str_from_char_code(bytes[i])
+    s = s + chr(bytes[i] & 255)
     i = i + 1
   @end
   return s

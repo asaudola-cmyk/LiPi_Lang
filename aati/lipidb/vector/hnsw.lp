@@ -163,28 +163,57 @@ import "utso/string"
   }
 
   // Connect bidirectional skip-list edges up to m_connections across layers
+  // WHY: Rank candidate peers by cosine similarity so graph traversal forms true navigable neighborhoods
   @if node_id > 0
     max_links = index.m_connections
     @if max_links <= 0 max_links = 4 @end
-    cand_id = node_id - 1
-    links_added = 0
-    @while cand_id >= 0 && links_added < max_links
-      new_node.neighbors_layer0 = new_node.neighbors_layer0.push(cand_id)
+
+    cands = []
+    ci = 0
+    @while ci < node_id
+      cand_n = index.nodes[ci]
+      c_sim = hnsw_cosine_similarity(embedding, cand_n.doc.embedding)
+      cands = cands.push({ id: ci, sim: c_sim })
+      ci = ci + 1
+    @end
+
+    si = 0
+    cn = cands.len()
+    @while si < cn && si < max_links
+      best_j = si
+      sj = si + 1
+      @while sj < cn
+        @if cands[sj].sim > cands[best_j].sim
+          best_j = sj
+        @end
+        sj = sj + 1
+      @end
+      @if best_j != si
+        tmp = cands[si]
+        cands = list_set(cands, si, cands[best_j])
+        cands = list_set(cands, best_j, tmp)
+      @end
+
+      cand_id = cands[si].id
       prev_n = index.nodes[cand_id]
+      new_node.neighbors_layer0 = new_node.neighbors_layer0.push(cand_id)
       @if prev_n.neighbors_layer0.len() < max_links
         prev_n.neighbors_layer0 = prev_n.neighbors_layer0.push(node_id)
       @end
       @if assigned_level >= 1 && prev_n.level >= 1
         new_node.neighbors_layer1 = new_node.neighbors_layer1.push(cand_id)
-        prev_n.neighbors_layer1 = prev_n.neighbors_layer1.push(node_id)
+        @if prev_n.neighbors_layer1.len() < max_links
+          prev_n.neighbors_layer1 = prev_n.neighbors_layer1.push(node_id)
+        @end
       @end
       @if assigned_level >= 2 && prev_n.level >= 2
         new_node.neighbors_layer2 = new_node.neighbors_layer2.push(cand_id)
-        prev_n.neighbors_layer2 = prev_n.neighbors_layer2.push(node_id)
+        @if prev_n.neighbors_layer2.len() < max_links
+          prev_n.neighbors_layer2 = prev_n.neighbors_layer2.push(node_id)
+        @end
       @end
       index.nodes = list_set(index.nodes, cand_id, prev_n)
-      links_added = links_added + 1
-      cand_id = cand_id - 1
+      si = si + 1
     @end
   @end
 
@@ -201,27 +230,104 @@ import "utso/string"
 // ── 5. Logarithmic k-NN Graph Search ──────────────────────────────────────────
 // WHY: Hierarchical beam search starts at top layer (sparse jump), traverses to
 // nearest cluster centroid, and zooms in on layer 0 for precise k-NN matches.
+@fn _hnsw_greedy_layer(index, query_vec, start_id, layer_num)
+  curr_id = start_id
+  curr_sim = hnsw_cosine_similarity(query_vec, index.nodes[curr_id].doc.embedding)
+  improved = 1
+  steps = 0
+  total_nodes = index.nodes.len()
+  @while improved == 1 && steps < total_nodes
+    improved = 0
+    steps = steps + 1
+    c_node = index.nodes[curr_id]
+    nbrs = c_node.neighbors_layer0
+    @if layer_num == 2
+      nbrs = c_node.neighbors_layer2
+    @elif layer_num == 1
+      nbrs = c_node.neighbors_layer1
+    @end
+    ni = 0
+    @while ni < nbrs.len()
+      nid = nbrs[ni]
+      nsim = hnsw_cosine_similarity(query_vec, index.nodes[nid].doc.embedding)
+      @if nsim > curr_sim
+        curr_sim = nsim
+        curr_id = nid
+        improved = 1
+      @end
+      ni = ni + 1
+    @end
+  @end
+  return curr_id
+@end
+
 @fn hnsw_search_knn(index, query_vec, top_k)
   results = []
   total_nodes = index.nodes.len()
-  @if total_nodes <= 0 return results @end
+  @if total_nodes <= 0 || top_k <= 0 return results @end
 
-  // Layer 0 scan with similarity calculation
-  i = 0
-  @while i < total_nodes
-    node = index.nodes[i]
-    sim = hnsw_cosine_similarity(query_vec, node.doc.embedding)
+  ep_id = index.entry_point_id
+  @if ep_id < 0 || ep_id >= total_nodes ep_id = 0 @end
 
-    record = {
-      doc_id: node.doc.doc_id,
-      score: sim,
-      text_content: node.doc.text_content
-    }
-    results = results.push(record)
-    i = i + 1
+  // Phase 1: Greedy descent across upper sparse skip-list layers (2 -> 1)
+  ep_id = _hnsw_greedy_layer(index, query_vec, ep_id, 2)
+  ep_id = _hnsw_greedy_layer(index, query_vec, ep_id, 1)
+  ep_id = _hnsw_greedy_layer(index, query_vec, ep_id, 0)
+
+  // Phase 2: Beam expansion on Layer 0 from converged entry point (plus visited tracking)
+  visited = []
+  vi = 0
+  @while vi < total_nodes
+    visited = visited.push(0)
+    vi = vi + 1
   @end
 
-  // Sort results descending by score (Bubble sort for pure Lipi collection arrays)
+  ef = top_k * 4
+  @if ef < 16 ef = 16 @end
+  @if ef > total_nodes ef = total_nodes @end
+
+  queue = [ep_id]
+  visited = list_set(visited, ep_id, 1)
+  q_idx = 0
+  @while q_idx < queue.len() && results.len() < ef
+    cid = queue[q_idx]
+    q_idx = q_idx + 1
+    cnode = index.nodes[cid]
+    csim = hnsw_cosine_similarity(query_vec, cnode.doc.embedding)
+    results = results.push({
+      doc_id: cnode.doc.doc_id,
+      score: csim,
+      text_content: cnode.doc.text_content
+    })
+    ni = 0
+    @while ni < cnode.neighbors_layer0.len()
+      nid = cnode.neighbors_layer0[ni]
+      @if nid >= 0 && nid < total_nodes && visited[nid] == 0
+        visited = list_set(visited, nid, 1)
+        queue = queue.push(nid)
+      @end
+      ni = ni + 1
+    @end
+  @end
+
+  // Fallback for disconnected strata if top_k candidates still unmet
+  @if results.len() < top_k
+    fi = 0
+    @while fi < total_nodes && results.len() < ef
+      @if visited[fi] == 0
+        fnode = index.nodes[fi]
+        fsim = hnsw_cosine_similarity(query_vec, fnode.doc.embedding)
+        results = results.push({
+          doc_id: fnode.doc.doc_id,
+          score: fsim,
+          text_content: fnode.doc.text_content
+        })
+      @end
+      fi = fi + 1
+    @end
+  @end
+
+  // Sort collected candidates descending by score
   n = results.len()
   step = 0
   @while step < n

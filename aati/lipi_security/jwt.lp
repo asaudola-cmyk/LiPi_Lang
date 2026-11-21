@@ -37,8 +37,7 @@ import "utso/crypto/base64"
   i = 0
   l = str_len(s)
   @while i < l
-    ch = str_char_at(s, i)
-    code = char_to_code(ch)
+    code = str_char_at(s, i)
     bytes = bytes.push(code & 255)
     i = i + 1
   @end
@@ -46,13 +45,60 @@ import "utso/crypto/base64"
 @end
 
 @fn jwt_compare_sig(sig1, sig2)
-  @if str_len(sig1) != str_len(sig2)
+  slen = str_len(sig1)
+  @if slen != str_len(sig2)
     return 0
   @end
-  @if sig1 == sig2
+  diff = 0
+  i = 0
+  @while i < slen
+    c1 = str_char_at(sig1, i) & 255
+    c2 = str_char_at(sig2, i) & 255
+    diff = diff | (c1 ^ c2)
+    i = i + 1
+  @end
+  @if diff == 0
     return 1
   @end
   return 0
+@end
+
+@fn jwt_base64url_decode_str(s)
+  norm = ""
+  i = 0
+  slen = str_len(s)
+  @while i < slen
+    c = str_char_at(s, i) & 255
+    @if c == 45
+      norm = norm + "+"
+    @elif c == 95
+      norm = norm + "/"
+    @else
+      norm = norm + str_from_char_code(c)
+    @end
+    i = i + 1
+  @end
+  rem = str_len(norm) % 4
+  @if rem == 2
+    norm = norm + "=="
+  @elif rem == 3
+    norm = norm + "="
+  @end
+  return base64_decode_string(norm)
+@end
+
+@fn jwt_header_is_hs256(enc_hdr)
+  @if str_len(enc_hdr) == 0
+    return 0
+  @end
+  hdr_json = jwt_base64url_decode_str(enc_hdr)
+  @if str_contains(hdr_json, "\"none\"") == 1 || str_contains(hdr_json, "\"None\"") == 1 || str_contains(hdr_json, "\"NONE\"") == 1
+    return 0
+  @end
+  @if str_contains(hdr_json, "\"HS256\"") != 1
+    return 0
+  @end
+  return 1
 @end
 
 @fn hmac_sha256_bytes(key_bytes, msg_bytes)
@@ -217,6 +263,9 @@ import "utso/crypto/base64"
   @if parts.len() != 3
     return 0
   @end
+  @if jwt_header_is_hs256(parts[0]) != 1
+    return 0
+  @end
 
   signing_input = parts[0] + "." + parts[1]
   key_bytes = jwt_str_to_bytes(secret)
@@ -228,6 +277,55 @@ import "utso/crypto/base64"
     return 1
   @end
   return 0
+@end
+
+@fn jwt_extract_num_claim(payload, key)
+  needle = "\"" + key + "\":"
+  idx = str_index_of(payload, needle)
+  @if idx < 0
+    return 0 - 1
+  @end
+  pos = idx + str_len(needle)
+  plen = str_len(payload)
+  @while pos < plen && (str_char_at(payload, pos) & 255) == 32
+    pos = pos + 1
+  @end
+  val = 0
+  has_digit = 0
+  @while pos < plen
+    c = str_char_at(payload, pos) & 255
+    @if c >= 48 && c <= 57
+      val = (val * 10) + (c - 48)
+      has_digit = 1
+      pos = pos + 1
+    @else
+      break
+    @end
+  @end
+  @if has_digit == 0
+    return 0 - 1
+  @end
+  return val
+@end
+
+@fn verify_jwt_hs256_with_exp(token, secret, current_time)
+  @if verify_jwt_hs256(token, secret) != 1
+    return 0
+  @end
+  parts = string_split(token, ".")
+  @if parts.len() != 3
+    return 0
+  @end
+  payload = jwt_base64url_decode_str(parts[1])
+  exp_v = jwt_extract_num_claim(payload, "exp")
+  @if exp_v >= 0 && current_time >= exp_v
+    return 0
+  @end
+  nbf_v = jwt_extract_num_claim(payload, "nbf")
+  @if nbf_v >= 0 && current_time < nbf_v
+    return 0
+  @end
+  return 1
 @end
 
 @fn jwt_sign(header_str, payload_str, secret)

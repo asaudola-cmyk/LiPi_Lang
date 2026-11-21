@@ -8,12 +8,17 @@ import "utso/os/fs"
 import "utso/core/string"
 
 @fn env_getcwd()
-  buf = lipi_alloc(4096)
+  buf = lipi_alloc(4097)
+  @if buf <= 0 return "" @end
   res = sys_getcwd(buf, 4096)
-  @if res < 0
+  @if res <= 0
+    lipi_free(buf)
     return ""
   @end
-  return lipi_str_new(buf)
+  sys_poke8(buf + 4096, 0)
+  out = str_sub(lipi_str_new(buf), 0, 4096)
+  lipi_free(buf)
+  return out
 @end
 
 @fn env_chdir(path)
@@ -24,23 +29,29 @@ import "utso/core/string"
   fd = sys_open("/proc/self/environ", 0, 0)
   arr = []
   @if fd < 0 return arr @end
-  
   buf_len = 65536
-  buf = lipi_alloc(buf_len)
+  buf = lipi_alloc(buf_len + 1)
+  @if buf <= 0
+    sys_close(fd)
+    return arr
+  @end
   bytes = sys_read(fd, buf, buf_len)
   sys_close(fd)
-  
-  @if bytes <= 0 return arr @end
-  
+  @if bytes <= 0
+    lipi_free(buf)
+    return arr
+  @end
+  sys_poke8(buf + bytes, 0)
   offset = 0
   @while offset < bytes
-    s = lipi_str_new(buf + offset)
+    s = str_sub(lipi_str_new(buf + offset), 0, bytes - offset)
     s_l = str_len(s)
     @if s_l > 0
       arr = arr.push(s)
     @end
     offset = offset + s_l + 1
   @end
+  lipi_free(buf)
   return arr
 @end
 
@@ -48,17 +59,25 @@ import "utso/core/string"
   fd = sys_open("/proc/self/environ", 0, 0)
   @if fd < 0 return "" @end
   buf_len = 65536
-  buf = lipi_alloc(buf_len)
+  buf = lipi_alloc(buf_len + 1)
+  @if buf <= 0
+    sys_close(fd)
+    return ""
+  @end
   bytes = sys_read(fd, buf, buf_len)
   sys_close(fd)
-  @if bytes <= 0 return "" @end
+  @if bytes <= 0
+    lipi_free(buf)
+    return ""
+  @end
+  sys_poke8(buf + bytes, 0)
   search = string_concat(key, "=")
   search_len = str_len(search)
   offset = 0
   res = ""
   found = 0
   @while offset < bytes && found == 0
-    s = lipi_str_new(buf + offset)
+    s = str_sub(lipi_str_new(buf + offset), 0, bytes - offset)
     s_l = str_len(s)
     @if s_l > 0
       @if starts_with(s, search)
@@ -68,6 +87,7 @@ import "utso/core/string"
     @end
     offset = offset + s_l + 1
   @end
+  lipi_free(buf)
   return res
 @end
 

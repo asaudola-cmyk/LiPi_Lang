@@ -100,7 +100,7 @@ fn grpc_tag_decode buf offset out_meta
     meta = sys_alloc(16)
     tag = grpc_varint_decode(buf, offset, meta)
     consumed = mem_read(meta, 8)
-    mem_free(meta, 16)
+    sys_free(meta)
 
     field_num = tag / 8
     wire_type = tag % 8

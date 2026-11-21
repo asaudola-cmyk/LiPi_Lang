@@ -26,8 +26,7 @@ import "compiler/frontend/lexer"
   active_line: i64      @! 0xFF282828
   selection: i64        @! 0xFF264F78
   cursor: i64           @! 0xFFFFFFFF
-  col_directive: i64    @! 0xFFC586C0 (Purple - @fn, @struct, @if, 
-@end)
+  col_directive: i64    @! 0xFFC586C0 (Purple - @fn, @struct, @if, @end)
   col_keyword: i64      @! 0xFF569CD6 (Blue - fn, struct, let, return)
   col_type: i64         @! 0xFF4EC9B0 (Teal - i64, f64, string, bool)
   col_string: i64       @! 0xFFCE9178 (Orange - "string", 'char')

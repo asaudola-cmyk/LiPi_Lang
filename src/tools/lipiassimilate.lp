@@ -33,7 +33,7 @@ import "utso/collections"
     @end
     i = i + 1
   @end
-  return spaces / 4
+  return spaces
 @end
 
 @fn assimilator_trim(line)
@@ -93,92 +93,162 @@ import "utso/collections"
   return res
 @end
 
+@fn _assim_is_ident_byte(b)
+  @if (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || (b >= 48 && b <= 57) || b == 95 || b >= 128
+    return 1
+  @end
+  return 0
+@end
+
 @fn assimilator_clean_expr(expr)
-  // WHY: Normalizes legacy boolean literals and NULL pointers into canonical Lipi integer values
-  res = expr
-  @if str_contains(res, "True") == 1
-    res = str_replace(res, "True", "1")
-  @end
-  @if str_contains(res, "False") == 1
-    res = str_replace(res, "False", "0")
-  @end
-  @if str_contains(res, "None") == 1
-    res = str_replace(res, "None", "0")
-  @end
-  @if str_contains(res, "NULL") == 1
-    res = str_replace(res, "NULL", "0")
+  // WHY: Normalizes boolean/null literals at identifier boundaries ONLY outside string literals.
+  res = ""
+  n = str_len(expr)
+  i = 0
+  in_str = 0
+  @while i < n
+    c = str_char_at(expr, i) & 255
+    @if in_str == 1
+      res = str_concat(res, str_substr(expr, i, i + 1))
+      @if c == 92 && i + 1 < n
+        res = str_concat(res, str_substr(expr, i + 1, i + 2))
+        i = i + 2
+        continue
+      @end
+      @if c == 34
+        in_str = 0
+      @end
+      i = i + 1
+      continue
+    @end
+    @if c == 34
+      in_str = 1
+      res = str_concat(res, "\"")
+      i = i + 1
+      continue
+    @end
+    @if _assim_is_ident_byte(c) == 1
+      start_i = i
+      @while i < n && _assim_is_ident_byte(str_char_at(expr, i) & 255) == 1
+        i = i + 1
+      @end
+      tok = str_substr(expr, start_i, i)
+      @if str_eq(tok, "True") == 1 || str_eq(tok, "true") == 1
+        res = str_concat(res, "1")
+      @elif str_eq(tok, "False") == 1 || str_eq(tok, "false") == 1 || str_eq(tok, "None") == 1 || str_eq(tok, "NULL") == 1 || str_eq(tok, "null") == 1
+        res = str_concat(res, "0")
+      @else
+        res = str_concat(res, tok)
+      @end
+    @else
+      res = str_concat(res, str_substr(expr, i, i + 1))
+      i = i + 1
+    @end
   @end
   return res
 @end
 
-@! ----------------------------------------------------------------------------
-@! 2. LINE TRANSPILATION & INDENTATION-TO-BLOCK LOWERING
-@! ----------------------------------------------------------------------------
+@fn _assim_pop_step(steps_arr)
+  out = []
+  i = 0
+  @while i < steps_arr.len() - 1
+    out = out.push(steps_arr[i])
+    i = i + 1
+  @end
+  return out
+@end
 
 @fn assimilate_source(src_text)
-  @! WHY: Parses line-by-line, tracks indentation depth, and synthesizes Lipi AST/source
   lines = string_split(src_text, "\n")
   total_lines = lines.len()
 
   out_lines = []
-  block_levels = []  @! Stack of active indent levels
-  
+  block_levels = []
+  block_steps = []
+  block_is_brace = []
+
   line_idx = 0
   @while line_idx < total_lines
     raw_line = lines[line_idx]
     trimmed = assimilator_trim(raw_line)
 
-    @! Skip empty lines and comment lines (# in Python, // in C)
     @if str_len(trimmed) == 0 || assimilator_starts_with(trimmed, "#") == 1 || assimilator_starts_with(trimmed, "//") == 1
       line_idx = line_idx + 1
       continue
     @end
 
     curr_indent = assimilator_indent_count(raw_line)
+    has_open_brace = str_ends_with(trimmed, "{")
     clean_content = assimilator_strip_trailing_punct(trimmed)
 
     @! C-Style block closure: standalone '}'
     @if str_eq(clean_content, "}") == 1
       @if block_levels.len() > 0
         closed_level = block_levels[block_levels.len() - 1]
+        closed_step = block_steps[block_steps.len() - 1]
         block_levels = pop_array(block_levels)
-        out_lines = out_lines.push(str_concat(make_indent(closed_level), "@end"))
+        block_steps = _assim_pop_step(block_steps)
+        block_is_brace = pop_array(block_is_brace)
+        out_depth = block_levels.len()
+        @if str_len(closed_step) > 0
+          out_lines = out_lines.push(str_concat(make_indent(out_depth + 1), closed_step))
+        @end
+        out_lines = out_lines.push(str_concat(make_indent(out_depth), "@end"))
       @end
       line_idx = line_idx + 1
       continue
     @end
 
+    @! Strip leading '} else if' / '} else' safely
+    @if assimilator_starts_with(clean_content, "} else") == 1
+      clean_content = assimilator_trim(str_substr(clean_content, 1, str_len(clean_content)))
+    @end
+
     is_elif_or_else = (str_eq(clean_content, "else") == 1) || (assimilator_starts_with(clean_content, "elif ") == 1) || (assimilator_starts_with(clean_content, "else if") == 1)
 
-    @! Pop block levels: if current line is elif/else, do not pop the matching @if block
     @if is_elif_or_else == 1
-      @while block_levels.len() > 0 && curr_indent < block_levels[block_levels.len() - 1]
+      @while block_levels.len() > 0 && block_is_brace[block_is_brace.len() - 1] == 0 && curr_indent < block_levels[block_levels.len() - 1]
         closed_level = block_levels[block_levels.len() - 1]
+        closed_step = block_steps[block_steps.len() - 1]
         block_levels = pop_array(block_levels)
-        out_lines = out_lines.push(str_concat(make_indent(closed_level), "@end"))
+        block_steps = _assim_pop_step(block_steps)
+        block_is_brace = pop_array(block_is_brace)
+        out_depth = block_levels.len()
+        @if str_len(closed_step) > 0
+          out_lines = out_lines.push(str_concat(make_indent(out_depth + 1), closed_step))
+        @end
+        out_lines = out_lines.push(str_concat(make_indent(out_depth), "@end"))
       @end
     @else
-      @while block_levels.len() > 0 && curr_indent <= block_levels[block_levels.len() - 1]
+      @while block_levels.len() > 0 && block_is_brace[block_is_brace.len() - 1] == 0 && curr_indent <= block_levels[block_levels.len() - 1]
         closed_level = block_levels[block_levels.len() - 1]
+        closed_step = block_steps[block_steps.len() - 1]
         block_levels = pop_array(block_levels)
-        out_lines = out_lines.push(str_concat(make_indent(closed_level), "@end"))
+        block_steps = _assim_pop_step(block_steps)
+        block_is_brace = pop_array(block_is_brace)
+        out_depth = block_levels.len()
+        @if str_len(closed_step) > 0
+          out_lines = out_lines.push(str_concat(make_indent(out_depth + 1), closed_step))
+        @end
+        out_lines = out_lines.push(str_concat(make_indent(out_depth), "@end"))
       @end
     @end
 
+    stmt_depth = block_levels.len()
     lipi_stmt = ""
 
-    @! Rule A: Python Function Definition: def name(args):
+    @! Rule A: Python def
     @if assimilator_starts_with(clean_content, "def ") == 1
       rem = assimilator_trim(str_substr(clean_content, 4, str_len(clean_content)))
       lipi_stmt = str_concat("@fn ", rem)
       block_levels = block_levels.push(curr_indent)
+      block_steps = block_steps.push("")
+      block_is_brace = block_is_brace.push(has_open_brace)
 
-    @! Rule B: C Function Definition: int name(a, b) or void name(...)
+    @! Rule B: C fn
     @elif (assimilator_starts_with(clean_content, "int ") == 1 || assimilator_starts_with(clean_content, "void ") == 1 || assimilator_starts_with(clean_content, "long ") == 1 || assimilator_starts_with(clean_content, "char* ") == 1) && str_contains(clean_content, "(") == 1 && str_contains(clean_content, "=") == 0
       prefix_len = 4
-      @if assimilator_starts_with(clean_content, "void ") == 1
-        prefix_len = 5
-      @elif assimilator_starts_with(clean_content, "long ") == 1
+      @if assimilator_starts_with(clean_content, "void ") == 1 || assimilator_starts_with(clean_content, "long ") == 1
         prefix_len = 5
       @elif assimilator_starts_with(clean_content, "char* ") == 1
         prefix_len = 6
@@ -194,61 +264,105 @@ import "utso/collections"
       rem = str_replace(rem, "double ", "")
       lipi_stmt = str_concat("@fn ", rem)
       block_levels = block_levels.push(curr_indent)
+      block_steps = block_steps.push("")
+      block_is_brace = block_is_brace.push(has_open_brace)
 
-    @! Rule C: Conditionals (if, elif, else)
-    @elif assimilator_starts_with(clean_content, "if ") == 1 || assimilator_starts_with(clean_content, "if(") == 1
-      rem = clean_content
-      @if assimilator_starts_with(clean_content, "if ") == 1
-        rem = assimilator_trim(str_substr(clean_content, 3, str_len(clean_content)))
-      @else
-        rem = assimilator_trim(str_substr(clean_content, 2, str_len(clean_content)))
-      @end
+    @! Rule C: Conditionals (if, else if, elif, else)
+    @elif assimilator_starts_with(clean_content, "else if") == 1
+      rem = assimilator_trim(str_substr(clean_content, 7, str_len(clean_content)))
       @if assimilator_starts_with(rem, "(") == 1 && str_ends_with(rem, ")") == 1
         rem = str_substr(rem, 1, str_len(rem) - 1)
       @end
-      rem = assimilator_clean_expr(rem)
-      lipi_stmt = str_concat("@if ", rem)
+      lipi_stmt = str_concat("@elif ", assimilator_clean_expr(rem))
+      @if stmt_depth > 0
+        stmt_depth = stmt_depth - 1
+      @end
+
+    @elif assimilator_starts_with(clean_content, "if ") == 1 || assimilator_starts_with(clean_content, "if(") == 1
+      rem = assimilator_trim(str_substr(clean_content, 2, str_len(clean_content)))
+      @if assimilator_starts_with(rem, "(") == 1 && str_ends_with(rem, ")") == 1
+        rem = str_substr(rem, 1, str_len(rem) - 1)
+      @end
+      lipi_stmt = str_concat("@if ", assimilator_clean_expr(rem))
       block_levels = block_levels.push(curr_indent)
+      block_steps = block_steps.push("")
+      block_is_brace = block_is_brace.push(has_open_brace)
 
     @elif assimilator_starts_with(clean_content, "elif ") == 1
       rem = assimilator_trim(str_substr(clean_content, 5, str_len(clean_content)))
-      rem = assimilator_clean_expr(rem)
-      lipi_stmt = str_concat("@elif ", rem)
+      lipi_stmt = str_concat("@elif ", assimilator_clean_expr(rem))
+      @if stmt_depth > 0
+        stmt_depth = stmt_depth - 1
+      @end
 
     @elif str_eq(clean_content, "else") == 1
       lipi_stmt = "@else"
-
-    @! Rule D: Loops (while)
-    @elif assimilator_starts_with(clean_content, "while ") == 1 || assimilator_starts_with(clean_content, "while(") == 1
-      rem = clean_content
-      @if assimilator_starts_with(clean_content, "while ") == 1
-        rem = assimilator_trim(str_substr(clean_content, 6, str_len(clean_content)))
-      @else
-        rem = assimilator_trim(str_substr(clean_content, 5, str_len(clean_content)))
+      @if stmt_depth > 0
+        stmt_depth = stmt_depth - 1
       @end
+
+    @! Rule D: Loops (while, C for, Python for)
+    @elif assimilator_starts_with(clean_content, "while ") == 1 || assimilator_starts_with(clean_content, "while(") == 1
+      rem = assimilator_trim(str_substr(clean_content, 5, str_len(clean_content)))
       @if assimilator_starts_with(rem, "(") == 1 && str_ends_with(rem, ")") == 1
         rem = str_substr(rem, 1, str_len(rem) - 1)
       @end
-      rem = assimilator_clean_expr(rem)
-      lipi_stmt = str_concat("@while ", rem)
+      lipi_stmt = str_concat("@while ", assimilator_clean_expr(rem))
       block_levels = block_levels.push(curr_indent)
+      block_steps = block_steps.push("")
+      block_is_brace = block_is_brace.push(has_open_brace)
 
-    @! Rule E: Print Statements: print(...) / printf(...) -> println(...)
+    @elif assimilator_starts_with(clean_content, "for ") == 1 || assimilator_starts_with(clean_content, "for(") == 1
+      rem = assimilator_trim(str_substr(clean_content, 3, str_len(clean_content)))
+      @if assimilator_starts_with(rem, "(") == 1 && str_ends_with(rem, ")") == 1
+        inner = str_substr(rem, 1, str_len(rem) - 1)
+        parts = string_split(inner, ";")
+        @if parts.len() == 3
+          f_init = assimilator_trim(parts[0])
+          @if assimilator_starts_with(f_init, "int ") == 1 f_init = str_substr(f_init, 4, str_len(f_init)) @end
+          f_cond = assimilator_clean_expr(assimilator_trim(parts[1]))
+          f_step = assimilator_trim(parts[2])
+          @if str_ends_with(f_step, "++") == 1
+            vn = assimilator_trim(str_substr(f_step, 0, str_len(f_step) - 2))
+            f_step = str_concat(vn, str_concat(" = ", str_concat(vn, " + 1")))
+          @elif str_ends_with(f_step, "--") == 1
+            vn = assimilator_trim(str_substr(f_step, 0, str_len(f_step) - 2))
+            f_step = str_concat(vn, str_concat(" = ", str_concat(vn, " - 1")))
+          @end
+          @if str_len(f_init) > 0
+            out_lines = out_lines.push(str_concat(make_indent(stmt_depth), assimilator_clean_expr(f_init)))
+          @end
+          lipi_stmt = str_concat("@while ", f_cond)
+          block_levels = block_levels.push(curr_indent)
+          block_steps = block_steps.push(assimilator_clean_expr(f_step))
+          block_is_brace = block_is_brace.push(has_open_brace)
+        @else
+          lipi_stmt = str_concat("@for ", assimilator_clean_expr(inner))
+          block_levels = block_levels.push(curr_indent)
+          block_steps = block_steps.push("")
+          block_is_brace = block_is_brace.push(has_open_brace)
+        @end
+      @else
+        lipi_stmt = str_concat("@for ", assimilator_clean_expr(rem))
+        block_levels = block_levels.push(curr_indent)
+        block_steps = block_steps.push("")
+        block_is_brace = block_is_brace.push(has_open_brace)
+      @end
+
+    @! Rule E: Print Statements
     @elif assimilator_starts_with(clean_content, "print(") == 1
       rem = str_substr(clean_content, 6, str_len(clean_content) - 1)
-      rem = assimilator_clean_expr(rem)
-      lipi_stmt = str_concat("println(", str_concat(rem, ")"))
+      lipi_stmt = str_concat("println(", str_concat(assimilator_clean_expr(rem), ")"))
 
     @elif assimilator_starts_with(clean_content, "printf(") == 1
       rem = str_substr(clean_content, 7, str_len(clean_content) - 1)
-      rem = assimilator_clean_expr(rem)
-      lipi_stmt = str_concat("println(", str_concat(rem, ")"))
+      lipi_stmt = str_concat("println(", str_concat(assimilator_clean_expr(rem), ")"))
 
-    @! Rule F: Return Statements
+    @! Rule F: Return
     @elif assimilator_starts_with(clean_content, "return") == 1
       lipi_stmt = assimilator_clean_expr(clean_content)
 
-    @! Rule G: Variable Declarations / Assignments / Function Calls
+    @! Rule G: Declarations / Assignments / Calls
     @else
       clean_assign = clean_content
       @if assimilator_starts_with(clean_assign, "int ") == 1
@@ -270,20 +384,24 @@ import "utso/collections"
       @elif assimilator_starts_with(clean_assign, "const ") == 1
         clean_assign = str_substr(clean_assign, 6, str_len(clean_assign))
       @end
-
-      clean_assign = assimilator_clean_expr(clean_assign)
-      lipi_stmt = clean_assign
+      lipi_stmt = assimilator_clean_expr(clean_assign)
     @end
 
-    out_lines = out_lines.push(str_concat(make_indent(curr_indent), lipi_stmt))
+    out_lines = out_lines.push(str_concat(make_indent(stmt_depth), lipi_stmt))
     line_idx = line_idx + 1
   @end
 
-  @! Close any remaining blocks
   @while block_levels.len() > 0
     closed_level = block_levels[block_levels.len() - 1]
+    closed_step = block_steps[block_steps.len() - 1]
     block_levels = pop_array(block_levels)
-    out_lines = out_lines.push(str_concat(make_indent(closed_level), "@end"))
+    block_steps = _assim_pop_step(block_steps)
+    block_is_brace = pop_array(block_is_brace)
+    out_depth = block_levels.len()
+    @if str_len(closed_step) > 0
+      out_lines = out_lines.push(str_concat(make_indent(out_depth + 1), closed_step))
+    @end
+    out_lines = out_lines.push(str_concat(make_indent(out_depth), "@end"))
   @end
 
   return string_join(out_lines, "\n")

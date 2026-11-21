@@ -78,6 +78,10 @@ struct WasmSynthesizer
     ws_structs       // Registry list of WasmStructDef
     ws_global_fields // List of globally tracked struct field names
     ws_try_depths    // Stack of catch block ws_block_depth targets for try/catch unwind
+    ws_last_expr_is_float // 1 if last compiled expression yielded IEEE-754 f64 bits in i64
+    ws_last_expr_is_str   // 1 if last compiled expression yielded a linear-memory string pointer
+    ws_float_vars         // Active local variable names holding IEEE-754 f64 values
+    ws_str_vars           // Active local variable names holding linear-memory string pointers
 
 // ==============================================================================
 // ── 2. W3C WebAssembly Opcode & Type Constants ─────────────────────────────────
@@ -355,6 +359,89 @@ fn wasm_emit_i64_rem_s byte_list
     push(byte_list, WASM_OP_I64_REM_S)
     return byte_list.len()
 
+fn wasm_emit_i64_and byte_list
+    // WHY: Emits 0x83. Pops two i64s, pushes left & right.
+    push(byte_list, 131)
+    return byte_list.len()
+
+// WHY: IEEE-754 f64 arithmetic, comparison, and reinterpret/convert opcodes
+fn wasm_emit_f64_eq byte_list
+    push(byte_list, 97)
+    return byte_list.len()
+
+fn wasm_emit_f64_ne byte_list
+    push(byte_list, 98)
+    return byte_list.len()
+
+fn wasm_emit_f64_lt byte_list
+    push(byte_list, 99)
+    return byte_list.len()
+
+fn wasm_emit_f64_gt byte_list
+    push(byte_list, 100)
+    return byte_list.len()
+
+fn wasm_emit_f64_le byte_list
+    push(byte_list, 101)
+    return byte_list.len()
+
+fn wasm_emit_f64_ge byte_list
+    push(byte_list, 102)
+    return byte_list.len()
+
+fn wasm_emit_f64_neg byte_list
+    push(byte_list, 154)
+    return byte_list.len()
+
+fn wasm_emit_f64_add byte_list
+    push(byte_list, 160)
+    return byte_list.len()
+
+fn wasm_emit_f64_sub byte_list
+    push(byte_list, 161)
+    return byte_list.len()
+
+fn wasm_emit_f64_mul byte_list
+    push(byte_list, 162)
+    return byte_list.len()
+
+fn wasm_emit_f64_div byte_list
+    push(byte_list, 163)
+    return byte_list.len()
+
+fn wasm_emit_i64_trunc_f64_s byte_list
+    push(byte_list, 176)
+    return byte_list.len()
+
+fn wasm_emit_f64_convert_i64_s byte_list
+    push(byte_list, 185)
+    return byte_list.len()
+
+fn wasm_emit_i64_reinterpret_f64 byte_list
+    push(byte_list, 189)
+    return byte_list.len()
+
+fn wasm_emit_f64_reinterpret_i64 byte_list
+    push(byte_list, 191)
+    return byte_list.len()
+
+fn wasm_is_ident_token kind
+    if kind == TOK_IDENT() return 1
+    if kind == TOK_KW_END() return 1
+    if kind == TOK_KW_IN() return 1
+    if kind == TOK_KW_TYPE() return 1
+    if kind == TOK_KW_CASE() return 1
+    if kind == TOK_KW_MATCH() return 1
+    if kind == TOK_KW_MUT() return 1
+    if kind == TOK_KW_ASYNC() return 1
+    if kind == TOK_KW_AWAIT() return 1
+    if kind == TOK_KW_TRY() return 1
+    if kind == TOK_KW_CATCH() return 1
+    if kind == TOK_KW_DEFER() return 1
+    if kind == TOK_KW_PRINT() return 1
+    if kind == TOK_KW_SYSCALL() return 1
+    return 0
+
 fn wasm_emit_i64_extend_i32_u byte_list
     // WHY: Emits 0xAD. Zero-extends 32-bit boolean comparison result to 64-bit.
     push(byte_list, WASM_OP_I64_EXTEND_I32_U)
@@ -601,7 +688,7 @@ fn wasm_emit_import_section import_entries
     return wasm_emit_section(WASM_SEC_IMPORT, payload)
 
 fn wasm_parse_float_bits s_text
-    // WHY: Converts floating-point string literal (e.g. "1.9", "2.9", "100.5", "-0.25")
+    // WHY: Converts floating-point string literal (including scientific notation like 1.5e-4 or 2E10)
     // directly into standard IEEE-754 binary64 64-bit integer bit representation.
     // Pure integer arithmetic: zero libc, zero external dependencies, bit-exact.
     s_len = len(s_text)
@@ -623,25 +710,53 @@ fn wasm_parse_float_bits s_text
     frac_part = 0
     frac_digits = 0
     dot_seen = 0
+    exp_seen = 0
+    exp_neg = 0
+    exp_val = 0
 
     idx = start
     while idx < s_len
         c = char_at(s_text, idx)
-        if c == "."
+        if c == "." and exp_seen == 0
             dot_seen = 1
+        elif c == "e" or c == "E"
+            exp_seen = 1
+            if idx + 1 < s_len
+                nc = char_at(s_text, idx + 1)
+                if nc == "-"
+                    exp_neg = 1
+                    idx = idx + 1
+                elif nc == "+"
+                    idx = idx + 1
+                end
+            end
         else
             code = ord(c)
             if code >= 48 and code <= 57
                 d = code - 48
-                if dot_seen == 0
-                    int_part = (int_part * 10) + d
+                if exp_seen == 1
+                    if exp_val < 1000
+                        exp_val = (exp_val * 10) + d
+                    end
+                elif dot_seen == 0
+                    if int_part < 90000000000000000
+                        int_part = (int_part * 10) + d
+                    else
+                        exp_val = exp_val + 1
+                    end
                 else
-                    frac_part = (frac_part * 10) + d
-                    frac_digits = frac_digits + 1
+                    if frac_digits < 17 and frac_part < 90000000000000000
+                        frac_part = (frac_part * 10) + d
+                        frac_digits = frac_digits + 1
+                    end
                 end
             end
         end
         idx = idx + 1
+    end
+
+    if exp_neg == 1
+        exp_val = 0 - exp_val
     end
 
     if int_part == 0 and frac_part == 0
@@ -651,16 +766,48 @@ fn wasm_parse_float_bits s_text
         return 0
     end
 
-    den = 1
+    exp10 = exp_val - frac_digits
+    num = int_part
     k = 0
     while k < frac_digits
-        den = den * 10
+        num = num * 10
         k = k + 1
     end
-
-    num = (int_part * den) + frac_part
-
+    num = num + frac_part
+    den = 1
     exp = 1023
+
+    if exp10 > 320
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp10 < (0 - 340)
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
+    end
+
+    while exp10 > 0
+        while num >= 450359962737049600
+            num = num / 2
+            exp = exp + 1
+        end
+        num = num * 10
+        exp10 = exp10 - 1
+    end
+    while exp10 < 0
+        while den >= 450359962737049600
+            den = den / 2
+            exp = exp - 1
+        end
+        den = den * 10
+        exp10 = exp10 + 1
+    end
+
     while num >= (den * 2)
         den = den * 2
         exp = exp + 1
@@ -668,6 +815,20 @@ fn wasm_parse_float_bits s_text
     while num < den
         num = num * 2
         exp = exp - 1
+    end
+
+    if exp >= 2047
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp <= 0
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
     end
 
     rem = num - den

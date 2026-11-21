@@ -162,6 +162,9 @@ import "aati/lipidb/wal"
     i = i + 1
   @end
 
+  @! 5. Flush dirty B+Tree pages and sync DB file on commit
+  buffer_pool_flush_all(db.pool)
+
   tx.state[0] = TX_STATE_COMMITTED()
   return 1
 @end

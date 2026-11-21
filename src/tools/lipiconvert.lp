@@ -92,28 +92,131 @@ fn convert_source_line raw_line
 
     return line
 
-fn convert_source_file in_path out_path
+fn _conv_is_ident_char ch
+    o = ord(ch)
+    if (o >= 65 and o <= 90) or (o >= 97 and o <= 122) or (o >= 48 and o <= 57) or o == 95 or o == 64 or o >= 128
+        return 1
+    return 0
+
+fn _conv_map_tri_token tok target_mode
+    // Modes: "english", "bengali", "directive"
+    is_fn = 0
+    is_struct = 0
+    is_if = 0
+    is_elif = 0
+    is_else = 0
+    is_while = 0
+    is_for = 0
+    is_ret = 0
+    is_end = 0
+    is_let = 0
+    if tok == "fn" or tok == "@fn" or tok == "কাজ" is_fn = 1
+    if tok == "struct" or tok == "@struct" or tok == "গঠন" or tok == "কাঠামো" is_struct = 1
+    if tok == "if" or tok == "@if" or tok == "যদি" is_if = 1
+    if tok == "elif" or tok == "@elif" or tok == "নাহলে_যদি" is_elif = 1
+    if tok == "else" or tok == "@else" or tok == "নাহলে" is_else = 1
+    if tok == "while" or tok == "@while" or tok == "যতক্ষণ" is_while = 1
+    if tok == "for" or tok == "@for" or tok == "প্রতিটি" is_for = 1
+    if tok == "return" or tok == "@return" or tok == "ফেরত" is_ret = 1
+    if tok == "end" or tok == "@end" or tok == "শেষ" is_end = 1
+    if tok == "let" or tok == "@let" or tok == "চলক" is_let = 1
+
+    if target_mode == "directive"
+        if is_fn == 1 return "@fn"
+        if is_struct == 1 return "@struct"
+        if is_if == 1 return "@if"
+        if is_elif == 1 return "@elif"
+        if is_else == 1 return "@else"
+        if is_while == 1 return "@while"
+        if is_for == 1 return "@for"
+        if is_ret == 1 return "return"
+        if is_end == 1 return "@end"
+        if is_let == 1 return "@let"
+    elif target_mode == "bengali"
+        if is_fn == 1 return "কাজ"
+        if is_struct == 1 return "গঠন"
+        if is_if == 1 return "যদি"
+        if is_elif == 1 return "নাহলে_যদি"
+        if is_else == 1 return "নাহলে"
+        if is_while == 1 return "যতক্ষণ"
+        if is_for == 1 return "প্রতিটি"
+        if is_ret == 1 return "ফেরত"
+        if is_end == 1 return "শেষ"
+        if is_let == 1 return "চলক"
+    elif target_mode == "english"
+        if is_fn == 1 return "fn"
+        if is_struct == 1 return "struct"
+        if is_if == 1 return "if"
+        if is_elif == 1 return "elif"
+        if is_else == 1 return "else"
+        if is_while == 1 return "while"
+        if is_for == 1 return "for"
+        if is_ret == 1 return "return"
+        if is_end == 1 return "end"
+        if is_let == 1 return "let"
+    return tok
+
+fn convert_tri_syntax src target_mode
+    // Token-aware conversion across Lipi's 3 syntaxes while strictly preserving strings & comments
+    out = ""
+    n = len(src)
+    i = 0
+    while i < n
+        c = char_at(src, i)
+        if c == "\""
+            out = out + c
+            i = i + 1
+            while i < n
+                sc = char_at(src, i)
+                out = out + sc
+                if sc == "\\" and i + 1 < n
+                    i = i + 1
+                    out = out + char_at(src, i)
+                elif sc == "\""
+                    i = i + 1
+                    break
+                i = i + 1
+        elif (c == "/" and i + 1 < n and char_at(src, i + 1) == "/") or (c == "@" and i + 1 < n and char_at(src, i + 1) == "!")
+            while i < n and char_at(src, i) != "\n"
+                out = out + char_at(src, i)
+                i = i + 1
+        elif _conv_is_ident_char(c) == 1
+            tok = ""
+            while i < n and _conv_is_ident_char(char_at(src, i)) == 1
+                tok = tok + char_at(src, i)
+                i = i + 1
+            out = out + _conv_map_tri_token(tok, target_mode)
+        else
+            out = out + c
+            i = i + 1
+    return out
+
+fn convert_source_file in_path target_mode out_path
     src = file_read(in_path)
     if len(src) == 0
         say "❌ Error: Input file not found or empty: " + in_path
         return 0
     end
-    say "[1] Reading source file: " + in_path + " (" + str(len(src)) + " bytes)"
-    lines = str_split(src, "\n")
-    out_code = "// Transpiled to Sovereign Lipi by lipiconvert\ninclude \"utso/io\"\n\n"
-    i = 0
-    while i < len(lines)
-        conv = convert_source_line(lines[i])
-        if len(conv) > 0
-            out_code = out_code + conv + "\n"
+    out_code = ""
+    if target_mode == "english" or target_mode == "bengali" or target_mode == "directive"
+        out_code = convert_tri_syntax(src, target_mode)
+    else
+        lines = str_split(src, "\n")
+        out_code = "// Transpiled to Sovereign Lipi by lipiconvert\ninclude \"utso/io\"\n\n"
+        i = 0
+        while i < len(lines)
+            conv = convert_source_line(lines[i])
+            if len(conv) > 0
+                out_code = out_code + conv + "\n"
+            end
+            i = i + 1
         end
-        i = i + 1
     end
-    say "\n[2] Generated Sovereign Lipi Source Code (.lp):\n"
-    say out_code
     if len(out_path) > 0
         file_write(out_path, out_code)
-        say "✔ Saved transpiled Lipi file to: " + out_path
+        say "✔ Saved converted Lipi file to: " + out_path
+    else
+        say out_code
     end
     return 1
 
@@ -163,20 +266,38 @@ fn ডেমো_রূপান্তর_test
     say "\n✔ Transpilation successful! Generated Lipi code is directly compilable via ./bin/lipi."
     return 1
 
+fn _conv_norm_mode s
+    if s == "bengali" or s == "bn" or s == "বাংলা" return "bengali"
+    if s == "english" or s == "en" return "english"
+    if s == "directive" or s == "directives" or s == "@" return "directive"
+    return ""
+
 fn main
-    প্রিন্ট_কনভার্টার_ব্যানার()
     args = argv()
-    if len(args) >= 2
-        in_arg = get(args, 1)
-        if in_arg != "--demo" and file_exists(in_arg) == 1
-            out_arg = ""
-            if len(args) >= 3
-                out_arg = get(args, 2)
-            end
-            convert_source_file(in_arg, out_arg)
+    argc = len(args)
+    if argc >= 2
+        arg1 = get(args, 1)
+        if arg1 == "-h" or arg1 == "--help"
+            say "Usage: lipiconvert <file.lp> [bengali|english|directive] [-o out.lp]"
             return 0
-        end
-    end
+        if arg1 != "--demo" and file_exists(arg1) == 1
+            mode = ""
+            out_path = ""
+            ai = 2
+            while ai < argc
+                a = get(args, ai)
+                m = _conv_norm_mode(a)
+                if len(m) > 0
+                    mode = m
+                elif a == "-o" and ai + 1 < argc
+                    ai = ai + 1
+                    out_path = get(args, ai)
+                elif len(out_path) == 0
+                    out_path = a
+                ai = ai + 1
+            convert_source_file(arg1, mode, out_path)
+            return 0
+    প্রিন্ট_কনভার্টার_ব্যানার()
     ডেমো_রূপান্তর_test()
     return 0
 

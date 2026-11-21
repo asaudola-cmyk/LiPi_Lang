@@ -83,7 +83,7 @@ fn main
     pos_bin = base + "_pos.elf"
     pos_clog = base + "_pos_c.log"
     pos_rlog = base + "_pos_r.log"
-    pos_src = "fn silicon_seal p v\n  pid = syscall(39, 0, 0, 0, 0, 0, 0)\n  mem_write(p, 0, v ^ (pid & 255))\n  return pid\n\nfn mk_slot val\n  s = alloc(64)\n  silicon_seal(s, val)\n  return s\n\nfn main\n  b = mk_slot(919)\n  v = mem_read(b, 0)\n  free(b)\n  say \"KAVACH_POS_OK=\" + str(v)\n  return 0\n\nmain()\n"
+    pos_src = "fn silicon_seal p v\n  pid = syscall(39, 0, 0, 0, 0, 0, 0)\n  mem_write(p, 0, v ^ (pid & 255))\n  return pid\n\nfn silicon_read p off\n  return mem_read(p, off)\n\nfn mk_slot val\n  s = alloc(64)\n  silicon_seal(s, val)\n  return s\n\nfn main\n  b = mk_slot(919)\n  v = silicon_read(b, 0)\n  free(b)\n  say \"KAVACH_POS_OK=\" + str(v)\n  return 0\n\nmain()\n"
     kv_write_file(pos_lp, pos_src)
     c1 = kv_exec_log(comp, pos_lp, pos_bin, "--kavach", pos_clog)
     if c1 != 0
@@ -128,6 +128,20 @@ fn main
         say "[ERR] Uncrowned raw mem_write compiled under --kavach"
         return 1
     say "[PASS] --kavach rejected uncrowned raw mem_write"
+
+    // 3b. Negative uncrowned raw mem_read check
+    n2r_lp = base + "_neg2r.lp"
+    n2r_bin = base + "_neg2r.elf"
+    n2r_log = base + "_neg2r.log"
+    kv_write_file(n2r_lp, "fn rogue_peek ptr\n  return mem_read(ptr, 0)\n\nfn main\n  b = alloc(64)\n  v = rogue_peek(b)\n  free(b)\n  return v\n\nmain()\n")
+    c3r = kv_exec_log(comp, n2r_lp, n2r_bin, "--kavach", n2r_log)
+    syscall(87, n2r_lp, 0, 0, 0, 0, 0)
+    syscall(87, n2r_bin, 0, 0, 0, 0, 0)
+    syscall(87, n2r_log, 0, 0, 0, 0, 0)
+    if c3r == 0
+        say "[ERR] Uncrowned raw mem_read compiled under --kavach"
+        return 1
+    say "[PASS] --kavach rejected uncrowned raw mem_read"
 
     // 4. Negative Return leak check (was previously bypassed by last_stmt == Return)
     n3_lp = base + "_neg3.lp"

@@ -153,7 +153,7 @@ fn main
         return 1
     say "[PASS] lipi_akhara --selftest verified"
 
-    // 2. Akhara live HTTP server (--oneshot-http <port> 2)
+    // 2. Akhara live HTTP server (--oneshot-http <port> 4: /health, unauth /api/run 403, GET / token, auth /api/run 200)
     port = 18300 + (pid % 1000)
     srv_log = "/tmp/ab_srv_" + str(pid) + ".log"
     argv = malloc(64)
@@ -169,7 +169,7 @@ fn main
     mem_write(argv, 0, akh_bin)
     mem_write(argv, 8, "--oneshot-http")
     mem_write(argv, 16, str(port))
-    mem_write(argv, 24, "2")
+    mem_write(argv, 24, "4")
     mem_write(argv, 32, 0)
 
     srv_pid = syscall(57, 0, 0, 0, 0, 0, 0)
@@ -190,7 +190,31 @@ fn main
         return 1
 
     json_body = "{\"code\":\"fn main\\n  say \\\"HTTP_SILICON_WIN\\\"\\n  return 0\\n\\nmain()\",\"kavach\":true}"
-    post_req = "POST /api/run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: " + str(len(json_body)) + "\r\nConnection: close\r\n\r\n" + json_body
+    unauth_req = "POST /api/run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: " + str(len(json_body)) + "\r\nConnection: close\r\n\r\n" + json_body
+    r_unauth = ab_http_roundtrip(port, unauth_req, 1)
+    if str_contains(r_unauth, "403 Forbidden") != 1
+        say "[ERR] Akhara did not block unauthenticated POST /api/run with 403"
+        syscall(61, srv_pid, st, 0, 0, 0, 0)
+        syscall(87, srv_log, 0, 0, 0, 0, 0)
+        return 1
+
+    r_studio = ab_http_roundtrip(port, "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n", 1)
+    tok_marker = "const LIPI_TOK='"
+    tok_pos = str_index_of(r_studio, tok_marker)
+    csrf_tok = ""
+    if tok_pos >= 0
+        ts = tok_pos + len(tok_marker)
+        te = ts
+        while te < len(r_studio) and str_char_at(r_studio, te) != 39
+            te = te + 1
+        csrf_tok = str_sub(r_studio, ts, te)
+    if len(csrf_tok) < 32
+        say "[ERR] Akhara GET / did not issue CSPRNG LIPI_TOK"
+        syscall(61, srv_pid, st, 0, 0, 0, 0)
+        syscall(87, srv_log, 0, 0, 0, 0, 0)
+        return 1
+
+    post_req = "POST /api/run HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost:" + str(port) + "\r\nContent-Type: application/json\r\nX-Lipi-Token: " + csrf_tok + "\r\nContent-Length: " + str(len(json_body)) + "\r\nConnection: close\r\n\r\n" + json_body
     r_run = ab_http_roundtrip(port, post_req, 1)
     syscall(61, srv_pid, st, 0, 0, 0, 0)
     syscall(11, argv, 64, 0, 0, 0, 0)
@@ -201,7 +225,7 @@ fn main
     if str_contains(r_run, "HTTP_SILICON_WIN") != 1 or str_contains(r_run, "ET_DYN") != 1
         say "[ERR] Akhara POST /api/run did not execute or return ELF telemetry"
         return 1
-    say "[PASS] lipi_akhara HTTP /health + /api/run socket & ELF audit verified"
+    say "[PASS] lipi_akhara HTTP /health + CSRF 403 guard + tokenized /api/run ELF audit verified"
 
     // 3. lipilsp JSON-RPC diagnostics & documentSymbol verification (file-backed zero-deadlock pipe)
     lsp_in = "/tmp/ab_lsp_in_" + str(pid) + ".rpc"

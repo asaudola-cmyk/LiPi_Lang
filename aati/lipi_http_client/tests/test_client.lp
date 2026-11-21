@@ -56,7 +56,7 @@ mem_write_byte(buf_200, 11, 51) // '3'
 s503 = http_parse_status_code(buf_200, 13)
 assert_eq(s503, 503, "HTTP 503 Service Unavailable parsed")
 
-mem_free(buf_200, 32)
+sys_free(buf_200)
 
 // ── ২. সম্পূর্ণ HTTP রেসপন্স এবং বডি ডিলিমিটার পরীক্ষা ──
 // Raw response:

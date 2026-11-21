@@ -343,7 +343,7 @@ import "utso/crypto/base64"
     txt_i = 0
     @while txt_i < payload_len
       ch_code = unmasked_bytes[txt_i] & 255
-      payload_text = string_concat(payload_text, str_from_char_code(ch_code))
+      payload_text = string_concat(payload_text, chr(ch_code))
       txt_i = txt_i + 1
     @end
   @end
@@ -599,5 +599,11 @@ import "utso/crypto/base64"
 @end
 
 @fn ws_frame_encode(payload, is_text)
-  return [129, payload.len()]
+  // WHY: Serializes complete RFC 6455 unmasked wire frame with opcode and 7/16/64-bit payload length.
+  op = 2
+  @if is_text == 1
+    op = 1
+  @end
+  @return_frame = ws_encode_frame(1, op, 0, [0, 0, 0, 0], payload)
+  return @return_frame
 @end

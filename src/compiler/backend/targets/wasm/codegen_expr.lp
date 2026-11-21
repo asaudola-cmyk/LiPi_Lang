@@ -17,7 +17,50 @@ fn wasm_synth_new
     s.ws_structs = list()
     s.ws_global_fields = list()
     s.ws_try_depths = list()
+    s.ws_last_expr_is_float = 0
+    s.ws_last_expr_is_str = 0
+    s.ws_float_vars = list()
+    s.ws_str_vars = list()
     return s
+
+fn wasm_list_contains lst name
+    li = 0
+    while li < lst.len()
+        if lst[li] == name
+            return 1
+        li = li + 1
+    return 0
+
+fn wasm_list_set_membership lst name flag
+    out = list()
+    li = 0
+    seen = 0
+    while li < lst.len()
+        item = lst[li]
+        if item == name
+            if flag == 1
+                push(out, item)
+                seen = 1
+        else
+            push(out, item)
+        li = li + 1
+    if flag == 1 and seen == 0
+        push(out, name)
+    return out
+
+fn wasm_synth_is_float_var s name
+    return wasm_list_contains(s.ws_float_vars, name)
+
+fn wasm_synth_mark_float_var s name flag
+    s.ws_float_vars = wasm_list_set_membership(s.ws_float_vars, name, flag)
+    return 0
+
+fn wasm_synth_is_str_var s name
+    return wasm_list_contains(s.ws_str_vars, name)
+
+fn wasm_synth_mark_str_var s name flag
+    s.ws_str_vars = wasm_list_set_membership(s.ws_str_vars, name, flag)
+    return 0
 
 fn wasm_synth_find_struct s sname
     si = 0
@@ -132,9 +175,29 @@ fn wasm_synth_alloc_local s name
     return next_idx
 
 fn wasm_synth_add_string_constant s str_text
-    // WHY: Appends string literal into linear memory rodata buffer and returns its offset.
-    base_offset = 1024 + s.ws_data_bytes.len()
+    // WHY: Stores 8-byte aligned tagged length-prefixed UTF-8 string in linear memory:
+    //   [ptr - 16] = magic 0x4C505354 ("LPST"), [ptr - 8] = byte len (i64), [ptr..] = UTF-8 + '\0'.
+    while (s.ws_data_bytes.len() % 8) != 0
+        push(s.ws_data_bytes, 0)
+    // Magic 1280332628 = 0x4C505354 ('T','S','P','L', 0..0)
+    push(s.ws_data_bytes, 84)
+    push(s.ws_data_bytes, 83)
+    push(s.ws_data_bytes, 80)
+    push(s.ws_data_bytes, 76)
+    push(s.ws_data_bytes, 0)
+    push(s.ws_data_bytes, 0)
+    push(s.ws_data_bytes, 0)
+    push(s.ws_data_bytes, 0)
     slen = len(str_text)
+    push(s.ws_data_bytes, slen & 255)
+    push(s.ws_data_bytes, (slen / 256) & 255)
+    push(s.ws_data_bytes, (slen / 65536) & 255)
+    push(s.ws_data_bytes, (slen / 16777216) & 255)
+    push(s.ws_data_bytes, 0)
+    push(s.ws_data_bytes, 0)
+    push(s.ws_data_bytes, 0)
+    push(s.ws_data_bytes, 0)
+    base_offset = 1024 + s.ws_data_bytes.len()
     i = 0
     while i < slen
         c = char_at(str_text, i)
@@ -206,12 +269,199 @@ fn wasm_synth_emit_bump_alloc s
     wasm_emit_local_get(s.ws_code, l_ptr)
     return 0
 
+fn wasm_synth_emit_str_len_into s l_ptr l_out
+    // WHY: Reads string length into l_out (i64) from [l_ptr - 8] if tagged with LPST magic, else 0.
+    wasm_emit_i64_const(s.ws_code, 0)
+    wasm_emit_local_set(s.ws_code, l_out)
+    wasm_emit_local_get(s.ws_code, l_ptr)
+    wasm_emit_i64_const(s.ws_code, 1040)
+    wasm_emit_i64_ge_s(s.ws_code)
+    wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+        wasm_emit_local_get(s.ws_code, l_ptr)
+        wasm_emit_i64_const(s.ws_code, 262144)
+        wasm_emit_i64_lt_s(s.ws_code)
+        wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+            wasm_emit_local_get(s.ws_code, l_ptr)
+            wasm_emit_i64_const(s.ws_code, 7)
+            wasm_emit_i64_and(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_eq(s.ws_code)
+            wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                wasm_emit_local_get(s.ws_code, l_ptr)
+                wasm_emit_i64_const(s.ws_code, 16)
+                wasm_emit_i64_sub(s.ws_code)
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                wasm_emit_i64_load(s.ws_code, 3, 0)
+                wasm_emit_i64_const(s.ws_code, 1280332628)
+                wasm_emit_i64_eq(s.ws_code)
+                wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                    wasm_emit_local_get(s.ws_code, l_ptr)
+                    wasm_emit_i64_const(s.ws_code, 8)
+                    wasm_emit_i64_sub(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                    wasm_emit_local_set(s.ws_code, l_out)
+                wasm_emit_end(s.ws_code)
+            wasm_emit_end(s.ws_code)
+        wasm_emit_end(s.ws_code)
+    wasm_emit_end(s.ws_code)
+    return 0
+
+fn wasm_synth_emit_copy_bytes s l_dst l_src l_cnt
+    // WHY: Copies l_cnt bytes from linear memory l_src to l_dst using local index.
+    l_ci = wasm_synth_alloc_local(s, "__wasi_cp_i")
+    wasm_emit_i64_const(s.ws_code, 0)
+    wasm_emit_local_set(s.ws_code, l_ci)
+    wasm_emit_block(s.ws_code, WASM_TYPE_EMPTY)
+    wasm_emit_loop(s.ws_code, WASM_TYPE_EMPTY)
+        wasm_emit_local_get(s.ws_code, l_ci)
+        wasm_emit_local_get(s.ws_code, l_cnt)
+        wasm_emit_i64_ge_s(s.ws_code)
+        wasm_emit_br_if(s.ws_code, 1)
+        wasm_emit_local_get(s.ws_code, l_dst)
+        wasm_emit_local_get(s.ws_code, l_ci)
+        wasm_emit_i64_add(s.ws_code)
+        wasm_emit_i32_wrap_i64(s.ws_code)
+        wasm_emit_local_get(s.ws_code, l_src)
+        wasm_emit_local_get(s.ws_code, l_ci)
+        wasm_emit_i64_add(s.ws_code)
+        wasm_emit_i32_wrap_i64(s.ws_code)
+        wasm_emit_i64_load8_u(s.ws_code, 0, 0)
+        wasm_emit_i64_store8(s.ws_code, 0, 0)
+        wasm_emit_local_get(s.ws_code, l_ci)
+        wasm_emit_i64_const(s.ws_code, 1)
+        wasm_emit_i64_add(s.ws_code)
+        wasm_emit_local_set(s.ws_code, l_ci)
+        wasm_emit_br(s.ws_code, 0)
+    wasm_emit_end(s.ws_code)
+    wasm_emit_end(s.ws_code)
+    return 0
+
+fn wasm_synth_emit_runtime_str_concat s
+    // WHY: Pops [lhs_str, rhs_str], allocates length-prefixed LPST string buffer on linear heap,
+    // copies both UTF-8 payloads, null-terminates, and leaves result pointer on stack.
+    l_sa = wasm_synth_alloc_local(s, "__wasi_sc_a")
+    l_sb = wasm_synth_alloc_local(s, "__wasi_sc_b")
+    l_la = wasm_synth_alloc_local(s, "__wasi_sc_la")
+    l_lb = wasm_synth_alloc_local(s, "__wasi_sc_lb")
+    l_buf = wasm_synth_alloc_local(s, "__wasi_sc_buf")
+    l_dst2 = wasm_synth_alloc_local(s, "__wasi_sc_dst2")
+
+    wasm_emit_local_set(s.ws_code, l_sb)
+    wasm_emit_local_set(s.ws_code, l_sa)
+    wasm_synth_emit_str_len_into(s, l_sa, l_la)
+    wasm_synth_emit_str_len_into(s, l_sb, l_lb)
+
+    wasm_emit_local_get(s.ws_code, l_la)
+    wasm_emit_local_get(s.ws_code, l_lb)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_i64_const(s.ws_code, 24)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_synth_emit_bump_alloc(s)
+    wasm_emit_local_set(s.ws_code, l_buf)
+
+    wasm_emit_local_get(s.ws_code, l_buf)
+    wasm_emit_i32_wrap_i64(s.ws_code)
+    wasm_emit_i64_const(s.ws_code, 1280332628)
+    wasm_emit_i64_store(s.ws_code, 3, 0)
+
+    wasm_emit_local_get(s.ws_code, l_buf)
+    wasm_emit_i32_wrap_i64(s.ws_code)
+    wasm_emit_local_get(s.ws_code, l_la)
+    wasm_emit_local_get(s.ws_code, l_lb)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_i64_store(s.ws_code, 3, 8)
+
+    wasm_emit_local_get(s.ws_code, l_buf)
+    wasm_emit_i64_const(s.ws_code, 16)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_local_set(s.ws_code, l_dst2)
+    wasm_synth_emit_copy_bytes(s, l_dst2, l_sa, l_la)
+
+    wasm_emit_local_get(s.ws_code, l_dst2)
+    wasm_emit_local_get(s.ws_code, l_la)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_local_set(s.ws_code, l_dst2)
+    wasm_synth_emit_copy_bytes(s, l_dst2, l_sb, l_lb)
+
+    wasm_emit_local_get(s.ws_code, l_dst2)
+    wasm_emit_local_get(s.ws_code, l_lb)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_i32_wrap_i64(s.ws_code)
+    wasm_emit_i64_const(s.ws_code, 0)
+    wasm_emit_i64_store8(s.ws_code, 0, 0)
+
+    wasm_emit_local_get(s.ws_code, l_buf)
+    wasm_emit_i64_const(s.ws_code, 16)
+    wasm_emit_i64_add(s.ws_code)
+    s.ws_last_expr_is_str = 1
+    s.ws_last_expr_is_float = 0
+    return 0
+
+fn wasm_synth_emit_str_or_list_len s l_ptr
+    // WHY: Dispatches len() cleanly: LPST tagged strings return [ptr - 8]; lists return [ptr + 0].
+    wasm_emit_local_get(s.ws_code, l_ptr)
+    wasm_emit_i64_const(s.ws_code, 1040)
+    wasm_emit_i64_ge_s(s.ws_code)
+    wasm_emit_if(s.ws_code, WASM_TYPE_I64)
+        wasm_emit_local_get(s.ws_code, l_ptr)
+        wasm_emit_i64_const(s.ws_code, 262144)
+        wasm_emit_i64_lt_s(s.ws_code)
+        wasm_emit_if(s.ws_code, WASM_TYPE_I64)
+            wasm_emit_local_get(s.ws_code, l_ptr)
+            wasm_emit_i64_const(s.ws_code, 7)
+            wasm_emit_i64_and(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_eq(s.ws_code)
+            wasm_emit_if(s.ws_code, WASM_TYPE_I64)
+                wasm_emit_local_get(s.ws_code, l_ptr)
+                wasm_emit_i64_const(s.ws_code, 16)
+                wasm_emit_i64_sub(s.ws_code)
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                wasm_emit_i64_load(s.ws_code, 3, 0)
+                wasm_emit_i64_const(s.ws_code, 1280332628)
+                wasm_emit_i64_eq(s.ws_code)
+                wasm_emit_if(s.ws_code, WASM_TYPE_I64)
+                    wasm_emit_local_get(s.ws_code, l_ptr)
+                    wasm_emit_i64_const(s.ws_code, 8)
+                    wasm_emit_i64_sub(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                wasm_emit_else(s.ws_code)
+                    wasm_emit_local_get(s.ws_code, l_ptr)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                wasm_emit_end(s.ws_code)
+            wasm_emit_else(s.ws_code)
+                wasm_emit_local_get(s.ws_code, l_ptr)
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                wasm_emit_i64_load(s.ws_code, 3, 0)
+            wasm_emit_end(s.ws_code)
+        wasm_emit_else(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 0)
+        wasm_emit_end(s.ws_code)
+    wasm_emit_else(s.ws_code)
+        wasm_emit_local_get(s.ws_code, l_ptr)
+        wasm_emit_i64_const(s.ws_code, 24)
+        wasm_emit_i64_ge_s(s.ws_code)
+        wasm_emit_if(s.ws_code, WASM_TYPE_I64)
+            wasm_emit_local_get(s.ws_code, l_ptr)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i64_load(s.ws_code, 3, 0)
+        wasm_emit_else(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 0)
+        wasm_emit_end(s.ws_code)
+    wasm_emit_end(s.ws_code)
+    return 0
+
 fn wasm_synth_emit_str_concat_opcodes s str_a str_b
     // WHY: Interns concatenated string constant into WASM linear memory data segment
     // and pushes its 64-bit linear memory pointer onto the WASM value stack.
     joined = str_a + str_b
     off = wasm_synth_add_string_constant(s, joined)
     wasm_emit_i64_const(s.ws_code, off)
+    s.ws_last_expr_is_str = 1
+    s.ws_last_expr_is_float = 0
     return off
 
 // ==============================================================================
@@ -232,6 +482,8 @@ fn wasm_synth_skip_whitespace toks pos_box
 fn wasm_synth_expr_primary s toks pos_box
     // WHY: Synthesizes primary operands: literals, variables, calls, parenthesized expressions.
     // Leaves exactly one 64-bit operand on the WASM evaluation stack.
+    s.ws_last_expr_is_float = 0
+    s.ws_last_expr_is_str = 0
     pos = get(pos_box, 0)
     if pos >= toks.len()
         wasm_emit_i64_const(s.ws_code, 0)
@@ -241,8 +493,8 @@ fn wasm_synth_expr_primary s toks pos_box
     k = t.tok_kind
     txt = t.tok_text
 
-    // 1. Integer Literal
-    if k == TOK_INT()
+    // 1. Integer / Boolean / Null Literal
+    if k == TOK_INT() or k == TOK_BOOL() or k == TOK_NONE()
         list_set(pos_box, 0, pos + 1)
         int_val = t.tok_int_val
         wasm_emit_i64_const(s.ws_code, int_val)
@@ -253,6 +505,7 @@ fn wasm_synth_expr_primary s toks pos_box
         list_set(pos_box, 0, pos + 1)
         fbits = wasm_parse_float_bits(t.tok_text)
         wasm_emit_i64_const(s.ws_code, fbits)
+        s.ws_last_expr_is_float = 1
         return 0
 
     // 2. String Literal
@@ -260,6 +513,7 @@ fn wasm_synth_expr_primary s toks pos_box
         list_set(pos_box, 0, pos + 1)
         str_offset = wasm_synth_add_string_constant(s, txt)
         wasm_emit_i64_const(s.ws_code, str_offset)
+        s.ws_last_expr_is_str = 1
         return 0
 
     // 3. Parenthesized Expression: ( expr )
@@ -271,12 +525,21 @@ fn wasm_synth_expr_primary s toks pos_box
             list_set(pos_box, 0, cur_p + 1) // Consume ')'
         return 0
 
-    // 4. Unary Minus: -expr
+    // 4. Unary Minus: -expr (handles both i64 negation and f64 IEEE-754 sign flip)
     if k == TOK_MINUS()
         list_set(pos_box, 0, pos + 1)
-        wasm_emit_i64_const(s.ws_code, 0)
         wasm_synth_expr_primary(s, toks, pos_box)
-        wasm_emit_i64_sub(s.ws_code)
+        if s.ws_last_expr_is_float == 1
+            wasm_emit_f64_reinterpret_i64(s.ws_code)
+            wasm_emit_f64_neg(s.ws_code)
+            wasm_emit_i64_reinterpret_f64(s.ws_code)
+            s.ws_last_expr_is_float = 1
+        else
+            l_un = wasm_synth_alloc_local(s, "__wasi_un_neg")
+            wasm_emit_local_set(s.ws_code, l_un)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_local_get(s.ws_code, l_un)
+            wasm_emit_i64_sub(s.ws_code)
         return 0
 
     // 5. Identifier: Variable Read or Function Call
@@ -412,15 +675,58 @@ fn wasm_synth_expr_primary s toks pos_box
                         wasm_emit_drop(s.ws_code)
                         ai = ai + 1
                     wasm_emit_i64_const(s.ws_code, 0)
+            elif ident_name == "int" or ident_name == "পূর্ণসংখ্যা"
+                if arg_count >= 1
+                    while arg_count > 1
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    if s.ws_last_expr_is_float == 1
+                        wasm_emit_f64_reinterpret_i64(s.ws_code)
+                        wasm_emit_i64_trunc_f64_s(s.ws_code)
+                else
+                    wasm_emit_i64_const(s.ws_code, 0)
+                s.ws_last_expr_is_float = 0
+                s.ws_last_expr_is_str = 0
+            elif ident_name == "float" or ident_name == "দশমিক"
+                if arg_count >= 1
+                    while arg_count > 1
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    if s.ws_last_expr_is_float == 0
+                        wasm_emit_f64_convert_i64_s(s.ws_code)
+                        wasm_emit_i64_reinterpret_f64(s.ws_code)
+                else
+                    wasm_emit_i64_const(s.ws_code, 0)
+                    wasm_emit_f64_convert_i64_s(s.ws_code)
+                    wasm_emit_i64_reinterpret_f64(s.ws_code)
+                s.ws_last_expr_is_float = 1
+                s.ws_last_expr_is_str = 0
+            elif ident_name == "str_concat"
+                if arg_count >= 2
+                    while arg_count > 2
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    wasm_synth_emit_runtime_str_concat(s)
+                else
+                    ai = 0
+                    while ai < arg_count
+                        wasm_emit_drop(s.ws_code)
+                        ai = ai + 1
+                    wasm_emit_i64_const(s.ws_code, wasm_synth_add_string_constant(s, ""))
+                    s.ws_last_expr_is_str = 1
+                    s.ws_last_expr_is_float = 0
             elif ident_name == "len" or ident_name == "দৈর্ঘ্য"
                 if arg_count >= 1
                     while arg_count > 1
                         wasm_emit_drop(s.ws_code)
                         arg_count = arg_count - 1
-                    wasm_emit_i32_wrap_i64(s.ws_code)
-                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                    l_len_p = wasm_synth_alloc_local(s, "__wasi_len_p")
+                    wasm_emit_local_set(s.ws_code, l_len_p)
+                    wasm_synth_emit_str_or_list_len(s, l_len_p)
                 else
                     wasm_emit_i64_const(s.ws_code, 0)
+                s.ws_last_expr_is_float = 0
+                s.ws_last_expr_is_str = 0
             elif ident_name == "get" or ident_name == "নাও"
                 if arg_count >= 2
                     while arg_count > 2
@@ -565,17 +871,22 @@ fn wasm_synth_expr_primary s toks pos_box
             else
                 // Unbound identifier defaults to 0
                 wasm_emit_i64_const(s.ws_code, 0)
+            s.ws_last_expr_is_float = wasm_synth_is_float_var(s, ident_name)
+            s.ws_last_expr_is_str = wasm_synth_is_str_var(s, ident_name)
 
-        // Postfix member read: obj.field (supports chained a.b.c and fn().field and lst.len())
+        // Postfix member read: obj.field (supports chained a.b.c and fn().field and lst.len() / s.len())
         while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_DOT() or toks[get(pos_box, 0)].tok_text == ".")
             dp = get(pos_box, 0)
-            if dp + 1 < toks.len() and toks[dp + 1].tok_kind == TOK_IDENT()
+            if dp + 1 < toks.len() and wasm_is_ident_token(toks[dp + 1].tok_kind) == 1
                 fname = toks[dp + 1].tok_text
                 if dp + 2 < toks.len() and toks[dp + 2].tok_kind == TOK_LPAREN()
                     if fname == "len" and dp + 3 < toks.len() and toks[dp + 3].tok_kind == TOK_RPAREN()
                         list_set(pos_box, 0, dp + 4)
-                        wasm_emit_i32_wrap_i64(s.ws_code)
-                        wasm_emit_i64_load(s.ws_code, 3, 0)
+                        l_plen = wasm_synth_alloc_local(s, "__wasi_plen_p")
+                        wasm_emit_local_set(s.ws_code, l_plen)
+                        wasm_synth_emit_str_or_list_len(s, l_plen)
+                        s.ws_last_expr_is_float = 0
+                        s.ws_last_expr_is_str = 0
                     else
                         break
                 else
@@ -583,6 +894,8 @@ fn wasm_synth_expr_primary s toks pos_box
                     f_off = wasm_synth_get_field_offset(s, fname)
                     wasm_emit_i32_wrap_i64(s.ws_code)
                     wasm_emit_i64_load(s.ws_code, 3, f_off)
+                    s.ws_last_expr_is_float = 0
+                    s.ws_last_expr_is_str = 0
             else
                 break
         return 0
@@ -592,9 +905,60 @@ fn wasm_synth_expr_primary s toks pos_box
     wasm_emit_i64_const(s.ws_code, 0)
     return 0
 
+fn wasm_synth_emit_f64_binop s lhs_f rhs_f op_kind is_rel
+    // WHY: Promotes integer operands to f64 via f64.convert_i64_s or reinterprets f64 bit patterns,
+    // executes IEEE-754 f64 arithmetic or comparison, and restores Lipi's 64-bit i64 value ABI.
+    l_rhs = wasm_synth_alloc_local(s, "__wasi_f64_r")
+    l_lhs = wasm_synth_alloc_local(s, "__wasi_f64_l")
+    wasm_emit_local_set(s.ws_code, l_rhs)
+    wasm_emit_local_set(s.ws_code, l_lhs)
+
+    wasm_emit_local_get(s.ws_code, l_lhs)
+    if lhs_f == 1
+        wasm_emit_f64_reinterpret_i64(s.ws_code)
+    else
+        wasm_emit_f64_convert_i64_s(s.ws_code)
+
+    wasm_emit_local_get(s.ws_code, l_rhs)
+    if rhs_f == 1
+        wasm_emit_f64_reinterpret_i64(s.ws_code)
+    else
+        wasm_emit_f64_convert_i64_s(s.ws_code)
+
+    if is_rel == 1
+        if op_kind == TOK_EQ()
+            wasm_emit_f64_eq(s.ws_code)
+        elif op_kind == TOK_NEQ()
+            wasm_emit_f64_ne(s.ws_code)
+        elif op_kind == TOK_LT()
+            wasm_emit_f64_lt(s.ws_code)
+        elif op_kind == TOK_LTE()
+            wasm_emit_f64_le(s.ws_code)
+        elif op_kind == TOK_GT()
+            wasm_emit_f64_gt(s.ws_code)
+        else
+            wasm_emit_f64_ge(s.ws_code)
+        wasm_emit_i64_extend_i32_u(s.ws_code)
+        s.ws_last_expr_is_float = 0
+        s.ws_last_expr_is_str = 0
+    else
+        if op_kind == TOK_PLUS()
+            wasm_emit_f64_add(s.ws_code)
+        elif op_kind == TOK_MINUS()
+            wasm_emit_f64_sub(s.ws_code)
+        elif op_kind == TOK_STAR()
+            wasm_emit_f64_mul(s.ws_code)
+        else
+            wasm_emit_f64_div(s.ws_code)
+        wasm_emit_i64_reinterpret_f64(s.ws_code)
+        s.ws_last_expr_is_float = 1
+        s.ws_last_expr_is_str = 0
+    return 0
+
 fn wasm_synth_expr_multiplicative s toks pos_box
-    // WHY: Pratt level for high-precedence binary operators: *, /, %
+    // WHY: Pratt level for high-precedence binary operators: *, /, % (i64 & IEEE-754 f64)
     wasm_synth_expr_primary(s, toks, pos_box)
+    lhs_f = s.ws_last_expr_is_float
 
     while get(pos_box, 0) < toks.len()
         p = get(pos_box, 0)
@@ -603,31 +967,50 @@ fn wasm_synth_expr_multiplicative s toks pos_box
         if k == TOK_STAR()
             list_set(pos_box, 0, p + 1)
             wasm_synth_expr_primary(s, toks, pos_box)
-            wasm_emit_i64_mul(s.ws_code)
+            rhs_f = s.ws_last_expr_is_float
+            if lhs_f == 1 or rhs_f == 1
+                wasm_synth_emit_f64_binop(s, lhs_f, rhs_f, TOK_STAR(), 0)
+                lhs_f = 1
+            else
+                wasm_emit_i64_mul(s.ws_code)
+                s.ws_last_expr_is_str = 0
         elif k == TOK_SLASH()
             list_set(pos_box, 0, p + 1)
             wasm_synth_expr_primary(s, toks, pos_box)
-            wasm_emit_i64_div_s(s.ws_code)
+            rhs_f = s.ws_last_expr_is_float
+            if lhs_f == 1 or rhs_f == 1
+                wasm_synth_emit_f64_binop(s, lhs_f, rhs_f, TOK_SLASH(), 0)
+                lhs_f = 1
+            else
+                wasm_emit_i64_div_s(s.ws_code)
+                s.ws_last_expr_is_str = 0
         elif k == TOK_PERCENT()
             list_set(pos_box, 0, p + 1)
             wasm_synth_expr_primary(s, toks, pos_box)
             wasm_emit_i64_rem_s(s.ws_code)
+            lhs_f = 0
+            s.ws_last_expr_is_float = 0
+            s.ws_last_expr_is_str = 0
         else
             break
+    s.ws_last_expr_is_float = lhs_f
     return 0
 
 fn wasm_synth_expr_additive s toks pos_box
-    // WHY: Pratt level for standard arithmetic operators: +, -
-    // Also folds compile-time string literal concatenation ("a" + "b") directly into linear memory.
+    // WHY: Pratt level for standard arithmetic operators: +, - (i64, IEEE-754 f64, & string concat)
+    // Also folds simple two-literal string concatenation ("a" + "b") directly into linear memory.
     p_lhs = get(pos_box, 0)
     if p_lhs + 2 < toks.len() and toks[p_lhs].tok_kind == TOK_STR() and toks[p_lhs + 1].tok_kind == TOK_PLUS() and toks[p_lhs + 2].tok_kind == TOK_STR()
-        str_a = toks[p_lhs].tok_text
-        str_b = toks[p_lhs + 2].tok_text
-        list_set(pos_box, 0, p_lhs + 3)
-        wasm_synth_emit_str_concat_opcodes(s, str_a, str_b)
-        return 0
+        if p_lhs + 3 >= toks.len() or toks[p_lhs + 3].tok_kind != TOK_PLUS()
+            str_a = toks[p_lhs].tok_text
+            str_b = toks[p_lhs + 2].tok_text
+            list_set(pos_box, 0, p_lhs + 3)
+            wasm_synth_emit_str_concat_opcodes(s, str_a, str_b)
+            return 0
 
     wasm_synth_expr_multiplicative(s, toks, pos_box)
+    lhs_f = s.ws_last_expr_is_float
+    lhs_s = s.ws_last_expr_is_str
 
     while get(pos_box, 0) < toks.len()
         p = get(pos_box, 0)
@@ -636,54 +1019,69 @@ fn wasm_synth_expr_additive s toks pos_box
         if k == TOK_PLUS()
             list_set(pos_box, 0, p + 1)
             wasm_synth_expr_multiplicative(s, toks, pos_box)
-            wasm_emit_i64_add(s.ws_code)
+            rhs_f = s.ws_last_expr_is_float
+            rhs_s = s.ws_last_expr_is_str
+            if lhs_s == 1 or rhs_s == 1
+                wasm_synth_emit_runtime_str_concat(s)
+                lhs_s = 1
+                lhs_f = 0
+            elif lhs_f == 1 or rhs_f == 1
+                wasm_synth_emit_f64_binop(s, lhs_f, rhs_f, TOK_PLUS(), 0)
+                lhs_f = 1
+                lhs_s = 0
+            else
+                wasm_emit_i64_add(s.ws_code)
+                lhs_s = 0
         elif k == TOK_MINUS()
             list_set(pos_box, 0, p + 1)
             wasm_synth_expr_multiplicative(s, toks, pos_box)
-            wasm_emit_i64_sub(s.ws_code)
+            rhs_f = s.ws_last_expr_is_float
+            if lhs_f == 1 or rhs_f == 1
+                wasm_synth_emit_f64_binop(s, lhs_f, rhs_f, TOK_MINUS(), 0)
+                lhs_f = 1
+            else
+                wasm_emit_i64_sub(s.ws_code)
+            lhs_s = 0
         else
             break
+    s.ws_last_expr_is_float = lhs_f
+    s.ws_last_expr_is_str = lhs_s
     return 0
 
 fn wasm_synth_expr_relational s toks pos_box
-    // WHY: Pratt level for comparison operators: ==, !=, <, <=, >, >=
+    // WHY: Pratt level for comparison operators: ==, !=, <, <=, >, >= (i64 & IEEE-754 f64)
     // Produces a consistent 64-bit boolean (1 or 0) via i64.extend_i32_u.
     wasm_synth_expr_additive(s, toks, pos_box)
+    lhs_f = s.ws_last_expr_is_float
 
     while get(pos_box, 0) < toks.len()
         p = get(pos_box, 0)
         k = toks[p].tok_kind
 
-        if k == TOK_EQ()
+        if k == TOK_EQ() or k == TOK_NEQ() or k == TOK_LT() or k == TOK_LTE() or k == TOK_GT() or k == TOK_GTE()
             list_set(pos_box, 0, p + 1)
             wasm_synth_expr_additive(s, toks, pos_box)
-            wasm_emit_i64_eq(s.ws_code)
-            wasm_emit_i64_extend_i32_u(s.ws_code)
-        elif k == TOK_NEQ()
-            list_set(pos_box, 0, p + 1)
-            wasm_synth_expr_additive(s, toks, pos_box)
-            wasm_emit_i64_ne(s.ws_code)
-            wasm_emit_i64_extend_i32_u(s.ws_code)
-        elif k == TOK_LT()
-            list_set(pos_box, 0, p + 1)
-            wasm_synth_expr_additive(s, toks, pos_box)
-            wasm_emit_i64_lt_s(s.ws_code)
-            wasm_emit_i64_extend_i32_u(s.ws_code)
-        elif k == TOK_LTE()
-            list_set(pos_box, 0, p + 1)
-            wasm_synth_expr_additive(s, toks, pos_box)
-            wasm_emit_i64_le_s(s.ws_code)
-            wasm_emit_i64_extend_i32_u(s.ws_code)
-        elif k == TOK_GT()
-            list_set(pos_box, 0, p + 1)
-            wasm_synth_expr_additive(s, toks, pos_box)
-            wasm_emit_i64_gt_s(s.ws_code)
-            wasm_emit_i64_extend_i32_u(s.ws_code)
-        elif k == TOK_GTE()
-            list_set(pos_box, 0, p + 1)
-            wasm_synth_expr_additive(s, toks, pos_box)
-            wasm_emit_i64_ge_s(s.ws_code)
-            wasm_emit_i64_extend_i32_u(s.ws_code)
+            rhs_f = s.ws_last_expr_is_float
+            if lhs_f == 1 or rhs_f == 1
+                wasm_synth_emit_f64_binop(s, lhs_f, rhs_f, k, 1)
+                lhs_f = 0
+            else
+                if k == TOK_EQ()
+                    wasm_emit_i64_eq(s.ws_code)
+                elif k == TOK_NEQ()
+                    wasm_emit_i64_ne(s.ws_code)
+                elif k == TOK_LT()
+                    wasm_emit_i64_lt_s(s.ws_code)
+                elif k == TOK_LTE()
+                    wasm_emit_i64_le_s(s.ws_code)
+                elif k == TOK_GT()
+                    wasm_emit_i64_gt_s(s.ws_code)
+                else
+                    wasm_emit_i64_ge_s(s.ws_code)
+                wasm_emit_i64_extend_i32_u(s.ws_code)
+                lhs_f = 0
+            s.ws_last_expr_is_float = 0
+            s.ws_last_expr_is_str = 0
         else
             break
     return 0

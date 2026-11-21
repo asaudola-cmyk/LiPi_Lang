@@ -128,7 +128,7 @@ import "utso/core/string"
     res_str = ""
     i = 0
     @while i < s_len && (offset + i) < blen
-      res_str = string_concat(res_str, str_from_char_code(bytes[offset + i]))
+      res_str = string_concat(res_str, chr(bytes[offset + i] & 255))
       i = i + 1
     @end
     return { field_1: res_str }
@@ -186,6 +186,29 @@ import "utso/core/string"
     msg_len: len_val,
     message: msg
   }
+@end
+
+@fn grpc_bytes_to_str(bytes)
+  // WHY: Self-contained wire byte array to string serializer without pulling grpc_advanced.
+  s = ""
+  i = 0
+  n = bytes.len()
+  @while i < n
+    s = string_concat(s, chr(bytes[i] & 255))
+    i = i + 1
+  @end
+  return s
+@end
+
+@fn grpc_str_to_bytes(s)
+  b = []
+  i = 0
+  n = str_len(s)
+  @while i < n
+    b = b.push(str_char_at(s, i))
+    i = i + 1
+  @end
+  return b
 @end
 
 @fn grpc_client_call(client_stream, service_method, request_payload)

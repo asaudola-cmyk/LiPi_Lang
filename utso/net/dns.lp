@@ -89,7 +89,10 @@ import "utso/core/string"
   return bytes
 @end
 
-@fn dns_decompress_label(data: array, offset: i64) -> string
+@fn dns_decompress_label_bounded(data: array, offset: i64, depth: i64) -> string
+  @if depth > 32
+    return ""
+  @end
   domain = ""
   curr = offset
   num_items = data.len()
@@ -110,7 +113,10 @@ import "utso/core/string"
         b_off = m_len * 256
         b1 = data[curr + 1] & 255
         ptr_offset = b_off | b1
-        sub = dns_decompress_label(data, ptr_offset)
+        @if ptr_offset == curr
+          break
+        @end
+        sub = dns_decompress_label_bounded(data, ptr_offset, depth + 1)
         @if first == 0
           domain = string_concat(domain, string_concat(".", sub))
         @else
@@ -126,12 +132,17 @@ import "utso/core/string"
       k = 0
       curr = curr + 1
       @while k < len_byte && curr < num_items
-        domain = string_concat(domain, str_from_char_code(data[curr] & 255))
+        domain = string_concat(domain, chr(data[curr] & 255))
         curr = curr + 1
         k = k + 1
       @end
     @end
   @end
+  return domain
+@end
+
+@fn dns_decompress_label(data: array, offset: i64) -> string
+  return dns_decompress_label_bounded(data, offset, 0)
 
   return domain
 @end

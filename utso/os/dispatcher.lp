@@ -397,10 +397,14 @@ import "utso/os/process"
     @if n <= 0
       break
     @end
-    chunk = lipi_str_new(buf)
-    captured = captured + chunk
+    k = 0
+    @while k < n
+      captured = captured + chr(sys_peek8(buf + k))
+      k = k + 1
+    @end
   @end
-  
+
+  lipi_free_sized(buf, buf_size)
   sys_close(read_fd)
   status = process_wait(child_pid)
   

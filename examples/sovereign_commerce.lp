@@ -272,7 +272,7 @@ fn main
 
     // Request 7: Admin Metrics (Protected Route - Authorized)
     sec = app.admin_secret
-    auth_hdr = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." + sec + ".sig"
+    auth_hdr = sf_jwt_create_bearer(1001, sec)
     req7_auth = http_request_new("GET", "/api/admin/metrics", "", auth_hdr, "127.0.0.1")
     res7_auth = commerce_app_handle_http(app, req7_auth)
     say "  [REQ 7] GET /api/admin/metrics (With Bearer Token) -> " + res7_auth.res_status + "\n          Payload: " + res7_auth.res_body

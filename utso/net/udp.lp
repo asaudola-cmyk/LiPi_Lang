@@ -35,15 +35,13 @@ import "utso/core/string"
 
 @fn parse_ipv4_addr(host)
   @if host == "localhost"
-    t1 = 0 * 256
-    t2 = 0 * 65536
-    t3 = 1 * 16777216
-    r1 = 127 | t1
-    r2 = t2 | t3
-    return r1 | r2
+    return (127 | (1 * 16777216)) & 4294967295
   @end
-  @if host == "" || host == "0.0.0.0"
+  @if host == "0.0.0.0"
     return 0
+  @end
+  @if host == ""
+    return -1
   @end
 
   a = 0
@@ -52,6 +50,7 @@ import "utso/core/string"
   d = 0
   part = 0
   curr = 0
+  has_digit = 0
   i = 0
   hlen = host.len()
 
@@ -59,27 +58,26 @@ import "utso/core/string"
     ch = str_char_at(host, i)
     @if ch >= 48 && ch <= 57
       curr = (curr * 10) + (ch - 48)
+      has_digit = 1
+      @if curr > 255 return -1 @end
     @elif ch == 46
+      @if has_digit == 0 || part >= 3 return -1 @end
       @if part == 0 a = curr @end
       @if part == 1 b = curr @end
       @if part == 2 c = curr @end
       part = part + 1
       curr = 0
+      has_digit = 0
+    @else
+      return -1
     @end
     i = i + 1
   @end
-  @if part == 3 d = curr @end
+  @if has_digit == 0 || part != 3 return -1 @end
+  d = curr
 
-  w0 = a & 255
-  b_byte = b & 255
-  w1 = b_byte * 256
-  c_byte = c & 255
-  w2 = c_byte * 65536
-  d_byte = d & 255
-  w3 = d_byte * 16777216
-  res01 = w0 | w1
-  res23 = w2 | w3
-  return res01 | res23
+  res = (a & 255) | ((b & 255) * 256) | ((c & 255) * 65536) | ((d & 255) * 16777216)
+  return res & 4294967295
 @end
 
 @fn sockaddr_in_pack(host, port)
@@ -177,13 +175,19 @@ import "utso/core/string"
     return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
   @end
   buf = lipi_alloc(max_len + 1)
+  @if buf <= 0
+    return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
+  @end
   src_addr = { w0: 0, w1: 0 }
   src_len = { val: 16 }
   n = sys_recvfrom(sockfd, buf, max_len, 0, src_addr, src_len)
   @if n <= 0
+    lipi_free(buf)
     return { data: "", sender_host: "", sender_port: 0, bytes_read: n }
   @end
-  data_str = lipi_str_new(buf)
+  sys_poke8(buf + n, 0)
+  data_str = str_sub(lipi_str_new(buf), 0, n)
+  lipi_free(buf)
   sender = udp_unpack_sender(src_addr.w0)
   return {
     data: data_str,
@@ -198,14 +202,20 @@ import "utso/core/string"
     return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
   @end
   buf = lipi_alloc(max_len + 1)
+  @if buf <= 0
+    return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
+  @end
   src_addr = { w0: 0, w1: 0 }
   src_len = { val: 16 }
   @! MSG_DONTWAIT = 64
   n = sys_recvfrom(sockfd, buf, max_len, 64, src_addr, src_len)
   @if n <= 0
+    lipi_free(buf)
     return { data: "", sender_host: "", sender_port: 0, bytes_read: n }
   @end
-  data_str = lipi_str_new(buf)
+  sys_poke8(buf + n, 0)
+  data_str = str_sub(lipi_str_new(buf), 0, n)
+  lipi_free(buf)
   sender = udp_unpack_sender(src_addr.w0)
   return {
     data: data_str,

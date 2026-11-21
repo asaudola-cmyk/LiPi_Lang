@@ -333,27 +333,120 @@ fn dns_pure_resolver_cache_get resolver domain
         i = i + 1
     return 0
 
+fn _dnsp_parse_ipv4 ip_str
+    o0 = 0
+    o1 = 0
+    o2 = 0
+    o3 = 0
+    part = 0
+    curr = 0
+    has_d = 0
+    valid = 1
+    i = 0
+    n = len(ip_str)
+    while i < n
+        ch = ord(char_at(ip_str, i))
+        if ch >= 48 and ch <= 57
+            curr = (curr * 10) + (ch - 48)
+            has_d = 1
+            if curr > 255 valid = 0
+        elif ch == 46
+            if has_d == 0 or part >= 3 valid = 0
+            if part == 0 o0 = curr
+            if part == 1 o1 = curr
+            if part == 2 o2 = curr
+            part = part + 1
+            curr = 0
+            has_d = 0
+        else
+            valid = 0
+        i = i + 1
+    if has_d == 0 or part != 3 valid = 0
+    if valid == 0 return list()
+    o3 = curr
+    res = list()
+    push(res, o0)
+    push(res, o1)
+    push(res, o2)
+    push(res, o3)
+    return res
+
 fn dns_pure_resolve resolver domain
     // Check Cache first
     cached = dns_pure_resolver_cache_get(resolver, domain)
     if cached != 0
         return cached
-    
-    // Build binary query packet
-    query = dns_pure_query_new(domain, DNS_TYPE_A, 4296)
+
+    ns_octs = _dnsp_parse_ipv4(resolver.dr_upstream_ip)
+    if len(ns_octs) != 4
+        return 0
+    port = resolver.dr_port
+    if port <= 0 port = 53
+
+    // CSPRNG 16-bit tx_id
+    rng_buf = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    if rng_buf <= 0 return 0
+    tx_id = 17777
+    if syscall(318, rng_buf, 2, 0, 0, 0, 0) == 2
+        tx_id = (sys_peek8(rng_buf) * 256) + sys_peek8(rng_buf + 1)
+    if tx_id == 0 tx_id = 23456
+    syscall(11, rng_buf, 4096, 0, 0, 0, 0)
+
+    query = dns_pure_query_new(domain, DNS_TYPE_A, tx_id)
     pkt = dns_pure_build_packet(query)
-    
-    // Simulate authoritative answer for known root hosts or network delivery
+    plen = len(pkt)
+    if plen <= 0 return 0
+
+    io_buf = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    if io_buf <= 0 return 0
+    pi = 0
+    while pi < plen
+        sys_poke8(io_buf + pi, get(pkt, pi) & 255)
+        pi = pi + 1
+
+    // sockaddr_in at io_buf + 2048, timeval at io_buf + 2080, rx_buf at io_buf + 2112
+    addr_ptr = io_buf + 2048
+    tv_ptr = io_buf + 2080
+    rx_ptr = io_buf + 2112
+    ki = 0
+    while ki < 16
+        sys_poke8(addr_ptr + ki, 0)
+        ki = ki + 1
+    sys_poke8(addr_ptr, 2)
+    sys_poke8(addr_ptr + 2, (port >> 8) & 255)
+    sys_poke8(addr_ptr + 3, port & 255)
+    sys_poke8(addr_ptr + 4, get(ns_octs, 0))
+    sys_poke8(addr_ptr + 5, get(ns_octs, 1))
+    sys_poke8(addr_ptr + 6, get(ns_octs, 2))
+    sys_poke8(addr_ptr + 7, get(ns_octs, 3))
+
+    tmo_ms = resolver.dr_timeout_ms
+    if tmo_ms <= 0 tmo_ms = 1000
+    tmo_sec = tmo_ms / 1000
+    tmo_usec = (tmo_ms % 1000) * 1000
+    mem_write(tv_ptr, 0, tmo_sec)
+    mem_write(tv_ptr, 8, tmo_usec)
+
     ans = 0
-    if domain == "lipi-lang.org"
-        ans = dns_pure_answer_new(domain, DNS_TYPE_A, 3600, "185.199.108.153", 3116887193)
-    elif domain == "cloudflare.com"
-        ans = dns_pure_answer_new(domain, DNS_TYPE_A, 300, "104.16.132.229", 1745913061)
-    elif domain == "dns.google"
-        ans = dns_pure_answer_new(domain, DNS_TYPE_A, 86400, "8.8.8.8", 134744072)
-    else
-        // Default sovereign fallback
-        ans = dns_pure_answer_new(domain, DNS_TYPE_A, 60, "127.0.0.1", 2130706433)
-    
-    dns_pure_resolver_cache_put(resolver, domain, ans)
+    fd = syscall(41, 2, 2, 0, 0, 0, 0)
+    if fd >= 0
+        syscall(54, fd, 1, 20, tv_ptr, 16, 0)
+        sent = syscall(44, fd, io_buf, plen, 0, addr_ptr, 16)
+        if sent > 0
+            rn = syscall(45, fd, rx_ptr, 1500, 0, 0, 0)
+            if rn >= 12
+                rx_tx = (sys_peek8(rx_ptr) * 256) + sys_peek8(rx_ptr + 1)
+                if rx_tx == (tx_id & 65535)
+                    r_bytes = list()
+                    ri = 0
+                    while ri < rn
+                        push(r_bytes, sys_peek8(rx_ptr + ri) & 255)
+                        ri = ri + 1
+                    ans = dns_pure_parse_response(r_bytes)
+                    if ans != 0
+                        ans.da_name = domain
+                        dns_pure_resolver_cache_put(resolver, domain, ans)
+        syscall(3, fd, 0, 0, 0, 0, 0)
+
+    syscall(11, io_buf, 4096, 0, 0, 0, 0)
     return ans

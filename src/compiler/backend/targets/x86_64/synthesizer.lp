@@ -5,6 +5,7 @@
 // ==============================================================================
 
 include "src/compiler/backend/targets/x86_64/codegen_core.lp"
+include "src/compiler/backend/targets/x86_64/prescan.lp"
 include "src/compiler/backend/targets/x86_64/codegen_postfix.lp"
 include "src/compiler/backend/targets/x86_64/codegen_expr.lp"
 include "src/compiler/backend/targets/x86_64/codegen_operators.lp"
@@ -47,23 +48,41 @@ fn x86_synth_compile_fn_def s toks pos_box
     fn_jmp_patch = s.synth_code.len()
     x86_synth_emit_u32(s, 0)
 
-    // Record function entry point (immediately after the skip jump)
-    fn_entry = X86Function()
-    fn_entry.fn_name = fn_name
-    fn_entry.fn_entry_offset = s.synth_code.len()
-    fn_entry.fn_ret_type = ""
-    fn_entry.fn_end_offset = 0
-    fn_entry.fn_decl_line = base_line
-    fn_entry_idx = x86_synth_register_fn_obj(s, fn_entry)
+    // Record function entry point (reusing pre-scanned stub when available so indexes remain valid)
+    fn_entry_idx = x86_synth_find_prescan_stub(s, fn_name, base_line)
+    fn_entry = 0
+    if fn_entry_idx >= 0
+        fn_entry = s.synth_functions[fn_entry_idx]
+        fn_entry.fn_entry_offset = s.synth_code.len()
+        fn_entry.fn_end_offset = 0
+    else
+        fn_entry = X86Function()
+        fn_entry.fn_name = fn_name
+        fn_entry.fn_entry_offset = s.synth_code.len()
+        fn_entry.fn_ret_type = ""
+        fn_entry.fn_end_offset = 0
+        fn_entry.fn_decl_line = base_line
+        fn_entry.fn_param_count = 0 - 1
+        fn_entry_idx = x86_synth_register_fn_obj(s, fn_entry)
+    end
     fn_alias = 0
     if method_alias != ""
-        fn_alias = X86Function()
-        fn_alias.fn_name = method_alias
-        fn_alias.fn_entry_offset = s.synth_code.len()
-        fn_alias.fn_ret_type = ""
-        fn_alias.fn_end_offset = 0
-        fn_alias.fn_decl_line = base_line
-        x86_synth_register_fn_obj(s, fn_alias)
+        alias_idx = x86_synth_find_prescan_stub(s, method_alias, base_line)
+        if alias_idx >= 0
+            fn_alias = s.synth_functions[alias_idx]
+            fn_alias.fn_entry_offset = s.synth_code.len()
+            fn_alias.fn_end_offset = 0
+        else
+            fn_alias = X86Function()
+            fn_alias.fn_name = method_alias
+            fn_alias.fn_entry_offset = s.synth_code.len()
+            fn_alias.fn_ret_type = ""
+            fn_alias.fn_end_offset = 0
+            fn_alias.fn_decl_line = base_line
+            fn_alias.fn_param_count = 0 - 1
+            x86_synth_register_fn_obj(s, fn_alias)
+        end
+    end
 
     // Reset frame locals (saving enclosing scope to restore when function definition completes)
     saved_locals = s.synth_locals
@@ -71,11 +90,15 @@ fn x86_synth_compile_fn_def s toks pos_box
     saved_fn_idx = s.synth_current_fn_idx
     saved_try_depth = s.synth_try_depth
     saved_try_frames = s.synth_try_frames
+    saved_defer_starts = s.synth_defer_starts
+    saved_defer_ends = s.synth_defer_ends
     s.synth_locals = list()
     s.synth_stack_offset = 64
     s.synth_current_fn_idx = fn_entry_idx
     s.synth_try_depth = 0
     s.synth_try_frames = list()
+    s.synth_defer_starts = list()
+    s.synth_defer_ends = list()
 
     // Parse parameter names (supporting parentheses, commas, and type annotations)
     params = list()
@@ -151,6 +174,11 @@ fn x86_synth_compile_fn_def s toks pos_box
             end
             list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume return type name
 
+    fn_entry.fn_param_count = params.len()
+    if fn_alias != 0
+        fn_alias.fn_param_count = params.len()
+    end
+
     if method_alias != "" and params.len() > 0
         if param_types[0] == ""
             list_set(param_types, 0, target_sname)
@@ -211,6 +239,7 @@ fn x86_synth_compile_fn_def s toks pos_box
                     fn_alias.fn_ret_type = "f64"
                 end
             end
+            x86_synth_emit_defers(s, toks)
             x86_synth_emit_epilogue(s)
             after_fn_offset = s.synth_code.len()
             fn_entry.fn_end_offset = after_fn_offset
@@ -230,6 +259,8 @@ fn x86_synth_compile_fn_def s toks pos_box
             s.synth_current_fn_idx = saved_fn_idx
             s.synth_try_depth = saved_try_depth
             s.synth_try_frames = saved_try_frames
+            s.synth_defer_starts = saved_defer_starts
+            s.synth_defer_ends = saved_defer_ends
             s.synth_in_function = 0
             s.synth_current_fn = ""
             return 0
@@ -268,6 +299,7 @@ fn x86_synth_compile_fn_def s toks pos_box
     // Default epilogue at end of function
     x86_synth_emit_byte(s, 49)
     x86_synth_emit_byte(s, 192)
+    x86_synth_emit_defers(s, toks)
     x86_synth_emit_epilogue(s)
 
     // Patch jump to bypass function body during top-level execution
@@ -289,6 +321,8 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_current_fn_idx = saved_fn_idx
     s.synth_try_depth = saved_try_depth
     s.synth_try_frames = saved_try_frames
+    s.synth_defer_starts = saved_defer_starts
+    s.synth_defer_ends = saved_defer_ends
     s.synth_in_function = 0
     s.synth_current_fn = ""
     return 0
@@ -326,9 +360,10 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
                 rbi = rbi + 1
     end
 
-    // 1. Emit top-level stack frame prologue at entry point (offset 0)
+    // 1. Emit top-level stack frame prologue at entry point (offset 0) & pre-scan function signatures
     say "    [x86_synth] Emitting top-level prologue..."
-    x86_synth_emit_prologue(s)
+    top_prologue_patch = x86_synth_emit_prologue(s)
+    x86_synth_prescan_signatures(s, tokens)
 
     // 2. Synthesize all functions, structs, and statements
     say "    [x86_synth] Synthesizing top-level declarations & statements..."
@@ -394,7 +429,14 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_emit_byte(s, 49)  // xor eax, eax (default exit code 0)
         x86_synth_emit_byte(s, 192)
 
-    // 4. Top-level exit epilogue
+    // 4. Backpatch top-level stack frame size & emit exit epilogue
+    top_needed = s.synth_stack_offset
+    top_frame = ((top_needed + 256 + 15) / 16) * 16
+    if top_frame < 4096
+        top_frame = 4096
+    end
+    x86_synth_patch_u32(s, top_prologue_patch, top_frame)
+    x86_synth_emit_defers(s, tokens)
     x86_synth_emit_epilogue(s)
 
     // 5. Emit complete micro-runtime helpers (zero C/libc, pure silicon execution)
@@ -433,7 +475,7 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
             else
                 // WHY: For general functions, preserve original definition ordering via O(1) bucket index
                 fn_item = x86_synth_find_fn_first(s, cr.cr_target_name)
-                if fn_item != 0
+                if fn_item != 0 and fn_item.fn_entry_offset >= 0
                     resolved_addr = fn_item.fn_entry_offset
                     found = 1
 
@@ -489,8 +531,8 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
 
     // 8. Backpatch Strict W^X RW Runtime Globals (zero writes to .text) & Record Static-PIE Fixups
     if s.synth_alloc_off > 0
-        x86_synth_patch_u64(s, s.synth_alloc_off + 10, heap_base_vaddr)
-        x86_synth_record_reloc_patch(s, s.synth_alloc_off + 10, rw_file_off + 16)
+        x86_synth_patch_u64(s, s.synth_alloc_off + 19, heap_base_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_alloc_off + 19, rw_file_off + 16)
     if s.synth_argv_off > 0
         x86_synth_patch_u64(s, s.synth_argv_off + 15, g_argc_vaddr)
         x86_synth_patch_u64(s, s.synth_argv_off + 28, g_argv_vaddr)
@@ -545,7 +587,7 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         end
         if arena_offs[1] > 0
             x86_synth_record_reloc_patch(s, arena_offs[1] + 2, rw_file_off + 16)
-            x86_synth_record_reloc_patch(s, arena_offs[1] + 20, rw_file_off + 24)
+            x86_synth_record_reloc_patch(s, arena_offs[1] + 24, rw_file_off + 24)
         end
         if arena_offs[2] > 0
             x86_synth_record_reloc_patch(s, arena_offs[2] + 2, rw_file_off + 16)

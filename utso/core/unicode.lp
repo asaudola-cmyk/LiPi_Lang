@@ -12,8 +12,8 @@
 // ==============================================================================
 
 // ── ১. লিড বাইটের দৈর্ঘ্য নির্ধারণ (UTF-8 Lead Byte Length Classifier) ────────
-// WHY: Mathematically decodes the expected byte length (1 to 4 bytes) from the lead byte
-// using standard RFC 3629 UTF-8 bit prefix masking without bitwise shift dependencies.
+// WHY: RFC 3629 compliant lead byte length classification.
+// Rejects continuation bytes (128..191), C0/C1 overlong leads (192..193), and >=245 leads as 1-byte error steps.
 fn utf8_byte_len lead_byte
     b = floor(lead_byte) % 256
     if b < 0
@@ -21,49 +21,69 @@ fn utf8_byte_len lead_byte
     // 1-Byte ASCII: 0xxxxxxx (0 to 127)
     if b < 128
         return 1
-    // Continuation byte: 10xxxxxx (128 to 191) - orphan byte fallback
-    if b < 192
+    // Invalid continuation/overlong lead: 128..193
+    if b < 194
         return 1
-    // 2-Byte Sequence: 110xxxxx (192 to 223)
+    // 2-Byte Sequence: 110xxxxx (194 to 223)
     if b < 224
         return 2
-    // 3-Byte Sequence: 1110xxxx (224 to 239) -> All Bengali script lives here!
+    // 3-Byte Sequence: 1110xxxx (224 to 239) -> Bengali U+0980..U+09FF lives here
     if b < 240
         return 3
-    // 4-Byte Sequence: 11110xxx (240 to 247) -> Astral plane emojis and symbols
-    if b < 248
+    // 4-Byte Sequence: 11110xxx (240 to 244) -> Up to U+10FFFF
+    if b < 245
         return 4
     return 1
 
 // ── ২. নির্দিষ্ট পজিশনে কোডপয়েন্ট ডিকোডিং (Decode Scalar Value at Byte Offset) ─
-// WHY: Reconstructs the 21-bit integer Unicode scalar value from 1..4 contiguous bytes.
+// WHY: Strictly validates continuation bytes (10xxxxxx), overlong encodings, UTF-16 surrogates
+// (U+D800..U+DFFF), and range <= U+10FFFF per RFC 3629, returning U+FFFD (65533) on malformed input.
 fn utf8_decode_codepoint s byte_pos
     slen = len(s)
     if byte_pos >= slen or byte_pos < 0
         return 0
     b1 = ord(char_at(s, byte_pos))
-    blen = utf8_byte_len(b1)
-    if blen == 1
+    if b1 < 128
         return b1
+    if b1 < 194 or b1 > 244
+        return 65533
+    blen = utf8_byte_len(b1)
     if blen == 2
         if byte_pos + 1 >= slen
-            return b1
+            return 65533
         b2 = ord(char_at(s, byte_pos + 1))
-        return ((b1 % 32) * 64) + (b2 % 64)
+        if b2 < 128 or b2 > 191
+            return 65533
+        cp2 = ((b1 - 192) * 64) + (b2 - 128)
+        if cp2 < 128
+            return 65533
+        return cp2
     if blen == 3
         if byte_pos + 2 >= slen
-            return b1
+            return 65533
         b2 = ord(char_at(s, byte_pos + 1))
         b3 = ord(char_at(s, byte_pos + 2))
-        return ((b1 % 16) * 4096) + ((b2 % 64) * 64) + (b3 % 64)
+        if b2 < 128 or b2 > 191 or b3 < 128 or b3 > 191
+            return 65533
+        cp3 = ((b1 - 224) * 4096) + ((b2 - 128) * 64) + (b3 - 128)
+        if cp3 < 2048
+            return 65533
+        if cp3 >= 55296 and cp3 <= 57343
+            return 65533
+        return cp3
     if blen == 4
         if byte_pos + 3 >= slen
-            return b1
+            return 65533
         b2 = ord(char_at(s, byte_pos + 1))
         b3 = ord(char_at(s, byte_pos + 2))
         b4 = ord(char_at(s, byte_pos + 3))
-        return ((b1 % 8) * 262144) + ((b2 % 64) * 4096) + ((b3 % 64) * 64) + (b4 % 64)
-    return b1
+        if b2 < 128 or b2 > 191 or b3 < 128 or b3 > 191 or b4 < 128 or b4 > 191
+            return 65533
+        cp4 = ((b1 - 240) * 262144) + ((b2 - 128) * 4096) + ((b3 - 128) * 64) + (b4 - 128)
+        if cp4 < 65536 or cp4 > 1114111
+            return 65533
+        return cp4
+    return 65533
 
 // ── ৩. মোট রুন বা অক্ষরের সংখ্যা গণনা (Count True Unicode Runes) ───────────────
 // WHY: Returns the true visible character count instead of raw byte count.
@@ -208,3 +228,58 @@ fn int_to_bengali_digit n
     if n == 8 return "৮"
     if n == 9 return "৯"
     return str(n)
+
+// WHY: Verifies every byte sequence in string s conforms strictly to RFC 3629 UTF-8.
+fn utf8_is_valid s
+    slen = len(s)
+    pos = 0
+    while pos < slen
+        b1 = ord(char_at(s, pos))
+        if b1 < 128
+            pos = pos + 1
+        elif b1 >= 194 and b1 <= 244
+            step = utf8_byte_len(b1)
+            cp = utf8_decode_codepoint(s, pos)
+            if cp == 65533
+                // Only valid if literal U+FFFD (EF BF BD = 239 191 189)
+                if not (step == 3 and pos + 2 < slen and b1 == 239 and ord(char_at(s, pos + 1)) == 191 and ord(char_at(s, pos + 2)) == 189)
+                    return 0
+            pos = pos + step
+        else
+            return 0
+    return 1
+
+// WHY: Parses multi-digit Bengali (০..৯) and ASCII (0..9) integer strings with optional sign.
+fn bengali_num_to_int s
+    slen = len(s)
+    pos = 0
+    while pos < slen
+        c = ord(char_at(s, pos))
+        if c == 32 or c == 9 or c == 10 or c == 13
+            pos = pos + 1
+        else
+            break
+    if pos >= slen
+        return 0
+    neg = 0
+    fc = ord(char_at(s, pos))
+    if fc == 45
+        neg = 1
+        pos = pos + 1
+    elif fc == 43
+        pos = pos + 1
+    acc = 0
+    while pos < slen
+        cp = utf8_decode_codepoint(s, pos)
+        b = ord(char_at(s, pos))
+        step = utf8_byte_len(b)
+        if cp >= 48 and cp <= 57
+            acc = (acc * 10) - (cp - 48)
+        elif cp >= 2534 and cp <= 2543
+            acc = (acc * 10) - (cp - 2534)
+        else
+            break
+        pos = pos + step
+    if neg == 1
+        return acc
+    return 0 - acc

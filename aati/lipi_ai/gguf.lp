@@ -20,6 +20,203 @@ GGUF_VERSION_3 = 3
 জিজিইউএফ_ভার্সন_3 = 3
 
 // ── ২. GGUF বাইনারি হেডার ও ম্যাজিক যাচাই ─────────────────────────────────────
+// WHY: Signed 32-bit integer decoding prevents unsigned 2^31 wraparound on weights/logits.
+fn gguf_read_i32 buf offset
+    v = mem_read_u32(buf, offset) & 4294967295
+    if v >= 2147483648
+        return v - 4294967296
+    return v
+
+// WHY: Accurate IEEE-754 binary16 (FP16) to binary64 conversion for GGML block scales.
+fn gguf_f16_to_f64 bits
+    b = bits & 65535
+    sign = (b >> 15) & 1
+    exp16 = (b >> 10) & 31
+    mant16 = b & 1023
+    f_bits = 0
+    if exp16 == 0
+        if mant16 == 0
+            f_bits = sign << 63
+        else
+            sub = mant16
+            e = 0 - 14
+            while (sub & 1024) == 0
+                sub = sub << 1
+                e = e - 1
+            sub = sub & 1023
+            exp64 = e + 1023
+            f_bits = (sign << 63) | (exp64 << 52) | (sub << 42)
+    elif exp16 == 31
+        f_bits = (sign << 63) | (2047 << 52) | (mant16 << 42)
+    else
+        exp64 = (exp16 - 15) + 1023
+        f_bits = (sign << 63) | (exp64 << 52) | (mant16 << 42)
+    return f_bits
+
+fn _gguf_f64_mul_bits a_bits b_bits
+    return _gguf_fmul_typed(a_bits, b_bits)
+
+fn _gguf_fmul_typed a:f64 b:f64 -> f64
+    return a * b
+
+fn _gguf_i_to_f64 v:i64 -> f64
+    return v + 0.0
+
+// WHY: Dequantizes a standard 18-byte GGML Q4_0 block (2B FP16 scale + 16B nibbles = 32 f64s).
+fn gguf_dequant_q4_0_block block_addr out_f64_addr
+    if block_addr == 0 or out_f64_addr == 0
+        return 0
+    b0 = mem_byte_read(block_addr, 0) & 255
+    b1 = mem_byte_read(block_addr, 1) & 255
+    d_bits = gguf_f16_to_f64(b0 | (b1 << 8))
+    i = 0
+    while i < 16
+        byte = mem_byte_read(block_addr, 2 + i) & 255
+        q0 = (byte & 15) - 8
+        q1 = ((byte >> 4) & 15) - 8
+        w0 = _gguf_fmul_typed(_gguf_i_to_f64(q0), d_bits)
+        w1 = _gguf_fmul_typed(_gguf_i_to_f64(q1), d_bits)
+        sys_poke(out_f64_addr + (i * 8), w0)
+        sys_poke(out_f64_addr + ((i + 16) * 8), w1)
+        i = i + 1
+    return 32
+
+// WHY: Dequantizes a standard 34-byte GGML Q8_0 block (2B FP16 scale + 32 x int8 = 32 f64s).
+fn gguf_dequant_q8_0_block block_addr out_f64_addr
+    if block_addr == 0 or out_f64_addr == 0
+        return 0
+    b0 = mem_byte_read(block_addr, 0) & 255
+    b1 = mem_byte_read(block_addr, 1) & 255
+    d_bits = gguf_f16_to_f64(b0 | (b1 << 8))
+    i = 0
+    while i < 32
+        qv = mem_byte_read(block_addr, 2 + i) & 255
+        if qv >= 128 qv = qv - 256
+        wv = _gguf_fmul_typed(_gguf_i_to_f64(qv), d_bits)
+        sys_poke(out_f64_addr + (i * 8), wv)
+        i = i + 1
+    return 32
+
+fn _gguf_read_u64_le buf off
+    res = 0
+    bi = 0
+    while bi < 8
+        res = res | ((mem_byte_read(buf, off + bi) & 255) << (bi * 8))
+        bi = bi + 1
+    return res
+
+fn _gguf_read_string buf pos_box limit
+    p = get(pos_box, 0)
+    if p + 8 > limit return ""
+    slen = _gguf_read_u64_le(buf, p)
+    p = p + 8
+    if slen < 0 or p + slen > limit
+        list_set(pos_box, 0, limit)
+        return ""
+    s = ""
+    i = 0
+    while i < slen
+        s = s + chr(mem_byte_read(buf, p + i) & 255)
+        i = i + 1
+    list_set(pos_box, 0, p + slen)
+    return s
+
+fn _gguf_skip_value buf pos_box vtype limit depth
+    if depth > 8 return 0
+    p = get(pos_box, 0)
+    if vtype == 0 or vtype == 1 or vtype == 7
+        list_set(pos_box, 0, p + 1)
+    elif vtype == 2 or vtype == 3
+        list_set(pos_box, 0, p + 2)
+    elif vtype == 4 or vtype == 5 or vtype == 6
+        list_set(pos_box, 0, p + 4)
+    elif vtype == 10 or vtype == 11 or vtype == 12
+        list_set(pos_box, 0, p + 8)
+    elif vtype == 8
+        _gguf_read_string(buf, pos_box, limit)
+    elif vtype == 9
+        if p + 12 > limit
+            list_set(pos_box, 0, limit)
+            return 0
+        elem_t = mem_read_u32(buf, p) & 4294967295
+        cnt = _gguf_read_u64_le(buf, p + 4)
+        list_set(pos_box, 0, p + 12)
+        ai = 0
+        while ai < cnt and get(pos_box, 0) < limit
+            _gguf_skip_value(buf, pos_box, elem_t, limit, depth + 1)
+            ai = ai + 1
+    else
+        list_set(pos_box, 0, limit)
+    return 1
+
+// WHY: Full GGUF v2/v3 metadata & tensor info directory parser with aligned data offset.
+fn gguf_parse_buffer buf buf_len
+    if buf == 0 or buf_len < 24
+        return { ok: 0, version: 0, tensor_count: 0, kv_count: 0, alignment: 32, data_offset: 0, metadata: list(), tensors: list() }
+    if gguf_magic_verify(buf) == 0
+        return { ok: 0, version: 0, tensor_count: 0, kv_count: 0, alignment: 32, data_offset: 0, metadata: list(), tensors: list() }
+    ver = gguf_version(buf)
+    if ver < 2 or ver > 3
+        return { ok: 0, version: ver, tensor_count: 0, kv_count: 0, alignment: 32, data_offset: 0, metadata: list(), tensors: list() }
+    t_count = gguf_tensor_count(buf)
+    kv_count = gguf_metadata_kv_count(buf)
+    pos_box = [24]
+    meta = list()
+    alignment = 32
+    ki = 0
+    while ki < kv_count and get(pos_box, 0) < buf_len
+        k = _gguf_read_string(buf, pos_box, buf_len)
+        vp = get(pos_box, 0)
+        if vp + 4 > buf_len break
+        vt = mem_read_u32(buf, vp) & 4294967295
+        list_set(pos_box, 0, vp + 4)
+        if vt == 4 and k == "general.alignment" and vp + 8 <= buf_len
+            alignment = mem_read_u32(buf, vp + 4) & 4294967295
+            if alignment <= 0 alignment = 32
+            list_set(pos_box, 0, vp + 8)
+            push(meta, { key: k, vtype: vt, val: alignment })
+        elif vt == 8
+            sv = _gguf_read_string(buf, pos_box, buf_len)
+            push(meta, { key: k, vtype: vt, val: sv })
+        elif vt == 4 or vt == 5
+            if vp + 8 <= buf_len
+                iv = mem_read_u32(buf, vp + 4) & 4294967295
+                if vt == 5 and iv >= 2147483648 iv = iv - 4294967296
+                list_set(pos_box, 0, vp + 8)
+                push(meta, { key: k, vtype: vt, val: iv })
+        else
+            _gguf_skip_value(buf, pos_box, vt, buf_len, 0)
+            push(meta, { key: k, vtype: vt, val: 0 })
+        ki = ki + 1
+
+    tensors = list()
+    ti = 0
+    while ti < t_count and get(pos_box, 0) < buf_len
+        t_name = _gguf_read_string(buf, pos_box, buf_len)
+        tp = get(pos_box, 0)
+        if tp + 4 > buf_len break
+        n_dims = mem_read_u32(buf, tp) & 4294967295
+        tp = tp + 4
+        dims = list()
+        di = 0
+        while di < n_dims and tp + 8 <= buf_len
+            push(dims, _gguf_read_u64_le(buf, tp))
+            tp = tp + 8
+            di = di + 1
+        if tp + 12 > buf_len break
+        ggml_type = mem_read_u32(buf, tp) & 4294967295
+        t_off = _gguf_read_u64_le(buf, tp + 4)
+        list_set(pos_box, 0, tp + 12)
+        push(tensors, { name: t_name, n_dims: n_dims, dims: dims, ggml_type: ggml_type, offset: t_off })
+        ti = ti + 1
+
+    raw_end = get(pos_box, 0)
+    rem = raw_end % alignment
+    data_off = raw_end
+    if rem != 0
+        data_off = raw_end + (alignment - rem)
+    return { ok: 1, version: ver, tensor_count: t_count, kv_count: kv_count, alignment: alignment, data_offset: data_off, metadata: meta, tensors: tensors }
+
 // WHY: মডেল ফাইলের বৈধতা এবং মেটাডাটা সরাসরি বাফার থেকে যাচাই করা।
 fn gguf_magic_verify header_buffer
     b0 = mem_byte_read(header_buffer, 0) // 'G' (71)
@@ -131,8 +328,8 @@ fn gguf_gemv output_vec weight_matrix input_vec column row
 
         while c < column
             matrix_offset = ((r * column) + c) * 4
-            weight = mem_read_u32(weight_matrix, matrix_offset)
-            input = mem_read_u32(input_vec, c * 4)
+            weight = gguf_read_i32(weight_matrix, matrix_offset)
+            input = gguf_read_i32(input_vec, c * 4)
 
             dot_product = dot_product + (weight * input)
             c = c + 1
@@ -177,12 +374,12 @@ fn gguf_token_argmax logit_addr vocab_size
     if vocab_size <= 0
         return 0
 
-    highest_val = mem_read_u32(logit_addr, 0)
+    highest_val = gguf_read_i32(logit_addr, 0)
     best_token = 0
     i = 1
 
     while i < vocab_size
-        current_val = mem_read_u32(logit_addr, i * 4)
+        current_val = gguf_read_i32(logit_addr, i * 4)
         if current_val > highest_val
             highest_val = current_val
             best_token = i

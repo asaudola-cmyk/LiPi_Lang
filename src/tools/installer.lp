@@ -19,6 +19,7 @@
 
 include "utso/io"
 include "utso/memory"
+include "utso/string"
 
 // ── 1. Hardware-Aligned Models (Max 8 Fields / 64-Byte Bounds) ────────────────
 
@@ -117,56 +118,160 @@ fn installer_get_env name
     syscall(11, buf, 32768, 0, 0, 0, 0)
     return ""
 
-fn installer_copy_file src dst
-    // WHY: 100% pure LiPi standalone file copier utilizing kernel-space sys_copy_file_range (326)
-    // with 64KB virtual memory streaming fallback (sys_mmap 9). Breaks any existing symlinks
-    // via sys_unlink (syscall 87) first to ensure pure standalone binary installation.
+fn installer_copy_file src dst mode_perm
+    // WHY: Looped full-file copy via sys_copy_file_range (326) with short-write-safe 64KB fallback.
     syscall(87, dst, 0, 0, 0, 0, 0)
     fd_in = syscall(2, src, 0, 0, 0, 0, 0)
     if fd_in < 0
         return 0
     end
-    fd_out = syscall(2, dst, 577, 493, 0, 0, 0)
+    fd_out = syscall(2, dst, 577, mode_perm, 0, 0, 0)
     if fd_out < 0
         syscall(3, fd_in, 0, 0, 0, 0, 0)
         return 0
     end
-    n = syscall(326, fd_in, 0, fd_out, 0, 10485760, 0)
-    if n <= 0
-        buf = syscall(9, 0, 65536, 3, 34, -1, 0)
-        while 1 == 1
-            nr = syscall(0, fd_in, buf, 65536, 0, 0, 0)
-            if nr <= 0
-                break
-            end
-            syscall(1, fd_out, buf, nr, 0, 0, 0)
+    copied = 0
+    while 1 == 1
+        n = syscall(326, fd_in, 0, fd_out, 0, 4194304, 0)
+        if n > 0
+            copied = copied + n
+            continue
         end
-        syscall(11, buf, 65536, 0, 0, 0, 0)
+        break
+    end
+    if copied == 0
+        buf = syscall(9, 0, 65536, 3, 34, -1, 0)
+        if buf > 0
+            while 1 == 1
+                nr = syscall(0, fd_in, buf, 65536, 0, 0, 0)
+                if nr <= 0
+                    break
+                end
+                off = 0
+                while off < nr
+                    nw = syscall(1, fd_out, buf + off, nr - off, 0, 0, 0)
+                    if nw <= 0
+                        break
+                    end
+                    off = off + nw
+                end
+            end
+            syscall(11, buf, 65536, 0, 0, 0, 0)
+        end
     end
     syscall(3, fd_in, 0, 0, 0, 0, 0)
     syscall(3, fd_out, 0, 0, 0, 0, 0)
-    syscall(90, dst, 493, 0, 0, 0, 0)
+    syscall(90, dst, mode_perm, 0, 0, 0, 0)
     return 1
 
+fn _installer_ends_with_slash s
+    n = len(s)
+    if n > 0 and str_char_at(s, n - 1) == 47
+        return 1
+    end
+    return 0
+
+fn installer_mkdir_p dir_path
+    // WHY: Pure-syscall recursive mkdir -p (SYS_mkdir=83) for nested install roots without bash.
+    n = len(dir_path)
+    if n == 0
+        return 0
+    end
+    i = 1
+    while i < n
+        if str_char_at(dir_path, i) == 47
+            sub = str_sub(dir_path, 0, i)
+            syscall(83, sub, 493, 0, 0, 0, 0)
+        end
+        i = i + 1
+    end
+    syscall(83, dir_path, 493, 0, 0, 0, 0)
+    return 1
+
+fn installer_copy_dir src_dir dst_dir
+    installer_mkdir_p(dst_dir)
+    dfd = syscall(2, src_dir, 65536, 0, 0, 0, 0)
+    if dfd < 0
+        return 0
+    end
+    buf = syscall(9, 0, 4096, 3, 34, -1, 0)
+    if buf <= 0
+        syscall(3, dfd, 0, 0, 0, 0, 0)
+        return 0
+    end
+    count = 0
+    while 1 == 1
+        n = syscall(217, dfd, buf, 4096, 0, 0, 0)
+        if n <= 0
+            break
+        end
+        pos = 0
+        while pos < n
+            r0 = mem_byte_read(buf, pos + 16)
+            r1 = mem_byte_read(buf, pos + 17)
+            reclen = r0 + (r1 * 256)
+            dtype = mem_byte_read(buf, pos + 18)
+            if reclen <= 0
+                break
+            end
+            name = ""
+            np = pos + 19
+            while 1 == 1
+                ch = mem_byte_read(buf, np)
+                if ch == 0
+                    break
+                end
+                name = name + chr(ch)
+                np = np + 1
+            end
+            if len(name) > 0 and name != "." and name != ".."
+                sp = src_dir + "/" + name
+                dp = dst_dir + "/" + name
+                if dtype == 4
+                    count = count + installer_copy_dir(sp, dp)
+                else
+                    count = count + installer_copy_file(sp, dp, 420)
+                end
+            end
+            pos = pos + reclen
+        end
+    end
+    syscall(11, buf, 4096, 0, 0, 0, 0)
+    syscall(3, dfd, 0, 0, 0, 0, 0)
+    return count
+
 fn installer_deploy_all engine
-    // WHY: Verifies and installs all required sovereign binaries and standard libraries.
-    // Ensure target installation and binary directories exist via direct Linux syscall 83 (sys_mkdir)
-    syscall(83, engine.ie_install_dir, 509, 0, 0, 0, 0)
-    syscall(83, engine.ie_bin_dir, 509, 0, 0, 0, 0)
+    // WHY: Deploys binaries and universe libraries (utso/, aati/, unikernel) faithfully.
+    installer_mkdir_p(engine.ie_install_dir)
+    installer_mkdir_p(engine.ie_bin_dir)
     files = engine.ie_files
     fcount = len(files)
     i = 0
     while i < fcount
         item = get(files, i)
-        if item.if_is_executable == 1
-            // Copy file standalone instead of creating symlinks
-            installer_copy_file(item.if_source_path, item.if_target_path)
+        if _installer_ends_with_slash(item.if_source_path) == 1
+            s_dir = str_sub(item.if_source_path, 0, len(item.if_source_path) - 1)
+            t_dir = str_sub(item.if_target_path, 0, len(item.if_target_path) - 1)
+            dcnt = installer_copy_dir(s_dir, t_dir)
+            if dcnt > 0
+                item.if_is_installed = 1
+                engine.ie_total_installed = engine.ie_total_installed + 1
+            end
+        else
+            perm = 420
+            if item.if_is_executable == 1
+                perm = 493
+            end
+            ok = installer_copy_file(item.if_source_path, item.if_target_path, perm)
+            if ok == 1
+                item.if_is_installed = 1
+                engine.ie_total_installed = engine.ie_total_installed + 1
+            end
         end
-        item.if_is_installed = 1
-        engine.ie_total_installed = engine.ie_total_installed + 1
         i = i + 1
     end
     return engine.ie_total_installed
+end
 
 // ── 4. Banner & Diagnostics Presentation ──────────────────────────────────────
 
@@ -219,11 +324,10 @@ fn installer_main
     installer_add_file(engine, "bin/lipifmt", bin_dir + "/lipifmt", 1)
     installer_add_file(engine, "bin/lipidbg", bin_dir + "/lipidbg", 1)
     installer_add_file(engine, "bin/lipilsp", bin_dir + "/lipilsp", 1)
-    installer_add_file(engine, "bin/lipidb_server", bin_dir + "/lipidb_server", 1)
     installer_add_file(engine, "bin/lipi_akhara", bin_dir + "/lipi_akhara", 1)
     installer_add_file(engine, "utso/", home_dir + "/utso/", 0)
     installer_add_file(engine, "aati/", home_dir + "/aati/", 0)
-    installer_add_file(engine, "src/tools/lipi_unikernel_boot.lp", home_dir + "/src/tools/lipi_unikernel_boot.lp", 0)
+    installer_add_file(engine, "src/tools/lipi_unikernel_boot.lp", home_dir + "/lipi_unikernel_boot.lp", 0)
 
     say "\n▶ Deploying Sovereign Toolchain and Standard Universe..."
     installer_deploy_all(engine)

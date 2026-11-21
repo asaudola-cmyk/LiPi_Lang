@@ -231,30 +231,102 @@
 
 @fn lipi_str_to_int(s)
   @! Parse signed integer from string
-  @! WHY: Uses str_char_at with ASCII byte values (48..57) for freestanding execution.
-  result = 0
-  negative = 0
-  i = 0
+  @! WHY: Skips leading whitespace and accumulates negatively so INT64_MIN (-9223372036854775808)
+  @! parses without intermediate positive signed overflow.
   n = str_len(s)
-  @if n > 0
-    first_ch = str_char_at(s, 0)
-    @if first_ch == 45 @! '-'
-      negative = 1
-      i = 1
+  i = 0
+  @while i < n
+    wch = str_char_at(s, i)
+    @if wch == 32 || wch == 9 || wch == 10 || wch == 13
+      i = i + 1
+    @else
+      break
     @end
   @end
+
+  negative = 0
+  @if i < n
+    first_ch = str_char_at(s, i)
+    @if first_ch == 45 @! '-'
+      negative = 1
+      i = i + 1
+    @elif first_ch == 43 @! '+'
+      i = i + 1
+    @end
+  @end
+
+  acc = 0
   @while i < n
     ch = str_char_at(s, i)
     @if ch >= 48 && ch <= 57
       digit = ch - 48
-      result = result * 10 + digit
+      acc = (acc * 10) - digit
     @end
     i = i + 1
   @end
   @if negative == 1
-    result = 0 - result
+    return acc
   @end
-  return result
+  return 0 - acc
+@end
+
+@fn str_parse_int(s)
+  @! Strict signed integer parser returning { ok: 1/0, value: i64 }
+  @! WHY: Rejects empty or trailing-garbage strings while supporting whitespace and INT64_MIN.
+  n = str_len(s)
+  i = 0
+  @while i < n
+    wch = str_char_at(s, i)
+    @if wch == 32 || wch == 9 || wch == 10 || wch == 13
+      i = i + 1
+    @else
+      break
+    @end
+  @end
+  @if i >= n
+    return { ok: 0, value: 0 }
+  @end
+
+  negative = 0
+  first_ch = str_char_at(s, i)
+  @if first_ch == 45
+    negative = 1
+    i = i + 1
+  @elif first_ch == 43
+    i = i + 1
+  @end
+
+  acc = 0
+  has_digit = 0
+  @while i < n
+    ch = str_char_at(s, i)
+    @if ch >= 48 && ch <= 57
+      digit = ch - 48
+      acc = (acc * 10) - digit
+      has_digit = 1
+      i = i + 1
+    @else
+      break
+    @end
+  @end
+
+  @while i < n
+    tch = str_char_at(s, i)
+    @if tch == 32 || tch == 9 || tch == 10 || tch == 13
+      i = i + 1
+    @else
+      return { ok: 0, value: 0 }
+    @end
+  @end
+
+  @if has_digit == 0
+    return { ok: 0, value: 0 }
+  @end
+  val = acc
+  @if negative == 0
+    val = 0 - acc
+  @end
+  return { ok: 1, value: val }
 @end
 
 // WHY: Canonical string_to_int parser returning integer representation of string s
@@ -527,7 +599,7 @@
 
 @fn string_split(s, sep)
   @! Pure freestanding zero-dependency string splitting
-  @! WHY: Uses byte indices and str_slice instead of pointer addition or character copying.
+  @! WHY: Compares separator bytes in-place via str_char_at without allocating per-byte slice temporaries.
   result = []
   n = str_len(s)
   sep_len = str_len(sep)
@@ -542,7 +614,16 @@
   i = 0
   limit = n - sep_len + 1
   @while i < limit
-    @if str_starts_with(str_slice(s, i, n), sep) == 1
+    matched = 1
+    j = 0
+    @while j < sep_len
+      @if str_char_at(s, i + j) != str_char_at(sep, j)
+        matched = 0
+        break
+      @end
+      j = j + 1
+    @end
+    @if matched == 1
       piece = str_slice(s, last_start, i)
       result = result.push(piece)
       i = i + sep_len
@@ -581,199 +662,63 @@
 @! ─── Char Code ───────────────────────────────────────────────
 
 @fn str_from_char_code(code)
-  @! ASCII code to single-character string
-  @if code == 9 return "\t" @end
-  @if code == 10 return "\n" @end
-  @if code == 13 return "\r" @end
-  @if code == 32 return " " @end
-  @if code == 33 return "!" @end
-  @if code == 34 return "\"" @end
-  @if code == 35 return "#" @end
-  @if code == 36 return "$" @end
-  @if code == 37 return "%" @end
-  @if code == 38 return "&" @end
-  @if code == 39 return "'" @end
-  @if code == 40 return "(" @end
-  @if code == 41 return ")" @end
-  @if code == 42 return "*" @end
-  @if code == 43 return "+" @end
-  @if code == 44 return "," @end
-  @if code == 45 return "-" @end
-  @if code == 46 return "." @end
-  @if code == 47 return "/" @end
-  @if code == 48 return "0" @end
-  @if code == 49 return "1" @end
-  @if code == 50 return "2" @end
-  @if code == 51 return "3" @end
-  @if code == 52 return "4" @end
-  @if code == 53 return "5" @end
-  @if code == 54 return "6" @end
-  @if code == 55 return "7" @end
-  @if code == 56 return "8" @end
-  @if code == 57 return "9" @end
-  @if code == 58 return ":" @end
-  @if code == 59 return ";" @end
-  @if code == 60 return "<" @end
-  @if code == 61 return "=" @end
-  @if code == 62 return ">" @end
-  @if code == 63 return "?" @end
-  @if code == 64 return "@" @end
-  @if code == 65 return "A" @end
-  @if code == 66 return "B" @end
-  @if code == 67 return "C" @end
-  @if code == 68 return "D" @end
-  @if code == 69 return "E" @end
-  @if code == 70 return "F" @end
-  @if code == 71 return "G" @end
-  @if code == 72 return "H" @end
-  @if code == 73 return "I" @end
-  @if code == 74 return "J" @end
-  @if code == 75 return "K" @end
-  @if code == 76 return "L" @end
-  @if code == 77 return "M" @end
-  @if code == 78 return "N" @end
-  @if code == 79 return "O" @end
-  @if code == 80 return "P" @end
-  @if code == 81 return "Q" @end
-  @if code == 82 return "R" @end
-  @if code == 83 return "S" @end
-  @if code == 84 return "T" @end
-  @if code == 85 return "U" @end
-  @if code == 86 return "V" @end
-  @if code == 87 return "W" @end
-  @if code == 88 return "X" @end
-  @if code == 89 return "Y" @end
-  @if code == 90 return "Z" @end
-  @if code == 91 return "[" @end
-  @if code == 92 return "\\" @end
-  @if code == 93 return "]" @end
-  @if code == 94 return "^" @end
-  @if code == 95 return "_" @end
-  @if code == 96 return "`" @end
-  @if code == 97 return "a" @end
-  @if code == 98 return "b" @end
-  @if code == 99 return "c" @end
-  @if code == 100 return "d" @end
-  @if code == 101 return "e" @end
-  @if code == 102 return "f" @end
-  @if code == 103 return "g" @end
-  @if code == 104 return "h" @end
-  @if code == 105 return "i" @end
-  @if code == 106 return "j" @end
-  @if code == 107 return "k" @end
-  @if code == 108 return "l" @end
-  @if code == 109 return "m" @end
-  @if code == 110 return "n" @end
-  @if code == 111 return "o" @end
-  @if code == 112 return "p" @end
-  @if code == 113 return "q" @end
-  @if code == 114 return "r" @end
-  @if code == 115 return "s" @end
-  @if code == 116 return "t" @end
-  @if code == 117 return "u" @end
-  @if code == 118 return "v" @end
-  @if code == 119 return "w" @end
-  @if code == 120 return "x" @end
-  @if code == 121 return "y" @end
-  @if code == 122 return "z" @end
-  @if code == 123 return "{" @end
-  @if code == 124 return "|" @end
-  @if code == 125 return "}" @end
-  @if code == 126 return "~" @end
-  return "?"
+  @! Encode Unicode scalar codepoint (0..0x10FFFF) to UTF-8 string
+  @if code < 0 || code > 1114111
+    return chr(239) + chr(191) + chr(189)
+  @end
+  @if code < 128
+    return chr(code)
+  @end
+  @if code < 2048
+    b0 = 192 + ((code / 64) % 32)
+    b1 = 128 + (code % 64)
+    return chr(b0) + chr(b1)
+  @end
+  @if code < 65536
+    @if code >= 55296 && code <= 57343
+      return chr(239) + chr(191) + chr(189)
+    @end
+    b0 = 224 + ((code / 4096) % 16)
+    b1 = 128 + ((code / 64) % 64)
+    b2 = 128 + (code % 64)
+    return chr(b0) + chr(b1) + chr(b2)
+  @end
+  b0 = 240 + ((code / 262144) % 8)
+  b1 = 128 + ((code / 4096) % 64)
+  b2 = 128 + ((code / 64) % 64)
+  b3 = 128 + (code % 64)
+  return chr(b0) + chr(b1) + chr(b2) + chr(b3)
 @end
 
 @fn char_code(c)
-  @! Single char string → ASCII code
-  @if c == "\t" return 9 @end
-  @if c == "\n" return 10 @end
-  @if c == "\r" return 13 @end
-  @if c == " " return 32 @end
-  @if c == "!" return 33 @end
-  @if c == "\"" return 34 @end
-  @if c == "#" return 35 @end
-  @if c == "$" return 36 @end
-  @if c == "%" return 37 @end
-  @if c == "&" return 38 @end
-  @if c == "'" return 39 @end
-  @if c == "(" return 40 @end
-  @if c == ")" return 41 @end
-  @if c == "*" return 42 @end
-  @if c == "+" return 43 @end
-  @if c == "," return 44 @end
-  @if c == "-" return 45 @end
-  @if c == "." return 46 @end
-  @if c == "/" return 47 @end
-  @if c == "0" return 48 @end
-  @if c == "1" return 49 @end
-  @if c == "2" return 50 @end
-  @if c == "3" return 51 @end
-  @if c == "4" return 52 @end
-  @if c == "5" return 53 @end
-  @if c == "6" return 54 @end
-  @if c == "7" return 55 @end
-  @if c == "8" return 56 @end
-  @if c == "9" return 57 @end
-  @if c == ":" return 58 @end
-  @if c == ";" return 59 @end
-  @if c == "<" return 60 @end
-  @if c == "=" return 61 @end
-  @if c == ">" return 62 @end
-  @if c == "?" return 63 @end
-  @if c == "@" return 64 @end
-  @if c == "A" return 65 @end
-  @if c == "B" return 66 @end
-  @if c == "C" return 67 @end
-  @if c == "D" return 68 @end
-  @if c == "E" return 69 @end
-  @if c == "F" return 70 @end
-  @if c == "G" return 71 @end
-  @if c == "H" return 72 @end
-  @if c == "I" return 73 @end
-  @if c == "J" return 74 @end
-  @if c == "K" return 75 @end
-  @if c == "L" return 76 @end
-  @if c == "M" return 77 @end
-  @if c == "N" return 78 @end
-  @if c == "O" return 79 @end
-  @if c == "P" return 80 @end
-  @if c == "Q" return 81 @end
-  @if c == "R" return 82 @end
-  @if c == "S" return 83 @end
-  @if c == "T" return 84 @end
-  @if c == "U" return 85 @end
-  @if c == "V" return 86 @end
-  @if c == "W" return 87 @end
-  @if c == "X" return 88 @end
-  @if c == "Y" return 89 @end
-  @if c == "Z" return 90 @end
-  @if c == "a" return 97 @end
-  @if c == "b" return 98 @end
-  @if c == "c" return 99 @end
-  @if c == "d" return 100 @end
-  @if c == "e" return 101 @end
-  @if c == "f" return 102 @end
-  @if c == "g" return 103 @end
-  @if c == "h" return 104 @end
-  @if c == "i" return 105 @end
-  @if c == "j" return 106 @end
-  @if c == "k" return 107 @end
-  @if c == "l" return 108 @end
-  @if c == "m" return 109 @end
-  @if c == "n" return 110 @end
-  @if c == "o" return 111 @end
-  @if c == "p" return 112 @end
-  @if c == "q" return 113 @end
-  @if c == "r" return 114 @end
-  @if c == "s" return 115 @end
-  @if c == "t" return 116 @end
-  @if c == "u" return 117 @end
-  @if c == "v" return 118 @end
-  @if c == "w" return 119 @end
-  @if c == "x" return 120 @end
-  @if c == "y" return 121 @end
-  @if c == "z" return 122 @end
-  return 0
+  @! Single char / UTF-8 rune string -> integer codepoint
+  @if c == 0 return 0 @end
+  n = len(c)
+  @if n == 0 return 0 @end
+  b0 = ord(char_at(c, 0))
+  @if b0 < 128 return b0 @end
+  @if b0 >= 194 && b0 < 224 && n >= 2
+    b1 = ord(char_at(c, 1))
+    @if b1 >= 128 && b1 <= 191
+      return ((b0 - 192) * 64) + (b1 - 128)
+    @end
+  @end
+  @if b0 >= 224 && b0 < 240 && n >= 3
+    b1 = ord(char_at(c, 1))
+    b2 = ord(char_at(c, 2))
+    @if b1 >= 128 && b1 <= 191 && b2 >= 128 && b2 <= 191
+      return ((b0 - 224) * 4096) + ((b1 - 128) * 64) + (b2 - 128)
+    @end
+  @end
+  @if b0 >= 240 && b0 < 245 && n >= 4
+    b1 = ord(char_at(c, 1))
+    b2 = ord(char_at(c, 2))
+    b3 = ord(char_at(c, 3))
+    @if b1 >= 128 && b1 <= 191 && b2 >= 128 && b2 <= 191 && b3 >= 128 && b3 <= 191
+      return ((b0 - 240) * 262144) + ((b1 - 128) * 4096) + ((b2 - 128) * 64) + (b3 - 128)
+    @end
+  @end
+  return b0
 @end
 
 @fn is_digit(c)
@@ -1112,9 +1057,6 @@ fn split s
             res = push(res, word)
     return res
 
-fn str_split s
-    return split(s)
-
 fn বিভাজন s
     return split(s)
 
@@ -1154,20 +1096,9 @@ fn split_delim s delim
     res = push(res, cur)
     return res
 
-// WHY: Joins a list of items into a single string separated by sep.
-fn str_join sep items
-    count = len(items)
-    if count == 0
-        return ""
-    res = "" + get(items, 0)
-    i = 1
-    while i < count
-        res = res + sep + get(items, i)
-        i = i + 1
-    return res
-
-fn যুক্ত_করো sep items
-    return str_join(sep, items)
+// WHY: Joins a list of items using the canonical str_join(items, sep) parameter order.
+fn যুক্ত_করো items sep
+    return str_join(items, sep)
 
 // WHY: Repeat string n times.
 fn str_repeat s n

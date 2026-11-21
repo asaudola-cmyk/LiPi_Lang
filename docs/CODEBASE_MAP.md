@@ -84,10 +84,10 @@ lipi/
   - `src/toolkit/fmt/`: Indentation and AST-based code formatter engine.
 - **`src/tools/`**: Top-level source code for standalone CLI utilities:
   - `src/tools/lipi.lp`: Main unified CLI runner (`lipi run`, `lipi build`, `lipi test`).
-  - `src/tools/lipi_lsp.lp`: Standalone LSP server executable.
+  - `src/tools/lipilsp.lp`: Standalone LSP server executable.
   - `src/tools/lipifmt.lp`: Standalone code formatter.
   - `src/tools/lipidbg.lp`: Standalone native debugger.
-  - `src/tools/lipipkg.lp`: Standalone package manager.
+  - `src/tools/aati.lp`: Standalone package manager (`aati` / `haat` / `lipipkg`).
 
 ---
 

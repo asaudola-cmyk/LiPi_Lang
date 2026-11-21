@@ -36,24 +36,98 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_i32_const(s.ws_code, 4)
             wasm_emit_i32_const(s.ws_code, str_len)
             wasm_emit_i32_store(s.ws_code, 2, 0)
-        else
+            wasm_emit_i32_const(s.ws_code, 1) // STDOUT
+            wasm_emit_i32_const(s.ws_code, 0) // iovs
+            wasm_emit_i32_const(s.ws_code, 1) // iovs_len
+            wasm_emit_i32_const(s.ws_code, 8) // nwritten
+            wasm_emit_call(s.ws_code, 0)      // call fd_write
+            wasm_emit_drop(s.ws_code)
+            return 0
+        end
+
+        // General expression print: runtime detection of LPST tagged string vs signed i64 decimal
+        l_val = wasm_synth_alloc_local(s, "__wasi_p_val")
+        l_pos = wasm_synth_alloc_local(s, "__wasi_p_pos")
+        l_neg = wasm_synth_alloc_local(s, "__wasi_p_neg")
+        l_dig = wasm_synth_alloc_local(s, "__wasi_p_dig")
+        l_is_str = wasm_synth_alloc_local(s, "__wasi_p_is_str")
+        l_niovs = wasm_synth_alloc_local(s, "__wasi_p_niovs")
+
+        wasm_synth_compile_expr(s, toks, pos_box)
+        wasm_emit_local_set(s.ws_code, l_val)
+
+        wasm_emit_i64_const(s.ws_code, 0)
+        wasm_emit_local_set(s.ws_code, l_is_str)
+        wasm_emit_local_get(s.ws_code, l_val)
+        wasm_emit_i64_const(s.ws_code, 1040)
+        wasm_emit_i64_ge_s(s.ws_code)
+        wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+            wasm_emit_local_get(s.ws_code, l_val)
+            wasm_emit_i64_const(s.ws_code, 262144)
+            wasm_emit_i64_lt_s(s.ws_code)
+            wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                wasm_emit_local_get(s.ws_code, l_val)
+                wasm_emit_i64_const(s.ws_code, 7)
+                wasm_emit_i64_and(s.ws_code)
+                wasm_emit_i64_const(s.ws_code, 0)
+                wasm_emit_i64_eq(s.ws_code)
+                wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                    wasm_emit_local_get(s.ws_code, l_val)
+                    wasm_emit_i64_const(s.ws_code, 16)
+                    wasm_emit_i64_sub(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                    wasm_emit_i64_const(s.ws_code, 1280332628)
+                    wasm_emit_i64_eq(s.ws_code)
+                    wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                        wasm_emit_i64_const(s.ws_code, 1)
+                        wasm_emit_local_set(s.ws_code, l_is_str)
+                    wasm_emit_end(s.ws_code)
+                wasm_emit_end(s.ws_code)
+            wasm_emit_end(s.ws_code)
+        wasm_emit_end(s.ws_code)
+
+        wasm_emit_local_get(s.ws_code, l_is_str)
+        wasm_emit_i64_const(s.ws_code, 1)
+        wasm_emit_i64_eq(s.ws_code)
+        wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+            // iovs[0] = { base: l_val, len: [l_val - 8] }, iovs[1] = { base: 95 ('\n'), len: 1 }
+            wasm_emit_i32_const(s.ws_code, 0)
+            wasm_emit_local_get(s.ws_code, l_val)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+
+            wasm_emit_i32_const(s.ws_code, 4)
+            wasm_emit_local_get(s.ws_code, l_val)
+            wasm_emit_i64_const(s.ws_code, 8)
+            wasm_emit_i64_sub(s.ws_code)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i64_load(s.ws_code, 3, 0)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+
+            wasm_emit_i32_const(s.ws_code, 95)
+            wasm_emit_i64_const(s.ws_code, 10)
+            wasm_emit_i64_store8(s.ws_code, 0, 0)
+
+            wasm_emit_i32_const(s.ws_code, 8)
+            wasm_emit_i32_const(s.ws_code, 95)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+
+            wasm_emit_i32_const(s.ws_code, 12)
+            wasm_emit_i32_const(s.ws_code, 1)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+
+            wasm_emit_i64_const(s.ws_code, 2)
+            wasm_emit_local_set(s.ws_code, l_niovs)
+        wasm_emit_else(s.ws_code)
             // Format evaluated signed i64 expression into decimal ASCII bytes at [64..95] + '\n'
-            l_val = wasm_synth_alloc_local(s, "__wasi_p_val")
-            l_pos = wasm_synth_alloc_local(s, "__wasi_p_pos")
-            l_neg = wasm_synth_alloc_local(s, "__wasi_p_neg")
-            l_dig = wasm_synth_alloc_local(s, "__wasi_p_dig")
-
-            wasm_synth_compile_expr(s, toks, pos_box)
-            wasm_emit_local_set(s.ws_code, l_val)
-
-            // Store trailing '\n' at offset 95 and initialize cursor pos = 95
             wasm_emit_i32_const(s.ws_code, 95)
             wasm_emit_i64_const(s.ws_code, 10)
             wasm_emit_i64_store8(s.ws_code, 0, 0)
             wasm_emit_i64_const(s.ws_code, 95)
             wasm_emit_local_set(s.ws_code, l_pos)
 
-            // Track sign bit safely (handles INT64_MIN without negation overflow)
             wasm_emit_i64_const(s.ws_code, 0)
             wasm_emit_local_set(s.ws_code, l_neg)
             wasm_emit_local_get(s.ws_code, l_val)
@@ -64,7 +138,6 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_local_set(s.ws_code, l_neg)
             wasm_emit_end(s.ws_code)
 
-            // Extract decimal digits backward via do-while loop
             wasm_emit_loop(s.ws_code, WASM_TYPE_EMPTY)
             wasm_emit_local_get(s.ws_code, l_pos)
             wasm_emit_i64_const(s.ws_code, 1)
@@ -100,7 +173,6 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_br_if(s.ws_code, 0)
             wasm_emit_end(s.ws_code)
 
-            // Prepend '-' if value was negative
             wasm_emit_local_get(s.ws_code, l_neg)
             wasm_emit_i64_const(s.ws_code, 0)
             wasm_emit_i64_ne(s.ws_code)
@@ -114,7 +186,6 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_i64_store8(s.ws_code, 0, 0)
             wasm_emit_end(s.ws_code)
 
-            // Populate iovs[0] = { base: l_pos, len: 96 - l_pos }
             wasm_emit_i32_const(s.ws_code, 0)
             wasm_emit_local_get(s.ws_code, l_pos)
             wasm_emit_i32_wrap_i64(s.ws_code)
@@ -126,14 +197,18 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_i64_sub(s.ws_code)
             wasm_emit_i32_wrap_i64(s.ws_code)
             wasm_emit_i32_store(s.ws_code, 2, 0)
-        end
-        // 2. Invoke WASI fd_write: param1(fd=1), param2(iovs=0), param3(iovs_len=1), param4(nwritten=8)
-        wasm_emit_i32_const(s.ws_code, 1) // STDOUT
-        wasm_emit_i32_const(s.ws_code, 0) // iovs
-        wasm_emit_i32_const(s.ws_code, 1) // iovs_len
-        wasm_emit_i32_const(s.ws_code, 8) // nwritten
-        wasm_emit_call(s.ws_code, 0)      // call fd_write (imported func index 0)
-        wasm_emit_drop(s.ws_code)          // drop result errno
+
+            wasm_emit_i64_const(s.ws_code, 1)
+            wasm_emit_local_set(s.ws_code, l_niovs)
+        wasm_emit_end(s.ws_code)
+        // Invoke WASI fd_write: fd=1, iovs=0, iovs_len=l_niovs, nwritten=16
+        wasm_emit_i32_const(s.ws_code, 1)
+        wasm_emit_i32_const(s.ws_code, 0)
+        wasm_emit_local_get(s.ws_code, l_niovs)
+        wasm_emit_i32_wrap_i64(s.ws_code)
+        wasm_emit_i32_const(s.ws_code, 16)
+        wasm_emit_call(s.ws_code, 0)
+        wasm_emit_drop(s.ws_code)
         return 0
 
     // ── 2. Control Flow: return / ফেরত ─────────────────────────────────────────
@@ -461,17 +536,22 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
         s.ws_block_depth = s.ws_block_depth + 1
         cont_depth = s.ws_block_depth
 
-        // Condition check: var >= end -> break out of outer block
+        // Condition check: var > end -> break out of outer block (inclusive a..b)
         wasm_emit_local_get(s.ws_code, var_idx)
         wasm_emit_local_get(s.ws_code, end_idx)
-        wasm_emit_i64_ge_s(s.ws_code)
+        wasm_emit_i64_gt_s(s.ws_code)
         rel_exit = s.ws_block_depth - brk_depth
         wasm_emit_br_if(s.ws_code, rel_exit)
+
+        // Inner step block so continue lands directly at var = var + 1 increment
+        wasm_emit_block(s.ws_code, WASM_TYPE_EMPTY)
+        s.ws_block_depth = s.ws_block_depth + 1
+        step_depth = s.ws_block_depth
 
         // Push loop context
         loop_ctx = WasmLoopContext()
         loop_ctx.wlc_break_depth = brk_depth
-        loop_ctx.wlc_continue_depth = cont_depth
+        loop_ctx.wlc_continue_depth = step_depth
         loop_ctx.wlc_is_for = 1
         loop_ctx.wlc_var_idx = var_idx
         push(s.ws_loop_stack, loop_ctx)
@@ -509,6 +589,10 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             cur_txt = cur_t.tok_text
             if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
                 list_set(pos_box, 0, cur_p + 1)
+
+        // Close inner $step block before increment so `continue` reaches var = var + 1
+        wasm_emit_end(s.ws_code)
+        s.ws_block_depth = s.ws_block_depth - 1
 
         // Step increment: var = var + 1
         wasm_emit_local_get(s.ws_code, var_idx)
@@ -859,15 +943,17 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 wasm_synth_compile_expr(s, toks, pos_box)
                 var_idx = wasm_synth_alloc_local(s, var_name)
                 wasm_emit_local_set(s.ws_code, var_idx)
+                wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
+                wasm_synth_mark_str_var(s, var_name, s.ws_last_expr_is_str)
         return 0
 
     // ── 8. Struct Field & Variable Assignment: obj.field = expr / x = expr ────
     if k == TOK_IDENT()
         // Check obj.field = expr (with arbitrary chained a.b.c = expr support)
-        if pos + 3 < toks.len() and (toks[pos + 1].tok_kind == TOK_DOT() or toks[pos + 1].tok_text == ".") and toks[pos + 2].tok_kind == TOK_IDENT()
+        if pos + 3 < toks.len() and (toks[pos + 1].tok_kind == TOK_DOT() or toks[pos + 1].tok_text == ".") and wasm_is_ident_token(toks[pos + 2].tok_kind) == 1
             scan_f = pos + 1
             fnames = list()
-            while scan_f + 1 < toks.len() and (toks[scan_f].tok_kind == TOK_DOT() or toks[scan_f].tok_text == ".") and toks[scan_f + 1].tok_kind == TOK_IDENT()
+            while scan_f + 1 < toks.len() and (toks[scan_f].tok_kind == TOK_DOT() or toks[scan_f].tok_text == ".") and wasm_is_ident_token(toks[scan_f + 1].tok_kind) == 1
                 push(fnames, toks[scan_f + 1].tok_text)
                 scan_f = scan_f + 2
             if fnames.len() > 0 and scan_f < toks.len() and (toks[scan_f].tok_kind == TOK_ASSIGN() or toks[scan_f].tok_text == "=")
@@ -899,6 +985,8 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 wasm_synth_compile_expr(s, toks, pos_box)
                 var_idx = wasm_synth_alloc_local(s, var_name)
                 wasm_emit_local_set(s.ws_code, var_idx)
+                wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
+                wasm_synth_mark_str_var(s, var_name, s.ws_last_expr_is_str)
                 return 0
 
             // Compound assignment: x += expr, x -= expr, x *= expr, x /= expr, x %= expr
@@ -1027,7 +1115,7 @@ fn wasm_synth_compile_program tokens
                         break
                     elif st_f.tok_span.span_start_line > hdr_line_s and st_f.tok_span.span_start_col <= base_col_s
                         break
-                    elif sk_f == TOK_IDENT()
+                    elif wasm_is_ident_token(sk_f) == 1
                         push(s_fields, stxt_f)
                         sp = sp + 1
                         if sp < toks.len() and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
@@ -1123,10 +1211,14 @@ fn wasm_synth_compile_program tokens
             target_fn = wasm_synth_find_function(s, fn_name)
             if target_fn != 0
                 saved_ws_try_depths = s.ws_try_depths
+                saved_ws_float_vars = s.ws_float_vars
+                saved_ws_str_vars = s.ws_str_vars
                 s.ws_current_fn = target_fn
                 s.ws_code = target_fn.wfn_code
                 s.ws_block_depth = 0
                 s.ws_try_depths = list()
+                s.ws_float_vars = list()
+                s.ws_str_vars = list()
 
                 // Compile function body until explicit end marker, next function, dedent, or EOF
                 while get(pos_box, 0) < toks.len()
@@ -1165,6 +1257,8 @@ fn wasm_synth_compile_program tokens
                 s.ws_code = main_fn.wfn_code
                 s.ws_block_depth = 0
                 s.ws_try_depths = saved_ws_try_depths
+                s.ws_float_vars = saved_ws_float_vars
+                s.ws_str_vars = saved_ws_str_vars
         else
             // Compile top-level statement into main function
             b_p = get(pos_box, 0)

@@ -39,6 +39,12 @@ fn x86_synth_try_fold_for_residue s var_name end_off start_is_one toks body_star
     if x86_synth_is_ident_token(t0.tok_kind) != 1
         return 0
     acc_name = t0.tok_text
+    if acc_name == var_name
+        return 0
+    end
+    if x86_synth_find_local_var(s, acc_name) == 0 and x86_synth_find_mutable_global(s, acc_name) >= 512
+        return 0
+    end
     p = p + 1
 
     // 2. '=' token
@@ -71,11 +77,11 @@ fn x86_synth_try_fold_for_residue s var_name end_off start_is_one toks body_star
         return 0
     p = p + 1
 
-    // Modulo constant K
+    // Modulo constant K (guard against mod_k*(mod_k-1) overflow beyond signed i64)
     if p >= body_end or toks[p].tok_kind != TOK_INT()
         return 0
     mod_k = toks[p].tok_int_val
-    if mod_k <= 0
+    if mod_k <= 0 or mod_k >= 3037000500
         return 0
     p = p + 1
 
@@ -132,14 +138,14 @@ fn x86_synth_try_fold_for_residue s var_name end_off start_is_one toks body_star
     x86_synth_emit_byte(s, 247)
     x86_synth_emit_byte(s, 241)
 
-    // Period sum: S_K = (mod_k * (mod_k - 1)) / 2
+    // Period sum: S_K = (mod_k * (mod_k - 1)) / 2 (64-bit imul via %r8 avoids 32-bit imm truncation)
     period_sum = (mod_k * (mod_k - 1)) / 2
 
-    // imul rax, period_sum (48 69 C0 imm32)
-    x86_synth_emit_byte(s, 72)
-    x86_synth_emit_byte(s, 105)
-    x86_synth_emit_byte(s, 192)
-    x86_synth_emit_u32(s, period_sum)
+    // movabs r8, period_sum (49 B8 imm64); imul rax, r8 (49 0F AF C0)
+    x86_synth_emit_byte(s, 73)
+    x86_synth_emit_byte(s, 184)
+    x86_synth_emit_u64(s, period_sum)
+    x86_synth_emit_bytes(s, [73, 15, 175, 192])
 
     // Compute rem_sum = (r * (r + 1)) / 2 into %rcx:
     // lea rcx, [rdx + 1] (48 8D 4A 01)
@@ -415,18 +421,154 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
         end
     end
 
-    // Compile start expression into %rax
+    // Compile start or collection expression into %rax
     x86_synth_compile_expr(s, toks, pos_box)
+
+    // Inspect whether next token is '..' (range loop) or collection loop (`for x in col`)
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    is_range_loop = 0
+    if get(pos_box, 0) < toks.len()
+        dot_t = toks[get(pos_box, 0)]
+        if dot_t.tok_kind == TOK_DOTDOT() or (dot_t.tok_kind != TOK_STR() and dot_t.tok_text == "..")
+            is_range_loop = 1
+        end
+    end
+
+    if is_range_loop == 0
+        // Iterate elements 0..len(col)-1 via _lipi_len and _lipi_list_get
+        col_id = s.synth_code.len()
+        col_var = "__for_col_" + str(col_id)
+        len_var = "__for_len_" + str(col_id)
+        idx_var = "__for_idx_" + str(col_id)
+
+        col_off = x86_synth_alloc_var(s, col_var)
+        x86_synth_emit_store_var(s, 0, col_off)
+
+        // rdi = col -> rax = len(col)
+        x86_synth_emit_bytes(s, [72, 137, 199])
+        x86_synth_emit_call_helper(s, "_lipi_len")
+        len_off = x86_synth_alloc_var(s, len_var)
+        x86_synth_emit_store_var(s, 0, len_off)
+
+        // idx = 0
+        idx_off = x86_synth_alloc_var(s, idx_var)
+        x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+        x86_synth_emit_store_var(s, 0, idx_off)
+
+        // Initialize iteration variable binding (supports register allocation cleanly)
+        x86_synth_emit_bytes(s, [49, 192])
+        elem_off = x86_synth_bind_reg_var(s, var_name, 0)
+        x86_synth_set_prim_type(s, var_name, "")
+
+        s.synth_last_store_end = 0 - 1
+        loop_header = s.synth_code.len()
+        push(s.synth_loop_starts, loop_header)
+        loop_brks = list()
+        push(s.synth_loop_breaks, loop_brks)
+        loop_conts = list()
+        push(s.synth_loop_continues, loop_conts)
+        push(s.synth_loop_try_depths, s.synth_try_depth)
+
+        // cmp idx, len -> jge loop_exit
+        x86_synth_emit_load_var(s, 0, idx_off)
+        if len_off <= 128
+            disp8_c = (256 - (len_off % 256)) % 256
+            x86_synth_emit_bytes(s, [72, 59, 69, disp8_c])
+        else
+            disp32_c = 0 - len_off
+            x86_synth_emit_bytes(s, [72, 59, 133])
+            x86_synth_emit_u32(s, disp32_c)
+        end
+        x86_synth_emit_byte(s, 15)
+        x86_synth_emit_byte(s, 141) // jge rel32
+        patch_loop_exit = s.synth_code.len()
+        x86_synth_emit_u32(s, 0)
+
+        // Fetch element: _lipi_list_get(col, idx) -> rax -> var_name
+        x86_synth_emit_load_var(s, 7, col_off)
+        x86_synth_emit_load_var(s, 6, idx_off)
+        x86_synth_emit_call_helper(s, "_lipi_list_get")
+        lv_elem = x86_synth_find_local_var(s, var_name)
+        if lv_elem != 0 and lv_elem.lv_is_spilled == 0 and lv_elem.lv_reg >= 0
+            x86_synth_emit_mov_reg_reg(s, lv_elem.lv_reg, 0)
+        end
+        x86_synth_emit_store_var(s, 0, elem_off)
+
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        while get(pos_box, 0) < toks.len()
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p >= toks.len()
+                break
+            end
+            cur_t = toks[cur_p]
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                break
+            end
+            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                break
+            end
+            b_p = get(pos_box, 0)
+            x86_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) == b_p
+                list_set(pos_box, 0, b_p + 1)
+            end
+            if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
+                break
+            end
+        end
+
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cur_p = get(pos_box, 0)
+        if cur_p < toks.len()
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                list_set(pos_box, 0, cur_p + 1)
+            end
+        end
+
+        latch_off = s.synth_code.len()
+        ci = 0
+        while ci < loop_conts.len()
+            cont_patch = loop_conts[ci]
+            c_rel32 = latch_off - (cont_patch + 4)
+            x86_synth_patch_u32(s, cont_patch, c_rel32)
+            ci = ci + 1
+        end
+
+        x86_synth_emit_load_var(s, 0, idx_off)
+        x86_synth_emit_bytes(s, [72, 255, 192]) // inc rax
+        x86_synth_emit_store_var(s, 0, idx_off)
+
+        x86_synth_emit_byte(s, 233)
+        next_ip = s.synth_code.len() + 4
+        disp32 = loop_header - next_ip
+        x86_synth_emit_u32(s, disp32)
+
+        loop_exit_off = s.synth_code.len()
+        rel32 = loop_exit_off - (patch_loop_exit + 4)
+        x86_synth_patch_u32(s, patch_loop_exit, rel32)
+
+        bi = 0
+        while bi < loop_brks.len()
+            brk_patch = loop_brks[bi]
+            b_rel32 = loop_exit_off - (brk_patch + 4)
+            x86_synth_patch_u32(s, brk_patch, b_rel32)
+            bi = bi + 1
+        end
+
+        s.synth_loop_starts = pop(s.synth_loop_starts)
+        s.synth_loop_breaks = pop(s.synth_loop_breaks)
+        s.synth_loop_continues = pop(s.synth_loop_continues)
+        s.synth_loop_try_depths = pop(s.synth_loop_try_depths)
+        return 0
+    end
+
     // WHY: Use x86_synth_bind_reg_var with register hint 1 to assign callee-saved register (%r12-%r15, %rbx)
     var_off = x86_synth_bind_reg_var(s, var_name, 1)
     x86_synth_set_prim_type(s, var_name, "int")
 
-    // Consume '..' if present
-    x86_synth_skip_whitespace_tokens(toks, pos_box)
-    if get(pos_box, 0) < toks.len()
-        dot_t = toks[get(pos_box, 0)]
-        if dot_t.tok_kind == TOK_DOTDOT() or (dot_t.tok_kind != TOK_STR() and dot_t.tok_text == "..")
-            list_set(pos_box, 0, get(pos_box, 0) + 1)
+    // Consume '..'
+    list_set(pos_box, 0, get(pos_box, 0) + 1)
     x86_synth_skip_whitespace_tokens(toks, pos_box)
 
     // Compile end expression into %rax

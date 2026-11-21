@@ -165,7 +165,7 @@ import "utso/core/string"
   return 0
 @end
 
-@fn kzg_srs_new(tau: i64, p_mod: i64) -> KZG_SRS
+@fn kzg_srs_new(tau: i64, p_mod: i64) -> KZGSRS
   g1 = ec_point_new(1, 2)
   g2 = g2_point_new(fp2_new(1, 0), fp2_new(2, 0))
   g2_tau = g2_scalar_mult(tau, g2, p_mod)
@@ -210,8 +210,8 @@ import "utso/core/string"
   eval_val = poly_eval(coeffs, eval_pt, p_mod)
 
   return {
-    cm_x: c_pt.x,
-    cm_y: c_pt.y,
+    cm_x: c_pt.x_coord,
+    cm_y: c_pt.y_coord,
     eval_point: eval_pt,
     proof_eval: eval_val
   }
@@ -265,7 +265,21 @@ import "utso/core/string"
   return w_pt
 @end
 
+@fn _plonk_is_on_bn_g1(pt, p_mod)
+  @if pt.is_inf == 1 return 0 @end
+  lhs = fp_mul(pt.y_coord, pt.y_coord, p_mod)
+  x2 = fp_mul(pt.x_coord, pt.x_coord, p_mod)
+  x3 = fp_mul(x2, pt.x_coord, p_mod)
+  rhs = fp_add(x3, 3, p_mod)
+  @if lhs == rhs return 1 @end
+  return 0
+@end
+
 @fn kzg_verify(cm_pt, z, v, w_pt, srs, p_mod)
+  @! WHY: Reject forged zero / point-at-infinity or off-curve EC points before pairing check.
+  @if _plonk_is_on_bn_g1(cm_pt, p_mod) != 1 return 0 @end
+  @if w_pt.is_inf == 0 && _plonk_is_on_bn_g1(w_pt, p_mod) != 1 return 0 @end
+
   @! Verifies pairing identity: e(W, [tau - z]_2) == e(C - v*[1]_1, [1]_2)
   @! 1. Q_tau_minus_z = [tau]_2 - z*[1]_2
   z_g2 = g2_scalar_mult(z, srs.g2_gen, p_mod)
@@ -322,7 +336,7 @@ import "utso/core/string"
 @end
 
 @fn plonk_verify_recursive_proof(proof, srs, p_mod)
-  @! 1. Check size limit
+  @! 1. Check size limit & non-trivial hash
   @if proof.proof_size_bytes > 22528
     return 0
   @end
@@ -330,7 +344,7 @@ import "utso/core/string"
     return 0
   @end
 
-  @! 2. Execute genuine pairing KZG verification
+  @! 2. Execute genuine curve & pairing KZG verification
   cm_pt = ec_point_new(proof.commitment.cm_x, proof.commitment.cm_y)
   z = proof.commitment.eval_point
   v = proof.commitment.proof_eval

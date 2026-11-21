@@ -1,6 +1,8 @@
 // WHY: Pure declarative domain specific query language for sovereign LiPi database
 @! LiPi Query Language — Simple SQL-like DSL
 
+import "utso/core/string"
+
 @struct Query
   q_table: string
   q_select: array

@@ -2,8 +2,9 @@ name: Lipi Sovereign Native CI
 
 # WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
 # CI verifies standalone Stage-1->2->3 Static-PIE deterministic bootstrap, W^X (0 RWE)
-# audit across all bin/* tools, 255 regression tests, 31/31 aati verify & aati.lock,
-# --kavach toolchain dogfooding, Node V8 WebAssembly execution, Shared .so (ctypes) + -g DWARF,
+# audit across all bin/* tools, 257 regression tests, 31/31 aati verify & aati.lock,
+# full utso/aati/examples compile sweeps, valid OPC .vsix packaging, --kavach toolchain dogfooding,
+# Node V8 WebAssembly execution, Shared .so (ctypes) + -g DWARF,
 # Mach-O LC_CODE_SIGNATURE validation, and native Windows PE32+ (.exe) & macOS Mach-O validation.
 
 on:
@@ -17,7 +18,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi Static-PIE Bootstrap, W^X Audit & 255-Test Suite (Ubuntu)"
+    name: "Lipi Static-PIE Bootstrap, W^X Audit & 257-Test Suite (Ubuntu)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -51,9 +52,18 @@ jobs:
             test "$rwe" = "0"
           done
 
-      - name: Run Full 255-Test Sovereign Regression Suite (0% Shell)
+      - name: Run Full 257-Test Sovereign Regression Suite (0% Shell)
         run: |
           ./bin/lipi test
+
+      - name: Verify Full Ecosystem Clean Compile Sweeps (utso + aati + examples)
+        run: |
+          for grp in utso aati examples; do
+            for f in $(find "$grp" -name "*.lp" | sort); do
+              ./bin/lipc "$f" -o /tmp/ci_sw_bin >/dev/null
+            done
+          done
+          rm -f /tmp/ci_sw_bin
 
       - name: Verify Kavach Toolchain Dogfooding, Akhara Selftest & Bench Quick
         run: |
@@ -186,16 +196,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Audit for Python Elimination in Core
+      - name: Audit for Python Elimination Across Repository
         run: |
-          echo "Auditing core directories (src, utso, aati, tests, bin) for Python files..."
-          py_files=$(find src utso aati tests bin -name "*.py" 2>/dev/null || true)
+          echo "Auditing repository directories (src, utso, aati, tests, bin, benchmarks, scripts) for Python files..."
+          py_files=$(find src utso aati tests bin benchmarks scripts -name "*.py" 2>/dev/null || true)
           if [ -n "$py_files" ]; then
-            echo "❌ Sovereignty breach: Found Python files in core tree:"
+            echo "❌ Sovereignty breach: Found Python files in repository:"
             echo "$py_files"
             exit 1
           fi
-          echo "✔ 100% Pure: Zero Python files in src, utso, aati, tests, bin!"
+          echo "✔ 100% Pure: Zero Python files in src, utso, aati, tests, bin, benchmarks, scripts!"
 
       - name: Audit for Bytecode Artifacts
         run: |

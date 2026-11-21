@@ -246,11 +246,11 @@ fn sql_engine_free engine
             max_rows = mem_read(tbl, 24)
             data_buf = mem_read(tbl, 32)
             mask_buf = mem_read(tbl, 40)
-            mem_free(data_buf, max_rows * col_count * 8)
-            mem_free(mask_buf, max_rows)
-            mem_free(tbl, 64)
+            sys_free(data_buf)
+            sys_free(mask_buf)
+            sys_free(tbl)
         i = i + 1
-    mem_free(engine, 136)
+    sys_free(engine)
     return 0
 
 // ── SQL Text Query Tokenizer & Execution Planner ─────────────────────────────

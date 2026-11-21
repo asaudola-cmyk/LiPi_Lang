@@ -343,11 +343,13 @@ import "aati/lipidb/buffer"
       curr_id = child_id
     @else
       leaf_id = curr_id
-      del_ok = page_delete_leaf_cell(buf, key)
-      @if del_ok == 0
+      del_res = page_delete_leaf_cell(buf, key)
+      @if del_res.ok == 0
         buffer_pool_unpin_page(tree.pool, leaf_id, 0)
         return tree
       @end
+      buf = del_res.buf
+      buffer_pool_set_page_buf(tree.pool, leaf_id, buf)
 
       cnt = page_get_cell_count(buf)
       @if cnt == 0 && leaf_id != tree.root_page_id
@@ -355,25 +357,73 @@ import "aati/lipidb/buffer"
         next_id = page_get_next_page_id(buf)
         @if prev_id != 0
           p_buf = buffer_pool_fetch_page(tree.pool, prev_id)
-          page_set_next_page_id(p_buf, next_id)
+          p_buf = page_set_next_page_id(p_buf, next_id)
+          buffer_pool_set_page_buf(tree.pool, prev_id, p_buf)
           buffer_pool_unpin_page(tree.pool, prev_id, 1)
         @end
         @if next_id != 0
           n_buf = buffer_pool_fetch_page(tree.pool, next_id)
-          page_set_prev_page_id(n_buf, prev_id)
+          n_buf = page_set_prev_page_id(n_buf, prev_id)
+          buffer_pool_set_page_buf(tree.pool, next_id, n_buf)
           buffer_pool_unpin_page(tree.pool, next_id, 1)
+        @end
+        @! Unlink empty leaf from parent internal routing page
+        @if stack.len() > 0
+          parent_id = stack[stack.len() - 1]
+          par_buf = buffer_pool_fetch_page(tree.pool, parent_id)
+          par_cnt = page_get_cell_count(par_buf)
+          par_dirty = 0
+          @if page_get_first_child_page_id(par_buf) == leaf_id && par_cnt > 0
+            next_first = page_get_internal_child_page_id(par_buf, 0)
+            par_buf = page_set_first_child_page_id(par_buf, next_first)
+            del_p0 = page_delete_internal_cell_at(par_buf, 0)
+            par_buf = del_p0.buf
+            par_dirty = 1
+          @else
+            si = 0
+            @while si < par_cnt
+              @if page_get_internal_child_page_id(par_buf, si) == leaf_id
+                del_ps = page_delete_internal_cell_at(par_buf, si)
+                par_buf = del_ps.buf
+                par_dirty = 1
+                break
+              @end
+              si = si + 1
+            @end
+          @end
+          @if par_dirty == 1
+            buffer_pool_set_page_buf(tree.pool, parent_id, par_buf)
+          @end
+          buffer_pool_unpin_page(tree.pool, parent_id, par_dirty)
         @end
       @elif cnt > 0 && stack.len() > 0
         @! Synchronize parent internal page if this leaf's minimum key changed
         new_min_k = page_get_leaf_key(buf, 0)
         parent_id = stack[stack.len() - 1]
-        p_buf = buffer_pool_fetch_page(tree.pool, parent_id)
-        p_cnt = page_get_cell_count(p_buf)
-        @if p_cnt > 0 && str_len(new_min_k) > 0
-          buffer_pool_unpin_page(tree.pool, parent_id, 1)
-        @else
-          buffer_pool_unpin_page(tree.pool, parent_id, 0)
+        par_buf = buffer_pool_fetch_page(tree.pool, parent_id)
+        par_cnt = page_get_cell_count(par_buf)
+        par_dirty = 0
+        @if par_cnt > 0 && str_len(new_min_k) > 0
+          si = 0
+          @while si < par_cnt
+            @if page_get_internal_child_page_id(par_buf, si) == leaf_id
+              old_sep = page_get_internal_key(par_buf, si)
+              @if old_sep != new_min_k
+                del_ps = page_delete_internal_cell_at(par_buf, si)
+                par_buf = del_ps.buf
+                ins_ps = page_insert_internal_cell(par_buf, new_min_k, leaf_id)
+                par_buf = ins_ps.buf
+                par_dirty = 1
+              @end
+              break
+            @end
+            si = si + 1
+          @end
         @end
+        @if par_dirty == 1
+          buffer_pool_set_page_buf(tree.pool, parent_id, par_buf)
+        @end
+        buffer_pool_unpin_page(tree.pool, parent_id, par_dirty)
       @end
 
       buffer_pool_unpin_page(tree.pool, leaf_id, 1)

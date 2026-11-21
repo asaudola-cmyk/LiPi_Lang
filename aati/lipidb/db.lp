@@ -19,9 +19,9 @@ import "aati/lipidb/kv"
 // ── Database Engine Factory ───────────────────────────────────────────────────
 // WHY: Opens or creates an ACID-compliant LipiKV database with Write-Ahead Logging.
 @fn lipi_db_open(path, capacity)
-    if capacity <= 0
+    @if capacity <= 0
         capacity = 64
-    end
+    @end
     return db_open(path, capacity)
 @end
 

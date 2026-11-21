@@ -20,6 +20,9 @@ fn silicon_hardware_stamp ptr tag_val
     mem_write(ptr, 8, tag_val)
     return seal
 
+fn silicon_read_slot ptr off
+    return mem_read(ptr, off)
+
 // Bilingual crowned helper: reads kernel monotonic counter & returns folded hardware entropy word.
 কাজ সিলিকন_এন্ট্রপি মান
     টিকিট = syscall(39, 0, 0, 0, 0, 0, 0)
@@ -46,8 +49,8 @@ fn main
         say "[ERR] Vault allocation failed"
         return 1
 
-    sealed_sig = mem_read(slot, 0)
-    stored_tag = mem_read(slot, 8)
+    sealed_sig = silicon_read_slot(slot, 0)
+    stored_tag = silicon_read_slot(slot, 8)
     free(slot)
 
     delta_bytes = arena_allocated() - base_bytes

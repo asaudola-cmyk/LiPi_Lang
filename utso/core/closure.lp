@@ -42,17 +42,44 @@ fn closure_env_set cl index value
         list_set(env, index, value)
     return cl
 
+fn closure_from_fn fn_ref
+    // WHY: Wraps a native function pointer or hardware closure object as a Closure descriptor.
+    return closure_new(fn_ref, list(), 1)
+
+fn closure_invoke cl arg
+    // WHY: Dispatches real function pointers / closures (fn_tag > 4096) or legacy tags 1..3.
+    fn_tag = cl.cl_fn_tag
+    if fn_tag > 4096
+        if cl.cl_param_count == 2 and cl.cl_env != 0 and cl.cl_env.len() > 0
+            return fn_tag(arg, cl.cl_env)
+        end
+        return fn_tag(arg)
+    end
+    if fn_tag == 1
+        return arg * closure_env_get(cl, 0)
+    elif fn_tag == 2
+        return arg + closure_env_get(cl, 0)
+    elif fn_tag == 3
+        return arg * arg
+    end
+    return arg
+
 fn closure_map l cl
-    // WHY: Functional map applying closure transformation over all elements of list.
+    // WHY: Functional map applying real closure/function pointer or legacy tag over all elements.
     res = list()
     i = 0
     n = l.len()
+    fn_tag = cl.cl_fn_tag
     while i < n
         elem = l[i]
-        // Evaluate closure against element
-        fn_tag = cl.cl_fn_tag
         transformed = elem
-        if fn_tag == 1
+        if fn_tag > 4096
+            if cl.cl_param_count == 2 and cl.cl_env != 0 and cl.cl_env.len() > 0
+                transformed = fn_tag(elem, cl.cl_env)
+            else
+                transformed = fn_tag(elem)
+            end
+        elif fn_tag == 1
             // Multiply by env[0]
             factor = closure_env_get(cl, 0)
             transformed = elem * factor
@@ -68,15 +95,23 @@ fn closure_map l cl
     return res
 
 fn closure_filter l cl
-    // WHY: Functional filter selecting elements matching closure predicate.
+    // WHY: Functional filter applying real predicate fn/closure or legacy tags 10..11.
     res = list()
     i = 0
     n = l.len()
+    fn_tag = cl.cl_fn_tag
     while i < n
         elem = l[i]
-        fn_tag = cl.cl_fn_tag
         keep = 0
-        if fn_tag == 10
+        if fn_tag > 4096
+            if cl.cl_param_count == 2 and cl.cl_env != 0 and cl.cl_env.len() > 0
+                if fn_tag(elem, cl.cl_env) != 0
+                    keep = 1
+                end
+            elif fn_tag(elem) != 0
+                keep = 1
+            end
+        elif fn_tag == 10
             // Greater than env[0]
             limit = closure_env_get(cl, 0)
             if elem > limit
@@ -91,14 +126,20 @@ fn closure_filter l cl
     return res
 
 fn closure_reduce l cl initial
-    // WHY: Functional fold/reduce accumulating list elements via closure accumulator.
+    // WHY: Functional fold/reduce applying real reducer fn/closure (acc, elem) or legacy tags 20..21.
     acc = initial
     i = 0
     n = l.len()
+    fn_tag = cl.cl_fn_tag
     while i < n
         elem = l[i]
-        fn_tag = cl.cl_fn_tag
-        if fn_tag == 20
+        if fn_tag > 4096
+            if cl.cl_param_count == 3 and cl.cl_env != 0 and cl.cl_env.len() > 0
+                acc = fn_tag(acc, elem, cl.cl_env)
+            else
+                acc = fn_tag(acc, elem)
+            end
+        elif fn_tag == 20
             // Sum accumulator
             acc = acc + elem
         elif fn_tag == 21

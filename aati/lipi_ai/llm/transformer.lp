@@ -53,6 +53,50 @@ import "aati/lipi_ai/autodiff"
 @! 2. NORMALIZATION LAYERS (RMSNORM & LAYERNORM)
 @! ----------------------------------------------------------------------------
 
+@fn _llm_fadd(a: f64, b: f64) -> f64 return a + b @end
+@fn _llm_fsub(a: f64, b: f64) -> f64 return a - b @end
+@fn _llm_fmul(a: f64, b: f64) -> f64 return a * b @end
+@fn _llm_fdiv(a: f64, b: f64) -> f64 return a / b @end
+@fn _llm_fgt(a: f64, b: f64) -> i64
+  @if a > b return 1 @end
+  return 0
+@end
+@fn _llm_to_f64(v: i64) -> f64
+  @if v == 0 return 0.0 @end
+  exp_b = (v >> 52) & 2047
+  @if exp_b >= 900 && exp_b <= 1150
+    return v
+  @end
+  return v + 0.0
+@end
+@fn _llm_f64_to_i64(v: f64) -> i64
+  neg = 0
+  @if v < 0.0
+    neg = 1
+    v = 0.0 - v
+  @end
+  n = floor(v)
+  @if neg == 1
+    return 0 - n
+  @end
+  return n
+@end
+@fn _llm_is_f64_bits(v: i64) -> i64
+  @if v == 0 return 0 @end
+  exp_b = (v >> 52) & 2047
+  @if exp_b >= 900 && exp_b <= 1150
+    return 1
+  @end
+  return 0
+@end
+@fn _llm_prng_next(state: i64) -> i64
+  next_s = (state * 6364136223846793005 + 1442695040888963407) & 9223372036854775807
+  @if next_s == 0
+    next_s = 88172645463325252
+  @end
+  return next_s
+@end
+
 @fn rmsnorm_new(dim, eps)
   return {
     dim: dim,
@@ -62,33 +106,72 @@ import "aati/lipi_ai/autodiff"
 @end
 
 @fn rmsnorm_forward(norm, x)
-  // WHY: Normalizes activations using Root Mean Square (RMS) normalization:
-  // RMSNorm(x) = (x / sqrt(mean(x^2) + eps)) * weight.
-  // Uses fixed-point scaling factor of 1000 to maintain 3 decimal places of precision
-  // under 64-bit integer arithmetic without truncation to zero.
-  sum_sq = 0
-  i = 0
+  // WHY: Normalizes each activation row using RMSNorm(x) = (x / sqrt(mean(x^2) + eps)) * weight.
   x_len = x.data.len()
-  @while i < x_len
-    val = x.data[i]
-    sum_sq = sum_sq + (val * val)
-    i = i + 1
+  @if x_len == 0 return x @end
+  dim = norm.dim
+  @if dim <= 0 || (x_len % dim) != 0
+    dim = x_len
   @end
-  
-  mean_sq = sum_sq / x_len
-  denom = math_sqrt(mean_sq + norm.eps)
-  @if denom <= 0
-    denom = 1
-  @end
-  
+  use_float = _llm_is_f64_bits(x.data[0])
   out_data = []
-  i = 0
-  @while i < x_len
-    norm_val = (x.data[i] * 1000) / denom
-    out_data = out_data.push(norm_val)
-    i = i + 1
+  base = 0
+  @while base < x_len
+    @if use_float == 1
+      sum_sq_f = 0.0
+      c = 0
+      @while c < dim
+        vf = x.data[base + c]
+        sum_sq_f = _llm_fadd(sum_sq_f, _llm_fmul(vf, vf))
+        c = c + 1
+      @end
+      mean_sq_f = _llm_fdiv(sum_sq_f, dim + 0.0)
+      denom_f = math_sqrt(_llm_fadd(mean_sq_f, _llm_to_f64(norm.eps)))
+      @if _llm_fgt(denom_f, 0.000000001) == 0
+        denom_f = 1.0
+      @end
+      c = 0
+      @while c < dim
+        normed_f = _llm_fdiv(x.data[base + c], denom_f)
+        @if norm.weight != 0 && c < norm.weight.data.len()
+          wf = _llm_to_f64(norm.weight.data[c])
+          normed_f = _llm_fmul(normed_f, wf)
+        @end
+        out_data = out_data.push(normed_f)
+        c = c + 1
+      @end
+    @else
+      sum_sq = 0
+      c = 0
+      @while c < dim
+        val = x.data[base + c]
+        sum_sq = sum_sq + (val * val)
+        c = c + 1
+      @end
+      mean_sq = sum_sq / dim
+      eps_i = norm.eps
+      @if _llm_is_f64_bits(eps_i) == 1
+        eps_i = _llm_f64_to_i64(eps_i)
+      @end
+      denom = sqrt(mean_sq + eps_i)
+      @if denom <= 0
+        denom = 1
+      @end
+      c = 0
+      @while c < dim
+        norm_val = (x.data[base + c] * 1000) / denom
+        @if norm.weight != 0 && c < norm.weight.data.len()
+          w_raw = norm.weight.data[c]
+          @if w_raw != 4607182418800017408 && w_raw != 1
+            norm_val = _llm_f64_to_i64(_llm_fmul(norm_val + 0.0, _llm_to_f64(w_raw)))
+          @end
+        @end
+        out_data = out_data.push(norm_val)
+        c = c + 1
+      @end
+    @end
+    base = base + dim
   @end
-  
   return tensor_new(out_data, x.shape)
 @end
 
@@ -102,31 +185,54 @@ import "aati/lipi_ai/autodiff"
 @end
 
 @fn layernorm_forward(norm, x)
-  sum = 0.0
-  i = 0
   x_len = x.data.len()
-  @while i < x_len
-    sum = sum + x.data[i]
-    i = i + 1
+  @if x_len == 0 return x @end
+  dim = norm.dim
+  @if dim <= 0 || (x_len % dim) != 0
+    dim = x_len
   @end
-  mean = sum / (x_len * 1.0)
-  
-  var_sum = 0.0
-  i = 0
-  @while i < x_len
-    diff = x.data[i] - mean
-    var_sum = var_sum + (diff * diff)
-    i = i + 1
-  @end
-  variance = var_sum / (x_len * 1.0)
-  inv_std = 1.0 / (variance + norm.eps)
-  
+  eps_f = _llm_to_f64(norm.eps)
   out = []
-  i = 0
-  @while i < x_len
-    normed = (x.data[i] - mean) * inv_std
-    out = out.push(normed)
-    i = i + 1
+  base = 0
+  @while base < x_len
+    sum_f = 0.0
+    c = 0
+    @while c < dim
+      vf = _llm_to_f64(x.data[base + c])
+      sum_f = _llm_fadd(sum_f, vf)
+      c = c + 1
+    @end
+    mean_f = _llm_fdiv(sum_f, dim + 0.0)
+
+    var_sum = 0.0
+    c = 0
+    @while c < dim
+      vf = _llm_to_f64(x.data[base + c])
+      diff = _llm_fsub(vf, mean_f)
+      var_sum = _llm_fadd(var_sum, _llm_fmul(diff, diff))
+      c = c + 1
+    @end
+    variance = _llm_fdiv(var_sum, dim + 0.0)
+    std_f = math_sqrt(_llm_fadd(variance, eps_f))
+    @if _llm_fgt(std_f, 0.000000001) == 0
+      std_f = 0.00001
+    @end
+    inv_std = _llm_fdiv(1.0, std_f)
+
+    c = 0
+    @while c < dim
+      vf = _llm_to_f64(x.data[base + c])
+      normed = _llm_fmul(_llm_fsub(vf, mean_f), inv_std)
+      @if norm.gamma != 0 && c < norm.gamma.data.len()
+        normed = _llm_fmul(normed, _llm_to_f64(norm.gamma.data[c]))
+      @end
+      @if norm.beta != 0 && c < norm.beta.data.len()
+        normed = _llm_fadd(normed, _llm_to_f64(norm.beta.data[c]))
+      @end
+      out = out.push(normed)
+      c = c + 1
+    @end
+    base = base + dim
   @end
   return tensor_new(out, x.shape)
 @end
@@ -186,15 +292,14 @@ import "aati/lipi_ai/autodiff"
 @end
 
 @fn rope_apply_tensor(t, seq_pos, head_dim)
-  // WHY: Rotates pairs of head coordinates (x_{2i}, x_{2i+1}) by angle alpha = seq_pos * theta_i
-  // where theta_i = base^(-2i / d) with standard base = 10000.0.
-  // Performs 2D rotary embedding matrix multiplication with 1000-scale fixed-point precision:
-  // [x_{2i}', x_{2i+1}'] = [x_{2i}*cos - x_{2i+1}*sin, x_{2i}*sin + x_{2i+1}*cos] / 1000
+  // WHY: Rotates pairs of head coordinates (x_{2i}, x_{2i+1}) by alpha = seq_pos * 10000^(-2i/d).
   @if t == 0 return 0 @end
   @if head_dim <= 1 return t @end
 
   t_data = t.data
   total_len = t_data.len()
+  @if total_len == 0 return t @end
+  use_float = _llm_is_f64_bits(t_data[0])
   out_data = []
   idx = 0
   @while idx < total_len
@@ -207,22 +312,32 @@ import "aati/lipi_ai/autodiff"
   @while chunk_start < total_len
     i = 0
     @while i < half_dim
-      // theta_i frequency approximation: base = 10000.0, exponent = -2.0 * i / head_dim
-      freq = 1.0 / (1.0 + ((i * 10000.0) / (half_dim * 1.0)))
-      angle = (seq_pos * 1.0) * freq
-      trig = rope_math_sin_cos(angle)
-      sin_val = trig.sin
-      cos_val = trig.cos
+      // True exponential RoPE base 10000.0^(-i / half_dim) where ln(10000) = 9.210340371976184
+      theta = math_exp(_llm_fsub(0.0, _llm_fdiv(_llm_fmul(9.210340371976184, i + 0.0), half_dim + 0.0)))
+      angle = _llm_fmul(seq_pos + 0.0, theta)
+      sin_f = math_sin(angle)
+      cos_f = math_cos(angle)
 
       idx0 = chunk_start + (i * 2)
       idx1 = idx0 + 1
       @if idx1 < total_len
-        x0 = t_data[idx0]
-        x1 = t_data[idx1]
-        rot0 = ((x0 * cos_val) - (x1 * sin_val)) / 1000
-        rot1 = ((x0 * sin_val) + (x1 * cos_val)) / 1000
-        out_data = list_set(out_data, idx0, rot0)
-        out_data = list_set(out_data, idx1, rot1)
+        @if use_float == 1
+          x0f = t_data[idx0]
+          x1f = t_data[idx1]
+          rot0f = _llm_fsub(_llm_fmul(x0f, cos_f), _llm_fmul(x1f, sin_f))
+          rot1f = _llm_fadd(_llm_fmul(x0f, sin_f), _llm_fmul(x1f, cos_f))
+          out_data = list_set(out_data, idx0, rot0f)
+          out_data = list_set(out_data, idx1, rot1f)
+        @else
+          sin_val = _llm_f64_to_i64(_llm_fmul(sin_f, 1000.0))
+          cos_val = _llm_f64_to_i64(_llm_fmul(cos_f, 1000.0))
+          x0 = t_data[idx0]
+          x1 = t_data[idx1]
+          rot0 = ((x0 * cos_val) - (x1 * sin_val)) / 1000
+          rot1 = ((x0 * sin_val) + (x1 * cos_val)) / 1000
+          out_data = list_set(out_data, idx0, rot0)
+          out_data = list_set(out_data, idx1, rot1)
+        @end
       @end
       i = i + 1
     @end
@@ -260,34 +375,139 @@ import "aati/lipi_ai/autodiff"
   }
 @end
 
+@fn _attn_f64_matmul(a, b)
+  m = a.shape[0]
+  k_dim = a.shape[1]
+  n = b.shape[1]
+  out = []
+  i = 0
+  @while i < m
+    j = 0
+    @while j < n
+      acc = 0.0
+      p = 0
+      @while p < k_dim
+        va = _llm_to_f64(a.data[(i * k_dim) + p])
+        vb = _llm_to_f64(b.data[(p * n) + j])
+        acc = _llm_fadd(acc, _llm_fmul(va, vb))
+        p = p + 1
+      @end
+      out = out.push(acc)
+      j = j + 1
+    @end
+    i = i + 1
+  @end
+  return tensor_new(out, [m, n])
+@end
+
+@fn _attn_scale_mask_softmax(scores, q_rows, k_rows, head_dim)
+  inv_sqrt_dk = 1.0
+  @if head_dim > 0
+    inv_sqrt_dk = _llm_fdiv(1.0, math_sqrt(head_dim + 0.0))
+  @end
+  offset_base = k_rows - q_rows
+  out = []
+  r = 0
+  @while r < q_rows
+    max_s = 0.0 - 1000000000.0
+    row_scaled = []
+    c = 0
+    @while c < k_rows
+      s_val = _llm_fmul(_llm_to_f64(scores.data[(r * k_rows) + c]), inv_sqrt_dk)
+      @if c > (offset_base + r)
+        s_val = 0.0 - 1000000000.0
+      @end
+      row_scaled = row_scaled.push(s_val)
+      @if _llm_fgt(s_val, max_s) == 1
+        max_s = s_val
+      @end
+      c = c + 1
+    @end
+    sum_e = 0.0
+    exps = []
+    c = 0
+    @while c < k_rows
+      @if _llm_fgt(row_scaled[c], 0.0 - 100000.0) == 1
+        ev = math_exp(_llm_fsub(row_scaled[c], max_s))
+        exps = exps.push(ev)
+        sum_e = _llm_fadd(sum_e, ev)
+      @else
+        exps = exps.push(0.0)
+      @end
+      c = c + 1
+    @end
+    @if _llm_fgt(sum_e, 0.000000001) == 0
+      sum_e = 1.0
+    @end
+    c = 0
+    @while c < k_rows
+      out = out.push(_llm_fdiv(exps[c], sum_e))
+      c = c + 1
+    @end
+    r = r + 1
+  @end
+  return tensor_new(out, [q_rows, k_rows])
+@end
+
+@fn _attn_concat_cache(cache_list)
+  @if cache_list.len() == 0 return 0 @end
+  cols = cache_list[0].shape[1]
+  total_rows = 0
+  data = []
+  ci = 0
+  @while ci < cache_list.len()
+    t = cache_list[ci]
+    r = t.shape[0]
+    total_rows = total_rows + r
+    di = 0
+    @while di < t.data.len()
+      data = data.push(t.data[di])
+      di = di + 1
+    @end
+    ci = ci + 1
+  @end
+  return tensor_new(data, [total_rows, cols])
+@end
+
 @fn self_attention_forward(layer, x)
-  q = tensor_matmul_2x2(x, layer.w_q)
-  k = tensor_matmul_2x2(x, layer.w_k)
-  v = tensor_matmul_2x2(x, layer.w_v)
-  
-  k_t = tensor_new([k.data[0], k.data[2], k.data[1], k.data[3]], [2, 2])
-  scores = tensor_matmul_2x2(q, k_t)
-  attn_weights = tensor_softmax(scores, 1.0)
-  out = tensor_matmul_2x2(attn_weights, v)
-  final_out = tensor_matmul_2x2(out, layer.w_o)
+  q = _attn_f64_matmul(x, layer.w_q)
+  k = _attn_f64_matmul(x, layer.w_k)
+  v = _attn_f64_matmul(x, layer.w_v)
+
+  k_t = tensor_transpose_2d(k)
+  scores = _attn_f64_matmul(q, k_t)
+  attn_weights = _attn_scale_mask_softmax(scores, q.shape[0], k.shape[0], layer.head_dim)
+  out = _attn_f64_matmul(attn_weights, v)
+  final_out = _attn_f64_matmul(out, layer.w_o)
   return final_out
 @end
 
+@struct LlmKvCache
+  k_cache: array
+  v_cache: array
+@end
+
+@fn llm_kv_cache_new()
+  return { k_cache: [], v_cache: [] }
+@end
+
 @fn self_attention_forward_cached(layer, x, kv_cache, pos)
-  q = tensor_matmul_2x2(x, layer.w_q)
-  k = tensor_matmul_2x2(x, layer.w_k)
-  v = tensor_matmul_2x2(x, layer.w_v)
-  
-  @! Update KV-Cache
+  q = _attn_f64_matmul(x, layer.w_q)
+  k = _attn_f64_matmul(x, layer.w_k)
+  v = _attn_f64_matmul(x, layer.w_v)
+
+  @! Append rotated/projected K and V to cache and attend over FULL cached sequence
   kv_cache.k_cache = kv_cache.k_cache.push(k)
   kv_cache.v_cache = kv_cache.v_cache.push(v)
-  
-  k_t = tensor_new([k.data[0], k.data[2], k.data[1], k.data[3]], [2, 2])
-  scores = tensor_matmul_2x2(q, k_t)
-  attn_weights = tensor_softmax(scores, 1.0)
-  out = tensor_matmul_2x2(attn_weights, v)
-  final_out = tensor_matmul_2x2(out, layer.w_o)
-  
+  k_all = _attn_concat_cache(kv_cache.k_cache)
+  v_all = _attn_concat_cache(kv_cache.v_cache)
+
+  k_t = tensor_transpose_2d(k_all)
+  scores = _attn_f64_matmul(q, k_t)
+  attn_weights = _attn_scale_mask_softmax(scores, q.shape[0], k_all.shape[0], layer.head_dim)
+  out = _attn_f64_matmul(attn_weights, v_all)
+  final_out = _attn_f64_matmul(out, layer.w_o)
+
   return { output: final_out, kv_cache: kv_cache }
 @end
 
@@ -304,11 +524,24 @@ import "aati/lipi_ai/autodiff"
 @end
 
 @fn mlp_swiglu_forward(mlp, x)
-  gate = tensor_silu(tensor_matmul_2x2(x, mlp.w_gate))
-  up = tensor_matmul_2x2(x, mlp.w_up)
-  h = tensor_mul(gate, up)
-  out = tensor_matmul_2x2(h, mlp.w_down)
-  return out
+  gate_pre = _attn_f64_matmul(x, mlp.w_gate)
+  gate = []
+  gi = 0
+  @while gi < gate_pre.data.len()
+    xv = gate_pre.data[gi]
+    sig = _llm_fdiv(1.0, _llm_fadd(1.0, math_exp(_llm_fsub(0.0, xv))))
+    gate = gate.push(_llm_fmul(xv, sig))
+    gi = gi + 1
+  @end
+  up = _attn_f64_matmul(x, mlp.w_up)
+  h_data = []
+  gi = 0
+  @while gi < gate.len()
+    h_data = h_data.push(_llm_fmul(gate[gi], up.data[gi]))
+    gi = gi + 1
+  @end
+  h = tensor_new(h_data, gate_pre.shape)
+  return _attn_f64_matmul(h, mlp.w_down)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -325,16 +558,38 @@ import "aati/lipi_ai/autodiff"
   }
 @end
 
+@fn _llm_f64_add_tensor(a, b)
+  out = []
+  i = 0
+  @while i < a.data.len()
+    out = out.push(_llm_fadd(_llm_to_f64(a.data[i]), _llm_to_f64(b.data[i % b.data.len()])))
+    i = i + 1
+  @end
+  return tensor_new(out, a.shape)
+@end
+
 @fn transformer_block_forward(block, x)
   @! Pre-Norm Architecture
   x_norm = rmsnorm_forward(block.norm1, x)
   attn_out = self_attention_forward(block.attention, x_norm)
-  x = tensor_add(x, attn_out)
-  
+  x = _llm_f64_add_tensor(x, attn_out)
+
   x_norm2 = rmsnorm_forward(block.norm2, x)
-  ff_hidden = tensor_relu(tensor_matmul_2x2(x_norm2, block.ff_w1))
-  ff_out = tensor_matmul_2x2(ff_hidden, block.ff_w2)
-  x = tensor_add(x, ff_out)
+  ff_pre = _attn_f64_matmul(x_norm2, block.ff_w1)
+  ff_h = []
+  fi = 0
+  @while fi < ff_pre.data.len()
+    v = ff_pre.data[fi]
+    @if _llm_fgt(v, 0.0) == 1
+      ff_h = ff_h.push(v)
+    @else
+      ff_h = ff_h.push(0.0)
+    @end
+    fi = fi + 1
+  @end
+  ff_hidden = tensor_new(ff_h, ff_pre.shape)
+  ff_out = _attn_f64_matmul(ff_hidden, block.ff_w2)
+  x = _llm_f64_add_tensor(x, ff_out)
   return x
 @end
 
@@ -362,9 +617,29 @@ import "aati/lipi_ai/autodiff"
 @end
 
 @fn gpt_net_forward(gpt_instance, tokens)
-  @! Initial embedding projection
-  x = tensor_random_mat(2, 2)
-  
+  @! Real embedding table lookup across sequence tokens + positional RoPE
+  seq_len = tokens.len()
+  @if seq_len == 0
+    seq_len = 1
+    tokens = [0]
+  @end
+  embed_sz = gpt_instance.embed_size
+  vocab_sz = gpt_instance.vocab_size
+  emb_data = []
+  ti = 0
+  @while ti < seq_len
+    tok_id = tokens[ti] % vocab_sz
+    @if tok_id < 0 tok_id = tok_id + vocab_sz @end
+    row_base = tok_id * embed_sz
+    di = 0
+    @while di < embed_sz
+      emb_data = emb_data.push(_llm_to_f64(gpt_instance.token_embedding.data[row_base + di]))
+      di = di + 1
+    @end
+    ti = ti + 1
+  @end
+  x = tensor_new(emb_data, [seq_len, embed_sz])
+
   __layer_idx = 0
   __layer_len = gpt_instance.layers.len()
   @while __layer_idx < __layer_len
@@ -372,9 +647,9 @@ import "aati/lipi_ai/autodiff"
     x = transformer_block_forward(layer, x)
     __layer_idx = __layer_idx + 1
   @end
-  
+
   x = rmsnorm_forward(gpt_instance.final_norm, x)
-  logits = tensor_matmul_2x2(x, gpt_instance.lm_head)
+  logits = _attn_f64_matmul(x, gpt_instance.lm_head)
   return logits
 @end
 
@@ -504,71 +779,141 @@ import "aati/lipi_ai/autodiff"
   return tensor_new(out_data, logits.shape)
 @end
 
+@fn _llm_sample_logits_last_row(logits, vocab_sz, temperature, prng_state)
+  rows = 1
+  @if logits.shape.len() >= 2
+    rows = logits.shape[0]
+  @end
+  row_base = (rows - 1) * vocab_sz
+  @if row_base + vocab_sz > logits.data.len()
+    row_base = 0
+  @end
+  @if _llm_fgt(temperature, 0.0001) == 0
+    max_val = 0.0 - 1000000000.0
+    best_idx = 0
+    k = 0
+    @while k < vocab_sz
+      vk = _llm_to_f64(logits.data[row_base + k])
+      @if k == 0 || _llm_fgt(vk, max_val) == 1
+        max_val = vk
+        best_idx = k
+      @end
+      k = k + 1
+    @end
+    return best_idx
+  @end
+
+  max_val = 0.0 - 1000000000.0
+  k = 0
+  @while k < vocab_sz
+    vk = _llm_to_f64(logits.data[row_base + k])
+    @if k == 0 || _llm_fgt(vk, max_val) == 1
+      max_val = vk
+    @end
+    k = k + 1
+  @end
+  probs = []
+  sum_p = 0.0
+  k = 0
+  @while k < vocab_sz
+    vk = _llm_to_f64(logits.data[row_base + k])
+    ev = math_exp(_llm_fsub(vk, max_val))
+    probs = probs.push(ev)
+    sum_p = _llm_fadd(sum_p, ev)
+    k = k + 1
+  @end
+  @if _llm_fgt(sum_p, 0.000000001) == 0
+    return 0
+  @end
+  u_norm = _llm_fdiv((prng_state & 1048575) + 0.5, 1048576.0)
+  target = _llm_fmul(u_norm, sum_p)
+  acc = 0.0
+  k = 0
+  @while k < vocab_sz
+    acc = _llm_fadd(acc, probs[k])
+    @if _llm_fgt(acc, target) == 1
+      return k
+    @end
+    k = k + 1
+  @end
+  return vocab_sz - 1
+@end
+
 @fn gpt_generate_advanced(gpt, prompt, max_tokens, temperature, top_k, top_p, repetition_penalty)
   println("  [LLM] Generating " + max_tokens.to_str() + " tokens (Temp: " + temperature.to_str() + ", Top-K: " + top_k.to_str() + ", Top-P: " + top_p.to_str() + ")")
-  
+
   generated = []
   context = prompt
-  
+  vocab_sz = gpt.vocab_size
+  prng_s = clock_ms() ^ 1315423911
+
   i = 0
   @while i < max_tokens
-    logits = gpt_net_forward(gpt, context)
-    
-    @! Apply temperature
-    @if temperature != 1.0 && temperature > 0.0
+    logits_all = gpt_net_forward(gpt, context)
+    rows = 1
+    @if logits_all.shape.len() >= 2
+      rows = logits_all.shape[0]
+    @end
+    row_base = (rows - 1) * vocab_sz
+    @if row_base + vocab_sz > logits_all.data.len()
+      row_base = 0
+    @end
+    last_row = []
+    ki = 0
+    @while ki < vocab_sz
+      last_row = last_row.push(_llm_to_f64(logits_all.data[row_base + ki]))
+      ki = ki + 1
+    @end
+    logits = tensor_new(last_row, [1, vocab_sz])
+
+    @! Apply temperature scaling
+    @if _llm_fgt(temperature, 0.0001) == 1
       scaled_data = []
       j = 0
       @while j < logits.data.len()
-        scaled_data = scaled_data.push(logits.data[j] / temperature)
+        scaled_data = scaled_data.push(_llm_fdiv(logits.data[j], _llm_to_f64(temperature)))
         j = j + 1
       @end
       logits = tensor_new(scaled_data, logits.shape)
     @end
-    
+
     @! Apply repetition penalty
     @if repetition_penalty != 1.0
+      rp_f = _llm_to_f64(repetition_penalty)
       j = 0
       @while j < context.len()
         tok = context[j]
-        @if tok < logits.data.len()
+        @if tok >= 0 && tok < logits.data.len()
           val = logits.data[tok]
-          @if val > 0.0
-            logits.data = list_set(logits.data, tok, val / repetition_penalty)
+          @if _llm_fgt(val, 0.0) == 1
+            logits.data = list_set(logits.data, tok, _llm_fdiv(val, rp_f))
           @else
-            logits.data = list_set(logits.data, tok, val * repetition_penalty)
+            logits.data = list_set(logits.data, tok, _llm_fmul(val, rp_f))
           @end
         @end
         j = j + 1
       @end
     @end
-    
+
     @! Top-K
     @if top_k > 0
       logits = tensor_top_k_filtering(logits, top_k)
     @end
-    
+
     @! Top-P
     @if top_p < 1.0 && top_p > 0.0
       logits = tensor_top_p_nucleus_sampling(logits, top_p)
     @end
-    
-    @! Argmax (Simulating sample from multinomial)
-    max_val = -999999.0
-    best_idx = 0
-    k = 0
-    @while k < logits.data.len()
-      @if logits.data[k] > max_val
-        max_val = logits.data[k]
-        best_idx = k
-      @end
-      k = k + 1
-    @end
-    
+
+    @! Multinomial stochastic sampling (argmax fallback only when temp <= 0)
+    prng_s = _llm_prng_next(prng_s)
+    best_idx = _llm_sample_logits_last_row(logits, vocab_sz, temperature, prng_s)
+
     generated = generated.push(best_idx)
     context = context.push(best_idx)
     i = i + 1
   @end
-  
+
   return generated
 @end
 

@@ -244,7 +244,7 @@ say "বিন্দুদ্বয়ের দূরত্বের বর্গ:
 ## ৫. ডিরেক্ট সিলিকন ও বাইটকোড আর্কিটেকচার: x86_64, ARM64 ও WebAssembly
 
 লিপির সবচেয়ে যুগান্তকারী দিক হলো এর সার্বভৌম মেশিন কোড ও বাইটকোড এমিটারসমূহ:
-- **x86_64 ELF64 এমিটার:** [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp)
+- **x86_64 ELF64 এমিটার:** [`src/compiler/backend/formats/elf/elf_writer.lp`](../src/compiler/backend/formats/elf/elf_writer.lp)
 - **ARM64 (AArch64) ELF64 এমিটার:** [`src/compiler/arm64_emitter.lp`](../src/compiler/arm64_emitter.lp)
 - **WebAssembly (WASM) বাইনারি এমিটার:** [`src/compiler/wasm_emitter.lp`](../src/compiler/wasm_emitter.lp)
 

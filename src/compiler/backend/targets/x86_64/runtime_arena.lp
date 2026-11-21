@@ -65,20 +65,55 @@ fn x86_synth_emit_arena_helpers s
     x86_synth_register_helper_fn(s, "অ্যারেনা_রিসেট", reset_off)
 
     reset_bytes = [
-        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,               // 0..9: movabs rax, <heap_base_addr> (patch at reset_off + 2)
-        72, 139, 0,                                    // 10..12: mov rax, [rax] (_heap_base)
-        72, 57, 199,                                   // 13..15: cmp rdi, rax
-        114, 25,                                       // 16..17: jb .invalid (+25 -> index 43)
-        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,               // 18..27: movabs rdx, <heap_ptr_addr> (patch at reset_off + 20)
-        72, 139, 10,                                   // 28..30: mov rcx, [rdx] (current _heap_ptr)
-        72, 57, 207,                                   // 31..33: cmp rdi, rcx
-        119, 9,                                        // 34..35: ja .invalid (+9 -> index 45)
-        72, 137, 58,                                   // 36..38: mov [rdx], rdi (update _heap_ptr = saved_mark!)
-        49, 192,                                       // 39..40: xor eax, eax (success code 0)
-        195,                                           // 41: ret
-        144, 144, 144,                                 // 42..44: nop
-        72, 199, 192, 255, 255, 255, 255,              // 45..51: .invalid: mov rax, -1
-        195                                            // 52: ret
+        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
+        72, 139, 0,
+        72, 57, 199,
+        15, 130, 136, 0, 0, 0,
+        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,
+        72, 139, 10,
+        72, 57, 207,
+        119, 118,
+        72, 137, 58,
+        240, 72, 15, 186, 106, 104, 0,
+        114, 247,
+        69, 49, 192,
+        73, 131, 248, 9,
+        115, 36,
+        78, 141, 76, 194, 8,
+        77, 139, 17,
+        77, 133, 210,
+        116, 18,
+        73, 57, 250,
+        115, 5,
+        77, 137, 209,
+        235, 238,
+        77, 139, 26,
+        77, 137, 25,
+        235, 230,
+        73, 255, 192,
+        235, 214,
+        76, 141, 74, 112,
+        77, 139, 17,
+        77, 133, 210,
+        116, 39,
+        73, 131, 226, 254,
+        77, 133, 210,
+        116, 30,
+        77, 139, 90, 240,
+        73, 131, 227, 254,
+        73, 57, 250,
+        115, 9,
+        77, 141, 74, 240,
+        77, 137, 218,
+        235, 220,
+        77, 137, 25,
+        77, 137, 218,
+        235, 212,
+        240, 72, 15, 186, 114, 104, 0,
+        49, 192,
+        195,
+        72, 199, 192, 255, 255, 255, 255,
+        195
     ]
     x86_synth_emit_bytes(s, reset_bytes)
 
@@ -92,12 +127,22 @@ fn x86_synth_emit_arena_helpers s
     x86_synth_register_helper_fn(s, "অ্যারেনা_সব_খালি", free_off)
 
     free_bytes = [
-        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,               // 0..9: movabs rax, <heap_base_addr> (patch at free_off + 2)
-        72, 139, 0,                                    // 10..12: mov rax, [rax] (_heap_base)
-        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,               // 13..22: movabs rdx, <heap_ptr_addr> (patch at free_off + 15)
-        72, 137, 2,                                    // 23..25: mov [rdx], rax (reset _heap_ptr = _heap_base)
-        49, 192,                                       // 26..27: xor eax, eax (return 0)
-        195                                            // 28: ret
+        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
+        72, 139, 0,
+        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,
+        72, 137, 2,
+        240, 72, 15, 186, 106, 104, 0,
+        114, 247,
+        49, 201,
+        72, 131, 249, 9,
+        115, 14,
+        72, 199, 68, 202, 8, 0, 0, 0, 0,
+        72, 255, 193,
+        235, 236,
+        72, 199, 66, 112, 0, 0, 0, 0,
+        240, 72, 15, 186, 114, 104, 0,
+        49, 192,
+        195
     ]
     x86_synth_emit_bytes(s, free_bytes)
 
@@ -143,7 +188,7 @@ fn x86_synth_patch_arena_helpers s arena_offs heap_base_vaddr heap_ptr_vaddr
 
         if r_off > 0
             x86_synth_patch_u64(s, r_off + 2, heap_base_vaddr)
-            x86_synth_patch_u64(s, r_off + 20, heap_ptr_vaddr)
+            x86_synth_patch_u64(s, r_off + 24, heap_ptr_vaddr)
 
         if f_off > 0
             x86_synth_patch_u64(s, f_off + 2, heap_base_vaddr)

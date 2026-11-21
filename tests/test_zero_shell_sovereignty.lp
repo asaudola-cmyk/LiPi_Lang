@@ -72,11 +72,14 @@ fn main
     // ── Section 3: Native Installer Asset Manifest & Registration ─────────────
     say "\n▶ Section 3: Native Installer Manifest Registration..."
     total_tests = total_tests + 1
-    inst = installer_engine_new("/home/test/.lipi", "/home/test/.local/bin")
+    zss_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    zss_root = "/tmp/lipi_zss_" + str(zss_pid)
+    zss_bin = zss_root + "/bin"
+    inst = installer_engine_new(zss_root, zss_bin)
     
-    f1 = installer_add_file(inst, "bin/lipi", "/home/test/.local/bin/lipi", 1)
-    f2 = installer_add_file(inst, "bin/lipc", "/home/test/.local/bin/lipc", 1)
-    f3 = installer_add_file(inst, "aati/lipi_web/", "/home/test/.lipi/aati/lipi_web/", 0)
+    f1 = installer_add_file(inst, "bin/lipi", zss_bin + "/lipi", 1)
+    f2 = installer_add_file(inst, "bin/lipc", zss_bin + "/lipc", 1)
+    f3 = installer_add_file(inst, "aati/lipi_web/", zss_root + "/aati/lipi_web/", 0)
 
     ok_i1 = assert_eq(f1.if_is_executable, 1, "Binary Marked Executable")
     ok_i2 = assert_eq(f3.if_is_executable, 0, "Library Folder Marked Non-Executable")

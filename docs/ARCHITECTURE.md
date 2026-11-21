@@ -41,7 +41,7 @@ The Lipi toolchain operates with **Zero Foreign Dependencies**:
 ## 1. Direct Silicon Architecture & Multi-Platform Emitters
 
 Lipi features twin first-class silicon emitters written in 100% pure Lipi code:
-1. **x86_64 (AMD64) ELF64 Emitter:** [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp)
+1. **x86_64 (AMD64) ELF64 Emitter:** [`src/compiler/backend/formats/elf/elf_writer.lp`](../src/compiler/backend/formats/elf/elf_writer.lp)
 2. **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](../src/compiler/arm64_emitter.lp)
 
 ### 1.1 x86_64 Direct Machine Code Generation
@@ -185,7 +185,7 @@ movabsq $0, %rax       ; 0x48 0xB8 00 00 00 00 00 00 00 00 (10 bytes!)
 This consumes 10 bytes of instruction cache and requires 8 bytes of immediate operand decoding.
 
 #### The Lipi Peephole Solution
-In [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp#L326-L338):
+In [`src/compiler/backend/formats/elf/elf_writer.lp`](../src/compiler/backend/formats/elf/elf_writer.lp):
 ```lipi
 fn x86_mov_reg_imm64 ctx reg val
     if val == 0

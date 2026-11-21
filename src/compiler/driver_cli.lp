@@ -96,8 +96,10 @@ fn cli_verify_binary file_path
         say "❌ [GPU SPIR-V AUDIT FAILED]: " + spv_runner.gsr_validation_status
         return 0
     elif cli_str_ends_with(file_path, ".rv64") == 1
-        vm = riscv64_vm_new(4194304, 65536)
-        if riscv64_vm_load_file(vm, file_path) == 1
+        vm = riscv64_vm_new(4194304, 4194304)
+        rv_vok = riscv64_vm_load_file(vm, file_path)
+        riscv64_vm_free(vm)
+        if rv_vok == 1
             say "✔ [RISC-V 64 ELF VERIFIED]: ELF64 RISC-V binary mapped cleanly into 4MB memory bus!"
             return 1
         say "❌ [RISC-V 64 AUDIT FAILED]: Unable to map RISC-V 64 binary."
@@ -107,8 +109,8 @@ fn cli_verify_binary file_path
         if len(data) >= 4 and ord(char_at(data, 0)) == 127 and ord(char_at(data, 1)) == 69 and ord(char_at(data, 2)) == 76 and ord(char_at(data, 3)) == 70
             say "✔ [LINUX ELF64 VERIFIED]: 0x7F 'ELF' Magic header 100% compliant!"
             return 1
-        if len(data) >= 8 and ord(char_at(data, 0)) == 214 and (ord(char_at(data, 1)) == 208 or ord(char_at(data, 1)) == 80) and ord(char_at(data, 2)) == 82 and ord(char_at(data, 3)) == 232
-            say "✔ [BARE-METAL MULTIBOOT2 UNIKERNEL VERIFIED]: 0xE852D0D6/0xE85250D6 Magic header 100% compliant!"
+        if len(data) >= 8 and ord(char_at(data, 0)) == 214 and ord(char_at(data, 1)) == 80 and ord(char_at(data, 2)) == 82 and ord(char_at(data, 3)) == 232
+            say "✔ [BARE-METAL MULTIBOOT2 UNIKERNEL VERIFIED]: 0xE85250D6 Magic header 100% compliant!"
             return 1
         say "❌ [BINARY AUDIT FAILED]: Unknown binary container format."
         return 0
@@ -117,13 +119,17 @@ fn cli_execute_riscv_vm bin_path
     if file_exists(bin_path) == 0
         say "❌ [RISC-V 64 VM ত্রুটি]: ফাইল পাওয়া যায়নি: " + bin_path
         return 0
-    vm = riscv64_vm_new(4194304, 65536)
+    vm = riscv64_vm_new(4194304, 4194304)
     if riscv64_vm_load_file(vm, bin_path) == 0
+        riscv64_vm_free(vm)
         say "❌ [RISC-V 64 VM ত্রুটি]: বাইনারি মেমরিতে লোড করা ব্যর্থ হয়েছে।"
         return 0
     say "⚡ [খাঁটি লিপি RISC-V 64 CPU CORE]: এক্সিকিউশন শুরু হচ্ছে (০% QEMU)..."
     exit_code = riscv64_vm_run(vm, 100000)
+    if len(vm.rv_captured_output) > 0
+        syscall(1, 1, vm.rv_captured_output, len(vm.rv_captured_output), 0, 0, 0)
     say "✔ [RISC-V 64 CPU Halted]: প্রসেসর সমাপ্ত, এক্সিট কোড: " + str(exit_code) + " | মোট ইনস্ট্রাকশন: " + str(vm.rv_pc / 4)
+    riscv64_vm_free(vm)
     return exit_code
 
 fn cli_execute_omni in_file out_base opt_level debug_mode
@@ -193,6 +199,31 @@ fn cli_execute_omni in_file out_base opt_level debug_mode
     say "🎉 [OMNIVERSE SUCCESS]: 6/6 Multi-Silicon & Multi-OS Targets Generated & Sovereignly Verified!"
     return 1
 
+fn cli_resolve_target_spec t_arg cur_arch cur_fmt
+    // WHY: Unified validator for `--target X` and `--target=X` flags; returns [arch, fmt, ok].
+    if t_arg == "windows" or t_arg == "pe" or t_arg == "win" or t_arg == "win64"
+        return [cur_arch, FORMAT_PE(), 1]
+    elif t_arg == "macos-arm64" or t_arg == "darwin-arm64" or t_arg == "apple-silicon"
+        return [TARGET_ID_ARM64(), FORMAT_MACHO(), 1]
+    elif t_arg == "macos-x86_64" or t_arg == "darwin-x86_64"
+        return [TARGET_ID_X86_64(), FORMAT_MACHO(), 1]
+    elif t_arg == "macos" or t_arg == "macho" or t_arg == "darwin" or t_arg == "mac"
+        return [cur_arch, FORMAT_MACHO(), 1]
+    elif t_arg == "arm64" or t_arg == "aarch64"
+        return [TARGET_ID_ARM64(), cur_fmt, 1]
+    elif t_arg == "wasm" or t_arg == "wasm32" or t_arg == "web"
+        return [TARGET_ID_WASM(), cur_fmt, 1]
+    elif t_arg == "riscv64" or t_arg == "riscv"
+        return [TARGET_ID_RISCV64(), cur_fmt, 1]
+    elif t_arg == "verilog" or t_arg == "hdl"
+        return [TARGET_ID_VERILOG(), FORMAT_VERILOG(), 1]
+    elif t_arg == "unikernel" or t_arg == "multiboot2" or t_arg == "baremetal"
+        return [cur_arch, FORMAT_UNIKERNEL(), 1]
+    elif t_arg == "x86_64" or t_arg == "amd64" or t_arg == "linux"
+        return [TARGET_ID_X86_64(), cur_fmt, 1]
+    end
+    return [cur_arch, cur_fmt, 0]
+
 fn main
     args = argv()
     argc = len(args)
@@ -249,54 +280,36 @@ fn main
                     verify_target_file = next_a
         elif arg == "-target" or arg == "--target"
             i = i + 1
-            if i < argc
-                t_arg = get(args, i)
-                if t_arg == "windows" or t_arg == "pe" or t_arg == "win"
-                    emit_format = FORMAT_PE()
-                elif t_arg == "macos-arm64" or t_arg == "darwin-arm64" or t_arg == "apple-silicon"
-                    emit_format = FORMAT_MACHO()
-                    target_arch = TARGET_ID_ARM64()
-                elif t_arg == "macos-x86_64" or t_arg == "darwin-x86_64"
-                    emit_format = FORMAT_MACHO()
-                    target_arch = TARGET_ID_X86_64()
-                elif t_arg == "macos" or t_arg == "macho" or t_arg == "darwin" or t_arg == "mac"
-                    emit_format = FORMAT_MACHO()
-                elif t_arg == "arm64" or t_arg == "aarch64"
-                    target_arch = TARGET_ID_ARM64()
-                elif t_arg == "wasm" or t_arg == "web"
-                    target_arch = TARGET_ID_WASM()
-                elif t_arg == "riscv64" or t_arg == "riscv"
-                    target_arch = TARGET_ID_RISCV64()
-                elif t_arg == "verilog" or t_arg == "hdl"
-                    target_arch = TARGET_ID_VERILOG()
-                    emit_format = FORMAT_VERILOG()
-                elif t_arg == "unikernel" or t_arg == "multiboot2" or t_arg == "baremetal"
-                    emit_format = FORMAT_UNIKERNEL()
-                elif t_arg == "x86_64" or t_arg == "amd64" or t_arg == "linux"
-                    target_arch = TARGET_ID_X86_64()
-        elif arg == "--target=macos-arm64" or arg == "--target=darwin-arm64" or arg == "--target=apple-silicon"
+            if i >= argc
+                say "❌ [Error]: Missing target name after " + arg
+                exit(1)
+            end
+            t_arg = get(args, i)
+            tres = cli_resolve_target_spec(t_arg, target_arch, emit_format)
+            if tres[2] == 0
+                say "❌ [Error]: Unsupported target architecture/format '" + t_arg + "'."
+                exit(1)
+            end
+            target_arch = tres[0]
+            emit_format = tres[1]
+        elif len(arg) > 9 and str_sub(arg, 0, 9) == "--target="
+            t_arg = str_sub(arg, 9, len(arg))
+            tres = cli_resolve_target_spec(t_arg, target_arch, emit_format)
+            if tres[2] == 0
+                say "❌ [Error]: Unsupported --target value '" + t_arg + "'."
+                exit(1)
+            end
+            target_arch = tres[0]
+            emit_format = tres[1]
+        elif arg == "--format=macho" or arg == "--macho"
             emit_format = FORMAT_MACHO()
-            target_arch = TARGET_ID_ARM64()
-        elif arg == "--target=macos-x86_64" or arg == "--target=darwin-x86_64"
-            emit_format = FORMAT_MACHO()
-            target_arch = TARGET_ID_X86_64()
-        elif arg == "--format=macho" or arg == "--macho" or arg == "--target=macos"
-            emit_format = FORMAT_MACHO()
-        elif arg == "--format=pe" or arg == "--pe" or arg == "--target=windows"
+        elif arg == "--format=pe" or arg == "--pe"
             emit_format = FORMAT_PE()
-        elif arg == "--target=arm64" or arg == "--target=aarch64"
-            target_arch = TARGET_ID_ARM64()
-        elif arg == "--target=wasm" or arg == "--target=web"
-            target_arch = TARGET_ID_WASM()
-        elif arg == "--target=riscv64" or arg == "--target=riscv"
-            target_arch = TARGET_ID_RISCV64()
-        elif arg == "--target=verilog" or arg == "--target=hdl" or arg == "--emit=verilog"
+        elif arg == "--emit=verilog"
             target_arch = TARGET_ID_VERILOG()
             emit_format = FORMAT_VERILOG()
-        elif arg == "--target=unikernel" or arg == "--format=multiboot2" or arg == "--unikernel"
+        elif arg == "--format=multiboot2" or arg == "--unikernel"
             emit_format = FORMAT_UNIKERNEL()
-        elif arg == "--target=x86_64" or arg == "--target=amd64"
-            target_arch = TARGET_ID_X86_64()
         elif arg == "--ai-opt" or arg == "-ai"
             ai_opt_enabled = 1
         elif arg == "--no-pie"

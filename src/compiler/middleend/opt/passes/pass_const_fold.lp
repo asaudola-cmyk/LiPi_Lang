@@ -31,7 +31,10 @@ fn const_fold_eval_binary op l r
     if op == OP_OR  return l | r
     if op == OP_XOR return l ^ r
     if op == OP_SHL
-        // Shift left
+        // Shift left (bounded to [0, 63])
+        if r < 0 or r >= 64
+            return 0
+        end
         shift = r
         res = l
         while shift > 0
@@ -39,11 +42,22 @@ fn const_fold_eval_binary op l r
             shift = shift - 1
         return res
     if op == OP_SHR
-        // Shift right
+        // Arithmetic right shift toward -inf, safe for negative operands and shifts >= 63
+        if r < 0
+            return l
+        end
+        if r >= 63
+            if l < 0 return 0 - 1 end
+            return 0
+        end
         shift = r
         res = l
-        while shift > 0 and res > 0
-            res = res / 2
+        while shift > 0
+            if res >= 0
+                res = res / 2
+            else
+                res = (res - 1) / 2
+            end
             shift = shift - 1
         return res
     return 0

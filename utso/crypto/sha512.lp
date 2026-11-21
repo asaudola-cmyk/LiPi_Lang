@@ -25,18 +25,18 @@ import "utso/core/string"
 @end
 
 @fn w64_new(hi, lo)
-  return [hi % 4294967296, lo % 4294967296]
+  return [hi & 4294967295, lo & 4294967295]
 @end
 
 @fn w64_add(a, b)
-  a1 = a[1] % 4294967296
-  b1 = b[1] % 4294967296
+  a1 = a[1] & 4294967295
+  b1 = b[1] & 4294967295
   lo_sum = a1 + b1
   carry = lo_sum / 4294967296
-  a0 = a[0] % 4294967296
-  b0 = b[0] % 4294967296
-  hi_sum = (a0 + b0 + carry) % 4294967296
-  return [hi_sum, lo_sum % 4294967296]
+  a0 = a[0] & 4294967295
+  b0 = b[0] & 4294967295
+  hi_sum = (a0 + b0 + carry) & 4294967295
+  return [hi_sum, lo_sum & 4294967295]
 @end
 
 @fn w64_add4(a, b, c, d)
@@ -49,9 +49,9 @@ import "utso/core/string"
 
 @fn w64_xor(a, b)
   t0 = a[0] ^ b[0]
-  x0 = t0 % 4294967296
+  x0 = t0 & 4294967295
   t1 = a[1] ^ b[1]
-  x1 = t1 % 4294967296
+  x1 = t1 & 4294967295
   return [x0, x1]
 @end
 
@@ -62,68 +62,68 @@ import "utso/core/string"
 @fn w64_and(a, b)
   a0 = a[0] & b[0]
   a1 = a[1] & b[1]
-  return [a0 % 4294967296, a1 % 4294967296]
+  return [a0 & 4294967295, a1 & 4294967295]
 @end
 
 @fn w64_or(a, b)
   o0 = a[0] | b[0]
   o1 = a[1] | b[1]
-  return [o0 % 4294967296, o1 % 4294967296]
+  return [o0 & 4294967295, o1 & 4294967295]
 @end
 
 @fn w64_not(a)
-  n0 = ~a[0]
-  n1 = ~a[1]
-  return [n0 % 4294967296, n1 % 4294967296]
+  // WHY: Unsigned 32-bit bitwise NOT via complement against 0xFFFFFFFF avoids negative signed remainder.
+  n0 = 4294967295 - (a[0] & 4294967295)
+  n1 = 4294967295 - (a[1] & 4294967295)
+  return [n0, n1]
 @end
 
 @fn w64_rotr(x, n)
-  @if n == 0 return [x[0] % 4294967296, x[1] % 4294967296] @end
-  @if n == 32 return [x[1] % 4294967296, x[0] % 4294967296] @end
+  xh = x[0] & 4294967295
+  xl = x[1] & 4294967295
+  @if n == 0 return [xh, xl] @end
+  @if n == 32 return [xl, xh] @end
   @if n < 32
     p1 = lipi_pow2(n)
     p2 = lipi_pow2(32 - n)
-    t1 = (x[0] / p1) % 4294967296
-    t2 = (x[1] * p2) % 4294967296
-    t_hi = t1 | t2
-    hi = t_hi % 4294967296
-    t3 = (x[1] / p1) % 4294967296
-    t4 = (x[0] * p2) % 4294967296
-    t_lo = t3 | t4
-    lo = t_lo % 4294967296
+    t1 = (xh / p1) & 4294967295
+    t2 = (xl * p2) & 4294967295
+    hi = (t1 | t2) & 4294967295
+    t3 = (xl / p1) & 4294967295
+    t4 = (xh * p2) & 4294967295
+    lo = (t3 | t4) & 4294967295
     return [hi, lo]
   @end
   m = n - 32
   p1 = lipi_pow2(m)
   p2 = lipi_pow2(32 - m)
-  t1 = (x[1] / p1) % 4294967296
-  t2 = (x[0] * p2) % 4294967296
-  t_hi = t1 | t2
-  hi = t_hi % 4294967296
-  t3 = (x[0] / p1) % 4294967296
-  t4 = (x[1] * p2) % 4294967296
-  t_lo = t3 | t4
-  lo = t_lo % 4294967296
+  t1 = (xl / p1) & 4294967295
+  t2 = (xh * p2) & 4294967295
+  hi = (t1 | t2) & 4294967295
+  t3 = (xh / p1) & 4294967295
+  t4 = (xl * p2) & 4294967295
+  lo = (t3 | t4) & 4294967295
   return [hi, lo]
 @end
 
 @fn w64_shr(x, n)
-  @if n == 0 return [x[0] % 4294967296, x[1] % 4294967296] @end
-  @if n == 32 return [0, x[0] % 4294967296] @end
+  xh = x[0] & 4294967295
+  xl = x[1] & 4294967295
+  @if n == 0 return [xh, xl] @end
+  @if n == 32 return [0, xh] @end
   @if n < 32
     p1 = lipi_pow2(n)
     p2 = lipi_pow2(32 - n)
-    hi = (x[0] / p1) % 4294967296
-    t1 = (x[1] / p1) % 4294967296
-    t2 = (x[0] * p2) % 4294967296
-    t_lo = t1 | t2
-    lo = t_lo % 4294967296
+    hi = (xh / p1) & 4294967295
+    t1 = (xl / p1) & 4294967295
+    t2 = (xh * p2) & 4294967295
+    lo = (t1 | t2) & 4294967295
     return [hi, lo]
   @end
   m = n - 32
   p1 = lipi_pow2(m)
   hi = 0
-  lo = (x[0] / p1) % 4294967296
+  lo = (xh / p1) & 4294967295
   return [hi, lo]
 @end
 
@@ -382,8 +382,8 @@ import "utso/core/string"
   digest = []
   i = 0
   @while i < 8
-    hi = ctx.state[i][0] % 4294967296
-    lo = ctx.state[i][1] % 4294967296
+    hi = ctx.state[i][0] & 4294967295
+    lo = ctx.state[i][1] & 4294967295
 
     digest = digest.push((hi / 16777216) & 255)
     digest = digest.push((hi / 65536) & 255)
@@ -445,6 +445,57 @@ import "utso/core/string"
     bv = digest[i] & 255
     h_val = sha512_byte_to_hex(bv)
     res = str_concat(res, h_val)
+    i = i + 1
+  @end
+  return res
+@end
+
+@! ----------------------------------------------------------------------------
+@! 7. FIPS 180-4 SHA-384 (for TLS 1.3 TLS_AES_256_GCM_SHA384 Cipher Suite)
+@! ----------------------------------------------------------------------------
+
+@fn sha384_init()
+  return {
+    state: [
+      [0xcbbb9d5d, 0xc1059ed8],
+      [0x629a292a, 0x367cd507],
+      [0x9159015a, 0x3070dd17],
+      [0x152fecd8, 0xf70e5939],
+      [0x67332667, 0xffc00b31],
+      [0x8eb44a87, 0x68581511],
+      [0xdb0c2e0d, 0x64f98fa7],
+      [0x47b5481d, 0xbefa4fa4]
+    ],
+    count: 0,
+    buffer: []
+  }
+@end
+
+@fn sha384_final(ctx)
+  full64 = sha512_final(ctx)
+  out48 = []
+  i = 0
+  @while i < 48 && i < full64.len()
+    out48 = out48.push(full64[i] & 255)
+    i = i + 1
+  @end
+  return out48
+@end
+
+@fn sha384_hash_bytes(data)
+  ctx = sha384_init()
+  ctx = sha512_update(ctx, data)
+  return sha384_final(ctx)
+@end
+
+@fn sha384_hex(data)
+  digest = sha384_hash_bytes(data)
+  res = ""
+  i = 0
+  num_items = digest.len()
+  @while i < num_items
+    bv = digest[i] & 255
+    res = str_concat(res, sha512_byte_to_hex(bv))
     i = i + 1
   @end
   return res

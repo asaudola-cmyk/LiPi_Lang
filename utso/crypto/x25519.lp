@@ -58,7 +58,7 @@ import "utso/crypto/ed25519"
   x_1 = fe_from_bytes(masked_u)
   x_2 = fe_one()
   z_2 = fe_zero()
-  x_3 = x_1
+  x_3 = fe_add(x_1, fe_zero())
   z_3 = fe_one()
   swap = 0
   
@@ -72,13 +72,17 @@ import "utso/crypto/ed25519"
     b = (clamped[byte_idx] >> bit_idx) & 1
     k_bit = b ^ swap
 
-    @if k_bit == 1
-      tmp = x_2
-      x_2 = x_3
-      x_3 = tmp
-      tmp = z_2
-      z_2 = z_3
-      z_3 = tmp
+    @! WHY: Branchless arithmetic constant-time conditional swap across all 16 field limbs
+    @! eliminates secret-dependent control flow on X25519 ladder bits.
+    ci = 0
+    @while ci < 16
+      dx = k_bit * (x_2[ci] - x_3[ci])
+      dz = k_bit * (z_2[ci] - z_3[ci])
+      x_2 = list_set(x_2, ci, x_2[ci] - dx)
+      x_3 = list_set(x_3, ci, x_3[ci] + dx)
+      z_2 = list_set(z_2, ci, z_2[ci] - dz)
+      z_3 = list_set(z_3, ci, z_3[ci] + dz)
+      ci = ci + 1
     @end
     swap = b
 
@@ -109,13 +113,15 @@ import "utso/crypto/ed25519"
     t = t - 1
   @end
 
-  @if swap == 1
-    tmp = x_2
-    x_2 = x_3
-    x_3 = tmp
-    tmp = z_2
-    z_2 = z_3
-    z_3 = tmp
+  ci = 0
+  @while ci < 16
+    dx = swap * (x_2[ci] - x_3[ci])
+    dz = swap * (z_2[ci] - z_3[ci])
+    x_2 = list_set(x_2, ci, x_2[ci] - dx)
+    x_3 = list_set(x_3, ci, x_3[ci] + dx)
+    z_2 = list_set(z_2, ci, z_2[ci] - dz)
+    z_3 = list_set(z_3, ci, z_3[ci] + dz)
+    ci = ci + 1
   @end
 
   inv_z2 = fe_inv(z_2)
@@ -131,5 +137,19 @@ import "utso/crypto/ed25519"
 
 @fn x25519_shared_secret(priv_key, peer_pub_key)
   @! Computes ECDH shared secret: shared_secret = X25519(priv_key, peer_pub_key)
-  return x25519_scalarmult(priv_key, peer_pub_key)
+  @! RFC 7748 Section 6.1: Reject all-zero shared secret resulting from low-order peer points.
+  out = x25519_scalarmult(priv_key, peer_pub_key)
+  @if out.len() != 32
+    return []
+  @end
+  acc = 0
+  i = 0
+  @while i < 32
+    acc = acc | (out[i] & 255)
+    i = i + 1
+  @end
+  @if acc == 0
+    return []
+  @end
+  return out
 @end

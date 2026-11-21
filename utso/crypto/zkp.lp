@@ -35,15 +35,32 @@ import "utso/crypto/sha256"
   public_commitment: string
 @end
 
+@fn _zkp_mul_mod(a, b, mod)
+  res = 0
+  x = a % mod
+  @if x < 0 x = x + mod @end
+  y = b % mod
+  @if y < 0 y = y + mod @end
+  @while y > 0
+    @if (y & 1) == 1
+      res = (res + x) % mod
+    @end
+    x = (x + x) % mod
+    y = y >> 1
+  @end
+  return res
+@end
+
 @fn zkp_mod_pow(base, exp, mod)
   res = 1
   base = base % mod
+  @if base < 0 base = base + mod @end
   @while exp > 0
     @if (exp % 2) == 1
-      res = (res * base) % mod
+      res = _zkp_mul_mod(res, base, mod)
     @end
     exp = exp / 2
-    base = (base * base) % mod
+    base = _zkp_mul_mod(base, base, mod)
   @end
   return res
 @end
@@ -152,9 +169,10 @@ import "utso/crypto/sha256"
 
   @! 4. Quotient polynomial H(x) = (A(x)*B(x) - C(x)) / Z(x) mod p
   z_inv = zkp_mod_pow(z_val, p - 2, p)
-  h_val = (diff * z_inv) % p
+  h_val = _zkp_mul_mod(diff, z_inv, p)
 
-  commit_str = sha256_hex_string(a_tot.to_str() + ":" + b_tot.to_str() + ":" + c_tot.to_str())
+  fs_msg = a_tot.to_str() + ":" + b_tot.to_str() + ":" + c_tot.to_str() + ":" + h_val.to_str() + ":" + z_val.to_str() + ":" + p.to_str()
+  commit_str = sha256_hex_string(fs_msg)
 
   return {
     a_eval: a_tot,
@@ -168,21 +186,33 @@ import "utso/crypto/sha256"
 
 @fn zkp_verify_proof(proof, prime_mod)
   p = prime_mod
-  
-  @! 1. Public commitment format check
-  @if str_len(proof.public_commitment) != 64
+  @if p <= 2 return 0 @end
+
+  @! 1. Public commitment length & degenerate zero-proof check
+  @if str_len(proof.public_commitment) != 64 || proof.z_eval <= 0
+    return 0
+  @end
+  @if proof.a_eval == 0 && proof.b_eval == 0 && proof.c_eval == 0 && proof.h_eval == 0
     return 0
   @end
 
-  @! 2. Schwartz-Zippel constraint identity check: A(tau)*B(tau) - C(tau) == H(tau)*Z(tau) mod p
-  lhs = ((proof.a_eval * proof.b_eval) - proof.c_eval) % p
+  @! 2. Recompute and constant-time verify Fiat-Shamir commitment over all proof scalars
+  expected_fs = proof.a_eval.to_str() + ":" + proof.b_eval.to_str() + ":" + proof.c_eval.to_str() + ":" + proof.h_eval.to_str() + ":" + proof.z_eval.to_str() + ":" + p.to_str()
+  expected_commit = sha256_hex_string(expected_fs)
+  @if str_len(expected_commit) != 64 return 0 @end
+  cdiff = 0
+  ci = 0
+  @while ci < 64
+    cdiff = cdiff | ((str_char_at(expected_commit, ci) & 255) ^ (str_char_at(proof.public_commitment, ci) & 255))
+    ci = ci + 1
+  @end
+  @if cdiff != 0 return 0 @end
+
+  @! 3. Overflow-safe Schwartz-Zippel constraint identity check: A(tau)*B(tau) - C(tau) == H(tau)*Z(tau) mod p
+  lhs = (_zkp_mul_mod(proof.a_eval, proof.b_eval, p) - (proof.c_eval % p)) % p
   @if lhs < 0 lhs = lhs + p @end
 
-  z_val = proof.z_eval
-  @if z_val == 0 z_val = 1 @end
-  rhs = (proof.h_eval * z_val) % p
-  @if rhs < 0 rhs = rhs + p @end
-  
+  rhs = _zkp_mul_mod(proof.h_eval, proof.z_eval, p)
   @if lhs == rhs
     return 1
   @end

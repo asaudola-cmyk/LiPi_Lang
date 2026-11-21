@@ -681,7 +681,7 @@ import "utso/string"
           @while prev_idx < len_s
             ps = pipeline.stages[prev_idx]
             @if ps.status == "COMPLETED" && ps.output_result.len() > 0
-              
+              enriched_prompt = str_concat(enriched_prompt, str_concat("\n", ps.output_result))
             @end
             prev_idx = prev_idx + 1
           @end
@@ -689,7 +689,7 @@ import "utso/string"
           task_id = cluster.next_task_id
           cluster.next_task_id = cluster.next_task_id + 1
 
-          st = task_new(task_id, stage.name, "PIPELINE_STAGE", stage.required_role, 2, enriched_prompt, [])
+          st = task_new(task_id, stage.name, stage.required_role, 2, enriched_prompt, [])
           task_router_dispatch(cluster, st)
           stage.status = "RUNNING"
           all_stages_completed = 0

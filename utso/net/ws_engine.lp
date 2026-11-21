@@ -94,7 +94,8 @@ fn sha1_hash_msg msg out_digest
     h3 = 271733878
     h4 = 3285377520
 
-    w = malloc(320) // 80 words * 4 bytes
+    // WHY: Uses 8-byte word slots matching mem_write/mem_read 64-bit semantics (80 * 8 = 640 bytes).
+    w = malloc(640)
     block_offset = 0
     while block_offset < pad_len
         t = 0
@@ -105,16 +106,16 @@ fn sha1_hash_msg msg out_digest
             b2 = mem_byte_read(buf, boff + 2)
             b3 = mem_byte_read(buf, boff + 3)
             w_val = ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) & 4294967295
-            mem_write(w, t * 4, w_val)
+            mem_write(w, t * 8, w_val)
             t = t + 1
 
         while t < 80
-            v1 = mem_read(w, (t - 3) * 4) & 4294967295
-            v2 = mem_read(w, (t - 8) * 4) & 4294967295
-            v3 = mem_read(w, (t - 14) * 4) & 4294967295
-            v4 = mem_read(w, (t - 16) * 4) & 4294967295
+            v1 = mem_read(w, (t - 3) * 8) & 4294967295
+            v2 = mem_read(w, (t - 8) * 8) & 4294967295
+            v3 = mem_read(w, (t - 14) * 8) & 4294967295
+            v4 = mem_read(w, (t - 16) * 8) & 4294967295
             w_val = rotl32(v1 ^ v2 ^ v3 ^ v4, 1)
-            mem_write(w, t * 4, w_val)
+            mem_write(w, t * 8, w_val)
             t = t + 1
 
         a = h0
@@ -126,7 +127,7 @@ fn sha1_hash_msg msg out_digest
         i = 0
         while i < 80
             if i < 20
-                f = (b & c) | ((~b) & d)
+                f = (b & c) | ((4294967295 - b) & d)
                 k = 1518500249
             elif i < 40
                 f = b ^ c ^ d
@@ -138,7 +139,7 @@ fn sha1_hash_msg msg out_digest
                 f = b ^ c ^ d
                 k = 3395469782
 
-            temp = (rotl32(a, 5) + f + e + k + (mem_read(w, i * 4) & 4294967295)) & 4294967295
+            temp = (rotl32(a, 5) + f + e + k + (mem_read(w, i * 8) & 4294967295)) & 4294967295
             e = d
             d = c
             c = rotl32(b, 30)
@@ -154,7 +155,7 @@ fn sha1_hash_msg msg out_digest
 
         block_offset = block_offset + 64
 
-    free(w, 320)
+    free(w, 640)
     free(buf, pad_len)
 
     // Emit 20-byte big-endian digest
@@ -285,6 +286,12 @@ fn ws_decode_client_frame in_buf nread
         actual_len = (b2 << 8) | b3
         header_offset = 4
     elif len_code == 127
+        if nread < 14 return ""
+        actual_len = 0
+        li = 2
+        while li < 10
+            actual_len = (actual_len * 256) + mem_byte_read(in_buf, li)
+            li = li + 1
         header_offset = 10
 
     if is_masked == 0

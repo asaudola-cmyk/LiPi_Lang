@@ -227,8 +227,29 @@ import "aati/lipi_ai/autograd"
   return out
 @end
 
+@fn torch_fexp(x: f64) -> f64
+  @if x > 40.0 return math_exp(40.0) @end
+  @if x < (0.0 - 40.0) return 0.0 @end
+  return math_exp(x)
+@end
+
 @fn torch_sigmoid(a: Tensor) -> Tensor
-  return tensor_sigmoid(a, 1.0)
+  res_data = []
+  i = 0
+  @while i < a.size
+    x = a.data[i]
+    neg_x = torch_fsub(0.0, x)
+    sig = torch_fdiv(1.0, torch_fadd(1.0, torch_fexp(neg_x)))
+    res_data = res_data.push(sig)
+    i = i + 1
+  @end
+  out = tensor_new(res_data, a.shape)
+  @if a.requires_grad == 1
+    out.requires_grad = 1
+    out.creator_op = "sigmoid"
+    out.parents = [a]
+  @end
+  return out
 @end
 
 @fn torch_backward(root: Tensor) -> i64
@@ -371,6 +392,19 @@ import "aati/lipi_ai/autograd"
           @end
           torch_accumulate_f64_grad(pa, ga)
         @end
+      @elif op == "sigmoid"
+        pa = curr.parents[0]
+        @if pa.requires_grad == 1
+          ga = []
+          k = 0
+          @while k < curr.size
+            y = curr.data[k]
+            ds = torch_fmul(y, torch_fsub(1.0, y))
+            ga = ga.push(torch_fmul(curr.grad[k], ds))
+            k = k + 1
+          @end
+          torch_accumulate_f64_grad(pa, ga)
+        @end
       @elif op == "mse_loss"
         pa = curr.parents[0]
         pb = curr.parents[1]
@@ -407,13 +441,16 @@ import "aati/lipi_ai/autograd"
 // ── 4. Neural Network Modules & Optimizers ───────────────────────────────────
 
 @fn torch_linear_new(in_f: i64, out_f: i64) -> TorchLinear
-  // WHY: Initializes fully-connected affine transformation layer with IEEE-754 f64 weights: y = xW + b.
-  w_init_vals = [1.0, 2.0, 3.0, 4.0, 5.0]
+  // WHY: Initializes fully-connected affine layer with Xavier/Kaiming 1/sqrt(fan_in) variance scaling.
+  fan_in_f = in_f + 0.0
+  @if in_f <= 0 fan_in_f = 1.0 @end
+  scale = torch_fdiv(1.0, math_sqrt(fan_in_f))
+  w_init_vals = [0.0 - 0.6, 0.4, 0.0 - 0.2, 0.5, 0.0 - 0.3, 0.2, 0.7]
   w_data = []
   total_w = in_f * out_f
   i = 0
   @while i < total_w
-    w_data = w_data.push(w_init_vals[i % 5])
+    w_data = w_data.push(torch_fmul(w_init_vals[i % 7], scale))
     i = i + 1
   @end
   w_tensor = leaf_tensor(w_data, [in_f, out_f])

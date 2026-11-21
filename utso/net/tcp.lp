@@ -5,6 +5,7 @@
 @! ============================================================================
 
 import "utso/os/syscalls"
+import "utso/net/dns_client"
 
 @! ----------------------------------------------------------------------------
 @! 1. Socket Constants & Bitwise Endian Helpers
@@ -31,15 +32,13 @@ import "utso/os/syscalls"
 
 @fn parse_ipv4_addr(host)
   @if host == "localhost"
-    t1 = 0 * 256
-    t2 = 0 * 65536
-    t3 = 1 * 16777216
-    r1 = 127 | t1
-    r2 = t2 | t3
-    return r1 | r2
+    return (127 | (1 * 16777216)) & 4294967295
   @end
-  @if host == "" || host == "0.0.0.0"
+  @if host == "0.0.0.0"
     return 0
+  @end
+  @if host == ""
+    return -1
   @end
 
   a = 0
@@ -48,6 +47,7 @@ import "utso/os/syscalls"
   d = 0
   part = 0
   curr = 0
+  has_digit = 0
   i = 0
   hlen = host.len()
 
@@ -55,43 +55,80 @@ import "utso/os/syscalls"
     ch = str_char_at(host, i)
     @if ch >= 48 && ch <= 57
       curr = (curr * 10) + (ch - 48)
+      has_digit = 1
+      @if curr > 255 return -1 @end
     @elif ch == 46
+      @if has_digit == 0 || part >= 3 return -1 @end
       @if part == 0 a = curr @end
       @if part == 1 b = curr @end
       @if part == 2 c = curr @end
       part = part + 1
       curr = 0
+      has_digit = 0
+    @else
+      return -1
     @end
     i = i + 1
   @end
-  @if part == 3 d = curr @end
+  @if has_digit == 0 || part != 3 return -1 @end
+  d = curr
 
-  w0 = a & 255
-  b_byte = b & 255
-  w1 = b_byte * 256
-  c_byte = c & 255
-  w2 = c_byte * 65536
-  d_byte = d & 255
-  w3 = d_byte * 16777216
-  res01 = w0 | w1
-  res23 = w2 | w3
-  return res01 | res23
+  res = (a & 255) | ((b & 255) * 256) | ((c & 255) * 65536) | ((d & 255) * 16777216)
+  return res & 4294967295
+@end
+
+@fn _tcp_pack_sockaddr_buf(host, port, allow_any_empty)
+  ip_host = host
+  @if ip_host == "" && allow_any_empty == 1
+    ip_host = "0.0.0.0"
+  @end
+  sin_addr = parse_ipv4_addr(ip_host)
+  @if sin_addr < 0 return 0 @end
+  buf = lipi_alloc(16)
+  @if buf <= 0 return 0 @end
+  k = 0
+  @while k < 16
+    sys_poke8(buf + k, 0)
+    k = k + 1
+  @end
+  sys_poke8(buf + 0, 2) // AF_INET = 2 LE
+  sys_poke8(buf + 1, 0)
+  sys_poke8(buf + 2, (port >> 8) & 255)
+  sys_poke8(buf + 3, port & 255)
+  sys_poke8(buf + 4, sin_addr & 255)
+  sys_poke8(buf + 5, (sin_addr >> 8) & 255)
+  sys_poke8(buf + 6, (sin_addr >> 16) & 255)
+  sys_poke8(buf + 7, (sin_addr >> 24) & 255)
+  return buf
 @end
 
 @fn sockaddr_in_pack(host, port)
   sin_family = 2
   sin_port = htons(port)
   sin_addr = parse_ipv4_addr(host)
+  @if sin_addr < 0 sin_addr = 0 @end
 
   w_fam = sin_family & 65535
   p_val = sin_port & 65535
   w_port = p_val * 65536
-  w_addr = sin_addr * 4294967296
+  w_addr = (sin_addr & 4294967295) * 4294967296
   t1 = w_fam | w_port
   w0 = t1 | w_addr
   w1 = 0
 
   return { w0: w0, w1: w1 }
+@end
+
+@fn tcp_set_timeout(sockfd, seconds)
+  @if sockfd < 0 return -1 @end
+  tv = lipi_alloc(16)
+  @if tv <= 0 return -1 @end
+  mem_write(tv, 0, seconds)
+  mem_write(tv, 8, 0)
+  sys_setsockopt(sockfd, 1, 20, tv, 16) // SO_RCVTIMEO
+  sys_setsockopt(sockfd, 1, 21, tv, 16) // SO_SNDTIMEO
+  lipi_free(tv)
+  return 0
 @end
 
 @fn tcp_socket_new()
@@ -108,8 +145,10 @@ import "utso/os/syscalls"
   sys_setsockopt(sockfd, 1, 15, opt_buf, 4)
   lipi_free(opt_buf)
 
-  addr = sockaddr_in_pack(host, port)
-  res = sys_bind(sockfd, addr, 16)
+  addr_buf = _tcp_pack_sockaddr_buf(host, port, 1)
+  @if addr_buf <= 0 return -1 @end
+  res = sys_bind(sockfd, addr_buf, 16)
+  lipi_free(addr_buf)
   return res
 @end
 
@@ -128,8 +167,15 @@ import "utso/os/syscalls"
 
 @fn tcp_connect(sockfd, host, port)
   @if sockfd < 0 return -1 @end
-  addr = sockaddr_in_pack(host, port)
-  res = sys_connect(sockfd, addr, 16)
+  ip_str = host
+  @if parse_ipv4_addr(ip_str) < 0
+    ip_str = dns_resolve_ipv4(host)
+    @if ip_str == "" return -1 @end
+  @end
+  addr_buf = _tcp_pack_sockaddr_buf(ip_str, port, 0)
+  @if addr_buf <= 0 return -1 @end
+  res = sys_connect(sockfd, addr_buf, 16)
+  lipi_free(addr_buf)
   return res
 @end
 
@@ -140,7 +186,7 @@ import "utso/os/syscalls"
 
   total_sent = 0
   @while total_sent < dlen
-    written = sys_write(sockfd, data, dlen - total_sent)
+    written = sys_write(sockfd, data + total_sent, dlen - total_sent)
     @if written <= 0
       @if total_sent > 0 return total_sent @end
       return written
@@ -153,11 +199,20 @@ import "utso/os/syscalls"
 @fn tcp_recv(sockfd, max_len)
   @if sockfd < 0 || max_len <= 0 return "" @end
   buf = lipi_alloc(max_len + 1)
+  @if buf <= 0 return "" @end
   n = sys_read(sockfd, buf, max_len)
   @if n <= 0
+    lipi_free_sized(buf, max_len + 1)
     return ""
   @end
-  return lipi_str_new(buf)
+  out = ""
+  k = 0
+  @while k < n
+    out = out + chr(sys_peek8(buf + k))
+    k = k + 1
+  @end
+  lipi_free_sized(buf, max_len + 1)
+  return out
 @end
 
 @fn tcp_close(sockfd)
@@ -205,12 +260,23 @@ import "utso/os/syscalls"
 @end
 
 @fn tcp_stream_connect(host, port)
+  @if host == "" || port <= 0
+    return { fd: -1, peer_host: host, peer_port: port, error: "invalid_endpoint" }
+  @end
+  resolved_ip = host
+  @if parse_ipv4_addr(resolved_ip) < 0
+    resolved_ip = dns_resolve_ipv4(host)
+    @if resolved_ip == ""
+      return { fd: -1, peer_host: host, peer_port: port, error: "dns_failed" }
+    @end
+  @end
   fd = tcp_socket_new()
   @if fd < 0
     return { fd: fd, peer_host: host, peer_port: port, error: "socket_failed" }
   @end
+  tcp_set_timeout(fd, 5)
 
-  conn_res = tcp_connect(fd, host, port)
+  conn_res = tcp_connect(fd, resolved_ip, port)
   @if conn_res < 0
     tcp_close(fd)
     return { fd: -1, peer_host: host, peer_port: port, error: "connect_failed" }

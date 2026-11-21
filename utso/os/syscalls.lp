@@ -896,29 +896,53 @@ import "utso/core/string"
 @! 7. Runtime Memory & String Primitives (Pure Sovereign Lipi)
 @! ----------------------------------------------------------------------------
 @fn lipi_alloc(size)
-  return syscall(9, 0, size, 3, 34, 0 - 1, 0)
+  // WHY: Prepend 16-byte page-aligned metadata header [magic, total_len] so 1-arg lipi_free unmaps any size accurately.
+  sz = size
+  @if sz < 1 sz = 1 @end
+  total = sz + 16
+  raw = syscall(9, 0, total, 3, 34, 0 - 1, 0)
+  @if raw == 0 || (raw < 0 && raw >= 0 - 4095)
+    return 0
+  @end
+  mem_write(raw, 0, 5497015524916642128)
+  mem_write(raw, 8, total)
+  return raw + 16
 @end
 
 @fn lipi_gc_alloc(size)
-  return syscall(9, 0, size, 3, 34, 0 - 1, 0)
+  return lipi_alloc(size)
 @end
 
 @fn gc_alloc(size)
-  return syscall(9, 0, size, 3, 34, 0 - 1, 0)
+  return lipi_alloc(size)
 @end
 
 @fn lipi_free(ptr)
-  // WHY: Default 1-argument runtime free primitive releasing allocated buffer with standard page size.
+  // WHY: Unmaps the exact tracked total_len recorded by lipi_alloc, preventing partial unmap leaks for >4KB buffers.
+  @if ptr <= 0 return 0 @end
+  @if ptr > 4096 && (ptr & 4095) == 16 && mem_read(ptr, 0 - 16) == 5497015524916642128
+    total_sz = mem_read(ptr, 0 - 8)
+    @if total_sz > 0
+      return syscall(11, ptr - 16, total_sz, 0, 0, 0, 0)
+    @end
+  @end
   return syscall(11, ptr, 4096, 0, 0, 0, 0)
 @end
 
 @fn lipi_free_sized(ptr, size)
-  // WHY: Sized memory unmapping helper delegating to Linux SYS_munmap (syscall 11).
+  // WHY: Sized memory unmapping helper aware of lipi_alloc 16-byte header when ptr was allocated via lipi_alloc.
+  @if ptr <= 0 return 0 @end
+  @if ptr > 4096 && (ptr & 4095) == 16 && mem_read(ptr, 0 - 16) == 5497015524916642128
+    total_sz = mem_read(ptr, 0 - 8)
+    @if total_sz > 0
+      return syscall(11, ptr - 16, total_sz, 0, 0, 0, 0)
+    @end
+  @end
   return syscall(11, ptr, size, 0, 0, 0, 0)
 @end
 
 @fn lipi_gc_free(ptr, size)
-  return syscall(11, ptr, size, 0, 0, 0, 0)
+  return lipi_free_sized(ptr, size)
 @end
 
 @fn lipi_str_ptr(s)

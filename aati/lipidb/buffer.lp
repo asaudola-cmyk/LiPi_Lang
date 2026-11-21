@@ -211,7 +211,7 @@ import "aati/lipidb/page"
   page_write_u64(p0_buf, 44, clock_ms())
 
   sys_lseek(pool.fd, 0, 0)
-  sys_write(pool.fd, page_data_ptr(p0_buf), 4096)
+  page_write_to_fd(pool.fd, p0_buf)
   pool.stats_flushes = pool.stats_flushes + 1
   return 1
 @end
@@ -323,7 +323,7 @@ import "aati/lipidb/page"
     p1_buf = page_new()
     page_format_leaf(p1_buf, 1, 0, 0)
     sys_lseek(fd, 4096, 0)
-    sys_write(fd, page_data_ptr(p1_buf), 4096)
+    page_write_to_fd(fd, p1_buf)
     sys_fsync(fd)
   @else
     bp_read_page_0(pool)
@@ -374,7 +374,7 @@ import "aati/lipidb/page"
     victim: PageFrame = pool.frames[target_frame_id]
     @if victim.dirty == 1
       sys_lseek(pool.fd, victim.page_id * 4096, 0)
-      sys_write(pool.fd, page_data_ptr(victim.buffer), 4096)
+      page_write_to_fd(pool.fd, victim.buffer)
       victim.dirty = 0
       pool.stats_flushes = pool.stats_flushes + 1
     @end
@@ -440,7 +440,7 @@ import "aati/lipidb/page"
     victim: PageFrame = pool.frames[target_frame_id]
     @if victim.dirty == 1
       sys_lseek(pool.fd, victim.page_id * 4096, 0)
-      sys_write(pool.fd, page_data_ptr(victim.buffer), 4096)
+      page_write_to_fd(pool.fd, victim.buffer)
       victim.dirty = 0
       pool.stats_flushes = pool.stats_flushes + 1
     @end
@@ -507,6 +507,17 @@ import "aati/lipidb/page"
   return buffer_pool_unpin_page(pool, page_id, 0)
 @end
 
+@! Updates the cached buffer reference for a page frame in memory
+@fn buffer_pool_set_page_buf(pool: BufferPool, page_id, new_buf)
+  frame_id = page_table_lookup(pool, page_id)
+  @if frame_id != (0 - 1)
+    frame: PageFrame = pool.frames[frame_id]
+    frame.buffer = new_buf
+    return 1
+  @end
+  return 0
+@end
+
 @! Marks an in-memory page frame as dirty
 @fn buffer_pool_mark_dirty(pool: BufferPool, page_id)
   frame_id = page_table_lookup(pool, page_id)
@@ -527,7 +538,7 @@ import "aati/lipidb/page"
   frame: PageFrame = pool.frames[frame_id]
   @if frame.dirty == 1
     sys_lseek(pool.fd, page_id * 4096, 0)
-    sys_write(pool.fd, page_data_ptr(frame.buffer), 4096)
+    page_write_to_fd(pool.fd, frame.buffer)
     frame.dirty = 0
     pool.stats_flushes = pool.stats_flushes + 1
     return 1
@@ -543,7 +554,7 @@ import "aati/lipidb/page"
     frame: PageFrame = pool.frames[i]
     @if frame.page_id != (0 - 1) && frame.dirty == 1
       sys_lseek(pool.fd, frame.page_id * 4096, 0)
-      sys_write(pool.fd, page_data_ptr(frame.buffer), 4096)
+      page_write_to_fd(pool.fd, frame.buffer)
       frame.dirty = 0
       flushed = flushed + 1
       pool.stats_flushes = pool.stats_flushes + 1

@@ -46,6 +46,7 @@ struct Arm64StringReloc
 struct Arm64LocalVar
     lv_name             // Variable identifier string
     lv_offset           // Positive stack offset in bytes: accessed as [sp, #lv_offset]
+    a64_lv_struct_type      // Struct type name string for accurate field offset resolution
 
 // WHY: Records a function definition entry point for inter-procedural call site resolution
 struct Arm64Function
@@ -54,8 +55,8 @@ struct Arm64Function
 
 // WHY: Records an unresolved 26-bit PC-relative subroutine call displacement
 struct Arm64CallReloc
-    cr_patch_offset     // Byte index in code_bytes where the 4-byte BL instruction is located
-    cr_target_name      // Target function identifier or "__print_int" / "__alloc"
+    a64_cr_patch_offset     // Byte index in code_bytes where the 4-byte BL instruction is located
+    a64_cr_target_name      // Target function identifier or "__print_int" / "__alloc"
 
 // WHY: Models struct schema definitions and field member offsets
 struct Arm64StructDef
@@ -83,17 +84,26 @@ struct Arm64Synthesizer
     synth_print_int_off // Byte offset where print_int helper starts
     synth_loop_starts   // Stack of loop header byte offsets for 'continue'
     synth_loop_breaks   // Stack of lists of break patch offsets
+    a64_pad_loop_cont   // Padding slot aligning struct indices with X86Synthesizer
     synth_structs       // List of Arm64StructDef structs
     synth_global_fields // List of global field name strings
     synth_needs_alloc   // Flag: 1 if bump allocator helper must be emitted
     synth_alloc_off     // Byte offset where bump allocator starts
-    synth_alloc_rw_patch_off // Byte offset of 4-word movz/movk loading RW heap pointer base
-    synth_needs_list_create // Flag: 1 if list constructor helper must be emitted
-    synth_list_create_off   // Byte offset where list constructor helper starts
-    synth_needs_file_write  // Flag: 1 if file_write helper must be emitted
-    synth_file_write_off    // Byte offset where file_write helper starts
-    synth_in_function   // 1 if currently synthesizing inside a function, 0 if top-level
-    synth_try_patches   // Stack of lists of [patch_offset, kind] exception unwind patches (0=B, 1=B.NE)
+    a64_alloc_rw_patch_off // Byte offset of 4-word movz/movk loading RW heap pointer base
+    a64_needs_list_create // Flag: 1 if list constructor helper must be emitted
+    a64_list_create_off   // Byte offset where list constructor helper starts
+    a64_needs_file_write  // Flag: 1 if file_write helper must be emitted
+    a64_file_write_off    // Byte offset where file_write helper starts
+    a64_in_function   // 1 if currently synthesizing inside a function, 0 if top-level
+    a64_try_patches   // Stack of lists of [patch_offset, kind] exception unwind patches (0=B, 1=B.NE)
+    a64_sp_delta      // Temporary stack pointer displacement in bytes from push/pop pairs
+    a64_for_conts     // Stack of lists of continue patch offsets for for-loop step targets
+    a64_needs_list_push   // Flag: 1 if __list_push helper must be emitted
+    a64_list_push_off     // Byte offset where __list_push helper starts
+    a64_error_count       // Count of backend synthesis/relocation errors
+    a64_error_msg         // First error diagnostic message
+    a64_called_main       // 1 if top-level main()/মূল() call was emitted
+    a64_last_struct       // Tracks struct type of most recently synthesized primary expression
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -111,17 +121,26 @@ fn arm64_synth_new
     s.synth_print_int_off = 0
     s.synth_loop_starts = list()
     s.synth_loop_breaks = list()
+    s.a64_pad_loop_cont = 0
     s.synth_structs = list()
     s.synth_global_fields = list()
     s.synth_needs_alloc = 0
     s.synth_alloc_off = 0
-    s.synth_alloc_rw_patch_off = 0 - 1
-    s.synth_needs_list_create = 0
-    s.synth_list_create_off = 0
-    s.synth_needs_file_write = 0
-    s.synth_file_write_off = 0
-    s.synth_in_function = 0
-    s.synth_try_patches = list()
+    s.a64_alloc_rw_patch_off = 0 - 1
+    s.a64_needs_list_create = 0
+    s.a64_list_create_off = 0
+    s.a64_needs_file_write = 0
+    s.a64_file_write_off = 0
+    s.a64_in_function = 0
+    s.a64_try_patches = list()
+    s.a64_sp_delta = 0
+    s.a64_for_conts = list()
+    s.a64_needs_list_push = 0
+    s.a64_list_push_off = 0
+    s.a64_error_count = 0
+    s.a64_error_msg = ""
+    s.a64_called_main = 0
+    s.a64_last_struct = ""
     return s
 
 fn arm64_synth_emit_byte s byte_val
@@ -283,6 +302,42 @@ fn arm64_emit_sdiv_x s rd rn rm
     arm64_synth_emit32(s, word)
     return 0
 
+fn arm64_emit_and_x s rd rn rm
+    // WHY: `and x<rd>, x<rn>, x<rm>` (0x8A000000).
+    word = 2315255808 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_emit_orr_x s rd rn rm
+    // WHY: `orr x<rd>, x<rn>, x<rm>` (0xAA000000).
+    word = 2852126720 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_emit_orn_x s rd rn rm
+    // WHY: `orn x<rd>, x<rn>, x<rm>` (0xAA200000) — use rn=31 (XZR) for bitwise NOT (`mvn`).
+    word = 2854223872 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_emit_eor_x s rd rn rm
+    // WHY: `eor x<rd>, x<rn>, x<rm>` (0xCA000000).
+    word = 3388997632 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_emit_lslv_x s rd rn rm
+    // WHY: `lslv x<rd>, x<rn>, x<rm>` (0x9AC02000).
+    word = 2596282368 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_emit_asrv_x s rd rn rm
+    // WHY: `asrv x<rd>, x<rn>, x<rm>` (0x9AC02800).
+    word = 2596284416 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
 fn arm64_emit_cmp_x s rn rm
     // WHY: `subs xzr, x<rn>, x<rm>` (0xEB00001F | (rm << 16) | (rn << 5)).
     // Subtracts Rm from Rn, updates NZCV flags, and discards arithmetic result via XZR.
@@ -347,19 +402,19 @@ fn arm64_emit_ldp_post s rt1 rt2 rn imm7
     return 0
 
 fn arm64_emit_str_reg_sp s rt sp_offset
-    // WHY: `str x<rt>, [sp, #<sp_offset>]` (0xF9000000 | (((sp_offset / 8) & 0xFFF) << 10) | (31 << 5) | rt).
-    // 64-bit store with 12-bit unsigned 8-byte scaled immediate displacement from Stack Pointer (SP=31).
+    // WHY: `str x<rt>, [sp, #<sp_offset + a64_sp_delta>]` adjusting automatically for pushed temporaries.
     t = rt & 31
-    scaled = (sp_offset / 8) & 4095
+    eff_off = sp_offset + s.a64_sp_delta
+    scaled = (eff_off / 8) & 4095
     word = 4177526784 | (scaled << 10) | (31 << 5) | t
     arm64_synth_emit32(s, word)
     return 0
 
 fn arm64_emit_ldr_reg_sp s rt sp_offset
-    // WHY: `ldr x<rt>, [sp, #<sp_offset>]` (0xF9400000 | (((sp_offset / 8) & 0xFFF) << 10) | (31 << 5) | rt).
-    // 64-bit load with 12-bit unsigned 8-byte scaled immediate displacement from Stack Pointer (SP=31).
+    // WHY: `ldr x<rt>, [sp, #<sp_offset + a64_sp_delta>]` adjusting automatically for pushed temporaries.
     t = rt & 31
-    scaled = (sp_offset / 8) & 4095
+    eff_off = sp_offset + s.a64_sp_delta
+    scaled = (eff_off / 8) & 4095
     word = 4181721088 | (scaled << 10) | (31 << 5) | t
     arm64_synth_emit32(s, word)
     return 0
@@ -374,16 +429,22 @@ fn arm64_emit_svc s imm16
 
 fn arm64_push_reg s reg
     // WHY: Pushes 64-bit register Xt onto stack (pre-index: str Xt, [sp, #-16]!).
-    // Maintains mandatory AAPCS64 16-byte stack alignment during expression evaluation.
+    // Maintains mandatory AAPCS64 16-byte stack alignment and tracks SP shift.
     r = reg & 31
     arm64_synth_emit32(s, 4162785248 | r)
+    s.a64_sp_delta = s.a64_sp_delta + 16
     return 0
 
 fn arm64_pop_reg s reg
     // WHY: Pops 64-bit register Xt from stack (post-index: ldr Xt, [sp], #16).
-    // Restores register operand and pops 16 bytes while preserving alignment.
+    // Restores register operand and reverses tracked SP shift.
     r = reg & 31
     arm64_synth_emit32(s, 4165011424 | r)
+    if s.a64_sp_delta >= 16
+        s.a64_sp_delta = s.a64_sp_delta - 16
+    else
+        s.a64_sp_delta = 0
+    end
     return 0
 
 fn arm64_emit_prologue s
@@ -451,8 +512,8 @@ fn arm64_synth_emit_call_print_int s
     arm64_emit_bl(s, 0) // Placeholder 26-bit call displacement
 
     call_rel = Arm64CallReloc()
-    call_rel.cr_patch_offset = call_off
-    call_rel.cr_target_name = "__print_int"
+    call_rel.a64_cr_patch_offset = call_off
+    call_rel.a64_cr_target_name = "__print_int"
     push(s.synth_call_relocs, call_rel)
     return 0
 
@@ -577,14 +638,14 @@ fn arm64_synth_emit_call_alloc s
     arm64_emit_bl(s, 0) // Placeholder
 
     call_rel = Arm64CallReloc()
-    call_rel.cr_patch_offset = call_off
-    call_rel.cr_target_name = "__alloc"
+    call_rel.a64_cr_patch_offset = call_off
+    call_rel.a64_cr_target_name = "__alloc"
     push(s.synth_call_relocs, call_rel)
     return 0
 
 fn arm64_synth_emit_alloc_helper s
     // WHY: Emits pure W^X ARM64 silicon bump-arena memory allocator (0% RWE, zero self-modifying code).
-    // Reads/writes _heap_ptr inside the RW .data segment patched via s.synth_alloc_rw_patch_off.
+    // Reads/writes _heap_ptr inside the RW .data segment patched via s.a64_alloc_rw_patch_off.
     // Inputs: X0 = requested byte size. Output: X0 = pointer to allocated memory.
     s.synth_alloc_off = s.synth_code.len()
 
@@ -595,7 +656,7 @@ fn arm64_synth_emit_alloc_helper s
     // 2: bic x0, x0, x1 -> align to 16 bytes
     arm64_synth_emit32(s, 2317484032)
     // 3..6: movz/movk x1, RW_DATA_VADDR (_heap_ptr slot in strict RW segment, patched by linker)
-    s.synth_alloc_rw_patch_off = s.synth_code.len()
+    s.a64_alloc_rw_patch_off = s.synth_code.len()
     arm64_emit_movz_x(s, 1, 0, 0)
     arm64_emit_movk_x(s, 1, 0, 16)
     arm64_emit_movk_x(s, 1, 0, 32)
@@ -712,13 +773,47 @@ fn arm64_synth_alloc_var s name
     lv = Arm64LocalVar()
     lv.lv_name = name
     lv.lv_offset = off
+    lv.a64_lv_struct_type = ""
     push(s.synth_locals, lv)
     return off
 
+fn arm64_synth_set_var_struct s name sname
+    i = 0
+    while i < s.synth_locals.len()
+        if s.synth_locals[i].lv_name == name
+            s.synth_locals[i].a64_lv_struct_type = sname
+            return 0
+        i = i + 1
+    return 0
+
+fn arm64_synth_get_var_struct s name
+    i = 0
+    while i < s.synth_locals.len()
+        if s.synth_locals[i].lv_name == name
+            return s.synth_locals[i].a64_lv_struct_type
+        i = i + 1
+    return ""
+
+fn arm64_is_ident_token kind
+    if kind == TOK_IDENT() return 1
+    if kind == TOK_KW_END() return 1
+    if kind == TOK_KW_IN() return 1
+    if kind == TOK_KW_TYPE() return 1
+    if kind == TOK_KW_CASE() return 1
+    if kind == TOK_KW_MATCH() return 1
+    if kind == TOK_KW_MUT() return 1
+    if kind == TOK_KW_ASYNC() return 1
+    if kind == TOK_KW_AWAIT() return 1
+    if kind == TOK_KW_TRY() return 1
+    if kind == TOK_KW_CATCH() return 1
+    if kind == TOK_KW_DEFER() return 1
+    if kind == TOK_KW_PRINT() return 1
+    if kind == TOK_KW_SYSCALL() return 1
+    return 0
+
 fn arm64_parse_float_bits s_text
-    // WHY: Converts floating-point string literal (e.g. "1.9", "2.9", "100.5", "-0.25")
+    // WHY: Converts floating-point string literal (including scientific notation like 1.5e-4 or 2E10)
     // directly into standard IEEE-754 binary64 64-bit integer bit representation.
-    // Pure integer arithmetic: zero libc, zero external dependencies, bit-exact.
     s_len = len(s_text)
     if s_len == 0
         return 0
@@ -738,25 +833,53 @@ fn arm64_parse_float_bits s_text
     frac_part = 0
     frac_digits = 0
     dot_seen = 0
+    exp_seen = 0
+    exp_neg = 0
+    exp_val = 0
 
     idx = start
     while idx < s_len
         c = char_at(s_text, idx)
-        if c == "."
+        if c == "." and exp_seen == 0
             dot_seen = 1
+        elif c == "e" or c == "E"
+            exp_seen = 1
+            if idx + 1 < s_len
+                nc = char_at(s_text, idx + 1)
+                if nc == "-"
+                    exp_neg = 1
+                    idx = idx + 1
+                elif nc == "+"
+                    idx = idx + 1
+                end
+            end
         else
             code = ord(c)
             if code >= 48 and code <= 57
                 d = code - 48
-                if dot_seen == 0
-                    int_part = (int_part * 10) + d
+                if exp_seen == 1
+                    if exp_val < 1000
+                        exp_val = (exp_val * 10) + d
+                    end
+                elif dot_seen == 0
+                    if int_part < 90000000000000000
+                        int_part = (int_part * 10) + d
+                    else
+                        exp_val = exp_val + 1
+                    end
                 else
-                    frac_part = (frac_part * 10) + d
-                    frac_digits = frac_digits + 1
+                    if frac_digits < 17 and frac_part < 90000000000000000
+                        frac_part = (frac_part * 10) + d
+                        frac_digits = frac_digits + 1
+                    end
                 end
             end
         end
         idx = idx + 1
+    end
+
+    if exp_neg == 1
+        exp_val = 0 - exp_val
     end
 
     if int_part == 0 and frac_part == 0
@@ -766,16 +889,48 @@ fn arm64_parse_float_bits s_text
         return 0
     end
 
-    den = 1
+    exp10 = exp_val - frac_digits
+    num = int_part
     k = 0
     while k < frac_digits
-        den = den * 10
+        num = num * 10
         k = k + 1
     end
-
-    num = (int_part * den) + frac_part
-
+    num = num + frac_part
+    den = 1
     exp = 1023
+
+    if exp10 > 320
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp10 < (0 - 340)
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
+    end
+
+    while exp10 > 0
+        while num >= 450359962737049600
+            num = num / 2
+            exp = exp + 1
+        end
+        num = num * 10
+        exp10 = exp10 - 1
+    end
+    while exp10 < 0
+        while den >= 450359962737049600
+            den = den / 2
+            exp = exp - 1
+        end
+        den = den * 10
+        exp10 = exp10 + 1
+    end
+
     while num >= (den * 2)
         den = den * 2
         exp = exp + 1
@@ -783,6 +938,20 @@ fn arm64_parse_float_bits s_text
     while num < den
         num = num * 2
         exp = exp - 1
+    end
+
+    if exp >= 2047
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp <= 0
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
     end
 
     rem = num - den

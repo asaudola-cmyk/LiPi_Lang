@@ -125,10 +125,10 @@ fn main
     ok_sec3 = assert_eq(rate_limiter_acquire(limiter), 0, "Token 3 Blocked (429)")
 
     secret_key = "sovereign_key"
-    token_valid = "Bearer head." + secret_key + ".sig"
-    token_invalid = "Bearer head.forged_key.sig"
-    ok_sec4 = assert_eq(jwt_auth_guard(token_valid, secret_key), 1001, "JWT Valid Signature")
-    ok_sec5 = assert_eq(jwt_auth_guard(token_invalid, secret_key), 0, "JWT Rejection")
+    token_valid = sf_jwt_create_bearer(1001, secret_key)
+    token_invalid = "Bearer head." + secret_key + ".sig"
+    ok_sec4 = assert_eq(jwt_auth_guard(token_valid, secret_key), 1001, "JWT Valid HMAC-SHA256 Signature")
+    ok_sec5 = assert_eq(jwt_auth_guard(token_invalid, secret_key), 0, "JWT Plaintext Substring Forgery Rejection")
     if ok_sec1 == 1 and ok_sec2 == 1 and ok_sec3 == 1 and ok_sec4 == 1 and ok_sec5 == 1
         passed_tests = passed_tests + 1
 

@@ -313,7 +313,7 @@
 
 @fn math_proof_engine_new()
   allocs = [
-    "alloc", "malloc", "heap_alloc", "mem_alloc", "sys_alloc",
+    "alloc", "malloc", "heap_alloc", "mem_alloc", "sys_alloc", "slab_alloc", "স্ল্যাব_বরাদ্দ",
     "sys_mmap", "buffer_alloc", "gc_alloc", "_lipi_alloc",
     "বরাদ্দ", "মেমরি_বরাদ্দ",
     "list", "map", "list_new", "map_new", "buffer_new", "string_new", "make"
@@ -387,6 +387,43 @@
   @end
   @if str_eq(k, "Closure") == 1 || tag == AST_TAG_CLOSURE()
     return 1
+  @end
+  return 0
+@end
+
+@fn math_proof_count_nested_allocs(mpe, expr)
+  // WHY: Counts raw allocations nested inside array elements or call arguments.
+  @if expr == 0 return 0 @end
+  k = expr.kind
+  tag = expr.tag
+  cnt = 0
+  @if (str_eq(k, "ArrayLit") == 1 || tag == AST_TAG_ARRAY_LIT() || str_eq(k, "Array") == 1) && expr.elements != 0
+    ei = 0
+    @while ei < expr.elements.len()
+      el = expr.elements[ei]
+      @if math_proof_expr_is_alloc(mpe, el) == 1
+        cnt = cnt + 1
+      @end
+      cnt = cnt + math_proof_count_nested_allocs(mpe, el)
+      ei = ei + 1
+    @end
+    return cnt
+  @end
+  @if str_eq(k, "Call") == 1 || tag == AST_TAG_CALL()
+    cargs = expr.args
+    @if cargs == 0 cargs = expr.params @end
+    @if cargs != 0
+      ai = 0
+      @while ai < cargs.len()
+        ag = cargs[ai]
+        @if math_proof_expr_is_alloc(mpe, ag) == 1
+          cnt = cnt + 1
+        @end
+        cnt = cnt + math_proof_count_nested_allocs(mpe, ag)
+        ai = ai + 1
+      @end
+    @end
+    return cnt
   @end
   return 0
 @end
@@ -896,6 +933,12 @@
         @if rhs == 0 rhs = stmt.right @end
 
         is_alloc = math_proof_expr_is_alloc(mpe, rhs)
+        nested_a = math_proof_count_nested_allocs(mpe, rhs)
+        @if nested_a > 0
+          st.mps_balance = st.mps_balance + nested_a
+          st.mps_alloc_count = st.mps_alloc_count + nested_a
+          st.mps_active_count = st.mps_active_count + nested_a
+        @end
         @if is_alloc == 1
           st.mps_balance = st.mps_balance + 1
           st.mps_alloc_count = st.mps_alloc_count + 1
@@ -933,7 +976,13 @@
           cname = call_node.func.name
         @end
 
-        // Check standalone allocator
+        // Check standalone allocator and nested allocation arguments
+        nested_c = math_proof_count_nested_allocs(mpe, call_node)
+        @if nested_c > 0
+          st.mps_balance = st.mps_balance + nested_c
+          st.mps_alloc_count = st.mps_alloc_count + nested_c
+          st.mps_active_count = st.mps_active_count + nested_c
+        @end
         @if math_proof_is_allocator(mpe, cname) == 1
           st.mps_balance = st.mps_balance + 1
           st.mps_alloc_count = st.mps_alloc_count + 1

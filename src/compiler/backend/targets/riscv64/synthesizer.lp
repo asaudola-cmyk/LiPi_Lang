@@ -12,24 +12,93 @@ include "src/compiler/backend/targets/riscv64/riscv64_vector.lp"
 // ── 11b. RV64G Dynamic Runtime Helpers (List, File I/O) ──────────────────────
 
 fn riscv64_synth_emit_list_create_helper s
-    // WHY: Native RV64G 24-byte list header {len, cap, data_ptr} constructor backed by __alloc.
+    // WHY: Native RV64G 24-byte list header {len, cap, data_ptr} constructor with dynamic capacity.
     // Input: a0 (x10) = initial len. Output: a0 (x10) = pointer to 24-byte list header.
     off = s.rv_code.len()
     s.rv_list_create_off = off
     riscv64_emit_addi(s, 2, 2, 0 - 32)
     riscv64_emit_sd(s, 1, 2, 24)
     riscv64_emit_sd(s, 9, 2, 16)
+    riscv64_emit_sd(s, 18, 2, 8)
     riscv64_emit_mv(s, 9, 10)            // s1 (x9) = initial len
-    riscv64_emit_li(s, 10, 160)          // 24B header + 136B data buffer
+    riscv64_emit_li(s, 18, 16)           // s2 (x18) = default cap 16
+    bge_cap = s.rv_code.len()
+    riscv64_emit_bge(s, 18, 9, 0)        // if 16 >= initial_len, skip doubling
+    riscv64_emit_slli(s, 18, 9, 1)       // cap = initial_len * 2
+    cap_ready_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_cap, 5, 18, 9, cap_ready_off)
+    riscv64_emit_slli(s, 10, 18, 3)      // cap * 8
+    riscv64_emit_addi(s, 10, 10, 24)     // 24B header + cap * 8
     riscv64_synth_emit_call_alloc(s)
     riscv64_emit_sd(s, 9, 10, 0)         // [a0 + 0] = len
-    riscv64_emit_li(s, 5, 16)
-    riscv64_emit_sd(s, 5, 10, 8)         // [a0 + 8] = cap (16)
+    riscv64_emit_sd(s, 18, 10, 8)        // [a0 + 8] = cap
     riscv64_emit_addi(s, 6, 10, 24)
     riscv64_emit_sd(s, 6, 10, 16)        // [a0 + 16] = a0 + 24 (data_ptr)
+    riscv64_emit_ld(s, 18, 2, 8)
     riscv64_emit_ld(s, 9, 2, 16)
     riscv64_emit_ld(s, 1, 2, 24)
     riscv64_emit_addi(s, 2, 2, 32)
+    riscv64_emit_ret(s)
+    return off
+
+fn riscv64_synth_emit_list_push_helper s
+    // WHY: Appends value (a1) to list header (a0), growing backing buffer exponentially via __alloc.
+    off = s.rv_code.len()
+    s.rv_list_push_off = off
+    riscv64_emit_addi(s, 2, 2, 0 - 48)
+    riscv64_emit_sd(s, 1, 2, 40)
+    riscv64_emit_sd(s, 9, 2, 32)
+    riscv64_emit_sd(s, 18, 2, 24)
+    riscv64_emit_sd(s, 19, 2, 16)
+    riscv64_emit_sd(s, 20, 2, 8)
+    riscv64_emit_sd(s, 21, 2, 0)
+    riscv64_emit_mv(s, 9, 10)            // s1 = hdr
+    riscv64_emit_mv(s, 18, 11)           // s2 = val
+    riscv64_emit_ld(s, 20, 9, 0)         // s4 = len
+    riscv64_emit_ld(s, 21, 9, 8)         // s5 = cap
+    riscv64_emit_ld(s, 19, 9, 16)        // s3 = data_ptr
+    blt_have_cap = s.rv_code.len()
+    riscv64_emit_blt(s, 20, 21, 0)       // if len < cap, skip grow
+    blt_nz_cap = s.rv_code.len()
+    riscv64_emit_blt(s, 0, 21, 0)        // if 0 < cap, skip default 8
+    riscv64_emit_addi(s, 21, 0, 8)
+    nz_cap_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_nz_cap, 4, 0, 21, nz_cap_off)
+    riscv64_emit_slli(s, 21, 21, 1)      // new_cap = cap * 2
+    riscv64_emit_slli(s, 10, 21, 3)      // alloc_bytes = new_cap * 8
+    riscv64_synth_emit_call_alloc(s)     // a0 = new_data
+    riscv64_emit_addi(s, 5, 0, 0)        // t0 = i = 0
+    copy_loop_off = s.rv_code.len()
+    bge_copy_done = s.rv_code.len()
+    riscv64_emit_bge(s, 5, 20, 0)        // if i >= len, done
+    riscv64_emit_slli(s, 6, 5, 3)        // t1 = i * 8
+    riscv64_emit_add(s, 7, 19, 6)        // &old[i]
+    riscv64_emit_ld(s, 11, 7, 0)         // a1 = old[i]
+    riscv64_emit_add(s, 7, 10, 6)        // &new[i]
+    riscv64_emit_sd(s, 11, 7, 0)         // new[i] = old[i]
+    riscv64_emit_addi(s, 5, 5, 1)        // i++
+    jmp_loop = s.rv_code.len()
+    riscv64_emit_jal(s, 0, copy_loop_off - jmp_loop)
+    copy_done_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_copy_done, 5, 5, 20, copy_done_off)
+    riscv64_emit_mv(s, 19, 10)           // s3 = new_data
+    riscv64_emit_sd(s, 21, 9, 8)         // hdr[8] = new_cap
+    riscv64_emit_sd(s, 19, 9, 16)        // hdr[16] = new_data
+    have_cap_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_have_cap, 4, 20, 21, have_cap_off)
+    riscv64_emit_slli(s, 5, 20, 3)       // len * 8
+    riscv64_emit_add(s, 5, 19, 5)        // &data_ptr[len]
+    riscv64_emit_sd(s, 18, 5, 0)         // data_ptr[len] = val
+    riscv64_emit_addi(s, 20, 20, 1)      // len + 1
+    riscv64_emit_sd(s, 20, 9, 0)         // hdr[0] = len + 1
+    riscv64_emit_mv(s, 10, 9)            // return hdr
+    riscv64_emit_ld(s, 21, 2, 0)
+    riscv64_emit_ld(s, 20, 2, 8)
+    riscv64_emit_ld(s, 19, 2, 16)
+    riscv64_emit_ld(s, 18, 2, 24)
+    riscv64_emit_ld(s, 9, 2, 32)
+    riscv64_emit_ld(s, 1, 2, 40)
+    riscv64_emit_addi(s, 2, 2, 48)
     riscv64_emit_ret(s)
     return off
 
@@ -101,10 +170,10 @@ fn riscv64_synth_compile_program tokens
 
         riscv64_synth_compile_statement(s, tokens, pos_box)
 
-    // 3. If there were NO top-level statements, but 'main' or 'মূল' exists, call main() automatically!
+    // 3. Auto-call main()/মূল() whenever defined and not already invoked at top-level
     has_main = 0
     main_name = ""
-    if has_top_level == 0
+    if s.rv_called_main == 0
         fi = 0
         while fi < s.rv_functions.len()
             fn_candidate = s.rv_functions[fi].rv_fn_name
@@ -120,8 +189,8 @@ fn riscv64_synth_compile_program tokens
             call_rel.rv_cr_target_name = main_name
             push(s.rv_call_relocs, call_rel)
 
-    // 4. Top-level exit epilogue
-    if has_top_level == 1 or has_main == 0
+    // 4. Top-level exit epilogue (preserve main() return code in a0 when auto-called)
+    if has_main == 0 and s.rv_called_main == 0
         riscv64_emit_addi(s, 10, 0, 0) // exit code 0 in a0
     // Exit via Linux sys_exit (syscall 93 on RISC-V) with status code in a0
     riscv64_emit_li(s, 17, 93)
@@ -131,7 +200,10 @@ fn riscv64_synth_compile_program tokens
     if s.rv_needs_print_int == 1
         riscv64_synth_emit_print_int_helper(s)
 
-    // 5b. Emit sovereign alloc, list_create, and file_write helpers if required
+    // 5b. Emit sovereign alloc, list_create, list_push, and file_write helpers if required
+    if s.rv_needs_list_push == 1
+        s.rv_needs_alloc = 1
+        riscv64_synth_emit_list_push_helper(s)
     if s.rv_needs_list_create == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_list_create_helper(s)
@@ -145,28 +217,44 @@ fn riscv64_synth_compile_program tokens
     while ci < s.rv_call_relocs.len()
         cr = s.rv_call_relocs[ci]
         resolved_addr = 0
+        found_rel = 0
         if cr.rv_cr_target_name == "__print_int"
             resolved_addr = s.rv_print_int_off
+            found_rel = 1
         elif cr.rv_cr_target_name == "__alloc"
             resolved_addr = s.rv_alloc_off
+            found_rel = 1
         elif cr.rv_cr_target_name == "__list_create"
             resolved_addr = s.rv_list_create_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__list_push"
+            resolved_addr = s.rv_list_push_off
+            found_rel = 1
         elif cr.rv_cr_target_name == "__file_write"
             resolved_addr = s.rv_file_write_off
+            found_rel = 1
         else
             k = 0
             while k < s.rv_functions.len()
                 fn_item = s.rv_functions[k]
                 if fn_item.rv_fn_name == cr.rv_cr_target_name
                     resolved_addr = fn_item.rv_fn_entry_offset
+                    found_rel = 1
                 k = k + 1
-
-        riscv64_synth_patch_jal(s, cr.rv_cr_patch_offset, 1, resolved_addr)
+        if found_rel == 0
+            s.rv_error_count = s.rv_error_count + 1
+            if s.rv_error_msg == ""
+                s.rv_error_msg = "Undefined function in riscv64 target: " + cr.rv_cr_target_name
+            end
+            say "❌ [RISC-V 64 Backend Error]: Undefined function '" + cr.rv_cr_target_name + "'"
+        else
+            riscv64_synth_patch_jal(s, cr.rv_cr_patch_offset, 1, resolved_addr)
+        end
         ci = ci + 1
 
-    // 7. Resolve 64-Bit Virtual Memory String Relocations
+    // 7. Resolve 64-Bit Virtual Memory String & Allocator RW .data Relocations
     total_code_size = s.rv_code.len()
-    rodata_base_vaddr = 4194424 + total_code_size // 0x400078 + total_code_size
+    rodata_base_vaddr = 4194536 + total_code_size // 0x4000E8 (232B header) + total_code_size
 
     ri = 0
     while ri < s.rv_str_relocs.len()
@@ -175,33 +263,49 @@ fn riscv64_synth_compile_program tokens
         riscv64_synth_patch_lui_addi(s, rel.rv_sr_patch_offset, rel.rv_sr_reg, target_vaddr)
         ri = ri + 1
 
+    if s.rv_needs_alloc == 1 and s.rv_alloc_rw_patch_off >= 0
+        rx_tot = 232 + total_code_size + s.rv_rodata.len()
+        rem_rx = rx_tot % 4096
+        rx_pad = 0
+        if rem_rx != 0
+            rx_pad = 4096 - rem_rx
+        rw_f_off = rx_tot + rx_pad
+        rw_vaddr_target = 4198400 + rw_f_off // 0x401000 + rw_f_off (strict W^X RW .data inside 64KB VM window)
+        riscv64_synth_patch_lui_addi(s, s.rv_alloc_rw_patch_off, 5, rw_vaddr_target)
+
     return s
 
 // ── 13. ELF64 RISC-V Container Header Generator ───────────────────────────────
 
 fn riscv64_elf_emit_executable code_bytes rodata_bytes out_path
-    // WHY: Packages the compiled RISC-V 64 machine instructions and read-only constants into a
-    // bit-perfect Linux ELF64 standalone executable container and persists it to disk with 0755 permissions.
+    // WHY: Packages RISC-V 64 machine instructions and read-only constants into a
+    // strict W^X 3-PHDR Linux ELF64 executable container (zero RWE segments) and persists it with 0755 permissions.
     //
     // Binary Layout:
     //   - Base Virtual Address: 0x400000 (4194304)
-    //   - ELF64 Header: 64 bytes (0x00 - 0x3F)
-    //   - PT_LOAD Program Header: 56 bytes (0x40 - 0x77)
-    //   - Total Header Overhead: 120 bytes (0x78)
-    //   - Entry Point: 0x400078 (4194424) -> code_bytes starts immediately at offset 120
+    //   - ELF64 Header: 64 bytes + 3 * 56 Program Headers = 232 bytes (0xE8)
+    //   - Entry Point: 0x4000E8 (4194536) -> code_bytes starts immediately at offset 232
     //   - Machine: EM_RISCV = 243 (0x00F3)
-    //   - Single PT_LOAD segment encompassing header, code, and rodata.
-    total_hdr_size = 120 // 64 (ELF Header) + 56 (PT_LOAD Program Header)
+    //   - PHDR 0: PT_LOAD Strict RX (PF_R | PF_X = 5) covering header + code + rodata
+    //   - PHDR 1: PT_LOAD Strict RW (PF_R | PF_W = 6) 4KB-aligned covering 64B _heap_ptr .data
+    //   - PHDR 2: PT_GNU_STACK Non-Executable Stack (PF_R | PF_W = 6)
+    total_hdr_size = 232
     code_size = code_bytes.len()
     rodata_size = rodata_bytes.len()
-    total_size = total_hdr_size + code_size + rodata_size
-    base_vaddr = 4194304  // 0x400000
-    entry_vaddr = 4194424 // 0x400078 (0x400000 + 120)
+    rx_size = total_hdr_size + code_size + rodata_size
+    rem_rx = rx_size % 4096
+    rx_pad = 0
+    if rem_rx != 0
+        rx_pad = 4096 - rem_rx
+    rw_file_off = rx_size + rx_pad
+    rw_vaddr = 4198400 + rw_file_off // 0x401000 + rw_file_off (congruent mod 4096, fits 0x400000..0x410000)
+    rw_size = 64
+    base_vaddr = 4194304   // 0x400000
+    entry_vaddr = 4194536  // 0x4000E8 (0x400000 + 232)
 
     elf = list()
 
     // ── 1. ELF64 Header (64 bytes) ──────────────────────────────────────────
-    // e_ident: Magic \x7FELF, Class 2 (64-bit), Data 1 (Little-Endian), Version 1, OS/ABI 0 (System V), 8 padding zeroes
     push(elf, 127) // 0x7F
     push(elf, 69)  // 'E'
     push(elf, 76)  // 'L'
@@ -211,160 +315,66 @@ fn riscv64_elf_emit_executable code_bytes rodata_bytes out_path
     push(elf, 1)   // EV_CURRENT (1)
     push(elf, 0)   // ELFOSABI_NONE / System V
     push(elf, 0)   // ABI Version (0)
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad (total 16 bytes e_ident)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   // 7 pad bytes (total 16 bytes e_ident)
 
-    // e_type: ET_EXEC (2) (2 bytes)
-    push(elf, 2)
-    push(elf, 0)
+    // e_type: ET_EXEC (2), e_machine: EM_RISCV (243), e_version: 1
+    push(elf, 2)   push(elf, 0)
+    push(elf, 243) push(elf, 0)
+    push(elf, 1)   push(elf, 0)   push(elf, 0)   push(elf, 0)
 
-    // e_machine: EM_RISCV (243 = 0x00F3) (2 bytes)
-    push(elf, 243)
-    push(elf, 0)
+    // e_entry: 0x4000E8 (4194536) (8 bytes)
+    push(elf, 232) push(elf, 0)   push(elf, 64)  push(elf, 0)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0)
 
-    // e_version: EV_CURRENT (1) (4 bytes)
-    push(elf, 1)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // e_phoff: 64 (0x40), e_shoff: 0, e_flags: 0
+    push(elf, 64)  push(elf, 0)   push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0)
 
-    // e_entry: 0x400078 (4194424) (8 bytes)
-    push(elf, 120)
-    push(elf, 0)
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // e_ehsize: 64, e_phentsize: 56, e_phnum: 3, e_shentsize: 0, e_shnum: 0, e_shstrndx: 0
+    push(elf, 64)  push(elf, 0)
+    push(elf, 56)  push(elf, 0)
+    push(elf, 3)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)
+    push(elf, 0)   push(elf, 0)
 
-    // e_phoff: 64 (0x40) (8 bytes) -> Program header table follows immediately
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // ── 2. Program Header 0: PT_LOAD Strict RX (PF_R | PF_X = 5) ─────────────
+    push(elf, 1)   push(elf, 0)   push(elf, 0)   push(elf, 0) // PT_LOAD
+    push(elf, 5)   push(elf, 0)   push(elf, 0)   push(elf, 0) // PF_R | PF_X (5)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_offset = 0
+    push(elf, 0)   push(elf, 0)   push(elf, 64)  push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_vaddr = 0x400000
+    push(elf, 0)   push(elf, 0)   push(elf, 64)  push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_paddr = 0x400000
+    push(elf, rx_size % 256) push(elf, (rx_size / 256) % 256) push(elf, (rx_size / 65536) % 256) push(elf, (rx_size / 16777216) % 256)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0) // p_filesz
+    push(elf, rx_size % 256) push(elf, (rx_size / 256) % 256) push(elf, (rx_size / 65536) % 256) push(elf, (rx_size / 16777216) % 256)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0) // p_memsz
+    push(elf, 0)   push(elf, 16)  push(elf, 0)   push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_align = 4096
 
-    // e_shoff: 0 (8 bytes) -> No section headers in raw sovereign binary
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // ── 2b. Program Header 1: PT_LOAD Strict RW (PF_R | PF_W = 6) ────────────
+    push(elf, 1)   push(elf, 0)   push(elf, 0)   push(elf, 0) // PT_LOAD
+    push(elf, 6)   push(elf, 0)   push(elf, 0)   push(elf, 0) // PF_R | PF_W (6)
+    push(elf, rw_file_off % 256) push(elf, (rw_file_off / 256) % 256) push(elf, (rw_file_off / 65536) % 256) push(elf, (rw_file_off / 16777216) % 256)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0) // p_offset
+    push(elf, rw_vaddr % 256) push(elf, (rw_vaddr / 256) % 256) push(elf, (rw_vaddr / 65536) % 256) push(elf, (rw_vaddr / 16777216) % 256)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0) // p_vaddr
+    push(elf, rw_vaddr % 256) push(elf, (rw_vaddr / 256) % 256) push(elf, (rw_vaddr / 65536) % 256) push(elf, (rw_vaddr / 16777216) % 256)
+    push(elf, 0)   push(elf, 0)   push(elf, 0)   push(elf, 0) // p_paddr
+    push(elf, rw_size) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_filesz
+    push(elf, rw_size) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_memsz
+    push(elf, 0)   push(elf, 16)  push(elf, 0)   push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_align = 4096
 
-    // e_flags: 0 (4 bytes) -> LP64 base ABI
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // e_ehsize: 64 (2 bytes)
-    push(elf, 64)
-    push(elf, 0)
-
-    // e_phentsize: 56 (2 bytes)
-    push(elf, 56)
-    push(elf, 0)
-
-    // e_phnum: 1 (2 bytes) -> Single PT_LOAD segment
-    push(elf, 1)
-    push(elf, 0)
-
-    // e_shentsize: 0 (2 bytes)
-    push(elf, 0)
-    push(elf, 0)
-
-    // e_shnum: 0 (2 bytes)
-    push(elf, 0)
-    push(elf, 0)
-
-    // e_shstrndx: 0 (2 bytes)
-    push(elf, 0)
-    push(elf, 0)
-
-    // ── 2. Program Header Table (56 bytes, PT_LOAD) ─────────────────────────
-    // p_type: PT_LOAD (1) (4 bytes)
-    push(elf, 1)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_flags: PF_R | PF_W | PF_X = 7 (Read, Write, Execute) (4 bytes)
-    push(elf, 7)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_offset: 0 (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_vaddr: 0x400000 (4194304) (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_paddr: 0x400000 (4194304) (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_filesz: total_size (8 bytes)
-    push(elf, total_size % 256)
-    push(elf, (total_size / 256) % 256)
-    push(elf, (total_size / 65536) % 256)
-    push(elf, (total_size / 16777216) % 256)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_memsz: total_size (8 bytes)
-    push(elf, total_size % 256)
-    push(elf, (total_size / 256) % 256)
-    push(elf, (total_size / 65536) % 256)
-    push(elf, (total_size / 16777216) % 256)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_align: 65536 (0x10000 = 64KB) (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 1)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // ── 2c. Program Header 2: PT_GNU_STACK (PF_R | PF_W = 6) ────────────────
+    push(elf, 81)  push(elf, 229) push(elf, 116) push(elf, 100) // 0x6474E551
+    push(elf, 6)   push(elf, 0)   push(elf, 0)   push(elf, 0)   // PF_R | PF_W
+    zi_p = 0
+    while zi_p < 40
+        push(elf, 0)
+        zi_p = zi_p + 1
+    push(elf, 16)  push(elf, 0)   push(elf, 0)   push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_align = 16
 
     // ── 3. Append Executable Machine Code ───────────────────────────────────
     ci = 0
@@ -372,11 +382,19 @@ fn riscv64_elf_emit_executable code_bytes rodata_bytes out_path
         push(elf, code_bytes[ci])
         ci = ci + 1
 
-    // ── 4. Append Read-Only Data (.rodata) ───────────────────────────────────
+    // ── 4. Append Read-Only Data (.rodata) + Page Pad + 64B RW .data ────────
     di = 0
     while di < rodata_size
         push(elf, rodata_bytes[di])
         di = di + 1
+    pi = 0
+    while pi < rx_pad
+        push(elf, 0)
+        pi = pi + 1
+    wi = 0
+    while wi < rw_size
+        push(elf, 0)
+        wi = wi + 1
 
     // ── 5. Direct Binary Persistence to Filesystem ─────────────────────────
     w_res = file_write_bytes(out_path, elf)

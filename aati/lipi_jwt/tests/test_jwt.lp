@@ -67,6 +67,6 @@ wrong_sec_len = len(wrong_secret)
 wrong_key_status = jwt_validate_token(token_buf, tok_len, wrong_secret, wrong_sec_len, 1700000000)
 assert_eq(wrong_key_status, 0 - 1, "Forged token with wrong key rejected with code -1")
 
-mem_free(token_buf, 256)
+sys_free(token_buf)
 
 say "🎉 ALL SOVEREIGN JWT TESTS PASSED!"

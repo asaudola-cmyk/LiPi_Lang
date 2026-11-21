@@ -38,7 +38,7 @@ import "aati/lipi_web/app"
 @end
 
 @fn web_server_handle_connection(server, stream)
-  raw_req = tcp_stream_read(stream, 4096)
+  raw_req = _http_read_full_request(stream)
   @if raw_req.len() > 0
     parsed = http_parse_request(raw_req)
     req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, stream.peer_host)

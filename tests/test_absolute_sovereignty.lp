@@ -98,6 +98,7 @@ fn main
     
     // Resolver in-memory caching test
     res = dns_pure_resolver_new("1.1.1.1", 53)
+    dns_pure_resolver_cache_put(res, "cloudflare.com", dns_pure_answer_new("cloudflare.com", DNS_TYPE_A, 300, "104.16.132.229", 1745913061))
     c_ans = dns_pure_resolve(res, "cloudflare.com")
     ok_d3 = 0
     if c_ans != 0

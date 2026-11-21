@@ -10,6 +10,7 @@
 
 include "utso/io"
 include "utso/memory"
+include "utso/crypto"
 
 fn print_lipi_banner
     // WHY: 72 visual columns (70 chars interior + 2 border chars).
@@ -458,7 +459,9 @@ fn handle_fmt file_path flag
     if len(file_path) == 0
         say "❌ Error: Source file required: lipi fmt <file.lp> [-w]"
         return 1
-    return spawn_exec_cmd(resolve_bin_path("lipifmt"), file_path, flag, "", "")
+    if len(flag) > 0
+        return spawn_exec_cmd(resolve_bin_path("lipifmt"), flag, file_path, "", "")
+    return spawn_exec_cmd(resolve_bin_path("lipifmt"), file_path, "", "", "")
 
 fn handle_lsp
     say "⚡ Starting Lipi Sovereign Language Server (LSP daemon)..."
@@ -789,16 +792,23 @@ fn handle_unum file_path
     if len(file_path) == 0
         say "❌ Error: Source file required: lipi unum <file.lp>"
         return 1
-    say "\033[1;36m[LIPI UNUM]\033[0m Synthesizing Gödel Universal Prime State Number..."
-    tmp_bin = "dist/tmp_unum_bin"
+    say "\033[1;36m[LIPI UNUM]\033[0m Synthesizing Real Binary & Source State Digest..."
+    cur_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    tmp_bin = "/tmp/lipi_unum_" + str(cur_pid)
     c_bin = resolve_bin_path("lipc_bin")
     code = spawn_exec_cmd(c_bin, file_path, "-o", tmp_bin, "")
     if code != 0
         say "❌ Compilation failed."
+        syscall(87, tmp_bin, 0, 0, 0, 0, 0)
         return code
-    say "✔ Program universal prime state factorization active."
-    say "  Formula: U = 2^(Op_0) * 3^(Arg_0) * 5^(Op_1) * 7^(Arg_1) ..."
-    say "  Universal Fingerprint: 0x7F454C46554E554D"
+    bin_bytes = file_read(tmp_bin)
+    src_bytes = file_read(file_path)
+    bin_sha = sha256_hex(bin_bytes)
+    src_sha = sha256_hex(src_bytes)
+    say "✔ Real Compiled Binary Size : " + str(len(bin_bytes)) + " bytes"
+    say "  Source SHA-256 Digest     : " + src_sha
+    say "  Machine ELF64 SHA-256     : " + bin_sha
+    say "  Universal Fingerprint     : 0x" + str_sub(bin_sha, 0, 16)
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
     return 0
 

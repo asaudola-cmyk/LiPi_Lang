@@ -261,7 +261,7 @@ When compiling an OOP call `p1.set_xy(10, 20)`:
 ## 5. Direct Silicon Architecture: x86_64, ARM64 & WebAssembly Emitters
 
 Lipi implements first-class native machine code and bytecode generators written entirely in pure Lipi:
-- **x86_64 ELF64 Emitter:** [`src/compiler/elf_emitter.lp`](../src/compiler/elf_emitter.lp)
+- **x86_64 ELF64 Emitter:** [`src/compiler/backend/formats/elf/elf_writer.lp`](../src/compiler/backend/formats/elf/elf_writer.lp)
 - **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](../src/compiler/arm64_emitter.lp)
 - **WebAssembly (WASM) Binary Emitter:** [`src/compiler/wasm_emitter.lp`](../src/compiler/wasm_emitter.lp)
 
@@ -478,8 +478,8 @@ Located at [`src/tools/lipirepl.lp`](../src/tools/lipirepl.lp), `lipirepl` offer
 ./bin/lipirepl
 ```
 
-### 9.3 `lipipkg` — Sovereign Package Manager
-Located at [`src/tools/lipipkg.lp`](../src/tools/lipipkg.lp), `lipipkg` orchestrates the complete software lifecycle:
+### 9.3 `lipipkg` (`aati`) — Sovereign Package Manager
+Located at [`src/tools/aati.lp`](../src/tools/aati.lp), `lipipkg` / `aati` orchestrates the complete software lifecycle:
 - `lipipkg init <name>`: Initializes a standard project structure.
 - `lipipkg build`: Compiles `src/main.lp` into a standalone ELF binary.
 - `lipipkg run`: Builds and runs the executable in a single pass.

@@ -21,43 +21,73 @@
   return syscall(9, addr, length, prot, flags, fd, offset)
 @end
 
+@fn sys_munmap(addr, length)
+  return syscall(11, addr, length, 0, 0, 0, 0)
+@end
+
 @fn sys_wait4(pid, status_ptr, options, rusage_ptr)
   return syscall(61, pid, status_ptr, options, rusage_ptr, 0, 0)
 @end
 
 @! ----------------------------------------------------------------------------
-@! 1. Local Green Thread Spawning (sys_clone / Syscall 56)
+@! 1. Native Shared-Memory Kernel Thread Spawning (CLONE_VM + SYS_futex)
 @! ----------------------------------------------------------------------------
 
 @fn lipi_spawn(func, arg)
+  // WHY: Initializes runtime heap globals before clone so parent & child share heap state safely,
+  // allocates a guard-safe anonymous stack, and enters the native thread_spawn_vm trampoline.
+  _heap_init = []
   size = 2097152
-  p1 = PROT_READ()
-  p2 = PROT_WRITE()
-  p_prot = p1 | p2
-  m1 = MAP_PRIVATE()
-  m2 = MAP_ANONYMOUS()
-  m3 = MAP_GROWSDOWN()
-  m_flags = m1 | m2
-  m_flags = m_flags | m3
-  stack = sys_mmap(0, size, p_prot, m_flags, 0 - 1, 0)
-  
-  stack_top = stack + size - 16
-  f1 = CLONE_VM()
-  f2 = CLONE_FS()
-  f3 = CLONE_FILES()
-  f4 = CLONE_SIGHAND()
-  f5 = CLONE_THREAD()
-  flags = f1 | f2
-  flags = flags | f3
-  flags = flags | f4
-  flags = flags | f5
-  
-  @! Sovereign thread scheduler routes clone syscall (56) to thread dispatcher
-  pid = syscall(56, flags, stack_top, func, arg, 0, 0)
-  return pid
+  stack = sys_mmap(0, size, 3, 34, 0 - 1, 0)
+  @if stack <= 0
+    return 0 - 1
+  @end
+  return thread_spawn_vm(func, arg, stack + size)
 @end
 
-// WHY: thread_spawn provides standard cross-module naming for green thread creation.
+// WHY: Spawns a joinable OS thread via CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID + futex handle.
+@fn lipi_spawn_joinable(func, arg)
+  _heap_init = []
+  size = 2097152
+  stack = sys_mmap(0, size, 3, 34, 0 - 1, 0)
+  @if stack <= 0
+    return 0
+  @end
+  handle = sys_mmap(0, 4096, 3, 34, 0 - 1, 0)
+  @if handle <= 0
+    sys_munmap(stack, size)
+    return 0
+  @end
+  mem_word_write(handle, 0, 1)
+  mem_word_write(handle, 8, stack)
+  mem_word_write(handle, 16, size)
+  tid = thread_spawn_vm_joinable(func, arg, stack + size, handle)
+  @if tid <= 0
+    sys_munmap(stack, size)
+    sys_munmap(handle, 4096)
+    return 0
+  @end
+  return handle
+@end
+
+// WHY: Zero-spin kernel SYS_futex join blocking until child thread exit clears tid word.
+@fn lipi_join(handle)
+  @if handle == 0 return 0 @end
+  cur_tid = mem_word_read(handle, 0) & 4294967295
+  @while cur_tid != 0
+    futex_wait(handle, cur_tid)
+    cur_tid = mem_word_read(handle, 0) & 4294967295
+  @end
+  stack = mem_word_read(handle, 8)
+  size = mem_word_read(handle, 16)
+  @if stack > 0 && size > 0
+    sys_munmap(stack, size)
+  @end
+  sys_munmap(handle, 4096)
+  return 1
+@end
+
+// WHY: thread_spawn provides standard cross-module naming for green/OS thread creation.
 @fn thread_spawn(func, arg)
   return lipi_spawn(func, arg)
 @end

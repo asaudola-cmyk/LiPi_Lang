@@ -458,11 +458,13 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(k, "Index") == 1
     arr_t = tc_check_expr(tc, expr.iterable)
     idx_t = tc_check_expr(tc, expr.index)
-    @if idx_t != TYPE_ID_I64() && idx_t != TYPE_ID_ANY()
-      tc_error(tc, ERR_INVALID_INDEX_TYPE(), "Array index must be i64, got " + type_to_string(tc.tc_reg, idx_t), span_default())
+    arr_def = type_registry_get(tc.tc_reg, arr_t)
+    @if arr_t == TYPE_ID_STRING() || (arr_def != 0 && arr_def.ty_kind == TYPE_KIND_ARRAY())
+      @if idx_t != TYPE_ID_I64() && idx_t != TYPE_ID_ANY()
+        tc_error(tc, ERR_INVALID_INDEX_TYPE(), "Array index must be i64, got " + type_to_string(tc.tc_reg, idx_t), span_default())
+      @end
     @end
 
-    arr_def = type_registry_get(tc.tc_reg, arr_t)
     @if arr_def != 0 && arr_def.ty_kind == TYPE_KIND_ARRAY()
       return arr_def.ty_elem_type_id
     @end
@@ -498,8 +500,17 @@ import "compiler/frontend/ast/ast_node"
     return infer_expr_type(tc.tc_infer_ctx, expr)
   @end
 
-  // 9. Struct Literal
-  @if str_eq(k, "StructLit") == 1
+  // 9. Struct Literal / Field / Map Literal
+  @if str_eq(k, "Field") == 1
+    @if expr.value != 0
+      return tc_check_expr(tc, expr.value)
+    @elif expr.expr != 0
+      return tc_check_expr(tc, expr.expr)
+    @end
+    return TYPE_ID_ANY()
+  @end
+
+  @if str_eq(k, "StructLit") == 1 || str_eq(k, "MapLit") == 1
     i = 0
     n = expr.elements.len()
     @while i < n
@@ -508,6 +519,8 @@ import "compiler/frontend/ast/ast_node"
         tc_check_expr(tc, f_ast.value)
       @elif f_ast.expr != 0
         tc_check_expr(tc, f_ast.expr)
+      @else
+        tc_check_expr(tc, f_ast)
       @end
       i = i + 1
     @end
@@ -517,12 +530,14 @@ import "compiler/frontend/ast/ast_node"
   // 10. Closure / Lambda Expression
   @if str_eq(k, "Closure") == 1
     scope_stack_push(tc.tc_scopes, SCOPE_BLOCK(), "closure")
+    c_param_types = []
     @if expr.params != 0
       pi = 0
       @while pi < expr.params.len()
         pname = expr.params[pi]
         p_sym = symbol_variable(pname, TYPE_ID_ANY(), 0, span_default(), tc.tc_scopes.stk_current_id)
         scope_define_in_scope_id(tc.tc_scopes, tc.tc_scopes.stk_current_id, p_sym)
+        c_param_types = c_param_types.push(TYPE_ID_ANY())
         pi = pi + 1
       @end
     @end
@@ -534,13 +549,37 @@ import "compiler/frontend/ast/ast_node"
       @end
     @end
     scope_stack_pop(tc.tc_scopes)
-    return TYPE_ID_I64()
+    return type_make_function(tc.tc_reg, c_param_types, TYPE_ID_ANY())
   @end
 
   return infer_expr_type(tc.tc_infer_ctx, expr)
 @end
 
 // ── 4. STATEMENT SEMANTIC CHECKING ───────────────────────────────────────────
+
+@fn tc_resolve_annotation_id(tc, tname)
+  @if tname == "" return TYPE_ID_ANY() @end
+  @if str_eq(tname, "i64") == 1 || str_eq(tname, "int") == 1 || str_eq(tname, "i32") == 1 || str_eq(tname, "u64") == 1 || str_eq(tname, "u32") == 1 || str_eq(tname, "সংখ্যা") == 1 || str_eq(tname, "পূর্ণসংখ্যা") == 1
+    return TYPE_ID_I64()
+  @end
+  @if str_eq(tname, "f64") == 1 || str_eq(tname, "float") == 1 || str_eq(tname, "দশমিক") == 1
+    return TYPE_ID_F64()
+  @end
+  @if str_eq(tname, "bool") == 1 || str_eq(tname, "boolean") == 1 || str_eq(tname, "বুলিয়ান") == 1
+    return TYPE_ID_BOOL()
+  @end
+  @if str_eq(tname, "string") == 1 || str_eq(tname, "str") == 1 || str_eq(tname, "স্ট্রিং") == 1 || str_eq(tname, "বর্ণমালা") == 1
+    return TYPE_ID_STRING()
+  @end
+  @if str_eq(tname, "byte") == 1 || str_eq(tname, "বাইট") == 1
+    return TYPE_ID_BYTE()
+  @end
+  st_s = symtab_get(tc.tc_symtab, tname)
+  @if st_s != 0 && st_s.sym_kind == SYM_KIND_STRUCT()
+    return st_s.sym_type_ref
+  @end
+  return TYPE_ID_ANY()
+@end
 
 @fn tc_check_statement(tc, stmt)
   @if stmt == 0 return 0 @end
@@ -550,21 +589,98 @@ import "compiler/frontend/ast/ast_node"
 
   // 1. Variable Assignment (target = value or compound target += value)
   @if str_eq(k, "Assign") == 1 || str_eq(k, "AssignOp") == 1
+    @if stmt.index != 0
+      tc_check_expr(tc, stmt.index)
+    @end
     target_name = stmt.target
     val_expr = stmt.value
     @if val_expr == 0 val_expr = stmt.expr @end
 
     rhs_t = tc_check_expr(tc, val_expr)
 
-    // WHY: Struct field assignments (obj.field = expr) or array element updates (arr[i] = expr)
-    // modify properties or heap buffers rather than declaring a new scalar symbol in the current scope.
-    @if str_contains(target_name, ".") == 1 || str_contains(target_name, "[") == 1
+    // Check explicit type annotation `: Type` on simple declarations (`Assign` stores decl_type in `op`)
+    decl_tid = TYPE_ID_ANY()
+    @if str_eq(k, "Assign") == 1 && stmt.op != ""
+      decl_tid = tc_resolve_annotation_id(tc, stmt.op)
+      @if decl_tid != TYPE_ID_ANY() && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
+        ann_ok = type_is_assignable(tc.tc_reg, decl_tid, rhs_t)
+        @if (decl_tid == TYPE_ID_I64() && rhs_t == TYPE_ID_BOOL()) || (decl_tid == TYPE_ID_BOOL() && rhs_t == TYPE_ID_I64())
+          ann_ok = 1
+        @end
+        @if ann_ok == 0
+          tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Annotated type '" + stmt.op + "' is incompatible with assigned " + type_to_string(tc.tc_reg, rhs_t), span_default())
+        @end
+      @end
+    @end
+
+    // Check struct field assignments (obj.field = expr) and array element updates (arr[i] = expr)
+    @if str_contains(target_name, ".") == 1 || str_contains(target_name, "[") == 1 || stmt.index != 0
+      root_end = len(target_name)
+      ri_s = 0
+      @while ri_s < len(target_name)
+        ch_s = str_char_at(target_name, ri_s)
+        @if ch_s == 46 || ch_s == 91
+          root_end = ri_s
+          break
+        @end
+        ri_s = ri_s + 1
+      @end
+      root_name = str_slice(target_name, 0, root_end)
+      root_sym = scope_lookup(tc.tc_scopes, root_name)
+      @if root_sym == 0
+        root_sym = symtab_get(tc.tc_symtab, root_name)
+      @end
+      @if root_sym != 0
+        @if root_sym.sym_is_const == 1 || root_sym.sym_kind == SYM_KIND_CONSTANT()
+          tc_error(tc, ERR_CANNOT_ASSIGN_CONST(), "Cannot mutate field/element of constant '" + root_name + "'", span_default())
+        @end
+        @if str_contains(target_name, ".") == 1 && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
+          // Resolve dotted chain field type on typed structs
+          cur_ftid = root_sym.sym_type_ref
+          seg_start = root_end + 1
+          seg_i = seg_start
+          @while seg_i <= len(target_name) && cur_ftid != TYPE_ID_ANY() && cur_ftid != 0
+            at_end = 0
+            @if seg_i == len(target_name)
+              at_end = 1
+            @elif str_char_at(target_name, seg_i) == 46
+              at_end = 1
+            @end
+            @if at_end == 1 && seg_i > seg_start
+              seg_fld = str_slice(target_name, seg_start, seg_i)
+              fd_s = type_find_field(tc.tc_reg, cur_ftid, seg_fld)
+              @if fd_s == 0
+                cur_ftid = TYPE_ID_ANY()
+              @elif seg_i == len(target_name)
+                @if fd_s.fd_type_id != TYPE_ID_ANY() && fd_s.fd_type_id != TYPE_ID_UNKNOWN() && fd_s.fd_type_id != 0
+                  @if type_is_assignable(tc.tc_reg, fd_s.fd_type_id, rhs_t) == 0
+                    tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot assign " + type_to_string(tc.tc_reg, rhs_t) + " to field '" + target_name + "' of type " + type_to_string(tc.tc_reg, fd_s.fd_type_id), span_default())
+                  @end
+                @end
+                cur_ftid = fd_s.fd_type_id
+              @else
+                cur_ftid = fd_s.fd_type_id
+              @end
+              seg_start = seg_i + 1
+            @end
+            seg_i = seg_i + 1
+          @end
+        @end
+      @end
       return 1
     @end
 
     sym = scope_lookup(tc.tc_scopes, target_name)
+    @if sym == 0 && str_starts_with(target_name, "g_") == 1
+      sym = symtab_get(tc.tc_symtab, target_name)
+    @end
     @if sym != 0 && sym.sym_kind == SYM_KIND_FUNCTION()
       sym = scope_lookup_current(tc.tc_scopes, target_name)
+    @end
+
+    effective_t = rhs_t
+    @if decl_tid != TYPE_ID_ANY()
+      effective_t = decl_tid
     @end
 
     @if sym != 0
@@ -572,8 +688,18 @@ import "compiler/frontend/ast/ast_node"
         tc_error(tc, ERR_CANNOT_ASSIGN_CONST(), "Cannot reassign to constant '" + target_name + "'", span_default())
       @end
 
+      // WHY: Pass 1 pre-populates main() variables with TYPE_ID_ANY(); apply explicit `: Type` annotation on declaration.
+      @if decl_tid != TYPE_ID_ANY()
+        @if sym.sym_is_annotated == 1 && type_is_assignable(tc.tc_reg, sym.sym_type_ref, decl_tid) == 0
+          tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot redeclare annotated variable '" + target_name + "' as " + type_to_string(tc.tc_reg, decl_tid), span_default())
+        @else
+          sym.sym_type_ref = decl_tid
+          sym.sym_is_annotated = 1
+        @end
+      @end
+
       @if type_is_assignable(tc.tc_reg, sym.sym_type_ref, rhs_t) == 0
-        @if sym.sym_kind == SYM_KIND_VARIABLE() && sym.sym_is_const == 0
+        @if sym.sym_kind == SYM_KIND_VARIABLE() && sym.sym_is_const == 0 && sym.sym_is_annotated == 0 && decl_tid == TYPE_ID_ANY()
           sym.sym_type_ref = TYPE_ID_ANY()
         @else
           tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot assign " + type_to_string(tc.tc_reg, rhs_t) + " to variable '" + target_name + "' of type " + type_to_string(tc.tc_reg, sym.sym_type_ref), span_default())
@@ -586,7 +712,10 @@ import "compiler/frontend/ast/ast_node"
       @if fn_sid >= 0
         target_scope_id = fn_sid
       @end
-      new_sym = symbol_variable(target_name, rhs_t, 0, span_default(), target_scope_id)
+      new_sym = symbol_variable(target_name, effective_t, 0, span_default(), target_scope_id)
+      @if decl_tid != TYPE_ID_ANY()
+        new_sym.sym_is_annotated = 1
+      @end
       scope_define_in_scope_id(tc.tc_scopes, target_scope_id, new_sym)
       symtab_put(tc.tc_symtab, new_sym)
     @end
@@ -706,10 +835,22 @@ import "compiler/frontend/ast/ast_node"
     return 1
   @end
 
-  // 5. Break / Continue
+  // 5. Break / Continue / Defer
   @if str_eq(k, "Break") == 1 || str_eq(k, "Continue") == 1
     @if scope_is_inside_loop(tc.tc_scopes) == 0
       tc_error(tc, ERR_BREAK_OUTSIDE_LOOP(), "'" + k + "' statement used outside of any loop construct", span_default())
+    @end
+    return 1
+  @end
+
+  @if str_eq(k, "Defer") == 1
+    @if stmt.expr != 0 tc_check_expr(tc, stmt.expr) @end
+    @if stmt.body != 0
+      di_d = 0
+      @while di_d < stmt.body.len()
+        tc_check_statement(tc, stmt.body[di_d])
+        di_d = di_d + 1
+      @end
     @end
     return 1
   @end

@@ -155,14 +155,36 @@ fn nvme_controller_init ctrl
 
 // ── 5. I/O Submission & Hardware Doorbell Ringing ──────────────────────────────
 
+fn nvme_serialize_sqe cmd
+    // WHY: Packs an NVM Express 1.4 64-byte Submission Queue Entry (CDW0..CDW15) in real DMA memory.
+    sqe = malloc(64)
+    if sqe <= 0
+        return 0
+    i = 0
+    while i < 64
+        mem_byte_write(sqe, i, 0)
+        i = i + 1
+    cdw0 = (cmd.nc_opcode & 255) | ((cmd.nc_cid & 65535) * 65536)
+    mem_word_write(sqe, 0, cdw0 | (cmd.nc_nsid * 4294967296))
+    mem_word_write(sqe, 24, cmd.nc_dma_buffer_addr)
+    mem_word_write(sqe, 40, cmd.nc_lba)
+    nlb = cmd.nc_block_count - 1
+    if nlb < 0 nlb = 0
+    mem_word_write(sqe, 48, nlb & 65535)
+    return sqe
+
 fn nvme_submit_io ctrl cmd
-    // WHY: Submits a 64-byte command to the hardware I/O Submission Queue (IOSQ),
-    // records command descriptor in the SQ ring buffer, and updates the Tail Doorbell.
+    // WHY: Submits a 64-byte NVMe command into the Submission Queue (IOSQ),
+    // serializes its 64-byte hardware SQE frame, and advances the Tail Doorbell.
     sq = ctrl.nvc_io_sq
     tail = sq.nq_tail
     qsize = sq.nq_size
     if qsize <= 0
         return 0 - 1
+    end
+    sqe_buf = nvme_serialize_sqe(cmd)
+    if sqe_buf > 0
+        free(sqe_buf, 64)
     end
     push(sq.nq_ring_buf, cmd)
     ctrl.nvc_last_cid = cmd.nc_cid

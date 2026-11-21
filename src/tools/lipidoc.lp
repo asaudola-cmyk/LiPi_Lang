@@ -43,6 +43,9 @@ fn silicon_getdents64 dfd buf cap
 fn silicon_close_fd fd
     return syscall(3, fd, 0, 0, 0, 0, 0)
 
+fn silicon_mem_byte_read ptr off
+    return mem_byte_read(ptr, off)
+
 // WHY: Allocates memory pages directly via Linux kernel SYS_mmap (syscall 9).
 fn alloc_buf size
     return silicon_mmap_buf(size)
@@ -182,8 +185,8 @@ fn str_index_of s sub
 // ── 3. Source Code Parsing & Signature Extraction ─────────────────────────────
 
 // WHY: Formats function declarations into standard signatures 'fn_name(param1, param2)'.
-fn parse_fn_sig line
-    rest = trim_left(str_sub(line, 3, len(line)))
+fn parse_fn_sig_off line kw_len
+    rest = trim_left(str_sub(line, kw_len, len(line)))
     eq_idx = str_index_of(rest, "=")
     if eq_idx >= 0
         rest = trim_right(str_sub(rest, 0, eq_idx))
@@ -216,6 +219,9 @@ fn parse_fn_sig line
                 params = params + ", " + param
     return fname + "(" + params + ")"
 
+fn parse_fn_sig line
+    return parse_fn_sig_off(line, 3)
+
 // WHY: Extracts the documentation string following the doc or why prefix.
 fn extract_doc_comment line prefix
     idx = str_index_of(line, prefix)
@@ -238,7 +244,7 @@ fn read_file_lines path
             break
         i = 0
         while i < n
-            b = mem_byte_read(buf, i)
+            b = silicon_mem_byte_read(buf, i)
             if b == 10
                 lines = push(lines, cur_line)
                 cur_line = ""
@@ -292,25 +298,33 @@ fn extract_module_docs lines
                         else
                             pending_why = pending_why + " " + w
                     else
-                        if starts_with(tline, "struct ")
-                            sname = trim(str_sub(tline, 7, len(tline)))
+                        st_off = 0
+                        if starts_with(tline, "struct ") st_off = 7
+                        elif starts_with(tline, "@struct ") st_off = 8
+                        elif starts_with(tline, "গঠন ") st_off = len("গঠন ")
+                        elif starts_with(tline, "কাঠামো ") st_off = len("কাঠামো ")
+                        if st_off > 0
+                            sname = trim(str_sub(tline, st_off, len(tline)))
                             fields = list()
-                            
-                            // Scan indented field lines
+
+                            // Scan indented field lines (stop on @end / end / শেষ)
                             while (li + 1) < total
                                 next_line = get(lines, li + 1)
+                                f_trim = trim(next_line)
+                                if f_trim == "@end" or f_trim == "end" or f_trim == "শেষ"
+                                    li = li + 1
+                                    break
                                 if count_leading_spaces(next_line) > 0
-                                    f_trim = trim(next_line)
-                                    if len(f_trim) > 0 and starts_with(f_trim, "//") == 0
+                                    if len(f_trim) > 0 and starts_with(f_trim, "//") == 0 and starts_with(f_trim, "@!") == 0
                                         fields = push(fields, f_trim)
                                     li = li + 1
                                 else
                                     break
-                            
+
                             item = DocItem()
                             item.kind = "struct"
                             item.name = sname
-                            
+
                             sig = ""
                             fcount = len(fields)
                             fi = 0
@@ -324,13 +338,17 @@ fn extract_module_docs lines
                             item.doc = pending_doc
                             item.why = pending_why
                             item.fields = fields
-                            
+
                             items = push(items, item)
                             pending_doc = ""
                             pending_why = ""
                         else
-                            if starts_with(tline, "fn ")
-                                sig = parse_fn_sig(tline)
+                            fn_off = 0
+                            if starts_with(tline, "fn ") fn_off = 3
+                            elif starts_with(tline, "@fn ") fn_off = 4
+                            elif starts_with(tline, "কাজ ") fn_off = len("কাজ ")
+                            if fn_off > 0
+                                sig = parse_fn_sig_off(tline, fn_off)
                                 fname = ""
                                 oidx = str_index_of(sig, "(")
                                 if oidx >= 0
@@ -345,13 +363,12 @@ fn extract_module_docs lines
                                 item.doc = pending_doc
                                 item.why = pending_why
                                 item.fields = list()
-                                
+
                                 items = push(items, item)
                                 pending_doc = ""
                                 pending_why = ""
                             else
-                                // Reset pending doc comments if ordinary statements intervene
-                                if len(tline) > 0 and starts_with(tline, "//") == 0
+                                if len(tline) > 0 and starts_with(tline, "//") == 0 and starts_with(tline, "@!") == 0
                                     pending_doc = ""
                                     pending_why = ""
 
@@ -464,37 +481,49 @@ fn document_directory dir_path
         return 0
 
     buf = alloc_buf(4096)
-    n = silicon_getdents64(dfd, buf, 4096)
-    bpos = 0
+    subdirs = list()
     count = 0
 
-    while bpos < n
-        rec_lo = mem_byte_read(buf, bpos + 16)
-        rec_hi = mem_byte_read(buf, bpos + 17)
-        reclen = rec_lo + (rec_hi * 256)
-        dtype = mem_byte_read(buf, bpos + 18)
-
-        name = ""
-        npos = bpos + 19
-        while 1
-            b = mem_byte_read(buf, npos)
-            if b == 0
-                break
-            name = name + chr(b)
-            npos = npos + 1
-
-        if reclen == 0
+    while 1
+        n = silicon_getdents64(dfd, buf, 4096)
+        if n <= 0
             break
+        bpos = 0
+        while bpos < n
+            rec_lo = silicon_mem_byte_read(buf, bpos + 16)
+            rec_hi = silicon_mem_byte_read(buf, bpos + 17)
+            reclen = rec_lo + (rec_hi * 256)
+            dtype = silicon_mem_byte_read(buf, bpos + 18)
 
-        if ends_with(name, ".lp") and starts_with(name, ".") == 0
-            fpath = dir_path + "/" + name
-            document_file(fpath)
-            count = count + 1
+            name = ""
+            npos = bpos + 19
+            while 1
+                b = silicon_mem_byte_read(buf, npos)
+                if b == 0
+                    break
+                name = name + chr(b)
+                npos = npos + 1
 
-        bpos = bpos + reclen
+            if reclen == 0
+                break
+
+            if starts_with(name, ".") == 0
+                fpath = dir_path + "/" + name
+                if ends_with(name, ".lp")
+                    document_file(fpath)
+                    count = count + 1
+                elif dtype == 4 and name != "bin" and name != "build" and name != "dist"
+                    subdirs = push(subdirs, fpath)
+
+            bpos = bpos + reclen
 
     silicon_close_fd(dfd)
     free_buf(buf, 4096)
+
+    si = 0
+    while si < len(subdirs)
+        count = count + document_directory(get(subdirs, si))
+        si = si + 1
 
     if count == 0
         say "No .lp source files found in directory: " + dir_path

@@ -28,7 +28,7 @@
 
 - [`lipi`](../src/tools/lipi.lp) — Universal sovereign master CLI driver (replaces gcc, cargo, make, and go).
 - [`lipc`](../src/compiler/driver_cli.lp) — Direct silicon machine code compiler with multi-target emitters (ELF64, PE32+, Mach-O, WASM).
-- [`lipipkg`](../src/tools/lipipkg.lp) — Autonomous Ed25519 cryptographic package manager, Git resolver, and built-in registry daemon.
+- [`aati` (`lipipkg`)](../src/tools/aati.lp) — Autonomous Ed25519 cryptographic package manager, Git resolver, and built-in registry daemon.
 - [`lipilsp`](../src/tools/lipilsp.lp) — High-performance Language Server Protocol daemon for IDE integration.
 - [`lipidbg`](../src/tools/lipidbg.lp) — Pure `sys_ptrace` native machine code debugger with hardware register introspection.
 - [`lipirepl`](../src/tools/lipirepl.lp) — Interactive REPL shell with instant hardware cycle evaluation and JIT statement execution.
@@ -38,33 +38,33 @@
 
 ## 📦 Foundational Packages
 
-The following packages are pre-verified, cryptographically signed with RFC 8032 Ed25519, and ready to install via `lipipkg`:
+The following packages are pre-verified, cryptographically signed with RFC 8032 Ed25519, and ready to install via `aati`:
 
 | Package | Description | Status | Installation |
 |---|---|---|---|
-| [`web_router`](../packages/web_router) | Zero-allocation radix-tree HTTP request router with parameter decoding | ✅ Verified | `lipipkg add web_router` |
-| [`crypto_vault`](../packages/crypto_vault) | NIST FIPS 180-4 SHA-256 and Ed25519 cryptographic authentication suite | ✅ Verified | `lipipkg add crypto_vault` |
-| [`lipi_sql`](../packages/lipi_sql) | Pure LiPi relational query engine, table algebra, and in-memory indexing | ✅ Verified | `lipipkg add lipi_sql` |
-| [`json_toolkit`](../packages/json_toolkit) | Zero-leak JSON parser, serializer, and JSONPath querying engine | ✅ Verified | `lipipkg add json_toolkit` |
-| [`math_extra`](../packages/math_extra) | High-precision complex numbers, trigonometry, matrix algebra, and geometry | ✅ Verified | `lipipkg add math_extra` |
+| [`web_router`](../aati/web_router) | Zero-allocation radix-tree HTTP request router with parameter decoding | ✅ Verified | `aati add web_router` |
+| [`crypto_vault`](../aati/crypto_vault) | NIST FIPS 180-4 SHA-256 and Ed25519 cryptographic authentication suite | ✅ Verified | `aati add crypto_vault` |
+| [`lipi_sql`](../aati/lipi_sql) | Pure LiPi relational query engine, table algebra, and in-memory indexing | ✅ Verified | `aati add lipi_sql` |
+| [`json_toolkit`](../aati/json_toolkit) | Zero-leak JSON parser, serializer, and JSONPath querying engine | ✅ Verified | `aati add json_toolkit` |
+| [`math_extra`](../aati/math_extra) | High-precision complex numbers, trigonometry, matrix algebra, and geometry | ✅ Verified | `aati add math_extra` |
 
 ---
 
 ## 🌐 Web & Networking
 
 - [`utso/net/socket.lp`](../utso/net/socket.lp) — Direct Linux kernel raw TCP/UDP socket driver without libc.
-- [`utso/net/http.lp`](../utso/net/http.lp) — Pure RFC 7230 / RFC 7231 HTTP/1.1 client (`http_get`, `http_post`) and request serializer.
-- [`packages/lipi_web/engine.lp`](../packages/lipi_web/engine.lp) — High-throughput HTTP web engine with response streaming and JSON serialization.
+- [`utso/net/http.lp`](../utso/net/http.lp) — Pure RFC 7230 / RFC 7231 HTTP/1.1 & TLS 1.3 HTTPS client (`http_get`, `http_post`) and request serializer.
+- [`aati/lipi_web/engine.lp`](../aati/lipi_web/engine.lp) — High-throughput HTTP web engine with response streaming and JSON serialization.
 - [`utso/net/websocket.lp`](../utso/net/websocket.lp) — RFC 6455 full-duplex WebSocket server protocol implementation.
 
 ---
 
 ## 💾 Database & Storage
 
-- [`packages/lipidb/pg_wire.lp`](../packages/lipidb/pg_wire.lp) — Pure PostgreSQL 3.0 binary wire protocol client connecting to live Postgres servers over raw TCP.
-- [`packages/lipidb/mysql_wire.lp`](../packages/lipidb/mysql_wire.lp) — Native MySQL wire protocol client implementation.
-- [`packages/lipidb/btree.lp`](../packages/lipidb/btree.lp) — Slotted-page 4KB B+Tree storage engine with disk serialization.
-- [`examples/lipidkv_cache/`](../examples/lipidkv_cache) — Production in-memory Redis-compatible key-value cache and store.
+- [`aati/lipidb/redis_protocol.lp`](../aati/lipidb/redis_protocol.lp) — Pure RESP2/RESP3 Redis-compatible wire protocol serializer and parser over raw TCP.
+- [`aati/lipidb/sql/executor.lp`](../aati/lipidb/sql/executor.lp) — Native relational SQL query executor and storage engine.
+- [`aati/lipidb/btree.lp`](../aati/lipidb/btree.lp) — Slotted-page 4KB B+Tree storage engine with disk serialization.
+- [`examples/lipidb_server.lp`](../examples/lipidb_server.lp) — Production in-memory Redis-compatible key-value cache and server.
 
 ---
 
@@ -72,7 +72,7 @@ The following packages are pre-verified, cryptographically signed with RFC 8032 
 
 - [`src/runtime/async/fiber.lp`](../src/runtime/async/fiber.lp) — M:N lightweight fiber scheduler with 8KB user-space stacks and 9-register fast context switching.
 - [`utso/os/syscalls.lp`](../utso/os/syscalls.lp) — Multi-OS native system call table (Linux, macOS Darwin `0x2000000`, Windows PE64).
-- [`packages/lipi_hypervisor/kvm.lp`](../packages/lipi_hypervisor/kvm.lp) — Linux Kernel-based Virtual Machine (KVM) hypervisor controller and vCPU manager.
+- [`aati/lipi_hypervisor/kvm.lp`](../aati/lipi_hypervisor/kvm.lp) — Linux Kernel-based Virtual Machine (KVM) hypervisor controller and vCPU manager.
 - [`utso/os/kernel_multiboot.lp`](../utso/os/kernel_multiboot.lp) — Bare-metal x86_64 Multiboot2 unikernel entry point.
 
 ---
@@ -80,16 +80,16 @@ The following packages are pre-verified, cryptographically signed with RFC 8032 
 ## 🔐 Cryptography & Security
 
 - [`utso/crypto.lp`](../utso/crypto.lp) — NIST FIPS 180-4 SHA-256 and SHA-512 cryptographic digests.
-- [`utso/crypto/advanced.lp`](../utso/crypto/advanced.lp) — RFC 8032 Ed25519 digital signature generation and verification.
-- [`utso/crypto/tls.lp`](../utso/crypto/tls.lp) — Pure LiPi TLS 1.3 record layer and AES-128-GCM authentication.
+- [`utso/crypto/advanced.lp`](../utso/crypto/advanced.lp) — FIPS 202 SHA3-256, AES-256-GCM, BLAKE3, Argon2id, and HKDF cryptographic primitives.
+- [`utso/crypto/tls.lp`](../utso/crypto/tls.lp) — Pure LiPi TLS 1.3 record layer and ChaCha20-Poly1305 authentication.
 
 ---
 
 ## 🧠 Silicon AI & Scientific Computing
 
-- [`packages/lipi_ai/tensor.lp`](../packages/lipi_ai/tensor.lp) — N-dimensional tensor engine with AVX2 SIMD matrix multiplication (GEMM).
-- [`packages/lipi_ai/llm/transformer.lp`](../packages/lipi_ai/llm/transformer.lp) — Scaled Dot-Product Attention, Softmax, and Rotary Position Embeddings (RoPE).
-- [`packages/lipi_quantum/shor.lp`](../packages/lipi_quantum/shor.lp) — Shor's quantum period-finding with continued fraction expansion.
+- [`aati/lipi_ai/tensor.lp`](../aati/lipi_ai/tensor.lp) — N-dimensional tensor engine with AVX2 SIMD matrix multiplication (GEMM).
+- [`aati/lipi_ai/llm/transformer.lp`](../aati/lipi_ai/llm/transformer.lp) — Scaled Dot-Product Attention, Softmax, and Rotary Position Embeddings (RoPE).
+- [`aati/lipi_quantum/shor.lp`](../aati/lipi_quantum/shor.lp) — Shor's quantum period-finding with continued fraction expansion.
 
 ---
 

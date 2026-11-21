@@ -21,13 +21,14 @@ import "utso/core/string"
 @! 1. 32-Bit Bitwise Left Rotation (FIPS 180-1 Section 3)
 @! ----------------------------------------------------------------------------
 @fn sha1_rotl(x, n)
-  v = x % 4294967296
+  v = x & 4294967295
+  @if n == 0 return v @end
   p1 = lipi_pow2(n)
   p2 = lipi_pow2(32 - n)
-  t1 = (v * p1) % 4294967296
-  t2 = (v / p2) % 4294967296
+  t1 = (v * p1) & 4294967295
+  t2 = (v / p2) & 4294967295
   res = t1 | t2
-  return res % 4294967296
+  return res & 4294967295
 @end
 
 @! ----------------------------------------------------------------------------
@@ -48,7 +49,7 @@ import "utso/core/string"
     w01 = w0 | w1
     w23 = w2 | b3
     w_val = w01 | w23
-    w_item = w_val % 4294967296
+    w_item = w_val & 4294967295
     w = w.push(w_item)
     i = i + 1
   @end
@@ -60,18 +61,18 @@ import "utso/core/string"
     i = i + 1
   @end
 
-  a = state[0] % 4294967296
-  b = state[1] % 4294967296
-  c = state[2] % 4294967296
-  d = state[3] % 4294967296
-  e = state[4] % 4294967296
+  a = state[0] & 4294967295
+  b = state[1] & 4294967295
+  c = state[2] & 4294967295
+  d = state[3] & 4294967295
+  e = state[4] & 4294967295
 
   i = 0
   @while i < 80
     f = 0
     k = 0
     @if i < 20
-      not_b = ~b
+      not_b = 4294967295 - b
       t1 = b & c
       t2 = not_b & d
       f = t1 | t2
@@ -89,8 +90,8 @@ import "utso/core/string"
       f = b ^ c ^ d
       k = 3395469782 @! 0xCA62C1D6
     @end
-    f = f % 4294967296
-    temp = (sha1_rotl(a, 5) + f + e + k + w[i]) % 4294967296
+    f = f & 4294967295
+    temp = (sha1_rotl(a, 5) + f + e + k + w[i]) & 4294967295
     e = d
     d = c
     c = sha1_rotl(b, 30)
@@ -99,11 +100,11 @@ import "utso/core/string"
     i = i + 1
   @end
 
-  state = list_set(state, 0, (state[0] + a) % 4294967296)
-  state = list_set(state, 1, (state[1] + b) % 4294967296)
-  state = list_set(state, 2, (state[2] + c) % 4294967296)
-  state = list_set(state, 3, (state[3] + d) % 4294967296)
-  state = list_set(state, 4, (state[4] + e) % 4294967296)
+  state = list_set(state, 0, (state[0] + a) & 4294967295)
+  state = list_set(state, 1, (state[1] + b) & 4294967295)
+  state = list_set(state, 2, (state[2] + c) & 4294967295)
+  state = list_set(state, 3, (state[3] + d) & 4294967295)
+  state = list_set(state, 4, (state[4] + e) & 4294967295)
   return state
 @end
 

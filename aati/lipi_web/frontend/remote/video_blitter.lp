@@ -235,8 +235,8 @@ import "utso/string"
         dist_sq = (dx * dx) + (dy * dy)
         @if dist_sq <= r_sq
           safe_r_sq = r_sq
-        @if safe_r_sq <= 0 safe_r_sq = 1 @end
-        ratio = (dist_sq * 200) / safe_r_sq
+          @if safe_r_sq <= 0 safe_r_sq = 1 @end
+          ratio = (dist_sq * 200) / safe_r_sq
           shade = 255 - ratio
           @if shade < 0 shade = 0 @end
           @if shade > 255 shade = 255 @end

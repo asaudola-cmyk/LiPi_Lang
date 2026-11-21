@@ -115,7 +115,11 @@ For full technical specifications, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTUR
 > **Toolchains Measured:** GCC 13.3.0, Clang 18.1.3, G++ 13.3.0, Rustc 1.97.1, Node.js 24.19 (V8), Bun 1.3.14 (JavaScriptCore), Python 3.12.3 (CPython), Lipi First 1.0.0 (Pure ELF64 Native Silicon)  
 > **Empirical Guarantee:** 100% measured on live hardware with zero mock data. Hardware cycles sampled via x86_64 `RDTSC`, memory via Linux `/proc/[pid]/statm` and `getrusage` (Peak RSS).
 
-### 1. 🥇 10,000,000 Arithmetic Modulo Loop
+> **Benchmark Tiers (Transparent Classification):**
+> - **Tier I — Measured on Local Silicon (Compile-Time Closed-Form Algebraic Proof & Cold Compile/Binary Footprint):** Direct measurements on the Zen 4 host above via `RDTSC`, `/proc/[pid]/statm`, and `getrusage`. Fixed-bound induction loops (`for i in 1..10000000`) are mathematically reduced at compile time (`O(N) -> O(1)`).
+> - **Tier II — Runtime-Seeded Unfoldable `O(N)` Silicon (`./bin/lipi bench`) & Architectural Targets:** Runtime-seeded `CLOCK_MONOTONIC` workloads (`526M ops/s` Xorshift64\*, `5,045 MB/s` 64 KiB Slab Scan, `136.6M pairs/s` O(1) Slab Recycler) and multi-core/distributed architectural targets documented in [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md).
+
+### 1. 🥇 10,000,000 Arithmetic Modulo Loop *(Tier I — Compile-Time Algebraic Proof + Measured Native ELF64)*
 *Workload:* `total += (i % 7)` for $i = 1 \dots 10,000,000$ | Verified Checksum: `29,999,997` ✔
 
 | Rank | Language / Runtime | Compute Time | Peak RSS Memory | Standalone Binary Size | Speedup vs Baseline |

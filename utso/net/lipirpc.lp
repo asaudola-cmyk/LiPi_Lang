@@ -220,27 +220,149 @@ fn lipirpc_cluster_detect_failures cluster cur_tick suspect_threshold dead_thres
         i = i + 1
     return failures
 
-// ── 4. Cryptographic Message Authentication ───────────────────────────────────
-// WHY: Protects RPC frames against network tampering and man-in-the-middle attacks.
+// ── 4. Cryptographic Message Authentication (Keyed SHA-256 HMAC-32) ───────────
+// WHY: Replaces forgeable XOR-over-FNV with genuine keyed SHA-256 MAC authentication
+//      and constant-time tag verification to defeat forging & timing side channels.
+
+fn _lipirpc_rotr32 x n
+    m = 4294967295
+    v = x & m
+    if n == 0
+        return v
+    return ((v >> n) | ((v << (32 - n)) & m)) & m
+
+fn _lipirpc_sha256_block state block
+    k = [1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298]
+    w = list()
+    i = 0
+    while i < 16
+        j = i * 4
+        w0 = ((get(block, j) & 255) << 24) | ((get(block, j + 1) & 255) << 16) | ((get(block, j + 2) & 255) << 8) | (get(block, j + 3) & 255)
+        push(w, w0 & 4294967295)
+        i = i + 1
+    while i < 64
+        s0 = _lipirpc_rotr32(get(w, i - 15), 7) ^ _lipirpc_rotr32(get(w, i - 15), 18) ^ ((get(w, i - 15) & 4294967295) >> 3)
+        s1 = _lipirpc_rotr32(get(w, i - 2), 17) ^ _lipirpc_rotr32(get(w, i - 2), 19) ^ ((get(w, i - 2) & 4294967295) >> 10)
+        push(w, (get(w, i - 16) + s0 + get(w, i - 7) + s1) & 4294967295)
+        i = i + 1
+    a = get(state, 0)
+    b = get(state, 1)
+    c = get(state, 2)
+    d = get(state, 3)
+    e = get(state, 4)
+    f = get(state, 5)
+    g = get(state, 6)
+    h = get(state, 7)
+    i = 0
+    while i < 64
+        s1 = _lipirpc_rotr32(e, 6) ^ _lipirpc_rotr32(e, 11) ^ _lipirpc_rotr32(e, 25)
+        ch = (e & f) ^ ((~e) & g)
+        temp1 = (h + s1 + ch + get(k, i) + get(w, i)) & 4294967295
+        s0 = _lipirpc_rotr32(a, 2) ^ _lipirpc_rotr32(a, 13) ^ _lipirpc_rotr32(a, 22)
+        maj = (a & b) ^ (a & c) ^ (b & c)
+        temp2 = (s0 + maj) & 4294967295
+        h = g
+        g = f
+        f = e
+        e = (d + temp1) & 4294967295
+        d = c
+        c = b
+        b = a
+        a = (temp1 + temp2) & 4294967295
+        i = i + 1
+    return [
+        (get(state, 0) + a) & 4294967295,
+        (get(state, 1) + b) & 4294967295,
+        (get(state, 2) + c) & 4294967295,
+        (get(state, 3) + d) & 4294967295,
+        (get(state, 4) + e) & 4294967295,
+        (get(state, 5) + f) & 4294967295,
+        (get(state, 6) + g) & 4294967295,
+        (get(state, 7) + h) & 4294967295
+    ]
+
+fn _lipirpc_sha256_bytes msg_bytes
+    st = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]
+    padded = list()
+    i = 0
+    mlen = len(msg_bytes)
+    while i < mlen
+        push(padded, get(msg_bytes, i) & 255)
+        i = i + 1
+    push(padded, 128)
+    while (len(padded) % 64) != 56
+        push(padded, 0)
+    bit_len = mlen * 8
+    bi = 7
+    while bi >= 0
+        sh = bi * 8
+        push(padded, (bit_len >> sh) & 255)
+        bi = bi - 1
+    off = 0
+    while off < len(padded)
+        blk = list()
+        j = 0
+        while j < 64
+            push(blk, get(padded, off + j))
+            j = j + 1
+        st = _lipirpc_sha256_block(st, blk)
+        off = off + 64
+    out = list()
+    wi = 0
+    while wi < 8
+        w = get(st, wi)
+        push(out, (w >> 24) & 255)
+        push(out, (w >> 16) & 255)
+        push(out, (w >> 8) & 255)
+        push(out, w & 255)
+        wi = wi + 1
+    return out
+
+fn _lipirpc_hmac_sha256_u32 buffer offset msg_len secret_key
+    key64 = list()
+    bi = 0
+    while bi < 8
+        key64.push((secret_key >> (bi * 8)) & 255)
+        bi = bi + 1
+    while len(key64) < 64
+        push(key64, 0)
+    inner = list()
+    outer = list()
+    i = 0
+    while i < 64
+        kb = get(key64, i)
+        push(inner, kb ^ 54)
+        push(outer, kb ^ 92)
+        i = i + 1
+    i = 0
+    while i < msg_len
+        push(inner, mem_byte_read(buffer, offset + i) & 255)
+        i = i + 1
+    in_hash = _lipirpc_sha256_bytes(inner)
+    i = 0
+    while i < 32
+        push(outer, get(in_hash, i))
+        i = i + 1
+    mac = _lipirpc_sha256_bytes(outer)
+    return (get(mac, 0) & 255) | ((get(mac, 1) & 255) << 8) | ((get(mac, 2) & 255) << 16) | ((get(mac, 3) & 255) << 24)
 
 fn lipirpc_compute_checksum buffer offset len
-    sum = 2166136261 // FNV-1a 32-bit offset basis
+    msg = list()
     i = 0
     while i < len
-        b = mem_byte_read(buffer, offset + i)
-        sum = sum ^ b
-        sum = (sum * 16777619) % 4294967296
+        push(msg, mem_byte_read(buffer, offset + i) & 255)
         i = i + 1
-    return sum
+    d = _lipirpc_sha256_bytes(msg)
+    return (get(d, 0) & 255) | ((get(d, 1) & 255) << 8) | ((get(d, 2) & 255) << 16) | ((get(d, 3) & 255) << 24)
 
 fn lipirpc_sign_frame buffer payload_offset payload_len secret_key
-    // Append 32-bit HMAC/Checksum token to frame tail
-    sig = lipirpc_compute_checksum(buffer, payload_offset, payload_len) ^ secret_key
+    // Append 32-bit keyed HMAC-SHA-256 authentication tag to frame tail
+    sig = _lipirpc_hmac_sha256_u32(buffer, payload_offset, payload_len, secret_key)
     sig_offset = payload_offset + payload_len
-    s0 = sig % 256
-    s1 = (sig / 256) % 256
-    s2 = (sig / 65536) % 256
-    s3 = (sig / 16777216) % 256
+    s0 = sig & 255
+    s1 = (sig >> 8) & 255
+    s2 = (sig >> 16) & 255
+    s3 = (sig >> 24) & 255
     mem_byte_write(buffer, sig_offset, s0)
     mem_byte_write(buffer, sig_offset + 1, s1)
     mem_byte_write(buffer, sig_offset + 2, s2)
@@ -248,14 +370,15 @@ fn lipirpc_sign_frame buffer payload_offset payload_len secret_key
     return 4
 
 fn lipirpc_verify_frame buffer payload_offset payload_len secret_key
-    expected_sig = lipirpc_compute_checksum(buffer, payload_offset, payload_len) ^ secret_key
+    expected_sig = _lipirpc_hmac_sha256_u32(buffer, payload_offset, payload_len, secret_key)
     sig_offset = payload_offset + payload_len
-    s0 = mem_byte_read(buffer, sig_offset)
-    s1 = mem_byte_read(buffer, sig_offset + 1)
-    s2 = mem_byte_read(buffer, sig_offset + 2)
-    s3 = mem_byte_read(buffer, sig_offset + 3)
-    actual_sig = s0 + (s1 * 256) + (s2 * 65536) + (s3 * 16777216)
+    s0 = mem_byte_read(buffer, sig_offset) & 255
+    s1 = mem_byte_read(buffer, sig_offset + 1) & 255
+    s2 = mem_byte_read(buffer, sig_offset + 2) & 255
+    s3 = mem_byte_read(buffer, sig_offset + 3) & 255
+    actual_sig = s0 | (s1 << 8) | (s2 << 16) | (s3 << 24)
 
-    if expected_sig == actual_sig
+    diff = expected_sig ^ actual_sig
+    if diff == 0
         return 1
     return 0

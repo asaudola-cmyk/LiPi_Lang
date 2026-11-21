@@ -98,6 +98,14 @@ struct Riscv64Synthesizer
     rv_file_write_off      // Byte offset where file_write helper starts
     rv_in_function         // 1 if currently synthesizing inside a function, 0 if top-level
     rv_try_patches         // Stack of lists of [patch_offset, kind] exception unwind patches (0=JAL, 1=BNE)
+    rv_sp_delta            // Net stack bytes pushed since statement entry
+    rv_for_conts           // Stack of continue patch lists for for-loops (to target step increment)
+    rv_alloc_rw_patch_off  // Code offset of LUI+ADDI for _heap_ptr in RW .data segment
+    rv_needs_list_push     // Flag: 1 if __list_push helper must be emitted
+    rv_list_push_off       // Byte offset where __list_push helper starts
+    rv_error_count         // Count of backend synthesis/relocation errors
+    rv_error_msg           // First error diagnostic message
+    rv_called_main         // 1 if explicit top-level main()/মূল() call was emitted
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -125,6 +133,14 @@ fn riscv64_synth_new
     s.rv_file_write_off = 0
     s.rv_in_function = 0
     s.rv_try_patches = list()
+    s.rv_sp_delta = 0
+    s.rv_for_conts = list()
+    s.rv_alloc_rw_patch_off = 0 - 1
+    s.rv_needs_list_push = 0
+    s.rv_list_push_off = 0
+    s.rv_error_count = 0
+    s.rv_error_msg = ""
+    s.rv_called_main = 0
     return s
 
 fn riscv64_synth_emit_byte s byte_val
@@ -358,27 +374,100 @@ fn riscv64_emit_mv s rd rs
     riscv64_emit_addi(s, rd, rs, 0)
     return 0
 
+fn riscv64_emit_ori s rd rs1 imm12
+    // WHY: ORI rd, rs1, imm12 (opcode 0x13 = 19, funct3=6). Bitwise OR immediate.
+    bytes = rv64_encode_i(19, rd, 6, rs1, imm12)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_slli s rd rs1 shamt
+    // WHY: SLLI rd, rs1, shamt (opcode 0x13 = 19, funct3=1). Shift left logical immediate.
+    bytes = rv64_encode_i(19, rd, 1, rs1, shamt & 63)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_and s rd rs1 rs2
+    // WHY: AND rd, rs1, rs2 (opcode 0x33 = 51, funct3=7, funct7=0).
+    bytes = rv64_encode_r(51, rd, 7, rs1, rs2, 0)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_or s rd rs1 rs2
+    // WHY: OR rd, rs1, rs2 (opcode 0x33 = 51, funct3=6, funct7=0).
+    bytes = rv64_encode_r(51, rd, 6, rs1, rs2, 0)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_xor s rd rs1 rs2
+    // WHY: XOR rd, rs1, rs2 (opcode 0x33 = 51, funct3=4, funct7=0).
+    bytes = rv64_encode_r(51, rd, 4, rs1, rs2, 0)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_sll s rd rs1 rs2
+    // WHY: SLL rd, rs1, rs2 (opcode 0x33 = 51, funct3=1, funct7=0).
+    bytes = rv64_encode_r(51, rd, 1, rs1, rs2, 0)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_sra s rd rs1 rs2
+    // WHY: SRA rd, rs1, rs2 (opcode 0x33 = 51, funct3=5, funct7=32).
+    bytes = rv64_encode_r(51, rd, 5, rs1, rs2, 32)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
 fn riscv64_emit_li s rd val
-    // WHY: LI rd, val. Loads arbitrary signed 32-bit constant into rd using minimal instructions.
+    // WHY: LI rd, val. Loads arbitrary signed 64-bit constant into rd using minimal instructions.
     // Small values (-2048..2047) take 1 instruction (ADDI rd, x0, val).
-    // Larger 32-bit constants take 2 instructions (LUI + ADDI).
+    // 32-bit signed values take 2 instructions (LUI + ADDI).
+    // Full 64-bit values (e.g. IEEE-754 f64 bits) pack cleanly via 9+5*11 bit chunks with SLLI+ORI.
     if val >= 0 - 2048 and val <= 2047
         riscv64_emit_addi(s, rd, 0, val)
         return 0
-    v_adj = val + 2048
-    hi = (v_adj / 4096) % 1048576
-    lo = val - (hi * 4096)
-    riscv64_emit_lui(s, rd, hi)
-    riscv64_emit_addi(s, rd, rd, lo)
+    if val >= 0 - 2147483648 and val <= 2147483647
+        lo = val & 4095
+        if lo >= 2048
+            lo = lo - 4096
+        hi = ((val - lo) >> 12) & 1048575
+        riscv64_emit_lui(s, rd, hi)
+        if lo != 0
+            riscv64_emit_addi(s, rd, rd, lo)
+        return 0
+
+    top9 = (val >> 55) & 511
+    if (top9 & 256) != 0
+        top9 = top9 - 512
+    riscv64_emit_addi(s, rd, 0, top9)
+    c4 = (val >> 44) & 2047
+    riscv64_emit_slli(s, rd, rd, 11)
+    if c4 != 0
+        riscv64_emit_ori(s, rd, rd, c4)
+    c3 = (val >> 33) & 2047
+    riscv64_emit_slli(s, rd, rd, 11)
+    if c3 != 0
+        riscv64_emit_ori(s, rd, rd, c3)
+    c2 = (val >> 22) & 2047
+    riscv64_emit_slli(s, rd, rd, 11)
+    if c2 != 0
+        riscv64_emit_ori(s, rd, rd, c2)
+    c1 = (val >> 11) & 2047
+    riscv64_emit_slli(s, rd, rd, 11)
+    if c1 != 0
+        riscv64_emit_ori(s, rd, rd, c1)
+    c0 = val & 2047
+    riscv64_emit_slli(s, rd, rd, 11)
+    if c0 != 0
+        riscv64_emit_ori(s, rd, rd, c0)
     return 0
 
 // ── 5. Backpatching & Relocation Utilities ─────────────────────────────────────
 
 fn riscv64_synth_patch_lui_addi s offset rd target_vaddr
     // WHY: Patches a 2-instruction (8-byte) LUI + ADDI sequence to load a 32-bit virtual memory address.
-    v_adj = target_vaddr + 2048
-    hi = (v_adj / 4096) % 1048576
-    lo = target_vaddr - (hi * 4096)
+    lo = target_vaddr & 4095
+    if lo >= 2048
+        lo = lo - 4096
+    hi = ((target_vaddr - lo) >> 12) & 1048575
     w_lui_bytes = rv64_encode_u(55, rd, hi)
     w_addi_bytes = rv64_encode_i(19, rd, 0, rd, lo)
     list_set(s.rv_code, offset, get(w_lui_bytes, 0))
@@ -420,6 +509,7 @@ fn riscv64_push_reg s reg
     // Preserves mandatory LP64 16-byte stack alignment at all times.
     riscv64_emit_addi(s, 2, 2, 0 - 16)
     riscv64_emit_sd(s, reg, 2, 0)
+    s.rv_sp_delta = s.rv_sp_delta + 16
     return 0
 
 fn riscv64_pop_reg s reg
@@ -428,6 +518,31 @@ fn riscv64_pop_reg s reg
     //      addi sp, sp, 16
     riscv64_emit_ld(s, reg, 2, 0)
     riscv64_emit_addi(s, 2, 2, 16)
+    s.rv_sp_delta = s.rv_sp_delta - 16
+    return 0
+
+fn riscv64_emit_local_ld s rd off
+    // WHY: Reads local variable slot accounting for transiently pushed expression stack operands.
+    eff = off + s.rv_sp_delta
+    if eff >= 0 - 2048 and eff <= 2047
+        riscv64_emit_ld(s, rd, 2, eff)
+    else
+        riscv64_emit_li(s, 31, eff)
+        riscv64_emit_add(s, 31, 2, 31)
+        riscv64_emit_ld(s, rd, 31, 0)
+    end
+    return 0
+
+fn riscv64_emit_local_sd s rs2 off
+    // WHY: Writes local variable slot accounting for transiently pushed expression stack operands.
+    eff = off + s.rv_sp_delta
+    if eff >= 0 - 2048 and eff <= 2047
+        riscv64_emit_sd(s, rs2, 2, eff)
+    else
+        riscv64_emit_li(s, 31, eff)
+        riscv64_emit_add(s, 31, 2, 31)
+        riscv64_emit_sd(s, rs2, 31, 0)
+    end
     return 0
 
 fn riscv64_emit_prologue s
@@ -599,23 +714,26 @@ fn riscv64_synth_emit_call_alloc s
     return 0
 
 fn riscv64_synth_emit_alloc_helper s
-    // WHY: Emits pure RISC-V silicon bump-arena memory allocator with zero libc dependency.
+    // WHY: Emits pure RISC-V silicon bump-arena memory allocator storing _heap_ptr in RW .data
+    // segment (strict W^X compliance, zero writes to executable .text pages).
     // Inputs: a0 (x10) = requested byte size. Output: a0 (x10) = pointer to allocated memory.
     s.rv_alloc_off = s.rv_code.len()
 
-    // 0: Round requested size up to 16 bytes:
-    // addi a0, a0, 15
+    // 0: Round requested size up to 16 bytes (minimum 16):
     riscv64_emit_addi(s, 10, 10, 15)
-    // andi a0, a0, -16 (0xFF0 = 4080)
     riscv64_emit_andi(s, 10, 10, 0 - 16)
 
-    // 1: Locate _heap_ptr storage at end of function via PC-relative AUIPC (Inst 2 -> Inst 28 = +104 bytes)
-    riscv64_emit_auipc(s, 5, 0)
-    // Inst 3: ld t1, 104(t0) -> load current heap pointer
-    riscv64_emit_ld(s, 6, 5, 104)
+    // 1: Load address of _heap_ptr in RW .data segment into t0 (x5) (patched before ELF emit)
+    s.rv_alloc_rw_patch_off = s.rv_code.len()
+    riscv64_emit_lui(s, 5, 0)
+    riscv64_emit_addi(s, 5, 5, 0)
 
-    // Inst 4: bne t1, x0, .bump (+80 bytes forward from Inst 4 = Inst 24)
-    riscv64_emit_bne(s, 6, 0, 80)
+    // Load current _heap_ptr from 0(t0) into t1 (x6)
+    riscv64_emit_ld(s, 6, 5, 0)
+
+    // bne t1, x0, .bump
+    bne_bump_off = s.rv_code.len()
+    riscv64_emit_bne(s, 6, 0, 0)
 
     // ── Heap initialization via Linux sys_mmap(NULL, 16MB, PROT_READ|WRITE, MAP_ANON|PRIVATE, -1, 0) ──
     riscv64_emit_addi(s, 2, 2, 0 - 32)
@@ -637,21 +755,18 @@ fn riscv64_synth_emit_alloc_helper s
     riscv64_emit_ld(s, 5, 2, 8)
     riscv64_emit_addi(s, 2, 2, 32)
 
-    // Inst 21: sd a0, 104(t0) (store arena base address into _heap_ptr)
-    riscv64_emit_sd(s, 10, 5, 104)
+    // Store arena base address into _heap_ptr at 0(t0)
+    riscv64_emit_sd(s, 10, 5, 0)
     riscv64_emit_mv(s, 6, 10)
     riscv64_emit_mv(s, 10, 12)
 
-    // .bump (Inst 24):
+    // .bump:
+    bump_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_bump_off, 1, 6, 0, bump_off)
     riscv64_emit_add(s, 7, 6, 10)
-    // Inst 25: sd t2, 104(t0) (update _heap_ptr)
-    riscv64_emit_sd(s, 7, 5, 104)
+    riscv64_emit_sd(s, 7, 5, 0)
     riscv64_emit_mv(s, 10, 6)
     riscv64_emit_ret(s)
-
-    // Inst 28..29: _heap_ptr storage (8 bytes initialized to 0, exactly 104 bytes from Inst 2)
-    riscv64_synth_emit32(s, 0)
-    riscv64_synth_emit32(s, 0)
     return 0
 
 // ── 9. Parser Utilities, Symbol Table & Scoping ───────────────────────────────
@@ -729,8 +844,25 @@ fn riscv64_synth_alloc_var s name
     push(s.rv_locals, lv)
     return off
 
+fn riscv64_is_ident_token kind
+    if kind == TOK_IDENT() return 1
+    if kind == TOK_KW_END() return 1
+    if kind == TOK_KW_IN() return 1
+    if kind == TOK_KW_TYPE() return 1
+    if kind == TOK_KW_CASE() return 1
+    if kind == TOK_KW_MATCH() return 1
+    if kind == TOK_KW_MUT() return 1
+    if kind == TOK_KW_ASYNC() return 1
+    if kind == TOK_KW_AWAIT() return 1
+    if kind == TOK_KW_TRY() return 1
+    if kind == TOK_KW_CATCH() return 1
+    if kind == TOK_KW_DEFER() return 1
+    if kind == TOK_KW_PRINT() return 1
+    if kind == TOK_KW_SYSCALL() return 1
+    return 0
+
 fn riscv64_parse_float_bits s_text
-    // WHY: Converts floating-point string literal (e.g. "1.9", "2.9", "100.5", "-0.25")
+    // WHY: Converts floating-point string literal (including scientific notation like 1.5e-4 or 2E10)
     // directly into standard IEEE-754 binary64 64-bit integer bit representation.
     // Pure integer arithmetic: zero libc, zero external dependencies, bit-exact.
     s_len = len(s_text)
@@ -752,25 +884,53 @@ fn riscv64_parse_float_bits s_text
     frac_part = 0
     frac_digits = 0
     dot_seen = 0
+    exp_seen = 0
+    exp_neg = 0
+    exp_val = 0
 
     idx = start
     while idx < s_len
         c = char_at(s_text, idx)
-        if c == "."
+        if c == "." and exp_seen == 0
             dot_seen = 1
+        elif c == "e" or c == "E"
+            exp_seen = 1
+            if idx + 1 < s_len
+                nc = char_at(s_text, idx + 1)
+                if nc == "-"
+                    exp_neg = 1
+                    idx = idx + 1
+                elif nc == "+"
+                    idx = idx + 1
+                end
+            end
         else
             code = ord(c)
             if code >= 48 and code <= 57
                 d = code - 48
-                if dot_seen == 0
-                    int_part = (int_part * 10) + d
+                if exp_seen == 1
+                    if exp_val < 1000
+                        exp_val = (exp_val * 10) + d
+                    end
+                elif dot_seen == 0
+                    if int_part < 90000000000000000
+                        int_part = (int_part * 10) + d
+                    else
+                        exp_val = exp_val + 1
+                    end
                 else
-                    frac_part = (frac_part * 10) + d
-                    frac_digits = frac_digits + 1
+                    if frac_digits < 17 and frac_part < 90000000000000000
+                        frac_part = (frac_part * 10) + d
+                        frac_digits = frac_digits + 1
+                    end
                 end
             end
         end
         idx = idx + 1
+    end
+
+    if exp_neg == 1
+        exp_val = 0 - exp_val
     end
 
     if int_part == 0 and frac_part == 0
@@ -780,16 +940,48 @@ fn riscv64_parse_float_bits s_text
         return 0
     end
 
-    den = 1
+    exp10 = exp_val - frac_digits
+    num = int_part
     k = 0
     while k < frac_digits
-        den = den * 10
+        num = num * 10
         k = k + 1
     end
-
-    num = (int_part * den) + frac_part
-
+    num = num + frac_part
+    den = 1
     exp = 1023
+
+    if exp10 > 320
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp10 < (0 - 340)
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
+    end
+
+    while exp10 > 0
+        while num >= 450359962737049600
+            num = num / 2
+            exp = exp + 1
+        end
+        num = num * 10
+        exp10 = exp10 - 1
+    end
+    while exp10 < 0
+        while den >= 450359962737049600
+            den = den / 2
+            exp = exp - 1
+        end
+        den = den * 10
+        exp10 = exp10 + 1
+    end
+
     while num >= (den * 2)
         den = den * 2
         exp = exp + 1
@@ -797,6 +989,20 @@ fn riscv64_parse_float_bits s_text
     while num < den
         num = num * 2
         exp = exp - 1
+    end
+
+    if exp >= 2047
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp <= 0
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
     end
 
     rem = num - den

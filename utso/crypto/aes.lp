@@ -357,7 +357,19 @@ import "utso/core/string"
   @end
   pad_len = data[num_items - 1] & 255
   @if pad_len <= 0 || pad_len > 16 || pad_len > num_items
-    return data
+    return []
+  @end
+
+  // Constant-time full-padding byte check (RFC 2315 / PKCS#7 oracle defense)
+  bad = 0
+  k = 0
+  @while k < pad_len
+    b = data[num_items - 1 - k] & 255
+    bad = bad | (b ^ pad_len)
+    k = k + 1
+  @end
+  @if bad != 0
+    return []
   @end
 
   unpadded_len = num_items - pad_len
@@ -375,7 +387,7 @@ import "utso/core/string"
   i = 0
   num_items = bytes.len()
   @while i < num_items
-    res = res + str_from_char_code(bytes[i] & 255)
+    res = res + chr(bytes[i] & 255)
     i = i + 1
   @end
   return res

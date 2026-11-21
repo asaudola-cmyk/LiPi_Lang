@@ -31,6 +31,7 @@ fn x86_synth_register_helper_fn s name off
     fn_info.fn_ret_type = ""
     fn_info.fn_end_offset = 0
     fn_info.fn_decl_line = 0
+    fn_info.fn_param_count = 0 - 1
     x86_synth_register_fn_obj(s, fn_info)
     return 0
 
@@ -95,24 +96,23 @@ fn x86_synth_emit__lipi_list_create s
 fn x86_synth_emit_lipi_fn_list s
     // WHY: Native zero-argument list constructor list() / তালিকা()
     // Clears %rdi (initial length = 0) and %rsi (initial buffer = 0), then delegates
-    // cleanly to _lipi_list_create via SysV call relocation and returns list object in %rax.
+    // cleanly to _lipi_list_create via 16-byte aligned SysV call relocation and returns list object in %rax.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "lipi_fn_list", off)
-    x86_synth_emit_bytes(s, [49, 255, 49, 246]) // xor edi, edi (0x31 0xFF); xor esi, esi (0x31 0xF6)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 49, 255, 49, 246]) // push rbp; mov rbp, rsp; xor edi, edi; xor esi, esi
     x86_synth_emit_call_helper(s, "_lipi_list_create")
-    x86_synth_emit_byte(s, 195) // ret (0xC3)
+    x86_synth_emit_bytes(s, [93, 195]) // pop rbp; ret
     return off
 
 fn x86_synth_emit__lipi_list_get s
     // WHY: Unified polymorphic element index resolver.
     // Handles both list access (arr[i]) and string character access (str[i]) dynamically.
-    // When applied to strings, extracts the byte/character codepoint without crash.
-    // When applied to lists, dereferences the 64-bit element array.
+    // Maintains 16-byte stack alignment around _lipi_is_str call.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_get", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 45, 87, 86])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 50, 85, 72, 137, 229, 87, 86])
     x86_synth_emit_call_helper(s, "_lipi_is_str")
-    x86_synth_emit_bytes(s, [94, 95, 133, 192, 116, 18, 72, 133, 246, 120, 27, 139, 79, 248, 72, 57, 206, 115, 19, 15, 182, 4, 55, 195, 72, 59, 55, 115, 9, 72, 139, 71, 16, 72, 139, 4, 240, 195, 49, 192, 195])
+    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 116, 18, 72, 133, 246, 120, 27, 139, 79, 248, 72, 57, 206, 115, 19, 15, 182, 4, 55, 195, 72, 59, 55, 115, 9, 72, 139, 71, 16, 72, 139, 4, 240, 195, 49, 192, 195])
     return off
 
 fn x86_synth_emit__lipi_list_set s
@@ -129,11 +129,12 @@ fn x86_synth_emit__lipi_list_pop s
     return off
 
 fn x86_synth_emit__lipi_list_push s
+    // WHY: Thread-safe dynamic list push protected by per-list bit-63 spinlock on cap slot [r12 + 8].
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_push", off)
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 83, 72, 133, 255, 116, 105, 73, 137, 252, 73, 137, 245, 73, 139, 4, 36, 73, 139, 92, 36, 8, 77, 139, 116, 36, 16, 72, 57, 216, 114, 69, 72, 209, 227, 72, 131, 251, 16, 115, 7, 72, 199, 195, 16, 0, 0, 0, 73, 137, 92, 36, 8, 72, 137, 223, 72, 193, 231, 3, 80, 83])
-    x86_synth_emit_call_helper(s, "__alloc") // call   152 <_lipi_list_push+0x4c>
-    x86_synth_emit_bytes(s, [91, 89, 72, 49, 210, 72, 57, 202, 115, 13, 73, 139, 52, 214, 72, 137, 52, 208, 72, 255, 194, 235, 238, 73, 137, 68, 36, 16, 73, 137, 198, 72, 137, 200, 77, 137, 44, 198, 72, 255, 192, 73, 137, 4, 36, 76, 137, 224, 91, 65, 94, 65, 93, 65, 92, 93, 195])
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 83, 49, 192, 72, 133, 255, 15, 132, 140, 0, 0, 0, 73, 137, 252, 73, 137, 245, 240, 73, 15, 186, 108, 36, 8, 63, 115, 4, 243, 144, 235, 242, 73, 139, 4, 36, 73, 139, 92, 36, 8, 72, 15, 186, 243, 63, 77, 139, 116, 36, 16, 72, 57, 216, 114, 74, 72, 209, 227, 72, 131, 251, 16, 115, 7, 72, 199, 195, 16, 0, 0, 0, 72, 137, 223, 72, 193, 231, 3, 80, 83])
+    x86_synth_emit_call_helper(s, "__alloc")
+    x86_synth_emit_bytes(s, [91, 89, 72, 49, 210, 72, 57, 202, 115, 13, 73, 139, 52, 214, 72, 137, 52, 208, 72, 255, 194, 235, 238, 73, 137, 68, 36, 16, 73, 137, 198, 72, 15, 186, 235, 63, 73, 137, 92, 36, 8, 72, 137, 200, 77, 137, 44, 198, 72, 255, 192, 73, 137, 4, 36, 240, 73, 15, 186, 116, 36, 8, 63, 76, 137, 224, 91, 65, 94, 65, 93, 65, 92, 93, 195])
     return off
 
 fn x86_synth_emit_lipi_fn_argv s
@@ -168,11 +169,13 @@ fn x86_synth_emit__lipi_int_to_str s
 fn x86_synth_emit__lipi_str_sub s
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_str_sub", off)
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 83, 73, 137, 252, 73, 137, 245, 73, 137, 214, 77, 133, 228, 116, 65, 77, 57, 245, 125, 60, 76, 137, 243, 76, 41, 235, 72, 141, 123, 9])
-    x86_synth_emit_call_helper(s, "__alloc") // call   3e0 <_lipi_str_sub+0x2d>
-    x86_synth_emit_bytes(s, [137, 24, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 72, 49, 201, 72, 57, 217, 115, 15, 75, 141, 4, 44, 138, 20, 8, 136, 20, 15, 72, 255, 193, 235, 236, 198, 4, 31, 0, 72, 137, 248, 235, 35, 72, 199, 199, 9, 0, 0, 0])
-    x86_synth_emit_call_helper(s, "__alloc") // call   419 <.ss_em+0xc>
-    x86_synth_emit_bytes(s, [199, 0, 0, 0, 0, 0, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 198, 7, 0, 72, 137, 248, 91, 65, 94, 65, 93, 65, 92, 93, 195])
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 65, 87, 83, 73, 137, 252, 73, 137, 245, 73, 137, 214, 77, 133, 228, 116, 116, 77, 133, 237, 121, 3, 69, 49, 237, 76, 137, 231])
+    x86_synth_emit_call_helper(s, "_lipi_is_str")
+    x86_synth_emit_bytes(s, [133, 192, 116, 7, 69, 139, 124, 36, 248, 235, 15, 69, 49, 255, 67, 128, 60, 60, 0, 116, 5, 73, 255, 199, 235, 244, 77, 57, 254, 126, 3, 77, 137, 254, 77, 57, 245, 125, 61, 76, 137, 243, 76, 41, 235, 72, 141, 123, 9])
+    x86_synth_emit_call_helper(s, "__alloc")
+    x86_synth_emit_bytes(s, [137, 24, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 72, 49, 201, 72, 57, 217, 115, 16, 79, 141, 4, 44, 65, 138, 20, 8, 136, 20, 15, 72, 255, 193, 235, 235, 198, 4, 31, 0, 72, 137, 248, 235, 35, 72, 199, 199, 9, 0, 0, 0])
+    x86_synth_emit_call_helper(s, "__alloc")
+    x86_synth_emit_bytes(s, [199, 0, 0, 0, 0, 0, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 198, 7, 0, 72, 137, 248, 91, 65, 95, 65, 94, 65, 93, 65, 92, 93, 195])
     return off
 
 // File I/O helpers (_lipi_file_exists, _lipi_file_write, _lipi_file_read, _lipi_file_write_bytes)
@@ -222,31 +225,33 @@ fn x86_synth_emit__lipi_print_dynamic s
     return off
 
 fn x86_synth_emit__lipi_print_float s
-    // WHY: Native Silicon IEEE-754 binary64 Floating-Point Printer.
-    // Formats 64-bit double precision float in %rdi directly into ASCII decimal digits
-    // and writes to stdout via SYS_write (1) with trailing newline (pure machine code, zero libc).
+    // WHY: Native Silicon IEEE-754 binary64 Floating-Point Printer (handles NaN, Inf, -Inf, scientific >= 1e18 / < 1e-6).
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_print_float", off)
     x86_synth_register_helper_fn(s, "print_float", off)
-    pf_bytes = [85, 72, 137, 229, 83, 72, 131, 236, 88, 76, 141, 69, 184, 69, 49, 201, 72, 133, 255, 121, 21, 67, 198, 4, 8, 45, 73, 255, 193, 72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 72, 33, 199, 102, 72, 15, 110, 199, 242, 72, 15, 44, 192, 242, 72, 15, 42, 200, 242, 15, 92, 193, 72, 186, 0, 0, 0, 0, 128, 132, 46, 65, 102, 72, 15, 110, 210, 242, 15, 89, 194, 72, 186, 0, 0, 0, 0, 0, 0, 224, 63, 102, 72, 15, 110, 218, 242, 15, 88, 195, 242, 72, 15, 44, 240, 72, 129, 254, 64, 66, 15, 0, 124, 5, 72, 255, 192, 49, 246, 72, 141, 93, 247, 72, 137, 217, 69, 49, 210, 72, 133, 192, 117, 11, 198, 1, 48, 72, 255, 201, 73, 255, 194, 235, 29, 72, 133, 192, 116, 24, 49, 210, 65, 187, 10, 0, 0, 0, 73, 247, 243, 128, 194, 48, 136, 17, 72, 255, 201, 73, 255, 194, 235, 227, 77, 133, 210, 116, 17, 72, 255, 193, 138, 1, 67, 136, 4, 8, 73, 255, 193, 73, 255, 202, 235, 234, 67, 198, 4, 8, 46, 73, 255, 193, 72, 137, 240, 72, 133, 192, 116, 105, 190, 6, 0, 0, 0, 49, 210, 65, 187, 10, 0, 0, 0, 73, 247, 243, 72, 133, 210, 117, 4, 255, 206, 235, 236, 72, 107, 192, 10, 72, 1, 208, 72, 137, 217, 69, 49, 210, 72, 133, 192, 116, 24, 49, 210, 65, 187, 10, 0, 0, 0, 73, 247, 243, 128, 194, 48, 136, 17, 72, 255, 201, 73, 255, 194, 235, 227, 73, 57, 242, 125, 11, 198, 1, 48, 72, 255, 201, 73, 255, 194, 235, 240, 77, 133, 210, 116, 25, 72, 255, 193, 138, 1, 67, 136, 4, 8, 73, 255, 193, 73, 255, 202, 235, 234, 67, 198, 4, 8, 48, 73, 255, 193, 67, 198, 4, 8, 10, 73, 255, 193, 184, 1, 0, 0, 0, 191, 1, 0, 0, 0, 76, 137, 198, 76, 137, 202, 15, 5, 72, 131, 196, 88, 91, 93, 195]
-    x86_synth_emit_bytes(s, pf_bytes)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229])
+    x86_synth_emit_call_helper(s, "_lipi_float_to_str")
+    x86_synth_emit_bytes(s, [72, 131, 236, 16, 139, 80, 248, 72, 137, 198, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 198, 4, 36, 10, 186, 1, 0, 0, 0, 72, 137, 230, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 72, 131, 196, 16, 93, 195])
     return off
 
 fn x86_synth_emit__lipi_gc_collect s
-    // WHY: Tri-Color GC / Heap Reclamation & Slab Sweep-and-Scrub Engine.
-    // Traverses all 9 segregated slab freelist buckets via _lipi_slab_buckets_ptr,
-    // actively scrubs/zeroes dead payload words ([rdx + 8] = 0) of recycled slots to prevent
-    // stale pointer retention, and returns total reclaimed byte capacity in %rax.
+    // WHY: Sovereign conservative mark-and-sweep collector + slab freelist scrubber.
+    // Clears mark bits, traces stack/BSS words for slab pointers in [_heap_base, _heap_ptr),
+    // follows interior pointer slots, reclaims unmarked allocated blocks via _lipi_user_free,
+    // scrubs all 9 slab freelist payloads, and returns total reclaimed byte capacity in %rax.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_gc_collect", off)
     x86_synth_register_helper_fn(s, "gc_collect", off)
     x86_synth_register_helper_fn(s, "lipi_gc_collect", off)
     x86_synth_register_helper_fn(s, "আবর্জনা_পরিষ্কার", off)
-    // Chunk 1: Save callee-saved registers
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86])
+    // Chunk 1: Save callee-saved registers & query _lipi_slab_buckets_ptr
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 131, 236, 32, 83, 65, 84, 65, 85, 65, 86, 65, 87])
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Chunk 2: Traverse 9 slab freelists, zero dead payload [rdx+8], accumulate slot sizes (16 << bucket_idx) and return in %rax
-    x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 69, 49, 228, 73, 131, 252, 9, 125, 43, 73, 199, 197, 16, 0, 0, 0, 76, 137, 225, 73, 211, 229, 75, 139, 20, 230, 72, 133, 210, 116, 16, 76, 1, 235, 72, 199, 66, 8, 0, 0, 0, 0, 72, 139, 18, 235, 235, 73, 255, 196, 235, 207, 72, 137, 216, 65, 94, 65, 93, 65, 92, 91, 93, 195])
+    // Chunk 2: Conservative mark pass over stack & static BSS globals; sweep unmarked slab blocks <= 4096
+    x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 77, 139, 102, 240, 77, 139, 110, 248, 77, 139, 126, 80, 77, 133, 228, 15, 132, 50, 1, 0, 0, 77, 57, 229, 15, 134, 41, 1, 0, 0, 73, 139, 78, 104, 72, 133, 201, 15, 132, 28, 1, 0, 0, 72, 133, 201, 116, 17, 72, 139, 65, 240, 72, 131, 224, 252, 72, 137, 65, 240, 72, 137, 193, 235, 234, 72, 137, 230, 73, 57, 247, 119, 4, 76, 141, 125, 64, 76, 137, 125, 248, 72, 59, 117, 248, 115, 16, 72, 139, 6, 86, 232, 134, 1, 0, 0, 94, 72, 131, 198, 8, 235, 234, 73, 141, 182, 224, 1, 0, 0, 73, 141, 134, 224, 15, 0, 0, 72, 137, 69, 248, 72, 59, 117, 248, 115, 16, 72, 139, 6, 86, 232, 94, 1, 0, 0, 94, 72, 131, 198, 8, 235, 234, 199, 69, 240, 0, 0, 0, 0, 73, 139, 78, 104, 72, 133, 201, 116, 81, 72, 139, 65, 240, 72, 137, 194, 72, 131, 226, 3, 72, 131, 250, 1, 117, 54, 72, 131, 200, 2, 72, 137, 65, 240, 76, 139, 65, 248, 77, 133, 192, 126, 37, 69, 49, 201, 73, 141, 81, 8, 76, 57, 194, 119, 25, 74, 139, 4, 9, 81, 65, 80, 65, 81, 232, 178, 0, 0, 0, 65, 89, 65, 88, 89, 73, 131, 193, 8, 235, 222, 72, 139, 73, 240, 72, 131, 225, 252, 235, 170, 131, 125, 240, 0, 117, 153, 73, 139, 78, 104, 72, 133, 201, 116, 72, 76, 139, 65, 240, 77, 137, 193, 73, 131, 225, 252, 72, 139, 81, 248, 76, 137, 73, 240, 72, 133, 210, 126, 43, 73, 247, 192, 1, 0, 0, 0, 117, 34, 72, 129, 250, 0, 16, 0, 0, 127, 14, 65, 81, 72, 137, 207])
+    x86_synth_emit_call_helper(s, "_lipi_user_free")
+    // Chunk 3: Scrub all 9 slab freelists, sum reclaimed bytes into %rax, and restore stack
+    x86_synth_emit_bytes(s, [65, 89, 235, 11, 72, 199, 65, 248, 0, 0, 0, 0, 72, 1, 211, 76, 137, 201, 235, 179, 69, 49, 228, 73, 131, 252, 9, 125, 43, 73, 199, 197, 16, 0, 0, 0, 76, 137, 225, 73, 211, 229, 75, 139, 20, 230, 72, 133, 210, 116, 16, 76, 1, 235, 72, 199, 66, 8, 0, 0, 0, 0, 72, 139, 18, 235, 235, 73, 255, 196, 235, 207, 72, 137, 216, 65, 95, 65, 94, 65, 93, 65, 92, 91, 72, 131, 196, 32, 93, 195, 76, 57, 224, 114, 81, 76, 57, 232, 115, 76, 77, 139, 86, 104, 77, 133, 210, 116, 67, 77, 139, 90, 248, 77, 133, 219, 126, 48, 76, 57, 208, 114, 43, 75, 141, 60, 26, 72, 57, 248, 115, 34, 73, 139, 82, 240, 72, 247, 194, 1, 0, 0, 0, 117, 15, 72, 131, 202, 1, 73, 137, 82, 240, 199, 69, 240, 1, 0, 0, 0, 184, 1, 0, 0, 0, 195, 77, 139, 82, 240, 73, 131, 226, 252, 235, 184, 49, 192, 195, 76, 57, 224, 15, 130, 198, 0, 0, 0, 76, 57, 232, 15, 131, 189, 0, 0, 0, 73, 137, 194, 73, 131, 226, 7, 77, 133, 210, 15, 133, 168, 0, 0, 0, 80, 232, 127, 255, 255, 255, 94, 133, 192, 15, 133, 158, 0, 0, 0, 77, 137, 232, 73, 41, 240, 73, 129, 248, 0, 1, 0, 0, 118, 7, 73, 199, 192, 0, 1, 0, 0, 73, 131, 248, 24, 114, 88, 72, 139, 14, 72, 131, 249, 1, 124, 79, 72, 129, 249, 0, 4, 0, 0, 127, 70, 72, 59, 78, 8, 127, 64, 72, 139, 86, 16, 76, 57, 226, 114, 55, 76, 57, 234, 115, 50, 72, 193, 225, 3, 72, 141, 60, 10, 76, 57, 239, 119, 37, 69, 49, 201, 73, 57, 201, 115, 29, 74, 139, 4, 10, 86, 65, 80, 81, 82, 65, 81, 232, 15, 255, 255, 255, 65, 89, 90, 89, 65, 88, 94, 73, 131, 193, 8, 235, 222, 69, 49, 201, 73, 141, 73, 8, 76, 57, 193, 119, 30, 74, 139, 4, 14, 86, 65, 80, 65, 81, 232, 232, 254, 255, 255, 65, 89, 65, 88, 94, 73, 131, 193, 8, 235, 222, 232, 216, 254, 255, 255, 195])
     return off
 
 fn x86_synth_emit__lipi_print_nl s
@@ -301,12 +306,12 @@ fn x86_synth_emit__lipi_chr s
 
 fn x86_synth_emit__lipi_char_at s
     // WHY: Native 1-character substring extractor char_at(str, idx)
-    // Computes end = idx + 1 into %rdx and delegates to _lipi_str_sub
+    // Computes end = idx + 1 into %rdx and maintains 16-byte stack alignment around _lipi_str_sub.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_char_at", off)
-    x86_synth_emit_bytes(s, [72, 141, 86, 1]) // lea rdx, [rsi + 1]
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 141, 86, 1]) // push rbp; mov rbp, rsp; lea rdx, [rsi + 1]
     x86_synth_emit_call_helper(s, "_lipi_str_sub")
-    x86_synth_emit_byte(s, 195) // ret
+    x86_synth_emit_bytes(s, [93, 195]) // pop rbp; ret
     return off
 
 fn x86_synth_emit__lipi_mem_byte_read s
@@ -449,12 +454,21 @@ fn x86_synth_emit__lipi_fiber_context_switch s
     return off
 
 fn x86_synth_emit__lipi_atomic_lock s
-    // WHY: Hardware silicon atomic spinlock via lock bts with pause
+    // WHY: Hardware silicon atomic spinlock via lock bts with pause.
+    // Offset map:
+    //   0..5:   F0 48 0F BA 2F 00  -> lock bts qword ptr [rdi], 0
+    //   6..7:   73 0A              -> jae +10 (8 + 10 = 18: mov rax, 1)
+    //   8..9:   F3 90              -> pause
+    //  10..13:  48 83 3F 00        -> cmp qword ptr [rdi], 0
+    //  14..15:  75 F8              -> jne -8 (16 - 8 = 8: pause)
+    //  16..17:  EB EE              -> jmp -18 (18 - 18 = 0: lock bts)
+    //  18..24:  48 C7 C0 01 00 00 00 -> mov rax, 1
+    //  25:      C3                 -> ret
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_atomic_lock", off)
     x86_synth_emit_bytes(s, [
-        240, 72, 15, 186, 47, 0, 115, 11, 243, 144, 72, 131, 63, 0,
-        117, 248, 235, 239, 72, 199, 192, 1, 0, 0, 0, 195
+        240, 72, 15, 186, 47, 0, 115, 10, 243, 144, 72, 131, 63, 0,
+        117, 248, 235, 238, 72, 199, 192, 1, 0, 0, 0, 195
     ])
     return off
 
@@ -475,7 +489,7 @@ fn x86_synth_emit__lipi_exc_slot_ptr s
     x86_synth_register_helper_fn(s, "_lipi_exc_slot_ptr", off)
     x86_synth_emit_bytes(s, [
         81, 65, 82, 184, 186, 0, 0, 0, 15, 5, 65, 90, 89, 73, 137, 195,
-        77, 141, 66, 32, 65, 185, 16, 0, 0, 0, 73, 139, 0, 76, 57, 216,
+        77, 141, 66, 40, 65, 185, 16, 0, 0, 0, 73, 139, 0, 76, 57, 216,
         116, 29, 72, 133, 192, 117, 14, 49, 192, 240, 77, 15, 177, 24,
         116, 15, 76, 57, 216, 116, 10, 73, 131, 192, 16, 65, 255, 201,
         117, 220, 195, 77, 141, 80, 8, 195
@@ -630,6 +644,7 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_atomic_add = x86_synth_emit__lipi_atomic_add(s)
     off__lipi_user_alloc = x86_synth_emit__lipi_user_alloc(s)
     off__lipi_user_free = x86_synth_emit__lipi_user_free(s)
+    off__lipi_float_to_str = x86_synth_emit__lipi_float_to_str(s)
     off__lipi_print_float = x86_synth_emit__lipi_print_float(s)
     off__lipi_gc_collect = x86_synth_emit__lipi_gc_collect(s)
     off__lipi_thread_spawn_vm = x86_synth_emit__lipi_thread_spawn_vm(s)
@@ -646,7 +661,7 @@ fn x86_synth_emit_all_runtime_helpers s
 
     // Register bilingual and standard aliases
     x86_synth_register_helper_fn(s, "move", off__lipi_pass_thru)
-    x86_synth_register_helper_fn(s, "drop", off__lipi_pass_thru)
+    x86_synth_register_helper_fn(s, "drop", off__lipi_user_free)
     x86_synth_register_helper_fn(s, "_lipi_print_float", off__lipi_print_float)
     x86_synth_register_helper_fn(s, "print_float", off__lipi_print_float)
     x86_synth_register_helper_fn(s, "_lipi_gc_collect", off__lipi_gc_collect)

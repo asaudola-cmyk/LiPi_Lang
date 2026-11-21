@@ -153,7 +153,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
       continue
     @end
     // 2. 10-byte movabs r64, imm64 -> relocate .rodata AND W^X RW runtime globals into __DATA
-    @if i + 10 <= code_len && b0 == 72
+    @if i + 10 <= code_len && (b0 == 72 || b0 == 73)
       b1 = code_bytes[i + 1]
       @if (b1 >= 184 && b1 <= 191) && code_bytes[i + 6] == 0 && code_bytes[i + 7] == 0 && code_bytes[i + 8] == 0 && code_bytes[i + 9] == 0
         imm32 = code_bytes[i + 2] + (code_bytes[i + 3] * 256) + (code_bytes[i + 4] * 65536) + (code_bytes[i + 5] * 16777216)
@@ -166,7 +166,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
         @if new_addr > 0
           low32 = new_addr % 4294967296
           high32 = new_addr / 4294967296
-          push(out, 72)
+          push(out, b0)
           push(out, b1)
           push(out, low32 % 256)
           push(out, (low32 / 256) % 256)
@@ -239,7 +239,13 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
 
   linux_ro_base = 4194536 + n
   linux_ro_end = linux_ro_base + rodata_len + 64
-  linux_rw_base = 4259840
+  rx_sz = 232 + n + rodata_len
+  rem_rx = rx_sz % 4096
+  rx_pad = 0
+  @if rem_rx != 0
+    rx_pad = 4096 - rem_rx
+  @end
+  linux_rw_base = 4259840 + rx_sz + rx_pad
 
   // 1. Rewrite 4-instruction MOVZ/MOVK absolute address quads
   idx = 0
@@ -260,7 +266,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
         @if addr >= linux_ro_base && addr < linux_ro_end
           new_addr = data_vmaddr + (addr - linux_ro_base)
         @elif addr >= linux_rw_base && addr < (linux_rw_base + 16777216)
-          new_addr = data_vmaddr + rodata_len
+          new_addr = data_vmaddr + rodata_len + (addr - linux_rw_base)
         @end
         @if new_addr > 0
           nc0 = new_addr & 65535
@@ -293,6 +299,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     @if w == 3531606024 nw = 3531604112 @end      // MOVZ X8, #64 (write) -> MOVZ X16, #4
     @if w == 3531606952 nw = 3531604016 @end      // MOVZ X8, #93 (exit)  -> MOVZ X16, #1
     @if w == 3531611080 nw = 3531610288 @end      // MOVZ X8, #222 (mmap) -> MOVZ X16, #197
+    @if w == 3531605059 nw = 3531735107 @end      // MOVZ X3, #34  (Linux MAP_ANON|PRIVATE) -> MOVZ X3, #0x1002
     @if w == 3556769793 nw = 3556773889 @end      // SVC #0               -> SVC #0x80
     @if nw != w
       pb = macho_pack_u32_le(nw)

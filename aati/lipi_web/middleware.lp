@@ -125,7 +125,8 @@ import "utso/os/fs"
   ctx_set(ctx, "__recovered", "0")
   ctx_next(ctx)
   @if ctx.ctx_res.res_status_code == 0
-    ctx_json(ctx, 500, "{\"error\":\"Internal Server Error\",\"status\":500,\"path\":\"" + ctx.ctx_req.req_path + "\"}")
+    safe_path = web_json_escape(ctx.ctx_req.req_path)
+    ctx_json(ctx, 500, "{\"error\":\"Internal Server Error\",\"status\":500,\"path\":\"" + safe_path + "\"}")
     ctx_set(ctx, "__recovered", "1")
   @end
   return 0
@@ -157,6 +158,9 @@ import "utso/os/fs"
   return "application/octet-stream"
 @end
 
+_mw_static_root_dir = "./public"
+_mw_static_prefix = "/static"
+
 @fn mw_static_serve_run(root_dir, prefix, ctx)
   req_path = ctx.ctx_req.req_path
   @if starts_with(req_path, prefix) == 0
@@ -169,8 +173,10 @@ import "utso/os/fs"
     rel_path = "/" + rel_path
   @end
 
-  @! Security check: directory traversal defense
-  @if contains(rel_path, "..") == 1
+  @! Security check: directory traversal & encoded-dot/backslash/null-byte defense
+  lower_rel = str_to_lower(rel_path)
+  decoded_rel = str_to_lower(url_decode(rel_path))
+  @if contains(lower_rel, "..") == 1 || contains(decoded_rel, "..") == 1 || contains(lower_rel, "%2e") == 1 || contains(lower_rel, "%5c") == 1 || contains(lower_rel, "\\") == 1 || contains(decoded_rel, "\\") == 1 || contains(lower_rel, "%00") == 1
     ctx_text(ctx, 403, "403 Forbidden: Invalid file path")
     ctx_abort(ctx)
     return ctx
@@ -202,12 +208,18 @@ import "utso/os/fs"
 @end
 
 @fn middleware_static_handler(ctx)
-  root_dir = ctx_get(ctx, "static_root_dir", "./public")
-  prefix = ctx_get(ctx, "static_prefix", "/static")
+  root_dir = ctx_get(ctx, "static_root_dir", _mw_static_root_dir)
+  prefix = ctx_get(ctx, "static_prefix", _mw_static_prefix)
   return mw_static_serve_run(root_dir, prefix, ctx)
 @end
 
 @fn middleware_static(root_dir, prefix)
+  @if root_dir != ""
+    _mw_static_root_dir = root_dir
+  @end
+  @if prefix != ""
+    _mw_static_prefix = prefix
+  @end
   return middleware_static_handler
 @end
 

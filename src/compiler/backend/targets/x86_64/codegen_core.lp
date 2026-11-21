@@ -41,6 +41,7 @@ struct X86LocalVar
     lv_prim_type        // Inferred primitive silicon type: "int", "str", or "" if dynamic
     lv_reg              // Assigned physical register ID (-1 if none or spilled)
     lv_is_spilled       // 1 if spilled to stack frame slot, 0 if held in physical register
+    lv_elem_type        // Inferred list/array element primitive type ("float", "int", "str", or "")
 
 // WHY: Records a function definition entry point for call site resolution
 struct X86Function
@@ -49,6 +50,7 @@ struct X86Function
     fn_ret_type         // Declared return type name string ("" if untyped)
     fn_end_offset       // Byte offset where the function body ends (for non-overlapping DWARF)
     fn_decl_line        // Source declaration line number (for DWARF DW_AT_decl_line)
+    fn_param_count      // Declared parameter count (-1 if helper/unknown, >=0 for user fns)
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -122,6 +124,10 @@ struct X86Synthesizer
     synth_regalloc_buckets // 4096-bucket hash index over synth_regalloc_names
     synth_global_buckets   // 4096-bucket hash index over synth_global_names
     synth_fn_buckets       // 4096-bucket hash index over synth_functions
+    synth_defer_starts     // List of deferred statement start token indices in current function
+    synth_defer_ends       // Parallel list of deferred statement end token indices in current function
+    synth_emitting_defer   // 1 while replaying deferred statements before function exit
+    synth_last_elem_type   // Element primitive type of most recent array/list ("float", "")
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -262,6 +268,11 @@ fn x86_synth_new
     s.synth_regalloc_buckets = list()
     s.synth_global_buckets = x86_synth_make_buckets_4096()
     s.synth_fn_buckets = x86_synth_make_buckets_4096()
+    s.synth_defer_starts = list()
+    s.synth_defer_ends = list()
+    s.synth_emitting_defer = 0
+    s.synth_last_elem_type = ""
+    s.synth_emitting_defer = 0
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -648,42 +659,11 @@ fn x86_synth_emit_call_alloc s
     return 0
 
 fn x86_synth_emit_alloc_helper s
-    // WHY: Emits pure AMD64 silicon bump-arena memory allocator with zero libc dependency.
-    // Thread-safe: guards lazy 4GB SYS_mmap initialization with spinlock at [rdx + 104] (rw+120)
-    // and double-checked [rdx], then bumps [rdx + 8] atomically via lock xadd.
-    // Inputs: %rdi = requested byte size. Output: %rax = pointer to allocated memory.
+    // WHY: Emits lock-free CAS bump-arena memory allocator with automatic heap overflow expansion.
+    // Fast path uses lock cmpxchg [rdx+8] bounded by _heap_end ([rdx+384] == rw+400).
+    // Slow path acquires [rdx+104] (rw+120), expands via SYS_mmap (with _heap_end hint), and aborts (137) on OOM/negative sizes.
     s.synth_alloc_off = s.synth_code.len()
-    alloc_bytes = [
-        72, 131, 199, 15,                     // add rdi, 15 (align up to 16 bytes)
-        72, 131, 231, 240,                    // and rdi, -16
-        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,      // movabs rdx, <rw_vaddr + 16> (patched at +10)
-        72, 139, 2,                           // mov rax, [rdx]
-        72, 133, 192,                         // test rax, rax
-        117, 69,                              // jnz .allocated (+69 to index 95)
-        240, 72, 15, 186, 106, 104, 0,        // .spin: lock bts qword [rdx + 104], 0
-        114, 247,                             // jc .spin
-        72, 139, 2,                           // mov rax, [rdx]
-        72, 133, 192,                         // test rax, rax
-        117, 45,                              // jnz .unlock (+45 to index 88)
-        87,                                   // push rdi
-        82,                                   // push rdx
-        49, 255,                              // xor edi, edi (addr = 0)
-        190, 0, 240, 255, 255,                // mov esi, 4294963200 (4GB virtual memory arena, 0xfffff000)
-        106, 3, 90, 144,                      // push 3; pop rdx; nop (PROT_READ | PROT_WRITE = 3)
-        65, 186, 34, 0, 0, 0,                 // mov r10d, 34 (MAP_PRIVATE | MAP_ANON)
-        73, 199, 192, 255, 255, 255, 255,     // mov r8, -1
-        69, 49, 201,                          // xor r9d, r9d
-        184, 9, 0, 0, 0,                      // mov eax, 9 (sys_mmap)
-        15, 5,                                // syscall
-        90,                                   // pop rdx
-        95,                                   // pop rdi
-        72, 137, 2,                           // mov [rdx], rax (save arena base to _heap_base)
-        72, 137, 66, 8,                       // mov [rdx + 8], rax (initialize _heap_ptr)
-        240, 72, 15, 186, 114, 104, 0,        // .unlock: lock btr qword [rdx + 104], 0
-        72, 137, 248,                         // .allocated: mov rax, rdi (index 95)
-        240, 72, 15, 193, 66, 8,              // lock xadd [rdx + 8], rax (atomic bump allocation)
-        195                                   // ret
-    ]
+    alloc_bytes = [72, 133, 255, 15, 136, 228, 0, 0, 0, 72, 131, 199, 15, 72, 131, 231, 240, 72, 186, 136, 119, 102, 85, 68, 51, 34, 17, 72, 139, 66, 8, 72, 133, 192, 116, 26, 72, 137, 193, 72, 1, 249, 114, 18, 72, 59, 138, 128, 1, 0, 0, 119, 9, 240, 72, 15, 177, 74, 8, 117, 222, 195, 240, 72, 15, 186, 106, 104, 0, 114, 247, 72, 139, 66, 8, 72, 133, 192, 116, 29, 72, 137, 193, 72, 1, 249, 114, 21, 72, 59, 138, 128, 1, 0, 0, 119, 12, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 72, 141, 183, 255, 15, 0, 0, 72, 129, 230, 0, 240, 255, 255, 185, 0, 240, 255, 255, 72, 57, 206, 115, 3, 72, 137, 206, 87, 82, 86, 72, 139, 186, 128, 1, 0, 0, 186, 3, 0, 0, 0, 65, 186, 34, 0, 0, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0, 0, 0, 15, 5, 94, 90, 95, 72, 133, 192, 120, 48, 72, 139, 10, 72, 133, 201, 117, 5, 72, 137, 2, 235, 8, 72, 57, 200, 115, 3, 72, 137, 2, 72, 141, 12, 48, 72, 137, 138, 128, 1, 0, 0, 72, 141, 12, 56, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 240, 72, 15, 186, 114, 104, 0, 191, 137, 0, 0, 0, 184, 60, 0, 0, 0, 15, 5]
     x86_synth_emit_bytes(s, alloc_bytes)
     return 0
 
@@ -738,42 +718,55 @@ fn x86_synth_scan_brace_keys toks start_pos
     return keys
 
 fn x86_synth_find_matching_struct s keys
-    // WHY: Matches a set of field names against all declared struct schemas.
-    // Prefers exact field-count matches on declared named structs while preserving
-    // forward schema order for unified anonymous AST node layouts.
+    // WHY: Requires exact field count and key set equality against declared/anonymous structs,
+    // ranking exact ordered named structs highest to eliminate field-offset collisions on partial matches.
     if keys.len() == 0
         return ""
     best_name = ""
-    best_match_count = 0
-    best_exact_named = 0
+    best_score = 0
     i = 0
     while i < s.synth_structs.len()
         sd = s.synth_structs[i]
-        match_count = 0
-        k = 0
-        while k < keys.len()
-            key = keys[k]
-            f = 0
-            while f < sd.sd_fields.len()
-                if sd.sd_fields[f] == key
-                    match_count = match_count + 1
-                    break
-                f = f + 1
-            k = k + 1
-        if match_count == keys.len()
-            is_anon = 0
-            if len(sd.sd_name) > 8 and str_sub(sd.sd_name, 0, 8) == "_anon_s_"
-                is_anon = 1
+        if sd.sd_fields.len() == keys.len()
+            match_count = 0
+            k = 0
+            while k < keys.len()
+                key = keys[k]
+                f = 0
+                while f < sd.sd_fields.len()
+                    if sd.sd_fields[f] == key
+                        match_count = match_count + 1
+                        break
+                    f = f + 1
+                k = k + 1
+            if match_count == keys.len()
+                is_anon = 0
+                if len(sd.sd_name) > 8 and str_sub(sd.sd_name, 0, 8) == "_anon_s_"
+                    is_anon = 1
+                end
+                order_match = 1
+                oi = 0
+                while oi < keys.len()
+                    if sd.sd_fields[oi] != keys[oi]
+                        order_match = 0
+                        break
+                    end
+                    oi = oi + 1
+                end
+                score = 1
+                if is_anon == 0 and order_match == 1
+                    score = 4
+                elif is_anon == 0
+                    score = 3
+                elif order_match == 1
+                    score = 2
+                end
+                if score > best_score
+                    best_score = score
+                    best_name = sd.sd_name
+                end
             end
-            is_exact_named = 0
-            if is_anon == 0 and sd.sd_fields.len() == keys.len()
-                is_exact_named = 1
-            end
-            if (is_exact_named == 1 and best_exact_named == 0) or (is_exact_named == best_exact_named and match_count > best_match_count)
-                best_match_count = match_count
-                best_exact_named = is_exact_named
-                best_name = sd.sd_name
-            end
+        end
         i = i + 1
     return best_name
 
@@ -866,6 +859,28 @@ fn x86_synth_get_field_type s sname fname
             is_anon = 1
         end
         if is_anon == 0
+            fi = 0
+            while fi < sd.sd_fields.len()
+                if sd.sd_fields[fi] == fname
+                    if fi < sd.sd_field_types.len()
+                        return sd.sd_field_types[fi]
+                    end
+                    return ""
+                end
+                fi = fi + 1
+            end
+        end
+        i = i + 1
+    end
+    // Fallback pass 2: search anonymous struct literals (_anon_s_*) if named structs had no match
+    i = 0
+    while i < s.synth_structs.len()
+        sd = s.synth_structs[i]
+        is_anon = 0
+        if len(sd.sd_name) > 8 and str_sub(sd.sd_name, 0, 8) == "_anon_s_"
+            is_anon = 1
+        end
+        if is_anon == 1
             fi = 0
             while fi < sd.sd_fields.len()
                 if sd.sd_fields[fi] == fname
@@ -1268,6 +1283,31 @@ fn x86_synth_get_prim_type s name
         i = i + 1
     return ""
 
+fn x86_synth_set_elem_type s name elem_type
+    // WHY: Tracks primitive element types of local lists/arrays ("float", etc.) for typed indexing.
+    i = 0
+    n = s.synth_locals.len()
+    while i < n
+        v = s.synth_locals[i]
+        if v.lv_name == name
+            v.lv_elem_type = elem_type
+            return 0
+        i = i + 1
+    return 0
+
+fn x86_synth_get_elem_type s name
+    // WHY: Returns inferred list/array element primitive type ("float", or "").
+    i = 0
+    n = s.synth_locals.len()
+    while i < n
+        v = s.synth_locals[i]
+        if v.lv_name == name
+            if v.lv_elem_type != 0
+                return v.lv_elem_type
+            return ""
+        i = i + 1
+    return ""
+
 fn x86_synth_bind_reg_var s var_name is_reg
     // WHY: Binds expression result in %rax to local variable. If variable is assigned a physical
     // register by SSA linear scan or explicit register declaration, emits 1-cycle direct mov into that register;
@@ -1284,6 +1324,13 @@ fn x86_synth_bind_reg_var s var_name is_reg
     if s.synth_last_struct != ""
         x86_synth_set_var_type(s, var_name, s.synth_last_struct)
         s.synth_last_struct = ""
+    end
+    if s.synth_last_elem_type != ""
+        x86_synth_set_elem_type(s, var_name, s.synth_last_elem_type)
+        s.synth_last_elem_type = ""
+    else
+        x86_synth_set_elem_type(s, var_name, "")
+    end
     return off
 
 fn x86_synth_bind_var s var_name
@@ -1500,8 +1547,40 @@ fn x86_synth_emit_pop_args s arg_count
         x86_synth_emit_byte(s, 246) // 0xF6
     return 0
 
+fn x86_synth_emit_save_r12_r15 s
+    // WHY: Lipi passes args 9..12 in %r12..%r15, which are also callee-saved registers.
+    // Call sites with arg_count >= 9 spill caller %r12..%r15 before pop_args and restore after call.
+    offs = list()
+    r = 12
+    while r <= 15
+        off = x86_synth_alloc_var(s, "__abi_save_r" + str(r))
+        push(offs, off)
+        x86_synth_emit_byte(s, 76)  // REX.W + REX.R (0x4C)
+        x86_synth_emit_byte(s, 137) // mov [rbp + disp32], r64
+        x86_synth_emit_byte(s, 133 + (r - 8) * 8)
+        x86_synth_emit_u32(s, 0 - off)
+        r = r + 1
+    end
+    return offs
+
+fn x86_synth_emit_restore_r12_r15 s offs
+    if offs == 0 or offs.len() < 4
+        return 0
+    end
+    i = 0
+    while i < 4
+        r = 12 + i
+        off = offs[i]
+        x86_synth_emit_byte(s, 76)  // REX.W + REX.R (0x4C)
+        x86_synth_emit_byte(s, 139) // mov r64, [rbp + disp32]
+        x86_synth_emit_byte(s, 133 + (r - 8) * 8)
+        x86_synth_emit_u32(s, 0 - off)
+        i = i + 1
+    end
+    return 0
+
 fn x86_synth_parse_float_bits s_text
-    // WHY: Converts floating-point string literal (e.g. "1.9", "2.9", "100.5", "-0.25")
+    // WHY: Converts floating-point string literal (including scientific notation like 1.5e-4 or 2E10)
     // directly into standard IEEE-754 binary64 64-bit integer bit representation.
     // Pure integer arithmetic: zero libc, zero external dependencies, bit-exact.
     s_len = len(s_text)
@@ -1519,30 +1598,58 @@ fn x86_synth_parse_float_bits s_text
         start = 1
     end
 
-    // Split into integer and fractional parts
+    // Split into integer, fractional, and optional scientific exponent parts
     int_part = 0
     frac_part = 0
     frac_digits = 0
     dot_seen = 0
+    exp_seen = 0
+    exp_neg = 0
+    exp_val = 0
 
     idx = start
     while idx < s_len
         c = char_at(s_text, idx)
-        if c == "."
+        if c == "." and exp_seen == 0
             dot_seen = 1
+        elif c == "e" or c == "E"
+            exp_seen = 1
+            if idx + 1 < s_len
+                nc = char_at(s_text, idx + 1)
+                if nc == "-"
+                    exp_neg = 1
+                    idx = idx + 1
+                elif nc == "+"
+                    idx = idx + 1
+                end
+            end
         else
             code = ord(c)
             if code >= 48 and code <= 57
                 d = code - 48
-                if dot_seen == 0
-                    int_part = (int_part * 10) + d
+                if exp_seen == 1
+                    if exp_val < 1000
+                        exp_val = (exp_val * 10) + d
+                    end
+                elif dot_seen == 0
+                    if int_part < 90000000000000000
+                        int_part = (int_part * 10) + d
+                    else
+                        exp_val = exp_val + 1
+                    end
                 else
-                    frac_part = (frac_part * 10) + d
-                    frac_digits = frac_digits + 1
+                    if frac_digits < 17 and frac_part < 90000000000000000
+                        frac_part = (frac_part * 10) + d
+                        frac_digits = frac_digits + 1
+                    end
                 end
             end
         end
         idx = idx + 1
+    end
+
+    if exp_neg == 1
+        exp_val = 0 - exp_val
     end
 
     if int_part == 0 and frac_part == 0
@@ -1552,17 +1659,49 @@ fn x86_synth_parse_float_bits s_text
         return 0
     end
 
-    // Compute denominator = 10^frac_digits
-    den = 1
+    exp10 = exp_val - frac_digits
+    num = (int_part * 1)
     k = 0
     while k < frac_digits
-        den = den * 10
+        num = num * 10
         k = k + 1
     end
-
-    num = (int_part * den) + frac_part
-
+    num = num + frac_part
+    den = 1
     exp = 1023
+
+    // Overflow to +/-inf or underflow to +/-0 bounds for extreme exponents
+    if exp10 > 320
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp10 < (0 - 340)
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
+    end
+
+    while exp10 > 0
+        while num >= 450359962737049600
+            num = num / 2
+            exp = exp + 1
+        end
+        num = num * 10
+        exp10 = exp10 - 1
+    end
+    while exp10 < 0
+        while den >= 450359962737049600
+            den = den / 2
+            exp = exp - 1
+        end
+        den = den * 10
+        exp10 = exp10 + 1
+    end
+
     while num >= (den * 2)
         den = den * 2
         exp = exp + 1
@@ -1570,6 +1709,20 @@ fn x86_synth_parse_float_bits s_text
     while num < den
         num = num * 2
         exp = exp - 1
+    end
+
+    if exp >= 2047
+        res = 2047 * 4503599627370496
+        if sign == 1
+            res = res + 9223372036854775808
+        end
+        return res
+    end
+    if exp <= 0
+        if sign == 1
+            return 9223372036854775808
+        end
+        return 0
     end
 
     rem = num - den

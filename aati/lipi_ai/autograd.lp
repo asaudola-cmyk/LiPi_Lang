@@ -898,6 +898,126 @@ import "aati/lipi_ai/tensor"
         @end
       @end
 
+      @! --- SILU BACKWARD ---
+      @if op == "silu"
+        pa = curr.parents[0]
+        @if pa.requires_grad == 1
+          ga = []
+          k = 0
+          @while k < pa.size
+            xk = tensor_get_flat(pa, k)
+            @if xk >= 0
+              sig_k = 1000000 / (1000 + math_exp_scaled(0 - xk))
+            @else
+              ev = math_exp_scaled(xk)
+              sig_k = (ev * 1000) / (1000 + ev)
+            @end
+            // d/dx SiLU(x) = sig(x) * (1 + x * (1 - sig(x))) with 1000 fixed-point scaling
+            term_in = 1000000 + (xk * (1000 - sig_k))
+            d_silu = (sig_k * term_in) / 1000000000
+            ga = ga.push(curr.grad[k] * d_silu)
+            k = k + 1
+          @end
+          tensor_accumulate_grad(pa, ga)
+        @end
+      @end
+
+      @! --- MUL_SCALAR / DIV_SCALAR BACKWARD ---
+      @if op == "mul_scalar" || op == "div_scalar"
+        pa = curr.parents[0]
+        scalar = 1.0
+        @if curr.ctx.saved_floats.len() > 0
+          scalar = curr.ctx.saved_floats[0]
+          @if op == "div_scalar" && scalar != 0.0
+            scalar = 1.0 / scalar
+          @end
+        @end
+        @if pa.requires_grad == 1
+          ga = []
+          k = 0
+          @while k < pa.size
+            ga = ga.push(curr.grad[k] * scalar)
+            k = k + 1
+          @end
+          tensor_accumulate_grad(pa, ga)
+        @end
+      @end
+
+      @! --- VARIANCE REDUCTION BACKWARD ---
+      @if op == "var"
+        pa = curr.parents[0]
+        dim = 0 - 1
+        @if curr.ctx.saved_ints.len() >= 1
+          dim = curr.ctx.saved_ints[0]
+        @end
+        @if pa.requires_grad == 1
+          ga = []
+          @if dim < 0 || dim >= pa.ndim
+            n_v = pa.size
+            @if n_v <= 0 n_v = 1 @end
+            mean_v = 0.0
+            k = 0
+            @while k < pa.size
+              mean_v = mean_v + (tensor_get_flat(pa, k) + 0.0)
+              k = k + 1
+            @end
+            mean_v = mean_v / (n_v + 0.0)
+            g_out = curr.grad[0] + 0.0
+            k = 0
+            @while k < pa.size
+              diff = (tensor_get_flat(pa, k) + 0.0) - mean_v
+              ga = ga.push((2.0 * diff * g_out) / (n_v + 0.0))
+              k = k + 1
+            @end
+          @else
+            outer_size = 1
+            k = 0
+            @while k < dim
+              outer_size = outer_size * pa.shape[k]
+              k = k + 1
+            @end
+            reduce_size = pa.shape[dim]
+            inner_size = 1
+            k = dim + 1
+            @while k < pa.ndim
+              inner_size = inner_size * pa.shape[k]
+              k = k + 1
+            @end
+            k = 0
+            @while k < pa.size
+              ga = ga.push(0.0)
+              k = k + 1
+            @end
+            o = 0
+            @while o < outer_size
+              in_elem = 0
+              @while in_elem < inner_size
+                sum_s = 0.0
+                r = 0
+                @while r < reduce_size
+                  in_flat = (o * reduce_size * inner_size) + (r * inner_size) + in_elem
+                  sum_s = sum_s + (tensor_get_flat(pa, in_flat) + 0.0)
+                  r = r + 1
+                @end
+                mean_s = sum_s / (reduce_size + 0.0)
+                out_flat = (o * inner_size) + in_elem
+                g_out = curr.grad[out_flat] + 0.0
+                r = 0
+                @while r < reduce_size
+                  in_flat = (o * reduce_size * inner_size) + (r * inner_size) + in_elem
+                  diff = (tensor_get_flat(pa, in_flat) + 0.0) - mean_s
+                  ga[in_flat] = (2.0 * diff * g_out) / (reduce_size + 0.0)
+                  r = r + 1
+                @end
+                in_elem = in_elem + 1
+              @end
+              o = o + 1
+            @end
+          @end
+          tensor_accumulate_grad(pa, ga)
+        @end
+      @end
+
     @end
     idx = idx - 1
   @end

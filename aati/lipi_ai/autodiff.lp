@@ -8,8 +8,16 @@
 import "utso/collections"
 import "utso/math"
 import "aati/lipi_ai/tensor"
+@fn _ad_fadd(a: f64, b: f64) -> f64 return a + b @end
+@fn _ad_fsub(a: f64, b: f64) -> f64 return a - b @end
+@fn _ad_fmul(a: f64, b: f64) -> f64 return a * b @end
+@fn _ad_fdiv(a: f64, b: f64) -> f64 return a / b @end
+@fn _ad_fgt(a: f64, b: f64) -> i64 @if a > b return 1 @end return 0 @end
+@fn _ad_flt(a: f64, b: f64) -> i64 @if a < b return 1 @end return 0 @end
+@fn _ad_i2f(n: i64) -> f64 return n * 1.0 @end
+
 @fn int_to_float(n)
-  return n * 1.0
+  return _ad_i2f(n)
 @end
 
 
@@ -48,28 +56,24 @@ import "aati/lipi_ai/tensor"
   num_items = node.grad.len()
   @while i < num_items
     g = node.grad[i]
-    parent_a.grad = list_set(parent_a.grad, i, parent_a.grad[i] + g)
-    parent_b.grad = list_set(parent_b.grad, i, parent_b.grad[i] + g)
+    parent_a.grad = list_set(parent_a.grad, i, _ad_fadd(parent_a.grad[i], g))
+    parent_b.grad = list_set(parent_b.grad, i, _ad_fadd(parent_b.grad[i], g))
     i = i + 1
   @end
   return 1
 @end
 
 @fn autodiff_add(a, b)
-  res = tensor_add(a, b)
-  res.requires_grad = 1
-  res.grad_fn = "backward_add"
-  res.parents = [a, b]
-  
-  grad = []
+  res_data = []
   i = 0
-  num_items = res.data.len()
+  num_items = a.data.len()
   @while i < num_items
-    grad = grad.push(0.0)
+    res_data = res_data.push(_ad_fadd(a.data[i], b.data[i]))
     i = i + 1
   @end
-  res.grad = grad
-  
+  res = tensor_with_grad(res_data, a.shape)
+  res.creator_op = "backward_add"
+  res.parents = [a, b]
   return res
 @end
 
@@ -82,8 +86,8 @@ import "aati/lipi_ai/tensor"
   num_items = node.grad.len()
   @while i < num_items
     g = node.grad[i]
-    parent_a.grad = list_set(parent_a.grad, i, parent_a.grad[i] + (g * parent_b.data[i]))
-    parent_b.grad = list_set(parent_b.grad, i, parent_b.grad[i] + (g * parent_a.data[i]))
+    parent_a.grad = list_set(parent_a.grad, i, _ad_fadd(parent_a.grad[i], _ad_fmul(g, parent_b.data[i])))
+    parent_b.grad = list_set(parent_b.grad, i, _ad_fadd(parent_b.grad[i], _ad_fmul(g, parent_a.data[i])))
     i = i + 1
   @end
   return 1
@@ -94,12 +98,12 @@ import "aati/lipi_ai/tensor"
   i = 0
   num_items = a.data.len()
   @while i < num_items
-    res_data = res_data.push(a.data[i] * b.data[i])
+    res_data = res_data.push(_ad_fmul(a.data[i], b.data[i]))
     i = i + 1
   @end
   
   res = tensor_with_grad(res_data, a.shape)
-  res.grad_fn = "backward_mul"
+  res.creator_op = "backward_mul"
   res.parents = [a, b]
   return res
 @end
@@ -112,8 +116,8 @@ import "aati/lipi_ai/tensor"
   num_items = node.grad.len()
   @while i < num_items
     g = node.grad[i]
-    @if parent.data[i] > 0.0
-      parent.grad = list_set(parent.grad, i, parent.grad[i] + g)
+    @if _ad_fgt(parent.data[i], 0.0) == 1
+      parent.grad = list_set(parent.grad, i, _ad_fadd(parent.grad[i], g))
     @end
     i = i + 1
   @end
@@ -121,30 +125,31 @@ import "aati/lipi_ai/tensor"
 @end
 
 @fn autodiff_relu(a)
-  res = tensor_relu(a)
-  res.requires_grad = 1
-  res.grad_fn = "backward_relu"
-  res.parents = [a]
-  
-  grad = []
+  res_data = []
   i = 0
-  num_items = res.data.len()
+  num_items = a.data.len()
   @while i < num_items
-    grad = grad.push(0.0)
+    v = a.data[i]
+    @if _ad_fgt(v, 0.0) == 1
+      res_data = res_data.push(v)
+    @else
+      res_data = res_data.push(0.0)
+    @end
     i = i + 1
   @end
-  res.grad = grad
-  
+  res = tensor_with_grad(res_data, a.shape)
+  res.creator_op = "backward_relu"
+  res.parents = [a]
   return res
 @end
 
 @! 2.4 SIGMOID
-@fn math_exp(x)
+@fn math_exp(x: f64) -> f64
   @! Taylor series approximation of exp(x)
   sum = 1.0
   term = 1.0
   i = 1.0
-  @while i < 15.0
+  @while i < 20.0
     term = (term * x) / i
     sum = sum + term
     i = i + 1.0
@@ -160,7 +165,8 @@ import "aati/lipi_ai/tensor"
   @while i < num_items
     g = node.grad[i]
     y = node.data[i]
-    parent.grad = list_set(parent.grad, i, parent.grad[i] + (g * y * (1.0 - y)))
+    d = _ad_fmul(_ad_fmul(g, y), _ad_fsub(1.0, y))
+    parent.grad = list_set(parent.grad, i, _ad_fadd(parent.grad[i], d))
     i = i + 1
   @end
   return 1
@@ -172,13 +178,13 @@ import "aati/lipi_ai/tensor"
   num_items = a.data.len()
   @while i < num_items
     x = a.data[i]
-    y = 1.0 / (1.0 + math_exp(0.0 - x))
+    y = _ad_fdiv(1.0, _ad_fadd(1.0, math_exp(_ad_fsub(0.0, x))))
     res_data = res_data.push(y)
     i = i + 1
   @end
   
   res = tensor_with_grad(res_data, a.shape)
-  res.grad_fn = "backward_sigmoid"
+  res.creator_op = "backward_sigmoid"
   res.parents = [a]
   return res
 @end
@@ -194,7 +200,6 @@ import "aati/lipi_ai/tensor"
   n = parent_b.shape[1]
   
   @! dL/dA = dL/dNode @ B.T
-  @! B.T is [N, K]
   i = 0
   @while i < m
     j = 0
@@ -204,17 +209,16 @@ import "aati/lipi_ai/tensor"
       @while p < n
         g = node.grad[i * n + p]
         b_val = parent_b.data[j * n + p]
-        sum_a = sum_a + (g * b_val)
+        sum_a = _ad_fadd(sum_a, _ad_fmul(g, b_val))
         p = p + 1
       @end
-      parent_a.grad = list_set(parent_a.grad, i * k + j, parent_a.grad[i * k + j] + sum_a)
+      parent_a.grad = list_set(parent_a.grad, i * k + j, _ad_fadd(parent_a.grad[i * k + j], sum_a))
       j = j + 1
     @end
     i = i + 1
   @end
   
   @! dL/dB = A.T @ dL/dNode
-  @! A.T is [K, M]
   i = 0
   @while i < k
     j = 0
@@ -224,10 +228,10 @@ import "aati/lipi_ai/tensor"
       @while p < m
         a_val = parent_a.data[p * k + i]
         g = node.grad[p * n + j]
-        sum_b = sum_b + (a_val * g)
+        sum_b = _ad_fadd(sum_b, _ad_fmul(a_val, g))
         p = p + 1
       @end
-      parent_b.grad = list_set(parent_b.grad, i * n + j, parent_b.grad[i * n + j] + sum_b)
+      parent_b.grad = list_set(parent_b.grad, i * n + j, _ad_fadd(parent_b.grad[i * n + j], sum_b))
       j = j + 1
     @end
     i = i + 1
@@ -236,20 +240,28 @@ import "aati/lipi_ai/tensor"
 @end
 
 @fn autodiff_matmul(a, b)
-  res = tensor_matmul_2x2(a, b)
-  res.requires_grad = 1
-  res.grad_fn = "backward_matmul"
-  res.parents = [a, b]
-  
-  grad = []
+  m = a.shape[0]
+  k = a.shape[1]
+  n = b.shape[1]
+  out = []
   i = 0
-  num_items = res.data.len()
-  @while i < num_items
-    grad = grad.push(0.0)
+  @while i < m
+    j = 0
+    @while j < n
+      acc = 0.0
+      p = 0
+      @while p < k
+        acc = _ad_fadd(acc, _ad_fmul(a.data[i * k + p], b.data[p * n + j]))
+        p = p + 1
+      @end
+      out = out.push(acc)
+      j = j + 1
+    @end
     i = i + 1
   @end
-  res.grad = grad
-  
+  res = tensor_with_grad(out, [m, n])
+  res.creator_op = "backward_matmul"
+  res.parents = [a, b]
   return res
 @end
 
@@ -263,13 +275,13 @@ import "aati/lipi_ai/tensor"
   target = node.parents[1]
   
   n = pred.data.len()
-  factor = 2.0 / int_to_float(n)
+  factor = _ad_fdiv(2.0, _ad_i2f(n))
   g_out = node.grad[0]
   
   i = 0
   @while i < n
-    diff = pred.data[i] - target.data[i]
-    pred.grad = list_set(pred.grad, i, pred.grad[i] + (g_out * factor * diff))
+    diff = _ad_fsub(pred.data[i], target.data[i])
+    pred.grad = list_set(pred.grad, i, _ad_fadd(pred.grad[i], _ad_fmul(_ad_fmul(g_out, factor), diff)))
     i = i + 1
   @end
   return 1
@@ -280,14 +292,14 @@ import "aati/lipi_ai/tensor"
   i = 0
   n = pred.data.len()
   @while i < n
-    diff = pred.data[i] - target.data[i]
-    sum = sum + (diff * diff)
+    diff = _ad_fsub(pred.data[i], target.data[i])
+    sum = _ad_fadd(sum, _ad_fmul(diff, diff))
     i = i + 1
   @end
   
-  mean_val = sum / int_to_float(n)
+  mean_val = _ad_fdiv(sum, _ad_i2f(n))
   res = tensor_with_grad([mean_val], [1])
-  res.grad_fn = "backward_mse"
+  res.creator_op = "backward_mse"
   res.parents = [pred, target]
   return res
 @end
@@ -298,40 +310,40 @@ import "aati/lipi_ai/tensor"
   target = node.parents[1]
   
   n = pred.data.len()
-  factor = 1.0 / int_to_float(n)
+  factor = _ad_fdiv(1.0, _ad_i2f(n))
   g_out = node.grad[0]
   
   i = 0
   @while i < n
-    @! Simplified gradient for CE with Softmax: (pred - target) / N
-    diff = pred.data[i] - target.data[i]
-    pred.grad = list_set(pred.grad, i, pred.grad[i] + (g_out * factor * diff))
+    diff = _ad_fsub(pred.data[i], target.data[i])
+    pred.grad = list_set(pred.grad, i, _ad_fadd(pred.grad[i], _ad_fmul(_ad_fmul(g_out, factor), diff)))
     i = i + 1
   @end
   return 1
 @end
 
 @fn loss_cross_entropy(pred, target)
-  @! This assumes pred is already softmaxed and target is one-hot
   sum = 0.0
   i = 0
   n = pred.data.len()
   @while i < n
     p = pred.data[i]
-    @if p < 0.0001
+    @if _ad_flt(p, 0.0001) == 1
       p = 0.0001
     @end
     // WHY: High-precision Taylor expansion approximation of natural log in pure LiPi floating-point math
-    z = (p - 1.0) / (p + 1.0)
-    z2 = z * z
-    p_log = 2.0 * (z + (z * z2) / 3.0 + (z * z2 * z2) / 5.0)
-    sum = sum - (target.data[i] * p_log)
+    z = _ad_fdiv(_ad_fsub(p, 1.0), _ad_fadd(p, 1.0))
+    z2 = _ad_fmul(z, z)
+    z3 = _ad_fmul(z, z2)
+    z5 = _ad_fmul(z3, z2)
+    p_log = _ad_fmul(2.0, _ad_fadd(_ad_fadd(z, _ad_fdiv(z3, 3.0)), _ad_fdiv(z5, 5.0)))
+    sum = _ad_fsub(sum, _ad_fmul(target.data[i], p_log))
     i = i + 1
   @end
   
-  mean_val = sum / int_to_float(n)
+  mean_val = _ad_fdiv(sum, _ad_i2f(n))
   res = tensor_with_grad([mean_val], [1])
-  res.grad_fn = "backward_ce"
+  res.creator_op = "backward_ce"
   res.parents = [pred, target]
   return res
 @end
@@ -339,52 +351,53 @@ import "aati/lipi_ai/tensor"
 @! ----------------------------------------------------------------------------
 @! 4. REVERSE-MODE BACKPROPAGATION ALGORITHM
 @! ----------------------------------------------------------------------------
-@fn topo_sort(node, visited, sorted)
-  @! Simple recursive DFS
-  visited = visited.push(node)
-  
+@fn _topo_sort_box(node, visited_box, sorted)
+  @! Shared visited-set DFS topological post-order preventing duplicate DAG visits
+  vis = visited_box[0]
+  vi = 0
+  vlen = vis.len()
+  @while vi < vlen
+    @if vis[vi] == node
+      return sorted
+    @end
+    vi = vi + 1
+  @end
+  visited_box = list_set(visited_box, 0, vis.push(node))
+
   i = 0
   num_items = node.parents.len()
   @while i < num_items
     p = node.parents[i]
-    @! Check if p in visited (skipped for brevity)
-    sorted = topo_sort(p, visited, sorted)
+    sorted = _topo_sort_box(p, visited_box, sorted)
     i = i + 1
   @end
-  
+
   return sorted.push(node)
+@end
+
+@fn topo_sort(node, visited, sorted)
+  vbox = [visited]
+  return _topo_sort_box(node, vbox, sorted)
 @end
 
 @fn tensor_backward(loss_node)
   loss_node.grad = list_set(loss_node.grad, 0, 1.0)
-  
-  @! Execute backward passes recursively
-  queue = [loss_node]
-  q_head = 0
-  
-  @while q_head < queue.len()
-    curr = queue[q_head]
-    q_head = q_head + 1
-    
-    @if curr.grad_fn != 0
+  topo = _topo_sort_box(loss_node, [[]], [])
+  idx = topo.len() - 1
+  @while idx >= 0
+    curr = topo[idx]
+    @if curr.creator_op != 0 && curr.creator_op != "" && curr.creator_op != "none"
       res = 0
-      @if curr.grad_fn == "backward_add" res = backward_add(curr) @end
-      @if curr.grad_fn == "backward_mul" res = backward_mul(curr) @end
-      @if curr.grad_fn == "backward_relu" res = backward_relu(curr) @end
-      @if curr.grad_fn == "backward_sigmoid" res = backward_sigmoid(curr) @end
-      @if curr.grad_fn == "backward_matmul" res = backward_matmul(curr) @end
-      @if curr.grad_fn == "backward_mse" res = backward_mse(curr) @end
-      @if curr.grad_fn == "backward_ce" res = backward_ce(curr) @end
-      
-      i = 0
-      num_items = curr.parents.len()
-      @while i < num_items
-        queue = queue.push(curr.parents[i])
-        i = i + 1
-      @end
+      @if curr.creator_op == "backward_add" res = backward_add(curr) @end
+      @if curr.creator_op == "backward_mul" res = backward_mul(curr) @end
+      @if curr.creator_op == "backward_relu" res = backward_relu(curr) @end
+      @if curr.creator_op == "backward_sigmoid" res = backward_sigmoid(curr) @end
+      @if curr.creator_op == "backward_matmul" res = backward_matmul(curr) @end
+      @if curr.creator_op == "backward_mse" res = backward_mse(curr) @end
+      @if curr.creator_op == "backward_ce" res = backward_ce(curr) @end
     @end
+    idx = idx - 1
   @end
-  
   return loss_node
 @end
 
@@ -399,7 +412,7 @@ import "aati/lipi_ai/tensor"
     j = 0
     plen = p.data.len()
     @while j < plen
-      p.data = list_set(p.data, j, p.data[j] - (lr * p.grad[j]))
+      p.data = list_set(p.data, j, _ad_fsub(p.data[j], _ad_fmul(lr, p.grad[j])))
       p.grad = list_set(p.grad, j, 0.0)
       j = j + 1
     @end
@@ -444,42 +457,56 @@ import "aati/lipi_ai/tensor"
   }
 @end
 
+@fn _ad_pow(base: f64, exp: i64) -> f64
+  res = 1.0
+  k = 0
+  @while k < exp
+    res = res * base
+    k = k + 1
+  @end
+  return res
+@end
+
 @fn optimizer_adam_step(adam)
   adam.t = adam.t + 1
-  t = int_to_float(adam.t)
-  
+  b1 = adam.beta1
+  b2 = adam.beta2
+  b1_corr = _ad_fsub(1.0, _ad_pow(b1, adam.t))
+  b2_corr = _ad_fsub(1.0, _ad_pow(b2, adam.t))
+  @if _ad_flt(b1_corr, 0.0000001) == 1 b1_corr = 0.0000001 @end
+  @if _ad_flt(b2_corr, 0.0000001) == 1 b2_corr = 0.0000001 @end
+
   i = 0
   num_items = adam.params.len()
   @while i < num_items
     p = adam.params[i]
     m_arr = adam.m[i]
     v_arr = adam.v[i]
-    
+
     j = 0
     plen = p.data.len()
     @while j < plen
       g = p.grad[j]
-      
-      @! m = beta1 * m + (1 - beta1) * g
-      m_arr = list_set(m_arr, j, (adam.beta1 * m_arr[j]) + ((1.0 - adam.beta1) * g))
-      
-      @! v = beta2 * v + (1 - beta2) * g^2
-      v_arr = list_set(v_arr, j, (adam.beta2 * v_arr[j]) + ((1.0 - adam.beta2) * g * g))
-      
-      @! Bias correction
-      m_hat = m_arr[j] @! simplified
-      v_hat = v_arr[j] @! simplified
-      
-      @! Update weight
-      denom = v_hat + adam.epsilon
-      p.data = list_set(p.data, j, p.data[j] - (adam.lr * m_hat / denom))
-      
-      @! Zero grad
+
+      m_new = _ad_fadd(_ad_fmul(b1, m_arr[j]), _ad_fmul(_ad_fsub(1.0, b1), g))
+      v_new = _ad_fadd(_ad_fmul(b2, v_arr[j]), _ad_fmul(_ad_fsub(1.0, b2), _ad_fmul(g, g)))
+      m_arr = list_set(m_arr, j, m_new)
+      v_arr = list_set(v_arr, j, v_new)
+
+      m_hat = _ad_fdiv(m_new, b1_corr)
+      v_hat = _ad_fdiv(v_new, b2_corr)
+      @if _ad_flt(v_hat, 0.0) == 1 v_hat = 0.0 @end
+
+      denom = _ad_fadd(math_sqrt(v_hat), adam.epsilon)
+      step_delta = _ad_fdiv(_ad_fmul(adam.lr, m_hat), denom)
+      p.data = list_set(p.data, j, _ad_fsub(p.data[j], step_delta))
+
       p.grad = list_set(p.grad, j, 0.0)
-      
       j = j + 1
     @end
-    
+    adam.m = list_set(adam.m, i, m_arr)
+    adam.v = list_set(adam.v, i, v_arr)
+
     i = i + 1
   @end
   

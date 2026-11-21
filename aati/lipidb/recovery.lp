@@ -99,6 +99,7 @@ import "aati/lipidb/wal"
     buf = buf.push(sys_peek8(raw_mmap + b_i) & 255)
     b_i = b_i + 1
   @end
+  free(raw_mmap)
 
   crc_table = crc32_table_init()
 

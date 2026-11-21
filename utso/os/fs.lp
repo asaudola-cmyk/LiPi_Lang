@@ -67,17 +67,28 @@ import "utso/core/string"
   return sys_open(path, flags, mode)
 @end
 
-@! Reads up to max_len bytes from fd, returning string
+@! Reads up to max_len bytes from fd, returning a valid STR0 Lipi string
 @fn fs_read(fd, max_len)
   @if max_len <= 0
     return ""
   @end
   buf = lipi_alloc(max_len + 1)
-  bytes_read = sys_read(fd, buf, max_len)
-  @if bytes_read <= 0
+  @if buf <= 0
     return ""
   @end
-  return lipi_str_new(buf)
+  bytes_read = sys_read(fd, buf, max_len)
+  @if bytes_read <= 0
+    lipi_free_sized(buf, max_len + 1)
+    return ""
+  @end
+  out = ""
+  k = 0
+  @while k < bytes_read
+    out = out + chr(sys_peek8(buf + k))
+    k = k + 1
+  @end
+  lipi_free_sized(buf, max_len + 1)
+  return out
 @end
 
 @! Writes string data to fd, returning number of bytes written
@@ -104,23 +115,36 @@ import "utso/core/string"
   @if res == 0
     return 1
   @end
-  st = { dev: 0, ino: 0, nlink: 0, mode_uid: 0, rdev: 0, pad: 0, size: 0, blksize: 0, blocks: 0, atime_sec: 0, atime_nsec: 0, mtime_sec: 0, mtime_nsec: 0, ctime_sec: 0, ctime_nsec: 0, res1: 0, res2: 0, res3: 0 }
-  st_res = sys_stat(path, st)
+  stat_buf = lipi_alloc(144)
+  st_res = -1
+  @if stat_buf > 0
+    st_res = sys_stat(path, stat_buf)
+    lipi_free_sized(stat_buf, 144)
+  @end
   @if st_res == 0
     return 1
   @end
   return file_exists(path)
 @end
 
-@! Queries file metadata (size, mode, is_file, is_dir) via sys_stat
+@! Queries file metadata (size, mode, is_file, is_dir) via Linux x86_64 struct stat ABI
 @fn fs_stat(path)
-  st = { dev: 0, ino: 0, nlink: 0, mode_uid: 0, rdev: 0, pad: 0, size: 0, blksize: 0, blocks: 0, atime_sec: 0, atime_nsec: 0, mtime_sec: 0, mtime_nsec: 0, ctime_sec: 0, ctime_nsec: 0, res1: 0, res2: 0, res3: 0 }
-  res = sys_stat(path, st)
+  stat_buf = lipi_alloc(144)
+  @if stat_buf <= 0
+    return { size: 0, mode: 0, is_file: 0, is_dir: 0 }
+  @end
+  res = sys_stat(path, stat_buf)
   @if res != 0
+    lipi_free_sized(stat_buf, 144)
     return { size: 0, mode: 0, is_file: 0, is_dir: 0 }
   @end
 
-  raw_mode = st.mode_uid & 65535
+  // Linux x86_64 struct stat offsets: st_mode (u32) at +24, st_size (i64) at +48.
+  mode32 = sys_peek32(stat_buf + 24)
+  fsize = sys_peek64(stat_buf + 48)
+  lipi_free_sized(stat_buf, 144)
+
+  raw_mode = mode32 & 65535
   fmt = raw_mode & 61440  @! S_IFMT (0170000)
   is_d = 0
   @if fmt == 16384  @! S_IFDIR (0040000)
@@ -132,7 +156,7 @@ import "utso/core/string"
   @end
 
   return {
-    size: st.size,
+    size: fsize,
     mode: raw_mode,
     is_file: is_f,
     is_dir: is_d
@@ -306,6 +330,10 @@ import "utso/core/string"
   entries = []
   buf_size = 4096
   buf = lipi_alloc(buf_size)
+  @if buf <= 0
+    sys_close(fd)
+    return entries
+  @end
 
   @while 1
     nread = sys_getdents64(fd, buf, buf_size)
@@ -316,15 +344,26 @@ import "utso/core/string"
     pos = 0
     @while pos < nread
       entry_ptr = buf + pos
-      name_ptr = entry_ptr + 19
-      name = lipi_str_new(name_ptr)
-
-      reclen = entry_ptr.d_reclen_type & 65535
+      reclen = sys_peek16(entry_ptr + 16)
       @if reclen <= 0
         break
       @end
 
-      @if name != "." && name != ".."
+      // Copy NUL-terminated d_name at offset +19 into a managed STR0 string before freeing buf.
+      name_ptr = entry_ptr + 19
+      name = ""
+      nk = 0
+      max_name = reclen - 19
+      @while nk < max_name
+        nb = sys_peek8(name_ptr + nk)
+        @if nb == 0
+          break
+        @end
+        name = name + chr(nb)
+        nk = nk + 1
+      @end
+
+      @if name != "" && name != "." && name != ".."
         entries.push(name)
       @end
 
@@ -332,6 +371,7 @@ import "utso/core/string"
     @end
   @end
 
+  lipi_free_sized(buf, buf_size)
   sys_close(fd)
   return entries
 @end

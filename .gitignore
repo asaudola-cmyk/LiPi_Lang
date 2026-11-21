@@ -15,7 +15,6 @@ scratch/
 benchmarks/**/bin_*
 benchmarks/**/gateway_bin
 !benchmarks/**/*.lp
-!benchmarks/**/*.py
 !benchmarks/**/*.md
 
 # Standalone package manager dependencies
@@ -60,5 +59,4 @@ bin/test_*
 *.db
 *.wal
 /tmp/libtest_*
-__pycache__/
-*.py[cod]
+# 100% Pure Sovereign Repository — Zero Python Sources or Bytecode

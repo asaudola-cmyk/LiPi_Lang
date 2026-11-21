@@ -36,6 +36,7 @@ REGEX_DIGIT        = 11  // \d = [0-9০-৯]
 REGEX_WORD         = 12  // \w = [a-zA-Z0-9_] + Bengali
 REGEX_SPACE        = 13  // \s = [ \t\n\r]
 REGEX_BENGALI      = 14  // \ব = Bengali Unicode letter range (U+0980-U+09FF)
+REGEX_WORD_BOUNDARY = 15 // \b = word/non-word transition
 
 // Quantifier enums
 QUANT_ONE  = 1
@@ -51,6 +52,7 @@ struct RegexNode
     char_code
     ranges
     negated
+    sub_pat_list
 
 struct REGEX_pattern
     node_list
@@ -71,7 +73,7 @@ struct REGEX_ম্যাচ_result
 // ─── UTF-8 & Unicode Helpers ──────────────────────────────────────────────────
 // WHY: Bengali characters (U+0980..U+09FF) and other Unicode codepoints span 2 to 4
 // UTF-8 bytes. Pure rune decoding ensures exact character boundary awareness.
-fn utf8_rune_len b0
+fn _rx_utf8_rune_len b0
     if b0 < 128
         return 1
     elif b0 >= 192 and b0 <= 223
@@ -82,7 +84,7 @@ fn utf8_rune_len b0
         return 4
     return 1
 
-fn utf8_decode_cp s idx slen
+fn _rx_utf8_decode_cp s idx slen
     b0 = ord(char_at(s, idx))
     if b0 < 128
         return b0
@@ -110,8 +112,8 @@ fn regex_node_matches node text t_idx t_len
     if t_idx >= t_len
         return 0
     b0 = ord(char_at(text, t_idx))
-    rlen = utf8_rune_len(b0)
-    cp = utf8_decode_cp(text, t_idx, t_len)
+    rlen = _rx_utf8_rune_len(b0)
+    cp = _rx_utf8_decode_cp(text, t_idx, t_len)
     nt = node.node_type
 
     // Dot matches any character except newline (ASCII 10)
@@ -173,10 +175,50 @@ fn regex_node_matches node text t_idx t_len
 
     return 0
 
-// ─── NFA Simulation Engine with Backtracking ──────────────────────────────────
-// WHY: Executes the compiled NFA state sequence with greedy matching and clean
-// backtracking for * (zero or more), + (one or more), and ? (zero or one).
-fn regex_exec_nodes pat node_idx text t_idx t_len
+// ─── NFA Simulation Engine with Memoized Backtracking (O(M * N) ReDoS-Safe) ────
+fn _regex_is_word_cp cp
+    if (cp >= 97 and cp <= 122) or (cp >= 65 and cp <= 90) or (cp >= 48 and cp <= 57) or cp == 95 or (cp >= 2432 and cp <= 2559)
+        return 1
+    return 0
+
+fn _regex_check_word_boundary text t_idx t_len
+    left_w = 0
+    if t_idx > 0
+        // Scan back to previous UTF-8 rune start
+        prev = t_idx - 1
+        while prev > 0 and (ord(char_at(text, prev)) & 192) == 128
+            prev = prev - 1
+        left_w = _regex_is_word_cp(_rx_utf8_decode_cp(text, prev, t_len))
+    right_w = 0
+    if t_idx < t_len
+        right_w = _regex_is_word_cp(_rx_utf8_decode_cp(text, t_idx, t_len))
+    if left_w != right_w
+        return 1
+    return 0
+
+fn _regex_pattern_needs_memo pat
+    i = 0
+    while i < pat.node_count
+        nd = get(pat.node_list, i)
+        if nd.quantifier != QUANT_ONE or nd.node_type == REGEX_GROUP or nd.node_type == REGEX_ALTERNATE
+            return 1
+        i = i + 1
+    return 0
+
+fn _regex_make_memo pat t_len
+    if _regex_pattern_needs_memo(pat) == 0
+        return 0
+    cells = (pat.node_count + 1) * (t_len + 1)
+    if cells > 262144
+        return 0
+    memo = list()
+    i = 0
+    while i < cells
+        push(memo, 0)
+        i = i + 1
+    return memo
+
+fn regex_exec_nodes_memo pat node_idx text t_idx t_len memo
     if node_idx >= pat.node_count
         if pat.has_anchor_end == 1
             if t_idx == t_len
@@ -184,16 +226,108 @@ fn regex_exec_nodes pat node_idx text t_idx t_len
             return -1
         return t_idx
 
+    stride = t_len + 1
+    mkey = (node_idx * stride) + t_idx
+    if memo != 0
+        if get(memo, mkey) == 1
+            return -1
+
     node = get(pat.node_list, node_idx)
     q = node.quantifier
+    nt = node.node_type
+
+    // Alternation node (branch list)
+    if nt == REGEX_ALTERNATE
+        bi = 0
+        bn = len(node.sub_pat_list)
+        while bi < bn
+            bpat = get(node.sub_pat_list, bi)
+            ok_start = 1
+            if bpat.has_anchor_start == 1 and t_idx != 0
+                ok_start = 0
+            if ok_start == 1
+                sub_memo = _regex_make_memo(bpat, t_len)
+                res = regex_exec_nodes_memo(bpat, 0, text, t_idx, t_len, sub_memo)
+                if res >= 0
+                    return res
+            bi = bi + 1
+        if memo != 0
+            list_set(memo, mkey, 1)
+        return -1
+
+    // Zero-width word boundary (\b)
+    if nt == REGEX_WORD_BOUNDARY
+        if _regex_check_word_boundary(text, t_idx, t_len) == 1
+            sub_res = regex_exec_nodes_memo(pat, node_idx + 1, text, t_idx, t_len, memo)
+            if sub_res >= 0
+                return sub_res
+        if memo != 0
+            list_set(memo, mkey, 1)
+        return -1
+
+    // Group node (...) matching inner sub-pattern with optional quantifier
+    if nt == REGEX_GROUP
+        sub_pat = get(node.sub_pat_list, 0)
+        if q == QUANT_ONE
+            sub_memo = _regex_make_memo(sub_pat, t_len)
+            mid = regex_exec_nodes_memo(sub_pat, 0, text, t_idx, t_len, sub_memo)
+            if mid >= 0
+                sub_res = regex_exec_nodes_memo(pat, node_idx + 1, text, mid, t_len, memo)
+                if sub_res >= 0
+                    return sub_res
+            if memo != 0
+                list_set(memo, mkey, 1)
+            return -1
+        if q == QUANT_OPT
+            sub_memo = _regex_make_memo(sub_pat, t_len)
+            mid = regex_exec_nodes_memo(sub_pat, 0, text, t_idx, t_len, sub_memo)
+            if mid >= 0
+                sub_res = regex_exec_nodes_memo(pat, node_idx + 1, text, mid, t_len, memo)
+                if sub_res >= 0
+                    return sub_res
+            sub_res0 = regex_exec_nodes_memo(pat, node_idx + 1, text, t_idx, t_len, memo)
+            if sub_res0 >= 0
+                return sub_res0
+            if memo != 0
+                list_set(memo, mkey, 1)
+            return -1
+        positions = list()
+        if q == QUANT_STAR
+            push(positions, t_idx)
+        cur = t_idx
+        while cur <= t_len
+            sub_memo = _regex_make_memo(sub_pat, t_len)
+            nxt = regex_exec_nodes_memo(sub_pat, 0, text, cur, t_len, sub_memo)
+            if nxt < 0
+                break
+            push(positions, nxt)
+            if nxt == cur
+                break
+            cur = nxt
+        p_idx = len(positions) - 1
+        while p_idx >= 0
+            pos = get(positions, p_idx)
+            sub_res = regex_exec_nodes_memo(pat, node_idx + 1, text, pos, t_len, memo)
+            if sub_res >= 0
+                return sub_res
+            p_idx = p_idx - 1
+        if memo != 0
+            list_set(memo, mkey, 1)
+        return -1
 
     // Exact single match
     if q == QUANT_ONE
         if t_idx >= t_len
+            if memo != 0
+                list_set(memo, mkey, 1)
             return -1
         adv = regex_node_matches(node, text, t_idx, t_len)
         if adv > 0
-            return regex_exec_nodes(pat, node_idx + 1, text, t_idx + adv, t_len)
+            res = regex_exec_nodes_memo(pat, node_idx + 1, text, t_idx + adv, t_len, memo)
+            if res >= 0
+                return res
+        if memo != 0
+            list_set(memo, mkey, 1)
         return -1
 
     // Optional match (?)
@@ -201,10 +335,15 @@ fn regex_exec_nodes pat node_idx text t_idx t_len
         if t_idx < t_len
             adv = regex_node_matches(node, text, t_idx, t_len)
             if adv > 0
-                sub_res = regex_exec_nodes(pat, node_idx + 1, text, t_idx + adv, t_len)
+                sub_res = regex_exec_nodes_memo(pat, node_idx + 1, text, t_idx + adv, t_len, memo)
                 if sub_res >= 0
                     return sub_res
-        return regex_exec_nodes(pat, node_idx + 1, text, t_idx, t_len)
+        res0 = regex_exec_nodes_memo(pat, node_idx + 1, text, t_idx, t_len, memo)
+        if res0 >= 0
+            return res0
+        if memo != 0
+            list_set(memo, mkey, 1)
+        return -1
 
     // Repetitions (* and +)
     if q == QUANT_STAR or q == QUANT_PLUS
@@ -220,21 +359,62 @@ fn regex_exec_nodes pat node_idx text t_idx t_len
             else
                 break
         if len(positions) == 0
+            if memo != 0
+                list_set(memo, mkey, 1)
             return -1
-        // Greedy: check from most matched positions down to fewest
         p_idx = len(positions) - 1
         while p_idx >= 0
             pos = get(positions, p_idx)
-            sub_res = regex_exec_nodes(pat, node_idx + 1, text, pos, t_len)
+            sub_res = regex_exec_nodes_memo(pat, node_idx + 1, text, pos, t_len, memo)
             if sub_res >= 0
                 return sub_res
             p_idx = p_idx - 1
+        if memo != 0
+            list_set(memo, mkey, 1)
         return -1
 
+    if memo != 0
+        list_set(memo, mkey, 1)
     return -1
 
+fn regex_exec_nodes pat node_idx text t_idx t_len
+    memo = _regex_make_memo(pat, t_len)
+    return regex_exec_nodes_memo(pat, node_idx, text, t_idx, t_len, memo)
+
 // ─── Compile ──────────────────────────────────────────────────────────────────
-// WHY: Parses pattern string into an NFA sequence of compiled RegexNode states.
+// WHY: Parses pattern string into an NFA sequence of compiled RegexNode states,
+// supporting top-level '|' alternation, '(...)' grouping, character classes, and escapes.
+fn _regex_split_top_alt pattern_string
+    plen = len(pattern_string)
+    parts = list()
+    start = 0
+    in_class = 0
+    depth = 0
+    i = 0
+    while i < plen
+        c = char_at(pattern_string, i)
+        if c == "\\"
+            i = i + 1
+            if i < plen
+                i = i + _rx_utf8_rune_len(ord(char_at(pattern_string, i)))
+            continue
+        if c == "[" and in_class == 0
+            in_class = 1
+        elif c == "]" and in_class == 1
+            in_class = 0
+        elif in_class == 0
+            if c == "("
+                depth = depth + 1
+            elif c == ")" and depth > 0
+                depth = depth - 1
+            elif c == "|" and depth == 0
+                push(parts, str_sub(pattern_string, start, i))
+                start = i + 1
+        i = i + 1
+    if len(parts) > 0
+        push(parts, str_sub(pattern_string, start, plen))
+    return parts
+
 fn REGEX_কম্পাইল pattern_string
     pat = REGEX_pattern()
     pat.মূল_string = pattern_string
@@ -246,6 +426,24 @@ fn REGEX_কম্পাইল pattern_string
 
     plen = len(pattern_string)
     if plen == 0
+        return pat
+
+    alts = _regex_split_top_alt(pattern_string)
+    if len(alts) > 1
+        branches = list()
+        ai = 0
+        while ai < len(alts)
+            push(branches, REGEX_কম্পাইল(get(alts, ai)))
+            ai = ai + 1
+        anode = RegexNode()
+        anode.node_type = REGEX_ALTERNATE
+        anode.quantifier = QUANT_ONE
+        anode.char_code = 0
+        anode.ranges = list()
+        anode.negated = 0
+        anode.sub_pat_list = branches
+        push(pat.node_list, anode)
+        pat.node_count = 1
         return pat
 
     p_idx = 0
@@ -269,6 +467,7 @@ fn REGEX_কম্পাইল pattern_string
         c = char_at(pattern_string, p_idx)
         node = RegexNode()
         node.ranges = list()
+        node.sub_pat_list = list()
         node.negated = 0
         node.quantifier = QUANT_ONE
 
@@ -278,22 +477,66 @@ fn REGEX_কম্পাইল pattern_string
         elif c == "\\"
             p_idx = p_idx + 1
             if p_idx < limit
-                esc = char_at(pattern_string, p_idx)
-                p_idx = p_idx + 1
-                if esc == "d"
+                b_esc = ord(char_at(pattern_string, p_idx))
+                r_esc = _rx_utf8_rune_len(b_esc)
+                cp_esc = _rx_utf8_decode_cp(pattern_string, p_idx, limit)
+                p_idx = p_idx + r_esc
+                if cp_esc == 100
                     node.node_type = REGEX_DIGIT
-                elif esc == "w"
+                elif cp_esc == 119
                     node.node_type = REGEX_WORD
-                elif esc == "s"
+                elif cp_esc == 115
                     node.node_type = REGEX_SPACE
-                elif esc == "b" or esc == "ব"
+                elif cp_esc == 98
+                    node.node_type = REGEX_WORD_BOUNDARY
+                elif cp_esc == 2476
                     node.node_type = REGEX_BENGALI
+                elif cp_esc == 110
+                    node.node_type = REGEX_LITERAL
+                    node.char_code = 10
+                elif cp_esc == 116
+                    node.node_type = REGEX_LITERAL
+                    node.char_code = 9
+                elif cp_esc == 114
+                    node.node_type = REGEX_LITERAL
+                    node.char_code = 13
                 else
                     node.node_type = REGEX_LITERAL
-                    node.char_code = ord(esc)
+                    node.char_code = cp_esc
             else
                 node.node_type = REGEX_LITERAL
                 node.char_code = 92
+        elif c == "("
+            p_idx = p_idx + 1
+            grp_start = p_idx
+            grp_depth = 1
+            in_cls = 0
+            while p_idx < limit and grp_depth > 0
+                gc = char_at(pattern_string, p_idx)
+                if gc == "\\"
+                    p_idx = p_idx + 1
+                    if p_idx < limit
+                        p_idx = p_idx + _rx_utf8_rune_len(ord(char_at(pattern_string, p_idx)))
+                    continue
+                if gc == "[" and in_cls == 0
+                    in_cls = 1
+                elif gc == "]" and in_cls == 1
+                    in_cls = 0
+                elif in_cls == 0
+                    if gc == "("
+                        grp_depth = grp_depth + 1
+                    elif gc == ")"
+                        grp_depth = grp_depth - 1
+                        if grp_depth == 0
+                            break
+                p_idx = p_idx + 1
+            inner_str = str_sub(pattern_string, grp_start, p_idx)
+            if p_idx < limit and char_at(pattern_string, p_idx) == ")"
+                p_idx = p_idx + 1
+            sub_pat = REGEX_কম্পাইল(inner_str)
+            node.node_type = REGEX_GROUP
+            push(node.sub_pat_list, sub_pat)
+            pat.গ্রুপ_count = pat.গ্রুপ_count + 1
         elif c == "["
             p_idx = p_idx + 1
             node.node_type = REGEX_CHAR_CLASS
@@ -302,14 +545,14 @@ fn REGEX_কম্পাইল pattern_string
                 p_idx = p_idx + 1
             while p_idx < limit and char_at(pattern_string, p_idx) != "]"
                 b0 = ord(char_at(pattern_string, p_idx))
-                r1_len = utf8_rune_len(b0)
-                cp1 = utf8_decode_cp(pattern_string, p_idx, limit)
+                r1_len = _rx_utf8_rune_len(b0)
+                cp1 = _rx_utf8_decode_cp(pattern_string, p_idx, limit)
                 p_idx = p_idx + r1_len
                 if p_idx + 1 < limit and char_at(pattern_string, p_idx) == "-" and char_at(pattern_string, p_idx + 1) != "]"
                     p_idx = p_idx + 1 // skip '-'
                     b2 = ord(char_at(pattern_string, p_idx))
-                    r2_len = utf8_rune_len(b2)
-                    cp2 = utf8_decode_cp(pattern_string, p_idx, limit)
+                    r2_len = _rx_utf8_rune_len(b2)
+                    cp2 = _rx_utf8_decode_cp(pattern_string, p_idx, limit)
                     p_idx = p_idx + r2_len
                     push(node.ranges, cp1)
                     push(node.ranges, cp2)
@@ -320,8 +563,8 @@ fn REGEX_কম্পাইল pattern_string
                 p_idx = p_idx + 1
         else
             b0 = ord(char_at(pattern_string, p_idx))
-            r_len = utf8_rune_len(b0)
-            cp = utf8_decode_cp(pattern_string, p_idx, limit)
+            r_len = _rx_utf8_rune_len(b0)
+            cp = _rx_utf8_decode_cp(pattern_string, p_idx, limit)
             p_idx = p_idx + r_len
             node.node_type = REGEX_LITERAL
             node.char_code = cp
@@ -353,20 +596,21 @@ fn REGEX_মিল pat text
     if pat == 0
         return 0
     tlen = len(text)
+    memo = _regex_make_memo(pat, tlen)
     if pat.has_anchor_start == 1
-        res = regex_exec_nodes(pat, 0, text, 0, tlen)
+        res = regex_exec_nodes_memo(pat, 0, text, 0, tlen, memo)
         if res >= 0
             return 1
         return 0
     i = 0
     while i <= tlen
-        res = regex_exec_nodes(pat, 0, text, i, tlen)
+        res = regex_exec_nodes_memo(pat, 0, text, i, tlen, memo)
         if res >= 0
             return 1
         if i == tlen
             break
         b0 = ord(char_at(text, i))
-        i = i + utf8_rune_len(b0)
+        i = i + _rx_utf8_rune_len(b0)
     return 0
 
 fn regex_match pat text
@@ -399,8 +643,9 @@ fn REGEX_খোঁজো pat text
     if pat == 0
         return res_obj
     tlen = len(text)
+    memo = _regex_make_memo(pat, tlen)
     if pat.has_anchor_start == 1
-        end_pos = regex_exec_nodes(pat, 0, text, 0, tlen)
+        end_pos = regex_exec_nodes_memo(pat, 0, text, 0, tlen, memo)
         if end_pos >= 0
             res_obj.পাওয়া_গেছে = 1
             res_obj.শুরু_offset = 0
@@ -410,7 +655,7 @@ fn REGEX_খোঁজো pat text
         return res_obj
     i = 0
     while i <= tlen
-        end_pos = regex_exec_nodes(pat, 0, text, i, tlen)
+        end_pos = regex_exec_nodes_memo(pat, 0, text, i, tlen, memo)
         if end_pos >= 0
             res_obj.পাওয়া_গেছে = 1
             res_obj.শুরু_offset = i
@@ -420,7 +665,7 @@ fn REGEX_খোঁজো pat text
         if i == tlen
             break
         b0 = ord(char_at(text, i))
-        i = i + utf8_rune_len(b0)
+        i = i + _rx_utf8_rune_len(b0)
     return res_obj
 
 fn regex_find pat text
@@ -444,14 +689,14 @@ fn REGEX_সব_খোঁজো pat text
             else
                 if i < tlen
                     b0 = ord(char_at(text, i))
-                    i = i + utf8_rune_len(b0)
+                    i = i + _rx_utf8_rune_len(b0)
                 else
                     break
         else
             if i == tlen
                 break
             b0 = ord(char_at(text, i))
-            i = i + utf8_rune_len(b0)
+            i = i + _rx_utf8_rune_len(b0)
     return matches
 
 fn regex_find_all pat text
@@ -489,7 +734,7 @@ fn REGEX_প্রতিস্থাপন_সব pat text replacement
             else
                 if i < tlen
                     b0 = ord(char_at(text, i))
-                    rlen = utf8_rune_len(b0)
+                    rlen = _rx_utf8_rune_len(b0)
                     result = result + str_sub(text, i, i + rlen)
                     i = i + rlen
                 else
@@ -498,7 +743,7 @@ fn REGEX_প্রতিস্থাপন_সব pat text replacement
             if i == tlen
                 break
             b0 = ord(char_at(text, i))
-            rlen = utf8_rune_len(b0)
+            rlen = _rx_utf8_rune_len(b0)
             result = result + str_sub(text, i, i + rlen)
             i = i + rlen
     return result
@@ -528,14 +773,14 @@ fn REGEX_বিভক্ত pat text
             else
                 if i < tlen
                     b0 = ord(char_at(text, i))
-                    i = i + utf8_rune_len(b0)
+                    i = i + _rx_utf8_rune_len(b0)
                 else
                     break
         else
             if i == tlen
                 break
             b0 = ord(char_at(text, i))
-            i = i + utf8_rune_len(b0)
+            i = i + _rx_utf8_rune_len(b0)
     tail = str_sub(text, last_idx, tlen)
     push(parts, tail)
     return parts
@@ -567,25 +812,53 @@ fn regex_email_verify email
 // WHY: Validates Bangladeshi mobile phone numbers (11 digits, starts with 01[3-9]).
 fn REGEX_ফোন_verify phone
     plen = len(phone)
-    if plen == 11
-        if starts_with(phone, "01")
-            prefix_char = char_at(phone, 2)
-            p_code = ord(prefix_char)
-            if p_code >= 51 and p_code <= 57
-                return 1
-    return 0
+    if plen != 11
+        return 0
+    if not starts_with(phone, "01")
+        return 0
+    p2 = ord(char_at(phone, 2))
+    if p2 < 51 or p2 > 57
+        return 0
+    i = 3
+    while i < 11
+        ch = ord(char_at(phone, i))
+        if ch < 48 or ch > 57
+            return 0
+        i = i + 1
+    return 1
 
 fn regex_phone_verify phone
     return REGEX_ফোন_verify(phone)
 
-// WHY: Validates HTTP/HTTPS URLs.
+// WHY: Validates HTTP/HTTPS URLs with non-empty host and no whitespace/control bytes.
 fn REGEX_URL_verify url
     ulen = len(url)
-    if ulen < 8
+    host_start = 0
+    if starts_with(url, "http://")
+        host_start = 7
+    elif starts_with(url, "https://")
+        host_start = 8
+    else
         return 0
-    if starts_with(url, "http://") or starts_with(url, "https://")
-        return 1
-    return 0
+    if ulen <= host_start
+        return 0
+    i = 0
+    while i < ulen
+        ch = ord(char_at(url, i))
+        if ch <= 32 or ch == 127
+            return 0
+        i = i + 1
+    host_len = 0
+    j = host_start
+    while j < ulen
+        c = ord(char_at(url, j))
+        if c == 47 or c == 63 or c == 35
+            break
+        host_len = host_len + 1
+        j = j + 1
+    if host_len == 0
+        return 0
+    return 1
 
 fn regex_url_verify url
     return REGEX_URL_verify(url)
@@ -599,8 +872,8 @@ fn REGEX_শুধু_বাংলা text
     idx = 0
     while idx < tlen
         b0 = ord(char_at(text, idx))
-        rlen = utf8_rune_len(b0)
-        cp = utf8_decode_cp(text, idx, tlen)
+        rlen = _rx_utf8_rune_len(b0)
+        cp = _rx_utf8_decode_cp(text, idx, tlen)
         if (cp >= 2432 and cp <= 2559) or cp == 32 or cp == 9 or cp == 10 or cp == 44 or cp == 46 or cp == 2404 or cp == 2405
             idx = idx + rlen
         else

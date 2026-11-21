@@ -205,6 +205,62 @@ import "compiler/frontend/lexer/char_stream"
     return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
   @end
 
+  // ── B2. Octal Literal (0o / 0O / ০o / ০O) ───────────────────────────────────
+  is_oct_prefix = 0
+  oct_prefix_len = 0
+  @if first_c == 48 && i + 1 < num_items // ASCII '0'
+    next_c = str_char_at(source, i + 1)
+    @if next_c == 111 || next_c == 79 // 'o' or 'O'
+      is_oct_prefix = 1
+      oct_prefix_len = 2
+    @end
+  @elif is_bengali_zero == 1 && i + 3 < num_items // Bengali '০'
+    next_c = str_char_at(source, i + 3)
+    @if next_c == 111 || next_c == 79 // 'o' or 'O'
+      is_oct_prefix = 1
+      oct_prefix_len = 4
+    @end
+  @end
+
+  @if is_oct_prefix == 1
+    i = i + oct_prefix_len
+    oct_val = 0
+    raw_text = str_slice(source, start_pos, i)
+    digit_count = 0
+    @while i < num_items
+      cur = str_char_at(source, i)
+      @if cur == 95 // '_' separator
+        raw_text = str_concat(raw_text, "_")
+        i = i + 1
+      @elif cur >= 48 && cur <= 55 // ASCII '0'..'7'
+        raw_text = str_concat(raw_text, str_from_char_code(cur))
+        oct_val = (oct_val * 8) + (cur - 48)
+        digit_count = digit_count + 1
+        i = i + 1
+      @elif num_is_bengali_digit_at(source, i, num_items) == 1
+        b_digit = num_bengali_digit_val_at(source, i)
+        @if b_digit >= 0 && b_digit <= 7
+          raw_text = str_concat(raw_text, str_slice(source, i, i + 3))
+          oct_val = (oct_val * 8) + b_digit
+          digit_count = digit_count + 1
+          i = i + 3
+        @else
+          return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+        @end
+      @else
+        @if digit_count > 0
+          return { num_is_valid: 1, num_is_float: 0, num_int_val: oct_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+        @else
+          return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+        @end
+      @end
+    @end
+    @if digit_count > 0
+      return { num_is_valid: 1, num_is_float: 0, num_int_val: oct_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+    @end
+    return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+  @end
+
   // ── C. Decimal Integer & Floating Point (Western & Bengali) ────────────────
   int_val = 0
   is_float = 0
@@ -257,17 +313,51 @@ import "compiler/frontend/lexer/char_stream"
       raw_text = str_concat(raw_text, ".")
       i = i + 1
 
-    // Exponent 'e' or 'E'
-    @elif (cur == 101 || cur == 69) && has_dot == 1 && (i + 1 < num_items)
+    // Exponent 'e' or 'E' (supports both integer 1e5 and decimal 1.5e-3 mantissas)
+    @elif (cur == 101 || cur == 69) && digit_count > 0 && (i + 1 < num_items)
+      saved_exp_i = i
+      saved_exp_text = raw_text
       raw_text = str_concat(raw_text, str_from_char_code(cur))
       i = i + 1
+      exp_neg = 0
       @if i < num_items && (str_char_at(source, i) == 43 || str_char_at(source, i) == 45) // '+' or '-'
+        @if str_char_at(source, i) == 45
+          exp_neg = 1
+        @end
         raw_text = str_concat(raw_text, str_from_char_code(str_char_at(source, i)))
         i = i + 1
       @end
+      exp_digits = 0
+      exp_val = 0
       @while i < num_items && num_is_ascii_digit(str_char_at(source, i)) == 1
-        raw_text = str_concat(raw_text, str_from_char_code(str_char_at(source, i)))
+        ec = str_char_at(source, i)
+        raw_text = str_concat(raw_text, str_from_char_code(ec))
+        @if exp_val < 320
+          exp_val = (exp_val * 10) + (ec - 48)
+        @end
+        exp_digits = exp_digits + 1
         i = i + 1
+      @end
+      @if exp_digits == 0
+        // Not a scientific exponent (e.g. `1e_foo`); restore before 'e' and return mantissa
+        i = saved_exp_i
+        raw_text = saved_exp_text
+        @if is_float == 0
+          float_val = int_val + 0.0
+        @end
+        return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: raw_text, num_consumed: i - start_pos }
+      @end
+      @if is_float == 0
+        float_val = int_val + 0.0
+      @end
+      ek = 0
+      @while ek < exp_val
+        @if exp_neg == 1
+          float_val = float_val / 10.0
+        @else
+          float_val = float_val * 10.0
+        @end
+        ek = ek + 1
       @end
       return { num_is_valid: 1, num_is_float: 1, num_int_val: int_val, num_float_val: float_val, num_text: raw_text, num_consumed: i - start_pos }
 

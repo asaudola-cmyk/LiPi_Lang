@@ -302,13 +302,13 @@ fn বাইনারি_ডায়াগনস্টিক bin_path
     e_shnum = read_u16(hdr, 60)
     e_shstrndx = read_u16(hdr, 62)
 
-    say "  • Type (e_type): " + e_type + " (ET_EXEC)"
-    say "  • Architecture (e_machine): " + e_machine + " (EM_X86_64, 0x3E)"
-    say "  • Entry Point (e_entry): 0x" + qword_to_hex(e_entry) + " (" + e_entry + ")"
-    say "  • Program Headers (e_phoff): " + e_phoff + " (" + e_phnum + " entries)"
-    say "  • Section Headers (e_shoff): " + e_shoff + " (" + e_shnum + " entries)"
+    say "  • Type (e_type): " + str(e_type) + " (ET_EXEC)"
+    say "  • Architecture (e_machine): " + str(e_machine) + " (EM_X86_64, 0x3E)"
+    say "  • Entry Point (e_entry): 0x" + qword_to_hex(e_entry) + " (" + str(e_entry) + ")"
+    say "  • Program Headers (e_phoff): " + str(e_phoff) + " (" + str(e_phnum) + " entries)"
+    say "  • Section Headers (e_shoff): " + str(e_shoff) + " (" + str(e_shnum) + " entries)"
     say "  • Flags (e_flags): 0x" + to_hex32(e_flags)
-    say "  • Header Size (e_ehsize): " + e_ehsize + " bytes"
+    say "  • Header Size (e_ehsize): " + str(e_ehsize) + " bytes"
 
     if e_phnum > 0 and e_phoff >= 64 and n >= (e_phoff + 56)
         p_offset = read_u64(hdr, e_phoff + 8)
@@ -324,6 +324,84 @@ fn বাইনারি_ডায়াগনস্টিক bin_path
             if cn > 0
                 dbg_disasm(cbuf, cn)
             free(cbuf, 64)
+
+    // Parse ELF64 section headers (.text, .symtab, .strtab)
+    if e_shoff > 0 and e_shentsize >= 64 and e_shnum > 0 and e_shnum < 128
+        sh_tot = e_shentsize * e_shnum
+        sh_buf = malloc(sh_tot)
+        syscall(8, fd, e_shoff, 0, 0, 0, 0)
+        sh_read = syscall(0, fd, sh_buf, sh_tot, 0, 0, 0)
+        if sh_read >= sh_tot
+            shstr_data = 0
+            shstr_sz = 0
+            if e_shstrndx < e_shnum
+                s_base = e_shstrndx * e_shentsize
+                shstr_off = read_u64(sh_buf, s_base + 24)
+                shstr_sz = read_u64(sh_buf, s_base + 32)
+                if shstr_sz > 0 and shstr_sz <= 65536
+                    shstr_data = malloc(shstr_sz)
+                    syscall(8, fd, shstr_off, 0, 0, 0, 0)
+                    syscall(0, fd, shstr_data, shstr_sz, 0, 0, 0)
+            symtab_off = 0
+            symtab_sz = 0
+            strtab_off = 0
+            strtab_sz = 0
+            si = 0
+            while si < e_shnum
+                off_s = si * e_shentsize
+                sh_type = read_u32(sh_buf, off_s + 4)
+                sh_name_i = read_u32(sh_buf, off_s)
+                if sh_type == 2 // SHT_SYMTAB
+                    symtab_off = read_u64(sh_buf, off_s + 24)
+                    symtab_sz = read_u64(sh_buf, off_s + 32)
+                    str_link = read_u32(sh_buf, off_s + 40)
+                    if str_link < e_shnum
+                        l_base = str_link * e_shentsize
+                        strtab_off = read_u64(sh_buf, l_base + 24)
+                        strtab_sz = read_u64(sh_buf, l_base + 32)
+                if shstr_data != 0 and sh_name_i < shstr_sz
+                    sname = ""
+                    ni = sh_name_i
+                    while ni < shstr_sz
+                        cb = mem_byte_read(shstr_data, ni)
+                        if cb == 0 break
+                        sname = sname + chr(cb)
+                        ni = ni + 1
+                    if sname == ".text"
+                        tx_off = read_u64(sh_buf, off_s + 24)
+                        tx_sz = read_u64(sh_buf, off_s + 32)
+                        say "  • Section .text: offset=0x" + qword_to_hex(tx_off) + ", size=" + str(tx_sz) + " B"
+                si = si + 1
+            if symtab_off > 0 and symtab_sz >= 24 and strtab_off > 0 and strtab_sz > 0 and symtab_sz <= 262144 and strtab_sz <= 262144
+                sbuf = malloc(symtab_sz)
+                strb = malloc(strtab_sz)
+                syscall(8, fd, symtab_off, 0, 0, 0, 0)
+                syscall(0, fd, sbuf, symtab_sz, 0, 0, 0)
+                syscall(8, fd, strtab_off, 0, 0, 0, 0)
+                syscall(0, fd, strb, strtab_sz, 0, 0, 0)
+                say "  • ELF64 Symbol Table (.symtab):"
+                sym_i = 0
+                printed = 0
+                while sym_i + 24 <= symtab_sz and printed < 24
+                    st_name = read_u32(sbuf, sym_i)
+                    st_val = read_u64(sbuf, sym_i + 8)
+                    if st_name > 0 and st_name < strtab_sz and st_val > 0
+                        sym_nm = ""
+                        ki = st_name
+                        while ki < strtab_sz
+                            sb = mem_byte_read(strb, ki)
+                            if sb == 0 break
+                            sym_nm = sym_nm + chr(sb)
+                            ki = ki + 1
+                        if len(sym_nm) > 0
+                            say "    0x" + qword_to_hex(st_val) + "  " + sym_nm
+                            printed = printed + 1
+                    sym_i = sym_i + 24
+                free(sbuf, symtab_sz)
+                free(strb, strtab_sz)
+            if shstr_data != 0
+                free(shstr_data, shstr_sz)
+        free(sh_buf, sh_tot)
 
     free(hdr, 128)
     syscall(3, fd, 0, 0, 0, 0, 0)
@@ -391,16 +469,16 @@ fn dbg_get_regs pid
     regs_buf = alloc(256)
     res = dbg_ptrace(PTRACE_GETREGS, pid, 0, regs_buf)
     if res < 0
+        free(regs_buf)
         say "  ⚠ [PTRACE_GETREGS] রেজিস্টার পড়া সম্ভব হয়নি (PID: " + str(pid) + ")"
         return 0 - 1
-    // Linux x86_64 user_regs_struct offsets:
-    //rax=10*8(80), rbx=5*8(40), rcx=11*8(88), rdx=12*8(96), rsi=13*8(104), rdi=14*8(112), rip=16*8(128), rsp=19*8(152)
     rip_val = mem_word_read(regs_buf, 16)
     rsp_val = mem_word_read(regs_buf, 19)
     rax_val = mem_word_read(regs_buf, 10)
     rbx_val = mem_word_read(regs_buf, 5)
     rcx_val = mem_word_read(regs_buf, 11)
     rdx_val = mem_word_read(regs_buf, 12)
+    free(regs_buf)
     say "  • [PTRACE_GETREGS] RIP: 0x" + qword_to_hex(rip_val) + " | RSP: 0x" + qword_to_hex(rsp_val)
     say "  • [PTRACE_GETREGS] RAX: 0x" + qword_to_hex(rax_val) + " | RBX: 0x" + qword_to_hex(rbx_val)
     say "  • [PTRACE_GETREGS] RCX: 0x" + qword_to_hex(rcx_val) + " | RDX: 0x" + qword_to_hex(rdx_val)
@@ -414,6 +492,7 @@ fn dbg_single_step pid
         return 0 - 1
     status_buf = alloc(16)
     syscall(61, pid, status_buf, 0, 0, 0, 0)
+    free(status_buf)
     return dbg_get_regs(pid)
 
 fn dbg_attach pid
@@ -424,6 +503,7 @@ fn dbg_attach pid
         return 0 - 1
     status_buf = alloc(16)
     w_res = syscall(61, pid, status_buf, 0, 0, 0, 0)
+    free(status_buf)
     say "  ✔ সফলভাবে সংযুক্ত! প্রসেস ইন্টারাপ্ট প্রাপ্ত।"
     dbg_get_regs(pid)
     return 0
@@ -435,9 +515,28 @@ fn dbg_detach pid
         say "  ✔ সফলভাবে ডিটাচ সম্পন্ন।"
     return res
 
+fn dbg_peek_word pid addr
+    // Linux raw sys_ptrace PTRACE_PEEKDATA writes 64-bit word to 4th arg pointer and returns 0 on success
+    peek_buf = alloc(16)
+    mem_word_write(peek_buf, 0, 0)
+    rc = dbg_ptrace(PTRACE_PEEKDATA, pid, addr, peek_buf)
+    if rc < 0
+        free(peek_buf)
+        return 0 - 1
+    val = mem_word_read(peek_buf, 0)
+    free(peek_buf)
+    return val
+
 fn dbg_set_breakpoint pid addr
-    orig_word = dbg_ptrace(PTRACE_PEEKDATA, pid, addr, 0)
-    new_word = (floor(orig_word / 256) * 256) + 204
+    peek_buf = alloc(16)
+    rc = dbg_ptrace(PTRACE_PEEKDATA, pid, addr, peek_buf)
+    if rc < 0
+        free(peek_buf)
+        say "  ❌ [PTRACE_PEEKDATA] ব্রেকপয়েন্ট পড়া ব্যর্থ @ 0x" + qword_to_hex(addr)
+        return 0 - 1
+    orig_word = mem_word_read(peek_buf, 0)
+    free(peek_buf)
+    new_word = (orig_word & (-256)) | 204
     dbg_ptrace(PTRACE_POKEDATA, pid, addr, new_word)
     say "  ✔ ব্রেকপয়েন্ট (INT3) স্থাপিত @ 0x" + qword_to_hex(addr)
     return orig_word
@@ -445,6 +544,74 @@ fn dbg_set_breakpoint pid addr
 fn dbg_restore_breakpoint pid addr orig_word
     dbg_ptrace(PTRACE_POKEDATA, pid, addr, orig_word)
     say "  ✔ মূল অপকোড পুনরুদ্ধার সম্পন্ন @ 0x" + qword_to_hex(addr)
+    return 0
+
+fn dbg_spawn_traced bin_path
+    cpid = syscall(57, 0, 0, 0, 0, 0, 0) // fork
+    if cpid == 0
+        dbg_ptrace(PTRACE_TRACEME, 0, 0, 0)
+        argv = alloc(16)
+        mem_word_write(argv, 0, bin_path)
+        mem_word_write(argv, 1, 0)
+        env = alloc(8)
+        mem_word_write(env, 0, 0)
+        syscall(59, bin_path, argv, env, 0, 0, 0)
+        syscall(60, 127, 0, 0, 0, 0, 0)
+    if cpid < 0
+        return 0 - 1
+    st = alloc(16)
+    syscall(61, cpid, st, 0, 0, 0, 0)
+    free(st)
+    return cpid
+
+fn dbg_interactive_loop pid
+    bp_addrs = list()
+    bp_origs = list()
+    bb = malloc(2)
+    while 1
+        prm = "(lipidbg) "
+        syscall(1, 1, prm, len(prm), 0, 0, 0)
+        line = ""
+        while 1
+            nr = syscall(0, 0, bb, 1, 0, 0, 0)
+            if nr <= 0
+                free(bb, 2)
+                dbg_detach(pid)
+                return 0
+            b = mem_byte_read(bb, 0)
+            if b == 10 or b == 13 break
+            line = line + chr(b)
+        if line == "q" or line == "quit" or line == "exit"
+            break
+        elif line == "regs" or line == "r"
+            dbg_get_regs(pid)
+        elif line == "step" or line == "si" or line == "s"
+            dbg_single_step(pid)
+        elif line == "cont" or line == "c"
+            dbg_ptrace(PTRACE_CONT, pid, 0, 0)
+            st = alloc(16)
+            syscall(61, pid, st, 0, 0, 0, 0)
+            free(st)
+            dbg_get_regs(pid)
+        elif len(line) > 2 and char_at(line, 0) == "b" and char_at(line, 1) == " "
+            addr = parse_hex_or_dec(str_sub(line, 2, len(line)))
+            orig = dbg_set_breakpoint(pid, addr)
+            if orig >= 0
+                push(bp_addrs, addr)
+                push(bp_origs, orig)
+        elif len(line) > 6 and str_sub(line, 0, 6) == "break "
+            addr = parse_hex_or_dec(str_sub(line, 6, len(line)))
+            orig = dbg_set_breakpoint(pid, addr)
+            if orig >= 0
+                push(bp_addrs, addr)
+                push(bp_origs, orig)
+    // Restore breakpoints before detaching
+    bi = 0
+    while bi < len(bp_addrs)
+        dbg_restore_breakpoint(pid, get(bp_addrs, bi), get(bp_origs, bi))
+        bi = bi + 1
+    free(bb, 2)
+    dbg_detach(pid)
     return 0
 
 // ── 7. Sovereign Time-Travel Debugger (TTD) Engine ───────────────────────────
@@ -599,12 +766,22 @@ fn main
         dbg_run_ttd_demo()
         return 0
 
+    if cmd == "live" and argc >= 3
+        cpid = dbg_spawn_traced(get(args, 2))
+        if cpid > 0
+            say "⚡ লাইভ ডিবাগ সেশন শুরু (PID: " + str(cpid) + ") — কমান্ড: break <addr> | regs | step | cont | quit"
+            dbg_get_regs(cpid)
+            dbg_interactive_loop(cpid)
+            return 0
+        return 1
+
     if cmd == "attach"
         if argc >= 3
             target_pid = parse_hex_or_dec(get(args, 2))
-            dbg_attach(target_pid)
+            if dbg_attach(target_pid) == 0 and argc >= 4 and get(args, 3) == "-i"
+                dbg_interactive_loop(target_pid)
             return 0
-        say "Usage: lipidbg attach <pid>"
+        say "Usage: lipidbg attach <pid> [-i]"
         return 1
 
     if cmd == "regs"

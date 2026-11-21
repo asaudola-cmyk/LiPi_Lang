@@ -16,22 +16,75 @@ fn riscv64_synth_expr_primary s toks pos_box
 
     t = toks[pos]
     k = t.tok_kind
+    handled = 0
 
-    // 1. Integer Literal
-    if k == TOK_INT()
+    // 0. Unary Operators (-, !, ~, not, না)
+    if k == TOK_MINUS()
         list_set(pos_box, 0, pos + 1)
-        riscv64_emit_li(s, 10, t.tok_int_val)
+        riscv64_synth_expr_primary(s, toks, pos_box)
+        riscv64_emit_sub(s, 10, 0, 10) // sub a0, x0, a0
+        return 0
+    if k == TOK_BANG() or (k == TOK_IDENT() and (t.tok_text == "not" or t.tok_text == "না"))
+        list_set(pos_box, 0, pos + 1)
+        riscv64_synth_expr_primary(s, toks, pos_box)
+        riscv64_emit_sltiu(s, 10, 10, 1) // sltiu a0, a0, 1
+        return 0
+    if k == TOK_TILDE()
+        list_set(pos_box, 0, pos + 1)
+        riscv64_synth_expr_primary(s, toks, pos_box)
+        riscv64_emit_xori(s, 10, 10, 0 - 1) // xori a0, a0, -1
         return 0
 
+    // 1. Integer / Boolean / Null Literal
+    if k == TOK_INT() or k == TOK_BOOL() or k == TOK_NONE()
+        list_set(pos_box, 0, pos + 1)
+        riscv64_emit_li(s, 10, t.tok_int_val)
+        handled = 1
+
     // 1b. Float Literal: IEEE-754 binary64 64-bit precision
-    if k == TOK_FLOAT()
+    if handled == 0 and k == TOK_FLOAT()
         list_set(pos_box, 0, pos + 1)
         fbits = riscv64_parse_float_bits(t.tok_text)
         riscv64_emit_li(s, 10, fbits)
-        return 0
+        handled = 1
+
+    // 1c. Array / List Literal: [e0, e1, ...]
+    if handled == 0 and k == TOK_LBRACKET()
+        list_set(pos_box, 0, pos + 1)
+        arr_cnt = 0
+        while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RBRACKET()
+            riscv64_synth_compile_expr(s, toks, pos_box)
+            riscv64_push_reg(s, 10)
+            arr_cnt = arr_cnt + 1
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len() and toks[cur_p].tok_kind == TOK_COMMA()
+                list_set(pos_box, 0, cur_p + 1)
+        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        s.rv_needs_list_create = 1
+        s.rv_needs_alloc = 1
+        riscv64_emit_li(s, 10, arr_cnt)
+        arr_call_off = s.rv_code.len()
+        riscv64_emit_jal(s, 1, 0)
+        arr_rel = Riscv64CallReloc()
+        arr_rel.rv_cr_patch_offset = arr_call_off
+        arr_rel.rv_cr_target_name = "__list_create"
+        push(s.rv_call_relocs, arr_rel)
+        if arr_cnt > 0
+            riscv64_emit_mv(s, 28, 10)
+            riscv64_emit_ld(s, 29, 28, 16) // t4 = data_ptr
+            ai = arr_cnt - 1
+            while ai >= 0
+                riscv64_pop_reg(s, 11)
+                riscv64_emit_li(s, 5, ai * 8)
+                riscv64_emit_add(s, 5, 29, 5)
+                riscv64_emit_sd(s, 11, 5, 0)
+                ai = ai - 1
+            riscv64_emit_mv(s, 10, 28)
+        handled = 1
 
     // 2. String Literal
-    if k == TOK_STR()
+    if handled == 0 and k == TOK_STR()
         list_set(pos_box, 0, pos + 1)
         ro_off = riscv64_synth_add_rodata_str(s, t.tok_text, 0)
         patch_pos = s.rv_code.len()
@@ -43,13 +96,14 @@ fn riscv64_synth_expr_primary s toks pos_box
         rel.rv_sr_rodata_offset = ro_off
         rel.rv_sr_reg = 10
         push(s.rv_str_relocs, rel)
-        return 0
+        handled = 1
 
     // 3. Identifier or Call (Variable lookup, Field access, or Function Call)
     is_ident_or_call = 0
-    if k == TOK_IDENT() or k == TOK_KW_SYSCALL() or k == TOK_KW_PRINT()
+    if handled == 0 and (k == TOK_IDENT() or k == TOK_KW_SYSCALL() or k == TOK_KW_PRINT())
         is_ident_or_call = 1
     if is_ident_or_call == 1
+        handled = 1
         list_set(pos_box, 0, pos + 1)
         var_name = t.tok_text
         next_pos = get(pos_box, 0)
@@ -241,6 +295,29 @@ fn riscv64_synth_expr_primary s toks pos_box
                     riscv64_emit_addi(s, 10, 0, 0)
                 return 0
 
+            // ── Intrinsic 8e: push / list_push / ঠেলো (hdr, val -> hdr) ──────────
+            if var_name == "push" or var_name == "list_push" or var_name == "ঠেলো"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                if arg_count == 2
+                    s.rv_needs_list_push = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 11) // a1 = val
+                    riscv64_pop_reg(s, 10) // a0 = hdr
+                    lp_call_off = s.rv_code.len()
+                    riscv64_emit_jal(s, 1, 0)
+                    lp_rel = Riscv64CallReloc()
+                    lp_rel.rv_cr_patch_offset = lp_call_off
+                    lp_rel.rv_cr_target_name = "__list_push"
+                    push(s.rv_call_relocs, lp_rel)
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    riscv64_emit_addi(s, 10, 0, 0)
+                return 0
+
             // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────
             if var_name == "file_write" or var_name == "ফাইল_লেখো"
                 s.rv_needs_file_write = 1
@@ -303,6 +380,9 @@ fn riscv64_synth_expr_primary s toks pos_box
                 riscv64_pop_reg(s, 10)
 
             // Emit JAL instruction with relocation placeholder
+            if var_name == "main" or var_name == "মূল"
+                if s.rv_in_function == 0
+                    s.rv_called_main = 1
             call_off = s.rv_code.len()
             riscv64_emit_jal(s, 1, 0) // JAL ra, 0
 
@@ -326,48 +406,102 @@ fn riscv64_synth_expr_primary s toks pos_box
                 riscv64_synth_patch_b(s, skip_beq_off, 0, 26, 0, s.rv_code.len())
             return 0
 
-        // ── Struct Field Access: obj.field ──────────────────────────────────
-        if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_DOT() or toks[next_pos].tok_text == ".")
-            // Load base object pointer from local stack into a0
-            off = riscv64_synth_lookup_var(s, var_name)
-            if off > 0
-                riscv64_emit_ld(s, 10, 2, off)
-            else
-                riscv64_emit_addi(s, 10, 0, 0)
-
-            while get(pos_box, 0) < toks.len()
-                cp = get(pos_box, 0)
-                if toks[cp].tok_kind != TOK_DOT() and toks[cp].tok_text != "."
-                    break
-                list_set(pos_box, 0, cp + 1) // Consume '.'
-                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
-                    fn_tok = toks[get(pos_box, 0)]
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    f_off = riscv64_synth_get_field_offset(s, "", fn_tok.tok_text)
-                    // ld a0, f_off(a0)
-                    riscv64_emit_ld(s, 10, 10, f_off)
-            return 0
-
         // Variable load: ld a0, off(sp)
         off = riscv64_synth_lookup_var(s, var_name)
         if off > 0
-            riscv64_emit_ld(s, 10, 2, off)
+            riscv64_emit_local_ld(s, 10, off)
         else
             riscv64_emit_addi(s, 10, 0, 0)
-        return 0
 
     // 4. Parenthesized expression: ( expr )
-    if k == TOK_LPAREN()
+    if handled == 0 and k == TOK_LPAREN()
         list_set(pos_box, 0, pos + 1)
         riscv64_synth_compile_expr(s, toks, pos_box)
         cur_pos = get(pos_box, 0)
         if cur_pos < toks.len() and toks[cur_pos].tok_kind == TOK_RPAREN()
             list_set(pos_box, 0, cur_pos + 1)
+        handled = 1
+
+    if handled == 0
+        // Fallback: advance and clear a0
+        list_set(pos_box, 0, pos + 1)
+        riscv64_emit_addi(s, 10, 0, 0)
         return 0
 
-    // Fallback: advance and clear a0
-    list_set(pos_box, 0, pos + 1)
-    riscv64_emit_addi(s, 10, 0, 0)
+    // 5. Postfix operations: .field, .len(), .push(x), [index]
+    while get(pos_box, 0) < toks.len()
+        cp = get(pos_box, 0)
+        ct = toks[cp]
+        if ct.tok_kind == TOK_DOT() or ct.tok_text == "."
+            list_set(pos_box, 0, cp + 1)
+            if get(pos_box, 0) < toks.len() and riscv64_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                fn_tok = toks[get(pos_box, 0)]
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                np = get(pos_box, 0)
+                if np < toks.len() and toks[np].tok_kind == TOK_LPAREN()
+                    list_set(pos_box, 0, np + 1)
+                    m_args = 0
+                    while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
+                        if m_args == 0
+                            riscv64_push_reg(s, 10)
+                        riscv64_synth_compile_expr(s, toks, pos_box)
+                        riscv64_push_reg(s, 10)
+                        m_args = m_args + 1
+                        cur_mp = get(pos_box, 0)
+                        if cur_mp < toks.len() and toks[cur_mp].tok_kind == TOK_COMMA()
+                            list_set(pos_box, 0, cur_mp + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RPAREN()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if fn_tok.tok_text == "len" or fn_tok.tok_text == "length"
+                        while m_args > 0
+                            riscv64_pop_reg(s, 11)
+                            if m_args == 1
+                                riscv64_pop_reg(s, 10)
+                            m_args = m_args - 1
+                        riscv64_emit_ld(s, 10, 10, 0)
+                    elif fn_tok.tok_text == "push"
+                        while m_args > 1
+                            riscv64_pop_reg(s, 11)
+                            m_args = m_args - 1
+                        if m_args == 1
+                            s.rv_needs_list_push = 1
+                            s.rv_needs_alloc = 1
+                            riscv64_pop_reg(s, 11)
+                            riscv64_pop_reg(s, 10)
+                            mp_off = s.rv_code.len()
+                            riscv64_emit_jal(s, 1, 0)
+                            mp_rel = Riscv64CallReloc()
+                            mp_rel.rv_cr_patch_offset = mp_off
+                            mp_rel.rv_cr_target_name = "__list_push"
+                            push(s.rv_call_relocs, mp_rel)
+                        else
+                            riscv64_emit_addi(s, 10, 0, 0)
+                    else
+                        while m_args > 0
+                            riscv64_pop_reg(s, 11)
+                            if m_args == 1
+                                riscv64_pop_reg(s, 10)
+                            m_args = m_args - 1
+                        riscv64_emit_addi(s, 10, 0, 0)
+                else
+                    f_off = riscv64_synth_get_field_offset(s, "", fn_tok.tok_text)
+                    riscv64_emit_ld(s, 10, 10, f_off)
+            else
+                break
+        elif ct.tok_kind == TOK_LBRACKET()
+            list_set(pos_box, 0, cp + 1)
+            riscv64_push_reg(s, 10) // Save hdr ptr
+            riscv64_synth_compile_expr(s, toks, pos_box) // a0 = idx
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            riscv64_emit_mv(s, 11, 10)     // a1 = idx
+            riscv64_pop_reg(s, 10)         // a0 = hdr
+            riscv64_emit_ld(s, 12, 10, 16) // a2 = data_ptr
+            riscv64_emit_slli(s, 11, 11, 3) // idx * 8
+            riscv64_emit_add(s, 10, 12, 11)
+            riscv64_emit_ld(s, 10, 10, 0)
+        else
+            break
     return 0
 
 fn riscv64_synth_expr_mul s toks pos_box
@@ -442,9 +576,29 @@ fn riscv64_synth_expr_add s toks pos_box
 
     return 0
 
-fn riscv64_synth_expr_rel s toks pos_box
-    // WHY: Pratt precedence level 3 for comparison operators (==, !=, <, <=, >, >=) in RISC-V 64.
+fn riscv64_synth_expr_shift s toks pos_box
+    // WHY: Pratt precedence level 3 for bitwise shifts (<<, >>) in RISC-V 64.
     riscv64_synth_expr_add(s, toks, pos_box)
+
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        k = toks[pos].tok_kind
+        if k != TOK_SHL() and k != TOK_SHR()
+            break
+        list_set(pos_box, 0, pos + 1)
+        riscv64_push_reg(s, 10)
+        riscv64_synth_expr_add(s, toks, pos_box)
+        riscv64_emit_mv(s, 11, 10)
+        riscv64_pop_reg(s, 10)
+        if k == TOK_SHL()
+            riscv64_emit_sll(s, 10, 10, 11)
+        else
+            riscv64_emit_sra(s, 10, 10, 11)
+    return 0
+
+fn riscv64_synth_expr_rel s toks pos_box
+    // WHY: Pratt precedence level 4 for comparison operators (==, !=, <, <=, >, >=) in RISC-V 64.
+    riscv64_synth_expr_shift(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
         pos = get(pos_box, 0)
@@ -463,8 +617,8 @@ fn riscv64_synth_expr_rel s toks pos_box
         // Push left operand (a0) to stack
         riscv64_push_reg(s, 10)
 
-        // Evaluate right operand with additive precedence into a0
-        riscv64_synth_expr_add(s, toks, pos_box)
+        // Evaluate right operand into a0
+        riscv64_synth_expr_shift(s, toks, pos_box)
 
         // Move right operand to a1, pop left operand back into a0
         riscv64_emit_mv(s, 11, 10)
@@ -495,7 +649,90 @@ fn riscv64_synth_expr_rel s toks pos_box
 
     return 0
 
+fn riscv64_synth_expr_bit_and s toks pos_box
+    riscv64_synth_expr_rel(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        if toks[pos].tok_kind != TOK_AMP()
+            break
+        list_set(pos_box, 0, pos + 1)
+        riscv64_push_reg(s, 10)
+        riscv64_synth_expr_rel(s, toks, pos_box)
+        riscv64_emit_mv(s, 11, 10)
+        riscv64_pop_reg(s, 10)
+        riscv64_emit_and(s, 10, 10, 11)
+    return 0
+
+fn riscv64_synth_expr_bit_xor s toks pos_box
+    riscv64_synth_expr_bit_and(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        if toks[pos].tok_kind != TOK_CARET()
+            break
+        list_set(pos_box, 0, pos + 1)
+        riscv64_push_reg(s, 10)
+        riscv64_synth_expr_bit_and(s, toks, pos_box)
+        riscv64_emit_mv(s, 11, 10)
+        riscv64_pop_reg(s, 10)
+        riscv64_emit_xor(s, 10, 10, 11)
+    return 0
+
+fn riscv64_synth_expr_bit_or s toks pos_box
+    riscv64_synth_expr_bit_xor(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        if toks[pos].tok_kind != TOK_BAR()
+            break
+        list_set(pos_box, 0, pos + 1)
+        riscv64_push_reg(s, 10)
+        riscv64_synth_expr_bit_xor(s, toks, pos_box)
+        riscv64_emit_mv(s, 11, 10)
+        riscv64_pop_reg(s, 10)
+        riscv64_emit_or(s, 10, 10, 11)
+    return 0
+
+fn riscv64_synth_expr_log_and s toks pos_box
+    riscv64_synth_expr_bit_or(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        t = toks[pos]
+        k = t.tok_kind
+        txt = t.tok_text
+        if not (k == TOK_AND() or (k == TOK_IDENT() and (txt == "and" or txt == "এবং")))
+            break
+        list_set(pos_box, 0, pos + 1)
+        // Normalize left to 0/1; short-circuit to end if 0
+        bytes_sltu_l = rv64_encode_r(51, 10, 3, 0, 10, 0)
+        riscv64_synth_emit_bytes(s, bytes_sltu_l)
+        patch_false = s.rv_code.len()
+        riscv64_emit_beq(s, 10, 0, 0)
+        riscv64_synth_expr_bit_or(s, toks, pos_box)
+        bytes_sltu_r = rv64_encode_r(51, 10, 3, 0, 10, 0)
+        riscv64_synth_emit_bytes(s, bytes_sltu_r)
+        riscv64_synth_patch_b(s, patch_false, 0, 10, 0, s.rv_code.len())
+    return 0
+
+fn riscv64_synth_expr_log_or s toks pos_box
+    riscv64_synth_expr_log_and(s, toks, pos_box)
+    while get(pos_box, 0) < toks.len()
+        pos = get(pos_box, 0)
+        t = toks[pos]
+        k = t.tok_kind
+        txt = t.tok_text
+        if not (k == TOK_OR() or (k == TOK_IDENT() and (txt == "or" or txt == "অথবা" or txt == "বা")))
+            break
+        list_set(pos_box, 0, pos + 1)
+        bytes_sltu_l = rv64_encode_r(51, 10, 3, 0, 10, 0)
+        riscv64_synth_emit_bytes(s, bytes_sltu_l)
+        patch_true = s.rv_code.len()
+        riscv64_emit_bne(s, 10, 0, 0)
+        riscv64_synth_expr_log_and(s, toks, pos_box)
+        bytes_sltu_r = rv64_encode_r(51, 10, 3, 0, 10, 0)
+        riscv64_synth_emit_bytes(s, bytes_sltu_r)
+        riscv64_synth_patch_b(s, patch_true, 1, 10, 0, s.rv_code.len())
+    return 0
+
 fn riscv64_synth_compile_expr s toks pos_box
-    // WHY: Master expression evaluator for RISC-V 64 entering at relational precedence level.
-    return riscv64_synth_expr_rel(s, toks, pos_box)
+    // WHY: Master expression evaluator for RISC-V 64 entering at logical OR precedence level.
+    return riscv64_synth_expr_log_or(s, toks, pos_box)
 

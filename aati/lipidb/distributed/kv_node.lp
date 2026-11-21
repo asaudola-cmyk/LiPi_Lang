@@ -17,7 +17,7 @@ import "utso/string"
   return {
     node_id: node_id,
     term: 1,
-    store: {},
+    store: hashmap_new(),
     wal_log: []
   }
 @end
@@ -37,7 +37,7 @@ import "utso/string"
   node.wal_log = node.wal_log.push(entry)
 
   @! 2. Apply to state machine
-  node.store[key] = val
+  node.store = hashmap_set(node.store, key, val)
   return 1
 @end
 
@@ -46,8 +46,8 @@ import "utso/string"
     return 0
   @end
 
-  @if node.store.contains(key)
-    return node.store[key]
+  @if hashmap_has(node.store, key) == 1
+    return hashmap_get(node.store, key)
   @end
   return 0
 @end
@@ -57,14 +57,14 @@ import "utso/string"
     return 0
   @end
 
-  @if node.store.contains(key)
+  @if hashmap_has(node.store, key) == 1
     entry = {
       op: "DEL",
       key: key,
       term: node.term
     }
     node.wal_log = node.wal_log.push(entry)
-    node.store.delete(key)
+    node.store = hashmap_delete(node.store, key)
     return 1
   @end
   return 0

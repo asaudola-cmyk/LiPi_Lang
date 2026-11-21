@@ -113,8 +113,8 @@ fn main
     end
     assert_eq(hex_len, 64, "SHA-256 64-character manifest hash produced")
 
-    mem_free(manifest_buf, m_len)
-    mem_free(digest_buf, 65)
+    mem_free(manifest_buf)
+    mem_free(digest_buf)
 
     // ── Phase 5: Dependency Graph Resolution Simulation ────────────────────────
     say "\n▶ Phase 5: Multi-Package Dependency Resolution Resolution..."

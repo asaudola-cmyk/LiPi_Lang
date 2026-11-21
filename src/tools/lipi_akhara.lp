@@ -65,15 +65,15 @@ fn akhara_u64_hex val
     return "0x" + out
 
 fn akhara_read_u16_le buf off
-    b0 = mem_byte_read(buf, off)
-    b1 = mem_byte_read(buf, off + 1)
+    b0 = silicon_mem_byte_read(buf, off)
+    b1 = silicon_mem_byte_read(buf, off + 1)
     return b0 + b1 * 256
 
 fn akhara_read_u32_le buf off
-    b0 = mem_byte_read(buf, off)
-    b1 = mem_byte_read(buf, off + 1)
-    b2 = mem_byte_read(buf, off + 2)
-    b3 = mem_byte_read(buf, off + 3)
+    b0 = silicon_mem_byte_read(buf, off)
+    b1 = silicon_mem_byte_read(buf, off + 1)
+    b2 = silicon_mem_byte_read(buf, off + 2)
+    b3 = silicon_mem_byte_read(buf, off + 3)
     return b0 + b1 * 256 + b2 * 65536 + b3 * 16777216
 
 fn akhara_read_u64_le buf off
@@ -83,6 +83,9 @@ fn akhara_read_u64_le buf off
 
 // ── Sovereign Silicon Hardware Boundary (--kavach Crowned Layer) ───────────────
 // WHY: Under --kavach, only silicon_* functions touch raw kernel syscalls or pointer writes.
+fn silicon_mem_byte_read ptr off
+    return mem_byte_read(ptr, off)
+
 fn silicon_alloc_raw size
     return syscall(9, 0, size, 3, 34, -1, 0)
 
@@ -120,6 +123,20 @@ fn silicon_readlink_exe buf cap
     if n > 0
         mem_byte_write(buf, n, 0)
     return n
+
+fn silicon_rand_hex n_bytes
+    buf = silicon_alloc_raw(n_bytes)
+    if buf <= 0
+        return ""
+    got = syscall(318, buf, n_bytes, 0, 0, 0, 0)
+    out = ""
+    if got == n_bytes
+        i = 0
+        while i < n_bytes
+            out = out + akhara_byte_hex(mem_byte_read(buf, i) & 255)
+            i = i + 1
+    silicon_free_raw(buf, n_bytes)
+    return out
 
 fn silicon_now_us
     ts = silicon_alloc_raw(16)
@@ -256,24 +273,24 @@ fn akhara_get_env target_key
             else
                 j = 0
                 while j < klen
-                    if mem_byte_read(buf, i + j) != ord(char_at(target_key, j))
+                    if silicon_mem_byte_read(buf, i + j) != ord(char_at(target_key, j))
                         matched = 0
                         break
                     j = j + 1
-                if matched == 1 and mem_byte_read(buf, i + klen) != 61
+                if matched == 1 and silicon_mem_byte_read(buf, i + klen) != 61
                     matched = 0
             if matched == 1
                 val = ""
                 p = i + klen + 1
                 while p < n
-                    b = mem_byte_read(buf, p)
+                    b = silicon_mem_byte_read(buf, p)
                     if b == 0
                         break
                     val = val + chr(b)
                     p = p + 1
                 out_val = val
                 break
-            while i < n and mem_byte_read(buf, i) != 0
+            while i < n and silicon_mem_byte_read(buf, i) != 0
                 i = i + 1
             i = i + 1
     silicon_free_raw(buf, 16384)
@@ -297,7 +314,7 @@ fn akhara_resolve_compiler
         last_slash = 0 - 1
         si = n - 1
         while si >= 0
-            if mem_byte_read(exe_buf, si) == 47
+            if silicon_mem_byte_read(exe_buf, si) == 47
                 last_slash = si
                 break
             si = si - 1
@@ -305,7 +322,7 @@ fn akhara_resolve_compiler
             dir_s = ""
             di = 0
             while di <= last_slash
-                dir_s = dir_s + chr(mem_byte_read(exe_buf, di))
+                dir_s = dir_s + chr(silicon_mem_byte_read(exe_buf, di))
                 di = di + 1
             cand_sib = dir_s + "lipc"
             if silicon_access_ok(cand_sib) == 1
@@ -442,7 +459,7 @@ fn akhara_inspect_elf bin_path
     silicon_close_fd(fd)
 
     rep.er_size = total
-    if total >= 64 and mem_byte_read(buf, 0) == 127 and mem_byte_read(buf, 1) == 69 and mem_byte_read(buf, 2) == 76 and mem_byte_read(buf, 3) == 70
+    if total >= 64 and silicon_mem_byte_read(buf, 0) == 127 and silicon_mem_byte_read(buf, 1) == 69 and silicon_mem_byte_read(buf, 2) == 76 and silicon_mem_byte_read(buf, 3) == 70
         rep.er_valid = 1
         e_type = akhara_read_u16_le(buf, 16)
         if e_type == 3
@@ -496,7 +513,7 @@ fn akhara_inspect_elf bin_path
             while k < 24 and entry_file_off + k < total
                 if k > 0
                     bytes_hex = bytes_hex + " "
-                bytes_hex = bytes_hex + akhara_byte_hex(mem_byte_read(buf, entry_file_off + k))
+                bytes_hex = bytes_hex + akhara_byte_hex(silicon_mem_byte_read(buf, entry_file_off + k))
                 k = k + 1
         rep.er_silicon_bytes = bytes_hex
 
@@ -593,7 +610,7 @@ fn akhara_result_to_json res
     j = j + "}"
     return j
 
-fn akhara_studio_html
+fn akhara_studio_html csrf_tok
     h = "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
     h = h + "<title>Lipi Akhara (লিপি আখড়া) — Sovereign Silicon Studio</title>"
     h = h + "<style>body{margin:0;background:#0a0e17;color:#e6edf3;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;padding:20px;}"
@@ -622,7 +639,7 @@ fn akhara_studio_html
     h = h + "<div class='pill'>Entry: <span id='m_ent'>-</span></div></div>"
     h = h + "<div style='margin-top:10px'><b>_start Machine Bytes</b></div><pre id='m_bytes' style='min-height:36px;color:#fcd34d'>-</pre>"
     h = h + "<div><b>Silicon Stdout &amp; Compiler Output</b></div><pre id='out'>Ready.</pre></div></div></div>"
-    h = h + "<script>async function runCode(){const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},"
+    h = h + "<script>const LIPI_TOK='" + csrf_tok + "';async function runCode(){const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Lipi-Token':LIPI_TOK},"
     h = h + "body:JSON.stringify({code:document.getElementById('src').value,kavach:document.getElementById('kav').checked})});"
     h = h + "const d=await r.json();document.getElementById('m_elf').textContent=d.elf_type+' ('+d.machine+')';"
     h = h + "document.getElementById('m_rwe').textContent=d.rwe_segments;document.getElementById('m_sz').textContent=d.bin_bytes+' B';"
@@ -630,6 +647,66 @@ fn akhara_studio_html
     h = h + "document.getElementById('m_ent').textContent=d.entry_hex;document.getElementById('m_bytes').textContent=d.silicon_bytes||'-';"
     h = h + "document.getElementById('out').textContent=(d.ok?d.stdout:d.compiler_log)+'\\n[exit='+ (d.ok?d.run_exit:d.compile_exit) +']';}</script></body></html>"
     return h
+
+fn _akhara_ascii_lower c
+    o = ord(c)
+    if o >= 65 and o <= 90
+        return chr(o + 32)
+    return c
+
+fn _akhara_str_lower s
+    out = ""
+    i = 0
+    while i < len(s)
+        out = out + _akhara_ascii_lower(char_at(s, i))
+        i = i + 1
+    return out
+
+fn _akhara_get_header hdrs name_lower
+    hlen = len(hdrs)
+    nlen = len(name_lower)
+    pos = 0
+    while pos < hlen
+        eol = pos
+        while eol < hlen and char_at(hdrs, eol) != "\n"
+            eol = eol + 1
+        line = str_sub(hdrs, pos, eol)
+        if len(line) > 0 and char_at(line, len(line) - 1) == "\r"
+            line = str_sub(line, 0, len(line) - 1)
+        col = 0
+        while col < len(line) and char_at(line, col) != ":"
+            col = col + 1
+        if col > 0 and col < len(line)
+            hn = _akhara_str_lower(str_sub(line, 0, col))
+            if hn == name_lower
+                vs = col + 1
+                while vs < len(line) and (char_at(line, vs) == " " or char_at(line, vs) == "\t")
+                    vs = vs + 1
+                return str_sub(line, vs, len(line))
+        pos = eol + 1
+    return ""
+
+fn _akhara_ct_eq a b
+    if len(a) == 0 or len(a) != len(b)
+        return 0
+    diff = 0
+    i = 0
+    while i < len(a)
+        diff = diff | (ord(char_at(a, i)) ^ ord(char_at(b, i)))
+        i = i + 1
+    if diff == 0 return 1
+    return 0
+
+fn _akhara_is_local_host_or_origin val port allow_scheme
+    v = _akhara_str_lower(val)
+    p_s = str(port)
+    if allow_scheme == 0
+        if v == ("127.0.0.1:" + p_s) or v == ("localhost:" + p_s) or v == "127.0.0.1" or v == "localhost"
+            return 1
+        return 0
+    if v == ("http://127.0.0.1:" + p_s) or v == ("http://localhost:" + p_s) or v == "http://127.0.0.1" or v == "http://localhost"
+        return 1
+    return 0
 
 fn akhara_send_http cfd status_line content_type body
     hdr = "HTTP/1.1 " + status_line + "\r\n"
@@ -655,7 +732,7 @@ fn akhara_read_http_request cfd
         if header_end < 0 and total >= 4
             k = 0
             while k + 3 < total
-                if mem_byte_read(buf, k) == 13 and mem_byte_read(buf, k + 1) == 10 and mem_byte_read(buf, k + 2) == 13 and mem_byte_read(buf, k + 3) == 10
+                if silicon_mem_byte_read(buf, k) == 13 and silicon_mem_byte_read(buf, k + 1) == 10 and silicon_mem_byte_read(buf, k + 2) == 13 and silicon_mem_byte_read(buf, k + 3) == 10
                     header_end = k + 4
                     break
                 k = k + 1
@@ -663,7 +740,7 @@ fn akhara_read_http_request cfd
                 hdr_txt = ""
                 hi = 0
                 while hi < header_end
-                    hdr_txt = hdr_txt + chr(mem_byte_read(buf, hi))
+                    hdr_txt = hdr_txt + chr(silicon_mem_byte_read(buf, hi))
                     hi = hi + 1
                 cl_val = 0
                 hl = len(hdr_txt)
@@ -691,12 +768,16 @@ fn akhara_read_http_request cfd
     req = ""
     i = 0
     while i < total
-        req = req + chr(mem_byte_read(buf, i))
+        req = req + chr(silicon_mem_byte_read(buf, i))
         i = i + 1
     silicon_free_raw(buf, cap)
     return req
 
 fn akhara_serve port max_requests
+    csrf_tok = silicon_rand_hex(24)
+    if len(csrf_tok) < 32
+        say "❌ CSPRNG token allocation failed"
+        return 1
     srv_fd = silicon_tcp_bind_listen(port)
     if srv_fd < 0
         say "❌ Socket setup/bind/listen failed on 127.0.0.1:" + str(port) + " (rc=" + str(srv_fd) + ")"
@@ -722,29 +803,47 @@ fn akhara_serve port max_requests
                 eol = eol + 1
             req_line = str_sub(req, 0, eol)
 
+            body_idx = 0 - 1
+            bi = 0
+            while bi + 3 < rlen
+                if str_sub(req, bi, bi + 4) == "\r\n\r\n"
+                    body_idx = bi + 4
+                    break
+                bi = bi + 1
+            hdr_part = req
+            if body_idx >= 4
+                hdr_part = str_sub(req, 0, body_idx)
+
             if str_starts_with(req_line, "GET /health ") == 1
                 akhara_send_http(cfd, "200 OK", "application/json", "{\"status\":\"ok\",\"service\":\"lipi_akhara\",\"zero_deps\":true}")
             elif str_starts_with(req_line, "GET / ") == 1
-                akhara_send_http(cfd, "200 OK", "text/html; charset=utf-8", akhara_studio_html())
+                akhara_send_http(cfd, "200 OK", "text/html; charset=utf-8", akhara_studio_html(csrf_tok))
             elif str_starts_with(req_line, "POST /api/run ") == 1
-                body_idx = 0 - 1
-                bi = 0
-                while bi + 3 < rlen
-                    if str_sub(req, bi, bi + 4) == "\r\n\r\n"
-                        body_idx = bi + 4
-                        break
-                    bi = bi + 1
-                body = ""
-                if body_idx >= 0 and body_idx < rlen
-                    body = str_sub(req, body_idx, rlen)
-                code_str = akhara_json_extract_str(body, "code")
-                use_kav = akhara_json_extract_bool(body, "kavach")
-                if len(code_str) == 0
-                    akhara_send_http(cfd, "400 Bad Request", "application/json", "{\"ok\":false,\"compiler_log\":\"Missing code payload\"}")
+                host_v = _akhara_get_header(hdr_part, "host")
+                origin_v = _akhara_get_header(hdr_part, "origin")
+                ctype_v = _akhara_str_lower(_akhara_get_header(hdr_part, "content-type"))
+                tok_v = _akhara_get_header(hdr_part, "x-lipi-token")
+                host_ok = _akhara_is_local_host_or_origin(host_v, port, 0)
+                origin_ok = 1
+                if len(origin_v) > 0
+                    origin_ok = _akhara_is_local_host_or_origin(origin_v, port, 1)
+                ctype_ok = str_starts_with(ctype_v, "application/json")
+                tok_ok = _akhara_ct_eq(tok_v, csrf_tok)
+
+                if host_ok != 1 or origin_ok != 1 or ctype_ok != 1 or tok_ok != 1
+                    akhara_send_http(cfd, "403 Forbidden", "application/json", "{\"ok\":false,\"error\":\"csrf_origin_or_content_type_rejected\"}")
                 else
-                    rr = akhara_compile_and_run_code(code_str, use_kav, seq)
-                    seq = seq + 1
-                    akhara_send_http(cfd, "200 OK", "application/json", akhara_result_to_json(rr))
+                    body = ""
+                    if body_idx >= 0 and body_idx < rlen
+                        body = str_sub(req, body_idx, rlen)
+                    code_str = akhara_json_extract_str(body, "code")
+                    use_kav = akhara_json_extract_bool(body, "kavach")
+                    if len(code_str) == 0
+                        akhara_send_http(cfd, "400 Bad Request", "application/json", "{\"ok\":false,\"compiler_log\":\"Missing code payload\"}")
+                    else
+                        rr = akhara_compile_and_run_code(code_str, use_kav, seq)
+                        seq = seq + 1
+                        akhara_send_http(cfd, "200 OK", "application/json", akhara_result_to_json(rr))
             else
                 akhara_send_http(cfd, "404 Not Found", "application/json", "{\"error\":\"not_found\"}")
             handled = handled + 1

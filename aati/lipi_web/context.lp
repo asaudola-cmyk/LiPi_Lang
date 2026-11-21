@@ -88,9 +88,75 @@ import "aati/lipi_web/router"
   ctx_req: any
   ctx_res: any
   ctx_handlers: array
-  ctx_handler_idx: i64
-  ctx_store: array
+  ctx_handler_index: i64
   ctx_is_aborted: i64
+  ctx_store: array
+  ctx_app: any
+@end
+
+@! Strips CR, LF, and NUL bytes from HTTP header names/values to prevent CRLF response splitting
+@fn web_strip_crlf(s)
+  out = ""
+  i = 0
+  n = str_len(s)
+  @while i < n
+    ch = str_char_at(s, i)
+    @if ch != 13 && ch != 10 && ch != 0
+      out = out + str_substr(s, i, i + 1)
+    @end
+    i = i + 1
+  @end
+  return out
+@end
+
+@! Escapes HTML meta-characters (&, <, >, ", ') to neutralize reflected/stored XSS
+@fn web_html_escape(s)
+  out = ""
+  i = 0
+  n = str_len(s)
+  @while i < n
+    ch = str_char_at(s, i)
+    @if ch == 38
+      out = out + "&amp;"
+    @elif ch == 60
+      out = out + "&lt;"
+    @elif ch == 62
+      out = out + "&gt;"
+    @elif ch == 34
+      out = out + "&quot;"
+    @elif ch == 39
+      out = out + "&#39;"
+    @else
+      out = out + str_substr(s, i, i + 1)
+    @end
+    i = i + 1
+  @end
+  return out
+@end
+
+@! Escapes JSON string special characters (", \, \n, \r, \t)
+@fn web_json_escape(s)
+  out = ""
+  i = 0
+  n = str_len(s)
+  @while i < n
+    ch = str_char_at(s, i)
+    @if ch == 92
+      out = out + "\\\\"
+    @elif ch == 34
+      out = out + "\\\""
+    @elif ch == 10
+      out = out + "\\n"
+    @elif ch == 13
+      out = out + "\\r"
+    @elif ch == 9
+      out = out + "\\t"
+    @else
+      out = out + str_substr(s, i, i + 1)
+    @end
+    i = i + 1
+  @end
+  return out
 @end
 
 @! ----------------------------------------------------------------------------
@@ -119,10 +185,24 @@ import "aati/lipi_web/router"
         @if v_ch == 34 @! string
           v_start = i + 1
           v_end = v_start
-          @while v_end < num_items && str_char_at(raw_str, v_end) != 34
-            v_end = v_end + 1
+          val_str = ""
+          @while v_end < num_items
+            vc = str_char_at(raw_str, v_end)
+            @if vc == 92 && (v_end + 1) < num_items
+              esc = str_char_at(raw_str, v_end + 1)
+              @if esc == 110 val_str = val_str + "\n"
+              @elif esc == 114 val_str = val_str + "\r"
+              @elif esc == 116 val_str = val_str + "\t"
+              @else val_str = val_str + str_substr(raw_str, v_end + 1, v_end + 2)
+              @end
+              v_end = v_end + 2
+            @elif vc == 34
+              break
+            @else
+              val_str = val_str + str_substr(raw_str, v_end, v_end + 1)
+              v_end = v_end + 1
+            @end
           @end
-          val_str = str_substr(raw_str, v_start, v_end)
           pairs = pairs.push({ key: key, value: val_str })
           i = v_end + 1
         @elif (v_ch >= 48 && v_ch <= 57) || v_ch == 45 @! number
@@ -364,15 +444,27 @@ import "aati/lipi_web/router"
 @end
 
 @fn res_header(res, name, value)
+  clean_name = web_strip_crlf(name)
+  clean_val = web_strip_crlf(value)
+  target = str_to_lower(str_trim(clean_name))
+  @if target == ""
+    return res
+  @end
+
+  @! RFC 6265 allows multiple independent Set-Cookie response headers
+  @if target == "set-cookie"
+    res.res_headers = res.res_headers.push({ name: clean_name, value: clean_val })
+    return res
+  @end
+
   new_headers = []
-  target = str_to_lower(str_trim(name))
   found = 0
   i = 0
   num_items = res.res_headers.len()
   @while i < num_items
     h = res.res_headers[i]
     @if str_to_lower(h.name) == target
-      new_headers = new_headers.push({ name: name, value: value })
+      new_headers = new_headers.push({ name: clean_name, value: clean_val })
       found = 1
     @else
       new_headers = new_headers.push(h)
@@ -380,11 +472,11 @@ import "aati/lipi_web/router"
     i = i + 1
   @end
   @if found == 0
-    new_headers = new_headers.push({ name: name, value: value })
+    new_headers = new_headers.push({ name: clean_name, value: clean_val })
   @end
   res.res_headers = new_headers
   @if target == "content-type"
-    res.res_content_type = value
+    res.res_content_type = clean_val
   @end
   return res
 @end
@@ -470,7 +562,7 @@ import "aati/lipi_web/router"
 @! ----------------------------------------------------------------------------
 
 @fn res_format_http(res)
-  reason = http_status_reason(res.res_status_code)
+  reason = web_strip_crlf(http_status_reason(res.res_status_code))
   status_line = "HTTP/1.1 " + res.res_status_code.to_str() + " " + reason + "\r\n"
 
   has_ct = 0
@@ -483,12 +575,14 @@ import "aati/lipi_web/router"
   num_items = res.res_headers.len()
   @while i < num_items
     h = res.res_headers[i]
-    h_lower = str_to_lower(h.name)
+    h_name = web_strip_crlf(h.name)
+    h_val = web_strip_crlf(h.value)
+    h_lower = str_to_lower(h_name)
     @if h_lower == "content-type" has_ct = 1 @end
     @if h_lower == "content-length" has_cl = 1 @end
     @if h_lower == "connection" has_conn = 1 @end
     @if h_lower == "server" has_server = 1 @end
-    headers_block = headers_block + h.name + ": " + h.value + "\r\n"
+    headers_block = headers_block + h_name + ": " + h_val + "\r\n"
     i = i + 1
   @end
 
@@ -497,7 +591,7 @@ import "aati/lipi_web/router"
     headers_block = headers_block + "Server: LiPi-Pure-Web/1.0\r\n"
   @end
   @if has_ct == 0 && res.res_content_type != ""
-    headers_block = headers_block + "Content-Type: " + res.res_content_type + "\r\n"
+    headers_block = headers_block + "Content-Type: " + web_strip_crlf(res.res_content_type) + "\r\n"
   @end
   @if has_cl == 0
     headers_block = headers_block + "Content-Length: " + res.res_body.len().to_str() + "\r\n"
