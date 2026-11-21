@@ -87,6 +87,21 @@
         "command": "lipi.buildFile",
         "title": "Lipi: Build Executable Binary",
         "category": "Lipi"
+      },
+      {
+        "command": "lipi.formatFile",
+        "title": "Lipi: Format Active File (lipifmt)",
+        "category": "Lipi"
+      },
+      {
+        "command": "lipi.akhara",
+        "title": "Lipi: Open Sovereign Silicon Studio (Akhara)",
+        "category": "Lipi"
+      },
+      {
+        "command": "lipi.kavachCheck",
+        "title": "Lipi: Verify With Sovereign Kavach (--kavach)",
+        "category": "Lipi"
       }
     ],
     "configuration": {

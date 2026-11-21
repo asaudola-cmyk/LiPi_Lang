@@ -220,11 +220,20 @@ create_command() {
             build_tool() {
                 t_src="$1"
                 t_dst="$2"
+                t_flag="$3"
                 if [ "$IS_UPDATE" = "1" ] || [ ! -x "$t_dst" ]; then
-                    if ./bin/lipc "$t_src" "$t_dst" >/dev/null 2>&1; then
-                        chmod +x "$t_dst"
+                    if [ -n "$t_flag" ]; then
+                        if ./bin/lipc "$t_src" "$t_dst" "$t_flag" >/dev/null 2>&1; then
+                            chmod +x "$t_dst"
+                        else
+                            warn "Failed to compile $t_src ($t_flag) to $t_dst"
+                        fi
                     else
-                        warn "Failed to compile $t_src to $t_dst"
+                        if ./bin/lipc "$t_src" "$t_dst" >/dev/null 2>&1; then
+                            chmod +x "$t_dst"
+                        else
+                            warn "Failed to compile $t_src to $t_dst"
+                        fi
                     fi
                 fi
             }
@@ -235,11 +244,12 @@ create_command() {
             [ -x "bin/aati" ] && cp -f "bin/aati" "bin/lipipkg" && chmod +x "bin/lipipkg"
             build_tool "src/tools/lipilsp.lp" "bin/lipilsp"
             build_tool "src/tools/lipidbg.lp" "bin/lipidbg"
-            build_tool "src/tools/lipifmt.lp" "bin/lipifmt"
+            build_tool "src/tools/lipifmt.lp" "bin/lipifmt" "--kavach"
             build_tool "src/tools/lipiconvert.lp" "bin/lipiconvert"
-            build_tool "src/tools/lipidoc.lp" "bin/lipidoc"
+            build_tool "src/tools/lipidoc.lp" "bin/lipidoc" "--kavach"
             build_tool "src/tools/lipirepl.lp" "bin/lipirepl"
             build_tool "src/tools/lipiassimilate.lp" "bin/lipiassimilate"
+            build_tool "src/tools/lipi_akhara.lp" "bin/lipi_akhara" "--kavach"
             build_tool "src/tools/lipi_unikernel_boot.lp" "bin/lipi_unikernel_boot"
             build_tool "build.lp" "bin/lipi-build"
             build_tool "tests/run_tests.lp" "bin/lipi-test"
@@ -281,6 +291,7 @@ create_command() {
     install_tool_binary "lipidoc" "Markdown Documentation Engine"
     install_tool_binary "lipirepl" "Interactive Real-Time REPL"
     install_tool_binary "lipiassimilate" "AI Architecture Assimilator"
+    install_tool_binary "lipi_akhara" "Sovereign Silicon Studio & ELF Inspector"
     install_tool_binary "lipi_unikernel_boot" "Bare-Metal Unikernel Boot Engine"
     install_tool_binary "lipi-build" "Native Build Orchestrator"
     install_tool_binary "lipi-test" "Regression Test Engine"
@@ -296,7 +307,7 @@ heal_system_links() {
     # WHY: Scans $LIPI_BIN_DIR (~/.local/bin) and /usr/local/bin for symlinks pointing
     # directly into development workspaces. Replaces them with pristine standalone binaries
     # to enforce total isolation and eliminate broken symlink traps.
-    ALL_TOOLS="lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipidb_server lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi_unikernel_boot lipi-build lipi-test"
+    ALL_TOOLS="lipi lipc lipc_bin lipc_micro aati haat lipipkg lipilsp lipils lipidbg lipidb_server lipifmt lipiconvert lipidoc lipirepl lipiassimilate lipi_akhara lipi_unikernel_boot lipi-build lipi-test"
     
     # 1. Clean and decouple user local bin (~/.local/bin)
     for tool in $ALL_TOOLS; do

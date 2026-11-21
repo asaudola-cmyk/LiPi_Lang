@@ -1606,10 +1606,10 @@ fn pipeline_build_ast_declarations toks src_path
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     break
                 end
-                if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or sk == TOK_KW_STRUCT() or sk == TOK_DIR_STRUCT()
+                if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or sk == TOK_KW_STRUCT() or sk == TOK_DIR_STRUCT() or sk == TOK_DIR_ENUM()
                     break
                 end
-                if sk == TOK_IDENT() and (stxt == "fn" or stxt == "কাজ" or stxt == "@fn" or stxt == "struct" or stxt == "গঠন" or stxt == "@struct")
+                if sk == TOK_IDENT() and (stxt == "fn" or stxt == "কাজ" or stxt == "@fn" or stxt == "struct" or stxt == "গঠন" or stxt == "@struct" or stxt == "enum" or stxt == "@enum" or stxt == "গণনা")
                     break
                 end
                 if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
@@ -1638,6 +1638,60 @@ fn pipeline_build_ast_declarations toks src_path
             if len(struct_name) > 0
                 s_decl = ast_decl_struct(struct_name, fields, sp)
                 push(decls, s_decl)
+            end
+        elif k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
+            base_l = t.tok_span.span_start_line
+            base_c = t.tok_span.span_start_col
+            list_set(pos_box, 0, cp + 1)
+            enum_name = ""
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                enum_name = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            variants = list()
+            while get(pos_box, 0) < toks.len()
+                while get(pos_box, 0) < toks.len()
+                    ek_skip = toks[get(pos_box, 0)].tok_kind
+                    if ek_skip == TOK_NEWLINE() or ek_skip == TOK_SEMI() or ek_skip == TOK_COMMA() or ek_skip == TOK_COMMENT_DOC() or ek_skip == TOK_COMMENT_LINE() or ek_skip == TOK_COMMENT_BLOCK()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    else
+                        break
+                    end
+                end
+                if get(pos_box, 0) >= toks.len()
+                    break
+                end
+                ek = toks[get(pos_box, 0)].tok_kind
+                etxt = toks[get(pos_box, 0)].tok_text
+                if ek == TOK_KW_END() or ek == TOK_DIR_END() or etxt == "end" or etxt == "শেষ" or etxt == "@end"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    break
+                end
+                if ek == TOK_KW_FN() or ek == TOK_DIR_FN() or ek == TOK_KW_STRUCT() or ek == TOK_DIR_STRUCT() or ek == TOK_DIR_ENUM()
+                    break
+                end
+                if ek == TOK_IDENT() and (etxt == "fn" or etxt == "কাজ" or etxt == "@fn" or etxt == "struct" or etxt == "গঠন" or etxt == "@struct" or etxt == "enum" or etxt == "@enum" or etxt == "গণনা")
+                    break
+                end
+                if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
+                    break
+                end
+                if ek == TOK_IDENT()
+                    push(variants, etxt)
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        if get(pos_box, 0) < toks.len()
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    end
+                else
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            if len(enum_name) > 0
+                e_decl = ast_decl_enum(enum_name, variants, sp)
+                push(decls, e_decl)
             end
         else
             before_top = get(pos_box, 0)

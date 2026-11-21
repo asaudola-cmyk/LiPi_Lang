@@ -50,7 +50,8 @@ struct SsaLowerer
     low_code        // list of bytes
     low_rodata      // list of bytes
     low_slots       // list of SsaSlot structs
-    low_patches     // list of SsaJumpPatch structs
+    low_patches     // list of intra-function SsaJumpPatch structs
+    low_call_patches // list of inter-function OP_CALL SsaJumpPatch structs
     low_blocks      // list of SsaBlockOffset structs
     low_stack_frame // integer: total allocated stack frame size in bytes
     low_cur_offset  // integer: next available stack offset for local alloca slots
@@ -68,6 +69,7 @@ fn ssa_lowerer_new target_arch
     low.low_rodata = list()
     low.low_slots = list()
     low.low_patches = list()
+    low.low_call_patches = list()
     low.low_blocks = list()
     low.low_stack_frame = 32
     low.low_cur_offset = 8
@@ -75,6 +77,16 @@ fn ssa_lowerer_new target_arch
     low.low_fn_offsets = list()
     low.low_total_insts = 0
     return low
+
+fn ssa_hash_str_4096 s
+    // WHY: Deterministic FNV-1a-style 12-bit bucket hash for O(1) inter-function call resolution.
+    h = 2166136261
+    n = len(s)
+    i = 0
+    while i < n
+        h = ((h ^ ord(char_at(s, i))) * 16777619) & 2147483647
+        i = i + 1
+    return h & 4095
 
 fn ssa_lowerer_emit_byte low b
     // WHY: Emits single byte into machine code stream.
@@ -433,7 +445,7 @@ fn ssa_lower_instruction_x86 low inst
         jp_call.sjp_offset = patch_call
         jp_call.sjp_target = inst.extra_str
         jp_call.sjp_kind = 10
-        push(low.low_patches, jp_call)
+        push(low.low_call_patches, jp_call)
         if inst.result != 0
             ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
         end
@@ -450,42 +462,87 @@ fn ssa_lower_instruction_x86 low inst
 
 // ── 5. Backpatching & Module Lowering ─────────────────────────────────────────
 
-fn ssa_lowerer_resolve_jumps low
-    // WHY: Resolves relative jump displacements across all basic block boundaries.
+fn ssa_lowerer_resolve_function_branches low
+    // WHY: Resolves intra-function basic block branches immediately before per-function slot/block state is reset.
     pi = 0
     while pi < low.low_patches.len()
         patch = low.low_patches[pi]
         tgt_offset = 0 - 1
-        if patch.sjp_kind == 10
-            fi = 0
-            while fi < low.low_fn_names.len()
-                if low.low_fn_names[fi] == patch.sjp_target
-                    tgt_offset = low.low_fn_offsets[fi]
-                    break
-                end
-                fi = fi + 1
+        bi = 0
+        while bi < low.low_blocks.len()
+            b = low.low_blocks[bi]
+            if b.sbo_label == patch.sjp_target
+                tgt_offset = b.sbo_offset
+                break
             end
-        else
-            bi = 0
-            while bi < low.low_blocks.len()
-                b = low.low_blocks[bi]
-                if b.sbo_label == patch.sjp_target
-                    tgt_offset = b.sbo_offset
-                    break
-                end
-                bi = bi + 1
-            end
+            bi = bi + 1
         end
-
         if tgt_offset >= 0
-            // Relative displacement from end of jump instruction
             disp = tgt_offset - (patch.sjp_offset + 4)
             ssa_lowerer_patch_u32(low, patch.sjp_offset, disp)
+        end
         pi = pi + 1
+    return 0
+
+fn ssa_lowerer_resolve_jumps low
+    // WHY: Builds a 4096-bucket hash index over emitted functions and resolves inter-function OP_CALL patches in O(1).
+    ssa_lowerer_resolve_function_branches(low)
+
+    buckets = list()
+    bi = 0
+    while bi < 4096
+        push(buckets, 0)
+        bi = bi + 1
+    end
+
+    fi = 0
+    fcount = low.low_fn_names.len()
+    while fi < fcount
+        fname = low.low_fn_names[fi]
+        h = ssa_hash_str_4096(fname)
+        ent = buckets[h]
+        if ent == 0
+            ent = list()
+            list_set(buckets, h, ent)
+        end
+        push(ent, fi)
+        fi = fi + 1
+    end
+
+    pi = 0
+    pcount = low.low_call_patches.len()
+    while pi < pcount
+        patch = low.low_call_patches[pi]
+        tgt_offset = 0 - 1
+        h = ssa_hash_str_4096(patch.sjp_target)
+        cand = buckets[h]
+        if cand != 0
+            ci = 0
+            while ci < cand.len()
+                fidx = cand[ci]
+                if low.low_fn_names[fidx] == patch.sjp_target
+                    tgt_offset = low.low_fn_offsets[fidx]
+                    break
+                end
+                ci = ci + 1
+            end
+        end
+        if tgt_offset >= 0
+            disp = tgt_offset - (patch.sjp_offset + 4)
+            ssa_lowerer_patch_u32(low, patch.sjp_offset, disp)
+        end
+        pi = pi + 1
+    end
     return 0
 
 fn ssa_lower_function low fn_obj
     // WHY: Lowers an entire IRFunction and its basic blocks into machine code.
+    // Resets per-function slot and block tables so frame offsets stay bounded per function and lookup stays O(1).
+    low.low_slots = list()
+    low.low_cur_offset = 8
+    low.low_blocks = list()
+    low.low_patches = list()
+
     push(low.low_fn_names, fn_obj.name)
     push(low.low_fn_offsets, low.low_code.len())
 
@@ -519,6 +576,8 @@ fn ssa_lower_function low fn_obj
             ii = ii + 1
         bi = bi + 1
 
+    ssa_lowerer_resolve_function_branches(low)
+    low.low_patches = list()
     return 0
 
 fn ssa_lower_module low ir_mod

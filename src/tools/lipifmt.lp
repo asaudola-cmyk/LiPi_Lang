@@ -13,13 +13,38 @@ include "utso/memory"
 
 // ── 1. Helper Utilities ──────────────────────────────────────────────────────
 
+// WHY: Sovereign silicon hardware boundary for direct kernel memory/file/process syscalls under --kavach.
+fn silicon_mmap_buf size
+    return syscall(9, 0, size, 3, 34, -1, 0)
+
+fn silicon_munmap_buf ptr size
+    return syscall(11, ptr, size, 0, 0, 0, 0)
+
+fn silicon_open_ro path
+    return syscall(2, path, 0, 0, 0, 0, 0)
+
+fn silicon_open_trunc path
+    return syscall(2, path, 577, 420, 0, 0, 0)
+
+fn silicon_read_fd fd buf cap
+    return syscall(0, fd, buf, cap, 0, 0, 0)
+
+fn silicon_write_str fd s
+    return syscall(1, fd, s, len(s), 0, 0, 0)
+
+fn silicon_close_fd fd
+    return syscall(3, fd, 0, 0, 0, 0, 0)
+
+fn silicon_exit code
+    return syscall(60, code, 0, 0, 0, 0, 0)
+
 // WHY: Allocates memory pages directly via kernel SYS_mmap for file buffer operations.
 fn alloc_buf size
-    return syscall(9, 0, size, 3, 34, -1, 0)
+    return silicon_mmap_buf(size)
 
 // WHY: Releases allocated memory pages via Linux SYS_munmap.
 fn free_buf ptr size
-    return syscall(11, ptr, size, 0, 0, 0, 0)
+    return silicon_munmap_buf(ptr, size)
 
 // WHY: Checks if character is ASCII whitespace (space or tab).
 fn is_space c
@@ -409,16 +434,16 @@ fn format_source_lines lines
 
     return out_lines
 
-// WHY: Reads raw lines from disk via direct Linux kernel syscall 0 (SYS_read).
+// WHY: Reads raw lines from disk via crowned silicon_open_ro / silicon_read_fd primitives.
 fn read_file_lines path
-    fd = syscall(2, path, 0, 0, 0, 0, 0)
+    fd = silicon_open_ro(path)
     if fd < 0
         return list()
     lines = list()
     buf = alloc_buf(4096)
     cur_line = ""
     while 1
-        n = syscall(0, fd, buf, 4096, 0, 0, 0)
+        n = silicon_read_fd(fd, buf, 4096)
         if n <= 0
             break
         i = 0
@@ -433,23 +458,23 @@ fn read_file_lines path
             i = i + 1
     if len(cur_line) > 0
         lines = push(lines, cur_line)
-    syscall(3, fd, 0, 0, 0, 0, 0)
+    silicon_close_fd(fd)
     free_buf(buf, 4096)
     return lines
 
-// WHY: Rewrites formatted lines to disk via Linux kernel syscall 1 (SYS_write).
+// WHY: Rewrites formatted lines to disk via crowned silicon_open_trunc / silicon_write_str primitives.
 fn write_file_lines path lines
-    fd = syscall(2, path, 577, 420, 0, 0, 0) // O_WRONLY | O_CREAT | O_TRUNC
+    fd = silicon_open_trunc(path)
     if fd < 0
         return 0
     total = len(lines)
     i = 0
     while i < total
         l = get(lines, i)
-        syscall(1, fd, l, len(l), 0, 0, 0)
-        syscall(1, fd, "\n", 1, 0, 0, 0)
+        silicon_write_str(fd, l)
+        silicon_write_str(fd, "\n")
         i = i + 1
-    syscall(3, fd, 0, 0, 0, 0, 0)
+    silicon_close_fd(fd)
     return 1
 
 // ── 4. CLI Driver & Entry Point ──────────────────────────────────────────────
@@ -492,12 +517,12 @@ fn main
     if arg1 == "--check"
         if argc < 3
             say "❌ Error: File path required: lipifmt --check <file.lp>"
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            silicon_exit(1)
         target_path = get(args, 2)
         raw_lines = read_file_lines(target_path)
         if len(raw_lines) == 0
             say "❌ Error: Failed to read file or file is empty: " + target_path
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            silicon_exit(1)
 
         formatted_lines = format_source_lines(raw_lines)
         rlen = len(raw_lines)
@@ -517,22 +542,22 @@ fn main
 
         if is_identical == 1
             say "✔ " + target_path + " is formatted properly."
-            syscall(60, 0, 0, 0, 0, 0, 0)
+            silicon_exit(0)
         else
             say "✗ " + target_path + " requires reformatting."
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            silicon_exit(1)
         return 0
 
     // Mode 2: -w or --write <file.lp>
     if arg1 == "-w" or arg1 == "--write"
         if argc < 3
             say "❌ Error: File path required: lipifmt -w <file.lp>"
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            silicon_exit(1)
         target_path = get(args, 2)
         raw_lines = read_file_lines(target_path)
         if len(raw_lines) == 0
             say "❌ Error: File not found or empty: " + target_path
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            silicon_exit(1)
 
         formatted_lines = format_source_lines(raw_lines)
         write_ok = write_file_lines(target_path, formatted_lines)
@@ -541,7 +566,7 @@ fn main
             return 0
         else
             say "❌ Error: Failed to write formatted file: " + target_path
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            silicon_exit(1)
         return 0
 
     // Mode 3: Default stdout format
@@ -549,7 +574,7 @@ fn main
     raw_lines = read_file_lines(target_path)
     if len(raw_lines) == 0
         say "❌ Error: File not found or empty: " + target_path
-        syscall(60, 1, 0, 0, 0, 0, 0)
+        silicon_exit(1)
 
     formatted_lines = format_source_lines(raw_lines)
     flen = len(formatted_lines)

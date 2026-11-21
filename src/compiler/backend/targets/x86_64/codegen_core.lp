@@ -119,8 +119,87 @@ struct X86Synthesizer
     synth_line_pcs         // Monotonic code byte offsets paired with DWARF source lines
     synth_line_nums        // Parallel 1-based source line numbers for .debug_line
     synth_current_fn_idx   // Index of active X86Function in synth_functions (-1 at top-level)
+    synth_regalloc_buckets // 4096-bucket hash index over synth_regalloc_names
+    synth_global_buckets   // 4096-bucket hash index over synth_global_names
+    synth_fn_buckets       // 4096-bucket hash index over synth_functions
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
+
+fn x86_synth_hash4096 name
+    // WHY: Deterministic FNV-1a-style 12-bit hash avoiding O(N) scans across 80k symbols.
+    h = 2166136261
+    n = len(name)
+    i = 0
+    while i < n
+        h = ((h ^ ord(char_at(name, i))) * 16777619) & 2147483647
+        i = i + 1
+    return h & 4095
+
+fn x86_synth_make_buckets_4096
+    // WHY: Pre-allocates 4096 zero slots lazily populated on first bucket collision.
+    b = list()
+    i = 0
+    while i < 4096
+        push(b, 0)
+        i = i + 1
+    return b
+
+fn x86_synth_bucket_insert buckets key idx
+    h = x86_synth_hash4096(key)
+    entry = buckets[h]
+    if entry == 0
+        entry = list()
+        list_set(buckets, h, entry)
+    push(entry, idx)
+    return 0
+
+fn x86_synth_register_fn_obj s fn_obj
+    // WHY: Registers an X86Function in synth_functions AND its 4096-bucket O(1) hash index.
+    idx = s.synth_functions.len()
+    push(s.synth_functions, fn_obj)
+    if s.synth_fn_buckets.len() == 4096
+        x86_synth_bucket_insert(s.synth_fn_buckets, fn_obj.fn_name, idx)
+    return idx
+
+fn x86_synth_find_fn_first s name
+    if s.synth_fn_buckets.len() == 4096
+        ent = s.synth_fn_buckets[x86_synth_hash4096(name)]
+        if ent == 0
+            return 0
+        bi = 0
+        while bi < ent.len()
+            idx = ent[bi]
+            fn_item = s.synth_functions[idx]
+            if fn_item.fn_name == name
+                return fn_item
+            bi = bi + 1
+        return 0
+    k = 0
+    while k < s.synth_functions.len()
+        fn_item = s.synth_functions[k]
+        if fn_item.fn_name == name
+            return fn_item
+        k = k + 1
+    return 0
+
+fn x86_synth_find_fn_last_idx s name
+    if s.synth_fn_buckets.len() == 4096
+        ent = s.synth_fn_buckets[x86_synth_hash4096(name)]
+        if ent == 0
+            return 0 - 1
+        bi = ent.len() - 1
+        while bi >= 0
+            idx = ent[bi]
+            if s.synth_functions[idx].fn_name == name
+                return idx
+            bi = bi - 1
+        return 0 - 1
+    k = s.synth_functions.len() - 1
+    while k >= 0
+        if s.synth_functions[k].fn_name == name
+            return k
+        k = k - 1
+    return 0 - 1
 
 fn x86_synth_new
     // WHY: Allocates and initializes clean synthesizer state.
@@ -180,6 +259,9 @@ fn x86_synth_new
     s.synth_line_pcs = list()
     s.synth_line_nums = list()
     s.synth_current_fn_idx = 0 - 1
+    s.synth_regalloc_buckets = list()
+    s.synth_global_buckets = x86_synth_make_buckets_4096()
+    s.synth_fn_buckets = x86_synth_make_buckets_4096()
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -300,18 +382,13 @@ fn x86_synth_convert_to_pie s
     return 0
 
 fn x86_synth_lookup_fn_ret_type s fn_name
-    // WHY: Returns the declared return type name of fn_name for struct-aware field resolution.
-    k = 0
-    while k < s.synth_functions.len()
-        fn_item = s.synth_functions[k]
-        if fn_item.fn_name == fn_name
-            rt = fn_item.fn_ret_type
-            if rt != 0 and rt != ""
-                return rt
-            end
-            return ""
+    // WHY: Returns the declared return type name of fn_name via O(1) bucket index.
+    fn_item = x86_synth_find_fn_first(s, fn_name)
+    if fn_item != 0
+        rt = fn_item.fn_ret_type
+        if rt != 0 and rt != ""
+            return rt
         end
-        k = k + 1
     end
     return ""
 
@@ -994,29 +1071,61 @@ fn x86_synth_alloc_reg_var s name is_reg_hint
     if s.synth_in_function == 1 and len(s.synth_current_fn) > 0
         target_key = s.synth_current_fn + "::" + name
     end
-    ri = 0
-    while ri < s.synth_regalloc_names.len()
-        rname = s.synth_regalloc_names[ri]
-        if rname == target_key
-            assigned_r = s.synth_regalloc_regs[ri]
-            if assigned_r == 12 or assigned_r == 13 or assigned_r == 14 or assigned_r == 15 or assigned_r == 3
-                reg_conflict = 0
-                ci = 0
-                while ci < s.synth_locals.len()
-                    other_lv = s.synth_locals[ci]
-                    if other_lv.lv_is_spilled == 0 and other_lv.lv_reg == assigned_r
-                        reg_conflict = 1
+    if s.synth_regalloc_names.len() > 0
+        if s.synth_regalloc_buckets.len() == 4096
+            ra_ent = s.synth_regalloc_buckets[x86_synth_hash4096(target_key)]
+            if ra_ent != 0
+                rbi = 0
+                while rbi < ra_ent.len()
+                    ri = ra_ent[rbi]
+                    if s.synth_regalloc_names[ri] == target_key
+                        assigned_r = s.synth_regalloc_regs[ri]
+                        if assigned_r == 12 or assigned_r == 13 or assigned_r == 14 or assigned_r == 15 or assigned_r == 3
+                            reg_conflict = 0
+                            ci = 0
+                            while ci < s.synth_locals.len()
+                                other_lv = s.synth_locals[ci]
+                                if other_lv.lv_is_spilled == 0 and other_lv.lv_reg == assigned_r
+                                    reg_conflict = 1
+                                end
+                                ci = ci + 1
+                            end
+                            if reg_conflict == 0
+                                lv.lv_reg = assigned_r
+                                lv.lv_is_spilled = 0
+                                break
+                            end
+                        end
                     end
-                    ci = ci + 1
-                end
-                if reg_conflict == 0
-                    lv.lv_reg = assigned_r
-                    lv.lv_is_spilled = 0
-                    break
+                    rbi = rbi + 1
                 end
             end
+        else
+            ri = 0
+            while ri < s.synth_regalloc_names.len()
+                rname = s.synth_regalloc_names[ri]
+                if rname == target_key
+                    assigned_r = s.synth_regalloc_regs[ri]
+                    if assigned_r == 12 or assigned_r == 13 or assigned_r == 14 or assigned_r == 15 or assigned_r == 3
+                        reg_conflict = 0
+                        ci = 0
+                        while ci < s.synth_locals.len()
+                            other_lv = s.synth_locals[ci]
+                            if other_lv.lv_is_spilled == 0 and other_lv.lv_reg == assigned_r
+                                reg_conflict = 1
+                            end
+                            ci = ci + 1
+                        end
+                        if reg_conflict == 0
+                            lv.lv_reg = assigned_r
+                            lv.lv_is_spilled = 0
+                            break
+                        end
+                    end
+                end
+                ri = ri + 1
+            end
         end
-        ri = ri + 1
     end
 
     // 2. If explicitly declared as register variable or pinned induction variable,
@@ -1183,7 +1292,22 @@ fn x86_synth_bind_var s var_name
 // ── 6. Global Constant Registry ───────────────────────────────────────────────
 
 fn x86_synth_set_global_const s name val
-    // WHY: Registers a top-level constant or global identifier binding so nested functions can resolve it in O(1)
+    // WHY: Registers top-level constant in O(1) via 4096-bucket hash index.
+    if s.synth_global_buckets.len() == 4096
+        ent = s.synth_global_buckets[x86_synth_hash4096(name)]
+        if ent != 0
+            bi = 0
+            while bi < ent.len()
+                idx = ent[bi]
+                if s.synth_global_names[idx] == name
+                    list_set(s.synth_global_vals, idx, val)
+                    return 0
+                bi = bi + 1
+        new_idx = s.synth_global_names.len()
+        push(s.synth_global_names, name)
+        push(s.synth_global_vals, val)
+        x86_synth_bucket_insert(s.synth_global_buckets, name, new_idx)
+        return 0
     i = 0
     while i < s.synth_global_names.len()
         if s.synth_global_names[i] == name
@@ -1195,7 +1319,18 @@ fn x86_synth_set_global_const s name val
     return 0
 
 fn x86_synth_lookup_global_const s name
-    // WHY: Fast linear scan for registered top-level compile-time integer constants
+    // WHY: O(1) hashed lookup for registered top-level compile-time integer constants.
+    if s.synth_global_buckets.len() == 4096
+        ent = s.synth_global_buckets[x86_synth_hash4096(name)]
+        if ent == 0
+            return 0 - 999999999
+        bi = 0
+        while bi < ent.len()
+            idx = ent[bi]
+            if s.synth_global_names[idx] == name
+                return s.synth_global_vals[idx]
+            bi = bi + 1
+        return 0 - 999999999
     i = 0
     while i < s.synth_global_names.len()
         if s.synth_global_names[i] == name
@@ -1279,9 +1414,9 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
         if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
             list_set(pos_box, 0, cur_p + 1)
             break
-        if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or cur_k == TOK_KW_STRUCT() or cur_k == TOK_DIR_STRUCT()
+        if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or cur_k == TOK_KW_STRUCT() or cur_k == TOK_DIR_STRUCT() or cur_k == TOK_DIR_ENUM()
             break
-        if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "struct" or cur_txt == "গঠন")
+        if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "struct" or cur_txt == "গঠন" or cur_txt == "enum" or cur_txt == "@enum" or cur_txt == "গণনা")
             break
         if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
             break

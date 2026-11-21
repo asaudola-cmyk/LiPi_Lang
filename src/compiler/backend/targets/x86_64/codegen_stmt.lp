@@ -200,6 +200,51 @@ fn x86_synth_compile_statement s toks pos_box
     if is_struct == 1
         return x86_synth_compile_struct_def(s, toks, pos_box, t.tok_span.span_start_col, t.tok_span.span_start_line)
 
+    // ── 4b. Enum Definition: @enum / enum / গণনা ─────────────────────────────
+    is_enum = 0
+    if k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
+        is_enum = 1
+
+    if is_enum == 1
+        e_col = t.tok_span.span_start_col
+        e_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        e_val = 0
+        while get(pos_box, 0) < toks.len()
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            ep = get(pos_box, 0)
+            if ep >= toks.len()
+                break
+            et = toks[ep]
+            ek = et.tok_kind
+            etx = et.tok_text
+            if ek == TOK_KW_END() or ek == TOK_DIR_END() or (ek == TOK_IDENT() and (etx == "end" or etx == "শেষ" or etx == "@end"))
+                list_set(pos_box, 0, ep + 1)
+                break
+            if ek == TOK_KW_FN() or ek == TOK_DIR_FN() or ek == TOK_KW_STRUCT() or ek == TOK_DIR_STRUCT() or ek == TOK_DIR_ENUM()
+                break
+            if ek == TOK_IDENT() and (etx == "fn" or etx == "কাজ" or etx == "@fn" or etx == "struct" or etx == "গঠন" or etx == "@struct" or etx == "enum" or etx == "@enum" or etx == "গণনা")
+                break
+            if et.tok_span.span_start_line > e_line and et.tok_span.span_start_col <= e_col
+                break
+            if ek == TOK_IDENT()
+                vname = etx
+                list_set(pos_box, 0, ep + 1)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len()
+                        v_tok = toks[get(pos_box, 0)]
+                        if v_tok.tok_kind == TOK_INT()
+                            e_val = v_tok.tok_int_val
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                x86_synth_set_global_const(s, vname, e_val)
+                e_val = e_val + 1
+            else
+                list_set(pos_box, 0, ep + 1)
+        return 0
+
     // ── 5. Struct Field Assignment (arbitrary depth): obj.field = expr, obj.f1.f2 = expr
     if k == TOK_IDENT()
         scan_fp = pos + 1

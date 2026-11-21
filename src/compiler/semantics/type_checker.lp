@@ -888,6 +888,24 @@ import "compiler/frontend/ast/ast_node"
     st = statements[i]
     @if str_eq(st.kind, "StructDef") == 1
       tc_check_struct_def(tc, st)
+    @elif str_eq(st.kind, "EnumDef") == 1
+      e_name = st.name
+      @if e_name != ""
+        e_sym = symbol_variable(e_name, TYPE_ID_I64(), 1, span_default(), tc.tc_scopes.stk_current_id)
+        scope_define(tc.tc_scopes, e_sym)
+        symtab_put(tc.tc_symtab, e_sym)
+      @end
+      ev_idx = 0
+      ev_len = st.elements.len()
+      @while ev_idx < ev_len
+        ev_name = st.elements[ev_idx]
+        @if ev_name != ""
+          ev_sym = symbol_variable(ev_name, TYPE_ID_I64(), 1, span_default(), tc.tc_scopes.stk_current_id)
+          scope_define(tc.tc_scopes, ev_sym)
+          symtab_put(tc.tc_symtab, ev_sym)
+        @end
+        ev_idx = ev_idx + 1
+      @end
     @elif str_eq(st.kind, "Assign") == 1 || str_eq(st.kind, "VarDecl") == 1
       v_name = st.target
       @if v_name != ""
@@ -930,7 +948,7 @@ import "compiler/frontend/ast/ast_node"
     st = statements[k]
     @if str_eq(st.kind, "FnDef") == 1 || str_eq(st.kind, "Function") == 1
       tc_check_function_body(tc, st)
-    @elif str_eq(st.kind, "StructDef") == 0
+    @elif str_eq(st.kind, "StructDef") == 0 && str_eq(st.kind, "EnumDef") == 0
       tc_check_statement(tc, st)
     @end
     k = k + 1

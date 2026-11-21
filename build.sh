@@ -61,6 +61,9 @@ else
         cp -f bin/aati bin/lipipkg
         chmod +x bin/haat bin/lipipkg
     fi
+    [ -x "bin/lipifmt" ] || (./bin/lipc src/tools/lipifmt.lp bin/lipifmt --kavach && chmod +x bin/lipifmt)
+    [ -x "bin/lipidoc" ] || (./bin/lipc src/tools/lipidoc.lp bin/lipidoc --kavach && chmod +x bin/lipidoc)
+    [ -x "bin/lipi_akhara" ] || (./bin/lipc src/tools/lipi_akhara.lp bin/lipi_akhara --kavach && chmod +x bin/lipi_akhara)
     [ -x "bin/lipi-build" ] || (./bin/lipc build.lp bin/lipi-build && chmod +x bin/lipi-build)
     [ -x "bin/lipi-test" ] || (./bin/lipc tests/run_tests.lp bin/lipi-test && chmod +x bin/lipi-test)
     echo "👑 100% Native LiPi Developer Toolchain Ready in bin/!"

@@ -1300,6 +1300,31 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_kavach_toolchain_dogfood.lp", "test_kavach_toolchain_dogfood") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_cross_target_deep_parity.lp", "test_cross_target_deep_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_compiler_hash_index_determinism.lp", "test_compiler_hash_index_determinism") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_aati_ide_and_p2p.lp", "test_aati_ide_and_p2p") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_aati_security_zero_trust.lp", "test_aati_security_zero_trust") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

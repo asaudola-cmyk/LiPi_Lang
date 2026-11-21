@@ -93,6 +93,7 @@ struct Arm64Synthesizer
     synth_needs_file_write  // Flag: 1 if file_write helper must be emitted
     synth_file_write_off    // Byte offset where file_write helper starts
     synth_in_function   // 1 if currently synthesizing inside a function, 0 if top-level
+    synth_try_patches   // Stack of lists of [patch_offset, kind] exception unwind patches (0=B, 1=B.NE)
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -120,6 +121,7 @@ fn arm64_synth_new
     s.synth_needs_file_write = 0
     s.synth_file_write_off = 0
     s.synth_in_function = 0
+    s.synth_try_patches = list()
     return s
 
 fn arm64_synth_emit_byte s byte_val

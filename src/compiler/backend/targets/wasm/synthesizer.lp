@@ -529,6 +529,318 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
         s.ws_loop_stack = pop(s.ws_loop_stack)
         return 0
 
+    // ── 6b. Struct Definition Skip (already pre-scanned in Phase 1) ─────────────
+    is_struct_stmt = 0
+    if k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT()
+        is_struct_stmt = 1
+    if k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct")
+        is_struct_stmt = 1
+
+    if is_struct_stmt == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        while get(pos_box, 0) < toks.len()
+            wasm_synth_skip_whitespace(toks, pos_box)
+            cp_s = get(pos_box, 0)
+            if cp_s >= toks.len()
+                break
+            ct_s = toks[cp_s]
+            ck_s = ct_s.tok_kind
+            cx_s = ct_s.tok_text
+            if ck_s == TOK_EOF()
+                break
+            if ck_s == TOK_KW_END() or ck_s == TOK_DIR_END() or (ck_s == TOK_IDENT() and (cx_s == "end" or cx_s == "শেষ" or cx_s == "@end"))
+                list_set(pos_box, 0, cp_s + 1)
+                break
+            if ck_s == TOK_KW_FN() or ck_s == TOK_DIR_FN() or ck_s == TOK_KW_STRUCT() or ck_s == TOK_DIR_STRUCT()
+                break
+            if ck_s == TOK_IDENT() and (cx_s == "fn" or cx_s == "কাজ" or cx_s == "@fn" or cx_s == "struct" or cx_s == "গঠন" or cx_s == "@struct")
+                break
+            if ct_s.tok_span.span_start_line > base_line and ct_s.tok_span.span_start_col <= base_col
+                break
+            list_set(pos_box, 0, cp_s + 1)
+        return 0
+
+    // ── 6c. Pattern Match: match / মিল / মেলাও / @match ────────────────────────
+    is_match = 0
+    if k == TOK_KW_MATCH() or k == TOK_DIR_MATCH() or (k == TOK_IDENT() and (txt == "match" or txt == "মিল" or txt == "মেলাও" or txt == "@match"))
+        if pos + 1 < toks.len()
+            mn_w = toks[pos + 1]
+            if mn_w.tok_kind != TOK_ASSIGN() and mn_w.tok_text != "=" and mn_w.tok_kind != TOK_PLUSEQ() and mn_w.tok_text != "+=" and mn_w.tok_kind != TOK_MINUSEQ() and mn_w.tok_text != "-=" and mn_w.tok_kind != TOK_STAREQ() and mn_w.tok_kind != TOK_SLASHEQ() and mn_w.tok_kind != TOK_PERCENTEQ() and mn_w.tok_kind != TOK_DOT() and mn_w.tok_text != "." and mn_w.tok_kind != TOK_LBRACKET() and mn_w.tok_text != "[" and mn_w.tok_kind != TOK_LPAREN() and mn_w.tok_text != "(" and mn_w.tok_kind != TOK_NEWLINE() and mn_w.tok_kind != TOK_SEMI()
+                is_match = 1
+
+    if is_match == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        l_mval = wasm_synth_alloc_local(s, "__wasi_match_" + str(pos))
+        wasm_synth_compile_expr(s, toks, pos_box)
+        wasm_emit_local_set(s.ws_code, l_mval)
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        wasm_synth_skip_whitespace(toks, pos_box)
+
+        opened_cases = 0
+        while get(pos_box, 0) < toks.len()
+            wasm_synth_skip_whitespace(toks, pos_box)
+            cp_m = get(pos_box, 0)
+            if cp_m >= toks.len()
+                break
+            ct_m = toks[cp_m]
+            ck_m = ct_m.tok_kind
+            cx_m = ct_m.tok_text
+            if ck_m == TOK_EOF() or ck_m == TOK_KW_END() or ck_m == TOK_DIR_END() or (ck_m == TOK_IDENT() and (cx_m == "end" or cx_m == "শেষ" or cx_m == "@end"))
+                break
+            if ct_m.tok_span.span_start_line > base_line and ct_m.tok_span.span_start_col <= base_col
+                break
+
+            arm_col = ct_m.tok_span.span_start_col
+            arm_line = ct_m.tok_span.span_start_line
+
+            if ck_m == TOK_KW_CASE() or (ck_m == TOK_IDENT() and (cx_m == "case" or cx_m == "ঘটনা" or cx_m == "ক্ষেত্র" or cx_m == "@case"))
+                list_set(pos_box, 0, cp_m + 1)
+
+            pat_p = get(pos_box, 0)
+            if pat_p >= toks.len()
+                break
+            pt_m = toks[pat_p]
+            pk_m = pt_m.tok_kind
+            px_m = pt_m.tok_text
+
+            is_default_arm = 0
+            if pk_m == TOK_KW_ELSE() or pk_m == TOK_DIR_ELSE() or (pk_m == TOK_IDENT() and (px_m == "_" or px_m == "default" or px_m == "else" or px_m == "নাহলে" or px_m == "অন্যথায়" or px_m == "@else"))
+                is_default_arm = 1
+                list_set(pos_box, 0, pat_p + 1)
+
+            if get(pos_box, 0) < toks.len()
+                sep_k = toks[get(pos_box, 0)].tok_kind
+                sep_txt = toks[get(pos_box, 0)].tok_text
+                if is_default_arm == 1 and (sep_k == TOK_FAT_ARROW() or sep_k == TOK_COLON() or sep_k == TOK_ARROW() or sep_txt == "=>" or sep_txt == ":" or sep_txt == "->")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+            if is_default_arm == 1
+                if opened_cases > 0
+                    wasm_emit_else(s.ws_code)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_COMMENT_LINE()
+                    bp_e1 = get(pos_box, 0)
+                    wasm_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) == bp_e1
+                        list_set(pos_box, 0, bp_e1 + 1)
+                else
+                    while get(pos_box, 0) < toks.len()
+                        wasm_synth_skip_whitespace(toks, pos_box)
+                        cp_e = get(pos_box, 0)
+                        if cp_e >= toks.len()
+                            break
+                        ct_e = toks[cp_e]
+                        ck_e = ct_e.tok_kind
+                        cx_e = ct_e.tok_text
+                        if ck_e == TOK_KW_END() or ck_e == TOK_DIR_END() or (ck_e == TOK_IDENT() and (cx_e == "end" or cx_e == "শেষ" or cx_e == "@end"))
+                            break
+                        if ct_e.tok_span.span_start_line > arm_line and ct_e.tok_span.span_start_col <= base_col
+                            break
+                        bp_e = get(pos_box, 0)
+                        wasm_synth_compile_statement(s, toks, pos_box)
+                        if get(pos_box, 0) == bp_e
+                            list_set(pos_box, 0, bp_e + 1)
+                break
+            else
+                if opened_cases > 0
+                    wasm_emit_else(s.ws_code)
+                wasm_emit_local_get(s.ws_code, l_mval)
+                wasm_synth_compile_expr(s, toks, pos_box)
+                if get(pos_box, 0) < toks.len()
+                    sep_k2 = toks[get(pos_box, 0)].tok_kind
+                    sep_t2 = toks[get(pos_box, 0)].tok_text
+                    if sep_k2 == TOK_FAT_ARROW() or sep_k2 == TOK_COLON() or sep_k2 == TOK_ARROW() or sep_t2 == "=>" or sep_t2 == ":" or sep_t2 == "->"
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                wasm_emit_i64_eq(s.ws_code)
+                wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                s.ws_block_depth = s.ws_block_depth + 1
+                opened_cases = opened_cases + 1
+
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_COMMENT_LINE()
+                    bp_c1 = get(pos_box, 0)
+                    wasm_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) == bp_c1
+                        list_set(pos_box, 0, bp_c1 + 1)
+                else
+                    while get(pos_box, 0) < toks.len()
+                        wasm_synth_skip_whitespace(toks, pos_box)
+                        cp_b = get(pos_box, 0)
+                        if cp_b >= toks.len()
+                            break
+                        ct_b = toks[cp_b]
+                        ck_b = ct_b.tok_kind
+                        cx_b = ct_b.tok_text
+                        if ck_b == TOK_KW_CASE() or ck_b == TOK_KW_ELSE() or ck_b == TOK_DIR_ELSE() or ck_b == TOK_KW_END() or ck_b == TOK_DIR_END()
+                            break
+                        if ck_b == TOK_IDENT() and (cx_b == "case" or cx_b == "ঘটনা" or cx_b == "ক্ষেত্র" or cx_b == "@case" or cx_b == "else" or cx_b == "নাহলে" or cx_b == "অন্যথায়" or cx_b == "_" or cx_b == "default" or cx_b == "@else" or cx_b == "end" or cx_b == "শেষ" or cx_b == "@end")
+                            break
+                        if ct_b.tok_span.span_start_line > arm_line and ct_b.tok_span.span_start_col <= arm_col
+                            break
+                        bp_c = get(pos_box, 0)
+                        wasm_synth_compile_statement(s, toks, pos_box)
+                        if get(pos_box, 0) == bp_c
+                            list_set(pos_box, 0, bp_c + 1)
+
+        while opened_cases > 0
+            wasm_emit_end(s.ws_code)
+            s.ws_block_depth = s.ws_block_depth - 1
+            opened_cases = opened_cases - 1
+
+        wasm_synth_skip_whitespace(toks, pos_box)
+        if get(pos_box, 0) < toks.len()
+            et_m = toks[get(pos_box, 0)]
+            if et_m.tok_kind == TOK_KW_END() or et_m.tok_kind == TOK_DIR_END() or (et_m.tok_kind == TOK_IDENT() and (et_m.tok_text == "end" or et_m.tok_text == "শেষ" or et_m.tok_text == "@end"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+        return 0
+
+    // ── 6d. Exception Handling: throw / নিক্ষেপ & try / চেষ্টা ... catch / ধরো ─
+    if k == TOK_IDENT() and (txt == "throw" or txt == "নিক্ষেপ" or txt == "@throw")
+        list_set(pos_box, 0, pos + 1)
+        l_tv = wasm_synth_alloc_local(s, "__wasi_throw_v")
+        wasm_synth_compile_expr(s, toks, pos_box)
+        wasm_emit_local_set(s.ws_code, l_tv)
+        wasm_emit_i32_const(s.ws_code, 112)
+        wasm_emit_local_get(s.ws_code, l_tv)
+        wasm_emit_i64_store(s.ws_code, 3, 0)
+        wasm_emit_i32_const(s.ws_code, 104)
+        wasm_emit_i64_const(s.ws_code, 1)
+        wasm_emit_i64_store(s.ws_code, 3, 0)
+        if s.ws_try_depths.len() > 0
+            t_depth = s.ws_try_depths[s.ws_try_depths.len() - 1]
+            wasm_emit_br(s.ws_code, s.ws_block_depth - t_depth)
+        elif s.ws_current_fn != 0 and s.ws_current_fn.wfn_name != "main" and s.ws_current_fn.wfn_name != "_start" and s.ws_current_fn.wfn_name != "মূল"
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_return(s.ws_code)
+        return 0
+
+    is_try = 0
+    if k == TOK_KW_TRY() or k == TOK_DIR_TRY()
+        is_try = 1
+    if k == TOK_IDENT() and (txt == "try" or txt == "চেষ্টা" or txt == "@try")
+        is_try = 1
+
+    if is_try == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+        // Reset exception flag before entering try block
+        wasm_emit_i32_const(s.ws_code, 104)
+        wasm_emit_i64_const(s.ws_code, 0)
+        wasm_emit_i64_store(s.ws_code, 3, 0)
+
+        wasm_emit_block(s.ws_code, WASM_TYPE_EMPTY)
+        s.ws_block_depth = s.ws_block_depth + 1
+        push(s.ws_try_depths, s.ws_block_depth)
+
+        while get(pos_box, 0) < toks.len()
+            wasm_synth_skip_whitespace(toks, pos_box)
+            cp_t = get(pos_box, 0)
+            if cp_t >= toks.len()
+                break
+            ct_t = toks[cp_t]
+            ck_t = ct_t.tok_kind
+            cx_t = ct_t.tok_text
+            if ck_t == TOK_EOF() or ck_t == TOK_KW_CATCH() or ck_t == TOK_DIR_CATCH() or ck_t == TOK_KW_END() or ck_t == TOK_DIR_END()
+                break
+            if ck_t == TOK_IDENT() and (cx_t == "catch" or cx_t == "ধরো" or cx_t == "@catch" or cx_t == "end" or cx_t == "শেষ" or cx_t == "@end")
+                break
+            if ct_t.tok_span.span_start_line > base_line and ct_t.tok_span.span_start_col <= base_col
+                break
+            bp_t = get(pos_box, 0)
+            wasm_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) == bp_t
+                list_set(pos_box, 0, bp_t + 1)
+
+        s.ws_try_depths = pop(s.ws_try_depths)
+        wasm_emit_end(s.ws_code)
+        s.ws_block_depth = s.ws_block_depth - 1
+
+        wasm_synth_skip_whitespace(toks, pos_box)
+        cp_c = get(pos_box, 0)
+        if cp_c < toks.len()
+            ct_c = toks[cp_c]
+            ck_c = ct_c.tok_kind
+            cx_c = ct_c.tok_text
+            is_catch = 0
+            if ck_c == TOK_KW_CATCH() or ck_c == TOK_DIR_CATCH()
+                is_catch = 1
+            if ck_c == TOK_IDENT() and (cx_c == "catch" or cx_c == "ধরো" or cx_c == "@catch")
+                is_catch = 1
+
+            if is_catch == 1
+                catch_line = ct_c.tok_span.span_start_line
+                list_set(pos_box, 0, cp_c + 1)
+                catch_var = ""
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() and toks[get(pos_box, 0)].tok_span.span_start_line == catch_line
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        catch_var = toks[get(pos_box, 0)].tok_text
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RPAREN()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT() and toks[get(pos_box, 0)].tok_span.span_start_line == catch_line
+                    catch_var = toks[get(pos_box, 0)].tok_text
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+                wasm_emit_i32_const(s.ws_code, 104)
+                wasm_emit_i64_load(s.ws_code, 3, 0)
+                wasm_emit_i64_const(s.ws_code, 0)
+                wasm_emit_i64_ne(s.ws_code)
+                wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                s.ws_block_depth = s.ws_block_depth + 1
+
+                // Clear active exception flag before running catch body
+                wasm_emit_i32_const(s.ws_code, 104)
+                wasm_emit_i64_const(s.ws_code, 0)
+                wasm_emit_i64_store(s.ws_code, 3, 0)
+
+                if catch_var != ""
+                    cv_idx = wasm_synth_alloc_local(s, catch_var)
+                    wasm_emit_i32_const(s.ws_code, 112)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                    wasm_emit_local_set(s.ws_code, cv_idx)
+
+                while get(pos_box, 0) < toks.len()
+                    wasm_synth_skip_whitespace(toks, pos_box)
+                    cp_cb = get(pos_box, 0)
+                    if cp_cb >= toks.len()
+                        break
+                    ct_cb = toks[cp_cb]
+                    ck_cb = ct_cb.tok_kind
+                    cx_cb = ct_cb.tok_text
+                    if ck_cb == TOK_EOF() or ck_cb == TOK_KW_END() or ck_cb == TOK_DIR_END()
+                        break
+                    if ck_cb == TOK_IDENT() and (cx_cb == "end" or cx_cb == "শেষ" or cx_cb == "@end")
+                        break
+                    if ct_cb.tok_span.span_start_line > catch_line and ct_cb.tok_span.span_start_col <= base_col
+                        break
+                    bp_cb = get(pos_box, 0)
+                    wasm_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) == bp_cb
+                        list_set(pos_box, 0, bp_cb + 1)
+
+                wasm_emit_end(s.ws_code)
+                s.ws_block_depth = s.ws_block_depth - 1
+
+        wasm_synth_skip_whitespace(toks, pos_box)
+        if get(pos_box, 0) < toks.len()
+            et_t = toks[get(pos_box, 0)]
+            if et_t.tok_kind == TOK_KW_END() or et_t.tok_kind == TOK_DIR_END() or (et_t.tok_kind == TOK_IDENT() and (et_t.tok_text == "end" or et_t.tok_text == "শেষ" or et_t.tok_text == "@end"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+        return 0
+
     // ── 7. Variable Declarations: let / var / চলক / ধরি ──────────────────────
     is_let = 0
     if k == TOK_KW_LET() or (k == TOK_IDENT() and (txt == "let" or txt == "var" or txt == "ধরি" or txt == "চলক" or txt == "@let"))
@@ -549,8 +861,31 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 wasm_emit_local_set(s.ws_code, var_idx)
         return 0
 
-    // ── 8. Variable Assignment: <var> = <expr> or <var> <op>= <expr> ───────────
+    // ── 8. Struct Field & Variable Assignment: obj.field = expr / x = expr ────
     if k == TOK_IDENT()
+        // Check obj.field = expr (with arbitrary chained a.b.c = expr support)
+        if pos + 3 < toks.len() and (toks[pos + 1].tok_kind == TOK_DOT() or toks[pos + 1].tok_text == ".") and toks[pos + 2].tok_kind == TOK_IDENT()
+            scan_f = pos + 1
+            fnames = list()
+            while scan_f + 1 < toks.len() and (toks[scan_f].tok_kind == TOK_DOT() or toks[scan_f].tok_text == ".") and toks[scan_f + 1].tok_kind == TOK_IDENT()
+                push(fnames, toks[scan_f + 1].tok_text)
+                scan_f = scan_f + 2
+            if fnames.len() > 0 and scan_f < toks.len() and (toks[scan_f].tok_kind == TOK_ASSIGN() or toks[scan_f].tok_text == "=")
+                obj_idx = wasm_synth_alloc_local(s, txt)
+                wasm_emit_local_get(s.ws_code, obj_idx)
+                fi_m = 0
+                while fi_m < fnames.len() - 1
+                    mid_off = wasm_synth_get_field_offset(s, fnames[fi_m])
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, mid_off)
+                    fi_m = fi_m + 1
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                last_off = wasm_synth_get_field_offset(s, fnames[fnames.len() - 1])
+                list_set(pos_box, 0, scan_f + 1)
+                wasm_synth_compile_expr(s, toks, pos_box)
+                wasm_emit_i64_store(s.ws_code, 3, last_off)
+                return 0
+
         next_pos = pos + 1
         if next_pos < toks.len()
             nt = toks[next_pos]
@@ -669,6 +1004,44 @@ fn wasm_synth_compile_program tokens
                 entry = [fn_name, param_names, scan_p]
                 push(fn_headers, entry)
                 scan_p = pp
+        elif tk == TOK_KW_STRUCT() or tk == TOK_DIR_STRUCT() or (tk == TOK_IDENT() and (ttxt == "struct" or ttxt == "গঠন" or ttxt == "@struct"))
+            base_col_s = tok.tok_span.span_start_col
+            hdr_line_s = tok.tok_span.span_start_line
+            sp = scan_p + 1
+            if sp < toks.len() and toks[sp].tok_kind == TOK_IDENT()
+                sname = toks[sp].tok_text
+                sp = sp + 1
+                s_fields = list()
+                while sp < toks.len()
+                    st_f = toks[sp]
+                    sk_f = st_f.tok_kind
+                    stxt_f = st_f.tok_text
+                    if sk_f == TOK_EOF()
+                        break
+                    if sk_f == TOK_NEWLINE() or sk_f == TOK_SEMI() or sk_f == TOK_COMMENT_DOC() or sk_f == TOK_COMMENT_LINE() or sk_f == TOK_COMMENT_BLOCK()
+                        sp = sp + 1
+                    elif sk_f == TOK_KW_END() or sk_f == TOK_DIR_END() or (sk_f == TOK_IDENT() and (stxt_f == "end" or stxt_f == "@end" or stxt_f == "শেষ"))
+                        sp = sp + 1
+                        break
+                    elif sk_f == TOK_KW_FN() or sk_f == TOK_DIR_FN() or sk_f == TOK_KW_STRUCT() or sk_f == TOK_DIR_STRUCT() or (sk_f == TOK_IDENT() and (stxt_f == "fn" or stxt_f == "কাজ" or stxt_f == "@fn" or stxt_f == "struct" or stxt_f == "গঠন" or stxt_f == "@struct"))
+                        break
+                    elif st_f.tok_span.span_start_line > hdr_line_s and st_f.tok_span.span_start_col <= base_col_s
+                        break
+                    elif sk_f == TOK_IDENT()
+                        push(s_fields, stxt_f)
+                        sp = sp + 1
+                        if sp < toks.len() and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
+                            sp = sp + 1
+                            if sp < toks.len() and toks[sp].tok_kind == TOK_IDENT()
+                                sp = sp + 1
+                    else
+                        sp = sp + 1
+                if wasm_synth_find_struct(s, sname) == 0
+                    sdef_new = WasmStructDef()
+                    sdef_new.wsd_name = sname
+                    sdef_new.wsd_fields = s_fields
+                    push(s.ws_structs, sdef_new)
+                scan_p = sp - 1
         else
             if tk == TOK_KW_PRINT() or (tk == TOK_IDENT() and (ttxt == "say" or ttxt == "বলো" or ttxt == "print" or ttxt == "println" or ttxt == "show" or ttxt == "দেখাও"))
                 s.ws_needs_wasi_print = 1
@@ -704,6 +1077,7 @@ fn wasm_synth_compile_program tokens
     s.ws_current_fn = main_fn
     s.ws_code = main_fn.wfn_code
     s.ws_block_depth = 0
+    s.ws_try_depths = list()
 
     while get(pos_box, 0) < toks.len()
         cur_p = get(pos_box, 0)
@@ -748,9 +1122,11 @@ fn wasm_synth_compile_program tokens
 
             target_fn = wasm_synth_find_function(s, fn_name)
             if target_fn != 0
+                saved_ws_try_depths = s.ws_try_depths
                 s.ws_current_fn = target_fn
                 s.ws_code = target_fn.wfn_code
                 s.ws_block_depth = 0
+                s.ws_try_depths = list()
 
                 // Compile function body until explicit end marker, next function, dedent, or EOF
                 while get(pos_box, 0) < toks.len()
@@ -788,6 +1164,7 @@ fn wasm_synth_compile_program tokens
                 s.ws_current_fn = main_fn
                 s.ws_code = main_fn.wfn_code
                 s.ws_block_depth = 0
+                s.ws_try_depths = saved_ws_try_depths
         else
             // Compile top-level statement into main function
             b_p = get(pos_box, 0)

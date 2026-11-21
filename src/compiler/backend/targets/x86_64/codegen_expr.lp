@@ -297,13 +297,8 @@ fn x86_synth_expr_primary s toks pos_box
             tname = toks[np_a].tok_text
             list_set(pos_box, 0, np_a + 1)
             is_reg_fn = 0
-            fi = 0
-            while fi < s.synth_functions.len()
-                if s.synth_functions[fi].fn_name == tname
-                    is_reg_fn = 1
-                    break
-                end
-                fi = fi + 1
+            if x86_synth_find_fn_first(s, tname) != 0
+                is_reg_fn = 1
             end
             lv_amp = x86_synth_find_local_var(s, tname)
             if is_reg_fn == 1 or lv_amp == 0
@@ -935,12 +930,8 @@ fn x86_synth_expr_primary s toks pos_box
                     else
                         // Check if var_name is a registered zero-arg constant function
                         is_fn_const = 0
-                        fi = 0
-                        while fi < s.synth_functions.len()
-                            if s.synth_functions[fi].fn_name == var_name
-                                is_fn_const = 1
-                                break
-                            fi = fi + 1
+                        if x86_synth_find_fn_first(s, var_name) != 0
+                            is_fn_const = 1
                         end
                         if is_fn_const == 1
                             // Check for parenthesis-less argument on the same line (e.g. say bench_loop 10000000)

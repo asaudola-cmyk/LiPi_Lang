@@ -71,7 +71,10 @@ fn arm64_synth_compile_program tokens
     s = arm64_synth_new()
 
     // 1. Emit top-level stack frame prologue at entry point (offset 0)
+    // and clear callee-saved exception state registers (X27=flag, X28=value).
     arm64_emit_prologue(s)
+    arm64_emit_movz_x(s, 27, 0, 0)
+    arm64_emit_movz_x(s, 28, 0, 0)
 
     // 2. Synthesize all functions, structs, and statements
     pos_box = [0]

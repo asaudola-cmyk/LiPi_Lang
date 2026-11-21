@@ -2,9 +2,9 @@ name: Lipi Sovereign Native CI
 
 # WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
 # CI verifies standalone Stage-1->2->3 Static-PIE deterministic bootstrap, W^X (0 RWE)
-# audit across all bin/* tools, 245 regression tests, 31/31 aati verify & aati.lock,
-# Node V8 WebAssembly execution, Shared .so (ctypes) + -g DWARF, Mach-O LC_CODE_SIGNATURE
-# validation, and native Windows PE32+ (.exe) & macOS Mach-O artifact validation.
+# audit across all bin/* tools, 255 regression tests, 31/31 aati verify & aati.lock,
+# --kavach toolchain dogfooding, Node V8 WebAssembly execution, Shared .so (ctypes) + -g DWARF,
+# Mach-O LC_CODE_SIGNATURE validation, and native Windows PE32+ (.exe) & macOS Mach-O validation.
 
 on:
   push:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi Static-PIE Bootstrap, W^X Audit & 245-Test Suite (Ubuntu)"
+    name: "Lipi Static-PIE Bootstrap, W^X Audit & 255-Test Suite (Ubuntu)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -51,9 +51,18 @@ jobs:
             test "$rwe" = "0"
           done
 
-      - name: Run Full 245-Test Sovereign Regression Suite (0% Shell)
+      - name: Run Full 255-Test Sovereign Regression Suite (0% Shell)
         run: |
           ./bin/lipi test
+
+      - name: Verify Kavach Toolchain Dogfooding, Akhara Selftest & Bench Quick
+        run: |
+          ./bin/lipc src/tools/lipidoc.lp -o /tmp/ci_kv_doc --kavach
+          ./bin/lipc src/tools/lipifmt.lp -o /tmp/ci_kv_fmt --kavach
+          ./bin/lipc src/tools/lipi_akhara.lp -o /tmp/ci_kv_akh --kavach
+          rm -f /tmp/ci_kv_doc /tmp/ci_kv_fmt /tmp/ci_kv_akh
+          ./bin/lipi akhara --selftest
+          ./bin/lipi bench --quick
 
       - name: Verify Strict Ownership & Memory Conservation Enforcement
         run: |
@@ -218,4 +227,5 @@ jobs:
           ./install.sh
           "$HOME/.local/bin/lipi" version
           "$HOME/.local/bin/lipc" --version
+          "$HOME/.local/bin/lipi_akhara" --selftest
           echo "Fresh install test passed successfully!"

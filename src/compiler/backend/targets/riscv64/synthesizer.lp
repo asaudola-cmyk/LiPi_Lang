@@ -71,7 +71,10 @@ fn riscv64_synth_compile_program tokens
     s = riscv64_synth_new()
 
     // 1. Emit top-level stack frame prologue at entry point (offset 0)
+    // and clear callee-saved exception state registers (x26=s10 flag, x27=s11 value).
     riscv64_emit_prologue(s)
+    riscv64_emit_addi(s, 26, 0, 0)
+    riscv64_emit_addi(s, 27, 0, 0)
 
     // 2. Synthesize all functions, structs, and statements
     pos_box = [0]

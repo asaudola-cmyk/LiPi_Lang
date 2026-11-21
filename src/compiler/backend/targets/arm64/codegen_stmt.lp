@@ -582,6 +582,287 @@ fn arm64_synth_compile_statement s toks pos_box
         s.synth_loop_breaks = pop(s.synth_loop_breaks)
         return 0
 
+    // ── 8b. Pattern Match: match / মিল / মেলাও / @match ────────────────────────
+    is_match = 0
+    if k == TOK_KW_MATCH() or k == TOK_DIR_MATCH() or (k == TOK_IDENT() and (txt == "match" or txt == "মিল" or txt == "মেলাও" or txt == "@match"))
+        if pos + 1 < toks.len()
+            mn_a = toks[pos + 1]
+            if mn_a.tok_kind != TOK_ASSIGN() and mn_a.tok_text != "=" and mn_a.tok_kind != TOK_PLUSEQ() and mn_a.tok_text != "+=" and mn_a.tok_kind != TOK_MINUSEQ() and mn_a.tok_text != "-=" and mn_a.tok_kind != TOK_STAREQ() and mn_a.tok_kind != TOK_SLASHEQ() and mn_a.tok_kind != TOK_PERCENTEQ() and mn_a.tok_kind != TOK_DOT() and mn_a.tok_text != "." and mn_a.tok_kind != TOK_LBRACKET() and mn_a.tok_text != "[" and mn_a.tok_kind != TOK_LPAREN() and mn_a.tok_text != "(" and mn_a.tok_kind != TOK_NEWLINE() and mn_a.tok_kind != TOK_SEMI()
+                is_match = 1
+
+    if is_match == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+
+        arm64_synth_compile_expr(s, toks, pos_box)
+        m_off = arm64_synth_alloc_var(s, "__arm64_match_" + str(pos))
+        arm64_emit_str_reg_sp(s, 0, m_off)
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        arm64_synth_skip_whitespace_tokens(toks, pos_box)
+
+        end_patches = list()
+        while get(pos_box, 0) < toks.len()
+            arm64_synth_skip_whitespace_tokens(toks, pos_box)
+            cp_m = get(pos_box, 0)
+            if cp_m >= toks.len()
+                break
+            ct_m = toks[cp_m]
+            ck_m = ct_m.tok_kind
+            cx_m = ct_m.tok_text
+            if ck_m == TOK_EOF() or ck_m == TOK_KW_END() or ck_m == TOK_DIR_END() or (ck_m == TOK_IDENT() and (cx_m == "end" or cx_m == "শেষ" or cx_m == "@end"))
+                break
+            if ct_m.tok_span.span_start_line > base_line and ct_m.tok_span.span_start_col <= base_col
+                break
+
+            arm_col = ct_m.tok_span.span_start_col
+            arm_line = ct_m.tok_span.span_start_line
+
+            if ck_m == TOK_KW_CASE() or (ck_m == TOK_IDENT() and (cx_m == "case" or cx_m == "ঘটনা" or cx_m == "ক্ষেত্র" or cx_m == "@case"))
+                list_set(pos_box, 0, cp_m + 1)
+
+            pat_p = get(pos_box, 0)
+            if pat_p >= toks.len()
+                break
+            pt_m = toks[pat_p]
+            pk_m = pt_m.tok_kind
+            px_m = pt_m.tok_text
+
+            is_default_arm = 0
+            if pk_m == TOK_KW_ELSE() or pk_m == TOK_DIR_ELSE() or (pk_m == TOK_IDENT() and (px_m == "_" or px_m == "default" or px_m == "else" or px_m == "নাহলে" or px_m == "অন্যথায়" or px_m == "@else"))
+                is_default_arm = 1
+                list_set(pos_box, 0, pat_p + 1)
+
+            if get(pos_box, 0) < toks.len() and is_default_arm == 1
+                sep_k = toks[get(pos_box, 0)].tok_kind
+                sep_txt = toks[get(pos_box, 0)].tok_text
+                if sep_k == TOK_FAT_ARROW() or sep_k == TOK_COLON() or sep_k == TOK_ARROW() or sep_txt == "=>" or sep_txt == ":" or sep_txt == "->"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+            if is_default_arm == 1
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_COMMENT_LINE()
+                    bp_e1 = get(pos_box, 0)
+                    arm64_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) == bp_e1
+                        list_set(pos_box, 0, bp_e1 + 1)
+                else
+                    while get(pos_box, 0) < toks.len()
+                        arm64_synth_skip_whitespace_tokens(toks, pos_box)
+                        cp_e = get(pos_box, 0)
+                        if cp_e >= toks.len()
+                            break
+                        ct_e = toks[cp_e]
+                        ck_e = ct_e.tok_kind
+                        cx_e = ct_e.tok_text
+                        if ck_e == TOK_KW_END() or ck_e == TOK_DIR_END() or (ck_e == TOK_IDENT() and (cx_e == "end" or cx_e == "শেষ" or cx_e == "@end"))
+                            break
+                        if ct_e.tok_span.span_start_line > arm_line and ct_e.tok_span.span_start_col <= base_col
+                            break
+                        bp_e = get(pos_box, 0)
+                        arm64_synth_compile_statement(s, toks, pos_box)
+                        if get(pos_box, 0) == bp_e
+                            list_set(pos_box, 0, bp_e + 1)
+                break
+            else
+                arm64_synth_compile_expr(s, toks, pos_box)
+                if get(pos_box, 0) < toks.len()
+                    sep_k2 = toks[get(pos_box, 0)].tok_kind
+                    sep_t2 = toks[get(pos_box, 0)].tok_text
+                    if sep_k2 == TOK_FAT_ARROW() or sep_k2 == TOK_COLON() or sep_k2 == TOK_ARROW() or sep_t2 == "=>" or sep_t2 == ":" or sep_t2 == "->"
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                arm64_emit_ldr_reg_sp(s, 1, m_off)
+                arm64_emit_cmp_x(s, 1, 0)
+                patch_miss = s.synth_code.len()
+                arm64_emit_b_cond(s, 1, 0) // b.ne miss
+
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_COMMENT_LINE()
+                    bp_c1 = get(pos_box, 0)
+                    arm64_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) == bp_c1
+                        list_set(pos_box, 0, bp_c1 + 1)
+                else
+                    while get(pos_box, 0) < toks.len()
+                        arm64_synth_skip_whitespace_tokens(toks, pos_box)
+                        cp_b = get(pos_box, 0)
+                        if cp_b >= toks.len()
+                            break
+                        ct_b = toks[cp_b]
+                        ck_b = ct_b.tok_kind
+                        cx_b = ct_b.tok_text
+                        if ck_b == TOK_KW_CASE() or ck_b == TOK_KW_ELSE() or ck_b == TOK_DIR_ELSE() or ck_b == TOK_KW_END() or ck_b == TOK_DIR_END()
+                            break
+                        if ck_b == TOK_IDENT() and (cx_b == "case" or cx_b == "ঘটনা" or cx_b == "ক্ষেত্র" or cx_b == "@case" or cx_b == "else" or cx_b == "নাহলে" or cx_b == "অন্যথায়" or cx_b == "_" or cx_b == "default" or cx_b == "@else" or cx_b == "end" or cx_b == "শেষ" or cx_b == "@end")
+                            break
+                        if ct_b.tok_span.span_start_line > arm_line and ct_b.tok_span.span_start_col <= arm_col
+                            break
+                        bp_c = get(pos_box, 0)
+                        arm64_synth_compile_statement(s, toks, pos_box)
+                        if get(pos_box, 0) == bp_c
+                            list_set(pos_box, 0, bp_c + 1)
+
+                jmp_end = s.synth_code.len()
+                arm64_emit_b(s, 0)
+                push(end_patches, jmp_end)
+
+                miss_off = s.synth_code.len()
+                miss_words = (miss_off - patch_miss) / 4
+                arm64_synth_patch_u32(s, patch_miss, 1409286144 | ((miss_words & 524287) << 5) | 1)
+
+        end_off = s.synth_code.len()
+        ei = 0
+        while ei < end_patches.len()
+            ep = end_patches[ei]
+            ew = (end_off - ep) / 4
+            arm64_synth_patch_u32(s, ep, 335544320 | (ew & 67108863))
+            ei = ei + 1
+
+        arm64_synth_skip_whitespace_tokens(toks, pos_box)
+        if get(pos_box, 0) < toks.len()
+            et_m = toks[get(pos_box, 0)]
+            if et_m.tok_kind == TOK_KW_END() or et_m.tok_kind == TOK_DIR_END() or (et_m.tok_kind == TOK_IDENT() and (et_m.tok_text == "end" or et_m.tok_text == "শেষ" or et_m.tok_text == "@end"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+        return 0
+
+    // ── 8c. Exception Handling: throw / নিক্ষেপ & try / চেষ্টা ... catch / ধরো ─
+    if k == TOK_IDENT() and (txt == "throw" or txt == "নিক্ষেপ" or txt == "@throw")
+        list_set(pos_box, 0, pos + 1)
+        arm64_synth_compile_expr(s, toks, pos_box)
+        arm64_emit_mov_reg(s, 28, 0)
+        arm64_emit_movz_x(s, 27, 1, 0)
+        if s.synth_try_patches.len() > 0
+            p_off = s.synth_code.len()
+            arm64_emit_b(s, 0)
+            active_tp = s.synth_try_patches[s.synth_try_patches.len() - 1]
+            push(active_tp, [p_off, 0])
+        elif s.synth_in_function == 1
+            arm64_emit_epilogue(s)
+        return 0
+
+    is_try = 0
+    if k == TOK_KW_TRY() or k == TOK_DIR_TRY()
+        is_try = 1
+    if k == TOK_IDENT() and (txt == "try" or txt == "চেষ্টা" or txt == "@try")
+        is_try = 1
+
+    if is_try == 1
+        base_col = t.tok_span.span_start_col
+        base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+        // Reset X27 exception flag before entering try block
+        arm64_emit_movz_x(s, 27, 0, 0)
+        tp_list = list()
+        push(s.synth_try_patches, tp_list)
+
+        while get(pos_box, 0) < toks.len()
+            arm64_synth_skip_whitespace_tokens(toks, pos_box)
+            cp_t = get(pos_box, 0)
+            if cp_t >= toks.len()
+                break
+            ct_t = toks[cp_t]
+            ck_t = ct_t.tok_kind
+            cx_t = ct_t.tok_text
+            if ck_t == TOK_EOF() or ck_t == TOK_KW_CATCH() or ck_t == TOK_DIR_CATCH() or ck_t == TOK_KW_END() or ck_t == TOK_DIR_END()
+                break
+            if ck_t == TOK_IDENT() and (cx_t == "catch" or cx_t == "ধরো" or cx_t == "@catch" or cx_t == "end" or cx_t == "শেষ" or cx_t == "@end")
+                break
+            if ct_t.tok_span.span_start_line > base_line and ct_t.tok_span.span_start_col <= base_col
+                break
+            bp_t = get(pos_box, 0)
+            arm64_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) == bp_t
+                list_set(pos_box, 0, bp_t + 1)
+
+        cur_tp = s.synth_try_patches[s.synth_try_patches.len() - 1]
+        s.synth_try_patches = pop(s.synth_try_patches)
+
+        jmp_after_catch = s.synth_code.len()
+        arm64_emit_b(s, 0)
+
+        catch_entry_off = s.synth_code.len()
+        tpi = 0
+        while tpi < cur_tp.len()
+            p_item = cur_tp[tpi]
+            p_off = p_item[0]
+            p_kind = p_item[1]
+            rel_w = (catch_entry_off - p_off) / 4
+            if p_kind == 0
+                arm64_synth_patch_u32(s, p_off, 335544320 | (rel_w & 67108863))
+            else
+                arm64_synth_patch_u32(s, p_off, 1409286144 | ((rel_w & 524287) << 5) | 1)
+            tpi = tpi + 1
+
+        // Restore SP = X29 - 2048 so mid-expression unwinds keep stack slot layout intact, then clear X27
+        arm64_synth_emit32(s, 3508536255)
+        arm64_emit_movz_x(s, 27, 0, 0)
+
+        arm64_synth_skip_whitespace_tokens(toks, pos_box)
+        cp_c = get(pos_box, 0)
+        if cp_c < toks.len()
+            ct_c = toks[cp_c]
+            ck_c = ct_c.tok_kind
+            cx_c = ct_c.tok_text
+            is_catch = 0
+            if ck_c == TOK_KW_CATCH() or ck_c == TOK_DIR_CATCH()
+                is_catch = 1
+            if ck_c == TOK_IDENT() and (cx_c == "catch" or cx_c == "ধরো" or cx_c == "@catch")
+                is_catch = 1
+
+            if is_catch == 1
+                catch_line = ct_c.tok_span.span_start_line
+                list_set(pos_box, 0, cp_c + 1)
+                catch_var = ""
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() and toks[get(pos_box, 0)].tok_span.span_start_line == catch_line
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        catch_var = toks[get(pos_box, 0)].tok_text
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RPAREN()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT() and toks[get(pos_box, 0)].tok_span.span_start_line == catch_line
+                    catch_var = toks[get(pos_box, 0)].tok_text
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+                if catch_var != ""
+                    cv_off = arm64_synth_alloc_var(s, catch_var)
+                    arm64_emit_str_reg_sp(s, 28, cv_off)
+
+                while get(pos_box, 0) < toks.len()
+                    arm64_synth_skip_whitespace_tokens(toks, pos_box)
+                    cp_cb = get(pos_box, 0)
+                    if cp_cb >= toks.len()
+                        break
+                    ct_cb = toks[cp_cb]
+                    ck_cb = ct_cb.tok_kind
+                    cx_cb = ct_cb.tok_text
+                    if ck_cb == TOK_EOF() or ck_cb == TOK_KW_END() or ck_cb == TOK_DIR_END()
+                        break
+                    if ck_cb == TOK_IDENT() and (cx_cb == "end" or cx_cb == "শেষ" or cx_cb == "@end")
+                        break
+                    if ct_cb.tok_span.span_start_line > catch_line and ct_cb.tok_span.span_start_col <= base_col
+                        break
+                    bp_cb = get(pos_box, 0)
+                    arm64_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) == bp_cb
+                        list_set(pos_box, 0, bp_cb + 1)
+
+        after_catch_off = s.synth_code.len()
+        ac_words = (after_catch_off - jmp_after_catch) / 4
+        arm64_synth_patch_u32(s, jmp_after_catch, 335544320 | (ac_words & 67108863))
+
+        arm64_synth_skip_whitespace_tokens(toks, pos_box)
+        if get(pos_box, 0) < toks.len()
+            et_t = toks[get(pos_box, 0)]
+            if et_t.tok_kind == TOK_KW_END() or et_t.tok_kind == TOK_DIR_END() or (et_t.tok_kind == TOK_IDENT() and (et_t.tok_text == "end" or et_t.tok_text == "শেষ" or et_t.tok_text == "@end"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+        return 0
+
     // ── 9. Variable Declaration: let / চলক / ধরি / var ─────────────────────────
     is_let = 0
     if k == TOK_KW_LET()
@@ -642,9 +923,11 @@ fn arm64_synth_compile_statement s toks pos_box
         push(s.synth_functions, fn_entry)
 
         // Reset frame locals
+        saved_arm_try_patches = s.synth_try_patches
         s.synth_locals = list()
         s.synth_stack_offset = 16
         s.synth_in_function = 1
+        s.synth_try_patches = list()
 
         // Parse parameter names until newline or return arrow
         params = list()
@@ -725,6 +1008,7 @@ fn arm64_synth_compile_statement s toks pos_box
         arm64_emit_movz_x(s, 0, 0, 0)
         arm64_emit_epilogue(s)
         s.synth_in_function = 0
+        s.synth_try_patches = saved_arm_try_patches
 
         // Patch jump to bypass function body during top-level execution
         after_fn_offset = s.synth_code.len()

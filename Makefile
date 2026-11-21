@@ -42,7 +42,8 @@ bootstrap:
 build: bootstrap
 	@echo "🔨 Building core developer toolchain..."
 	@mkdir -p dist
-	@if [ -d editors/vscode ] && [ ! -f dist/lipi-language-1.0.0.vsix ] && command -v zip >/dev/null 2>&1; then \
+	@if [ -d editors/vscode ] && command -v zip >/dev/null 2>&1; then \
+		rm -f dist/lipi-language-1.0.0.vsix && \
 		(cd editors/vscode && zip -rq ../../dist/lipi-language-1.0.0.vsix . >/dev/null 2>&1 || true); \
 	fi
 	@./bin/lipc src/tools/lipi.lp bin/lipi && chmod +x bin/lipi
@@ -50,12 +51,14 @@ build: bootstrap
 	@cp -f bin/aati bin/haat && chmod +x bin/haat
 	@cp -f bin/aati bin/lipipkg && chmod +x bin/lipipkg
 	@./bin/lipc src/tools/lipilsp.lp bin/lipilsp && chmod +x bin/lipilsp
+	@cp -f bin/lipilsp bin/lipils && chmod +x bin/lipils
 	@./bin/lipc src/tools/lipidbg.lp bin/lipidbg && chmod +x bin/lipidbg
-	@./bin/lipc src/tools/lipifmt.lp bin/lipifmt && chmod +x bin/lipifmt
+	@./bin/lipc src/tools/lipifmt.lp bin/lipifmt --kavach && chmod +x bin/lipifmt
 	@./bin/lipc src/tools/lipiconvert.lp bin/lipiconvert && chmod +x bin/lipiconvert
-	@./bin/lipc src/tools/lipidoc.lp bin/lipidoc && chmod +x bin/lipidoc
+	@./bin/lipc src/tools/lipidoc.lp bin/lipidoc --kavach && chmod +x bin/lipidoc
 	@./bin/lipc src/tools/lipirepl.lp bin/lipirepl && chmod +x bin/lipirepl
 	@./bin/lipc src/tools/lipiassimilate.lp bin/lipiassimilate && chmod +x bin/lipiassimilate
+	@./bin/lipc src/tools/lipi_akhara.lp bin/lipi_akhara --kavach && chmod +x bin/lipi_akhara
 	@./bin/lipc src/tools/lipi_unikernel_boot.lp bin/lipi_unikernel_boot && chmod +x bin/lipi_unikernel_boot
 	@./bin/lipc build.lp bin/lipi-build && chmod +x bin/lipi-build
 	@./bin/lipc tests/run_tests.lp bin/lipi-test && chmod +x bin/lipi-test
@@ -84,9 +87,9 @@ release: build unikernel windows
 	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
 	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
-# Run autonomous 245 regression test suite
+# Run autonomous 255 regression test suite
 test: bootstrap
-	@echo "🧪 Running full 245 regression test suite..."
+	@echo "🧪 Running full 255 regression test suite..."
 	@if [ -x bin/lipi ]; then \
 		./bin/lipi test; \
 	elif [ -x bin/lipi-test ]; then \

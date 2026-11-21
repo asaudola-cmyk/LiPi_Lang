@@ -81,120 +81,61 @@ fn akhara_read_u64_le buf off
     hi = akhara_read_u32_le(buf, off + 4)
     return lo + hi * 4294967296
 
-// WHY: Reads monotonic clock in microseconds using direct kernel clock_gettime (SYS_clock_gettime=228, CLOCK_MONOTONIC=1).
-fn akhara_now_us
-    ts = malloc(16)
-    rc = syscall(228, 1, ts, 0, 0, 0, 0)
-    if rc < 0
-        free(ts, 16)
-        return 0
-    sec = mem_read(ts, 0)
-    nsec = mem_read(ts, 8)
-    free(ts, 16)
-    return sec * 1000000 + nsec / 1000
+// ── Sovereign Silicon Hardware Boundary (--kavach Crowned Layer) ───────────────
+// WHY: Under --kavach, only silicon_* functions touch raw kernel syscalls or pointer writes.
+fn silicon_alloc_raw size
+    return syscall(9, 0, size, 3, 34, -1, 0)
 
-fn akhara_get_env target_key
-    data = file_read("/proc/self/environ")
-    if len(data) == 0
-        return ""
-    // /proc/self/environ is NUL-delimited; read raw bytes instead so NUL separators remain visible.
-    buf = malloc(16384)
-    fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
-    if fd < 0
-        free(buf, 16384)
-        return ""
-    n = syscall(0, fd, buf, 16383, 0, 0, 0)
-    syscall(3, fd, 0, 0, 0, 0, 0)
-    if n <= 0
-        free(buf, 16384)
-        return ""
-    klen = len(target_key)
-    i = 0
-    while i < n
-        // Check match for "KEY="
-        matched = 1
-        if i + klen + 1 >= n
-            matched = 0
-        else
-            j = 0
-            while j < klen
-                if mem_byte_read(buf, i + j) != ord(char_at(target_key, j))
-                    matched = 0
-                    break
-                j = j + 1
-            if matched == 1 and mem_byte_read(buf, i + klen) != 61
-                matched = 0
-        if matched == 1
-            val = ""
-            p = i + klen + 1
-            while p < n
-                b = mem_byte_read(buf, p)
-                if b == 0
-                    break
-                val = val + chr(b)
-                p = p + 1
-            free(buf, 16384)
-            return val
-        while i < n and mem_byte_read(buf, i) != 0
-            i = i + 1
-        i = i + 1
-    free(buf, 16384)
-    return ""
+fn silicon_free_raw ptr size
+    return syscall(11, ptr, size, 0, 0, 0, 0)
 
-fn akhara_resolve_compiler
-    l_home = akhara_get_env("LIPI_HOME")
-    if len(l_home) > 0
-        c0 = l_home + "/bin/lipc"
-        if syscall(21, c0, 0, 0, 0, 0, 0) == 0
-            return c0
-    if syscall(21, "bin/lipc", 0, 0, 0, 0, 0) == 0
-        return "bin/lipc"
-    if syscall(21, "bin/lipc_bin", 0, 0, 0, 0, 0) == 0
-        return "bin/lipc_bin"
-    // Check sibling binaries next to /proc/self/exe (covers standalone execution from bin/ or ~/.local/bin)
-    exe_buf = malloc(512)
-    n = syscall(89, "/proc/self/exe", exe_buf, 511, 0, 0, 0)
+fn silicon_open_ro path
+    return syscall(2, path, 0, 0, 0, 0, 0)
+
+fn silicon_open_trunc path
+    return syscall(2, path, 577, 420, 0, 0, 0)
+
+fn silicon_read_fd fd buf cap
+    return syscall(0, fd, buf, cap, 0, 0, 0)
+
+fn silicon_write_fd fd buf cnt
+    return syscall(1, fd, buf, cnt, 0, 0, 0)
+
+fn silicon_close_fd fd
+    return syscall(3, fd, 0, 0, 0, 0, 0)
+
+fn silicon_unlink path
+    return syscall(87, path, 0, 0, 0, 0, 0)
+
+fn silicon_access_ok path
+    if syscall(21, path, 0, 0, 0, 0, 0) == 0
+        return 1
+    return 0
+
+fn silicon_getpid
+    return syscall(39, 0, 0, 0, 0, 0, 0)
+
+fn silicon_readlink_exe buf cap
+    n = syscall(89, "/proc/self/exe", buf, cap, 0, 0, 0)
     if n > 0
-        mem_byte_write(exe_buf, n, 0)
-        last_slash = 0 - 1
-        si = n - 1
-        while si >= 0
-            if mem_byte_read(exe_buf, si) == 47
-                last_slash = si
-                break
-            si = si - 1
-        if last_slash >= 0
-            dir_s = ""
-            di = 0
-            while di <= last_slash
-                dir_s = dir_s + chr(mem_byte_read(exe_buf, di))
-                di = di + 1
-            cand_sib = dir_s + "lipc"
-            if syscall(21, cand_sib, 0, 0, 0, 0, 0) == 0
-                free(exe_buf, 512)
-                return cand_sib
-            cand_sib2 = dir_s + "lipc_bin"
-            if syscall(21, cand_sib2, 0, 0, 0, 0, 0) == 0
-                free(exe_buf, 512)
-                return cand_sib2
-    free(exe_buf, 512)
-    u_home = akhara_get_env("HOME")
-    if len(u_home) > 0
-        c1 = u_home + "/.lipi/bin/lipc"
-        if syscall(21, c1, 0, 0, 0, 0, 0) == 0
-            return c1
-        c2 = u_home + "/.local/bin/lipc"
-        if syscall(21, c2, 0, 0, 0, 0, 0) == 0
-            return c2
-    if syscall(21, "/usr/local/bin/lipc", 0, 0, 0, 0, 0) == 0
-        return "/usr/local/bin/lipc"
-    return "bin/lipc"
+        mem_byte_write(buf, n, 0)
+    return n
 
-// WHY: Fork/execve helper capturing combined stdout+stderr into capture_path without libc popen().
-fn akhara_exec_capture exe_path a1 a2 a3 a4 capture_path
-    argv = malloc(64)
-    env = malloc(32)
-    st = malloc(8)
+fn silicon_now_us
+    ts = silicon_alloc_raw(16)
+    rc = syscall(228, 1, ts, 0, 0, 0, 0)
+    res = 0
+    if rc >= 0
+        sec = mem_read(ts, 0)
+        nsec = mem_read(ts, 8)
+        res = sec * 1000000 + nsec / 1000
+    silicon_free_raw(ts, 16)
+    return res
+
+fn silicon_exec_capture exe_path a1 a2 a3 a4 home_s capture_path
+    argv = silicon_alloc_raw(64)
+    env = silicon_alloc_raw(32)
+    st = silicon_alloc_raw(8)
 
     i = 0
     while i < 64
@@ -222,7 +163,6 @@ fn akhara_exec_capture exe_path a1 a2 a3 a4 capture_path
         idx = idx + 1
     mem_write(argv, idx * 8, 0)
 
-    home_s = akhara_get_env("HOME")
     if len(home_s) > 0
         env_home = "HOME=" + home_s
         mem_write(env, 0, env_home)
@@ -241,25 +181,158 @@ fn akhara_exec_capture exe_path a1 a2 a3 a4 capture_path
         syscall(59, exe_path, argv, env, 0, 0, 0)
         syscall(60, 127, 0, 0, 0, 0, 0)
 
-    if pid < 0
-        free(argv, 64)
-        free(env, 32)
-        free(st, 8)
-        return 127
+    exit_code = 127
+    if pid > 0
+        syscall(61, pid, st, 0, 0, 0, 0)
+        raw_st = mem_read(st, 0) & 65535
+        sig_num = raw_st & 127
+        if sig_num != 0
+            exit_code = 128 + sig_num
+        else
+            exit_code = (raw_st / 256) % 256
 
-    syscall(61, pid, st, 0, 0, 0, 0)
-    raw_st = mem_read(st, 0) & 65535
-    sig_num = raw_st & 127
-    exit_code = 0
-    if sig_num != 0
-        exit_code = 128 + sig_num
-    else
-        exit_code = (raw_st / 256) % 256
-
-    free(argv, 64)
-    free(env, 32)
-    free(st, 8)
+    silicon_free_raw(argv, 64)
+    silicon_free_raw(env, 32)
+    silicon_free_raw(st, 8)
     return exit_code
+
+fn silicon_tcp_bind_listen port
+    srv_fd = syscall(41, 2, 1, 0, 0, 0, 0)
+    if srv_fd < 0
+        return 0 - 1
+
+    opt = silicon_alloc_raw(8)
+    mem_write(opt, 0, 1)
+    syscall(54, srv_fd, 1, 2, opt, 4, 0)
+    silicon_free_raw(opt, 8)
+
+    sa = silicon_alloc_raw(16)
+    i = 0
+    while i < 16
+        mem_byte_write(sa, i, 0)
+        i = i + 1
+    mem_byte_write(sa, 0, 2)
+    mem_byte_write(sa, 1, 0)
+    mem_byte_write(sa, 2, (port / 256) % 256)
+    mem_byte_write(sa, 3, port % 256)
+    mem_byte_write(sa, 4, 127)
+    mem_byte_write(sa, 5, 0)
+    mem_byte_write(sa, 6, 0)
+    mem_byte_write(sa, 7, 1)
+
+    b_rc = syscall(49, srv_fd, sa, 16, 0, 0, 0)
+    silicon_free_raw(sa, 16)
+    if b_rc < 0
+        syscall(3, srv_fd, 0, 0, 0, 0, 0)
+        return 0 - 2
+
+    l_rc = syscall(50, srv_fd, 32, 0, 0, 0, 0)
+    if l_rc < 0
+        syscall(3, srv_fd, 0, 0, 0, 0, 0)
+        return 0 - 3
+
+    return srv_fd
+
+fn silicon_tcp_accept srv_fd
+    return syscall(43, srv_fd, 0, 0, 0, 0, 0)
+
+fn akhara_get_env target_key
+    data = file_read("/proc/self/environ")
+    if len(data) == 0
+        return ""
+    // /proc/self/environ is NUL-delimited; read raw bytes cleanly via crowned helpers.
+    buf = silicon_alloc_raw(16384)
+    fd = silicon_open_ro("/proc/self/environ")
+    out_val = ""
+    if fd >= 0
+        n = silicon_read_fd(fd, buf, 16383)
+        silicon_close_fd(fd)
+        klen = len(target_key)
+        i = 0
+        while i < n
+            matched = 1
+            if i + klen + 1 >= n
+                matched = 0
+            else
+                j = 0
+                while j < klen
+                    if mem_byte_read(buf, i + j) != ord(char_at(target_key, j))
+                        matched = 0
+                        break
+                    j = j + 1
+                if matched == 1 and mem_byte_read(buf, i + klen) != 61
+                    matched = 0
+            if matched == 1
+                val = ""
+                p = i + klen + 1
+                while p < n
+                    b = mem_byte_read(buf, p)
+                    if b == 0
+                        break
+                    val = val + chr(b)
+                    p = p + 1
+                out_val = val
+                break
+            while i < n and mem_byte_read(buf, i) != 0
+                i = i + 1
+            i = i + 1
+    silicon_free_raw(buf, 16384)
+    return out_val
+
+fn akhara_resolve_compiler
+    l_home = akhara_get_env("LIPI_HOME")
+    if len(l_home) > 0
+        c0 = l_home + "/bin/lipc"
+        if silicon_access_ok(c0) == 1
+            return c0
+    if silicon_access_ok("bin/lipc") == 1
+        return "bin/lipc"
+    if silicon_access_ok("bin/lipc_bin") == 1
+        return "bin/lipc_bin"
+
+    exe_buf = silicon_alloc_raw(512)
+    n = silicon_readlink_exe(exe_buf, 511)
+    found_sib = ""
+    if n > 0
+        last_slash = 0 - 1
+        si = n - 1
+        while si >= 0
+            if mem_byte_read(exe_buf, si) == 47
+                last_slash = si
+                break
+            si = si - 1
+        if last_slash >= 0
+            dir_s = ""
+            di = 0
+            while di <= last_slash
+                dir_s = dir_s + chr(mem_byte_read(exe_buf, di))
+                di = di + 1
+            cand_sib = dir_s + "lipc"
+            if silicon_access_ok(cand_sib) == 1
+                found_sib = cand_sib
+            else
+                cand_sib2 = dir_s + "lipc_bin"
+                if silicon_access_ok(cand_sib2) == 1
+                    found_sib = cand_sib2
+    silicon_free_raw(exe_buf, 512)
+    if len(found_sib) > 0
+        return found_sib
+
+    u_home = akhara_get_env("HOME")
+    if len(u_home) > 0
+        c1 = u_home + "/.lipi/bin/lipc"
+        if silicon_access_ok(c1) == 1
+            return c1
+        c2 = u_home + "/.local/bin/lipc"
+        if silicon_access_ok(c2) == 1
+            return c2
+    if silicon_access_ok("/usr/local/bin/lipc") == 1
+        return "/usr/local/bin/lipc"
+    return "bin/lipc"
+
+fn akhara_exec_capture exe_path a1 a2 a3 a4 capture_path
+    home_s = akhara_get_env("HOME")
+    return silicon_exec_capture(exe_path, a1, a2, a3, a4, home_s, capture_path)
 
 fn akhara_json_escape s
     out = ""
@@ -354,88 +427,80 @@ struct ElfReport
 // WHY: Reads raw ELF64 bytes via SYS_open/SYS_read (preserving embedded 0x00 bytes) to audit PIE ET_DYN, W^X PHDRs, and entry machine opcodes.
 fn akhara_inspect_elf bin_path
     rep = ElfReport(0, 0, "INVALID", "UNKNOWN", "0x0", 0, 0, "")
-    fd = syscall(2, bin_path, 0, 0, 0, 0, 0)
+    fd = silicon_open_ro(bin_path)
     if fd < 0
         return rep
 
     cap = 524288
-    buf = malloc(cap)
+    buf = silicon_alloc_raw(cap)
     total = 0
     while total < cap
-        chunk = syscall(0, fd, buf + total, cap - total, 0, 0, 0)
+        chunk = silicon_read_fd(fd, buf + total, cap - total)
         if chunk <= 0
             break
         total = total + chunk
-    syscall(3, fd, 0, 0, 0, 0, 0)
+    silicon_close_fd(fd)
 
     rep.er_size = total
-    if total < 64
-        free(buf, cap)
-        return rep
+    if total >= 64 and mem_byte_read(buf, 0) == 127 and mem_byte_read(buf, 1) == 69 and mem_byte_read(buf, 2) == 76 and mem_byte_read(buf, 3) == 70
+        rep.er_valid = 1
+        e_type = akhara_read_u16_le(buf, 16)
+        if e_type == 3
+            rep.er_type_name = "ET_DYN"
+        elif e_type == 2
+            rep.er_type_name = "ET_EXEC"
+        else
+            rep.er_type_name = "ELF_" + str(e_type)
 
-    // ELF magic: 0x7f 'E' 'L' 'F' (127, 69, 76, 70)
-    if mem_byte_read(buf, 0) != 127 or mem_byte_read(buf, 1) != 69 or mem_byte_read(buf, 2) != 76 or mem_byte_read(buf, 3) != 70
-        free(buf, cap)
-        return rep
+        e_mach = akhara_read_u16_le(buf, 18)
+        if e_mach == 62
+            rep.er_machine_name = "x86_64"
+        elif e_mach == 183
+            rep.er_machine_name = "aarch64"
+        elif e_mach == 243
+            rep.er_machine_name = "riscv64"
+        else
+            rep.er_machine_name = "arch_" + str(e_mach)
 
-    rep.er_valid = 1
-    e_type = akhara_read_u16_le(buf, 16)
-    if e_type == 3
-        rep.er_type_name = "ET_DYN"
-    elif e_type == 2
-        rep.er_type_name = "ET_EXEC"
-    else
-        rep.er_type_name = "ELF_" + str(e_type)
+        e_entry = akhara_read_u64_le(buf, 24)
+        rep.er_entry_hex = akhara_u64_hex(e_entry)
 
-    e_mach = akhara_read_u16_le(buf, 18)
-    if e_mach == 62
-        rep.er_machine_name = "x86_64"
-    elif e_mach == 183
-        rep.er_machine_name = "aarch64"
-    elif e_mach == 243
-        rep.er_machine_name = "riscv64"
-    else
-        rep.er_machine_name = "arch_" + str(e_mach)
+        e_phoff = akhara_read_u64_le(buf, 32)
+        e_phentsize = akhara_read_u16_le(buf, 54)
+        e_phnum = akhara_read_u16_le(buf, 56)
+        rep.er_phnum = e_phnum
 
-    e_entry = akhara_read_u64_le(buf, 24)
-    rep.er_entry_hex = akhara_u64_hex(e_entry)
+        entry_file_off = 0 - 1
+        rwe_hits = 0
+        pi = 0
+        while pi < e_phnum and pi < 32
+            off = e_phoff + pi * e_phentsize
+            if off + 56 <= total
+                p_type = akhara_read_u32_le(buf, off)
+                p_flags = akhara_read_u32_le(buf, off + 4)
+                p_offset = akhara_read_u64_le(buf, off + 8)
+                p_vaddr = akhara_read_u64_le(buf, off + 16)
+                p_memsz = akhara_read_u64_le(buf, off + 40)
+                if p_type == 1
+                    if (p_flags & 7) == 7
+                        rwe_hits = rwe_hits + 1
+                    if e_entry >= p_vaddr and e_entry < p_vaddr + p_memsz
+                        entry_file_off = p_offset + (e_entry - p_vaddr)
+            pi = pi + 1
 
-    e_phoff = akhara_read_u64_le(buf, 32)
-    e_phentsize = akhara_read_u16_le(buf, 54)
-    e_phnum = akhara_read_u16_le(buf, 56)
-    rep.er_phnum = e_phnum
+        rep.er_rwe_count = rwe_hits
 
-    entry_file_off = 0 - 1
-    rwe_hits = 0
-    pi = 0
-    while pi < e_phnum and pi < 32
-        off = e_phoff + pi * e_phentsize
-        if off + 56 <= total
-            p_type = akhara_read_u32_le(buf, off)
-            p_flags = akhara_read_u32_le(buf, off + 4)
-            p_offset = akhara_read_u64_le(buf, off + 8)
-            p_vaddr = akhara_read_u64_le(buf, off + 16)
-            p_memsz = akhara_read_u64_le(buf, off + 40)
-            if p_type == 1
-                if (p_flags & 7) == 7
-                    rwe_hits = rwe_hits + 1
-                if e_entry >= p_vaddr and e_entry < p_vaddr + p_memsz
-                    entry_file_off = p_offset + (e_entry - p_vaddr)
-        pi = pi + 1
+        bytes_hex = ""
+        if entry_file_off >= 0 and entry_file_off < total
+            k = 0
+            while k < 24 and entry_file_off + k < total
+                if k > 0
+                    bytes_hex = bytes_hex + " "
+                bytes_hex = bytes_hex + akhara_byte_hex(mem_byte_read(buf, entry_file_off + k))
+                k = k + 1
+        rep.er_silicon_bytes = bytes_hex
 
-    rep.er_rwe_count = rwe_hits
-
-    bytes_hex = ""
-    if entry_file_off >= 0 and entry_file_off < total
-        k = 0
-        while k < 24 and entry_file_off + k < total
-            if k > 0
-                bytes_hex = bytes_hex + " "
-            bytes_hex = bytes_hex + akhara_byte_hex(mem_byte_read(buf, entry_file_off + k))
-            k = k + 1
-    rep.er_silicon_bytes = bytes_hex
-
-    free(buf, cap)
+    silicon_free_raw(buf, cap)
     return rep
 
 struct RunResult
@@ -449,61 +514,61 @@ struct RunResult
     rr_elf
 
 fn akhara_compile_and_run_file src_path use_kavach seq_tag
-    pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    pid = silicon_getpid()
     bin_path = "/tmp/akhara_bin_" + str(pid) + "_" + str(seq_tag) + ".elf"
     clog_path = "/tmp/akhara_clog_" + str(pid) + "_" + str(seq_tag) + ".txt"
     rlog_path = "/tmp/akhara_rlog_" + str(pid) + "_" + str(seq_tag) + ".txt"
 
     compiler = akhara_resolve_compiler()
-    t0 = akhara_now_us()
+    t0 = silicon_now_us()
     cexit = 0
     if use_kavach == 1
         cexit = akhara_exec_capture(compiler, src_path, bin_path, "--kavach", "", clog_path)
     else
         cexit = akhara_exec_capture(compiler, src_path, bin_path, "", "", clog_path)
-    t1 = akhara_now_us()
+    t1 = silicon_now_us()
     c_us = t1 - t0
     if c_us < 0
         c_us = 0
 
     clog = file_read(clog_path)
-    syscall(87, clog_path, 0, 0, 0, 0, 0)
+    silicon_unlink(clog_path)
 
     empty_elf = ElfReport(0, 0, "NONE", "NONE", "0x0", 0, 0, "")
     if cexit != 0
-        syscall(87, bin_path, 0, 0, 0, 0, 0)
+        silicon_unlink(bin_path)
         return RunResult(0, cexit, 0 - 1, c_us, 0, "", clog, empty_elf)
 
     elf_rep = akhara_inspect_elf(bin_path)
-    t2 = akhara_now_us()
+    t2 = silicon_now_us()
     rexit = akhara_exec_capture(bin_path, "", "", "", "", rlog_path)
-    t3 = akhara_now_us()
+    t3 = silicon_now_us()
     r_us = t3 - t2
     if r_us < 0
         r_us = 0
 
     r_out = file_read(rlog_path)
-    syscall(87, rlog_path, 0, 0, 0, 0, 0)
-    syscall(87, bin_path, 0, 0, 0, 0, 0)
+    silicon_unlink(rlog_path)
+    silicon_unlink(bin_path)
 
     return RunResult(1, 0, rexit, c_us, r_us, r_out, clog, elf_rep)
 
 fn akhara_compile_and_run_code code_str use_kavach seq_tag
-    pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    pid = silicon_getpid()
     tmp_src = "/tmp/akhara_play_" + str(pid) + "_" + str(seq_tag) + ".lp"
     if len(code_str) > 32768
         empty_elf = ElfReport(0, 0, "NONE", "NONE", "0x0", 0, 0, "")
         return RunResult(0, 1, 0 - 1, 0, 0, "", "Error: source size exceeds 32 KiB limit", empty_elf)
 
-    fd = syscall(2, tmp_src, 577, 420, 0, 0, 0)
+    fd = silicon_open_trunc(tmp_src)
     if fd < 0
         empty_elf = ElfReport(0, 0, "NONE", "NONE", "0x0", 0, 0, "")
         return RunResult(0, 1, 0 - 1, 0, 0, "", "Error: failed to create temporary source file", empty_elf)
-    syscall(1, fd, code_str, len(code_str), 0, 0, 0)
-    syscall(3, fd, 0, 0, 0, 0, 0)
+    silicon_write_fd(fd, code_str, len(code_str))
+    silicon_close_fd(fd)
 
     res = akhara_compile_and_run_file(tmp_src, use_kavach, seq_tag)
-    syscall(87, tmp_src, 0, 0, 0, 0, 0)
+    silicon_unlink(tmp_src)
     return res
 
 fn akhara_result_to_json res
@@ -573,21 +638,20 @@ fn akhara_send_http cfd status_line content_type body
     hdr = hdr + "Connection: close\r\n"
     hdr = hdr + "X-Lipi-Sovereign: Direct-Silicon\r\n\r\n"
     pkt = hdr + body
-    syscall(1, cfd, pkt, len(pkt), 0, 0, 0)
+    silicon_write_fd(cfd, pkt, len(pkt))
 
 fn akhara_read_http_request cfd
     cap = 65536
-    buf = malloc(cap)
+    buf = silicon_alloc_raw(cap)
     total = 0
     header_end = 0 - 1
     expected_total = 0 - 1
 
     while total < cap - 1
-        n = syscall(0, cfd, buf + total, cap - 1 - total, 0, 0, 0)
+        n = silicon_read_fd(cfd, buf + total, cap - 1 - total)
         if n <= 0
             break
         total = total + n
-        // Locate end of HTTP headers (\r\n\r\n = 13,10,13,10)
         if header_end < 0 and total >= 4
             k = 0
             while k + 3 < total
@@ -596,14 +660,12 @@ fn akhara_read_http_request cfd
                     break
                 k = k + 1
             if header_end >= 0
-                // Parse Content-Length if present to avoid partial JSON reads
                 hdr_txt = ""
                 hi = 0
                 while hi < header_end
                     hdr_txt = hdr_txt + chr(mem_byte_read(buf, hi))
                     hi = hi + 1
                 cl_val = 0
-                // Case-insensitive search for "content-length:"
                 hl = len(hdr_txt)
                 ci = 0
                 while ci + 15 <= hl
@@ -631,46 +693,13 @@ fn akhara_read_http_request cfd
     while i < total
         req = req + chr(mem_byte_read(buf, i))
         i = i + 1
-    free(buf, cap)
+    silicon_free_raw(buf, cap)
     return req
 
 fn akhara_serve port max_requests
-    srv_fd = syscall(41, 2, 1, 0, 0, 0, 0)
+    srv_fd = silicon_tcp_bind_listen(port)
     if srv_fd < 0
-        say "❌ Socket creation failed: " + str(srv_fd)
-        return 1
-
-    opt = malloc(8)
-    mem_write(opt, 0, 1)
-    syscall(54, srv_fd, 1, 2, opt, 4, 0)
-    free(opt, 8)
-
-    sa = malloc(16)
-    i = 0
-    while i < 16
-        mem_byte_write(sa, i, 0)
-        i = i + 1
-    mem_byte_write(sa, 0, 2)
-    mem_byte_write(sa, 1, 0)
-    mem_byte_write(sa, 2, (port / 256) % 256)
-    mem_byte_write(sa, 3, port % 256)
-    // Bind to 127.0.0.1 for local sovereign safety (or 0.0.0.0 when persistent studio is needed? 127.0.0.1 is safest default!)
-    mem_byte_write(sa, 4, 127)
-    mem_byte_write(sa, 5, 0)
-    mem_byte_write(sa, 6, 0)
-    mem_byte_write(sa, 7, 1)
-
-    b_rc = syscall(49, srv_fd, sa, 16, 0, 0, 0)
-    free(sa, 16)
-    if b_rc < 0
-        say "❌ Bind failed on 127.0.0.1:" + str(port) + " (rc=" + str(b_rc) + ")"
-        syscall(3, srv_fd, 0, 0, 0, 0, 0)
-        return 1
-
-    l_rc = syscall(50, srv_fd, 32, 0, 0, 0, 0)
-    if l_rc < 0
-        say "❌ Listen failed (rc=" + str(l_rc) + ")"
-        syscall(3, srv_fd, 0, 0, 0, 0, 0)
+        say "❌ Socket setup/bind/listen failed on 127.0.0.1:" + str(port) + " (rc=" + str(srv_fd) + ")"
         return 1
 
     say "AKHARA_READY port=" + str(port)
@@ -678,14 +707,13 @@ fn akhara_serve port max_requests
     seq = 1
 
     while max_requests == 0 or handled < max_requests
-        cfd = syscall(43, srv_fd, 0, 0, 0, 0, 0)
+        cfd = silicon_tcp_accept(srv_fd)
         if cfd < 0
             continue
 
         req = akhara_read_http_request(cfd)
         rlen = len(req)
         if rlen > 0
-            // Extract first request line
             eol = 0
             while eol < rlen
                 ch = char_at(req, eol)
@@ -721,9 +749,9 @@ fn akhara_serve port max_requests
                 akhara_send_http(cfd, "404 Not Found", "application/json", "{\"error\":\"not_found\"}")
             handled = handled + 1
 
-        syscall(3, cfd, 0, 0, 0, 0, 0)
+        silicon_close_fd(cfd)
 
-    syscall(3, srv_fd, 0, 0, 0, 0, 0)
+    silicon_close_fd(srv_fd)
     return 0
 
 fn akhara_run_selftest

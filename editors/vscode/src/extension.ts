@@ -25,6 +25,15 @@ const BILINGUAL_DOCS: Record<string, BilingualDocEntry> = {
   'গঠন': { kind: 'Keyword', syntax: 'গঠন নাম:', desc: 'ইউজার-ডিফাইন্ড ডাটা স্ট্রাকচার (Struct Definition)।' },
   'ফেরত': { kind: 'Keyword', syntax: 'ফেরত মান', desc: 'ফাংশন থেকে মান রিটার্ন করে (Return value)।' },
   'বলো': { kind: 'Keyword', syntax: 'বলো মান', desc: 'কনসোলে টেক্সট বা সংখ্যার আউটপুট প্রদর্শন করে (Print stdout)।' },
+  'মিল': { kind: 'Keyword', syntax: 'মিল মান ... শেষ', desc: 'বাংলা প্যাটার্ন ম্যাচিং সুইচ (Pattern matching switch)।' },
+  'মেলাও': { kind: 'Keyword', syntax: 'মেলাও মান ... শেষ', desc: 'প্যাটার্ন ম্যাচিং স্টেটমেন্ট (match সমতুল্য)।' },
+  'ঘটনা': { kind: 'Keyword', syntax: 'ঘটনা মান:', desc: 'মিল/match ব্লকের কেস শাখা (case branch)। ক্ষেত্র কিওয়ার্ডও সমর্থিত।' },
+  'ক্ষেত্র': { kind: 'Keyword', syntax: 'ক্ষেত্র মান:', desc: 'প্যাটার্ন ম্যাচিং কেস শাখা (case branch)।' },
+  'চেষ্টা': { kind: 'Keyword', syntax: 'চেষ্টা ... ধরো ভুল ... শেষ', desc: 'স্ট্রাকচার্ড এক্সেপশন হ্যান্ডলিং ব্লক (Structured try/catch unwinding)।' },
+  'ধরো': { kind: 'Keyword', syntax: 'ধরো ভুল:', desc: 'চেষ্টা ব্লকে নিক্ষিপ্ত ত্রুটি গ্রহণ করে (Catch handler)।' },
+  'নিক্ষেপ': { kind: 'Keyword', syntax: 'নিক্ষেপ ত্রুটি', desc: 'চলমান ফ্রেম আনউইন্ড করে এক্সেপশন নিক্ষেপ করে (Throw exception)।' },
+  'কবচ': { kind: 'Module', syntax: 'lipc file.lp --kavach', desc: 'সার্বভৌম কবচ মোড: ওনারশিপ ও সিলিকন_* হার্ডওয়্যার বিচ্ছিন্নতা যাচাই।' },
+  'আখড়া': { kind: 'Module', syntax: 'lipi akhara [--inspect file.lp]', desc: 'লিপি আখড়া — সার্বভৌম সিলিকন স্টুডিও ও ELF পরিদর্শক।' },
   'মেমরি_বরাদ্দ': { kind: 'Function', syntax: 'মেমরি_বরাদ্দ(বাইট)', desc: 'সরাসরি র হিপ মেমরি বরাদ্দ করে (sys_mmap / malloc)।' },
   'মেমরি_মুক্তি': { kind: 'Function', syntax: 'মেমরি_মুক্তি(ঠিকানা, বাইট)', desc: 'বরাদ্দকৃত হিপ মেমরি মুক্ত করে (free)।' },
 
@@ -38,8 +47,12 @@ const BILINGUAL_DOCS: Record<string, BilingualDocEntry> = {
   'return': { kind: 'Keyword', syntax: 'return value', desc: 'Exits function and returns an evaluated expression.' },
   'say': { kind: 'Keyword', syntax: 'say value', desc: 'Outputs text or expression value to standard output.' },
   'match': { kind: 'Keyword', syntax: 'match expr ... end', desc: 'Pattern matching switch across cases and wildcards.' },
+  'case': { kind: 'Keyword', syntax: 'case pattern:', desc: 'Pattern branch inside a match block.' },
   'try': { kind: 'Keyword', syntax: 'try ... catch e ... end', desc: 'Structured exception handling block with stack unwinding.' },
+  'catch': { kind: 'Keyword', syntax: 'catch err:', desc: 'Handles exception thrown inside an enclosing try block.' },
   'throw': { kind: 'Keyword', syntax: 'throw expr', desc: 'Raises an exception handled by enclosing try/catch frames.' },
+  '--kavach': { kind: 'Module', syntax: 'lipc file.lp --kavach', desc: 'Sovereign Kavach Mode: enforces ownership safety and silicon_* isolation.' },
+  'akhara': { kind: 'Module', syntax: 'lipi akhara [--selftest]', desc: 'Lipi Akhara Silicon Studio and raw ELF inspector.' },
   'malloc': { kind: 'Function', syntax: 'malloc(bytes)', desc: 'Allocates raw heap memory via zero-libc direct kernel syscall.' },
   'free': { kind: 'Function', syntax: 'free(addr, bytes)', desc: 'Releases previously allocated heap buffer.' },
 
@@ -403,6 +416,32 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const filePath = editor.document.fileName;
       runTerminal(`./bin/lipi build "${filePath}" -o "${filePath.replace(/\.(lp|lipi|লিপি)$/, '')}"`);
+    }),
+    vscode.commands.registerCommand('lipi.formatFile', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('কোনো সক্রিয় লিপি ফাইল উন্মুক্ত নেই।');
+        return;
+      }
+      runTerminal(`./bin/lipifmt "${editor.document.fileName}"`);
+    }),
+    vscode.commands.registerCommand('lipi.akhara', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        runTerminal(`./bin/lipi akhara --inspect "${editor.document.fileName}"`);
+      } else {
+        runTerminal('./bin/lipi akhara');
+      }
+    }),
+    vscode.commands.registerCommand('lipi.kavachCheck', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('কোনো সক্রিয় লিপি ফাইল উন্মুক্ত নেই।');
+        return;
+      }
+      const filePath = editor.document.fileName;
+      const outPath = `${filePath.replace(/\.(lp|lipi|লিপি)$/, '')}.kavach_chk`;
+      runTerminal(`./bin/lipc "${filePath}" "${outPath}" --kavach && rm -f "${outPath}"`);
     }),
     vscode.commands.registerCommand('lipi.build', () => runTerminal('./bin/lipi build')),
     vscode.commands.registerCommand('lipi.test', () => runTerminal('./bin/lipi test')),

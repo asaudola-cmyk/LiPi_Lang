@@ -97,6 +97,7 @@ struct Riscv64Synthesizer
     rv_needs_file_write    // Flag: 1 if file_write helper must be emitted
     rv_file_write_off      // Byte offset where file_write helper starts
     rv_in_function         // 1 if currently synthesizing inside a function, 0 if top-level
+    rv_try_patches         // Stack of lists of [patch_offset, kind] exception unwind patches (0=JAL, 1=BNE)
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -123,6 +124,7 @@ fn riscv64_synth_new
     s.rv_needs_file_write = 0
     s.rv_file_write_off = 0
     s.rv_in_function = 0
+    s.rv_try_patches = list()
     return s
 
 fn riscv64_synth_emit_byte s byte_val

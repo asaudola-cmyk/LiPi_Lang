@@ -14,7 +14,39 @@ fn wasm_synth_new
     s.ws_block_depth = 0
     s.ws_data_bytes = list()
     s.ws_needs_wasi_print = 0
+    s.ws_structs = list()
+    s.ws_global_fields = list()
+    s.ws_try_depths = list()
     return s
+
+fn wasm_synth_find_struct s sname
+    si = 0
+    while si < s.ws_structs.len()
+        sd = s.ws_structs[si]
+        if sd.wsd_name == sname
+            return sd
+        si = si + 1
+    return 0
+
+fn wasm_synth_get_field_offset s fname
+    // WHY: Checks defined struct field tables first so distinct structs align with positional constructors,
+    // falling back to unified global field slot table for structural/dynamic field access.
+    si = 0
+    while si < s.ws_structs.len()
+        sd = s.ws_structs[si]
+        fi = 0
+        while fi < sd.wsd_fields.len()
+            if sd.wsd_fields[fi] == fname
+                return fi * 8
+            fi = fi + 1
+        si = si + 1
+    gi = 0
+    while gi < s.ws_global_fields.len()
+        if s.ws_global_fields[gi] == fname
+            return gi * 8
+        gi = gi + 1
+    push(s.ws_global_fields, fname)
+    return (s.ws_global_fields.len() - 1) * 8
 
 fn wasm_synth_get_or_add_type s param_count
     // WHY: Deduplicates function signatures in Type Section. Each signature
@@ -279,6 +311,24 @@ fn wasm_synth_expr_primary s toks pos_box
                 // WHY: WASI import fd_write occupies function index 0 when ws_needs_wasi_print == 1,
                 // shifting all module-defined WASM function indices up by +1.
                 wasm_emit_call(s.ws_code, target_fn.wfn_index + s.ws_needs_wasi_print)
+                // WHY: Inter-procedural exception propagation across WASM calls checks linear
+                // memory flag at offset 104 immediately after each call returns.
+                l_cret = wasm_synth_alloc_local(s, "__wasi_call_ret")
+                wasm_emit_local_set(s.ws_code, l_cret)
+                wasm_emit_i32_const(s.ws_code, 104)
+                wasm_emit_i64_load(s.ws_code, 3, 0)
+                wasm_emit_i64_const(s.ws_code, 0)
+                wasm_emit_i64_ne(s.ws_code)
+                wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+                if s.ws_try_depths.len() > 0
+                    t_depth = s.ws_try_depths[s.ws_try_depths.len() - 1]
+                    rel_try = (s.ws_block_depth + 1) - t_depth
+                    wasm_emit_br(s.ws_code, rel_try)
+                elif s.ws_current_fn != 0 and s.ws_current_fn.wfn_name != "main" and s.ws_current_fn.wfn_name != "_start" and s.ws_current_fn.wfn_name != "মূল"
+                    wasm_emit_i64_const(s.ws_code, 0)
+                    wasm_emit_return(s.ws_code)
+                wasm_emit_end(s.ws_code)
+                wasm_emit_local_get(s.ws_code, l_cret)
             elif ident_name == "mem_read" or ident_name == "mem_word_read" or ident_name == "মেমরি_পড়ো"
                 if arg_count >= 2
                     wasm_emit_i64_add(s.ws_code)
@@ -468,6 +518,38 @@ fn wasm_synth_expr_primary s toks pos_box
                     wasm_emit_i64_store(s.ws_code, 3, 24 + (ei * 8))
                     ei = ei + 1
                 wasm_emit_local_get(s.ws_code, l_hdr)
+            elif wasm_synth_find_struct(s, ident_name) != 0
+                // WHY: Pops evaluated struct constructor args in reverse into locals, bump-allocates
+                // 8 bytes per field via mem[24], stores fields at offset fi*8, and pushes struct ptr.
+                sdef = wasm_synth_find_struct(s, ident_name)
+                sc_locs = list()
+                ai = 0
+                while ai < arg_count
+                    push(sc_locs, wasm_synth_alloc_local(s, "__wasi_sc_arg_" + str(ai)))
+                    ai = ai + 1
+                rev = arg_count - 1
+                while rev >= 0
+                    wasm_emit_local_set(s.ws_code, sc_locs[rev])
+                    rev = rev - 1
+
+                num_fields = sdef.wsd_fields.len()
+                alloc_sz = num_fields * 8
+                if alloc_sz < 8
+                    alloc_sz = 8
+                wasm_emit_i64_const(s.ws_code, alloc_sz)
+                wasm_synth_emit_bump_alloc(s)
+
+                l_sptr = wasm_synth_alloc_local(s, "__wasi_struct_ptr")
+                wasm_emit_local_set(s.ws_code, l_sptr)
+
+                fi = 0
+                while fi < arg_count and fi < num_fields
+                    wasm_emit_local_get(s.ws_code, l_sptr)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_local_get(s.ws_code, sc_locs[fi])
+                    wasm_emit_i64_store(s.ws_code, 3, fi * 8)
+                    fi = fi + 1
+                wasm_emit_local_get(s.ws_code, l_sptr)
             else
                 // Intrinsic / Unknown function fallback: discard args, push 0
                 ai = 0
@@ -475,15 +557,34 @@ fn wasm_synth_expr_primary s toks pos_box
                     wasm_emit_drop(s.ws_code)
                     ai = ai + 1
                 wasm_emit_i64_const(s.ws_code, 0)
-            return 0
-
-        // Local variable read:
-        loc_idx = wasm_synth_lookup_local(s, ident_name)
-        if loc_idx >= 0
-            wasm_emit_local_get(s.ws_code, loc_idx)
         else
-            // Unbound identifier defaults to 0
-            wasm_emit_i64_const(s.ws_code, 0)
+            // Local variable read:
+            loc_idx = wasm_synth_lookup_local(s, ident_name)
+            if loc_idx >= 0
+                wasm_emit_local_get(s.ws_code, loc_idx)
+            else
+                // Unbound identifier defaults to 0
+                wasm_emit_i64_const(s.ws_code, 0)
+
+        // Postfix member read: obj.field (supports chained a.b.c and fn().field and lst.len())
+        while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_DOT() or toks[get(pos_box, 0)].tok_text == ".")
+            dp = get(pos_box, 0)
+            if dp + 1 < toks.len() and toks[dp + 1].tok_kind == TOK_IDENT()
+                fname = toks[dp + 1].tok_text
+                if dp + 2 < toks.len() and toks[dp + 2].tok_kind == TOK_LPAREN()
+                    if fname == "len" and dp + 3 < toks.len() and toks[dp + 3].tok_kind == TOK_RPAREN()
+                        list_set(pos_box, 0, dp + 4)
+                        wasm_emit_i32_wrap_i64(s.ws_code)
+                        wasm_emit_i64_load(s.ws_code, 3, 0)
+                    else
+                        break
+                else
+                    list_set(pos_box, 0, dp + 2)
+                    f_off = wasm_synth_get_field_offset(s, fname)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, f_off)
+            else
+                break
         return 0
 
     // Fallback: advance position and push 0

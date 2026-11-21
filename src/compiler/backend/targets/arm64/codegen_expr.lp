@@ -322,6 +322,22 @@ fn arm64_synth_expr_primary s toks pos_box
             call_rel.cr_patch_offset = call_off
             call_rel.cr_target_name = var_name
             push(s.synth_call_relocs, call_rel)
+
+            // WHY: Check callee-saved X27 exception flag after call returns. If active, jump to
+            // the innermost try/catch handler or immediately unwind the current stack frame.
+            if s.synth_try_patches.len() > 0
+                arm64_emit_cmp_x(s, 27, 31)
+                exc_bne_off = s.synth_code.len()
+                arm64_emit_b_cond(s, 1, 0)
+                active_tp = s.synth_try_patches[s.synth_try_patches.len() - 1]
+                push(active_tp, [exc_bne_off, 1])
+            elif s.synth_in_function == 1
+                arm64_emit_cmp_x(s, 27, 31)
+                skip_eq_off = s.synth_code.len()
+                arm64_emit_b_cond(s, 0, 0)
+                arm64_emit_epilogue(s)
+                skip_words = (s.synth_code.len() - skip_eq_off) / 4
+                arm64_synth_patch_u32(s, skip_eq_off, 1409286144 | ((skip_words & 524287) << 5) | 0)
             return 0
 
         // ── Struct Field Access: obj.field ──────────────────────────────────

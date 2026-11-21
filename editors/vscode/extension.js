@@ -25,6 +25,15 @@ const BILINGUAL_DOCS = {
   'গঠন': { kind: 'Keyword', syntax: 'গঠন নাম:', desc: 'ইউজার-ডিফাইন্ড ডাটা স্ট্রাকচার (Struct Definition)।' },
   'ফেরত': { kind: 'Keyword', syntax: 'ফেরত মান', desc: 'ফাংশন থেকে মান রিটার্ন করে (Return value)।' },
   'বলো': { kind: 'Keyword', syntax: 'বলো মান', desc: 'কনসোলে টেক্সট বা সংখ্যার আউটপুট প্রদর্শন করে (Print stdout)।' },
+  'মিল': { kind: 'Keyword', syntax: 'মিল মান\n  ঘটনা ক ...\n  নাহলে ...', desc: 'প্যাটার্ন ম্যাচিং সুইচ (Pattern matching switch)। মেলাও কিওয়ার্ডও সমর্থিত।' },
+  'মেলাও': { kind: 'Keyword', syntax: 'মেলাও মান ... শেষ', desc: 'বাংলা প্যাটার্ন ম্যাচিং স্টেটমেন্ট (match সমতুল্য)।' },
+  'ঘটনা': { kind: 'Keyword', syntax: 'ঘটনা মান:', desc: 'মিল/match ব্লকের নির্দিষ্ট কেস শাখা (case branch)। ক্ষেত্র কিওয়ার্ডও সমর্থিত।' },
+  'ক্ষেত্র': { kind: 'Keyword', syntax: 'ক্ষেত্র মান:', desc: 'প্যাটার্ন ম্যাচিং কেস শাখা (case branch)।' },
+  'চেষ্টা': { kind: 'Keyword', syntax: 'চেষ্টা\n  ...\nধরো ভুল\n  ...', desc: 'স্ট্রাকচার্ড এক্সেপশন হ্যান্ডলিং ব্লক (Structured try/catch unwinding)।' },
+  'ধরো': { kind: 'Keyword', syntax: 'ধরো ভুল:', desc: 'চেষ্টা (try) ব্লকে নিক্ষিপ্ত ত্রুটি গ্রহণ করে (Catch handler)।' },
+  'নিক্ষেপ': { kind: 'Keyword', syntax: 'নিক্ষেপ ত্রুটি', desc: 'চলমান ফ্রেম আনউইন্ড করে এক্সেপশন নিক্ষেপ করে (Throw exception)।' },
+  'কবচ': { kind: 'Module', syntax: 'lipc file.lp --kavach', desc: 'সার্বভৌম কবচ মোড: কমপাইল-টাইমে ওনারশিপ এবং সিলিকন_* হার্ডওয়্যার বিচ্ছিন্নতা যাচাই করে।' },
+  'আখড়া': { kind: 'Module', syntax: 'lipi akhara [--inspect file.lp]', desc: 'লিপি আখড়া — সার্বভৌম সিলিকন প্লেগ্রাউন্ড ও ELF বাইট পরিদর্শক।' },
   'মেমরি_বরাদ্দ': { kind: 'Function', syntax: 'মেমরি_বরাদ্দ(বাইট)', desc: 'সরাসরি র হিপ মেমরি বরাদ্দ করে (sys_mmap / malloc)।' },
   'মেমরি_মুক্তি': { kind: 'Function', syntax: 'মেমরি_মুক্তি(ঠিকানা, বাইট)', desc: 'বরাদ্দকৃত হিপ মেমরি মুক্ত করে (free)।' },
 
@@ -37,6 +46,13 @@ const BILINGUAL_DOCS = {
   'struct': { kind: 'Keyword', syntax: 'struct Name:', desc: 'Composite user-defined data type.' },
   'return': { kind: 'Keyword', syntax: 'return value', desc: 'Exits function and returns an evaluated expression.' },
   'say': { kind: 'Keyword', syntax: 'say value', desc: 'Outputs text or expression value to standard output.' },
+  'match': { kind: 'Keyword', syntax: 'match expr ... end', desc: 'Pattern matching switch across cases and default else.' },
+  'case': { kind: 'Keyword', syntax: 'case pattern:', desc: 'Pattern branch inside a match block.' },
+  'try': { kind: 'Keyword', syntax: 'try ... catch err ... end', desc: 'Structured exception handling block with cross-frame unwinding.' },
+  'catch': { kind: 'Keyword', syntax: 'catch err:', desc: 'Handles an exception thrown inside the enclosing try block.' },
+  'throw': { kind: 'Keyword', syntax: 'throw expr', desc: 'Raises an exception and unwinds caller frames to the nearest try/catch.' },
+  '--kavach': { kind: 'Module', syntax: 'lipc file.lp --kavach', desc: 'Sovereign Kavach Mode: enforces ownership safety and silicon_* capability isolation.' },
+  'akhara': { kind: 'Module', syntax: 'lipi akhara [--selftest]', desc: 'Lipi Akhara pure-socket Silicon Studio and raw ELF inspector.' },
   'malloc': { kind: 'Function', syntax: 'malloc(bytes)', desc: 'Allocates raw heap memory via zero-libc direct kernel syscall.' },
   'free': { kind: 'Function', syntax: 'free(addr, bytes)', desc: 'Releases previously allocated heap buffer.' },
 
@@ -454,6 +470,48 @@ function activate(context) {
       const terminal = vscode.window.terminals.find(t => t.name === 'Lipi Sovereign') || vscode.window.createTerminal('Lipi Sovereign');
       terminal.show();
       terminal.sendText(`./bin/lipi build "${filePath}" -o "${outPath}"`);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lipi.formatFile', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('কোনো সক্রিয় লিপি ফাইল উন্মুক্ত নেই।');
+        return;
+      }
+      const filePath = editor.document.fileName;
+      const terminal = vscode.window.terminals.find(t => t.name === 'Lipi Sovereign') || vscode.window.createTerminal('Lipi Sovereign');
+      terminal.show();
+      terminal.sendText(`./bin/lipifmt "${filePath}"`);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lipi.akhara', () => {
+      const editor = vscode.window.activeTextEditor;
+      const terminal = vscode.window.terminals.find(t => t.name === 'Lipi Sovereign') || vscode.window.createTerminal('Lipi Sovereign');
+      terminal.show();
+      if (editor) {
+        terminal.sendText(`./bin/lipi akhara --inspect "${editor.document.fileName}"`);
+      } else {
+        terminal.sendText(`./bin/lipi akhara`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lipi.kavachCheck', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('কোনো সক্রিয় লিপি ফাইল উন্মুক্ত নেই।');
+        return;
+      }
+      const filePath = editor.document.fileName;
+      const outPath = filePath.replace(/\.(lp|lipi|লিপি)$/, '') + '.kavach_chk';
+      const terminal = vscode.window.terminals.find(t => t.name === 'Lipi Sovereign') || vscode.window.createTerminal('Lipi Sovereign');
+      terminal.show();
+      terminal.sendText(`./bin/lipc "${filePath}" "${outPath}" --kavach && rm -f "${outPath}"`);
     })
   );
 

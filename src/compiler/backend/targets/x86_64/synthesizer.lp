@@ -54,8 +54,7 @@ fn x86_synth_compile_fn_def s toks pos_box
     fn_entry.fn_ret_type = ""
     fn_entry.fn_end_offset = 0
     fn_entry.fn_decl_line = base_line
-    fn_entry_idx = s.synth_functions.len()
-    push(s.synth_functions, fn_entry)
+    fn_entry_idx = x86_synth_register_fn_obj(s, fn_entry)
     fn_alias = 0
     if method_alias != ""
         fn_alias = X86Function()
@@ -64,7 +63,7 @@ fn x86_synth_compile_fn_def s toks pos_box
         fn_alias.fn_ret_type = ""
         fn_alias.fn_end_offset = 0
         fn_alias.fn_decl_line = base_line
-        push(s.synth_functions, fn_alias)
+        x86_synth_register_fn_obj(s, fn_alias)
 
     // Reset frame locals (saving enclosing scope to restore when function definition completes)
     saved_locals = s.synth_locals
@@ -254,9 +253,9 @@ fn x86_synth_compile_fn_def s toks pos_box
             break
         if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn" or ct.tok_text == "component" or ct.tok_text == "উপাদান")
             break
-        if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT()
+        if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_DIR_ENUM()
             break
-        if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "struct" or ct.tok_text == "গঠন" or ct.tok_text == "@struct")
+        if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "struct" or ct.tok_text == "গঠন" or ct.tok_text == "@struct" or ct.tok_text == "enum" or ct.tok_text == "@enum" or ct.tok_text == "গণনা")
             break
         cur_col = ct.tok_span.span_start_col
         if cur_col <= base_col and ct.tok_span.span_start_line > base_line
@@ -318,6 +317,13 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     if reg_names != 0 and reg_regs != 0
         s.synth_regalloc_names = reg_names
         s.synth_regalloc_regs = reg_regs
+        if reg_names.len() > 0
+            s.synth_regalloc_buckets = x86_synth_make_buckets_4096()
+            rbi = 0
+            rb_n = reg_names.len()
+            while rbi < rb_n
+                x86_synth_bucket_insert(s.synth_regalloc_buckets, reg_names[rbi], rbi)
+                rbi = rbi + 1
     end
 
     // 1. Emit top-level stack frame prologue at entry point (offset 0)
@@ -344,10 +350,10 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn" or tok_item.tok_text == "component" or tok_item.tok_text == "উপাদান")
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT()
+        if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT() or tok_item.tok_kind == TOK_DIR_ENUM()
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "struct" or tok_item.tok_text == "গঠন" or tok_item.tok_text == "@struct")
+        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "struct" or tok_item.tok_text == "গঠন" or tok_item.tok_text == "@struct" or tok_item.tok_text == "enum" or tok_item.tok_text == "@enum" or tok_item.tok_text == "গণনা")
             is_fn_tok = 1
         end
 
@@ -365,14 +371,14 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     // WHY: Search backwards so translation unit's main() takes precedence over imported modules
     has_main = 0
     main_name = ""
-    fi = s.synth_functions.len() - 1
-    while fi >= 0
-        fn_candidate = s.synth_functions[fi].fn_name
-        if fn_candidate == "main" or fn_candidate == "মূল"
-            has_main = 1
-            main_name = fn_candidate
-            break
-        fi = fi - 1
+    idx_en = x86_synth_find_fn_last_idx(s, "main")
+    idx_bn = x86_synth_find_fn_last_idx(s, "মূল")
+    if idx_en >= 0 or idx_bn >= 0
+        has_main = 1
+        if idx_bn > idx_en
+            main_name = "মূল"
+        else
+            main_name = "main"
     if has_main == 1 and s.synth_called_top_level_main == 0
         call_off = s.synth_code.len()
         x86_synth_emit_byte(s, 232)
@@ -420,24 +426,16 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         else
             if cr.cr_target_name == "main" or cr.cr_target_name == "মূল"
                 // WHY: For entry point main, resolve to latest definition in root translation unit
-                k = s.synth_functions.len() - 1
-                while k >= 0
-                    fn_item = s.synth_functions[k]
-                    if fn_item.fn_name == cr.cr_target_name
-                        resolved_addr = fn_item.fn_entry_offset
-                        found = 1
-                        break
-                    k = k - 1
+                l_idx = x86_synth_find_fn_last_idx(s, cr.cr_target_name)
+                if l_idx >= 0
+                    resolved_addr = s.synth_functions[l_idx].fn_entry_offset
+                    found = 1
             else
-                // WHY: For general functions, preserve original definition ordering and ABI stability
-                k = 0
-                while k < s.synth_functions.len()
-                    fn_item = s.synth_functions[k]
-                    if fn_item.fn_name == cr.cr_target_name
-                        resolved_addr = fn_item.fn_entry_offset
-                        found = 1
-                        break
-                    k = k + 1
+                // WHY: For general functions, preserve original definition ordering via O(1) bucket index
+                fn_item = x86_synth_find_fn_first(s, cr.cr_target_name)
+                if fn_item != 0
+                    resolved_addr = fn_item.fn_entry_offset
+                    found = 1
 
         if found == 0
             say "❌ [LINKER ERROR]: Unresolved function symbol: " + cr.cr_target_name
@@ -579,21 +577,15 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
                 fn_name = ssa_lower_res.slr_fn_names[fi]
                 fn_off = base_off + ssa_lower_res.slr_fn_offsets[fi]
                 already_exists = 0
-                k = 0
-                while k < s.synth_functions.len()
-                    item = s.synth_functions[k]
-                    if item.fn_name == fn_name
-                        already_exists = 1
-                        break
-                    end
-                    k = k + 1
+                if x86_synth_find_fn_first(s, fn_name) != 0
+                    already_exists = 1
                 end
                 if already_exists == 0
                     fn_item = X86Function()
                     fn_item.fn_name = fn_name
                     fn_item.fn_entry_offset = fn_off
                     fn_item.fn_ret_type = ""
-                    push(s.synth_functions, fn_item)
+                    x86_synth_register_fn_obj(s, fn_item)
                     has_new_fns = 1
                 end
                 fi = fi + 1

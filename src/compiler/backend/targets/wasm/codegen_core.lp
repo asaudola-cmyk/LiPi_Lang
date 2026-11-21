@@ -59,6 +59,11 @@ struct WasmLoopContext
     wlc_is_for          // 1 if synthesized for-loop with induction variable
     wlc_var_idx         // Local index of induction counter variable
 
+// WHY: Models struct schema definitions and field member offsets in linear memory
+struct WasmStructDef
+    wsd_name            // Struct type name string
+    wsd_fields          // List of field name strings
+
 // WHY: Encapsulates mutable compilation state for WebAssembly binary bytecode generation
 struct WasmSynthesizer
     ws_code          // Active pointer to current function's bytecode list
@@ -70,6 +75,9 @@ struct WasmSynthesizer
     ws_block_depth   // Current structured block nesting depth (for relative labels)
     ws_data_bytes    // Linear memory initial data bytes (.rodata)
     ws_needs_wasi_print // 1 if WASI fd_write import is required
+    ws_structs       // Registry list of WasmStructDef
+    ws_global_fields // List of globally tracked struct field names
+    ws_try_depths    // Stack of catch block ws_block_depth targets for try/catch unwind
 
 // ==============================================================================
 // ── 2. W3C WebAssembly Opcode & Type Constants ─────────────────────────────────

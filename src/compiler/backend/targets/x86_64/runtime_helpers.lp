@@ -31,7 +31,7 @@ fn x86_synth_register_helper_fn s name off
     fn_info.fn_ret_type = ""
     fn_info.fn_end_offset = 0
     fn_info.fn_decl_line = 0
-    push(s.synth_functions, fn_info)
+    x86_synth_register_fn_obj(s, fn_info)
     return 0
 
 fn x86_synth_emit__lipi_is_str s

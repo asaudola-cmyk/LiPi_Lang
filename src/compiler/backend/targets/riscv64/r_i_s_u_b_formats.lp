@@ -96,7 +96,7 @@ fn rv64_encode_b opcode funct3 rs1 rs2 imm
 
     b_1_4  = (im / 2) % 16      // imm[4:1]
     b_11   = (im / 2048) % 2    // imm[11]
-    b_low5 = b_1_4 + (b_11 * 16)
+    b_low5 = b_11 + (b_1_4 * 2) // RV64I B-type bits 11:7 = [imm[4:1] | imm[11]]
 
     b_5_10 = (im / 32) % 64     // imm[10:5]
     b_12   = (im / 4096) % 2    // imm[12]

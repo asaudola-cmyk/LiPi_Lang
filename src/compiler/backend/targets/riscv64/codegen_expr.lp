@@ -310,6 +310,20 @@ fn riscv64_synth_expr_primary s toks pos_box
             call_rel.rv_cr_patch_offset = call_off
             call_rel.rv_cr_target_name = var_name
             push(s.rv_call_relocs, call_rel)
+
+            // WHY: Check callee-saved s10 (x26) exception flag after call returns. If active,
+            // branch to the innermost try/catch handler or restore sp from s0 and unwind frame.
+            if s.rv_try_patches.len() > 0
+                exc_bne_off = s.rv_code.len()
+                riscv64_emit_bne(s, 26, 0, 0)
+                active_tp = s.rv_try_patches[s.rv_try_patches.len() - 1]
+                push(active_tp, [exc_bne_off, 1])
+            elif s.rv_in_function == 1
+                skip_beq_off = s.rv_code.len()
+                riscv64_emit_beq(s, 26, 0, 0)
+                riscv64_emit_addi(s, 2, 8, 0 - 1024)
+                riscv64_emit_epilogue(s)
+                riscv64_synth_patch_b(s, skip_beq_off, 0, 26, 0, s.rv_code.len())
             return 0
 
         // ── Struct Field Access: obj.field ──────────────────────────────────

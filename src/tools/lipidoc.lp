@@ -24,13 +24,32 @@ struct DocItem
 
 // ── 2. Memory & String Primitives ────────────────────────────────────────────
 
+// WHY: Sovereign silicon hardware boundary for direct kernel memory/file syscalls under --kavach.
+fn silicon_mmap_buf size
+    return syscall(9, 0, size, 3, 34, -1, 0)
+
+fn silicon_munmap_buf ptr size
+    return syscall(11, ptr, size, 0, 0, 0, 0)
+
+fn silicon_open_ro path
+    return syscall(2, path, 0, 0, 0, 0, 0)
+
+fn silicon_read_fd fd buf cap
+    return syscall(0, fd, buf, cap, 0, 0, 0)
+
+fn silicon_getdents64 dfd buf cap
+    return syscall(217, dfd, buf, cap, 0, 0, 0)
+
+fn silicon_close_fd fd
+    return syscall(3, fd, 0, 0, 0, 0, 0)
+
 // WHY: Allocates memory pages directly via Linux kernel SYS_mmap (syscall 9).
 fn alloc_buf size
-    return syscall(9, 0, size, 3, 34, -1, 0)
+    return silicon_mmap_buf(size)
 
 // WHY: Releases allocated memory pages via Linux kernel SYS_munmap (syscall 11).
 fn free_buf ptr size
-    return syscall(11, ptr, size, 0, 0, 0, 0)
+    return silicon_munmap_buf(ptr, size)
 
 // WHY: Removes trailing whitespace and carriage returns from the end of a line.
 fn trim_right s
@@ -205,16 +224,16 @@ fn extract_doc_comment line prefix
     rest = str_sub(line, idx + len(prefix), len(line))
     return trim(rest)
 
-// WHY: Reads raw lines from disk via Linux kernel SYS_read (syscall 0).
+// WHY: Reads raw lines from disk via crowned silicon_open_ro / silicon_read_fd primitives.
 fn read_file_lines path
-    fd = syscall(2, path, 0, 0, 0, 0, 0)
+    fd = silicon_open_ro(path)
     if fd < 0
         return list()
     lines = list()
     buf = alloc_buf(4096)
     cur_line = ""
     while 1
-        n = syscall(0, fd, buf, 4096, 0, 0, 0)
+        n = silicon_read_fd(fd, buf, 4096)
         if n <= 0
             break
         i = 0
@@ -229,7 +248,7 @@ fn read_file_lines path
             i = i + 1
     if len(cur_line) > 0
         lines = push(lines, cur_line)
-    syscall(3, fd, 0, 0, 0, 0, 0)
+    silicon_close_fd(fd)
     free_buf(buf, 4096)
     return lines
 
@@ -436,16 +455,16 @@ fn document_file path
     generate_markdown(path, items)
     return 1
 
-// WHY: Traverses a directory using Linux kernel SYS_getdents64 (syscall 217)
+// WHY: Traverses a directory using crowned silicon_getdents64 (SYS_getdents64=217)
 // and generates documentation for all discovered .lp source files.
 fn document_directory dir_path
-    dfd = syscall(2, dir_path, 0, 0, 0, 0, 0)
+    dfd = silicon_open_ro(dir_path)
     if dfd < 0
         say "❌ ত্রুটি: ডিরেক্টরি খুলতে ব্যর্থ: " + dir_path
         return 0
 
     buf = alloc_buf(4096)
-    n = syscall(217, dfd, buf, 4096, 0, 0, 0)
+    n = silicon_getdents64(dfd, buf, 4096)
     bpos = 0
     count = 0
 
@@ -474,7 +493,7 @@ fn document_directory dir_path
 
         bpos = bpos + reclen
 
-    syscall(3, dfd, 0, 0, 0, 0, 0)
+    silicon_close_fd(dfd)
     free_buf(buf, 4096)
 
     if count == 0

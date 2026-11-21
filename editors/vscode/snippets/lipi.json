@@ -80,5 +80,47 @@
       "ফেরত ${1:মান}"
     ],
     "description": "Lipi Bengali Return Statement (ফেরত)"
+  },
+  "Lipi Match (English)": {
+    "prefix": "match",
+    "body": [
+      "match ${1:expr}",
+      "\tcase ${2:1}",
+      "\t\t$0",
+      "\telse",
+      "\t\tsay \"default\""
+    ],
+    "description": "Lipi Pattern Matching Switch"
+  },
+  "Lipi Match (Bengali)": {
+    "prefix": "mil",
+    "body": [
+      "মিল ${1:মান}",
+      "\tঘটনা ${2:১}",
+      "\t\t$0",
+      "\tনাহলে",
+      "\t\tবলো \"অন্যান্য\""
+    ],
+    "description": "লিপি বাংলা প্যাটার্ন ম্যাচিং (মিল / ঘটনা / নাহলে)"
+  },
+  "Lipi Try Catch (English)": {
+    "prefix": "try",
+    "body": [
+      "try",
+      "\t${1:// protected block}",
+      "catch ${2:err}",
+      "\t$0"
+    ],
+    "description": "Lipi Exception Handling Block"
+  },
+  "Lipi Try Catch (Bengali)": {
+    "prefix": "chesta",
+    "body": [
+      "চেষ্টা",
+      "\t${1:// সুরক্ষিত কোড}",
+      "ধরো ${2:ভুল}",
+      "\t$0"
+    ],
+    "description": "লিপি এক্সেপশন হ্যান্ডলিং (চেষ্টা / ধরো / নিক্ষেপ)"
   }
 }
