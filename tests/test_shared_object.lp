@@ -116,12 +116,17 @@ if e_machine != 62
     exit(1)
 say "  ✔ Machine architecture verified: AMD x86-64 (EM_X86_64)"
 
-// Verify Program Header Count at byte 56: e_phnum == 2 (PT_LOAD + PT_DYNAMIC)
+// Verify Program Header Count at byte 56: e_phnum == 4 (PT_LOAD RX, PT_LOAD RW, PT_DYNAMIC, PT_GNU_STACK)
 e_phnum = sys_peek8(hdr_buf + 56)
-if e_phnum != 2
-    say "FAIL: Expected e_phnum == 2, got: " + str(e_phnum)
+if e_phnum != 4
+    say "FAIL: Expected e_phnum == 4 (Strict W^X 4-PHDR layout), got: " + str(e_phnum)
     exit(1)
-say "  ✔ Program headers verified: PT_LOAD and PT_DYNAMIC present (phnum=2)"
+rx_flags = sys_peek8(hdr_buf + 68)
+rw_flags = sys_peek8(hdr_buf + 124)
+if rx_flags != 5 or rw_flags != 6
+    say "FAIL: Expected W^X flags RX=5 and RW=6, got: " + str(rx_flags) + " / " + str(rw_flags)
+    exit(1)
+say "  ✔ Program headers verified: Strict W^X RX(5) + RW(6) + PT_DYNAMIC + PT_GNU_STACK (phnum=4)"
 
 // ── Test 4: Exported Symbols in .dynstr Verification ──────────────────────────
 say "[4/4] Verifying Exported Functions in Dynamic String & Symbol Tables..."

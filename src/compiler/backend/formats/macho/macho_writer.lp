@@ -135,7 +135,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     pad_bytes = 4096 - rem_page
   @end
   linux_rw_base = 1073741824 + text_ro_end + pad_bytes
-  linux_rw_end = linux_rw_base + 128
+  linux_rw_end = linux_rw_base + 4096
 
   out = list()
   i = 0
@@ -224,43 +224,139 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   return macho_patch_darwin_code_full(code_bytes, data_vmaddr, 0)
 @end
 
-@fn macho_build_adhoc_codesig(binary_prefix, code_limit)
-  // WHY: Generates a real Apple CS_SuperBlob (0xFADE0CC0) + SHA-256 CS_CodeDirectory (0xFADE0C02)
-  // covering every 4KB page of binary_prefix[0..code_limit) so Apple Silicon / macOS validates ad-hoc signing.
-  n_slots = (code_limit + 4095) / 4096
+@fn macho_patch_darwin_arm64(code_bytes, data_vmaddr, rodata_len)
+  // WHY: Relocates Linux AArch64 ELF64 .rodata (0x4000E8 + code_len + off) and RW heap slots
+  // (>= 0x410000) into Mach-O __DATA, and translates Linux AArch64 SVC #0 syscalls (X8=64/93/222)
+  // into Darwin Apple Silicon XNU BSD syscalls (X16=4/1/197, SVC #0x80).
+  n = code_bytes.len()
+  @if n < 4 return code_bytes @end
+  out = []
+  ri = 0
+  @while ri < n
+    out = out.push(code_bytes[ri])
+    ri = ri + 1
+  @end
+
+  linux_ro_base = 4194536 + n
+  linux_ro_end = linux_ro_base + rodata_len + 64
+  linux_rw_base = 4259840
+
+  // 1. Rewrite 4-instruction MOVZ/MOVK absolute address quads
+  idx = 0
+  @while idx + 15 < n
+    w0 = out[idx] + (out[idx + 1] * 256) + (out[idx + 2] * 65536) + (out[idx + 3] * 16777216)
+    w1 = out[idx + 4] + (out[idx + 5] * 256) + (out[idx + 6] * 65536) + (out[idx + 7] * 16777216)
+    w2 = out[idx + 8] + (out[idx + 9] * 256) + (out[idx + 10] * 65536) + (out[idx + 11] * 16777216)
+    w3 = out[idx + 12] + (out[idx + 13] * 256) + (out[idx + 14] * 65536) + (out[idx + 15] * 16777216)
+    reg0 = w0 & 31
+    @if ((w0 / 2097152) & 2047) == 1684 && ((w1 / 2097152) & 2047) == 1941 && (w1 & 31) == reg0 && ((w2 / 2097152) & 2047) == 1942 && (w2 & 31) == reg0 && ((w3 / 2097152) & 2047) == 1943 && (w3 & 31) == reg0
+      c0 = (w0 / 32) & 65535
+      c1 = (w1 / 32) & 65535
+      c2 = (w2 / 32) & 65535
+      c3 = (w3 / 32) & 65535
+      addr = c0 + (c1 * 65536) + (c2 * 4294967296)
+      @if c3 == 0
+        new_addr = 0
+        @if addr >= linux_ro_base && addr < linux_ro_end
+          new_addr = data_vmaddr + (addr - linux_ro_base)
+        @elif addr >= linux_rw_base && addr < (linux_rw_base + 16777216)
+          new_addr = data_vmaddr + rodata_len
+        @end
+        @if new_addr > 0
+          nc0 = new_addr & 65535
+          nc1 = (new_addr / 65536) & 65535
+          nc2 = (new_addr / 4294967296) & 65535
+          nc3 = 0
+          nw0 = 3531603968 | (nc0 * 32) | reg0
+          nw1 = 4070572032 | (nc1 * 32) | reg0
+          nw2 = 4072669184 | (nc2 * 32) | reg0
+          nw3 = 4074766336 | (nc3 * 32) | reg0
+          p0 = macho_pack_u32_le(nw0)
+          p1 = macho_pack_u32_le(nw1)
+          p2 = macho_pack_u32_le(nw2)
+          p3 = macho_pack_u32_le(nw3)
+          list_set(out, idx + 0, p0[0]) list_set(out, idx + 1, p0[1]) list_set(out, idx + 2, p0[2]) list_set(out, idx + 3, p0[3])
+          list_set(out, idx + 4, p1[0]) list_set(out, idx + 5, p1[1]) list_set(out, idx + 6, p1[2]) list_set(out, idx + 7, p1[3])
+          list_set(out, idx + 8, p2[0]) list_set(out, idx + 9, p2[1]) list_set(out, idx + 10, p2[2]) list_set(out, idx + 11, p2[3])
+          list_set(out, idx + 12, p3[0]) list_set(out, idx + 13, p3[1]) list_set(out, idx + 14, p3[2]) list_set(out, idx + 15, p3[3])
+        @end
+      @end
+    @end
+    idx = idx + 4
+  @end
+
+  // 2. Rewrite Linux AArch64 MOVZ X8, #<nr>; SVC #0 -> Darwin MOVZ X16, #<bsd>; SVC #0x80
+  idx = 0
+  @while idx + 3 < n
+    w = out[idx] + (out[idx + 1] * 256) + (out[idx + 2] * 65536) + (out[idx + 3] * 16777216)
+    nw = w
+    @if w == 3531606024 nw = 3531604112 @end      // MOVZ X8, #64 (write) -> MOVZ X16, #4
+    @if w == 3531606952 nw = 3531604016 @end      // MOVZ X8, #93 (exit)  -> MOVZ X16, #1
+    @if w == 3531611080 nw = 3531610288 @end      // MOVZ X8, #222 (mmap) -> MOVZ X16, #197
+    @if w == 3556769793 nw = 3556773889 @end      // SVC #0               -> SVC #0x80
+    @if nw != w
+      pb = macho_pack_u32_le(nw)
+      list_set(out, idx + 0, pb[0])
+      list_set(out, idx + 1, pb[1])
+      list_set(out, idx + 2, pb[2])
+      list_set(out, idx + 3, pb[3])
+    @end
+    idx = idx + 4
+  @end
+  return out
+@end
+
+@fn macho_build_adhoc_codesig_ex(binary_prefix, code_limit, text_vmsize, cs_page, cs_log2)
+  // WHY: Generates a real Apple CS_SuperBlob (0xFADE0CC0) + 88-byte v0x20400 SHA-256
+  // CS_CodeDirectory (0xFADE0C02) with execSegBase/execSegLimit/execSegFlags for Apple Silicon.
+  n_slots = (code_limit + cs_page - 1) / cs_page
   @if n_slots < 1 n_slots = 1 @end
-  cd_len = 44 + 9 + (n_slots * 32)
+  cd_len = 88 + 9 + (n_slots * 32)
   total_len = 20 + cd_len
 
   blob = []
-  blob = macho_concat(blob, macho_pack_u32_be(4208856256))
+  blob = macho_concat(blob, macho_pack_u32_be(4208856256)) // 0xFADE0CC0 SuperBlob
   blob = macho_concat(blob, macho_pack_u32_be(total_len))
   blob = macho_concat(blob, macho_pack_u32_be(1))
   blob = macho_concat(blob, macho_pack_u32_be(0))
   blob = macho_concat(blob, macho_pack_u32_be(20))
 
-  blob = macho_concat(blob, macho_pack_u32_be(4208856066))
+  blob = macho_concat(blob, macho_pack_u32_be(4208856066)) // 0xFADE0C02 CodeDirectory
   blob = macho_concat(blob, macho_pack_u32_be(cd_len))
-  blob = macho_concat(blob, macho_pack_u32_be(132096))
-  blob = macho_concat(blob, macho_pack_u32_be(131074))
-  blob = macho_concat(blob, macho_pack_u32_be(53))
-  blob = macho_concat(blob, macho_pack_u32_be(44))
-  blob = macho_concat(blob, macho_pack_u32_be(0))
-  blob = macho_concat(blob, macho_pack_u32_be(n_slots))
-  blob = macho_concat(blob, macho_pack_u32_be(code_limit))
-  blob = blob.push(32)
-  blob = blob.push(2)
-  blob = blob.push(0)
-  blob = blob.push(12)
-  blob = macho_concat(blob, macho_pack_u32_be(0))
+  blob = macho_concat(blob, macho_pack_u32_be(132096))     // version = 0x20400
+  blob = macho_concat(blob, macho_pack_u32_be(131074))     // flags = adhoc | linkerSigned
+  blob = macho_concat(blob, macho_pack_u32_be(97))         // hashOffset = 88 + 9
+  blob = macho_concat(blob, macho_pack_u32_be(88))         // identOffset = 88
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // nSpecialSlots
+  blob = macho_concat(blob, macho_pack_u32_be(n_slots))    // nCodeSlots
+  blob = macho_concat(blob, macho_pack_u32_be(code_limit)) // codeLimit
+  blob = blob.push(32)                                     // hashSize = 32
+  blob = blob.push(2)                                      // hashType = SHA-256
+  blob = blob.push(0)                                      // platform = 0
+  blob = blob.push(cs_log2)                                // pageSize log2 (14 for ARM64 16KB, 12 for x86_64 4KB)
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // spare2
+  // v0x20200 .. v0x20400 fields (44 bytes -> total 88-byte header)
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // scatterOffset
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // teamOffset
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // spare3
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // codeLimit64 hi
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // codeLimit64 lo
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // execSegBase hi
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // execSegBase lo
+  es_hi = (text_vmsize / 4294967296) & 4294967295
+  es_lo = text_vmsize & 4294967295
+  blob = macho_concat(blob, macho_pack_u32_be(es_hi))      // execSegLimit hi
+  blob = macho_concat(blob, macho_pack_u32_be(es_lo))      // execSegLimit lo
+  blob = macho_concat(blob, macho_pack_u32_be(0))          // execSegFlags hi
+  blob = macho_concat(blob, macho_pack_u32_be(1))          // execSegFlags lo (CS_EXECSEG_MAIN_BINARY = 1)
 
   ident_bytes = [108, 105, 112, 105, 95, 98, 105, 110, 0]
   blob = macho_concat(blob, ident_bytes)
 
   si = 0
   @while si < n_slots
-    p_start = si * 4096
-    p_end = p_start + 4096
+    p_start = si * cs_page
+    p_end = p_start + cs_page
     @if p_end > code_limit
       p_end = code_limit
     @end
@@ -278,19 +374,20 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   return blob
 @end
 
-@fn macho_emit_executable(code_bytes, data_bytes, bss_size, cputype, output_path)
-  // WHY: Comprehensive Mach-O 64 binary generator.
-  // Supported architectures:
-  //   - CPU_TYPE_X86_64 (16777223)
-  //   - CPU_TYPE_ARM64  (16777228)
-  //
-  // Memory Layout:
-  // 1. [0x000000000 .. 0x0FFFFFFFF]: __PAGEZERO (4GB protected zone)
-  // 2. [0x100000000 .. text_end]:   __TEXT Segment (Header + Cmds + __text)
-  // 3. [data_start  .. data_end]:   __DATA Segment (__data + __bss)
-  // 4. [linkedit_start ..]:         __LINKEDIT (LC_CODE_SIGNATURE ad-hoc SHA-256)
+@fn macho_build_adhoc_codesig(binary_prefix, code_limit)
+  return macho_build_adhoc_codesig_ex(binary_prefix, code_limit, code_limit, 4096, 12)
+@end
 
+@fn macho_emit_executable(code_bytes, data_bytes, bss_size, cputype, output_path)
+  // WHY: Comprehensive Mach-O 64 binary generator with Apple Silicon 16KB paging & v0x20400 CodeDirectory.
   page_size = 4096
+  cs_page = 4096
+  cs_log2 = 12
+  @if cputype == 16777228
+    page_size = 16384
+    cs_page = 16384
+    cs_log2 = 14
+  @end
 
   // 1. Calculate Load Commands Size
   // Header: 32 bytes
@@ -302,12 +399,12 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   // Cmd 6: __DATA segment command with 2 sections (__data, __bss) = 72 + 80 + 80 = 232 bytes
   // Cmd 7: __LINKEDIT segment command = 72 bytes; Cmd 8: LC_CODE_SIGNATURE = 16 bytes
 
-  // Always emit __DATA with rodata + 128B RW runtime globals + __LINKEDIT (LC_CODE_SIGNATURE)
+  // Always emit __DATA with rodata + 4096B RW runtime/mutable globals + __LINKEDIT (LC_CODE_SIGNATURE)
   ro_orig_len = data_bytes.len()
   full_data_bytes = []
   full_data_bytes = macho_concat(full_data_bytes, data_bytes)
   gi = 0
-  @while gi < 128
+  @while gi < 4096
     full_data_bytes = full_data_bytes.push(0)
     gi = gi + 1
   @end
@@ -352,21 +449,23 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     data_file_aligned = data_file_aligned + (page_size - rem_dfp)
   @end
 
-  // 2b. Configure __LINKEDIT + LC_CODE_SIGNATURE ad-hoc SHA-256 CodeDirectory layout
+  // 2b. Configure __LINKEDIT + LC_CODE_SIGNATURE ad-hoc SHA-256 CodeDirectory layout (88B v0x20400)
   linkedit_offset = data_offset + data_file_aligned
   linkedit_vmaddr = data_vmaddr + data_vmsize
-  n_cs_slots = (linkedit_offset + 4095) / 4096
+  n_cs_slots = (linkedit_offset + cs_page - 1) / cs_page
   @if n_cs_slots < 1 n_cs_slots = 1 @end
-  codesig_size = 20 + 44 + 9 + (n_cs_slots * 32)
+  codesig_size = 20 + 88 + 9 + (n_cs_slots * 32)
   linkedit_vmsize = codesig_size
   rem_lpage = linkedit_vmsize % page_size
   @if rem_lpage != 0
     linkedit_vmsize = linkedit_vmsize + (page_size - rem_lpage)
   @end
 
-  // Relocate x86_64 Linux .rodata, RW globals, and ALL Linux syscalls to Darwin BSD Mach-O ABI
+  // Relocate x86_64 or ARM64 Linux ELF64 .rodata, RW globals, and syscalls to Darwin Mach-O ABI
   @if cputype == 16777223
     code_bytes = macho_patch_darwin_code_full(code_bytes, data_vmaddr, ro_orig_len)
+  @elif cputype == 16777228
+    code_bytes = macho_patch_darwin_arm64(code_bytes, data_vmaddr, ro_orig_len)
   @end
 
   // 3. Build Mach-O Header
@@ -448,11 +547,11 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     binary = macho_concat(binary, full_data_bytes)
   @end
 
-  // Pad up to linkedit_offset and append SHA-256 ad-hoc SuperBlob CodeDirectory
+  // Pad up to linkedit_offset and append v0x20400 SHA-256 ad-hoc SuperBlob CodeDirectory
   @while binary.len() < linkedit_offset
     binary = binary.push(0)
   @end
-  codesig_blob = macho_build_adhoc_codesig(binary, linkedit_offset)
+  codesig_blob = macho_build_adhoc_codesig_ex(binary, linkedit_offset, text_vmsize, cs_page, cs_log2)
   binary = macho_concat(binary, codesig_blob)
 
   // 6. Write to disk

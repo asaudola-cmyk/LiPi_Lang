@@ -49,7 +49,7 @@ import "aati/lipi_torch/src/torch"
   println("▶ [4/4] Testing SGD Parameter Descent & Zero-Grad...")
   w_before = linear.weight.data[0]
   params = [linear.weight, linear.bias]
-  opt = torch_sgd_new(params, 1)
+  opt = torch_sgd_new(params, 0.1)
   torch_sgd_step(opt)
   w_after = linear.weight.data[0]
   

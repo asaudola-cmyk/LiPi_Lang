@@ -171,12 +171,12 @@ macho_runner_load_bytes(m_runner, m_res.mw_bytes)
 t233_assert(m_runner.mor_is_valid_macho, 1, "Mach-O ARM64 binary valid")
 t233_assert(m_runner.mor_has_codesig, 1, "Mach-O embeds __LINKEDIT + LC_CODE_SIGNATURE (0xFADE0CC0)")
 
-// K. Windows PE32+ 10-API KERNEL32.dll IAT verification
+// K. Windows PE32+ 12-API KERNEL32.dll IAT verification
 p_res = pe_emit_executable(sample_code, [], [], 0, 0, "")
 p_runner = win64_pe_runner_new()
 win64_pe_runner_load_bytes(p_runner, p_res.pe_bytes)
 t233_assert(p_runner.wpr_is_valid_pe, 1, "PE32+ Windows binary valid")
 t233_assert(p_runner.wpr_linux_syscall_count, 0, "PE32+ .text contains 0 Linux syscalls")
-t233_assert(p_runner.wpr_import_functions.len(), 10, "PE32+ IAT imports all 10 KERNEL32.dll APIs")
+t233_assert(p_runner.wpr_import_functions.len(), 12, "PE32+ IAT imports all 12 KERNEL32.dll APIs")
 
 say "PASS: Test 233 Tier 1-4 Sovereign Verification"

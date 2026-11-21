@@ -65,7 +65,7 @@ fn main
     n_read = syscall(0, fd, buf, 1024, 0, 0, 0)
     syscall(3, fd, 0, 0, 0, 0, 0)
 
-    test_assert(n_read >= 176, "Read ELF header and program headers")
+    test_assert(n_read >= 288, "Read ELF header and 4 strict W^X program headers")
 
     // Verify ELF Magic
     b0 = sys_peek8(buf + 0)
@@ -82,9 +82,12 @@ fn main
     e_mach = sys_peek8(buf + 18)
     test_assert(e_mach == 62, "Machine architecture verified: AMD x86-64 (EM_X86_64)")
 
-    // Verify e_phnum == 2 (PT_LOAD and PT_DYNAMIC)
+    // Verify e_phnum == 4 (PT_LOAD RX, PT_LOAD RW, PT_DYNAMIC, PT_GNU_STACK) and 0 RWE
     phnum = sys_peek8(buf + 56)
-    test_assert(phnum == 2, "Program header count is 2 (PT_LOAD and PT_DYNAMIC)")
+    test_assert(phnum == 4, "Program header count is 4 (strict W^X RX/RW split + DYNAMIC + GNU_STACK)")
+    rx_flags = sys_peek8(buf + 68)
+    rw_flags = sys_peek8(buf + 124)
+    test_assert(rx_flags == 5 and rw_flags == 6, "Strict W^X segments confirmed (RX=5, RW=6, zero RWE)")
 
     // Verify e_shnum == 8
     shnum = sys_peek8(buf + 60)

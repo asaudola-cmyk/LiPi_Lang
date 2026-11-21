@@ -47,6 +47,8 @@ struct X86Function
     fn_name             // Function identifier
     fn_entry_offset     // Byte offset in code_bytes where the function prologue starts
     fn_ret_type         // Declared return type name string ("" if untyped)
+    fn_end_offset       // Byte offset where the function body ends (for non-overlapping DWARF)
+    fn_decl_line        // Source declaration line number (for DWARF DW_AT_decl_line)
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -58,6 +60,7 @@ struct X86CallReloc
 struct X86StructDef
     sd_name             // Struct type name string
     sd_fields           // List of field name strings
+    sd_field_types      // Parallel list of declared/inferred field type strings
 
 // WHY: Encapsulates mutable compilation state for AMD64 silicon code generation
 struct X86Synthesizer
@@ -102,6 +105,20 @@ struct X86Synthesizer
     synth_stack_bottom_off // Byte offset where _lipi_stack_bottom helper starts
     synth_heap_base_fn_off // Byte offset where _lipi_heap_base helper starts
     synth_heap_ptr_fn_off  // Byte offset where _lipi_heap_ptr helper starts
+    synth_exc_slot_off     // Byte offset where _lipi_exc_slot_ptr per-thread helper starts
+    synth_thread_spawn_j_off // Byte offset where _lipi_thread_spawn_joinable helper starts
+    synth_mutable_globals  // List of mutable global variable names
+    synth_mutable_global_offs // Parallel RW .data offsets (>= 512)
+    synth_mutable_global_prims // Parallel primitive type strings ("int", "float", "str", "")
+    synth_mutable_global_structs // Parallel struct type strings
+    synth_global_rw_patch_offs // Code patch offsets of mutable global movabs imm64 instructions
+    synth_global_rw_slot_offs  // Matching RW .data offsets (>= 512)
+    synth_try_depth        // Current active nested try depth inside enclosing function/top-level
+    synth_try_frames       // Stack of active try-finally unwind frames [flag_off, val_off, ret_patches, entry_depth]
+    synth_loop_try_depths  // Stack of try depths captured on entry to enclosing loops
+    synth_line_pcs         // Monotonic code byte offsets paired with DWARF source lines
+    synth_line_nums        // Parallel 1-based source line numbers for .debug_line
+    synth_current_fn_idx   // Index of active X86Function in synth_functions (-1 at top-level)
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -149,6 +166,20 @@ fn x86_synth_new
     s.synth_stack_bottom_off = 0
     s.synth_heap_base_fn_off = 0
     s.synth_heap_ptr_fn_off = 0
+    s.synth_exc_slot_off = 0
+    s.synth_thread_spawn_j_off = 0
+    s.synth_mutable_globals = list()
+    s.synth_mutable_global_offs = list()
+    s.synth_mutable_global_prims = list()
+    s.synth_mutable_global_structs = list()
+    s.synth_global_rw_patch_offs = list()
+    s.synth_global_rw_slot_offs = list()
+    s.synth_try_depth = 0
+    s.synth_try_frames = list()
+    s.synth_loop_try_depths = list()
+    s.synth_line_pcs = list()
+    s.synth_line_nums = list()
+    s.synth_current_fn_idx = 0 - 1
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -541,8 +572,8 @@ fn x86_synth_emit_call_alloc s
 
 fn x86_synth_emit_alloc_helper s
     // WHY: Emits pure AMD64 silicon bump-arena memory allocator with zero libc dependency.
-    // Strict W^X compliant: _heap_base ([rdx]) and _heap_ptr ([rdx+8]) live in the page-aligned
-    // RW PT_LOAD[1] data segment (patched at s.synth_alloc_off + 10), never inside .text.
+    // Thread-safe: guards lazy 4GB SYS_mmap initialization with spinlock at [rdx + 104] (rw+120)
+    // and double-checked [rdx], then bumps [rdx + 8] atomically via lock xadd.
     // Inputs: %rdi = requested byte size. Output: %rax = pointer to allocated memory.
     s.synth_alloc_off = s.synth_code.len()
     alloc_bytes = [
@@ -551,7 +582,12 @@ fn x86_synth_emit_alloc_helper s
         72, 186, 0, 0, 0, 0, 0, 0, 0, 0,      // movabs rdx, <rw_vaddr + 16> (patched at +10)
         72, 139, 2,                           // mov rax, [rdx]
         72, 133, 192,                         // test rax, rax
-        117, 45,                              // jnz .allocated (+45 bytes to index 71)
+        117, 69,                              // jnz .allocated (+69 to index 95)
+        240, 72, 15, 186, 106, 104, 0,        // .spin: lock bts qword [rdx + 104], 0
+        114, 247,                             // jc .spin
+        72, 139, 2,                           // mov rax, [rdx]
+        72, 133, 192,                         // test rax, rax
+        117, 45,                              // jnz .unlock (+45 to index 88)
         87,                                   // push rdi
         82,                                   // push rdx
         49, 255,                              // xor edi, edi (addr = 0)
@@ -566,9 +602,10 @@ fn x86_synth_emit_alloc_helper s
         95,                                   // pop rdi
         72, 137, 2,                           // mov [rdx], rax (save arena base to _heap_base)
         72, 137, 66, 8,                       // mov [rdx + 8], rax (initialize _heap_ptr)
-        72, 137, 248,                         // .allocated: mov rax, rdi (index 71)
+        240, 72, 15, 186, 114, 104, 0,        // .unlock: lock btr qword [rdx + 104], 0
+        72, 137, 248,                         // .allocated: mov rax, rdi (index 95)
         240, 72, 15, 193, 66, 8,              // lock xadd [rdx + 8], rax (atomic bump allocation)
-        195                                   // ret (index 80)
+        195                                   // ret
     ]
     x86_synth_emit_bytes(s, alloc_bytes)
     return 0
@@ -722,6 +759,150 @@ fn x86_synth_get_field_offset s sname fname
         fi = fi + 1
     push(s.synth_global_fields, fname)
     return (s.synth_global_fields.len() - 1) * 8
+
+fn x86_synth_get_field_type s sname fname
+    // WHY: Resolves declared/inferred field type name for nested struct & float type propagation.
+    if sname != ""
+        i = s.synth_structs.len() - 1
+        while i >= 0
+            sd = s.synth_structs[i]
+            if sd.sd_name == sname
+                fi = 0
+                while fi < sd.sd_fields.len()
+                    if sd.sd_fields[fi] == fname
+                        if fi < sd.sd_field_types.len()
+                            return sd.sd_field_types[fi]
+                        end
+                        return ""
+                    end
+                    fi = fi + 1
+                end
+            end
+            i = i - 1
+        end
+    end
+    i = 0
+    while i < s.synth_structs.len()
+        sd = s.synth_structs[i]
+        is_anon = 0
+        if len(sd.sd_name) > 8 and str_sub(sd.sd_name, 0, 8) == "_anon_s_"
+            is_anon = 1
+        end
+        if is_anon == 0
+            fi = 0
+            while fi < sd.sd_fields.len()
+                if sd.sd_fields[fi] == fname
+                    if fi < sd.sd_field_types.len()
+                        return sd.sd_field_types[fi]
+                    end
+                    return ""
+                end
+                fi = fi + 1
+            end
+        end
+        i = i + 1
+    end
+    return ""
+
+fn x86_synth_is_mutable_global_name name
+    // WHY: Treats top-level `g_*` variables as cross-function mutable RW globals.
+    if len(name) >= 2 and char_at(name, 0) == "g" and char_at(name, 1) == "_"
+        return 1
+    end
+    return 0
+
+fn x86_synth_find_mutable_global s name
+    // WHY: Returns RW .data offset (>= 512) if name is registered as a mutable global, or 0 otherwise.
+    i = 0
+    n = s.synth_mutable_globals.len()
+    while i < n
+        if s.synth_mutable_globals[i] == name
+            return s.synth_mutable_global_offs[i]
+        end
+        i = i + 1
+    end
+    return 0
+
+fn x86_synth_alloc_mutable_global s name
+    // WHY: Allocates an 8-byte RW .data slot at offset 512..4088 for cross-function mutable globals.
+    existing = x86_synth_find_mutable_global(s, name)
+    if existing >= 512
+        return existing
+    end
+    slot_off = 512 + (s.synth_mutable_globals.len() * 8)
+    if slot_off >= 4096
+        return 0
+    end
+    push(s.synth_mutable_globals, name)
+    push(s.synth_mutable_global_offs, slot_off)
+    push(s.synth_mutable_global_prims, "")
+    push(s.synth_mutable_global_structs, "")
+    return slot_off
+
+fn x86_synth_set_mutable_global_types s name ptype stype
+    i = 0
+    n = s.synth_mutable_globals.len()
+    while i < n
+        if s.synth_mutable_globals[i] == name
+            if ptype != ""
+                list_set(s.synth_mutable_global_prims, i, ptype)
+            end
+            if stype != ""
+                list_set(s.synth_mutable_global_structs, i, stype)
+            end
+            return 1
+        end
+        i = i + 1
+    end
+    return 0
+
+fn x86_synth_get_mutable_global_prim s name
+    i = 0
+    n = s.synth_mutable_globals.len()
+    while i < n
+        if s.synth_mutable_globals[i] == name
+            return s.synth_mutable_global_prims[i]
+        end
+        i = i + 1
+    end
+    return ""
+
+fn x86_synth_get_mutable_global_struct s name
+    i = 0
+    n = s.synth_mutable_globals.len()
+    while i < n
+        if s.synth_mutable_globals[i] == name
+            return s.synth_mutable_global_structs[i]
+        end
+        i = i + 1
+    end
+    return ""
+
+fn x86_synth_emit_mutable_global_read s slot_off
+    // WHY: Emits movabs rax, <rw+slot_off>; mov rax, [rax] and records relocation for Static-PIE / PE / Mach-O.
+    if slot_off < 512
+        return 0
+    end
+    x86_synth_emit_bytes(s, [72, 184])
+    p_off = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    push(s.synth_global_rw_patch_offs, p_off)
+    push(s.synth_global_rw_slot_offs, slot_off)
+    x86_synth_emit_bytes(s, [72, 139, 0]) // mov rax, [rax]
+    return 1
+
+fn x86_synth_emit_mutable_global_write s slot_off
+    // WHY: Emits movabs rcx, <rw+slot_off>; mov [rcx], rax (value in %rax preserved) with RW relocation.
+    if slot_off < 512
+        return 0
+    end
+    x86_synth_emit_bytes(s, [72, 185])
+    p_off = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    push(s.synth_global_rw_patch_offs, p_off)
+    push(s.synth_global_rw_slot_offs, slot_off)
+    x86_synth_emit_bytes(s, [72, 137, 1]) // mov [rcx], rax
+    return 1
 
 // ── 5. Local Variable & Scope Management ──────────────────────────────────────
 
@@ -1085,6 +1266,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
     list_set(pos_box, 0, get(pos_box, 0) + 1)
 
     fields = list()
+    field_types = list()
     while get(pos_box, 0) < toks.len()
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         cur_p = get(pos_box, 0)
@@ -1106,20 +1288,26 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
 
         if cur_k == TOK_IDENT()
             push(fields, cur_txt)
+            ftype = ""
             list_set(pos_box, 0, cur_p + 1)
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             np = get(pos_box, 0)
             if np < toks.len() and (toks[np].tok_kind == TOK_COLON() or (toks[np].tok_kind != TOK_STR() and toks[np].tok_text == ":"))
                 list_set(pos_box, 0, np + 1)
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
-                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_IDENT() or toks[get(pos_box, 0)].tok_text == "string" or toks[get(pos_box, 0)].tok_text == "i64" or toks[get(pos_box, 0)].tok_text == "f64")
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_IDENT() or toks[get(pos_box, 0)].tok_text == "string" or toks[get(pos_box, 0)].tok_text == "i64" or toks[get(pos_box, 0)].tok_text == "f64" or toks[get(pos_box, 0)].tok_text == "array" or toks[get(pos_box, 0)].tok_text == "bool")
+                    ftype = toks[get(pos_box, 0)].tok_text
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            push(field_types, ftype)
         else
             list_set(pos_box, 0, cur_p + 1)
 
     sdef = X86StructDef()
     sdef.sd_name = sname
     sdef.sd_fields = fields
+    sdef.sd_field_types = field_types
     push(s.synth_structs, sdef)
     return 0
 

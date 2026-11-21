@@ -524,62 +524,41 @@ fn riscv64_synth_emit_print_int_helper s
     // t1 = 1 (current length = 1)
     riscv64_emit_addi(s, 6, 0, 1)
 
-    // Check if a0 == 0
-    // bne a0, x0, .check_neg (offset +16 bytes: 4 instructions forward)
-    riscv64_emit_bne(s, 10, 0, 16)
+    // Check if a0 == 0 -> jump to .check_neg (5 instructions forward: 24 bytes from bne)
+    bne_zero_off = s.rv_code.len()
+    riscv64_emit_bne(s, 10, 0, 24)
 
     // Special case: a0 == 0
-    // addi t0, t0, -1
     riscv64_emit_addi(s, 5, 5, 0 - 1)
-    // addi t2, x0, 48 ('0')
     riscv64_emit_addi(s, 7, 0, 48)
-    // sb t2, 0(t0)
     riscv64_emit_sb(s, 7, 5, 0)
-    // addi t1, t1, 1
     riscv64_emit_addi(s, 6, 6, 1)
-    // jal x0, .do_write (offset +76 bytes: 19 instructions forward)
+    // jal x0, .do_write (4+9+5 = 18 -> +72 or +76; exact = 76 bytes from jal)
     riscv64_emit_jal(s, 0, 76)
 
     // .check_neg:
-    // addi t3, x0, 0 (negative flag = 0)
     riscv64_emit_addi(s, 28, 0, 0)
-    // bge a0, x0, .loop_digits (offset +12 bytes: 3 instructions forward)
     riscv64_emit_bge(s, 10, 0, 12)
-    // addi t3, x0, 1 (negative flag = 1)
     riscv64_emit_addi(s, 28, 0, 1)
-    // sub a0, x0, a0 (a0 = -a0)
     riscv64_emit_sub(s, 10, 0, 10)
 
     // .loop_digits:
-    // beq a0, x0, .finish_digits (offset +36 bytes: 9 instructions forward)
     riscv64_emit_beq(s, 10, 0, 36)
-    // addi t4, x0, 10 (divisor = 10)
     riscv64_emit_addi(s, 29, 0, 10)
-    // rem t5, a0, t4 (remainder = a0 % 10)
     riscv64_emit_rem(s, 30, 10, 29)
-    // div a0, a0, t4 (quotient = a0 / 10)
     riscv64_emit_div(s, 10, 10, 29)
-    // addi t5, t5, 48 (ASCII digit)
     riscv64_emit_addi(s, 30, 30, 48)
-    // addi t0, t0, -1 (decrement buffer pointer)
     riscv64_emit_addi(s, 5, 5, 0 - 1)
-    // sb t5, 0(t0)
     riscv64_emit_sb(s, 30, 5, 0)
-    // addi t1, t1, 1 (increment length)
     riscv64_emit_addi(s, 6, 6, 1)
-    // jal x0, .loop_digits (offset -32 bytes: 8 instructions backward)
     riscv64_emit_jal(s, 0, 0 - 32)
 
     // .finish_digits:
-    // beq t3, x0, .do_write (offset +16 bytes: 4 instructions forward)
-    riscv64_emit_beq(s, 28, 0, 16)
-    // addi t0, t0, -1
+    // beq t3, x0, .do_write (5 instructions = +20 bytes forward)
+    riscv64_emit_beq(s, 28, 0, 20)
     riscv64_emit_addi(s, 5, 5, 0 - 1)
-    // addi t2, x0, 45 ('-')
     riscv64_emit_addi(s, 7, 0, 45)
-    // sb t2, 0(t0)
     riscv64_emit_sb(s, 7, 5, 0)
-    // addi t1, t1, 1
     riscv64_emit_addi(s, 6, 6, 1)
 
     // .do_write:
@@ -628,70 +607,47 @@ fn riscv64_synth_emit_alloc_helper s
     // andi a0, a0, -16 (0xFF0 = 4080)
     riscv64_emit_andi(s, 10, 10, 0 - 16)
 
-    // 1: Locate _heap_ptr storage at end of function via PC-relative AUIPC:
-    // Inst 2: auipc t0, 0 (t0 = PC of inst 2)
-    // _heap_ptr is located at Inst 27 (offset 25 instructions = 100 bytes forward from inst 2)
+    // 1: Locate _heap_ptr storage at end of function via PC-relative AUIPC (Inst 2 -> Inst 28 = +104 bytes)
     riscv64_emit_auipc(s, 5, 0)
-    // Inst 3: ld t1, 100(t0) -> load current heap pointer
-    riscv64_emit_ld(s, 6, 5, 100)
+    // Inst 3: ld t1, 104(t0) -> load current heap pointer
+    riscv64_emit_ld(s, 6, 5, 104)
 
-    // Inst 4: bne t1, x0, .bump (offset +68 bytes: 17 instructions forward to inst 21)
-    riscv64_emit_bne(s, 6, 0, 68)
+    // Inst 4: bne t1, x0, .bump (+80 bytes forward from Inst 4 = Inst 24)
+    riscv64_emit_bne(s, 6, 0, 80)
 
-    // ── Heap initialization via Linux sys_mmap(NULL, 1GB, PROT_READ|WRITE, MAP_ANON|PRIVATE, -1, 0) ──
-    // Inst 5: addi sp, sp, -32 (preserve registers)
+    // ── Heap initialization via Linux sys_mmap(NULL, 16MB, PROT_READ|WRITE, MAP_ANON|PRIVATE, -1, 0) ──
     riscv64_emit_addi(s, 2, 2, 0 - 32)
-    // Inst 6: sd ra, 24(sp)
     riscv64_emit_sd(s, 1, 2, 24)
-    // Inst 7: sd a0, 16(sp) (preserve requested size)
     riscv64_emit_sd(s, 10, 2, 16)
-    // Inst 8: sd t0, 8(sp)  (preserve _heap_ptr address)
     riscv64_emit_sd(s, 5, 2, 8)
 
-    // Inst 9: addi a0, x0, 0 (addr = NULL)
     riscv64_emit_addi(s, 10, 0, 0)
-    // Inst 10: lui a1, 262144 (1GB virtual memory arena = 1073741824 bytes = 262144 * 4096)
-    riscv64_emit_lui(s, 11, 262144)
-    // Inst 11: addi a2, x0, 3 (PROT_READ | PROT_WRITE = 3)
+    riscv64_emit_lui(s, 11, 4096) // 16MB virtual memory arena (4096 * 4096)
     riscv64_emit_addi(s, 12, 0, 3)
-    // Inst 12: addi a3, x0, 34 (MAP_PRIVATE | MAP_ANONYMOUS = 34)
     riscv64_emit_addi(s, 13, 0, 34)
-    // Inst 13: addi a4, x0, -1 (fd = -1)
     riscv64_emit_addi(s, 14, 0, 0 - 1)
-    // Inst 14: addi a5, x0, 0 (offset = 0)
     riscv64_emit_addi(s, 15, 0, 0)
-    // Inst 15: addi a7, x0, 222 (SYS_mmap on Linux RISC-V = 222)
     riscv64_emit_li(s, 17, 222)
-    // Inst 16: ecall -> a0 now holds allocated arena base address
     riscv64_emit_ecall(s)
 
-    // Inst 17: ld ra, 24(sp)
     riscv64_emit_ld(s, 1, 2, 24)
-    // Inst 18: ld a2, 16(sp) (restore requested size into a2)
     riscv64_emit_ld(s, 12, 2, 16)
-    // Inst 19: ld t0, 8(sp)  (restore _heap_ptr address into t0)
     riscv64_emit_ld(s, 5, 2, 8)
-    // Inst 20: addi sp, sp, 32
     riscv64_emit_addi(s, 2, 2, 32)
 
-    // Inst 21: sd a0, 100(t0) (store arena base address into _heap_ptr)
-    riscv64_emit_sd(s, 10, 5, 100)
-    // Inst 22: mv t1, a0 (t1 = current heap pointer)
+    // Inst 21: sd a0, 104(t0) (store arena base address into _heap_ptr)
+    riscv64_emit_sd(s, 10, 5, 104)
     riscv64_emit_mv(s, 6, 10)
-    // Inst 23: mv a0, a2 (a0 = requested size)
     riscv64_emit_mv(s, 10, 12)
 
-    // .bump (inst 24):
-    // Inst 24: add t2, t1, a0 (compute next heap pointer: current + requested)
+    // .bump (Inst 24):
     riscv64_emit_add(s, 7, 6, 10)
-    // Inst 25: sd t2, 100(t0) (update _heap_ptr)
-    riscv64_emit_sd(s, 7, 5, 100)
-    // Inst 26: mv a0, t1 (return previous heap pointer in a0)
+    // Inst 25: sd t2, 104(t0) (update _heap_ptr)
+    riscv64_emit_sd(s, 7, 5, 104)
     riscv64_emit_mv(s, 10, 6)
-    // Inst 27: ret
     riscv64_emit_ret(s)
 
-    // Inst 28..29: _heap_ptr storage (8 bytes initialized to 0, exactly 100 bytes from inst 2)
+    // Inst 28..29: _heap_ptr storage (8 bytes initialized to 0, exactly 104 bytes from Inst 2)
     riscv64_synth_emit32(s, 0)
     riscv64_synth_emit32(s, 0)
     return 0

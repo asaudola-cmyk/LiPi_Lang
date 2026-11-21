@@ -18,44 +18,44 @@ import "utso/string"
 @! ============================================================================
 
 @struct ComptimeEnv
-  names: array
-  values: array
-  is_const: array
+  ct_names: array
+  ct_values: array
+  ct_is_const: array
 @end
 
 @fn comptime_env_new()
-  return {
-    names: [],
-    values: [],
-    is_const: []
-  }
+  env = ComptimeEnv()
+  env.ct_names = []
+  env.ct_values = []
+  env.ct_is_const = []
+  return env
 @end
 
-@fn comptime_env_set(env, name, val)
+@fn comptime_env_set(env: ComptimeEnv, name, val)
   // WHY: Search if variable already exists in comptime environment
   i = 0
-  n = env.names.len()
+  n = env.ct_names.len()
   @while i < n
-    @if str_eq(env.names[i], name) == 1
-      env.values[i] = val
-      env.is_const[i] = 1
+    @if str_eq(env.ct_names[i], name) == 1
+      list_set(env.ct_values, i, val)
+      list_set(env.ct_is_const, i, 1)
       return 1
     @end
     i = i + 1
   @end
   
   // New binding
-  env.names = env.names.push(name)
-  env.values = env.values.push(val)
-  env.is_const = env.is_const.push(1)
+  env.ct_names = env.ct_names.push(name)
+  env.ct_values = env.ct_values.push(val)
+  env.ct_is_const = env.ct_is_const.push(1)
   return 1
 @end
 
-@fn comptime_env_has(env, name)
+@fn comptime_env_has(env: ComptimeEnv, name)
   i = 0
-  n = env.names.len()
+  n = env.ct_names.len()
   @while i < n
-    @if str_eq(env.names[i], name) == 1
+    @if str_eq(env.ct_names[i], name) == 1
       return 1
     @end
     i = i + 1
@@ -63,12 +63,12 @@ import "utso/string"
   return 0
 @end
 
-@fn comptime_env_get(env, name)
+@fn comptime_env_get(env: ComptimeEnv, name)
   i = 0
-  n = env.names.len()
+  n = env.ct_names.len()
   @while i < n
-    @if str_eq(env.names[i], name) == 1
-      return env.values[i]
+    @if str_eq(env.ct_names[i], name) == 1
+      return env.ct_values[i]
     @end
     i = i + 1
   @end

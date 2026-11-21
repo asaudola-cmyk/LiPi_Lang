@@ -187,11 +187,10 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
     after_clos = s.synth_code.len()
     x86_synth_patch_u32(s, skip_jmp_patch, after_clos - (skip_jmp_patch + 4))
 
-    // Allocate heap CLOS object: [magic=0x434C4F53, code_ptr (RIP-relative), n_caps, cap0, ...]
+    // Allocate heap CLOS object via arena allocator: [magic=0x434C4F53, code_ptr (RIP-relative), n_caps, cap0, ...]
     obj_sz = 24 + (cap_names.len() * 8)
-    x86_synth_emit_byte(s, 191)
-    x86_synth_emit_u32(s, obj_sz)
-    x86_synth_emit_call_helper(s, "_lipi_malloc")
+    x86_synth_emit_mov_rdi_imm64(s, obj_sz)
+    x86_synth_emit_call_alloc(s)
     x86_synth_emit_bytes(s, [72, 199, 0, 83, 79, 76, 67])
     x86_synth_emit_bytes(s, [72, 141, 21])
     disp_clos = clos_code_off - (s.synth_code.len() + 4)
@@ -208,7 +207,15 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
         elif lv_outer != 0
             x86_synth_emit_load_var(s, 1, lv_outer.lv_offset)
         else
-            x86_synth_emit_bytes(s, [72, 49, 201])
+            mg_cap = x86_synth_find_mutable_global(s, cap_names[ci])
+            if mg_cap >= 512
+                x86_synth_emit_byte(s, 80) // push rax
+                x86_synth_emit_mutable_global_read(s, mg_cap)
+                x86_synth_emit_bytes(s, [72, 137, 193]) // mov rcx, rax
+                x86_synth_emit_byte(s, 88) // pop rax
+            else
+                x86_synth_emit_bytes(s, [72, 49, 201])
+            end
         end
         disp_c = 24 + (ci * 8)
         if disp_c < 128
@@ -260,10 +267,16 @@ fn x86_synth_expr_primary s toks pos_box
     elif (k == TOK_MINUS() or (k == TOK_IDENT() and txt == "-")) and pos + 1 < toks.len()
         list_set(pos_box, 0, pos + 1)
         x86_synth_expr_primary(s, toks, pos_box)
-        // neg rax (0x48 0xF7 0xD8)
-        x86_synth_emit_byte(s, 72)
-        x86_synth_emit_byte(s, 247)
-        x86_synth_emit_byte(s, 216)
+        if s.synth_last_expr_type == "float"
+            // btc rax, 63 (0x48 0x0F 0xBA 0xF8 0x3F) — toggle IEEE-754 sign bit
+            x86_synth_emit_bytes(s, [72, 15, 186, 248, 63])
+            s.synth_last_expr_type = "float"
+        else
+            // neg rax (0x48 0xF7 0xD8)
+            x86_synth_emit_byte(s, 72)
+            x86_synth_emit_byte(s, 247)
+            x86_synth_emit_byte(s, 216)
+        end
         return 0
 
     // 0c. Unary Bitwise NOT (~)
@@ -457,12 +470,22 @@ fn x86_synth_expr_primary s toks pos_box
         // WHY: Scans keys to identify matching struct schema for deterministic field offsets
         keys = x86_synth_scan_brace_keys(toks, pos + 1)
         sname = x86_synth_find_matching_struct(s, keys)
+        is_anon_s = 0
         if sname == "" and keys.len() > 0
             anon_sdef = X86StructDef()
             anon_sdef.sd_name = "_anon_s_" + int_to_str(s.synth_structs.len())
             anon_sdef.sd_fields = keys
+            anon_types = list()
+            ki_init = 0
+            while ki_init < keys.len()
+                push(anon_types, "")
+                ki_init = ki_init + 1
+            end
+            anon_sdef.sd_field_types = anon_types
             push(s.synth_structs, anon_sdef)
             sname = anon_sdef.sd_name
+            is_anon_s = 1
+        end
         s.synth_last_struct = sname
 
         alloc_sz = 1024
@@ -501,6 +524,23 @@ fn x86_synth_expr_primary s toks pos_box
 
             // Compile field value expression into %rax
             x86_synth_compile_expr(s, toks, pos_box)
+            fld_inf_type = s.synth_last_struct
+            if fld_inf_type == ""
+                fld_inf_type = s.synth_last_expr_type
+            end
+            if sname != "" and fld_inf_type != ""
+                cur_sd_fill = x86_synth_find_struct(s, sname)
+                if cur_sd_fill != 0 and cur_sd_fill.sd_field_types.len() == cur_sd_fill.sd_fields.len()
+                    kf_i = 0
+                    while kf_i < cur_sd_fill.sd_fields.len()
+                        if cur_sd_fill.sd_fields[kf_i] == key_name and cur_sd_fill.sd_field_types[kf_i] == ""
+                            list_set(cur_sd_fill.sd_field_types, kf_i, fld_inf_type)
+                            break
+                        end
+                        kf_i = kf_i + 1
+                    end
+                end
+            end
 
             f_off = x86_synth_get_field_offset(s, sname, key_name)
 
@@ -874,55 +914,67 @@ fn x86_synth_expr_primary s toks pos_box
                 s.synth_last_struct = x86_synth_get_var_type(s, var_name)
                 s.synth_last_expr_type = x86_synth_get_prim_type(s, var_name)
             else
-                // Check if var_name is a registered compile-time global constant
-                g_val = x86_synth_lookup_global_const(s, var_name)
-                if g_val != (0 - 999999999)
-                    x86_synth_emit_mov_rax_imm64(s, g_val)
-                    s.synth_last_expr_type = "int"
+                // Check if var_name is a mutable RW global slot or compile-time constant
+                mg_off = x86_synth_find_mutable_global(s, var_name)
+                if mg_off >= 512
+                    x86_synth_emit_mutable_global_read(s, mg_off)
+                    s.synth_last_struct = x86_synth_get_mutable_global_struct(s, var_name)
+                    s.synth_last_expr_type = x86_synth_get_mutable_global_prim(s, var_name)
                 else
-                    // Check if var_name is a registered zero-arg constant function
-                    is_fn_const = 0
-                    fi = 0
-                    while fi < s.synth_functions.len()
-                        if s.synth_functions[fi].fn_name == var_name
-                            is_fn_const = 1
-                            break
-                        fi = fi + 1
-                    if is_fn_const == 1
-                        // Check for parenthesis-less argument on the same line (e.g. say bench_loop 10000000)
-                        if next_pos < toks.len() and toks[next_pos].tok_span.span_start_line == t.tok_span.span_start_line
-                            nk = toks[next_pos].tok_kind
-                            ntxt = toks[next_pos].tok_text
-                            if nk == TOK_INT() or nk == TOK_FLOAT() or nk == TOK_STR() or nk == TOK_INTERP_STR() or (nk == TOK_IDENT() and x86_synth_find_local_var(s, ntxt) != 0)
-                                x86_synth_compile_expr(s, toks, pos_box)
-                                // mov rdi, rax (pass argument 0 in %rdi)
-                                x86_synth_emit_byte(s, 72)
-                                x86_synth_emit_byte(s, 137)
-                                x86_synth_emit_byte(s, 199)
-                            end
-                        end
-                        // Emit direct call: call var_name (leaves return value in %rax)
-                        x86_synth_emit_byte(s, 232)
-                        patch_pos = s.synth_code.len()
-                        x86_synth_emit_u32(s, 0)
-                        call_rel = X86CallReloc()
-                        call_rel.cr_patch_offset = patch_pos
-                        call_rel.cr_call_site_end = patch_pos + 4
-                        call_rel.cr_target_name = var_name
-                        push(s.synth_call_relocs, call_rel)
-                        if var_name == "main" or var_name == "মূল"
-                            s.synth_called_top_level_main = 1
-                        if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
-                            s.synth_last_expr_type = "int"
-                        elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
-                            s.synth_last_expr_type = "str"
-                        else
-                            s.synth_last_expr_type = ""
+                    g_val = x86_synth_lookup_global_const(s, var_name)
+                    if g_val != (0 - 999999999)
+                        x86_synth_emit_mov_rax_imm64(s, g_val)
+                        s.synth_last_expr_type = "int"
                     else
-                        // Unbound identifier defaults to 0
-                        x86_synth_emit_byte(s, 49)
-                        x86_synth_emit_byte(s, 192)
-                        s.synth_last_expr_type = ""
+                        // Check if var_name is a registered zero-arg constant function
+                        is_fn_const = 0
+                        fi = 0
+                        while fi < s.synth_functions.len()
+                            if s.synth_functions[fi].fn_name == var_name
+                                is_fn_const = 1
+                                break
+                            fi = fi + 1
+                        end
+                        if is_fn_const == 1
+                            // Check for parenthesis-less argument on the same line (e.g. say bench_loop 10000000)
+                            if next_pos < toks.len() and toks[next_pos].tok_span.span_start_line == t.tok_span.span_start_line
+                                nk = toks[next_pos].tok_kind
+                                ntxt = toks[next_pos].tok_text
+                                if nk == TOK_INT() or nk == TOK_FLOAT() or nk == TOK_STR() or nk == TOK_INTERP_STR() or (nk == TOK_IDENT() and x86_synth_find_local_var(s, ntxt) != 0)
+                                    x86_synth_compile_expr(s, toks, pos_box)
+                                    // mov rdi, rax (pass argument 0 in %rdi)
+                                    x86_synth_emit_byte(s, 72)
+                                    x86_synth_emit_byte(s, 137)
+                                    x86_synth_emit_byte(s, 199)
+                                end
+                            end
+                            // Emit direct call: call var_name (leaves return value in %rax)
+                            x86_synth_emit_byte(s, 232)
+                            patch_pos = s.synth_code.len()
+                            x86_synth_emit_u32(s, 0)
+                            call_rel = X86CallReloc()
+                            call_rel.cr_patch_offset = patch_pos
+                            call_rel.cr_call_site_end = patch_pos + 4
+                            call_rel.cr_target_name = var_name
+                            push(s.synth_call_relocs, call_rel)
+                            if var_name == "main" or var_name == "মূল"
+                                s.synth_called_top_level_main = 1
+                            end
+                            if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
+                                s.synth_last_expr_type = "int"
+                            elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং"
+                                s.synth_last_expr_type = "str"
+                            else
+                                s.synth_last_expr_type = ""
+                            end
+                        else
+                            // Unbound identifier defaults to 0
+                            x86_synth_emit_byte(s, 49)
+                            x86_synth_emit_byte(s, 192)
+                            s.synth_last_expr_type = ""
+                        end
+                    end
+                end
     else
         // WHY: Syntax error guard against unexpected delimiters inside expression operands
         if k == TOK_SEMI() or k == TOK_RBRACE() or k == TOK_RPAREN() or txt == ";" or txt == "}" or txt == ")"

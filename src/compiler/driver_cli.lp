@@ -249,6 +249,12 @@ fn main
                 t_arg = get(args, i)
                 if t_arg == "windows" or t_arg == "pe" or t_arg == "win"
                     emit_format = FORMAT_PE()
+                elif t_arg == "macos-arm64" or t_arg == "darwin-arm64" or t_arg == "apple-silicon"
+                    emit_format = FORMAT_MACHO()
+                    target_arch = TARGET_ID_ARM64()
+                elif t_arg == "macos-x86_64" or t_arg == "darwin-x86_64"
+                    emit_format = FORMAT_MACHO()
+                    target_arch = TARGET_ID_X86_64()
                 elif t_arg == "macos" or t_arg == "macho" or t_arg == "darwin" or t_arg == "mac"
                     emit_format = FORMAT_MACHO()
                 elif t_arg == "arm64" or t_arg == "aarch64"
@@ -264,6 +270,12 @@ fn main
                     emit_format = FORMAT_UNIKERNEL()
                 elif t_arg == "x86_64" or t_arg == "amd64" or t_arg == "linux"
                     target_arch = TARGET_ID_X86_64()
+        elif arg == "--target=macos-arm64" or arg == "--target=darwin-arm64" or arg == "--target=apple-silicon"
+            emit_format = FORMAT_MACHO()
+            target_arch = TARGET_ID_ARM64()
+        elif arg == "--target=macos-x86_64" or arg == "--target=darwin-x86_64"
+            emit_format = FORMAT_MACHO()
+            target_arch = TARGET_ID_X86_64()
         elif arg == "--format=macho" or arg == "--macho" or arg == "--target=macos"
             emit_format = FORMAT_MACHO()
         elif arg == "--format=pe" or arg == "--pe" or arg == "--target=windows"

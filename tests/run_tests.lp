@@ -1213,6 +1213,68 @@ fn main
     else
         failed = failed + 1
 
+    // 234: Phase 1-4 Forensic Architecture Deep Audit (f64, NaN, Fields, Globals, Closures, Threads, HKDF/AES-CTR, ARM64/Mach-O/PE/WASM)
+    if run_single_test(compiler, "tests/test_phase1_to_phase4_deep_audit.lp", "test_phase1_to_phase4_deep_audit") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    // 235-245: Sovereign Aati Ecosystem Package Test Suites (11/11)
+    if run_single_test(compiler, "aati/crypto_vault/tests/test_vault.lp", "aati_crypto_vault") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/json_toolkit/tests/test_json.lp", "aati_json_toolkit") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/lipi_dataframe/tests/test_df.lp", "aati_lipi_dataframe") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/lipi_grpc/tests/test_grpc.lp", "aati_lipi_grpc") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/lipi_http_client/tests/test_client.lp", "aati_lipi_http_client") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/lipi_jwt/tests/test_jwt.lp", "aati_lipi_jwt") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/lipi_sql/tests/test_sql.lp", "aati_lipi_sql") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/lipi_torch/tests/test_torch.lp", "aati_lipi_torch") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/math_extra/tests/test_math.lp", "aati_math_extra") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/sovereign_mesh/tests/test_mesh.lp", "aati_sovereign_mesh") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "aati/web_router/tests/test_router.lp", "aati_web_router") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

@@ -52,6 +52,9 @@ fn x86_synth_compile_fn_def s toks pos_box
     fn_entry.fn_name = fn_name
     fn_entry.fn_entry_offset = s.synth_code.len()
     fn_entry.fn_ret_type = ""
+    fn_entry.fn_end_offset = 0
+    fn_entry.fn_decl_line = base_line
+    fn_entry_idx = s.synth_functions.len()
     push(s.synth_functions, fn_entry)
     fn_alias = 0
     if method_alias != ""
@@ -59,13 +62,21 @@ fn x86_synth_compile_fn_def s toks pos_box
         fn_alias.fn_name = method_alias
         fn_alias.fn_entry_offset = s.synth_code.len()
         fn_alias.fn_ret_type = ""
+        fn_alias.fn_end_offset = 0
+        fn_alias.fn_decl_line = base_line
         push(s.synth_functions, fn_alias)
 
     // Reset frame locals (saving enclosing scope to restore when function definition completes)
     saved_locals = s.synth_locals
     saved_stack_offset = s.synth_stack_offset
+    saved_fn_idx = s.synth_current_fn_idx
+    saved_try_depth = s.synth_try_depth
+    saved_try_frames = s.synth_try_frames
     s.synth_locals = list()
     s.synth_stack_offset = 64
+    s.synth_current_fn_idx = fn_entry_idx
+    s.synth_try_depth = 0
+    s.synth_try_frames = list()
 
     // Parse parameter names (supporting parentheses, commas, and type annotations)
     params = list()
@@ -160,6 +171,13 @@ fn x86_synth_compile_fn_def s toks pos_box
         ptype = param_types[pi]
         if ptype != ""
             x86_synth_set_var_type(s, pname, ptype)
+            if ptype == "float" or ptype == "f64" or ptype == "f32"
+                x86_synth_set_prim_type(s, pname, "float")
+            elif ptype == "int" or ptype == "i64" or ptype == "i32" or ptype == "u64" or ptype == "u32"
+                x86_synth_set_prim_type(s, pname, "int")
+            elif ptype == "str" or ptype == "string"
+                x86_synth_set_prim_type(s, pname, "str")
+            end
         end
         x86_synth_emit_store_param(s, pi, off)
         pi = pi + 1
@@ -188,8 +206,18 @@ fn x86_synth_compile_fn_def s toks pos_box
             list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume '='
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             x86_synth_compile_expr(s, toks, pos_box)
+            if fn_entry.fn_ret_type == "" and s.synth_last_expr_type == "float"
+                fn_entry.fn_ret_type = "f64"
+                if fn_alias != 0
+                    fn_alias.fn_ret_type = "f64"
+                end
+            end
             x86_synth_emit_epilogue(s)
             after_fn_offset = s.synth_code.len()
+            fn_entry.fn_end_offset = after_fn_offset
+            if fn_alias != 0
+                fn_alias.fn_end_offset = after_fn_offset
+            end
             rel32 = after_fn_offset - (fn_jmp_patch + 4)
             x86_synth_patch_u32(s, fn_jmp_patch, rel32)
             needed_stack = s.synth_stack_offset
@@ -200,7 +228,11 @@ fn x86_synth_compile_fn_def s toks pos_box
             x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
             s.synth_locals = saved_locals
             s.synth_stack_offset = saved_stack_offset
+            s.synth_current_fn_idx = saved_fn_idx
+            s.synth_try_depth = saved_try_depth
+            s.synth_try_frames = saved_try_frames
             s.synth_in_function = 0
+            s.synth_current_fn = ""
             return 0
 
     // Parse function body statements until next function, EOF, or dedent
@@ -241,6 +273,10 @@ fn x86_synth_compile_fn_def s toks pos_box
 
     // Patch jump to bypass function body during top-level execution
     after_fn_offset = s.synth_code.len()
+    fn_entry.fn_end_offset = after_fn_offset
+    if fn_alias != 0
+        fn_alias.fn_end_offset = after_fn_offset
+    end
     rel32 = after_fn_offset - (fn_jmp_patch + 4)
     x86_synth_patch_u32(s, fn_jmp_patch, rel32)
     needed_stack = s.synth_stack_offset
@@ -251,6 +287,9 @@ fn x86_synth_compile_fn_def s toks pos_box
     x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
     s.synth_locals = saved_locals
     s.synth_stack_offset = saved_stack_offset
+    s.synth_current_fn_idx = saved_fn_idx
+    s.synth_try_depth = saved_try_depth
+    s.synth_try_frames = saved_try_frames
     s.synth_in_function = 0
     s.synth_current_fn = ""
     return 0
@@ -489,6 +528,15 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     if s.synth_heap_ptr_fn_off > 0
         x86_synth_patch_u64(s, s.synth_heap_ptr_fn_off + 2, heap_ptr_vaddr)
         x86_synth_record_reloc_patch(s, s.synth_heap_ptr_fn_off + 2, rw_file_off + 24)
+    end
+    mg_i = 0
+    while mg_i < s.synth_global_rw_patch_offs.len()
+        mg_p = s.synth_global_rw_patch_offs[mg_i]
+        mg_slot = s.synth_global_rw_slot_offs[mg_i]
+        x86_synth_patch_u64(s, mg_p, rw_vaddr - (0 - mg_slot))
+        x86_synth_record_reloc_patch(s, mg_p, rw_file_off + mg_slot)
+        mg_i = mg_i + 1
+    end
 
     // 9. Backpatch Scoped Arena Virtual Addresses & Record PIE Fixups
     x86_synth_patch_arena_helpers(s, arena_offs, heap_base_vaddr, heap_ptr_vaddr)

@@ -173,17 +173,17 @@ fn arm64_synth_expr_primary s toks pos_box
                 lc_rel.cr_target_name = "__list_create"
                 push(s.synth_call_relocs, lc_rel)
                 if arg_count > 0
-                    arm64_push_reg(s, 0)
+                    arm64_emit_mov_reg(s, 9, 0) // X9 = list header ptr (keep SP pointing to args)
                     ai = arg_count - 1
                     while ai >= 0
                         arm64_pop_reg(s, 1)
-                        arm64_emit_ldr_reg_sp(s, 2, 0)
                         item_off = 24 + (ai * 8)
                         scaled = item_off / 8
-                        st_item = 0xF9000000 | (scaled << 10) | (2 << 5) | 1
+                        // str x1, [x9, #item_off]
+                        st_item = 4177526784 | ((scaled & 4095) << 10) | (9 << 5) | 1
                         arm64_synth_emit32(s, st_item)
                         ai = ai - 1
-                    arm64_pop_reg(s, 0)
+                    arm64_emit_mov_reg(s, 0, 9) // return list ptr in X0
                 return 0
 
             // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────────
@@ -220,18 +220,16 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_synth_emit_call_alloc(s)
                 // Struct pointer is now in X0
                 if arg_count > 0
-                    arm64_push_reg(s, 0) // preserve struct pointer on stack
+                    arm64_emit_mov_reg(s, 9, 0) // X9 = struct ptr (keep SP pointing to args)
                     ai = arg_count - 1
                     while ai >= 0
                         arm64_pop_reg(s, 1) // pop field value into X1
-                        // ldr x2, [sp, #0] -> reload struct pointer into X2
-                        arm64_emit_ldr_reg_sp(s, 2, 0)
-                        // str x1, [x2, #ai*8] -> 0xF9000000 | (((ai*8)/8) << 10) | (2 << 5) | 1
+                        // str x1, [x9, #ai*8]
                         scaled_ai = ai & 4095
-                        st_word = 4177526784 | (scaled_ai << 10) | (2 << 5) | 1
+                        st_word = 4177526784 | (scaled_ai << 10) | (9 << 5) | 1
                         arm64_synth_emit32(s, st_word)
                         ai = ai - 1
-                    arm64_pop_reg(s, 0) // restore struct pointer into X0
+                    arm64_emit_mov_reg(s, 0, 9) // return struct pointer in X0
                 return 0
 
             // ── Normal Function Call: Pop arguments into AAPCS64 registers X0..X7

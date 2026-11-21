@@ -463,6 +463,10 @@ fn wasm_emit_type_section type_param_counts
             push(payload, WASM_TYPE_I32)
             wasm_emit_u32_leb(payload, 1)
             push(payload, WASM_TYPE_I32)
+        elif pcount == (0 - 5)
+            // WASI _start void signature: () -> ()
+            wasm_emit_u32_leb(payload, 0)
+            wasm_emit_u32_leb(payload, 0)
         else
             // Parameter vector: pcount items of type i64 (0x7E)
             wasm_emit_u32_leb(payload, pcount)
@@ -498,11 +502,11 @@ fn wasm_emit_function_section func_type_indices
 
 // Section 5: Memory Section
 fn wasm_emit_memory_section
-    // WHY: Declares 1 page (64KB) initial linear memory for strings and dynamic allocations.
+    // WHY: Declares 4 pages (256KB) initial linear memory for strings and dynamic heap allocations.
     payload = list()
     wasm_emit_u32_leb(payload, 1) // 1 memory declaration
     push(payload, 0)              // Flags = 0 (minimum pages only, no maximum)
-    wasm_emit_u32_leb(payload, 1) // Initial memory size = 1 page (64KB)
+    wasm_emit_u32_leb(payload, 4) // Initial memory size = 4 pages (256KB)
     return wasm_emit_section(WASM_SEC_MEMORY, payload)
 
 // Section 7: Export Section

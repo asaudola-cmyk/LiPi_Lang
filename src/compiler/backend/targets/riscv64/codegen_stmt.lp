@@ -604,6 +604,8 @@ fn riscv64_synth_compile_statement s toks pos_box
         is_fn = 1
 
     if is_fn == 1
+        fn_base_col = t.tok_span.span_start_col
+        fn_base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, pos + 1) // Consume fn
         name_pos = get(pos_box, 0)
         fn_name = ""
@@ -621,7 +623,9 @@ fn riscv64_synth_compile_statement s toks pos_box
         fn_entry.rv_fn_entry_offset = s.rv_code.len()
         push(s.rv_functions, fn_entry)
 
-        // Reset frame locals
+        // Save outer scope and initialize function frame locals
+        saved_rv_locals = s.rv_locals
+        saved_rv_stack_off = s.rv_stack_offset
         s.rv_locals = list()
         s.rv_stack_offset = 16
         s.rv_in_function = 1
@@ -667,19 +671,41 @@ fn riscv64_synth_compile_statement s toks pos_box
                 riscv64_emit_sd(s, arg_reg, 2, off)
             pi = pi + 1
 
-        // Parse function body statements until next function or EOF
+        // Parse function body statements until explicit end, next fn, dedent, or EOF
         while get(pos_box, 0) < toks.len()
+            riscv64_synth_skip_whitespace_tokens(toks, pos_box)
             cur_pos = get(pos_box, 0)
+            if cur_pos >= toks.len()
+                break
+            end
             ct = toks[cur_pos]
-            if ct.tok_kind == TOK_KW_FN() or ct.tok_kind == TOK_DIR_FN()
+            ck_fn = ct.tok_kind
+            ctx_fn = ct.tok_text
+            if ck_fn == TOK_EOF()
                 break
-            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn")
+            end
+            if ck_fn == TOK_KW_END() or ck_fn == TOK_DIR_END() or (ck_fn == TOK_IDENT() and (ctx_fn == "end" or ctx_fn == "@end" or ctx_fn == "শেষ"))
+                list_set(pos_box, 0, cur_pos + 1)
                 break
+            end
+            if ck_fn == TOK_KW_FN() or ck_fn == TOK_DIR_FN() or (ck_fn == TOK_IDENT() and (ctx_fn == "fn" or ctx_fn == "কাজ" or ctx_fn == "@fn"))
+                break
+            end
+            if ct.tok_span.span_start_line > fn_base_line and ct.tok_span.span_start_col <= fn_base_col
+                break
+            end
+            bp_fn = get(pos_box, 0)
             riscv64_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) == bp_fn
+                list_set(pos_box, 0, bp_fn + 1)
+            end
+        end
 
         // Default epilogue at end of function
         riscv64_emit_addi(s, 10, 0, 0)
         riscv64_emit_epilogue(s)
+        s.rv_locals = saved_rv_locals
+        s.rv_stack_offset = saved_rv_stack_off
         s.rv_in_function = 0
 
         // Patch jump to bypass function body during top-level execution

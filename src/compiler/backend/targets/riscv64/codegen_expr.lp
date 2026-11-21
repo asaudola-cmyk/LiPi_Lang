@@ -167,15 +167,14 @@ fn riscv64_synth_expr_primary s toks pos_box
                 lc_rel.rv_cr_target_name = "__list_create"
                 push(s.rv_call_relocs, lc_rel)
                 if arg_count > 0
-                    riscv64_push_reg(s, 10)
+                    riscv64_emit_addi(s, 28, 10, 0) // t3 = list ptr (keep SP at args)
                     ai = arg_count - 1
                     while ai >= 0
                         riscv64_pop_reg(s, 11)
-                        riscv64_emit_ld(s, 12, 2, 0)
                         item_off = 24 + (ai * 8)
-                        riscv64_emit_sd(s, 11, 12, item_off)
+                        riscv64_emit_sd(s, 11, 28, item_off)
                         ai = ai - 1
-                    riscv64_pop_reg(s, 10)
+                    riscv64_emit_addi(s, 10, 28, 0) // restore list ptr into a0
                 return 0
 
             // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────
@@ -212,16 +211,13 @@ fn riscv64_synth_expr_primary s toks pos_box
                 riscv64_synth_emit_call_alloc(s)
                 // Struct pointer is now in a0
                 if arg_count > 0
-                    riscv64_push_reg(s, 10) // preserve struct pointer on stack
+                    riscv64_emit_addi(s, 28, 10, 0) // t3 = struct ptr (keep SP at args)
                     ai = arg_count - 1
                     while ai >= 0
                         riscv64_pop_reg(s, 11) // pop field value into a1
-                        // ld a2, 0(sp) -> reload struct pointer into a2
-                        riscv64_emit_ld(s, 12, 2, 0)
-                        // sd a1, (ai*8)(a2)
-                        riscv64_emit_sd(s, 11, 12, ai * 8)
+                        riscv64_emit_sd(s, 11, 28, ai * 8)
                         ai = ai - 1
-                    riscv64_pop_reg(s, 10) // restore struct pointer into a0
+                    riscv64_emit_addi(s, 10, 28, 0) // restore struct pointer into a0
                 return 0
 
             // ── Normal Function Call: Pop arguments into LP64 registers a0..a7

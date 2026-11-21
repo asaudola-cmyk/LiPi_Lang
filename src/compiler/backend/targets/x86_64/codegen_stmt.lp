@@ -26,6 +26,24 @@ fn x86_synth_compile_statement s toks pos_box
         list_set(pos_box, 0, pos + 1)
         return 0
 
+    // WHY: Record real source line -> machine-code PC mappings for DWARF v4 .debug_line
+    stmt_src_line = t.tok_span.span_start_line
+    if stmt_src_line > 0
+        cur_pc_line = s.synth_code.len()
+        if s.synth_line_pcs.len() == 0
+            push(s.synth_line_pcs, cur_pc_line)
+            push(s.synth_line_nums, stmt_src_line)
+        else
+            last_lp_idx = s.synth_line_pcs.len() - 1
+            if cur_pc_line > s.synth_line_pcs[last_lp_idx] and stmt_src_line != s.synth_line_nums[last_lp_idx]
+                push(s.synth_line_pcs, cur_pc_line)
+                push(s.synth_line_nums, stmt_src_line)
+            elif cur_pc_line == s.synth_line_pcs[last_lp_idx]
+                list_set(s.synth_line_nums, last_lp_idx, stmt_src_line)
+            end
+        end
+    end
+
     // ── 1. Output Statement: say / বলো / print / println / show / দেখাও ──────────
     is_print = 0
     if k == TOK_KW_PRINT()
@@ -75,10 +93,53 @@ fn x86_synth_compile_statement s toks pos_box
 
         if has_expr == 1
             x86_synth_compile_expr(s, toks, pos_box)
+            if s.synth_last_expr_type == "float" and s.synth_current_fn_idx >= 0 and s.synth_current_fn_idx < s.synth_functions.len()
+                ret_fn_obj = s.synth_functions[s.synth_current_fn_idx]
+                if ret_fn_obj.fn_ret_type == ""
+                    ret_fn_obj.fn_ret_type = "f64"
+                end
+            end
         else
             // Default 0 return
             x86_synth_emit_byte(s, 49)
             x86_synth_emit_byte(s, 192)
+        end
+
+        if s.synth_try_frames.len() > 0
+            cur_tframe = s.synth_try_frames[s.synth_try_frames.len() - 1]
+            tf_flag_off = cur_tframe[0]
+            tf_val_off = cur_tframe[1]
+            tf_patches = cur_tframe[2]
+            tf_entry_depth = cur_tframe[3]
+            pops_ret = s.synth_try_depth - tf_entry_depth
+            if pops_ret > 0
+                x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+                ti_ret = 0
+                while ti_ret < pops_ret
+                    x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                    ti_ret = ti_ret + 1
+                end
+                x86_synth_emit_bytes(s, [72, 131, 196, 8, 88]) // add rsp, 8; pop rax
+            end
+            x86_synth_emit_store_var(s, 0, tf_val_off)
+            x86_synth_emit_bytes(s, [184, 2, 0, 0, 0]) // mov eax, 2
+            x86_synth_emit_store_var(s, 0, tf_flag_off)
+            x86_synth_emit_byte(s, 233) // jmp rel32 -> enclosing finally
+            rj_off = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            push(tf_patches, rj_off)
+            return 0
+        end
+
+        if s.synth_try_depth > 0
+            x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+            ti_ret = 0
+            while ti_ret < s.synth_try_depth
+                x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                ti_ret = ti_ret + 1
+            end
+            x86_synth_emit_bytes(s, [72, 131, 196, 8, 88]) // add rsp, 8; pop rax
+        end
 
         x86_synth_emit_epilogue(s)
         return 0
@@ -86,6 +147,15 @@ fn x86_synth_compile_statement s toks pos_box
     // ── 3. Loop Control: break / থামো & continue / চলুক ───────────────────────
     if k == TOK_KW_BREAK() or (k == TOK_IDENT() and (txt == "break" or txt == "থামো"))
         list_set(pos_box, 0, pos + 1)
+        if s.synth_loop_try_depths.len() > 0
+            l_td = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
+            diff_td = s.synth_try_depth - l_td
+            ti_brk = 0
+            while ti_brk < diff_td
+                x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                ti_brk = ti_brk + 1
+            end
+        end
         if s.synth_loop_breaks.len() > 0
             x86_synth_emit_byte(s, 233) // jmp rel32
             p_off = s.synth_code.len()
@@ -96,6 +166,15 @@ fn x86_synth_compile_statement s toks pos_box
 
     if k == TOK_KW_CONTINUE() or (k == TOK_IDENT() and (txt == "continue" or txt == "চলুক" or txt == "চলো"))
         list_set(pos_box, 0, pos + 1)
+        if s.synth_loop_try_depths.len() > 0
+            l_td = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
+            diff_td = s.synth_try_depth - l_td
+            ti_cnt = 0
+            while ti_cnt < diff_td
+                x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                ti_cnt = ti_cnt + 1
+            end
+        end
         if s.synth_loop_continues.len() > 0
             x86_synth_emit_byte(s, 233) // jmp rel32
             p_off = s.synth_code.len()
@@ -138,41 +217,73 @@ fn x86_synth_compile_statement s toks pos_box
                 break
         if chain_fields.len() > 0 and scan_fp < toks.len()
             t_eq = toks[scan_fp]
+            teq_k = t_eq.tok_kind
+            teq_txt = t_eq.tok_text
             is_assign = 0
-            if t_eq.tok_kind == TOK_ASSIGN() or (t_eq.tok_kind != TOK_STR() and t_eq.tok_text == "=")
+            is_fld_comp = 0
+            fld_comp_op = 0
+            if teq_k == TOK_ASSIGN() or (teq_k != TOK_STR() and teq_txt == "=")
                 is_assign = 1
+            elif teq_k == TOK_PLUSEQ() or teq_txt == "+="
+                is_assign = 1
+                is_fld_comp = 1
+                fld_comp_op = TOK_PLUS()
+            elif teq_k == TOK_MINUSEQ() or teq_txt == "-="
+                is_assign = 1
+                is_fld_comp = 1
+                fld_comp_op = TOK_MINUS()
+            elif teq_k == TOK_STAREQ() or teq_txt == "*="
+                is_assign = 1
+                is_fld_comp = 1
+                fld_comp_op = TOK_STAR()
+            elif teq_k == TOK_SLASHEQ() or teq_txt == "/="
+                is_assign = 1
+                is_fld_comp = 1
+                fld_comp_op = TOK_SLASH()
+            elif teq_k == TOK_PERCENTEQ() or teq_txt == "%="
+                is_assign = 1
+                is_fld_comp = 1
+                fld_comp_op = TOK_PERCENT()
+            end
             if is_assign == 1
                 obj_name = txt
-                list_set(pos_box, 0, scan_fp + 1) // Consume obj, '.f1...fN', '='
+                list_set(pos_box, 0, scan_fp + 1) // Consume obj, '.f1...fN', op
 
-                // Evaluate expr into %rax
+                // Evaluate expr into %rax and save RHS value on stack
                 x86_synth_compile_expr(s, toks, pos_box)
+                rhs_fld_type = s.synth_last_expr_type
+                x86_synth_emit_byte(s, 80) // push rax
 
-                // Save value: push rax
-                x86_synth_emit_byte(s, 80)
-
-                // Load root obj pointer into %rcx
+                // Load root obj pointer into %rcx (preserving stack alignment)
                 lv_obj = x86_synth_find_local_var(s, obj_name)
+                cur_stype = ""
                 if lv_obj != 0 and lv_obj.lv_is_spilled == 0 and lv_obj.lv_reg >= 0
                     x86_synth_emit_mov_reg_reg(s, 1, lv_obj.lv_reg)
+                    cur_stype = x86_synth_get_var_type(s, obj_name)
                 else
-                    obj_off = x86_synth_lookup_var(s, obj_name)
-                    if obj_off > 0
-                        x86_synth_emit_load_var(s, 1, obj_off)
+                    mg_obj = x86_synth_find_mutable_global(s, obj_name)
+                    if lv_obj == 0 and mg_obj >= 512
+                        x86_synth_emit_mutable_global_read(s, mg_obj)
+                        x86_synth_emit_bytes(s, [72, 137, 193]) // mov rcx, rax
+                        cur_stype = x86_synth_get_mutable_global_struct(s, obj_name)
                     else
-                        // mov rcx, 0
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 49)
-                        x86_synth_emit_byte(s, 201)
+                        obj_off = x86_synth_lookup_var(s, obj_name)
+                        if obj_off > 0
+                            x86_synth_emit_load_var(s, 1, obj_off)
+                        else
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 49)
+                            x86_synth_emit_byte(s, 201)
+                        end
+                        cur_stype = x86_synth_get_var_type(s, obj_name)
                     end
                 end
 
-                // Walk intermediate nested struct pointers: mov rcx, [rcx + mid_off]
-                cur_stype = x86_synth_get_var_type(s, obj_name)
+                // Walk intermediate nested struct pointers with field type propagation
                 ci = 0
                 while ci < chain_fields.len() - 1
                     mid_off = x86_synth_get_field_offset(s, cur_stype, chain_fields[ci])
-                    cur_stype = ""
+                    cur_stype = x86_synth_get_field_type(s, cur_stype, chain_fields[ci])
                     if mid_off < 128
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 139)
@@ -187,12 +298,64 @@ fn x86_synth_compile_statement s toks pos_box
                     ci = ci + 1
                 end
 
-                // Pop value into %rax
-                x86_synth_emit_byte(s, 88)
-
-                // Store value to leaf field: mov [rcx + f_off], rax
                 leaf_field = chain_fields[chain_fields.len() - 1]
                 f_off = x86_synth_get_field_offset(s, cur_stype, leaf_field)
+                leaf_ftype = x86_synth_get_field_type(s, cur_stype, leaf_field)
+                if is_fld_comp == 0
+                    // Pop RHS value into %rax
+                    x86_synth_emit_byte(s, 88)
+                else
+                    // Pop RHS value into %r8, load old [rcx + f_off] into %rax
+                    x86_synth_emit_bytes(s, [65, 88]) // pop r8
+                    if f_off < 128
+                        x86_synth_emit_bytes(s, [72, 139, 65, f_off])
+                    else
+                        x86_synth_emit_bytes(s, [72, 139, 129])
+                        x86_synth_emit_u32(s, f_off)
+                    end
+                    is_flt_fld = 0
+                    if leaf_ftype == "f64" or leaf_ftype == "f32" or leaf_ftype == "float" or rhs_fld_type == "float"
+                        is_flt_fld = 1
+                    end
+                    if is_flt_fld == 1 and fld_comp_op != TOK_PERCENT()
+                        if leaf_ftype == "f64" or leaf_ftype == "f32" or leaf_ftype == "float"
+                            x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                        else
+                            x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                        end
+                        if rhs_fld_type == "float"
+                            x86_synth_emit_bytes(s, [102, 73, 15, 110, 200]) // movq xmm1, r8
+                        else
+                            x86_synth_emit_bytes(s, [242, 73, 15, 42, 200])  // cvtsi2sd xmm1, r8
+                        end
+                        if fld_comp_op == TOK_PLUS()
+                            x86_synth_emit_bytes(s, [242, 15, 88, 193])
+                        elif fld_comp_op == TOK_MINUS()
+                            x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                        elif fld_comp_op == TOK_STAR()
+                            x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                        elif fld_comp_op == TOK_SLASH()
+                            x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                        end
+                        x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
+                    elif fld_comp_op == TOK_PLUS() and (leaf_ftype == "str" or leaf_ftype == "string" or rhs_fld_type == "str")
+                        x86_synth_emit_bytes(s, [81, 72, 131, 236, 8, 72, 137, 199, 76, 137, 198])
+                        x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                        x86_synth_emit_bytes(s, [72, 131, 196, 8, 89])
+                    elif fld_comp_op == TOK_PLUS()
+                        x86_synth_emit_bytes(s, [76, 1, 192]) // add rax, r8
+                    elif fld_comp_op == TOK_MINUS()
+                        x86_synth_emit_bytes(s, [76, 41, 192]) // sub rax, r8
+                    elif fld_comp_op == TOK_STAR()
+                        x86_synth_emit_bytes(s, [73, 15, 175, 192]) // imul rax, r8
+                    elif fld_comp_op == TOK_SLASH()
+                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 5, 72, 153, 73, 247, 248])
+                    elif fld_comp_op == TOK_PERCENT()
+                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                    end
+                end
+
+                // Store value to leaf field: mov [rcx + f_off], rax
                 if f_off < 128
                     x86_synth_emit_byte(s, 72)
                     x86_synth_emit_byte(s, 137)
@@ -203,15 +366,18 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_byte(s, 137)
                     x86_synth_emit_byte(s, 129)
                     x86_synth_emit_u32(s, f_off)
+                end
 
                 return 0
 
-    // ── 5b. Array Indexing Assignment: arr[idx] = expr ───────────────────────────
+    // ── 5b. Array Indexing Assignment: arr[idx] (= | += | -= | *= | /= | %=) expr ───────
     if k == TOK_IDENT() and pos + 1 < toks.len()
         nt1 = toks[pos + 1]
         if nt1.tok_kind == TOK_LBRACKET() or (nt1.tok_kind != TOK_STR() and nt1.tok_text == "[")
             arr_name = txt
             is_arr_assign = 0
+            is_arr_comp = 0
+            arr_comp_op = 0
             scan_p = pos + 1
             b_depth = 0
             while scan_p < toks.len()
@@ -226,8 +392,31 @@ fn x86_synth_compile_statement s toks pos_box
                             next_p = next_p + 1
                         if next_p < toks.len()
                             nt = toks[next_p]
-                            if nt.tok_kind == TOK_ASSIGN() or (nt.tok_kind != TOK_STR() and nt.tok_text == "=")
+                            nk_arr = nt.tok_kind
+                            nt_arr = nt.tok_text
+                            if nk_arr == TOK_ASSIGN() or (nk_arr != TOK_STR() and nt_arr == "=")
                                 is_arr_assign = 1
+                            elif nk_arr == TOK_PLUSEQ() or nt_arr == "+="
+                                is_arr_assign = 1
+                                is_arr_comp = 1
+                                arr_comp_op = TOK_PLUS()
+                            elif nk_arr == TOK_MINUSEQ() or nt_arr == "-="
+                                is_arr_assign = 1
+                                is_arr_comp = 1
+                                arr_comp_op = TOK_MINUS()
+                            elif nk_arr == TOK_STAREQ() or nt_arr == "*="
+                                is_arr_assign = 1
+                                is_arr_comp = 1
+                                arr_comp_op = TOK_STAR()
+                            elif nk_arr == TOK_SLASHEQ() or nt_arr == "/="
+                                is_arr_assign = 1
+                                is_arr_comp = 1
+                                arr_comp_op = TOK_SLASH()
+                            elif nk_arr == TOK_PERCENTEQ() or nt_arr == "%="
+                                is_arr_assign = 1
+                                is_arr_comp = 1
+                                arr_comp_op = TOK_PERCENT()
+                            end
                         break
                 scan_p = scan_p + 1
 
@@ -239,28 +428,85 @@ fn x86_synth_compile_statement s toks pos_box
                 cp = get(pos_box, 0)
                 if cp < toks.len() and (toks[cp].tok_kind == TOK_RBRACKET() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "]"))
                     list_set(pos_box, 0, cp + 1)
-                // Consume '='
+                // Consume '=' or compound op
                 cp = get(pos_box, 0)
-                if cp < toks.len() and (toks[cp].tok_kind == TOK_ASSIGN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "="))
+                if cp < toks.len()
                     list_set(pos_box, 0, cp + 1)
+                end
                 x86_synth_compile_expr(s, toks, pos_box) // rax = val
-                // Set up registers for _lipi_list_set:
+                rhs_arr_type = s.synth_last_expr_type
+                if is_arr_comp == 1
+                    x86_synth_emit_byte(s, 80) // push rhs (stack: [rsp]=rhs, [rsp+8]=idx)
+                    lv_arr = x86_synth_find_local_var(s, arr_name)
+                    if lv_arr != 0 and lv_arr.lv_is_spilled == 0 and lv_arr.lv_reg >= 0
+                        x86_synth_emit_mov_reg_reg(s, 7, lv_arr.lv_reg)
+                    else
+                        mg_arr = x86_synth_find_mutable_global(s, arr_name)
+                        if lv_arr == 0 and mg_arr >= 512
+                            x86_synth_emit_mutable_global_read(s, mg_arr)
+                            x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+                        else
+                            off = x86_synth_lookup_var(s, arr_name)
+                            if off > 0
+                                x86_synth_emit_load_var(s, 7, off)
+                            else
+                                x86_synth_emit_bytes(s, [49, 255])
+                            end
+                        end
+                    end
+                    x86_synth_emit_bytes(s, [72, 139, 116, 36, 8]) // mov rsi, [rsp + 8]
+                    x86_synth_emit_call_helper(s, "_lipi_list_get") // rax = old element
+                    x86_synth_emit_bytes(s, [65, 88]) // pop r8 (rhs); stack top is now idx
+                    if rhs_arr_type == "float" and arr_comp_op != TOK_PERCENT()
+                        x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                        x86_synth_emit_bytes(s, [102, 73, 15, 110, 200]) // movq xmm1, r8
+                        if arr_comp_op == TOK_PLUS()
+                            x86_synth_emit_bytes(s, [242, 15, 88, 193])
+                        elif arr_comp_op == TOK_MINUS()
+                            x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                        elif arr_comp_op == TOK_STAR()
+                            x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                        elif arr_comp_op == TOK_SLASH()
+                            x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                        end
+                        x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
+                    elif arr_comp_op == TOK_PLUS() and rhs_arr_type == "str"
+                        x86_synth_emit_bytes(s, [72, 137, 199, 76, 137, 198])
+                        x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                    elif arr_comp_op == TOK_PLUS()
+                        x86_synth_emit_bytes(s, [76, 1, 192])
+                    elif arr_comp_op == TOK_MINUS()
+                        x86_synth_emit_bytes(s, [76, 41, 192])
+                    elif arr_comp_op == TOK_STAR()
+                        x86_synth_emit_bytes(s, [73, 15, 175, 192])
+                    elif arr_comp_op == TOK_SLASH()
+                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 5, 72, 153, 73, 247, 248])
+                    elif arr_comp_op == TOK_PERCENT()
+                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                    end
+                end
                 // rdx = val, rsi = idx, rdi = list_ptr
                 x86_synth_emit_byte(s, 72) // mov rdx, rax (0x48 0x89 0xC2)
                 x86_synth_emit_byte(s, 137)
                 x86_synth_emit_byte(s, 194)
                 x86_synth_emit_byte(s, 94)  // pop rsi (idx)
-                lv_arr = x86_synth_find_local_var(s, arr_name)
-                if lv_arr != 0 and lv_arr.lv_is_spilled == 0 and lv_arr.lv_reg >= 0
-                    x86_synth_emit_mov_reg_reg(s, 7, lv_arr.lv_reg)
+                lv_arr2 = x86_synth_find_local_var(s, arr_name)
+                if lv_arr2 != 0 and lv_arr2.lv_is_spilled == 0 and lv_arr2.lv_reg >= 0
+                    x86_synth_emit_mov_reg_reg(s, 7, lv_arr2.lv_reg)
                 else
-                    off = x86_synth_lookup_var(s, arr_name)
-                    if off > 0
-                        x86_synth_emit_load_var(s, 7, off)
+                    mg_arr2 = x86_synth_find_mutable_global(s, arr_name)
+                    if lv_arr2 == 0 and mg_arr2 >= 512
+                        x86_synth_emit_bytes(s, [82, 86]) // push rdx; push rsi
+                        x86_synth_emit_mutable_global_read(s, mg_arr2)
+                        x86_synth_emit_bytes(s, [72, 137, 199, 94, 90]) // mov rdi, rax; pop rsi; pop rdx
                     else
-                        // mov rdi, 0
-                        x86_synth_emit_byte(s, 49)
-                        x86_synth_emit_byte(s, 255)
+                        off = x86_synth_lookup_var(s, arr_name)
+                        if off > 0
+                            x86_synth_emit_load_var(s, 7, off)
+                        else
+                            x86_synth_emit_byte(s, 49)
+                            x86_synth_emit_byte(s, 255)
+                        end
                     end
                 end
                 x86_synth_emit_call_helper(s, "_lipi_list_set")
@@ -594,7 +840,7 @@ fn x86_synth_compile_statement s toks pos_box
             return 0
         end
 
-    // ── 9c. Structured Try/Catch: try ... catch [err] ... [end] ─────────────────
+    // ── 9c. Structured Try/Catch/Finally: try ... catch [err] ... [finally ...] [end] ─
     is_try_stmt = 0
     if k == TOK_KW_TRY() or k == TOK_DIR_TRY() or (k == TOK_IDENT() and (txt == "try" or txt == "চেষ্টা" or txt == "@try"))
         if pos + 1 >= toks.len() or (toks[pos + 1].tok_kind != TOK_ASSIGN() and toks[pos + 1].tok_text != "=")
@@ -604,9 +850,14 @@ fn x86_synth_compile_statement s toks pos_box
         base_col = t.tok_span.span_start_col
         base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, pos + 1)
-        // Reserve 80B exception frame [rbp - exc_off]
-        s.synth_stack_offset = ((s.synth_stack_offset + 15) / 16) * 16 + 80
+        // Reserve 96B exception frame [rbp - exc_off]; +64/+72 store pending uncaught exc for finally
+        s.synth_stack_offset = ((s.synth_stack_offset + 15) / 16) * 16 + 96
         exc_off = s.synth_stack_offset
+        fin_flag_off = exc_off - 64
+        fin_val_off = exc_off - 72
+        x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+        x86_synth_emit_store_var(s, 0, fin_flag_off)
+
         // lea rdi, [rbp - exc_off]; lea rsi, [rip + catch_disp]; mov rdx, rbp; mov rcx, rsp; call _lipi_exc_push
         x86_synth_emit_bytes(s, [72, 141, 189])
         x86_synth_emit_u32(s, 0 - exc_off)
@@ -617,13 +868,19 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_emit_call_helper(s, "_lipi_exc_push")
         s.synth_last_store_end = 0 - 1
 
-        // Compile try body until 'catch', block end, or dedent
+        outer_try_depth = s.synth_try_depth
+        s.synth_try_depth = outer_try_depth + 1
+        try_ret_patches = list()
+        try_frame = [fin_flag_off, fin_val_off, try_ret_patches, outer_try_depth]
+        push(s.synth_try_frames, try_frame)
+
+        // Compile try body until 'catch', 'finally', block end, or dedent
         while get(pos_box, 0) < toks.len()
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             cur_pt = get(pos_box, 0)
             if cur_pt >= toks.len() break end
             ct_t = toks[cur_pt]
-            if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "catch" or ct_t.tok_text == "ধরো" or ct_t.tok_text == "@catch"))
+            if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "catch" or ct_t.tok_text == "ধরো" or ct_t.tok_text == "@catch" or ct_t.tok_text == "finally" or ct_t.tok_text == "অবশেষে" or ct_t.tok_text == "@finally"))
                 break
             end
             if x86_synth_is_block_end(toks, cur_pt) == 1 break end
@@ -633,7 +890,9 @@ fn x86_synth_compile_statement s toks pos_box
             if get(pos_box, 0) <= bp_t list_set(pos_box, 0, bp_t + 1) end
         end
 
-        // Normal exit from try: pop handler and jump past catch block
+        s.synth_try_depth = outer_try_depth
+
+        // Normal exit from try: pop handler and jump past catch block into finally
         x86_synth_emit_call_helper(s, "_lipi_exc_pop")
         x86_synth_emit_byte(s, 233)
         jmp_after_catch = s.synth_code.len()
@@ -644,10 +903,12 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_patch_u32(s, catch_lea_patch, catch_target_off - (catch_lea_patch + 4))
         s.synth_last_store_end = 0 - 1
 
+        has_catch_blk = 0
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         if get(pos_box, 0) < toks.len()
             ct_c = toks[get(pos_box, 0)]
             if ct_c.tok_kind == TOK_KW_CATCH() or ct_c.tok_kind == TOK_DIR_CATCH() or (ct_c.tok_kind == TOK_IDENT() and (ct_c.tok_text == "catch" or ct_c.tok_text == "ধরো" or ct_c.tok_text == "@catch"))
+                has_catch_blk = 1
                 c_line = ct_c.tok_span.span_start_line
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == c_line and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
@@ -661,6 +922,9 @@ fn x86_synth_compile_statement s toks pos_box
                     cur_pc = get(pos_box, 0)
                     if cur_pc >= toks.len() break end
                     ct_c2 = toks[cur_pc]
+                    if ct_c2.tok_kind == TOK_IDENT() and (ct_c2.tok_text == "finally" or ct_c2.tok_text == "অবশেষে" or ct_c2.tok_text == "@finally")
+                        break
+                    end
                     if x86_synth_is_block_end(toks, cur_pc) == 1 break end
                     if ct_c2.tok_span.span_start_line > c_line and ct_c2.tok_span.span_start_col <= base_col break end
                     bp_c = get(pos_box, 0)
@@ -669,12 +933,96 @@ fn x86_synth_compile_statement s toks pos_box
                 end
             end
         end
+
+        if has_catch_blk == 0
+            // Standalone try ... finally: record uncaught exception so it re-throws after finally
+            x86_synth_emit_store_var(s, 0, fin_val_off)
+            x86_synth_emit_mov_rax_imm64(s, 1)
+            x86_synth_emit_store_var(s, 0, fin_flag_off)
+        end
+
+        finally_entry_off = s.synth_code.len()
+        x86_synth_patch_u32(s, jmp_after_catch, finally_entry_off - (jmp_after_catch + 4))
+        rp_i = 0
+        while rp_i < try_ret_patches.len()
+            rp_off = try_ret_patches[rp_i]
+            x86_synth_patch_u32(s, rp_off, finally_entry_off - (rp_off + 4))
+            rp_i = rp_i + 1
+        end
+        s.synth_try_frames = pop(s.synth_try_frames)
+        s.synth_last_store_end = 0 - 1
+
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        if get(pos_box, 0) < toks.len()
+            ct_f = toks[get(pos_box, 0)]
+            if ct_f.tok_kind == TOK_IDENT() and (ct_f.tok_text == "finally" or ct_f.tok_text == "অবশেষে" or ct_f.tok_text == "@finally")
+                f_line = ct_f.tok_span.span_start_line
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    x86_synth_skip_whitespace_tokens(toks, pos_box)
+                    cur_pf = get(pos_box, 0)
+                    if cur_pf >= toks.len() break end
+                    ct_f2 = toks[cur_pf]
+                    if x86_synth_is_block_end(toks, cur_pf) == 1 break end
+                    if ct_f2.tok_span.span_start_line > f_line and ct_f2.tok_span.span_start_col <= base_col break end
+                    bp_f = get(pos_box, 0)
+                    x86_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) <= bp_f list_set(pos_box, 0, bp_f + 1) end
+                end
+            end
+        end
+
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         if get(pos_box, 0) < toks.len() and x86_synth_is_block_end(toks, get(pos_box, 0)) == 1 and toks[get(pos_box, 0)].tok_span.span_start_col >= base_col
             list_set(pos_box, 0, get(pos_box, 0) + 1)
         end
-        after_try_off = s.synth_code.len()
-        x86_synth_patch_u32(s, jmp_after_catch, after_try_off - (jmp_after_catch + 4))
+
+        if has_catch_blk == 0
+            x86_synth_emit_load_var(s, 0, fin_flag_off)
+            x86_synth_emit_bytes(s, [72, 131, 248, 1, 15, 133]) // cmp rax, 1; jne rel32
+            skip_rethrow_patch = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            x86_synth_emit_load_var(s, 7, fin_val_off) // mov rdi, [rbp - fin_val_off]
+            x86_synth_emit_call_helper(s, "_lipi_exc_throw")
+            after_rethrow = s.synth_code.len()
+            x86_synth_patch_u32(s, skip_rethrow_patch, after_rethrow - (skip_rethrow_patch + 4))
+        end
+
+        // Propagate or emit epilogue for pending return (fin_flag == 2)
+        x86_synth_emit_load_var(s, 0, fin_flag_off)
+        x86_synth_emit_bytes(s, [72, 131, 248, 2, 15, 133]) // cmp rax, 2; jne rel32
+        skip_fin_ret_patch = s.synth_code.len()
+        x86_synth_emit_u32(s, 0)
+        x86_synth_emit_load_var(s, 0, fin_val_off)
+        if s.synth_try_frames.len() > 0
+            p_frame = s.synth_try_frames[s.synth_try_frames.len() - 1]
+            p_flag_off = p_frame[0]
+            p_val_off = p_frame[1]
+            p_patches = p_frame[2]
+            p_entry_depth = p_frame[3]
+            p_pops = outer_try_depth - p_entry_depth
+            if p_pops > 0
+                x86_synth_emit_bytes(s, [80, 72, 131, 236, 8])
+                pi_fp = 0
+                while pi_fp < p_pops
+                    x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                    pi_fp = pi_fp + 1
+                end
+                x86_synth_emit_bytes(s, [72, 131, 196, 8, 88])
+            end
+            x86_synth_emit_store_var(s, 0, p_val_off)
+            x86_synth_emit_bytes(s, [184, 2, 0, 0, 0]) // mov eax, 2
+            x86_synth_emit_store_var(s, 0, p_flag_off)
+            x86_synth_emit_byte(s, 233)
+            p_jmp_off = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            push(p_patches, p_jmp_off)
+        else
+            x86_synth_emit_epilogue(s)
+        end
+        after_fin_ret = s.synth_code.len()
+        x86_synth_patch_u32(s, skip_fin_ret_patch, after_fin_ret - (skip_fin_ret_patch + 4))
+
         s.synth_last_store_end = 0 - 1
         return 0
 
@@ -779,6 +1127,57 @@ fn x86_synth_compile_statement s toks pos_box
         s.synth_last_store_end = 0 - 1
         return 0
 
+    // ── 9e. Mutable Global Declaration: global / @global / বিশ্বজনীন ───────────
+    if k == TOK_IDENT() and (txt == "global" or txt == "@global" or txt == "বিশ্বজনীন")
+        if pos + 1 < toks.len() and x86_synth_is_ident_token(toks[pos + 1].tok_kind) == 1
+            if toks[pos + 1].tok_text != "="
+                g_name = toks[pos + 1].tok_text
+                g_off = x86_synth_alloc_mutable_global(s, g_name)
+                list_set(pos_box, 0, pos + 2)
+                g_ann_type = ""
+                g_np = get(pos_box, 0)
+                if g_np < toks.len() and (toks[g_np].tok_kind == TOK_COLON() or (toks[g_np].tok_kind != TOK_STR() and toks[g_np].tok_text == ":"))
+                    if g_np + 1 < toks.len() and x86_synth_is_ident_token(toks[g_np + 1].tok_kind) == 1
+                        g_ann_type = toks[g_np + 1].tok_text
+                        list_set(pos_box, 0, g_np + 2)
+                    end
+                end
+                g_eqp = get(pos_box, 0)
+                if g_eqp < toks.len() and (toks[g_eqp].tok_kind == TOK_ASSIGN() or (toks[g_eqp].tok_kind != TOK_STR() and toks[g_eqp].tok_text == "="))
+                    list_set(pos_box, 0, g_eqp + 1)
+                    x86_synth_compile_expr(s, toks, pos_box)
+                    x86_synth_emit_mutable_global_write(s, g_off)
+                    g_prim = s.synth_last_expr_type
+                    g_st = s.synth_last_struct
+                    if g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "u64" or g_ann_type == "u32"
+                        g_prim = "int"
+                    elif g_ann_type == "float" or g_ann_type == "f64" or g_ann_type == "f32"
+                        g_prim = "float"
+                    elif g_ann_type == "str" or g_ann_type == "string"
+                        g_prim = "str"
+                    elif g_ann_type != ""
+                        g_st = g_ann_type
+                    end
+                    x86_synth_set_mutable_global_types(s, g_name, g_prim, g_st)
+                elif g_ann_type != ""
+                    g_p2 = ""
+                    g_s2 = ""
+                    if g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "u64" or g_ann_type == "u32"
+                        g_p2 = "int"
+                    elif g_ann_type == "float" or g_ann_type == "f64" or g_ann_type == "f32"
+                        g_p2 = "float"
+                    elif g_ann_type == "str" or g_ann_type == "string"
+                        g_p2 = "str"
+                    else
+                        g_s2 = g_ann_type
+                    end
+                    x86_synth_set_mutable_global_types(s, g_name, g_p2, g_s2)
+                end
+                return 0
+            end
+        end
+    end
+
     // ── 10. Assignment: <var> = <expr> or <var>: <type> = <expr> or <var> <op>= <expr> ───────────────────
     if x86_synth_is_ident_token(k) == 1
         var_name = txt
@@ -823,11 +1222,17 @@ fn x86_synth_compile_statement s toks pos_box
                 comp_op = TOK_PERCENT()
 
             if is_assign == 1
+                lv_mg_chk = x86_synth_find_local_var(s, var_name)
+                mg_cur_off = x86_synth_find_mutable_global(s, var_name)
+                is_mg_target = 0
+                if (s.synth_in_function == 0 and x86_synth_is_mutable_global_name(var_name) == 1) or (lv_mg_chk == 0 and mg_cur_off >= 512)
+                    is_mg_target = 1
+                end
                 if is_compound == 0
                     // Fast Path A & B: Direct 1-cycle in-register increment/accumulate for unspilled integer locals:
                     //   1) `x = x + k` or `x = x - k` (0 <= k <= 127) -> single `add/sub reg, imm8`
                     //   2) `x = x + (pure_int_expr)` -> evaluate `(expr)` into %rax, then single `add reg, rax`
-                    if assigned_type == "" and next_pos + 3 < toks.len()
+                    if is_mg_target == 0 and assigned_type == "" and next_pos + 3 < toks.len()
                         lv_fast = x86_synth_find_local_var(s, var_name)
                         if lv_fast != 0 and lv_fast.lv_is_spilled == 0 and lv_fast.lv_reg >= 0 and lv_fast.lv_prim_type == "int"
                             ft1 = toks[next_pos + 1]
@@ -948,6 +1353,23 @@ fn x86_synth_compile_statement s toks pos_box
                                 int_lit_val = rhs_tok.tok_int_val
                     list_set(pos_box, 0, next_pos + 1) // Consume ident [ : type ] and '='
                     x86_synth_compile_expr(s, toks, pos_box)
+                    if is_mg_target == 1
+                        mg_slot = x86_synth_alloc_mutable_global(s, var_name)
+                        x86_synth_emit_mutable_global_write(s, mg_slot)
+                        mg_p = s.synth_last_expr_type
+                        mg_st = s.synth_last_struct
+                        if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
+                            mg_p = "int"
+                        elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
+                            mg_p = "float"
+                        elif assigned_type == "str" or assigned_type == "string"
+                            mg_p = "str"
+                        elif assigned_type != ""
+                            mg_st = assigned_type
+                        end
+                        x86_synth_set_mutable_global_types(s, var_name, mg_p, mg_st)
+                        return 0
+                    end
                     off = x86_synth_bind_var(s, var_name)
                     if assigned_type != ""
                         x86_synth_set_var_type(s, var_name, assigned_type)
@@ -976,6 +1398,7 @@ fn x86_synth_compile_statement s toks pos_box
                     list_set(pos_box, 0, next_pos + 1) // Consume ident and op=
                     // Evaluate RHS expression into %rax
                     x86_synth_compile_expr(s, toks, pos_box)
+                    rhs_comp_type = s.synth_last_expr_type
                     // mov rcx, rax (save RHS in rcx)
                     x86_synth_emit_byte(s, 72)
                     x86_synth_emit_byte(s, 137)
@@ -983,21 +1406,50 @@ fn x86_synth_compile_statement s toks pos_box
                     // Load current value of target var into %rax
                     lv_tgt = x86_synth_find_local_var(s, var_name)
                     off = 0
-                    if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                    pt = ""
+                    if is_mg_target == 1
+                        mg_cur_off = x86_synth_alloc_mutable_global(s, var_name)
+                        x86_synth_emit_mutable_global_read(s, mg_cur_off)
+                        pt = x86_synth_get_mutable_global_prim(s, var_name)
+                    elif lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
                         x86_synth_emit_mov_reg_reg(s, 0, lv_tgt.lv_reg)
                         off = lv_tgt.lv_offset
+                        pt = x86_synth_get_prim_type(s, var_name)
                     else
                         off = x86_synth_alloc_var(s, var_name)
                         x86_synth_emit_load_var(s, 0, off)
-                    end
-                    if comp_op == TOK_PLUS()
                         pt = x86_synth_get_prim_type(s, var_name)
-                        if (pt == "int" or s.synth_last_expr_type == "int") and pt != "str" and s.synth_last_expr_type != "str"
+                    end
+                    res_comp_prim = pt
+                    if (pt == "float" or rhs_comp_type == "float") and comp_op != TOK_PERCENT()
+                        if pt == "float"
+                            x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                        else
+                            x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                        end
+                        if rhs_comp_type == "float"
+                            x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
+                        else
+                            x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
+                        end
+                        if comp_op == TOK_PLUS()
+                            x86_synth_emit_bytes(s, [242, 15, 88, 193])
+                        elif comp_op == TOK_MINUS()
+                            x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                        elif comp_op == TOK_STAR()
+                            x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                        elif comp_op == TOK_SLASH()
+                            x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                        end
+                        x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
+                        res_comp_prim = "float"
+                    elif comp_op == TOK_PLUS()
+                        if (pt == "int" or rhs_comp_type == "int") and pt != "str" and rhs_comp_type != "str"
                             // Native hardware add rax, rcx (0x48 0x01 0xC8) - 1 cycle silicon execution!
                             x86_synth_emit_byte(s, 72)
                             x86_synth_emit_byte(s, 1)
                             x86_synth_emit_byte(s, 200)
-                            x86_synth_set_prim_type(s, var_name, "int")
+                            res_comp_prim = "int"
                         else
                             // Safe dynamic fallback for strings, lists, objects
                             x86_synth_emit_byte(s, 72)
@@ -1007,7 +1459,8 @@ fn x86_synth_compile_statement s toks pos_box
                             x86_synth_emit_byte(s, 137)
                             x86_synth_emit_byte(s, 206)
                             x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
-                            x86_synth_set_prim_type(s, var_name, "")
+                            res_comp_prim = ""
+                        end
                     elif comp_op == TOK_MINUS()
                         // sub rax, rcx
                         x86_synth_emit_byte(s, 72)
@@ -1020,29 +1473,25 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_byte(s, 175)
                         x86_synth_emit_byte(s, 193)
                     elif comp_op == TOK_SLASH()
-                        // cqo; idiv rcx
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 153)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 247)
-                        x86_synth_emit_byte(s, 249)
+                        // Zero-guarded cqo; idiv rcx
+                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 5, 72, 153, 72, 247, 249])
                     elif comp_op == TOK_PERCENT()
-                        // cqo; idiv rcx; mov rax, rdx
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 153)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 247)
-                        x86_synth_emit_byte(s, 249)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 137)
-                        x86_synth_emit_byte(s, 208)
+                        // Zero-guarded cqo; idiv rcx; mov rax, rdx
+                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                    end
                     // Store updated value back to target
-                    if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
-                        // WHY: Update physical register directly and keep stack slot synchronized.
-                        x86_synth_emit_mov_reg_reg(s, lv_tgt.lv_reg, 0)
-                        x86_synth_emit_store_var(s, 0, off)
+                    if is_mg_target == 1
+                        x86_synth_emit_mutable_global_write(s, mg_cur_off)
+                        x86_synth_set_mutable_global_types(s, var_name, res_comp_prim, x86_synth_get_mutable_global_struct(s, var_name))
                     else
-                        x86_synth_emit_store_var(s, 0, off)
+                        x86_synth_set_prim_type(s, var_name, res_comp_prim)
+                        if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                            // WHY: Update physical register directly and keep stack slot synchronized.
+                            x86_synth_emit_mov_reg_reg(s, lv_tgt.lv_reg, 0)
+                            x86_synth_emit_store_var(s, 0, off)
+                        else
+                            x86_synth_emit_store_var(s, 0, off)
+                        end
                     end
                     return 0
 

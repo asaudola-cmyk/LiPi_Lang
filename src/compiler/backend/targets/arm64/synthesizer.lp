@@ -164,9 +164,16 @@ fn arm64_synth_compile_program tokens
         arm64_synth_patch_u32(s, cr.cr_patch_offset, bl_word)
         ci = ci + 1
 
-    // 7. Resolve 64-Bit Virtual Memory String Relocations
+    // 7. Resolve 64-Bit Virtual Memory String & Strict-W^X RW Heap Relocations
     total_code_size = s.synth_code.len()
-    rodata_base_vaddr = 4194424 + total_code_size
+    rodata_base_vaddr = 4194536 + total_code_size // 0x4000E8 + total_code_size
+
+    if s.synth_needs_alloc == 1 and s.synth_alloc_rw_patch_off >= 0
+        rx_tot = 232 + total_code_size + s.synth_rodata.len()
+        rw_f_off = ((rx_tot + 4095) / 4096) * 4096
+        rw_vaddr_target = 4259840 + rw_f_off
+        arm64_synth_patch_mov_imm64(s, s.synth_alloc_rw_patch_off, 1, rw_vaddr_target)
+    end
 
     ri = 0
     while ri < s.synth_str_relocs.len()
@@ -177,194 +184,93 @@ fn arm64_synth_compile_program tokens
 
     return s
 
-// ── 10. ELF64 AArch64 Container Header Generator ──────────────────────────────
+// ── 10. ELF64 AArch64 Container Header Generator (Strict W^X 3-PHDR Layout) ─
 
 fn arm64_elf_emit_executable code_bytes rodata_bytes out_path
-    // WHY: Packages the compiled AArch64 machine instructions and read-only constants into a
-    // bit-perfect Linux ELF64 standalone executable container and persists it to disk with 0755 permissions.
-    //
-    // Binary Layout:
-    //   - Base Virtual Address: 0x400000 (4194304)
-    //   - ELF64 Header: 64 bytes (0x00 - 0x3F)
-    //   - PT_LOAD Program Header: 56 bytes (0x40 - 0x77)
-    //   - Total Header Overhead: 120 bytes (0x78)
-    //   - Entry Point: 0x400078 (4194424) -> code_bytes starts immediately at offset 120
-    //   - Machine: EM_AARCH64 = 183 (0x00B7)
-    //   - Single PT_LOAD segment encompassing header, code, and rodata.
-    total_hdr_size = 120 // 64 (ELF Header) + 56 (PT_LOAD Program Header)
+    // WHY: Packages AArch64 machine instructions and .rodata into a strict W^X Linux ELF64
+    // executable (0 RWE segments): PHDR 0 = RX (5), PHDR 1 = RW (6), PHDR 2 = PT_GNU_STACK (6).
+    // Base Virtual Address: 0x400000; Header: 64 + 3*56 = 232 bytes; Entry: 0x4000E8 (4194536).
+    total_hdr_size = 232
     code_size = code_bytes.len()
     rodata_size = rodata_bytes.len()
-    total_size = total_hdr_size + code_size + rodata_size
-    base_vaddr = 4194304  // 0x400000
-    entry_vaddr = 4194424 // 0x400078 (0x400000 + 120)
+    rx_size = total_hdr_size + code_size + rodata_size
+    rem_rx = rx_size % 4096
+    rx_pad = 0
+    if rem_rx != 0
+        rx_pad = 4096 - rem_rx
+    end
+    rw_file_off = rx_size + rx_pad
+    rw_vaddr = 4259840 + rw_file_off // 0x410000 + rw_file_off (congruent mod 64KB)
+    rw_size = 64
+    base_vaddr = 4194304   // 0x400000
+    entry_vaddr = 4194536  // 0x4000E8 (0x400000 + 232)
 
     elf = list()
 
     // ── 1. ELF64 Header (64 bytes) ──────────────────────────────────────────
-    // e_ident: Magic \x7FELF, Class 2 (64-bit), Data 1 (Little-Endian), Version 1, OS/ABI 0 (System V), 8 padding zeroes
-    push(elf, 127) // 0x7F
-    push(elf, 69)  // 'E'
-    push(elf, 76)  // 'L'
-    push(elf, 70)  // 'F'
-    push(elf, 2)   // ELFCLASS64 (64-bit)
-    push(elf, 1)   // ELFDATA2LSB (Little-Endian)
-    push(elf, 1)   // EV_CURRENT (1)
-    push(elf, 0)   // ELFOSABI_NONE / System V
-    push(elf, 0)   // ABI Version (0)
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad
-    push(elf, 0)   // Pad (total 16 bytes e_ident)
+    push(elf, 127) push(elf, 69) push(elf, 76) push(elf, 70) // \x7FELF
+    push(elf, 2)   push(elf, 1)  push(elf, 1)  push(elf, 0)  // 64-bit LE v1 SysV
+    push(elf, 0)   push(elf, 0)  push(elf, 0)  push(elf, 0)
+    push(elf, 0)   push(elf, 0)  push(elf, 0)  push(elf, 0)
 
-    // e_type: ET_EXEC (2) (2 bytes)
-    push(elf, 2)
-    push(elf, 0)
+    // e_type: ET_EXEC (2), e_machine: EM_AARCH64 (183), e_version: 1
+    push(elf, 2)   push(elf, 0)
+    push(elf, 183) push(elf, 0)
+    push(elf, 1)   push(elf, 0)  push(elf, 0)  push(elf, 0)
 
-    // e_machine: EM_AARCH64 (183 = 0x00B7) (2 bytes)
-    push(elf, 183)
-    push(elf, 0)
+    // e_entry: 0x4000E8 (4194536) (8 bytes)
+    push(elf, 232) push(elf, 0) push(elf, 64) push(elf, 0)
+    push(elf, 0)   push(elf, 0) push(elf, 0)  push(elf, 0)
 
-    // e_version: EV_CURRENT (1) (4 bytes)
-    push(elf, 1)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // e_phoff: 64 (8 bytes), e_shoff: 0 (8 bytes), e_flags: 0 (4 bytes)
+    push(elf, 64) push(elf, 0) push(elf, 0) push(elf, 0)
+    push(elf, 0)  push(elf, 0) push(elf, 0) push(elf, 0)
+    push(elf, 0)  push(elf, 0) push(elf, 0) push(elf, 0)
+    push(elf, 0)  push(elf, 0) push(elf, 0) push(elf, 0)
+    push(elf, 0)  push(elf, 0) push(elf, 0) push(elf, 0)
 
-    // e_entry: 0x400078 (4194424) (8 bytes)
-    push(elf, 120)
-    push(elf, 0)
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // e_ehsize: 64, e_phentsize: 56, e_phnum: 3, e_shentsize: 0, e_shnum: 0, e_shstrndx: 0
+    push(elf, 64) push(elf, 0)
+    push(elf, 56) push(elf, 0)
+    push(elf, 3)  push(elf, 0)
+    push(elf, 0)  push(elf, 0)
+    push(elf, 0)  push(elf, 0)
+    push(elf, 0)  push(elf, 0)
 
-    // e_phoff: 64 (0x40) (8 bytes) -> Program header table follows immediately
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // ── 2. Program Header 0: PT_LOAD Strict RX (PF_R | PF_X = 5) ─────────────
+    push(elf, 1) push(elf, 0) push(elf, 0) push(elf, 0) // PT_LOAD
+    push(elf, 5) push(elf, 0) push(elf, 0) push(elf, 0) // PF_R | PF_X (5)
+    push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_offset = 0
+    push(elf, 0) push(elf, 0) push(elf, 64) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_vaddr = 0x400000
+    push(elf, 0) push(elf, 0) push(elf, 64) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_paddr = 0x400000
+    push(elf, rx_size & 255) push(elf, (rx_size / 256) & 255) push(elf, (rx_size / 65536) & 255) push(elf, (rx_size / 16777216) & 255)
+    push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_filesz
+    push(elf, rx_size & 255) push(elf, (rx_size / 256) & 255) push(elf, (rx_size / 65536) & 255) push(elf, (rx_size / 16777216) & 255)
+    push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_memsz
+    push(elf, 0) push(elf, 0) push(elf, 1) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_align = 65536
 
-    // e_shoff: 0 (8 bytes) -> No section headers in raw sovereign binary
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // ── 2b. Program Header 1: PT_LOAD Strict RW (PF_R | PF_W = 6) ────────────
+    push(elf, 1) push(elf, 0) push(elf, 0) push(elf, 0) // PT_LOAD
+    push(elf, 6) push(elf, 0) push(elf, 0) push(elf, 0) // PF_R | PF_W (6)
+    push(elf, rw_file_off & 255) push(elf, (rw_file_off / 256) & 255) push(elf, (rw_file_off / 65536) & 255) push(elf, (rw_file_off / 16777216) & 255)
+    push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_offset
+    push(elf, rw_vaddr & 255) push(elf, (rw_vaddr / 256) & 255) push(elf, (rw_vaddr / 65536) & 255) push(elf, (rw_vaddr / 16777216) & 255)
+    push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_vaddr
+    push(elf, rw_vaddr & 255) push(elf, (rw_vaddr / 256) & 255) push(elf, (rw_vaddr / 65536) & 255) push(elf, (rw_vaddr / 16777216) & 255)
+    push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_paddr
+    push(elf, rw_size) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_filesz
+    push(elf, rw_size) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_memsz
+    push(elf, 0) push(elf, 0) push(elf, 1) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_align = 65536
 
-    // e_flags: 0 (4 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // e_ehsize: 64 (2 bytes)
-    push(elf, 64)
-    push(elf, 0)
-
-    // e_phentsize: 56 (2 bytes)
-    push(elf, 56)
-    push(elf, 0)
-
-    // e_phnum: 1 (2 bytes) -> Single PT_LOAD segment
-    push(elf, 1)
-    push(elf, 0)
-
-    // e_shentsize: 0 (2 bytes)
-    push(elf, 0)
-    push(elf, 0)
-
-    // e_shnum: 0 (2 bytes)
-    push(elf, 0)
-    push(elf, 0)
-
-    // e_shstrndx: 0 (2 bytes)
-    push(elf, 0)
-    push(elf, 0)
-
-    // ── 2. Program Header Table (56 bytes, PT_LOAD) ─────────────────────────
-    // p_type: PT_LOAD (1) (4 bytes)
-    push(elf, 1)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_flags: PF_R | PF_W | PF_X = 7 (Read, Write, Execute) (4 bytes)
-    push(elf, 7)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_offset: 0 (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_vaddr: 0x400000 (4194304) (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_paddr: 0x400000 (4194304) (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 64)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_filesz: total_size (8 bytes)
-    push(elf, total_size % 256)
-    push(elf, (total_size / 256) % 256)
-    push(elf, (total_size / 65536) % 256)
-    push(elf, (total_size / 16777216) % 256)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_memsz: total_size (8 bytes)
-    push(elf, total_size % 256)
-    push(elf, (total_size / 256) % 256)
-    push(elf, (total_size / 65536) % 256)
-    push(elf, (total_size / 16777216) % 256)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-
-    // p_align: 64KB (65536 = 0x10000) (8 bytes)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 1)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
-    push(elf, 0)
+    // ── 2c. Program Header 2: PT_GNU_STACK (PF_R | PF_W = 6) ────────────────
+    push(elf, 81) push(elf, 229) push(elf, 116) push(elf, 100) // 0x6474E551
+    push(elf, 6)  push(elf, 0)   push(elf, 0)   push(elf, 0)   // PF_R | PF_W
+    zi_p = 0
+    while zi_p < 40
+        push(elf, 0)
+        zi_p = zi_p + 1
+    end
+    push(elf, 16) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) push(elf, 0) // p_align = 16
 
     // ── 3. Append Code Bytes ────────────────────────────────────────────────
     ci = 0
@@ -372,11 +278,19 @@ fn arm64_elf_emit_executable code_bytes rodata_bytes out_path
         push(elf, code_bytes[ci])
         ci = ci + 1
 
-    // ── 4. Append Rodata Bytes ──────────────────────────────────────────────
+    // ── 4. Append Rodata Bytes + Page Pad + 64B RW .data ─────────────────────
     ri = 0
     while ri < rodata_size
         push(elf, rodata_bytes[ri])
         ri = ri + 1
+    pi = 0
+    while pi < rx_pad
+        push(elf, 0)
+        pi = pi + 1
+    wi = 0
+    while wi < rw_size
+        push(elf, 0)
+        wi = wi + 1
 
     // ── 5. Write Full Executable to Disk with 0755 Permissions ──────────────
     w_res = file_write_bytes(out_path, elf)

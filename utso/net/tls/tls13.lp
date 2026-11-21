@@ -1,14 +1,3 @@
-@fn lipi_pow2(n)
-  @if n <= 0 return 1 @end
-  res = 1
-  i = 0
-  @while i < n
-    res = res * 2
-    i = i + 1
-  @end
-  return res
-@end
-
 @fn net_u16_be(buf, off)
   b0 = buf[off] & 255
   t0 = b0 * 256
@@ -38,6 +27,7 @@
 
 import "utso/core/collections"
 import "utso/core/string"
+import "utso/crypto/sha256"
 import "utso/crypto/aes"
 import "utso/crypto/x25519"
 
@@ -662,33 +652,65 @@ import "utso/crypto/x25519"
   }
 @end
 
-@fn tls13_hkdf_extract(salt_bytes, ikm_bytes)
-  @! WHY: RFC 5869 / RFC 8446 Section 7.1 HKDF-Extract(salt, IKM) -> PRK (32 bytes)
-  @! Mixes salt and input keying material over a 32-byte sovereign sponge state.
-  prk = []
-  s_len = salt_bytes.len()
-  i_len = ikm_bytes.len()
-  acc = 90 + (s_len * 17) + (i_len * 31)
-  idx = 0
-  @while idx < 32
-    sb = 0
-    @if s_len > 0
-      sb = salt_bytes[idx % s_len] & 255
+@fn tls13_hmac_sha256(key_bytes, msg_bytes)
+  @! WHY: Genuine RFC 2104 HMAC-SHA-256 keyed hash construction over FIPS 180-4 SHA-256.
+  k_len = key_bytes.len()
+  k0 = []
+  @if k_len > 64
+    k0 = sha256_hash_bytes(key_bytes)
+  @else
+    ki = 0
+    @while ki < k_len
+      k0 = k0.push(key_bytes[ki] & 255)
+      ki = ki + 1
     @end
-    ib = 0
-    @if i_len > 0
-      ib = ikm_bytes[idx % i_len] & 255
-    @end
-    acc = ((acc * 131) + sb + (ib * 7) + idx + 19) % 65536
-    prk = prk.push((acc ^ sb ^ ib) & 255)
-    idx = idx + 1
   @end
-  return prk
+  @while k0.len() < 64
+    k0 = k0.push(0)
+  @end
+
+  inner = []
+  outer = []
+  bi = 0
+  @while bi < 64
+    kb = k0[bi] & 255
+    inner = inner.push(kb ^ 54)
+    outer = outer.push(kb ^ 92)
+    bi = bi + 1
+  @end
+
+  mi = 0
+  m_len = msg_bytes.len()
+  @while mi < m_len
+    inner = inner.push(msg_bytes[mi] & 255)
+    mi = mi + 1
+  @end
+  inner_digest = sha256_hash_bytes(inner)
+
+  di = 0
+  @while di < inner_digest.len()
+    outer = outer.push(inner_digest[di] & 255)
+    di = di + 1
+  @end
+  return sha256_hash_bytes(outer)
+@end
+
+@fn tls13_hkdf_extract(salt_bytes, ikm_bytes)
+  @! WHY: Authentic RFC 5869 / RFC 8446 Section 7.1 HKDF-Extract(salt, IKM) -> HMAC-SHA256(salt, IKM)
+  salt = salt_bytes
+  @if salt.len() == 0
+    salt = []
+    zi = 0
+    @while zi < 32
+      salt = salt.push(0)
+      zi = zi + 1
+    @end
+  @end
+  return tls13_hmac_sha256(salt, ikm_bytes)
 @end
 
 @fn tls13_hkdf_expand_label(secret_bytes, label_str, context_bytes, out_len)
-  @! WHY: RFC 8446 Section 7.1 HKDF-Expand-Label(Secret, Label, Context, Length)
-  @! Constructs HkdfLabel structure with "tls13 " prefix and expands to out_len bytes.
+  @! WHY: Authentic RFC 8446 Section 7.1 HKDF-Expand-Label using RFC 5869 HMAC-SHA256 expansion.
   info = []
   info = info.push((out_len / 256) & 255)
   info = info.push(out_len & 255)
@@ -708,25 +730,31 @@ import "utso/crypto/x25519"
     ci = ci + 1
   @end
 
-  sec_len = secret_bytes.len()
-  info_len = info.len()
-  out = []
-  state = 165 + out_len + fl_len
-  oi = 0
-  @while oi < out_len
-    sec_b = 0
-    @if sec_len > 0
-      sec_b = secret_bytes[oi % sec_len] & 255
+  okm = []
+  t_prev = []
+  counter = 1
+  @while okm.len() < out_len
+    inp = []
+    ti = 0
+    @while ti < t_prev.len()
+      inp = inp.push(t_prev[ti] & 255)
+      ti = ti + 1
     @end
-    inf_b = 0
-    @if info_len > 0
-      inf_b = info[oi % info_len] & 255
+    ii = 0
+    @while ii < info.len()
+      inp = inp.push(info[ii] & 255)
+      ii = ii + 1
     @end
-    state = ((state * 257) + sec_b + (inf_b * 13) + oi + 1) % 65536
-    out = out.push((state ^ sec_b ^ inf_b) & 255)
-    oi = oi + 1
+    inp = inp.push(counter & 255)
+    t_prev = tls13_hmac_sha256(secret_bytes, inp)
+    oi = 0
+    @while oi < t_prev.len() && okm.len() < out_len
+      okm = okm.push(t_prev[oi] & 255)
+      oi = oi + 1
+    @end
+    counter = counter + 1
   @end
-  return out
+  return okm
 @end
 
 @fn tls13_derive_handshake_keys(shared_secret_bytes, transcript_hash_bytes)

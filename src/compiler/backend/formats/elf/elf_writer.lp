@@ -481,10 +481,10 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   end
   elf_concat(text_payload, code_bytes)
 
-  // 1b. Build RW .data payload: 128-byte runtime globals (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets) + user .data
+  // 1b. Build RW .data payload: 4096-byte runtime/mutable globals (g_argc.._slab_buckets, per-thread exc, user globals) + user .data
   rw_payload = list()
   gi = 0
-  @while gi < 128
+  @while gi < 4096
     push(rw_payload, 0)
     gi = gi + 1
   @end
@@ -633,7 +633,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 
   rw_payload = list()
   gi = 0
-  @while gi < 128
+  @while gi < 4096
     push(rw_payload, 0)
     gi = gi + 1
   @end

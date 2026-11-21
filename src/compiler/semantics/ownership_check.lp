@@ -361,12 +361,16 @@ import "compiler/frontend/ast/ast_node"
   @end
   @if str_eq(k, "Call") == 1 || str_eq(k, "CallExpr") == 1
     cname = ""
-    @if expr.callee != 0
+    @if expr.func != 0
+      cname = expr.func.name
+    @elif expr.callee != 0
       cname = expr.callee.name
     @end
     @if cname == "" cname = expr.name @end
-    @if (str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1) && expr.params != 0 && expr.params.len() >= 1
-      a0 = expr.params[0]
+    call_args = expr.args
+    @if call_args == 0 call_args = expr.params @end
+    @if (str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1) && call_args != 0 && call_args.len() >= 1
+      a0 = call_args[0]
       @if a0 != 0 && (str_eq(a0.kind, "Variable") == 1 || str_eq(a0.kind, "IDENT") == 1 || str_eq(a0.kind, "Identifier") == 1)
         aname = a0.name
         @if aname == "" aname = a0.target @end
@@ -375,27 +379,54 @@ import "compiler/frontend/ast/ast_node"
         return 1
       @end
     @end
-    @if expr.params != 0
+    @if call_args != 0
       pi = 0
-      @while pi < expr.params.len()
-        oc_analyze_expr(oc, expr.params[pi])
+      @while pi < call_args.len()
+        oc_analyze_expr(oc, call_args[pi])
         pi = pi + 1
       @end
     @end
     return 1
   @end
-  @if str_eq(k, "Binary") == 1 || str_eq(k, "BinaryExpr") == 1
+  @if str_eq(k, "Binary") == 1 || str_eq(k, "BinaryExpr") == 1 || str_eq(k, "BinaryOp") == 1
     oc_analyze_expr(oc, expr.left)
     oc_analyze_expr(oc, expr.right)
     return 1
   @end
-  @if str_eq(k, "Unary") == 1
+  @if str_eq(k, "Unary") == 1 || str_eq(k, "UnaryOp") == 1
     oc_analyze_expr(oc, expr.expr)
     return 1
   @end
-  @if str_eq(k, "Index") == 1 || str_eq(k, "Member") == 1
+  @if str_eq(k, "Index") == 1 || str_eq(k, "Member") == 1 || str_eq(k, "MemberAccess") == 1
     oc_analyze_expr(oc, expr.left)
-    oc_analyze_expr(oc, expr.right)
+    @if expr.right != 0 oc_analyze_expr(oc, expr.right) @end
+    @if expr.index != 0 oc_analyze_expr(oc, expr.index) @end
+    return 1
+  @end
+  @if str_eq(k, "ArrayLit") == 1 || str_eq(k, "MapLit") == 1
+    @if expr.elements != 0
+      ei = 0
+      @while ei < expr.elements.len()
+        oc_analyze_expr(oc, expr.elements[ei])
+        ei = ei + 1
+      @end
+    @end
+    return 1
+  @end
+  @if str_eq(k, "Closure") == 1
+    oc_enter_scope(oc)
+    @if expr.params != 0
+      pi = 0
+      @while pi < expr.params.len()
+        pm = expr.params[pi]
+        pname = pm.param_name
+        @if pname == "" pname = pm.name @end
+        @if pname != "" oc_declare(oc, pname, 1, span_default()) @end
+        pi = pi + 1
+      @end
+    @end
+    oc_analyze_stmt_list(oc, expr.body)
+    oc_exit_scope(oc)
     return 1
   @end
   return 1
@@ -424,7 +455,8 @@ import "compiler/frontend/ast/ast_node"
       pi = 0
       @while pi < stmt.params.len()
         pm = stmt.params[pi]
-        pname = pm.name
+        pname = pm.param_name
+        @if pname == "" pname = pm.name @end
         @if pname != "" oc_declare(oc, pname, 1, span_default()) @end
         pi = pi + 1
       @end
@@ -434,8 +466,8 @@ import "compiler/frontend/ast/ast_node"
     return 1
   @end
 
-  // 2. Assignment: target = value (Copy by default in Lipi unless RHS is move(x))
-  @if str_eq(k, "Assign") == 1
+  // 2. Assignment & Compound Assignment: target = value, target <op>= value
+  @if str_eq(k, "Assign") == 1 || str_eq(k, "AssignOp") == 1
     target = stmt.target
     val_node = stmt.value
     @if val_node == 0 val_node = stmt.expr @end
@@ -464,25 +496,27 @@ import "compiler/frontend/ast/ast_node"
   @end
 
   // 5. While / For / Block / If scopes
-  @if str_eq(k, "While") == 1 || str_eq(k, "যতক্ষণ") == 1
-    oc_analyze_expr(oc, stmt.expr)
+  @if str_eq(k, "While") == 1 || str_eq(k, "WhileLoop") == 1 || str_eq(k, "যতক্ষণ") == 1
+    @if stmt.condition != 0 oc_analyze_expr(oc, stmt.condition) @else oc_analyze_expr(oc, stmt.expr) @end
     oc_enter_scope(oc)
     oc_analyze_stmt_list(oc, stmt.body)
     oc_exit_scope(oc)
     return 1
   @end
 
-  @if str_eq(k, "For") == 1 || str_eq(k, "প্রতিটি") == 1
-    oc_analyze_expr(oc, stmt.expr)
+  @if str_eq(k, "For") == 1 || str_eq(k, "ForLoop") == 1 || str_eq(k, "প্রতিটি") == 1
+    @if stmt.iterable != 0 oc_analyze_expr(oc, stmt.iterable) @else oc_analyze_expr(oc, stmt.expr) @end
     oc_enter_scope(oc)
-    @if stmt.target != "" oc_declare(oc, stmt.target, 1, span_default()) @end
+    fvar = stmt.variable
+    @if fvar == "" fvar = stmt.target @end
+    @if fvar != "" oc_declare(oc, fvar, 1, span_default()) @end
     oc_analyze_stmt_list(oc, stmt.body)
     oc_exit_scope(oc)
     return 1
   @end
 
-  @if str_eq(k, "Block") == 1 || str_eq(k, "If") == 1 || str_eq(k, "যদি") == 1
-    oc_analyze_expr(oc, stmt.expr)
+  @if str_eq(k, "Block") == 1 || str_eq(k, "If") == 1 || str_eq(k, "IfStmt") == 1 || str_eq(k, "যদি") == 1
+    @if stmt.condition != 0 oc_analyze_expr(oc, stmt.condition) @else oc_analyze_expr(oc, stmt.expr) @end
     oc_enter_scope(oc)
     oc_analyze_stmt_list(oc, stmt.then_body)
     oc_exit_scope(oc)

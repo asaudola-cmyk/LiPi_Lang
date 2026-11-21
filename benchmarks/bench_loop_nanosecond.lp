@@ -46,13 +46,13 @@ fn main
 
     ms_int = delta_ns / 1000000
     ms_frac = (delta_ns % 1000000) / 10000
-    frac_str = "" + ms_frac
-    if ms_frac < 10 frac_str = "0" + ms_frac
+    frac_str = str(ms_frac)
+    if ms_frac < 10 frac_str = "0" + str(ms_frac)
 
     say "👑 Lipi Nanosecond Loop 10,000,000 Iterations Complete!"
-    say "Sum: " + res
-    say "Elapsed Time: " + ms_int + "." + frac_str + " ms (" + delta_ns + " ns)"
-    say "CPU Cycles: " + delta_cyc
+    say "Sum: " + str(res)
+    say "Elapsed Time: " + str(ms_int) + "." + frac_str + " ms (" + str(delta_ns) + " ns)"
+    say "CPU Cycles: " + str(delta_cyc)
     return 0
 
 main()

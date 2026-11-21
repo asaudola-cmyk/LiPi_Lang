@@ -105,8 +105,18 @@ fn x86_synth_expr_postfix s toks pos_box
                 else
                     // Struct Field Read: obj.field
                     f_off = x86_synth_get_field_offset(s, s.synth_last_struct, member_name)
+                    ft = x86_synth_get_field_type(s, s.synth_last_struct, member_name)
                     s.synth_last_struct = ""
                     s.synth_last_expr_type = ""
+                    if ft == "f64" or ft == "f32" or ft == "float"
+                        s.synth_last_expr_type = "float"
+                    elif ft == "int" or ft == "i64" or ft == "i32" or ft == "u64" or ft == "u32"
+                        s.synth_last_expr_type = "int"
+                    elif ft == "str" or ft == "string"
+                        s.synth_last_expr_type = "str"
+                    elif ft != ""
+                        s.synth_last_struct = ft
+                    end
                     if f_off < 128
                         // mov rax, [rax + f_off]: 0x48 0x8B 0x40 disp8
                         x86_synth_emit_byte(s, 72)

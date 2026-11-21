@@ -200,8 +200,8 @@ fn test_elf_container_emission
 
     res = arm64_elf_emit_executable(synth.synth_code, synth.synth_rodata, out_path)
     test_assert_eq(res.ew_success, 1, "arm64_elf_emit_executable success == 1")
-    test_assert_eq(res.ew_entry_vaddr, 4194424, "Entry point is 0x400078 (4194424)")
-    test_assert_eq(res.ew_file_size > 120, 1, "File size greater than 120 bytes")
+    test_assert_eq(res.ew_entry_vaddr, 4194536, "Entry point is 0x4000E8 (4194536)")
+    test_assert_eq(res.ew_file_size > 232, 1, "File size greater than 232 bytes")
 
     // Read back content from disk to verify headers
     content = file_read(out_path)
@@ -235,9 +235,9 @@ fn test_elf_container_emission
     e_machine = ord(char_at(content, 18)) + (ord(char_at(content, 19)) * 256)
     test_assert_eq(e_machine, 183, "e_machine == EM_AARCH64 (183 / 0x00B7)")
 
-    // 5. e_entry: 0x400078 (4194424)
+    // 5. e_entry: 0x4000E8 (4194536)
     e_entry = ord(char_at(content, 24)) + (ord(char_at(content, 25)) * 256) + (ord(char_at(content, 26)) * 65536) + (ord(char_at(content, 27)) * 16777216)
-    test_assert_eq(e_entry, 4194424, "e_entry == 0x400078 (0x400000 + 120)")
+    test_assert_eq(e_entry, 4194536, "e_entry == 0x4000E8 (0x400000 + 232)")
 
     // 6. Header sizes and Program Header counts
     e_ehsize = ord(char_at(content, 52)) + (ord(char_at(content, 53)) * 256)
@@ -245,13 +245,15 @@ fn test_elf_container_emission
     e_phnum = ord(char_at(content, 56)) + (ord(char_at(content, 57)) * 256)
     test_assert_eq(e_ehsize, 64, "e_ehsize == 64 bytes")
     test_assert_eq(e_phentsize, 56, "e_phentsize == 56 bytes")
-    test_assert_eq(e_phnum, 1, "e_phnum == 1 Program Header")
+    test_assert_eq(e_phnum, 3, "e_phnum == 3 Program Headers (Strict W^X)")
 
-    // 7. Program Header: PT_LOAD
+    // 7. Program Header: PT_LOAD Strict RX (PF_R | PF_X = 5, 0 RWE)
     p_type = ord(char_at(content, 64)) + (ord(char_at(content, 65)) * 256) + (ord(char_at(content, 66)) * 65536) + (ord(char_at(content, 67)) * 16777216)
     p_flags = ord(char_at(content, 68)) + (ord(char_at(content, 69)) * 256) + (ord(char_at(content, 70)) * 65536) + (ord(char_at(content, 71)) * 16777216)
+    p_rw_flags = ord(char_at(content, 124))
     test_assert_eq(p_type, 1, "Program Header p_type == PT_LOAD (1)")
-    test_assert_eq(p_flags, 7, "Program Header p_flags == PF_R | PF_W | PF_X (7)")
+    test_assert_eq(p_flags, 5, "Program Header 0 p_flags == PF_R | PF_X (5)")
+    test_assert_eq(p_rw_flags, 6, "Program Header 1 p_flags == PF_R | PF_W (6)")
     return 1
 
 fn main

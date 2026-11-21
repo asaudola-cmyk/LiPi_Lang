@@ -424,18 +424,26 @@ fn ensure_keypair
     fd = syscall(2, priv_path, 0, 0, 0, 0, 0)
     if fd < 0
         say "  🔑 নতুন Ed25519 কী-পেয়ার তৈরি হচ্ছে (~/.lipi/keys/)..."
-        syscall(83, lipi_dir, 509, 0, 0, 0, 0)
-        syscall(83, keys_dir, 509, 0, 0, 0, 0)
+        syscall(83, lipi_dir, 448, 0, 0, 0, 0) // 0700 rwx------
+        syscall(83, keys_dir, 448, 0, 0, 0, 0) // 0700 rwx------
+        syscall(90, lipi_dir, 448, 0, 0, 0, 0)
+        syscall(90, keys_dir, 448, 0, 0, 0, 0)
         kp = Ed25519_generate_keypair()
         priv_hex = bytes_to_hex(kp.private_key, 32)
         pub_hex = bytes_to_hex(kp.public_key, 32)
         write_file(priv_path, priv_hex + "\n")
+        syscall(90, priv_path, 384, 0, 0, 0, 0) // 0600 rw-------
         write_file(pub_path, pub_hex + "\n")
+        syscall(90, pub_path, 420, 0, 0, 0, 0) // 0644 rw-r--r--
         res = list()
         push(res, kp.private_key)
         push(res, pub_hex)
         return res
     syscall(3, fd, 0, 0, 0, 0, 0)
+    syscall(90, lipi_dir, 448, 0, 0, 0, 0)
+    syscall(90, keys_dir, 448, 0, 0, 0, 0)
+    syscall(90, priv_path, 384, 0, 0, 0, 0)
+    syscall(90, pub_path, 420, 0, 0, 0, 0)
 
     priv_hex = trim(read_file(priv_path))
     priv_buf = alloc(32)
@@ -989,6 +997,7 @@ fn cmd_lock store_target
         i = i + 1
     end
     write_file("aati.lock", out)
+    syscall(90, "aati.lock", 420, 0, 0, 0, 0) // 0644 rw-r--r--
     say "✔ Generated deterministic aati.lock (" + str(n) + " packages locked from " + store_dir + "/)"
     return 0
 
@@ -1651,6 +1660,7 @@ fn pkg_update_lockfile pkg_name version source checksum
         pi = pi + 1
 
     write_file("aati.lock", out)
+    syscall(90, "aati.lock", 420, 0, 0, 0, 0) // 0644 rw-r--r--
     say "  ✔ আঁটি লকফাইল হালনাগাদ করা হয়েছে: aati.lock"
     return 1
 

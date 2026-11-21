@@ -1129,12 +1129,39 @@ fn pipeline_build_statement toks pos_box sp
             end
             if b_cnt == 0 and scan_i < toks.len()
                 eq_tok = toks[scan_i]
-                if eq_tok.tok_kind == TOK_ASSIGN() or (eq_tok.tok_kind != TOK_STR() and eq_tok.tok_text == "=")
+                ek = eq_tok.tok_kind
+                etx = eq_tok.tok_text
+                if ek == TOK_ASSIGN() or (ek != TOK_STR() and etx == "=")
                     list_set(pos_box, 0, scan_i + 1)
                     val_e = pipeline_parse_expr(toks, pos_box, sp)
                     return ast_stmt_assign(txt, val_e, sp)
+                elif ek == TOK_PLUSEQ() or ek == TOK_MINUSEQ() or ek == TOK_STAREQ() or ek == TOK_SLASHEQ() or ek == TOK_PERCENTEQ() or etx == "+=" or etx == "-=" or etx == "*=" or etx == "/=" or etx == "%="
+                    list_set(pos_box, 0, scan_i + 1)
+                    val_e = pipeline_parse_expr(toks, pos_box, sp)
+                    return ast_stmt_assign_op(txt, val_e, etx, sp)
                 end
             end
+        end
+    end
+
+    // 4d. Mutable global declaration: global / @global / বিশ্বজনীন name [: Type] [= expr]
+    if k == TOK_IDENT() and (txt == "global" or txt == "@global" or txt == "বিশ্বজনীন") and cp + 1 < toks.len()
+        if pipeline_is_ident_token(toks[cp + 1].tok_kind) == 1 and toks[cp + 1].tok_text != "="
+            g_name = toks[cp + 1].tok_text
+            list_set(pos_box, 0, cp + 2)
+            gp = get(pos_box, 0)
+            if gp < toks.len() and (toks[gp].tok_kind == TOK_COLON() or (toks[gp].tok_kind != TOK_STR() and toks[gp].tok_text == ":"))
+                if gp + 1 < toks.len() and pipeline_is_ident_token(toks[gp + 1].tok_kind) == 1
+                    list_set(pos_box, 0, gp + 2)
+                end
+            end
+            geq = get(pos_box, 0)
+            if geq < toks.len() and (toks[geq].tok_kind == TOK_ASSIGN() or (toks[geq].tok_kind != TOK_STR() and toks[geq].tok_text == "="))
+                list_set(pos_box, 0, geq + 1)
+                gval_e = pipeline_parse_expr(toks, pos_box, sp)
+                return ast_stmt_assign(g_name, gval_e, sp)
+            end
+            return ast_stmt_assign(g_name, ast_expr_literal_int(0, sp), sp)
         end
     end
 
@@ -1172,6 +1199,12 @@ fn pipeline_build_statement toks pos_box sp
             val_e = pipeline_parse_expr(toks, pos_box, sp)
             return ast_stmt_assign_op(var_name, val_e, "-=", sp)
         end
+        if n1.tok_kind == TOK_STAREQ() or n1.tok_kind == TOK_SLASHEQ() or n1.tok_kind == TOK_PERCENTEQ() or (n1.tok_kind != TOK_STR() and (n1.tok_text == "*=" or n1.tok_text == "/=" or n1.tok_text == "%="))
+            var_name = txt
+            list_set(pos_box, 0, cp + 2)
+            val_e = pipeline_parse_expr(toks, pos_box, sp)
+            return ast_stmt_assign_op(var_name, val_e, n1.tok_text, sp)
+        end
     end
 
     // 5b. Exception throw: throw expr / নিক্ষেপ expr
@@ -1201,7 +1234,7 @@ fn pipeline_build_statement toks pos_box sp
             cur_pt = get(pos_box, 0)
             if cur_pt >= toks.len() break end
             ct_t = toks[cur_pt]
-            if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "catch" or ct_t.tok_text == "ধরো" or ct_t.tok_text == "@catch"))
+            if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "catch" or ct_t.tok_text == "ধরো" or ct_t.tok_text == "@catch" or ct_t.tok_text == "finally" or ct_t.tok_text == "অবশেষে" or ct_t.tok_text == "@finally"))
                 break
             end
             if pipeline_is_block_end(toks, cur_pt) == 1 break end
@@ -1227,12 +1260,35 @@ fn pipeline_build_statement toks pos_box sp
                     cur_pc = get(pos_box, 0)
                     if cur_pc >= toks.len() break end
                     ct_c2 = toks[cur_pc]
+                    if ct_c2.tok_kind == TOK_IDENT() and (ct_c2.tok_text == "finally" or ct_c2.tok_text == "অবশেষে" or ct_c2.tok_text == "@finally")
+                        break
+                    end
                     if pipeline_is_block_end(toks, cur_pc) == 1 break end
                     if ct_c2.tok_span.span_start_line > c_line and ct_c2.tok_span.span_start_col <= base_col break end
                     bp_c = get(pos_box, 0)
                     st_c = pipeline_build_statement(toks, pos_box, sp)
                     if st_c != 0 push(catch_body, st_c) end
                     if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
+                end
+            end
+        end
+        pipeline_skip_whitespace(toks, pos_box)
+        if get(pos_box, 0) < toks.len()
+            ct_f = toks[get(pos_box, 0)]
+            if ct_f.tok_kind == TOK_IDENT() and (ct_f.tok_text == "finally" or ct_f.tok_text == "অবশেষে" or ct_f.tok_text == "@finally")
+                f_line = ct_f.tok_span.span_start_line
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    pipeline_skip_whitespace(toks, pos_box)
+                    cur_pf = get(pos_box, 0)
+                    if cur_pf >= toks.len() break end
+                    ct_f2 = toks[cur_pf]
+                    if pipeline_is_block_end(toks, cur_pf) == 1 break end
+                    if ct_f2.tok_span.span_start_line > f_line and ct_f2.tok_span.span_start_col <= base_col break end
+                    bp_f = get(pos_box, 0)
+                    st_f = pipeline_build_statement(toks, pos_box, sp)
+                    if st_f != 0 push(try_body, st_f) end
+                    if get(pos_box, 0) <= bp_f list_set(pos_box, 0, bp_f + 1) end
                 end
             end
         end
@@ -3087,7 +3143,7 @@ fn compiler_pipeline_execute config source_code
             ii_h = 0
             while ii_h < bb_h.instructions.len()
                 inst_h = bb_h.instructions[ii_h]
-                if inst_h.opcode == OP_STORE and inst_h.operands.len() >= 2
+                if inst_h.op == OP_STORE and inst_h.operands.len() >= 2
                     val_op = inst_h.operands[0]
                     ptr_op = inst_h.operands[1]
                     if (val_op.kind == VAL_KIND_CONST or val_op.val_kind == VAL_KIND_CONST) and ptr_op != 0
@@ -3110,6 +3166,133 @@ fn compiler_pipeline_execute config source_code
             bi_h = bi_h + 1
         end
         fi_h = fi_h + 1
+    end
+
+    // 3. Immutable module-level constant folding over pure integer expressions via ComptimeEval
+    seen_assigns = list()
+    ban_consts = list()
+    ti_c = 0
+    t_len_c = toks.len()
+    while ti_c < t_len_c
+        tk_c = toks[ti_c]
+        if tk_c.tok_kind == TOK_IDENT()
+            tname_c = tk_c.tok_text
+            if tname_c == "global" or tname_c == "@global" or tname_c == "বিশ্বজনীন" or tname_c == "for" or tname_c == "প্রতিটি"
+                if ti_c + 1 < t_len_c and toks[ti_c + 1].tok_kind == TOK_IDENT()
+                    push(ban_consts, toks[ti_c + 1].tok_text)
+                end
+            elif len(tname_c) >= 2 and str_sub(tname_c, 0, 2) == "g_"
+                push(ban_consts, tname_c)
+            elif ti_c + 1 < t_len_c
+                nk_c = toks[ti_c + 1].tok_kind
+                ntx_c = toks[ti_c + 1].tok_text
+                if nk_c == TOK_ASSIGN() or (nk_c != TOK_STR() and ntx_c == "=")
+                    seen_before = 0
+                    si_c = 0
+                    while si_c < seen_assigns.len()
+                        if seen_assigns[si_c] == tname_c
+                            seen_before = 1
+                            break
+                        end
+                        si_c = si_c + 1
+                    end
+                    if seen_before == 1
+                        push(ban_consts, tname_c)
+                    else
+                        push(seen_assigns, tname_c)
+                    end
+                elif ntx_c == "+=" or ntx_c == "-=" or ntx_c == "*=" or ntx_c == "/=" or ntx_c == "%=" or nk_c == TOK_PLUSEQ() or nk_c == TOK_MINUSEQ() or nk_c == TOK_STAREQ() or nk_c == TOK_SLASHEQ() or nk_c == TOK_PERCENTEQ()
+                    push(ban_consts, tname_c)
+                end
+            end
+        end
+        ti_c = ti_c + 1
+    end
+
+    ti_c = 0
+    while ti_c + 2 < t_len_c
+        tk_c = toks[ti_c]
+        if tk_c.tok_kind == TOK_IDENT() and tk_c.tok_span.span_start_col == 1
+            cname_c = tk_c.tok_text
+            eq_c = toks[ti_c + 1]
+            if (eq_c.tok_kind == TOK_ASSIGN() or (eq_c.tok_kind != TOK_STR() and eq_c.tok_text == "="))
+                prev_ok_c = 1
+                if ti_c > 0
+                    pk_c = toks[ti_c - 1].tok_kind
+                    if pk_c != TOK_NEWLINE() and pk_c != TOK_SEMI()
+                        prev_ok_c = 0
+                    end
+                end
+                is_banned_c = 0
+                bi_c = 0
+                while bi_c < ban_consts.len()
+                    if ban_consts[bi_c] == cname_c
+                        is_banned_c = 1
+                        break
+                    end
+                    bi_c = bi_c + 1
+                end
+                if prev_ok_c == 1 and is_banned_c == 0
+                    t2_c = toks[ti_c + 2]
+                    after3_ok = 0
+                    if ti_c + 3 >= t_len_c
+                        after3_ok = 1
+                    else
+                        a3k = toks[ti_c + 3].tok_kind
+                        if a3k == TOK_NEWLINE() or a3k == TOK_SEMI() or a3k == TOK_COMMENT_LINE() or a3k == TOK_EOF()
+                            after3_ok = 1
+                        end
+                    end
+                    if t2_c.tok_kind == TOK_INT() and after3_ok == 1
+                        comptime_env_set(ct_env, cname_c, t2_c.tok_int_val)
+                    elif ti_c + 4 < t_len_c
+                        op_c = toks[ti_c + 3]
+                        r_c = toks[ti_c + 4]
+                        after5_ok = 0
+                        if ti_c + 5 >= t_len_c
+                            after5_ok = 1
+                        else
+                            a5k = toks[ti_c + 5].tok_kind
+                            if a5k == TOK_NEWLINE() or a5k == TOK_SEMI() or a5k == TOK_COMMENT_LINE() or a5k == TOK_EOF()
+                                after5_ok = 1
+                            end
+                        end
+                        op_s = op_c.tok_text
+                        is_fold_op = 0
+                        if op_c.tok_kind != TOK_STR() and (op_s == "+" or op_s == "-" or op_s == "*" or op_s == "/" or op_s == "%" or op_s == "<<" or op_s == ">>")
+                            is_fold_op = 1
+                        end
+                        if after5_ok == 1 and is_fold_op == 1
+                            lhs_ok = 0
+                            lhs_v = 0
+                            if t2_c.tok_kind == TOK_INT()
+                                lhs_ok = 1
+                                lhs_v = t2_c.tok_int_val
+                            elif t2_c.tok_kind == TOK_IDENT() and comptime_env_has(ct_env, t2_c.tok_text) == 1
+                                lhs_ok = 1
+                                lhs_v = comptime_env_get(ct_env, t2_c.tok_text)
+                            end
+                            rhs_ok = 0
+                            rhs_v = 0
+                            if r_c.tok_kind == TOK_INT()
+                                rhs_ok = 1
+                                rhs_v = r_c.tok_int_val
+                            elif r_c.tok_kind == TOK_IDENT() and comptime_env_has(ct_env, r_c.tok_text) == 1
+                                rhs_ok = 1
+                                rhs_v = comptime_env_get(ct_env, r_c.tok_text)
+                            end
+                            if lhs_ok == 1 and rhs_ok == 1
+                                f_val = comptime_eval_binop(op_s, lhs_v, rhs_v)
+                                comptime_env_set(ct_env, cname_c, f_val)
+                                push(opt_const_names, cname_c)
+                                push(opt_const_vals, f_val)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        ti_c = ti_c + 1
     end
 
     // ── Phase 6: Linear Scan Register Allocation ──────────────────────────────
@@ -3223,8 +3406,21 @@ fn compiler_pipeline_execute config source_code
             f_idx = 0
             while f_idx < synth.synth_functions.len()
                 fn_item = synth.synth_functions[f_idx]
-                push(exp_names, fn_item.fn_name)
-                push(exp_offs, fn_item.fn_entry_offset)
+                fn_n = fn_item.fn_name
+                is_user_exp = 0
+                if fn_item.fn_decl_line > 0 and len(fn_n) > 0
+                    is_user_exp = 1
+                    if len(fn_n) >= 2 and str_sub(fn_n, 0, 2) == "__"
+                        is_user_exp = 0
+                    end
+                    if len(fn_n) >= 6 and str_sub(fn_n, 0, 6) == "_lipi_"
+                        is_user_exp = 0
+                    end
+                end
+                if is_user_exp == 1
+                    push(exp_names, fn_n)
+                    push(exp_offs, fn_item.fn_entry_offset)
+                end
                 f_idx = f_idx + 1
             if exp_names.len() == 0
                 push(exp_names, "_start")
@@ -3332,32 +3528,40 @@ fn compiler_pipeline_execute config source_code
                 dw_base = 304
             end
             if config.cfg_debug_mode == 1
-                // Emit ELF64 executable with embedded DWARF v4/v5 debug metadata (-g)
+                // Emit ELF64 executable with real source-line DWARF v4 metadata (-g)
                 line_builder = dwarf_line_builder_new(4)
                 dwarf_line_add_dir(line_builder, ".")
                 dwarf_line_add_file(line_builder, config.cfg_src_path, 1)
                 dwarf_line_emit_set_address(line_builder, dw_base)
-                dwarf_line_emit_advance_line(line_builder, 1)
-                dwarf_line_emit_copy(line_builder)
                 cur_dw_pc = 0
-                cur_dw_line = 2
-                df_i = 0
-                while df_i < synth.synth_functions.len()
-                    fn_dw = synth.synth_functions[df_i]
-                    if fn_dw.fn_entry_offset > cur_dw_pc
-                        pc_delta = fn_dw.fn_entry_offset - cur_dw_pc
-                        dwarf_line_emit_advance_pc(line_builder, pc_delta)
-                        dwarf_line_emit_advance_line(line_builder, 1)
-                        dwarf_line_emit_copy(line_builder)
-                        cur_dw_pc = fn_dw.fn_entry_offset
-                        cur_dw_line = cur_dw_line + 1
+                cur_dw_line = 1
+                if synth.synth_line_pcs.len() > 0
+                    li_dw = 0
+                    while li_dw < synth.synth_line_pcs.len()
+                        tgt_pc = synth.synth_line_pcs[li_dw]
+                        tgt_ln = synth.synth_line_nums[li_dw]
+                        pc_d = tgt_pc - cur_dw_pc
+                        ln_d = tgt_ln - cur_dw_line
+                        if pc_d > 0 or ln_d != 0 or li_dw == 0
+                            if pc_d > 0
+                                dwarf_line_emit_advance_pc(line_builder, pc_d)
+                                cur_dw_pc = tgt_pc
+                            end
+                            if ln_d != 0
+                                dwarf_line_emit_advance_line(line_builder, ln_d)
+                                cur_dw_line = tgt_ln
+                            end
+                            dwarf_line_emit_copy(line_builder)
+                        end
+                        li_dw = li_dw + 1
                     end
-                    df_i = df_i + 1
+                else
+                    dwarf_line_emit_advance_line(line_builder, 0)
+                    dwarf_line_emit_copy(line_builder)
                 end
                 if synth.synth_code.len() > cur_dw_pc
                     dwarf_line_emit_advance_pc(line_builder, synth.synth_code.len() - cur_dw_pc)
                 end
-                dwarf_line_emit_advance_line(line_builder, 1)
                 dwarf_line_end_sequence(line_builder, dw_base + synth.synth_code.len())
                 line_bytes = dwarf_line_serialize(line_builder)
 
@@ -3366,9 +3570,17 @@ fn compiler_pipeline_execute config source_code
                 f_idx = 0
                 while f_idx < synth.synth_functions.len()
                     fn_item = synth.synth_functions[f_idx]
-                    dwarf_unit_add_function(cu, fn_item.fn_name, dw_base + fn_item.fn_entry_offset, dw_base + synth.synth_code.len(), 1, 1)
+                    if fn_item.fn_decl_line > 0
+                        fn_end_dw = fn_item.fn_end_offset
+                        if fn_end_dw <= fn_item.fn_entry_offset
+                            fn_end_dw = fn_item.fn_entry_offset + 1
+                        end
+                        dwarf_unit_add_function(cu, fn_item.fn_name, dw_base + fn_item.fn_entry_offset, dw_base + fn_end_dw, 1, fn_item.fn_decl_line)
+                    end
                     f_idx = f_idx + 1
+                end
                 dwarf_unit_add_base_type(cu, "i64", 8, DW_ATE_signed())
+                dwarf_unit_add_base_type(cu, "f64", 8, DW_ATE_float())
                 info_bytes = dwarf_info_serialize(cu)
 
                 if config.cfg_no_pie == 0

@@ -39,6 +39,7 @@ struct RiscV64VM
     rv_exit_code           // Process exit code
     rv_cycles_executed     // Total instruction count executed
     rv_captured_output     // String capturing bytes written to stdout/stderr via sys_write
+    rv_heap_brk            // Guest heap bump pointer for SYS_brk (214) / SYS_mmap (222)
 end
 
 fn riscv64_vm_new mem_capacity base_vaddr
@@ -64,6 +65,7 @@ fn riscv64_vm_new mem_capacity base_vaddr
     vm.rv_exit_code = 0
     vm.rv_cycles_executed = 0
     vm.rv_captured_output = ""
+    vm.rv_heap_brk = base_vaddr + 262144
     return vm
 
 fn riscv64_vm_free vm
@@ -187,16 +189,38 @@ fn riscv64_vm_load_elf_bytes vm elf_bytes
     end
     vm.rv_pc = e_entry
 
-    // Program header offset at offset 32 (8 bytes)
-    phoff = elf_bytes[32]
-    phnum = elf_bytes[56] // number of program headers
+    // Program header offset at offset 32 (8 bytes) & phnum at offset 56 (2 bytes)
+    phoff = elf_bytes[32] + (elf_bytes[33] * 256) + (elf_bytes[34] * 65536) + (elf_bytes[35] * 16777216)
+    phnum = elf_bytes[56] + (elf_bytes[57] * 256)
 
-    // Default load: copy entire byte payload into virtual RAM starting at base_vaddr
-    c_i = 0
-    c_len = len(elf_bytes)
-    while c_i < c_len
-        riscv64_mem_write_u8(vm, vm.rv_mem_base_vaddr + c_i, elf_bytes[c_i])
-        c_i = c_i + 1
+    loaded_ph = 0
+    if phnum > 0 and phoff + (phnum * 56) <= len(elf_bytes)
+        pi = 0
+        while pi < phnum
+            ph = phoff + (pi * 56)
+            p_type = elf_bytes[ph] + (elf_bytes[ph + 1] * 256) + (elf_bytes[ph + 2] * 65536) + (elf_bytes[ph + 3] * 16777216)
+            if p_type == 1 // PT_LOAD
+                p_offset = elf_bytes[ph + 8] + (elf_bytes[ph + 9] * 256) + (elf_bytes[ph + 10] * 65536) + (elf_bytes[ph + 11] * 16777216)
+                p_vaddr = elf_bytes[ph + 16] + (elf_bytes[ph + 17] * 256) + (elf_bytes[ph + 18] * 65536) + (elf_bytes[ph + 19] * 16777216)
+                p_filesz = elf_bytes[ph + 32] + (elf_bytes[ph + 33] * 256) + (elf_bytes[ph + 34] * 65536) + (elf_bytes[ph + 35] * 16777216)
+                li = 0
+                while li < p_filesz and (p_offset + li) < len(elf_bytes)
+                    riscv64_mem_write_u8(vm, p_vaddr + li, elf_bytes[p_offset + li])
+                    li = li + 1
+                end
+                loaded_ph = 1
+            end
+            pi = pi + 1
+        end
+    end
+
+    if loaded_ph == 0
+        c_i = 0
+        c_len = len(elf_bytes)
+        while c_i < c_len
+            riscv64_mem_write_u8(vm, vm.rv_mem_base_vaddr + c_i, elf_bytes[c_i])
+            c_i = c_i + 1
+        end
     end
 
     // Initialize stack pointer (x2 / sp) at top of memory
@@ -281,11 +305,27 @@ fn riscv64_vm_step vm
         res = pc + riscv64_sign_extend_32(imm20)
         riscv64_reg_write(vm, rd, res)
 
-    // ── OP (0x33 / 51): ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND ─────
+    // ── OP (0x33 / 51): ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND & RV64M ─
     elif opcode == 51
         val1 = riscv64_reg_read(vm, rs1)
         val2 = riscv64_reg_read(vm, rs2)
-        if funct3 == 0
+        if funct7 == 1
+            if funct3 == 0 // MUL
+                riscv64_reg_write(vm, rd, val1 * val2)
+            elif funct3 == 4 or funct3 == 5 // DIV / DIVU
+                if val2 == 0
+                    riscv64_reg_write(vm, rd, 0 - 1)
+                else
+                    riscv64_reg_write(vm, rd, val1 / val2)
+                end
+            elif funct3 == 6 or funct3 == 7 // REM / REMU
+                if val2 == 0
+                    riscv64_reg_write(vm, rd, val1)
+                else
+                    riscv64_reg_write(vm, rd, val1 % val2)
+                end
+            end
+        elif funct3 == 0
             if funct7 == 0 // ADD
                 riscv64_reg_write(vm, rd, val1 + val2)
             elif funct7 == 32 // SUB
@@ -293,6 +333,12 @@ fn riscv64_vm_step vm
             end
         elif funct3 == 1 // SLL
             riscv64_reg_write(vm, rd, val1 << (val2 & 63))
+        elif funct3 == 2 // SLT
+            if val1 < val2
+                riscv64_reg_write(vm, rd, 1)
+            else
+                riscv64_reg_write(vm, rd, 0)
+            end
         elif funct3 == 4 // XOR
             riscv64_reg_write(vm, rd, val1 ^ val2)
         elif funct3 == 5 // SRL / SRA
@@ -424,6 +470,23 @@ fn riscv64_vm_step vm
                 end
                 vm.rv_captured_output = vm.rv_captured_output + str_out
                 riscv64_reg_write(vm, 10, a2) // return bytes written in a0
+            elif sys_num == 214 // sys_brk(addr)
+                if a0 > vm.rv_heap_brk and a0 < (vm.rv_mem_base_vaddr + vm.rv_mem_size - 65536)
+                    vm.rv_heap_brk = a0
+                end
+                riscv64_reg_write(vm, 10, vm.rv_heap_brk)
+            elif sys_num == 222 // sys_mmap(addr, len, prot, flags, fd, off)
+                alloc_len = a1
+                if alloc_len <= 0 or alloc_len > 65536
+                    alloc_len = 65536
+                end
+                addr_out = vm.rv_heap_brk
+                if addr_out + alloc_len >= (vm.rv_mem_base_vaddr + vm.rv_mem_size - 65536)
+                    riscv64_reg_write(vm, 10, 0 - 12)
+                else
+                    vm.rv_heap_brk = addr_out + alloc_len
+                    riscv64_reg_write(vm, 10, addr_out)
+                end
             else
                 // Default fallback: return 0 for unsupported syscall
                 riscv64_reg_write(vm, 10, 0)

@@ -37,15 +37,94 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_i32_const(s.ws_code, str_len)
             wasm_emit_i32_store(s.ws_code, 2, 0)
         else
-            // Store evaluated i64 expression into linear memory at offset 16
-            wasm_emit_i32_const(s.ws_code, 16)
+            // Format evaluated signed i64 expression into decimal ASCII bytes at [64..95] + '\n'
+            l_val = wasm_synth_alloc_local(s, "__wasi_p_val")
+            l_pos = wasm_synth_alloc_local(s, "__wasi_p_pos")
+            l_neg = wasm_synth_alloc_local(s, "__wasi_p_neg")
+            l_dig = wasm_synth_alloc_local(s, "__wasi_p_dig")
+
             wasm_synth_compile_expr(s, toks, pos_box)
-            wasm_emit_i64_store(s.ws_code, 3, 0)
+            wasm_emit_local_set(s.ws_code, l_val)
+
+            // Store trailing '\n' at offset 95 and initialize cursor pos = 95
+            wasm_emit_i32_const(s.ws_code, 95)
+            wasm_emit_i64_const(s.ws_code, 10)
+            wasm_emit_i64_store8(s.ws_code, 0, 0)
+            wasm_emit_i64_const(s.ws_code, 95)
+            wasm_emit_local_set(s.ws_code, l_pos)
+
+            // Track sign bit safely (handles INT64_MIN without negation overflow)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_local_set(s.ws_code, l_neg)
+            wasm_emit_local_get(s.ws_code, l_val)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_lt_s(s.ws_code)
+            wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+            wasm_emit_i64_const(s.ws_code, 1)
+            wasm_emit_local_set(s.ws_code, l_neg)
+            wasm_emit_end(s.ws_code)
+
+            // Extract decimal digits backward via do-while loop
+            wasm_emit_loop(s.ws_code, WASM_TYPE_EMPTY)
+            wasm_emit_local_get(s.ws_code, l_pos)
+            wasm_emit_i64_const(s.ws_code, 1)
+            wasm_emit_i64_sub(s.ws_code)
+            wasm_emit_local_set(s.ws_code, l_pos)
+
+            wasm_emit_local_get(s.ws_code, l_val)
+            wasm_emit_i64_const(s.ws_code, 10)
+            wasm_emit_i64_rem_s(s.ws_code)
+            wasm_emit_local_tee(s.ws_code, l_dig)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_lt_s(s.ws_code)
+            wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_local_get(s.ws_code, l_dig)
+            wasm_emit_i64_sub(s.ws_code)
+            wasm_emit_local_set(s.ws_code, l_dig)
+            wasm_emit_end(s.ws_code)
+
+            wasm_emit_local_get(s.ws_code, l_pos)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_local_get(s.ws_code, l_dig)
+            wasm_emit_i64_const(s.ws_code, 48)
+            wasm_emit_i64_add(s.ws_code)
+            wasm_emit_i64_store8(s.ws_code, 0, 0)
+
+            wasm_emit_local_get(s.ws_code, l_val)
+            wasm_emit_i64_const(s.ws_code, 10)
+            wasm_emit_i64_div_s(s.ws_code)
+            wasm_emit_local_tee(s.ws_code, l_val)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_br_if(s.ws_code, 0)
+            wasm_emit_end(s.ws_code)
+
+            // Prepend '-' if value was negative
+            wasm_emit_local_get(s.ws_code, l_neg)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+            wasm_emit_local_get(s.ws_code, l_pos)
+            wasm_emit_i64_const(s.ws_code, 1)
+            wasm_emit_i64_sub(s.ws_code)
+            wasm_emit_local_tee(s.ws_code, l_pos)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 45)
+            wasm_emit_i64_store8(s.ws_code, 0, 0)
+            wasm_emit_end(s.ws_code)
+
+            // Populate iovs[0] = { base: l_pos, len: 96 - l_pos }
             wasm_emit_i32_const(s.ws_code, 0)
-            wasm_emit_i32_const(s.ws_code, 16)
+            wasm_emit_local_get(s.ws_code, l_pos)
+            wasm_emit_i32_wrap_i64(s.ws_code)
             wasm_emit_i32_store(s.ws_code, 2, 0)
+
             wasm_emit_i32_const(s.ws_code, 4)
-            wasm_emit_i32_const(s.ws_code, 8)
+            wasm_emit_i64_const(s.ws_code, 96)
+            wasm_emit_local_get(s.ws_code, l_pos)
+            wasm_emit_i64_sub(s.ws_code)
+            wasm_emit_i32_wrap_i64(s.ws_code)
             wasm_emit_i32_store(s.ws_code, 2, 0)
         end
         // 2. Invoke WASI fd_write: param1(fd=1), param2(iovs=0), param3(iovs_len=1), param4(nwritten=8)
@@ -73,7 +152,7 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             wasm_emit_i64_const(s.ws_code, 0)
 
         wasm_emit_return(s.ws_code)
-        if s.ws_current_fn != 0
+        if s.ws_current_fn != 0 and s.ws_block_depth == 0
             s.ws_current_fn.wfn_has_returned = 1
         return 0
 
@@ -733,6 +812,9 @@ fn wasm_synth_compile_program tokens
         import_fn_count = 1
     end
 
+    // Register WASI standard _start signature: () -> ()
+    wasi_start_type_idx = wasm_synth_get_or_add_type(s, 0 - 5)
+
     sec1 = wasm_emit_type_section(s.ws_types)
     sec2 = wasm_emit_import_section(import_list)
 
@@ -742,19 +824,22 @@ fn wasm_synth_compile_program tokens
     while fi < s.ws_functions.len()
         push(func_types, s.ws_functions[fi].wfn_type_index)
         fi = fi + 1
+    // Append WASI _start wrapper signature after user functions so all user indices stay unchanged
+    push(func_types, wasi_start_type_idx)
     sec3 = wasm_emit_function_section(func_types)
 
-    // Section 5: Memory Section (1 page = 64KB initial memory)
+    // Section 5: Memory Section (4 pages = 256KB initial memory)
     sec5 = wasm_emit_memory_section()
 
     // Section 7: Export Section
     export_list = list()
 
-    // Export 1: main (Function index 0 + import_fn_count)
+    // Export 1: main (Function index 0 + import_fn_count, () -> i64)
     push(export_list, ["main", 0, import_fn_count])
 
-    // Export 2: _start (Function index 0 + import_fn_count for standard runtime compatibility)
-    push(export_list, ["_start", 0, import_fn_count])
+    // Export 2: _start (WASI () -> () wrapper calling main and dropping return value)
+    wasi_start_fn_idx = import_fn_count + s.ws_functions.len()
+    push(export_list, ["_start", 0, wasi_start_fn_idx])
 
     if main_fn.wfn_name == "মূল"
         push(export_list, ["মূল", 0, import_fn_count])
@@ -796,6 +881,14 @@ fn wasm_synth_compile_program tokens
 
         push(func_bodies, body)
         fi = fi + 1
+
+    // Append WASI _start wrapper body: call main; drop; end
+    start_body = list()
+    push(start_body, 0)
+    wasm_emit_call(start_body, import_fn_count)
+    wasm_emit_drop(start_body)
+    push(start_body, WASM_OP_END)
+    push(func_bodies, start_body)
 
     sec10 = wasm_emit_code_section(func_bodies)
 

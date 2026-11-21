@@ -251,3 +251,54 @@ fn thread_wait_counter counter_ptr target
         thread_yield()
     end
     return target
+
+fn thread_spawn_joinable fn_entry arg stack_size
+    // WHY: Spawns an OS thread using CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID so parent can block
+    // on kernel SYS_futex without polling or leaking stack memory. Returns handle [tid_slot, stack_base, stack_sz].
+    _heap_init = list()
+    sz = stack_size
+    if sz < 65536
+        sz = 65536
+    end
+    stack_base = syscall(9, 0, sz, 3, 34, 0 - 1, 0)
+    if stack_base <= 0
+        return 0
+    end
+    handle = malloc(24)
+    মেমরি_লেখো(handle, 0, 1)
+    মেমরি_লেখো(handle, 8, stack_base)
+    মেমরি_লেখো(handle, 16, sz)
+    tid = thread_spawn_vm_joinable(fn_entry, arg, stack_base + sz, handle)
+    if tid <= 0
+        syscall(11, stack_base, sz, 0, 0, 0, 0)
+        free(handle, 24)
+        return 0
+    end
+    return handle
+
+fn thread_join handle
+    // WHY: Zero-spin kernel futex join waiting until child thread exits and kernel zeroes *ctid_ptr.
+    if handle == 0
+        return 0
+    end
+    cur_tid = মেমরি_পড়ো(handle, 0)
+    while cur_tid != 0
+        futex_wait(handle, cur_tid)
+        cur_tid = মেমরি_পড়ো(handle, 0)
+    end
+    stack_base = মেমরি_পড়ো(handle, 8)
+    sz = মেমরি_পড়ো(handle, 16)
+    if stack_base > 0 and sz > 0
+        syscall(11, stack_base, sz, 0, 0, 0, 0)
+    end
+    free(handle, 24)
+    return 1
+
+fn থ্রেড_স্পন_জয়েনযোগ্য fn_entry arg stack_size
+    return thread_spawn_joinable(fn_entry, arg, stack_size)
+
+fn থ্রেড_যোগদান handle
+    return thread_join(handle)
+
+fn থ্রেড_অপেক্ষা handle
+    return thread_join(handle)

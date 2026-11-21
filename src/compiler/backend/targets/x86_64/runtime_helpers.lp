@@ -29,6 +29,8 @@ fn x86_synth_register_helper_fn s name off
     fn_info.fn_name = name
     fn_info.fn_entry_offset = off
     fn_info.fn_ret_type = ""
+    fn_info.fn_end_offset = 0
+    fn_info.fn_decl_line = 0
     push(s.synth_functions, fn_info)
     return 0
 
@@ -463,16 +465,34 @@ fn x86_synth_emit__lipi_atomic_unlock s
     x86_synth_emit_bytes(s, [240, 72, 15, 186, 55, 0, 72, 49, 192, 195])
     return off
 
+fn x86_synth_emit__lipi_exc_slot_ptr s
+    // WHY: Resolves per-thread exception top pointer using Linux SYS_gettid (186) + lock cmpxchg
+    // table at [g_exc_top + 32 .. +288] (16 slots of [tid, exc_top]).
+    // Input: %r10 = &g_exc_top (rw_vaddr + 104). Output: %r10 = &thread_exc_top.
+    // Preserves %rdi, %rsi, %rdx, %rcx, %rbx, %r12-%r15, %rbp.
+    off = s.synth_code.len()
+    s.synth_exc_slot_off = off
+    x86_synth_register_helper_fn(s, "_lipi_exc_slot_ptr", off)
+    x86_synth_emit_bytes(s, [
+        81, 65, 82, 184, 186, 0, 0, 0, 15, 5, 65, 90, 89, 73, 137, 195,
+        77, 141, 66, 32, 65, 185, 16, 0, 0, 0, 73, 139, 0, 76, 57, 216,
+        116, 29, 72, 133, 192, 117, 14, 49, 192, 240, 77, 15, 177, 24,
+        116, 15, 76, 57, 216, 116, 10, 73, 131, 192, 16, 65, 255, 201,
+        117, 220, 195, 77, 141, 80, 8, 195
+    ])
+    return off
+
 fn x86_synth_emit__lipi_exc_push s
-    // WHY: Pushes a 72-byte cross-frame exception handler onto g_exc_top (rw_vaddr + 104).
+    // WHY: Pushes a 72-byte cross-frame exception handler onto per-thread exc_top slot.
     // Inputs: %rdi=frame_ptr, %rsi=catch_rip, %rdx=saved_rbp, %rcx=saved_rsp.
     off = s.synth_code.len()
     s.synth_exc_push_off = off
     x86_synth_register_helper_fn(s, "_lipi_exc_push", off)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 73, 137, 194])
+    x86_synth_emit_call_helper(s, "_lipi_exc_slot_ptr")
     x86_synth_emit_bytes(s, [
-        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
-        76, 139, 16,
-        76, 137, 23,
+        77, 139, 26,
+        76, 137, 31,
         72, 137, 119, 8,
         72, 137, 87, 16,
         72, 137, 79, 24,
@@ -481,41 +501,43 @@ fn x86_synth_emit__lipi_exc_push s
         76, 137, 111, 48,
         76, 137, 119, 56,
         76, 137, 127, 64,
-        72, 137, 56,
+        73, 137, 58,
         195
     ])
     return off
 
 fn x86_synth_emit__lipi_exc_pop s
-    // WHY: Pops active exception handler frame from g_exc_top (rw_vaddr + 104) on normal try exit.
+    // WHY: Pops active exception handler frame from per-thread exc_top slot on normal exit.
     off = s.synth_code.len()
     s.synth_exc_pop_off = off
     x86_synth_register_helper_fn(s, "_lipi_exc_pop", off)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 73, 137, 194])
+    x86_synth_emit_call_helper(s, "_lipi_exc_slot_ptr")
     x86_synth_emit_bytes(s, [
-        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
-        72, 139, 16,
+        73, 139, 18,
         72, 133, 210,
         116, 6,
         72, 139, 18,
-        72, 137, 16,
+        73, 137, 18,
         195
     ])
     return off
 
 fn x86_synth_emit__lipi_exc_throw s
     // WHY: Cross-frame stack unwinding throw(%rdi = err_val). Restores callee-saved
-    // registers, rbp, rsp from active g_exc_top handler and jumps to catch_rip with err in %rax.
+    // registers, rbp, rsp from calling thread's active exc_top handler and jumps to catch_rip.
     off = s.synth_code.len()
     s.synth_exc_throw_off = off
     x86_synth_register_helper_fn(s, "_lipi_exc_throw", off)
     x86_synth_register_helper_fn(s, "exc_throw", off)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 73, 137, 194])
+    x86_synth_emit_call_helper(s, "_lipi_exc_slot_ptr")
     x86_synth_emit_bytes(s, [
-        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,
-        72, 139, 16,
+        73, 139, 18,
         72, 133, 210,
         116, 44,
-        76, 139, 18,
-        76, 137, 16,
+        76, 139, 26,
+        77, 137, 26,
         76, 139, 90, 8,
         72, 139, 90, 32,
         76, 139, 98, 40,
@@ -613,9 +635,11 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_thread_spawn_vm = x86_synth_emit__lipi_thread_spawn_vm(s)
     off__lipi_futex_wait = x86_synth_emit__lipi_futex_wait(s)
     off__lipi_futex_wake = x86_synth_emit__lipi_futex_wake(s)
+    off__lipi_exc_slot_ptr = x86_synth_emit__lipi_exc_slot_ptr(s)
     off__lipi_exc_push = x86_synth_emit__lipi_exc_push(s)
     off__lipi_exc_pop = x86_synth_emit__lipi_exc_pop(s)
     off__lipi_exc_throw = x86_synth_emit__lipi_exc_throw(s)
+    off__lipi_thread_spawn_joinable = x86_synth_emit__lipi_thread_spawn_joinable(s)
     off__lipi_stack_bottom = x86_synth_emit__lipi_stack_bottom(s)
     off__lipi_heap_base = x86_synth_emit__lipi_heap_base(s)
     off__lipi_heap_ptr = x86_synth_emit__lipi_heap_ptr(s)

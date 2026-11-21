@@ -136,36 +136,54 @@ fn x86_synth_emit__lipi_atomic_add s
     return off
 
 fn x86_synth_emit__lipi_user_alloc s
-    // WHY: User memory allocator with O(1) segregated slab freelist recycling.
-    // Inspects slab buckets; pops recycled slots or falls back to bump allocator with size header.
+    // WHY: Thread-safe O(1) segregated slab freelist allocator.
+    // Acquires _slab_spinlock [slab_base + 96] (rw + 128) around freelist pop and always
+    // releases before falling through to __alloc on empty buckets.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_user_alloc", off)
     x86_synth_register_helper_fn(s, "alloc", off)
     x86_synth_register_helper_fn(s, "sys_alloc", off)
     x86_synth_register_helper_fn(s, "বরাদ্দ", off)
     // Chunk 1: Size classification and bucket lookup across 9 geometric size classes
-    // (16B, 32B, 64B, 128B, 256B, 512B, 1024B, 2048B, 4096B)
-    x86_synth_emit_bytes(s, [83, 65, 84, 65, 85, 73, 137, 252, 185, 0, 0, 0, 0, 186, 16, 0, 0, 0, 73, 131, 252, 16, 15, 142, 158, 0, 0, 0, 185, 8, 0, 0, 0, 186, 32, 0, 0, 0, 73, 131, 252, 32, 15, 142, 138, 0, 0, 0, 185, 16, 0, 0, 0, 186, 64, 0, 0, 0, 73, 131, 252, 64, 126, 122, 185, 24, 0, 0, 0, 186, 128, 0, 0, 0, 73, 129, 252, 128, 0, 0, 0, 126, 103, 185, 32, 0, 0, 0, 186, 0, 1, 0, 0, 73, 129, 252, 0, 1, 0, 0, 126, 84, 185, 40, 0, 0, 0, 186, 0, 2, 0, 0, 73, 129, 252, 0, 2, 0, 0, 126, 65, 185, 48, 0, 0, 0, 186, 0, 4, 0, 0, 73, 129, 252, 0, 4, 0, 0, 126, 46, 185, 56, 0, 0, 0, 186, 0, 8, 0, 0, 73, 129, 252, 0, 8, 0, 0, 126, 27, 185, 64, 0, 0, 0, 186, 0, 16, 0, 0, 73, 129, 252, 0, 16, 0, 0, 126, 8, 185, 255, 255, 255, 255, 76, 137, 226, 131, 249, 0, 124, 43, 65, 137, 205, 82])
+    x86_synth_emit_bytes(s, [83, 65, 84, 65, 85, 73, 137, 252, 185, 0, 0, 0, 0, 186, 16, 0, 0, 0, 73, 131, 252, 16, 15, 142, 158, 0, 0, 0, 185, 8, 0, 0, 0, 186, 32, 0, 0, 0, 73, 131, 252, 32, 15, 142, 138, 0, 0, 0, 185, 16, 0, 0, 0, 186, 64, 0, 0, 0, 73, 131, 252, 64, 126, 122, 185, 24, 0, 0, 0, 186, 128, 0, 0, 0, 73, 129, 252, 128, 0, 0, 0, 126, 103, 185, 32, 0, 0, 0, 186, 0, 1, 0, 0, 73, 129, 252, 0, 1, 0, 0, 126, 84, 185, 40, 0, 0, 0, 186, 0, 2, 0, 0, 73, 129, 252, 0, 2, 0, 0, 126, 65, 185, 48, 0, 0, 0, 186, 0, 4, 0, 0, 73, 129, 252, 0, 4, 0, 0, 126, 46, 185, 56, 0, 0, 0, 186, 0, 8, 0, 0, 73, 129, 252, 0, 8, 0, 0, 126, 27, 185, 64, 0, 0, 0, 186, 0, 16, 0, 0, 73, 129, 252, 0, 16, 0, 0, 126, 8, 185, 255, 255, 255, 255, 76, 137, 226, 131, 249, 0, 124, 66, 65, 137, 205, 82])
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Chunk 2: Freelist pop or fallback setup
-    x86_synth_emit_bytes(s, [90, 72, 137, 199, 76, 1, 239, 72, 139, 7, 72, 133, 192, 116, 16, 72, 139, 48, 72, 137, 55, 76, 137, 96, 248, 65, 93, 65, 92, 91, 195, 73, 137, 212, 73, 141, 124, 36, 16])
+    // Chunk 2: Spinlock-protected freelist pop or unlocked fallback to __alloc
+    x86_synth_emit_bytes(s, [90, 73, 137, 192, 72, 137, 199, 76, 1, 239, 240, 73, 15, 186, 104, 96, 0, 114, 247, 72, 139, 7, 72, 133, 192, 116, 23, 72, 139, 48, 72, 137, 55, 240, 73, 15, 186, 112, 96, 0, 76, 137, 96, 248, 65, 93, 65, 92, 91, 195, 240, 73, 15, 186, 112, 96, 0, 73, 137, 212, 73, 141, 124, 36, 16])
     x86_synth_emit_call_helper(s, "__alloc")
     // Chunk 3: Store size header at [rax] and return user ptr at rax + 8
     x86_synth_emit_bytes(s, [76, 137, 32, 72, 131, 192, 8, 65, 93, 65, 92, 91, 195])
     return off
 
 fn x86_synth_emit__lipi_user_free s
-    // WHY: User memory deallocator. Reclaims user slot into segregated slab freelist via LIFO push.
+    // WHY: Thread-safe deallocator. Reclaims user slot into segregated slab freelist under _slab_spinlock.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_user_free", off)
     x86_synth_register_helper_fn(s, "free", off)
     x86_synth_register_helper_fn(s, "sys_free", off)
     x86_synth_register_helper_fn(s, "মুক্ত", off)
     // Free Chunk 1: Read size header at [rdi - 8] and map to 9 geometric slab classes
-    x86_synth_emit_bytes(s, [83, 65, 84, 73, 137, 252, 77, 133, 228, 15, 132, 145, 0, 0, 0, 73, 139, 116, 36, 248, 185, 0, 0, 0, 0, 72, 131, 254, 16, 126, 108, 185, 8, 0, 0, 0, 72, 131, 254, 32, 126, 97, 185, 16, 0, 0, 0, 72, 131, 254, 64, 126, 86, 185, 24, 0, 0, 0, 72, 129, 254, 128, 0, 0, 0, 126, 72, 185, 32, 0, 0, 0, 72, 129, 254, 0, 1, 0, 0, 126, 58, 185, 40, 0, 0, 0, 72, 129, 254, 0, 2, 0, 0, 126, 44, 185, 48, 0, 0, 0, 72, 129, 254, 0, 4, 0, 0, 126, 30, 185, 56, 0, 0, 0, 72, 129, 254, 0, 8, 0, 0, 126, 16, 185, 64, 0, 0, 0, 72, 129, 254, 0, 16, 0, 0, 126, 2, 235, 21, 81])
+    x86_synth_emit_bytes(s, [83, 65, 84, 73, 137, 252, 77, 133, 228, 15, 132, 161, 0, 0, 0, 73, 139, 116, 36, 248, 185, 0, 0, 0, 0, 72, 131, 254, 16, 126, 108, 185, 8, 0, 0, 0, 72, 131, 254, 32, 126, 97, 185, 16, 0, 0, 0, 72, 131, 254, 64, 126, 86, 185, 24, 0, 0, 0, 72, 129, 254, 128, 0, 0, 0, 126, 72, 185, 32, 0, 0, 0, 72, 129, 254, 0, 1, 0, 0, 126, 58, 185, 40, 0, 0, 0, 72, 129, 254, 0, 2, 0, 0, 126, 44, 185, 48, 0, 0, 0, 72, 129, 254, 0, 4, 0, 0, 126, 30, 185, 56, 0, 0, 0, 72, 129, 254, 0, 8, 0, 0, 126, 16, 185, 64, 0, 0, 0, 72, 129, 254, 0, 16, 0, 0, 126, 2, 235, 37, 81])
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Free Chunk 2: LIFO push ptr into bucket head
-    x86_synth_emit_bytes(s, [89, 72, 141, 28, 8, 72, 139, 19, 73, 137, 20, 36, 76, 137, 35, 49, 192, 65, 92, 91, 195])
+    // Free Chunk 2: Acquire _slab_spinlock, push ptr onto bucket head, unlock
+    x86_synth_emit_bytes(s, [89, 72, 141, 28, 8, 240, 72, 15, 186, 104, 96, 0, 114, 247, 72, 139, 19, 73, 137, 20, 36, 76, 137, 35, 240, 72, 15, 186, 112, 96, 0, 49, 192, 65, 92, 91, 195])
+    return off
+
+fn x86_synth_emit__lipi_thread_spawn_joinable s
+    // WHY: Joinable OS thread via Linux SYS_clone (56) with CLONE_VM|CLONE_FS|CLONE_FILES|
+    // CLONE_SIGHAND|CLONE_THREAD|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID (0x00310F00).
+    // Inputs: %rdi=fn_ptr, %rsi=arg, %rdx=stack_top, %rcx=ctid_ptr.
+    // On child exit, kernel atomically zeroes *ctid_ptr and issues FUTEX_WAKE.
+    off = s.synth_code.len()
+    s.synth_thread_spawn_j_off = off
+    x86_synth_register_helper_fn(s, "_lipi_thread_spawn_joinable", off)
+    x86_synth_register_helper_fn(s, "thread_spawn_vm_joinable", off)
+    x86_synth_emit_bytes(s, [
+        72, 131, 226, 240, 72, 131, 234, 16, 72, 137, 50, 72, 137, 122, 8,
+        72, 137, 214, 72, 137, 202, 73, 137, 202, 69, 49, 192,
+        191, 0, 15, 49, 0, 184, 56, 0, 0, 0, 15, 5,
+        72, 133, 192, 117, 16, 49, 237, 95, 88, 255, 208,
+        72, 137, 199, 184, 60, 0, 0, 0, 15, 5, 195
+    ])
     return off
 
 fn x86_synth_emit__lipi_thread_spawn_vm s

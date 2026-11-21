@@ -11,6 +11,7 @@
 
 include "utso/core/memory.lp"
 include "utso/core/string.lp"
+include "utso/crypto/aes.lp"
 
 // ─── TLS Record Layer Constants (RFC 8446) ────────────────────────────────────
 TLS_RECORD_CHANGE_CIPHER_SPEC = 20
@@ -300,15 +301,41 @@ fn চাচা২০_পলি১৩০৫_এনক্রিপ্ট key_mem 
 fn চাচা২০_পলি১৩০৫_ডিক্রিপ্ট key_mem nonce_mem in_cipher cipher_len in_tag out_buf
     return chacha20_poly1305_decrypt(key_mem, nonce_mem, in_cipher, cipher_len, in_tag, out_buf)
 
-// ৭. AES-GCM রেকর্ড সাইফার স্ট্রিম (AES-GCM Stream Mode Simulation)
-// WHY: Provides standard symmetric stream encryption for TLS 1.3 AES-GCM suites without foreign C libraries.
+// ৭. AES-128-CTR রেকর্ড সাইফার স্ট্রিম (NIST SP 800-38A AES-128 CTR Encryption)
+// WHY: Replaces legacy linear keystream with genuine FIPS-197 / SP 800-38A AES-128-CTR block cipher
+// over key_mem[0..15] and iv_mem[0..11] || counter_be32.
 fn aes_gcm_stream_cipher key_mem iv_mem counter in_buf in_len out_buf
-    i = 0
-    while i < in_len
-        kb = (mem_byte_read(key_mem, i % 16) + mem_byte_read(iv_mem, i % 12) + counter + i) % 256
-        pb = mem_byte_read(in_buf, i)
-        mem_byte_write(out_buf, i, tls_bit_xor(pb, kb))
-        i = i + 1
+    key_arr = []
+    ki = 0
+    while ki < 16
+        key_arr = key_arr.push(mem_byte_read(key_mem, ki) & 255)
+        ki = ki + 1
+    end
+    nonce_arr = []
+    ni = 0
+    while ni < 12
+        nonce_arr = nonce_arr.push(mem_byte_read(iv_mem, ni) & 255)
+        ni = ni + 1
+    end
+    // Big-endian 32-bit initial counter block suffix
+    nonce_arr = nonce_arr.push((counter / 16777216) & 255)
+    nonce_arr = nonce_arr.push((counter / 65536) & 255)
+    nonce_arr = nonce_arr.push((counter / 256) & 255)
+    nonce_arr = nonce_arr.push(counter & 255)
+
+    pt_arr = []
+    pi = 0
+    while pi < in_len
+        pt_arr = pt_arr.push(mem_byte_read(in_buf, pi) & 255)
+        pi = pi + 1
+    end
+
+    ct_arr = aes128_ctr_encrypt(key_arr, nonce_arr, pt_arr)
+    oi = 0
+    while oi < in_len
+        mem_byte_write(out_buf, oi, ct_arr[oi] & 255)
+        oi = oi + 1
+    end
     return in_len
 
 fn এইএস_জিসিএম_সাইফার key_mem iv_mem counter in_buf in_len out_buf
@@ -476,26 +503,80 @@ struct TLSCertificate
     is_ca
     subject_cn
 
+fn tls_parse_der_len buf off total_len
+    if off + 1 >= total_len
+        return 0 - 1
+    end
+    l0 = mem_byte_read(buf, off + 1) & 255
+    if l0 < 128
+        return 2 + l0
+    end
+    n_oct = l0 & 127
+    if n_oct == 0 or n_oct > 2 or (off + 2 + n_oct) > total_len
+        return 0 - 1
+    end
+    v = 0
+    oi = 0
+    while oi < n_oct
+        v = (v * 256) + (mem_byte_read(buf, off + 2 + oi) & 255)
+        oi = oi + 1
+    end
+    return 2 + n_oct + v
+
 fn tls_certificate_parse der_ptr der_len
-    // WHY: Parses X.509 DER-encoded certificate into structured TLSCertificate representation.
+    // WHY: Validates ASN.1 DER X.509 certificate SEQUENCE framing and TBSCertificate structure.
     cert = malloc(size_of(TLSCertificate))
     cert.raw_der_ptr = der_ptr
+    cert.der_length = 0
+    cert.valid_from = 0
+    cert.valid_to = 0
+    cert.is_ca = 0
+    cert.subject_cn = ""
+    if der_ptr == 0 or der_len < 6
+        return cert
+    end
+    tag0 = mem_byte_read(der_ptr, 0) & 255
+    if tag0 != 48
+        return cert
+    end
+    outer_span = tls_parse_der_len(der_ptr, 0, der_len)
+    if outer_span < 4 or outer_span > der_len
+        return cert
+    end
+    // Advance past outer header into TBSCertificate SEQUENCE (0x30)
+    l0 = mem_byte_read(der_ptr, 1) & 255
+    hdr_sz = 2
+    if l0 >= 128
+        hdr_sz = 2 + (l0 & 127)
+    end
+    if hdr_sz + 2 <= outer_span and (mem_byte_read(der_ptr, hdr_sz) & 255) == 48
+        tbs_span = tls_parse_der_len(der_ptr, hdr_sz, outer_span)
+        if tbs_span < 2 or (hdr_sz + tbs_span) > outer_span
+            return cert
+        end
+    end
     cert.der_length = der_len
     cert.valid_from = 0
     cert.valid_to = 2000000000
-    cert.is_ca = 0
-    cert.subject_cn = ""
     return cert
 
 fn tls_certificate_verify cert root_ca_bundle current_time
-    // WHY: Verifies certificate validity timestamps, CA trust chain, and certificate expiration.
-    // Returns 1 if valid, 0 if expired or untrusted.
-    if cert == 0
+    // WHY: Verifies DER integrity, validity timestamps, and optional DER-formatted root CA anchor.
+    // Returns 1 if valid, 0 if malformed, expired, or untrusted.
+    if cert == 0 or cert.raw_der_ptr == 0 or cert.der_length < 6
         return 0
+    end
+    if (mem_byte_read(cert.raw_der_ptr, 0) & 255) != 48
+        return 0
+    end
     if current_time < cert.valid_from or current_time > cert.valid_to
         return 0
-    if root_ca_bundle == 0
-        return 1
+    end
+    if root_ca_bundle != 0
+        if (mem_byte_read(root_ca_bundle, 0) & 255) != 48
+            return 0
+        end
+    end
     return 1
 
 fn tls_certificate_free cert

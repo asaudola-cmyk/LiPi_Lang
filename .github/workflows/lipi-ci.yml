@@ -2,9 +2,9 @@ name: Lipi Sovereign Native CI
 
 # WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
 # CI verifies standalone Stage-1->2->3 Static-PIE deterministic bootstrap, W^X (0 RWE)
-# audit across all bin/* tools, 233+ regression tests, 31/31 aati verify & aati.lock,
-# Node V8 WebAssembly execution, Mach-O LC_CODE_SIGNATURE validation, and native
-# Windows PE32+ (.exe) & macOS Mach-O artifact validation on real OS runners.
+# audit across all bin/* tools, 245 regression tests, 31/31 aati verify & aati.lock,
+# Node V8 WebAssembly execution, Shared .so (ctypes) + -g DWARF, Mach-O LC_CODE_SIGNATURE
+# validation, and native Windows PE32+ (.exe) & macOS Mach-O artifact validation.
 
 on:
   push:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi Static-PIE Bootstrap, W^X Audit & 233-Test Suite (Ubuntu)"
+    name: "Lipi Static-PIE Bootstrap, W^X Audit & 245-Test Suite (Ubuntu)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -51,7 +51,7 @@ jobs:
             test "$rwe" = "0"
           done
 
-      - name: Run Full 233-Test Sovereign Regression Suite (0% Shell)
+      - name: Run Full 245-Test Sovereign Regression Suite (0% Shell)
         run: |
           ./bin/lipi test
 
@@ -78,13 +78,19 @@ jobs:
             const fs = require("fs");
             const wasm = fs.readFileSync("/tmp/ci_wasm.wasm");
             let memRef = null;
+            let stdout = "";
             WebAssembly.instantiate(wasm, {
               wasi_snapshot_preview1: {
                 fd_write: (_fd, iovs, iovsLen, nwritten) => {
                   if (memRef) {
                     const dv = new DataView(memRef.buffer);
                     let total = 0;
-                    for (let i = 0; i < iovsLen; i++) total += dv.getUint32(iovs + i * 8 + 4, true);
+                    for (let i = 0; i < iovsLen; i++) {
+                      const ptr = dv.getUint32(iovs + i * 8, true);
+                      const len = dv.getUint32(iovs + i * 8 + 4, true);
+                      stdout += Buffer.from(memRef.buffer, ptr, len).toString("utf8");
+                      total += len;
+                    }
                     dv.setUint32(nwritten, total, true);
                   }
                   return 0;
@@ -92,20 +98,33 @@ jobs:
               }
             }).then(r => {
               memRef = r.instance.exports.memory;
-              r.instance.exports._start();
+              const sret = r.instance.exports._start();
+              if (sret !== undefined) process.exit(1);
+              if (stdout !== "25\n") process.exit(2);
               const res = r.instance.exports.add_sq(3n, 4n);
-              if (res !== 25n) process.exit(1);
-              console.log("Node V8 WASM OK:", res.toString());
+              if (res !== 25n) process.exit(3);
+              console.log("Node V8 WASM OK:", JSON.stringify(stdout), res.toString());
             });
           '
           rm -f /tmp/ci_wasm.lp /tmp/ci_wasm.wasm
 
+      - name: Verify Shared Object (.so + ctypes) & DWARF v4 (-g)
+        run: |
+          printf 'fn fib_val n\n    if n <= 1\n        return n\n    a = 0\n    b = 1\n    i = 2\n    while i <= n\n        c = a + b\n        a = b\n        b = c\n        i = i + 1\n    return b\n' > /tmp/ci_so.lp
+          ./bin/lipc --shared /tmp/ci_so.lp -o /tmp/ci_so.so
+          test "$(readelf -l /tmp/ci_so.so | grep -c RWE || true)" = "0"
+          python3 -c 'import ctypes; lib = ctypes.CDLL("/tmp/ci_so.so"); lib.fib_val.restype = ctypes.c_int64; lib.fib_val.argtypes = [ctypes.c_int64]; assert lib.fib_val(10) == 55'
+          ./bin/lipc -g tests/01_hello.lp -o /tmp/ci_dw
+          readelf --debug-dump=decodedline /tmp/ci_dw | grep -q "01_hello.lp"
+          readelf --debug-dump=info /tmp/ci_dw | grep -q "DW_TAG_subprogram"
+          rm -f /tmp/ci_so.lp /tmp/ci_so.so /tmp/ci_dw
+
       - name: Cross-Compile PE32+ Windows & Mach-O macOS Artifacts
         run: |
           mkdir -p /tmp/cross_artifacts
-          printf 'say "CI: Windows PE32+ OK"\nok = file_write("ci_win_tmp.txt", "lipi_win64_ok")\nif ok == 0 or file_exists("ci_win_tmp.txt") == 0\n    exit(1)\nif file_read("ci_win_tmp.txt") != "lipi_win64_ok"\n    exit(2)\nif clock_ms() <= 0\n    exit(3)\nsay "CI: Windows File I/O + Clock Verified"\n' > /tmp/win_smoke.lp
+          printf 'args = argv()\nif args.len() < 1\n    exit(1)\nsay "CI: Windows PE32+ OK"\nok = file_write("ci_win_tmp.txt", "lipi_win64_ok")\nif ok == 0 or file_exists("ci_win_tmp.txt") == 0\n    exit(1)\nif file_read("ci_win_tmp.txt") != "lipi_win64_ok"\n    exit(2)\nif clock_ms() <= 0\n    exit(3)\nsay "CI: Windows File I/O + Clock Verified"\n' > /tmp/win_smoke.lp
           ./bin/lipc /tmp/win_smoke.lp --target windows -o /tmp/cross_artifacts/lipi_win_smoke.exe
-          ./bin/lipc tests/01_hello.lp --target macos -o /tmp/cross_artifacts/lipi_mac_smoke
+          ./bin/lipc tests/01_hello.lp --target macos-arm64 -o /tmp/cross_artifacts/lipi_mac_smoke
           ./bin/lipc tests/01_hello.lp --target arm64 -o /tmp/cross_artifacts/lipi_arm64_smoke
           rm -f /tmp/win_smoke.lp
 

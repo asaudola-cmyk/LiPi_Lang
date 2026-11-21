@@ -249,8 +249,7 @@ import "utso/string"
 
 @fn macho_segment_text(vmsize, filesize, nsects)
   // WHY: __TEXT segment contains Mach-O headers, load commands, code, and string constants.
-  // It is mapped at 0x100000000 (4GB base, right after __PAGEZERO).
-  // initprot = RX (5), maxprot = RWX (7).
+  // Enforces strict W^X protection (initprot = RX, maxprot = RX).
   return {
     seg_cmd: LC_SEGMENT_64(),
     seg_cmdsize: 72 + (80 * nsects),
@@ -259,7 +258,7 @@ import "utso/string"
     seg_vmsize: vmsize,
     seg_fileoff: 0,
     seg_filesize: filesize,
-    seg_maxprot: VM_PROT_RWX(),
+    seg_maxprot: VM_PROT_RX(),
     seg_initprot: VM_PROT_RX(),
     seg_nsects: nsects,
     seg_flags: 0
@@ -305,8 +304,7 @@ import "utso/string"
 @end
 
 @fn macho_segment_data(vmaddr, vmsize, fileoff, filesize, nsects)
-  // WHY: __DATA segment contains initialized globals and BSS.
-  // initprot = RW (3), maxprot = RWX (7).
+  // WHY: __DATA segment enforces strict W^X protection (initprot = RW, maxprot = RW).
   return {
     seg_cmd: LC_SEGMENT_64(),
     seg_cmdsize: 72 + (80 * nsects),
@@ -315,7 +313,7 @@ import "utso/string"
     seg_vmsize: vmsize,
     seg_fileoff: fileoff,
     seg_filesize: filesize,
-    seg_maxprot: VM_PROT_RWX(),
+    seg_maxprot: VM_PROT_RW(),
     seg_initprot: VM_PROT_RW(),
     seg_nsects: nsects,
     seg_flags: 0

@@ -87,6 +87,7 @@ struct Arm64Synthesizer
     synth_global_fields // List of global field name strings
     synth_needs_alloc   // Flag: 1 if bump allocator helper must be emitted
     synth_alloc_off     // Byte offset where bump allocator starts
+    synth_alloc_rw_patch_off // Byte offset of 4-word movz/movk loading RW heap pointer base
     synth_needs_list_create // Flag: 1 if list constructor helper must be emitted
     synth_list_create_off   // Byte offset where list constructor helper starts
     synth_needs_file_write  // Flag: 1 if file_write helper must be emitted
@@ -113,6 +114,7 @@ fn arm64_synth_new
     s.synth_global_fields = list()
     s.synth_needs_alloc = 0
     s.synth_alloc_off = 0
+    s.synth_alloc_rw_patch_off = 0 - 1
     s.synth_needs_list_create = 0
     s.synth_list_create_off = 0
     s.synth_needs_file_write = 0
@@ -579,73 +581,61 @@ fn arm64_synth_emit_call_alloc s
     return 0
 
 fn arm64_synth_emit_alloc_helper s
-    // WHY: Emits pure ARM64 silicon bump-arena memory allocator with zero libc dependency.
+    // WHY: Emits pure W^X ARM64 silicon bump-arena memory allocator (0% RWE, zero self-modifying code).
+    // Reads/writes _heap_ptr inside the RW .data segment patched via s.synth_alloc_rw_patch_off.
     // Inputs: X0 = requested byte size. Output: X0 = pointer to allocated memory.
     s.synth_alloc_off = s.synth_code.len()
 
-    // 0: add x0, x0, 15 (0x91003C00 = 2432699392) -> round up
+    // 0: add x0, x0, 15 -> round up
     arm64_synth_emit32(s, 2432699392)
     // 1: movz x1, 15, 0
     arm64_emit_movz_x(s, 1, 15, 0)
-    // 2: bic x0, x0, x1 (0x8A210000 = 2317484032) -> align to 16 bytes
+    // 2: bic x0, x0, x1 -> align to 16 bytes
     arm64_synth_emit32(s, 2317484032)
-    // 3: adr x1, 96 (0x10000301 = 2684360449) -> points to _heap_ptr at instruction 27
-    arm64_synth_emit32(s, 2684360449)
-    // 4: ldr x2, [x1, #0] (0xF9400022 = 4181721122) -> load current heap pointer
+    // 3..6: movz/movk x1, RW_DATA_VADDR (_heap_ptr slot in strict RW segment, patched by linker)
+    s.synth_alloc_rw_patch_off = s.synth_code.len()
+    arm64_emit_movz_x(s, 1, 0, 0)
+    arm64_emit_movk_x(s, 1, 0, 16)
+    arm64_emit_movk_x(s, 1, 0, 32)
+    arm64_emit_movk_x(s, 1, 0, 48)
+    // 7: ldr x2, [x1, #0]
     arm64_synth_emit32(s, 4181721122)
-    // 5: cmp x2, xzr
+    // 8: cmp x2, xzr
     arm64_emit_cmp_x(s, 2, 31)
-    // 6: b.ne +16 words -> jump to .bump (instruction 22)
-    arm64_emit_b_cond(s, 1, 16)
+    // 9: b.ne .bump (patched dynamically)
+    bne_patch_off = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)
 
     // Heap initialization via Linux sys_mmap(NULL, 64MB, PROT_READ|WRITE, MAP_ANON|PRIVATE, -1, 0)
-    // 7: stp x0, x1, [sp, #-16]! (preserve size and _heap_ptr pointer)
     arm64_emit_stp_pre(s, 0, 1, 31, 0 - 16)
-    // 8: stp x29, x30, [sp, #-16]!
     arm64_emit_stp_pre(s, 29, 30, 31, 0 - 16)
-    // 9: movz x0, 0, 0 (addr = NULL)
     arm64_emit_movz_x(s, 0, 0, 0)
-    // 10: movz x1, 0, 0; movk x1, 16384, 16 -> length = 1073741824 (1GB virtual memory arena)
     arm64_emit_movz_x(s, 1, 0, 0)
-    arm64_emit_movk_x(s, 1, 16384, 16)
-    // 11: movz x2, 3, 0 (PROT_READ | PROT_WRITE = 3)
-    arm64_emit_movz_x(s, 2, 3, 0)
-    // 12: movz x3, 34, 0 (MAP_PRIVATE | MAP_ANONYMOUS = 34)
-    arm64_emit_movz_x(s, 3, 34, 0)
-    // 13: mov x4, -1 (fd = -1)
-    arm64_emit_mov_imm64(s, 4, 0 - 1)
-    // 14: movz x5, 0, 0 (offset = 0)
-    arm64_emit_movz_x(s, 5, 0, 0)
-    // 15: movz x8, 222, 0 (Linux AArch64 SYS_mmap = 222)
-    arm64_emit_movz_x(s, 8, 222, 0)
-    // 16: svc #0 -> X0 now holds allocated arena base pointer
+    arm64_emit_movk_x(s, 1, 1024, 16) // 64MB virtual memory arena
+    arm64_emit_movz_x(s, 2, 3, 0)     // PROT_READ | PROT_WRITE
+    arm64_emit_movz_x(s, 3, 34, 0)    // MAP_PRIVATE | MAP_ANONYMOUS
+    arm64_synth_emit32(s, 2457862148) // MOVN X4, #0 (fd = -1)
+    arm64_emit_movz_x(s, 5, 0, 0)     // offset = 0
+    arm64_emit_movz_x(s, 8, 222, 0)   // Linux AArch64 SYS_mmap = 222
     arm64_emit_svc(s, 0)
-    // 17: ldp x29, x30, [sp], #16
     arm64_emit_ldp_post(s, 29, 30, 31, 16)
-    // 18: ldp x3, x1, [sp], #16 -> X3 = requested size, X1 = _heap_ptr address
     arm64_emit_ldp_post(s, 3, 1, 31, 16)
-    // 19: str x0, [x1, #0] (0xF9000020 = 4177526816) -> store arena base into _heap_ptr
+    // str x0, [x1, #0]
     arm64_synth_emit32(s, 4177526816)
-    // 20: mov x2, x0
     arm64_emit_mov_reg(s, 2, 0)
-    // 21: mov x0, x3
     arm64_emit_mov_reg(s, 0, 3)
 
-    // .bump (instruction 22):
-    // 22: ldr x2, [x1, #0] (0xF9400022 = 4181721122) -> load current heap pointer
-    arm64_synth_emit32(s, 4181721122)
-    // 23: add x3, x2, x0 -> compute next heap pointer
-    arm64_emit_add_x(s, 3, 2, 0)
-    // 24: str x3, [x1, #0] (0xF9000023 = 4177526819) -> update _heap_ptr
-    arm64_synth_emit32(s, 4177526819)
-    // 25: mov x0, x2 -> return previous heap pointer in X0
-    arm64_emit_mov_reg(s, 0, 2)
-    // 26: ret
-    arm64_emit_ret(s)
+    // .bump:
+    bump_off = s.synth_code.len()
+    rel_words = (bump_off - bne_patch_off) / 4
+    arm64_synth_patch_u32(s, bne_patch_off, 1409286144 | ((rel_words & 524287) << 5) | 1)
 
-    // 27..28: _heap_ptr storage (8 bytes initialized to 0)
-    arm64_synth_emit32(s, 0)
-    arm64_synth_emit32(s, 0)
+    // ldr x2, [x1, #0]; add x3, x2, x0; str x3, [x1, #0]; mov x0, x2; ret
+    arm64_synth_emit32(s, 4181721122)
+    arm64_emit_add_x(s, 3, 2, 0)
+    arm64_synth_emit32(s, 4177526819)
+    arm64_emit_mov_reg(s, 0, 2)
+    arm64_emit_ret(s)
     return 0
 
 // ── 6. Parser Utilities, Symbol Table & Scoping ───────────────────────────────

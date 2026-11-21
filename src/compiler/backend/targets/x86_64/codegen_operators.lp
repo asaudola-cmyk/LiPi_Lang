@@ -50,7 +50,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         is_const_rhs = 1
                         const_val = nt.tok_int_val
 
-            if is_const_rhs == 1 and op_kind != TOK_MATMUL()
+            if is_const_rhs == 1 and op_kind != TOK_MATMUL() and s.synth_last_expr_type != "float"
                 list_set(pos_box, 0, next_p + 1) // Consume operator and integer literal
 
                 if op_kind == TOK_PERCENT()
@@ -617,7 +617,7 @@ fn x86_synth_compile_expr_add s toks pos_box
                         is_const_int_rhs = 1
                         const_add_val = nt.tok_int_val
 
-            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or left_type == "int")
+            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or left_type == "int") and left_type != "float"
                 // WHY: 1-cycle direct silicon arithmetic for constant additions/subtractions (e.g. i + 1, i - 1)
                 // Zero function calls, zero stack traffic, zero heap allocations.
                 list_set(pos_box, 0, next_p + 1)
@@ -865,6 +865,7 @@ fn x86_synth_compile_expr_rel s toks pos_box
         if is_op == 0
             cont_rel = 0
         else
+            left_type = s.synth_last_expr_type
             list_set(pos_box, 0, pos + 1) // Consume operator
 
             // Push left operand (%rax) to stack
@@ -872,6 +873,7 @@ fn x86_synth_compile_expr_rel s toks pos_box
 
             // Evaluate right operand with shift precedence into %rax
             x86_synth_compile_expr_shift(s, toks, pos_box)
+            right_type = s.synth_last_expr_type
 
             // Move right operand to %rcx, restore left operand to %rax
             x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
@@ -879,7 +881,31 @@ fn x86_synth_compile_expr_rel s toks pos_box
             x86_synth_emit_byte(s, 193)
             x86_synth_emit_byte(s, 88)  // pop rax
 
-            if op_kind == TOK_LT()
+            if left_type == "float" or right_type == "float"
+                if left_type == "float"
+                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                else
+                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                end
+                if right_type == "float"
+                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
+                else
+                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
+                end
+                if op_kind == TOK_LT()
+                    // ucomisd xmm1, xmm0; seta al; movzx rax, al
+                    x86_synth_emit_bytes(s, [102, 15, 46, 200, 15, 151, 192, 72, 15, 182, 192])
+                elif op_kind == TOK_LTE()
+                    // ucomisd xmm1, xmm0; setae al; movzx rax, al
+                    x86_synth_emit_bytes(s, [102, 15, 46, 200, 15, 147, 192, 72, 15, 182, 192])
+                elif op_kind == TOK_GT()
+                    // ucomisd xmm0, xmm1; seta al; movzx rax, al
+                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 151, 192, 72, 15, 182, 192])
+                elif op_kind == TOK_GTE()
+                    // ucomisd xmm0, xmm1; setae al; movzx rax, al
+                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 147, 192, 72, 15, 182, 192])
+                end
+            elif op_kind == TOK_LT()
                 // cmp rax, rcx; setl al; movzx rax, al
                 x86_synth_emit_byte(s, 72)
                 x86_synth_emit_byte(s, 57)
@@ -927,6 +953,9 @@ fn x86_synth_compile_expr_rel s toks pos_box
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 182)
                 x86_synth_emit_byte(s, 192)
+            end
+            s.synth_last_expr_type = "int"
+            s.synth_last_struct = ""
     return 0
 
 fn x86_synth_compile_expr_eq s toks pos_box
@@ -955,6 +984,7 @@ fn x86_synth_compile_expr_eq s toks pos_box
         if is_op == 0
             cont_eq = 0
         else
+            left_type = s.synth_last_expr_type
             list_set(pos_box, 0, pos + 1) // Consume operator
 
             // Push left operand (%rax) to stack
@@ -962,6 +992,7 @@ fn x86_synth_compile_expr_eq s toks pos_box
 
             // Evaluate right operand with relational precedence into %rax
             x86_synth_compile_expr_rel(s, toks, pos_box)
+            right_type = s.synth_last_expr_type
 
             // Move right operand to %rcx, restore left operand to %rax
             x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
@@ -969,7 +1000,25 @@ fn x86_synth_compile_expr_eq s toks pos_box
             x86_synth_emit_byte(s, 193)
             x86_synth_emit_byte(s, 88)  // pop rax
 
-            if op_kind == TOK_EQ()
+            if left_type == "float" or right_type == "float"
+                if left_type == "float"
+                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                else
+                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                end
+                if right_type == "float"
+                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
+                else
+                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
+                end
+                if op_kind == TOK_EQ()
+                    // ucomisd xmm0, xmm1; sete al; setnp cl; and al, cl; movzx rax, al
+                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 148, 192, 15, 155, 193, 32, 200, 72, 15, 182, 192])
+                elif op_kind == TOK_NEQ()
+                    // ucomisd xmm0, xmm1; setne al; setp cl; or al, cl; movzx rax, al
+                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 149, 192, 15, 154, 193, 8, 200, 72, 15, 182, 192])
+                end
+            elif op_kind == TOK_EQ()
                 // rdi = rax (left), rsi = rcx (right) -> call _lipi_cmp_dynamic
                 x86_synth_emit_byte(s, 72) // mov rdi, rax
                 x86_synth_emit_byte(s, 137)
@@ -1007,6 +1056,9 @@ fn x86_synth_compile_expr_eq s toks pos_box
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 182)
                 x86_synth_emit_byte(s, 192)
+            end
+            s.synth_last_expr_type = "int"
+            s.synth_last_struct = ""
     return 0
 
 fn x86_synth_compile_expr_bitwise s toks pos_box

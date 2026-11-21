@@ -218,6 +218,12 @@ fn win64_pe_runner_load_bytes runner bytes_list
                 if str_contains(idata_ascii, "GetFileAttributesA") == 1
                     push(runner.wpr_import_functions, "GetFileAttributesA")
                 end
+                if str_contains(idata_ascii, "VirtualFree") == 1
+                    push(runner.wpr_import_functions, "VirtualFree")
+                end
+                if str_contains(idata_ascii, "GetCommandLineA") == 1
+                    push(runner.wpr_import_functions, "GetCommandLineA")
+                end
             end
         end
         s_idx = s_idx + 1

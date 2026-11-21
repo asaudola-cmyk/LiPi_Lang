@@ -216,6 +216,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
     push(s.synth_loop_breaks, loop_brks)
     loop_conts = list()
     push(s.synth_loop_continues, loop_conts)
+    push(s.synth_loop_try_depths, s.synth_try_depth)
 
     // Fused compare-and-branch fast path: while lhs (< | <= | > | >=) rhs
     fused_cond = 0
@@ -369,6 +370,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
     s.synth_loop_starts = pop(s.synth_loop_starts)
     s.synth_loop_breaks = pop(s.synth_loop_breaks)
     s.synth_loop_continues = pop(s.synth_loop_continues)
+    s.synth_loop_try_depths = pop(s.synth_loop_try_depths)
     return 0
 
 fn x86_synth_compile_for s toks pos_box base_col base_line
@@ -468,6 +470,7 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
     push(s.synth_loop_breaks, loop_brks)
     loop_conts = list()
     push(s.synth_loop_continues, loop_conts)
+    push(s.synth_loop_try_depths, s.synth_try_depth)
 
     // Compare var and end: mov rax, [rbp - var_off]; cmp rax, [rbp - end_off]
     lv_var = x86_synth_find_local_var(s, var_name)
@@ -582,6 +585,7 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
     s.synth_loop_starts = pop(s.synth_loop_starts)
     s.synth_loop_breaks = pop(s.synth_loop_breaks)
     s.synth_loop_continues = pop(s.synth_loop_continues)
+    s.synth_loop_try_depths = pop(s.synth_loop_try_depths)
     return 0
 
 fn x86_synth_compile_repeat s toks pos_box base_col base_line
@@ -616,6 +620,7 @@ fn x86_synth_compile_repeat s toks pos_box base_col base_line
     push(s.synth_loop_breaks, loop_brks)
     loop_conts = list()
     push(s.synth_loop_continues, loop_conts)
+    push(s.synth_loop_try_depths, s.synth_try_depth)
 
     // Compare counter with limit: load cnt into %rax; cmp rax, [rbp - lim_off]
     lv_cnt = x86_synth_find_local_var(s, cnt_var)
@@ -740,6 +745,7 @@ fn x86_synth_compile_repeat s toks pos_box base_col base_line
     s.synth_loop_starts = pop(s.synth_loop_starts)
     s.synth_loop_breaks = pop(s.synth_loop_breaks)
     s.synth_loop_continues = pop(s.synth_loop_continues)
+    s.synth_loop_try_depths = pop(s.synth_loop_try_depths)
     // WHY: Release hardware register allocated to internal loop temporary so subsequent loops can use it
     if lv_cnt != 0
         lv_cnt.lv_is_spilled = 1

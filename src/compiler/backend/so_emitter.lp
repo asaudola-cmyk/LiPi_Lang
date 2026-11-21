@@ -61,31 +61,33 @@ fn so_put32 b_list val
     return 0
 
 fn so_put64 b_list val
-    push(b_list, val % 256)
-    push(b_list, floor(val / 256) % 256)
-    push(b_list, floor(val / 65536) % 256)
-    push(b_list, floor(val / 16777216) % 256)
-    push(b_list, 0)
-    push(b_list, 0)
-    push(b_list, 0)
-    push(b_list, 0)
+    lo = val & 4294967295
+    hi = (val / 4294967296) & 4294967295
+    push(b_list, lo & 255)
+    push(b_list, (lo / 256) & 255)
+    push(b_list, (lo / 65536) & 255)
+    push(b_list, (lo / 16777216) & 255)
+    push(b_list, hi & 255)
+    push(b_list, (hi / 256) & 255)
+    push(b_list, (hi / 65536) & 255)
+    push(b_list, (hi / 16777216) & 255)
     return 0
 
-// WHY: Compute SysV standard ELF hash for dynamic symbol lookup table (.hash)
+// WHY: Compute unsigned 32-bit SysV standard ELF hash for dynamic symbol lookup table (.hash)
 fn so_elf_hash str_val
     h = 0
     g = 0
     i = 0
     slen = len(str_val)
     while i < slen
-        ch = mem_byte_read(str_val, i)
-        h = (h * 16) + ch
+        ch = mem_byte_read(str_val, i) & 255
+        h = ((h * 16) + ch) & 4294967295
         g = h & 4026531840 // 0xF0000000
         if g != 0
-            h = h ^ (floor(g / 16777216) % 256)
-        h = h & (~g)
+            h = h ^ ((g / 16777216) & 255)
+        h = (h ^ g) & 4294967295
         i = i + 1
-    return h
+    return h & 4294967295
 
 // Emits an 8-byte key + 8-byte value Elf64_Dyn entry (16 bytes)
 fn so_emit_dyn_entry dyn_list tag val
@@ -113,12 +115,7 @@ fn so_emit_shdr_tail shdrs_list size link info addralign entsize
 // =============================================================================
 // Position-Independent Code (PIC) RIP-Relative .rodata + RW Globals Patcher
 // =============================================================================
-// WHY: Shared libraries (ET_DYN .so) can be mapped at any virtual base address via ASLR/dlopen.
-// This pass rewrites 10-byte absolute `movabs r64, <linux_vaddr>` instructions targeting either
-// `.rodata` (1073742128 + code_len + off) or W^X RW runtime globals (g_argc, g_argv, _heap_base,
-// _heap_ptr, _slab_buckets at page-aligned rw_vaddr) into 10-byte position-independent
-// `lea r64, [rip + disp32]; nop; nop; nop` sequences in-place with ZERO absolute 0x4000xxxx refs.
-fn so_patch_pic_rodata code_bytes rodata_len
+fn so_patch_pic_full code_bytes rodata_len text_offset rw_vaddr
     code_len = len(code_bytes)
     if code_len < 10
         return code_bytes
@@ -130,21 +127,25 @@ fn so_patch_pic_rodata code_bytes rodata_len
     if rem_page != 0
         pad_bytes = 4096 - rem_page
     linux_rw_base = 1073741824 + text_ro_end + pad_bytes
-    linux_rw_end = linux_rw_base + 128
+    linux_rw_end = linux_rw_base + 4096
 
     out = list()
     i = 0
     while i < code_len
         b0 = get(code_bytes, i)
-        if i + 10 <= code_len and b0 == 72
+        if i + 10 <= code_len and (b0 == 72 or b0 == 73)
             b1 = get(code_bytes, i + 1)
             if (b1 >= 184 and b1 <= 191) and get(code_bytes, i + 6) == 0 and get(code_bytes, i + 7) == 0 and get(code_bytes, i + 8) == 0 and get(code_bytes, i + 9) == 0
                 imm32 = get(code_bytes, i + 2) + (get(code_bytes, i + 3) << 8) + (get(code_bytes, i + 4) << 16) + (get(code_bytes, i + 5) << 24)
+                lea_rex = 72
+                if b0 == 73
+                    lea_rex = 76 // REX.WR for r8..r15
+                end
                 modrm = 5 + ((b1 - 184) * 8)
                 if imm32 >= linux_rodata_base and imm32 <= linux_rodata_end
                     ro_off = imm32 - linux_rodata_base
                     disp32 = (code_len + ro_off) - (i + 7)
-                    push(out, 72)
+                    push(out, lea_rex)
                     push(out, 141)
                     push(out, modrm)
                     push(out, disp32 & 255)
@@ -158,8 +159,8 @@ fn so_patch_pic_rodata code_bytes rodata_len
                     continue
                 elif imm32 >= linux_rw_base and imm32 <= linux_rw_end
                     rw_off = imm32 - linux_rw_base
-                    disp32 = (code_len + rodata_len + rw_off) - (i + 7)
-                    push(out, 72)
+                    disp32 = (rw_vaddr + rw_off) - (text_offset + i + 7)
+                    push(out, lea_rex)
                     push(out, 141)
                     push(out, modrm)
                     push(out, disp32 & 255)
@@ -171,19 +172,25 @@ fn so_patch_pic_rodata code_bytes rodata_len
                     push(out, 144)
                     i = i + 10
                     continue
+                end
+            end
+        end
         push(out, b0)
         i = i + 1
     return out
 
-// ── 3. Standalone Shared Library Assembler & Emitter ──────────────────────────
+fn so_patch_pic_rodata code_bytes rodata_len
+    return so_patch_pic_full(code_bytes, rodata_len, 0, len(code_bytes) + rodata_len)
+
+// ── 3. Standalone Shared Library Assembler & Emitter (Strict W^X 4-PHDR) ────
 
 fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
-    // WHY: Assembles an independent, ASLR-safe ELF64 ET_DYN shared library.
+    // WHY: Assembles an independent, strict W^X (0 RWE) ELF64 ET_DYN shared library.
     code_len = len(code_bytes)
     rodata_len = len(rodata_bytes)
 
-    // Base header offset: 64 (ELF Header) + 112 (2 Program Headers) = 176
-    text_offset = 176
+    // Base header offset: 64 (ELF Header) + 224 (4 Program Headers: RX, RW, DYNAMIC, GNU_STACK) = 288
+    text_offset = 288
 
     // 1. Build .dynstr table
     dynstr = list(0)
@@ -200,8 +207,7 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
         ei = ei + 1
     dynstr_len = len(dynstr)
 
-    // 2. Build .dynsym table (24 bytes per Elf64_Sym)
-    // Symbol 0 is STN_UNDEF (all zeros)
+    // 2. Build .dynsym table (24 bytes per Elf64_Sym; symbol 0 is STN_UNDEF)
     dynsym = list()
     zi = 0
     while zi < 24
@@ -211,47 +217,80 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     ei = 0
     while ei < len(exp_names)
         sname_off = get(dynstr_name_offs, ei)
-        // Offset relative to base of .text
         sv_addr = text_offset + get(exp_offs, ei)
-
         so_put32(dynsym, sname_off)
         push(dynsym, 18) // STB_GLOBAL (1) << 4 | STT_FUNC (2) = 18
         push(dynsym, 0)  // STV_DEFAULT
         push(dynsym, 1)  // st_shndx = 1 (.text section)
         push(dynsym, 0)
-        so_put64(dynsym, sv_addr) // st_value (virtual address)
-        so_put64(dynsym, 0)       // st_size
+        so_put64(dynsym, sv_addr)
+        so_put64(dynsym, 0)
         ei = ei + 1
 
     num_syms = len(exp_names) + 1
     dynsym_len = len(dynsym)
 
-    // 3. Build .hash table (SysV Hash Table)
+    // 3. Build multi-bucket SysV .hash table
+    nbucket = num_syms
+    if nbucket < 4
+        nbucket = 4
+    end
+    buckets = list()
+    bi = 0
+    while bi < nbucket
+        push(buckets, 0)
+        bi = bi + 1
+    end
+    chains = list()
+    ci_h = 0
+    while ci_h < num_syms
+        push(chains, 0)
+        ci_h = ci_h + 1
+    end
+    si_h = 0
+    while si_h < len(exp_names)
+        sym_idx = si_h + 1
+        hval = so_elf_hash(get(exp_names, si_h))
+        bkt = hval % nbucket
+        list_set(chains, sym_idx, get(buckets, bkt))
+        list_set(buckets, bkt, sym_idx)
+        si_h = si_h + 1
+    end
     hashtab = list()
-    so_put32(hashtab, 1)        // nbucket = 1
-    so_put32(hashtab, num_syms) // nchain = num_syms
-
-    last_sym = 0
-    if num_syms > 1
-        last_sym = num_syms - 1
-    so_put32(hashtab, last_sym) // bucket[0]
-    so_put32(hashtab, 0)        // chain[0] = 0
-
-    ck = 1
-    while ck < num_syms
-        prev_k = ck - 1
-        so_put32(hashtab, prev_k)
-        ck = ck + 1
+    so_put32(hashtab, nbucket)
+    so_put32(hashtab, num_syms)
+    bi = 0
+    while bi < nbucket
+        so_put32(hashtab, get(buckets, bi))
+        bi = bi + 1
+    end
+    ci_h = 0
+    while ci_h < num_syms
+        so_put32(hashtab, get(chains, ci_h))
+        ci_h = ci_h + 1
+    end
     hash_len = len(hashtab)
 
-    // 4. Calculate Section File Offsets & Patch Position-Independent (PIC) RIP-relative .rodata + RW globals
-    code_bytes = so_patch_pic_rodata(code_bytes, rodata_len)
-    rw_globals_len = 128
+    // 4. Layout Strict W^X Segments:
+    //   Segment 0 (PF_R|PF_X = 5): [0 .. rx_end) = ELF Hdr + 4 PHDRs + .text + .rodata + .dynstr + .dynsym + .hash
+    //   Segment 1 (PF_R|PF_W = 6): [rw_file_offset .. rw_end) = 4096B RW runtime/mutable globals + .dynamic
     rodata_offset  = text_offset + code_len
-    dynstr_offset  = rodata_offset + rodata_len + rw_globals_len
+    dynstr_offset  = rodata_offset + rodata_len
     dynsym_offset  = dynstr_offset + dynstr_len
     hash_offset    = dynsym_offset + dynsym_len
-    dynamic_offset = hash_offset + hash_len
+    rx_end         = hash_offset + hash_len
+
+    rem_rx = rx_end % 4096
+    rx_pad = 0
+    if rem_rx != 0
+        rx_pad = 4096 - rem_rx
+    end
+    rw_file_offset = rx_end + rx_pad
+    rw_vaddr       = rw_file_offset
+    rw_globals_len = 4096
+    dynamic_offset = rw_file_offset + rw_globals_len
+
+    code_bytes = so_patch_pic_full(code_bytes, rodata_len, text_offset, rw_vaddr)
 
     // 5. Build .dynamic array (16 bytes per entry)
     dynamic = list()
@@ -263,16 +302,10 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     so_emit_dyn_entry(dynamic, SO_DT_NULL(), 0)
     dynamic_len = len(dynamic)
 
+    rw_end = dynamic_offset + dynamic_len
+    rw_seg_size = rw_end - rw_file_offset
+
     // 6. Build .shstrtab section name string table
-    // Offsets:
-    // 0: \0
-    // 1: .text\0
-    // 7: .rodata\0
-    // 15: .dynsym\0
-    // 23: .dynstr\0
-    // 31: .hash\0
-    // 37: .dynamic\0
-    // 46: .shstrtab\0
     shstrtab = list(
         0,
         46, 116, 101, 120, 116, 0,             // .text
@@ -283,11 +316,10 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
         46, 100, 121, 110, 97, 109, 105, 99, 0,// .dynamic
         46, 115, 104, 115, 116, 114, 116, 97, 98, 0 // .shstrtab
     )
-    shstrtab_offset = dynamic_offset + dynamic_len
+    shstrtab_offset = rw_end
     sh_offset = shstrtab_offset + len(shstrtab)
 
     // 7. Build Section Header Table (8 sections * 64 = 512 bytes)
-    // WHY: Use 6-parameter max helpers for SysV AMD64 register parameter convention
     shdrs = list()
     // [0] NULL section
     so_emit_shdr_base(shdrs, 0, SO_SHT_NULL(), 0, 0, 0)
@@ -314,8 +346,6 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     so_emit_shdr_base(shdrs, 46, SO_SHT_STRTAB(), 0, 0, shstrtab_offset)
     so_emit_shdr_tail(shdrs, len(shstrtab), 0, 0, 1, 0)
 
-    total_size = sh_offset + len(shdrs)
-
     // 8. Assemble Full Binary Bytes
     elf = list()
 
@@ -335,22 +365,32 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     so_put32(elf, 0)                // e_flags: 0
     so_put16(elf, 64)               // e_ehsize: 64
     so_put16(elf, 56)               // e_phentsize: 56
-    so_put16(elf, 2)                // e_phnum: 2 (PT_LOAD and PT_DYNAMIC)
+    so_put16(elf, 4)                // e_phnum: 4 (PT_LOAD RX, PT_LOAD RW, PT_DYNAMIC, PT_GNU_STACK)
     so_put16(elf, 64)               // e_shentsize: 64
     so_put16(elf, 8)                // e_shnum: 8 sections
     so_put16(elf, 7)                // e_shstrndx: 7 (.shstrtab index)
 
-    // Program Header 0: PT_LOAD (RX + RW mapping)
+    // Program Header 0: PT_LOAD (Strict RX = 5)
     so_put32(elf, 1)          // p_type: PT_LOAD
-    so_put32(elf, 7)          // p_flags: PF_R | PF_W | PF_X
+    so_put32(elf, 5)          // p_flags: PF_R | PF_X
     so_put64(elf, 0)          // p_offset: 0
     so_put64(elf, 0)          // p_vaddr: 0
     so_put64(elf, 0)          // p_paddr: 0
-    so_put64(elf, total_size) // p_filesz
-    so_put64(elf, total_size + 4096) // p_memsz
+    so_put64(elf, rx_end)     // p_filesz
+    so_put64(elf, rx_end)     // p_memsz
     so_put64(elf, 4096)       // p_align: 4KB
 
-    // Program Header 1: PT_DYNAMIC
+    // Program Header 1: PT_LOAD (Strict RW = 6) for runtime/mutable globals & .dynamic
+    so_put32(elf, 1)              // p_type: PT_LOAD
+    so_put32(elf, 6)              // p_flags: PF_R | PF_W
+    so_put64(elf, rw_file_offset) // p_offset
+    so_put64(elf, rw_vaddr)       // p_vaddr
+    so_put64(elf, rw_vaddr)       // p_paddr
+    so_put64(elf, rw_seg_size)    // p_filesz
+    so_put64(elf, rw_seg_size)    // p_memsz
+    so_put64(elf, 4096)           // p_align: 4KB
+
+    // Program Header 2: PT_DYNAMIC
     so_put32(elf, 2)              // p_type: PT_DYNAMIC
     so_put32(elf, 6)              // p_flags: PF_R | PF_W
     so_put64(elf, dynamic_offset) // p_offset
@@ -359,6 +399,16 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     so_put64(elf, dynamic_len)    // p_filesz
     so_put64(elf, dynamic_len)    // p_memsz
     so_put64(elf, 8)              // p_align: 8 bytes
+
+    // Program Header 3: PT_GNU_STACK (Non-executable stack RW = 6)
+    so_put32(elf, 1685382481)     // p_type: PT_GNU_STACK (0x6474E551)
+    so_put32(elf, 6)              // p_flags: PF_R | PF_W
+    so_put64(elf, 0)
+    so_put64(elf, 0)
+    so_put64(elf, 0)
+    so_put64(elf, 0)
+    so_put64(elf, 0)
+    so_put64(elf, 16)
 
     // Concatenate .text payload
     ii = 0
@@ -370,12 +420,6 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     ii = 0
     while ii < rodata_len
         push(elf, get(rodata_bytes, ii))
-        ii = ii + 1
-
-    // Append 128-byte zeroed PIC runtime globals slot (g_argc, g_argv, _heap_base, _heap_ptr, _slab_buckets)
-    ii = 0
-    while ii < rw_globals_len
-        push(elf, 0)
         ii = ii + 1
 
     // Concatenate .dynstr
@@ -394,6 +438,18 @@ fn so_emit_shared_library code_bytes rodata_bytes exp_names exp_offs out_path
     ii = 0
     while ii < hash_len
         push(elf, get(hashtab, ii))
+        ii = ii + 1
+
+    // Page-align RX segment before RW segment
+    ii = 0
+    while ii < rx_pad
+        push(elf, 0)
+        ii = ii + 1
+
+    // Append 4096-byte zeroed PIC RW globals slot
+    ii = 0
+    while ii < rw_globals_len
+        push(elf, 0)
         ii = ii + 1
 
     // Concatenate .dynamic

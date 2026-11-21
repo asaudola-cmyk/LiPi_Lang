@@ -131,6 +131,49 @@ fn wasm_synth_emit_list_create_opcodes code_buf heap_offset initial_len
     wasm_emit_i64_const(code_buf, heap_offset)
     return heap_offset + 160
 
+fn wasm_synth_emit_bump_alloc s
+    // WHY: Pops [i64 size], aligns up to 8B (min 8B), allocates sequentially via mem[24]
+    // starting at 65536 (clear of .rodata at 1024..65535), and pushes allocated i64 ptr.
+    l_sz = wasm_synth_alloc_local(s, "__wasi_alloc_sz")
+    l_ptr = wasm_synth_alloc_local(s, "__wasi_alloc_ptr")
+
+    wasm_emit_local_set(s.ws_code, l_sz)
+    wasm_emit_local_get(s.ws_code, l_sz)
+    wasm_emit_i64_const(s.ws_code, 8)
+    wasm_emit_i64_lt_s(s.ws_code)
+    wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+    wasm_emit_i64_const(s.ws_code, 8)
+    wasm_emit_local_set(s.ws_code, l_sz)
+    wasm_emit_else(s.ws_code)
+    wasm_emit_local_get(s.ws_code, l_sz)
+    wasm_emit_i64_const(s.ws_code, 7)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_i64_const(s.ws_code, 8)
+    wasm_emit_i64_div_s(s.ws_code)
+    wasm_emit_i64_const(s.ws_code, 8)
+    wasm_emit_i64_mul(s.ws_code)
+    wasm_emit_local_set(s.ws_code, l_sz)
+    wasm_emit_end(s.ws_code)
+
+    wasm_emit_i32_const(s.ws_code, 24)
+    wasm_emit_i64_load(s.ws_code, 3, 0)
+    wasm_emit_local_tee(s.ws_code, l_ptr)
+    wasm_emit_i64_const(s.ws_code, 0)
+    wasm_emit_i64_eq(s.ws_code)
+    wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
+    wasm_emit_i64_const(s.ws_code, 65536)
+    wasm_emit_local_set(s.ws_code, l_ptr)
+    wasm_emit_end(s.ws_code)
+
+    wasm_emit_i32_const(s.ws_code, 24)
+    wasm_emit_local_get(s.ws_code, l_ptr)
+    wasm_emit_local_get(s.ws_code, l_sz)
+    wasm_emit_i64_add(s.ws_code)
+    wasm_emit_i64_store(s.ws_code, 3, 0)
+
+    wasm_emit_local_get(s.ws_code, l_ptr)
+    return 0
+
 fn wasm_synth_emit_str_concat_opcodes s str_a str_b
     // WHY: Interns concatenated string constant into WASM linear memory data segment
     // and pushes its 64-bit linear memory pointer onto the WASM value stack.
@@ -270,18 +313,61 @@ fn wasm_synth_expr_primary s toks pos_box
                 wasm_emit_i64_const(s.ws_code, 0)
             elif ident_name == "malloc" or ident_name == "মেমরি_বরাদ্দ"
                 if arg_count == 0
-                    wasm_emit_i64_const(s.ws_code, 65536)
+                    wasm_emit_i64_const(s.ws_code, 8)
                 else
-                    wasm_emit_i64_const(s.ws_code, 65536)
-                    wasm_emit_i64_add(s.ws_code)
+                    // Keep first size argument on stack; discard any extra args
+                    while arg_count > 1
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                wasm_synth_emit_bump_alloc(s)
             elif ident_name == "list" or ident_name == "তালিকা"
-                // WHY: Allocates real 24-byte linear-memory list header {len, cap, data_ptr}
+                // WHY: Pops evaluated args in reverse into locals, bump-allocates 24-byte header +
+                // element storage via mem[24], and stores elements in order at [hdr + 24 + i*8].
+                arg_locs = list()
                 ai = 0
                 while ai < arg_count
-                    wasm_emit_drop(s.ws_code)
+                    push(arg_locs, wasm_synth_alloc_local(s, "__wasi_list_arg_" + str(ai)))
                     ai = ai + 1
-                list_heap_off = 16384 + (s.ws_code.len() * 16)
-                wasm_synth_emit_list_create_opcodes(s.ws_code, list_heap_off, arg_count)
+                rev = arg_count - 1
+                while rev >= 0
+                    wasm_emit_local_set(s.ws_code, arg_locs[rev])
+                    rev = rev - 1
+
+                l_cap = 16
+                if arg_count > 16
+                    l_cap = arg_count
+                total_sz = 24 + (l_cap * 8)
+                wasm_emit_i64_const(s.ws_code, total_sz)
+                wasm_synth_emit_bump_alloc(s)
+
+                l_hdr = wasm_synth_alloc_local(s, "__wasi_list_hdr")
+                wasm_emit_local_set(s.ws_code, l_hdr)
+
+                wasm_emit_local_get(s.ws_code, l_hdr)
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                wasm_emit_i64_const(s.ws_code, arg_count)
+                wasm_emit_i64_store(s.ws_code, 3, 0)
+
+                wasm_emit_local_get(s.ws_code, l_hdr)
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                wasm_emit_i64_const(s.ws_code, l_cap)
+                wasm_emit_i64_store(s.ws_code, 3, 8)
+
+                wasm_emit_local_get(s.ws_code, l_hdr)
+                wasm_emit_i32_wrap_i64(s.ws_code)
+                wasm_emit_local_get(s.ws_code, l_hdr)
+                wasm_emit_i64_const(s.ws_code, 24)
+                wasm_emit_i64_add(s.ws_code)
+                wasm_emit_i64_store(s.ws_code, 3, 16)
+
+                ei = 0
+                while ei < arg_count
+                    wasm_emit_local_get(s.ws_code, l_hdr)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_local_get(s.ws_code, arg_locs[ei])
+                    wasm_emit_i64_store(s.ws_code, 3, 24 + (ei * 8))
+                    ei = ei + 1
+                wasm_emit_local_get(s.ws_code, l_hdr)
             else
                 // Intrinsic / Unknown function fallback: discard args, push 0
                 ai = 0
@@ -401,9 +487,58 @@ fn wasm_synth_expr_relational s toks pos_box
             break
     return 0
 
+fn wasm_synth_expr_logical_and s toks pos_box
+    // WHY: Pratt level for logical conjunction (and / && / এবং).
+    wasm_synth_expr_relational(s, toks, pos_box)
+
+    while get(pos_box, 0) < toks.len()
+        p = get(pos_box, 0)
+        t = toks[p]
+        k = t.tok_kind
+        txt = t.tok_text
+        if k == TOK_AND() or (k != TOK_STR() and (txt == "and" or txt == "&&" or txt == "এবং"))
+            list_set(pos_box, 0, p + 1)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_i64_extend_i32_u(s.ws_code)
+            wasm_synth_expr_relational(s, toks, pos_box)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_i64_extend_i32_u(s.ws_code)
+            wasm_emit_i64_mul(s.ws_code)
+        else
+            break
+    return 0
+
+fn wasm_synth_expr_logical_or s toks pos_box
+    // WHY: Pratt level for logical disjunction (or / || / অথবা).
+    wasm_synth_expr_logical_and(s, toks, pos_box)
+
+    while get(pos_box, 0) < toks.len()
+        p = get(pos_box, 0)
+        t = toks[p]
+        k = t.tok_kind
+        txt = t.tok_text
+        if k == TOK_OR() or (k != TOK_STR() and (txt == "or" or txt == "||" or txt == "অথবা"))
+            list_set(pos_box, 0, p + 1)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_i64_extend_i32_u(s.ws_code)
+            wasm_synth_expr_logical_and(s, toks, pos_box)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_i64_extend_i32_u(s.ws_code)
+            wasm_emit_i64_add(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 0)
+            wasm_emit_i64_ne(s.ws_code)
+            wasm_emit_i64_extend_i32_u(s.ws_code)
+        else
+            break
+    return 0
+
 fn wasm_synth_compile_expr s toks pos_box
-    // WHY: Master expression evaluator entering at relational precedence level.
-    return wasm_synth_expr_relational(s, toks, pos_box)
+    // WHY: Master expression evaluator entering at logical disjunction precedence level.
+    return wasm_synth_expr_logical_or(s, toks, pos_box)
 
 // ==============================================================================
 // ── 8. Statement Synthesizer (Control Flow, Loops, Variables) ──────────────────
