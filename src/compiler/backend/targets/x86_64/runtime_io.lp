@@ -155,17 +155,29 @@ fn x86_synth_emit__lipi_user_alloc s
     return off
 
 fn x86_synth_emit__lipi_user_free s
-    // WHY: Thread-safe deallocator. Reclaims user slot into segregated slab freelist under _slab_spinlock.
+    // WHY: Sovereign bounds-guarded & double-free-shielded deallocator.
+    // 1. Safely ignores NULL/small pointers (ptr <= 4096).
+    // 2. Calls _lipi_heap_base and _lipi_heap_ptr to prove (_heap_base < ptr < _heap_ptr)
+    //    BEFORE dereferencing [ptr - 8], eliminating SEGV_MAPERR if a non-slab pointer is passed.
+    // 3. Prevents immediate freelist head double-free cycles (cmp rdx, r12; je .unlock) under _slab_spinlock.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_user_free", off)
     x86_synth_register_helper_fn(s, "free", off)
     x86_synth_register_helper_fn(s, "sys_free", off)
+    x86_synth_register_helper_fn(s, "mem_free", off)
     x86_synth_register_helper_fn(s, "মুক্ত", off)
-    // Free Chunk 1: Read size header at [rdi - 8] and map to 9 geometric slab classes
-    x86_synth_emit_bytes(s, [83, 65, 84, 73, 137, 252, 77, 133, 228, 15, 132, 161, 0, 0, 0, 73, 139, 116, 36, 248, 185, 0, 0, 0, 0, 72, 131, 254, 16, 126, 108, 185, 8, 0, 0, 0, 72, 131, 254, 32, 126, 97, 185, 16, 0, 0, 0, 72, 131, 254, 64, 126, 86, 185, 24, 0, 0, 0, 72, 129, 254, 128, 0, 0, 0, 126, 72, 185, 32, 0, 0, 0, 72, 129, 254, 0, 1, 0, 0, 126, 58, 185, 40, 0, 0, 0, 72, 129, 254, 0, 2, 0, 0, 126, 44, 185, 48, 0, 0, 0, 72, 129, 254, 0, 4, 0, 0, 126, 30, 185, 56, 0, 0, 0, 72, 129, 254, 0, 8, 0, 0, 126, 16, 185, 64, 0, 0, 0, 72, 129, 254, 0, 16, 0, 0, 126, 2, 235, 37, 81])
+    x86_synth_register_helper_fn(s, "মেমরি_মুক্তি", off)
+    // Chunk 1: Save callee-saved rbx/r12/r13, check ptr > 4096, query _lipi_heap_base
+    x86_synth_emit_bytes(s, [83, 65, 84, 65, 85, 73, 137, 252, 73, 129, 252, 0, 16, 0, 0, 15, 134, 210, 0, 0, 0])
+    x86_synth_emit_call_helper(s, "_lipi_heap_base")
+    // Chunk 2: Require _heap_base != 0 and ptr > _heap_base, query _lipi_heap_ptr
+    x86_synth_emit_bytes(s, [72, 133, 192, 15, 132, 196, 0, 0, 0, 73, 57, 196, 15, 134, 187, 0, 0, 0])
+    x86_synth_emit_call_helper(s, "_lipi_heap_ptr")
+    // Chunk 3: Require ptr < _heap_ptr, validate 0 < [ptr - 8] <= 4096, map to 9 slab buckets
+    x86_synth_emit_bytes(s, [73, 57, 196, 15, 131, 173, 0, 0, 0, 73, 139, 116, 36, 248, 72, 133, 246, 15, 142, 159, 0, 0, 0, 187, 0, 0, 0, 0, 72, 131, 254, 16, 126, 108, 187, 8, 0, 0, 0, 72, 131, 254, 32, 126, 97, 187, 16, 0, 0, 0, 72, 131, 254, 64, 126, 86, 187, 24, 0, 0, 0, 72, 129, 254, 128, 0, 0, 0, 126, 72, 187, 32, 0, 0, 0, 72, 129, 254, 0, 1, 0, 0, 126, 58, 187, 40, 0, 0, 0, 72, 129, 254, 0, 2, 0, 0, 126, 44, 187, 48, 0, 0, 0, 72, 129, 254, 0, 4, 0, 0, 126, 30, 187, 56, 0, 0, 0, 72, 129, 254, 0, 8, 0, 0, 126, 16, 187, 64, 0, 0, 0, 72, 129, 254, 0, 16, 0, 0, 126, 2, 235, 40])
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Free Chunk 2: Acquire _slab_spinlock, push ptr onto bucket head, unlock
-    x86_synth_emit_bytes(s, [89, 72, 141, 28, 8, 240, 72, 15, 186, 104, 96, 0, 114, 247, 72, 139, 19, 73, 137, 20, 36, 76, 137, 35, 240, 72, 15, 186, 112, 96, 0, 49, 192, 65, 92, 91, 195])
+    // Chunk 4: Acquire _slab_spinlock, guard against double-free head cycle, push & unlock
+    x86_synth_emit_bytes(s, [72, 141, 12, 24, 240, 72, 15, 186, 104, 96, 0, 114, 247, 72, 139, 17, 76, 57, 226, 116, 7, 73, 137, 20, 36, 76, 137, 33, 240, 72, 15, 186, 112, 96, 0, 49, 192, 65, 93, 65, 92, 91, 195])
     return off
 
 fn x86_synth_emit__lipi_thread_spawn_joinable s

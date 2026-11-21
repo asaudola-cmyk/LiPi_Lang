@@ -311,7 +311,7 @@ fn wasm_synth_expr_primary s toks pos_box
                     wasm_emit_drop(s.ws_code)
                     ai = ai + 1
                 wasm_emit_i64_const(s.ws_code, 0)
-            elif ident_name == "malloc" or ident_name == "মেমরি_বরাদ্দ"
+            elif ident_name == "malloc" or ident_name == "মেমরি_বরাদ্দ" or ident_name == "alloc" or ident_name == "sys_alloc" or ident_name == "mem_alloc" or ident_name == "বরাদ্দ"
                 if arg_count == 0
                     wasm_emit_i64_const(s.ws_code, 8)
                 else
@@ -320,6 +320,106 @@ fn wasm_synth_expr_primary s toks pos_box
                         wasm_emit_drop(s.ws_code)
                         arg_count = arg_count - 1
                 wasm_synth_emit_bump_alloc(s)
+            elif ident_name == "free" or ident_name == "sys_free" or ident_name == "mem_free" or ident_name == "মুক্ত" or ident_name == "মেমরি_মুক্তি"
+                ai = 0
+                while ai < arg_count
+                    wasm_emit_drop(s.ws_code)
+                    ai = ai + 1
+                wasm_emit_i64_const(s.ws_code, 0)
+            elif ident_name == "mem_write" or ident_name == "mem_word_write" or ident_name == "মেমরি_লেখো" or ident_name == "মেমরি_শব্দ_লেখো"
+                if arg_count >= 3
+                    while arg_count > 3
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    l_mwv = wasm_synth_alloc_local(s, "__wasi_mw_v")
+                    wasm_emit_local_set(s.ws_code, l_mwv)
+                    wasm_emit_i64_add(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_local_get(s.ws_code, l_mwv)
+                    wasm_emit_i64_store(s.ws_code, 0, 0)
+                    wasm_emit_local_get(s.ws_code, l_mwv)
+                else
+                    ai = 0
+                    while ai < arg_count
+                        wasm_emit_drop(s.ws_code)
+                        ai = ai + 1
+                    wasm_emit_i64_const(s.ws_code, 0)
+            elif ident_name == "mem_byte_write" or ident_name == "mem_write_byte" or ident_name == "মেমরি_বাইট_লেখো" or ident_name == "sys_poke8"
+                if arg_count >= 3
+                    while arg_count > 3
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    l_mbwv = wasm_synth_alloc_local(s, "__wasi_mbw_v")
+                    wasm_emit_local_set(s.ws_code, l_mbwv)
+                    wasm_emit_i64_add(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_local_get(s.ws_code, l_mbwv)
+                    wasm_emit_i64_store8(s.ws_code, 0, 0)
+                    wasm_emit_local_get(s.ws_code, l_mbwv)
+                else
+                    ai = 0
+                    while ai < arg_count
+                        wasm_emit_drop(s.ws_code)
+                        ai = ai + 1
+                    wasm_emit_i64_const(s.ws_code, 0)
+            elif ident_name == "len" or ident_name == "দৈর্ঘ্য"
+                if arg_count >= 1
+                    while arg_count > 1
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                else
+                    wasm_emit_i64_const(s.ws_code, 0)
+            elif ident_name == "get" or ident_name == "নাও"
+                if arg_count >= 2
+                    while arg_count > 2
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    l_lgi = wasm_synth_alloc_local(s, "__wasi_lg_i")
+                    wasm_emit_local_set(s.ws_code, l_lgi)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 16)
+                    wasm_emit_local_get(s.ws_code, l_lgi)
+                    wasm_emit_i64_const(s.ws_code, 8)
+                    wasm_emit_i64_mul(s.ws_code)
+                    wasm_emit_i64_add(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 0)
+                else
+                    ai = 0
+                    while ai < arg_count
+                        wasm_emit_drop(s.ws_code)
+                        ai = ai + 1
+                    wasm_emit_i64_const(s.ws_code, 0)
+            elif ident_name == "list_set" or ident_name == "সেট"
+                if arg_count >= 3
+                    while arg_count > 3
+                        wasm_emit_drop(s.ws_code)
+                        arg_count = arg_count - 1
+                    l_lsv = wasm_synth_alloc_local(s, "__wasi_ls_v")
+                    l_lsi = wasm_synth_alloc_local(s, "__wasi_ls_i")
+                    l_lsh = wasm_synth_alloc_local(s, "__wasi_ls_h")
+                    wasm_emit_local_set(s.ws_code, l_lsv)
+                    wasm_emit_local_set(s.ws_code, l_lsi)
+                    wasm_emit_local_set(s.ws_code, l_lsh)
+                    wasm_emit_local_get(s.ws_code, l_lsh)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_i64_load(s.ws_code, 3, 16)
+                    wasm_emit_local_get(s.ws_code, l_lsi)
+                    wasm_emit_i64_const(s.ws_code, 8)
+                    wasm_emit_i64_mul(s.ws_code)
+                    wasm_emit_i64_add(s.ws_code)
+                    wasm_emit_i32_wrap_i64(s.ws_code)
+                    wasm_emit_local_get(s.ws_code, l_lsv)
+                    wasm_emit_i64_store(s.ws_code, 3, 0)
+                    wasm_emit_local_get(s.ws_code, l_lsh)
+                else
+                    ai = 0
+                    while ai < arg_count
+                        wasm_emit_drop(s.ws_code)
+                        ai = ai + 1
+                    wasm_emit_i64_const(s.ws_code, 0)
             elif ident_name == "list" or ident_name == "তালিকা"
                 // WHY: Pops evaluated args in reverse into locals, bump-allocates 24-byte header +
                 // element storage via mem[24], and stores elements in order at [hdr + 24 + i*8].

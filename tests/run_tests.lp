@@ -1275,6 +1275,31 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_sovereign_kavach_mode.lp", "test_sovereign_kavach_mode") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_dynamic_silicon_alu_opt.lp", "test_dynamic_silicon_alu_opt") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_cross_target_list_mem_parity.lp", "test_cross_target_list_mem_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_lipi_akhara_and_bench.lp", "test_lipi_akhara_and_bench") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_flagship_showcases.lp", "test_flagship_showcases") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

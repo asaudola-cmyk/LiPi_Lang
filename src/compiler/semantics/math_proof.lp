@@ -315,11 +315,13 @@
   allocs = [
     "alloc", "malloc", "heap_alloc", "mem_alloc", "sys_alloc",
     "sys_mmap", "buffer_alloc", "gc_alloc", "_lipi_alloc",
+    "বরাদ্দ", "মেমরি_বরাদ্দ",
     "list", "map", "list_new", "map_new", "buffer_new", "string_new", "make"
   ]
   deallocs = [
     "free", "dealloc", "drop", "mem_free", "sys_free",
-    "sys_munmap", "buffer_free", "release", "close", "destroy", "_lipi_free"
+    "sys_munmap", "buffer_free", "release", "close", "destroy", "_lipi_free",
+    "মুক্ত", "মেমরি_মুক্তি"
   ]
   mpe = MathProofEngine()
   mpe.mpe_scope_depth = 0
@@ -462,7 +464,7 @@
   tag = stmt.tag
 
   // 1. Return Statement
-  @if str_eq(k, "Return") == 1 || tag == AST_TAG_RETURN()
+  @if str_eq(k, "Return") == 1 || str_eq(k, "ফেরত") == 1 || tag == AST_TAG_RETURN()
     // Append any active defers before terminating
     cfg_emit_defers_for_depth(ctx, 1)
     blk.cbb_stmts = blk.cbb_stmts.push(stmt)
@@ -944,8 +946,10 @@
           st.mps_free_count = st.mps_free_count + 1
 
           target_arg = ""
-          @if call_node.args != 0 && call_node.args.len() > 0
-            arg0 = call_node.args[0]
+          call_args = call_node.args
+          @if call_args == 0 call_args = call_node.params @end
+          @if call_args != 0 && call_args.len() > 0
+            arg0 = call_args[0]
             @if arg0 != 0
               target_arg = arg0.name
               @if target_arg == "" target_arg = arg0.target @end
@@ -969,6 +973,28 @@
               @if mpe.mpe_strict_mode == 1
                 viol = math_proof_violation_new(ERR_MATH_PROOF_UNTRACKED_FREE(), "Untracked or illegal free detected on variable '" + target_arg + "' (never allocated in routine)", stmt.span, -1, "untracked_free")
                 mpe.mpe_violations = mpe.mpe_violations.push(viol)
+              @end
+            @end
+          @end
+        @end
+      @end
+
+      // Case C: Return ownership move/transfer (`return buf` transfers ownership to caller, `return 0` does not)
+      @if str_eq(k, "Return") == 1 || str_eq(k, "ফেরত") == 1 || tag == AST_TAG_RETURN()
+        ret_e = stmt.value
+        @if ret_e == 0 ret_e = stmt.expr @end
+        @if ret_e != 0
+          rk = ret_e.kind
+          @if str_eq(rk, "Variable") == 1 || str_eq(rk, "IDENT") == 1 || str_eq(rk, "Identifier") == 1 || ret_e.tag == AST_TAG_VARIABLE()
+            rname = ret_e.name
+            @if rname == "" rname = ret_e.target @end
+            @if rname != ""
+              existing_r = math_proof_state_lookup_var(st, rname)
+              @if existing_r != 0 && existing_r.mvr_is_allocated == 1
+                existing_r.mvr_is_allocated = 0
+                st.mps_balance = st.mps_balance - 1
+                st.mps_free_count = st.mps_free_count + 1
+                st.mps_active_count = st.mps_active_count - 1
               @end
             @end
           @end

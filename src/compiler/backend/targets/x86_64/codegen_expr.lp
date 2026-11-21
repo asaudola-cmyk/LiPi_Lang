@@ -668,15 +668,22 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_emit_mov_rdi_imm64(s, 32)
                 x86_synth_emit_call_helper(s, "_lipi_malloc")
                 s.synth_last_expr_type = ""
-            // Intrinsic 2b: alloc / mem_alloc / মেমরি_বরাদ্দ (segregated slab freelist bump allocator)
+            // Intrinsic 2b: alloc / বরাদ্দ / mem_alloc / মেমরি_বরাদ্দ (segregated slab freelist bump allocator)
             // WHY: Uses O(1) segregated slab freelist recycling and stores valid size/STR0 headers within [_heap_base, _heap_ptr)
-            elif var_name == "alloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ" or var_name == "sys_alloc"
+            elif var_name == "alloc" or var_name == "বরাদ্দ" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ" or var_name == "sys_alloc"
                 if arg_count >= 1
                     x86_synth_emit_byte(s, 95) // pop rdi
                 else
                     x86_synth_emit_mov_rdi_imm64(s, 32)
                 x86_synth_emit_call_helper(s, "_lipi_user_alloc")
                 s.synth_last_expr_type = ""
+            // Intrinsic 2c: 1-arg free / মুক্ত (segregated slab freelist recycler)
+            // WHY: Routes 1-argument free(ptr) directly to _lipi_user_free even when utso/core/memory.lp
+            // defines 2-argument free(addr, size) for kernel page SYS_munmap.
+            elif arg_count == 1 and (var_name == "free" or var_name == "মুক্ত" or var_name == "mem_free" or var_name == "sys_free" or var_name == "মেমরি_মুক্তি")
+                x86_synth_emit_byte(s, 95) // pop rdi
+                x86_synth_emit_call_helper(s, "_lipi_user_free")
+                s.synth_last_expr_type = "int"
             // Intrinsic 3: mem_word_read
             elif var_name == "mem_word_read" or var_name == "mem_read" or var_name == "মেমরি_পড়ো"
                 if arg_count >= 2

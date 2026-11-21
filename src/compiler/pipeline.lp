@@ -56,6 +56,7 @@ import "src/compiler/semantics/const_eval.lp"
 import "src/compiler/semantics/ownership_check.lp"
 import "src/compiler/semantics/purity_analyzer.lp"
 import "src/compiler/semantics/math_proof.lp"
+import "src/compiler/semantics/kavach_shield.lp"
 
 // Subsystem 5: Middle-End SSA Lowering, Comptime Supercompilation & Optimization Pass Manager
 include "src/compiler/middleend/ast_to_ssa.lp"
@@ -120,6 +121,7 @@ struct CompilerConfig
     cfg_no_pie              // 1 to force fixed-address ET_EXEC instead of Static-PIE ET_DYN
     cfg_strict_ownership    // 1 to fail compilation on ownership/use-after-move violations
     cfg_strict_proof        // 1 to fail compilation when memory conservation proof fails
+    cfg_kavach_mode         // 1 to enable Sovereign Kavach Mode (ownership + escape-exact proof + silicon_* crown)
 
 struct CompilerResult
     res_success             // 1 on success, 0 on failure
@@ -1688,6 +1690,7 @@ fn compiler_config_new src out_bin arch opt fmt dry_run
     cfg.cfg_no_pie = 0
     cfg.cfg_strict_ownership = 0
     cfg.cfg_strict_proof = 0
+    cfg.cfg_kavach_mode = 0
     return cfg
 
 fn compiler_result_new
@@ -3005,6 +3008,18 @@ fn compiler_pipeline_execute config source_code
 
     // ── Phase 4: Semantic Analysis, Type System & Ownership ───────────────────
     say "  [pipeline] Phase 4: Type checking & semantic analysis..."
+    if config.cfg_kavach_mode == 1
+        config.cfg_strict_ownership = 1
+        config.cfg_strict_proof = 1
+        kv_res = kavach_verify_program(ast_decls)
+        if kv_res.kv_error_count > 0
+            result.res_error_count = result.res_error_count + kv_res.kv_error_count
+            result.res_error_msg = kv_res.kv_first_msg
+            result.res_stage_reached = PIPELINE_STAGE_SEMANTICS()
+            result.res_success = 0
+            return result
+        end
+    end
     sym_table = symtab_new(64)
     scope_stk = scope_stack_new()
     ty_reg = type_registry_new()
@@ -3058,13 +3073,11 @@ fn compiler_pipeline_execute config source_code
     while di < ast_decls.len()
         decl = ast_decls[di]
         if decl.kind == "FnDef" or decl.kind == "Function" or decl.kind == "কাজ"
-            // WHY: Structural escape check + lifecycle token check without hardcoded domain/brand names.
-            is_cleanup_fn = pipeline_is_memory_exempt_fn(decl.name)
-            if is_cleanup_fn == 0 and decl.body != 0 and decl.body.len() > 0
-                last_stmt = decl.body[decl.body.len() - 1]
-                if last_stmt != 0 and (last_stmt.kind == "Return" or last_stmt.kind == "ফেরত")
-                    is_cleanup_fn = 1
-                end
+            // WHY: Top-level script wrapper main()/মূল and trusted factory/allocator utilities are exempt;
+            // user routines must prove ΔMemory = 0 (frees or returns allocated handles cleanly).
+            is_cleanup_fn = 0
+            if decl.name == "main" or decl.name == "মূল" or pipeline_is_memory_exempt_fn(decl.name) == 1
+                is_cleanup_fn = 1
             end
             if is_cleanup_fn == 0
                 proof_engine = math_proof_engine_new()

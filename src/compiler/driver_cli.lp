@@ -36,6 +36,9 @@ fn print_cli_usage
     say "  --ai-opt                   এআই চালিত নিউরাল অপটিমাইজার (AI-driven neural optimization heuristics)"
     say "  -g, --debug                সোর্স ডিবাগিং ইনফরমেশন (DWARF v4/v5 Debug symbols)"
     say "  --shared                   ডাইনামিক শেয়ার্ড লাইব্রেরি (.so Shared Object)"
+    say "  --kavach, --কবচ            সার্বভৌম কবচ মোড (Strict Ownership + Escape Proof + silicon_* Crown)"
+    say "  --strict-ownership         মালিকানা/মুভ-পরবর্তী ব্যবহার যাচাই (Affine ownership errors)"
+    say "  --strict-proof             গাণিতিক মেমোরি সংরক্ষণ প্রমাণ (Strict ΔMemory=0 proof)"
     say "  -h, --help                 সহায়তা বার্তা প্রদর্শন (Display this help manual)"
     say "  -v, --version              ভার্সন তথ্য (Display compiler version: First 1.0.0)"
     say ""
@@ -206,6 +209,7 @@ fn main
     no_pie_mode = 0
     strict_ownership_mode = 0
     strict_proof_mode = 0
+    kavach_mode = 0
     emit_format = FORMAT_ELF()
     ai_opt_enabled = 0
     omni_mode = 0
@@ -303,6 +307,10 @@ fn main
             strict_ownership_mode = 1
         elif arg == "--strict-proof"
             strict_proof_mode = 1
+        elif arg == "--kavach" or arg == "--কবচ" or arg == "--safe"
+            kavach_mode = 1
+            strict_ownership_mode = 1
+            strict_proof_mode = 1
         elif arg == "-O0"
             opt_level = 0
         elif arg == "-O1"
@@ -397,6 +405,8 @@ fn main
         mode_flags = mode_flags + 4
     if strict_proof_mode != 0
         mode_flags = mode_flags + 8
+    if kavach_mode != 0
+        mode_flags = mode_flags + 16
     res = compiler_driver_compile_file_full(in_file, out_file, target_arch, opt_level, emit_format, mode_flags)
     
     // Report detailed diagnostics

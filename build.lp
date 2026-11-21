@@ -244,6 +244,7 @@ fn build_main
     build_pipeline_add_target(pipe, "WebX Full-Stack Suite", "tests/test_webx_fullstack.lp", "dist/test_webx_fullstack", 1)
     build_pipeline_add_target(pipe, "WebX Pure SVG Charts Engine", "tests/test_webx_charts.lp", "dist/test_webx_charts", 1)
     build_pipeline_add_target(pipe, "WebX Sovereign Islands Suite", "tests/test_webx_islands.lp", "dist/test_webx_islands", 1)
+    build_pipeline_add_target(pipe, "Sovereign Silicon Akhara", "src/tools/lipi_akhara.lp", "bin/lipi_akhara", 1)
 
     say "\n▶ Executing Native LiPi Build Pipeline (0% Bash)..."
     build_pipeline_run_all(pipe)

@@ -92,13 +92,22 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_emit_svc(s, 0)
                 return 0
 
-            // ── Intrinsic 2: malloc / mem_alloc / মেমরি_বরাদ্দ ──────────────
-            if var_name == "malloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ"
+            // ── Intrinsic 2: malloc / alloc / sys_alloc / mem_alloc / মেমরি_বরাদ্দ ──
+            if var_name == "malloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ" or var_name == "alloc" or var_name == "sys_alloc" or var_name == "বরাদ্দ"
                 if arg_count >= 1
                     arm64_pop_reg(s, 0) // requested size in X0
                 else
                     arm64_emit_mov_imm64(s, 0, 32)
                 arm64_synth_emit_call_alloc(s)
+                return 0
+
+            // ── Intrinsic 2b: free / sys_free / mem_free / মুক্ত / মেমরি_মুক্তি ──
+            if var_name == "free" or var_name == "sys_free" or var_name == "mem_free" or var_name == "মুক্ত" or var_name == "মেমরি_মুক্তি"
+                ai = 0
+                while ai < arg_count
+                    arm64_pop_reg(s, 1)
+                    ai = ai + 1
+                arm64_emit_movz_x(s, 0, 0, 0)
                 return 0
 
             // ── Intrinsic 3: mem_word_read / mem_read / মেমরি_পড়ো ──────────
@@ -184,6 +193,61 @@ fn arm64_synth_expr_primary s toks pos_box
                         arm64_synth_emit32(s, st_item)
                         ai = ai - 1
                     arm64_emit_mov_reg(s, 0, 9) // return list ptr in X0
+                return 0
+
+            // ── Intrinsic 8b: len / দৈর্ঘ্য (list header [0]) ────────────────────
+            if var_name == "len" or var_name == "দৈর্ঘ্য"
+                while arg_count > 1
+                    arm64_pop_reg(s, 1)
+                    arg_count = arg_count - 1
+                if arg_count == 1
+                    arm64_pop_reg(s, 0)
+                    arm64_synth_emit32(s, 4181721088) // ldr x0, [x0, #0]
+                else
+                    arm64_emit_movz_x(s, 0, 0, 0)
+                return 0
+
+            // ── Intrinsic 8c: get / নাও (hdr, idx -> data[idx]) ────────────────
+            if var_name == "get" or var_name == "নাও"
+                while arg_count > 2
+                    arm64_pop_reg(s, 1)
+                    arg_count = arg_count - 1
+                if arg_count == 2
+                    arm64_pop_reg(s, 1) // X1 = idx
+                    arm64_pop_reg(s, 0) // X0 = hdr
+                    arm64_synth_emit32(s, 4181723138) // ldr x2, [x0, #16]
+                    arm64_emit_add_x(s, 1, 1, 1)     // X1 = idx * 2
+                    arm64_emit_add_x(s, 1, 1, 1)     // X1 = idx * 4
+                    arm64_emit_add_x(s, 1, 1, 1)     // X1 = idx * 8
+                    arm64_emit_add_x(s, 0, 2, 1)     // X0 = data_ptr + idx*8
+                    arm64_synth_emit32(s, 4181721088) // ldr x0, [x0, #0]
+                else
+                    while arg_count > 0
+                        arm64_pop_reg(s, 1)
+                        arg_count = arg_count - 1
+                    arm64_emit_movz_x(s, 0, 0, 0)
+                return 0
+
+            // ── Intrinsic 8d: list_set / সেট (hdr, idx, val -> hdr) ────────────
+            if var_name == "list_set" or var_name == "সেট"
+                while arg_count > 3
+                    arm64_pop_reg(s, 1)
+                    arg_count = arg_count - 1
+                if arg_count == 3
+                    arm64_pop_reg(s, 2) // X2 = val
+                    arm64_pop_reg(s, 1) // X1 = idx
+                    arm64_pop_reg(s, 0) // X0 = hdr
+                    arm64_synth_emit32(s, 4181723139) // ldr x3, [x0, #16]
+                    arm64_emit_add_x(s, 1, 1, 1)
+                    arm64_emit_add_x(s, 1, 1, 1)
+                    arm64_emit_add_x(s, 1, 1, 1)
+                    arm64_emit_add_x(s, 3, 3, 1)     // X3 = data_ptr + idx*8
+                    arm64_synth_emit32(s, 4177526882) // str x2, [x3, #0]
+                else
+                    while arg_count > 0
+                        arm64_pop_reg(s, 1)
+                        arg_count = arg_count - 1
+                    arm64_emit_movz_x(s, 0, 0, 0)
                 return 0
 
             // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────────

@@ -220,6 +220,7 @@ fn installer_main
     installer_add_file(engine, "bin/lipidbg", bin_dir + "/lipidbg", 1)
     installer_add_file(engine, "bin/lipilsp", bin_dir + "/lipilsp", 1)
     installer_add_file(engine, "bin/lipidb_server", bin_dir + "/lipidb_server", 1)
+    installer_add_file(engine, "bin/lipi_akhara", bin_dir + "/lipi_akhara", 1)
     installer_add_file(engine, "utso/", home_dir + "/utso/", 0)
     installer_add_file(engine, "aati/", home_dir + "/aati/", 0)
     installer_add_file(engine, "src/tools/lipi_unikernel_boot.lp", home_dir + "/src/tools/lipi_unikernel_boot.lp", 0)

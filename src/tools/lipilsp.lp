@@ -191,6 +191,195 @@ fn json_unescape s
             i = i + 1
     return res
 
+// ─── Sovereign Diagnostics & Symbol Collector ─────────────────────────────────
+// WHY: Validates literal quote termination and delimiter balance on bare-metal LSP edits.
+fn lsp_compute_diagnostics text
+    n = len(text)
+    if n == 0
+        return "[]"
+
+    diags = "["
+    diag_cnt = 0
+    line = 0
+    col = 0
+    in_str = 0
+    str_start_col = 0
+    in_comment = 0
+    paren_depth = 0
+    paren_line = 0
+    paren_col = 0
+    i = 0
+
+    while i < n
+        c = char_at(text, i)
+        if in_comment == 1
+            if c == "\n"
+                in_comment = 0
+                line = line + 1
+                col = 0
+            else
+                col = col + 1
+            i = i + 1
+            continue
+
+        if in_str == 1
+            if c == "\\" and i + 1 < n
+                nx = char_at(text, i + 1)
+                if nx == "\n"
+                    if diag_cnt > 0
+                        diags = diags + ","
+                    diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(str_start_col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal\"}"
+                    diag_cnt = diag_cnt + 1
+                    in_str = 0
+                    line = line + 1
+                    col = 0
+                else
+                    col = col + 2
+                i = i + 2
+                continue
+            if c == "\""
+                in_str = 0
+                col = col + 1
+                i = i + 1
+                continue
+            if c == "\n"
+                if diag_cnt > 0
+                    diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(str_start_col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal\"}"
+                diag_cnt = diag_cnt + 1
+                in_str = 0
+                line = line + 1
+                col = 0
+                i = i + 1
+                continue
+            col = col + 1
+            i = i + 1
+            continue
+
+        // Outside strings and comments
+        if c == "/" and i + 1 < n and char_at(text, i + 1) == "/"
+            in_comment = 1
+            col = col + 2
+            i = i + 2
+            continue
+        if c == "\""
+            in_str = 1
+            str_start_col = col
+            col = col + 1
+            i = i + 1
+            continue
+        if c == "("
+            if paren_depth == 0
+                paren_line = line
+                paren_col = col
+            paren_depth = paren_depth + 1
+        elif c == ")"
+            if paren_depth <= 0
+                if diag_cnt > 0
+                    diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col + 1) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unmatched closing parenthesis ')'\"}"
+                diag_cnt = diag_cnt + 1
+            else
+                paren_depth = paren_depth - 1
+
+        if c == "\n"
+            line = line + 1
+            col = 0
+        else
+            col = col + 1
+        i = i + 1
+
+    if in_str == 1
+        if diag_cnt > 0
+            diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(str_start_col) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal at EOF\"}"
+        diag_cnt = diag_cnt + 1
+
+    if paren_depth > 0
+        if diag_cnt > 0
+            diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(paren_line) + ",\"character\":" + str(paren_col) + "},\"end\":{\"line\":" + str(paren_line) + ",\"character\":" + str(paren_col + 1) + "}},\"severity\":2,\"source\":\"lipilsp\",\"message\":\"Unclosed opening parenthesis '('\"}"
+        diag_cnt = diag_cnt + 1
+
+    return diags + "]"
+
+fn lsp_sub_eq s start pat
+    plen = len(pat)
+    if start + plen > len(s)
+        return 0
+    j = 0
+    while j < plen
+        if char_at(s, start + j) != char_at(pat, j)
+            return 0
+        j = j + 1
+    return 1
+
+// WHY: Extracts function, struct, and enum DocumentSymbol entries for outline view & breadcrumbs.
+fn lsp_collect_document_symbols text
+    n = len(text)
+    if n == 0
+        return "[]"
+    out = "["
+    sym_cnt = 0
+    line = 0
+    pos = 0
+
+    while pos < n
+        eol = pos
+        while eol < n and char_at(text, eol) != "\n"
+            eol = eol + 1
+        line_len = eol - pos
+
+        p = pos
+        while p < eol and (char_at(text, p) == " " or char_at(text, p) == "\t")
+            p = p + 1
+
+        kind = 0
+        kw_len = 0
+        if p < eol
+            if lsp_sub_eq(text, p, "fn ") == 1
+                kind = 12
+                kw_len = 3
+            elif lsp_sub_eq(text, p, "কাজ ") == 1
+                kind = 12
+                kw_len = len("কাজ ")
+            elif lsp_sub_eq(text, p, "struct ") == 1
+                kind = 23
+                kw_len = 7
+            elif lsp_sub_eq(text, p, "কাঠামো ") == 1
+                kind = 23
+                kw_len = len("কাঠামো ")
+            elif lsp_sub_eq(text, p, "enum ") == 1
+                kind = 10
+                kw_len = 5
+
+        if kind > 0
+            ns = p + kw_len
+            while ns < eol and (char_at(text, ns) == " " or char_at(text, ns) == "\t")
+                ns = ns + 1
+            ne = ns
+            name = ""
+            while ne < eol
+                ch = char_at(text, ne)
+                if ch == " " or ch == "\t" or ch == "(" or ch == ":" or ch == "=" or ch == "\r"
+                    break
+                name = name + ch
+                ne = ne + 1
+            if len(name) > 0
+                col_s = ns - pos
+                col_e = ne - pos
+                if sym_cnt > 0
+                    out = out + ","
+                out = out + "{\"name\":\"" + json_escape(name) + "\",\"kind\":" + str(kind)
+                out = out + ",\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":0},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(line_len) + "}}"
+                out = out + ",\"selectionRange\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(col_s) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col_e) + "}}}"
+                sym_cnt = sym_cnt + 1
+
+        line = line + 1
+        pos = eol + 1
+
+    return out + "]"
+
 // ─── Header Parser ────────────────────────────────────────────────────────────
 // WHY: Reads "Content-Length: N\r\n" and extracts byte count for JSON body framing.
 fn parse_content_length header
@@ -496,6 +685,15 @@ fn build_completion_items
     push(items, make_item("std/simd.lp", 9, "SIMD Acceleration", "AVX2 & SSE Vector Math"))
     push(items, make_item("std/crypto.lp", 9, "Sovereign Cryptography", "AES-256-GCM & SHA-256"))
     push(items, make_item("std/db.lp", 9, "Embedded Database", "Embedded Key-Value ACID Store"))
+    push(items, make_item("--kavach", 14, "Sovereign Hardware Crown", "Strict static ownership proof + silicon_* hardware isolation"))
+    push(items, make_item("alloc", 3, "Segregated Slab Allocator", "alloc(size) -> O(1) tracked slab block"))
+    push(items, make_item("বরাদ্দ", 3, "বরাদ্দ (Slab Alloc)", "বরাদ্দ(size) -> স্ল্যাব মেমরি বরাদ্দ"))
+    push(items, make_item("free", 3, "Sovereign Memory Free", "free(ptr) for slab / free(addr, size) in utso/memory"))
+    push(items, make_item("মুক্ত", 3, "মুক্ত (Slab Free)", "মুক্ত(ptr) দ্বারা মেমরি মুক্তি ও প্রমাণ"))
+    push(items, make_item("arena_mark", 3, "Arena Snapshot Mark", "mark = arena_mark() for O(1) scoped arena unwind"))
+    push(items, make_item("arena_reset", 3, "Arena Snapshot Reset", "arena_reset(mark) frees all transient blocks cleanly"))
+    push(items, make_item("arena_allocated", 3, "Arena Bytes Counter", "Returns active allocated heap bytes"))
+    push(items, make_item("silicon_seal", 14, "Sovereign Hardware Crown", "Prefix silicon_* / সিলিকন_* required for syscall/mem_write under --kavach"))
 
     res = "["
     i = 0
@@ -569,8 +767,14 @@ fn get_hover_documentation word
         return "### `std/crypto.lp` (Sovereign Cryptography)\nHardware-accelerated AES-256-GCM and SHA-256."
     if word == "std/db.lp"
         return "### `std/db.lp` (Embedded Database)\nEmbedded key-value storage engine with ACID transactions."
-    if word == "malloc" or word == "free"
-        return "### Memory Management (`malloc` / `free`)\nDirect kernel memory allocation via SYS_mmap / SYS_munmap."
+    if word == "malloc" or word == "free" or word == "alloc" or word == "বরাদ্দ" or word == "মুক্ত"
+        return "### Memory Management (`alloc` / `free` / `malloc`)\n- `alloc(size)` / `free(ptr)`: O(1) bounds- & double-free-checked segregated slab allocator.\n- `malloc(size)` / `free(addr, size)` (`utso/memory`): Direct kernel `SYS_mmap` / `SYS_munmap`."
+
+    if word == "--kavach" or word == "silicon_" or word == "সিলিকন_"
+        return "### Sovereign Kavach (`--kavach` / `--কবচ`)\nEnforces compile-time leak/use-after-free mathematical proofs AND restricts raw hardware primitives (`syscall`, `mem_write`) exclusively to functions prefixed with `silicon_` or `সিলিকন_`."
+
+    if word == "arena_mark" or word == "arena_reset" or word == "arena_allocated"
+        return "### Scoped Arena Snapshots\n`mark = arena_mark()`, run allocations, then `arena_reset(mark)` in O(1) with `arena_allocated()` accounting."
     
     return "### 👑 Lipi Sovereign Programming Language (লিপি প্রথম ১.০.০ - First 1.0.0)\n**Direct Silicon Execution** | 0% Libc | 0% LLVM | Bilingual (English & Bengali)"
 
@@ -711,7 +915,7 @@ fn lsp_main_loop
             // ── 1. initialize ──
             if method == "initialize"
                 lsp_log("Received initialize request (id: " + req_id + ")")
-                resp = "{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\",\"/\",\"\\\"\",\":\",\" \"]},\"hoverProvider\":true,\"documentFormattingProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true},\"serverInfo\":{\"name\":\"" + sname + "\",\"version\":\"" + sver + "\"}}"
+                resp = "{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\",\"/\",\"\\\"\",\":\",\" \"]},\"hoverProvider\":true,\"documentFormattingProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,\"documentSymbolProvider\":true},\"serverInfo\":{\"name\":\"" + sname + "\",\"version\":\"" + sver + "\"}}"
                 lsp_send_response(req_id, resp)
 
             // ── 2. initialized ──
@@ -726,7 +930,8 @@ fn lsp_main_loop
                 doc_text = json_unescape(raw_text)
                 workspace_set_file(tracked_uris, tracked_texts, uri, doc_text)
                 lsp_log("didOpen tracked file: " + uri)
-                diag_params = "{\"uri\":\"" + uri + "\",\"diagnostics\":[]}"
+                diags_json = lsp_compute_diagnostics(doc_text)
+                diag_params = "{\"uri\":\"" + uri + "\",\"diagnostics\":" + diags_json + "}"
                 lsp_send_notification("textDocument/publishDiagnostics", diag_params)
 
             // ── 4. textDocument/didChange ──
@@ -736,8 +941,16 @@ fn lsp_main_loop
                 doc_text = json_unescape(raw_text)
                 workspace_set_file(tracked_uris, tracked_texts, uri, doc_text)
                 lsp_log("didChange updated file: " + uri)
-                diag_params = "{\"uri\":\"" + uri + "\",\"diagnostics\":[]}"
+                diags_json = lsp_compute_diagnostics(doc_text)
+                diag_params = "{\"uri\":\"" + uri + "\",\"diagnostics\":" + diags_json + "}"
                 lsp_send_notification("textDocument/publishDiagnostics", diag_params)
+
+            // ── 4b. textDocument/documentSymbol ──
+            elif method == "textDocument/documentSymbol"
+                uri = json_extract_str_value(raw_msg, "uri")
+                doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)
+                syms_json = lsp_collect_document_symbols(doc_text)
+                lsp_send_response(req_id, syms_json)
 
             // ── 5. textDocument/didClose ──
             elif method == "textDocument/didClose"

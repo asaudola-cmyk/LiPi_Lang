@@ -90,13 +90,22 @@ fn riscv64_synth_expr_primary s toks pos_box
                 riscv64_emit_ecall(s)
                 return 0
 
-            // ── Intrinsic 2: malloc / mem_alloc / মেমরি_বরাদ্দ ──────────────
-            if var_name == "malloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ"
+            // ── Intrinsic 2: malloc / alloc / sys_alloc / mem_alloc / মেমরি_বরাদ্দ ──
+            if var_name == "malloc" or var_name == "mem_alloc" or var_name == "মেমরি_বরাদ্দ" or var_name == "alloc" or var_name == "sys_alloc" or var_name == "বরাদ্দ"
                 if arg_count >= 1
                     riscv64_pop_reg(s, 10) // requested size in a0
                 else
                     riscv64_emit_li(s, 10, 32)
                 riscv64_synth_emit_call_alloc(s)
+                return 0
+
+            // ── Intrinsic 2b: free / sys_free / mem_free / মুক্ত / মেমরি_মুক্তি ──
+            if var_name == "free" or var_name == "sys_free" or var_name == "mem_free" or var_name == "মুক্ত" or var_name == "মেমরি_মুক্তি"
+                ai = 0
+                while ai < arg_count
+                    riscv64_pop_reg(s, 11)
+                    ai = ai + 1
+                riscv64_emit_addi(s, 10, 0, 0)
                 return 0
 
             // ── Intrinsic 3: mem_word_read / mem_read / মেমরি_পড়ো ──────────
@@ -175,6 +184,61 @@ fn riscv64_synth_expr_primary s toks pos_box
                         riscv64_emit_sd(s, 11, 28, item_off)
                         ai = ai - 1
                     riscv64_emit_addi(s, 10, 28, 0) // restore list ptr into a0
+                return 0
+
+            // ── Intrinsic 8b: len / দৈর্ঘ্য (list header [0]) ────────────────────
+            if var_name == "len" or var_name == "দৈর্ঘ্য"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10) // a0 = hdr
+                    riscv64_emit_ld(s, 10, 10, 0)
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                return 0
+
+            // ── Intrinsic 8c: get / নাও (hdr, idx -> data[idx]) ────────────────
+            if var_name == "get" or var_name == "নাও"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                if arg_count == 2
+                    riscv64_pop_reg(s, 11) // a1 = idx
+                    riscv64_pop_reg(s, 10) // a0 = hdr
+                    riscv64_emit_ld(s, 12, 10, 16) // a2 = data_ptr
+                    riscv64_emit_add(s, 11, 11, 11)
+                    riscv64_emit_add(s, 11, 11, 11)
+                    riscv64_emit_add(s, 11, 11, 11) // idx * 8
+                    riscv64_emit_add(s, 10, 12, 11)
+                    riscv64_emit_ld(s, 10, 10, 0)
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    riscv64_emit_addi(s, 10, 0, 0)
+                return 0
+
+            // ── Intrinsic 8d: list_set / সেট (hdr, idx, val -> hdr) ────────────
+            if var_name == "list_set" or var_name == "সেট"
+                while arg_count > 3
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                if arg_count == 3
+                    riscv64_pop_reg(s, 12) // a2 = val
+                    riscv64_pop_reg(s, 11) // a1 = idx
+                    riscv64_pop_reg(s, 10) // a0 = hdr
+                    riscv64_emit_ld(s, 13, 10, 16) // a3 = data_ptr
+                    riscv64_emit_add(s, 11, 11, 11)
+                    riscv64_emit_add(s, 11, 11, 11)
+                    riscv64_emit_add(s, 11, 11, 11) // idx * 8
+                    riscv64_emit_add(s, 13, 13, 11) // a3 = &data[idx]
+                    riscv64_emit_sd(s, 12, 13, 0)  // store a2 into 0(a3)
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    riscv64_emit_addi(s, 10, 0, 0)
                 return 0
 
             // ── Intrinsic 9: file_write / ফাইল_লেখো ────────────────────────

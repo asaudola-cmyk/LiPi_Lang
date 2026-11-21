@@ -28,10 +28,12 @@ fn print_usage
     say "\033[1;33mUsage:\033[0m"
     say "  lipi <command> [arguments...]\n"
     say "\033[1;36mCore Compiler Commands:\033[0m"
-    say "  \033[1;32mbuild\033[0m <file.lp> [-o out] [--target=arch]  Compile standalone native machine binary (ELF/PE/Mach-O)"
+    say "  \033[1;32mbuild\033[0m <file.lp> [-o out] [--target=arch] [--kavach]  Compile native binary (with optional Kavach hardware proof)"
     say "  \033[1;32mrun\033[0m <file.lp> [--jit] [args...]           Compile and execute program in-memory (Zero disk latency)"
     say "  \033[1;32m-e\033[0m '<expr>'                                Direct one-liner evaluation without source files"
     say "  \033[1;32mtest\033[0m [suite]                                Execute sovereign test runner and regression suites"
+    say "  \033[1;32mbench\033[0m [--quick]                             Run Tier-I & Tier-II unfoldable sovereign silicon benchmarks"
+    say "  \033[1;32makhara\033[0m [port|--selftest|--inspect <file>]    Launch Lipi Sovereign Silicon Studio & ELF Inspector"
     say "  \033[1;32mrepl\033[0m                                       Launch interactive REPL terminal session\n"
     say "\033[1;36mPackage Management & Registry:\033[0m"
     say "  \033[1;32maati|আঁটি\033[0m <subcommand>                      Sovereign Ed25519 cryptographic package manager (Aati)"
@@ -392,7 +394,7 @@ fn handle_run file_path a1 a2 a3 a4
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
     return exec_code
 
-fn handle_build file_path out_file target_flag
+fn handle_build file_path out_file target_flag mode_flag
     if len(file_path) == 0
         say "❌ Error: Source file required: lipi build <file.lp> [-o <out>]"
         return 1
@@ -413,7 +415,7 @@ fn handle_build file_path out_file target_flag
         
     say "\033[1;34m[LIPI BUILD]\033[0m " + file_path + " ➔ " + dest
     c_bin = resolve_bin_path("lipc_bin")
-    code = spawn_exec_cmd(c_bin, file_path, dest, target_flag, "")
+    code = spawn_exec_cmd(c_bin, file_path, dest, target_flag, mode_flag)
     if code == 0
         say "\033[1;32m✔ Binary generated successfully: " + dest + "\033[0m"
     else
@@ -500,6 +502,38 @@ fn handle_repl
 
 fn handle_convert file_path to_syntax
     return spawn_exec_cmd(resolve_bin_path("lipiconvert"), file_path, to_syntax, "", "")
+
+// WHY: Launches pure-Lipi Lipi Akhara silicon studio / ELF inspector with PID-isolated execution.
+fn handle_akhara arg1 arg2 arg3
+    akh_bin = resolve_bin_path("lipi_akhara")
+    return spawn_exec_cmd(akh_bin, arg1, arg2, arg3, "")
+
+// WHY: Compiles benchmarks/sovereign_truth_bench.lp into PID-isolated /tmp binary so running CLI never clobbers workspace artifacts.
+fn handle_bench flag
+    l_root = lipi_tool_get_root()
+    bench_src = "benchmarks/sovereign_truth_bench.lp"
+    if len(l_root) > 0 and l_root != "."
+        cand = l_root + "/benchmarks/sovereign_truth_bench.lp"
+        if syscall(21, cand, 0, 0, 0, 0, 0) == 0
+            bench_src = cand
+    if syscall(21, bench_src, 0, 0, 0, 0, 0) != 0
+        say "❌ Benchmark suite not found: " + bench_src
+        return 1
+
+    c_bin = resolve_bin_path("lipc_bin")
+    if syscall(21, c_bin, 0, 0, 0, 0, 0) != 0
+        c_bin = resolve_bin_path("lipc")
+
+    cur_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+    tmp_bin = "/tmp/lipi_bench_" + str(cur_pid) + ".bin"
+    c_code = spawn_exec_cmd(c_bin, bench_src, tmp_bin, "", "")
+    if c_code != 0
+        syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+        return c_code
+
+    r_code = spawn_exec_cmd(tmp_bin, flag, "", "", "")
+    syscall(87, tmp_bin, 0, 0, 0, 0, 0)
+    return r_code
 
 fn handle_os action
     if action == "boot"
@@ -984,11 +1018,12 @@ fn main
 
     if cmd == "build"
         if argc < 3
-            say "Usage: lipi build <file.lp> [-o <out>] [--target=<arch>]"
+            say "Usage: lipi build <file.lp> [-o <out>] [--target=<arch>] [--kavach]"
             return 1
         src_file = get(args, 2)
         out_f = ""
         target_f = ""
+        mode_f = ""
         ai = 3
         while ai < argc
             cur = get(args, ai)
@@ -1011,8 +1046,10 @@ fn main
                 target_f = "--shared"
             elif cur == "--ai-opt"
                 target_f = "--ai-opt"
+            elif cur == "--kavach" or cur == "--কবচ" or cur == "--safe" or cur == "--strict-ownership" or cur == "--strict-proof"
+                mode_f = cur
             ai = ai + 1
-        return handle_build(src_file, out_f, target_f)
+        return handle_build(src_file, out_f, target_f, mode_f)
 
     if cmd == "test"
         suite = ""
@@ -1100,6 +1137,22 @@ fn main
         extra2 = ""
         if argc >= 6 extra2 = get(args, 5) end
         return handle_ai(m_path, p_str, extra1, extra2)
+    end
+
+    if cmd == "akhara" or cmd == "play" or cmd == "আখড়া"
+        akh1 = ""
+        akh2 = ""
+        akh3 = ""
+        if argc >= 3 akh1 = get(args, 2) end
+        if argc >= 4 akh2 = get(args, 3) end
+        if argc >= 5 akh3 = get(args, 4) end
+        return handle_akhara(akh1, akh2, akh3)
+    end
+
+    if cmd == "bench" or cmd == "benchmark" or cmd == "বেঞ্চমার্ক"
+        bflag = ""
+        if argc >= 3 bflag = get(args, 2) end
+        return handle_bench(bflag)
     end
 
     say "❌ Unknown command: '" + cmd + "'"

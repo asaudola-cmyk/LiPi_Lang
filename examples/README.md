@@ -80,3 +80,13 @@ Hardware SIMD acceleration, neural networks, GGUF local LLM inference, and WebAs
 | [`07_llm_inference/`](07_llm_inference/) | Local GGUF transformer LLM execution via AVX2 | `bin/lipc examples/07_llm_inference/main.lp /tmp/ex && /tmp/ex` |
 | [`neural_network.lp`](neural_network.lp) | 3-layer neural network trained directly in pure LiPi | `bin/lipc examples/neural_network.lp /tmp/ex && /tmp/ex` |
 | [`matrix_math.lp`](matrix_math.lp) | High-performance AVX2 SIMD matrix multiplication | `bin/lipc examples/matrix_math.lp /tmp/ex && /tmp/ex` |
+
+---
+
+## Tier 5: Flagship Sovereign Showcases (`flagship/`)
+
+| Example | Sovereign Capability | Run |
+|---|---|---|
+| [`01_sovereign_kavach_vault.lp`](flagship/01_sovereign_kavach_vault.lp) | `--kavach` hardware crown (`silicon_*` / `সিলিকন_*`) & inter-procedural move proof | `bin/lipc examples/flagship/01_sovereign_kavach_vault.lp /tmp/ex --kavach && /tmp/ex` |
+| [`02_sovereign_silicon_brain.lp`](flagship/02_sovereign_silicon_brain.lp) | Pure `f64` 2-3-1 MLP learning XOR via analytic backprop (`0% Python / C++`) | `bin/lipc examples/flagship/02_sovereign_silicon_brain.lp /tmp/ex && /tmp/ex` |
+| [`03_omni_six_target_harmony.lp`](flagship/03_omni_six_target_harmony.lp) | Portable bilingual list & slab harmony (`x86_64`, `arm64`, `macos-arm64`, `riscv64`, `windows`, `wasm`) | `bin/lipc examples/flagship/03_omni_six_target_harmony.lp /tmp/ex && /tmp/ex` |

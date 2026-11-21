@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/Compiler-Zero%20C%20%7C%20Zero%20Libc%20%7C%20Zero%20LLVM-blue.svg)](#architecture)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/Silicon-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 245/245 Passing](https://img.shields.io/badge/Tests-245%2F245%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 250/250 Passing](https://img.shields.io/badge/Tests-250%2F250%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](README.bn.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -237,7 +237,7 @@ lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```bash
 lipi test
 ```
-All **245 regression test suites pass (245/245 ✔, 100% green)** across Static-PIE (`ET_DYN` full ASLR + `0 RWE` `W^X`), core language semantics (SSE2 `f64` + NaN-safe comparisons, disambiguated structs, chained compound ops, mutable globals, slab-allocated capturing closures, pattern matching, cross-frame `try`/`catch`/`finally` unwinding), 8-thread `CLONE_VM` + `SYS_futex` joinable concurrency + thread-safe `__alloc`/TLS, RFC 5869/8446 TLS 1.3 + AES-128-CTR + X.509 DER validation, conservative stack-scanning GC, strict `W^X` `.so` (`ctypes` ABI) + DWARF v4 `-g`, cross-platform PE32+ (12-API + `argv()`)/Mach-O ARM64 16KB/WASM WASI/ARM64/RISC-V backends, and all **11 `aati/*` package test suites**.
+All **250 regression test suites pass (250/250 ✔, 100% green)** across Static-PIE (`ET_DYN` full ASLR + `0 RWE` `W^X`), **Sovereign Kavach (`--kavach`)** compile-time ownership proofs + `silicon_*` / `সিলিকন_*` hardware authority isolation, Direct Silicon hot-loop ALU optimization (`shl/sar/and/or/xor`, inline `==`), core language semantics (SSE2 `f64` + NaN-safe comparisons, disambiguated structs, chained compound ops, mutable globals, slab-allocated capturing closures, pattern matching, cross-frame `try`/`catch`/`finally` unwinding), 8-thread `CLONE_VM` + `SYS_futex` joinable concurrency + thread-safe `__alloc`/TLS, RFC 5869/8446 TLS 1.3 + AES-128-CTR + X.509 DER validation, conservative stack-scanning GC, strict `W^X` `.so` (`ctypes` ABI) + DWARF v4 `-g`, 6-target list & slab parity (PE32+/Mach-O ARM64 16KB/WASM WASI/ARM64/RISC-V VM), `lipi_akhara` studio/ELF inspector, `lipilsp` live diagnostics/document symbols, and all **11 `aati/*` package test suites**.
 
 ---
 
@@ -250,27 +250,31 @@ lipi/
 ├── bin/
 │   ├── lipc             # Sovereign compiler driver (direct ELF64, ARM64, RISC-V, WASM)
 │   ├── lipc_bin         # Native silicon machine code compiler engine
-│   ├── lipi             # Universal CLI driver, runner & REPL evaluator
+│   ├── lipi             # Universal CLI driver, runner, benchmarker & REPL evaluator
+│   ├── lipi_akhara      # Sovereign Silicon Studio & raw ELF64 machine-byte inspector
 │   ├── aati             # Sovereign Ed25519 package manager & bundle builder (legacy alias: lipipkg)
 │   ├── haat             # Sovereign decentralized package registry daemon & hub
 │   ├── lipidbg          # Native hardware stack, register & breakpoint (INT3) debugger
 │   ├── lipirepl         # Live silicon REPL with RDTSC CPU timer & memory hex inspection
 │   ├── lipifmt          # Idiomatic 4-space code formatter
-│   ├── lipilsp          # Standard JSON-RPC 2.0 Language Server Protocol daemon
+│   ├── lipilsp          # Standard JSON-RPC 2.0 Language Server (diagnostics & document symbols)
 │   ├── lipiconvert      # Bilingual syntax converter & legacy migration engine (C/Py/JS/Go ➔ Lipi)
 │   └── lipidoc          # Automated sovereign documentation generator
 ```
 
-- **Universal Driver (`lipi`):** Execute scripts, run tests, update toolchains, and evaluate expressions:
+- **Universal Driver (`lipi`):** Execute scripts, run tests, inspect ELF telemetry, benchmark silicon, and evaluate expressions:
   ```bash
   lipi run examples/01_hello_world/main.lp
   lipi test
+  lipi bench          # Tier-I algebraic fold vs Tier-II runtime-seeded silicon truth benchmark
+  lipi akhara         # Launch Lipi Akhara pure-socket Web Silicon Studio on :8085 (or --inspect <file.lp>)
   lipi update
   lipi version
   ```
-- **Sovereign Compiler (`lipc`):** Compile standalone native ELF64 binaries in ~4 milliseconds:
+- **Sovereign Compiler (`lipc`):** Compile standalone native ELF64 binaries in ~4 milliseconds, or enforce **Sovereign Kavach (`--kavach`)** (`silicon_*` / `সিলিকন_*` hardware crown + inter-procedural ownership proof):
   ```bash
   lipc examples/01_hello_world/main.lp -o build/hello_app
+  lipc examples/flagship/01_sovereign_kavach_vault.lp -o build/vault --kavach
   ```
 - **Interactive REPL (`lipirepl`):** Evaluate expressions and inspect hardware registers in real time:
   ```bash

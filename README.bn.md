@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/সার্বভৌমত্ব-১০০%25%20খাঁটি%20সিলিকন-brightgreen.svg)](#১০০-সার্বভৌম-অবস্থা)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/কম্পাইলার-জিরো%20C%20%7C%20জিরো%20Libc%20%7C%20জিরো%20LLVM-blue.svg)](#আর্কিটেকচার)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/সিলিকন-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 245/245 Passing](https://img.shields.io/badge/টেস্ট-২৪৫%2F২৪৫%20উত্তীর্ণ%20(১০০%25)-brightgreen.svg)](tests/)
+[![Tests: 250/250 Passing](https://img.shields.io/badge/টেস্ট-২৫০%2F২৫০%20উত্তীর্ণ%20(১০০%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/দ্বিভাষিক-বাংলা%20%2B%20English-orange.svg)](README.md)
 [![License: MIT](https://img.shields.io/badge/লাইসেন্স-MIT-green.svg)](LICENSE)
 
@@ -229,7 +229,7 @@ lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```bash
 lipi test
 ```
-সকল **২৪৫টি রিগ্রেশন টেস্ট (২৪৫/২৪৫ ✔, ১০০% সফল)** সফলভাবে উত্তীর্ণ হয়েছে — যার মধ্যে Static-PIE (`ET_DYN` পূর্ণ ASLR + `0 RWE` `W^X`), পূর্ণ SSE2 `f64` ও NaN-নিরাপদ তুলনা, ডিসঅ্যাম্বিগুয়েটেড স্ট্রাক্ট ও কম্পাউন্ড অ্যাসাইনমেন্ট, মিউটেবল গ্লোবাল, স্ল্যাব-ভিত্তিক ক্লোজার, প্যাটর্ন ম্যাচিং, নেস্টেড `try`/`catch`/`finally` আনউইন্ডিং, ৮-থ্রেড `CLONE_VM` + `SYS_futex` জয়েনেবল কনকারেন্সি ও থ্রেড-নিরাপদ অ্যালোকেটর, কনজারভেটিভ জিসি, `W^X` `.so` (`ctypes`) ও `-g` DWARF v4, PE32+/Mach-O ARM64/WASM WASI/ARM64/RISC-V প্যারিটি এবং ১১টি `aati/*` প্যাকেজ টেস্ট স্যুট অন্তর্ভুক্ত।
+সকল **২৫০টি রিগ্রেশন টেস্ট (২৫০/২৫০ ✔, ১০০% সফল)** সফলভাবে উত্তীর্ণ হয়েছে — যার মধ্যে Static-PIE (`ET_DYN` পূর্ণ ASLR + `0 RWE` `W^X`), **সর্বভৌম কবচ (`--kavach` / `--কবচ`)** মালিকানা প্রমাণ ও `silicon_*` / `সিলিকন_*` হার্ডওয়্যার মুকুট সুরক্ষা, সরাসরি সিলিকন হট-লুপ ALU অপটিমাইজার, পূর্ণ SSE2 `f64` ও NaN-নিরাপদ তুলনা, ডিসঅ্যাম্বিগুয়েটেড স্ট্রাক্ট ও কম্পাউন্ড অ্যাসাইনমেন্ট, মিউটেবল গ্লোবাল, স্ল্যাব-ভিত্তিক ক্লোজার, প্যাটর্ন ম্যাচিং, নেস্টেড `try`/`catch`/`finally` আনউইন্ডিং, ৮-থ্রেড `CLONE_VM` + `SYS_futex` জয়েনেবল কনকারেন্সি ও থ্রেড-নিরাপদ অ্যালোকেটর, কনজারভেটিভ জিসি, `W^X` `.so` (`ctypes`) ও `-g` DWARF v4, PE32+/Mach-O ARM64 16KB/WASM WASI/ARM64/RISC-V প্যারিটি, `lipi_akhara` (লিপি আখড়া) ও ১১টি `aati/*` প্যাকেজ টেস্ট স্যুট অন্তর্ভুক্ত।
 
 ---
 
@@ -242,27 +242,31 @@ lipi/
 ├── bin/
 │   ├── lipc             # সার্বভৌম কম্পাইলার (ELF64, ARM64, RISC-V, WASM)
 │   ├── lipc_bin         # নেটিভ সিলিকন মেশিন কোড ইঞ্জিন
-│   ├── lipi             # সার্বজনীন সিএলআই ড্রাইভার, রানার ও আরইপিএল
+│   ├── lipi             # সার্বজনীন সিএলআই ড্রাইভার, বেঞ্চমার্ক, রানার ও আরইপিএল
+│   ├── lipi_akhara      # লিপি আখড়া — সার্বভৌম সিলিকন স্টুডিও ও ELF64 মেশিন-বাইট পরিদর্শক
 │   ├── aati             # আঁটি (Aati) Ed25519 প্যাকেজ ম্যানেজার ও ক্রিপ্টোগ্রাফিক বান্ডলার
 │   ├── haat             # হাট (Haat) ডিসেন্ট্রালাইজড প্যাকেজ রেজিস্ট্রি হাব
 │   ├── lipidbg          # হার্ডওয়্যার রেজিস্টার ও ব্রেকপয়েন্ট ডিবাগার
 │   ├── lipirepl         # লাইভ আরইপিএল ও মেমোরি হেক্স পরিদর্শক
 │   ├── lipifmt          # স্বকীয় ৪-স্পেস কোড ফরম্যাটার
-│   ├── lipilsp          # স্ট্যান্ডার্ড JSON-RPC ২.০ এলএসপি সার্ভার
+│   ├── lipilsp          # স্ট্যান্ডার্ড JSON-RPC ২.০ এলএসপি সার্ভার (লাইভ ডায়াগনস্টিকস ও সিম্বল)
 │   ├── lipiconvert      # কোড রূপান্তরকারী ইঞ্জিন (C/Py/JS/Go ➔ লিপি)
 │   └── lipidoc          # স্বয়ংক্রিয় ডকুমেন্টেশন জেনারেটর
 ```
 
-- **সার্বজনীন ড্রাইভার (`lipi`):** কোড চালানো, টেস্ট রান করা এবং টুলচেন আপডেট করা:
+- **সার্বজনীন ড্রাইভার (`lipi`):** কোড চালানো, টেস্ট রান, বেঞ্চমার্কিং ও লিপি আখড়া চালানো:
   ```bash
   lipi run examples/01_hello_world/main.lp
   lipi test
+  lipi bench          # Tier-I বীজগাণিতিক ফোল্ডিং বনাম Tier-II রানটাইম-সিডেড সিলিকন বেঞ্চমার্ক
+  lipi akhara         # পিওর-সকেট ওয়েব সিলিকন স্টুডিও (:8085) অথবা --inspect <file.lp>
   lipi update
   lipi version
   ```
-- **সার্বভৌম কম্পাইলার (`lipc`):** মাত্র ৪ মিলিসেকেন্ডে সরাসরি মেশিন কোড তৈরি:
+- **সার্বভৌম কম্পাইলার (`lipc`):** মাত্র ৪ মিলিসেকেন্ডে সরাসরি মেশিন কোড তৈরি বা **সর্বভৌম কবচ (`--kavach` / `--কবচ`)** (`silicon_*` / `সিলিকন_*` হার্ডওয়্যার মুকুট ও মেমোরি প্রমাণ) সক্রিয় করুন:
   ```bash
   lipc examples/01_hello_world/main.lp -o build/hello_app
+  lipc examples/flagship/01_sovereign_kavach_vault.lp -o build/vault --kavach
   ```
 - **ইন্টারেক্টিভ আরইপিএল (`lipirepl`):** সরাসরি মেমোরি ও হার্ডওয়্যার রেজিস্টার পরীক্ষা:
   ```bash
