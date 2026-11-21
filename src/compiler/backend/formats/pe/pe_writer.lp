@@ -216,24 +216,33 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 @end
 
 // ============================================================================
-// 5. WINDOWS X64 ENTRY BOOTSTRAP STUB + WIN32 KERNEL32 TRAMPOLINES (1024 BYTES)
+// 5. WINDOWS X64 ENTRY BOOTSTRAP STUB + WIN32 KERNEL32 TRAMPOLINES (1920 BYTES)
 // ============================================================================
 
+@fn PE_WIN64_STUB_SIZE()
+  return 1920
+@end
+
+@fn pe_emit_jmp_to(stub, target_off)
+  // WHY: Emits a 5-byte relative jmp to a fixed slot offset inside the PE Win64 stub.
+  rel = target_off - (stub.len() + 5)
+  rb = pe_pack_u32(rel)
+  stub = stub.push(233)
+  stub = stub.push(rb[0]) stub = stub.push(rb[1]) stub = stub.push(rb[2]) stub = stub.push(rb[3])
+  return stub
+@end
+
 @fn pe_emit_win64_save_regs(stub, extra_sub)
-  // WHY: Preserves Win64 volatile caller registers (rdi,rsi,rdx,rcx,r8..r11) and aligns rsp to 16B.
-  stub = stub.push(87) stub = stub.push(86) stub = stub.push(82) stub = stub.push(81)
-  stub = stub.push(65) stub = stub.push(80) stub = stub.push(65) stub = stub.push(81)
-  stub = stub.push(65) stub = stub.push(82) stub = stub.push(65) stub = stub.push(83)
-  stub = stub.push(72) stub = stub.push(131) stub = stub.push(236) stub = stub.push(extra_sub)
+  // WHY: Preserves rbp and Win64 volatile registers (rdi,rsi,rdx,rcx,r8..r11) and dynamically
+  // enforces strict 16-byte Win64 stack alignment before any KERNEL32.dll IAT call.
+  // After mov rbp, rsp: [rbp+40] holds the original caller rdx.
+  stub = pe_concat(stub, [85, 87, 86, 82, 81, 65, 80, 65, 81, 65, 82, 65, 83, 72, 137, 229, 72, 131, 228, 240, 72, 131, 236, extra_sub])
   return stub
 @end
 
 @fn pe_emit_win64_restore_ret(stub, extra_sub)
-  stub = stub.push(72) stub = stub.push(131) stub = stub.push(196) stub = stub.push(extra_sub)
-  stub = stub.push(65) stub = stub.push(91) stub = stub.push(65) stub = stub.push(90)
-  stub = stub.push(65) stub = stub.push(89) stub = stub.push(65) stub = stub.push(88)
-  stub = stub.push(89) stub = stub.push(90) stub = stub.push(94) stub = stub.push(95)
-  stub = stub.push(195)
+  // WHY: Restores rsp from rbp and pops all saved registers identically regardless of pre-call alignment.
+  stub = pe_concat(stub, [72, 137, 236, 65, 91, 65, 90, 65, 89, 65, 88, 89, 90, 94, 95, 93, 195])
   return stub
 @end
 
@@ -246,34 +255,41 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 @end
 
 @fn pe_build_start_stub_with_data(main_entry_offset, exit_process_iat_rva, text_rva, win_rw_vaddr)
-  // WHY: Windows x64 entry stub + 12 native KERNEL32.dll Win64 ABI trampolines (exact 1152 bytes):
-  //   [0..31]     _start                [32..111]   __win64_write_stdout
-  //   [112..191]  __win64_virtual_alloc [192..271]  __win64_virtual_free (SYS_munmap -> VirtualFree)
-  //   [272..367]  __win64_write_fd      [368..479]  __win64_open_file
-  //   [480..559]  __win64_read_fd       [560..607]  __win64_close_fd
-  //   [608..687]  __win64_clock_gettime [688..751]  __win64_lseek_fd
-  //   [752..815]  __win64_access_file   [816..1023] __win64_init_cmdline
-  //   [1024..1151] __win64_dyn_syscall
+  // WHY: Windows x64 entry stub + 12 native KERNEL32.dll Win64 ABI trampolines (exact 1920 bytes):
+  //   [0..63]      _start (+14 = ExitProcess exit point)
+  //   [64..191]    __win64_write_stdout
+  //   [192..319]   __win64_virtual_alloc
+  //   [320..447]   __win64_virtual_free
+  //   [448..575]   __win64_write_fd
+  //   [576..767]   __win64_open_file
+  //   [768..895]   __win64_read_fd
+  //   [896..1023]  __win64_close_fd
+  //   [1024..1151] __win64_clock_gettime
+  //   [1152..1279] __win64_lseek_fd
+  //   [1280..1407] __win64_access_file
+  //   [1408..1663] __win64_init_cmdline
+  //   [1664..1919] __win64_dyn_syscall
+  stub_total = PE_WIN64_STUB_SIZE()
   stub = []
-  // 1. [0..31] _start
+  // 1. [0..63] _start
   stub = stub.push(72) stub = stub.push(131) stub = stub.push(236) stub = stub.push(40)
-  cmd_rel = 816 - 9
+  cmd_rel = 1408 - 9
   cmd_bytes = pe_pack_u32(cmd_rel)
   stub = stub.push(232)
   stub = stub.push(cmd_bytes[0]) stub = stub.push(cmd_bytes[1]) stub = stub.push(cmd_bytes[2]) stub = stub.push(cmd_bytes[3])
-  rel32 = (1152 + main_entry_offset) - 14
+  rel32 = (stub_total + main_entry_offset) - 14
   cd = pe_pack_u32(rel32)
   stub = stub.push(232)
   stub = stub.push(cd[0]) stub = stub.push(cd[1]) stub = stub.push(cd[2]) stub = stub.push(cd[3])
-  // ExitProcess jump target at _start+14
-  stub = stub.push(137) stub = stub.push(193)
+  // ExitProcess jump target at exact _start+14
+  stub = pe_concat(stub, [137, 193, 72, 131, 228, 240, 72, 131, 236, 32])
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva, text_rva)
-  @while stub.len() < 32
+  @while stub.len() < 64
     stub = stub.push(144)
   @end
 
-  // 2. [32..111] __win64_write_stdout (71 bytes, saves/restores caller volatile regs)
-  stub = pe_emit_win64_save_regs(stub, 56)
+  // 2. [64..191] __win64_write_stdout (rdi=len, rsi=buf)
+  stub = pe_emit_win64_save_regs(stub, 64)
   stub = stub.push(185) stub = stub.push(245) stub = stub.push(255) stub = stub.push(255) stub = stub.push(255)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 8, text_rva)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(193)
@@ -283,41 +299,42 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   stub = stub.push(49) stub = stub.push(192)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(68) stub = stub.push(36) stub = stub.push(32)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 16, text_rva)
-  stub = pe_emit_win64_restore_ret(stub, 56)
-  @while stub.len() < 112
-    stub = stub.push(144)
-  @end
-
-  // 3. [112..191] __win64_virtual_alloc (min 4KB, full >512MB VirtualAlloc width, returns -12 ENOMEM on NULL)
-  stub = pe_concat(stub, [81, 82, 65, 80, 65, 81, 65, 82, 65, 83, 72, 131, 236, 40, 49, 201, 72, 137, 242, 72, 129, 250, 0, 16, 0, 0, 115, 5, 186, 0, 16, 0, 0, 65, 184, 0, 48, 0, 0, 65, 185, 4, 0, 0, 0])
-  stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 24, text_rva)
-  stub = pe_concat(stub, [72, 133, 192, 117, 7, 72, 199, 192, 244, 255, 255, 255])
-  stub = pe_concat(stub, [72, 131, 196, 40, 65, 91, 65, 90, 65, 89, 65, 88, 90, 89, 195])
+  stub = pe_emit_win64_restore_ret(stub, 64)
   @while stub.len() < 192
     stub = stub.push(144)
   @end
 
-  // 3b. [192..271] __win64_virtual_free (rdi=addr -> VirtualFree(addr, 0, MEM_RELEASE=0x8000))
-  stub = pe_emit_win64_save_regs(stub, 40)
-  stub = pe_concat(stub, [72, 137, 249, 49, 210, 65, 184, 0, 128, 0, 0])
-  stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 80, text_rva)
-  stub = pe_concat(stub, [133, 192, 116, 4, 49, 192, 235, 7, 72, 199, 192, 255, 255, 255, 255])
-  stub = pe_emit_win64_restore_ret(stub, 40)
-  @while stub.len() < 272
+  // 3. [192..319] __win64_virtual_alloc (clamps [4KB..256MB] for safe Windows pagefile commit, returns -12 ENOMEM on NULL)
+  stub = pe_emit_win64_save_regs(stub, 48)
+  stub = pe_concat(stub, [49, 201, 72, 137, 242, 72, 129, 250, 0, 16, 0, 0, 115, 5, 186, 0, 16, 0, 0, 184, 0, 0, 0, 16, 72, 57, 194, 118, 3, 72, 137, 194, 65, 184, 0, 48, 0, 0, 65, 185, 4, 0, 0, 0])
+  stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 24, text_rva)
+  stub = pe_concat(stub, [72, 133, 192, 117, 7, 72, 199, 192, 244, 255, 255, 255])
+  stub = pe_emit_win64_restore_ret(stub, 48)
+  @while stub.len() < 320
     stub = stub.push(144)
   @end
 
-  // 4. [272..367] __win64_write_fd (rdi=fd/HANDLE, rsi=buf, rdx=len)
-  stub = pe_emit_win64_save_regs(stub, 56)
+  // 3b. [320..447] __win64_virtual_free (rdi=addr -> VirtualFree(addr, 0, MEM_RELEASE=0x8000))
+  stub = pe_emit_win64_save_regs(stub, 48)
+  stub = pe_concat(stub, [72, 137, 249, 49, 210, 65, 184, 0, 128, 0, 0])
+  stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 80, text_rva)
+  stub = pe_concat(stub, [133, 192, 116, 4, 49, 192, 235, 7, 72, 199, 192, 255, 255, 255, 255])
+  stub = pe_emit_win64_restore_ret(stub, 48)
+  @while stub.len() < 448
+    stub = stub.push(144)
+  @end
+
+  // 4. [448..575] __win64_write_fd (rdi=fd/HANDLE, rsi=buf, rdx=len)
+  stub = pe_emit_win64_save_regs(stub, 64)
   stub = stub.push(72) stub = stub.push(131) stub = stub.push(255) stub = stub.push(2)
-  stub = stub.push(119) stub = stub.push(14)
+  stub = stub.push(119) stub = stub.push(13)
   stub = stub.push(137) stub = stub.push(215)
-  wfd_rel = pe_pack_u32(32 - (stub.len() + 5))
+  wfd_rel = pe_pack_u32(64 - (stub.len() + 5))
   stub = stub.push(232)
   stub = stub.push(wfd_rel[0]) stub = stub.push(wfd_rel[1]) stub = stub.push(wfd_rel[2]) stub = stub.push(wfd_rel[3])
-  stub = stub.push(72) stub = stub.push(139) stub = stub.push(68) stub = stub.push(36) stub = stub.push(96)
+  stub = stub.push(72) stub = stub.push(139) stub = stub.push(69) stub = stub.push(40)
   stub = stub.push(235) stub = stub.push(35)
-  // file handle WriteFile path
+  // file handle WriteFile path (35 bytes)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(249)
   stub = stub.push(65) stub = stub.push(137) stub = stub.push(208)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(242)
@@ -327,22 +344,22 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   stub = stub.push(137) stub = stub.push(68) stub = stub.push(36) stub = stub.push(40)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 16, text_rva)
   stub = stub.push(139) stub = stub.push(68) stub = stub.push(36) stub = stub.push(40)
-  stub = pe_emit_win64_restore_ret(stub, 56)
-  @while stub.len() < 368
+  stub = pe_emit_win64_restore_ret(stub, 64)
+  @while stub.len() < 576
     stub = stub.push(144)
   @end
 
-  // 5. [368..479] __win64_open_file (rdi=path, rsi=flags, rdx=mode) -> CreateFileA (O_RDONLY/WRONLY/RDWR/CREAT/TRUNC/APPEND)
-  stub = pe_emit_win64_save_regs(stub, 56)
+  // 5. [576..767] __win64_open_file (rdi=path, rsi=flags, rdx=mode) -> CreateFileA (O_RDONLY/WRONLY/RDWR/CREAT/TRUNC/APPEND)
+  stub = pe_emit_win64_save_regs(stub, 64)
   stub = pe_concat(stub, [137, 241, 106, 3, 88, 186, 0, 0, 0, 128, 246, 193, 3, 116, 22, 106, 4, 90, 246, 197, 4, 117, 5, 186, 0, 0, 0, 64, 246, 193, 2, 116, 4, 15, 186, 234, 31, 246, 193, 64, 116, 9, 176, 4, 246, 197, 2, 116, 2, 176, 2, 72, 137, 249, 106, 3, 65, 88, 69, 49, 201, 137, 68, 36, 32, 176, 128, 137, 68, 36, 40, 76, 137, 76, 36, 48])
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 32, text_rva)
-  stub = pe_emit_win64_restore_ret(stub, 56)
-  @while stub.len() < 480
+  stub = pe_emit_win64_restore_ret(stub, 64)
+  @while stub.len() < 768
     stub = stub.push(144)
   @end
 
-  // 6. [480..559] __win64_read_fd (rdi=hFile, rsi=buf, rdx=len) -> ReadFile
-  stub = pe_emit_win64_save_regs(stub, 56)
+  // 6. [768..895] __win64_read_fd (rdi=hFile, rsi=buf, rdx=len) -> ReadFile
+  stub = pe_emit_win64_save_regs(stub, 64)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(249)
   stub = stub.push(65) stub = stub.push(137) stub = stub.push(208)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(242)
@@ -352,23 +369,23 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   stub = stub.push(137) stub = stub.push(68) stub = stub.push(36) stub = stub.push(40)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 40, text_rva)
   stub = stub.push(139) stub = stub.push(68) stub = stub.push(36) stub = stub.push(40)
-  stub = pe_emit_win64_restore_ret(stub, 56)
-  @while stub.len() < 560
+  stub = pe_emit_win64_restore_ret(stub, 64)
+  @while stub.len() < 896
     stub = stub.push(144)
   @end
 
-  // 7. [560..607] __win64_close_fd (rdi=hFile) -> CloseHandle
-  stub = pe_emit_win64_save_regs(stub, 40)
+  // 7. [896..1023] __win64_close_fd (rdi=hFile) -> CloseHandle
+  stub = pe_emit_win64_save_regs(stub, 48)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(249)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 48, text_rva)
   stub = stub.push(49) stub = stub.push(192)
-  stub = pe_emit_win64_restore_ret(stub, 40)
-  @while stub.len() < 608
+  stub = pe_emit_win64_restore_ret(stub, 48)
+  @while stub.len() < 1024
     stub = stub.push(144)
   @end
 
-  // 8. [608..687] __win64_clock_gettime (rsi=&timespec) -> GetTickCount64
-  stub = pe_emit_win64_save_regs(stub, 40)
+  // 8. [1024..1151] __win64_clock_gettime (rsi=&timespec) -> GetTickCount64
+  stub = pe_emit_win64_save_regs(stub, 48)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 56, text_rva)
   stub = stub.push(49) stub = stub.push(210)
   stub = stub.push(185) stub = stub.push(232) stub = stub.push(3) stub = stub.push(0) stub = stub.push(0)
@@ -377,13 +394,13 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   stub = stub.push(72) stub = stub.push(105) stub = stub.push(210) stub = stub.push(64) stub = stub.push(66) stub = stub.push(15) stub = stub.push(0)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(86) stub = stub.push(8)
   stub = stub.push(49) stub = stub.push(192)
-  stub = pe_emit_win64_restore_ret(stub, 40)
-  @while stub.len() < 688
+  stub = pe_emit_win64_restore_ret(stub, 48)
+  @while stub.len() < 1152
     stub = stub.push(144)
   @end
 
-  // 9. [688..751] __win64_lseek_fd (rdi=hFile, rsi=off, rdx=whence) -> SetFilePointer
-  stub = pe_emit_win64_save_regs(stub, 40)
+  // 9. [1152..1279] __win64_lseek_fd (rdi=hFile, rsi=off, rdx=whence) -> SetFilePointer
+  stub = pe_emit_win64_save_regs(stub, 48)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(249)
   stub = stub.push(65) stub = stub.push(137) stub = stub.push(209)
   stub = stub.push(137) stub = stub.push(242)
@@ -392,38 +409,60 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   stub = stub.push(131) stub = stub.push(248) stub = stub.push(255)
   stub = stub.push(117) stub = stub.push(4)
   stub = stub.push(72) stub = stub.push(131) stub = stub.push(200) stub = stub.push(255)
-  stub = pe_emit_win64_restore_ret(stub, 40)
-  @while stub.len() < 752
+  stub = pe_emit_win64_restore_ret(stub, 48)
+  @while stub.len() < 1280
     stub = stub.push(144)
   @end
 
-  // 10. [752..815] __win64_access_file (rdi=path) -> GetFileAttributesA
-  stub = pe_emit_win64_save_regs(stub, 40)
+  // 10. [1280..1407] __win64_access_file (rdi=path) -> GetFileAttributesA
+  stub = pe_emit_win64_save_regs(stub, 48)
   stub = stub.push(72) stub = stub.push(137) stub = stub.push(249)
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 72, text_rva)
   stub = stub.push(131) stub = stub.push(248) stub = stub.push(255)
   stub = stub.push(116) stub = stub.push(2)
   stub = stub.push(49) stub = stub.push(192)
-  stub = pe_emit_win64_restore_ret(stub, 40)
-  @while stub.len() < 816
+  stub = pe_emit_win64_restore_ret(stub, 48)
+  @while stub.len() < 1408
     stub = stub.push(144)
   @end
 
-  // 11. [816..1023] __win64_init_cmdline (GetCommandLineA -> [win_rw_vaddr]=argc, [win_rw_vaddr+8]=argv)
-  stub = pe_concat(stub, [83, 65, 84, 65, 85, 72, 131, 236, 32, 49, 201, 186, 0, 16, 0, 0, 65, 184, 0, 48, 0, 0, 65, 185, 4, 0, 0, 0])
+  // 11. [1408..1663] __win64_init_cmdline (GetCommandLineA -> [win_rw_vaddr]=argc, [win_rw_vaddr+8]=argv)
+  // Note: 3 pushes (24B) + sub rsp, 40 = 64B preserves 16-byte Win64 stack alignment before IAT calls.
+  stub = pe_concat(stub, [83, 65, 84, 65, 85, 72, 131, 236, 40, 49, 201, 186, 0, 16, 0, 0, 65, 184, 0, 48, 0, 0, 65, 185, 4, 0, 0, 0])
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 24, text_rva)
   stub = pe_concat(stub, [72, 133, 192, 15, 132, 138, 0, 0, 0, 72, 137, 195])
   stub = pe_emit_win64_iat_call(stub, exit_process_iat_rva + 88, text_rva)
   stub = pe_concat(stub, [72, 133, 192, 116, 124, 73, 137, 196, 76, 141, 171, 0, 2, 0, 0, 49, 201, 65, 138, 4, 36, 132, 192, 116, 82, 60, 32, 116, 6, 60, 9, 116, 2, 235, 5, 73, 255, 196, 235, 233, 76, 137, 44, 203, 72, 255, 193, 49, 210, 65, 138, 4, 36, 132, 192, 116, 36, 60, 34, 117, 8, 128, 242, 1, 73, 255, 196, 235, 236, 132, 210, 117, 8, 60, 32, 116, 16, 60, 9, 116, 12, 65, 136, 69, 0, 73, 255, 197, 73, 255, 196, 235, 212, 65, 198, 69, 0, 0, 73, 255, 197, 72, 131, 249, 63, 114, 166, 72, 184])
   stub = pe_concat(stub, pe_pack_u64(win_rw_vaddr))
-  stub = pe_concat(stub, [72, 133, 192, 116, 7, 72, 137, 8, 72, 137, 88, 8, 72, 131, 196, 32, 65, 93, 65, 92, 91, 195])
-  @while stub.len() < 1024
+  stub = pe_concat(stub, [72, 133, 192, 116, 7, 72, 137, 8, 72, 137, 88, 8, 72, 131, 196, 40, 65, 93, 65, 92, 91, 195])
+  @while stub.len() < 1664
     stub = stub.push(144)
   @end
 
-  // 12. [1024..1151] __win64_dyn_syscall (stack: [ret, a2(rsi), a1(rdi), nr(rax)])
-  stub = pe_concat(stub, [89, 94, 95, 88, 81, 131, 248, 1, 116, 60, 131, 248, 0, 116, 50, 131, 248, 2, 116, 55, 131, 248, 3, 116, 55, 131, 248, 8, 116, 55, 131, 248, 9, 116, 55, 131, 248, 11, 116, 55, 131, 248, 21, 116, 55, 131, 248, 60, 116, 60, 61, 228, 0, 0, 0, 116, 48, 72, 199, 192, 218, 255, 255, 255, 195, 233, 154, 253, 255, 255, 233, 197, 252, 255, 255, 233, 32, 253, 255, 255, 233, 219, 253, 255, 255, 233, 86, 254, 255, 255, 233, 17, 252, 255, 255, 233, 92, 252, 255, 255, 233, 135, 254, 255, 255, 233, 242, 253, 255, 255, 137, 248, 233, 153, 251, 255, 255])
-  @while stub.len() < 1152
+  // 12. [1664..1919] __win64_dyn_syscall (stack: [ret, a2(rsi), a1(rdi), nr(rax)])
+  stub = pe_concat(stub, [89, 94, 95, 88, 81])
+  stub = pe_concat(stub, [131, 248, 0, 117, 5])
+  stub = pe_emit_jmp_to(stub, 768)
+  stub = pe_concat(stub, [131, 248, 1, 117, 5])
+  stub = pe_emit_jmp_to(stub, 448)
+  stub = pe_concat(stub, [131, 248, 2, 117, 5])
+  stub = pe_emit_jmp_to(stub, 576)
+  stub = pe_concat(stub, [131, 248, 3, 117, 5])
+  stub = pe_emit_jmp_to(stub, 896)
+  stub = pe_concat(stub, [131, 248, 8, 117, 5])
+  stub = pe_emit_jmp_to(stub, 1152)
+  stub = pe_concat(stub, [131, 248, 9, 117, 5])
+  stub = pe_emit_jmp_to(stub, 192)
+  stub = pe_concat(stub, [131, 248, 11, 117, 5])
+  stub = pe_emit_jmp_to(stub, 320)
+  stub = pe_concat(stub, [131, 248, 21, 117, 5])
+  stub = pe_emit_jmp_to(stub, 1280)
+  stub = pe_concat(stub, [131, 248, 60, 117, 7, 137, 248])
+  stub = pe_emit_jmp_to(stub, 14)
+  stub = pe_concat(stub, [61, 228, 0, 0, 0, 117, 5])
+  stub = pe_emit_jmp_to(stub, 1024)
+  stub = pe_concat(stub, [72, 199, 192, 218, 255, 255, 255, 195])
+  @while stub.len() < stub_total
     stub = stub.push(144)
   @end
 
@@ -467,11 +506,11 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
 
   win_ro_base = image_base + rdata_rva
   win_rw_base = image_base + data_rva
-  stub_sz = 1152
+  stub_sz = PE_WIN64_STUB_SIZE()
 
   idx = 0
   @while idx < n
-    // 1. 27-byte inline Linux SYS_write stdout print sequence -> call __win64_write_stdout (+32)
+    // 1. 27-byte inline Linux SYS_write stdout print sequence -> call __win64_write_stdout (+64)
     @if idx + 26 < n && out[idx] == 184 && out[idx + 1] == 1 && out[idx + 2] == 0 && out[idx + 3] == 0 && out[idx + 4] == 0 && out[idx + 5] == 191 && out[idx + 6] == 1 && out[idx + 10] == 72 && out[idx + 11] == 190 && out[idx + 20] == 186 && out[idx + 25] == 15 && out[idx + 26] == 5
       l0 = out[idx + 21]
       l1 = out[idx + 22]
@@ -498,7 +537,7 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
         list_set(out, idx + 12 + k, vb[k])
         k = k + 1
       @end
-      call_rel = 32 - (stub_sz + idx + 25)
+      call_rel = 64 - (stub_sz + idx + 25)
       cb = pe_pack_u32(call_rel)
       list_set(out, idx + 20, 232)
       list_set(out, idx + 21, cb[0])
@@ -508,12 +547,12 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
       list_set(out, idx + 25, 95)
       list_set(out, idx + 26, 94)
       idx = idx + 27
-    // 2. 18-byte print_float stdout write sequence -> call __win64_write_stdout (+32)
+    // 2. 18-byte print_float stdout write sequence -> call __win64_write_stdout (+64)
     @elif idx + 17 < n && out[idx] == 184 && out[idx + 1] == 1 && out[idx + 2] == 0 && out[idx + 3] == 0 && out[idx + 4] == 0 && out[idx + 5] == 191 && out[idx + 6] == 1 && out[idx + 10] == 76 && out[idx + 11] == 137 && out[idx + 12] == 198 && out[idx + 13] == 76 && out[idx + 14] == 137 && out[idx + 15] == 202 && out[idx + 16] == 15 && out[idx + 17] == 5
       // mov rsi, r8 (3B); mov edi, r9d (3B); call __win64_write_stdout (5B); 7 NOPs
       list_set(out, idx + 0, 76) list_set(out, idx + 1, 137) list_set(out, idx + 2, 198)
       list_set(out, idx + 3, 68) list_set(out, idx + 4, 137) list_set(out, idx + 5, 207)
-      pf_rel = 32 - (stub_sz + idx + 11)
+      pf_rel = 64 - (stub_sz + idx + 11)
       pfb = pe_pack_u32(pf_rel)
       list_set(out, idx + 6, 232)
       list_set(out, idx + 7, pfb[0]) list_set(out, idx + 8, pfb[1]) list_set(out, idx + 9, pfb[2]) list_set(out, idx + 10, pfb[3])
@@ -523,11 +562,11 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
         k = k + 1
       @end
       idx = idx + 18
-    // 3. 15-byte clock_ms SYS_clock_gettime sequence -> call __win64_clock_gettime (+608)
+    // 3. 15-byte clock_ms SYS_clock_gettime sequence -> call __win64_clock_gettime (+1024)
     @elif idx + 14 < n && out[idx] == 72 && out[idx + 1] == 199 && out[idx + 2] == 192 && out[idx + 3] == 228 && out[idx + 4] == 0 && out[idx + 13] == 15 && out[idx + 14] == 5
       // mov rsi, rsp (3B); call __win64_clock_gettime (5B); 7 NOPs
       list_set(out, idx + 0, 72) list_set(out, idx + 1, 137) list_set(out, idx + 2, 230)
-      clk_rel = 608 - (stub_sz + idx + 8)
+      clk_rel = 1024 - (stub_sz + idx + 8)
       clkb = pe_pack_u32(clk_rel)
       list_set(out, idx + 3, 232)
       list_set(out, idx + 4, clkb[0]) list_set(out, idx + 5, clkb[1]) list_set(out, idx + 6, clkb[2]) list_set(out, idx + 7, clkb[3])
@@ -559,14 +598,14 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
     @elif idx + 8 < n && out[idx] == 72 && out[idx + 1] == 199 && out[idx + 2] == 192 && out[idx + 4] == 0 && out[idx + 5] == 0 && out[idx + 6] == 0 && out[idx + 7] == 15 && out[idx + 8] == 5
       nr9 = out[idx + 3]
       w9_target = 0 - 1
-      @if nr9 == 0 w9_target = 480 @end
-      @if nr9 == 1 w9_target = 272 @end
-      @if nr9 == 2 w9_target = 368 @end
-      @if nr9 == 3 w9_target = 560 @end
-      @if nr9 == 8 w9_target = 688 @end
-      @if nr9 == 9 w9_target = 112 @end
-      @if nr9 == 11 w9_target = 192 @end
-      @if nr9 == 21 w9_target = 752 @end
+      @if nr9 == 0 w9_target = 768 @end
+      @if nr9 == 1 w9_target = 448 @end
+      @if nr9 == 2 w9_target = 576 @end
+      @if nr9 == 3 w9_target = 896 @end
+      @if nr9 == 8 w9_target = 1152 @end
+      @if nr9 == 9 w9_target = 192 @end
+      @if nr9 == 11 w9_target = 320 @end
+      @if nr9 == 21 w9_target = 1280 @end
       @if w9_target >= 0
         w9_rel = w9_target - (stub_sz + idx + 5)
         w9b = pe_pack_u32(w9_rel)
@@ -584,14 +623,14 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
     @elif idx + 6 < n && out[idx] == 184 && out[idx + 2] == 0 && out[idx + 3] == 0 && out[idx + 4] == 0 && out[idx + 5] == 15 && out[idx + 6] == 5
       nr7 = out[idx + 1]
       w7_target = 0 - 1
-      @if nr7 == 0 w7_target = 480 @end
-      @if nr7 == 1 w7_target = 272 @end
-      @if nr7 == 2 w7_target = 368 @end
-      @if nr7 == 3 w7_target = 560 @end
-      @if nr7 == 8 w7_target = 688 @end
-      @if nr7 == 9 w7_target = 112 @end
-      @if nr7 == 11 w7_target = 192 @end
-      @if nr7 == 21 w7_target = 752 @end
+      @if nr7 == 0 w7_target = 768 @end
+      @if nr7 == 1 w7_target = 448 @end
+      @if nr7 == 2 w7_target = 576 @end
+      @if nr7 == 3 w7_target = 896 @end
+      @if nr7 == 8 w7_target = 1152 @end
+      @if nr7 == 9 w7_target = 192 @end
+      @if nr7 == 11 w7_target = 320 @end
+      @if nr7 == 21 w7_target = 1280 @end
       @if w7_target >= 0
         w7_rel = w7_target - (stub_sz + idx + 5)
         w7b = pe_pack_u32(w7_rel)
@@ -614,9 +653,9 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
         list_set(out, idx + 3, 218) list_set(out, idx + 4, 255) list_set(out, idx + 5, 255) list_set(out, idx + 6, 255)
       @end
       idx = idx + 7
-    // 7. Dynamic 5-byte syscall sequence: pop rsi; pop rdi; pop rax; syscall (5E 5F 58 0F 05)
+    // 7. Dynamic 5-byte syscall sequence: pop rsi; pop rdi; pop rax; syscall (5E 5F 58 0F 05) -> __win64_dyn_syscall (+1664)
     @elif idx + 4 < n && out[idx] == 94 && out[idx + 1] == 95 && out[idx + 2] == 88 && out[idx + 3] == 15 && out[idx + 4] == 5
-      ds_rel = 1024 - (stub_sz + idx + 5)
+      ds_rel = 1664 - (stub_sz + idx + 5)
       dsb = pe_pack_u32(ds_rel)
       list_set(out, idx + 0, 232)
       list_set(out, idx + 1, dsb[0])
@@ -670,8 +709,8 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   size_of_headers = pe_align_to(raw_headers_size, file_align)
 
   // 2. Compute Memory Layout & RVAs
-  // Section 1: .text (1024-byte Win64 stub & trampolines + User code)
-  stub_len = 1024
+  // Section 1: .text (1920-byte Win64 stub & trampolines + User code)
+  stub_len = PE_WIN64_STUB_SIZE()
   user_code = code_bytes
   @if user_code.len() == 0
     user_code = [72, 49, 192, 195] // xor rax, rax; ret
