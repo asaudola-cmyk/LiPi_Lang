@@ -1,7 +1,7 @@
 {
   "name": "lipi-language",
-  "displayName": "Lipi Sovereign Programming Language",
-  "description": "Official Language Support for Lipi (Bilingual English & Bengali, Direct Silicon Compiler)",
+  "displayName": "Lipi Programming Language",
+  "description": "Language support for Lipi (bilingual English and Bengali native systems language)",
   "version": "1.0.0",
   "publisher": "lipi-lang",
   "author": {
@@ -95,12 +95,12 @@
       },
       {
         "command": "lipi.akhara",
-        "title": "Lipi: Open Sovereign Silicon Studio (Akhara)",
+        "title": "Lipi: Open Binary Inspector (Akhara)",
         "category": "Lipi"
       },
       {
         "command": "lipi.kavachCheck",
-        "title": "Lipi: Verify With Sovereign Kavach (--kavach)",
+        "title": "Lipi: Verify With Kavach (--kavach)",
         "category": "Lipi"
       }
     ],

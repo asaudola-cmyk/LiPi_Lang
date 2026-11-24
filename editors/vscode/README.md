@@ -1,19 +1,28 @@
-# 📜 লিপি (Lipi) — VS Code অফিসিয়াল এক্সটেনশন
+# Lipi VS Code Extension
 
-লিপি প্রোগ্রামিং ভাষা (`.lp` / `.lipi`)-র জন্য পূর্ণাঙ্গ দ্বিভাষিক সিনট্যাক্স হাইলাইটিং, কোড ফরম্যাটিং ও ব্র্যাকেট ম্যাচিং এক্সটেনশন।
+Syntax highlighting, code snippets, file icons, and Language Server (`lipilsp`) integration for `.lp`, `.lipi`, and `.লিপি` files.
 
-## ✨ প্রধান সুবিধাসমূহ:
-1. **বাংলা ও ইংরেজি দ্বিভাষিক ব্যাকরণ হাইলাইটিং:**
-   - নিয়ন্ত্রণ শব্দসমূহ: `যদি`, `নাহলে`, `যতক্ষণ`, `প্রতিটি`, `সহযোগ`, `অপেক্ষা`, ইত্যাদি।
-   - ডিক্লেয়ারেশন: `ধরি`, `কাজ`, `গঠন`, `নতুন`, `আমদানি`।
-2. **বাংলা ইউনিকোড সংখ্যা স্বীকৃতি:** `০, ১, ২, ৩, ৪, ৫, ৬, ৭, ৮, ৯` স্বয়ংক্রিয়ভাবে নিউমেরিক কনস্ট্যান্ট হিসেবে হাইলাইট হয়।
-3. **ব্র্যাকেট ও কোটেশন অটো-ক্লোজিং:** `{ }`, `( )`, `[ ]`, `" "`, `' '`।
+## Features
 
-## 🚀 ইনস্টলেশন নির্দেশিকা:
-লিপির এই এক্সটেনশনটি সরাসরি আপনার লোকাল VS Code এক্সটেনশন ডিরেক্টরিতে সিমলিঙ্ক বা কপি করে নিন:
+- Bilingual syntax highlighting for English, Bengali, and `@`-directive Lipi syntax
+- Bengali Unicode numeral highlighting (`০`–`৯`)
+- Bracket matching, auto-closing pairs, and language snippets
+- Integration with `bin/lipilsp` (LSP) and `bin/lipifmt` (formatter)
+
+## Installation
+
+### From Packaged VSIX
 
 ```bash
-mkdir -p ~/.vscode/extensions/lipi-lang
-cp -r editors/vscode-lipi/* ~/.vscode/extensions/lipi-lang/
+make
+code --install-extension dist/lipi-language-1.0.0.vsix
 ```
-অথবা VS Code রিলোড করুন (`Ctrl+Shift+P` -> `Developer: Reload Window`)।
+
+### Manual Local Install
+
+```bash
+mkdir -p ~/.vscode/extensions/lipi-language-1.0.0
+cp -r editors/vscode/* ~/.vscode/extensions/lipi-language-1.0.0/
+```
+
+Reload VS Code (`Ctrl+Shift+P` → `Developer: Reload Window`).

@@ -1,5 +1,5 @@
 ﻿# =============================================================================
-# 👑 Lipi Programming Language — Windows PowerShell Sovereign Installer
+# Lipi Programming Language — Windows PowerShell Installer
 # GitHub: https://github.com/asaudola-cmyk/LiPi_Lang
 # Usage:  irm https://raw.githubusercontent.com/asaudola-cmyk/LiPi_Lang/main/install.ps1 | iex
 # =============================================================================
@@ -44,8 +44,8 @@ Write-Host "  ██║     ██║██████╔╝██║" -Foregro
 Write-Host "  ██║     ██║██╔═══╝ ██║" -ForegroundColor Cyan
 Write-Host "  ███████╗██║██║     ██║" -ForegroundColor Cyan
 Write-Host "  ╚══════╝╚═╝╚═╝     ╚═╝" -ForegroundColor Cyan
-Write-Host "  Lipi Programming Language — First 1.0.0 (Windows Sovereign Setup)" -ForegroundColor Yellow
-Write-Host "  Autonomous Bilingual Systems Programming Language (0% C, 0% Libc, 0% LLVM)`n"
+Write-Host "  Lipi Programming Language — 1.0.0 (Windows Setup)" -ForegroundColor Yellow
+Write-Host "  Self-hosted bilingual systems programming language (zero C, libc, or LLVM)`n"
 
 # 1. Verify Architecture
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture

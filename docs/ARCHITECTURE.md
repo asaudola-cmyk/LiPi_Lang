@@ -1,414 +1,85 @@
-# 🏛️ Lipi First 1.0.0 Sovereign Architecture Specification
+# Lipi Architecture
 
-## Abstract
-The **Lipi Sovereign Programming Language** is an autonomous, bilingual systems programming language and toolchain engineered for absolute software independence. Lipi compiles high-level, human-readable source code directly into native 64-bit Linux Executable and Linkable Format (ELF64) binaries.
+This document describes the architecture of the Lipi compiler, runtime, memory safety model, cryptography/networking stack, and durable storage subsystems.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       Lipi Sovereign Toolchain Flow                         │
-│                                                                             │
-│   [Bengali Source (.lp)] ──┐                                                │
-│                            ├─► [Bilingual Lexer] ──► [Recursive AST Parser] │
-│   [English Source (.lp)] ──┘                                      │         │
-│                                                                   ▼         │
-│   ┌───────────────────────────────────────────────────────────────────────┐ │
-│   │                         SSA IR & Optimization                         │ │
-│   │   • Constant Folding          • Granlund-Montgomery Strength Reduction│ │
-│   │   • Dead Code Elimination     • 2-Byte Peephole Zero-Init Optimization│ │
-│   └───────────────────────────────────┬───────────────────────────────────┘ │
-│                                       │                                     │
-│                     ┌─────────────────┴─────────────────┐                   │
-│                     ▼                                   ▼                   │
-│      [AMD64 ELF64 Silicon Emitter]        [AArch64 ELF64 Silicon Emitter]   │
-│      • RegAlloc: %r12-%r15, %rdi-%r9      • RegAlloc: X0-X7, X19-X28        │
-│      • Direct Syscall ABI (sys_*)         • Linux AArch64 Syscall ABI (X8)  │
-│      • Multiboot 1 Embedded Kernel        • 64KB Page Alignment             │
-│                     │                                   │                   │
-│                     ▼                                   ▼                   │
-│           [Standalone ELF64]                  [Standalone ELF64]            │
-│         (0% C / 0% GCC / 0% Libc)           (0% C / 0% GCC / 0% Libc)       │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+## 1. Self-Hosting Compiler Pipeline
 
-The Lipi toolchain operates with **Zero Foreign Dependencies**:
-- **0% C Runtime (`libc`):** Does not link against `glibc`, `musl`, or any external C standard library.
-- **0% Compiler Infrastructure (`gcc`, `clang`, `llvm`):** Machine instructions are synthesized byte-by-byte in memory.
-- **0% External Assembler or Linker (`as`, `ld`, `lld`):** ELF64 file headers, program headers, and relocation tables are written directly to disk.
-- **0% Virtual Machine or Interpreter Overhead:** Produces native silicon machine code executed directly by the CPU.
+Lipi compiles source files directly to native machine code without GCC, Clang, LLVM, or `libc`. The compiler resides under `src/compiler/` and is built through a deterministic 3-stage self-hosting bootstrap starting from `src/boot/lipi-seed`.
 
----
-
-## 1. Direct Silicon Architecture & Multi-Platform Emitters
-
-Lipi features twin first-class silicon emitters written in 100% pure Lipi code:
-1. **x86_64 (AMD64) ELF64 Emitter:** [`src/compiler/backend/formats/elf/elf_writer.lp`](../src/compiler/backend/formats/elf/elf_writer.lp)
-2. **ARM64 (AArch64) ELF64 Emitter:** [`src/compiler/arm64_emitter.lp`](../src/compiler/arm64_emitter.lp)
-
-### 1.1 x86_64 Direct Machine Code Generation
-The x86_64 emitter translates Lipi AST constructs into raw x86_64 machine instructions:
-
-- **ELF64 Layout:**
-  - `Elf64_Ehdr` (64 bytes): ELF Magic (`0x7F 'E' 'L' 'F'`), Class 2 (64-bit), Data 1 (Little-Endian), OS/ABI 0 (System V), Machine 62 (`EM_X86_64`), Entry Virtual Address `0x401000`.
-  - `Elf64_Phdr` (56 bytes): Type 1 (`PT_LOAD`), Flags 7 (`PF_R | PF_W | PF_X`), Virtual Address `0x400000`, File Size = Memory Size.
-  - Page Alignment Padding: 3,976 zero-bytes to align code execution cleanly at page boundary `0x1000` (file offset 4,096).
-  - `.text` Segment: Emits variable-length x86_64 instructions starting at virtual address `0x401000`.
-  - `.rodata` Segment: Embedded static string literals and lookup tables positioned immediately after executable code.
-- **Baremetal Multiboot 1 Specification:**
-  - Embedded at byte offset 124 within the binary header.
-  - Header Magic: `0x1BADB002` (464367618).
-  - Flags: `0x00000000` (0).
-  - Checksum: `0xE4524FFE` (3830599678), satisfying `-(magic + flags)`.
-  - This enables any Lipi executable to boot directly on physical x86_64 silicon or hypervisors (QEMU, KVM, VirtualBox) without an underlying operating system.
-- **Direct Kernel Syscall Mechanism:**
-  - Invocations of `syscall(num, arg1, arg2, arg3, arg4, arg5, arg6)` load the syscall number into `%rax` and pass arguments through registers `%rdi`, `%rsi`, `%rdx`, `%r10`, `%r8`, `%r9` before issuing the 2-byte opcode `0x0F 0x05` (`syscall`).
-
-### 1.2 ARM64 (AArch64) Direct Machine Code Generation
-The ARM64 emitter delivers native execution on 64-bit ARM platforms (Apple Silicon via Linux VMs, Raspberry Pi 4/5, AWS Graviton, and Ampere servers):
-
-- **AArch64 ELF64 Layout:**
-  - `Elf64_Ehdr` (64 bytes): Machine Architecture 183 (`EM_AARCH64` / `0x00B7`).
-  - Base Virtual Address: `0x400000` (`ARM64_ELF_BASE_VADDR`).
-  - Kernel Page Alignment: 64 KB (`0x10000`) for modern Linux AArch64 enterprise kernels.
-  - Total Header Overhead: 120 bytes (`ARM64_TOTAL_HDR_SIZE` = 64-byte file header + 56-byte program header).
-  - Entry Point: `0x400078` (`0x400000 + 120`), executing immediately following the ELF headers without bloat.
-- **AArch64 32-Bit Instruction Synthesis:**
-  - Emits fixed-width 32-bit (4-byte) little-endian opcodes.
-  - Data Processing: `ADD`, `SUB`, `MUL`, `SDIV`, `AND`, `ORR`, `EOR`, `MOVZ`, `MOVK`.
-  - Memory Access: Immediate and register-offset `LDR` (load 64-bit register) and `STR` (store 64-bit register).
-  - Control Flow: `B` (unconditional branch, 26-bit PC-relative), `B.cond` (conditional branch, 19-bit PC-relative), `BL` (branch with link to LR / X30), `RET` (return to address in X30).
-- **Linux AArch64 Syscall ABI:**
-  - Linux AArch64 adheres to the `asm-generic` unistd table:
-    - Syscall number placed in register `X8` (e.g., `sys_write` = 64, `sys_read` = 63, `sys_exit` = 93, `sys_mmap` = 222).
-    - Arguments passed across registers `X0`, `X1`, `X2`, `X3`, `X4`, `X5`.
-    - Executed via `SVC #0` (`0xD4000001`). Return values delivered in register `X0`.
-
-### 1.3 WebAssembly (WASM) Direct Binary Synthesis
-The WebAssembly emitter ([`src/compiler/wasm_emitter.lp`](../src/compiler/wasm_emitter.lp)) translates Lipi procedures directly into W3C WebAssembly 1.0 binary modules (`.wasm`) for execution in browsers, edge workers, and sandboxed runtimes (0% C, 0% LLVM, 0% Emscripten):
-
-- **WASM Binary Layout:**
-  - Magic Header: 4 bytes `0x00, 0x61, 0x73, 0x6D` (`\0asm`).
-  - Version: 4 bytes little-endian `0x01, 0x00, 0x00, 0x00` (Version 1).
-  - Canonical Sections:
-    - Type Section (id 1): Vector of function type descriptors (`0x60`, parameter types vector, result types vector).
-    - Function Section (id 3): Vector of type indices mapping module functions to type signatures.
-    - Memory Section (id 5): Optional linear memory descriptors (page allocations).
-    - Export Section (id 7): Export vector exposing public functions (`main`, `add`, `sub`, `mul`, `div_s`, `fib`) and memory.
-    - Code Section (id 10): Function bodies containing compressed local variable declarations and stack bytecode instructions terminated by `0x0B` (`end`).
-- **Mathematical LEB128 Integer Encoders:**
-  - Unsigned LEB128 (`u32`): Encodes section sizes, vector element counts, and function/type indices.
-  - Signed LEB128 (`s32`): Encodes positive and negative two's complement integer literals for `i32.const` immediates without host bitwise dependencies.
-- **Core Virtual Stack Machine Instructions:**
-  - Constant loading: `0x41` (`i32.const`).
-  - Arithmetic: `0x6A` (`i32.add`), `0x6B` (`i32.sub`), `0x6C` (`i32.mul`), `0x6D` (`i32.div_s`), `0x6E` (`i32.div_u`).
-  - Control Flow: `0x10` (`call`), `0x0F` (`return`), `0x04` (`if`), `0x05` (`else`), `0x0B` (`end`), `0x0C` (`br`), `0x0D` (`br_if`).
-  - Variables: `0x20` (`local.get`), `0x21` (`local.set`), `0x22` (`local.tee`).
-  - Comparisons: `0x45` (`i32.eqz`), `0x46` (`i32.eq`), `0x47` (`i32.ne`), `0x48` (`i32.lt_s`), `0x4C` (`i32.le_s`), etc.
-- **Direct Memory Staging & Filesystem Commit:**
-  - Binary bytes are assembled into memory buffers allocated via Linux `SYS_mmap`, validated byte-by-byte via `mem_byte_read`, and committed to disk via `file_write`.
-
----
-
-## 2. Object-Oriented Struct Methods & ABI
-
-Lipi First 1.0.0 introduces first-class **Object-Oriented Struct Methods** that combine high-level object ergonomics with zero-cost low-level static dispatch.
-
-### 2.1 Method Definition Syntax
-Methods are declared with struct-type qualification:
-```lipi
-struct Point
-    x
-    y
-
-// Modern Lipi First 1.0.0 Method Definition
-fn Point.set_xy self x y
-    self.x = x
-    self.y = y
-    return self
-
-fn Point.distance_squared self other
-    dx = self.x - other.x
-    dy = self.y - other.y
-    return (dx * dx) + (dy * dy)
+```text
+Source (.lp / .লিপি)
+   │
+   ▼
+[1. Module Bundler & Lexer]        src/compiler/frontend/lexer.lp
+   │  Resolves include/import DAG (utso/, aati/, local files);
+   │  normalizes Bengali, English, and @-directive tokens + Bengali numerals
+   ▼
+[2. Parser & AST Construction]     src/compiler/frontend/parser.lp
+   │  Single unified AST across all three syntax dialects
+   ▼
+[3. Semantic & Safety Analysis]    src/compiler/semantics/
+   │  Type checking, scope resolution, mathematical/closed-form analysis,
+   │  optional --kavach affine ownership + silicon_* hardware boundary check
+   ▼
+[4. SSA Middle-End & Regalloc]     src/compiler/middleend/
+   │  AST → SSA IR lowering, constant folding, algebraic loop proofs,
+   │  linear-scan register allocation
+   ▼
+[5. Target Codegen & Formats]      src/compiler/backend/
+      ├── x86_64   → Static-PIE ELF64 (Linux), PE32+ (Windows), Mach-O (macOS), Multiboot2
+      ├── ARM64    → AArch64 ELF64 / Mach-O + NEON
+      ├── RISC-V   → RV64I/M/V ELF64
+      └── WASM     → WebAssembly binary (.wasm)
 ```
 
-In Bengali syntax:
-```lipi
-গঠন বিন্দু
-    x
-    y
+### Bootstrap Determinism & Binary Security Invariants
 
-কাজ বিন্দু.নির্ধারণ self x y
-    self.x = x
-    self.y = y
-    ফেরত self
-```
+- **Stage 1 → Stage 2 → Stage 3 equivalence**: `lipi-seed` builds Stage 1 (`lipc_s1`), Stage 1 builds Stage 2 (`lipc_s2`), and Stage 2 builds Stage 3 (`lipc_s3`). CI verifies byte-for-byte identity (`cmp lipc_s2 lipc_s3`).
+- **Static-PIE & W^X (`0 RWE`)**: Emitted Linux ELF64 binaries are statically linked `ET_DYN` (PIE) executables with zero dynamic interpreter (`ld.so` / `libc`) and zero `RWE` writable+executable program segments.
 
-### 2.2 Compiler Symbol Resolution & Name Mangling
-When the compiler encounters `fn StructName.methodName self ...`:
-1. It prefixes the symbol with the struct namespace: `lipi_fn_<StructName>_<methodName>`.
-2. The initial parameter `self` is bound to the instance reference.
-3. In-memory struct field access `self.field` compiles to fixed base-pointer displacement offsets `[reg + (field_index * 8)]`.
+## 2. Memory Model & Static Safety (`--kavach`)
 
-### 2.3 Register Passing Calling Convention
-Method invocations `instance.method(arg1, arg2)` follow native hardware calling conventions with zero indirection:
+Lipi exposes two memory layers:
 
-#### AMD64 (System V x86_64) ABI
-- `self` pointer is loaded into register `%rdi` (Argument 1).
-- `arg1` is loaded into register `%rsi` (Argument 2).
-- `arg2` is loaded into register `%rdx` (Argument 3).
-- Subsequent arguments populate `%rcx`, `%r8`, `%r9`, and the stack.
-- Return values are delivered in `%rax`.
+1. **Segregated Slab Allocator (`alloc` / `free`)**: Built-in `O(1)` allocator with bounds metadata and double-free protection, plus scoped arena snapshots (`arena_mark()` / `arena_reset()`).
+2. **Direct Kernel Memory (`utso/memory.lp`, `utso/syscalls.lp`)**: Direct page allocation via `SYS_mmap` / `SYS_munmap` and raw buffer access for systems code.
 
-#### AArch64 (ARM64) ABI
-- `self` pointer is passed in register `X0` (Argument 1).
-- `arg1` is passed in register `X1` (Argument 2).
-- `arg2` is passed in register `X2` (Argument 3).
-- Subsequent arguments populate registers `X3` through `X7`.
-- Return values are delivered in `X0`.
+When compiled with `--kavach` (or `--কবচ`):
 
-Because methods are resolved at compile-time, there is **no virtual method table (vtable) indirection, no dynamic dispatch penalty, and no memory pointer chasing**.
+- The static analyzer tracks allocation ownership to flag leaks and use-after-free paths at compile time.
+- Raw hardware primitives (`syscall`, `mem_write`, `mem_read`) are restricted exclusively to functions prefixed with `silicon_` or `সিলিকন_`, isolating unsafe hardware boundaries cleanly from application code.
+- Core tools (`lipifmt`, `lipidoc`, `lipi_akhara`) are continuously dogfooded under `--kavach` in CI.
 
----
+## 3. W^X Code Capsules & Native FFI Isolation
 
-## 3. Peephole Machine Code Optimization
+To load binary code safely without introducing RWX memory pages:
 
-The Lipi code generation pipeline includes targeted peephole optimizations designed for maximum code density and execution speed on modern superscalar processors.
+- **Signed W^X Capsules (`utso/core/kavach_capsule.lp`)**: Defines the `LPKC` binary capsule format signed with RFC 8032 Ed25519. Code pages are mapped `PROT_READ | PROT_WRITE`, populated and verified (including signed 32-bit `REL32` overflow checks), and transitioned via `SYS_mprotect` to `PROT_READ | PROT_EXEC` before execution. Includes `KavachRing`, a lock-free shared-memory IPC ring buffer.
+- **Native ELF Shared-Object Loader (`utso/core/ffi_sovereign.lp`)**: Parses ELF64 headers, maps each `PT_LOAD` segment with strict W^X permissions (never `PROT_READ | PROT_WRITE | PROT_EXEC`), applies `.rela.dyn` relocations, and resolves symbols through `SHF_ALLOC` sections and `sh_link` `.dynstr` tables.
 
-### 3.1 Two-Byte Zero-Initialization Optimization (`xor reg32, reg32`)
-In systems code, initializing variables, counters, accumulators, and return values to zero is the most frequent register operation.
+## 4. Cryptography, X.509 PKI & TLS 1.3 Stack
 
-#### The Problem with Naive Instruction Selection
-A naive 64-bit immediate move:
-```asm
-movabsq $0, %rax       ; 0x48 0xB8 00 00 00 00 00 00 00 00 (10 bytes!)
-```
-This consumes 10 bytes of instruction cache and requires 8 bytes of immediate operand decoding.
+All cryptographic and TLS protocols are implemented directly in Lipi without OpenSSL or system TLS libraries:
 
-#### The Lipi Peephole Solution
-In [`src/compiler/backend/formats/elf/elf_writer.lp`](../src/compiler/backend/formats/elf/elf_writer.lp):
-```lipi
-fn x86_mov_reg_imm64 ctx reg val
-    if val == 0
-        // WHY: Peephole optimization: xor reg32, reg32 is only 2-3 bytes vs 10 bytes for mov reg64, 0
-        // In AMD64, writing to a 32-bit register automatically zero-extends to the full 64-bit register
-        rex = 0
-        if reg >= 8
-            rex = 69 // 0x45 (REX.RB)
-        modrm = 192 + ((reg % 8) * 8) + (reg % 8)
-        if rex > 0
-            bb_put8(ctx, rex)
-        bb_put8(ctx, 49) // 0x31 (xor r/m32, r32)
-        bb_put8(ctx, modrm)
-        return 0
-```
+- **Primitives (`utso/crypto/`)**:
+  - Hashes & KDFs: SHA-256 (`sha256.lp`), SHA-384/512 (`sha512.lp`), HKDF-SHA256/384.
+  - AEAD Ciphers: AES-128-GCM, AES-256-GCM (`aes.lp`), ChaCha20-Poly1305 (`advanced.lp`).
+  - Asymmetric & Key Exchange: X25519 (`x25519.lp`), Ed25519 (`ed25519.lp`), NIST P-256 & P-384 ECDSA (`p256_ecdsa.lp`), RSA-PSS & RSASSA-PKCS#1 v1.5 (`rsa.lp`).
+- **X.509 Certificate Validation (`utso/crypto/x509.lp`)**:
+  - ASN.1 DER parsing, RFC 5280 chain signature and `BasicConstraints` verification, certificate validity window checking, RFC 6125 hostname and wildcard verification (rejecting TLD wildcard spoofing such as `*.com`), and system PEM trust-store loading from `/etc/ssl/certs/ca-certificates.crt`.
+- **TLS 1.3 Client (`utso/net/tls/tls13.lp`) & HTTPS (`utso/net/http.lp`, `aati/lipi_http_client/`)**:
+  - Full cryptographic `CertificateVerify` enforcement for Ed25519, ECDSA P-256/P-384, and RSA-PSS, RFC 8446 16,384-byte record chunking, DNS resolution (`utso/net/dns_pure.lp`), and multi-MB chunked HTTP transfer support.
+- **TLS 1.3 Server (`utso/net/tls13_server.lp`)**:
+  - X25519 key agreement, RFC 8446 §4.1.4 `HelloRetryRequest` handling, AES-128-GCM / ChaCha20-Poly1305 record protection, browser-compatible default NIST P-256 (`0x0403`) + Ed25519 (`0x0807`) handshake signing, `ALPN: http/1.1` negotiation, and 16,384-byte record fragmentation. Verified against `openssl s_client -tls1_3` and `curl --tlsv1.3`.
 
-#### Silicon Hardware Advantages:
-1. **Architectural Zero-Extension:** Under AMD64 specifications, any write to a 32-bit register (such as `%eax`, `%edi`, `%r8d`) automatically and atomically zero-extends into the upper 32 bits of the full 64-bit register (`%rax`, `%rdi`, `%r8`).
-2. **Byte Density:** Emitting `31 C0` (`xor %eax, %eax`) takes only **2 bytes**—an **80% reduction in code size** compared to 10-byte moves. Extended registers (`%r8`..`%r15`) require a 1-byte REX prefix (`45 31 C0`), taking only 3 bytes.
-3. **Register Renaming & Dependency Breaking:** Modern x86 hardware execution engines recognize `xor reg, reg` as a dependency-breaking idiom. It executes in 0 cycles at the register alias table (RAT) stage without allocating an execution pipeline ALU unit.
+## 5. Durable WAL Storage & Concurrency
 
----
+- **Relational SQL Engine (`aati/lipi_sql/src/sql.lp`)**: Dynamic tables and rows, interned text storage, multi-column schema support, and crash-recoverable write-ahead logging (CRC-32 checksummed frames flushed with `SYS_fsync`, full WAL replay, and checkpointing).
+- **Persistent Job Queue (`aati/lipi_web/job_queue.lp`)**: Single-lock thread-safe queue over Linux futex/spinlock primitives with CRC-32 `SYS_fsync` WAL durability, automatic `RUNNING` → `PENDING` crash recovery on restart, and log compaction.
 
-## 4. First-Class Web Standard Library (`aati/lipi_web/router.lp`)
+## 6. Package Management & Supply-Chain Integrity (`aati`)
 
-Lipi First 1.0.0 eliminates all legacy external web frameworks and C wrappers in favor of a sovereign, high-throughput standard web engine: [`aati/lipi_web/router.lp`](../aati/lipi_web/router.lp).
+`aati` (`src/tools/aati.lp`) manages workspace packages defined in `aati.toml`:
 
-### 4.1 Architectural Foundations
-- **Direct Linux Socket Calls:** Binds directly to the operating system network stack via `SYS_socket` (syscall 41), `SYS_bind` (syscall 49), `SYS_listen` (syscall 50), and `SYS_accept` (syscall 43).
-- **Sub-Microsecond Dispatch:** Routes are held in contiguous memory arrays and matched via linear byte scanning without recursive regex engine overhead.
-- **Zero-Copy Parsing:** Extracts HTTP verbs (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD`), request paths, URL query strings, and headers without dynamic heap reallocation.
-- **Wire-Format Response Serialization:** Constructs standards-compliant HTTP/1.1 response envelopes with explicit `Content-Length`, `Content-Type`, CORS headers, and CRLF (`\r\n`) delimiters.
-
-```lipi
-include "aati/lipi_web/router.lp"
-
-router = web_router_new()
-web_get(router, "/", 1)
-web_get(router, "/api/status", 2)
-web_post(router, "/api/data", 3)
-
-fn handle_request req
-    route_id = web_dispatch(router, req.method, req.path)
-    if route_id == 1
-        return web_response_html("<h1>Lipi First 1.0.0 Sovereign Web Server</h1>")
-    if route_id == 2
-        return web_response_json("{\"status\":\"healthy\",\"engine\":\"Lipi First 1.0.0\"}")
-    return web_response_not_found()
-```
-
----
-
-## 5. Native Multithreading & Memory Architecture
-
-Lipi implements high-concurrency systems programming directly against the Linux kernel without `pthreads` or external threading libraries.
-
-### 5.1 Kernel Thread Creation via `SYS_clone`
-[`utso/os/thread.lp`](../utso/os/thread.lp) invokes the Linux `SYS_clone` syscall (56 on x86_64, 220 on AArch64):
-- **Clone Flags:**
-  - `CLONE_VM` (`0x00000100` = 256): Shares virtual memory space with the parent process.
-  - `CLONE_FS` (`0x00000200` = 512): Shares filesystem information.
-  - `CLONE_FILES` (`0x00000400` = 1024): Shares open file descriptors.
-  - `CLONE_SIGHAND` (`0x00000800` = 2048): Shares signal handlers.
-  - `CLONE_THREAD` (`0x00010000` = 65536): Places child in the same thread group.
-  - Combined Mask: `69376` (`0x10F00`).
-- **Stack Allocation:** Thread stacks are allocated in memory via `SYS_mmap` (Syscall 9 on x86_64, Syscall 222 on AArch64) with `PROT_READ | PROT_WRITE` permissions. The stack pointer is aligned to a 16-byte boundary and passed to `SYS_clone`.
-
-### 5.2 Atomic Spinlocks & Cooperative Yielding
-Concurrency synchronization is managed through memory word locks:
-- **Acquire (`স্পিনলক_আটক` / `spinlock_lock`):** Polls the atomic memory address. When contended, calls `SYS_sched_yield` (Syscall 24) to forfeit the current CPU timeslice, preventing CPU starvation and busy-wait thermal throttling.
-- **Release (`স্পিনলক_মুক্ত` / `spinlock_unlock`):** Writes `0` to the lock memory address, enabling waiting worker threads to claim the critical section.
-
-### 5.3 O(1) Bump-Pointer Arena Memory Allocator
-[`utso/arena.lp`](../utso/arena.lp) implements linear bump allocation for high-throughput pipelines:
-- Allocates contiguous blocks of physical memory directly from the kernel via `SYS_mmap`.
-- Dispenses memory sequentially via an internal offset pointer aligned to 8-byte QWORD boundaries.
-- **Instant Mass Reclamation:** Resetting the arena (`used = 0`) reclaims all allocations in **0 cycles** with zero memory fragmentation and zero pointer chasing.
-
----
-
-## 6. The 5-Stage Nano-Compiler Engine Pipeline
-
-```
-[Lipi Source (.lp)]
-       │
-       ▼
-[Stage 1: Lexical Analysis (টোকেনাইজার)]
-       │ UTF-8 bilingual lexer, number scanner (ASCII 0-9 & Bengali ০-৯)
-       ▼
-[Stage 2: AST Parser (এএসটি_তৈরি)]
-       │ Recursive-descent grammar, struct field layout, method bindings
-       ▼
-[Stage 3: SSA IR Optimizer (এসএসএ_আইআর)]
-       │ Constant folding, strength reduction, algebraic simplification
-       ▼
-[Stage 4: Linear Scan RegAlloc (রেজিস্টার_বরাদ্দকরণ)]
-       │ Live-range analysis, physical register binding (%r12-%r15 / X19-X28)
-       ▼
-[Stage 5: Silicon Machine Code Emitter (সিলিকন_ইমিটার)]
-       │ x86_64 ELF64 / ARM64 ELF64 byte synthesis, Multiboot 1 embedding
-       ▼
-[Native Executable Binary (0% C, 0% GCC, 0% Libc, 0% LLVM)]
-```
-
-1. **Stage 1: Lexical Analysis:** Scans UTF-8 byte streams directly from memory or disk. Supports Bengali keywords (`যদি`, `কাজ`, `গঠন`, `ফেরত`) and English keywords (`if`, `fn`, `struct`, `return`) interchangeably, generating identical token streams.
-2. **Stage 2: Abstract Syntax Tree Parsing:** Recursive-descent parser producing hierarchical syntax trees. Tracks indentation depth without curly braces or semicolons. Resolves struct fields and struct method declarations.
-3. **Stage 3: SSA IR & Algebraic Optimization:** Converts expressions into Static Single Assignment form. Performs compile-time constant folding and converts expensive division operations into reciprocal multiplications via Granlund-Montgomery algorithms.
-4. **Stage 4: Linear Scan Register Allocation:** Computes live ranges for inner-loop induction variables and accumulators. Maps hot variables directly to callee-saved registers (`%r12`–`%r15` on AMD64, `X19`–`X28` on AArch64), avoiding round-trips to the stack frame.
-5. **Stage 5: Silicon Machine Code Synthesis:** Encodes raw opcodes, resolves jump labels via relocation backpatching, constructs standard ELF64 headers, embeds the Multiboot 1 specification header, and commits the binary to disk with `0755` executable permissions.
-
----
-
-## 7. Sovereign Direct SSA-to-Silicon Lowering Engine (`src/compiler/backend/ssa_lowerer.lp`)
-
-Lipi First 1.0.0 eliminates intermediate multi-pass conversions by lowering the SSA Control Flow Graph (CFG) directly into silicon machine code.
-
-### 7.1 CFG Traversal & Block Offset Mapping
-The lowering engine (`SSALowerer`) operates across basic block graphs:
-- **Block Layout:** Sequentially emits basic blocks into the code buffer while recording entry offsets in a hash map (`block_offsets`).
-- **Instruction Lowering:** Maps individual SSA instructions to CPU opcodes:
-  - `OP_ALLOCA`: Adjusts the virtual stack frame pointer via `sub %rsp, imm32` (`48 81 EC`).
-  - `OP_STORE` / `OP_LOAD`: Emits frame-relative memory transfers `mov [rbp - disp], rax` (`48 89 85`) and `mov rax, [rbp - disp]` (`48 8B 85`).
-  - `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`: Direct 64-bit arithmetic opcodes.
-  - `OP_CMP`: Emits `cmp rax, rbx` (`48 39 D8`).
-  - `OP_RET`: Restores stack frame (`mov %rsp, %rbp; pop %rbp; ret`).
-- **Control Flow & Conditional Branching:**
-  - `OP_BR`: Conditional branch using `jne rel32` (`0F 85 rel32`) or `je rel32` (`0F 84 rel32`).
-  - `OP_JMP`: Unconditional near jump `jmp rel32` (`E9 rel32`).
-
-### 7.2 Label Backpatching without Relocation Engines
-When a branch targets a basic block that has not yet been emitted (forward jump), the lowerer registers a backpatch entry in `patch_table`:
-```lipi
-fn ssa_lowerer_patch_jumps self
-    // Computes relative jump displacement: target_offset - (inst_offset + 4)
-    // and writes 32-bit little-endian value into the opcode stream.
-```
-This guarantees single-pass code emission with zero external linker or object file requirements.
-
----
-
-## 8. Multi-Silicon Vectorization & Direct Hardware Interfacing
-
-### 8.1 ARM64 128-Bit NEON Vector Emitter (`src/compiler/backend/targets/arm64/arm64_simd.lp`)
-Delivers vector parallelism on 64-bit ARM microarchitectures:
-- `arm64_emit_fadd_4s(v_dest, v_src1, v_src2)`: Emits 128-bit `add.4s` (`0x4E208400`).
-- `arm64_emit_fsub_4s(v_dest, v_src1, v_src2)`: Emits 128-bit `sub.4s` (`0x4E208400`).
-- `arm64_emit_fmul_4s(v_dest, v_src1, v_src2)`: Emits 128-bit `mul.4s` (`0x4E209C00`).
-- `arm64_emit_ld1_4s(v_dest, r_addr)`: 128-bit vector load `ld1.4s {vt.4s}, [xn]` (`0x4C407000`).
-- `arm64_emit_st1_4s(v_src, r_addr)`: 128-bit vector store `st1.4s {vt.4s}, [xn]` (`0x4C007000`).
-- `arm64_emit_dup_4s(v_dest, r_val)`: Vector scalar broadcast `dup.4s vt, wn` (`0x4E040C00`).
-
-### 8.2 RISC-V RV64V Vector Extension 1.0 (`src/compiler/backend/targets/riscv64/riscv64_vector.lp`)
-Direct vector instruction generation for modern RISC-V silicon:
-- `riscv64_emit_vsetvli(rd, rs1, vtype)`: Configures vector length and type (`0x00007057`).
-- `riscv64_emit_vle32_v(vd, rs1, vm)`: Vector unit-stride 32-bit load (`0x02000007`).
-- `riscv64_emit_vse32_v(vs3, rs1, vm)`: Vector unit-stride 32-bit store (`0x02000027`).
-- `riscv64_emit_vadd_vv(vd, vs2, vs1, vm)`: Vector integer vector-vector addition (`0x00000057`).
-- `riscv64_emit_vsub_vv(vd, vs2, vs1, vm)`: Vector integer vector-vector subtraction (`0x08000057`).
-- `riscv64_emit_vmul_vv(vd, vs2, vs1, vm)`: Vector integer vector-vector multiplication (`0x94000057`).
-
-### 8.3 Linux DRM/KMS Hardware GPU Interfacing (`aati/lipi_gpu/compute.lp`)
-Sovereign GPU compute discovery directly against the Linux Direct Rendering Manager (DRM):
-- Probes `/dev/dri/renderD128` (primary render node) and `/dev/dri/card0` via raw syscalls (`sys_openat`, `sys_fstat`).
-- Resolves GPU vendor IDs (NVIDIA `0x10DE`, AMD `0x1002`, Intel `0x8086`) and memory heaps without proprietary user-space driver stacks.
-- Automatically falls back to high-throughput containerized CPU emulation when running in constrained CI environments.
-
----
-
-## 9. Sovereign Portable Executable (PE32+) Windows Direct Synthesis (`src/compiler/backend/formats/pe/pe_writer.lp`)
-
-Lipi compiles high-level source directly into native Microsoft Windows x86-64 console and GUI executables (`.exe`) without needing MinGW, MSVC, or Wine.
-
-### 9.1 Header Structure & Virtual Memory Layout
-- **MS-DOS 2.0 Header (64 bytes) & Stub:**
-  - Standard magic `0x5A4D` (`MZ`).
-  - Pointer to PE Header at offset `0x3C` (`e_lfanew` = `0x80`).
-- **PE32+ Signature & COFF File Header:**
-  - 4-byte signature `0x00004550` (`PE\0\0`).
-  - Machine: `0x8664` (`IMAGE_FILE_MACHINE_AMD64`).
-  - TimeDateStamp: bit-for-bit deterministic zero or build timestamp.
-  - Characteristics: `0x0022` (`IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE`).
-- **Optional Header PE32+ (240 bytes):**
-  - Magic: `0x020B` (PE32+ 64-bit).
-  - ImageBase: `0x140000000` (5,368,709,120).
-  - SectionAlignment: `4,096` bytes (4 KB).
-  - FileAlignment: `512` bytes.
-  - Subsystem: `0x0003` (`IMAGE_SUBSYSTEM_WINDOWS_CUI`).
-  - Data Directories: 16 directories including Import Directory (Index 1) and IAT (Index 12).
-
-### 9.2 Zero-Dependency KERNEL32 Import Directory Table & IAT
-The PE writer synthesizes a bit-perfect `.idata` section containing:
-1. `IMAGE_IMPORT_DESCRIPTOR` targeting `KERNEL32.dll`.
-2. Import Lookup Table (ILT) and Import Address Table (IAT) thunks for `ExitProcess`, `GetStdHandle`, and `WriteFile`.
-3. Hint/Name entries with ASCII name strings.
-
-### 9.3 Windows x64 Entry Bootstrap Stub
-A 64-byte entry bootstrap stub conforms to Microsoft x64 calling conventions:
-```asm
-sub rsp, 40                ; 0x48 0x83 0xEC 0x28 (allocate shadow space & 16-byte align)
-call user_main             ; 0xE8 rel32
-mov ecx, eax               ; 0x89 0xC1 (pass exit code in ECX)
-call [rip + disp32]        ; 0xFF 0x15 disp32 (call ExitProcess via IAT)
-add rsp, 40                ; 0x48 0x83 0xC4 0x28
-ret                        ; 0xC3
-```
-
----
-
-## 10. Native Hardware & Kernel Bypass Subsystems
-
-1. **DRM/KMS Hardware Graphics & Modesetting (`aati/lipi_gui/drm_kms.lp`):**
-   - Interacts with Linux DRM subsystem directly via ioctls (`DRM_IOCTL_MODE_GETRESOURCES`, `DRM_IOCTL_MODE_CREATE_DUMB`, `DRM_IOCTL_MODE_MAP_DUMB`, `DRM_IOCTL_MODE_PAGE_FLIP`).
-   - Implements hardware double-buffering with atomic VBLANK synchronization and damage rectangle clipping.
-2. **Framebuffer Direct Driver (`aati/lipi_gui/fbdev.lp`):**
-   - Accesses physical display framebuffers (`/dev/fb0`) directly with Bresenham line and circle algorithms.
-3. **High-Performance Fiber Reactor with io_uring (`utso/os/fiber.lp`, `utso/io/io_uring.lp`):**
-   - Cooperative user-space green threads (fibers) with independent stacks swapped via register context switching (`%rsp`, `%rbp`, callee-saved registers).
-   - Direct kernel submission queue (`sq`) and completion queue (`cq`) polling for zero-syscall I/O throughput.
-4. **Zero-Copy Network Wire Framing (`utso/net/wire.lp`, `utso/net/tcp.lp`):**
-   - Raw Ethernet II (DIX) frames, IPv4 packet decoding, TCP state machine with sliding window flow control.
-5. **Sovereign 9-Class Slab Memory Allocator (`utso/memory/slab.lp`):**
-   - Power-of-two size classes (16, 32, 64, 128, 256, 512, 1024, 2048, 4096 bytes) for O(1) alloc/free with zero memory fragmentation.
-6. **Autoregressive Transformer Core (`aati/lipi_ai/transformer.lp`):**
-   - Full Multi-Head Self-Attention (Q, K, V projections), RMSNorm layer normalization, and rotary position embeddings (RoPE) executed directly on silicon.
-
-
+- Computes SHA-256 content digests over package source files and signs/verifies `lipi.sig` manifests with Ed25519.
+- Validates workspace integrity against `aati.lock` (`./bin/aati verify-lock aati.lock`) across all 31 packages in `aati/`.

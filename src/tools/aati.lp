@@ -579,13 +579,7 @@ fn parse_sig_manifest content
 // ── ৫. ইউআই ও ব্যানার ফাংশনসমূহ (UI & Help Display) ─────────────────────────────
 
 fn ব্যানার_দেখাও
-    // WHY: 72 visual columns (70 chars interior + 2 border chars).
-    // Leaves safe 8-column margin on standard 80-column Linux terminal windows.
-    // Preserves version invariant: First 1.0.0 (প্রথম ১.০.০).
-    say "\033[38;2;0;255;204m╔══════════════════════════════════════════════════════════════════════╗\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[1;38;2;255;255;255m🌾 আঁটি (AATI) — SOVEREIGN PACKAGE MANAGER (First 1.0.0)\033[0m            \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m║\033[0m  \033[38;2;180;180;180m🔖 Version: First 1.0.0 (প্রথম ১.০.০) | aati.lipi.dev\033[0m                \033[38;2;0;255;204m║\033[0m"
-    say "\033[38;2;0;255;204m╚══════════════════════════════════════════════════════════════════════╝\033[0m"
+    say "aati (আঁটি) — Lipi Package Manager 1.0.0"
     say ""
 
 fn সহায়তা_দেখাও

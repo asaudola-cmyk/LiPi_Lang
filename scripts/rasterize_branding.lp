@@ -297,7 +297,7 @@ import "aati/lipi_gui/framebuffer"
     "docs/branding/lipi_mark.svg",
     "docs/branding/favicon.ico",
     "docs/branding/png/lipi_icon_256x256.png",
-    "docs/branding/png/og_image.png"
+    "docs/branding/png/lipi_icon_512x512.png"
   ]
   ri = 0
   @while ri < req_paths.len()

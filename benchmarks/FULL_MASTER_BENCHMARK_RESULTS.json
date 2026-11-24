@@ -1,6 +1,0 @@
-{
-  "engine": "lipi-master-benchmark-pure",
-  "loop_10m_ms": 6.97,
-  "columnstore_1m_ms": 1.04,
-  "truth_bench_ms": 66.39
-}

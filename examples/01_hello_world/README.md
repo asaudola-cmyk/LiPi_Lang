@@ -1,12 +1,10 @@
-# 👑 01_hello_world
+# 01_hello_world
 
-A simple, production-grade starter project demonstrating Lipi's console I/O, bilingual syntax, and hardware RDTSC cycle measurement.
+Starter example demonstrating console I/O, bilingual syntax, and RDTSC cycle measurement.
 
-## How to Build & Run:
+## Build & Run
+
 ```bash
-# Compile to standalone native ELF binary
-./bin/lipi examples/01_hello_world/main.lp -o bin/hello_app
-
-# Execute directly on bare silicon
-./bin/hello_app
+./bin/lipc examples/01_hello_world/main.lp -o /tmp/hello_app
+/tmp/hello_app
 ```

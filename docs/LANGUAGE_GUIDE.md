@@ -1,480 +1,197 @@
-# 📖 লিপি ভাষার সম্পূর্ণ গাইড
-# Lipi Programming Language — Complete Language Guide
-## সংস্করণ: প্রথম ১.০.০ | Version: First 1.0.0
+# Lipi Language Guide (লিপি ভাষার গাইড)
 
----
+Lipi supports Bengali syntax, English syntax, and `@`-directive syntax interchangeably. All three forms compile to the same AST and produce identical native machine code.
 
-## ভূমিকা (Introduction)
+## 1. Hello World
 
-**লিপি** (Lipi) পৃথিবীর প্রথম বাংলা প্রোগ্রামিং ভাষা।
-বাংলায় কোড লিখুন, সরাসরি CPU-তে চলবে। শূন্য Python, শূন্য GCC, শূন্য libc।
+English:
 
-**Lipi** is the world's first Bengali programming language.
-Write code in Bengali — runs directly on CPU. Zero Python, Zero GCC, Zero libc.
+```lipi
+fn main
+    say "Hello, World!"
+    return 0
+
+main()
+```
+
+Bengali:
+
+```lipi
+ফাংশন প্রধান
+    বলো "হ্যালো, দুনিয়া!"
+    ফেরত ০
+
+প্রধান()
+```
+
+Compile and run:
 
 ```bash
-# ইনস্টল করুন (Install)
-curl -fsSL https://lipi.dev/install | bash
-
-# প্রথম প্রোগ্রাম (First program)
-echo 'দেখাও "সালাম দুনিয়া!"' > hello.lp
-lipic hello.lp -o hello
+./bin/lipc hello.lp -o hello
 ./hello
-# আউটপুট: সালাম দুনিয়া!
+
+# Or via the unified CLI:
+./bin/lipi run hello.lp
 ```
 
----
+## 2. Variables, Literals & Types
 
-## অধ্যায় ১: মূল ধারণা (Chapter 1: Core Concepts)
-
-### ১.১ — চলক (Variables)
+- **64-bit signed integers (`i64`)**: `42`, `-10`, `০`, `৪২`, `0xFF` (Bengali digits `০`–`৯` are parsed identically to `0`–`9`).
+- **Floating-point numbers (`f64`)**: `3.14`, `0.5`.
+- **Strings**: UTF-8 strings (`"hello"`, `"বাংলা"`).
+- **Booleans**: `true` / `সত্য` (`1`), `false` / `মিথ্যা` (`0`).
+- **Lists**: Dynamic lists created with `list()`, manipulated via `push`, `pop`, `len`, indexing `xs[i]`.
 
 ```lipi
-// ধরি = let/var (declare a variable)
-// WHY: বাংলায় "ধরি" মানে "ধরে নিই" — assume/let it be
-ধরি নাম = "রফিক আহমেদ"
-ধরি বয়স = ২৫
-ধরি উচ্চতা = ৫.৮
-ধরি বিবাহিত = মিথ্যা
+x = 10
+y = 20
+total = x + y
+say "Total: " + to_str(total)
 
-// English equivalent keywords also work
-let name = "Rafiq Ahmed"
-var age = 25
+নাম = "লিপি"
+সংখ্যা = ৪২
+বলো নাম + " " + to_str(সংখ্যা)
 ```
 
-**সমতুল্য কীওয়ার্ড (Keyword Equivalents):**
-| বাংলা | English |
-|-------|---------|
-| `ধরি` | `let` / `var` |
-| `দেখাও` | `print` / `show` |
-| `যদি` | `if` |
-| `নাহলে` | `else` |
-| `যতক্ষণ` | `while` |
-| `কাজ` | `fun` / `func` |
-| `ফেরত` | `return` |
-| `সত্য` | `true` |
-| `মিথ্যা` | `false` |
-| `শূন্য` | `null` / `nil` |
-| `ধরনক` | generic type param |
+## 3. Control Flow
 
----
-
-### ১.২ — প্রদর্শন (Output)
+### Conditionals (`if` / `else`, `যদি` / `নাহলে` / `নতুবা`)
 
 ```lipi
-// দেখাও = show/print
-দেখাও "হ্যালো লিপি!"
-
-// Comma-separated (multiple values)
-ধরি ফলাফল = ৪২
-দেখাও "উত্তর:", ফলাফল
-
-// Bengali numerals are native
-দেখাও বাংলা_সংখ্যা(৪২)   // → ৪২
-দেখাও বাংলা_সংখ্যা(১০০০) // → ১০০০
+if x > 10
+    say "greater"
+else
+    say "smaller or equal"
 ```
 
----
-
-### ১.৩ — ডেটা ধরন (Data Types)
-
 ```lipi
-// সংখ্যা = Number (integer & float)
-ধরি ক: সংখ্যা = ১০০
-ধরি খ: সংখ্যা = ৩.১৪
-
-// লেখা = String (text)
-ধরি বার্তা: লেখা = "লিপিতে স্বাগতম"
-
-// সত্যমিথ্যা = Boolean
-ধরি সত্যিকার: সত্যমিথ্যা = সত্য
-ধরি মিথ্যাকার: সত্যমিথ্যা = মিথ্যা
-
-// শূন্য = Null/None
-ধরি খালি = শূন্য
+যদি সংখ্যা > ১০
+    বলো "বড়"
+নাহলে
+    বলো "ছোট বা সমান"
 ```
 
----
-
-## অধ্যায় ২: অপারেটর (Chapter 2: Operators)
-
-### ২.১ — গাণিতিক অপারেটর (Arithmetic)
+### Loops (`while` / `যতক্ষণ`, `for`)
 
 ```lipi
-ধরি ক = ১০
-ধরি খ = ৩
-
-দেখাও ক + খ    // ১৩ (যোগ)
-দেখাও ক - খ    // ৭  (বিয়োগ)
-দেখাও ক * খ    // ৩০ (গুণ)
-দেখাও ক / খ    // ৩  (ভাগ, integer)
-দেখাও ক % খ    // ১  (ভাগশেষ/modulo)
-দেখাও ক ** খ   // ১০০০ (ঘাত/power)
+i = 0
+while i < 5
+    say to_str(i)
+    i = i + 1
 ```
 
-### ২.২ — তুলনা অপারেটর (Comparison)
-
 ```lipi
-ধরি ক = ১০
-দেখাও ক == ১০   // সত্য (equal)
-দেখাও ক != ৫    // সত্য (not equal)
-দেখাও ক > ৫     // সত্য (greater than)
-দেখাও ক < ২০    // সত্য (less than)
-দেখাও ক >= ১০   // সত্য (greater or equal)
-দেখাও ক <= ১০   // সত্য (less or equal)
-```
-
-### ২.৩ — বিটওয়াইজ অপারেটর (Bitwise)
-
-```lipi
-দেখাও ১০ & ৬    // ২  (AND)
-দেখাও ১০ | ৬    // ১৪ (OR)
-দেখাও ১০ ^ ৬    // ১২ (XOR)
-দেখাও ১ << ৪    // ১৬ (left shift)
-দেখাও ১৬ >> ২   // ৪  (right shift)
-```
-
----
-
-## অধ্যায় ৩: শর্তাধীন লজিক (Chapter 3: Conditionals)
-
-### ৩.১ — যদি/নাহলে (if/else)
-
-```lipi
-ধরি বয়স = ২০
-
-যদি বয়স >= ১৮ {
-    দেখাও "প্রাপ্তবয়স্ক (adult)"
-} নাহলে {
-    দেখাও "অপ্রাপ্তবয়স্ক (minor)"
-}
-```
-
-### ৩.২ — nested যদি (nested if — for else-if effect)
-
-```lipi
-// WHY: লিপি প্রথম ১.০ এ নাহলে_যদি এর পরিবর্তে nested যদি ব্যবহার করুন
-ধরি নম্বর = ৭৬
-
-যদি নম্বর >= ৯০ {
-    দেখাও "গ্রেড: A+"
-} নাহলে {
-    যদি নম্বর >= ৮০ {
-        দেখাও "গ্রেড: A"
-    } নাহলে {
-        যদি নম্বর >= ৭০ {
-            দেখাও "গ্রেড: B"
-        } নাহলে {
-            দেখাও "গ্রেড: F"
-        }
-    }
-}
-// আউটপুট: গ্রেড: B
-
-// ─── ভবিষ্যৎ (প্রথম ২.০ এ): ───────────────
-// যদি নম্বর >= ৯০ { ... }
-// নাহলে_যদি নম্বর >= ৮০ { ... }
-// নাহলে { ... }
-```
-
----
-
-## অধ্যায় ৪: লুপ (Chapter 4: Loops)
-
-### ৪.১ — যতক্ষণ লুপ (while loop)
-
-```lipi
-// WHY: "যতক্ষণ" = "as long as" — সবচেয়ে মৌলিক iteration
-ধরি গণনা = ১
-
-যতক্ষণ গণনা <= ১০ {
-    দেখাও "সংখ্যা:", বাংলা_সংখ্যা(গণনা)
-    গণনা = গণনা + ১
-}
-
-// ─── পারফরম্যান্স লুপ (১ কোটি iteration) ────
-ধরি যোগফল = ০
-ধরি আই = ১
-ধরি শুরু = সিপিউ_ক্লক()
-
-যতক্ষণ আই <= ১০০০০০০০ {
-    যোগফল = যোগফল + (আই % ৭)
-    আই = আই + ১
-}
-
-ধরি শেষ = সিপিউ_ক্লক()
-দেখাও "যোগফল:", যোগফল
-দেখাও "CPU Cycles:", (শেষ - শুরু)
-```
-
-### ৪.২ — গণনা লুপ (counted loop)
-
-```lipi
-// লুপ ভেরিয়েবল বাইরে declare করুন
-ধরি i = ০
-যতক্ষণ i < ৫ {
-    দেখাও i
+i = ০
+যতক্ষণ i < ৫
+    বলো to_str(i)
     i = i + ১
-}
-// আউটপুট: ০ ১ ২ ৩ ৪
 ```
 
----
-
-## অধ্যায় ৫: ফাংশন (Chapter 5: Functions)
-
-### ৫.১ — ফাংশন সংজ্ঞা (Function Definition)
+## 4. Functions & Recursion
 
 ```lipi
-// কাজ = function/fun/def
-// WHY: "কাজ" বাংলায় "task/work" — একটি কাজ সম্পাদন করে
+fn fib n
+    if n <= 1
+        return n
+    return fib(n - 1) + fib(n - 2)
 
-কাজ স্বাগত() {
-    দেখাও "লিপিতে স্বাগতম!"
-}
+fn main
+    say to_str(fib(10))
+    return 0
 
-কাজ যোগ(ক, খ) {
-    ফেরত ক + খ
-}
-
-কাজ গড়(সংখ্যাগুলো, মোট) {
-    ফেরত সংখ্যাগুলো / মোট
-}
-
-// কল করুন
-স্বাগত()
-ধরি ফল = যোগ(৫, ৭)
-দেখাও "৫ + ৭ =", ফল
+main()
 ```
 
-### ৫.২ — পুনরাবৃত্তি (Recursion)
+Directive syntax (commonly used in standard library modules):
 
 ```lipi
-// WHY: Recursion = function calling itself — গণিতের মতো
-কাজ ফ্যাক্টোরিয়াল(ন) {
-    যদি ন <= ১ {
-        ফেরত ১
-    }
-    ফেরত ন * ফ্যাক্টোরিয়াল(ন - ১)
-}
-
-দেখাও "১০! =", ফ্যাক্টোরিয়াল(১০)
-// আউটপুট: ১০! = ৩৬২৮৮০০
-
-কাজ ফিবোনাচি(ন) {
-    যদি ন <= ১ { ফেরত ন }
-    ফেরত ফিবোনাচি(ন - ১) + ফিবোনাচি(ন - ২)
-}
-
-দেখাও "ফিবোনাচি(১০) =", ফিবোনাচি(১০)
-// আউটপুট: ৫৫
+@fn add(a: i64, b: i64)
+    return a + b
+@end
 ```
 
----
-
-## অধ্যায় ৬: গঠন (Chapter 6: Structs)
-
-### ৬.১ — গঠন সংজ্ঞা (Struct Definition)
+## 5. Structs & Methods
 
 ```lipi
-// গঠন = struct/record — কাস্টম ডেটা টাইপ
-// WHY: Real-world objects have multiple properties
-// A "person" has name, age, height — গঠন এটা model করে
+struct Point
+    x
+    y
 
-গঠন মানুষ {
-    আইডি,
-    বয়স,
-    উচ্চতা
-}
+fn point_sum p
+    return p.x + p.y
 
-// মেমরি বরাদ্দ করে instance তৈরি
-ধরি আকার = সাইজ(মানুষ)
-ধরি রফিক = মেমরি_বরাদ্দ(আকার)
-রফিক.আইডি = ১
-রফিক.বয়স = ২৫
-রফিক.উচ্চতা = ১৭৫
+fn main
+    p = Point()
+    p.x = 3
+    p.y = 4
+    say to_str(point_sum(p))
+    return 0
 
-দেখাও "আইডি:", রফিক.আইডি
-দেখাও "বয়স:", রফিক.বয়স
-দেখাও "উচ্চতা:", রফিক.উচ্চতা
-
-// মেমরি মুক্তি (good practice)
-মেমরি_মুক্তি(রফিক, আকার)
+main()
 ```
 
----
+## 6. Modules & Imports
 
-## অধ্যায় ৭: মডিউল (Chapter 7: Modules)
-
-### ৭.১ — stdlib import
+Import core standard library modules from `utso/` or workspace packages from `aati/`:
 
 ```lipi
-// অন্তর্ভুক্ত = include/import
-// WHY: Code reuse — "include" করা মানে সেই ফাইলের সব কোড এখানে নিয়ে আসা
-
-অন্তর্ভুক্ত "std/io.lp"        // ফাইল I/O
-অন্তর্ভুক্ত "std/net.lp"       // নেটওয়ার্ক
-অন্তর্ভুক্ত "std/mem.lp"       // মেমরি
-অন্তর্ভুক্ত "std/str.lp"       // স্ট্রিং
-অন্তর্ভুক্ত "std/math.lp"      // গণিত
-অন্তর্ভুক্ত "std/crypto.lp"    // SHA-256, TLS
-অন্তর্ভুক্ত "std/version.lp"   // সংস্করণ তথ্য
+include "utso/io.lp"
+include "utso/memory.lp"
+include "utso/crypto/sha256.lp"
+include "aati/lipi_sql/src/sql.lp"
 ```
 
-### ৭.২ — নিজস্ব মডিউল (Custom Module)
+Both `include "utso/io.lp"` and `import "utso/io"` forms are supported.
+
+## 7. Memory Management & `--kavach` Safety
+
+### Segregated Slab Allocator
 
 ```lipi
-// modules/আমার_গণিত.lp ফাইল তৈরি করুন:
-ধরি পাই = ৩১৪৬ / ১০০০   // ≈ 3.14159
-
-কাজ বর্গ(সংখ্যা) {
-    ফেরত সংখ্যা * সংখ্যা
-}
-
-কাজ বর্গমূল_আনুমানিক(ন) {
-    // Newton's method
-    ধরি অনুমান = ন / ২
-    ধরি গণনা = ০
-    যতক্ষণ গণনা < ১০ {
-        অনুমান = (অনুমান + ন / অনুমান) / ২
-        গণনা = গণনা + ১
-    }
-    ফেরত অনুমান
-}
-
-// প্রধান ফাইলে ব্যবহার:
-অন্তর্ভুক্ত "modules/আমার_গণিত.lp"
-দেখাও "৯ এর বর্গ:", বর্গ(৯)
-দেখাও "√১৬ ≈", বর্গমূল_আনুমানিক(১৬)
+buf = alloc(64)
+mem_write(buf, 0, 12345)
+val = mem_read(buf, 0)
+free(buf)
 ```
 
----
+### Direct Syscalls & Hardware Boundary (`--kavach`)
 
-## অধ্যায় ৮: ফাইল I/O (Chapter 8: File I/O)
+When compiling with `./bin/lipc app.lp -o app --kavach`, raw hardware operations (`syscall`, `mem_write`, `mem_read`) must live inside functions prefixed with `silicon_` or `সিলিকন_`:
 
 ```lipi
-অন্তর্ভুক্ত "std/io.lp"
-
-// ফাইল লেখা (File Write)
-// WHY: syscall write() directly — no stdio buffering
-ধরি ফাইল = ফাইল_খোলো("data.txt", O_WRONLY | O_CREAT, ৬৪৪)
-ফাইল_লিখো(ফাইল, "লিপিতে লেখা ফাইল")
-ফাইল_বন্ধ করো(ফাইল)
-
-// ফাইল পড়া (File Read)
-ধরি পড়ার_ফাইল = ফাইল_খোলো("data.txt", O_RDONLY, ০)
-ধরি বাফার = মেমরি_বরাদ্দ(৪০৯৬)
-ধরি পড়া_বাইট = ফাইল_পড়ো(পড়ার_ফাইল, বাফার, ৪০৯৬)
-দেখাও "পড়া হয়েছে:", পড়া_বাইট, "বাইট"
-ফাইল_বন্ধ করো(পড়ার_ফাইল)
+fn silicon_write_byte ptr offset val
+    mem_byte_write(ptr, offset, val)
+    return 0
 ```
 
----
-
-## অধ্যায় ৯: নেটওয়ার্ক (Chapter 9: Networking)
-
-```lipi
-অন্তর্ভুক্ত "std/net.lp"
-
-// HTTP সার্ভার (HTTP Server)
-// WHY: Direct Linux TCP socket — no Node.js, no nginx needed
-কাজ হ্যান্ডলার(ক্লায়েন্ট_fd) {
-    ধরি রেসপন্স = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>লিপি সার্ভার!</h1>"
-    সকেট_লিখো(ক্লায়েন্ট_fd, রেসপন্স)
-    সকেট_বন্ধ(ক্লায়েন্ট_fd)
-}
-
-ধরি সার্ভার = TCP_সকেট_তৈরি()
-সকেট_বাঁধো(সার্ভার, ৮০৮০)
-সকেট_শোনো(সার্ভার, ১২৮)
-
-যতক্ষণ সত্য {
-    ধরি ক্লায়েন্ট = সকেট_গ্রহণ(সার্ভার)
-    হ্যান্ডলার(ক্লায়েন্ট)
-}
-```
-
----
-
-## অধ্যায় ১০: হার্ডওয়্যার প্রোগ্রামিং (Chapter 10: Hardware Programming)
-
-```lipi
-// সরাসরি CPU clock পড়া
-ধরি শুরু = সিপিউ_ক্লক()
-
-// SIMD — একসাথে ৮টি সংখ্যা প্রক্রিয়াকরণ
-অন্তর্ভুক্ত "std/sys/simd.lp"
-ধরি ভেক্টর_ক = SIMD_লোড(ptr_ক)
-ধরি ভেক্টর_খ = SIMD_লোড(ptr_খ)
-ধরি ফলাফল = SIMD_যোগ(ভেক্টর_ক, ভেক্টর_খ)
-
-// kernel syscall সরাসরি
-অন্তর্ভুক্ত "std/sys/kernel.lp"
-ধরি pid = getpid()
-দেখাও "প্রসেস আইডি:", pid
-```
-
----
-
-## দ্রুত রেফারেন্স (Quick Reference)
-
-### Built-in Functions
-
-| ফাংশন | কাজ | উদাহরণ |
-|-------|-----|---------|
-| `দেখাও(...)` | screen এ দেখানো | `দেখাও "হ্যালো"` |
-| `দৈর্ঘ্য(x)` | length of string/array | `দৈর্ঘ্য("abc")` → ৩ |
-| `বাংলা_সংখ্যা(n)` | number → Bengali string | `বাংলা_সংখ্যা(৪২)` |
-| `সিপিউ_ক্লক()` | RDTSC hardware clock | nanosecond timer |
-| `মেমরি_বরাদ্দ(n)` | allocate n bytes | raw memory |
-| `মেমরি_মুক্তি(p, n)` | free memory | release allocation |
-| `মেমরি_বাইট_লেখো(p, i, v)` | write byte | low-level write |
-| `মেমরি_বাইট_পড়ো(p, i)` | read byte | low-level read |
-| `সাইজ(T)` | sizeof struct T | struct memory size |
-| `ফাইল_খোলো(path, flags, mode)` | open file | returns fd |
-| `ফাইল_পড়ো(fd, buf, n)` | read n bytes | returns bytes read |
-| `ফাইল_লিখো(fd, data)` | write to file | returns bytes written |
-| `ফাইল_বন্ধ করো(fd)` | close file | releases fd |
-
-### বিশেষ ধ্রুবক (Special Constants)
-| ধ্রুবক | মান |
-|--------|-----|
-| `সত্য` | 1 (true) |
-| `মিথ্যা` | 0 (false) |
-| `শূন্য` | 0 (null/nil) |
-| `O_RDONLY` | 0 |
-| `O_WRONLY` | 1 |
-| `O_CREAT` | 64 |
-
----
-
-## কম্পাইল ও রান (Compile & Run)
+## 8. Cross-Compilation Targets
 
 ```bash
-# সাধারণ compile
-lipic আমার_প্রোগ্রাম.lp -o আমার_প্রোগ্রাম
-./আমার_প্রোগ্রাম
+# Linux x86_64 Static-PIE ELF64 (default)
+./bin/lipc app.lp -o app
 
-# স্বনির্ভর (sovereign) compiler ব্যবহার
-lipi আমার_প্রোগ্রাম.lp -o আমার_প্রোগ্রাম
+# Windows x86_64 PE32+
+./bin/lipc app.lp -o app.exe --target windows
 
-# binary type verify করুন
-file আমার_প্রোগ্রাম  # → ELF 64-bit, statically linked
+# macOS Mach-O
+./bin/lipc app.lp -o app_macos --target macos
 
-# sovereignty audit
-ldd আমার_প্রোগ্রাম   # → not a dynamic executable ✔
+# ARM64 / RISC-V 64 / WebAssembly
+./bin/lipc app.lp -o app_arm64 --target arm64
+./bin/lipc app.lp -o app_rv64 --target riscv64
+./bin/lipc app.lp -o app.wasm --target wasm
 ```
 
----
+## 9. Bilingual Keyword Quick Reference
 
-## আরো শিখুন (Learn More)
-
-- **স্পেসিফিকেশন:** `docs/SPECIFICATION_v1.md`
-- **আর্কিটেকচার:** `docs/ARCHITECTURE.md`
-- **stdlib ডক:** `docs/STANDARD_LIBRARY.md`
-- **উদাহরণ:** `tests/*.lp` (৪২টি প্রোগ্রাম)
-- **লাইভ সার্ভার ও ডেমো:** `benchmarks/servers/web_server.lp` চালিয়ে দেখুন
-
----
-
-*গাইড রচনা: Gyani Supreme | লিপি প্রথম ১.০ | ২০২৬-০৯-০৯*
+| Concept | English | Bengali | Directive |
+|---|---|---|---|
+| Function | `fn` | `ফাংশন` / `কাজ` | `@fn` ... `@end` |
+| Struct | `struct` | `গঠন` / `কাঠামো` | `@struct` ... `@end` |
+| Return | `return` | `ফেরত` | `return` |
+| If / Else | `if` / `else` | `যদি` / `নাহলে` / `নতুবা` | `@if` / `@else` / `@end` |
+| While | `while` | `যতক্ষণ` | `@while` ... `@end` |
+| Break / Continue | `break` / `continue` | `থামো` / `চলো` | `break` / `continue` |
+| Print | `say` / `println` | `বলো` / `দেখাও` | `say` / `println` |
+| Import | `import` / `include` | `আমদানি` / `অন্তর্ভুক্ত` | `import` / `include` |
+| True / False | `true` / `false` | `সত্য` / `মিথ্যা` | `1` / `0` |

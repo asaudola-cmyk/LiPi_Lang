@@ -5,7 +5,7 @@
   <mime-type type="text/x-lipi">
     <comment>Lipi source code</comment>
     <comment xml:lang="bn">লিপি সোর্স কোড</comment>
-    <!-- Explicitly bind to Lipi's sovereign vector desktop icon -->
+    <!-- Bind to Lipi vector desktop icon -->
     <icon name="text-x-lipi"/>
     <generic-icon name="text-x-generic"/>
     <glob pattern="*.lp" weight="80"/>

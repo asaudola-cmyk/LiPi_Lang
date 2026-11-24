@@ -1,9 +1,0 @@
-{
-  "engine": "pure-lipi-sovereign-benchmark",
-  "suites": [
-    {"suite":"loop_10m","lang":"Lipi Canonical","best_ms":6.69,"bin_kb":16},
-    {"suite":"loop_10m","lang":"C GCC -O3","best_ms":8.11,"bin_kb":15},
-    {"suite":"columnstore_1m","lang":"Lipi Canonical","best_ms":1.15,"bin_kb":16},
-    {"suite":"columnstore_1m","lang":"C GCC -O3","best_ms":1.25,"bin_kb":15}
-  ]
-}

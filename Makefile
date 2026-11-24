@@ -1,6 +1,6 @@
 # ==============================================================================
-# 👑 LIPI SOVEREIGN PROGRAMMING LANGUAGE — ROOT MAKEFILE
-# ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign Build Automation
+# Lipi Programming Language — Root Makefile
+# Self-hosted native toolchain build, bootstrap, test, and packaging targets
 # ==============================================================================
 
 SHELL := /bin/bash
@@ -47,7 +47,7 @@ build: bootstrap
 		mkdir -p /tmp/lipi_vsix_stage/extension && \
 		cp -a editors/vscode/. /tmp/lipi_vsix_stage/extension/ && \
 		printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json"/><Default Extension=".vsixmanifest" ContentType="text/xml"/><Default Extension=".js" ContentType="application/javascript"/><Default Extension=".ts" ContentType="text/plain"/><Default Extension=".md" ContentType="text/markdown"/><Default Extension=".png" ContentType="image/png"/><Default Extension=".svg" ContentType="image/svg+xml"/><Default Extension=".woff" ContentType="font/woff"/></Types>' > '/tmp/lipi_vsix_stage/[Content_Types].xml' && \
-		printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"><Metadata><Identity Language="en-US" Id="lipi-language" Version="1.0.0" Publisher="lipi-lang"/><DisplayName>Lipi Sovereign Programming Language</DisplayName><Description xml:space="preserve">Official Language Support for Lipi (Bilingual English &amp; Bengali, Direct Silicon Compiler)</Description><Tags>lipi,bengali,compiler,sovereign</Tags><Categories>Programming Languages,Snippets</Categories><Icon>extension/icons/icon.png</Icon></Metadata><Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true"/></Assets></PackageManifest>' > /tmp/lipi_vsix_stage/extension.vsixmanifest && \
+		printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"><Metadata><Identity Language="en-US" Id="lipi-language" Version="1.0.0" Publisher="lipi-lang"/><DisplayName>Lipi Programming Language</DisplayName><Description xml:space="preserve">Language support for Lipi (bilingual English &amp; Bengali native systems language)</Description><Tags>lipi,bengali,compiler</Tags><Categories>Programming Languages,Snippets</Categories><Icon>extension/icons/icon.png</Icon></Metadata><Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true"/></Assets></PackageManifest>' > /tmp/lipi_vsix_stage/extension.vsixmanifest && \
 		(cd /tmp/lipi_vsix_stage && zip -rq "$(CURDIR)/dist/lipi-language-1.0.0.vsix" '[Content_Types].xml' extension.vsixmanifest extension) && \
 		cp -f dist/lipi-language-1.0.0.vsix dist/vscode/lipi-language-1.0.0.vsix && \
 		rm -rf /tmp/lipi_vsix_stage; \
@@ -68,34 +68,34 @@ build: bootstrap
 	@./bin/lipc src/tools/lipi_unikernel_boot.lp bin/lipi_unikernel_boot && chmod +x bin/lipi_unikernel_boot
 	@./bin/lipc build.lp bin/lipi-build && chmod +x bin/lipi-build
 	@./bin/lipc tests/run_tests.lp bin/lipi-test && chmod +x bin/lipi-test
-	@echo "👑 100% Native LiPi Developer Toolchain Ready!"
+	@echo "Native Lipi developer toolchain built in bin/"
 
-# Build sovereign bare-metal Multiboot2 unikernel image
+# Build bare-metal Multiboot2 unikernel image
 unikernel: build
-	@echo "👑 Synthesizing Sovereign Ring-0 Bare-Metal Multiboot2 Unikernel image..."
+	@echo "Building Multiboot2 unikernel image..."
 	@./bin/lipi_unikernel_boot
-	@echo "✔ Unikernel image ready at dist/lipi_kernel.bin"
+	@echo "Unikernel image ready at dist/lipi_kernel.bin"
 
-# Build sovereign Windows PE32+ native release binaries
+# Build Windows PE32+ native release binaries
 windows: build
-	@echo "🪟 Synthesizing Native Windows PE32+ binaries..."
+	@echo "Building Windows PE32+ binaries..."
 	@mkdir -p dist
 	@./bin/lipc src/compiler/driver_cli.lp dist/lipc.exe --target windows
 	@./bin/lipc src/tools/lipi.lp dist/lipi.exe --target windows
 	@./bin/lipc src/tools/aati.lp dist/aati.exe --target windows
 	@zip -q -r dist/lipi-1.0.0-windows-x86_64.zip dist/*.exe install.ps1 README.md LICENSE utso/ aati/ examples/
-	@echo "✔ Native Windows PE32+ binaries and archive created in dist/"
+	@echo "Windows PE32+ binaries and archive created in dist/"
 
 # Package standalone pre-built release archive for Linux x86_64 and Windows
 release: build unikernel windows
-	@echo "📦 Packaging sovereign standalone release distribution..."
+	@echo "Packaging standalone release distribution..."
 	@mkdir -p dist
 	@tar -czf dist/lipi-1.0.0-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
-	@echo "✔ Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
+	@echo "Standalone release archive created: dist/lipi-1.0.0-linux-x86_64.tar.gz"
 
-# Run autonomous 257 regression test suite
+# Run full regression test suite (258 tests)
 test: bootstrap
-	@echo "🧪 Running full 257 regression test suite..."
+	@echo "Running regression test suite..."
 	@if [ -x bin/lipi ]; then \
 		./bin/lipi test; \
 	elif [ -x bin/lipi-test ]; then \

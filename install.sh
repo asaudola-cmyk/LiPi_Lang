@@ -8,7 +8,7 @@
 
 set -e
 
-LIPI_VERSION="First 1.0.0 (প্রথম ১.০.০)"
+LIPI_VERSION="1.0.0"
 LIPI_REPO="https://github.com/asaudola-cmyk/LiPi_Lang.git"
 LIPI_INSTALL_DIR="${LIPI_INSTALL_DIR:-$HOME/.lipi}"
 LIPI_BIN_DIR="${LIPI_BIN_DIR:-$HOME/.local/bin}"
@@ -35,7 +35,7 @@ header() {
     printf "  ╚══════╝╚═╝╚═╝     ╚═╝\n"
     printf "%b" "${LIPI_COLOR_RESET}"
     printf "  %bLipi Programming Language%b — %b%s%b\n" "${LIPI_COLOR_BOLD}" "${LIPI_COLOR_RESET}" "${LIPI_COLOR_YELLOW}" "${LIPI_VERSION}" "${LIPI_COLOR_RESET}"
-    printf "  The world's first globally-ready language with Unicode identifiers\n\n"
+    printf "  Self-hosted bilingual native systems programming language\n\n"
 }
 
 # ─── Check Architecture & Operating System ──────────────────────────────────
@@ -45,10 +45,10 @@ check_system() {
 
     if [ "$OS" = "Darwin" ]; then
         ok "Detected macOS ($ARCH) Darwin environment."
-        info "LiPi supports native Mach-O 64-bit container synthesis and WebAssembly on macOS."
+        info "Lipi supports native Mach-O 64-bit output and WebAssembly on macOS."
     elif [ "$OS" = "Linux" ]; then
         ok "Detected Linux ($ARCH) environment."
-        info "LiPi sovereign direct-to-silicon compilation active for $ARCH (x86_64, ARM64, RISC-V 64)."
+        info "Lipi native direct machine-code compilation active for $ARCH (x86_64, ARM64, RISC-V 64)."
     else
         info "Detected Operating System: $OS ($ARCH)."
     fi
@@ -56,8 +56,8 @@ check_system() {
 
 # ─── Check Toolchain ─────────────────────────────────────────────────────────
 check_toolchain() {
-    info "Verifying Sovereign Self-Hosting Toolchain..."
-    ok "100% Sovereign Free-Standing Engine active (Zero C, Zero Libc, Zero LLVM) 👑"
+    info "Verifying self-hosted toolchain..."
+    ok "Standalone freestanding toolchain active (zero C, libc, or LLVM dependencies)"
 }
 
 # ─── Install Repository ──────────────────────────────────────────────────────

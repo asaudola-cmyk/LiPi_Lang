@@ -801,26 +801,26 @@ fn build_completion_items
     push(items, make_item("চলো", 14, "লুপ চলো", "চলো"))
 
     // Standard Library Modules
-    push(items, make_item("std/web.lp", 9, "Web Framework", "Sovereign HTTP Router & Server"))
-    push(items, make_item("std/thread.lp", 9, "Native Threads", "Linux Clone Syscall Multithreading"))
-    push(items, make_item("std/hashmap.lp", 9, "Hash Map", "Fast Robin-Hood Hash Map"))
-    push(items, make_item("std/arena.lp", 9, "Arena Allocator", "High-speed Bump Allocator"))
+    push(items, make_item("aati/lipi_web/router.lp", 9, "Web Framework", "HTTP Router & Server"))
+    push(items, make_item("utso/concurrency", 9, "Native Threads", "Linux Clone Syscall Multithreading"))
+    push(items, make_item("utso/hashmap", 9, "Hash Map", "Hash Map"))
+    push(items, make_item("utso/arena", 9, "Arena Allocator", "Bump Arena Allocator"))
     push(items, make_item("utso/io", 9, "Direct Syscall I/O", "Linux AMD64 Kernel Syscalls"))
     push(items, make_item("utso/string", 9, "Unicode String", "String Utilities & Slicing"))
     push(items, make_item("utso/memory", 9, "Kernel Allocator", "Virtual Memory & Slab Operations"))
-    push(items, make_item("std/math.lp", 9, "Fast Math", "Mathematical Operations"))
-    push(items, make_item("std/simd.lp", 9, "SIMD Acceleration", "AVX2 & SSE Vector Math"))
-    push(items, make_item("std/crypto.lp", 9, "Sovereign Cryptography", "AES-256-GCM & SHA-256"))
-    push(items, make_item("std/db.lp", 9, "Embedded Database", "Embedded Key-Value ACID Store"))
-    push(items, make_item("--kavach", 14, "Sovereign Hardware Crown", "Strict static ownership proof + silicon_* hardware isolation"))
+    push(items, make_item("utso/math", 9, "Math", "Mathematical Operations"))
+    push(items, make_item("utso/core/simd.lp", 9, "SIMD", "AVX2 & SSE Vector Math"))
+    push(items, make_item("utso/crypto", 9, "Cryptography", "AES-GCM, ChaCha20-Poly1305, SHA-256, Ed25519, P-256/P-384, RSA, X.509"))
+    push(items, make_item("aati/lipi_sql/src/sql.lp", 9, "SQL Engine", "WAL-backed Embedded SQL Store"))
+    push(items, make_item("--kavach", 14, "Kavach Static Safety", "Static ownership proof + silicon_* hardware boundary isolation"))
     push(items, make_item("alloc", 3, "Segregated Slab Allocator", "alloc(size) -> O(1) tracked slab block"))
     push(items, make_item("বরাদ্দ", 3, "বরাদ্দ (Slab Alloc)", "বরাদ্দ(size) -> স্ল্যাব মেমরি বরাদ্দ"))
-    push(items, make_item("free", 3, "Sovereign Memory Free", "free(ptr) for slab / free(addr, size) in utso/memory"))
-    push(items, make_item("মুক্ত", 3, "মুক্ত (Slab Free)", "মুক্ত(ptr) দ্বারা মেমরি মুক্তি ও প্রমাণ"))
+    push(items, make_item("free", 3, "Memory Free", "free(ptr) for slab / free(addr, size) in utso/memory"))
+    push(items, make_item("মুক্ত", 3, "মুক্ত (Slab Free)", "মুক্ত(ptr) দ্বারা মেমরি মুক্তি"))
     push(items, make_item("arena_mark", 3, "Arena Snapshot Mark", "mark = arena_mark() for O(1) scoped arena unwind"))
     push(items, make_item("arena_reset", 3, "Arena Snapshot Reset", "arena_reset(mark) frees all transient blocks cleanly"))
     push(items, make_item("arena_allocated", 3, "Arena Bytes Counter", "Returns active allocated heap bytes"))
-    push(items, make_item("silicon_seal", 14, "Sovereign Hardware Crown", "Prefix silicon_* / সিলিকন_* required for syscall/mem_write under --kavach"))
+    push(items, make_item("silicon_seal", 14, "Kavach Hardware Boundary", "Prefix silicon_* / সিলিকন_* required for syscall/mem_write under --kavach"))
 
     res = "["
     i = 0
@@ -872,38 +872,38 @@ fn get_hover_documentation word
         return "### Loop Break (`break` / `থামো`)\nTerminates current loop execution immediately."
     if word == "continue" or word == "চলো"
         return "### Loop Continue (`continue` / `চলো`)\nProceeds directly to next loop iteration."
-    if word == "std/web.lp" or word == "web_router_create"
-        return "### `std/web.lp` (Web Framework)\nSovereign HTTP server, JSON routing, and WebSocket engine.\n- `web_router_create()`\n- `web_server_start(port)`"
-    if word == "std/thread.lp" or word == "thread_create"
-        return "### `std/thread.lp` (Multithreading)\nNative Linux clone syscall threads, mutexes, and atomics.\n- `thread_create(fn_ptr, arg)`\n- `thread_join(th)`"
-    if word == "std/hashmap.lp" or word == "hashmap_new"
-        return "### `std/hashmap.lp` (Robin Hood Hash Map)\nFast O(1) key-value hash map data structure.\n- `hashmap_new()`\n- `hashmap_set(hm, key, val)`\n- `hashmap_get(hm, key)`"
-    if word == "std/arena.lp" or word == "arena_create"
-        return "### `std/arena.lp` (Arena Allocator)\nUltra-fast bump memory allocator for batch allocations.\n- `arena_create(size)`\n- `arena_alloc(ar, size)`\n- `arena_reset(ar)`"
+    if word == "aati/lipi_web/router.lp" or word == "web_router_create"
+        return "### `aati/lipi_web/router.lp` (Web Framework)\nHTTP server, JSON routing, and WebSocket engine.\n- `web_router_create()`\n- `web_server_start(port)`"
+    if word == "utso/concurrency" or word == "thread_create"
+        return "### `utso/concurrency` (Multithreading)\nNative Linux clone syscall threads, mutexes, and atomics.\n- `thread_create(fn_ptr, arg)`\n- `thread_join(th)`"
+    if word == "utso/hashmap" or word == "hashmap_new"
+        return "### `utso/hashmap` (Hash Map)\nKey-value hash map data structure.\n- `hashmap_new()`\n- `hashmap_set(hm, key, val)`\n- `hashmap_get(hm, key)`"
+    if word == "utso/arena" or word == "arena_create"
+        return "### `utso/arena` (Arena Allocator)\nBump memory allocator for batch allocations.\n- `arena_create(size)`\n- `arena_alloc(ar, size)`\n- `arena_reset(ar)`"
     if word == "utso/io" or word == "utso/core/io.lp" or word == "syscall"
         return "### `utso/io` (Direct Syscall I/O)\nLow-level I/O via direct Linux AMD64 kernel syscalls (0% Libc).\n- `write_out(msg)`\n- `file_open(path, flags)`"
     if word == "utso/string" or word == "utso/core/string.lp"
         return "### `utso/string` (Unicode String Library)\nString manipulation, padding, repeat, and substring slicing.\n- `str_repeat(s, n)`\n- `str_sub(s, start, end)`"
     if word == "utso/memory"
         return "### `utso/memory` (Kernel Memory Allocator)\nPage-aligned virtual memory via direct SYS_mmap & SYS_munmap.\n- `malloc(size)`\n- `free(addr, size)`\n- `mem_copy(dest, src, len)`"
-    if word == "std/math.lp"
-        return "### `std/math.lp` (Mathematical Library)\nFast integer and float arithmetic, powers, and trigonometry.\n- `abs(x)`, `min(a, b)`, `max(a, b)`"
-    if word == "std/simd.lp"
-        return "### `std/simd.lp` (Hardware SIMD)\nAVX2 / SSE vector arithmetic operations."
-    if word == "std/crypto.lp"
-        return "### `std/crypto.lp` (Sovereign Cryptography)\nHardware-accelerated AES-256-GCM and SHA-256."
-    if word == "std/db.lp"
-        return "### `std/db.lp` (Embedded Database)\nEmbedded key-value storage engine with ACID transactions."
+    if word == "utso/math"
+        return "### `utso/math` (Math Library)\nInteger and float arithmetic utilities.\n- `abs(x)`, `min(a, b)`, `max(a, b)`"
+    if word == "utso/core/simd.lp"
+        return "### `utso/core/simd.lp` (Hardware SIMD)\nAVX2 / SSE vector arithmetic operations."
+    if word == "utso/crypto"
+        return "### `utso/crypto` (Cryptography)\nSHA-256/384/512, AES-GCM, ChaCha20-Poly1305, X25519, Ed25519, P-256/P-384, RSA, X.509."
+    if word == "aati/lipi_sql/src/sql.lp"
+        return "### `aati/lipi_sql/src/sql.lp` (Embedded SQL)\nDynamic relational SQL engine with CRC-32 fsync WAL."
     if word == "malloc" or word == "free" or word == "alloc" or word == "বরাদ্দ" or word == "মুক্ত"
         return "### Memory Management (`alloc` / `free` / `malloc`)\n- `alloc(size)` / `free(ptr)`: O(1) bounds- & double-free-checked segregated slab allocator.\n- `malloc(size)` / `free(addr, size)` (`utso/memory`): Direct kernel `SYS_mmap` / `SYS_munmap`."
 
     if word == "--kavach" or word == "silicon_" or word == "সিলিকন_"
-        return "### Sovereign Kavach (`--kavach` / `--কবচ`)\nEnforces compile-time leak/use-after-free mathematical proofs AND restricts raw hardware primitives (`syscall`, `mem_write`) exclusively to functions prefixed with `silicon_` or `সিলিকন_`."
+        return "### Kavach Static Safety (`--kavach` / `--কবচ`)\nEnforces compile-time leak/use-after-free checks AND restricts raw hardware primitives (`syscall`, `mem_write`) exclusively to functions prefixed with `silicon_` or `সিলিকন_`."
 
     if word == "arena_mark" or word == "arena_reset" or word == "arena_allocated"
         return "### Scoped Arena Snapshots\n`mark = arena_mark()`, run allocations, then `arena_reset(mark)` in O(1) with `arena_allocated()` accounting."
     
-    return "### 👑 Lipi Sovereign Programming Language (লিপি প্রথম ১.০.০ - First 1.0.0)\n**Direct Silicon Execution** | 0% Libc | 0% LLVM | Bilingual (English & Bengali)"
+    return "### Lipi Programming Language (1.0.0)\nSelf-hosted bilingual native compiler (English & Bengali, zero libc/LLVM)"
 
 // ─── Source Formatter ─────────────────────────────────────────────────────────
 // WHY: Provides 4-space indentation alignment for functions, structs, conditionals, and loops.

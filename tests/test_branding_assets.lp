@@ -90,24 +90,23 @@ import "aati/lipi_gui/framebuffer"
   png_128 = "docs/branding/png/lipi_icon_128x128.png"
   png_256 = "docs/branding/png/lipi_icon_256x256.png"
   png_512 = "docs/branding/png/lipi_icon_512x512.png"
-  og_card = "docs/branding/png/og_image.png"
 
   ok_ico = file_exists(ico_path)
   ok_256 = file_exists(png_256)
-  ok_og  = file_exists(og_card)
+  ok_512 = file_exists(png_512)
 
   sz_ico = get_file_size(ico_path)
   sz_256 = get_file_size(png_256)
-  sz_og  = get_file_size(og_card)
+  sz_512 = get_file_size(png_512)
 
   ok_s2 = 0
-  @if ok_ico == 1 && ok_256 == 1 && ok_og == 1 && sz_ico > 100 && sz_256 > 1000 && sz_og > 5000
+  @if ok_ico == 1 && ok_256 == 1 && ok_512 == 1 && sz_ico > 100 && sz_256 > 1000 && sz_512 > 5000
     ok_s2 = 1
   @end
 
-  ok_v2 = assert_true(ok_s2 == 1, "Favicon ICO, 256px PNG, and 1200x630 OG card verified")
+  ok_v2 = assert_true(ok_s2 == 1, "Favicon ICO, 256px PNG, and 512px PNG icon assets verified")
   @if ok_v2 == 1
-    println(str_concat("  ✔ [PASS] Multi-resolution raster assets verified (ICO: ", str_concat(to_str(sz_ico), str_concat(" B, 256px: ", str_concat(to_str(sz_256), str_concat(" B, OG: ", str_concat(to_str(sz_og), " B)")))))))
+    println(str_concat("  ✔ [PASS] Multi-resolution raster assets verified (ICO: ", str_concat(to_str(sz_ico), str_concat(" B, 256px: ", str_concat(to_str(sz_256), str_concat(" B, 512px: ", str_concat(to_str(sz_512), " B)")))))))
     passed_tests = passed_tests + 1
   @end
 
