@@ -614,7 +614,7 @@ fn _wd_build_app_so path dep_soname
     _wd_lu64(p, 240, 1792) _wd_lu64(p, 248, 1792) _wd_lu64(p, 256, 1792) _wd_lu64(p, 264, 8) _wd_lu64(p, 272, 16) _wd_lu64(p, 280, 16)
 
     // .dynstr @ 0x300 (768)
-    snames = [dep_soname, "dep_mul_add", "dep_magic_val", "app_call_dep", "app_call_ifunc", "app_read_tls", "app_read_copy", "app_read_init_flag", "tls_seed"]
+    snames = [dep_soname, "dep_mul_add", "dep_magic_val", "app_call_dep", "app_call_ifunc", "app_read_tls", "app_read_copy", "app_read_init_flag", "tls_seed", "app_gnu_ifunc"]
     soffs = list()
     cur_s = 1
     si = 0
@@ -649,9 +649,11 @@ fn _wd_build_app_so path dep_soname
     end
     // sym 8: tls_seed (st_shndx=2, st_value=0)
     _wd_lu32(p, 512 + (8 * 24), get(soffs, 8)) mem_byte_write(p, 512 + (8 * 24) + 4, 22) _wd_lu16(p, 512 + (8 * 24) + 6, 2) _wd_lu64(p, 512 + (8 * 24) + 8, 0)
+    // sym 9: app_gnu_ifunc (STB_GLOBAL|STT_GNU_IFUNC = 26, resolver @ 0x6A0 = 1696!)
+    _wd_lu32(p, 512 + (9 * 24), get(soffs, 9)) mem_byte_write(p, 512 + (9 * 24) + 4, 26) _wd_lu16(p, 512 + (9 * 24) + 6, 1) _wd_lu64(p, 512 + (9 * 24) + 8, 1696) _wd_lu64(p, 512 + (9 * 24) + 16, 16)
 
-    // DT_HASH @ 0x400 (1024): nbuckets=1, nchain=9
-    _wd_lu32(p, 1024, 1) _wd_lu32(p, 1028, 9)
+    // DT_HASH @ 0x400 (1024): nbuckets=1, nchain=10
+    _wd_lu32(p, 1024, 1) _wd_lu32(p, 1028, 10)
 
     // .rela.dyn @ 0x440 (1088): 5 relocations (120 bytes)
     ro = 1088
@@ -720,16 +722,18 @@ fn test_d2_sovereign_elf64_linker()
 
     f_dep   = ffi_find_symbol(app_lib, "app_call_dep")
     f_ifunc = ffi_find_symbol(app_lib, "app_call_ifunc")
+    f_gif   = ffi_find_symbol(app_lib, "app_gnu_ifunc")
     f_tls   = ffi_find_symbol(app_lib, "app_read_tls")
     f_copy  = ffi_find_symbol(app_lib, "app_read_copy")
     f_init  = ffi_find_symbol(app_lib, "app_read_init_flag")
-    if f_dep == 0 or f_ifunc == 0 or f_tls == 0 or f_copy == 0 or f_init == 0
+    if f_dep == 0 or f_ifunc == 0 or f_gif == 0 or f_tls == 0 or f_copy == 0 or f_init == 0
         print("FAIL D2a: missing exported symbols from app_lib")
         return 1
     end
 
     r_dep   = ffi_call_native(f_dep, 6, 7, 100, 0, 0)
     r_ifunc = ffi_call_native(f_ifunc, 88, 0, 0, 0, 0)
+    r_gif   = ffi_call_native(f_gif, 77, 0, 0, 0, 0)
     r_tls   = ffi_call_native(f_tls, 0, 0, 0, 0, 0)
     r_copy  = ffi_call_native(f_copy, 0, 0, 0, 0, 0)
     r_init  = ffi_call_native(f_init, 0, 0, 0, 0, 0)
@@ -738,8 +742,8 @@ fn test_d2_sovereign_elf64_linker()
         print("FAIL D2a: DT_NEEDED + DT_GNU_HASH + JUMP_SLOT expected 142 got " + str(r_dep))
         return 1
     end
-    if r_ifunc != 4288
-        print("FAIL D2a: R_X86_64_IRELATIVE IFUNC expected 4288 got " + str(r_ifunc))
+    if r_ifunc != 4288 or r_gif != 4277
+        print("FAIL D2a: IFUNC (IRELATIVE + STT_GNU_IFUNC) expected 4288,4277 got " + str(r_ifunc) + "," + str(r_gif))
         return 1
     end
     if r_tls != 777

@@ -64,6 +64,9 @@ DT_INIT_ARRAYSZ     = 27
 DT_RUNPATH          = 29
 DT_GNU_HASH         = 1879047925 // 0x6ffffef5
 
+// ELF64 Symbol Types (ELF64_ST_TYPE(st_info) = st_info & 15)
+STT_GNU_IFUNC       = 10
+
 // x86_64 Relocation Types
 R_X86_64_64         = 1
 R_X86_64_COPY       = 5
@@ -589,8 +592,8 @@ fn _ffi_gnu_hash_name name
 end
 
 fn _ffi_find_symbol_entry_in_lib lib sym_name
-    // Returns [addr, st_size, found (0/1)] for a DEFINED (st_shndx != 0) symbol in `lib`.
-    if get(lib, 6) == 0 return [0, 0, 0] end
+    // Returns [addr, st_size, found (0/1), st_type] for a DEFINED (st_shndx != 0) symbol in `lib`.
+    if get(lib, 6) == 0 return [0, 0, 0, 0] end
     base = get(lib, 0)
     dynsym_off = get(lib, 2)
     sym_count = get(lib, 3)
@@ -598,7 +601,7 @@ fn _ffi_find_symbol_entry_in_lib lib sym_name
     min_vaddr = get(lib, 8)
     gnu_hash_off = 0
     if len(lib) > 10 gnu_hash_off = get(lib, 10) end
-    if dynsym_off == 0 or dynstr_off == 0 return [0, 0, 0] end
+    if dynsym_off == 0 or dynstr_off == 0 return [0, 0, 0, 0] end
 
     // Fast path: O(1) DT_GNU_HASH Bloom filter + bucket chain
     if gnu_hash_off > 0
@@ -627,9 +630,10 @@ fn _ffi_find_symbol_entry_in_lib lib sym_name
                             if st_shndx != 0
                                 st_name = mem_read_u32(sym_e, 0)
                                 if _ffi_cstr_eq(base + dynstr_off + st_name, sym_name) == 1
+                                    st_type = mem_byte_read(sym_e, 4) & 15
                                     st_val = mem_read(sym_e, 8)
                                     st_sz = mem_read(sym_e, 16)
-                                    return [base + (st_val - min_vaddr), st_sz, 1]
+                                    return [base + (st_val - min_vaddr), st_sz, 1, st_type]
                                 end
                             end
                         end
@@ -650,16 +654,17 @@ fn _ffi_find_symbol_entry_in_lib lib sym_name
         st_name = mem_read_u32(sym_entry, 0)
         if st_shndx != 0 or sym_count <= 64
             if _ffi_cstr_eq(base + dynstr_off + st_name, sym_name) == 1
+                st_type = mem_byte_read(sym_entry, 4) & 15
                 st_value = mem_read(sym_entry, 8)
                 st_size = mem_read(sym_entry, 16)
                 if st_shndx != 0 or st_value != 0
-                    return [base + (st_value - min_vaddr), st_size, 1]
+                    return [base + (st_value - min_vaddr), st_size, 1, st_type]
                 end
             end
         end
         i = i + 1
     end
-    return [0, 0, 0]
+    return [0, 0, 0, 0]
 end
 
 fn _ffi_resolve_global_symbol lib sym_name skip_self
@@ -688,8 +693,8 @@ fn _ffi_resolve_global_symbol lib sym_name skip_self
         gi = gi + 1
     end
     sh = _ffi_lookup_shim(sym_name)
-    if sh > 0 return [sh, 0, 1] end
-    return [0, 0, 0]
+    if sh > 0 return [sh, 0, 1, 2] end
+    return [0, 0, 0, 0]
 end
 
 // ── 5. Full ELF64 Shared Object Loader (PT_DYNAMIC + BFS DT_NEEDED + IFUNC + TLS) ──
@@ -1009,7 +1014,7 @@ fn _ffi_load_so_internal path depth
                     mem_write(base, patch_off, base + (r_addend - min_vaddr))
                 elif r_type == R_X86_64_IRELATIVE
                     // Defer IFUNC resolver execution until .text is locked PROT_READ|PROT_EXEC
-                    push(irel_list, [patch_off, base + (r_addend - min_vaddr)])
+                    push(irel_list, [patch_off, base + (r_addend - min_vaddr), 0])
                 elif r_type == R_X86_64_DTPMOD64
                     mem_write(base, patch_off, get(lib, 17))
                 elif r_type == R_X86_64_DTPOFF64
@@ -1027,10 +1032,12 @@ fn _ffi_load_so_internal path depth
                 elif (r_type == R_X86_64_GLOB_DAT or r_type == R_X86_64_JUMP_SLOT or r_type == R_X86_64_64 or r_type == R_X86_64_COPY) and dynsym_rel > 0 and r_sym > 0
                     sym_e = base + dynsym_rel + (r_sym * 24)
                     st_name = mem_read_u32(sym_e, 0)
+                    st_type_loc = mem_byte_read(sym_e, 4) & 15
                     st_shndx = mem_byte_read(sym_e, 6) + (mem_byte_read(sym_e, 7) * 256)
                     st_val = mem_read(sym_e, 8)
                     st_sz = mem_read(sym_e, 16)
                     resolved = 0
+                    res_type = st_type_loc
                     if r_type == R_X86_64_COPY
                         sname = _ffi_read_cstr(base + dynstr_off + st_name, 256)
                         gr = _ffi_resolve_global_symbol(lib, sname, 1)
@@ -1043,10 +1050,18 @@ fn _ffi_load_so_internal path depth
                         elif dynstr_off > 0 and st_name > 0
                             sname = _ffi_read_cstr(base + dynstr_off + st_name, 256)
                             gr = _ffi_resolve_global_symbol(lib, sname, 0)
-                            if gr[2] == 1 resolved = gr[0] end
+                            if gr[2] == 1
+                                resolved = gr[0]
+                                res_type = gr[3]
+                            end
                         end
                         if resolved != 0
-                            if r_type == R_X86_64_64
+                            if res_type == STT_GNU_IFUNC
+                                // WHY: STT_GNU_IFUNC (10) exports a resolver function; defer call until .text is RX!
+                                add_v = 0
+                                if r_type == R_X86_64_64 add_v = r_addend end
+                                push(irel_list, [patch_off, resolved, add_v])
+                            elif r_type == R_X86_64_64
                                 mem_write(base, patch_off, resolved + r_addend)
                             else
                                 mem_write(base, patch_off, resolved)
@@ -1100,22 +1115,27 @@ fn _ffi_load_so_internal path depth
     end
     free(fbuf, sz)
 
-    // Step 8: Execute R_X86_64_IRELATIVE (GLIBC IFUNC) resolvers now that .text is RX!
+    // Step 8: Execute R_X86_64_IRELATIVE & STT_GNU_IFUNC resolvers now that .text is RX!
     ii = 0
     while ii < len(irel_list)
         ir = get(irel_list, ii)
         po = ir[0]
         rfn = ir[1]
+        add_v = ir[2]
         if rfn > 0
             target_fn = c_abi_invoke(rfn, 0, 0, 0, 0, 0)
-            mem_write(base, po, target_fn)
+            mem_write(base, po, target_fn + add_v)
         end
         ii = ii + 1
     end
 
-    // Step 9: Run DT_INIT_ARRAY constructors (deps already ran before us via post-order recursion!)
+    // Step 9: Run DT_INIT + DT_INIT_ARRAY constructors (deps already ran before us via post-order recursion!)
     if get(lib, 20) == 0
         list_set(lib, 20, 1)
+        init_fn = get(lib, 15)
+        if init_fn > 0
+            c_abi_invoke(base + init_fn, 0, 0, 0, 0, 0)
+        end
         ia_off = get(lib, 13)
         ia_sz = get(lib, 14)
         if ia_off > 0 and ia_sz >= 8
@@ -1150,18 +1170,30 @@ fn ffi_close_so lib
     return 0
 end
 
-// ── 6. Dynamic Symbol Resolver (O(1) GNU_HASH + Cross-Library DT_NEEDED) ─────
+// ── 6. Dynamic Symbol Resolver (O(1) GNU_HASH + STT_GNU_IFUNC + Cross-Library DT_NEEDED) ──
 
 fn ffi_find_symbol lib sym_name
     r = _ffi_find_symbol_entry_in_lib(lib, sym_name)
-    if r[2] == 1 return r[0] end
+    if r[2] == 1
+        if r[3] == STT_GNU_IFUNC and r[0] > 0
+            // WHY: GNU gABI mandates invoking STT_GNU_IFUNC (10) resolvers (e.g. Ubuntu 22.04 libz crc32)
+            // to obtain the hardware-dispatched implementation pointer.
+            return c_abi_invoke(r[0], 0, 0, 0, 0, 0)
+        end
+        return r[0]
+    end
     // Also search transitively loaded DT_NEEDED dependencies
     if len(lib) > 12
         deps = get(lib, 12)
         di = 0
         while di < len(deps)
             rd = _ffi_find_symbol_entry_in_lib(get(deps, di), sym_name)
-            if rd[2] == 1 return rd[0] end
+            if rd[2] == 1
+                if rd[3] == STT_GNU_IFUNC and rd[0] > 0
+                    return c_abi_invoke(rd[0], 0, 0, 0, 0, 0)
+                end
+                return rd[0]
+            end
             di = di + 1
         end
     end
