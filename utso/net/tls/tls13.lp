@@ -68,14 +68,16 @@ g_tls13_disable_sys = 0
 @end
 
 @fn tls_bytes_to_string(bytes: array) -> string
-  res = ""
-  i = 0
   num_items = bytes.len()
+  @if num_items <= 0 return "" @end
+  b = buf_new(num_items)
+  i = 0
   @while i < num_items
-    b_v = bytes[i] & 255
-    res = str_concat(res, chr(b_v))
+    buf_write_byte(b, bytes[i] & 255)
     i = i + 1
   @end
+  res = buf_to_str(b)
+  buf_free(b)
   return res
 @end
 
@@ -1350,6 +1352,84 @@ g_tls13_disable_sys = 0
   return 1
 @end
 
+@fn _tls13_read_env_var(target_name)
+  // WHY: Reads an environment variable (e.g. SSL_CERT_FILE) directly from /proc/self/environ
+  // with zero extra module imports so portable CA bundles work on any Linux distro/container.
+  fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
+  @if fd < 0 return "" @end
+  raw = buf_new(4096)
+  tmp = alloc(4096)
+  @if tmp > 0
+    @while 1 == 1
+      nr = syscall(0, fd, tmp, 4096, 0, 0, 0)
+      @if nr <= 0 break @end
+      buf_write_mem(raw, tmp, nr)
+    @end
+    free(tmp)
+  @end
+  syscall(3, fd, 0, 0, 0, 0, 0)
+  total = buf_len(raw)
+  base = buf_ptr(raw)
+  tlen = str_len(target_name)
+  found_val = ""
+  pos = 0
+  @while pos < total
+    start = pos
+    eq_pos = 0 - 1
+    @while pos < total
+      b = mem_byte_read(base, pos) & 255
+      @if b == 0 break @end
+      @if b == 61 && eq_pos < 0
+        eq_pos = pos
+      @end
+      pos = pos + 1
+    @end
+    @if eq_pos > start && (eq_pos - start) == tlen
+      matched = 1
+      k = 0
+      @while k < tlen
+        @if (mem_byte_read(base, start + k) & 255) != (mem_byte_read(target_name, k) & 255)
+          matched = 0
+          break
+        @end
+        k = k + 1
+      @end
+      @if matched == 1
+        vlen = pos - (eq_pos + 1)
+        @if vlen > 0
+          found_val = bytes_to_str(base + eq_pos + 1, vlen)
+        @end
+        break
+      @end
+    @end
+    pos = pos + 1
+  @end
+  buf_free(raw)
+  return found_val
+@end
+
+@fn _tls13_load_portable_sys_ca_ders()
+  // WHY: Honors SSL_CERT_FILE first, then searches standard multi-distro Linux/BSD/Nix CA paths.
+  env_ca = _tls13_read_env_var("SSL_CERT_FILE")
+  @if str_len(env_ca) > 0
+    ders = x509_load_pem_bundle_file(env_ca)
+    @if ders.len() > 0 return ders @end
+  @end
+  candidates = [
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/ca-bundle.pem",
+    "/etc/ssl/cert.pem"
+  ]
+  ci = 0
+  @while ci < candidates.len()
+    ders = x509_load_pem_bundle_file(candidates[ci])
+    @if ders.len() > 0 return ders @end
+    ci = ci + 1
+  @end
+  return []
+@end
+
 @fn _tls13_get_active_trust_store()
   combined = []
   @if g_tls13_custom_init == 1
@@ -1361,7 +1441,7 @@ g_tls13_disable_sys = 0
   @end
   @if g_tls13_disable_sys == 0
     @if g_tls13_sys_loaded == 0
-      sys_ders = x509_load_pem_bundle_file("/etc/ssl/certs/ca-certificates.crt")
+      sys_ders = _tls13_load_portable_sys_ca_ders()
       g_tls13_sys_store = x509_trust_store_build(sys_ders)
       g_tls13_sys_loaded = 1
     @end

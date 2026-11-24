@@ -34,7 +34,10 @@ Lipi's libraries are organized into two layers:
   - `simd_raster.lp` — Pure-Lipi `ARGB8888` 2D software compositor (64-bit QWORD paired-pixel clear, Porter-Duff `SRC_OVER` alpha blending, SDF anti-aliased rounded rectangles, Xiaolin Wu AA lines, sprite & 8-bit glyph mask blitting)
   - `ttf.lp` — Pure-Lipi TrueType (`.ttf` / SFNT) binary font parser (`head`, `maxp`, `hhea`, `hmtx`, `cmap` Format 4 & 12, `loca` 16/32-bit, `glyf` quadratic Bézier contours) and 4x4 supersampled non-zero winding anti-aliased scanline rasterizer
   - `png.lp` — Pure-Lipi RFC 2083 PNG encoder/decoder with IEEE CRC-32, Adler-32, full RFC 1950/1951 DEFLATE Inflate (Stored Type 0, Fixed Huffman Type 1, Dynamic Huffman Type 2, LZ77 sliding window), and all 5 PNG scanline filters (`None`, `Sub`, `Up`, `Average`, `Paeth`)
-  - `json.lp`, `json_fast.lp`, `regex.lp`, `fiber_reactor.lp`, `formal_proof.lp`, `simd.lp`, `fs.lp`, `gc.lp`, `graphics_2d.lp`
+  - `hashmap.lp` — Integer Robin-Hood maps plus GC-traced dynamic string-keyed `StrDict` (`dict_new`/`set`/`get`/`get_or`/`has`/`delete`/`keys`/`values`/`free`)
+  - `sync.lp` — Linux `SYS_futex` `FutexMutex`, `FutexCondvar`, `FutexRwLock`, blocking `MPSC` channel, and joinable `CLONE_VM` worker `ThreadPool`
+  - `db.lp` — `O(1)` `StrDict` KV engine with crash-safe disk-persisted binary CRC-32 WAL (`db_open`/`db_compact`/`db_close`/`db_get_opt`), `SYS_flock`, `SYS_fsync`, torn-tail auto-truncation, and ACID transactions
+  - `json.lp`, `json_fast.lp` (RFC 8259 IEEE-754 `f64`, `ByteBuffer` escaping, `O(1)` `StrDict` object lookup), `regex.lp`, `fiber_reactor.lp`, `formal_proof.lp`, `simd.lp`, `fs.lp`, `gc.lp`, `graphics_2d.lp`
 - **`utso/crypto/`**:
   - `sha256.lp`, `sha512.lp`, `sha1.lp`, `base64.lp`, `random.lp`
   - `aes.lp` (AES-128/256-GCM), `advanced.lp` (ChaCha20-Poly1305)
@@ -45,11 +48,11 @@ Lipi's libraries are organized into two layers:
   - `tls/tls13.lp`, `tls/record.lp` — Pure-Lipi TLS 1.3 client with PKI and `CertificateVerify` enforcement
   - `tls13_server.lp` — Pure-Lipi TLS 1.3 server (X25519, `HelloRetryRequest`, SNI multi-domain, P-256/P-384/Ed25519, PSK session resumption, ALPN `h2`/`http/1.1`)
   - `http2/server.lp`, `http2/frame.lp`, `http2/hpack.lp`, `http2/stream.lp` — RFC 7540/7541 HTTP/2 (`h2c` & `h2` over TLS 1.3) with HPACK canonical Huffman decoder
-  - `http.lp`, `http3.lp`, `quic.lp`, `websocket.lp`, `ws_engine.lp`, `ws_wire.lp`
-  - `dns_pure.lp`, `dns_client.lp`, `tcp.lp`, `tcp_server.lp`, `udp.lp`, `io_uring_reactor.lp`, `io_uring_ring.lp`, `grpc.lp`, `grpc_server.lp`, `server_production.lp`
+  - `http.lp` (HTTP/1.1 & HTTPS TLS 1.3 client/server, `http_put`/`http_delete`/`http_patch`, chunked requests, real-time incremental SSE streaming `http_post_stream`/`http_get_stream`), `http3.lp`, `quic.lp`, `websocket.lp`, `ws_engine.lp` (full RFC 6455 Ping/Pong/fragmentation/binary/Close), `ws_wire.lp`
+  - `dns_pure.lp`, `dns_client.lp` (tab/space `/etc/hosts`, UDP `TC=1` TCP fallback, `0xC0` decompression, CNAME chasing, `AAAA`), `tcp.lp` (`O(N)` `bytes_to_str` + `SO_RCVTIMEO`/`SO_SNDTIMEO`), `tcp_server.lp`, `udp.lp`, `io_uring_reactor.lp`, `io_uring_ring.lp`, `grpc.lp`, `grpc_server.lp`, `server_production.lp` (exact 12-byte `EPOLL_PACKED` multi-connection HTTP/1.1 + SSE + full-duplex WS server)
 - **`utso/cpu/`**: `avx512_native.lp`, `avx512_gemm.lp`, `amx_vnni.lp`
 - **`utso/io/`**: `uring.lp`, `uring_sqpoll.lp`, `reactor.lp`, `dma.lp`, `nvme_direct.lp`
-- **`utso/os/`**: `syscalls.lp`, `wayland.lp` (pure-kernel Wayland wire protocol over `AF_UNIX`, `SYS_memfd_create`, `MAP_SHARED`, and `SYS_sendmsg`/`SYS_recvmsg` `SCM_RIGHTS` FD passing), `process.lp`, `thread.lp`, `ipc.lp`, `shm.lp`, `fs.lp`, `vfs.lp`, `env.lp`, `path.lp`, `unikernel.lp`, `build_unikernel.lp`, `boot/`, `drivers/`
+- **`utso/os/`**: `syscalls.lp`, `wayland.lp` (pure-kernel Wayland wire protocol over `AF_UNIX`, `SYS_memfd_create`, `MAP_SHARED`, and `SYS_sendmsg`/`SYS_recvmsg` `SCM_RIGHTS` FD passing), `pty.lp` (pure-kernel `/dev/ptmx` Linux PTY driver with `TIOCSPTLCK`/`TIOCGPTN`/`TIOCSCTTY`/`TIOCSWINSZ`), `process.lp` (`process_capture_full` stdout/stderr/stdin/`SYS_poll` timeout + env inheritance), `thread.lp`, `ipc.lp` (real `SYS_pipe2`, `AF_UNIX` socketpairs/stream sockets, `SYS_memfd_create` `MAP_SHARED` SHM), `shm.lp`, `fs.lp` (`fs_write_atomic`, `SYS_flock` locking, `O(N)` line/dir readers), `vfs.lp`, `env.lp` (mutable `StrDict` env), `path.lp`, `unikernel.lp`, `build_unikernel.lp`, `boot/`, `drivers/`
 - **`utso/tools/`**: `cli.lp`, `repl.lp`, `test_runner.lp`, `profiler.lp`, `debugger.lp`, `lsp/`
 
 ---

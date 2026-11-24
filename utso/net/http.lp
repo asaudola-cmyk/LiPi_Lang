@@ -109,31 +109,41 @@ import "utso/net/tls/tls13"
 @! ----------------------------------------------------------------------------
 
 @! WHY: Strips CR (13), LF (10), and NUL (0) bytes from request targets and header lines to block CRLF response/request splitting.
+@fn _http_raw_ptr(x) return x @end
+
 @fn _http_strip_crlf(s)
-  out = ""
+  ss = str(s)
+  n = str_len(ss)
+  @if n == 0 return "" @end
+  b = buf_new(n)
   i = 0
-  n = str_len(s)
   @while i < n
-    ch = str_char_at(s, i)
+    ch = mem_byte_read(ss, i) & 255
     @if ch != 13 && ch != 10 && ch != 0
-      out = str_concat(out, str_substr(s, i, i + 1))
+      buf_write_byte(b, ch)
     @end
     i = i + 1
   @end
+  out = buf_to_str(b)
+  buf_free(b)
   return out
 @end
 
 @fn _http_sanitize_header_name(s)
-  out = ""
+  ss = str(s)
+  n = str_len(ss)
+  @if n == 0 return "" @end
+  b = buf_new(n)
   i = 0
-  n = str_len(s)
   @while i < n
-    ch = str_char_at(s, i)
+    ch = mem_byte_read(ss, i) & 255
     @if ch != 13 && ch != 10 && ch != 0 && ch != 58 && ch != 32 && ch != 9
-      out = str_concat(out, str_substr(s, i, i + 1))
+      buf_write_byte(b, ch)
     @end
     i = i + 1
   @end
+  out = buf_to_str(b)
+  buf_free(b)
   return out
 @end
 
@@ -204,27 +214,30 @@ import "utso/net/tls/tls13"
 @! ----------------------------------------------------------------------------
 
 @fn http_decode_chunked(raw_body)
-  result = ""
+  rb = str(raw_body)
+  rbp = _http_raw_ptr(rb)
+  blen = str_len(rb)
+  @if blen == 0 return "" @end
+  out_b = buf_new(blen)
   pos = 0
-  blen = str_len(raw_body)
 
   @while pos < blen
     @! Find end of chunk header line (\r\n or \n)
     line_end = -1
     i = pos
     @while i < blen
-      ch = str_char_at(raw_body, i)
+      ch = mem_byte_read(rbp, i) & 255
       @if ch == 10 @! '\n'
         line_end = i
-        i = blen
+        break
       @end
       i = i + 1
     @end
 
     @if line_end == -1
-      pos = blen @! Incomplete chunk header, break
+      break
     @else
-      line_str = str_substr(raw_body, pos, line_end)
+      line_str = bytes_to_str(rbp + pos, line_end - pos)
       semi_pos = str_index_of(line_str, ";")
       @if semi_pos >= 0
         line_str = str_substr(line_str, 0, semi_pos)
@@ -235,18 +248,14 @@ import "utso/net/tls/tls13"
       @if str_len(line_str) > 0
         chunk_size = parse_hex_int(line_str)
         @if chunk_size <= 0 || pos + chunk_size > blen
-          pos = blen @! Final chunk (0) or truncated/malformed chunk boundary
+          break
         @else
-          payload_end = pos + chunk_size
-          chunk_payload = str_substr(raw_body, pos, payload_end)
-          result = str_concat(result, chunk_payload)
-          pos = payload_end
-
-          @! Consume trailing \r and/or \n after chunk payload
-          @if pos < blen && str_char_at(raw_body, pos) == 13 @! '\r'
+          buf_write_mem(out_b, rbp + pos, chunk_size)
+          pos = pos + chunk_size
+          @if pos < blen && (mem_byte_read(rbp, pos) & 255) == 13
             pos = pos + 1
           @end
-          @if pos < blen && str_char_at(raw_body, pos) == 10 @! '\n'
+          @if pos < blen && (mem_byte_read(rbp, pos) & 255) == 10
             pos = pos + 1
           @end
         @end
@@ -254,6 +263,8 @@ import "utso/net/tls/tls13"
     @end
   @end
 
+  result = buf_to_str(out_b)
+  buf_free(out_b)
   return result
 @end
 
@@ -1079,8 +1090,8 @@ import "utso/net/tls/tls13"
     @end
   @end
 
-  @! Receive encrypted HTTPS response records
-  raw_resp = ""
+  @! Receive encrypted HTTPS response records into O(N) ByteBuffer
+  resp_buf = buf_new(4096)
   s_app_seq = 0
   @while 1 == 1
     rec = _http_tls_read_record(stream.fd)
@@ -1094,23 +1105,28 @@ import "utso/net/tls/tls13"
       break
     @end
     @if rec.tls_rec_type != 23
+      buf_free(resp_buf)
       return ""
     @end
     dec = _http_tls_unwrap_aead_record_suite(cipher, app_keys.s_key, app_keys.s_iv, s_app_seq, rec.tls_rec_hdr, rec.tls_rec_body)
     @if dec.tls_pt_ok != 1
+      buf_free(resp_buf)
       return ""
     @end
     s_app_seq = s_app_seq + 1
     @if dec.tls_pt_type == 21
       break
     @elif dec.tls_pt_type == 23
-      raw_resp = string_concat(raw_resp, tls_bytes_to_string(dec.tls_pt_data))
-      @if _http_is_wire_response_complete(raw_resp) == 1
+      pt_str = tls_bytes_to_string(dec.tls_pt_data)
+      buf_write_str(resp_buf, pt_str)
+      @if _http_is_wire_response_complete(buf_to_str(resp_buf)) == 1
         break
       @end
     @end
   @end
 
+  raw_resp = buf_to_str(resp_buf)
+  buf_free(resp_buf)
   return raw_resp
 @end
 
@@ -1175,11 +1191,14 @@ import "utso/net/tls/tls13"
   return ""
 @end
 
-@fn _http_execute_single(method, url, extra_headers, body)
+@fn _http_execute_single_to(method, url, extra_headers, body, timeout_ms)
   u = http_parse_url(url)
   stream = tcp_stream_connect(u.host, u.port)
   @if stream.fd < 0
     return { status_code: 0, status_text: "Connection failed", version: "HTTP/1.1", headers: [], body: "" }
+  @end
+  @if timeout_ms > 0
+    tcp_set_timeout_ms(stream.fd, timeout_ms)
   @end
 
   req_hdrs = _http_build_client_headers(u, extra_headers)
@@ -1195,29 +1214,36 @@ import "utso/net/tls/tls13"
   @end
 
   tcp_stream_write(stream, req)
+  acc = buf_new(4096)
   @while 1 == 1
-    chunk = tcp_stream_read(stream, 4096)
+    chunk = tcp_stream_read(stream, 8192)
     @if chunk == "" || str_len(chunk) == 0
       break
     @end
-    raw_resp = string_concat(raw_resp, chunk)
-    @if _http_is_wire_response_complete(raw_resp) == 1
+    buf_write_str(acc, chunk)
+    @if _http_is_wire_response_complete(buf_to_str(acc)) == 1
       break
     @end
   @end
 
+  raw_resp = buf_to_str(acc)
+  buf_free(acc)
   tcp_stream_close(stream)
   return http_parse_response(raw_resp)
 @end
 
-@fn _http_execute(method, url, extra_headers, body)
+@fn _http_execute_single(method, url, extra_headers, body)
+  return _http_execute_single_to(method, url, extra_headers, body, 0)
+@end
+
+@fn _http_execute_to(method, url, extra_headers, body, timeout_ms)
   cur_method = method
   cur_url = url
   cur_body = body
   hop = 0
   resp = { status_code: 0, status_text: "Connection failed", version: "HTTP/1.1", headers: [], body: "" }
   @while hop < 6
-    resp = _http_execute_single(cur_method, cur_url, extra_headers, cur_body)
+    resp = _http_execute_single_to(cur_method, cur_url, extra_headers, cur_body, timeout_ms)
     sc = resp.status_code
     @if sc == 301 || sc == 302 || sc == 303 || sc == 307 || sc == 308
       loc = _http_find_header_value(resp.headers, "location")
@@ -1235,12 +1261,436 @@ import "utso/net/tls/tls13"
   return resp
 @end
 
+@fn _http_execute(method, url, extra_headers, body)
+  return _http_execute_to(method, url, extra_headers, body, 0)
+@end
+
 @fn http_get(url)
   return _http_execute("GET", url, [], "")
 @end
 
 @fn http_post(url, headers, body)
   return _http_execute("POST", url, headers, body)
+@end
+
+@fn http_put(url, headers, body)
+  return _http_execute("PUT", url, headers, body)
+@end
+
+@fn http_delete(url, headers)
+  return _http_execute("DELETE", url, headers, "")
+@end
+
+@fn http_patch(url, headers, body)
+  return _http_execute("PATCH", url, headers, body)
+@end
+
+@fn http_request_with_timeout(method, url, headers, body, timeout_ms)
+  return _http_execute_to(method, url, headers, body, timeout_ms)
+@end
+
+@! ----------------------------------------------------------------------------
+@! 7b. Real-Time Incremental Streaming HTTP & HTTPS (TLS 1.3) SSE Client
+@! ----------------------------------------------------------------------------
+
+@struct HttpStreamState
+  hs_buf: i64
+  hs_chunked: i64
+  hs_clen: i64
+  hs_body_got: i64
+  hs_cstate: i64
+  hs_cneed: i64
+  hs_done: i64
+  hs_aborted: i64
+  hs_headers_done: i64
+  hs_status_code: i64
+  hs_status_text: string
+  hs_version: string
+  hs_headers: array
+@end
+
+@fn _http_buf_consume(b, count)
+  cur_len = buf_len(b)
+  @if count <= 0 return 0 @end
+  @if count >= cur_len
+    buf_clear(b)
+    return 0
+  @end
+  rem = cur_len - count
+  p = buf_ptr(b)
+  i = 0
+  @while i < rem
+    mem_byte_write(p, i, mem_byte_read(p, count + i))
+    i = i + 1
+  @end
+  @! Rebuild clean length in-place via temporary copy slice
+  tail = bytes_to_str(p, rem)
+  buf_clear(b)
+  buf_write_mem(b, tail, rem)
+  return 0
+@end
+
+@fn _http_buf_find_hdr_end(b)
+  p = buf_ptr(b)
+  n = buf_len(b)
+  i = 0
+  @while i + 3 < n
+    @if (mem_byte_read(p, i) & 255) == 13 && (mem_byte_read(p, i + 1) & 255) == 10 && (mem_byte_read(p, i + 2) & 255) == 13 && (mem_byte_read(p, i + 3) & 255) == 10
+      return i
+    @end
+    i = i + 1
+  @end
+  return 0 - 1
+@end
+
+@fn _http_stream_feed(st: HttpStreamState, data_ptr, data_len, on_chunk_fn)
+  @if data_len > 0
+    buf_write_mem(st.hs_buf, data_ptr, data_len)
+  @end
+
+  @while st.hs_done == 0 && st.hs_aborted == 0
+    @if st.hs_headers_done == 0
+      hend = _http_buf_find_hdr_end(st.hs_buf)
+      sep = 4
+      @if hend < 0
+        @! Also support bare \n\n delimiter
+        p0 = buf_ptr(st.hs_buf)
+        n0 = buf_len(st.hs_buf)
+        k = 0
+        @while k + 1 < n0
+          @if (mem_byte_read(p0, k) & 255) == 10 && (mem_byte_read(p0, k + 1) & 255) == 10
+            hend = k
+            sep = 2
+            break
+          @end
+          k = k + 1
+        @end
+      @end
+      @if hend < 0
+        break
+      @end
+      hdr_raw = bytes_to_str(buf_ptr(st.hs_buf), hend + sep)
+      parsed = http_parse_response(hdr_raw)
+      st.hs_status_code = parsed.status_code
+      st.hs_status_text = parsed.status_text
+      st.hs_version = parsed.version
+      st.hs_headers = parsed.headers
+      hi = 0
+      @while hi < parsed.headers.len()
+        h = parsed.headers[hi]
+        hl = str_to_lower(h.name)
+        @if hl == "transfer-encoding" && contains(str_to_lower(h.value), "chunked") == 1
+          st.hs_chunked = 1
+        @elif hl == "content-length" && st.hs_clen < 0
+          st.hs_clen = parse_int_str(h.value)
+        @end
+        hi = hi + 1
+      @end
+      _http_buf_consume(st.hs_buf, hend + sep)
+      st.hs_headers_done = 1
+    @end
+
+    @if st.hs_headers_done == 1
+      @if st.hs_chunked == 1
+        @if st.hs_cstate == 0
+          p = buf_ptr(st.hs_buf)
+          n = buf_len(st.hs_buf)
+          nl = 0 - 1
+          i = 0
+          @while i < n
+            @if (mem_byte_read(p, i) & 255) == 10
+              nl = i
+              break
+            @end
+            i = i + 1
+          @end
+          @if nl < 0 break @end
+          line_s = bytes_to_str(p, nl)
+          semi = str_index_of(line_s, ";")
+          @if semi >= 0 line_s = str_substr(line_s, 0, semi) @end
+          line_s = str_trim(line_s)
+          _http_buf_consume(st.hs_buf, nl + 1)
+          @if str_len(line_s) == 0 continue @end
+          csz = parse_hex_int(line_s)
+          @if csz <= 0
+            st.hs_done = 1
+            break
+          @end
+          st.hs_cneed = csz
+          st.hs_cstate = 1
+        @elif st.hs_cstate == 1
+          av = buf_len(st.hs_buf)
+          @if av <= 0 break @end
+          take = av
+          @if take > st.hs_cneed take = st.hs_cneed @end
+          chunk_s = bytes_to_str(buf_ptr(st.hs_buf), take)
+          _http_buf_consume(st.hs_buf, take)
+          st.hs_cneed = st.hs_cneed - take
+          st.hs_body_got = st.hs_body_got + take
+          @if on_chunk_fn != 0
+            rc = on_chunk_fn(chunk_s)
+            @if rc == (0 - 1)
+              st.hs_aborted = 1
+              break
+            @end
+          @end
+          @if st.hs_cneed == 0
+            st.hs_cstate = 2
+          @end
+        @else
+          av = buf_len(st.hs_buf)
+          @if av <= 0 break @end
+          b0 = mem_byte_read(buf_ptr(st.hs_buf), 0) & 255
+          @if b0 == 13
+            @if av < 2 break @end
+            b1 = mem_byte_read(buf_ptr(st.hs_buf), 1) & 255
+            @if b1 == 10
+              _http_buf_consume(st.hs_buf, 2)
+            @else
+              _http_buf_consume(st.hs_buf, 1)
+            @end
+          @elif b0 == 10
+            _http_buf_consume(st.hs_buf, 1)
+          @end
+          st.hs_cstate = 0
+        @end
+      @else
+        av = buf_len(st.hs_buf)
+        @if av <= 0
+          @if st.hs_clen == 0 st.hs_done = 1 @end
+          break
+        @end
+        take = av
+        @if st.hs_clen >= 0
+          rem = st.hs_clen - st.hs_body_got
+          @if take > rem take = rem @end
+        @end
+        @if take > 0
+          chunk_s = bytes_to_str(buf_ptr(st.hs_buf), take)
+          _http_buf_consume(st.hs_buf, take)
+          st.hs_body_got = st.hs_body_got + take
+          @if on_chunk_fn != 0
+            rc = on_chunk_fn(chunk_s)
+            @if rc == (0 - 1)
+              st.hs_aborted = 1
+              break
+            @end
+          @end
+        @end
+        @if st.hs_clen >= 0 && st.hs_body_got >= st.hs_clen
+          st.hs_done = 1
+          break
+        @end
+      @end
+    @end
+  @end
+  return 0
+@end
+
+@fn _http_tls_exchange_stream(stream, host, req_str, st: HttpStreamState, on_chunk_fn)
+  c_priv = _http_tls_rand32()
+  @if c_priv.len() != 32 return 0 @end
+  c_pub = x25519_public_key(c_priv)
+  ch = tls13_build_client_hello(host, c_pub)
+  @if ch.wire_bytes.len() < 46 return 0 @end
+  ch_hs = _http_tls_slice(ch.wire_bytes, 5, ch.wire_bytes.len())
+  @if _http_tls_write_exact(stream.fd, ch.wire_bytes) <= 0 return 0 @end
+
+  sh_hs = _http_tls_read_server_hello(stream.fd)
+  @if sh_hs.len() == 0 return 0 @end
+  sh_info = _http_tls_parse_server_hello(sh_hs)
+  @if sh_info.tls_sh_ok != 1 return 0 @end
+  cipher = sh_info.tls_sh_cipher
+
+  hs_transcript = []
+  @if sh_info.tls_sh_is_hrr == 1
+    h1 = _http_tls_hash_transcript(cipher, ch_hs)
+    msg_hash = [254, 0, 0, h1.len() & 255]
+    msg_hash = tls_append_bytes(msg_hash, h1)
+    c_priv = _http_tls_rand32()
+    @if c_priv.len() != 32 return 0 @end
+    c_pub = x25519_public_key(c_priv)
+    ch2_wire = _http_tls_build_ch_with_cookie(host, c_pub, sh_info.tls_sh_cookie)
+    @if ch2_wire.len() < 46 return 0 @end
+    ch2_hs = _http_tls_slice(ch2_wire, 5, ch2_wire.len())
+    @if _http_tls_write_exact(stream.fd, ch2_wire) <= 0 return 0 @end
+    sh2_hs = _http_tls_read_server_hello(stream.fd)
+    @if sh2_hs.len() == 0 return 0 @end
+    sh_info = _http_tls_parse_server_hello(sh2_hs)
+    @if sh_info.tls_sh_ok != 1 || sh_info.tls_sh_is_hrr == 1 || sh_info.tls_sh_cipher != cipher return 0 @end
+    hs_transcript = tls_append_bytes(hs_transcript, msg_hash)
+    hs_transcript = tls_append_bytes(hs_transcript, sh_hs)
+    hs_transcript = tls_append_bytes(hs_transcript, ch2_hs)
+    hs_transcript = tls_append_bytes(hs_transcript, sh2_hs)
+  @else
+    hs_transcript = tls_append_bytes(hs_transcript, ch_hs)
+    hs_transcript = tls_append_bytes(hs_transcript, sh_hs)
+  @end
+
+  shared = x25519_shared_secret(c_priv, sh_info.tls_sh_pub)
+  @if shared.len() != 32 return 0 @end
+  thash1 = _http_tls_hash_transcript(cipher, hs_transcript)
+  hs_keys = _http_tls_derive_hs_keys_for_cipher(cipher, shared, thash1)
+
+  hs_buf = []
+  s_hs_seq = 0
+  got_server_finished = 0
+  got_cert = 0
+  got_cert_verify = 0
+  cert_der = []
+  flight_steps = 0
+  @while got_server_finished == 0 && flight_steps < 64
+    flight_steps = flight_steps + 1
+    rec = _http_tls_read_record(stream.fd)
+    @if rec.tls_rec_ok != 1 return 0 @end
+    @if rec.tls_rec_type == 20 continue @end
+    @if rec.tls_rec_type != 23 return 0 @end
+    unwrapped = _http_tls_unwrap_aead_record_suite(cipher, hs_keys.server_write_key, hs_keys.server_write_iv, s_hs_seq, rec.tls_rec_hdr, rec.tls_rec_body)
+    @if unwrapped.tls_pt_ok != 1 return 0 @end
+    s_hs_seq = s_hs_seq + 1
+    @if unwrapped.tls_pt_type != 22 return 0 @end
+    hs_buf = tls_append_bytes(hs_buf, unwrapped.tls_pt_data)
+
+    pos = 0
+    @while pos + 4 <= hs_buf.len()
+      ht = hs_buf[pos] & 255
+      hl = ((hs_buf[pos + 1] & 255) * 65536) | ((hs_buf[pos + 2] & 255) * 256) | (hs_buf[pos + 3] & 255)
+      @if pos + 4 + hl > hs_buf.len() break @end
+      msg = _http_tls_slice(hs_buf, pos, pos + 4 + hl)
+      pos = pos + 4 + hl
+      @if ht == 11
+        cert_chain = _http_tls_extract_cert_chain(msg)
+        @if cert_chain.len() == 0 || tls13_verify_x509_cert_chain_list(cert_chain, host) != 1 return 0 @end
+        cert_der = cert_chain[0]
+        got_cert = 1
+      @elif ht == 15
+        @if got_cert != 1 || msg.len() < 8 return 0 @end
+        sig_alg = ((msg[4] & 255) * 256) | (msg[5] & 255)
+        sig_len = ((msg[6] & 255) * 256) | (msg[7] & 255)
+        @if 8 + sig_len != msg.len() return 0 @end
+        sig_bytes = _http_tls_slice(msg, 8, 8 + sig_len)
+        cv_hash = _http_tls_hash_transcript(cipher, hs_transcript)
+        @if tls13_verify_certificate_verify(cert_der, cv_hash, sig_alg, sig_bytes) != 1 return 0 @end
+        got_cert_verify = 1
+      @elif ht == 20
+        @if got_cert != 1 || got_cert_verify != 1 return 0 @end
+        expected_hl = 32
+        @if cipher == 4866 expected_hl = 48 @end
+        @if hl != expected_hl return 0 @end
+        s_fin_key = []
+        expected_fin = []
+        @if cipher == 4866
+          s_fin_key = tls13_hkdf_expand_label_384(hs_keys.server_handshake_traffic_secret, "finished", [], 48)
+          expected_fin = tls13_hmac_sha384(s_fin_key, sha384_hash_bytes(hs_transcript))
+        @else
+          s_fin_key = tls13_hkdf_expand_label(hs_keys.server_handshake_traffic_secret, "finished", [], 32)
+          expected_fin = tls13_hmac_sha256(s_fin_key, sha256_hash_bytes(hs_transcript))
+        @end
+        actual_fin = _http_tls_slice(msg, 4, 4 + expected_hl)
+        @if _http_tls_ct_bytes_equal(actual_fin, expected_fin) != 1 return 0 @end
+        hs_transcript = tls_append_bytes(hs_transcript, msg)
+        got_server_finished = 1
+        break
+      @end
+      hs_transcript = tls_append_bytes(hs_transcript, msg)
+    @end
+    hs_buf = _http_tls_slice(hs_buf, pos, hs_buf.len())
+  @end
+
+  @if got_server_finished != 1 || got_cert != 1 || got_cert_verify != 1 return 0 @end
+  fin_hash = _http_tls_hash_transcript(cipher, hs_transcript)
+  app_keys = _http_tls_derive_app_keys_for_cipher(cipher, hs_keys, fin_hash)
+
+  c_verify = []
+  c_fin_hdr = [20, 0, 0, 32]
+  @if cipher == 4866
+    c_fin_key = tls13_hkdf_expand_label_384(hs_keys.client_handshake_traffic_secret, "finished", [], 48)
+    c_verify = tls13_hmac_sha384(c_fin_key, fin_hash)
+    c_fin_hdr = [20, 0, 0, 48]
+  @else
+    c_fin_key = tls13_hkdf_expand_label(hs_keys.client_handshake_traffic_secret, "finished", [], 32)
+    c_verify = tls13_hmac_sha256(c_fin_key, fin_hash)
+  @end
+  c_fin_msg = tls_append_bytes(c_fin_hdr, c_verify)
+  c_fin_rec = _http_tls_wrap_aead_record_suite(cipher, hs_keys.client_write_key, hs_keys.client_write_iv, 0, 22, c_fin_msg)
+  @if _http_tls_write_exact(stream.fd, c_fin_rec) <= 0 return 0 @end
+
+  req_bytes = tls_string_to_bytes(req_str)
+  rlen = req_bytes.len()
+  c_app_seq = 0
+  roff = 0
+  @while roff < rlen
+    rstop = roff + 16384
+    @if rstop > rlen rstop = rlen @end
+    rchunk = _http_tls_slice(req_bytes, roff, rstop)
+    req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, c_app_seq, 23, rchunk)
+    @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return 0 @end
+    c_app_seq = c_app_seq + 1
+    roff = rstop
+  @end
+
+  s_app_seq = 0
+  @while st.hs_done == 0 && st.hs_aborted == 0
+    rec = _http_tls_read_record(stream.fd)
+    @if rec.tls_rec_ok != 1 break @end
+    @if rec.tls_rec_type == 20 continue @end
+    @if rec.tls_rec_type == 21 break @end
+    @if rec.tls_rec_type != 23 return 0 @end
+    dec = _http_tls_unwrap_aead_record_suite(cipher, app_keys.s_key, app_keys.s_iv, s_app_seq, rec.tls_rec_hdr, rec.tls_rec_body)
+    @if dec.tls_pt_ok != 1 return 0 @end
+    s_app_seq = s_app_seq + 1
+    @if dec.tls_pt_type == 21
+      break
+    @elif dec.tls_pt_type == 23
+      pt_str = tls_bytes_to_string(dec.tls_pt_data)
+      _http_stream_feed(st, _http_raw_ptr(pt_str), str_len(pt_str), on_chunk_fn)
+    @end
+  @end
+  return 1
+@end
+
+@fn http_request_stream(method, url, extra_headers, body, on_chunk_fn)
+  // WHY: Real-time incremental SSE / chunked streaming client for both HTTP and HTTPS TLS 1.3.
+  // Invokes on_chunk_fn(chunk_str) immediately upon arrival without waiting for full body EOF.
+  u = http_parse_url(url)
+  stream = tcp_stream_connect(u.host, u.port)
+  @if stream.fd < 0
+    return { status_code: 0, status_text: "Connection failed", version: "HTTP/1.1", headers: [], body: "" }
+  @end
+  req_hdrs = _http_build_client_headers(u, extra_headers)
+  req = http_format_request(method, u.path, req_hdrs, body)
+
+  st = HttpStreamState(buf_new(4096), 0, 0 - 1, 0, 0, 0, 0, 0, 0, 0, "", "HTTP/1.1", [])
+  @if u.protocol == "https"
+    ok = _http_tls_exchange_stream(stream, u.host, req, st, on_chunk_fn)
+    tcp_stream_close(stream)
+    buf_free(st.hs_buf)
+    @if ok != 1 && st.hs_status_code == 0
+      return { status_code: 0, status_text: "TLS handshake failed", version: "HTTP/1.1", headers: [], body: "" }
+    @end
+    return { status_code: st.hs_status_code, status_text: st.hs_status_text, version: st.hs_version, headers: st.hs_headers, body: "" }
+  @end
+
+  tcp_stream_write(stream, req)
+  rbuf = lipi_alloc(8192)
+  @while st.hs_done == 0 && st.hs_aborted == 0
+    n = sys_read(stream.fd, rbuf, 8192)
+    @if n == (0 - 4) continue @end
+    @if n <= 0 break @end
+    _http_stream_feed(st, rbuf, n, on_chunk_fn)
+  @end
+  lipi_free_sized(rbuf, 8192)
+  tcp_stream_close(stream)
+  buf_free(st.hs_buf)
+  return { status_code: st.hs_status_code, status_text: st.hs_status_text, version: st.hs_version, headers: st.hs_headers, body: "" }
+@end
+
+@fn http_post_stream(url, headers, body, on_chunk_fn)
+  return http_request_stream("POST", url, headers, body, on_chunk_fn)
+@end
+
+@fn http_get_stream(url, headers, on_chunk_fn)
+  return http_request_stream("GET", url, headers, "", on_chunk_fn)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -1327,6 +1777,12 @@ import "utso/net/tls/tls13"
     @end
   @end
 
+  @! Decode Transfer-Encoding: chunked request bodies transparently
+  te_val = _http_find_header_value(headers, "transfer-encoding")
+  @if te_val != "" && contains(str_to_lower(te_val), "chunked") == 1
+    body = http_decode_chunked(body)
+  @end
+
   return {
     method: method,
     path: path,
@@ -1337,42 +1793,66 @@ import "utso/net/tls/tls13"
 @end
 
 @fn _http_read_full_request(stream)
-  raw_req = ""
+  // WHY: O(N) ByteBuffer request reader supporting arbitrary body sizes and chunked requests.
+  acc = buf_new(4096)
+  rbuf = lipi_alloc(8192)
   header_end = -1
   sep_len = 4
   req_clen = -1
-  reads = 0
-  @while reads < 256
-    chunk = tcp_stream_read(stream, 4096)
-    @if chunk == "" || str_len(chunk) == 0
-      break
-    @end
-    raw_req = string_concat(raw_req, chunk)
-    reads = reads + 1
+  is_chunked = 0
+  @while 1 == 1
+    nr = sys_read(stream.fd, rbuf, 8192)
+    @if nr == (0 - 4) continue @end
+    @if nr <= 0 break @end
+    buf_write_mem(acc, rbuf, nr)
     @if header_end < 0
-      header_end = str_index_of(raw_req, "\r\n\r\n")
+      header_end = _http_buf_find_hdr_end(acc)
       sep_len = 4
       @if header_end < 0
-        header_end = str_index_of(raw_req, "\n\n")
-        sep_len = 2
+        p0 = buf_ptr(acc)
+        n0 = buf_len(acc)
+        k = 0
+        @while k + 1 < n0
+          @if (mem_byte_read(p0, k) & 255) == 10 && (mem_byte_read(p0, k + 1) & 255) == 10
+            header_end = k
+            sep_len = 2
+            break
+          @end
+          k = k + 1
+        @end
       @end
       @if header_end >= 0
-        req_head = http_parse_request(str_substr(raw_req, 0, header_end + sep_len))
-        cl_val = _http_find_header_value(req_head.headers, "content-length")
-        @if cl_val != ""
-          req_clen = parse_int_str(cl_val)
+        hdr_s = bytes_to_str(buf_ptr(acc), header_end + sep_len)
+        req_head = http_parse_request(hdr_s)
+        te_v = _http_find_header_value(req_head.headers, "transfer-encoding")
+        @if te_v != "" && contains(str_to_lower(te_v), "chunked") == 1
+          is_chunked = 1
         @else
-          req_clen = 0
+          cl_val = _http_find_header_value(req_head.headers, "content-length")
+          @if cl_val != ""
+            req_clen = parse_int_str(cl_val)
+          @else
+            req_clen = 0
+          @end
         @end
       @end
     @end
-    @if header_end >= 0 && req_clen >= 0
-      have_body = str_len(raw_req) - (header_end + sep_len)
-      @if have_body >= req_clen
+    @if header_end >= 0
+      body_off = header_end + sep_len
+      have_body = buf_len(acc) - body_off
+      @if is_chunked == 1
+        body_tail = bytes_to_str(buf_ptr(acc) + body_off, have_body)
+        @if contains(body_tail, "\r\n0\r\n\r\n") == 1 || starts_with(body_tail, "0\r\n\r\n") == 1
+          break
+        @end
+      @elif req_clen >= 0 && have_body >= req_clen
         break
       @end
     @end
   @end
+  lipi_free_sized(rbuf, 8192)
+  raw_req = buf_to_str(acc)
+  buf_free(acc)
   return raw_req
 @end
 

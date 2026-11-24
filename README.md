@@ -73,7 +73,7 @@ make
 ### Run Tests
 
 ```bash
-# Run the full regression test suite (262 tests)
+# Run the full regression test suite (265 tests)
 ./bin/lipi test
 
 # Verify Ed25519 signatures and lockfile across all 31 aati/ packages

@@ -677,6 +677,7 @@ fn json_parse_val_at s pos_ref
         list_set(pos_ref, 0, p + 4)
         return 0
     neg = 0
+    num_start = p
     if c == "-"
         neg = 1
         p = p + 1
@@ -690,18 +691,82 @@ fn json_parse_val_at s pos_ref
             break
     if neg == 0
         acc = 0 - acc
-    // Skip fractional/exponent suffix if present while preserving token boundary
+    // Parse fractional/exponent IEEE-754 f64 when '.' or 'e'/'E' is present (RFC 8259)
+    is_flt = 0
     if p < slen and char_at(s, p) == "."
+        is_flt = 1
         p = p + 1
         while p < slen and ord(char_at(s, p)) >= 48 and ord(char_at(s, p)) <= 57
             p = p + 1
     if p < slen and (char_at(s, p) == "e" or char_at(s, p) == "E")
+        is_flt = 1
         p = p + 1
         if p < slen and (char_at(s, p) == "+" or char_at(s, p) == "-")
             p = p + 1
         while p < slen and ord(char_at(s, p)) >= 48 and ord(char_at(s, p)) <= 57
             p = p + 1
     list_set(pos_ref, 0, p)
+    if is_flt == 1
+        // Compute exact f64 from s[num_start..p)
+        fp = num_start
+        fneg = 0
+        if fp < p and mem_read_byte(s, fp) == 45
+            fneg = 1
+            fp = fp + 1
+        end
+        fval = 0.0
+        while fp < p
+            fc = mem_read_byte(s, fp)
+            if fc >= 48 and fc <= 57
+                fval = (fval * 10.0) + (fc - 48)
+                fp = fp + 1
+            else
+                break
+            end
+        end
+        if fp < p and mem_read_byte(s, fp) == 46
+            fp = fp + 1
+            frac = 0.1
+            while fp < p
+                fc = mem_read_byte(s, fp)
+                if fc >= 48 and fc <= 57
+                    fval = fval + ((fc - 48) * frac)
+                    frac = frac * 0.1
+                    fp = fp + 1
+                else
+                    break
+                end
+            end
+        end
+        if fp < p and (mem_read_byte(s, fp) == 101 or mem_read_byte(s, fp) == 69)
+            fp = fp + 1
+            eneg = 0
+            if fp < p and mem_read_byte(s, fp) == 45
+                eneg = 1
+                fp = fp + 1
+            elif fp < p and mem_read_byte(s, fp) == 43
+                fp = fp + 1
+            end
+            exp = 0
+            while fp < p
+                fc = mem_read_byte(s, fp)
+                if fc >= 48 and fc <= 57
+                    exp = (exp * 10) + (fc - 48)
+                    fp = fp + 1
+                else
+                    break
+                end
+            end
+            if exp > 308 exp = 308 end
+            ei = 0
+            while ei < exp
+                if eneg == 1 fval = fval * 0.1 else fval = fval * 10.0 end
+                ei = ei + 1
+            end
+        end
+        if fneg == 1 fval = 0.0 - fval end
+        return fval
+    end
     return acc
 
 fn json_parse src

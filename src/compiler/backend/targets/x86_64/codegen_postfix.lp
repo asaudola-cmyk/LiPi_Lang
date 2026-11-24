@@ -112,12 +112,8 @@ fn x86_synth_expr_postfix s toks pos_box
                     if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ")"))
                         list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume ')'
 
-                    m_abi_save = 0
-                    if m_args >= 9
-                        m_abi_save = x86_synth_emit_save_r12_r15(s)
-                    end
-                    // Pop arguments in reverse into LiPi 12-register calling convention
-                    x86_synth_emit_pop_args(s, m_args)
+                    // Pop arguments into standard System V AMD64 ABI (6 regs + unlimited stack args)
+                    m_cleanup = x86_synth_emit_pop_args(s, m_args)
 
                     if member_name == "push" or member_name == "যোগ_করো"
                         x86_synth_emit_call_helper(s, "_lipi_list_push")
@@ -163,9 +159,7 @@ fn x86_synth_expr_postfix s toks pos_box
                                 s.synth_last_struct = rt_m
                             end
                         end
-                    if m_abi_save != 0
-                        x86_synth_emit_restore_r12_r15(s, m_abi_save)
-                    end
+                    x86_synth_emit_cleanup_stack_args(s, m_cleanup)
                 else
                     // Struct Field Read: obj.field
                     f_off = x86_synth_get_field_offset(s, s.synth_last_struct, member_name)
@@ -246,16 +240,10 @@ fn x86_synth_expr_postfix s toks pos_box
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ")"))
                 list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume ')'
             end
-            c_abi_save = 0
-            if c_args >= 9
-                c_abi_save = x86_synth_emit_save_r12_r15(s)
-            end
-            x86_synth_emit_pop_args(s, c_args)
+            c_cleanup = x86_synth_emit_pop_args(s, c_args)
             x86_synth_emit_load_var(s, 0, callee_off)
             x86_synth_emit_indirect_call_rax(s)
-            if c_abi_save != 0
-                x86_synth_emit_restore_r12_r15(s, c_abi_save)
-            end
+            x86_synth_emit_cleanup_stack_args(s, c_cleanup)
             s.synth_last_expr_type = ""
             s.synth_last_struct = ""
             s.synth_last_elem_type = ""

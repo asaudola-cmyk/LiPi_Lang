@@ -131,6 +131,20 @@ import "utso/net/dns_client"
   return 0
 @end
 
+@fn tcp_set_timeout_ms(sockfd, timeout_ms)
+  @if sockfd < 0 return -1 @end
+  ms = timeout_ms
+  @if ms < 0 ms = 0 @end
+  tv = lipi_alloc(16)
+  @if tv <= 0 return -1 @end
+  mem_write(tv, 0, ms / 1000)
+  mem_write(tv, 8, (ms % 1000) * 1000)
+  sys_setsockopt(sockfd, 1, 20, tv, 16) // SO_RCVTIMEO
+  sys_setsockopt(sockfd, 1, 21, tv, 16) // SO_SNDTIMEO
+  lipi_free(tv)
+  return 0
+@end
+
 @fn tcp_socket_new()
   fd = sys_socket(2, 1, 6)
   return fd
@@ -179,14 +193,20 @@ import "utso/net/dns_client"
   return res
 @end
 
+@fn _tcp_raw_ptr(x) return x @end
+
 @fn tcp_send(sockfd, data)
   @if sockfd < 0 return -1 @end
   dlen = data.len()
   @if dlen == 0 return 0 @end
+  d_ptr = _tcp_raw_ptr(data)
 
   total_sent = 0
   @while total_sent < dlen
-    written = sys_write(sockfd, data + total_sent, dlen - total_sent)
+    written = sys_write(sockfd, d_ptr + total_sent, dlen - total_sent)
+    @if written == (0 - 4)
+      continue
+    @end
     @if written <= 0
       @if total_sent > 0 return total_sent @end
       return written
@@ -201,16 +221,14 @@ import "utso/net/dns_client"
   buf = lipi_alloc(max_len + 1)
   @if buf <= 0 return "" @end
   n = sys_read(sockfd, buf, max_len)
+  @while n == (0 - 4)
+    n = sys_read(sockfd, buf, max_len)
+  @end
   @if n <= 0
     lipi_free_sized(buf, max_len + 1)
     return ""
   @end
-  out = ""
-  k = 0
-  @while k < n
-    out = out + chr(sys_peek8(buf + k))
-    k = k + 1
-  @end
+  out = bytes_to_str(buf, n)
   lipi_free_sized(buf, max_len + 1)
   return out
 @end

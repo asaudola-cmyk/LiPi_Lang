@@ -99,6 +99,8 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_try_frames = list()
     s.synth_defer_starts = list()
     s.synth_defer_ends = list()
+    saved_boxed_vars = s.synth_boxed_vars
+    s.synth_boxed_vars = list()
 
     // Parse parameter names (supporting parentheses, commas, and type annotations)
     params = list()
@@ -188,9 +190,12 @@ fn x86_synth_compile_fn_def s toks pos_box
     // Emit standard function prologue: push rbp; mov rbp, rsp; push r12-r15, rbx; sub rsp, imm32
     prologue_sub_patch = x86_synth_emit_prologue(s)
 
+    // Prescan function body for outer variables mutated inside nested closures (auto-boxed upvalue cells)
+    s.synth_boxed_vars = x86_synth_prescan_boxed_vars(toks, get(pos_box, 0), base_col, base_line)
+
     // WHY: Two-pass parameter initialization prevents clobbering incoming argument registers.
-    // In Pass 1, save ALL incoming argument registers (0..11) to local stack slots [rbp - off]
-    // before modifying any hardware registers.
+    // In Pass 1, save ALL incoming arguments (0..5 in SysV regs, 6+ from caller stack [rbp+16+...])
+    // to local stack slots [rbp - off] before modifying any hardware registers.
     pi = 0
     while pi < params.len()
         pname = params[pi]
@@ -207,6 +212,22 @@ fn x86_synth_compile_fn_def s toks pos_box
             end
         end
         x86_synth_emit_store_param(s, pi, off)
+        pi = pi + 1
+    end
+
+    // Pass 1b: Wrap any closure-mutated parameters in 8-byte GC upvalue cells (after all reg params are saved!)
+    pi = 0
+    while pi < params.len()
+        pname = params[pi]
+        lv_bp = x86_synth_find_local_var(s, pname)
+        if lv_bp != 0 and lv_bp.lv_is_boxed == 1
+            x86_synth_emit_mov_rdi_imm64(s, 8)
+            x86_synth_emit_call_alloc(s)
+            x86_synth_emit_load_var(s, 1, lv_bp.lv_offset) // mov rcx, [rbp - off] (raw param val)
+            x86_synth_emit_bytes(s, [72, 137, 8])          // mov [rax], rcx
+            x86_synth_emit_store_var(s, 0, lv_bp.lv_offset) // store cell ptr in slot
+            s.synth_last_store_end = 0 - 1
+        end
         pi = pi + 1
     end
 
@@ -233,7 +254,12 @@ fn x86_synth_compile_fn_def s toks pos_box
             list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume '='
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             x86_synth_compile_expr(s, toks, pos_box)
-            if fn_entry.fn_ret_type == "" and s.synth_last_expr_type == "float"
+            if fn_entry.fn_ret_type == "" and s.synth_last_struct != ""
+                fn_entry.fn_ret_type = s.synth_last_struct
+                if fn_alias != 0
+                    fn_alias.fn_ret_type = s.synth_last_struct
+                end
+            elif fn_entry.fn_ret_type == "" and s.synth_last_expr_type == "float"
                 fn_entry.fn_ret_type = "f64"
                 if fn_alias != 0
                     fn_alias.fn_ret_type = "f64"
@@ -261,6 +287,7 @@ fn x86_synth_compile_fn_def s toks pos_box
             s.synth_try_frames = saved_try_frames
             s.synth_defer_starts = saved_defer_starts
             s.synth_defer_ends = saved_defer_ends
+            s.synth_boxed_vars = saved_boxed_vars
             s.synth_in_function = 0
             s.synth_current_fn = ""
             return 0
@@ -323,6 +350,7 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_try_frames = saved_try_frames
     s.synth_defer_starts = saved_defer_starts
     s.synth_defer_ends = saved_defer_ends
+    s.synth_boxed_vars = saved_boxed_vars
     s.synth_in_function = 0
     s.synth_current_fn = ""
     return 0

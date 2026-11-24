@@ -625,23 +625,34 @@ import "utso/core/string"
   return net_write(sockfd, buf_ptr, len)
 @end
 
+@fn net_tcp_set_timeout_ms(sockfd, timeout_ms)
+  @if sockfd < 0 return 0 - 1 @end
+  ms = timeout_ms
+  @if ms < 0 ms = 0 @end
+  tv = sys_mmap(0, 4096, 3, 34, 0 - 1, 0)
+  @if tv <= 0 return 0 - 1 @end
+  mem_write(tv, 0, ms / 1000)
+  mem_write(tv, 8, (ms % 1000) * 1000)
+  net_setsockopt(sockfd, 1, 20, tv, 16)
+  net_setsockopt(sockfd, 1, 21, tv, 16)
+  sys_munmap(tv, 4096)
+  return 0
+@end
+
 @fn net_tcp_recv(sockfd, max_len)
-  // WHY: Reads raw incoming bytes into buffer and returns Lipi string
+  // WHY: O(N) binary-safe socket read via native ERMS bytes_to_str (zero O(N^2) chr loop).
   @if max_len <= 0 max_len = 4096 @end
   buf = sys_mmap(0, max_len + 1, 3, 34, -1, 0)
   @if buf <= 0 return "" @end
   bytes_read = net_read(sockfd, buf, max_len)
+  @while bytes_read == (0 - 4)
+    bytes_read = net_read(sockfd, buf, max_len)
+  @end
   @if bytes_read <= 0
     sys_munmap(buf, max_len + 1)
     return ""
   @end
-  res = ""
-  i = 0
-  @while i < bytes_read
-    b = sys_peek8(buf + i) & 255
-    res = res + chr(b)
-    i = i + 1
-  @end
+  res = bytes_to_str(buf, bytes_read)
   sys_munmap(buf, max_len + 1)
   return res
 @end

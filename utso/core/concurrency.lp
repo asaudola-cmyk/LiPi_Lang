@@ -1,8 +1,10 @@
 @! ============================================================================
 @! LIPI UNIVERSE CORE — CONCURRENCY & GREEN THREADS (utso/core/concurrency.lp)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
-@! Native Linux x86-64 sys_clone Green Threads & Dynamic Swarm Routing Bridge
+@! Native Linux x86-64 sys_clone Green Threads, SYS_futex Sync & Worker ThreadPool
 @! ============================================================================
+
+include "utso/core/sync.lp"
 
 @fn PROT_READ() return 1 @end
 @fn PROT_WRITE() return 2 @end

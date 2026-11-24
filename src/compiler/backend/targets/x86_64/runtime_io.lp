@@ -284,3 +284,142 @@ fn x86_synth_emit__lipi_futex_wake s
         195
     ])
     return off
+
+// ── Native O(N) ERMS ByteBuffer & Binary-Safe ByteSlice Intrinsics ────────────
+// WHY: Eliminates O(N^2) string concat loops across TCP, HTTP/SSE, JSON, FS,
+// and process capture while preserving embedded NUL (0x00) binary payloads safely.
+// Layout (24B GC-tracked header): [0]=len, [8]=cap, [16]=data_ptr (GC-tracked).
+
+fn x86_synth_emit__lipi_buf_new s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_new", off)
+    x86_synth_register_helper_fn(s, "buf_new", off)
+    x86_synth_register_helper_fn(s, "byte_buf_new", off)
+    x86_synth_register_helper_fn(s, "বাফার_তৈরি", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 72, 137, 251, 72, 131, 251, 64, 125, 5, 187, 64, 0, 0, 0, 191, 24, 0, 0, 0])
+    x86_synth_emit_call_helper(s, "_lipi_user_alloc")
+    x86_synth_emit_bytes(s, [73, 137, 196, 72, 137, 223])
+    x86_synth_emit_call_helper(s, "_lipi_user_alloc")
+    x86_synth_emit_bytes(s, [73, 199, 4, 36, 0, 0, 0, 0, 73, 137, 92, 36, 8, 73, 137, 68, 36, 16, 76, 137, 224, 65, 92, 91, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_write_mem s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_write_mem", off)
+    x86_synth_register_helper_fn(s, "buf_write_mem", off)
+    x86_synth_register_helper_fn(s, "buf_append_mem", off)
+    x86_synth_register_helper_fn(s, "বাফার_লেখো_মেম", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8, 73, 137, 252, 73, 137, 245, 73, 137, 214, 77, 133, 228, 15, 132, 158, 0, 0, 0, 73, 139, 4, 36, 77, 133, 237, 15, 132, 130, 0, 0, 0, 73, 131, 254, 0, 126, 124, 77, 139, 124, 36, 8, 74, 141, 28, 48, 76, 57, 251, 126, 85, 73, 209, 231, 73, 131, 255, 64, 125, 6, 65, 191, 64, 0, 0, 0, 73, 57, 223, 125, 3, 73, 137, 223, 76, 137, 255])
+    x86_synth_emit_call_helper(s, "_lipi_user_alloc")
+    x86_synth_emit_bytes(s, [73, 137, 192, 77, 139, 76, 36, 16, 73, 139, 12, 36, 72, 133, 201, 116, 14, 77, 133, 201, 116, 9, 76, 137, 199, 76, 137, 206, 252, 243, 164, 77, 137, 68, 36, 16, 77, 137, 124, 36, 8, 77, 133, 201, 116, 8, 76, 137, 207])
+    x86_synth_emit_call_helper(s, "_lipi_user_free")
+    x86_synth_emit_bytes(s, [73, 139, 124, 36, 16, 73, 3, 60, 36, 76, 137, 238, 76, 137, 241, 252, 243, 164, 73, 137, 28, 36, 72, 137, 216, 72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195, 49, 192, 235, 237])
+    return off
+
+fn x86_synth_emit__lipi_buf_write_byte s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_write_byte", off)
+    x86_synth_register_helper_fn(s, "buf_write_byte", off)
+    x86_synth_register_helper_fn(s, "buf_append_byte", off)
+    x86_synth_register_helper_fn(s, "buf_push", off)
+    x86_synth_register_helper_fn(s, "বাফার_বাইট", off)
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 27, 72, 139, 7, 72, 139, 79, 8, 72, 57, 200, 115, 18, 72, 139, 87, 16, 64, 136, 52, 2, 72, 255, 192, 72, 137, 7, 195, 49, 192, 195, 85, 72, 137, 229, 72, 131, 236, 16, 64, 136, 117, 248, 72, 141, 117, 248, 186, 1, 0, 0, 0])
+    x86_synth_emit_call_helper(s, "_lipi_buf_write_mem")
+    x86_synth_emit_bytes(s, [72, 131, 196, 16, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_write_str s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_write_str", off)
+    x86_synth_register_helper_fn(s, "buf_write_str", off)
+    x86_synth_register_helper_fn(s, "buf_append", off)
+    x86_synth_register_helper_fn(s, "buf_append_str", off)
+    x86_synth_register_helper_fn(s, "বাফার_স্ট্রিং", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 73, 137, 252, 73, 137, 245, 77, 133, 228, 116, 57, 77, 133, 237, 116, 46, 76, 137, 239])
+    x86_synth_emit_call_helper(s, "_lipi_is_str")
+    x86_synth_emit_bytes(s, [133, 192, 116, 6, 65, 139, 85, 248, 235, 15, 49, 210, 65, 128, 124, 21, 0, 0, 116, 5, 72, 255, 194, 235, 243, 76, 137, 231, 76, 137, 238])
+    x86_synth_emit_call_helper(s, "_lipi_buf_write_mem")
+    x86_synth_emit_bytes(s, [235, 8, 73, 139, 4, 36, 235, 2, 49, 192, 65, 93, 65, 92, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_bytes_to_str s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_bytes_to_str", off)
+    x86_synth_register_helper_fn(s, "bytes_to_str", off)
+    x86_synth_register_helper_fn(s, "mem_to_str", off)
+    x86_synth_register_helper_fn(s, "বাইট_থেকে_স্ট্রিং", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 73, 137, 252, 72, 137, 243, 72, 131, 251, 0, 125, 2, 49, 219, 72, 141, 123, 9])
+    x86_synth_emit_call_helper(s, "_lipi_user_alloc")
+    x86_synth_emit_bytes(s, [137, 24, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 72, 133, 219, 116, 14, 77, 133, 228, 116, 9, 76, 137, 230, 72, 137, 217, 252, 243, 164, 198, 68, 24, 8, 0, 72, 131, 192, 8, 65, 92, 91, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_to_str s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_to_str", off)
+    x86_synth_register_helper_fn(s, "buf_to_str", off)
+    x86_synth_register_helper_fn(s, "বাফার_স্ট্রিংয়ে", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 133, 255, 116, 14, 72, 139, 55, 72, 139, 127, 16])
+    x86_synth_emit_call_helper(s, "_lipi_bytes_to_str")
+    x86_synth_emit_bytes(s, [93, 195, 49, 255, 49, 246])
+    x86_synth_emit_call_helper(s, "_lipi_bytes_to_str")
+    x86_synth_emit_bytes(s, [93, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_len s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_len", off)
+    x86_synth_register_helper_fn(s, "buf_len", off)
+    x86_synth_register_helper_fn(s, "বাফার_দৈর্ঘ্য", off)
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 4, 72, 139, 7, 195, 49, 192, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_ptr s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_ptr", off)
+    x86_synth_register_helper_fn(s, "buf_ptr", off)
+    x86_synth_register_helper_fn(s, "বাফার_পয়েন্টার", off)
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 5, 72, 139, 71, 16, 195, 49, 192, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_clear s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_clear", off)
+    x86_synth_register_helper_fn(s, "buf_clear", off)
+    x86_synth_register_helper_fn(s, "বাফার_মুছো", off)
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 7, 72, 199, 7, 0, 0, 0, 0, 49, 192, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_get_byte s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_get_byte", off)
+    x86_synth_register_helper_fn(s, "buf_get_byte", off)
+    x86_synth_register_helper_fn(s, "বাইট_পড়ো", off)
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 20, 72, 131, 254, 0, 124, 14, 72, 59, 55, 115, 9, 72, 139, 87, 16, 15, 182, 4, 50, 195, 49, 192, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_free s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_free", off)
+    x86_synth_register_helper_fn(s, "buf_free", off)
+    x86_synth_register_helper_fn(s, "বাফার_মুক্তি", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 72, 131, 236, 8, 73, 137, 252, 77, 133, 228, 116, 49, 73, 139, 124, 36, 16, 73, 199, 4, 36, 0, 0, 0, 0, 73, 199, 68, 36, 8, 0, 0, 0, 0, 73, 199, 68, 36, 16, 0, 0, 0, 0, 72, 133, 255, 116, 5])
+    x86_synth_emit_call_helper(s, "_lipi_user_free")
+    x86_synth_emit_bytes(s, [76, 137, 231])
+    x86_synth_emit_call_helper(s, "_lipi_user_free")
+    x86_synth_emit_bytes(s, [49, 192, 72, 131, 196, 8, 65, 92, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_buf_slice s
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_buf_slice", off)
+    x86_synth_register_helper_fn(s, "buf_slice", off)
+    x86_synth_register_helper_fn(s, "bytes_slice", off)
+    x86_synth_register_helper_fn(s, "বাইট_স্লাইস", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 73, 137, 252, 73, 137, 245, 73, 137, 214, 77, 133, 228, 116, 30, 73, 139, 4, 36, 73, 131, 253, 0, 125, 3, 69, 49, 237, 73, 57, 198, 126, 3, 73, 137, 198, 77, 41, 238, 73, 131, 254, 0, 127, 12, 191, 64, 0, 0, 0])
+    x86_synth_emit_call_helper(s, "_lipi_buf_new")
+    x86_synth_emit_bytes(s, [235, 33, 76, 137, 247])
+    x86_synth_emit_call_helper(s, "_lipi_buf_new")
+    x86_synth_emit_bytes(s, [72, 137, 195, 72, 137, 223, 73, 139, 116, 36, 16, 76, 1, 238, 76, 137, 242])
+    x86_synth_emit_call_helper(s, "_lipi_buf_write_mem")
+    x86_synth_emit_bytes(s, [72, 137, 216, 65, 94, 65, 93, 65, 92, 91, 93, 195])
+    return off

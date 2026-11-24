@@ -1,4 +1,5 @@
 import "utso/os/syscalls"
+import "utso/os/env"
 
 @struct ProcessWaitStatus
   val: 0
@@ -218,9 +219,10 @@ import "utso/os/syscalls"
 @end
 
 @fn process_spawn(command, args)
+  cur_env = env_all()
   child_pid = process_fork()
   @if child_pid == 0
-    res = process_execve(command, args, 0)
+    res = process_execve(command, args, cur_env)
     process_exit(127)
   @end
   return child_pid
@@ -236,7 +238,9 @@ import "utso/os/syscalls"
 @end
 
 @fn process_capture(command, args)
-  // WHY: Captures child stdout/stderr via SYS_pipe2 + fork + SYS_dup2 + execve into a real STR0 string.
+  // WHY: Captures child stdout/stderr via SYS_pipe2 + fork + SYS_dup2 + execve with inherited envp
+  // and O(N) native ERMS ByteBuffer accumulation (zero O(N^2) chr() loop!).
+  cur_env = env_all()
   pbuf = lipi_alloc(16)
   @if pbuf <= 0 return { exit_code: -1, output: "" } @end
   @if syscall(293, pbuf, 0, 0, 0, 0, 0) < 0
@@ -253,7 +257,7 @@ import "utso/os/syscalls"
     syscall(33, wfd, 1, 0, 0, 0, 0)
     syscall(33, wfd, 2, 0, 0, 0, 0)
     sys_close(wfd)
-    process_execve(command, args, 0)
+    process_execve(command, args, cur_env)
     process_exit(127)
   @end
 
@@ -263,25 +267,150 @@ import "utso/os/syscalls"
     return { exit_code: -1, output: "" }
   @end
 
-  rbuf = lipi_alloc(4096)
-  out = ""
+  rbuf = lipi_alloc(8192)
+  acc = buf_new(4096)
   @while 1 == 1
-    nr = sys_read(rfd, rbuf, 4096)
+    nr = sys_read(rfd, rbuf, 8192)
     @if nr <= 0 break @end
-    k = 0
-    @while k < nr
-      out = out + chr(sys_peek8(rbuf + k))
-      k = k + 1
-    @end
+    buf_write_mem(acc, rbuf, nr)
   @end
-  lipi_free_sized(rbuf, 4096)
+  lipi_free_sized(rbuf, 8192)
   sys_close(rfd)
+  out = buf_to_str(acc)
+  buf_free(acc)
   st = process_wait(pid)
   code = st
   @if process_wifexited(st) == 1
     code = process_wexitstatus(st)
   @end
   return { exit_code: code, output: out }
+@end
+
+@fn process_capture_full(command, args, stdin_data, timeout_ms)
+  // WHY: Production subprocess runner with inherited environment, separate stdout & stderr pipes,
+  // optional stdin feed, SYS_poll(7) deadlock-free multiplexing, and SIGKILL timeout enforcement.
+  cur_env = env_all()
+  pbuf = lipi_alloc(48)
+  @if pbuf <= 0 return { exit_code: -1, stdout: "", stderr: "", timed_out: 0 } @end
+  @if syscall(293, pbuf, 0, 0, 0, 0, 0) < 0 || syscall(293, pbuf + 16, 0, 0, 0, 0, 0) < 0 || syscall(293, pbuf + 32, 0, 0, 0, 0, 0) < 0
+    lipi_free_sized(pbuf, 48)
+    return { exit_code: -1, stdout: "", stderr: "", timed_out: 0 }
+  @end
+  in_r = sys_peek32(pbuf)
+  in_w = sys_peek32(pbuf + 4)
+  out_r = sys_peek32(pbuf + 16)
+  out_w = sys_peek32(pbuf + 20)
+  err_r = sys_peek32(pbuf + 32)
+  err_w = sys_peek32(pbuf + 36)
+  lipi_free_sized(pbuf, 48)
+
+  pid = process_fork()
+  @if pid == 0
+    sys_close(in_w)
+    sys_close(out_r)
+    sys_close(err_r)
+    syscall(33, in_r, 0, 0, 0, 0, 0)
+    syscall(33, out_w, 1, 0, 0, 0, 0)
+    syscall(33, err_w, 2, 0, 0, 0, 0)
+    sys_close(in_r)
+    sys_close(out_w)
+    sys_close(err_w)
+    process_execve(command, args, cur_env)
+    process_exit(127)
+  @end
+
+  sys_close(in_r)
+  sys_close(out_w)
+  sys_close(err_w)
+  @if pid < 0
+    sys_close(in_w)
+    sys_close(out_r)
+    sys_close(err_r)
+    return { exit_code: -1, stdout: "", stderr: "", timed_out: 0 }
+  @end
+
+  // Feed stdin payload and close stdin pipe to send EOF to child
+  sin_len = len(stdin_data)
+  @if sin_len > 0
+    sw = 0
+    @while sw < sin_len
+      nw = sys_write(in_w, stdin_data + sw, sin_len - sw)
+      @if nw <= 0 break @end
+      sw = sw + nw
+    @end
+  @end
+  sys_close(in_w)
+
+  // Multiplex stdout & stderr using Linux SYS_poll (syscall 7, struct pollfd = 8 bytes each)
+  pfd = lipi_alloc(32)
+  rbuf = lipi_alloc(8192)
+  out_acc = buf_new(4096)
+  err_acc = buf_new(1024)
+  out_open = 1
+  err_open = 1
+  timed_out = 0
+  t_start = clock_ms()
+
+  @while out_open == 1 || err_open == 1
+    rem_ms = 50
+    @if timeout_ms > 0
+      elapsed = clock_ms() - t_start
+      @if elapsed >= timeout_ms
+        timed_out = 1
+        sys_kill(pid, 9)
+        break
+      @end
+      left = timeout_ms - elapsed
+      @if left < rem_ms rem_ms = left @end
+    @end
+    // Build pollfd[0] (out_r) and pollfd[1] (err_r): { i32 fd, i16 events=POLLIN(1), i16 revents=0 }
+    fd0 = 0 - 1
+    @if out_open == 1 fd0 = out_r @end
+    fd1 = 0 - 1
+    @if err_open == 1 fd1 = err_r @end
+    sys_poke32(pfd + 0, fd0)
+    sys_poke16(pfd + 4, 1)
+    sys_poke16(pfd + 6, 0)
+    sys_poke32(pfd + 8, fd1)
+    sys_poke16(pfd + 12, 1)
+    sys_poke16(pfd + 14, 0)
+    pr = syscall(7, pfd, 2, rem_ms, 0, 0, 0)
+    @if pr > 0
+      rev0 = sys_peek16(pfd + 6)
+      @if out_open == 1 && (rev0 & (1 | 16 | 8)) != 0
+        nr0 = sys_read(out_r, rbuf, 8192)
+        @if nr0 > 0
+          buf_write_mem(out_acc, rbuf, nr0)
+        @else
+          out_open = 0
+        @end
+      @end
+      rev1 = sys_peek16(pfd + 14)
+      @if err_open == 1 && (rev1 & (1 | 16 | 8)) != 0
+        nr1 = sys_read(err_r, rbuf, 8192)
+        @if nr1 > 0
+          buf_write_mem(err_acc, rbuf, nr1)
+        @else
+          err_open = 0
+        @end
+      @end
+    @end
+  @end
+
+  lipi_free_sized(pfd, 32)
+  lipi_free_sized(rbuf, 8192)
+  sys_close(out_r)
+  sys_close(err_r)
+  st = process_wait(pid)
+  code = st
+  @if process_wifexited(st) == 1
+    code = process_wexitstatus(st)
+  @end
+  out_s = buf_to_str(out_acc)
+  err_s = buf_to_str(err_acc)
+  buf_free(out_acc)
+  buf_free(err_acc)
+  return { exit_code: code, stdout: out_s, stderr: err_s, timed_out: timed_out }
 @end
 
 @fn process_run(command, args)

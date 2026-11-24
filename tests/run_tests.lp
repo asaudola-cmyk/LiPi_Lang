@@ -1360,6 +1360,21 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave1_abi_buf_closures_modules.lp", "test_wave1_abi_buf_closures_modules") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave3_os_pty_futex_waldb.lp", "test_wave3_os_pty_futex_waldb") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave4_net_sse_dns_epoll_ws.lp", "test_wave4_net_sse_dns_epoll_ws") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

@@ -75,6 +75,7 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
     cap_names = list()
     cap_types = list()
     cap_prims = list()
+    cap_boxed = list()
     scan_i = get(pos_box, 0)
     paren_d = 0
     blk_depth = 0
@@ -163,6 +164,7 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
                             end
                             push(cap_types, lt)
                             push(cap_prims, lp)
+                            push(cap_boxed, lv_o.lv_is_boxed)
                         end
                     end
                 end
@@ -184,12 +186,14 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
     saved_cur_fn = s.synth_current_fn
     saved_ra_names = s.synth_regalloc_names
     saved_ra_regs = s.synth_regalloc_regs
+    saved_boxed_c = s.synth_boxed_vars
     s.synth_locals = list()
     s.synth_stack_offset = 64
     s.synth_in_function = 1
     s.synth_current_fn = "__closure"
     s.synth_regalloc_names = list()
     s.synth_regalloc_regs = list()
+    s.synth_boxed_vars = list()
     s.synth_last_store_end = 0 - 1
 
     prologue_patch = x86_synth_emit_prologue(s)
@@ -200,7 +204,7 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
         pi = pi + 1
     end
 
-    // Load captured outer values from [r10 + 24 + ci*8] into closure local slots
+    // Load captured outer values (or shared 8B upvalue cell pointers!) from [r10 + 24 + ci*8]
     ci = 0
     while ci < cap_names.len()
         disp_c = 24 + (ci * 8)
@@ -212,6 +216,12 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
         end
         c_off = x86_synth_alloc_var(s, cap_names[ci])
         x86_synth_emit_store_var(s, 0, c_off)
+        if cap_boxed[ci] == 1
+            lv_cb = x86_synth_find_local_var(s, cap_names[ci])
+            if lv_cb != 0
+                lv_cb.lv_is_boxed = 1
+            end
+        end
         if cap_types[ci] != ""
             x86_synth_set_var_type(s, cap_names[ci], cap_types[ci])
         end
@@ -264,6 +274,7 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
     s.synth_current_fn = saved_cur_fn
     s.synth_regalloc_names = saved_ra_names
     s.synth_regalloc_regs = saved_ra_regs
+    s.synth_boxed_vars = saved_boxed_c
     s.synth_last_store_end = 0 - 1
 
     after_clos = s.synth_code.len()
@@ -425,6 +436,9 @@ fn x86_synth_emit_interp_str s txt
                     x86_synth_emit_mov_reg_reg(s, 0, lv.lv_reg)
                 else
                     x86_synth_emit_load_var(s, 0, lv.lv_offset)
+                end
+                if lv.lv_is_boxed == 1
+                    x86_synth_emit_bytes(s, [72, 139, 0]) // mov rax, [rax]
                 end
             else
                 mg_off = x86_synth_find_mutable_global(s, vname)
@@ -898,18 +912,30 @@ fn x86_synth_expr_primary s toks pos_box
         end
         s.synth_last_struct = sname
 
-        alloc_sz = 1024
+        // WHY: Size record literals accurately without wasting 1024 bytes per small anonymous object.
+        alloc_sz = (keys.len() + 2) * 8
         if sname != ""
             sdef = x86_synth_find_struct(s, sname)
             if sdef != 0
                 alloc_sz = (sdef.sd_fields.len() + 2) * 8
-        else
-            gf_min_sz = (s.synth_global_fields.len() + keys.len() + 4) * 8
-            if alloc_sz < gf_min_sz
-                alloc_sz = gf_min_sz
             end
-        if alloc_sz < 64
-            alloc_sz = 64
+        else
+            max_gf_off = 0
+            gki2 = 0
+            while gki2 < keys.len()
+                gf_o = x86_synth_get_field_offset(s, "", keys[gki2])
+                if gf_o + 8 > max_gf_off
+                    max_gf_off = gf_o + 8
+                end
+                gki2 = gki2 + 1
+            end
+            if max_gf_off + 16 > alloc_sz
+                alloc_sz = max_gf_off + 16
+            end
+        end
+        if alloc_sz < 32
+            alloc_sz = 32
+        end
 
         // Allocate heap memory for struct: _lipi_alloc_helper(alloc_sz)
         x86_synth_emit_mov_rdi_imm64(s, alloc_sz)
@@ -1305,37 +1331,31 @@ fn x86_synth_expr_primary s toks pos_box
                     if lv_fn != 0 and ((lv_fn.lv_is_spilled == 0 and lv_fn.lv_reg >= 0) or lv_fn.lv_offset > 0)
                         // WHY: Load target fn_ptr/closure into %rax before pop_args so popping
                         // %rdi/%rsi/etc. cannot clobber a register-allocated callee variable.
-                        abi_save = 0
-                        if arg_count >= 9
-                            abi_save = x86_synth_emit_save_r12_r15(s)
-                        end
                         if lv_fn.lv_is_spilled == 0 and lv_fn.lv_reg >= 0
                             x86_synth_emit_mov_reg_reg(s, 0, lv_fn.lv_reg)
                         else
                             x86_synth_emit_load_var(s, 0, lv_fn.lv_offset)
                         end
-                        x86_synth_emit_pop_args(s, arg_count)
+                        if lv_fn.lv_is_boxed == 1
+                            x86_synth_emit_bytes(s, [72, 139, 0]) // mov rax, [rax]
+                        end
+                        fn_cleanup = x86_synth_emit_pop_args(s, arg_count)
                         x86_synth_emit_indirect_call_rax(s)
-                        if abi_save != 0
-                            x86_synth_emit_restore_r12_r15(s, abi_save)
-                        end
+                        x86_synth_emit_cleanup_stack_args(s, fn_cleanup)
                     elif mg_fn >= 512
-                        abi_save = 0
-                        if arg_count >= 9
-                            abi_save = x86_synth_emit_save_r12_r15(s)
-                        end
-                        x86_synth_emit_pop_args(s, arg_count)
+                        fn_cleanup = x86_synth_emit_pop_args(s, arg_count)
                         x86_synth_emit_mutable_global_read(s, mg_fn)
                         x86_synth_emit_indirect_call_rax(s)
-                        if abi_save != 0
-                            x86_synth_emit_restore_r12_r15(s, abi_save)
-                        end
+                        x86_synth_emit_cleanup_stack_args(s, fn_cleanup)
                     else
-                        abi_save = 0
-                        if arg_count >= 9
-                            abi_save = x86_synth_emit_save_r12_r15(s)
+                        if s.synth_strict_types == 1
+                            arity_fn = x86_synth_find_fn_first(s, var_name)
+                            if arity_fn != 0 and arity_fn.fn_param_count >= 0 and arg_count != arity_fn.fn_param_count
+                                say "❌ [Strict Arity Error]: Function '" + var_name + "' expects " + str(arity_fn.fn_param_count) + " argument(s), got " + str(arg_count) + " at line " + str(t.tok_span.span_start_line)
+                                exit(1)
+                            end
                         end
-                        x86_synth_emit_pop_args(s, arg_count)
+                        fn_cleanup = x86_synth_emit_pop_args(s, arg_count)
                         // Direct Function Call: Emits call rel32 (0xE8) and queues relocation
                         call_off = s.synth_code.len()
                         x86_synth_emit_byte(s, 232)
@@ -1346,17 +1366,15 @@ fn x86_synth_expr_primary s toks pos_box
                         call_rel.cr_call_site_end = patch_pos + 4
                         call_rel.cr_target_name = var_name
                         push(s.synth_call_relocs, call_rel)
-                        if abi_save != 0
-                            x86_synth_emit_restore_r12_r15(s, abi_save)
-                        end
+                        x86_synth_emit_cleanup_stack_args(s, fn_cleanup)
                         if var_name == "main" or var_name == "মূল"
                             s.synth_called_top_level_main = 1
                         rt_name = x86_synth_lookup_fn_ret_type(s, var_name)
                         if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
                             s.synth_last_expr_type = "int"
-                        elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "sha256_hex" or var_name == "str_sub" or var_name == "char_at" or var_name == "chr" or var_name == "file_read" or var_name == "bytes_to_hex" or var_name == "qword_to_hex"
+                        elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "float_to_str" or var_name == "sha256_hex" or var_name == "str_sub" or var_name == "char_at" or var_name == "chr" or var_name == "file_read" or var_name == "bytes_to_hex" or var_name == "qword_to_hex" or var_name == "buf_to_str" or var_name == "bytes_to_str" or var_name == "mem_to_str" or var_name == "বাফার_স্ট্রিংয়ে" or var_name == "বাইট_থেকে_স্ট্রিং"
                             s.synth_last_expr_type = "str"
-                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect" or var_name == "gc_live_bytes" or var_name == "gc_set_threshold" or var_name == "gc_set_auto" or var_name == "ord" or var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "mem_read" or var_name == "mem_word_read" or var_name == "str_char_at" or var_name == "ror32" or var_name == "rol32" or var_name == "clock_ms" or var_name == "cpu_clock" or var_name == "arena_mark" or var_name == "arena_allocated" or var_name == "file_exists" or var_name == "sha256_ch" or var_name == "sha256_maj" or var_name == "sha256_sigma0" or var_name == "sha256_sigma1" or var_name == "sha256_gamma0" or var_name == "sha256_gamma1"
+                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect" or var_name == "gc_live_bytes" or var_name == "gc_set_threshold" or var_name == "gc_set_auto" or var_name == "buf_len" or var_name == "buf_ptr" or var_name == "buf_write_byte" or var_name == "buf_append_byte" or var_name == "buf_push" or var_name == "buf_write_mem" or var_name == "buf_write_str" or var_name == "buf_get_byte" or var_name == "buf_clear" or var_name == "buf_free" or var_name == "ord" or var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "mem_read" or var_name == "mem_word_read" or var_name == "str_char_at" or var_name == "ror32" or var_name == "rol32" or var_name == "clock_ms" or var_name == "cpu_clock" or var_name == "arena_mark" or var_name == "arena_allocated" or var_name == "file_exists" or var_name == "sha256_ch" or var_name == "sha256_maj" or var_name == "sha256_sigma0" or var_name == "sha256_sigma1" or var_name == "sha256_gamma0" or var_name == "sha256_gamma1"
                             s.synth_last_expr_type = "int"
                         else
                             s.synth_last_expr_type = ""
@@ -1383,6 +1401,10 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_emit_mov_reg_reg(s, 0, lv.lv_reg)
                 else
                     x86_synth_emit_load_var(s, 0, lv.lv_offset)
+                end
+                if lv.lv_is_boxed == 1
+                    x86_synth_emit_bytes(s, [72, 139, 0]) // mov rax, [rax]
+                end
                 s.synth_last_struct = x86_synth_get_var_type(s, var_name)
                 s.synth_last_expr_type = x86_synth_get_prim_type(s, var_name)
                 s.synth_last_elem_type = x86_synth_get_elem_type(s, var_name)

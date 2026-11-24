@@ -510,8 +510,9 @@ fn x86_synth_emit__lipi_atomic_unlock s
     return off
 
 fn x86_synth_emit__lipi_exc_slot_ptr s
-    // WHY: Resolves per-thread exception top pointer using Linux SYS_gettid (186) + lock cmpxchg
-    // table at [g_exc_top + 32 .. +288] (16 slots of [tid, exc_top]).
+    // WHY: Resolves per-thread exception top pointer using Linux SYS_gettid (186) + lock cmpxchg.
+    // Fast L1 inline 16-slot cache at [g_exc_top + 40 .. +295], plus lazy SYS_mmap 4096-slot
+    // open-addressing overflow table at [g_exc_top + 352] (rw + 456) supporting 4,112 concurrent threads.
     // Input: %r10 = &g_exc_top (rw_vaddr + 104). Output: %r10 = &thread_exc_top.
     // Preserves %rdi, %rsi, %rdx, %rcx, %rbx, %r12-%r15, %rbp.
     off = s.synth_code.len()
@@ -520,9 +521,23 @@ fn x86_synth_emit__lipi_exc_slot_ptr s
     x86_synth_emit_bytes(s, [
         81, 65, 82, 184, 186, 0, 0, 0, 15, 5, 65, 90, 89, 73, 137, 195,
         77, 141, 66, 40, 65, 185, 16, 0, 0, 0, 73, 139, 0, 76, 57, 216,
-        116, 29, 72, 133, 192, 117, 14, 49, 192, 240, 77, 15, 177, 24,
-        116, 15, 76, 57, 216, 116, 10, 73, 131, 192, 16, 65, 255, 201,
-        117, 220, 195, 77, 141, 80, 8, 195
+        15, 132, 249, 0, 0, 0, 72, 133, 192, 117, 22, 49, 192, 240, 77,
+        15, 177, 24, 15, 132, 231, 0, 0, 0, 76, 57, 216, 15, 132, 222,
+        0, 0, 0, 73, 131, 192, 16, 65, 255, 201, 117, 208, 77, 139, 130,
+        96, 1, 0, 0, 77, 133, 192, 117, 118, 87, 86, 82, 81, 65, 82, 65,
+        83, 49, 255, 190, 0, 0, 1, 0, 186, 3, 0, 0, 0, 65, 186, 34, 0,
+        0, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0,
+        0, 0, 15, 5, 65, 91, 65, 90, 89, 90, 94, 95, 72, 61, 0, 16, 0,
+        0, 15, 134, 143, 0, 0, 0, 73, 137, 193, 49, 192, 240, 77, 15,
+        177, 138, 96, 1, 0, 0, 116, 36, 87, 86, 82, 81, 65, 82, 65, 83,
+        80, 76, 137, 207, 190, 0, 0, 1, 0, 184, 11, 0, 0, 0, 15, 5, 65,
+        88, 65, 91, 65, 90, 89, 90, 94, 95, 235, 3, 77, 137, 200, 82,
+        81, 76, 137, 194, 76, 137, 216, 105, 192, 177, 121, 55, 158, 37,
+        255, 15, 0, 0, 137, 193, 65, 185, 0, 16, 0, 0, 72, 137, 200, 72,
+        193, 224, 4, 76, 141, 4, 2, 73, 139, 0, 76, 57, 216, 116, 35,
+        72, 133, 192, 117, 14, 49, 192, 240, 77, 15, 177, 24, 116, 21,
+        76, 57, 216, 116, 16, 255, 193, 129, 225, 255, 15, 0, 0, 65,
+        255, 201, 117, 205, 89, 90, 195, 89, 90, 77, 141, 80, 8, 195, 195
     ])
     return off
 
@@ -691,6 +706,18 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_stack_bottom = x86_synth_emit__lipi_stack_bottom(s)
     off__lipi_heap_base = x86_synth_emit__lipi_heap_base(s)
     off__lipi_heap_ptr = x86_synth_emit__lipi_heap_ptr(s)
+    off__lipi_buf_new = x86_synth_emit__lipi_buf_new(s)
+    off__lipi_buf_write_mem = x86_synth_emit__lipi_buf_write_mem(s)
+    off__lipi_buf_write_byte = x86_synth_emit__lipi_buf_write_byte(s)
+    off__lipi_buf_write_str = x86_synth_emit__lipi_buf_write_str(s)
+    off__lipi_bytes_to_str = x86_synth_emit__lipi_bytes_to_str(s)
+    off__lipi_buf_to_str = x86_synth_emit__lipi_buf_to_str(s)
+    off__lipi_buf_len = x86_synth_emit__lipi_buf_len(s)
+    off__lipi_buf_ptr = x86_synth_emit__lipi_buf_ptr(s)
+    off__lipi_buf_clear = x86_synth_emit__lipi_buf_clear(s)
+    off__lipi_buf_get_byte = x86_synth_emit__lipi_buf_get_byte(s)
+    off__lipi_buf_free = x86_synth_emit__lipi_buf_free(s)
+    off__lipi_buf_slice = x86_synth_emit__lipi_buf_slice(s)
 
     // Register bilingual and standard aliases
     x86_synth_register_helper_fn(s, "move", off__lipi_pass_thru)

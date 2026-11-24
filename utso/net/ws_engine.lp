@@ -230,96 +230,216 @@ fn ws_perform_handshake client_fd req_str
     syscall(1, client_fd, resp, len(resp), 0, 0, 0)
     return 1
 
-// ── Send Unmasked WebSocket Text Frame (Server -> Client) ─────────────────────
-// WHY: Server sends unmasked frames according to RFC 6455 Section 5.1
-fn ws_send_text_frame client_fd msg
-    mlen = len(msg)
-    hdr_buf = malloc(16)
-    mem_write_byte(hdr_buf, 0, 129) // 0x81: FIN bit (0x80) | Text opcode (0x01)
+// ── Reliable Write Loop (Partial-Write & EINTR Safe) ──────────────────────────
+fn ws_write_all fd ptr total
+    if fd < 0 or total <= 0 return 0
+    sent = 0
+    while sent < total
+        n = syscall(1, fd, ptr + sent, total - sent, 0, 0, 0)
+        if n == (0 - 4)
+            continue
+        if n == (0 - 11)
+            // EAGAIN on non-blocking socket: yield briefly and retry
+            syscall(24, 0, 0, 0, 0, 0, 0)
+            continue
+        if n <= 0
+            return sent
+        sent = sent + n
+    return sent
 
-    if mlen <= 125
-        mem_write_byte(hdr_buf, 1, mlen)
-        syscall(1, client_fd, hdr_buf, 2, 0, 0, 0)
-    elif mlen <= 65535
-        mem_write_byte(hdr_buf, 1, 126)
-        mem_write_byte(hdr_buf, 2, (mlen >> 8) & 255)
-        mem_write_byte(hdr_buf, 3, mlen & 255)
-        syscall(1, client_fd, hdr_buf, 4, 0, 0, 0)
+// ── Full RFC 6455 Server Frame Sender (Text/Binary/Cont/Close/Ping/Pong) ──────
+fn ws_send_frame client_fd opcode data_ptr plen fin
+    b = buf_new(16 + plen)
+    b0 = opcode & 15
+    if fin != 0
+        b0 = b0 | 128
+    buf_write_byte(b, b0)
+
+    if plen <= 125
+        buf_write_byte(b, plen & 127)
+    elif plen <= 65535
+        buf_write_byte(b, 126)
+        buf_write_byte(b, (plen >> 8) & 255)
+        buf_write_byte(b, plen & 255)
     else
-        mem_write_byte(hdr_buf, 1, 127)
-        mem_write_byte(hdr_buf, 2, 0)
-        mem_write_byte(hdr_buf, 3, 0)
-        mem_write_byte(hdr_buf, 4, 0)
-        mem_write_byte(hdr_buf, 5, 0)
-        mem_write_byte(hdr_buf, 6, (mlen >> 24) & 255)
-        mem_write_byte(hdr_buf, 7, (mlen >> 16) & 255)
-        mem_write_byte(hdr_buf, 8, (mlen >> 8) & 255)
-        mem_write_byte(hdr_buf, 9, mlen & 255)
-        syscall(1, client_fd, hdr_buf, 10, 0, 0, 0)
+        buf_write_byte(b, 127)
+        buf_write_byte(b, (plen >> 56) & 255)
+        buf_write_byte(b, (plen >> 48) & 255)
+        buf_write_byte(b, (plen >> 40) & 255)
+        buf_write_byte(b, (plen >> 32) & 255)
+        buf_write_byte(b, (plen >> 24) & 255)
+        buf_write_byte(b, (plen >> 16) & 255)
+        buf_write_byte(b, (plen >> 8) & 255)
+        buf_write_byte(b, plen & 255)
 
-    free(hdr_buf, 16)
-    syscall(1, client_fd, msg, mlen, 0, 0, 0)
+    if plen > 0 and data_ptr != 0
+        buf_write_mem(b, data_ptr, plen)
+
+    ws_write_all(client_fd, buf_ptr(b), buf_len(b))
+    buf_free(b)
     return 1
 
-// ── Decode Client Masked WebSocket Frame (Client -> Server) ───────────────────
-// WHY: Decodes XOR-masked incoming frame payload per RFC 6455 Section 5.3
-fn ws_decode_client_frame in_buf nread
-    if nread < 6
-        return ""
+// ── Send Unmasked WebSocket Text Frame (Server -> Client) ─────────────────────
+fn ws_send_text_frame client_fd msg
+    mlen = len(msg)
+    return ws_send_frame(client_fd, 1, msg, mlen, 1)
 
-    b0 = mem_byte_read(in_buf, 0)
-    b1 = mem_byte_read(in_buf, 1)
+// ── Send Unmasked WebSocket Binary Frame (NUL-Byte Safe) ──────────────────────
+fn ws_send_binary_frame client_fd data_ptr data_len
+    return ws_send_frame(client_fd, 2, data_ptr, data_len, 1)
 
+// ── RFC 6455 Control Frames: Ping (0x9), Pong (0xA), Close (0x8) ──────────────
+fn ws_send_ping client_fd payload
+    plen = len(payload)
+    if plen > 125
+        plen = 125
+    return ws_send_frame(client_fd, 9, payload, plen, 1)
+
+fn ws_send_pong client_fd payload_ptr payload_len
+    plen = payload_len
+    if plen > 125
+        plen = 125
+    return ws_send_frame(client_fd, 10, payload_ptr, plen, 1)
+
+fn ws_send_close client_fd status_code
+    cb = alloc(8)
+    code = status_code
+    if code <= 0
+        code = 1000
+    mem_byte_write(cb, 0, (code >> 8) & 255)
+    mem_byte_write(cb, 1, code & 255)
+    ws_send_frame(client_fd, 8, cb, 2, 1)
+    free(cb)
+    return 1
+
+// ── RFC 6455 Masked Client Frame Encoder (Returns ByteBuffer) ─────────────────
+fn ws_encode_client_frame opcode payload_ptr plen fin mask_u32
+    b = buf_new(16 + plen)
+    b0 = opcode & 15
+    if fin != 0
+        b0 = b0 | 128
+    buf_write_byte(b, b0)
+
+    if plen <= 125
+        buf_write_byte(b, 128 | (plen & 127))
+    elif plen <= 65535
+        buf_write_byte(b, 128 | 126)
+        buf_write_byte(b, (plen >> 8) & 255)
+        buf_write_byte(b, plen & 255)
+    else
+        buf_write_byte(b, 128 | 127)
+        buf_write_byte(b, (plen >> 56) & 255)
+        buf_write_byte(b, (plen >> 48) & 255)
+        buf_write_byte(b, (plen >> 40) & 255)
+        buf_write_byte(b, (plen >> 32) & 255)
+        buf_write_byte(b, (plen >> 24) & 255)
+        buf_write_byte(b, (plen >> 16) & 255)
+        buf_write_byte(b, (plen >> 8) & 255)
+        buf_write_byte(b, plen & 255)
+
+    m0 = (mask_u32 >> 24) & 255
+    m1 = (mask_u32 >> 16) & 255
+    m2 = (mask_u32 >> 8) & 255
+    m3 = mask_u32 & 255
+    buf_write_byte(b, m0)
+    buf_write_byte(b, m1)
+    buf_write_byte(b, m2)
+    buf_write_byte(b, m3)
+
+    i = 0
+    while i < plen
+        raw_b = mem_byte_read(payload_ptr, i) & 255
+        mod4 = i & 3
+        mk = m0
+        if mod4 == 1
+            mk = m1
+        elif mod4 == 2
+            mk = m2
+        elif mod4 == 3
+            mk = m3
+        buf_write_byte(b, raw_b ^ mk)
+        i = i + 1
+    return b
+
+// ── Full RFC 6455 Streaming Frame Parser (Binary/NUL-Safe, Partial-Read Aware) ─
+struct WsFrame
+    ws_ok
+    ws_fin
+    ws_opcode
+    ws_consumed
+    ws_payload_len
+    ws_payload
+
+fn ws_parse_frame in_buf avail_len require_mask
+    // Returns ws_ok=1 when a complete frame is parsed (ws_consumed bytes),
+    // ws_ok=0 when more bytes are needed, ws_ok=-1 on protocol error.
+    if avail_len < 2
+        return WsFrame(0, 0, 0, 0, 0, "")
+
+    b0 = mem_byte_read(in_buf, 0) & 255
+    b1 = mem_byte_read(in_buf, 1) & 255
+    fin = (b0 >> 7) & 1
     opcode = b0 & 15
-    // Opcode 8: Connection Close Frame
-    if opcode == 8
-        return ""
-
     is_masked = (b1 >> 7) & 1
     len_code = b1 & 127
 
-    header_offset = 2
-    actual_len = len_code
+    if require_mask == 1 and is_masked == 0
+        return WsFrame(0 - 1, fin, opcode, 0, 0, "")
+
+    hdr_off = 2
+    plen = len_code
     if len_code == 126
-        b2 = mem_byte_read(in_buf, 2)
-        b3 = mem_byte_read(in_buf, 3)
-        actual_len = (b2 << 8) | b3
-        header_offset = 4
+        if avail_len < 4 return WsFrame(0, 0, 0, 0, 0, "")
+        plen = ((mem_byte_read(in_buf, 2) & 255) << 8) | (mem_byte_read(in_buf, 3) & 255)
+        hdr_off = 4
     elif len_code == 127
-        if nread < 14 return ""
-        actual_len = 0
+        if avail_len < 10 return WsFrame(0, 0, 0, 0, 0, "")
+        plen = 0
         li = 2
         while li < 10
-            actual_len = (actual_len * 256) + mem_byte_read(in_buf, li)
+            plen = (plen * 256) + (mem_byte_read(in_buf, li) & 255)
             li = li + 1
-        header_offset = 10
+        hdr_off = 10
 
-    if is_masked == 0
-        // Client frames MUST be masked; reject if unmasked
-        return ""
+    mask_len = 0
+    if is_masked == 1
+        mask_len = 4
+    total_need = hdr_off + mask_len + plen
+    if avail_len < total_need
+        return WsFrame(0, 0, 0, 0, 0, "")
 
-    // Read 4-byte masking key
-    m0 = mem_byte_read(in_buf, header_offset)
-    m1 = mem_byte_read(in_buf, header_offset + 1)
-    m2 = mem_byte_read(in_buf, header_offset + 2)
-    m3 = mem_byte_read(in_buf, header_offset + 3)
-
-    payload_start = header_offset + 4
-    res = ""
-    i = 0
-    while i < actual_len and (payload_start + i) < nread
-        masked_byte = mem_byte_read(in_buf, payload_start + i)
-        mod4 = i % 4
-        unmasked = 0
-        if mod4 == 0
-            unmasked = masked_byte ^ m0
-        elif mod4 == 1
-            unmasked = masked_byte ^ m1
-        elif mod4 == 2
-            unmasked = masked_byte ^ m2
+    pstart = hdr_off + mask_len
+    payload_str = ""
+    if plen > 0
+        if is_masked == 1
+            m0 = mem_byte_read(in_buf, hdr_off) & 255
+            m1 = mem_byte_read(in_buf, hdr_off + 1) & 255
+            m2 = mem_byte_read(in_buf, hdr_off + 2) & 255
+            m3 = mem_byte_read(in_buf, hdr_off + 3) & 255
+            out_b = buf_new(plen)
+            i = 0
+            while i < plen
+                mb = mem_byte_read(in_buf, pstart + i) & 255
+                mod4 = i & 3
+                mk = m0
+                if mod4 == 1
+                    mk = m1
+                elif mod4 == 2
+                    mk = m2
+                elif mod4 == 3
+                    mk = m3
+                buf_write_byte(out_b, mb ^ mk)
+                i = i + 1
+            payload_str = buf_to_str(out_b)
+            buf_free(out_b)
         else
-            unmasked = masked_byte ^ m3
-        res = res + chr(unmasked)
-        i = i + 1
+            payload_str = bytes_to_str(in_buf + pstart, plen)
 
-    return res
+    return WsFrame(1, fin, opcode, total_need, plen, payload_str)
+
+// ── Decode Client Masked WebSocket Frame (Backwards-Compatible O(N) Wrapper) ──
+fn ws_decode_client_frame in_buf nread
+    fr = ws_parse_frame(in_buf, nread, 1)
+    if fr.ws_ok != 1 or fr.ws_opcode == 8
+        return ""
+    return fr.ws_payload

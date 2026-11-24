@@ -42,6 +42,7 @@ struct X86LocalVar
     lv_reg              // Assigned physical register ID (-1 if none or spilled)
     lv_is_spilled       // 1 if spilled to stack frame slot, 0 if held in physical register
     lv_elem_type        // Inferred list/array element primitive type ("float", "int", "str", or "")
+    lv_is_boxed         // 1 if local is heap-boxed in an 8-byte GC upvalue cell for mutable closure capture
 
 // WHY: Records a function definition entry point for call site resolution
 struct X86Function
@@ -130,6 +131,7 @@ struct X86Synthesizer
     synth_last_elem_type   // Element primitive or struct type of most recent array/list ("float", "User", "")
     synth_strict_types     // 1 when --strict-types enforces zero ambiguous struct field offsets
     synth_ambiguous_count  // Count of untyped colliding struct field accesses observed
+    synth_boxed_vars       // Local variable names boxed into 8B GC upvalue cells for mutable closures
 
 global g_x86_strict_types = 0
 
@@ -378,7 +380,171 @@ fn x86_synth_new
     s.synth_last_elem_type = ""
     s.synth_strict_types = g_x86_strict_types
     s.synth_ambiguous_count = 0
+    s.synth_boxed_vars = list()
     return s
+
+fn x86_synth_is_boxed_name s name
+    if s.synth_boxed_vars == 0
+        return 0
+    end
+    bi = 0
+    bn = s.synth_boxed_vars.len()
+    while bi < bn
+        if s.synth_boxed_vars[bi] == name
+            return 1
+        end
+        bi = bi + 1
+    end
+    return 0
+end
+
+fn x86_synth_prescan_boxed_vars toks start_pos base_col base_line
+    // WHY: Identifies outer variables mutated inside nested closures so they are auto-boxed
+    // into 8-byte GC upvalue cells shared between the enclosing scope and escaping closures.
+    res = list()
+    n = toks.len()
+    i = start_pos
+    while i < n
+        t = toks[i]
+        k = t.tok_kind
+        txt = t.tok_text
+        if base_line >= 0
+            if x86_synth_is_block_end(toks, i) == 1 and t.tok_span.span_start_col <= base_col
+                break
+            end
+            if t.tok_span.span_start_line > base_line and t.tok_span.span_start_col <= base_col and k != TOK_NEWLINE() and k != TOK_COMMENT_LINE() and k != TOK_COMMENT_BLOCK()
+                break
+            end
+        end
+        is_clos = 0
+        c_end_hdr = i
+        c_params = list()
+        if (k == TOK_KW_FN() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ"))) and i + 1 < n and (toks[i + 1].tok_kind == TOK_LPAREN() or toks[i + 1].tok_text == "(")
+            j = i + 2
+            while j < n
+                if toks[j].tok_kind == TOK_RPAREN() or (toks[j].tok_kind != TOK_STR() and toks[j].tok_text == ")")
+                    c_end_hdr = j + 1
+                    is_clos = 1
+                    break
+                elif toks[j].tok_kind == TOK_COLON() or (toks[j].tok_kind != TOK_STR() and toks[j].tok_text == ":")
+                    j = j + 2
+                    continue
+                elif x86_synth_is_ident_token(toks[j].tok_kind) == 1
+                    push(c_params, toks[j].tok_text)
+                end
+                j = j + 1
+            end
+        elif k == TOK_BAR() or (k != TOK_STR() and txt == "|")
+            j = i + 1
+            ok_bar = 0
+            while j < n and (j - i) < 32
+                if toks[j].tok_kind == TOK_BAR() or (toks[j].tok_kind != TOK_STR() and toks[j].tok_text == "|")
+                    if j + 1 < n and (toks[j + 1].tok_kind == TOK_FAT_ARROW() or toks[j + 1].tok_text == "=>" or toks[j + 1].tok_kind == TOK_ARROW() or toks[j + 1].tok_text == "->" or toks[j + 1].tok_kind == TOK_LBRACE() or toks[j + 1].tok_text == "{")
+                        c_end_hdr = j + 1
+                        ok_bar = 1
+                    end
+                    break
+                elif toks[j].tok_kind == TOK_NEWLINE() or toks[j].tok_kind == TOK_SEMI()
+                    break
+                elif toks[j].tok_kind == TOK_COLON() or (toks[j].tok_kind != TOK_STR() and toks[j].tok_text == ":")
+                    j = j + 2
+                    continue
+                elif x86_synth_is_ident_token(toks[j].tok_kind) == 1
+                    push(c_params, toks[j].tok_text)
+                end
+                j = j + 1
+            end
+            is_clos = ok_bar
+        end
+        if is_clos == 1
+            j = c_end_hdr
+            if j < n and (toks[j].tok_kind == TOK_FAT_ARROW() or toks[j].tok_text == "=>" or toks[j].tok_kind == TOK_ARROW() or toks[j].tok_text == "->")
+                j = j + 1
+            end
+            b_mode = 0
+            if j < n and (toks[j].tok_kind == TOK_LBRACE() or (toks[j].tok_kind != TOK_STR() and toks[j].tok_text == "{"))
+                b_mode = 1
+                j = j + 1
+            elif j < n and toks[j].tok_kind == TOK_NEWLINE()
+                b_mode = 2
+                j = j + 1
+            end
+            if b_mode == 1 or b_mode == 2
+                depth = 1
+                while j < n and depth > 0
+                    ct = toks[j]
+                    ck = ct.tok_kind
+                    ctxt = ct.tok_text
+                    if b_mode == 1
+                        if ck == TOK_LBRACE() or (ck != TOK_STR() and ctxt == "{")
+                            depth = depth + 1
+                        elif ck == TOK_RBRACE() or (ck != TOK_STR() and ctxt == "}")
+                            depth = depth - 1
+                            if depth == 0
+                                j = j + 1
+                                break
+                            end
+                        end
+                    else
+                        if ck == TOK_KW_IF() or ck == TOK_KW_WHILE() or ck == TOK_KW_FOR() or ck == TOK_KW_TRY() or (ck == TOK_IDENT() and (ctxt == "if" or ctxt == "while" or ctxt == "for" or ctxt == "try" or ctxt == "region" or ctxt == "অঞ্চল"))
+                            depth = depth + 1
+                        elif x86_synth_is_block_end(toks, j) == 1
+                            depth = depth - 1
+                            if depth == 0
+                                j = j + 1
+                                break
+                            end
+                        end
+                    end
+                    if x86_synth_is_ident_token(ck) == 1 and j + 1 < n
+                        nk = toks[j + 1].tok_kind
+                        nt = toks[j + 1].tok_text
+                        is_mut = 0
+                        if nk == TOK_ASSIGN() or nk == TOK_PLUSEQ() or nk == TOK_MINUSEQ() or nk == TOK_STAREQ() or nk == TOK_SLASHEQ() or nk == TOK_PERCENTEQ()
+                            is_mut = 1
+                        elif nk != TOK_STR() and (nt == "=" or nt == "+=" or nt == "-=" or nt == "*=" or nt == "/=" or nt == "%=")
+                            is_mut = 1
+                        end
+                        if is_mut == 1
+                            is_dot_prev = 0
+                            if j > 0 and (toks[j - 1].tok_kind == TOK_DOT() or toks[j - 1].tok_text == ".")
+                                is_dot_prev = 1
+                            end
+                            is_cp = 0
+                            pi = 0
+                            while pi < c_params.len()
+                                if c_params[pi] == ctxt
+                                    is_cp = 1
+                                    break
+                                end
+                                pi = pi + 1
+                            end
+                            if is_dot_prev == 0 and is_cp == 0
+                                dup = 0
+                                ri = 0
+                                while ri < res.len()
+                                    if res[ri] == ctxt
+                                        dup = 1
+                                        break
+                                    end
+                                    ri = ri + 1
+                                end
+                                if dup == 0
+                                    push(res, ctxt)
+                                end
+                            end
+                        end
+                    end
+                    j = j + 1
+                end
+                i = j
+                continue
+            end
+        end
+        i = i + 1
+    end
+    return res
+end
 
 fn x86_synth_emit_byte s byte_val
     // WHY: Emits a single raw machine instruction byte into code_bytes.
@@ -1211,6 +1377,14 @@ fn x86_synth_alloc_reg_var s name is_reg_hint
     lv.lv_prim_type = ""
     lv.lv_reg = 0 - 1
     lv.lv_is_spilled = 1
+    lv.lv_is_boxed = 0
+
+    // WHY: Boxed upvalue cells stay in their dedicated stack slot so closures capture the heap cell address.
+    if x86_synth_is_boxed_name(s, name) == 1
+        lv.lv_is_boxed = 1
+        push(s.synth_locals, lv)
+        return off
+    end
 
     // 1. Check if variable was assigned a physical register by SSA linear scan allocation
     target_key = name
@@ -1440,12 +1614,26 @@ fn x86_synth_get_elem_type s name
     return ""
 
 fn x86_synth_bind_reg_var s var_name is_reg
-    // WHY: Binds expression result in %rax to local variable. If variable is assigned a physical
-    // register by SSA linear scan or explicit register declaration, emits 1-cycle direct mov into that register;
-    // otherwise stores to stack frame slot.
+    // WHY: Binds expression result in %rax to local variable. Supports register-allocated locals,
+    // stack slots, and 8-byte GC upvalue cells for mutable closure captures.
+    ex_lv = x86_synth_find_local_var(s, var_name)
     off = x86_synth_alloc_reg_var(s, var_name, is_reg)
     lv = x86_synth_find_local_var(s, var_name)
-    if lv != 0 and lv.lv_is_spilled == 0 and lv.lv_reg >= 0
+    if lv != 0 and lv.lv_is_boxed == 1
+        if ex_lv == 0
+            // First declaration of boxed variable: allocate 8B GC cell, store initial %rax inside, save cell ptr to slot
+            x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+            x86_synth_emit_mov_rdi_imm64(s, 8)
+            x86_synth_emit_call_alloc(s)
+            x86_synth_emit_store_var(s, 0, off)
+            x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 72, 137, 8, 72, 137, 200]) // add rsp, 8; pop rcx; mov [rax], rcx; mov rax, rcx
+        else
+            // Subsequent mutation of existing boxed cell: load cell ptr into %rcx, store %rax into [rcx]
+            x86_synth_emit_load_var(s, 1, off)
+            x86_synth_emit_bytes(s, [72, 137, 1]) // mov [rcx], rax
+        end
+        s.synth_last_store_end = 0 - 1
+    elif lv != 0 and lv.lv_is_spilled == 0 and lv.lv_reg >= 0
         // WHY: When allocated to a hardware register (%r12-%r15, %rbx) and unspilled,
         // move directly into physical register without redundant shadow stack writes.
         x86_synth_emit_mov_reg_reg(s, lv.lv_reg, 0)
@@ -1625,8 +1813,9 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
     return 0
 
 fn x86_synth_emit_store_param s pi off
-    // WHY: Stores incoming argument register (0..11) to local stack slot [rbp - off]
-    // Follows LiPi 12-register calling convention (rdi, rsi, rdx, rcx, r8, r9, r10, r11, r12, r13, r14, r15)
+    // WHY: Standard System V AMD64 ABI parameter ingress (unlimited argument count!):
+    // Params 0..5 arrive in %rdi, %rsi, %rdx, %rcx, %r8, %r9;
+    // Params 6..N-1 arrive on caller's stack at [rbp + 16 + (pi - 6)*8] without touching %r12-%r15.
     if pi == 0
         x86_synth_emit_store_var(s, 7, off) // %rdi
     elif pi == 1
@@ -1635,7 +1824,7 @@ fn x86_synth_emit_store_param s pi off
         x86_synth_emit_store_var(s, 2, off) // %rdx
     elif pi == 3
         x86_synth_emit_store_var(s, 1, off) // %rcx
-    elif pi >= 4 and pi < 12
+    elif pi == 4 or pi == 5
         modrm_disp8 = 69 + (pi - 4) * 8
         modrm_disp32 = 133 + (pi - 4) * 8
         if off <= 128
@@ -1650,32 +1839,101 @@ fn x86_synth_emit_store_param s pi off
             x86_synth_emit_byte(s, 137) // mov r/m64, r64 (0x89)
             x86_synth_emit_byte(s, modrm_disp32)
             x86_synth_emit_u32(s, disp32)
+        end
+    else
+        // Stack argument: mov rax, [rbp + 16 + (pi - 6) * 8]; store rax -> [rbp - off]
+        s_disp = 16 + ((pi - 6) * 8)
+        x86_synth_emit_bytes(s, [72, 139, 133]) // mov rax, [rbp + disp32]
+        x86_synth_emit_u32(s, s_disp)
+        x86_synth_emit_store_var(s, 0, off)
+    end
     return 0
 
 fn x86_synth_emit_pop_args s arg_count
-    // WHY: Pops up to 12 arguments in reverse LIFO order into LiPi calling convention registers
-    ai = arg_count - 1
-    while ai >= 0
-        if ai == 0
-            x86_synth_emit_byte(s, 95) // pop rdi (0x5F)
-        elif ai == 1
-            x86_synth_emit_byte(s, 94) // pop rsi (0x5E)
-        elif ai == 2
-            x86_synth_emit_byte(s, 90) // pop rdx (0x5A)
-        elif ai == 3
-            x86_synth_emit_byte(s, 89) // pop rcx (0x59)
-        elif ai >= 4 and ai < 12
-            x86_synth_emit_byte(s, 65) // REX.B prefix (0x41)
-            x86_synth_emit_byte(s, 88 + (ai - 4)) // pop r8..r15 (0x58..0x5F)
-        else
-            x86_synth_emit_byte(s, 88) // pop rax (discard extra stack arguments)
-        ai = ai - 1
-    if arg_count == 1
-        // WHY: For single-argument function calls, explicitly zero %rsi (xor esi, esi: 0x31, 0xF6).
-        // This guarantees that functions supporting optional second arguments (like free(ptr [, size]))
-        // or varargs don't inherit non-zero garbage in %rsi from previous computations.
-        x86_synth_emit_byte(s, 49) // xor esi, esi (0x31)
-        x86_synth_emit_byte(s, 246) // 0xF6
+    // WHY: Standard System V AMD64 ABI argument marshal supporting UNLIMITED arguments
+    // with strict 16-byte stack alignment and zero clobbering of %rax or callee-saved %r12-%r15.
+    // Returns cleanup_bytes (0 if arg_count <= 6, else 16B-aligned stack arg bytes to add back after call).
+    if arg_count <= 6
+        ai = arg_count - 1
+        while ai >= 0
+            if ai == 0
+                x86_synth_emit_byte(s, 95) // pop rdi (0x5F)
+            elif ai == 1
+                x86_synth_emit_byte(s, 94) // pop rsi (0x5E)
+            elif ai == 2
+                x86_synth_emit_byte(s, 90) // pop rdx (0x5A)
+            elif ai == 3
+                x86_synth_emit_byte(s, 89) // pop rcx (0x59)
+            elif ai == 4
+                x86_synth_emit_bytes(s, [65, 88]) // pop r8
+            elif ai == 5
+                x86_synth_emit_bytes(s, [65, 89]) // pop r9
+            end
+            ai = ai - 1
+        end
+        if arg_count == 1
+            x86_synth_emit_bytes(s, [49, 246]) // xor esi, esi
+        end
+        return 0
+    end
+
+    // arg_count > 6: Stack currently holds [rsp+0]=a_{n-1} .. [rsp+(extra-1)*8]=a6, [rsp+extra*8]=a5 .. [rsp+(n-1)*8]=a0.
+    // Step 1: Load a0..a5 into rdi, rsi, rdx, rcx, r8, r9 directly from stack without modifying %rax or %r12-%r15.
+    extra = arg_count - 6
+    aligned_bytes = ((extra + 1) / 2) * 16
+    shift = (arg_count * 8) - aligned_bytes
+    x86_synth_emit_bytes(s, [72, 139, 188, 36]) // mov rdi, [rsp + (extra+5)*8]
+    x86_synth_emit_u32(s, (extra + 5) * 8)
+    x86_synth_emit_bytes(s, [72, 139, 180, 36]) // mov rsi, [rsp + (extra+4)*8]
+    x86_synth_emit_u32(s, (extra + 4) * 8)
+    x86_synth_emit_bytes(s, [72, 139, 148, 36]) // mov rdx, [rsp + (extra+3)*8]
+    x86_synth_emit_u32(s, (extra + 3) * 8)
+    x86_synth_emit_bytes(s, [72, 139, 140, 36]) // mov rcx, [rsp + (extra+2)*8]
+    x86_synth_emit_u32(s, (extra + 2) * 8)
+    x86_synth_emit_bytes(s, [76, 139, 132, 36]) // mov r8,  [rsp + (extra+1)*8]
+    x86_synth_emit_u32(s, (extra + 1) * 8)
+    x86_synth_emit_bytes(s, [76, 139, 140, 36]) // mov r9,  [rsp + extra*8]
+    x86_synth_emit_u32(s, extra * 8)
+
+    // Step 2: Reverse a6..a_{n-1} in-place at [rsp+0 .. (extra-1)*8] using scratch %r10, %r11.
+    half = extra / 2
+    ri = 0
+    while ri < half
+        o1 = ri * 8
+        o2 = (extra - 1 - ri) * 8
+        x86_synth_emit_bytes(s, [76, 139, 148, 36]) // mov r10, [rsp + o1]
+        x86_synth_emit_u32(s, o1)
+        x86_synth_emit_bytes(s, [76, 139, 156, 36]) // mov r11, [rsp + o2]
+        x86_synth_emit_u32(s, o2)
+        x86_synth_emit_bytes(s, [76, 137, 156, 36]) // mov [rsp + o1], r11
+        x86_synth_emit_u32(s, o1)
+        x86_synth_emit_bytes(s, [76, 137, 148, 36]) // mov [rsp + o2], r10
+        x86_synth_emit_u32(s, o2)
+        ri = ri + 1
+    end
+
+    // Step 3: Shift forward-ordered a6..a_{n-1} upward by `shift` bytes (non-overlapping backward copy).
+    ki = extra - 1
+    while ki >= 0
+        src_o = ki * 8
+        dst_o = shift + (ki * 8)
+        x86_synth_emit_bytes(s, [76, 139, 148, 36]) // mov r10, [rsp + src_o]
+        x86_synth_emit_u32(s, src_o)
+        x86_synth_emit_bytes(s, [76, 137, 148, 36]) // mov [rsp + dst_o], r10
+        x86_synth_emit_u32(s, dst_o)
+        ki = ki - 1
+    end
+
+    // Step 4: Advance %rsp by `shift` -> %rsp is 16B aligned with [rsp+0]=a6, [rsp+8]=a7, ...
+    x86_synth_emit_bytes(s, [72, 129, 196]) // add rsp, imm32
+    x86_synth_emit_u32(s, shift)
+    return aligned_bytes
+
+fn x86_synth_emit_cleanup_stack_args s cleanup_bytes
+    if cleanup_bytes > 0
+        x86_synth_emit_bytes(s, [72, 129, 196]) // add rsp, imm32
+        x86_synth_emit_u32(s, cleanup_bytes)
+    end
     return 0
 
 fn x86_synth_emit_save_r12_r15 s

@@ -8,6 +8,7 @@
 // CLONE_VM (256) | CLONE_FS (512) | CLONE_FILES (1024) | CLONE_SIGHAND (2048) | CLONE_THREAD (65536) = 69376 (0x10f00)
 
 include "utso/core/memory.lp"
+include "utso/core/sync.lp"
 
 // ── ১. নেটিভ লিনাক্স কার্নেল থ্রেড সৃষ্টি (Spawn Real Linux Thread via SYS_clone: syscall 56) ──
 // WHY: নতুন থ্রেডের জন্য কার্নেল স্পেসে এক্সিকিউশন কন্টেক্সট তৈরি করা।
@@ -211,42 +212,8 @@ fn thread_spawn_shared fn_entry arg
 fn থ্রেড_শেয়ার্ড_চালু fn_entry arg
     return thread_spawn_shared(fn_entry, arg)
 
-fn futex_mutex_new
-    // WHY: Allocates a zero-initialized 16B shared futex mutex state word (0=free, 1=locked, 2=contended).
-    m = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
-    মেমরি_লেখো(m, 0, 0)
-    মেমরি_লেখো(m, 8, 0)
-    return m
-
-fn futex_mutex_lock mtx
-    // WHY: Drepper 3-state lock: 1-instruction lock cmpxchg fast path; kernel SYS_futex sleep on contention.
-    if atomic_cas(mtx, 0, 1) == 1
-        return 1
-    end
-    while atomic_cas(mtx, 0, 2) == 0
-        atomic_cas(mtx, 1, 2)
-        futex_wait(mtx, 2)
-    end
-    return 1
-
-fn futex_mutex_unlock mtx
-    // WHY: Uncontended fast unlock via atomic_cas(1->0); wakes kernel futex waiter when state==2.
-    if atomic_cas(mtx, 1, 0) == 1
-        return 0
-    end
-    while atomic_cas(mtx, 2, 0) == 0
-        if atomic_cas(mtx, 1, 0) == 1
-            return 0
-        end
-    end
-    futex_wake(mtx, 1)
-    return 0
-
-fn ফিউটেক্স_লক mtx
-    return futex_mutex_lock(mtx)
-
-fn ফিউটেক্স_আনলক mtx
-    return futex_mutex_unlock(mtx)
+// NOTE: futex_mutex_*, futex_condvar_*, futex_rwlock_*, mpsc_*, and threadpool_*
+// are provided via `include "utso/core/sync.lp"` above.
 
 fn thread_wait_counter counter_ptr target
     // WHY: Cooperatively waits until worker threads reach the target completion count.

@@ -155,3 +155,398 @@ fn হ্যাশম্যাপ_মুছে_ফেলো map_ptr capacity
 
 fn হ্যাশম্যাপ_অবমুক্তি map_ptr capacity
     return hashmap_delete(map_ptr, capacity)
+
+// ==============================================================================
+// ── ৬. ডায়নামিক স্ট্রিং-কীড রবিন-হুড হ্যাশম্যাপ / ডিক্ট (String-Keyed Dynamic Dict) ──
+// ==============================================================================
+// WHY: Production JSON objects, HTTP headers, environment tables, and KV databases
+// require O(1) runtime string-keyed maps with auto-rehash (load > 0.75), true
+// backward-shift delete (zero tombstone degradation), and GC-traced backing storage.
+//
+// Slot layout (32 bytes per slot in GC-tracked `_lipi_user_alloc` table):
+//   [+0]:  key_str_ptr  (STR0 pointer, traced by GC)
+//   [+8]:  val          (any Lipi value/ptr, traced by GC)
+//   [+16]: hash64       (cached positive FNV-1a hash for 1-cycle mismatch reject)
+//   [+24]: state_dist   (0 = empty, >= 1 = occupied with probe_dist = state_dist - 1)
+
+struct StrDict
+    sd_table
+    sd_cap
+    sd_count
+    sd_mask
+end
+
+fn str_hash64 s
+    if s == 0
+        return 1469598103
+    end
+    n = len(s)
+    h = 2166136261 ^ n
+    i = 0
+    while i < n
+        b = mem_read_byte(s, i)
+        h = ((h ^ b) * 16777619) & 2147483647
+        i = i + 1
+    end
+    h = (h ^ (h >> 15)) & 2147483647
+    if h == 0
+        h = 1
+    end
+    return h
+end
+
+fn _sd_str_eq a b
+    if a == b
+        return 1
+    end
+    if a == 0 or b == 0
+        return 0
+    end
+    la = len(a)
+    lb = len(b)
+    if la != lb
+        return 0
+    end
+    i = 0
+    while i < la
+        if mem_read_byte(a, i) != mem_read_byte(b, i)
+            return 0
+        end
+        i = i + 1
+    end
+    return 1
+end
+
+fn dict_new init_cap
+    cap = 16
+    while cap < init_cap and cap < 16777216
+        cap = cap * 2
+    end
+    tbl = alloc(cap * 32)
+    mem_fill(tbl, 0, cap * 32)
+    return StrDict(tbl, cap, 0, cap - 1)
+end
+
+fn strmap_new init_cap
+    return dict_new(init_cap)
+end
+
+fn অভিধান_তৈরি init_cap
+    return dict_new(init_cap)
+end
+
+fn _dict_insert_raw tbl cap mask key val h
+    slot = h & mask
+    cur_k = key
+    cur_v = val
+    cur_h = h
+    cur_d = 0
+    steps = 0
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0
+            mem_word_write(tbl, off, cur_k)
+            mem_word_write(tbl, off + 8, cur_v)
+            mem_word_write(tbl, off + 16, cur_h)
+            mem_word_write(tbl, off + 24, cur_d + 1)
+            return 1
+        end
+        ek = mem_word_read(tbl, off)
+        eh = mem_word_read(tbl, off + 16)
+        if eh == cur_h and _sd_str_eq(ek, cur_k) == 1
+            mem_word_write(tbl, off + 8, cur_v)
+            return 0
+        end
+        ed = st - 1
+        if cur_d > ed
+            ev = mem_word_read(tbl, off + 8)
+            mem_word_write(tbl, off, cur_k)
+            mem_word_write(tbl, off + 8, cur_v)
+            mem_word_write(tbl, off + 16, cur_h)
+            mem_word_write(tbl, off + 24, cur_d + 1)
+            cur_k = ek
+            cur_v = ev
+            cur_h = eh
+            cur_d = ed
+        end
+        cur_d = cur_d + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    return 0
+end
+
+fn _dict_grow m: StrDict
+    old_tbl = m.sd_table
+    old_cap = m.sd_cap
+    new_cap = old_cap * 2
+    if new_cap < 16
+        new_cap = 16
+    end
+    new_mask = new_cap - 1
+    new_tbl = alloc(new_cap * 32)
+    mem_fill(new_tbl, 0, new_cap * 32)
+    i = 0
+    while i < old_cap
+        off = i * 32
+        st = mem_word_read(old_tbl, off + 24)
+        if st > 0
+            k = mem_word_read(old_tbl, off)
+            v = mem_word_read(old_tbl, off + 8)
+            h = mem_word_read(old_tbl, off + 16)
+            _dict_insert_raw(new_tbl, new_cap, new_mask, k, v, h)
+        end
+        i = i + 1
+    end
+    m.sd_table = new_tbl
+    m.sd_cap = new_cap
+    m.sd_mask = new_mask
+    if old_tbl > 0
+        free(old_tbl)
+    end
+    return 1
+end
+
+fn dict_set m: StrDict key val
+    if m == 0
+        return 0
+    end
+    if (m.sd_count + 1) * 4 >= m.sd_cap * 3
+        _dict_grow(m)
+    end
+    h = str_hash64(key)
+    added = _dict_insert_raw(m.sd_table, m.sd_cap, m.sd_mask, key, val, h)
+    if added == 1
+        m.sd_count = m.sd_count + 1
+    end
+    return 1
+end
+
+fn strmap_set m: StrDict key val
+    return dict_set(m, key, val)
+end
+
+fn অভিধান_সেট m: StrDict key val
+    return dict_set(m, key, val)
+end
+
+fn dict_has m: StrDict key
+    if m == 0 or m.sd_table == 0 or m.sd_count == 0
+        return 0
+    end
+    tbl = m.sd_table
+    cap = m.sd_cap
+    mask = m.sd_mask
+    h = str_hash64(key)
+    slot = h & mask
+    dist = 0
+    steps = 0
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0
+            return 0
+        end
+        if dist > (st - 1)
+            return 0
+        end
+        eh = mem_word_read(tbl, off + 16)
+        if eh == h and _sd_str_eq(mem_word_read(tbl, off), key) == 1
+            return 1
+        end
+        dist = dist + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    return 0
+end
+
+fn strmap_has m: StrDict key
+    return dict_has(m, key)
+end
+
+fn অভিধান_আছে m: StrDict key
+    return dict_has(m, key)
+end
+
+fn dict_get_or m: StrDict key default_val
+    if m == 0 or m.sd_table == 0 or m.sd_count == 0
+        return default_val
+    end
+    tbl = m.sd_table
+    cap = m.sd_cap
+    mask = m.sd_mask
+    h = str_hash64(key)
+    slot = h & mask
+    dist = 0
+    steps = 0
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0
+            return default_val
+        end
+        if dist > (st - 1)
+            return default_val
+        end
+        eh = mem_word_read(tbl, off + 16)
+        if eh == h and _sd_str_eq(mem_word_read(tbl, off), key) == 1
+            return mem_word_read(tbl, off + 8)
+        end
+        dist = dist + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    return default_val
+end
+
+fn dict_get m: StrDict key
+    return dict_get_or(m, key, 0)
+end
+
+fn strmap_get m: StrDict key
+    return dict_get_or(m, key, 0)
+end
+
+fn অভিধান_নাও m: StrDict key
+    return dict_get_or(m, key, 0)
+end
+
+fn dict_delete m: StrDict key
+    // WHY: Robin-Hood backward-shift deletion removes keys in O(1) average time
+    // with zero tombstones, keeping probe lengths bounded forever under heavy churn.
+    if m == 0 or m.sd_table == 0 or m.sd_count == 0
+        return 0
+    end
+    tbl = m.sd_table
+    cap = m.sd_cap
+    mask = m.sd_mask
+    h = str_hash64(key)
+    slot = h & mask
+    dist = 0
+    steps = 0
+    found = 0 - 1
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0 or dist > (st - 1)
+            return 0
+        end
+        if mem_word_read(tbl, off + 16) == h and _sd_str_eq(mem_word_read(tbl, off), key) == 1
+            found = slot
+            break
+        end
+        dist = dist + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    if found < 0
+        return 0
+    end
+    // Backward shift subsequent displaced entries
+    cur = found
+    while 1 == 1
+        nxt = (cur + 1) & mask
+        n_off = nxt * 32
+        n_st = mem_word_read(tbl, n_off + 24)
+        if n_st <= 1
+            c_off = cur * 32
+            mem_word_write(tbl, c_off, 0)
+            mem_word_write(tbl, c_off + 8, 0)
+            mem_word_write(tbl, c_off + 16, 0)
+            mem_word_write(tbl, c_off + 24, 0)
+            break
+        end
+        c_off = cur * 32
+        mem_word_write(tbl, c_off, mem_word_read(tbl, n_off))
+        mem_word_write(tbl, c_off + 8, mem_word_read(tbl, n_off + 8))
+        mem_word_write(tbl, c_off + 16, mem_word_read(tbl, n_off + 16))
+        mem_word_write(tbl, c_off + 24, n_st - 1)
+        cur = nxt
+    end
+    m.sd_count = m.sd_count - 1
+    return 1
+end
+
+fn strmap_delete m: StrDict key
+    return dict_delete(m, key)
+end
+
+fn অভিধান_মুছো m: StrDict key
+    return dict_delete(m, key)
+end
+
+fn dict_len m: StrDict
+    if m == 0
+        return 0
+    end
+    return m.sd_count
+end
+
+fn dict_keys m: StrDict
+    ks = list()
+    if m == 0 or m.sd_table == 0
+        return ks
+    end
+    tbl = m.sd_table
+    cap = m.sd_cap
+    i = 0
+    while i < cap
+        off = i * 32
+        if mem_word_read(tbl, off + 24) > 0
+            push(ks, mem_word_read(tbl, off))
+        end
+        i = i + 1
+    end
+    return ks
+end
+
+fn dict_values m: StrDict
+    vs = list()
+    if m == 0 or m.sd_table == 0
+        return vs
+    end
+    tbl = m.sd_table
+    cap = m.sd_cap
+    i = 0
+    while i < cap
+        off = i * 32
+        if mem_word_read(tbl, off + 24) > 0
+            push(vs, mem_word_read(tbl, off + 8))
+        end
+        i = i + 1
+    end
+    return vs
+end
+
+fn dict_clear m: StrDict
+    if m == 0 or m.sd_table == 0
+        return 0
+    end
+    mem_fill(m.sd_table, 0, m.sd_cap * 32)
+    m.sd_count = 0
+    return 1
+end
+
+fn dict_free m: StrDict
+    if m == 0
+        return 0
+    end
+    if m.sd_table > 0
+        free(m.sd_table)
+        m.sd_table = 0
+    end
+    m.sd_cap = 0
+    m.sd_count = 0
+    m.sd_mask = 0
+    return 1
+end
+
+fn strmap_free m: StrDict
+    return dict_free(m)
+end
+
+fn অভিধান_মুক্তি m: StrDict
+    return dict_free(m)
+end

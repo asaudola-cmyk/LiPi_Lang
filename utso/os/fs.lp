@@ -174,7 +174,7 @@ import "utso/core/string"
   return file_read(path)
 @end
 
-@! Writes complete content string to target path, overwriting if exists
+@! Writes complete content string to target path (loops over partial sys_write safely)
 @fn fs_write_file(path, content)
   @! O_WRONLY (1) | O_CREAT (64) | O_TRUNC (512) = 577, 0644 mode = 420
   fd = sys_open(path, 577, 420)
@@ -186,15 +186,56 @@ import "utso/core/string"
     sys_close(fd)
     return 1
   @end
-  written = sys_write(fd, content, x_len)
-  sys_close(fd)
-  @if written >= 0
-    return 1
+  total = 0
+  @while total < x_len
+    w = sys_write(fd, content + total, x_len - total)
+    @if w <= 0
+      sys_close(fd)
+      return 0
+    @end
+    total = total + w
   @end
-  return file_write(path, content)
+  sys_close(fd)
+  return 1
 @end
 
-@! Appends content string to file at target path
+@! Atomic crash-safe file write: write temp file -> SYS_fsync -> close -> SYS_rename
+@fn fs_write_atomic(path, content)
+  tmp_path = path + ".tmp." + str(sys_getpid())
+  fd = sys_open(tmp_path, 577, 420)
+  @if fd < 0 return 0 @end
+  x_len = content.len()
+  total = 0
+  @while total < x_len
+    w = sys_write(fd, content + total, x_len - total)
+    @if w <= 0
+      sys_close(fd)
+      sys_unlink(tmp_path)
+      return 0
+    @end
+    total = total + w
+  @end
+  syscall(74, fd, 0, 0, 0, 0, 0) @! SYS_fsync (74)
+  sys_close(fd)
+  @if sys_rename(tmp_path, path) < 0
+    sys_unlink(tmp_path)
+    return 0
+  @end
+  return 1
+@end
+
+@! Advisory file locking via Linux SYS_flock (syscall 73: LOCK_SH=1, LOCK_EX=2, LOCK_UN=8)
+@fn fs_lock(fd, exclusive)
+  op = 1
+  @if exclusive != 0 op = 2 @end
+  return syscall(73, fd, op, 0, 0, 0, 0)
+@end
+
+@fn fs_unlock(fd)
+  return syscall(73, fd, 8, 0, 0, 0, 0)
+@end
+
+@! Appends content string to file at target path (partial-write safe)
 @fn fs_append_file(path, content)
   @! O_WRONLY (1) | O_CREAT (64) | O_APPEND (1024) = 1089, 0644 mode = 420
   fd = sys_open(path, 1089, 420)
@@ -206,34 +247,47 @@ import "utso/core/string"
     sys_close(fd)
     return 1
   @end
-  written = sys_write(fd, content, x_len)
-  sys_close(fd)
-  @if written >= 0
-    return 1
+  total = 0
+  @while total < x_len
+    w = sys_write(fd, content + total, x_len - total)
+    @if w <= 0
+      sys_close(fd)
+      return 0
+    @end
+    total = total + w
   @end
-  return file_append(path, content)
+  sys_close(fd)
+  return 1
 @end
 
-@! Reads whole file and splits into an array of string lines
+@! Reads whole file and splits into an array of string lines in O(N) via bytes_to_str
+@fn _fs_raw_ptr(x) return x @end
+
 @fn fs_read_lines(path)
   content = fs_read_file(path)
+  c_ptr = _fs_raw_ptr(content)
   lines = []
   x_len = content.len()
-  curr_line = ""
+  line_start = 0
   i = 0
   @while i < x_len
-    ch_code = str_char_at(content, i)
+    ch_code = mem_read_byte(c_ptr, i)
     @if ch_code == 10  @! '\n'
-      lines.push(curr_line)
-      curr_line = ""
-    @elif ch_code != 13  @! skip '\r'
-      ch = str_substr(content, i, i + 1)
-      curr_line = curr_line + ch
+      line_end = i
+      @if line_end > line_start && mem_read_byte(c_ptr, line_end - 1) == 13
+        line_end = line_end - 1
+      @end
+      lines.push(bytes_to_str(c_ptr + line_start, line_end - line_start))
+      line_start = i + 1
     @end
     i = i + 1
   @end
-  @if curr_line.len() > 0
-    lines.push(curr_line)
+  @if line_start < x_len
+    line_end = x_len
+    @if line_end > line_start && mem_read_byte(c_ptr, line_end - 1) == 13
+      line_end = line_end - 1
+    @end
+    lines.push(bytes_to_str(c_ptr + line_start, line_end - line_start))
   @end
   return lines
 @end
@@ -349,19 +403,15 @@ import "utso/core/string"
         break
       @end
 
-      // Copy NUL-terminated d_name at offset +19 into a managed STR0 string before freeing buf.
+      // Copy NUL-terminated d_name at offset +19 in O(N) via native ERMS bytes_to_str
       name_ptr = entry_ptr + 19
-      name = ""
       nk = 0
       max_name = reclen - 19
       @while nk < max_name
-        nb = sys_peek8(name_ptr + nk)
-        @if nb == 0
-          break
-        @end
-        name = name + chr(nb)
+        @if sys_peek8(name_ptr + nk) == 0 break @end
         nk = nk + 1
       @end
+      name = bytes_to_str(name_ptr, nk)
 
       @if name != "" && name != "." && name != ".."
         entries.push(name)

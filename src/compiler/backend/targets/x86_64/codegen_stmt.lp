@@ -125,7 +125,9 @@ fn x86_synth_compile_statement s toks pos_box
             x86_synth_compile_expr(s, toks, pos_box)
             if s.synth_current_fn_idx >= 0 and s.synth_current_fn_idx < s.synth_functions.len()
                 ret_fn_obj = s.synth_functions[s.synth_current_fn_idx]
-                if ret_fn_obj.fn_ret_type == ""
+                if s.synth_last_struct != "" and (ret_fn_obj.fn_ret_type == "" or ret_fn_obj.fn_ret_type == "int")
+                    ret_fn_obj.fn_ret_type = s.synth_last_struct
+                elif ret_fn_obj.fn_ret_type == ""
                     if s.synth_last_expr_type == "float"
                         ret_fn_obj.fn_ret_type = "f64"
                     elif s.synth_last_expr_type == "int" or s.synth_last_expr_type == "str"
@@ -1929,6 +1931,9 @@ fn x86_synth_compile_statement s toks pos_box
                     else
                         off = x86_synth_alloc_var(s, var_name)
                         x86_synth_emit_load_var(s, 0, off)
+                        if lv_tgt != 0 and lv_tgt.lv_is_boxed == 1
+                            x86_synth_emit_bytes(s, [72, 139, 0]) // mov rax, [rax]
+                        end
                         pt = x86_synth_get_prim_type(s, var_name)
                     end
                     res_comp_prim = pt
@@ -1996,7 +2001,11 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_mutable_global_types(s, var_name, res_comp_prim, x86_synth_get_mutable_global_struct(s, var_name))
                     else
                         x86_synth_set_prim_type(s, var_name, res_comp_prim)
-                        if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                        if lv_tgt != 0 and lv_tgt.lv_is_boxed == 1
+                            x86_synth_emit_load_var(s, 2, off) // mov rdx, [rbp - off] (cell ptr)
+                            x86_synth_emit_bytes(s, [72, 137, 2]) // mov [rdx], rax
+                            s.synth_last_store_end = 0 - 1
+                        elif lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
                             // WHY: Update physical register directly and keep stack slot synchronized.
                             x86_synth_emit_mov_reg_reg(s, lv_tgt.lv_reg, 0)
                             x86_synth_emit_store_var(s, 0, off)

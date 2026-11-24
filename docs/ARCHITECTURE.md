@@ -36,6 +36,7 @@ Source (.lp / .লিপি)
 
 - **Stage 1 → Stage 2 → Stage 3 equivalence**: `lipi-seed` builds Stage 1 (`lipc_s1`), Stage 1 builds Stage 2 (`lipc_s2`), and Stage 2 builds Stage 3 (`lipc_s3`). CI verifies byte-for-byte identity (`cmp lipc_s2 lipc_s3`).
 - **Static-PIE & W^X (`0 RWE`)**: Emitted Linux ELF64 binaries are statically linked `ET_DYN` (PIE) executables with zero dynamic interpreter (`ld.so` / `libc`) and zero `RWE` writable+executable program segments.
+- **System V AMD64 ABI, Native ByteBuffer & Scalable Threading**: Functions and closures pass arguments `0..5` in `rdi..r9` and unlimited stack arguments `6..N-1` on the 16-byte-aligned call stack without clobbering `%r12–%r15`. Native ERMS (`rep movsb`) `ByteBuffer` / `ByteSlice` intrinsics provide `O(N)` binary-safe accumulation; auto-boxed 8-byte GC upvalue cells back mutable closures; per-thread exception unwinding (`_lipi_exc_slot_ptr`) scales to 4,112 concurrent threads via 16 L1 inline slots plus a lazy `SYS_mmap` 4,096-slot lock-free CAS overflow table; and `import "path" as alias` provides file-level namespace isolation (`alias::sym`).
 
 ## 2. Memory Model, Deterministic Regions & Static Safety (`--kavach` / `--strict-types`)
 
@@ -73,7 +74,9 @@ All cryptographic and TLS protocols are implemented directly in Lipi without Ope
 - **X.509 Certificate Validation (`utso/crypto/x509.lp`)**:
   - ASN.1 DER parsing, RFC 5280 chain signature and `BasicConstraints` verification, certificate validity window checking, RFC 6125 hostname and wildcard verification (rejecting TLD wildcard spoofing such as `*.com`), and system PEM trust-store loading from `/etc/ssl/certs/ca-certificates.crt`.
 - **TLS 1.3 Client (`utso/net/tls/tls13.lp`) & HTTPS (`utso/net/http.lp`, `aati/lipi_http_client/`)**:
-  - Full cryptographic `CertificateVerify` enforcement for Ed25519, ECDSA P-256/P-384, and RSA-PSS, RFC 8446 16,384-byte record chunking, DNS resolution (`utso/net/dns_pure.lp`), and multi-MB chunked HTTP transfer support.
+  - Full cryptographic `CertificateVerify` enforcement for Ed25519, ECDSA P-256/P-384, and RSA-PSS, RFC 8446 16,384-byte record chunking, portable `SSL_CERT_FILE` + multi-distro CA trust store discovery, `O(N)` `ByteBuffer` TLS/TCP decoding, real-time incremental SSE streaming (`http_post_stream` / `http_get_stream` over HTTP and HTTPS TLS 1.3), `http_put`/`http_delete`/`http_patch`, and RFC 1035 DNS (`utso/net/dns_client.lp`) with tab/space `/etc/hosts`, UDP `TC=1` TCP fallback, `0xC0` pointer decompression, CNAME chasing, and `AAAA` IPv6 resolution.
+- **Concurrent Epoll HTTP/1.1 + SSE + WebSocket Server (`utso/net/server_production.lp`, `utso/net/ws_engine.lp`)**:
+  - Uses exact Linux x86_64 12-byte `EPOLL_PACKED` events, per-connection non-blocking `ByteBuffer` state machines, dynamic HTTP/SSE/WS routing (`prod_route_add`, `prod_ws_route_add`, `prod_sse_*`), chunked request decoding, and full RFC 6455 WebSocket framing (`Ping`/`Pong`, fragmentation reassembly, binary NUL-safe payloads, and `Close` handshake).
 - **TLS 1.3 Server (`utso/net/tls13_server.lp`)**:
   - X25519 key agreement, RFC 8446 §4.1.4 `HelloRetryRequest` handling, AES-128-GCM / AES-256-GCM / ChaCha20-Poly1305 record protection, browser-compatible NIST P-256 (`0x0403`), NIST P-384 (`0x0503` + SHA-384), and Ed25519 (`0x0807`) signing, SNI multi-domain certificate selection (exact + RFC 6125 single-label wildcards), RFC 8446 PSK Session Resumption (`NewSessionTicket` + constant-time `pre_shared_key` binder verification + `psk_dhe_ke`), and ALPN `h2` / `http/1.1` negotiation. Verified against `openssl s_client -tls1_3` and `curl --tlsv1.3`.
 - **HTTP/2 Wire Engine (`utso/net/http2/server.lp`)**:
@@ -81,6 +84,8 @@ All cryptographic and TLS protocols are implemented directly in Lipi without Ope
 
 ## 5. Durable WAL Storage & Concurrency
 
+- **Crash-Safe Binary WAL KV Engine (`utso/core/db.lp`)**: `O(1)` GC-traced Robin-Hood `StrDict` store with pure-Lipi disk persistence (`db_open`, `db_compact`, `db_close`, `db_get_opt`), IEEE 802.3 CRC-32 per-frame checksums, `SYS_flock` exclusive locking, `SYS_fsync` commits, automatic torn crash tail truncation (`SYS_ftruncate`), and atomic snapshot compaction.
+- **Linux `SYS_futex` Synchronization & ThreadPool (`utso/core/sync.lp`, `utso/os/thread.lp`, `utso/core/concurrency.lp`)**: Zero-spin Drepper 3-state `FutexMutex`, race-free monotonic `FutexCondvar`, single-word atomic `FutexRwLock`, blocking `MPSC` ring channels, and joinable `CLONE_VM` OS worker `ThreadPool`.
 - **Relational SQL Engine (`aati/lipi_sql/src/sql.lp`)**: Dynamic tables and rows, interned text storage, multi-column schema support, CRC-32 `SYS_fsync` write-ahead logging and checkpointing, explicit ACID transactions (`BEGIN`/`COMMIT`/`ROLLBACK` with reverse-LIFO undo log and staged WAL flush on commit), WAL-persisted `O(1)` secondary hash indexes (`CREATE INDEX`), `O(N + M)` `INNER`/`LEFT` hash joins, and `GROUP BY` aggregations (`COUNT`, `SUM`, `MIN`, `MAX`, `AVG`).
 - **Persistent Job Queue (`aati/lipi_web/job_queue.lp`)**: Single-lock thread-safe queue over Linux futex/spinlock primitives with CRC-32 `SYS_fsync` WAL durability, automatic `RUNNING` → `PENDING` crash recovery on restart, and log compaction.
 
