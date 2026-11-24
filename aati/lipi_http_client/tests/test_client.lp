@@ -109,4 +109,73 @@ assert_eq(mem_byte_read(body_p, 4), 79, "Last char of body is 'O'")
 
 http_response_free(resp)
 
+// ── ৩. Chunked Transfer-Encoding Decoding ────────────────────────────────────
+chk_str = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n6\r\n World\r\n0\r\n\r\n"
+chk_len = str_len(chk_str)
+chk_buf = sys_alloc(chk_len)
+ci = 0
+while ci < chk_len
+    mem_write_byte(chk_buf, ci, str_char_at(chk_str, ci) & 255)
+    ci = ci + 1
+cresp = http_parse_response(chk_buf, chk_len)
+assert_eq(http_response_status(cresp), 200, "Chunked response status 200")
+assert_eq(http_response_body_len(cresp), 11, "Chunked body decoded length == 11")
+assert_eq(mem_byte_read(http_response_body_ptr(cresp), 0), 72, "Chunked body starts with 'H'")
+assert_eq(mem_byte_read(http_response_body_ptr(cresp), 10), 100, "Chunked body ends with 'd'")
+http_response_free(cresp)
+
+// ── ৪. Real Loopback >32KB Multi-Segment HTTP Server via SYS_fork + http_client_get_url ──
+lfd = syscall(41, 2, 1, 6, 0, 0, 0)
+assert_true(lfd >= 0, "Created loopback listener socket")
+saddr = sys_alloc(16)
+mem_zero(saddr, 16)
+mem_byte_write(saddr, 0, 2)
+mem_byte_write(saddr, 4, 127)
+mem_byte_write(saddr, 7, 1)
+assert_eq(syscall(49, lfd, saddr, 16, 0, 0, 0), 0, "Bound ephemeral loopback port")
+alen_ptr = sys_alloc(8)
+mem_write(alen_ptr, 0, 16)
+assert_eq(syscall(51, lfd, saddr, alen_ptr, 0, 0, 0), 0, "Queried assigned ephemeral port via getsockname")
+port = ((mem_byte_read(saddr, 2) & 255) * 256) | (mem_byte_read(saddr, 3) & 255)
+sys_free(saddr)
+sys_free(alen_ptr)
+assert_eq(syscall(50, lfd, 4, 0, 0, 0, 0), 0, "Listening on loopback socket")
+
+pid = syscall(57, 0, 0, 0, 0, 0, 0)
+if pid == 0
+    // Child server: accept 1 HTTP request & send 32,768-byte body in segments (> 8KB!)
+    cfd = syscall(43, lfd, 0, 0, 0, 0, 0)
+    syscall(3, lfd, 0, 0, 0, 0, 0)
+    if cfd >= 0
+        rb = sys_alloc(2048)
+        syscall(0, cfd, rb, 2048, 0, 0, 0)
+        sys_free(rb)
+        hdr = "HTTP/1.1 200 OK\r\nContent-Length: 32768\r\n\r\n"
+        syscall(1, cfd, hdr, str_len(hdr), 0, 0, 0)
+        blk = sys_alloc(4096)
+        bi = 0
+        while bi < 8
+            k = 0
+            while k < 4096
+                mem_write_byte(blk, k, 65 + ((bi + k) % 26))
+                k = k + 1
+            mem_write_byte(blk, 4095, 90)
+            syscall(1, cfd, blk, 4096, 0, 0, 0)
+            bi = bi + 1
+        sys_free(blk)
+        syscall(3, cfd, 0, 0, 0, 0, 0)
+    syscall(60, 0, 0, 0, 0, 0, 0)
+
+syscall(3, lfd, 0, 0, 0, 0, 0)
+url = "http://localhost:" + to_str(port) + "/big32k"
+r32k = http_client_get_url(url)
+st_buf = sys_alloc(8)
+syscall(61, pid, st_buf, 0, 0, 0, 0)
+sys_free(st_buf)
+assert_true(r32k > 0, "http_client_get_url fetched 32KB multi-segment response")
+assert_eq(http_response_status(r32k), 200, "32KB response status is 200")
+assert_eq(http_response_body_len(r32k), 32768, "32KB multi-segment body length == 32768 (> 8KB limit gone)")
+assert_eq(mem_byte_read(http_response_body_ptr(r32k), 32767), 90, "Final byte of 32KB stream == 'Z'")
+http_response_free(r32k)
+
 say "🎉 ALL SOVEREIGN HTTP CLIENT TESTS PASSED!"

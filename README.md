@@ -11,7 +11,7 @@
 [![Sovereignty: 100%](https://img.shields.io/badge/Sovereignty-100%25%20Pure%20Silicon-brightgreen.svg)](#100-sovereign-status)
 [![Compiler: Zero C / Zero Libc / Zero LLVM](https://img.shields.io/badge/Compiler-Zero%20C%20%7C%20Zero%20Libc%20%7C%20Zero%20LLVM-blue.svg)](#architecture)
 [![Silicon: x86_64 / ARM64 / RISC-V](https://img.shields.io/badge/Silicon-x86__64%20%7C%20ARM64%20%7C%20RISC--V-purple.svg)](docs/ARCHITECTURE.md)
-[![Tests: 255/255 Passing](https://img.shields.io/badge/Tests-255%2F255%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 258/258 Passing](https://img.shields.io/badge/Tests-258%2F258%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![Bilingual: Bengali & English](https://img.shields.io/badge/Bilingual-বাংলা%20%2B%20English-orange.svg)](README.bn.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -241,7 +241,7 @@ lipc examples/01_hello_world/main.lp -o hello_app.exe --target windows
 ```bash
 lipi test
 ```
-All **255 regression test suites pass (255/255 ✔, 100% green)** across Static-PIE (`ET_DYN` full ASLR + `0 RWE` `W^X`), **Sovereign Kavach (`--kavach`)** compile-time ownership proofs + `--kavach` dogfooded toolchain (`lipidoc`, `lipifmt`, `lipi_akhara`) using `silicon_*` / `সিলিকন_*` hardware authority isolation, **7.39s Stage-3 deterministic compiler self-bootstrap** (`3.66x` faster vs `27.05s` via 4096-bucket `O(N)` SSA/x86_64 hash indexing across 347K tokens), Direct Silicon hot-loop ALU optimization (`shl/sar/and/or/xor`, inline `==`), core language semantics (SSE2 `f64` + NaN-safe comparisons, disambiguated structs, chained compound ops, mutable globals, slab-allocated capturing closures, pattern matching, cross-frame `try`/`catch`/`finally` unwinding), **Cross-Silicon Deep Parity** (`struct`, `match`/`case`, `try`/`catch`/`throw` on WASM WASI, ARM64, RISC-V VM), 8-thread `CLONE_VM` + `SYS_futex` joinable concurrency + thread-safe `__alloc`/TLS, RFC 5869/8446 TLS 1.3 + AES-128-CTR + X.509 DER validation, conservative stack-scanning GC, strict `W^X` `.so` (`ctypes` ABI) + DWARF v4 `-g`, 6-target list & slab parity (PE32+/Mach-O ARM64 16KB/WASM WASI/ARM64/RISC-V VM), `lipi_akhara` studio/ELF inspector, `lipilsp` live diagnostics/document symbols, and **100% (`31/31`) `aati/*` packages** (`aati/lipi_ide`, `aati/lipi_p2p`, `aati/lipi_security` zero-trust modules included).
+All **258 regression test suites pass (258/258 ✔, 100% green)** across Static-PIE (`ET_DYN` full ASLR + `0 RWE` `W^X`), **Sovereign Kavach (`--kavach`)** compile-time ownership proofs + `--kavach` dogfooded toolchain (`lipidoc`, `lipifmt`, `lipi_akhara`) using `silicon_*` / `সিলিকন_*` hardware authority isolation, signed W^X **`KavachCapsule` (`LPKC`)** native modules + zero-copy **`KavachRing`** IPC, **7.39s Stage-3 deterministic compiler self-bootstrap** (`3.66x` faster vs `27.05s` via 4096-bucket `O(N)` SSA/x86_64 hash indexing across 347K tokens), Direct Silicon hot-loop ALU optimization (`shl/sar/and/or/xor`, inline `==`), core language semantics (SSE2 `f64` + NaN-safe comparisons, disambiguated structs, chained compound ops, mutable globals, slab-allocated capturing closures, pattern matching, cross-frame `try`/`catch`/`finally` unwinding), **Cross-Silicon Deep Parity** (`struct`, `match`/`case`, `try`/`catch`/`throw` on WASM WASI, ARM64, RISC-V VM), 8-thread `CLONE_VM` + `SYS_futex` joinable concurrency + thread-safe `__alloc`/TLS, full **inbound & outbound RFC 8446 TLS 1.3** (X25519 + HKDF-SHA256/384 + AES-GCM/ChaCha20-Poly1305 + NIST P-256/P-384 ECDSA + RSA-PSS + Ed25519 + RFC 5280 X.509 Root-CA PKI + `ALPN` + `HelloRetryRequest`), crash-safe IEEE 802.3 CRC-32 `SYS_fsync` WALs (`lipi_sql` & `job_queue`), conservative stack-scanning GC, strict `W^X` `.so` (`ctypes` ABI + `.rela.dyn` relocation) + DWARF v4 `-g`, 6-target list & slab parity (PE32+/Mach-O ARM64 16KB/WASM WASI/ARM64/RISC-V VM), `lipi_akhara` studio/ELF inspector, `lipilsp` live diagnostics/document symbols, and **100% (`31/31`) `aati/*` packages** (`aati/lipi_ide`, `aati/lipi_p2p`, `aati/lipi_security` zero-trust modules included).
 
 ---
 
@@ -390,14 +390,14 @@ git clone https://github.com/asaudola-cmyk/vscode-lipi.git ~/.vscode/extensions/
 | **1M ColumnStore Memory Scan** | **0.38 ms (2,610 MElem/s)** | 1.51 ms | 1.94 ms | 1.66 ms | 8.50 ms | 78.38 ms |
 | **Cold-Start Compile Latency** | **4.28 ms** | 173.25 ms | 225.84 ms | 57.45 ms | ~80 ms | N/A (Interpreted) |
 | **Standalone Executable Size** | **5.8 KB** | 15.7 KB | 15.7 KB | 4,284 KB | 1,220 KB | Script |
-| **Test Suite Pass Rate** | **255/255 (100%)** | — | — | — | — | — |
+| **Test Suite Pass Rate** | **258/258 (100%)** | — | — | — | — | — |
 
 ---
 
 ## 🚀 Production Showcase & Demos
 
 ### 1. Unified Sovereign Full-Stack Showcase
-Execute the enterprise full-stack service showcasing zero-copy Radix-Trie HTTP routing (`aati/web_router`), hardware-entropy salted password hashing (`aati/crypto_vault`), RFC 7519 JWT bearer tokens (`aati/lipi_jwt`), and in-memory relational SQL queries (`aati/lipi_sql`):
+Execute the enterprise full-stack service showcasing zero-copy Radix-Trie HTTP routing (`aati/web_router`), hardware-entropy salted password hashing (`aati/crypto_vault`), RFC 7519 JWT bearer tokens (`aati/lipi_jwt`), and persistent CRC-32 WAL relational SQL queries (`aati/lipi_sql`):
 ```bash
 bin/lipc examples/sovereign_showcase/main.lp /tmp/sovereign_showcase && /tmp/sovereign_showcase
 ```

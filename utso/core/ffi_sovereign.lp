@@ -26,97 +26,297 @@ SHT_NULL            = 0
 SHT_PROGBITS        = 1
 SHT_SYMTAB          = 2
 SHT_STRTAB          = 3
+SHT_RELA            = 4
 SHT_DYNSYM          = 11
+
+PT_LOAD             = 1
+PF_X                = 1
+PF_W                = 2
+
+R_X86_64_64         = 1
+R_X86_64_GLOB_DAT   = 6
+R_X86_64_JUMP_SLOT  = 7
+R_X86_64_RELATIVE   = 8
 
 // ── 1. Sovereign Library Container ────────────────────────────────────────────
 // Library fields:
 //   lib[0]: base_addr (pointer returned by mmap)
-//   lib[1]: file_size (int)
+//   lib[1]: map_size (int)
 //   lib[2]: dynsym_offset (int)
 //   lib[3]: dynsym_count (int)
 //   lib[4]: dynstr_offset (int)
 //   lib[5]: dynstr_size (int)
 //   lib[6]: is_loaded (1 or 0)
 //   lib[7]: path (string)
+//   lib[8]: min_vaddr (int)
 
 fn ffi_lib_new path
     l = list()
     push(l, 0)    // 0: base_addr
-    push(l, 0)    // 1: file_size
+    push(l, 0)    // 1: file_size / map_size
     push(l, 0)    // 2: dynsym_offset
     push(l, 0)    // 3: dynsym_count
     push(l, 0)    // 4: dynstr_offset
     push(l, 0)    // 5: dynstr_size
     push(l, 0)    // 6: is_loaded
     push(l, path) // 7: path
+    push(l, 0)    // 8: min_vaddr
     return l
 
-// ── 2. In-Memory ELF64 Shared Object Loader ───────────────────────────────────
-// WHY: Ingests .so binaries using raw Linux syscalls without calling dlopen().
+fn _ffi_align_down addr
+    return addr - (addr % 4096)
+
+fn _ffi_align_up sz
+    if sz <= 0 return 4096 end
+    r = sz % 4096
+    if r == 0 return sz end
+    return sz + (4096 - r)
+
+// ── 2. Strict W^X In-Memory ELF64 Shared Object Loader ────────────────────────
+// WHY: Ingests .so binaries cleanly without PROT_READ|PROT_WRITE|PROT_EXEC (prot=7),
+// maps PT_LOAD segments, applies internal .rela.dyn/.rela.plt relocations while RW (prot=3),
+// and hardware-locks executable segments via SYS_mprotect (PROT_READ|PROT_EXEC = 5).
 
 fn ffi_load_so path
     lib = ffi_lib_new(path)
 
-    // Step 1: Open file via Linux SYS_open (2)
-    fd = syscall(2, path, 0, 0, 0, 0, 0) // O_RDONLY = 0
+    // Step 1: Open & read ELF64 binary into temporary RW buffer
+    fd = syscall(2, path, 0, 0, 0, 0, 0)
     if fd < 0
-        return lib // Failed to open
-
-    // Step 2: Query file size via SYS_lseek (8) SEEK_END (2)
+        return lib
+    end
     sz = syscall(8, fd, 0, 2, 0, 0, 0)
-    syscall(8, fd, 0, 0, 0, 0, 0) // Rewind to SEEK_SET (0)
-
-    if sz <= 64
-        syscall(3, fd, 0, 0, 0, 0, 0) // close
+    syscall(8, fd, 0, 0, 0, 0, 0)
+    if sz <= 64 or sz > 67108864
+        syscall(3, fd, 0, 0, 0, 0, 0)
         return lib
+    end
+    fbuf = malloc(sz)
+    if fbuf <= 0
+        syscall(3, fd, 0, 0, 0, 0, 0)
+        return lib
+    end
+    got = 0
+    while got < sz
+        n = syscall(0, fd, fbuf + got, sz - got, 0, 0, 0)
+        if n <= 0 break end
+        got = got + n
+    end
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    if got < 64
+        free(fbuf, sz)
+        return lib
+    end
 
-    // Step 3: Map into memory via Linux SYS_mmap (9)
-    // PROT_READ (1) | PROT_WRITE (2) | PROT_EXEC (4) = 7
-    // MAP_PRIVATE (2) = 2
-    base = syscall(9, 0, sz, 7, 2, fd, 0)
-    syscall(3, fd, 0, 0, 0, 0, 0) // Close fd (memory remains mapped)
+    // Step 2: Verify ELF64 Little-Endian Header
+    if mem_byte_read(fbuf, 0) != ELF_MAGIC_0 or mem_byte_read(fbuf, 1) != ELF_MAGIC_1 or mem_byte_read(fbuf, 2) != ELF_MAGIC_2 or mem_byte_read(fbuf, 3) != ELF_MAGIC_3
+        free(fbuf, sz)
+        return lib
+    end
+    if mem_byte_read(fbuf, 4) != ELF_CLASS_64 or mem_byte_read(fbuf, 5) != ELF_DATA_2LSB
+        free(fbuf, sz)
+        return lib
+    end
 
+    e_phoff = mem_read(fbuf, 32)
+    e_shoff = mem_read(fbuf, 40)
+    e_phentsize = mem_byte_read(fbuf, 54) + (mem_byte_read(fbuf, 55) * 256)
+    e_phnum = mem_byte_read(fbuf, 56) + (mem_byte_read(fbuf, 57) * 256)
+    e_shentsize = mem_byte_read(fbuf, 58) + (mem_byte_read(fbuf, 59) * 256)
+    e_shnum = mem_byte_read(fbuf, 60) + (mem_byte_read(fbuf, 61) * 256)
+    e_shstrndx = mem_byte_read(fbuf, 62) + (mem_byte_read(fbuf, 63) * 256)
+
+    // Step 3: Measure PT_LOAD virtual address span
+    has_load = 0
+    min_vaddr = 0
+    max_vaddr = 0
+    phi = 0
+    while phi < e_phnum and e_phentsize >= 56
+        poff = e_phoff + (phi * e_phentsize)
+        if poff + 56 <= got
+            ptype = mem_read_u32(fbuf, poff)
+            if ptype == PT_LOAD
+                pvaddr = mem_read(fbuf, poff + 16)
+                pmemsz = mem_read(fbuf, poff + 40)
+                if has_load == 0
+                    min_vaddr = _ffi_align_down(pvaddr)
+                    max_vaddr = _ffi_align_up(pvaddr + pmemsz)
+                    has_load = 1
+                else
+                    adn = _ffi_align_down(pvaddr)
+                    aup = _ffi_align_up(pvaddr + pmemsz)
+                    if adn < min_vaddr min_vaddr = adn end
+                    if aup > max_vaddr max_vaddr = aup end
+                end
+            end
+        end
+        phi = phi + 1
+    end
+
+    map_sz = _ffi_align_up(got)
+    if has_load == 1 and max_vaddr > min_vaddr
+        map_sz = _ffi_align_up(max_vaddr - min_vaddr)
+    else
+        min_vaddr = 0
+    end
+
+    // Step 4: Map anonymous RW arena (prot = 3 = PROT_READ | PROT_WRITE, NEVER prot = 7 RWX!)
+    base = syscall(9, 0, map_sz, 3, 34, -1, 0)
     if base <= 0
+        free(fbuf, sz)
         return lib
+    end
 
-    // Step 4: Verify ELF64 Header
-    m0 = mem_byte_read(base, 0)
-    m1 = mem_byte_read(base, 1)
-    m2 = mem_byte_read(base, 2)
-    m3 = mem_byte_read(base, 3)
-    if m0 != ELF_MAGIC_0 or m1 != ELF_MAGIC_1 or m2 != ELF_MAGIC_2 or m3 != ELF_MAGIC_3
-        syscall(11, base, sz, 0, 0, 0, 0)
-        return lib
+    if has_load == 1
+        phi = 0
+        while phi < e_phnum
+            poff = e_phoff + (phi * e_phentsize)
+            if poff + 56 <= got and mem_read_u32(fbuf, poff) == PT_LOAD
+                p_offset = mem_read(fbuf, poff + 8)
+                p_vaddr = mem_read(fbuf, poff + 16)
+                p_filesz = mem_read(fbuf, poff + 32)
+                dst_off = p_vaddr - min_vaddr
+                if dst_off >= 0 and p_filesz > 0 and p_offset + p_filesz <= got and dst_off + p_filesz <= map_sz
+                    mem_copy(base + dst_off, fbuf + p_offset, p_filesz)
+                end
+            end
+            phi = phi + 1
+        end
+    else
+        mem_copy(base, fbuf, got)
+    end
 
     list_set(lib, 0, base)
-    list_set(lib, 1, sz)
+    list_set(lib, 1, map_sz)
+    list_set(lib, 8, min_vaddr)
 
-    // Step 5: Parse Section Header Table to locate .dynsym and .dynstr
-    e_shoff_lo = mem_read_u32(base, 40) // QWORD at offset 40
-    e_shentsize = mem_byte_read(base, 58) + (mem_byte_read(base, 59) * 256)
-    e_shnum = mem_byte_read(base, 60) + (mem_byte_read(base, 61) * 256)
-    e_shstrndx = mem_byte_read(base, 62) + (mem_byte_read(base, 63) * 256)
-
+    // Step 5: Parse Section Headers (.dynsym, .dynstr, and .rela.* tables) from fbuf
+    rela_secs = list()
     sh_idx = 0
-    while sh_idx < e_shnum
-        sh_offset = e_shoff_lo + (sh_idx * e_shentsize)
-        if sh_offset + 64 <= sz
-            sh_type = mem_byte_read(base, sh_offset + 4)
-            sh_file_off = mem_read_u32(base, sh_offset + 24)
-            sh_size = mem_read_u32(base, sh_offset + 32)
+    while sh_idx < e_shnum and e_shentsize >= 64
+        sh_off = e_shoff + (sh_idx * e_shentsize)
+        if sh_off + 64 <= got
+            sh_type = mem_read_u32(fbuf, sh_off + 4)
+            sh_flags = mem_read(fbuf, sh_off + 8)
+            sh_addr = mem_read(fbuf, sh_off + 16)
+            sh_foff = mem_read(fbuf, sh_off + 24)
+            sh_size = mem_read(fbuf, sh_off + 32)
+            sh_link = mem_read_u32(fbuf, sh_off + 40)
+
+            target_off = sh_foff
+            if has_load == 1 and (sh_flags & 2) != 0 and sh_addr >= min_vaddr and sh_addr - min_vaddr + sh_size <= map_sz
+                target_off = sh_addr - min_vaddr
+            end
 
             if sh_type == SHT_DYNSYM
-                list_set(lib, 2, sh_file_off)
-                list_set(lib, 3, sh_size / 24) // 24 bytes per Elf64_Sym
+                list_set(lib, 2, target_off)
+                list_set(lib, 3, sh_size / 24)
+                if sh_link > 0 and sh_link < e_shnum
+                    l_off = e_shoff + (sh_link * e_shentsize)
+                    if l_off + 64 <= got
+                        l_flags = mem_read(fbuf, l_off + 8)
+                        l_addr = mem_read(fbuf, l_off + 16)
+                        l_foff = mem_read(fbuf, l_off + 24)
+                        l_size = mem_read(fbuf, l_off + 32)
+                        l_target = l_foff
+                        if has_load == 1 and (l_flags & 2) != 0 and l_addr >= min_vaddr and l_addr - min_vaddr + l_size <= map_sz
+                            l_target = l_addr - min_vaddr
+                        end
+                        list_set(lib, 4, l_target)
+                        list_set(lib, 5, l_size)
+                    end
+                end
             elif sh_type == SHT_STRTAB and sh_idx != e_shstrndx
-                // Dynamic string table
-                if get(lib, 4) == 0
-                    list_set(lib, 4, sh_file_off)
+                if get(lib, 4) == 0 or (has_load == 1 and (sh_flags & 2) != 0 and sh_addr > 0)
+                    list_set(lib, 4, target_off)
                     list_set(lib, 5, sh_size)
-
+                end
+            elif sh_type == SHT_RELA
+                push(rela_secs, [sh_foff, sh_size])
+            end
+        end
         sh_idx = sh_idx + 1
+    end
 
-    list_set(lib, 6, 1) // Mark successfully loaded
+    // Ensure .dynsym / .dynstr exist inside mapped arena even if un-allocated section headers
+    dynsym_rel = get(lib, 2)
+    sym_cnt = get(lib, 3)
+
+    // Step 6: Apply Internal ELF64 Relocations (.rela.dyn & .rela.plt) while RW
+    ri = 0
+    while ri < len(rela_secs)
+        rsec = get(rela_secs, ri)
+        rf_off = rsec[0]
+        rf_sz = rsec[1]
+        rcount = rf_sz / 24
+        ej = 0
+        while ej < rcount
+            re_off = rf_off + (ej * 24)
+            if re_off + 24 <= got
+                r_offset = mem_read(fbuf, re_off)
+                r_info = mem_read(fbuf, re_off + 8)
+                r_addend = mem_read(fbuf, re_off + 16)
+                r_type = r_info & 4294967295
+                r_sym = (r_info >> 32) & 4294967295
+                patch_off = r_offset - min_vaddr
+                if patch_off >= 0 and patch_off + 8 <= map_sz
+                    if r_type == R_X86_64_RELATIVE
+                        mem_write(base, patch_off, base + (r_addend - min_vaddr))
+                    elif (r_type == R_X86_64_GLOB_DAT or r_type == R_X86_64_JUMP_SLOT or r_type == R_X86_64_64) and dynsym_rel > 0 and r_sym < sym_cnt
+                        st_val = mem_read(base + dynsym_rel + (r_sym * 24), 8)
+                        if st_val != 0
+                            mem_write(base, patch_off, base + (st_val - min_vaddr) + r_addend)
+                        end
+                    end
+                end
+            end
+            ej = ej + 1
+        end
+        ri = ri + 1
+    end
+
+    // Step 7: Hardware W^X Enforcement via SYS_mprotect (10): RO (1) first, then RX (5) on PF_X
+    if has_load == 1
+        rx_segs = list()
+        ro_segs = list()
+        mp_i = 0
+        while mp_i < e_phnum
+            mo = e_phoff + (mp_i * e_phentsize)
+            if mo + 56 <= got and mem_read_u32(fbuf, mo) == PT_LOAD
+                pf = mem_read_u32(fbuf, mo + 4)
+                pv = mem_read(fbuf, mo + 16)
+                pm = mem_read(fbuf, mo + 40)
+                p_start = _ffi_align_down(pv - min_vaddr)
+                p_end = _ffi_align_up((pv - min_vaddr) + pm)
+                if p_end > p_start and p_end <= map_sz
+                    if (pf & PF_X) != 0
+                        push(rx_segs, [p_start, p_end - p_start])
+                    elif (pf & PF_W) == 0
+                        push(ro_segs, [p_start, p_end - p_start])
+                    end
+                end
+            end
+            mp_i = mp_i + 1
+        end
+        si = 0
+        while si < len(ro_segs)
+            seg = get(ro_segs, si)
+            syscall(10, base + seg[0], seg[1], 1, 0, 0, 0)
+            si = si + 1
+        end
+        si = 0
+        while si < len(rx_segs)
+            seg = get(rx_segs, si)
+            syscall(10, base + seg[0], seg[1], 5, 0, 0, 0)
+            si = si + 1
+        end
+    else
+        syscall(10, base, map_sz, 5, 0, 0, 0)
+    end
+
+    free(fbuf, sz)
+
+    list_set(lib, 6, 1)
     return lib
 
 fn ffi_close_so lib
@@ -139,6 +339,10 @@ fn ffi_find_symbol lib sym_name
     dynsym_off = get(lib, 2)
     sym_count = get(lib, 3)
     dynstr_off = get(lib, 4)
+    min_vaddr = 0
+    if len(lib) > 8
+        min_vaddr = get(lib, 8)
+    end
 
     if dynsym_off == 0 or dynstr_off == 0
         return 0
@@ -148,8 +352,7 @@ fn ffi_find_symbol lib sym_name
     while i < sym_count
         sym_entry = base + dynsym_off + (i * 24)
         st_name = mem_read_u32(sym_entry, 0)
-        
-        // Read string from dynstr
+
         str_ptr = base + dynstr_off + st_name
         is_match = 1
         ci = 0
@@ -158,13 +361,13 @@ fn ffi_find_symbol lib sym_name
             c_actual = mem_byte_read(str_ptr, ci)
             if c_target != c_actual
                 is_match = 0
-                ci = target_len // break
+                ci = target_len
             ci = ci + 1
 
         if is_match == 1
-            if mem_byte_read(str_ptr, target_len) == 0 // null terminator
-                st_value = mem_read_u32(sym_entry, 8) // offset 8
-                return base + st_value
+            if mem_byte_read(str_ptr, target_len) == 0
+                st_value = mem_read(sym_entry, 8)
+                return base + (st_value - min_vaddr)
 
         i = i + 1
 

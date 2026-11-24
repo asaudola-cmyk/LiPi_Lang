@@ -109,16 +109,24 @@ import "../aati/lipi_browser/browser.lp"
         exit(1)
     say "  [PASS] 9. DataFrame dynamic capacity growth (auto-reallocation)"
 
-    // 10. TLS 1.3 HKDF Key Schedule & X.509 Certificate SNI Verification
+    // 10. TLS 1.3 HKDF Key Schedule & Full Root-CA + Expiry X.509 Certificate Verification
     hs_keys = tls13_derive_handshake_keys([1, 2, 3, 4], [5, 6, 7, 8])
     if len(hs_keys.client_write_key) != 16 or len(hs_keys.client_write_iv) != 12
         say "FAIL: tls13_derive_handshake_keys wrong key/iv lengths"
         exit(1)
-    der_cert = [48, 130, 1, 0, 108, 105, 112, 105, 46, 100, 101, 118]
-    if tls13_verify_x509_cert_chain(der_cert, "lipi.dev") != 1 or tls13_verify_x509_cert_chain(der_cert, "evil.dev") != 0
-        say "FAIL: tls13_verify_x509_cert_chain SNI check failed"
+    ca_sk = [10,20,30,40,50,60,70,80, 90,100,110,120,130,140,150,160, 170,180,190,200,210,220,230,240, 11,22,33,44,55,66,77,88]
+    lf_sk = [12,22,32,42,52,62,72,82, 92,102,112,122,132,142,152,162, 172,182,192,202,212,222,232,242, 13,23,34,45,56,67,78,89]
+    ca_pk = ed25519_keygen(ca_sk).public_key
+    lf_pk = ed25519_keygen(lf_sk).public_key
+    ca_cert = x509_build_signed_ed25519_cert("Lipi Root", "Lipi Root", "", "250101000000Z", "350101000000Z", 1, ca_pk, ca_sk, 501)
+    lf_cert = x509_build_signed_ed25519_cert("Lipi Root", "lipi.dev", "lipi.dev", "250101000000Z", "350101000000Z", 0, lf_pk, ca_sk, 502)
+    mitm_cert = x509_build_signed_ed25519_cert("Evil MITM", "lipi.dev", "lipi.dev", "250101000000Z", "350101000000Z", 0, lf_pk, lf_sk, 503)
+    tls13_clear_custom_trust_roots()
+    tls13_add_trust_root(ca_cert)
+    if tls13_verify_x509_cert_chain(lf_cert, "lipi.dev") != 1 or tls13_verify_x509_cert_chain(lf_cert, "evil.dev") != 0 or tls13_verify_x509_cert_chain(mitm_cert, "lipi.dev") != 0
+        say "FAIL: tls13_verify_x509_cert_chain PKI check failed"
         exit(1)
-    say "  [PASS] 10. TLS 1.3 HKDF key schedule derivation & X.509 SNI verification"
+    say "  [PASS] 10. TLS 1.3 HKDF key schedule & Root-CA / MITM / SNI X.509 verification"
 
     // 11. QUIC RFC 9000 Binary Wire Packet Serialization & Multi-Layer LLM BPE Decoding
     qp = quic_packet_new(4, 0, 1001, 7, 128, "hello")

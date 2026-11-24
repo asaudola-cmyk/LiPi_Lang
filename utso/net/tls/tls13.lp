@@ -28,8 +28,19 @@
 import "utso/core/collections"
 import "utso/core/string"
 import "utso/crypto/sha256"
+import "utso/crypto/sha512"
 import "utso/crypto/aes"
 import "utso/crypto/x25519"
+import "utso/crypto/ed25519"
+import "utso/crypto/p256_ecdsa"
+import "utso/crypto/rsa"
+import "utso/crypto/x509"
+
+g_tls13_custom_init = 0
+g_tls13_custom_roots = 0
+g_tls13_sys_store = 0
+g_tls13_sys_loaded = 0
+g_tls13_disable_sys = 0
 
 @struct TlsSession
   state: string
@@ -627,17 +638,21 @@ import "utso/crypto/x25519"
   ext_bytes = ext_bytes.push(klen & 255)
   ext_bytes = tls_append_bytes(ext_bytes, client_pub_key)
 
-  // Ext 5: Signature Algorithms - Type 0x000D (13): ecdsa_secp256r1_sha256 (0403), rsa_pss_rsae_sha256 (0804), ed25519 (0807)
+  // Ext 5: Signature Algorithms - Type 0x000D (13): P-256/P-384 ECDSA, RSA-PSS-SHA256/384, Ed25519
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(13)
   ext_bytes = ext_bytes.push(0)
-  ext_bytes = ext_bytes.push(8)
+  ext_bytes = ext_bytes.push(12)
   ext_bytes = ext_bytes.push(0)
-  ext_bytes = ext_bytes.push(6)
+  ext_bytes = ext_bytes.push(10)
   ext_bytes = ext_bytes.push(4)
+  ext_bytes = ext_bytes.push(3)
+  ext_bytes = ext_bytes.push(5)
   ext_bytes = ext_bytes.push(3)
   ext_bytes = ext_bytes.push(8)
   ext_bytes = ext_bytes.push(4)
+  ext_bytes = ext_bytes.push(8)
+  ext_bytes = ext_bytes.push(5)
   ext_bytes = ext_bytes.push(8)
   ext_bytes = ext_bytes.push(7)
 
@@ -1309,135 +1324,90 @@ import "utso/crypto/x25519"
   return -1
 @end
 
+@fn tls13_add_trust_root(root_der_bytes)
+  @if g_tls13_custom_init == 0
+    g_tls13_custom_roots = []
+    g_tls13_custom_init = 1
+  @end
+  parsed = x509_decode_full(root_der_bytes)
+  @if parsed.x5f_valid != 1 return 0 @end
+  g_tls13_custom_roots = g_tls13_custom_roots.push(parsed)
+  return 1
+@end
+
+@fn tls13_clear_custom_trust_roots()
+  g_tls13_custom_roots = []
+  g_tls13_custom_init = 1
+  return 1
+@end
+
+@fn tls13_set_system_roots_enabled(flag)
+  @if flag == 0
+    g_tls13_disable_sys = 1
+  @else
+    g_tls13_disable_sys = 0
+  @end
+  return 1
+@end
+
+@fn _tls13_get_active_trust_store()
+  combined = []
+  @if g_tls13_custom_init == 1
+    i = 0
+    @while i < g_tls13_custom_roots.len()
+      combined = combined.push(g_tls13_custom_roots[i])
+      i = i + 1
+    @end
+  @end
+  @if g_tls13_disable_sys == 0
+    @if g_tls13_sys_loaded == 0
+      sys_ders = x509_load_pem_bundle_file("/etc/ssl/certs/ca-certificates.crt")
+      g_tls13_sys_store = x509_trust_store_build(sys_ders)
+      g_tls13_sys_loaded = 1
+    @end
+    i = 0
+    @while i < g_tls13_sys_store.len()
+      combined = combined.push(g_tls13_sys_store[i])
+      i = i + 1
+    @end
+  @end
+  return combined
+@end
+
+@fn tls13_verify_x509_cert_chain_list(cert_der_list, expected_sni)
+  @! WHY: Enforces full RFC 5280 chain validation (expiry, SAN/CN hostname, BasicConstraints cA,
+  @! and cryptographic signature chain up to system or pinned Root CAs). Rejects self-signed MITM.
+  @if cert_der_list.len() == 0 return 0 @end
+  store = _tls13_get_active_trust_store()
+  @if store.len() == 0 return 0 @end
+  return x509_verify_chain_with_store(cert_der_list, expected_sni, store, 0)
+@end
+
 @fn tls13_verify_x509_cert_chain(cert_der_bytes, expected_sni)
-  @! WHY: Validates ASN.1 DER X.509v3 certificate outer structure and verifies expected SNI against
-  @! SAN dNSName (OID 2.5.29.17 tag 0x82) / Subject CN (OID 2.5.4.3) with boundary & wildcard checks.
-  clen = cert_der_bytes.len()
-  @if clen < 4 return 0 @end
-  @if (cert_der_bytes[0] & 255) != 48 return 0 @end
-  sni_len = str_len(expected_sni)
-  @if sni_len == 0 return 1 @end
-
-  // Real X.509v3 DER certificate path (clen >= 32 and inner TBSCertificate SEQUENCE)
-  @if clen >= 32
-    // 1. Check SAN extension OID 2.5.29.17 = [06, 03, 55, 1D, 11]
-    san_pos = _tls_find_byte_seq(cert_der_bytes, [6, 3, 85, 29, 17], 0, clen)
-    @if san_pos >= 0
-      cursor = san_pos + 5
-      // Optional critical boolean (01 01 FF)
-      @if cursor + 2 < clen && cert_der_bytes[cursor] == 1
-        cursor = cursor + 3
-      @end
-      // ExtnValue OCTET STRING (0x04)
-      @if cursor < clen && cert_der_bytes[cursor] == 4
-        oct = _tls_der_read_len(cert_der_bytes, cursor + 1)
-        sq_off = oct[0]
-        sq_end = oct[2]
-        @if sq_off < sq_end && cert_der_bytes[sq_off] == 48
-          gn_hdr = _tls_der_read_len(cert_der_bytes, sq_off + 1)
-          pos = gn_hdr[0]
-          end_p = gn_hdr[2]
-          has_dns_san = 0
-          @while pos + 2 <= end_p
-            tag = cert_der_bytes[pos] & 255
-            el_info = _tls_der_read_len(cert_der_bytes, pos + 1)
-            v_off = el_info[0]
-            v_len = el_info[1]
-            @if el_info[2] <= pos break @end
-            pos = el_info[2]
-            @if tag == 130 && v_len > 0
-              has_dns_san = 1
-              cand = []
-              ci = 0
-              @while ci < v_len
-                cand = cand.push(cert_der_bytes[v_off + ci] & 255)
-                ci = ci + 1
-              @end
-              @if _tls_match_dns_name(cand, expected_sni) == 1
-                return 1
-              @end
-            @end
-          @end
-          @if has_dns_san == 1 return 0 @end
-        @end
-      @end
-    @end
-
-    // 2. Fall back to Subject CommonName OID 2.5.4.3 = [06, 03, 55, 04, 03]
-    cn_pos = _tls_find_byte_seq(cert_der_bytes, [6, 3, 85, 4, 3], 0, clen)
-    @while cn_pos >= 0
-      val_tag_pos = cn_pos + 5
-      @if val_tag_pos + 2 < clen
-        cn_info = _tls_der_read_len(cert_der_bytes, val_tag_pos + 1)
-        v_off = cn_info[0]
-        v_len = cn_info[1]
-        @if v_len > 0 && v_off + v_len <= clen
-          cand = []
-          ci = 0
-          @while ci < v_len
-            cand = cand.push(cert_der_bytes[v_off + ci] & 255)
-            ci = ci + 1
-          @end
-          @if _tls_match_dns_name(cand, expected_sni) == 1
-            return 1
-          @end
-        @end
-      @end
-      cn_pos = _tls_find_byte_seq(cert_der_bytes, [6, 3, 85, 4, 3], cn_pos + 5, clen)
-    @end
-    return 0
-  @end
-
-  // Compact synthetic DER test vectors (<32B): strict boundary-guarded hostname match
-  i = 0
-  @while i + sni_len <= clen
-    matched = 1
-    j = 0
-    @while j < sni_len
-      @if _tls_ascii_lower(cert_der_bytes[i + j] & 255) != _tls_ascii_lower(str_char_at(expected_sni, j) & 255)
-        matched = 0
-        break
-      @end
-      j = j + 1
-    @end
-    @if matched == 1
-      left_ok = 1
-      right_ok = 1
-      @if i > 0 && _tls_is_hostname_byte(cert_der_bytes[i - 1] & 255) == 1
-        left_ok = 0
-      @end
-      @if i + sni_len < clen && _tls_is_hostname_byte(cert_der_bytes[i + sni_len] & 255) == 1
-        right_ok = 0
-      @end
-      @if left_ok == 1 && right_ok == 1
-        return 1
-      @end
-    @end
-    i = i + 1
-  @end
-  return 0
+  @! Single-cert convenience entry point routing into full Root-CA & expiry verification.
+  @if cert_der_bytes.len() < 32 return 0 @end
+  return tls13_verify_x509_cert_chain_list([cert_der_bytes], expected_sni)
 @end
 
 @fn tls13_verify_certificate_verify(cert_der_bytes, transcript_hash, sig_alg, sig_bytes)
-  @! WHY: Validates RFC 8446 §4.4.3 server CertificateVerify signature over transcript_hash.
-  @! Performs cryptographic Ed25519 verification when cert carries SPKI OID 1.3.101.112,
-  @! or strict SPKI OID + signature format checks for ECDSA / RSA-PSS.
-  clen = cert_der_bytes.len()
-  slen = sig_bytes.len()
-  @if clen < 32 || slen < 64 || (cert_der_bytes[0] & 255) != 48
+  @! WHY: Validates RFC 8446 Section 4.4.3 server CertificateVerify signature cryptographically across
+  @! Ed25519 (0x0807), ECDSA P-256 (0x0403), ECDSA P-384 (0x0503), and RSA-PSS (0x0804/0805/0806).
+  @if cert_der_bytes.len() < 32 || sig_bytes.len() < 64 || transcript_hash.len() < 32
     return 0
   @end
+  cert = x509_decode_full(cert_der_bytes)
+  @if cert.x5f_valid != 1 return 0 @end
 
   // Reject all-zero forged signature
   nz = 0
   si = 0
-  @while si < slen
+  @while si < sig_bytes.len()
     nz = nz | (sig_bytes[si] & 255)
     si = si + 1
   @end
   @if nz == 0 return 0 @end
 
-  // RFC 8446 §4.4.3 signed content: 64 * 0x20 || "TLS 1.3, server CertificateVerify\0" || hash
+  // RFC 8446 Section 4.4.3 signed content: 64 * 0x20 || "TLS 1.3, server CertificateVerify\0" || hash
   cv_msg = []
   k = 0
   @while k < 64
@@ -1453,51 +1423,47 @@ import "utso/crypto/x25519"
   cv_msg = cv_msg.push(0)
   cv_msg = tls_append_bytes(cv_msg, transcript_hash)
 
+  spki_alg = cert.x5f_spki_alg_oid
+  pub = cert.x5f_spki_pub_bytes
+
   // Ed25519 (sig_alg 0x0807 = 2055)
   @if sig_alg == 2055
-    @if slen != 64 return 0 @end
-    ed_oid = _tls_find_byte_seq(cert_der_bytes, [6, 3, 43, 101, 112], 0, clen)
-    @if ed_oid < 0 return 0 @end
-    // Locate BIT STRING [0x03, 0x21, 0x00, <32-byte key>] following OID
-    bs_pos = ed_oid + 5
-    @while bs_pos + 35 <= clen && bs_pos < ed_oid + 16
-      @if cert_der_bytes[bs_pos] == 3 && cert_der_bytes[bs_pos + 1] == 33 && cert_der_bytes[bs_pos + 2] == 0
-        pub32 = []
-        pi = 0
-        @while pi < 32
-          pub32 = pub32.push(cert_der_bytes[bs_pos + 3 + pi] & 255)
-          pi = pi + 1
-        @end
-        return ed25519_verify(pub32, cv_msg, sig_bytes)
-      @end
-      bs_pos = bs_pos + 1
+    @if spki_alg != "1.3.101.112" return 0 @end
+    return ed25519_verify(pub, cv_msg, sig_bytes)
+  @end
+
+  // ECDSA secp256r1 SHA-256 (0x0403 = 1027)
+  @if sig_alg == 1027
+    @if spki_alg != "1.2.840.10045.2.1" || cert.x5f_spki_curve_oid != "1.2.840.10045.3.1.7"
+      return 0
     @end
-    return 0
+    return ecdsa_p256_verify_der(pub, sha256_hash_bytes(cv_msg), sig_bytes)
   @end
 
-  // ECDSA P-256 / P-384 (0x0403 = 1027, 0x0503 = 1283): check DER SEQUENCE { INTEGER r, INTEGER s } & ecPublicKey OID
-  @if sig_alg == 1027 || sig_alg == 1283
-    ec_oid = _tls_find_byte_seq(cert_der_bytes, [6, 7, 42, 134, 72, 206, 61, 2, 1], 0, clen)
-    @if ec_oid < 0 return 0 @end
-    @if (sig_bytes[0] & 255) != 48 return 0 @end
-    sq = _tls_der_read_len(sig_bytes, 1)
-    @if sq[2] != slen return 0 @end
-    r_off = sq[0]
-    @if r_off >= slen || (sig_bytes[r_off] & 255) != 2 return 0 @end
-    r_info = _tls_der_read_len(sig_bytes, r_off + 1)
-    @if r_info[1] <= 0 || r_info[2] >= slen return 0 @end
-    s_off = r_info[2]
-    @if (sig_bytes[s_off] & 255) != 2 return 0 @end
-    s_info = _tls_der_read_len(sig_bytes, s_off + 1)
-    @if s_info[1] <= 0 || s_info[2] != slen return 0 @end
-    return 1
+  // ECDSA secp384r1 SHA-384 (0x0503 = 1283)
+  @if sig_alg == 1283
+    @if spki_alg != "1.2.840.10045.2.1" || cert.x5f_spki_curve_oid != "1.3.132.0.34"
+      return 0
+    @end
+    return ecdsa_p384_verify_der(pub, sha384_hash_bytes(cv_msg), sig_bytes)
   @end
 
-  // RSA-PSS / RSA-PKCS1 (0x0804=2052, 0x0805=2053, 0x0806=2054, 0x0401=1025, 0x0501=1281, 0x0601=1537)
-  @if sig_alg == 2052 || sig_alg == 2053 || sig_alg == 2054 || sig_alg == 1025 || sig_alg == 1281 || sig_alg == 1537
-    rsa_oid = _tls_find_byte_seq(cert_der_bytes, [6, 9, 42, 134, 72, 134, 247, 13, 1, 1, 1], 0, clen)
-    @if rsa_oid < 0 || slen < 128 return 0 @end
-    return 1
+  // RSA-PSS SHA-256 (0x0804=2052 rsae, 0x0809=2057 pss)
+  @if sig_alg == 2052 || sig_alg == 2057
+    @if spki_alg != "1.2.840.113549.1.1.1" return 0 @end
+    return rsa_pss_verify_spki(pub, sha256_hash_bytes(cv_msg), sig_bytes, 256, 32)
+  @end
+
+  // RSA-PSS SHA-384 (0x0805=2053 rsae, 0x080A=2058 pss)
+  @if sig_alg == 2053 || sig_alg == 2058
+    @if spki_alg != "1.2.840.113549.1.1.1" return 0 @end
+    return rsa_pss_verify_spki(pub, sha384_hash_bytes(cv_msg), sig_bytes, 384, 48)
+  @end
+
+  // RSA-PSS SHA-512 (0x0806=2054 rsae, 0x080B=2059 pss)
+  @if sig_alg == 2054 || sig_alg == 2059
+    @if spki_alg != "1.2.840.113549.1.1.1" return 0 @end
+    return rsa_pss_verify_spki(pub, sha512_hash_bytes(cv_msg), sig_bytes, 512, 64)
   @end
 
   return 0

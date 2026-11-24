@@ -69,4 +69,60 @@ count_age_25_after = sql_select_where_eq(engine, 101, 1, 25)
 assert_eq(count_age_25_after, 1, "Only 1 active user with age 25 remains")
 
 sql_engine_free(engine)
+
+// ── Dynamic >20 Tables & Auto-Row Growth ─────────────────────────────────────
+dyn = sql_engine_new()
+ti = 1
+while ti <= 24
+    tp = sql_create_table(dyn, 500 + ti, 2, 2)
+    assert_true(tp > 0, "Created dynamic table #" + to_str(ti) + " (> old 16-table cap)")
+    ti = ti + 1
+ri = 1
+while ri <= 35
+    sql_insert_2(dyn, 524, ri, ri * 100)
+    ri = ri + 1
+assert_eq(sql_count_active(dyn, 524), 35, "Auto-grew row capacity from 2 to 35 rows")
+assert_eq(sql_select_first_where_eq(dyn, 524, 0, 35, 1), 3500, "Row 35 cell accurately stored after realloc")
+sql_engine_free(dyn)
+
+// ── Disk Persistence, TEXT Interning, UPDATE SQL, & Torn-WAL Crash Recovery ──
+wal_path = "/tmp/lipi_sql_pkg_wal_test.db"
+syscall(87, wal_path, 0, 0, 0, 0, 0) // unlink if leftover
+p1 = sql_engine_open(wal_path)
+sql_execute_query(p1, "CREATE TABLE 10 (2, 4)")
+sql_execute_query(p1, "INSERT INTO 10 VALUES (1, 100)")
+sql_execute_query(p1, "INSERT INTO 10 VALUES (2, 200)")
+sql_execute_query(p1, "INSERT INTO 10 VALUES (3, 300)")
+sql_execute_query(p1, "UPDATE 10 SET 1 = 999 WHERE 0 = 2")
+sql_execute_query(p1, "DELETE FROM 10 WHERE 0 = 3")
+sql_create_table(p1, 20, 2, 4)
+sql_insert_text_2(p1, 20, 42, "Sovereign Dhaka Text")
+sql_engine_close(p1)
+
+// Append 11 torn garbage bytes simulating power failure mid-WAL write
+tfd = syscall(2, wal_path, 1089, 420, 0, 0, 0) // O_WRONLY | O_APPEND
+gbuf = sys_alloc(12)
+mem_write_byte(gbuf, 0, 83)
+mem_write_byte(gbuf, 1, 81)
+mem_write_byte(gbuf, 2, 76)
+mem_write_byte(gbuf, 3, 82)
+mem_write_byte(gbuf, 4, 255)
+syscall(1, tfd, gbuf, 11, 0, 0, 0)
+syscall(3, tfd, 0, 0, 0, 0, 0)
+sys_free(gbuf)
+
+// Reopen: must truncate torn tail & preserve all committed writes
+p2 = sql_engine_open(wal_path)
+assert_eq(sql_select_first_where_eq(p2, 10, 0, 2, 1), 999, "WAL persisted UPDATE after close/reopen + torn-tail recovery")
+assert_eq(sql_count_active(p2, 10), 2, "WAL persisted DELETE count == 2")
+assert_true(sql_select_text_cell(p2, 20, 0, 1) == "Sovereign Dhaka Text", "WAL persisted TEXT interned string")
+assert_eq(sql_engine_checkpoint(p2, wal_path), 1, "WAL checkpoint compaction succeeded")
+sql_engine_close(p2)
+
+p3 = sql_engine_open(wal_path)
+assert_eq(sql_select_first_where_eq(p3, 10, 0, 1, 1), 100, "Compacted checkpoint reload preserved row 1")
+assert_true(sql_select_text_cell(p3, 20, 0, 1) == "Sovereign Dhaka Text", "Compacted checkpoint reload preserved TEXT")
+sql_engine_close(p3)
+syscall(87, wal_path, 0, 0, 0, 0, 0)
+
 say "🎉 ALL SOVEREIGN SQL ENGINE TESTS PASSED!"

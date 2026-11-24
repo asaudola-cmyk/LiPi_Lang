@@ -133,14 +133,16 @@ import "aati/lipidb/wal"
 
   ee = [8, 0, 0, 2, 0, 0]
   hs_transcript = tls_append_bytes(hs_transcript, ee)
+  ca_seed = [
+    9, 19, 29, 39, 49, 59, 69, 79, 89, 99, 109, 119, 129, 139, 149, 159,
+    169, 179, 189, 199, 209, 219, 229, 239, 249, 7, 17, 27, 37, 47, 57, 67
+  ]
   ed_seed = [
     17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255, 1,
     18, 35, 52, 69, 86, 103, 120, 137, 154, 171, 188, 205, 222, 239, 2, 19
   ]
   ed_kp = ed25519_keygen(ed_seed)
-  der_body = tls_append_bytes([6, 3, 43, 101, 112, 3, 33, 0], ed_kp.public_key)
-  der_body = tls_append_bytes(der_body, [6, 3, 85, 4, 3, 12, 9, 108, 111, 99, 97, 108, 104, 111, 115, 116])
-  der = tls_append_bytes([48, der_body.len() & 255], der_body)
+  der = x509_build_signed_ed25519_cert("Audit Root CA", "localhost", "localhost", "250101000000Z", "350101000000Z", 0, ed_kp.public_key, ca_seed, 702)
   dl = der.len()
   cert_entry = tls_append_bytes([(dl / 65536) & 255, (dl / 256) & 255, dl & 255], der)
   cert_entry = tls_append_bytes(cert_entry, [0, 0])
@@ -280,6 +282,14 @@ import "aati/lipidb/wal"
     say "FAIL: loopback bind failed"
     return 1
   @end
+  ca_seed = [
+    9, 19, 29, 39, 49, 59, 69, 79, 89, 99, 109, 119, 129, 139, 149, 159,
+    169, 179, 189, 199, 209, 219, 229, 239, 249, 7, 17, 27, 37, 47, 57, 67
+  ]
+  ca_kp = ed25519_keygen(ca_seed)
+  ca_cert = x509_build_signed_ed25519_cert("Audit Root CA", "Audit Root CA", "", "250101000000Z", "350101000000Z", 1, ca_kp.public_key, ca_seed, 701)
+  tls13_clear_custom_trust_roots()
+  tls13_add_trust_root(ca_cert)
   st = malloc(8)
   p1 = syscall(57, 0, 0, 0, 0, 0, 0)
   @if p1 == 0
@@ -289,6 +299,7 @@ import "aati/lipidb/wal"
   resp = http_get("https://localhost:18449/audit")
   syscall(61, p1, st, 0, 0, 0, 0)
   @if resp.status_code != 200 || resp.body != "TLS13_AUDIT_OK"
+    tls13_clear_custom_trust_roots()
     tcp_close(listener.fd)
     free(st, 8)
     say "FAIL: HTTPS TLS 1.3 loopback roundtrip failed"
@@ -301,6 +312,7 @@ import "aati/lipidb/wal"
   @end
   bad_resp = http_get("https://localhost:18449/audit")
   syscall(61, p2, st, 0, 0, 0, 0)
+  tls13_clear_custom_trust_roots()
   tcp_close(listener.fd)
   free(st, 8)
   @if bad_resp.status_code != 0

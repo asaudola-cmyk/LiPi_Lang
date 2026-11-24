@@ -2,7 +2,10 @@
 @! PURE LIPI CRYPTOGRAPHIC STANDARD LIBRARY: RSA PUBLIC KEY CRYPTOGRAPHY
 @! Module: utso/crypto/rsa
 @! 100% Pure Lipi Implementation — O(log phi) Extended Euclidean Algorithm (ext_gcd)
+@! Supports 2048/4096-bit RSA-OAEP, RSASSA-PSS, and RSASSA-PKCS1-v1_5
 @! ============================================================================
+
+import "utso/crypto/sha512"
 
 @fn rsa_gcd(a, b)
   @while b != 0
@@ -867,3 +870,609 @@
   em = bigint_to_bytes(m_int, k_len)
   return rsa_oaep_decode(em, [])
 @end
+
+@! ============================================================================
+@! FAST MONTGOMERY BASE-2^24 ARITHMETIC FOR 2048/4096-BIT RSA SIGNATURES
+@! Namespaced rsa_bi_* to avoid collisions across mixed-module imports.
+@! ============================================================================
+
+@fn rsa_bi_zero(k)
+  out = []
+  i = 0
+  @while i < k
+    out = out.push(0)
+    i = i + 1
+  @end
+  return out
+@end
+
+@fn rsa_bi_copy(a, k)
+  out = []
+  al = a.len()
+  i = 0
+  @while i < k
+    v = 0
+    @if i < al v = a[i] @end
+    out = out.push(v)
+    i = i + 1
+  @end
+  return out
+@end
+
+@fn rsa_bi_cmp(a, b, k)
+  i = k - 1
+  @while i >= 0
+    av = 0
+    bv = 0
+    @if i < a.len() av = a[i] @end
+    @if i < b.len() bv = b[i] @end
+    @if av > bv return 1 @end
+    @if av < bv return -1 @end
+    i = i - 1
+  @end
+  return 0
+@end
+
+@fn rsa_bi_from_bytes(bytes, k)
+  limbs = rsa_bi_zero(k)
+  pos = bytes.len()
+  li = 0
+  @while pos > 0 && li < k
+    b0 = bytes[pos - 1] & 255
+    b1 = 0
+    b2 = 0
+    @if pos >= 2 b1 = bytes[pos - 2] & 255 @end
+    @if pos >= 3 b2 = bytes[pos - 3] & 255 @end
+    limbs[li] = b0 | (b1 * 256) | (b2 * 65536)
+    li = li + 1
+    pos = pos - 3
+  @end
+  return limbs
+@end
+
+@fn rsa_bi_to_bytes(a, out_len)
+  out = []
+  i = out_len - 1
+  @while i >= 0
+    li = i / 3
+    rem = i % 3
+    lv = 0
+    @if li < a.len() lv = a[li] @end
+    out = out.push((lv >> (rem * 8)) & 255)
+    i = i - 1
+  @end
+  return out
+@end
+
+@fn _rsa_mont_n0p(m0)
+  inv = 1
+  s = 0
+  @while s < 5
+    t = (m0 * inv) & 16777215
+    inv = (inv * ((2 - t) & 16777215)) & 16777215
+    s = s + 1
+  @end
+  return (16777216 - inv) & 16777215
+@end
+
+@fn _rsa_mont_mul(a, b, m, k, n0p)
+  t = rsa_bi_zero(k + 2)
+  i = 0
+  @while i < k
+    bi = b[i]
+    carry = 0
+    j = 0
+    @while j < k
+      s = t[j] + (a[j] * bi) + carry
+      t[j] = s & 16777215
+      carry = s >> 24
+      j = j + 1
+    @end
+    sk = t[k] + carry
+    t[k] = sk & 16777215
+    t[k + 1] = sk >> 24
+
+    u = (t[0] * n0p) & 16777215
+    s0 = t[0] + (u * m[0])
+    carry = s0 >> 24
+    j = 1
+    @while j < k
+      s = t[j] + (u * m[j]) + carry
+      t[j - 1] = s & 16777215
+      carry = s >> 24
+      j = j + 1
+    @end
+    sk2 = t[k] + carry
+    t[k - 1] = sk2 & 16777215
+    t[k] = t[k + 1] + (sk2 >> 24)
+    t[k + 1] = 0
+    i = i + 1
+  @end
+
+  need_sub = 0
+  @if t[k] > 0
+    need_sub = 1
+  @elif rsa_bi_cmp(t, m, k) >= 0
+    need_sub = 1
+  @end
+
+  res = rsa_bi_zero(k)
+  @if need_sub == 1
+    borrow = 0
+    j = 0
+    @while j < k
+      d = t[j] - m[j] - borrow
+      @if d < 0
+        d = d + 16777216
+        borrow = 1
+      @else
+        borrow = 0
+      @end
+      res[j] = d
+      j = j + 1
+    @end
+  @else
+    j = 0
+    @while j < k
+      res[j] = t[j]
+      j = j + 1
+    @end
+  @end
+  return res
+@end
+
+@fn _rsa_mont_pow_bytes(base_bytes, exp_bytes, mod_bytes, out_len)
+  @! WHY: Overflow-safe O(log e * k^2) Montgomery CIOS modular exponentiation over raw big-endian byte arrays.
+  @! Rejects even/zero/small moduli and rejects base >= mod strictly per RFC 8017.
+  nlen = mod_bytes.len()
+  @if nlen == 0 || (mod_bytes[nlen - 1] & 1) == 0
+    return []
+  @end
+  @if base_bytes.len() > nlen || exp_bytes.len() == 0
+    return []
+  @end
+  k = (nlen + 2) / 3
+  m = rsa_bi_from_bytes(mod_bytes, k)
+  base_l = rsa_bi_from_bytes(base_bytes, k)
+  @if rsa_bi_cmp(base_l, m, k) >= 0
+    return []
+  @end
+
+  n0p = _rsa_mont_n0p(m[0])
+  one = rsa_bi_zero(k)
+  one[0] = 1
+
+  @! Compute R = 2^(24*k) mod m and R^2 mod m
+  cur = rsa_bi_copy(one, k)
+  r_mod = []
+  half_bits = k * 24
+  tot_bits = k * 48
+  bit = 1
+  @while bit <= tot_bits
+    carry = 0
+    j = 0
+    @while j < k
+      s = (cur[j] << 1) + carry
+      cur[j] = s & 16777215
+      carry = s >> 24
+      j = j + 1
+    @end
+    @if carry > 0 || rsa_bi_cmp(cur, m, k) >= 0
+      borrow = 0
+      j = 0
+      @while j < k
+        d = cur[j] - m[j] - borrow
+        @if d < 0
+          d = d + 16777216
+          borrow = 1
+        @else
+          borrow = 0
+        @end
+        cur[j] = d
+        j = j + 1
+      @end
+    @end
+    @if bit == half_bits
+      r_mod = rsa_bi_copy(cur, k)
+    @end
+    bit = bit + 1
+  @end
+  r2 = cur
+
+  res_m = rsa_bi_copy(r_mod, k)
+  base_m = _rsa_mont_mul(base_l, r2, m, k, n0p)
+
+  @! Scan big-endian exponent bytes from MSB to LSB via square-and-multiply
+  ei = 0
+  started = 0
+  @while ei < exp_bytes.len()
+    eb = exp_bytes[ei] & 255
+    bidx = 7
+    @while bidx >= 0
+      ebit = (eb >> bidx) & 1
+      @if started == 1
+        res_m = _rsa_mont_mul(res_m, res_m, m, k, n0p)
+        @if ebit == 1
+          res_m = _rsa_mont_mul(res_m, base_m, m, k, n0p)
+        @end
+      @elif ebit == 1
+        res_m = rsa_bi_copy(base_m, k)
+        started = 1
+      @end
+      bidx = bidx - 1
+    @end
+    ei = ei + 1
+  @end
+
+  out_l = _rsa_mont_mul(res_m, one, m, k, n0p)
+  return rsa_bi_to_bytes(out_l, out_len)
+@end
+
+@fn _rsa_strip_be_zeros(b)
+  i = 0
+  @while i < b.len() && (b[i] & 255) == 0
+    i = i + 1
+  @end
+  out = []
+  @while i < b.len()
+    out = out.push(b[i] & 255)
+    i = i + 1
+  @end
+  return out
+@end
+
+@fn _rsa_der_len(buf, off)
+  n = buf.len()
+  @if off >= n return [0, 0, n] @end
+  b = buf[off] & 255
+  @if b < 128
+    @if off + 1 + b > n return [0, 0, n] @end
+    return [off + 1, b, off + 1 + b]
+  @end
+  nb = b & 127
+  @if nb == 0 || nb > 4 || off + 1 + nb > n return [0, 0, n] @end
+  lv = 0
+  i = 0
+  @while i < nb
+    lv = (lv * 256) + (buf[off + 1 + i] & 255)
+    i = i + 1
+  @end
+  vo = off + 1 + nb
+  @if vo + lv > n return [0, 0, n] @end
+  return [vo, lv, vo + lv]
+@end
+
+@fn rsa_parse_der_public_key(der_bytes)
+  @! Parses ASN.1 DER RSAPublicKey ::= SEQUENCE { modulus INTEGER, publicExponent INTEGER }
+  @! Returns [ok, n_bytes, e_bytes, n_bits]
+  dlen = der_bytes.len()
+  @if dlen < 16 || (der_bytes[0] & 255) != 48
+    return [0, [], [], 0]
+  @end
+  sq = _rsa_der_len(der_bytes, 1)
+  @if sq[1] == 0 || sq[2] > dlen return [0, [], [], 0] @end
+  pos = sq[0]
+  sq_end = sq[2]
+
+  @if pos >= sq_end || (der_bytes[pos] & 255) != 2 return [0, [], [], 0] @end
+  n_info = _rsa_der_len(der_bytes, pos + 1)
+  @if n_info[1] <= 0 || n_info[2] > sq_end return [0, [], [], 0] @end
+  n_raw = []
+  i = 0
+  @while i < n_info[1]
+    n_raw = n_raw.push(der_bytes[n_info[0] + i] & 255)
+    i = i + 1
+  @end
+  n_bytes = _rsa_strip_be_zeros(n_raw)
+  @if n_bytes.len() < 64 || (n_bytes[n_bytes.len() - 1] & 1) == 0
+    return [0, [], [], 0]
+  @end
+
+  epos = n_info[2]
+  @if epos >= sq_end || (der_bytes[epos] & 255) != 2 return [0, [], [], 0] @end
+  e_info = _rsa_der_len(der_bytes, epos + 1)
+  @if e_info[1] <= 0 || e_info[2] != sq_end return [0, [], [], 0] @end
+  e_raw = []
+  i = 0
+  @while i < e_info[1]
+    e_raw = e_raw.push(der_bytes[e_info[0] + i] & 255)
+    i = i + 1
+  @end
+  e_bytes = _rsa_strip_be_zeros(e_raw)
+  @if e_bytes.len() == 0 return [0, [], [], 0] @end
+  @if e_bytes.len() == 1 && e_bytes[0] < 3 return [0, [], [], 0] @end
+
+  top = n_bytes[0] & 255
+  top_bits = 0
+  @while top > 0
+    top_bits = top_bits + 1
+    top = top >> 1
+  @end
+  n_bits = ((n_bytes.len() - 1) * 8) + top_bits
+  return [1, n_bytes, e_bytes, n_bits]
+@end
+
+@fn _rsa_hash_by_bits(msg_bytes, hash_bits)
+  @if hash_bits == 384
+    return sha384_hash_bytes(msg_bytes)
+  @elif hash_bits == 512
+    return sha512_hash_bytes(msg_bytes)
+  @end
+  return _rsa_sha256_bytes(msg_bytes)
+@end
+
+@fn rsa_mgf1_hash(seed, mask_len, hash_bits)
+  @if hash_bits == 256
+    return rsa_mgf1_sha256(seed, mask_len)
+  @end
+  out = []
+  counter = 0
+  @while out.len() < mask_len
+    inp = []
+    i = 0
+    @while i < seed.len()
+      inp = inp.push(seed[i] & 255)
+      i = i + 1
+    @end
+    inp = inp.push((counter >> 24) & 255)
+    inp = inp.push((counter >> 16) & 255)
+    inp = inp.push((counter >> 8) & 255)
+    inp = inp.push(counter & 255)
+    blk = _rsa_hash_by_bits(inp, hash_bits)
+    bi = 0
+    @while bi < blk.len() && out.len() < mask_len
+      out = out.push(blk[bi] & 255)
+      bi = bi + 1
+    @end
+    counter = counter + 1
+  @end
+  return out
+@end
+
+@fn _rsa_ct_eq(a, b)
+  @if a.len() != b.len() return 0 @end
+  diff = 0
+  i = 0
+  @while i < a.len()
+    diff = diff | ((a[i] & 255) ^ (b[i] & 255))
+    i = i + 1
+  @end
+  @if diff == 0 return 1 @end
+  return 0
+@end
+
+@fn rsa_pss_verify_bytes(n_bytes, e_bytes, n_bits, m_hash, sig_bytes, hash_bits, req_slen)
+  @! WHY: Implements RFC 8017 Section 9.1.2 EMSA-PSS-VERIFY using constant-time digest matching.
+  k_len = n_bytes.len()
+  @if sig_bytes.len() != k_len return 0 @end
+  h_len = 32
+  @if hash_bits == 384 h_len = 48 @end
+  @if hash_bits == 512 h_len = 64 @end
+  @if m_hash.len() != h_len return 0 @end
+
+  em_bits = n_bits - 1
+  em_len = (em_bits + 7) / 8
+  @if em_len < h_len + 2 return 0 @end
+
+  m_full = _rsa_mont_pow_bytes(sig_bytes, e_bytes, n_bytes, k_len)
+  @if m_full.len() != k_len return 0 @end
+
+  em = []
+  @if em_len < k_len
+    @if m_full[0] != 0 return 0 @end
+    i = k_len - em_len
+    @while i < k_len
+      em = em.push(m_full[i])
+      i = i + 1
+    @end
+  @else
+    em = m_full
+  @end
+
+  @if (em[em_len - 1] & 255) != 188 return 0 @end
+  zero_bits = (8 * em_len) - em_bits
+  first_mask = 255 >> zero_bits
+  top_forbidden = (~first_mask) & 255
+  @if (em[0] & top_forbidden) != 0 return 0 @end
+
+  db_len = em_len - h_len - 1
+  masked_db = []
+  i = 0
+  @while i < db_len
+    masked_db = masked_db.push(em[i] & 255)
+    i = i + 1
+  @end
+  h_val = []
+  i = 0
+  @while i < h_len
+    h_val = h_val.push(em[db_len + i] & 255)
+    i = i + 1
+  @end
+
+  db_mask = rsa_mgf1_hash(h_val, db_len, hash_bits)
+  db = []
+  i = 0
+  @while i < db_len
+    db = db.push((masked_db[i] ^ db_mask[i]) & 255)
+    i = i + 1
+  @end
+  db[0] = db[0] & first_mask
+
+  @! Verify leading zeros ending in 0x01 delimiter followed by salt
+  delim = -1
+  i = 0
+  @while i < db_len
+    b = db[i]
+    @if b == 1
+      delim = i
+      break
+    @elif b != 0
+      return 0
+    @end
+    i = i + 1
+  @end
+  @if delim < 0 return 0 @end
+
+  slen = db_len - delim - 1
+  @if req_slen >= 0 && slen != req_slen
+    return 0
+  @end
+
+  m_prime = [0, 0, 0, 0, 0, 0, 0, 0]
+  i = 0
+  @while i < h_len
+    m_prime = m_prime.push(m_hash[i] & 255)
+    i = i + 1
+  @end
+  i = delim + 1
+  @while i < db_len
+    m_prime = m_prime.push(db[i] & 255)
+    i = i + 1
+  @end
+  h_prime = _rsa_hash_by_bits(m_prime, hash_bits)
+  return _rsa_ct_eq(h_val, h_prime)
+@end
+
+@fn rsa_pss_sign_bytes(n_bytes, d_bytes, n_bits, m_hash, salt_bytes, hash_bits)
+  @! WHY: RFC 8017 Section 9.1.1 EMSA-PSS-ENCODE + RSASP1 for pure-Lipi RSA-PSS test vectors.
+  k_len = n_bytes.len()
+  h_len = 32
+  @if hash_bits == 384 h_len = 48 @end
+  @if hash_bits == 512 h_len = 64 @end
+  @if m_hash.len() != h_len return [] @end
+
+  em_bits = n_bits - 1
+  em_len = (em_bits + 7) / 8
+  slen = salt_bytes.len()
+  @if em_len < h_len + slen + 2 return [] @end
+
+  m_prime = [0, 0, 0, 0, 0, 0, 0, 0]
+  i = 0
+  @while i < h_len
+    m_prime = m_prime.push(m_hash[i] & 255)
+    i = i + 1
+  @end
+  i = 0
+  @while i < slen
+    m_prime = m_prime.push(salt_bytes[i] & 255)
+    i = i + 1
+  @end
+  h_val = _rsa_hash_by_bits(m_prime, hash_bits)
+
+  db_len = em_len - h_len - 1
+  ps_len = db_len - slen - 1
+  db = []
+  i = 0
+  @while i < ps_len
+    db = db.push(0)
+    i = i + 1
+  @end
+  db = db.push(1)
+  i = 0
+  @while i < slen
+    db = db.push(salt_bytes[i] & 255)
+    i = i + 1
+  @end
+
+  db_mask = rsa_mgf1_hash(h_val, db_len, hash_bits)
+  masked_db = []
+  i = 0
+  @while i < db_len
+    masked_db = masked_db.push((db[i] ^ db_mask[i]) & 255)
+    i = i + 1
+  @end
+  zero_bits = (8 * em_len) - em_bits
+  first_mask = 255 >> zero_bits
+  masked_db[0] = masked_db[0] & first_mask
+
+  em = []
+  @if em_len < k_len em = em.push(0) @end
+  i = 0
+  @while i < db_len
+    em = em.push(masked_db[i])
+    i = i + 1
+  @end
+  i = 0
+  @while i < h_len
+    em = em.push(h_val[i])
+    i = i + 1
+  @end
+  em = em.push(188)
+  return _rsa_mont_pow_bytes(em, d_bytes, n_bytes, k_len)
+@end
+
+@fn rsa_pkcs1_v15_verify_bytes(n_bytes, e_bytes, m_hash, sig_bytes, hash_bits)
+  @! WHY: RFC 8017 Section 8.2.2 EMSA-PKCS1-v1_5 verification (used by root/intermediate CAs).
+  k_len = n_bytes.len()
+  @if sig_bytes.len() != k_len return 0 @end
+  h_len = 32
+  @if hash_bits == 384 h_len = 48 @end
+  @if hash_bits == 512 h_len = 64 @end
+  @if m_hash.len() != h_len return 0 @end
+
+  em = _rsa_mont_pow_bytes(sig_bytes, e_bytes, n_bytes, k_len)
+  @if em.len() != k_len return 0 @end
+
+  @! Standard DER DigestInfo prefixes (with NULL param or omitted NULL param)
+  pref_null = []
+  pref_nonull = []
+  @if hash_bits == 256
+    pref_null = [48, 49, 48, 13, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 1, 5, 0, 4, 32]
+    pref_nonull = [48, 47, 48, 11, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 1, 4, 32]
+  @elif hash_bits == 384
+    pref_null = [48, 65, 48, 13, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 2, 5, 0, 4, 48]
+    pref_nonull = [48, 63, 48, 11, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 2, 4, 48]
+  @else
+    pref_null = [48, 81, 48, 13, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 3, 5, 0, 4, 64]
+    pref_nonull = [48, 79, 48, 11, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 3, 4, 64]
+  @end
+
+  @! Check EM against variant 1 (with NULL) or variant 2 (without NULL)
+  v = 0
+  @while v < 2
+    pref = pref_null
+    @if v == 1 pref = pref_nonull @end
+    t_len = pref.len() + h_len
+    @if k_len >= t_len + 11
+      ps_len = k_len - t_len - 3
+      @if em[0] == 0 && em[1] == 1
+        bad_ps = 0
+        i = 0
+        @while i < ps_len
+          @if em[2 + i] != 255 bad_ps = 1 @end
+          i = i + 1
+        @end
+        @if bad_ps == 0 && em[2 + ps_len] == 0
+          t_off = 3 + ps_len
+          ok_t = 1
+          i = 0
+          @while i < pref.len()
+            @if em[t_off + i] != pref[i] ok_t = 0 @end
+            i = i + 1
+          @end
+          i = 0
+          @while i < h_len
+            @if em[t_off + pref.len() + i] != (m_hash[i] & 255) ok_t = 0 @end
+            i = i + 1
+          @end
+          @if ok_t == 1 return 1 @end
+        @end
+      @end
+    @end
+    v = v + 1
+  @end
+  return 0
+@end
+
+@fn rsa_pss_verify_spki(spki_key_bytes, m_hash, sig_bytes, hash_bits, req_slen)
+  parsed = rsa_parse_der_public_key(spki_key_bytes)
+  @if parsed[0] != 1 return 0 @end
+  return rsa_pss_verify_bytes(parsed[1], parsed[2], parsed[3], m_hash, sig_bytes, hash_bits, req_slen)
+@end
+
+@fn rsa_pkcs1_verify_spki(spki_key_bytes, m_hash, sig_bytes, hash_bits)
+  parsed = rsa_parse_der_public_key(spki_key_bytes)
+  @if parsed[0] != 1 return 0 @end
+  return rsa_pkcs1_v15_verify_bytes(parsed[1], parsed[2], m_hash, sig_bytes, hash_bits)
+@end
+

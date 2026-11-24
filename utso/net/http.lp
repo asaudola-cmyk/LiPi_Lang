@@ -769,18 +769,36 @@ import "utso/net/tls/tls13"
   return 0
 @end
 
-@fn _http_tls_extract_cert_der(cert_hs)
+@fn _http_tls_extract_cert_chain(cert_hs)
   n = cert_hs.len()
   @if n < 12 return [] @end
   ctx_len = cert_hs[4] & 255
   list_off = 5 + ctx_len
-  @if list_off + 6 >= n return [] @end
-  ent_off = list_off + 3
-  cert_len = ((cert_hs[ent_off] & 255) * 65536) | ((cert_hs[ent_off + 1] & 255) * 256) | (cert_hs[ent_off + 2] & 255)
-  @if cert_len <= 0 || ent_off + 3 + cert_len > n
-    return []
+  @if list_off + 3 > n return [] @end
+  list_len = ((cert_hs[list_off] & 255) * 65536) | ((cert_hs[list_off + 1] & 255) * 256) | (cert_hs[list_off + 2] & 255)
+  pos = list_off + 3
+  list_end = pos + list_len
+  @if list_end > n return [] @end
+  chain = []
+  @while pos + 5 <= list_end
+    cert_len = ((cert_hs[pos] & 255) * 65536) | ((cert_hs[pos + 1] & 255) * 256) | (cert_hs[pos + 2] & 255)
+    pos = pos + 3
+    @if cert_len <= 0 || pos + cert_len + 2 > list_end
+      return []
+    @end
+    chain = chain.push(_http_tls_slice(cert_hs, pos, pos + cert_len))
+    pos = pos + cert_len
+    ext_len = ((cert_hs[pos] & 255) * 256) | (cert_hs[pos + 1] & 255)
+    pos = pos + 2 + ext_len
+    @if pos > list_end return [] @end
   @end
-  return _http_tls_slice(cert_hs, ent_off + 3, ent_off + 3 + cert_len)
+  return chain
+@end
+
+@fn _http_tls_extract_cert_der(cert_hs)
+  chain = _http_tls_extract_cert_chain(cert_hs)
+  @if chain.len() == 0 return [] @end
+  return chain[0]
 @end
 
 @fn _http_tls_hash_transcript(cipher, transcript)
@@ -969,10 +987,11 @@ import "utso/net/tls/tls13"
       msg = _http_tls_slice(hs_buf, pos, pos + 4 + hl)
       pos = pos + 4 + hl
       @if ht == 11
-        cert_der = _http_tls_extract_cert_der(msg)
-        @if cert_der.len() == 0 || tls13_verify_x509_cert_chain(cert_der, host) != 1
+        cert_chain = _http_tls_extract_cert_chain(msg)
+        @if cert_chain.len() == 0 || tls13_verify_x509_cert_chain_list(cert_chain, host) != 1
           return ""
         @end
+        cert_der = cert_chain[0]
         got_cert = 1
       @elif ht == 15
         @if got_cert != 1 || msg.len() < 8
@@ -1042,8 +1061,23 @@ import "utso/net/tls/tls13"
   @if _http_tls_write_exact(stream.fd, c_fin_rec) <= 0 return "" @end
 
   req_bytes = tls_string_to_bytes(req_str)
-  req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, 0, 23, req_bytes)
-  @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return "" @end
+  rlen = req_bytes.len()
+  @if rlen == 0
+    req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, 0, 23, req_bytes)
+    @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return "" @end
+  @else
+    c_app_seq = 0
+    roff = 0
+    @while roff < rlen
+      rstop = roff + 16384
+      @if rstop > rlen rstop = rlen @end
+      rchunk = _http_tls_slice(req_bytes, roff, rstop)
+      req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, c_app_seq, 23, rchunk)
+      @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return "" @end
+      c_app_seq = c_app_seq + 1
+      roff = rstop
+    @end
+  @end
 
   @! Receive encrypted HTTPS response records
   raw_resp = ""
@@ -1052,6 +1086,9 @@ import "utso/net/tls/tls13"
     rec = _http_tls_read_record(stream.fd)
     @if rec.tls_rec_ok != 1
       break
+    @end
+    @if rec.tls_rec_type == 20
+      continue
     @end
     @if rec.tls_rec_type == 21
       break

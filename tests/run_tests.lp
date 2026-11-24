@@ -1335,6 +1335,11 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_sovereign_five_pillars_e2e.lp", "test_sovereign_five_pillars_e2e") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"
