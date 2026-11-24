@@ -1280,3 +1280,22 @@ import "utso/crypto/rsa"
   return _x509_der_tlv_wrap(48, cert_inner)
 @end
 
+@fn x509_build_signed_p384_cert(issuer_cn, subject_cn, san_dns, not_before_str, not_after_str, is_ca, subj_pub97, issuer_priv48, nonce48, serial_num)
+  @! WHY: Builds a genuine RFC 5280 DER X.509 v3 certificate signed with ECDSA P-384 SHA-384.
+  @! sigAlg = ecdsa-with-SHA384 (1.2.840.10045.4.3.3), SPKI = ecPublicKey + secp384r1 (1.3.132.0.34)
+  alg_ecdsa384 = [48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 3]
+  alg_spki_ec384 = [48, 16, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 5, 43, 129, 4, 0, 34]
+  bs_pub = [0]
+  bs_pub = _x509_der_append(bs_pub, subj_pub97)
+  spki = _x509_der_tlv_wrap(48, _x509_der_append(alg_spki_ec384, _x509_der_tlv_wrap(3, bs_pub)))
+
+  tbs = _x509_build_tbs_common(issuer_cn, subject_cn, san_dns, not_before_str, not_after_str, is_ca, alg_ecdsa384, spki, serial_num)
+  sig_der = ecdsa_p384_sign_der(issuer_priv48, sha384_hash_bytes(tbs), nonce48)
+  bs_sig = [0]
+  bs_sig = _x509_der_append(bs_sig, sig_der)
+
+  cert_inner = _x509_der_append(tbs, alg_ecdsa384)
+  cert_inner = _x509_der_append(cert_inner, _x509_der_tlv_wrap(3, bs_sig))
+  return _x509_der_tlv_wrap(48, cert_inner)
+@end
+

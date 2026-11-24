@@ -1340,6 +1340,16 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_v101_compiler_opt_regalloc.lp", "test_v101_compiler_opt_regalloc") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_v101_deep_upgrades_e2e.lp", "test_v101_deep_upgrades_e2e") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

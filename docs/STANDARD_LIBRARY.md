@@ -40,8 +40,9 @@ Lipi's libraries are organized into two layers:
   - `pqc.lp`, `zkp.lp`, `pairing.lp`, `plonk.lp`
 - **`utso/net/`**:
   - `tls/tls13.lp`, `tls/record.lp` — Pure-Lipi TLS 1.3 client with PKI and `CertificateVerify` enforcement
-  - `tls13_server.lp` — Pure-Lipi TLS 1.3 server (X25519, `HelloRetryRequest`, ECDSA P-256 + Ed25519, `ALPN: http/1.1`)
-  - `http.lp`, `http2/`, `http3.lp`, `quic.lp`, `websocket.lp`, `ws_engine.lp`, `ws_wire.lp`
+  - `tls13_server.lp` — Pure-Lipi TLS 1.3 server (X25519, `HelloRetryRequest`, SNI multi-domain, P-256/P-384/Ed25519, PSK session resumption, ALPN `h2`/`http/1.1`)
+  - `http2/server.lp`, `http2/frame.lp`, `http2/hpack.lp`, `http2/stream.lp` — RFC 7540/7541 HTTP/2 (`h2c` & `h2` over TLS 1.3) with HPACK canonical Huffman decoder
+  - `http.lp`, `http3.lp`, `quic.lp`, `websocket.lp`, `ws_engine.lp`, `ws_wire.lp`
   - `dns_pure.lp`, `dns_client.lp`, `tcp.lp`, `tcp_server.lp`, `udp.lp`, `io_uring_reactor.lp`, `io_uring_ring.lp`, `grpc.lp`, `grpc_server.lp`, `server_production.lp`
 - **`utso/cpu/`**: `avx512_native.lp`, `avx512_gemm.lp`, `amx_vnni.lp`
 - **`utso/io/`**: `uring.lp`, `uring_sqpoll.lp`, `reactor.lp`, `dma.lp`, `nvme_direct.lp`
@@ -80,7 +81,7 @@ Every package under `aati/` contains an `aati.toml` manifest and an Ed25519-sign
 | `lipi_quantum` | `aati/lipi_quantum` | State-vector quantum gate simulator |
 | `lipi_registry` | `aati/lipi_registry` | Package registry server and SemVer parser |
 | `lipi_security` | `aati/lipi_security` | Seccomp syscall filtering and sandbox policy primitives |
-| `lipi_sql` | `aati/lipi_sql` | Dynamic relational SQL engine with CRC-32 `fsync` WAL and checkpointing |
+| `lipi_sql` | `aati/lipi_sql` | Relational SQL engine with CRC-32 `fsync` WAL, ACID `BEGIN`/`COMMIT`/`ROLLBACK`, hash indexes, `INNER`/`LEFT` joins, and `GROUP BY` |
 | `lipi_swarm` | `aati/lipi_swarm` | Multi-agent RPC mesh and consensus helpers |
 | `lipi_torch` | `aati/lipi_torch` | Tensor autograd and neural network layers |
 | `lipi_web` | `aati/lipi_web` | HTTP web server, routing, middleware, and thread-safe WAL-backed job queue |

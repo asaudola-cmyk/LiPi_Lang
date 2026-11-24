@@ -2,7 +2,38 @@
 
 All notable changes to the Lipi programming language are documented in this file.
 
-## [1.0.0] — Current (`main`)
+## [1.0.1] — Current (`main`)
+
+### Compiler Middle-End & Register Allocation
+- Fixed ABI safety during linear-scan register eviction (`src/compiler/backend/regalloc/linear_scan.lp`): call-spanning intervals now strictly evict only callee-saved candidates instead of inheriting caller-saved scratch registers.
+- Tightened call-crossing live-interval analysis (`src/compiler/backend/regalloc/live_interval.lp`) to strict interior crossings (`start_pos < call_pos < end_pos`), eliminating false call-span flags on call results and last-use arguments.
+- Extended SSA peephole optimization (`src/compiler/middleend/opt/passes/pass_peephole.lp`) with constant-chain reassociation (`(x + c1) + c2`, `(x - c1) - c2`), shift-chain folding (`(x << c1) << c2`), `x % 1 -> 0`, bitwise `-1` identities, and fixpoint accounting for in-place strength reductions.
+- Synchronized `src/boot/lipi-seed` and `src/boot/seed.b64` with the hardened Stage-2 == Stage-3 deterministic compiler.
+
+### TLS 1.3 Server & X.509 PKI
+- Added RFC 5280 NIST P-384 X.509 certificate synthesis (`x509_build_signed_p384_cert` in `utso/crypto/x509.lp`) and ECDSA-SHA384 (`0x0503`) `CertificateVerify` handshake signing (`tls13_engine_set_p384_identity`).
+- Added SNI multi-domain virtual-host certificate selection (`tls13_engine_add_sni_identity`) supporting exact hostnames and RFC 6125 single-label wildcards with TLD wildcard rejection.
+- Implemented RFC 8446 TLS 1.3 Session Resumption (`NewSessionTicket`, `resumption_master_secret`, `psk_key_exchange_modes` `psk_dhe_ke`, constant-time `pre_shared_key` binder verification with tampered-binder rejection, and abbreviated resumed server flights).
+- Added ALPN `"h2"` negotiation and binary-safe AEAD record encryption/decryption (`tls13_record_encrypt_raw` / `tls13_record_decrypt_raw`).
+
+### HTTP/2 Wire Protocol (`utso/net/http2/server.lp`)
+- Implemented pure-Lipi RFC 7540 HTTP/2 framing (`SETTINGS`/`ACK`, `PING`/`ACK`, `HEADERS` with `PADDED`/`PRIORITY`, `DATA`, `GOAWAY`) with graceful TCP `SHUT_WR` drain close to prevent premature `RST`.
+- Implemented RFC 7541 HPACK header block decoding/encoding (static + dynamic tables) and an `O(1)` canonical RFC 7541 Appendix B Huffman decoder.
+- Added live `h2c` (TCP prior knowledge) and `h2` (over Pure-Lipi TLS 1.3 ALPN `"h2"`) server drivers, verified live against `curl 8.5.0 / nghttp2 1.59.0`.
+
+### Relational SQL Engine (`aati/lipi_sql/src/sql.lp`)
+- Implemented explicit ACID transactions (`BEGIN` / `COMMIT` / `ROLLBACK`) with reverse-LIFO undo logging and staged WAL flushing (`SYS_fsync` only on `COMMIT`).
+- Added WAL-persisted `O(1)` secondary hash indexes (`CREATE INDEX`, auto-maintained on `INSERT`/`UPDATE`/`DELETE`/`ROLLBACK`/checkpoint/replay).
+- Added `O(N + M)` hash-based `INNER JOIN` and `LEFT JOIN` (`sql_inner_join`, `sql_left_join`) and `GROUP BY` aggregations (`COUNT`, `SUM`, `MIN`, `MAX`, `AVG`).
+
+### CI, Hygiene & Testing
+- Migrated remaining legacy `include "std/..."` tests to canonical `utso/` and `aati/` modules.
+- Upgraded `.github/workflows/lipi-ci.yml` to Node 24 native Actions (`checkout@v7`, `setup-node@v7`, `upload-artifact@v7`, `download-artifact@v8`).
+- Added `tests/test_v101_compiler_opt_regalloc.lp` and `tests/test_v101_deep_upgrades_e2e.lp` expanding the regression suite to 260 tests (`260/260` passing).
+
+---
+
+## [1.0.0]
 
 ### Pure-Lipi Security, Networking, Isolation & Storage
 - **Cryptography & X.509 PKI (`utso/crypto/`)**:

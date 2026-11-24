@@ -1,6 +1,6 @@
 [package]
 name = "lipi"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Lipi Contributors"]
 edition = "2026"
 description = "Self-hosted bilingual (Bengali and English) native systems programming language"

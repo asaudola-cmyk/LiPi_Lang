@@ -579,7 +579,7 @@ fn parse_sig_manifest content
 // ── ৫. ইউআই ও ব্যানার ফাংশনসমূহ (UI & Help Display) ─────────────────────────────
 
 fn ব্যানার_দেখাও
-    say "aati (আঁটি) — Lipi Package Manager 1.0.0"
+    say "aati (আঁটি) — Lipi Package Manager 1.0.1"
     say ""
 
 fn সহায়তা_দেখাও

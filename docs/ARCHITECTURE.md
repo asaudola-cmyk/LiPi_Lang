@@ -70,11 +70,13 @@ All cryptographic and TLS protocols are implemented directly in Lipi without Ope
 - **TLS 1.3 Client (`utso/net/tls/tls13.lp`) & HTTPS (`utso/net/http.lp`, `aati/lipi_http_client/`)**:
   - Full cryptographic `CertificateVerify` enforcement for Ed25519, ECDSA P-256/P-384, and RSA-PSS, RFC 8446 16,384-byte record chunking, DNS resolution (`utso/net/dns_pure.lp`), and multi-MB chunked HTTP transfer support.
 - **TLS 1.3 Server (`utso/net/tls13_server.lp`)**:
-  - X25519 key agreement, RFC 8446 §4.1.4 `HelloRetryRequest` handling, AES-128-GCM / ChaCha20-Poly1305 record protection, browser-compatible default NIST P-256 (`0x0403`) + Ed25519 (`0x0807`) handshake signing, `ALPN: http/1.1` negotiation, and 16,384-byte record fragmentation. Verified against `openssl s_client -tls1_3` and `curl --tlsv1.3`.
+  - X25519 key agreement, RFC 8446 §4.1.4 `HelloRetryRequest` handling, AES-128-GCM / AES-256-GCM / ChaCha20-Poly1305 record protection, browser-compatible NIST P-256 (`0x0403`), NIST P-384 (`0x0503` + SHA-384), and Ed25519 (`0x0807`) signing, SNI multi-domain certificate selection (exact + RFC 6125 single-label wildcards), RFC 8446 PSK Session Resumption (`NewSessionTicket` + constant-time `pre_shared_key` binder verification + `psk_dhe_ke`), and ALPN `h2` / `http/1.1` negotiation. Verified against `openssl s_client -tls1_3` and `curl --tlsv1.3`.
+- **HTTP/2 Wire Engine (`utso/net/http2/server.lp`)**:
+  - Pure-Lipi RFC 7540 HTTP/2 framing (`SETTINGS`/`ACK`, `PING`/`ACK`, `HEADERS` with `PADDED`/`PRIORITY`, `DATA` chunking, `GOAWAY`) and RFC 7541 HPACK header compression with an `O(1)` canonical Appendix B Huffman decoder. Supports both cleartext `h2c` (TCP prior knowledge) and encrypted `h2` over Pure-Lipi TLS 1.3 ALPN `"h2"`, verified live against `curl` / `nghttp2`.
 
 ## 5. Durable WAL Storage & Concurrency
 
-- **Relational SQL Engine (`aati/lipi_sql/src/sql.lp`)**: Dynamic tables and rows, interned text storage, multi-column schema support, and crash-recoverable write-ahead logging (CRC-32 checksummed frames flushed with `SYS_fsync`, full WAL replay, and checkpointing).
+- **Relational SQL Engine (`aati/lipi_sql/src/sql.lp`)**: Dynamic tables and rows, interned text storage, multi-column schema support, CRC-32 `SYS_fsync` write-ahead logging and checkpointing, explicit ACID transactions (`BEGIN`/`COMMIT`/`ROLLBACK` with reverse-LIFO undo log and staged WAL flush on commit), WAL-persisted `O(1)` secondary hash indexes (`CREATE INDEX`), `O(N + M)` `INNER`/`LEFT` hash joins, and `GROUP BY` aggregations (`COUNT`, `SUM`, `MIN`, `MAX`, `AVG`).
 - **Persistent Job Queue (`aati/lipi_web/job_queue.lp`)**: Single-lock thread-safe queue over Linux futex/spinlock primitives with CRC-32 `SYS_fsync` WAL durability, automatic `RUNNING` → `PENDING` crash recovery on restart, and log compaction.
 
 ## 6. Package Management & Supply-Chain Integrity (`aati`)

@@ -903,7 +903,7 @@ fn get_hover_documentation word
     if word == "arena_mark" or word == "arena_reset" or word == "arena_allocated"
         return "### Scoped Arena Snapshots\n`mark = arena_mark()`, run allocations, then `arena_reset(mark)` in O(1) with `arena_allocated()` accounting."
     
-    return "### Lipi Programming Language (1.0.0)\nSelf-hosted bilingual native compiler (English & Bengali, zero libc/LLVM)"
+    return "### Lipi Programming Language (1.0.1)\nSelf-hosted bilingual native compiler (English & Bengali, zero libc/LLVM)"
 
 // ─── Source Formatter ─────────────────────────────────────────────────────────
 // WHY: Provides 4-space indentation alignment for functions, structs, conditionals, and loops.

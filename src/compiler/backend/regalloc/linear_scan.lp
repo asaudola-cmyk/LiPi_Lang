@@ -167,10 +167,24 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
                 push(ins_act, cur)
             active = ins_act
         else
-            // Register starvation: Must spill either cur or an active interval
+            // Register starvation: Must spill either cur or an ABI-compatible active interval.
+            // WHY: Never assign a caller-saved register to a call-spanning interval on eviction,
+            // because caller-saved registers are clobbered across CALL instructions.
             spill_cand_idx = 0 - 1
-            if active.len() > 0
-                spill_cand_idx = active.len() - 1
+            sc_i = active.len() - 1
+            while sc_i >= 0
+                sc_cand = active[sc_i]
+                if cur.spans_call == 1
+                    if contains_int(callee_regs, sc_cand.assigned_reg) == 1
+                        spill_cand_idx = sc_i
+                        break
+                    end
+                else
+                    spill_cand_idx = sc_i
+                    break
+                end
+                sc_i = sc_i - 1
+            end
 
             if spill_cand_idx >= 0
                 cand = active[spill_cand_idx]

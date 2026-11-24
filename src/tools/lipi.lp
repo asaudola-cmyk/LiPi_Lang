@@ -13,7 +13,7 @@ include "utso/memory"
 include "utso/crypto"
 
 fn print_lipi_banner
-    say "Lipi Programming Language 1.0.0 (লিপি ১.০.০)"
+    say "Lipi Programming Language 1.0.1 (লিপি ১.০.১)"
     say "Self-hosted bilingual native compiler (zero C, libc, or LLVM)"
     say ""
 
@@ -51,7 +51,7 @@ fn print_usage
 
 fn show_version
     print_lipi_banner()
-    say "Version: 1.0.0"
+    say "Version: 1.0.1"
     say "Target: x86_64-unknown-linux-musl-freestanding"
     say "Bootstrap Seed: src/boot/lipi-seed"
     say "Targets: ELF64 (x86_64/ARM64/RISC-V), PE32+ (Windows), Mach-O (macOS), WASM"

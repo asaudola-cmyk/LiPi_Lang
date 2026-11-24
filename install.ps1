@@ -44,7 +44,7 @@ Write-Host "  ██║     ██║██████╔╝██║" -Foregro
 Write-Host "  ██║     ██║██╔═══╝ ██║" -ForegroundColor Cyan
 Write-Host "  ███████╗██║██║     ██║" -ForegroundColor Cyan
 Write-Host "  ╚══════╝╚═╝╚═╝     ╚═╝" -ForegroundColor Cyan
-Write-Host "  Lipi Programming Language — 1.0.0 (Windows Setup)" -ForegroundColor Yellow
+Write-Host "  Lipi Programming Language — 1.0.1 (Windows Setup)" -ForegroundColor Yellow
 Write-Host "  Self-hosted bilingual systems programming language (zero C, libc, or LLVM)`n"
 
 # 1. Verify Architecture

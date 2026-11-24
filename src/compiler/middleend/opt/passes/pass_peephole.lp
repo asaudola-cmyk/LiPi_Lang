@@ -63,14 +63,50 @@ fn peephole_simplify_inst inst
             end
             if op == OP_AND or op == OP_OR return l
 
-        // Addition: x + 0 -> x, 0 + x -> x
+        // Addition: x + 0 -> x, 0 + x -> x, and constant chain reassociation (x + c1) + c2 -> x + (c1 + c2)
         if op == OP_ADD
             if is_r_const == 1 and r_val == 0 return l
             if is_l_const == 1 and l_val == 0 return r
+            if is_r_const == 1 and l.def_inst != 0 and l.def_inst.op == OP_ADD and len(l.def_inst.operands) == 2
+                inner_l = get(l.def_inst.operands, 0)
+                inner_r = get(l.def_inst.operands, 1)
+                if inner_r.kind == VAL_KIND_CONST
+                    folded_c = inner_r.const_val + r_val
+                    if folded_c == 0
+                        return inner_l
+                    end
+                    new_c = ssa_value_new_const(folded_c, inst.result.vtype)
+                    ssa_value_remove_use(l, inst)
+                    ssa_value_remove_use(r, inst)
+                    list_set(inst.operands, 0, inner_l)
+                    list_set(inst.operands, 1, new_c)
+                    ssa_value_add_use(inner_l, inst)
+                    ssa_value_add_use(new_c, inst)
+                    return 0
+                end
+            end
 
-        // Subtraction: x - 0 -> x
+        // Subtraction: x - 0 -> x, and constant chain reassociation (x - c1) - c2 -> x - (c1 + c2)
         if op == OP_SUB
             if is_r_const == 1 and r_val == 0 return l
+            if is_r_const == 1 and l.def_inst != 0 and l.def_inst.op == OP_SUB and len(l.def_inst.operands) == 2
+                inner_l = get(l.def_inst.operands, 0)
+                inner_r = get(l.def_inst.operands, 1)
+                if inner_r.kind == VAL_KIND_CONST
+                    folded_c = inner_r.const_val + r_val
+                    if folded_c == 0
+                        return inner_l
+                    end
+                    new_c = ssa_value_new_const(folded_c, inst.result.vtype)
+                    ssa_value_remove_use(l, inst)
+                    ssa_value_remove_use(r, inst)
+                    list_set(inst.operands, 0, inner_l)
+                    list_set(inst.operands, 1, new_c)
+                    ssa_value_add_use(inner_l, inst)
+                    ssa_value_add_use(new_c, inst)
+                    return 0
+                end
+            end
 
         // Multiplication: x * 1 -> x, x * 0 -> 0, 1 * x -> x, 0 * x -> 0
         if op == OP_MUL
@@ -106,25 +142,52 @@ fn peephole_simplify_inst inst
                 if r_val == 1 return l
             end
 
-        // Bitwise AND: x & 0 -> 0, 0 & x -> 0
+        // Modulo: x % 1 -> 0 (signed integer remainder mod 1 is always 0)
+        if op == OP_MOD
+            if is_r_const == 1 and r_val == 1
+                vt_m = inst.result.vtype
+                if vt_m != "f64" and vt_m != "float"
+                    return ssa_value_new_const(0, vt_m)
+                end
+            end
+
+        // Bitwise AND: x & 0 -> 0, 0 & x -> 0, x & -1 -> x, -1 & x -> x
         if op == OP_AND
             if is_r_const == 1 and r_val == 0 return ssa_value_new_const(0, inst.result.vtype)
             if is_l_const == 1 and l_val == 0 return ssa_value_new_const(0, inst.result.vtype)
+            if is_r_const == 1 and r_val == -1 return l
+            if is_l_const == 1 and l_val == -1 return r
 
-        // Bitwise OR: x | 0 -> x, 0 | x -> x
+        // Bitwise OR: x | 0 -> x, 0 | x -> x, x | -1 -> -1, -1 | x -> -1
         if op == OP_OR
             if is_r_const == 1 and r_val == 0 return l
             if is_l_const == 1 and l_val == 0 return r
+            if is_r_const == 1 and r_val == -1 return ssa_value_new_const(-1, inst.result.vtype)
+            if is_l_const == 1 and l_val == -1 return ssa_value_new_const(-1, inst.result.vtype)
 
         // Bitwise XOR: x ^ 0 -> x, 0 ^ x -> x
         if op == OP_XOR
             if is_r_const == 1 and r_val == 0 return l
             if is_l_const == 1 and l_val == 0 return r
 
-        // Shifts by 0: x << 0 -> x, x >> 0 -> x
+        // Shifts by 0: x << 0 -> x, x >> 0 -> x, and shift-chain folding (x << c1) << c2 -> x << (c1 + c2)
         if op == OP_SHL or op == OP_SHR
             if is_r_const == 1 and r_val == 0 return l
             if is_l_const == 1 and l_val == 0 return ssa_value_new_const(0, inst.result.vtype)
+            if is_r_const == 1 and r_val > 0 and l.def_inst != 0 and l.def_inst.op == op and len(l.def_inst.operands) == 2
+                inner_l = get(l.def_inst.operands, 0)
+                inner_r = get(l.def_inst.operands, 1)
+                if inner_r.kind == VAL_KIND_CONST and inner_r.const_val > 0 and (inner_r.const_val + r_val) < 64
+                    new_sh = ssa_value_new_const(inner_r.const_val + r_val, "i64")
+                    ssa_value_remove_use(l, inst)
+                    ssa_value_remove_use(r, inst)
+                    list_set(inst.operands, 0, inner_l)
+                    list_set(inst.operands, 1, new_sh)
+                    ssa_value_add_use(inner_l, inst)
+                    ssa_value_add_use(new_sh, inst)
+                    return 0
+                end
+            end
 
         // Comparisons on self: cmp pred x, x (integers only; preserve IEEE-754 NaN comparisons)
         if op == OP_CMP and l == r
@@ -171,6 +234,11 @@ fn pass_peephole_run fn_obj
         ii = 0
         while ii < len(bb.instructions)
             inst = get(bb.instructions, ii)
+            old_op = inst.op
+            old_op0 = 0
+            if len(inst.operands) >= 1
+                old_op0 = get(inst.operands, 0)
+            end
             replacement_val = peephole_simplify_inst(inst)
 
             if replacement_val != 0
@@ -180,7 +248,19 @@ fn pass_peephole_run fn_obj
                 inst.is_dead = 1
                 simplified_count = simplified_count + 1
             else
+                // WHY: In-place rewrites (strength reduction, constant-chain reassociation)
+                // must increment simplified_count so PassManager triggers cascading DCE.
+                in_place_changed = 0
+                if inst.op != old_op
+                    in_place_changed = 1
+                elif len(inst.operands) >= 1 and get(inst.operands, 0) != old_op0
+                    in_place_changed = 1
+                end
+                if in_place_changed == 1
+                    simplified_count = simplified_count + 1
+                end
                 push(new_insts, inst)
+            end
 
             ii = ii + 1
 

@@ -15,7 +15,7 @@ Thank you for contributing to Lipi. Please keep changes clean, minimal, well-tes
 # Bootstrap compiler and build toolchain
 make
 
-# Run the full regression test suite (258 tests)
+# Run the full regression test suite (260 tests)
 ./bin/lipi test
 
 # Verify deterministic 3-stage self-hosting bootstrap

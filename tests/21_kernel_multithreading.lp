@@ -6,7 +6,7 @@
 // and singly-linked list node traversal in heap memory with strict assertions.
 // ==============================================================================
 
-include "std/mem.lp"
+include "utso/memory.lp"
 include "utso/os/thread.lp"
 
 fn mt_worker_entry shared_ptr

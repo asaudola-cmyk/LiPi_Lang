@@ -15,14 +15,14 @@ Syntax highlighting, code snippets, file icons, and Language Server (`lipilsp`) 
 
 ```bash
 make
-code --install-extension dist/lipi-language-1.0.0.vsix
+code --install-extension dist/lipi-language-1.0.1.vsix
 ```
 
 ### Manual Local Install
 
 ```bash
-mkdir -p ~/.vscode/extensions/lipi-language-1.0.0
-cp -r editors/vscode/* ~/.vscode/extensions/lipi-language-1.0.0/
+mkdir -p ~/.vscode/extensions/lipi-language-1.0.1
+cp -r editors/vscode/* ~/.vscode/extensions/lipi-language-1.0.1/
 ```
 
 Reload VS Code (`Ctrl+Shift+P` → `Developer: Reload Window`).

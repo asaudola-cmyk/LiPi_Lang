@@ -7,7 +7,7 @@
 // Ensures zero-libc HTTP routing, zero-allocation request parsing, query extraction,
 // header inspection, and RFC 7230 wire protocol serialization.
 
-include "std/web.lp"
+include "aati/lipi_web/engine.lp"
 
 fn main
     say "════════════════════════════════════════════════════════════════════════"

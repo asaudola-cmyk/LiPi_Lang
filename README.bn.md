@@ -13,8 +13,8 @@
 - **জিরো এক্সটার্নাল রানটাইম ডিপেনডেন্সি**: প্রোগ্রামগুলো কোনো ডাইনামিক লিংকার বা C রানটাইম ছাড়াই সরাসরি OS কার্নেল সিসকল ব্যবহার করে।
 - **দ্বিভাষিক সিনট্যাক্স**: একই AST-তে বাংলা কীওয়ার্ড ও সংখ্যা, ইংরেজি কীওয়ার্ড এবং `@`-ডিরেক্টিভ সিনট্যাক্স সমর্থিত।
 - **স্ট্যাটিক সেফটি (`--kavach`) ও W^X আইসোলেশন**: ঐচ্ছিক কম্পাইল-টাইম ওনারশিপ/মেমরি লিক যাচাই ও `silicon_*` হার্ডওয়্যার বাউন্ডারি চেক, পাশাপাশি Ed25519-স্বাক্ষরিত `LPKC` W^X ক্যাপসুল (`utso/core/kavach_capsule.lp`) এবং W^X ELF শেয়ার্ড-অবজেক্ট লোডার (`utso/core/ffi_sovereign.lp`)।
-- **নেটিভ ক্রিপ্টোগ্রাফি ও TLS 1.3**: সম্পূর্ণ লিপিতে লেখা SHA-256/384/512, AES-128/256-GCM, ChaCha20-Poly1305, X25519, Ed25519, NIST P-256/P-384 ECDSA, RSA-PSS/PKCS#1 v1.5, RFC 5280/6125 X.509 চেইন ভ্যালিডেশন এবং TLS 1.3 ক্লায়েন্ট/সার্ভার (`utso/crypto/`, `utso/net/`)।
-- **WAL-ভিত্তিক স্টোরেজ ও টুলচেইন**: CRC-32 `fsync` WAL-সহ SQL ইঞ্জিন (`aati/lipi_sql/`) ও থ্রেড-সেফ জব কিউ (`aati/lipi_web/`), সাথে CLI (`lipi`), Ed25519 প্যাকেজ ম্যানেজার (`aati`), ফরম্যাটার (`lipifmt`), LSP সার্ভার (`lipilsp`), ডিবাগার (`lipidbg`), ডক জেনারেটর (`lipidoc`), REPL (`lipirepl`) এবং ELF ইন্সপেক্টর (`lipi_akhara`)।
+- **নেটিভ ক্রিপ্টোগ্রাফি, TLS 1.3 ও HTTP/2**: সম্পূর্ণ লিপিতে লেখা SHA-256/384/512, AES-128/256-GCM, ChaCha20-Poly1305, X25519, Ed25519, NIST P-256/P-384 ECDSA, RSA-PSS/PKCS#1 v1.5, X.509 চেইন ভ্যালিডেশন, TLS 1.3 ক্লায়েন্ট/সার্ভার (SNI মাল্টি-ডোমেইন, P-256/P-384/Ed25519 সাইনিং, PSK সেশন রিজাম্পশন, ALPN `h2`/`http/1.1`) এবং RFC 7540/7541 HTTP/2 (`h2c` ও `h2`, HPACK Huffman ডিকোডারসহ) (`utso/crypto/`, `utso/net/`)।
+- **WAL-ভিত্তিক রিলেশনাল স্টোরেজ ও টুলচেইন**: CRC-32 `fsync` WAL-সহ SQL ইঞ্জিন (`BEGIN`/`COMMIT`/`ROLLBACK` ACID ট্রানজ্যাকশন, সেকেন্ডারি হ্যাশ ইনডেক্স, `INNER`/`LEFT` হ্যাশ জয়েন ও `GROUP BY` অ্যাগ্রিগেশন — `aati/lipi_sql/`) এবং থ্রেড-সেফ জব কিউ (`aati/lipi_web/`), সাথে CLI (`lipi`), Ed25519 প্যাকেজ ম্যানেজার (`aati`), ফরম্যাটার (`lipifmt`), LSP (`lipilsp`), ডিবাগার (`lipidbg`), ডক জেনারেটর (`lipidoc`), REPL (`lipirepl`) ও ELF ইন্সপেক্টর (`lipi_akhara`)।
 
 ## উদাহরণ
 
@@ -71,7 +71,7 @@ make
 ### টেস্ট ও ভেরিফিকেশন
 
 ```bash
-# পূর্ণ রিগ্রেশন টেস্ট স্যুট (২৫৮টি টেস্ট)
+# পূর্ণ রিগ্রেশন টেস্ট স্যুট (২৬০টি টেস্ট)
 ./bin/lipi test
 
 # ৩১টি aati/ প্যাকেজের Ed25519 সিগনেচার ও লকফাইল যাচাই
@@ -99,7 +99,7 @@ LiPi_Lang/
 ├── src/            # বুটস্ট্র্যাপ সিড, কম্পাইলার, রানটাইম, টুলকিট ও CLI টুলস
 ├── utso/           # কোর স্ট্যান্ডার্ড লাইব্রেরি (syscalls, memory, io, crypto, net, cpu, os)
 ├── aati/           # ৩১টি স্বাক্ষরিত প্যাকেজ (aati.toml ও aati.lock দ্রষ্টব্য)
-├── tests/          # ২৫৮টি রিগ্রেশন টেস্ট (tests/run_tests.lp)
+├── tests/          # ২৬০টি রিগ্রেশন টেস্ট (tests/run_tests.lp)
 ├── examples/       # রানযোগ্য উদাহরণ প্রোগ্রাম
 ├── benchmarks/     # বেঞ্চমার্ক হারনেস ও ক্রস-ল্যাঙ্গুয়েজ রেফারেন্স
 ├── editors/vscode/ # VS Code এক্সটেনশন (TextMate গ্রামার, স্নিপেট, LSP ক্লায়েন্ট)
@@ -129,7 +129,7 @@ LiPi_Lang/
 
 ```bash
 make
-code --install-extension dist/lipi-language-1.0.0.vsix
+code --install-extension dist/lipi-language-1.0.1.vsix
 ```
 
 ম্যানুয়াল ইনস্টলেশনের জন্য [editors/vscode/README.md](editors/vscode/README.md) দেখুন।

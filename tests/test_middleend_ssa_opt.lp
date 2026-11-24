@@ -390,7 +390,7 @@ fn main
     basic_block_append_inst(peep_entry, ir_build_ret(4, v_mul8))
 
     peep_hits = pass_peephole_run(f_peep)
-    test_assert(peep_hits == 2, "2 algebraic identities simplified")
+    test_assert(peep_hits == 3, "3 peephole simplifications applied (2 identities + 1 strength reduction)")
     test_assert(i_mul8.op == OP_SHL, "Multiplication reduced to shift left (OP_SHL)")
 
     // ──────────────────────────────────────────────────────────────────────────

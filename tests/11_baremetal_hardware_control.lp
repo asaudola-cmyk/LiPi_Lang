@@ -7,7 +7,7 @@
 // with rigorous, non-trivial assertions on hardware bitmasks and state transitions.
 // ==============================================================================
 
-include "std/mem.lp"
+include "utso/memory.lp"
 
 fn test_assert actual expected test_name
     if actual != expected

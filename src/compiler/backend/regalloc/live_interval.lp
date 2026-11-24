@@ -134,7 +134,11 @@ fn live_interval_mark_calls intervals call_positions
         c = 0
         while c < call_count
             cp = call_positions[c]
-            if cp >= iv.start_pos and cp <= iv.end_pos
+            // WHY: Strictly live ACROSS a call means defined strictly before the call
+            // (start_pos < cp) and last used strictly after the call (end_pos > cp).
+            // Values produced by the call itself (start_pos == cp) or consumed solely as
+            // call arguments (end_pos == cp) are not clobbered across the call boundary.
+            if cp > iv.start_pos and cp < iv.end_pos
                 spans = 1
             c = c + 1
         iv.spans_call = spans

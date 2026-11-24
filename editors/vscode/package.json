@@ -2,7 +2,7 @@
   "name": "lipi-language",
   "displayName": "Lipi Programming Language",
   "description": "Language support for Lipi (bilingual English and Bengali native systems language)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "lipi-lang",
   "author": {
     "name": "Lipi Language Project",

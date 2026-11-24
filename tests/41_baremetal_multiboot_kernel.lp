@@ -11,7 +11,7 @@
 // 5. PS/2 Keyboard Controller Driver (Scan Code Set 1 translation & break code filtering).
 // 6. Baremetal VGA Kernel Shell commands (help, info, mem, calc, clear, echo, reboot, exit).
 
-include "std/kernel.lp"
+include "utso/os/kernel_multiboot.lp"
 
 fn cpu_detect
     // WHY: Verify CPU architecture and essential 64-bit Long Mode extensions.

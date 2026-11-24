@@ -11,8 +11,8 @@
 //   4. Poly1305 key clamping and Horner polynomial MAC computation.
 // ==============================================================================
 
-include "std/mem.lp"
-include "std/crypto.lp"
+include "utso/memory.lp"
+include "utso/crypto.lp"
 
 fn test_assert_int actual expected test_name
     if actual != expected

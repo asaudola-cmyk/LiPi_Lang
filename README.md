@@ -13,8 +13,8 @@ Lipi is a self-hosted, statically compiled bilingual (Bengali and English) syste
 - **Zero external runtime dependencies**: Programs invoke OS kernel syscalls directly (`syscall` on Linux x86_64) with no dynamic loader or C runtime dependency.
 - **Bilingual syntax**: Supports Bengali keywords and numerals, English keywords, and `@`-directive syntax within a single unified AST.
 - **Static safety (`--kavach`) & W^X isolation**: Optional compile-time ownership/leak checking and hardware-boundary enforcement (`silicon_*` prefix), paired with signed `LPKC` W^X code capsules (`utso/core/kavach_capsule.lp`) and W^X ELF shared-object loading (`utso/core/ffi_sovereign.lp`).
-- **Native cryptography & TLS 1.3**: Pure-Lipi implementations of SHA-256/384/512, AES-128/256-GCM, ChaCha20-Poly1305, X25519, Ed25519, NIST P-256/P-384 ECDSA, RSA-PSS/PKCS#1 v1.5, RFC 5280/6125 X.509 chain validation, and TLS 1.3 client/server stacks (`utso/crypto/`, `utso/net/`).
-- **Durable storage & developer toolchain**: CRC-32 `fsync` WAL-backed SQL engine (`aati/lipi_sql/`) and thread-safe job queue (`aati/lipi_web/`), alongside native CLI (`lipi`), Ed25519 package manager (`aati`), formatter (`lipifmt`), LSP server (`lipilsp`), debugger (`lipidbg`), doc generator (`lipidoc`), REPL (`lipirepl`), and ELF inspector (`lipi_akhara`).
+- **Native cryptography, TLS 1.3 & HTTP/2**: Pure-Lipi implementations of SHA-256/384/512, AES-128/256-GCM, ChaCha20-Poly1305, X25519, Ed25519, NIST P-256/P-384 ECDSA, RSA-PSS/PKCS#1 v1.5, RFC 5280/6125 X.509 validation, TLS 1.3 client/server (SNI multi-domain, P-256/P-384/Ed25519 signing, PSK session resumption, ALPN `h2`/`http/1.1`), and RFC 7540/7541 HTTP/2 (`h2c` & `h2` with HPACK Huffman decoding) (`utso/crypto/`, `utso/net/`).
+- **Durable relational storage & developer toolchain**: CRC-32 `fsync` WAL-backed SQL engine with `BEGIN`/`COMMIT`/`ROLLBACK` ACID transactions, secondary hash indexes, `INNER`/`LEFT` hash joins, and `GROUP BY` aggregations (`aati/lipi_sql/`), thread-safe WAL job queue (`aati/lipi_web/`), plus native CLI (`lipi`), Ed25519 package manager (`aati`), formatter (`lipifmt`), LSP (`lipilsp`), debugger (`lipidbg`), doc generator (`lipidoc`), REPL (`lipirepl`), and ELF inspector (`lipi_akhara`).
 
 ## Quick Example
 
@@ -73,7 +73,7 @@ make
 ### Run Tests
 
 ```bash
-# Run the full regression test suite (258 tests)
+# Run the full regression test suite (260 tests)
 ./bin/lipi test
 
 # Verify Ed25519 signatures and lockfile across all 31 aati/ packages
@@ -123,7 +123,7 @@ LiPi_Lang/
 │   └── tools/          # Native CLI binaries (lipi, aati, lipilsp, lipifmt, lipidbg, ...)
 ├── utso/               # Core standard library (syscalls, memory, io, crypto, net, cpu, os)
 ├── aati/               # 31 signed ecosystem packages (see aati.toml and aati.lock)
-├── tests/              # Regression test suite (258 tests registered in tests/run_tests.lp)
+├── tests/              # Regression test suite (260 tests registered in tests/run_tests.lp)
 ├── examples/           # Runnable example programs
 ├── benchmarks/         # Benchmark harnesses and cross-language reference implementations
 ├── editors/vscode/     # VS Code extension (TextMate grammar, snippets, LSP client)
@@ -162,11 +162,11 @@ See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for methodology details and cross-l
 
 ## Editor Support
 
-The VS Code extension source lives directly in [editors/vscode/](editors/vscode/). Building with `make` packages `dist/lipi-language-1.0.0.vsix`:
+The VS Code extension source lives directly in [editors/vscode/](editors/vscode/). Building with `make` packages `dist/lipi-language-1.0.1.vsix`:
 
 ```bash
 make
-code --install-extension dist/lipi-language-1.0.0.vsix
+code --install-extension dist/lipi-language-1.0.1.vsix
 ```
 
 See [editors/vscode/README.md](editors/vscode/README.md) for manual installation instructions.

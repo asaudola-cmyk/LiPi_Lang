@@ -8,7 +8,7 @@
 
 set -e
 
-LIPI_VERSION="1.0.0"
+LIPI_VERSION="1.0.1"
 LIPI_REPO="https://github.com/asaudola-cmyk/LiPi_Lang.git"
 LIPI_INSTALL_DIR="${LIPI_INSTALL_DIR:-$HOME/.lipi}"
 LIPI_BIN_DIR="${LIPI_BIN_DIR:-$HOME/.local/bin}"
@@ -208,16 +208,16 @@ create_command() {
         [ -x "bin/lipc_bin" ] || cp -f bin/lipc bin/lipc_bin 2>/dev/null || true
         [ -x "bin/lipc_micro" ] || cp -f bin/lipc bin/lipc_micro 2>/dev/null || true
 
-        # 2. Ensure valid dist/lipi-language-1.0.0.vsix package exists if editors/vscode present
-        if [ -d "editors/vscode" ] && [ ! -f "dist/lipi-language-1.0.0.vsix" ] && command -v zip >/dev/null 2>&1; then
+        # 2. Ensure valid dist/lipi-language-1.0.1.vsix package exists if editors/vscode present
+        if [ -d "editors/vscode" ] && [ ! -f "dist/lipi-language-1.0.1.vsix" ] && command -v zip >/dev/null 2>&1; then
             VSIX_STAGE="/tmp/lipi_vsix_stage_$$"
             rm -rf "$VSIX_STAGE"
             mkdir -p "$VSIX_STAGE/extension" dist/vscode
             cp -a editors/vscode/. "$VSIX_STAGE/extension/" 2>/dev/null || true
             printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json"/><Default Extension=".vsixmanifest" ContentType="text/xml"/><Default Extension=".js" ContentType="application/javascript"/><Default Extension=".ts" ContentType="text/plain"/><Default Extension=".md" ContentType="text/markdown"/><Default Extension=".png" ContentType="image/png"/><Default Extension=".svg" ContentType="image/svg+xml"/><Default Extension=".woff" ContentType="font/woff"/></Types>' > "$VSIX_STAGE/[Content_Types].xml"
-            printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"><Metadata><Identity Language="en-US" Id="lipi-language" Version="1.0.0" Publisher="lipi-lang"/><DisplayName>Lipi Sovereign Programming Language</DisplayName><Description xml:space="preserve">Official Language Support for Lipi (Bilingual English &amp; Bengali, Direct Silicon Compiler)</Description><Tags>lipi,bengali,compiler,sovereign</Tags><Categories>Programming Languages,Snippets</Categories><Icon>extension/icons/icon.png</Icon></Metadata><Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true"/></Assets></PackageManifest>' > "$VSIX_STAGE/extension.vsixmanifest"
-            ( cd "$VSIX_STAGE" && zip -rq "$LIPI_INSTALL_DIR/dist/lipi-language-1.0.0.vsix" '[Content_Types].xml' extension.vsixmanifest extension >/dev/null 2>&1 || true )
-            cp -f dist/lipi-language-1.0.0.vsix dist/vscode/lipi-language-1.0.0.vsix 2>/dev/null || true
+            printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"><Metadata><Identity Language="en-US" Id="lipi-language" Version="1.0.1" Publisher="lipi-lang"/><DisplayName>Lipi Programming Language</DisplayName><Description xml:space="preserve">Language support for Lipi (bilingual English &amp; Bengali native systems language)</Description><Tags>lipi,bengali,compiler</Tags><Categories>Programming Languages,Snippets</Categories><Icon>extension/icons/icon.png</Icon></Metadata><Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true"/></Assets></PackageManifest>' > "$VSIX_STAGE/extension.vsixmanifest"
+            ( cd "$VSIX_STAGE" && zip -rq "$LIPI_INSTALL_DIR/dist/lipi-language-1.0.1.vsix" '[Content_Types].xml' extension.vsixmanifest extension >/dev/null 2>&1 || true )
+            cp -f dist/lipi-language-1.0.1.vsix dist/vscode/lipi-language-1.0.1.vsix 2>/dev/null || true
             rm -rf "$VSIX_STAGE"
         fi
 

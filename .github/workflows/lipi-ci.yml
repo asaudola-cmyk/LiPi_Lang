@@ -1,11 +1,9 @@
-name: Lipi Sovereign Native CI
+name: Lipi CI
 
-# WHY: Lipi is 100% Sovereign (Zero Python, Zero Libc, Zero GCC).
-# CI verifies standalone Stage-1->2->3 Static-PIE deterministic bootstrap, W^X (0 RWE)
-# audit across all bin/* tools, 258 regression tests, 31/31 aati verify & aati.lock,
-# full utso/aati/examples compile sweeps, valid OPC .vsix packaging, --kavach toolchain dogfooding,
-# Node V8 WebAssembly execution, Shared .so (ctypes) + -g DWARF,
-# Mach-O LC_CODE_SIGNATURE validation, and native Windows PE32+ (.exe) & macOS Mach-O validation.
+# Verifies 3-stage Static-PIE deterministic bootstrap, W^X (0 RWE) audit across bin/*,
+# 260 regression tests, 31/31 aati verify & aati.lock, utso/aati/examples compile sweeps,
+# valid OPC .vsix packaging, --kavach toolchain dogfooding, Node V8 WASM execution,
+# Shared .so + DWARF v4 (-g), Windows PE32+ execution, and macOS Mach-O verification.
 
 on:
   push:
@@ -18,15 +16,15 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Lipi Static-PIE Bootstrap, W^X Audit & 258-Test Suite (Ubuntu)"
+    name: "Static-PIE Bootstrap, W^X Audit & 260-Test Suite (Ubuntu)"
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js v20 for WASM Live Execution
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -52,7 +50,7 @@ jobs:
             test "$rwe" = "0"
           done
 
-      - name: Run Full 258-Test Sovereign Regression Suite (0% Shell)
+      - name: Run Full 260-Test Regression Suite
         run: |
           ./bin/lipi test
 
@@ -148,7 +146,7 @@ jobs:
           rm -f /tmp/win_smoke.lp
 
       - name: Upload Cross-Compiled Windows & macOS Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cross-platform-smoke-bins
           path: /tmp/cross_artifacts/
@@ -160,7 +158,7 @@ jobs:
 
     steps:
       - name: Download Cross-Compiled PE32+ Executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cross-platform-smoke-bins
           path: artifacts
@@ -177,7 +175,7 @@ jobs:
 
     steps:
       - name: Download Cross-Compiled Mach-O Executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cross-platform-smoke-bins
           path: artifacts
@@ -189,41 +187,41 @@ jobs:
           otool -l artifacts/lipi_mac_smoke | grep -E "LC_SEGMENT_64|__LINKEDIT|LC_CODE_SIGNATURE|LC_MAIN"
 
   zero-dependency-audit:
-    name: "Zero-Dependency Sovereignty Audit"
+    name: "Zero-Dependency Audit"
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Audit for Python Elimination Across Repository
         run: |
           echo "Auditing repository directories (src, utso, aati, tests, bin, benchmarks, scripts) for Python files..."
           py_files=$(find src utso aati tests bin benchmarks scripts -name "*.py" 2>/dev/null || true)
           if [ -n "$py_files" ]; then
-            echo "❌ Sovereignty breach: Found Python files in repository:"
+            echo "Found Python files in repository:"
             echo "$py_files"
             exit 1
           fi
-          echo "✔ 100% Pure: Zero Python files in src, utso, aati, tests, bin, benchmarks, scripts!"
+          echo "Zero Python files in src, utso, aati, tests, bin, benchmarks, scripts"
 
       - name: Audit for Bytecode Artifacts
         run: |
           pyc_files=$(find . -name "*.pyc" 2>/dev/null || true)
           if [ -n "$pyc_files" ]; then
-            echo "❌ Found untracked or stale bytecode:"
+            echo "Found untracked or stale bytecode:"
             echo "$pyc_files"
             exit 1
           fi
-          echo "✔ 100% Pure: Zero .pyc bytecode files!"
+          echo "Zero .pyc bytecode files"
 
   installer-test:
-    name: "Sovereign Installer Test"
+    name: "Installer Test"
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Test install.sh bash & dash POSIX syntax
         run: |
