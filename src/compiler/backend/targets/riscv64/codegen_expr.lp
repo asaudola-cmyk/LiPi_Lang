@@ -214,7 +214,7 @@ fn riscv64_synth_expr_primary s toks pos_box
                     riscv64_pop_reg(s, 10) // status code in a0
                 else
                     riscv64_emit_addi(s, 10, 0, 0)
-                riscv64_emit_li(s, 17, 93) // SYS_exit (93)
+                riscv64_emit_li(s, 17, 94) // SYS_exit_group (94)
                 riscv64_emit_ecall(s)
                 return 0
 

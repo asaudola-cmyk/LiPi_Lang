@@ -74,8 +74,8 @@ fn arm64_synth_compile_statement s toks pos_box
         if s.a64_in_function == 1
             arm64_emit_epilogue(s)
         else
-            // Top-level return: exit with code in X0 via Linux SYS_exit (93)
-            arm64_emit_movz_x(s, 8, 93, 0)
+            // Top-level return: exit whole process cleanly with code in X0 via Linux SYS_exit_group (94)
+            arm64_emit_movz_x(s, 8, 94, 0)
             arm64_emit_svc(s, 0)
         return 0
 

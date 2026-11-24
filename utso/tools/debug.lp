@@ -15,7 +15,7 @@ include "utso/memory.lp"
 fn assert_val শর্ত error_message
     if শর্ত == 0
         say "❌ [দাবি ব্যর্থ / ASSERTION FAILED]: " + error_message
-        syscall(60, 1, 0, 0, 0, 0, 0) // SYS_exit 1
+        syscall(231, 1, 0, 0, 0, 0, 0) // SYS_exit_group 1
 
 fn দাবি শর্ত error_message
     assert_val(শর্ত, error_message)

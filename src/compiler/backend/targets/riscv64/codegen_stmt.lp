@@ -74,8 +74,8 @@ fn riscv64_synth_compile_statement s toks pos_box
         if s.rv_in_function == 1
             riscv64_emit_epilogue(s)
         else
-            // Top-level return: exit with code in a0 via Linux SYS_exit (93)
-            riscv64_emit_li(s, 17, 93)
+            // Top-level return: exit whole process cleanly with code in a0 via Linux SYS_exit_group (94)
+            riscv64_emit_li(s, 17, 94)
             riscv64_emit_ecall(s)
         return 0
 

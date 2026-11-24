@@ -197,8 +197,8 @@ fn arm64_synth_compile_program tokens
     // 4. Top-level exit epilogue
     if has_main == 0 and s.a64_called_main == 0
         arm64_emit_movz_x(s, 0, 0, 0) // exit code 0
-    // Exit via Linux sys_exit (syscall 93 on AArch64) with status code in X0
-    arm64_emit_movz_x(s, 8, 93, 0)
+    // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on AArch64) with status code in X0
+    arm64_emit_movz_x(s, 8, 94, 0)
     arm64_emit_svc(s, 0)
 
     // 5. Emit print_int helper if required

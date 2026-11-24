@@ -1211,13 +1211,15 @@ fn x86_synth_expr_primary s toks pos_box
                 s.synth_last_expr_type = "int"
             // ── Intrinsic 7: exit / বিদায় ─────────────────────────────────────
             elif var_name == "exit" or var_name == "বিদায়"
+                // WHY: Linux SYS_exit_group (231) terminates the entire process & all OS threads cleanly
+                // (never leaves orphaned worker threads hanging like single-thread SYS_exit 60).
                 if arg_count >= 1
                     x86_synth_emit_byte(s, 95) // pop rdi (status code)
                 else
                     x86_synth_emit_byte(s, 49) // xor edi, edi
                     x86_synth_emit_byte(s, 255)
                 x86_synth_emit_byte(s, 184)
-                x86_synth_emit_u32(s, 60)  // mov eax, 60
+                x86_synth_emit_u32(s, 231)  // mov eax, 231 (SYS_exit_group)
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 5)   // syscall
                 s.synth_last_expr_type = ""

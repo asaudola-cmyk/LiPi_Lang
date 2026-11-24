@@ -459,6 +459,8 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
   stub = pe_emit_jmp_to(stub, 1280)
   stub = pe_concat(stub, [131, 248, 60, 117, 7, 137, 248])
   stub = pe_emit_jmp_to(stub, 14)
+  stub = pe_concat(stub, [61, 231, 0, 0, 0, 117, 7, 137, 248])
+  stub = pe_emit_jmp_to(stub, 14)
   stub = pe_concat(stub, [61, 228, 0, 0, 0, 117, 5])
   stub = pe_emit_jmp_to(stub, 1024)
   stub = pe_concat(stub, [72, 199, 192, 218, 255, 255, 255, 195])
@@ -612,6 +614,14 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
         list_set(out, idx + 0, 232)
         list_set(out, idx + 1, w9b[0]) list_set(out, idx + 2, w9b[1]) list_set(out, idx + 3, w9b[2]) list_set(out, idx + 4, w9b[3])
         list_set(out, idx + 5, 144) list_set(out, idx + 6, 144) list_set(out, idx + 7, 144) list_set(out, idx + 8, 144)
+      @elif nr9 == 60 || nr9 == 231
+        // SYS_exit / SYS_exit_group -> mov eax, edi; jmp _start+14 (ExitProcess); nop; nop
+        jmp9_rel = 14 - (stub_sz + idx + 7)
+        j9b = pe_pack_u32(jmp9_rel)
+        list_set(out, idx + 0, 137) list_set(out, idx + 1, 248)
+        list_set(out, idx + 2, 233)
+        list_set(out, idx + 3, j9b[0]) list_set(out, idx + 4, j9b[1]) list_set(out, idx + 5, j9b[2]) list_set(out, idx + 6, j9b[3])
+        list_set(out, idx + 7, 144) list_set(out, idx + 8, 144)
       @else
         // mov rax, -38 (-ENOSYS); nop; nop
         list_set(out, idx + 0, 72) list_set(out, idx + 1, 199) list_set(out, idx + 2, 192)
@@ -637,8 +647,8 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
         list_set(out, idx + 0, 232)
         list_set(out, idx + 1, w7b[0]) list_set(out, idx + 2, w7b[1]) list_set(out, idx + 3, w7b[2]) list_set(out, idx + 4, w7b[3])
         list_set(out, idx + 5, 144) list_set(out, idx + 6, 144)
-      @elif nr7 == 60
-        // SYS_exit -> mov eax, edi; jmp _start+14 (ExitProcess); also NOP trailing hlt (0xF4)
+      @elif nr7 == 60 || nr7 == 231
+        // SYS_exit / SYS_exit_group -> mov eax, edi; jmp _start+14 (ExitProcess); also NOP trailing hlt (0xF4)
         jmp_rel = 14 - (stub_sz + idx + 7)
         jb = pe_pack_u32(jmp_rel)
         list_set(out, idx + 0, 137) list_set(out, idx + 1, 248)

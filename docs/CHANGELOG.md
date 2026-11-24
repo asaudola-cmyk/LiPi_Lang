@@ -59,7 +59,8 @@ All notable changes to the Lipi programming language are documented in this file
 ### CI, Hygiene & Testing
 - Migrated remaining legacy `include "std/..."` tests to canonical `utso/` and `aati/` modules.
 - Upgraded `.github/workflows/lipi-ci.yml` to Node 24 native Actions (`checkout@v7`, `setup-node@v7`, `upload-artifact@v7`, `download-artifact@v8`).
-- Added `tests/test_v101_compiler_opt_regalloc.lp`, `tests/test_v101_deep_upgrades_e2e.lp`, `tests/test_core_language_and_memory.lp`, `tests/test_core_pure_kernel_media.lp`, `tests/test_wave1_abi_buf_closures_modules.lp`, `tests/test_wave3_os_pty_futex_waldb.lp`, and `tests/test_wave4_net_sse_dns_epoll_ws.lp`, expanding the regression suite to 265 tests (`265/265` passing) and 450/450 clean ecosystem compile sweeps (`utso/` + `aati/` + `examples/`).
+- Upgraded all process-level termination paths across every native target, stdlib module, and CLI tool to thread-group-safe `SYS_exit_group` (Linux x86_64 `231`, ARM64 & RISC-V `94`, standalone `arm64_emitter.lp`, PE32+ `ExitProcess` rewriter + `__win64_dyn_syscall`, macOS x86_64/ARM64 Mach-O Darwin BSD `SYS_exit` translator, RISC-V VM emulator, `_start` stubs, `exit()`, `process_exit()`, `panic()`, `lipi_exit()`, unhandled `throw`, `__alloc` OOM panic, and all native CLI tools), while preserving single-thread `SYS_exit` (`60`) exclusively for `thread_exit()`, raw `sys_exit()` wrappers, and spawned thread trampolines so detached OS threads never hang process exit.
+- Added `tests/test_v101_compiler_opt_regalloc.lp`, `tests/test_v101_deep_upgrades_e2e.lp`, `tests/test_core_language_and_memory.lp`, `tests/test_core_pure_kernel_media.lp`, `tests/test_wave1_abi_buf_closures_modules.lp`, `tests/test_wave3_os_pty_futex_waldb.lp`, `tests/test_wave4_net_sse_dns_epoll_ws.lp`, and `tests/test_exit_group_multithreaded.lp`, expanding the regression suite to 266 tests (`266/266` passing) and clean ecosystem compile sweeps (`utso/` + `aati/` + `examples/`).
 
 ---
 

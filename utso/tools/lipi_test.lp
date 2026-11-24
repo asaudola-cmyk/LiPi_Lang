@@ -195,7 +195,7 @@ import "utso/core/error"
     @else
       test_arg()
     @end
-    sys_exit(0)
+    sys_exit_group(0)
   @end
 
   @if pid < 0
@@ -300,7 +300,7 @@ import "utso/core/error"
     compiler_args = ["./bin/lipc", test_path, "-o", tmp_bin, 0]
     sys_execve("./bin/lipc", compiler_args, 0)
     
-    sys_exit(127)
+    sys_exit_group(127)
   @end
 
   @if pid < 0
@@ -732,7 +732,7 @@ import "utso/core/error"
 @end
 
 @fn test_process_isolation_exit_nonzero_unit()
-  sys_exit(42)
+  sys_exit_group(42)
 @end
 
 @fn test_process_isolation_signal_crash_unit()

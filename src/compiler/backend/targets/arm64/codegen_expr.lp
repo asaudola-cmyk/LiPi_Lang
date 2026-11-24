@@ -228,7 +228,7 @@ fn arm64_synth_expr_primary s toks pos_box
                     arm64_pop_reg(s, 0) // status code
                 else
                     arm64_emit_movz_x(s, 0, 0, 0)
-                arm64_emit_movz_x(s, 8, 93, 0) // SYS_exit (93)
+                arm64_emit_movz_x(s, 8, 94, 0) // SYS_exit_group (94)
                 arm64_emit_svc(s, 0)
                 return 0
 

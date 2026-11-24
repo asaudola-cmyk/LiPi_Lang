@@ -488,7 +488,7 @@ fn riscv64_vm_step vm
             a1 = riscv64_reg_read(vm, 11)
             a2 = riscv64_reg_read(vm, 12)
 
-            if sys_num == 93 // sys_exit
+            if sys_num == 93 or sys_num == 94 // sys_exit / sys_exit_group
                 vm.rv_is_halted = 1
                 vm.rv_exit_code = a0
                 return 0

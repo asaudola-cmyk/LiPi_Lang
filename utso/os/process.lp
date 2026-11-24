@@ -158,7 +158,8 @@ import "utso/os/env"
 @end
 
 @fn process_exit(code)
-  sys_exit(code)
+  // WHY: Uses Linux SYS_exit_group (231) so all threads in the process terminate cleanly together.
+  sys_exit_group(code)
 @end
 
 @fn _proc_build_argv(command, args)

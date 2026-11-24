@@ -752,7 +752,7 @@ fn arm64_emit_strings ctx
 
 // ── Linux AArch64 Syscall Convention Helpers ─────────────────────────────────
 // WHY: Implements the Linux AArch64 ABI calling convention:
-//      - X8: Syscall number (e.g. 64 for write, 93 for exit)
+//      - X8: Syscall number (e.g. 64 for write, 94 for exit_group)
 //      - X0: arg1
 //      - X1: arg2
 //      - X2: arg3
@@ -763,7 +763,7 @@ fn arm64_emit_strings ctx
 
 fn arm64_emit_sys_exit ctx exit_code
     arm64_emit_mov_imm64(ctx, ARM64_REG_X0, exit_code)
-    arm64_emit_movz(ctx, ARM64_REG_X8, ARM64_SYS_EXIT, 0)
+    arm64_emit_movz(ctx, ARM64_REG_X8, ARM64_SYS_EXIT_GROUP, 0)
     arm64_emit_svc(ctx, 0)
 
 fn arm64_emit_sys_write ctx fd buf_label count
@@ -1592,10 +1592,10 @@ fn arm64_emit_runtime_stubs ctx
     arm64_emit_ret(ctx)                                 // Return (result in X0)
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 6. lipi_fn_exit: Terminate process with exit code in X0
+    // 6. lipi_fn_exit: Terminate entire process group with exit code in X0
     // ──────────────────────────────────────────────────────────────────────────
     arm64_label_define(ctx, "lipi_fn_exit")
-    arm64_emit_movz(ctx, ARM64_REG_X8, ARM64_SYS_EXIT, 0) // sys_exit = 93
+    arm64_emit_movz(ctx, ARM64_REG_X8, ARM64_SYS_EXIT_GROUP, 0) // sys_exit_group = 94
     arm64_emit_svc(ctx, 0)
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -3417,7 +3417,7 @@ fn arm64_compile_source_to_elf in_path out_path
     arm64_emit(ctx, 4177526816) // str x0, [x1] (0xF9000020)
     arm64_emit_bl_label(ctx, "_lipi_init_heap")
     arm64_emit_bl_label(ctx, "lipi_main")
-    arm64_emit_movz(ctx, ARM64_REG_X8, ARM64_SYS_EXIT, 0) // X8 = 93 (sys_exit)
+    arm64_emit_movz(ctx, ARM64_REG_X8, ARM64_SYS_EXIT_GROUP, 0) // X8 = 94 (sys_exit_group)
     arm64_emit_svc(ctx, 0)
 
     // Step 2: Emit baremetal runtime syscall stubs

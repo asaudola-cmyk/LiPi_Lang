@@ -77,7 +77,7 @@ fn proc_spawn cmd_path args_list
         // Child process: execute binary via Linux SYS_execve (syscall 59)
         syscall(59, cmd_path, argv, envp, 0, 0, 0)
         // If execve returns, execution failed (binary missing or not executable)
-        syscall(60, 127, 0, 0, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
 
     // Parent process: wait for child termination via Linux SYS_wait4 (syscall 61)
     syscall(61, pid, status_buf, 0, 0, 0, 0)
@@ -147,7 +147,7 @@ fn proc_spawn_capture cmd_path args_list
         syscall(59, cmd_path, argv, envp, 0, 0, 0)
 
         // Exit immediately if execve fails
-        syscall(60, 127, 0, 0, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
 
     // ── Parent Process ──
     // Close unused write end in parent so read will hit EOF when child closes stdout

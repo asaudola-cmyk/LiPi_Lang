@@ -363,11 +363,11 @@ fn x86_synth_emit__lipi_mem_byte_write s
     return off
 
 fn x86_synth_emit__lipi_sys_exit s
-    // WHY: Native Linux sys_exit (syscall nr 60) terminates calling process with code in %rdi
+    // WHY: Native Linux sys_exit_group (syscall nr 231) terminates the entire process & all threads cleanly with code in %rdi
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_sys_exit", off)
-    // mov eax, 60; syscall; hlt; ret
-    x86_synth_emit_bytes(s, [184, 60, 0, 0, 0, 15, 5, 244, 195])
+    // mov eax, 231; syscall; hlt; ret
+    x86_synth_emit_bytes(s, [184, 231, 0, 0, 0, 15, 5, 244, 195])
     return off
 
 fn x86_synth_emit__lipi_sys_mmap s
@@ -608,7 +608,7 @@ fn x86_synth_emit__lipi_exc_throw s
         72, 137, 248,
         65, 255, 227,
         191, 1, 0, 0, 0,
-        184, 60, 0, 0, 0,
+        184, 231, 0, 0, 0,
         15, 5
     ])
     return off

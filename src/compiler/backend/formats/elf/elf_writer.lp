@@ -73,7 +73,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   //   [rsp]     = argc
   //   [rsp + 8] = argv[0]
   //   ...
-  // The _start stub extracts argc/argv, calls user main, and exits via sys_exit (syscall 60).
+  // The _start stub extracts argc/argv, calls user main, and exits via sys_exit_group (syscall 231).
   //
   // 0x00: 31 ED                      (xor ebp, ebp) -> clear frame pointer per SysV ABI
   // 0x02: 48 8B 04 24                (mov rax, [rsp] -> argc)
@@ -82,7 +82,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   // 0x12: 48 89 05 1F 00 00 00       (mov [rip + 0x1F], rax -> g_argv at +0x38)
   // 0x19: E8 xx xx xx xx             (call main)
   // 0x1E: 48 89 C7                   (mov rdi, rax -> exit code)
-  // 0x21: B8 3C 00 00 00             (mov eax, 60 -> __NR_exit)
+  // 0x21: B8 E7 00 00 00             (mov eax, 231 -> __NR_exit_group)
   // 0x26: 0F 05                      (syscall)
   // 0x28: F4                         (hlt)
   // 0x29..0x2F: NOP padding to 48 bytes (0x30)
@@ -103,7 +103,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
     (rel32 / 65536) % 256,
     (rel32 / 16777216) % 256,    // 4-byte displacement
     72, 137, 199,                // mov rdi, rax (3 bytes)
-    184, 60, 0, 0, 0,            // mov eax, 60 (5 bytes)
+    184, 231, 0, 0, 0,           // mov eax, 231 (SYS_exit_group, 5 bytes)
     15, 5,                       // syscall (2 bytes)
     244                          // hlt (1 byte)
   ]
@@ -301,7 +301,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 @fn elf_build_start_stub_wx(main_entry_offset, rw_vaddr)
   // WHY: Strict W^X SysV AMD64 _start bootstrap stub (exact 64 bytes, ZERO writable data in .text).
   // Stores [rsp]=argc, [rsp+8]=argv, and rsp=g_stack_bottom into RW PT_LOAD[1] at rw_vaddr+0/8/112,
-  // calls user entry point at stub+64+main_entry_offset, and exits cleanly via Linux SYS_exit (60).
+  // calls user entry point at stub+64+main_entry_offset, and exits whole thread group via Linux SYS_exit_group (231).
   rel32 = 27 + main_entry_offset
   stub = [49, 237, 72, 186]
   elf_emit_u64_le(stub, rw_vaddr)
@@ -313,7 +313,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   push(stub, 232)
   elf_emit_u32_le(stub, rel32)
   push(stub, 72) push(stub, 137) push(stub, 199)
-  push(stub, 184) push(stub, 60) push(stub, 0) push(stub, 0) push(stub, 0)
+  push(stub, 184) push(stub, 231) push(stub, 0) push(stub, 0) push(stub, 0)
   push(stub, 15) push(stub, 5)
   push(stub, 244)
   @while stub.len() < 64
@@ -325,7 +325,8 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 @fn elf_build_start_stub_pie(main_entry_offset, rw_file_offset)
   // WHY: Strict W^X + ASLR Static-PIE _start bootstrap stub (exact 64 bytes at file offset 240).
   // Uses RIP-relative `lea rdx, [rip + disp32]` (disp32 = rw_file_offset - 249) so kernel ASLR
-  // can slide the base address arbitrarily while capturing argc, argv, and g_stack_bottom (+112).
+  // can slide the base address arbitrarily while capturing argc, argv, and g_stack_bottom (+112),
+  // and exits whole thread group cleanly via Linux SYS_exit_group (231).
   disp32 = rw_file_offset - 249
   rel32 = 27 + main_entry_offset
   stub = [49, 237, 72, 141, 21]
@@ -339,7 +340,7 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   push(stub, 232)
   elf_emit_u32_le(stub, rel32)
   push(stub, 72) push(stub, 137) push(stub, 199)
-  push(stub, 184) push(stub, 60) push(stub, 0) push(stub, 0) push(stub, 0)
+  push(stub, 184) push(stub, 231) push(stub, 0) push(stub, 0) push(stub, 0)
   push(stub, 15) push(stub, 5)
   push(stub, 244)
   @while stub.len() < 64

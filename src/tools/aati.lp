@@ -1372,7 +1372,7 @@ fn pkg_spawn_exec_list cmd_path args_list
 
     if pid == 0
         syscall(59, cmd_path, argv, env, 0, 0, 0)
-        syscall(60, 127, 0, 0, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
 
     syscall(61, pid, st, 0, 0, 0, 0)
     raw_status = mem_word_read(st, 0)
@@ -2773,12 +2773,12 @@ fn main
         target = "release"
         if argc >= 3 target = get(args, 2)
         b_res = cmd_build(target)
-        if b_res != 0 syscall(60, b_res, 0, 0, 0, 0, 0)
+        if b_res != 0 syscall(231, b_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "test" or cmd == "পরীক্ষা"
         t_res = cmd_test()
-        if t_res != 0 syscall(60, t_res, 0, 0, 0, 0, 0)
+        if t_res != 0 syscall(231, t_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "clean" or cmd == "পরিষ্কার"
@@ -2789,34 +2789,34 @@ fn main
         pkg_target = "."
         if argc >= 3 pkg_target = get(args, 2)
         res = cmd_sign(pkg_target)
-        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        if res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "verify" or cmd == "যাচাই"
         pkg_target = "."
         if argc >= 3 pkg_target = get(args, 2)
         res = cmd_verify(pkg_target)
-        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        if res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "lock" or cmd == "লক"
         store_target = "aati"
         if argc >= 3 store_target = get(args, 2)
         res = cmd_lock(store_target)
-        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        if res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "verify-lock" or cmd == "যাচাই-লক"
         l_target = "aati.lock"
         if argc >= 3 l_target = get(args, 2)
         res = cmd_verify_lock(l_target)
-        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        if res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "hash" or cmd == "হ্যাশ"
         if argc < 3
             say "Usage: aati hash <file_path>"
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            syscall(231, 1, 0, 0, 0, 0, 0)
             return 1
         cmd_hash(get(args, 2))
         return 0
@@ -2828,26 +2828,26 @@ fn main
     if cmd == "install" or cmd == "ইনস্টল" or cmd == "tolo" or cmd == "তোলো"
         if argc < 3
             say "Usage: aati install <package_name> (or 'aati tolo <package_name>')"
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            syscall(231, 1, 0, 0, 0, 0, 0)
             return 1
         i_res = cmd_install(get(args, 2))
-        if i_res != 0 syscall(60, i_res, 0, 0, 0, 0, 0)
+        if i_res != 0 syscall(231, i_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "add" or cmd == "যোগ"
         if argc < 3
             say "Usage: aati add <package_name>"
-            syscall(60, 1, 0, 0, 0, 0, 0)
+            syscall(231, 1, 0, 0, 0, 0, 0)
             return 1
         a_res = cmd_add(get(args, 2))
-        if a_res != 0 syscall(60, a_res, 0, 0, 0, 0, 0)
+        if a_res != 0 syscall(231, a_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "pack" or cmd == "প্যাক" or cmd == "bandho" or cmd == "বাঁধো"
         pkg_target = "."
         if argc >= 3 pkg_target = get(args, 2)
         res = cmd_pack(pkg_target)
-        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        if res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "cache" or cmd == "ক্যাশ"
@@ -2862,7 +2862,7 @@ fn main
         if argc >= 3 pkg_target = get(args, 2)
         if argc >= 4 reg_url = get(args, 3)
         res = cmd_publish(pkg_target, reg_url)
-        if res != 0 syscall(60, 1, 0, 0, 0, 0, 0)
+        if res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     is_numeric_cmd = 0
@@ -2880,7 +2880,7 @@ fn main
             if argc >= 3 port = to_int(get(args, 2))
             if argc >= 4 store_dir = get(args, 3)
         s_res = cmd_server(port, store_dir)
-        if s_res != 0 syscall(60, s_res, 0, 0, 0, 0, 0)
+        if s_res != 0 syscall(231, s_res, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "search" or cmd == "khoj" or cmd == "খোঁজ"
@@ -2922,7 +2922,7 @@ fn main
 
     say "❌ Unknown command: " + cmd
     say "Run 'aati help' for available commands."
-    syscall(60, 1, 0, 0, 0, 0, 0)
+    syscall(231, 1, 0, 0, 0, 0, 0)
     return 1
 
 main()

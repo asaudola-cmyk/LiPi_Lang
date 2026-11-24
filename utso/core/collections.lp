@@ -13,9 +13,9 @@
 @end
 
 @fn exit(code)
-  @! Freestanding Linux exit syscall (nr 60)
-  @! WHY: Direct kernel invocation using compiler intrinsic sys_exit.
-  return sys_exit(code)
+  @! Freestanding Linux exit_group syscall (nr 231)
+  @! WHY: Direct kernel invocation using compiler intrinsic sys_exit_group so all OS threads terminate cleanly.
+  return sys_exit_group(code)
 @end
 
 @fn to_str(val)

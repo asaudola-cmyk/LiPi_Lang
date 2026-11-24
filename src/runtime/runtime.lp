@@ -360,7 +360,7 @@ import "runtime/lipi_slab"
 @end
 
 @fn lipi_exit(code)
-  // WHY: Direct exit termination via sys_exit (syscall 60).
-  sys_exit(code)
+  // WHY: Direct process-group termination via sys_exit_group (syscall 231) so all threads exit cleanly.
+  sys_exit_group(code)
 @end
 

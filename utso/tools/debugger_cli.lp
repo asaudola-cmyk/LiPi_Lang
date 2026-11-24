@@ -111,14 +111,14 @@
     @! In child: request tracing
     tr_res = sys_ptrace(PTRACE_TRACEME(), 0, 0, 0)
     @if tr_res < 0
-      sys_syscall(60, 126, 0, 0, 0, 0, 0)
+      sys_syscall(231, 126, 0, 0, 0, 0, 0)
     @end
 
     @! Execute target binary
     argv = [program_path, 0]
     sys_syscall(59, program_path, argv, 0)
-    @! If execve fails, exit child
-    sys_syscall(60, 127, 0, 0, 0, 0, 0)
+    @! If execve fails, exit child process group
+    sys_syscall(231, 127, 0, 0, 0, 0, 0)
   @end
 
   @! In parent: wait for child to stop on execve SIGTRAP

@@ -215,8 +215,8 @@ import "utso/os/syscalls"
 @end
 
 @fn process_exit(code)
-  @! Terminate current process immediately via raw sys_exit (syscall 60)
-  sys_exit(code)
+  @! Terminate current process and all OS threads immediately via raw sys_exit_group (syscall 231)
+  sys_exit_group(code)
 @end
 
 @fn process_exit_group(code)

@@ -196,7 +196,7 @@ fn silicon_exec_capture exe_path a1 a2 a3 a4 home_s capture_path
                 syscall(33, cfd, 2, 0, 0, 0, 0)
                 syscall(3, cfd, 0, 0, 0, 0, 0)
         syscall(59, exe_path, argv, env, 0, 0, 0)
-        syscall(60, 127, 0, 0, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
 
     exit_code = 127
     if pid > 0

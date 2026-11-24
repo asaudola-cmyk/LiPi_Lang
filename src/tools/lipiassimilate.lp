@@ -480,7 +480,7 @@ import "utso/collections"
   pid = sys_fork()
   @if pid == 0
     sys_execve(cmd_path, argv, 0)
-    sys_exit(127)
+    sys_exit_group(127)
   @end
 
   sys_wait4(pid, st, 0, 0)

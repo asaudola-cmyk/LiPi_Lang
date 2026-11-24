@@ -192,8 +192,8 @@ fn riscv64_synth_compile_program tokens
     // 4. Top-level exit epilogue (preserve main() return code in a0 when auto-called)
     if has_main == 0 and s.rv_called_main == 0
         riscv64_emit_addi(s, 10, 0, 0) // exit code 0 in a0
-    // Exit via Linux sys_exit (syscall 93 on RISC-V) with status code in a0
-    riscv64_emit_li(s, 17, 93)
+    // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on RISC-V) with status code in a0
+    riscv64_emit_li(s, 17, 94)
     riscv64_emit_ecall(s)
 
     // 5. Emit print_int helper if required

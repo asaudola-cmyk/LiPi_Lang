@@ -556,7 +556,7 @@ fn dbg_spawn_traced bin_path
         env = alloc(8)
         mem_word_write(env, 0, 0)
         syscall(59, bin_path, argv, env, 0, 0, 0)
-        syscall(60, 127, 0, 0, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
     if cpid < 0
         return 0 - 1
     st = alloc(16)

@@ -36,7 +36,7 @@ fn silicon_close_fd fd
     return syscall(3, fd, 0, 0, 0, 0, 0)
 
 fn silicon_exit code
-    return syscall(60, code, 0, 0, 0, 0, 0)
+    return syscall(231, code, 0, 0, 0, 0, 0)
 
 fn silicon_mem_byte_read ptr off
     return mem_byte_read(ptr, off)

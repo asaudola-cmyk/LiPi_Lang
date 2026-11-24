@@ -112,8 +112,9 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
   @if linux_nr == 9  return 197 @end // SYS_mmap (0xC5)
   @if linux_nr == 11 return 73  @end // SYS_munmap (0x49)
   @if linux_nr == 21 return 33  @end // SYS_access (0x21)
-  @if linux_nr == 60 return 1   @end // SYS_exit
-  @if linux_nr == 90 return 15  @end // SYS_chmod (0x0F)
+  @if linux_nr == 60  return 1   @end // SYS_exit
+  @if linux_nr == 231 return 1   @end // SYS_exit_group -> Darwin BSD SYS_exit
+  @if linux_nr == 90  return 15  @end // SYS_chmod (0x0F)
   return 0 - 1
 @end
 
@@ -298,6 +299,7 @@ import "src/compiler/backend/formats/macho/load_commands.lp"
     nw = w
     @if w == 3531606024 nw = 3531604112 @end      // MOVZ X8, #64 (write) -> MOVZ X16, #4
     @if w == 3531606952 nw = 3531604016 @end      // MOVZ X8, #93 (exit)  -> MOVZ X16, #1
+    @if w == 3531606984 nw = 3531604016 @end      // MOVZ X8, #94 (exit_group) -> MOVZ X16, #1
     @if w == 3531611080 nw = 3531610288 @end      // MOVZ X8, #222 (mmap) -> MOVZ X16, #197
     @if w == 3531605059 nw = 3531735107 @end      // MOVZ X3, #34  (Linux MAP_ANON|PRIVATE) -> MOVZ X3, #0x1002
     @if w == 3556769793 nw = 3556773889 @end      // SVC #0               -> SVC #0x80

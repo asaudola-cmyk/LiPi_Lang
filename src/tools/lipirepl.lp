@@ -285,7 +285,7 @@ fn repl_spawn_exec cmd_path arg1 arg2 arg3
     pid = syscall(57, 0, 0, 0, 0, 0, 0)
     if pid == 0
         syscall(59, cmd_path, argv, env, 0, 0, 0)
-        syscall(60, 127, 0, 0, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
 
     syscall(61, pid, st, 0, 0, 0, 0)
     raw_status = mem_word_read(st, 0)

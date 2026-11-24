@@ -5,9 +5,9 @@
 @end
 
 @fn panic(msg)
-  // WHY: Terminates execution immediately with an error message and exit code 1
+  // WHY: Terminates entire process group immediately with an error message and exit code 1
   println(msg)
-  sys_exit(1)
+  sys_exit_group(1)
   return 0
 @end
 
