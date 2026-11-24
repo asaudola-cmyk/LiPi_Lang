@@ -525,12 +525,9 @@ g_tls13_disable_sys = 0
   server_name: string
 @end
 
-@fn tls13_build_client_hello(server_name, client_pub_key)
-  @! WHY: Serializes standard RFC 8446 TLS 1.3 ClientHello handshake message with
-  @! Supported Versions (0x002B), Supported Groups (X25519 0x001D), Key Share (0x0033),
-  @! and SNI (0x0000) extensions for sovereign HTTPS connections.
-
-  // 1. Client Random (32 bytes strictly from kernel CSPRNG SYS_getrandom 318 — fail closed on error)
+@fn tls13_build_client_hello_alpn(server_name, client_pub_key, alpn_protos)
+  @! WHY: Serializes RFC 8446 TLS 1.3 ClientHello with optional RFC 7301 ALPN (0x0010)
+  @! protocol list (e.g. ["h2", "http/1.1"]) for pure-Lipi HTTP/2 & HTTPS connections.
   c_rand = []
   rng_buf = alloc(32)
   rng_ok = syscall(318, rng_buf, 32, 0, 0, 0, 0)
@@ -550,13 +547,9 @@ g_tls13_disable_sys = 0
   @end
   free(rng_buf)
 
-  // 2. ClientHello Body
   ch_body = []
-  // Legacy version: 0x0303 (TLS 1.2 compatibility)
   ch_body = ch_body.push(3)
   ch_body = ch_body.push(3)
-
-  // 32-byte Client Random
   ch_body = tls_append_bytes(ch_body, c_rand)
 
   // Legacy Session ID (32 bytes)
@@ -567,24 +560,23 @@ g_tls13_disable_sys = 0
     s_i = s_i + 1
   @end
 
-  // Cipher Suites (Length: 6 bytes = 3 suites: 0x1301 AES-128-GCM-SHA256, 0x1302 AES-256-GCM-SHA384, 0x1303 ChaCha20-Poly1305-SHA256)
+  // Cipher Suites: 0x1301 AES-128-GCM, 0x1302 AES-256-GCM, 0x1303 ChaCha20-Poly1305
   ch_body = ch_body.push(0)
   ch_body = ch_body.push(6)
-  ch_body = ch_body.push(19) // 0x1301
+  ch_body = ch_body.push(19)
   ch_body = ch_body.push(1)
-  ch_body = ch_body.push(19) // 0x1302
+  ch_body = ch_body.push(19)
   ch_body = ch_body.push(2)
-  ch_body = ch_body.push(19) // 0x1303
+  ch_body = ch_body.push(19)
   ch_body = ch_body.push(3)
 
-  // Legacy Compression Methods (Length: 1 byte = 0x00 null compression)
+  // Legacy Compression Methods
   ch_body = ch_body.push(1)
   ch_body = ch_body.push(0)
 
-  // Extensions Block
   ext_bytes = []
 
-  // Ext 1: Server Name Indication (SNI) - Type 0x0000
+  // Ext 1: SNI (0x0000)
   sn_len = str_len(server_name)
   @if sn_len > 0
     ext_bytes = ext_bytes.push(0)
@@ -605,16 +597,16 @@ g_tls13_disable_sys = 0
     @end
   @end
 
-  // Ext 2: Supported Versions - Type 0x002B (43)
+  // Ext 2: Supported Versions (0x002B)
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(43)
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(3)
   ext_bytes = ext_bytes.push(2)
   ext_bytes = ext_bytes.push(3)
-  ext_bytes = ext_bytes.push(4) // TLS 1.3
+  ext_bytes = ext_bytes.push(4)
 
-  // Ext 3: Supported Groups - Type 0x000A (10)
+  // Ext 3: Supported Groups (0x000A) -> X25519
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(10)
   ext_bytes = ext_bytes.push(0)
@@ -622,9 +614,9 @@ g_tls13_disable_sys = 0
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(2)
   ext_bytes = ext_bytes.push(0)
-  ext_bytes = ext_bytes.push(29) // X25519
+  ext_bytes = ext_bytes.push(29)
 
-  // Ext 4: Key Share - Type 0x0033 (51)
+  // Ext 4: Key Share (0x0033)
   klen = client_pub_key.len()
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(51)
@@ -635,12 +627,12 @@ g_tls13_disable_sys = 0
   ext_bytes = ext_bytes.push((cs_list_len / 256) & 255)
   ext_bytes = ext_bytes.push(cs_list_len & 255)
   ext_bytes = ext_bytes.push(0)
-  ext_bytes = ext_bytes.push(29) // X25519
+  ext_bytes = ext_bytes.push(29)
   ext_bytes = ext_bytes.push((klen / 256) & 255)
   ext_bytes = ext_bytes.push(klen & 255)
   ext_bytes = tls_append_bytes(ext_bytes, client_pub_key)
 
-  // Ext 5: Signature Algorithms - Type 0x000D (13): P-256/P-384 ECDSA, RSA-PSS-SHA256/384, Ed25519
+  // Ext 5: Signature Algorithms (0x000D)
   ext_bytes = ext_bytes.push(0)
   ext_bytes = ext_bytes.push(13)
   ext_bytes = ext_bytes.push(0)
@@ -658,25 +650,51 @@ g_tls13_disable_sys = 0
   ext_bytes = ext_bytes.push(8)
   ext_bytes = ext_bytes.push(7)
 
-  // Append extensions length and extensions body
+  // Ext 6: Application-Layer Protocol Negotiation (RFC 7301 ALPN, 0x0010)
+  @if alpn_protos.len() > 0
+    alpn_list = []
+    ai = 0
+    @while ai < alpn_protos.len()
+      pstr = alpn_protos[ai]
+      plen = str_len(pstr)
+      @if plen > 0 && plen < 256
+        alpn_list = alpn_list.push(plen & 255)
+        pi = 0
+        @while pi < plen
+          alpn_list = alpn_list.push(str_char_at(pstr, pi) & 255)
+          pi = pi + 1
+        @end
+      @end
+      ai = ai + 1
+    @end
+    @if alpn_list.len() > 0
+      al_len = alpn_list.len()
+      ext_bytes = ext_bytes.push(0)
+      ext_bytes = ext_bytes.push(16)
+      ext_bytes = ext_bytes.push(((al_len + 2) / 256) & 255)
+      ext_bytes = ext_bytes.push((al_len + 2) & 255)
+      ext_bytes = ext_bytes.push((al_len / 256) & 255)
+      ext_bytes = ext_bytes.push(al_len & 255)
+      ext_bytes = tls_append_bytes(ext_bytes, alpn_list)
+    @end
+  @end
+
   ext_tot_len = ext_bytes.len()
   ch_body = ch_body.push((ext_tot_len / 256) & 255)
   ch_body = ch_body.push(ext_tot_len & 255)
   ch_body = tls_append_bytes(ch_body, ext_bytes)
 
-  // 3. Handshake Header (4 bytes): Type 0x01 (ClientHello), 3-byte length
   hs_msg = []
-  hs_msg = hs_msg.push(1) // ClientHello
+  hs_msg = hs_msg.push(1)
   ch_body_len = ch_body.len()
   hs_msg = hs_msg.push((ch_body_len / 65536) & 255)
   hs_msg = hs_msg.push((ch_body_len / 256) & 255)
   hs_msg = hs_msg.push(ch_body_len & 255)
   hs_msg = tls_append_bytes(hs_msg, ch_body)
 
-  // 4. TLS Record Layer Framing (5 bytes): ContentType 0x16 (Handshake), Version 0x0301 (TLS 1.0 legacy)
   wire = []
-  wire = wire.push(22) // 0x16 Handshake
-  wire = wire.push(3)  // Legacy Record Version TLS 1.0 (0x0301)
+  wire = wire.push(22)
+  wire = wire.push(3)
   wire = wire.push(1)
   hs_len = hs_msg.len()
   wire = wire.push((hs_len / 256) & 255)
@@ -689,6 +707,40 @@ g_tls13_disable_sys = 0
     client_pub_key: client_pub_key,
     server_name: server_name
   }
+@end
+
+@fn tls13_parse_encrypted_extensions_alpn(ee_msg)
+  @! WHY: Extracts the server-selected ALPN protocol (e.g. "h2") from RFC 8446 EncryptedExtensions (0x08).
+  n = ee_msg.len()
+  @if n < 6 || (ee_msg[0] & 255) != 8 return "" @end
+  ext_tot = ((ee_msg[4] & 255) * 256) | (ee_msg[5] & 255)
+  pos = 6
+  end_p = 6 + ext_tot
+  @if end_p > n end_p = n @end
+  @while pos + 4 <= end_p
+    et = ((ee_msg[pos] & 255) * 256) | (ee_msg[pos + 1] & 255)
+    el = ((ee_msg[pos + 2] & 255) * 256) | (ee_msg[pos + 3] & 255)
+    pos = pos + 4
+    @if pos + el > end_p break @end
+    @if et == 16 && el >= 4
+      plen = ee_msg[pos + 2] & 255
+      @if 3 + plen <= el
+        pb = []
+        k = 0
+        @while k < plen
+          pb = pb.push(ee_msg[pos + 3 + k] & 255)
+          k = k + 1
+        @end
+        return tls_bytes_to_string(pb)
+      @end
+    @end
+    pos = pos + el
+  @end
+  return ""
+@end
+
+@fn tls13_build_client_hello(server_name, client_pub_key)
+  return tls13_build_client_hello_alpn(server_name, client_pub_key, [])
 @end
 
 @fn tls13_hmac_sha256(key_bytes, msg_bytes)

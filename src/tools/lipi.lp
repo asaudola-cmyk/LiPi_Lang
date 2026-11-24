@@ -254,6 +254,83 @@ fn spawn_exec_cmd cmd_path arg1 arg2 arg3 arg4
 
     return exit_code
 
+fn spawn_exec_list cmd_path args_list
+    // WHY: Arbitrary-length argument forwarding for multi-flag invocations like
+    // `lipi build --strict-types --kavach -o out file.lp` without fixed 4-arg truncation.
+    nargs = len(args_list)
+    argv_bytes = (nargs + 2) * 8
+    if argv_bytes < 64 argv_bytes = 64 end
+    argv = syscall(9, 0, argv_bytes, 3, 34, -1, 0)
+    mem_word_write(argv, 0, cmd_path)
+
+    idx = 1
+    ai = 0
+    while ai < nargs
+        cur_a = get(args_list, ai)
+        if len(cur_a) > 0
+            mem_word_write(argv, idx * 8, cur_a)
+            idx = idx + 1
+        end
+        ai = ai + 1
+    end
+    mem_word_write(argv, idx * 8, 0)
+
+    env = syscall(9, 0, 128, 3, 34, -1, 0)
+    e_idx = 0
+    u_home = lipi_get_env("HOME")
+    if len(u_home) > 0
+        home_env = "HOME=" + u_home
+        mem_word_write(env, e_idx * 8, home_env)
+        e_idx = e_idx + 1
+        path_env = "PATH=" + u_home + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    else
+        path_env = "PATH=/usr/local/bin:/usr/bin:/bin"
+    end
+    mem_word_write(env, e_idx * 8, path_env)
+    e_idx = e_idx + 1
+
+    u_user = lipi_get_env("USER")
+    if len(u_user) > 0
+        user_env = "USER=" + u_user
+        mem_word_write(env, e_idx * 8, user_env)
+        e_idx = e_idx + 1
+    end
+
+    l_root = lipi_get_env("LIPI_ROOT")
+    if len(l_root) == 0
+        l_root = lipi_tool_get_root()
+    end
+    if len(l_root) > 0
+        lr_env = "LIPI_ROOT=" + l_root
+        mem_word_write(env, e_idx * 8, lr_env)
+        e_idx = e_idx + 1
+    end
+    mem_word_write(env, e_idx * 8, 0)
+
+    st = syscall(9, 0, 8, 3, 34, -1, 0)
+    mem_word_write(st, 0, 0)
+
+    pid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if pid == 0
+        syscall(59, cmd_path, argv, env, 0, 0, 0)
+        syscall(231, 127, 0, 0, 0, 0, 0)
+    end
+
+    syscall(61, pid, st, 0, 0, 0, 0)
+    raw_status = mem_word_read(st, 0)
+    sig_num = raw_status % 128
+    if sig_num != 0
+        exit_code = 128 + sig_num
+    else
+        exit_code = (raw_status / 256) % 256
+    end
+
+    syscall(11, argv, argv_bytes, 0, 0, 0, 0)
+    syscall(11, env, 128, 0, 0, 0, 0)
+    syscall(11, st, 8, 0, 0, 0, 0)
+
+    return exit_code
+
 // WHY: Resolves toolchain binaries dynamically prioritizing canonical root, ~/.local/bin, ~/.lipi/bin, and system paths
 fn resolve_bin_path rel_name
     l_root = lipi_tool_get_root()
@@ -387,32 +464,60 @@ fn handle_run file_path a1 a2 a3 a4
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
     return exec_code
 
-fn handle_build file_path out_file target_flag mode_flag
+fn handle_build file_path out_file target_flag extra_flags
     if len(file_path) == 0
-        say "❌ Error: Source file required: lipi build <file.lp> [-o <out>]"
+        say "❌ Error: Source file required: lipi build [flags...] <file.lp> [-o <out>]"
         return 1
+    end
+    is_shared = 0
+    is_unikernel = 0
+    ei = 0
+    while ei < len(extra_flags)
+        ef = get(extra_flags, ei)
+        if ef == "--shared" or ef == "-shared"
+            is_shared = 1
+        elif ef == "--format=multiboot2" or ef == "--unikernel"
+            is_unikernel = 1
+        end
+        ei = ei + 1
+    end
     dest = out_file
     if len(dest) == 0
         if target_flag == "--target=wasm" or target_flag == "--target=web"
             dest = file_path + ".wasm"
         elif target_flag == "--target=verilog" or target_flag == "--target=hdl"
             dest = file_path + ".v"
-        elif target_flag == "--target=unikernel" or target_flag == "--format=multiboot2"
+        elif target_flag == "--target=unikernel" or target_flag == "--format=multiboot2" or is_unikernel == 1
             dest = file_path + ".kernel.bin"
-        elif target_flag == "--shared"
+        elif target_flag == "--target=windows" or target_flag == "--target=win64" or target_flag == "--target=pe"
+            dest = file_path + ".exe"
+        elif target_flag == "--shared" or is_shared == 1
             dest = file_path + ".so"
         else
             dest = file_path + ".bin"
         end
     end
-        
+
     say "\033[1;34m[LIPI BUILD]\033[0m " + file_path + " ➔ " + dest
     c_bin = resolve_bin_path("lipc_bin")
-    code = spawn_exec_cmd(c_bin, file_path, dest, target_flag, mode_flag)
+    c_args = list()
+    push(c_args, file_path)
+    push(c_args, "-o")
+    push(c_args, dest)
+    if len(target_flag) > 0
+        push(c_args, target_flag)
+    end
+    fi = 0
+    while fi < len(extra_flags)
+        push(c_args, get(extra_flags, fi))
+        fi = fi + 1
+    end
+    code = spawn_exec_list(c_bin, c_args)
     if code == 0
         say "\033[1;32m✔ Binary generated successfully: " + dest + "\033[0m"
     else
         say "\033[1;31m❌ Binary build failed.\033[0m"
+    end
     return code
 
 fn handle_test suite_path
@@ -1026,38 +1131,38 @@ fn main
 
     if cmd == "build"
         if argc < 3
-            say "Usage: lipi build <file.lp> [-o <out>] [--target=<arch>] [--kavach]"
+            say "Usage: lipi build [flags...] <file.lp> [-o <out>] [--target=<arch>] [--strict-types] [--kavach]"
             return 1
-        src_file = get(args, 2)
+        end
+        // WHY: Order-independent argument scanning allows flags like --strict-types or --kavach
+        // before or after the source filename (e.g. `lipi build --strict-types app.lp -o app`).
+        src_file = ""
         out_f = ""
         target_f = ""
-        mode_f = ""
-        ai = 3
+        extra_flags = list()
+        ai = 2
         while ai < argc
             cur = get(args, ai)
-            if cur == "-o" and ai + 1 < argc
+            if (cur == "-o" or cur == "--output") and ai + 1 < argc
                 ai = ai + 1
                 out_f = get(args, ai)
-            elif cur == "--target=arm64" or cur == "--target=aarch64"
-                target_f = "--target=arm64"
-            elif cur == "--target=wasm" or cur == "--target=web"
-                target_f = "--target=wasm"
-            elif cur == "--target=riscv64" or cur == "--target=riscv"
-                target_f = "--target=riscv64"
-            elif cur == "--target=verilog" or cur == "--target=hdl"
-                target_f = "--target=verilog"
-            elif cur == "--target=unikernel" or cur == "--format=multiboot2"
-                target_f = "--target=unikernel"
-            elif cur == "--target=x86_64" or cur == "--target=amd64"
-                target_f = "--target=x86_64"
-            elif cur == "--shared"
-                target_f = "--shared"
-            elif cur == "--ai-opt"
-                target_f = "--ai-opt"
-            elif cur == "--kavach" or cur == "--কবচ" or cur == "--safe" or cur == "--strict-ownership" or cur == "--strict-proof"
-                mode_f = cur
+            elif (cur == "--target" or cur == "-target") and ai + 1 < argc
+                ai = ai + 1
+                target_f = "--target=" + get(args, ai)
+            elif len(cur) > 9 and str_sub(cur, 0, 9) == "--target="
+                target_f = cur
+            elif len(cur) > 0 and char_at(cur, 0) == "-"
+                push(extra_flags, cur)
+            else
+                if len(src_file) == 0
+                    src_file = cur
+                elif len(out_f) == 0
+                    out_f = cur
+                end
+            end
             ai = ai + 1
-        return handle_build(src_file, out_f, target_f, mode_f)
+        end
+        return handle_build(src_file, out_f, target_f, extra_flags)
 
     if cmd == "test"
         suite = ""
@@ -1066,11 +1171,21 @@ fn main
 
     if cmd == "fmt"
         if argc < 3
-            say "Usage: lipi fmt <file.lp> [-w]"
+            say "Usage: lipi fmt [-w] <file.lp>"
             return 1
-        target_f = get(args, 2)
+        end
+        target_f = ""
         w_flag = ""
-        if argc >= 4 and get(args, 3) == "-w" w_flag = "-w"
+        fi = 2
+        while fi < argc
+            cur_f = get(args, fi)
+            if cur_f == "-w" or cur_f == "--write"
+                w_flag = "-w"
+            elif len(target_f) == 0
+                target_f = cur_f
+            end
+            fi = fi + 1
+        end
         return handle_fmt(target_f, w_flag)
 
     if cmd == "lsp"

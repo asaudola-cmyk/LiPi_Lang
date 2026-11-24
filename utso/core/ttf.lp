@@ -26,6 +26,8 @@ struct TtfFont
     ttf_loca_off
     ttf_glyf_off
     ttf_valid
+    ttf_gsub_off
+    ttf_gpos_off
 end
 
 struct TtfGlyphBitmap
@@ -71,7 +73,7 @@ end
 // ── 1. Load & Parse TrueType SFNT Font File ───────────────────────────────────
 
 fn ttf_load_from_memory data_ptr data_len
-    font = TtfFont(data_ptr, data_len, 1000, 0, 0, 800, 0 - 200, 0, 0, 0, 0, 0, 0)
+    font = TtfFont(data_ptr, data_len, 1000, 0, 0, 800, 0 - 200, 0, 0, 0, 0, 0, 0, 0, 0)
     if data_ptr <= 0 or data_len < 64
         return font
     end
@@ -107,12 +109,19 @@ fn ttf_load_from_memory data_ptr data_len
         // 'glyf' = 103,108,121,102
         elif _ttf_tag(data_ptr, rec, 103, 108, 121, 102) == 1
             font.ttf_glyf_off = t_off
+        // 'GSUB' = 71,83,85,66
+        elif _ttf_tag(data_ptr, rec, 71, 83, 85, 66) == 1
+            font.ttf_gsub_off = t_off
+        // 'GPOS' = 71,80,79,83
+        elif _ttf_tag(data_ptr, rec, 71, 80, 79, 83) == 1
+            font.ttf_gpos_off = t_off
         end
         ti = ti + 1
     end
-    if head_off == 0 or maxp_off == 0 or font.ttf_cmap_off == 0 or font.ttf_loca_off == 0 or font.ttf_glyf_off == 0
+    if head_off == 0 or maxp_off == 0 or font.ttf_cmap_off == 0
         return font
     end
+    // Note: CFF/OTF fonts omit loca/glyf while still supporting cmap/hmtx/GSUB/GPOS shaping
     if head_off + 54 <= data_len
         font.ttf_units_per_em = _ttf_u16(data_ptr, head_off + 18)
         font.ttf_loca_format = _ttf_i16(data_ptr, head_off + 50)
@@ -134,13 +143,13 @@ end
 fn ttf_load_file path
     fd = syscall(2, path, 0, 0, 0, 0, 0)
     if fd < 0
-        return TtfFont(0, 0, 1000, 0, 0, 800, 0 - 200, 0, 0, 0, 0, 0, 0)
+        return TtfFont(0, 0, 1000, 0, 0, 800, 0 - 200, 0, 0, 0, 0, 0, 0, 0, 0)
     end
     sz = syscall(8, fd, 0, 2, 0, 0, 0)
     syscall(8, fd, 0, 0, 0, 0, 0)
     if sz <= 64 or sz > 67108864
         syscall(3, fd, 0, 0, 0, 0, 0)
-        return TtfFont(0, 0, 1000, 0, 0, 800, 0 - 200, 0, 0, 0, 0, 0, 0)
+        return TtfFont(0, 0, 1000, 0, 0, 800, 0 - 200, 0, 0, 0, 0, 0, 0, 0, 0)
     end
     buf = malloc(sz)
     got = 0
@@ -299,13 +308,17 @@ end
 
 fn ttf_rasterize_glyph font codepoint px_height
     gid = ttf_find_glyph(font, codepoint)
+    return ttf_rasterize_gid(font, gid, px_height)
+end
+
+fn ttf_rasterize_gid font gid px_height
     hm = ttf_get_hmetrics(font, gid)
     upem = font.ttf_units_per_em
     if upem <= 0 upem = 1000 end
     adv_px = (hm[0] * px_height + (upem / 2)) / upem
     lsb_px = (hm[1] * px_height) / upem
     empty_bm = TtfGlyphBitmap(0, 0, 0, lsb_px, 0, adv_px, lsb_px, gid)
-    if font.ttf_valid == 0 or gid < 0 or gid >= font.ttf_num_glyphs
+    if font.ttf_valid == 0 or font.ttf_loca_off == 0 or font.ttf_glyf_off == 0 or gid < 0 or gid >= font.ttf_num_glyphs
         return empty_bm
     end
 

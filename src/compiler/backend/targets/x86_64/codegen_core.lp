@@ -52,6 +52,8 @@ struct X86Function
     fn_end_offset       // Byte offset where the function body ends (for non-overlapping DWARF)
     fn_decl_line        // Source declaration line number (for DWARF DW_AT_decl_line)
     fn_param_count      // Declared parameter count (-1 if helper/unknown, >=0 for user fns)
+    fn_tok_pos          // Source token index of `fn` keyword (-1 for runtime helpers / mono clones)
+    fn_param_types      // Parallel list of explicit declared parameter type strings ("", "float", ...)
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -132,6 +134,10 @@ struct X86Synthesizer
     synth_strict_types     // 1 when --strict-types enforces zero ambiguous struct field offsets
     synth_ambiguous_count  // Count of untyped colliding struct field accesses observed
     synth_boxed_vars       // Local variable names boxed into 8B GC upvalue cells for mutable closures
+    synth_globals_rw_ptr_patch // Patch offset for movabs rax, <rw_vaddr + 488> (_gc_globals_bytes)
+    synth_globals_rw_len_patch // Patch offset for movabs rcx, <globals_byte_span>
+    synth_mono_name_override   // Forced mangled function name during call-site float monomorphization
+    synth_mono_param_override  // Forced parameter type list during call-site float monomorphization
 
 global g_x86_strict_types = 0
 
@@ -381,6 +387,10 @@ fn x86_synth_new
     s.synth_strict_types = g_x86_strict_types
     s.synth_ambiguous_count = 0
     s.synth_boxed_vars = list()
+    s.synth_globals_rw_ptr_patch = 0
+    s.synth_globals_rw_len_patch = 0
+    s.synth_mono_name_override = ""
+    s.synth_mono_param_override = 0
     return s
 
 fn x86_synth_is_boxed_name s name
@@ -399,15 +409,26 @@ fn x86_synth_is_boxed_name s name
 end
 
 fn x86_synth_prescan_boxed_vars toks start_pos base_col base_line
-    // WHY: Identifies outer variables mutated inside nested closures so they are auto-boxed
-    // into 8-byte GC upvalue cells shared between the enclosing scope and escaping closures.
+    // WHY: True 2-pass upvalue escape & mutation analysis across ALL closure forms
+    // (single-expression `fn(x) => expr`, brace block `{ ... }`, multiline block, `|x| => ...`).
+    // Boxes any outer variable v into a shared 8-byte GC upvalue cell iff:
+    //   (v is captured by any nested closure in this scope) AND
+    //   (v is mutated inside a closure OR reassigned/compound-mutated in the enclosing scope).
     res = list()
+    captured = list()
+    inner_mut = list()
+    outer_writes = list()
+    outer_counts = list()
+    outer_comp = list()
     n = toks.len()
     i = start_pos
     while i < n
         t = toks[i]
         k = t.tok_kind
         txt = t.tok_text
+        if k == TOK_EOF()
+            break
+        end
         if base_line >= 0
             if x86_synth_is_block_end(toks, i) == 1 and t.tok_span.span_start_col <= base_col
                 break
@@ -416,6 +437,51 @@ fn x86_synth_prescan_boxed_vars toks start_pos base_col base_line
                 break
             end
         end
+        // Skip nested named `fn name ...` / `struct` definitions so their locals don't mix with enclosing scope
+        is_named_fn = 0
+        if (k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component"))) and i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
+            is_named_fn = 1
+        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct" or txt == "enum" or txt == "@enum"))
+            is_named_fn = 1
+        end
+        if is_named_fn == 1
+            nf_col = t.tok_span.span_start_col
+            nf_line = t.tok_span.span_start_line
+            i = i + 1
+            nf_bd = 0
+            while i < n
+                ntf = toks[i]
+                nkf = ntf.tok_kind
+                ntxf = ntf.tok_text
+                if nkf == TOK_EOF() break end
+                if nkf == TOK_LBRACE() or (nkf != TOK_STR() and ntxf == "{")
+                    nf_bd = nf_bd + 1
+                elif nkf == TOK_RBRACE() or (nkf != TOK_STR() and ntxf == "}")
+                    if nf_bd > 0
+                        nf_bd = nf_bd - 1
+                        if nf_bd == 0
+                            i = i + 1
+                            break
+                        end
+                    end
+                end
+                if nf_bd == 0
+                    if x86_synth_is_block_end(toks, i) == 1 and ntf.tok_span.span_start_col <= nf_col
+                        i = i + 1
+                        break
+                    end
+                    if ntf.tok_span.span_start_line > nf_line and ntf.tok_span.span_start_col <= nf_col and nkf != TOK_NEWLINE() and nkf != TOK_SEMI() and nkf != TOK_COMMENT_LINE() and nkf != TOK_COMMENT_DOC() and nkf != TOK_COMMENT_BLOCK()
+                        if nkf != TOK_KW_ELIF() and nkf != TOK_KW_ELSE() and nkf != TOK_DIR_ELIF() and nkf != TOK_DIR_ELSE() and nkf != TOK_DIR_END() and nkf != TOK_KW_END() and ntxf != "elif" and ntxf != "else" and ntxf != "অথবা" and ntxf != "নাহলে"
+                            break
+                        end
+                    end
+                end
+                i = i + 1
+            end
+            continue
+        end
+
+        // Check if this token starts a closure: `fn(...) => ...` or `|...| => ...`
         is_clos = 0
         c_end_hdr = i
         c_params = list()
@@ -469,79 +535,187 @@ fn x86_synth_prescan_boxed_vars toks start_pos base_col base_line
                 b_mode = 2
                 j = j + 1
             end
-            if b_mode == 1 or b_mode == 2
-                depth = 1
-                while j < n and depth > 0
-                    ct = toks[j]
-                    ck = ct.tok_kind
-                    ctxt = ct.tok_text
-                    if b_mode == 1
-                        if ck == TOK_LBRACE() or (ck != TOK_STR() and ctxt == "{")
-                            depth = depth + 1
-                        elif ck == TOK_RBRACE() or (ck != TOK_STR() and ctxt == "}")
-                            depth = depth - 1
-                            if depth == 0
-                                j = j + 1
-                                break
-                            end
-                        end
-                    else
-                        if ck == TOK_KW_IF() or ck == TOK_KW_WHILE() or ck == TOK_KW_FOR() or ck == TOK_KW_TRY() or (ck == TOK_IDENT() and (ctxt == "if" or ctxt == "while" or ctxt == "for" or ctxt == "try" or ctxt == "region" or ctxt == "অঞ্চল"))
-                            depth = depth + 1
-                        elif x86_synth_is_block_end(toks, j) == 1
-                            depth = depth - 1
-                            if depth == 0
-                                j = j + 1
-                                break
-                            end
+            depth = 1
+            ep_d = 0
+            while j < n and depth > 0
+                ct = toks[j]
+                ck = ct.tok_kind
+                ctxt = ct.tok_text
+                if ck == TOK_EOF() break end
+                if b_mode == 1
+                    if ck == TOK_LBRACE() or (ck != TOK_STR() and ctxt == "{")
+                        depth = depth + 1
+                    elif ck == TOK_RBRACE() or (ck != TOK_STR() and ctxt == "}")
+                        depth = depth - 1
+                        if depth == 0
+                            j = j + 1
+                            break
                         end
                     end
-                    if x86_synth_is_ident_token(ck) == 1 and j + 1 < n
-                        nk = toks[j + 1].tok_kind
-                        nt = toks[j + 1].tok_text
-                        is_mut = 0
-                        if nk == TOK_ASSIGN() or nk == TOK_PLUSEQ() or nk == TOK_MINUSEQ() or nk == TOK_STAREQ() or nk == TOK_SLASHEQ() or nk == TOK_PERCENTEQ()
-                            is_mut = 1
-                        elif nk != TOK_STR() and (nt == "=" or nt == "+=" or nt == "-=" or nt == "*=" or nt == "/=" or nt == "%=")
-                            is_mut = 1
+                elif b_mode == 2
+                    if ck == TOK_KW_IF() or ck == TOK_KW_WHILE() or ck == TOK_KW_FOR() or ck == TOK_KW_TRY() or (ck == TOK_IDENT() and (ctxt == "if" or ctxt == "while" or ctxt == "for" or ctxt == "try" or ctxt == "region" or ctxt == "অঞ্চল"))
+                        depth = depth + 1
+                    elif x86_synth_is_block_end(toks, j) == 1
+                        depth = depth - 1
+                        if depth == 0
+                            j = j + 1
+                            break
                         end
-                        if is_mut == 1
-                            is_dot_prev = 0
-                            if j > 0 and (toks[j - 1].tok_kind == TOK_DOT() or toks[j - 1].tok_text == ".")
-                                is_dot_prev = 1
+                    end
+                else
+                    // b_mode == 0: single-expression closure (`fn(x) => expr` / `|x| => expr`)
+                    if ck == TOK_LPAREN() or ck == TOK_LBRACKET() or ck == TOK_LBRACE() or (ck != TOK_STR() and (ctxt == "(" or ctxt == "[" or ctxt == "{"))
+                        ep_d = ep_d + 1
+                    elif ck == TOK_RPAREN() or ck == TOK_RBRACKET() or ck == TOK_RBRACE() or (ck != TOK_STR() and (ctxt == ")" or ctxt == "]" or ctxt == "}"))
+                        if ep_d == 0
+                            break
+                        end
+                        ep_d = ep_d - 1
+                    elif ep_d == 0 and (ck == TOK_NEWLINE() or ck == TOK_SEMI() or ck == TOK_COMMA() or (ck != TOK_STR() and (ctxt == ";" or ctxt == ",")))
+                        break
+                    end
+                end
+                if x86_synth_is_ident_token(ck) == 1
+                    is_dot_prev = 0
+                    if j > 0 and (toks[j - 1].tok_kind == TOK_DOT() or toks[j - 1].tok_text == ".")
+                        is_dot_prev = 1
+                    end
+                    is_cp = 0
+                    pi = 0
+                    while pi < c_params.len()
+                        if c_params[pi] == ctxt
+                            is_cp = 1
+                            break
+                        end
+                        pi = pi + 1
+                    end
+                    if is_dot_prev == 0 and is_cp == 0
+                        // Record into captured set
+                        dup_c = 0
+                        ci = 0
+                        while ci < captured.len()
+                            if captured[ci] == ctxt
+                                dup_c = 1
+                                break
                             end
-                            is_cp = 0
-                            pi = 0
-                            while pi < c_params.len()
-                                if c_params[pi] == ctxt
-                                    is_cp = 1
-                                    break
-                                end
-                                pi = pi + 1
+                            ci = ci + 1
+                        end
+                        if dup_c == 0
+                            push(captured, ctxt)
+                        end
+                        // Check if mutated directly inside closure
+                        if j + 1 < n
+                            nk = toks[j + 1].tok_kind
+                            nt = toks[j + 1].tok_text
+                            is_mut = 0
+                            if nk == TOK_ASSIGN() or nk == TOK_PLUSEQ() or nk == TOK_MINUSEQ() or nk == TOK_STAREQ() or nk == TOK_SLASHEQ() or nk == TOK_PERCENTEQ()
+                                is_mut = 1
+                            elif nk != TOK_STR() and (nt == "=" or nt == "+=" or nt == "-=" or nt == "*=" or nt == "/=" or nt == "%=")
+                                is_mut = 1
                             end
-                            if is_dot_prev == 0 and is_cp == 0
-                                dup = 0
-                                ri = 0
-                                while ri < res.len()
-                                    if res[ri] == ctxt
-                                        dup = 1
+                            if is_mut == 1
+                                dup_m = 0
+                                mi = 0
+                                while mi < inner_mut.len()
+                                    if inner_mut[mi] == ctxt
+                                        dup_m = 1
                                         break
                                     end
-                                    ri = ri + 1
+                                    mi = mi + 1
                                 end
-                                if dup == 0
-                                    push(res, ctxt)
+                                if dup_m == 0
+                                    push(inner_mut, ctxt)
                                 end
                             end
                         end
                     end
-                    j = j + 1
                 end
-                i = j
-                continue
+                j = j + 1
+            end
+            i = j
+            continue
+        end
+
+        // Track assignments in the enclosing scope (outside closure bodies!)
+        if x86_synth_is_ident_token(k) == 1 and i + 1 < n
+            is_dot_o = 0
+            if i > 0 and (toks[i - 1].tok_kind == TOK_DOT() or toks[i - 1].tok_text == ".")
+                is_dot_o = 1
+            end
+            if is_dot_o == 0
+                np_o = i + 1
+                if np_o + 2 < n and (toks[np_o].tok_kind == TOK_COLON() or (toks[np_o].tok_kind != TOK_STR() and toks[np_o].tok_text == ":"))
+                    np_o = np_o + 2
+                end
+                if np_o < n
+                    onk = toks[np_o].tok_kind
+                    ont = toks[np_o].tok_text
+                    ow_kind = 0
+                    if onk == TOK_ASSIGN() or (onk != TOK_STR() and ont == "=")
+                        ow_kind = 1
+                    elif onk == TOK_PLUSEQ() or onk == TOK_MINUSEQ() or onk == TOK_STAREQ() or onk == TOK_SLASHEQ() or onk == TOK_PERCENTEQ() or (onk != TOK_STR() and (ont == "+=" or ont == "-=" or ont == "*=" or ont == "/=" or ont == "%="))
+                        ow_kind = 2
+                    end
+                    if ow_kind > 0
+                        oi = 0
+                        found_o = 0 - 1
+                        while oi < outer_writes.len()
+                            if outer_writes[oi] == txt
+                                found_o = oi
+                                break
+                            end
+                            oi = oi + 1
+                        end
+                        if found_o < 0
+                            push(outer_writes, txt)
+                            push(outer_counts, 1)
+                            if ow_kind == 2
+                                push(outer_comp, 1)
+                            else
+                                push(outer_comp, 0)
+                            end
+                        else
+                            list_set(outer_counts, found_o, outer_counts[found_o] + 1)
+                            if ow_kind == 2
+                                list_set(outer_comp, found_o, 1)
+                            end
+                        end
+                    end
+                end
             end
         end
         i = i + 1
+    end
+
+    // Intersect captured vars with (inner_mut OR outer_counts >= 2 OR outer_comp == 1)
+    ci = 0
+    while ci < captured.len()
+        cname = captured[ci]
+        should_box = 0
+        mi = 0
+        while mi < inner_mut.len()
+            if inner_mut[mi] == cname
+                should_box = 1
+                break
+            end
+            mi = mi + 1
+        end
+        if should_box == 0
+            oi = 0
+            while oi < outer_writes.len()
+                if outer_writes[oi] == cname
+                    if outer_counts[oi] >= 2 or outer_comp[oi] == 1
+                        should_box = 1
+                    end
+                    break
+                end
+                oi = oi + 1
+            end
+        end
+        if should_box == 1
+            push(res, cname)
+        end
+        ci = ci + 1
     end
     return res
 end
@@ -676,6 +850,8 @@ fn x86_synth_lookup_fn_ret_type s fn_name
 
 include "src/compiler/backend/targets/x86_64/runtime_helpers.lp"
 include "src/compiler/backend/targets/x86_64/runtime_io.lp"
+include "src/compiler/backend/targets/x86_64/runtime_mt_gc.lp"
+include "src/compiler/backend/targets/x86_64/runtime_dict.lp"
 include "src/compiler/backend/targets/x86_64/avx2_encoder.lp"
 include "src/compiler/backend/targets/x86_64/amx_vnni_encoder.lp"
 include "src/compiler/backend/targets/x86_64/runtime_arena.lp"
@@ -1194,8 +1370,8 @@ fn x86_synth_get_field_type s sname fname
     return ""
 
 fn x86_synth_is_mutable_global_name name
-    // WHY: Treats top-level `g_*` variables as cross-function mutable RW globals.
-    if len(name) >= 2 and char_at(name, 0) == "g" and char_at(name, 1) == "_"
+    // WHY: Treats top-level `g_*` and `G_*` variables as cross-function mutable RW globals.
+    if len(name) >= 2 and (char_at(name, 0) == "g" or char_at(name, 0) == "G") and char_at(name, 1) == "_"
         return 1
     end
     return 0
@@ -1213,15 +1389,12 @@ fn x86_synth_find_mutable_global s name
     return 0
 
 fn x86_synth_alloc_mutable_global s name
-    // WHY: Allocates an 8-byte RW .data slot at offset 512..4088 for cross-function mutable globals.
+    // WHY: Allocates an 8-byte RW .data/.bss slot starting at offset 512 (auto-expanding PT_LOAD[1] beyond 4KB).
     existing = x86_synth_find_mutable_global(s, name)
     if existing >= 512
         return existing
     end
     slot_off = 512 + (s.synth_mutable_globals.len() * 8)
-    if slot_off >= 4096
-        return 0
-    end
     push(s.synth_mutable_globals, name)
     push(s.synth_mutable_global_offs, slot_off)
     push(s.synth_mutable_global_prims, "")
@@ -1723,6 +1896,32 @@ fn x86_synth_is_ident_token kind
     if kind == TOK_KW_PRINT() return 1
     if kind == TOK_KW_SYSCALL() return 1
     return 0
+
+fn x86_synth_line_has_inline_end toks start_pos start_line
+    // WHY: Detects explicit single-line block terminators (`if cond s1; s2 end`) on start_line
+    // so semicolons separate statements inside the inline block instead of prematurely closing it.
+    n = toks.len()
+    i = start_pos
+    depth = 0
+    while i < n
+        t = toks[i]
+        k = t.tok_kind
+        txt = t.tok_text
+        if k == TOK_EOF() or k == TOK_NEWLINE() or t.tok_span.span_start_line > start_line
+            return 0
+        end
+        if k == TOK_KW_IF() or k == TOK_DIR_IF() or k == TOK_KW_WHILE() or k == TOK_DIR_WHILE() or k == TOK_KW_FOR() or k == TOK_DIR_FOR() or (k == TOK_IDENT() and (txt == "if" or txt == "যদি" or txt == "@if" or txt == "while" or txt == "যতক্ষণ" or txt == "@while" or txt == "for" or txt == "জন্য" or txt == "@for"))
+            depth = depth + 1
+        elif x86_synth_is_block_end(toks, i) == 1
+            if depth == 0
+                return 1
+            end
+            depth = depth - 1
+        end
+        i = i + 1
+    end
+    return 0
+end
 
 fn x86_synth_should_stop_inline toks pos_box start_line
     // WHY: Allows single-line multi-statement directive blocks (`@while cond s1 s2 @end`)

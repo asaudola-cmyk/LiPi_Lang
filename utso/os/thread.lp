@@ -68,7 +68,7 @@ fn থ্রেড_ছেড়ে_দাও
 // WHY: চাইল্ড থ্রেডের কাজ সমাপ্ত হলে প্যারেন্ট প্রসেসকে অক্ষত রেখে কেবলমাত্র কলিং থ্রেডটি নিষ্ক্রিয় করা।
 // সতর্কতা: exit_group (231) পুরো প্রসেস বন্ধ করে দেয়, কিন্তু SYS_exit (60) শুধু বর্তমান থ্রেড সমাপ্ত করে।
 fn thread_exit status
-    syscall(60, status)
+    _lipi_thread_exit(status)
 
 fn থ্রেড_প্রস্থান status
     thread_exit(status)

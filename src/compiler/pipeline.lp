@@ -158,14 +158,39 @@ fn pipeline_is_ident_token kind
 
 fn pipeline_should_stop_inline toks pos_box start_line
     // WHY: Stops a single-line header body (e.g. `if c stmt`) at newline/EOF, while allowing
-    // multi-statement inline blocks (e.g. `@while cond s1 s2 @end`) to consume all tokens on start_line.
+    // multi-statement inline blocks (e.g. `if 1 == 2 x = 1; x = 2 end` or `@while cond s1 s2 @end`)
+    // to consume all `;`-separated statements on start_line whenever an explicit block terminator
+    // (`end`/`else`/`elif`) closes the inline block on the same line.
     np = get(pos_box, 0)
     if np >= toks.len()
         return 1
     end
     nt = toks[np]
     nk = nt.tok_kind
-    if nk == TOK_NEWLINE() or nk == TOK_SEMI() or nk == TOK_COMMENT_LINE() or nk == TOK_EOF()
+    if nk == TOK_NEWLINE() or nk == TOK_COMMENT_LINE() or nk == TOK_EOF()
+        return 1
+    end
+    if nk == TOK_SEMI()
+        // Look ahead on start_line for an explicit `end`/`else`/`elif` terminator
+        si = np + 1
+        while si < toks.len()
+            st = toks[si]
+            sk = st.tok_kind
+            if sk == TOK_NEWLINE() or sk == TOK_EOF() or st.tok_span.span_start_line > start_line
+                break
+            end
+            if pipeline_is_block_end(toks, si) == 1
+                return 0
+            end
+            stxt = st.tok_text
+            if sk == TOK_KW_ELSE() or sk == TOK_DIR_ELSE() or sk == TOK_KW_ELIF() or sk == TOK_DIR_ELIF()
+                return 0
+            end
+            if sk == TOK_IDENT() and (stxt == "else" or stxt == "elif" or stxt == "নাহলে" or stxt == "নতুবা" or stxt == "অন্যথায়" or stxt == "নাহলে_যদি" or stxt == "@else" or stxt == "@elif")
+                return 0
+            end
+            si = si + 1
+        end
         return 1
     end
     if nt.tok_span.span_start_line > start_line
@@ -578,11 +603,24 @@ fn pipeline_parse_primary toks pos_box sp
             end
             if toks[cp_map].tok_kind == TOK_COMMA() or (toks[cp_map].tok_kind != TOK_STR() and toks[cp_map].tok_text == ",")
                 list_set(pos_box, 0, cp_map + 1)
+            elif toks[cp_map].tok_kind == TOK_COLON() or (toks[cp_map].tok_kind != TOK_STR() and toks[cp_map].tok_text == ":")
+                // Empty map literal `{:}` syntax
+                list_set(pos_box, 0, cp_map + 1)
             else
-                // Field key identifier
-                key_tok = toks[get(pos_box, 0)]
-                key_name = key_tok.tok_text
-                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                // Field key: identifier, string/int literal, or computed `[expr]`
+                key_name = ""
+                if toks[cp_map].tok_kind == TOK_LBRACKET() or (toks[cp_map].tok_kind != TOK_STR() and toks[cp_map].tok_text == "[")
+                    list_set(pos_box, 0, cp_map + 1)
+                    _comp_k = pipeline_parse_expr(toks, pos_box, sp)
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "]"))
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                    key_name = "__computed__"
+                else
+                    key_tok = toks[get(pos_box, 0)]
+                    key_name = key_tok.tok_text
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
 
                 while get(pos_box, 0) < toks.len()
                     skip_k = toks[get(pos_box, 0)].tok_kind
@@ -4062,16 +4100,36 @@ fn compiler_pipeline_execute config source_code
                 dwarf_unit_add_base_type(cu, "f64", 8, DW_ATE_float())
                 info_bytes = dwarf_info_serialize(cu)
 
+                extra_rw_bss = 0
+                needed_rw_bytes = 512 + (synth.synth_mutable_globals.len() * 8)
+                if needed_rw_bytes > 4096
+                    rem_rw = (needed_rw_bytes - 4096) % 4096
+                    if rem_rw == 0
+                        extra_rw_bss = needed_rw_bytes - 4096
+                    else
+                        extra_rw_bss = (needed_rw_bytes - 4096) + (4096 - rem_rw)
+                    end
+                end
                 if config.cfg_no_pie == 0
-                    emit_res = elf_emit_executable_pie_with_debug(synth.synth_code, synth.synth_rodata, [], 0, line_bytes, info_bytes, abbrev_bytes, config.cfg_out_path)
+                    emit_res = elf_emit_executable_pie_with_debug(synth.synth_code, synth.synth_rodata, [], extra_rw_bss, line_bytes, info_bytes, abbrev_bytes, config.cfg_out_path)
                 else
-                    emit_res = elf_emit_executable_with_debug(synth.synth_code, synth.synth_rodata, [], 0, line_bytes, info_bytes, abbrev_bytes, config.cfg_out_path)
+                    emit_res = elf_emit_executable_with_debug(synth.synth_code, synth.synth_rodata, [], extra_rw_bss, line_bytes, info_bytes, abbrev_bytes, config.cfg_out_path)
                 end
             else
+                extra_rw_bss = 0
+                needed_rw_bytes = 512 + (synth.synth_mutable_globals.len() * 8)
+                if needed_rw_bytes > 4096
+                    rem_rw = (needed_rw_bytes - 4096) % 4096
+                    if rem_rw == 0
+                        extra_rw_bss = needed_rw_bytes - 4096
+                    else
+                        extra_rw_bss = (needed_rw_bytes - 4096) + (4096 - rem_rw)
+                    end
+                end
                 if config.cfg_no_pie == 0
-                    emit_res = elf_emit_executable_pie(synth.synth_code, synth.synth_rodata, [], 0, config.cfg_out_path)
+                    emit_res = elf_emit_executable_pie(synth.synth_code, synth.synth_rodata, [], extra_rw_bss, config.cfg_out_path)
                 else
-                    emit_res = elf_emit_executable(synth.synth_code, synth.synth_rodata, [], 0, config.cfg_out_path)
+                    emit_res = elf_emit_executable(synth.synth_code, synth.synth_rodata, [], extra_rw_bss, config.cfg_out_path)
                 end
             end
             if emit_res.ew_success == 1

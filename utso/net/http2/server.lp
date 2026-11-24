@@ -725,3 +725,89 @@ fn http2_serve_tls_h2_once listen_fd engine response_body
     end
     _h2_graceful_close(cfd)
     return [0, "", "", session.ts_alpn]
+
+fn http2_serve_h2c_multi listen_fd expected_streams
+    // WHY: Accepts 1 cleartext HTTP/2 (h2c) connection and serves `expected_streams` multiplexed
+    // requests (including PING ACK, WINDOW_UPDATE, HEADERS+DATA body echo) on the same TCP stream.
+    cfd = syscall(43, listen_fd, 0, 0, 0, 0, 0)
+    if cfd < 0 return 0 end
+    pref = _h2_tcp_read_exact(cfd, 24)
+    if http2_check_preface(pref) != 1
+        syscall(3, cfd, 0, 0, 0, 0, 0)
+        return 0
+    end
+    _tls13s_write_list_fd(cfd, http2_build_server_settings())
+
+    s_ids = list()
+    s_methods = list()
+    s_paths = list()
+    s_bodies = list()
+    served = 0
+    last_sid = 0
+    frames_seen = 0
+    while served < expected_streams and frames_seen < 128
+        hdr = _h2_tcp_read_exact(cfd, 9)
+        if len(hdr) < 9 break end
+        flen = ((get(hdr, 0) & 255) << 16) | ((get(hdr, 1) & 255) << 8) | (get(hdr, 2) & 255)
+        ftype = get(hdr, 3) & 255
+        flags = get(hdr, 4) & 255
+        sid = ((get(hdr, 5) & 127) << 24) | ((get(hdr, 6) & 255) << 16) | ((get(hdr, 7) & 255) << 8) | (get(hdr, 8) & 255)
+        if flen > 65536 break end
+        payload = list()
+        if flen > 0
+            payload = _h2_tcp_read_exact(cfd, flen)
+            if len(payload) != flen break end
+        end
+        frames_seen = frames_seen + 1
+
+        if ftype == H2_FRAME_SETTINGS
+            if (flags & H2_FLAG_ACK) == 0
+                _tls13s_write_list_fd(cfd, http2_build_settings_ack())
+            end
+        elif ftype == H2_FRAME_PING
+            if (flags & H2_FLAG_ACK) == 0 and flen == 8
+                _tls13s_write_list_fd(cfd, http2_build_ping_ack(payload))
+            end
+        elif ftype == H2_FRAME_HEADERS
+            hblk = _h2_extract_headers_payload(flags, payload)
+            kv = http2_hpack_decode_headers(hblk)
+            rm = _h2_find_header(kv[0], kv[1], ":method")
+            rp = _h2_find_header(kv[0], kv[1], ":path")
+            push(s_ids, sid)
+            push(s_methods, rm)
+            push(s_paths, rp)
+            push(s_bodies, "")
+            if sid > last_sid last_sid = sid end
+            if (flags & H2_FLAG_END_STREAM) != 0
+                reply = "{\"stream\":" + str(sid) + ",\"method\":\"" + rm + "\",\"path\":\"" + rp + "\"}"
+                _tls13s_write_list_fd(cfd, http2_build_response_frames(sid, 200, "application/json", reply))
+                served = served + 1
+            end
+        elif ftype == H2_FRAME_DATA
+            idx = 0
+            found = 0 - 1
+            while idx < len(s_ids)
+                if get(s_ids, idx) == sid
+                    found = idx
+                    break
+                end
+                idx = idx + 1
+            end
+            if found >= 0
+                cur_b = get(s_bodies, found) + _h2_bytes_to_str(payload)
+                list_set(s_bodies, found, cur_b)
+                if (flags & H2_FLAG_END_STREAM) != 0
+                    rm2 = get(s_methods, found)
+                    rp2 = get(s_paths, found)
+                    reply2 = "{\"stream\":" + str(sid) + ",\"method\":\"" + rm2 + "\",\"path\":\"" + rp2 + "\",\"echo\":\"" + cur_b + "\"}"
+                    _tls13s_write_list_fd(cfd, http2_build_response_frames(sid, 200, "application/json", reply2))
+                    served = served + 1
+                end
+            end
+        elif ftype == H2_FRAME_GOAWAY
+            break
+        end
+    end
+    _tls13s_write_list_fd(cfd, http2_build_goaway(last_sid, 0))
+    _h2_graceful_close(cfd)
+    return served

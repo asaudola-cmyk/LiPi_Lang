@@ -1380,6 +1380,26 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave_a_mt_gc_globals.lp", "test_wave_a_mt_gc_globals") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_b_mono_dict_closures_cli.lp", "test_wave_b_mono_dict_closures_cli") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_c_join_png_http2.lp", "test_wave_c_join_png_http2") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_d_shaper_ffi.lp", "test_wave_d_shaper_ffi") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

@@ -982,6 +982,7 @@ fn x86_synth_compile_statement s toks pos_box
         end_patches = list()
 
         x86_synth_skip_whitespace_tokens(toks, pos_box)
+        if_has_end = x86_synth_line_has_inline_end(toks, get(pos_box, 0), base_line)
 
         // Compile then-block statements
         while get(pos_box, 0) < toks.len()
@@ -1010,7 +1011,7 @@ fn x86_synth_compile_statement s toks pos_box
             if get(pos_box, 0) == before_stmt_p
                 list_set(pos_box, 0, before_stmt_p + 1)
 
-            if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
+            if cur_t.tok_span.span_start_line == base_line and if_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
                 break
 
         // Check if there is an elif or else coming next
@@ -1073,6 +1074,7 @@ fn x86_synth_compile_statement s toks pos_box
             x86_synth_emit_u32(s, 0)
 
             x86_synth_skip_whitespace_tokens(toks, pos_box)
+            elif_has_end = x86_synth_line_has_inline_end(toks, get(pos_box, 0), elif_line)
 
             // Compile elif body
             while get(pos_box, 0) < toks.len()
@@ -1095,7 +1097,7 @@ fn x86_synth_compile_statement s toks pos_box
                 x86_synth_compile_statement(s, toks, pos_box)
                 if get(pos_box, 0) == b_p2
                     list_set(pos_box, 0, b_p2 + 1)
-                if ct2.tok_span.span_start_line == elif_line and x86_synth_should_stop_inline(toks, pos_box, elif_line) == 1
+                if ct2.tok_span.span_start_line == elif_line and elif_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, elif_line) == 1
                     break
 
             // Jump to end of if
@@ -1125,6 +1127,7 @@ fn x86_synth_compile_statement s toks pos_box
                 else_line = cur_t.tok_span.span_start_line
                 list_set(pos_box, 0, cur_p + 1) // Consume 'else'
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
+                else_has_end = x86_synth_line_has_inline_end(toks, get(pos_box, 0), else_line)
                 while get(pos_box, 0) < toks.len()
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
                     cur_p3 = get(pos_box, 0)
@@ -1141,7 +1144,7 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_compile_statement(s, toks, pos_box)
                     if get(pos_box, 0) == b_p3
                         list_set(pos_box, 0, b_p3 + 1)
-                    if ct3.tok_span.span_start_line == else_line and x86_synth_should_stop_inline(toks, pos_box, else_line) == 1
+                    if ct3.tok_span.span_start_line == else_line and else_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, else_line) == 1
                         break
 
         // Consume optional end / @end / শেষ
@@ -1734,11 +1737,29 @@ fn x86_synth_compile_statement s toks pos_box
                 comp_op = TOK_PERCENT()
 
             if is_assign == 1
+                is_int_lit = 0
+                int_lit_val = 0
+                if is_compound == 0 and next_pos + 1 < toks.len()
+                    rhs_tok = toks[next_pos + 1]
+                    if rhs_tok.tok_kind == TOK_INT()
+                        after_rhs = next_pos + 2
+                        if after_rhs >= toks.len() or toks[after_rhs].tok_kind == TOK_NEWLINE() or toks[after_rhs].tok_kind == TOK_SEMI() or toks[after_rhs].tok_kind == TOK_COMMENT_LINE()
+                            is_int_lit = 1
+                            int_lit_val = rhs_tok.tok_int_val
+                        end
+                    end
+                end
                 lv_mg_chk = x86_synth_find_local_var(s, var_name)
                 mg_cur_off = x86_synth_find_mutable_global(s, var_name)
                 is_mg_target = 0
-                if (s.synth_in_function == 0 and x86_synth_is_mutable_global_name(var_name) == 1) or (lv_mg_chk == 0 and mg_cur_off >= 512)
-                    is_mg_target = 1
+                if s.synth_in_function == 0
+                    if x86_synth_is_mutable_global_name(var_name) == 1 or (lv_mg_chk == 0 and mg_cur_off >= 512)
+                        is_mg_target = 1
+                    end
+                else
+                    if lv_mg_chk == 0 and mg_cur_off >= 512 and (x86_synth_is_mutable_global_name(var_name) == 1 or is_compound == 1)
+                        is_mg_target = 1
+                    end
                 end
                 if is_compound == 0
                     // Fast Path A & B: Direct 1-cycle in-register increment/accumulate for unspilled integer locals:
@@ -1854,15 +1875,6 @@ fn x86_synth_compile_statement s toks pos_box
                         end
                     end
 
-                    is_int_lit = 0
-                    int_lit_val = 0
-                    if next_pos + 1 < toks.len()
-                        rhs_tok = toks[next_pos + 1]
-                        if rhs_tok.tok_kind == TOK_INT()
-                            after_rhs = next_pos + 2
-                            if after_rhs >= toks.len() or toks[after_rhs].tok_kind == TOK_NEWLINE() or toks[after_rhs].tok_kind == TOK_SEMI()
-                                is_int_lit = 1
-                                int_lit_val = rhs_tok.tok_int_val
                     list_set(pos_box, 0, next_pos + 1) // Consume ident [ : type ] and '='
                     x86_synth_compile_expr(s, toks, pos_box)
                     if is_mg_target == 1

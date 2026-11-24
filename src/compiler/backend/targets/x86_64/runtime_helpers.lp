@@ -32,6 +32,8 @@ fn x86_synth_register_helper_fn s name off
     fn_info.fn_end_offset = 0
     fn_info.fn_decl_line = 0
     fn_info.fn_param_count = 0 - 1
+    fn_info.fn_tok_pos = 0 - 1
+    fn_info.fn_param_types = list()
     x86_synth_register_fn_obj(s, fn_info)
     return 0
 
@@ -105,21 +107,24 @@ fn x86_synth_emit_lipi_fn_list s
     return off
 
 fn x86_synth_emit__lipi_list_get s
-    // WHY: Unified polymorphic element index resolver.
-    // Handles both list access (arr[i]) and string character access (str[i]) dynamically.
-    // Maintains 16-byte stack alignment around _lipi_is_str call.
+    // WHY: Unified polymorphic element index resolver supporting LIST, STR0 strings, and DICT0 maps.
+    // Maintains 16-byte stack alignment around _lipi_is_str and _lipi_dict_get calls.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_get", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 50, 85, 72, 137, 229, 87, 86])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 77, 85, 72, 137, 229, 87, 86])
     x86_synth_emit_call_helper(s, "_lipi_is_str")
-    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 116, 18, 72, 133, 246, 120, 27, 139, 79, 248, 72, 57, 206, 115, 19, 15, 182, 4, 55, 195, 72, 59, 55, 115, 9, 72, 139, 71, 16, 72, 139, 4, 240, 195, 49, 192, 195])
+    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 41, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 14, 72, 59, 55, 115, 38, 72, 139, 71, 16, 72, 139, 4, 240, 195, 85, 72, 137, 229])
+    x86_synth_emit_call_helper(s, "_lipi_dict_get")
+    x86_synth_emit_bytes(s, [93, 195, 72, 133, 246, 120, 13, 139, 79, 248, 72, 57, 206, 115, 5, 15, 182, 4, 55, 195, 49, 192, 195])
     return off
 
 fn x86_synth_emit__lipi_list_set s
+    // WHY: Polymorphic setter supporting both LIST[idx]=val and DICT0[key]=val, returning collection ptr in rax.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_set", off)
-    // WHY: Returns rdi (the mutated list pointer) in rax, matching lipi_fn_list_set ABI so chained or assignment updates preserve list identity.
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 13, 72, 59, 55, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 72, 137, 248, 195])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 29, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 17, 72, 59, 55, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 72, 137, 248, 195, 85, 72, 137, 229])
+    x86_synth_emit_call_helper(s, "_lipi_dict_set")
+    x86_synth_emit_bytes(s, [93, 195])
     return off
 
 fn x86_synth_emit__lipi_list_pop s
@@ -234,28 +239,9 @@ fn x86_synth_emit__lipi_print_float s
     x86_synth_emit_bytes(s, [72, 131, 236, 16, 139, 80, 248, 72, 137, 198, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 198, 4, 36, 10, 186, 1, 0, 0, 0, 72, 137, 230, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 72, 131, 196, 16, 93, 195])
     return off
 
-fn x86_synth_emit__lipi_gc_collect s
-    // WHY: True O(N) Magic-XOR conservative mark-and-sweep collector + tail heap shrink (SYS_madvise).
-    // Validates stack/BSS/interior roots in O(1) via [ptr-24]==MAGIC^ptr (including STR0 ptr-8),
-    // skips scanning string character payloads, sweeps dead strings/lists/structs via _lipi_user_free,
-    // updates adaptive threshold (max(512KB, 2x live)), and shrinks dead tail >= 64KB back to Linux.
-    off = s.synth_code.len()
-    x86_synth_register_helper_fn(s, "_lipi_gc_collect", off)
-    x86_synth_register_helper_fn(s, "gc_collect", off)
-    x86_synth_register_helper_fn(s, "lipi_gc_collect", off)
-    x86_synth_register_helper_fn(s, "আবর্জনা_পরিষ্কার", off)
-    // Chunk 1: Save callee-saved regs, reserve locals, query _lipi_slab_buckets_ptr
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 40])
-    x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Chunk 2: Re-entrancy guard, O(1) mark pass over stack/BSS/heap objects, sweep unmarked blocks
-    x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 240, 73, 15, 186, 174, 136, 1, 0, 0, 0, 15, 130, 253, 1, 0, 0, 77, 139, 102, 240, 77, 139, 110, 248, 77, 139, 126, 80, 76, 137, 101, 192, 77, 133, 228, 15, 132, 122, 1, 0, 0, 77, 57, 229, 15, 134, 113, 1, 0, 0, 73, 139, 78, 104, 72, 133, 201, 15, 132, 100, 1, 0, 0, 72, 133, 201, 116, 17, 72, 139, 65, 240, 72, 131, 224, 252, 72, 137, 65, 240, 72, 137, 193, 235, 234, 72, 137, 230, 73, 57, 247, 119, 4, 76, 141, 125, 64, 76, 137, 125, 184, 72, 59, 117, 184, 115, 14, 72, 139, 6, 232, 172, 1, 0, 0, 72, 131, 198, 8, 235, 236, 73, 141, 182, 224, 1, 0, 0, 73, 141, 134, 224, 15, 0, 0, 72, 137, 69, 184, 72, 59, 117, 184, 115, 14, 72, 139, 6, 232, 134, 1, 0, 0, 72, 131, 198, 8, 235, 236, 72, 199, 69, 208, 0, 0, 0, 0, 73, 139, 78, 104, 72, 133, 201, 116, 81, 72, 139, 65, 240, 72, 137, 194, 72, 131, 226, 3, 72, 131, 250, 1, 117, 54, 72, 131, 200, 2, 72, 137, 65, 240, 76, 139, 81, 248, 73, 131, 250, 8, 124, 36, 129, 121, 4, 48, 82, 84, 83, 116, 27, 69, 49, 219, 73, 141, 67, 8, 76, 57, 208, 119, 15, 74, 139, 4, 25, 232, 46, 1, 0, 0, 73, 131, 195, 8, 235, 232, 72, 139, 73, 240, 72, 131, 225, 252, 235, 170, 72, 131, 125, 208, 0, 117, 151, 72, 199, 69, 200, 0, 0, 0, 0, 76, 137, 101, 192, 73, 139, 78, 104, 72, 133, 201, 116, 82, 76, 139, 65, 240, 77, 137, 193, 73, 131, 225, 252, 72, 139, 81, 248, 76, 137, 73, 240, 72, 131, 250, 0, 126, 52, 73, 247, 192, 1, 0, 0, 0, 116, 20, 72, 1, 85, 200, 72, 141, 4, 17, 72, 59, 69, 192, 118, 29, 72, 137, 69, 192, 235, 23, 72, 1, 211, 65, 81, 72, 131, 236, 8, 72, 137, 207])
-    x86_synth_emit_call_helper(s, "_lipi_user_free")
-    // Chunk 3: Update adaptive threshold & telemetry, scrub & count slab freelists, shrink dead tail >= 64KB
-    x86_synth_emit_bytes(s, [72, 131, 196, 8, 65, 89, 76, 137, 201, 235, 169, 72, 139, 69, 200, 73, 137, 134, 144, 1, 0, 0, 73, 1, 158, 152, 1, 0, 0, 73, 199, 134, 120, 1, 0, 0, 0, 0, 0, 0, 72, 209, 224, 72, 61, 0, 0, 8, 0, 115, 5, 184, 0, 0, 8, 0, 73, 137, 134, 128, 1, 0, 0, 69, 49, 192, 73, 131, 248, 9, 115, 42, 65, 185, 16, 0, 0, 0, 76, 137, 193, 73, 211, 225, 75, 139, 20, 198, 72, 133, 210, 116, 16, 72, 199, 66, 8, 0, 0, 0, 0, 76, 1, 203, 72, 139, 18, 235, 235, 73, 255, 192, 235, 208, 77, 133, 228, 116, 40, 72, 139, 125, 192, 76, 57, 231, 114, 31, 72, 131, 199, 15, 72, 131, 231, 240, 73, 139, 78, 248, 72, 137, 200, 72, 41, 248, 72, 61, 0, 0, 1, 0, 114, 5])
-    x86_synth_emit_call_helper(s, "_lipi_arena_reset")
-    // Chunk 4: Release _gc_in_progress, return reclaimed bytes, local O(1) .gc_mark_o1 helper
-    x86_synth_emit_bytes(s, [240, 73, 15, 186, 182, 136, 1, 0, 0, 0, 72, 137, 216, 72, 131, 196, 40, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195, 77, 141, 76, 36, 24, 76, 57, 200, 114, 110, 76, 57, 232, 115, 105, 72, 169, 7, 0, 0, 0, 117, 97, 73, 184, 165, 90, 90, 165, 49, 67, 71, 76, 73, 49, 192, 76, 57, 64, 232, 116, 42, 77, 141, 76, 36, 32, 76, 57, 200, 114, 68, 129, 120, 252, 48, 82, 84, 83, 117, 59, 72, 131, 232, 8, 73, 184, 165, 90, 90, 165, 49, 67, 71, 76, 73, 49, 192, 76, 57, 64, 232, 117, 36, 72, 131, 120, 248, 0, 126, 29, 76, 139, 64, 240, 73, 247, 192, 1, 0, 0, 0, 117, 16, 73, 131, 200, 1, 76, 137, 64, 240, 72, 199, 69, 208, 1, 0, 0, 0, 195])
-    return off
+// Multithreaded STW Safepoint GC (_lipi_gc_collect, _lipi_gc_park_self, _lipi_gc_thread_init_and_alloc_slot,
+// _lipi_thread_exit, _lipi_thread_spawn_vm, _lipi_thread_spawn_joinable, _lipi_futex_wait, _lipi_user_alloc)
+// are defined cleanly in runtime_mt_gc.lp.
 
 fn x86_synth_emit__lipi_gc_live_bytes s
     off = s.synth_code.len()
@@ -687,6 +673,9 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_pass_thru = x86_synth_emit__lipi_pass_thru(s)
     off__lipi_atomic_cas = x86_synth_emit__lipi_atomic_cas(s)
     off__lipi_atomic_add = x86_synth_emit__lipi_atomic_add(s)
+    off__lipi_gc_park_self = x86_synth_emit__lipi_gc_park_self(s)
+    off__lipi_gc_thread_init = x86_synth_emit__lipi_gc_thread_init_and_alloc_slot(s)
+    off__lipi_thread_exit = x86_synth_emit__lipi_thread_exit(s)
     off__lipi_user_alloc = x86_synth_emit__lipi_user_alloc(s)
     off__lipi_user_free = x86_synth_emit__lipi_user_free(s)
     off__lipi_float_to_str = x86_synth_emit__lipi_float_to_str(s)
@@ -718,6 +707,7 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_buf_get_byte = x86_synth_emit__lipi_buf_get_byte(s)
     off__lipi_buf_free = x86_synth_emit__lipi_buf_free(s)
     off__lipi_buf_slice = x86_synth_emit__lipi_buf_slice(s)
+    x86_synth_emit_all_dict_helpers(s)
 
     // Register bilingual and standard aliases
     x86_synth_register_helper_fn(s, "move", off__lipi_pass_thru)

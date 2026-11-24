@@ -40,6 +40,16 @@ fn x86_synth_compile_fn_def s toks pos_box
             end
         end
     end
+    saved_in_function = s.synth_in_function
+    saved_current_fn = s.synth_current_fn
+    mono_name = s.synth_mono_name_override
+    mono_params = s.synth_mono_param_override
+    s.synth_mono_name_override = ""
+    s.synth_mono_param_override = 0
+    if mono_name != ""
+        fn_name = mono_name
+        method_alias = ""
+    end
     s.synth_in_function = 1
     s.synth_current_fn = fn_name
 
@@ -48,8 +58,20 @@ fn x86_synth_compile_fn_def s toks pos_box
     fn_jmp_patch = s.synth_code.len()
     x86_synth_emit_u32(s, 0)
 
-    // Record function entry point (reusing pre-scanned stub when available so indexes remain valid)
-    fn_entry_idx = x86_synth_find_prescan_stub(s, fn_name, base_line)
+    // Record function entry point (reusing pre-scanned stub or mono stub when available)
+    fn_entry_idx = 0 - 1
+    if mono_name != ""
+        fi_m = s.synth_functions.len() - 1
+        while fi_m >= 0
+            if s.synth_functions[fi_m].fn_name == fn_name
+                fn_entry_idx = fi_m
+                break
+            end
+            fi_m = fi_m - 1
+        end
+    else
+        fn_entry_idx = x86_synth_find_prescan_stub(s, fn_name, base_line)
+    end
     fn_entry = 0
     if fn_entry_idx >= 0
         fn_entry = s.synth_functions[fn_entry_idx]
@@ -63,6 +85,8 @@ fn x86_synth_compile_fn_def s toks pos_box
         fn_entry.fn_end_offset = 0
         fn_entry.fn_decl_line = base_line
         fn_entry.fn_param_count = 0 - 1
+        fn_entry.fn_tok_pos = 0 - 1
+        fn_entry.fn_param_types = list()
         fn_entry_idx = x86_synth_register_fn_obj(s, fn_entry)
     end
     fn_alias = 0
@@ -80,6 +104,8 @@ fn x86_synth_compile_fn_def s toks pos_box
             fn_alias.fn_end_offset = 0
             fn_alias.fn_decl_line = base_line
             fn_alias.fn_param_count = 0 - 1
+            fn_alias.fn_tok_pos = 0 - 1
+            fn_alias.fn_param_types = list()
             x86_synth_register_fn_obj(s, fn_alias)
         end
     end
@@ -92,6 +118,9 @@ fn x86_synth_compile_fn_def s toks pos_box
     saved_try_frames = s.synth_try_frames
     saved_defer_starts = s.synth_defer_starts
     saved_defer_ends = s.synth_defer_ends
+    saved_loop_starts = s.synth_loop_starts
+    saved_loop_breaks = s.synth_loop_breaks
+    saved_loop_continues = s.synth_loop_continues
     s.synth_locals = list()
     s.synth_stack_offset = 64
     s.synth_current_fn_idx = fn_entry_idx
@@ -99,6 +128,9 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_try_frames = list()
     s.synth_defer_starts = list()
     s.synth_defer_ends = list()
+    s.synth_loop_starts = list()
+    s.synth_loop_breaks = list()
+    s.synth_loop_continues = list()
     saved_boxed_vars = s.synth_boxed_vars
     s.synth_boxed_vars = list()
 
@@ -184,6 +216,15 @@ fn x86_synth_compile_fn_def s toks pos_box
     if method_alias != "" and params.len() > 0
         if param_types[0] == ""
             list_set(param_types, 0, target_sname)
+        end
+    end
+    if mono_params != 0
+        mpi = 0
+        while mpi < param_types.len() and mpi < mono_params.len()
+            if param_types[mpi] == "" and mono_params[mpi] != ""
+                list_set(param_types, mpi, mono_params[mpi])
+            end
+            mpi = mpi + 1
         end
     end
 
@@ -287,9 +328,12 @@ fn x86_synth_compile_fn_def s toks pos_box
             s.synth_try_frames = saved_try_frames
             s.synth_defer_starts = saved_defer_starts
             s.synth_defer_ends = saved_defer_ends
+            s.synth_loop_starts = saved_loop_starts
+            s.synth_loop_breaks = saved_loop_breaks
+            s.synth_loop_continues = saved_loop_continues
             s.synth_boxed_vars = saved_boxed_vars
-            s.synth_in_function = 0
-            s.synth_current_fn = ""
+            s.synth_in_function = saved_in_function
+            s.synth_current_fn = saved_current_fn
             return 0
 
     // Parse function body statements until next function, EOF, or dedent
@@ -350,9 +394,12 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_try_frames = saved_try_frames
     s.synth_defer_starts = saved_defer_starts
     s.synth_defer_ends = saved_defer_ends
+    s.synth_loop_starts = saved_loop_starts
+    s.synth_loop_breaks = saved_loop_breaks
+    s.synth_loop_continues = saved_loop_continues
     s.synth_boxed_vars = saved_boxed_vars
-    s.synth_in_function = 0
-    s.synth_current_fn = ""
+    s.synth_in_function = saved_in_function
+    s.synth_current_fn = saved_current_fn
     return 0
 
 // ── 8. Master Program Synthesizer Entry Point ──────────────────────────────────
@@ -388,10 +435,20 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
                 rbi = rbi + 1
     end
 
-    // 1. Emit top-level stack frame prologue at entry point (offset 0) & pre-scan function signatures
+    // 1. Emit top-level stack frame prologue at entry point (offset 0) & pre-scan function signatures + top-level globals
     say "    [x86_synth] Emitting top-level prologue..."
     top_prologue_patch = x86_synth_emit_prologue(s)
+    // Publish dynamic RW globals scan span into [rw_vaddr + 488] (_gc_globals_bytes) for GC root scanning
+    x86_synth_emit_bytes(s, [72, 184]) // movabs rax, <rw_vaddr + 488>
+    s.synth_globals_rw_ptr_patch = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    x86_synth_emit_bytes(s, [72, 185]) // movabs rcx, <globals_bytes>
+    s.synth_globals_rw_len_patch = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    x86_synth_emit_bytes(s, [72, 137, 8]) // mov [rax], rcx
     x86_synth_prescan_signatures(s, tokens)
+    s.synth_boxed_vars = x86_synth_prescan_boxed_vars(tokens, 0, 0 - 1, 0 - 1)
+    x86_synth_prescan_globals(s, tokens)
 
     // 2. Synthesize all functions, structs, and statements
     say "    [x86_synth] Synthesizing top-level declarations & statements..."
@@ -597,6 +654,11 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u64(s, s.synth_heap_ptr_fn_off + 2, heap_ptr_vaddr)
         x86_synth_record_reloc_patch(s, s.synth_heap_ptr_fn_off + 2, rw_file_off + 24)
     end
+    if s.synth_globals_rw_ptr_patch > 0
+        x86_synth_patch_u64(s, s.synth_globals_rw_ptr_patch, rw_vaddr - (0 - 488))
+        x86_synth_record_reloc_patch(s, s.synth_globals_rw_ptr_patch, rw_file_off + 488)
+        x86_synth_patch_u64(s, s.synth_globals_rw_len_patch, s.synth_mutable_globals.len() * 8)
+    end
     mg_i = 0
     while mg_i < s.synth_global_rw_patch_offs.len()
         mg_p = s.synth_global_rw_patch_offs[mg_i]
@@ -655,6 +717,8 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
                     fn_item.fn_name = fn_name
                     fn_item.fn_entry_offset = fn_off
                     fn_item.fn_ret_type = ""
+                    fn_item.fn_tok_pos = 0 - 1
+                    fn_item.fn_param_types = list()
                     x86_synth_register_fn_obj(s, fn_item)
                     has_new_fns = 1
                 end

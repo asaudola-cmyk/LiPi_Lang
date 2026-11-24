@@ -190,23 +190,35 @@
 @end
 
 @fn str_repeat(s, n)
-  result = ""
+  @! WHY: O(N) string repetition via native ERMS ByteBuffer — zero O(N^2) concatenation churn.
+  @if n <= 0 return "" @end
+  slen = str_len(s)
+  @if slen <= 0 return "" @end
+  @if n == 1 return s @end
+  b = buf_new((slen * n) + 16)
   i = 0
   @while i < n
-    result = result + s
+    buf_write_str(b, s)
     i = i + 1
   @end
-  return result
+  res = buf_to_str(b)
+  buf_free(b)
+  return res
 @end
 
 @fn str_reverse(s)
-  result = ""
-  i = str_len(s) - 1
+  @! WHY: O(N) byte-order string reversal via native ByteBuffer.
+  n = str_len(s)
+  @if n <= 1 return s @end
+  b = buf_new(n + 16)
+  i = n - 1
   @while i >= 0
-    result = result + s.char_at(i)
+    buf_write_byte(b, str_char_at(s, i) & 255)
     i = i - 1
   @end
-  return result
+  res = buf_to_str(b)
+  buf_free(b)
+  return res
 @end
 
 @! ─── Integer / String Conversion ────────────────────────────
@@ -377,18 +389,9 @@
   return 1
 @end
 
-// WHY: Repeats string s count times into a newly accumulated string
+// WHY: O(N) string repetition delegating to ERMS ByteBuffer str_repeat
 @fn string_repeat(s, count)
-  @if count <= 0
-    return ""
-  @end
-  res = ""
-  i = 0
-  @while i < count
-    res = res + s
-    i = i + 1
-  @end
-  return res
+  return str_repeat(s, count)
 @end
 
 // WHY: Returns the ASCII/byte value at idx in string s, or 0 if out of bounds
@@ -642,17 +645,29 @@
 @end
 
 @fn string_join(arr, sep)
-  result = ""
-  i = 0
+  @! WHY: O(N) total-length precomputed join using native ERMS ByteBuffer (eliminates O(N^2) str_concat loops).
   n = arr.len()
+  @if n <= 0 return "" @end
+  @if n == 1 return arr[0] @end
+  sep_len = str_len(sep)
+  total = sep_len * (n - 1)
+  i = 0
   @while i < n
-    @if i > 0
-      result = str_concat(result, sep)
-    @end
-    result = str_concat(result, arr[i])
+    total = total + str_len(arr[i])
     i = i + 1
   @end
-  return result
+  b = buf_new(total + 16)
+  i = 0
+  @while i < n
+    @if i > 0 && sep_len > 0
+      buf_write_str(b, sep)
+    @end
+    buf_write_str(b, arr[i])
+    i = i + 1
+  @end
+  res = buf_to_str(b)
+  buf_free(b)
+  return res
 @end
 
 @fn str_join(arr, sep)

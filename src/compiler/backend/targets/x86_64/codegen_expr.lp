@@ -866,10 +866,71 @@ fn x86_synth_expr_primary s toks pos_box
             s.synth_last_struct = ""
             s.synth_last_elem_type = arr_elem_t
 
-    // 3b. Struct / Map Literal: { key: val, key2: val2, ... }
+    // 3b. Dynamic Silicon Dict (`{ "k": v }`, `{}`, `{:}`) OR Static Struct Literal (`{ field: val }`)
     elif k == TOK_LBRACE() or (k == TOK_IDENT() and txt == "{") or txt == "{"
         list_set(pos_box, 0, pos + 1) // Consume '{'
         x86_synth_skip_whitespace_tokens(toks, pos_box)
+
+        // WHY: String-keyed literals (`{ "alpha": 10 }`), empty `{}` / `{:}`, and int/computed keys
+        // lower to First-Class Silicon DICT0 HashMaps (O(1) Robin-Hood, GC-traced, polymorphic d[k]).
+        // Unquoted identifier literals (`{ a: 1, b: 2 }`) remain zero-overhead static structs.
+        is_dict_lit = 0
+        dp_peek = get(pos_box, 0)
+        if dp_peek < toks.len()
+            dk0 = toks[dp_peek].tok_kind
+            dtxt0 = toks[dp_peek].tok_text
+            if dk0 == TOK_RBRACE() or dk0 == TOK_COLON() or dk0 == TOK_STR() or dk0 == TOK_INTERP_STR() or dk0 == TOK_INT() or dk0 == TOK_LBRACKET() or (dk0 != TOK_STR() and (dtxt0 == "}" or dtxt0 == ":" or dtxt0 == "["))
+                is_dict_lit = 1
+            end
+        end
+        if is_dict_lit == 1
+            x86_synth_emit_mov_rdi_imm64(s, 16)
+            x86_synth_emit_call_helper(s, "_lipi_dict_new")
+            x86_synth_emit_byte(s, 80) // push rax (preserve dict ptr on stack)
+            if dp_peek < toks.len() and (toks[dp_peek].tok_kind == TOK_COLON() or (toks[dp_peek].tok_kind != TOK_STR() and toks[dp_peek].tok_text == ":"))
+                list_set(pos_box, 0, dp_peek + 1) // Consume ':' in empty `{:}`
+            end
+            while get(pos_box, 0) < toks.len()
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                cur_dp = get(pos_box, 0)
+                if cur_dp >= toks.len()
+                    break
+                end
+                cur_dt = toks[cur_dp]
+                if cur_dt.tok_kind == TOK_RBRACE() or (cur_dt.tok_kind != TOK_STR() and cur_dt.tok_text == "}")
+                    break
+                end
+                // Compile dynamic key expression -> push rax
+                x86_synth_compile_expr(s, toks, pos_box)
+                x86_synth_emit_byte(s, 80) // push rax ([rsp]=key, [rsp+8]=dict)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                cur_dp = get(pos_box, 0)
+                if cur_dp < toks.len() and (toks[cur_dp].tok_kind == TOK_COLON() or (toks[cur_dp].tok_kind != TOK_STR() and toks[cur_dp].tok_text == ":"))
+                    list_set(pos_box, 0, cur_dp + 1) // Consume ':'
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                // Compile value expression -> %rax
+                x86_synth_compile_expr(s, toks, pos_box)
+                // rdx = val, rsi = pop key, rdi = [rsp] (dict) -> call _lipi_dict_set
+                x86_synth_emit_bytes(s, [72, 137, 194, 94, 72, 139, 60, 36])
+                x86_synth_emit_call_helper(s, "_lipi_dict_set")
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                cur_dp = get(pos_box, 0)
+                if cur_dp < toks.len() and (toks[cur_dp].tok_kind == TOK_COMMA() or (toks[cur_dp].tok_kind != TOK_STR() and toks[cur_dp].tok_text == ","))
+                    list_set(pos_box, 0, cur_dp + 1)
+                end
+            end
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cur_dp = get(pos_box, 0)
+            if cur_dp < toks.len() and (toks[cur_dp].tok_kind == TOK_RBRACE() or (toks[cur_dp].tok_kind != TOK_STR() and toks[cur_dp].tok_text == "}"))
+                list_set(pos_box, 0, cur_dp + 1)
+            end
+            x86_synth_emit_byte(s, 88) // pop rax (dict ptr)
+            s.synth_last_struct = ""
+            s.synth_last_expr_type = ""
+            s.synth_last_elem_type = ""
+            return 0
+        end
 
         // WHY: Scans keys to identify matching struct schema for deterministic field offsets.
         // If any key was already lowered via s.synth_global_fields by an earlier consumer function,
@@ -1277,6 +1338,43 @@ fn x86_synth_expr_primary s toks pos_box
                 end
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = ""
+            // ── Intrinsic 8b: dict / map / অভিধান + native DICT0 operations ────
+            elif (var_name == "dict" or var_name == "map" or var_name == "অভিধান") and arg_count <= 1
+                if arg_count == 0
+                    x86_synth_emit_bytes(s, [49, 255]) // xor edi, edi
+                else
+                    x86_synth_emit_byte(s, 95)         // pop rdi (initial cap)
+                end
+                x86_synth_emit_call_helper(s, "_lipi_dict_new")
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+            elif (var_name == "has_key" or (var_name == "dict_has" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 2
+                x86_synth_emit_byte(s, 94) // pop rsi (key)
+                x86_synth_emit_byte(s, 95) // pop rdi (dict)
+                x86_synth_emit_call_helper(s, "_lipi_dict_has")
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+            elif (var_name == "del_key" or (var_name == "dict_del" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 2
+                x86_synth_emit_byte(s, 94) // pop rsi (key)
+                x86_synth_emit_byte(s, 95) // pop rdi (dict)
+                x86_synth_emit_call_helper(s, "_lipi_dict_del")
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+            elif (var_name == "keys" or (var_name == "dict_keys" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 1
+                x86_synth_emit_byte(s, 95) // pop rdi (dict)
+                x86_synth_emit_call_helper(s, "_lipi_dict_keys")
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+            elif (var_name == "values" or (var_name == "dict_values" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 1
+                x86_synth_emit_byte(s, 95) // pop rdi (dict)
+                x86_synth_emit_call_helper(s, "_lipi_dict_values")
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
             elif (var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং") and arg_count == 1 and arg_expr_types.len() >= 1 and arg_expr_types[0] == "float"
                 x86_synth_emit_byte(s, 95) // pop rdi
                 x86_synth_emit_call_helper(s, "_lipi_float_to_str")
@@ -1357,6 +1455,61 @@ fn x86_synth_expr_primary s toks pos_box
                                 exit(1)
                             end
                         end
+                        // WHY: Sovereign Call-Site Float Monomorphization (0% runtime overhead!).
+                        // When a direct call passes IEEE-754 float argument(s) to an untyped user function,
+                        // specialize an SSE2-typed clone on-demand so arithmetic never corrupts float bits.
+                        call_target_name = var_name
+                        has_flt_mono = 0
+                        m_i = 0
+                        while m_i < arg_expr_types.len()
+                            if arg_expr_types[m_i] == "float"
+                                has_flt_mono = 1
+                                break
+                            end
+                            m_i = m_i + 1
+                        end
+                        if has_flt_mono == 1
+                            orig_fn = x86_synth_find_fn_first(s, var_name)
+                            if orig_fn != 0 and orig_fn.fn_tok_pos >= 0 and orig_fn.fn_param_count == arg_count and orig_fn.fn_param_types != 0 and orig_fn.fn_param_types.len() == arg_count
+                                needs_mono = 0
+                                spec_ptypes = list()
+                                spec_suffix = "__mono"
+                                m_k = 0
+                                while m_k < arg_count
+                                    decl_pt = orig_fn.fn_param_types[m_k]
+                                    if decl_pt == "" and m_k < arg_expr_types.len() and arg_expr_types[m_k] == "float"
+                                        needs_mono = 1
+                                        push(spec_ptypes, "float")
+                                        spec_suffix = spec_suffix + "_f"
+                                    else
+                                        push(spec_ptypes, decl_pt)
+                                        spec_suffix = spec_suffix + "_a"
+                                    end
+                                    m_k = m_k + 1
+                                end
+                                if needs_mono == 1
+                                    call_target_name = var_name + spec_suffix
+                                    if x86_synth_find_fn_first(s, call_target_name) == 0
+                                        m_stub = X86Function()
+                                        m_stub.fn_name = call_target_name
+                                        m_stub.fn_entry_offset = 0 - 1
+                                        m_stub.fn_ret_type = orig_fn.fn_ret_type
+                                        m_stub.fn_end_offset = 0
+                                        m_stub.fn_decl_line = orig_fn.fn_decl_line
+                                        m_stub.fn_param_count = arg_count
+                                        m_stub.fn_tok_pos = 0 - 1
+                                        m_stub.fn_param_types = spec_ptypes
+                                        x86_synth_register_fn_obj(s, m_stub)
+                                        s.synth_last_store_end = 0 - 1
+                                        s.synth_mono_name_override = call_target_name
+                                        s.synth_mono_param_override = spec_ptypes
+                                        m_pos_box = [orig_fn.fn_tok_pos]
+                                        x86_synth_compile_fn_def(s, toks, m_pos_box)
+                                        s.synth_last_store_end = 0 - 1
+                                    end
+                                end
+                            end
+                        end
                         fn_cleanup = x86_synth_emit_pop_args(s, arg_count)
                         // Direct Function Call: Emits call rel32 (0xE8) and queues relocation
                         call_off = s.synth_code.len()
@@ -1366,12 +1519,12 @@ fn x86_synth_expr_primary s toks pos_box
                         call_rel = X86CallReloc()
                         call_rel.cr_patch_offset = patch_pos
                         call_rel.cr_call_site_end = patch_pos + 4
-                        call_rel.cr_target_name = var_name
+                        call_rel.cr_target_name = call_target_name
                         push(s.synth_call_relocs, call_rel)
                         x86_synth_emit_cleanup_stack_args(s, fn_cleanup)
                         if var_name == "main" or var_name == "মূল"
                             s.synth_called_top_level_main = 1
-                        rt_name = x86_synth_lookup_fn_ret_type(s, var_name)
+                        rt_name = x86_synth_lookup_fn_ret_type(s, call_target_name)
                         if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
                             s.synth_last_expr_type = "int"
                         elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "float_to_str" or var_name == "sha256_hex" or var_name == "str_sub" or var_name == "char_at" or var_name == "chr" or var_name == "file_read" or var_name == "bytes_to_hex" or var_name == "qword_to_hex" or var_name == "buf_to_str" or var_name == "bytes_to_str" or var_name == "mem_to_str" or var_name == "বাফার_স্ট্রিংয়ে" or var_name == "বাইট_থেকে_স্ট্রিং"

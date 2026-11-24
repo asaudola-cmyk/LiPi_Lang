@@ -93,7 +93,7 @@ release: build unikernel windows
 	@tar -czf dist/lipi-1.0.1-linux-x86_64.tar.gz bin/ utso/ aati/ examples/ install.sh LICENSE README.md
 	@echo "Standalone release archive created: dist/lipi-1.0.1-linux-x86_64.tar.gz"
 
-# Run full regression test suite (266 tests)
+# Run full regression test suite (270 tests)
 test: bootstrap
 	@echo "Running regression test suite..."
 	@if [ -x bin/lipi ]; then \

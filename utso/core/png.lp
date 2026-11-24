@@ -426,7 +426,7 @@ fn _inf_inflate_zlib zptr zlen out_buf out_cap
     return out_pos
 end
 
-// ── 4. PNG Decoder (All 5 Scanline Filters + RGB/RGBA -> ARGB8888) ────────────
+// ── 4. Full RFC 2083 PNG Decoder (Types 0/2/3/4/6, 1/2/4/8/16-bit, PLTE/tRNS, Adam7) ──
 
 fn _png_paeth a b c
     p = a + b - c
@@ -439,6 +439,210 @@ fn _png_paeth a b c
     if pa <= pb and pa <= pc return a end
     if pb <= pc return b end
     return c
+end
+
+fn _png_channels_for_format color_type bit_depth
+    // WHY: Enforces RFC 2083 Table 11.1 valid (color_type, bit_depth) combinations.
+    if color_type == 0
+        if bit_depth == 1 or bit_depth == 2 or bit_depth == 4 or bit_depth == 8 or bit_depth == 16
+            return 1
+        end
+        return 0
+    elif color_type == 2
+        if bit_depth == 8 or bit_depth == 16 return 3 end
+        return 0
+    elif color_type == 3
+        if bit_depth == 1 or bit_depth == 2 or bit_depth == 4 or bit_depth == 8
+            return 1
+        end
+        return 0
+    elif color_type == 4
+        if bit_depth == 8 or bit_depth == 16 return 2 end
+        return 0
+    elif color_type == 6
+        if bit_depth == 8 or bit_depth == 16 return 4 end
+        return 0
+    end
+    return 0
+end
+
+fn _png_pass_row_bytes pw channels bit_depth
+    return ((pw * channels * bit_depth) + 7) / 8
+end
+
+fn _png_decode_pass raw raw_off pw ph channels bit_depth color_type bpp plte_buf plte_cnt trns_alpha has_trns trns_r trns_g trns_b argb img_w x0 y0 dx dy
+    // WHY: Unfilters one full pass (either the single non-interlaced image or one of the 7 Adam7
+    // passes) with two O(width) row buffers and scatters decoded ARGB8888 pixels directly into `argb`.
+    pstride = _png_pass_row_bytes(pw, channels, bit_depth)
+    prev_row = malloc(pstride + 8)
+    cur_row = malloc(pstride + 8)
+    zi = 0
+    while zi < pstride
+        mem_write_byte(prev_row, zi, 0)
+        zi = zi + 1
+    end
+
+    off = raw_off
+    py = 0
+    while py < ph
+        ftype = mem_read_byte(raw, off)
+        off = off + 1
+        // 1. Reconstruct scanline bytes across all 5 RFC 2083 filter types
+        bx = 0
+        while bx < pstride
+            fv = mem_read_byte(raw, off + bx)
+            a = 0
+            b = 0
+            c = 0
+            if bx >= bpp a = mem_read_byte(cur_row, bx - bpp) end
+            if py > 0 b = mem_read_byte(prev_row, bx) end
+            if bx >= bpp and py > 0 c = mem_read_byte(prev_row, bx - bpp) end
+            out_b = fv
+            if ftype == 1
+                out_b = (fv + a) & 255
+            elif ftype == 2
+                out_b = (fv + b) & 255
+            elif ftype == 3
+                out_b = (fv + ((a + b) / 2)) & 255
+            elif ftype == 4
+                out_b = (fv + _png_paeth(a, b, c)) & 255
+            end
+            mem_write_byte(cur_row, bx, out_b)
+            bx = bx + 1
+        end
+        off = off + pstride
+
+        // 2. Unpack samples (1/2/4/8/16-bit) & color-convert into ARGB8888 destination
+        dst_y = y0 + (py * dy)
+        px = 0
+        while px < pw
+            r = 0
+            g = 0
+            bl = 0
+            al = 255
+            if bit_depth < 8
+                // Sub-byte MSB-first packing (RFC 2083 §7.2)
+                bit_pos = px * bit_depth
+                bval = mem_read_byte(cur_row, bit_pos / 8)
+                shift = 8 - bit_depth - (bit_pos % 8)
+                mask = (1 << bit_depth) - 1
+                sample = (bval >> shift) & mask
+                if color_type == 0
+                    // Scale 1->255, 2->85, 4->17 to exact full 0..255 range
+                    if bit_depth == 1
+                        r = sample * 255
+                    elif bit_depth == 2
+                        r = sample * 85
+                    else
+                        r = sample * 17
+                    end
+                    g = r
+                    bl = r
+                    if has_trns == 1 and sample == trns_r
+                        al = 0
+                    end
+                else
+                    // Indexed palette (color_type == 3)
+                    if sample < plte_cnt
+                        r = mem_read_byte(plte_buf, sample * 3)
+                        g = mem_read_byte(plte_buf, (sample * 3) + 1)
+                        bl = mem_read_byte(plte_buf, (sample * 3) + 2)
+                    end
+                    al = mem_read_byte(trns_alpha, sample)
+                end
+            elif bit_depth == 8
+                if color_type == 0
+                    v = mem_read_byte(cur_row, px)
+                    r = v
+                    g = v
+                    bl = v
+                    if has_trns == 1 and v == trns_r
+                        al = 0
+                    end
+                elif color_type == 2
+                    so = px * 3
+                    r = mem_read_byte(cur_row, so)
+                    g = mem_read_byte(cur_row, so + 1)
+                    bl = mem_read_byte(cur_row, so + 2)
+                    if has_trns == 1 and r == trns_r and g == trns_g and bl == trns_b
+                        al = 0
+                    end
+                elif color_type == 3
+                    idx = mem_read_byte(cur_row, px)
+                    if idx < plte_cnt
+                        r = mem_read_byte(plte_buf, idx * 3)
+                        g = mem_read_byte(plte_buf, (idx * 3) + 1)
+                        bl = mem_read_byte(plte_buf, (idx * 3) + 2)
+                    end
+                    al = mem_read_byte(trns_alpha, idx)
+                elif color_type == 4
+                    so = px * 2
+                    v = mem_read_byte(cur_row, so)
+                    r = v
+                    g = v
+                    bl = v
+                    al = mem_read_byte(cur_row, so + 1)
+                else
+                    so = px * 4
+                    r = mem_read_byte(cur_row, so)
+                    g = mem_read_byte(cur_row, so + 1)
+                    bl = mem_read_byte(cur_row, so + 2)
+                    al = mem_read_byte(cur_row, so + 3)
+                end
+            else
+                // 16-bit big-endian samples (RFC 2083 §7.1): exact 16-bit tRNS check + MSB 8-bit ARGB output
+                if color_type == 0
+                    so = px * 2
+                    hi = mem_read_byte(cur_row, so)
+                    s16 = (hi << 8) | mem_read_byte(cur_row, so + 1)
+                    r = hi
+                    g = hi
+                    bl = hi
+                    if has_trns == 1 and s16 == trns_r
+                        al = 0
+                    end
+                elif color_type == 2
+                    so = px * 6
+                    r = mem_read_byte(cur_row, so)
+                    r16 = (r << 8) | mem_read_byte(cur_row, so + 1)
+                    g = mem_read_byte(cur_row, so + 2)
+                    g16 = (g << 8) | mem_read_byte(cur_row, so + 3)
+                    bl = mem_read_byte(cur_row, so + 4)
+                    b16 = (bl << 8) | mem_read_byte(cur_row, so + 5)
+                    if has_trns == 1 and r16 == trns_r and g16 == trns_g and b16 == trns_b
+                        al = 0
+                    end
+                elif color_type == 4
+                    so = px * 4
+                    v = mem_read_byte(cur_row, so)
+                    r = v
+                    g = v
+                    bl = v
+                    al = mem_read_byte(cur_row, so + 2)
+                else
+                    so = px * 8
+                    r = mem_read_byte(cur_row, so)
+                    g = mem_read_byte(cur_row, so + 2)
+                    bl = mem_read_byte(cur_row, so + 4)
+                    al = mem_read_byte(cur_row, so + 6)
+                end
+            end
+            dst_x = x0 + (px * dx)
+            px_val = (al << 24) | (r << 16) | (g << 8) | bl
+            mem_write_u32(argb, ((dst_y * img_w) + dst_x) * 4, px_val)
+            px = px + 1
+        end
+
+        // Swap prev_row and cur_row pointers
+        tmp_r = prev_row
+        prev_row = cur_row
+        cur_row = tmp_r
+        py = py + 1
+    end
+
+    free(prev_row, pstride + 8)
+    free(cur_row, pstride + 8)
+    return off
 end
 
 fn png_decode_to_argb png_ptr png_len
@@ -454,6 +658,24 @@ fn png_decode_to_argb png_ptr png_len
     height = 0
     bit_depth = 0
     color_type = 0
+    comp_method = 0
+    filt_method = 0
+    interlace = 0
+
+    // Palette (up to 256 RGB triplets) & tRNS transparency state
+    plte_buf = malloc(768)
+    plte_cnt = 0
+    trns_alpha = malloc(256)
+    ti = 0
+    while ti < 256
+        mem_write_byte(trns_alpha, ti, 255)
+        ti = ti + 1
+    end
+    has_trns = 0
+    trns_r = 0
+    trns_g = 0
+    trns_b = 0
+
     // Gather IDAT payloads into contiguous zlib buffer
     zbuf = malloc(png_len)
     zlen = 0
@@ -470,6 +692,8 @@ fn png_decode_to_argb png_ptr png_len
         got_crc = png_crc32(png_ptr, pos + 4, 4 + clen)
         if want_crc != got_crc
             free(zbuf, png_len)
+            free(plte_buf, 768)
+            free(trns_alpha, 256)
             return bad
         end
         // IHDR
@@ -478,6 +702,30 @@ fn png_decode_to_argb png_ptr png_len
             height = _png_u32_be(png_ptr, pos + 12)
             bit_depth = mem_read_byte(png_ptr, pos + 16)
             color_type = mem_read_byte(png_ptr, pos + 17)
+            comp_method = mem_read_byte(png_ptr, pos + 18)
+            filt_method = mem_read_byte(png_ptr, pos + 19)
+            interlace = mem_read_byte(png_ptr, pos + 20)
+        // PLTE
+        elif c0 == 80 and c1 == 76 and c2 == 84 and c3 == 69 and clen > 0
+            copy_n = clen
+            if copy_n > 768 copy_n = 768 end
+            mem_copy(plte_buf, png_ptr + pos + 8, copy_n)
+            plte_cnt = copy_n / 3
+        // tRNS
+        elif c0 == 116 and c1 == 82 and c2 == 78 and c3 == 83 and clen > 0
+            if color_type == 3
+                tn = clen
+                if tn > 256 tn = 256 end
+                mem_copy(trns_alpha, png_ptr + pos + 8, tn)
+            elif color_type == 0 and clen >= 2
+                trns_r = (mem_read_byte(png_ptr, pos + 8) << 8) | mem_read_byte(png_ptr, pos + 9)
+                has_trns = 1
+            elif color_type == 2 and clen >= 6
+                trns_r = (mem_read_byte(png_ptr, pos + 8) << 8) | mem_read_byte(png_ptr, pos + 9)
+                trns_g = (mem_read_byte(png_ptr, pos + 10) << 8) | mem_read_byte(png_ptr, pos + 11)
+                trns_b = (mem_read_byte(png_ptr, pos + 12) << 8) | mem_read_byte(png_ptr, pos + 13)
+                has_trns = 1
+            end
         // IDAT
         elif c0 == 73 and c1 == 68 and c2 == 65 and c3 == 84 and clen > 0
             mem_copy(zbuf + zlen, png_ptr + pos + 8, clen)
@@ -489,75 +737,187 @@ fn png_decode_to_argb png_ptr png_len
         pos = pos + 12 + clen
     end
 
-    if width <= 0 or height <= 0 or bit_depth != 8 or (color_type != 2 and color_type != 6) or zlen < 6
+    channels = _png_channels_for_format(color_type, bit_depth)
+    if width <= 0 or height <= 0 or channels == 0 or comp_method != 0 or filt_method != 0 or (interlace != 0 and interlace != 1) or zlen < 6
         free(zbuf, png_len)
+        free(plte_buf, 768)
+        free(trns_alpha, 256)
         return bad
     end
-    bpp = 4
-    if color_type == 2 bpp = 3 end
-    stride = width * bpp
-    raw_cap = (1 + stride) * height
-    raw = malloc(raw_cap)
+    if color_type == 3 and plte_cnt == 0
+        free(zbuf, png_len)
+        free(plte_buf, 768)
+        free(trns_alpha, 256)
+        return bad
+    end
+
+    // Filter byte-stride (RFC 2083 §9: ceil(channels * bit_depth / 8), min 1)
+    bpp = ((channels * bit_depth) + 7) / 8
+    if bpp < 1 bpp = 1 end
+
+    // Adam7 interlacing grid constants (RFC 2083 §8.2)
+    a7_x0 = [0, 4, 0, 2, 0, 1, 0]
+    a7_y0 = [0, 0, 4, 0, 2, 0, 1]
+    a7_dx = [8, 8, 4, 4, 2, 2, 1]
+    a7_dy = [8, 8, 8, 4, 4, 2, 2]
+
+    // Calculate exact decompressed raw scanline byte size
+    raw_cap = 0
+    if interlace == 0
+        stride = _png_pass_row_bytes(width, channels, bit_depth)
+        raw_cap = (1 + stride) * height
+    else
+        pi = 0
+        while pi < 7
+            if width > a7_x0[pi] and height > a7_y0[pi]
+                pw = (width - a7_x0[pi] + a7_dx[pi] - 1) / a7_dx[pi]
+                ph = (height - a7_y0[pi] + a7_dy[pi] - 1) / a7_dy[pi]
+                raw_cap = raw_cap + ((1 + _png_pass_row_bytes(pw, channels, bit_depth)) * ph)
+            end
+            pi = pi + 1
+        end
+    end
+
+    raw = malloc(raw_cap + 16)
     inf_len = _inf_inflate_zlib(zbuf, zlen, raw, raw_cap)
     free(zbuf, png_len)
     if inf_len != raw_cap
-        free(raw, raw_cap)
+        free(raw, raw_cap + 16)
+        free(plte_buf, 768)
+        free(trns_alpha, 256)
         return bad
     end
 
-    // Unfilter all 5 PNG scanline filters in-place per row into `recon`
-    recon = malloc(stride * height)
-    y = 0
-    while y < height
-        src_row = y * (1 + stride)
-        ftype = mem_read_byte(raw, src_row)
-        dst_row = y * stride
-        x = 0
-        while x < stride
-            fv = mem_read_byte(raw, src_row + 1 + x)
-            a = 0
-            b = 0
-            c = 0
-            if x >= bpp a = mem_read_byte(recon, dst_row + x - bpp) end
-            if y > 0 b = mem_read_byte(recon, dst_row - stride + x) end
-            if x >= bpp and y > 0 c = mem_read_byte(recon, dst_row - stride + x - bpp) end
-            out_b = fv
-            if ftype == 1
-                out_b = (fv + a) & 255
-            elif ftype == 2
-                out_b = (fv + b) & 255
-            elif ftype == 3
-                out_b = (fv + ((a + b) / 2)) & 255
-            elif ftype == 4
-                out_b = (fv + _png_paeth(a, b, c)) & 255
-            end
-            mem_write_byte(recon, dst_row + x, out_b)
-            x = x + 1
-        end
-        y = y + 1
-    end
-    free(raw, raw_cap)
-
-    // Convert RGB / RGBA into ARGB8888 pixel buffer
     argb = malloc(width * height * 4)
-    y = 0
-    while y < height
-        x = 0
-        while x < width
-            so = (y * stride) + (x * bpp)
-            r = mem_read_byte(recon, so)
-            g = mem_read_byte(recon, so + 1)
-            b = mem_read_byte(recon, so + 2)
-            a = 255
-            if bpp == 4 a = mem_read_byte(recon, so + 3) end
-            px = (a << 24) | (r << 16) | (g << 8) | b
-            mem_write_u32(argb, ((y * width) + x) * 4, px)
-            x = x + 1
+    if interlace == 0
+        _png_decode_pass(raw, 0, width, height, channels, bit_depth, color_type, bpp, plte_buf, plte_cnt, trns_alpha, has_trns, trns_r, trns_g, trns_b, argb, width, 0, 0, 1, 1)
+    else
+        cur_off = 0
+        pi = 0
+        while pi < 7
+            if width > a7_x0[pi] and height > a7_y0[pi]
+                pw = (width - a7_x0[pi] + a7_dx[pi] - 1) / a7_dx[pi]
+                ph = (height - a7_y0[pi] + a7_dy[pi] - 1) / a7_dy[pi]
+                cur_off = _png_decode_pass(raw, cur_off, pw, ph, channels, bit_depth, color_type, bpp, plte_buf, plte_cnt, trns_alpha, has_trns, trns_r, trns_g, trns_b, argb, width, a7_x0[pi], a7_y0[pi], a7_dx[pi], a7_dy[pi])
+            end
+            pi = pi + 1
         end
-        y = y + 1
     end
-    free(recon, stride * height)
+
+    free(raw, raw_cap + 16)
+    free(plte_buf, 768)
+    free(trns_alpha, 256)
     return PngImage(argb, width, height, 1)
+end
+
+fn png_encode_custom width height bit_depth color_type interlace plte_ptr plte_len trns_ptr trns_len raw_scan raw_len out_len_box
+    // WHY: Encodes arbitrary RFC 2083 color types (0/2/3/4/6), bit depths (1/2/4/8/16),
+    // optional PLTE/tRNS chunks, and non-interlaced or Adam7 scanline streams into a valid PNG binary.
+    num_blocks = (raw_len + 65534) / 65535
+    if num_blocks < 1 num_blocks = 1 end
+    zlib_len = 2 + raw_len + (num_blocks * 5) + 4
+    extra_chunks = 0
+    if plte_ptr > 0 and plte_len > 0 extra_chunks = extra_chunks + 12 + plte_len end
+    if trns_ptr > 0 and trns_len > 0 extra_chunks = extra_chunks + 12 + trns_len end
+    total_len = 8 + 25 + extra_chunks + 12 + zlib_len + 12
+    out = malloc(total_len)
+
+    // 1. Signature
+    mem_write_byte(out, 0, 137)
+    mem_write_byte(out, 1, 80)
+    mem_write_byte(out, 2, 78)
+    mem_write_byte(out, 3, 71)
+    mem_write_byte(out, 4, 13)
+    mem_write_byte(out, 5, 10)
+    mem_write_byte(out, 6, 26)
+    mem_write_byte(out, 7, 10)
+
+    // 2. IHDR
+    pos = 8
+    _png_write_u32_be(out, pos, 13)
+    mem_write_byte(out, pos + 4, 73)
+    mem_write_byte(out, pos + 5, 72)
+    mem_write_byte(out, pos + 6, 68)
+    mem_write_byte(out, pos + 7, 82)
+    _png_write_u32_be(out, pos + 8, width)
+    _png_write_u32_be(out, pos + 12, height)
+    mem_write_byte(out, pos + 16, bit_depth & 255)
+    mem_write_byte(out, pos + 17, color_type & 255)
+    mem_write_byte(out, pos + 18, 0)
+    mem_write_byte(out, pos + 19, 0)
+    mem_write_byte(out, pos + 20, interlace & 255)
+    _png_write_u32_be(out, pos + 21, png_crc32(out, pos + 4, 17))
+    pos = pos + 25
+
+    // 3. Optional PLTE
+    if plte_ptr > 0 and plte_len > 0
+        _png_write_u32_be(out, pos, plte_len)
+        mem_write_byte(out, pos + 4, 80)
+        mem_write_byte(out, pos + 5, 76)
+        mem_write_byte(out, pos + 6, 84)
+        mem_write_byte(out, pos + 7, 69)
+        mem_copy(out + pos + 8, plte_ptr, plte_len)
+        _png_write_u32_be(out, pos + 8 + plte_len, png_crc32(out, pos + 4, 4 + plte_len))
+        pos = pos + 12 + plte_len
+    end
+
+    // 4. Optional tRNS
+    if trns_ptr > 0 and trns_len > 0
+        _png_write_u32_be(out, pos, trns_len)
+        mem_write_byte(out, pos + 4, 116)
+        mem_write_byte(out, pos + 5, 82)
+        mem_write_byte(out, pos + 6, 78)
+        mem_write_byte(out, pos + 7, 83)
+        mem_copy(out + pos + 8, trns_ptr, trns_len)
+        _png_write_u32_be(out, pos + 8 + trns_len, png_crc32(out, pos + 4, 4 + trns_len))
+        pos = pos + 12 + trns_len
+    end
+
+    // 5. IDAT
+    idat_start = pos
+    _png_write_u32_be(out, pos, zlib_len)
+    mem_write_byte(out, pos + 4, 73)
+    mem_write_byte(out, pos + 5, 68)
+    mem_write_byte(out, pos + 6, 65)
+    mem_write_byte(out, pos + 7, 84)
+    zpos = pos + 8
+    mem_write_byte(out, zpos, 120)
+    mem_write_byte(out, zpos + 1, 1)
+    zpos = zpos + 2
+    rem = raw_len
+    src_off = 0
+    while rem > 0
+        blk = rem
+        if blk > 65535 blk = 65535 end
+        bfinal = 0
+        if blk == rem bfinal = 1 end
+        mem_write_byte(out, zpos, bfinal)
+        mem_write_byte(out, zpos + 1, blk & 255)
+        mem_write_byte(out, zpos + 2, (blk >> 8) & 255)
+        nlen = blk ^ 65535
+        mem_write_byte(out, zpos + 3, nlen & 255)
+        mem_write_byte(out, zpos + 4, (nlen >> 8) & 255)
+        zpos = zpos + 5
+        mem_copy(out + zpos, raw_scan + src_off, blk)
+        zpos = zpos + blk
+        src_off = src_off + blk
+        rem = rem - blk
+    end
+    _png_write_u32_be(out, zpos, png_adler32(raw_scan, 0, raw_len))
+    zpos = zpos + 4
+    _png_write_u32_be(out, zpos, png_crc32(out, idat_start + 4, 4 + zlib_len))
+    pos = zpos + 4
+
+    // 6. IEND
+    _png_write_u32_be(out, pos, 0)
+    mem_write_byte(out, pos + 4, 73)
+    mem_write_byte(out, pos + 5, 69)
+    mem_write_byte(out, pos + 6, 78)
+    mem_write_byte(out, pos + 7, 68)
+    _png_write_u32_be(out, pos + 8, png_crc32(out, pos + 4, 4))
+
+    if out_len_box != 0 list_set(out_len_box, 0, total_len) end
+    return out
 end
 
 fn png_free_image img

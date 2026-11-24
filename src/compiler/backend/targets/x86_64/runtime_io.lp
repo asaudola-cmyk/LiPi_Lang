@@ -137,26 +137,8 @@ fn x86_synth_emit__lipi_atomic_add s
     x86_synth_emit_bytes(s, [72, 137, 240, 240, 72, 15, 193, 7, 195])
     return off
 
-fn x86_synth_emit__lipi_user_alloc s
-    // WHY: Thread-safe O(1) segregated slab + large-block freelist allocator with 32B Magic-XOR GC header,
-    // zero-on-reuse ERMS scrubbing, and adaptive auto-reclamation threshold (512KB / 2x live).
-    off = s.synth_code.len()
-    x86_synth_register_helper_fn(s, "_lipi_user_alloc", off)
-    x86_synth_register_helper_fn(s, "alloc", off)
-    x86_synth_register_helper_fn(s, "sys_alloc", off)
-    x86_synth_register_helper_fn(s, "বরাদ্দ", off)
-    // Chunk 1: Size classification across 9 geometric classes (16..4096B) or 16B-aligned large block
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8, 73, 137, 252, 73, 131, 252, 0, 127, 7, 73, 199, 196, 16, 0, 0, 0, 69, 49, 237, 65, 190, 16, 0, 0, 0, 73, 131, 252, 16, 15, 142, 186, 0, 0, 0, 65, 189, 8, 0, 0, 0, 65, 190, 32, 0, 0, 0, 73, 131, 252, 32, 15, 142, 164, 0, 0, 0, 65, 189, 16, 0, 0, 0, 65, 190, 64, 0, 0, 0, 73, 131, 252, 64, 15, 142, 142, 0, 0, 0, 65, 189, 24, 0, 0, 0, 65, 190, 128, 0, 0, 0, 73, 129, 252, 128, 0, 0, 0, 126, 121, 65, 189, 32, 0, 0, 0, 65, 190, 0, 1, 0, 0, 73, 129, 252, 0, 1, 0, 0, 126, 100, 65, 189, 40, 0, 0, 0, 65, 190, 0, 2, 0, 0, 73, 129, 252, 0, 2, 0, 0, 126, 79, 65, 189, 48, 0, 0, 0, 65, 190, 0, 4, 0, 0, 73, 129, 252, 0, 4, 0, 0, 126, 58, 65, 189, 56, 0, 0, 0, 65, 190, 0, 8, 0, 0, 73, 129, 252, 0, 8, 0, 0, 126, 37, 65, 189, 64, 0, 0, 0, 65, 190, 0, 16, 0, 0, 73, 129, 252, 0, 16, 0, 0, 126, 16, 73, 199, 197, 255, 255, 255, 255, 77, 141, 116, 36, 15, 73, 131, 230, 240, 49, 219])
-    x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
-    // Chunk 2: Fast-path slab/large freelist pop + zero-fill + alloc accounting, or adaptive auto-GC trigger
-    x86_synth_emit_bytes(s, [73, 137, 199, 73, 131, 253, 0, 124, 80, 75, 141, 60, 47, 240, 73, 15, 186, 111, 96, 0, 114, 247, 72, 139, 7, 72, 133, 192, 116, 50, 72, 139, 48, 72, 137, 55, 240, 73, 15, 186, 119, 96, 0, 77, 1, 183, 120, 1, 0, 0, 76, 137, 112, 248, 73, 137, 193, 72, 137, 199, 76, 137, 241, 72, 193, 233, 3, 49, 192, 243, 72, 171, 76, 137, 200, 233, 4, 1, 0, 0, 240, 73, 15, 186, 119, 96, 0, 235, 104, 240, 73, 15, 186, 111, 96, 0, 114, 247, 73, 141, 191, 160, 1, 0, 0, 79, 141, 4, 54, 72, 139, 7, 72, 133, 192, 116, 69, 72, 139, 80, 8, 76, 57, 242, 114, 55, 76, 57, 194, 119, 50, 72, 139, 48, 72, 137, 55, 240, 73, 15, 186, 119, 96, 0, 73, 1, 151, 120, 1, 0, 0, 72, 137, 80, 248, 73, 137, 193, 72, 137, 199, 76, 137, 241, 72, 193, 233, 3, 49, 192, 243, 72, 171, 76, 137, 200, 233, 159, 0, 0, 0, 72, 137, 199, 235, 179, 240, 73, 15, 186, 119, 96, 0, 133, 219, 117, 77, 73, 139, 135, 136, 1, 0, 0, 72, 133, 192, 117, 65, 73, 139, 143, 120, 1, 0, 0, 76, 1, 241, 73, 137, 143, 120, 1, 0, 0, 73, 139, 151, 128, 1, 0, 0, 72, 133, 210, 117, 5, 186, 0, 0, 8, 0, 72, 57, 209, 114, 26, 73, 199, 135, 120, 1, 0, 0, 0, 0, 0, 0, 187, 1, 0, 0, 0])
-    x86_synth_emit_call_helper(s, "_lipi_gc_collect")
-    // Chunk 3: Retry freelist after GC, else carve 32B header + payload from bump arena
-    x86_synth_emit_bytes(s, [233, 241, 254, 255, 255, 73, 141, 126, 47, 72, 131, 231, 240])
-    x86_synth_emit_call_helper(s, "__alloc")
-    // Chunk 4: Write Magic-XOR header [ptr-24], size [ptr-8], link onto _gc_alloc_head under spinlock
-    x86_synth_emit_bytes(s, [72, 131, 192, 32, 72, 185, 165, 90, 90, 165, 49, 67, 71, 76, 72, 49, 193, 72, 137, 72, 232, 76, 137, 112, 248, 240, 73, 15, 186, 111, 96, 0, 114, 247, 73, 139, 79, 104, 72, 137, 72, 240, 73, 137, 71, 104, 240, 73, 15, 186, 119, 96, 0, 72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195])
-    return off
+// _lipi_user_alloc, _lipi_thread_spawn_joinable, _lipi_thread_spawn_vm, and _lipi_futex_wait
+// are defined in runtime_mt_gc.lp with full multithreaded STW safepoint and thread-stack registration.
 
 fn x86_synth_emit__lipi_user_free s
     // WHY: Sovereign bounds-guarded, Magic-XOR validated & double-free-shielded deallocator.
@@ -180,77 +162,6 @@ fn x86_synth_emit__lipi_user_free s
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
     // Chunk 4: Push to 9 slab buckets OR large freelist + SYS_madvise(MADV_DONTNEED) >= 8KB
     x86_synth_emit_bytes(s, [73, 137, 199, 73, 129, 253, 0, 16, 0, 0, 15, 143, 142, 0, 0, 0, 49, 219, 73, 131, 253, 16, 126, 97, 187, 8, 0, 0, 0, 73, 131, 253, 32, 126, 86, 187, 16, 0, 0, 0, 73, 131, 253, 64, 126, 75, 187, 24, 0, 0, 0, 73, 129, 253, 128, 0, 0, 0, 126, 61, 187, 32, 0, 0, 0, 73, 129, 253, 0, 1, 0, 0, 126, 47, 187, 40, 0, 0, 0, 73, 129, 253, 0, 2, 0, 0, 126, 33, 187, 48, 0, 0, 0, 73, 129, 253, 0, 4, 0, 0, 126, 19, 187, 56, 0, 0, 0, 73, 129, 253, 0, 8, 0, 0, 126, 5, 187, 64, 0, 0, 0, 73, 141, 12, 31, 240, 73, 15, 186, 111, 96, 0, 114, 247, 72, 139, 17, 76, 57, 226, 116, 7, 73, 137, 20, 36, 76, 137, 33, 240, 73, 15, 186, 119, 96, 0, 235, 96, 73, 129, 253, 0, 32, 0, 0, 114, 43, 73, 141, 188, 36, 15, 16, 0, 0, 72, 129, 231, 0, 240, 255, 255, 75, 141, 52, 44, 72, 129, 230, 0, 240, 255, 255, 72, 41, 254, 118, 12, 186, 4, 0, 0, 0, 184, 28, 0, 0, 0, 15, 5, 77, 137, 108, 36, 8, 240, 73, 15, 186, 111, 96, 0, 114, 247, 73, 139, 151, 160, 1, 0, 0, 76, 57, 226, 116, 11, 73, 137, 20, 36, 77, 137, 167, 160, 1, 0, 0, 240, 73, 15, 186, 119, 96, 0, 49, 192, 72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195])
-    return off
-
-fn x86_synth_emit__lipi_thread_spawn_joinable s
-    // WHY: Joinable OS thread via Linux SYS_clone (56) with CLONE_VM|CLONE_FS|CLONE_FILES|
-    // CLONE_SIGHAND|CLONE_THREAD|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID (0x00310F00).
-    // Inputs: %rdi=fn_ptr, %rsi=arg, %rdx=stack_top, %rcx=ctid_ptr.
-    // On child exit, kernel atomically zeroes *ctid_ptr and issues FUTEX_WAKE.
-    off = s.synth_code.len()
-    s.synth_thread_spawn_j_off = off
-    x86_synth_register_helper_fn(s, "_lipi_thread_spawn_joinable", off)
-    x86_synth_register_helper_fn(s, "thread_spawn_vm_joinable", off)
-    x86_synth_emit_bytes(s, [
-        72, 131, 226, 240, 72, 131, 234, 16, 72, 137, 50, 72, 137, 122, 8,
-        72, 137, 214, 72, 137, 202, 73, 137, 202, 69, 49, 192,
-        191, 0, 15, 49, 0, 184, 56, 0, 0, 0, 15, 5,
-        72, 133, 192, 117, 16, 49, 237, 95, 88, 255, 208,
-        72, 137, 199, 184, 60, 0, 0, 0, 15, 5, 195
-    ])
-    return off
-
-fn x86_synth_emit__lipi_thread_spawn_vm s
-    // WHY: True shared-memory OS thread spawner via Linux SYS_clone (56) with
-    // CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD (0x10F00 = 69376).
-    // Inputs: %rdi = fn_ptr, %rsi = arg, %rdx = stack_top. Parent returns child TID in %rax;
-    // child executes fn_ptr(arg) on isolated aligned stack and exits via SYS_exit (60).
-    off = s.synth_code.len()
-    x86_synth_register_helper_fn(s, "_lipi_thread_spawn_vm", off)
-    x86_synth_register_helper_fn(s, "thread_spawn_vm", off)
-    x86_synth_register_helper_fn(s, "থ্রেড_চালু_ভিএম", off)
-    x86_synth_emit_bytes(s, [
-        72, 131, 226, 240,
-        72, 131, 234, 16,
-        72, 137, 50,
-        72, 137, 122, 8,
-        72, 137, 214,
-        191, 0, 15, 1, 0,
-        49, 210,
-        69, 49, 210,
-        69, 49, 192,
-        184, 56, 0, 0, 0,
-        15, 5,
-        72, 133, 192,
-        117, 16,
-        49, 237,
-        95,
-        88,
-        255, 208,
-        72, 137, 199,
-        184, 60, 0, 0, 0,
-        15, 5,
-        195
-    ])
-    return off
-
-fn x86_synth_emit__lipi_futex_wait s
-    // WHY: Linux kernel zero-spin futex wait via SYS_futex(addr, FUTEX_WAIT=0, expected, NULL, NULL, 0)
-    // Shared FUTEX_WAIT (0) matches Linux CLONE_CHILD_CLEARTID kernel mm_release wakeup semantics reliably.
-    off = s.synth_code.len()
-    x86_synth_register_helper_fn(s, "_lipi_futex_wait", off)
-    x86_synth_register_helper_fn(s, "futex_wait", off)
-    x86_synth_register_helper_fn(s, "ফিউটেক্স_অপেক্ষা", off)
-    x86_synth_emit_bytes(s, [
-        72, 137, 242,
-        190, 0, 0, 0, 0,
-        69, 49, 210,
-        69, 49, 192,
-        69, 49, 201,
-        184, 202, 0, 0, 0,
-        15, 5,
-        195
-    ])
     return off
 
 fn x86_synth_emit__lipi_float_to_str s

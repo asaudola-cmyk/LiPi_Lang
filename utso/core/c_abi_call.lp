@@ -32,7 +32,7 @@ fn c_abi_init_trampoline
     // 03: 48 89 f7       mov rdi, rsi          ; rdi = a0
     // 06: 48 89 d6       mov rsi, rdx          ; rsi = a1
     // 09: 48 89 ca       mov rdx, rcx          ; rdx = a2
-    // 0c: 49 89 c1       mov rcx, r8           ; rcx = a3
+    // 0c: 4c 89 c1       mov rcx, r8           ; rcx = a3 (REX.W|REX.R = 0x4C, NOT 0x49!)
     // 0f: 4d 89 c8       mov r8,  r9           ; r8  = a4
     // 12: 48 83 ec 08    sub rsp, 8            ; 16-byte stack alignment guard
     // 16: 31 c0          xor eax, eax          ; AL=0 (System V variadic vector count)
@@ -56,7 +56,7 @@ fn c_abi_init_trampoline
     mem_byte_write(page, 10, 137) // 0x89
     mem_byte_write(page, 11, 202) // 0xCA
 
-    mem_byte_write(page, 12, 73)  // 0x49
+    mem_byte_write(page, 12, 76)  // 0x4C (REX.W + REX.R: mov rcx, r8)
     mem_byte_write(page, 13, 137) // 0x89
     mem_byte_write(page, 14, 193) // 0xC1
 

@@ -550,3 +550,220 @@ end
 fn অভিধান_মুক্তি m: StrDict
     return dict_free(m)
 end
+
+// ── ৬. ডায়নামিক রিসাইজিং ইন্টিজার হ্যাশম্যাপ (Dynamic Auto-Resizing IntMap) ──────
+// WHY: Replaces fixed-capacity manual hashmap_create with full 2x automatic rehashing at 75% load
+// and zero-tombstone Robin-Hood backward-shift deletion for arbitrary 64-bit integer keys.
+
+struct IntMap
+    im_table
+    im_cap
+    im_count
+    im_mask
+end
+
+fn intmap_new init_cap
+    cap = 16
+    while cap < init_cap
+        cap = cap * 2
+    end
+    tbl = alloc(cap * 32)
+    mem_fill(tbl, 0, cap * 32)
+    return IntMap(tbl, cap, 0, cap - 1)
+end
+
+fn _intmap_hash64 k
+    h = k ^ (k >> 30)
+    h = h * 48271
+    h = h ^ (h >> 17)
+    h = h * 2654435761
+    return h ^ (h >> 16)
+end
+
+fn _intmap_insert_raw tbl cap mask key val h
+    slot = h & mask
+    cur_k = key
+    cur_v = val
+    cur_h = h
+    cur_d = 0
+    steps = 0
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0
+            mem_word_write(tbl, off, cur_k)
+            mem_word_write(tbl, off + 8, cur_v)
+            mem_word_write(tbl, off + 16, cur_h)
+            mem_word_write(tbl, off + 24, cur_d + 1)
+            return 1
+        end
+        ek = mem_word_read(tbl, off)
+        if ek == cur_k
+            mem_word_write(tbl, off + 8, cur_v)
+            return 0
+        end
+        ed = st - 1
+        if cur_d > ed
+            ev = mem_word_read(tbl, off + 8)
+            eh = mem_word_read(tbl, off + 16)
+            mem_word_write(tbl, off, cur_k)
+            mem_word_write(tbl, off + 8, cur_v)
+            mem_word_write(tbl, off + 16, cur_h)
+            mem_word_write(tbl, off + 24, cur_d + 1)
+            cur_k = ek
+            cur_v = ev
+            cur_h = eh
+            cur_d = ed
+        end
+        cur_d = cur_d + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    return 0
+end
+
+fn _intmap_grow m: IntMap
+    old_tbl = m.im_table
+    old_cap = m.im_cap
+    new_cap = old_cap * 2
+    if new_cap < 16
+        new_cap = 16
+    end
+    new_mask = new_cap - 1
+    new_tbl = alloc(new_cap * 32)
+    mem_fill(new_tbl, 0, new_cap * 32)
+    i = 0
+    while i < old_cap
+        off = i * 32
+        if mem_word_read(old_tbl, off + 24) > 0
+            _intmap_insert_raw(new_tbl, new_cap, new_mask, mem_word_read(old_tbl, off), mem_word_read(old_tbl, off + 8), mem_word_read(old_tbl, off + 16))
+        end
+        i = i + 1
+    end
+    m.im_table = new_tbl
+    m.im_cap = new_cap
+    m.im_mask = new_mask
+    if old_tbl > 0
+        free(old_tbl)
+    end
+    return 1
+end
+
+fn intmap_set m: IntMap key val
+    if m == 0 return 0 end
+    if (m.im_count + 1) * 4 >= m.im_cap * 3
+        _intmap_grow(m)
+    end
+    h = _intmap_hash64(key)
+    added = _intmap_insert_raw(m.im_table, m.im_cap, m.im_mask, key, val, h)
+    if added == 1
+        m.im_count = m.im_count + 1
+    end
+    return 1
+end
+
+fn intmap_has m: IntMap key
+    if m == 0 or m.im_table == 0 or m.im_count == 0 return 0 end
+    tbl = m.im_table
+    cap = m.im_cap
+    mask = m.im_mask
+    slot = _intmap_hash64(key) & mask
+    dist = 0
+    steps = 0
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0 or dist > (st - 1) return 0 end
+        if mem_word_read(tbl, off) == key return 1 end
+        dist = dist + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    return 0
+end
+
+fn intmap_get_or m: IntMap key default_val
+    if m == 0 or m.im_table == 0 or m.im_count == 0 return default_val end
+    tbl = m.im_table
+    cap = m.im_cap
+    mask = m.im_mask
+    slot = _intmap_hash64(key) & mask
+    dist = 0
+    steps = 0
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0 or dist > (st - 1) return default_val end
+        if mem_word_read(tbl, off) == key return mem_word_read(tbl, off + 8) end
+        dist = dist + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    return default_val
+end
+
+fn intmap_get m: IntMap key
+    return intmap_get_or(m, key, 0)
+end
+
+fn intmap_del m: IntMap key
+    if m == 0 or m.im_table == 0 or m.im_count == 0 return 0 end
+    tbl = m.im_table
+    cap = m.im_cap
+    mask = m.im_mask
+    slot = _intmap_hash64(key) & mask
+    dist = 0
+    steps = 0
+    found = 0 - 1
+    while steps < cap
+        off = slot * 32
+        st = mem_word_read(tbl, off + 24)
+        if st == 0 or dist > (st - 1) return 0 end
+        if mem_word_read(tbl, off) == key
+            found = slot
+            break
+        end
+        dist = dist + 1
+        slot = (slot + 1) & mask
+        steps = steps + 1
+    end
+    if found < 0 return 0 end
+    cur = found
+    while 1 == 1
+        nxt = (cur + 1) & mask
+        n_off = nxt * 32
+        n_st = mem_word_read(tbl, n_off + 24)
+        c_off = cur * 32
+        if n_st <= 1
+            mem_word_write(tbl, c_off, 0)
+            mem_word_write(tbl, c_off + 8, 0)
+            mem_word_write(tbl, c_off + 16, 0)
+            mem_word_write(tbl, c_off + 24, 0)
+            break
+        end
+        mem_word_write(tbl, c_off, mem_word_read(tbl, n_off))
+        mem_word_write(tbl, c_off + 8, mem_word_read(tbl, n_off + 8))
+        mem_word_write(tbl, c_off + 16, mem_word_read(tbl, n_off + 16))
+        mem_word_write(tbl, c_off + 24, n_st - 1)
+        cur = nxt
+    end
+    m.im_count = m.im_count - 1
+    return 1
+end
+
+fn intmap_len m: IntMap
+    if m == 0 return 0 end
+    return m.im_count
+end
+
+fn intmap_free m: IntMap
+    if m == 0 return 0 end
+    if m.im_table > 0
+        free(m.im_table)
+        m.im_table = 0
+    end
+    m.im_cap = 0
+    m.im_count = 0
+    m.im_mask = 0
+    return 1
+end
