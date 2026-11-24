@@ -43,11 +43,32 @@ fn x86_synth_emit_indirect_call_rax s
     return 0
 
 fn x86_synth_emit_closure_literal s toks pos_box c_params
-    // WHY: Synthesizes a first-class capturing closure (`|params| => expr` / `fn(params) -> expr`).
+    // WHY: Synthesizes a first-class capturing closure supporting all 3 Lipi forms:
+    //   1. Single expression: |x| => expr  /  fn(a, b) => expr
+    //   2. Brace block:       |x| => { stmts }  /  fn(a, b) => { stmts }
+    //   3. Native block:      fn(a, b)\n stmts\n end  /  fn(a, b) =>\n stmts\n end
     // Emits isolated closure machine code inline (skipped via jmp), scans free outer locals
     // to pack into a 24B+`CLOS` heap environment object, and binds captures via %r10.
+    clos_hdr_line = 0
+    if get(pos_box, 0) > 0 and get(pos_box, 0) - 1 < toks.len()
+        clos_hdr_line = toks[get(pos_box, 0) - 1].tok_span.span_start_line
+    end
     if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>" or toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or toks[get(pos_box, 0)].tok_text == "->")
+        clos_hdr_line = toks[get(pos_box, 0)].tok_span.span_start_line
         list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+
+    // Determine body form: 0 = inline expr, 1 = { ... } brace block, 2 = native multi-line ... end block
+    clos_mode = 0
+    if get(pos_box, 0) < toks.len()
+        bt_c = toks[get(pos_box, 0)]
+        if bt_c.tok_kind == TOK_LBRACE() or (bt_c.tok_kind != TOK_STR() and bt_c.tok_text == "{")
+            clos_mode = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        elif bt_c.tok_kind == TOK_NEWLINE()
+            clos_mode = 2
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+        end
     end
 
     // Scan closure body tokens for free outer local variables
@@ -56,27 +77,56 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
     cap_prims = list()
     scan_i = get(pos_box, 0)
     paren_d = 0
+    blk_depth = 0
     while scan_i < toks.len()
         stk = toks[scan_i]
         sk = stk.tok_kind
         stxt = stk.tok_text
-        if sk == TOK_LPAREN() or stxt == "(" or sk == TOK_LBRACKET() or stxt == "[" or sk == TOK_LBRACE() or stxt == "{"
-            paren_d = paren_d + 1
-        elif sk == TOK_RPAREN() or stxt == ")" or sk == TOK_RBRACKET() or stxt == "]" or sk == TOK_RBRACE() or stxt == "}"
-            if paren_d == 0
+        if clos_mode == 1
+            if sk == TOK_LBRACE() or (sk != TOK_STR() and stxt == "{")
+                blk_depth = blk_depth + 1
+            elif sk == TOK_RBRACE() or (sk != TOK_STR() and stxt == "}")
+                if blk_depth == 0
+                    break
+                end
+                blk_depth = blk_depth - 1
+            end
+        elif clos_mode == 2
+            if sk == TOK_EOF()
+                break
+            elif sk == TOK_KW_IF() or sk == TOK_KW_WHILE() or sk == TOK_KW_FOR() or sk == TOK_KW_MATCH() or sk == TOK_KW_TRY() or sk == TOK_KW_FN() or (sk == TOK_IDENT() and (stxt == "if" or stxt == "while" or stxt == "for" or stxt == "match" or stxt == "try" or stxt == "region" or stxt == "অঞ্চল" or stxt == "fn" or stxt == "কাজ" or stxt == "মিল" or stxt == "যদি" or stxt == "যতক্ষণ"))
+                if scan_i + 1 >= toks.len() or (toks[scan_i + 1].tok_kind != TOK_ASSIGN() and toks[scan_i + 1].tok_text != "=")
+                    blk_depth = blk_depth + 1
+                end
+            elif x86_synth_is_block_end(toks, scan_i) == 1
+                if blk_depth == 0
+                    break
+                end
+                blk_depth = blk_depth - 1
+            end
+        else
+            if sk == TOK_LPAREN() or stxt == "(" or sk == TOK_LBRACKET() or stxt == "[" or sk == TOK_LBRACE() or stxt == "{"
+                paren_d = paren_d + 1
+            elif sk == TOK_RPAREN() or stxt == ")" or sk == TOK_RBRACKET() or stxt == "]" or sk == TOK_RBRACE() or stxt == "}"
+                if paren_d == 0
+                    break
+                end
+                paren_d = paren_d - 1
+            elif (sk == TOK_COMMA() or stxt == ",") and paren_d == 0
+                break
+            elif (sk == TOK_NEWLINE() or sk == TOK_SEMI() or sk == TOK_EOF()) and paren_d == 0
                 break
             end
-            paren_d = paren_d - 1
-        elif (sk == TOK_COMMA() or stxt == ",") and paren_d == 0
-            break
-        elif (sk == TOK_NEWLINE() or sk == TOK_SEMI() or sk == TOK_EOF()) and paren_d == 0
-            break
-        elif x86_synth_is_ident_token(sk) == 1
+        end
+        if x86_synth_is_ident_token(sk) == 1
             is_member_or_call = 0
             if scan_i > 0 and (toks[scan_i - 1].tok_kind == TOK_DOT() or toks[scan_i - 1].tok_text == ".")
                 is_member_or_call = 1
             end
             if scan_i + 1 < toks.len() and (toks[scan_i + 1].tok_kind == TOK_LPAREN() or toks[scan_i + 1].tok_text == "(")
+                is_member_or_call = 1
+            end
+            if scan_i > 0 and (toks[scan_i - 1].tok_kind == TOK_KW_LET() or toks[scan_i - 1].tok_text == "let" or toks[scan_i - 1].tok_text == "ধরি" or toks[scan_i - 1].tok_text == "চলক")
                 is_member_or_call = 1
             end
             if is_member_or_call == 0
@@ -171,7 +221,35 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
         ci = ci + 1
     end
 
-    x86_synth_compile_expr(s, toks, pos_box)
+    if clos_mode == 1
+        while get(pos_box, 0) < toks.len()
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cp_cb = get(pos_box, 0)
+            if cp_cb >= toks.len() break end
+            if toks[cp_cb].tok_kind == TOK_RBRACE() or (toks[cp_cb].tok_kind != TOK_STR() and toks[cp_cb].tok_text == "}")
+                list_set(pos_box, 0, cp_cb + 1)
+                break
+            end
+            bp_cb = get(pos_box, 0)
+            x86_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) <= bp_cb list_set(pos_box, 0, bp_cb + 1) end
+        end
+    elif clos_mode == 2
+        while get(pos_box, 0) < toks.len()
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cp_cb2 = get(pos_box, 0)
+            if cp_cb2 >= toks.len() break end
+            if x86_synth_is_block_end(toks, cp_cb2) == 1
+                list_set(pos_box, 0, cp_cb2 + 1)
+                break
+            end
+            bp_cb2 = get(pos_box, 0)
+            x86_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) <= bp_cb2 list_set(pos_box, 0, bp_cb2 + 1) end
+        end
+    else
+        x86_synth_compile_expr(s, toks, pos_box)
+    end
     x86_synth_emit_epilogue(s)
     frame_sz = ((s.synth_stack_offset + 256 + 15) / 16) * 16
     if frame_sz < 512
@@ -459,7 +537,7 @@ fn x86_synth_expr_primary s toks pos_box
         x86_synth_expr_primary(s, toks, pos_box)
         return 0
 
-    // 0e. Closure literal: |p1, p2| => expr
+    // 0e. Closure literal: |p1, p2| => expr / { ... }
     elif k == TOK_BAR() or (k != TOK_STR() and txt == "|")
         list_set(pos_box, 0, pos + 1)
         c_params = list()
@@ -471,6 +549,11 @@ fn x86_synth_expr_primary s toks pos_box
                 break
             elif ct_c.tok_kind == TOK_COMMA() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ",")
                 list_set(pos_box, 0, cp_c + 1)
+            elif ct_c.tok_kind == TOK_COLON() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ":")
+                list_set(pos_box, 0, cp_c + 1)
+                if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
             elif x86_synth_is_ident_token(ct_c.tok_kind) == 1
                 push(c_params, ct_c.tok_text)
                 list_set(pos_box, 0, cp_c + 1)
@@ -481,7 +564,7 @@ fn x86_synth_expr_primary s toks pos_box
         x86_synth_emit_closure_literal(s, toks, pos_box, c_params)
         return 0
 
-    // 0f. Lambda literal: fn(p1, p2) => expr
+    // 0f. Lambda literal: fn(p1, p2) => expr / { ... } / native block ... end
     elif (k == TOK_KW_FN() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ"))) and pos + 1 < toks.len() and (toks[pos + 1].tok_kind == TOK_LPAREN() or toks[pos + 1].tok_text == "(")
         list_set(pos_box, 0, pos + 2)
         c_params = list()
@@ -493,6 +576,11 @@ fn x86_synth_expr_primary s toks pos_box
                 break
             elif ct_c.tok_kind == TOK_COMMA() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ",")
                 list_set(pos_box, 0, cp_c + 1)
+            elif ct_c.tok_kind == TOK_COLON() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ":")
+                list_set(pos_box, 0, cp_c + 1)
+                if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
             elif x86_synth_is_ident_token(ct_c.tok_kind) == 1
                 push(c_params, ct_c.tok_text)
                 list_set(pos_box, 0, cp_c + 1)
@@ -501,6 +589,126 @@ fn x86_synth_expr_primary s toks pos_box
             end
         end
         x86_synth_emit_closure_literal(s, toks, pos_box, c_params)
+        return 0
+
+    // 0g. Value-Returning Pattern Match Expression: res = match x ... end  /  match x { 1 => v1, _ => v2 }
+    elif x86_synth_is_match_start(toks, pos) == 1
+        me_base_col = t.tok_span.span_start_col
+        me_base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        x86_synth_compile_expr(s, toks, pos_box)
+        me_scrut_off = s.synth_stack_offset
+        s.synth_stack_offset = s.synth_stack_offset + 8
+        x86_synth_emit_store_var(s, 0, me_scrut_off)
+        me_end_patches = list()
+        me_has_wild = 0
+        me_arm_type = ""
+        me_arm_struct = ""
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        me_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            me_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        me_first_arm_col = 0 - 1
+        while get(pos_box, 0) < toks.len()
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cur_me = get(pos_box, 0)
+            if cur_me >= toks.len() break end
+            ct_me = toks[cur_me]
+            if me_braced == 1
+                if ct_me.tok_kind == TOK_RBRACE() or (ct_me.tok_kind != TOK_STR() and ct_me.tok_text == "}")
+                    list_set(pos_box, 0, cur_me + 1)
+                    break
+                end
+                if ct_me.tok_kind == TOK_COMMA() or (ct_me.tok_kind != TOK_STR() and ct_me.tok_text == ",")
+                    list_set(pos_box, 0, cur_me + 1)
+                    continue
+                end
+            else
+                if x86_synth_is_block_end(toks, cur_me) == 1
+                    list_set(pos_box, 0, cur_me + 1)
+                    break
+                end
+                if me_first_arm_col < 0
+                    me_first_arm_col = ct_me.tok_span.span_start_col
+                elif ct_me.tok_span.span_start_col < me_first_arm_col
+                    break
+                end
+            end
+            if ct_me.tok_kind == TOK_KW_CASE() or (ct_me.tok_kind == TOK_IDENT() and (ct_me.tok_text == "case" or ct_me.tok_text == "ক্ষেত্র"))
+                list_set(pos_box, 0, cur_me + 1)
+            end
+            me_miss = 0 - 1
+            mp_p = get(pos_box, 0)
+            if mp_p < toks.len() and (toks[mp_p].tok_text == "_" or toks[mp_p].tok_text == "default" or toks[mp_p].tok_text == "অন্যথায়" or toks[mp_p].tok_kind == TOK_KW_ELSE())
+                me_has_wild = 1
+                list_set(pos_box, 0, mp_p + 1)
+            else
+                x86_synth_compile_expr(s, toks, pos_box)
+                x86_synth_emit_bytes(s, [72, 137, 198]) // mov rsi, rax
+                x86_synth_emit_load_var(s, 7, me_scrut_off)
+                x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
+                x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
+                me_miss = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+            end
+            if get(pos_box, 0) < toks.len()
+                sk_me = toks[get(pos_box, 0)].tok_kind
+                st_me = toks[get(pos_box, 0)].tok_text
+                if sk_me == TOK_FAT_ARROW() or sk_me == TOK_COLON() or sk_me == TOK_ARROW() or st_me == "=>" or st_me == ":" or st_me == "->"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    x86_synth_skip_whitespace_tokens(toks, pos_box)
+                    cp_mb = get(pos_box, 0)
+                    if cp_mb >= toks.len() break end
+                    if toks[cp_mb].tok_kind == TOK_RBRACE() or (toks[cp_mb].tok_kind != TOK_STR() and toks[cp_mb].tok_text == "}")
+                        list_set(pos_box, 0, cp_mb + 1)
+                        break
+                    end
+                    bp_me = get(pos_box, 0)
+                    x86_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) <= bp_me list_set(pos_box, 0, bp_me + 1) end
+                end
+            else
+                x86_synth_compile_expr(s, toks, pos_box)
+                if me_arm_type == "" and s.synth_last_expr_type != ""
+                    me_arm_type = s.synth_last_expr_type
+                end
+                if me_arm_struct == "" and s.synth_last_struct != ""
+                    me_arm_struct = s.synth_last_struct
+                end
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COMMA() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ","))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            x86_synth_emit_byte(s, 233)
+            ep_me = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            push(me_end_patches, ep_me)
+            if me_miss >= 0
+                next_me_off = s.synth_code.len()
+                x86_synth_patch_u32(s, me_miss, next_me_off - (me_miss + 4))
+            end
+            s.synth_last_store_end = 0 - 1
+        end
+        if me_has_wild == 0
+            x86_synth_emit_bytes(s, [49, 192]) // default 0 if no arm matched
+        end
+        end_me_off = s.synth_code.len()
+        mei = 0
+        while mei < me_end_patches.len()
+            x86_synth_patch_u32(s, me_end_patches[mei], end_me_off - (me_end_patches[mei] + 4))
+            mei = mei + 1
+        end
+        s.synth_last_expr_type = me_arm_type
+        s.synth_last_struct = me_arm_struct
+        s.synth_last_elem_type = ""
+        s.synth_last_store_end = 0 - 1
         return 0
 
     // 1. Integer / Boolean / None Literal
@@ -569,12 +777,29 @@ fn x86_synth_expr_primary s toks pos_box
                     break
                 x86_synth_compile_expr(s, toks, pos_box)
                 et = s.synth_last_expr_type
-                if et == "float" and mixed_elem_t == 0
-                    arr_elem_t = "float"
-                elif et == "str" or et == "int"
-                    if arr_elem_t == "float" and et == "str"
+                es = s.synth_last_struct
+                if es != "" and mixed_elem_t == 0
+                    if arr_elem_t == ""
+                        arr_elem_t = es
+                    elif arr_elem_t != es
                         arr_elem_t = ""
                         mixed_elem_t = 1
+                    end
+                elif et == "float" and mixed_elem_t == 0
+                    if arr_elem_t == "" or arr_elem_t == "float"
+                        arr_elem_t = "float"
+                    else
+                        arr_elem_t = ""
+                        mixed_elem_t = 1
+                    end
+                elif et == "str" or et == "int"
+                    if arr_elem_t != "" and arr_elem_t != et
+                        if arr_elem_t == "float" and et == "int"
+                            // int widens cleanly in float arrays
+                        else
+                            arr_elem_t = ""
+                            mixed_elem_t = 1
+                        end
                     end
                 end
                 x86_synth_emit_byte(s, 80) // push rax
@@ -1131,7 +1356,7 @@ fn x86_synth_expr_primary s toks pos_box
                             s.synth_last_expr_type = "int"
                         elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "sha256_hex" or var_name == "str_sub" or var_name == "char_at" or var_name == "chr" or var_name == "file_read" or var_name == "bytes_to_hex" or var_name == "qword_to_hex"
                             s.synth_last_expr_type = "str"
-                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect" or var_name == "ord" or var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "mem_read" or var_name == "mem_word_read" or var_name == "str_char_at" or var_name == "ror32" or var_name == "rol32" or var_name == "clock_ms" or var_name == "cpu_clock" or var_name == "arena_mark" or var_name == "arena_allocated" or var_name == "file_exists" or var_name == "sha256_ch" or var_name == "sha256_maj" or var_name == "sha256_sigma0" or var_name == "sha256_sigma1" or var_name == "sha256_gamma0" or var_name == "sha256_gamma1"
+                        elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect" or var_name == "gc_live_bytes" or var_name == "gc_set_threshold" or var_name == "gc_set_auto" or var_name == "ord" or var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "mem_read" or var_name == "mem_word_read" or var_name == "str_char_at" or var_name == "ror32" or var_name == "rol32" or var_name == "clock_ms" or var_name == "cpu_clock" or var_name == "arena_mark" or var_name == "arena_allocated" or var_name == "file_exists" or var_name == "sha256_ch" or var_name == "sha256_maj" or var_name == "sha256_sigma0" or var_name == "sha256_sigma1" or var_name == "sha256_gamma0" or var_name == "sha256_gamma1"
                             s.synth_last_expr_type = "int"
                         else
                             s.synth_last_expr_type = ""

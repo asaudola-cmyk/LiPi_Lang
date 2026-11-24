@@ -37,18 +37,23 @@ Source (.lp / .লিপি)
 - **Stage 1 → Stage 2 → Stage 3 equivalence**: `lipi-seed` builds Stage 1 (`lipc_s1`), Stage 1 builds Stage 2 (`lipc_s2`), and Stage 2 builds Stage 3 (`lipc_s3`). CI verifies byte-for-byte identity (`cmp lipc_s2 lipc_s3`).
 - **Static-PIE & W^X (`0 RWE`)**: Emitted Linux ELF64 binaries are statically linked `ET_DYN` (PIE) executables with zero dynamic interpreter (`ld.so` / `libc`) and zero `RWE` writable+executable program segments.
 
-## 2. Memory Model & Static Safety (`--kavach`)
+## 2. Memory Model, Deterministic Regions & Static Safety (`--kavach` / `--strict-types`)
 
-Lipi exposes two memory layers:
+Lipi exposes three coordinated memory layers with direct Linux kernel page return (`SYS_madvise(MADV_DONTNEED)`):
 
-1. **Segregated Slab Allocator (`alloc` / `free`)**: Built-in `O(1)` allocator with bounds metadata and double-free protection, plus scoped arena snapshots (`arena_mark()` / `arena_reset()`).
-2. **Direct Kernel Memory (`utso/memory.lp`, `utso/syscalls.lp`)**: Direct page allocation via `SYS_mmap` / `SYS_munmap` and raw buffer access for systems code.
+1. **Unified Magic-XOR Segregated Slab + Mark-Sweep GC (`_lipi_user_alloc` / `_lipi_gc_collect`)**: All dynamic strings, lists, structs, closures, and file buffers allocate through a thread-safe 9-bucket slab + large-block allocator with 32-byte Magic-XOR (`0x4C474331A55A5AA5 ^ ptr`) headers, ERMS `rep stosq` zero-on-reuse, and double-free guards. The `O(N)` conservative mark-sweep collector reclaims unreachable strings/lists/structs, scrubs idle slab payload words, adapts its auto-GC threshold (`max(512 KB, 2x live)`), and shrinks dead heap tails (`>= 64 KB`) or large freed blocks (`>= 8 KB`) back to Linux physical RAM via `SYS_madvise(MADV_DONTNEED)`. Tunable via `gc_collect()`, `gc_live_bytes()`, `gc_set_threshold(bytes)`, and `gc_set_auto(0|1)`.
+2. **Deterministic Scoped Memory Regions (`region ... end` / `অঞ্চল ... শেষ`)**: Captures `arena_mark()` on block entry and deterministically rolls back allocations and returns freed physical pages (`SYS_madvise(MADV_DONTNEED)`) on block exit with zero GC pause.
+3. **Direct Kernel Memory (`utso/memory.lp`, `utso/syscalls.lp`)**: Direct page allocation via `SYS_mmap` / `SYS_munmap` and `madvise_dontneed()` (`silicon_madvise_dontneed`) for systems code.
 
 When compiled with `--kavach` (or `--কবচ`):
 
 - The static analyzer tracks allocation ownership to flag leaks and use-after-free paths at compile time.
 - Raw hardware primitives (`syscall`, `mem_write`, `mem_read`) are restricted exclusively to functions prefixed with `silicon_` or `সিলিকন_`, isolating unsafe hardware boundaries cleanly from application code.
 - Core tools (`lipifmt`, `lipidoc`, `lipi_akhara`) are continuously dogfooded under `--kavach` in CI.
+
+When compiled with `--strict-types`:
+
+- Enforces zero-collision struct field resolution across inferred struct return types, typed parameters, and struct array literals, rejecting ambiguous untyped field offsets and missing struct fields with hard compile errors.
 
 ## 3. W^X Code Capsules & Native FFI Isolation
 

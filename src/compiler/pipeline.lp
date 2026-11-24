@@ -122,6 +122,7 @@ struct CompilerConfig
     cfg_strict_ownership    // 1 to fail compilation on ownership/use-after-move violations
     cfg_strict_proof        // 1 to fail compilation when memory conservation proof fails
     cfg_kavach_mode         // 1 to enable Sovereign Kavach Mode (ownership + escape-exact proof + silicon_* crown)
+    cfg_strict_types        // 1 to enforce zero-collision struct field layouts (--strict-types)
 
 struct CompilerResult
     res_success             // 1 on success, 0 on failure
@@ -171,6 +172,96 @@ fn pipeline_should_stop_inline toks pos_box start_line
         return 1
     end
     return 0
+
+fn pipeline_is_match_start toks pos
+    // WHY: Soft-keyword disambiguation for `match` matching x86_synth_is_match_start.
+    if pos < 0 or pos + 1 >= toks.len()
+        return 0
+    end
+    t0 = toks[pos]
+    k0 = t0.tok_kind
+    txt0 = t0.tok_text
+    if k0 != TOK_KW_MATCH() and k0 != TOK_DIR_MATCH() and not (k0 == TOK_IDENT() and (txt0 == "match" or txt0 == "মিল" or txt0 == "মেলাও" or txt0 == "@match"))
+        return 0
+    end
+    t1 = toks[pos + 1]
+    k1 = t1.tok_kind
+    txt1 = t1.tok_text
+    if t1.tok_span.span_start_line != t0.tok_span.span_start_line
+        return 0
+    end
+    ok_start = 0
+    if k1 == TOK_INT() or k1 == TOK_FLOAT() or k1 == TOK_BOOL() or k1 == TOK_STR() or k1 == TOK_INTERP_STR() or k1 == TOK_LPAREN() or k1 == TOK_LBRACKET() or k1 == TOK_BANG() or k1 == TOK_TILDE() or k1 == TOK_MINUS()
+        ok_start = 1
+    elif pipeline_is_ident_token(k1) == 1
+        if txt1 != "and" and txt1 != "or" and txt1 != "এবং" and txt1 != "অথবা" and txt1 != "return" and txt1 != "break" and txt1 != "continue" and txt1 != "end" and txt1 != "else" and txt1 != "elif" and txt1 != "then" and txt1 != "in"
+            ok_start = 1
+        end
+    end
+    if ok_start == 0
+        return 0
+    end
+    line0 = t0.tok_span.span_start_line
+    si = pos + 1
+    while si < toks.len()
+        st = toks[si]
+        sk = st.tok_kind
+        if sk == TOK_NEWLINE() or st.tok_span.span_start_line > line0
+            break
+        end
+        if sk == TOK_LBRACE() or (sk != TOK_STR() and st.tok_text == "{")
+            return 1
+        end
+        si = si + 1
+    end
+    while si < toks.len()
+        sk = toks[si].tok_kind
+        if sk == TOK_NEWLINE() or sk == TOK_SEMI() or sk == TOK_COMMENT_LINE() or sk == TOK_COMMENT_BLOCK()
+            si = si + 1
+        else
+            break
+        end
+    end
+    if si >= toks.len()
+        return 0
+    end
+    at0 = toks[si]
+    if at0.tok_kind == TOK_LBRACE() or at0.tok_text == "{" or at0.tok_kind == TOK_KW_CASE() or (at0.tok_kind == TOK_IDENT() and (at0.tok_text == "case" or at0.tok_text == "ক্ষেত্র"))
+        return 1
+    end
+    arm_line = at0.tok_span.span_start_line
+    steps = 0
+    while si < toks.len() and steps < 16
+        at = toks[si]
+        if at.tok_kind == TOK_NEWLINE() or at.tok_span.span_start_line != arm_line
+            break
+        end
+        if at.tok_kind == TOK_FAT_ARROW() or at.tok_kind == TOK_ARROW() or at.tok_kind == TOK_COLON() or (at.tok_kind != TOK_STR() and (at.tok_text == "=>" or at.tok_text == "->" or at.tok_text == ":"))
+            return 1
+        end
+        si = si + 1
+        steps = steps + 1
+    end
+    return 0
+end
+
+fn pipeline_is_region_start toks pos
+    if pos < 0 or pos >= toks.len()
+        return 0
+    end
+    t0 = toks[pos]
+    if t0.tok_kind != TOK_IDENT() or (t0.tok_text != "region" and t0.tok_text != "অঞ্চল" and t0.tok_text != "@region")
+        return 0
+    end
+    if pos + 1 >= toks.len()
+        return 1
+    end
+    t1 = toks[pos + 1]
+    if t1.tok_kind == TOK_NEWLINE() or t1.tok_kind == TOK_COMMENT_LINE() or t1.tok_kind == TOK_LBRACE() or (t1.tok_kind != TOK_STR() and t1.tok_text == "{") or t1.tok_span.span_start_line > t0.tok_span.span_start_line
+        return 1
+    end
+    return 0
+end
 
 fn pipeline_parse_primary toks pos_box sp
     // WHY: Parses primitive literals, identifiers, unary operators, and postfix chains (.field, [idx], (args)).
@@ -225,6 +316,11 @@ fn pipeline_parse_primary toks pos_box sp
                 break
             elif ct_c.tok_kind == TOK_COMMA() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ",")
                 list_set(pos_box, 0, cp_c + 1)
+            elif ct_c.tok_kind == TOK_COLON() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ":")
+                list_set(pos_box, 0, cp_c + 1)
+                if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
             elif pipeline_is_ident_token(ct_c.tok_kind) == 1
                 push(c_params, ct_c.tok_text)
                 list_set(pos_box, 0, cp_c + 1)
@@ -234,6 +330,41 @@ fn pipeline_parse_primary toks pos_box sp
         end
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>" or toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or toks[get(pos_box, 0)].tok_text == "->")
             list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            cb_stmts = list()
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cp_b = get(pos_box, 0)
+                if cp_b >= toks.len() break end
+                if toks[cp_b].tok_kind == TOK_RBRACE() or (toks[cp_b].tok_kind != TOK_STR() and toks[cp_b].tok_text == "}")
+                    list_set(pos_box, 0, cp_b + 1)
+                    break
+                end
+                bp_c = get(pos_box, 0)
+                st_c = pipeline_build_statement(toks, pos_box, sp)
+                if st_c != 0 push(cb_stmts, st_c) end
+                if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
+            end
+            return ast_expr_closure(c_params, cb_stmts, sp)
+        elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_NEWLINE()
+            pipeline_skip_whitespace(toks, pos_box)
+            cb_stmts = list()
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cp_b = get(pos_box, 0)
+                if cp_b >= toks.len() break end
+                if pipeline_is_block_end(toks, cp_b) == 1
+                    list_set(pos_box, 0, cp_b + 1)
+                    break
+                end
+                bp_c = get(pos_box, 0)
+                st_c = pipeline_build_statement(toks, pos_box, sp)
+                if st_c != 0 push(cb_stmts, st_c) end
+                if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
+            end
+            return ast_expr_closure(c_params, cb_stmts, sp)
         end
         lam_expr = pipeline_parse_expr(toks, pos_box, sp)
         return ast_expr_closure(c_params, [ast_stmt_return(lam_expr, sp)], sp)
@@ -248,6 +379,11 @@ fn pipeline_parse_primary toks pos_box sp
                 break
             elif ct_c.tok_kind == TOK_COMMA() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ",")
                 list_set(pos_box, 0, cp_c + 1)
+            elif ct_c.tok_kind == TOK_COLON() or (ct_c.tok_kind != TOK_STR() and ct_c.tok_text == ":")
+                list_set(pos_box, 0, cp_c + 1)
+                if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
             elif pipeline_is_ident_token(ct_c.tok_kind) == 1
                 push(c_params, ct_c.tok_text)
                 list_set(pos_box, 0, cp_c + 1)
@@ -258,8 +394,118 @@ fn pipeline_parse_primary toks pos_box sp
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_FAT_ARROW() or toks[get(pos_box, 0)].tok_text == "=>" or toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or toks[get(pos_box, 0)].tok_text == "->")
             list_set(pos_box, 0, get(pos_box, 0) + 1)
         end
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            cb_stmts = list()
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cp_b = get(pos_box, 0)
+                if cp_b >= toks.len() break end
+                if toks[cp_b].tok_kind == TOK_RBRACE() or (toks[cp_b].tok_kind != TOK_STR() and toks[cp_b].tok_text == "}")
+                    list_set(pos_box, 0, cp_b + 1)
+                    break
+                end
+                bp_c = get(pos_box, 0)
+                st_c = pipeline_build_statement(toks, pos_box, sp)
+                if st_c != 0 push(cb_stmts, st_c) end
+                if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
+            end
+            return ast_expr_closure(c_params, cb_stmts, sp)
+        elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_NEWLINE()
+            pipeline_skip_whitespace(toks, pos_box)
+            cb_stmts = list()
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cp_b = get(pos_box, 0)
+                if cp_b >= toks.len() break end
+                if pipeline_is_block_end(toks, cp_b) == 1
+                    list_set(pos_box, 0, cp_b + 1)
+                    break
+                end
+                bp_c = get(pos_box, 0)
+                st_c = pipeline_build_statement(toks, pos_box, sp)
+                if st_c != 0 push(cb_stmts, st_c) end
+                if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
+            end
+            return ast_expr_closure(c_params, cb_stmts, sp)
+        end
         lam_expr = pipeline_parse_expr(toks, pos_box, sp)
         return ast_expr_closure(c_params, [ast_stmt_return(lam_expr, sp)], sp)
+    elif pipeline_is_match_start(toks, p) == 1
+        me_base_col = t.tok_span.span_start_col
+        me_base_line = t.tok_span.span_start_line
+        scrut_me = pipeline_parse_expr(toks, pos_box, sp)
+        pipeline_skip_whitespace(toks, pos_box)
+        me_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            me_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        me_first_arm_col = 0 - 1
+        last_arm_e = scrut_me
+        while get(pos_box, 0) < toks.len()
+            pipeline_skip_whitespace(toks, pos_box)
+            cur_me = get(pos_box, 0)
+            if cur_me >= toks.len() break end
+            ct_me = toks[cur_me]
+            if me_braced == 1
+                if ct_me.tok_kind == TOK_RBRACE() or (ct_me.tok_kind != TOK_STR() and ct_me.tok_text == "}")
+                    list_set(pos_box, 0, cur_me + 1)
+                    break
+                end
+                if ct_me.tok_kind == TOK_COMMA() or (ct_me.tok_kind != TOK_STR() and ct_me.tok_text == ",")
+                    list_set(pos_box, 0, cur_me + 1)
+                    continue
+                end
+            else
+                if pipeline_is_block_end(toks, cur_me) == 1
+                    list_set(pos_box, 0, cur_me + 1)
+                    break
+                end
+                if me_first_arm_col < 0
+                    me_first_arm_col = ct_me.tok_span.span_start_col
+                elif ct_me.tok_span.span_start_col < me_first_arm_col
+                    break
+                end
+            end
+            if ct_me.tok_kind == TOK_KW_CASE() or (ct_me.tok_kind == TOK_IDENT() and (ct_me.tok_text == "case" or ct_me.tok_text == "ক্ষেত্র"))
+                list_set(pos_box, 0, cur_me + 1)
+            end
+            mp_p = get(pos_box, 0)
+            if mp_p < toks.len() and (toks[mp_p].tok_text == "_" or toks[mp_p].tok_text == "default" or toks[mp_p].tok_text == "অন্যথায়" or toks[mp_p].tok_kind == TOK_KW_ELSE())
+                list_set(pos_box, 0, mp_p + 1)
+            else
+                _pat_me = pipeline_parse_expr(toks, pos_box, sp)
+            end
+            if get(pos_box, 0) < toks.len()
+                sk_me = toks[get(pos_box, 0)].tok_kind
+                st_me = toks[get(pos_box, 0)].tok_text
+                if sk_me == TOK_FAT_ARROW() or sk_me == TOK_COLON() or sk_me == TOK_ARROW() or st_me == "=>" or st_me == ":" or st_me == "->"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    pipeline_skip_whitespace(toks, pos_box)
+                    cp_mb = get(pos_box, 0)
+                    if cp_mb >= toks.len() break end
+                    if toks[cp_mb].tok_kind == TOK_RBRACE() or (toks[cp_mb].tok_kind != TOK_STR() and toks[cp_mb].tok_text == "}")
+                        list_set(pos_box, 0, cp_mb + 1)
+                        break
+                    end
+                    bp_mb = get(pos_box, 0)
+                    _st_mb = pipeline_build_statement(toks, pos_box, sp)
+                    if get(pos_box, 0) <= bp_mb list_set(pos_box, 0, bp_mb + 1) end
+                end
+            else
+                last_arm_e = pipeline_parse_expr(toks, pos_box, sp)
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COMMA() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ","))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+        end
+        return last_arm_e
     elif k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
         while get(pos_box, 0) < toks.len()
             skip_k = toks[get(pos_box, 0)].tok_kind
@@ -1331,38 +1577,46 @@ fn pipeline_build_statement toks pos_box sp
     end
 
     // 5d. Pattern match statement: match expr ... (excluding variable 'match = ...')
-    is_match_stmt = 0
-    if k == TOK_KW_MATCH() or k == TOK_DIR_MATCH() or (k == TOK_IDENT() and (txt == "match" or txt == "মিল" or txt == "মেলাও" or txt == "@match"))
-        if cp + 1 < toks.len()
-            mn = toks[cp + 1]
-            if mn.tok_kind != TOK_ASSIGN() and mn.tok_text != "=" and mn.tok_kind != TOK_PLUSEQ() and mn.tok_kind != TOK_MINUSEQ() and mn.tok_kind != TOK_DOT() and mn.tok_kind != TOK_LBRACKET() and mn.tok_kind != TOK_LPAREN() and mn.tok_kind != TOK_NEWLINE()
-                is_match_stmt = 1
-            end
-        end
-    end
-    if is_match_stmt == 1
+    if pipeline_is_match_start(toks, cp) == 1
         base_col = t.tok_span.span_start_col
         base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, cp + 1)
         scrut_e = pipeline_parse_expr(toks, pos_box, sp)
         match_body = list()
+        pipeline_skip_whitespace(toks, pos_box)
+        m_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            m_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
         while get(pos_box, 0) < toks.len()
             pipeline_skip_whitespace(toks, pos_box)
             cur_pm = get(pos_box, 0)
             if cur_pm >= toks.len() break end
             ct_m = toks[cur_pm]
-            if pipeline_is_block_end(toks, cur_pm) == 1
-                list_set(pos_box, 0, cur_pm + 1)
-                break
+            if m_braced == 1
+                if ct_m.tok_kind == TOK_RBRACE() or (ct_m.tok_kind != TOK_STR() and ct_m.tok_text == "}")
+                    list_set(pos_box, 0, cur_pm + 1)
+                    break
+                end
+                if ct_m.tok_kind == TOK_COMMA() or (ct_m.tok_kind != TOK_STR() and ct_m.tok_text == ",")
+                    list_set(pos_box, 0, cur_pm + 1)
+                    continue
+                end
+            else
+                if pipeline_is_block_end(toks, cur_pm) == 1
+                    list_set(pos_box, 0, cur_pm + 1)
+                    break
+                end
+                if ct_m.tok_span.span_start_line > base_line and ct_m.tok_span.span_start_col <= base_col break end
             end
-            if ct_m.tok_span.span_start_line > base_line and ct_m.tok_span.span_start_col <= base_col break end
             arm_col = ct_m.tok_span.span_start_col
             arm_line = ct_m.tok_span.span_start_line
             if ct_m.tok_kind == TOK_KW_CASE() or (ct_m.tok_kind == TOK_IDENT() and (ct_m.tok_text == "case" or ct_m.tok_text == "ক্ষেত্র"))
                 list_set(pos_box, 0, cur_pm + 1)
             end
             pat_p = get(pos_box, 0)
-            if pat_p < toks.len() and (toks[pat_p].tok_text == "_" or toks[pat_p].tok_text == "default" or toks[pat_p].tok_text == "অন্যথায়")
+            if pat_p < toks.len() and (toks[pat_p].tok_text == "_" or toks[pat_p].tok_text == "default" or toks[pat_p].tok_text == "অন্যথায়" or toks[pat_p].tok_kind == TOK_KW_ELSE())
                 list_set(pos_box, 0, pat_p + 1)
             else
                 pat_e = pipeline_parse_expr(toks, pos_box, sp)
@@ -1377,7 +1631,22 @@ fn pipeline_build_statement toks pos_box sp
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
             end
-            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE()
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    pipeline_skip_whitespace(toks, pos_box)
+                    cp_ab = get(pos_box, 0)
+                    if cp_ab >= toks.len() break end
+                    if toks[cp_ab].tok_kind == TOK_RBRACE() or (toks[cp_ab].tok_kind != TOK_STR() and toks[cp_ab].tok_text == "}")
+                        list_set(pos_box, 0, cp_ab + 1)
+                        break
+                    end
+                    bp_mb = get(pos_box, 0)
+                    st_mb = pipeline_build_statement(toks, pos_box, sp)
+                    if st_mb != 0 push(match_body, st_mb) end
+                    if get(pos_box, 0) <= bp_mb list_set(pos_box, 0, bp_mb + 1) end
+                end
+            elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE()
                 bp_m = get(pos_box, 0)
                 st_m = pipeline_build_statement(toks, pos_box, sp)
                 if st_m != 0 push(match_body, st_m) end
@@ -1389,6 +1658,7 @@ fn pipeline_build_statement toks pos_box sp
                     if cp_ab >= toks.len() break end
                     ct_ab = toks[cp_ab]
                     if pipeline_is_block_end(toks, cp_ab) == 1 break end
+                    if m_braced == 1 and (ct_ab.tok_kind == TOK_RBRACE() or (ct_ab.tok_kind != TOK_STR() and ct_ab.tok_text == "}")) break end
                     if ct_ab.tok_span.span_start_line > arm_line and ct_ab.tok_span.span_start_col <= arm_col break end
                     bp_m2 = get(pos_box, 0)
                     st_m2 = pipeline_build_statement(toks, pos_box, sp)
@@ -1398,6 +1668,43 @@ fn pipeline_build_statement toks pos_box sp
             end
         end
         return ast_stmt_if(scrut_e, match_body, list(), list(), sp)
+    end
+
+    // 5c. Scoped Memory Region statement: region ... end / অঞ্চল ... শেষ
+    if pipeline_is_region_start(toks, cp) == 1
+            reg_col = t.tok_span.span_start_col
+            reg_line = t.tok_span.span_start_line
+            list_set(pos_box, 0, cp + 1)
+            pipeline_skip_whitespace(toks, pos_box)
+            r_braced = 0
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                r_braced = 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            reg_body = list()
+            while get(pos_box, 0) < toks.len()
+                pipeline_skip_whitespace(toks, pos_box)
+                cur_pr = get(pos_box, 0)
+                if cur_pr >= toks.len() break end
+                ct_r = toks[cur_pr]
+                if r_braced == 1
+                    if ct_r.tok_kind == TOK_RBRACE() or (ct_r.tok_kind != TOK_STR() and ct_r.tok_text == "}")
+                        list_set(pos_box, 0, cur_pr + 1)
+                        break
+                    end
+                else
+                    if pipeline_is_block_end(toks, cur_pr) == 1
+                        list_set(pos_box, 0, cur_pr + 1)
+                        break
+                    end
+                    if ct_r.tok_span.span_start_line > reg_line and ct_r.tok_span.span_start_col <= reg_col break end
+                end
+                bp_r = get(pos_box, 0)
+                st_r = pipeline_build_statement(toks, pos_box, sp)
+                if st_r != 0 push(reg_body, st_r) end
+                if get(pos_box, 0) <= bp_r list_set(pos_box, 0, bp_r + 1) end
+            end
+            return ast_stmt_if(ast_expr_literal_int(1, sp), reg_body, list(), list(), sp)
     end
 
     // 6. Output print / say statement
@@ -1799,6 +2106,7 @@ fn compiler_config_new src out_bin arch opt fmt dry_run
     cfg.cfg_strict_ownership = 0
     cfg.cfg_strict_proof = 0
     cfg.cfg_kavach_mode = 0
+    cfg.cfg_strict_types = 0
     return cfg
 
 fn compiler_result_new
@@ -3539,6 +3847,7 @@ fn compiler_pipeline_execute config source_code
     // WHY: If live emission requested (cfg_is_dry_run == 0), assemble and persist the binary to disk.
     if config.cfg_is_dry_run == 0
         say "  [pipeline] Phase 8: Live emission to " + config.cfg_out_path
+        x86_synth_set_strict_types(config.cfg_strict_types)
         if config.cfg_emit_format == FORMAT_SHARED()
             // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)

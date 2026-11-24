@@ -35,6 +35,18 @@ fn মেমরি_মুক্তি addr size
 fn mem_free addr size
     return free(addr, size)
 
+// ── ২.১. কার্নেল ফিজিক্যাল পেজ প্রত্যাবর্তন (Linux SYS_madvise: syscall 28, MADV_DONTNEED = 4) ──
+// WHY: ভার্চুয়াল অ্যাড্রেস স্পেস ধরে রেখেই অব্যবহৃত 4KB ফিজিক্যাল পেজগুলো তাৎক্ষণিকভাবে OS-এ ফেরত দিয়ে VmRSS কমানো।
+// Kavach-safe: raw syscall is isolated inside a `silicon_*` crowned boundary function.
+fn silicon_madvise_dontneed addr size
+    if addr <= 0 or size <= 0
+        return 0
+    end
+    return syscall(28, addr, size, 4, 0, 0, 0)
+
+fn madvise_dontneed addr size
+    return silicon_madvise_dontneed(addr, size)
+
 // ── ৩. মেমরি অনুলিপি বা কপি (Pure Native Memory Copy / memcpy) ───────────────────
 // WHY: মেমরির এক ব্লক থেকে অন্য ব্লকে হাই-থ্রুপুট ৬৪-বাইট আনরোল্ড ৬৪-বিট ওয়ার্ড ট্রান্সফার।
 // O(n) বাইট লুপের পরিবর্তে নেটিভ AMD64 QWORD নির্দেশাবলী ব্যবহার করে মেমরি কপি ১৫০০ গুণ দ্রুত করা।

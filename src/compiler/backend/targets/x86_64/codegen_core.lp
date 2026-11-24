@@ -127,7 +127,111 @@ struct X86Synthesizer
     synth_defer_starts     // List of deferred statement start token indices in current function
     synth_defer_ends       // Parallel list of deferred statement end token indices in current function
     synth_emitting_defer   // 1 while replaying deferred statements before function exit
-    synth_last_elem_type   // Element primitive type of most recent array/list ("float", "")
+    synth_last_elem_type   // Element primitive or struct type of most recent array/list ("float", "User", "")
+    synth_strict_types     // 1 when --strict-types enforces zero ambiguous struct field offsets
+    synth_ambiguous_count  // Count of untyped colliding struct field accesses observed
+
+global g_x86_strict_types = 0
+
+fn x86_synth_set_strict_types flag
+    g_x86_strict_types = flag
+    return flag
+
+fn x86_synth_is_match_start toks pos
+    // WHY: Soft-keyword disambiguation for `match` / `মিল` / `মেলাও` / `@match`.
+    // Preserves variables named `match` (`match = 1`, `if match == 1`, `return match`)
+    // while reliably recognizing both statement and value-returning match expressions.
+    if pos < 0 or pos + 1 >= toks.len()
+        return 0
+    end
+    t0 = toks[pos]
+    k0 = t0.tok_kind
+    txt0 = t0.tok_text
+    if k0 != TOK_KW_MATCH() and k0 != TOK_DIR_MATCH() and not (k0 == TOK_IDENT() and (txt0 == "match" or txt0 == "মিল" or txt0 == "মেলাও" or txt0 == "@match"))
+        return 0
+    end
+    t1 = toks[pos + 1]
+    k1 = t1.tok_kind
+    txt1 = t1.tok_text
+    if t1.tok_span.span_start_line != t0.tok_span.span_start_line
+        return 0
+    end
+    // Allowlist valid scrutinee-starting tokens (rejects =, ==, !=, +, -, <, >, ), ], ,, and, or, return, etc.)
+    ok_start = 0
+    if k1 == TOK_INT() or k1 == TOK_FLOAT() or k1 == TOK_BOOL() or k1 == TOK_STR() or k1 == TOK_INTERP_STR() or k1 == TOK_LPAREN() or k1 == TOK_LBRACKET() or k1 == TOK_BANG() or k1 == TOK_TILDE() or k1 == TOK_MINUS()
+        ok_start = 1
+    elif x86_synth_is_ident_token(k1) == 1
+        if txt1 != "and" and txt1 != "or" and txt1 != "এবং" and txt1 != "অথবা" and txt1 != "return" and txt1 != "break" and txt1 != "continue" and txt1 != "end" and txt1 != "else" and txt1 != "elif" and txt1 != "then" and txt1 != "in"
+            ok_start = 1
+        end
+    end
+    if ok_start == 0
+        return 0
+    end
+    // Lookahead past scrutinee: confirm `{` on same line OR `case`/`=>`/`->`/`:` on next arm line
+    line0 = t0.tok_span.span_start_line
+    si = pos + 1
+    while si < toks.len()
+        st = toks[si]
+        sk = st.tok_kind
+        if sk == TOK_NEWLINE() or st.tok_span.span_start_line > line0
+            break
+        end
+        if sk == TOK_LBRACE() or (sk != TOK_STR() and st.tok_text == "{")
+            return 1
+        end
+        si = si + 1
+    end
+    while si < toks.len()
+        sk = toks[si].tok_kind
+        if sk == TOK_NEWLINE() or sk == TOK_SEMI() or sk == TOK_COMMENT_LINE() or sk == TOK_COMMENT_BLOCK()
+            si = si + 1
+        else
+            break
+        end
+    end
+    if si >= toks.len()
+        return 0
+    end
+    at0 = toks[si]
+    if at0.tok_kind == TOK_LBRACE() or at0.tok_text == "{" or at0.tok_kind == TOK_KW_CASE() or (at0.tok_kind == TOK_IDENT() and (at0.tok_text == "case" or at0.tok_text == "ক্ষেত্র"))
+        return 1
+    end
+    arm_line = at0.tok_span.span_start_line
+    steps = 0
+    while si < toks.len() and steps < 16
+        at = toks[si]
+        if at.tok_kind == TOK_NEWLINE() or at.tok_span.span_start_line != arm_line
+            break
+        end
+        if at.tok_kind == TOK_FAT_ARROW() or at.tok_kind == TOK_ARROW() or at.tok_kind == TOK_COLON() or (at.tok_kind != TOK_STR() and (at.tok_text == "=>" or at.tok_text == "->" or at.tok_text == ":"))
+            return 1
+        end
+        si = si + 1
+        steps = steps + 1
+    end
+    return 0
+end
+
+fn x86_synth_is_region_start toks pos
+    // WHY: Soft-keyword disambiguation for `region` / `অঞ্চল` / `@region`.
+    // Only starts a scoped memory region block when followed by newline, `{`, or EOF.
+    if pos < 0 or pos >= toks.len()
+        return 0
+    end
+    t0 = toks[pos]
+    if t0.tok_kind != TOK_IDENT() or (t0.tok_text != "region" and t0.tok_text != "অঞ্চল" and t0.tok_text != "@region")
+        return 0
+    end
+    if pos + 1 >= toks.len()
+        return 1
+    end
+    t1 = toks[pos + 1]
+    if t1.tok_kind == TOK_NEWLINE() or t1.tok_kind == TOK_COMMENT_LINE() or t1.tok_kind == TOK_LBRACE() or (t1.tok_kind != TOK_STR() and t1.tok_text == "{") or t1.tok_span.span_start_line > t0.tok_span.span_start_line
+        return 1
+    end
+    return 0
+end
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -272,7 +376,8 @@ fn x86_synth_new
     s.synth_defer_ends = list()
     s.synth_emitting_defer = 0
     s.synth_last_elem_type = ""
-    s.synth_emitting_defer = 0
+    s.synth_strict_types = g_x86_strict_types
+    s.synth_ambiguous_count = 0
     return s
 
 fn x86_synth_emit_byte s byte_val
@@ -644,7 +749,8 @@ fn x86_synth_emit_print_int_helper s
     return 0
 
 fn x86_synth_emit_call_alloc s
-    // WHY: Emits a near call to the native _lipi_alloc_helper bump allocator.
+    // WHY: Routes struct/closure allocations through GC-tracked slab allocator (_lipi_user_alloc)
+    // for zero-initialized reuse, full interior pointer tracing, and deterministic OS page return.
     s.synth_needs_alloc = 1
     call_off = s.synth_code.len()
     x86_synth_emit_byte(s, 232) // CALL rel32
@@ -654,7 +760,7 @@ fn x86_synth_emit_call_alloc s
     call_rel = X86CallReloc()
     call_rel.cr_patch_offset = patch_pos
     call_rel.cr_call_site_end = patch_pos + 4
-    call_rel.cr_target_name = "__alloc"
+    call_rel.cr_target_name = "_lipi_user_alloc"
     push(s.synth_call_relocs, call_rel)
     return 0
 
@@ -772,11 +878,15 @@ fn x86_synth_find_matching_struct s keys
 
 fn x86_synth_get_field_offset s sname fname
     // WHY: Determines the 8-byte aligned memory offset for struct field access.
+    // Under --strict-types, rejects missing fields on typed structs AND rejects ambiguous
+    // untyped field accesses when multiple named structs place `fname` at conflicting offsets.
     if sname != ""
+        matched_struct = 0
         i = s.synth_structs.len() - 1
         while i >= 0
             sd = s.synth_structs[i]
             if sd.sd_name == sname
+                matched_struct = 1
                 fi = 0
                 while fi < sd.sd_fields.len()
                     if sd.sd_fields[fi] == fname
@@ -787,9 +897,15 @@ fn x86_synth_get_field_offset s sname fname
             end
             i = i - 1
         end
+        if matched_struct == 1 and s.synth_strict_types == 1
+            say "❌ [Strict Type Error]: Struct '" + sname + "' has no field '." + fname + "' (in '" + s.synth_current_fn + "')"
+            exit(1)
+        end
     end
 
-    // Fallback pass 1: search declared named structs first (skip _anon_s_*)
+    // Fallback pass 1: search declared named structs first (skip _anon_s_*) and detect offset collisions
+    first_off = 0 - 1
+    first_sname = ""
     i = 0
     while i < s.synth_structs.len()
         sd = s.synth_structs[i]
@@ -801,11 +917,26 @@ fn x86_synth_get_field_offset s sname fname
             fi = 0
             while fi < sd.sd_fields.len()
                 if sd.sd_fields[fi] == fname
-                    return fi * 8
+                    cand_off = fi * 8
+                    if first_off < 0
+                        first_off = cand_off
+                        first_sname = sd.sd_name
+                    elif cand_off != first_off
+                        s.synth_ambiguous_count = s.synth_ambiguous_count + 1
+                        if s.synth_strict_types == 1
+                            say "❌ [Strict Type Error]: Ambiguous field '." + fname + "' on untyped receiver in '" + s.synth_current_fn + "' — struct '" + first_sname + "' (offset " + str(first_off) + ") collides with struct '" + sd.sd_name + "' (offset " + str(cand_off) + "). Annotate variable or parameter type."
+                            exit(1)
+                        end
+                    end
+                    break
+                end
                 fi = fi + 1
             end
         end
         i = i + 1
+    end
+    if first_off >= 0
+        return first_off
     end
 
     // Fallback pass 2: search across all registered struct schemas (including anonymous)

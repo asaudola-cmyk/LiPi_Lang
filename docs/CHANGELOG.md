@@ -4,6 +4,24 @@ All notable changes to the Lipi programming language are documented in this file
 
 ## [1.0.1] — Current (`main`)
 
+### Core Language & Compiler Honesty
+- Implemented multi-level chained lvalue assignments (`o.inn.arr[1] = 99`, `+=`, `m[i][j]`, `arr[0].inn.arr[0]`) across x86_64 and ARM64 backends, and replaced silent assignment fallthroughs with explicit `[Syntax Error]` diagnostics on invalid lvalue targets.
+- Added value-returning `match` expressions (`res = match x ... end` and braced `match x { ... }`) with contextual soft-keyword disambiguation so existing identifiers named `match` (`match = 1`, `if match == 1`) remain valid.
+- Added multi-line block closures (`fn(a, b) => { ... }`, `fn(a, b)\n...\nend`, `|a: int, b: int| => { ... }`) with optional `: Type` parameter annotations.
+- Added first-class scoped memory regions (`region ... end` / `অঞ্চল ... শেষ`) with deterministic arena rollback and OS physical page return on block exit.
+- Added `--strict-types` compile-time struct layout verification (`src/compiler/driver_cli.lp`, `src/compiler/backend/targets/x86_64/prescan.lp`, `codegen_core.lp`, `codegen_expr.lp`, `codegen_postfix.lp`) with automatic struct return-type inference, struct array-element type propagation, and hard errors on colliding untyped field offsets or missing fields.
+
+### Deterministic Memory Runtime, String/List GC & OS Page Return
+- Routed all dynamic strings, lists, structs, closures, and file buffers through a unified 32-byte Magic-XOR-header segregated slab + large-block allocator (`_lipi_user_alloc`) with ERMS `rep stosq` zero-on-reuse and adaptive auto-GC (`max(512 KB, 2x live)`).
+- Upgraded `_lipi_gc_collect` to an `O(N)` Magic-XOR conservative mark-sweep collector supporting `STR0` interior string pointers, idle slab payload scrubbing, and dead heap tail shrinking (`>= 64 KB`), plus `gc_live_bytes()`, `gc_set_threshold(bytes)`, and `gc_set_auto(0|1)`.
+- Added Linux `SYS_madvise(MADV_DONTNEED)` physical page reclamation across `_lipi_arena_reset`, `_lipi_arena_free_all`, `_lipi_user_free` (`>= 8 KB`), `_lipi_gc_collect`, and `utso/core/memory.lp` (`silicon_madvise_dontneed` / `madvise_dontneed`). Verified live via `/proc/self/status` `VmRSS`: 100k–300k temp strings remain bounded at `~388–616 KB`, and 15–20 MB bursts return physical RAM to Linux (`19,760 KB → 616 KB` via `gc_collect()`, `14,624 KB → 616 KB` via `region ... end`).
+
+### Pure-Kernel Hardware & Media Core (`utso/`)
+- Added `utso/os/wayland.lp`: binary Wayland wire protocol over `AF_UNIX`, `SYS_memfd_create`, `SYS_ftruncate`, `MAP_SHARED`, `SYS_sendmsg`/`SYS_recvmsg` `SCM_RIGHTS` FD passing, and `xdg_wm_base` ping/pong dispatch (0% `libwayland`).
+- Added `utso/core/simd_raster.lp`: pure-Lipi `ARGB8888` 2D software compositor with 64-bit QWORD paired-pixel clear, Porter-Duff `SRC_OVER` alpha blending, SDF anti-aliased rounded rects, Xiaolin Wu AA lines, and 8-bit glyph mask blitting.
+- Added `utso/core/ttf.lp`: pure-Lipi TrueType (`.ttf` / SFNT) parser (`head`, `maxp`, `hhea`, `hmtx`, `cmap` Format 4 & 12, `loca` 16/32-bit, `glyf` quadratic Bézier contours) and 4x4 supersampled AA scanline rasterizer (0% FreeType).
+- Added `utso/core/png.lp`: pure-Lipi RFC 2083 PNG encoder/decoder with IEEE CRC-32, Adler-32, RFC 1950/1951 DEFLATE Inflate (Stored/Fixed/Dynamic Huffman + LZ77), and all 5 PNG scanline filters (0% `libpng`/`zlib`).
+
 ### Compiler Middle-End & Register Allocation
 - Fixed ABI safety during linear-scan register eviction (`src/compiler/backend/regalloc/linear_scan.lp`): call-spanning intervals now strictly evict only callee-saved candidates instead of inheriting caller-saved scratch registers.
 - Tightened call-crossing live-interval analysis (`src/compiler/backend/regalloc/live_interval.lp`) to strict interior crossings (`start_pos < call_pos < end_pos`), eliminating false call-span flags on call results and last-use arguments.
@@ -29,7 +47,7 @@ All notable changes to the Lipi programming language are documented in this file
 ### CI, Hygiene & Testing
 - Migrated remaining legacy `include "std/..."` tests to canonical `utso/` and `aati/` modules.
 - Upgraded `.github/workflows/lipi-ci.yml` to Node 24 native Actions (`checkout@v7`, `setup-node@v7`, `upload-artifact@v7`, `download-artifact@v8`).
-- Added `tests/test_v101_compiler_opt_regalloc.lp` and `tests/test_v101_deep_upgrades_e2e.lp` expanding the regression suite to 260 tests (`260/260` passing).
+- Added `tests/test_v101_compiler_opt_regalloc.lp`, `tests/test_v101_deep_upgrades_e2e.lp`, `tests/test_core_language_and_memory.lp`, and `tests/test_core_pure_kernel_media.lp`, expanding the regression suite to 262 tests (`262/262` passing).
 
 ---
 

@@ -73,7 +73,7 @@ make
 ### Run Tests
 
 ```bash
-# Run the full regression test suite (260 tests)
+# Run the full regression test suite (262 tests)
 ./bin/lipi test
 
 # Verify Ed25519 signatures and lockfile across all 31 aati/ packages
@@ -123,7 +123,7 @@ LiPi_Lang/
 │   └── tools/          # Native CLI binaries (lipi, aati, lipilsp, lipifmt, lipidbg, ...)
 ├── utso/               # Core standard library (syscalls, memory, io, crypto, net, cpu, os)
 ├── aati/               # 31 signed ecosystem packages (see aati.toml and aati.lock)
-├── tests/              # Regression test suite (260 tests registered in tests/run_tests.lp)
+├── tests/              # Regression test suite (262 tests registered in tests/run_tests.lp)
 ├── examples/           # Runnable example programs
 ├── benchmarks/         # Benchmark harnesses and cross-language reference implementations
 ├── editors/vscode/     # VS Code extension (TextMate grammar, snippets, LSP client)

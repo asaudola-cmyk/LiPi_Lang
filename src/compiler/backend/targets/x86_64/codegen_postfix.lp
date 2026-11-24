@@ -38,8 +38,16 @@ fn x86_synth_expr_postfix s toks pos_box
             x86_synth_emit_byte(s, 198)
             x86_synth_emit_byte(s, 95)        // pop rdi (collection ptr)
             x86_synth_emit_call_helper(s, "_lipi_list_get")
-            s.synth_last_expr_type = arr_el_t
-            s.synth_last_struct = ""
+            if arr_el_t == "float" or arr_el_t == "int" or arr_el_t == "str"
+                s.synth_last_expr_type = arr_el_t
+                s.synth_last_struct = ""
+            elif arr_el_t != ""
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = arr_el_t
+            else
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+            end
             s.synth_last_elem_type = ""
 
         // Case B: Dot Member Access or Method Call: obj.member or obj.method(...)

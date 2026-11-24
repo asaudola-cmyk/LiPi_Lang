@@ -367,6 +367,262 @@ fn x86_synth_compile_statement s toks pos_box
         return 0
 
     // ── 5. Struct Field Assignment (arbitrary depth): obj.field = expr, obj.f1.f2 = expr
+    // ── 5.0 Mixed / Multi-Level Chained L-Value Assignment: o.inn.arr[1] = 99, m[i][j] += 5, a[0].f = 7 ──
+    if k == TOK_IDENT() and pos + 2 < toks.len()
+        scan_lp = pos + 1
+        lv_kinds = list()
+        lv_fields = list()
+        lv_starts = list()
+        lv_has_brk = 0
+        while scan_lp < toks.len()
+            tlp = toks[scan_lp]
+            tlp_k = tlp.tok_kind
+            tlp_t = tlp.tok_text
+            if (tlp_k == TOK_DOT() or (tlp_k != TOK_STR() and tlp_t == ".")) and scan_lp + 1 < toks.len() and x86_synth_is_ident_token(toks[scan_lp + 1].tok_kind) == 1
+                push(lv_kinds, 0)
+                push(lv_fields, toks[scan_lp + 1].tok_text)
+                push(lv_starts, scan_lp + 1)
+                scan_lp = scan_lp + 2
+            elif tlp_k == TOK_LBRACKET() or (tlp_k != TOK_STR() and tlp_t == "[")
+                b_dep = 1
+                b_cur = scan_lp + 1
+                while b_cur < toks.len() and b_dep > 0
+                    bk_c = toks[b_cur].tok_kind
+                    bt_c = toks[b_cur].tok_text
+                    if bk_c == TOK_LBRACKET() or (bk_c != TOK_STR() and bt_c == "[")
+                        b_dep = b_dep + 1
+                    elif bk_c == TOK_RBRACKET() or (bk_c != TOK_STR() and bt_c == "]")
+                        b_dep = b_dep - 1
+                        if b_dep == 0
+                            break
+                        end
+                    end
+                    b_cur = b_cur + 1
+                end
+                if b_dep == 0 and b_cur < toks.len()
+                    push(lv_kinds, 1)
+                    push(lv_fields, "")
+                    push(lv_starts, scan_lp + 1)
+                    lv_has_brk = 1
+                    scan_lp = b_cur + 1
+                else
+                    break
+                end
+            else
+                break
+            end
+        end
+        if lv_has_brk == 1 and lv_kinds.len() >= 2 and scan_lp < toks.len()
+            lv_eq = toks[scan_lp]
+            lve_k = lv_eq.tok_kind
+            lve_t = lv_eq.tok_text
+            lv_is_assign = 0
+            lv_is_comp = 0
+            lv_comp_op = 0
+            if lve_k == TOK_ASSIGN() or (lve_k != TOK_STR() and lve_t == "=")
+                lv_is_assign = 1
+            elif lve_k == TOK_PLUSEQ() or lve_t == "+="
+                lv_is_assign = 1
+                lv_is_comp = 1
+                lv_comp_op = TOK_PLUS()
+            elif lve_k == TOK_MINUSEQ() or lve_t == "-="
+                lv_is_assign = 1
+                lv_is_comp = 1
+                lv_comp_op = TOK_MINUS()
+            elif lve_k == TOK_STAREQ() or lve_t == "*="
+                lv_is_assign = 1
+                lv_is_comp = 1
+                lv_comp_op = TOK_STAR()
+            elif lve_k == TOK_SLASHEQ() or lve_t == "/="
+                lv_is_assign = 1
+                lv_is_comp = 1
+                lv_comp_op = TOK_SLASH()
+            elif lve_k == TOK_PERCENTEQ() or lve_t == "%="
+                lv_is_assign = 1
+                lv_is_comp = 1
+                lv_comp_op = TOK_PERCENT()
+            end
+            if lv_is_assign == 1
+                root_name = txt
+                lv_root = x86_synth_find_local_var(s, root_name)
+                cur_stype = ""
+                cur_el_t = ""
+                if lv_root != 0 and lv_root.lv_is_spilled == 0 and lv_root.lv_reg >= 0
+                    x86_synth_emit_mov_reg_reg(s, 0, lv_root.lv_reg)
+                    cur_stype = x86_synth_get_var_type(s, root_name)
+                    cur_el_t = x86_synth_get_elem_type(s, root_name)
+                else
+                    mg_root = x86_synth_find_mutable_global(s, root_name)
+                    if lv_root == 0 and mg_root >= 512
+                        x86_synth_emit_mutable_global_read(s, mg_root)
+                        cur_stype = x86_synth_get_mutable_global_struct(s, root_name)
+                    else
+                        r_off = x86_synth_lookup_var(s, root_name)
+                        if r_off > 0
+                            x86_synth_emit_load_var(s, 0, r_off)
+                        else
+                            x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+                        end
+                        cur_stype = x86_synth_get_var_type(s, root_name)
+                        cur_el_t = x86_synth_get_elem_type(s, root_name)
+                    end
+                end
+
+                // Walk intermediate segments 0 .. n_segs - 2 leaving final parent container in %rax
+                n_lv = lv_kinds.len()
+                si_lv = 0
+                while si_lv < n_lv - 1
+                    if lv_kinds[si_lv] == 0
+                        m_fld = lv_fields[si_lv]
+                        m_off = x86_synth_get_field_offset(s, cur_stype, m_fld)
+                        m_ft = x86_synth_get_field_type(s, cur_stype, m_fld)
+                        cur_stype = ""
+                        cur_el_t = ""
+                        if m_ft != "" and m_ft != "int" and m_ft != "i64" and m_ft != "i32" and m_ft != "u64" and m_ft != "u32" and m_ft != "float" and m_ft != "f64" and m_ft != "f32" and m_ft != "str" and m_ft != "string"
+                            cur_stype = m_ft
+                        end
+                        if m_off < 128
+                            x86_synth_emit_bytes(s, [72, 139, 64, m_off]) // mov rax, [rax + m_off]
+                        else
+                            x86_synth_emit_bytes(s, [72, 139, 128])
+                            x86_synth_emit_u32(s, m_off)
+                        end
+                    else
+                        // Index dereference with 16-byte stack alignment around index expression & call
+                        x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+                        idx_pb = [lv_starts[si_lv]]
+                        x86_synth_compile_expr(s, toks, idx_pb)
+                        x86_synth_emit_bytes(s, [72, 137, 198, 72, 131, 196, 8, 95]) // mov rsi, rax; add rsp, 8; pop rdi
+                        x86_synth_emit_call_helper(s, "_lipi_list_get")
+                        if cur_el_t != "" and cur_el_t != "int" and cur_el_t != "float" and cur_el_t != "str"
+                            cur_stype = cur_el_t
+                        else
+                            cur_stype = ""
+                        end
+                        cur_el_t = ""
+                    end
+                    si_lv = si_lv + 1
+                end
+
+                leaf_i = n_lv - 1
+                if lv_kinds[leaf_i] == 0
+                    // Final write to struct field: <expr>.leaf_field op= rhs
+                    x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax (parent); sub rsp, 8
+                    list_set(pos_box, 0, scan_lp + 1)
+                    x86_synth_compile_expr(s, toks, pos_box)
+                    lv_rhs_t = s.synth_last_expr_type
+                    x86_synth_emit_bytes(s, [72, 131, 196, 8, 89]) // add rsp, 8; pop rcx (parent)
+                    lf_name = lv_fields[leaf_i]
+                    lf_off = x86_synth_get_field_offset(s, cur_stype, lf_name)
+                    lf_ft = x86_synth_get_field_type(s, cur_stype, lf_name)
+                    if lv_is_comp == 1
+                        x86_synth_emit_bytes(s, [73, 137, 192]) // mov r8, rax (rhs)
+                        if lf_off < 128
+                            x86_synth_emit_bytes(s, [72, 139, 65, lf_off])
+                        else
+                            x86_synth_emit_bytes(s, [72, 139, 129])
+                            x86_synth_emit_u32(s, lf_off)
+                        end
+                        if lf_ft == "f64" or lf_ft == "f32" or lf_ft == "float" or lv_rhs_t == "float"
+                            if lf_ft == "f64" or lf_ft == "f32" or lf_ft == "float"
+                                x86_synth_emit_bytes(s, [102, 72, 15, 110, 192])
+                            else
+                                x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])
+                            end
+                            if lv_rhs_t == "float"
+                                x86_synth_emit_bytes(s, [102, 73, 15, 110, 200])
+                            else
+                                x86_synth_emit_bytes(s, [242, 73, 15, 42, 200])
+                            end
+                            if lv_comp_op == TOK_PLUS()
+                                x86_synth_emit_bytes(s, [242, 15, 88, 193])
+                            elif lv_comp_op == TOK_MINUS()
+                                x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                            elif lv_comp_op == TOK_STAR()
+                                x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                            elif lv_comp_op == TOK_SLASH()
+                                x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                            elif lv_comp_op == TOK_PERCENT()
+                                x86_synth_emit_bytes(s, [102, 15, 40, 208, 242, 15, 94, 193, 102, 15, 58, 11, 192, 3, 242, 15, 89, 193, 242, 15, 92, 208, 102, 15, 40, 194])
+                            end
+                            x86_synth_emit_bytes(s, [102, 72, 15, 126, 192])
+                        elif lv_comp_op == TOK_PLUS() and (lf_ft == "str" or lf_ft == "string" or lv_rhs_t == "str")
+                            x86_synth_emit_bytes(s, [81, 72, 131, 236, 8, 72, 137, 199, 76, 137, 198])
+                            x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                            x86_synth_emit_bytes(s, [72, 131, 196, 8, 89])
+                        elif lv_comp_op == TOK_PLUS()
+                            x86_synth_emit_bytes(s, [76, 1, 192])
+                        elif lv_comp_op == TOK_MINUS()
+                            x86_synth_emit_bytes(s, [76, 41, 192])
+                        elif lv_comp_op == TOK_STAR()
+                            x86_synth_emit_bytes(s, [73, 15, 175, 192])
+                        elif lv_comp_op == TOK_SLASH()
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                        elif lv_comp_op == TOK_PERCENT()
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        end
+                    end
+                    if lf_off < 128
+                        x86_synth_emit_bytes(s, [72, 137, 65, lf_off])
+                    else
+                        x86_synth_emit_bytes(s, [72, 137, 129])
+                        x86_synth_emit_u32(s, lf_off)
+                    end
+                    s.synth_last_store_end = 0 - 1
+                    return 0
+                else
+                    // Final write to list element: <expr>[leaf_idx] op= rhs (e.g. o.inn.arr[1] = 99)
+                    // Stack layout: [rsp+8] = list_ptr, [rsp+0] = leaf_idx (16-byte aligned throughout!)
+                    x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax (list_ptr); sub rsp, 8
+                    lidx_pb = [lv_starts[leaf_i]]
+                    x86_synth_compile_expr(s, toks, lidx_pb)
+                    x86_synth_emit_bytes(s, [72, 137, 4, 36]) // mov [rsp], rax (leaf_idx)
+                    list_set(pos_box, 0, scan_lp + 1)
+                    x86_synth_compile_expr(s, toks, pos_box)
+                    lv_rhs_t2 = s.synth_last_expr_type
+                    if lv_is_comp == 1
+                        x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rhs; sub rsp, 8 -> [rsp+8]=rhs,[rsp+16]=idx,[rsp+24]=list
+                        x86_synth_emit_bytes(s, [72, 139, 124, 36, 24, 72, 139, 116, 36, 16]) // mov rdi,[rsp+24]; mov rsi,[rsp+16]
+                        x86_synth_emit_call_helper(s, "_lipi_list_get")
+                        x86_synth_emit_bytes(s, [72, 131, 196, 8, 65, 88]) // add rsp, 8; pop r8 (rhs)
+                        if lv_rhs_t2 == "float"
+                            x86_synth_emit_bytes(s, [102, 72, 15, 110, 192, 102, 73, 15, 110, 200])
+                            if lv_comp_op == TOK_PLUS()
+                                x86_synth_emit_bytes(s, [242, 15, 88, 193])
+                            elif lv_comp_op == TOK_MINUS()
+                                x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                            elif lv_comp_op == TOK_STAR()
+                                x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                            elif lv_comp_op == TOK_SLASH()
+                                x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                            elif lv_comp_op == TOK_PERCENT()
+                                x86_synth_emit_bytes(s, [102, 15, 40, 208, 242, 15, 94, 193, 102, 15, 58, 11, 192, 3, 242, 15, 89, 193, 242, 15, 92, 208, 102, 15, 40, 194])
+                            end
+                            x86_synth_emit_bytes(s, [102, 72, 15, 126, 192])
+                        elif lv_comp_op == TOK_PLUS() and lv_rhs_t2 == "str"
+                            x86_synth_emit_bytes(s, [72, 137, 199, 76, 137, 198])
+                            x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                        elif lv_comp_op == TOK_PLUS()
+                            x86_synth_emit_bytes(s, [76, 1, 192])
+                        elif lv_comp_op == TOK_MINUS()
+                            x86_synth_emit_bytes(s, [76, 41, 192])
+                        elif lv_comp_op == TOK_STAR()
+                            x86_synth_emit_bytes(s, [73, 15, 175, 192])
+                        elif lv_comp_op == TOK_SLASH()
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                        elif lv_comp_op == TOK_PERCENT()
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        end
+                    end
+                    x86_synth_emit_bytes(s, [72, 137, 194, 94, 95]) // mov rdx, rax; pop rsi (idx); pop rdi (list)
+                    x86_synth_emit_call_helper(s, "_lipi_list_set")
+                    s.synth_last_store_end = 0 - 1
+                    return 0
+                end
+            end
+        end
+    end
+
     if k == TOK_IDENT()
         scan_fp = pos + 1
         chain_fields = list()
@@ -1211,37 +1467,46 @@ fn x86_synth_compile_statement s toks pos_box
         return 0
 
     // ── 9d. Contextual Pattern Match: match <expr> ... (preserves `match = 1`) ──
-    is_match_stmt = 0
-    if k == TOK_KW_MATCH() or k == TOK_DIR_MATCH() or (k == TOK_IDENT() and (txt == "match" or txt == "মিল" or txt == "মেলাও" or txt == "@match"))
-        if pos + 1 < toks.len()
-            mn = toks[pos + 1]
-            if mn.tok_kind != TOK_ASSIGN() and mn.tok_text != "=" and mn.tok_kind != TOK_PLUSEQ() and mn.tok_text != "+=" and mn.tok_kind != TOK_MINUSEQ() and mn.tok_text != "-=" and mn.tok_kind != TOK_STAREQ() and mn.tok_kind != TOK_SLASHEQ() and mn.tok_kind != TOK_PERCENTEQ() and mn.tok_kind != TOK_DOT() and mn.tok_text != "." and mn.tok_kind != TOK_LBRACKET() and mn.tok_text != "[" and mn.tok_kind != TOK_LPAREN() and mn.tok_text != "(" and mn.tok_kind != TOK_NEWLINE() and mn.tok_kind != TOK_SEMI()
-                is_match_stmt = 1
-            end
-        end
-    if is_match_stmt == 1
+    if x86_synth_is_match_start(toks, pos) == 1
         base_col = t.tok_span.span_start_col
         base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, pos + 1)
         x86_synth_compile_expr(s, toks, pos_box)
         // Store scrutinee in anonymous stack slot so arms can freely evaluate patterns
-        s.synth_stack_offset = s.synth_stack_offset + 8
         scrut_off = s.synth_stack_offset
+        s.synth_stack_offset = s.synth_stack_offset + 8
         x86_synth_emit_store_var(s, 0, scrut_off)
         match_end_patches = list()
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        match_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            match_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
 
         while get(pos_box, 0) < toks.len()
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             cur_pm = get(pos_box, 0)
             if cur_pm >= toks.len() break end
             ct_m = toks[cur_pm]
-            if x86_synth_is_block_end(toks, cur_pm) == 1
-                if ct_m.tok_span.span_start_col >= base_col
+            if match_braced == 1
+                if ct_m.tok_kind == TOK_RBRACE() or (ct_m.tok_kind != TOK_STR() and ct_m.tok_text == "}")
                     list_set(pos_box, 0, cur_pm + 1)
+                    break
                 end
-                break
+                if ct_m.tok_kind == TOK_COMMA() or (ct_m.tok_kind != TOK_STR() and ct_m.tok_text == ",")
+                    list_set(pos_box, 0, cur_pm + 1)
+                    continue
+                end
+            else
+                if x86_synth_is_block_end(toks, cur_pm) == 1
+                    if ct_m.tok_span.span_start_col >= base_col
+                        list_set(pos_box, 0, cur_pm + 1)
+                    end
+                    break
+                end
+                if ct_m.tok_span.span_start_line > base_line and ct_m.tok_span.span_start_col <= base_col break end
             end
-            if ct_m.tok_span.span_start_line > base_line and ct_m.tok_span.span_start_col <= base_col break end
             arm_col = ct_m.tok_span.span_start_col
             arm_line = ct_m.tok_span.span_start_line
             if ct_m.tok_kind == TOK_KW_CASE() or (ct_m.tok_kind == TOK_IDENT() and (ct_m.tok_text == "case" or ct_m.tok_text == "ক্ষেত্র"))
@@ -1271,7 +1536,21 @@ fn x86_synth_compile_statement s toks pos_box
                 end
             end
 
-            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_COMMENT_LINE()
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    x86_synth_skip_whitespace_tokens(toks, pos_box)
+                    cp_ab = get(pos_box, 0)
+                    if cp_ab >= toks.len() break end
+                    if toks[cp_ab].tok_kind == TOK_RBRACE() or (toks[cp_ab].tok_kind != TOK_STR() and toks[cp_ab].tok_text == "}")
+                        list_set(pos_box, 0, cp_ab + 1)
+                        break
+                    end
+                    bp_mb = get(pos_box, 0)
+                    x86_synth_compile_statement(s, toks, pos_box)
+                    if get(pos_box, 0) <= bp_mb list_set(pos_box, 0, bp_mb + 1) end
+                end
+            elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_COMMENT_LINE()
                 bp_m = get(pos_box, 0)
                 x86_synth_compile_statement(s, toks, pos_box)
                 if get(pos_box, 0) <= bp_m list_set(pos_box, 0, bp_m + 1) end
@@ -1282,6 +1561,7 @@ fn x86_synth_compile_statement s toks pos_box
                     if cp_ab >= toks.len() break end
                     ct_ab = toks[cp_ab]
                     if x86_synth_is_block_end(toks, cp_ab) == 1 break end
+                    if match_braced == 1 and (ct_ab.tok_kind == TOK_RBRACE() or (ct_ab.tok_kind != TOK_STR() and ct_ab.tok_text == "}")) break end
                     if ct_ab.tok_span.span_start_line > arm_line and ct_ab.tok_span.span_start_col <= arm_col break end
                     bp_m2 = get(pos_box, 0)
                     x86_synth_compile_statement(s, toks, pos_box)
@@ -1310,6 +1590,52 @@ fn x86_synth_compile_statement s toks pos_box
         end
         s.synth_last_store_end = 0 - 1
         return 0
+
+    // ── 9d2. Deterministic Scoped Memory Region: region ... end / অঞ্চল ... শেষ ──
+    // WHY: Captures arena watermark on entry and deterministically rolls back & releases
+    // OS physical pages (MADV_DONTNEED) on block exit with 0% GC pause.
+    if x86_synth_is_region_start(toks, pos) == 1
+        reg_base_col = t.tok_span.span_start_col
+        reg_base_line = t.tok_span.span_start_line
+        list_set(pos_box, 0, pos + 1)
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        reg_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            reg_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        reg_mark_off = s.synth_stack_offset
+        s.synth_stack_offset = s.synth_stack_offset + 8
+        x86_synth_emit_call_helper(s, "_lipi_arena_mark")
+        x86_synth_emit_store_var(s, 0, reg_mark_off)
+        while get(pos_box, 0) < toks.len()
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cur_pr = get(pos_box, 0)
+            if cur_pr >= toks.len() break end
+            ct_r = toks[cur_pr]
+            if reg_braced == 1
+                if ct_r.tok_kind == TOK_RBRACE() or (ct_r.tok_kind != TOK_STR() and ct_r.tok_text == "}")
+                    list_set(pos_box, 0, cur_pr + 1)
+                    break
+                end
+            else
+                if x86_synth_is_block_end(toks, cur_pr) == 1
+                    if ct_r.tok_span.span_start_col >= reg_base_col
+                        list_set(pos_box, 0, cur_pr + 1)
+                    end
+                    break
+                end
+                if ct_r.tok_span.span_start_line > reg_base_line and ct_r.tok_span.span_start_col <= reg_base_col break end
+            end
+            bp_r = get(pos_box, 0)
+            x86_synth_compile_statement(s, toks, pos_box)
+            if get(pos_box, 0) <= bp_r list_set(pos_box, 0, bp_r + 1) end
+        end
+        x86_synth_emit_load_var(s, 7, reg_mark_off) // mov rdi, [rbp - reg_mark_off]
+        x86_synth_emit_call_helper(s, "_lipi_arena_reset")
+        s.synth_last_store_end = 0 - 1
+        return 0
+    end
 
     // ── 9e. Mutable Global Declaration: global / @global / বিশ্বজনীন ───────────
     if k == TOK_IDENT() and (txt == "global" or txt == "@global" or txt == "বিশ্বজনীন")
@@ -1690,9 +2016,18 @@ fn x86_synth_compile_statement s toks pos_box
     if is_fn == 1
         return x86_synth_compile_fn_def(s, toks, pos_box)
 
-    // Default: evaluate expression or advance token with strict forward progress guarantee
+    // Default: evaluate expression or advance token with strict forward progress & zero silent assignment drop
     before_expr_p = get(pos_box, 0)
     x86_synth_compile_expr(s, toks, pos_box)
-    if get(pos_box, 0) <= before_expr_p
+    after_expr_p = get(pos_box, 0)
+    if after_expr_p < toks.len() and toks[after_expr_p].tok_span.span_start_line == t.tok_span.span_start_line
+        ak_chk = toks[after_expr_p].tok_kind
+        at_chk = toks[after_expr_p].tok_text
+        if ak_chk == TOK_ASSIGN() or ak_chk == TOK_PLUSEQ() or ak_chk == TOK_MINUSEQ() or ak_chk == TOK_STAREQ() or ak_chk == TOK_SLASHEQ() or ak_chk == TOK_PERCENTEQ() or (ak_chk != TOK_STR() and (at_chk == "=" or at_chk == "+=" or at_chk == "-=" or at_chk == "*=" or at_chk == "/=" or at_chk == "%="))
+            say "❌ [Syntax Error]: Invalid or unsupported assignment target before '" + at_chk + "' at line " + str(t.tok_span.span_start_line)
+            exit(1)
+        end
+    end
+    if after_expr_p <= before_expr_p
         list_set(pos_box, 0, before_expr_p + 1)
     return 0

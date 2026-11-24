@@ -157,6 +157,112 @@ fn arm64_synth_compile_statement s toks pos_box
         push(s.synth_structs, sdef)
         return 0
 
+    // ── 5.0 Mixed / Multi-Level Chained L-Value Assignment: o.inn.arr[1] = 99, m[i][j] = 5, a[0].f = 7 ──
+    if k == TOK_IDENT() and pos + 2 < toks.len()
+        a_scan = pos + 1
+        a_kinds = list()
+        a_fields = list()
+        a_starts = list()
+        a_has_brk = 0
+        while a_scan < toks.len()
+            at_l = toks[a_scan]
+            ak_l = at_l.tok_kind
+            ax_l = at_l.tok_text
+            if (ak_l == TOK_DOT() or (ak_l != TOK_STR() and ax_l == ".")) and a_scan + 1 < toks.len() and arm64_is_ident_token(toks[a_scan + 1].tok_kind) == 1
+                push(a_kinds, 0)
+                push(a_fields, toks[a_scan + 1].tok_text)
+                push(a_starts, a_scan + 1)
+                a_scan = a_scan + 2
+            elif ak_l == TOK_LBRACKET() or (ak_l != TOK_STR() and ax_l == "[")
+                ab_d = 1
+                ab_c = a_scan + 1
+                while ab_c < toks.len() and ab_d > 0
+                    abk = toks[ab_c].tok_kind
+                    if abk == TOK_LBRACKET()
+                        ab_d = ab_d + 1
+                    elif abk == TOK_RBRACKET()
+                        ab_d = ab_d - 1
+                        if ab_d == 0
+                            break
+                        end
+                    end
+                    ab_c = ab_c + 1
+                end
+                if ab_d == 0 and ab_c < toks.len()
+                    push(a_kinds, 1)
+                    push(a_fields, "")
+                    push(a_starts, a_scan + 1)
+                    a_has_brk = 1
+                    a_scan = ab_c + 1
+                else
+                    break
+                end
+            else
+                break
+            end
+        end
+        if a_has_brk == 1 and a_kinds.len() >= 2 and a_scan < toks.len() and (toks[a_scan].tok_kind == TOK_ASSIGN() or toks[a_scan].tok_text == "=")
+            a_off = arm64_synth_lookup_var(s, txt)
+            a_stype = arm64_synth_get_var_struct(s, txt)
+            if a_off > 0
+                arm64_emit_ldr_reg_sp(s, 0, a_off)
+            else
+                arm64_emit_movz_x(s, 0, 0, 0)
+            end
+            a_n = a_kinds.len()
+            a_si = 0
+            while a_si < a_n - 1
+                if a_kinds[a_si] == 0
+                    am_off = arm64_synth_get_field_offset(s, a_stype, a_fields[a_si])
+                    a_stype = ""
+                    am_sc = (am_off / 8) & 4095
+                    arm64_synth_emit32(s, 4181721088 | (am_sc << 10) | (0 << 5) | 0) // ldr x0, [x0, #am_off]
+                else
+                    arm64_push_reg(s, 0) // save list ptr
+                    a_ipb = [a_starts[a_si]]
+                    arm64_synth_compile_expr(s, toks, a_ipb) // X0 = idx
+                    arm64_pop_reg(s, 1) // X1 = list hdr
+                    arm64_synth_emit32(s, 4181723171) // ldr x3, [x1, #16] (data_ptr)
+                    arm64_emit_add_x(s, 0, 0, 0)
+                    arm64_emit_add_x(s, 0, 0, 0)
+                    arm64_emit_add_x(s, 0, 0, 0)
+                    arm64_emit_add_x(s, 3, 3, 0)
+                    arm64_synth_emit32(s, 4181721184) // ldr x0, [x3, #0]
+                    a_stype = ""
+                end
+                a_si = a_si + 1
+            end
+            a_leaf = a_n - 1
+            if a_kinds[a_leaf] == 0
+                arm64_push_reg(s, 0) // save parent struct ptr
+                list_set(pos_box, 0, a_scan + 1)
+                arm64_synth_compile_expr(s, toks, pos_box) // X0 = rhs
+                arm64_pop_reg(s, 1) // X1 = parent
+                alf_off = arm64_synth_get_field_offset(s, a_stype, a_fields[a_leaf])
+                alf_sc = (alf_off / 8) & 4095
+                arm64_synth_emit32(s, 4177526784 | (alf_sc << 10) | (1 << 5) | 0) // str x0, [x1, #alf_off]
+                return 0
+            else
+                arm64_push_reg(s, 0) // save list ptr
+                a_lpb = [a_starts[a_leaf]]
+                arm64_synth_compile_expr(s, toks, a_lpb) // X0 = leaf_idx
+                arm64_push_reg(s, 0) // save leaf_idx
+                list_set(pos_box, 0, a_scan + 1)
+                arm64_synth_compile_expr(s, toks, pos_box) // X0 = rhs
+                arm64_emit_add_x(s, 2, 0, 31) // X2 = rhs (mov x2, x0)
+                arm64_pop_reg(s, 1) // X1 = leaf_idx
+                arm64_pop_reg(s, 0) // X0 = list hdr
+                arm64_synth_emit32(s, 4181723139) // ldr x3, [x0, #16]
+                arm64_emit_add_x(s, 1, 1, 1)
+                arm64_emit_add_x(s, 1, 1, 1)
+                arm64_emit_add_x(s, 1, 1, 1)
+                arm64_emit_add_x(s, 3, 3, 1)
+                arm64_synth_emit32(s, 4177526882) // str x2, [x3, #0]
+                return 0
+            end
+        end
+    end
+
     // ── 5. Struct Field Assignment: obj.field = expr ─────────────────────────────
     if k == TOK_IDENT()
         p1 = pos + 1

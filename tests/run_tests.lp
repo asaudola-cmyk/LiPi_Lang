@@ -1350,6 +1350,16 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_core_language_and_memory.lp", "test_core_language_and_memory") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_core_pure_kernel_media.lp", "test_core_pure_kernel_media") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

@@ -31,6 +31,9 @@ Lipi's libraries are organized into two layers:
 - **`utso/core/`**:
   - `kavach_capsule.lp` — Signed `LPKC` W^X code capsules, `REL32` bounds verification, and lock-free `KavachRing` IPC
   - `ffi_sovereign.lp`, `c_abi_call.lp` — Strict W^X ELF64 shared-object loader (`.rela.dyn`, `SHF_ALLOC` / `.dynstr`) and System V AMD64 ABI invocation
+  - `simd_raster.lp` — Pure-Lipi `ARGB8888` 2D software compositor (64-bit QWORD paired-pixel clear, Porter-Duff `SRC_OVER` alpha blending, SDF anti-aliased rounded rectangles, Xiaolin Wu AA lines, sprite & 8-bit glyph mask blitting)
+  - `ttf.lp` — Pure-Lipi TrueType (`.ttf` / SFNT) binary font parser (`head`, `maxp`, `hhea`, `hmtx`, `cmap` Format 4 & 12, `loca` 16/32-bit, `glyf` quadratic Bézier contours) and 4x4 supersampled non-zero winding anti-aliased scanline rasterizer
+  - `png.lp` — Pure-Lipi RFC 2083 PNG encoder/decoder with IEEE CRC-32, Adler-32, full RFC 1950/1951 DEFLATE Inflate (Stored Type 0, Fixed Huffman Type 1, Dynamic Huffman Type 2, LZ77 sliding window), and all 5 PNG scanline filters (`None`, `Sub`, `Up`, `Average`, `Paeth`)
   - `json.lp`, `json_fast.lp`, `regex.lp`, `fiber_reactor.lp`, `formal_proof.lp`, `simd.lp`, `fs.lp`, `gc.lp`, `graphics_2d.lp`
 - **`utso/crypto/`**:
   - `sha256.lp`, `sha512.lp`, `sha1.lp`, `base64.lp`, `random.lp`
@@ -46,7 +49,7 @@ Lipi's libraries are organized into two layers:
   - `dns_pure.lp`, `dns_client.lp`, `tcp.lp`, `tcp_server.lp`, `udp.lp`, `io_uring_reactor.lp`, `io_uring_ring.lp`, `grpc.lp`, `grpc_server.lp`, `server_production.lp`
 - **`utso/cpu/`**: `avx512_native.lp`, `avx512_gemm.lp`, `amx_vnni.lp`
 - **`utso/io/`**: `uring.lp`, `uring_sqpoll.lp`, `reactor.lp`, `dma.lp`, `nvme_direct.lp`
-- **`utso/os/`**: `syscalls.lp`, `process.lp`, `thread.lp`, `ipc.lp`, `shm.lp`, `fs.lp`, `vfs.lp`, `env.lp`, `path.lp`, `unikernel.lp`, `build_unikernel.lp`, `boot/`, `drivers/`
+- **`utso/os/`**: `syscalls.lp`, `wayland.lp` (pure-kernel Wayland wire protocol over `AF_UNIX`, `SYS_memfd_create`, `MAP_SHARED`, and `SYS_sendmsg`/`SYS_recvmsg` `SCM_RIGHTS` FD passing), `process.lp`, `thread.lp`, `ipc.lp`, `shm.lp`, `fs.lp`, `vfs.lp`, `env.lp`, `path.lp`, `unikernel.lp`, `build_unikernel.lp`, `boot/`, `drivers/`
 - **`utso/tools/`**: `cli.lp`, `repl.lp`, `test_runner.lp`, `profiler.lp`, `debugger.lp`, `lsp/`
 
 ---

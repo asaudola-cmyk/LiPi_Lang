@@ -32,9 +32,23 @@ fn x86_synth_find_prescan_stub s name decl_line
     return 0 - 1
 
 fn x86_synth_prescan_signatures s tokens
-    // WHY: Pre-populates X86Function metadata (param_count, explicit/inferred return types)
-    // before sequential codegen so forward calls, float propagation, and fn pointers work out-of-order.
+    // WHY: Pre-populates declared struct names and X86Function metadata (param_count, explicit or
+    // inferred float/struct return types) before sequential codegen so forward calls,
+    // float propagation, zero-collision struct access, and bare fn pointers work out-of-order.
     n = tokens.len()
+    known_structs = list()
+    si_ps = 0
+    while si_ps + 1 < n
+        st_ps = tokens[si_ps]
+        sk_ps = st_ps.tok_kind
+        sx_ps = st_ps.tok_text
+        if sk_ps == TOK_KW_STRUCT() or sk_ps == TOK_DIR_STRUCT() or (sk_ps == TOK_IDENT() and (sx_ps == "struct" or sx_ps == "গঠন" or sx_ps == "@struct"))
+            if tokens[si_ps + 1].tok_kind == TOK_IDENT()
+                push(known_structs, tokens[si_ps + 1].tok_text)
+            end
+        end
+        si_ps = si_ps + 1
+    end
     i = 0
     while i < n
         t = tokens[i]
@@ -132,6 +146,8 @@ fn x86_synth_prescan_signatures s tokens
                 // Conservative lookahead across return expressions up to block end
                 saw_float = 0
                 saw_nonfloat = 0
+                inferred_struct = ""
+                struct_conflict = 0
                 bp = p
                 brace_d = 0
                 if bp < n and (tokens[bp].tok_kind == TOK_ASSIGN() or (tokens[bp].tok_kind != TOK_STR() and tokens[bp].tok_text == "="))
@@ -180,6 +196,18 @@ fn x86_synth_prescan_signatures s tokens
                             arm_fl = 0
                             arm_str = 0
                             arm_toks = 0
+                            arm_st = ""
+                            if rp + 1 < n and tokens[rp].tok_kind == TOK_IDENT() and (tokens[rp + 1].tok_kind == TOK_LPAREN() or tokens[rp + 1].tok_text == "(")
+                                cand_st = tokens[rp].tok_text
+                                ksi = 0
+                                while ksi < known_structs.len()
+                                    if known_structs[ksi] == cand_st
+                                        arm_st = cand_st
+                                        break
+                                    end
+                                    ksi = ksi + 1
+                                end
+                            end
                             while rp < n and tokens[rp].tok_kind != TOK_NEWLINE() and tokens[rp].tok_kind != TOK_SEMI() and tokens[rp].tok_kind != TOK_EOF()
                                 rk = tokens[rp].tok_kind
                                 rtxt = tokens[rp].tok_text
@@ -203,7 +231,14 @@ fn x86_synth_prescan_signatures s tokens
                                 end
                                 rp = rp + 1
                             end
-                            if arm_fl == 1 and arm_str == 0
+                            if arm_st != ""
+                                if inferred_struct == ""
+                                    inferred_struct = arm_st
+                                elif inferred_struct != arm_st
+                                    struct_conflict = 1
+                                end
+                                saw_nonfloat = 1
+                            elif arm_fl == 1 and arm_str == 0
                                 saw_float = 1
                             elif arm_toks > 0
                                 saw_nonfloat = 1
@@ -212,7 +247,9 @@ fn x86_synth_prescan_signatures s tokens
                         bp = bp + 1
                     end
                 end
-                if saw_float == 1 and saw_nonfloat == 0
+                if inferred_struct != "" and struct_conflict == 0 and saw_float == 0
+                    ret_t = inferred_struct
+                elif saw_float == 1 and saw_nonfloat == 0
                     ret_t = "f64"
                 end
             end

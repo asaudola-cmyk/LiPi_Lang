@@ -1,7 +1,7 @@
 name: Lipi CI
 
 # Verifies 3-stage Static-PIE deterministic bootstrap, W^X (0 RWE) audit across bin/*,
-# 260 regression tests, 31/31 aati verify & aati.lock, utso/aati/examples compile sweeps,
+# 262 regression tests, 31/31 aati verify & aati.lock, utso/aati/examples compile sweeps,
 # valid OPC .vsix packaging, --kavach toolchain dogfooding, Node V8 WASM execution,
 # Shared .so + DWARF v4 (-g), Windows PE32+ execution, and macOS Mach-O verification.
 
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   native-regression-test:
-    name: "Static-PIE Bootstrap, W^X Audit & 260-Test Suite (Ubuntu)"
+    name: "Static-PIE Bootstrap, W^X Audit & 262-Test Suite (Ubuntu)"
     runs-on: ubuntu-22.04
 
     steps:
@@ -50,7 +50,7 @@ jobs:
             test "$rwe" = "0"
           done
 
-      - name: Run Full 260-Test Regression Suite
+      - name: Run Full 262-Test Regression Suite
         run: |
           ./bin/lipi test
 

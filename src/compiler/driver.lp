@@ -804,6 +804,7 @@ fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emi
     cfg.cfg_strict_ownership = (mode_flags / 4) % 2
     cfg.cfg_strict_proof = (mode_flags / 8) % 2
     cfg.cfg_kavach_mode = (mode_flags / 16) % 2
+    cfg.cfg_strict_types = (mode_flags / 32) % 2
     res = compiler_pipeline_execute(cfg, source_code)
     return res
 
