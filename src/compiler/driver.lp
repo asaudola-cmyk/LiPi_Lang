@@ -157,6 +157,12 @@ fn compiler_driver_resolve_std target
     if target == "utso/ffi" or target == "utso/ffi.lp" return "utso/ffi.lp"
     if target == "utso/concurrency" or target == "utso/concurrency.lp" return "utso/concurrency.lp"
     if target == "utso/channel" or target == "utso/channel.lp" return "utso/channel.lp"
+    if target == "utso/bare" or target == "utso/bare/core" or target == "utso/bare/core.lp" return "utso/bare/core.lp"
+    if target == "utso/silicon/serial" or target == "utso/silicon/serial.lp" return "utso/silicon/serial.lp"
+    if target == "utso/silicon/vga" or target == "utso/silicon/vga.lp" return "utso/silicon/vga.lp"
+    if target == "utso/silicon/cpu" or target == "utso/silicon/cpu.lp" return "utso/silicon/cpu.lp"
+    if target == "utso/silicon/virtio" or target == "utso/silicon/virtio.lp" return "utso/silicon/virtio.lp"
+    if target == "utso/silicon/uefi" or target == "utso/silicon/uefi.lp" return "utso/silicon/uefi.lp"
 
     // 2. Legacy 'universe/core/*' and 'universe/os/*' mapping to sovereign primitives:
     if target == "universe/core/memory.lp" or target == "universe/core/memory" return "utso/memory.lp"
@@ -949,11 +955,26 @@ fn compiler_driver_rewrite_aliases src aliases alias_pubs alias_has_pub alias_pa
     return compiler_driver_join_chunks(out_chunks)
 end
 
+global G_DRV_IMPORT_STACK = 0
+
 fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
-    // WHY: Recursively traverses and consolidates all 'import', 'include', and 'from ... import'
-    // dependencies into a flat list of chunks with scoped namespaces and `pub` visibility enforcement.
+    // WHY: 3-color DFS recursive dependency bundler (white/grey/black) with explicit circular-import
+    // cycle breaking across BOTH plain imports AND scoped (`import ... as alias`, `from ... import`) imports.
     if len(file_path) > 2 and mem_byte_read(file_path, 0) == 46 and mem_byte_read(file_path, 1) == 47
         file_path = str_sub(file_path, 2, len(file_path))
+    end
+    if G_DRV_IMPORT_STACK == 0
+        G_DRV_IMPORT_STACK = list()
+    end
+    // Grey-node cycle check: prevents infinite recursion even across aliased/selective circular imports!
+    gi = 0
+    while gi < G_DRV_IMPORT_STACK.len()
+        if compiler_driver_streq(G_DRV_IMPORT_STACK[gi], file_path) == 1
+            say "  [bundle] circular import cycle resolved via forward hoisting -> " + file_path
+            return 0
+        end
+        gi = gi + 1
+    end
 
     i = 0
     while i < visited.len()
@@ -961,16 +982,21 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
             return 0
         i = i + 1
     push(visited, file_path)
+    push(G_DRV_IMPORT_STACK, file_path)
     say "  [bundle] -> " + file_path
 
     if file_exists(file_path) == 0
+        _lipi_list_pop(G_DRV_IMPORT_STACK)
         return 0
+    end
 
     content = file_read(file_path)
     if compiler_driver_has_include(content) == 0
         push(chunks, content)
         push(chunks, "\n")
+        _lipi_list_pop(G_DRV_IMPORT_STACK)
         return 0
+    end
 
     cur_dir = compiler_driver_dirname(file_path)
     file_aliases = list()
@@ -1182,6 +1208,9 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
         end
     end
 
+    if G_DRV_IMPORT_STACK != 0 and G_DRV_IMPORT_STACK.len() > 0
+        _lipi_list_pop(G_DRV_IMPORT_STACK)
+    end
     return 0
 
 fn compiler_driver_bundle_source file_path visited
@@ -1220,10 +1249,17 @@ fn compiler_driver_print_banner
     say "║  ⚡ 100% Pure Silicon Machine Code | 0% C | 0% Libc | Sovereign      ║"
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
+global g_driver_base_vaddr = 1073741824
+
+fn compiler_driver_set_base_vaddr vaddr
+    g_driver_base_vaddr = vaddr
+    return vaddr
+
 fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emit_fmt mode_flags
     // WHY: Sovereign compilation entry point supporting packed mode flags while staying within <= 6 SysV registers:
     // bit 0 (1): DWARF debug (-g), bit 1 (2): --no-pie, bit 2 (4): --strict-ownership,
-    // bit 3 (8): --strict-proof, bit 4 (16): --kavach / --কবচ.
+    // bit 3 (8): --strict-proof, bit 4 (16): --kavach, bit 5 (32): --strict-types,
+    // bit 6 (64): --freestanding / --no-runtime, bit 7 (128): --ssa-codegen.
     lipi_root = compiler_driver_get_lipi_root()
     if file_exists(src_path) == 0
         if compiler_driver_starts_with(src_path, "packages/") == 1
@@ -1259,6 +1295,9 @@ fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emi
     cfg.cfg_strict_proof = (mode_flags / 8) % 2
     cfg.cfg_kavach_mode = (mode_flags / 16) % 2
     cfg.cfg_strict_types = (mode_flags / 32) % 2
+    cfg.cfg_freestanding = (mode_flags / 64) % 2
+    cfg.cfg_ssa_codegen = (mode_flags / 128) % 2
+    cfg.cfg_base_vaddr = g_driver_base_vaddr
     res = compiler_pipeline_execute(cfg, source_code)
     return res
 

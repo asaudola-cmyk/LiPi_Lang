@@ -13,6 +13,25 @@ import "utso/net/tls/tls13"
 @! WHY: Explicit struct definitions provide deterministic O(1) field offsets across all compilation units
 @! ----------------------------------------------------------------------------
 
+@struct HttpHeader
+  name: string
+  value: string
+@end
+
+@struct HttpUrl
+  protocol: string
+  host: string
+  port: i64
+  path: string
+@end
+
+@struct HttpTlsAppKeys
+  c_key: array
+  c_iv: array
+  s_key: array
+  s_iv: array
+@end
+
 @struct HttpResponse
   status_code: i64
   status_text: string
@@ -28,6 +47,9 @@ import "utso/net/tls/tls13"
   headers: array
   body: string
 @end
+
+@fn _http_hdr_name(h: HttpHeader) return h.name @end
+@fn _http_hdr_value(h: HttpHeader) return h.value @end
 
 @struct HttpTlsRecord
   tls_rec_ok: i64
@@ -159,8 +181,8 @@ import "utso/net/tls/tls13"
   hlen = headers.len()
   @while i < hlen
     h = headers[i]
-    h_name = _http_sanitize_header_name(h.name)
-    h_val = _http_strip_crlf(h.value)
+    h_name = _http_sanitize_header_name(_http_hdr_name(h))
+    h_val = _http_strip_crlf(_http_hdr_value(h))
     @if h_name == "Content-Length" || h_name == "content-length"
       has_content_length = 1
     @end
@@ -272,7 +294,7 @@ import "utso/net/tls/tls13"
 @! 5. HTTP/1.1 Response Parser Engine
 @! ----------------------------------------------------------------------------
 
-@fn http_parse_response(raw_http_str: string)
+@fn http_parse_response(raw_http_str: string) -> HttpResponse
   status_code = 0
   status_text = ""
   version = "HTTP/1.1"
@@ -281,7 +303,7 @@ import "utso/net/tls/tls13"
 
   raw_len = str_len(raw_http_str)
   @if raw_len == 0
-    return { status_code: 0, status_text: "Empty Response", version: version, headers: headers, body: "" }
+    return HttpResponse(0, "Empty Response", version, headers, "")
   @end
 
   @! Find header/body delimiter (\r\n\r\n or \n\n)
@@ -354,7 +376,7 @@ import "utso/net/tls/tls13"
         @if colon_pos >= 0
           h_name = str_trim(str_substr(line, 0, colon_pos))
           h_val = str_trim(str_substr(line, colon_pos + 1, str_len(line)))
-          headers = headers.push({ name: h_name, value: h_val })
+          headers = headers.push(HttpHeader(h_name, h_val))
 
           h_lower = str_to_lower(h_name)
           @if h_lower == "transfer-encoding" && contains(str_to_lower(h_val), "chunked") == 1
@@ -375,13 +397,7 @@ import "utso/net/tls/tls13"
     body = body_str
   @end
 
-  return {
-    status_code: status_code,
-    status_text: status_text,
-    version: version,
-    headers: headers,
-    body: body
-  }
+  return HttpResponse(status_code, status_text, version, headers, body)
 @end
 
 @fn parse_int_str(s)
@@ -402,7 +418,7 @@ import "utso/net/tls/tls13"
 @! 6. HTTP URL Parser
 @! ----------------------------------------------------------------------------
 
-@fn http_parse_url(url)
+@fn http_parse_url(url) -> HttpUrl
   proto = "http"
   host = "localhost"
   port = 80
@@ -438,12 +454,7 @@ import "utso/net/tls/tls13"
 
   @if host == "" host = "localhost" @end
 
-  return {
-    protocol: proto,
-    host: host,
-    port: port,
-    path: path
-  }
+  return HttpUrl(proto, host, port, path)
 @end
 
 @! ----------------------------------------------------------------------------
@@ -861,12 +872,12 @@ import "utso/net/tls/tls13"
   @if cipher == 4867
     klen = 32
   @end
-  return {
-    c_key: tls13_hkdf_expand_label(c_app, "key", [], klen),
-    c_iv: tls13_hkdf_expand_label(c_app, "iv", [], 12),
-    s_key: tls13_hkdf_expand_label(s_app, "key", [], klen),
-    s_iv: tls13_hkdf_expand_label(s_app, "iv", [], 12)
-  }
+  return HttpTlsAppKeys(
+    tls13_hkdf_expand_label(c_app, "key", [], klen),
+    tls13_hkdf_expand_label(c_app, "iv", [], 12),
+    tls13_hkdf_expand_label(s_app, "key", [], klen),
+    tls13_hkdf_expand_label(s_app, "iv", [], 12)
+  )
 @end
 
 @fn _http_is_wire_response_complete(raw_resp)
@@ -886,11 +897,12 @@ import "utso/net/tls/tls13"
   clen = -1
   @while hi < parsed.headers.len()
     h = parsed.headers[hi]
-    hl = str_to_lower(h.name)
-    @if hl == "transfer-encoding" && contains(str_to_lower(h.value), "chunked") == 1
+    hl = str_to_lower(_http_hdr_name(h))
+    hv = _http_hdr_value(h)
+    @if hl == "transfer-encoding" && contains(str_to_lower(hv), "chunked") == 1
       is_chunked = 1
     @elif hl == "content-length" && clen < 0
-      clen = parse_int_str(h.value)
+      clen = parse_int_str(hv)
     @end
     hi = hi + 1
   @end
@@ -908,7 +920,7 @@ import "utso/net/tls/tls13"
   return 0
 @end
 
-@fn _http_tls_exchange(stream, host, req_str)
+@fn _http_tls_exchange(stream: TcpStream, host, req_str)
   c_priv = _http_tls_rand32()
   @if c_priv.len() != 32 return "" @end
   c_pub = x25519_public_key(c_priv)
@@ -916,11 +928,11 @@ import "utso/net/tls/tls13"
   @if ch.wire_bytes.len() < 46 return "" @end
   ch_hs = _http_tls_slice(ch.wire_bytes, 5, ch.wire_bytes.len())
 
-  @if _http_tls_write_exact(stream.fd, ch.wire_bytes) <= 0
+  @if _http_tls_write_exact(stream.tcp_fd, ch.wire_bytes) <= 0
     return ""
   @end
 
-  sh_hs = _http_tls_read_server_hello(stream.fd)
+  sh_hs = _http_tls_read_server_hello(stream.tcp_fd)
   @if sh_hs.len() == 0 return "" @end
 
   sh_info = _http_tls_parse_server_hello(sh_hs)
@@ -938,8 +950,8 @@ import "utso/net/tls/tls13"
     ch2_wire = _http_tls_build_ch_with_cookie(host, c_pub, sh_info.tls_sh_cookie)
     @if ch2_wire.len() < 46 return "" @end
     ch2_hs = _http_tls_slice(ch2_wire, 5, ch2_wire.len())
-    @if _http_tls_write_exact(stream.fd, ch2_wire) <= 0 return "" @end
-    sh2_hs = _http_tls_read_server_hello(stream.fd)
+    @if _http_tls_write_exact(stream.tcp_fd, ch2_wire) <= 0 return "" @end
+    sh2_hs = _http_tls_read_server_hello(stream.tcp_fd)
     @if sh2_hs.len() == 0 return "" @end
     sh_info = _http_tls_parse_server_hello(sh2_hs)
     @if sh_info.tls_sh_ok != 1 || sh_info.tls_sh_is_hrr == 1 || sh_info.tls_sh_cipher != cipher
@@ -969,7 +981,7 @@ import "utso/net/tls/tls13"
   flight_steps = 0
   @while got_server_finished == 0 && flight_steps < 64
     flight_steps = flight_steps + 1
-    rec = _http_tls_read_record(stream.fd)
+    rec = _http_tls_read_record(stream.tcp_fd)
     @if rec.tls_rec_ok != 1 return "" @end
     @if rec.tls_rec_type == 20
       continue
@@ -1069,13 +1081,13 @@ import "utso/net/tls/tls13"
   @end
   c_fin_msg = tls_append_bytes(c_fin_hdr, c_verify)
   c_fin_rec = _http_tls_wrap_aead_record_suite(cipher, hs_keys.client_write_key, hs_keys.client_write_iv, 0, 22, c_fin_msg)
-  @if _http_tls_write_exact(stream.fd, c_fin_rec) <= 0 return "" @end
+  @if _http_tls_write_exact(stream.tcp_fd, c_fin_rec) <= 0 return "" @end
 
   req_bytes = tls_string_to_bytes(req_str)
   rlen = req_bytes.len()
   @if rlen == 0
     req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, 0, 23, req_bytes)
-    @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return "" @end
+    @if _http_tls_write_exact(stream.tcp_fd, req_rec) <= 0 return "" @end
   @else
     c_app_seq = 0
     roff = 0
@@ -1084,7 +1096,7 @@ import "utso/net/tls/tls13"
       @if rstop > rlen rstop = rlen @end
       rchunk = _http_tls_slice(req_bytes, roff, rstop)
       req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, c_app_seq, 23, rchunk)
-      @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return "" @end
+      @if _http_tls_write_exact(stream.tcp_fd, req_rec) <= 0 return "" @end
       c_app_seq = c_app_seq + 1
       roff = rstop
     @end
@@ -1094,7 +1106,7 @@ import "utso/net/tls/tls13"
   resp_buf = buf_new(4096)
   s_app_seq = 0
   @while 1 == 1
-    rec = _http_tls_read_record(stream.fd)
+    rec = _http_tls_read_record(stream.tcp_fd)
     @if rec.tls_rec_ok != 1
       break
     @end
@@ -1134,15 +1146,16 @@ import "utso/net/tls/tls13"
 @! 7. High-Level HTTP Client API (GET & POST over HTTP & HTTPS TLS 1.3)
 @! ----------------------------------------------------------------------------
 
-@fn _http_build_client_headers(u, extra_headers)
+@fn _http_build_client_headers(u: HttpUrl, extra_headers)
   has_host = 0
   has_conn = 0
   req_hdrs = []
   i = 0
   @while i < extra_headers.len()
     h = extra_headers[i]
-    @if h.name == "Host" || h.name == "host" has_host = 1 @end
-    @if h.name == "Connection" || h.name == "connection" has_conn = 1 @end
+    hn = _http_hdr_name(h)
+    @if hn == "Host" || hn == "host" has_host = 1 @end
+    @if hn == "Connection" || hn == "connection" has_conn = 1 @end
     req_hdrs = req_hdrs.push(h)
     i = i + 1
   @end
@@ -1151,17 +1164,17 @@ import "utso/net/tls/tls13"
     @if u.port != 80 && u.port != 443
       host_hdr = string_concat(host_hdr, string_concat(":", int_to_str(u.port)))
     @end
-    req_hdrs = req_hdrs.push({ name: "Host", value: host_hdr })
+    req_hdrs = req_hdrs.push(HttpHeader("Host", host_hdr))
   @end
-  req_hdrs = req_hdrs.push({ name: "User-Agent", value: "LiPi-Universe-Client/1.0" })
-  req_hdrs = req_hdrs.push({ name: "Accept", value: "*/*" })
+  req_hdrs = req_hdrs.push(HttpHeader("User-Agent", "LiPi-Universe-Client/1.0"))
+  req_hdrs = req_hdrs.push(HttpHeader("Accept", "*/*"))
   @if has_conn == 0
-    req_hdrs = req_hdrs.push({ name: "Connection", value: "close" })
+    req_hdrs = req_hdrs.push(HttpHeader("Connection", "close"))
   @end
   return req_hdrs
 @end
 
-@fn _http_resolve_redirect(base_u, loc)
+@fn _http_resolve_redirect(base_u: HttpUrl, loc)
   @if starts_with(loc, "http://") == 1 || starts_with(loc, "https://") == 1
     return loc
   @end
@@ -1183,22 +1196,22 @@ import "utso/net/tls/tls13"
   i = 0
   @while i < headers.len()
     h = headers[i]
-    @if str_to_lower(h.name) == name_lower
-      return h.value
+    @if str_to_lower(_http_hdr_name(h)) == name_lower
+      return _http_hdr_value(h)
     @end
     i = i + 1
   @end
   return ""
 @end
 
-@fn _http_execute_single_to(method, url, extra_headers, body, timeout_ms)
+@fn _http_execute_single_to(method, url, extra_headers, body, timeout_ms) -> HttpResponse
   u = http_parse_url(url)
   stream = tcp_stream_connect(u.host, u.port)
-  @if stream.fd < 0
-    return { status_code: 0, status_text: "Connection failed", version: "HTTP/1.1", headers: [], body: "" }
+  @if stream.tcp_fd < 0
+    return HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
   @end
   @if timeout_ms > 0
-    tcp_set_timeout_ms(stream.fd, timeout_ms)
+    tcp_set_timeout_ms(stream.tcp_fd, timeout_ms)
   @end
 
   req_hdrs = _http_build_client_headers(u, extra_headers)
@@ -1208,7 +1221,7 @@ import "utso/net/tls/tls13"
     raw_resp = _http_tls_exchange(stream, u.host, req)
     tcp_stream_close(stream)
     @if raw_resp == ""
-      return { status_code: 0, status_text: "TLS handshake failed", version: "HTTP/1.1", headers: [], body: "" }
+      return HttpResponse(0, "TLS handshake failed", "HTTP/1.1", [], "")
     @end
     return http_parse_response(raw_resp)
   @end
@@ -1232,16 +1245,16 @@ import "utso/net/tls/tls13"
   return http_parse_response(raw_resp)
 @end
 
-@fn _http_execute_single(method, url, extra_headers, body)
+@fn _http_execute_single(method, url, extra_headers, body) -> HttpResponse
   return _http_execute_single_to(method, url, extra_headers, body, 0)
 @end
 
-@fn _http_execute_to(method, url, extra_headers, body, timeout_ms)
+@fn _http_execute_to(method, url, extra_headers, body, timeout_ms) -> HttpResponse
   cur_method = method
   cur_url = url
   cur_body = body
   hop = 0
-  resp = { status_code: 0, status_text: "Connection failed", version: "HTTP/1.1", headers: [], body: "" }
+  resp = HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
   @while hop < 6
     resp = _http_execute_single_to(cur_method, cur_url, extra_headers, cur_body, timeout_ms)
     sc = resp.status_code
@@ -1261,31 +1274,31 @@ import "utso/net/tls/tls13"
   return resp
 @end
 
-@fn _http_execute(method, url, extra_headers, body)
+@fn _http_execute(method, url, extra_headers, body) -> HttpResponse
   return _http_execute_to(method, url, extra_headers, body, 0)
 @end
 
-@fn http_get(url)
+@fn http_get(url) -> HttpResponse
   return _http_execute("GET", url, [], "")
 @end
 
-@fn http_post(url, headers, body)
+@fn http_post(url, headers, body) -> HttpResponse
   return _http_execute("POST", url, headers, body)
 @end
 
-@fn http_put(url, headers, body)
+@fn http_put(url, headers, body) -> HttpResponse
   return _http_execute("PUT", url, headers, body)
 @end
 
-@fn http_delete(url, headers)
+@fn http_delete(url, headers) -> HttpResponse
   return _http_execute("DELETE", url, headers, "")
 @end
 
-@fn http_patch(url, headers, body)
+@fn http_patch(url, headers, body) -> HttpResponse
   return _http_execute("PATCH", url, headers, body)
 @end
 
-@fn http_request_with_timeout(method, url, headers, body, timeout_ms)
+@fn http_request_with_timeout(method, url, headers, body, timeout_ms) -> HttpResponse
   return _http_execute_to(method, url, headers, body, timeout_ms)
 @end
 
@@ -1378,11 +1391,12 @@ import "utso/net/tls/tls13"
       hi = 0
       @while hi < parsed.headers.len()
         h = parsed.headers[hi]
-        hl = str_to_lower(h.name)
-        @if hl == "transfer-encoding" && contains(str_to_lower(h.value), "chunked") == 1
+        hl = str_to_lower(_http_hdr_name(h))
+        hv = _http_hdr_value(h)
+        @if hl == "transfer-encoding" && contains(str_to_lower(hv), "chunked") == 1
           st.hs_chunked = 1
         @elif hl == "content-length" && st.hs_clen < 0
-          st.hs_clen = parse_int_str(h.value)
+          st.hs_clen = parse_int_str(hv)
         @end
         hi = hi + 1
       @end
@@ -1487,16 +1501,16 @@ import "utso/net/tls/tls13"
   return 0
 @end
 
-@fn _http_tls_exchange_stream(stream, host, req_str, st: HttpStreamState, on_chunk_fn)
+@fn _http_tls_exchange_stream(stream: TcpStream, host, req_str, st: HttpStreamState, on_chunk_fn)
   c_priv = _http_tls_rand32()
   @if c_priv.len() != 32 return 0 @end
   c_pub = x25519_public_key(c_priv)
   ch = tls13_build_client_hello(host, c_pub)
   @if ch.wire_bytes.len() < 46 return 0 @end
   ch_hs = _http_tls_slice(ch.wire_bytes, 5, ch.wire_bytes.len())
-  @if _http_tls_write_exact(stream.fd, ch.wire_bytes) <= 0 return 0 @end
+  @if _http_tls_write_exact(stream.tcp_fd, ch.wire_bytes) <= 0 return 0 @end
 
-  sh_hs = _http_tls_read_server_hello(stream.fd)
+  sh_hs = _http_tls_read_server_hello(stream.tcp_fd)
   @if sh_hs.len() == 0 return 0 @end
   sh_info = _http_tls_parse_server_hello(sh_hs)
   @if sh_info.tls_sh_ok != 1 return 0 @end
@@ -1513,8 +1527,8 @@ import "utso/net/tls/tls13"
     ch2_wire = _http_tls_build_ch_with_cookie(host, c_pub, sh_info.tls_sh_cookie)
     @if ch2_wire.len() < 46 return 0 @end
     ch2_hs = _http_tls_slice(ch2_wire, 5, ch2_wire.len())
-    @if _http_tls_write_exact(stream.fd, ch2_wire) <= 0 return 0 @end
-    sh2_hs = _http_tls_read_server_hello(stream.fd)
+    @if _http_tls_write_exact(stream.tcp_fd, ch2_wire) <= 0 return 0 @end
+    sh2_hs = _http_tls_read_server_hello(stream.tcp_fd)
     @if sh2_hs.len() == 0 return 0 @end
     sh_info = _http_tls_parse_server_hello(sh2_hs)
     @if sh_info.tls_sh_ok != 1 || sh_info.tls_sh_is_hrr == 1 || sh_info.tls_sh_cipher != cipher return 0 @end
@@ -1541,7 +1555,7 @@ import "utso/net/tls/tls13"
   flight_steps = 0
   @while got_server_finished == 0 && flight_steps < 64
     flight_steps = flight_steps + 1
-    rec = _http_tls_read_record(stream.fd)
+    rec = _http_tls_read_record(stream.tcp_fd)
     @if rec.tls_rec_ok != 1 return 0 @end
     @if rec.tls_rec_type == 20 continue @end
     @if rec.tls_rec_type != 23 return 0 @end
@@ -1613,7 +1627,7 @@ import "utso/net/tls/tls13"
   @end
   c_fin_msg = tls_append_bytes(c_fin_hdr, c_verify)
   c_fin_rec = _http_tls_wrap_aead_record_suite(cipher, hs_keys.client_write_key, hs_keys.client_write_iv, 0, 22, c_fin_msg)
-  @if _http_tls_write_exact(stream.fd, c_fin_rec) <= 0 return 0 @end
+  @if _http_tls_write_exact(stream.tcp_fd, c_fin_rec) <= 0 return 0 @end
 
   req_bytes = tls_string_to_bytes(req_str)
   rlen = req_bytes.len()
@@ -1624,14 +1638,14 @@ import "utso/net/tls/tls13"
     @if rstop > rlen rstop = rlen @end
     rchunk = _http_tls_slice(req_bytes, roff, rstop)
     req_rec = _http_tls_wrap_aead_record_suite(cipher, app_keys.c_key, app_keys.c_iv, c_app_seq, 23, rchunk)
-    @if _http_tls_write_exact(stream.fd, req_rec) <= 0 return 0 @end
+    @if _http_tls_write_exact(stream.tcp_fd, req_rec) <= 0 return 0 @end
     c_app_seq = c_app_seq + 1
     roff = rstop
   @end
 
   s_app_seq = 0
   @while st.hs_done == 0 && st.hs_aborted == 0
-    rec = _http_tls_read_record(stream.fd)
+    rec = _http_tls_read_record(stream.tcp_fd)
     @if rec.tls_rec_ok != 1 break @end
     @if rec.tls_rec_type == 20 continue @end
     @if rec.tls_rec_type == 21 break @end
@@ -1649,13 +1663,13 @@ import "utso/net/tls/tls13"
   return 1
 @end
 
-@fn http_request_stream(method, url, extra_headers, body, on_chunk_fn)
+@fn http_request_stream(method, url, extra_headers, body, on_chunk_fn) -> HttpResponse
   // WHY: Real-time incremental SSE / chunked streaming client for both HTTP and HTTPS TLS 1.3.
   // Invokes on_chunk_fn(chunk_str) immediately upon arrival without waiting for full body EOF.
   u = http_parse_url(url)
   stream = tcp_stream_connect(u.host, u.port)
-  @if stream.fd < 0
-    return { status_code: 0, status_text: "Connection failed", version: "HTTP/1.1", headers: [], body: "" }
+  @if stream.tcp_fd < 0
+    return HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
   @end
   req_hdrs = _http_build_client_headers(u, extra_headers)
   req = http_format_request(method, u.path, req_hdrs, body)
@@ -1666,15 +1680,15 @@ import "utso/net/tls/tls13"
     tcp_stream_close(stream)
     buf_free(st.hs_buf)
     @if ok != 1 && st.hs_status_code == 0
-      return { status_code: 0, status_text: "TLS handshake failed", version: "HTTP/1.1", headers: [], body: "" }
+      return HttpResponse(0, "TLS handshake failed", "HTTP/1.1", [], "")
     @end
-    return { status_code: st.hs_status_code, status_text: st.hs_status_text, version: st.hs_version, headers: st.hs_headers, body: "" }
+    return HttpResponse(st.hs_status_code, st.hs_status_text, st.hs_version, st.hs_headers, "")
   @end
 
   tcp_stream_write(stream, req)
   rbuf = lipi_alloc(8192)
   @while st.hs_done == 0 && st.hs_aborted == 0
-    n = sys_read(stream.fd, rbuf, 8192)
+    n = sys_read(stream.tcp_fd, rbuf, 8192)
     @if n == (0 - 4) continue @end
     @if n <= 0 break @end
     _http_stream_feed(st, rbuf, n, on_chunk_fn)
@@ -1682,14 +1696,14 @@ import "utso/net/tls/tls13"
   lipi_free_sized(rbuf, 8192)
   tcp_stream_close(stream)
   buf_free(st.hs_buf)
-  return { status_code: st.hs_status_code, status_text: st.hs_status_text, version: st.hs_version, headers: st.hs_headers, body: "" }
+  return HttpResponse(st.hs_status_code, st.hs_status_text, st.hs_version, st.hs_headers, "")
 @end
 
-@fn http_post_stream(url, headers, body, on_chunk_fn)
+@fn http_post_stream(url, headers, body, on_chunk_fn) -> HttpResponse
   return http_request_stream("POST", url, headers, body, on_chunk_fn)
 @end
 
-@fn http_get_stream(url, headers, on_chunk_fn)
+@fn http_get_stream(url, headers, on_chunk_fn) -> HttpResponse
   return http_request_stream("GET", url, headers, "", on_chunk_fn)
 @end
 
@@ -1697,7 +1711,7 @@ import "utso/net/tls/tls13"
 @! 8. HTTP Server Engine & Request Dispatcher
 @! ----------------------------------------------------------------------------
 
-@fn http_parse_request(raw_req: string)
+@fn http_parse_request(raw_req: string) -> HttpRequest
   method = "GET"
   path = "/"
   version = "HTTP/1.1"
@@ -1706,7 +1720,7 @@ import "utso/net/tls/tls13"
 
   raw_len = str_len(raw_req)
   @if raw_len == 0
-    return { method: method, path: path, version: version, headers: headers, body: body }
+    return HttpRequest(method, path, version, headers, body)
   @end
 
   header_end = str_index_of(raw_req, "\r\n\r\n")
@@ -1771,7 +1785,7 @@ import "utso/net/tls/tls13"
         @if colon_pos >= 0
           h_name = str_trim(str_substr(line, 0, colon_pos))
           h_val = str_trim(str_substr(line, colon_pos + 1, str_len(line)))
-          headers = headers.push({ name: h_name, value: h_val })
+          headers = headers.push(HttpHeader(h_name, h_val))
         @end
       @end
     @end
@@ -1783,16 +1797,10 @@ import "utso/net/tls/tls13"
     body = http_decode_chunked(body)
   @end
 
-  return {
-    method: method,
-    path: path,
-    version: version,
-    headers: headers,
-    body: body
-  }
+  return HttpRequest(method, path, version, headers, body)
 @end
 
-@fn _http_read_full_request(stream)
+@fn _http_read_full_request(stream: TcpStream)
   // WHY: O(N) ByteBuffer request reader supporting arbitrary body sizes and chunked requests.
   acc = buf_new(4096)
   rbuf = lipi_alloc(8192)
@@ -1801,7 +1809,7 @@ import "utso/net/tls/tls13"
   req_clen = -1
   is_chunked = 0
   @while 1 == 1
-    nr = sys_read(stream.fd, rbuf, 8192)
+    nr = sys_read(stream.tcp_fd, rbuf, 8192)
     @if nr == (0 - 4) continue @end
     @if nr <= 0 break @end
     buf_write_mem(acc, rbuf, nr)
@@ -1858,7 +1866,7 @@ import "utso/net/tls/tls13"
 
 @fn http_server_listen(host, port, handler_fn)
   listener = tcp_listener_bind(host, port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     println("HTTP Server failed to bind on " + host + ":" + port.to_str())
     return -1
   @end
@@ -1868,7 +1876,7 @@ import "utso/net/tls/tls13"
 
   @while 1 == 1
     stream = tcp_listener_accept(listener)
-    @if stream.fd >= 0
+    @if stream.tcp_fd >= 0
       raw_req = _http_read_full_request(stream)
       @if str_len(raw_req) > 0
         req = http_parse_request(raw_req)
@@ -1893,6 +1901,6 @@ import "utso/net/tls/tls13"
     @end
   @end
 
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   return 0
 @end

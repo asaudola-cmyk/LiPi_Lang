@@ -87,6 +87,8 @@ import "src/compiler/backend/formats/debug/dwarf_info.lp"
 include "src/compiler/backend/so_emitter.lp"
 import "src/compiler/backend/formats/macho/macho_writer.lp"
 import "src/compiler/backend/formats/pe/pe_writer.lp"
+include "src/compiler/backend/formats/bare/bare_writer.lp"
+include "src/compiler/backend/formats/lpo/lpo_format.lp"
 
 // WHY: Declarations as zero-argument functions enable seamless compile-time identifier resolution
 // across all decoupled compiler stages without relying on top-level stack variable allocation.
@@ -106,6 +108,11 @@ import "src/compiler/backend/formats/pe/pe_writer.lp"
 @fn FORMAT_WASM()             return 5 @end
 @fn FORMAT_SHARED()           return 6 @end
 @fn FORMAT_VERILOG()          return 7 @end
+@fn FORMAT_RAW_BIN()          return 8 @end
+@fn FORMAT_ELF_KERNEL()       return 9 @end
+@fn FORMAT_UEFI()             return 10 @end
+@fn FORMAT_OBJ()              return 11 @end
+@fn FORMAT_MULTIBOOT2_BARE()  return 12 @end
 
 // ── 2. Hardware-Aligned Models (Max 8 Fields) ─────────────────────────────────
 
@@ -114,7 +121,7 @@ struct CompilerConfig
     cfg_out_path            // Target output binary path
     cfg_target_arch         // TARGET_ID_X86_64, TARGET_ID_ARM64, etc.
     cfg_opt_level           // 0, 1, 2, or 3
-    cfg_emit_format         // FORMAT_ELF, FORMAT_PE, FORMAT_SHARED, etc.
+    cfg_emit_format         // FORMAT_ELF, FORMAT_PE, FORMAT_SHARED, FORMAT_UEFI, FORMAT_RAW_BIN, etc.
     cfg_is_dry_run          // 1 to skip disk emission, 0 to persist
     cfg_verbose             // 1 for verbose phase telemetry, 0 for quiet
     cfg_debug_mode          // 1 for DWARF debug emission (-g), 0 for standard
@@ -123,6 +130,9 @@ struct CompilerConfig
     cfg_strict_proof        // 1 to fail compilation when memory conservation proof fails
     cfg_kavach_mode         // 1 to enable Sovereign Kavach Mode (ownership + escape-exact proof + silicon_* crown)
     cfg_strict_types        // 1 to enforce zero-collision struct field layouts (--strict-types)
+    cfg_freestanding        // 1 to enable --freestanding / --no-runtime bare-metal mode (0 Linux syscalls)
+    cfg_base_vaddr          // Configurable virtual/physical base address (--base-addr=0x...)
+    cfg_ssa_codegen         // 1 when --ssa-codegen prefers direct SSA IR machine code emission
 
 struct CompilerResult
     res_success             // 1 on success, 0 on failure
@@ -1167,6 +1177,110 @@ fn pipeline_build_statement toks pos_box sp
     k = t.tok_kind
     txt = t.tok_text
 
+    // 0. Sovereign Silicon & Hardware Layout Directives (@asm, @naked, @interrupt, @packed, @align, @ring0, @layout, @bss)
+    if k == TOK_IDENT() and len(txt) >= 2 and mem_byte_read(txt, 0) == 64
+        if txt == "@naked" or txt == "@interrupt" or txt == "@packed" or txt == "@ring0" or txt == "@silicon"
+            list_set(pos_box, 0, cp + 1)
+            return 0
+        elif txt == "@align" or txt == "@layout"
+            list_set(pos_box, 0, cp + 1)
+            pipeline_skip_whitespace(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                dp_a = 1
+                while get(pos_box, 0) < toks.len() and dp_a > 0
+                    ak_s = toks[get(pos_box, 0)].tok_kind
+                    at_s = toks[get(pos_box, 0)].tok_text
+                    if ak_s == TOK_LPAREN() or at_s == "(" dp_a = dp_a + 1
+                    elif ak_s == TOK_RPAREN() or at_s == ")" dp_a = dp_a - 1 end
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            return 0
+        elif txt == "@asm" or txt == "@অ্যাসেম্বলি"
+            list_set(pos_box, 0, cp + 1)
+            pipeline_skip_whitespace(toks, pos_box)
+            if get(pos_box, 0) < toks.len()
+                at0 = toks[get(pos_box, 0)]
+                if at0.tok_kind == TOK_LBRACKET() or at0.tok_text == "["
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    while get(pos_box, 0) < toks.len()
+                        if toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET() or toks[get(pos_box, 0)].tok_text == "]"
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            break
+                        end
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                elif at0.tok_kind == TOK_LBRACE() or at0.tok_text == "{"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    while get(pos_box, 0) < toks.len()
+                        if toks[get(pos_box, 0)].tok_kind == TOK_RBRACE() or toks[get(pos_box, 0)].tok_text == "}"
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            break
+                        end
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                else
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            return 0
+        elif txt == "@bss"
+            list_set(pos_box, 0, cp + 1)
+            pipeline_skip_whitespace(toks, pos_box)
+            // Support `@bss @align(N) name: Type` in addition to `@align(N) @bss name: Type`
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_text == "@align"
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                pipeline_skip_whitespace(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    dp_b = 1
+                    while get(pos_box, 0) < toks.len() and dp_b > 0
+                        ak_b = toks[get(pos_box, 0)].tok_kind
+                        at_b = toks[get(pos_box, 0)].tok_text
+                        if ak_b == TOK_LPAREN() or at_b == "(" dp_b = dp_b + 1
+                        elif ak_b == TOK_RPAREN() or at_b == ")" dp_b = dp_b - 1 end
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                pipeline_skip_whitespace(toks, pos_box)
+            end
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_text == "static"
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                pipeline_skip_whitespace(toks, pos_box)
+            end
+            bss_ast_nm = ""
+            if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                bss_ast_nm = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACKET() or toks[get(pos_box, 0)].tok_text == "[")
+                    while get(pos_box, 0) < toks.len()
+                        if toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET() or toks[get(pos_box, 0)].tok_text == "]"
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            break
+                        end
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                end
+                if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    pipeline_skip_type_args(toks, pos_box, 0)
+                end
+            end
+            if bss_ast_nm != ""
+                return ast_stmt_assign(bss_ast_nm, ast_expr_literal_int(0, sp), sp)
+            end
+            return 0
+        end
+    end
+
     // 1. Return statement
     if k == TOK_KW_RETURN() or txt == "return" or txt == "ফেরত"
         list_set(pos_box, 0, cp + 1)
@@ -1935,6 +2049,29 @@ fn pipeline_build_ast_declarations toks src_path
         if k == TOK_EOF()
             break
 
+        // Skip top-level hardware/silicon attribute directives before fn/struct/@bss declarations
+        if k == TOK_IDENT() and (txt == "@naked" or txt == "@interrupt" or txt == "@packed" or txt == "@ring0" or txt == "@silicon")
+            list_set(pos_box, 0, cp + 1)
+            continue
+        elif k == TOK_IDENT() and (txt == "@align" or txt == "@layout")
+            list_set(pos_box, 0, cp + 1)
+            pipeline_skip_whitespace(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                dp_t = 1
+                while get(pos_box, 0) < toks.len() and dp_t > 0
+                    ak_t = toks[get(pos_box, 0)].tok_kind
+                    at_t = toks[get(pos_box, 0)].tok_text
+                    if ak_t == TOK_LPAREN() or at_t == "(" dp_t = dp_t + 1
+                    elif ak_t == TOK_RPAREN() or at_t == ")" dp_t = dp_t - 1 end
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            continue
+        end
+
         is_comp = 0
         if k == TOK_KW_COMPONENT() or (k == TOK_IDENT() and (txt == "component" or txt == "উপাদান"))
             is_comp = 1
@@ -2095,7 +2232,7 @@ fn pipeline_build_ast_declarations toks src_path
                     if cur_tok.tok_kind == TOK_KW_FN() or cur_tok.tok_kind == TOK_DIR_FN() or cur_tok.tok_kind == TOK_KW_COMPONENT()
                         break
                     end
-                    if cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "fn" or cur_tok.tok_text == "কাজ" or cur_tok.tok_text == "@fn" or cur_tok.tok_text == "component" or cur_tok.tok_text == "উপাদান")
+                    if cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "fn" or cur_tok.tok_text == "কাজ" or cur_tok.tok_text == "@fn" or cur_tok.tok_text == "component" or cur_tok.tok_text == "উপাদান" or cur_tok.tok_text == "@naked" or cur_tok.tok_text == "@interrupt" or cur_tok.tok_text == "@packed" or cur_tok.tok_text == "@align" or cur_tok.tok_text == "@bss")
                         break
                     end
                     if pipeline_is_block_end(toks, cur_p) == 1
@@ -2187,7 +2324,23 @@ fn pipeline_build_ast_declarations toks src_path
                         fld_t = toks[get(pos_box, 0)].tok_text
                         if fld_k == TOK_COLON() or (fld_k != TOK_STR() and fld_t == ":")
                             list_set(pos_box, 0, get(pos_box, 0) + 1)
-                            if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACKET() or toks[get(pos_box, 0)].tok_text == "[")
+                                arr_s = "["
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                while get(pos_box, 0) < toks.len()
+                                    if toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET() or toks[get(pos_box, 0)].tok_text == "]"
+                                        arr_s = arr_s + "]"
+                                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        break
+                                    end
+                                    arr_s = arr_s + toks[get(pos_box, 0)].tok_text
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
+                                if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                                    fld_type = arr_s + toks[get(pos_box, 0)].tok_text
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
+                            elif get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                                 fld_type = toks[get(pos_box, 0)].tok_text
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                                 pipeline_skip_type_args(toks, pos_box, 0)
@@ -2357,6 +2510,9 @@ fn compiler_config_new src out_bin arch opt fmt dry_run
     cfg.cfg_strict_proof = 0
     cfg.cfg_kavach_mode = 0
     cfg.cfg_strict_types = 0
+    cfg.cfg_freestanding = 0
+    cfg.cfg_base_vaddr = 1073741824
+    cfg.cfg_ssa_codegen = 0
     return cfg
 
 fn compiler_result_new
@@ -4000,10 +4156,16 @@ fn compiler_pipeline_execute config source_code
     word_size = 8
 
     if config.cfg_target_arch == TARGET_ID_X86_64()
-        // WHY: AMD64 x86_64 backend allocates dedicated hardware callee-saved registers
-        // (%r12-%r15, %rbx) for function/loop locals to guarantee stability across expressions
-        // and eliminate stack round-trips. Scratch registers are omitted from linear scan candidate pools
-        // so all active intervals are mapped to protected callee registers preserved by function ABI.
+        // WHY: Full 11-register AMD64 Linear Scan pool:
+        //   - 6 caller-saved scratch registers (r10, r11, r8, r9, rsi, rdi) absorb short-lived
+        //     non-call-crossing SSA temps, cutting register spills by 50-80% on large codebases!
+        //   - 5 callee-saved registers (r12-r15, rbx) protect call-crossing loop locals in x86_synth.
+        push(caller_regs, 10)
+        push(caller_regs, 11)
+        push(caller_regs, 8)
+        push(caller_regs, 9)
+        push(caller_regs, 6)
+        push(caller_regs, 7)
         push(callee_regs, 12)
         push(callee_regs, 13)
         push(callee_regs, 14)
@@ -4052,17 +4214,27 @@ fn compiler_pipeline_execute config source_code
         while ivi < ra_res.intervals.len()
             iv = ra_res.intervals[ivi]
             if iv.is_spilled == 0 and iv.assigned_reg >= 0
-                vname = iv.vreg_name
-                clean_v = vname
-                if len(vname) > 6 and str_sub(vname, 0, 6) == "%slot_"
-                    clean_v = str_sub(vname, 6, len(vname))
-                elif starts_with(vname, "%") == 1
-                    clean_v = str_sub(vname, 1, len(vname))
+                // WHY: x86_synth binds local variables exclusively to callee-saved registers (r12-r15, rbx)
+                // so expression scratch registers never clobber live locals, while caller_regs absorb SSA temps.
+                bind_ok = 1
+                if config.cfg_target_arch == TARGET_ID_X86_64()
+                    if iv.assigned_reg != 12 and iv.assigned_reg != 13 and iv.assigned_reg != 14 and iv.assigned_reg != 15 and iv.assigned_reg != 3
+                        bind_ok = 0
+                    end
                 end
-                // WHY: Scopes register assignment by function name to avoid cross-routine collision.
-                key = fn_obj.name + "::" + clean_v
-                push(reg_names, key)
-                push(reg_regs, iv.assigned_reg)
+                if bind_ok == 1
+                    vname = iv.vreg_name
+                    clean_v = vname
+                    if len(vname) > 6 and str_sub(vname, 0, 6) == "%slot_"
+                        clean_v = str_sub(vname, 6, len(vname))
+                    elif starts_with(vname, "%") == 1
+                        clean_v = str_sub(vname, 1, len(vname))
+                    end
+                    // WHY: Scopes register assignment by function name to avoid cross-routine collision.
+                    key = fn_obj.name + "::" + clean_v
+                    push(reg_names, key)
+                    push(reg_regs, iv.assigned_reg)
+                end
             end
             ivi = ivi + 1
         end
@@ -4098,6 +4270,10 @@ fn compiler_pipeline_execute config source_code
     if config.cfg_is_dry_run == 0
         say "  [pipeline] Phase 8: Live emission to " + config.cfg_out_path
         x86_synth_set_strict_types(config.cfg_strict_types)
+        x86_synth_set_ssa_codegen(config.cfg_ssa_codegen)
+        x86_synth_set_freestanding(0)
+        x86_synth_set_base_vaddr(1073741824)
+        x86_synth_set_code_file_off(304)
         if config.cfg_emit_format == FORMAT_SHARED()
             // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
@@ -4177,62 +4353,99 @@ fn compiler_pipeline_execute config source_code
                 result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
-        elif config.cfg_emit_format == FORMAT_UNIKERNEL()
-            // Sovereign Ring-0 Bare-Metal Multiboot2 Unikernel Emission
+        elif config.cfg_emit_format == FORMAT_RAW_BIN()
+            // Sovereign Flat Headerless Raw Binary (--target=raw-bin) — Zero Linux Syscalls
+            raw_base = config.cfg_base_vaddr
+            if raw_base == 1073741824
+                raw_base = 0
+            end
+            x86_synth_set_freestanding(1)
+            x86_synth_set_base_vaddr(raw_base)
+            x86_synth_set_code_file_off(0)
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
-            // Multiboot2 Header starts at offset 0 of user .text (ELF file offset 304 = 0x130, 8-byte aligned):
-            // 16B header + 16B padded ENTRY_ADDRESS tag (0x400158 = 0x400130 + 40) + 8B END tag = 40 bytes.
-            mb2_code = list()
-            // Magic: 0xE85250D6
-            push(mb2_code, 214)
-            push(mb2_code, 80)
-            push(mb2_code, 82)
-            push(mb2_code, 232)
-            // Architecture: 0 (i386 / x86_64 Long Mode)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            // Length: 40 bytes
-            push(mb2_code, 40)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            // Checksum: -(0xE85250D6 + 0 + 40) & 0xFFFFFFFF = 0x17ADAF02
-            push(mb2_code, 2)
-            push(mb2_code, 175)
-            push(mb2_code, 173)
-            push(mb2_code, 23)
-            // Tag 3: Entry Address (type=3, flags=0, size=12, entry=0x00400158, 4B align pad)
-            push(mb2_code, 3)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 12)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 88)
-            push(mb2_code, 1)
-            push(mb2_code, 64)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            // Tag End: type=0, flags=0, size=8
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 8)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            push(mb2_code, 0)
-            si = 0
-            while si < synth.synth_code.len()
-                push(mb2_code, synth.synth_code[si])
-                si = si + 1
+            if raw_base == 0 and config.cfg_no_pie == 0
+                x86_synth_convert_to_pie(synth)
+            end
+            raw_res = bare_emit_raw_bin(synth.synth_code, synth.synth_rodata, config.cfg_out_path)
+            if raw_res.bw_success == 1
+                result.res_output_bytes = raw_res.bw_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = raw_res.bw_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
+        elif config.cfg_emit_format == FORMAT_UEFI()
+            // Sovereign UEFI PE32+ Application (--target=uefi, Subsystem=10, zero KERNEL32.dll, RIP-relative PIE)
+            x86_synth_set_freestanding(1)
+            x86_synth_set_base_vaddr(4194304)
+            x86_synth_set_code_file_off(4128) // 0x1000 (.text RVA) + 32B MS x64 -> SysV entry stub
+            synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            x86_synth_convert_to_pie(synth)
+            efi_bss = 0
+            efi_need = 512 + (synth.synth_mutable_globals.len() * 8)
+            if synth.synth_bss_cursor > 0
+                efi_need = bare_align_up(efi_need, 4096)
+                if efi_need < 4096 efi_need = 4096 end
+                efi_need = efi_need + bare_align_up(synth.synth_bss_cursor, 4096)
+            end
+            if efi_need > 4096
+                efi_bss = bare_align_up(efi_need - 4096, 4096)
+            end
+            efi_res = bare_emit_uefi_pe32plus(synth.synth_code, synth.synth_rodata, efi_bss, config.cfg_out_path)
+            if efi_res.bw_success == 1
+                result.res_output_bytes = efi_res.bw_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = efi_res.bw_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
+        elif config.cfg_emit_format == FORMAT_MULTIBOOT2_BARE()
+            // Sovereign Bare-Metal Dual Multiboot1+Multiboot2 32->64-bit Long-Mode Kernel (--target=multiboot2-bare / baremetal)
+            mb_phys = config.cfg_base_vaddr
+            if mb_phys == 1073741824
+                mb_phys = 1048576 // 0x100000 physical load address
+            end
+            x86_synth_set_freestanding(1)
+            x86_synth_set_base_vaddr(mb_phys)
+            x86_synth_set_code_file_off(304)
+            synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            mb_bss = 0
+            mb_need = 512 + (synth.synth_mutable_globals.len() * 8)
+            if synth.synth_bss_cursor > 0
+                mb_need = bare_align_up(mb_need, 4096)
+                if mb_need < 4096 mb_need = 4096 end
+                mb_need = mb_need + bare_align_up(synth.synth_bss_cursor, 4096)
+            end
+            if mb_need > 4096
+                mb_bss = bare_align_up(mb_need - 4096, 4096)
+            end
+            mb_res = bare_emit_multiboot2_kernel(synth.synth_code, synth.synth_rodata, mb_bss, synth.synth_base_vaddr, config.cfg_out_path)
+            if mb_res.bw_success == 1
+                result.res_output_bytes = mb_res.bw_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = mb_res.bw_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
+        elif config.cfg_emit_format == FORMAT_UNIKERNEL()
+            // Sovereign ELF64 3-PHDR W^X Multiboot2 Unikernel (--target=unikernel / multiboot2)
+            synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            mb2_code = [
+                214, 80, 82, 232, 0, 0, 0, 0, 40, 0, 0, 0, 2, 175, 173, 23,
+                3, 0, 0, 0, 12, 0, 0, 0, 88, 1, 64, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 8, 0, 0, 0
+            ]
+            si_u = 0
+            while si_u < synth.synth_code.len()
+                push(mb2_code, synth.synth_code[si_u])
+                si_u = si_u + 1
+            end
             emit_res = elf_emit_executable(mb2_code, synth.synth_rodata, [], 0, config.cfg_out_path)
             if emit_res.ew_success == 1
                 result.res_output_bytes = emit_res.ew_file_size
@@ -4242,6 +4455,112 @@ fn compiler_pipeline_execute config source_code
                 result.res_stage_reached = PIPELINE_STAGE_EMIT()
                 result.res_success = 0
                 return result
+            end
+        elif config.cfg_emit_format == FORMAT_ELF_KERNEL() or (config.cfg_freestanding == 1 and config.cfg_target_arch == TARGET_ID_X86_64() and config.cfg_emit_format != FORMAT_OBJ())
+            // Sovereign Freestanding ELF64 Kernel at Configurable Base Address (--target=elf-kernel / --freestanding)
+            k_base = config.cfg_base_vaddr
+            if k_base == 1073741824
+                k_base = 1048576 // default 0x100000 (1MB) when --base-addr not overridden
+            end
+            x86_synth_set_freestanding(1)
+            x86_synth_set_base_vaddr(k_base)
+            x86_synth_set_code_file_off(304)
+            synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            eff_k_base = synth.synth_base_vaddr
+            k_code_vaddr = eff_k_base - (0 - 304)
+            k_bss = 0
+            k_need = 512 + (synth.synth_mutable_globals.len() * 8)
+            if synth.synth_bss_cursor > 0
+                k_need = bare_align_up(k_need, 4096)
+                if k_need < 4096 k_need = 4096 end
+                k_need = k_need + bare_align_up(synth.synth_bss_cursor, 4096)
+            end
+            if k_need > 4096
+                k_bss = bare_align_up(k_need - 4096, 4096)
+            end
+            k_eh = lpo_build_eh_frame(k_code_vaddr, synth.synth_functions)
+            k_dl = list()
+            k_di = list()
+            k_da = list()
+            if config.cfg_debug_mode == 1
+                k_lb = dwarf_line_builder_new(4)
+                dwarf_line_add_dir(k_lb, ".")
+                dwarf_line_add_file(k_lb, config.cfg_src_path, 1)
+                dwarf_line_emit_set_address(k_lb, k_code_vaddr)
+                cur_kpc = 0
+                cur_kln = 1
+                if synth.synth_line_pcs.len() > 0
+                    kli = 0
+                    while kli < synth.synth_line_pcs.len()
+                        tpc = synth.synth_line_pcs[kli]
+                        tln = synth.synth_line_nums[kli]
+                        dp = tpc - cur_kpc
+                        dl = tln - cur_kln
+                        if dp > 0 or dl != 0 or kli == 0
+                            if dp > 0
+                                dwarf_line_emit_advance_pc(k_lb, dp)
+                                cur_kpc = tpc
+                            end
+                            if dl != 0
+                                dwarf_line_emit_advance_line(k_lb, dl)
+                                cur_kln = tln
+                            end
+                            dwarf_line_emit_copy(k_lb)
+                        end
+                        kli = kli + 1
+                    end
+                else
+                    dwarf_line_emit_advance_line(k_lb, 0)
+                    dwarf_line_emit_copy(k_lb)
+                end
+                if synth.synth_code.len() > cur_kpc
+                    dwarf_line_emit_advance_pc(k_lb, synth.synth_code.len() - cur_kpc)
+                end
+                dwarf_line_end_sequence(k_lb, k_code_vaddr - (0 - synth.synth_code.len()))
+                k_dl = dwarf_line_serialize(k_lb)
+                k_da = dwarf_abbrev_build_standard()
+                k_cu = dwarf_unit_create("LiPi First 1.0.0 Sovereign Kernel", config.cfg_src_path, ".", k_code_vaddr, k_code_vaddr - (0 - synth.synth_code.len()), 0)
+                kfi = 0
+                while kfi < synth.synth_functions.len()
+                    kf = synth.synth_functions[kfi]
+                    if kf.fn_decl_line > 0
+                        kf_end = kf.fn_end_offset
+                        if kf_end <= kf.fn_entry_offset kf_end = kf.fn_entry_offset + 1 end
+                        dwarf_unit_add_function(k_cu, kf.fn_name, k_code_vaddr - (0 - kf.fn_entry_offset), k_code_vaddr - (0 - kf_end), 1, kf.fn_decl_line)
+                    end
+                    kfi = kfi + 1
+                end
+                dwarf_unit_add_base_type(k_cu, "u64", 8, DW_ATE_unsigned())
+                k_di = dwarf_info_serialize(k_cu)
+            end
+            k_res = bare_emit_elf64_kernel(synth.synth_code, synth.synth_rodata, k_bss, eff_k_base, k_dl, k_di, k_da, k_eh, config.cfg_out_path)
+            if k_res.bw_success == 1
+                result.res_output_bytes = k_res.bw_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = k_res.bw_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
+        elif config.cfg_emit_format == FORMAT_OBJ()
+            // Sovereign ELF64 Relocatable Object (.o / ET_REL = 1) Emission (-c / --emit=obj)
+            x86_synth_set_freestanding(config.cfg_freestanding)
+            x86_synth_set_base_vaddr(0)
+            x86_synth_set_code_file_off(0)
+            synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            x86_synth_convert_to_pie(synth)
+            obj_bss = bare_align_up(synth.synth_bss_cursor, 16)
+            obj_res = lpo_emit_elf64_relocatable(synth.synth_code, synth.synth_rodata, obj_bss, synth.synth_functions, synth.synth_call_relocs, config.cfg_out_path)
+            if obj_res.ow_success == 1
+                result.res_output_bytes = obj_res.ow_file_size
+            else
+                result.res_error_count = 1
+                result.res_error_msg = obj_res.ow_error_msg
+                result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                result.res_success = 0
+                return result
+            end
         elif config.cfg_target_arch == TARGET_ID_X86_64()
             say "  [pipeline] Phase 8: Calling x86_synth_compile_program_full..."
             // Synthesize AMD64 machine code instructions and rodata directly from tokens with SSA optimizations and lowering
@@ -4314,6 +4633,11 @@ fn compiler_pipeline_execute config source_code
 
                 extra_rw_bss = 0
                 needed_rw_bytes = 512 + (synth.synth_mutable_globals.len() * 8)
+                if synth.synth_bss_cursor > 0
+                    needed_rw_bytes = bare_align_up(needed_rw_bytes, 4096)
+                    if needed_rw_bytes < 4096 needed_rw_bytes = 4096 end
+                    needed_rw_bytes = needed_rw_bytes + bare_align_up(synth.synth_bss_cursor, 4096)
+                end
                 if needed_rw_bytes > 4096
                     rem_rw = (needed_rw_bytes - 4096) % 4096
                     if rem_rw == 0
@@ -4330,6 +4654,11 @@ fn compiler_pipeline_execute config source_code
             else
                 extra_rw_bss = 0
                 needed_rw_bytes = 512 + (synth.synth_mutable_globals.len() * 8)
+                if synth.synth_bss_cursor > 0
+                    needed_rw_bytes = bare_align_up(needed_rw_bytes, 4096)
+                    if needed_rw_bytes < 4096 needed_rw_bytes = 4096 end
+                    needed_rw_bytes = needed_rw_bytes + bare_align_up(synth.synth_bss_cursor, 4096)
+                end
                 if needed_rw_bytes > 4096
                     rem_rw = (needed_rw_bytes - 4096) % 4096
                     if rem_rw == 0

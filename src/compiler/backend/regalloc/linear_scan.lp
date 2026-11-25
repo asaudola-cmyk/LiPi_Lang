@@ -99,7 +99,7 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
         a_i = 0
         while a_i < a_count
             act = active[a_i]
-            if act.end_pos < cur.start_pos
+            if act.end_pos <= cur.start_pos
                 // Register is now free; return it to the corresponding pool
                 reg_id = act.assigned_reg
                 if contains_int(callee_regs, reg_id) == 1

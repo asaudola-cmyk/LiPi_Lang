@@ -971,53 +971,51 @@ import "utso/core/string"
 @end
 
 @fn sys_peek16(addr)
-  // WHY: Read 16-bit integer from memory in little-endian byte order
-  b0 = sys_peek8(addr)
-  b1 = sys_peek8(addr + 1)
-  return b0 + (b1 * 256)
+  // WHY: Lowered directly by lipc x86_64 backend to a single volatile `movzx eax, word ptr [rdi]`
+  // bus instruction. Fallback body preserved with unsigned bit-shifts for genesis seed bootstrap.
+  b0 = sys_peek8(addr) & 255
+  b1 = sys_peek8(addr + 1) & 255
+  return b0 | (b1 << 8)
 @end
 
 @fn sys_peek32(addr)
-  // WHY: Read 32-bit integer from memory in little-endian byte order
-  b0 = sys_peek8(addr)
-  b1 = sys_peek8(addr + 1)
-  b2 = sys_peek8(addr + 2)
-  b3 = sys_peek8(addr + 3)
-  return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+  // WHY: Lowered directly by lipc x86_64 backend to a single volatile `mov eax, dword ptr [rdi]`
+  // bus instruction. Fallback body preserved with unsigned bit-shifts for genesis seed bootstrap.
+  b0 = sys_peek8(addr) & 255
+  b1 = sys_peek8(addr + 1) & 255
+  b2 = sys_peek8(addr + 2) & 255
+  b3 = sys_peek8(addr + 3) & 255
+  return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
 @end
 
 @fn sys_peek64(addr)
-  // WHY: Read 64-bit integer from memory in little-endian byte order
-  lo = sys_peek32(addr)
-  hi = sys_peek32(addr + 4)
-  return lo + (hi * 4294967296)
+  // WHY: Lowered directly by lipc x86_64 backend to a single volatile `mov rax, qword ptr [rdi]`
+  // bus instruction. Fallback uses mem_word_read(addr, 0) for genesis seed bootstrap.
+  return mem_word_read(addr, 0)
 @end
 
 @fn sys_poke16(addr, val)
-  // WHY: Write 16-bit integer to memory in little-endian byte order
-  sys_poke8(addr, val % 256)
-  sys_poke8(addr + 1, (val / 256) % 256)
+  // WHY: Lowered directly by lipc x86_64 backend to a single volatile `mov word ptr [rdi], si`
+  // bus instruction. Fallback body uses unsigned bitmasks (fixing signed % 256 bug).
+  sys_poke8(addr, val & 255)
+  sys_poke8(addr + 1, (val >> 8) & 255)
   return 2
 @end
 
 @fn sys_poke32(addr, val)
-  // WHY: Write 32-bit integer to memory in little-endian byte order
-  sys_poke8(addr, val % 256)
-  sys_poke8(addr + 1, (val / 256) % 256)
-  sys_poke8(addr + 2, (val / 65536) % 256)
-  sys_poke8(addr + 3, (val / 16777216) % 256)
+  // WHY: Lowered directly by lipc x86_64 backend to a single volatile `mov dword ptr [rdi], esi`
+  // bus instruction. Fallback body uses unsigned bitmasks (fixing signed % 256 bug).
+  sys_poke8(addr, val & 255)
+  sys_poke8(addr + 1, (val >> 8) & 255)
+  sys_poke8(addr + 2, (val >> 16) & 255)
+  sys_poke8(addr + 3, (val >> 24) & 255)
   return 4
 @end
 
 @fn sys_poke64(addr, val)
-  // WHY: Write 64-bit integer to memory in little-endian byte order
-  v = val
-  i = 0
-  @while i < 8
-    sys_poke8(addr + i, v % 256)
-    v = v / 256
-    i = i + 1
-  @end
+  // WHY: Lowered directly by lipc x86_64 backend to a single volatile `mov qword ptr [rdi], rsi`
+  // bus instruction. Fallback uses mem_word_write(addr, 0, val) for genesis seed bootstrap.
+  mem_word_write(addr, 0, val)
   return 8
 @end
 

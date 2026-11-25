@@ -63,12 +63,20 @@ struct X86CallReloc
     cr_call_site_end    // Next instruction IP (cr_patch_offset + 4)
     cr_target_name      // Target function identifier or "__print_int"
 
-// WHY: Models struct schema definitions and field member offsets
+// WHY: Models struct schema definitions with exact hardware byte offsets, fixed-width sizes,
+// packed layout, explicit alignment, and inline fixed-size arrays ([N]T).
 struct X86StructDef
     sd_name             // Struct type name string
     sd_fields           // List of field name strings
     sd_field_types      // Parallel list of declared/inferred field type strings
     sd_type_params      // Generic type parameter names (e.g. ["T"]), empty for concrete structs
+    sd_field_offsets    // Parallel list of exact byte offsets for each field
+    sd_field_sizes      // Parallel list of exact byte sizes (1/2/4/8 or N*elem_sz)
+    sd_field_elem_sizes // Parallel list of element byte sizes (0 for scalar, 1/2/4/8 for [N]T)
+    sd_field_signed     // Parallel list: 1 for signed (i8/i16/i32/i64), 0 for unsigned (u8/u16/u32/u64)
+    sd_is_packed        // 1 if annotated @packed (zero inter-field padding), 0 for natural alignment
+    sd_align            // Effective struct alignment in bytes (default 8, or explicit @align(N))
+    sd_total_size       // Exact total byte size of struct (used by compile-time sizeof(T) & alloc)
 
 // WHY: Models Algebraic Data Type (Tagged Enum) & C-style Integer Enum schemas
 struct X86EnumDef
@@ -157,11 +165,53 @@ struct X86Synthesizer
     synth_defer_err_off        // Positive RBP-relative offset saving thrown exception across defer replay
     synth_in_defer_unwind_pad  // 1 while emitting Defer Unwind Pad (exc frame already popped by _lipi_exc_throw)
     synth_lsym_ptrs_off        // Byte offset of _lipi_lsym_ptrs helper for zero-overhead LSYM0 stack traces
+    synth_freestanding         // 1 in --freestanding / --no-runtime / bare-metal mode (0 Linux syscalls)
+    synth_base_vaddr           // Configurable base virtual address (default 0x40000000; supports 0x100000 & 0xFFFFFFFF80000000)
+    synth_code_file_off        // File offset where synth_code starts (304 for standard ELF, 0 for raw-bin/freestanding custom)
+    synth_pending_fn_naked     // 1 when @naked precedes next fn definition
+    synth_pending_fn_interrupt // 1 when @interrupt precedes next fn definition
+    synth_in_interrupt_fn      // 1 while compiling inside an @interrupt handler (return emits iretq)
+    synth_in_naked_fn          // 1 while compiling inside a @naked function (omits prologue/epilogue)
+    synth_pending_struct_packed // 1 when @packed precedes next struct definition
+    synth_pending_struct_align  // Explicit alignment (>0) when @align(N) precedes next struct or @bss
+    synth_bss_names            // Static @bss buffer variable names
+    synth_bss_offs             // Byte offsets relative to RW segment start (placed after mutable globals)
+    synth_bss_sizes            // Exact total byte sizes of @bss buffers
+    synth_bss_elem_sizes       // Element byte size for [N]T @bss arrays (0 for scalar/struct)
+    synth_bss_signed           // Signedness (1=signed, 0=unsigned) for @bss array elements
+    synth_bss_structs          // Struct type name if @bss holds a static struct instance
+    synth_bss_cursor           // Next available byte offset inside @bss area (relative to bss base)
+    synth_bss_patch_offs       // Code patch offsets for movabs imm64 referencing @bss addresses
+    synth_bss_patch_idxs       // Parallel index into synth_bss_offs for each patch site
+    synth_layout_base          // Optional base address declared in source via @layout(base=0x...)
+    synth_layout_stack         // Optional stack size declared in source via @layout(stack=...)
+    synth_fn_tag_offs          // Allocated lv_tag_off stack slots in current fn (zeroed by prologue stub)
+    synth_fn_dyn_vars          // Multi-write variables prescanned as dyn_tagged candidates in current fn
 
 global g_x86_strict_types = 0
+global g_x86_freestanding = 0
+global g_x86_base_vaddr = 1073741824
+global g_x86_code_file_off = 304
+global g_x86_ssa_codegen = 0
 
 fn x86_synth_set_strict_types flag
     g_x86_strict_types = flag
+    return flag
+
+fn x86_synth_set_freestanding flag
+    g_x86_freestanding = flag
+    return flag
+
+fn x86_synth_set_base_vaddr vaddr
+    g_x86_base_vaddr = vaddr
+    return vaddr
+
+fn x86_synth_set_code_file_off foff
+    g_x86_code_file_off = foff
+    return foff
+
+fn x86_synth_set_ssa_codegen flag
+    g_x86_ssa_codegen = flag
     return flag
 
 fn x86_synth_is_match_start toks pos
@@ -417,11 +467,479 @@ fn x86_synth_new
     s.synth_defer_err_off = 0
     s.synth_in_defer_unwind_pad = 0
     s.synth_lsym_ptrs_off = 0
+    s.synth_freestanding = g_x86_freestanding
+    s.synth_base_vaddr = g_x86_base_vaddr
+    s.synth_code_file_off = g_x86_code_file_off
+    s.synth_pending_fn_naked = 0
+    s.synth_pending_fn_interrupt = 0
+    s.synth_in_interrupt_fn = 0
+    s.synth_in_naked_fn = 0
+    s.synth_pending_struct_packed = 0
+    s.synth_pending_struct_align = 0
+    s.synth_bss_names = list()
+    s.synth_bss_offs = list()
+    s.synth_bss_sizes = list()
+    s.synth_bss_elem_sizes = list()
+    s.synth_bss_signed = list()
+    s.synth_bss_structs = list()
+    s.synth_bss_cursor = 0
+    s.synth_bss_patch_offs = list()
+    s.synth_bss_patch_idxs = list()
+    s.synth_layout_base = 0
+    s.synth_layout_stack = 0
+    s.synth_fn_tag_offs = list()
+    s.synth_fn_dyn_vars = list()
     return s
+
+fn x86_synth_emit_store_imm64_to_var s off imm32
+    // WHY: Writes sign-extended 32-bit immediate (e.g. val_tag 0/1/2) directly to [rbp - off]
+    // using `mov qword [rbp - off], imm32` (REX.W C7 /0 id) — clobbers ZERO registers and ZERO flags.
+    if off <= 128
+        disp8 = (256 - (off % 256)) % 256
+        x86_synth_emit_bytes(s, [72, 199, 69, disp8])
+        x86_synth_emit_u32(s, imm32)
+    else
+        x86_synth_emit_bytes(s, [72, 199, 133])
+        x86_synth_emit_u32(s, 0 - off)
+        x86_synth_emit_u32(s, imm32)
+    end
+    return 0
+
+fn x86_synth_emit_tag_init_stub_if_needed s tag_init_patch
+    // WHY: Guarantees zero uninitialized stack garbage in any lazily-allocated lv_tag_off slot.
+    // Functions with 0 dyn_tagged slots keep the 5-byte prologue NOP (zero bytes, zero writes);
+    // functions with >=1 dyn_tagged slots patch the NOP to `call stub` that zeroes every tag slot.
+    if tag_init_patch < 0 or s.synth_fn_tag_offs == 0 or s.synth_fn_tag_offs.len() == 0
+        return 0
+    end
+    stub_off = s.synth_code.len()
+    list_set(s.synth_code, tag_init_patch, 232) // 0xE8: call rel32
+    x86_synth_patch_u32(s, tag_init_patch + 1, stub_off - (tag_init_patch + 5))
+    ti = 0
+    tn = s.synth_fn_tag_offs.len()
+    while ti < tn
+        x86_synth_emit_store_imm64_to_var(s, s.synth_fn_tag_offs[ti], 0)
+        ti = ti + 1
+    end
+    x86_synth_emit_byte(s, 195) // ret
+    return 0
+
+fn x86_synth_is_dyn_var s name
+    if s.synth_fn_dyn_vars == 0
+        return 0
+    end
+    di = 0
+    dn = s.synth_fn_dyn_vars.len()
+    while di < dn
+        if s.synth_fn_dyn_vars[di] == name
+            return 1
+        end
+        di = di + 1
+    end
+    return 0
+
+fn x86_synth_dyn_list_has lst name
+    i = 0
+    n = lst.len()
+    while i < n
+        if lst[i] == name
+            return 1
+        end
+        i = i + 1
+    end
+    return 0
+
+fn x86_synth_dyn_bump_write w_names w_counts name
+    i = 0
+    n = w_names.len()
+    while i < n
+        if w_names[i] == name
+            list_set(w_counts, i, w_counts[i] + 1)
+            return 0
+        end
+        i = i + 1
+    end
+    push(w_names, name)
+    push(w_counts, 1)
+    return 0
+
+fn x86_synth_dyn_is_non_assign_kw txt
+    if txt == "if" or txt == "elif" or txt == "else" or txt == "while" or txt == "for" or txt == "return" or txt == "fn" or txt == "struct" or txt == "enum" or txt == "end" or txt == "match" or txt == "case" or txt == "try" or txt == "catch" or txt == "finally" or txt == "defer" or txt == "break" or txt == "continue" or txt == "throw" or txt == "say" or txt == "print" or txt == "println" or txt == "import" or txt == "global" or txt == "const" or txt == "let" or txt == "var" or txt == "and" or txt == "or" or txt == "not"
+        return 1
+    end
+    if txt == "@if" or txt == "@elif" or txt == "@else" or txt == "@while" or txt == "@for" or txt == "@fn" or txt == "@struct" or txt == "@enum" or txt == "@end" or txt == "@match" or txt == "@try" or txt == "@defer" or txt == "@let" or txt == "ধরি" or txt == "যদি" or txt == "শেষ" or txt == "ফেরত"
+        return 1
+    end
+    return 0
+
+fn x86_synth_prescan_dyn_vars toks start_pos base_col base_line param_names
+    // WHY: Flow-sensitive fixpoint prescan for single-pass codegen. Identifies every multi-write
+    // local/parameter that can hold a dynamically-tagged value (from subscript indexing, `?`,
+    // `match`, or transitive arithmetic/assignment propagation) across untaken branches, if/else
+    // merges, and loop-carried accumulators so its tag slot is allocated and synced from write #1.
+    res = list()
+    w_names = list()
+    w_counts = list()
+    a_lhs = list()
+    a_rs = list()
+    a_re = list()
+    dyn_set = list()
+    if param_names != 0
+        pi = 0
+        while pi < param_names.len()
+            x86_synth_dyn_bump_write(w_names, w_counts, param_names[pi])
+            pi = pi + 1
+        end
+    end
+    n = toks.len()
+    i = start_pos
+    while i < n and (toks[i].tok_kind == TOK_NEWLINE() or toks[i].tok_kind == TOK_SEMI() or toks[i].tok_kind == TOK_COMMENT_LINE() or toks[i].tok_kind == TOK_COMMENT_DOC() or toks[i].tok_kind == TOK_COMMENT_BLOCK())
+        i = i + 1
+    end
+    fn_braced = 0
+    fn_bd = 0
+    if i < n and (toks[i].tok_kind == TOK_LBRACE() or (toks[i].tok_kind != TOK_STR() and toks[i].tok_text == "{"))
+        fn_braced = 1
+        fn_bd = 1
+        i = i + 1
+    end
+    pd = 0
+    bd = 0
+    while i < n
+        t = toks[i]
+        k = t.tok_kind
+        txt = t.tok_text
+        if k == TOK_EOF()
+            break
+        end
+        if fn_braced == 1
+            if k == TOK_LBRACE() or (k != TOK_STR() and txt == "{")
+                fn_bd = fn_bd + 1
+                i = i + 1
+                continue
+            elif k == TOK_RBRACE() or (k != TOK_STR() and txt == "}")
+                fn_bd = fn_bd - 1
+                if fn_bd <= 0
+                    break
+                end
+                i = i + 1
+                continue
+            end
+        elif base_line >= 0
+            if x86_synth_is_block_end(toks, i) == 1 and t.tok_span.span_start_col <= base_col
+                break
+            end
+            if t.tok_span.span_start_line > base_line and t.tok_span.span_start_col <= base_col and k != TOK_NEWLINE() and k != TOK_SEMI() and k != TOK_COMMENT_LINE() and k != TOK_COMMENT_DOC() and k != TOK_COMMENT_BLOCK()
+                break
+            end
+        end
+        // Skip nested named fn/struct/enum definitions
+        is_nested = 0
+        if (k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component"))) and i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
+            is_nested = 1
+        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or k == TOK_KW_ENUM() or k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct" or txt == "enum" or txt == "@enum"))
+            is_nested = 1
+        end
+        if is_nested == 1
+            nf_col = t.tok_span.span_start_col
+            nf_line = t.tok_span.span_start_line
+            i = i + 1
+            nf_bd = 0
+            while i < n
+                ntf = toks[i]
+                nkf = ntf.tok_kind
+                ntxf = ntf.tok_text
+                if nkf == TOK_EOF()
+                    break
+                end
+                if nkf == TOK_LBRACE() or (nkf != TOK_STR() and ntxf == "{")
+                    nf_bd = nf_bd + 1
+                elif nkf == TOK_RBRACE() or (nkf != TOK_STR() and ntxf == "}")
+                    if nf_bd > 0
+                        nf_bd = nf_bd - 1
+                        if nf_bd == 0
+                            i = i + 1
+                            break
+                        end
+                    end
+                end
+                if nf_bd == 0
+                    if x86_synth_is_block_end(toks, i) == 1 and ntf.tok_span.span_start_col <= nf_col
+                        i = i + 1
+                        break
+                    end
+                    if ntf.tok_span.span_start_line > nf_line and ntf.tok_span.span_start_col <= nf_col and nkf != TOK_NEWLINE() and nkf != TOK_SEMI() and nkf != TOK_COMMENT_LINE() and nkf != TOK_COMMENT_DOC() and nkf != TOK_COMMENT_BLOCK()
+                        if nkf != TOK_KW_ELIF() and nkf != TOK_KW_ELSE() and nkf != TOK_DIR_ELIF() and nkf != TOK_DIR_ELSE() and nkf != TOK_DIR_END() and nkf != TOK_KW_END() and ntxf != "elif" and ntxf != "else" and ntxf != "অথবা" and ntxf != "নাহলে"
+                            break
+                        end
+                    end
+                end
+                i = i + 1
+            end
+            continue
+        end
+        if k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
+            pd = pd + 1
+            i = i + 1
+            continue
+        elif k == TOK_RPAREN() or (k != TOK_STR() and txt == ")")
+            if pd > 0
+                pd = pd - 1
+            end
+            i = i + 1
+            continue
+        elif k == TOK_LBRACKET() or (k != TOK_STR() and txt == "[")
+            bd = bd + 1
+            i = i + 1
+            continue
+        elif k == TOK_RBRACKET() or (k != TOK_STR() and txt == "]")
+            if bd > 0
+                bd = bd - 1
+            end
+            i = i + 1
+            continue
+        end
+        // Detect untyped assignment / compound assignment: `v = rhs` or `v += rhs`
+        if pd == 0 and bd == 0 and x86_synth_is_ident_token(k) == 1 and x86_synth_dyn_is_non_assign_kw(txt) == 0 and i + 1 < n
+            prev_is_dot = 0
+            if i > start_pos and (toks[i - 1].tok_kind == TOK_DOT() or (toks[i - 1].tok_kind != TOK_STR() and toks[i - 1].tok_text == "."))
+                prev_is_dot = 1
+            end
+            if prev_is_dot == 0
+                nt = toks[i + 1]
+                nk = nt.tok_kind
+                ntx = nt.tok_text
+                is_asgn = 0
+                if nk == TOK_ASSIGN() or nk == TOK_PLUSEQ() or nk == TOK_MINUSEQ() or nk == TOK_STAREQ() or nk == TOK_SLASHEQ() or nk == TOK_PERCENTEQ()
+                    is_asgn = 1
+                elif nk != TOK_STR() and (ntx == "=" or ntx == "+=" or ntx == "-=" or ntx == "*=" or ntx == "/=" or ntx == "%=")
+                    is_asgn = 1
+                end
+                if is_asgn == 1
+                    x86_synth_dyn_bump_write(w_names, w_counts, txt)
+                    rs = i + 2
+                    re = rs
+                    rpd = 0
+                    rbd = 0
+                    rcd = 0
+                    while re < n
+                        rt = toks[re]
+                        rk = rt.tok_kind
+                        rtx = rt.tok_text
+                        if rk == TOK_EOF()
+                            break
+                        end
+                        if rpd == 0 and rbd == 0 and rcd == 0
+                            if rk == TOK_NEWLINE() or rk == TOK_SEMI() or rk == TOK_COMMENT_LINE() or rk == TOK_COMMENT_DOC() or rk == TOK_COMMENT_BLOCK() or rk == TOK_RBRACE() or (rk != TOK_STR() and rtx == "}") or x86_synth_is_block_end(toks, re) == 1
+                                break
+                            end
+                        end
+                        if rk == TOK_LPAREN() or (rk != TOK_STR() and rtx == "(")
+                            rpd = rpd + 1
+                        elif rk == TOK_RPAREN() or (rk != TOK_STR() and rtx == ")")
+                            if rpd > 0
+                                rpd = rpd - 1
+                            end
+                        elif rk == TOK_LBRACKET() or (rk != TOK_STR() and rtx == "[")
+                            rbd = rbd + 1
+                        elif rk == TOK_RBRACKET() or (rk != TOK_STR() and rtx == "]")
+                            if rbd > 0
+                                rbd = rbd - 1
+                            end
+                        elif rk == TOK_LBRACE() or (rk != TOK_STR() and rtx == "{")
+                            rcd = rcd + 1
+                        elif rk == TOK_RBRACE() or (rk != TOK_STR() and rtx == "}")
+                            if rcd > 0
+                                rcd = rcd - 1
+                            end
+                        end
+                        re = re + 1
+                    end
+                    push(a_lhs, txt)
+                    push(a_rs, rs)
+                    push(a_re, re)
+                    // Direct dyn source check: unprojected subscript `obj[idx]`, `?`, or value `match`
+                    is_dir = 0
+                    if rs < re
+                        if x86_synth_is_match_start(toks, rs) == 1
+                            is_dir = 1
+                        end
+                        sj = rs
+                        c_depth = 0
+                        while sj < re and is_dir == 0
+                            st = toks[sj]
+                            sk = st.tok_kind
+                            stx = st.tok_text
+                            if c_depth > 0
+                                if sk == TOK_LPAREN() or (sk != TOK_STR() and stx == "(")
+                                    c_depth = c_depth + 1
+                                elif sk == TOK_RPAREN() or (sk != TOK_STR() and stx == ")")
+                                    c_depth = c_depth - 1
+                                end
+                                sj = sj + 1
+                                continue
+                            end
+                            // Skip function/method call arguments: `ident(...)`
+                            if (sk == TOK_LPAREN() or (sk != TOK_STR() and stx == "(")) and sj > rs
+                                pk0 = toks[sj - 1].tok_kind
+                                ptx0 = toks[sj - 1].tok_text
+                                if x86_synth_is_ident_token(pk0) == 1 and x86_synth_dyn_is_non_assign_kw(ptx0) == 0
+                                    c_depth = 1
+                                    sj = sj + 1
+                                    continue
+                                end
+                            end
+                            if sk == TOK_QUERY() or (sk != TOK_STR() and stx == "?")
+                                is_dir = 1
+                                break
+                            end
+                            if (sk == TOK_LBRACKET() or (sk != TOK_STR() and stx == "[")) and sj > rs
+                                pk1 = toks[sj - 1].tok_kind
+                                ptx1 = toks[sj - 1].tok_text
+                                if x86_synth_is_ident_token(pk1) == 1 or pk1 == TOK_RPAREN() or pk1 == TOK_RBRACKET() or pk1 == TOK_STR() or (pk1 != TOK_STR() and (ptx1 == ")" or ptx1 == "]"))
+                                    // Find matching ']'
+                                    mj = sj + 1
+                                    mb = 1
+                                    while mj < re and mb > 0
+                                        if toks[mj].tok_kind == TOK_LBRACKET() or (toks[mj].tok_kind != TOK_STR() and toks[mj].tok_text == "[")
+                                            mb = mb + 1
+                                        elif toks[mj].tok_kind == TOK_RBRACKET() or (toks[mj].tok_kind != TOK_STR() and toks[mj].tok_text == "]")
+                                            mb = mb - 1
+                                            if mb == 0
+                                                break
+                                            end
+                                        end
+                                        mj = mj + 1
+                                    end
+                                    // Subscript is direct dyn iff NOT followed immediately by `.` or `(`
+                                    if mj < re
+                                        proj_after = 0
+                                        if mj + 1 < re
+                                            ak2 = toks[mj + 1].tok_kind
+                                            atx2 = toks[mj + 1].tok_text
+                                            if ak2 == TOK_DOT() or ak2 == TOK_LPAREN() or (ak2 != TOK_STR() and (atx2 == "." or atx2 == "("))
+                                                proj_after = 1
+                                            end
+                                        end
+                                        if proj_after == 0
+                                            is_dir = 1
+                                            break
+                                        end
+                                        sj = mj + 1
+                                        continue
+                                    end
+                                end
+                            end
+                            sj = sj + 1
+                        end
+                    end
+                    if is_dir == 1 and x86_synth_dyn_list_has(dyn_set, txt) == 0
+                        push(dyn_set, txt)
+                    end
+                    i = re
+                    continue
+                end
+            end
+        end
+        i = i + 1
+    end
+    // Fixpoint propagation: if `lhs` RHS uses any bare dyn variable (not in call args, index, or `.field`)
+    if dyn_set.len() > 0
+        changed = 1
+        pass_n = 0
+        while changed == 1 and pass_n < 8
+            changed = 0
+            pass_n = pass_n + 1
+            ai = 0
+            an = a_lhs.len()
+            while ai < an
+                lv_n = a_lhs[ai]
+                if x86_synth_dyn_list_has(dyn_set, lv_n) == 0
+                    rs = a_rs[ai]
+                    re = a_re[ai]
+                    sj = rs
+                    c_depth = 0
+                    b_depth = 0
+                    while sj < re
+                        st = toks[sj]
+                        sk = st.tok_kind
+                        stx = st.tok_text
+                        if c_depth > 0
+                            if sk == TOK_LPAREN() or (sk != TOK_STR() and stx == "(")
+                                c_depth = c_depth + 1
+                            elif sk == TOK_RPAREN() or (sk != TOK_STR() and stx == ")")
+                                c_depth = c_depth - 1
+                            end
+                            sj = sj + 1
+                            continue
+                        end
+                        if b_depth > 0
+                            if sk == TOK_LBRACKET() or (sk != TOK_STR() and stx == "[")
+                                b_depth = b_depth + 1
+                            elif sk == TOK_RBRACKET() or (sk != TOK_STR() and stx == "]")
+                                b_depth = b_depth - 1
+                            end
+                            sj = sj + 1
+                            continue
+                        end
+                        if sk == TOK_LBRACKET() or (sk != TOK_STR() and stx == "[")
+                            b_depth = 1
+                            sj = sj + 1
+                            continue
+                        end
+                        if (sk == TOK_LPAREN() or (sk != TOK_STR() and stx == "(")) and sj > rs
+                            pk0 = toks[sj - 1].tok_kind
+                            ptx0 = toks[sj - 1].tok_text
+                            if x86_synth_is_ident_token(pk0) == 1 and x86_synth_dyn_is_non_assign_kw(ptx0) == 0
+                                c_depth = 1
+                                sj = sj + 1
+                                continue
+                            end
+                        end
+                        if x86_synth_is_ident_token(sk) == 1 and x86_synth_dyn_list_has(dyn_set, stx) == 1
+                            prev_dot = 0
+                            if sj > rs and (toks[sj - 1].tok_kind == TOK_DOT() or (toks[sj - 1].tok_kind != TOK_STR() and toks[sj - 1].tok_text == "."))
+                                prev_dot = 1
+                            end
+                            next_proj = 0
+                            if sj + 1 < re
+                                nk2 = toks[sj + 1].tok_kind
+                                ntx2 = toks[sj + 1].tok_text
+                                if nk2 == TOK_DOT() or nk2 == TOK_LPAREN() or nk2 == TOK_LBRACKET() or (nk2 != TOK_STR() and (ntx2 == "." or ntx2 == "(" or ntx2 == "["))
+                                    next_proj = 1
+                                end
+                            end
+                            if prev_dot == 0 and next_proj == 0
+                                push(dyn_set, lv_n)
+                                changed = 1
+                                break
+                            end
+                        end
+                        sj = sj + 1
+                    end
+                end
+                ai = ai + 1
+            end
+        end
+        // Emit only multi-write dyn variables (count >= 2): single-write locals never have stale prior tag
+        wi = 0
+        wn = w_names.len()
+        while wi < wn
+            if w_counts[wi] >= 2 and x86_synth_dyn_list_has(dyn_set, w_names[wi]) == 1
+                push(res, w_names[wi])
+            end
+            wi = wi + 1
+        end
+    end
+    return res
 
 fn x86_synth_emit_null_check_rax s
     // WHY: Guards struct field reads on %rax against NULL / low unmapped page (< 4096),
-    // throwing catchable NullPointerException instead of raw SIGSEGV (Exit 139).
+    // throwing catchable NullPointerException in hosted mode. Disabled in --freestanding
+    // where zero Linux exception runtime exists and low physical addresses are valid.
+    if s.synth_freestanding == 1
+        return 0
+    end
     // cmp rax, 4096 (6B); jae +5 (2B); call _lipi_throw_null_deref (5B)
     x86_synth_emit_bytes(s, [72, 61, 0, 16, 0, 0, 115, 5])
     x86_synth_emit_call_helper(s, "_lipi_throw_null_deref")
@@ -429,6 +947,9 @@ fn x86_synth_emit_null_check_rax s
 
 fn x86_synth_emit_null_check_rcx s
     // WHY: Guards struct field writes / chain walks on %rcx against NULL / low page (< 4096).
+    if s.synth_freestanding == 1
+        return 0
+    end
     // cmp rcx, 4096 (7B); jae +5 (2B); call _lipi_throw_null_deref (5B)
     x86_synth_emit_bytes(s, [72, 129, 249, 0, 16, 0, 0, 115, 5])
     x86_synth_emit_call_helper(s, "_lipi_throw_null_deref")
@@ -898,9 +1419,9 @@ fn x86_synth_patch_lea_rip s u64_patch_off target_file_off text_file_off
     return 0
 
 fn x86_synth_convert_to_pie s
-    // WHY: Converts all recorded .rodata and RW global relocations in s.synth_code to
-    // position-independent RIP-relative addressing for strict W^X ET_DYN (Static-PIE) ASLR.
-    text_file_off = 304
+    // WHY: Converts all recorded .rodata, @bss, and RW global relocations in s.synth_code to
+    // position-independent RIP-relative addressing for Static-PIE ASLR, UEFI PE32+, raw-bin, & higher-half kernels.
+    text_file_off = s.synth_code_file_off
     ro_file_off = text_file_off + s.synth_code.len()
     ri = 0
     while ri < s.synth_str_relocs.len()
@@ -1039,7 +1560,15 @@ fn x86_synth_emit_prologue s
     return patch_pos
 
 fn x86_synth_emit_epilogue s
-    // WHY: Restores stack pointer, callee-saved registers, and caller frame:
+    // WHY: Restores stack pointer, callee-saved registers, and caller frame.
+    // Inside @interrupt functions, restores ALL 15 GPRs and emits `iretq` (48 CF).
+    // Inside @naked functions, emits no epilogue bytes (user controls return/iretq/hlt).
+    if s.synth_in_naked_fn == 1
+        return 0
+    end
+    if s.synth_in_interrupt_fn == 1
+        return x86_synth_emit_interrupt_epilogue(s)
+    end
     //      lea rsp, [rbp - 40] (0x48 0x8D 0x65 0xD8) - Points rsp to saved rbx without clobbering rax
     //      pop rbx             (0x5B)
     //      pop r15             (0x41 0x5F)
@@ -1063,6 +1592,36 @@ fn x86_synth_emit_epilogue s
     x86_synth_emit_byte(s, 92)
     x86_synth_emit_byte(s, 93)
     x86_synth_emit_byte(s, 195)
+    return 0
+
+fn x86_synth_emit_interrupt_prologue s
+    // WHY: Hardware x86-64 Ring-0 @interrupt handler prologue.
+    // Saves ALL 15 general-purpose registers so the interrupted context is preserved bit-for-bit,
+    // establishes rbp, loads hardware interrupt frame pointer [rbp + 120] into %rdi, and aligns stack.
+    s.synth_last_store_end = 0 - 1
+    // push rax, rcx, rdx, rsi, rdi, r8..r15, rbx, rbp (15 * 8 = 120 bytes)
+    x86_synth_emit_bytes(s, [
+        80, 81, 82, 86, 87,
+        65, 80, 65, 81, 65, 82, 65, 83, 65, 84, 65, 85, 65, 86, 65, 87,
+        83, 85,
+        72, 137, 229,         // mov rbp, rsp
+        72, 141, 125, 120,    // lea rdi, [rbp + 120] (hardware TrapFrame: rip, cs, rflags, rsp, ss)
+        72, 131, 228, 240,    // and rsp, -16 (guarantee 16-byte ABI alignment for calls inside ISR)
+        72, 129, 236          // sub rsp, imm32
+    ])
+    patch_pos = s.synth_code.len()
+    x86_synth_emit_u32(s, 512)
+    return patch_pos
+
+fn x86_synth_emit_interrupt_epilogue s
+    // WHY: Hardware x86-64 Ring-0 @interrupt handler epilogue — restores all 15 GPRs and executes `iretq`.
+    x86_synth_emit_bytes(s, [
+        72, 137, 236,         // mov rsp, rbp
+        93, 91,               // pop rbp; pop rbx
+        65, 95, 65, 94, 65, 93, 65, 92, 65, 91, 65, 90, 65, 89, 65, 88, // pop r15..r8
+        95, 94, 90, 89, 88,   // pop rdi, rsi, rdx, rcx, rax
+        72, 207               // iretq (0x48 0xCF)
+    ])
     return 0
 
 fn x86_synth_emit_print_string s str_val
@@ -1299,10 +1858,378 @@ fn x86_synth_find_matching_struct s keys
         i = i + 1
     return best_name
 
+fn x86_synth_parse_decimal_int str_val
+    n = len(str_val)
+    if n == 0 return 0 end
+    acc = 0
+    i = 0
+    while i < n
+        b = mem_byte_read(str_val, i)
+        if b >= 48 and b <= 57
+            acc = acc * 10 + (b - 48)
+        else
+            break
+        end
+        i = i + 1
+    end
+    return acc
+
+fn x86_synth_type_layout_info s ftype
+    // WHY: Computes exact hardware layout [byte_size, align, elem_size, is_signed] for scalar
+    // fixed-width types (u8/i8/u16/i16/u32/i32/u64/i64/f32/f64/ptr), inline fixed-size arrays
+    // `[N]T`, and dynamic/untyped 64-bit Lipi slots (8-byte aligned by default).
+    if ftype == "" or ftype == "i64" or ftype == "int" or ftype == "f64" or ftype == "float" or ftype == "str" or ftype == "string" or ftype == "array" or ftype == "bool" or ftype == "any"
+        return [8, 8, 0, 1]
+    elif ftype == "u64" or ftype == "ptr" or (len(ftype) >= 4 and str_sub(ftype, 0, 4) == "ptr<")
+        return [8, 8, 0, 0]
+    elif ftype == "u8" or ftype == "byte"
+        return [1, 1, 0, 0]
+    elif ftype == "i8"
+        return [1, 1, 0, 1]
+    elif ftype == "u16"
+        return [2, 2, 0, 0]
+    elif ftype == "i16"
+        return [2, 2, 0, 1]
+    elif ftype == "u32"
+        return [4, 4, 0, 0]
+    elif ftype == "i32" or ftype == "f32"
+        return [4, 4, 0, 1]
+    elif len(ftype) >= 4 and mem_byte_read(ftype, 0) == 91
+        // Fixed-size inline array syntax: `[N]T` (e.g. `[512]u8`, `[16]u32`, `[512]u64`)
+        rb = 0 - 1
+        ci = 1
+        fl = len(ftype)
+        while ci < fl
+            if mem_byte_read(ftype, ci) == 93
+                rb = ci
+                break
+            end
+            ci = ci + 1
+        end
+        if rb > 1 and rb + 1 < fl
+            arr_cnt = x86_synth_parse_decimal_int(str_sub(ftype, 1, rb))
+            elem_t = str_sub(ftype, rb + 1, fl)
+            el_info = x86_synth_type_layout_info(s, elem_t)
+            el_sz = el_info[0]
+            el_al = el_info[1]
+            el_sgn = el_info[3]
+            if arr_cnt < 1 arr_cnt = 1 end
+            return [arr_cnt * el_sz, el_al, el_sz, el_sgn]
+        end
+    end
+    // Nested named struct pointer (reference in Lipi) is 8 bytes
+    return [8, 8, 0, 0]
+
+fn x86_synth_compute_struct_layout s sdef
+    // WHY: Computes deterministic exact byte offsets, field widths, and aligned/packed total byte size
+    // for X86StructDef, replacing legacy hardcoded `fi * 8`. Untyped/i64 structs keep exact 8B slots.
+    offs = list()
+    sizes = list()
+    elems = list()
+    signs = list()
+    is_packed = sdef.sd_is_packed
+    explicit_align = sdef.sd_align
+    max_align = 1
+    cursor = 0
+    fi = 0
+    n = sdef.sd_fields.len()
+    while fi < n
+        ft = ""
+        if sdef.sd_field_types != 0 and fi < sdef.sd_field_types.len()
+            ft = sdef.sd_field_types[fi]
+        end
+        info = x86_synth_type_layout_info(s, ft)
+        fsz = info[0]
+        fal = info[1]
+        fel = info[2]
+        fsgn = info[3]
+        eff_al = fal
+        if is_packed == 1
+            eff_al = 1
+        end
+        if eff_al > 1
+            rem = cursor % eff_al
+            if rem != 0
+                cursor = cursor + (eff_al - rem)
+            end
+        end
+        if eff_al > max_align
+            max_align = eff_al
+        end
+        push(offs, cursor)
+        push(sizes, fsz)
+        push(elems, fel)
+        push(signs, fsgn)
+        cursor = cursor + fsz
+        fi = fi + 1
+    end
+    final_align = max_align
+    if explicit_align > final_align
+        final_align = explicit_align
+    end
+    total_sz = cursor
+    if final_align > 1 and total_sz > 0
+        rem_t = total_sz % final_align
+        if rem_t != 0
+            total_sz = total_sz + (final_align - rem_t)
+        end
+    end
+    sdef.sd_field_offsets = offs
+    sdef.sd_field_sizes = sizes
+    sdef.sd_field_elem_sizes = elems
+    sdef.sd_field_signed = signs
+    sdef.sd_align = final_align
+    sdef.sd_total_size = total_sz
+    return total_sz
+
+fn x86_synth_get_field_meta s sname fname
+    // WHY: Returns [offset, size, is_signed, elem_size, field_type] for struct field access.
+    if sname != ""
+        i = s.synth_structs.len() - 1
+        while i >= 0
+            sd = s.synth_structs[i]
+            if sd.sd_name == sname
+                fi = 0
+                while fi < sd.sd_fields.len()
+                    if sd.sd_fields[fi] == fname
+                        fo = fi * 8
+                        fs = 8
+                        fg = 1
+                        fe = 0
+                        ft = ""
+                        if sd.sd_field_offsets != 0 and fi < sd.sd_field_offsets.len()
+                            fo = sd.sd_field_offsets[fi]
+                            fs = sd.sd_field_sizes[fi]
+                            fg = sd.sd_field_signed[fi]
+                            fe = sd.sd_field_elem_sizes[fi]
+                        end
+                        if sd.sd_field_types != 0 and fi < sd.sd_field_types.len()
+                            ft = sd.sd_field_types[fi]
+                        end
+                        return [fo, fs, fg, fe, ft]
+                    end
+                    fi = fi + 1
+                end
+            end
+            i = i - 1
+        end
+    end
+    f_off = x86_synth_get_field_offset(s, sname, fname)
+    f_ft = x86_synth_get_field_type(s, sname, fname)
+    info = x86_synth_type_layout_info(s, f_ft)
+    return [f_off, info[0], info[3], info[2], f_ft]
+
+fn x86_synth_emit_field_load_rax s f_off f_sz f_signed f_elem_sz
+    // WHY: Emits exact-width hardware load from [rax + f_off] into %rax (1/2/4/8B signed/unsigned),
+    // or `lea rax, [rax + f_off]` for inline fixed-size arrays `[N]T` inside structs.
+    if f_elem_sz > 0
+        // Inline fixed array: return pointer &struct + f_off
+        if f_off == 0
+            return 0
+        elif f_off < 128
+            x86_synth_emit_bytes(s, [72, 141, 64, f_off]) // lea rax, [rax + disp8]
+        else
+            x86_synth_emit_bytes(s, [72, 141, 128])       // lea rax, [rax + disp32]
+            x86_synth_emit_u32(s, f_off)
+        end
+        return 0
+    end
+    if f_sz == 1
+        op2 = 182 // movzx (0xB6)
+        if f_signed == 1 op2 = 190 end // movsx (0xBE)
+        if f_off < 128
+            x86_synth_emit_bytes(s, [72, 15, op2, 64, f_off])
+        else
+            x86_synth_emit_bytes(s, [72, 15, op2, 128])
+            x86_synth_emit_u32(s, f_off)
+        end
+    elif f_sz == 2
+        op2 = 183 // movzx (0xB7)
+        if f_signed == 1 op2 = 191 end // movsx (0xBF)
+        if f_off < 128
+            x86_synth_emit_bytes(s, [72, 15, op2, 64, f_off])
+        else
+            x86_synth_emit_bytes(s, [72, 15, op2, 128])
+            x86_synth_emit_u32(s, f_off)
+        end
+    elif f_sz == 4
+        if f_signed == 1
+            // movsxd rax, dword ptr [rax + f_off]: 48 63 40 disp8 / 48 63 80 disp32
+            if f_off < 128
+                x86_synth_emit_bytes(s, [72, 99, 64, f_off])
+            else
+                x86_synth_emit_bytes(s, [72, 99, 128])
+                x86_synth_emit_u32(s, f_off)
+            end
+        else
+            // mov eax, dword ptr [rax + f_off] (zero-extends to rax): 8B 40 disp8 / 8B 80 disp32
+            if f_off < 128
+                x86_synth_emit_bytes(s, [139, 64, f_off])
+            else
+                x86_synth_emit_bytes(s, [139, 128])
+                x86_synth_emit_u32(s, f_off)
+            end
+        end
+    else
+        // 8-byte qword load: mov rax, [rax + f_off]
+        if f_off < 128
+            x86_synth_emit_bytes(s, [72, 139, 64, f_off])
+        else
+            x86_synth_emit_bytes(s, [72, 139, 128])
+            x86_synth_emit_u32(s, f_off)
+        end
+    end
+    return 0
+
+fn x86_synth_emit_field_store_rcx_rax s f_off f_sz
+    // WHY: Emits exact-width hardware store from %rax into [rcx + f_off] (1/2/4/8B)
+    // without clobbering adjacent packed fields.
+    if f_sz == 1
+        if f_off < 128
+            x86_synth_emit_bytes(s, [136, 65, f_off]) // mov byte [rcx + disp8], al
+        else
+            x86_synth_emit_bytes(s, [136, 129])
+            x86_synth_emit_u32(s, f_off)
+        end
+    elif f_sz == 2
+        if f_off < 128
+            x86_synth_emit_bytes(s, [102, 137, 65, f_off]) // mov word [rcx + disp8], ax
+        else
+            x86_synth_emit_bytes(s, [102, 137, 129])
+            x86_synth_emit_u32(s, f_off)
+        end
+    elif f_sz == 4
+        if f_off < 128
+            x86_synth_emit_bytes(s, [137, 65, f_off]) // mov dword [rcx + disp8], eax
+        else
+            x86_synth_emit_bytes(s, [137, 129])
+            x86_synth_emit_u32(s, f_off)
+        end
+    else
+        if f_off < 128
+            x86_synth_emit_bytes(s, [72, 137, 65, f_off]) // mov qword [rcx + disp8], rax
+        else
+            x86_synth_emit_bytes(s, [72, 137, 129])
+            x86_synth_emit_u32(s, f_off)
+        end
+    end
+    return 0
+
+fn x86_synth_emit_raw_array_load s elem_sz is_signed
+    // WHY: Direct inline scaled load `[rdi + rsi * elem_sz]` -> `%rax` for @bss and struct [N]T arrays.
+    // Zero runtime heap calls — 100% freestanding Ring-0 safe.
+    if elem_sz == 1
+        if is_signed == 1
+            x86_synth_emit_bytes(s, [72, 15, 190, 4, 55]) // movsx rax, byte [rdi + rsi]
+        else
+            x86_synth_emit_bytes(s, [72, 15, 182, 4, 55]) // movzx rax, byte [rdi + rsi]
+        end
+    elif elem_sz == 2
+        if is_signed == 1
+            x86_synth_emit_bytes(s, [72, 15, 191, 4, 119]) // movsx rax, word [rdi + rsi*2] (SIB=0x77)
+        else
+            x86_synth_emit_bytes(s, [72, 15, 183, 4, 119]) // movzx rax, word [rdi + rsi*2]
+        end
+    elif elem_sz == 4
+        if is_signed == 1
+            x86_synth_emit_bytes(s, [72, 99, 4, 183]) // movsxd rax, dword [rdi + rsi*4] (SIB=0xB7)
+        else
+            x86_synth_emit_bytes(s, [139, 4, 183])    // mov eax, dword [rdi + rsi*4]
+        end
+    else
+        x86_synth_emit_bytes(s, [72, 139, 4, 247])    // mov rax, qword [rdi + rsi*8] (SIB=0xF7)
+    end
+    return 0
+
+fn x86_synth_emit_raw_array_store s elem_sz
+    // WHY: Direct inline scaled store `%rdx` -> `[rdi + rsi * elem_sz]` for @bss and struct [N]T arrays.
+    if elem_sz == 1
+        x86_synth_emit_bytes(s, [136, 20, 55])        // mov byte [rdi + rsi], dl
+    elif elem_sz == 2
+        x86_synth_emit_bytes(s, [102, 137, 20, 119])  // mov word [rdi + rsi*2], dx
+    elif elem_sz == 4
+        x86_synth_emit_bytes(s, [137, 20, 183])       // mov dword [rdi + rsi*4], edx
+    else
+        x86_synth_emit_bytes(s, [72, 137, 20, 247])   // mov qword [rdi + rsi*8], rdx
+    end
+    return 0
+
+fn x86_synth_raw_elem_tag elem_sz is_signed
+    if elem_sz == 1
+        if is_signed == 1 return "raw_i8" end
+        return "raw_u8"
+    elif elem_sz == 2
+        if is_signed == 1 return "raw_i16" end
+        return "raw_u16"
+    elif elem_sz == 4
+        if is_signed == 1 return "raw_i32" end
+        return "raw_u32"
+    elif elem_sz == 8
+        if is_signed == 1 return "raw_i64" end
+        return "raw_u64"
+    end
+    return ""
+
+fn x86_synth_parse_raw_elem_tag tag
+    // Returns [elem_sz, is_signed] or [0, 0] if not a raw fixed-array tag
+    if tag == "raw_u8" return [1, 0] end
+    if tag == "raw_i8" return [1, 1] end
+    if tag == "raw_u16" return [2, 0] end
+    if tag == "raw_i16" return [2, 1] end
+    if tag == "raw_u32" return [4, 0] end
+    if tag == "raw_i32" return [4, 1] end
+    if tag == "raw_u64" return [8, 0] end
+    if tag == "raw_i64" return [8, 1] end
+    return [0, 0]
+
+fn x86_synth_find_bss s name
+    // Returns index into synth_bss_* lists, or -1 if not found
+    bi = 0
+    while bi < s.synth_bss_names.len()
+        if s.synth_bss_names[bi] == name
+            return bi
+        end
+        bi = bi + 1
+    end
+    return 0 - 1
+
+fn x86_synth_alloc_bss s name byte_size align elem_sz is_signed struct_t
+    // WHY: Reserves zero-initialized static aligned storage directly in ELF SHT_NOBITS .bss
+    // (GDT/IDT/Page Tables/DMA rings — zero file bloat, zero runtime heap/mmap).
+    ex = x86_synth_find_bss(s, name)
+    if ex >= 0
+        return ex
+    end
+    al = align
+    if al < 16 al = 16 end
+    cur = s.synth_bss_cursor
+    rem = cur % al
+    if rem != 0
+        cur = cur + (al - rem)
+    end
+    idx = s.synth_bss_names.len()
+    push(s.synth_bss_names, name)
+    push(s.synth_bss_offs, cur)
+    push(s.synth_bss_sizes, byte_size)
+    push(s.synth_bss_elem_sizes, elem_sz)
+    push(s.synth_bss_signed, is_signed)
+    push(s.synth_bss_structs, struct_t)
+    s.synth_bss_cursor = cur + byte_size
+    return idx
+
+fn x86_synth_emit_bss_addr s bss_idx
+    // WHY: Loads static @bss buffer address into %rax via movabs imm64 (patched at link time
+    // and auto-converted to RIP-relative LEA in Static-PIE / higher-half kernels).
+    x86_synth_emit_bytes(s, [72, 184]) // movabs rax, imm64
+    p_off = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    push(s.synth_bss_patch_offs, p_off)
+    push(s.synth_bss_patch_idxs, bss_idx)
+    return 0
+
 fn x86_synth_get_field_offset s sname fname
-    // WHY: Determines the 8-byte aligned memory offset for struct field access.
-    // Under --strict-types, rejects missing fields on typed structs AND rejects ambiguous
-    // untyped field accesses when multiple named structs place `fname` at conflicting offsets.
+    // WHY: Determines exact hardware byte offset for struct field access (packed or aligned).
+    // Detects offset collisions across distinct named structs on untyped receivers.
     if sname != ""
         matched_struct = 0
         i = s.synth_structs.len() - 1
@@ -1313,6 +2240,9 @@ fn x86_synth_get_field_offset s sname fname
                 fi = 0
                 while fi < sd.sd_fields.len()
                     if sd.sd_fields[fi] == fname
+                        if sd.sd_field_offsets != 0 and fi < sd.sd_field_offsets.len()
+                            return sd.sd_field_offsets[fi]
+                        end
                         return fi * 8
                     end
                     fi = fi + 1
@@ -1341,6 +2271,9 @@ fn x86_synth_get_field_offset s sname fname
             while fi < sd.sd_fields.len()
                 if sd.sd_fields[fi] == fname
                     cand_off = fi * 8
+                    if sd.sd_field_offsets != 0 and fi < sd.sd_field_offsets.len()
+                        cand_off = sd.sd_field_offsets[fi]
+                    end
                     if first_off < 0
                         first_off = cand_off
                         first_sname = sd.sd_name
@@ -1359,20 +2292,67 @@ fn x86_synth_get_field_offset s sname fname
         i = i + 1
     end
     if first_off >= 0
+        // WHY: Also detect collisions between a named @struct and any anonymous record literal (_anon_s_*)
+        // that defines the same field name at a different offset (e.g. LipiDatabase.fd@64 vs {fd:...}@0).
+        ai = 0
+        while ai < s.synth_structs.len()
+            asd = s.synth_structs[ai]
+            if len(asd.sd_name) > 8 and str_sub(asd.sd_name, 0, 8) == "_anon_s_"
+                afi = 0
+                while afi < asd.sd_fields.len()
+                    if asd.sd_fields[afi] == fname
+                        acand_off = afi * 8
+                        if asd.sd_field_offsets != 0 and afi < asd.sd_field_offsets.len()
+                            acand_off = asd.sd_field_offsets[afi]
+                        end
+                        if acand_off != first_off
+                            s.synth_ambiguous_count = s.synth_ambiguous_count + 1
+                            if s.synth_strict_types == 1
+                                say "❌ [Strict Type Error]: Ambiguous field '." + fname + "' on untyped receiver in '" + s.synth_current_fn + "' — struct '" + first_sname + "' (offset " + str(first_off) + ") collides with anonymous struct '" + asd.sd_name + "' (offset " + str(acand_off) + "). Define a named @struct or annotate variable/parameter type."
+                                exit(1)
+                            end
+                        end
+                        break
+                    end
+                    afi = afi + 1
+                end
+            end
+            ai = ai + 1
+        end
         return first_off
     end
 
-    // Fallback pass 2: search across all registered struct schemas (including anonymous)
+    // Fallback pass 2: search across all registered struct schemas (including anonymous) and detect collisions
+    anon_first_off = 0 - 1
+    anon_first_sname = ""
     i = 0
     while i < s.synth_structs.len()
         sd = s.synth_structs[i]
         fi = 0
         while fi < sd.sd_fields.len()
             if sd.sd_fields[fi] == fname
-                return fi * 8
+                cand_off2 = fi * 8
+                if sd.sd_field_offsets != 0 and fi < sd.sd_field_offsets.len()
+                    cand_off2 = sd.sd_field_offsets[fi]
+                end
+                if anon_first_off < 0
+                    anon_first_off = cand_off2
+                    anon_first_sname = sd.sd_name
+                elif cand_off2 != anon_first_off
+                    s.synth_ambiguous_count = s.synth_ambiguous_count + 1
+                    if s.synth_strict_types == 1
+                        say "❌ [Strict Type Error]: Ambiguous field '." + fname + "' on untyped receiver in '" + s.synth_current_fn + "' — anonymous struct '" + anon_first_sname + "' (offset " + str(anon_first_off) + ") collides with anonymous struct '" + sd.sd_name + "' (offset " + str(cand_off2) + "). Define a named @struct or annotate variable/parameter type."
+                        exit(1)
+                    end
+                end
+                break
+            end
             fi = fi + 1
         end
         i = i + 1
+    end
+    if anon_first_off >= 0
+        return anon_first_off
     end
 
     // Fallback: search or allocate in global fields
@@ -1874,12 +2854,28 @@ fn x86_synth_bind_reg_var s var_name is_reg
     ex_lv = x86_synth_find_local_var(s, var_name)
     off = x86_synth_alloc_reg_var(s, var_name, is_reg)
     lv = x86_synth_find_local_var(s, var_name)
-    if s.synth_last_expr_type == "dyn_tagged" and lv != 0
-        if lv.lv_tag_off == 0
-            lv.lv_tag_off = s.synth_stack_offset
-            s.synth_stack_offset = s.synth_stack_offset + 8
+    if lv != 0
+        if s.synth_last_expr_type == "dyn_tagged"
+            if lv.lv_tag_off == 0
+                lv.lv_tag_off = s.synth_stack_offset
+                s.synth_stack_offset = s.synth_stack_offset + 8
+                push(s.synth_fn_tag_offs, lv.lv_tag_off)
+            end
+            x86_synth_emit_store_var(s, 2, lv.lv_tag_off) // mov [rbp - lv_tag_off], rdx
+        elif lv.lv_tag_off > 0 or (s.synth_freestanding == 0 and x86_synth_is_dyn_var(s, var_name) == 1)
+            if lv.lv_tag_off == 0
+                lv.lv_tag_off = s.synth_stack_offset
+                s.synth_stack_offset = s.synth_stack_offset + 8
+                push(s.synth_fn_tag_offs, lv.lv_tag_off)
+            end
+            st_tag = 0
+            if s.synth_last_expr_type == "float"
+                st_tag = 1
+            elif s.synth_last_expr_type == "str"
+                st_tag = 2
+            end
+            x86_synth_emit_store_imm64_to_var(s, lv.lv_tag_off, st_tag)
         end
-        x86_synth_emit_store_var(s, 2, lv.lv_tag_off) // mov [rbp - lv_tag_off], rdx
     end
     if lv != 0 and lv.lv_is_boxed == 1
         if ex_lv == 0
@@ -2128,9 +3124,20 @@ fn x86_synth_parse_type_list toks pos_box require_lparen
 end
 
 fn x86_synth_parse_type_expr toks pos_box
-    // WHY: Parses a type annotation `Name` or `Name<Arg1, Arg2>` into a single string `"Name"` or `"Name<Arg1,Arg2>"`.
+    // WHY: Parses a type annotation `Name`, `Name<Arg1, Arg2>`, or fixed-size array `[N]T` (e.g. `[512]u8`).
     p = get(pos_box, 0)
     if p >= toks.len() return "" end
+    if toks[p].tok_kind == TOK_LBRACKET() or (toks[p].tok_kind != TOK_STR() and toks[p].tok_text == "[")
+        if p + 3 < toks.len() and toks[p + 1].tok_kind == TOK_INT() and (toks[p + 2].tok_kind == TOK_RBRACKET() or toks[p + 2].tok_text == "]")
+            arr_n = str(toks[p + 1].tok_int_val)
+            list_set(pos_box, 0, p + 3)
+            el_t = x86_synth_parse_type_expr(toks, pos_box)
+            if el_t != ""
+                return "[" + arr_n + "]" + el_t
+            end
+        end
+        return ""
+    end
     if x86_synth_is_ident_token(toks[p].tok_kind) == 0 return "" end
     base_t = toks[p].tok_text
     list_set(pos_box, 0, p + 1)
@@ -2150,7 +3157,7 @@ fn x86_synth_parse_type_expr toks pos_box
 end
 
 fn x86_synth_specialize_struct s base_sdef targs
-    // WHY: Compile-time monomorphizes `struct Box<T>` into cached `Box__g_float` with concrete field types (0% boxing).
+    // WHY: Compile-time monomorphizes `struct Box<T>` into cached `Box__g_float` with concrete field types & layout.
     if base_sdef == 0 or targs == 0 or targs.len() == 0
         return base_sdef
     end
@@ -2177,6 +3184,9 @@ fn x86_synth_specialize_struct s base_sdef targs
         fi = fi + 1
     end
     ns.sd_field_types = new_ftypes
+    ns.sd_is_packed = base_sdef.sd_is_packed
+    ns.sd_align = base_sdef.sd_align
+    x86_synth_compute_struct_layout(s, ns)
     push(s.synth_structs, ns)
     return ns
 end
@@ -2636,6 +3646,11 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
     sdef.sd_fields = fields
     sdef.sd_field_types = field_types
     sdef.sd_type_params = tparams
+    sdef.sd_is_packed = s.synth_pending_struct_packed
+    sdef.sd_align = s.synth_pending_struct_align
+    s.synth_pending_struct_packed = 0
+    s.synth_pending_struct_align = 0
+    x86_synth_compute_struct_layout(s, sdef)
     push(s.synth_structs, sdef)
     return 0
 

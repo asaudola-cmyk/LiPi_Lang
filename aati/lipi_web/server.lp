@@ -37,11 +37,11 @@ import "aati/lipi_web/app"
   }
 @end
 
-@fn web_server_handle_connection(server, stream)
+@fn web_server_handle_connection(server, stream: TcpStream)
   raw_req = _http_read_full_request(stream)
   @if raw_req.len() > 0
     parsed = http_parse_request(raw_req)
-    req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, stream.peer_host)
+    req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, stream.tcp_peer_host)
     res = app_dispatch(server.server_app, req)
     wire_resp = res_format_http(res)
     tcp_stream_write(stream, wire_resp)
@@ -55,7 +55,7 @@ import "aati/lipi_web/app"
 
 @fn web_server_listen(server, host, port)
   listener = tcp_listener_bind(host, port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     println("Failed to bind " + host + ":" + port.to_str())
     return -1
   @end
@@ -68,19 +68,19 @@ import "aati/lipi_web/app"
 
   @while server.running == 1
     stream = tcp_listener_accept(listener)
-    @if stream.fd >= 0
+    @if stream.tcp_fd >= 0
       web_server_handle_connection(server, stream)
       server.request_count = server.request_count + 1
     @end
   @end
 
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   return 0
 @end
 
 @fn web_server_listen_limited(server, host, port, max_requests)
   listener = tcp_listener_bind(host, port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     println("Failed to bind " + host + ":" + port.to_str())
     return -1
   @end
@@ -93,7 +93,7 @@ import "aati/lipi_web/app"
 
   @while server.running == 1
     stream = tcp_listener_accept(listener)
-    @if stream.fd >= 0
+    @if stream.tcp_fd >= 0
       web_server_handle_connection(server, stream)
       server.request_count = server.request_count + 1
 
@@ -103,14 +103,14 @@ import "aati/lipi_web/app"
     @end
   @end
 
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   return 0
 @end
 
 @fn web_server_stop(server)
   server.running = 0
   @if server.listener != 0
-    tcp_close(server.listener.fd)
+    tcp_listener_close(server.listener)
   @end
 @end
 

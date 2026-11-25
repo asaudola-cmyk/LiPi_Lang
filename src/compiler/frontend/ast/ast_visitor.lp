@@ -204,7 +204,7 @@ import "compiler/frontend/ast/ast_node"
   work_stack = work_stack.push(root)
 
   @while work_stack.len() > 0
-    cur_node = pop(work_stack)
+    cur_node = _lipi_list_pop(work_stack)
 
     @if cur_node != 0
       @if cur_node.kind == "Call" && cur_node.name != ""

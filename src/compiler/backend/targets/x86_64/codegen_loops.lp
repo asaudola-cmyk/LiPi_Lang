@@ -253,7 +253,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
         end
         if c_ok_after == 1 and c_jcc > 0 and x86_synth_is_ident_token(c_lhs.tok_kind) == 1
             lv_cl = x86_synth_find_local_var(s, c_lhs.tok_text)
-            if lv_cl != 0 and lv_cl.lv_prim_type != "float" and lv_cl.lv_prim_type != "str"
+            if lv_cl != 0 and lv_cl.lv_prim_type != "float" and lv_cl.lv_prim_type != "str" and lv_cl.lv_prim_type != "dyn_tagged" and lv_cl.lv_tag_off == 0
                 if c_rhs.tok_kind == TOK_INT()
                     if lv_cl.lv_is_spilled == 0 and lv_cl.lv_reg >= 0
                         x86_synth_emit_mov_reg_reg(s, 0, lv_cl.lv_reg)
@@ -274,7 +274,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
                     fused_cond = 1
                 elif x86_synth_is_ident_token(c_rhs.tok_kind) == 1
                     lv_cr = x86_synth_find_local_var(s, c_rhs.tok_text)
-                    if lv_cr != 0 and lv_cr.lv_prim_type != "float" and lv_cr.lv_prim_type != "str"
+                    if lv_cr != 0 and lv_cr.lv_prim_type != "float" and lv_cr.lv_prim_type != "str" and lv_cr.lv_prim_type != "dyn_tagged" and lv_cr.lv_tag_off == 0
                         if lv_cl.lv_is_spilled == 0 and lv_cl.lv_reg >= 0
                             x86_synth_emit_mov_reg_reg(s, 0, lv_cl.lv_reg)
                         else

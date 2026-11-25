@@ -1420,6 +1420,31 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave_i_silicon_mmio_atomics_asm.lp", "test_wave_i_silicon_mmio_atomics_asm") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_j_packed_bss_syntax_collections.lp", "test_wave_j_packed_bss_syntax_collections") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_k_bare_targets_io.lp", "test_wave_k_bare_targets_io") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_l_circular_imports_and_obj.lp", "test_wave_l_circular_imports_and_obj") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_m_dyn_tag_strict_tcp_db.lp", "test_wave_m_dyn_tag_strict_tcp_db") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

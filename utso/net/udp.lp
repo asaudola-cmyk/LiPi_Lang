@@ -235,15 +235,15 @@ import "utso/core/string"
 @! ----------------------------------------------------------------------------
 
 @struct UdpSocket
-  fd: i64
+  udp_fd: i64
   bound_port: i64
   is_broadcast: i64
 @end
 
-@fn udp_socket_bind(host, port, is_broadcast)
+@fn udp_socket_bind(host, port, is_broadcast) -> UdpSocket
   fd = udp_socket_new()
   @if fd < 0
-    return { fd: -1, bound_port: port, is_broadcast: is_broadcast }
+    return UdpSocket(-1, port, is_broadcast)
   @end
 
   udp_set_reuse(fd)
@@ -254,35 +254,35 @@ import "utso/core/string"
   bind_res = udp_bind(fd, host, port)
   @if bind_res < 0
     udp_close(fd)
-    return { fd: -1, bound_port: port, is_broadcast: is_broadcast }
+    return UdpSocket(-1, port, is_broadcast)
   @end
 
-  return { fd: fd, bound_port: port, is_broadcast: is_broadcast }
+  return UdpSocket(fd, port, is_broadcast)
 @end
 
-@fn udp_socket_send(sock, host, port, data)
-  @if sock.fd < 0 return -1 @end
-  return udp_send_to(sock.fd, host, port, data)
+@fn udp_socket_send(sock: UdpSocket, host, port, data)
+  @if sock.udp_fd < 0 return -1 @end
+  return udp_send_to(sock.udp_fd, host, port, data)
 @end
 
-@fn udp_socket_recv(sock, max_len)
-  @if sock.fd < 0
+@fn udp_socket_recv(sock: UdpSocket, max_len)
+  @if sock.udp_fd < 0
     return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
   @end
-  return udp_recv_from(sock.fd, max_len)
+  return udp_recv_from(sock.udp_fd, max_len)
 @end
 
-@fn udp_socket_recv_nonblocking(sock, max_len)
-  @if sock.fd < 0
+@fn udp_socket_recv_nonblocking(sock: UdpSocket, max_len)
+  @if sock.udp_fd < 0
     return { data: "", sender_host: "", sender_port: 0, bytes_read: -1 }
   @end
-  return udp_recv_from_nonblocking(sock.fd, max_len)
+  return udp_recv_from_nonblocking(sock.udp_fd, max_len)
 @end
 
-@fn udp_socket_close(sock)
-  @if sock.fd >= 0
-    res = udp_close(sock.fd)
-    sock.fd = -1
+@fn udp_socket_close(sock: UdpSocket)
+  @if sock.udp_fd >= 0
+    res = udp_close(sock.udp_fd)
+    sock.udp_fd = -1
     return res
   @end
   return 0

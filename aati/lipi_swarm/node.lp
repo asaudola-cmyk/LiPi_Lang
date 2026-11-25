@@ -102,7 +102,7 @@ import "aati/lipi_swarm/actor"
 @end
 
 @fn swarm_node_broadcast_beacon(node, target_host, target_port)
-  @if node.udp_sock.fd >= 0
+  @if node.udp_sock.udp_fd >= 0
     node.info.load = load_monitor_get_load(node.load_monitor)
     discovery_broadcast_beacon(node.udp_sock, node.info, target_host, target_port)
     return 1
@@ -184,7 +184,7 @@ import "aati/lipi_swarm/actor"
 @fn swarm_node_stop(node)
   @if node.is_running == 1
     node.is_running = 0
-    @if node.udp_sock.fd >= 0
+    @if node.udp_sock.udp_fd >= 0
       udp_socket_close(node.udp_sock)
     @end
     @if node.tcp_listener_fd >= 0
@@ -209,16 +209,16 @@ import "aati/lipi_swarm/actor"
   desc = task_descriptor_new(tid, task_name, [arg], node.info.node_id, fid)
 
   stream = tcp_stream_connect(target_peer.host, target_peer.tcp_port)
-  @if stream.fd < 0
+  @if stream.tcp_fd < 0
     println("[SwarmNode] Error: Failed to connect to remote peer " + target_peer.node_id + " at " + target_peer.host + ":" + target_peer.tcp_port.to_str())
     return swarm_join_handle_new(tid, 1, 0, target_peer.node_id, fid)
   @end
 
   desc_str = serialize_task_descriptor(desc)
-  protocol_send_tcp(stream.fd, MSG_TASK_SUBMIT(), desc_str)
+  protocol_send_tcp(stream.tcp_fd, MSG_TASK_SUBMIT(), desc_str)
 
   @! Receive task execution result
-  resp_pkt = protocol_recv_tcp(stream.fd)
+  resp_pkt = protocol_recv_tcp(stream.tcp_fd)
   tcp_stream_close(stream)
 
   @if resp_pkt.valid == 1 && resp_pkt.msg_type == MSG_TASK_RESULT()

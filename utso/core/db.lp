@@ -24,7 +24,7 @@ import "utso/core/hashmap"
   in_tx: i64
   tx_wal: array
   index: i64
-  fd: i64
+  wdb_fd: i64
   path: string
   sync_mode: i64
   wal_frames: i64
@@ -151,43 +151,29 @@ import "utso/core/hashmap"
 @end
 
 @fn _db_wal_write_single(db: LipiDatabase, op_code, key, val)
-  @if db.fd < 0
+  @if db.wdb_fd < 0
     return 0
   @end
   b = buf_new(64 + str_len(str(key)) + str_len(str(val)))
   _db_append_frame_to_buf(b, op_code, key, val)
-  n = _db_fd_write_all(db.fd, buf_ptr(b), buf_len(b))
+  n = _db_fd_write_all(db.wdb_fd, buf_ptr(b), buf_len(b))
   buf_free(b)
   @if n < 0
     return 0 - 1
   @end
   db.wal_frames = db.wal_frames + 1
   @if db.sync_mode == 1
-    syscall(74, db.fd, 0, 0, 0, 0, 0) @! SYS_fsync
+    syscall(74, db.wdb_fd, 0, 0, 0, 0, 0) @! SYS_fsync
   @end
   return n
 @end
 
-@fn db_new(name, order)
+@fn db_new(name, order) -> LipiDatabase
   // WHY: Initializes O(1) StrDict-backed LipiDatabase keeping keys/values slots for ABI compatibility.
-  return {
-    keys: [],
-    values: [],
-    name: name,
-    order: order,
-    wal: [],
-    in_tx: 0,
-    tx_wal: [],
-    index: dict_new(64),
-    fd: 0 - 1,
-    path: "",
-    sync_mode: 1,
-    wal_frames: 0,
-    recovered_truncated: 0
-  }
+  return LipiDatabase([], [], name, order, [], 0, [], dict_new(64), 0 - 1, "", 1, 0, 0)
 @end
 
-@fn db_open(path)
+@fn db_open(path) -> LipiDatabase
   // WHY: Opens or creates a crash-safe disk-persisted binary WAL database with SYS_flock
   // advisory locking, IEEE CRC-32 replay, and automatic torn-tail recovery via SYS_ftruncate.
   db = db_new(path, 64)
@@ -199,7 +185,7 @@ import "utso/core/hashmap"
   @end
   @! Exclusive advisory lock: SYS_flock(73, fd, LOCK_EX=2)
   syscall(73, fd, 2, 0, 0, 0, 0)
-  db.fd = fd
+  db.wdb_fd = fd
 
   @! Determine file size via SYS_lseek(8, fd, 0, SEEK_END=2)
   fsize = syscall(8, fd, 0, 2, 0, 0, 0)
@@ -273,14 +259,14 @@ import "utso/core/hashmap"
   return db
 @end
 
-@fn db_set_sync(db: LipiDatabase, mode)
+@fn db_set_sync(db: LipiDatabase, mode) -> LipiDatabase
   db.sync_mode = mode
   return db
 @end
 
 @fn db_sync(db: LipiDatabase)
-  @if db.fd >= 0
-    return syscall(74, db.fd, 0, 0, 0, 0, 0)
+  @if db.wdb_fd >= 0
+    return syscall(74, db.wdb_fd, 0, 0, 0, 0, 0)
   @end
   return 0
 @end
@@ -288,7 +274,7 @@ import "utso/core/hashmap"
 @fn db_compact(db: LipiDatabase)
   // WHY: Atomically rewrites WAL to minimal live snapshot via tmp + SYS_fsync + SYS_rename
   // so dead updates/deletes are reclaimed safely even under sudden power loss.
-  @if db.fd < 0 || str_len(db.path) == 0
+  @if db.wdb_fd < 0 || str_len(db.path) == 0
     return 0
   @end
   tmp_path = db.path + ".compact"
@@ -343,8 +329,8 @@ import "utso/core/hashmap"
   syscall(73, new_fd, 2, 0, 0, 0, 0) @! LOCK_EX on compacted file
   syscall(8, new_fd, 0, 2, 0, 0, 0)  @! SEEK_END
 
-  old_fd = db.fd
-  db.fd = new_fd
+  old_fd = db.wdb_fd
+  db.wdb_fd = new_fd
   db.wal = []
   db.wal_frames = n
   syscall(73, old_fd, 8, 0, 0, 0, 0) @! LOCK_UN old inode
@@ -353,11 +339,11 @@ import "utso/core/hashmap"
 @end
 
 @fn db_close(db: LipiDatabase)
-  @if db.fd >= 0
-    syscall(74, db.fd, 0, 0, 0, 0, 0) @! SYS_fsync
-    syscall(73, db.fd, 8, 0, 0, 0, 0) @! LOCK_UN
-    syscall(3, db.fd, 0, 0, 0, 0, 0)  @! SYS_close
-    db.fd = 0 - 1
+  @if db.wdb_fd >= 0
+    syscall(74, db.wdb_fd, 0, 0, 0, 0, 0) @! SYS_fsync
+    syscall(73, db.wdb_fd, 8, 0, 0, 0, 0) @! LOCK_UN
+    syscall(3, db.wdb_fd, 0, 0, 0, 0, 0)  @! SYS_close
+    db.wdb_fd = 0 - 1
   @end
   return 0
 @end
@@ -413,17 +399,17 @@ import "utso/core/hashmap"
   return 0
 @end
 
-@fn _db_apply_upsert(db: LipiDatabase, key, val)
+@fn _db_apply_upsert(db: LipiDatabase, key, val) -> LipiDatabase
   dict_set(db.index, str(key), str(val))
   return db
 @end
 
-@fn _db_apply_remove(db: LipiDatabase, key)
+@fn _db_apply_remove(db: LipiDatabase, key) -> LipiDatabase
   dict_delete(db.index, str(key))
   return db
 @end
 
-@fn db_insert(db: LipiDatabase, key, val)
+@fn db_insert(db: LipiDatabase, key, val) -> LipiDatabase
   ks = str(key)
   vs = str(val)
   prev_had = dict_has(db.index, ks)
@@ -431,11 +417,11 @@ import "utso/core/hashmap"
   @if prev_had == 1
     prev_val = dict_get(db.index, ks)
   @end
-  entry = { op: "INSERT", key: ks, val: vs, prev_had: prev_had, prev_val: prev_val }
+  entry = WALRecord("INSERT", ks, vs, prev_had, prev_val)
   @if db.in_tx == 1
     db.tx_wal = arr_push(db.tx_wal, entry)
   @else
-    @if db.fd >= 0
+    @if db.wdb_fd >= 0
       _db_wal_write_single(db, 1, ks, vs)
     @else
       db.wal = arr_push(db.wal, entry)
@@ -474,18 +460,18 @@ import "utso/core/hashmap"
   return dict_len(db.index)
 @end
 
-@fn db_delete(db: LipiDatabase, key)
+@fn db_delete(db: LipiDatabase, key) -> LipiDatabase
   ks = str(key)
   prev_had = dict_has(db.index, ks)
   prev_val = ""
   @if prev_had == 1
     prev_val = dict_get(db.index, ks)
   @end
-  entry = { op: "DELETE", key: ks, val: "", prev_had: prev_had, prev_val: prev_val }
+  entry = WALRecord("DELETE", ks, "", prev_had, prev_val)
   @if db.in_tx == 1
     db.tx_wal = arr_push(db.tx_wal, entry)
   @else
-    @if db.fd >= 0
+    @if db.wdb_fd >= 0
       _db_wal_write_single(db, 2, ks, "")
     @else
       db.wal = arr_push(db.wal, entry)
@@ -505,23 +491,23 @@ import "utso/core/hashmap"
   @while i < n
     k = all_keys[i]
     @if (start_key == "" || _db_str_cmp(k, start_key) >= 0) && (end_key == "" || _db_str_cmp(k, end_key) <= 0)
-      res = arr_push(res, { op: "KV", key: k, val: dict_get(db.index, k) })
+      res = arr_push(res, WALRecord("KV", k, dict_get(db.index, k), 0, ""))
     @end
     i = i + 1
   @end
   return res
 @end
 
-@fn db_begin_tx(db: LipiDatabase)
+@fn db_begin_tx(db: LipiDatabase) -> LipiDatabase
   db.in_tx = 1
   db.tx_wal = []
   return db
 @end
 
-@fn db_commit_tx(db: LipiDatabase)
+@fn db_commit_tx(db: LipiDatabase) -> LipiDatabase
   @if db.in_tx == 1
     ntx = arr_len(db.tx_wal)
-    @if db.fd >= 0 && ntx > 0
+    @if db.wdb_fd >= 0 && ntx > 0
       b = buf_new(256)
       i = 0
       @while i < ntx
@@ -536,11 +522,11 @@ import "utso/core/hashmap"
         @end
         i = i + 1
       @end
-      _db_fd_write_all(db.fd, buf_ptr(b), buf_len(b))
+      _db_fd_write_all(db.wdb_fd, buf_ptr(b), buf_len(b))
       buf_free(b)
       db.wal_frames = db.wal_frames + ntx
       @if db.sync_mode == 1
-        syscall(74, db.fd, 0, 0, 0, 0, 0) @! Single atomic SYS_fsync for whole tx
+        syscall(74, db.wdb_fd, 0, 0, 0, 0, 0) @! Single atomic SYS_fsync for whole tx
       @end
     @else
       i = 0
@@ -555,7 +541,7 @@ import "utso/core/hashmap"
   return db
 @end
 
-@fn db_rollback_tx(db: LipiDatabase)
+@fn db_rollback_tx(db: LipiDatabase) -> LipiDatabase
   @if db.in_tx == 1
     db.in_tx = 0
     i = arr_len(db.tx_wal) - 1
@@ -581,8 +567,8 @@ import "utso/core/hashmap"
   return db
 @end
 
-@fn db_flush_wal(db: LipiDatabase)
-  @if db.fd >= 0
+@fn db_flush_wal(db: LipiDatabase) -> LipiDatabase
+  @if db.wdb_fd >= 0
     db_compact(db)
   @else
     db.wal = []
@@ -590,7 +576,7 @@ import "utso/core/hashmap"
   return db
 @end
 
-@fn db_recover_from_wal(name, order, wal_entries)
+@fn db_recover_from_wal(name, order, wal_entries) -> LipiDatabase
   database = db_new(name, order)
   i = 0
   num_items = arr_len(wal_entries)
@@ -772,7 +758,7 @@ import "utso/core/hashmap"
 @end
 
 @fn wal_flush(db: LipiDatabase)
-  @if db.fd >= 0
+  @if db.wdb_fd >= 0
     db_compact(db)
   @else
     db.wal = []

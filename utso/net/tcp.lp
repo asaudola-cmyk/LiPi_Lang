@@ -243,80 +243,103 @@ import "utso/net/dns_client"
 @! 4. Object-Oriented Abstractions: TcpListener & TcpStream
 @! ----------------------------------------------------------------------------
 
-@fn tcp_listener_bind(host, port)
+@struct TcpListener
+  tcpl_fd: i64
+  tcpl_host: string
+  tcpl_port: i64
+  tcpl_error: string
+@end
+
+@struct TcpStream
+  tcp_fd: i64
+  tcp_peer_host: string
+  tcp_peer_port: i64
+  tcp_error: string
+@end
+
+@fn tcp_listener_bind(host, port) -> TcpListener
   fd = tcp_socket_new()
   @if fd < 0
-    return { fd: fd, host: host, port: port, error: "socket_failed" }
+    return TcpListener(fd, host, port, "socket_failed")
   @end
 
   bind_res = tcp_bind(fd, host, port)
   @if bind_res < 0
     tcp_close(fd)
-    return { fd: -1, host: host, port: port, error: "bind_failed" }
+    return TcpListener(-1, host, port, "bind_failed")
   @end
 
   listen_res = tcp_listen(fd, 128)
   @if listen_res < 0
     tcp_close(fd)
-    return { fd: -1, host: host, port: port, error: "listen_failed" }
+    return TcpListener(-1, host, port, "listen_failed")
   @end
 
-  return { fd: fd, host: host, port: port, error: "" }
+  return TcpListener(fd, host, port, "")
 @end
 
-@fn tcp_listener_accept(listener)
-  @if listener.fd < 0
-    return { fd: -1, peer_host: "", peer_port: 0, error: "invalid_listener" }
+@fn tcp_listener_accept(listener: TcpListener) -> TcpStream
+  @if listener.tcpl_fd < 0
+    return TcpStream(-1, "", 0, "invalid_listener")
   @end
 
-  client_fd = tcp_accept(listener.fd)
+  client_fd = tcp_accept(listener.tcpl_fd)
   @if client_fd < 0
-    return { fd: client_fd, peer_host: "", peer_port: 0, error: "accept_failed" }
+    return TcpStream(client_fd, "", 0, "accept_failed")
   @end
 
-  return { fd: client_fd, peer_host: "", peer_port: 0, error: "" }
+  return TcpStream(client_fd, "", 0, "")
 @end
 
-@fn tcp_stream_connect(host, port)
+@fn tcp_listener_close(listener: TcpListener)
+  @if listener.tcpl_fd >= 0
+    res = tcp_close(listener.tcpl_fd)
+    listener.tcpl_fd = -1
+    return res
+  @end
+  return 0
+@end
+
+@fn tcp_stream_connect(host, port) -> TcpStream
   @if host == "" || port <= 0
-    return { fd: -1, peer_host: host, peer_port: port, error: "invalid_endpoint" }
+    return TcpStream(-1, host, port, "invalid_endpoint")
   @end
   resolved_ip = host
   @if parse_ipv4_addr(resolved_ip) < 0
     resolved_ip = dns_resolve_ipv4(host)
     @if resolved_ip == ""
-      return { fd: -1, peer_host: host, peer_port: port, error: "dns_failed" }
+      return TcpStream(-1, host, port, "dns_failed")
     @end
   @end
   fd = tcp_socket_new()
   @if fd < 0
-    return { fd: fd, peer_host: host, peer_port: port, error: "socket_failed" }
+    return TcpStream(fd, host, port, "socket_failed")
   @end
   tcp_set_timeout(fd, 5)
 
   conn_res = tcp_connect(fd, resolved_ip, port)
   @if conn_res < 0
     tcp_close(fd)
-    return { fd: -1, peer_host: host, peer_port: port, error: "connect_failed" }
+    return TcpStream(-1, host, port, "connect_failed")
   @end
 
-  return { fd: fd, peer_host: host, peer_port: port, error: "" }
+  return TcpStream(fd, host, port, "")
 @end
 
-@fn tcp_stream_read(stream, max_len)
-  @if stream.fd < 0 return "" @end
-  return tcp_recv(stream.fd, max_len)
+@fn tcp_stream_read(stream: TcpStream, max_len)
+  @if stream.tcp_fd < 0 return "" @end
+  return tcp_recv(stream.tcp_fd, max_len)
 @end
 
-@fn tcp_stream_write(stream, data)
-  @if stream.fd < 0 return -1 @end
-  return tcp_send(stream.fd, data)
+@fn tcp_stream_write(stream: TcpStream, data)
+  @if stream.tcp_fd < 0 return -1 @end
+  return tcp_send(stream.tcp_fd, data)
 @end
 
-@fn tcp_stream_close(stream)
-  @if stream.fd >= 0
-    res = tcp_close(stream.fd)
-    stream.fd = -1
+@fn tcp_stream_close(stream: TcpStream)
+  @if stream.tcp_fd >= 0
+    res = tcp_close(stream.tcp_fd)
+    stream.tcp_fd = -1
     return res
   @end
   return 0

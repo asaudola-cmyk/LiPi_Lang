@@ -107,6 +107,16 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap"
     return 1
   end
+  // Sovereign Ring-0 Privileged & Hardware MMIO / Port I/O Authority Guard
+  if call_name == "port_in8" or call_name == "port_out8" or call_name == "port_in16" or call_name == "port_out16" or call_name == "port_in32" or call_name == "port_out32" or call_name == "inb" or call_name == "outb" or call_name == "inw" or call_name == "outw" or call_name == "inl" or call_name == "outl"
+    return 1
+  end
+  if call_name == "mmio_r8" or call_name == "mmio_w8" or call_name == "mmio_r16" or call_name == "mmio_w16" or call_name == "mmio_r32" or call_name == "mmio_w32" or call_name == "mmio_r64" or call_name == "mmio_w64" or call_name == "mmio_read8" or call_name == "mmio_write8" or call_name == "mmio_read16" or call_name == "mmio_write16" or call_name == "mmio_read64" or call_name == "mmio_write64"
+    return 1
+  end
+  if call_name == "cpu_cli" or call_name == "cli" or call_name == "cpu_sti" or call_name == "sti" or call_name == "cpu_hlt" or call_name == "hlt" or call_name == "cpu_lgdt" or call_name == "lgdt" or call_name == "cpu_lidt" or call_name == "lidt" or call_name == "cpu_ltr" or call_name == "ltr" or call_name == "cpu_write_cr0" or call_name == "write_cr0" or call_name == "cpu_write_cr3" or call_name == "write_cr3" or call_name == "cpu_write_cr4" or call_name == "write_cr4" or call_name == "cpu_wrmsr" or call_name == "wrmsr" or call_name == "cpu_invlpg" or call_name == "invlpg" or call_name == "cpu_swapgs" or call_name == "swapgs"
+    return 1
+  end
   return 0
 end
 

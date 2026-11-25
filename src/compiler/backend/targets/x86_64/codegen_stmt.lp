@@ -82,6 +82,137 @@ fn x86_synth_compile_statement s toks pos_box
         list_set(pos_box, 0, pos + 1)
         return 0
 
+    // ── 0. Sovereign Silicon & Hardware Layout Directives (@asm, @naked, @interrupt, @packed, @align, @bss, @ring0, @layout) ──
+    if k == TOK_IDENT() and len(txt) >= 2 and mem_byte_read(txt, 0) == 64
+        if txt == "@asm" or txt == "@অ্যাসেম্বলি"
+            return x86_synth_compile_asm_stmt(s, toks, pos_box)
+        elif txt == "@naked"
+            s.synth_pending_fn_naked = 1
+            list_set(pos_box, 0, pos + 1)
+            return 0
+        elif txt == "@interrupt"
+            s.synth_pending_fn_interrupt = 1
+            list_set(pos_box, 0, pos + 1)
+            return 0
+        elif txt == "@packed"
+            s.synth_pending_struct_packed = 1
+            list_set(pos_box, 0, pos + 1)
+            return 0
+        elif txt == "@ring0" or txt == "@silicon"
+            list_set(pos_box, 0, pos + 1)
+            return 0
+        elif txt == "@align"
+            list_set(pos_box, 0, pos + 1)
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            ap = get(pos_box, 0)
+            if ap < toks.len() and (toks[ap].tok_kind == TOK_LPAREN() or toks[ap].tok_text == "(")
+                list_set(pos_box, 0, ap + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                    s.synth_pending_struct_align = toks[get(pos_box, 0)].tok_int_val
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or toks[get(pos_box, 0)].tok_text == ")")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            elif ap < toks.len() and toks[ap].tok_kind == TOK_INT()
+                s.synth_pending_struct_align = toks[ap].tok_int_val
+                list_set(pos_box, 0, ap + 1)
+            end
+            return 0
+        elif txt == "@layout"
+            list_set(pos_box, 0, pos + 1)
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    x86_synth_skip_whitespace_tokens(toks, pos_box)
+                    lp = get(pos_box, 0)
+                    if lp >= toks.len() break end
+                    lt = toks[lp]
+                    if lt.tok_kind == TOK_RPAREN() or lt.tok_text == ")"
+                        list_set(pos_box, 0, lp + 1)
+                        break
+                    elif lt.tok_kind == TOK_COMMA() or lt.tok_text == ","
+                        list_set(pos_box, 0, lp + 1)
+                    elif x86_synth_is_ident_token(lt.tok_kind) == 1
+                        lkey = lt.tok_text
+                        list_set(pos_box, 0, lp + 1)
+                        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=" or toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                            lval = toks[get(pos_box, 0)].tok_int_val
+                            if lkey == "base" or lkey == "base_addr"
+                                s.synth_layout_base = lval
+                            elif lkey == "stack" or lkey == "stack_size"
+                                s.synth_layout_stack = lval
+                            end
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    else
+                        list_set(pos_box, 0, lp + 1)
+                    end
+                end
+            end
+            return 0
+        elif txt == "@bss"
+            // Syntax: `@bss [@align(N)] [static] name: [N]T` or `@align(N) @bss [static] name: StructType`
+            list_set(pos_box, 0, pos + 1)
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            bss_al = s.synth_pending_struct_align
+            s.synth_pending_struct_align = 0
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_text == "@align"
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                        bss_al = toks[get(pos_box, 0)].tok_int_val
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or toks[get(pos_box, 0)].tok_text == ")")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                    bss_al = toks[get(pos_box, 0)].tok_int_val
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+            end
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_text == "static"
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+            end
+            if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                bss_nm = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                bss_type = "[64]u8"
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    bss_type = x86_synth_parse_type_expr(toks, pos_box)
+                end
+                bss_sd = x86_synth_find_struct(s, bss_type)
+                if bss_sd != 0
+                    bsz = bss_sd.sd_total_size
+                    if bsz <= 0 bsz = 64 end
+                    if bss_al < bss_sd.sd_align bss_al = bss_sd.sd_align end
+                    x86_synth_alloc_bss(s, bss_nm, bsz, bss_al, 0, 0, bss_sd.sd_name)
+                else
+                    binfo = x86_synth_type_layout_info(s, bss_type)
+                    bsz = binfo[0]
+                    bal = binfo[1]
+                    bel = binfo[2]
+                    bsgn = binfo[3]
+                    if bss_al > bal bal = bss_al end
+                    x86_synth_alloc_bss(s, bss_nm, bsz, bal, bel, bsgn, "")
+                end
+            end
+            return 0
+        end
+    end
+
     // WHY: Record real source line -> machine-code PC mappings for DWARF v4 .debug_line
     stmt_src_line = t.tok_span.span_start_line
     if stmt_src_line > 0
@@ -150,17 +281,28 @@ fn x86_synth_compile_statement s toks pos_box
             if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF()
                 has_expr = 1
 
+        ret_expr_t = ""
         if has_expr == 1
             x86_synth_compile_expr(s, toks, pos_box)
+            ret_expr_t = s.synth_last_expr_type
             if s.synth_current_fn_idx >= 0 and s.synth_current_fn_idx < s.synth_functions.len()
                 ret_fn_obj = s.synth_functions[s.synth_current_fn_idx]
                 if s.synth_last_struct != "" and (ret_fn_obj.fn_ret_type == "" or ret_fn_obj.fn_ret_type == "int")
                     ret_fn_obj.fn_ret_type = s.synth_last_struct
                 elif ret_fn_obj.fn_ret_type == ""
-                    if s.synth_last_expr_type == "float"
+                    if ret_expr_t == "float"
                         ret_fn_obj.fn_ret_type = "f64"
-                    elif s.synth_last_expr_type == "int" or s.synth_last_expr_type == "str"
-                        ret_fn_obj.fn_ret_type = s.synth_last_expr_type
+                    elif ret_expr_t == "int" or ret_expr_t == "str" or ret_expr_t == "dyn_tagged"
+                        ret_fn_obj.fn_ret_type = ret_expr_t
+                    end
+                elif ret_fn_obj.fn_ret_type == "dyn_tagged" and ret_expr_t != "dyn_tagged"
+                    // Keep (%rax, %rdx) tagged return ABI consistent across all return paths
+                    if ret_expr_t == "float"
+                        x86_synth_emit_bytes(s, [186, 1, 0, 0, 0]) // mov edx, 1
+                    elif ret_expr_t == "str"
+                        x86_synth_emit_bytes(s, [186, 2, 0, 0, 0]) // mov edx, 2
+                    else
+                        x86_synth_emit_bytes(s, [49, 210]) // xor edx, edx
                     end
                 end
             end
@@ -168,6 +310,9 @@ fn x86_synth_compile_statement s toks pos_box
             // Default 0 return
             x86_synth_emit_byte(s, 49)
             x86_synth_emit_byte(s, 192)
+            if s.synth_current_fn_idx >= 0 and s.synth_current_fn_idx < s.synth_functions.len() and s.synth_functions[s.synth_current_fn_idx].fn_ret_type == "dyn_tagged"
+                x86_synth_emit_bytes(s, [49, 210]) // xor edx, edx
+            end
         end
 
         if s.synth_try_frames.len() > 0
@@ -178,13 +323,13 @@ fn x86_synth_compile_statement s toks pos_box
             tf_entry_depth = cur_tframe[3]
             pops_ret = s.synth_try_depth - tf_entry_depth
             if pops_ret > 0
-                x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+                x86_synth_emit_bytes(s, [80, 82]) // push rax; push rdx (16B aligned)
                 ti_ret = 0
                 while ti_ret < pops_ret
                     x86_synth_emit_call_helper(s, "_lipi_exc_pop")
                     ti_ret = ti_ret + 1
                 end
-                x86_synth_emit_bytes(s, [72, 131, 196, 8, 88]) // add rsp, 8; pop rax
+                x86_synth_emit_bytes(s, [90, 88]) // pop rdx; pop rax
             end
             x86_synth_emit_store_var(s, 0, tf_val_off)
             x86_synth_emit_bytes(s, [184, 2, 0, 0, 0]) // mov eax, 2
@@ -197,16 +342,22 @@ fn x86_synth_compile_statement s toks pos_box
         end
 
         if s.synth_try_depth > 0
-            x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+            x86_synth_emit_bytes(s, [80, 82]) // push rax; push rdx (16B aligned)
             ti_ret = 0
             while ti_ret < s.synth_try_depth
                 x86_synth_emit_call_helper(s, "_lipi_exc_pop")
                 ti_ret = ti_ret + 1
             end
-            x86_synth_emit_bytes(s, [72, 131, 196, 8, 88]) // add rsp, 8; pop rax
+            x86_synth_emit_bytes(s, [90, 88]) // pop rdx; pop rax
         end
 
-        x86_synth_emit_defers(s, toks)
+        if ret_expr_t == "dyn_tagged" and (s.synth_defer_starts.len() > 0 or s.synth_has_defer_unwind == 1)
+            x86_synth_emit_bytes(s, [80, 82]) // push rax; push rdx across defer replay
+            x86_synth_emit_defers(s, toks)
+            x86_synth_emit_bytes(s, [90, 88]) // pop rdx; pop rax
+        else
+            x86_synth_emit_defers(s, toks)
+        end
         x86_synth_emit_epilogue(s)
         return 0
 
@@ -484,27 +635,33 @@ fn x86_synth_compile_statement s toks pos_box
                 while si_lv < n_lv - 1
                     if lv_kinds[si_lv] == 0
                         m_fld = lv_fields[si_lv]
-                        m_off = x86_synth_get_field_offset(s, cur_stype, m_fld)
-                        m_ft = x86_synth_get_field_type(s, cur_stype, m_fld)
+                        m_meta = x86_synth_get_field_meta(s, cur_stype, m_fld)
+                        m_off = m_meta[0]
+                        m_sz = m_meta[1]
+                        m_sgn = m_meta[2]
+                        m_el = m_meta[3]
+                        m_ft = m_meta[4]
                         cur_stype = ""
                         cur_el_t = ""
-                        if m_ft != "" and m_ft != "int" and m_ft != "i64" and m_ft != "i32" and m_ft != "u64" and m_ft != "u32" and m_ft != "float" and m_ft != "f64" and m_ft != "f32" and m_ft != "str" and m_ft != "string"
+                        if m_el > 0
+                            cur_el_t = x86_synth_raw_elem_tag(m_el, m_sgn)
+                        elif m_ft != "" and m_ft != "int" and m_ft != "i64" and m_ft != "i32" and m_ft != "i16" and m_ft != "i8" and m_ft != "u64" and m_ft != "u32" and m_ft != "u16" and m_ft != "u8" and m_ft != "float" and m_ft != "f64" and m_ft != "f32" and m_ft != "str" and m_ft != "string"
                             cur_stype = m_ft
                         end
-                        if m_off < 128
-                            x86_synth_emit_bytes(s, [72, 139, 64, m_off]) // mov rax, [rax + m_off]
-                        else
-                            x86_synth_emit_bytes(s, [72, 139, 128])
-                            x86_synth_emit_u32(s, m_off)
-                        end
+                        x86_synth_emit_field_load_rax(s, m_off, m_sz, m_sgn, m_el)
                     else
                         // Index dereference with 16-byte stack alignment around index expression & call
                         x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
                         idx_pb = [lv_starts[si_lv]]
                         x86_synth_compile_expr(s, toks, idx_pb)
                         x86_synth_emit_bytes(s, [72, 137, 198, 72, 131, 196, 8, 95]) // mov rsi, rax; add rsp, 8; pop rdi
-                        x86_synth_emit_call_helper(s, "_lipi_list_get")
-                        if cur_el_t != "" and cur_el_t != "int" and cur_el_t != "float" and cur_el_t != "str"
+                        raw_mi = x86_synth_parse_raw_elem_tag(cur_el_t)
+                        if raw_mi[0] > 0
+                            x86_synth_emit_raw_array_load(s, raw_mi[0], raw_mi[1])
+                        else
+                            x86_synth_emit_call_helper(s, "_lipi_list_get")
+                        end
+                        if cur_el_t != "" and cur_el_t != "int" and cur_el_t != "float" and cur_el_t != "str" and raw_mi[0] == 0
                             cur_stype = cur_el_t
                         else
                             cur_stype = ""
@@ -524,8 +681,10 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_bytes(s, [72, 131, 196, 8, 89]) // add rsp, 8; pop rcx (parent)
                     x86_synth_emit_null_check_rcx(s)
                     lf_name = lv_fields[leaf_i]
-                    lf_off = x86_synth_get_field_offset(s, cur_stype, lf_name)
-                    lf_ft = x86_synth_get_field_type(s, cur_stype, lf_name)
+                    lf_meta = x86_synth_get_field_meta(s, cur_stype, lf_name)
+                    lf_off = lf_meta[0]
+                    lf_sz = lf_meta[1]
+                    lf_ft = lf_meta[4]
                     if lv_is_comp == 1
                         x86_synth_emit_bytes(s, [73, 137, 192]) // mov r8, rax (rhs)
                         if lf_off < 128
@@ -573,24 +732,26 @@ fn x86_synth_compile_statement s toks pos_box
                             x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
                         end
                     end
-                    if lf_off < 128
-                        x86_synth_emit_bytes(s, [72, 137, 65, lf_off])
-                    else
-                        x86_synth_emit_bytes(s, [72, 137, 129])
-                        x86_synth_emit_u32(s, lf_off)
-                    end
+                    x86_synth_emit_field_store_rcx_rax(s, lf_off, lf_sz)
                     s.synth_last_store_end = 0 - 1
                     return 0
                 else
-                    // Final write to list element: <expr>[leaf_idx] op= rhs (e.g. o.inn.arr[1] = 99)
-                    // Stack layout: [rsp+8] = list_ptr, [rsp+0] = leaf_idx (16-byte aligned throughout!)
-                    x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax (list_ptr); sub rsp, 8
+                    // Final write to list OR inline fixed-array element: <expr>[leaf_idx] op= rhs
+                    raw_leaf = x86_synth_parse_raw_elem_tag(cur_el_t)
+                    // Stack layout: [rsp+8] = list/buf ptr, [rsp+0] = leaf_idx (16-byte aligned throughout!)
+                    x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax (list/buf ptr); sub rsp, 8
                     lidx_pb = [lv_starts[leaf_i]]
                     x86_synth_compile_expr(s, toks, lidx_pb)
                     x86_synth_emit_bytes(s, [72, 137, 4, 36]) // mov [rsp], rax (leaf_idx)
                     list_set(pos_box, 0, scan_lp + 1)
                     x86_synth_compile_expr(s, toks, pos_box)
                     lv_rhs_t2 = s.synth_last_expr_type
+                    if raw_leaf[0] > 0 and lv_is_comp == 0
+                        x86_synth_emit_bytes(s, [72, 137, 194, 94, 95]) // mov rdx, rax; pop rsi (idx); pop rdi (buf)
+                        x86_synth_emit_raw_array_store(s, raw_leaf[0])
+                        s.synth_last_store_end = 0 - 1
+                        return 0
+                    end
                     if lv_is_comp == 1
                         x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rhs; sub rsp, 8 -> [rsp+8]=rhs,[rsp+16]=idx,[rsp+24]=list
                         x86_synth_emit_bytes(s, [72, 139, 124, 36, 24, 72, 139, 116, 36, 16]) // mov rdi,[rsp+24]; mov rsi,[rsp+16]
@@ -696,15 +857,20 @@ fn x86_synth_compile_statement s toks pos_box
                 rhs_fld_type = s.synth_last_expr_type
                 x86_synth_emit_byte(s, 80) // push rax
 
-                // Load root obj pointer into %rcx (preserving stack alignment)
+                // Load root obj pointer into %rcx (supports locals, @bss static structs, & mutable globals)
                 lv_obj = x86_synth_find_local_var(s, obj_name)
                 cur_stype = ""
                 if lv_obj != 0 and lv_obj.lv_is_spilled == 0 and lv_obj.lv_reg >= 0
                     x86_synth_emit_mov_reg_reg(s, 1, lv_obj.lv_reg)
                     cur_stype = x86_synth_get_var_type(s, obj_name)
                 else
+                    bss_obj = x86_synth_find_bss(s, obj_name)
                     mg_obj = x86_synth_find_mutable_global(s, obj_name)
-                    if lv_obj == 0 and mg_obj >= 512
+                    if lv_obj == 0 and bss_obj >= 0
+                        x86_synth_emit_bss_addr(s, bss_obj)
+                        x86_synth_emit_bytes(s, [72, 137, 193]) // mov rcx, rax
+                        cur_stype = s.synth_bss_structs[bss_obj]
+                    elif lv_obj == 0 and mg_obj >= 512
                         x86_synth_emit_mutable_global_read(s, mg_obj)
                         x86_synth_emit_bytes(s, [72, 137, 193]) // mov rcx, rax
                         cur_stype = x86_synth_get_mutable_global_struct(s, obj_name)
@@ -743,8 +909,10 @@ fn x86_synth_compile_statement s toks pos_box
 
                 x86_synth_emit_null_check_rcx(s)
                 leaf_field = chain_fields[chain_fields.len() - 1]
-                f_off = x86_synth_get_field_offset(s, cur_stype, leaf_field)
-                leaf_ftype = x86_synth_get_field_type(s, cur_stype, leaf_field)
+                lf_meta2 = x86_synth_get_field_meta(s, cur_stype, leaf_field)
+                f_off = lf_meta2[0]
+                f_sz2 = lf_meta2[1]
+                leaf_ftype = lf_meta2[4]
                 if is_fld_comp == 0
                     // Pop RHS value into %rax
                     x86_synth_emit_byte(s, 88)
@@ -801,18 +969,8 @@ fn x86_synth_compile_statement s toks pos_box
                     end
                 end
 
-                // Store value to leaf field: mov [rcx + f_off], rax
-                if f_off < 128
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 137)
-                    x86_synth_emit_byte(s, 65)
-                    x86_synth_emit_byte(s, f_off)
-                else
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 137)
-                    x86_synth_emit_byte(s, 129)
-                    x86_synth_emit_u32(s, f_off)
-                end
+                // Store value to leaf field with exact 1/2/4/8B hardware width
+                x86_synth_emit_field_store_rcx_rax(s, f_off, f_sz2)
 
                 return 0
 
@@ -881,6 +1039,16 @@ fn x86_synth_compile_statement s toks pos_box
                 end
                 x86_synth_compile_expr(s, toks, pos_box) // rax = val
                 rhs_arr_type = s.synth_last_expr_type
+                // Direct zero-heap store for static @bss `[N]T` buffers!
+                bss_arr_idx = x86_synth_find_bss(s, arr_name)
+                if bss_arr_idx >= 0 and s.synth_bss_elem_sizes[bss_arr_idx] > 0 and is_arr_comp == 0
+                    x86_synth_emit_bytes(s, [72, 137, 194, 94]) // mov rdx, rax (val); pop rsi (idx)
+                    x86_synth_emit_bss_addr(s, bss_arr_idx)     // rax = bss buffer base
+                    x86_synth_emit_bytes(s, [72, 137, 199])     // mov rdi, rax
+                    x86_synth_emit_raw_array_store(s, s.synth_bss_elem_sizes[bss_arr_idx])
+                    s.synth_last_store_end = 0 - 1
+                    return 0
+                end
                 if is_arr_comp == 1
                     x86_synth_emit_byte(s, 80) // push rhs (stack: [rsp]=rhs, [rsp+8]=idx)
                     if rhs_arr_type == "dyn_tagged"
@@ -1319,6 +1487,7 @@ fn x86_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, eq_pos + 1)
                 x86_synth_compile_expr(s, toks, pos_box)
                 off = x86_synth_bind_reg_var(s, var_name, is_reg)
+                lv_let_post = x86_synth_find_local_var(s, var_name)
                 if assigned_type != ""
                     x86_synth_set_var_type(s, var_name, assigned_type)
                     if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
@@ -1331,7 +1500,13 @@ fn x86_synth_compile_statement s toks pos_box
                     if s.synth_in_function == 0
                         x86_synth_set_global_const(s, var_name, int_lit_val)
                     end
-                    x86_synth_set_prim_type(s, var_name, "int")
+                    if assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
+                        x86_synth_set_prim_type(s, var_name, "dyn_tagged")
+                    else
+                        x86_synth_set_prim_type(s, var_name, "int")
+                    end
+                elif assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
+                    x86_synth_set_prim_type(s, var_name, "dyn_tagged")
                 elif s.synth_last_expr_type == "int"
                     x86_synth_set_prim_type(s, var_name, "int")
                 elif s.synth_last_expr_type == "float"
@@ -1602,8 +1777,12 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_compile_expr(s, toks, pos_box)
                     x86_synth_emit_bytes(s, [72, 137, 198])
                     x86_synth_emit_load_var(s, 7, scrut_off)
-                    x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
-                    x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
+                    if s.synth_freestanding == 1
+                        x86_synth_emit_bytes(s, [72, 57, 247, 15, 133]) // cmp rdi, rsi; jne next_arm
+                    else
+                        x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
+                        x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
+                    end
                     miss_patch = s.synth_code.len()
                     x86_synth_emit_u32(s, 0)
                 end
@@ -1854,7 +2033,7 @@ fn x86_synth_compile_statement s toks pos_box
                     //   2) `x = x + (pure_int_expr)` -> evaluate `(expr)` into %rax, then single `add reg, rax`
                     if is_mg_target == 0 and assigned_type == "" and next_pos + 3 < toks.len()
                         lv_fast = x86_synth_find_local_var(s, var_name)
-                        if lv_fast != 0 and lv_fast.lv_is_spilled == 0 and lv_fast.lv_reg >= 0 and lv_fast.lv_prim_type == "int"
+                        if lv_fast != 0 and lv_fast.lv_is_spilled == 0 and lv_fast.lv_reg >= 0 and lv_fast.lv_prim_type == "int" and lv_fast.lv_tag_off == 0
                             ft1 = toks[next_pos + 1]
                             ft2 = toks[next_pos + 2]
                             ft3 = toks[next_pos + 3]
@@ -1923,7 +2102,7 @@ fn x86_synth_compile_statement s toks pos_box
                                                 break
                                             end
                                             lv_inner = x86_synth_find_local_var(s, stk.tok_text)
-                                            if lv_inner != 0 and (lv_inner.lv_prim_type == "str" or lv_inner.lv_prim_type == "float")
+                                            if lv_inner != 0 and (lv_inner.lv_prim_type == "str" or lv_inner.lv_prim_type == "float" or lv_inner.lv_prim_type == "dyn_tagged" or lv_inner.lv_tag_off > 0)
                                                 sp_pure = 0
                                                 break
                                             end
@@ -1983,6 +2162,7 @@ fn x86_synth_compile_statement s toks pos_box
                         return 0
                     end
                     off = x86_synth_bind_var(s, var_name)
+                    lv_asg_post = x86_synth_find_local_var(s, var_name)
                     if assigned_type != ""
                         x86_synth_set_var_type(s, var_name, assigned_type)
                         if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
@@ -1995,7 +2175,13 @@ fn x86_synth_compile_statement s toks pos_box
                         if s.synth_in_function == 0
                             x86_synth_set_global_const(s, var_name, int_lit_val)
                         end
-                        x86_synth_set_prim_type(s, var_name, "int")
+                        if assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
+                            x86_synth_set_prim_type(s, var_name, "dyn_tagged")
+                        else
+                            x86_synth_set_prim_type(s, var_name, "int")
+                        end
+                    elif assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
+                        x86_synth_set_prim_type(s, var_name, "dyn_tagged")
                     elif s.synth_last_expr_type == "int"
                         x86_synth_set_prim_type(s, var_name, "int")
                     elif s.synth_last_expr_type == "float"
@@ -2010,15 +2196,90 @@ fn x86_synth_compile_statement s toks pos_box
                 else
                     // Compound assignment: target += expr, target -= expr, etc.
                     list_set(pos_box, 0, next_pos + 1) // Consume ident and op=
-                    // Evaluate RHS expression into %rax
+                    // Evaluate RHS expression into %rax (and %rdx = rtag if dyn_tagged)
                     x86_synth_compile_expr(s, toks, pos_box)
                     rhs_comp_type = s.synth_last_expr_type
+                    lv_tgt = x86_synth_find_local_var(s, var_name)
+                    pt_pre = ""
+                    if is_mg_target == 0
+                        pt_pre = x86_synth_get_prim_type(s, var_name)
+                    end
+                    // Runtime-tagged compound assignment fast path via _lipi_binop_tagged
+                    if s.synth_freestanding == 0 and is_mg_target == 0 and (pt_pre == "dyn_tagged" or rhs_comp_type == "dyn_tagged" or (lv_tgt != 0 and lv_tgt.lv_tag_off > 0))
+                        tag_op = 0
+                        if comp_op == TOK_MINUS()
+                            tag_op = 1
+                        elif comp_op == TOK_STAR()
+                            tag_op = 2
+                        elif comp_op == TOK_SLASH()
+                            tag_op = 3
+                        elif comp_op == TOK_PERCENT()
+                            tag_op = 4
+                        end
+                        // %rsi = rhs, %rcx = rtag (preserve %rdx before loading ltag!)
+                        x86_synth_emit_bytes(s, [72, 137, 198]) // mov rsi, rax
+                        if rhs_comp_type == "dyn_tagged"
+                            x86_synth_emit_bytes(s, [72, 137, 209]) // mov rcx, rdx
+                        elif rhs_comp_type == "float"
+                            x86_synth_emit_bytes(s, [185, 1, 0, 0, 0]) // mov ecx, 1
+                        elif rhs_comp_type == "str"
+                            x86_synth_emit_bytes(s, [185, 2, 0, 0, 0]) // mov ecx, 2
+                        else
+                            x86_synth_emit_bytes(s, [49, 201]) // xor ecx, ecx
+                        end
+                        // %rdi = lhs (without clobbering %rsi or %rcx)
+                        off = 0
+                        if lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                            x86_synth_emit_mov_reg_reg(s, 7, lv_tgt.lv_reg)
+                            off = lv_tgt.lv_offset
+                        else
+                            off = x86_synth_alloc_var(s, var_name)
+                            lv_tgt = x86_synth_find_local_var(s, var_name)
+                            x86_synth_emit_load_var(s, 7, off)
+                            if lv_tgt != 0 and lv_tgt.lv_is_boxed == 1
+                                x86_synth_emit_bytes(s, [72, 139, 63]) // mov rdi, [rdi]
+                            end
+                        end
+                        // %rdx = ltag
+                        if lv_tgt != 0 and lv_tgt.lv_tag_off > 0
+                            x86_synth_emit_load_var(s, 2, lv_tgt.lv_tag_off) // mov rdx, [rbp - lv_tag_off]
+                        elif pt_pre == "float"
+                            x86_synth_emit_bytes(s, [186, 1, 0, 0, 0]) // mov edx, 1
+                        elif pt_pre == "str"
+                            x86_synth_emit_bytes(s, [186, 2, 0, 0, 0]) // mov edx, 2
+                        else
+                            x86_synth_emit_bytes(s, [49, 210]) // xor edx, edx
+                        end
+                        // %r8d = tag_op; call _lipi_binop_tagged -> %rax = res, %rdx = res_tag
+                        x86_synth_emit_bytes(s, [65, 184])
+                        x86_synth_emit_u32(s, tag_op)
+                        x86_synth_emit_call_helper(s, "_lipi_binop_tagged")
+                        if lv_tgt != 0
+                            if lv_tgt.lv_tag_off == 0
+                                lv_tgt.lv_tag_off = s.synth_stack_offset
+                                s.synth_stack_offset = s.synth_stack_offset + 8
+                                push(s.synth_fn_tag_offs, lv_tgt.lv_tag_off)
+                            end
+                            x86_synth_emit_store_var(s, 2, lv_tgt.lv_tag_off) // mov [rbp - lv_tag_off], rdx
+                        end
+                        x86_synth_set_prim_type(s, var_name, "dyn_tagged")
+                        if lv_tgt != 0 and lv_tgt.lv_is_boxed == 1
+                            x86_synth_emit_load_var(s, 2, off) // mov rdx, [rbp - off] (cell ptr)
+                            x86_synth_emit_bytes(s, [72, 137, 2]) // mov [rdx], rax
+                            s.synth_last_store_end = 0 - 1
+                        elif lv_tgt != 0 and lv_tgt.lv_is_spilled == 0 and lv_tgt.lv_reg >= 0
+                            x86_synth_emit_mov_reg_reg(s, lv_tgt.lv_reg, 0)
+                            x86_synth_emit_store_var(s, 0, off)
+                        else
+                            x86_synth_emit_store_var(s, 0, off)
+                        end
+                        return 0
+                    end
                     // mov rcx, rax (save RHS in rcx)
                     x86_synth_emit_byte(s, 72)
                     x86_synth_emit_byte(s, 137)
                     x86_synth_emit_byte(s, 193)
                     // Load current value of target var into %rax
-                    lv_tgt = x86_synth_find_local_var(s, var_name)
                     off = 0
                     pt = ""
                     if is_mg_target == 1
@@ -2061,7 +2322,7 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
                         res_comp_prim = "float"
                     elif comp_op == TOK_PLUS()
-                        if (pt == "int" or rhs_comp_type == "int") and pt != "str" and rhs_comp_type != "str"
+                        if s.synth_freestanding == 1 or ((pt == "int" or rhs_comp_type == "int") and pt != "str" and rhs_comp_type != "str")
                             // Native hardware add rax, rcx (0x48 0x01 0xC8) - 1 cycle silicon execution!
                             x86_synth_emit_byte(s, 72)
                             x86_synth_emit_byte(s, 1)

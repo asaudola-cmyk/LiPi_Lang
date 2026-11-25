@@ -213,15 +213,15 @@ import "aati/lipi_swarm/serializer"
 @! 4. UDP Beacon Broadcasting & Polling
 @! ----------------------------------------------------------------------------
 
-@fn discovery_broadcast_beacon(udp_sock, info, bcast_host, discovery_port)
-  @if udp_sock.fd < 0 return -1 @end
+@fn discovery_broadcast_beacon(udp_sock: UdpSocket, info, bcast_host, discovery_port)
+  @if udp_sock.udp_fd < 0 return -1 @end
   payload = serialize_node_info(info)
-  return protocol_send_udp(udp_sock.fd, bcast_host, discovery_port, MSG_BEACON(), payload)
+  return protocol_send_udp(udp_sock.udp_fd, bcast_host, discovery_port, MSG_BEACON(), payload)
 @end
 
-@fn discovery_poll_beacons(udp_sock, table, local_node_id)
-  @if udp_sock.fd < 0 return 0 @end
-  res = protocol_recv_udp_nonblocking(udp_sock.fd)
+@fn discovery_poll_beacons(udp_sock: UdpSocket, table, local_node_id)
+  @if udp_sock.udp_fd < 0 return 0 @end
+  res = protocol_recv_udp_nonblocking(udp_sock.udp_fd)
   @if res.packet.valid == 1 && res.packet.msg_type == MSG_BEACON()
     peer_info = deserialize_node_info(res.packet.payload)
     @if peer_info.node_id != "" && peer_info.node_id != local_node_id
@@ -243,14 +243,14 @@ import "aati/lipi_swarm/serializer"
 
 @fn discovery_gossip_exchange(table, local_info, seed_host, seed_port)
   stream = tcp_stream_connect(seed_host, seed_port)
-  @if stream.fd < 0 return -1 @end
+  @if stream.tcp_fd < 0 return -1 @end
 
   @! Send MSG_GOSSIP_REQ with our local peer table
   local_table_str = serialize_peer_table(table)
-  protocol_send_tcp(stream.fd, MSG_GOSSIP_REQ(), local_table_str)
+  protocol_send_tcp(stream.tcp_fd, MSG_GOSSIP_REQ(), local_table_str)
 
   @! Receive MSG_GOSSIP_RESP with remote peer table
-  resp_pkt = protocol_recv_tcp(stream.fd)
+  resp_pkt = protocol_recv_tcp(stream.tcp_fd)
   tcp_stream_close(stream)
 
   @if resp_pkt.valid == 1 && resp_pkt.msg_type == MSG_GOSSIP_RESP()

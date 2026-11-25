@@ -95,10 +95,10 @@ import "aati/lipidb/wal"
   return tls_append_bytes(hs, body)
 @end
 
-@fn audit_tls_serve_once(listener, tamper_fin)
+@fn audit_tls_serve_once(listener: TcpListener, tamper_fin)
   stream = tcp_listener_accept(listener)
-  @if stream.fd < 0 return 1 @end
-  rec = _http_tls_read_record(stream.fd)
+  @if stream.tcp_fd < 0 return 1 @end
+  rec = _http_tls_read_record(stream.tcp_fd)
   @if rec.tls_rec_ok != 1 tcp_stream_close(stream) return 1 @end
   ch_hs = rec.tls_rec_body
   sid_len = ch_hs[38] & 255
@@ -125,7 +125,7 @@ import "aati/lipidb/wal"
   sh_hs = build_audit_server_hello(s_priv)
   sh_len = sh_hs.len()
   sh_rec = tls_append_bytes([22, 3, 3, (sh_len / 256) & 255, sh_len & 255], sh_hs)
-  _http_tls_write_exact(stream.fd, sh_rec)
+  _http_tls_write_exact(stream.tcp_fd, sh_rec)
 
   shared = x25519_shared_secret(s_priv, c_pub)
   hs_transcript = tls_append_bytes(tls_append_bytes([], ch_hs), sh_hs)
@@ -181,7 +181,7 @@ import "aati/lipidb/wal"
 
   flight = tls_append_bytes(tls_append_bytes(tls_append_bytes(ee, cert_msg), cv_msg), s_fin)
   flight_rec = _http_tls_wrap_aead_record(hs_keys.server_write_key, hs_keys.server_write_iv, 0, 22, flight)
-  _http_tls_write_exact(stream.fd, flight_rec)
+  _http_tls_write_exact(stream.tcp_fd, flight_rec)
 
   @if tamper_fin == 1
     tcp_stream_close(stream)
@@ -199,16 +199,16 @@ import "aati/lipidb/wal"
   c_app_key = tls13_hkdf_expand_label(c_app_traffic, "key", [], 16)
   c_app_iv  = tls13_hkdf_expand_label(c_app_traffic, "iv", [], 12)
 
-  cfin_rec = _http_tls_read_record(stream.fd)
+  cfin_rec = _http_tls_read_record(stream.tcp_fd)
   @if cfin_rec.tls_rec_ok != 1 tcp_stream_close(stream) return 1 @end
-  creq_rec = _http_tls_read_record(stream.fd)
+  creq_rec = _http_tls_read_record(stream.tcp_fd)
   @if creq_rec.tls_rec_ok != 1 tcp_stream_close(stream) return 1 @end
   dec_req = _http_tls_unwrap_aead_record(c_app_key, c_app_iv, 0, creq_rec.tls_rec_hdr, creq_rec.tls_rec_body)
   @if dec_req.tls_pt_ok != 1 tcp_stream_close(stream) return 1 @end
 
   http_resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 14\r\nConnection: close\r\n\r\nTLS13_AUDIT_OK"
   resp_rec = _http_tls_wrap_aead_record(s_app_key, s_app_iv, 0, 23, tls_string_to_bytes(http_resp))
-  _http_tls_write_exact(stream.fd, resp_rec)
+  _http_tls_write_exact(stream.tcp_fd, resp_rec)
   tcp_stream_close(stream)
   return 0
 @end
@@ -278,7 +278,7 @@ import "aati/lipidb/wal"
   // 4. Live Loopback HTTPS TLS 1.3 Client Roundtrip + ServerFinished Tamper Rejection
   port = 18449
   listener = tcp_listener_bind("127.0.0.1", port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     say "FAIL: loopback bind failed"
     return 1
   @end
@@ -300,7 +300,7 @@ import "aati/lipidb/wal"
   syscall(61, p1, st, 0, 0, 0, 0)
   @if resp.status_code != 200 || resp.body != "TLS13_AUDIT_OK"
     tls13_clear_custom_trust_roots()
-    tcp_close(listener.fd)
+    tcp_close(listener.tcpl_fd)
     free(st, 8)
     say "FAIL: HTTPS TLS 1.3 loopback roundtrip failed"
     return 1
@@ -313,7 +313,7 @@ import "aati/lipidb/wal"
   bad_resp = http_get("https://localhost:18449/audit")
   syscall(61, p2, st, 0, 0, 0, 0)
   tls13_clear_custom_trust_roots()
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   free(st, 8)
   @if bad_resp.status_code != 0
     say "FAIL: tampered TLS 1.3 ServerFinished was accepted"

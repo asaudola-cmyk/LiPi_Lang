@@ -36,7 +36,16 @@
 @end
 
 @fn pop(arr)
-  @! WHY: Returns a shallow copy excluding the final item using native Lipi list operations.
+  @! WHY: O(1) in-place mutation popping the final element via native runtime _lipi_list_pop
+  @! and returning the mutated list reference (preserves both `pop(arr)` and `arr = pop(arr)`).
+  @if len(arr) > 0
+    _lipi_list_pop(arr)
+  @end
+  return arr
+@end
+
+@fn list_drop_last(arr)
+  @! WHY: Pure non-mutating copy returning a new list excluding the final item.
   n = len(arr)
   result = []
   i = 0
@@ -45,6 +54,11 @@
     i = i + 1
   @end
   return result
+@end
+
+@fn pop_value(arr)
+  @! WHY: O(1) in-place pop returning the removed element itself.
+  return _lipi_list_pop(arr)
 @end
 
 @fn list_map(arr, f)

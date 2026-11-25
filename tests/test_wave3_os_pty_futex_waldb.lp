@@ -229,9 +229,9 @@ fn main
     db2 = db_open(db_path)
     w3_assert(db2.recovered_truncated == 19 && db_count(db2) == 182, "WAL torn-tail healing")
     w3_assert(str_eq(db_get(db2, "tx_key"), "committed_val") == 1 && db_has(db2, "key_5") == 0, "WAL replay")
-    sz_before = syscall(8, db2.fd, 0, 2, 0, 0, 0)
+    sz_before = syscall(8, db2.wdb_fd, 0, 2, 0, 0, 0)
     compacted_n = db_compact(db2)
-    sz_after = syscall(8, db2.fd, 0, 2, 0, 0, 0)
+    sz_after = syscall(8, db2.wdb_fd, 0, 2, 0, 0, 0)
     w3_assert(compacted_n == 182 && sz_after < sz_before, "db_compact")
     db_close(db2)
 

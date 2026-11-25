@@ -10,11 +10,73 @@ fn x86_synth_emit__lipi_file_exists s
     x86_synth_emit_bytes(s, [85, 72, 137, 229, 49, 246, 184, 21, 0, 0, 0, 15, 5, 133, 192, 15, 148, 192, 15, 182, 192, 93, 195])
     return off
 
+fn x86_synth_emit__lipi_file_write_mem s
+    // WHY: Zero-copy, NUL-safe binary file writer with full partial-write & EINTR (-4) retry loop.
+    // Signature: file_write_mem(path=%rdi, buf_ptr=%rsi, byte_len=%rdx) -> bytes_written (or -1 on error).
+    // Ideal for writing multi-MB ISO/ELF/Kernel binary images directly from raw buffers without 8x list boxing.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_file_write_mem", off)
+    x86_synth_register_helper_fn(s, "file_write_mem", off)
+    x86_synth_emit_bytes(s, [
+        85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8,
+        73, 137, 252, 73, 137, 245, 73, 137, 214,
+        76, 137, 231, 190, 65, 2, 0, 0, 186, 164, 1, 0, 0, 184, 2, 0, 0, 0, 15, 5,
+        72, 133, 192, 120, 64,
+        73, 137, 196, 77, 49, 255,
+        77, 57, 247, 115, 38,
+        76, 137, 231, 76, 137, 238, 76, 1, 254, 76, 137, 242, 76, 41, 250,
+        184, 1, 0, 0, 0, 15, 5,
+        72, 131, 248, 252, 116, 223,
+        72, 133, 192, 126, 5,
+        73, 1, 199, 235, 213,
+        76, 137, 231, 184, 3, 0, 0, 0, 15, 5,
+        76, 137, 248, 235, 7,
+        72, 199, 192, 255, 255, 255, 255,
+        72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195
+    ])
+    return off
+
+fn x86_synth_emit__lipi_file_append_mem s
+    // WHY: Zero-copy, NUL-safe binary file appender (O_WRONLY|O_CREAT|O_APPEND=1089) with partial-write/EINTR loop.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_file_append_mem", off)
+    x86_synth_register_helper_fn(s, "file_append_mem", off)
+    x86_synth_emit_bytes(s, [
+        85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8,
+        73, 137, 252, 73, 137, 245, 73, 137, 214,
+        76, 137, 231, 190, 65, 4, 0, 0, 186, 164, 1, 0, 0, 184, 2, 0, 0, 0, 15, 5,
+        72, 133, 192, 120, 64,
+        73, 137, 196, 77, 49, 255,
+        77, 57, 247, 115, 38,
+        76, 137, 231, 76, 137, 238, 76, 1, 254, 76, 137, 242, 76, 41, 250,
+        184, 1, 0, 0, 0, 15, 5,
+        72, 131, 248, 252, 116, 223,
+        72, 133, 192, 126, 5,
+        73, 1, 199, 235, 213,
+        76, 137, 231, 184, 3, 0, 0, 0, 15, 5,
+        76, 137, 248, 235, 7,
+        72, 199, 192, 255, 255, 255, 255,
+        72, 131, 196, 8, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195
+    ])
+    return off
+
 fn x86_synth_emit__lipi_file_write s
-    // WHY: Silicon-direct string file writer via SYS_open (2), SYS_write (1), SYS_close (3)
+    // WHY: Silicon-direct NUL-safe string file writer delegating to _lipi_file_write_mem
+    // with full partial-write + EINTR retry loop (returns bytes written, or 0 on error).
+    x86_synth_emit__lipi_file_write_mem(s)
+    x86_synth_emit__lipi_file_append_mem(s)
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_file_write", off)
-    x86_synth_emit_bytes(s, [85, 72, 137, 229, 65, 84, 65, 85, 65, 86, 73, 137, 252, 73, 137, 245, 77, 49, 246, 77, 133, 237, 116, 30, 65, 139, 69, 252, 61, 48, 82, 84, 83, 117, 6, 69, 139, 117, 248, 235, 13, 67, 128, 124, 53, 0, 0, 116, 5, 73, 255, 198, 235, 243, 76, 137, 231, 190, 65, 2, 0, 0, 186, 237, 1, 0, 0, 184, 2, 0, 0, 0, 15, 5, 72, 133, 192, 120, 39, 73, 137, 196, 77, 133, 246, 116, 16, 76, 137, 231, 76, 137, 238, 76, 137, 242, 184, 1, 0, 0, 0, 15, 5, 76, 137, 231, 184, 3, 0, 0, 0, 15, 5, 76, 137, 240, 235, 2, 49, 192, 65, 94, 65, 93, 65, 92, 93, 195])
+    // Compute rdx = byte_len (STR0 header [rsi-8] if [rsi-4]=='STR0', else C-strlen), then call _lipi_file_write_mem(rdi, rsi, rdx)
+    x86_synth_emit_bytes(s, [
+        85, 72, 137, 229, 49, 210, 72, 133, 246, 116, 26,
+        139, 70, 252, 61, 48, 82, 84, 83, 117, 5,
+        139, 86, 248, 235, 11,
+        128, 60, 22, 0, 116, 5, 72, 255, 194, 235, 245
+    ])
+    x86_synth_emit_call_helper(s, "_lipi_file_write_mem")
+    // test rax, rax; jns +2; xor eax, eax; pop rbp; ret
+    x86_synth_emit_bytes(s, [72, 133, 192, 121, 2, 49, 192, 93, 195])
     return off
 
 fn x86_synth_emit__lipi_file_read s
@@ -59,8 +121,16 @@ fn x86_synth_emit__lipi_file_write_bytes s
     x86_synth_emit_bytes(s, [73, 137, 199, 73, 139, 85, 16, 72, 49, 201])
     // .loop: mov rax, [rdx + rcx*8]; mov [r15 + rcx], al; inc rcx; cmp rcx, rbx; jb .loop
     x86_synth_emit_bytes(s, [72, 139, 4, 202, 65, 136, 4, 15, 72, 255, 193, 72, 57, 217, 114, 240])
-    // SYS_write(fd, r15, rbx)
-    x86_synth_emit_bytes(s, [76, 137, 247, 76, 137, 254, 72, 137, 218, 72, 199, 192, 1, 0, 0, 0, 15, 5])
+    // Full partial-write & EINTR (-4) retry loop: SYS_write(r14=fd, r15 + r12, rbx - r12)
+    x86_synth_emit_bytes(s, [
+        77, 49, 228,
+        73, 57, 220, 115, 38,
+        76, 137, 247, 76, 137, 254, 76, 1, 230, 72, 137, 218, 76, 41, 226,
+        184, 1, 0, 0, 0, 15, 5,
+        72, 131, 248, 252, 116, 223,
+        72, 133, 192, 126, 5,
+        73, 1, 196, 235, 213
+    ])
     // SYS_close(fd)
     x86_synth_emit_bytes(s, [76, 137, 247, 72, 199, 192, 3, 0, 0, 0, 15, 5])
     // xor eax, eax (return 0); epilogue & ret

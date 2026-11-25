@@ -697,8 +697,12 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_compile_expr(s, toks, pos_box)
                     x86_synth_emit_bytes(s, [72, 137, 198]) // mov rsi, rax
                     x86_synth_emit_load_var(s, 7, me_scrut_off)
-                    x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
-                    x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
+                    if s.synth_freestanding == 1
+                        x86_synth_emit_bytes(s, [72, 57, 247, 15, 133]) // cmp rdi, rsi; jne next_arm
+                    else
+                        x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
+                        x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
+                    end
                     me_miss = s.synth_code.len()
                     x86_synth_emit_u32(s, 0)
                 end
@@ -1210,6 +1214,81 @@ fn x86_synth_expr_primary s toks pos_box
                 x86_synth_expr_postfix(s, toks, pos_box)
                 return 0
             end
+            // Compile-time sizeof(Type | Struct | @bss | [N]T) — exact byte size, 0 runtime cost!
+            if enum_qual == "" and (var_name == "sizeof" or var_name == "size_of" or var_name == "সাইজ_অফ") and x86_synth_find_local_var(s, var_name) == 0
+                save_sz_p = get(pos_box, 0)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                t_sz_str = x86_synth_parse_type_expr(toks, pos_box)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                ct_sz_end = get(pos_box, 0)
+                if t_sz_str != "" and ct_sz_end < toks.len() and (toks[ct_sz_end].tok_kind == TOK_RPAREN() or (toks[ct_sz_end].tok_kind != TOK_STR() and toks[ct_sz_end].tok_text == ")"))
+                    exact_sz = 0 - 1
+                    sd_sz = x86_synth_find_struct(s, t_sz_str)
+                    if sd_sz != 0
+                        exact_sz = sd_sz.sd_total_size
+                    elif t_sz_str == "u8" or t_sz_str == "i8" or t_sz_str == "byte"
+                        exact_sz = 1
+                    elif t_sz_str == "u16" or t_sz_str == "i16"
+                        exact_sz = 2
+                    elif t_sz_str == "u32" or t_sz_str == "i32" or t_sz_str == "f32"
+                        exact_sz = 4
+                    elif t_sz_str == "u64" or t_sz_str == "i64" or t_sz_str == "int" or t_sz_str == "f64" or t_sz_str == "float" or t_sz_str == "ptr" or t_sz_str == "bool" or t_sz_str == "str" or t_sz_str == "string"
+                        exact_sz = 8
+                    elif len(t_sz_str) >= 4 and mem_byte_read(t_sz_str, 0) == 91
+                        li_sz = x86_synth_type_layout_info(s, t_sz_str)
+                        exact_sz = li_sz[0]
+                    else
+                        bi_sz = x86_synth_find_bss(s, t_sz_str)
+                        if bi_sz >= 0
+                            exact_sz = s.synth_bss_sizes[bi_sz]
+                        else
+                            vt_sz = x86_synth_get_var_type(s, t_sz_str)
+                            if vt_sz != ""
+                                sd_vsz = x86_synth_find_struct(s, vt_sz)
+                                if sd_vsz != 0
+                                    exact_sz = sd_vsz.sd_total_size
+                                end
+                            end
+                        end
+                    end
+                    if exact_sz >= 0
+                        list_set(pos_box, 0, ct_sz_end + 1) // Consume ')'
+                        x86_synth_emit_mov_rax_imm64(s, exact_sz)
+                        s.synth_last_expr_type = "int"
+                        s.synth_last_struct = ""
+                        s.synth_last_elem_type = ""
+                        x86_synth_expr_postfix(s, toks, pos_box)
+                        return 0
+                    end
+                end
+                list_set(pos_box, 0, save_sz_p)
+            end
+            // Compile-time offsetof(StructName, field_name) — exact hardware byte offset!
+            if enum_qual == "" and (var_name == "offsetof" or var_name == "offset_of" or var_name == "অফসেট_অফ") and x86_synth_find_local_var(s, var_name) == 0
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                of_st = x86_synth_parse_type_expr(toks, pos_box)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COMMA() or toks[get(pos_box, 0)].tok_text == ",")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                of_fld = ""
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STR() or x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1)
+                    of_fld = toks[get(pos_box, 0)].tok_text
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or toks[get(pos_box, 0)].tok_text == ")")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                exact_off = x86_synth_get_field_offset(s, of_st, of_fld)
+                x86_synth_emit_mov_rax_imm64(s, exact_off)
+                s.synth_last_expr_type = "int"
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+                x86_synth_expr_postfix(s, toks, pos_box)
+                return 0
+            end
             // Parse arguments into caller registers (%rdi, %rsi, %rdx, %rcx, %r8, %r9)
             // WHY: Multi-line argument lists (e.g. error_code_new(\n "E0001",\n ...)) contain
             // TOK_NEWLINE() tokens that must be skipped so they are not evaluated as spurious 0 arguments.
@@ -1235,8 +1314,12 @@ fn x86_synth_expr_primary s toks pos_box
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ")"))
                 list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume ')'
 
-            // Intrinsic 1: syscall
+            // Intrinsic 1: syscall (blocked at compile time in --freestanding / bare-metal mode)
             if var_name == "syscall" or var_name == "সিসকল" or var_name == "sys_syscall"
+                if s.synth_freestanding == 1
+                    say "❌ [Bare-Metal Purity Gate]: Linux 'syscall' instruction is forbidden in --freestanding / bare-metal mode! Use port_in*/port_out*/mmio_*/cpu_* or @asm instead."
+                    exit(1)
+                end
                 if arg_count >= 7
                     x86_synth_emit_byte(s, 65)
                     x86_synth_emit_byte(s, 89) // pop r9
@@ -1361,6 +1444,27 @@ fn x86_synth_expr_primary s toks pos_box
                 else
                     x86_synth_emit_byte(s, 49) // xor eax, eax
                     x86_synth_emit_byte(s, 192)
+                s.synth_last_expr_type = "int"
+            // ── Intrinsic 6b: Single-Instruction Volatile Hardware MMIO (16/32/64-bit) ──
+            // WHY: Lowers sys_peek16/32/64 & sys_poke16/32/64 inline to a single hardware bus
+            // transaction (eliminating utso/os/syscalls.lp byte-loop tearing on PCIe/APIC/VirtIO).
+            elif arg_count == 1 and (var_name == "sys_peek16" or var_name == "mmio_r16" or var_name == "mmio_read16" or var_name == "mem_u16_read")
+                x86_synth_emit_bytes(s, [95, 15, 183, 7]) // pop rdi; movzx eax, word ptr [rdi]
+                s.synth_last_expr_type = "int"
+            elif arg_count == 1 and (var_name == "sys_peek32" or var_name == "mmio_r32" or var_name == "mmio_read32_hw" or var_name == "mem_u32_read")
+                x86_synth_emit_bytes(s, [95, 139, 7])     // pop rdi; mov eax, dword ptr [rdi]
+                s.synth_last_expr_type = "int"
+            elif arg_count == 1 and (var_name == "sys_peek64" or var_name == "mmio_r64" or var_name == "mmio_read64" or var_name == "mem_u64_read")
+                x86_synth_emit_bytes(s, [95, 72, 139, 7]) // pop rdi; mov rax, qword ptr [rdi]
+                s.synth_last_expr_type = "int"
+            elif arg_count == 2 and (var_name == "sys_poke16" or var_name == "mmio_w16" or var_name == "mmio_write16" or var_name == "mem_u16_write")
+                x86_synth_emit_bytes(s, [88, 95, 102, 137, 7]) // pop rax; pop rdi; mov word ptr [rdi], ax
+                s.synth_last_expr_type = "int"
+            elif arg_count == 2 and (var_name == "sys_poke32" or var_name == "mmio_w32" or var_name == "mmio_write32_hw" or var_name == "mem_u32_write")
+                x86_synth_emit_bytes(s, [88, 95, 137, 7])      // pop rax; pop rdi; mov dword ptr [rdi], eax
+                s.synth_last_expr_type = "int"
+            elif arg_count == 2 and (var_name == "sys_poke64" or var_name == "mmio_w64" or var_name == "mmio_write64" or var_name == "mem_u64_write")
+                x86_synth_emit_bytes(s, [88, 95, 72, 137, 7])  // pop rax; pop rdi; mov qword ptr [rdi], rax
                 s.synth_last_expr_type = "int"
             // ── Intrinsic 7: exit / বিদায় ─────────────────────────────────────
             elif var_name == "exit" or var_name == "বিদায়"
@@ -1519,9 +1623,13 @@ fn x86_synth_expr_primary s toks pos_box
                         end
                         s.synth_last_struct = sdef.sd_name
                         fcount = sdef.sd_fields.len()
-                        alloc_sz = (fcount + 1) * 8
+                        alloc_sz = sdef.sd_total_size
+                        if alloc_sz <= 0
+                            alloc_sz = (fcount + 1) * 8
+                        end
                         if alloc_sz < 32
                             alloc_sz = 32
+                        end
                         x86_synth_emit_mov_rdi_imm64(s, alloc_sz)
                         x86_synth_emit_call_alloc(s)
                         if arg_count > 0
@@ -1534,18 +1642,15 @@ fn x86_synth_expr_primary s toks pos_box
                                 if ai < arg_expr_types.len() and ai < sdef.sd_field_types.len() and sdef.sd_field_types[ai] == "" and arg_expr_types[ai] != ""
                                     list_set(sdef.sd_field_types, ai, arg_expr_types[ai])
                                 end
-                                x86_synth_emit_byte(s, 89) // pop rcx (arg val)
+                                x86_synth_emit_byte(s, 88) // pop rax (arg val)
+                                x86_synth_emit_bytes(s, [76, 137, 209]) // mov rcx, r10
                                 field_off = ai * 8
-                                if field_off < 128
-                                    x86_synth_emit_byte(s, 73)  // REX.W + REX.B (0x49)
-                                    x86_synth_emit_byte(s, 137) // mov r/m64, r64 (0x89)
-                                    x86_synth_emit_byte(s, 74)  // ModR/M: [r10 + disp8] (0x4A)
-                                    x86_synth_emit_byte(s, field_off)
-                                else
-                                    x86_synth_emit_byte(s, 73)  // REX.W + REX.B (0x49)
-                                    x86_synth_emit_byte(s, 137) // mov r/m64, r64 (0x89)
-                                    x86_synth_emit_byte(s, 138) // ModR/M: [r10 + disp32] (0x8A)
-                                    x86_synth_emit_u32(s, field_off)
+                                field_sz = 8
+                                if sdef.sd_field_offsets != 0 and ai < sdef.sd_field_offsets.len()
+                                    field_off = sdef.sd_field_offsets[ai]
+                                    field_sz = sdef.sd_field_sizes[ai]
+                                end
+                                x86_synth_emit_field_store_rcx_rax(s, field_off, field_sz)
                                 ai = ai - 1
                             // Restore struct pointer to %rax: mov rax, r10
                             x86_synth_emit_byte(s, 76)  // REX.W + REX.R (0x4C)
@@ -1740,6 +1845,9 @@ fn x86_synth_expr_primary s toks pos_box
                             elif rt_name == "str" or rt_name == "string"
                                 s.synth_last_expr_type = "str"
                                 s.synth_last_struct = ""
+                            elif rt_name == "dyn_tagged"
+                                s.synth_last_expr_type = "dyn_tagged"
+                                s.synth_last_struct = ""
                             else
                                 s.synth_last_struct = rt_name
                             end
@@ -1778,9 +1886,20 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_emit_load_var(s, 2, lv.lv_tag_off) // mov rdx, [rbp - lv_tag_off]
                 end
             else
-                // Check if var_name is a mutable RW global slot or compile-time constant
+                // Check static @bss aligned hardware buffer BEFORE mutable globals/constants
+                bss_idx = x86_synth_find_bss(s, var_name)
                 mg_off = x86_synth_find_mutable_global(s, var_name)
-                if mg_off >= 512
+                if bss_idx >= 0
+                    x86_synth_emit_bss_addr(s, bss_idx)
+                    s.synth_last_struct = s.synth_bss_structs[bss_idx]
+                    s.synth_last_expr_type = "int"
+                    b_el = s.synth_bss_elem_sizes[bss_idx]
+                    if b_el > 0
+                        s.synth_last_elem_type = x86_synth_raw_elem_tag(b_el, s.synth_bss_signed[bss_idx])
+                    else
+                        s.synth_last_elem_type = ""
+                    end
+                elif mg_off >= 512
                     x86_synth_emit_mutable_global_read(s, mg_off)
                     s.synth_last_struct = x86_synth_get_mutable_global_struct(s, var_name)
                     s.synth_last_expr_type = x86_synth_get_mutable_global_prim(s, var_name)
@@ -1854,6 +1973,7 @@ fn x86_synth_expr_primary s toks pos_box
                         end
                     end
                 end
+            end
     else
         // WHY: Syntax error guard against unexpected delimiters inside expression operands
         if k == TOK_SEMI() or k == TOK_RBRACE() or k == TOK_RPAREN() or txt == ";" or txt == "}" or txt == ")"

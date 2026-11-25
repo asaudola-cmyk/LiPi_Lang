@@ -38,7 +38,7 @@ import "utso/net/http"
   port = 18891
   total_reqs = 200
   listener = tcp_listener_bind("127.0.0.1", port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     println("❌ FAIL: Could not bind loopback benchmark port")
     exit(1)
   @end
@@ -49,7 +49,7 @@ import "utso/net/http"
     resp_wire = http_format_response(200, "text/plain", "Hello, World!")
     @while served < total_reqs
       s = tcp_listener_accept(listener)
-      @if s.fd >= 0
+      @if s.tcp_fd >= 0
         raw = tcp_stream_read(s, 1024)
         @if str_len(raw) > 0
           tcp_stream_write(s, resp_wire)
@@ -58,11 +58,11 @@ import "utso/net/http"
         served = served + 1
       @end
     @end
-    tcp_close(listener.fd)
+    tcp_close(listener.tcpl_fd)
     syscall(60, 0, 0, 0, 0, 0, 0)
   @end
 
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   ts_buf = lipi_alloc(16)
   t0 = rps_now_ns(ts_buf)
   ok_count = 0
@@ -71,7 +71,7 @@ import "utso/net/http"
   i = 0
   @while i < total_reqs
     c = tcp_stream_connect("127.0.0.1", port)
-    @if c.fd >= 0
+    @if c.tcp_fd >= 0
       tcp_stream_write(c, req_wire)
       resp = tcp_stream_read(c, 1024)
       tcp_stream_close(c)

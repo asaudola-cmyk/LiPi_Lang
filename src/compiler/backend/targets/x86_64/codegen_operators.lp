@@ -844,7 +844,7 @@ fn x86_synth_compile_expr_add s toks pos_box
                         x86_synth_emit_byte(s, 192)
                         s.synth_last_expr_type = "float"
                     elif op_kind == TOK_PLUS()
-                        if (left_type == "int" or right_type == "int") and left_type != "str" and right_type != "str"
+                        if s.synth_freestanding == 1 or ((left_type == "int" or right_type == "int") and left_type != "str" and right_type != "str")
                             x86_synth_emit_byte(s, 72)
                             x86_synth_emit_byte(s, 1)
                             x86_synth_emit_byte(s, 200) // add rax, rcx
@@ -1164,9 +1164,9 @@ fn x86_synth_compile_expr_eq s toks pos_box
                     elif op_kind == TOK_NEQ()
                         x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 149, 192, 15, 154, 193, 8, 200, 72, 15, 182, 192])
                     end
-                elif left_type == "int" and right_type == "int" and op_kind == TOK_EQ()
+                elif (s.synth_freestanding == 1 or (left_type == "int" and right_type == "int")) and op_kind == TOK_EQ()
                     x86_synth_emit_bytes(s, [72, 57, 200, 15, 148, 192, 72, 15, 182, 192])
-                elif left_type == "int" and right_type == "int" and op_kind == TOK_NEQ()
+                elif (s.synth_freestanding == 1 or (left_type == "int" and right_type == "int")) and op_kind == TOK_NEQ()
                     x86_synth_emit_bytes(s, [72, 57, 200, 15, 149, 192, 72, 15, 182, 192])
                 elif op_kind == TOK_EQ()
                     x86_synth_emit_byte(s, 72)

@@ -188,9 +188,9 @@ import "aati/lipi_swarm/discovery"
     peer = peer_table_find(peer_table, target_pid.node_id)
     @if peer != 0
       stream = tcp_stream_connect(peer.host, peer.tcp_port)
-      @if stream.fd >= 0
+      @if stream.tcp_fd >= 0
         msg_str = serialize_actor_message(msg)
-        protocol_send_tcp(stream.fd, MSG_ACTOR_CAST(), msg_str)
+        protocol_send_tcp(stream.tcp_fd, MSG_ACTOR_CAST(), msg_str)
         tcp_stream_close(stream)
         return 1
       @end
@@ -225,12 +225,12 @@ import "aati/lipi_swarm/discovery"
     peer = peer_table_find(peer_table, target_pid.node_id)
     @if peer != 0
       stream = tcp_stream_connect(peer.host, peer.tcp_port)
-      @if stream.fd >= 0
+      @if stream.tcp_fd >= 0
         msg_str = serialize_actor_message(msg)
-        protocol_send_tcp(stream.fd, MSG_ACTOR_CALL(), msg_str)
+        protocol_send_tcp(stream.tcp_fd, MSG_ACTOR_CALL(), msg_str)
 
         @! Wait for response packet
-        resp_pkt = protocol_recv_tcp(stream.fd)
+        resp_pkt = protocol_recv_tcp(stream.tcp_fd)
         tcp_stream_close(stream)
 
         @if resp_pkt.valid == 1 && resp_pkt.msg_type == MSG_ACTOR_REPLY()

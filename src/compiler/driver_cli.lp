@@ -28,7 +28,11 @@ fn print_cli_usage
     say ""
     say "অপশনসমূহ (Available Flags):"
     say "  -o <file>                  আউটপুট বাইনারির পাথ (Output binary path)"
-    say "  --target=<arch>            টার্গেট আর্কিটেকচার (Target: x86_64, arm64, wasm, riscv64, verilog)"
+    say "  --target=<arch>            টার্গেট (x86_64, arm64, wasm, riscv64, verilog, raw-bin, elf-kernel, multiboot2-bare, uefi, obj)"
+    say "  --freestanding, --no-runtime বেয়ার-মেটাল মোড (Zero Linux syscalls, Ring-0 pure silicon)"
+    say "  --base-addr=<hex|dec>      কাস্টম লোড অ্যাড্রেস (e.g. 0x100000 or 0xFFFFFFFF80000000)"
+    say "  -c, --emit=obj             রিলোকেটেবল ELF64 অবজেক্ট ফাইল (.o / ET_REL)"
+    say "  --ssa-codegen              ডাইরেক্ট SSA IR ব্যাকএন্ড কোডজেন"
     say "  --omni                     অমনিভার্স এককালীন সব প্ল্যাটফর্ম বিল্ড (Synthesize 6 silicon targets at once)"
     say "  --run-rv64, --vm=riscv64   খাঁটি লিপি আরআইএসসি-ভি সিপিইউ-তে এক্সিকিউট (Run in pure LiPi RV64 VM core)"
     say "  --verify                   বাইনারি ফরম্যাট সার্বভৌম ভেরিফিকেশন (Validate PE/Mach-O/SPIR-V binary)"
@@ -105,14 +109,48 @@ fn cli_verify_binary file_path
             return 1
         say "❌ [RISC-V 64 AUDIT FAILED]: Unable to map RISC-V 64 binary."
         return 0
+    elif cli_str_ends_with(file_path, ".efi") == 1
+        data_e = file_read(file_path)
+        if len(data_e) >= 256 and mem_byte_read(data_e, 0) == 77 and mem_byte_read(data_e, 1) == 90
+            pe_off = mem_byte_read(data_e, 60) + (mem_byte_read(data_e, 61) * 256)
+            if pe_off + 96 < len(data_e) and mem_byte_read(data_e, pe_off) == 80 and mem_byte_read(data_e, pe_off + 1) == 69
+                opt_off = pe_off + 24
+                opt_magic = mem_byte_read(data_e, opt_off) + (mem_byte_read(data_e, opt_off + 1) * 256)
+                subsys = mem_byte_read(data_e, opt_off + 68) + (mem_byte_read(data_e, opt_off + 69) * 256)
+                if opt_magic == 523 and subsys == 10
+                    say "✔ [UEFI PE32+ EFI_APPLICATION VERIFIED]: PE32+ Magic=0x20B, Subsystem=10 (EFI_APPLICATION), zero KERNEL32.dll!"
+                    return 1
+                end
+            end
+        end
+        say "❌ [UEFI PE32+ AUDIT FAILED]: Missing PE32+ or Subsystem=10 EFI_APPLICATION header."
+        return 0
+    elif cli_str_ends_with(file_path, ".o") == 1
+        data_o = file_read(file_path)
+        if len(data_o) >= 64 and mem_byte_read(data_o, 0) == 127 and mem_byte_read(data_o, 1) == 69 and mem_byte_read(data_o, 2) == 76 and mem_byte_read(data_o, 3) == 70
+            et_val = mem_byte_read(data_o, 16) + (mem_byte_read(data_o, 17) * 256)
+            if et_val == 1
+                say "✔ [ELF64 ET_REL OBJECT VERIFIED]: Relocatable .o with .symtab and .rela.text!"
+                return 1
+            end
+        end
+        say "❌ [ELF64 ET_REL AUDIT FAILED]: Not a valid relocatable ELF64 object."
+        return 0
     else
         data = file_read(file_path)
         if len(data) >= 4 and ord(char_at(data, 0)) == 127 and ord(char_at(data, 1)) == 69 and ord(char_at(data, 2)) == 76 and ord(char_at(data, 3)) == 70
+            e_cls = mem_byte_read(data, 4)
+            if e_cls == 1 and len(data) >= 4120 and mem_byte_read(data, 4096) == 2 and mem_byte_read(data, 4097) == 176 and mem_byte_read(data, 4098) == 173 and mem_byte_read(data, 4099) == 27
+                say "✔ [BARE-METAL MULTIBOOT1+2 LONG-MODE KERNEL VERIFIED]: ELF32 + MB1 (0x1BADB002) + MB2 (0xE85250D6) + 64-bit Trampoline!"
+                return 1
+            end
             say "✔ [LINUX ELF64 VERIFIED]: 0x7F 'ELF' Magic header 100% compliant!"
             return 1
+        end
         if len(data) >= 8 and ord(char_at(data, 0)) == 214 and ord(char_at(data, 1)) == 80 and ord(char_at(data, 2)) == 82 and ord(char_at(data, 3)) == 232
             say "✔ [BARE-METAL MULTIBOOT2 UNIKERNEL VERIFIED]: 0xE85250D6 Magic header 100% compliant!"
             return 1
+        end
         say "❌ [BINARY AUDIT FAILED]: Unknown binary container format."
         return 0
 
@@ -200,10 +238,59 @@ fn cli_execute_omni in_file out_base opt_level debug_mode
     say "🎉 [OMNIVERSE SUCCESS]: 6/6 Multi-Silicon & Multi-OS Targets Generated & Sovereignly Verified!"
     return 1
 
+fn cli_parse_u64_addr s
+    // WHY: Parses decimal or hex (0x...) 64-bit addresses including canonical higher-half
+    // kernel base addresses like 0xFFFFFFFF80000000 without overflow!
+    n = len(s)
+    if n == 0 return 0 end
+    if n > 2 and char_at(s, 0) == "0" and (char_at(s, 1) == "x" or char_at(s, 1) == "X")
+        acc = 0
+        i = 2
+        while i < n
+            b = mem_byte_read(s, i)
+            d = 0
+            if b >= 48 and b <= 57
+                d = b - 48
+            elif b >= 97 and b <= 102
+                d = 10 + (b - 97)
+            elif b >= 65 and b <= 70
+                d = 10 + (b - 65)
+            elif b == 95
+                i = i + 1
+                continue
+            else
+                break
+            end
+            acc = (acc << 4) | d
+            i = i + 1
+        end
+        return acc
+    end
+    acc2 = 0
+    j = 0
+    while j < n
+        b2 = mem_byte_read(s, j)
+        if b2 >= 48 and b2 <= 57
+            acc2 = acc2 * 10 + (b2 - 48)
+        else
+            break
+        end
+        j = j + 1
+    end
+    return acc2
+
 fn cli_resolve_target_spec t_arg cur_arch cur_fmt
     // WHY: Unified validator for `--target X` and `--target=X` flags; returns [arch, fmt, ok].
     if t_arg == "windows" or t_arg == "pe" or t_arg == "win" or t_arg == "win64"
         return [cur_arch, FORMAT_PE(), 1]
+    elif t_arg == "uefi" or t_arg == "efi" or t_arg == "uefi-x86_64"
+        return [TARGET_ID_X86_64(), FORMAT_UEFI(), 1]
+    elif t_arg == "raw-bin" or t_arg == "raw" or t_arg == "flat"
+        return [TARGET_ID_X86_64(), FORMAT_RAW_BIN(), 1]
+    elif t_arg == "elf-kernel" or t_arg == "kernel" or t_arg == "freestanding"
+        return [TARGET_ID_X86_64(), FORMAT_ELF_KERNEL(), 1]
+    elif t_arg == "obj" or t_arg == "object" or t_arg == "reloc"
+        return [TARGET_ID_X86_64(), FORMAT_OBJ(), 1]
     elif t_arg == "macos-arm64" or t_arg == "darwin-arm64" or t_arg == "apple-silicon"
         return [TARGET_ID_ARM64(), FORMAT_MACHO(), 1]
     elif t_arg == "macos-x86_64" or t_arg == "darwin-x86_64"
@@ -218,8 +305,10 @@ fn cli_resolve_target_spec t_arg cur_arch cur_fmt
         return [TARGET_ID_RISCV64(), cur_fmt, 1]
     elif t_arg == "verilog" or t_arg == "hdl"
         return [TARGET_ID_VERILOG(), FORMAT_VERILOG(), 1]
-    elif t_arg == "unikernel" or t_arg == "multiboot2" or t_arg == "baremetal"
-        return [cur_arch, FORMAT_UNIKERNEL(), 1]
+    elif t_arg == "multiboot2-bare" or t_arg == "baremetal" or t_arg == "qemu-kernel"
+        return [TARGET_ID_X86_64(), FORMAT_MULTIBOOT2_BARE(), 1]
+    elif t_arg == "unikernel" or t_arg == "multiboot2"
+        return [TARGET_ID_X86_64(), FORMAT_UNIKERNEL(), 1]
     elif t_arg == "x86_64" or t_arg == "amd64" or t_arg == "linux"
         return [TARGET_ID_X86_64(), cur_fmt, 1]
     end
@@ -243,6 +332,9 @@ fn main
     strict_proof_mode = 0
     strict_types_mode = 0
     kavach_mode = 0
+    freestanding_mode = 0
+    ssa_codegen_mode = 0
+    base_vaddr_val = 1073741824
     emit_format = FORMAT_ELF()
     ai_opt_enabled = 0
     omni_mode = 0
@@ -324,6 +416,19 @@ fn main
             strict_proof_mode = 1
         elif arg == "--strict-types"
             strict_types_mode = 1
+        elif arg == "--freestanding" or arg == "--no-runtime" or arg == "-ffreestanding"
+            freestanding_mode = 1
+        elif arg == "--ssa-codegen"
+            ssa_codegen_mode = 1
+        elif arg == "-c" or arg == "--emit=obj" or arg == "--obj"
+            emit_format = FORMAT_OBJ()
+        elif arg == "--base-addr"
+            i = i + 1
+            if i < argc
+                base_vaddr_val = cli_parse_u64_addr(get(args, i))
+            end
+        elif len(arg) > 12 and str_sub(arg, 0, 12) == "--base-addr="
+            base_vaddr_val = cli_parse_u64_addr(str_sub(arg, 12, len(arg)))
         elif arg == "--kavach" or arg == "--কবচ" or arg == "--safe"
             kavach_mode = 1
             strict_ownership_mode = 1
@@ -383,8 +488,14 @@ fn main
             out_file = in_file + ".macho"
         elif emit_format == FORMAT_PE()
             out_file = in_file + ".exe"
-        elif emit_format == FORMAT_UNIKERNEL()
-            out_file = in_file + ".kernel.bin"
+        elif emit_format == FORMAT_UNIKERNEL() or emit_format == FORMAT_ELF_KERNEL() or emit_format == FORMAT_MULTIBOOT2_BARE()
+            out_file = in_file + ".kernel.elf"
+        elif emit_format == FORMAT_RAW_BIN()
+            out_file = in_file + ".raw.bin"
+        elif emit_format == FORMAT_UEFI()
+            out_file = in_file + ".efi"
+        elif emit_format == FORMAT_OBJ()
+            out_file = in_file + ".o"
         elif target_arch == TARGET_ID_WASM()
             out_file = in_file + ".wasm"
         elif target_arch == TARGET_ID_VERILOG() or emit_format == FORMAT_VERILOG()
@@ -426,6 +537,11 @@ fn main
         mode_flags = mode_flags + 16
     if strict_types_mode != 0
         mode_flags = mode_flags + 32
+    if freestanding_mode != 0
+        mode_flags = mode_flags + 64
+    if ssa_codegen_mode != 0
+        mode_flags = mode_flags + 128
+    compiler_driver_set_base_vaddr(base_vaddr_val)
     res = compiler_driver_compile_file_full(in_file, out_file, target_arch, opt_level, emit_format, mode_flags)
     
     // Report detailed diagnostics

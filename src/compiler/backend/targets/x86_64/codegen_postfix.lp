@@ -27,7 +27,8 @@ fn x86_synth_expr_postfix s toks pos_box
         if pkind == TOK_LBRACKET() or (pkind != TOK_STR() and ptxt == "[")
             list_set(pos_box, 0, post_p + 1) // Consume '['
             arr_el_t = s.synth_last_elem_type
-            x86_synth_emit_byte(s, 80)        // push rax (save collection ptr)
+            raw_info = x86_synth_parse_raw_elem_tag(arr_el_t)
+            x86_synth_emit_byte(s, 80)        // push rax (save collection/buffer ptr)
             x86_synth_compile_expr(s, toks, pos_box) // rax = index
             cp = get(pos_box, 0)
             if cp < toks.len() and (toks[cp].tok_kind == TOK_RBRACKET() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "]"))
@@ -36,20 +37,27 @@ fn x86_synth_expr_postfix s toks pos_box
             x86_synth_emit_byte(s, 72)
             x86_synth_emit_byte(s, 137)
             x86_synth_emit_byte(s, 198)
-            x86_synth_emit_byte(s, 95)        // pop rdi (collection ptr)
-            x86_synth_emit_call_helper(s, "_lipi_list_get")
-            if arr_el_t == "float" or arr_el_t == "int" or arr_el_t == "str"
-                s.synth_last_expr_type = arr_el_t
+            x86_synth_emit_byte(s, 95)        // pop rdi (collection/buffer ptr)
+            if raw_info[0] > 0
+                // Direct inline fixed-size / @bss array load: [rdi + rsi * scale] (zero heap call!)
+                x86_synth_emit_raw_array_load(s, raw_info[0], raw_info[1])
+                s.synth_last_expr_type = "int"
                 s.synth_last_struct = ""
-            elif arr_el_t == "dyn_dict"
-                s.synth_last_expr_type = "dyn_tagged"
-                s.synth_last_struct = ""
-            elif arr_el_t != ""
-                s.synth_last_expr_type = ""
-                s.synth_last_struct = arr_el_t
             else
-                s.synth_last_expr_type = "dyn_tagged"
-                s.synth_last_struct = ""
+                x86_synth_emit_call_helper(s, "_lipi_list_get")
+                if arr_el_t == "float" or arr_el_t == "int" or arr_el_t == "str"
+                    s.synth_last_expr_type = arr_el_t
+                    s.synth_last_struct = ""
+                elif arr_el_t == "dyn_dict"
+                    s.synth_last_expr_type = "dyn_tagged"
+                    s.synth_last_struct = ""
+                elif arr_el_t != ""
+                    s.synth_last_expr_type = ""
+                    s.synth_last_struct = arr_el_t
+                else
+                    s.synth_last_expr_type = "dyn_tagged"
+                    s.synth_last_struct = ""
+                end
             end
             s.synth_last_elem_type = ""
 
@@ -164,34 +172,32 @@ fn x86_synth_expr_postfix s toks pos_box
                         end
                     x86_synth_emit_cleanup_stack_args(s, m_cleanup)
                 else
-                    // Struct Field Read: obj.field
-                    f_off = x86_synth_get_field_offset(s, s.synth_last_struct, member_name)
-                    ft = x86_synth_get_field_type(s, s.synth_last_struct, member_name)
+                    // Struct Field Read: obj.field (exact packed/aligned offset & 1/2/4/8B width or inline [N]T LEA)
+                    fmeta = x86_synth_get_field_meta(s, s.synth_last_struct, member_name)
+                    f_off = fmeta[0]
+                    f_sz = fmeta[1]
+                    f_sgn = fmeta[2]
+                    f_el = fmeta[3]
+                    ft = fmeta[4]
                     s.synth_last_struct = ""
                     s.synth_last_expr_type = ""
-                    if ft == "f64" or ft == "f32" or ft == "float"
+                    s.synth_last_elem_type = ""
+                    if f_el > 0
+                        s.synth_last_elem_type = x86_synth_raw_elem_tag(f_el, f_sgn)
+                        s.synth_last_expr_type = "int"
+                    elif ft == "f64" or ft == "f32" or ft == "float"
                         s.synth_last_expr_type = "float"
-                    elif ft == "int" or ft == "i64" or ft == "i32" or ft == "u64" or ft == "u32"
+                    elif ft == "int" or ft == "i64" or ft == "i32" or ft == "i16" or ft == "i8" or ft == "u64" or ft == "u32" or ft == "u16" or ft == "u8" or ft == "byte" or ft == "ptr"
                         s.synth_last_expr_type = "int"
                     elif ft == "str" or ft == "string"
                         s.synth_last_expr_type = "str"
                     elif ft != ""
                         s.synth_last_struct = ft
                     end
-                    // Guard null / low-page struct pointer (< 4096) with catchable NullPointerException
+                    // Guard null / low-page struct pointer (< 4096) in hosted mode
                     x86_synth_emit_null_check_rax(s)
-                    if f_off < 128
-                        // mov rax, [rax + f_off]: 0x48 0x8B 0x40 disp8
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 139)
-                        x86_synth_emit_byte(s, 64)
-                        x86_synth_emit_byte(s, f_off)
-                    else
-                        // mov rax, [rax + f_off]: 0x48 0x8B 0x80 disp32
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 139)
-                        x86_synth_emit_byte(s, 128)
-                        x86_synth_emit_u32(s, f_off)
+                    x86_synth_emit_field_load_rax(s, f_off, f_sz, f_sgn, f_el)
+                end
             else
                 cont_postfix = 0
         // Case C: Postfix Query '?' — Sovereign ADT (Result/Option) unwrap & early return + legacy 0-guard

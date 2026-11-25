@@ -963,11 +963,11 @@ import "aati/lipi_p2p/registry"
 @! 6. SERVER LIFECYCLE & TCP CONTAINER
 @! ============================================================================
 
-@fn lipipkg_server_handle_connection(server, stream)
+@fn lipipkg_server_handle_connection(server, stream: TcpStream)
   raw_req = tcp_stream_read(stream, 65536)
   @if str_len(raw_req) > 0
     parsed = http_parse_request(raw_req)
-    req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, stream.peer_host)
+    req = req_new(parsed.method, parsed.path, parsed.headers, parsed.body, stream.tcp_peer_host)
     res = lipipkg_server_dispatch(server, req)
     wire_resp = res_format_http(res)
     tcp_stream_write(stream, wire_resp)
@@ -977,7 +977,7 @@ import "aati/lipi_p2p/registry"
 
 @fn lipipkg_server_listen(server, host, port)
   listener = tcp_listener_bind(host, port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     err_bind = string_concat("Failed to bind LipiPkg Server on ", host)
     err_bind = string_concat(err_bind, ":")
     err_bind = string_concat(err_bind, to_str(port))
@@ -988,18 +988,18 @@ import "aati/lipi_p2p/registry"
   server.is_running = 1
   @while server.is_running == 1
     stream = tcp_listener_accept(listener)
-    @if stream.fd >= 0
+    @if stream.tcp_fd >= 0
       lipipkg_server_handle_connection(server, stream)
     @end
   @end
 
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   return 0
 @end
 
 @fn lipipkg_server_listen_limited(server, host, port, max_requests)
   listener = tcp_listener_bind(host, port)
-  @if listener.fd < 0
+  @if listener.tcpl_fd < 0
     println("Failed to bind LipiPkg Server on " + host + ":" + port.to_str())
     return -1
   @end
@@ -1008,7 +1008,7 @@ import "aati/lipi_p2p/registry"
   count = 0
   @while server.is_running == 1
     stream = tcp_listener_accept(listener)
-    @if stream.fd >= 0
+    @if stream.tcp_fd >= 0
       lipipkg_server_handle_connection(server, stream)
       count = count + 1
       @if max_requests > 0 && count >= max_requests
@@ -1017,7 +1017,7 @@ import "aati/lipi_p2p/registry"
     @end
   @end
 
-  tcp_close(listener.fd)
+  tcp_close(listener.tcpl_fd)
   return 0
 @end
 

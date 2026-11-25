@@ -453,11 +453,18 @@ fn x86_synth_emit__lipi_clock_ms s
     return off
 
 fn x86_synth_emit__lipi_size_of s
-    // WHY: Intrinsic sizeof returning 64 bytes for general heap cells
+    // WHY: Runtime sizeof fallback for dynamic values (compile-time sizeof(Type) is lowered
+    // directly to exact constant mov rax, <byte_size> in codegen_expr.lp).
+    // Returns 8 bytes (native 64-bit word) for scalars, or actual heap cell size when valid pointer.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_size_of", off)
-    // mov rax, 64; ret
-    x86_synth_emit_bytes(s, [72, 199, 192, 64, 0, 0, 0, 195])
+    // cmp rdi, 4096; jb .scalar_word; test rdi, 7; jnz .scalar_word; mov rax, [rdi - 8]; test rax, rax; jle .scalar_word; ret; .scalar_word: mov eax, 8; ret
+    x86_synth_emit_bytes(s, [
+        72, 129, 255, 0, 16, 0, 0, 114, 19,
+        72, 247, 199, 7, 0, 0, 0, 117, 10,
+        72, 139, 71, 248, 72, 133, 192, 126, 1, 195,
+        184, 8, 0, 0, 0, 195
+    ])
     return off
 
 fn x86_synth_emit__lipi_stack_pointer s
@@ -763,9 +770,14 @@ fn x86_synth_emit_all_runtime_helpers s
     x86_synth_register_helper_fn(s, "list_set", off__lipi_list_set)
     x86_synth_register_helper_fn(s, "সেট", off__lipi_list_set)
     x86_synth_register_helper_fn(s, "push", off__lipi_list_push)
+    x86_synth_register_helper_fn(s, "list_push", off__lipi_list_push)
     x86_synth_register_helper_fn(s, "যোগ_করো", off__lipi_list_push)
     x86_synth_register_helper_fn(s, "pop", off__lipi_list_pop)
+    x86_synth_register_helper_fn(s, "list_pop", off__lipi_list_pop)
     x86_synth_register_helper_fn(s, "বাদ_দাও", off__lipi_list_pop)
+    x86_synth_register_helper_fn(s, "list_get", off__lipi_list_get)
+    x86_synth_register_helper_fn(s, "list_len", off__lipi_len)
+    x86_synth_register_helper_fn(s, "list_create", off_lipi_fn_list)
     x86_synth_register_helper_fn(s, "str", off__lipi_ensure_str)
     x86_synth_register_helper_fn(s, "স্ট্রিং", off__lipi_ensure_str)
     x86_synth_register_helper_fn(s, "_lipi_ensure_str", off__lipi_ensure_str)

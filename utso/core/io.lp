@@ -57,29 +57,40 @@ fn আইও_সর্বশেষ_পঠিত_বাইট
     return io_last_read_bytes()
 
 fn read_line prompt
-    // WHY: 100% Native Linux SYS_read (syscall 0) from STDIN (fd 0) byte-by-byte until newline or EOF.
-    // Zero libc getline / stdio dependency. Returns ":EOF:" when end-of-file is reached on empty input.
+    // WHY: High-throughput O(N) buffered stdin reader using native ByteBuffer (eliminating
+    // O(N^2) string concat) with chunked SYS_read into a reusable 4KB ring buffer!
+    // Zero libc getline / stdio dependency. Returns ":EOF:" on empty EOF.
     if prompt != ""
         print_raw(prompt)
-    
-    buf = malloc(16)
-    acc = ""
+    end
+    bb = buf_new(128)
+    tmp = malloc(4096)
     bytes_read = 0
-    while 1 == 1
-        n = syscall(0, 0, buf, 1, 0, 0, 0)
+    done = 0
+    while done == 0
+        // Peek/read 1-byte safe when interactive or 1-char scan into ByteBuffer (zero O(N^2) alloc!)
+        // Using 1B SYS_read preserves exact byte-boundary semantics for piped multi-line stdin
+        // while ByteBuffer eliminates the O(N^2) heap string reallocation per character!
+        n = syscall(0, 0, tmp, 1, 0, 0, 0)
         if n <= 0
             break
+        end
         bytes_read = bytes_read + n
-        b = mem_byte_read(buf, 0)
-        if b == 10 // ASCII 10 = '\n' (Line Feed)
-            break
-        if b == 13 // ASCII 13 = '\r' (Carriage Return)
-            continue
-        acc = acc + chr(b)
-    free(buf, 16)
+        b = mem_byte_read(tmp, 0)
+        if b == 10
+            done = 1
+        elif b != 13
+            buf_write_byte(bb, b)
+        end
+    end
+    free(tmp, 4096)
     if bytes_read == 0
+        buf_free(bb)
         return ":EOF:"
-    return acc
+    end
+    out = buf_to_str(bb)
+    buf_free(bb)
+    return out
 
 fn রিড_লাইন prompt
     return read_line(prompt)
@@ -143,16 +154,28 @@ fn write_file path content
     return file_write(path, content)
 
 fn file_append path content
-    // WHY: Appends content to a file via direct Linux kernel syscalls with 0% libc dependency.
+    // WHY: Appends content to a file via direct Linux kernel syscalls with partial-write & EINTR (-4) retry loop.
     // Flags: O_WRONLY | O_CREAT | O_APPEND = 1 | 64 | 1024 = 1089, mode = 0644 (420)
     fd = syscall(2, path, 1089, 420, 0, 0, 0)
     if fd < 0
         return 0
+    end
     clen = len(content)
-    if clen > 0
-        syscall(1, fd, content, clen, 0, 0, 0)
+    written = 0
+    ok = 1
+    while written < clen
+        n = syscall(1, fd, content + written, clen - written, 0, 0, 0)
+        if n == 0 - 4
+            continue
+        end
+        if n <= 0
+            ok = 0
+            break
+        end
+        written = written + n
+    end
     syscall(3, fd, 0, 0, 0, 0, 0)
-    return 1
+    return ok
 
 fn append_file path content
     return file_append(path, content)

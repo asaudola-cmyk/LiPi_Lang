@@ -11,6 +11,7 @@ include "src/compiler/backend/targets/x86_64/codegen_expr.lp"
 include "src/compiler/backend/targets/x86_64/codegen_operators.lp"
 include "src/compiler/backend/targets/x86_64/codegen_loops.lp"
 include "src/compiler/backend/targets/x86_64/codegen_stmt.lp"
+include "src/compiler/backend/targets/x86_64/silicon_encoder.lp"
 
 // ── Function Definition Synthesizer ───────────────────────────────────────────
 
@@ -146,6 +147,10 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_loop_continues = list()
     saved_boxed_vars = s.synth_boxed_vars
     s.synth_boxed_vars = list()
+    saved_fn_tag_offs = s.synth_fn_tag_offs
+    s.synth_fn_tag_offs = list()
+    saved_fn_dyn_vars = s.synth_fn_dyn_vars
+    s.synth_fn_dyn_vars = list()
 
     // Parse parameter names (supporting parentheses, commas, and type annotations)
     params = list()
@@ -254,11 +259,38 @@ fn x86_synth_compile_fn_def s toks pos_box
         fn_entry.fn_ret_type = mono_ret
     end
 
-    // Emit standard function prologue: push rbp; mov rbp, rsp; push r12-r15, rbx; sub rsp, imm32
-    prologue_sub_patch = x86_synth_emit_prologue(s)
+    // Emit standard function prologue, @interrupt 15-GPR ISR prologue, or omit for @naked
+    is_fn_naked = s.synth_pending_fn_naked
+    is_fn_interrupt = s.synth_pending_fn_interrupt
+    s.synth_pending_fn_naked = 0
+    s.synth_pending_fn_interrupt = 0
+    saved_in_interrupt = s.synth_in_interrupt_fn
+    saved_in_naked = s.synth_in_naked_fn
+    s.synth_in_interrupt_fn = is_fn_interrupt
+    s.synth_in_naked_fn = is_fn_naked
+    prologue_sub_patch = 0 - 1
+    tag_init_patch = 0 - 1
+    if is_fn_naked == 1
+        prologue_sub_patch = 0 - 1
+    elif is_fn_interrupt == 1
+        prologue_sub_patch = x86_synth_emit_interrupt_prologue(s)
+        if s.synth_freestanding == 0
+            tag_init_patch = s.synth_code.len()
+            x86_synth_emit_bytes(s, [15, 31, 68, 0, 0]) // 5B NOP placeholder for dyn_tagged slot zeroing call
+        end
+    else
+        prologue_sub_patch = x86_synth_emit_prologue(s)
+        if s.synth_freestanding == 0
+            tag_init_patch = s.synth_code.len()
+            x86_synth_emit_bytes(s, [15, 31, 68, 0, 0]) // 5B NOP placeholder for dyn_tagged slot zeroing call
+        end
+    end
 
     // Prescan function body for outer variables mutated inside nested closures (auto-boxed upvalue cells)
     s.synth_boxed_vars = x86_synth_prescan_boxed_vars(toks, get(pos_box, 0), base_col, base_line)
+    if s.synth_freestanding == 0 and is_fn_naked == 0
+        s.synth_fn_dyn_vars = x86_synth_prescan_dyn_vars(toks, get(pos_box, 0), base_col, base_line, params)
+    end
 
     // Prescan function body for defer statements: if present, push exception unwind frame so defer
     // executes in strict LIFO order during cross-frame throw unwinding as well as normal return!
@@ -269,6 +301,9 @@ fn x86_synth_compile_fn_def s toks pos_box
         defer_exc_off = s.synth_stack_offset
         s.synth_defer_mask_off = defer_exc_off - 72
         s.synth_defer_err_off = defer_exc_off - 80
+        // WHY: x86_synth_alloc_var allocates at [rbp - synth_stack_offset]; advance past defer_exc_off
+        // so param 0 never aliases [rbp - defer_exc_off] where _lipi_exc_push writes the frame!
+        s.synth_stack_offset = defer_exc_off + 8
     end
 
     // WHY: Two-pass parameter initialization prevents clobbering incoming argument registers.
@@ -290,6 +325,24 @@ fn x86_synth_compile_fn_def s toks pos_box
             end
         end
         x86_synth_emit_store_param(s, pi, off)
+        if s.synth_freestanding == 0 and x86_synth_is_dyn_var(s, pname) == 1
+            lv_pdyn = x86_synth_find_local_var(s, pname)
+            if lv_pdyn != 0
+                if lv_pdyn.lv_tag_off == 0
+                    lv_pdyn.lv_tag_off = s.synth_stack_offset
+                    s.synth_stack_offset = s.synth_stack_offset + 8
+                    push(s.synth_fn_tag_offs, lv_pdyn.lv_tag_off)
+                end
+                p_init_tag = 0
+                if ptype == "float" or ptype == "f64" or ptype == "f32"
+                    p_init_tag = 1
+                elif ptype == "str" or ptype == "string"
+                    p_init_tag = 2
+                end
+                x86_synth_emit_store_imm64_to_var(s, lv_pdyn.lv_tag_off, p_init_tag)
+                x86_synth_set_prim_type(s, pname, "dyn_tagged")
+            end
+        end
         pi = pi + 1
     end
 
@@ -356,9 +409,15 @@ fn x86_synth_compile_fn_def s toks pos_box
                 if fn_alias != 0
                     fn_alias.fn_ret_type = "f64"
                 end
+            elif fn_entry.fn_ret_type == "" and s.synth_last_expr_type == "dyn_tagged"
+                fn_entry.fn_ret_type = "dyn_tagged"
+                if fn_alias != 0
+                    fn_alias.fn_ret_type = "dyn_tagged"
+                end
             end
             x86_synth_emit_defers(s, toks)
             x86_synth_emit_epilogue(s)
+            x86_synth_emit_tag_init_stub_if_needed(s, tag_init_patch)
             after_fn_offset = s.synth_code.len()
             fn_entry.fn_end_offset = after_fn_offset
             if fn_alias != 0
@@ -371,7 +430,9 @@ fn x86_synth_compile_fn_def s toks pos_box
             if frame_sz < 512
                 frame_sz = 512
             end
-            x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
+            if prologue_sub_patch >= 0
+                x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
+            end
             s.synth_locals = saved_locals
             s.synth_stack_offset = saved_stack_offset
             s.synth_current_fn_idx = saved_fn_idx
@@ -387,46 +448,70 @@ fn x86_synth_compile_fn_def s toks pos_box
             s.synth_loop_breaks = saved_loop_breaks
             s.synth_loop_continues = saved_loop_continues
             s.synth_boxed_vars = saved_boxed_vars
+            s.synth_fn_tag_offs = saved_fn_tag_offs
+            s.synth_fn_dyn_vars = saved_fn_dyn_vars
             s.synth_in_function = saved_in_function
             s.synth_current_fn = saved_current_fn
+            s.synth_in_interrupt_fn = saved_in_interrupt
+            s.synth_in_naked_fn = saved_in_naked
             return 0
 
-    // Parse function body statements until next function, EOF, or dedent
+    // Parse function body statements: supports BOTH braced `{ ... }` and indentation/`end`-delimited blocks!
+    fn_braced = 0
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    if get(pos_box, 0) < toks.len()
+        bt0 = toks[get(pos_box, 0)]
+        if bt0.tok_kind == TOK_LBRACE() or (bt0.tok_kind != TOK_STR() and bt0.tok_text == "{")
+            fn_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume '{'
+        end
+    end
     while get(pos_box, 0) < toks.len()
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         cur_pos = get(pos_box, 0)
         if cur_pos >= toks.len()
             break
         ct = toks[cur_pos]
-        is_fn_block_end = 0
-        if (ct.tok_kind == TOK_KW_END() or ct.tok_kind == TOK_DIR_END() or (ct.tok_kind == TOK_IDENT() and (ct.tok_text == "end" or ct.tok_text == "শেষ" or ct.tok_text == "@end"))) and ct.tok_span.span_start_col <= base_col
-            // WHY: Only treat as block terminator if NOT followed by an assignment '='
-            if cur_pos + 1 >= toks.len() or (toks[cur_pos + 1].tok_kind != TOK_ASSIGN() and toks[cur_pos + 1].tok_text != "=")
-                is_fn_block_end = 1
-        if is_fn_block_end == 1
-            list_set(pos_box, 0, cur_pos + 1)
-            break
-        if ct.tok_kind == TOK_KW_FN() or ct.tok_kind == TOK_DIR_FN() or ct.tok_kind == TOK_KW_COMPONENT()
-            break
-        if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn" or ct.tok_text == "component" or ct.tok_text == "উপাদান")
-            break
-        if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_KW_ENUM() or ct.tok_kind == TOK_DIR_ENUM()
-            break
-        if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "struct" or ct.tok_text == "গঠন" or ct.tok_text == "@struct" or ct.tok_text == "enum" or ct.tok_text == "@enum" or ct.tok_text == "গণনা")
-            break
-        cur_col = ct.tok_span.span_start_col
-        if cur_col <= base_col and ct.tok_span.span_start_line > base_line
-            break
+        if fn_braced == 1
+            if ct.tok_kind == TOK_RBRACE() or (ct.tok_kind != TOK_STR() and ct.tok_text == "}")
+                list_set(pos_box, 0, cur_pos + 1) // Consume '}'
+                break
+            end
+        else
+            is_fn_block_end = 0
+            if (ct.tok_kind == TOK_KW_END() or ct.tok_kind == TOK_DIR_END() or (ct.tok_kind == TOK_IDENT() and (ct.tok_text == "end" or ct.tok_text == "শেষ" or ct.tok_text == "@end"))) and ct.tok_span.span_start_col <= base_col
+                // WHY: Only treat as block terminator if NOT followed by an assignment '='
+                if cur_pos + 1 >= toks.len() or (toks[cur_pos + 1].tok_kind != TOK_ASSIGN() and toks[cur_pos + 1].tok_text != "=")
+                    is_fn_block_end = 1
+            if is_fn_block_end == 1
+                list_set(pos_box, 0, cur_pos + 1)
+                break
+            if ct.tok_kind == TOK_KW_FN() or ct.tok_kind == TOK_DIR_FN() or ct.tok_kind == TOK_KW_COMPONENT()
+                break
+            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn" or ct.tok_text == "component" or ct.tok_text == "উপাদান" or ct.tok_text == "@naked" or ct.tok_text == "@interrupt" or ct.tok_text == "@packed" or ct.tok_text == "@align" or ct.tok_text == "@bss")
+                break
+            if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_KW_ENUM() or ct.tok_kind == TOK_DIR_ENUM()
+                break
+            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "struct" or ct.tok_text == "গঠন" or ct.tok_text == "@struct" or ct.tok_text == "enum" or ct.tok_text == "@enum" or ct.tok_text == "গণনা")
+                break
+            cur_col = ct.tok_span.span_start_col
+            if cur_col <= base_col and ct.tok_span.span_start_line > base_line
+                break
+        end
         before_fn_stmt_p = get(pos_box, 0)
         x86_synth_compile_statement(s, toks, pos_box)
         if get(pos_box, 0) <= before_fn_stmt_p
             list_set(pos_box, 0, before_fn_stmt_p + 1)
 
-    // Default epilogue at end of function
-    x86_synth_emit_byte(s, 49)
-    x86_synth_emit_byte(s, 192)
-    x86_synth_emit_defers(s, toks)
-    x86_synth_emit_epilogue(s)
+    // Default epilogue at end of function (omitted for @naked; emits iretq for @interrupt)
+    if is_fn_naked == 0
+        if is_fn_interrupt == 0
+            x86_synth_emit_byte(s, 49)
+            x86_synth_emit_byte(s, 192)
+        end
+        x86_synth_emit_defers(s, toks)
+        x86_synth_emit_epilogue(s)
+    end
 
     // Emit Defer Unwind Pad (landed on by _lipi_exc_throw when an exception propagates out of this function)
     if s.synth_has_defer_unwind == 1 and defer_pad_lea_patch >= 0
@@ -441,6 +526,9 @@ fn x86_synth_compile_fn_def s toks pos_box
         x86_synth_emit_call_helper(s, "_lipi_exc_throw")
     end
 
+    // Emit zero-overhead dyn_tagged prologue tag-zeroing stub if this function allocated any lv_tag_off
+    x86_synth_emit_tag_init_stub_if_needed(s, tag_init_patch)
+
     // Patch jump to bypass function body during top-level execution
     after_fn_offset = s.synth_code.len()
     fn_entry.fn_end_offset = after_fn_offset
@@ -449,12 +537,16 @@ fn x86_synth_compile_fn_def s toks pos_box
     end
     rel32 = after_fn_offset - (fn_jmp_patch + 4)
     x86_synth_patch_u32(s, fn_jmp_patch, rel32)
-    needed_stack = s.synth_stack_offset
-    frame_sz = ((needed_stack + 256 + 15) / 16) * 16
-    if frame_sz < 512
-        frame_sz = 512
+    if prologue_sub_patch >= 0
+        needed_stack = s.synth_stack_offset
+        frame_sz = ((needed_stack + 256 + 15) / 16) * 16
+        if frame_sz < 512
+            frame_sz = 512
+        end
+        x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
     end
-    x86_synth_patch_u32(s, prologue_sub_patch, frame_sz)
+    s.synth_in_interrupt_fn = saved_in_interrupt
+    s.synth_in_naked_fn = saved_in_naked
     s.synth_locals = saved_locals
     s.synth_stack_offset = saved_stack_offset
     s.synth_current_fn_idx = saved_fn_idx
@@ -470,6 +562,8 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_loop_breaks = saved_loop_breaks
     s.synth_loop_continues = saved_loop_continues
     s.synth_boxed_vars = saved_boxed_vars
+    s.synth_fn_tag_offs = saved_fn_tag_offs
+    s.synth_fn_dyn_vars = saved_fn_dyn_vars
     s.synth_in_function = saved_in_function
     s.synth_current_fn = saved_current_fn
     return 0
@@ -510,16 +604,30 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     // 1. Emit top-level stack frame prologue at entry point (offset 0) & pre-scan function signatures + top-level globals
     say "    [x86_synth] Emitting top-level prologue..."
     top_prologue_patch = x86_synth_emit_prologue(s)
-    // Publish dynamic RW globals scan span into [rw_vaddr + 488] (_gc_globals_bytes) for GC root scanning
-    x86_synth_emit_bytes(s, [72, 184]) // movabs rax, <rw_vaddr + 488>
-    s.synth_globals_rw_ptr_patch = s.synth_code.len()
-    x86_synth_emit_u64(s, 0)
-    x86_synth_emit_bytes(s, [72, 185]) // movabs rcx, <globals_bytes>
-    s.synth_globals_rw_len_patch = s.synth_code.len()
-    x86_synth_emit_u64(s, 0)
-    x86_synth_emit_bytes(s, [72, 137, 8]) // mov [rax], rcx
+    top_tag_init_patch = 0 - 1
+    if s.synth_freestanding == 0
+        top_tag_init_patch = s.synth_code.len()
+        x86_synth_emit_bytes(s, [15, 31, 68, 0, 0]) // 5B NOP placeholder for top-level dyn_tagged zeroing stub
+    end
+    if s.synth_freestanding == 1
+        // Preserve incoming boot/UEFI arguments (%rdi=magic/ImageHandle, %rsi=mb2_info/SystemTable)
+        // in local slots [rbp-48] and [rbp-56] across any top-level initialization before kmain/efi_main/main!
+        x86_synth_emit_bytes(s, [72, 137, 125, 208, 72, 137, 117, 200]) // mov [rbp-48], rdi; mov [rbp-56], rsi
+    else
+        // Publish dynamic RW globals scan span into [rw_vaddr + 488] (_gc_globals_bytes) for GC root scanning
+        x86_synth_emit_bytes(s, [72, 184]) // movabs rax, <rw_vaddr + 488>
+        s.synth_globals_rw_ptr_patch = s.synth_code.len()
+        x86_synth_emit_u64(s, 0)
+        x86_synth_emit_bytes(s, [72, 185]) // movabs rcx, <globals_bytes>
+        s.synth_globals_rw_len_patch = s.synth_code.len()
+        x86_synth_emit_u64(s, 0)
+        x86_synth_emit_bytes(s, [72, 137, 8]) // mov [rax], rcx
+    end
     x86_synth_prescan_signatures(s, tokens)
     s.synth_boxed_vars = x86_synth_prescan_boxed_vars(tokens, 0, 0 - 1, 0 - 1)
+    if s.synth_freestanding == 0
+        s.synth_fn_dyn_vars = x86_synth_prescan_dyn_vars(tokens, 0, 0 - 1, 0 - 1, 0)
+    end
     x86_synth_prescan_globals(s, tokens)
 
     // 2. Synthesize all functions, structs, and statements
@@ -559,19 +667,46 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
             list_set(pos_box, 0, before_top_stmt_p + 1)
         end
 
-    // 3. If 'main' or 'মূল' exists, call main() automatically!
-    // WHY: Search backwards so translation unit's main() takes precedence over imported modules
+    // 3. Dispatch entry function: in freestanding mode check kmain -> efi_main -> main -> মূল
+    //    and forward preserved boot/UEFI args (%rdi, %rsi); in hosted mode check main / মূল.
     has_main = 0
     main_name = ""
-    idx_en = x86_synth_find_fn_last_idx(s, "main")
-    idx_bn = x86_synth_find_fn_last_idx(s, "মূল")
-    if idx_en >= 0 or idx_bn >= 0
-        has_main = 1
-        if idx_bn > idx_en
-            main_name = "মূল"
-        else
-            main_name = "main"
+    if s.synth_freestanding == 1
+        idx_km = x86_synth_find_fn_last_idx(s, "kmain")
+        idx_efi = x86_synth_find_fn_last_idx(s, "efi_main")
+        idx_en = x86_synth_find_fn_last_idx(s, "main")
+        idx_bn = x86_synth_find_fn_last_idx(s, "মূল")
+        if idx_km >= 0
+            has_main = 1
+            main_name = "kmain"
+        elif idx_efi >= 0
+            has_main = 1
+            main_name = "efi_main"
+        elif idx_en >= 0 or idx_bn >= 0
+            has_main = 1
+            if idx_bn > idx_en
+                main_name = "মূল"
+            else
+                main_name = "main"
+            end
+        end
+    else
+        idx_en = x86_synth_find_fn_last_idx(s, "main")
+        idx_bn = x86_synth_find_fn_last_idx(s, "মূল")
+        if idx_en >= 0 or idx_bn >= 0
+            has_main = 1
+            if idx_bn > idx_en
+                main_name = "মূল"
+            else
+                main_name = "main"
+            end
+        end
+    end
     if has_main == 1 and s.synth_called_top_level_main == 0
+        if s.synth_freestanding == 1
+            // Restore boot/UEFI (%rdi, %rsi) before invoking kmain / efi_main / main
+            x86_synth_emit_bytes(s, [72, 139, 125, 208, 72, 139, 117, 200]) // mov rdi, [rbp-48]; mov rsi, [rbp-56]
+        end
         call_off = s.synth_code.len()
         x86_synth_emit_byte(s, 232)
         patch_pos = s.synth_code.len()
@@ -589,19 +724,34 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     // 4. Backpatch top-level stack frame size & emit exit epilogue
     top_needed = s.synth_stack_offset
     top_frame = ((top_needed + 256 + 15) / 16) * 16
-    if top_frame < 4096
-        top_frame = 4096
+    if s.synth_freestanding == 1
+        if top_frame < 512
+            top_frame = 512
+        end
+    else
+        if top_frame < 4096
+            top_frame = 4096
+        end
     end
     x86_synth_patch_u32(s, top_prologue_patch, top_frame)
     x86_synth_emit_defers(s, tokens)
     x86_synth_emit_epilogue(s)
+    x86_synth_emit_tag_init_stub_if_needed(s, top_tag_init_patch)
 
-    // 5. Emit complete micro-runtime helpers (zero C/libc, pure silicon execution)
-    x86_synth_emit_print_int_helper(s)
-    x86_synth_emit_alloc_helper(s)
-    x86_synth_emit_all_runtime_helpers(s)
-    x86_synth_emit_all_avx2_helpers(s)
-    arena_offs = x86_synth_emit_arena_helpers(s)
+    // 5. Emit runtime helpers:
+    //    - Freestanding (--freestanding / bare-metal): ONLY zero-syscall Ring-0 silicon helpers (0 Linux syscalls!)
+    //    - Hosted: full Lipi micro-runtime + Ring-0 silicon & AVX2 helpers
+    arena_offs = list()
+    if s.synth_freestanding == 1
+        x86_synth_emit_all_silicon_helpers(s)
+    else
+        x86_synth_emit_print_int_helper(s)
+        x86_synth_emit_alloc_helper(s)
+        x86_synth_emit_all_runtime_helpers(s)
+        x86_synth_emit_all_avx2_helpers(s)
+        x86_synth_emit_all_silicon_helpers(s)
+        arena_offs = x86_synth_emit_arena_helpers(s)
+    end
 
     // 5b. Attach and integrate direct SSA IR Lowering machine code & functions
     // WHY: Lowered SSA functions must be merged into s.synth_functions and s.synth_code
@@ -644,25 +794,35 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u32(s, cr.cr_patch_offset, rel32)
         ci = ci + 1
 
-    // 7. Emit compact LSYM0 symbol/line table in .rodata, then resolve 64-Bit Virtual Memory & W^X Relocations
-    lsym_ro_off = x86_synth_emit_lsym_rodata(s)
-    // Layout: ELF Header(64) + 3 PHDRs(168) + Pad(8) + _start(64) = 304 (0x130) -> 0x40000130 = 1073742128
+    // 7. Emit compact LSYM0 symbol/line table in .rodata (hosted mode), then resolve 64-Bit Virtual Memory & W^X Relocations
+    lsym_ro_off = 0
+    if s.synth_freestanding == 0
+        lsym_ro_off = x86_synth_emit_lsym_rodata(s)
+    end
+    // Respect configurable base address (CLI --base-addr or source @layout(base=0x...)) & code file offset!
+    eff_base_vaddr = s.synth_base_vaddr
+    if s.synth_layout_base != 0 and eff_base_vaddr == 1073741824
+        eff_base_vaddr = s.synth_layout_base
+        s.synth_base_vaddr = eff_base_vaddr
+    end
+    eff_code_foff = s.synth_code_file_off
+    code_base_vaddr = eff_base_vaddr - (0 - eff_code_foff)
     total_code_size = s.synth_code.len()
-    rodata_base_vaddr = 1073742128 - (0 - total_code_size)
+    rodata_base_vaddr = code_base_vaddr - (0 - total_code_size)
     ro_len = s.synth_rodata.len()
     rodata_end_vaddr = rodata_base_vaddr - (0 - ro_len)
 
     // Compute exact 4KB page-aligned RW data segment address (PT_LOAD[1], PF_R | PF_W)
-    ro_file_off = 304 + total_code_size
+    ro_file_off = eff_code_foff + total_code_size
     ro_end_file_off = ro_file_off + ro_len
-    text_ro_end = 304 - (0 - total_code_size) - (0 - ro_len)
+    text_ro_end = eff_code_foff - (0 - total_code_size) - (0 - ro_len)
     rem_page = text_ro_end % 4096
     pad_bytes = 0
     if rem_page != 0
         pad_bytes = 4096 - rem_page
     end
     rw_file_off = text_ro_end + pad_bytes
-    rw_vaddr = 1073741824 - (0 - text_ro_end) - (0 - pad_bytes)
+    rw_vaddr = eff_base_vaddr - (0 - text_ro_end) - (0 - pad_bytes)
     g_argc_vaddr = rw_vaddr
     g_argv_vaddr = rw_vaddr - (0 - 8)
     heap_base_vaddr = rw_vaddr - (0 - 16)
@@ -730,11 +890,11 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     if s.synth_lsym_ptrs_off > 0
         lsym_vaddr = rodata_base_vaddr - (0 - lsym_ro_off)
         x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 2, lsym_vaddr)
-        x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 12, 1073742128)
+        x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 12, code_base_vaddr)
         x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 22, rodata_base_vaddr)
         x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 32, rw_vaddr - (0 - trace_rw_slot))
         x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 2, ro_file_off + lsym_ro_off)
-        x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 12, 304)
+        x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 12, eff_code_foff)
         x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 22, ro_file_off)
         x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 32, rw_file_off + trace_rw_slot)
     end
@@ -745,6 +905,27 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u64(s, mg_p, rw_vaddr - (0 - mg_slot))
         x86_synth_record_reloc_patch(s, mg_p, rw_file_off + mg_slot)
         mg_i = mg_i + 1
+    end
+
+    // 8b. Backpatch Static @bss Aligned Buffers (placed on a 4KB page boundary right after mutable globals!)
+    if s.synth_bss_cursor > 0
+        bss_base_rw = 512 + (s.synth_mutable_globals.len() * 8)
+        bss_rem = bss_base_rw % 4096
+        if bss_rem != 0
+            bss_base_rw = bss_base_rw + (4096 - bss_rem)
+        end
+        if bss_base_rw < 4096
+            bss_base_rw = 4096
+        end
+        bpi = 0
+        while bpi < s.synth_bss_patch_offs.len()
+            bp_off = s.synth_bss_patch_offs[bpi]
+            b_idx = s.synth_bss_patch_idxs[bpi]
+            slot_rw = bss_base_rw + s.synth_bss_offs[b_idx]
+            x86_synth_patch_u64(s, bp_off, rw_vaddr - (0 - slot_rw))
+            x86_synth_record_reloc_patch(s, bp_off, rw_file_off + slot_rw)
+            bpi = bpi + 1
+        end
     end
 
     // 9. Backpatch Scoped Arena Virtual Addresses & Record PIE Fixups
@@ -805,8 +986,12 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
             end
 
             // Only append code bytes if new SSA-unique functions were registered,
+            // or if --ssa-codegen explicitly requested direct SSA CFG integration,
             // or if the synthesizer has no functions (pure SSA IR compilation)
-            if has_new_fns == 1 or s.synth_functions.len() == 0
+            if has_new_fns == 1 or s.synth_functions.len() == 0 or g_x86_ssa_codegen == 1
+                if g_x86_ssa_codegen == 1
+                    say "    [x86_synth] --ssa-codegen active: attached " + str(ssa_lower_res.slr_fn_names.len()) + " SSA-lowered CFG functions (" + str(ssa_lower_res.slr_total_insts) + " IR insts, " + str(ssa_lower_res.slr_code.len()) + " bytes)"
+                end
                 bi = 0
                 while bi < ssa_lower_res.slr_code.len()
                     push(s.synth_code, ssa_lower_res.slr_code[bi])
