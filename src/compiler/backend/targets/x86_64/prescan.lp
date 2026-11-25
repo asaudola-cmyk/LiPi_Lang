@@ -46,6 +46,13 @@ fn x86_synth_prescan_signatures s tokens
             if tokens[si_ps + 1].tok_kind == TOK_IDENT()
                 push(known_structs, tokens[si_ps + 1].tok_text)
             end
+        elif sk_ps == TOK_KW_ENUM() or sk_ps == TOK_DIR_ENUM() or (sk_ps == TOK_IDENT() and (sx_ps == "enum" or sx_ps == "@enum" or sx_ps == "গণনা"))
+            ep_box = [si_ps]
+            x86_synth_register_enum_from_tokens(s, tokens, ep_box, st_ps.tok_span.span_start_col, st_ps.tok_span.span_start_line)
+            if get(ep_box, 0) > si_ps
+                si_ps = get(ep_box, 0)
+                continue
+            end
         end
         si_ps = si_ps + 1
     end
@@ -70,6 +77,14 @@ fn x86_synth_prescan_signatures s tokens
                 method_alias = tokens[p + 1].tok_text
                 fn_name = fn_name + "_" + method_alias
                 p = p + 2
+            end
+            // Parse optional generic type parameters: fn name<T, U>(...)
+            tp_box = [p]
+            fn_tparams = x86_synth_parse_type_list(tokens, tp_box, 0)
+            if fn_tparams == 0
+                fn_tparams = list()
+            else
+                p = get(tp_box, 0)
             end
             pcount = 0
             fparams = list()
@@ -112,13 +127,14 @@ fn x86_synth_prescan_signatures s tokens
                         while has_paren == 1 and p < n and tokens[p].tok_kind == TOK_NEWLINE()
                             p = p + 1
                         end
-                        if p < n and x86_synth_is_ident_token(tokens[p].tok_kind) == 1
-                            pt_ps = tokens[p].tok_text
+                        pt_box = [p]
+                        pt_ps = x86_synth_parse_type_expr(tokens, pt_box)
+                        if pt_ps != ""
                             pt_decl = pt_ps
                             if pt_ps == "float" or pt_ps == "f64" or pt_ps == "f32"
                                 push(fparams, pname_ps)
                             end
-                            p = p + 1
+                            p = get(pt_box, 0)
                         end
                     end
                     push(p_types, pt_decl)
@@ -141,9 +157,11 @@ fn x86_synth_prescan_signatures s tokens
                 while p < n and tokens[p].tok_kind == TOK_NEWLINE()
                     p = p + 1
                 end
-                if p < n and (x86_synth_is_ident_token(tokens[p].tok_kind) == 1 or tokens[p].tok_kind == TOK_IDENT())
-                    ret_t = tokens[p].tok_text
-                    p = p + 1
+                rt_box = [p]
+                rt_parsed = x86_synth_parse_type_expr(tokens, rt_box)
+                if rt_parsed != ""
+                    ret_t = rt_parsed
+                    p = get(rt_box, 0)
                 end
             end
             if ret_t == ""
@@ -266,6 +284,7 @@ fn x86_synth_prescan_signatures s tokens
             fe.fn_param_count = pcount
             fe.fn_tok_pos = i
             fe.fn_param_types = p_types
+            fe.fn_type_params = fn_tparams
             x86_synth_register_fn_obj(s, fe)
             if method_alias != ""
                 fa = X86Function()
@@ -277,6 +296,7 @@ fn x86_synth_prescan_signatures s tokens
                 fa.fn_param_count = pcount
                 fa.fn_tok_pos = i
                 fa.fn_param_types = p_types
+                fa.fn_type_params = fn_tparams
                 x86_synth_register_fn_obj(s, fa)
             end
             i = p
@@ -334,7 +354,7 @@ fn x86_synth_prescan_globals s tokens
         if k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT()
             is_blk = 1
             is_fn_blk = 1
-        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or k == TOK_DIR_ENUM()
+        elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or k == TOK_KW_ENUM() or k == TOK_DIR_ENUM()
             is_blk = 1
         elif k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান")
             is_blk = 1

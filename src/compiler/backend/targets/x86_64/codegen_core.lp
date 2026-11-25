@@ -41,8 +41,9 @@ struct X86LocalVar
     lv_prim_type        // Inferred primitive silicon type: "int", "str", or "" if dynamic
     lv_reg              // Assigned physical register ID (-1 if none or spilled)
     lv_is_spilled       // 1 if spilled to stack frame slot, 0 if held in physical register
-    lv_elem_type        // Inferred list/array element primitive type ("float", "int", "str", or "")
+    lv_elem_type        // Inferred list/array element primitive type ("float", "int", "str", "dyn_dict", or "")
     lv_is_boxed         // 1 if local is heap-boxed in an 8-byte GC upvalue cell for mutable closure capture
+    lv_tag_off          // Positive RBP-relative offset for runtime val_tag when lv_prim_type == "dyn_tagged" (0 if unused)
 
 // WHY: Records a function definition entry point for call site resolution
 struct X86Function
@@ -54,6 +55,7 @@ struct X86Function
     fn_param_count      // Declared parameter count (-1 if helper/unknown, >=0 for user fns)
     fn_tok_pos          // Source token index of `fn` keyword (-1 for runtime helpers / mono clones)
     fn_param_types      // Parallel list of explicit declared parameter type strings ("", "float", ...)
+    fn_type_params      // Generic type parameter names (e.g. ["T", "U"]), empty for non-generic fns
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -66,6 +68,16 @@ struct X86StructDef
     sd_name             // Struct type name string
     sd_fields           // List of field name strings
     sd_field_types      // Parallel list of declared/inferred field type strings
+    sd_type_params      // Generic type parameter names (e.g. ["T"]), empty for concrete structs
+
+// WHY: Models Algebraic Data Type (Tagged Enum) & C-style Integer Enum schemas
+struct X86EnumDef
+    ed_name             // Enum type name string ("Result", "Option", "Shape")
+    ed_variants         // List of variant name strings (["Ok", "Err"])
+    ed_arities          // Parallel list of payload field counts ([1, 1])
+    ed_field_types      // Parallel list of lists of payload type strings ([["T"], ["E"]])
+    ed_is_adt           // 1 if tagged ADT enum (heap ADT0 cells), 0 if pure integer enum
+    ed_type_params      // Generic type parameter names (["T", "E"])
 
 // WHY: Encapsulates mutable compilation state for AMD64 silicon code generation
 struct X86Synthesizer
@@ -136,8 +148,15 @@ struct X86Synthesizer
     synth_boxed_vars       // Local variable names boxed into 8B GC upvalue cells for mutable closures
     synth_globals_rw_ptr_patch // Patch offset for movabs rax, <rw_vaddr + 488> (_gc_globals_bytes)
     synth_globals_rw_len_patch // Patch offset for movabs rcx, <globals_byte_span>
-    synth_mono_name_override   // Forced mangled function name during call-site float monomorphization
-    synth_mono_param_override  // Forced parameter type list during call-site float monomorphization
+    synth_mono_name_override   // Forced mangled function name during call-site float/generic monomorphization
+    synth_mono_param_override  // Forced parameter type list during call-site float/generic monomorphization
+    synth_mono_ret_override    // Forced return type string during generic monomorphization
+    synth_enums                // List of X86EnumDef schemas (tagged ADTs & enums)
+    synth_has_defer_unwind     // 1 if current function pushed an exception unwind frame for defer
+    synth_defer_mask_off       // Positive RBP-relative offset of 64-bit executed-defer bitmask
+    synth_defer_err_off        // Positive RBP-relative offset saving thrown exception across defer replay
+    synth_in_defer_unwind_pad  // 1 while emitting Defer Unwind Pad (exc frame already popped by _lipi_exc_throw)
+    synth_lsym_ptrs_off        // Byte offset of _lipi_lsym_ptrs helper for zero-overhead LSYM0 stack traces
 
 global g_x86_strict_types = 0
 
@@ -391,7 +410,68 @@ fn x86_synth_new
     s.synth_globals_rw_len_patch = 0
     s.synth_mono_name_override = ""
     s.synth_mono_param_override = 0
+    s.synth_mono_ret_override = ""
+    s.synth_enums = list()
+    s.synth_has_defer_unwind = 0
+    s.synth_defer_mask_off = 0
+    s.synth_defer_err_off = 0
+    s.synth_in_defer_unwind_pad = 0
+    s.synth_lsym_ptrs_off = 0
     return s
+
+fn x86_synth_emit_null_check_rax s
+    // WHY: Guards struct field reads on %rax against NULL / low unmapped page (< 4096),
+    // throwing catchable NullPointerException instead of raw SIGSEGV (Exit 139).
+    // cmp rax, 4096 (6B); jae +5 (2B); call _lipi_throw_null_deref (5B)
+    x86_synth_emit_bytes(s, [72, 61, 0, 16, 0, 0, 115, 5])
+    x86_synth_emit_call_helper(s, "_lipi_throw_null_deref")
+    return 0
+
+fn x86_synth_emit_null_check_rcx s
+    // WHY: Guards struct field writes / chain walks on %rcx against NULL / low page (< 4096).
+    // cmp rcx, 4096 (7B); jae +5 (2B); call _lipi_throw_null_deref (5B)
+    x86_synth_emit_bytes(s, [72, 129, 249, 0, 16, 0, 0, 115, 5])
+    x86_synth_emit_call_helper(s, "_lipi_throw_null_deref")
+    return 0
+
+fn x86_synth_body_has_defer toks start_pos base_col base_line
+    // WHY: Zero-overhead prescan: returns 1 iff current function body contains a defer statement
+    // (ignoring nested fn definitions). Functions without defer emit 0 unwind instructions.
+    n = toks.len()
+    i = start_pos
+    while i < n
+        t = toks[i]
+        k = t.tok_kind
+        txt = t.tok_text
+        if k == TOK_EOF()
+            break
+        end
+        if base_line >= 0
+            if x86_synth_is_block_end(toks, i) == 1 and t.tok_span.span_start_col <= base_col
+                break
+            end
+            if t.tok_span.span_start_line > base_line and t.tok_span.span_start_col <= base_col and k != TOK_NEWLINE() and k != TOK_SEMI() and k != TOK_COMMENT_LINE() and k != TOK_COMMENT_DOC() and k != TOK_COMMENT_BLOCK()
+                break
+            end
+        end
+        if k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান"))
+            if i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
+                break
+            end
+        end
+        if k == TOK_KW_DEFER() or (k == TOK_IDENT() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব"))
+            if i + 1 >= n
+                return 1
+            else
+                dn = toks[i + 1]
+                if dn.tok_kind != TOK_ASSIGN() and dn.tok_text != "=" and dn.tok_kind != TOK_LPAREN() and dn.tok_text != "(" and dn.tok_kind != TOK_DOT() and dn.tok_text != "."
+                    return 1
+                end
+            end
+        end
+        i = i + 1
+    end
+    return 0
 
 fn x86_synth_is_boxed_name s name
     if s.synth_boxed_vars == 0
@@ -852,6 +932,7 @@ include "src/compiler/backend/targets/x86_64/runtime_helpers.lp"
 include "src/compiler/backend/targets/x86_64/runtime_io.lp"
 include "src/compiler/backend/targets/x86_64/runtime_mt_gc.lp"
 include "src/compiler/backend/targets/x86_64/runtime_dict.lp"
+include "src/compiler/backend/targets/x86_64/runtime_trace.lp"
 include "src/compiler/backend/targets/x86_64/avx2_encoder.lp"
 include "src/compiler/backend/targets/x86_64/amx_vnni_encoder.lp"
 include "src/compiler/backend/targets/x86_64/runtime_arena.lp"
@@ -1551,6 +1632,7 @@ fn x86_synth_alloc_reg_var s name is_reg_hint
     lv.lv_reg = 0 - 1
     lv.lv_is_spilled = 1
     lv.lv_is_boxed = 0
+    lv.lv_tag_off = 0
 
     // WHY: Boxed upvalue cells stay in their dedicated stack slot so closures capture the heap cell address.
     if x86_synth_is_boxed_name(s, name) == 1
@@ -1792,6 +1874,13 @@ fn x86_synth_bind_reg_var s var_name is_reg
     ex_lv = x86_synth_find_local_var(s, var_name)
     off = x86_synth_alloc_reg_var(s, var_name, is_reg)
     lv = x86_synth_find_local_var(s, var_name)
+    if s.synth_last_expr_type == "dyn_tagged" and lv != 0
+        if lv.lv_tag_off == 0
+            lv.lv_tag_off = s.synth_stack_offset
+            s.synth_stack_offset = s.synth_stack_offset + 8
+        end
+        x86_synth_emit_store_var(s, 2, lv.lv_tag_off) // mov [rbp - lv_tag_off], rdx
+    end
     if lv != 0 and lv.lv_is_boxed == 1
         if ex_lv == 0
             // First declaration of boxed variable: allocate 8B GC cell, store initial %rax inside, save cell ptr to slot
@@ -1956,14 +2045,544 @@ fn x86_synth_is_block_end toks p
         return 1
     return 0
 
+// ── Wave G Helpers: Generic Type Params/Args, Struct Specialization, Tagged ADTs ──
+
+fn x86_synth_norm_type_name t
+    if t == "f64" or t == "f32" or t == "float" or t == "দশমিক"
+        return "float"
+    elif t == "i64" or t == "i32" or t == "u64" or t == "u32" or t == "int" or t == "সংখ্যা" or t == "পূর্ণসংখ্যা"
+        return "int"
+    elif t == "str" or t == "string" or t == "স্ট্রিং"
+        return "str"
+    end
+    return t
+end
+
+fn x86_synth_parse_type_list toks pos_box require_lparen
+    // WHY: Parses `<T, U>` or `<Box<float>, int>` without colliding with `<` comparisons.
+    // When require_lparen == 1 (call sites), requires `(` immediately after closing `>`.
+    // Returns list of type strings (e.g. ["float"] or ["Box<float>", "int"]), or 0 if not a type list.
+    p = get(pos_box, 0)
+    if p >= toks.len() return 0 end
+    if toks[p].tok_kind != TOK_LT() and not (toks[p].tok_kind != TOK_STR() and toks[p].tok_text == "<")
+        return 0
+    end
+    scan = p + 1
+    depth = 1
+    items = list()
+    cur_item = ""
+    while scan < toks.len() and depth > 0
+        tk = toks[scan].tok_kind
+        tx = toks[scan].tok_text
+        if tk == TOK_LT() or (tk != TOK_STR() and tx == "<")
+            depth = depth + 1
+            cur_item = cur_item + "<"
+        elif tk == TOK_GT() or (tk != TOK_STR() and tx == ">")
+            depth = depth - 1
+            if depth == 0
+                if cur_item != "" push(items, cur_item) end
+                scan = scan + 1
+                break
+            else
+                cur_item = cur_item + ">"
+            end
+        elif tk == TOK_SHR() or (tk != TOK_STR() and tx == ">>")
+            if depth == 2
+                cur_item = cur_item + ">"
+                depth = 0
+                if cur_item != "" push(items, cur_item) end
+                scan = scan + 1
+                break
+            elif depth > 2
+                cur_item = cur_item + ">>"
+                depth = depth - 2
+            else
+                return 0
+            end
+        elif (tk == TOK_COMMA() or (tk != TOK_STR() and tx == ",")) and depth == 1
+            if cur_item == "" return 0 end
+            push(items, cur_item)
+            cur_item = ""
+        elif tk == TOK_COMMA() or (tk != TOK_STR() and tx == ",")
+            cur_item = cur_item + ","
+        elif tk == TOK_NEWLINE()
+            // skip whitespace inside multi-line type list
+        elif x86_synth_is_ident_token(tk) == 1
+            cur_item = cur_item + tx
+        else
+            return 0
+        end
+        scan = scan + 1
+    end
+    if depth != 0 or items.len() == 0
+        return 0
+    end
+    if require_lparen == 1
+        if scan >= toks.len() return 0 end
+        if toks[scan].tok_kind != TOK_LPAREN() and not (toks[scan].tok_kind != TOK_STR() and toks[scan].tok_text == "(")
+            return 0
+        end
+    end
+    list_set(pos_box, 0, scan)
+    return items
+end
+
+fn x86_synth_parse_type_expr toks pos_box
+    // WHY: Parses a type annotation `Name` or `Name<Arg1, Arg2>` into a single string `"Name"` or `"Name<Arg1,Arg2>"`.
+    p = get(pos_box, 0)
+    if p >= toks.len() return "" end
+    if x86_synth_is_ident_token(toks[p].tok_kind) == 0 return "" end
+    base_t = toks[p].tok_text
+    list_set(pos_box, 0, p + 1)
+    targs = x86_synth_parse_type_list(toks, pos_box, 0)
+    if targs != 0 and targs.len() > 0
+        res = base_t + "<"
+        ti = 0
+        while ti < targs.len()
+            if ti > 0 res = res + "," end
+            res = res + targs[ti]
+            ti = ti + 1
+        end
+        res = res + ">"
+        return res
+    end
+    return base_t
+end
+
+fn x86_synth_specialize_struct s base_sdef targs
+    // WHY: Compile-time monomorphizes `struct Box<T>` into cached `Box__g_float` with concrete field types (0% boxing).
+    if base_sdef == 0 or targs == 0 or targs.len() == 0
+        return base_sdef
+    end
+    mangled = base_sdef.sd_name + "__g"
+    ti = 0
+    while ti < targs.len()
+        mangled = mangled + "_" + x86_synth_norm_type_name(targs[ti])
+        ti = ti + 1
+    end
+    existing = x86_synth_find_struct(s, mangled)
+    if existing != 0
+        return existing
+    end
+    ns = X86StructDef()
+    ns.sd_name = mangled
+    ns.sd_fields = base_sdef.sd_fields
+    ns.sd_type_params = list()
+    new_ftypes = list()
+    fi = 0
+    while fi < base_sdef.sd_field_types.len()
+        raw_ft = base_sdef.sd_field_types[fi]
+        sub_ft = x86_synth_subst_type(s, raw_ft, base_sdef.sd_type_params, targs)
+        push(new_ftypes, sub_ft)
+        fi = fi + 1
+    end
+    ns.sd_field_types = new_ftypes
+    push(s.synth_structs, ns)
+    return ns
+end
+
+fn x86_synth_subst_type s raw_t tparams targs
+    // WHY: Substitutes generic type parameters `T` -> `float` and generic struct refs `Box<T>` -> `Box__g_float`.
+    if raw_t == "" return "" end
+    if tparams != 0 and targs != 0
+        pi = 0
+        while pi < tparams.len() and pi < targs.len()
+            if raw_t == tparams[pi]
+                return x86_synth_norm_type_name(targs[pi])
+            end
+            pi = pi + 1
+        end
+    end
+    // Check if raw_t contains '<' (e.g. "Box<T>" or "Box<float>")
+    lt_idx = 0 - 1
+    n_rt = len(raw_t)
+    ci = 0
+    while ci < n_rt
+        if char_at(raw_t, ci) == "<"
+            lt_idx = ci
+            break
+        end
+        ci = ci + 1
+    end
+    if lt_idx > 0 and char_at(raw_t, n_rt - 1) == ">"
+        base_nm = str_sub(raw_t, 0, lt_idx)
+        inner = str_sub(raw_t, lt_idx + 1, n_rt - 1)
+        // Split top-level commas in inner
+        sub_args = list()
+        seg_s = 0
+        dep = 0
+        ii = 0
+        ilen = len(inner)
+        while ii < ilen
+            ch = char_at(inner, ii)
+            if ch == "<" dep = dep + 1
+            elif ch == ">" dep = dep - 1
+            elif ch == "," and dep == 0
+                push(sub_args, x86_synth_subst_type(s, str_sub(inner, seg_s, ii), tparams, targs))
+                seg_s = ii + 1
+            end
+            ii = ii + 1
+        end
+        if seg_s < ilen
+            push(sub_args, x86_synth_subst_type(s, str_sub(inner, seg_s, ilen), tparams, targs))
+        end
+        base_sd = x86_synth_find_struct(s, base_nm)
+        if base_sd != 0 and base_sd.sd_type_params != 0 and base_sd.sd_type_params.len() > 0
+            spec_sd = x86_synth_specialize_struct(s, base_sd, sub_args)
+            return spec_sd.sd_name
+        end
+        return base_nm
+    end
+    return raw_t
+end
+
+fn x86_synth_find_enum s ename
+    ei = 0
+    while ei < s.synth_enums.len()
+        if s.synth_enums[ei].ed_name == ename
+            return s.synth_enums[ei]
+        end
+        ei = ei + 1
+    end
+    return 0
+end
+
+fn x86_synth_find_adt_variant s enum_qual var_name
+    // WHY: Looks up an enum variant across all registered X86EnumDefs.
+    // Returns [ed, variant_idx] if found, else 0.
+    ei = s.synth_enums.len() - 1
+    while ei >= 0
+        ed = s.synth_enums[ei]
+        if enum_qual == "" or ed.ed_name == enum_qual
+            vi = 0
+            while vi < ed.ed_variants.len()
+                if ed.ed_variants[vi] == var_name
+                    return [ed, vi]
+                end
+                vi = vi + 1
+            end
+        end
+        ei = ei - 1
+    end
+    return 0
+end
+
+fn x86_synth_register_enum_from_tokens s toks pos_box e_col e_line
+    // WHY: Unified parser for BOTH Tagged ADTs (`enum Result<T, E> { Ok(T), Err(E) }`)
+    // and C-style integer enums (`enum Color { RED, GREEN = 5 }`).
+    pos = get(pos_box, 0)
+    list_set(pos_box, 0, pos + 1) // Consume enum keyword
+    ename = ""
+    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+        ename = toks[get(pos_box, 0)].tok_text
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+    tparams = x86_synth_parse_type_list(toks, pos_box, 0)
+    if tparams == 0 tparams = list() end
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    en_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        en_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+    v_names = list()
+    v_arities = list()
+    v_ftypes = list()
+    v_int_vals = list()
+    has_payload = 0
+    e_val = 0
+    while get(pos_box, 0) < toks.len()
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        ep = get(pos_box, 0)
+        if ep >= toks.len() break end
+        et = toks[ep]
+        ek = et.tok_kind
+        etx = et.tok_text
+        if en_braced == 1
+            if ek == TOK_RBRACE() or (ek != TOK_STR() and etx == "}")
+                list_set(pos_box, 0, ep + 1)
+                break
+            end
+            if ek == TOK_COMMA() or (ek != TOK_STR() and etx == ",")
+                list_set(pos_box, 0, ep + 1)
+                continue
+            end
+        else
+            if ek == TOK_KW_END() or ek == TOK_DIR_END() or (ek == TOK_IDENT() and (etx == "end" or etx == "শেষ" or etx == "@end"))
+                list_set(pos_box, 0, ep + 1)
+                break
+            end
+            if ek == TOK_KW_FN() or ek == TOK_DIR_FN() or ek == TOK_KW_STRUCT() or ek == TOK_DIR_STRUCT() or ek == TOK_KW_ENUM() or ek == TOK_DIR_ENUM()
+                break
+            end
+            if ek == TOK_IDENT() and (etx == "fn" or etx == "কাজ" or etx == "@fn" or etx == "struct" or etx == "গঠন" or etx == "@struct" or etx == "enum" or etx == "@enum" or etx == "গণনা")
+                break
+            end
+            if et.tok_span.span_start_line > e_line and et.tok_span.span_start_col <= e_col
+                break
+            end
+            if ek == TOK_COMMA() or (ek != TOK_STR() and etx == ",")
+                list_set(pos_box, 0, ep + 1)
+                continue
+            end
+        end
+        if x86_synth_is_ident_token(ek) == 1
+            vname = etx
+            list_set(pos_box, 0, ep + 1)
+            f_list = list()
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                has_payload = 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                while get(pos_box, 0) < toks.len()
+                    x86_synth_skip_whitespace_tokens(toks, pos_box)
+                    vp = get(pos_box, 0)
+                    if vp >= toks.len() break end
+                    if toks[vp].tok_kind == TOK_RPAREN() or (toks[vp].tok_kind != TOK_STR() and toks[vp].tok_text == ")")
+                        list_set(pos_box, 0, vp + 1)
+                        break
+                    elif toks[vp].tok_kind == TOK_COMMA() or (toks[vp].tok_kind != TOK_STR() and toks[vp].tok_text == ",")
+                        list_set(pos_box, 0, vp + 1)
+                    else
+                        ft_v = x86_synth_parse_type_expr(toks, pos_box)
+                        if ft_v == ""
+                            list_set(pos_box, 0, vp + 1)
+                        else
+                            push(f_list, ft_v)
+                        end
+                    end
+                end
+            elif get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len()
+                    v_tok = toks[get(pos_box, 0)]
+                    if v_tok.tok_kind == TOK_INT()
+                        e_val = v_tok.tok_int_val
+                    end
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            push(v_names, vname)
+            push(v_arities, f_list.len())
+            push(v_ftypes, f_list)
+            push(v_int_vals, e_val)
+            e_val = e_val + 1
+        else
+            list_set(pos_box, 0, ep + 1)
+        end
+    end
+    is_adt = 0
+    if has_payload == 1 or tparams.len() > 0
+        is_adt = 1
+    end
+    if is_adt == 0
+        vi = 0
+        while vi < v_names.len()
+            x86_synth_set_global_const(s, v_names[vi], v_int_vals[vi])
+            vi = vi + 1
+        end
+    end
+    if ename != "" and x86_synth_find_enum(s, ename) == 0
+        ed = X86EnumDef()
+        ed.ed_name = ename
+        ed.ed_variants = v_names
+        ed.ed_arities = v_arities
+        ed.ed_field_types = v_ftypes
+        ed.ed_is_adt = is_adt
+        ed.ed_type_params = tparams
+        push(s.synth_enums, ed)
+    end
+    return 0
+end
+
+fn x86_synth_emit_adt_alloc s tag arity arg_expr_types
+    // WHY: Allocates a GC-traced ADT0 cell: [0]=tag, [8]=arity, [16]=0x41445430|(tag_mask<<32), [24+]=payloads.
+    // Preserves dynamic float/str payload tags with 0 bytes of extra memory overhead.
+    single_dyn = 0
+    if arity == 1 and arg_expr_types != 0 and arg_expr_types.len() >= 1 and arg_expr_types[0] == "dyn_tagged"
+        single_dyn = 1
+        // Save live %rdx tag across __alloc while keeping stack 16-byte aligned: sub rsp, 8; push rdx
+        x86_synth_emit_bytes(s, [72, 131, 236, 8, 82])
+    end
+    alloc_sz = (3 + arity) * 8
+    if alloc_sz < 32 alloc_sz = 32 end
+    x86_synth_emit_mov_rdi_imm64(s, alloc_sz)
+    x86_synth_emit_call_alloc(s)
+    // mov r10, rax
+    x86_synth_emit_bytes(s, [73, 137, 194])
+    // mov qword ptr [r10 + 0], tag
+    x86_synth_emit_bytes(s, [73, 199, 2])
+    x86_synth_emit_u32(s, tag)
+    // mov qword ptr [r10 + 8], arity
+    x86_synth_emit_bytes(s, [73, 199, 66, 8])
+    x86_synth_emit_u32(s, arity)
+    if single_dyn == 1
+        // pop rdx; add rsp, 8; and edx, 3; shl rdx, 32; mov eax, 0x41445430; or rax, rdx; mov [r10+16], rax
+        x86_synth_emit_bytes(s, [90, 72, 131, 196, 8, 131, 226, 3, 72, 193, 226, 32, 184, 48, 84, 68, 65, 72, 9, 208, 73, 137, 66, 16])
+    else
+        tag_mask = 0
+        if arg_expr_types != 0
+            ti = 0
+            shift_mul = 1
+            while ti < arity and ti < arg_expr_types.len() and ti < 16
+                at = arg_expr_types[ti]
+                tbits = 0
+                if at == "float" tbits = 1
+                elif at == "str" tbits = 2
+                end
+                tag_mask = tag_mask + (tbits * shift_mul)
+                shift_mul = shift_mul * 4
+                ti = ti + 1
+            end
+        end
+        hdr_word = 1094997040 + (tag_mask * 4294967296)
+        x86_synth_emit_mov_rax_imm64(s, hdr_word)
+        x86_synth_emit_bytes(s, [73, 137, 66, 16]) // mov [r10 + 16], rax
+    end
+    ai = arity - 1
+    while ai >= 0
+        x86_synth_emit_byte(s, 89) // pop rcx
+        off = 24 + (ai * 8)
+        if off < 128
+            x86_synth_emit_bytes(s, [73, 137, 74, off]) // mov [r10 + off], rcx
+        else
+            x86_synth_emit_bytes(s, [73, 137, 138])
+            x86_synth_emit_u32(s, off)
+        end
+        ai = ai - 1
+    end
+    // Restore cell pointer to %rax: mov rax, r10
+    x86_synth_emit_bytes(s, [76, 137, 208])
+    s.synth_last_store_end = 0 - 1
+    return 0
+end
+
+fn x86_synth_try_compile_adt_pattern s toks pos_box scrut_off
+    // WHY: Compiles ADT destructuring patterns `[Enum::]Variant[(b0, b1, ...)]` in match arms.
+    // Returns a list of jump patch offsets (miss_patches) if matched as an ADT pattern, else 0.
+    p = get(pos_box, 0)
+    if p >= toks.len() or x86_synth_is_ident_token(toks[p].tok_kind) == 0
+        return 0
+    end
+    scan = p
+    enum_qual = ""
+    var_name = toks[scan].tok_text
+    scan = scan + 1
+    if scan + 2 < toks.len() and (toks[scan].tok_kind == TOK_COLON() or toks[scan].tok_text == ":") and (toks[scan + 1].tok_kind == TOK_COLON() or toks[scan + 1].tok_text == ":") and x86_synth_is_ident_token(toks[scan + 2].tok_kind) == 1
+        enum_qual = var_name
+        var_name = toks[scan + 2].tok_text
+        scan = scan + 3
+    end
+    vinfo = x86_synth_find_adt_variant(s, enum_qual, var_name)
+    if vinfo == 0
+        return 0
+    end
+    ed = vinfo[0]
+    v_idx = vinfo[1]
+    if ed.ed_is_adt == 0
+        return 0
+    end
+    binds = list()
+    if scan < toks.len() and (toks[scan].tok_kind == TOK_LPAREN() or toks[scan].tok_text == "(")
+        scan = scan + 1
+        while scan < toks.len()
+            sk = toks[scan].tok_kind
+            stx = toks[scan].tok_text
+            if sk == TOK_RPAREN() or (sk != TOK_STR() and stx == ")")
+                scan = scan + 1
+                break
+            elif sk == TOK_COMMA() or (sk != TOK_STR() and stx == ",") or sk == TOK_NEWLINE()
+                scan = scan + 1
+            elif x86_synth_is_ident_token(sk) == 1
+                push(binds, stx)
+                scan = scan + 1
+            else
+                return 0
+            end
+        end
+    end
+    list_set(pos_box, 0, scan)
+
+    // Emit tag & ADT0 magic verification on scrutinee
+    miss_patches = list()
+    x86_synth_emit_load_var(s, 0, scrut_off)
+    x86_synth_emit_bytes(s, [72, 61, 0, 16, 0, 0, 15, 130]) // cmp rax, 4096; jb miss
+    m1 = s.synth_code.len()
+    x86_synth_emit_u32(s, 0)
+    push(miss_patches, m1)
+    x86_synth_emit_bytes(s, [129, 120, 16, 48, 84, 68, 65, 15, 133]) // cmp dword [rax+16], 'ADT0'; jne miss
+    m2 = s.synth_code.len()
+    x86_synth_emit_u32(s, 0)
+    push(miss_patches, m2)
+    x86_synth_emit_bytes(s, [72, 129, 56]) // cmp qword [rax+0], v_idx
+    x86_synth_emit_u32(s, v_idx)
+    x86_synth_emit_bytes(s, [15, 133]) // jne miss
+    m3 = s.synth_code.len()
+    x86_synth_emit_u32(s, 0)
+    push(miss_patches, m3)
+
+    // Destructure & bind payload variables into current arm scope
+    v_ft_list = ed.ed_field_types[v_idx]
+    bi = 0
+    while bi < binds.len()
+        bname = binds[bi]
+        if bname != "_"
+            x86_synth_emit_load_var(s, 1, scrut_off) // mov rcx, [rbp - scrut_off]
+            poff = 24 + (bi * 8)
+            if poff < 128
+                x86_synth_emit_bytes(s, [72, 139, 65, poff]) // mov rax, [rcx + poff]
+            else
+                x86_synth_emit_bytes(s, [72, 139, 129])
+                x86_synth_emit_u32(s, poff)
+            end
+            decl_ft = ""
+            if v_ft_list != 0 and bi < v_ft_list.len()
+                decl_ft = x86_synth_norm_type_name(v_ft_list[bi])
+            end
+            if decl_ft == "float" or decl_ft == "int" or decl_ft == "str"
+                s.synth_last_expr_type = decl_ft
+                s.synth_last_struct = ""
+                x86_synth_bind_var(s, bname)
+                x86_synth_set_prim_type(s, bname, decl_ft)
+            else
+                // Generic / dynamic payload: extract 2-bit runtime tag from [rcx + 20] into %rdx!
+                x86_synth_emit_bytes(s, [139, 81, 20]) // mov edx, dword ptr [rcx + 20]
+                if bi > 0
+                    x86_synth_emit_bytes(s, [193, 234, bi * 2]) // shr edx, bi*2
+                end
+                x86_synth_emit_bytes(s, [131, 226, 3]) // and edx, 3
+                s.synth_last_expr_type = "dyn_tagged"
+                s.synth_last_struct = ""
+                x86_synth_bind_var(s, bname)
+                x86_synth_set_prim_type(s, bname, "dyn_tagged")
+                if decl_ft != "" and x86_synth_find_struct(s, decl_ft) != 0
+                    x86_synth_set_var_type(s, bname, decl_ft)
+                end
+            end
+        end
+        bi = bi + 1
+    end
+    s.synth_last_store_end = 0 - 1
+    return miss_patches
+end
+
 fn x86_synth_compile_struct_def s toks pos_box base_col base_line
-    // WHY: Registers user-defined struct schemas with ordered field offsets in compiler state.
+    // WHY: Registers user-defined struct schemas (including generic `struct Box<T>`) with ordered field offsets.
     pos = get(pos_box, 0)
     list_set(pos_box, 0, pos + 1) // Consume 'struct'
 
     sname_tok = toks[get(pos_box, 0)]
     sname = sname_tok.tok_text
     list_set(pos_box, 0, get(pos_box, 0) + 1)
+
+    tparams = x86_synth_parse_type_list(toks, pos_box, 0)
+    if tparams == 0 tparams = list() end
+
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    st_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        st_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
 
     fields = list()
     field_types = list()
@@ -1976,15 +2595,26 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
         cur_k = cur_t.tok_kind
         cur_txt = cur_t.tok_text
 
-        if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
-            list_set(pos_box, 0, cur_p + 1)
-            break
-        if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or cur_k == TOK_KW_STRUCT() or cur_k == TOK_DIR_STRUCT() or cur_k == TOK_DIR_ENUM()
-            break
-        if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "struct" or cur_txt == "গঠন" or cur_txt == "enum" or cur_txt == "@enum" or cur_txt == "গণনা")
-            break
-        if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-            break
+        if st_braced == 1
+            if cur_k == TOK_RBRACE() or (cur_k != TOK_STR() and cur_txt == "}")
+                list_set(pos_box, 0, cur_p + 1)
+                break
+            end
+            if cur_k == TOK_COMMA() or (cur_k != TOK_STR() and cur_txt == ",")
+                list_set(pos_box, 0, cur_p + 1)
+                continue
+            end
+        else
+            if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
+                list_set(pos_box, 0, cur_p + 1)
+                break
+            if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or cur_k == TOK_KW_STRUCT() or cur_k == TOK_DIR_STRUCT() or cur_k == TOK_KW_ENUM() or cur_k == TOK_DIR_ENUM()
+                break
+            if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "struct" or cur_txt == "গঠন" or cur_txt == "enum" or cur_txt == "@enum" or cur_txt == "গণনা")
+                break
+            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                break
+        end
 
         if cur_k == TOK_IDENT()
             push(fields, cur_txt)
@@ -1995,10 +2625,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
             if np < toks.len() and (toks[np].tok_kind == TOK_COLON() or (toks[np].tok_kind != TOK_STR() and toks[np].tok_text == ":"))
                 list_set(pos_box, 0, np + 1)
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
-                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_IDENT() or toks[get(pos_box, 0)].tok_text == "string" or toks[get(pos_box, 0)].tok_text == "i64" or toks[get(pos_box, 0)].tok_text == "f64" or toks[get(pos_box, 0)].tok_text == "array" or toks[get(pos_box, 0)].tok_text == "bool")
-                    ftype = toks[get(pos_box, 0)].tok_text
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                end
+                ftype = x86_synth_parse_type_expr(toks, pos_box)
             end
             push(field_types, ftype)
         else
@@ -2008,6 +2635,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
     sdef.sd_name = sname
     sdef.sd_fields = fields
     sdef.sd_field_types = field_types
+    sdef.sd_type_params = tparams
     push(s.synth_structs, sdef)
     return 0
 

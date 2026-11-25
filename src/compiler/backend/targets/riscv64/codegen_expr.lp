@@ -83,6 +83,89 @@ fn riscv64_synth_expr_primary s toks pos_box
             riscv64_emit_mv(s, 10, 28)
         handled = 1
 
+    // 1d. Closure Literal: fn(p1, p2) { ... } / => expr, |p1, p2| => expr / { ... }, || => expr
+    if handled == 0 and (k == TOK_KW_FN() or (k == TOK_IDENT() and (t.tok_text == "fn" or t.tok_text == "কাজ"))) and pos + 1 < toks.len() and (toks[pos + 1].tok_kind == TOK_LPAREN() or toks[pos + 1].tok_text == "(")
+        list_set(pos_box, 0, pos + 2)
+        c_params = list()
+        while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN() and toks[get(pos_box, 0)].tok_text != ")"
+            pt = toks[get(pos_box, 0)]
+            if riscv64_is_ident_token(pt.tok_kind) == 1
+                push(c_params, pt.tok_text)
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                end
+            else
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+        end
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or toks[get(pos_box, 0)].tok_text == ")")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        riscv64_emit_closure_literal(s, toks, pos_box, c_params)
+        handled = 1
+    end
+
+    if handled == 0 and (k == TOK_BAR() or k == TOK_OR() or (k != TOK_STR() and (t.tok_text == "|" or t.tok_text == "||")))
+        c_params = list()
+        if k == TOK_OR() or t.tok_text == "||"
+            list_set(pos_box, 0, pos + 1)
+        else
+            list_set(pos_box, 0, pos + 1)
+            while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_BAR() and toks[get(pos_box, 0)].tok_text != "|"
+                pt = toks[get(pos_box, 0)]
+                if riscv64_is_ident_token(pt.tok_kind) == 1
+                    push(c_params, pt.tok_text)
+                end
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_BAR() or toks[get(pos_box, 0)].tok_text == "|")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+        end
+        riscv64_emit_closure_literal(s, toks, pos_box, c_params)
+        handled = 1
+    end
+
+    // 1e. Dict / HashMap Literal: { "k": v, ... } or {}
+    if handled == 0 and (k == TOK_LBRACE() or (k != TOK_STR() and t.tok_text == "{"))
+        list_set(pos_box, 0, pos + 1)
+        s.rv_needs_dict = 1
+        s.rv_needs_alloc = 1
+        riscv64_emit_li(s, 10, 16)
+        riscv64_synth_emit_call_helper(s, "__dict_new")
+        riscv64_push_reg(s, 10)
+        while get(pos_box, 0) < toks.len()
+            riscv64_synth_skip_whitespace_tokens(toks, pos_box)
+            dp = get(pos_box, 0)
+            if dp >= toks.len() break end
+            if toks[dp].tok_kind == TOK_RBRACE() or (toks[dp].tok_kind != TOK_STR() and toks[dp].tok_text == "}")
+                list_set(pos_box, 0, dp + 1)
+                break
+            end
+            riscv64_synth_compile_expr(s, toks, pos_box)
+            riscv64_push_reg(s, 10) // key
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            riscv64_synth_compile_expr(s, toks, pos_box) // a0 = val
+            riscv64_emit_mv(s, 12, 10)
+            riscv64_pop_reg(s, 11) // key
+            riscv64_pop_reg(s, 10) // dict hdr
+            riscv64_synth_emit_call_helper(s, "__dict_set")
+            riscv64_push_reg(s, 10) // save dict hdr
+            riscv64_synth_skip_whitespace_tokens(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_COMMA()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+        end
+        riscv64_pop_reg(s, 10)
+        handled = 1
+    end
+
     // 2. String Literal
     if handled == 0 and k == TOK_STR()
         list_set(pos_box, 0, pos + 1)
@@ -234,7 +317,7 @@ fn riscv64_synth_expr_primary s toks pos_box
                     ai = arg_count - 1
                     while ai >= 0
                         riscv64_pop_reg(s, 11)
-                        item_off = 24 + (ai * 8)
+                        item_off = 32 + (ai * 8)
                         riscv64_emit_sd(s, 11, 28, item_off)
                         ai = ai - 1
                     riscv64_emit_addi(s, 10, 28, 0) // restore list ptr into a0
@@ -341,6 +424,243 @@ fn riscv64_synth_expr_primary s toks pos_box
                 push(s.rv_call_relocs, fw_rel)
                 return 0
 
+            // ── Intrinsic 9b: Dict / HashMap Intrinsics (DICT0 Parity) ──────
+            if var_name == "dict" or var_name == "map" or var_name == "অভিধান"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10)
+                else
+                    riscv64_emit_li(s, 10, 16)
+                end
+                s.rv_needs_dict = 1
+                s.rv_needs_alloc = 1
+                riscv64_synth_emit_call_helper(s, "__dict_new")
+                return 0
+            end
+            if var_name == "has_key" or var_name == "dict_has"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 2
+                    s.rv_needs_dict = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__dict_has")
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "del_key" or var_name == "dict_del"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 2
+                    s.rv_needs_dict = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__dict_del")
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "dict_get"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 2
+                    s.rv_needs_dict = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__dict_get")
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "dict_set"
+                while arg_count > 3
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 3
+                    s.rv_needs_dict = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 12)
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__dict_set")
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+
+            // ── Intrinsic 9c: ByteBuffer Intrinsics ─────────────────────────
+            if var_name == "buf_new" or var_name == "byte_buf_new" or var_name == "বাফার_তৈরি"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10)
+                else
+                    riscv64_emit_li(s, 10, 64)
+                end
+                s.rv_needs_buf = 1
+                s.rv_needs_alloc = 1
+                riscv64_synth_emit_call_helper(s, "__buf_new")
+                return 0
+            end
+            if var_name == "buf_write_byte" or var_name == "buf_append_byte" or var_name == "buf_push"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 2
+                    s.rv_needs_buf = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__buf_write_byte")
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_write_str" or var_name == "buf_append" or var_name == "buf_append_str"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 2
+                    s.rv_needs_buf = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__buf_write_str")
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_to_str"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    s.rv_needs_buf = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_pop_reg(s, 10)
+                    riscv64_synth_emit_call_helper(s, "__buf_to_str")
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_len"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10)
+                    riscv64_emit_ld(s, 10, 10, 8)
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_ptr"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10)
+                    riscv64_emit_ld(s, 10, 10, 0)
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_clear"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10)
+                    riscv64_emit_sd(s, 0, 10, 8)
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_get_byte"
+                while arg_count > 2
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 2
+                    riscv64_pop_reg(s, 11)
+                    riscv64_pop_reg(s, 10)
+                    riscv64_emit_ld(s, 5, 10, 0)
+                    riscv64_emit_add(s, 5, 5, 11)
+                    riscv64_emit_lbu(s, 10, 5, 0)
+                else
+                    while arg_count > 0
+                        riscv64_pop_reg(s, 11)
+                        arg_count = arg_count - 1
+                    end
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                return 0
+            end
+            if var_name == "buf_free"
+                while arg_count > 0
+                    riscv64_pop_reg(s, 11)
+                    arg_count = arg_count - 1
+                end
+                riscv64_emit_addi(s, 10, 0, 0)
+                return 0
+            end
+
             // ── Struct Constructor: StructName(...) ─────────────────────────
             sdef = riscv64_synth_find_struct(s, var_name)
             if sdef != 0
@@ -379,17 +699,27 @@ fn riscv64_synth_expr_primary s toks pos_box
             if arg_count >= 1
                 riscv64_pop_reg(s, 10)
 
-            // Emit JAL instruction with relocation placeholder
-            if var_name == "main" or var_name == "মূল"
-                if s.rv_in_function == 0
-                    s.rv_called_main = 1
-            call_off = s.rv_code.len()
-            riscv64_emit_jal(s, 1, 0) // JAL ra, 0
+            // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
+            lv_call = riscv64_find_local_var(s, var_name)
+            if lv_call != 0
+                riscv64_emit_local_ld(s, 29, lv_call.rv_lv_offset)
+                if lv_call.rv_lv_is_boxed == 1
+                    riscv64_emit_ld(s, 29, 29, 0)
+                end
+                riscv64_emit_indirect_call_t4(s)
+            else
+                // Emit JAL instruction with relocation placeholder
+                if var_name == "main" or var_name == "মূল"
+                    if s.rv_in_function == 0
+                        s.rv_called_main = 1
+                call_off = s.rv_code.len()
+                riscv64_emit_jal(s, 1, 0) // JAL ra, 0
 
-            call_rel = Riscv64CallReloc()
-            call_rel.rv_cr_patch_offset = call_off
-            call_rel.rv_cr_target_name = var_name
-            push(s.rv_call_relocs, call_rel)
+                call_rel = Riscv64CallReloc()
+                call_rel.rv_cr_patch_offset = call_off
+                call_rel.rv_cr_target_name = var_name
+                push(s.rv_call_relocs, call_rel)
+            end
 
             // WHY: Check callee-saved s10 (x26) exception flag after call returns. If active,
             // branch to the innermost try/catch handler or restore sp from s0 and unwind frame.
@@ -402,16 +732,22 @@ fn riscv64_synth_expr_primary s toks pos_box
                 skip_beq_off = s.rv_code.len()
                 riscv64_emit_beq(s, 26, 0, 0)
                 riscv64_emit_addi(s, 2, 8, 0 - 1024)
+                riscv64_emit_defers(s, toks)
                 riscv64_emit_epilogue(s)
                 riscv64_synth_patch_b(s, skip_beq_off, 0, 26, 0, s.rv_code.len())
-            return 0
-
-        // Variable load: ld a0, off(sp)
-        off = riscv64_synth_lookup_var(s, var_name)
-        if off > 0
-            riscv64_emit_local_ld(s, 10, off)
+            end
         else
-            riscv64_emit_addi(s, 10, 0, 0)
+            // Variable load: ld a0, off(sp) (auto-deref boxed upvalue cells!)
+            lv_rd = riscv64_find_local_var(s, var_name)
+            if lv_rd != 0
+                riscv64_emit_local_ld(s, 10, lv_rd.rv_lv_offset)
+                if lv_rd.rv_lv_is_boxed == 1
+                    riscv64_emit_ld(s, 10, 10, 0)
+                end
+            else
+                riscv64_emit_addi(s, 10, 0, 0)
+            end
+        end
 
     // 4. Parenthesized expression: ( expr )
     if handled == 0 and k == TOK_LPAREN()
@@ -491,15 +827,39 @@ fn riscv64_synth_expr_primary s toks pos_box
         elif ct.tok_kind == TOK_LBRACKET()
             list_set(pos_box, 0, cp + 1)
             riscv64_push_reg(s, 10) // Save hdr ptr
-            riscv64_synth_compile_expr(s, toks, pos_box) // a0 = idx
+            riscv64_synth_compile_expr(s, toks, pos_box) // a0 = idx/key
             if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
-            riscv64_emit_mv(s, 11, 10)     // a1 = idx
+            riscv64_emit_mv(s, 11, 10)     // a1 = idx/key
             riscv64_pop_reg(s, 10)         // a0 = hdr
-            riscv64_emit_ld(s, 12, 10, 16) // a2 = data_ptr
-            riscv64_emit_slli(s, 11, 11, 3) // idx * 8
-            riscv64_emit_add(s, 10, 12, 11)
-            riscv64_emit_ld(s, 10, 10, 0)
+            s.rv_needs_dict = 1
+            s.rv_needs_alloc = 1
+            riscv64_synth_emit_call_helper(s, "__container_get")
+        elif ct.tok_kind == TOK_LPAREN() and cp > 0 and ct.tok_span.span_start_line == toks[cp - 1].tok_span.span_start_line
+            list_set(pos_box, 0, cp + 1)
+            riscv64_push_reg(s, 10) // Save callee closure/fn_ptr
+            p_argc = 0
+            while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
+                riscv64_synth_compile_expr(s, toks, pos_box)
+                riscv64_push_reg(s, 10)
+                p_argc = p_argc + 1
+                if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_COMMA()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RPAREN()
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            if p_argc >= 8 riscv64_pop_reg(s, 17) end
+            if p_argc >= 7 riscv64_pop_reg(s, 16) end
+            if p_argc >= 6 riscv64_pop_reg(s, 15) end
+            if p_argc >= 5 riscv64_pop_reg(s, 14) end
+            if p_argc >= 4 riscv64_pop_reg(s, 13) end
+            if p_argc >= 3 riscv64_pop_reg(s, 12) end
+            if p_argc >= 2 riscv64_pop_reg(s, 11) end
+            if p_argc >= 1 riscv64_pop_reg(s, 10) end
+            riscv64_pop_reg(s, 29) // t4 = callee
+            riscv64_emit_indirect_call_t4(s)
         else
             break
     return 0

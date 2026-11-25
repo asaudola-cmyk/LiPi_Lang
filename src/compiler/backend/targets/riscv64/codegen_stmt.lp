@@ -56,6 +56,49 @@ fn riscv64_synth_compile_statement s toks pos_box
         riscv64_synth_emit_call_print_int(s)
         return 0
 
+    // ── 1b. Deferred Execution: defer / @defer / বিলম্ব ─────────────────────────
+    if k != TOK_STR() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব")
+        is_def = 1
+        if pos + 1 < toks.len()
+            dn_k = toks[pos + 1].tok_kind
+            dn_t = toks[pos + 1].tok_text
+            if dn_k == TOK_ASSIGN() or dn_t == "=" or dn_k == TOK_LPAREN() or dn_t == "(" or dn_k == TOK_DOT() or dn_t == "."
+                is_def = 0
+            end
+        end
+        if is_def == 1
+            d_line = t.tok_span.span_start_line
+            d_start = pos + 1
+            if d_start < toks.len() and (toks[d_start].tok_kind == TOK_LBRACE() or toks[d_start].tok_text == "{")
+                d_start = d_start + 1
+                d_scan = d_start
+                d_bd = 1
+                while d_scan < toks.len() and d_bd > 0
+                    if toks[d_scan].tok_kind == TOK_LBRACE() or toks[d_scan].tok_text == "{"
+                        d_bd = d_bd + 1
+                    elif toks[d_scan].tok_kind == TOK_RBRACE() or toks[d_scan].tok_text == "}"
+                        d_bd = d_bd - 1
+                        if d_bd == 0 break end
+                    end
+                    d_scan = d_scan + 1
+                end
+                push(s.rv_defer_starts, d_start)
+                push(s.rv_defer_ends, d_scan)
+                if d_scan < toks.len() d_scan = d_scan + 1 end
+                list_set(pos_box, 0, d_scan)
+            else
+                d_scan = d_start
+                while d_scan < toks.len() and toks[d_scan].tok_kind != TOK_NEWLINE() and toks[d_scan].tok_kind != TOK_SEMI() and toks[d_scan].tok_kind != TOK_EOF() and toks[d_scan].tok_span.span_start_line == d_line
+                    d_scan = d_scan + 1
+                end
+                push(s.rv_defer_starts, d_start)
+                push(s.rv_defer_ends, d_scan)
+                list_set(pos_box, 0, d_scan)
+            end
+            return 0
+        end
+    end
+
     // ── 2. Control Flow: return / ফেরত ─────────────────────────────────────────
     if k == TOK_KW_RETURN() or (k == TOK_IDENT() and (txt == "return" or txt == "ফেরত"))
         list_set(pos_box, 0, pos + 1) // Consume keyword
@@ -72,9 +115,11 @@ fn riscv64_synth_compile_statement s toks pos_box
             riscv64_emit_addi(s, 10, 0, 0)
 
         if s.rv_in_function == 1
+            riscv64_emit_defers(s, toks)
             riscv64_emit_epilogue(s)
         else
             // Top-level return: exit whole process cleanly with code in a0 via Linux SYS_exit_group (94)
+            riscv64_emit_defers(s, toks)
             riscv64_emit_li(s, 17, 94)
             riscv64_emit_ecall(s)
         return 0
@@ -225,15 +270,17 @@ fn riscv64_synth_compile_statement s toks pos_box
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 riscv64_synth_compile_expr(s, toks, pos_box) // a0 = rhs
                 riscv64_push_reg(s, 10)
-                arr_off = riscv64_synth_lookup_var(s, arr_name)
-                if arr_off > 0
-                    riscv64_emit_local_ld(s, 10, arr_off) // a0 = hdr
-                    riscv64_emit_ld(s, 13, 10, 16)        // a3 = data_ptr
+                lv_arr = riscv64_find_local_var(s, arr_name)
+                if lv_arr != 0
                     riscv64_pop_reg(s, 12)                // a2 = val
-                    riscv64_pop_reg(s, 11)                // a1 = idx
-                    riscv64_emit_slli(s, 11, 11, 3)       // idx * 8
-                    riscv64_emit_add(s, 13, 13, 11)       // &data[idx]
-                    riscv64_emit_sd(s, 12, 13, 0)
+                    riscv64_pop_reg(s, 11)                // a1 = key/idx
+                    riscv64_emit_local_ld(s, 10, lv_arr.rv_lv_offset) // a0 = hdr
+                    if lv_arr.rv_lv_is_boxed == 1
+                        riscv64_emit_ld(s, 10, 10, 0)
+                    end
+                    s.rv_needs_dict = 1
+                    s.rv_needs_alloc = 1
+                    riscv64_synth_emit_call_helper(s, "__container_set")
                 else
                     riscv64_pop_reg(s, 12)
                     riscv64_pop_reg(s, 11)
@@ -780,6 +827,7 @@ fn riscv64_synth_compile_statement s toks pos_box
             push(active_tp, [p_off, 0])
         elif s.rv_in_function == 1
             riscv64_emit_addi(s, 2, 8, 0 - 1024)
+            riscv64_emit_defers(s, toks)
             riscv64_emit_epilogue(s)
         return 0
 
@@ -922,20 +970,93 @@ fn riscv64_synth_compile_statement s toks pos_box
             if eq_pos < toks.len() and toks[eq_pos].tok_kind == TOK_ASSIGN()
                 list_set(pos_box, 0, eq_pos + 1)
                 riscv64_synth_compile_expr(s, toks, pos_box)
-                off = riscv64_synth_alloc_var(s, var_name)
-                riscv64_emit_local_sd(s, 10, off)
+                prev_lv = riscv64_find_local_var(s, var_name)
+                if prev_lv == 0
+                    off = riscv64_synth_alloc_var(s, var_name)
+                    if riscv64_is_boxed_name(s, var_name) == 1
+                        riscv64_push_reg(s, 10)
+                        riscv64_emit_li(s, 10, 8)
+                        riscv64_synth_emit_call_alloc(s)
+                        riscv64_pop_reg(s, 5)
+                        riscv64_emit_sd(s, 5, 10, 0)
+                        riscv64_emit_local_sd(s, 10, off)
+                    else
+                        riscv64_emit_local_sd(s, 10, off)
+                    end
+                elif prev_lv.rv_lv_is_boxed == 1
+                    riscv64_emit_local_ld(s, 5, prev_lv.rv_lv_offset)
+                    riscv64_emit_sd(s, 10, 5, 0)
+                else
+                    riscv64_emit_local_sd(s, 10, prev_lv.rv_lv_offset)
+                end
         return 0
 
-    // ── 10. Assignment: <var> = <expr> ─────────────────────────────────────────
+    // ── 10. Assignment & Compound Assignment: <var> = <expr>, <var> += <expr> ─
     if k == TOK_IDENT()
         next_pos = pos + 1
         if next_pos < toks.len() and toks[next_pos].tok_kind == TOK_ASSIGN()
             var_name = txt
             list_set(pos_box, 0, next_pos + 1) // Consume ident and '='
             riscv64_synth_compile_expr(s, toks, pos_box)
-            off = riscv64_synth_alloc_var(s, var_name)
-            riscv64_emit_local_sd(s, 10, off)
+            prev_lv = riscv64_find_local_var(s, var_name)
+            if prev_lv == 0
+                off = riscv64_synth_alloc_var(s, var_name)
+                if riscv64_is_boxed_name(s, var_name) == 1
+                    riscv64_push_reg(s, 10)
+                    riscv64_emit_li(s, 10, 8)
+                    riscv64_synth_emit_call_alloc(s)
+                    riscv64_pop_reg(s, 5)
+                    riscv64_emit_sd(s, 5, 10, 0)
+                    riscv64_emit_local_sd(s, 10, off)
+                else
+                    riscv64_emit_local_sd(s, 10, off)
+                end
+            elif prev_lv.rv_lv_is_boxed == 1
+                riscv64_emit_local_ld(s, 5, prev_lv.rv_lv_offset)
+                riscv64_emit_sd(s, 10, 5, 0)
+            else
+                riscv64_emit_local_sd(s, 10, prev_lv.rv_lv_offset)
+            end
             return 0
+        end
+        if next_pos < toks.len()
+            ca_op = riscv64_is_compound_assign_tok(toks[next_pos])
+            if ca_op != 0
+                var_name = txt
+                list_set(pos_box, 0, next_pos + 1)
+                riscv64_synth_compile_expr(s, toks, pos_box) // a0 = rhs
+                riscv64_emit_mv(s, 11, 10) // a1 = rhs
+                ca_lv = riscv64_find_local_var(s, var_name)
+                if ca_lv != 0
+                    riscv64_emit_local_ld(s, 10, ca_lv.rv_lv_offset)
+                    if ca_lv.rv_lv_is_boxed == 1
+                        riscv64_emit_ld(s, 10, 10, 0)
+                    end
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                if ca_op == TOK_PLUS()
+                    riscv64_emit_add(s, 10, 10, 11)
+                elif ca_op == TOK_MINUS()
+                    riscv64_emit_sub(s, 10, 10, 11)
+                elif ca_op == TOK_STAR()
+                    riscv64_emit_mul(s, 10, 10, 11)
+                elif ca_op == TOK_SLASH()
+                    riscv64_emit_div(s, 10, 10, 11)
+                elif ca_op == TOK_PERCENT()
+                    riscv64_emit_rem(s, 10, 10, 11)
+                end
+                if ca_lv != 0
+                    if ca_lv.rv_lv_is_boxed == 1
+                        riscv64_emit_local_ld(s, 5, ca_lv.rv_lv_offset)
+                        riscv64_emit_sd(s, 10, 5, 0)
+                    else
+                        riscv64_emit_local_sd(s, 10, ca_lv.rv_lv_offset)
+                    end
+                end
+                return 0
+            end
+        end
 
     // ── 11. Function & Component Definition: fn / কাজ / @fn / component / উপাদান ──
     is_fn = 0
@@ -943,6 +1064,10 @@ fn riscv64_synth_compile_statement s toks pos_box
         is_fn = 1
     if k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান")
         is_fn = 1
+    // Do NOT treat anonymous closure expression `fn(...)` as a top-level named function def
+    if is_fn == 1 and pos + 1 < toks.len() and (toks[pos + 1].tok_kind == TOK_LPAREN() or toks[pos + 1].tok_text == "(")
+        is_fn = 0
+    end
 
     if is_fn == 1
         fn_base_col = t.tok_span.span_start_col
@@ -969,11 +1094,16 @@ fn riscv64_synth_compile_statement s toks pos_box
         saved_rv_stack_off = s.rv_stack_offset
         saved_rv_try_patches = s.rv_try_patches
         saved_rv_sp_delta = s.rv_sp_delta
+        saved_rv_boxed = s.rv_boxed_vars
+        saved_rv_ds = s.rv_defer_starts
+        saved_rv_de = s.rv_defer_ends
         s.rv_locals = list()
         s.rv_stack_offset = 16
         s.rv_in_function = 1
         s.rv_try_patches = list()
         s.rv_sp_delta = 0
+        s.rv_defer_starts = list()
+        s.rv_defer_ends = list()
 
         // Parse parameter names until newline or return arrow
         params = list()
@@ -1003,10 +1133,13 @@ fn riscv64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
 
+        // Prescan function body for variables mutated inside nested closures
+        s.rv_boxed_vars = riscv64_prescan_boxed_vars(toks, get(pos_box, 0), fn_base_col, fn_base_line)
+
         // Emit function prologue
         riscv64_emit_prologue(s)
 
-        // Save incoming argument registers (a0..a7 = x10..x17) into local stack slots
+        // Save incoming argument registers (a0..a7 = x10..x17) into local stack slots first
         pi = 0
         while pi < params.len()
             pname = params[pi]
@@ -1015,6 +1148,20 @@ fn riscv64_synth_compile_statement s toks pos_box
                 arg_reg = 10 + pi
                 riscv64_emit_local_sd(s, arg_reg, off)
             pi = pi + 1
+        // Wrap any closure-mutated parameter into a shared 8-byte heap upvalue cell
+        pi = 0
+        while pi < params.len()
+            pname = params[pi]
+            plv = riscv64_find_local_var(s, pname)
+            if plv != 0 and plv.rv_lv_is_boxed == 1
+                riscv64_emit_li(s, 10, 8)
+                riscv64_synth_emit_call_alloc(s)
+                riscv64_emit_local_ld(s, 5, plv.rv_lv_offset)
+                riscv64_emit_sd(s, 5, 10, 0)
+                riscv64_emit_local_sd(s, 10, plv.rv_lv_offset)
+            end
+            pi = pi + 1
+        end
 
         // Parse function body statements until explicit end, next fn, dedent, or EOF
         while get(pos_box, 0) < toks.len()
@@ -1033,7 +1180,7 @@ fn riscv64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, cur_pos + 1)
                 break
             end
-            if ck_fn == TOK_KW_FN() or ck_fn == TOK_DIR_FN() or (ck_fn == TOK_IDENT() and (ctx_fn == "fn" or ctx_fn == "কাজ" or ctx_fn == "@fn"))
+            if (ck_fn == TOK_KW_FN() or ck_fn == TOK_DIR_FN() or (ck_fn == TOK_IDENT() and (ctx_fn == "fn" or ctx_fn == "কাজ" or ctx_fn == "@fn"))) and cur_pos + 1 < toks.len() and toks[cur_pos + 1].tok_kind == TOK_IDENT()
                 break
             end
             if ct.tok_span.span_start_line > fn_base_line and ct.tok_span.span_start_col <= fn_base_col
@@ -1048,11 +1195,15 @@ fn riscv64_synth_compile_statement s toks pos_box
 
         // Default epilogue at end of function
         riscv64_emit_addi(s, 10, 0, 0)
+        riscv64_emit_defers(s, toks)
         riscv64_emit_epilogue(s)
         s.rv_locals = saved_rv_locals
         s.rv_stack_offset = saved_rv_stack_off
         s.rv_try_patches = saved_rv_try_patches
         s.rv_sp_delta = saved_rv_sp_delta
+        s.rv_boxed_vars = saved_rv_boxed
+        s.rv_defer_starts = saved_rv_ds
+        s.rv_defer_ends = saved_rv_de
         s.rv_in_function = 0
 
         // Patch jump to bypass function body during top-level execution

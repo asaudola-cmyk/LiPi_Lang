@@ -5,6 +5,7 @@
 // ==============================================================================
 
 include "src/compiler/backend/targets/riscv64/codegen_core.lp"
+include "src/compiler/backend/targets/riscv64/runtime_parity.lp"
 include "src/compiler/backend/targets/riscv64/codegen_expr.lp"
 include "src/compiler/backend/targets/riscv64/codegen_stmt.lp"
 include "src/compiler/backend/targets/riscv64/riscv64_vector.lp"
@@ -12,8 +13,8 @@ include "src/compiler/backend/targets/riscv64/riscv64_vector.lp"
 // ── 11b. RV64G Dynamic Runtime Helpers (List, File I/O) ──────────────────────
 
 fn riscv64_synth_emit_list_create_helper s
-    // WHY: Native RV64G 24-byte list header {len, cap, data_ptr} constructor with dynamic capacity.
-    // Input: a0 (x10) = initial len. Output: a0 (x10) = pointer to 24-byte list header.
+    // WHY: Native RV64G 32-byte list header {len, cap, data_ptr, magic=0} constructor.
+    // Zeroing [a0 + 24] guarantees zero collision with DICT0 magic (0x44494354) at [+24].
     off = s.rv_code.len()
     s.rv_list_create_off = off
     riscv64_emit_addi(s, 2, 2, 0 - 32)
@@ -28,12 +29,13 @@ fn riscv64_synth_emit_list_create_helper s
     cap_ready_off = s.rv_code.len()
     riscv64_synth_patch_b(s, bge_cap, 5, 18, 9, cap_ready_off)
     riscv64_emit_slli(s, 10, 18, 3)      // cap * 8
-    riscv64_emit_addi(s, 10, 10, 24)     // 24B header + cap * 8
+    riscv64_emit_addi(s, 10, 10, 32)     // 32B header + cap * 8
     riscv64_synth_emit_call_alloc(s)
     riscv64_emit_sd(s, 9, 10, 0)         // [a0 + 0] = len
     riscv64_emit_sd(s, 18, 10, 8)        // [a0 + 8] = cap
-    riscv64_emit_addi(s, 6, 10, 24)
-    riscv64_emit_sd(s, 6, 10, 16)        // [a0 + 16] = a0 + 24 (data_ptr)
+    riscv64_emit_addi(s, 6, 10, 32)
+    riscv64_emit_sd(s, 6, 10, 16)        // [a0 + 16] = a0 + 32 (data_ptr)
+    riscv64_emit_sd(s, 0, 10, 24)        // [a0 + 24] = 0 (non-DICT marker)
     riscv64_emit_ld(s, 18, 2, 8)
     riscv64_emit_ld(s, 9, 2, 16)
     riscv64_emit_ld(s, 1, 2, 24)
@@ -144,6 +146,7 @@ fn riscv64_synth_compile_program tokens
     riscv64_emit_prologue(s)
     riscv64_emit_addi(s, 26, 0, 0)
     riscv64_emit_addi(s, 27, 0, 0)
+    s.rv_boxed_vars = riscv64_prescan_boxed_vars(tokens, 0, 0 - 1, 0 - 1)
 
     // 2. Synthesize all functions, structs, and statements
     pos_box = [0]
@@ -200,13 +203,19 @@ fn riscv64_synth_compile_program tokens
     if s.rv_needs_print_int == 1
         riscv64_synth_emit_print_int_helper(s)
 
-    // 5b. Emit sovereign alloc, list_create, list_push, and file_write helpers if required
+    // 5b. Emit sovereign alloc, list_create, list_push, dict, buf, and file_write helpers if required
     if s.rv_needs_list_push == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_list_push_helper(s)
     if s.rv_needs_list_create == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_list_create_helper(s)
+    if s.rv_needs_dict == 1
+        s.rv_needs_alloc = 1
+        riscv64_synth_emit_dict_helpers(s)
+    if s.rv_needs_buf == 1
+        s.rv_needs_alloc = 1
+        riscv64_synth_emit_buf_helpers(s)
     if s.rv_needs_file_write == 1
         riscv64_synth_emit_file_write_helper(s)
     if s.rv_needs_alloc == 1
@@ -232,6 +241,45 @@ fn riscv64_synth_compile_program tokens
             found_rel = 1
         elif cr.rv_cr_target_name == "__file_write"
             resolved_addr = s.rv_file_write_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_hash"
+            resolved_addr = s.rv_dict_hash_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_key_eq"
+            resolved_addr = s.rv_dict_eq_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_new"
+            resolved_addr = s.rv_dict_new_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_set"
+            resolved_addr = s.rv_dict_set_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_get"
+            resolved_addr = s.rv_dict_get_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_has"
+            resolved_addr = s.rv_dict_has_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__dict_del"
+            resolved_addr = s.rv_dict_del_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__container_get"
+            resolved_addr = s.rv_cont_get_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__container_set"
+            resolved_addr = s.rv_cont_set_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__buf_new"
+            resolved_addr = s.rv_buf_new_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__buf_write_byte"
+            resolved_addr = s.rv_buf_wbyte_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__buf_write_str"
+            resolved_addr = s.rv_buf_wstr_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__buf_to_str"
+            resolved_addr = s.rv_buf_tostr_off
             found_rel = 1
         else
             k = 0

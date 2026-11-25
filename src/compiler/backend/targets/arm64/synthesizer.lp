@@ -5,6 +5,7 @@
 // ==============================================================================
 
 include "src/compiler/backend/targets/arm64/codegen_core.lp"
+include "src/compiler/backend/targets/arm64/runtime_parity.lp"
 include "src/compiler/backend/targets/arm64/codegen_expr.lp"
 include "src/compiler/backend/targets/arm64/codegen_stmt.lp"
 include "src/compiler/backend/targets/arm64/arm64_simd.lp"
@@ -12,8 +13,9 @@ include "src/compiler/backend/targets/arm64/arm64_simd.lp"
 // ── 8b. AArch64 Dynamic Runtime Helpers (List, File I/O) ─────────────────────
 
 fn arm64_synth_emit_list_create_helper s
-    // WHY: Native AArch64 24-byte list header {len, cap, data_ptr} constructor with dynamic capacity.
-    // Input: X0 = initial len. Output: X0 = pointer to 24-byte list header.
+    // WHY: Native AArch64 32-byte list header {len, cap, data_ptr, magic=0} constructor.
+    // Magic word 0 at [+24] guarantees zero collision with DICT0 magic 0x44494354.
+    // Input: X0 = initial len. Output: X0 = pointer to 32-byte list header.
     off = s.synth_code.len()
     s.a64_list_create_off = off
     arm64_emit_stp_pre(s, 29, 30, 31, 0 - 32)
@@ -28,13 +30,14 @@ fn arm64_synth_emit_list_create_helper s
     arm64_emit_add_x(s, 0, 20, 20)       // X0 = cap * 2
     arm64_emit_add_x(s, 0, 0, 0)         // X0 = cap * 4
     arm64_emit_add_x(s, 0, 0, 0)         // X0 = cap * 8
-    arm64_synth_emit32(s, 2432720896)    // add x0, x0, #24
+    arm64_emit_add_imm(s, 0, 0, 32)      // add x0, x0, #32
     arm64_synth_emit_call_alloc(s)
-    // Store [X0 + 0] = X19 (len), [X0 + 8] = X20 (cap), [X0 + 16] = X0 + 24 (data_ptr)
-    arm64_synth_emit32(s, 4177526803)    // str x19, [x0, #0]
-    arm64_synth_emit32(s, 4177527828)    // str x20, [x0, #8]
-    arm64_synth_emit32(s, 2432720898)    // add x2, x0, #24
-    arm64_synth_emit32(s, 4177528834)    // str x2, [x0, #16]
+    // Store [X0 + 0] = X19 (len), [X0 + 8] = X20 (cap), [X0 + 16] = X0 + 32 (data_ptr), [X0 + 24] = 0
+    arm64_emit_str_x_off(s, 19, 0, 0)
+    arm64_emit_str_x_off(s, 20, 0, 8)
+    arm64_emit_add_imm(s, 2, 0, 32)
+    arm64_emit_str_x_off(s, 2, 0, 16)
+    arm64_emit_str_x_off(s, 31, 0, 24)
     // ldr x19, [sp, #16]; ldr x20, [sp, #24]
     arm64_synth_emit32(s, 4181721088 | (2 << 10) | (31 << 5) | 19)
     arm64_synth_emit32(s, 4181721088 | (3 << 10) | (31 << 5) | 20)
@@ -150,7 +153,8 @@ fn arm64_synth_compile_program tokens
     arm64_emit_movz_x(s, 27, 0, 0)
     arm64_emit_movz_x(s, 28, 0, 0)
 
-    // 2. Synthesize all functions, structs, and statements
+    // 2. Prescan top-level closure-mutated locals and synthesize all functions, structs, and statements
+    s.a64_boxed_vars = arm64_prescan_boxed_vars(tokens, 0, 0, 0 - 1)
     pos_box = [0]
     has_top_level = 0
     while get(pos_box, 0) < tokens.len()
@@ -195,6 +199,7 @@ fn arm64_synth_compile_program tokens
             push(s.synth_call_relocs, call_rel)
 
     // 4. Top-level exit epilogue
+    arm64_emit_defers(s, tokens)
     if has_main == 0 and s.a64_called_main == 0
         arm64_emit_movz_x(s, 0, 0, 0) // exit code 0
     // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on AArch64) with status code in X0
@@ -205,13 +210,19 @@ fn arm64_synth_compile_program tokens
     if s.synth_needs_print_int == 1
         arm64_synth_emit_print_int_helper(s)
 
-    // 5b. Emit sovereign alloc, list_create, list_push, and file_write helpers if required
+    // 5b. Emit sovereign alloc, list_create, list_push, dict, bytebuffer, and file_write helpers if required
     if s.a64_needs_list_push == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_list_push_helper(s)
     if s.a64_needs_list_create == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_list_create_helper(s)
+    if s.a64_needs_dict == 1
+        s.synth_needs_alloc = 1
+        arm64_synth_emit_dict_helpers(s)
+    if s.a64_needs_buf == 1
+        s.synth_needs_alloc = 1
+        arm64_synth_emit_buf_helpers(s)
     if s.a64_needs_file_write == 1
         arm64_synth_emit_file_write_helper(s)
     if s.synth_needs_alloc == 1
@@ -237,6 +248,45 @@ fn arm64_synth_compile_program tokens
             found_rel = 1
         elif cr.a64_cr_target_name == "__file_write"
             resolved_addr = s.a64_file_write_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_hash"
+            resolved_addr = s.a64_dict_hash_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_key_eq"
+            resolved_addr = s.a64_dict_eq_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_new"
+            resolved_addr = s.a64_dict_new_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_set"
+            resolved_addr = s.a64_dict_set_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_get"
+            resolved_addr = s.a64_dict_get_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_has"
+            resolved_addr = s.a64_dict_has_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__dict_del"
+            resolved_addr = s.a64_dict_del_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__container_get"
+            resolved_addr = s.a64_cont_get_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__container_set"
+            resolved_addr = s.a64_cont_set_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__buf_new"
+            resolved_addr = s.a64_buf_new_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__buf_write_byte"
+            resolved_addr = s.a64_buf_wbyte_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__buf_write_str"
+            resolved_addr = s.a64_buf_wstr_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__buf_to_str"
+            resolved_addr = s.a64_buf_tostr_off
             found_rel = 1
         else
             k = 0

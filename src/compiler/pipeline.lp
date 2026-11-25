@@ -468,6 +468,7 @@ fn pipeline_parse_primary toks pos_box sp
         end
         me_first_arm_col = 0 - 1
         last_arm_e = scrut_me
+        me_arm_blocks = list()
         while get(pos_box, 0) < toks.len()
             pipeline_skip_whitespace(toks, pos_box)
             cur_me = get(pos_box, 0)
@@ -496,11 +497,21 @@ fn pipeline_parse_primary toks pos_box sp
             if ct_me.tok_kind == TOK_KW_CASE() or (ct_me.tok_kind == TOK_IDENT() and (ct_me.tok_text == "case" or ct_me.tok_text == "ক্ষেত্র"))
                 list_set(pos_box, 0, cur_me + 1)
             end
+            arm_stmts = list()
             mp_p = get(pos_box, 0)
             if mp_p < toks.len() and (toks[mp_p].tok_text == "_" or toks[mp_p].tok_text == "default" or toks[mp_p].tok_text == "অন্যথায়" or toks[mp_p].tok_kind == TOK_KW_ELSE())
                 list_set(pos_box, 0, mp_p + 1)
             else
-                _pat_me = pipeline_parse_expr(toks, pos_box, sp)
+                pat_binds_me = pipeline_try_parse_adt_pat_binds(toks, pos_box)
+                if pat_binds_me != 0
+                    pbi_me = 0
+                    while pbi_me < pat_binds_me.len()
+                        push(arm_stmts, ast_stmt_assign(pat_binds_me[pbi_me], ast_expr_literal_int(0, sp), sp))
+                        pbi_me = pbi_me + 1
+                    end
+                else
+                    _pat_me = pipeline_parse_expr(toks, pos_box, sp)
+                end
             end
             if get(pos_box, 0) < toks.len()
                 sk_me = toks[get(pos_box, 0)].tok_kind
@@ -521,16 +532,24 @@ fn pipeline_parse_primary toks pos_box sp
                     end
                     bp_mb = get(pos_box, 0)
                     _st_mb = pipeline_build_statement(toks, pos_box, sp)
+                    if _st_mb != 0 push(arm_stmts, _st_mb) end
                     if get(pos_box, 0) <= bp_mb list_set(pos_box, 0, bp_mb + 1) end
                 end
             else
                 last_arm_e = pipeline_parse_expr(toks, pos_box, sp)
+                a_st = ast_stmt_expr(last_arm_e, sp)
+                a_st.kind = "ExprStmt"
+                push(arm_stmts, a_st)
             end
+            push(me_arm_blocks, ast_stmt_if(ast_expr_literal_int(1, sp), arm_stmts, list(), list(), sp))
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COMMA() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ","))
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
         end
-        return last_arm_e
+        m_expr_nd = ast_node_new(AST_TAG_NONE(), "MatchExpr", sp)
+        m_expr_nd.expr = scrut_me
+        m_expr_nd.body = me_arm_blocks
+        return m_expr_nd
     elif k == TOK_LPAREN() or (k != TOK_STR() and txt == "(")
         while get(pos_box, 0) < toks.len()
             skip_k = toks[get(pos_box, 0)].tok_kind
@@ -654,14 +673,26 @@ fn pipeline_parse_primary toks pos_box sp
         end
         node = ast_expr_map_lit(entries, sp)
     elif pipeline_is_ident_token(k) == 1 or (k >= TOK_KW_FN() and k <= TOK_KW_SYSCALL())
-        node = ast_expr_ident(txt, sp)
+        ident_nm = txt
+        // Qualified enum variant: Enum::Variant (e.g., Result::Ok, Option::None)
+        qp_id = get(pos_box, 0)
+        if qp_id + 2 < toks.len() and (toks[qp_id].tok_kind == TOK_COLON() or toks[qp_id].tok_text == ":") and (toks[qp_id + 1].tok_kind == TOK_COLON() or toks[qp_id + 1].tok_text == ":") and pipeline_is_ident_token(toks[qp_id + 2].tok_kind) == 1
+            ident_nm = ident_nm + "::" + toks[qp_id + 2].tok_text
+            list_set(pos_box, 0, qp_id + 3)
+        end
+        node = ast_expr_ident(ident_nm, sp)
     else
         return ast_expr_literal_int(0, sp)
     end
 
-    // WHY: Postfix operator chain: handles member access .field, indexing [idx], and calls (args)
+    // WHY: Postfix operator chain: handles member access .field, indexing [idx], generic calls <T>(args), calls (args), and '?'
     while get(pos_box, 0) < toks.len()
+        // Consume optional generic type arguments `<Type1, Type2>` immediately before `(`
+        if toks[get(pos_box, 0)].tok_kind == TOK_LT() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "<")
+            pipeline_skip_type_args(toks, pos_box, 1)
+        end
         nxt_p = get(pos_box, 0)
+        if nxt_p >= toks.len() break end
         nxt_t = toks[nxt_p]
         nxt_k = nxt_t.tok_kind
         nxt_txt = nxt_t.tok_text
@@ -744,12 +775,107 @@ fn pipeline_parse_primary toks pos_box sp
             call_node.func = node
             call_node.name = node.name
             node = call_node
+        elif nxt_k == TOK_QUERY() or (nxt_k != TOK_STR() and nxt_txt == "?")
+            list_set(pos_box, 0, nxt_p + 1)
         else
             break
         end
     end
 
     return node
+
+fn pipeline_skip_type_args toks pos_box require_lparen
+    // WHY: Safely skips `<T, U>` generic type parameter/argument lists without ever colliding
+    // with `<` comparison operators (when require_lparen == 1, requires `> (` immediately after).
+    p = get(pos_box, 0)
+    if p >= toks.len() return 0 end
+    if toks[p].tok_kind != TOK_LT() and not (toks[p].tok_kind != TOK_STR() and toks[p].tok_text == "<")
+        return 0
+    end
+    scan = p + 1
+    depth = 1
+    saw_ident = 0
+    while scan < toks.len() and depth > 0
+        tk = toks[scan].tok_kind
+        tx = toks[scan].tok_text
+        if tk == TOK_LT() or (tk != TOK_STR() and tx == "<")
+            depth = depth + 1
+        elif tk == TOK_GT() or (tk != TOK_STR() and tx == ">")
+            depth = depth - 1
+            if depth == 0
+                scan = scan + 1
+                break
+            end
+        elif tk == TOK_SHR() or (tk != TOK_STR() and tx == ">>")
+            depth = depth - 2
+            if depth <= 0
+                scan = scan + 1
+                break
+            end
+        elif pipeline_is_ident_token(tk) == 1
+            saw_ident = 1
+        elif tk == TOK_COMMA() or (tk != TOK_STR() and tx == ",") or tk == TOK_NEWLINE()
+            // allowed separator inside generic list
+        else
+            return 0
+        end
+        scan = scan + 1
+    end
+    if depth != 0 or saw_ident == 0
+        return 0
+    end
+    if require_lparen == 1
+        if scan >= toks.len() return 0 end
+        if toks[scan].tok_kind != TOK_LPAREN() and not (toks[scan].tok_kind != TOK_STR() and toks[scan].tok_text == "(")
+            return 0
+        end
+    end
+    list_set(pos_box, 0, scan)
+    return 1
+end
+
+fn pipeline_try_parse_adt_pat_binds toks pos_box
+    // WHY: Detects ADT destructuring patterns `[Enum::]Variant(x, y)` before `=>`/`->`/`:`
+    // and returns the list of bound variable names while advancing pos_box past the pattern.
+    // Returns 0 if current token is not an ADT destructuring pattern.
+    p = get(pos_box, 0)
+    if p >= toks.len() return 0 end
+    if pipeline_is_ident_token(toks[p].tok_kind) == 0 return 0 end
+    scan = p + 1
+    if scan + 2 < toks.len() and (toks[scan].tok_kind == TOK_COLON() or toks[scan].tok_text == ":") and (toks[scan + 1].tok_kind == TOK_COLON() or toks[scan + 1].tok_text == ":") and pipeline_is_ident_token(toks[scan + 2].tok_kind) == 1
+        scan = scan + 3
+    end
+    if scan >= toks.len() or (toks[scan].tok_kind != TOK_LPAREN() and toks[scan].tok_text != "(")
+        return 0
+    end
+    scan = scan + 1
+    binds = list()
+    while scan < toks.len()
+        sk = toks[scan].tok_kind
+        stx = toks[scan].tok_text
+        if sk == TOK_RPAREN() or (sk != TOK_STR() and stx == ")")
+            scan = scan + 1
+            break
+        elif sk == TOK_COMMA() or (sk != TOK_STR() and stx == ",") or sk == TOK_NEWLINE()
+            scan = scan + 1
+        elif pipeline_is_ident_token(sk) == 1
+            if stx != "_"
+                push(binds, stx)
+            end
+            scan = scan + 1
+        else
+            return 0
+        end
+    end
+    if scan >= toks.len() return 0 end
+    ak = toks[scan].tok_kind
+    atx = toks[scan].tok_text
+    if ak == TOK_FAT_ARROW() or ak == TOK_COLON() or ak == TOK_ARROW() or atx == "=>" or atx == ":" or atx == "->"
+        list_set(pos_box, 0, scan)
+        return binds
+    end
+    return 0
+end
 
 fn pipeline_skip_whitespace toks pos_box
     // WHY: Advances cursor past non-semantic tokens (newlines, semicolons, comments)
@@ -1356,12 +1482,15 @@ fn pipeline_build_statement toks pos_box sp
             var_name = toks[scan_p].tok_text
             decl_type = ""
             scan_p = scan_p + 1
-            // Optional type annotation: : Type
+            // Optional type annotation: : Type[<...>]
             if scan_p < toks.len() and (toks[scan_p].tok_kind == TOK_COLON() or (toks[scan_p].tok_kind != TOK_STR() and toks[scan_p].tok_text == ":"))
                 scan_p = scan_p + 1
                 if scan_p < toks.len() and pipeline_is_ident_token(toks[scan_p].tok_kind) == 1
                     decl_type = toks[scan_p].tok_text
                     scan_p = scan_p + 1
+                    sp_box = [scan_p]
+                    pipeline_skip_type_args(toks, sp_box, 0)
+                    scan_p = get(sp_box, 0)
                 end
             end
             if scan_p < toks.len() and (toks[scan_p].tok_kind == TOK_ASSIGN() or (toks[scan_p].tok_kind != TOK_STR() and toks[scan_p].tok_text == "="))
@@ -1480,18 +1609,23 @@ fn pipeline_build_statement toks pos_box sp
     // 5. Direct assignment: ident = expr, ident += expr, ident -= expr, OR typed declaration: ident: Type = expr
     if pipeline_is_ident_token(k) == 1 and cp + 1 < toks.len()
         n1 = toks[cp + 1]
-        // Case A: Typed declaration/assignment (e.g. search_res: PageSearchLeafResult = page_binary_search_leaf(buf, key))
+        // Case A: Typed declaration/assignment (e.g. search_res: PageSearchLeafResult = ..., b: Box<float> = ...)
         if n1.tok_kind == TOK_COLON() or (n1.tok_kind != TOK_STR() and n1.tok_text == ":")
-            if cp + 3 < toks.len()
-                n3 = toks[cp + 3]
-                if n3.tok_kind == TOK_ASSIGN() or (n3.tok_kind != TOK_STR() and n3.tok_text == "=")
-                    var_name = txt
-                    decl_type = toks[cp + 2].tok_text
-                    list_set(pos_box, 0, cp + 4)
-                    val_e = pipeline_parse_expr(toks, pos_box, sp)
-                    td_n = ast_stmt_assign(var_name, val_e, sp)
-                    td_n.op = decl_type
-                    return td_n
+            if cp + 2 < toks.len() and pipeline_is_ident_token(toks[cp + 2].tok_kind) == 1
+                td_box = [cp + 3]
+                pipeline_skip_type_args(toks, td_box, 0)
+                eq_i = get(td_box, 0)
+                if eq_i < toks.len()
+                    n3 = toks[eq_i]
+                    if n3.tok_kind == TOK_ASSIGN() or (n3.tok_kind != TOK_STR() and n3.tok_text == "=")
+                        var_name = txt
+                        decl_type = toks[cp + 2].tok_text
+                        list_set(pos_box, 0, eq_i + 1)
+                        val_e = pipeline_parse_expr(toks, pos_box, sp)
+                        td_n = ast_stmt_assign(var_name, val_e, sp)
+                        td_n.op = decl_type
+                        return td_n
+                    end
                 end
             end
         end
@@ -1653,14 +1787,24 @@ fn pipeline_build_statement toks pos_box sp
             if ct_m.tok_kind == TOK_KW_CASE() or (ct_m.tok_kind == TOK_IDENT() and (ct_m.tok_text == "case" or ct_m.tok_text == "ক্ষেত্র"))
                 list_set(pos_box, 0, cur_pm + 1)
             end
+            arm_body = list()
             pat_p = get(pos_box, 0)
             if pat_p < toks.len() and (toks[pat_p].tok_text == "_" or toks[pat_p].tok_text == "default" or toks[pat_p].tok_text == "অন্যথায়" or toks[pat_p].tok_kind == TOK_KW_ELSE())
                 list_set(pos_box, 0, pat_p + 1)
             else
-                pat_e = pipeline_parse_expr(toks, pos_box, sp)
-                pat_st = ast_stmt_expr(pat_e, sp)
-                pat_st.kind = "ExprStmt"
-                push(match_body, pat_st)
+                pat_binds_st = pipeline_try_parse_adt_pat_binds(toks, pos_box)
+                if pat_binds_st != 0
+                    pbi_st = 0
+                    while pbi_st < pat_binds_st.len()
+                        push(arm_body, ast_stmt_assign(pat_binds_st[pbi_st], ast_expr_literal_int(0, sp), sp))
+                        pbi_st = pbi_st + 1
+                    end
+                else
+                    pat_e = pipeline_parse_expr(toks, pos_box, sp)
+                    pat_st = ast_stmt_expr(pat_e, sp)
+                    pat_st.kind = "ExprStmt"
+                    push(arm_body, pat_st)
+                end
             end
             if get(pos_box, 0) < toks.len()
                 sep_k = toks[get(pos_box, 0)].tok_kind
@@ -1681,13 +1825,13 @@ fn pipeline_build_statement toks pos_box sp
                     end
                     bp_mb = get(pos_box, 0)
                     st_mb = pipeline_build_statement(toks, pos_box, sp)
-                    if st_mb != 0 push(match_body, st_mb) end
+                    if st_mb != 0 push(arm_body, st_mb) end
                     if get(pos_box, 0) <= bp_mb list_set(pos_box, 0, bp_mb + 1) end
                 end
             elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_span.span_start_line == arm_line and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE()
                 bp_m = get(pos_box, 0)
                 st_m = pipeline_build_statement(toks, pos_box, sp)
-                if st_m != 0 push(match_body, st_m) end
+                if st_m != 0 push(arm_body, st_m) end
                 if get(pos_box, 0) <= bp_m list_set(pos_box, 0, bp_m + 1) end
             else
                 while get(pos_box, 0) < toks.len()
@@ -1700,10 +1844,11 @@ fn pipeline_build_statement toks pos_box sp
                     if ct_ab.tok_span.span_start_line > arm_line and ct_ab.tok_span.span_start_col <= arm_col break end
                     bp_m2 = get(pos_box, 0)
                     st_m2 = pipeline_build_statement(toks, pos_box, sp)
-                    if st_m2 != 0 push(match_body, st_m2) end
+                    if st_m2 != 0 push(arm_body, st_m2) end
                     if get(pos_box, 0) <= bp_m2 list_set(pos_box, 0, bp_m2 + 1) end
                 end
             end
+            push(match_body, ast_stmt_if(ast_expr_literal_int(1, sp), arm_body, list(), list(), sp))
         end
         return ast_stmt_if(scrut_e, match_body, list(), list(), sp)
     end
@@ -1812,6 +1957,9 @@ fn pipeline_build_ast_declarations toks src_path
                 end
             end
 
+            // Skip optional generic type parameter list: fn name<T, U>(...)
+            pipeline_skip_type_args(toks, pos_box, 0)
+
             // Parse formal parameters
             params = list()
             has_paren = 0
@@ -1842,6 +1990,7 @@ fn pipeline_build_ast_declarations toks src_path
                                 if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                                     p_type = toks[get(pos_box, 0)].tok_text
                                     list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                    pipeline_skip_type_args(toks, pos_box, 0)
                                 end
                             end
                         end
@@ -1871,6 +2020,7 @@ fn pipeline_build_ast_declarations toks src_path
                                 if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                                     p_type = toks[get(pos_box, 0)].tok_text
                                     list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                    pipeline_skip_type_args(toks, pos_box, 0)
                                 end
                             end
                         end
@@ -1883,7 +2033,7 @@ fn pipeline_build_ast_declarations toks src_path
                     end
                 end
 
-            // Extract return type annotation: -> type or : type
+            // Extract return type annotation: -> type[<...>] or : type[<...>]
             ret_type_str = ""
             if get(pos_box, 0) < toks.len()
                 rk = toks[get(pos_box, 0)].tok_kind
@@ -1893,6 +2043,7 @@ fn pipeline_build_ast_declarations toks src_path
                     if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                         ret_type_str = toks[get(pos_box, 0)].tok_text
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        pipeline_skip_type_args(toks, pos_box, 0)
                     end
                 end
             end
@@ -1986,11 +2137,17 @@ fn pipeline_build_ast_declarations toks src_path
                 struct_name = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
+            pipeline_skip_type_args(toks, pos_box, 0)
+            st_braced = 0
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                st_braced = 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
             fields = list()
             while get(pos_box, 0) < toks.len()
                 while get(pos_box, 0) < toks.len()
                     sk_skip = toks[get(pos_box, 0)].tok_kind
-                    if sk_skip == TOK_NEWLINE() or sk_skip == TOK_SEMI() or sk_skip == TOK_COMMENT_LINE() or sk_skip == TOK_COMMENT_BLOCK()
+                    if sk_skip == TOK_NEWLINE() or sk_skip == TOK_SEMI() or sk_skip == TOK_COMMA() or sk_skip == TOK_COMMENT_LINE() or sk_skip == TOK_COMMENT_BLOCK()
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                     else
                         break
@@ -2001,18 +2158,25 @@ fn pipeline_build_ast_declarations toks src_path
                 end
                 sk = toks[get(pos_box, 0)].tok_kind
                 stxt = toks[get(pos_box, 0)].tok_text
-                if sk == TOK_KW_END() or sk == TOK_DIR_END() or stxt == "end" or stxt == "শেষ" or stxt == "@end"
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    break
-                end
-                if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or sk == TOK_KW_STRUCT() or sk == TOK_DIR_STRUCT() or sk == TOK_DIR_ENUM()
-                    break
-                end
-                if sk == TOK_IDENT() and (stxt == "fn" or stxt == "কাজ" or stxt == "@fn" or stxt == "struct" or stxt == "গঠন" or stxt == "@struct" or stxt == "enum" or stxt == "@enum" or stxt == "গণনা")
-                    break
-                end
-                if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
-                    break
+                if st_braced == 1
+                    if sk == TOK_RBRACE() or (sk != TOK_STR() and stxt == "}")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        break
+                    end
+                else
+                    if sk == TOK_KW_END() or sk == TOK_DIR_END() or stxt == "end" or stxt == "শেষ" or stxt == "@end"
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        break
+                    end
+                    if sk == TOK_KW_FN() or sk == TOK_DIR_FN() or sk == TOK_KW_STRUCT() or sk == TOK_DIR_STRUCT() or sk == TOK_KW_ENUM() or sk == TOK_DIR_ENUM()
+                        break
+                    end
+                    if sk == TOK_IDENT() and (stxt == "fn" or stxt == "কাজ" or stxt == "@fn" or stxt == "struct" or stxt == "গঠন" or stxt == "@struct" or stxt == "enum" or stxt == "@enum" or stxt == "গণনা")
+                        break
+                    end
+                    if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
+                        break
+                    end
                 end
                 if sk == TOK_IDENT()
                     fld_name = stxt
@@ -2023,9 +2187,10 @@ fn pipeline_build_ast_declarations toks src_path
                         fld_t = toks[get(pos_box, 0)].tok_text
                         if fld_k == TOK_COLON() or (fld_k != TOK_STR() and fld_t == ":")
                             list_set(pos_box, 0, get(pos_box, 0) + 1)
-                            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                            if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                                 fld_type = toks[get(pos_box, 0)].tok_text
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                pipeline_skip_type_args(toks, pos_box, 0)
                             end
                         end
                     end
@@ -2038,7 +2203,7 @@ fn pipeline_build_ast_declarations toks src_path
                 s_decl = ast_decl_struct(struct_name, fields, sp)
                 push(decls, s_decl)
             end
-        elif k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
+        elif k == TOK_KW_ENUM() or k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
             base_l = t.tok_span.span_start_line
             base_c = t.tok_span.span_start_col
             list_set(pos_box, 0, cp + 1)
@@ -2047,7 +2212,14 @@ fn pipeline_build_ast_declarations toks src_path
                 enum_name = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
+            pipeline_skip_type_args(toks, pos_box, 0)
+            en_braced = 0
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                en_braced = 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
             variants = list()
+            var_arities = list()
             while get(pos_box, 0) < toks.len()
                 while get(pos_box, 0) < toks.len()
                     ek_skip = toks[get(pos_box, 0)].tok_kind
@@ -2062,34 +2234,74 @@ fn pipeline_build_ast_declarations toks src_path
                 end
                 ek = toks[get(pos_box, 0)].tok_kind
                 etxt = toks[get(pos_box, 0)].tok_text
-                if ek == TOK_KW_END() or ek == TOK_DIR_END() or etxt == "end" or etxt == "শেষ" or etxt == "@end"
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    break
+                if en_braced == 1
+                    if ek == TOK_RBRACE() or (ek != TOK_STR() and etxt == "}")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        break
+                    end
+                else
+                    if ek == TOK_KW_END() or ek == TOK_DIR_END() or etxt == "end" or etxt == "শেষ" or etxt == "@end"
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        break
+                    end
+                    if ek == TOK_KW_FN() or ek == TOK_DIR_FN() or ek == TOK_KW_STRUCT() or ek == TOK_DIR_STRUCT() or ek == TOK_KW_ENUM() or ek == TOK_DIR_ENUM()
+                        break
+                    end
+                    if ek == TOK_IDENT() and (etxt == "fn" or etxt == "কাজ" or etxt == "@fn" or etxt == "struct" or etxt == "গঠন" or etxt == "@struct" or etxt == "enum" or etxt == "@enum" or etxt == "গণনা")
+                        break
+                    end
+                    if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
+                        break
+                    end
                 end
-                if ek == TOK_KW_FN() or ek == TOK_DIR_FN() or ek == TOK_KW_STRUCT() or ek == TOK_DIR_STRUCT() or ek == TOK_DIR_ENUM()
-                    break
-                end
-                if ek == TOK_IDENT() and (etxt == "fn" or etxt == "কাজ" or etxt == "@fn" or etxt == "struct" or etxt == "গঠন" or etxt == "@struct" or etxt == "enum" or etxt == "@enum" or etxt == "গণনা")
-                    break
-                end
-                if toks[get(pos_box, 0)].tok_span.span_start_line > base_l and toks[get(pos_box, 0)].tok_span.span_start_col <= base_c
-                    break
-                end
-                if ek == TOK_IDENT()
+                if pipeline_is_ident_token(ek) == 1
                     push(variants, etxt)
+                    v_arity = 0
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=")
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        v_pdepth = 1
+                        v_expect = 1
+                        while get(pos_box, 0) < toks.len() and v_pdepth > 0
+                            vk = toks[get(pos_box, 0)].tok_kind
+                            vtx = toks[get(pos_box, 0)].tok_text
+                            if vk == TOK_RPAREN() or (vk != TOK_STR() and vtx == ")")
+                                v_pdepth = v_pdepth - 1
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            elif vk == TOK_LPAREN() or (vk != TOK_STR() and vtx == "(")
+                                v_pdepth = v_pdepth + 1
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            elif vk == TOK_COMMA() or (vk != TOK_STR() and vtx == ",")
+                                v_expect = 1
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            elif vk == TOK_LT() or (vk != TOK_STR() and vtx == "<")
+                                if pipeline_skip_type_args(toks, pos_box, 0) == 0
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
+                            elif pipeline_is_ident_token(vk) == 1
+                                if v_expect == 1
+                                    v_arity = v_arity + 1
+                                    v_expect = 0
+                                end
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            else
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            end
+                        end
+                    elif get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=")
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                         if get(pos_box, 0) < toks.len()
                             list_set(pos_box, 0, get(pos_box, 0) + 1)
                         end
                     end
+                    push(var_arities, v_arity)
                 else
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
             end
             if len(enum_name) > 0
                 e_decl = ast_decl_enum(enum_name, variants, sp)
+                e_decl.params = var_arities
                 push(decls, e_decl)
             end
         else

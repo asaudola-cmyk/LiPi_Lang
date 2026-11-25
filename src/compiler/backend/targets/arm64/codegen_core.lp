@@ -47,6 +47,7 @@ struct Arm64LocalVar
     lv_name             // Variable identifier string
     lv_offset           // Positive stack offset in bytes: accessed as [sp, #lv_offset]
     a64_lv_struct_type      // Struct type name string for accurate field offset resolution
+    a64_lv_is_boxed         // 1 if heap-boxed in an 8-byte upvalue cell for mutable closure capture
 
 // WHY: Records a function definition entry point for inter-procedural call site resolution
 struct Arm64Function
@@ -104,6 +105,25 @@ struct Arm64Synthesizer
     a64_error_msg         // First error diagnostic message
     a64_called_main       // 1 if top-level main()/মূল() call was emitted
     a64_last_struct       // Tracks struct type of most recently synthesized primary expression
+    a64_boxed_vars        // List of local variable names mutated inside nested closures
+    a64_defer_starts      // Stack of deferred statement start token indices
+    a64_defer_ends        // Stack of deferred statement end token indices
+    a64_emitting_defer    // Guard preventing recursive defer replay
+    a64_needs_dict        // 1 if DICT0 HashMap / unified container helpers must be emitted
+    a64_dict_hash_off     // Byte offset of __dict_hash
+    a64_dict_eq_off       // Byte offset of __dict_key_eq
+    a64_dict_new_off      // Byte offset of __dict_new
+    a64_dict_set_off      // Byte offset of __dict_set
+    a64_dict_get_off      // Byte offset of __dict_get
+    a64_dict_has_off      // Byte offset of __dict_has
+    a64_dict_del_off      // Byte offset of __dict_del
+    a64_cont_get_off      // Byte offset of __container_get
+    a64_cont_set_off      // Byte offset of __container_set
+    a64_needs_buf         // 1 if ByteBuffer helpers must be emitted
+    a64_buf_new_off       // Byte offset of __buf_new
+    a64_buf_wbyte_off     // Byte offset of __buf_write_byte
+    a64_buf_wstr_off      // Byte offset of __buf_write_str
+    a64_buf_tostr_off     // Byte offset of __buf_to_str
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -141,6 +161,25 @@ fn arm64_synth_new
     s.a64_error_msg = ""
     s.a64_called_main = 0
     s.a64_last_struct = ""
+    s.a64_boxed_vars = list()
+    s.a64_defer_starts = list()
+    s.a64_defer_ends = list()
+    s.a64_emitting_defer = 0
+    s.a64_needs_dict = 0
+    s.a64_dict_hash_off = 0
+    s.a64_dict_eq_off = 0
+    s.a64_dict_new_off = 0
+    s.a64_dict_set_off = 0
+    s.a64_dict_get_off = 0
+    s.a64_dict_has_off = 0
+    s.a64_dict_del_off = 0
+    s.a64_cont_get_off = 0
+    s.a64_cont_set_off = 0
+    s.a64_needs_buf = 0
+    s.a64_buf_new_off = 0
+    s.a64_buf_wbyte_off = 0
+    s.a64_buf_wstr_off = 0
+    s.a64_buf_tostr_off = 0
     return s
 
 fn arm64_synth_emit_byte s byte_val
@@ -774,6 +813,7 @@ fn arm64_synth_alloc_var s name
     lv.lv_name = name
     lv.lv_offset = off
     lv.a64_lv_struct_type = ""
+    lv.a64_lv_is_boxed = arm64_is_boxed_name(s, name)
     push(s.synth_locals, lv)
     return off
 

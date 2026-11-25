@@ -41,11 +41,14 @@ fn x86_synth_expr_postfix s toks pos_box
             if arr_el_t == "float" or arr_el_t == "int" or arr_el_t == "str"
                 s.synth_last_expr_type = arr_el_t
                 s.synth_last_struct = ""
+            elif arr_el_t == "dyn_dict"
+                s.synth_last_expr_type = "dyn_tagged"
+                s.synth_last_struct = ""
             elif arr_el_t != ""
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = arr_el_t
             else
-                s.synth_last_expr_type = ""
+                s.synth_last_expr_type = "dyn_tagged"
                 s.synth_last_struct = ""
             end
             s.synth_last_elem_type = ""
@@ -175,6 +178,8 @@ fn x86_synth_expr_postfix s toks pos_box
                     elif ft != ""
                         s.synth_last_struct = ft
                     end
+                    // Guard null / low-page struct pointer (< 4096) with catchable NullPointerException
+                    x86_synth_emit_null_check_rax(s)
                     if f_off < 128
                         // mov rax, [rax + f_off]: 0x48 0x8B 0x40 disp8
                         x86_synth_emit_byte(s, 72)
@@ -189,18 +194,38 @@ fn x86_synth_expr_postfix s toks pos_box
                         x86_synth_emit_u32(s, f_off)
             else
                 cont_postfix = 0
-        // Case C: Postfix Query '?' (Error propagation / Early return on 0 with full epilogue & unwind)
+        // Case C: Postfix Query '?' — Sovereign ADT (Result/Option) unwrap & early return + legacy 0-guard
+        // WHY: If %rax is an ADT0 cell ([rax+16]==0x41445430): tag==0 (Ok/Some) unwraps [rax+24] & 2-bit
+        // payload tag into %rdx; tag!=0 (Err/None) pops try frames, runs defers, and returns the Err/None cell!
+        // For non-ADT values, preserves 100% backwards-compatible `test rax, rax; jz early_ret` behavior.
         elif pkind == TOK_QUERY() or (pkind != TOK_STR() and ptxt == "?")
             list_set(pos_box, 0, post_p + 1) // Consume '?'
-            // test rax, rax
-            x86_synth_emit_byte(s, 72)
-            x86_synth_emit_byte(s, 133)
-            x86_synth_emit_byte(s, 192)
-            // jne ok_label (0x0F 0x85 rel32)
-            x86_synth_emit_byte(s, 15)
-            x86_synth_emit_byte(s, 133)
-            q_patch = s.synth_code.len()
+            // cmp rax, 4096; jb .q_not_adt
+            x86_synth_emit_bytes(s, [72, 61, 0, 16, 0, 0, 15, 130])
+            q_not_adt_1 = s.synth_code.len()
             x86_synth_emit_u32(s, 0)
+            // cmp dword ptr [rax + 16], 0x41445430 ('ADT0'); jne .q_not_adt
+            x86_synth_emit_bytes(s, [129, 120, 16, 48, 84, 68, 65, 15, 133])
+            q_not_adt_2 = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            // cmp qword ptr [rax + 0], 0; jne .q_early_ret (propagate Err/None cell in %rax!)
+            x86_synth_emit_bytes(s, [72, 131, 56, 0, 15, 133])
+            q_early_adt = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            // Ok/Some (tag == 0): mov edx, [rax + 20]; and edx, 3; mov rax, [rax + 24]; jmp .q_ok
+            x86_synth_emit_bytes(s, [139, 80, 20, 131, 226, 3, 72, 139, 64, 24, 233])
+            q_ok_adt = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            // .q_not_adt: xor edx, edx; test rax, rax; jne .q_ok
+            not_adt_off = s.synth_code.len()
+            x86_synth_patch_u32(s, q_not_adt_1, not_adt_off - (q_not_adt_1 + 4))
+            x86_synth_patch_u32(s, q_not_adt_2, not_adt_off - (q_not_adt_2 + 4))
+            x86_synth_emit_bytes(s, [49, 210, 72, 133, 192, 15, 133])
+            q_ok_raw = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            // .q_early_ret:
+            early_off = s.synth_code.len()
+            x86_synth_patch_u32(s, q_early_adt, early_off - (q_early_adt + 4))
             if s.synth_try_depth > 0
                 x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
                 ti_q = 0
@@ -212,8 +237,14 @@ fn x86_synth_expr_postfix s toks pos_box
             end
             x86_synth_emit_defers(s, toks)
             x86_synth_emit_epilogue(s)
+            // .q_ok:
             q_ok_off = s.synth_code.len()
-            x86_synth_patch_u32(s, q_patch, q_ok_off - (q_patch + 4))
+            x86_synth_patch_u32(s, q_ok_adt, q_ok_off - (q_ok_adt + 4))
+            x86_synth_patch_u32(s, q_ok_raw, q_ok_off - (q_ok_raw + 4))
+            s.synth_last_expr_type = "dyn_tagged"
+            s.synth_last_struct = ""
+            s.synth_last_elem_type = ""
+            s.synth_last_store_end = 0 - 1
         // Case D: Postfix Indirect Call expr(...) — supports (make_adder(5))(10), arr[0](x), obj.cb(x)
         elif pkind == TOK_LPAREN() or (pkind != TOK_STR() and ptxt == "(")
             list_set(pos_box, 0, post_p + 1) // Consume '('

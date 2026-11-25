@@ -1400,6 +1400,26 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave_e_core_fixes.lp", "test_wave_e_core_fixes") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_f_ffi_cabi_trace.lp", "test_wave_f_ffi_cabi_trace") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_g_adts_generics_modules.lp", "test_wave_g_adts_generics_modules") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_h_arm64_riscv64_parity.lp", "test_wave_h_arm64_riscv64_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

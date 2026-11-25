@@ -108,22 +108,49 @@ fn x86_synth_emit_lipi_fn_list s
 
 fn x86_synth_emit__lipi_list_get s
     // WHY: Unified polymorphic element index resolver supporting LIST, STR0 strings, and DICT0 maps.
-    // Maintains 16-byte stack alignment around _lipi_is_str and _lipi_dict_get calls.
+    // Returns %rax = raw value, %rdx = val_tag (0 for list/str/miss, 0/1/2 for DICT0).
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_get", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 77, 85, 72, 137, 229, 87, 86])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 81, 85, 72, 137, 229, 87, 86])
     x86_synth_emit_call_helper(s, "_lipi_is_str")
-    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 41, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 14, 72, 59, 55, 115, 38, 72, 139, 71, 16, 72, 139, 4, 240, 195, 85, 72, 137, 229])
+    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 43, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 16, 72, 59, 55, 115, 42, 72, 139, 71, 16, 72, 139, 4, 240, 49, 210, 195, 85, 72, 137, 229])
     x86_synth_emit_call_helper(s, "_lipi_dict_get")
-    x86_synth_emit_bytes(s, [93, 195, 72, 133, 246, 120, 13, 139, 79, 248, 72, 57, 206, 115, 5, 15, 182, 4, 55, 195, 49, 192, 195])
+    x86_synth_emit_bytes(s, [93, 195, 72, 133, 246, 120, 15, 139, 79, 248, 72, 57, 206, 115, 7, 15, 182, 4, 55, 49, 210, 195, 49, 192, 49, 210, 195])
     return off
 
 fn x86_synth_emit__lipi_list_set s
-    // WHY: Polymorphic setter supporting both LIST[idx]=val and DICT0[key]=val, returning collection ptr in rax.
+    // WHY: Polymorphic setter supporting both LIST[idx]=val and DICT0[key]=val (default vtag=0).
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_set", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 49, 201])
+    x86_synth_emit_call_helper(s, "_lipi_list_set_typed")
+    x86_synth_emit_bytes(s, [93, 195])
+    return off
+
+fn x86_synth_emit__lipi_list_set_typed s
+    // WHY: Tagged polymorphic setter forwarding %rcx = val_tag (0=int/ptr, 1=float, 2=str) into DICT0.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_list_set_typed", off)
     x86_synth_emit_bytes(s, [72, 133, 255, 116, 29, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 17, 72, 59, 55, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 72, 137, 248, 195, 85, 72, 137, 229])
-    x86_synth_emit_call_helper(s, "_lipi_dict_set")
+    x86_synth_emit_call_helper(s, "_lipi_dict_set_typed")
+    x86_synth_emit_bytes(s, [93, 195])
+    return off
+
+fn x86_synth_emit__lipi_throw_null_deref s
+    // WHY: Shared bare-metal trap throwing catchable NullPointerException on null/low struct deref (< 4096).
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_throw_null_deref", off)
+    ro_off = x86_synth_add_rodata_str(s, "NullPointerException: null struct dereference", 0)
+    // push rbp; mov rbp, rsp; movabs rax, <rodata_vaddr>; mov rdi, rax; call _lipi_exc_throw
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 184])
+    patch_pos = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    rel = X86StringReloc()
+    rel.sr_patch_offset = patch_pos
+    rel.sr_rodata_offset = ro_off
+    push(s.synth_str_relocs, rel)
+    x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+    x86_synth_emit_call_helper(s, "_lipi_exc_throw")
     x86_synth_emit_bytes(s, [93, 195])
     return off
 
@@ -569,13 +596,15 @@ fn x86_synth_emit__lipi_exc_pop s
     return off
 
 fn x86_synth_emit__lipi_exc_throw s
-    // WHY: Cross-frame stack unwinding throw(%rdi = err_val). Restores callee-saved
-    // registers, rbp, rsp from calling thread's active exc_top handler and jumps to catch_rip.
+    // WHY: Cross-frame stack unwinding throw(%rdi = err_val). Snapshots call-stack RIPs
+    // into LSYM0 trace buffer before unwinding; if uncaught, prints message + full backtrace
+    // to stderr (fd 2) and exits 1 cleanly via _lipi_exc_print_unhandled.
     off = s.synth_code.len()
     s.synth_exc_throw_off = off
     x86_synth_register_helper_fn(s, "_lipi_exc_throw", off)
     x86_synth_register_helper_fn(s, "exc_throw", off)
     x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 73, 137, 194])
+    x86_synth_emit_call_helper(s, "_lipi_trace_save_throw")
     x86_synth_emit_call_helper(s, "_lipi_exc_slot_ptr")
     x86_synth_emit_bytes(s, [
         73, 139, 18,
@@ -592,11 +621,10 @@ fn x86_synth_emit__lipi_exc_throw s
         72, 139, 106, 16,
         72, 139, 98, 24,
         72, 137, 248,
-        65, 255, 227,
-        191, 1, 0, 0, 0,
-        184, 231, 0, 0, 0,
-        15, 5
+        65, 255, 227
     ])
+    x86_synth_emit_call_helper(s, "_lipi_exc_print_unhandled")
+    x86_synth_emit_bytes(s, [191, 1, 0, 0, 0, 184, 231, 0, 0, 0, 15, 5, 244])
     return off
 
 fn x86_synth_emit__lipi_stack_bottom s
@@ -634,6 +662,8 @@ fn x86_synth_emit_all_runtime_helpers s
     off_lipi_fn_list = x86_synth_emit_lipi_fn_list(s)
     off__lipi_list_get = x86_synth_emit__lipi_list_get(s)
     off__lipi_list_set = x86_synth_emit__lipi_list_set(s)
+    off__lipi_list_set_typed = x86_synth_emit__lipi_list_set_typed(s)
+    off__lipi_throw_null_deref = x86_synth_emit__lipi_throw_null_deref(s)
     off__lipi_list_pop = x86_synth_emit__lipi_list_pop(s)
     off__lipi_list_push = x86_synth_emit__lipi_list_push(s)
     off_lipi_fn_argv = x86_synth_emit_lipi_fn_argv(s)
@@ -708,6 +738,7 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_buf_free = x86_synth_emit__lipi_buf_free(s)
     off__lipi_buf_slice = x86_synth_emit__lipi_buf_slice(s)
     x86_synth_emit_all_dict_helpers(s)
+    x86_synth_emit_all_trace_helpers(s)
 
     // Register bilingual and standard aliases
     x86_synth_register_helper_fn(s, "move", off__lipi_pass_thru)

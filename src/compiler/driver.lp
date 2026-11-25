@@ -70,8 +70,7 @@ fn compiler_driver_starts_with s prefix
 
 fn compiler_driver_has_include content
     // WHY: High-speed zero-allocation prefix scanner to identify whether a source file contains
-    // any include or import statements. If zero include directives exist, file can be returned
-    // directly without slicing or heap churn.
+    // any include/import/from/pub statements requiring bundler transformation.
     p = 0
     clen = len(content)
     while p < clen
@@ -84,6 +83,12 @@ fn compiler_driver_has_include content
                     return 1
                 if compiler_driver_match_kw(content, p, "import ") == 1
                     return 1
+            elif b0 == 102 // 'f'
+                if compiler_driver_match_kw(content, p, "from ") == 1
+                    return 1
+            elif b0 == 112 // 'p'
+                if compiler_driver_match_kw(content, p, "pub ") == 1
+                    return 1
             elif b0 == 64 // '@'
                 if compiler_driver_match_kw(content, p, "@include ") == 1
                     return 1
@@ -92,6 +97,8 @@ fn compiler_driver_has_include content
                 if compiler_driver_match_kw(content, p, "@অন্তর্ভুক্ত ") == 1
                     return 1
             elif compiler_driver_match_kw(content, p, "অন্তর্ভুক্ত ") == 1
+                return 1
+            elif compiler_driver_match_kw(content, p, "থেকে ") == 1
                 return 1
         while p < clen and mem_byte_read(content, p) != 10
             p = p + 1
@@ -635,16 +642,84 @@ fn compiler_driver_is_ident_ch b
     return 0
 end
 
-fn compiler_driver_collect_mod_symbols src
-    // WHY: Collects top-level `fn <name>` and `struct <name>` identifiers in an aliased module
-    // so they can be cleanly mangled to `__mod_<alias>__<name>` with zero global collision.
-    syms = list()
+G_DRV_SEL_COUNTER = 0
+
+fn compiler_driver_strip_pub src
+    // WHY: Strips leading `pub ` visibility modifiers before declarations so lexer/parser/backend
+    // remain 100% clean while bundler enforces module export encapsulation.
+    n = len(src)
+    p = 0
+    seg_start = 0
+    out_chunks = list()
+    found_any = 0
+    while p < n
+        ls = p
+        while p < n and (mem_byte_read(src, p) == 32 or mem_byte_read(src, p) == 9)
+            p = p + 1
+        end
+        if p + 4 < n and mem_byte_read(src, p) == 112 and compiler_driver_match_kw(src, p, "pub ") == 1
+            q = p + 4
+            while q < n and (mem_byte_read(src, q) == 32 or mem_byte_read(src, q) == 9)
+                q = q + 1
+            end
+            is_decl = 0
+            if compiler_driver_match_kw(src, q, "fn ") == 1 or compiler_driver_match_kw(src, q, "@fn ") == 1 or compiler_driver_match_kw(src, q, "struct ") == 1 or compiler_driver_match_kw(src, q, "@struct ") == 1 or compiler_driver_match_kw(src, q, "enum ") == 1 or compiler_driver_match_kw(src, q, "@enum ") == 1 or compiler_driver_match_kw(src, q, "const ") == 1 or compiler_driver_match_kw(src, q, "let ") == 1 or compiler_driver_match_kw(src, q, "কাজ ") == 1 or compiler_driver_match_kw(src, q, "গঠন ") == 1 or compiler_driver_match_kw(src, q, "গণনা ") == 1
+                is_decl = 1
+            end
+            if is_decl == 1
+                found_any = 1
+                if p > seg_start
+                    push(out_chunks, str_sub(src, seg_start, p))
+                end
+                seg_start = q
+            end
+        end
+        while p < n and mem_byte_read(src, p) != 10
+            p = p + 1
+        end
+        if p < n p = p + 1 end
+    end
+    if found_any == 0
+        return src
+    end
+    if seg_start < n
+        push(out_chunks, str_sub(src, seg_start, n))
+    end
+    return compiler_driver_join_chunks(out_chunks)
+end
+
+fn compiler_driver_list_has lst val
+    i = 0
+    while i < lst.len()
+        if compiler_driver_streq(lst[i], val) == 1
+            return 1
+        end
+        i = i + 1
+    end
+    return 0
+end
+
+fn compiler_driver_collect_mod_meta src
+    // WHY: Collects top-level declarations (fn, struct, enum, const, let) and tracks `pub`
+    // exports so scoped modules enforce true private encapsulation while preserving 100%
+    // backwards compatibility for legacy modules that declare zero `pub` keywords.
+    all_syms = list()
+    pub_syms = list()
+    has_pub = 0
     n = len(src)
     p = 0
     while p < n
-        // Skip line indentation
         while p < n and (mem_byte_read(src, p) == 32 or mem_byte_read(src, p) == 9)
             p = p + 1
+        end
+        is_pub = 0
+        if p + 4 < n and mem_byte_read(src, p) == 112 and compiler_driver_match_kw(src, p, "pub ") == 1
+            is_pub = 1
+            has_pub = 1
+            p = p + 4
+            while p < n and (mem_byte_read(src, p) == 32 or mem_byte_read(src, p) == 9)
+                p = p + 1
+            end
         end
         kw_len = 0
         if compiler_driver_match_kw(src, p, "fn ") == 1
@@ -655,6 +730,14 @@ fn compiler_driver_collect_mod_symbols src
             kw_len = 7
         elif compiler_driver_match_kw(src, p, "@struct ") == 1
             kw_len = 8
+        elif compiler_driver_match_kw(src, p, "enum ") == 1
+            kw_len = 5
+        elif compiler_driver_match_kw(src, p, "@enum ") == 1
+            kw_len = 6
+        elif compiler_driver_match_kw(src, p, "const ") == 1
+            kw_len = 6
+        elif compiler_driver_match_kw(src, p, "let ") == 1
+            kw_len = 4
         end
         if kw_len > 0
             q = p + kw_len
@@ -667,18 +750,11 @@ fn compiler_driver_collect_mod_symbols src
             end
             if q > s0
                 nm = str_sub(src, s0, q)
-                // Avoid duplicates
-                dup = 0
-                si = 0
-                while si < syms.len()
-                    if compiler_driver_streq(syms[si], nm) == 1
-                        dup = 1
-                        break
-                    end
-                    si = si + 1
+                if compiler_driver_list_has(all_syms, nm) == 0
+                    push(all_syms, nm)
                 end
-                if dup == 0
-                    push(syms, nm)
+                if is_pub == 1 and compiler_driver_list_has(pub_syms, nm) == 0
+                    push(pub_syms, nm)
                 end
             end
         end
@@ -687,29 +763,29 @@ fn compiler_driver_collect_mod_symbols src
         end
         if p < n p = p + 1 end
     end
-    return syms
+    return [all_syms, pub_syms, has_pub]
 end
 
-fn compiler_driver_mangle_module src alias
+fn compiler_driver_mangle_module src alias all_syms
     // WHY: Rewrites whole-word occurrences of module-local symbols inside `src` to
     // `__mod_<alias>__<sym>`, safely skipping string literals, comments, and `.field` accesses.
-    syms = compiler_driver_collect_mod_symbols(src)
-    if syms.len() == 0
-        return src
+    clean_src = compiler_driver_strip_pub(src)
+    if all_syms.len() == 0
+        return clean_src
     end
     prefix = "__mod_" + alias + "__"
     out_chunks = list()
-    n = len(src)
+    n = len(clean_src)
     p = 0
     seg_start = 0
     while p < n
-        b = mem_byte_read(src, p)
+        b = mem_byte_read(clean_src, p)
         // Skip string literals
         if b == 34 or b == 39
             q_ch = b
             p = p + 1
             while p < n
-                cb = mem_byte_read(src, p)
+                cb = mem_byte_read(clean_src, p)
                 if cb == 92 and p + 1 < n
                     p = p + 2
                 elif cb == q_ch
@@ -722,8 +798,8 @@ fn compiler_driver_mangle_module src alias
             continue
         end
         // Skip // line comments
-        if b == 47 and p + 1 < n and mem_byte_read(src, p + 1) == 47
-            while p < n and mem_byte_read(src, p) != 10
+        if b == 47 and p + 1 < n and mem_byte_read(clean_src, p + 1) == 47
+            while p < n and mem_byte_read(clean_src, p) != 10
                 p = p + 1
             end
             continue
@@ -731,28 +807,19 @@ fn compiler_driver_mangle_module src alias
         if compiler_driver_is_ident_ch(b) == 1 and (b < 48 or b > 57)
             id_start = p
             p = p + 1
-            while p < n and compiler_driver_is_ident_ch(mem_byte_read(src, p)) == 1
+            while p < n and compiler_driver_is_ident_ch(mem_byte_read(clean_src, p)) == 1
                 p = p + 1
             end
             // Do not mangle struct field access `.ident`
             prev_is_dot = 0
-            if id_start > 0 and mem_byte_read(src, id_start - 1) == 46
+            if id_start > 0 and mem_byte_read(clean_src, id_start - 1) == 46
                 prev_is_dot = 1
             end
             if prev_is_dot == 0
-                word = str_sub(src, id_start, p)
-                matched = 0
-                si = 0
-                while si < syms.len()
-                    if compiler_driver_streq(syms[si], word) == 1
-                        matched = 1
-                        break
-                    end
-                    si = si + 1
-                end
-                if matched == 1
+                word = str_sub(clean_src, id_start, p)
+                if compiler_driver_list_has(all_syms, word) == 1
                     if id_start > seg_start
-                        push(out_chunks, str_sub(src, seg_start, id_start))
+                        push(out_chunks, str_sub(clean_src, seg_start, id_start))
                     end
                     push(out_chunks, prefix + word)
                     seg_start = p
@@ -763,15 +830,15 @@ fn compiler_driver_mangle_module src alias
         p = p + 1
     end
     if seg_start < n
-        push(out_chunks, str_sub(src, seg_start, n))
+        push(out_chunks, str_sub(clean_src, seg_start, n))
     end
     return compiler_driver_join_chunks(out_chunks)
 end
 
-fn compiler_driver_rewrite_aliases src aliases
-    // WHY: Rewrites `alias::symbol` references in importer source to `__mod_<alias>__<symbol>`
-    // while safely skipping string literals and // comments.
-    if aliases.len() == 0
+fn compiler_driver_rewrite_aliases src aliases alias_pubs alias_has_pub alias_paths sel_locals sel_targets
+    // WHY: Rewrites `alias::symbol`, `alias.symbol`, and selectively imported `from "..." import sym`
+    // references while enforcing compile-time `pub` visibility encapsulation.
+    if aliases.len() == 0 and sel_locals.len() == 0
         return src
     end
     out_chunks = list()
@@ -808,32 +875,68 @@ fn compiler_driver_rewrite_aliases src aliases
             while p < n and compiler_driver_is_ident_ch(mem_byte_read(src, p)) == 1
                 p = p + 1
             end
+            prev_is_dot = 0
+            if id_start > 0 and mem_byte_read(src, id_start - 1) == 46
+                prev_is_dot = 1
+            end
+            word = str_sub(src, id_start, p)
+            // Case 1: Qualified module access `alias::sym` or `alias.sym`
+            sep_len = 0
             if p + 2 < n and mem_byte_read(src, p) == 58 and mem_byte_read(src, p + 1) == 58
-                word = str_sub(src, id_start, p)
+                sep_len = 2
+            elif p + 1 < n and mem_byte_read(src, p) == 46
+                sep_len = 1
+            end
+            if prev_is_dot == 0 and sep_len > 0 and aliases.len() > 0
                 ai = 0
-                is_al = 0
+                al_idx = 0 - 1
                 while ai < aliases.len()
                     if compiler_driver_streq(aliases[ai], word) == 1
-                        is_al = 1
+                        al_idx = ai
                         break
                     end
                     ai = ai + 1
                 end
-                if is_al == 1
-                    m_start = p + 2
+                if al_idx >= 0
+                    m_start = p + sep_len
                     m_end = m_start
                     while m_end < n and compiler_driver_is_ident_ch(mem_byte_read(src, m_end)) == 1
                         m_end = m_end + 1
                     end
                     if m_end > m_start
+                        mem_sym = str_sub(src, m_start, m_end)
+                        if alias_has_pub[al_idx] == 1 and compiler_driver_list_has(alias_pubs[al_idx], mem_sym) == 0
+                            say "❌ [Visibility Error]: Symbol '" + mem_sym + "' in module '" + alias_paths[al_idx] + "' is private (mark it 'pub' to export)."
+                            exit(1)
+                        end
                         if id_start > seg_start
                             push(out_chunks, str_sub(src, seg_start, id_start))
                         end
-                        push(out_chunks, "__mod_" + word + "__" + str_sub(src, m_start, m_end))
+                        push(out_chunks, "__mod_" + word + "__" + mem_sym)
                         seg_start = m_end
                         p = m_end
                         continue
                     end
+                end
+            end
+            // Case 2: Selective import binding `from "mod" import sym [as local]`
+            if prev_is_dot == 0 and sel_locals.len() > 0
+                si = 0
+                sel_idx = 0 - 1
+                while si < sel_locals.len()
+                    if compiler_driver_streq(sel_locals[si], word) == 1
+                        sel_idx = si
+                        break
+                    end
+                    si = si + 1
+                end
+                if sel_idx >= 0
+                    if id_start > seg_start
+                        push(out_chunks, str_sub(src, seg_start, id_start))
+                    end
+                    push(out_chunks, sel_targets[sel_idx])
+                    seg_start = p
+                    continue
                 end
             end
             continue
@@ -847,8 +950,8 @@ fn compiler_driver_rewrite_aliases src aliases
 end
 
 fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
-    // WHY: Recursively traverses and consolidates all 'import' and 'include' dependencies
-    // into a flat list of immutable chunks without quadratic string concatenation.
+    // WHY: Recursively traverses and consolidates all 'import', 'include', and 'from ... import'
+    // dependencies into a flat list of chunks with scoped namespaces and `pub` visibility enforcement.
     if len(file_path) > 2 and mem_byte_read(file_path, 0) == 46 and mem_byte_read(file_path, 1) == 47
         file_path = str_sub(file_path, 2, len(file_path))
 
@@ -871,6 +974,11 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
 
     cur_dir = compiler_driver_dirname(file_path)
     file_aliases = list()
+    file_alias_pubs = list()
+    file_alias_has_pub = list()
+    file_alias_paths = list()
+    file_sel_locals = list()
+    file_sel_targets = list()
     local_chunk_idxs = list()
     chunk_start = 0
     p = 0
@@ -878,7 +986,6 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
 
     while p < clen
         line_start = p
-        // Skip leading whitespace without heap allocation
         while p < clen
             b = mem_byte_read(content, p)
             if b != 32 and b != 9
@@ -886,11 +993,13 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
             p = p + 1
 
         is_inc = 0
+        is_from_import = 0
         inc_target = ""
         inc_alias = ""
+        from_syms = list()
+        from_locals = list()
         plen = 0
 
-        // Fast prefix check: only check include/import if line starts with 'i' (105) or '@' (64) or Bengali 'অ'
         if p < clen
             b0 = mem_byte_read(content, p)
             if b0 == 105 // 'i'
@@ -898,6 +1007,10 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
                     plen = 8
                 elif compiler_driver_match_kw(content, p, "import ") == 1
                     plen = 7
+            elif b0 == 102 // 'f'
+                if compiler_driver_match_kw(content, p, "from ") == 1
+                    plen = 5
+                    is_from_import = 1
             elif b0 == 64 // '@'
                 if compiler_driver_match_kw(content, p, "@include ") == 1
                     plen = 9
@@ -907,9 +1020,11 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
                     plen = 35
             elif compiler_driver_match_kw(content, p, "অন্তর্ভুক্ত ") == 1
                 plen = 34
+            elif compiler_driver_match_kw(content, p, "থেকে ") == 1
+                plen = 13
+                is_from_import = 1
 
         if plen > 0 and p + plen < clen
-            // Skip spaces between keyword and opening quote
             p_scan = p + plen
             while p_scan < clen
                 qb = mem_byte_read(content, p_scan)
@@ -927,28 +1042,70 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
                             break
                         p_tend = p_tend + 1
                     if p_tend < clen and mem_byte_read(content, p_tend) == q
-                        is_inc = 1
                         inc_target = str_sub(content, p_tstart, p_tend)
-                        // Check for optional module namespace alias: `as <alias>`
                         pa = p_tend + 1
                         while pa < clen and (mem_byte_read(content, pa) == 32 or mem_byte_read(content, pa) == 9)
                             pa = pa + 1
                         end
-                        if compiler_driver_match_kw(content, pa, "as ") == 1
-                            pa = pa + 3
-                            while pa < clen and (mem_byte_read(content, pa) == 32 or mem_byte_read(content, pa) == 9)
-                                pa = pa + 1
+                        if is_from_import == 1
+                            // Parse: from "mod" import sym1, sym2 [as local2]
+                            if compiler_driver_match_kw(content, pa, "import ") == 1
+                                pa = pa + 7
+                                is_inc = 1
+                                while pa < clen and mem_byte_read(content, pa) != 10
+                                    while pa < clen and (mem_byte_read(content, pa) == 32 or mem_byte_read(content, pa) == 9 or mem_byte_read(content, pa) == 44)
+                                        pa = pa + 1
+                                    end
+                                    if pa >= clen or mem_byte_read(content, pa) == 10 or (mem_byte_read(content, pa) == 47 and pa + 1 < clen and mem_byte_read(content, pa + 1) == 47)
+                                        break
+                                    end
+                                    s0 = pa
+                                    while pa < clen and compiler_driver_is_ident_ch(mem_byte_read(content, pa)) == 1
+                                        pa = pa + 1
+                                    end
+                                    if pa > s0
+                                        req_sym = str_sub(content, s0, pa)
+                                        loc_sym = req_sym
+                                        while pa < clen and (mem_byte_read(content, pa) == 32 or mem_byte_read(content, pa) == 9)
+                                            pa = pa + 1
+                                        end
+                                        if compiler_driver_match_kw(content, pa, "as ") == 1
+                                            pa = pa + 3
+                                            while pa < clen and (mem_byte_read(content, pa) == 32 or mem_byte_read(content, pa) == 9)
+                                                pa = pa + 1
+                                            end
+                                            a0 = pa
+                                            while pa < clen and compiler_driver_is_ident_ch(mem_byte_read(content, pa)) == 1
+                                                pa = pa + 1
+                                            end
+                                            if pa > a0
+                                                loc_sym = str_sub(content, a0, pa)
+                                            end
+                                        end
+                                        push(from_syms, req_sym)
+                                        push(from_locals, loc_sym)
+                                    else
+                                        pa = pa + 1
+                                    end
+                                end
                             end
-                            a_start = pa
-                            while pa < clen and compiler_driver_is_ident_ch(mem_byte_read(content, pa)) == 1
-                                pa = pa + 1
-                            end
-                            if pa > a_start
-                                inc_alias = str_sub(content, a_start, pa)
+                        else
+                            is_inc = 1
+                            if compiler_driver_match_kw(content, pa, "as ") == 1
+                                pa = pa + 3
+                                while pa < clen and (mem_byte_read(content, pa) == 32 or mem_byte_read(content, pa) == 9)
+                                    pa = pa + 1
+                                end
+                                a_start = pa
+                                while pa < clen and compiler_driver_is_ident_ch(mem_byte_read(content, pa)) == 1
+                                    pa = pa + 1
+                                end
+                                if pa > a_start
+                                    inc_alias = str_sub(content, a_start, pa)
+                                end
                             end
                         end
 
-        // Advance to end of line without heap allocation
         while p < clen and mem_byte_read(content, p) != 10
             p = p + 1
         if p < clen and mem_byte_read(content, p) == 10
@@ -961,13 +1118,49 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
             end
             inc_target = compiler_driver_resolve_std(inc_target)
             resolved = compiler_driver_resolve_path(inc_target, cur_dir, lipi_root)
-            if len(inc_alias) > 0
-                push(file_aliases, inc_alias)
+            if is_from_import == 1 and from_syms.len() > 0
+                G_DRV_SEL_COUNTER = G_DRV_SEL_COUNTER + 1
+                sel_alias = "__sel_" + str(G_DRV_SEL_COUNTER)
                 mod_vis = list()
                 mod_chunks = list()
                 compiler_driver_bundle_into_chunks(resolved, mod_vis, mod_chunks, lipi_root)
                 mod_joined = compiler_driver_join_chunks(mod_chunks)
-                mod_mangled = compiler_driver_mangle_module(mod_joined, inc_alias)
+                meta = compiler_driver_collect_mod_meta(mod_joined)
+                m_all = meta[0]
+                m_pub = meta[1]
+                m_has_pub = meta[2]
+                fi_s = 0
+                while fi_s < from_syms.len()
+                    rsym = from_syms[fi_s]
+                    if m_has_pub == 1 and compiler_driver_list_has(m_pub, rsym) == 0
+                        say "❌ [Visibility Error]: Cannot import private symbol '" + rsym + "' from module '" + resolved + "' (mark it 'pub' to export)."
+                        exit(1)
+                    end
+                    if compiler_driver_list_has(m_all, rsym) == 0
+                        say "❌ [Import Error]: Symbol '" + rsym + "' not found in module '" + resolved + "'."
+                        exit(1)
+                    end
+                    push(file_sel_locals, from_locals[fi_s])
+                    push(file_sel_targets, "__mod_" + sel_alias + "__" + rsym)
+                    fi_s = fi_s + 1
+                end
+                mod_mangled = compiler_driver_mangle_module(mod_joined, sel_alias, m_all)
+                push(chunks, mod_mangled)
+                push(chunks, "\n")
+            elif len(inc_alias) > 0
+                mod_vis = list()
+                mod_chunks = list()
+                compiler_driver_bundle_into_chunks(resolved, mod_vis, mod_chunks, lipi_root)
+                mod_joined = compiler_driver_join_chunks(mod_chunks)
+                meta = compiler_driver_collect_mod_meta(mod_joined)
+                m_all = meta[0]
+                m_pub = meta[1]
+                m_has_pub = meta[2]
+                push(file_aliases, inc_alias)
+                push(file_alias_pubs, m_pub)
+                push(file_alias_has_pub, m_has_pub)
+                push(file_alias_paths, resolved)
+                mod_mangled = compiler_driver_mangle_module(mod_joined, inc_alias, m_all)
                 push(chunks, mod_mangled)
                 push(chunks, "\n")
             else
@@ -980,11 +1173,11 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
         push(local_chunk_idxs, chunks.len())
         push(chunks, str_sub(content, chunk_start, clen))
     end
-    if file_aliases.len() > 0
+    if file_aliases.len() > 0 or file_sel_locals.len() > 0
         li_c = 0
         while li_c < local_chunk_idxs.len()
             c_idx = local_chunk_idxs[li_c]
-            list_set(chunks, c_idx, compiler_driver_rewrite_aliases(chunks[c_idx], file_aliases))
+            list_set(chunks, c_idx, compiler_driver_rewrite_aliases(chunks[c_idx], file_aliases, file_alias_pubs, file_alias_has_pub, file_alias_paths, file_sel_locals, file_sel_targets))
             li_c = li_c + 1
         end
     end
@@ -1012,7 +1205,7 @@ fn compiler_driver_bundle_source file_path visited
             if file_exists(lipi_root + "/" + file_path) == 1
                 real_path = lipi_root + "/" + file_path
     compiler_driver_bundle_into_chunks(real_path, visited, chunks, lipi_root)
-    return compiler_driver_join_chunks(chunks)
+    return compiler_driver_strip_pub(compiler_driver_join_chunks(chunks))
 
 // ── 2. Driver Execution Wrapper ───────────────────────────────────────────────
 

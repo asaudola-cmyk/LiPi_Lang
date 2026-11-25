@@ -51,6 +51,7 @@ struct Riscv64StringReloc
 struct Riscv64LocalVar
     rv_lv_name             // Variable identifier string
     rv_lv_offset           // Positive stack offset in bytes: accessed as [sp + rv_lv_offset]
+    rv_lv_is_boxed         // 1 if heap-boxed in an 8-byte upvalue cell for mutable closure capture
 
 // WHY: Records a function definition entry point for inter-procedural call site resolution
 struct Riscv64Function
@@ -106,6 +107,25 @@ struct Riscv64Synthesizer
     rv_error_count         // Count of backend synthesis/relocation errors
     rv_error_msg           // First error diagnostic message
     rv_called_main         // 1 if explicit top-level main()/মূল() call was emitted
+    rv_boxed_vars          // Local variable names auto-boxed into 8B upvalue cells for mutable closures
+    rv_defer_starts        // List of deferred statement start token indices in current function
+    rv_defer_ends          // Parallel list of deferred statement end token indices in current function
+    rv_emitting_defer      // 1 while replaying deferred statements before function exit
+    rv_needs_dict          // Flag: 1 if DICT0 HashMap + unified container helpers must be emitted
+    rv_dict_hash_off       // Byte offset of __dict_hash helper
+    rv_dict_eq_off         // Byte offset of __dict_key_eq helper
+    rv_dict_new_off        // Byte offset of __dict_new helper
+    rv_dict_set_off        // Byte offset of __dict_set helper
+    rv_dict_get_off        // Byte offset of __dict_get helper
+    rv_dict_has_off        // Byte offset of __dict_has helper
+    rv_dict_del_off        // Byte offset of __dict_del helper
+    rv_cont_get_off        // Byte offset of __container_get helper
+    rv_cont_set_off        // Byte offset of __container_set helper
+    rv_needs_buf           // Flag: 1 if ByteBuffer helpers must be emitted
+    rv_buf_new_off         // Byte offset of __buf_new helper
+    rv_buf_wbyte_off       // Byte offset of __buf_write_byte helper
+    rv_buf_wstr_off        // Byte offset of __buf_write_str helper
+    rv_buf_tostr_off       // Byte offset of __buf_to_str helper
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -141,6 +161,25 @@ fn riscv64_synth_new
     s.rv_error_count = 0
     s.rv_error_msg = ""
     s.rv_called_main = 0
+    s.rv_boxed_vars = list()
+    s.rv_defer_starts = list()
+    s.rv_defer_ends = list()
+    s.rv_emitting_defer = 0
+    s.rv_needs_dict = 0
+    s.rv_dict_hash_off = 0
+    s.rv_dict_eq_off = 0
+    s.rv_dict_new_off = 0
+    s.rv_dict_set_off = 0
+    s.rv_dict_get_off = 0
+    s.rv_dict_has_off = 0
+    s.rv_dict_del_off = 0
+    s.rv_cont_get_off = 0
+    s.rv_cont_set_off = 0
+    s.rv_needs_buf = 0
+    s.rv_buf_new_off = 0
+    s.rv_buf_wbyte_off = 0
+    s.rv_buf_wstr_off = 0
+    s.rv_buf_tostr_off = 0
     return s
 
 fn riscv64_synth_emit_byte s byte_val
@@ -841,6 +880,7 @@ fn riscv64_synth_alloc_var s name
     lv = Riscv64LocalVar()
     lv.rv_lv_name = name
     lv.rv_lv_offset = off
+    lv.rv_lv_is_boxed = riscv64_is_boxed_name(s, name)
     push(s.rv_locals, lv)
     return off
 

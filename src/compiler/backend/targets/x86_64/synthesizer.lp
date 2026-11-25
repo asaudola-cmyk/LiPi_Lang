@@ -40,12 +40,17 @@ fn x86_synth_compile_fn_def s toks pos_box
             end
         end
     end
+    // Parse optional generic type parameters: fn name<T, U>(...)
+    fn_tparams = x86_synth_parse_type_list(toks, pos_box, 0)
+    if fn_tparams == 0 fn_tparams = list() end
     saved_in_function = s.synth_in_function
     saved_current_fn = s.synth_current_fn
     mono_name = s.synth_mono_name_override
     mono_params = s.synth_mono_param_override
+    mono_ret = s.synth_mono_ret_override
     s.synth_mono_name_override = ""
     s.synth_mono_param_override = 0
+    s.synth_mono_ret_override = ""
     if mono_name != ""
         fn_name = mono_name
         method_alias = ""
@@ -118,6 +123,10 @@ fn x86_synth_compile_fn_def s toks pos_box
     saved_try_frames = s.synth_try_frames
     saved_defer_starts = s.synth_defer_starts
     saved_defer_ends = s.synth_defer_ends
+    saved_has_defer_unwind = s.synth_has_defer_unwind
+    saved_defer_mask_off = s.synth_defer_mask_off
+    saved_defer_err_off = s.synth_defer_err_off
+    saved_in_defer_unwind_pad = s.synth_in_defer_unwind_pad
     saved_loop_starts = s.synth_loop_starts
     saved_loop_breaks = s.synth_loop_breaks
     saved_loop_continues = s.synth_loop_continues
@@ -128,6 +137,10 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_try_frames = list()
     s.synth_defer_starts = list()
     s.synth_defer_ends = list()
+    s.synth_has_defer_unwind = 0
+    s.synth_defer_mask_off = 0
+    s.synth_defer_err_off = 0
+    s.synth_in_defer_unwind_pad = 0
     s.synth_loop_starts = list()
     s.synth_loop_breaks = list()
     s.synth_loop_continues = list()
@@ -173,17 +186,14 @@ fn x86_synth_compile_fn_def s toks pos_box
             list_set(pos_box, 0, cur_p_idx + 1) // Consume param name
             if has_paren == 1
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
-            // Skip optional type annotation: : type
+                // Skip optional type annotation: : type[<...>]
             after_p = get(pos_box, 0)
             if after_p < toks.len() and (toks[after_p].tok_kind == TOK_COLON() or (toks[after_p].tok_kind != TOK_STR() and toks[after_p].tok_text == ":"))
                 list_set(pos_box, 0, after_p + 1) // Consume ':'
                 if has_paren == 1
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
-                type_p = get(pos_box, 0)
-                if type_p < toks.len() and (x86_synth_is_ident_token(toks[type_p].tok_kind) == 1 or toks[type_p].tok_text == "string" or toks[type_p].tok_text == "i64" or toks[type_p].tok_text == "f64" or toks[type_p].tok_text == "bool" or toks[type_p].tok_text == "array")
-                    param_type = toks[type_p].tok_text
-                    list_set(pos_box, 0, type_p + 1) // Consume type name
                 end
+                param_type = x86_synth_parse_type_expr(toks, pos_box)
             end
             push(param_types, param_type)
             if has_paren == 1
@@ -195,22 +205,26 @@ fn x86_synth_compile_fn_def s toks pos_box
         else
             list_set(pos_box, 0, cur_p_idx + 1)
 
-    // Parse optional return type: -> return_type or : return_type
+    // Parse optional return type: -> return_type[<...>] or : return_type[<...>]
     x86_synth_skip_whitespace_tokens(toks, pos_box)
     ret_p = get(pos_box, 0)
     if ret_p < toks.len() and (toks[ret_p].tok_kind == TOK_ARROW() or (toks[ret_p].tok_kind != TOK_STR() and toks[ret_p].tok_text == "->") or toks[ret_p].tok_kind == TOK_COLON() or (toks[ret_p].tok_kind != TOK_STR() and toks[ret_p].tok_text == ":"))
         list_set(pos_box, 0, ret_p + 1) // Consume '->' or ':'
         x86_synth_skip_whitespace_tokens(toks, pos_box)
-        if get(pos_box, 0) < toks.len() and (x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1 or toks[get(pos_box, 0)].tok_kind == TOK_IDENT())
-            fn_entry.fn_ret_type = toks[get(pos_box, 0)].tok_text
+        parsed_ret_t = x86_synth_parse_type_expr(toks, pos_box)
+        if parsed_ret_t != ""
+            fn_entry.fn_ret_type = x86_synth_subst_type(s, parsed_ret_t, 0, 0)
             if fn_alias != 0
                 fn_alias.fn_ret_type = fn_entry.fn_ret_type
             end
-            list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume return type name
+        end
+    end
 
     fn_entry.fn_param_count = params.len()
+    fn_entry.fn_type_params = fn_tparams
     if fn_alias != 0
         fn_alias.fn_param_count = params.len()
+        fn_alias.fn_type_params = fn_tparams
     end
 
     if method_alias != "" and params.len() > 0
@@ -221,11 +235,23 @@ fn x86_synth_compile_fn_def s toks pos_box
     if mono_params != 0
         mpi = 0
         while mpi < param_types.len() and mpi < mono_params.len()
-            if param_types[mpi] == "" and mono_params[mpi] != ""
+            if mono_params[mpi] != ""
                 list_set(param_types, mpi, mono_params[mpi])
             end
             mpi = mpi + 1
         end
+    else
+        // Resolve concrete generic struct annotations like `b: Box<float>` in non-generic functions
+        mpi2 = 0
+        while mpi2 < param_types.len()
+            if param_types[mpi2] != ""
+                list_set(param_types, mpi2, x86_synth_subst_type(s, param_types[mpi2], 0, 0))
+            end
+            mpi2 = mpi2 + 1
+        end
+    end
+    if mono_ret != ""
+        fn_entry.fn_ret_type = mono_ret
     end
 
     // Emit standard function prologue: push rbp; mov rbp, rsp; push r12-r15, rbx; sub rsp, imm32
@@ -233,6 +259,17 @@ fn x86_synth_compile_fn_def s toks pos_box
 
     // Prescan function body for outer variables mutated inside nested closures (auto-boxed upvalue cells)
     s.synth_boxed_vars = x86_synth_prescan_boxed_vars(toks, get(pos_box, 0), base_col, base_line)
+
+    // Prescan function body for defer statements: if present, push exception unwind frame so defer
+    // executes in strict LIFO order during cross-frame throw unwinding as well as normal return!
+    defer_pad_lea_patch = 0 - 1
+    if x86_synth_body_has_defer(toks, get(pos_box, 0), base_col, base_line) == 1
+        s.synth_has_defer_unwind = 1
+        s.synth_stack_offset = ((s.synth_stack_offset + 15) / 16) * 16 + 96
+        defer_exc_off = s.synth_stack_offset
+        s.synth_defer_mask_off = defer_exc_off - 72
+        s.synth_defer_err_off = defer_exc_off - 80
+    end
 
     // WHY: Two-pass parameter initialization prevents clobbering incoming argument registers.
     // In Pass 1, save ALL incoming arguments (0..5 in SysV regs, 6+ from caller stack [rbp+16+...])
@@ -286,6 +323,20 @@ fn x86_synth_compile_fn_def s toks pos_box
         pi = pi + 1
     end
 
+    // Pass 3: Install defer unwind frame AFTER all incoming parameter registers are saved!
+    if s.synth_has_defer_unwind == 1
+        x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+        x86_synth_emit_store_var(s, 0, s.synth_defer_mask_off)
+        // lea rdi, [rbp - defer_exc_off]; lea rsi, [rip + pad_disp]; mov rdx, rbp; mov rcx, rsp; call _lipi_exc_push
+        x86_synth_emit_bytes(s, [72, 141, 189])
+        x86_synth_emit_u32(s, 0 - defer_exc_off)
+        x86_synth_emit_bytes(s, [72, 141, 53])
+        defer_pad_lea_patch = s.synth_code.len()
+        x86_synth_emit_u32(s, 0)
+        x86_synth_emit_bytes(s, [72, 137, 234, 72, 137, 225])
+        x86_synth_emit_call_helper(s, "_lipi_exc_push")
+        s.synth_last_store_end = 0 - 1
+    end
 
     // Check for one-liner expression function: fn name args = expr
     x86_synth_skip_whitespace_tokens(toks, pos_box)
@@ -328,6 +379,10 @@ fn x86_synth_compile_fn_def s toks pos_box
             s.synth_try_frames = saved_try_frames
             s.synth_defer_starts = saved_defer_starts
             s.synth_defer_ends = saved_defer_ends
+            s.synth_has_defer_unwind = saved_has_defer_unwind
+            s.synth_defer_mask_off = saved_defer_mask_off
+            s.synth_defer_err_off = saved_defer_err_off
+            s.synth_in_defer_unwind_pad = saved_in_defer_unwind_pad
             s.synth_loop_starts = saved_loop_starts
             s.synth_loop_breaks = saved_loop_breaks
             s.synth_loop_continues = saved_loop_continues
@@ -355,7 +410,7 @@ fn x86_synth_compile_fn_def s toks pos_box
             break
         if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn" or ct.tok_text == "component" or ct.tok_text == "উপাদান")
             break
-        if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_DIR_ENUM()
+        if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_KW_ENUM() or ct.tok_kind == TOK_DIR_ENUM()
             break
         if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "struct" or ct.tok_text == "গঠন" or ct.tok_text == "@struct" or ct.tok_text == "enum" or ct.tok_text == "@enum" or ct.tok_text == "গণনা")
             break
@@ -372,6 +427,19 @@ fn x86_synth_compile_fn_def s toks pos_box
     x86_synth_emit_byte(s, 192)
     x86_synth_emit_defers(s, toks)
     x86_synth_emit_epilogue(s)
+
+    // Emit Defer Unwind Pad (landed on by _lipi_exc_throw when an exception propagates out of this function)
+    if s.synth_has_defer_unwind == 1 and defer_pad_lea_patch >= 0
+        defer_pad_off = s.synth_code.len()
+        x86_synth_patch_u32(s, defer_pad_lea_patch, defer_pad_off - (defer_pad_lea_patch + 4))
+        s.synth_last_store_end = 0 - 1
+        x86_synth_emit_store_var(s, 0, s.synth_defer_err_off) // save thrown exception value in %rax
+        s.synth_in_defer_unwind_pad = 1
+        x86_synth_emit_defers(s, toks)
+        s.synth_in_defer_unwind_pad = 0
+        x86_synth_emit_load_var(s, 7, s.synth_defer_err_off)  // mov rdi, [rbp - defer_err_off]
+        x86_synth_emit_call_helper(s, "_lipi_exc_throw")
+    end
 
     // Patch jump to bypass function body during top-level execution
     after_fn_offset = s.synth_code.len()
@@ -394,6 +462,10 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_try_frames = saved_try_frames
     s.synth_defer_starts = saved_defer_starts
     s.synth_defer_ends = saved_defer_ends
+    s.synth_has_defer_unwind = saved_has_defer_unwind
+    s.synth_defer_mask_off = saved_defer_mask_off
+    s.synth_defer_err_off = saved_defer_err_off
+    s.synth_in_defer_unwind_pad = saved_in_defer_unwind_pad
     s.synth_loop_starts = saved_loop_starts
     s.synth_loop_breaks = saved_loop_breaks
     s.synth_loop_continues = saved_loop_continues
@@ -470,7 +542,7 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn" or tok_item.tok_text == "component" or tok_item.tok_text == "উপাদান")
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT() or tok_item.tok_kind == TOK_DIR_ENUM()
+        if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT() or tok_item.tok_kind == TOK_KW_ENUM() or tok_item.tok_kind == TOK_DIR_ENUM()
             is_fn_tok = 1
         end
         if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "struct" or tok_item.tok_text == "গঠন" or tok_item.tok_text == "@struct" or tok_item.tok_text == "enum" or tok_item.tok_text == "@enum" or tok_item.tok_text == "গণনা")
@@ -565,23 +637,15 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
                     found = 1
 
         if found == 0
-            say "❌ [LINKER ERROR]: Unresolved function symbol: " + cr.cr_target_name
-            say "  • Total registered functions: " + str(s.synth_functions.len())
-            say "  • Call reloc target: " + cr.cr_target_name + " at patch offset " + str(cr.cr_patch_offset)
-            i = 0
-            limit = 10
-            if s.synth_functions.len() < limit
-                limit = s.synth_functions.len()
-            while i < limit
-                say "    fn[" + str(i) + "]: " + s.synth_functions[i].fn_name
-                i = i + 1
+            say "❌ [Error]: Undefined function '" + cr.cr_target_name + "' (not declared in scope or imported modules)."
             exit(1)
 
         rel32 = resolved_addr - cr.cr_call_site_end
         x86_synth_patch_u32(s, cr.cr_patch_offset, rel32)
         ci = ci + 1
 
-    // 7. Resolve 64-Bit Virtual Memory String Relocations & Strict W^X RW Segment Globals
+    // 7. Emit compact LSYM0 symbol/line table in .rodata, then resolve 64-Bit Virtual Memory & W^X Relocations
+    lsym_ro_off = x86_synth_emit_lsym_rodata(s)
     // Layout: ELF Header(64) + 3 PHDRs(168) + Pad(8) + _start(64) = 304 (0x130) -> 0x40000130 = 1073742128
     total_code_size = s.synth_code.len()
     rodata_base_vaddr = 1073742128 - (0 - total_code_size)
@@ -654,10 +718,25 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_patch_u64(s, s.synth_heap_ptr_fn_off + 2, heap_ptr_vaddr)
         x86_synth_record_reloc_patch(s, s.synth_heap_ptr_fn_off + 2, rw_file_off + 24)
     end
+    trace_rw_slot = 0
+    if s.synth_lsym_ptrs_off > 0
+        trace_rw_slot = x86_synth_alloc_mutable_global(s, "__lipi_last_trace_ptr")
+    end
     if s.synth_globals_rw_ptr_patch > 0
         x86_synth_patch_u64(s, s.synth_globals_rw_ptr_patch, rw_vaddr - (0 - 488))
         x86_synth_record_reloc_patch(s, s.synth_globals_rw_ptr_patch, rw_file_off + 488)
         x86_synth_patch_u64(s, s.synth_globals_rw_len_patch, s.synth_mutable_globals.len() * 8)
+    end
+    if s.synth_lsym_ptrs_off > 0
+        lsym_vaddr = rodata_base_vaddr - (0 - lsym_ro_off)
+        x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 2, lsym_vaddr)
+        x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 12, 1073742128)
+        x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 22, rodata_base_vaddr)
+        x86_synth_patch_u64(s, s.synth_lsym_ptrs_off + 32, rw_vaddr - (0 - trace_rw_slot))
+        x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 2, ro_file_off + lsym_ro_off)
+        x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 12, 304)
+        x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 22, ro_file_off)
+        x86_synth_record_reloc_patch(s, s.synth_lsym_ptrs_off + 32, rw_file_off + trace_rw_slot)
     end
     mg_i = 0
     while mg_i < s.synth_global_rw_patch_offs.len()

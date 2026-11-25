@@ -1,121 +1,238 @@
 // ==============================================================================
-// 👑 LIPI UNIVERSE CORE: UNIVERSAL C-ABI DYNAMIC INVOCATION (utso/core/c_abi_call.lp)
-// ⚡ 100% Pure Lipi | Zero Libc | Zero C Compiler | Direct AMD64 Register Marshalling
+// 👑 LIPI UNIVERSE CORE: FULL SYSTEM V AMD64 C-ABI BRIDGE (utso/core/c_abi_call.lp)
+// ⚡ 100% Pure Lipi | Zero Libc | Zero libffi | Strict W^X Direct Silicon Trampolines
 //
-// WHY: To truly replace C, C++, and Zig, LiPi must effortlessly invoke existing shared
-// object (.so) functions without wrapping them in C stubs or relying on libffi/dlopen.
-// This module synthesizes an in-memory AMD64 execution trampoline in an executable page
-// (via Linux SYS_mmap), shifts caller registers into System V AMD64 ABI positions
-// (RDI, RSI, RDX, RCX, R8, R9), aligns RSP to 16-byte boundary, and executes dynamically.
+// WHY: To invoke ANY native C/C++/Rust/Zig shared library (.so) and pass Lipi
+// functions & closures back into C (e.g. qsort, callbacks, FreeType, libpng) with
+// ZERO external dependencies, this module synthesizes strict W^X AMD64 trampolines:
+//   1. c_abi_invoke(fn_ptr, a0..a4): 5 GPR args (backwards compatible)
+//   2. c_abi_invoke6(fn_ptr, a0..a5): full 6 GPR args (rdi, rsi, rdx, rcx, r8, r9)
+//   3. c_abi_invoke_full(fn_ptr, int_ptr, int_cnt, flt_ptr, flt_cnt, out_xmm0_ptr)
+//      + c_abi_call(fn_ptr, int_list, flt_list) -> [rax, xmm0_bits]:
+//      Full System V AMD64 ABI (6 GPR + arbitrary >6 16B-aligned stack args + XMM0..XMM7 + AL!)
+//   4. c_abi_make_callback(fn_or_closure) / c_abi_free_callback(cb):
+//      Strict W^X C-to-Lipi callback trampoline bridging plain Lipi fns AND heap CLOS closures!
 // ==============================================================================
 
 include "utso/core/memory.lp"
 include "utso/core/arena.lp"
 
-// ── Trampoline Cache State ───────────────────────────────────────────────────
-// Holds base address of mmapped executable trampoline page
+// ── Strict W^X Trampoline Page Cache ─────────────────────────────────────────
 TRAMPOLINE_PAGE_ADDR = 0
+G_TRAMPOLINE_6_ADDR    = 0
+G_TRAMPOLINE_FULL_ADDR = 0
+G_C_ABI_CB_ROOTS     = list()
+G_C_ABI_CB_PAGES     = list()
 
-// ১. এক্সিকিউটেবল ট্রাম্পোলাইন ইনিশিয়ালাইজেশন (Initialize Strict W^X JIT Trampoline)
-// WHY: Allocates RW page (PROT_READ|PROT_WRITE=3), emits machine code, then flips
-// permissions via SYS_mprotect (10) to PROT_READ|PROT_EXEC=5 so memory is NEVER simultaneously RWX.
+fn _c_abi_write_bytes page off arr
+    i = 0
+    n = len(arr)
+    while i < n
+        mem_byte_write(page, off + i, get(arr, i))
+        i = i + 1
+    end
+    return off + n
+end
+
+// ১. এক্সিকিউটেবল ট্রাম্পোলাইন ইনিশিয়ালাইজেশন (Initialize Strict W^X JIT Trampolines)
+// WHY: Packs 5-arg, 6-arg, and full SysV (GPR + XMM0..7 + >6 stack args) trampolines
+// into a single RW page then transitions once to PROT_READ|PROT_EXEC (5) via SYS_mprotect (10).
 fn c_abi_init_trampoline
     if TRAMPOLINE_PAGE_ADDR > 0
         return TRAMPOLINE_PAGE_ADDR
+    end
 
     page = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
     if page <= 0
         return 0
+    end
 
-    // Machine code:
-    // 00: 49 89 fb       mov r11, rdi          ; r11 = target function pointer
-    // 03: 48 89 f7       mov rdi, rsi          ; rdi = a0
-    // 06: 48 89 d6       mov rsi, rdx          ; rsi = a1
-    // 09: 48 89 ca       mov rdx, rcx          ; rdx = a2
-    // 0c: 4c 89 c1       mov rcx, r8           ; rcx = a3 (REX.W|REX.R = 0x4C, NOT 0x49!)
-    // 0f: 4d 89 c8       mov r8,  r9           ; r8  = a4
-    // 12: 48 83 ec 08    sub rsp, 8            ; 16-byte stack alignment guard
-    // 16: 31 c0          xor eax, eax          ; AL=0 (System V variadic vector count)
-    // 18: 41 ff d3       call r11              ; Call target C function
-    // 1b: 48 83 c4 08    add rsp, 8            ; Restore stack frame
-    // 1f: c3             ret                   ; Return RAX to caller
+    // Offset 0: 5-arg GPR trampoline (32 bytes)
+    t5 = [
+        73, 137, 251, 72, 137, 247, 72, 137, 214, 72, 137, 202,
+        76, 137, 193, 77, 137, 200, 72, 131, 236, 8, 49, 192,
+        65, 255, 211, 72, 131, 196, 8, 195
+    ]
+    _c_abi_write_bytes(page, 0, t5)
 
-    mem_byte_write(page, 0, 73)   // 0x49
-    mem_byte_write(page, 1, 137)  // 0x89
-    mem_byte_write(page, 2, 251)  // 0xFB
+    // Offset 64: 6-arg GPR trampoline (37 bytes: loads 6th arg a5 from [rsp+8] into r9)
+    t6 = [
+        73, 137, 251, 72, 137, 247, 72, 137, 214, 72, 137, 202,
+        76, 137, 193, 77, 137, 200, 76, 139, 76, 36, 8, 72, 131,
+        236, 8, 49, 192, 65, 255, 211, 72, 131, 196, 8, 195
+    ]
+    _c_abi_write_bytes(page, 64, t6)
 
-    mem_byte_write(page, 3, 72)   // 0x48
-    mem_byte_write(page, 4, 137)  // 0x89
-    mem_byte_write(page, 5, 247)  // 0xF7
-
-    mem_byte_write(page, 6, 72)   // 0x48
-    mem_byte_write(page, 7, 137)  // 0x89
-    mem_byte_write(page, 8, 214)  // 0xD6
-
-    mem_byte_write(page, 9, 72)   // 0x48
-    mem_byte_write(page, 10, 137) // 0x89
-    mem_byte_write(page, 11, 202) // 0xCA
-
-    mem_byte_write(page, 12, 76)  // 0x4C (REX.W + REX.R: mov rcx, r8)
-    mem_byte_write(page, 13, 137) // 0x89
-    mem_byte_write(page, 14, 193) // 0xC1
-
-    mem_byte_write(page, 15, 77)  // 0x4D
-    mem_byte_write(page, 16, 137) // 0x89
-    mem_byte_write(page, 17, 200) // 0xC8
-
-    mem_byte_write(page, 18, 72)  // 0x48
-    mem_byte_write(page, 19, 131) // 0x83
-    mem_byte_write(page, 20, 236) // 0xEC
-    mem_byte_write(page, 21, 8)   // 0x08
-
-    mem_byte_write(page, 22, 49)  // 0x31
-    mem_byte_write(page, 23, 192) // 0xC0
-
-    mem_byte_write(page, 24, 65)  // 0x41
-    mem_byte_write(page, 25, 255) // 0xFF
-    mem_byte_write(page, 26, 211) // 0xD3
-
-    mem_byte_write(page, 27, 72)  // 0x48
-    mem_byte_write(page, 28, 131) // 0x83
-    mem_byte_write(page, 29, 196) // 0xC4
-    mem_byte_write(page, 30, 8)   // 0x08
-
-    mem_byte_write(page, 31, 195) // 0xC3 (ret)
+    // Offset 128: Full System V AMD64 ABI trampoline (293 bytes)
+    // Supports: 0..64 GPR+stack args (16B aligned), XMM0..XMM7 doubles, variadic AL, and XMM0 capture!
+    tfull = [
+        85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 8,
+        73, 137, 252, 73, 137, 245, 72, 137, 211, 77, 137, 206, 77, 137, 199,
+        72, 133, 201, 116, 87, 73, 131, 255, 1, 114, 81, 242, 15, 16, 1,
+        73, 131, 255, 2, 114, 71, 242, 15, 16, 73, 8,
+        73, 131, 255, 3, 114, 60, 242, 15, 16, 81, 16,
+        73, 131, 255, 4, 114, 49, 242, 15, 16, 89, 24,
+        73, 131, 255, 5, 114, 38, 242, 15, 16, 97, 32,
+        73, 131, 255, 6, 114, 27, 242, 15, 16, 105, 40,
+        73, 131, 255, 7, 114, 16, 242, 15, 16, 113, 48,
+        73, 131, 255, 8, 114, 5, 242, 15, 16, 121, 56,
+        72, 131, 251, 6, 118, 42, 77, 133, 237, 116, 37, 72, 137, 216,
+        72, 131, 232, 6, 168, 1, 116, 4, 72, 131, 236, 8,
+        72, 137, 217, 72, 255, 201, 72, 131, 249, 6, 114, 10,
+        65, 255, 116, 205, 0, 72, 255, 201, 235, 240,
+        49, 255, 49, 246, 49, 210, 49, 201, 69, 49, 192, 69, 49, 201,
+        77, 133, 237, 116, 60,
+        72, 131, 251, 1, 114, 54, 73, 139, 125, 0,
+        72, 131, 251, 2, 114, 44, 73, 139, 117, 8,
+        72, 131, 251, 3, 114, 34, 73, 139, 85, 16,
+        72, 131, 251, 4, 114, 24, 73, 139, 77, 24,
+        72, 131, 251, 5, 114, 14, 77, 139, 69, 32,
+        72, 131, 251, 6, 114, 4, 77, 139, 77, 40,
+        76, 137, 248, 72, 131, 248, 8, 118, 5, 184, 8, 0, 0, 0,
+        65, 255, 212, 77, 133, 246, 116, 5, 102, 65, 15, 214, 6,
+        72, 141, 101, 216, 65, 95, 65, 94, 65, 93, 65, 92, 91, 93, 195
+    ]
+    _c_abi_write_bytes(page, 128, tfull)
 
     // Strict W^X transition: remove write permission, enable execute (PROT_READ|PROT_EXEC = 5)
     mret = syscall(10, page, 4096, 5, 0, 0, 0)
     if mret < 0
         syscall(11, page, 4096, 0, 0, 0, 0)
         return 0
+    end
 
-    TRAMPOLINE_PAGE_ADDR = page
+    TRAMPOLINE_PAGE_ADDR   = page
+    G_TRAMPOLINE_6_ADDR    = page + 64
+    G_TRAMPOLINE_FULL_ADDR = page + 128
     return page
+end
 
-// ২. ডায়নামিক সি-ফাংশন ইনভোক (Invoke Function via Trampoline)
-// Calls target function pointer with up to 5 arguments
+// ২. ডায়নামিক সি-ফাংশন ইনভোক (5 GPR args — backwards compatible)
 fn c_abi_invoke fn_ptr a0 a1 a2 a3 a4
-    if fn_ptr <= 0
-        return 0
+    if fn_ptr <= 0 return 0 end
     tramp = c_abi_init_trampoline()
-    if tramp <= 0
+    if tramp <= 0 return 0 end
+    return tramp(fn_ptr, a0, a1, a2, a3, a4)
+end
+
+// ৩. ফুল ৬-আর্গুমেন্ট GPR ইনভোক (6 GPR args: rdi..r9)
+fn c_abi_invoke6 fn_ptr a0 a1 a2 a3 a4 a5
+    if fn_ptr <= 0 return 0 end
+    tramp = c_abi_init_trampoline()
+    if tramp <= 0 return 0 end
+    t6 = tramp + 64
+    return t6(fn_ptr, a0, a1, a2, a3, a4, a5)
+end
+
+// ৪. পূর্ণ System V AMD64 ABI ইনভোক (Unlimited Int/Stack Args + XMM0..XMM7 + XMM0 Return)
+fn c_abi_invoke_full fn_ptr int_ptr int_cnt flt_ptr flt_cnt out_xmm0_ptr
+    if fn_ptr <= 0 return 0 end
+    tramp = c_abi_init_trampoline()
+    if tramp <= 0 return 0 end
+    tf = tramp + 128
+    return tf(fn_ptr, int_ptr, int_cnt, flt_ptr, flt_cnt, out_xmm0_ptr)
+end
+
+// Ergonomic high-level wrapper accepting Lipi lists of int args & float args -> returns [rax_val, xmm0_bits]
+fn c_abi_call fn_ptr int_args flt_args
+    if fn_ptr <= 0 return [0, 0] end
+    if c_abi_init_trampoline() <= 0 return [0, 0] end
+    n_i = 0
+    if int_args != 0 n_i = len(int_args) end
+    n_f = 0
+    if flt_args != 0 n_f = len(flt_args) end
+    i_buf = 0
+    if n_i > 0
+        i_buf = alloc(n_i * 8)
+        ii = 0
+        while ii < n_i
+            mem_write(i_buf, ii * 8, get(int_args, ii))
+            ii = ii + 1
+        end
+    end
+    f_buf = 0
+    if n_f > 0
+        f_buf = alloc(n_f * 8)
+        fi = 0
+        while fi < n_f
+            mem_write(f_buf, fi * 8, get(flt_args, fi))
+            fi = fi + 1
+        end
+    end
+    out_xmm = alloc(8)
+    mem_write(out_xmm, 0, 0)
+    rax_res = c_abi_invoke_full(fn_ptr, i_buf, n_i, f_buf, n_f, out_xmm)
+    xmm_res = mem_read(out_xmm, 0)
+    free(out_xmm)
+    if i_buf != 0 free(i_buf) end
+    if f_buf != 0 free(f_buf) end
+    return [rax_res, xmm_res]
+end
+
+// ৫. C-to-Lipi কলব্যাক ট্রাম্পোলাইন (Strict W^X Callback Bridge for Plain Functions & Closures!)
+// WHY: Plain Lipi functions already match SysV AMD64 ABI directly (zero overhead!).
+// Heap closures (`CLOS` magic 0x434C4F53) expect %r10 = closure_ptr; this allocates a
+// strict W^X 16-byte trampoline: `movabs r10, closure; mov rax, [r10+8]; jmp rax`
+// preserving all incoming C arguments (GPR + XMM + stack args) untouched!
+fn c_abi_make_callback callable
+    if callable <= 4096 return 0 end
+    // Detect Lipi heap closure object (magic 0x434C4F53 = 1129074515 "CLOS" at [+0])
+    magic = mem_read(callable, 0)
+    if magic != 1129074515
+        // Plain Lipi function pointer — directly callable from C with zero wrapper!
+        return callable
+    end
+    page = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    if page <= 0 return 0 end
+    // 49 BA <u64 closure_ptr>   (movabs r10, closure_ptr)
+    // 49 8B 42 08               (mov rax, [r10 + 8])
+    // FF E0                     (jmp rax)
+    mem_byte_write(page, 0, 73)   // 0x49
+    mem_byte_write(page, 1, 186)  // 0xBA
+    mem_write(page, 2, callable)  // 8-byte closure pointer
+    mem_byte_write(page, 10, 73)  // 0x49
+    mem_byte_write(page, 11, 139) // 0x8B
+    mem_byte_write(page, 12, 66)  // 0x42
+    mem_byte_write(page, 13, 8)   // 0x08
+    mem_byte_write(page, 14, 255) // 0xFF
+    mem_byte_write(page, 15, 224) // 0xE0
+    if syscall(10, page, 4096, 5, 0, 0, 0) < 0
+        syscall(11, page, 4096, 0, 0, 0, 0)
         return 0
+    end
+    // Keep closure GC-rooted while trampoline is live
+    push(G_C_ABI_CB_ROOTS, callable)
+    push(G_C_ABI_CB_PAGES, page)
+    return page
+end
 
-    // In LiPi, calling a function pointer variable executes the machine code at that address!
-    // The Lipi compiler treats function values as callable addresses.
-    // However, calling through trampoline directly transfers control to the JIT trampoline:
-    res = tramp(fn_ptr, a0, a1, a2, a3, a4)
-    return res
+fn c_abi_make_closure_callback closure_obj
+    return c_abi_make_callback(closure_obj)
+end
 
-// ৩. স্কোপড মেমরি পুল দিয়ে সি-ফাংশন কল (Call with Scoped Arena Memory Lifecycle)
-// WHY: Eliminates manual free() tracking by allocating C string/struct buffers in an arena
-// and dropping the entire arena in a single step after the call completes.
+fn c_abi_free_callback cb_ptr
+    if cb_ptr <= 4096 return 0 end
+    i = 0
+    n = len(G_C_ABI_CB_PAGES)
+    while i < n
+        if get(G_C_ABI_CB_PAGES, i) == cb_ptr
+            syscall(11, cb_ptr, 4096, 0, 0, 0, 0)
+            list_set(G_C_ABI_CB_PAGES, i, 0)
+            list_set(G_C_ABI_CB_ROOTS, i, 0)
+            return 1
+        end
+        i = i + 1
+    end
+    return 0
+end
+
+// ৬. স্কোপড মেমরি পুল দিয়ে সি-ফাংশন কল (Call with Scoped Arena Memory Lifecycle)
 fn c_abi_scoped_call fn_ptr a0 a1 a2 arena_capacity
     if arena_capacity <= 0
         arena_capacity = 65536
+    end
     scope_arena = arena_create(arena_capacity)
-    
     res = c_abi_invoke(fn_ptr, a0, a1, a2, 0, 0)
-    
     arena_destroy(scope_arena)
     return res
+end

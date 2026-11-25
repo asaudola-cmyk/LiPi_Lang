@@ -4,6 +4,48 @@
 // 🏛️ File: src/compiler/backend/targets/x86_64/codegen_operators.lp
 // ==============================================================================
 
+fn x86_synth_emit_tagged_binop s left_type right_type op_code
+    // WHY: Dispatches any binary operator involving a dynamically tagged dict/container element
+    // (%rdx = val_tag: 0=int/ptr, 1=float, 2=str) through _lipi_binop_tagged(lhs, rhs, ltag, rtag, op).
+    // Stack on entry: if left_type == "dyn_tagged" -> [rsp]=ltag, [rsp+8]=lhs; else [rsp]=lhs.
+    // %rax = rhs, %rdx = rtag (when right_type == "dyn_tagged").
+    x86_synth_emit_bytes(s, [72, 137, 198]) // mov rsi, rax (rhs)
+    if right_type == "dyn_tagged"
+        x86_synth_emit_bytes(s, [72, 137, 209]) // mov rcx, rdx (rtag)
+    elif right_type == "float"
+        x86_synth_emit_bytes(s, [185, 1, 0, 0, 0]) // mov ecx, 1
+    elif right_type == "str"
+        x86_synth_emit_bytes(s, [185, 2, 0, 0, 0]) // mov ecx, 2
+    else
+        x86_synth_emit_bytes(s, [49, 201]) // xor ecx, ecx
+    end
+    if left_type == "dyn_tagged"
+        x86_synth_emit_bytes(s, [90, 95]) // pop rdx (ltag); pop rdi (lhs)
+    else
+        x86_synth_emit_byte(s, 95) // pop rdi (lhs)
+        if left_type == "float"
+            x86_synth_emit_bytes(s, [186, 1, 0, 0, 0]) // mov edx, 1
+        elif left_type == "str"
+            x86_synth_emit_bytes(s, [186, 2, 0, 0, 0]) // mov edx, 2
+        else
+            x86_synth_emit_bytes(s, [49, 210]) // xor edx, edx
+        end
+    end
+    x86_synth_emit_bytes(s, [65, 184]) // mov r8d, op_code
+    x86_synth_emit_u32(s, op_code)
+    x86_synth_emit_call_helper(s, "_lipi_binop_tagged")
+    if op_code >= 5
+        s.synth_last_expr_type = "int"
+    elif op_code == 0 and (left_type == "str" or right_type == "str")
+        s.synth_last_expr_type = "str"
+    elif left_type == "float" or right_type == "float"
+        s.synth_last_expr_type = "float"
+    else
+        s.synth_last_expr_type = "dyn_tagged"
+    end
+    s.synth_last_struct = ""
+    return 0
+
 fn x86_synth_compile_expr_mul s toks pos_box
     // WHY: Pratt precedence level 1 for multiplicative operations (*, /, %)
     // Guarantees that multiplication, division, and modulo bind tighter than additive arithmetic.
@@ -50,7 +92,7 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         is_const_rhs = 1
                         const_val = nt.tok_int_val
 
-            if is_const_rhs == 1 and op_kind != TOK_MATMUL() and s.synth_last_expr_type != "float"
+            if is_const_rhs == 1 and op_kind != TOK_MATMUL() and s.synth_last_expr_type != "float" and s.synth_last_expr_type != "dyn_tagged"
                 list_set(pos_box, 0, next_p + 1) // Consume operator and integer literal
 
                 if op_kind == TOK_PERCENT()
@@ -437,138 +479,150 @@ fn x86_synth_compile_expr_mul s toks pos_box
                     exit(1)
                 end
 
-                // Push left operand (%rax) to stack
+                // Push left operand (%rax) (and %rdx val_tag if dyn_tagged) to stack
                 x86_synth_emit_byte(s, 80) // push rax
+                if left_type == "dyn_tagged"
+                    x86_synth_emit_byte(s, 82) // push rdx
+                end
 
                 // Evaluate right operand into %rax
                 x86_synth_expr_primary(s, toks, pos_box)
                 right_type = s.synth_last_expr_type
 
-                // Move right operand to %rcx, restore left operand to %rax
-                x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 193)
-                x86_synth_emit_byte(s, 88)  // pop rax
+                if (left_type == "dyn_tagged" or right_type == "dyn_tagged") and op_kind != TOK_MATMUL()
+                    tag_op_m = 2
+                    if op_kind == TOK_SLASH()
+                        tag_op_m = 3
+                    elif op_kind == TOK_PERCENT()
+                        tag_op_m = 4
+                    end
+                    x86_synth_emit_tagged_binop(s, left_type, right_type, tag_op_m)
+                else
+                    // Move right operand to %rcx, restore left operand to %rax
+                    x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 193)
+                    if left_type == "dyn_tagged"
+                        x86_synth_emit_byte(s, 90) // pop rdx (discard tag for matmul)
+                    end
+                    x86_synth_emit_byte(s, 88)  // pop rax
 
-                if (left_type == "float" or right_type == "float") and (op_kind == TOK_STAR() or op_kind == TOK_SLASH() or op_kind == TOK_PERCENT())
-                    // WHY: SSE2 64-bit Double-Precision Floating Point Multiplication & Division.
-                    // Transfers 64-bit IEEE-754 bit patterns from GPRs (%rax, %rcx) to SSE2 registers (%xmm0, %xmm1).
-                    // Mixed integer-float arithmetic promotes integers to double precision via cvtsi2sd.
-                    if left_type == "float"
-                        // movq xmm0, rax (66 48 0F 6E C0)
+                    if (left_type == "float" or right_type == "float") and (op_kind == TOK_STAR() or op_kind == TOK_SLASH() or op_kind == TOK_PERCENT())
+                        // WHY: SSE2 64-bit Double-Precision Floating Point Multiplication & Division.
+                        // Transfers 64-bit IEEE-754 bit patterns from GPRs (%rax, %rcx) to SSE2 registers (%xmm0, %xmm1).
+                        // Mixed integer-float arithmetic promotes integers to double precision via cvtsi2sd.
+                        if left_type == "float"
+                            // movq xmm0, rax (66 48 0F 6E C0)
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 110)
+                            x86_synth_emit_byte(s, 192)
+                        else
+                            // cvtsi2sd xmm0, rax (F2 48 0F 2A C0)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 42)
+                            x86_synth_emit_byte(s, 192)
+                        end
+
+                        if right_type == "float"
+                            // movq xmm1, rcx (66 48 0F 6E C9)
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 110)
+                            x86_synth_emit_byte(s, 201)
+                        else
+                            // cvtsi2sd xmm1, rcx (F2 48 0F 2A C9)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 42)
+                            x86_synth_emit_byte(s, 201)
+                        end
+
+                        if op_kind == TOK_STAR()
+                            // mulsd xmm0, xmm1 (F2 0F 59 C1)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 89)
+                            x86_synth_emit_byte(s, 193)
+                        elif op_kind == TOK_SLASH()
+                            // divsd xmm0, xmm1 (F2 0F 5E C1)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 94)
+                            x86_synth_emit_byte(s, 193)
+                        elif op_kind == TOK_PERCENT()
+                            // WHY: IEEE-754 fmod(a, b) = a - trunc(a / b) * b via roundsd imm8=3
+                            // movapd xmm2, xmm0 (66 0F 28 D0)
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 40)
+                            x86_synth_emit_byte(s, 208)
+                            // divsd xmm0, xmm1 (F2 0F 5E C1)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 94)
+                            x86_synth_emit_byte(s, 193)
+                            // roundsd xmm0, xmm0, 3 (66 0F 3A 0B C0 03)
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 58)
+                            x86_synth_emit_byte(s, 11)
+                            x86_synth_emit_byte(s, 192)
+                            x86_synth_emit_byte(s, 3)
+                            // mulsd xmm0, xmm1 (F2 0F 59 C1)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 89)
+                            x86_synth_emit_byte(s, 193)
+                            // subsd xmm2, xmm0 (F2 0F 5C D0)
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 92)
+                            x86_synth_emit_byte(s, 208)
+                            // movapd xmm0, xmm2 (66 0F 28 C2)
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 40)
+                            x86_synth_emit_byte(s, 194)
+                        end
+
+                        // movq rax, xmm0 (66 48 0F 7E C0)
                         x86_synth_emit_byte(s, 102)
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 110)
+                        x86_synth_emit_byte(s, 126)
                         x86_synth_emit_byte(s, 192)
-                    else
-                        // cvtsi2sd xmm0, rax (F2 48 0F 2A C0)
-                        x86_synth_emit_byte(s, 242)
+                        s.synth_last_expr_type = "float"
+                    elif op_kind == TOK_STAR()
+                        // imul rax, rcx (0x48 0x0F 0xAF 0xC1)
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 42)
-                        x86_synth_emit_byte(s, 192)
-                    end
-
-                    if right_type == "float"
-                        // movq xmm1, rcx (66 48 0F 6E C9)
-                        x86_synth_emit_byte(s, 102)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 110)
-                        x86_synth_emit_byte(s, 201)
-                    else
-                        // cvtsi2sd xmm1, rcx (F2 48 0F 2A C9)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 42)
-                        x86_synth_emit_byte(s, 201)
-                    end
-
-                    if op_kind == TOK_STAR()
-                        // mulsd xmm0, xmm1 (F2 0F 59 C1)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 89)
+                        x86_synth_emit_byte(s, 175)
                         x86_synth_emit_byte(s, 193)
                     elif op_kind == TOK_SLASH()
-                        // divsd xmm0, xmm1 (F2 0F 5E C1)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 94)
-                        x86_synth_emit_byte(s, 193)
+                        // WHY: Division-by-Zero and INT64_MIN / -1 hardware protection.
+                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
                     elif op_kind == TOK_PERCENT()
-                        // WHY: IEEE-754 fmod(a, b) = a - trunc(a / b) * b via roundsd imm8=3
-                        // movapd xmm2, xmm0 (66 0F 28 D0)
-                        x86_synth_emit_byte(s, 102)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 40)
-                        x86_synth_emit_byte(s, 208)
-                        // divsd xmm0, xmm1 (F2 0F 5E C1)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 94)
-                        x86_synth_emit_byte(s, 193)
-                        // roundsd xmm0, xmm0, 3 (66 0F 3A 0B C0 03)
-                        x86_synth_emit_byte(s, 102)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 58)
-                        x86_synth_emit_byte(s, 11)
-                        x86_synth_emit_byte(s, 192)
-                        x86_synth_emit_byte(s, 3)
-                        // mulsd xmm0, xmm1 (F2 0F 59 C1)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 89)
-                        x86_synth_emit_byte(s, 193)
-                        // subsd xmm2, xmm0 (F2 0F 5C D0)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 92)
-                        x86_synth_emit_byte(s, 208)
-                        // movapd xmm0, xmm2 (66 0F 28 C2)
-                        x86_synth_emit_byte(s, 102)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 40)
-                        x86_synth_emit_byte(s, 194)
+                        // WHY: Modulo-by-Zero and INT64_MIN % -1 hardware protection.
+                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                    elif op_kind == TOK_MATMUL()
+                        // WHY: Sovereign Silicon Matrix & Tensor Multiplication (@ Operator)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 199)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 137)
+                        x86_synth_emit_byte(s, 206)
+                        x86_synth_emit_call_helper(s, "_lipi_matmul")
+                        s.synth_last_expr_type = "int"
+                    if left_type != "float" and right_type != "float"
+                        s.synth_last_expr_type = "int"
                     end
-
-                    // movq rax, xmm0 (66 48 0F 7E C0)
-                    x86_synth_emit_byte(s, 102)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 15)
-                    x86_synth_emit_byte(s, 126)
-                    x86_synth_emit_byte(s, 192)
-                    s.synth_last_expr_type = "float"
-                elif op_kind == TOK_STAR()
-                    // imul rax, rcx (0x48 0x0F 0xAF 0xC1)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 15)
-                    x86_synth_emit_byte(s, 175)
-                    x86_synth_emit_byte(s, 193)
-                elif op_kind == TOK_SLASH()
-                    // WHY: Division-by-Zero and INT64_MIN / -1 hardware protection.
-                    x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
-                elif op_kind == TOK_PERCENT()
-                    // WHY: Modulo-by-Zero and INT64_MIN % -1 hardware protection.
-                    x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
-                elif op_kind == TOK_MATMUL()
-                    // WHY: Sovereign Silicon Matrix & Tensor Multiplication (@ Operator)
-                    // Left operand is in %rax, Right operand is in %rcx.
-                    // SysV calling convention: %rdi = left (%rax), %rsi = right (%rcx).
-                    // mov rdi, rax (3B: 48 89 C7)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 137)
-                    x86_synth_emit_byte(s, 199)
-                    // mov rsi, rcx (3B: 48 89 CE)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 137)
-                    x86_synth_emit_byte(s, 206)
-                    x86_synth_emit_call_helper(s, "_lipi_matmul")
-                    s.synth_last_expr_type = "int"
-                if left_type != "float" and right_type != "float"
-                    s.synth_last_expr_type = "int"
                 end
     return 0
 
@@ -637,7 +691,7 @@ fn x86_synth_compile_expr_add s toks pos_box
                 end
             end
 
-            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or left_type == "int") and left_type != "float"
+            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or left_type == "int") and left_type != "float" and left_type != "dyn_tagged"
                 // WHY: 1-cycle direct silicon arithmetic for constant additions/subtractions (e.g. i + 1, i - 1)
                 // Zero function calls, zero stack traffic, zero heap allocations.
                 list_set(pos_box, 0, next_p + 1)
@@ -718,104 +772,104 @@ fn x86_synth_compile_expr_add s toks pos_box
                     exit(1)
                 end
 
-                // Push left operand (%rax) to stack
+                // Push left operand (%rax) (and %rdx val_tag if dyn_tagged) to stack
                 x86_synth_emit_byte(s, 80) // push rax
+                if left_type == "dyn_tagged"
+                    x86_synth_emit_byte(s, 82) // push rdx
+                end
 
                 // Evaluate right operand with multiplicative precedence into %rax
                 x86_synth_compile_expr_mul(s, toks, pos_box)
                 right_type = s.synth_last_expr_type
 
-                // Move right operand to %rcx, restore left operand to %rax
-                x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 193)
-                x86_synth_emit_byte(s, 88)  // pop rax
-
-                if left_type == "float" or right_type == "float"
-                    // WHY: SSE2 64-bit Double-Precision Floating Point Addition & Subtraction.
-                    // Transfers 64-bit IEEE-754 bit patterns from GPRs (%rax, %rcx) to SSE2 registers (%xmm0, %xmm1).
-                    // Mixed integer-float arithmetic promotes integers to double precision via cvtsi2sd.
-                    if left_type == "float"
-                        // movq xmm0, rax (66 48 0F 6E C0)
-                        x86_synth_emit_byte(s, 102)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 110)
-                        x86_synth_emit_byte(s, 192)
-                    else
-                        // cvtsi2sd xmm0, rax (F2 48 0F 2A C0)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 42)
-                        x86_synth_emit_byte(s, 192)
+                if left_type == "dyn_tagged" or right_type == "dyn_tagged"
+                    tag_op_a = 0
+                    if op_kind == TOK_MINUS()
+                        tag_op_a = 1
                     end
+                    x86_synth_emit_tagged_binop(s, left_type, right_type, tag_op_a)
+                else
+                    // Move right operand to %rcx, restore left operand to %rax
+                    x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 193)
+                    x86_synth_emit_byte(s, 88)  // pop rax
 
-                    if right_type == "float"
-                        // movq xmm1, rcx (66 48 0F 6E C9)
-                        x86_synth_emit_byte(s, 102)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 110)
-                        x86_synth_emit_byte(s, 201)
-                    else
-                        // cvtsi2sd xmm1, rcx (F2 48 0F 2A C9)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 42)
-                        x86_synth_emit_byte(s, 201)
-                    end
-
-                    if op_kind == TOK_PLUS()
-                        // addsd xmm0, xmm1 (F2 0F 58 C1)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 88)
-                        x86_synth_emit_byte(s, 193)
-                    elif op_kind == TOK_MINUS()
-                        // subsd xmm0, xmm1 (F2 0F 5C C1)
-                        x86_synth_emit_byte(s, 242)
-                        x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, 92)
-                        x86_synth_emit_byte(s, 193)
-                    end
-
-                    // movq rax, xmm0 (66 48 0F 7E C0)
-                    x86_synth_emit_byte(s, 102)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 15)
-                    x86_synth_emit_byte(s, 126)
-                    x86_synth_emit_byte(s, 192)
-                    s.synth_last_expr_type = "float"
-                elif op_kind == TOK_PLUS()
-                    if (left_type == "int" or right_type == "int") and left_type != "str" and right_type != "str"
-                        // WHY: Direct 1-cycle integer addition when at least one operand is a known integer
-                        // and neither operand is statically a string (e.g. prod[idx] + (ai * b[j]), acc + rem).
-                        x86_synth_emit_byte(s, 72)
-                        x86_synth_emit_byte(s, 1)
-                        x86_synth_emit_byte(s, 200) // add rax, rcx
-                        s.synth_last_expr_type = "int"
-                    else
-                        // rdi = rax (left), rsi = rcx (right) -> call _lipi_add_dynamic
-                        x86_synth_emit_byte(s, 72) // mov rdi, rax
-                        x86_synth_emit_byte(s, 137)
-                        x86_synth_emit_byte(s, 199)
-                        x86_synth_emit_byte(s, 72) // mov rsi, rcx
-                        x86_synth_emit_byte(s, 137)
-                        x86_synth_emit_byte(s, 206)
-                        x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
-                        if left_type == "str" or right_type == "str"
-                            s.synth_last_expr_type = "str"
+                    if left_type == "float" or right_type == "float"
+                        // WHY: SSE2 64-bit Double-Precision Floating Point Addition & Subtraction.
+                        if left_type == "float"
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 110)
+                            x86_synth_emit_byte(s, 192)
                         else
-                            s.synth_last_expr_type = ""
-                    // mov rax, rcx
-                elif op_kind == TOK_MINUS()
-                    // sub rax, rcx (0x48 0x29 0xC8)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 41)
-                    x86_synth_emit_byte(s, 200)
-                    s.synth_last_expr_type = "int"
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 42)
+                            x86_synth_emit_byte(s, 192)
+                        end
+
+                        if right_type == "float"
+                            x86_synth_emit_byte(s, 102)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 110)
+                            x86_synth_emit_byte(s, 201)
+                        else
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 42)
+                            x86_synth_emit_byte(s, 201)
+                        end
+
+                        if op_kind == TOK_PLUS()
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 88)
+                            x86_synth_emit_byte(s, 193)
+                        elif op_kind == TOK_MINUS()
+                            x86_synth_emit_byte(s, 242)
+                            x86_synth_emit_byte(s, 15)
+                            x86_synth_emit_byte(s, 92)
+                            x86_synth_emit_byte(s, 193)
+                        end
+
+                        x86_synth_emit_byte(s, 102)
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 15)
+                        x86_synth_emit_byte(s, 126)
+                        x86_synth_emit_byte(s, 192)
+                        s.synth_last_expr_type = "float"
+                    elif op_kind == TOK_PLUS()
+                        if (left_type == "int" or right_type == "int") and left_type != "str" and right_type != "str"
+                            x86_synth_emit_byte(s, 72)
+                            x86_synth_emit_byte(s, 1)
+                            x86_synth_emit_byte(s, 200) // add rax, rcx
+                            s.synth_last_expr_type = "int"
+                        else
+                            x86_synth_emit_byte(s, 72) // mov rdi, rax
+                            x86_synth_emit_byte(s, 137)
+                            x86_synth_emit_byte(s, 199)
+                            x86_synth_emit_byte(s, 72) // mov rsi, rcx
+                            x86_synth_emit_byte(s, 137)
+                            x86_synth_emit_byte(s, 206)
+                            x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                            if left_type == "str" or right_type == "str"
+                                s.synth_last_expr_type = "str"
+                            else
+                                s.synth_last_expr_type = ""
+                            end
+                        end
+                    elif op_kind == TOK_MINUS()
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 41)
+                        x86_synth_emit_byte(s, 200)
+                        s.synth_last_expr_type = "int"
+                    end
+                end
     return 0
 
 fn x86_synth_compile_expr_shift s toks pos_box
@@ -945,94 +999,101 @@ fn x86_synth_compile_expr_rel s toks pos_box
             left_type = s.synth_last_expr_type
             list_set(pos_box, 0, pos + 1) // Consume operator
 
-            // Push left operand (%rax) to stack
+            // Push left operand (%rax) (and %rdx val_tag if dyn_tagged) to stack
             x86_synth_emit_byte(s, 80) // push rax
+            if left_type == "dyn_tagged"
+                x86_synth_emit_byte(s, 82) // push rdx
+            end
 
             // Evaluate right operand with shift precedence into %rax
             x86_synth_compile_expr_shift(s, toks, pos_box)
             right_type = s.synth_last_expr_type
 
-            // Move right operand to %rcx, restore left operand to %rax
-            x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
-            x86_synth_emit_byte(s, 137)
-            x86_synth_emit_byte(s, 193)
-            x86_synth_emit_byte(s, 88)  // pop rax
-
-            if left_type == "float" or right_type == "float"
-                if left_type == "float"
-                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
-                else
-                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
-                end
-                if right_type == "float"
-                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
-                else
-                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
-                end
-                if op_kind == TOK_LT()
-                    // ucomisd xmm1, xmm0; seta al; movzx rax, al
-                    x86_synth_emit_bytes(s, [102, 15, 46, 200, 15, 151, 192, 72, 15, 182, 192])
-                elif op_kind == TOK_LTE()
-                    // ucomisd xmm1, xmm0; setae al; movzx rax, al
-                    x86_synth_emit_bytes(s, [102, 15, 46, 200, 15, 147, 192, 72, 15, 182, 192])
+            if left_type == "dyn_tagged" or right_type == "dyn_tagged"
+                tag_op_r = 5
+                if op_kind == TOK_LTE()
+                    tag_op_r = 6
                 elif op_kind == TOK_GT()
-                    // ucomisd xmm0, xmm1; seta al; movzx rax, al
-                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 151, 192, 72, 15, 182, 192])
+                    tag_op_r = 7
                 elif op_kind == TOK_GTE()
-                    // ucomisd xmm0, xmm1; setae al; movzx rax, al
-                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 147, 192, 72, 15, 182, 192])
+                    tag_op_r = 8
                 end
-            elif op_kind == TOK_LT()
-                // cmp rax, rcx; setl al; movzx rax, al
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 57)
-                x86_synth_emit_byte(s, 200)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 156)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 182)
-                x86_synth_emit_byte(s, 192)
-            elif op_kind == TOK_LTE()
-                // cmp rax, rcx; setle al; movzx rax, al
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 57)
-                x86_synth_emit_byte(s, 200)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 158)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 182)
-                x86_synth_emit_byte(s, 192)
-            elif op_kind == TOK_GT()
-                // cmp rax, rcx; setg al; movzx rax, al
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 57)
-                x86_synth_emit_byte(s, 200)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 159)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 182)
-                x86_synth_emit_byte(s, 192)
-            elif op_kind == TOK_GTE()
-                // cmp rax, rcx; setge al; movzx rax, al
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 57)
-                x86_synth_emit_byte(s, 200)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 157)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 182)
-                x86_synth_emit_byte(s, 192)
+                x86_synth_emit_tagged_binop(s, left_type, right_type, tag_op_r)
+            else
+                // Move right operand to %rcx, restore left operand to %rax
+                x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
+                x86_synth_emit_byte(s, 137)
+                x86_synth_emit_byte(s, 193)
+                x86_synth_emit_byte(s, 88)  // pop rax
+
+                if left_type == "float" or right_type == "float"
+                    if left_type == "float"
+                        x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                    else
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                    end
+                    if right_type == "float"
+                        x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
+                    else
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
+                    end
+                    if op_kind == TOK_LT()
+                        x86_synth_emit_bytes(s, [102, 15, 46, 200, 15, 151, 192, 72, 15, 182, 192])
+                    elif op_kind == TOK_LTE()
+                        x86_synth_emit_bytes(s, [102, 15, 46, 200, 15, 147, 192, 72, 15, 182, 192])
+                    elif op_kind == TOK_GT()
+                        x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 151, 192, 72, 15, 182, 192])
+                    elif op_kind == TOK_GTE()
+                        x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 147, 192, 72, 15, 182, 192])
+                    end
+                elif op_kind == TOK_LT()
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 57)
+                    x86_synth_emit_byte(s, 200)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 156)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 182)
+                    x86_synth_emit_byte(s, 192)
+                elif op_kind == TOK_LTE()
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 57)
+                    x86_synth_emit_byte(s, 200)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 158)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 182)
+                    x86_synth_emit_byte(s, 192)
+                elif op_kind == TOK_GT()
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 57)
+                    x86_synth_emit_byte(s, 200)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 159)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 182)
+                    x86_synth_emit_byte(s, 192)
+                elif op_kind == TOK_GTE()
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 57)
+                    x86_synth_emit_byte(s, 200)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 157)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 182)
+                    x86_synth_emit_byte(s, 192)
+                end
+                s.synth_last_expr_type = "int"
+                s.synth_last_struct = ""
             end
-            s.synth_last_expr_type = "int"
-            s.synth_last_struct = ""
     return 0
 
 fn x86_synth_compile_expr_eq s toks pos_box
@@ -1064,84 +1125,87 @@ fn x86_synth_compile_expr_eq s toks pos_box
             left_type = s.synth_last_expr_type
             list_set(pos_box, 0, pos + 1) // Consume operator
 
-            // Push left operand (%rax) to stack
+            // Push left operand (%rax) (and %rdx val_tag if dyn_tagged) to stack
             x86_synth_emit_byte(s, 80) // push rax
+            if left_type == "dyn_tagged"
+                x86_synth_emit_byte(s, 82) // push rdx
+            end
 
             // Evaluate right operand with relational precedence into %rax
             x86_synth_compile_expr_rel(s, toks, pos_box)
             right_type = s.synth_last_expr_type
 
-            // Move right operand to %rcx, restore left operand to %rax
-            x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
-            x86_synth_emit_byte(s, 137)
-            x86_synth_emit_byte(s, 193)
-            x86_synth_emit_byte(s, 88)  // pop rax
+            if left_type == "dyn_tagged" or right_type == "dyn_tagged"
+                tag_op_e = 9
+                if op_kind == TOK_NEQ()
+                    tag_op_e = 10
+                end
+                x86_synth_emit_tagged_binop(s, left_type, right_type, tag_op_e)
+            else
+                // Move right operand to %rcx, restore left operand to %rax
+                x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
+                x86_synth_emit_byte(s, 137)
+                x86_synth_emit_byte(s, 193)
+                x86_synth_emit_byte(s, 88)  // pop rax
 
-            if left_type == "float" or right_type == "float"
-                if left_type == "float"
-                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
-                else
-                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
-                end
-                if right_type == "float"
-                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
-                else
-                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
-                end
-                if op_kind == TOK_EQ()
-                    // ucomisd xmm0, xmm1; sete al; setnp cl; and al, cl; movzx rax, al
-                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 148, 192, 15, 155, 193, 32, 200, 72, 15, 182, 192])
+                if left_type == "float" or right_type == "float"
+                    if left_type == "float"
+                        x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                    else
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                    end
+                    if right_type == "float"
+                        x86_synth_emit_bytes(s, [102, 72, 15, 110, 201]) // movq xmm1, rcx
+                    else
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 201])  // cvtsi2sd xmm1, rcx
+                    end
+                    if op_kind == TOK_EQ()
+                        x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 148, 192, 15, 155, 193, 32, 200, 72, 15, 182, 192])
+                    elif op_kind == TOK_NEQ()
+                        x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 149, 192, 15, 154, 193, 8, 200, 72, 15, 182, 192])
+                    end
+                elif left_type == "int" and right_type == "int" and op_kind == TOK_EQ()
+                    x86_synth_emit_bytes(s, [72, 57, 200, 15, 148, 192, 72, 15, 182, 192])
+                elif left_type == "int" and right_type == "int" and op_kind == TOK_NEQ()
+                    x86_synth_emit_bytes(s, [72, 57, 200, 15, 149, 192, 72, 15, 182, 192])
+                elif op_kind == TOK_EQ()
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 199)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 206)
+                    x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
+                    x86_synth_emit_byte(s, 133)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 148)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 182)
+                    x86_synth_emit_byte(s, 192)
                 elif op_kind == TOK_NEQ()
-                    // ucomisd xmm0, xmm1; setne al; setp cl; or al, cl; movzx rax, al
-                    x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 149, 192, 15, 154, 193, 8, 200, 72, 15, 182, 192])
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 199)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 137)
+                    x86_synth_emit_byte(s, 206)
+                    x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
+                    x86_synth_emit_byte(s, 133)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 149)
+                    x86_synth_emit_byte(s, 192)
+                    x86_synth_emit_byte(s, 72)
+                    x86_synth_emit_byte(s, 15)
+                    x86_synth_emit_byte(s, 182)
+                    x86_synth_emit_byte(s, 192)
                 end
-            elif left_type == "int" and right_type == "int" and op_kind == TOK_EQ()
-                // WHY: Proven integer operands bypass _lipi_cmp_dynamic call via inline cmp+sete+movzx
-                x86_synth_emit_bytes(s, [72, 57, 200, 15, 148, 192, 72, 15, 182, 192])
-            elif left_type == "int" and right_type == "int" and op_kind == TOK_NEQ()
-                // WHY: Proven integer operands bypass _lipi_cmp_dynamic call via inline cmp+setne+movzx
-                x86_synth_emit_bytes(s, [72, 57, 200, 15, 149, 192, 72, 15, 182, 192])
-            elif op_kind == TOK_EQ()
-                // rdi = rax (left), rsi = rcx (right) -> call _lipi_cmp_dynamic
-                x86_synth_emit_byte(s, 72) // mov rdi, rax
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 199)
-                x86_synth_emit_byte(s, 72) // mov rsi, rcx
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 206)
-                x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
-                // test eax, eax; sete al; movzx rax, al
-                x86_synth_emit_byte(s, 133)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 148)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 182)
-                x86_synth_emit_byte(s, 192)
-            elif op_kind == TOK_NEQ()
-                // rdi = rax (left), rsi = rcx (right) -> call _lipi_cmp_dynamic
-                x86_synth_emit_byte(s, 72) // mov rdi, rax
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 199)
-                x86_synth_emit_byte(s, 72) // mov rsi, rcx
-                x86_synth_emit_byte(s, 137)
-                x86_synth_emit_byte(s, 206)
-                x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
-                // test eax, eax; setne al; movzx rax, al
-                x86_synth_emit_byte(s, 133)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 149)
-                x86_synth_emit_byte(s, 192)
-                x86_synth_emit_byte(s, 72)
-                x86_synth_emit_byte(s, 15)
-                x86_synth_emit_byte(s, 182)
-                x86_synth_emit_byte(s, 192)
+                s.synth_last_expr_type = "int"
+                s.synth_last_struct = ""
             end
-            s.synth_last_expr_type = "int"
-            s.synth_last_struct = ""
     return 0
 
 fn x86_synth_compile_expr_bitwise s toks pos_box

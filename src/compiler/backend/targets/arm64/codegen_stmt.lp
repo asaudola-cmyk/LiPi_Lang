@@ -56,6 +56,49 @@ fn arm64_synth_compile_statement s toks pos_box
         arm64_synth_emit_call_print_int(s)
         return 0
 
+    // ── 1b. Deferred Execution: defer / @defer / বিলম্ব ─────────────────────────
+    if k != TOK_STR() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব")
+        is_def = 1
+        if pos + 1 < toks.len()
+            dn_k = toks[pos + 1].tok_kind
+            dn_t = toks[pos + 1].tok_text
+            if dn_k == TOK_ASSIGN() or dn_t == "=" or dn_k == TOK_LPAREN() or dn_t == "(" or dn_k == TOK_DOT() or dn_t == "."
+                is_def = 0
+            end
+        end
+        if is_def == 1
+            d_line = t.tok_span.span_start_line
+            d_start = pos + 1
+            if d_start < toks.len() and (toks[d_start].tok_kind == TOK_LBRACE() or toks[d_start].tok_text == "{")
+                d_start = d_start + 1
+                d_scan = d_start
+                d_bd = 1
+                while d_scan < toks.len() and d_bd > 0
+                    if toks[d_scan].tok_kind == TOK_LBRACE() or toks[d_scan].tok_text == "{"
+                        d_bd = d_bd + 1
+                    elif toks[d_scan].tok_kind == TOK_RBRACE() or toks[d_scan].tok_text == "}"
+                        d_bd = d_bd - 1
+                        if d_bd == 0 break end
+                    end
+                    d_scan = d_scan + 1
+                end
+                push(s.a64_defer_starts, d_start)
+                push(s.a64_defer_ends, d_scan)
+                if d_scan < toks.len() d_scan = d_scan + 1 end
+                list_set(pos_box, 0, d_scan)
+            else
+                d_scan = d_start
+                while d_scan < toks.len() and toks[d_scan].tok_kind != TOK_NEWLINE() and toks[d_scan].tok_kind != TOK_SEMI() and toks[d_scan].tok_kind != TOK_EOF() and toks[d_scan].tok_span.span_start_line == d_line
+                    d_scan = d_scan + 1
+                end
+                push(s.a64_defer_starts, d_start)
+                push(s.a64_defer_ends, d_scan)
+                list_set(pos_box, 0, d_scan)
+            end
+            return 0
+        end
+    end
+
     // ── 2. Control Flow: return / ফেরত ─────────────────────────────────────────
     if k == TOK_KW_RETURN() or (k == TOK_IDENT() and (txt == "return" or txt == "ফেরত"))
         list_set(pos_box, 0, pos + 1) // Consume keyword
@@ -72,9 +115,11 @@ fn arm64_synth_compile_statement s toks pos_box
             arm64_emit_movz_x(s, 0, 0, 0)
 
         if s.a64_in_function == 1
+            arm64_emit_defers(s, toks)
             arm64_emit_epilogue(s)
         else
             // Top-level return: exit whole process cleanly with code in X0 via Linux SYS_exit_group (94)
+            arm64_emit_defers(s, toks)
             arm64_emit_movz_x(s, 8, 94, 0)
             arm64_emit_svc(s, 0)
         return 0
@@ -333,17 +378,17 @@ fn arm64_synth_compile_statement s toks pos_box
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 arm64_synth_compile_expr(s, toks, pos_box) // X0 = rhs
                 arm64_push_reg(s, 0)
-                arr_off = arm64_synth_lookup_var(s, arr_name)
-                if arr_off > 0
-                    arm64_emit_ldr_reg_sp(s, 0, arr_off) // X0 = hdr
-                    arm64_synth_emit32(s, 4181723139)    // ldr x3, [x0, #16] (data_ptr)
+                lv_arr = arm64_find_local_var(s, arr_name)
+                if lv_arr != 0
                     arm64_pop_reg(s, 2)                  // X2 = val
-                    arm64_pop_reg(s, 1)                  // X1 = idx
-                    arm64_emit_add_x(s, 1, 1, 1)
-                    arm64_emit_add_x(s, 1, 1, 1)
-                    arm64_emit_add_x(s, 1, 1, 1)
-                    arm64_emit_add_x(s, 3, 3, 1)         // &data[idx]
-                    arm64_synth_emit32(s, 4177526882)    // str x2, [x3, #0]
+                    arm64_pop_reg(s, 1)                  // X1 = key/idx
+                    arm64_emit_ldr_reg_sp(s, 0, lv_arr.lv_offset) // X0 = hdr
+                    if lv_arr.a64_lv_is_boxed == 1
+                        arm64_emit_ldr_x_off(s, 0, 0, 0)
+                    end
+                    s.a64_needs_dict = 1
+                    s.synth_needs_alloc = 1
+                    arm64_synth_emit_call_helper(s, "__container_set")
                 else
                     arm64_pop_reg(s, 2)
                     arm64_pop_reg(s, 1)
@@ -910,6 +955,7 @@ fn arm64_synth_compile_statement s toks pos_box
             active_tp = s.a64_try_patches[s.a64_try_patches.len() - 1]
             push(active_tp, [p_off, 0])
         elif s.a64_in_function == 1
+            arm64_emit_defers(s, toks)
             arm64_emit_epilogue(s)
         return 0
 
@@ -1055,12 +1101,29 @@ fn arm64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, eq_pos + 1)
                 s.a64_last_struct = ""
                 arm64_synth_compile_expr(s, toks, pos_box)
-                off = arm64_synth_alloc_var(s, var_name)
-                arm64_emit_str_reg_sp(s, 0, off)
+                prev_lv = arm64_find_local_var(s, var_name)
+                if prev_lv == 0
+                    off = arm64_synth_alloc_var(s, var_name)
+                    if arm64_is_boxed_name(s, var_name) == 1
+                        arm64_push_reg(s, 0)
+                        arm64_emit_movz_x(s, 0, 8, 0)
+                        arm64_synth_emit_call_alloc(s)
+                        arm64_pop_reg(s, 9)
+                        arm64_emit_str_x_off(s, 9, 0, 0)
+                        arm64_emit_str_reg_sp(s, 0, off)
+                    else
+                        arm64_emit_str_reg_sp(s, 0, off)
+                    end
+                elif prev_lv.a64_lv_is_boxed == 1
+                    arm64_emit_ldr_reg_sp(s, 9, prev_lv.lv_offset)
+                    arm64_emit_str_x_off(s, 0, 9, 0)
+                else
+                    arm64_emit_str_reg_sp(s, 0, prev_lv.lv_offset)
+                end
                 arm64_synth_set_var_struct(s, var_name, s.a64_last_struct)
         return 0
 
-    // ── 10. Assignment: <var> = <expr> ─────────────────────────────────────────
+    // ── 10. Assignment & Compound Assignment: <var> = <expr>, <var> += <expr> ─
     if k == TOK_IDENT()
         next_pos = pos + 1
         if next_pos < toks.len() and toks[next_pos].tok_kind == TOK_ASSIGN()
@@ -1068,10 +1131,68 @@ fn arm64_synth_compile_statement s toks pos_box
             list_set(pos_box, 0, next_pos + 1) // Consume ident and '='
             s.a64_last_struct = ""
             arm64_synth_compile_expr(s, toks, pos_box)
-            off = arm64_synth_alloc_var(s, var_name)
-            arm64_emit_str_reg_sp(s, 0, off)
+            prev_lv = arm64_find_local_var(s, var_name)
+            if prev_lv == 0
+                off = arm64_synth_alloc_var(s, var_name)
+                if arm64_is_boxed_name(s, var_name) == 1
+                    arm64_push_reg(s, 0)
+                    arm64_emit_movz_x(s, 0, 8, 0)
+                    arm64_synth_emit_call_alloc(s)
+                    arm64_pop_reg(s, 9)
+                    arm64_emit_str_x_off(s, 9, 0, 0)
+                    arm64_emit_str_reg_sp(s, 0, off)
+                else
+                    arm64_emit_str_reg_sp(s, 0, off)
+                end
+            elif prev_lv.a64_lv_is_boxed == 1
+                arm64_emit_ldr_reg_sp(s, 9, prev_lv.lv_offset)
+                arm64_emit_str_x_off(s, 0, 9, 0)
+            else
+                arm64_emit_str_reg_sp(s, 0, prev_lv.lv_offset)
+            end
             arm64_synth_set_var_struct(s, var_name, s.a64_last_struct)
             return 0
+        end
+        if next_pos < toks.len()
+            ca_op = arm64_is_compound_assign_tok(toks[next_pos])
+            if ca_op != 0
+                var_name = txt
+                list_set(pos_box, 0, next_pos + 1)
+                arm64_synth_compile_expr(s, toks, pos_box) // X0 = rhs
+                arm64_emit_mov_reg(s, 1, 0) // X1 = rhs
+                ca_lv = arm64_find_local_var(s, var_name)
+                if ca_lv != 0
+                    arm64_emit_ldr_reg_sp(s, 0, ca_lv.lv_offset)
+                    if ca_lv.a64_lv_is_boxed == 1
+                        arm64_emit_ldr_x_off(s, 0, 0, 0)
+                    end
+                else
+                    arm64_emit_movz_x(s, 0, 0, 0)
+                end
+                if ca_op == TOK_PLUS()
+                    arm64_emit_add_x(s, 0, 0, 1)
+                elif ca_op == TOK_MINUS()
+                    arm64_emit_sub_x(s, 0, 0, 1)
+                elif ca_op == TOK_STAR()
+                    arm64_emit_mul_x(s, 0, 0, 1)
+                elif ca_op == TOK_SLASH()
+                    arm64_emit_sdiv_x(s, 0, 0, 1)
+                elif ca_op == TOK_PERCENT()
+                    arm64_emit_sdiv_x(s, 2, 0, 1)
+                    arm64_emit_mul_x(s, 2, 2, 1)
+                    arm64_emit_sub_x(s, 0, 0, 2)
+                end
+                if ca_lv != 0
+                    if ca_lv.a64_lv_is_boxed == 1
+                        arm64_emit_ldr_reg_sp(s, 9, ca_lv.lv_offset)
+                        arm64_emit_str_x_off(s, 0, 9, 0)
+                    else
+                        arm64_emit_str_reg_sp(s, 0, ca_lv.lv_offset)
+                    end
+                end
+                return 0
+            end
+        end
 
     // ── 11. Function & Component Definition: fn / কাজ / @fn / component / উপাদান ──
     is_fn = 0
@@ -1079,6 +1200,9 @@ fn arm64_synth_compile_statement s toks pos_box
         is_fn = 1
     if k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান")
         is_fn = 1
+    if is_fn == 1 and pos + 1 < toks.len() and (toks[pos + 1].tok_kind == TOK_LPAREN() or toks[pos + 1].tok_text == "(")
+        is_fn = 0
+    end
 
     if is_fn == 1
         base_col = t.tok_span.span_start_col
@@ -1105,11 +1229,16 @@ fn arm64_synth_compile_statement s toks pos_box
         saved_arm_stack_off = s.synth_stack_offset
         saved_arm_sp_delta = s.a64_sp_delta
         saved_arm_try_patches = s.a64_try_patches
+        saved_arm_boxed = s.a64_boxed_vars
+        saved_arm_ds = s.a64_defer_starts
+        saved_arm_de = s.a64_defer_ends
         s.synth_locals = list()
         s.synth_stack_offset = 16
         s.a64_sp_delta = 0
         s.a64_in_function = 1
         s.a64_try_patches = list()
+        s.a64_defer_starts = list()
+        s.a64_defer_ends = list()
 
         // Parse parameter names until newline or return arrow
         params = list()
@@ -1139,6 +1268,9 @@ fn arm64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
 
+        // Prescan function body for variables mutated inside nested closures
+        s.a64_boxed_vars = arm64_prescan_boxed_vars(toks, get(pos_box, 0), base_col, base_line)
+
         // Emit function prologue
         arm64_emit_prologue(s)
 
@@ -1150,6 +1282,20 @@ fn arm64_synth_compile_statement s toks pos_box
             if pi < 8
                 arm64_emit_str_reg_sp(s, pi, off)
             pi = pi + 1
+        // Wrap any closure-mutated parameter into a shared 8-byte heap upvalue cell
+        pi = 0
+        while pi < params.len()
+            pname = params[pi]
+            plv = arm64_find_local_var(s, pname)
+            if plv != 0 and plv.a64_lv_is_boxed == 1
+                arm64_emit_movz_x(s, 0, 8, 0)
+                arm64_synth_emit_call_alloc(s)
+                arm64_emit_ldr_reg_sp(s, 9, plv.lv_offset)
+                arm64_emit_str_x_off(s, 9, 0, 0)
+                arm64_emit_str_reg_sp(s, 0, plv.lv_offset)
+            end
+            pi = pi + 1
+        end
 
         arm64_synth_skip_whitespace_tokens(toks, pos_box)
 
@@ -1162,9 +1308,7 @@ fn arm64_synth_compile_statement s toks pos_box
             ct = toks[cur_pos]
             cur_k = ct.tok_kind
             cur_txt = ct.tok_text
-            if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN()
-                break
-            if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "@fn")
+            if (cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or (cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "@fn"))) and cur_pos + 1 < toks.len() and toks[cur_pos + 1].tok_kind == TOK_IDENT()
                 break
             if cur_k == TOK_KW_END() or cur_k == TOK_DIR_END() or (cur_k == TOK_IDENT() and (cur_txt == "end" or cur_txt == "শেষ" or cur_txt == "@end"))
                 break
@@ -1188,12 +1332,16 @@ fn arm64_synth_compile_statement s toks pos_box
 
         // Default epilogue at end of function
         arm64_emit_movz_x(s, 0, 0, 0)
+        arm64_emit_defers(s, toks)
         arm64_emit_epilogue(s)
         s.synth_locals = saved_arm_locals
         s.synth_stack_offset = saved_arm_stack_off
         s.a64_sp_delta = saved_arm_sp_delta
         s.a64_in_function = 0
         s.a64_try_patches = saved_arm_try_patches
+        s.a64_boxed_vars = saved_arm_boxed
+        s.a64_defer_starts = saved_arm_ds
+        s.a64_defer_ends = saved_arm_de
 
         // Patch jump to bypass function body during top-level execution
         after_fn_offset = s.synth_code.len()

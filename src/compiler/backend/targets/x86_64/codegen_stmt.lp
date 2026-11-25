@@ -9,7 +9,17 @@
 fn x86_synth_emit_defers s toks
     // WHY: Emits all registered defer statements in strict LIFO order while preserving
     // the pending return value in %rax across arbitrary cleanup calls/statements.
-    if s.synth_emitting_defer == 1 or s.synth_defer_starts.len() == 0
+    // On normal exit from a function with defer unwind frame, pops our exc frame first
+    // so exceptions inside defer bodies propagate cleanly to callers without looping.
+    if s.synth_emitting_defer == 1
+        return 0
+    end
+    if s.synth_has_defer_unwind == 1 and s.synth_in_defer_unwind_pad == 0
+        x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+        x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+        x86_synth_emit_bytes(s, [72, 131, 196, 8, 88]) // add rsp, 8; pop rax
+    end
+    if s.synth_defer_starts.len() == 0
         return 0
     end
     s.synth_emitting_defer = 1
@@ -17,6 +27,17 @@ fn x86_synth_emit_defers s toks
     x86_synth_emit_store_var(s, 0, ret_save_off)
     di = s.synth_defer_starts.len() - 1
     while di >= 0
+        d_skip_patch = 0 - 1
+        if s.synth_has_defer_unwind == 1 and di < 64
+            // bt qword ptr [rbp - defer_mask_off], di; jnc skip_defer
+            x86_synth_emit_bytes(s, [72, 15, 186, 165])
+            x86_synth_emit_u32(s, 0 - s.synth_defer_mask_off)
+            x86_synth_emit_byte(s, di)
+            x86_synth_emit_bytes(s, [15, 131]) // jnc rel32
+            d_skip_patch = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            s.synth_last_store_end = 0 - 1
+        end
         d_pos = [s.synth_defer_starts[di]]
         d_end = s.synth_defer_ends[di]
         while get(d_pos, 0) < d_end
@@ -29,6 +50,11 @@ fn x86_synth_emit_defers s toks
             if get(d_pos, 0) <= cur_d
                 list_set(d_pos, 0, cur_d + 1)
             end
+        end
+        if d_skip_patch >= 0
+            d_after_off = s.synth_code.len()
+            x86_synth_patch_u32(s, d_skip_patch, d_after_off - (d_skip_patch + 4))
+            s.synth_last_store_end = 0 - 1
         end
         di = di - 1
     end
@@ -106,6 +132,9 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_emit_byte(s, 199)
         if s.synth_last_expr_type == "float"
             x86_synth_emit_call_helper(s, "_lipi_print_float")
+        elif s.synth_last_expr_type == "dyn_tagged"
+            x86_synth_emit_bytes(s, [72, 137, 214]) // mov rsi, rdx (val_tag)
+            x86_synth_emit_call_helper(s, "_lipi_print_tagged")
         else
             x86_synth_emit_call_helper(s, "_lipi_print_dynamic")
         end
@@ -222,8 +251,16 @@ fn x86_synth_compile_statement s toks pos_box
                     if dt0.tok_span.span_start_line > d_line and blk_depth == 0 and bt.tok_span.span_start_line > d_line and bt.tok_span.span_start_col <= d_col
                         if x86_synth_is_block_end(toks, d_scan) == 1
                             list_set(pos_box, 0, d_scan + 1)
+                            d_idx_b = s.synth_defer_starts.len()
                             push(s.synth_defer_starts, d_start)
                             push(s.synth_defer_ends, d_scan)
+                            if s.synth_has_defer_unwind == 1 and d_idx_b < 64
+                                // bts qword ptr [rbp - defer_mask_off], d_idx_b
+                                x86_synth_emit_bytes(s, [72, 15, 186, 173])
+                                x86_synth_emit_u32(s, 0 - s.synth_defer_mask_off)
+                                x86_synth_emit_byte(s, d_idx_b)
+                                s.synth_last_store_end = 0 - 1
+                            end
                             return 0
                         end
                         break
@@ -260,8 +297,16 @@ fn x86_synth_compile_statement s toks pos_box
                     d_scan = d_scan + 1
                 end
             end
+            d_idx_s = s.synth_defer_starts.len()
             push(s.synth_defer_starts, d_start)
             push(s.synth_defer_ends, d_scan)
+            if s.synth_has_defer_unwind == 1 and d_idx_s < 64
+                // bts qword ptr [rbp - defer_mask_off], d_idx_s
+                x86_synth_emit_bytes(s, [72, 15, 186, 173])
+                x86_synth_emit_u32(s, 0 - s.synth_defer_mask_off)
+                x86_synth_emit_byte(s, d_idx_s)
+                s.synth_last_store_end = 0 - 1
+            end
             list_set(pos_box, 0, d_scan)
         end
         return 0
@@ -323,50 +368,13 @@ fn x86_synth_compile_statement s toks pos_box
     if is_struct == 1
         return x86_synth_compile_struct_def(s, toks, pos_box, t.tok_span.span_start_col, t.tok_span.span_start_line)
 
-    // ── 4b. Enum Definition: @enum / enum / গণনা ─────────────────────────────
+    // ── 4b. Enum / Tagged ADT Definition: enum / @enum / গণনা ────────────────
     is_enum = 0
-    if k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
+    if k == TOK_KW_ENUM() or k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
         is_enum = 1
 
     if is_enum == 1
-        e_col = t.tok_span.span_start_col
-        e_line = t.tok_span.span_start_line
-        list_set(pos_box, 0, pos + 1)
-        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
-            list_set(pos_box, 0, get(pos_box, 0) + 1)
-        e_val = 0
-        while get(pos_box, 0) < toks.len()
-            x86_synth_skip_whitespace_tokens(toks, pos_box)
-            ep = get(pos_box, 0)
-            if ep >= toks.len()
-                break
-            et = toks[ep]
-            ek = et.tok_kind
-            etx = et.tok_text
-            if ek == TOK_KW_END() or ek == TOK_DIR_END() or (ek == TOK_IDENT() and (etx == "end" or etx == "শেষ" or etx == "@end"))
-                list_set(pos_box, 0, ep + 1)
-                break
-            if ek == TOK_KW_FN() or ek == TOK_DIR_FN() or ek == TOK_KW_STRUCT() or ek == TOK_DIR_STRUCT() or ek == TOK_DIR_ENUM()
-                break
-            if ek == TOK_IDENT() and (etx == "fn" or etx == "কাজ" or etx == "@fn" or etx == "struct" or etx == "গঠন" or etx == "@struct" or etx == "enum" or etx == "@enum" or etx == "গণনা")
-                break
-            if et.tok_span.span_start_line > e_line and et.tok_span.span_start_col <= e_col
-                break
-            if ek == TOK_IDENT()
-                vname = etx
-                list_set(pos_box, 0, ep + 1)
-                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or toks[get(pos_box, 0)].tok_text == "=")
-                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                    if get(pos_box, 0) < toks.len()
-                        v_tok = toks[get(pos_box, 0)]
-                        if v_tok.tok_kind == TOK_INT()
-                            e_val = v_tok.tok_int_val
-                        list_set(pos_box, 0, get(pos_box, 0) + 1)
-                x86_synth_set_global_const(s, vname, e_val)
-                e_val = e_val + 1
-            else
-                list_set(pos_box, 0, ep + 1)
-        return 0
+        return x86_synth_register_enum_from_tokens(s, toks, pos_box, t.tok_span.span_start_col, t.tok_span.span_start_line)
 
     // ── 5. Struct Field Assignment (arbitrary depth): obj.field = expr, obj.f1.f2 = expr
     // ── 5.0 Mixed / Multi-Level Chained L-Value Assignment: o.inn.arr[1] = 99, m[i][j] += 5, a[0].f = 7 ──
@@ -514,6 +522,7 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_compile_expr(s, toks, pos_box)
                     lv_rhs_t = s.synth_last_expr_type
                     x86_synth_emit_bytes(s, [72, 131, 196, 8, 89]) // add rsp, 8; pop rcx (parent)
+                    x86_synth_emit_null_check_rcx(s)
                     lf_name = lv_fields[leaf_i]
                     lf_off = x86_synth_get_field_offset(s, cur_stype, lf_name)
                     lf_ft = x86_synth_get_field_type(s, cur_stype, lf_name)
@@ -616,8 +625,17 @@ fn x86_synth_compile_statement s toks pos_box
                             x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
                         end
                     end
+                    if lv_rhs_t2 == "float"
+                        x86_synth_emit_bytes(s, [185, 1, 0, 0, 0]) // mov ecx, 1
+                    elif lv_rhs_t2 == "str"
+                        x86_synth_emit_bytes(s, [185, 2, 0, 0, 0]) // mov ecx, 2
+                    elif lv_rhs_t2 == "dyn_tagged"
+                        x86_synth_emit_bytes(s, [72, 137, 209]) // mov rcx, rdx
+                    else
+                        x86_synth_emit_bytes(s, [49, 201]) // xor ecx, ecx
+                    end
                     x86_synth_emit_bytes(s, [72, 137, 194, 94, 95]) // mov rdx, rax; pop rsi (idx); pop rdi (list)
-                    x86_synth_emit_call_helper(s, "_lipi_list_set")
+                    x86_synth_emit_call_helper(s, "_lipi_list_set_typed")
                     s.synth_last_store_end = 0 - 1
                     return 0
                 end
@@ -703,9 +721,10 @@ fn x86_synth_compile_statement s toks pos_box
                     end
                 end
 
-                // Walk intermediate nested struct pointers with field type propagation
+                // Walk intermediate nested struct pointers with field type propagation & null guard
                 ci = 0
                 while ci < chain_fields.len() - 1
+                    x86_synth_emit_null_check_rcx(s)
                     mid_off = x86_synth_get_field_offset(s, cur_stype, chain_fields[ci])
                     cur_stype = x86_synth_get_field_type(s, cur_stype, chain_fields[ci])
                     if mid_off < 128
@@ -722,6 +741,7 @@ fn x86_synth_compile_statement s toks pos_box
                     ci = ci + 1
                 end
 
+                x86_synth_emit_null_check_rcx(s)
                 leaf_field = chain_fields[chain_fields.len() - 1]
                 f_off = x86_synth_get_field_offset(s, cur_stype, leaf_field)
                 leaf_ftype = x86_synth_get_field_type(s, cur_stype, leaf_field)
@@ -863,6 +883,9 @@ fn x86_synth_compile_statement s toks pos_box
                 rhs_arr_type = s.synth_last_expr_type
                 if is_arr_comp == 1
                     x86_synth_emit_byte(s, 80) // push rhs (stack: [rsp]=rhs, [rsp+8]=idx)
+                    if rhs_arr_type == "dyn_tagged"
+                        x86_synth_emit_byte(s, 82) // push rdx ([rsp]=rtag, [rsp+8]=rhs, [rsp+16]=idx)
+                    end
                     lv_arr = x86_synth_find_local_var(s, arr_name)
                     if lv_arr != 0 and lv_arr.lv_is_spilled == 0 and lv_arr.lv_reg >= 0
                         x86_synth_emit_mov_reg_reg(s, 7, lv_arr.lv_reg)
@@ -880,50 +903,95 @@ fn x86_synth_compile_statement s toks pos_box
                             end
                         end
                     end
-                    x86_synth_emit_bytes(s, [72, 139, 116, 36, 8]) // mov rsi, [rsp + 8]
-                    x86_synth_emit_call_helper(s, "_lipi_list_get") // rax = old element
-                    x86_synth_emit_bytes(s, [65, 88]) // pop r8 (rhs); stack top is now idx
+                    if rhs_arr_type == "dyn_tagged"
+                        x86_synth_emit_bytes(s, [72, 139, 116, 36, 16]) // mov rsi, [rsp + 16]
+                    else
+                        x86_synth_emit_bytes(s, [72, 139, 116, 36, 8]) // mov rsi, [rsp + 8]
+                    end
+                    x86_synth_emit_call_helper(s, "_lipi_list_get") // rax = old element, rdx = old tag
                     arr_el_prim = x86_synth_get_elem_type(s, arr_name)
-                    if rhs_arr_type == "float" or arr_el_prim == "float"
-                        if arr_el_prim == "float"
-                            x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                    if arr_el_prim == "dyn_dict" or rhs_arr_type == "dyn_tagged"
+                        // Pop rtag (if pushed) into rcx, pop rhs into rsi; rdi = old(rax), rdx = old_tag
+                        if rhs_arr_type == "dyn_tagged"
+                            x86_synth_emit_bytes(s, [89, 94]) // pop rcx (rtag); pop rsi (rhs)
                         else
-                            x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                            x86_synth_emit_byte(s, 94) // pop rsi (rhs)
+                            if rhs_arr_type == "float"
+                                x86_synth_emit_bytes(s, [185, 1, 0, 0, 0])
+                            elif rhs_arr_type == "str"
+                                x86_synth_emit_bytes(s, [185, 2, 0, 0, 0])
+                            else
+                                x86_synth_emit_bytes(s, [49, 201])
+                            end
                         end
-                        if rhs_arr_type == "float"
-                            x86_synth_emit_bytes(s, [102, 73, 15, 110, 200]) // movq xmm1, r8
-                        else
-                            x86_synth_emit_bytes(s, [242, 73, 15, 42, 200])  // cvtsi2sd xmm1, r8
-                        end
-                        if arr_comp_op == TOK_PLUS()
-                            x86_synth_emit_bytes(s, [242, 15, 88, 193])
-                        elif arr_comp_op == TOK_MINUS()
-                            x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                        x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+                        c_tag_op = 0
+                        if arr_comp_op == TOK_MINUS()
+                            c_tag_op = 1
                         elif arr_comp_op == TOK_STAR()
-                            x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                            c_tag_op = 2
                         elif arr_comp_op == TOK_SLASH()
-                            x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                            c_tag_op = 3
                         elif arr_comp_op == TOK_PERCENT()
-                            x86_synth_emit_bytes(s, [102, 15, 40, 208, 242, 15, 94, 193, 102, 15, 58, 11, 192, 3, 242, 15, 89, 193, 242, 15, 92, 208, 102, 15, 40, 194])
+                            c_tag_op = 4
                         end
-                        x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
-                        x86_synth_set_elem_type(s, arr_name, "float")
-                    elif arr_comp_op == TOK_PLUS() and rhs_arr_type == "str"
-                        x86_synth_emit_bytes(s, [72, 137, 199, 76, 137, 198])
-                        x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
-                    elif arr_comp_op == TOK_PLUS()
-                        x86_synth_emit_bytes(s, [76, 1, 192])
-                    elif arr_comp_op == TOK_MINUS()
-                        x86_synth_emit_bytes(s, [76, 41, 192])
-                    elif arr_comp_op == TOK_STAR()
-                        x86_synth_emit_bytes(s, [73, 15, 175, 192])
-                    elif arr_comp_op == TOK_SLASH()
-                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
-                    elif arr_comp_op == TOK_PERCENT()
-                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        x86_synth_emit_bytes(s, [65, 184])
+                        x86_synth_emit_u32(s, c_tag_op)
+                        x86_synth_emit_call_helper(s, "_lipi_binop_tagged")
+                        rhs_arr_type = "dyn_tagged"
+                    else
+                        x86_synth_emit_bytes(s, [65, 88]) // pop r8 (rhs); stack top is now idx
+                        if rhs_arr_type == "float" or arr_el_prim == "float"
+                            if arr_el_prim == "float"
+                                x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
+                            else
+                                x86_synth_emit_bytes(s, [242, 72, 15, 42, 192])  // cvtsi2sd xmm0, rax
+                            end
+                            if rhs_arr_type == "float"
+                                x86_synth_emit_bytes(s, [102, 73, 15, 110, 200]) // movq xmm1, r8
+                            else
+                                x86_synth_emit_bytes(s, [242, 73, 15, 42, 200])  // cvtsi2sd xmm1, r8
+                            end
+                            if arr_comp_op == TOK_PLUS()
+                                x86_synth_emit_bytes(s, [242, 15, 88, 193])
+                            elif arr_comp_op == TOK_MINUS()
+                                x86_synth_emit_bytes(s, [242, 15, 92, 193])
+                            elif arr_comp_op == TOK_STAR()
+                                x86_synth_emit_bytes(s, [242, 15, 89, 193])
+                            elif arr_comp_op == TOK_SLASH()
+                                x86_synth_emit_bytes(s, [242, 15, 94, 193])
+                            elif arr_comp_op == TOK_PERCENT()
+                                x86_synth_emit_bytes(s, [102, 15, 40, 208, 242, 15, 94, 193, 102, 15, 58, 11, 192, 3, 242, 15, 89, 193, 242, 15, 92, 208, 102, 15, 40, 194])
+                            end
+                            x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
+                            x86_synth_set_elem_type(s, arr_name, "float")
+                            rhs_arr_type = "float"
+                        elif arr_comp_op == TOK_PLUS() and rhs_arr_type == "str"
+                            x86_synth_emit_bytes(s, [72, 137, 199, 76, 137, 198])
+                            x86_synth_emit_call_helper(s, "_lipi_add_dynamic")
+                        elif arr_comp_op == TOK_PLUS()
+                            x86_synth_emit_bytes(s, [76, 1, 192])
+                        elif arr_comp_op == TOK_MINUS()
+                            x86_synth_emit_bytes(s, [76, 41, 192])
+                        elif arr_comp_op == TOK_STAR()
+                            x86_synth_emit_bytes(s, [73, 15, 175, 192])
+                        elif arr_comp_op == TOK_SLASH()
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                        elif arr_comp_op == TOK_PERCENT()
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        end
                     end
                 end
-                // rdx = val, rsi = idx, rdi = list_ptr
+                // rcx = vtag (1=float, 2=str, rdx=dyn_tagged, 0=other), rdx = val, rsi = idx, rdi = obj
+                if rhs_arr_type == "float"
+                    x86_synth_emit_bytes(s, [185, 1, 0, 0, 0]) // mov ecx, 1
+                elif rhs_arr_type == "str"
+                    x86_synth_emit_bytes(s, [185, 2, 0, 0, 0]) // mov ecx, 2
+                elif rhs_arr_type == "dyn_tagged"
+                    x86_synth_emit_bytes(s, [72, 137, 209]) // mov rcx, rdx
+                else
+                    x86_synth_emit_bytes(s, [49, 201]) // xor ecx, ecx
+                end
                 x86_synth_emit_byte(s, 72) // mov rdx, rax (0x48 0x89 0xC2)
                 x86_synth_emit_byte(s, 137)
                 x86_synth_emit_byte(s, 194)
@@ -934,9 +1002,9 @@ fn x86_synth_compile_statement s toks pos_box
                 else
                     mg_arr2 = x86_synth_find_mutable_global(s, arr_name)
                     if lv_arr2 == 0 and mg_arr2 >= 512
-                        x86_synth_emit_bytes(s, [82, 86]) // push rdx; push rsi
+                        x86_synth_emit_bytes(s, [81, 82, 86]) // push rcx; push rdx; push rsi
                         x86_synth_emit_mutable_global_read(s, mg_arr2)
-                        x86_synth_emit_bytes(s, [72, 137, 199, 94, 90]) // mov rdi, rax; pop rsi; pop rdx
+                        x86_synth_emit_bytes(s, [72, 137, 199, 94, 90, 89]) // mov rdi, rax; pop rsi; pop rdx; pop rcx
                     else
                         off = x86_synth_lookup_var(s, arr_name)
                         if off > 0
@@ -947,10 +1015,10 @@ fn x86_synth_compile_statement s toks pos_box
                         end
                     end
                 end
-                if rhs_arr_type == "float"
+                if rhs_arr_type == "float" and x86_synth_get_elem_type(s, arr_name) != "dyn_dict"
                     x86_synth_set_elem_type(s, arr_name, "float")
                 end
-                x86_synth_emit_call_helper(s, "_lipi_list_set")
+                x86_synth_emit_call_helper(s, "_lipi_list_set_typed")
                 return 0
 
     // ── 6. Conditionals: if / elif / else (যদি / নাহলে_যদি / নাহলে / @if...) ──
@@ -1231,10 +1299,12 @@ fn x86_synth_compile_statement s toks pos_box
             list_set(pos_box, 0, var_pos + 1)
             next_p = get(pos_box, 0)
             if next_p < toks.len() and (toks[next_p].tok_kind == TOK_COLON() or (toks[next_p].tok_kind != TOK_STR() and toks[next_p].tok_text == ":"))
-                type_p = next_p + 1
-                if type_p < toks.len() and x86_synth_is_ident_token(toks[type_p].tok_kind) == 1
-                    assigned_type = toks[type_p].tok_text
-                    list_set(pos_box, 0, type_p + 1)
+                list_set(pos_box, 0, next_p + 1)
+                raw_at = x86_synth_parse_type_expr(toks, pos_box)
+                if raw_at != ""
+                    assigned_type = x86_synth_subst_type(s, raw_at, 0, 0)
+                end
+            end
             eq_pos = get(pos_box, 0)
             if eq_pos < toks.len() and (toks[eq_pos].tok_kind == TOK_ASSIGN() or (toks[eq_pos].tok_kind != TOK_STR() and toks[eq_pos].tok_text == "="))
                 is_int_lit = 0
@@ -1268,6 +1338,8 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_set_prim_type(s, var_name, "float")
                 elif s.synth_last_expr_type == "str"
                     x86_synth_set_prim_type(s, var_name, "str")
+                elif s.synth_last_expr_type == "dyn_tagged"
+                    x86_synth_set_prim_type(s, var_name, "dyn_tagged")
                 elif assigned_type == ""
                     x86_synth_set_prim_type(s, var_name, "")
         return 0
@@ -1519,18 +1591,22 @@ fn x86_synth_compile_statement s toks pos_box
             end
 
             miss_patch = 0 - 1
+            adt_miss_patches = 0
             pat_p = get(pos_box, 0)
             if pat_p < toks.len() and (toks[pat_p].tok_text == "_" or toks[pat_p].tok_text == "default" or toks[pat_p].tok_text == "অন্যথায়" or toks[pat_p].tok_kind == TOK_KW_ELSE())
                 list_set(pos_box, 0, pat_p + 1)
             else
-                // Compile pattern -> %rsi, load scrutinee -> %rdi, call _lipi_cmp_dynamic (0 == equal)
-                x86_synth_compile_expr(s, toks, pos_box)
-                x86_synth_emit_bytes(s, [72, 137, 198])
-                x86_synth_emit_load_var(s, 7, scrut_off)
-                x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
-                x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
-                miss_patch = s.synth_code.len()
-                x86_synth_emit_u32(s, 0)
+                adt_miss_patches = x86_synth_try_compile_adt_pattern(s, toks, pos_box, scrut_off)
+                if adt_miss_patches == 0
+                    // Compile value pattern -> %rsi, load scrutinee -> %rdi, call _lipi_cmp_dynamic (0 == equal)
+                    x86_synth_compile_expr(s, toks, pos_box)
+                    x86_synth_emit_bytes(s, [72, 137, 198])
+                    x86_synth_emit_load_var(s, 7, scrut_off)
+                    x86_synth_emit_call_helper(s, "_lipi_cmp_dynamic")
+                    x86_synth_emit_bytes(s, [133, 192, 15, 133]) // test eax, eax; jnz next_arm
+                    miss_patch = s.synth_code.len()
+                    x86_synth_emit_u32(s, 0)
+                end
             end
 
             if get(pos_box, 0) < toks.len()
@@ -1582,6 +1658,15 @@ fn x86_synth_compile_statement s toks pos_box
             if miss_patch >= 0
                 next_arm_off = s.synth_code.len()
                 x86_synth_patch_u32(s, miss_patch, next_arm_off - (miss_patch + 4))
+            end
+            if adt_miss_patches != 0
+                next_arm_off = s.synth_code.len()
+                ami = 0
+                while ami < adt_miss_patches.len()
+                    am_p = adt_miss_patches[ami]
+                    x86_synth_patch_u32(s, am_p, next_arm_off - (am_p + 4))
+                    ami = ami + 1
+                end
             end
             s.synth_last_store_end = 0 - 1
         end
@@ -1698,14 +1783,16 @@ fn x86_synth_compile_statement s toks pos_box
         var_name = txt
         assigned_type = ""
         next_pos = pos + 1
-        // WHY: Support typed variable declarations: name: Type = expr
+        // WHY: Support typed variable declarations: name: Type[<...>] = expr
         if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_COLON() or (toks[next_pos].tok_kind != TOK_STR() and toks[next_pos].tok_text == ":"))
-            type_pos = next_pos + 1
-            if type_pos < toks.len() and x86_synth_is_ident_token(toks[type_pos].tok_kind) == 1
-                after_type = type_pos + 1
-                if after_type < toks.len() and (toks[after_type].tok_kind == TOK_ASSIGN() or (toks[after_type].tok_kind != TOK_STR() and toks[after_type].tok_text == "="))
-                    assigned_type = toks[type_pos].tok_text
-                    next_pos = after_type
+            t_scan_box = [next_pos + 1]
+            raw_at2 = x86_synth_parse_type_expr(toks, t_scan_box)
+            after_type = get(t_scan_box, 0)
+            if raw_at2 != "" and after_type < toks.len() and (toks[after_type].tok_kind == TOK_ASSIGN() or (toks[after_type].tok_kind != TOK_STR() and toks[after_type].tok_text == "="))
+                assigned_type = x86_synth_subst_type(s, raw_at2, 0, 0)
+                next_pos = after_type
+            end
+        end
         if next_pos < toks.len()
             ntk = toks[next_pos]
             nk = ntk.tok_kind
@@ -1915,6 +2002,8 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_prim_type(s, var_name, "float")
                     elif s.synth_last_expr_type == "str"
                         x86_synth_set_prim_type(s, var_name, "str")
+                    elif s.synth_last_expr_type == "dyn_tagged"
+                        x86_synth_set_prim_type(s, var_name, "dyn_tagged")
                     elif assigned_type == ""
                         x86_synth_set_prim_type(s, var_name, "")
                     return 0

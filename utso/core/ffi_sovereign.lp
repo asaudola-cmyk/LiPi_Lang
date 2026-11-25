@@ -62,6 +62,9 @@ DT_JMPREL           = 23
 DT_INIT_ARRAY       = 25
 DT_INIT_ARRAYSZ     = 27
 DT_RUNPATH          = 29
+DT_RELRSZ           = 35
+DT_RELR             = 36
+DT_RELRENT          = 37
 DT_GNU_HASH         = 1879047925 // 0x6ffffef5
 
 // ELF64 Symbol Types (ELF64_ST_TYPE(st_info) = st_info & 15)
@@ -87,6 +90,14 @@ G_FFI_ERRNO_PTR     = 0
 G_FFI_SHIM_NAMES    = list()
 G_FFI_SHIM_ADDRS    = list()
 G_FFI_SHIM_READY    = 0
+G_FFI_SILICON_PAGE  = 0
+G_FFI_STDIO_FILES   = 0
+G_FFI_CTYPE_TBL     = 0
+G_FFI_CTYPE_PTR     = 0
+G_FFI_ENV_BUF       = 0
+G_FFI_ENV_LEN       = 0
+G_FFI_GMTIME_BUF    = 0
+G_FFI_STRERR_BUF    = 0
 
 // ── 1. Sovereign Pure-Lipi C-ABI Shim Functions (0% libc) ────────────────────
 // WHY: Real Linux C libraries (libz, libpng, libm, etc.) import ~15 core C runtime
@@ -328,22 +339,643 @@ fn _ffi_c_mutex_unlock m
     return 0
 end
 
+// ── 1b. Extended Sovereign Pure-Lipi C-ABI Shims (FreeType, libpng, libbz2, libbrotli) ──
+
+fn _ffi_c_memcpy_chk dst src n destlen
+    return _ffi_c_memcpy(dst, src, n)
+end
+
+fn _ffi_c_strncpy dst src n
+    i = 0
+    done = 0
+    while i < n
+        if done == 0
+            b = mem_byte_read(src, i) & 255
+            mem_byte_write(dst, i, b)
+            if b == 0 done = 1 end
+        else
+            mem_byte_write(dst, i, 0)
+        end
+        i = i + 1
+    end
+    return dst
+end
+
+fn _ffi_c_strcat dst src
+    dlen = _ffi_c_strlen(dst)
+    _ffi_c_strcpy(dst + dlen, src)
+    return dst
+end
+
+fn _ffi_c_strchr s c
+    if s <= 0 return 0 end
+    cv = c & 255
+    i = 0
+    while 1
+        b = mem_byte_read(s, i) & 255
+        if b == cv return s + i end
+        if b == 0 return 0 end
+        i = i + 1
+    end
+    return 0
+end
+
+fn _ffi_c_strrchr s c
+    if s <= 0 return 0 end
+    cv = c & 255
+    last = 0
+    i = 0
+    while 1
+        b = mem_byte_read(s, i) & 255
+        if b == cv last = s + i end
+        if b == 0 return last end
+        i = i + 1
+    end
+    return last
+end
+
+fn _ffi_c_strstr hay needle
+    if hay <= 0 or needle <= 0 return 0 end
+    nlen = _ffi_c_strlen(needle)
+    if nlen == 0 return hay end
+    hlen = _ffi_c_strlen(hay)
+    if nlen > hlen return 0 end
+    i = 0
+    while i <= hlen - nlen
+        if _ffi_c_memcmp(hay + i, needle, nlen) == 0
+            return hay + i
+        end
+        i = i + 1
+    end
+    return 0
+end
+
+fn _ffi_c_strtol nptr endptr base
+    if nptr <= 0 return 0 end
+    p = nptr
+    while 1
+        ch = mem_byte_read(p, 0) & 255
+        if ch == 32 or ch == 9 or ch == 10 or ch == 13 or ch == 11 or ch == 12
+            p = p + 1
+        else
+            break
+        end
+    end
+    neg = 0
+    ch = mem_byte_read(p, 0) & 255
+    if ch == 45
+        neg = 1
+        p = p + 1
+    elif ch == 43
+        p = p + 1
+    end
+    b = base
+    if b == 0
+        c0 = mem_byte_read(p, 0) & 255
+        c1 = mem_byte_read(p, 1) & 255
+        if c0 == 48 and (c1 == 120 or c1 == 88)
+            b = 16
+            p = p + 2
+        elif c0 == 48
+            b = 8
+        else
+            b = 10
+        end
+    elif b == 16
+        c0 = mem_byte_read(p, 0) & 255
+        c1 = mem_byte_read(p, 1) & 255
+        if c0 == 48 and (c1 == 120 or c1 == 88)
+            p = p + 2
+        end
+    end
+    acc = 0
+    while 1
+        ch = mem_byte_read(p, 0) & 255
+        d = 0 - 1
+        if ch >= 48 and ch <= 57
+            d = ch - 48
+        elif ch >= 65 and ch <= 90
+            d = ch - 55
+        elif ch >= 97 and ch <= 122
+            d = ch - 87
+        end
+        if d < 0 or d >= b break end
+        acc = (acc * b) + d
+        p = p + 1
+    end
+    if endptr > 0 mem_write(endptr, 0, p) end
+    if neg == 1 return 0 - acc end
+    return acc
+end
+
+fn _ffi_c_strtod nptr endptr
+    // Minimal clean integer-to-double fallback; libpng calls strtod only on optional text chunks
+    v = _ffi_c_strtol(nptr, endptr, 10)
+    return v
+end
+
+fn _ffi_c_swap_bytes a b sz
+    i = 0
+    while i < sz
+        ba = mem_byte_read(a, i) & 255
+        bb = mem_byte_read(b, i) & 255
+        mem_byte_write(a, i, bb)
+        mem_byte_write(b, i, ba)
+        i = i + 1
+    end
+    return 0
+end
+
+fn _ffi_c_qsort base nmemb sz compar
+    // WHY: Real O(N log N) iterative heapsort calling the C/Lipi comparator via c_abi_invoke!
+    // Zero recursion stack overflow, handles arbitrary element sizes, 100% pure Lipi!
+    if base <= 0 or nmemb <= 1 or sz <= 0 or compar <= 0 return 0 end
+    // Build max-heap
+    start = (nmemb / 2) - 1
+    while start >= 0
+        root = start
+        while (root * 2) + 1 < nmemb
+            child = (root * 2) + 1
+            swp = root
+            c1 = c_abi_invoke(compar, base + (swp * sz), base + (child * sz), 0, 0, 0)
+            // C compar returns 32-bit signed int in eax -> sign-extend!
+            if (c1 & 2147483648) != 0
+                swp = child
+            end
+            if child + 1 < nmemb
+                c2 = c_abi_invoke(compar, base + (swp * sz), base + ((child + 1) * sz), 0, 0, 0)
+                if (c2 & 2147483648) != 0
+                    swp = child + 1
+                end
+            end
+            if swp == root break end
+            _ffi_c_swap_bytes(base + (root * sz), base + (swp * sz), sz)
+            root = swp
+        end
+        start = start - 1
+    end
+    // Extract elements from heap in sorted order
+    end_i = nmemb - 1
+    while end_i > 0
+        _ffi_c_swap_bytes(base, base + (end_i * sz), sz)
+        end_i = end_i - 1
+        root = 0
+        while (root * 2) + 1 <= end_i
+            child = (root * 2) + 1
+            swp = root
+            c1 = c_abi_invoke(compar, base + (swp * sz), base + (child * sz), 0, 0, 0)
+            if (c1 & 2147483648) != 0
+                swp = child
+            end
+            if child + 1 <= end_i
+                c2 = c_abi_invoke(compar, base + (swp * sz), base + ((child + 1) * sz), 0, 0, 0)
+                if (c2 & 2147483648) != 0
+                    swp = child + 1
+                end
+            end
+            if swp == root break end
+            _ffi_c_swap_bytes(base + (root * sz), base + (swp * sz), sz)
+            root = swp
+        end
+    end
+    return 0
+end
+
+fn _ffi_c_bsearch key base nmemb sz compar
+    if key <= 0 or base <= 0 or nmemb <= 0 or sz <= 0 or compar <= 0 return 0 end
+    lo = 0
+    hi = nmemb
+    while lo < hi
+        mid = lo + ((hi - lo) / 2)
+        elem = base + (mid * sz)
+        c = c_abi_invoke(compar, key, elem, 0, 0, 0) & 4294967295
+        if c == 0 return elem end
+        if (c & 2147483648) != 0
+            hi = mid
+        else
+            lo = mid + 1
+        end
+    end
+    return 0
+end
+
+fn _ffi_c_mmap addr length prot flags fd off
+    r = syscall(9, addr, length, prot, flags, fd, off)
+    if r < 0 and r > (0 - 4096)
+        _ffi_set_errno(0 - r)
+        return 0 - 1
+    end
+    return r
+end
+
+fn _ffi_c_munmap addr length
+    r = syscall(11, addr, length, 0, 0, 0, 0)
+    if r < 0
+        _ffi_set_errno(0 - r)
+        return 0 - 1
+    end
+    return r
+end
+
+fn _ffi_c_fstat fd statbuf
+    r = syscall(5, fd, statbuf, 0, 0, 0, 0)
+    if r < 0
+        _ffi_set_errno(0 - r)
+        return 0 - 1
+    end
+    return r
+end
+
+fn _ffi_c_fcntl fd cmd arg
+    r = syscall(72, fd, cmd, arg, 0, 0, 0)
+    if r < 0
+        _ffi_set_errno(0 - r)
+        return 0 - 1
+    end
+    return r
+end
+
+fn _ffi_c_remove path
+    r = syscall(87, path, 0, 0, 0, 0, 0) // SYS_unlink
+    if r < 0
+        _ffi_set_errno(0 - r)
+        return 0 - 1
+    end
+    return 0
+end
+
+fn _ffi_c_exit code
+    syscall(231, code, 0, 0, 0, 0, 0)
+    return 0
+end
+
+fn _ffi_c_abort
+    print("FATAL: [ffi_sovereign] abort() invoked by foreign shared library")
+    syscall(231, 134, 0, 0, 0, 0, 0)
+    return 0
+end
+
+fn _ffi_c_getenv name
+    if name <= 0 return 0 end
+    if G_FFI_ENV_BUF == 0
+        fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
+        if fd >= 0
+            buf = syscall(9, 0, 65536, 3, 34, 0 - 1, 0)
+            if buf > 0
+                got = 0
+                while got < 65535
+                    n = syscall(0, fd, buf + got, 65535 - got, 0, 0, 0)
+                    if n <= 0 break end
+                    got = got + n
+                end
+                mem_byte_write(buf, got, 0)
+                G_FFI_ENV_BUF = buf
+                G_FFI_ENV_LEN = got
+            end
+            syscall(3, fd, 0, 0, 0, 0, 0)
+        end
+    end
+    if G_FFI_ENV_BUF <= 0 return 0 end
+    nlen = _ffi_c_strlen(name)
+    if nlen == 0 return 0 end
+    pos = 0
+    while pos < G_FFI_ENV_LEN
+        elen = _ffi_c_strlen(G_FFI_ENV_BUF + pos)
+        if elen > nlen and (mem_byte_read(G_FFI_ENV_BUF, pos + nlen) & 255) == 61
+            if _ffi_c_memcmp(G_FFI_ENV_BUF + pos, name, nlen) == 0
+                return G_FFI_ENV_BUF + pos + nlen + 1
+            end
+        end
+        pos = pos + elen + 1
+    end
+    return 0
+end
+
+fn _ffi_c_strerror errnum
+    if G_FFI_STRERR_BUF == 0
+        G_FFI_STRERR_BUF = syscall(9, 0, 64, 3, 34, 0 - 1, 0)
+        if G_FFI_STRERR_BUF > 0
+            _ffi_c_strcpy(G_FFI_STRERR_BUF, "error")
+        end
+    end
+    return G_FFI_STRERR_BUF
+end
+
+fn _ffi_c_snprintf_core dst maxlen fmt a0 a1 a2
+    if dst <= 0 or maxlen <= 0 return 0 end
+    if fmt <= 0
+        mem_byte_write(dst, 0, 0)
+        return 0
+    end
+    args = [a0, a1, a2]
+    ai = 0
+    fi = 0
+    oi = 0
+    lim = maxlen - 1
+    while 1
+        ch = mem_byte_read(fmt, fi) & 255
+        if ch == 0 break end
+        if ch == 37 // '%'
+            fi = fi + 1
+            // Skip flags/width/length modifiers (-,+,0-9,.,l,h,z)
+            while 1
+                mc = mem_byte_read(fmt, fi) & 255
+                if mc == 45 or mc == 43 or mc == 32 or mc == 35 or mc == 46 or mc == 108 or mc == 104 or mc == 122 or (mc >= 48 and mc <= 57)
+                    fi = fi + 1
+                else
+                    break
+                end
+            end
+            sp = mem_byte_read(fmt, fi) & 255
+            if sp == 0 break end
+            if sp == 37
+                if oi < lim
+                    mem_byte_write(dst, oi, 37)
+                    oi = oi + 1
+                end
+            elif sp == 115 // 's'
+                sv = 0
+                if ai < len(args) sv = get(args, ai) end
+                ai = ai + 1
+                if sv > 4096
+                    si = 0
+                    while 1
+                        sc = mem_byte_read(sv, si) & 255
+                        if sc == 0 break end
+                        if oi < lim
+                            mem_byte_write(dst, oi, sc)
+                            oi = oi + 1
+                        end
+                        si = si + 1
+                    end
+                end
+            elif sp == 100 or sp == 105 or sp == 117 or sp == 120 or sp == 88 // d/i/u/x/X
+                iv = 0
+                if ai < len(args) iv = get(args, ai) end
+                ai = ai + 1
+                s_num = str(iv)
+                nl = len(s_num)
+                ni = 0
+                while ni < nl
+                    if oi < lim
+                        mem_byte_write(dst, oi, ord(char_at(s_num, ni)))
+                        oi = oi + 1
+                    end
+                    ni = ni + 1
+                end
+            elif sp == 99 // 'c'
+                cv = 0
+                if ai < len(args) cv = get(args, ai) & 255 end
+                ai = ai + 1
+                if oi < lim
+                    mem_byte_write(dst, oi, cv)
+                    oi = oi + 1
+                end
+            end
+            fi = fi + 1
+        else
+            if oi < lim
+                mem_byte_write(dst, oi, ch)
+                oi = oi + 1
+            end
+            fi = fi + 1
+        end
+    end
+    mem_byte_write(dst, oi, 0)
+    return oi
+end
+
+fn _ffi_c_snprintf dst maxlen fmt a0 a1 a2
+    return _ffi_c_snprintf_core(dst, maxlen, fmt, a0, a1, a2)
+end
+
+fn _ffi_c_snprintf_chk dst maxlen flag slen fmt a0
+    return _ffi_c_snprintf_core(dst, maxlen, fmt, a0, 0, 0)
+end
+
+fn _ffi_c_vsnprintf dst maxlen fmt ap
+    return _ffi_c_snprintf_core(dst, maxlen, fmt, 0, 0, 0)
+end
+
+fn _ffi_c_vsnprintf_chk dst maxlen flag slen fmt ap
+    return _ffi_c_snprintf_core(dst, maxlen, fmt, 0, 0, 0)
+end
+
+fn _ffi_c_fprintf_chk fp flag fmt a0 a1 a2
+    return 0
+end
+
+// Minimal POSIX FILE* shims (each synthetic FILE is 32B: [0]=fd, [8]=err, [16]=has_unget, [24]=unget_byte)
+fn _ffi_ensure_stdio
+    if G_FFI_STDIO_FILES > 0 return G_FFI_STDIO_FILES end
+    p = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    if p <= 0 return 0 end
+    // [p+0]=stdin(fd 0), [p+32]=stdout(fd 1), [p+64]=stderr(fd 2)
+    // [p+128]=ptr_to_stdin, [p+136]=ptr_to_stdout, [p+144]=ptr_to_stderr (for GLOB_DAT/COPY!)
+    mem_write(p, 0, 0)
+    mem_write(p, 32, 1)
+    mem_write(p, 64, 2)
+    mem_write(p, 128, p)
+    mem_write(p, 136, p + 32)
+    mem_write(p, 144, p + 64)
+    G_FFI_STDIO_FILES = p
+    return p
+end
+
+fn _ffi_c_fopen path mode
+    if path <= 0 return 0 end
+    flags = 0
+    if mode > 0
+        m0 = mem_byte_read(mode, 0) & 255
+        if m0 == 119 flags = 577 end // 'w' -> O_WRONLY|O_CREAT|O_TRUNC
+        if m0 == 97 flags = 1089 end // 'a' -> O_WRONLY|O_CREAT|O_APPEND
+    end
+    fd = syscall(2, path, flags, 420, 0, 0, 0)
+    if fd < 0 return 0 end
+    fp = _ffi_c_calloc(1, 32)
+    if fp > 0 mem_write(fp, 0, fd) end
+    return fp
+end
+
+fn _ffi_c_fdopen fd mode
+    if fd < 0 return 0 end
+    fp = _ffi_c_calloc(1, 32)
+    if fp > 0 mem_write(fp, 0, fd) end
+    return fp
+end
+
+fn _ffi_c_fclose fp
+    if fp <= 4096 return 0 - 1 end
+    fd = mem_read(fp, 0)
+    if fd > 2 syscall(3, fd, 0, 0, 0, 0, 0) end
+    _ffi_c_free(fp)
+    return 0
+end
+
+fn _ffi_c_fread ptr sz nmemb fp
+    if ptr <= 0 or fp <= 4096 or sz <= 0 or nmemb <= 0 return 0 end
+    fd = mem_read(fp, 0)
+    tot = sz * nmemb
+    n = syscall(0, fd, ptr, tot, 0, 0, 0)
+    if n <= 0 return 0 end
+    return n / sz
+end
+
+fn _ffi_c_fwrite ptr sz nmemb fp
+    if ptr <= 0 or fp <= 4096 or sz <= 0 or nmemb <= 0 return 0 end
+    fd = mem_read(fp, 0)
+    tot = sz * nmemb
+    n = syscall(1, fd, ptr, tot, 0, 0, 0)
+    if n <= 0 return 0 end
+    return n / sz
+end
+
+fn _ffi_c_fgetc fp
+    if fp <= 4096 return 0 - 1 end
+    if mem_read(fp, 16) != 0
+        mem_write(fp, 16, 0)
+        return mem_read(fp, 24) & 255
+    end
+    fd = mem_read(fp, 0)
+    b = alloc(8)
+    n = syscall(0, fd, b, 1, 0, 0, 0)
+    ch = 0 - 1
+    if n == 1 ch = mem_byte_read(b, 0) & 255 end
+    free(b)
+    return ch
+end
+
+fn _ffi_c_ungetc c fp
+    if fp <= 4096 return 0 - 1 end
+    mem_write(fp, 16, 1)
+    mem_write(fp, 24, c & 255)
+    return c & 255
+end
+
+fn _ffi_c_fputc c fp
+    if fp <= 4096 return 0 - 1 end
+    fd = mem_read(fp, 0)
+    b = alloc(8)
+    mem_byte_write(b, 0, c & 255)
+    syscall(1, fd, b, 1, 0, 0, 0)
+    free(b)
+    return c & 255
+end
+
+fn _ffi_c_fflush fp
+    return 0
+end
+
+fn _ffi_c_ferror fp
+    if fp <= 4096 return 0 end
+    return mem_read(fp, 8)
+end
+
+fn _ffi_c_ctype_b_loc
+    // WHY: Standard glibc uint16_t ctype mask table indexed [-128..255] so libbz2/C macros work 0% libc!
+    if G_FFI_CTYPE_PTR > 0 return G_FFI_CTYPE_PTR end
+    tbl = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    if tbl <= 0 return 0 end
+    base_t = tbl + 256 // index 0 starts after 128 u16 entries
+    c = 0
+    while c < 128
+        m = 0
+        if c >= 65 and c <= 90 m = m | 256 | 1024 | 8 | 16384 | 32768 end    // upper|alpha|alnum|print|graph
+        if c >= 97 and c <= 122 m = m | 512 | 1024 | 8 | 16384 | 32768 end   // lower|alpha|alnum|print|graph
+        if c >= 48 and c <= 57 m = m | 2048 | 4096 | 8 | 16384 | 32768 end   // digit|xdigit|alnum|print|graph
+        if (c >= 65 and c <= 70) or (c >= 97 and c <= 102) m = m | 4096 end  // xdigit
+        if c == 32 or (c >= 9 and c <= 13) m = m | 8192 end                  // space
+        if c == 32 or c == 9 m = m | 1 end                                   // blank
+        if c < 32 or c == 127 m = m | 2 end                                  // cntrl
+        if c >= 33 and c <= 126 and (m & 8) == 0 m = m | 4 | 16384 | 32768 end // punct|print|graph
+        if c == 32 m = m | 16384 end                                         // print
+        mem_byte_write(base_t, c * 2, m & 255)
+        mem_byte_write(base_t, (c * 2) + 1, (m >> 8) & 255)
+        c = c + 1
+    end
+    ptr_slot = tbl + 2048
+    mem_write(ptr_slot, 0, base_t)
+    G_FFI_CTYPE_TBL = tbl
+    G_FFI_CTYPE_PTR = ptr_slot
+    return ptr_slot
+end
+
+fn _ffi_c_gmtime timep
+    if G_FFI_GMTIME_BUF == 0
+        G_FFI_GMTIME_BUF = syscall(9, 0, 64, 3, 34, 0 - 1, 0)
+    end
+    return G_FFI_GMTIME_BUF
+end
+
+fn _ffi_c_unresolved_trap
+    print("FATAL: [ffi_sovereign] invoked unresolved foreign symbol stub")
+    syscall(231, 127, 0, 0, 0, 0, 0)
+    return 0
+end
+
+// ── 1c. Strict W^X Pure Silicon Page for _setjmp / longjmp & Virtual libm.so.6 ──
+fn _ffi_init_silicon_shims
+    if G_FFI_SILICON_PAGE > 0 return G_FFI_SILICON_PAGE end
+    page = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+    if page <= 0 return 0 end
+    // +0:   _setjmp (43 bytes)
+    _c_abi_write_bytes(page, 0, [72, 137, 31, 72, 137, 111, 8, 76, 137, 103, 16, 76, 137, 111, 24, 76, 137, 119, 32, 76, 137, 127, 40, 72, 141, 76, 36, 8, 72, 137, 79, 48, 72, 139, 12, 36, 72, 137, 79, 56, 49, 192, 195])
+    // +64:  longjmp / __longjmp_chk (41 bytes)
+    _c_abi_write_bytes(page, 64, [72, 139, 31, 72, 139, 111, 8, 76, 139, 103, 16, 76, 139, 111, 24, 76, 139, 119, 32, 76, 139, 127, 40, 72, 139, 103, 48, 137, 240, 133, 192, 117, 5, 184, 1, 0, 0, 0, 255, 103, 56])
+    // +128: floor (7 bytes)
+    _c_abi_write_bytes(page, 128, [102, 15, 58, 11, 192, 1, 195])
+    // +160: ceil (7 bytes)
+    _c_abi_write_bytes(page, 160, [102, 15, 58, 11, 192, 2, 195])
+    // +192: fabs (20 bytes)
+    _c_abi_write_bytes(page, 192, [72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 102, 72, 15, 110, 200, 102, 15, 84, 193, 195])
+    // +224: sqrt (5 bytes)
+    _c_abi_write_bytes(page, 224, [242, 15, 81, 192, 195])
+    // +256: modf (20 bytes)
+    _c_abi_write_bytes(page, 256, [102, 15, 58, 11, 200, 3, 72, 133, 255, 116, 4, 242, 15, 17, 15, 242, 15, 92, 193, 195])
+    // +288: frexp (90 bytes)
+    _c_abi_write_bytes(page, 288, [102, 72, 15, 126, 192, 72, 137, 193, 73, 184, 255, 255, 255, 255, 255, 255, 255, 127, 76, 33, 193, 72, 133, 201, 117, 12, 72, 133, 255, 116, 58, 199, 7, 0, 0, 0, 0, 195, 72, 137, 202, 72, 193, 234, 52, 129, 234, 254, 3, 0, 0, 72, 133, 255, 116, 2, 137, 23, 73, 184, 255, 255, 255, 255, 255, 255, 15, 128, 76, 33, 192, 73, 184, 0, 0, 0, 0, 0, 0, 224, 63, 76, 9, 192, 102, 72, 15, 110, 192, 195])
+    // +416: pow (128 bytes)
+    _c_abi_write_bytes(page, 416, [72, 131, 236, 24, 242, 15, 17, 4, 36, 242, 15, 17, 76, 36, 8, 102, 15, 87, 210, 102, 15, 46, 202, 117, 20, 72, 184, 0, 0, 0, 0, 0, 0, 240, 63, 102, 72, 15, 110, 192, 72, 131, 196, 24, 195, 102, 15, 46, 194, 119, 26, 116, 66, 72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 102, 72, 15, 110, 208, 102, 15, 84, 194, 242, 15, 17, 4, 36, 221, 68, 36, 8, 221, 4, 36, 217, 241, 217, 192, 217, 252, 220, 233, 217, 201, 217, 240, 217, 232, 222, 193, 217, 253, 221, 217, 221, 92, 36, 16, 242, 15, 16, 68, 36, 16, 72, 131, 196, 24, 195, 102, 15, 87, 192, 72, 131, 196, 24, 195])
+    if syscall(10, page, 4096, 5, 0, 0, 0) < 0
+        syscall(11, page, 4096, 0, 0, 0, 0)
+        return 0
+    end
+    G_FFI_SILICON_PAGE = page
+    return page
+end
+
 fn _ffi_init_shims
     if G_FFI_SHIM_READY == 1 return 0 end
+    sp = _ffi_init_silicon_shims()
+    st = _ffi_ensure_stdio()
     G_FFI_SHIM_NAMES = [
         "malloc", "calloc", "realloc", "free",
-        "memcpy", "memmove", "memset", "memcmp", "memchr",
-        "strlen", "strcmp", "strncmp", "strcpy",
+        "memcpy", "__memcpy_chk", "memmove", "memset", "memcmp", "memchr",
+        "strlen", "strcmp", "strncmp", "strcpy", "strncpy", "strcat", "strchr", "strrchr", "strstr",
+        "strtol", "strtoul", "strtod", "qsort", "bsearch",
         "open", "open64", "read", "write", "close", "lseek", "lseek64",
+        "mmap", "munmap", "fstat", "fcntl", "remove", "getenv", "exit", "abort", "strerror",
+        "snprintf", "__snprintf_chk", "vsnprintf", "__vsnprintf_chk", "__fprintf_chk",
+        "fopen", "fopen64", "fdopen", "fclose", "fread", "fwrite", "fflush", "fgetc", "ungetc", "fputc", "ferror",
+        "stdin", "stdout", "stderr", "__ctype_b_loc", "gmtime",
+        "_setjmp", "setjmp", "longjmp", "__longjmp_chk",
+        "floor", "ceil", "fabs", "sqrt", "modf", "frexp", "pow",
         "__errno_location", "__stack_chk_fail",
         "__cxa_finalize", "__gmon_start__", "_ITM_registerTMCloneTable", "_ITM_deregisterTMCloneTable",
         "pthread_mutex_init", "pthread_mutex_lock", "pthread_mutex_unlock", "pthread_mutex_destroy"
     ]
     G_FFI_SHIM_ADDRS = [
         fn_ptr(_ffi_c_malloc), fn_ptr(_ffi_c_calloc), fn_ptr(_ffi_c_realloc), fn_ptr(_ffi_c_free),
-        fn_ptr(_ffi_c_memcpy), fn_ptr(_ffi_c_memmove), fn_ptr(_ffi_c_memset), fn_ptr(_ffi_c_memcmp), fn_ptr(_ffi_c_memchr),
-        fn_ptr(_ffi_c_strlen), fn_ptr(_ffi_c_strcmp), fn_ptr(_ffi_c_strncmp), fn_ptr(_ffi_c_strcpy),
+        fn_ptr(_ffi_c_memcpy), fn_ptr(_ffi_c_memcpy_chk), fn_ptr(_ffi_c_memmove), fn_ptr(_ffi_c_memset), fn_ptr(_ffi_c_memcmp), fn_ptr(_ffi_c_memchr),
+        fn_ptr(_ffi_c_strlen), fn_ptr(_ffi_c_strcmp), fn_ptr(_ffi_c_strncmp), fn_ptr(_ffi_c_strcpy), fn_ptr(_ffi_c_strncpy), fn_ptr(_ffi_c_strcat), fn_ptr(_ffi_c_strchr), fn_ptr(_ffi_c_strrchr), fn_ptr(_ffi_c_strstr),
+        fn_ptr(_ffi_c_strtol), fn_ptr(_ffi_c_strtol), fn_ptr(_ffi_c_strtod), fn_ptr(_ffi_c_qsort), fn_ptr(_ffi_c_bsearch),
         fn_ptr(_ffi_c_open), fn_ptr(_ffi_c_open), fn_ptr(_ffi_c_read), fn_ptr(_ffi_c_write), fn_ptr(_ffi_c_close), fn_ptr(_ffi_c_lseek), fn_ptr(_ffi_c_lseek),
+        fn_ptr(_ffi_c_mmap), fn_ptr(_ffi_c_munmap), fn_ptr(_ffi_c_fstat), fn_ptr(_ffi_c_fcntl), fn_ptr(_ffi_c_remove), fn_ptr(_ffi_c_getenv), fn_ptr(_ffi_c_exit), fn_ptr(_ffi_c_abort), fn_ptr(_ffi_c_strerror),
+        fn_ptr(_ffi_c_snprintf), fn_ptr(_ffi_c_snprintf_chk), fn_ptr(_ffi_c_vsnprintf), fn_ptr(_ffi_c_vsnprintf_chk), fn_ptr(_ffi_c_fprintf_chk),
+        fn_ptr(_ffi_c_fopen), fn_ptr(_ffi_c_fopen), fn_ptr(_ffi_c_fdopen), fn_ptr(_ffi_c_fclose), fn_ptr(_ffi_c_fread), fn_ptr(_ffi_c_fwrite), fn_ptr(_ffi_c_fflush), fn_ptr(_ffi_c_fgetc), fn_ptr(_ffi_c_ungetc), fn_ptr(_ffi_c_fputc), fn_ptr(_ffi_c_ferror),
+        st + 128, st + 136, st + 144, fn_ptr(_ffi_c_ctype_b_loc), fn_ptr(_ffi_c_gmtime),
+        sp + 0, sp + 0, sp + 64, sp + 64,
+        sp + 128, sp + 160, sp + 192, sp + 224, sp + 256, sp + 288, sp + 416,
         fn_ptr(_ffi_c_errno_location), fn_ptr(_ffi_c_stack_chk_fail),
         fn_ptr(_ffi_c_noop), fn_ptr(_ffi_c_noop), fn_ptr(_ffi_c_noop), fn_ptr(_ffi_c_noop),
         fn_ptr(_ffi_c_mutex_init), fn_ptr(_ffi_c_mutex_lock), fn_ptr(_ffi_c_mutex_unlock), fn_ptr(_ffi_c_noop)
@@ -512,9 +1144,10 @@ fn _ffi_basename path
 end
 
 fn _ffi_is_virtual_libc_soname name
-    // WHY: Standard glibc runtime DSOs are satisfied directly by Lipi's Sovereign C-ABI Shim Table
-    // without importing glibc's internal _rtld_global ld.so coupling.
-    if name == "libc.so.6" or name == "libpthread.so.0" or name == "libdl.so.2" or name == "librt.so.1" or name == "ld-linux-x86-64.so.2"
+    // WHY: Standard glibc runtime & math DSOs (including libm.so.6 which uses glibc's private
+    // _rtld_global_ro IFUNC resolvers) are virtualized directly by Lipi's Sovereign C-ABI &
+    // Pure-Silicon SSE2/x87 Math Shims with 0% glibc/ld.so dependency!
+    if name == "libc.so.6" or name == "libm.so.6" or name == "libpthread.so.0" or name == "libdl.so.2" or name == "librt.so.1" or name == "ld-linux-x86-64.so.2"
         return 1
     end
     return 0
@@ -890,6 +1523,8 @@ fn _ffi_load_so_internal path depth
     dt_relasz = 0
     dt_jmprel_v = 0
     dt_pltrelsz = 0
+    dt_relr_v = 0
+    dt_relrsz = 0
     dt_hash_v = 0
     if dyn_vaddr >= min_vaddr and dyn_memsz >= 16 and (dyn_vaddr - min_vaddr) + dyn_memsz <= map_sz
         dyn_ptr = base + (dyn_vaddr - min_vaddr)
@@ -930,6 +1565,10 @@ fn _ffi_load_so_internal path depth
                 list_set(lib, 13, d_val - min_vaddr)
             elif d_tag == DT_INIT_ARRAYSZ
                 list_set(lib, 14, d_val)
+            elif d_tag == DT_RELR
+                dt_relr_v = d_val
+            elif d_tag == DT_RELRSZ
+                dt_relrsz = d_val
             end
             di = di + 16
         end
@@ -988,6 +1627,40 @@ fn _ffi_load_so_internal path depth
             end
         end
         ni = ni + 1
+    end
+
+    // Step 5b: Decode modern ELF64 DT_RELR (packed relative relocations) while RW!
+    if dt_relr_v >= min_vaddr and dt_relrsz >= 8 and (dt_relr_v - min_vaddr) + dt_relrsz <= map_sz
+        relr_ptr = base + (dt_relr_v - min_vaddr)
+        relr_cnt = dt_relrsz / 8
+        relr_where = 0
+        relr_delta = base - min_vaddr
+        rli = 0
+        while rli < relr_cnt
+            entry = mem_read(relr_ptr, rli * 8)
+            if (entry & 1) == 0
+                wo = entry - min_vaddr
+                if wo >= 0 and wo + 8 <= map_sz
+                    mem_write(base, wo, mem_read(base, wo) + relr_delta)
+                end
+                relr_where = wo + 8
+            else
+                bm = entry >> 1
+                bi = 0
+                while bi < 63
+                    if (bm & 1) != 0
+                        wo2 = relr_where + (bi * 8)
+                        if wo2 >= 0 and wo2 + 8 <= map_sz
+                            mem_write(base, wo2, mem_read(base, wo2) + relr_delta)
+                        end
+                    end
+                    bm = bm >> 1
+                    bi = bi + 1
+                end
+                relr_where = relr_where + (63 * 8)
+            end
+            rli = rli + 1
+        end
     end
 
     // Step 6: Apply Complete x86_64 Dynamic Relocations while RW (defer IRELATIVE until after RX!)
@@ -1066,6 +1739,9 @@ fn _ffi_load_so_internal path depth
                             else
                                 mem_write(base, patch_off, resolved)
                             end
+                        elif r_type == R_X86_64_JUMP_SLOT and ((mem_byte_read(sym_e, 4) >> 4) & 15) != 2
+                            // Guard unresolved non-weak PLT slot with safe diagnostic trap instead of 0x0
+                            mem_write(base, patch_off, fn_ptr(_ffi_c_unresolved_trap))
                         end
                     end
                 end
