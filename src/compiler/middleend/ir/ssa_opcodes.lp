@@ -36,6 +36,19 @@ OP_JMP      = 17  // Unconditional control transfer: jmp label_target
 OP_RET      = 18  // Function return: ret %val (or ret void)
 OP_CALL     = 19  // Function invocation: %res = call @callee, [%arg0, %arg1, ...]
 OP_PHI      = 20  // SSA Confluence selector: %res = phi [%val0, bb0], [%val1, bb1]
+OP_FADD     = 21  // IEEE-754 f64 addition: %res = fadd %a, %b
+OP_FSUB     = 22  // IEEE-754 f64 subtraction: %res = fsub %a, %b
+OP_FMUL     = 23  // IEEE-754 f64 multiplication: %res = fmul %a, %b
+OP_FDIV     = 24  // IEEE-754 f64 division: %res = fdiv %a, %b
+OP_FCMP     = 25  // IEEE-754 f64 ordered comparison: %res = fcmp pred, %a, %b
+OP_I2F      = 26  // Signed i64 to IEEE-754 f64 conversion: %res = i2f %a
+OP_STR_LIT  = 27  // STR0-headered UTF-8 string literal pointer: %res = str_lit "text"
+OP_STRUCT_NEW  = 28 // Heap-allocated GC-tracked struct constructor: %res = struct_new size, [fields...]
+OP_FIELD_LOAD  = 29 // Null-guarded struct field read: %res = field_load %obj, byte_off
+OP_FIELD_STORE = 30 // Null-guarded struct field write: field_store %obj, %val, byte_off
+OP_FNEG     = 31  // IEEE-754 f64 sign-bit negation: %res = fneg %a
+OP_ADD_DYN  = 32  // Dynamic int/string addition: %res = add_dyn %a, %b
+OP_CMP_DYN  = 33  // Dynamic int/string comparison: %res = cmp_dyn pred, %a, %b
 
 // ── 2. Comparison Predicates ──────────────────────────────────────────────────
 // WHY: Unifying relational comparisons under a single OP_CMP opcode with a predicate
@@ -75,6 +88,19 @@ fn ssa_opcode_name op
     if op == OP_RET return "ret"
     if op == OP_CALL return "call"
     if op == OP_PHI return "phi"
+    if op == OP_FADD return "fadd"
+    if op == OP_FSUB return "fsub"
+    if op == OP_FMUL return "fmul"
+    if op == OP_FDIV return "fdiv"
+    if op == OP_FCMP return "fcmp"
+    if op == OP_I2F return "i2f"
+    if op == OP_STR_LIT return "str_lit"
+    if op == OP_STRUCT_NEW return "struct_new"
+    if op == OP_FIELD_LOAD return "field_load"
+    if op == OP_FIELD_STORE return "field_store"
+    if op == OP_FNEG return "fneg"
+    if op == OP_ADD_DYN return "add_dyn"
+    if op == OP_CMP_DYN return "cmp_dyn"
     return "unknown_op"
 
 fn ssa_cmp_pred_name pred
@@ -134,6 +160,10 @@ fn ssa_has_side_effects op
     if op == OP_RET return 1
     if op == OP_BR return 1
     if op == OP_JMP return 1
+    if op == OP_STRUCT_NEW return 1
+    if op == OP_FIELD_LOAD return 1
+    if op == OP_FIELD_STORE return 1
+    if op == OP_ADD_DYN return 1
     return 0
 
 // Returns 1 if the instruction defines an SSA output value register
@@ -142,4 +172,5 @@ fn ssa_produces_value op
     if op == OP_STORE return 0
     if op == OP_BR return 0
     if op == OP_JMP return 0
+    if op == OP_FIELD_STORE return 0
     return 1

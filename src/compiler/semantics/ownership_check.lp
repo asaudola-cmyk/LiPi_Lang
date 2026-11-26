@@ -84,6 +84,8 @@ import "compiler/frontend/ast/ast_node"
   oc_scope_depth: i64
   oc_errors: array
   oc_warnings: array
+  oc_struct_map: i64
+  oc_fn_consumes: i64
 @end
 
 @fn ownership_checker_new()
@@ -92,7 +94,20 @@ import "compiler/frontend/ast/ast_node"
   oc.oc_scope_depth = 0
   oc.oc_errors = []
   oc.oc_warnings = []
+  oc.oc_struct_map = dict()
+  oc.oc_fn_consumes = dict()
   return oc
+@end
+
+@fn oc_list_contains(arr, target)
+  @if arr == 0 || target == "" return 0 @end
+  i = 0
+  n = arr.len()
+  @while i < n
+    @if str_eq(arr[i], target) == 1 return 1 @end
+    i = i + 1
+  @end
+  return 0
 @end
 
 @fn oc_record_error(oc, code, msg, span)
@@ -348,14 +363,37 @@ import "compiler/frontend/ast/ast_node"
 @end
 
 @fn oc_expr_is_owned_alloc(expr)
-  // WHY: Identifies raw heap allocator expressions that confer non-Copy affine ownership.
+  // WHY: Identifies raw heap allocator & owned handle constructor expressions that confer non-Copy affine ownership.
   @if expr == 0 return 0 @end
+  @if str_eq(expr.kind, "StructLit") == 1
+    return 1
+  @end
   @if str_eq(expr.kind, "Call") == 1 || str_eq(expr.kind, "CallExpr") == 1
     cn = ""
-    @if expr.func != 0 cn = expr.func.name @end
+    @if expr.func != 0 && (str_eq(expr.func.kind, "Variable") == 1 || str_eq(expr.func.kind, "IDENT") == 1 || str_eq(expr.func.kind, "Identifier") == 1)
+      cn = expr.func.name
+    @end
     @if cn == "" && expr.callee != 0 cn = expr.callee.name @end
     @if cn == "" cn = expr.name @end
-    @if str_eq(cn, "alloc") == 1 || str_eq(cn, "malloc") == 1 || str_eq(cn, "sys_alloc") == 1 || str_eq(cn, "mem_alloc") == 1 || str_eq(cn, "slab_alloc") == 1 || str_eq(cn, "heap_alloc") == 1 || str_eq(cn, "buffer_alloc") == 1 || str_eq(cn, "বরাদ্দ") == 1 || str_eq(cn, "মেমরি_বরাদ্দ") == 1
+    @if str_eq(cn, "alloc") == 1 || str_eq(cn, "malloc") == 1 || str_eq(cn, "sys_alloc") == 1 || str_eq(cn, "sys_mmap") == 1 || str_eq(cn, "mem_alloc") == 1 || str_eq(cn, "slab_alloc") == 1 || str_eq(cn, "heap_alloc") == 1 || str_eq(cn, "buffer_alloc") == 1 || str_eq(cn, "buf_new") == 1 || str_eq(cn, "byte_buf_new") == 1 || str_eq(cn, "বরাদ্দ") == 1 || str_eq(cn, "মেমরি_বরাদ্দ") == 1 || str_eq(cn, "বাফার_তৈরি") == 1
+      return 1
+    @end
+  @end
+  return 0
+@end
+
+@fn oc_expr_is_owned_with_ctx(oc, expr)
+  // WHY: Recognizes heap allocations, anonymous struct literals, AND user-defined struct constructors as non-Copy affine values.
+  @if oc_expr_is_owned_alloc(expr) == 1 return 1 @end
+  @if oc == 0 || expr == 0 return 0 @end
+  @if str_eq(expr.kind, "Call") == 1 || str_eq(expr.kind, "CallExpr") == 1
+    cn = ""
+    @if expr.func != 0 && (str_eq(expr.func.kind, "Variable") == 1 || str_eq(expr.func.kind, "IDENT") == 1 || str_eq(expr.func.kind, "Identifier") == 1)
+      cn = expr.func.name
+    @end
+    @if cn == "" && expr.callee != 0 cn = expr.callee.name @end
+    @if cn == "" cn = expr.name @end
+    @if cn != "" && oc.oc_struct_map != 0 && has_key(oc.oc_struct_map, cn) == 1
       return 1
     @end
   @end
@@ -376,6 +414,305 @@ import "compiler/frontend/ast/ast_node"
   return name
 @end
 
+@fn oc_is_direct_consumer(cname)
+  @if cname == "" return 0 @end
+  @if str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1 || str_eq(cname, "free") == 1 || str_eq(cname, "user_free") == 1 || str_eq(cname, "_lipi_user_free") == 1 || str_eq(cname, "mem_free") == 1 || str_eq(cname, "sys_free") == 1 || str_eq(cname, "buf_free") == 1 || str_eq(cname, "list_free") == 1 || str_eq(cname, "heap_free") == 1 || str_eq(cname, "slab_free") == 1 || str_eq(cname, "munmap") == 1 || str_eq(cname, "sys_munmap") == 1 || str_eq(cname, "মুক্ত") == 1 || str_eq(cname, "মেমরি_মুক্তি") == 1 || str_eq(cname, "বাফার_মুক্তি") == 1
+    return 1
+  @end
+  return 0
+@end
+
+@fn oc_origin_clone(orig_d, orig_k)
+  nd = dict()
+  nk = []
+  i = 0
+  @while i < orig_k.len()
+    ky = orig_k[i]
+    nd[ky] = orig_d[ky]
+    nk = nk.push(ky)
+    i = i + 1
+  @end
+  return [nd, nk]
+@end
+
+@fn oc_origin_merge_may(dst_d, dst_k, src_d, src_k)
+  // WHY: Conservative may-consume join across branches: preserves existing positive parameter
+  // origins (so `if c { p = 0 }; free(p)` still sees `p` as origin) and imports new branch aliases.
+  i = 0
+  @while i < src_k.len()
+    ky = src_k[i]
+    @if has_key(src_d, ky) == 1 && src_d[ky] > 0
+      @if has_key(dst_d, ky) == 0 || dst_d[ky] == 0
+        @if has_key(dst_d, ky) == 0
+          push(dst_k, ky)
+        @end
+        dst_d[ky] = src_d[ky]
+      @end
+    @end
+    i = i + 1
+  @end
+  return 0
+@end
+
+@fn oc_extract_callee_name(expr)
+  @if expr == 0 return "" @end
+  cn = ""
+  @if expr.func != 0
+    fk = expr.func.kind
+    @if str_eq(fk, "Variable") == 1 || str_eq(fk, "IDENT") == 1 || str_eq(fk, "Identifier") == 1 || str_eq(fk, "MemberAccess") == 1 || str_eq(fk, "FieldAccess") == 1
+      cn = expr.func.name
+    @end
+  @elif expr.callee != 0
+    cn = expr.callee.name
+  @end
+  @if cn == "" cn = expr.name @end
+  return cn
+@end
+
+@fn oc_scan_expr_consumes(oc, expr, param_origin, flags)
+  // WHY: Scans an expression inside a function body to detect whether any parameter
+  // (or local alias of a parameter) flows into a consuming builtin or consuming user helper.
+  @if expr == 0 return 0 @end
+  changed = 0
+  k = expr.kind
+  @if str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1
+    return oc_scan_expr_consumes(oc, expr.expr, param_origin, flags)
+  @end
+  @if str_eq(k, "Call") == 1 || str_eq(k, "CallExpr") == 1
+    cname = oc_extract_callee_name(expr)
+    call_args = expr.args
+    @if call_args == 0 call_args = expr.params @end
+    @if oc_is_direct_consumer(cname) == 1 && call_args != 0 && call_args.len() >= 1
+      a0 = call_args[0]
+      @if a0 != 0 && (str_eq(a0.kind, "Variable") == 1 || str_eq(a0.kind, "IDENT") == 1 || str_eq(a0.kind, "Identifier") == 1)
+        an = a0.name
+        @if an == "" an = a0.target @end
+        @if an != "" && has_key(param_origin, an) == 1
+          orig_p = param_origin[an]
+          @if orig_p > 0
+            pidx = orig_p - 1
+            @if pidx < flags.len() && flags[pidx] == 0
+              list_set(flags, pidx, 1)
+              changed = 1
+            @end
+          @end
+        @end
+      @end
+    @elif cname != "" && oc.oc_fn_consumes != 0 && has_key(oc.oc_fn_consumes, cname) == 1 && call_args != 0
+      callee_flags = oc.oc_fn_consumes[cname]
+      ai = 0
+      @while ai < call_args.len() && ai < callee_flags.len()
+        @if callee_flags[ai] == 1
+          arg_n = call_args[ai]
+          @if arg_n != 0 && (str_eq(arg_n.kind, "Variable") == 1 || str_eq(arg_n.kind, "IDENT") == 1 || str_eq(arg_n.kind, "Identifier") == 1)
+            an2 = arg_n.name
+            @if an2 == "" an2 = arg_n.target @end
+            @if an2 != "" && has_key(param_origin, an2) == 1
+              orig_p2 = param_origin[an2]
+              @if orig_p2 > 0
+                pidx2 = orig_p2 - 1
+                @if pidx2 < flags.len() && flags[pidx2] == 0
+                  list_set(flags, pidx2, 1)
+                  changed = 1
+                @end
+              @end
+            @end
+          @end
+        @end
+        ai = ai + 1
+      @end
+    @end
+    @if call_args != 0
+      ci = 0
+      @while ci < call_args.len()
+        @if oc_scan_expr_consumes(oc, call_args[ci], param_origin, flags) == 1 changed = 1 @end
+        ci = ci + 1
+      @end
+    @end
+    return changed
+  @end
+  @if str_eq(k, "Binary") == 1 || str_eq(k, "BinaryExpr") == 1 || str_eq(k, "BinaryOp") == 1
+    @if oc_scan_expr_consumes(oc, expr.left, param_origin, flags) == 1 changed = 1 @end
+    @if oc_scan_expr_consumes(oc, expr.right, param_origin, flags) == 1 changed = 1 @end
+    return changed
+  @end
+  @if str_eq(k, "Unary") == 1 || str_eq(k, "UnaryOp") == 1
+    return oc_scan_expr_consumes(oc, expr.expr, param_origin, flags)
+  @end
+  @if str_eq(k, "Index") == 1 || str_eq(k, "Member") == 1 || str_eq(k, "MemberAccess") == 1
+    @if oc_scan_expr_consumes(oc, expr.left, param_origin, flags) == 1 changed = 1 @end
+    @if expr.right != 0 && oc_scan_expr_consumes(oc, expr.right, param_origin, flags) == 1 changed = 1 @end
+    @if expr.index != 0 && oc_scan_expr_consumes(oc, expr.index, param_origin, flags) == 1 changed = 1 @end
+    return changed
+  @end
+  @if str_eq(k, "Field") == 1
+    @if expr.value != 0 && oc_scan_expr_consumes(oc, expr.value, param_origin, flags) == 1 changed = 1 @end
+    @if expr.expr != 0 && oc_scan_expr_consumes(oc, expr.expr, param_origin, flags) == 1 changed = 1 @end
+    return changed
+  @end
+  @if str_eq(k, "ArrayLit") == 1 || str_eq(k, "MapLit") == 1 || str_eq(k, "StructLit") == 1
+    @if expr.elements != 0
+      ei = 0
+      @while ei < expr.elements.len()
+        @if oc_scan_expr_consumes(oc, expr.elements[ei], param_origin, flags) == 1 changed = 1 @end
+        ei = ei + 1
+      @end
+    @end
+    return changed
+  @end
+  return changed
+@end
+
+@fn oc_scan_stmts_consumes(oc, stmts, param_origin, origin_keys, flags)
+  @if stmts == 0 return 0 @end
+  changed = 0
+  i = 0
+  n = stmts.len()
+  @while i < n
+    st = stmts[i]
+    @if st != 0
+      k = st.kind
+      @if str_eq(k, "Assign") == 1 || str_eq(k, "AssignOp") == 1
+        @if st.index != 0 && oc_scan_expr_consumes(oc, st.index, param_origin, flags) == 1 changed = 1 @end
+        val_n = st.value
+        @if val_n == 0 val_n = st.expr @end
+        @if oc_scan_expr_consumes(oc, val_n, param_origin, flags) == 1 changed = 1 @end
+        tgt = st.target
+        @if str_eq(k, "Assign") == 1 && st.index == 0 && tgt != "" && str_contains(tgt, ".") == 0 && str_contains(tgt, "[") == 0
+          @if has_key(param_origin, tgt) == 0
+            push(origin_keys, tgt)
+          @end
+          @if val_n != 0 && (str_eq(val_n.kind, "Variable") == 1 || str_eq(val_n.kind, "IDENT") == 1 || str_eq(val_n.kind, "Identifier") == 1)
+            rvn = val_n.name
+            @if rvn == "" rvn = val_n.target @end
+            @if rvn != "" && has_key(param_origin, rvn) == 1 && param_origin[rvn] > 0
+              param_origin[tgt] = param_origin[rvn]
+            @else
+              param_origin[tgt] = 0
+            @end
+          @else
+            param_origin[tgt] = 0
+          @end
+        @end
+      @elif str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1 || str_eq(k, "Call") == 1 || str_eq(k, "CallExpr") == 1
+        @if oc_scan_expr_consumes(oc, st, param_origin, flags) == 1 changed = 1 @end
+      @elif str_eq(k, "Print") == 1 || str_eq(k, "Say") == 1 || str_eq(k, "Return") == 1 || str_eq(k, "ফেরত") == 1
+        @if st.expr != 0 && oc_scan_expr_consumes(oc, st.expr, param_origin, flags) == 1 changed = 1 @end
+        @if st.value != 0 && oc_scan_expr_consumes(oc, st.value, param_origin, flags) == 1 changed = 1 @end
+        @if st.args != 0
+          pai = 0
+          @while pai < st.args.len()
+            @if oc_scan_expr_consumes(oc, st.args[pai], param_origin, flags) == 1 changed = 1 @end
+            pai = pai + 1
+          @end
+        @end
+      @elif str_eq(k, "Defer") == 1
+        @if st.expr != 0 && oc_scan_expr_consumes(oc, st.expr, param_origin, flags) == 1 changed = 1 @end
+        dc = oc_origin_clone(param_origin, origin_keys)
+        @if oc_scan_stmts_consumes(oc, st.body, dc[0], dc[1], flags) == 1 changed = 1 @end
+        oc_origin_merge_may(param_origin, origin_keys, dc[0], dc[1])
+      @elif str_eq(k, "While") == 1 || str_eq(k, "WhileLoop") == 1 || str_eq(k, "যতক্ষণ") == 1
+        @if st.condition != 0 && oc_scan_expr_consumes(oc, st.condition, param_origin, flags) == 1 changed = 1 @end
+        wc = oc_origin_clone(param_origin, origin_keys)
+        @if oc_scan_stmts_consumes(oc, st.body, wc[0], wc[1], flags) == 1 changed = 1 @end
+        oc_origin_merge_may(param_origin, origin_keys, wc[0], wc[1])
+      @elif str_eq(k, "For") == 1 || str_eq(k, "ForLoop") == 1 || str_eq(k, "প্রতিটি") == 1
+        @if st.iterable != 0 && oc_scan_expr_consumes(oc, st.iterable, param_origin, flags) == 1 changed = 1 @end
+        fc = oc_origin_clone(param_origin, origin_keys)
+        @if oc_scan_stmts_consumes(oc, st.body, fc[0], fc[1], flags) == 1 changed = 1 @end
+        oc_origin_merge_may(param_origin, origin_keys, fc[0], fc[1])
+      @elif str_eq(k, "Block") == 1
+        @if oc_scan_stmts_consumes(oc, st.body, param_origin, origin_keys, flags) == 1 changed = 1 @end
+        @if oc_scan_stmts_consumes(oc, st.then_body, param_origin, origin_keys, flags) == 1 changed = 1 @end
+      @elif str_eq(k, "If") == 1 || str_eq(k, "IfStmt") == 1 || str_eq(k, "যদি") == 1 || str_eq(k, "TryCatch") == 1 || str_eq(k, "Try") == 1
+        @if st.condition != 0 && oc_scan_expr_consumes(oc, st.condition, param_origin, flags) == 1 changed = 1 @end
+        tc = oc_origin_clone(param_origin, origin_keys)
+        ec = oc_origin_clone(param_origin, origin_keys)
+        @if oc_scan_stmts_consumes(oc, st.then_body, tc[0], tc[1], flags) == 1 changed = 1 @end
+        @if oc_scan_stmts_consumes(oc, st.else_body, ec[0], ec[1], flags) == 1 changed = 1 @end
+        oc_origin_merge_may(param_origin, origin_keys, tc[0], tc[1])
+        oc_origin_merge_may(param_origin, origin_keys, ec[0], ec[1])
+        @if st.body != 0
+          bc = oc_origin_clone(param_origin, origin_keys)
+          @if oc_scan_stmts_consumes(oc, st.body, bc[0], bc[1], flags) == 1 changed = 1 @end
+          oc_origin_merge_may(param_origin, origin_keys, bc[0], bc[1])
+        @end
+      @elif str_eq(k, "MatchStmt") == 1 || str_eq(k, "Match") == 1
+        @if st.left != 0 && oc_scan_expr_consumes(oc, st.left, param_origin, flags) == 1 changed = 1 @end
+        @if st.elements != 0
+          mc = oc_origin_clone(param_origin, origin_keys)
+          @if oc_scan_stmts_consumes(oc, st.elements, mc[0], mc[1], flags) == 1 changed = 1 @end
+          oc_origin_merge_may(param_origin, origin_keys, mc[0], mc[1])
+        @end
+      @end
+    @end
+    i = i + 1
+  @end
+  return changed
+@end
+
+@fn oc_build_fn_consume_summaries(oc, stmts)
+  // WHY: Fixed-point inter-procedural parameter-consumption summary (`consumes_param[i]`).
+  // Catches custom wrapper destructors (`fn my_free p { free(p) }` and transitive wrappers)
+  // at call sites while keeping borrow-by-default for non-freeing helpers (`silicon_seal`, `mem_zero`).
+  @if oc == 0 || stmts == 0 return 0 @end
+  fn_list = []
+  i = 0
+  n = stmts.len()
+  @while i < n
+    st = stmts[i]
+    @if st != 0
+      k = st.kind
+      @if (str_eq(k, "FnDef") == 1 || str_eq(k, "Function") == 1 || str_eq(k, "কাজ") == 1 || str_eq(k, "Component") == 1) && st.name != ""
+        flags = []
+        @if st.params != 0
+          pi = 0
+          @while pi < st.params.len()
+            flags = flags.push(0)
+            pi = pi + 1
+          @end
+        @end
+        oc.oc_fn_consumes[st.name] = flags
+        fn_list = fn_list.push(st)
+      @end
+    @end
+    i = i + 1
+  @end
+  pass_num = 0
+  @while pass_num < 8
+    any_changed = 0
+    fi = 0
+    @while fi < fn_list.len()
+      fd = fn_list[fi]
+      flags = oc.oc_fn_consumes[fd.name]
+      @if fd.params != 0 && fd.params.len() > 0 && fd.body != 0
+        param_origin = dict()
+        origin_keys = []
+        pi2 = 0
+        @while pi2 < fd.params.len()
+          pm = fd.params[pi2]
+          pn = pm.param_name
+          @if pn == "" pn = pm.name @end
+          @if pn != ""
+            param_origin[pn] = pi2 + 1
+            origin_keys = origin_keys.push(pn)
+          @end
+          pi2 = pi2 + 1
+        @end
+        @if oc_scan_stmts_consumes(oc, fd.body, param_origin, origin_keys, flags) == 1
+          any_changed = 1
+        @end
+      @end
+      fi = fi + 1
+    @end
+    @if any_changed == 0
+      break
+    @end
+    pass_num = pass_num + 1
+  @end
+  return 1
+@end
+
 @fn oc_analyze_expr(oc, expr)
   @if expr == 0 return 1 @end
   k = expr.kind
@@ -391,14 +728,23 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(k, "Call") == 1 || str_eq(k, "CallExpr") == 1
     cname = ""
     @if expr.func != 0
-      cname = expr.func.name
+      fk_o = expr.func.kind
+      @if str_eq(fk_o, "Variable") == 1 || str_eq(fk_o, "IDENT") == 1 || str_eq(fk_o, "Identifier") == 1
+        cname = expr.func.name
+      @elif str_eq(fk_o, "MemberAccess") == 1 || str_eq(fk_o, "FieldAccess") == 1
+        cname = expr.func.name
+        oc_analyze_expr(oc, expr.func)
+      @else
+        // Indirect call callee (e.g. `fns[0](10)`): check callee expression for moved reads
+        oc_analyze_expr(oc, expr.func)
+      @end
     @elif expr.callee != 0
       cname = expr.callee.name
     @end
     @if cname == "" cname = expr.name @end
     call_args = expr.args
     @if call_args == 0 call_args = expr.params @end
-    @if (str_eq(cname, "move") == 1 || str_eq(cname, "drop") == 1 || str_eq(cname, "free") == 1 || str_eq(cname, "mem_free") == 1 || str_eq(cname, "sys_free") == 1 || str_eq(cname, "মুক্ত") == 1 || str_eq(cname, "মেমরি_মুক্তি") == 1) && call_args != 0 && call_args.len() >= 1
+    @if oc_is_direct_consumer(cname) == 1 && call_args != 0 && call_args.len() >= 1
       a0 = call_args[0]
       @if a0 != 0 && (str_eq(a0.kind, "Variable") == 1 || str_eq(a0.kind, "IDENT") == 1 || str_eq(a0.kind, "Identifier") == 1)
         aname = a0.name
@@ -414,6 +760,60 @@ import "compiler/frontend/ast/ast_node"
         @end
         return 1
       @end
+    @end
+    // Inter-procedural consuming wrapper propagation: order-independent aliasing check + consumes_param[i] move
+    @if cname != "" && oc.oc_fn_consumes != 0 && has_key(oc.oc_fn_consumes, cname) == 1 && call_args != 0
+      c_flags = oc.oc_fn_consumes[cname]
+      // Phase 1: Check all arguments for reads & detect aliasing between consumed and borrowed positions
+      consumed_names = []
+      consumed_idxs = []
+      pi_c = 0
+      @while pi_c < call_args.len()
+        arg_c = call_args[pi_c]
+        is_cvar = 0
+        @if pi_c < c_flags.len() && c_flags[pi_c] == 1 && arg_c != 0 && (str_eq(arg_c.kind, "Variable") == 1 || str_eq(arg_c.kind, "IDENT") == 1 || str_eq(arg_c.kind, "Identifier") == 1)
+          an_c = arg_c.name
+          @if an_c == "" an_c = arg_c.target @end
+          oc_check_read(oc, an_c, span_default())
+          consumed_names = consumed_names.push(an_c)
+          consumed_idxs = consumed_idxs.push(pi_c)
+          is_cvar = 1
+        @end
+        @if is_cvar == 0
+          oc_analyze_expr(oc, arg_c)
+        @end
+        pi_c = pi_c + 1
+      @end
+      // Detect order-independent aliasing: `wf(x, x)` where one arg consumes `x` and another borrows/uses `x`
+      ci_a = 0
+      @while ci_a < consumed_names.len()
+        cn_a = consumed_names[ci_a]
+        cidx_a = consumed_idxs[ci_a]
+        @if oc_lookup(oc, cn_a) != 0
+          pi_b = 0
+          @while pi_b < call_args.len()
+            @if pi_b != cidx_a && (pi_b >= c_flags.len() || c_flags[pi_b] == 0)
+              arg_b = call_args[pi_b]
+              @if arg_b != 0 && (str_eq(arg_b.kind, "Variable") == 1 || str_eq(arg_b.kind, "IDENT") == 1 || str_eq(arg_b.kind, "Identifier") == 1)
+                bn_a = arg_b.name
+                @if bn_a == "" bn_a = arg_b.target @end
+                @if str_eq(bn_a, cn_a) == 1
+                  oc_record_error(oc, ERR_USE_AFTER_MOVE(), "Aliasing use of value '" + cn_a + "' passed both as consumed and borrowed argument in call to '" + cname + "'", span_default())
+                @end
+              @end
+            @end
+            pi_b = pi_b + 1
+          @end
+        @end
+        ci_a = ci_a + 1
+      @end
+      // Phase 2: Move all consumed variable arguments
+      ci_m = 0
+      @while ci_m < consumed_names.len()
+        oc_force_move(oc, consumed_names[ci_m], span_default())
+        ci_m = ci_m + 1
+      @end
+      return 1
     @end
     @if call_args != 0
       pi = 0
@@ -490,6 +890,22 @@ import "compiler/frontend/ast/ast_node"
 
 @fn oc_analyze_stmt_list(oc, stmts)
   @if stmts == 0 return 1 @end
+  // Pre-register top-level StructDef declarations and build inter-procedural parameter-consumption summaries
+  @if oc.oc_scope_depth == 0
+    pi0 = 0
+    n0 = stmts.len()
+    @while pi0 < n0
+      st0 = stmts[pi0]
+      @if st0 != 0
+        k0 = st0.kind
+        @if (str_eq(k0, "StructDef") == 1 || str_eq(k0, "Struct") == 1 || str_eq(k0, "গঠন") == 1) && st0.name != ""
+          oc.oc_struct_map[st0.name] = 1
+        @end
+      @end
+      pi0 = pi0 + 1
+    @end
+    oc_build_fn_consume_summaries(oc, stmts)
+  @end
   i = 0
   n = stmts.len()
   @while i < n
@@ -550,6 +966,14 @@ import "compiler/frontend/ast/ast_node"
 
   k = stmt.kind
 
+  // 0. Struct Definition: register struct name as non-Copy owned type
+  @if str_eq(k, "StructDef") == 1 || str_eq(k, "Struct") == 1 || str_eq(k, "গঠন") == 1
+    @if stmt.name != ""
+      oc.oc_struct_map[stmt.name] = 1
+    @end
+    return 1
+  @end
+
   // 1. Function Definition: create isolated function scope
   @if str_eq(k, "FnDef") == 1 || str_eq(k, "Function") == 1 || str_eq(k, "কাজ") == 1 || str_eq(k, "Component") == 1
     oc_enter_scope(oc)
@@ -577,10 +1001,10 @@ import "compiler/frontend/ast/ast_node"
     val_node = stmt.value
     @if val_node == 0 val_node = stmt.expr @end
 
-    // Detect alias move: q = p when p holds a non-Copy owned heap handle
+    // Detect alias move: q = p when p holds a non-Copy owned heap handle or struct
     move_src = ""
     rhs_is_copy = 1
-    @if oc_expr_is_owned_alloc(val_node) == 1
+    @if oc_expr_is_owned_with_ctx(oc, val_node) == 1
       rhs_is_copy = 0
     @elif str_eq(k, "Assign") == 1 && val_node != 0 && (str_eq(val_node.kind, "Variable") == 1 || str_eq(val_node.kind, "IDENT") == 1 || str_eq(val_node.kind, "Identifier") == 1)
       rhs_vn = val_node.name

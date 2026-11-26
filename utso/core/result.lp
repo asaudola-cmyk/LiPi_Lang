@@ -16,12 +16,28 @@ import "utso/core/option"
   return r
 @end
 
+@fn result_map_fn(r, transform_fn)
+  // WHY: True higher-order monadic map taking a Lipi closure/function pointer!
+  @if is_ok(r) == 1
+    return ok(transform_fn(unwrap(r)))
+  @end
+  return r
+@end
+
 @fn result_and_then(r1, r2)
   // WHY: Monadic bind: if r1 is Ok, evaluates and returns r2; else propagates r1 error
   @if is_ok(r1) == 1
     return r2
   @end
   return r1
+@end
+
+@fn result_and_then_fn(r, bind_fn)
+  // WHY: True higher-order monadic bind invoking closure bind_fn(val) -> Result
+  @if is_ok(r) == 1
+    return bind_fn(unwrap(r))
+  @end
+  return r
 @end
 
 @fn result_or(r, default_val)

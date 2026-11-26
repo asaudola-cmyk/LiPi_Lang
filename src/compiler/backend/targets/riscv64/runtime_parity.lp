@@ -506,7 +506,7 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_addi(s, 2, 2, 32)
     riscv64_emit_ret(s)
 
-    // ── Helper D: __dict_set(a0=hdr, a1=key, a2=val) -> a0=hdr ──
+    // ── Helper D: __dict_set(a0=hdr, a1=key, a2=val, a3=val_tag) -> a0=hdr ──
     s.rv_dict_set_off = s.rv_code.len()
     riscv64_emit_addi(s, 2, 2, 0 - 80)
     riscv64_emit_sd(s, 1, 2, 72)
@@ -518,9 +518,11 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_sd(s, 22, 2, 24)
     riscv64_emit_sd(s, 23, 2, 16)
     riscv64_emit_sd(s, 24, 2, 8)
+    riscv64_emit_sd(s, 25, 2, 0)
     riscv64_emit_mv(s, 9, 10)                 // s1 = hdr
     riscv64_emit_mv(s, 18, 11)                // s2 = key
     riscv64_emit_mv(s, 19, 12)                // s3 = val
+    riscv64_emit_mv(s, 25, 13)                // s9 = val_tag (0=int, 1=float, 2=str)
     // Rehash if count * 2 >= cap
     riscv64_emit_ld(s, 20, 9, 0)              // s4 = count
     riscv64_emit_ld(s, 21, 9, 8)              // s5 = cap
@@ -551,7 +553,7 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_sd(s, 0, 9, 0)               // count = 0
     riscv64_emit_sd(s, 21, 9, 8)              // cap = new_cap
     riscv64_emit_sd(s, 24, 9, 16)             // slots = new_slots
-    // Re-insert each occupied slot from old_slots[0..old_cap-1]
+    // Re-insert each occupied slot from old_slots[0..old_cap-1] preserving val_tag
     riscv64_emit_li(s, 20, 0)                 // s4 = i = 0
     ri_loop = s.rv_code.len()
     bge_ri = s.rv_code.len()
@@ -559,16 +561,18 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_li(s, 5, 24)
     riscv64_emit_mul(s, 5, 20, 5)
     riscv64_emit_add(s, 5, 22, 5)
-    riscv64_emit_ld(s, 6, 5, 0)               // state
+    riscv64_emit_ld(s, 6, 5, 0)               // raw state | (tag << 8)
+    riscv64_emit_andi(s, 28, 6, 255)          // t3 = state_low
     riscv64_emit_addi(s, 7, 0, 1)
     bne_ri_skip = s.rv_code.len()
-    riscv64_emit_bne(s, 6, 7, 0)
+    riscv64_emit_bne(s, 28, 7, 0)
     riscv64_emit_mv(s, 10, 9)
     riscv64_emit_ld(s, 11, 5, 8)              // key
     riscv64_emit_ld(s, 12, 5, 16)             // val
+    riscv64_emit_srli(s, 13, 6, 8)            // a3 = preserved val_tag
     riscv64_synth_emit_call_helper(s, "__dict_set")
     ri_skip = s.rv_code.len()
-    riscv64_synth_patch_b(s, bne_ri_skip, 1, 6, 7, ri_skip)
+    riscv64_synth_patch_b(s, bne_ri_skip, 1, 28, 7, ri_skip)
     riscv64_emit_addi(s, 20, 20, 1)
     riscv64_emit_jal(s, 0, ri_loop - s.rv_code.len())
     ri_done = s.rv_code.len()
@@ -587,7 +591,8 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_li(s, 5, 24)
     riscv64_emit_mul(s, 5, 20, 5)
     riscv64_emit_add(s, 5, 22, 5)             // t0 = &slots[idx]
-    riscv64_emit_ld(s, 6, 5, 0)               // t1 = state
+    riscv64_emit_ld(s, 6, 5, 0)               // t1 = raw state
+    riscv64_emit_andi(s, 6, 6, 255)           // t1 = state_low
     beq_empty = s.rv_code.len()
     riscv64_emit_beq(s, 6, 0, 0)              // state == 0 -> insert!
     riscv64_emit_addi(s, 7, 0, 2)
@@ -610,10 +615,13 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_synth_emit_call_helper(s, "__dict_key_eq")
     beq_ds_next = s.rv_code.len()
     riscv64_emit_beq(s, 10, 0, 0)
-    // Update existing key in-place
+    // Update existing key in-place (preserving new val_tag in bits 8..15)
     riscv64_emit_li(s, 5, 24)
     riscv64_emit_mul(s, 5, 20, 5)
     riscv64_emit_add(s, 5, 22, 5)
+    riscv64_emit_slli(s, 6, 25, 8)
+    riscv64_emit_ori(s, 6, 6, 1)
+    riscv64_emit_sd(s, 6, 5, 0)
     riscv64_emit_sd(s, 19, 5, 16)
     jmp_ds_ret1 = s.rv_code.len()
     riscv64_emit_jal(s, 0, 0)
@@ -633,7 +641,8 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_li(s, 5, 24)
     riscv64_emit_mul(s, 5, 20, 5)
     riscv64_emit_add(s, 5, 22, 5)
-    riscv64_emit_addi(s, 6, 0, 1)
+    riscv64_emit_slli(s, 6, 25, 8)
+    riscv64_emit_ori(s, 6, 6, 1)
     riscv64_emit_sd(s, 6, 5, 0)
     riscv64_emit_sd(s, 18, 5, 8)
     riscv64_emit_sd(s, 19, 5, 16)
@@ -643,6 +652,7 @@ fn riscv64_synth_emit_dict_helpers s
     ds_ret_off = s.rv_code.len()
     riscv64_synth_patch_jal(s, jmp_ds_ret1, 0, ds_ret_off)
     riscv64_emit_mv(s, 10, 9)
+    riscv64_emit_ld(s, 25, 2, 0)
     riscv64_emit_ld(s, 24, 2, 8)
     riscv64_emit_ld(s, 23, 2, 16)
     riscv64_emit_ld(s, 22, 2, 24)
@@ -655,7 +665,7 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_addi(s, 2, 2, 80)
     riscv64_emit_ret(s)
 
-    // ── Helper E: __dict_get(a0=hdr, a1=key) -> a0=val (or 0) ──
+    // ── Helper E: __dict_get(a0=hdr, a1=key) -> (a0=val, a1=val_tag) ──
     s.rv_dict_get_off = s.rv_code.len()
     riscv64_emit_addi(s, 2, 2, 0 - 64)
     riscv64_emit_sd(s, 1, 2, 56)
@@ -678,6 +688,7 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_mul(s, 5, 22, 5)
     riscv64_emit_add(s, 5, 20, 5)
     riscv64_emit_ld(s, 6, 5, 0)
+    riscv64_emit_andi(s, 6, 6, 255)
     beq_dg_miss = s.rv_code.len()
     riscv64_emit_beq(s, 6, 0, 0)
     riscv64_emit_addi(s, 7, 0, 1)
@@ -691,7 +702,9 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_li(s, 5, 24)
     riscv64_emit_mul(s, 5, 22, 5)
     riscv64_emit_add(s, 5, 20, 5)
-    riscv64_emit_ld(s, 10, 5, 16)
+    riscv64_emit_ld(s, 6, 5, 0)
+    riscv64_emit_srli(s, 11, 6, 8)            // a1 = val_tag
+    riscv64_emit_ld(s, 10, 5, 16)             // a0 = val
     jmp_dg_ret = s.rv_code.len()
     riscv64_emit_jal(s, 0, 0)
     dg_next_off = s.rv_code.len()
@@ -703,6 +716,7 @@ fn riscv64_synth_emit_dict_helpers s
     dg_miss_off = s.rv_code.len()
     riscv64_synth_patch_b(s, beq_dg_miss, 0, 6, 0, dg_miss_off)
     riscv64_emit_addi(s, 10, 0, 0)
+    riscv64_emit_addi(s, 11, 0, 0)
     dg_ret_off = s.rv_code.len()
     riscv64_synth_patch_jal(s, jmp_dg_ret, 0, dg_ret_off)
     riscv64_emit_ld(s, 22, 2, 8)
@@ -738,6 +752,7 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_mul(s, 5, 22, 5)
     riscv64_emit_add(s, 5, 20, 5)
     riscv64_emit_ld(s, 6, 5, 0)
+    riscv64_emit_andi(s, 6, 6, 255)
     beq_dh_miss = s.rv_code.len()
     riscv64_emit_beq(s, 6, 0, 0)
     riscv64_emit_addi(s, 7, 0, 1)
@@ -795,6 +810,7 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_mul(s, 5, 22, 5)
     riscv64_emit_add(s, 5, 20, 5)
     riscv64_emit_ld(s, 6, 5, 0)
+    riscv64_emit_andi(s, 6, 6, 255)
     beq_dd_miss = s.rv_code.len()
     riscv64_emit_beq(s, 6, 0, 0)
     riscv64_emit_addi(s, 7, 0, 1)
@@ -838,24 +854,60 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_addi(s, 2, 2, 64)
     riscv64_emit_ret(s)
 
-    // ── Helper H: __container_get(a0=hdr, a1=key_or_idx) -> a0=val ──
+    // ── Helper H: __container_get(a0=hdr, a1=key_or_idx) -> (a0=val, a1=tag) ──
     s.rv_cont_get_off = s.rv_code.len()
+    if s.rv_freestanding == 0
+        s.rv_needs_throw_null = 1
+        riscv64_emit_li(s, 7, 4096)
+        bgeu_cg_ok = s.rv_code.len()
+        riscv64_emit_bgeu(s, 10, 7, 0)
+        riscv64_emit_addi(s, 2, 2, 0 - 16)
+        riscv64_emit_sd(s, 1, 2, 8)
+        riscv64_synth_emit_call_helper(s, "_lipi_throw_null_deref")
+        riscv64_emit_ld(s, 1, 2, 8)
+        riscv64_emit_addi(s, 2, 2, 16)
+        riscv64_emit_ret(s)
+        cg_ok_off = s.rv_code.len()
+        riscv64_synth_patch_b(s, bgeu_cg_ok, 7, 10, 7, cg_ok_off)
+    end
     riscv64_emit_ld(s, 5, 10, 24)
     riscv64_emit_li(s, 6, 1145652052)         // 'DICT'
     bne_cg_list = s.rv_code.len()
     riscv64_emit_bne(s, 5, 6, 0)
-    // Tail-jump directly into __dict_get
+    // Tail-jump directly into __dict_get (returns val in a0, val_tag in a1)
     riscv64_emit_jal(s, 0, s.rv_dict_get_off - s.rv_code.len())
     cg_list_off = s.rv_code.len()
     riscv64_synth_patch_b(s, bne_cg_list, 1, 5, 6, cg_list_off)
+    // Negative list indexing: if idx (a1) < 0, idx += hdr[0] (len)
+    bge_cg_pos = s.rv_code.len()
+    riscv64_emit_bge(s, 11, 0, 0)
+    riscv64_emit_ld(s, 7, 10, 0)
+    riscv64_emit_add(s, 11, 11, 7)
+    cg_pos_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_cg_pos, 5, 11, 0, cg_pos_off)
     riscv64_emit_ld(s, 12, 10, 16)            // data_ptr
     riscv64_emit_slli(s, 11, 11, 3)
     riscv64_emit_add(s, 10, 12, 11)
     riscv64_emit_ld(s, 10, 10, 0)
+    riscv64_emit_addi(s, 11, 0, 0)            // a1 = tag 0 for list elements
     riscv64_emit_ret(s)
 
-    // ── Helper I: __container_set(a0=hdr, a1=key_or_idx, a2=val) -> a0=hdr ──
+    // ── Helper I: __container_set(a0=hdr, a1=key_or_idx, a2=val, a3=val_tag) -> a0=hdr ──
     s.rv_cont_set_off = s.rv_code.len()
+    if s.rv_freestanding == 0
+        s.rv_needs_throw_null = 1
+        riscv64_emit_li(s, 7, 4096)
+        bgeu_cs_ok = s.rv_code.len()
+        riscv64_emit_bgeu(s, 10, 7, 0)
+        riscv64_emit_addi(s, 2, 2, 0 - 16)
+        riscv64_emit_sd(s, 1, 2, 8)
+        riscv64_synth_emit_call_helper(s, "_lipi_throw_null_deref")
+        riscv64_emit_ld(s, 1, 2, 8)
+        riscv64_emit_addi(s, 2, 2, 16)
+        riscv64_emit_ret(s)
+        cs_ok_off = s.rv_code.len()
+        riscv64_synth_patch_b(s, bgeu_cs_ok, 7, 10, 7, cs_ok_off)
+    end
     riscv64_emit_ld(s, 5, 10, 24)
     riscv64_emit_li(s, 6, 1145652052)         // 'DICT'
     bne_cs_list = s.rv_code.len()
@@ -863,6 +915,13 @@ fn riscv64_synth_emit_dict_helpers s
     riscv64_emit_jal(s, 0, s.rv_dict_set_off - s.rv_code.len())
     cs_list_off = s.rv_code.len()
     riscv64_synth_patch_b(s, bne_cs_list, 1, 5, 6, cs_list_off)
+    // Negative list indexing: if idx (a1) < 0, idx += hdr[0] (len)
+    bge_cs_pos = s.rv_code.len()
+    riscv64_emit_bge(s, 11, 0, 0)
+    riscv64_emit_ld(s, 7, 10, 0)
+    riscv64_emit_add(s, 11, 11, 7)
+    cs_pos_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_cs_pos, 5, 11, 0, cs_pos_off)
     riscv64_emit_ld(s, 13, 10, 16)
     riscv64_emit_slli(s, 11, 11, 3)
     riscv64_emit_add(s, 13, 13, 11)
@@ -1008,6 +1067,468 @@ fn riscv64_synth_emit_buf_helpers s
     riscv64_emit_ld(s, 9, 2, 16)
     riscv64_emit_ld(s, 1, 2, 24)
     riscv64_emit_addi(s, 2, 2, 32)
+    riscv64_emit_ret(s)
+    return 0
+end
+
+// ── 5. Null-Deref Trap, Tagged Printing & Real LSYM0 Stack Trace (RV64 Parity) ─
+
+fn riscv64_synth_emit_throw_null_helper s
+    // WHY: Shared RV64 trap throwing catchable NullPointerException (x26=3 [str tag], x27=msg)
+    // on null/low (< 4096) struct or container dereference, matching x86_64 _lipi_throw_null_deref.
+    s.rv_throw_null_off = s.rv_code.len()
+    riscv64_emit_load_rodata_str(s, 27, "NullPointerException: null struct dereference")
+    riscv64_emit_addi(s, 26, 0, 3)            // flag=1 + str_tag(2) = 3
+    riscv64_emit_addi(s, 10, 0, 0)
+    riscv64_emit_addi(s, 11, 0, 0)
+    riscv64_emit_ret(s)
+    return 0
+end
+
+fn riscv64_emit_null_guard_reg s toks reg
+    // WHY: Guards struct/pointer deref in register `reg` against < 4096 in hosted mode.
+    // Skipped in --freestanding bare-metal mode where low physical addresses may be valid MMIO.
+    if s.rv_freestanding == 1
+        return 0
+    end
+    s.rv_needs_throw_null = 1
+    riscv64_emit_li(s, 7, 4096)
+    bgeu_ok = s.rv_code.len()
+    riscv64_emit_bgeu(s, reg, 7, 0)
+    riscv64_synth_emit_call_helper(s, "_lipi_throw_null_deref")
+    if s.rv_try_patches.len() > 0
+        jmp_c = s.rv_code.len()
+        riscv64_emit_jal(s, 0, 0)
+        push(s.rv_try_patches[s.rv_try_patches.len() - 1], [jmp_c, 0])
+    elif s.rv_in_function == 1
+        riscv64_emit_addi(s, 2, 8, 0 - 1024)
+        riscv64_emit_defers(s, toks)
+        riscv64_emit_epilogue(s)
+    else
+        s.rv_needs_print_tagged = 1
+        riscv64_emit_mv(s, 10, 27)
+        riscv64_synth_emit_call_helper(s, "__print_str")
+        riscv64_emit_li(s, 10, 1)
+        riscv64_emit_li(s, 17, 94)
+        riscv64_emit_ecall(s)
+    end
+    ok_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bgeu_ok, 7, reg, 7, ok_off)
+    return 0
+end
+
+fn riscv64_synth_emit_print_tagged_helpers s
+    // WHY: Pure RV64I+M runtime printing for strings, IEEE-754 f64 floats, and dyn_tagged (a0=val, a1=tag).
+    // Uses zero FP instructions so binaries execute identically on hardware RV64 and riscv64_vm.lp.
+
+    // ── __print_str(a0=cstr_ptr) ──
+    s.rv_print_str_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 32)
+    riscv64_emit_sd(s, 1, 2, 24)
+    riscv64_emit_sd(s, 9, 2, 16)
+    riscv64_emit_mv(s, 9, 10)                 // s1 = ptr
+    beq_ps_nl = s.rv_code.len()
+    riscv64_emit_beq(s, 9, 0, 0)
+    riscv64_emit_li(s, 5, 0)                  // t0 = len
+    ps_loop = s.rv_code.len()
+    riscv64_emit_add(s, 6, 9, 5)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    beq_ps_w = s.rv_code.len()
+    riscv64_emit_beq(s, 7, 0, 0)
+    riscv64_emit_addi(s, 5, 5, 1)
+    riscv64_emit_jal(s, 0, ps_loop - s.rv_code.len())
+    ps_w_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_ps_w, 0, 7, 0, ps_w_off)
+    beq_ps_nl2 = s.rv_code.len()
+    riscv64_emit_beq(s, 5, 0, 0)
+    riscv64_emit_li(s, 10, 1)
+    riscv64_emit_mv(s, 11, 9)
+    riscv64_emit_mv(s, 12, 5)
+    riscv64_emit_li(s, 17, 64)
+    riscv64_emit_ecall(s)
+    ps_nl_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_ps_nl, 0, 9, 0, ps_nl_off)
+    riscv64_synth_patch_b(s, beq_ps_nl2, 0, 5, 0, ps_nl_off)
+    riscv64_emit_li(s, 5, 10)
+    riscv64_emit_sb(s, 5, 2, 0)
+    riscv64_emit_li(s, 10, 1)
+    riscv64_emit_mv(s, 11, 2)
+    riscv64_emit_li(s, 12, 1)
+    riscv64_emit_li(s, 17, 64)
+    riscv64_emit_ecall(s)
+    riscv64_emit_ld(s, 9, 2, 16)
+    riscv64_emit_ld(s, 1, 2, 24)
+    riscv64_emit_addi(s, 2, 2, 32)
+    riscv64_emit_ret(s)
+
+    // ── __print_float(a0=ieee754_f64_bits) ──
+    s.rv_print_float_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 112)
+    riscv64_emit_sd(s, 1, 2, 104)
+    riscv64_emit_sd(s, 9, 2, 96)
+    riscv64_emit_sd(s, 18, 2, 88)
+    riscv64_emit_sd(s, 19, 2, 80)
+    riscv64_emit_sd(s, 20, 2, 72)
+    riscv64_emit_sd(s, 21, 2, 64)
+    riscv64_emit_mv(s, 9, 10)                 // s1 = bits
+    riscv64_emit_mv(s, 18, 2)                 // s2 = out cursor (starts at sp+0)
+    // Sign check
+    riscv64_emit_srli(s, 5, 9, 63)
+    beq_pf_pos = s.rv_code.len()
+    riscv64_emit_beq(s, 5, 0, 0)
+    riscv64_emit_li(s, 5, 45)                 // '-'
+    riscv64_emit_sb(s, 5, 18, 0)
+    riscv64_emit_addi(s, 18, 18, 1)
+    pf_pos_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_pf_pos, 0, 5, 0, pf_pos_off)
+    // abs_bits in t1 (x6)
+    riscv64_emit_slli(s, 6, 9, 1)
+    riscv64_emit_srli(s, 6, 6, 1)
+    bne_pf_nz = s.rv_code.len()
+    riscv64_emit_bne(s, 6, 0, 0)
+    // Zero: emit "0.0\n"
+    riscv64_emit_li(s, 5, 48)
+    riscv64_emit_sb(s, 5, 18, 0)
+    riscv64_emit_li(s, 5, 46)
+    riscv64_emit_sb(s, 5, 18, 1)
+    riscv64_emit_li(s, 5, 48)
+    riscv64_emit_sb(s, 5, 18, 2)
+    riscv64_emit_li(s, 5, 10)
+    riscv64_emit_sb(s, 5, 18, 3)
+    riscv64_emit_addi(s, 18, 18, 4)
+    jmp_pf_flush0 = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    pf_nz_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_pf_nz, 1, 6, 0, pf_nz_off)
+    // exp -> s3 (x19), full_mant -> s4 (x20)
+    riscv64_emit_srli(s, 19, 6, 52)
+    riscv64_emit_addi(s, 19, 19, 0 - 1023)
+    riscv64_emit_li(s, 7, 1)
+    riscv64_emit_slli(s, 7, 7, 52)
+    riscv64_emit_addi(s, 5, 7, 0 - 1)
+    riscv64_emit_and(s, 20, 6, 5)
+    riscv64_emit_or(s, 20, 20, 7)
+    // Split into int_part (s5=x21) and 32-bit frac (s1=x9)
+    riscv64_emit_li(s, 5, 52)
+    blt_pf_lt52 = s.rv_code.len()
+    riscv64_emit_blt(s, 19, 5, 0)
+    riscv64_emit_sub(s, 6, 19, 5)
+    riscv64_emit_sll(s, 21, 20, 6)
+    riscv64_emit_li(s, 9, 0)
+    jmp_pf_have1 = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    pf_lt52_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_pf_lt52, 4, 19, 5, pf_lt52_off)
+    riscv64_emit_li(s, 5, 20)
+    blt_pf_lt20 = s.rv_code.len()
+    riscv64_emit_blt(s, 19, 5, 0)
+    riscv64_emit_li(s, 5, 52)
+    riscv64_emit_sub(s, 6, 5, 19)             // shift = 52 - exp (<= 32)
+    riscv64_emit_srl(s, 21, 20, 6)
+    riscv64_emit_li(s, 7, 32)
+    riscv64_emit_sub(s, 7, 7, 6)
+    riscv64_emit_sll(s, 9, 20, 7)
+    riscv64_emit_slli(s, 9, 9, 32)
+    riscv64_emit_srli(s, 9, 9, 32)
+    jmp_pf_have2 = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    pf_lt20_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_pf_lt20, 4, 19, 5, pf_lt20_off)
+    blt_pf_neg = s.rv_code.len()
+    riscv64_emit_blt(s, 19, 0, 0)
+    riscv64_emit_li(s, 5, 52)
+    riscv64_emit_sub(s, 6, 5, 19)             // shift = 52 - exp (> 32)
+    riscv64_emit_srl(s, 21, 20, 6)
+    riscv64_emit_addi(s, 7, 6, 0 - 32)
+    riscv64_emit_srl(s, 9, 20, 7)
+    riscv64_emit_slli(s, 9, 9, 32)
+    riscv64_emit_srli(s, 9, 9, 32)
+    jmp_pf_have3 = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    pf_neg_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_pf_neg, 4, 19, 0, pf_neg_off)
+    riscv64_emit_li(s, 21, 0)
+    riscv64_emit_li(s, 5, 0 - 32)
+    blt_pf_tiny = s.rv_code.len()
+    riscv64_emit_blt(s, 19, 5, 0)
+    riscv64_emit_li(s, 6, 20)
+    riscv64_emit_sub(s, 6, 6, 19)             // 20 - exp
+    riscv64_emit_srl(s, 9, 20, 6)
+    riscv64_emit_slli(s, 9, 9, 32)
+    riscv64_emit_srli(s, 9, 9, 32)
+    jmp_pf_have4 = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    pf_tiny_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_pf_tiny, 4, 19, 5, pf_tiny_off)
+    riscv64_emit_li(s, 9, 0)
+    pf_have_off = s.rv_code.len()
+    riscv64_synth_patch_jal(s, jmp_pf_have1, 0, pf_have_off)
+    riscv64_synth_patch_jal(s, jmp_pf_have2, 0, pf_have_off)
+    riscv64_synth_patch_jal(s, jmp_pf_have3, 0, pf_have_off)
+    riscv64_synth_patch_jal(s, jmp_pf_have4, 0, pf_have_off)
+    // dec6 = ((f32 * 1000000) + 2^31) >> 32
+    riscv64_emit_li(s, 5, 1000000)
+    riscv64_emit_mul(s, 9, 9, 5)
+    riscv64_emit_li(s, 6, 1)
+    riscv64_emit_slli(s, 6, 6, 31)
+    riscv64_emit_add(s, 9, 9, 6)
+    riscv64_emit_srli(s, 9, 9, 32)
+    blt_pf_nc = s.rv_code.len()
+    riscv64_emit_blt(s, 9, 5, 0)
+    riscv64_emit_addi(s, 21, 21, 1)
+    riscv64_emit_li(s, 9, 0)
+    pf_nc_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_pf_nc, 4, 9, 5, pf_nc_off)
+    // Convert int_part (s5) into reverse digits at sp+32..sp+63
+    riscv64_emit_addi(s, 6, 2, 63)            // t1 = tmp ptr
+    riscv64_emit_li(s, 7, 10)
+    pf_idig = s.rv_code.len()
+    riscv64_emit_remu(s, 5, 21, 7)
+    riscv64_emit_addi(s, 5, 5, 48)
+    riscv64_emit_sb(s, 5, 6, 0)
+    riscv64_emit_addi(s, 6, 6, 0 - 1)
+    riscv64_emit_divu(s, 21, 21, 7)
+    riscv64_emit_bne(s, 21, 0, pf_idig - s.rv_code.len())
+    // Copy int digits forward into s2
+    riscv64_emit_addi(s, 6, 6, 1)
+    riscv64_emit_addi(s, 7, 2, 64)
+    pf_icp = s.rv_code.len()
+    bge_pf_icp = s.rv_code.len()
+    riscv64_emit_bge(s, 6, 7, 0)
+    riscv64_emit_lbu(s, 5, 6, 0)
+    riscv64_emit_sb(s, 5, 18, 0)
+    riscv64_emit_addi(s, 18, 18, 1)
+    riscv64_emit_addi(s, 6, 6, 1)
+    riscv64_emit_jal(s, 0, pf_icp - s.rv_code.len())
+    pf_icp_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_pf_icp, 5, 6, 7, pf_icp_done)
+    // Decimal point '.'
+    riscv64_emit_li(s, 5, 46)
+    riscv64_emit_sb(s, 5, 18, 0)
+    riscv64_emit_addi(s, 18, 18, 1)
+    // Emit 6 fractional digits into sp+32..sp+37
+    riscv64_emit_li(s, 6, 5)                  // idx = 5..0
+    riscv64_emit_li(s, 7, 10)
+    pf_fdig = s.rv_code.len()
+    blt_pf_fdig = s.rv_code.len()
+    riscv64_emit_blt(s, 6, 0, 0)
+    riscv64_emit_remu(s, 5, 9, 7)
+    riscv64_emit_addi(s, 5, 5, 48)
+    riscv64_emit_addi(s, 28, 2, 32)
+    riscv64_emit_add(s, 28, 28, 6)
+    riscv64_emit_sb(s, 5, 28, 0)
+    riscv64_emit_divu(s, 9, 9, 7)
+    riscv64_emit_addi(s, 6, 6, 0 - 1)
+    riscv64_emit_jal(s, 0, pf_fdig - s.rv_code.len())
+    pf_fdig_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, blt_pf_fdig, 4, 6, 0, pf_fdig_done)
+    // Trim trailing '0' down to minimum length 1
+    riscv64_emit_li(s, 6, 6)                  // len = 6
+    riscv64_emit_li(s, 7, 1)
+    riscv64_emit_li(s, 29, 48)                // '0'
+    pf_trim = s.rv_code.len()
+    bge_pf_trim_done = s.rv_code.len()
+    riscv64_emit_bge(s, 7, 6, 0)              // if 1 >= len, stop
+    riscv64_emit_addi(s, 28, 2, 31)
+    riscv64_emit_add(s, 28, 28, 6)
+    riscv64_emit_lbu(s, 5, 28, 0)
+    bne_pf_trim_done = s.rv_code.len()
+    riscv64_emit_bne(s, 5, 29, 0)
+    riscv64_emit_addi(s, 6, 6, 0 - 1)
+    riscv64_emit_jal(s, 0, pf_trim - s.rv_code.len())
+    pf_trim_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_pf_trim_done, 5, 7, 6, pf_trim_done)
+    riscv64_synth_patch_b(s, bne_pf_trim_done, 1, 5, 29, pf_trim_done)
+    // Copy trimmed frac digits into s2
+    riscv64_emit_li(s, 7, 0)
+    pf_fcp = s.rv_code.len()
+    bge_pf_fcp = s.rv_code.len()
+    riscv64_emit_bge(s, 7, 6, 0)
+    riscv64_emit_addi(s, 28, 2, 32)
+    riscv64_emit_add(s, 28, 28, 7)
+    riscv64_emit_lbu(s, 5, 28, 0)
+    riscv64_emit_sb(s, 5, 18, 0)
+    riscv64_emit_addi(s, 18, 18, 1)
+    riscv64_emit_addi(s, 7, 7, 1)
+    riscv64_emit_jal(s, 0, pf_fcp - s.rv_code.len())
+    pf_fcp_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_pf_fcp, 5, 7, 6, pf_fcp_done)
+    // Trailing '\n'
+    riscv64_emit_li(s, 5, 10)
+    riscv64_emit_sb(s, 5, 18, 0)
+    riscv64_emit_addi(s, 18, 18, 1)
+    pf_flush_off = s.rv_code.len()
+    riscv64_synth_patch_jal(s, jmp_pf_flush0, 0, pf_flush_off)
+    riscv64_emit_sub(s, 12, 18, 2)            // a2 = len
+    riscv64_emit_mv(s, 11, 2)                 // a1 = sp
+    riscv64_emit_li(s, 10, 1)                 // a0 = stdout
+    riscv64_emit_li(s, 17, 64)                // SYS_write
+    riscv64_emit_ecall(s)
+    riscv64_emit_ld(s, 21, 2, 64)
+    riscv64_emit_ld(s, 20, 2, 72)
+    riscv64_emit_ld(s, 19, 2, 80)
+    riscv64_emit_ld(s, 18, 2, 88)
+    riscv64_emit_ld(s, 9, 2, 96)
+    riscv64_emit_ld(s, 1, 2, 104)
+    riscv64_emit_addi(s, 2, 2, 112)
+    riscv64_emit_ret(s)
+
+    // ── __print_tagged(a0=val, a1=tag) -> tail-dispatches to __print_str/float/int ──
+    s.rv_print_tagged_off = s.rv_code.len()
+    riscv64_emit_li(s, 5, 2)
+    bne_pt_not_str = s.rv_code.len()
+    riscv64_emit_bne(s, 11, 5, 0)
+    riscv64_emit_jal(s, 0, s.rv_print_str_off - s.rv_code.len())
+    pt_not_str_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_pt_not_str, 1, 11, 5, pt_not_str_off)
+    riscv64_emit_li(s, 5, 1)
+    bne_pt_not_flt = s.rv_code.len()
+    riscv64_emit_bne(s, 11, 5, 0)
+    riscv64_emit_jal(s, 0, s.rv_print_float_off - s.rv_code.len())
+    pt_not_flt_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_pt_not_flt, 1, 11, 5, pt_not_flt_off)
+    riscv64_emit_addi(s, 2, 2, 0 - 16)
+    riscv64_emit_sd(s, 1, 2, 8)
+    riscv64_synth_emit_call_print_int(s)
+    riscv64_emit_ld(s, 1, 2, 8)
+    riscv64_emit_addi(s, 2, 2, 16)
+    riscv64_emit_ret(s)
+    return 0
+end
+
+fn riscv64_synth_emit_stack_trace_helper s
+    // WHY: Real RV64 frame-pointer walker resolving live call chain against LSYM0 .rodata table
+    // into "  at <fn_name> (line <decl_line>)\n" — exact x86_64 stack_trace() parity!
+    s.rv_stack_trace_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 128)
+    riscv64_emit_sd(s, 1, 2, 120)
+    riscv64_emit_sd(s, 8, 2, 112)
+    riscv64_emit_sd(s, 9, 2, 104)
+    riscv64_emit_sd(s, 18, 2, 96)
+    riscv64_emit_sd(s, 19, 2, 88)
+    riscv64_emit_sd(s, 20, 2, 80)
+    riscv64_emit_sd(s, 21, 2, 72)
+    riscv64_emit_sd(s, 22, 2, 64)
+    riscv64_emit_sd(s, 23, 2, 56)
+    riscv64_emit_sd(s, 24, 2, 48)
+    riscv64_emit_sd(s, 25, 2, 40)
+    // Capture immediate caller PC (ra) and frame pointer (s0)
+    riscv64_emit_mv(s, 9, 1)                  // s1 = cur_pc
+    riscv64_emit_mv(s, 18, 8)                 // s2 = cur_fp
+    // Allocate ByteBuffer for trace string
+    riscv64_emit_li(s, 10, 256)
+    riscv64_synth_emit_call_helper(s, "__buf_new")
+    riscv64_emit_mv(s, 19, 10)                // s3 = buf
+    // Load patched LSYM0 table, code_base, rodata_base virtual addresses
+    s.rv_lsym_patch_lsym = s.rv_code.len()
+    riscv64_emit_lui(s, 20, 0)
+    riscv64_emit_addi(s, 20, 20, 0)           // s4 = lsym_vaddr
+    s.rv_lsym_patch_code = s.rv_code.len()
+    riscv64_emit_lui(s, 21, 0)
+    riscv64_emit_addi(s, 21, 21, 0)           // s5 = code_base_vaddr
+    s.rv_lsym_patch_ro = s.rv_code.len()
+    riscv64_emit_lui(s, 22, 0)
+    riscv64_emit_addi(s, 22, 22, 0)           // s6 = rodata_base_vaddr
+    riscv64_emit_li(s, 23, 0)                 // s7 = depth = 0
+    // Walk up to 16 stack frames
+    st_frame_loop = s.rv_code.len()
+    riscv64_emit_li(s, 5, 16)
+    bge_st_done1 = s.rv_code.len()
+    riscv64_emit_bge(s, 23, 5, 0)
+    bltu_st_skip = s.rv_code.len()
+    riscv64_emit_bltu(s, 9, 21, 0)            // skip if pc < code_base
+    riscv64_emit_sub(s, 24, 9, 21)
+    riscv64_emit_addi(s, 24, 24, 0 - 4)       // s8 = rel_pc of call site
+    // Linear scan LSYM0 entries: fcnt = lwu 8(s4), entries start at s4 + 16, stride 24
+    riscv64_emit_lwu(s, 5, 20, 8)             // t0 = fcnt
+    riscv64_emit_li(s, 25, 0)                 // s9 = i = 0
+    st_sym_loop = s.rv_code.len()
+    bge_st_sym_done = s.rv_code.len()
+    riscv64_emit_bge(s, 25, 5, 0)
+    riscv64_emit_li(s, 6, 24)
+    riscv64_emit_mul(s, 6, 25, 6)
+    riscv64_emit_addi(s, 6, 6, 16)
+    riscv64_emit_add(s, 6, 20, 6)             // t1 = &entry[i]
+    riscv64_emit_lwu(s, 7, 6, 0)              // start_off
+    bltu_st_sym_next1 = s.rv_code.len()
+    riscv64_emit_bltu(s, 24, 7, 0)
+    riscv64_emit_lwu(s, 7, 6, 4)              // end_off
+    bgeu_st_sym_next2 = s.rv_code.len()
+    riscv64_emit_bgeu(s, 24, 7, 0)
+    // Matched function! Extract name_ptr (s9) and decl_line (s8)
+    riscv64_emit_lwu(s, 7, 6, 8)              // name_ro_off
+    riscv64_emit_add(s, 25, 22, 7)            // s9 = rodata_base + name_ro_off
+    riscv64_emit_lwu(s, 24, 6, 12)            // s8 = decl_line
+    // Append "  at " + name + " (line " + dec(decl_line) + ")\n"
+    riscv64_emit_mv(s, 10, 19)
+    riscv64_emit_load_rodata_str(s, 11, "  at ")
+    riscv64_synth_emit_call_helper(s, "__buf_write_str")
+    riscv64_emit_mv(s, 10, 19)
+    riscv64_emit_mv(s, 11, 25)
+    riscv64_synth_emit_call_helper(s, "__buf_write_str")
+    riscv64_emit_mv(s, 10, 19)
+    riscv64_emit_load_rodata_str(s, 11, " (line ")
+    riscv64_synth_emit_call_helper(s, "__buf_write_str")
+    // Format decl_line (s8) backwards into sp+0..sp+31 (null-terminated at sp+31)
+    riscv64_emit_addi(s, 6, 2, 31)
+    riscv64_emit_sb(s, 0, 6, 0)
+    riscv64_emit_li(s, 7, 10)
+    st_ldig = s.rv_code.len()
+    riscv64_emit_addi(s, 6, 6, 0 - 1)
+    riscv64_emit_remu(s, 5, 24, 7)
+    riscv64_emit_addi(s, 5, 5, 48)
+    riscv64_emit_sb(s, 5, 6, 0)
+    riscv64_emit_divu(s, 24, 24, 7)
+    riscv64_emit_bne(s, 24, 0, st_ldig - s.rv_code.len())
+    riscv64_emit_mv(s, 10, 19)
+    riscv64_emit_mv(s, 11, 6)
+    riscv64_synth_emit_call_helper(s, "__buf_write_str")
+    riscv64_emit_mv(s, 10, 19)
+    riscv64_emit_load_rodata_str(s, 11, ")\n")
+    riscv64_synth_emit_call_helper(s, "__buf_write_str")
+    jmp_st_next_frame = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    st_sym_next_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bltu_st_sym_next1, 6, 24, 7, st_sym_next_off)
+    riscv64_synth_patch_b(s, bgeu_st_sym_next2, 7, 24, 7, st_sym_next_off)
+    riscv64_emit_addi(s, 25, 25, 1)
+    riscv64_emit_jal(s, 0, st_sym_loop - s.rv_code.len())
+    st_next_frame_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bltu_st_skip, 6, 9, 21, st_next_frame_off)
+    riscv64_synth_patch_b(s, bge_st_sym_done, 5, 25, 5, st_next_frame_off)
+    riscv64_synth_patch_jal(s, jmp_st_next_frame, 0, st_next_frame_off)
+    // Advance to caller frame: pc = [fp - 8], fp = [fp - 16]
+    beq_st_done2 = s.rv_code.len()
+    riscv64_emit_beq(s, 18, 0, 0)
+    riscv64_emit_andi(s, 5, 18, 7)
+    bne_st_done3 = s.rv_code.len()
+    riscv64_emit_bne(s, 5, 0, 0)
+    riscv64_emit_ld(s, 9, 18, 0 - 8)
+    riscv64_emit_ld(s, 6, 18, 0 - 16)
+    beq_st_done4 = s.rv_code.len()
+    riscv64_emit_beq(s, 6, 18, 0)
+    riscv64_emit_mv(s, 18, 6)
+    riscv64_emit_addi(s, 23, 23, 1)
+    riscv64_emit_jal(s, 0, st_frame_loop - s.rv_code.len())
+    st_done_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_st_done1, 5, 23, 5, st_done_off)
+    riscv64_synth_patch_b(s, beq_st_done2, 0, 18, 0, st_done_off)
+    riscv64_synth_patch_b(s, bne_st_done3, 1, 5, 0, st_done_off)
+    riscv64_synth_patch_b(s, beq_st_done4, 0, 6, 18, st_done_off)
+    riscv64_emit_mv(s, 10, 19)
+    riscv64_synth_emit_call_helper(s, "__buf_to_str")
+    riscv64_emit_ld(s, 25, 2, 40)
+    riscv64_emit_ld(s, 24, 2, 48)
+    riscv64_emit_ld(s, 23, 2, 56)
+    riscv64_emit_ld(s, 22, 2, 64)
+    riscv64_emit_ld(s, 21, 2, 72)
+    riscv64_emit_ld(s, 20, 2, 80)
+    riscv64_emit_ld(s, 19, 2, 88)
+    riscv64_emit_ld(s, 18, 2, 96)
+    riscv64_emit_ld(s, 9, 2, 104)
+    riscv64_emit_ld(s, 8, 2, 112)
+    riscv64_emit_ld(s, 1, 2, 120)
+    riscv64_emit_addi(s, 2, 2, 128)
     riscv64_emit_ret(s)
     return 0
 end

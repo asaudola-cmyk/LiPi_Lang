@@ -147,8 +147,9 @@ fn arm64_synth_compile_program tokens
     // against the Linux ELF virtual address space (0x400000+), and resolves call sites.
     s = arm64_synth_new()
 
-    // 1. Emit top-level stack frame prologue at entry point (offset 0)
-    // and clear callee-saved exception state registers (X27=flag, X28=value).
+    // 1. Zero initial frame pointer X29 so LSYM0 stack_trace() terminates cleanly at root,
+    // emit top-level stack frame prologue, and clear exception registers (X27=flag, X28=value).
+    arm64_emit_movz_x(s, 29, 0, 0)
     arm64_emit_prologue(s)
     arm64_emit_movz_x(s, 27, 0, 0)
     arm64_emit_movz_x(s, 28, 0, 0)
@@ -202,15 +203,34 @@ fn arm64_synth_compile_program tokens
     arm64_emit_defers(s, tokens)
     if has_main == 0 and s.a64_called_main == 0
         arm64_emit_movz_x(s, 0, 0, 0) // exit code 0
-    // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on AArch64) with status code in X0
-    arm64_emit_movz_x(s, 8, 94, 0)
-    arm64_emit_svc(s, 0)
+    if s.a64_freestanding == 1
+        // Bare-metal ARM64 halt loop (wfi; b -4) — ZERO Linux SVC instructions!
+        arm64_synth_emit32(s, 3573751935) // wfi (0xD503207F)
+        arm64_emit_b(s, 0 - 1)            // b -4
+    else
+        // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on AArch64) with status code in X0
+        arm64_emit_movz_x(s, 8, 94, 0)
+        arm64_emit_svc(s, 0)
+    end
 
-    // 5. Emit print_int helper if required
+    // 5. Emit print_int, tagged print, and LSYM0 stack_trace helpers if required
+    if s.a64_needs_print_tagged == 1
+        s.synth_needs_print_int = 1
+    end
+    if s.a64_needs_stack_trace == 1
+        s.a64_needs_buf = 1
+        s.synth_needs_alloc = 1
+    end
     if s.synth_needs_print_int == 1
         arm64_synth_emit_print_int_helper(s)
+    if s.a64_needs_print_uint == 1
+        arm64_synth_emit_print_uint_helper(s)
+    if s.a64_needs_print_tagged == 1
+        arm64_synth_emit_print_tagged_helpers(s)
+    if s.a64_needs_stack_trace == 1
+        arm64_synth_emit_stack_trace_helper(s)
 
-    // 5b. Emit sovereign alloc, list_create, list_push, dict, bytebuffer, and file_write helpers if required
+    // 5b. Emit sovereign alloc, list_create, list_push, dict, throw_null, bytebuffer, and file_write helpers if required
     if s.a64_needs_list_push == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_list_push_helper(s)
@@ -220,6 +240,8 @@ fn arm64_synth_compile_program tokens
     if s.a64_needs_dict == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_dict_helpers(s)
+    if s.a64_needs_throw_null == 1
+        arm64_synth_emit_throw_null_helper(s)
     if s.a64_needs_buf == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_buf_helpers(s)
@@ -236,6 +258,24 @@ fn arm64_synth_compile_program tokens
         found_rel = 0
         if cr.a64_cr_target_name == "__print_int"
             resolved_addr = s.synth_print_int_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__print_uint"
+            resolved_addr = s.a64_print_uint_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__print_str"
+            resolved_addr = s.a64_print_str_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__print_float"
+            resolved_addr = s.a64_print_float_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__print_tagged"
+            resolved_addr = s.a64_print_tagged_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "_lipi_throw_null_deref"
+            resolved_addr = s.a64_throw_null_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "_lipi_stack_trace"
+            resolved_addr = s.a64_stack_trace_off
             found_rel = 1
         elif cr.a64_cr_target_name == "__alloc"
             resolved_addr = s.synth_alloc_off
@@ -311,9 +351,24 @@ fn arm64_synth_compile_program tokens
         end
         ci = ci + 1
 
-    // 7. Resolve 64-Bit Virtual Memory String & Strict-W^X RW Heap Relocations
+    // 7. Emit LSYM0 symbol table in .rodata (hosted mode), then resolve 64-Bit Virtual Memory String & Strict-W^X RW Heap Relocations
+    lsym_ro_off = 0
+    if s.a64_freestanding == 0
+        lsym_ro_off = arm64_synth_emit_lsym_rodata(s)
+    end
     total_code_size = s.synth_code.len()
-    rodata_base_vaddr = 4194536 + total_code_size // 0x4000E8 + total_code_size
+    code_base_vaddr = 4194536 // 0x4000E8
+    rodata_base_vaddr = code_base_vaddr + total_code_size
+
+    if s.a64_lsym_patch_lsym >= 0
+        arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_lsym, 22, rodata_base_vaddr + lsym_ro_off)
+    end
+    if s.a64_lsym_patch_code >= 0
+        arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_code, 23, code_base_vaddr)
+    end
+    if s.a64_lsym_patch_ro >= 0
+        arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_ro, 24, rodata_base_vaddr)
+    end
 
     if s.synth_needs_alloc == 1 and s.a64_alloc_rw_patch_off >= 0
         rx_tot = 232 + total_code_size + s.synth_rodata.len()

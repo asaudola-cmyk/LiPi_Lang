@@ -11,11 +11,14 @@ import "utso/core/error"
 @struct Option
   is_some: i64
   value: i64
+  opt_tag: i64
 @end
 
+@fn OPTION_MAGIC_TAG() return 1330664497 @end // "OPT1" disambiguates Option from raw 0/false/null
+
 @fn option_some(val)
-  // WHY: Constructs an Option representing the presence of a value
-  opt = { is_some: 1, value: val }
+  // WHY: Constructs an explicitly tagged Option representing presence (even when val == 0 / false!)
+  opt = { is_some: 1, value: val, opt_tag: 1330664497 }
   return opt
 @end
 
@@ -25,9 +28,15 @@ import "utso/core/error"
 @end
 
 @fn option_none()
-  // WHY: Constructs an Option representing the absence of a value
-  opt = { is_some: 0, value: 0 }
+  // WHY: Constructs an explicitly tagged Option representing absence
+  opt = { is_some: 0, value: 0, opt_tag: 1330664497 }
   return opt
+@end
+
+@fn option_is_valid(opt)
+  @if opt == 0 return 0 @end
+  @if opt.opt_tag == 1330664497 return 1 @end
+  return 0
 @end
 
 @fn none_option()
@@ -81,10 +90,26 @@ import "utso/core/error"
   return option_none()
 @end
 
+@fn option_map_fn(opt, transform_fn)
+  // WHY: True higher-order monadic functor map taking a Lipi closure/function pointer!
+  @if is_some(opt) == 1
+    return option_some(transform_fn(opt.value))
+  @end
+  return option_none()
+@end
+
 @fn option_and_then(opt1, opt2)
   // WHY: Monadic flat_map: returns opt2 if opt1 is Some; propagates None
   @if is_some(opt1) == 1
     return opt2
+  @end
+  return option_none()
+@end
+
+@fn option_and_then_fn(opt, bind_fn)
+  // WHY: True higher-order monadic bind invoking closure bind_fn(val) -> Option
+  @if is_some(opt) == 1
+    return bind_fn(opt.value)
   @end
   return option_none()
 @end

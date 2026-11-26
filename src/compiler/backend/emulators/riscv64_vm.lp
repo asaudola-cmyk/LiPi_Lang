@@ -298,9 +298,9 @@ fn riscv64_vm_step vm
             riscv64_reg_write(vm, rd, res)
         elif funct3 == 5 // SRLI / SRAI
             shamt = (inst / 1048576) & 63
-            if funct7 == 0
-                res = src_val >> shamt
-                riscv64_reg_write(vm, rd, res)
+            if ((inst / 1073741824) & 1) == 0
+                u_srli: u64 = src_val
+                riscv64_reg_write(vm, rd, u_srli >> shamt)
             else
                 res = src_val >> shamt
                 riscv64_reg_write(vm, rd, res)
@@ -326,17 +326,33 @@ fn riscv64_vm_step vm
         if funct7 == 1
             if funct3 == 0 // MUL
                 riscv64_reg_write(vm, rd, val1 * val2)
-            elif funct3 == 4 or funct3 == 5 // DIV / DIVU
+            elif funct3 == 4 // DIV (signed)
                 if val2 == 0
                     riscv64_reg_write(vm, rd, 0 - 1)
                 else
                     riscv64_reg_write(vm, rd, val1 / val2)
                 end
-            elif funct3 == 6 or funct3 == 7 // REM / REMU
+            elif funct3 == 5 // DIVU (unsigned 64-bit)
+                if val2 == 0
+                    riscv64_reg_write(vm, rd, 0 - 1)
+                else
+                    u1: u64 = val1
+                    u2: u64 = val2
+                    riscv64_reg_write(vm, rd, u1 / u2)
+                end
+            elif funct3 == 6 // REM (signed)
                 if val2 == 0
                     riscv64_reg_write(vm, rd, val1)
                 else
                     riscv64_reg_write(vm, rd, val1 % val2)
+                end
+            elif funct3 == 7 // REMU (unsigned 64-bit)
+                if val2 == 0
+                    riscv64_reg_write(vm, rd, val1)
+                else
+                    u1m: u64 = val1
+                    u2m: u64 = val2
+                    riscv64_reg_write(vm, rd, u1m % u2m)
                 end
             end
         elif funct3 == 0
@@ -363,8 +379,14 @@ fn riscv64_vm_step vm
             riscv64_reg_write(vm, rd, u_lt)
         elif funct3 == 4 // XOR
             riscv64_reg_write(vm, rd, val1 ^ val2)
-        elif funct3 == 5 // SRL / SRA
-            riscv64_reg_write(vm, rd, val1 >> (val2 & 63))
+        elif funct3 == 5 // SRL (funct7==0) / SRA (funct7==32)
+            sh = val2 & 63
+            if funct7 == 32
+                riscv64_reg_write(vm, rd, val1 >> sh)
+            else
+                u_srl: u64 = val1
+                riscv64_reg_write(vm, rd, u_srl >> sh)
+            end
         elif funct3 == 6 // OR
             riscv64_reg_write(vm, rd, val1 | val2)
         elif funct3 == 7 // AND

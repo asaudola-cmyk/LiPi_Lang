@@ -141,8 +141,9 @@ fn riscv64_synth_compile_program tokens
     // against the Linux ELF virtual address space (0x400000+), and resolves call sites.
     s = riscv64_synth_new()
 
-    // 1. Emit top-level stack frame prologue at entry point (offset 0)
-    // and clear callee-saved exception state registers (x26=s10 flag, x27=s11 value).
+    // 1. Zero initial frame pointer s0 (x8) so LSYM0 stack_trace() terminates cleanly at root,
+    // emit top-level stack frame prologue, and clear exception registers (x26=s10 flag, x27=s11 value).
+    riscv64_emit_addi(s, 8, 0, 0)
     riscv64_emit_prologue(s)
     riscv64_emit_addi(s, 26, 0, 0)
     riscv64_emit_addi(s, 27, 0, 0)
@@ -195,15 +196,34 @@ fn riscv64_synth_compile_program tokens
     // 4. Top-level exit epilogue (preserve main() return code in a0 when auto-called)
     if has_main == 0 and s.rv_called_main == 0
         riscv64_emit_addi(s, 10, 0, 0) // exit code 0 in a0
-    // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on RISC-V) with status code in a0
-    riscv64_emit_li(s, 17, 94)
-    riscv64_emit_ecall(s)
+    if s.rv_freestanding == 1
+        // Bare-metal RISC-V 64 halt loop (wfi; j -4) — ZERO Linux ECALL instructions!
+        riscv64_synth_emit32(s, 273678451) // wfi (0x10500073)
+        riscv64_emit_jal(s, 0, 0 - 4)      // j -4
+    else
+        // Exit whole process cleanly via Linux SYS_exit_group (syscall 94 on RISC-V) with status code in a0
+        riscv64_emit_li(s, 17, 94)
+        riscv64_emit_ecall(s)
+    end
 
-    // 5. Emit print_int helper if required
+    // 5. Emit print_int, tagged print, throw_null, and LSYM0 stack_trace helpers if required
+    if s.rv_needs_print_tagged == 1
+        s.rv_needs_print_int = 1
+    end
+    if s.rv_needs_stack_trace == 1
+        s.rv_needs_buf = 1
+        s.rv_needs_alloc = 1
+    end
     if s.rv_needs_print_int == 1
         riscv64_synth_emit_print_int_helper(s)
+    if s.rv_needs_print_uint == 1
+        riscv64_synth_emit_print_uint_helper(s)
+    if s.rv_needs_print_tagged == 1
+        riscv64_synth_emit_print_tagged_helpers(s)
+    if s.rv_needs_stack_trace == 1
+        riscv64_synth_emit_stack_trace_helper(s)
 
-    // 5b. Emit sovereign alloc, list_create, list_push, dict, buf, and file_write helpers if required
+    // 5b. Emit sovereign alloc, list_create, list_push, dict, buf, throw_null, and file_write helpers if required
     if s.rv_needs_list_push == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_list_push_helper(s)
@@ -213,6 +233,8 @@ fn riscv64_synth_compile_program tokens
     if s.rv_needs_dict == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_dict_helpers(s)
+    if s.rv_needs_throw_null == 1
+        riscv64_synth_emit_throw_null_helper(s)
     if s.rv_needs_buf == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_buf_helpers(s)
@@ -229,6 +251,24 @@ fn riscv64_synth_compile_program tokens
         found_rel = 0
         if cr.rv_cr_target_name == "__print_int"
             resolved_addr = s.rv_print_int_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__print_uint"
+            resolved_addr = s.rv_print_uint_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__print_str"
+            resolved_addr = s.rv_print_str_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__print_float"
+            resolved_addr = s.rv_print_float_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__print_tagged"
+            resolved_addr = s.rv_print_tagged_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "_lipi_throw_null_deref"
+            resolved_addr = s.rv_throw_null_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "_lipi_stack_trace"
+            resolved_addr = s.rv_stack_trace_off
             found_rel = 1
         elif cr.rv_cr_target_name == "__alloc"
             resolved_addr = s.rv_alloc_off
@@ -300,9 +340,24 @@ fn riscv64_synth_compile_program tokens
         end
         ci = ci + 1
 
-    // 7. Resolve 64-Bit Virtual Memory String & Allocator RW .data Relocations
+    // 7. Emit LSYM0 symbol table in .rodata (hosted mode), then resolve 64-Bit Virtual Memory String & Allocator RW .data Relocations
+    lsym_ro_off = 0
+    if s.rv_freestanding == 0
+        lsym_ro_off = riscv64_synth_emit_lsym_rodata(s)
+    end
     total_code_size = s.rv_code.len()
-    rodata_base_vaddr = 4194536 + total_code_size // 0x4000E8 (232B header) + total_code_size
+    code_base_vaddr = 4194536 // 0x4000E8 (232B header)
+    rodata_base_vaddr = code_base_vaddr + total_code_size
+
+    if s.rv_lsym_patch_lsym >= 0
+        riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_lsym, 20, rodata_base_vaddr + lsym_ro_off)
+    end
+    if s.rv_lsym_patch_code >= 0
+        riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_code, 21, code_base_vaddr)
+    end
+    if s.rv_lsym_patch_ro >= 0
+        riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_ro, 22, rodata_base_vaddr)
+    end
 
     ri = 0
     while ri < s.rv_str_relocs.len()

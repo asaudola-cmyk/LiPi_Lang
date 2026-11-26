@@ -1,15 +1,19 @@
 // ==============================================================================
-// 👑 TEST 41: BARE-METAL MULTIBOOT KERNEL & SOVEREIGN OS RUNTIME
-// ⚡ 100% Pure Lipi First 1.0.0 Indentation Syntax | Zero Linux | Zero POSIX
+// 👑 TEST 41: HOST-SIDE LEGACY MULTIBOOT1 / IDT / VGA ABI UNIT TEST
+// ⚡ 100% Pure Lipi First 1.0.0 | Userspace Verification of `utso/os/kernel_multiboot.lp`
 // ==============================================================================
-
-// WHY: Verifies the entire baremetal execution chain defined in std/kernel.lp:
-// 1. Multiboot 1 Specification Header generation (0x1BADB002) and checksum validation.
-// 2. Hardware VGA 80x25 Text Mode physical buffer address (0xB8000) & 16-bit cell packing.
-// 3. 256-Entry x86_64 Long Mode Interrupt Descriptor Table (IDT) allocation & gate setup.
-// 4. 8259 Programmable Interrupt Controller (PIC) IRQ remapping & EOI acknowledgment.
-// 5. PS/2 Keyboard Controller Driver (Scan Code Set 1 translation & break code filtering).
-// 6. Baremetal VGA Kernel Shell commands (help, info, mem, calc, clear, echo, reboot, exit).
+//
+// NOTE ON SEPARATION & DEPRECATION:
+// - `utso/os/kernel_multiboot.lp` is the legacy userspace-testable Multiboot 1 /
+//   8259 PIC / VGA / IDT data-structure model kept for regression compatibility.
+// - Real Ring-0 freestanding bare-metal kernels (--target=multiboot2-bare /
+//   --target=uefi --freestanding) use `utso/silicon/*` (Multiboot2, Local APIC,
+//   PCI/PCIe, AHCI, xHCI, NVMe, 16550 COM1 serial, UEFI GOP) & `utso/bare/*`
+//   and are verified directly under live QEMU bare-metal execution.
+//
+// WHY: Verifies the legacy Multiboot 1 header bytes (0x1BADB002), VGA 16-bit
+// cell packing, 256-entry 64-bit IDT descriptor encoding, 8259 PIC masks,
+// PS/2 scancode set 1 translation, and kernel shell command logic.
 
 include "utso/os/kernel_multiboot.lp"
 

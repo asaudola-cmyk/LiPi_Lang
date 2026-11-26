@@ -23,6 +23,7 @@ fn print_usage
     say "  lipi <command> [arguments...]\n"
     say "\033[1;36mCore Compiler Commands:\033[0m"
     say "  \033[1;32mbuild\033[0m <file.lp> [-o out] [--target=arch] [--kavach]  Compile native binary (with optional Kavach safety check)"
+    say "  \033[1;32mlink\033[0m <a.o> <b.o> ... [-o out] [--entry=sym]  Link multiple ELF64 .o objects natively (0% GNU ld)"
     say "  \033[1;32mrun\033[0m <file.lp> [--jit] [args...]           Compile and execute program"
     say "  \033[1;32m-e\033[0m '<expr>'                                Direct one-liner evaluation"
     say "  \033[1;32mtest\033[0m [suite]                                Run regression test suite"
@@ -1163,6 +1164,22 @@ fn main
             ai = ai + 1
         end
         return handle_build(src_file, out_f, target_f, extra_flags)
+
+    if cmd == "link"
+        if argc < 3
+            say "Usage: lipi link <a.o> [b.o ...] [-o <out>] [--entry=<sym>] [--base-addr=<addr>]"
+            return 1
+        end
+        l_args = list()
+        push(l_args, "link")
+        li = 2
+        while li < argc
+            push(l_args, get(args, li))
+            li = li + 1
+        end
+        c_bin_l = resolve_bin_path("lipc_bin")
+        return spawn_exec_list(c_bin_l, l_args)
+    end
 
     if cmd == "test"
         suite = ""

@@ -170,11 +170,17 @@ import "utso/net/tls/tls13"
 @end
 
 @fn http_format_request(method, path, headers, body)
+  // WHY: O(N) ByteBuffer wire assembly (eliminates O(N^2) str_concat heap churn on large headers/bodies!)
   @if path == "" path = "/" @end
   safe_method = _http_strip_crlf(method)
   safe_path = _http_strip_crlf(path)
   @if safe_path == "" safe_path = "/" @end
-  req = str_concat(safe_method, str_concat(" ", str_concat(safe_path, " HTTP/1.1\r\n")))
+  blen = str_len(body)
+  bb = buf_new(256 + blen)
+  buf_write_str(bb, safe_method)
+  buf_write_str(bb, " ")
+  buf_write_str(bb, safe_path)
+  buf_write_str(bb, " HTTP/1.1\r\n")
 
   has_content_length = 0
   i = 0
@@ -187,26 +193,32 @@ import "utso/net/tls/tls13"
       has_content_length = 1
     @end
     @if h_name != ""
-      req = str_concat(req, str_concat(h_name, str_concat(": ", str_concat(h_val, "\r\n"))))
+      buf_write_str(bb, h_name)
+      buf_write_str(bb, ": ")
+      buf_write_str(bb, h_val)
+      buf_write_str(bb, "\r\n")
     @end
     i = i + 1
   @end
 
-  blen = str_len(body)
   @if blen > 0 && has_content_length == 0
-    req = str_concat(req, str_concat("Content-Length: ", str_concat(to_str(blen), "\r\n")))
+    buf_write_str(bb, "Content-Length: ")
+    buf_write_str(bb, to_str(blen))
+    buf_write_str(bb, "\r\n")
   @end
 
-  req = str_concat(req, "\r\n")
+  buf_write_str(bb, "\r\n")
   @if blen > 0
-    req = str_concat(req, body)
+    buf_write_str(bb, body)
   @end
 
+  req = buf_to_str(bb)
+  buf_free(bb)
   return req
 @end
 
 @! ----------------------------------------------------------------------------
-@! 3. HTTP/1.1 Response Formatter (Server Helper)
+@! 3. HTTP/1.1 Response Formatter (Server Helper — O(N) ByteBuffer)
 @! ----------------------------------------------------------------------------
 
 @fn http_format_response(status_code, content_type_or_reason, body)
@@ -220,14 +232,22 @@ import "utso/net/tls/tls13"
   @end
 
   blen = str_len(body)
-  resp = str_concat("HTTP/1.1 ", str_concat(to_str(status_code), str_concat(" ", str_concat(reason, "\r\n"))))
-  resp = str_concat(resp, str_concat("Content-Type: ", str_concat(content_type, "\r\n")))
-  resp = str_concat(resp, str_concat("Content-Length: ", str_concat(to_str(blen), "\r\n")))
-  resp = str_concat(resp, "Connection: close\r\n\r\n")
+  bb = buf_new(256 + blen)
+  buf_write_str(bb, "HTTP/1.1 ")
+  buf_write_str(bb, to_str(status_code))
+  buf_write_str(bb, " ")
+  buf_write_str(bb, reason)
+  buf_write_str(bb, "\r\nContent-Type: ")
+  buf_write_str(bb, content_type)
+  buf_write_str(bb, "\r\nContent-Length: ")
+  buf_write_str(bb, to_str(blen))
+  buf_write_str(bb, "\r\nConnection: close\r\n\r\n")
   @if blen > 0
-    resp = str_concat(resp, body)
+    buf_write_str(bb, body)
   @end
 
+  resp = buf_to_str(bb)
+  buf_free(bb)
   return resp
 @end
 
@@ -1227,20 +1247,7 @@ import "utso/net/tls/tls13"
   @end
 
   tcp_stream_write(stream, req)
-  acc = buf_new(4096)
-  @while 1 == 1
-    chunk = tcp_stream_read(stream, 8192)
-    @if chunk == "" || str_len(chunk) == 0
-      break
-    @end
-    buf_write_str(acc, chunk)
-    @if _http_is_wire_response_complete(buf_to_str(acc)) == 1
-      break
-    @end
-  @end
-
-  raw_resp = buf_to_str(acc)
-  buf_free(acc)
+  raw_resp = _http_read_framed_response_fd(stream.tcp_fd)
   tcp_stream_close(stream)
   return http_parse_response(raw_resp)
 @end
@@ -1300,6 +1307,249 @@ import "utso/net/tls/tls13"
 
 @fn http_request_with_timeout(method, url, headers, body, timeout_ms) -> HttpResponse
   return _http_execute_to(method, url, headers, body, timeout_ms)
+@end
+
+@! ── Keep-Alive Connection Pool & Cancellable Request Context ─────────────────
+@struct HttpCancelToken
+  hct_cancelled: i64
+  hct_deadline_ms: i64
+@end
+
+@fn http_cancel_token_new(timeout_ms)
+  dl = 0
+  @if timeout_ms > 0 dl = clock_ms() + timeout_ms @end
+  return { hct_cancelled: 0, hct_deadline_ms: dl }
+@end
+
+@fn http_cancel_trigger(tok: HttpCancelToken)
+  @if tok != 0 tok.hct_cancelled = 1 @end
+  return 1
+@end
+
+@fn http_cancel_is_aborted(tok: HttpCancelToken)
+  @if tok == 0 return 0 @end
+  @if tok.hct_cancelled != 0 return 1 @end
+  @if tok.hct_deadline_ms > 0 && clock_ms() >= tok.hct_deadline_ms return 1 @end
+  return 0
+@end
+
+@fn http_socket_set_timeout_ms(fd, timeout_ms)
+  // WHY: Configures Linux SO_RCVTIMEO (20) & SO_SNDTIMEO (21) with struct timeval {tv_sec, tv_usec}.
+  @if fd < 0 || timeout_ms <= 0 return 0 @end
+  tv = malloc(16)
+  @if tv <= 0 return 0 @end
+  mem_write(tv, 0, timeout_ms / 1000)
+  mem_write(tv, 8, (timeout_ms % 1000) * 1000)
+  syscall(54, fd, 1, 20, tv, 16, 0)
+  syscall(54, fd, 1, 21, tv, 16, 0)
+  free(tv, 16)
+  return 1
+@end
+
+@struct HttpConnPool
+  hcp_max_idle: i64
+  hcp_keys: array
+  hcp_fds: array
+  hcp_ts: array
+@end
+
+@fn http_pool_new(max_idle)
+  mi = max_idle
+  @if mi <= 0 mi = 16 @end
+  return { hcp_max_idle: mi, hcp_keys: [], hcp_fds: [], hcp_ts: [] }
+@end
+
+@fn http_pool_acquire(pool: HttpConnPool, host_port_key)
+  @if pool == 0 return 0 - 1 @end
+  i = 0
+  n = pool.hcp_keys.len()
+  @while i < n
+    @if pool.hcp_keys[i] == host_port_key && pool.hcp_fds[i] >= 0
+      fd = pool.hcp_fds[i]
+      list_set(pool.hcp_fds, i, 0 - 1)
+      return fd
+    @end
+    i = i + 1
+  @end
+  return 0 - 1
+@end
+
+@fn http_pool_release(pool: HttpConnPool, host_port_key, fd)
+  @if pool == 0 || fd < 0 return 0 @end
+  i = 0
+  n = pool.hcp_keys.len()
+  @while i < n
+    @if pool.hcp_fds[i] < 0
+      list_set(pool.hcp_keys, i, host_port_key)
+      list_set(pool.hcp_fds, i, fd)
+      list_set(pool.hcp_ts, i, clock_ms())
+      return 1
+    @end
+    i = i + 1
+  @end
+  @if n < pool.hcp_max_idle
+    pool.hcp_keys = pool.hcp_keys.push(host_port_key)
+    pool.hcp_fds = pool.hcp_fds.push(fd)
+    pool.hcp_ts = pool.hcp_ts.push(clock_ms())
+    return 1
+  @end
+  syscall(3, fd, 0, 0, 0, 0, 0)
+  return 0
+@end
+
+@fn http_pool_close_all(pool: HttpConnPool)
+  @if pool == 0 return 0 @end
+  i = 0
+  @while i < pool.hcp_fds.len()
+    @if pool.hcp_fds[i] >= 0
+      syscall(3, pool.hcp_fds[i], 0, 0, 0, 0, 0)
+      list_set(pool.hcp_fds, i, 0 - 1)
+    @end
+    i = i + 1
+  @end
+  return 1
+@end
+
+@fn _http_read_framed_response_fd(fd)
+  // WHY: O(N) ByteBuffer HTTP/1.1 response reader supporting both Content-Length and
+  // Transfer-Encoding: chunked without O(N^2) buf_to_str() copies per read chunk,
+  // enabling true HTTP/1.1 keep-alive connection reuse without waiting for TCP EOF!
+  acc = buf_new(4096)
+  rbuf = lipi_alloc(8192)
+  @if rbuf <= 0
+    buf_free(acc)
+    return ""
+  @end
+  hdr_end = 0 - 1
+  sep_len = 4
+  clen = 0 - 1
+  is_chunked = 0
+  @while 1 == 1
+    nr = sys_read(fd, rbuf, 8192)
+    @if nr == (0 - 4) continue @end
+    @if nr <= 0 break @end
+    buf_write_mem(acc, rbuf, nr)
+    @if hdr_end < 0
+      hdr_end = _http_buf_find_hdr_end(acc)
+      sep_len = 4
+      @if hdr_end >= 0
+        hdr_s = bytes_to_str(buf_ptr(acc), hdr_end + sep_len)
+        head_r = http_parse_response(hdr_s)
+        te_v = _http_find_header_value(head_r.headers, "transfer-encoding")
+        @if te_v != "" && contains(str_to_lower(te_v), "chunked") == 1
+          is_chunked = 1
+        @else
+          cl_v = _http_find_header_value(head_r.headers, "content-length")
+          @if cl_v != ""
+            clen = parse_int_str(cl_v)
+          @end
+        @end
+      @end
+    @end
+    @if hdr_end >= 0
+      body_off = hdr_end + sep_len
+      have_b = buf_len(acc) - body_off
+      @if is_chunked == 1
+        tail_s = bytes_to_str(buf_ptr(acc) + body_off, have_b)
+        @if contains(tail_s, "\r\n0\r\n\r\n") == 1 || starts_with(tail_s, "0\r\n\r\n") == 1
+          break
+        @end
+      @elif clen >= 0 && have_b >= clen
+        break
+      @end
+    @end
+  @end
+  lipi_free_sized(rbuf, 8192)
+  raw_r = buf_to_str(acc)
+  buf_free(acc)
+  return raw_r
+@end
+
+@fn http_pool_request(pool: HttpConnPool, method, url, extra_headers, body) -> HttpResponse
+  // WHY: Executes an HTTP/1.1 request over a pooled persistent Keep-Alive TCP connection,
+  // automatically reconnecting once if a pooled idle socket was closed by the peer.
+  u = http_parse_url(url)
+  @if u.protocol == "https"
+    return _http_execute(method, url, extra_headers, body)
+  @end
+  key = string_concat(u.host, string_concat(":", int_to_str(u.port)))
+  ka_hdrs = []
+  has_conn = 0
+  hi = 0
+  @while hi < extra_headers.len()
+    h = extra_headers[hi]
+    hn = _http_hdr_name(h)
+    @if hn == "Connection" || hn == "connection" has_conn = 1 @end
+    ka_hdrs = ka_hdrs.push(h)
+    hi = hi + 1
+  @end
+  @if has_conn == 0
+    ka_hdrs = ka_hdrs.push(HttpHeader("Connection", "keep-alive"))
+  @end
+  req_hdrs = _http_build_client_headers(u, ka_hdrs)
+  req_str = http_format_request(method, u.path, req_hdrs, body)
+  req_len = str_len(req_str)
+  req_ptr = _http_raw_ptr(req_str)
+
+  attempt = 0
+  @while attempt < 2
+    fd = http_pool_acquire(pool, key)
+    reused = 1
+    @if fd < 0
+      reused = 0
+      st = tcp_stream_connect(u.host, u.port)
+      fd = st.tcp_fd
+    @end
+    @if fd < 0
+      return HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
+    @end
+    http_socket_set_timeout_ms(fd, 10000)
+
+    sent = 0
+    w_ok = 1
+    @while sent < req_len
+      w = sys_write(fd, req_ptr + sent, req_len - sent)
+      @if w == (0 - 4) continue @end
+      @if w <= 0
+        w_ok = 0
+        break
+      @end
+      sent = sent + w
+    @end
+
+    raw_resp = ""
+    @if w_ok == 1
+      raw_resp = _http_read_framed_response_fd(fd)
+    @end
+    @if str_len(raw_resp) == 0 && reused == 1 && attempt == 0
+      syscall(3, fd, 0, 0, 0, 0, 0)
+      attempt = attempt + 1
+      continue
+    @end
+    resp = http_parse_response(raw_resp)
+    srv_conn = str_to_lower(_http_find_header_value(resp.headers, "connection"))
+    @if resp.status_code > 0 && srv_conn != "close"
+      http_pool_release(pool, key, fd)
+    @else
+      syscall(3, fd, 0, 0, 0, 0, 0)
+    @end
+    return resp
+  @end
+  return HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
+@end
+
+@fn http_request_cancellable(method, url, headers, body, tok: HttpCancelToken) -> HttpResponse
+  @if http_cancel_is_aborted(tok) == 1
+    return { status_code: 499, status_text: "Cancelled", version: "HTTP/1.1", headers: [], body: "" }
+  @end
+  rem = 5000
+  @if tok != 0 && tok.hct_deadline_ms > 0
+    rem = tok.hct_deadline_ms - clock_ms()
+    @if rem <= 0
+      return { status_code: 408, status_text: "Request Timeout", version: "HTTP/1.1", headers: [], body: "" }
+    @end
+  @end
+  return _http_execute_to(method, url, headers, body, rem)
 @end
 
 @! ----------------------------------------------------------------------------

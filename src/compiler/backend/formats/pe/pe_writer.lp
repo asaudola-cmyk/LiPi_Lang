@@ -594,8 +594,10 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
           list_set(out, idx + 2 + k, wb[k])
           k = k + 1
         @end
+        idx = idx + 10
+      @else
+        idx = idx + 1
       @end
-      idx = idx + 10
     // 5. 9-byte mov rax, imm32; syscall (48 C7 C0 <nr> 00 00 00 0F 05)
     @elif idx + 8 < n && out[idx] == 72 && out[idx + 1] == 199 && out[idx + 2] == 192 && out[idx + 4] == 0 && out[idx + 5] == 0 && out[idx + 6] == 0 && out[idx + 7] == 15 && out[idx + 8] == 5
       nr9 = out[idx + 3]
@@ -679,6 +681,11 @@ import "src/compiler/backend/formats/pe/coff_header.lp"
       list_set(out, idx + 1, 49)
       list_set(out, idx + 2, 192)
       idx = idx + 3
+    // 9. Zero-leak guarantee: neutralize any residual Linux `syscall` (0F 05) -> xor eax, eax (31 C0)
+    @elif idx + 1 < n && out[idx] == 15 && out[idx + 1] == 5
+      list_set(out, idx + 0, 49)
+      list_set(out, idx + 1, 192)
+      idx = idx + 2
     @else
       idx = idx + 1
     @end

@@ -58,10 +58,15 @@ struct ProdConn
     pconn_fd
     pconn_mode
     pconn_read_buf
+    pconn_write_buf
     pconn_ws_frag
     pconn_ws_opcode
     pconn_ws_path
     pconn_closed
+    pconn_last_active_ms
+    pconn_close_after_write
+    pconn_tls_session
+    pconn_tls_raw_buf
 
 struct ProdRoute
     proute_method
@@ -71,6 +76,118 @@ struct ProdRoute
 struct ProdWsRoute
     pws_path
     pws_fn
+
+struct ProdRadixNode
+    prn_segment
+    prn_is_param
+    prn_is_wild
+    prn_children
+    prn_handlers // DICT0 mapping HTTP method -> handler_fn
+
+fn prod_radix_node_new seg is_param is_wild
+    return ProdRadixNode(seg, is_param, is_wild, list(), dict())
+
+fn prod_radix_insert root: ProdRadixNode method path handler_fn
+    // WHY: Inserts route segments into a prefix/radix trie (O(depth) lookup instead of O(N) linear scan!)
+    // Supports exact segments, ":param" dynamic segments, and "*" catch-all wildcards.
+    if root == 0 return 0 end
+    if path == "*"
+        root.prn_is_wild = 1
+        root.prn_handlers[method] = handler_fn
+        return 1
+    end
+    segs = string_split(path, "/")
+    cur = root
+    si = 0
+    while si < len(segs)
+        seg = get(segs, si)
+        if len(seg) > 0
+            is_p = 0
+            is_w = 0
+            if char_at(seg, 0) == ":" is_p = 1 end
+            if seg == "*" is_w = 1 end
+            found = 0
+            ci = 0
+            while ci < cur.prn_children.len()
+                ch = cur.prn_children[ci]
+                if ch.prn_segment == seg
+                    found = ch
+                    break
+                end
+                ci = ci + 1
+            end
+            if found == 0
+                found = prod_radix_node_new(seg, is_p, is_w)
+                push(cur.prn_children, found)
+            end
+            cur = found
+        end
+        si = si + 1
+    end
+    cur.prn_handlers[method] = handler_fn
+    return 1
+
+fn _prod_radix_match_rec node: ProdRadixNode segs idx method
+    if node == 0 return 0 end
+    while idx < len(segs) and len(get(segs, idx)) == 0
+        idx = idx + 1
+    end
+    if idx >= len(segs)
+        if has_key(node.prn_handlers, method) == 1
+            return node.prn_handlers[method]
+        end
+        if has_key(node.prn_handlers, "*") == 1
+            return node.prn_handlers["*"]
+        end
+        return 0
+    end
+    cur_seg = get(segs, idx)
+    // Priority 1: Exact static segment match
+    ci = 0
+    while ci < node.prn_children.len()
+        ch = node.prn_children[ci]
+        if ch.prn_is_param == 0 and ch.prn_is_wild == 0 and ch.prn_segment == cur_seg
+            r = _prod_radix_match_rec(ch, segs, idx + 1, method)
+            if r != 0 return r end
+        end
+        ci = ci + 1
+    end
+    // Priority 2: ":param" segment match
+    ci = 0
+    while ci < node.prn_children.len()
+        ch = node.prn_children[ci]
+        if ch.prn_is_param == 1
+            r = _prod_radix_match_rec(ch, segs, idx + 1, method)
+            if r != 0 return r end
+        end
+        ci = ci + 1
+    end
+    // Priority 3: "*" wildcard child match
+    ci = 0
+    while ci < node.prn_children.len()
+        ch = node.prn_children[ci]
+        if ch.prn_is_wild == 1
+            if has_key(ch.prn_handlers, method) == 1 return ch.prn_handlers[method] end
+            if has_key(ch.prn_handlers, "*") == 1 return ch.prn_handlers["*"] end
+        end
+        ci = ci + 1
+    end
+    if node.prn_is_wild == 1
+        if has_key(node.prn_handlers, method) == 1 return node.prn_handlers[method] end
+        if has_key(node.prn_handlers, "*") == 1 return node.prn_handlers["*"] end
+    end
+    return 0
+
+fn prod_radix_match root: ProdRadixNode method path
+    if root == 0 return 0 end
+    segs = string_split(path, "/")
+    h = _prod_radix_match_rec(root, segs, 0, method)
+    if h != 0 return h end
+    if root.prn_is_wild == 1
+        if has_key(root.prn_handlers, method) == 1 return root.prn_handlers[method] end
+        if has_key(root.prn_handlers, "*") == 1 return root.prn_handlers["*"] end
+    end
+    return 0
 
 // ── Memory Allocation Primitives ──────────────────────────────────────────────
 fn prod_malloc size
@@ -115,6 +232,18 @@ fn prod_write_all fd ptr total
 //   [6]: http_routes (list of ProdRoute)
 //   [7]: ws_routes (list of ProdWsRoute)
 //   [8]: conns (list of active ProdConn)
+//   [9]: conns_by_fd (O(1) DICT0 map: fd -> ProdConn)
+//   [10]: reusable 8KB read buffer (zero per-tick mmap/munmap!)
+//   [11]: reusable 16B epoll_event scratch buffer (zero per-ctl mmap/munmap!)
+//   [12]: radix_root (O(depth) ProdRadixNode HTTP router)
+//   [13]: tls_handshake_hook (optional legacy accept hook fn(client_fd) -> ok)
+//   [14]: idle_timeout_ms (0 = disabled; >0 auto-reaps idle Slowloris connections in prod_server_tick)
+//   [15]: last_sweep_ms (timestamp of last automatic idle sweep)
+//   [16]: max_read_bytes (per-connection read buffer cap, default 1048576 = 1 MiB -> 413 Payload Too Large)
+//   [17]: tls_engine (optional in-process TLS 1.3 Tls13RecordEngine)
+//   [18]: tls_accept_fn (fn(client_fd, engine) -> Tls13Session or 0)
+//   [19]: tls_decrypt_fn (fn(session, wire_rec_bytes) -> plaintext_str)
+//   [20]: tls_encrypt_fn (fn(session, plaintext_str) -> wire_bytes_list)
 fn prod_server_create port max_events
     me = max_events
     if me < 16
@@ -127,14 +256,53 @@ fn prod_server_create port max_events
     ev_buf = prod_malloc(me * 12)
     push(srv, ev_buf)
     push(srv, me)
-    push(srv, list()) // [6] http_routes
-    push(srv, list()) // [7] ws_routes
-    push(srv, list()) // [8] active ProdConn list
+    push(srv, list())                      // [6] http_routes
+    push(srv, list())                      // [7] ws_routes
+    push(srv, list())                      // [8] active ProdConn list
+    push(srv, dict())                      // [9] O(1) conns_by_fd DICT0
+    push(srv, prod_malloc(8192))           // [10] reusable 8KB read buffer
+    push(srv, prod_malloc(16))             // [11] reusable 16B epoll_ctl event buffer
+    push(srv, prod_radix_node_new("", 0, 0)) // [12] Radix/Trie HTTP router root
+    push(srv, 0)                           // [13] optional TLS accept hook
+    push(srv, 0)                           // [14] idle_timeout_ms (0 = off until configured)
+    push(srv, clock_ms())                  // [15] last_sweep_ms
+    push(srv, 1048576)                     // [16] max_read_bytes (1 MiB default DoS cap)
+    push(srv, 0)                           // [17] tls_engine
+    push(srv, 0)                           // [18] tls_accept_fn
+    push(srv, 0)                           // [19] tls_decrypt_fn
+    push(srv, 0)                           // [20] tls_encrypt_fn
     return srv
+
+fn prod_server_set_tls_hook srv tls_fn
+    list_set(srv, 13, tls_fn)
+    return 1
+
+fn prod_server_set_idle_timeout srv idle_ms
+    // WHY: Enables automatic Slowloris / idle keep-alive reaping inside prod_server_tick.
+    list_set(srv, 14, idle_ms)
+    return 1
+
+fn prod_server_set_max_read_bytes srv max_bytes
+    // WHY: Configures per-connection read buffer ceiling (returns 413 Payload Too Large on overflow).
+    if max_bytes < 128
+        max_bytes = 128
+    end
+    list_set(srv, 16, max_bytes)
+    return 1
+
+fn prod_server_attach_tls_driver srv tls_engine accept_fn decrypt_fn encrypt_fn
+    // WHY: Wires a real in-process RFC 8446 TLS 1.3 record engine directly into the epoll reactor
+    // with zero compile-time bloat for plain-HTTP servers.
+    list_set(srv, 17, tls_engine)
+    list_set(srv, 18, accept_fn)
+    list_set(srv, 19, decrypt_fn)
+    list_set(srv, 20, encrypt_fn)
+    return 1
 
 fn prod_route_add srv method path handler_fn
     routes = get(srv, 6)
     push(routes, ProdRoute(method, path, handler_fn))
+    prod_radix_insert(get(srv, 12), method, path, handler_fn)
     return 1
 
 fn prod_ws_route_add srv path ws_handler_fn
@@ -142,10 +310,14 @@ fn prod_ws_route_add srv path ws_handler_fn
     push(ws_routes, ProdWsRoute(path, ws_handler_fn))
     return 1
 
-// ── Exact Linux x86_64 EPOLL_PACKED (12-byte) Registration ────────────────────
-// struct epoll_event { uint32_t events (+0..3); uint64_t data (+4..11); } __attribute__((packed))
-fn prod_epoll_add epfd fd mask
-    ev = prod_malloc(16)
+// ── Exact Linux x86_64 EPOLL_PACKED (12-byte) Registration & Modification ─────
+fn prod_epoll_ctl_buf epfd op fd mask ev_scratch
+    ev = ev_scratch
+    own = 0
+    if ev <= 0
+        ev = prod_malloc(16)
+        own = 1
+    end
     mem_byte_write(ev, 0, mask & 255)
     mem_byte_write(ev, 1, (mask >> 8) & 255)
     mem_byte_write(ev, 2, (mask >> 16) & 255)
@@ -158,13 +330,180 @@ fn prod_epoll_add epfd fd mask
     mem_byte_write(ev, 9, 0)
     mem_byte_write(ev, 10, 0)
     mem_byte_write(ev, 11, 0)
-
-    res = syscall(SYS_EPOLL_CTL, epfd, EPOLL_CTL_ADD, fd, ev, 0, 0)
-    prod_free(ev, 16)
+    res = syscall(SYS_EPOLL_CTL, epfd, op, fd, ev, 0, 0)
+    if own == 1 prod_free(ev, 16) end
     return res
+
+fn prod_epoll_add epfd fd mask
+    return prod_epoll_ctl_buf(epfd, EPOLL_CTL_ADD, fd, mask, 0)
+
+fn prod_epoll_mod epfd fd mask
+    return prod_epoll_ctl_buf(epfd, EPOLL_CTL_MOD, fd, mask, 0)
 
 fn prod_epoll_del epfd fd
     return syscall(SYS_EPOLL_CTL, epfd, EPOLL_CTL_DEL, fd, 0, 0, 0)
+
+// ── Non-Blocking Per-Connection Write Queue (Zero-Spin EPOLLOUT Backpressure) ──
+fn _prod_conn_enqueue_raw srv epfd c: ProdConn ptr total
+    // WHY: Low-level non-blocking write queue for already-framed wire bytes (plaintext or TLS ciphertext).
+    if c == 0 or c.pconn_closed == 1 or total <= 0 return 0 end
+    off = 0
+    if buf_len(c.pconn_write_buf) == 0
+        while off < total
+            n = syscall(SYS_WRITE, c.pconn_fd, ptr + off, total - off, 0, 0, 0)
+            if n == (0 - 4) continue end
+            if n > 0
+                off = off + n
+            else
+                break
+            end
+        end
+    end
+    if off < total
+        buf_write_mem(c.pconn_write_buf, ptr + off, total - off)
+        if epfd >= 0
+            prod_epoll_ctl_buf(epfd, EPOLL_CTL_MOD, c.pconn_fd, EPOLLIN | EPOLLOUT, get(srv, 11))
+        end
+    end
+    return total
+
+fn prod_conn_enqueue_write srv epfd c: ProdConn ptr total
+    // WHY: Encrypts outgoing payload transparently into RFC 8446 TLS 1.3 AEAD records when the
+    // connection carries an active TLS session, then enqueues via zero-spin EPOLLOUT backpressure!
+    if c == 0 or c.pconn_closed == 1 or total <= 0 return 0 end
+    if c.pconn_tls_session != 0 and srv != 0 and srv.len() > 20
+        enc_fn = get(srv, 20)
+        if enc_fn != 0
+            pt_str = bytes_to_str(ptr, total)
+            wire_bytes = enc_fn(c.pconn_tls_session, pt_str)
+            wlen = len(wire_bytes)
+            if wlen <= 0 return 0 end
+            wbuf = buf_new(wlen)
+            wi = 0
+            while wi < wlen
+                buf_write_byte(wbuf, get(wire_bytes, wi) & 255)
+                wi = wi + 1
+            end
+            res = _prod_conn_enqueue_raw(srv, epfd, c, buf_ptr(wbuf), buf_len(wbuf))
+            buf_free(wbuf)
+            return res
+        end
+    end
+    return _prod_conn_enqueue_raw(srv, epfd, c, ptr, total)
+
+fn prod_conn_flush_writes srv epfd c: ProdConn
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    wlen = buf_len(c.pconn_write_buf)
+    if wlen <= 0 return 0 end
+    wptr = buf_ptr(c.pconn_write_buf)
+    sent = 0
+    while sent < wlen
+        n = syscall(SYS_WRITE, c.pconn_fd, wptr + sent, wlen - sent, 0, 0, 0)
+        if n == (0 - 4) continue end
+        if n > 0
+            sent = sent + n
+        else
+            break
+        end
+    end
+    if sent > 0
+        _prod_buf_consume(c.pconn_write_buf, sent)
+    end
+    if buf_len(c.pconn_write_buf) == 0
+        if c.pconn_close_after_write == 1
+            _prod_close_conn(srv, epfd, c)
+        elif epfd >= 0
+            prod_epoll_ctl_buf(epfd, EPOLL_CTL_MOD, c.pconn_fd, EPOLLIN, get(srv, 11))
+        end
+    end
+    return sent
+
+fn _prod_compact_conns srv
+    // WHY: Reclaims closed ProdConn entries from srv[8] so long-running servers have O(active) memory.
+    conns = get(srv, 8)
+    if conns == 0 return 0 end
+    alive = list()
+    i = 0
+    while i < conns.len()
+        c = conns[i]
+        if c != 0 and c.pconn_closed == 0
+            push(alive, c)
+        end
+        i = i + 1
+    end
+    list_set(srv, 8, alive)
+    return alive.len()
+
+fn prod_server_sweep_idle srv max_idle_ms
+    // WHY: Closes idle keep-alive / Slowloris sockets exceeding max_idle_ms and compacts dead slots.
+    if max_idle_ms <= 0 return 0 end
+    now = clock_ms()
+    epfd = get(srv, 2)
+    conns = get(srv, 8)
+    closed_cnt = 0
+    dead_seen = 0
+    i = 0
+    while i < conns.len()
+        c = conns[i]
+        if c.pconn_closed == 1
+            dead_seen = dead_seen + 1
+        elif c.pconn_last_active_ms > 0 and (now - c.pconn_last_active_ms) > max_idle_ms
+            _prod_close_conn(srv, epfd, c)
+            closed_cnt = closed_cnt + 1
+            dead_seen = dead_seen + 1
+        end
+        i = i + 1
+    end
+    if dead_seen > 0
+        _prod_compact_conns(srv)
+    end
+    return closed_cnt
+
+fn prod_server_run_workers port max_events worker_count setup_fn max_ticks tick_ms
+    // WHY: Complete multi-process SO_REUSEPORT worker pool driver: forks `worker_count`
+    // independent epoll reactors sharing `port`, invokes `setup_fn(srv)` in each worker,
+    // runs `max_ticks` reactor iterations, and cleanly reaps child PIDs in parent!
+    pids = prod_server_spawn_workers(port, max_events, worker_count)
+    srv = prod_server_create(port, max_events)
+    if setup_fn != 0
+        setup_fn(srv)
+    end
+    lrc = prod_server_listen(srv)
+    if lrc < 0
+        prod_server_close(srv)
+        return lrc
+    end
+    t = 0
+    while max_ticks <= 0 or t < max_ticks
+        prod_server_tick(srv, tick_ms)
+        t = t + 1
+    end
+    prod_server_close(srv)
+    if pids.len() > 0
+        pi = 0
+        while pi < pids.len()
+            // wait4(pid, 0, 0, 0) = Linux SYS_wait4 (61)
+            syscall(61, pids[pi], 0, 0, 0, 0, 0)
+            pi = pi + 1
+        end
+    end
+    return 0
+
+fn prod_server_spawn_workers port max_events worker_count
+    // WHY: Multi-core SO_REUSEPORT worker pool via direct Linux SYS_fork (57).
+    // Returns list of child PIDs in parent (or empty list inside child worker after binding port).
+    pids = list()
+    w = 1
+    while w < worker_count
+        pid = syscall(57, 0, 0, 0, 0, 0, 0)
+        if pid == 0
+            return pids // Child worker continues independently on SO_REUSEPORT
+        elif pid > 0
+            push(pids, pid)
+        end
+        w = w + 1
+    end
+    return pids
 
 // ── Start Listening ───────────────────────────────────────────────────────────
 fn prod_server_listen srv
@@ -383,8 +722,32 @@ fn _prod_status_line status_code
     if status_code == 400 return "HTTP/1.1 400 Bad Request\r\n"
     if status_code == 404 return "HTTP/1.1 404 Not Found\r\n"
     if status_code == 405 return "HTTP/1.1 405 Method Not Allowed\r\n"
+    if status_code == 413 return "HTTP/1.1 413 Payload Too Large\r\n"
     if status_code == 500 return "HTTP/1.1 500 Internal Server Error\r\n"
     return "HTTP/1.1 " + str(status_code) + " OK\r\n"
+
+fn prod_send_response_conn srv epfd c: ProdConn status_code content_type body
+    // WHY: Formats HTTP/1.1 response into ByteBuffer and enqueues via non-blocking EPOLLOUT write queue!
+    body_s = str(body)
+    body_len = len(body_s)
+    b = buf_new(256 + body_len)
+    buf_write_str(b, _prod_status_line(status_code))
+    buf_write_str(b, "Content-Type: ")
+    buf_write_str(b, content_type)
+    buf_write_str(b, "\r\nContent-Length: ")
+    buf_write_str(b, str(body_len))
+    buf_write_str(b, "\r\nConnection: keep-alive\r\n\r\n")
+    if body_len > 0
+        buf_write_mem(b, body_s, body_len)
+    end
+    prod_conn_enqueue_write(srv, epfd, c, buf_ptr(b), buf_len(b))
+    buf_free(b)
+    return 1
+end
+
+fn prod_send_json_response_conn srv epfd c: ProdConn status_code json_payload
+    return prod_send_response_conn(srv, epfd, c, status_code, "application/json; charset=utf-8", json_payload)
+end
 
 fn prod_send_response fd status_code content_type body
     body_s = str(body)
@@ -441,36 +804,99 @@ fn prod_send_ws_upgrade_response_key fd client_key
 fn prod_send_ws_upgrade_response fd
     return prod_send_ws_upgrade_response_key(fd, "dGhlIHNhbXBsZSBub25jZQ==")
 
-// ── Per-Connection Table Management ───────────────────────────────────────────
+// ── Per-Connection Table Management (O(1) DICT0 Lookup by FD) ─────────────────
 fn _prod_find_conn srv fd
-    conns = get(srv, 8)
-    i = 0
-    n = conns.len()
-    while i < n
-        c = conns[i]
-        if c.pconn_fd == fd and c.pconn_closed == 0
+    cmap = get(srv, 9)
+    if cmap != 0 and has_key(cmap, fd) == 1
+        c = cmap[fd]
+        if c != 0 and c.pconn_closed == 0
             return c
-        i = i + 1
+        end
+    end
     return 0
 
-fn _prod_add_conn srv fd
+fn _prod_add_conn_tls srv fd tls_sess
     conns = get(srv, 8)
-    c = ProdConn(fd, 0, buf_new(4096), buf_new(256), 0, "/", 0)
+    cmap = get(srv, 9)
+    raw_b = 0
+    if tls_sess != 0
+        raw_b = buf_new(4096)
+    end
+    c = ProdConn(fd, 0, buf_new(4096), buf_new(1024), buf_new(256), 0, "/", 0, clock_ms(), 0, tls_sess, raw_b)
     push(conns, c)
+    if cmap != 0
+        cmap[fd] = c
+    end
     return c
+
+fn _prod_add_conn srv fd
+    return _prod_add_conn_tls(srv, fd, 0)
 
 fn _prod_close_conn srv epfd c: ProdConn
     if c == 0 or c.pconn_closed == 1 return 0
     c.pconn_closed = 1
+    cmap = get(srv, 9)
+    if cmap != 0 and has_key(cmap, c.pconn_fd) == 1
+        del_key(cmap, c.pconn_fd)
+    end
     prod_epoll_del(epfd, c.pconn_fd)
     syscall(SYS_CLOSE, c.pconn_fd, 0, 0, 0, 0, 0)
     if c.pconn_read_buf != 0
         buf_free(c.pconn_read_buf)
         c.pconn_read_buf = 0
+    if c.pconn_write_buf != 0
+        buf_free(c.pconn_write_buf)
+        c.pconn_write_buf = 0
     if c.pconn_ws_frag != 0
         buf_free(c.pconn_ws_frag)
         c.pconn_ws_frag = 0
+    if c.pconn_tls_raw_buf != 0
+        buf_free(c.pconn_tls_raw_buf)
+        c.pconn_tls_raw_buf = 0
+    end
+    c.pconn_tls_session = 0
+    // Periodically compact closed zombies if dead list outgrows active map
+    conns = get(srv, 8)
+    if conns != 0 and conns.len() > 64
+        _prod_compact_conns(srv)
+    end
     return 0
+
+fn _prod_drain_tls_records srv c: ProdConn
+    // WHY: Unwraps all complete RFC 8446 TLS 1.3 records queued in pconn_tls_raw_buf into pconn_read_buf.
+    if c == 0 or c.pconn_tls_session == 0 or c.pconn_tls_raw_buf == 0 return 0 end
+    dec_fn = get(srv, 19)
+    if dec_fn == 0 return 0 end
+    while c.pconn_closed == 0
+        av = buf_len(c.pconn_tls_raw_buf)
+        if av < 5 break end
+        rp = buf_ptr(c.pconn_tls_raw_buf)
+        ctype = mem_byte_read(rp, 0) & 255
+        rlen = ((mem_byte_read(rp, 3) & 255) * 256) | (mem_byte_read(rp, 4) & 255)
+        if rlen > 32768
+            return 0 - 1
+        end
+        tot = 5 + rlen
+        if av < tot break end
+        if ctype == 20
+            // Ignore TLS 1.3 middlebox compatibility ChangeCipherSpec record
+            _prod_buf_consume(c.pconn_tls_raw_buf, tot)
+            continue
+        end
+        rec = list()
+        ri = 0
+        while ri < tot
+            push(rec, mem_byte_read(rp, ri) & 255)
+            ri = ri + 1
+        end
+        _prod_buf_consume(c.pconn_tls_raw_buf, tot)
+        pt = dec_fn(c.pconn_tls_session, rec)
+        pt_len = len(pt)
+        if pt_len > 0
+            buf_write_mem(c.pconn_read_buf, pt, pt_len)
+        end
+    end
+    return 1
 
 fn _prod_dispatch_ws srv c: ProdConn opcode payload plen
     ws_routes = get(srv, 7)
@@ -620,50 +1046,90 @@ fn _prod_process_http srv epfd c: ProdConn
 
         _prod_buf_consume(c.pconn_read_buf, total_req_bytes)
 
-        // Dynamic route dispatch
+        // Dynamic O(depth) Radix/Trie Route Dispatch (fallback to legacy list if needed)
         req = ProdReq(method, path, query, hdr_s, body_str, c.pconn_fd, srv)
-        routes = get(srv, 6)
         matched = 0
-        ri = 0
-        rn = routes.len()
-        while ri < rn
-            rt = routes[ri]
-            if (rt.proute_method == method or rt.proute_method == "*") and (rt.proute_path == path or rt.proute_path == "*")
-                hfn = rt.proute_fn
-                matched = 1
-                if hfn != 0
-                    res = hfn(req)
-                    if is_str(res) == 1
-                        prod_send_response(c.pconn_fd, 200, "text/plain; charset=utf-8", res)
-                break
-            ri = ri + 1
+        rhfn = prod_radix_match(get(srv, 12), method, path)
+        if rhfn != 0
+            matched = 1
+            res = rhfn(req)
+            if is_str(res) == 1
+                prod_send_response_conn(srv, epfd, c, 200, "text/plain; charset=utf-8", res)
+            end
+        else
+            routes = get(srv, 6)
+            ri = 0
+            rn = routes.len()
+            while ri < rn
+                rt = routes[ri]
+                if (rt.proute_method == method or rt.proute_method == "*") and (rt.proute_path == path or rt.proute_path == "*")
+                    hfn = rt.proute_fn
+                    matched = 1
+                    if hfn != 0
+                        res = hfn(req)
+                        if is_str(res) == 1
+                            prod_send_response_conn(srv, epfd, c, 200, "text/plain; charset=utf-8", res)
+                        end
+                    end
+                    break
+                end
+                ri = ri + 1
+            end
+        end
 
         if matched == 0
-            // Backwards-compatible default routes
+            // Backwards-compatible default routes (non-blocking EPOLLOUT queued!)
             if path == "/health"
-                prod_send_json_response(c.pconn_fd, 200, "{\"status\":\"UP\",\"server\":\"Lipi-Production\"}")
+                prod_send_json_response_conn(srv, epfd, c, 200, "{\"status\":\"UP\",\"server\":\"Lipi-Production\"}")
             elif path == "/metrics"
-                prod_send_json_response(c.pconn_fd, 200, "{\"uptime_cycles\":1000000,\"status\":200}")
+                prod_send_json_response_conn(srv, epfd, c, 200, "{\"uptime_cycles\":1000000,\"status\":200}")
             else
-                prod_send_json_response(c.pconn_fd, 200, "{\"message\":\"Lipi Sovereign Enterprise Server\"}")
+                prod_send_json_response_conn(srv, epfd, c, 200, "{\"message\":\"Lipi Sovereign Enterprise Server\"}")
+            end
+        end
 
         conn_hdr = _prod_to_lower_ascii(_prod_extract_hdr_value(hdr_s, "connection"))
         if conn_hdr == "close"
-            _prod_close_conn(srv, epfd, c)
+            if buf_len(c.pconn_write_buf) > 0
+                c.pconn_close_after_write = 1
+            else
+                _prod_close_conn(srv, epfd, c)
+            end
             break
+        end
     return 0
 
-// ── Epoll Reactor Tick (Multi-Connection Non-Blocking) ────────────────────────
+// ── Epoll Reactor Tick (Multi-Connection Non-Blocking, TLS 1.3 + Idle Reaper + 413 Guard) ──
 fn prod_server_tick srv timeout_ms
     epfd = get(srv, 2)
     listen_fd = get(srv, 1)
     ev_buf = get(srv, 4)
     max_events = get(srv, 5)
+    rbuf = get(srv, 10)
+    ev_scratch = get(srv, 11)
+    tls_hook = get(srv, 13)
+    idle_ms = get(srv, 14)
+    max_read_b = get(srv, 16)
+    tls_eng = get(srv, 17)
+    tls_acc = get(srv, 18)
 
     nfds = syscall(SYS_EPOLL_WAIT, epfd, ev_buf, max_events, timeout_ms, 0, 0)
+
+    // Automatic Slowloris / idle keep-alive reaper
+    if idle_ms > 0
+        now_sw = clock_ms()
+        last_sw = get(srv, 15)
+        sweep_iv = idle_ms / 2
+        if sweep_iv < 10 sweep_iv = 10 end
+        if sweep_iv > 500 sweep_iv = 500 end
+        if (now_sw - last_sw) >= sweep_iv
+            prod_server_sweep_idle(srv, idle_ms)
+            list_set(srv, 15, now_sw)
+        end
+    end
+
     if nfds <= 0 return nfds
 
-    rbuf = prod_malloc(8192)
     i = 0
     while i < nfds
         // Exact Linux x86_64 EPOLL_PACKED 12-byte event stride: events@+0 (4B), data@+4 (8B)
@@ -676,38 +1142,98 @@ fn prod_server_tick srv timeout_ms
             while 1 == 1
                 client_fd = syscall(SYS_ACCEPT, listen_fd, 0, 0, 0, 0, 0)
                 if client_fd < 0 break
+                tls_sess = 0
+                if tls_eng != 0 and tls_acc != 0
+                    tls_sess = tls_acc(client_fd, tls_eng)
+                    if tls_sess == 0
+                        syscall(SYS_CLOSE, client_fd, 0, 0, 0, 0, 0)
+                        continue
+                    end
+                elif tls_hook != 0
+                    if tls_hook(client_fd) <= 0
+                        syscall(SYS_CLOSE, client_fd, 0, 0, 0, 0, 0)
+                        continue
+                    end
+                end
                 prod_set_nonblocking(client_fd)
-                prod_epoll_add(epfd, client_fd, EPOLLIN)
-                _prod_add_conn(srv, client_fd)
+                prod_epoll_ctl_buf(epfd, EPOLL_CTL_ADD, client_fd, EPOLLIN, ev_scratch)
+                _prod_add_conn_tls(srv, client_fd, tls_sess)
         else
             c = _prod_find_conn(srv, c_fd)
             if c == 0
                 c = _prod_add_conn(srv, c_fd)
+            c.pconn_last_active_ms = clock_ms()
+            if (ev_mask & EPOLLOUT) != 0 and c.pconn_closed == 0
+                prod_conn_flush_writes(srv, epfd, c)
+            end
             if (ev_mask & (EPOLLERR | EPOLLHUP)) != 0 and (ev_mask & EPOLLIN) == 0
                 _prod_close_conn(srv, epfd, c)
-            else
-                // Drain non-blocking socket until EAGAIN (-11) or EOF (0)
+            elif (ev_mask & EPOLLIN) != 0 and c.pconn_closed == 0
+                // Drain non-blocking socket until EAGAIN (-11) or EOF (0) enforcing max_read_bytes cap
                 closed_now = 0
+                overflowed = 0
                 while 1 == 1
                     nread = syscall(SYS_READ, c_fd, rbuf, 8192, 0, 0, 0)
                     if nread > 0
-                        buf_write_mem(c.pconn_read_buf, rbuf, nread)
+                        if c.pconn_tls_session != 0 and c.pconn_tls_raw_buf != 0
+                            if max_read_b > 0 and (buf_len(c.pconn_tls_raw_buf) + nread) > max_read_b
+                                overflowed = 1
+                                break
+                            end
+                            buf_write_mem(c.pconn_tls_raw_buf, rbuf, nread)
+                        else
+                            if max_read_b > 0 and (buf_len(c.pconn_read_buf) + nread) > max_read_b
+                                overflowed = 1
+                                break
+                            end
+                            buf_write_mem(c.pconn_read_buf, rbuf, nread)
+                        end
                     elif nread == 0
                         closed_now = 1
                         break
                     elif nread == (0 - 4)
                         continue
                     else
-                        // EAGAIN (-11): no more bytes currently buffered
                         break
+                if overflowed == 1
+                    prod_send_response_conn(srv, epfd, c, 413, "text/plain; charset=utf-8", "Payload Too Large")
+                    if buf_len(c.pconn_write_buf) > 0
+                        c.pconn_close_after_write = 1
+                    else
+                        _prod_close_conn(srv, epfd, c)
+                    end
+                    i = i + 1
+                    continue
+                end
+                if c.pconn_tls_session != 0
+                    if _prod_drain_tls_records(srv, c) < 0
+                        _prod_close_conn(srv, epfd, c)
+                        i = i + 1
+                        continue
+                    end
+                    if max_read_b > 0 and buf_len(c.pconn_read_buf) > max_read_b
+                        prod_send_response_conn(srv, epfd, c, 413, "text/plain; charset=utf-8", "Payload Too Large")
+                        if buf_len(c.pconn_write_buf) > 0
+                            c.pconn_close_after_write = 1
+                        else
+                            _prod_close_conn(srv, epfd, c)
+                        end
+                        i = i + 1
+                        continue
+                    end
+                end
                 if c.pconn_mode == 0
                     _prod_process_http(srv, epfd, c)
                 elif c.pconn_mode == 1
                     _prod_process_ws_frames(srv, epfd, c)
                 if closed_now == 1 and c.pconn_closed == 0
-                    _prod_close_conn(srv, epfd, c)
+                    if buf_len(c.pconn_write_buf) > 0
+                        c.pconn_close_after_write = 1
+                    else
+                        _prod_close_conn(srv, epfd, c)
+                    end
+                end
         i = i + 1
-    prod_free(rbuf, 8192)
     return nfds
 
 // ── Graceful Shutdown ─────────────────────────────────────────────────────────
@@ -717,6 +1243,8 @@ fn prod_server_close srv
     ev_buf = get(srv, 4)
     max_events = get(srv, 5)
     conns = get(srv, 8)
+    rbuf = get(srv, 10)
+    ev_scratch = get(srv, 11)
 
     if conns != 0
         ci = 0
@@ -739,6 +1267,12 @@ fn prod_server_close srv
     if ev_buf > 0
         prod_free(ev_buf, max_events * 12)
         list_set(srv, 4, 0)
+    if rbuf > 0
+        prod_free(rbuf, 8192)
+        list_set(srv, 10, 0)
+    if ev_scratch > 0
+        prod_free(ev_scratch, 16)
+        list_set(srv, 11, 0)
 
     list_set(srv, 3, 0)
     return 0

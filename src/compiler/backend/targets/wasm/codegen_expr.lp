@@ -21,6 +21,7 @@ fn wasm_synth_new
     s.ws_last_expr_is_str = 0
     s.ws_float_vars = list()
     s.ws_str_vars = list()
+    s.ws_freestanding = g_wasm_freestanding
     return s
 
 fn wasm_list_contains lst name
@@ -1168,4 +1169,10 @@ fn wasm_synth_compile_statement s toks pos_box
     if k == TOK_KW_END() or k == TOK_DIR_END() or (k == TOK_IDENT() and (txt == "@end" or txt == "end" or txt == "শেষ"))
         list_set(pos_box, 0, pos + 1)
         return 0
+
+    // Skip compiler attribute directives (@strict, @fn_strict, @kavach, @freestanding, @attr_*) and `async` fn modifier
+    if k == TOK_KW_ASYNC() or (k == TOK_IDENT() and (txt == "async" or txt == "@async" or txt == "@strict" or txt == "@fn_strict" or txt == "@strict_types" or txt == "@strict_ownership" or txt == "@strict_proof" or txt == "@kavach" or txt == "@freestanding" or txt == "@ring0" or txt == "@silicon" or txt == "@packed" or txt == "@naked" or txt == "@interrupt" or str_starts_with(txt, "@attr_") == 1))
+        list_set(pos_box, 0, pos + 1)
+        return 0
+    end
 

@@ -52,11 +52,16 @@ struct Riscv64LocalVar
     rv_lv_name             // Variable identifier string
     rv_lv_offset           // Positive stack offset in bytes: accessed as [sp + rv_lv_offset]
     rv_lv_is_boxed         // 1 if heap-boxed in an 8-byte upvalue cell for mutable closure capture
+    rv_lv_is_uint          // 1 if unsigned integer type (u8/u16/u32/u64/usize)
+    rv_lv_prim_type        // Primitive type tag: "int", "float", "str", "dyn_tagged"
+    rv_lv_tag_off          // Positive stack offset for runtime val_tag (0 if unused)
 
 // WHY: Records a function definition entry point for inter-procedural call site resolution
 struct Riscv64Function
     rv_fn_name             // Function identifier string
     rv_fn_entry_offset     // Byte offset in rv_code where the function prologue starts
+    rv_fn_end_offset       // Byte offset in rv_code where the function body ends (for LSYM0)
+    rv_fn_decl_line        // Source declaration line number (for LSYM0 stack traces)
 
 // WHY: Records an unresolved 20-bit PC-relative subroutine call displacement
 struct Riscv64CallReloc
@@ -126,6 +131,98 @@ struct Riscv64Synthesizer
     rv_buf_wbyte_off       // Byte offset of __buf_write_byte helper
     rv_buf_wstr_off        // Byte offset of __buf_write_str helper
     rv_buf_tostr_off       // Byte offset of __buf_to_str helper
+    rv_freestanding        // 1 when --freestanding / --no-runtime bare-metal mode (0 Linux ECALL)
+    rv_enum_names          // Registered ADT variant names (Ok, Err, Some, None, + user enums)
+    rv_enum_tags           // Parallel ADT integer discriminant tags
+    rv_enum_arities        // Parallel ADT payload arities
+    rv_next_enum_tag       // Next auto-assigned custom enum tag (starts at 2000)
+    rv_cur_fn_name         // Active function name for stack_trace()
+    rv_last_is_uint        // 1 if last evaluated expression is unsigned (u8/u16/u32/u64/usize)
+    rv_last_expr_type      // Type of most recently evaluated expression: "int", "float", "str", "dyn_tagged"
+    rv_needs_throw_null    // 1 if _lipi_throw_null_deref helper must be emitted
+    rv_throw_null_off      // Byte offset of _lipi_throw_null_deref helper
+    rv_needs_stack_trace   // 1 if _lipi_stack_trace LSYM0 frame walker must be emitted
+    rv_stack_trace_off     // Byte offset of _lipi_stack_trace helper
+    rv_lsym_patch_lsym     // Code offset of LUI+ADDI for LSYM0 table vaddr
+    rv_lsym_patch_code     // Code offset of LUI+ADDI for code_base vaddr
+    rv_lsym_patch_ro       // Code offset of LUI+ADDI for rodata_base vaddr
+    rv_needs_print_tagged  // 1 if __print_str / __print_float / __print_tagged helpers must be emitted
+    rv_print_str_off       // Byte offset of __print_str helper
+    rv_print_float_off     // Byte offset of __print_float helper
+    rv_print_tagged_off    // Byte offset of __print_tagged helper
+    rv_needs_print_uint    // 1 if unsigned 64-bit __print_uint helper must be emitted
+    rv_print_uint_off      // Byte offset of __print_uint helper
+
+fn riscv64_is_uint_type tname
+    if tname == "u8" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
+        return 1
+    end
+    return 0
+end
+
+global g_rv64_freestanding = 0
+
+fn riscv64_synth_set_freestanding flag
+    g_rv64_freestanding = flag
+    return flag
+
+fn riscv64_verify_zero_linux_ecalls code_bytes
+    // WHY: Bare-Metal Purity Gate for RISC-V 64 --freestanding: scans 32-bit aligned words
+    // for Linux `ecall` (0x00000073 -> [0x73, 0x00, 0x00, 0x00]).
+    cnt = 0
+    i = 0
+    n = code_bytes.len()
+    while i + 3 < n
+        if code_bytes[i] == 115 and code_bytes[i + 1] == 0 and code_bytes[i + 2] == 0 and code_bytes[i + 3] == 0
+            cnt = cnt + 1
+        end
+        i = i + 4
+    end
+    return cnt
+
+fn riscv64_enum_register s vname tag arity
+    // WHY: Preserves canonical Result/Option tags (Ok=1001, Err=1002, Some=1003, None=1004)
+    // when user code redeclares `enum Res { Ok(T), Err(E) }` so postfix `?` always matches Err/None.
+    i = 0
+    while i < s.rv_enum_names.len()
+        if s.rv_enum_names[i] == vname
+            cur_tag = s.rv_enum_tags[i]
+            if cur_tag >= 1001 and cur_tag <= 1004
+                list_set(s.rv_enum_arities, i, arity)
+                return cur_tag
+            end
+            list_set(s.rv_enum_tags, i, tag)
+            list_set(s.rv_enum_arities, i, arity)
+            return tag
+        end
+        i = i + 1
+    end
+    push(s.rv_enum_names, vname)
+    push(s.rv_enum_tags, tag)
+    push(s.rv_enum_arities, arity)
+    return tag
+
+fn riscv64_enum_find_idx s vname
+    i = 0
+    while i < s.rv_enum_names.len()
+        if s.rv_enum_names[i] == vname
+            return i
+        end
+        i = i + 1
+    end
+    return 0 - 1
+
+fn riscv64_emit_load_rodata_str s reg str_text
+    ro_off = riscv64_synth_add_rodata_str(s, str_text, 0)
+    p_off = s.rv_code.len()
+    riscv64_emit_lui(s, reg, 0)
+    riscv64_emit_addi(s, reg, reg, 0)
+    srel = Riscv64StringReloc()
+    srel.rv_sr_patch_offset = p_off
+    srel.rv_sr_rodata_offset = ro_off
+    srel.rv_sr_reg = reg
+    push(s.rv_str_relocs, srel)
+    return 0
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -180,6 +277,31 @@ fn riscv64_synth_new
     s.rv_buf_wbyte_off = 0
     s.rv_buf_wstr_off = 0
     s.rv_buf_tostr_off = 0
+    s.rv_freestanding = g_rv64_freestanding
+    s.rv_enum_names = list()
+    s.rv_enum_tags = list()
+    s.rv_enum_arities = list()
+    s.rv_next_enum_tag = 2000
+    s.rv_cur_fn_name = "_start"
+    s.rv_last_is_uint = 0
+    s.rv_last_expr_type = "int"
+    s.rv_needs_throw_null = 0
+    s.rv_throw_null_off = 0
+    s.rv_needs_stack_trace = 0
+    s.rv_stack_trace_off = 0
+    s.rv_lsym_patch_lsym = 0 - 1
+    s.rv_lsym_patch_code = 0 - 1
+    s.rv_lsym_patch_ro = 0 - 1
+    s.rv_needs_print_tagged = 0
+    s.rv_print_str_off = 0
+    s.rv_print_float_off = 0
+    s.rv_print_tagged_off = 0
+    s.rv_needs_print_uint = 0
+    s.rv_print_uint_off = 0
+    riscv64_enum_register(s, "Ok", 1001, 1)
+    riscv64_enum_register(s, "Err", 1002, 1)
+    riscv64_enum_register(s, "Some", 1003, 1)
+    riscv64_enum_register(s, "None", 1004, 0)
     return s
 
 fn riscv64_synth_emit_byte s byte_val
@@ -330,9 +452,27 @@ fn riscv64_emit_div s rd rs1 rs2
     riscv64_synth_emit_bytes(s, bytes)
     return 0
 
+fn riscv64_emit_divu s rd rs1 rs2
+    // WHY: DIVU rd, rs1, rs2 (RV64M extension: opcode 0x33 = 51, funct3=5, funct7=1). 64-bit unsigned integer division.
+    bytes = rv64_encode_r(51, rd, 5, rs1, rs2, 1)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
 fn riscv64_emit_rem s rd rs1 rs2
     // WHY: REM rd, rs1, rs2 (RV64M extension: opcode 0x33 = 51, funct3=6, funct7=1). 64-bit signed remainder.
     bytes = rv64_encode_r(51, rd, 6, rs1, rs2, 1)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_remu s rd rs1 rs2
+    // WHY: REMU rd, rs1, rs2 (RV64M extension: opcode 0x33 = 51, funct3=7, funct7=1). 64-bit unsigned remainder.
+    bytes = rv64_encode_r(51, rd, 7, rs1, rs2, 1)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_srl s rd rs1 rs2
+    // WHY: SRL rd, rs1, rs2 (RV64I: opcode 0x33 = 51, funct3=5, funct7=0). Logical right shift.
+    bytes = rv64_encode_r(51, rd, 5, rs1, rs2, 0)
     riscv64_synth_emit_bytes(s, bytes)
     return 0
 
@@ -369,6 +509,18 @@ fn riscv64_emit_andi s rd rs1 imm12
 fn riscv64_emit_ld s rd rs1 offset12
     // WHY: LD rd, offset12(rs1) (opcode 0x03 = 3, funct3=3). 64-bit memory load.
     bytes = rv64_emit_ld(rd, rs1, offset12)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_lwu s rd rs1 offset12
+    // WHY: LWU rd, offset12(rs1) (opcode 0x03 = 3, funct3=6). Unsigned 32-bit load (LSYM0 table).
+    bytes = rv64_encode_i(3, rd, 6, rs1, offset12)
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_srli s rd rs1 shamt
+    // WHY: SRLI rd, rs1, shamt (opcode 0x13 = 19, funct3=5). Logical right shift immediate.
+    bytes = rv64_encode_i(19, rd, 5, rs1, shamt & 63)
     riscv64_synth_emit_bytes(s, bytes)
     return 0
 
@@ -658,85 +810,138 @@ fn riscv64_synth_emit_call_print_int s
     push(s.rv_call_relocs, call_rel)
     return 0
 
+fn riscv64_synth_emit_call_print_uint s
+    // WHY: Emits subroutine call to native __print_uint helper to display unsigned u64 in a0 (x10).
+    s.rv_needs_print_uint = 1
+    call_off = s.rv_code.len()
+    riscv64_emit_jal(s, 1, 0)
+    call_rel = Riscv64CallReloc()
+    call_rel.rv_cr_patch_offset = call_off
+    call_rel.rv_cr_target_name = "__print_uint"
+    push(s.rv_call_relocs, call_rel)
+    return 0
+
 fn riscv64_synth_emit_print_int_helper s
     // WHY: Pure RISC-V assembly routine converting 64-bit signed integer in a0 (x10)
     // to ASCII decimal string on the stack and writing to STDOUT with trailing newline.
-    // Zero dependencies on external C printf/puts.
+    // Uses divu/remu after negation so positive, zero, negative, and INT64_MIN all print accurately.
     s.rv_print_int_off = s.rv_code.len()
 
-    // Stack setup: addi sp, sp, -64; sd ra, 56(sp); sd s0, 48(sp)
     riscv64_emit_addi(s, 2, 2, 0 - 64)
     riscv64_emit_sd(s, 1, 2, 56)
     riscv64_emit_sd(s, 8, 2, 48)
 
-    // Buffer built backwards starting at [sp + 47]
-    // Write trailing newline '\n' (10)
-    // addi t0, sp, 47 (t0 = buffer pointer)
     riscv64_emit_addi(s, 5, 2, 47)
-    // addi t1, x0, 10
     riscv64_emit_addi(s, 6, 0, 10)
-    // sb t1, 0(t0)
     riscv64_emit_sb(s, 6, 5, 0)
-    // t1 = 1 (current length = 1)
     riscv64_emit_addi(s, 6, 0, 1)
 
-    // Check if a0 == 0 -> jump to .check_neg (5 instructions forward: 24 bytes from bne)
     bne_zero_off = s.rv_code.len()
-    riscv64_emit_bne(s, 10, 0, 24)
+    riscv64_emit_bne(s, 10, 0, 0)
 
     // Special case: a0 == 0
     riscv64_emit_addi(s, 5, 5, 0 - 1)
     riscv64_emit_addi(s, 7, 0, 48)
     riscv64_emit_sb(s, 7, 5, 0)
     riscv64_emit_addi(s, 6, 6, 1)
-    // jal x0, .do_write (4+9+5 = 18 -> +72 or +76; exact = 76 bytes from jal)
-    riscv64_emit_jal(s, 0, 76)
+    j_zero_write = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
 
     // .check_neg:
+    check_neg_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_zero_off, 1, 10, 0, check_neg_off)
     riscv64_emit_addi(s, 28, 0, 0)
-    riscv64_emit_bge(s, 10, 0, 12)
+    bge_pos_off = s.rv_code.len()
+    riscv64_emit_bge(s, 10, 0, 0)
     riscv64_emit_addi(s, 28, 0, 1)
     riscv64_emit_sub(s, 10, 0, 10)
 
     // .loop_digits:
-    riscv64_emit_beq(s, 10, 0, 36)
+    loop_dig_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_pos_off, 5, 10, 0, loop_dig_off)
+    beq_fin_off = s.rv_code.len()
+    riscv64_emit_beq(s, 10, 0, 0)
     riscv64_emit_addi(s, 29, 0, 10)
-    riscv64_emit_rem(s, 30, 10, 29)
-    riscv64_emit_div(s, 10, 10, 29)
+    riscv64_emit_remu(s, 30, 10, 29)
+    riscv64_emit_divu(s, 10, 10, 29)
     riscv64_emit_addi(s, 30, 30, 48)
     riscv64_emit_addi(s, 5, 5, 0 - 1)
     riscv64_emit_sb(s, 30, 5, 0)
     riscv64_emit_addi(s, 6, 6, 1)
-    riscv64_emit_jal(s, 0, 0 - 32)
+    riscv64_emit_jal(s, 0, loop_dig_off - s.rv_code.len())
 
     // .finish_digits:
-    // beq t3, x0, .do_write (5 instructions = +20 bytes forward)
-    riscv64_emit_beq(s, 28, 0, 20)
+    fin_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_fin_off, 0, 10, 0, fin_off)
+    beq_write_off = s.rv_code.len()
+    riscv64_emit_beq(s, 28, 0, 0)
     riscv64_emit_addi(s, 5, 5, 0 - 1)
     riscv64_emit_addi(s, 7, 0, 45)
     riscv64_emit_sb(s, 7, 5, 0)
     riscv64_emit_addi(s, 6, 6, 1)
 
     // .do_write:
-    // a0 = 1 (stdout)
+    do_write_off = s.rv_code.len()
+    riscv64_synth_patch_jal(s, j_zero_write, 0, do_write_off)
+    riscv64_synth_patch_b(s, beq_write_off, 0, 28, 0, do_write_off)
     riscv64_emit_li(s, 10, 1)
-    // a1 = t0 (buffer address)
     riscv64_emit_mv(s, 11, 5)
-    // a2 = t1 (byte length)
     riscv64_emit_mv(s, 12, 6)
-    // a7 = 64 (SYS_write on Linux RISC-V)
     riscv64_emit_li(s, 17, 64)
-    // ecall
     riscv64_emit_ecall(s)
 
-    // Epilogue:
-    // ld ra, 56(sp)
     riscv64_emit_ld(s, 1, 2, 56)
-    // ld s0, 48(sp)
     riscv64_emit_ld(s, 8, 2, 48)
-    // addi sp, sp, 64
     riscv64_emit_addi(s, 2, 2, 64)
-    // ret
+    riscv64_emit_ret(s)
+    return 0
+
+fn riscv64_synth_emit_print_uint_helper s
+    // WHY: Pure RISC-V unsigned 64-bit integer decimal printer (0 .. 18446744073709551615) via DIVU/REMU.
+    s.rv_print_uint_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 64)
+    riscv64_emit_sd(s, 1, 2, 56)
+    riscv64_emit_sd(s, 8, 2, 48)
+
+    riscv64_emit_addi(s, 5, 2, 47)
+    riscv64_emit_addi(s, 6, 0, 10)
+    riscv64_emit_sb(s, 6, 5, 0)
+    riscv64_emit_addi(s, 6, 0, 1)
+
+    bne_u_loop = s.rv_code.len()
+    riscv64_emit_bne(s, 10, 0, 0)
+    riscv64_emit_addi(s, 5, 5, 0 - 1)
+    riscv64_emit_addi(s, 7, 0, 48)
+    riscv64_emit_sb(s, 7, 5, 0)
+    riscv64_emit_addi(s, 6, 6, 1)
+    j_u_write = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+
+    u_loop_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_u_loop, 1, 10, 0, u_loop_off)
+    beq_u_write = s.rv_code.len()
+    riscv64_emit_beq(s, 10, 0, 0)
+    riscv64_emit_addi(s, 29, 0, 10)
+    riscv64_emit_remu(s, 30, 10, 29)
+    riscv64_emit_divu(s, 10, 10, 29)
+    riscv64_emit_addi(s, 30, 30, 48)
+    riscv64_emit_addi(s, 5, 5, 0 - 1)
+    riscv64_emit_sb(s, 30, 5, 0)
+    riscv64_emit_addi(s, 6, 6, 1)
+    riscv64_emit_jal(s, 0, u_loop_off - s.rv_code.len())
+
+    u_write_off = s.rv_code.len()
+    riscv64_synth_patch_jal(s, j_u_write, 0, u_write_off)
+    riscv64_synth_patch_b(s, beq_u_write, 0, 10, 0, u_write_off)
+    riscv64_emit_li(s, 10, 1)
+    riscv64_emit_mv(s, 11, 5)
+    riscv64_emit_mv(s, 12, 6)
+    riscv64_emit_li(s, 17, 64)
+    riscv64_emit_ecall(s)
+
+    riscv64_emit_ld(s, 1, 2, 56)
+    riscv64_emit_ld(s, 8, 2, 48)
+    riscv64_emit_addi(s, 2, 2, 64)
     riscv64_emit_ret(s)
     return 0
 
@@ -820,6 +1025,15 @@ fn riscv64_synth_skip_whitespace_tokens toks pos_box
             break
     return 0
 
+fn riscv64_synth_find_fn s fname
+    // WHY: Checks whether a user-defined function shadows an optional DICT0 map_* intrinsic.
+    i = 0
+    while i < s.rv_functions.len()
+        if s.rv_functions[i].rv_fn_name == fname
+            return s.rv_functions[i]
+        i = i + 1
+    return 0
+
 fn riscv64_synth_find_struct s sname
     // WHY: Finds struct definition metadata by struct type name.
     i = 0
@@ -881,8 +1095,82 @@ fn riscv64_synth_alloc_var s name
     lv.rv_lv_name = name
     lv.rv_lv_offset = off
     lv.rv_lv_is_boxed = riscv64_is_boxed_name(s, name)
+    lv.rv_lv_is_uint = 0
+    lv.rv_lv_prim_type = "int"
+    lv.rv_lv_tag_off = 0
     push(s.rv_locals, lv)
     return off
+
+fn riscv64_synth_alloc_tag_slot s lv
+    // WHY: Lazily allocates an 8-byte runtime val_tag stack slot for dyn_tagged variables.
+    if lv == 0
+        return 0
+    end
+    if lv.rv_lv_tag_off > 0
+        return lv.rv_lv_tag_off
+    end
+    off = s.rv_stack_offset
+    s.rv_stack_offset = s.rv_stack_offset + 8
+    lv.rv_lv_tag_off = off
+    return off
+
+fn riscv64_synth_rodata_push_u32 s val
+    v = val
+    if v < 0
+        v = v + 4294967296
+    end
+    push(s.rv_rodata, v % 256)
+    push(s.rv_rodata, (v / 256) % 256)
+    push(s.rv_rodata, (v / 65536) % 256)
+    push(s.rv_rodata, (v / 16777216) % 256)
+    return 0
+
+fn riscv64_synth_emit_lsym_rodata s
+    // WHY: Serializes x86_64-identical LSYM0 symbol table ("LIPLSYM0") into RV64 .rodata
+    // so stack_trace()/backtrace() resolves full call chains with real function names & line numbers.
+    fn_starts = list()
+    fn_ends = list()
+    fn_name_offs = list()
+    fn_lines = list()
+    fi = 0
+    while fi < s.rv_functions.len()
+        fobj = s.rv_functions[fi]
+        if fobj.rv_fn_entry_offset >= 0 and fobj.rv_fn_end_offset > fobj.rv_fn_entry_offset and fobj.rv_fn_name != ""
+            n_ro = riscv64_synth_add_rodata_str(s, fobj.rv_fn_name, 0)
+            push(fn_starts, fobj.rv_fn_entry_offset)
+            push(fn_ends, fobj.rv_fn_end_offset)
+            push(fn_name_offs, n_ro)
+            push(fn_lines, fobj.rv_fn_decl_line)
+        end
+        fi = fi + 1
+    end
+    while (s.rv_rodata.len() % 8) != 0
+        push(s.rv_rodata, 0)
+    end
+    lsym_off = s.rv_rodata.len()
+    // Magic: "LIPLSYM0"
+    push(s.rv_rodata, 76)
+    push(s.rv_rodata, 73)
+    push(s.rv_rodata, 80)
+    push(s.rv_rodata, 76)
+    push(s.rv_rodata, 83)
+    push(s.rv_rodata, 89)
+    push(s.rv_rodata, 77)
+    push(s.rv_rodata, 48)
+    fcnt = fn_starts.len()
+    riscv64_synth_rodata_push_u32(s, fcnt)
+    riscv64_synth_rodata_push_u32(s, 0)
+    i = 0
+    while i < fcnt
+        riscv64_synth_rodata_push_u32(s, fn_starts[i])
+        riscv64_synth_rodata_push_u32(s, fn_ends[i])
+        riscv64_synth_rodata_push_u32(s, fn_name_offs[i])
+        riscv64_synth_rodata_push_u32(s, fn_lines[i])
+        riscv64_synth_rodata_push_u32(s, 0)
+        riscv64_synth_rodata_push_u32(s, 0)
+        i = i + 1
+    end
+    return lsym_off
 
 fn riscv64_is_ident_token kind
     if kind == TOK_IDENT() return 1

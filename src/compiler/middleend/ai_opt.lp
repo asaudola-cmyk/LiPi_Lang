@@ -418,3 +418,230 @@ include "src/compiler/middleend/opt/passes/pass_vectorize.lp"
   @end
   return transformed_count
 @end
+
+// ── 6. Deterministic Microarchitectural Loop Cost Model & Real PGO Persistence ──
+
+@struct LoopCostEstimate
+  lce_scalar_cycles_x100: i64     // Estimated scalar cycles per iteration * 100
+  lce_unrolled_cycles_x100: i64   // Estimated unrolled cycles per iteration * 100
+  lce_vector_cycles_x100: i64     // Estimated AVX2/NEON vector cycles per iteration * 100
+  lce_l1i_bytes: i64              // Estimated loop body code footprint in bytes
+  lce_best_unroll: i64            // Cost-optimal unroll factor (1, 2, 4, 8)
+  lce_should_vectorize: i64       // 1 if vector cost < scalar cost by >= 20%
+  lce_reg_pressure: i64           // 0..100
+@end
+
+@fn ai_opt_cost_model_evaluate(feat)
+  // WHY: Pure deterministic architectural cost model replacing opaque magic thresholds.
+  // Models a 4-wide out-of-order superscalar pipeline (x86-64 Zen/Golden Cove & ARM64 M-series):
+  //   - ALU throughput: 4 ops/cycle (25 cyc*100 per op)
+  //   - Load/Store ports: 2 mem ops/cycle (50 cyc*100 per mem op)
+  //   - FP/Div latency: 120 cyc*100 per FP/div op
+  //   - Branch overhead: 100 cyc*100 per scalar iteration (amortized by unroll factor)
+  //   - Loop-carried dependency barrier disables vectorization & limits unrolling.
+  alu_cost = feat.body_instruction_count * 25
+  mem_cost = feat.memory_access_count * 50
+  fp_cost = feat.floating_point_ops * 120
+  br_cost = (feat.branch_count + 1) * 100
+  scalar_c = alu_cost
+  @if mem_cost > scalar_c scalar_c = mem_cost @end
+  scalar_c = scalar_c + fp_cost + br_cost
+  @if scalar_c < 100 scalar_c = 100 @end
+
+  l1i_base = feat.body_instruction_count * 4
+  reg_p = ai_opt_estimate_register_pressure(feat)
+
+  // Pick cost-optimal unroll factor minimizing amortized branch cost within 512B L1i & reg pressure < 85
+  best_u = 1
+  best_uc = scalar_c
+  @if feat.has_cross_iter_dependency == 0
+    cand_u = 2
+    @while cand_u <= 8
+      @if (l1i_base * cand_u) <= 512 && (reg_p + (cand_u * 4)) <= 92
+        @if feat.trip_count_hint == 0 || feat.trip_count_hint >= cand_u
+          amort_br = br_cost / cand_u
+          cand_c = scalar_c - br_cost + amort_br
+          @if cand_c < best_uc
+            best_uc = cand_c
+            best_u = cand_u
+          @end
+        @end
+      @end
+      cand_u = cand_u * 2
+    @end
+  @end
+
+  // Vector cost model (4-wide 64-bit AVX2/NEON lanes + 150 cyc*100 shuffle/tail amortization)
+  vec_c = scalar_c
+  do_vec = 0
+  @if feat.has_cross_iter_dependency == 0 && feat.memory_access_count > 0 && feat.branch_count <= 1
+    @if feat.trip_count_hint == 0 || feat.trip_count_hint >= 8
+      vec_alu = (alu_cost / 4) + (mem_cost / 3) + (fp_cost / 4) + 85
+      @if vec_alu < 60 vec_alu = 60 @end
+      vec_c = vec_alu
+      @if (vec_c * 100) <= (scalar_c * 80)
+        do_vec = 1
+      @end
+    @end
+  @end
+
+  est = LoopCostEstimate()
+  est.lce_scalar_cycles_x100 = scalar_c
+  est.lce_unrolled_cycles_x100 = best_uc
+  est.lce_vector_cycles_x100 = vec_c
+  est.lce_l1i_bytes = l1i_base * best_u
+  est.lce_best_unroll = best_u
+  est.lce_should_vectorize = do_vec
+  est.lce_reg_pressure = reg_p
+  return est
+@end
+
+@struct PgoProfile
+  pgo_fn_names: array
+  pgo_invocations: array
+  pgo_total_iters: array
+  pgo_mispredicts: array
+@end
+
+@fn pgo_profile_new()
+  p = PgoProfile()
+  p.pgo_fn_names = list()
+  p.pgo_invocations = list()
+  p.pgo_total_iters = list()
+  p.pgo_mispredicts = list()
+  return p
+@end
+
+@fn pgo_profile_record(prof, fn_name, invocations, total_iters, mispredicts)
+  i = 0
+  @while i < prof.pgo_fn_names.len()
+    @if prof.pgo_fn_names[i] == fn_name
+      list_set(prof.pgo_invocations, i, prof.pgo_invocations[i] + invocations)
+      list_set(prof.pgo_total_iters, i, prof.pgo_total_iters[i] + total_iters)
+      list_set(prof.pgo_mispredicts, i, prof.pgo_mispredicts[i] + mispredicts)
+      return 1
+    @end
+    i = i + 1
+  @end
+  push(prof.pgo_fn_names, fn_name)
+  push(prof.pgo_invocations, invocations)
+  push(prof.pgo_total_iters, total_iters)
+  push(prof.pgo_mispredicts, mispredicts)
+  return 1
+@end
+
+@fn pgo_parse_int(s)
+  v = 0
+  neg = 0
+  i = 0
+  n = len(s)
+  @if n > 0 && mem_byte_read(s, 0) == 45
+    neg = 1
+    i = 1
+  @end
+  @while i < n
+    b = mem_byte_read(s, i)
+    @if b >= 48 && b <= 57
+      v = (v * 10) + (b - 48)
+    @end
+    i = i + 1
+  @end
+  @if neg == 1 return 0 - v @end
+  return v
+@end
+
+@fn pgo_save_profile(path, prof)
+  // WHY: Persists empirical runtime PGO counters in sovereign line-delimited "LPGO1" format
+  // (`fn_name|invocations|total_iters|mispredicts`) using pure Lipi file I/O.
+  out = "LPGO1\n"
+  i = 0
+  @while i < prof.pgo_fn_names.len()
+    out = out + prof.pgo_fn_names[i] + "|" + str(prof.pgo_invocations[i]) + "|" + str(prof.pgo_total_iters[i]) + "|" + str(prof.pgo_mispredicts[i]) + "\n"
+    i = i + 1
+  @end
+  return file_write(path, out)
+@end
+
+@fn pgo_load_profile(path)
+  prof = pgo_profile_new()
+  @if file_exists(path) == 0
+    return prof
+  @end
+  raw = file_read(path)
+  n = len(raw)
+  @if n < 6
+    return prof
+  @end
+  // Skip first line ("LPGO1\n")
+  pos = 0
+  @while pos < n && mem_byte_read(raw, pos) != 10
+    pos = pos + 1
+  @end
+  @if pos < n pos = pos + 1 @end
+
+  @while pos < n
+    line_start = pos
+    @while pos < n && mem_byte_read(raw, pos) != 10
+      pos = pos + 1
+    @end
+    line_end = pos
+    @if pos < n pos = pos + 1 @end
+    @if line_end > line_start
+      // Split by '|' (124) into 4 fields
+      p1 = 0 - 1
+      p2 = 0 - 1
+      p3 = 0 - 1
+      k = line_start
+      @while k < line_end
+        @if mem_byte_read(raw, k) == 124
+          @if p1 < 0 p1 = k
+          @elif p2 < 0 p2 = k
+          @elif p3 < 0 p3 = k
+          @end
+        @end
+        k = k + 1
+      @end
+      @if p1 > line_start && p2 > p1 && p3 > p2
+        fn_nm = str_sub(raw, line_start, p1)
+        inv_v = pgo_parse_int(str_sub(raw, p1 + 1, p2))
+        itr_v = pgo_parse_int(str_sub(raw, p2 + 1, p3))
+        mis_v = pgo_parse_int(str_sub(raw, p3 + 1, line_end))
+        pgo_profile_record(prof, fn_nm, inv_v, itr_v, mis_v)
+      @end
+    @end
+  @end
+  return prof
+@end
+
+@fn pgo_apply_feedback(prof, fn_name, feat)
+  // WHY: Combines deterministic microarchitectural LoopCostEstimate with loaded PGO counters!
+  cost_est = ai_opt_cost_model_evaluate(feat)
+  dec_u = cost_est.lce_best_unroll
+  dec_v = cost_est.lce_should_vectorize
+  i = 0
+  @while i < prof.pgo_fn_names.len()
+    @if prof.pgo_fn_names[i] == fn_name
+      tel = ai_opt_telemetry_new(prof.pgo_invocations[i], prof.pgo_total_iters[i], prof.pgo_mispredicts[i])
+      @if tel.average_trip_count >= 64 && feat.has_cross_iter_dependency == 0
+        @if dec_u < 4 && (feat.body_instruction_count * 4 * 4) <= 512
+          dec_u = 4
+        @end
+        @if feat.memory_access_count > 0 && feat.branch_count <= 1
+          dec_v = 1
+        @end
+      @end
+      @if tel.branch_mispredict_count > 500 && dec_u > 2
+        dec_u = 2
+      @end
+      break
+    @end
+    i = i + 1
+  @end
+  spd = 100 + (dec_u * 18) + (dec_v * 50)
+  return {
+    recommended_unroll_factor: dec_u,
+    should_vectorize: dec_v,
+    predicted_speedup_pct: spd,
+    register_pressure_score: cost_est.lce_reg_pressure
+  }
+@end

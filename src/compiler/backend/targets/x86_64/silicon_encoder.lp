@@ -171,10 +171,11 @@ fn x86_synth_emit_silicon_atomics_and_fences s
     end
     x86_synth_emit_bytes(s, [72, 137, 240, 240, 72, 15, 193, 7, 195])
 
-    // fence_full() / mfence
+    // fence_full() / mfence / cpu_fence
     off_mf = s.synth_code.len()
     x86_synth_register_helper_fn(s, "fence_full", off_mf)
     x86_synth_register_helper_fn(s, "mfence", off_mf)
+    x86_synth_register_helper_fn(s, "cpu_fence", off_mf)
     x86_synth_register_helper_fn(s, "মেমরি_ব্যারিয়ার", off_mf)
     x86_synth_emit_bytes(s, [15, 174, 240, 195])
 

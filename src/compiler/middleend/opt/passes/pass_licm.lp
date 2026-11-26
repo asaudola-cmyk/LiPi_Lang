@@ -44,8 +44,8 @@ fn licm_is_inst_invariant inst lp hoisted_vals
     if inst == 0 return 0
     if inst.result == 0 return 0
 
-    // Do not hoist instructions with side-effects, Phis, or allocas
-    if ssa_has_side_effects(inst.op) == 1 or inst.op == OP_PHI or inst.op == OP_ALLOCA
+    // Do not hoist instructions with side-effects, potentially trapping div/mod, Phis, or allocas
+    if ssa_has_side_effects(inst.op) == 1 or inst.op == OP_DIV or inst.op == OP_MOD or inst.op == OP_PHI or inst.op == OP_ALLOCA
         return 0
 
     // Only hoist pure arithmetic, bitwise, comparisons, negation

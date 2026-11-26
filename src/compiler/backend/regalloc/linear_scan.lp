@@ -83,6 +83,8 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
         i = i + 1
 
     active = list()                 // Intervals currently holding a physical register
+    spilled_active = list()         // Spilled intervals still live (for stack slot recycling on expiry)
+    free_spill_slots = list()       // Recycled frame offsets from dead spilled intervals (cuts stack bloat!)
     used_callee = list()            // Set of callee-saved registers that need saving
     spill_count = 0
     spill_offset = 0 - word_size    // First spill slot (e.g. -8 on 64-bit)
@@ -92,24 +94,38 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
     while idx < count
         cur = intervals[idx]
 
-        // ── Step 1: Expire Old Intervals ─────────────────────────────────────
-        // Free registers belonging to intervals that ended before cur.start_pos
+        // ── Step 1: Expire Old Intervals (Registers AND Recycled Stack Spill Slots) ──
         new_active = list()
         a_count = active.len()
         a_i = 0
         while a_i < a_count
             act = active[a_i]
             if act.end_pos <= cur.start_pos
-                // Register is now free; return it to the corresponding pool
                 reg_id = act.assigned_reg
                 if contains_int(callee_regs, reg_id) == 1
                     push(free_callee, reg_id)
                 else
                     push(free_caller, reg_id)
+                end
             else
                 push(new_active, act)
+            end
             a_i = a_i + 1
+        end
         active = new_active
+
+        new_spilled = list()
+        sp_i = 0
+        while sp_i < spilled_active.len()
+            s_iv = spilled_active[sp_i]
+            if s_iv.end_pos <= cur.start_pos
+                push(free_spill_slots, s_iv.spill_slot)
+            else
+                push(new_spilled, s_iv)
+            end
+            sp_i = sp_i + 1
+        end
+        spilled_active = new_spilled
 
         // ── Step 2: Attempt Allocation from Preferred Pool ────────────────────
         assigned_reg = 0 - 1
@@ -167,34 +183,72 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
                 push(ins_act, cur)
             active = ins_act
         else
-            // Register starvation: Must spill either cur or an ABI-compatible active interval.
+            // Register starvation: Use-density + furthest-end eviction with spill-slot recycling!
             // WHY: Never assign a caller-saved register to a call-spanning interval on eviction,
-            // because caller-saved registers are clobbered across CALL instructions.
+            // and keep heavily-used hot loop variables in physical registers by comparing
+            // spill cost = (uses * 1024) / span_len alongside end_pos.
+            cur_uses = 1
+            if cur.use_positions != 0 and cur.use_positions.len() > 0
+                cur_uses = cur.use_positions.len()
+            end
+            cur_span = cur.end_pos - cur.start_pos + 1
+            if cur_span < 1 cur_span = 1 end
+            cur_weight = (cur_uses * 1024) / cur_span
+
             spill_cand_idx = 0 - 1
+            best_evict_score = 0 - 1
             sc_i = active.len() - 1
             while sc_i >= 0
                 sc_cand = active[sc_i]
-                if cur.spans_call == 1
-                    if contains_int(callee_regs, sc_cand.assigned_reg) == 1
-                        spill_cand_idx = sc_i
-                        break
+                abi_ok = 1
+                if cur.spans_call == 1 and contains_int(callee_regs, sc_cand.assigned_reg) == 0
+                    abi_ok = 0
+                end
+                if abi_ok == 1
+                    c_uses = 1
+                    if sc_cand.use_positions != 0 and sc_cand.use_positions.len() > 0
+                        c_uses = sc_cand.use_positions.len()
                     end
-                else
-                    spill_cand_idx = sc_i
-                    break
+                    c_span = sc_cand.end_pos - sc_cand.start_pos + 1
+                    if c_span < 1 c_span = 1 end
+                    c_weight = (c_uses * 1024) / c_span
+                    // Higher evict_score = better candidate to evict (lower use density, further end_pos)
+                    evict_score = (sc_cand.end_pos * 16) - c_weight
+                    if spill_cand_idx < 0 or evict_score > best_evict_score
+                        spill_cand_idx = sc_i
+                        best_evict_score = evict_score
+                    end
                 end
                 sc_i = sc_i - 1
             end
 
+            // Allocate a stack spill slot (preferring recycled dead slots!)
+            alloc_slot = 0
+            if free_spill_slots.len() > 0
+                fs_last = free_spill_slots.len() - 1
+                alloc_slot = free_spill_slots[fs_last]
+                free_spill_slots = list_remove_at(free_spill_slots, fs_last)
+            else
+                alloc_slot = spill_offset
+                spill_offset = spill_offset - word_size
+            end
+
             if spill_cand_idx >= 0
                 cand = active[spill_cand_idx]
-                if cand.end_pos > cur.end_pos
+                cand_uses = 1
+                if cand.use_positions != 0 and cand.use_positions.len() > 0
+                    cand_uses = cand.use_positions.len()
+                end
+                cand_span = cand.end_pos - cand.start_pos + 1
+                if cand_span < 1 cand_span = 1 end
+                cand_weight = (cand_uses * 1024) / cand_span
+                if cand.end_pos > cur.end_pos or cur_weight > cand_weight * 2
                     // Evict candidate: give candidate's physical register to cur
                     cand_reg = cand.assigned_reg
                     cand.is_spilled = 1
-                    cand.spill_slot = spill_offset
+                    cand.spill_slot = alloc_slot
                     cand.assigned_reg = 0 - 1
-                    spill_offset = spill_offset - word_size
+                    push(spilled_active, cand)
                     spill_count = spill_count + 1
 
                     cur.assigned_reg = cand_reg
@@ -212,25 +266,30 @@ fn linear_scan_allocate intervals caller_regs callee_regs word_size
                         if inserted == 0 and cur.end_pos < item.end_pos
                             push(ins_act, cur)
                             inserted = 1
+                        end
                         push(ins_act, item)
                         k = k + 1
+                    end
                     if inserted == 0
                         push(ins_act, cur)
+                    end
                     active = ins_act
                 else
                     // Spill cur directly
                     cur.is_spilled = 1
                     cur.assigned_reg = 0 - 1
-                    cur.spill_slot = spill_offset
-                    spill_offset = spill_offset - word_size
+                    cur.spill_slot = alloc_slot
+                    push(spilled_active, cur)
                     spill_count = spill_count + 1
+                end
             else
                 // No active intervals (zero registers available)
                 cur.is_spilled = 1
                 cur.assigned_reg = 0 - 1
-                cur.spill_slot = spill_offset
-                spill_offset = spill_offset - word_size
+                cur.spill_slot = alloc_slot
+                push(spilled_active, cur)
                 spill_count = spill_count + 1
+            end
 
         idx = idx + 1
 
@@ -257,6 +316,7 @@ fn linear_scan_allocate_function fn_obj caller_regs callee_regs word_size
         return res
 
     intervals = list()
+    iv_map = dict()
     call_positions = list()
 
     // 1. Record incoming formal parameters at position 0
@@ -264,7 +324,7 @@ fn linear_scan_allocate_function fn_obj caller_regs callee_regs word_size
     while pi < fn_obj.params.len()
         p_val = fn_obj.params[pi]
         if p_val != 0
-            live_interval_record_def(intervals, p_val.id, 0, 1)
+            live_interval_record_def_fast(intervals, iv_map, p_val.id, 0, 1)
         pi = pi + 1
 
     // 2. Monotonic traversal over all basic blocks and instructions
@@ -296,7 +356,7 @@ fn linear_scan_allocate_function fn_obj caller_regs callee_regs word_size
                             is_reg_opnd = 1
                         end
                         if is_reg_opnd == 1
-                            live_interval_record_use(intervals, opnd.id, pos)
+                            live_interval_record_use_fast(intervals, iv_map, opnd.id, pos)
                         end
                     end
                     oi = oi + 1
@@ -313,7 +373,7 @@ fn linear_scan_allocate_function fn_obj caller_regs callee_regs word_size
                         is_res_vreg = 1
                     end
                     if is_res_vreg == 1
-                        live_interval_record_def(intervals, inst.result.id, pos, 0)
+                        live_interval_record_def_fast(intervals, iv_map, inst.result.id, pos, 0)
                     end
                 end
 

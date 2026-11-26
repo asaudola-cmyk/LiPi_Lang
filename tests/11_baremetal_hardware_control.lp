@@ -1,10 +1,14 @@
 // ==============================================================================
-// 🧪 LIPI TEST 11: BARE-METAL HARDWARE CONTROL & MMIO REGISTER DISPATCH
-// ⚡ 100% Pure Lipi First 1.0.0 | Zero Mocks | Direct Silicon Hardware State Machines
+// 🧪 LIPI TEST 11: HOST-SIDE HARDWARE STATE-MACHINE & SYSCALL UNIT TEST
+// ⚡ 100% Pure Lipi First 1.0.0 | Userspace Register-Bitmask & Linux Syscall Probe
 //
-// WHY: Validates bare-metal hardware register operations, UART 16550 serial state
-// machines, PS/2 keyboard controller scancode dispatch, and Linux kernel syscalls
-// with rigorous, non-trivial assertions on hardware bitmasks and state transitions.
+// NOTE ON SEPARATION:
+// - This test runs in Linux userspace to verify 16550 UART / 8042 PS/2 register
+//   bitmask state machines in RAM plus raw Linux SYS_getpid syscall dispatch.
+// - Real Ring-0 freestanding bare-metal hardware drivers (zero Linux syscalls,
+//   real x86 port I/O `in`/`out`, real MMIO `mmio_r32`/`mmio_w32`, Multiboot2,
+//   UEFI, Local APIC, PCIe ECAM, AHCI, xHCI, NVMe) live in `utso/silicon/*` and
+//   `utso/bare/*` and are verified under live QEMU bare-metal boot.
 // ==============================================================================
 
 include "utso/memory.lp"

@@ -1,6 +1,8 @@
 // ==============================================================================
-// 👑 LIPI BARE-METAL MULTIBOOT KERNEL ENGINE (std/kernel.lp)
-// ⚡ Zero Linux | Zero POSIX | Multiboot-1, IDT, 8259 PIC, PS/2 & VGA Shell
+// @deprecated [LEGACY HOSTED MULTIBOOT SIMULATOR — NOT REAL RING-0 HARDWARE]
+// For real bare-metal Multiboot2 tag parsing, Ring-0 CPU/APIC/VGA/Serial drivers,
+// compile with `--target=multiboot2-bare --freestanding` and use `utso/silicon/*`!
+// Retained strictly for backward compatibility with legacy hosted tests.
 // ==============================================================================
 
 // WHY: To achieve ultimate computing sovereignty, Lipi must be capable of running

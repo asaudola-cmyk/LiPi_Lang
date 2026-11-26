@@ -108,14 +108,15 @@ fn x86_synth_emit_lipi_fn_list s
 
 fn x86_synth_emit__lipi_list_get s
     // WHY: Unified polymorphic element index resolver supporting LIST, STR0 strings, and DICT0 maps.
+    // Supports Python/Lipi negative indexing (`a[-1]`, `s[-1]`) for LIST and STR0 (preserving signed keys for DICT0).
     // Returns %rax = raw value, %rdx = val_tag (0 for list/str/miss, 0/1/2 for DICT0).
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_get", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 81, 85, 72, 137, 229, 87, 86])
+    x86_synth_emit_bytes(s, [72, 133, 255, 15, 132, 95, 0, 0, 0, 85, 72, 137, 229, 87, 86])
     x86_synth_emit_call_helper(s, "_lipi_is_str")
-    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 43, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 16, 72, 59, 55, 115, 42, 72, 139, 71, 16, 72, 139, 4, 240, 49, 210, 195, 85, 72, 137, 229])
+    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 54, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 27, 72, 139, 15, 72, 133, 246, 121, 3, 72, 1, 206, 72, 57, 206, 115, 45, 72, 139, 71, 16, 72, 139, 4, 240, 49, 210, 195, 85, 72, 137, 229])
     x86_synth_emit_call_helper(s, "_lipi_dict_get")
-    x86_synth_emit_bytes(s, [93, 195, 72, 133, 246, 120, 15, 139, 79, 248, 72, 57, 206, 115, 7, 15, 182, 4, 55, 49, 210, 195, 49, 192, 49, 210, 195])
+    x86_synth_emit_bytes(s, [93, 195, 139, 79, 248, 72, 133, 246, 121, 3, 72, 1, 206, 72, 57, 206, 115, 7, 15, 182, 4, 55, 49, 210, 195, 49, 192, 49, 210, 195])
     return off
 
 fn x86_synth_emit__lipi_list_set s
@@ -128,10 +129,11 @@ fn x86_synth_emit__lipi_list_set s
     return off
 
 fn x86_synth_emit__lipi_list_set_typed s
-    // WHY: Tagged polymorphic setter forwarding %rcx = val_tag (0=int/ptr, 1=float, 2=str) into DICT0.
+    // WHY: Tagged polymorphic setter forwarding %rcx = val_tag (0=int/ptr, 1=float, 2=str) into DICT0,
+    // and supporting negative index normalization (`a[-1] = val`) on LISTs.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_set_typed", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 29, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 17, 72, 59, 55, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 72, 137, 248, 195, 85, 72, 137, 229])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 40, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 28, 76, 139, 7, 72, 133, 246, 121, 3, 76, 1, 198, 76, 57, 198, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 72, 137, 248, 195, 85, 72, 137, 229])
     x86_synth_emit_call_helper(s, "_lipi_dict_set_typed")
     x86_synth_emit_bytes(s, [93, 195])
     return off
@@ -150,6 +152,44 @@ fn x86_synth_emit__lipi_throw_null_deref s
     rel.sr_rodata_offset = ro_off
     push(s.synth_str_relocs, rel)
     x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+    x86_synth_emit_call_helper(s, "_lipi_exc_throw")
+    x86_synth_emit_bytes(s, [93, 195])
+    return off
+
+fn x86_synth_emit__lipi_throw_null_index s
+    // WHY: Shared trap throwing catchable NullPointerException on null/low bracket index (`p[idx]` when p < 4096).
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_throw_null_index", off)
+    ro_off = x86_synth_add_rodata_str(s, "NullPointerException: null index dereference", 0)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 184])
+    patch_pos = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    rel = X86StringReloc()
+    rel.sr_patch_offset = patch_pos
+    rel.sr_rodata_offset = ro_off
+    push(s.synth_str_relocs, rel)
+    x86_synth_emit_bytes(s, [72, 137, 199])
+    x86_synth_emit_call_helper(s, "_lipi_exc_throw")
+    x86_synth_emit_bytes(s, [93, 195])
+    return off
+
+fn x86_synth_emit__lipi_div_by_zero s
+    // WHY: Sovereign divide/modulo-by-zero handler. Inside any active `try` handler (per-thread exc_top != 0),
+    // throws catchable DivisionByZeroException; outside `try`, returns 0 safely (preserving legacy 0-guard tests).
+    off = s.synth_code.len()
+    s.synth_div_zero_off = off
+    x86_synth_register_helper_fn(s, "_lipi_div_by_zero", off)
+    ro_off = x86_synth_add_rodata_str(s, "DivisionByZeroException: integer division or modulo by zero", 0)
+    x86_synth_emit_bytes(s, [72, 184, 0, 0, 0, 0, 0, 0, 0, 0, 73, 137, 194])
+    x86_synth_emit_call_helper(s, "_lipi_exc_slot_ptr")
+    x86_synth_emit_bytes(s, [73, 139, 2, 72, 133, 192, 117, 3, 49, 192, 195, 85, 72, 137, 229, 72, 184])
+    patch_pos = s.synth_code.len()
+    x86_synth_emit_u64(s, 0)
+    rel = X86StringReloc()
+    rel.sr_patch_offset = patch_pos
+    rel.sr_rodata_offset = ro_off
+    push(s.synth_str_relocs, rel)
+    x86_synth_emit_bytes(s, [72, 137, 199])
     x86_synth_emit_call_helper(s, "_lipi_exc_throw")
     x86_synth_emit_bytes(s, [93, 195])
     return off
@@ -196,6 +236,27 @@ fn x86_synth_emit__lipi_int_to_str s
     x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 131, 236, 48, 65, 84, 65, 85, 72, 137, 248, 76, 141, 101, 255, 65, 198, 4, 36, 0, 69, 49, 237, 72, 133, 192, 117, 16, 73, 255, 204, 65, 198, 4, 36, 48, 65, 189, 1, 0, 0, 0, 235, 62, 49, 201, 72, 133, 192, 121, 8, 185, 1, 0, 0, 0, 72, 247, 216, 72, 199, 198, 10, 0, 0, 0, 72, 133, 192, 116, 20, 49, 210, 72, 247, 246, 73, 255, 204, 128, 194, 48, 65, 136, 20, 36, 65, 255, 197, 235, 231, 133, 201, 116, 11, 73, 255, 204, 65, 198, 4, 36, 45, 65, 255, 197, 76, 137, 239, 72, 131, 199, 9])
     x86_synth_emit_call_helper(s, "_lipi_user_alloc")
     x86_synth_emit_bytes(s, [68, 137, 40, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 49, 201, 68, 57, 233, 119, 11, 65, 138, 20, 12, 136, 20, 15, 255, 193, 235, 240, 72, 137, 248, 65, 93, 65, 92, 72, 131, 196, 48, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_uint_to_str s
+    // WHY: Pure unsigned 64-bit decimal formatter (0..18446744073709551615) using hardware `div rsi`
+    // without signed sign-bit negation, fixing u64 values > INT64_MAX (e.g. 0xFFFFFFFF80000000).
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_uint_to_str", off)
+    x86_synth_register_helper_fn(s, "uint_to_str", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229, 72, 131, 236, 48, 65, 84, 65, 85, 72, 137, 248, 76, 141, 101, 255, 65, 198, 4, 36, 0, 69, 49, 237, 72, 133, 192, 117, 16, 73, 255, 204, 65, 198, 4, 36, 48, 65, 189, 1, 0, 0, 0, 235, 32, 72, 199, 198, 10, 0, 0, 0, 72, 133, 192, 116, 20, 49, 210, 72, 247, 246, 73, 255, 204, 128, 194, 48, 65, 136, 20, 36, 65, 255, 197, 235, 231, 76, 137, 239, 72, 131, 199, 9])
+    x86_synth_emit_call_helper(s, "_lipi_user_alloc")
+    x86_synth_emit_bytes(s, [68, 137, 40, 199, 64, 4, 48, 82, 84, 83, 72, 141, 120, 8, 49, 201, 68, 57, 233, 119, 11, 65, 138, 20, 12, 136, 20, 15, 255, 193, 235, 240, 72, 137, 248, 65, 93, 65, 92, 72, 131, 196, 48, 93, 195])
+    return off
+
+fn x86_synth_emit__lipi_print_uint s
+    // WHY: Native unsigned 64-bit stdout printer with newline for u8/u16/u32/u64 expressions.
+    off = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "_lipi_print_uint", off)
+    x86_synth_register_helper_fn(s, "print_uint", off)
+    x86_synth_emit_bytes(s, [85, 72, 137, 229])
+    x86_synth_emit_call_helper(s, "_lipi_uint_to_str")
+    x86_synth_emit_bytes(s, [72, 131, 236, 16, 139, 80, 248, 72, 137, 198, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 198, 4, 36, 10, 186, 1, 0, 0, 0, 72, 137, 230, 191, 1, 0, 0, 0, 184, 1, 0, 0, 0, 15, 5, 72, 131, 196, 16, 93, 195])
     return off
 
 fn x86_synth_emit__lipi_str_sub s
@@ -671,11 +732,15 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_list_set = x86_synth_emit__lipi_list_set(s)
     off__lipi_list_set_typed = x86_synth_emit__lipi_list_set_typed(s)
     off__lipi_throw_null_deref = x86_synth_emit__lipi_throw_null_deref(s)
+    off__lipi_throw_null_index = x86_synth_emit__lipi_throw_null_index(s)
+    off__lipi_div_by_zero = x86_synth_emit__lipi_div_by_zero(s)
     off__lipi_list_pop = x86_synth_emit__lipi_list_pop(s)
     off__lipi_list_push = x86_synth_emit__lipi_list_push(s)
     off_lipi_fn_argv = x86_synth_emit_lipi_fn_argv(s)
     off__lipi_str_concat = x86_synth_emit__lipi_str_concat(s)
     off__lipi_int_to_str = x86_synth_emit__lipi_int_to_str(s)
+    off__lipi_uint_to_str = x86_synth_emit__lipi_uint_to_str(s)
+    off__lipi_print_uint = x86_synth_emit__lipi_print_uint(s)
     off__lipi_str_sub = x86_synth_emit__lipi_str_sub(s)
     off__lipi_char_at = x86_synth_emit__lipi_char_at(s)
     off__lipi_ord = x86_synth_emit__lipi_ord(s)
@@ -746,6 +811,7 @@ fn x86_synth_emit_all_runtime_helpers s
     off__lipi_buf_slice = x86_synth_emit__lipi_buf_slice(s)
     x86_synth_emit_all_dict_helpers(s)
     x86_synth_emit_all_trace_helpers(s)
+    x86_synth_emit_all_async_helpers(s)
 
     // Register bilingual and standard aliases
     x86_synth_register_helper_fn(s, "move", off__lipi_pass_thru)

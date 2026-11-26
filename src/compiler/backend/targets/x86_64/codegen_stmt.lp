@@ -82,7 +82,63 @@ fn x86_synth_compile_statement s toks pos_box
         list_set(pos_box, 0, pos + 1)
         return 0
 
-    // ── 0. Sovereign Silicon & Hardware Layout Directives (@asm, @naked, @interrupt, @packed, @align, @bss, @ring0, @layout) ──
+    // ── 0.0 External Function Declaration: `extern fn name(a: i64, ...) -> ret` ──
+    if k == TOK_IDENT() and (txt == "extern" or txt == "বাহ্যিক") and pos + 1 < toks.len() and (toks[pos + 1].tok_kind == TOK_KW_FN() or toks[pos + 1].tok_kind == TOK_DIR_FN() or (toks[pos + 1].tok_kind == TOK_IDENT() and (toks[pos + 1].tok_text == "fn" or toks[pos + 1].tok_text == "কাজ" or toks[pos + 1].tok_text == "@fn")))
+        // Syntax: `extern fn foo(a: i64, b: i64) -> i64` (emits SHN_UNDEF + R_X86_64_PLT32 in .o!)
+        list_set(pos_box, 0, pos + 2)
+        ext_name = ""
+        if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+            ext_name = toks[get(pos_box, 0)].tok_text
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        ext_pcount = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            while get(pos_box, 0) < toks.len()
+                etk = toks[get(pos_box, 0)]
+                if etk.tok_kind == TOK_RPAREN() or etk.tok_text == ")"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    break
+                elif etk.tok_kind == TOK_COLON() or etk.tok_text == ":"
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    x86_synth_parse_type_expr(toks, pos_box)
+                elif etk.tok_kind == TOK_COMMA() or etk.tok_text == "," or etk.tok_kind == TOK_NEWLINE()
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                elif x86_synth_is_ident_token(etk.tok_kind) == 1
+                    ext_pcount = ext_pcount + 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                else
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+        end
+        ext_ret = ""
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or toks[get(pos_box, 0)].tok_text == "->" or toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+            ext_ret = x86_synth_parse_type_expr(toks, pos_box)
+        end
+        if ext_name != ""
+            push(s.synth_extern_fns, ext_name)
+            if x86_synth_find_fn_first(s, ext_name) == 0
+                efn = X86Function()
+                efn.fn_name = ext_name
+                efn.fn_entry_offset = 0 - 1
+                efn.fn_ret_type = ext_ret
+                efn.fn_end_offset = 0
+                efn.fn_decl_line = 0
+                efn.fn_param_count = ext_pcount
+                efn.fn_tok_pos = 0 - 1
+                efn.fn_param_types = list()
+                efn.fn_type_params = list()
+                efn.fn_type_bounds = list()
+                efn.fn_section = ""
+                x86_synth_register_fn_obj(s, efn)
+            end
+        end
+        return 0
+    end
+
+    // ── 0. Sovereign Silicon & Hardware Layout Directives (@asm, @naked, @interrupt, @packed, @align, @bss, @ring0, @layout, @section) ──
     if k == TOK_IDENT() and len(txt) >= 2 and mem_byte_read(txt, 0) == 64
         if txt == "@asm" or txt == "@অ্যাসেম্বলি"
             return x86_synth_compile_asm_stmt(s, toks, pos_box)
@@ -98,7 +154,7 @@ fn x86_synth_compile_statement s toks pos_box
             s.synth_pending_struct_packed = 1
             list_set(pos_box, 0, pos + 1)
             return 0
-        elif txt == "@ring0" or txt == "@silicon"
+        elif txt == "@ring0" or txt == "@silicon" or txt == "@strict" or txt == "@fn_strict" or txt == "@strict_types" or txt == "@strict_ownership" or txt == "@strict_proof" or txt == "@kavach" or txt == "@freestanding" or str_starts_with(txt, "@attr_") == 1
             list_set(pos_box, 0, pos + 1)
             return 0
         elif txt == "@align"
@@ -157,6 +213,26 @@ fn x86_synth_compile_statement s toks pos_box
                 end
             end
             return 0
+        elif txt == "@section"
+            // Syntax: `@section(".boot")` — assigns custom ELF/PE section placement to next fn/data
+            list_set(pos_box, 0, pos + 1)
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STR() or x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1)
+                    s.synth_pending_section = toks[get(pos_box, 0)].tok_text
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_RPAREN() or toks[get(pos_box, 0)].tok_text == ")")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_STR()
+                s.synth_pending_section = toks[get(pos_box, 0)].tok_text
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            return 0
         elif txt == "@bss"
             // Syntax: `@bss [@align(N)] [static] name: [N]T` or `@align(N) @bss [static] name: StructType`
             list_set(pos_box, 0, pos + 1)
@@ -189,24 +265,39 @@ fn x86_synth_compile_statement s toks pos_box
                 bss_nm = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 bss_type = "[64]u8"
+                has_raw_bss_sz = 0
+                raw_bss_sz = 64
                 if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":")
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     bss_type = x86_synth_parse_type_expr(toks, pos_box)
+                elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_INT()
+                    raw_bss_sz = toks[get(pos_box, 0)].tok_int_val
+                    if raw_bss_sz <= 0
+                        raw_bss_sz = 64
+                    end
+                    has_raw_bss_sz = 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
-                bss_sd = x86_synth_find_struct(s, bss_type)
-                if bss_sd != 0
-                    bsz = bss_sd.sd_total_size
-                    if bsz <= 0 bsz = 64 end
-                    if bss_al < bss_sd.sd_align bss_al = bss_sd.sd_align end
-                    x86_synth_alloc_bss(s, bss_nm, bsz, bss_al, 0, 0, bss_sd.sd_name)
-                else
-                    binfo = x86_synth_type_layout_info(s, bss_type)
-                    bsz = binfo[0]
-                    bal = binfo[1]
-                    bel = binfo[2]
-                    bsgn = binfo[3]
+                if has_raw_bss_sz == 1
+                    bal = 16
                     if bss_al > bal bal = bss_al end
-                    x86_synth_alloc_bss(s, bss_nm, bsz, bal, bel, bsgn, "")
+                    x86_synth_alloc_bss(s, bss_nm, raw_bss_sz, bal, 1, 0, "")
+                else
+                    bss_sd = x86_synth_find_struct(s, bss_type)
+                    if bss_sd != 0
+                        bsz = bss_sd.sd_total_size
+                        if bsz <= 0 bsz = 64 end
+                        if bss_al < bss_sd.sd_align bss_al = bss_sd.sd_align end
+                        x86_synth_alloc_bss(s, bss_nm, bsz, bss_al, 0, 0, bss_sd.sd_name)
+                    else
+                        binfo = x86_synth_type_layout_info(s, bss_type)
+                        bsz = binfo[0]
+                        bal = binfo[1]
+                        bel = binfo[2]
+                        bsgn = binfo[3]
+                        if bss_al > bal bal = bss_al end
+                        x86_synth_alloc_bss(s, bss_nm, bsz, bal, bel, bsgn, "")
+                    end
                 end
             end
             return 0
@@ -231,12 +322,11 @@ fn x86_synth_compile_statement s toks pos_box
         end
     end
 
-    // ── 1. Output Statement: say / বলো / print / println / show / দেখাও ──────────
+    // ── 1. Output Statement: canonical TOK_KW_PRINT (say/বলো/print/println/দেখাও/@say/@print) + show ──
     is_print = 0
-    if k == TOK_KW_PRINT()
+    if k == TOK_KW_PRINT() or (k == TOK_IDENT() and txt == "show")
         is_print = 1
-    if k == TOK_IDENT() and (txt == "say" or txt == "বলো" or txt == "print" or txt == "println" or txt == "show" or txt == "দেখাও")
-        is_print = 1
+    end
 
     if is_print == 1
         list_set(pos_box, 0, pos + 1) // Consume keyword
@@ -263,6 +353,8 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_emit_byte(s, 199)
         if s.synth_last_expr_type == "float"
             x86_synth_emit_call_helper(s, "_lipi_print_float")
+        elif s.synth_last_expr_type == "uint"
+            x86_synth_emit_call_helper(s, "_lipi_print_uint")
         elif s.synth_last_expr_type == "dyn_tagged"
             x86_synth_emit_bytes(s, [72, 137, 214]) // mov rsi, rdx (val_tag)
             x86_synth_emit_call_helper(s, "_lipi_print_tagged")
@@ -292,9 +384,15 @@ fn x86_synth_compile_statement s toks pos_box
                 elif ret_fn_obj.fn_ret_type == ""
                     if ret_expr_t == "float"
                         ret_fn_obj.fn_ret_type = "f64"
+                    elif ret_expr_t == "uint"
+                        ret_fn_obj.fn_ret_type = "u64"
                     elif ret_expr_t == "int" or ret_expr_t == "str" or ret_expr_t == "dyn_tagged"
                         ret_fn_obj.fn_ret_type = ret_expr_t
                     end
+                elif ret_fn_obj.fn_ret_explicit == 1 and (ret_fn_obj.fn_ret_type == "f64" or ret_fn_obj.fn_ret_type == "float") and x86_synth_is_int_like(ret_expr_t) == 1
+                    // WHY: Coerce integer return value to IEEE-754 f64 ONLY when function explicitly declared `-> f64`/`-> float`
+                    // (Never coerce inferred unannotated float helpers like `fast_json_as_float` returning raw f64 bits from `get(node, 3)`!)
+                    x86_synth_emit_bytes(s, [242, 72, 15, 42, 192, 102, 72, 15, 126, 192]) // cvtsi2sd xmm0, rax; movq rax, xmm0
                 elif ret_fn_obj.fn_ret_type == "dyn_tagged" and ret_expr_t != "dyn_tagged"
                     // Keep (%rax, %rdx) tagged return ABI consistent across all return paths
                     if ret_expr_t == "float"
@@ -361,9 +459,9 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_emit_epilogue(s)
         return 0
 
-    // ── 2b. Deferred Execution: defer / @defer / বিলম্ব ─────────────────────────
+    // ── 2b. Deferred Execution: canonical TOK_KW_DEFER (defer / @defer / বিলম্ব) ─
     is_defer_stmt = 0
-    if k == TOK_KW_DEFER() or (k == TOK_IDENT() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব"))
+    if k == TOK_KW_DEFER() or k == TOK_DIR_DEFER()
         if pos + 1 >= toks.len()
             is_defer_stmt = 1
         else
@@ -382,6 +480,36 @@ fn x86_synth_compile_statement s toks pos_box
         d_scan = d_start
         if d_start < toks.len()
             dt0 = toks[d_start]
+            if dt0.tok_kind == TOK_LBRACE() or (dt0.tok_kind != TOK_STR() and dt0.tok_text == "{")
+                // Braced defer block: `defer { stmt1; stmt2 }`
+                bd_def = 1
+                d_scan = d_start + 1
+                while d_scan < toks.len() and bd_def > 0
+                    bt_d = toks[d_scan]
+                    if bt_d.tok_kind == TOK_LBRACE() or (bt_d.tok_kind != TOK_STR() and bt_d.tok_text == "{")
+                        bd_def = bd_def + 1
+                    elif bt_d.tok_kind == TOK_RBRACE() or (bt_d.tok_kind != TOK_STR() and bt_d.tok_text == "}")
+                        bd_def = bd_def - 1
+                        if bd_def == 0 break end
+                    end
+                    d_scan = d_scan + 1
+                end
+                d_idx_br = s.synth_defer_starts.len()
+                push(s.synth_defer_starts, d_start + 1)
+                push(s.synth_defer_ends, d_scan)
+                if s.synth_has_defer_unwind == 1 and d_idx_br < 64
+                    x86_synth_emit_bytes(s, [72, 15, 186, 173])
+                    x86_synth_emit_u32(s, 0 - s.synth_defer_mask_off)
+                    x86_synth_emit_byte(s, d_idx_br)
+                    s.synth_last_store_end = 0 - 1
+                end
+                if d_scan < toks.len() and (toks[d_scan].tok_kind == TOK_RBRACE() or toks[d_scan].tok_text == "}")
+                    list_set(pos_box, 0, d_scan + 1)
+                else
+                    list_set(pos_box, 0, d_scan)
+                end
+                return 0
+            end
             is_block_defer = 0
             if dt0.tok_span.span_start_line > d_line
                 is_block_defer = 1
@@ -441,6 +569,9 @@ fn x86_synth_compile_statement s toks pos_box
                     elif sk_d == TOK_RPAREN() or sk_d == TOK_RBRACKET() or sk_d == TOK_RBRACE() or stxt_d == ")" or stxt_d == "]" or stxt_d == "}"
                         if paren_d > 0
                             paren_d = paren_d - 1
+                        else
+                            // Stop before enclosing block's closing '}' / ')' / ']'
+                            break
                         end
                     elif paren_d == 0 and (sk_d == TOK_NEWLINE() or sk_d == TOK_SEMI() or sk_d == TOK_COMMENT_LINE())
                         break
@@ -483,7 +614,7 @@ fn x86_synth_compile_statement s toks pos_box
             push(curr_brk_list, p_off)
         return 0
 
-    if k == TOK_KW_CONTINUE() or (k == TOK_IDENT() and (txt == "continue" or txt == "চলুক" or txt == "চলো"))
+    if k == TOK_KW_CONTINUE() or k == TOK_DIR_CONTINUE()
         list_set(pos_box, 0, pos + 1)
         if s.synth_loop_try_depths.len() > 0
             l_td = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
@@ -509,19 +640,75 @@ fn x86_synth_compile_statement s toks pos_box
         end
         return 0
 
-    // ── 4. Struct Definition: struct / গঠন / @struct ──────────────────────────
+    // ── 4. Struct / Union Definition: canonical TOK_KW_STRUCT + union ──
     is_struct = 0
     if k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT()
         is_struct = 1
-    if k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct")
+    if k == TOK_IDENT() and (txt == "union" or txt == "ইউনিয়ন" or txt == "@union")
         is_struct = 1
 
     if is_struct == 1
         return x86_synth_compile_struct_def(s, toks, pos_box, t.tok_span.span_start_col, t.tok_span.span_start_line)
 
-    // ── 4b. Enum / Tagged ADT Definition: enum / @enum / গণনা ────────────────
+    // ── 4a. Trait / Impl Definition: canonical TOK_DIR_TRAIT & TOK_KW_IMPL ──
+    if k == TOK_DIR_TRAIT() and pos + 1 < toks.len() and x86_synth_is_ident_token(toks[pos + 1].tok_kind) == 1 and toks[pos + 1].tok_span.span_start_line == t.tok_span.span_start_line
+        return x86_synth_compile_trait_def(s, toks, pos_box, t.tok_span.span_start_col, t.tok_span.span_start_line)
+    end
+    if k == TOK_KW_IMPL() or k == TOK_DIR_IMPL()
+        return x86_synth_compile_impl_block(s, toks, pos_box, t.tok_span.span_start_col, t.tok_span.span_start_line)
+    end
+
+    // ── 4a2. Pointer Dereference Assignment: *ptr_expr = rhs ───────────────────
+    if (k == TOK_STAR() or (k != TOK_STR() and txt == "*")) and pos + 2 < toks.len()
+        // Scan ahead to check if '=' appears on the same line after the pointer l-value
+        dp_scan = pos + 1
+        dp_pdepth = 0
+        dp_eq_pos = 0 - 1
+        dp_line = t.tok_span.span_start_line
+        while dp_scan < toks.len()
+            dpt = toks[dp_scan]
+            dpk = dpt.tok_kind
+            dpx = dpt.tok_text
+            if dpk == TOK_NEWLINE() or dpk == TOK_SEMI() or dpk == TOK_EOF() or dpt.tok_span.span_start_line > dp_line
+                break
+            end
+            if dpk == TOK_LPAREN() or dpx == "(" or dpk == TOK_LBRACKET() or dpx == "["
+                dp_pdepth = dp_pdepth + 1
+            elif dpk == TOK_RPAREN() or dpx == ")" or dpk == TOK_RBRACKET() or dpx == "]"
+                if dp_pdepth > 0 dp_pdepth = dp_pdepth - 1 end
+            elif dp_pdepth == 0 and (dpk == TOK_ASSIGN() or (dpk != TOK_STR() and dpx == "="))
+                dp_eq_pos = dp_scan
+                break
+            end
+            dp_scan = dp_scan + 1
+        end
+        if dp_eq_pos > pos + 1
+            // Evaluate pointer expression into %rax
+            list_set(pos_box, 0, pos + 1)
+            x86_synth_compile_expr(s, toks, pos_box)
+            lhs_ptr_t = s.synth_last_struct
+            if x86_synth_is_const_ptr_type(lhs_ptr_t) == 1
+                say "❌ [Error]: Cannot write through immutable const pointer '" + lhs_ptr_t + "' at line " + str(dp_line)
+                exit(1)
+            end
+            pt_w = x86_synth_ptr_pointee(lhs_ptr_t)
+            if pt_w == "" pt_w = "i64" end
+            st_sz = x86_synth_sizeof_type(s, pt_w)
+            // Push target address (16B aligned), evaluate RHS, pop into %rcx, store exact width
+            x86_synth_emit_bytes(s, [80, 72, 131, 236, 8]) // push rax; sub rsp, 8
+            list_set(pos_box, 0, dp_eq_pos + 1)
+            x86_synth_compile_expr(s, toks, pos_box)
+            x86_synth_emit_bytes(s, [72, 131, 196, 8, 89]) // add rsp, 8; pop rcx
+            x86_synth_emit_null_check_rcx(s)
+            x86_synth_emit_field_store_rcx_rax(s, 0, st_sz)
+            s.synth_last_store_end = 0 - 1
+            return 0
+        end
+    end
+
+    // ── 4b. Enum / Tagged ADT Definition: canonical TOK_KW_ENUM ──────────────
     is_enum = 0
-    if k == TOK_KW_ENUM() or k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
+    if k == TOK_KW_ENUM() or k == TOK_DIR_ENUM()
         is_enum = 1
 
     if is_enum == 1
@@ -681,10 +868,20 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_bytes(s, [72, 131, 196, 8, 89]) // add rsp, 8; pop rcx (parent)
                     x86_synth_emit_null_check_rcx(s)
                     lf_name = lv_fields[leaf_i]
+                    if x86_synth_is_const_ptr_type(cur_stype) == 1
+                        say "❌ [Error]: Cannot mutate field '" + lf_name + "' through immutable const pointer '" + cur_stype + "'"
+                        exit(1)
+                    end
                     lf_meta = x86_synth_get_field_meta(s, cur_stype, lf_name)
                     lf_off = lf_meta[0]
                     lf_sz = lf_meta[1]
                     lf_ft = lf_meta[4]
+                    lf_bo = 0
+                    lf_bw = 0
+                    if lf_meta.len() >= 7
+                        lf_bo = lf_meta[5]
+                        lf_bw = lf_meta[6]
+                    end
                     if lv_is_comp == 1
                         x86_synth_emit_bytes(s, [73, 137, 192]) // mov r8, rax (rhs)
                         if lf_off < 128
@@ -732,7 +929,11 @@ fn x86_synth_compile_statement s toks pos_box
                             x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
                         end
                     end
-                    x86_synth_emit_field_store_rcx_rax(s, lf_off, lf_sz)
+                    if lf_bw > 0
+                        x86_synth_emit_bitfield_store_rcx_rax(s, lf_off, lf_sz, lf_bo, lf_bw)
+                    else
+                        x86_synth_emit_field_store_rcx_rax(s, lf_off, lf_sz)
+                    end
                     s.synth_last_store_end = 0 - 1
                     return 0
                 else
@@ -909,10 +1110,20 @@ fn x86_synth_compile_statement s toks pos_box
 
                 x86_synth_emit_null_check_rcx(s)
                 leaf_field = chain_fields[chain_fields.len() - 1]
+                if x86_synth_is_const_ptr_type(cur_stype) == 1
+                    say "❌ [Error]: Cannot mutate field '" + leaf_field + "' through immutable const pointer '" + cur_stype + "'"
+                    exit(1)
+                end
                 lf_meta2 = x86_synth_get_field_meta(s, cur_stype, leaf_field)
                 f_off = lf_meta2[0]
                 f_sz2 = lf_meta2[1]
                 leaf_ftype = lf_meta2[4]
+                f_bo2 = 0
+                f_bw2 = 0
+                if lf_meta2.len() >= 7
+                    f_bo2 = lf_meta2[5]
+                    f_bw2 = lf_meta2[6]
+                end
                 if is_fld_comp == 0
                     // Pop RHS value into %rax
                     x86_synth_emit_byte(s, 88)
@@ -969,8 +1180,12 @@ fn x86_synth_compile_statement s toks pos_box
                     end
                 end
 
-                // Store value to leaf field with exact 1/2/4/8B hardware width
-                x86_synth_emit_field_store_rcx_rax(s, f_off, f_sz2)
+                // Store value to leaf field with exact 1/2/4/8B hardware width (or read-modify-write bitfield!)
+                if f_bw2 > 0
+                    x86_synth_emit_bitfield_store_rcx_rax(s, f_off, f_sz2, f_bo2, f_bw2)
+                else
+                    x86_synth_emit_field_store_rcx_rax(s, f_off, f_sz2)
+                end
 
                 return 0
 
@@ -1046,6 +1261,41 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_bss_addr(s, bss_arr_idx)     // rax = bss buffer base
                     x86_synth_emit_bytes(s, [72, 137, 199])     // mov rdi, rax
                     x86_synth_emit_raw_array_store(s, s.synth_bss_elem_sizes[bss_arr_idx])
+                    s.synth_last_store_end = 0 - 1
+                    return 0
+                end
+                // Direct scaled store for typed pointers `p[i] = val` (rejects `*const T` at compile time!)
+                ptr_arr_t = x86_synth_get_var_type(s, arr_name)
+                if ptr_arr_t == ""
+                    ptr_arr_t = x86_synth_get_mutable_global_struct(s, arr_name)
+                end
+                if x86_synth_is_ptr_type(ptr_arr_t) == 1 and is_arr_comp == 0
+                    if x86_synth_is_const_ptr_type(ptr_arr_t) == 1
+                        say "❌ [Error]: Cannot index-write through immutable const pointer '" + ptr_arr_t + "'"
+                        exit(1)
+                    end
+                    pt_w_el = x86_synth_ptr_pointee(ptr_arr_t)
+                    pt_w_sz = x86_synth_sizeof_type(s, pt_w_el)
+                    x86_synth_emit_bytes(s, [72, 137, 194, 94]) // mov rdx, rax (val); pop rsi (idx)
+                    lv_pa = x86_synth_find_local_var(s, arr_name)
+                    if lv_pa != 0 and lv_pa.lv_is_spilled == 0 and lv_pa.lv_reg >= 0
+                        x86_synth_emit_mov_reg_reg(s, 7, lv_pa.lv_reg)
+                    else
+                        mg_pa = x86_synth_find_mutable_global(s, arr_name)
+                        if lv_pa == 0 and mg_pa >= 512
+                            x86_synth_emit_mutable_global_read(s, mg_pa)
+                            x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+                        else
+                            off_pa = x86_synth_lookup_var(s, arr_name)
+                            if off_pa > 0
+                                x86_synth_emit_load_var(s, 7, off_pa)
+                            else
+                                x86_synth_emit_bytes(s, [49, 255])
+                            end
+                        end
+                    end
+                    x86_synth_emit_null_check_rdi(s)
+                    x86_synth_emit_raw_array_store(s, pt_w_sz)
                     s.synth_last_store_end = 0 - 1
                     return 0
                 end
@@ -1218,9 +1468,14 @@ fn x86_synth_compile_statement s toks pos_box
         end_patches = list()
 
         x86_synth_skip_whitespace_tokens(toks, pos_box)
+        if_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            if_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
         if_has_end = x86_synth_line_has_inline_end(toks, get(pos_box, 0), base_line)
 
-        // Compile then-block statements
+        // Compile then-block statements (braced `{ ... }`, indented, or `end`-delimited)
         while get(pos_box, 0) < toks.len()
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             cur_p = get(pos_box, 0)
@@ -1230,24 +1485,31 @@ fn x86_synth_compile_statement s toks pos_box
             cur_k = cur_t.tok_kind
             cur_txt = cur_t.tok_text
 
-            // Check if we hit elif, else, or end
-            if cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()
-                break
-            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else")
-                break
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                break
+            if if_braced == 1
+                if cur_k == TOK_RBRACE() or (cur_k != TOK_STR() and cur_txt == "}")
+                    list_set(pos_box, 0, cur_p + 1)
+                    break
+                end
+            else
+                // Check if we hit elif, else, or end
+                if cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()
+                    break
+                if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else")
+                    break
+                if x86_synth_is_block_end(toks, cur_p) == 1
+                    break
 
-            // Indentation check: statement on subsequent line with column <= base_col marks block end
-            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-                break
+                // Indentation check: statement on subsequent line with column <= base_col marks block end
+                if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                    break
+            end
 
             before_stmt_p = get(pos_box, 0)
             x86_synth_compile_statement(s, toks, pos_box)
             if get(pos_box, 0) == before_stmt_p
                 list_set(pos_box, 0, before_stmt_p + 1)
 
-            if cur_t.tok_span.span_start_line == base_line and if_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
+            if if_braced == 0 and cur_t.tok_span.span_start_line == base_line and if_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
                 break
 
         // Check if there is an elif or else coming next
@@ -1258,9 +1520,9 @@ fn x86_synth_compile_statement s toks pos_box
             cur_t = toks[cur_p]
             cur_k = cur_t.tok_kind
             cur_txt = cur_t.tok_text
-            if (cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()) and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if (cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()) and (if_braced == 1 or cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 has_subsequent = 1
-            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else") and (if_braced == 1 or cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 has_subsequent = 1
 
         if has_subsequent == 1
@@ -1287,9 +1549,9 @@ fn x86_synth_compile_statement s toks pos_box
             cur_k = cur_t.tok_kind
             cur_txt = cur_t.tok_text
             is_elif = 0
-            if (cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF()) and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if (cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF()) and (if_braced == 1 or cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 is_elif = 1
-            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "@elif") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "@elif") and (if_braced == 1 or cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 is_elif = 1
             if is_elif == 0
                 break
@@ -1310,6 +1572,11 @@ fn x86_synth_compile_statement s toks pos_box
             x86_synth_emit_u32(s, 0)
 
             x86_synth_skip_whitespace_tokens(toks, pos_box)
+            elif_braced = 0
+            if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                elif_braced = 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
             elif_has_end = x86_synth_line_has_inline_end(toks, get(pos_box, 0), elif_line)
 
             // Compile elif body
@@ -1321,19 +1588,26 @@ fn x86_synth_compile_statement s toks pos_box
                 ct2 = toks[cur_p2]
                 ck2 = ct2.tok_kind
                 cx2 = ct2.tok_text
-                if ck2 == TOK_KW_ELIF() or ck2 == TOK_DIR_ELIF() or ck2 == TOK_KW_ELSE() or ck2 == TOK_DIR_ELSE()
-                    break
-                if ck2 == TOK_IDENT() and (cx2 == "elif" or cx2 == "নাহলে_যদি" or cx2 == "নতুবা_যদি" or cx2 == "@elif" or cx2 == "else" or cx2 == "নাহলে" or cx2 == "অন্যথায়" or cx2 == "নতুবা" or cx2 == "@else")
-                    break
-                if x86_synth_is_block_end(toks, cur_p2) == 1
-                    break
-                if ct2.tok_span.span_start_line > elif_line and ct2.tok_span.span_start_col <= base_col
-                    break
+                if elif_braced == 1
+                    if ck2 == TOK_RBRACE() or (ck2 != TOK_STR() and cx2 == "}")
+                        list_set(pos_box, 0, cur_p2 + 1)
+                        break
+                    end
+                else
+                    if ck2 == TOK_KW_ELIF() or ck2 == TOK_DIR_ELIF() or ck2 == TOK_KW_ELSE() or ck2 == TOK_DIR_ELSE()
+                        break
+                    if ck2 == TOK_IDENT() and (cx2 == "elif" or cx2 == "নাহলে_যদি" or cx2 == "নতুবা_যদি" or cx2 == "@elif" or cx2 == "else" or cx2 == "নাহলে" or cx2 == "অন্যথায়" or cx2 == "নতুবা" or cx2 == "@else")
+                        break
+                    if x86_synth_is_block_end(toks, cur_p2) == 1
+                        break
+                    if ct2.tok_span.span_start_line > elif_line and ct2.tok_span.span_start_col <= base_col
+                        break
+                end
                 b_p2 = get(pos_box, 0)
                 x86_synth_compile_statement(s, toks, pos_box)
                 if get(pos_box, 0) == b_p2
                     list_set(pos_box, 0, b_p2 + 1)
-                if ct2.tok_span.span_start_line == elif_line and elif_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, elif_line) == 1
+                if elif_braced == 0 and ct2.tok_span.span_start_line == elif_line and elif_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, elif_line) == 1
                     break
 
             // Jump to end of if
@@ -1355,14 +1629,19 @@ fn x86_synth_compile_statement s toks pos_box
             cur_k = cur_t.tok_kind
             cur_txt = cur_t.tok_text
             is_else = 0
-            if (cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()) and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if (cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()) and (if_braced == 1 or cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 is_else = 1
-            if cur_k == TOK_IDENT() and (cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else") and (cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
+            if cur_k == TOK_IDENT() and (cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else") and (if_braced == 1 or cur_t.tok_span.span_start_col == base_col or cur_t.tok_span.span_start_line == base_line)
                 is_else = 1
             if is_else == 1
                 else_line = cur_t.tok_span.span_start_line
                 list_set(pos_box, 0, cur_p + 1) // Consume 'else'
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
+                else_braced = 0
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                    else_braced = 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
                 else_has_end = x86_synth_line_has_inline_end(toks, get(pos_box, 0), else_line)
                 while get(pos_box, 0) < toks.len()
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
@@ -1372,23 +1651,32 @@ fn x86_synth_compile_statement s toks pos_box
                     ct3 = toks[cur_p3]
                     ck3 = ct3.tok_kind
                     cx3 = ct3.tok_text
-                    if x86_synth_is_block_end(toks, cur_p3) == 1
-                        break
-                    if ct3.tok_span.span_start_line > else_line and ct3.tok_span.span_start_col <= base_col
-                        break
+                    if else_braced == 1
+                        if ck3 == TOK_RBRACE() or (ck3 != TOK_STR() and cx3 == "}")
+                            list_set(pos_box, 0, cur_p3 + 1)
+                            break
+                        end
+                    else
+                        if x86_synth_is_block_end(toks, cur_p3) == 1
+                            break
+                        if ct3.tok_span.span_start_line > else_line and ct3.tok_span.span_start_col <= base_col
+                            break
+                    end
                     b_p3 = get(pos_box, 0)
                     x86_synth_compile_statement(s, toks, pos_box)
                     if get(pos_box, 0) == b_p3
                         list_set(pos_box, 0, b_p3 + 1)
-                    if ct3.tok_span.span_start_line == else_line and else_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, else_line) == 1
+                    if else_braced == 0 and ct3.tok_span.span_start_line == else_line and else_has_end == 0 and x86_synth_should_stop_inline(toks, pos_box, else_line) == 1
                         break
 
-        // Consume optional end / @end / শেষ
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-        cur_p = get(pos_box, 0)
-        if cur_p < toks.len()
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                list_set(pos_box, 0, cur_p + 1)
+        // Consume optional end / @end / শেষ (only when not braced)
+        if if_braced == 0
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len()
+                if x86_synth_is_block_end(toks, cur_p) == 1
+                    list_set(pos_box, 0, cur_p + 1)
+        end
 
         // Backpatch all exit jumps to current offset
         cur_off = s.synth_code.len()
@@ -1490,23 +1778,29 @@ fn x86_synth_compile_statement s toks pos_box
                 lv_let_post = x86_synth_find_local_var(s, var_name)
                 if assigned_type != ""
                     x86_synth_set_var_type(s, var_name, assigned_type)
-                    if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
+                    if x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1
+                        x86_synth_set_prim_type(s, var_name, "uint")
+                    elif assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "i16" or assigned_type == "i8"
                         x86_synth_set_prim_type(s, var_name, "int")
                     elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
                         x86_synth_set_prim_type(s, var_name, "float")
                     elif assigned_type == "str" or assigned_type == "string"
                         x86_synth_set_prim_type(s, var_name, "str")
                 if is_int_lit == 1
-                    if s.synth_in_function == 0
+                    if s.synth_in_function == 0 and x86_synth_is_uint_type(assigned_type) == 0 and x86_synth_is_ptr_type(assigned_type) == 0
                         x86_synth_set_global_const(s, var_name, int_lit_val)
                     end
-                    if assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
+                    if x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1
+                        x86_synth_set_prim_type(s, var_name, "uint")
+                    elif assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
                         x86_synth_set_prim_type(s, var_name, "dyn_tagged")
                     else
                         x86_synth_set_prim_type(s, var_name, "int")
                     end
                 elif assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
                     x86_synth_set_prim_type(s, var_name, "dyn_tagged")
+                elif x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1 or s.synth_last_expr_type == "uint"
+                    x86_synth_set_prim_type(s, var_name, "uint")
                 elif s.synth_last_expr_type == "int"
                     x86_synth_set_prim_type(s, var_name, "int")
                 elif s.synth_last_expr_type == "float"
@@ -1531,9 +1825,9 @@ fn x86_synth_compile_statement s toks pos_box
             return 0
         end
 
-    // ── 9c. Structured Try/Catch/Finally: try ... catch [err] ... [finally ...] [end] ─
+    // ── 9c. Structured Try/Catch/Finally: canonical TOK_KW_TRY / TOK_KW_CATCH ─
     is_try_stmt = 0
-    if k == TOK_KW_TRY() or k == TOK_DIR_TRY() or (k == TOK_IDENT() and (txt == "try" or txt == "চেষ্টা" or txt == "@try"))
+    if k == TOK_KW_TRY() or k == TOK_DIR_TRY()
         if pos + 1 >= toks.len() or (toks[pos + 1].tok_kind != TOK_ASSIGN() and toks[pos + 1].tok_text != "=")
             is_try_stmt = 1
         end
@@ -1565,17 +1859,30 @@ fn x86_synth_compile_statement s toks pos_box
         try_frame = [fin_flag_off, fin_val_off, try_ret_patches, outer_try_depth]
         push(s.synth_try_frames, try_frame)
 
-        // Compile try body until 'catch', 'finally', block end, or dedent
+        // Compile try body: supports BOTH braced `{ ... }` AND indentation/`end` blocks
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        try_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            try_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
         while get(pos_box, 0) < toks.len()
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             cur_pt = get(pos_box, 0)
             if cur_pt >= toks.len() break end
             ct_t = toks[cur_pt]
-            if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "catch" or ct_t.tok_text == "ধরো" or ct_t.tok_text == "@catch" or ct_t.tok_text == "finally" or ct_t.tok_text == "অবশেষে" or ct_t.tok_text == "@finally"))
-                break
+            if try_braced == 1
+                if ct_t.tok_kind == TOK_RBRACE() or (ct_t.tok_kind != TOK_STR() and ct_t.tok_text == "}")
+                    list_set(pos_box, 0, cur_pt + 1)
+                    break
+                end
+            else
+                if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "finally" or ct_t.tok_text == "অবশেষে" or ct_t.tok_text == "@finally"))
+                    break
+                end
+                if x86_synth_is_block_end(toks, cur_pt) == 1 break end
+                if ct_t.tok_span.span_start_line > base_line and ct_t.tok_span.span_start_col <= base_col break end
             end
-            if x86_synth_is_block_end(toks, cur_pt) == 1 break end
-            if ct_t.tok_span.span_start_line > base_line and ct_t.tok_span.span_start_col <= base_col break end
             bp_t = get(pos_box, 0)
             x86_synth_compile_statement(s, toks, pos_box)
             if get(pos_box, 0) <= bp_t list_set(pos_box, 0, bp_t + 1) end
@@ -1598,7 +1905,7 @@ fn x86_synth_compile_statement s toks pos_box
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         if get(pos_box, 0) < toks.len()
             ct_c = toks[get(pos_box, 0)]
-            if ct_c.tok_kind == TOK_KW_CATCH() or ct_c.tok_kind == TOK_DIR_CATCH() or (ct_c.tok_kind == TOK_IDENT() and (ct_c.tok_text == "catch" or ct_c.tok_text == "ধরো" or ct_c.tok_text == "@catch"))
+            if ct_c.tok_kind == TOK_KW_CATCH() or ct_c.tok_kind == TOK_DIR_CATCH()
                 has_catch_blk = 1
                 c_line = ct_c.tok_span.span_start_line
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
@@ -1608,16 +1915,29 @@ fn x86_synth_compile_statement s toks pos_box
                     // Exception value arrives in %rax; bind to err_vname
                     x86_synth_bind_var(s, err_vname)
                 end
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                catch_braced = 0
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                    catch_braced = 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
                 while get(pos_box, 0) < toks.len()
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
                     cur_pc = get(pos_box, 0)
                     if cur_pc >= toks.len() break end
                     ct_c2 = toks[cur_pc]
-                    if ct_c2.tok_kind == TOK_IDENT() and (ct_c2.tok_text == "finally" or ct_c2.tok_text == "অবশেষে" or ct_c2.tok_text == "@finally")
-                        break
+                    if catch_braced == 1
+                        if ct_c2.tok_kind == TOK_RBRACE() or (ct_c2.tok_kind != TOK_STR() and ct_c2.tok_text == "}")
+                            list_set(pos_box, 0, cur_pc + 1)
+                            break
+                        end
+                    else
+                        if ct_c2.tok_kind == TOK_IDENT() and (ct_c2.tok_text == "finally" or ct_c2.tok_text == "অবশেষে" or ct_c2.tok_text == "@finally")
+                            break
+                        end
+                        if x86_synth_is_block_end(toks, cur_pc) == 1 break end
+                        if ct_c2.tok_span.span_start_line > c_line and ct_c2.tok_span.span_start_col <= base_col break end
                     end
-                    if x86_synth_is_block_end(toks, cur_pc) == 1 break end
-                    if ct_c2.tok_span.span_start_line > c_line and ct_c2.tok_span.span_start_col <= base_col break end
                     bp_c = get(pos_box, 0)
                     x86_synth_compile_statement(s, toks, pos_box)
                     if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
@@ -1649,13 +1969,26 @@ fn x86_synth_compile_statement s toks pos_box
             if ct_f.tok_kind == TOK_IDENT() and (ct_f.tok_text == "finally" or ct_f.tok_text == "অবশেষে" or ct_f.tok_text == "@finally")
                 f_line = ct_f.tok_span.span_start_line
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                fin_braced = 0
+                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                    fin_braced = 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
                 while get(pos_box, 0) < toks.len()
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
                     cur_pf = get(pos_box, 0)
                     if cur_pf >= toks.len() break end
                     ct_f2 = toks[cur_pf]
-                    if x86_synth_is_block_end(toks, cur_pf) == 1 break end
-                    if ct_f2.tok_span.span_start_line > f_line and ct_f2.tok_span.span_start_col <= base_col break end
+                    if fin_braced == 1
+                        if ct_f2.tok_kind == TOK_RBRACE() or (ct_f2.tok_kind != TOK_STR() and ct_f2.tok_text == "}")
+                            list_set(pos_box, 0, cur_pf + 1)
+                            break
+                        end
+                    else
+                        if x86_synth_is_block_end(toks, cur_pf) == 1 break end
+                        if ct_f2.tok_span.span_start_line > f_line and ct_f2.tok_span.span_start_col <= base_col break end
+                    end
                     bp_f = get(pos_box, 0)
                     x86_synth_compile_statement(s, toks, pos_box)
                     if get(pos_box, 0) <= bp_f list_set(pos_box, 0, bp_f + 1) end
@@ -1663,9 +1996,11 @@ fn x86_synth_compile_statement s toks pos_box
             end
         end
 
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-        if get(pos_box, 0) < toks.len() and x86_synth_is_block_end(toks, get(pos_box, 0)) == 1 and toks[get(pos_box, 0)].tok_span.span_start_col >= base_col
-            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        if try_braced == 0
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            if get(pos_box, 0) < toks.len() and x86_synth_is_block_end(toks, get(pos_box, 0)) == 1 and toks[get(pos_box, 0)].tok_span.span_start_col >= base_col
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
         end
 
         if has_catch_blk == 0
@@ -1912,6 +2247,7 @@ fn x86_synth_compile_statement s toks pos_box
             if toks[pos + 1].tok_text != "="
                 g_name = toks[pos + 1].tok_text
                 g_off = x86_synth_alloc_mutable_global(s, g_name)
+                x86_synth_mark_mutable_global_explicit(s, g_name)
                 list_set(pos_box, 0, pos + 2)
                 g_ann_type = ""
                 g_np = get(pos_box, 0)
@@ -1928,7 +2264,9 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_emit_mutable_global_write(s, g_off)
                     g_prim = s.synth_last_expr_type
                     g_st = s.synth_last_struct
-                    if g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "u64" or g_ann_type == "u32"
+                    if x86_synth_is_uint_type(g_ann_type) == 1
+                        g_prim = "uint"
+                    elif g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "i16" or g_ann_type == "i8"
                         g_prim = "int"
                     elif g_ann_type == "float" or g_ann_type == "f64" or g_ann_type == "f32"
                         g_prim = "float"
@@ -1941,7 +2279,9 @@ fn x86_synth_compile_statement s toks pos_box
                 elif g_ann_type != ""
                     g_p2 = ""
                     g_s2 = ""
-                    if g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "u64" or g_ann_type == "u32"
+                    if x86_synth_is_uint_type(g_ann_type) == 1
+                        g_p2 = "uint"
+                    elif g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "i16" or g_ann_type == "i8"
                         g_p2 = "int"
                     elif g_ann_type == "float" or g_ann_type == "f64" or g_ann_type == "f32"
                         g_p2 = "float"
@@ -1979,6 +2319,7 @@ fn x86_synth_compile_statement s toks pos_box
             is_assign = 0
             is_compound = 0
             comp_op = 0
+            comp_tok_adv = 1
             if nk == TOK_ASSIGN() or ntxt == "="
                 is_assign = 1
             elif nk == TOK_PLUSEQ() or ntxt == "+="
@@ -2001,6 +2342,34 @@ fn x86_synth_compile_statement s toks pos_box
                 is_assign = 1
                 is_compound = 1
                 comp_op = TOK_PERCENT()
+            elif next_pos + 1 < toks.len() and (toks[next_pos + 1].tok_kind == TOK_ASSIGN() or (toks[next_pos + 1].tok_kind != TOK_STR() and toks[next_pos + 1].tok_text == "="))
+                if nk == TOK_SHR() or (nk != TOK_STR() and ntxt == ">>")
+                    is_assign = 1
+                    is_compound = 1
+                    comp_op = TOK_SHR()
+                    comp_tok_adv = 2
+                elif nk == TOK_SHL() or (nk != TOK_STR() and ntxt == "<<")
+                    is_assign = 1
+                    is_compound = 1
+                    comp_op = TOK_SHL()
+                    comp_tok_adv = 2
+                elif nk == TOK_AMP() or (nk != TOK_STR() and ntxt == "&")
+                    is_assign = 1
+                    is_compound = 1
+                    comp_op = TOK_AMP()
+                    comp_tok_adv = 2
+                elif nk == TOK_BAR() or (nk != TOK_STR() and ntxt == "|")
+                    is_assign = 1
+                    is_compound = 1
+                    comp_op = TOK_BAR()
+                    comp_tok_adv = 2
+                elif nk == TOK_CARET() or (nk != TOK_STR() and ntxt == "^")
+                    is_assign = 1
+                    is_compound = 1
+                    comp_op = TOK_CARET()
+                    comp_tok_adv = 2
+                end
+            end
 
             if is_assign == 1
                 is_int_lit = 0
@@ -2023,7 +2392,7 @@ fn x86_synth_compile_statement s toks pos_box
                         is_mg_target = 1
                     end
                 else
-                    if lv_mg_chk == 0 and mg_cur_off >= 512 and (x86_synth_is_mutable_global_name(var_name) == 1 or is_compound == 1)
+                    if lv_mg_chk == 0 and mg_cur_off >= 512 and (x86_synth_is_mutable_global_name(var_name) == 1 or x86_synth_is_explicit_mutable_global(s, var_name) == 1 or is_compound == 1)
                         is_mg_target = 1
                     end
                 end
@@ -2148,7 +2517,9 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_mutable_global_write(s, mg_slot)
                         mg_p = s.synth_last_expr_type
                         mg_st = s.synth_last_struct
-                        if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
+                        if x86_synth_is_uint_type(assigned_type) == 1
+                            mg_p = "uint"
+                        elif assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "i16" or assigned_type == "i8"
                             mg_p = "int"
                         elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
                             mg_p = "float"
@@ -2165,23 +2536,29 @@ fn x86_synth_compile_statement s toks pos_box
                     lv_asg_post = x86_synth_find_local_var(s, var_name)
                     if assigned_type != ""
                         x86_synth_set_var_type(s, var_name, assigned_type)
-                        if assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "u64" or assigned_type == "u32"
+                        if x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1
+                            x86_synth_set_prim_type(s, var_name, "uint")
+                        elif assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "i16" or assigned_type == "i8"
                             x86_synth_set_prim_type(s, var_name, "int")
                         elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
                             x86_synth_set_prim_type(s, var_name, "float")
                         elif assigned_type == "str" or assigned_type == "string"
                             x86_synth_set_prim_type(s, var_name, "str")
                     if is_int_lit == 1
-                        if s.synth_in_function == 0
+                        if s.synth_in_function == 0 and x86_synth_is_uint_type(assigned_type) == 0 and x86_synth_is_ptr_type(assigned_type) == 0
                             x86_synth_set_global_const(s, var_name, int_lit_val)
                         end
-                        if assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
+                        if x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1
+                            x86_synth_set_prim_type(s, var_name, "uint")
+                        elif assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
                             x86_synth_set_prim_type(s, var_name, "dyn_tagged")
                         else
                             x86_synth_set_prim_type(s, var_name, "int")
                         end
                     elif assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
                         x86_synth_set_prim_type(s, var_name, "dyn_tagged")
+                    elif x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1 or s.synth_last_expr_type == "uint"
+                        x86_synth_set_prim_type(s, var_name, "uint")
                     elif s.synth_last_expr_type == "int"
                         x86_synth_set_prim_type(s, var_name, "int")
                     elif s.synth_last_expr_type == "float"
@@ -2194,8 +2571,8 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_prim_type(s, var_name, "")
                     return 0
                 else
-                    // Compound assignment: target += expr, target -= expr, etc.
-                    list_set(pos_box, 0, next_pos + 1) // Consume ident and op=
+                    // Compound assignment: target += expr, target -= expr, /=, %=, >>=, <<=, &=, |=, ^=
+                    list_set(pos_box, 0, next_pos + comp_tok_adv) // Consume ident and op=
                     // Evaluate RHS expression into %rax (and %rdx = rtag if dyn_tagged)
                     x86_synth_compile_expr(s, toks, pos_box)
                     rhs_comp_type = s.synth_last_expr_type
@@ -2204,8 +2581,12 @@ fn x86_synth_compile_statement s toks pos_box
                     if is_mg_target == 0
                         pt_pre = x86_synth_get_prim_type(s, var_name)
                     end
+                    is_arith_comp = 0
+                    if comp_op == TOK_PLUS() or comp_op == TOK_MINUS() or comp_op == TOK_STAR() or comp_op == TOK_SLASH() or comp_op == TOK_PERCENT()
+                        is_arith_comp = 1
+                    end
                     // Runtime-tagged compound assignment fast path via _lipi_binop_tagged
-                    if s.synth_freestanding == 0 and is_mg_target == 0 and (pt_pre == "dyn_tagged" or rhs_comp_type == "dyn_tagged" or (lv_tgt != 0 and lv_tgt.lv_tag_off > 0))
+                    if is_arith_comp == 1 and s.synth_freestanding == 0 and is_mg_target == 0 and (pt_pre == "dyn_tagged" or rhs_comp_type == "dyn_tagged" or (lv_tgt != 0 and lv_tgt.lv_tag_off > 0))
                         tag_op = 0
                         if comp_op == TOK_MINUS()
                             tag_op = 1
@@ -2299,7 +2680,11 @@ fn x86_synth_compile_statement s toks pos_box
                         pt = x86_synth_get_prim_type(s, var_name)
                     end
                     res_comp_prim = pt
-                    if (pt == "float" or rhs_comp_type == "float") and comp_op != TOK_PERCENT()
+                    is_uint_comp = 0
+                    if pt == "uint" or rhs_comp_type == "uint"
+                        is_uint_comp = 1
+                    end
+                    if is_arith_comp == 1 and (pt == "float" or rhs_comp_type == "float") and comp_op != TOK_PERCENT()
                         if pt == "float"
                             x86_synth_emit_bytes(s, [102, 72, 15, 110, 192]) // movq xmm0, rax
                         else
@@ -2322,12 +2707,16 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_bytes(s, [102, 72, 15, 126, 192]) // movq rax, xmm0
                         res_comp_prim = "float"
                     elif comp_op == TOK_PLUS()
-                        if s.synth_freestanding == 1 or ((pt == "int" or rhs_comp_type == "int") and pt != "str" and rhs_comp_type != "str")
+                        if s.synth_freestanding == 1 or ((pt == "int" or pt == "uint" or rhs_comp_type == "int" or rhs_comp_type == "uint") and pt != "str" and rhs_comp_type != "str")
                             // Native hardware add rax, rcx (0x48 0x01 0xC8) - 1 cycle silicon execution!
                             x86_synth_emit_byte(s, 72)
                             x86_synth_emit_byte(s, 1)
                             x86_synth_emit_byte(s, 200)
-                            res_comp_prim = "int"
+                            if is_uint_comp == 1
+                                res_comp_prim = "uint"
+                            else
+                                res_comp_prim = "int"
+                            end
                         else
                             // Safe dynamic fallback for strings, lists, objects
                             x86_synth_emit_byte(s, 72)
@@ -2351,11 +2740,44 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_byte(s, 175)
                         x86_synth_emit_byte(s, 193)
                     elif comp_op == TOK_SLASH()
-                        // Division-by-zero & INT64_MIN / -1 guarded cqo; idiv rcx
-                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
+                        if is_uint_comp == 1
+                            // WHY: Unsigned division (u8/u16/u32/u64): zero-extend via xor edx, edx; div rcx!
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 5, 49, 210, 72, 247, 241])
+                            res_comp_prim = "uint"
+                        else
+                            // Division-by-zero & INT64_MIN / -1 guarded cqo; idiv rcx
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
+                        end
                     elif comp_op == TOK_PERCENT()
-                        // Modulo-by-zero & INT64_MIN % -1 guarded cqo; idiv rcx; mov rax, rdx
-                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                        if is_uint_comp == 1
+                            // WHY: Unsigned modulo (u8/u16/u32/u64): xor edx, edx; div rcx; mov rax, rdx!
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 8, 49, 210, 72, 247, 241, 72, 137, 208])
+                            res_comp_prim = "uint"
+                        else
+                            // Modulo-by-zero & INT64_MIN % -1 guarded cqo; idiv rcx; mov rax, rdx
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                        end
+                    elif comp_op == TOK_SHR()
+                        if pt == "uint"
+                            // Logical shift right: shr rax, cl (0x48 0xD3 0xE8)
+                            x86_synth_emit_bytes(s, [72, 211, 232])
+                            res_comp_prim = "uint"
+                        else
+                            // Arithmetic shift right: sar rax, cl (0x48 0xD3 0xF8)
+                            x86_synth_emit_bytes(s, [72, 211, 248])
+                        end
+                    elif comp_op == TOK_SHL()
+                        // shl rax, cl (0x48 0xD3 0xE0)
+                        x86_synth_emit_bytes(s, [72, 211, 224])
+                    elif comp_op == TOK_AMP()
+                        // and rax, rcx (0x48 0x21 0xC8)
+                        x86_synth_emit_bytes(s, [72, 33, 200])
+                    elif comp_op == TOK_BAR()
+                        // or rax, rcx (0x48 0x09 0xC8)
+                        x86_synth_emit_bytes(s, [72, 9, 200])
+                    elif comp_op == TOK_CARET()
+                        // xor rax, rcx (0x48 0x31 0xC8)
+                        x86_synth_emit_bytes(s, [72, 49, 200])
                     end
                     // Store updated value back to target
                     if is_mg_target == 1
@@ -2377,12 +2799,20 @@ fn x86_synth_compile_statement s toks pos_box
                     end
                     return 0
 
-    // ── 11. Function & Component Definition: fn / কাজ / @fn / component / উপাদান ──
+    // ── 11. Function & Component Definition: canonical TOK_KW_ASYNC / TOK_KW_FN / TOK_KW_COMPONENT ──
+    if k == TOK_KW_ASYNC() and pos + 1 < toks.len()
+        nt_af = toks[pos + 1]
+        if nt_af.tok_kind == TOK_KW_FN() or nt_af.tok_kind == TOK_DIR_FN()
+            s.synth_pending_fn_async = 1
+            s.synth_pending_fn_base_col = t.tok_span.span_start_col
+            list_set(pos_box, 0, pos + 1)
+            return x86_synth_compile_fn_def(s, toks, pos_box)
+        end
+    end
     is_fn = 0
     if k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT()
         is_fn = 1
-    if k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান")
-        is_fn = 1
+    end
 
     if is_fn == 1
         return x86_synth_compile_fn_def(s, toks, pos_box)

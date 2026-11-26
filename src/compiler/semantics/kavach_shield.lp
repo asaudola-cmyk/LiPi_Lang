@@ -66,6 +66,8 @@ fn kavach_is_silicon_crowned fn_name
     "obj_get_color", "অবজেক্ট_রং", "obj_get_flags", "অবজেক্ট_ফ্ল্যাগ", "obj_has_ptrs",
     "print_raw", "প্রিন্ট_র", "print_inline", "প্রিন্ট_ইনলাইন", "write_out", "write_err", "println",
     "read_line", "রিড_লাইন", "write_file", "read_file", "path_exists", "ফাইল_বিদ্যমান",
+    "buf_reader_new", "buf_reader_free", "buf_reader_fill", "buf_reader_read", "buf_reader_read_line",
+    "buf_writer_new", "buf_writer_free", "buf_writer_flush", "buf_writer_write", "buf_writer_write_byte",
     "file_open", "ফাইল_খোলো", "ফাইল_তৈরি", "ফাইল_খোলো_যুক্ত",
     "file_close", "ফাইল_বন্ধ", "file_read_fd", "ফাইল_পড়ো",
     "file_write_fd", "ফাইল_লেখো", "file_seek", "ফাইল_সিক",
@@ -107,14 +109,20 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap"
     return 1
   end
-  // Sovereign Ring-0 Privileged & Hardware MMIO / Port I/O Authority Guard
-  if call_name == "port_in8" or call_name == "port_out8" or call_name == "port_in16" or call_name == "port_out16" or call_name == "port_in32" or call_name == "port_out32" or call_name == "inb" or call_name == "outb" or call_name == "inw" or call_name == "outw" or call_name == "inl" or call_name == "outl"
+  // Sovereign Ring-0 Privileged & Hardware MMIO / Port I/O / Inline Assembly Authority Guard
+  if call_name == "@asm" or call_name == "@অ্যাসেম্বলি" or call_name == "uefi_call" or call_name == "ms_x64_call"
     return 1
   end
-  if call_name == "mmio_r8" or call_name == "mmio_w8" or call_name == "mmio_r16" or call_name == "mmio_w16" or call_name == "mmio_r32" or call_name == "mmio_w32" or call_name == "mmio_r64" or call_name == "mmio_w64" or call_name == "mmio_read8" or call_name == "mmio_write8" or call_name == "mmio_read16" or call_name == "mmio_write16" or call_name == "mmio_read64" or call_name == "mmio_write64"
+  if call_name == "port_in8" or call_name == "port_out8" or call_name == "port_in16" or call_name == "port_out16" or call_name == "port_in32" or call_name == "port_out32" or call_name == "inb" or call_name == "outb" or call_name == "inw" or call_name == "outw" or call_name == "inl" or call_name == "outl" or call_name == "পোর্ট_পড়ো৮" or call_name == "পোর্ট_লেখো৮" or call_name == "পোর্ট_পড়ো১৬" or call_name == "পোর্ট_লেখো১৬" or call_name == "পোর্ট_পড়ো৩২" or call_name == "পোর্ট_লেখো৩২"
     return 1
   end
-  if call_name == "cpu_cli" or call_name == "cli" or call_name == "cpu_sti" or call_name == "sti" or call_name == "cpu_hlt" or call_name == "hlt" or call_name == "cpu_lgdt" or call_name == "lgdt" or call_name == "cpu_lidt" or call_name == "lidt" or call_name == "cpu_ltr" or call_name == "ltr" or call_name == "cpu_write_cr0" or call_name == "write_cr0" or call_name == "cpu_write_cr3" or call_name == "write_cr3" or call_name == "cpu_write_cr4" or call_name == "write_cr4" or call_name == "cpu_wrmsr" or call_name == "wrmsr" or call_name == "cpu_invlpg" or call_name == "invlpg" or call_name == "cpu_swapgs" or call_name == "swapgs"
+  if call_name == "mmio_r8" or call_name == "mmio_w8" or call_name == "mmio_r16" or call_name == "mmio_w16" or call_name == "mmio_r32" or call_name == "mmio_w32" or call_name == "mmio_r64" or call_name == "mmio_w64" or call_name == "mmio_read8" or call_name == "mmio_write8" or call_name == "mmio_read16" or call_name == "mmio_write16" or call_name == "mmio_read32" or call_name == "mmio_write32" or call_name == "mmio_read32_hw" or call_name == "mmio_write32_hw" or call_name == "mmio_read64" or call_name == "mmio_write64"
+    return 1
+  end
+  if call_name == "mem_u8_read" or call_name == "mem_u8_write" or call_name == "mem_u16_read" or call_name == "mem_u16_write" or call_name == "mem_u32_read" or call_name == "mem_u32_write" or call_name == "mem_u64_read" or call_name == "mem_u64_write"
+    return 1
+  end
+  if call_name == "cpu_cli" or call_name == "cli" or call_name == "cpu_sti" or call_name == "sti" or call_name == "cpu_hlt" or call_name == "hlt" or call_name == "cpu_lgdt" or call_name == "lgdt" or call_name == "cpu_lidt" or call_name == "lidt" or call_name == "cpu_sgdt" or call_name == "sgdt" or call_name == "cpu_sidt" or call_name == "sidt" or call_name == "cpu_ltr" or call_name == "ltr" or call_name == "cpu_read_cr0" or call_name == "read_cr0" or call_name == "cpu_write_cr0" or call_name == "write_cr0" or call_name == "cpu_read_cr2" or call_name == "read_cr2" or call_name == "cpu_read_cr3" or call_name == "read_cr3" or call_name == "cpu_write_cr3" or call_name == "write_cr3" or call_name == "cpu_read_cr4" or call_name == "read_cr4" or call_name == "cpu_write_cr4" or call_name == "write_cr4" or call_name == "cpu_rdmsr" or call_name == "rdmsr" or call_name == "cpu_wrmsr" or call_name == "wrmsr" or call_name == "cpu_invlpg" or call_name == "invlpg" or call_name == "cpu_swapgs" or call_name == "swapgs" or call_name == "cpu_wbinvd"
     return 1
   end
   return 0
@@ -155,7 +163,15 @@ fn kavach_scan_expr kv fn_name expr
   if k == "Call" or k == "CallExpr" or tag == AST_TAG_CALL()
     cname = ""
     if expr.func != 0
-      cname = expr.func.name
+      fk_k = expr.func.kind
+      if fk_k == "Variable" or fk_k == "IDENT" or fk_k == "Identifier"
+        cname = expr.func.name
+      elif fk_k == "MemberAccess" or fk_k == "FieldAccess"
+        cname = expr.func.name
+        kavach_scan_expr(kv, fn_name, expr.func)
+      else
+        kavach_scan_expr(kv, fn_name, expr.func)
+      end
     end
     if cname == ""
       cname = expr.name
@@ -355,8 +371,12 @@ fn kavach_verify_program ast_decls
       dk = decl.kind
       dtag = decl.tag
       if dk == "FnDef" or dk == "Function" or dk == "কাজ" or dk == "Component" or dtag == AST_TAG_FN_DEF()
-        if kavach_is_silicon_crowned(decl.name) == 0
-          kavach_scan_stmt_list(kv, decl.name, decl.body)
+        fn_ctx = decl.name
+        if fn_ctx == ""
+          fn_ctx = "<toplevel>"
+        end
+        if kavach_is_silicon_crowned(fn_ctx) == 0
+          kavach_scan_stmt_list(kv, fn_ctx, decl.body)
         end
       elif dk != "StructDef" and dk != "EnumDef" and dtag != AST_TAG_STRUCT_DEF() and dtag != AST_TAG_ENUM_DEF()
         kavach_scan_stmt(kv, "<toplevel>", decl)

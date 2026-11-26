@@ -89,11 +89,30 @@ fn live_interval_record_def intervals name pos is_param
             if is_param == 1
                 iv.is_param = 1
             found = 1
+            break
         i = i + 1
 
     if found == 0
         new_iv = live_interval_new(name, 0 - 1, pos, pos, is_param)
         push(intervals, new_iv)
+    return intervals
+
+fn live_interval_record_def_fast intervals iv_map name pos is_param
+    // WHY: O(1) DICT0-indexed variant of live_interval_record_def for self-hosting speed.
+    if name == ""
+        return intervals
+    if has_key(iv_map, name) == 1
+        iv = iv_map[name]
+        if pos < iv.start_pos
+            iv.start_pos = pos
+        if pos > iv.end_pos
+            iv.end_pos = pos
+        if is_param == 1
+            iv.is_param = 1
+        return intervals
+    new_iv = live_interval_new(name, 0 - 1, pos, pos, is_param)
+    push(intervals, new_iv)
+    iv_map[name] = new_iv
     return intervals
 
 fn live_interval_record_use intervals name pos
@@ -110,6 +129,7 @@ fn live_interval_record_use intervals name pos
         if iv.vreg_name == name
             live_interval_add_use(iv, pos)
             found = 1
+            break
         i = i + 1
 
     if found == 0
@@ -119,28 +139,57 @@ fn live_interval_record_use intervals name pos
         push(intervals, new_iv)
     return intervals
 
+fn live_interval_record_use_fast intervals iv_map name pos
+    // WHY: O(1) DICT0-indexed variant of live_interval_record_use for self-hosting speed.
+    if name == ""
+        return intervals
+    if has_key(iv_map, name) == 1
+        live_interval_add_use(iv_map[name], pos)
+        return intervals
+    new_iv = live_interval_new(name, 0 - 1, pos, pos, 0)
+    push(new_iv.use_positions, pos)
+    push(intervals, new_iv)
+    iv_map[name] = new_iv
+    return intervals
+
 // ── 4. Call-Spanning Analysis ────────────────────────────────────────────────
 
 fn live_interval_mark_calls intervals call_positions
     // WHY: A register live across a subroutine CALL must either be preserved
     //      in a callee-saved register or spilled to the stack frame, because
     //      caller-saved (scratch) registers are clobbered by the call ABI.
+    //      Uses O(log C) binary search over monotonically ascending call_positions.
     iv_count = intervals.len()
     call_count = call_positions.len()
+    if call_count == 0
+        i0 = 0
+        while i0 < iv_count
+            intervals[i0].spans_call = 0
+            i0 = i0 + 1
+        return intervals
+    end
     i = 0
     while i < iv_count
         iv = intervals[i]
+        st = iv.start_pos
+        en = iv.end_pos
         spans = 0
-        c = 0
-        while c < call_count
-            cp = call_positions[c]
-            // WHY: Strictly live ACROSS a call means defined strictly before the call
-            // (start_pos < cp) and last used strictly after the call (end_pos > cp).
-            // Values produced by the call itself (start_pos == cp) or consumed solely as
-            // call arguments (end_pos == cp) are not clobbered across the call boundary.
-            if cp > iv.start_pos and cp < iv.end_pos
+        if en > st + 1
+            // Binary search for first call position strictly > st
+            lo = 0
+            hi = call_count
+            while lo < hi
+                mid = (lo + hi) / 2
+                if call_positions[mid] <= st
+                    lo = mid + 1
+                else
+                    hi = mid
+                end
+            end
+            if lo < call_count and call_positions[lo] < en
                 spans = 1
-            c = c + 1
+            end
+        end
         iv.spans_call = spans
         i = i + 1
     return intervals
@@ -149,28 +198,30 @@ fn live_interval_mark_calls intervals call_positions
 
 fn live_interval_sort_by_start intervals
     // WHY: Linear scan register allocation processes intervals in increasing
-    //      order of their start position. Stable insertion sort ensures O(N)
-    //      performance for nearly sorted SSA linearizations.
+    //      order of their start position. In-place stable insertion sort gives
+    //      O(N) time and O(1) extra allocations for nearly-sorted SSA intervals.
     count = intervals.len()
     sorted = list()
     i = 0
     while i < count
-        item = intervals[i]
-        inserted = 0
-        new_sorted = list()
-        s_count = sorted.len()
-        j = 0
-        while j < s_count
+        push(sorted, intervals[i])
+        i = i + 1
+    i = 1
+    while i < count
+        key = sorted[i]
+        k_st = key.start_pos
+        k_en = key.end_pos
+        j = i - 1
+        while j >= 0
             curr = sorted[j]
-            if inserted == 0
-                if item.start_pos < curr.start_pos or (item.start_pos == curr.start_pos and item.end_pos < curr.end_pos)
-                    push(new_sorted, item)
-                    inserted = 1
-            push(new_sorted, curr)
-            j = j + 1
-        if inserted == 0
-            push(new_sorted, item)
-        sorted = new_sorted
+            if k_st < curr.start_pos or (k_st == curr.start_pos and k_en < curr.end_pos)
+                list_set(sorted, j + 1, curr)
+                j = j - 1
+            else
+                break
+            end
+        end
+        list_set(sorted, j + 1, key)
         i = i + 1
     return sorted
 

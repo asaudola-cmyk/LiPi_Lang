@@ -1245,3 +1245,160 @@ import "utso/net/tls/tls13"
   packet = quic_connection_create_1rtt_packet(conn, close_frame)
   return packet
 @end
+
+@fn quic_connection_drain(conn)
+  // WHY: RFC 9000 Section 10.2 Draining state transitions before final CLOSED teardown.
+  conn.conn_state = "DRAINING"
+  return conn
+@end
+
+@fn quic_connection_is_draining(conn)
+  @if conn.conn_state == "DRAINING" return 1 @end
+  return 0
+@end
+
+@! ============================================================================
+@! 9. RFC 9001 REAL TLS 1.3 QUIC AEAD & CHACHA20 HEADER PROTECTION
+@! ============================================================================
+
+@fn quic_derive_packet_keys(traffic_secret32)
+  // WHY: Derives RFC 9001 Section 5.1 Packet Protection keys via TLS 1.3 HKDF-Expand-Label:
+  //   "quic key" (32B ChaCha20), "quic iv" (12B AEAD IV), "quic hp" (32B Header Protection key).
+  k = tls13_hkdf_expand_label(traffic_secret32, "quic key", [], 32)
+  iv = tls13_hkdf_expand_label(traffic_secret32, "quic iv", [], 12)
+  hp = tls13_hkdf_expand_label(traffic_secret32, "quic hp", [], 32)
+  return { qk_key: k, qk_iv: iv, qk_hp: hp }
+@end
+
+@fn quic_build_aead_nonce(iv12, pkt_num)
+  // WHY: RFC 9001 Section 5.3 — XORs the 64-bit packet number into the rightmost 8 bytes of the 12-byte IV.
+  nonce = []
+  i = 0
+  @while i < 12
+    b = iv12[i] & 255
+    @if i >= 4
+      shift = (11 - i) * 8
+      b = b ^ ((pkt_num >> shift) & 255)
+    @end
+    nonce = nonce.push(b)
+    i = i + 1
+  @end
+  return nonce
+@end
+
+@fn quic_hp_mask_chacha20(hp_key32, sample16)
+  // WHY: RFC 9001 Section 5.4.4 — ChaCha20 Header Protection:
+  //   counter = little-endian u32 of sample[0..3], nonce = sample[4..15] -> first 5 bytes of keystream!
+  ctr = (sample16[0] & 255) | ((sample16[1] & 255) << 8) | ((sample16[2] & 255) << 16) | ((sample16[3] & 255) << 24)
+  n12 = []
+  i = 4
+  @while i < 16
+    n12 = n12.push(sample16[i] & 255)
+    i = i + 1
+  @end
+  blk = _tls_chacha_block(hp_key32, n12, ctr)
+  return [blk[0], blk[1], blk[2], blk[3], blk[4]]
+@end
+
+@fn quic_aead_protect_packet(key32, iv12, hp_key32, header_bytes, pkt_num, pn_offset, pn_len, plaintext_bytes)
+  // WHY: Full RFC 9001 AEAD packet encryption + Poly1305 authentication over header AAD + ChaCha20 Header Protection!
+  nonce = quic_build_aead_nonce(iv12, pkt_num)
+  ct_tag = tls_chacha20_poly1305_encrypt_raw(key32, nonce, plaintext_bytes, header_bytes)
+  pkt = []
+  i = 0
+  @while i < header_bytes.len()
+    pkt = pkt.push(header_bytes[i] & 255)
+    i = i + 1
+  @end
+  i = 0
+  @while i < ct_tag.len()
+    pkt = pkt.push(ct_tag[i] & 255)
+    i = i + 1
+  @end
+  // Extract 16-byte sample starting at pn_offset + 4 (RFC 9001 Section 5.4.2)
+  sample_off = pn_offset + 4
+  @if sample_off + 16 <= pkt.len()
+    samp = []
+    si = 0
+    @while si < 16
+      samp = samp.push(pkt[sample_off + si])
+      si = si + 1
+    @end
+    mask = quic_hp_mask_chacha20(hp_key32, samp)
+    f0 = pkt[0]
+    @if (f0 & 128) != 0
+      // Long header: mask lower 4 bits
+      list_set(pkt, 0, f0 ^ (mask[0] & 15))
+    @else
+      // Short header (1-RTT): mask lower 5 bits
+      list_set(pkt, 0, f0 ^ (mask[0] & 31))
+    @end
+    pi = 0
+    @while pi < pn_len && (pn_offset + pi) < pkt.len()
+      list_set(pkt, pn_offset + pi, pkt[pn_offset + pi] ^ mask[1 + pi])
+      pi = pi + 1
+    @end
+  @end
+  return pkt
+@end
+
+@fn quic_aead_unprotect_packet(key32, iv12, hp_key32, protected_pkt, pn_offset)
+  // WHY: Removes RFC 9001 ChaCha20 Header Protection, recovers packet number, and verifies/decrypts ChaCha20-Poly1305!
+  // Returns { ok: 1/0, pn: i64, plaintext: array } (ok=0 on any 1-bit tamper!).
+  plen = protected_pkt.len()
+  sample_off = pn_offset + 4
+  @if sample_off + 16 > plen
+    return { ok: 0, pn: 0, plaintext: [] }
+  @end
+  pkt = []
+  i = 0
+  @while i < plen
+    pkt = pkt.push(protected_pkt[i] & 255)
+    i = i + 1
+  @end
+  samp = []
+  si = 0
+  @while si < 16
+    samp = samp.push(pkt[sample_off + si])
+    si = si + 1
+  @end
+  mask = quic_hp_mask_chacha20(hp_key32, samp)
+  f0 = pkt[0]
+  @if (f0 & 128) != 0
+    f0 = f0 ^ (mask[0] & 15)
+  @else
+    f0 = f0 ^ (mask[0] & 31)
+  @end
+  list_set(pkt, 0, f0)
+  pn_len = (f0 & 3) + 1
+  pn = 0
+  pi = 0
+  @while pi < pn_len
+    ub = pkt[pn_offset + pi] ^ mask[1 + pi]
+    list_set(pkt, pn_offset + pi, ub)
+    pn = (pn << 8) | ub
+    pi = pi + 1
+  @end
+  hdr_len = pn_offset + pn_len
+  aad = []
+  hi = 0
+  @while hi < hdr_len
+    aad = aad.push(pkt[hi])
+    hi = hi + 1
+  @end
+  ct_tag = []
+  ci = hdr_len
+  @while ci < plen
+    ct_tag = ct_tag.push(pkt[ci])
+    ci = ci + 1
+  @end
+  @if ct_tag.len() <= 16
+    return { ok: 0, pn: pn, plaintext: [] }
+  @end
+  nonce = quic_build_aead_nonce(iv12, pn)
+  pt = tls_chacha20_poly1305_decrypt_raw(key32, nonce, ct_tag, aad)
+  @if pt.len() == 0
+    return { ok: 0, pn: pn, plaintext: [] }
+  @end
+  return { ok: 1, pn: pn, plaintext: pt }
+@end

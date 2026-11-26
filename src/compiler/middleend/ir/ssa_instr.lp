@@ -120,6 +120,15 @@ fn ir_build_cmp id pred result_val lhs rhs
     ssa_value_add_use(rhs, inst)
     return inst
 
+fn ir_build_cmp_dyn id pred result_val lhs rhs
+    inst = ssa_instr_new(id, OP_CMP_DYN, result_val, 0)
+    inst.extra_int = pred
+    push(inst.operands, lhs)
+    push(inst.operands, rhs)
+    ssa_value_add_use(lhs, inst)
+    ssa_value_add_use(rhs, inst)
+    return inst
+
 // br %cond, true_label, false_label
 // WHY: Conditional branches terminate basic blocks, routing control to one of two successors.
 fn ir_build_br id cond_val true_lbl false_lbl
@@ -177,6 +186,61 @@ fn ir_build_phi id result_val incoming_vals incoming_bbs
         push(inst.operands, val)
         ssa_value_add_use(val, inst)
         i = i + 1
+    return inst
+
+// %res = i2f %val / fneg %val (generic unary SSA instruction)
+fn ir_build_unary id op result_val val
+    inst = ssa_instr_new(id, op, result_val, 0)
+    push(inst.operands, val)
+    ssa_value_add_use(val, inst)
+    return inst
+
+// %res = fcmp pred, %lhs, %rhs
+fn ir_build_fcmp id pred result_val lhs rhs
+    inst = ssa_instr_new(id, OP_FCMP, result_val, 0)
+    inst.extra_int = pred
+    push(inst.operands, lhs)
+    push(inst.operands, rhs)
+    ssa_value_add_use(lhs, inst)
+    ssa_value_add_use(rhs, inst)
+    return inst
+
+// %res = str_lit "text"
+fn ir_build_str_lit id result_val str_text
+    inst = ssa_instr_new(id, OP_STR_LIT, result_val, 0)
+    inst.extra_str = str_text
+    return inst
+
+// %res = struct_new size_bytes, [field_vals...]
+fn ir_build_struct_new id result_val struct_name alloc_bytes field_vals
+    inst = ssa_instr_new(id, OP_STRUCT_NEW, result_val, 0)
+    inst.extra_str = struct_name
+    inst.extra_int = alloc_bytes
+    i = 0
+    cnt = len(field_vals)
+    while i < cnt
+        fv = get(field_vals, i)
+        push(inst.operands, fv)
+        ssa_value_add_use(fv, inst)
+        i = i + 1
+    return inst
+
+// %res = field_load %obj, byte_off
+fn ir_build_field_load id result_val obj_val byte_off
+    inst = ssa_instr_new(id, OP_FIELD_LOAD, result_val, 0)
+    inst.extra_int = byte_off
+    push(inst.operands, obj_val)
+    ssa_value_add_use(obj_val, inst)
+    return inst
+
+// field_store %obj, %val, byte_off
+fn ir_build_field_store id obj_val val byte_off
+    inst = ssa_instr_new(id, OP_FIELD_STORE, 0, 0)
+    inst.extra_int = byte_off
+    push(inst.operands, obj_val)
+    push(inst.operands, val)
+    ssa_value_add_use(obj_val, inst)
+    ssa_value_add_use(val, inst)
     return inst
 
 // ── 4. Operand Manipulation & Use-Chain Maintenance ───────────────────────────

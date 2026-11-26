@@ -49,12 +49,12 @@ fn ir_dump_instr_to_str inst
         return "  " + res_str + " = neg " + inst.result.vtype + " " + val
 
     // Comparison
-    if op == OP_CMP
+    if op == OP_CMP or op == OP_CMP_DYN
         res_str = ssa_value_to_str(inst.result)
         pred_str = ssa_cmp_pred_name(inst.extra_int)
         lhs = ssa_value_to_str(ssa_instr_get_operand(inst, 0))
         rhs = ssa_value_to_str(ssa_instr_get_operand(inst, 1))
-        return "  " + res_str + " = cmp " + pred_str + " " + lhs + ", " + rhs
+        return "  " + res_str + " = " + ssa_opcode_name(op) + " " + pred_str + " " + lhs + ", " + rhs
 
     // Control Flow: Conditional Branch
     if op == OP_BR

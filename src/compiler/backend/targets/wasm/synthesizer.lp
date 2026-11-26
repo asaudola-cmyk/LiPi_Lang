@@ -16,6 +16,20 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
 
     if is_print == 1
         list_set(pos_box, 0, pos + 1) // Consume print keyword
+        if s.ws_freestanding == 1
+            // WHY: Freestanding WASM emits zero wasi_snapshot_preview1 imports; evaluate side effects cleanly and drop.
+            cur_p_fs = get(pos_box, 0)
+            if cur_p_fs < toks.len() and toks[cur_p_fs].tok_kind == TOK_STR()
+                np_fs = cur_p_fs + 1
+                if np_fs >= toks.len() or toks[np_fs].tok_kind == TOK_NEWLINE() or toks[np_fs].tok_kind == TOK_SEMI() or toks[np_fs].tok_kind == TOK_EOF()
+                    list_set(pos_box, 0, cur_p_fs + 1)
+                    return 0
+                end
+            end
+            wasm_synth_compile_expr(s, toks, pos_box)
+            wasm_emit_drop(s.ws_code)
+            return 0
+        end
         s.ws_needs_wasi_print = 1
         cur_p = get(pos_box, 0)
         is_direct_str = 0
@@ -1131,7 +1145,7 @@ fn wasm_synth_compile_program tokens
                     push(s.ws_structs, sdef_new)
                 scan_p = sp - 1
         else
-            if tk == TOK_KW_PRINT() or (tk == TOK_IDENT() and (ttxt == "say" or ttxt == "বলো" or ttxt == "print" or ttxt == "println" or ttxt == "show" or ttxt == "দেখাও"))
+            if s.ws_freestanding == 0 and (tk == TOK_KW_PRINT() or (tk == TOK_IDENT() and (ttxt == "say" or ttxt == "বলো" or ttxt == "print" or ttxt == "println" or ttxt == "show" or ttxt == "দেখাও")))
                 s.ws_needs_wasi_print = 1
             end
             if tk != TOK_NEWLINE() and tk != TOK_SEMI() and tk != TOK_EOF() and tk != TOK_COMMENT_DOC() and tk != TOK_COMMENT_LINE() and tk != TOK_COMMENT_BLOCK()
@@ -1276,15 +1290,18 @@ fn wasm_synth_compile_program tokens
     // Section 1: Type Section & Section 2: Import Section
     import_list = list()
     import_fn_count = 0
-    if s.ws_needs_wasi_print == 1
+    if s.ws_needs_wasi_print == 1 and s.ws_freestanding == 0
         wasi_type_idx = s.ws_types.len()
         push(s.ws_types, 0 - 4)
         push(import_list, ["wasi_snapshot_preview1", "fd_write", 0, wasi_type_idx])
         import_fn_count = 1
     end
 
-    // Register WASI standard _start signature: () -> ()
-    wasi_start_type_idx = wasm_synth_get_or_add_type(s, 0 - 5)
+    // Register WASI standard _start signature: () -> () only in hosted WASI mode (omitted in --freestanding)
+    wasi_start_type_idx = 0 - 1
+    if s.ws_freestanding == 0
+        wasi_start_type_idx = wasm_synth_get_or_add_type(s, 0 - 5)
+    end
 
     sec1 = wasm_emit_type_section(s.ws_types)
     sec2 = wasm_emit_import_section(import_list)
@@ -1295,8 +1312,10 @@ fn wasm_synth_compile_program tokens
     while fi < s.ws_functions.len()
         push(func_types, s.ws_functions[fi].wfn_type_index)
         fi = fi + 1
-    // Append WASI _start wrapper signature after user functions so all user indices stay unchanged
-    push(func_types, wasi_start_type_idx)
+    if s.ws_freestanding == 0
+        // Append WASI _start wrapper signature after user functions so all user indices stay unchanged
+        push(func_types, wasi_start_type_idx)
+    end
     sec3 = wasm_emit_function_section(func_types)
 
     // Section 5: Memory Section (4 pages = 256KB initial memory)
@@ -1308,9 +1327,11 @@ fn wasm_synth_compile_program tokens
     // Export 1: main (Function index 0 + import_fn_count, () -> i64)
     push(export_list, ["main", 0, import_fn_count])
 
-    // Export 2: _start (WASI () -> () wrapper calling main and dropping return value)
-    wasi_start_fn_idx = import_fn_count + s.ws_functions.len()
-    push(export_list, ["_start", 0, wasi_start_fn_idx])
+    if s.ws_freestanding == 0
+        // Export 2: _start (WASI () -> () wrapper calling main and dropping return value)
+        wasi_start_fn_idx = import_fn_count + s.ws_functions.len()
+        push(export_list, ["_start", 0, wasi_start_fn_idx])
+    end
 
     if main_fn.wfn_name == "মূল"
         push(export_list, ["মূল", 0, import_fn_count])
@@ -1353,13 +1374,15 @@ fn wasm_synth_compile_program tokens
         push(func_bodies, body)
         fi = fi + 1
 
-    // Append WASI _start wrapper body: call main; drop; end
-    start_body = list()
-    push(start_body, 0)
-    wasm_emit_call(start_body, import_fn_count)
-    wasm_emit_drop(start_body)
-    push(start_body, WASM_OP_END)
-    push(func_bodies, start_body)
+    if s.ws_freestanding == 0
+        // Append WASI _start wrapper body: call main; drop; end
+        start_body = list()
+        push(start_body, 0)
+        wasm_emit_call(start_body, import_fn_count)
+        wasm_emit_drop(start_body)
+        push(start_body, WASM_OP_END)
+        push(func_bodies, start_body)
+    end
 
     sec10 = wasm_emit_code_section(func_bodies)
 

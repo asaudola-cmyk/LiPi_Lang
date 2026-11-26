@@ -1,10 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — LIPI RING-0 UNIKERNEL ENGINE
+@! @deprecated [LEGACY HOSTED UNIKERNEL SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal VirtIO ring descriptors & `--target=multiboot2-bare`,
+@! import `utso/silicon/virtio.lp` and `utso/silicon/multiboot2.lp` instead!
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! Module: utso/os/unikernel.lp
-@! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: Multiboot2 Header Emitter, VirtIO Network Ring Transmit/Receive,
-@! 5ms Ring-0 Cloud Boot & Remote Diagnostic Network Logger
 @! ============================================================================
 
 import "utso/core/collections"

@@ -82,6 +82,14 @@ struct WasmSynthesizer
     ws_last_expr_is_str   // 1 if last compiled expression yielded a linear-memory string pointer
     ws_float_vars         // Active local variable names holding IEEE-754 f64 values
     ws_str_vars           // Active local variable names holding linear-memory string pointers
+    ws_freestanding       // 1 in --freestanding mode: zero WASI imports, zero fd_write, pure standalone WASM
+
+global g_wasm_freestanding = 0
+
+fn wasm_synth_set_freestanding flag
+    g_wasm_freestanding = flag
+    return 0
+end
 
 // ==============================================================================
 // ── 2. W3C WebAssembly Opcode & Type Constants ─────────────────────────────────

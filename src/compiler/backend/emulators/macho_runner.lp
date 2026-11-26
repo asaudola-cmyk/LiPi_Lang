@@ -32,6 +32,8 @@ struct MachORunner
     mor_segment_vaddrs      // List of segment VM addresses
     mor_segment_vsizes      // List of segment VM sizes
     mor_has_codesig         // 1 if valid LC_CODE_SIGNATURE SuperBlob (0xFADE0CC0) present
+    mor_has_symtab          // 1 if valid LC_SYMTAB (0x02) present
+    mor_nsyms               // Symbol count from LC_SYMTAB
     mor_validation_status   // Diagnostic report
 end
 
@@ -50,6 +52,8 @@ fn macho_runner_new
     r.mor_segment_vaddrs = list()
     r.mor_segment_vsizes = list()
     r.mor_has_codesig = 0
+    r.mor_has_symtab = 0
+    r.mor_nsyms = 0
     r.mor_validation_status = "UNINITIALIZED"
     return r
 
@@ -143,6 +147,11 @@ fn macho_runner_load_bytes runner bytes_list
             else
                 runner.mor_platform_name = "macOS"
             end
+
+        // LC_SYMTAB == 2 (0x02)
+        elif cmd_type == 2
+            runner.mor_has_symtab = 1
+            runner.mor_nsyms = macho_read_u32(bytes_list, cmd_cursor + 12)
 
         // LC_CODE_SIGNATURE == 29 (0x1D)
         elif cmd_type == 29

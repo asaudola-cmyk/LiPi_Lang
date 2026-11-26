@@ -313,10 +313,10 @@ fn bare_emit_multiboot2_kernel code_bytes rodata_bytes bss_size base_phys output
     //   [+0x010 .. +0x037] Multiboot2 Header (magic 0xE85250D6, arch 0, ENTRY tag -> base_phys+0x70)
     //   [+0x040 .. +0x057] 64-bit GDT (null, 0x08 code64, 0x10 data64)
     //   [+0x058 .. +0x061] GDTR (limit=23, base=base_phys+0x40)
-    //   [+0x070 .. +0x0FF] 32-bit Protected Mode -> 64-bit Long Mode Trampoline (PML4/PDPT/PD 1GB 2MB pages)
+    //   [+0x070 .. +0x0FF] 32-bit Protected Mode -> 64-bit Long Mode Trampoline (PML4/PDPT/4xPD 4GB 2MB pages)
     //   [+0x100 .. +0x12F] 64-bit Long Mode Bridge (reloads data segs, sets 64KB RSP, calls +0x130, cli;hlt)
     //   [+0x130 ..       ] Lipi freestanding 64-bit kernel code (`synth_code`) + `.rodata`
-    //   [rw_off ..       ] 4KB RW globals + user `@bss` + 12KB boot page tables + 64KB kernel stack!
+    //   [rw_off ..       ] 4KB RW globals + user `@bss` + 24KB boot page tables (full 0..4GB RAM+APIC+PCI MMIO) + 64KB kernel stack!
     phys = base_phys
     if phys <= 0
         phys = 1048576 // 0x100000 (1MB standard x86 kernel physical load address)
@@ -328,13 +328,13 @@ fn bare_emit_multiboot2_kernel code_bytes rodata_bytes bss_size base_phys output
     rw_data_sz = 4096
     user_bss_aligned = bare_align_up(bss_size, 4096)
 
-    // Boot page tables (PML4 4KB + PDPT 4KB + PD 4KB = 12KB) & 64KB kernel stack right after user @bss
+    // Boot page tables (PML4 4KB + PDPT 4KB + 4xPD 16KB = 24KB -> full 0..4GB identity map incl. APIC/PCI MMIO) & 64KB stack
     pt_off = rw_off + rw_data_sz + user_bss_aligned
     pt_phys = phys + pt_off
     pdpt_phys = pt_phys + 4096
     pd_phys = pt_phys + 8192
-    stack_top_phys = pt_phys + 12288 + 65536
-    total_memsz = pt_off + 12288 + 65536
+    stack_top_phys = pt_phys + 24576 + 65536
+    total_memsz = pt_off + 24576 + 65536
     total_filesz = rw_off + rw_data_sz
 
     // Build payload starting at phys (+0x000 .. total_filesz)
@@ -373,20 +373,27 @@ fn bare_emit_multiboot2_kernel code_bytes rodata_bytes bss_size base_phys output
     // [+0x070 .. +0x0FF]: 32-bit Protected Mode -> 64-bit Long Mode Boot Trampoline!
     // 1. cli; mov esi, eax (MB magic); mov ebp, ebx (MB info ptr)
     bare_append_bytes(img, [250, 137, 198, 137, 221])
-    // 2. Zero 12KB (3072 dwords) boot page tables at pt_phys: mov edi, pt_phys; xor eax, eax; mov ecx, 3072; cld; rep stosd
+    // 2. Zero 24KB (6144 dwords) boot page tables at pt_phys: mov edi, pt_phys; xor eax, eax; mov ecx, 6144; cld; rep stosd
     push(img, 191) bare_push_u32(img, pt_phys)
-    bare_append_bytes(img, [49, 192, 185, 0, 12, 0, 0, 252, 243, 171])
+    bare_append_bytes(img, [49, 192, 185, 0, 24, 0, 0, 252, 243, 171])
     // 3. PML4[0] = pdpt_phys | 0x03 (Present | Writable)
     push(img, 184) bare_push_u32(img, pdpt_phys + 3)
     push(img, 163) bare_push_u32(img, pt_phys)
-    // 4. PDPT[0] = pd_phys | 0x03
+    // 4. PDPT[0..3] = (pd_phys + i*4096) | 0x03 -> maps full 0..4GB physical RAM + Local/IO APIC + PCI MMIO BARs
+    push(img, 191) bare_push_u32(img, pdpt_phys)
     push(img, 184) bare_push_u32(img, pd_phys + 3)
-    push(img, 163) bare_push_u32(img, pdpt_phys)
-    // 5. Fill 512 PD entries with 2MB identity huge pages (0..1GB physical RAM, flags 0x83)
+    bare_append_bytes(img, [
+        185, 4, 0, 0, 0,            // mov ecx, 4
+        137, 7,                     // .pdpt_loop: mov [edi], eax
+        5, 0, 16, 0, 0,             // add eax, 0x1000 (4KB per PD)
+        131, 199, 8,                // add edi, 8
+        226, 244                    // loop .pdpt_loop (-12)
+    ])
+    // 5. Fill 2048 PD entries (4 PDs) with 2MB identity huge pages (0..4GB physical space, flags 0x83)
     push(img, 191) bare_push_u32(img, pd_phys)
     bare_append_bytes(img, [
         184, 131, 0, 0, 0,          // mov eax, 0x83
-        185, 0, 2, 0, 0,            // mov ecx, 512
+        185, 0, 8, 0, 0,            // mov ecx, 2048
         137, 7,                     // .pd_loop: mov [edi], eax
         5, 0, 0, 32, 0,             // add eax, 0x200000 (2MB)
         131, 199, 8,                // add edi, 8
@@ -479,24 +486,75 @@ fn bare_emit_multiboot2_kernel code_bytes rodata_bytes bss_size base_phys output
 
 // ── 4. Sovereign UEFI PE32+ Application Emitter (--target=uefi, Subsystem = 10) ──
 
-fn bare_emit_uefi_pe32plus code_bytes rodata_bytes bss_size output_path
+fn bare_build_pe_dir64_relocs reloc_rvas
+    // WHY: Constructs a standards-compliant PE32+ Base Relocation Table (.reloc) grouping
+    // every 64-bit absolute pointer RVA into 4KB page blocks with IMAGE_REL_BASED_DIR64 (10) entries,
+    // padded to 4-byte block boundaries so real UEFI firmware (OVMF/EDK2) can relocate `.efi` anywhere!
+    out = list()
+    if reloc_rvas == 0 or reloc_rvas.len() == 0
+        // Minimal valid PE base relocation terminator block (PageRVA=0x1000, BlockSize=8)
+        bare_append_bytes(out, [0, 16, 0, 0, 8, 0, 0, 0])
+        return out
+    end
+    // Insertion-sort RVAs ascending so same-page entries group contiguously
+    sorted = list()
+    i = 0
+    while i < reloc_rvas.len()
+        push(sorted, reloc_rvas[i])
+        i = i + 1
+    end
+    i = 1
+    while i < sorted.len()
+        key = sorted[i]
+        j = i - 1
+        while j >= 0 and sorted[j] > key
+            list_set(sorted, j + 1, sorted[j])
+            j = j - 1
+        end
+        list_set(sorted, j + 1, key)
+        i = i + 1
+    end
+    // Group sorted RVAs into 4KB PageRVA blocks
+    idx = 0
+    n = sorted.len()
+    while idx < n
+        page_rva = (sorted[idx] / 4096) * 4096
+        entries = list()
+        while idx < n and ((sorted[idx] / 4096) * 4096) == page_rva
+            page_off = sorted[idx] - page_rva
+            // Type 10 (IMAGE_REL_BASED_DIR64) << 12 | 12-bit offset
+            push(entries, (10 << 12) | (page_off & 4095))
+            idx = idx + 1
+        end
+        // Pad to even entry count so BlockSize is a multiple of 4 bytes (IMAGE_REL_BASED_ABSOLUTE = 0)
+        if (entries.len() % 2) != 0
+            push(entries, 0)
+        end
+        blk_sz = 8 + (entries.len() * 2)
+        bare_push_u32(out, page_rva)
+        bare_push_u32(out, blk_sz)
+        ei = 0
+        while ei < entries.len()
+            bare_push_u16(out, entries[ei])
+            ei = ei + 1
+        end
+    end
+    return out
+end
+
+fn bare_emit_uefi_pe32plus_reloc code_bytes rodata_bytes bss_size abs_code_patch_offs output_path
     // WHY: Emits a standards-compliant UEFI PE32+ (.efi) executable with:
     //   - Subsystem = 10 (IMAGE_SUBSYSTEM_EFI_APPLICATION)
     //   - Zero KERNEL32.dll IAT (Import Directory = 0)
-    //   - Position-independent RIP-relative .text/.rodata/.bss addressing + valid empty .reloc
+    //   - Real `.reloc` section with IMAGE_REL_BASED_DIR64 (type 10) fixups for all 64-bit patches!
     //   - MS x64 ABI -> System V ABI entry bridge forwarding (ImageHandle, SystemTable) to Lipi efi_main/main!
     // Zero EDK2, zero gnu-efi, zero LLVM/lld!
     file_align = 512
     sect_align = 4096
-    image_base = 4194304 // 0x00400000 (relocatable via RIP-relative addressing!)
+    image_base = 4194304 // 0x00400000
     size_of_headers = 1024
 
     // Build 32-byte UEFI MS x64 -> Lipi SysV entry stub:
-    //   push rdi (57); push rsi (56); sub rsp, 8 (48 83 EC 08) [16B aligned]
-    //   mov rdi, rcx (48 89 CF); mov rsi, rdx (48 89 D6)
-    //   call +11 (E8 0B 00 00 00) -> lands at offset 32 (start of Lipi code!)
-    //   add rsp, 8 (48 83 C4 08); pop rsi (5E); pop rdi (5F); ret (C3)
-    //   [pad with NOPs to 32 bytes]
     efi_stub = [
         87, 86, 72, 131, 236, 8,    // [0..5]   push rdi; push rsi; sub rsp, 8
         72, 137, 207, 72, 137, 214, // [6..11]  mov rdi, rcx; mov rsi, rdx
@@ -505,8 +563,7 @@ fn bare_emit_uefi_pe32plus code_bytes rodata_bytes bss_size output_path
         144, 144, 144, 144, 144, 144, 144, 144 // [24..31] NOP pad
     ]
 
-    // Combine [efi_stub(32) + code_bytes + rodata_bytes] in .text (so PIE RIP-relative rodata offsets
-    // stay 100% invariant!), followed by 4KB-aligned .data (4096B globals + bss_size) and .reloc (12B)!
+    // Combine [efi_stub(32) + code_bytes + rodata_bytes] in .text, followed by 4KB-aligned .data and .reloc!
     text_payload = list()
     bare_append_bytes(text_payload, efi_stub)
     bare_append_bytes(text_payload, code_bytes)
@@ -523,11 +580,22 @@ fn bare_emit_uefi_pe32plus code_bytes rodata_bytes bss_size output_path
 
     reloc_rva = data_rva + bare_align_up(data_vsize, sect_align)
     reloc_raw_ptr = data_raw_ptr + data_raw_size
-    // Minimal valid empty PE base relocation block (PageRVA=0x1000, BlockSize=8 -> 0 fixups needed!)
-    reloc_bytes = [0, 16, 0, 0, 8, 0, 0, 0]
-    reloc_vsize = 8
-    reloc_raw_size = file_align
-    size_of_image = reloc_rva + sect_align
+    // Convert code-relative 64-bit patch offsets into PE RVAs (`text_rva + 32 + code_off`)
+    reloc_rva_list = list()
+    if abs_code_patch_offs != 0
+        ri = 0
+        while ri < abs_code_patch_offs.len()
+            po = abs_code_patch_offs[ri]
+            if po >= 0 and po + 8 <= code_bytes.len()
+                push(reloc_rva_list, text_rva + 32 + po)
+            end
+            ri = ri + 1
+        end
+    end
+    reloc_bytes = bare_build_pe_dir64_relocs(reloc_rva_list)
+    reloc_vsize = reloc_bytes.len()
+    reloc_raw_size = bare_align_up(reloc_vsize, file_align)
+    size_of_image = reloc_rva + bare_align_up(reloc_vsize, sect_align)
 
     // Build PE32+ headers using Lipi's existing dos_header.lp & coff_header.lp
     dos_block = pe_dos_block_serialize()
@@ -578,16 +646,16 @@ fn bare_emit_uefi_pe32plus code_bytes rodata_bytes bss_size output_path
     sec_text = pe_section_text_create(text_vsize, text_rva, text_raw_size, text_raw_ptr)
     sec_data = pe_section_data_create(data_vsize, data_rva, data_raw_size, data_raw_ptr)
     sec_reloc = ImageSectionHeader()
-    sec_reloc.sh_name = ".reloc"
-    sec_reloc.sh_virtual_size = reloc_vsize
-    sec_reloc.sh_virtual_address = reloc_rva
-    sec_reloc.sh_size_of_raw_data = reloc_raw_size
-    sec_reloc.sh_pointer_to_raw_data = reloc_raw_ptr
-    sec_reloc.sh_pointer_to_relocations = 0
-    sec_reloc.sh_pointer_to_linenumbers = 0
-    sec_reloc.sh_number_of_relocations = 0
-    sec_reloc.sh_number_of_linenumbers = 0
-    sec_reloc.sh_characteristics = 1107296320 // 0x42000040: INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ
+    sec_reloc.sec_name = ".reloc"
+    sec_reloc.virtual_size = reloc_vsize
+    sec_reloc.virtual_address = reloc_rva
+    sec_reloc.size_of_raw_data = reloc_raw_size
+    sec_reloc.pointer_to_raw_data = reloc_raw_ptr
+    sec_reloc.pointer_to_relocations = 0
+    sec_reloc.pointer_to_linenumbers = 0
+    sec_reloc.num_relocations = 0
+    sec_reloc.num_linenumbers = 0
+    sec_reloc.sec_characteristics = 1107296320 // 0x42000040: INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ
 
     bin = list()
     bare_append_bytes(bin, dos_block)
@@ -619,3 +687,7 @@ fn bare_emit_uefi_pe32plus code_bytes rodata_bytes bss_size output_path
     res.bw_entry_vaddr = image_base + text_rva
     res.bw_error_msg = ""
     return res
+
+fn bare_emit_uefi_pe32plus code_bytes rodata_bytes bss_size output_path
+    return bare_emit_uefi_pe32plus_reloc(code_bytes, rodata_bytes, bss_size, list(), output_path)
+end

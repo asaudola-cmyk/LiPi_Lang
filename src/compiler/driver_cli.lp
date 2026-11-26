@@ -31,7 +31,10 @@ fn print_cli_usage
     say "  --target=<arch>            টার্গেট (x86_64, arm64, wasm, riscv64, verilog, raw-bin, elf-kernel, multiboot2-bare, uefi, obj)"
     say "  --freestanding, --no-runtime বেয়ার-মেটাল মোড (Zero Linux syscalls, Ring-0 pure silicon)"
     say "  --base-addr=<hex|dec>      কাস্টম লোড অ্যাড্রেস (e.g. 0x100000 or 0xFFFFFFFF80000000)"
+    say "  --entry=<symbol>           কাস্টম এন্ট্রি সিম্বল (e.g. --entry=kmain)"
     say "  -c, --emit=obj             রিলোকেটেবল ELF64 অবজেক্ট ফাইল (.o / ET_REL)"
+    say "  --cache-dir=<dir>          কন্টেন্ট-হ্যাশড .lpo অবজেক্ট বিল্ড ক্যাশ ডিরেক্টরি"
+    say "  link <a.o> <b.o> -o <out>  ১০০% খাঁটি লিপি মাল্টি-অবজেক্ট ELF64 লিংকার (0% GNU ld)"
     say "  --ssa-codegen              ডাইরেক্ট SSA IR ব্যাকএন্ড কোডজেন"
     say "  --omni                     অমনিভার্স এককালীন সব প্ল্যাটফর্ম বিল্ড (Synthesize 6 silicon targets at once)"
     say "  --run-rv64, --vm=riscv64   খাঁটি লিপি আরআইএসসি-ভি সিপিইউ-তে এক্সিকিউট (Run in pure LiPi RV64 VM core)"
@@ -322,6 +325,44 @@ fn main
         print_cli_usage()
         exit(1)
 
+    // Native Pure-Lipi Multi-Object ELF64 Linker Subcommand: `lipc link a.o b.o [-o out] [--entry=sym] [--base-addr=addr]`
+    if get(args, 1) == "link"
+        link_objs = list()
+        link_out = "a.out"
+        link_entry = ""
+        link_base = 1073741824
+        li = 2
+        while li < argc
+            la = get(args, li)
+            if (la == "-o" or la == "--output") and li + 1 < argc
+                li = li + 1
+                link_out = get(args, li)
+            elif la == "--entry" and li + 1 < argc
+                li = li + 1
+                link_entry = get(args, li)
+            elif len(la) > 8 and str_sub(la, 0, 8) == "--entry="
+                link_entry = str_sub(la, 8, len(la))
+            elif la == "--base-addr" and li + 1 < argc
+                li = li + 1
+                link_base = cli_parse_u64_addr(get(args, li))
+            elif len(la) > 12 and str_sub(la, 0, 12) == "--base-addr="
+                link_base = cli_parse_u64_addr(str_sub(la, 12, len(la)))
+            else
+                push(link_objs, la)
+            end
+            li = li + 1
+        end
+        say "🔗 [SOVEREIGN ELF64 LINKER]: Linking " + str(link_objs.len()) + " object(s) ──► " + link_out + " (0% GNU ld)..."
+        lres = lpo_link_elf64_objects(link_objs, link_out, link_entry, link_base)
+        if lres.lr_success == 1
+            say "✔ Linked " + str(lres.lr_obj_count) + " objects (" + str(lres.lr_sym_count) + " symbols, " + str(lres.lr_reloc_count) + " relocations) -> " + link_out + " (" + str(lres.lr_file_size) + " bytes)"
+            exit(0)
+        else
+            say "❌ [LINKER ERROR]: " + lres.lr_error_msg
+            exit(1)
+        end
+    end
+
     in_file = ""
     out_file = ""
     target_arch = TARGET_ID_X86_64()
@@ -335,6 +376,8 @@ fn main
     freestanding_mode = 0
     ssa_codegen_mode = 0
     base_vaddr_val = 1073741824
+    entry_sym_val = ""
+    cache_dir_val = ""
     emit_format = FORMAT_ELF()
     ai_opt_enabled = 0
     omni_mode = 0
@@ -429,6 +472,20 @@ fn main
             end
         elif len(arg) > 12 and str_sub(arg, 0, 12) == "--base-addr="
             base_vaddr_val = cli_parse_u64_addr(str_sub(arg, 12, len(arg)))
+        elif arg == "--entry"
+            i = i + 1
+            if i < argc
+                entry_sym_val = get(args, i)
+            end
+        elif len(arg) > 8 and str_sub(arg, 0, 8) == "--entry="
+            entry_sym_val = str_sub(arg, 8, len(arg))
+        elif arg == "--cache-dir"
+            i = i + 1
+            if i < argc
+                cache_dir_val = get(args, i)
+            end
+        elif len(arg) > 12 and str_sub(arg, 0, 12) == "--cache-dir="
+            cache_dir_val = str_sub(arg, 12, len(arg))
         elif arg == "--kavach" or arg == "--কবচ" or arg == "--safe"
             kavach_mode = 1
             strict_ownership_mode = 1
@@ -542,6 +599,8 @@ fn main
     if ssa_codegen_mode != 0
         mode_flags = mode_flags + 128
     compiler_driver_set_base_vaddr(base_vaddr_val)
+    compiler_driver_set_entry_sym(entry_sym_val)
+    compiler_driver_set_cache_dir(cache_dir_val)
     res = compiler_driver_compile_file_full(in_file, out_file, target_arch, opt_level, emit_format, mode_flags)
     
     // Report detailed diagnostics

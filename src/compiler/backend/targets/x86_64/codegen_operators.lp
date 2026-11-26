@@ -93,13 +93,28 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         const_val = nt.tok_int_val
 
             if is_const_rhs == 1 and op_kind != TOK_MATMUL() and s.synth_last_expr_type != "float" and s.synth_last_expr_type != "dyn_tagged"
+                mul_left_t = s.synth_last_expr_type
                 list_set(pos_box, 0, next_p + 1) // Consume operator and integer literal
 
                 if op_kind == TOK_PERCENT()
                     if const_val == 0
-                        // Zero divisor guard: xor eax, eax
-                        x86_synth_emit_byte(s, 49)
-                        x86_synth_emit_byte(s, 192)
+                        if s.synth_freestanding == 0
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                        else
+                            x86_synth_emit_byte(s, 49)
+                            x86_synth_emit_byte(s, 192)
+                        end
+                    elif mul_left_t == "uint"
+                        if const_val > 1 and (const_val & (const_val - 1)) == 0 and const_val <= 1073741824
+                            // 1-cycle unsigned power-of-2 modulo: and rax, (const_val - 1)
+                            x86_synth_emit_bytes(s, [72, 37])
+                            x86_synth_emit_u32(s, const_val - 1)
+                        else
+                            // Exact unsigned hardware modulo: mov rcx, const_val; xor edx, edx; div rcx; mov rax, rdx
+                            x86_synth_emit_bytes(s, [72, 185])
+                            x86_synth_emit_u64(s, const_val)
+                            x86_synth_emit_bytes(s, [49, 210, 72, 247, 241, 72, 137, 208])
+                        end
                     elif const_val == 7
                         // WHY: Exact 64-bit Fast Reciprocal Modulo for 7 (Granlund-Montgomery M = ceil(2^65 / 7) = 0x4924924924924925).
                         // Mathematically exact for all non-negative signed 64-bit integers 0 <= rax < 2^63 via post-mul shr rdx, 1.
@@ -415,9 +430,17 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         end
                 elif op_kind == TOK_SLASH()
                     if const_val == 0
-                        // Zero divisor guard: xor eax, eax
-                        x86_synth_emit_byte(s, 49)
-                        x86_synth_emit_byte(s, 192)
+                        if s.synth_freestanding == 0
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                        else
+                            x86_synth_emit_byte(s, 49)
+                            x86_synth_emit_byte(s, 192)
+                        end
+                    elif mul_left_t == "uint"
+                        // Exact unsigned hardware division: mov rcx, const_val; xor edx, edx; div rcx
+                        x86_synth_emit_bytes(s, [72, 185])
+                        x86_synth_emit_u64(s, const_val)
+                        x86_synth_emit_bytes(s, [49, 210, 72, 247, 241])
                     elif const_val == -1
                         // neg rax (handles both normal signs and INT64_MIN / -1 without #DE)
                         x86_synth_emit_bytes(s, [72, 247, 216])
@@ -459,7 +482,11 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 15)
                         x86_synth_emit_byte(s, 175)
                         x86_synth_emit_byte(s, 193)
-                s.synth_last_expr_type = "int"
+                if mul_left_t == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
             else
                 left_type = s.synth_last_expr_type
                 list_set(pos_box, 0, pos + 1) // Consume operator
@@ -605,11 +632,39 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_byte(s, 175)
                         x86_synth_emit_byte(s, 193)
                     elif op_kind == TOK_SLASH()
-                        // WHY: Division-by-Zero and INT64_MIN / -1 hardware protection.
-                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
+                        // WHY: Unsigned (`div rcx`) vs Signed (`idiv rcx`) division with DivisionByZero guard.
+                        if left_type == "uint" or right_type == "uint"
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [235, 5, 49, 210, 72, 247, 241])
+                            else
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 5, 49, 210, 72, 247, 241])
+                            end
+                        elif s.synth_freestanding == 0
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                            x86_synth_emit_bytes(s, [235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
+                        else
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
+                        end
                     elif op_kind == TOK_PERCENT()
-                        // WHY: Modulo-by-Zero and INT64_MIN % -1 hardware protection.
-                        x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                        // WHY: Unsigned (`div rcx; mov rax, rdx`) vs Signed (`idiv rcx`) modulo with DivisionByZero guard.
+                        if left_type == "uint" or right_type == "uint"
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [235, 8, 49, 210, 72, 247, 241, 72, 137, 208])
+                            else
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 8, 49, 210, 72, 247, 241, 72, 137, 208])
+                            end
+                        elif s.synth_freestanding == 0
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                            x86_synth_emit_bytes(s, [235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                        else
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
+                        end
                     elif op_kind == TOK_MATMUL()
                         // WHY: Sovereign Silicon Matrix & Tensor Multiplication (@ Operator)
                         x86_synth_emit_byte(s, 72)
@@ -621,7 +676,11 @@ fn x86_synth_compile_expr_mul s toks pos_box
                         x86_synth_emit_call_helper(s, "_lipi_matmul")
                         s.synth_last_expr_type = "int"
                     if left_type != "float" and right_type != "float"
-                        s.synth_last_expr_type = "int"
+                        if left_type == "uint" or right_type == "uint"
+                            s.synth_last_expr_type = "uint"
+                        else
+                            s.synth_last_expr_type = "int"
+                        end
                     end
                 end
     return 0
@@ -653,12 +712,14 @@ fn x86_synth_compile_expr_add s toks pos_box
             cont_add = 0
         else
             left_type = s.synth_last_expr_type
+            left_ptr_t = s.synth_last_struct
+            is_left_ptr = x86_synth_is_ptr_type(left_ptr_t)
 
             // Check if right operand is a small constant integer
             next_p = pos + 1
             is_const_int_rhs = 0
             const_add_val = 0
-            if next_p < toks.len()
+            if is_left_ptr == 0 and next_p < toks.len()
                 nt = toks[next_p]
                 if nt.tok_kind == TOK_INT()
                     after_next = next_p + 1
@@ -668,7 +729,7 @@ fn x86_synth_compile_expr_add s toks pos_box
 
             is_local_int_fast = 0
             lv_add_rhs = 0
-            if is_const_int_rhs == 0 and left_type == "int" and next_p < toks.len()
+            if is_left_ptr == 0 and is_const_int_rhs == 0 and x86_synth_is_int_like(left_type) == 1 and next_p < toks.len()
                 nt_id = toks[next_p]
                 if nt_id.tok_kind == TOK_IDENT()
                     af_id = next_p + 1
@@ -684,14 +745,14 @@ fn x86_synth_compile_expr_add s toks pos_box
                     end
                     if af_ok == 1
                         lv_add_rhs = x86_synth_find_local_var(s, nt_id.tok_text)
-                        if lv_add_rhs != 0 and lv_add_rhs.lv_prim_type == "int"
+                        if lv_add_rhs != 0 and x86_synth_is_int_like(lv_add_rhs.lv_prim_type) == 1
                             is_local_int_fast = 1
                         end
                     end
                 end
             end
 
-            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or left_type == "int") and left_type != "float" and left_type != "dyn_tagged"
+            if is_const_int_rhs == 1 and (op_kind == TOK_MINUS() or x86_synth_is_int_like(left_type) == 1) and left_type != "float" and left_type != "dyn_tagged"
                 // WHY: 1-cycle direct silicon arithmetic for constant additions/subtractions (e.g. i + 1, i - 1)
                 // Zero function calls, zero stack traffic, zero heap allocations.
                 list_set(pos_box, 0, next_p + 1)
@@ -739,7 +800,11 @@ fn x86_synth_compile_expr_add s toks pos_box
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 41)
                         x86_synth_emit_byte(s, 200)
-                s.synth_last_expr_type = "int"
+                if left_type == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
             elif is_local_int_fast == 1
                 // WHY: Direct register/frame load to %rcx followed by 1-cycle add/sub without stack push/pop
                 list_set(pos_box, 0, next_p + 1)
@@ -753,7 +818,11 @@ fn x86_synth_compile_expr_add s toks pos_box
                 else
                     x86_synth_emit_bytes(s, [72, 41, 200]) // sub rax, rcx
                 end
-                s.synth_last_expr_type = "int"
+                if left_type == "uint" or lv_add_rhs.lv_prim_type == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
             else
                 list_set(pos_box, 0, pos + 1) // Consume operator
 
@@ -781,6 +850,7 @@ fn x86_synth_compile_expr_add s toks pos_box
                 // Evaluate right operand with multiplicative precedence into %rax
                 x86_synth_compile_expr_mul(s, toks, pos_box)
                 right_type = s.synth_last_expr_type
+                right_ptr_t = s.synth_last_struct
 
                 if left_type == "dyn_tagged" or right_type == "dyn_tagged"
                     tag_op_a = 0
@@ -795,7 +865,41 @@ fn x86_synth_compile_expr_add s toks pos_box
                     x86_synth_emit_byte(s, 193)
                     x86_synth_emit_byte(s, 88)  // pop rax
 
-                    if left_type == "float" or right_type == "float"
+                    if is_left_ptr == 1
+                        // WHY: Typed pointer arithmetic (`*T + n`, `*T - n`, `p2 - p1`) scales by exact `sizeof(T)`!
+                        ptr_elem_sz = x86_synth_sizeof_type(s, x86_synth_ptr_pointee(left_ptr_t))
+                        if ptr_elem_sz < 1 ptr_elem_sz = 1 end
+                        if op_kind == TOK_PLUS()
+                            if ptr_elem_sz > 1
+                                // imul rcx, rcx, ptr_elem_sz (48 69 C9 <u32>)
+                                x86_synth_emit_bytes(s, [72, 105, 201])
+                                x86_synth_emit_u32(s, ptr_elem_sz)
+                            end
+                            x86_synth_emit_bytes(s, [72, 1, 200]) // add rax, rcx
+                            s.synth_last_struct = left_ptr_t
+                            s.synth_last_expr_type = "uint"
+                        else
+                            if x86_synth_is_ptr_type(right_ptr_t) == 1
+                                // Pointer difference: (p2 - p1) / sizeof(T)
+                                x86_synth_emit_bytes(s, [72, 41, 200]) // sub rax, rcx
+                                if ptr_elem_sz > 1
+                                    x86_synth_emit_bytes(s, [72, 199, 193]) // mov rcx, ptr_elem_sz
+                                    x86_synth_emit_u32(s, ptr_elem_sz)
+                                    x86_synth_emit_bytes(s, [72, 153, 72, 247, 249]) // cqo; idiv rcx
+                                end
+                                s.synth_last_struct = ""
+                                s.synth_last_expr_type = "int"
+                            else
+                                if ptr_elem_sz > 1
+                                    x86_synth_emit_bytes(s, [72, 105, 201])
+                                    x86_synth_emit_u32(s, ptr_elem_sz)
+                                end
+                                x86_synth_emit_bytes(s, [72, 41, 200]) // sub rax, rcx
+                                s.synth_last_struct = left_ptr_t
+                                s.synth_last_expr_type = "uint"
+                            end
+                        end
+                    elif left_type == "float" or right_type == "float"
                         // WHY: SSE2 64-bit Double-Precision Floating Point Addition & Subtraction.
                         if left_type == "float"
                             x86_synth_emit_byte(s, 102)
@@ -844,11 +948,28 @@ fn x86_synth_compile_expr_add s toks pos_box
                         x86_synth_emit_byte(s, 192)
                         s.synth_last_expr_type = "float"
                     elif op_kind == TOK_PLUS()
-                        if s.synth_freestanding == 1 or ((left_type == "int" or right_type == "int") and left_type != "str" and right_type != "str")
+                        if s.synth_freestanding == 1 or ((x86_synth_is_int_like(left_type) == 1 or x86_synth_is_int_like(right_type) == 1) and left_type != "str" and right_type != "str")
                             x86_synth_emit_byte(s, 72)
                             x86_synth_emit_byte(s, 1)
                             x86_synth_emit_byte(s, 200) // add rax, rcx
-                            s.synth_last_expr_type = "int"
+                            if left_type == "uint" or right_type == "uint"
+                                s.synth_last_expr_type = "uint"
+                            else
+                                s.synth_last_expr_type = "int"
+                            end
+                        elif left_type == "str" and right_type == "uint"
+                            // Convert unsigned RHS via _lipi_uint_to_str then concat
+                            x86_synth_emit_bytes(s, [80, 72, 131, 236, 8, 72, 137, 207]) // push rax; sub rsp, 8; mov rdi, rcx
+                            x86_synth_emit_call_helper(s, "_lipi_uint_to_str")
+                            x86_synth_emit_bytes(s, [72, 137, 198, 72, 131, 196, 8, 95]) // mov rsi, rax; add rsp, 8; pop rdi
+                            x86_synth_emit_call_helper(s, "_lipi_str_concat")
+                            s.synth_last_expr_type = "str"
+                        elif left_type == "uint" and right_type == "str"
+                            x86_synth_emit_bytes(s, [81, 72, 131, 236, 8, 72, 137, 199]) // push rcx; sub rsp, 8; mov rdi, rax
+                            x86_synth_emit_call_helper(s, "_lipi_uint_to_str")
+                            x86_synth_emit_bytes(s, [72, 137, 199, 72, 131, 196, 8, 94]) // mov rdi, rax; add rsp, 8; pop rsi
+                            x86_synth_emit_call_helper(s, "_lipi_str_concat")
+                            s.synth_last_expr_type = "str"
                         else
                             x86_synth_emit_byte(s, 72) // mov rdi, rax
                             x86_synth_emit_byte(s, 137)
@@ -867,7 +988,11 @@ fn x86_synth_compile_expr_add s toks pos_box
                         x86_synth_emit_byte(s, 72)
                         x86_synth_emit_byte(s, 41)
                         x86_synth_emit_byte(s, 200)
-                        s.synth_last_expr_type = "int"
+                        if left_type == "uint" or right_type == "uint"
+                            s.synth_last_expr_type = "uint"
+                        else
+                            s.synth_last_expr_type = "int"
+                        end
                     end
                 end
     return 0
@@ -898,6 +1023,7 @@ fn x86_synth_compile_expr_shift s toks pos_box
         if is_op == 0
             cont_shift = 0
         else
+            sh_left_t = s.synth_last_expr_type
             next_ps = pos + 1
             is_imm_shift = 0
             sh_imm = 0
@@ -923,14 +1049,20 @@ fn x86_synth_compile_expr_shift s toks pos_box
             end
 
             if is_imm_shift == 1
-                // WHY: 1-cycle immediate shift `shl/sar rax, imm8` eliminating stack push/pop and CL copy
+                // WHY: 1-cycle immediate shift: logical `shr` for unsigned u8/u16/u32/u64, arithmetic `sar` for signed.
                 list_set(pos_box, 0, next_ps + 1)
                 if op_kind == TOK_SHL()
                     x86_synth_emit_bytes(s, [72, 193, 224, sh_imm])
+                elif sh_left_t == "uint"
+                    x86_synth_emit_bytes(s, [72, 193, 232, sh_imm]) // shr rax, imm8
                 else
-                    x86_synth_emit_bytes(s, [72, 193, 248, sh_imm])
+                    x86_synth_emit_bytes(s, [72, 193, 248, sh_imm]) // sar rax, imm8
                 end
-                s.synth_last_expr_type = "int"
+                if sh_left_t == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
                 s.synth_last_struct = ""
             else
                 list_set(pos_box, 0, pos + 1) // Consume operator
@@ -953,12 +1085,21 @@ fn x86_synth_compile_expr_shift s toks pos_box
                     x86_synth_emit_byte(s, 211)
                     x86_synth_emit_byte(s, 224)
                 elif op_kind == TOK_SHR()
-                    // sar rax, cl (0x48 0xD3 0xF8)
-                    x86_synth_emit_byte(s, 72)
-                    x86_synth_emit_byte(s, 211)
-                    x86_synth_emit_byte(s, 248)
+                    if sh_left_t == "uint"
+                        // shr rax, cl (0x48 0xD3 0xE8) — logical zero-fill right shift
+                        x86_synth_emit_bytes(s, [72, 211, 232])
+                    else
+                        // sar rax, cl (0x48 0xD3 0xF8) — arithmetic sign-extending right shift
+                        x86_synth_emit_byte(s, 72)
+                        x86_synth_emit_byte(s, 211)
+                        x86_synth_emit_byte(s, 248)
+                    end
                 end
-                s.synth_last_expr_type = "int"
+                if sh_left_t == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
                 s.synth_last_struct = ""
             end
     return 0
@@ -1045,6 +1186,18 @@ fn x86_synth_compile_expr_rel s toks pos_box
                         x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 151, 192, 72, 15, 182, 192])
                     elif op_kind == TOK_GTE()
                         x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 147, 192, 72, 15, 182, 192])
+                    end
+                elif left_type == "uint" or right_type == "uint"
+                    // WHY: Unsigned 64-bit relational comparison using setb/setbe/seta/setae (CF/ZF)
+                    // so u64 values >= 2^63 (e.g. 0xFFFFFFFF80000000 > 4096) evaluate accurately.
+                    if op_kind == TOK_LT()
+                        x86_synth_emit_bytes(s, [72, 57, 200, 15, 146, 192, 72, 15, 182, 192]) // setb
+                    elif op_kind == TOK_LTE()
+                        x86_synth_emit_bytes(s, [72, 57, 200, 15, 150, 192, 72, 15, 182, 192]) // setbe
+                    elif op_kind == TOK_GT()
+                        x86_synth_emit_bytes(s, [72, 57, 200, 15, 151, 192, 72, 15, 182, 192]) // seta
+                    elif op_kind == TOK_GTE()
+                        x86_synth_emit_bytes(s, [72, 57, 200, 15, 147, 192, 72, 15, 182, 192]) // setae
                     end
                 elif op_kind == TOK_LT()
                     x86_synth_emit_byte(s, 72)
@@ -1164,9 +1317,9 @@ fn x86_synth_compile_expr_eq s toks pos_box
                     elif op_kind == TOK_NEQ()
                         x86_synth_emit_bytes(s, [102, 15, 46, 193, 15, 149, 192, 15, 154, 193, 8, 200, 72, 15, 182, 192])
                     end
-                elif (s.synth_freestanding == 1 or (left_type == "int" and right_type == "int")) and op_kind == TOK_EQ()
+                elif (s.synth_freestanding == 1 or (x86_synth_is_int_like(left_type) == 1 and x86_synth_is_int_like(right_type) == 1)) and op_kind == TOK_EQ()
                     x86_synth_emit_bytes(s, [72, 57, 200, 15, 148, 192, 72, 15, 182, 192])
-                elif (s.synth_freestanding == 1 or (left_type == "int" and right_type == "int")) and op_kind == TOK_NEQ()
+                elif (s.synth_freestanding == 1 or (x86_synth_is_int_like(left_type) == 1 and x86_synth_is_int_like(right_type) == 1)) and op_kind == TOK_NEQ()
                     x86_synth_emit_bytes(s, [72, 57, 200, 15, 149, 192, 72, 15, 182, 192])
                 elif op_kind == TOK_EQ()
                     x86_synth_emit_byte(s, 72)
@@ -1237,6 +1390,7 @@ fn x86_synth_compile_expr_bitwise s toks pos_box
         if is_op == 0
             cont_bit = 0
         else
+            bit_left_t = s.synth_last_expr_type
             next_pb = pos + 1
             is_imm_bit = 0
             bit_imm = 0
@@ -1283,7 +1437,11 @@ fn x86_synth_compile_expr_bitwise s toks pos_box
                     end
                     x86_synth_emit_u32(s, bit_imm)
                 end
-                s.synth_last_expr_type = "int"
+                if bit_left_t == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
                 s.synth_last_struct = ""
             else
                 list_set(pos_box, 0, pos + 1) // Consume operator
@@ -1293,6 +1451,7 @@ fn x86_synth_compile_expr_bitwise s toks pos_box
 
                 // Evaluate right operand with equality precedence into %rax
                 x86_synth_compile_expr_eq(s, toks, pos_box)
+                bit_right_t = s.synth_last_expr_type
 
                 // Move right operand to %rcx, restore left operand to %rax
                 x86_synth_emit_byte(s, 72)  // mov rcx, rax (0x48 0x89 0xC1)
@@ -1316,7 +1475,11 @@ fn x86_synth_compile_expr_bitwise s toks pos_box
                     x86_synth_emit_byte(s, 49)
                     x86_synth_emit_byte(s, 200)
                 end
-                s.synth_last_expr_type = "int"
+                if bit_left_t == "uint" or bit_right_t == "uint"
+                    s.synth_last_expr_type = "uint"
+                else
+                    s.synth_last_expr_type = "int"
+                end
                 s.synth_last_struct = ""
             end
     return 0

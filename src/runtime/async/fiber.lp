@@ -39,8 +39,8 @@ fn fiber_get_swap_engine
         return G_FIBER_SWAP_ENGINE
     end
 
-    // Allocate 4KB page with PROT_READ|WRITE|EXEC (syscall 9: sys_mmap)
-    p = syscall(9, 0, 4096, 7, 34, -1, 0)
+    // Allocate 4KB page with strict W^X: PROT_READ|PROT_WRITE (3), then mprotect to PROT_READ|PROT_EXEC (5)
+    p = syscall(9, 0, 4096, 3, 34, -1, 0)
     if p <= 0
         return 0
     end
@@ -366,6 +366,8 @@ fn fiber_get_swap_engine
     mem_byte_write(p, 340, 93)        // pop rbp (5d)
     mem_byte_write(p, 341, 195)       // ret (c3)
 
+    // Seal code page strict W^X (PROT_READ|PROT_EXEC = 5) via SYS_mprotect (10): zero RWX!
+    syscall(10, p, 4096, 5, 0, 0, 0)
     G_FIBER_SWAP_ENGINE = p
     return G_FIBER_SWAP_ENGINE
 end

@@ -145,10 +145,22 @@ fn hashmap_lookup map_ptr capacity key_val
 fn হ্যাশম্যাপ_লুকআপ map_ptr capacity key_val
     return hashmap_lookup(map_ptr, capacity, key_val)
 
-// ── ৫. হ্যাশম্যাপ অবমুক্তি (Destroy Hashmap via SYS_munmap) ──────────────────────
+// ── ৫. হ্যাশম্যাপ অবমুক্তি (Destroy Raw mmap Hashmap via SYS_munmap) ─────────────
 fn hashmap_delete map_ptr capacity
+    // WHY: Guard against accidental DICT0 handle passed to raw mmap table destructor;
+    // native DICT0 carries "LIPDICT0" (0x305443494450494C) at offset +24.
+    if map_ptr == 0
+        return 0
+    end
+    if mem_read(map_ptr, 24) == 3482482393822021964 or mem_read(map_ptr, 24) == 1145652052
+        del_key(map_ptr, capacity)
+        return map_ptr
+    end
     syscall(11, map_ptr, capacity * 32, 0, 0, 0, 0) // SYS_munmap
     return 1
+
+fn hashmap_free map_ptr capacity
+    return hashmap_delete(map_ptr, capacity)
 
 fn হ্যাশম্যাপ_মুছে_ফেলো map_ptr capacity
     return hashmap_delete(map_ptr, capacity)
@@ -766,4 +778,38 @@ fn intmap_free m: IntMap
     m.im_count = 0
     m.im_mask = 0
     return 1
+end
+
+// ── ৮. Auto-Growing Managed Robin-Hood HashMap Ergonomic Wrapper (2x Rehash >70% Load) ──
+
+fn robin_map_new init_cap
+    return intmap_new(init_cap)
+end
+
+fn robin_map_put m key val
+    return intmap_set(m, key, val)
+end
+
+fn robin_map_get m key
+    return intmap_get(m, key)
+end
+
+fn robin_map_get_or m key default_val
+    return intmap_get_or(m, key, default_val)
+end
+
+fn robin_map_has m key
+    return intmap_has(m, key)
+end
+
+fn robin_map_del m key
+    return intmap_del(m, key)
+end
+
+fn robin_map_len m
+    return intmap_len(m)
+end
+
+fn robin_map_free m
+    return intmap_free(m)
 end

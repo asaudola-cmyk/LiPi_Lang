@@ -640,6 +640,49 @@ import "utso/string"
   return out
 @end
 
+@fn macho_lc_build_version_serialize(platform, minos, sdk)
+  // WHY: Modern macOS dyld requires LC_BUILD_VERSION (0x32, 24 bytes) declaring platform & SDK.
+  out = []
+  out = macho_append_bytes(out, macho_pack_u32_le(LC_BUILD_VERSION()), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(24), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(platform), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(minos), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(sdk), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(0), 4) // ntools = 0
+  return out
+@end
+
+@fn macho_lc_symtab_serialize(symoff, nsyms, stroff, strsize)
+  // WHY: Serializes 24-byte LC_SYMTAB (0x02) pointing to nlist_64 table and string table in __LINKEDIT.
+  out = []
+  out = macho_append_bytes(out, macho_pack_u32_le(LC_SYMTAB()), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(24), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(symoff), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(nsyms), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(stroff), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(strsize), 4)
+  return out
+@end
+
+@fn macho_lc_dysymtab_serialize(iext, next_cnt, iundef)
+  // WHY: Serializes 80-byte LC_DYSYMTAB (0x0B) pairing with LC_SYMTAB for modern macOS dyld compliance.
+  out = []
+  out = macho_append_bytes(out, macho_pack_u32_le(LC_DYSYMTAB()), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(80), 4)
+  out = macho_append_bytes(out, macho_pack_u32_le(0), 4)         // ilocalsym
+  out = macho_append_bytes(out, macho_pack_u32_le(0), 4)         // nlocalsym
+  out = macho_append_bytes(out, macho_pack_u32_le(iext), 4)      // iextdefsym
+  out = macho_append_bytes(out, macho_pack_u32_le(next_cnt), 4)  // nextdefsym
+  out = macho_append_bytes(out, macho_pack_u32_le(iundef), 4)    // iundefsym
+  out = macho_append_bytes(out, macho_pack_u32_le(0), 4)         // nundefsym
+  zi = 0
+  @while zi < 12
+    out = macho_append_bytes(out, macho_pack_u32_le(0), 4)
+    zi = zi + 1
+  @end
+  return out
+@end
+
 @fn macho_lc_dylib_serialize(dylib_cmd)
   // WHY: Serializes LC_LOAD_DYLIB load command into exactly dylib_cmd.mdyb_cmdsize bytes.
   // Layout:

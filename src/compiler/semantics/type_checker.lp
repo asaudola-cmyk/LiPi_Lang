@@ -44,6 +44,7 @@ import "compiler/frontend/ast/ast_node"
 @fn ERR_UNDEFINED_FIELD()          return 1011 @end
 @fn ERR_NOT_CALLABLE()            return 1012 @end
 @fn ERR_BREAK_OUTSIDE_LOOP()      return 1013 @end
+@fn ERR_NON_EXHAUSTIVE_MATCH()    return 1014 @end
 
 @struct SemanticDiagnostic
   sd_code: i64
@@ -77,6 +78,8 @@ import "compiler/frontend/ast/ast_node"
   tc_current_stmt: ASTNode
   tc_errors: array
   tc_warnings: array
+  tc_enum_names: array
+  tc_enum_variants: array
 @end
 
 @fn type_checker_new(reg, symtab, scopes)
@@ -92,6 +95,8 @@ import "compiler/frontend/ast/ast_node"
   tc.tc_current_fn_name = ""
   tc.tc_errors = []
   tc.tc_warnings = []
+  tc.tc_enum_names = []
+  tc.tc_enum_variants = []
   return tc
 @end
 
@@ -154,17 +159,18 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "thread_spawn_vm") == 1 || str_eq(fn_name, "thread_spawn_vm_joinable") == 1 || str_eq(fn_name, "থ্রেড_চালু_ভিএম") == 1 || str_eq(fn_name, "futex_wait") == 1 || str_eq(fn_name, "ফিউটেক্স_অপেক্ষা") == 1 || str_eq(fn_name, "futex_wake") == 1 || str_eq(fn_name, "ফিউটেক্স_জাগাও") == 1 return 1 @end
   @if str_eq(fn_name, "stack_bottom") == 1 || str_eq(fn_name, "heap_base_ptr") == 1 || str_eq(fn_name, "heap_curr_ptr") == 1 || str_eq(fn_name, "exc_throw") == 1 || str_eq(fn_name, "stack_trace") == 1 || str_eq(fn_name, "backtrace") == 1 || str_eq(fn_name, "স্ট্যাক_ট্রেস") == 1 || str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1 || str_eq(fn_name, "move") == 1 || str_eq(fn_name, "drop") == 1 || str_eq(fn_name, "float_to_str") == 1 || str_eq(fn_name, "print_float") == 1 return 1 @end
   @if str_eq(fn_name, "buf_new") == 1 || str_eq(fn_name, "byte_buf_new") == 1 || str_eq(fn_name, "বাফার_তৈরি") == 1 || str_eq(fn_name, "buf_write_mem") == 1 || str_eq(fn_name, "buf_append_mem") == 1 || str_eq(fn_name, "বাফার_লেখো_মেম") == 1 || str_eq(fn_name, "buf_write_byte") == 1 || str_eq(fn_name, "buf_append_byte") == 1 || str_eq(fn_name, "buf_push") == 1 || str_eq(fn_name, "বাফার_বাইট") == 1 || str_eq(fn_name, "buf_write_str") == 1 || str_eq(fn_name, "buf_append") == 1 || str_eq(fn_name, "buf_append_str") == 1 || str_eq(fn_name, "বাফার_স্ট্রিং") == 1 || str_eq(fn_name, "bytes_to_str") == 1 || str_eq(fn_name, "mem_to_str") == 1 || str_eq(fn_name, "বাইট_থেকে_স্ট্রিং") == 1 || str_eq(fn_name, "buf_to_str") == 1 || str_eq(fn_name, "বাফার_স্ট্রিংয়ে") == 1 || str_eq(fn_name, "buf_len") == 1 || str_eq(fn_name, "বাফার_দৈর্ঘ্য") == 1 || str_eq(fn_name, "buf_ptr") == 1 || str_eq(fn_name, "বাফার_পয়েন্টার") == 1 || str_eq(fn_name, "buf_clear") == 1 || str_eq(fn_name, "বাফার_মুছো") == 1 || str_eq(fn_name, "buf_get_byte") == 1 || str_eq(fn_name, "বাইট_পড়ো") == 1 || str_eq(fn_name, "buf_free") == 1 || str_eq(fn_name, "বাফার_মুক্তি") == 1 || str_eq(fn_name, "buf_slice") == 1 || str_eq(fn_name, "bytes_slice") == 1 || str_eq(fn_name, "বাইট_স্লাইস") == 1 return 1 @end
-  @if str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "has_key") == 1 || str_eq(fn_name, "del_key") == 1 || str_eq(fn_name, "keys") == 1 || str_eq(fn_name, "values") == 1 || str_eq(fn_name, "dict_has") == 1 || str_eq(fn_name, "dict_del") == 1 || str_eq(fn_name, "dict_keys") == 1 || str_eq(fn_name, "dict_values") == 1 return 1 @end
+  @if str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "has_key") == 1 || str_eq(fn_name, "del_key") == 1 || str_eq(fn_name, "keys") == 1 || str_eq(fn_name, "values") == 1 || str_eq(fn_name, "dict_has") == 1 || str_eq(fn_name, "dict_del") == 1 || str_eq(fn_name, "dict_keys") == 1 || str_eq(fn_name, "dict_values") == 1 || str_eq(fn_name, "dict_get") == 1 || str_eq(fn_name, "dict_set") == 1 || str_eq(fn_name, "map_new") == 1 || str_eq(fn_name, "map_set") == 1 || str_eq(fn_name, "map_get") == 1 || str_eq(fn_name, "map_has") == 1 || str_eq(fn_name, "map_del") == 1 || str_eq(fn_name, "map_keys") == 1 || str_eq(fn_name, "map_values") == 1 || str_eq(fn_name, "hashmap_delete") == 1 || str_eq(fn_name, "async_yield") == 1 || str_eq(fn_name, "async_wait_fd") == 1 return 1 @end
   // Sovereign Ring-0 Silicon, Volatile MMIO, Hardware Atomics, Fences, offsetof, UEFI & Binary I/O Intrinsics
   @if str_eq(fn_name, "port_in8") == 1 || str_eq(fn_name, "port_out8") == 1 || str_eq(fn_name, "port_in16") == 1 || str_eq(fn_name, "port_out16") == 1 || str_eq(fn_name, "port_in32") == 1 || str_eq(fn_name, "port_out32") == 1 || str_eq(fn_name, "inb") == 1 || str_eq(fn_name, "outb") == 1 || str_eq(fn_name, "inw") == 1 || str_eq(fn_name, "outw") == 1 || str_eq(fn_name, "inl") == 1 || str_eq(fn_name, "outl") == 1 || str_eq(fn_name, "io_wait") == 1 || str_eq(fn_name, "port_io_wait") == 1 return 1 @end
   @if str_eq(fn_name, "পোর্ট_পড়ো৮") == 1 || str_eq(fn_name, "পোর্ট_লেখো৮") == 1 || str_eq(fn_name, "পোর্ট_পড়ো১৬") == 1 || str_eq(fn_name, "পোর্ট_লেখো১৬") == 1 || str_eq(fn_name, "পোর্ট_পড়ো৩২") == 1 || str_eq(fn_name, "পোর্ট_লেখো৩২") == 1 return 1 @end
   @if str_eq(fn_name, "mmio_r8") == 1 || str_eq(fn_name, "mmio_w8") == 1 || str_eq(fn_name, "mmio_r16") == 1 || str_eq(fn_name, "mmio_w16") == 1 || str_eq(fn_name, "mmio_r32") == 1 || str_eq(fn_name, "mmio_w32") == 1 || str_eq(fn_name, "mmio_r64") == 1 || str_eq(fn_name, "mmio_w64") == 1 || str_eq(fn_name, "mmio_read8") == 1 || str_eq(fn_name, "mmio_write8") == 1 || str_eq(fn_name, "mmio_read16") == 1 || str_eq(fn_name, "mmio_write16") == 1 || str_eq(fn_name, "mmio_read32_hw") == 1 || str_eq(fn_name, "mmio_write32_hw") == 1 || str_eq(fn_name, "mmio_read64") == 1 || str_eq(fn_name, "mmio_write64") == 1 return 1 @end
+  @if str_eq(fn_name, "cpu_fence") == 1 || str_eq(fn_name, "cpu_dmb") == 1 || str_eq(fn_name, "cpu_dsb") == 1 || str_eq(fn_name, "cpu_isb") == 1 || str_eq(fn_name, "cpu_wfi") == 1 || str_eq(fn_name, "cpu_nop") == 1 || str_eq(fn_name, "cpu_rdcycle") == 1 || str_eq(fn_name, "cpu_rdtime") == 1 || str_eq(fn_name, "Ok") == 1 || str_eq(fn_name, "Err") == 1 || str_eq(fn_name, "Some") == 1 || str_eq(fn_name, "None") == 1 return 1 @end
   @if str_eq(fn_name, "mem_u8_read") == 1 || str_eq(fn_name, "mem_u8_write") == 1 || str_eq(fn_name, "mem_u16_read") == 1 || str_eq(fn_name, "mem_u16_write") == 1 || str_eq(fn_name, "mem_u32_read") == 1 || str_eq(fn_name, "mem_u32_write") == 1 || str_eq(fn_name, "mem_u64_read") == 1 || str_eq(fn_name, "mem_u64_write") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_cli") == 1 || str_eq(fn_name, "cli") == 1 || str_eq(fn_name, "cpu_sti") == 1 || str_eq(fn_name, "sti") == 1 || str_eq(fn_name, "cpu_hlt") == 1 || str_eq(fn_name, "hlt") == 1 || str_eq(fn_name, "cpu_pause") == 1 || str_eq(fn_name, "cpu_lgdt") == 1 || str_eq(fn_name, "lgdt") == 1 || str_eq(fn_name, "cpu_lidt") == 1 || str_eq(fn_name, "lidt") == 1 || str_eq(fn_name, "cpu_sgdt") == 1 || str_eq(fn_name, "sgdt") == 1 || str_eq(fn_name, "cpu_sidt") == 1 || str_eq(fn_name, "sidt") == 1 || str_eq(fn_name, "cpu_ltr") == 1 || str_eq(fn_name, "ltr") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_read_cr0") == 1 || str_eq(fn_name, "read_cr0") == 1 || str_eq(fn_name, "cpu_write_cr0") == 1 || str_eq(fn_name, "write_cr0") == 1 || str_eq(fn_name, "cpu_read_cr2") == 1 || str_eq(fn_name, "read_cr2") == 1 || str_eq(fn_name, "cpu_read_cr3") == 1 || str_eq(fn_name, "read_cr3") == 1 || str_eq(fn_name, "cpu_write_cr3") == 1 || str_eq(fn_name, "write_cr3") == 1 || str_eq(fn_name, "cpu_read_cr4") == 1 || str_eq(fn_name, "read_cr4") == 1 || str_eq(fn_name, "cpu_write_cr4") == 1 || str_eq(fn_name, "write_cr4") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_rdmsr") == 1 || str_eq(fn_name, "rdmsr") == 1 || str_eq(fn_name, "cpu_wrmsr") == 1 || str_eq(fn_name, "wrmsr") == 1 || str_eq(fn_name, "cpu_invlpg") == 1 || str_eq(fn_name, "invlpg") == 1 || str_eq(fn_name, "cpu_swapgs") == 1 || str_eq(fn_name, "swapgs") == 1 || str_eq(fn_name, "cpu_wbinvd") == 1 || str_eq(fn_name, "cpu_rdtsc") == 1 || str_eq(fn_name, "rdtsc") == 1 || str_eq(fn_name, "cpu_read_rflags") == 1 || str_eq(fn_name, "read_rflags") == 1 || str_eq(fn_name, "cpu_read_rsp") == 1 || str_eq(fn_name, "cpu_cpuid") == 1 || str_eq(fn_name, "cpuid") == 1 return 1 @end
   @if str_eq(fn_name, "atomic_cas32") == 1 || str_eq(fn_name, "atomic_cas64") == 1 || str_eq(fn_name, "atomic_xchg32") == 1 || str_eq(fn_name, "atomic_xchg64") == 1 || str_eq(fn_name, "atomic_add32") == 1 || str_eq(fn_name, "atomic_add64") == 1 || str_eq(fn_name, "fence_full") == 1 || str_eq(fn_name, "mfence") == 1 || str_eq(fn_name, "fence_store") == 1 || str_eq(fn_name, "sfence") == 1 || str_eq(fn_name, "fence_load") == 1 || str_eq(fn_name, "lfence") == 1 || str_eq(fn_name, "মেমরি_ব্যারিয়ার") == 1 return 1 @end
-  @if str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 return 1 @end
+  @if str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 || str_eq(fn_name, "@asm") == 1 || str_eq(fn_name, "@অ্যাসেম্বলি") == 1 return 1 @end
   @if len(fn_name) >= 4 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "y" && char_at(fn_name, 2) == "s" && char_at(fn_name, 3) == "_" return 1 @end
   @if len(fn_name) >= 6 && char_at(fn_name, 0) == "_" && char_at(fn_name, 1) == "l" && char_at(fn_name, 2) == "i" && char_at(fn_name, 3) == "p" && char_at(fn_name, 4) == "i" && char_at(fn_name, 5) == "_" return 1 @end
   return 0
@@ -183,8 +189,8 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "syscall") == 1 || str_eq(fn_name, "সিসকল") == 1 || str_eq(fn_name, "sys_syscall") == 1 || str_eq(fn_name, "exit") == 1 || str_eq(fn_name, "বিদায়") == 1 || str_eq(fn_name, "sys_mmap") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "mem_word_read") == 1 || str_eq(fn_name, "mem_read") == 1 || str_eq(fn_name, "মেমরি_পড়ো") == 1 || str_eq(fn_name, "মেমরি_শব্দ_পড়ো") == 1 || str_eq(fn_name, "mem_byte_read") == 1 || str_eq(fn_name, "mem_read_byte") == 1 || str_eq(fn_name, "mem_byte_পড়ো") == 1 || str_eq(fn_name, "মেমরি_বাইট_পড়ো") == 1 || str_eq(fn_name, "sys_peek8") == 1 || str_eq(fn_name, "sys_peek") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "file_write") == 1 || str_eq(fn_name, "file_write_bytes") == 1 || str_eq(fn_name, "sys_exit") == 1 || str_eq(fn_name, "sys_exit_group") == 1 || str_eq(fn_name, "প্রস্থান") == 1 || str_eq(fn_name, "mem_word_write") == 1 || str_eq(fn_name, "mem_write") == 1 || str_eq(fn_name, "mem_write_word") == 1 || str_eq(fn_name, "মেমরি_লেখো") == 1 || str_eq(fn_name, "মেমরি_শব্দ_লেখো") == 1 || str_eq(fn_name, "mem_byte_write") == 1 || str_eq(fn_name, "mem_write_byte") == 1 || str_eq(fn_name, "mem_byte_লেখো") == 1 || str_eq(fn_name, "মেমরি_বাইট_লেখো") == 1 || str_eq(fn_name, "sys_poke8") == 1 || str_eq(fn_name, "sys_poke") == 1 return TYPE_ID_VOID() @end
-  @if str_eq(fn_name, "push") == 1 || str_eq(fn_name, "set") == 1 || str_eq(fn_name, "list_push") == 1 || str_eq(fn_name, "list_set") == 1 || str_eq(fn_name, "argv") == 1 || str_eq(fn_name, "আর্গস") == 1 || str_eq(fn_name, "pop") == 1 || str_eq(fn_name, "list_pop") == 1 || str_eq(fn_name, "বাদ_দাও") == 1 || str_eq(fn_name, "get") == 1 || str_eq(fn_name, "list") == 1 || str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "keys") == 1 || str_eq(fn_name, "values") == 1 || str_eq(fn_name, "dict_keys") == 1 || str_eq(fn_name, "dict_values") == 1 || str_eq(fn_name, "malloc") == 1 || str_eq(fn_name, "alloc") == 1 || str_eq(fn_name, "mem_alloc") == 1 || str_eq(fn_name, "মেমরি_বরাদ্দ") == 1 || str_eq(fn_name, "user_alloc") == 1 || str_eq(fn_name, "user_free") == 1 || str_eq(fn_name, "free") == 1 return TYPE_ID_ANY() @end
-  @if str_eq(fn_name, "has_key") == 1 || str_eq(fn_name, "del_key") == 1 || str_eq(fn_name, "dict_has") == 1 || str_eq(fn_name, "dict_del") == 1 return TYPE_ID_I64() @end
+  @if str_eq(fn_name, "push") == 1 || str_eq(fn_name, "set") == 1 || str_eq(fn_name, "list_push") == 1 || str_eq(fn_name, "list_set") == 1 || str_eq(fn_name, "argv") == 1 || str_eq(fn_name, "আর্গস") == 1 || str_eq(fn_name, "pop") == 1 || str_eq(fn_name, "list_pop") == 1 || str_eq(fn_name, "বাদ_দাও") == 1 || str_eq(fn_name, "get") == 1 || str_eq(fn_name, "list") == 1 || str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "keys") == 1 || str_eq(fn_name, "values") == 1 || str_eq(fn_name, "dict_keys") == 1 || str_eq(fn_name, "dict_values") == 1 || str_eq(fn_name, "dict_get") == 1 || str_eq(fn_name, "dict_set") == 1 || str_eq(fn_name, "map_new") == 1 || str_eq(fn_name, "map_set") == 1 || str_eq(fn_name, "map_get") == 1 || str_eq(fn_name, "map_keys") == 1 || str_eq(fn_name, "map_values") == 1 || str_eq(fn_name, "hashmap_delete") == 1 || str_eq(fn_name, "malloc") == 1 || str_eq(fn_name, "alloc") == 1 || str_eq(fn_name, "mem_alloc") == 1 || str_eq(fn_name, "মেমরি_বরাদ্দ") == 1 || str_eq(fn_name, "user_alloc") == 1 || str_eq(fn_name, "user_free") == 1 || str_eq(fn_name, "free") == 1 return TYPE_ID_ANY() @end
+  @if str_eq(fn_name, "has_key") == 1 || str_eq(fn_name, "del_key") == 1 || str_eq(fn_name, "dict_has") == 1 || str_eq(fn_name, "dict_del") == 1 || str_eq(fn_name, "map_has") == 1 || str_eq(fn_name, "map_del") == 1 || str_eq(fn_name, "async_yield") == 1 || str_eq(fn_name, "async_wait_fd") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "sizeof") == 1 || str_eq(fn_name, "size_of") == 1 || str_eq(fn_name, "সাইজ_অফ") == 1 || str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "port_in8") == 1 || str_eq(fn_name, "port_in16") == 1 || str_eq(fn_name, "port_in32") == 1 || str_eq(fn_name, "inb") == 1 || str_eq(fn_name, "inw") == 1 || str_eq(fn_name, "inl") == 1 || str_eq(fn_name, "mmio_r8") == 1 || str_eq(fn_name, "mmio_r16") == 1 || str_eq(fn_name, "mmio_r32") == 1 || str_eq(fn_name, "mmio_r64") == 1 || str_eq(fn_name, "atomic_cas32") == 1 || str_eq(fn_name, "atomic_cas64") == 1 || str_eq(fn_name, "atomic_xchg32") == 1 || str_eq(fn_name, "atomic_xchg64") == 1 || str_eq(fn_name, "atomic_add32") == 1 || str_eq(fn_name, "atomic_add64") == 1 || str_eq(fn_name, "cpu_read_cr0") == 1 || str_eq(fn_name, "cpu_read_cr2") == 1 || str_eq(fn_name, "cpu_read_cr3") == 1 || str_eq(fn_name, "cpu_read_cr4") == 1 || str_eq(fn_name, "cpu_rdmsr") == 1 || str_eq(fn_name, "cpu_rdtsc") == 1 || str_eq(fn_name, "cpu_read_rflags") == 1 || str_eq(fn_name, "cpu_read_rsp") == 1 || str_eq(fn_name, "cpu_cpuid") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 return TYPE_ID_I64() @end
   return TYPE_ID_ANY()
@@ -327,6 +333,7 @@ import "compiler/frontend/ast/ast_node"
   // 4. Unary Operations
   @if str_eq(k, "UnaryOp") == 1
     t_inner = tc_check_expr(tc, expr.expr)
+    @if expr.op == "await" return t_inner @end
     @if expr.op == "!" || expr.op == "not" || expr.op == "না" return TYPE_ID_BOOL() @end
     @if expr.op == "-"
       @if t_inner == TYPE_ID_ANY() || t_inner == TYPE_ID_UNKNOWN() || t_inner == 0
@@ -345,10 +352,22 @@ import "compiler/frontend/ast/ast_node"
     fn_name = ""
     @if expr.name != ""
       fn_name = expr.name
-    @elif expr.func != 0 && expr.func.name != ""
-      fn_name = expr.func.name
-    @elif expr.func != 0 && expr.func.target != ""
-      fn_name = expr.func.target
+    @elif expr.func != 0
+      // WHY: Only extract static callee name from identifier or member-access nodes.
+      // Indexed / computed callees like `fns[0](10)` store an ASTNode pointer in `expr.func.target`
+      // (NOT a string!), so blindly reading `expr.func.target` would corrupt string scans and hang.
+      fk_c = expr.func.kind
+      @if str_eq(fk_c, "Variable") == 1 || str_eq(fk_c, "IDENT") == 1 || str_eq(fk_c, "Identifier") == 1
+        @if expr.func.name != ""
+          fn_name = expr.func.name
+        @elif expr.func.target != ""
+          fn_name = expr.func.target
+        @end
+      @elif str_eq(fk_c, "MemberAccess") == 1 || str_eq(fk_c, "FieldAccess") == 1
+        @if expr.func.name != ""
+          fn_name = expr.func.name
+        @end
+      @end
     @end
 
     // WHY: Indirect / chained calls like `(|x| => x * 3)(7)` or `make_ctr(20)(5)` have
@@ -589,10 +608,13 @@ import "compiler/frontend/ast/ast_node"
     return type_make_function(tc.tc_reg, c_param_types, TYPE_ID_ANY())
   @end
 
-  // 10b. Value-Returning Match Expression (checks scrutinee & each arm in isolated scope)
+  // 10b. Value-Returning Match Expression (checks scrutinee, ADT exhaustiveness & each arm in isolated scope)
   @if str_eq(k, "MatchExpr") == 1
     @if expr.expr != 0
-      tc_check_expr(tc, expr.expr)
+      scrut_me_t = tc_check_expr(tc, expr.expr)
+      @if expr.elements != 0
+        tc_check_match_exhaustiveness(tc, scrut_me_t, expr.elements)
+      @end
     @end
     @if expr.body != 0
       mi_m = 0
@@ -605,6 +627,137 @@ import "compiler/frontend/ast/ast_node"
   @end
 
   return infer_expr_type(tc.tc_infer_ctx, expr)
+@end
+
+// ── 3b. COMPILE-TIME ADT ENUM MATCH EXHAUSTIVENESS VERIFIER ──────────────────
+
+@fn tc_strip_enum_prefix(pat_str)
+  // WHY: Normalizes qualified patterns like `Opt::Some` to bare variant `Some`.
+  n = len(pat_str)
+  i = 0
+  @while i + 1 < n
+    @if str_char_at(pat_str, i) == 58 && str_char_at(pat_str, i + 1) == 58
+      return str_slice(pat_str, i + 2, n)
+    @end
+    i = i + 1
+  @end
+  return pat_str
+@end
+
+@fn tc_extract_enum_qualifier(pat_str)
+  // WHY: Extracts qualifier `Opt` from `Opt::Some`, or "" if unqualified.
+  n = len(pat_str)
+  i = 0
+  @while i + 1 < n
+    @if str_char_at(pat_str, i) == 58 && str_char_at(pat_str, i + 1) == 58
+      return str_slice(pat_str, 0, i)
+    @end
+    i = i + 1
+  @end
+  return ""
+@end
+
+@fn tc_find_enum_idx_by_name(tc, ename)
+  @if ename == "" return 0 - 1 @end
+  i = 0
+  n = tc.tc_enum_names.len()
+  @while i < n
+    @if str_eq(tc.tc_enum_names[i], ename) == 1
+      return i
+    @end
+    i = i + 1
+  @end
+  return 0 - 1
+@end
+
+@fn tc_check_match_exhaustiveness(tc, scrut_tid, pat_names)
+  // WHY: Guarantees compile-time exhaustiveness whenever matching on an ADT enum type
+  // (identified either from scrutinee's static enum annotation OR from any enum variant arm).
+  // Rejects missing variants unless an explicit `_` / `default` / `else` wildcard arm is present.
+  @if tc == 0 || tc.tc_enum_names.len() == 0 return 1 @end
+  has_wild = 0
+  target_idx = 0 - 1
+
+  // 1. Check if scrutinee has a static enum type annotation (e.g. `fn f(x: Opt)`)
+  @if scrut_tid > 0 && scrut_tid != TYPE_ID_ANY() && scrut_tid != TYPE_ID_UNKNOWN()
+    st_def = type_registry_get(tc.tc_reg, scrut_tid)
+    @if st_def != 0 && st_def.ty_name != ""
+      target_idx = tc_find_enum_idx_by_name(tc, st_def.ty_name)
+    @end
+  @end
+
+  // 2. Scan arm pattern labels for wildcards and enum variant references
+  p_cnt = 0
+  @if pat_names != 0 p_cnt = pat_names.len() @end
+  pi = 0
+  @while pi < p_cnt
+    pn = pat_names[pi]
+    @if str_eq(pn, "_") == 1 || str_eq(pn, "default") == 1 || str_eq(pn, "else") == 1 || str_eq(pn, "অন্যথায়") == 1
+      has_wild = 1
+    @elif pn != "" && target_idx < 0
+      qual = tc_extract_enum_qualifier(pn)
+      @if qual != ""
+        target_idx = tc_find_enum_idx_by_name(tc, qual)
+      @else
+        bare = tc_strip_enum_prefix(pn)
+        ei = tc.tc_enum_names.len() - 1
+        @while ei >= 0
+          ev_list = tc.tc_enum_variants[ei]
+          vi = 0
+          @while vi < ev_list.len()
+            @if str_eq(ev_list[vi], bare) == 1
+              target_idx = ei
+              break
+            @end
+            vi = vi + 1
+          @end
+          @if target_idx >= 0 break @end
+          ei = ei - 1
+        @end
+      @end
+    @end
+    pi = pi + 1
+  @end
+
+  @if has_wild == 1 || target_idx < 0
+    return 1
+  @end
+
+  // 3. Verify every variant of the matched enum is covered by at least one arm
+  enum_nm = tc.tc_enum_names[target_idx]
+  req_vars = tc.tc_enum_variants[target_idx]
+  missing = ""
+  miss_cnt = 0
+  ri = 0
+  @while ri < req_vars.len()
+    rv = req_vars[ri]
+    covered = 0
+    ci = 0
+    @while ci < p_cnt
+      cp = pat_names[ci]
+      @if cp != ""
+        c_qual = tc_extract_enum_qualifier(cp)
+        c_bare = tc_strip_enum_prefix(cp)
+        @if str_eq(c_bare, rv) == 1 && (c_qual == "" || str_eq(c_qual, enum_nm) == 1)
+          covered = 1
+          break
+        @end
+      @end
+      ci = ci + 1
+    @end
+    @if covered == 0
+      @if miss_cnt > 0 missing = missing + ", " @end
+      missing = missing + rv
+      miss_cnt = miss_cnt + 1
+    @end
+    ri = ri + 1
+  @end
+
+  @if miss_cnt > 0
+    tc_error(tc, ERR_NON_EXHAUSTIVE_MATCH(), "In function '" + tc.tc_current_fn_name + "': Non-exhaustive match on enum '" + enum_nm + "' — missing variant(s): " + missing + " (cover all variants or add '_' wildcard arm)", span_default())
+    return 0
+  @end
+  return 1
 @end
 
 // ── 4. STATEMENT SEMANTIC CHECKING ───────────────────────────────────────────
@@ -798,13 +951,16 @@ import "compiler/frontend/ast/ast_node"
     return 1
   @end
 
-  // 3. If Statement
+  // 3. If Statement (also handles `match` statements with stmt.op == "match")
   @if str_eq(k, "If") == 1 || str_eq(k, "IfStmt") == 1
     cond_node = stmt.condition
     @if cond_node == 0 cond_node = stmt.cond @end
+    c_type = TYPE_ID_ANY()
     @if cond_node != 0
       c_type = tc_check_expr(tc, cond_node)
-      @if c_type != TYPE_ID_BOOL() && type_is_numeric(tc.tc_reg, c_type) == 0 && c_type != TYPE_ID_ANY() && c_type != TYPE_ID_UNKNOWN() && c_type != 0
+      @if str_eq(stmt.op, "match") == 1
+        tc_check_match_exhaustiveness(tc, c_type, stmt.elements)
+      @elif c_type != TYPE_ID_BOOL() && type_is_numeric(tc.tc_reg, c_type) == 0 && c_type != TYPE_ID_ANY() && c_type != TYPE_ID_UNKNOWN() && c_type != 0
         tc_error(tc, ERR_CONDITION_NOT_BOOL(), "Condition in 'if' must evaluate to bool or numeric", span_default())
       @end
     @end
@@ -1084,9 +1240,12 @@ import "compiler/frontend/ast/ast_node"
     @elif str_eq(st.kind, "EnumDef") == 1
       e_name = st.name
       @if e_name != ""
-        e_sym = symbol_variable(e_name, TYPE_ID_I64(), 1, span_default(), tc.tc_scopes.stk_current_id)
+        e_tid = type_make_struct(tc.tc_reg, e_name, [])
+        e_sym = symbol_struct(e_name, e_tid, span_default(), tc.tc_scopes.stk_current_id)
         scope_define(tc.tc_scopes, e_sym)
         symtab_put(tc.tc_symtab, e_sym)
+        tc.tc_enum_names = tc.tc_enum_names.push(e_name)
+        tc.tc_enum_variants = tc.tc_enum_variants.push(st.elements)
       @end
       ev_idx = 0
       ev_len = st.elements.len()

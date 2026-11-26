@@ -67,7 +67,7 @@ import "utso/core/string"
   return sys_open(path, flags, mode)
 @end
 
-@! Reads up to max_len bytes from fd, returning a valid STR0 Lipi string
+@! Reads up to max_len bytes from fd in O(N) via native ERMS bytes_to_str (zero O(N^2) concat!)
 @fn fs_read(fd, max_len)
   @if max_len <= 0
     return ""
@@ -81,12 +81,7 @@ import "utso/core/string"
     lipi_free_sized(buf, max_len + 1)
     return ""
   @end
-  out = ""
-  k = 0
-  @while k < bytes_read
-    out = out + chr(sys_peek8(buf + k))
-    k = k + 1
-  @end
+  out = bytes_to_str(buf, bytes_read)
   lipi_free_sized(buf, max_len + 1)
   return out
 @end
@@ -501,4 +496,139 @@ import "utso/core/string"
 @fn path_is_absolute(path)
   @if path.len() == 0 return 0 @end
   return starts_with(path, "/")
+@end
+
+@! ----------------------------------------------------------------------------
+@! 8. Recursive Dir Walk, Wildcard Glob, Temp Files & Linux Inotify Watcher
+@! ----------------------------------------------------------------------------
+
+@fn _fs_walk_rec(dir_path, out_list, depth)
+  @if depth > 64 return 0 @end
+  items = fs_read_dir(dir_path)
+  i = 0
+  @while i < items.len()
+    full = path_join(dir_path, items[i])
+    st = fs_stat(full)
+    out_list.push(full)
+    @if st.is_dir == 1
+      _fs_walk_rec(full, out_list, depth + 1)
+    @end
+    i = i + 1
+  @end
+  return out_list.len()
+@end
+
+@! Recursively walks directory tree via SYS_getdents64 and returns all paths
+@fn fs_dir_walk(root_dir)
+  res = []
+  _fs_walk_rec(root_dir, res, 0)
+  return res
+@end
+
+@! Wildcard glob pattern matcher supporting '*' (any sequence) and '?' (any single char)
+@fn fs_glob_match(pattern, text)
+  pi = 0
+  ti = 0
+  plen = pattern.len()
+  tlen = text.len()
+  star_p = 0 - 1
+  star_t = 0
+  @while ti < tlen
+    @if pi < plen && (str_char_at(pattern, pi) == 63 || str_char_at(pattern, pi) == str_char_at(text, ti))
+      pi = pi + 1
+      ti = ti + 1
+    @elif pi < plen && str_char_at(pattern, pi) == 42
+      star_p = pi
+      star_t = ti
+      pi = pi + 1
+    @elif star_p >= 0
+      pi = star_p + 1
+      star_t = star_t + 1
+      ti = star_t
+    @else
+      return 0
+    @end
+  @end
+  @while pi < plen && str_char_at(pattern, pi) == 42
+    pi = pi + 1
+  @end
+  @if pi == plen return 1 @end
+  return 0
+@end
+
+@! Lists all files inside dir_path whose basename matches wildcard pattern (e.g. "*.lp")
+@fn fs_glob(dir_path, pattern)
+  all_e = fs_read_dir(dir_path)
+  matched = []
+  i = 0
+  @while i < all_e.len()
+    @if fs_glob_match(pattern, all_e[i]) == 1
+      matched.push(path_join(dir_path, all_e[i]))
+    @end
+    i = i + 1
+  @end
+  return matched
+@end
+
+global g_fs_tmp_seq = 0
+
+@! Creates a unique temporary file under /tmp using O_CREAT|O_EXCL (192) + PID + sequence
+@fn fs_temp_file(prefix)
+  pid = sys_getpid()
+  tries = 0
+  @while tries < 64
+    g_fs_tmp_seq = g_fs_tmp_seq + 1
+    cand = "/tmp/" + prefix + "_" + str(pid) + "_" + str(g_fs_tmp_seq) + ".tmp"
+    @! O_RDWR (2) | O_CREAT (64) | O_EXCL (128) = 194, mode 0600 (384)
+    fd = sys_open(cand, 194, 384)
+    @if fd >= 0
+      sys_close(fd)
+      return cand
+    @end
+    tries = tries + 1
+  @end
+  return ""
+@end
+
+@! Creates a unique temporary directory under /tmp via SYS_mkdir (83)
+@fn fs_temp_dir(prefix)
+  pid = sys_getpid()
+  tries = 0
+  @while tries < 64
+    g_fs_tmp_seq = g_fs_tmp_seq + 1
+    cand = "/tmp/" + prefix + "_" + str(pid) + "_" + str(g_fs_tmp_seq)
+    @if syscall(83, cand, 448, 0, 0, 0, 0) == 0
+      return cand
+    @end
+    tries = tries + 1
+  @end
+  return ""
+@end
+
+@! Real Linux inotify watcher via SYS_inotify_init1 (294) and SYS_inotify_add_watch (254)
+@! IN_NONBLOCK = 2048 (0x800), IN_MODIFY = 2, IN_CREATE = 256, IN_DELETE = 512, IN_CLOSE_WRITE = 8
+@fn fs_inotify_init()
+  return syscall(294, 2048, 0, 0, 0, 0, 0)
+@end
+
+@fn fs_inotify_add_watch(ifd, path, mask)
+  return syscall(254, ifd, path, mask, 0, 0, 0)
+@end
+
+@fn fs_inotify_rm_watch(ifd, wd)
+  return syscall(255, ifd, wd, 0, 0, 0, 0)
+@end
+
+@! Reads next pending inotify event mask (returns event mask > 0, or 0 if no event / EAGAIN)
+@fn fs_inotify_read_event(ifd)
+  buf = lipi_alloc(256)
+  @if buf <= 0 return 0 @end
+  n = sys_read(ifd, buf, 256)
+  mask = 0
+  @if n >= 16
+    @! struct inotify_event: +0 wd(i32), +4 mask(u32), +8 cookie(u32), +12 len(u32)
+    mask = sys_peek32(buf + 4)
+  @end
+  lipi_free_sized(buf, 256)
+  return mask
 @end

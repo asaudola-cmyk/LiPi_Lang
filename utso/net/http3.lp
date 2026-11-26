@@ -247,8 +247,169 @@ fn qpack_static_lookup idx
     if idx == 43 return "cache-control:no-store"
     if idx == 44 return "content-encoding:gzip"
     if idx == 45 return "content-encoding:br"
-    if idx == 46 return "server:lipi"
+    if idx == 46 return "content-type:application/dns-message"
+    if idx == 47 return "content-type:application/javascript"
+    if idx == 48 return "content-type:application/json"
+    if idx == 49 return "content-type:application/x-www-form-urlencoded"
+    if idx == 50 return "content-type:image/gif"
+    if idx == 51 return "content-type:image/jpeg"
+    if idx == 52 return "content-type:image/png"
+    if idx == 53 return "content-type:text/css"
+    if idx == 54 return "content-type:text/html; charset=utf-8"
+    if idx == 55 return "content-type:text/plain"
+    if idx == 56 return "content-type:text/plain;charset=utf-8"
+    if idx == 57 return "range:bytes=0-"
+    if idx == 58 return "strict-transport-security:max-age=31536000"
+    if idx == 59 return "strict-transport-security:max-age=31536000; includesubdomains"
+    if idx == 60 return "strict-transport-security:max-age=31536000; includesubdomains; preload"
+    if idx == 61 return "vary:accept-encoding"
+    if idx == 62 return "vary:origin"
+    if idx == 63 return "x-content-type-options:nosniff"
+    if idx == 64 return "x-xss-protection:1; mode=block"
+    if idx == 65 return ":status:100"
+    if idx == 66 return ":status:204"
+    if idx == 67 return ":status:206"
+    if idx == 68 return ":status:302"
+    if idx == 69 return ":status:400"
+    if idx == 70 return ":status:403"
+    if idx == 71 return ":status:421"
+    if idx == 72 return ":status:425"
+    if idx == 73 return ":status:500"
+    if idx == 74 return "accept-language"
+    if idx == 75 return "access-control-allow-credentials:FALSE"
+    if idx == 76 return "access-control-allow-credentials:TRUE"
+    if idx == 77 return "access-control-allow-headers:*"
+    if idx == 78 return "access-control-allow-methods:get"
+    if idx == 79 return "access-control-allow-methods:get, post, options"
+    if idx == 80 return "access-control-allow-methods:options"
+    if idx == 81 return "access-control-expose-headers:content-length"
+    if idx == 82 return "access-control-request-headers:content-type"
+    if idx == 83 return "access-control-request-method:get"
+    if idx == 84 return "access-control-request-method:post"
+    if idx == 85 return "alt-svc:clear"
+    if idx == 86 return "authorization"
+    if idx == 87 return "content-security-policy:script-src 'none'; object-src 'none'; base-uri 'none'"
+    if idx == 88 return "early-data:1"
+    if idx == 89 return "expect-ct"
+    if idx == 90 return "forwarded"
+    if idx == 91 return "if-range"
+    if idx == 92 return "origin"
+    if idx == 93 return "purpose:prefetch"
+    if idx == 94 return "server"
+    if idx == 95 return "timing-allow-origin:*"
+    if idx == 96 return "upgrade-insecure-requests:1"
+    if idx == 97 return "user-agent"
+    if idx == 98 return "x-forwarded-for"
     return ""
+
+// ── 5b. RFC 9204 QPACK Prefix-Integer Codec & HEADERS Frame Decoder ──────────
+
+fn qpack_encode_prefixed_int out_list prefix_bits first_byte_mask val
+    // WHY: Implements RFC 7541 Section 5.1 / RFC 9204 Section 4.1.1 N-bit prefix integer encoding.
+    max_p = (1 << prefix_bits) - 1
+    if val < max_p
+        push(out_list, (first_byte_mask & (255 - max_p)) | val)
+        return 1
+    end
+    push(out_list, (first_byte_mask & (255 - max_p)) | max_p)
+    rem = val - max_p
+    written = 1
+    while rem >= 128
+        push(out_list, (rem & 127) | 128)
+        rem = rem >> 7
+        written = written + 1
+    end
+    push(out_list, rem & 127)
+    return written + 1
+
+fn qpack_decode_prefixed_int bytes off prefix_bits
+    // Returns [value, next_offset]
+    n = len(bytes)
+    if off >= n return [0, off] end
+    max_p = (1 << prefix_bits) - 1
+    val = get(bytes, off) & max_p
+    pos = off + 1
+    if val < max_p
+        return [val, pos]
+    end
+    shift = 0
+    while pos < n
+        b = get(bytes, pos) & 255
+        pos = pos + 1
+        val = val + ((b & 127) << shift)
+        if (b & 128) == 0 break end
+        shift = shift + 7
+    end
+    return [val, pos]
+
+fn h3_decode_headers_block payload_bytes
+    // WHY: Decodes a real RFC 9204 QPACK Encoded Field Section into a list of H3HeaderField structs!
+    fields = list()
+    plen = len(payload_bytes)
+    if plen < 2 return fields end
+    // Skip Required Insert Count + Sign/Delta Base prefix integers
+    ric = qpack_decode_prefixed_int(payload_bytes, 0, 8)
+    pos = get(ric, 1)
+    db = qpack_decode_prefixed_int(payload_bytes, pos, 7)
+    pos = get(db, 1)
+    while pos < plen
+        b0 = get(payload_bytes, pos) & 255
+        if (b0 & 128) != 0
+            // Indexed Field Line: 1 T Index(6+)
+            res = qpack_decode_prefixed_int(payload_bytes, pos, 6)
+            idx = get(res, 0)
+            pos = get(res, 1)
+            entry = qpack_static_lookup(idx)
+            if len(entry) > 0
+                // Split into name:value (preserving leading ':' for pseudo-headers like ":status:200")
+                colon = 0 - 1
+                si = 1
+                while si < len(entry)
+                    if mem_byte_read(entry, si) == 58
+                        colon = si
+                        break
+                    end
+                    si = si + 1
+                end
+                if colon > 0
+                    push(fields, h3_header_field_new(str_sub(entry, 0, colon), str_sub(entry, colon + 1, len(entry))))
+                else
+                    push(fields, h3_header_field_new(entry, ""))
+                end
+            end
+        elif (b0 & 224) == 32
+            // Literal Field Line with Literal Name: 001 N H NameLen(3+) ...
+            pos = pos + 1
+            if pos >= plen break end
+            nlen = get(payload_bytes, pos) & 127
+            pos = pos + 1
+            nb = buf_new(nlen + 1)
+            ni = 0
+            while ni < nlen and pos < plen
+                buf_write_byte(nb, get(payload_bytes, pos) & 255)
+                pos = pos + 1
+                ni = ni + 1
+            end
+            nm = buf_to_str(nb)
+            buf_free(nb)
+            if pos >= plen break end
+            vlen = get(payload_bytes, pos) & 127
+            pos = pos + 1
+            vb = buf_new(vlen + 1)
+            vi = 0
+            while vi < vlen and pos < plen
+                buf_write_byte(vb, get(payload_bytes, pos) & 255)
+                pos = pos + 1
+                vi = vi + 1
+            end
+            vl = buf_to_str(vb)
+            buf_free(vb)
+            push(fields, h3_header_field_new(nm, vl))
+        else
+            pos = pos + 1
+        end
+    end
+    return fields
 
 fn h3_header_field_new name val
     hf = H3HeaderField()

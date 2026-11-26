@@ -38,9 +38,14 @@ struct SsaBlockOffset
 
 struct SsaLowerResult
     slr_code        // list: raw machine code bytes (integers 0..255)
-    slr_rodata      // list: read-only data bytes (.rodata)
+    slr_rodata      // list: read-only data bytes (.rodata, STR0-prefixed)
     slr_fn_names    // list: names of emitted functions
     slr_fn_offsets  // list: entry byte offsets of emitted functions
+    slr_fn_sizes    // list: exact byte lengths of each emitted SSA function (prevents duplicate bloat!)
+    slr_fn_eligible // list: 1 if function is 100% natively lowered and ready to replace token re-parser
+    slr_fn_ret_types // list: normalized return types ("int", "float", "str", struct name)
+    slr_str_relocs  // list of [code_offset, rodata_offset] pairs for STR0 string literals
+    slr_call_relocs // list of SsaJumpPatch entries for all OP_CALL / runtime helper calls
     slr_total_insts // integer: total SSA instructions lowered
     slr_success     // integer: 1 on success, 0 on failure
     slr_error_msg   // string: diagnostic message on error
@@ -51,12 +56,16 @@ struct SsaLowerer
     low_rodata      // list of bytes
     low_slots       // list of SsaSlot structs
     low_patches     // list of intra-function SsaJumpPatch structs
-    low_call_patches // list of inter-function OP_CALL SsaJumpPatch structs
+    low_call_patches // list of inter-function OP_CALL / runtime helper SsaJumpPatch structs
+    low_str_relocs  // list of [code_offset, rodata_offset] pairs for OP_STR_LIT
     low_blocks      // list of SsaBlockOffset structs
     low_stack_frame // integer: total allocated stack frame size in bytes
     low_cur_offset  // integer: next available stack offset for local alloca slots
     low_fn_names    // list of string function names
     low_fn_offsets  // list of integer function entry byte offsets
+    low_fn_sizes    // list of integer function byte lengths
+    low_fn_eligible // list of integer eligibility flags (1 = safe direct native SSA replacement)
+    low_fn_ret_types // list of string return types per lowered function
     low_total_insts // integer: count of lowered instructions
 
 // ── 2. Constructor & Helpers ──────────────────────────────────────────────────
@@ -70,13 +79,45 @@ fn ssa_lowerer_new target_arch
     low.low_slots = list()
     low.low_patches = list()
     low.low_call_patches = list()
+    low.low_str_relocs = list()
     low.low_blocks = list()
     low.low_stack_frame = 32
     low.low_cur_offset = 8
     low.low_fn_names = list()
     low.low_fn_offsets = list()
+    low.low_fn_sizes = list()
+    low.low_fn_eligible = list()
+    low.low_fn_ret_types = list()
     low.low_total_insts = 0
     return low
+
+fn ssa_lowerer_emit_bytes low blist
+    i = 0
+    while i < blist.len()
+        ssa_lowerer_emit_byte(low, blist[i])
+        i = i + 1
+    end
+    return 0
+
+fn ssa_lowerer_add_rodata_str low str_text
+    // WHY: Prepends exact 8-byte STR0 header (u32 len + "0RTS" = 0x53545230) matching x86_64 runtime ABI.
+    slen = len(str_text)
+    push(low.low_rodata, slen % 256)
+    push(low.low_rodata, (slen / 256) % 256)
+    push(low.low_rodata, (slen / 65536) % 256)
+    push(low.low_rodata, (slen / 16777216) % 256)
+    push(low.low_rodata, 48) // '0'
+    push(low.low_rodata, 82) // 'R'
+    push(low.low_rodata, 84) // 'T'
+    push(low.low_rodata, 83) // 'S'
+    start_off = low.low_rodata.len()
+    i = 0
+    while i < slen
+        push(low.low_rodata, ord(char_at(str_text, i)))
+        i = i + 1
+    end
+    push(low.low_rodata, 0)
+    return start_off
 
 fn ssa_hash_str_4096 s
     // WHY: Deterministic FNV-1a-style 12-bit bucket hash for O(1) inter-function call resolution.
@@ -243,7 +284,7 @@ fn ssa_lower_instruction_x86 low inst
             ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
         return 0
 
-    if op == OP_ADD or op == OP_SUB or op == OP_MUL or op == OP_AND or op == OP_OR or op == OP_XOR
+    if op == OP_ADD or op == OP_ADD_DYN or op == OP_SUB or op == OP_MUL or op == OP_DIV or op == OP_MOD or op == OP_AND or op == OP_OR or op == OP_XOR or op == OP_SHL or op == OP_SHR
         if inst.operands.len() >= 2 and inst.result != 0
             val_a = inst.operands[0]
             val_b = inst.operands[1]
@@ -261,6 +302,16 @@ fn ssa_lower_instruction_x86 low inst
                 ssa_lowerer_emit_byte(low, 72)
                 ssa_lowerer_emit_byte(low, 1)
                 ssa_lowerer_emit_byte(low, 200)
+            elif op == OP_ADD_DYN
+                // Dynamic int/str addition: mov rdi, rax; mov rsi, rcx; call _lipi_add_dynamic
+                ssa_lowerer_emit_bytes(low, [72, 137, 199, 72, 137, 206, 232])
+                p_add = low.low_code.len()
+                ssa_lowerer_emit_u32(low, 0)
+                jp_add = SsaJumpPatch()
+                jp_add.sjp_offset = p_add
+                jp_add.sjp_target = "_lipi_add_dynamic"
+                jp_add.sjp_kind = 10
+                push(low.low_call_patches, jp_add)
             elif op == OP_SUB
                 // sub rax, rcx (0x48, 0x29, 0xC8)
                 ssa_lowerer_emit_byte(low, 72)
@@ -272,6 +323,30 @@ fn ssa_lower_instruction_x86 low inst
                 ssa_lowerer_emit_byte(low, 15)
                 ssa_lowerer_emit_byte(low, 175)
                 ssa_lowerer_emit_byte(low, 193)
+            elif op == OP_DIV
+                // Guarded cqo; idiv rcx: calls _lipi_div_by_zero on rcx==0 (throws inside try, 0 outside) & guards INT64_MIN/-1
+                // test rcx, rcx; jnz +7; call _lipi_div_by_zero; jmp +16; cmp rcx, -1; jne +5; neg rax; jmp +5; cqo; idiv rcx
+                ssa_lowerer_emit_bytes(low, [72, 133, 201, 117, 7, 232])
+                p_dz1 = low.low_code.len()
+                ssa_lowerer_emit_u32(low, 0)
+                jp_dz1 = SsaJumpPatch()
+                jp_dz1.sjp_offset = p_dz1
+                jp_dz1.sjp_target = "_lipi_div_by_zero"
+                jp_dz1.sjp_kind = 10
+                push(low.low_call_patches, jp_dz1)
+                ssa_lowerer_emit_bytes(low, [235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
+            elif op == OP_MOD
+                // Guarded cqo; idiv rcx; mov rax, rdx with _lipi_div_by_zero guard on rcx==0
+                // test rcx, rcx; jnz +7; call _lipi_div_by_zero; jmp +18; cmp rcx, -1; jne +4; xor eax, eax; jmp +8; cqo; idiv rcx; mov rax, rdx
+                ssa_lowerer_emit_bytes(low, [72, 133, 201, 117, 7, 232])
+                p_dz2 = low.low_code.len()
+                ssa_lowerer_emit_u32(low, 0)
+                jp_dz2 = SsaJumpPatch()
+                jp_dz2.sjp_offset = p_dz2
+                jp_dz2.sjp_target = "_lipi_div_by_zero"
+                jp_dz2.sjp_kind = 10
+                push(low.low_call_patches, jp_dz2)
+                ssa_lowerer_emit_bytes(low, [235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
             elif op == OP_AND
                 // and rax, rcx (0x48, 0x21, 0xC8)
                 ssa_lowerer_emit_byte(low, 72)
@@ -287,12 +362,185 @@ fn ssa_lower_instruction_x86 low inst
                 ssa_lowerer_emit_byte(low, 72)
                 ssa_lowerer_emit_byte(low, 49)
                 ssa_lowerer_emit_byte(low, 200)
+            elif op == OP_SHL
+                // shl rax, cl (0x48, 0xD3, 0xE0)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 211)
+                ssa_lowerer_emit_byte(low, 224)
+            elif op == OP_SHR
+                // sar rax, cl (0x48, 0xD3, 0xF8)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 211)
+                ssa_lowerer_emit_byte(low, 248)
+            end
 
             ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
         return 0
 
-    if op == OP_CMP
-        // cmp pred, %a, %b
+    if op == OP_NEG
+        if inst.operands.len() >= 1 and inst.result != 0
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            // neg rax (0x48, 0xF7, 0xD8)
+            ssa_lowerer_emit_byte(low, 72)
+            ssa_lowerer_emit_byte(low, 247)
+            ssa_lowerer_emit_byte(low, 216)
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_FNEG
+        if inst.operands.len() >= 1 and inst.result != 0
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            // movabs rcx, 0x8000000000000000; xor rax, rcx
+            ssa_lowerer_emit_bytes(low, [72, 185, 0, 0, 0, 0, 0, 0, 0, 128, 72, 49, 200])
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_I2F
+        if inst.operands.len() >= 1 and inst.result != 0
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            // cvtsi2sd xmm0, rax; movq rax, xmm0
+            ssa_lowerer_emit_bytes(low, [242, 72, 15, 42, 192, 102, 72, 15, 126, 192])
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_FADD or op == OP_FSUB or op == OP_FMUL or op == OP_FDIV
+        if inst.operands.len() >= 2 and inst.result != 0
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            ssa_lowerer_emit_byte(low, 80) // push rax
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[1])
+            // mov rcx, rax; pop rax; movq xmm0, rax; movq xmm1, rcx
+            ssa_lowerer_emit_bytes(low, [72, 137, 193, 88, 102, 72, 15, 110, 192, 102, 72, 15, 110, 201])
+            if op == OP_FADD
+                ssa_lowerer_emit_bytes(low, [242, 15, 88, 193]) // addsd xmm0, xmm1
+            elif op == OP_FSUB
+                ssa_lowerer_emit_bytes(low, [242, 15, 92, 193]) // subsd xmm0, xmm1
+            elif op == OP_FMUL
+                ssa_lowerer_emit_bytes(low, [242, 15, 89, 193]) // mulsd xmm0, xmm1
+            else
+                ssa_lowerer_emit_bytes(low, [242, 15, 94, 193]) // divsd xmm0, xmm1
+            end
+            // movq rax, xmm0
+            ssa_lowerer_emit_bytes(low, [102, 72, 15, 126, 192])
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_FCMP
+        if inst.operands.len() >= 2 and inst.result != 0
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            ssa_lowerer_emit_byte(low, 80) // push rax
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[1])
+            // mov rcx, rax; pop rax; movq xmm0, rax; movq xmm1, rcx; ucomisd xmm0, xmm1
+            ssa_lowerer_emit_bytes(low, [72, 137, 193, 88, 102, 72, 15, 110, 192, 102, 72, 15, 110, 201, 102, 15, 46, 193])
+            pred = inst.extra_int
+            if pred == CMP_EQ
+                ssa_lowerer_emit_bytes(low, [15, 148, 192]) // sete al
+            elif pred == CMP_NE
+                ssa_lowerer_emit_bytes(low, [15, 149, 192]) // setne al
+            elif pred == CMP_SLT
+                ssa_lowerer_emit_bytes(low, [15, 146, 192]) // setb al
+            elif pred == CMP_SLE
+                ssa_lowerer_emit_bytes(low, [15, 150, 192]) // setbe al
+            elif pred == CMP_SGT
+                ssa_lowerer_emit_bytes(low, [15, 151, 192]) // seta al
+            else
+                ssa_lowerer_emit_bytes(low, [15, 147, 192]) // setae al
+            end
+            ssa_lowerer_emit_bytes(low, [72, 15, 182, 192]) // movzx rax, al
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_STR_LIT
+        if inst.result != 0
+            ro_off = ssa_lowerer_add_rodata_str(low, inst.extra_str)
+            // movabs rax, <str_vaddr> (patched via slr_str_relocs when spliced into x86_64)
+            ssa_lowerer_emit_byte(low, 72)
+            ssa_lowerer_emit_byte(low, 184)
+            patch_s = low.low_code.len()
+            ssa_lowerer_emit_bytes(low, [0, 0, 0, 0, 0, 0, 0, 0])
+            push(low.low_str_relocs, [patch_s, ro_off])
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_STRUCT_NEW
+        if inst.result != 0
+            alloc_sz = inst.extra_int
+            if alloc_sz < 32
+                alloc_sz = 32
+            end
+            // mov rdi, alloc_sz; call _lipi_user_alloc
+            ssa_lowerer_emit_bytes(low, [72, 199, 199])
+            ssa_lowerer_emit_u32(low, alloc_sz)
+            ssa_lowerer_emit_byte(low, 232)
+            p_alloc = low.low_code.len()
+            ssa_lowerer_emit_u32(low, 0)
+            jp_al = SsaJumpPatch()
+            jp_al.sjp_offset = p_alloc
+            jp_al.sjp_target = "_lipi_user_alloc"
+            jp_al.sjp_kind = 10
+            push(low.low_call_patches, jp_al)
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+            // Initialize fields [ptr + fi*8] = operands[fi]
+            fi = 0
+            while fi < inst.operands.len()
+                ssa_lower_x86_load_val_to_rax(low, inst.operands[fi])
+                ssa_lowerer_emit_byte(low, 80) // push rax
+                ssa_lower_x86_load_val_to_rax(low, inst.result)
+                // mov rcx, rax; pop rax; mov [rcx + fi*8], rax
+                ssa_lowerer_emit_bytes(low, [72, 137, 193, 88, 72, 137, 129])
+                ssa_lowerer_emit_u32(low, fi * 8)
+                fi = fi + 1
+            end
+        end
+        return 0
+
+    if op == OP_FIELD_LOAD
+        if inst.operands.len() >= 1 and inst.result != 0
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            // Null-deref guard: cmp rax, 4096; jae +5; call _lipi_throw_null_deref
+            ssa_lowerer_emit_bytes(low, [72, 61, 0, 16, 0, 0, 115, 5, 232])
+            p_npe = low.low_code.len()
+            ssa_lowerer_emit_u32(low, 0)
+            jp_npe = SsaJumpPatch()
+            jp_npe.sjp_offset = p_npe
+            jp_npe.sjp_target = "_lipi_throw_null_deref"
+            jp_npe.sjp_kind = 10
+            push(low.low_call_patches, jp_npe)
+            // mov rax, [rax + byte_off]
+            ssa_lowerer_emit_bytes(low, [72, 139, 128])
+            ssa_lowerer_emit_u32(low, inst.extra_int)
+            ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
+        end
+        return 0
+
+    if op == OP_FIELD_STORE
+        if inst.operands.len() >= 2
+            // Check object pointer FIRST while %rsp is 16-byte aligned before any call to _lipi_throw_null_deref
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[0])
+            // cmp rax, 4096; jae +5; call _lipi_throw_null_deref
+            ssa_lowerer_emit_bytes(low, [72, 61, 0, 16, 0, 0, 115, 5, 232])
+            p_npe2 = low.low_code.len()
+            ssa_lowerer_emit_u32(low, 0)
+            jp_npe2 = SsaJumpPatch()
+            jp_npe2.sjp_offset = p_npe2
+            jp_npe2.sjp_target = "_lipi_throw_null_deref"
+            jp_npe2.sjp_kind = 10
+            push(low.low_call_patches, jp_npe2)
+            // push ptr; load val -> rax; pop rcx; mov [rcx + byte_off], rax
+            ssa_lowerer_emit_byte(low, 80)
+            ssa_lower_x86_load_val_to_rax(low, inst.operands[1])
+            ssa_lowerer_emit_bytes(low, [89, 72, 137, 129])
+            ssa_lowerer_emit_u32(low, inst.extra_int)
+        end
+        return 0
+
+    if op == OP_CMP or op == OP_CMP_DYN
+        // cmp pred, %a, %b  (or dynamic int/str comparison via _lipi_cmp_dynamic)
         if inst.operands.len() >= 2 and inst.result != 0
             val_a = inst.operands[0]
             val_b = inst.operands[1]
@@ -304,10 +552,23 @@ fn ssa_lower_instruction_x86 low inst
             ssa_lowerer_emit_byte(low, 193) // mov rcx, rax
             ssa_lowerer_emit_byte(low, 88)  // pop rax
 
-            // cmp rax, rcx (0x48, 0x39, 0xC8)
-            ssa_lowerer_emit_byte(low, 72)
-            ssa_lowerer_emit_byte(low, 57)
-            ssa_lowerer_emit_byte(low, 200)
+            if op == OP_CMP_DYN
+                // mov rdi, rax; mov rsi, rcx; call _lipi_cmp_dynamic; test eax, eax
+                ssa_lowerer_emit_bytes(low, [72, 137, 199, 72, 137, 206, 232])
+                p_cmp = low.low_code.len()
+                ssa_lowerer_emit_u32(low, 0)
+                jp_cmp = SsaJumpPatch()
+                jp_cmp.sjp_offset = p_cmp
+                jp_cmp.sjp_target = "_lipi_cmp_dynamic"
+                jp_cmp.sjp_kind = 10
+                push(low.low_call_patches, jp_cmp)
+                ssa_lowerer_emit_bytes(low, [133, 192]) // test eax, eax
+            else
+                // cmp rax, rcx (0x48, 0x39, 0xC8)
+                ssa_lowerer_emit_byte(low, 72)
+                ssa_lowerer_emit_byte(low, 57)
+                ssa_lowerer_emit_byte(low, 200)
+            end
 
             // sete/setne/setl/setle/setg/setge al
             pred = inst.extra_int
@@ -543,20 +804,84 @@ fn ssa_lower_function low fn_obj
     low.low_blocks = list()
     low.low_patches = list()
 
+    fn_start_off = low.low_code.len()
     push(low.low_fn_names, fn_obj.name)
-    push(low.low_fn_offsets, low.low_code.len())
+    push(low.low_fn_offsets, fn_start_off)
 
-    // 1. Calculate frame requirement based on allocas and temporaries
+    // 1. Calculate frame requirement based on allocas, parameters, and temporaries
     alloca_count = fn_obj.allocas.len()
     inst_count = ir_function_count_insts(fn_obj)
-    frame_size = (alloca_count + inst_count + 4) * 8
+    param_count = fn_obj.params.len()
+    frame_size = (alloca_count + inst_count + param_count + 8) * 8
     // Pad to 16-byte alignment
     if (frame_size % 16) != 0
         frame_size = frame_size + (16 - (frame_size % 16))
     low.low_stack_frame = frame_size
 
-    // 2. Emit function prologue
+    // Check native direct-replacement eligibility across all live SSA instructions
+    fn_elig = fn_obj.is_ssa_native_ready
+    if param_count > 6 or low.low_target_arch != TARGET_ID_X86_64
+        fn_elig = 0
+    end
+    if fn_elig == 1
+        ebi = 0
+        while ebi < fn_obj.blocks.len() and fn_elig == 1
+            ebb = fn_obj.blocks[ebi]
+            eii = 0
+            while eii < ebb.instructions.len()
+                ei = ebb.instructions[eii]
+                if ei.is_dead == 0
+                    eop = ei.op
+                    if eop != OP_NOP and eop != OP_ALLOCA and eop != OP_STORE and eop != OP_LOAD and eop != OP_ADD and eop != OP_ADD_DYN and eop != OP_SUB and eop != OP_MUL and eop != OP_DIV and eop != OP_MOD and eop != OP_AND and eop != OP_OR and eop != OP_XOR and eop != OP_SHL and eop != OP_SHR and eop != OP_NEG and eop != OP_CMP and eop != OP_CMP_DYN and eop != OP_JMP and eop != OP_BR and eop != OP_RET and eop != OP_CALL and eop != OP_FADD and eop != OP_FSUB and eop != OP_FMUL and eop != OP_FDIV and eop != OP_FCMP and eop != OP_I2F and eop != OP_FNEG and eop != OP_STR_LIT and eop != OP_STRUCT_NEW and eop != OP_FIELD_LOAD and eop != OP_FIELD_STORE
+                        fn_elig = 0
+                        break
+                    end
+                end
+                eii = eii + 1
+            end
+            ebi = ebi + 1
+        end
+    end
+
+    // 2. Emit function prologue & bind incoming System V AMD64 ABI parameter registers (%rdi..%r9)
     ssa_lower_x86_prologue(low, frame_size)
+    pi_arg = 0
+    while pi_arg < param_count and pi_arg < 6
+        pval = fn_obj.params[pi_arg]
+        if pi_arg == 0
+            // mov rax, rdi (0x48 0x89 0xF8)
+            ssa_lowerer_emit_byte(low, 72)
+            ssa_lowerer_emit_byte(low, 137)
+            ssa_lowerer_emit_byte(low, 248)
+        elif pi_arg == 1
+            // mov rax, rsi (0x48 0x89 0xF0)
+            ssa_lowerer_emit_byte(low, 72)
+            ssa_lowerer_emit_byte(low, 137)
+            ssa_lowerer_emit_byte(low, 240)
+        elif pi_arg == 2
+            // mov rax, rdx (0x48 0x89 0xD0)
+            ssa_lowerer_emit_byte(low, 72)
+            ssa_lowerer_emit_byte(low, 137)
+            ssa_lowerer_emit_byte(low, 208)
+        elif pi_arg == 3
+            // mov rax, rcx (0x48 0x89 0xC8)
+            ssa_lowerer_emit_byte(low, 72)
+            ssa_lowerer_emit_byte(low, 137)
+            ssa_lowerer_emit_byte(low, 200)
+        elif pi_arg == 4
+            // mov rax, r8 (0x4C 0x89 0xC0)
+            ssa_lowerer_emit_byte(low, 76)
+            ssa_lowerer_emit_byte(low, 137)
+            ssa_lowerer_emit_byte(low, 192)
+        elif pi_arg == 5
+            // mov rax, r9 (0x4C 0x89 0xC8)
+            ssa_lowerer_emit_byte(low, 76)
+            ssa_lowerer_emit_byte(low, 137)
+            ssa_lowerer_emit_byte(low, 200)
+        end
+        ssa_lower_x86_store_rax_to_slot(low, pval.id)
+        pi_arg = pi_arg + 1
+    end
 
     // 3. Lower each basic block sequentially
     bi = 0
@@ -578,6 +903,17 @@ fn ssa_lower_function low fn_obj
 
     ssa_lowerer_resolve_function_branches(low)
     low.low_patches = list()
+    push(low.low_fn_sizes, low.low_code.len() - fn_start_off)
+    push(low.low_fn_eligible, fn_elig)
+    rt_out = "int"
+    if fn_obj.return_type == "f64" or fn_obj.return_type == "float"
+        rt_out = "f64"
+    elif fn_obj.return_type == "str" or fn_obj.return_type == "string"
+        rt_out = "string"
+    elif fn_obj.return_type != "" and fn_obj.return_type != "i64" and fn_obj.return_type != "int"
+        rt_out = fn_obj.return_type
+    end
+    push(low.low_fn_ret_types, rt_out)
     return 0
 
 fn ssa_lower_module low ir_mod
@@ -587,6 +923,11 @@ fn ssa_lower_module low ir_mod
     res.slr_rodata = list()
     res.slr_fn_names = list()
     res.slr_fn_offsets = list()
+    res.slr_fn_sizes = list()
+    res.slr_fn_eligible = list()
+    res.slr_fn_ret_types = list()
+    res.slr_str_relocs = list()
+    res.slr_call_relocs = list()
     res.slr_total_insts = 0
     res.slr_success = 0
     res.slr_error_msg = ""
@@ -608,6 +949,11 @@ fn ssa_lower_module low ir_mod
     res.slr_rodata = low.low_rodata
     res.slr_fn_names = low.low_fn_names
     res.slr_fn_offsets = low.low_fn_offsets
+    res.slr_fn_sizes = low.low_fn_sizes
+    res.slr_fn_eligible = low.low_fn_eligible
+    res.slr_fn_ret_types = low.low_fn_ret_types
+    res.slr_str_relocs = low.low_str_relocs
+    res.slr_call_relocs = low.low_call_patches
     res.slr_total_insts = low.low_total_insts
     res.slr_success = 1
     return res

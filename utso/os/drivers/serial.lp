@@ -1,10 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL UART 16550 SERIAL DRIVER
+@! @deprecated [HOSTED IN-MEMORY UART SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real Ring-0 COM1 (0x3F8) `port_out8`/`port_in8` UART 16550 hardware I/O,
+@! import `utso/silicon/serial.lp` instead!
+@! Retained strictly for backward compatibility with legacy hosted unit tests.
 @! Module: utso/os/drivers/serial.lp
-@! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: UART 16550 COM1 (0x3F8) Serial Logging, Baud Divisor Math,
-@! FIFO Setup & Line Status Register Polling
 @! ============================================================================
 
 import "utso/core/collections"

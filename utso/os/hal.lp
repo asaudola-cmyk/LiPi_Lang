@@ -1,7 +1,9 @@
 @! ============================================================================
+@! @deprecated [HOSTED LINUX SIMULATOR FOR MMIO/PORT I/O]
+@! For real Ring-0 hardware MMIO, Port I/O, CR0-CR4, MSR, GDT/IDT & APIC,
+@! use `utso/silicon/cpu.lp`, `utso/silicon/pcie.lp`, `utso/silicon/apic.lp`.
 @! LIPI UNIVERSE OS — HARDWARE ABSTRACTION LAYER (HAL) (utso/os/hal)
-@! 100% Written in Pure Lipi Language — Authentic Linux Hardware Introspection
-@! Zero Mocks / No Fake CPUID Stubs
+@! 100% Written in Pure Lipi Language — Linux /proc/cpuinfo Introspection
 @! ============================================================================
 
 import "utso/os/syscalls"

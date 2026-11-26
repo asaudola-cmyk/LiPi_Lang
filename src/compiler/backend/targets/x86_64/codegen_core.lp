@@ -56,6 +56,10 @@ struct X86Function
     fn_tok_pos          // Source token index of `fn` keyword (-1 for runtime helpers / mono clones)
     fn_param_types      // Parallel list of explicit declared parameter type strings ("", "float", ...)
     fn_type_params      // Generic type parameter names (e.g. ["T", "U"]), empty for non-generic fns
+    fn_type_bounds      // Parallel list of trait bound strings per type param (e.g. ["Printable", ""])
+    fn_section          // Optional custom ELF/PE section name from `@section(".boot")` ("" for default .text)
+    fn_ret_explicit     // 1 if return type was explicitly declared via `-> Type`, 0 if inferred
+    fn_is_async         // 1 if declared `async fn`, 0 for regular function
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -63,10 +67,10 @@ struct X86CallReloc
     cr_call_site_end    // Next instruction IP (cr_patch_offset + 4)
     cr_target_name      // Target function identifier or "__print_int"
 
-// WHY: Models struct schema definitions with exact hardware byte offsets, fixed-width sizes,
-// packed layout, explicit alignment, and inline fixed-size arrays ([N]T).
+// WHY: Models struct/union schema definitions with exact hardware byte offsets, fixed-width sizes,
+// packed layout, explicit alignment, bitfield bit-offsets/widths, and inline fixed-size arrays ([N]T).
 struct X86StructDef
-    sd_name             // Struct type name string
+    sd_name             // Struct or union type name string
     sd_fields           // List of field name strings
     sd_field_types      // Parallel list of declared/inferred field type strings
     sd_type_params      // Generic type parameter names (e.g. ["T"]), empty for concrete structs
@@ -76,7 +80,10 @@ struct X86StructDef
     sd_field_signed     // Parallel list: 1 for signed (i8/i16/i32/i64), 0 for unsigned (u8/u16/u32/u64)
     sd_is_packed        // 1 if annotated @packed (zero inter-field padding), 0 for natural alignment
     sd_align            // Effective struct alignment in bytes (default 8, or explicit @align(N))
-    sd_total_size       // Exact total byte size of struct (used by compile-time sizeof(T) & alloc)
+    sd_total_size       // Exact total byte size of struct/union (used by compile-time sizeof(T) & alloc)
+    sd_is_union         // 1 if `union` (all fields share offset 0, size = max field size), 0 if `struct`
+    sd_field_bit_offsets // Parallel list of bit offsets within storage unit (0 if not bitfield)
+    sd_field_bit_widths  // Parallel list of bit widths 1..64 (0 if not bitfield)
 
 // WHY: Models Algebraic Data Type (Tagged Enum) & C-style Integer Enum schemas
 struct X86EnumDef
@@ -86,6 +93,16 @@ struct X86EnumDef
     ed_field_types      // Parallel list of lists of payload type strings ([["T"], ["E"]])
     ed_is_adt           // 1 if tagged ADT enum (heap ADT0 cells), 0 if pure integer enum
     ed_type_params      // Generic type parameter names (["T", "E"])
+
+// WHY: Models language-level compile-time `trait` interface declarations & `impl Trait for Type` bindings
+struct X86TraitDef
+    td_name             // Trait identifier name (e.g. "Printable")
+    td_methods          // Required method names (e.g. ["display", "format"])
+
+struct X86TraitImpl
+    ti_trait_name       // Implemented trait name (e.g. "Printable")
+    ti_type_name        // Concrete implementing type name (e.g. "Point")
+    ti_methods          // List of method names provided by this impl block
 
 // WHY: Encapsulates mutable compilation state for AMD64 silicon code generation
 struct X86Synthesizer
@@ -136,6 +153,7 @@ struct X86Synthesizer
     synth_mutable_global_offs // Parallel RW .data offsets (>= 512)
     synth_mutable_global_prims // Parallel primitive type strings ("int", "float", "str", "")
     synth_mutable_global_structs // Parallel struct type strings
+    synth_mutable_global_explicit // Parallel flags: 1 if declared via explicit `global` or `g_`/`G_`
     synth_global_rw_patch_offs // Code patch offsets of mutable global movabs imm64 instructions
     synth_global_rw_slot_offs  // Matching RW .data offsets (>= 512)
     synth_try_depth        // Current active nested try depth inside enclosing function/top-level
@@ -187,12 +205,38 @@ struct X86Synthesizer
     synth_layout_stack         // Optional stack size declared in source via @layout(stack=...)
     synth_fn_tag_offs          // Allocated lv_tag_off stack slots in current fn (zeroed by prologue stub)
     synth_fn_dyn_vars          // Multi-write variables prescanned as dyn_tagged candidates in current fn
+    synth_div_zero_off         // Byte offset of _lipi_div_by_zero guard helper (throws inside try, 0 outside)
+    synth_traits               // List of X86TraitDef compile-time trait declarations
+    synth_trait_impls          // List of X86TraitImpl compile-time `impl Trait for Type` bindings
+    synth_impl_type_ctx        // Active type name inside `impl [Trait for] Type { ... }` block ("" outside)
+    synth_extern_fns           // List of `extern fn` symbol names (emitted as SHN_UNDEF in .o)
+    synth_emit_obj             // 1 when compiling to ELF64 ET_REL (.o) allowing SHN_UNDEF extern relocs
+    synth_entry_sym            // Custom entry point symbol override from `--entry=<sym>` ("" for default)
+    synth_pending_section      // Active `@section(".name")` attribute applied to next fn or @bss
+    synth_ssa_replaced_cnt     // Count of functions emitted directly from SSA CFG (replacing token re-parser)
+    synth_ssa_replaced_bytes   // Exact native machine-code bytes emitted directly from SSA CFG
+    synth_ssa_rodata_base      // Base offset in synth_rodata where slr_rodata was merged (-1 if unmerged)
+    synth_async_sched_slot_off // Byte offset of _lipi_async_sched_slot helper for GC-traced async scheduler
+    synth_pending_fn_async     // 1 when `async` modifier precedes next fn definition
+    synth_pending_fn_base_col  // Preserved column of `async` modifier for indented block boundaries
 
 global g_x86_strict_types = 0
 global g_x86_freestanding = 0
 global g_x86_base_vaddr = 1073741824
 global g_x86_code_file_off = 304
 global g_x86_ssa_codegen = 0
+global g_x86_emit_obj = 0
+global g_x86_entry_sym = ""
+
+fn x86_synth_set_emit_obj flag
+    g_x86_emit_obj = flag
+    return flag
+end
+
+fn x86_synth_set_entry_sym sym_name
+    g_x86_entry_sym = sym_name
+    return 0
+end
 
 fn x86_synth_set_strict_types flag
     g_x86_strict_types = flag
@@ -438,6 +482,7 @@ fn x86_synth_new
     s.synth_mutable_global_offs = list()
     s.synth_mutable_global_prims = list()
     s.synth_mutable_global_structs = list()
+    s.synth_mutable_global_explicit = list()
     s.synth_global_rw_patch_offs = list()
     s.synth_global_rw_slot_offs = list()
     s.synth_try_depth = 0
@@ -489,7 +534,239 @@ fn x86_synth_new
     s.synth_layout_stack = 0
     s.synth_fn_tag_offs = list()
     s.synth_fn_dyn_vars = list()
+    s.synth_div_zero_off = 0
+    s.synth_traits = list()
+    s.synth_trait_impls = list()
+    s.synth_impl_type_ctx = ""
+    s.synth_extern_fns = list()
+    s.synth_emit_obj = g_x86_emit_obj
+    s.synth_entry_sym = g_x86_entry_sym
+    s.synth_pending_section = ""
+    s.synth_ssa_replaced_cnt = 0
+    s.synth_ssa_replaced_bytes = 0
+    s.synth_ssa_rodata_base = 0 - 1
+    s.synth_async_sched_slot_off = 0
+    s.synth_pending_fn_async = 0
+    s.synth_pending_fn_base_col = 0
     return s
+
+fn x86_synth_is_uint_type tname
+    // WHY: Identifies unsigned integer annotations so arithmetic, shifts, relational comparisons,
+    // and decimal formatting emit unsigned x86-64 instructions (setb/seta/shr/div/_lipi_print_uint).
+    if tname == "u64" or tname == "u32" or tname == "u16" or tname == "u8" or tname == "usize" or tname == "byte"
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_is_int_like etype
+    if etype == "int" or etype == "uint"
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_is_ptr_type tname
+    // WHY: Recognizes typed pointers (`*T`, `*const T`, `*mut T`, `ptr<T>`) for scaled
+    // pointer arithmetic, type-safe dereference, const-write rejection, and struct field access.
+    if len(tname) >= 2 and mem_byte_read(tname, 0) == 42 // '*'
+        return 1
+    end
+    if len(tname) >= 5 and str_sub(tname, 0, 4) == "ptr<"
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_is_const_ptr_type tname
+    if len(tname) >= 8 and str_sub(tname, 0, 7) == "*const "
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_ptr_pointee tname
+    // WHY: Extracts pointee type `T` from `*const T`, `*mut T`, `*T`, or `ptr<T>`.
+    n = len(tname)
+    if n >= 8 and str_sub(tname, 0, 7) == "*const "
+        return str_sub(tname, 7, n)
+    elif n >= 6 and str_sub(tname, 0, 5) == "*mut "
+        return str_sub(tname, 5, n)
+    elif n >= 2 and mem_byte_read(tname, 0) == 42
+        return str_sub(tname, 1, n)
+    elif n >= 6 and str_sub(tname, 0, 4) == "ptr<" and mem_byte_read(tname, n - 1) == 62
+        return str_sub(tname, 4, n - 1)
+    end
+    return ""
+end
+
+fn x86_synth_sizeof_type s tname
+    // WHY: Exact compile-time byte size for any primitive, typed pointer (*T = 8),
+    // fixed array [N]T, struct, or union (used by pointer arithmetic scaling & sizeof(T)).
+    if x86_synth_is_ptr_type(tname) == 1
+        return 8
+    end
+    sd_sz = x86_synth_find_struct(s, tname)
+    if sd_sz != 0
+        if sd_sz.sd_total_size > 0 return sd_sz.sd_total_size end
+        return sd_sz.sd_fields.len() * 8
+    end
+    info = x86_synth_type_layout_info(s, tname)
+    return info[0]
+end
+
+fn x86_synth_split_tparam_bounds raw_tparams
+    // WHY: Splits generic parameter list like `["T:Printable", "U:Eq+Hash", "V"]`
+    // into parallel `[clean_names, bounds_list]` for compile-time trait bound checking.
+    names = list()
+    bounds = list()
+    if raw_tparams == 0 return [names, bounds] end
+    i = 0
+    while i < raw_tparams.len()
+        item = raw_tparams[i]
+        colon_p = 0 - 1
+        ci = 0
+        ilen = len(item)
+        while ci < ilen
+            if mem_byte_read(item, ci) == 58 // ':'
+                colon_p = ci
+                break
+            end
+            ci = ci + 1
+        end
+        if colon_p > 0
+            push(names, str_sub(item, 0, colon_p))
+            push(bounds, str_sub(item, colon_p + 1, ilen))
+        else
+            push(names, item)
+            push(bounds, "")
+        end
+        i = i + 1
+    end
+    return [names, bounds]
+end
+
+fn x86_synth_find_trait s tname
+    ti = s.synth_traits.len() - 1
+    while ti >= 0
+        if s.synth_traits[ti].td_name == tname
+            return s.synth_traits[ti]
+        end
+        ti = ti - 1
+    end
+    return 0
+end
+
+fn x86_synth_type_satisfies_trait s concrete_t trait_nm
+    // WHY: Compile-time trait satisfaction verifier supporting BOTH explicit
+    // `impl Trait for Type` blocks AND structural method satisfaction (`Type_method`).
+    if trait_nm == "" or concrete_t == "" return 1 end
+    // 1. Check explicit `impl Trait for Type` registry
+    ii = 0
+    while ii < s.synth_trait_impls.len()
+        imp = s.synth_trait_impls[ii]
+        if imp.ti_trait_name == trait_nm and imp.ti_type_name == concrete_t
+            return 1
+        end
+        ii = ii + 1
+    end
+    // 2. Structural check: if trait exists, verify concrete_t implements all required methods
+    tdef = x86_synth_find_trait(s, trait_nm)
+    if tdef != 0 and tdef.td_methods.len() > 0
+        mi = 0
+        while mi < tdef.td_methods.len()
+            mname = tdef.td_methods[mi]
+            if x86_synth_find_fn_first(s, concrete_t + "_" + mname) == 0
+                return 0
+            end
+            mi = mi + 1
+        end
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_verify_generic_bounds s fn_name tparams tbounds targs
+    // WHY: Enforces `<T: Trait>` and `<T: A + B>` generic bounds at every monomorphization call site.
+    if tbounds == 0 or targs == 0 return 1 end
+    bi = 0
+    while bi < tbounds.len() and bi < targs.len()
+        bnd_str = tbounds[bi]
+        if bnd_str != ""
+            concrete_t = targs[bi]
+            // Split '+'-separated multi-trait bounds (e.g. "Printable+Hashable")
+            start_b = 0
+            blen = len(bnd_str)
+            ci = 0
+            while ci <= blen
+                if ci == blen or mem_byte_read(bnd_str, ci) == 43 // '+'
+                    if ci > start_b
+                        single_tr = str_sub(bnd_str, start_b, ci)
+                        if x86_synth_type_satisfies_trait(s, concrete_t, single_tr) == 0
+                            say "❌ [Error]: Trait bound violation in call to '" + fn_name + "': type '" + concrete_t + "' does not satisfy trait '" + single_tr + "'"
+                            exit(1)
+                        end
+                    end
+                    start_b = ci + 1
+                end
+                ci = ci + 1
+            end
+        end
+        bi = bi + 1
+    end
+    return 1
+end
+
+fn x86_synth_emit_bitfield_extract_rax s bit_off bit_width is_signed
+    // WHY: Extracts a packed hardware bitfield (bits [bit_off .. bit_off+bit_width-1]) from %rax.
+    // Uses zero-clobber shl/shr/sar (8 bytes, no temp register required!).
+    if bit_width <= 0 or bit_width >= 64
+        return 0
+    end
+    if bit_off > 0
+        // shr rax, bit_off (48 C1 E8 imm8)
+        x86_synth_emit_bytes(s, [72, 193, 232, bit_off & 63])
+    end
+    shift_amt = 64 - bit_width
+    // shl rax, shift_amt (48 C1 E0 imm8)
+    x86_synth_emit_bytes(s, [72, 193, 224, shift_amt & 63])
+    if is_signed == 1
+        // sar rax, shift_amt (48 C1 F8 imm8) — sign-extend bitfield
+        x86_synth_emit_bytes(s, [72, 193, 248, shift_amt & 63])
+    else
+        // shr rax, shift_amt (48 C1 E8 imm8) — zero-extend bitfield
+        x86_synth_emit_bytes(s, [72, 193, 232, shift_amt & 63])
+    end
+    return 0
+end
+
+fn x86_synth_emit_bitfield_store_rcx_rax s f_off f_sz bit_off bit_width
+    // WHY: Read-modify-write hardware store for packed bitfields without clobbering neighbor bits.
+    // Input: %rcx = struct base pointer, %rax = new value to store in [bit_off .. bit_off+bit_width-1].
+    if bit_width <= 0 or bit_width >= 64
+        return x86_synth_emit_field_store_rcx_rax(s, f_off, f_sz)
+    end
+    shift_amt = 64 - bit_width
+    // Mask new value to bit_width bits & shift into bit_off position, save in %rdx
+    x86_synth_emit_bytes(s, [72, 193, 224, shift_amt & 63]) // shl rax, 64 - bw
+    x86_synth_emit_bytes(s, [72, 193, 232, shift_amt & 63]) // shr rax, 64 - bw
+    if bit_off > 0
+        x86_synth_emit_bytes(s, [72, 193, 224, bit_off & 63]) // shl rax, bit_off
+    end
+    x86_synth_emit_bytes(s, [72, 137, 194]) // mov rdx, rax
+    // Load existing storage unit from [rcx + f_off] into %rax
+    x86_synth_emit_bytes(s, [72, 137, 200]) // mov rax, rcx
+    x86_synth_emit_field_load_rax(s, f_off, f_sz, 0, 0)
+    // Clear target bitfield bits in %rax via %r8 = ~(((1 << bw) - 1) << bit_off)
+    bw_mask = (1 << bit_width) - 1
+    clear_mask = (0 - 1) ^ (bw_mask << bit_off)
+    x86_synth_emit_bytes(s, [73, 184]) // movabs r8, clear_mask
+    x86_synth_emit_u64(s, clear_mask)
+    x86_synth_emit_bytes(s, [76, 33, 192]) // and rax, r8
+    x86_synth_emit_bytes(s, [72, 9, 208])  // or rax, rdx
+    x86_synth_emit_field_store_rcx_rax(s, f_off, f_sz)
+    return 0
+end
 
 fn x86_synth_emit_store_imm64_to_var s off imm32
     // WHY: Writes sign-extended 32-bit immediate (e.g. val_tag 0/1/2) directly to [rbp - off]
@@ -955,11 +1232,33 @@ fn x86_synth_emit_null_check_rcx s
     x86_synth_emit_call_helper(s, "_lipi_throw_null_deref")
     return 0
 
+fn x86_synth_emit_null_check_rdi s
+    // WHY: Guards bracket indexing `p[idx]` on %rdi against NULL / low unmapped page (< 4096),
+    // throwing catchable NullPointerException in hosted mode instead of silently returning 0.
+    if s.synth_freestanding == 1
+        return 0
+    end
+    // cmp rdi, 4096 (7B: 48 81 FF 00 10 00 00); jae +5 (2B); call _lipi_throw_null_index (5B)
+    x86_synth_emit_bytes(s, [72, 129, 255, 0, 16, 0, 0, 115, 5])
+    x86_synth_emit_call_helper(s, "_lipi_throw_null_index")
+    return 0
+
 fn x86_synth_body_has_defer toks start_pos base_col base_line
-    // WHY: Zero-overhead prescan: returns 1 iff current function body contains a defer statement
-    // (ignoring nested fn definitions). Functions without defer emit 0 unwind instructions.
+    // WHY: Zero-overhead prescan: returns 1 iff current function or top-level body contains a defer
+    // statement (supporting braced `{ ... }`, indented, and `end`-delimited scopes while skipping
+    // nested named fn/struct/enum definitions). Functions without defer emit 0 unwind instructions.
     n = toks.len()
     i = start_pos
+    while i < n and (toks[i].tok_kind == TOK_NEWLINE() or toks[i].tok_kind == TOK_SEMI() or toks[i].tok_kind == TOK_COMMENT_LINE() or toks[i].tok_kind == TOK_COMMENT_DOC() or toks[i].tok_kind == TOK_COMMENT_BLOCK())
+        i = i + 1
+    end
+    fn_braced = 0
+    fn_bd = 0
+    if base_line >= 0 and i < n and (toks[i].tok_kind == TOK_LBRACE() or (toks[i].tok_kind != TOK_STR() and toks[i].tok_text == "{"))
+        fn_braced = 1
+        fn_bd = 1
+        i = i + 1
+    end
     while i < n
         t = toks[i]
         k = t.tok_kind
@@ -967,7 +1266,20 @@ fn x86_synth_body_has_defer toks start_pos base_col base_line
         if k == TOK_EOF()
             break
         end
-        if base_line >= 0
+        if fn_braced == 1
+            if k == TOK_LBRACE() or (k != TOK_STR() and txt == "{")
+                fn_bd = fn_bd + 1
+                i = i + 1
+                continue
+            elif k == TOK_RBRACE() or (k != TOK_STR() and txt == "}")
+                fn_bd = fn_bd - 1
+                if fn_bd <= 0
+                    break
+                end
+                i = i + 1
+                continue
+            end
+        elif base_line >= 0
             if x86_synth_is_block_end(toks, i) == 1 and t.tok_span.span_start_col <= base_col
                 break
             end
@@ -975,9 +1287,44 @@ fn x86_synth_body_has_defer toks start_pos base_col base_line
                 break
             end
         end
+        // Skip nested named function definitions when scanning top-level (base_line < 0) or outer fn
         if k == TOK_KW_FN() or k == TOK_DIR_FN() or k == TOK_KW_COMPONENT() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn" or txt == "component" or txt == "উপাদান"))
             if i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
-                break
+                if base_line >= 0
+                    break
+                end
+                // Top-level scan: skip entire named fn body
+                nf_col = t.tok_span.span_start_col
+                nf_line = t.tok_span.span_start_line
+                i = i + 1
+                nf_bd = 0
+                while i < n
+                    ntf = toks[i]
+                    nkf = ntf.tok_kind
+                    ntxf = ntf.tok_text
+                    if nkf == TOK_EOF() break end
+                    if nkf == TOK_LBRACE() or (nkf != TOK_STR() and ntxf == "{")
+                        nf_bd = nf_bd + 1
+                    elif nkf == TOK_RBRACE() or (nkf != TOK_STR() and ntxf == "}")
+                        if nf_bd > 0
+                            nf_bd = nf_bd - 1
+                            if nf_bd == 0
+                                i = i + 1
+                                break
+                            end
+                        end
+                    elif nf_bd == 0
+                        if x86_synth_is_block_end(toks, i) == 1 and ntf.tok_span.span_start_col <= nf_col
+                            i = i + 1
+                            break
+                        end
+                        if ntf.tok_span.span_start_line > nf_line and ntf.tok_span.span_start_col <= nf_col and nkf != TOK_NEWLINE() and nkf != TOK_SEMI() and nkf != TOK_COMMENT_LINE() and nkf != TOK_COMMENT_DOC() and nkf != TOK_COMMENT_BLOCK()
+                            break
+                        end
+                    end
+                    i = i + 1
+                end
+                continue
             end
         end
         if k == TOK_KW_DEFER() or (k == TOK_IDENT() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব"))
@@ -1322,67 +1669,65 @@ fn x86_synth_prescan_boxed_vars toks start_pos base_col base_line
 end
 
 fn x86_synth_emit_byte s byte_val
-    // WHY: Emits a single raw machine instruction byte into code_bytes.
-    push(s.synth_code, (byte_val % 256 + 256) % 256)
-    return s.synth_code.len()
+    // WHY: Emits a single raw machine instruction byte using 1-cycle bitwise AND (zero IDIV overhead).
+    code = s.synth_code
+    push(code, byte_val & 255)
+    return code.len()
 
 fn x86_synth_emit_bytes s byte_list
-    // WHY: Appends an array of byte values sequentially.
+    // WHY: Appends an array of byte values sequentially with cached code list reference and bitwise mask.
+    code = s.synth_code
     i = 0
     n = byte_list.len()
     while i < n
-        push(s.synth_code, (byte_list[i] % 256 + 256) % 256)
+        push(code, byte_list[i] & 255)
         i = i + 1
-    return s.synth_code.len()
+    return code.len()
 
 fn x86_synth_emit_u32 s val
-    // WHY: Emits 32-bit unsigned integer in little-endian byte order.
-    v = val
-    if v < 0
-        v = v + 4294967296
-    push(s.synth_code, v % 256)
-    push(s.synth_code, (v / 256) % 256)
-    push(s.synth_code, (v / 65536) % 256)
-    push(s.synth_code, (v / 16777216) % 256)
-    return s.synth_code.len()
+    // WHY: Emits 32-bit little-endian word using shift+mask (0 IDIV instructions vs 6 IDIVs previously).
+    code = s.synth_code
+    push(code, val & 255)
+    push(code, (val >> 8) & 255)
+    push(code, (val >> 16) & 255)
+    push(code, (val >> 24) & 255)
+    return code.len()
 
 fn x86_synth_emit_u64 s val
-    // WHY: Emits 64-bit integer in little-endian byte order.
-    v = val
-    i = 0
-    while i < 8
-        b = v % 256
-        if b < 0
-            b = b + 256
-        push(s.synth_code, b)
-        v = (v - b) / 256
-        i = i + 1
-    return s.synth_code.len()
+    // WHY: Emits 64-bit little-endian qword using shift+mask (0 IDIV instructions; exact two's complement).
+    code = s.synth_code
+    push(code, val & 255)
+    push(code, (val >> 8) & 255)
+    push(code, (val >> 16) & 255)
+    push(code, (val >> 24) & 255)
+    push(code, (val >> 32) & 255)
+    push(code, (val >> 40) & 255)
+    push(code, (val >> 48) & 255)
+    push(code, (val >> 56) & 255)
+    return code.len()
 
 fn x86_synth_patch_u32 s offset val
-    // WHY: Backpatches 4 bytes at a predetermined location in code_bytes.
+    // WHY: Backpatches 4 bytes at a predetermined location in code_bytes using 1-cycle shift+mask.
     // Also invalidates basic-block store-forwarding state since a jump target was bound here.
     s.synth_last_store_end = 0 - 1
-    v = val
-    if v < 0
-        v = v + 4294967296
-    list_set(s.synth_code, offset, v % 256)
-    list_set(s.synth_code, offset + 1, (v / 256) % 256)
-    list_set(s.synth_code, offset + 2, (v / 65536) % 256)
-    list_set(s.synth_code, offset + 3, (v / 16777216) % 256)
+    code = s.synth_code
+    list_set(code, offset, val & 255)
+    list_set(code, offset + 1, (val >> 8) & 255)
+    list_set(code, offset + 2, (val >> 16) & 255)
+    list_set(code, offset + 3, (val >> 24) & 255)
     return 0
 
 fn x86_synth_patch_u64 s offset val
-    // WHY: Backpatches 8 bytes for 64-bit absolute virtual address relocations.
-    v = val
-    i = 0
-    while i < 8
-        b = v % 256
-        if b < 0
-            b = b + 256
-        list_set(s.synth_code, offset + i, b)
-        v = (v - b) / 256
-        i = i + 1
+    // WHY: Backpatches 8 bytes for 64-bit absolute virtual address relocations using shift+mask.
+    code = s.synth_code
+    list_set(code, offset, val & 255)
+    list_set(code, offset + 1, (val >> 8) & 255)
+    list_set(code, offset + 2, (val >> 16) & 255)
+    list_set(code, offset + 3, (val >> 24) & 255)
+    list_set(code, offset + 4, (val >> 32) & 255)
+    list_set(code, offset + 5, (val >> 40) & 255)
+    list_set(code, offset + 6, (val >> 48) & 255)
+    list_set(code, offset + 7, (val >> 56) & 255)
     return 0
 
 fn x86_synth_record_reloc_patch s u64_patch_off file_target_off
@@ -1454,6 +1799,7 @@ include "src/compiler/backend/targets/x86_64/runtime_io.lp"
 include "src/compiler/backend/targets/x86_64/runtime_mt_gc.lp"
 include "src/compiler/backend/targets/x86_64/runtime_dict.lp"
 include "src/compiler/backend/targets/x86_64/runtime_trace.lp"
+include "src/compiler/backend/targets/x86_64/runtime_async.lp"
 include "src/compiler/backend/targets/x86_64/avx2_encoder.lp"
 include "src/compiler/backend/targets/x86_64/amx_vnni_encoder.lp"
 include "src/compiler/backend/targets/x86_64/runtime_arena.lp"
@@ -1876,11 +2222,11 @@ fn x86_synth_parse_decimal_int str_val
 
 fn x86_synth_type_layout_info s ftype
     // WHY: Computes exact hardware layout [byte_size, align, elem_size, is_signed] for scalar
-    // fixed-width types (u8/i8/u16/i16/u32/i32/u64/i64/f32/f64/ptr), inline fixed-size arrays
+    // fixed-width types (u8/i8/u16/i16/u32/i32/u64/i64/f32/f64/ptr/*T), inline fixed-size arrays
     // `[N]T`, and dynamic/untyped 64-bit Lipi slots (8-byte aligned by default).
     if ftype == "" or ftype == "i64" or ftype == "int" or ftype == "f64" or ftype == "float" or ftype == "str" or ftype == "string" or ftype == "array" or ftype == "bool" or ftype == "any"
         return [8, 8, 0, 1]
-    elif ftype == "u64" or ftype == "ptr" or (len(ftype) >= 4 and str_sub(ftype, 0, 4) == "ptr<")
+    elif ftype == "u64" or ftype == "usize" or ftype == "ptr" or x86_synth_is_ptr_type(ftype) == 1
         return [8, 8, 0, 0]
     elif ftype == "u8" or ftype == "byte"
         return [1, 1, 0, 0]
@@ -1921,22 +2267,34 @@ fn x86_synth_type_layout_info s ftype
     return [8, 8, 0, 0]
 
 fn x86_synth_compute_struct_layout s sdef
-    // WHY: Computes deterministic exact byte offsets, field widths, and aligned/packed total byte size
-    // for X86StructDef, replacing legacy hardcoded `fi * 8`. Untyped/i64 structs keep exact 8B slots.
+    // WHY: Computes deterministic exact byte offsets, field widths, union overlapping offsets (all 0),
+    // bitfield packing (`field: u32 : 5`), and aligned/packed total byte size for X86StructDef.
     offs = list()
     sizes = list()
     elems = list()
     signs = list()
+    bit_offs = list()
+    bit_widths = list()
     is_packed = sdef.sd_is_packed
+    is_union = sdef.sd_is_union
     explicit_align = sdef.sd_align
     max_align = 1
+    max_size = 0
     cursor = 0
+    bf_active = 0
+    bf_unit_off = 0
+    bf_unit_sz = 0
+    bf_bit_cursor = 0
     fi = 0
     n = sdef.sd_fields.len()
     while fi < n
         ft = ""
         if sdef.sd_field_types != 0 and fi < sdef.sd_field_types.len()
             ft = sdef.sd_field_types[fi]
+        end
+        req_bw = 0
+        if sdef.sd_field_bit_widths != 0 and fi < sdef.sd_field_bit_widths.len()
+            req_bw = sdef.sd_field_bit_widths[fi]
         end
         info = x86_synth_type_layout_info(s, ft)
         fsz = info[0]
@@ -1947,20 +2305,62 @@ fn x86_synth_compute_struct_layout s sdef
         if is_packed == 1
             eff_al = 1
         end
-        if eff_al > 1
-            rem = cursor % eff_al
-            if rem != 0
-                cursor = cursor + (eff_al - rem)
-            end
-        end
         if eff_al > max_align
             max_align = eff_al
         end
-        push(offs, cursor)
-        push(sizes, fsz)
-        push(elems, fel)
-        push(signs, fsgn)
-        cursor = cursor + fsz
+        if is_union == 1
+            // Union: every field starts at byte offset 0; total size = max field size
+            push(offs, 0)
+            push(sizes, fsz)
+            push(elems, fel)
+            push(signs, fsgn)
+            push(bit_offs, 0)
+            push(bit_widths, req_bw)
+            if fsz > max_size max_size = fsz end
+        elif req_bw > 0 and fel == 0 and req_bw <= (fsz * 8)
+            // Packed bitfield within matching storage unit (e.g. u8/u16/u32/u64)
+            if bf_active == 1 and bf_unit_sz == fsz and (bf_bit_cursor + req_bw) <= (fsz * 8)
+                push(offs, bf_unit_off)
+                push(sizes, fsz)
+                push(elems, 0)
+                push(signs, fsgn)
+                push(bit_offs, bf_bit_cursor)
+                push(bit_widths, req_bw)
+                bf_bit_cursor = bf_bit_cursor + req_bw
+            else
+                if eff_al > 1
+                    rem_bf = cursor % eff_al
+                    if rem_bf != 0 cursor = cursor + (eff_al - rem_bf) end
+                end
+                bf_unit_off = cursor
+                bf_unit_sz = fsz
+                bf_bit_cursor = req_bw
+                bf_active = 1
+                push(offs, bf_unit_off)
+                push(sizes, fsz)
+                push(elems, 0)
+                push(signs, fsgn)
+                push(bit_offs, 0)
+                push(bit_widths, req_bw)
+                cursor = cursor + fsz
+            end
+        else
+            bf_active = 0
+            bf_bit_cursor = 0
+            if eff_al > 1
+                rem = cursor % eff_al
+                if rem != 0
+                    cursor = cursor + (eff_al - rem)
+                end
+            end
+            push(offs, cursor)
+            push(sizes, fsz)
+            push(elems, fel)
+            push(signs, fsgn)
+            push(bit_offs, 0)
+            push(bit_widths, 0)
+            cursor = cursor + fsz
+        end
         fi = fi + 1
     end
     final_align = max_align
@@ -1968,6 +2368,9 @@ fn x86_synth_compute_struct_layout s sdef
         final_align = explicit_align
     end
     total_sz = cursor
+    if is_union == 1
+        total_sz = max_size
+    end
     if final_align > 1 and total_sz > 0
         rem_t = total_sz % final_align
         if rem_t != 0
@@ -1978,17 +2381,24 @@ fn x86_synth_compute_struct_layout s sdef
     sdef.sd_field_sizes = sizes
     sdef.sd_field_elem_sizes = elems
     sdef.sd_field_signed = signs
+    sdef.sd_field_bit_offsets = bit_offs
+    sdef.sd_field_bit_widths = bit_widths
     sdef.sd_align = final_align
     sdef.sd_total_size = total_sz
     return total_sz
 
 fn x86_synth_get_field_meta s sname fname
-    // WHY: Returns [offset, size, is_signed, elem_size, field_type] for struct field access.
-    if sname != ""
+    // WHY: Returns [offset, size, is_signed, elem_size, field_type, bit_off, bit_width] for struct/union field access.
+    // Automatically unwraps typed pointers (`*Point`, `*const Point`, `*mut Point`) to pointee struct `Point`.
+    eff_sname = sname
+    if x86_synth_is_ptr_type(eff_sname) == 1
+        eff_sname = x86_synth_ptr_pointee(eff_sname)
+    end
+    if eff_sname != ""
         i = s.synth_structs.len() - 1
         while i >= 0
             sd = s.synth_structs[i]
-            if sd.sd_name == sname
+            if sd.sd_name == eff_sname
                 fi = 0
                 while fi < sd.sd_fields.len()
                     if sd.sd_fields[fi] == fname
@@ -1997,6 +2407,8 @@ fn x86_synth_get_field_meta s sname fname
                         fg = 1
                         fe = 0
                         ft = ""
+                        fbo = 0
+                        fbw = 0
                         if sd.sd_field_offsets != 0 and fi < sd.sd_field_offsets.len()
                             fo = sd.sd_field_offsets[fi]
                             fs = sd.sd_field_sizes[fi]
@@ -2006,7 +2418,11 @@ fn x86_synth_get_field_meta s sname fname
                         if sd.sd_field_types != 0 and fi < sd.sd_field_types.len()
                             ft = sd.sd_field_types[fi]
                         end
-                        return [fo, fs, fg, fe, ft]
+                        if sd.sd_field_bit_offsets != 0 and fi < sd.sd_field_bit_offsets.len()
+                            fbo = sd.sd_field_bit_offsets[fi]
+                            fbw = sd.sd_field_bit_widths[fi]
+                        end
+                        return [fo, fs, fg, fe, ft, fbo, fbw]
                     end
                     fi = fi + 1
                 end
@@ -2014,10 +2430,10 @@ fn x86_synth_get_field_meta s sname fname
             i = i - 1
         end
     end
-    f_off = x86_synth_get_field_offset(s, sname, fname)
-    f_ft = x86_synth_get_field_type(s, sname, fname)
+    f_off = x86_synth_get_field_offset(s, eff_sname, fname)
+    f_ft = x86_synth_get_field_type(s, eff_sname, fname)
     info = x86_synth_type_layout_info(s, f_ft)
-    return [f_off, info[0], info[3], info[2], f_ft]
+    return [f_off, info[0], info[3], info[2], f_ft, 0, 0]
 
 fn x86_synth_emit_field_load_rax s f_off f_sz f_signed f_elem_sz
     // WHY: Emits exact-width hardware load from [rax + f_off] into %rax (1/2/4/8B signed/unsigned),
@@ -2431,9 +2847,25 @@ fn x86_synth_get_field_type s sname fname
     return ""
 
 fn x86_synth_is_mutable_global_name name
-    // WHY: Treats top-level `g_*` and `G_*` variables as cross-function mutable RW globals.
-    if len(name) >= 2 and (char_at(name, 0) == "g" or char_at(name, 0) == "G") and char_at(name, 1) == "_"
+    // WHY: Treats top-level `g_*` and `G_*` variables (and canonically module-mangled
+    // `__mod_<id>__g_*` / `__mod_<id>__G_*` variables) as cross-function mutable RW globals.
+    n = len(name)
+    if n >= 2 and (char_at(name, 0) == "g" or char_at(name, 0) == "G") and char_at(name, 1) == "_"
         return 1
+    end
+    if n >= 10 and char_at(name, 0) == "_" and char_at(name, 1) == "_" and char_at(name, 2) == "m" and char_at(name, 3) == "o" and char_at(name, 4) == "d" and char_at(name, 5) == "_"
+        k = 6
+        while k + 3 < n
+            if char_at(name, k) == "_" and char_at(name, k + 1) == "_"
+                c0 = char_at(name, k + 2)
+                c1 = char_at(name, k + 3)
+                if (c0 == "g" or c0 == "G") and c1 == "_"
+                    return 1
+                end
+                break
+            end
+            k = k + 1
+        end
     end
     return 0
 
@@ -2460,7 +2892,33 @@ fn x86_synth_alloc_mutable_global s name
     push(s.synth_mutable_global_offs, slot_off)
     push(s.synth_mutable_global_prims, "")
     push(s.synth_mutable_global_structs, "")
+    push(s.synth_mutable_global_explicit, x86_synth_is_mutable_global_name(name))
     return slot_off
+
+fn x86_synth_mark_mutable_global_explicit s name
+    // WHY: Marks an explicitly declared `global <name>` (including module-mangled names) so
+    // assignments inside functions write back to the RW .data slot instead of shadowing locally.
+    i = 0
+    n = s.synth_mutable_globals.len()
+    while i < n
+        if s.synth_mutable_globals[i] == name
+            list_set(s.synth_mutable_global_explicit, i, 1)
+            return 1
+        end
+        i = i + 1
+    end
+    return 0
+
+fn x86_synth_is_explicit_mutable_global s name
+    i = 0
+    n = s.synth_mutable_globals.len()
+    while i < n
+        if s.synth_mutable_globals[i] == name
+            return s.synth_mutable_global_explicit[i]
+        end
+        i = i + 1
+    end
+    return 0
 
 fn x86_synth_set_mutable_global_types s name ptype stype
     i = 0
@@ -2980,6 +3438,7 @@ fn x86_synth_is_ident_token kind
     if kind == TOK_KW_DEFER() return 1
     if kind == TOK_KW_PRINT() return 1
     if kind == TOK_KW_SYSCALL() return 1
+    if kind == TOK_DIR_TRAIT() return 1
     return 0
 
 fn x86_synth_line_has_inline_end toks start_pos start_line
@@ -3101,10 +3560,22 @@ fn x86_synth_parse_type_list toks pos_box require_lparen
             cur_item = ""
         elif tk == TOK_COMMA() or (tk != TOK_STR() and tx == ",")
             cur_item = cur_item + ","
+        elif require_lparen == 0 and (tk == TOK_COLON() or (tk != TOK_STR() and tx == ":"))
+            cur_item = cur_item + ":"
+        elif require_lparen == 0 and (tk == TOK_PLUS() or (tk != TOK_STR() and tx == "+"))
+            cur_item = cur_item + "+"
+        elif tk == TOK_STAR() or (tk != TOK_STR() and tx == "*")
+            cur_item = cur_item + "*"
+        elif tk == TOK_KW_CONST() or tk == TOK_KW_MUT()
+            cur_item = cur_item + tx + " "
         elif tk == TOK_NEWLINE()
             // skip whitespace inside multi-line type list
         elif x86_synth_is_ident_token(tk) == 1
-            cur_item = cur_item + tx
+            if cur_item == "*" and (tx == "const" or tx == "mut")
+                cur_item = cur_item + tx + " "
+            else
+                cur_item = cur_item + tx
+            end
         else
             return 0
         end
@@ -3124,9 +3595,35 @@ fn x86_synth_parse_type_list toks pos_box require_lparen
 end
 
 fn x86_synth_parse_type_expr toks pos_box
-    // WHY: Parses a type annotation `Name`, `Name<Arg1, Arg2>`, or fixed-size array `[N]T` (e.g. `[512]u8`).
+    // WHY: Parses a type annotation `Name`, `Name<Arg1, Arg2>`, typed pointer `*T`/`*const T`/`*mut T`,
+    // or fixed-size array `[N]T` (e.g. `[512]u8`, `*const u32`, `*mut Point`).
     p = get(pos_box, 0)
     if p >= toks.len() return "" end
+    // Typed pointer prefix: *T, *const T, *mut T
+    if toks[p].tok_kind == TOK_STAR() or (toks[p].tok_kind != TOK_STR() and toks[p].tok_text == "*")
+        list_set(pos_box, 0, p + 1)
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        qual = ""
+        qp = get(pos_box, 0)
+        if qp < toks.len()
+            qk = toks[qp].tok_kind
+            qtxt = toks[qp].tok_text
+            if qk == TOK_KW_CONST() or (qk != TOK_STR() and qtxt == "const")
+                qual = "const "
+                list_set(pos_box, 0, qp + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+            elif qk == TOK_KW_MUT() or (qk != TOK_STR() and qtxt == "mut")
+                qual = "mut "
+                list_set(pos_box, 0, qp + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+            end
+        end
+        inner_pt = x86_synth_parse_type_expr(toks, pos_box)
+        if inner_pt != ""
+            return "*" + qual + inner_pt
+        end
+        return "*u8"
+    end
     if toks[p].tok_kind == TOK_LBRACKET() or (toks[p].tok_kind != TOK_STR() and toks[p].tok_text == "[")
         if p + 3 < toks.len() and toks[p + 1].tok_kind == TOK_INT() and (toks[p + 2].tok_kind == TOK_RBRACKET() or toks[p + 2].tok_text == "]")
             arr_n = str(toks[p + 1].tok_int_val)
@@ -3576,9 +4073,15 @@ fn x86_synth_try_compile_adt_pattern s toks pos_box scrut_off
 end
 
 fn x86_synth_compile_struct_def s toks pos_box base_col base_line
-    // WHY: Registers user-defined struct schemas (including generic `struct Box<T>`) with ordered field offsets.
+    // WHY: Registers user-defined struct & union schemas (including generic `struct Box<T>`,
+    // `union Reg { raw: u32, lo: u16 }`, and bitfields `flags: u32 : 5`) with exact layouts.
     pos = get(pos_box, 0)
-    list_set(pos_box, 0, pos + 1) // Consume 'struct'
+    kw_txt = toks[pos].tok_text
+    is_union_def = 0
+    if kw_txt == "union" or kw_txt == "ইউনিয়ন" or kw_txt == "@union"
+        is_union_def = 1
+    end
+    list_set(pos_box, 0, pos + 1) // Consume 'struct' / 'union'
 
     sname_tok = toks[get(pos_box, 0)]
     sname = sname_tok.tok_text
@@ -3586,6 +4089,8 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
 
     tparams = x86_synth_parse_type_list(toks, pos_box, 0)
     if tparams == 0 tparams = list() end
+    tp_split = x86_synth_split_tparam_bounds(tparams)
+    tparams = tp_split[0]
 
     x86_synth_skip_whitespace_tokens(toks, pos_box)
     st_braced = 0
@@ -3596,6 +4101,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
 
     fields = list()
     field_types = list()
+    field_bit_widths = list()
     while get(pos_box, 0) < toks.len()
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         cur_p = get(pos_box, 0)
@@ -3610,7 +4116,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
                 list_set(pos_box, 0, cur_p + 1)
                 break
             end
-            if cur_k == TOK_COMMA() or (cur_k != TOK_STR() and cur_txt == ",")
+            if cur_k == TOK_COMMA() or cur_k == TOK_SEMI() or (cur_k != TOK_STR() and (cur_txt == "," or cur_txt == ";"))
                 list_set(pos_box, 0, cur_p + 1)
                 continue
             end
@@ -3620,7 +4126,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
                 break
             if cur_k == TOK_KW_FN() or cur_k == TOK_DIR_FN() or cur_k == TOK_KW_STRUCT() or cur_k == TOK_DIR_STRUCT() or cur_k == TOK_KW_ENUM() or cur_k == TOK_DIR_ENUM()
                 break
-            if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "struct" or cur_txt == "গঠন" or cur_txt == "enum" or cur_txt == "@enum" or cur_txt == "গণনা")
+            if cur_k == TOK_IDENT() and (cur_txt == "fn" or cur_txt == "কাজ" or cur_txt == "struct" or cur_txt == "গঠন" or cur_txt == "union" or cur_txt == "ইউনিয়ন" or cur_txt == "@union" or cur_txt == "enum" or cur_txt == "@enum" or cur_txt == "গণনা" or cur_txt == "trait" or cur_txt == "impl")
                 break
             if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
                 break
@@ -3629,6 +4135,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
         if cur_k == TOK_IDENT()
             push(fields, cur_txt)
             ftype = ""
+            bw = 0
             list_set(pos_box, 0, cur_p + 1)
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             np = get(pos_box, 0)
@@ -3636,8 +4143,15 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
                 list_set(pos_box, 0, np + 1)
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
                 ftype = x86_synth_parse_type_expr(toks, pos_box)
+                // Optional bitfield width suffix: `field: u32 : 5`
+                bp = get(pos_box, 0)
+                if bp + 1 < toks.len() and (toks[bp].tok_kind == TOK_COLON() or (toks[bp].tok_kind != TOK_STR() and toks[bp].tok_text == ":")) and toks[bp + 1].tok_kind == TOK_INT()
+                    bw = toks[bp + 1].tok_int_val
+                    list_set(pos_box, 0, bp + 2)
+                end
             end
             push(field_types, ftype)
+            push(field_bit_widths, bw)
         else
             list_set(pos_box, 0, cur_p + 1)
 
@@ -3648,11 +4162,196 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
     sdef.sd_type_params = tparams
     sdef.sd_is_packed = s.synth_pending_struct_packed
     sdef.sd_align = s.synth_pending_struct_align
+    sdef.sd_is_union = is_union_def
+    sdef.sd_field_bit_widths = field_bit_widths
     s.synth_pending_struct_packed = 0
     s.synth_pending_struct_align = 0
     x86_synth_compute_struct_layout(s, sdef)
     push(s.synth_structs, sdef)
     return 0
+
+fn x86_synth_compile_trait_def s toks pos_box base_col base_line
+    // WHY: Parses compile-time `trait Name { fn m1(self, ...); fn m2(self) -> T }` (braced or indent)
+    // and registers its required method signatures for `impl Trait for Type` & `<T: Trait>` checking.
+    list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume 'trait'
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    tname = ""
+    if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+        tname = toks[get(pos_box, 0)].tok_text
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+    // Optional generic params on trait
+    x86_synth_parse_type_list(toks, pos_box, 0)
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    tr_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        tr_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+    methods = list()
+    while get(pos_box, 0) < toks.len()
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cp = get(pos_box, 0)
+        if cp >= toks.len() break end
+        ct = toks[cp]
+        ck = ct.tok_kind
+        ctx = ct.tok_text
+        if tr_braced == 1
+            if ck == TOK_RBRACE() or (ck != TOK_STR() and ctx == "}")
+                list_set(pos_box, 0, cp + 1)
+                break
+            end
+        else
+            if ck == TOK_KW_END() or ck == TOK_DIR_END() or (ck == TOK_IDENT() and (ctx == "end" or ctx == "শেষ" or ctx == "@end"))
+                list_set(pos_box, 0, cp + 1)
+                break
+            end
+            if ct.tok_span.span_start_line > base_line and ct.tok_span.span_start_col <= base_col
+                break
+            end
+        end
+        if ck == TOK_KW_FN() or ck == TOK_DIR_FN() or (ck == TOK_IDENT() and (ctx == "fn" or ctx == "কাজ" or ctx == "@fn"))
+            list_set(pos_box, 0, cp + 1)
+            if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                push(methods, toks[get(pos_box, 0)].tok_text)
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+            end
+            // Skip signature parameters, return type, and any optional default `{ ... }` body
+            sig_line = ct.tok_span.span_start_line
+            while get(pos_box, 0) < toks.len()
+                sp_t = toks[get(pos_box, 0)]
+                if sp_t.tok_kind == TOK_SEMI() or (sp_t.tok_kind != TOK_STR() and sp_t.tok_text == ";")
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    break
+                elif sp_t.tok_kind == TOK_NEWLINE() or sp_t.tok_span.span_start_line > sig_line
+                    break
+                elif sp_t.tok_kind == TOK_LBRACE() or (sp_t.tok_kind != TOK_STR() and sp_t.tok_text == "{")
+                    b_dep = 1
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    while get(pos_box, 0) < toks.len() and b_dep > 0
+                        bt = toks[get(pos_box, 0)]
+                        if bt.tok_kind == TOK_LBRACE() or (bt.tok_kind != TOK_STR() and bt.tok_text == "{")
+                            b_dep = b_dep + 1
+                        elif bt.tok_kind == TOK_RBRACE() or (bt.tok_kind != TOK_STR() and bt.tok_text == "}")
+                            b_dep = b_dep - 1
+                        end
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                    break
+                elif sp_t.tok_kind == TOK_RBRACE() or (sp_t.tok_kind != TOK_STR() and sp_t.tok_text == "}")
+                    break
+                else
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
+            end
+        else
+            list_set(pos_box, 0, cp + 1)
+        end
+    end
+    if tname != ""
+        td = X86TraitDef()
+        td.td_name = tname
+        td.td_methods = methods
+        push(s.synth_traits, td)
+    end
+    return 0
+end
+
+fn x86_synth_compile_impl_block s toks pos_box base_col base_line
+    // WHY: Compiles `impl TraitName for TypeName { fn ... }` and inherent `impl TypeName { fn ... }`,
+    // automatically mangling methods to `TypeName_<method>`, typing `self: TypeName`,
+    // and statically verifying all required methods of `TraitName` are implemented!
+    list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume 'impl'
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    // Optional generic params on impl: `impl<T> ...`
+    x86_synth_parse_type_list(toks, pos_box, 0)
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    first_nm = ""
+    if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+        first_nm = toks[get(pos_box, 0)].tok_text
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+    x86_synth_parse_type_list(toks, pos_box, 0)
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    trait_nm = ""
+    type_nm = first_nm
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_KW_FOR() or (x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1 and (toks[get(pos_box, 0)].tok_text == "for" or toks[get(pos_box, 0)].tok_text == "জন্য")))
+        trait_nm = first_nm
+        list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume 'for'
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        if get(pos_box, 0) < toks.len() and x86_synth_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+            type_nm = toks[get(pos_box, 0)].tok_text
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+        x86_synth_parse_type_list(toks, pos_box, 0)
+    end
+    x86_synth_skip_whitespace_tokens(toks, pos_box)
+    imp_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        imp_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
+
+    saved_impl_ctx = s.synth_impl_type_ctx
+    s.synth_impl_type_ctx = type_nm
+    impl_methods = list()
+    while get(pos_box, 0) < toks.len()
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cp = get(pos_box, 0)
+        if cp >= toks.len() break end
+        ct = toks[cp]
+        ck = ct.tok_kind
+        ctx = ct.tok_text
+        if imp_braced == 1
+            if ck == TOK_RBRACE() or (ck != TOK_STR() and ctx == "}")
+                list_set(pos_box, 0, cp + 1)
+                break
+            end
+        else
+            if ck == TOK_KW_END() or ck == TOK_DIR_END() or (ck == TOK_IDENT() and (ctx == "end" or ctx == "শেষ" or ctx == "@end"))
+                list_set(pos_box, 0, cp + 1)
+                break
+            end
+            if ct.tok_span.span_start_line > base_line and ct.tok_span.span_start_col <= base_col
+                break
+            end
+        end
+        if ck == TOK_KW_FN() or ck == TOK_DIR_FN() or (ck == TOK_IDENT() and (ctx == "fn" or ctx == "কাজ" or ctx == "@fn"))
+            if cp + 1 < toks.len() and x86_synth_is_ident_token(toks[cp + 1].tok_kind) == 1
+                push(impl_methods, toks[cp + 1].tok_text)
+            end
+            x86_synth_compile_fn_def(s, toks, pos_box)
+        else
+            list_set(pos_box, 0, cp + 1)
+        end
+    end
+    s.synth_impl_type_ctx = saved_impl_ctx
+
+    if trait_nm != "" and type_nm != ""
+        tdef = x86_synth_find_trait(s, trait_nm)
+        if tdef != 0
+            mi = 0
+            while mi < tdef.td_methods.len()
+                req_m = tdef.td_methods[mi]
+                has_m = 0
+                if x86_synth_find_fn_first(s, type_nm + "_" + req_m) != 0
+                    has_m = 1
+                end
+                if has_m == 0
+                    say "❌ [Error]: Trait impl error: 'impl " + trait_nm + " for " + type_nm + "' is missing required method '" + req_m + "'"
+                    exit(1)
+                end
+                mi = mi + 1
+            end
+        end
+        ti_obj = X86TraitImpl()
+        ti_obj.ti_trait_name = trait_nm
+        ti_obj.ti_type_name = type_nm
+        ti_obj.ti_methods = impl_methods
+        push(s.synth_trait_impls, ti_obj)
+    end
+    return 0
+end
 
 fn x86_synth_emit_store_param s pi off
     // WHY: Standard System V AMD64 ABI parameter ingress (unlimited argument count!):

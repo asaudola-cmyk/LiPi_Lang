@@ -28,18 +28,19 @@ import "compiler/frontend/lexer/num_literal"
 import "compiler/frontend/lexer/str_literal"
 import "compiler/frontend/lexer/comment_doc"
 
-// ── 1. Bilingual Keyword Resolver ─────────────────────────────────────────────
+// ── 1. Trilingual / 3-Dialect Canonical Keyword Resolver ─────────────────────
 
 @fn lexer_lookup_keyword(text: string)
-  // WHY: Maps both English and Bengali keyword representations to identical canonical TokenKinds.
-  // Guarantees zero linguistic bias and ensures seamless bilingual compilation.
+  // WHY: Normalizes English and Bengali keywords to identical canonical TokenKinds at lex time,
+  // eliminating redundant per-dialect string comparisons across parser and all target backends.
 
   // 1. Functions & Definitions
   @if text == "fn" || text == "কাজ" || text == "ফাংশন" return TOK_KW_FN() @end
   @if text == "component" || text == "উপাদান" return TOK_KW_COMPONENT() @end
   @if text == "struct" || text == "গঠন" || text == "কাঠামো" return TOK_KW_STRUCT() @end
-  @if text == "impl" return TOK_KW_IMPL() @end
-  @if text == "enum" return TOK_KW_ENUM() @end
+  @if text == "impl" || text == "বাস্তবায়ন" return TOK_KW_IMPL() @end
+  @if text == "enum" || text == "গণনা" return TOK_KW_ENUM() @end
+  @if text == "trait" || text == "বৈশিষ্ট্য" return TOK_DIR_TRAIT() @end
 
   // 2. Variable Declarations & Mutability
   @if text == "let" || text == "var" || text == "ধরি" || text == "চলক" return TOK_KW_LET() @end
@@ -59,7 +60,7 @@ import "compiler/frontend/lexer/comment_doc"
   // 5. Control Flow & Exit
   @if text == "return" || text == "ফেরত" return TOK_KW_RETURN() @end
   @if text == "break" || text == "থামো" return TOK_KW_BREAK() @end
-  @if text == "continue" || text == "চলো" return TOK_KW_CONTINUE() @end
+  @if text == "continue" || text == "চলো" || text == "চলুক" return TOK_KW_CONTINUE() @end
   @if text == "end" || text == "শেষ" return TOK_KW_END() @end
 
   // 6. Pattern Matching
@@ -70,50 +71,55 @@ import "compiler/frontend/lexer/comment_doc"
   @if text == "import" || text == "অন্তর্ভুক্ত" return TOK_KW_IMPORT() @end
 
   // 8. Error Handling & Deferral
-  @if text == "try" return TOK_KW_TRY() @end
-  @if text == "catch" return TOK_KW_CATCH() @end
-  @if text == "defer" return TOK_KW_DEFER() @end
+  @if text == "try" || text == "চেষ্টা" return TOK_KW_TRY() @end
+  @if text == "catch" || text == "ধরো" return TOK_KW_CATCH() @end
+  @if text == "defer" || text == "বিলম্ব" return TOK_KW_DEFER() @end
 
   // 9. Concurrency & Async
-  @if text == "async" return TOK_KW_ASYNC() @end
+  @if text == "async" || text == "অসমলয়" return TOK_KW_ASYNC() @end
   @if text == "await" || text == "অপেক্ষা" return TOK_KW_AWAIT() @end
 
   // 10. Types & IO
   @if text == "type" || text == "ধরন" return TOK_KW_TYPE() @end
-  @if text == "print" || text == "println" || text == "দেখাও" return TOK_KW_PRINT() @end
+  @if text == "print" || text == "println" || text == "say" || text == "বলো" || text == "দেখাও" return TOK_KW_PRINT() @end
   @if text == "syscall" || text == "সিসকল" return TOK_KW_SYSCALL() @end
 
   // Not a reserved keyword
   return -1
 @end
 
-// ── 2. Directive Resolver (@...) ──────────────────────────────────────────────
+// ── 2. Directive Resolver (@...) — Normalized to Canonical TOK_KW_* ──────────
 
 @fn lexer_lookup_directive(dir_name: string)
-  // WHY: Maps @-prefixed compiler directives to their respective TokenKinds
-  @if dir_name == "@fn" return TOK_DIR_FN() @end
-  @if dir_name == "@struct" return TOK_DIR_STRUCT() @end
-  @if dir_name == "@impl" return TOK_DIR_IMPL() @end
-  @if dir_name == "@enum" return TOK_DIR_ENUM() @end
-  @if dir_name == "@while" return TOK_DIR_WHILE() @end
-  @if dir_name == "@for" return TOK_DIR_FOR() @end
-  @if dir_name == "@if" return TOK_DIR_IF() @end
-  @if dir_name == "@elif" return TOK_DIR_ELIF() @end
-  @if dir_name == "@else" return TOK_DIR_ELSE() @end
-  @if dir_name == "@return" return TOK_DIR_RETURN() @end
-  @if dir_name == "@match" return TOK_DIR_MATCH() @end
-  @if dir_name == "@break" return TOK_DIR_BREAK() @end
-  @if dir_name == "@continue" return TOK_DIR_CONTINUE() @end
-  @if dir_name == "@try" return TOK_DIR_TRY() @end
-  @if dir_name == "@catch" return TOK_DIR_CATCH() @end
-  @if dir_name == "@defer" return TOK_DIR_DEFER() @end
-  @if dir_name == "@type" return TOK_DIR_TYPE() @end
+  // WHY: Normalizes the @-directive dialect (@fn, @if, @while, @end, etc.) to the exact same
+  // canonical TOK_KW_* token kinds as English and Bengali dialects at lex time, while keeping
+  // original dir_name in tok_text for diagnostics and attribute preservation.
+  @if dir_name == "@fn" return TOK_KW_FN() @end
+  @if dir_name == "@struct" return TOK_KW_STRUCT() @end
+  @if dir_name == "@impl" return TOK_KW_IMPL() @end
+  @if dir_name == "@enum" return TOK_KW_ENUM() @end
+  @if dir_name == "@while" return TOK_KW_WHILE() @end
+  @if dir_name == "@for" return TOK_KW_FOR() @end
+  @if dir_name == "@if" return TOK_KW_IF() @end
+  @if dir_name == "@elif" return TOK_KW_ELIF() @end
+  @if dir_name == "@else" return TOK_KW_ELSE() @end
+  @if dir_name == "@return" return TOK_KW_RETURN() @end
+  @if dir_name == "@match" return TOK_KW_MATCH() @end
+  @if dir_name == "@break" return TOK_KW_BREAK() @end
+  @if dir_name == "@continue" return TOK_KW_CONTINUE() @end
+  @if dir_name == "@try" return TOK_KW_TRY() @end
+  @if dir_name == "@catch" return TOK_KW_CATCH() @end
+  @if dir_name == "@defer" return TOK_KW_DEFER() @end
+  @if dir_name == "@type" return TOK_KW_TYPE() @end
+  @if dir_name == "@async" return TOK_KW_ASYNC() @end
+  @if dir_name == "@await" return TOK_KW_AWAIT() @end
+  @if dir_name == "@say" || dir_name == "@print" return TOK_KW_PRINT() @end
   @if dir_name == "@trait" return TOK_DIR_TRAIT() @end
   @if dir_name == "@actor" return TOK_DIR_ACTOR() @end
   @if dir_name == "@supervisor" return TOK_DIR_SUPERVISOR() @end
   @if dir_name == "@spawn" return TOK_DIR_SPAWN() @end
   @if dir_name == "@effect" return TOK_DIR_EFFECT() @end
-  @if dir_name == "@end" return TOK_DIR_END() @end
+  @if dir_name == "@end" return TOK_KW_END() @end
   return -1
 @end
 
@@ -213,7 +219,78 @@ import "compiler/frontend/lexer/comment_doc"
         char_stream_advance_byte(stream)
       @end
 
-    // ── 6. Directives (@fn, @struct, etc.) & Matrix Operators (@, @=) ──
+    // ── 6. Directives (@fn, @struct, etc.), Attributes (#![strict], #[strict]), & Matrix Operators (@, @=) ──
+    @elif b == 35 // '#'
+      // WHY: Support module-level `#![attr]`, item-level `#[attr]`, and Unix `#!` shebangs natively in lexer.
+      b1_h = char_stream_peek_byte_ahead(stream, 1)
+      b2_h = char_stream_peek_byte_ahead(stream, 2)
+      @if (b1_h == 33 && b2_h == 91) || b1_h == 91
+        is_inner_attr = 0
+        char_stream_advance_byte(stream) // '#'
+        @if b1_h == 33
+          is_inner_attr = 1
+          char_stream_advance_byte(stream) // '!'
+        @end
+        char_stream_advance_byte(stream) // '['
+        // Skip optional inner whitespace
+        @while char_stream_is_eof(stream) == 0 && (char_stream_peek_byte(stream) == 32 || char_stream_peek_byte(stream) == 9)
+          char_stream_advance_byte(stream)
+        @end
+        attr_name = ""
+        @while char_stream_is_eof(stream) == 0
+          ab = char_stream_peek_byte(stream)
+          @if ab == 93 || ab == 10 || ab == 13 || ab == 40 || ab == 32 || ab == 9
+            break
+          @end
+          attr_name = attr_name + chr(ab)
+          char_stream_advance_byte(stream)
+        @end
+        // Skip any optional attribute arguments up to closing ']' on same line
+        @while char_stream_is_eof(stream) == 0 && char_stream_peek_byte(stream) != 93 && char_stream_peek_byte(stream) != 10
+          char_stream_advance_byte(stream)
+        @end
+        @if char_stream_is_eof(stream) == 0 && char_stream_peek_byte(stream) == 93
+          char_stream_advance_byte(stream) // ']'
+        @end
+        span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
+        norm_attr = "@attr_" + attr_name
+        @if attr_name == "strict"
+          @if is_inner_attr == 1
+            norm_attr = "@strict"
+          @else
+            norm_attr = "@fn_strict"
+          @end
+        @elif attr_name == "kavach"
+          norm_attr = "@kavach"
+        @elif attr_name == "strict_types"
+          norm_attr = "@strict_types"
+        @elif attr_name == "strict_ownership"
+          norm_attr = "@strict_ownership"
+        @elif attr_name == "strict_proof"
+          norm_attr = "@strict_proof"
+        @elif attr_name == "packed"
+          norm_attr = "@packed"
+        @elif attr_name == "naked"
+          norm_attr = "@naked"
+        @elif attr_name == "interrupt"
+          norm_attr = "@interrupt"
+        @elif attr_name == "ring0"
+          norm_attr = "@ring0"
+        @elif attr_name == "silicon"
+          norm_attr = "@silicon"
+        @elif attr_name == "freestanding" || attr_name == "no_std"
+          norm_attr = "@freestanding"
+        @end
+        tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", norm_attr, is_inner_attr, 0.0, span))
+      @elif b1_h == 33
+        // Unix `#!...` shebang line: skip until LF
+        @while char_stream_is_eof(stream) == 0 && char_stream_peek_byte(stream) != 10
+          char_stream_advance_byte(stream)
+        @end
+      @else
+        char_stream_advance_byte(stream)
+      @end
+
     @elif b == 64 // '@'
       dir_name = "@"
       char_stream_advance_byte(stream)

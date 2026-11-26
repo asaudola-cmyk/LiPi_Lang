@@ -54,6 +54,20 @@ import "utso/core/string"
   params_buf: i64
   pending_ops: array
   is_active: i64
+  sq_ring_ptr: i64
+  sq_ring_sz: i64
+  cq_ring_ptr: i64
+  cq_ring_sz: i64
+  sqes_ptr: i64
+  sqes_sz: i64
+  sq_tail_off: i64
+  sq_mask_off: i64
+  sq_array_off: i64
+  cq_head_off: i64
+  cq_tail_off: i64
+  cq_mask_off: i64
+  cq_cqes_off: i64
+  ring_mapped: i64
 @end
 
 @struct IOEvent
@@ -64,26 +78,24 @@ import "utso/core/string"
 @end
 
 @! ============================================================================
-@! 3. INITIALIZATION WITH SAFE FALLBACK (মারাত্মক ফাঁদ প্রতিরোধ)
+@! 3. INITIALIZATION WITH REAL SYS_MMAP SQ/CQ/SQE RINGS + SAFE FALLBACK
 @! ============================================================================
 
 @fn io_uring_reactor_new(queue_size: i64, req_sqpoll: i64)
-  // WHY: io_uring_params struct requires 120 bytes of zeroed memory
+  // WHY: io_uring_params struct requires 120 bytes of zeroed memory. When kernel
+  // io_uring_setup (425) succeeds, maps real shared kernel SQ ring (off 0), CQ ring
+  // (off 0x08000000), and 64-byte SQE array (off 0x10000000) via SYS_mmap (9)!
   params_buf = sys_mmap(0, 256, 3, 34, 0 - 1, 0)
   @if params_buf <= 0
     return {
-      ring_fd: 0 - 1,
-      is_sqpoll: 0,
-      sq_entries: 0,
-      cq_entries: 0,
-      backend_mode: "epoll_fallback",
-      params_buf: 0,
-      pending_ops: [],
-      is_active: 0
+      ring_fd: 0 - 1, is_sqpoll: 0, sq_entries: 0, cq_entries: 0,
+      backend_mode: "epoll_fallback", params_buf: 0, pending_ops: [], is_active: 0,
+      sq_ring_ptr: 0, sq_ring_sz: 0, cq_ring_ptr: 0, cq_ring_sz: 0, sqes_ptr: 0, sqes_sz: 0,
+      sq_tail_off: 0, sq_mask_off: 0, sq_array_off: 0, cq_head_off: 0, cq_tail_off: 0,
+      cq_mask_off: 0, cq_cqes_off: 0, ring_mapped: 0
     }
   @end
 
-  // Zero the params buffer
   i = 0
   @while i < 256
     sys_poke8(params_buf + i, 0)
@@ -94,15 +106,10 @@ import "utso/core/string"
   actual_sqpoll = 0
   b_mode = "epoll_fallback"
 
-  // Attempt 1: Try IORING_SETUP_SQPOLL if requested
   @if req_sqpoll == 1
-    // Offset 8 in io_uring_params is flags (u32)
-    // Set flags = IORING_SETUP_SQPOLL (2)
     sys_poke8(params_buf + 8, 2)
-    // Offset 16 is sq_thread_idle (u32) = 2000 ms
     sys_poke8(params_buf + 16, 208)
-    sys_poke8(params_buf + 17, 7) // 2000 in little-endian
-
+    sys_poke8(params_buf + 17, 7)
     ring_fd = sys_io_uring_setup(queue_size, params_buf)
     @if ring_fd >= 0
       actual_sqpoll = 1
@@ -110,9 +117,7 @@ import "utso/core/string"
     @end
   @end
 
-  // Attempt 2: Fallback to standard io_uring if SQPOLL lacked CAP_SYS_NICE permissions
   @if ring_fd < 0
-    // Reset flags to 0
     sys_poke8(params_buf + 8, 0)
     sys_poke8(params_buf + 16, 0)
     sys_poke8(params_buf + 17, 0)
@@ -123,22 +128,118 @@ import "utso/core/string"
     @end
   @end
 
-  // Attempt 3: If io_uring is unsupported on this container/kernel, fallback to epoll
-  @if ring_fd < 0
+  sq_ent = queue_size
+  cq_ent = queue_size * 2
+  sq_rptr = 0
+  sq_rsz = 0
+  cq_rptr = 0
+  cq_rsz = 0
+  sqes_p = 0
+  sqes_s = 0
+  sq_tail_o = 0
+  sq_mask_o = 0
+  sq_arr_o = 0
+  cq_head_o = 0
+  cq_tail_o = 0
+  cq_mask_o = 0
+  cq_cqes_o = 0
+  mapped = 0
+
+  @if ring_fd >= 0
+    // Read kernel-populated io_uring_params offsets (Linux x86-64 ABI):
+    // +0 sq_entries(u32), +4 cq_entries(u32),
+    // +40 sq_off{head@40, tail@44, ring_mask@48, ring_entries@52, flags@56, dropped@60, array@64, resv1@68, user_addr@72}
+    // +80 cq_off{head@80, tail@84, ring_mask@88, ring_entries@92, overflow@96, cqes@100, flags@104, resv1@108}
+    sq_ent = sys_peek32(params_buf + 0)
+    cq_ent = sys_peek32(params_buf + 4)
+    sq_tail_o = sys_peek32(params_buf + 44)
+    sq_mask_o = sys_peek32(params_buf + 48)
+    sq_arr_o  = sys_peek32(params_buf + 64)
+    cq_head_o = sys_peek32(params_buf + 80)
+    cq_tail_o = sys_peek32(params_buf + 84)
+    cq_mask_o = sys_peek32(params_buf + 88)
+    cq_cqes_o = sys_peek32(params_buf + 100)
+
+    sq_rsz = sq_arr_o + (sq_ent * 4)
+    cq_rsz = cq_cqes_o + (cq_ent * 16)
+    sqes_s = sq_ent * 64
+    // MAP_SHARED | MAP_POPULATE = 1 | 32768 = 32769
+    sq_rptr = sys_mmap(0, sq_rsz, 3, 32769, ring_fd, 0)
+    cq_rptr = sys_mmap(0, cq_rsz, 3, 32769, ring_fd, 134217728)
+    sqes_p  = sys_mmap(0, sqes_s, 3, 32769, ring_fd, 268435456)
+    @if sq_rptr > 0 && cq_rptr > 0 && sqes_p > 0
+      mapped = 1
+    @end
+  @else
     b_mode = "epoll_fallback"
     actual_sqpoll = 0
   @end
 
   return {
-    ring_fd: ring_fd,
-    is_sqpoll: actual_sqpoll,
-    sq_entries: queue_size,
-    cq_entries: queue_size * 2,
-    backend_mode: b_mode,
-    params_buf: params_buf,
-    pending_ops: [],
-    is_active: 1
+    ring_fd: ring_fd, is_sqpoll: actual_sqpoll, sq_entries: sq_ent, cq_entries: cq_ent,
+    backend_mode: b_mode, params_buf: params_buf, pending_ops: [], is_active: 1,
+    sq_ring_ptr: sq_rptr, sq_ring_sz: sq_rsz, cq_ring_ptr: cq_rptr, cq_ring_sz: cq_rsz,
+    sqes_ptr: sqes_p, sqes_sz: sqes_s, sq_tail_off: sq_tail_o, sq_mask_off: sq_mask_o,
+    sq_array_off: sq_arr_o, cq_head_off: cq_head_o, cq_tail_off: cq_tail_o,
+    cq_mask_off: cq_mask_o, cq_cqes_off: cq_cqes_o, ring_mapped: mapped
   }
+@end
+
+@! Enqueues a genuine 64-byte kernel io_uring_sqe into the shared mmap SQE ring!
+@fn io_uring_push_real_sqe(reactor: IOUringReactor, opcode: i64, fd: i64, addr: i64, count: i64, user_data: i64)
+  @if reactor == 0 || reactor.ring_mapped == 0 || reactor.ring_fd < 0 return 0 @end
+  tail = sys_peek32(reactor.sq_ring_ptr + reactor.sq_tail_off)
+  mask = sys_peek32(reactor.sq_ring_ptr + reactor.sq_mask_off)
+  idx = tail & mask
+  sqe = reactor.sqes_ptr + (idx * 64)
+  k = 0
+  @while k < 64
+    sys_poke8(sqe + k, 0)
+    k = k + 1
+  @end
+  sys_poke8(sqe + 0, opcode & 255)
+  sys_poke32(sqe + 4, fd)
+  sys_poke64(sqe + 16, addr)
+  sys_poke32(sqe + 24, count)
+  sys_poke64(sqe + 32, user_data)
+  // Write SQ index array[idx] = idx, issue store-release barrier, then publish sq_tail = tail + 1
+  sys_poke32(reactor.sq_ring_ptr + reactor.sq_array_off + (idx * 4), idx)
+  cpu_fence()
+  sys_poke32(reactor.sq_ring_ptr + reactor.sq_tail_off, tail + 1)
+  @if reactor.is_sqpoll == 0
+    sys_io_uring_enter(reactor.ring_fd, 1, 0, 0, 0, 0)
+  @end
+  return 1
+@end
+
+@! Reaps real completed 16-byte io_uring_cqe entries directly from the shared mmap CQ ring!
+@fn io_uring_reap_real_cqes(reactor: IOUringReactor, max_events: i64)
+  events = []
+  @if reactor == 0 || reactor.ring_mapped == 0 return events @end
+  head = sys_peek32(reactor.cq_ring_ptr + reactor.cq_head_off)
+  tail = sys_peek32(reactor.cq_ring_ptr + reactor.cq_tail_off)
+  cpu_fence()
+  mask = sys_peek32(reactor.cq_ring_ptr + reactor.cq_mask_off)
+  cnt = 0
+  @while head != tail && (max_events <= 0 || cnt < max_events)
+    cqe = reactor.cq_ring_ptr + reactor.cq_cqes_off + ((head & mask) * 16)
+    ud = sys_peek64(cqe + 0)
+    res32 = sys_peek32(cqe + 8)
+    @if res32 >= 2147483648
+      res32 = res32 - 4294967296
+    @end
+    st_v = 1
+    @if res32 < 0 st_v = 0 @end
+    ev = { fd: ud & 65535, op_type: (ud >> 16) & 255, bytes_transferred: res32, status: st_v }
+    events = events.push(ev)
+    head = head + 1
+    cnt = cnt + 1
+  @end
+  @if cnt > 0
+    cpu_fence()
+    sys_poke32(reactor.cq_ring_ptr + reactor.cq_head_off, head)
+  @end
+  return events
 @end
 
 @! ============================================================================
@@ -147,6 +248,10 @@ import "utso/core/string"
 
 @fn io_uring_submit_read(reactor: IOUringReactor, fd: i64, buf_ptr: i64, count: i64)
   @if reactor == 0 || reactor.is_active == 0 return 0 - 1 @end
+  @if reactor.ring_mapped == 1 && fd >= 0 && buf_ptr > 65536 && count > 0
+    ud = ((IORING_OP_READ() & 255) << 16) | (fd & 65535)
+    return io_uring_push_real_sqe(reactor, IORING_OP_READ(), fd, buf_ptr, count, ud)
+  @end
   
   op = {
     fd: fd,
@@ -172,6 +277,10 @@ import "utso/core/string"
 
 @fn io_uring_submit_write(reactor: IOUringReactor, fd: i64, buf_ptr: i64, count: i64)
   @if reactor == 0 || reactor.is_active == 0 return 0 - 1 @end
+  @if reactor.ring_mapped == 1 && fd >= 0 && buf_ptr > 65536 && count > 0
+    ud = ((IORING_OP_WRITE() & 255) << 16) | (fd & 65535)
+    return io_uring_push_real_sqe(reactor, IORING_OP_WRITE(), fd, buf_ptr, count, ud)
+  @end
   
   op = {
     fd: fd,
@@ -236,13 +345,22 @@ import "utso/core/string"
 @end
 
 @fn io_uring_reactor_poll(reactor: IOUringReactor, max_events: i64)
-  // WHY: Non-blocking event harvester that reaps completed asynchronous I/O events
+  // WHY: Non-blocking event harvester that reaps genuine kernel io_uring CQEs first,
+  // then processes any fallback/mock queue entries when ring_mapped == 0 or synthetic fds are used.
   @if reactor == 0 || reactor.is_active == 0 return [] @end
   @if reactor.ring_fd >= 0 && str_eq(reactor.backend_mode, "io_uring_standard") == 1
     // Issue IORING_ENTER_GETEVENTS (1) to flush kernel CQ ring
     sys_io_uring_enter(reactor.ring_fd, 0, 0, 1, 0, 0)
   @end
   events = []
+  @if reactor.ring_mapped == 1
+    real_ev = io_uring_reap_real_cqes(reactor, max_events)
+    ri = 0
+    @while ri < real_ev.len()
+      events = events.push(real_ev[ri])
+      ri = ri + 1
+    @end
+  @end
   n = reactor.pending_ops.len()
   @if n == 0 return events @end
 
@@ -292,6 +410,19 @@ import "utso/core/string"
 
 @fn io_uring_reactor_close(reactor: IOUringReactor)
   @if reactor == 0 return 0 @end
+  @if reactor.sqes_ptr > 0
+    sys_munmap(reactor.sqes_ptr, reactor.sqes_sz)
+    reactor.sqes_ptr = 0
+  @end
+  @if reactor.cq_ring_ptr > 0
+    sys_munmap(reactor.cq_ring_ptr, reactor.cq_ring_sz)
+    reactor.cq_ring_ptr = 0
+  @end
+  @if reactor.sq_ring_ptr > 0
+    sys_munmap(reactor.sq_ring_ptr, reactor.sq_ring_sz)
+    reactor.sq_ring_ptr = 0
+  @end
+  reactor.ring_mapped = 0
   @if reactor.ring_fd >= 0
     sys_close(reactor.ring_fd)
     reactor.ring_fd = 0 - 1

@@ -22,6 +22,10 @@ fn x86_synth_compile_fn_def s toks pos_box
     pos = get(pos_box, 0)
     t = toks[pos]
     base_col = t.tok_span.span_start_col
+    if s.synth_pending_fn_base_col > 0
+        base_col = s.synth_pending_fn_base_col
+        s.synth_pending_fn_base_col = 0
+    end
     base_line = t.tok_span.span_start_line
     list_set(pos_box, 0, pos + 1) // Consume fn
     name_pos = get(pos_box, 0)
@@ -39,11 +43,19 @@ fn x86_synth_compile_fn_def s toks pos_box
                 list_set(pos_box, 0, next_p + 2)
                 fn_name = fn_name + "_" + method_alias
             end
+        elif s.synth_impl_type_ctx != "" and fn_name != ""
+            // WHY: Inside `impl [Trait for] Type { fn m(self, ...) }`, automatically mangle
+            // method name to `Type_m` and type `self` as `Type`!
+            method_alias = fn_name
+            target_sname = s.synth_impl_type_ctx
+            fn_name = target_sname + "_" + method_alias
         end
     end
-    // Parse optional generic type parameters: fn name<T, U>(...)
-    fn_tparams = x86_synth_parse_type_list(toks, pos_box, 0)
-    if fn_tparams == 0 fn_tparams = list() end
+    // Parse optional generic type parameters: fn name<T: Printable, U>(...)
+    fn_tparams_raw = x86_synth_parse_type_list(toks, pos_box, 0)
+    tp_split_fn = x86_synth_split_tparam_bounds(fn_tparams_raw)
+    fn_tparams = tp_split_fn[0]
+    fn_tbounds = tp_split_fn[1]
     saved_in_function = s.synth_in_function
     saved_current_fn = s.synth_current_fn
     mono_name = s.synth_mono_name_override
@@ -219,17 +231,25 @@ fn x86_synth_compile_fn_def s toks pos_box
         parsed_ret_t = x86_synth_parse_type_expr(toks, pos_box)
         if parsed_ret_t != ""
             fn_entry.fn_ret_type = x86_synth_subst_type(s, parsed_ret_t, 0, 0)
+            fn_entry.fn_ret_explicit = 1
             if fn_alias != 0
                 fn_alias.fn_ret_type = fn_entry.fn_ret_type
+                fn_alias.fn_ret_explicit = 1
             end
         end
     end
 
     fn_entry.fn_param_count = params.len()
     fn_entry.fn_type_params = fn_tparams
+    fn_entry.fn_type_bounds = fn_tbounds
+    if s.synth_pending_section != ""
+        fn_entry.fn_section = s.synth_pending_section
+        s.synth_pending_section = ""
+    end
     if fn_alias != 0
         fn_alias.fn_param_count = params.len()
         fn_alias.fn_type_params = fn_tparams
+        fn_alias.fn_type_bounds = fn_tbounds
     end
 
     if method_alias != "" and params.len() > 0
@@ -259,11 +279,159 @@ fn x86_synth_compile_fn_def s toks pos_box
         fn_entry.fn_ret_type = mono_ret
     end
 
+    // ── Direct SSA CFG Replacement (--ssa-codegen): Bypass Token Re-Parser for Eligible Functions (i64, f64, str, structs, inter-fn calls) ──
+    if g_x86_ssa_codegen == 1 and s.synth_freestanding == 0 and s.synth_ssa_lower_res != 0 and s.synth_ssa_lower_res.slr_success == 1 and fn_tparams.len() == 0 and method_alias == "" and mono_name == "" and s.synth_pending_fn_naked == 0 and s.synth_pending_fn_interrupt == 0
+        if 1 == 1
+            slr = s.synth_ssa_lower_res
+            ssa_match_i = 0 - 1
+            if slr.slr_fn_eligible != 0
+                sfi = 0
+                while sfi < slr.slr_fn_names.len() and sfi < slr.slr_fn_eligible.len()
+                    if slr.slr_fn_names[sfi] == fn_name and slr.slr_fn_eligible[sfi] == 1
+                        ssa_match_i = sfi
+                        break
+                    end
+                    sfi = sfi + 1
+                end
+            end
+            if ssa_match_i >= 0 and s.synth_pending_fn_async == 0 and ssa_match_i < slr.slr_fn_offsets.len() and ssa_match_i < slr.slr_fn_sizes.len()
+                ssa_off = slr.slr_fn_offsets[ssa_match_i]
+                ssa_sz = slr.slr_fn_sizes[ssa_match_i]
+                if ssa_sz > 0 and (ssa_off + ssa_sz) <= slr.slr_code.len()
+                    // Merge slr_rodata into synth_rodata once so STR0 string relocs stay exact
+                    if s.synth_ssa_rodata_base < 0 and slr.slr_rodata != 0 and slr.slr_rodata.len() > 0
+                        s.synth_ssa_rodata_base = s.synth_rodata.len()
+                        sri = 0
+                        while sri < slr.slr_rodata.len()
+                            push(s.synth_rodata, slr.slr_rodata[sri])
+                            sri = sri + 1
+                        end
+                    end
+                    dst_ssa_base = s.synth_code.len()
+                    // Emit SSA-lowered native x86-64 machine code directly (ZERO token re-parsing!)
+                    sbi = 0
+                    while sbi < ssa_sz
+                        push(s.synth_code, slr.slr_code[ssa_off + sbi])
+                        sbi = sbi + 1
+                    end
+                    // Translate STR0 string relocations falling inside this function slice
+                    if slr.slr_str_relocs != 0 and s.synth_ssa_rodata_base >= 0
+                        sri2 = 0
+                        while sri2 < slr.slr_str_relocs.len()
+                            sr_item = slr.slr_str_relocs[sri2]
+                            sr_c = sr_item[0]
+                            if sr_c >= ssa_off and sr_c < (ssa_off + ssa_sz)
+                                xrel = X86StringReloc()
+                                xrel.sr_patch_offset = dst_ssa_base + (sr_c - ssa_off)
+                                xrel.sr_rodata_offset = s.synth_ssa_rodata_base + sr_item[1]
+                                push(s.synth_str_relocs, xrel)
+                            end
+                            sri2 = sri2 + 1
+                        end
+                    end
+                    // Translate OP_CALL / _lipi_user_alloc / _lipi_throw_null_deref relocations inside this slice
+                    if slr.slr_call_relocs != 0
+                        cri = 0
+                        while cri < slr.slr_call_relocs.len()
+                            jp_c = slr.slr_call_relocs[cri]
+                            if jp_c.sjp_offset >= ssa_off and jp_c.sjp_offset < (ssa_off + ssa_sz)
+                                crel = X86CallReloc()
+                                crel.cr_patch_offset = dst_ssa_base + (jp_c.sjp_offset - ssa_off)
+                                crel.cr_call_site_end = crel.cr_patch_offset + 4
+                                crel.cr_target_name = jp_c.sjp_target
+                                push(s.synth_call_relocs, crel)
+                                if jp_c.sjp_target == "_lipi_user_alloc"
+                                    s.synth_needs_alloc = 1
+                                end
+                            end
+                            cri = cri + 1
+                        end
+                    end
+                    // Propagate SSA-inferred return type (float/str/struct) onto fn_entry for callers
+                    if fn_entry.fn_ret_type == "" and slr.slr_fn_ret_types != 0 and ssa_match_i < slr.slr_fn_ret_types.len()
+                        ssa_rt = slr.slr_fn_ret_types[ssa_match_i]
+                        if ssa_rt != "" and ssa_rt != "int"
+                            fn_entry.fn_ret_type = ssa_rt
+                        end
+                    end
+                    after_ssa_off = s.synth_code.len()
+                    fn_entry.fn_end_offset = after_ssa_off
+                    x86_synth_patch_u32(s, fn_jmp_patch, after_ssa_off - (fn_jmp_patch + 4))
+                    s.synth_ssa_replaced_cnt = s.synth_ssa_replaced_cnt + 1
+                    s.synth_ssa_replaced_bytes = s.synth_ssa_replaced_bytes + ssa_sz
+                    // Advance token cursor past the unparsed function body cleanly
+                    x86_synth_skip_whitespace_tokens(toks, pos_box)
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ASSIGN() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "="))
+                        eq_ln = toks[get(pos_box, 0)].tok_span.span_start_line
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_NEWLINE() and toks[get(pos_box, 0)].tok_kind != TOK_SEMI() and toks[get(pos_box, 0)].tok_kind != TOK_EOF() and toks[get(pos_box, 0)].tok_span.span_start_line == eq_ln
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    elif get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+                        sk_d = 1
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        while get(pos_box, 0) < toks.len() and sk_d > 0
+                            sk_t = toks[get(pos_box, 0)]
+                            if sk_t.tok_kind == TOK_LBRACE() or (sk_t.tok_kind != TOK_STR() and sk_t.tok_text == "{")
+                                sk_d = sk_d + 1
+                            elif sk_t.tok_kind == TOK_RBRACE() or (sk_t.tok_kind != TOK_STR() and sk_t.tok_text == "}")
+                                sk_d = sk_d - 1
+                            end
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    else
+                        while get(pos_box, 0) < toks.len()
+                            x86_synth_skip_whitespace_tokens(toks, pos_box)
+                            sp_c = get(pos_box, 0)
+                            if sp_c >= toks.len() break end
+                            st_c = toks[sp_c]
+                            if (st_c.tok_kind == TOK_KW_END() or st_c.tok_kind == TOK_DIR_END() or (st_c.tok_kind == TOK_IDENT() and (st_c.tok_text == "end" or st_c.tok_text == "শেষ" or st_c.tok_text == "@end"))) and st_c.tok_span.span_start_col <= base_col
+                                if sp_c + 1 >= toks.len() or (toks[sp_c + 1].tok_kind != TOK_ASSIGN() and toks[sp_c + 1].tok_text != "=")
+                                    list_set(pos_box, 0, sp_c + 1)
+                                    break
+                                end
+                            end
+                            if st_c.tok_span.span_start_col <= base_col and st_c.tok_span.span_start_line > base_line
+                                break
+                            end
+                            list_set(pos_box, 0, sp_c + 1)
+                        end
+                    end
+                    s.synth_locals = saved_locals
+                    s.synth_stack_offset = saved_stack_offset
+                    s.synth_current_fn_idx = saved_fn_idx
+                    s.synth_try_depth = saved_try_depth
+                    s.synth_try_frames = saved_try_frames
+                    s.synth_defer_starts = saved_defer_starts
+                    s.synth_defer_ends = saved_defer_ends
+                    s.synth_has_defer_unwind = saved_has_defer_unwind
+                    s.synth_defer_mask_off = saved_defer_mask_off
+                    s.synth_defer_err_off = saved_defer_err_off
+                    s.synth_in_defer_unwind_pad = saved_in_defer_unwind_pad
+                    s.synth_loop_starts = saved_loop_starts
+                    s.synth_loop_breaks = saved_loop_breaks
+                    s.synth_loop_continues = saved_loop_continues
+                    s.synth_boxed_vars = saved_boxed_vars
+                    s.synth_fn_tag_offs = saved_fn_tag_offs
+                    s.synth_fn_dyn_vars = saved_fn_dyn_vars
+                    s.synth_in_function = saved_in_function
+                    s.synth_current_fn = saved_current_fn
+                    return 0
+                end
+            end
+        end
+    end
+
     // Emit standard function prologue, @interrupt 15-GPR ISR prologue, or omit for @naked
     is_fn_naked = s.synth_pending_fn_naked
     is_fn_interrupt = s.synth_pending_fn_interrupt
+    is_fn_async = s.synth_pending_fn_async
     s.synth_pending_fn_naked = 0
     s.synth_pending_fn_interrupt = 0
+    s.synth_pending_fn_async = 0
+    if is_fn_async == 1
+        fn_entry.fn_is_async = 1
+    end
     saved_in_interrupt = s.synth_in_interrupt_fn
     saved_in_naked = s.synth_in_naked_fn
     s.synth_in_interrupt_fn = is_fn_interrupt
@@ -318,7 +486,9 @@ fn x86_synth_compile_fn_def s toks pos_box
             x86_synth_set_var_type(s, pname, ptype)
             if ptype == "float" or ptype == "f64" or ptype == "f32"
                 x86_synth_set_prim_type(s, pname, "float")
-            elif ptype == "int" or ptype == "i64" or ptype == "i32" or ptype == "u64" or ptype == "u32"
+            elif x86_synth_is_uint_type(ptype) == 1 or x86_synth_is_ptr_type(ptype) == 1
+                x86_synth_set_prim_type(s, pname, "uint")
+            elif ptype == "int" or ptype == "i64" or ptype == "i32" or ptype == "i16" or ptype == "i8"
                 x86_synth_set_prim_type(s, pname, "int")
             elif ptype == "str" or ptype == "string"
                 x86_synth_set_prim_type(s, pname, "str")
@@ -488,11 +658,15 @@ fn x86_synth_compile_fn_def s toks pos_box
                 break
             if ct.tok_kind == TOK_KW_FN() or ct.tok_kind == TOK_DIR_FN() or ct.tok_kind == TOK_KW_COMPONENT()
                 break
-            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "fn" or ct.tok_text == "কাজ" or ct.tok_text == "@fn" or ct.tok_text == "component" or ct.tok_text == "উপাদান" or ct.tok_text == "@naked" or ct.tok_text == "@interrupt" or ct.tok_text == "@packed" or ct.tok_text == "@align" or ct.tok_text == "@bss")
+            if ct.tok_kind == TOK_KW_ASYNC() and cur_pos + 1 < toks.len() and (toks[cur_pos + 1].tok_kind == TOK_KW_FN() or toks[cur_pos + 1].tok_kind == TOK_DIR_FN())
                 break
-            if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_KW_ENUM() or ct.tok_kind == TOK_DIR_ENUM()
+            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "@naked" or ct.tok_text == "@interrupt" or ct.tok_text == "@packed" or ct.tok_text == "@align" or ct.tok_text == "@bss")
                 break
-            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "struct" or ct.tok_text == "গঠন" or ct.tok_text == "@struct" or ct.tok_text == "enum" or ct.tok_text == "@enum" or ct.tok_text == "গণনা")
+            if ct.tok_kind == TOK_KW_STRUCT() or ct.tok_kind == TOK_DIR_STRUCT() or ct.tok_kind == TOK_KW_ENUM() or ct.tok_kind == TOK_DIR_ENUM() or ct.tok_kind == TOK_KW_IMPL()
+                break
+            if ct.tok_kind == TOK_DIR_TRAIT() and cur_pos + 1 < toks.len() and x86_synth_is_ident_token(toks[cur_pos + 1].tok_kind) == 1 and toks[cur_pos + 1].tok_span.span_start_line == ct.tok_span.span_start_line
+                break
+            if ct.tok_kind == TOK_IDENT() and (ct.tok_text == "union" or ct.tok_text == "@union" or ct.tok_text == "ইউনিয়ন")
                 break
             cur_col = ct.tok_span.span_start_col
             if cur_col <= base_col and ct.tok_span.span_start_line > base_line
@@ -528,6 +702,39 @@ fn x86_synth_compile_fn_def s toks pos_box
 
     // Emit zero-overhead dyn_tagged prologue tag-zeroing stub if this function allocated any lv_tag_off
     x86_synth_emit_tag_init_stub_if_needed(s, tag_init_patch)
+
+    // WHY: For `async fn`, emit a 47-byte Static-PIE fiber-spawning wrapper right after the body
+    // and point `fn_entry.fn_entry_offset` at the wrapper so calling `foo(args)` allocates a
+    // GC-traced FUTR + 64KB non-executable RW fiber stack and queues the body on the event loop!
+    if is_fn_async == 1 and s.synth_freestanding == 0
+        body_off_as = fn_entry.fn_entry_offset
+        wrapper_off_as = s.synth_code.len()
+        // push rbp; mov rbp, rsp; sub rsp, 48
+        // mov [rsp+0], rdi; mov [rsp+8], rsi; mov [rsp+16], rdx
+        // mov [rsp+24], rcx; mov [rsp+32], r8; mov [rsp+40], r9
+        // lea rdi, [rip + disp32]
+        x86_synth_emit_bytes(s, [
+            85, 72, 137, 229, 72, 131, 236, 48,
+            72, 137, 60, 36,
+            72, 137, 116, 36, 8,
+            72, 137, 84, 36, 16,
+            72, 137, 76, 36, 24,
+            76, 137, 68, 36, 32,
+            76, 137, 76, 36, 40,
+            72, 141, 61
+        ])
+        lea_next_ip = s.synth_code.len() + 4
+        x86_synth_emit_u32(s, body_off_as - lea_next_ip)
+        // mov rsi, rsp
+        x86_synth_emit_bytes(s, [72, 137, 230])
+        x86_synth_emit_call_helper(s, "_lipi_async_spawn")
+        // leave; ret
+        x86_synth_emit_bytes(s, [201, 195])
+        fn_entry.fn_entry_offset = wrapper_off_as
+        if fn_alias != 0
+            fn_alias.fn_entry_offset = wrapper_off_as
+        end
+    end
 
     // Patch jump to bypass function body during top-level execution
     after_fn_offset = s.synth_code.len()
@@ -573,6 +780,7 @@ fn x86_synth_compile_fn_def s toks pos_box
 fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals reg_names reg_regs ssa_lower_res
     say "    [x86_synth] Initializing synthesizer..."
     s = x86_synth_new()
+    s.synth_ssa_lower_res = ssa_lower_res
 
     say "    [x86_synth] Populating " + str(opt_const_names.len()) + " folded constants..."
     // 0a. Populate SSA constant-folded values
@@ -613,8 +821,9 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         // Preserve incoming boot/UEFI arguments (%rdi=magic/ImageHandle, %rsi=mb2_info/SystemTable)
         // in local slots [rbp-48] and [rbp-56] across any top-level initialization before kmain/efi_main/main!
         x86_synth_emit_bytes(s, [72, 137, 125, 208, 72, 137, 117, 200]) // mov [rbp-48], rdi; mov [rbp-56], rsi
-    else
+    elif s.synth_emit_obj == 0
         // Publish dynamic RW globals scan span into [rw_vaddr + 488] (_gc_globals_bytes) for GC root scanning
+        // (Skipped in -c object mode where `lipi link` trampoline publishes the merged cross-object span!)
         x86_synth_emit_bytes(s, [72, 184]) // movabs rax, <rw_vaddr + 488>
         s.synth_globals_rw_ptr_patch = s.synth_code.len()
         x86_synth_emit_u64(s, 0)
@@ -629,6 +838,27 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         s.synth_fn_dyn_vars = x86_synth_prescan_dyn_vars(tokens, 0, 0 - 1, 0 - 1, 0)
     end
     x86_synth_prescan_globals(s, tokens)
+
+    // Install top-level defer unwind frame if top-level statements contain `defer` (hosted mode)
+    top_defer_pad_lea_patch = 0 - 1
+    if s.synth_freestanding == 0 and x86_synth_body_has_defer(tokens, 0, 0 - 1, 0 - 1) == 1
+        s.synth_has_defer_unwind = 1
+        s.synth_stack_offset = ((s.synth_stack_offset + 15) / 16) * 16 + 96
+        top_def_exc_off = s.synth_stack_offset
+        s.synth_defer_mask_off = top_def_exc_off - 72
+        s.synth_defer_err_off = top_def_exc_off - 80
+        s.synth_stack_offset = top_def_exc_off + 8
+        x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+        x86_synth_emit_store_var(s, 0, s.synth_defer_mask_off)
+        x86_synth_emit_bytes(s, [72, 141, 189])
+        x86_synth_emit_u32(s, 0 - top_def_exc_off)
+        x86_synth_emit_bytes(s, [72, 141, 53])
+        top_defer_pad_lea_patch = s.synth_code.len()
+        x86_synth_emit_u32(s, 0)
+        x86_synth_emit_bytes(s, [72, 137, 234, 72, 137, 225])
+        x86_synth_emit_call_helper(s, "_lipi_exc_push")
+        s.synth_last_store_end = 0 - 1
+    end
 
     // 2. Synthesize all functions, structs, and statements
     say "    [x86_synth] Synthesizing top-level declarations & statements..."
@@ -647,13 +877,16 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         if tok_item.tok_kind == TOK_KW_FN() or tok_item.tok_kind == TOK_DIR_FN() or tok_item.tok_kind == TOK_KW_COMPONENT()
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn" or tok_item.tok_text == "component" or tok_item.tok_text == "উপাদান")
+        if tok_item.tok_kind == TOK_KW_ASYNC() and cur_pos + 1 < tokens.len() and (tokens[cur_pos + 1].tok_kind == TOK_KW_FN() or tokens[cur_pos + 1].tok_kind == TOK_DIR_FN())
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT() or tok_item.tok_kind == TOK_KW_ENUM() or tok_item.tok_kind == TOK_DIR_ENUM()
+        if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT() or tok_item.tok_kind == TOK_KW_ENUM() or tok_item.tok_kind == TOK_DIR_ENUM() or tok_item.tok_kind == TOK_KW_IMPL()
             is_fn_tok = 1
         end
-        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "struct" or tok_item.tok_text == "গঠন" or tok_item.tok_text == "@struct" or tok_item.tok_text == "enum" or tok_item.tok_text == "@enum" or tok_item.tok_text == "গণনা")
+        if tok_item.tok_kind == TOK_DIR_TRAIT() and cur_pos + 1 < tokens.len() and x86_synth_is_ident_token(tokens[cur_pos + 1].tok_kind) == 1 and tokens[cur_pos + 1].tok_span.span_start_line == tok_item.tok_span.span_start_line
+            is_fn_tok = 1
+        end
+        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "union" or tok_item.tok_text == "@union" or tok_item.tok_text == "ইউনিয়ন")
             is_fn_tok = 1
         end
 
@@ -671,7 +904,14 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     //    and forward preserved boot/UEFI args (%rdi, %rsi); in hosted mode check main / মূল.
     has_main = 0
     main_name = ""
-    if s.synth_freestanding == 1
+    if s.synth_entry_sym != ""
+        idx_custom = x86_synth_find_fn_last_idx(s, s.synth_entry_sym)
+        if idx_custom >= 0
+            has_main = 1
+            main_name = s.synth_entry_sym
+        end
+    end
+    if has_main == 0 and s.synth_freestanding == 1
         idx_km = x86_synth_find_fn_last_idx(s, "kmain")
         idx_efi = x86_synth_find_fn_last_idx(s, "efi_main")
         idx_en = x86_synth_find_fn_last_idx(s, "main")
@@ -690,7 +930,7 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
                 main_name = "main"
             end
         end
-    else
+    elif has_main == 0
         idx_en = x86_synth_find_fn_last_idx(s, "main")
         idx_bn = x86_synth_find_fn_last_idx(s, "মূল")
         if idx_en >= 0 or idx_bn >= 0
@@ -736,6 +976,17 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     x86_synth_patch_u32(s, top_prologue_patch, top_frame)
     x86_synth_emit_defers(s, tokens)
     x86_synth_emit_epilogue(s)
+    if s.synth_has_defer_unwind == 1 and top_defer_pad_lea_patch >= 0
+        top_def_pad_off = s.synth_code.len()
+        x86_synth_patch_u32(s, top_defer_pad_lea_patch, top_def_pad_off - (top_defer_pad_lea_patch + 4))
+        s.synth_last_store_end = 0 - 1
+        x86_synth_emit_store_var(s, 0, s.synth_defer_err_off)
+        s.synth_in_defer_unwind_pad = 1
+        x86_synth_emit_defers(s, tokens)
+        s.synth_in_defer_unwind_pad = 0
+        x86_synth_emit_load_var(s, 7, s.synth_defer_err_off)
+        x86_synth_emit_call_helper(s, "_lipi_exc_throw")
+    end
     x86_synth_emit_tag_init_stub_if_needed(s, top_tag_init_patch)
 
     // 5. Emit runtime helpers:
@@ -787,6 +1038,22 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
                     found = 1
 
         if found == 0
+            is_ext_sym = 0
+            if s.synth_emit_obj == 1
+                ei_x = 0
+                while ei_x < s.synth_extern_fns.len()
+                    if s.synth_extern_fns[ei_x] == cr.cr_target_name
+                        is_ext_sym = 1
+                        break
+                    end
+                    ei_x = ei_x + 1
+                end
+            end
+            if is_ext_sym == 1
+                // Leave rel32 = 0 for ELF64 ET_REL (.o) SHN_UNDEF + R_X86_64_PLT32 relocation!
+                ci = ci + 1
+                continue
+            end
             say "❌ [Error]: Undefined function '" + cr.cr_target_name + "' (not declared in scope or imported modules)."
             exit(1)
 
@@ -868,6 +1135,9 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     if s.synth_exc_throw_off > 0
         x86_synth_patch_u64(s, s.synth_exc_throw_off + 2, exc_top_vaddr)
         x86_synth_record_reloc_patch(s, s.synth_exc_throw_off + 2, rw_file_off + 104)
+    if s.synth_div_zero_off > 0
+        x86_synth_patch_u64(s, s.synth_div_zero_off + 2, exc_top_vaddr)
+        x86_synth_record_reloc_patch(s, s.synth_div_zero_off + 2, rw_file_off + 104)
     if s.synth_stack_bottom_off > 0
         x86_synth_patch_u64(s, s.synth_stack_bottom_off + 2, stack_bottom_vaddr)
         x86_synth_record_reloc_patch(s, s.synth_stack_bottom_off + 2, rw_file_off + 112)
@@ -882,10 +1152,31 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     if s.synth_lsym_ptrs_off > 0
         trace_rw_slot = x86_synth_alloc_mutable_global(s, "__lipi_last_trace_ptr")
     end
+    async_sched_rw_slot = 0
+    if s.synth_async_sched_slot_off > 0
+        async_sched_rw_slot = x86_synth_alloc_mutable_global(s, "__lipi_async_sched_ptr")
+        x86_synth_patch_u64(s, s.synth_async_sched_slot_off + 2, rw_vaddr - (0 - async_sched_rw_slot))
+        x86_synth_record_reloc_patch(s, s.synth_async_sched_slot_off + 2, rw_file_off + async_sched_rw_slot)
+    end
     if s.synth_globals_rw_ptr_patch > 0
         x86_synth_patch_u64(s, s.synth_globals_rw_ptr_patch, rw_vaddr - (0 - 488))
         x86_synth_record_reloc_patch(s, s.synth_globals_rw_ptr_patch, rw_file_off + 488)
-        x86_synth_patch_u64(s, s.synth_globals_rw_len_patch, s.synth_mutable_globals.len() * 8)
+        gc_glob_span = s.synth_mutable_globals.len() * 8
+        // WHY: Include static @bss buffers in GC root scanning so GC pointers stored inside
+        // @bss globals/ring-buffers are conservatively marked and never collected prematurely!
+        if s.synth_bss_cursor > 0
+            bss_base_rw_gc = 512 + gc_glob_span
+            bss_rem_gc = bss_base_rw_gc % 4096
+            if bss_rem_gc != 0
+                bss_base_rw_gc = bss_base_rw_gc + (4096 - bss_rem_gc)
+            end
+            if bss_base_rw_gc < 4096
+                bss_base_rw_gc = 4096
+            end
+            bss_end_gc = bss_base_rw_gc + (((s.synth_bss_cursor + 7) / 8) * 8)
+            gc_glob_span = bss_end_gc - 512
+        end
+        x86_synth_patch_u64(s, s.synth_globals_rw_len_patch, gc_glob_span)
     end
     if s.synth_lsym_ptrs_off > 0
         lsym_vaddr = rodata_base_vaddr - (0 - lsym_ro_off)
@@ -955,55 +1246,58 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
     return s
 
 fn x86_synth_attach_ssa_lower_res s ssa_lower_res
-    // WHY: Connects middle-end SSA IR Lowering results (machine code, rodata, resolved functions)
-    // to the backend silicon synthesizer, bridging the SSA CFG directly into executable image generation.
-    // Integrates SSA-lowered functions that are not already present in the AST function symbol table,
-    // avoiding duplicate function definitions while appending their machine code bytes before relocation resolution.
+    // WHY: Connects middle-end SSA IR Lowering results to the backend silicon synthesizer WITHOUT
+    // duplicating already-emitted AST functions (fixes 2x binary bloat under `--ssa-codegen`).
+    // Copies ONLY unique SSA function byte slices that are not already present in `s.synth_functions`.
     s.synth_ssa_lower_res = ssa_lower_res
-    if ssa_lower_res != 0
-        if ssa_lower_res.slr_code.len() > 0
-            base_off = s.synth_code.len()
-            has_new_fns = 0
-            fi = 0
-            while fi < ssa_lower_res.slr_fn_names.len()
-                fn_name = ssa_lower_res.slr_fn_names[fi]
-                fn_off = base_off + ssa_lower_res.slr_fn_offsets[fi]
-                already_exists = 0
-                if x86_synth_find_fn_first(s, fn_name) != 0
-                    already_exists = 1
-                end
-                if already_exists == 0
-                    fn_item = X86Function()
-                    fn_item.fn_name = fn_name
-                    fn_item.fn_entry_offset = fn_off
-                    fn_item.fn_ret_type = ""
-                    fn_item.fn_tok_pos = 0 - 1
-                    fn_item.fn_param_types = list()
-                    x86_synth_register_fn_obj(s, fn_item)
-                    has_new_fns = 1
-                end
-                fi = fi + 1
+    if ssa_lower_res != 0 and ssa_lower_res.slr_code.len() > 0
+        attached_cnt = 0
+        attached_bytes = 0
+        fi = 0
+        while fi < ssa_lower_res.slr_fn_names.len()
+            fn_name = ssa_lower_res.slr_fn_names[fi]
+            src_off = ssa_lower_res.slr_fn_offsets[fi]
+            src_sz = 0
+            if ssa_lower_res.slr_fn_sizes != 0 and fi < ssa_lower_res.slr_fn_sizes.len()
+                src_sz = ssa_lower_res.slr_fn_sizes[fi]
+            elif fi + 1 < ssa_lower_res.slr_fn_offsets.len()
+                src_sz = ssa_lower_res.slr_fn_offsets[fi + 1] - src_off
+            else
+                src_sz = ssa_lower_res.slr_code.len() - src_off
             end
-
-            // Only append code bytes if new SSA-unique functions were registered,
-            // or if --ssa-codegen explicitly requested direct SSA CFG integration,
-            // or if the synthesizer has no functions (pure SSA IR compilation)
-            if has_new_fns == 1 or s.synth_functions.len() == 0 or g_x86_ssa_codegen == 1
-                if g_x86_ssa_codegen == 1
-                    say "    [x86_synth] --ssa-codegen active: attached " + str(ssa_lower_res.slr_fn_names.len()) + " SSA-lowered CFG functions (" + str(ssa_lower_res.slr_total_insts) + " IR insts, " + str(ssa_lower_res.slr_code.len()) + " bytes)"
-                end
+            already_exists = 0
+            if x86_synth_find_fn_first(s, fn_name) != 0
+                already_exists = 1
+            end
+            if already_exists == 0 and src_sz > 0
+                dst_off = s.synth_code.len()
                 bi = 0
-                while bi < ssa_lower_res.slr_code.len()
-                    push(s.synth_code, ssa_lower_res.slr_code[bi])
+                while bi < src_sz and (src_off + bi) < ssa_lower_res.slr_code.len()
+                    push(s.synth_code, ssa_lower_res.slr_code[src_off + bi])
                     bi = bi + 1
                 end
-
-                ri = 0
-                while ri < ssa_lower_res.slr_rodata.len()
-                    push(s.synth_rodata, ssa_lower_res.slr_rodata[ri])
-                    ri = ri + 1
-                end
+                fn_item = X86Function()
+                fn_item.fn_name = fn_name
+                fn_item.fn_entry_offset = dst_off
+                fn_item.fn_end_offset = s.synth_code.len()
+                fn_item.fn_ret_type = ""
+                fn_item.fn_tok_pos = 0 - 1
+                fn_item.fn_param_types = list()
+                x86_synth_register_fn_obj(s, fn_item)
+                attached_cnt = attached_cnt + 1
+                attached_bytes = attached_bytes + bi
             end
+            fi = fi + 1
+        end
+        if attached_cnt > 0 and s.synth_ssa_rodata_base < 0
+            ri = 0
+            while ri < ssa_lower_res.slr_rodata.len()
+                push(s.synth_rodata, ssa_lower_res.slr_rodata[ri])
+                ri = ri + 1
+            end
+        end
+        if g_x86_ssa_codegen == 1
+            say "    [x86_synth] --ssa-codegen active: replaced " + str(s.synth_ssa_replaced_cnt) + "/" + str(ssa_lower_res.slr_fn_names.len()) + " functions directly from SSA CFG (" + str(s.synth_ssa_replaced_bytes) + " bytes native IR, " + str(ssa_lower_res.slr_total_insts) + " IR insts, " + str(attached_cnt) + " auxiliary, 0 duplicates)"
         end
     end
     return 0

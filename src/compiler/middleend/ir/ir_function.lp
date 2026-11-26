@@ -26,6 +26,7 @@ struct IRFunction
     allocas        // list: SSAInstr (OP_ALLOCA) records reserved for local stack slots
     val_counter    // integer: monotonically increasing counter for SSA registers (%v0, %v1)
     block_counter  // integer: monotonically increasing counter for unique block labels
+    is_ssa_native_ready // integer: 1 if 100% pure integer SSA CFG eligible for direct native emission
 
 // ── 2. Constructor ────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ fn ir_function_new name return_type
     fn_obj.allocas = list()
     fn_obj.val_counter = 0
     fn_obj.block_counter = 1
+    fn_obj.is_ssa_native_ready = 0
 
     // Automatically construct and register the canonical entry basic block
     // WHY: Every function in standard SSA form must have a unique entry block

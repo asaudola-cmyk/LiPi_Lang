@@ -936,6 +936,54 @@ fn _ffi_init_silicon_shims
     _c_abi_write_bytes(page, 288, [102, 72, 15, 126, 192, 72, 137, 193, 73, 184, 255, 255, 255, 255, 255, 255, 255, 127, 76, 33, 193, 72, 133, 201, 117, 12, 72, 133, 255, 116, 58, 199, 7, 0, 0, 0, 0, 195, 72, 137, 202, 72, 193, 234, 52, 129, 234, 254, 3, 0, 0, 72, 133, 255, 116, 2, 137, 23, 73, 184, 255, 255, 255, 255, 255, 255, 15, 128, 76, 33, 192, 73, 184, 0, 0, 0, 0, 0, 0, 224, 63, 76, 9, 192, 102, 72, 15, 110, 192, 195])
     // +416: pow (128 bytes)
     _c_abi_write_bytes(page, 416, [72, 131, 236, 24, 242, 15, 17, 4, 36, 242, 15, 17, 76, 36, 8, 102, 15, 87, 210, 102, 15, 46, 202, 117, 20, 72, 184, 0, 0, 0, 0, 0, 0, 240, 63, 102, 72, 15, 110, 192, 72, 131, 196, 24, 195, 102, 15, 46, 194, 119, 26, 116, 66, 72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 102, 72, 15, 110, 208, 102, 15, 84, 194, 242, 15, 17, 4, 36, 221, 68, 36, 8, 221, 4, 36, 217, 241, 217, 192, 217, 252, 220, 233, 217, 201, 217, 240, 217, 232, 222, 193, 217, 253, 221, 217, 221, 92, 36, 16, 242, 15, 16, 68, 36, 16, 72, 131, 196, 24, 195, 102, 15, 87, 192, 72, 131, 196, 24, 195])
+    // +576: sin (x87 fsin, 23 bytes)
+    _c_abi_write_bytes(page, 576, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 254, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +608: cos (x87 fcos, 23 bytes)
+    _c_abi_write_bytes(page, 608, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 255, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +640: tan (x87 fptan, 25 bytes)
+    _c_abi_write_bytes(page, 640, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 242, 221, 216, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +672: log (ln(x) = ln(2)*log2(x), 25 bytes)
+    _c_abi_write_bytes(page, 672, [242, 15, 17, 68, 36, 248, 217, 237, 221, 68, 36, 248, 217, 241, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +704: log2 (25 bytes)
+    _c_abi_write_bytes(page, 704, [242, 15, 17, 68, 36, 248, 217, 232, 221, 68, 36, 248, 217, 241, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +736: log10 (25 bytes)
+    _c_abi_write_bytes(page, 736, [242, 15, 17, 68, 36, 248, 217, 236, 221, 68, 36, 248, 217, 241, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +768: exp (e^x = 2^(x*log2(e)), 43 bytes)
+    _c_abi_write_bytes(page, 768, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 234, 222, 201, 217, 192, 217, 252, 220, 233, 217, 201, 217, 240, 217, 232, 222, 193, 217, 253, 221, 217, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +832: exp2 (2^x, 39 bytes)
+    _c_abi_write_bytes(page, 832, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 192, 217, 252, 220, 233, 217, 201, 217, 240, 217, 232, 222, 193, 217, 253, 221, 217, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +896: atan (fpatan(x, 1), 25 bytes)
+    _c_abi_write_bytes(page, 896, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 232, 217, 243, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +928: atan2(y, x) (33 bytes)
+    _c_abi_write_bytes(page, 928, [242, 15, 17, 68, 36, 248, 242, 15, 17, 76, 36, 240, 221, 68, 36, 248, 221, 68, 36, 240, 217, 243, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +976: asin(x) = atan2(x, sqrt(1-x^2)) (33 bytes)
+    _c_abi_write_bytes(page, 976, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 192, 216, 200, 217, 232, 222, 225, 217, 250, 217, 243, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +1024: acos(x) = atan2(sqrt(1-x^2), x) (35 bytes)
+    _c_abi_write_bytes(page, 1024, [242, 15, 17, 68, 36, 248, 221, 68, 36, 248, 217, 192, 216, 200, 217, 232, 222, 225, 217, 250, 217, 201, 217, 243, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +1072: trunc (7 bytes)
+    _c_abi_write_bytes(page, 1072, [102, 15, 58, 11, 192, 3, 195])
+    // +1088: round (ties away from zero, 49 bytes)
+    _c_abi_write_bytes(page, 1088, [72, 184, 0, 0, 0, 0, 0, 0, 0, 128, 102, 72, 15, 110, 200, 102, 15, 84, 200, 72, 184, 255, 255, 255, 255, 255, 255, 223, 63, 102, 72, 15, 110, 208, 102, 15, 86, 202, 242, 15, 88, 193, 102, 15, 58, 11, 192, 3, 195])
+    // +1152: fmod(x, y) (42 bytes)
+    _c_abi_write_bytes(page, 1152, [242, 15, 17, 68, 36, 248, 242, 15, 17, 76, 36, 240, 221, 68, 36, 240, 221, 68, 36, 248, 217, 248, 223, 224, 246, 196, 4, 117, 247, 221, 217, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +1216: hypot(x, y) (17 bytes)
+    _c_abi_write_bytes(page, 1216, [242, 15, 89, 192, 242, 15, 89, 201, 242, 15, 88, 193, 242, 15, 81, 192, 195])
+    // +1248: fmin (5 bytes)
+    _c_abi_write_bytes(page, 1248, [242, 15, 93, 193, 195])
+    // +1264: fmax (5 bytes)
+    _c_abi_write_bytes(page, 1264, [242, 15, 95, 193, 195])
+    // +1280: copysign (28 bytes)
+    _c_abi_write_bytes(page, 1280, [72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 102, 72, 15, 110, 208, 102, 15, 84, 194, 102, 15, 85, 209, 102, 15, 86, 194, 195])
+    // +1312: ldexp(x, exp) (33 bytes)
+    _c_abi_write_bytes(page, 1312, [137, 124, 36, 240, 242, 15, 17, 68, 36, 248, 219, 68, 36, 240, 221, 68, 36, 248, 217, 253, 221, 217, 221, 92, 36, 248, 242, 15, 16, 68, 36, 248, 195])
+    // +1360: sinh(x) = (exp(x) - 1/exp(x)) * 0.5 (56 bytes)
+    _c_abi_write_bytes(page, 1360, [72, 131, 236, 24, 232, 167, 253, 255, 255, 72, 184, 0, 0, 0, 0, 0, 0, 240, 63, 102, 72, 15, 110, 200, 242, 15, 94, 200, 242, 15, 92, 193, 72, 184, 0, 0, 0, 0, 0, 0, 224, 63, 102, 72, 15, 110, 200, 242, 15, 89, 193, 72, 131, 196, 24, 195])
+    // +1424: cosh(x) = (exp(x) + 1/exp(x)) * 0.5 (56 bytes)
+    _c_abi_write_bytes(page, 1424, [72, 131, 236, 24, 232, 103, 253, 255, 255, 72, 184, 0, 0, 0, 0, 0, 0, 240, 63, 102, 72, 15, 110, 200, 242, 15, 94, 200, 242, 15, 88, 193, 72, 184, 0, 0, 0, 0, 0, 0, 224, 63, 102, 72, 15, 110, 200, 242, 15, 89, 193, 72, 131, 196, 24, 195])
+    // +1488: tanh(x) = (exp(x) - 1/exp(x)) / (exp(x) + 1/exp(x)) (57 bytes)
+    _c_abi_write_bytes(page, 1488, [72, 131, 236, 24, 232, 39, 253, 255, 255, 72, 184, 0, 0, 0, 0, 0, 0, 240, 63, 102, 72, 15, 110, 200, 242, 15, 94, 200, 102, 15, 40, 208, 242, 15, 92, 209, 242, 15, 88, 193, 242, 15, 94, 208, 102, 15, 40, 194, 72, 131, 196, 24, 195])
+    // +1552: cbrt(x) = copysign(pow(fabs(x), 1/3), x) (81 bytes)
+    _c_abi_write_bytes(page, 1552, [72, 131, 236, 24, 242, 15, 17, 4, 36, 72, 184, 255, 255, 255, 255, 255, 255, 255, 127, 102, 72, 15, 110, 200, 102, 15, 84, 193, 72, 184, 85, 85, 85, 85, 85, 85, 213, 63, 102, 72, 15, 110, 200, 232, 96, 251, 255, 255, 242, 15, 16, 12, 36, 72, 184, 0, 0, 0, 0, 0, 0, 0, 128, 102, 72, 15, 110, 208, 102, 15, 84, 202, 102, 15, 86, 193, 72, 131, 196, 24, 195])
     if syscall(10, page, 4096, 5, 0, 0, 0) < 0
         syscall(11, page, 4096, 0, 0, 0, 0)
         return 0
@@ -960,6 +1008,10 @@ fn _ffi_init_shims
         "stdin", "stdout", "stderr", "__ctype_b_loc", "gmtime",
         "_setjmp", "setjmp", "longjmp", "__longjmp_chk",
         "floor", "ceil", "fabs", "sqrt", "modf", "frexp", "pow",
+        "sin", "cos", "tan", "log", "log2", "log10", "exp", "exp2",
+        "atan", "atan2", "asin", "acos", "trunc", "round", "fmod",
+        "hypot", "fmin", "fmax", "copysign", "ldexp",
+        "sinh", "cosh", "tanh", "cbrt",
         "__errno_location", "__stack_chk_fail",
         "__cxa_finalize", "__gmon_start__", "_ITM_registerTMCloneTable", "_ITM_deregisterTMCloneTable",
         "pthread_mutex_init", "pthread_mutex_lock", "pthread_mutex_unlock", "pthread_mutex_destroy"
@@ -976,6 +1028,10 @@ fn _ffi_init_shims
         st + 128, st + 136, st + 144, fn_ptr(_ffi_c_ctype_b_loc), fn_ptr(_ffi_c_gmtime),
         sp + 0, sp + 0, sp + 64, sp + 64,
         sp + 128, sp + 160, sp + 192, sp + 224, sp + 256, sp + 288, sp + 416,
+        sp + 576, sp + 608, sp + 640, sp + 672, sp + 704, sp + 736, sp + 768, sp + 832,
+        sp + 896, sp + 928, sp + 976, sp + 1024, sp + 1072, sp + 1088, sp + 1152,
+        sp + 1216, sp + 1248, sp + 1264, sp + 1280, sp + 1312,
+        sp + 1360, sp + 1424, sp + 1488, sp + 1552,
         fn_ptr(_ffi_c_errno_location), fn_ptr(_ffi_c_stack_chk_fail),
         fn_ptr(_ffi_c_noop), fn_ptr(_ffi_c_noop), fn_ptr(_ffi_c_noop), fn_ptr(_ffi_c_noop),
         fn_ptr(_ffi_c_mutex_init), fn_ptr(_ffi_c_mutex_lock), fn_ptr(_ffi_c_mutex_unlock), fn_ptr(_ffi_c_noop)
@@ -1076,6 +1132,7 @@ fn ffi_lib_new path
     push(l, list()) // 18: rx_segs
     push(l, list()) // 19: ro_segs
     push(l, 0)      // 20: init_ran
+    push(l, 0)      // 21: is_virtual (1 = virtualized glibc/libm sovereign DSO)
     return l
 end
 
@@ -1337,6 +1394,23 @@ fn _ffi_load_so_internal path depth
     existing = _ffi_find_loaded_by_name(path)
     if existing != 0 return existing end
 
+    // WHY: Direct calls like ffi_load_so("/lib/x86_64-linux-gnu/libm.so.6") or "libc.so.6"
+    // MUST route to Lipi's Sovereign Pure-Silicon virtual DSO instead of mapping glibc ELF64
+    // (whose private _rtld_global_ro IFUNC resolvers crash without ld-linux-x86-64.so.2).
+    bn_direct = _ffi_basename(path)
+    if _ffi_is_virtual_libc_soname(bn_direct) == 1
+        _ffi_init_shims()
+        vlib = ffi_lib_new(path)
+        list_set(vlib, 0, G_FFI_SILICON_PAGE)
+        list_set(vlib, 1, 0)
+        list_set(vlib, 6, 1)
+        list_set(vlib, 9, bn_direct)
+        list_set(vlib, 20, 1)
+        list_set(vlib, 21, 1)
+        push(G_FFI_LOADED_LIBS, vlib)
+        return vlib
+    end
+
     lib = ffi_lib_new(path)
     fd = syscall(2, path, 0, 0, 0, 0, 0)
     if fd < 0 return lib end
@@ -1346,7 +1420,7 @@ fn _ffi_load_so_internal path depth
         syscall(3, fd, 0, 0, 0, 0, 0)
         return lib
     end
-    fbuf = malloc(sz)
+    fbuf = syscall(9, 0, sz, 3, 34, 0 - 1, 0)
     if fbuf <= 0
         syscall(3, fd, 0, 0, 0, 0, 0)
         return lib
@@ -1359,17 +1433,17 @@ fn _ffi_load_so_internal path depth
     end
     syscall(3, fd, 0, 0, 0, 0, 0)
     if got < 64
-        free(fbuf, sz)
+        syscall(11, fbuf, sz, 0, 0, 0, 0)
         return lib
     end
 
     // Verify ELF64 Little-Endian Header
     if mem_byte_read(fbuf, 0) != ELF_MAGIC_0 or mem_byte_read(fbuf, 1) != ELF_MAGIC_1 or mem_byte_read(fbuf, 2) != ELF_MAGIC_2 or mem_byte_read(fbuf, 3) != ELF_MAGIC_3
-        free(fbuf, sz)
+        syscall(11, fbuf, sz, 0, 0, 0, 0)
         return lib
     end
     if mem_byte_read(fbuf, 4) != ELF_CLASS_64 or mem_byte_read(fbuf, 5) != ELF_DATA_2LSB
-        free(fbuf, sz)
+        syscall(11, fbuf, sz, 0, 0, 0, 0)
         return lib
     end
 
@@ -1432,7 +1506,7 @@ fn _ffi_load_so_internal path depth
     // Step 2: Map anonymous RW arena (prot=3, NEVER RWX) & copy PT_LOAD segments
     base = syscall(9, 0, map_sz, 3, 34, 0 - 1, 0)
     if base <= 0
-        free(fbuf, sz)
+        syscall(11, fbuf, sz, 0, 0, 0, 0)
         return lib
     end
     if has_load == 1
@@ -1789,7 +1863,7 @@ fn _ffi_load_so_internal path depth
     else
         syscall(10, base, map_sz, 5, 0, 0, 0)
     end
-    free(fbuf, sz)
+    syscall(11, fbuf, sz, 0, 0, 0, 0)
 
     // Step 8: Execute R_X86_64_IRELATIVE & STT_GNU_IFUNC resolvers now that .text is RX!
     ii = 0
@@ -1836,10 +1910,13 @@ fn ffi_load_so path
 end
 
 fn ffi_close_so lib
+    if lib == 0 or len(lib) < 7 return 0 end
+    is_virt = 0
+    if len(lib) > 21 is_virt = get(lib, 21) end
     base = get(lib, 0)
     sz = get(lib, 1)
-    if base > 0 and sz > 0
-        syscall(11, base, sz, 0, 0, 0, 0) // munmap
+    if is_virt == 0 and base > 0 and sz > 0
+        syscall(11, base, sz, 0, 0, 0, 0) // munmap (never unmap shared G_FFI_SILICON_PAGE)
     end
     list_set(lib, 0, 0)
     list_set(lib, 6, 0)
@@ -1849,6 +1926,12 @@ end
 // ── 6. Dynamic Symbol Resolver (O(1) GNU_HASH + STT_GNU_IFUNC + Cross-Library DT_NEEDED) ──
 
 fn ffi_find_symbol lib sym_name
+    if lib == 0 or len(lib) < 7 or get(lib, 6) == 0 return 0 end
+    // WHY: Virtualized sovereign DSOs (libm.so.6, libc.so.6, libpthread.so.0, etc.)
+    // resolve directly against Lipi's Pure-Silicon SSE2/x87 & C-ABI shim table!
+    if (len(lib) > 21 and get(lib, 21) == 1) or (len(lib) > 9 and _ffi_is_virtual_libc_soname(get(lib, 9)) == 1)
+        return _ffi_lookup_shim(sym_name)
+    end
     r = _ffi_find_symbol_entry_in_lib(lib, sym_name)
     if r[2] == 1
         if r[3] == STT_GNU_IFUNC and r[0] > 0

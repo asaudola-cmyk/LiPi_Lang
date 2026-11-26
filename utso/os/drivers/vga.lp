@@ -1,10 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL VGA TEXT & LFB DRIVERS
+@! @deprecated [HOSTED IN-MEMORY VGA SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real Ring-0 `0xB8000` MMIO VGA Text Mode & Linear Framebuffer writes,
+@! import `utso/silicon/vga.lp` instead!
+@! Retained strictly for backward compatibility with legacy hosted unit tests.
 @! Module: utso/os/drivers/vga.lp
-@! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: 80x25 Text Mode (0xB8000), Cursor Positioning via CRTC IO Ports,
-@! Text Buffer Scrolling, Linear Framebuffer (LFB 0xFD000000) Pixel Pipeline
 @! ============================================================================
 
 import "utso/core/collections"

@@ -133,9 +133,22 @@ import "src/compiler/backend/formats/elf/relocation.lp"
 // 4. LOW-LEVEL DIRECT SYSCALL BINARY DISK SERIALIZER
 // ============================================================================
 
+@fn elf_copy_list_to_mem(buf, base_off, arr)
+  // WHY: Copies raw byte list directly into an mmap page buffer via inline mem_byte_write
+  // without function-call overhead or intermediate list allocation/GC storms.
+  @if arr == 0 return 0 @end
+  i = 0
+  n = arr.len()
+  @while i < n
+    mem_byte_write(buf, base_off + i, arr[i])
+    i = i + 1
+  @end
+  return n
+@end
+
 @fn elf_write_to_disk(output_path, byte_list)
   // WHY: Writes the assembled binary bytes directly to the Linux filesystem
-  // using pure kernel syscalls (sys_open, sys_mmap, sys_poke8, sys_write, sys_chmod).
+  // using pure kernel syscalls (sys_open, sys_mmap, mem_byte_write, sys_write, sys_chmod, sys_munmap).
   // Zero dependence on libc, fopen, or fwrite.
   // Flags: O_WRONLY(1) | O_CREAT(64) | O_TRUNC(512) = 577.
   // Permissions: 0755 = 493 decimal (rwxr-xr-x).
@@ -161,14 +174,11 @@ import "src/compiler/backend/formats/elf/relocation.lp"
     return 0 - 2
   @end
 
-  i = 0
-  @while i < total
-    sys_poke8(buf + i, byte_list[i])
-    i = i + 1
-  @end
+  elf_copy_list_to_mem(buf, 0, byte_list)
 
   written = sys_write(fd, buf, total)
   sys_close(fd)
+  sys_munmap(buf, total + 16)
 
   // Explicitly apply executable permissions: 0755 (493) via sys_chmod
   sys_chmod(output_path, 493)
@@ -470,27 +480,21 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   data_file_offset = text_ro_end + pad_bytes
   data_vaddr = base_vaddr + data_file_offset
 
-  // 1. Build .text payload (W^X PIE or fixed _start stub + user code)
-  text_payload = list()
+  // 1. Build small header/stub and compute exact total file size
+  start_stub = list()
   if machine == 0 || machine == 62
     @if is_pie == 1
       start_stub = elf_build_start_stub_pie(0, data_file_offset)
     @else
       start_stub = elf_build_start_stub_wx(0, data_vaddr)
     @end
-    elf_concat(text_payload, start_stub)
   end
-  elf_concat(text_payload, code_bytes)
 
-  // 1b. Build RW .data payload: 4096-byte runtime/mutable globals (g_argc.._slab_buckets, per-thread exc, user globals) + user .data
-  rw_payload = list()
-  gi = 0
-  @while gi < 4096
-    push(rw_payload, 0)
-    gi = gi + 1
+  user_data_len = 0
+  @if data_bytes != 0
+    user_data_len = data_bytes.len()
   @end
-  elf_concat(rw_payload, data_bytes)
-  data_size = rw_payload.len()
+  data_size = 4096 + user_data_len
   data_memsz = data_size + bss_size
 
   shstr_file_offset = data_file_offset + data_size
@@ -508,15 +512,119 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   sh_offset = shstr_file_offset + shstr_size
   num_sections = 6
   shstr_idx = 5
+  total_size = sh_offset + 384
+
+  target_mach = 62
+  if machine != 0
+    target_mach = machine
+  end
+
+  // Fast single-pass mmap streaming path for large binaries (> 64KB): eliminates ~30MB intermediate
+  // byte-list copies and GC storms while emitting the exact bit-identical ELF64 layout.
+  @if output_path != "" && total_size > 65536
+    hdr = list()
+    elf_emit_header_machine_type(hdr, entry_point_vaddr, sh_offset, num_sections, shstr_idx, target_mach, e_type)
+    elf_emit_wx_split_phdrs_base(hdr, base_vaddr, text_ro_end, data_file_offset, data_vaddr, data_size, data_memsz)
+    pi = 0
+    @while pi < 8
+      push(hdr, 0)
+      pi = pi + 1
+    @end
+    elf_concat(hdr, start_stub)
+
+    tail = list()
+    elf_concat(tail, shstr_bytes)
+    k = 0
+    while k < 64
+      push(tail, 0)
+      k = k + 1
+    end
+    elf_emit_shdr_bits(tail, 1, 6, code_vaddr, code_file_offset, code_size)
+    elf_emit_shdr_bits(tail, 7, 2, rodata_vaddr, rodata_file_offset, rodata_size)
+    elf_emit_shdr_bits(tail, 15, 3, data_vaddr, data_file_offset, data_size)
+    elf_emit_shdr_nobits(tail, 21, data_vaddr + data_size, data_file_offset + data_size, bss_size)
+    elf_emit_shdr_strtab(tail, 26, shstr_file_offset, shstr_size)
+
+    sys_unlink(output_path)
+    fd = sys_open(output_path, 577, 493)
+    res_f = ElfWriteResult()
+    @if fd < 0
+      res_f.ew_success = 0
+      res_f.ew_out_path = output_path
+      res_f.ew_file_size = 0
+      res_f.ew_entry_vaddr = entry_point_vaddr
+      res_f.ew_error_msg = "Failed to open ELF64 output path"
+      res_f.ew_bytes = hdr
+      return res_f
+    @end
+    buf = sys_mmap(0, total_size + 16, 3, 34, 0 - 1, 0)
+    @if buf <= 0
+      sys_close(fd)
+      res_f.ew_success = 0
+      res_f.ew_out_path = output_path
+      res_f.ew_file_size = 0
+      res_f.ew_entry_vaddr = entry_point_vaddr
+      res_f.ew_error_msg = "Failed to mmap ELF64 output buffer"
+      res_f.ew_bytes = hdr
+      return res_f
+    @end
+    elf_copy_list_to_mem(buf, 0, hdr)
+    elf_copy_list_to_mem(buf, code_file_offset + stub_size, code_bytes)
+    elf_copy_list_to_mem(buf, rodata_file_offset, rodata_bytes)
+    // pad_bytes and 4096-byte RW runtime globals header are already zero-filled by anonymous mmap
+    @if user_data_len > 0
+      elf_copy_list_to_mem(buf, data_file_offset + 4096, data_bytes)
+    @end
+    elf_copy_list_to_mem(buf, shstr_file_offset, tail)
+
+    written = 0
+    @while written < total_size
+      w_chunk = sys_write(fd, buf + written, total_size - written)
+      @if w_chunk <= 0
+        written = 0 - 1
+        break
+      @end
+      written = written + w_chunk
+    @end
+    sys_close(fd)
+    sys_munmap(buf, total_size + 16)
+    sys_chmod(output_path, 493)
+
+    @if written < 0
+      res_f.ew_success = 0
+      res_f.ew_out_path = output_path
+      res_f.ew_file_size = 0
+      res_f.ew_entry_vaddr = entry_point_vaddr
+      res_f.ew_error_msg = "Failed to write ELF64 binary to filesystem"
+      res_f.ew_bytes = hdr
+      return res_f
+    @end
+    res_f.ew_success = 1
+    res_f.ew_out_path = output_path
+    res_f.ew_file_size = total_size
+    res_f.ew_entry_vaddr = entry_point_vaddr
+    res_f.ew_error_msg = ""
+    res_f.ew_bytes = hdr
+    return res_f
+  @end
+
+  // Standard in-memory list path for small executables/unit tests (populates full ew_bytes)
+  text_payload = list()
+  elf_concat(text_payload, start_stub)
+  elf_concat(text_payload, code_bytes)
+
+  rw_payload = list()
+  gi = 0
+  @while gi < 4096
+    push(rw_payload, 0)
+    gi = gi + 1
+  @end
+  elf_concat(rw_payload, data_bytes)
 
   // 2. Assemble complete W^X binary
   binary = list()
 
   // 2.1 ELF Header (64 bytes, e_phnum = 3)
-  target_mach = 62
-  if machine != 0
-    target_mach = machine
-  end
   elf_emit_header_machine_type(binary, entry_point_vaddr, sh_offset, num_sections, shstr_idx, target_mach, e_type)
 
   // 2.2 Strict W^X Program Headers (168 bytes) + 8-byte alignment pad

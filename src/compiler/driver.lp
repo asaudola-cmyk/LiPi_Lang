@@ -158,11 +158,24 @@ fn compiler_driver_resolve_std target
     if target == "utso/concurrency" or target == "utso/concurrency.lp" return "utso/concurrency.lp"
     if target == "utso/channel" or target == "utso/channel.lp" return "utso/channel.lp"
     if target == "utso/bare" or target == "utso/bare/core" or target == "utso/bare/core.lp" return "utso/bare/core.lp"
+    if target == "utso/bare/gpt" or target == "utso/bare/gpt.lp" return "utso/bare/gpt.lp"
+    if target == "utso/bare/fat32" or target == "utso/bare/fat32.lp" return "utso/bare/fat32.lp"
+    if target == "utso/bare/iso9660" or target == "utso/bare/iso9660.lp" return "utso/bare/iso9660.lp"
+    if target == "utso/bare/string" or target == "utso/bare/string.lp" return "utso/bare/string.lp"
+    if target == "utso/bare/fmt" or target == "utso/bare/fmt.lp" return "utso/bare/fmt.lp"
     if target == "utso/silicon/serial" or target == "utso/silicon/serial.lp" return "utso/silicon/serial.lp"
     if target == "utso/silicon/vga" or target == "utso/silicon/vga.lp" return "utso/silicon/vga.lp"
     if target == "utso/silicon/cpu" or target == "utso/silicon/cpu.lp" return "utso/silicon/cpu.lp"
     if target == "utso/silicon/virtio" or target == "utso/silicon/virtio.lp" return "utso/silicon/virtio.lp"
     if target == "utso/silicon/uefi" or target == "utso/silicon/uefi.lp" return "utso/silicon/uefi.lp"
+    if target == "utso/silicon/acpi" or target == "utso/silicon/acpi.lp" return "utso/silicon/acpi.lp"
+    if target == "utso/silicon/pcie" or target == "utso/silicon/pcie.lp" return "utso/silicon/pcie.lp"
+    if target == "utso/silicon/apic" or target == "utso/silicon/apic.lp" return "utso/silicon/apic.lp"
+    if target == "utso/silicon/multiboot2" or target == "utso/silicon/multiboot2.lp" return "utso/silicon/multiboot2.lp"
+    if target == "utso/silicon/nvme" or target == "utso/silicon/nvme.lp" return "utso/silicon/nvme.lp"
+    if target == "utso/silicon/ahci" or target == "utso/silicon/ahci.lp" return "utso/silicon/ahci.lp"
+    if target == "utso/silicon/xhci" or target == "utso/silicon/xhci.lp" return "utso/silicon/xhci.lp"
+    if target == "utso/silicon/hda" or target == "utso/silicon/hda.lp" return "utso/silicon/hda.lp"
 
     // 2. Legacy 'universe/core/*' and 'universe/os/*' mapping to sovereign primitives:
     if target == "universe/core/memory.lp" or target == "universe/core/memory" return "utso/memory.lp"
@@ -669,7 +682,7 @@ fn compiler_driver_strip_pub src
                 q = q + 1
             end
             is_decl = 0
-            if compiler_driver_match_kw(src, q, "fn ") == 1 or compiler_driver_match_kw(src, q, "@fn ") == 1 or compiler_driver_match_kw(src, q, "struct ") == 1 or compiler_driver_match_kw(src, q, "@struct ") == 1 or compiler_driver_match_kw(src, q, "enum ") == 1 or compiler_driver_match_kw(src, q, "@enum ") == 1 or compiler_driver_match_kw(src, q, "const ") == 1 or compiler_driver_match_kw(src, q, "let ") == 1 or compiler_driver_match_kw(src, q, "কাজ ") == 1 or compiler_driver_match_kw(src, q, "গঠন ") == 1 or compiler_driver_match_kw(src, q, "গণনা ") == 1
+            if compiler_driver_match_kw(src, q, "fn ") == 1 or compiler_driver_match_kw(src, q, "@fn ") == 1 or compiler_driver_match_kw(src, q, "struct ") == 1 or compiler_driver_match_kw(src, q, "@struct ") == 1 or compiler_driver_match_kw(src, q, "union ") == 1 or compiler_driver_match_kw(src, q, "@union ") == 1 or compiler_driver_match_kw(src, q, "trait ") == 1 or compiler_driver_match_kw(src, q, "@trait ") == 1 or compiler_driver_match_kw(src, q, "enum ") == 1 or compiler_driver_match_kw(src, q, "@enum ") == 1 or compiler_driver_match_kw(src, q, "const ") == 1 or compiler_driver_match_kw(src, q, "let ") == 1 or compiler_driver_match_kw(src, q, "global ") == 1 or compiler_driver_match_kw(src, q, "বৈশ্বিক ") == 1 or compiler_driver_match_kw(src, q, "কাজ ") == 1 or compiler_driver_match_kw(src, q, "গঠন ") == 1 or compiler_driver_match_kw(src, q, "ইউনিয়ন ") == 1 or compiler_driver_match_kw(src, q, "গণনা ") == 1
                 is_decl = 1
             end
             if is_decl == 1
@@ -706,86 +719,113 @@ fn compiler_driver_list_has lst val
 end
 
 fn compiler_driver_collect_mod_meta src
-    // WHY: Collects top-level declarations (fn, struct, enum, const, let) and tracks `pub`
-    // exports so scoped modules enforce true private encapsulation while preserving 100%
-    // backwards compatibility for legacy modules that declare zero `pub` keywords.
+    // WHY: AST/Token-driven module symbol table builder using Lipi's real lexer (`tokenize_source`)
+    // and O(1) `FastSymbolTable` (`symbol_table.lp`), immune to comments (`//`, `/* */`, `#`, `@!`)
+    // and string literals. Extracts all top-level fn/struct/union/enum/trait/const/let symbols
+    // and enforces `pub` visibility encapsulation.
     all_syms = list()
     pub_syms = list()
     has_pub = 0
-    n = len(src)
-    p = 0
-    while p < n
-        while p < n and (mem_byte_read(src, p) == 32 or mem_byte_read(src, p) == 9)
-            p = p + 1
-        end
-        is_pub = 0
-        if p + 4 < n and mem_byte_read(src, p) == 112 and compiler_driver_match_kw(src, p, "pub ") == 1
-            is_pub = 1
-            has_pub = 1
-            p = p + 4
-            while p < n and (mem_byte_read(src, p) == 32 or mem_byte_read(src, p) == 9)
-                p = p + 1
+    mod_tab = symtab_new(64)
+    mod_toks = tokenize_source(src)
+    tn = mod_toks.len()
+    ti = 0
+    while ti < tn
+        tk = mod_toks[ti]
+        if tk.tok_span.span_start_col == 1
+            is_pub = 0
+            cur_i = ti
+            if tk.tok_kind == TOK_IDENT() and tk.tok_text == "pub"
+                is_pub = 1
+                has_pub = 1
+                cur_i = cur_i + 1
             end
-        end
-        kw_len = 0
-        if compiler_driver_match_kw(src, p, "fn ") == 1
-            kw_len = 3
-        elif compiler_driver_match_kw(src, p, "@fn ") == 1
-            kw_len = 4
-        elif compiler_driver_match_kw(src, p, "struct ") == 1
-            kw_len = 7
-        elif compiler_driver_match_kw(src, p, "@struct ") == 1
-            kw_len = 8
-        elif compiler_driver_match_kw(src, p, "enum ") == 1
-            kw_len = 5
-        elif compiler_driver_match_kw(src, p, "@enum ") == 1
-            kw_len = 6
-        elif compiler_driver_match_kw(src, p, "const ") == 1
-            kw_len = 6
-        elif compiler_driver_match_kw(src, p, "let ") == 1
-            kw_len = 4
-        end
-        if kw_len > 0
-            q = p + kw_len
-            while q < n and (mem_byte_read(src, q) == 32 or mem_byte_read(src, q) == 9)
-                q = q + 1
+            if cur_i < tn and (mod_toks[cur_i].tok_kind == TOK_KW_ASYNC() or (mod_toks[cur_i].tok_kind == TOK_IDENT() and mod_toks[cur_i].tok_text == "async"))
+                cur_i = cur_i + 1
             end
-            s0 = q
-            while q < n and compiler_driver_is_ident_ch(mem_byte_read(src, q)) == 1
-                q = q + 1
-            end
-            if q > s0
-                nm = str_sub(src, s0, q)
-                if compiler_driver_list_has(all_syms, nm) == 0
-                    push(all_syms, nm)
+            if cur_i + 1 < tn
+                dk = mod_toks[cur_i].tok_kind
+                dt = mod_toks[cur_i].tok_text
+                is_decl_tok = 0
+                if dk == TOK_KW_FN() or dk == TOK_DIR_FN() or dk == TOK_KW_STRUCT() or dk == TOK_DIR_STRUCT() or dk == TOK_KW_ENUM() or dk == TOK_DIR_ENUM() or dk == TOK_DIR_TRAIT() or dk == TOK_KW_LET() or dk == TOK_KW_CONST()
+                    is_decl_tok = 1
+                elif dk == TOK_IDENT() and (dt == "union" or dt == "@union" or dt == "ইউনিয়ন" or dt == "global" or dt == "বৈশ্বিক")
+                    is_decl_tok = 1
                 end
-                if is_pub == 1 and compiler_driver_list_has(pub_syms, nm) == 0
-                    push(pub_syms, nm)
+                if is_decl_tok == 1 and mod_toks[cur_i + 1].tok_kind == TOK_IDENT()
+                    nm = mod_toks[cur_i + 1].tok_text
+                    if symtab_has(mod_tab, nm) == 0
+                        sym_entry = symbol_new(nm, SYM_KIND_FUNCTION(), TYPE_ID_ANY(), 0, span_default(), 0)
+                        sym_entry.sym_is_public = is_pub
+                        symtab_put(mod_tab, sym_entry)
+                        push(all_syms, nm)
+                    end
+                    if is_pub == 1 and compiler_driver_list_has(pub_syms, nm) == 0
+                        push(pub_syms, nm)
+                    end
                 end
             end
         end
-        while p < n and mem_byte_read(src, p) != 10
-            p = p + 1
-        end
-        if p < n p = p + 1 end
+        ti = ti + 1
     end
-    return [all_syms, pub_syms, has_pub]
+    return [all_syms, pub_syms, has_pub, mod_tab]
 end
 
-fn compiler_driver_mangle_module src alias all_syms
-    // WHY: Rewrites whole-word occurrences of module-local symbols inside `src` to
-    // `__mod_<alias>__<sym>`, safely skipping string literals, comments, and `.field` accesses.
+fn compiler_driver_mod_id resolved_path
+    // WHY: Canonical FNV-1a path-based module ID so two files using the same alias (`as m`) for
+    // different modules never collide, and duplicate imports of the same file share one canonical prefix.
+    h = 2166136261
+    n = len(resolved_path)
+    i = 0
+    while i < n
+        h = ((h ^ (mem_byte_read(resolved_path, i) & 255)) * 16777619) & 2147483647
+        i = i + 1
+    end
+    return "m_" + str(h)
+end
+
+fn compiler_driver_mangle_module src mod_id all_syms
+    // WHY: Scope-aware module symbol rewriter using O(1) `FastSymbolTable`:
+    //   1. Never mangles string literals, comments (`//`, `/* */`, `#`, `@!`), or member accesses `.field`.
+    //   2. Never mangles struct/union field declarations (while still mangling `: Type` references).
+    //   3. Never mangles formal function parameters or `let`/`for` local variables that shadow a module symbol.
     clean_src = compiler_driver_strip_pub(src)
     if all_syms.len() == 0
         return clean_src
     end
-    prefix = "__mod_" + alias + "__"
+    sym_tab = symtab_new(64)
+    sp0 = span_default()
+    si = 0
+    while si < all_syms.len()
+        symtab_put(sym_tab, symbol_new(all_syms[si], SYM_KIND_FUNCTION(), TYPE_ID_ANY(), 0, sp0, 0))
+        si = si + 1
+    end
+    prefix = "__mod_" + mod_id + "__"
     out_chunks = list()
     n = len(clean_src)
     p = 0
     seg_start = 0
+    col_start = 0
+    in_struct_body = 0
+    struct_braced = 0
+    struct_brace_depth = 0
+    fn_shadow_tab = 0
+    in_fn_params = 0
+    fn_param_type_next = 0
+    let_or_for_next = 0
+    struct_field_type_next = 0
+
     while p < n
         b = mem_byte_read(clean_src, p)
+        if b == 10
+            p = p + 1
+            col_start = p
+            in_fn_params = 0
+            fn_param_type_next = 0
+            let_or_for_next = 0
+            struct_field_type_next = 0
+            continue
+        end
         // Skip string literals
         if b == 34 or b == 39
             q_ch = b
@@ -803,27 +843,241 @@ fn compiler_driver_mangle_module src alias all_syms
             end
             continue
         end
-        // Skip // line comments
+        // Skip // line comments, /* ... */ block comments, # and @! comments
         if b == 47 and p + 1 < n and mem_byte_read(clean_src, p + 1) == 47
             while p < n and mem_byte_read(clean_src, p) != 10
                 p = p + 1
             end
             continue
         end
+        if b == 47 and p + 1 < n and mem_byte_read(clean_src, p + 1) == 42
+            p = p + 2
+            while p + 1 < n and not (mem_byte_read(clean_src, p) == 42 and mem_byte_read(clean_src, p + 1) == 47)
+                if mem_byte_read(clean_src, p) == 10
+                    col_start = p + 1
+                end
+                p = p + 1
+            end
+            if p + 1 < n p = p + 2 end
+            continue
+        end
+        if b == 35 or (b == 64 and p + 1 < n and mem_byte_read(clean_src, p + 1) == 33)
+            while p < n and mem_byte_read(clean_src, p) != 10
+                p = p + 1
+            end
+            continue
+        end
+        if b == 123 // '{'
+            if in_struct_body == 1
+                struct_braced = 1
+                struct_brace_depth = struct_brace_depth + 1
+            end
+            in_fn_params = 0
+            fn_param_type_next = 0
+            p = p + 1
+            continue
+        end
+        if b == 125 // '}'
+            if in_struct_body == 1 and struct_braced == 1
+                struct_brace_depth = struct_brace_depth - 1
+                if struct_brace_depth <= 0
+                    in_struct_body = 0
+                    struct_braced = 0
+                    struct_brace_depth = 0
+                    struct_field_type_next = 0
+                end
+            end
+            p = p + 1
+            continue
+        end
+        if b == 58 // ':'
+            if in_fn_params == 1
+                fn_param_type_next = 1
+            elif in_struct_body == 1
+                struct_field_type_next = 1
+            end
+            p = p + 1
+            continue
+        end
+        if b == 44 // ','
+            fn_param_type_next = 0
+            struct_field_type_next = 0
+            p = p + 1
+            continue
+        end
+        if b == 45 and p + 1 < n and mem_byte_read(clean_src, p + 1) == 62 // '->'
+            in_fn_params = 0
+            fn_param_type_next = 0
+            p = p + 2
+            continue
+        end
+        if b == 41 // ')'
+            if in_fn_params == 1
+                in_fn_params = 0
+                fn_param_type_next = 0
+            end
+            p = p + 1
+            continue
+        end
+        if b == 61 // '='
+            if in_fn_params == 1
+                in_fn_params = 0
+                fn_param_type_next = 0
+            end
+            p = p + 1
+            continue
+        end
+
         if compiler_driver_is_ident_ch(b) == 1 and (b < 48 or b > 57)
             id_start = p
+            is_col0 = 0
+            if id_start == col_start
+                is_col0 = 1
+            end
             p = p + 1
             while p < n and compiler_driver_is_ident_ch(mem_byte_read(clean_src, p)) == 1
                 p = p + 1
             end
-            // Do not mangle struct field access `.ident`
             prev_is_dot = 0
             if id_start > 0 and mem_byte_read(clean_src, id_start - 1) == 46
                 prev_is_dot = 1
             end
+            word = str_sub(clean_src, id_start, p)
+
+            // Leave indented struct body when encountering next col-0 declaration/token
+            if is_col0 == 1 and in_struct_body == 1 and struct_braced == 0
+                in_struct_body = 0
+                struct_field_type_next = 0
+            end
+
+            // Detect top-level struct/union/fn scope transitions
+            if is_col0 == 1 and (word == "struct" or word == "গঠন" or word == "union" or word == "ইউনিয়ন")
+                fn_shadow_tab = 0
+                in_struct_body = 1
+                struct_braced = 0
+                struct_brace_depth = 0
+                struct_field_type_next = 0
+                // Consume and mangle the struct name itself immediately after keyword
+                ws_p = p
+                while ws_p < n and (mem_byte_read(clean_src, ws_p) == 32 or mem_byte_read(clean_src, ws_p) == 9)
+                    ws_p = ws_p + 1
+                end
+                if ws_p < n and compiler_driver_is_ident_ch(mem_byte_read(clean_src, ws_p)) == 1
+                    sn_end = ws_p + 1
+                    while sn_end < n and compiler_driver_is_ident_ch(mem_byte_read(clean_src, sn_end)) == 1
+                        sn_end = sn_end + 1
+                    end
+                    sn_word = str_sub(clean_src, ws_p, sn_end)
+                    if symtab_has(sym_tab, sn_word) == 1
+                        if ws_p > seg_start
+                            push(out_chunks, str_sub(clean_src, seg_start, ws_p))
+                        end
+                        push(out_chunks, prefix + sn_word)
+                        seg_start = sn_end
+                    end
+                    p = sn_end
+                end
+                continue
+            end
+
+            if is_col0 == 1 and (word == "fn" or word == "কাজ" or word == "async")
+                if word == "async"
+                    continue
+                end
+                fn_shadow_tab = symtab_new(16)
+                in_fn_params = 1
+                fn_param_type_next = 0
+                // Consume and mangle the function name itself immediately after `fn`
+                ws_p = p
+                while ws_p < n and (mem_byte_read(clean_src, ws_p) == 32 or mem_byte_read(clean_src, ws_p) == 9)
+                    ws_p = ws_p + 1
+                end
+                if ws_p < n and compiler_driver_is_ident_ch(mem_byte_read(clean_src, ws_p)) == 1
+                    fn_end = ws_p + 1
+                    while fn_end < n and compiler_driver_is_ident_ch(mem_byte_read(clean_src, fn_end)) == 1
+                        fn_end = fn_end + 1
+                    end
+                    fn_word = str_sub(clean_src, ws_p, fn_end)
+                    if symtab_has(sym_tab, fn_word) == 1
+                        if ws_p > seg_start
+                            push(out_chunks, str_sub(clean_src, seg_start, ws_p))
+                        end
+                        push(out_chunks, prefix + fn_word)
+                        seg_start = fn_end
+                    end
+                    p = fn_end
+                end
+                continue
+            end
+
+            if is_col0 == 1 and word != "end" and word != "শেষ" and in_fn_params == 0
+                // Top-level statement (global/const/enum/etc.) exits previous fn local shadow scope
+                if word == "enum" or word == "trait" or word == "const" or word == "global" or word == "let"
+                    fn_shadow_tab = 0
+                end
+            end
+
+            // Inside struct body: do NOT mangle field names, DO mangle `: Type` annotations!
+            if in_struct_body == 1
+                if word == "end" or word == "শেষ"
+                    in_struct_body = 0
+                    struct_field_type_next = 0
+                    continue
+                end
+                if struct_field_type_next == 1
+                    struct_field_type_next = 0
+                    if prev_is_dot == 0 and symtab_has(sym_tab, word) == 1
+                        if id_start > seg_start
+                            push(out_chunks, str_sub(clean_src, seg_start, id_start))
+                        end
+                        push(out_chunks, prefix + word)
+                        seg_start = p
+                    end
+                end
+                continue
+            end
+
+            // Inside function signature parameter list: record formal params as shadowed, mangle `: Type`!
+            if in_fn_params == 1
+                if fn_param_type_next == 1
+                    fn_param_type_next = 0
+                    if prev_is_dot == 0 and symtab_has(sym_tab, word) == 1
+                        if id_start > seg_start
+                            push(out_chunks, str_sub(clean_src, seg_start, id_start))
+                        end
+                        push(out_chunks, prefix + word)
+                        seg_start = p
+                    end
+                else
+                    if fn_shadow_tab != 0 and symtab_has(fn_shadow_tab, word) == 0
+                        symtab_put(fn_shadow_tab, symbol_new(word, SYM_KIND_VARIABLE(), TYPE_ID_ANY(), 0, sp0, 0))
+                    end
+                end
+                continue
+            end
+
+            // Inside function body: track `let <var>` / `for <var>` local shadows
+            if fn_shadow_tab != 0 and is_col0 == 0
+                if let_or_for_next == 1
+                    let_or_for_next = 0
+                    if symtab_has(fn_shadow_tab, word) == 0
+                        symtab_put(fn_shadow_tab, symbol_new(word, SYM_KIND_VARIABLE(), TYPE_ID_ANY(), 0, sp0, 0))
+                    end
+                    continue
+                end
+                if word == "let" or word == "var" or word == "চলক" or word == "ধরি" or word == "for" or word == "প্রতিটি"
+                    let_or_for_next = 1
+                    continue
+                end
+            end
+
+            // Standard reference mangling (skip `.field` and shadowed local params/vars)
             if prev_is_dot == 0
-                word = str_sub(clean_src, id_start, p)
-                if compiler_driver_list_has(all_syms, word) == 1
+                is_shadowed = 0
+                if fn_shadow_tab != 0 and symtab_has(fn_shadow_tab, word) == 1
+                    is_shadowed = 1
+                end
+                if is_shadowed == 0 and symtab_has(sym_tab, word) == 1
                     if id_start > seg_start
                         push(out_chunks, str_sub(clean_src, seg_start, id_start))
                     end
@@ -841,9 +1095,10 @@ fn compiler_driver_mangle_module src alias all_syms
     return compiler_driver_join_chunks(out_chunks)
 end
 
-fn compiler_driver_rewrite_aliases src aliases alias_pubs alias_has_pub alias_paths sel_locals sel_targets
+fn compiler_driver_rewrite_aliases src aliases alias_prefixes alias_pubs alias_has_pub alias_paths sel_locals sel_targets
     // WHY: Rewrites `alias::symbol`, `alias.symbol`, and selectively imported `from "..." import sym`
-    // references while enforcing compile-time `pub` visibility encapsulation.
+    // references to canonical path-hashed `__mod_<id>__<sym>` prefixes while skipping strings AND
+    // all comment forms (`//`, `/* */`, `#`, `@!`) and enforcing `pub` visibility encapsulation.
     if aliases.len() == 0 and sel_locals.len() == 0
         return src
     end
@@ -870,6 +1125,20 @@ fn compiler_driver_rewrite_aliases src aliases alias_pubs alias_has_pub alias_pa
             continue
         end
         if b == 47 and p + 1 < n and mem_byte_read(src, p + 1) == 47
+            while p < n and mem_byte_read(src, p) != 10
+                p = p + 1
+            end
+            continue
+        end
+        if b == 47 and p + 1 < n and mem_byte_read(src, p + 1) == 42
+            p = p + 2
+            while p + 1 < n and not (mem_byte_read(src, p) == 42 and mem_byte_read(src, p + 1) == 47)
+                p = p + 1
+            end
+            if p + 1 < n p = p + 2 end
+            continue
+        end
+        if b == 35 or (b == 64 and p + 1 < n and mem_byte_read(src, p + 1) == 33)
             while p < n and mem_byte_read(src, p) != 10
                 p = p + 1
             end
@@ -918,7 +1187,7 @@ fn compiler_driver_rewrite_aliases src aliases alias_pubs alias_has_pub alias_pa
                         if id_start > seg_start
                             push(out_chunks, str_sub(src, seg_start, id_start))
                         end
-                        push(out_chunks, "__mod_" + word + "__" + mem_sym)
+                        push(out_chunks, alias_prefixes[al_idx] + mem_sym)
                         seg_start = m_end
                         p = m_end
                         continue
@@ -956,6 +1225,55 @@ fn compiler_driver_rewrite_aliases src aliases alias_pubs alias_has_pub alias_pa
 end
 
 global G_DRV_IMPORT_STACK = 0
+global G_DRV_ROOT_CHUNKS = 0
+global G_DRV_MOD_PATHS = 0
+global G_DRV_MOD_PREFIXES = 0
+global G_DRV_MOD_ALL = 0
+global G_DRV_MOD_PUB = 0
+global G_DRV_MOD_HASPUB = 0
+
+fn compiler_driver_load_canonical_mod resolved chunks lipi_root
+    // WHY: Loads, collects metadata for, and canonically mangles a scoped module ONCE per compilation
+    // keyed by canonical file path, always emitting into root chunks (topological post-order) so
+    // nested scoped imports are NEVER double-mangled by their parent module!
+    if G_DRV_MOD_PATHS == 0
+        G_DRV_MOD_PATHS = list()
+        G_DRV_MOD_PREFIXES = list()
+        G_DRV_MOD_ALL = list()
+        G_DRV_MOD_PUB = list()
+        G_DRV_MOD_HASPUB = list()
+    end
+    ci = 0
+    while ci < G_DRV_MOD_PATHS.len()
+        if compiler_driver_streq(G_DRV_MOD_PATHS[ci], resolved) == 1
+            return [G_DRV_MOD_PREFIXES[ci], G_DRV_MOD_ALL[ci], G_DRV_MOD_PUB[ci], G_DRV_MOD_HASPUB[ci]]
+        end
+        ci = ci + 1
+    end
+    mod_id = compiler_driver_mod_id(resolved)
+    mod_prefix = "__mod_" + mod_id + "__"
+    mod_vis = list()
+    mod_chunks = list()
+    compiler_driver_bundle_into_chunks(resolved, mod_vis, mod_chunks, lipi_root)
+    mod_joined = compiler_driver_join_chunks(mod_chunks)
+    meta = compiler_driver_collect_mod_meta(mod_joined)
+    m_all = meta[0]
+    m_pub = meta[1]
+    m_has_pub = meta[2]
+    mod_mangled = compiler_driver_mangle_module(mod_joined, mod_id, m_all)
+    emit_target = chunks
+    if G_DRV_ROOT_CHUNKS != 0
+        emit_target = G_DRV_ROOT_CHUNKS
+    end
+    push(emit_target, mod_mangled)
+    push(emit_target, "\n")
+    push(G_DRV_MOD_PATHS, resolved)
+    push(G_DRV_MOD_PREFIXES, mod_prefix)
+    push(G_DRV_MOD_ALL, m_all)
+    push(G_DRV_MOD_PUB, m_pub)
+    push(G_DRV_MOD_HASPUB, m_has_pub)
+    return [mod_prefix, m_all, m_pub, m_has_pub]
+end
 
 fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
     // WHY: 3-color DFS recursive dependency bundler (white/grey/black) with explicit circular-import
@@ -1000,6 +1318,7 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
 
     cur_dir = compiler_driver_dirname(file_path)
     file_aliases = list()
+    file_alias_prefixes = list()
     file_alias_pubs = list()
     file_alias_has_pub = list()
     file_alias_paths = list()
@@ -1145,16 +1464,11 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
             inc_target = compiler_driver_resolve_std(inc_target)
             resolved = compiler_driver_resolve_path(inc_target, cur_dir, lipi_root)
             if is_from_import == 1 and from_syms.len() > 0
-                G_DRV_SEL_COUNTER = G_DRV_SEL_COUNTER + 1
-                sel_alias = "__sel_" + str(G_DRV_SEL_COUNTER)
-                mod_vis = list()
-                mod_chunks = list()
-                compiler_driver_bundle_into_chunks(resolved, mod_vis, mod_chunks, lipi_root)
-                mod_joined = compiler_driver_join_chunks(mod_chunks)
-                meta = compiler_driver_collect_mod_meta(mod_joined)
-                m_all = meta[0]
-                m_pub = meta[1]
-                m_has_pub = meta[2]
+                c_mod = compiler_driver_load_canonical_mod(resolved, chunks, lipi_root)
+                c_prefix = c_mod[0]
+                m_all = c_mod[1]
+                m_pub = c_mod[2]
+                m_has_pub = c_mod[3]
                 fi_s = 0
                 while fi_s < from_syms.len()
                     rsym = from_syms[fi_s]
@@ -1167,28 +1481,19 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
                         exit(1)
                     end
                     push(file_sel_locals, from_locals[fi_s])
-                    push(file_sel_targets, "__mod_" + sel_alias + "__" + rsym)
+                    push(file_sel_targets, c_prefix + rsym)
                     fi_s = fi_s + 1
                 end
-                mod_mangled = compiler_driver_mangle_module(mod_joined, sel_alias, m_all)
-                push(chunks, mod_mangled)
-                push(chunks, "\n")
             elif len(inc_alias) > 0
-                mod_vis = list()
-                mod_chunks = list()
-                compiler_driver_bundle_into_chunks(resolved, mod_vis, mod_chunks, lipi_root)
-                mod_joined = compiler_driver_join_chunks(mod_chunks)
-                meta = compiler_driver_collect_mod_meta(mod_joined)
-                m_all = meta[0]
-                m_pub = meta[1]
-                m_has_pub = meta[2]
+                c_mod = compiler_driver_load_canonical_mod(resolved, chunks, lipi_root)
+                c_prefix = c_mod[0]
+                m_pub = c_mod[2]
+                m_has_pub = c_mod[3]
                 push(file_aliases, inc_alias)
+                push(file_alias_prefixes, c_prefix)
                 push(file_alias_pubs, m_pub)
                 push(file_alias_has_pub, m_has_pub)
                 push(file_alias_paths, resolved)
-                mod_mangled = compiler_driver_mangle_module(mod_joined, inc_alias, m_all)
-                push(chunks, mod_mangled)
-                push(chunks, "\n")
             else
                 compiler_driver_bundle_into_chunks(resolved, visited, chunks, lipi_root)
                 push(chunks, "\n")
@@ -1203,7 +1508,7 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
         li_c = 0
         while li_c < local_chunk_idxs.len()
             c_idx = local_chunk_idxs[li_c]
-            list_set(chunks, c_idx, compiler_driver_rewrite_aliases(chunks[c_idx], file_aliases, file_alias_pubs, file_alias_has_pub, file_alias_paths, file_sel_locals, file_sel_targets))
+            list_set(chunks, c_idx, compiler_driver_rewrite_aliases(chunks[c_idx], file_aliases, file_alias_prefixes, file_alias_pubs, file_alias_has_pub, file_alias_paths, file_sel_locals, file_sel_targets))
             li_c = li_c + 1
         end
     end
@@ -1214,7 +1519,13 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
     return 0
 
 fn compiler_driver_bundle_source file_path visited
+    G_DRV_MOD_PATHS = list()
+    G_DRV_MOD_PREFIXES = list()
+    G_DRV_MOD_ALL = list()
+    G_DRV_MOD_PUB = list()
+    G_DRV_MOD_HASPUB = list()
     chunks = list()
+    G_DRV_ROOT_CHUNKS = chunks
     lipi_root = compiler_driver_get_lipi_root()
     real_path = file_path
     if file_exists(real_path) == 0
@@ -1250,10 +1561,20 @@ fn compiler_driver_print_banner
     say "╚══════════════════════════════════════════════════════════════════════╝"
 
 global g_driver_base_vaddr = 1073741824
+global g_driver_entry_sym = ""
+global g_driver_cache_dir = ""
 
 fn compiler_driver_set_base_vaddr vaddr
     g_driver_base_vaddr = vaddr
     return vaddr
+
+fn compiler_driver_set_entry_sym sym
+    g_driver_entry_sym = sym
+    return sym
+
+fn compiler_driver_set_cache_dir dir_path
+    g_driver_cache_dir = dir_path
+    return dir_path
 
 fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emit_fmt mode_flags
     // WHY: Sovereign compilation entry point supporting packed mode flags while staying within <= 6 SysV registers:
@@ -1298,7 +1619,26 @@ fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emi
     cfg.cfg_freestanding = (mode_flags / 64) % 2
     cfg.cfg_ssa_codegen = (mode_flags / 128) % 2
     cfg.cfg_base_vaddr = g_driver_base_vaddr
+    cfg.cfg_entry_sym = g_driver_entry_sym
+    // Content-hashed .lpo object cache fast-path when compiling to FORMAT_OBJ with --cache-dir
+    lpo_cache_path = ""
+    lpo_src_h = 0
+    if emit_fmt == FORMAT_OBJ() and len(g_driver_cache_dir) > 0
+        lpo_src_h = lpo_source_hash(source_code + "|" + str(opt_level) + "|" + str(mode_flags))
+        lpo_cache_path = g_driver_cache_dir + "/obj_" + str(lpo_src_h) + ".lpo"
+        cached_sz = lpo_read_cache(lpo_cache_path, lpo_src_h, out_path)
+        if cached_sz > 0
+            c_res = compiler_result_new()
+            c_res.res_success = 1
+            c_res.res_stage_reached = PIPELINE_STAGE_COMPLETE()
+            c_res.res_output_bytes = cached_sz
+            return c_res
+        end
+    end
     res = compiler_pipeline_execute(cfg, source_code)
+    if res.res_success == 1 and len(lpo_cache_path) > 0
+        lpo_write_cache(lpo_cache_path, lpo_src_h, out_path)
+    end
     return res
 
 fn compiler_driver_compile_file_advanced src_path out_path target_arch opt_level emit_fmt is_debug

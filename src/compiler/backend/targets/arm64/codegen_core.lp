@@ -48,11 +48,16 @@ struct Arm64LocalVar
     lv_offset           // Positive stack offset in bytes: accessed as [sp, #lv_offset]
     a64_lv_struct_type      // Struct type name string for accurate field offset resolution
     a64_lv_is_boxed         // 1 if heap-boxed in an 8-byte upvalue cell for mutable closure capture
+    a64_lv_is_uint          // 1 if unsigned integer type (u8/u16/u32/u64/usize)
+    a64_lv_prim_type        // Primitive type tag: "int", "float", "str", "dyn_tagged"
+    a64_lv_tag_off          // Positive stack offset for runtime val_tag (0 if unused)
 
 // WHY: Records a function definition entry point for inter-procedural call site resolution
 struct Arm64Function
     fn_name             // Function identifier string
     fn_entry_offset     // Byte offset in code_bytes where the function prologue starts
+    a64_fn_end_offset   // Byte offset in code_bytes where the function body ends (for LSYM0; unique prefix!)
+    a64_fn_decl_line    // Source declaration line number (for LSYM0 stack traces; unique prefix!)
 
 // WHY: Records an unresolved 26-bit PC-relative subroutine call displacement
 struct Arm64CallReloc
@@ -124,6 +129,100 @@ struct Arm64Synthesizer
     a64_buf_wbyte_off     // Byte offset of __buf_write_byte
     a64_buf_wstr_off      // Byte offset of __buf_write_str
     a64_buf_tostr_off     // Byte offset of __buf_to_str
+    a64_freestanding      // 1 when --freestanding / --no-runtime bare-metal mode (0 Linux SVC)
+    a64_enum_names        // Registered ADT variant names (Ok, Err, Some, None, + user enums)
+    a64_enum_tags         // Parallel ADT integer discriminant tags
+    a64_enum_arities      // Parallel ADT payload arities (0 = unit, 1+ = tuple)
+    a64_next_enum_tag     // Next auto-assigned custom enum tag (starts at 2000)
+    a64_cur_fn_name       // Active function name for stack_trace()
+    a64_last_is_uint      // 1 if last evaluated expression is unsigned (u8/u16/u32/u64/usize)
+    a64_last_expr_type    // Type of most recently evaluated expression: "int", "float", "str", "dyn_tagged"
+    a64_needs_throw_null  // 1 if _lipi_throw_null_deref helper must be emitted
+    a64_throw_null_off    // Byte offset of _lipi_throw_null_deref helper
+    a64_needs_stack_trace // 1 if _lipi_stack_trace LSYM0 frame walker must be emitted
+    a64_stack_trace_off   // Byte offset of _lipi_stack_trace helper
+    a64_lsym_patch_lsym   // Code offset of MOVZ/MOVK quad for LSYM0 table vaddr
+    a64_lsym_patch_code   // Code offset of MOVZ/MOVK quad for code_base vaddr
+    a64_lsym_patch_ro     // Code offset of MOVZ/MOVK quad for rodata_base vaddr
+    a64_needs_print_tagged // 1 if __print_str / __print_float / __print_tagged helpers must be emitted
+    a64_print_str_off     // Byte offset of __print_str helper
+    a64_print_float_off   // Byte offset of __print_float helper
+    a64_print_tagged_off  // Byte offset of __print_tagged helper
+    a64_needs_print_uint  // 1 if unsigned 64-bit __print_uint helper must be emitted
+    a64_print_uint_off    // Byte offset of __print_uint helper
+
+fn arm64_is_uint_type tname
+    if tname == "u8" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
+        return 1
+    end
+    return 0
+end
+
+global g_arm64_freestanding = 0
+
+fn arm64_synth_set_freestanding flag
+    g_arm64_freestanding = flag
+    return flag
+
+fn arm64_verify_zero_linux_svcs code_bytes
+    // WHY: Bare-Metal Purity Gate for ARM64 --freestanding: scans 32-bit aligned words
+    // for Linux `svc #0` (0xD4000001 -> [0x01, 0x00, 0x00, 0xD4]).
+    cnt = 0
+    i = 0
+    n = code_bytes.len()
+    while i + 3 < n
+        if code_bytes[i] == 1 and code_bytes[i + 1] == 0 and code_bytes[i + 2] == 0 and code_bytes[i + 3] == 212
+            cnt = cnt + 1
+        end
+        i = i + 4
+    end
+    return cnt
+
+fn arm64_enum_register s vname tag arity
+    // WHY: Preserves canonical Result/Option tags (Ok=1001, Err=1002, Some=1003, None=1004)
+    // when user code redeclares `enum Res { Ok(T), Err(E) }` so postfix `?` always matches Err/None.
+    i = 0
+    while i < s.a64_enum_names.len()
+        if s.a64_enum_names[i] == vname
+            cur_tag = s.a64_enum_tags[i]
+            if cur_tag >= 1001 and cur_tag <= 1004
+                list_set(s.a64_enum_arities, i, arity)
+                return cur_tag
+            end
+            list_set(s.a64_enum_tags, i, tag)
+            list_set(s.a64_enum_arities, i, arity)
+            return tag
+        end
+        i = i + 1
+    end
+    push(s.a64_enum_names, vname)
+    push(s.a64_enum_tags, tag)
+    push(s.a64_enum_arities, arity)
+    return tag
+
+fn arm64_enum_find_idx s vname
+    i = 0
+    while i < s.a64_enum_names.len()
+        if s.a64_enum_names[i] == vname
+            return i
+        end
+        i = i + 1
+    end
+    return 0 - 1
+
+fn arm64_emit_load_rodata_str s reg str_text
+    ro_off = arm64_synth_add_rodata_str(s, str_text, 0)
+    p_off = s.synth_code.len()
+    arm64_emit_movz_x(s, reg, 0, 0)
+    arm64_emit_movk_x(s, reg, 0, 16)
+    arm64_emit_movk_x(s, reg, 0, 32)
+    arm64_emit_movk_x(s, reg, 0, 48)
+    srel = Arm64StringReloc()
+    srel.sr_patch_offset = p_off
+    srel.sr_rodata_offset = ro_off
+    srel.sr_reg = reg
+    push(s.synth_str_relocs, srel)
+    return 0
 
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
@@ -180,6 +279,31 @@ fn arm64_synth_new
     s.a64_buf_wbyte_off = 0
     s.a64_buf_wstr_off = 0
     s.a64_buf_tostr_off = 0
+    s.a64_freestanding = g_arm64_freestanding
+    s.a64_enum_names = list()
+    s.a64_enum_tags = list()
+    s.a64_enum_arities = list()
+    s.a64_next_enum_tag = 2000
+    s.a64_cur_fn_name = "_start"
+    s.a64_last_is_uint = 0
+    s.a64_last_expr_type = "int"
+    s.a64_needs_throw_null = 0
+    s.a64_throw_null_off = 0
+    s.a64_needs_stack_trace = 0
+    s.a64_stack_trace_off = 0
+    s.a64_lsym_patch_lsym = 0 - 1
+    s.a64_lsym_patch_code = 0 - 1
+    s.a64_lsym_patch_ro = 0 - 1
+    s.a64_needs_print_tagged = 0
+    s.a64_print_str_off = 0
+    s.a64_print_float_off = 0
+    s.a64_print_tagged_off = 0
+    s.a64_needs_print_uint = 0
+    s.a64_print_uint_off = 0
+    arm64_enum_register(s, "Ok", 1001, 1)
+    arm64_enum_register(s, "Err", 1002, 1)
+    arm64_enum_register(s, "Some", 1003, 1)
+    arm64_enum_register(s, "None", 1004, 0)
     return s
 
 fn arm64_synth_emit_byte s byte_val
@@ -341,6 +465,16 @@ fn arm64_emit_sdiv_x s rd rn rm
     arm64_synth_emit32(s, word)
     return 0
 
+fn arm64_emit_udiv_x s rd rn rm
+    // WHY: `udiv x<rd>, x<rn>, x<rm>` (0x9AC00800 | (rm << 16) | (rn << 5) | rd).
+    // Hardware unsigned 64-bit integer division for u8/u16/u32/u64.
+    d = rd & 31
+    n = rn & 31
+    m = rm & 31
+    word = 2596276224 | (m << 16) | (n << 5) | d
+    arm64_synth_emit32(s, word)
+    return 0
+
 fn arm64_emit_and_x s rd rn rm
     // WHY: `and x<rd>, x<rn>, x<rm>` (0x8A000000).
     word = 2315255808 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
@@ -374,6 +508,12 @@ fn arm64_emit_lslv_x s rd rn rm
 fn arm64_emit_asrv_x s rd rn rm
     // WHY: `asrv x<rd>, x<rn>, x<rm>` (0x9AC02800).
     word = 2596284416 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_emit_lsrv_x s rd rn rm
+    // WHY: `lsrv x<rd>, x<rn>, x<rm>` (0x9AC02400) — logical right shift for unsigned types.
+    word = 2596283392 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
     arm64_synth_emit32(s, word)
     return 0
 
@@ -556,117 +696,145 @@ fn arm64_synth_emit_call_print_int s
     push(s.synth_call_relocs, call_rel)
     return 0
 
+fn arm64_synth_emit_call_print_uint s
+    // WHY: Emits subroutine call to the centralized __print_uint helper to display unsigned u64 in X0.
+    s.a64_needs_print_uint = 1
+    call_off = s.synth_code.len()
+    arm64_emit_bl(s, 0)
+    call_rel = Arm64CallReloc()
+    call_rel.a64_cr_patch_offset = call_off
+    call_rel.a64_cr_target_name = "__print_uint"
+    push(s.synth_call_relocs, call_rel)
+    return 0
+
 fn arm64_synth_emit_print_int_helper s
     // WHY: Pure ARM64 assembly routine converting 64-bit signed integer in X0
     // to ASCII decimal string on the stack and writing to STDOUT with trailing newline.
-    // Zero dependencies on external C printf/puts.
+    // Uses dynamic branch patching + udiv so positive, zero, negative, and INT64_MIN all print accurately.
     s.synth_print_int_off = s.synth_code.len()
 
-    // 0: stp x29, x30, [sp, #-48]!
     arm64_emit_stp_pre(s, 29, 30, 31, 0 - 48)
-    // 1: mov x29, sp
-    arm64_synth_emit32(s, 2432697341)
+    arm64_synth_emit32(s, 2432697341) // mov x29, sp
 
     // Buffer is built backwards starting at [sp + 47]
-    // 2: movz x1, 10, 0 ('\n')
-    arm64_emit_movz_x(s, 1, 10, 0)
-    // 3: add x2, sp, 47 (2432745442) -> pointer to last byte
-    arm64_synth_emit32(s, 2432745442)
-    // 4: strb w1, [x2, 0] (956301377) -> write newline
-    arm64_synth_emit32(s, 956301377)
-    // 5: mov x1, x2 (current buffer pointer)
-    arm64_emit_mov_reg(s, 1, 2)
-    // 6: movz x2, 1, 0 (current length = 1)
-    arm64_emit_movz_x(s, 2, 1, 0)
+    arm64_emit_movz_x(s, 1, 10, 0)    // '\n'
+    arm64_synth_emit32(s, 2432745442) // add x2, sp, #47
+    arm64_synth_emit32(s, 956301377)  // strb w1, [x2, #0]
+    arm64_emit_mov_reg(s, 1, 2)       // X1 = buffer cursor
+    arm64_emit_movz_x(s, 2, 1, 0)     // X2 = byte count (1)
 
-    // 7: cmp x0, xzr
     arm64_emit_cmp_x(s, 0, 31)
-    // 8: b.ne +6 words -> jump to .check_neg (instruction 14)
-    arm64_emit_b_cond(s, 1, 6)
+    bne_check_neg = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)        // b.ne .check_neg
 
     // Special case: X0 == 0
-    // 9: sub x1, x1, 1
-    arm64_synth_emit32(s, 3506439201)
-    // 10: movz x3, 48, 0 ('0')
-    arm64_emit_movz_x(s, 3, 48, 0)
-    // 11: strb w3, [x1, 0]
-    arm64_synth_emit32(s, 956301347)
-    // 12: add x2, x2, 1
-    arm64_synth_emit32(s, 2432697410)
-    // 13: b +26 words -> jump to .do_write (instruction 39)
-    arm64_emit_b(s, 26)
+    arm64_synth_emit32(s, 3506439201) // sub x1, x1, #1
+    arm64_emit_movz_x(s, 3, 48, 0)    // '0'
+    arm64_synth_emit32(s, 956301347)  // strb w3, [x1, #0]
+    arm64_synth_emit32(s, 2432697410) // add x2, x2, #1
+    b_zero_write = s.synth_code.len()
+    arm64_emit_b(s, 0)                // b .do_write
 
-    // .check_neg (instruction 14):
-    // 14: movz x9, 0, 0 (negative flag = 0)
-    arm64_emit_movz_x(s, 9, 0, 0)
-    // 15: cmp x0, xzr
+    // .check_neg:
+    check_neg_off = s.synth_code.len()
+    arm64_synth_patch_u32(s, bne_check_neg, 1409286144 | ((((check_neg_off - bne_check_neg) / 4) & 524287) << 5) | 1)
+    arm64_emit_movz_x(s, 9, 0, 0)     // negative flag = 0
     arm64_emit_cmp_x(s, 0, 31)
-    // 16: b.ge +3 words -> jump to .loop_digits (instruction 19)
-    arm64_emit_b_cond(s, 10, 3)
-    // 17: movz x9, 1, 0 (negative flag = 1)
-    arm64_emit_movz_x(s, 9, 1, 0)
-    // 18: sub x0, xzr, x0 (negate X0: 0xCB0003E0 = 3405775840)
-    arm64_synth_emit32(s, 3405775840)
+    bge_loop_dig = s.synth_code.len()
+    arm64_emit_b_cond(s, 10, 0)       // b.ge .loop_digits
+    arm64_emit_movz_x(s, 9, 1, 0)     // negative flag = 1
+    arm64_synth_emit32(s, 3405775840) // sub x0, xzr, x0 (negate; INT64_MIN becomes 2^63 unsigned)
 
-    // .loop_digits (instruction 19):
-    // 19: cmp x0, xzr
+    // .loop_digits:
+    loop_dig_off = s.synth_code.len()
+    arm64_synth_patch_u32(s, bge_loop_dig, 1409286144 | ((((loop_dig_off - bge_loop_dig) / 4) & 524287) << 5) | 10)
     arm64_emit_cmp_x(s, 0, 31)
-    // 20: b.eq +11 words -> jump to .finish_digits (instruction 31)
-    arm64_emit_b_cond(s, 0, 11)
-    // 21: movz x10, 10, 0 (divisor)
-    arm64_emit_movz_x(s, 10, 10, 0)
-    // 22: sdiv x11, x0, x10 (quotient)
-    arm64_emit_sdiv_x(s, 11, 0, 10)
-    // 23: mul x12, x11, x10
+    beq_finish_dig = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)        // b.eq .finish_digits
+    arm64_emit_movz_x(s, 10, 10, 0)   // divisor = 10
+    arm64_emit_udiv_x(s, 11, 0, 10)   // unsigned quotient (handles 2^63 for INT64_MIN!)
     arm64_emit_mul_x(s, 12, 11, 10)
-    // 24: sub x12, x0, x12 (remainder = X0 % 10)
-    arm64_emit_sub_x(s, 12, 0, 12)
-    // 25: add x12, x12, 48 (ASCII digit: 0x9100C18C = 2432745868)
-    arm64_synth_emit32(s, 2432745868)
-    // 26: sub x1, x1, 1 (decrement buffer pointer)
-    arm64_synth_emit32(s, 3506439201)
-    // 27: strb w12, [x1, 0]
-    arm64_synth_emit32(s, 956301356)
-    // 28: add x2, x2, 1 (increment byte count)
-    arm64_synth_emit32(s, 2432697410)
-    // 29: mov x0, x11 (X0 = quotient)
-    arm64_emit_mov_reg(s, 0, 11)
-    // 30: b -11 words -> jump back to .loop_digits (instruction 19)
-    arm64_emit_b(s, 0 - 11)
+    arm64_emit_sub_x(s, 12, 0, 12)    // remainder = X0 % 10
+    arm64_synth_emit32(s, 2432745868) // add x12, x12, #48
+    arm64_synth_emit32(s, 3506439201) // sub x1, x1, #1
+    arm64_synth_emit32(s, 956301356)  // strb w12, [x1, #0]
+    arm64_synth_emit32(s, 2432697410) // add x2, x2, #1
+    arm64_emit_mov_reg(s, 0, 11)      // X0 = quotient
+    arm64_emit_b(s, (loop_dig_off - s.synth_code.len()) / 4)
 
-    // .finish_digits (instruction 31):
-    // 31: movz x3, 1, 0
+    // .finish_digits:
+    finish_dig_off = s.synth_code.len()
+    arm64_synth_patch_u32(s, beq_finish_dig, 1409286144 | ((((finish_dig_off - beq_finish_dig) / 4) & 524287) << 5) | 0)
     arm64_emit_movz_x(s, 3, 1, 0)
-    // 32: cmp x9, x3
     arm64_emit_cmp_x(s, 9, 3)
-    // 33: b.ne +6 words -> jump to .do_write (instruction 39)
-    arm64_emit_b_cond(s, 1, 6)
-    // 34: sub x1, x1, 1
-    arm64_synth_emit32(s, 3506439201)
-    // 35: movz x3, 45, 0 ('-')
-    arm64_emit_movz_x(s, 3, 45, 0)
-    // 36: strb w3, [x1, 0]
-    arm64_synth_emit32(s, 956301347)
-    // 37: add x2, x2, 1
-    arm64_synth_emit32(s, 2432697410)
-    // 38: fallthrough to .do_write
+    bne_do_write = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)        // b.ne .do_write
+    arm64_synth_emit32(s, 3506439201) // sub x1, x1, #1
+    arm64_emit_movz_x(s, 3, 45, 0)    // '-'
+    arm64_synth_emit32(s, 956301347)  // strb w3, [x1, #0]
+    arm64_synth_emit32(s, 2432697410) // add x2, x2, #1
 
-    // .do_write (instruction 39):
-    // 39: movz x0, 1, 0 (STDOUT_FILENO = 1)
-    arm64_emit_movz_x(s, 0, 1, 0)
-    // X1 already points to start of formatted ASCII string in stack buffer
-    // X2 already holds exact byte count
-    // 40: movz x8, 64, 0 (SYS_write on Linux AArch64)
-    arm64_emit_movz_x(s, 8, 64, 0)
-    // 41: svc #0
+    // .do_write:
+    do_write_off = s.synth_code.len()
+    arm64_synth_patch_u32(s, b_zero_write, 335544320 | (((do_write_off - b_zero_write) / 4) & 67108863))
+    arm64_synth_patch_u32(s, bne_do_write, 1409286144 | ((((do_write_off - bne_do_write) / 4) & 524287) << 5) | 1)
+    arm64_emit_movz_x(s, 0, 1, 0)     // STDOUT_FILENO = 1
+    arm64_emit_movz_x(s, 8, 64, 0)    // SYS_write on Linux AArch64
     arm64_emit_svc(s, 0)
 
     // Epilogue:
-    // 42: mov sp, x29
-    arm64_synth_emit32(s, 2432697279)
-    // 43: ldp x29, x30, [sp], #48
+    arm64_synth_emit32(s, 2432697279) // mov sp, x29
     arm64_emit_ldp_post(s, 29, 30, 31, 48)
-    // 44: ret
+    arm64_emit_ret(s)
+    return 0
+
+fn arm64_synth_emit_print_uint_helper s
+    // WHY: Pure ARM64 unsigned 64-bit integer decimal printer (0 .. 18446744073709551615) via UDIV.
+    s.a64_print_uint_off = s.synth_code.len()
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 48)
+    arm64_synth_emit32(s, 2432697341) // mov x29, sp
+
+    arm64_emit_movz_x(s, 1, 10, 0)    // '\n'
+    arm64_synth_emit32(s, 2432745442) // add x2, sp, #47
+    arm64_synth_emit32(s, 956301377)  // strb w1, [x2, #0]
+    arm64_emit_mov_reg(s, 1, 2)
+    arm64_emit_movz_x(s, 2, 1, 0)
+
+    arm64_emit_cmp_x(s, 0, 31)
+    bne_u_loop = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)
+    arm64_synth_emit32(s, 3506439201) // sub x1, x1, #1
+    arm64_emit_movz_x(s, 3, 48, 0)    // '0'
+    arm64_synth_emit32(s, 956301347)  // strb w3, [x1, #0]
+    arm64_synth_emit32(s, 2432697410) // add x2, x2, #1
+    b_u_write = s.synth_code.len()
+    arm64_emit_b(s, 0)
+
+    u_loop_off = s.synth_code.len()
+    arm64_synth_patch_u32(s, bne_u_loop, 1409286144 | ((((u_loop_off - bne_u_loop) / 4) & 524287) << 5) | 1)
+    arm64_emit_cmp_x(s, 0, 31)
+    beq_u_write = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_movz_x(s, 10, 10, 0)
+    arm64_emit_udiv_x(s, 11, 0, 10)
+    arm64_emit_mul_x(s, 12, 11, 10)
+    arm64_emit_sub_x(s, 12, 0, 12)
+    arm64_synth_emit32(s, 2432745868) // add x12, x12, #48
+    arm64_synth_emit32(s, 3506439201) // sub x1, x1, #1
+    arm64_synth_emit32(s, 956301356)  // strb w12, [x1, #0]
+    arm64_synth_emit32(s, 2432697410) // add x2, x2, #1
+    arm64_emit_mov_reg(s, 0, 11)
+    arm64_emit_b(s, (u_loop_off - s.synth_code.len()) / 4)
+
+    u_write_off = s.synth_code.len()
+    arm64_synth_patch_u32(s, b_u_write, 335544320 | (((u_write_off - b_u_write) / 4) & 67108863))
+    arm64_synth_patch_u32(s, beq_u_write, 1409286144 | ((((u_write_off - beq_u_write) / 4) & 524287) << 5) | 0)
+    arm64_emit_movz_x(s, 0, 1, 0)
+    arm64_emit_movz_x(s, 8, 64, 0)
+    arm64_emit_svc(s, 0)
+
+    arm64_synth_emit32(s, 2432697279)
+    arm64_emit_ldp_post(s, 29, 30, 31, 48)
     arm64_emit_ret(s)
     return 0
 
@@ -752,6 +920,15 @@ fn arm64_synth_skip_whitespace_tokens toks pos_box
             break
     return 0
 
+fn arm64_synth_find_fn s fname
+    // WHY: Checks whether a user-defined function shadows an optional DICT0 map_* intrinsic.
+    i = 0
+    while i < s.synth_functions.len()
+        if s.synth_functions[i].fn_name == fname
+            return s.synth_functions[i]
+        i = i + 1
+    return 0
+
 fn arm64_synth_find_struct s sname
     // WHY: Finds struct definition metadata by struct type name.
     i = 0
@@ -814,8 +991,82 @@ fn arm64_synth_alloc_var s name
     lv.lv_offset = off
     lv.a64_lv_struct_type = ""
     lv.a64_lv_is_boxed = arm64_is_boxed_name(s, name)
+    lv.a64_lv_is_uint = 0
+    lv.a64_lv_prim_type = "int"
+    lv.a64_lv_tag_off = 0
     push(s.synth_locals, lv)
     return off
+
+fn arm64_synth_alloc_tag_slot s lv
+    // WHY: Lazily allocates an 8-byte runtime val_tag stack slot for dyn_tagged variables.
+    if lv == 0
+        return 0
+    end
+    if lv.a64_lv_tag_off > 0
+        return lv.a64_lv_tag_off
+    end
+    off = s.synth_stack_offset
+    s.synth_stack_offset = s.synth_stack_offset + 8
+    lv.a64_lv_tag_off = off
+    return off
+
+fn arm64_synth_rodata_push_u32 s val
+    v = val
+    if v < 0
+        v = v + 4294967296
+    end
+    push(s.synth_rodata, v % 256)
+    push(s.synth_rodata, (v / 256) % 256)
+    push(s.synth_rodata, (v / 65536) % 256)
+    push(s.synth_rodata, (v / 16777216) % 256)
+    return 0
+
+fn arm64_synth_emit_lsym_rodata s
+    // WHY: Serializes x86_64-identical LSYM0 symbol table ("LIPLSYM0") into ARM64 .rodata
+    // so stack_trace()/backtrace() resolves full call chains with real function names & line numbers.
+    fn_starts = list()
+    fn_ends = list()
+    fn_name_offs = list()
+    fn_lines = list()
+    fi = 0
+    while fi < s.synth_functions.len()
+        fobj = s.synth_functions[fi]
+        if fobj.fn_entry_offset >= 0 and fobj.a64_fn_end_offset > fobj.fn_entry_offset and fobj.fn_name != ""
+            n_ro = arm64_synth_add_rodata_str(s, fobj.fn_name, 0)
+            push(fn_starts, fobj.fn_entry_offset)
+            push(fn_ends, fobj.a64_fn_end_offset)
+            push(fn_name_offs, n_ro)
+            push(fn_lines, fobj.a64_fn_decl_line)
+        end
+        fi = fi + 1
+    end
+    while (s.synth_rodata.len() % 8) != 0
+        push(s.synth_rodata, 0)
+    end
+    lsym_off = s.synth_rodata.len()
+    // Magic: "LIPLSYM0"
+    push(s.synth_rodata, 76)
+    push(s.synth_rodata, 73)
+    push(s.synth_rodata, 80)
+    push(s.synth_rodata, 76)
+    push(s.synth_rodata, 83)
+    push(s.synth_rodata, 89)
+    push(s.synth_rodata, 77)
+    push(s.synth_rodata, 48)
+    fcnt = fn_starts.len()
+    arm64_synth_rodata_push_u32(s, fcnt)
+    arm64_synth_rodata_push_u32(s, 0)
+    i = 0
+    while i < fcnt
+        arm64_synth_rodata_push_u32(s, fn_starts[i])
+        arm64_synth_rodata_push_u32(s, fn_ends[i])
+        arm64_synth_rodata_push_u32(s, fn_name_offs[i])
+        arm64_synth_rodata_push_u32(s, fn_lines[i])
+        arm64_synth_rodata_push_u32(s, 0)
+        arm64_synth_rodata_push_u32(s, 0)
+        i = i + 1
+    end
+    return lsym_off
 
 fn arm64_synth_set_var_struct s name sname
     i = 0

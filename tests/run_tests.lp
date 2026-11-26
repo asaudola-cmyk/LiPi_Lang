@@ -1445,6 +1445,36 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave_n_core_unsigned_strict_ffi.lp", "test_wave_n_core_unsigned_strict_ffi") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_o_union_bitfield_ptr_trait_coro.lp", "test_wave_o_union_bitfield_ptr_trait_coro") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_p_linker_ssa_arch_parity.lp", "test_wave_p_linker_ssa_arch_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_q_silicon_fs_net_production.lp", "test_wave_q_silicon_fs_net_production") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_r_round2_sovereign.lp", "test_wave_r_round2_sovereign") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_s_arm64_qemu_initarray_tls_ssa.lp", "test_wave_s_arm64_qemu_initarray_tls_ssa") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

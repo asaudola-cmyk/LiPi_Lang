@@ -125,7 +125,11 @@ fn x86_synth_emit_closure_literal s toks pos_box c_params
                 is_member_or_call = 1
             end
             if scan_i + 1 < toks.len() and (toks[scan_i + 1].tok_kind == TOK_LPAREN() or toks[scan_i + 1].tok_text == "(")
-                is_member_or_call = 1
+                // WHY: Allow capturing outer local closure/fn-ptr variables when invoked inside a nested closure
+                // (enables recursive closures like `f = 0; f = fn(n) { ... f(n - 1) }`), while skipping top-level fn calls.
+                if x86_synth_find_local_var(s, stxt) == 0
+                    is_member_or_call = 1
+                end
             end
             if scan_i > 0 and (toks[scan_i - 1].tok_kind == TOK_KW_LET() or toks[scan_i - 1].tok_text == "let" or toks[scan_i - 1].tok_text == "ধরি" or toks[scan_i - 1].tok_text == "চলক")
                 is_member_or_call = 1
@@ -563,14 +567,23 @@ fn x86_synth_expr_primary s toks pos_box
             lv_amp = x86_synth_find_local_var(s, tname)
             if lv_amp != 0
                 if lv_amp.lv_is_spilled == 0 and lv_amp.lv_reg >= 0
-                    x86_synth_emit_store_var(s, lv_amp.lv_reg, lv_amp.lv_offset)
+                    x86_synth_emit_mov_reg_reg(s, 0, lv_amp.lv_reg)
+                    x86_synth_emit_store_var(s, 0, lv_amp.lv_offset)
                     lv_amp.lv_is_spilled = 1
                 end
                 // lea rax, [rbp - off] (48 8D 85 disp32)
                 x86_synth_emit_bytes(s, [72, 141, 133])
                 x86_synth_emit_u32(s, 0 - lv_amp.lv_offset)
-                s.synth_last_struct = ""
-                s.synth_last_expr_type = "int"
+                amp_inner = "i64"
+                if lv_amp.lv_type != ""
+                    amp_inner = lv_amp.lv_type
+                elif lv_amp.lv_prim_type == "float"
+                    amp_inner = "f64"
+                elif lv_amp.lv_prim_type == "uint"
+                    amp_inner = "u64"
+                end
+                s.synth_last_struct = "*mut " + amp_inner
+                s.synth_last_expr_type = "uint"
                 s.synth_last_elem_type = ""
             else
                 x86_synth_emit_fn_ptr_lea(s, tname)
@@ -578,6 +591,57 @@ fn x86_synth_expr_primary s toks pos_box
             return 0
         end
         x86_synth_expr_primary(s, toks, pos_box)
+        return 0
+
+    // 0d3. Unary `await` / `অপেক্ষা` — drives stackful fiber + Linux epoll event loop to completion!
+    elif (k == TOK_KW_AWAIT() or (k == TOK_IDENT() and (txt == "await" or txt == "অপেক্ষা" or txt == "@await"))) and pos + 1 < toks.len() and toks[pos + 1].tok_span.span_start_line == t.tok_span.span_start_line and (x86_synth_is_ident_token(toks[pos + 1].tok_kind) == 1 or toks[pos + 1].tok_kind == TOK_LPAREN() or toks[pos + 1].tok_kind == TOK_LBRACKET() or toks[pos + 1].tok_kind == TOK_INT() or toks[pos + 1].tok_kind == TOK_FLOAT() or toks[pos + 1].tok_kind == TOK_STR() or toks[pos + 1].tok_kind == TOK_INTERP_STR() or toks[pos + 1].tok_kind == TOK_BOOL() or toks[pos + 1].tok_kind == TOK_NONE() or toks[pos + 1].tok_kind == TOK_BANG() or toks[pos + 1].tok_kind == TOK_AMP())
+        list_set(pos_box, 0, pos + 1)
+        x86_synth_expr_primary(s, toks, pos_box)
+        aw_expr_t = s.synth_last_expr_type
+        aw_struct = s.synth_last_struct
+        aw_elem_t = s.synth_last_elem_type
+        if s.synth_freestanding == 0
+            x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+            x86_synth_emit_call_helper(s, "_lipi_async_await")
+        end
+        s.synth_last_expr_type = aw_expr_t
+        s.synth_last_struct = aw_struct
+        s.synth_last_elem_type = aw_elem_t
+        return 0
+
+    // 0d2. Unary Pointer Dereference (*ptr_expr) — loads exact pointee width (1/2/4/8B) or struct ref!
+    elif (k == TOK_STAR() or (k != TOK_STR() and txt == "*")) and pos + 1 < toks.len()
+        list_set(pos_box, 0, pos + 1)
+        x86_synth_expr_primary(s, toks, pos_box)
+        deref_ptr_t = s.synth_last_struct
+        deref_pt = x86_synth_ptr_pointee(deref_ptr_t)
+        if deref_pt == ""
+            deref_pt = "i64"
+        end
+        x86_synth_emit_null_check_rax(s)
+        if x86_synth_find_struct(s, deref_pt) != 0
+            // Struct/union pointer dereference preserves address in %rax with unwrapped struct type
+            s.synth_last_struct = deref_pt
+            s.synth_last_expr_type = ""
+            s.synth_last_elem_type = ""
+        else
+            dp_info = x86_synth_type_layout_info(s, deref_pt)
+            x86_synth_emit_field_load_rax(s, 0, dp_info[0], dp_info[3], 0)
+            s.synth_last_elem_type = ""
+            if deref_pt == "float" or deref_pt == "f64" or deref_pt == "f32"
+                s.synth_last_expr_type = "float"
+                s.synth_last_struct = ""
+            elif x86_synth_is_ptr_type(deref_pt) == 1
+                s.synth_last_expr_type = "uint"
+                s.synth_last_struct = deref_pt
+            elif dp_info[3] == 0
+                s.synth_last_expr_type = "uint"
+                s.synth_last_struct = ""
+            else
+                s.synth_last_expr_type = "int"
+                s.synth_last_struct = ""
+            end
+        end
         return 0
 
     // 0e. Closure literal: |p1, p2| => expr / { ... }
@@ -1232,7 +1296,7 @@ fn x86_synth_expr_primary s toks pos_box
                         exact_sz = 2
                     elif t_sz_str == "u32" or t_sz_str == "i32" or t_sz_str == "f32"
                         exact_sz = 4
-                    elif t_sz_str == "u64" or t_sz_str == "i64" or t_sz_str == "int" or t_sz_str == "f64" or t_sz_str == "float" or t_sz_str == "ptr" or t_sz_str == "bool" or t_sz_str == "str" or t_sz_str == "string"
+                    elif t_sz_str == "u64" or t_sz_str == "i64" or t_sz_str == "int" or t_sz_str == "f64" or t_sz_str == "float" or t_sz_str == "ptr" or t_sz_str == "bool" or t_sz_str == "str" or t_sz_str == "string" or x86_synth_is_ptr_type(t_sz_str) == 1
                         exact_sz = 8
                     elif len(t_sz_str) >= 4 and mem_byte_read(t_sz_str, 0) == 91
                         li_sz = x86_synth_type_layout_info(s, t_sz_str)
@@ -1339,6 +1403,12 @@ fn x86_synth_expr_primary s toks pos_box
                     x86_synth_emit_byte(s, 88) // pop rax
                 x86_synth_emit_byte(s, 15)
                 x86_synth_emit_byte(s, 5)  // syscall
+                // WHY: For 1..4-arg raw user syscall(...), append a single 1-cycle 5-byte hardware NOP
+                // (0F 1F 44 00 00) so Mach-O Darwin translation can unambiguously replace it in-place
+                // with `add rsp, N*8; push -78; pop rax` (-ENOSYS) at exact byte-for-byte length!
+                if arg_count < 5
+                    x86_synth_emit_bytes(s, [15, 31, 68, 0, 0])
+                end
                 s.synth_last_expr_type = "int"
             // Intrinsic 2: malloc (raw direct kernel SYS_mmap page allocator)
             elif var_name == "malloc"
@@ -1535,7 +1605,7 @@ fn x86_synth_expr_primary s toks pos_box
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = ""
             // ── Intrinsic 8b: dict / map / অভিধান + native DICT0 operations ────
-            elif (var_name == "dict" or var_name == "map" or var_name == "অভিধান") and arg_count <= 1
+            elif (var_name == "dict" or var_name == "map" or var_name == "অভিধান" or (var_name == "map_new" and x86_synth_find_fn_first(s, "map_new") == 0)) and arg_count <= 1
                 if arg_count == 0
                     x86_synth_emit_bytes(s, [49, 255]) // xor edi, edi
                 else
@@ -1545,27 +1615,61 @@ fn x86_synth_expr_primary s toks pos_box
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = ""
                 s.synth_last_elem_type = "dyn_dict"
-            elif (var_name == "has_key" or (var_name == "dict_has" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 2
+            elif (var_name == "map_set" and x86_synth_find_fn_first(s, "map_set") == 0) and arg_count == 3
+                val_t_ms = 0
+                if arg_expr_types.len() >= 3
+                    if arg_expr_types[2] == "float" val_t_ms = 1
+                    elif arg_expr_types[2] == "str" val_t_ms = 2 end
+                end
+                x86_synth_emit_byte(s, 90) // pop rdx (val)
+                x86_synth_emit_byte(s, 94) // pop rsi (key)
+                x86_synth_emit_byte(s, 95) // pop rdi (dict)
+                if val_t_ms == 0
+                    x86_synth_emit_bytes(s, [49, 201]) // xor ecx, ecx
+                else
+                    x86_synth_emit_bytes(s, [185, val_t_ms, 0, 0, 0]) // mov ecx, val_tag
+                end
+                x86_synth_emit_call_helper(s, "_lipi_dict_set_typed")
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = "dyn_dict"
+            elif (var_name == "map_get" and x86_synth_find_fn_first(s, "map_get") == 0) and arg_count == 2
+                x86_synth_emit_byte(s, 94) // pop rsi (key)
+                x86_synth_emit_byte(s, 95) // pop rdi (dict)
+                x86_synth_emit_call_helper(s, "_lipi_dict_get")
+                s.synth_last_expr_type = "dyn_tagged"
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+            elif (var_name == "has_key" or ((var_name == "dict_has" or var_name == "map_has") and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 2
                 x86_synth_emit_byte(s, 94) // pop rsi (key)
                 x86_synth_emit_byte(s, 95) // pop rdi (dict)
                 x86_synth_emit_call_helper(s, "_lipi_dict_has")
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = ""
                 s.synth_last_elem_type = ""
-            elif (var_name == "del_key" or (var_name == "dict_del" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 2
+            elif (var_name == "del_key" or ((var_name == "dict_del" or var_name == "map_del") and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 2
                 x86_synth_emit_byte(s, 94) // pop rsi (key)
                 x86_synth_emit_byte(s, 95) // pop rdi (dict)
                 x86_synth_emit_call_helper(s, "_lipi_dict_del")
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = ""
                 s.synth_last_elem_type = ""
-            elif (var_name == "keys" or (var_name == "dict_keys" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 1
+            elif var_name == "hashmap_delete" and x86_synth_find_fn_first(s, var_name) == 0 and arg_count == 2
+                // WHY: Fallback DICT0 delete returning the map handle when utso/hashmap is not imported
+                // (avoids symbol collision with utso/core/hashmap.lp's hashmap_delete while keeping signed packages intact).
+                x86_synth_emit_bytes(s, [94, 95, 87, 72, 131, 236, 8]) // pop rsi; pop rdi; push rdi; sub rsp, 8
+                x86_synth_emit_call_helper(s, "_lipi_dict_del")
+                x86_synth_emit_bytes(s, [72, 131, 196, 8, 88])         // add rsp, 8; pop rax (return dict handle)
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+                s.synth_last_elem_type = ""
+            elif (var_name == "keys" or ((var_name == "dict_keys" or var_name == "map_keys") and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 1
                 x86_synth_emit_byte(s, 95) // pop rdi (dict)
                 x86_synth_emit_call_helper(s, "_lipi_dict_keys")
                 s.synth_last_expr_type = ""
                 s.synth_last_struct = ""
                 s.synth_last_elem_type = ""
-            elif (var_name == "values" or (var_name == "dict_values" and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 1
+            elif (var_name == "values" or ((var_name == "dict_values" or var_name == "map_values") and x86_synth_find_fn_first(s, var_name) == 0)) and arg_count == 1
                 x86_synth_emit_byte(s, 95) // pop rdi (dict)
                 x86_synth_emit_call_helper(s, "_lipi_dict_values")
                 s.synth_last_expr_type = ""
@@ -1720,6 +1824,8 @@ fn x86_synth_expr_primary s toks pos_box
                                         gti = gti + 1
                                     end
                                 end
+                                // Enforce compile-time generic trait bounds (`<T: Printable>`, `<T: A + B>`)
+                                x86_synth_verify_generic_bounds(s, var_name, orig_fn.fn_type_params, orig_fn.fn_type_bounds, g_targs)
                                 g_suffix = "__g"
                                 gsi = 0
                                 while gsi < g_targs.len()
@@ -1811,6 +1917,10 @@ fn x86_synth_expr_primary s toks pos_box
                                     end
                                 end
                             end
+                            // Direct Function Call: route str(u64_expr) to _lipi_uint_to_str for full unsigned range
+                            if arg_count == 1 and (var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং") and arg_expr_types.len() > 0 and arg_expr_types[0] == "uint"
+                                call_target_name = "_lipi_uint_to_str"
+                            end
                             fn_cleanup = x86_synth_emit_pop_args(s, arg_count)
                             // Direct Function Call: Emits call rel32 (0xE8) and queues relocation
                             call_off = s.synth_code.len()
@@ -1828,7 +1938,7 @@ fn x86_synth_expr_primary s toks pos_box
                             rt_name = x86_synth_lookup_fn_ret_type(s, call_target_name)
                             if var_name == "len" or var_name == "length" or var_name == "দৈর্ঘ্য" or var_name == "str_len"
                                 s.synth_last_expr_type = "int"
-                            elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "float_to_str" or var_name == "stack_trace" or var_name == "backtrace" or var_name == "স্ট্যাক_ট্রেস" or var_name == "sha256_hex" or var_name == "str_sub" or var_name == "char_at" or var_name == "chr" or var_name == "file_read" or var_name == "bytes_to_hex" or var_name == "qword_to_hex" or var_name == "buf_to_str" or var_name == "bytes_to_str" or var_name == "mem_to_str" or var_name == "বাফার_স্ট্রিংয়ে" or var_name == "বাইট_থেকে_স্ট্রিং"
+                            elif var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "float_to_str" or var_name == "uint_to_str" or var_name == "stack_trace" or var_name == "backtrace" or var_name == "স্ট্যাক_ট্রেস" or var_name == "sha256_hex" or var_name == "str_sub" or var_name == "char_at" or var_name == "chr" or var_name == "file_read" or var_name == "bytes_to_hex" or var_name == "qword_to_hex" or var_name == "buf_to_str" or var_name == "bytes_to_str" or var_name == "mem_to_str" or var_name == "বাফার_স্ট্রিংয়ে" or var_name == "বাইট_থেকে_স্ট্রিং"
                                 s.synth_last_expr_type = "str"
                             elif var_name == "floor" or var_name == "মেঝে" or var_name == "gc_collect" or var_name == "lipi_gc_collect" or var_name == "gc_live_bytes" or var_name == "gc_set_threshold" or var_name == "gc_set_auto" or var_name == "buf_len" or var_name == "buf_ptr" or var_name == "buf_write_byte" or var_name == "buf_append_byte" or var_name == "buf_push" or var_name == "buf_write_mem" or var_name == "buf_write_str" or var_name == "buf_get_byte" or var_name == "buf_clear" or var_name == "buf_free" or var_name == "ord" or var_name == "mem_byte_read" or var_name == "mem_read_byte" or var_name == "mem_read" or var_name == "mem_word_read" or var_name == "str_char_at" or var_name == "ror32" or var_name == "rol32" or var_name == "clock_ms" or var_name == "cpu_clock" or var_name == "arena_mark" or var_name == "arena_allocated" or var_name == "file_exists" or var_name == "sha256_ch" or var_name == "sha256_maj" or var_name == "sha256_sigma0" or var_name == "sha256_sigma1" or var_name == "sha256_gamma0" or var_name == "sha256_gamma1"
                                 s.synth_last_expr_type = "int"
@@ -1836,7 +1946,13 @@ fn x86_synth_expr_primary s toks pos_box
                                 s.synth_last_expr_type = ""
                             if var_name == "restore_extract_single_file"
                                 s.synth_last_struct = "ExtractedSingleFile"
-                            elif rt_name == "int" or rt_name == "i64" or rt_name == "i32" or rt_name == "u64" or rt_name == "u32"
+                            elif x86_synth_is_ptr_type(rt_name) == 1
+                                s.synth_last_expr_type = "uint"
+                                s.synth_last_struct = rt_name
+                            elif x86_synth_is_uint_type(rt_name) == 1
+                                s.synth_last_expr_type = "uint"
+                                s.synth_last_struct = ""
+                            elif rt_name == "int" or rt_name == "i64" or rt_name == "i32" or rt_name == "i16" or rt_name == "i8"
                                 s.synth_last_expr_type = "int"
                                 s.synth_last_struct = ""
                             elif rt_name == "float" or rt_name == "f64" or rt_name == "f32"
@@ -1954,10 +2070,14 @@ fn x86_synth_expr_primary s toks pos_box
                                     s.synth_last_expr_type = "str"
                                 elif rt0 == "float" or rt0 == "f64" or rt0 == "f32"
                                     s.synth_last_expr_type = "float"
-                                elif rt0 == "int" or rt0 == "i64" or rt0 == "i32" or rt0 == "u64" or rt0 == "u32"
+                                elif x86_synth_is_uint_type(rt0) == 1
+                                    s.synth_last_expr_type = "uint"
+                                elif rt0 == "int" or rt0 == "i64" or rt0 == "i32" or rt0 == "i16" or rt0 == "i8"
                                     s.synth_last_expr_type = "int"
                                 elif rt0 == "str" or rt0 == "string"
                                     s.synth_last_expr_type = "str"
+                                elif rt0 == "dyn_tagged"
+                                    s.synth_last_expr_type = "dyn_tagged"
                                 else
                                     s.synth_last_expr_type = ""
                                     s.synth_last_struct = rt0
