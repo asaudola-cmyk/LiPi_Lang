@@ -21,8 +21,37 @@ fn wasm_synth_new
     s.ws_last_expr_is_str = 0
     s.ws_float_vars = list()
     s.ws_str_vars = list()
+    s.ws_narrow_vars = list()
+    s.ws_narrow_types = list()
     s.ws_freestanding = g_wasm_freestanding
+    s.ws_ssa_replaced_cnt = 0
+    s.ws_ssa_replaced_bytes = 0
     return s
+
+fn wasm_synth_set_narrow_type s name tname
+    ni = 0
+    while ni < s.ws_narrow_vars.len()
+        if s.ws_narrow_vars[ni] == name
+            list_set(s.ws_narrow_types, ni, tname)
+            return 0
+        end
+        ni = ni + 1
+    end
+    push(s.ws_narrow_vars, name)
+    push(s.ws_narrow_types, tname)
+    return 0
+end
+
+fn wasm_synth_get_narrow_type s name
+    ni = 0
+    while ni < s.ws_narrow_vars.len()
+        if s.ws_narrow_vars[ni] == name
+            return s.ws_narrow_types[ni]
+        end
+        ni = ni + 1
+    end
+    return ""
+end
 
 fn wasm_list_contains lst name
     li = 0

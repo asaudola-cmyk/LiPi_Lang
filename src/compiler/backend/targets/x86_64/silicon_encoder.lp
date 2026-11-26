@@ -195,6 +195,11 @@ fn x86_synth_emit_silicon_atomics_and_fences s
     off_pause = s.synth_code.len()
     x86_synth_register_helper_fn(s, "cpu_pause", off_pause)
     x86_synth_emit_bytes(s, [243, 144, 195])
+
+    // cpu_nop() (cross-arch bare-metal parity with ARM64 & RISC-V 64)
+    off_nop = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "cpu_nop", off_nop)
+    x86_synth_emit_bytes(s, [144, 195])
     return 0
 
 fn x86_synth_emit_silicon_cpu_control s
@@ -211,9 +216,10 @@ fn x86_synth_emit_silicon_cpu_control s
     x86_synth_register_helper_fn(s, "sti", off_sti)
     x86_synth_emit_bytes(s, [251, 195])
 
-    // cpu_hlt() / hlt
+    // cpu_hlt() / cpu_halt() / hlt
     off_hlt = s.synth_code.len()
     x86_synth_register_helper_fn(s, "cpu_hlt", off_hlt)
+    x86_synth_register_helper_fn(s, "cpu_halt", off_hlt)
     x86_synth_register_helper_fn(s, "hlt", off_hlt)
     x86_synth_emit_bytes(s, [244, 195])
 

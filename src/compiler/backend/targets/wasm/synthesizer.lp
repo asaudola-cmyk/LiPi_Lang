@@ -992,11 +992,35 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             nk = nt.tok_kind
             ntxt = nt.tok_text
 
+            // Typed local variable declaration: x: u8 = expr / x: i64 = expr
+            if (nk == TOK_COLON() or (nk != TOK_STR() and ntxt == ":")) and next_pos + 2 < toks.len() and toks[next_pos + 1].tok_kind == TOK_IDENT()
+                decl_type = toks[next_pos + 1].tok_text
+                eq_p = next_pos + 2
+                if eq_p < toks.len() and (toks[eq_p].tok_kind == TOK_ASSIGN() or toks[eq_p].tok_text == "=")
+                    var_name = txt
+                    list_set(pos_box, 0, eq_p + 1)
+                    wasm_synth_compile_expr(s, toks, pos_box)
+                    if wasm_is_narrow_int_type(decl_type) == 1
+                        wasm_synth_set_narrow_type(s, var_name, decl_type)
+                        wasm_emit_truncate_int_width(s.ws_code, decl_type)
+                    end
+                    var_idx = wasm_synth_alloc_local(s, var_name)
+                    wasm_emit_local_set(s.ws_code, var_idx)
+                    wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
+                    wasm_synth_mark_str_var(s, var_name, s.ws_last_expr_is_str)
+                    return 0
+                end
+            end
+
             // Simple assignment: x = expr
             if nk == TOK_ASSIGN() or ntxt == "="
                 var_name = txt
                 list_set(pos_box, 0, next_pos + 1) // Consume ident and '='
                 wasm_synth_compile_expr(s, toks, pos_box)
+                nt_cur = wasm_synth_get_narrow_type(s, var_name)
+                if wasm_is_narrow_int_type(nt_cur) == 1
+                    wasm_emit_truncate_int_width(s.ws_code, nt_cur)
+                end
                 var_idx = wasm_synth_alloc_local(s, var_name)
                 wasm_emit_local_set(s.ws_code, var_idx)
                 wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
@@ -1029,6 +1053,10 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 elif nk == TOK_PERCENTEQ() or ntxt == "%="
                     wasm_emit_i64_rem_s(s.ws_code)
 
+                nt_comp = wasm_synth_get_narrow_type(s, var_name)
+                if wasm_is_narrow_int_type(nt_comp) == 1
+                    wasm_emit_truncate_int_width(s.ws_code, nt_comp)
+                end
                 wasm_emit_local_set(s.ws_code, var_idx)
                 return 0
 
@@ -1042,13 +1070,10 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
 // ── 9. Master Compilation Engine & Program Synthesizer ────────────────────────
 // ==============================================================================
 
-fn wasm_synth_compile_program tokens
-    // WHY: Master orchestration entry point. Transforms raw token stream into
-    //      a complete, sovereign, standalone W3C WebAssembly (.wasm) binary container.
-    //      - Phase 1: Pre-scans tokens to discover all user functions and top-level code.
-    //      - Phase 2: Allocates function table entries (ensuring 'main' / '_start' is index 0).
-    //      - Phase 3: Compiles function bodies, conditionals, and loops into bytecode.
-    //      - Phase 4: Envelopes Sections 1, 3, 5, 7, 10, 11 in strictly ascending W3C order.
+fn wasm_synth_compile_program_ssa tokens ssa_lower_res
+    // WHY: Master orchestration entry point. Transforms raw token stream (and optionally
+    //      direct SSA CFG-lowered WebAssembly MVP functions when --ssa-codegen is active)
+    //      into a complete, sovereign, standalone W3C WebAssembly (.wasm) binary container.
     s = wasm_synth_new()
     toks = tokens
 
@@ -1205,7 +1230,9 @@ fn wasm_synth_compile_program tokens
                 fn_name = toks[name_p].tok_text
                 list_set(pos_box, 0, name_p + 1)
 
-            // Skip parameter tokens until newline or return arrow
+            // Parse parameter narrow types while advancing past parameter list until newline or return arrow
+            p_narrow_names = list()
+            p_narrow_types = list()
             while get(pos_box, 0) < toks.len()
                 pt = toks[get(pos_box, 0)]
                 if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI()
@@ -1219,7 +1246,23 @@ fn wasm_synth_compile_program tokens
                     end
                     break
                 end
-                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                if pt.tok_kind == TOK_IDENT()
+                    p_nm_cur = pt.tok_text
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                            p_ty_cur = toks[get(pos_box, 0)].tok_text
+                            if wasm_is_narrow_int_type(p_ty_cur) == 1
+                                push(p_narrow_names, p_nm_cur)
+                                push(p_narrow_types, p_ty_cur)
+                            end
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    end
+                else
+                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                end
             end
 
             target_fn = wasm_synth_find_function(s, fn_name)
@@ -1227,12 +1270,29 @@ fn wasm_synth_compile_program tokens
                 saved_ws_try_depths = s.ws_try_depths
                 saved_ws_float_vars = s.ws_float_vars
                 saved_ws_str_vars = s.ws_str_vars
+                saved_ws_narrow_vars = s.ws_narrow_vars
+                saved_ws_narrow_types = s.ws_narrow_types
                 s.ws_current_fn = target_fn
                 s.ws_code = target_fn.wfn_code
                 s.ws_block_depth = 0
                 s.ws_try_depths = list()
                 s.ws_float_vars = list()
                 s.ws_str_vars = list()
+                s.ws_narrow_vars = list()
+                s.ws_narrow_types = list()
+
+                // Enforce narrow bit-width truncation on incoming parameter values at function entry
+                pni = 0
+                while pni < p_narrow_names.len()
+                    pn_nm = p_narrow_names[pni]
+                    pn_ty = p_narrow_types[pni]
+                    wasm_synth_set_narrow_type(s, pn_nm, pn_ty)
+                    pn_idx = wasm_synth_alloc_local(s, pn_nm)
+                    wasm_emit_local_get(s.ws_code, pn_idx)
+                    wasm_emit_truncate_int_width(s.ws_code, pn_ty)
+                    wasm_emit_local_set(s.ws_code, pn_idx)
+                    pni = pni + 1
+                end
 
                 // Compile function body until explicit end marker, next function, dedent, or EOF
                 while get(pos_box, 0) < toks.len()
@@ -1273,6 +1333,8 @@ fn wasm_synth_compile_program tokens
                 s.ws_try_depths = saved_ws_try_depths
                 s.ws_float_vars = saved_ws_float_vars
                 s.ws_str_vars = saved_ws_str_vars
+                s.ws_narrow_vars = saved_ws_narrow_vars
+                s.ws_narrow_types = saved_ws_narrow_types
         else
             // Compile top-level statement into main function
             b_p = get(pos_box, 0)
@@ -1295,6 +1357,71 @@ fn wasm_synth_compile_program tokens
         push(s.ws_types, 0 - 4)
         push(import_list, ["wasi_snapshot_preview1", "fd_write", 0, wasi_type_idx])
         import_fn_count = 1
+    end
+
+    // ── Phase 4a: Direct --ssa-codegen WASM MVP CFG Function Splicing ──────────
+    if g_wasm_ssa_codegen == 1 and ssa_lower_res != 0 and ssa_lower_res.slr_success == 1 and ssa_lower_res.slr_code_buf != 0
+        w_cp = buf_ptr(ssa_lower_res.slr_code_buf)
+        si_w = 0
+        sn_w = ssa_lower_res.slr_fn_names.len()
+        while si_w < sn_w
+            if ssa_lower_res.slr_fn_eligible[si_w] == 1
+                s_fnm = ssa_lower_res.slr_fn_names[si_w]
+                if s_fnm != "main" or has_top_level_code == 0
+                    w_tgt = wasm_synth_find_function(s, s_fnm)
+                    if w_tgt != 0
+                        s_off = ssa_lower_res.slr_fn_offsets[si_w]
+                        s_sz = ssa_lower_res.slr_fn_sizes[si_w]
+                        s_tot_loc = ssa_lower_res.slr_fn_locals[si_w]
+                        if s_sz > 0 and s_tot_loc >= w_tgt.wfn_param_count
+                            w_bytes = list()
+                            bi_cp = 0
+                            while bi_cp < s_sz
+                                push(w_bytes, mem_byte_read(w_cp, s_off + bi_cp) & 255)
+                                bi_cp = bi_cp + 1
+                            end
+                            // Patch all 5-byte padded ULEB128 OP_CALL targets inside this SSA function
+                            all_calls_ok = 1
+                            cri = 0
+                            while cri < ssa_lower_res.slr_call_relocs.len()
+                                cr = ssa_lower_res.slr_call_relocs[cri]
+                                if cr.sjp_kind == 20 and cr.sjp_offset >= s_off and cr.sjp_offset + 5 <= s_off + s_sz
+                                    c_wfn = wasm_synth_find_function(s, cr.sjp_target)
+                                    if c_wfn == 0
+                                        all_calls_ok = 0
+                                        break
+                                    end
+                                    t_idx = c_wfn.wfn_index + import_fn_count
+                                    ro_c = cr.sjp_offset - s_off
+                                    list_set(w_bytes, ro_c + 0, (t_idx & 127) | 128)
+                                    list_set(w_bytes, ro_c + 1, ((t_idx >> 7) & 127) | 128)
+                                    list_set(w_bytes, ro_c + 2, ((t_idx >> 14) & 127) | 128)
+                                    list_set(w_bytes, ro_c + 3, ((t_idx >> 21) & 127) | 128)
+                                    list_set(w_bytes, ro_c + 4, (t_idx >> 28) & 15)
+                                end
+                                cri = cri + 1
+                            end
+                            if all_calls_ok == 1
+                                w_tgt.wfn_code = w_bytes
+                                w_tgt.wfn_has_returned = 1
+                                extra_loc = s_tot_loc - w_tgt.wfn_param_count
+                                new_vl = list()
+                                li_e = 0
+                                while li_e < extra_loc
+                                    push(new_vl, "__ssa_loc_" + str(li_e))
+                                    li_e = li_e + 1
+                                end
+                                w_tgt.wfn_var_locals = new_vl
+                                s.ws_ssa_replaced_cnt = s.ws_ssa_replaced_cnt + 1
+                                s.ws_ssa_replaced_bytes = s.ws_ssa_replaced_bytes + s_sz
+                            end
+                        end
+                    end
+                end
+            end
+            si_w = si_w + 1
+        end
+        say "    [wasm_synth] --ssa-codegen active: replaced " + str(s.ws_ssa_replaced_cnt) + "/" + str(sn_w) + " functions directly from SSA CFG (" + str(s.ws_ssa_replaced_bytes) + " bytes native WASM MVP IR, " + str(ssa_lower_res.slr_total_insts) + " IR insts)"
     end
 
     // Register WASI standard _start signature: () -> () only in hosted WASI mode (omitted in --freestanding)
@@ -1404,6 +1531,9 @@ fn wasm_synth_compile_program tokens
         wasm_append_bytes(wasm_bytes, sec11)
 
     return wasm_bytes
+
+fn wasm_synth_compile_program tokens
+    return wasm_synth_compile_program_ssa(tokens, 0)
 
 fn wasm_synth_compile_source source_code
     // WHY: High-level convenience compiler turning raw LiPi source string

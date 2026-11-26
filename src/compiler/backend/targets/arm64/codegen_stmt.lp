@@ -126,7 +126,7 @@ fn arm64_synth_compile_statement s toks pos_box
         has_expr = 0
         if next_pos < toks.len()
             nt = toks[next_pos]
-            if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF()
+            if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF() and nt.tok_kind != TOK_KW_END() and nt.tok_kind != TOK_DIR_END() and nt.tok_kind != TOK_RBRACE() and not (nt.tok_kind == TOK_IDENT() and (nt.tok_text == "end" or nt.tok_text == "শেষ" or nt.tok_text == "@end"))
                 has_expr = 1
 
         if has_expr == 1
@@ -1429,6 +1429,13 @@ fn arm64_synth_compile_statement s toks pos_box
                 s.a64_last_struct = ""
                 arm64_synth_compile_expr(s, toks, pos_box)
                 prev_lv = arm64_find_local_var(s, var_name)
+                eff_let_itype = let_decl_type
+                if eff_let_itype == "" and prev_lv != 0
+                    eff_let_itype = prev_lv.a64_lv_int_type
+                end
+                if arm64_is_narrow_int_type(eff_let_itype) == 1
+                    arm64_emit_truncate_int_width(s, 0, eff_let_itype)
+                end
                 if prev_lv == 0
                     off = arm64_synth_alloc_var(s, var_name)
                     if arm64_is_boxed_name(s, var_name) == 1
@@ -1453,6 +1460,13 @@ fn arm64_synth_compile_statement s toks pos_box
                         prev_lv.a64_lv_is_uint = 1
                     elif let_decl_type != ""
                         prev_lv.a64_lv_is_uint = 0
+                    end
+                    if let_decl_type != ""
+                        if arm64_is_narrow_int_type(let_decl_type) == 1
+                            prev_lv.a64_lv_int_type = let_decl_type
+                        else
+                            prev_lv.a64_lv_int_type = ""
+                        end
                     end
                     prev_lv.a64_lv_prim_type = s.a64_last_expr_type
                     if s.a64_last_expr_type == "dyn_tagged"
@@ -1480,6 +1494,13 @@ fn arm64_synth_compile_statement s toks pos_box
             s.a64_last_struct = ""
             arm64_synth_compile_expr(s, toks, pos_box)
             prev_lv = arm64_find_local_var(s, var_name)
+            eff_as_itype = decl_type_a64
+            if eff_as_itype == "" and prev_lv != 0
+                eff_as_itype = prev_lv.a64_lv_int_type
+            end
+            if arm64_is_narrow_int_type(eff_as_itype) == 1
+                arm64_emit_truncate_int_width(s, 0, eff_as_itype)
+            end
             if prev_lv == 0
                 off = arm64_synth_alloc_var(s, var_name)
                 if arm64_is_boxed_name(s, var_name) == 1
@@ -1504,6 +1525,13 @@ fn arm64_synth_compile_statement s toks pos_box
                     prev_lv.a64_lv_is_uint = 1
                 elif decl_type_a64 != ""
                     prev_lv.a64_lv_is_uint = 0
+                end
+                if decl_type_a64 != ""
+                    if arm64_is_narrow_int_type(decl_type_a64) == 1
+                        prev_lv.a64_lv_int_type = decl_type_a64
+                    else
+                        prev_lv.a64_lv_int_type = ""
+                    end
                 end
                 prev_lv.a64_lv_prim_type = s.a64_last_expr_type
                 if s.a64_last_expr_type == "dyn_tagged"
@@ -1566,6 +1594,9 @@ fn arm64_synth_compile_statement s toks pos_box
                     arm64_emit_eor_x(s, 0, 0, 1)
                 end
                 if ca_lv != 0
+                    if arm64_is_narrow_int_type(ca_lv.a64_lv_int_type) == 1
+                        arm64_emit_truncate_int_width(s, 0, ca_lv.a64_lv_int_type)
+                    end
                     if ca_lv.a64_lv_is_boxed == 1
                         arm64_emit_ldr_reg_sp(s, 9, ca_lv.lv_offset)
                         arm64_emit_str_x_off(s, 0, 9, 0)
@@ -1626,9 +1657,11 @@ fn arm64_synth_compile_statement s toks pos_box
         s.a64_defer_starts = list()
         s.a64_defer_ends = list()
 
-        // Parse parameter names & unsigned type annotations until newline, '{', or return arrow
+        // Parse parameter names & unsigned/narrow int type annotations until ')', newline, '{', '->', or inline body keyword
         params = list()
         param_is_uint = list()
+        param_int_types = list()
+        fn_paren_depth = 0
         while get(pos_box, 0) < toks.len()
             p_tok = toks[get(pos_box, 0)]
             if p_tok.tok_kind == TOK_NEWLINE() or p_tok.tok_kind == TOK_SEMI()
@@ -1636,28 +1669,60 @@ fn arm64_synth_compile_statement s toks pos_box
                 break
             if p_tok.tok_kind == TOK_LBRACE() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "{")
                 break
+            if p_tok.tok_kind == TOK_LPAREN() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "(")
+                fn_paren_depth = fn_paren_depth + 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                continue
+            if p_tok.tok_kind == TOK_RPAREN() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == ")")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                fn_paren_depth = fn_paren_depth - 1
+                if fn_paren_depth <= 0
+                    // WHY: Single-line functions (`fn BASE() return 0x09000000 end`) place their body
+                    // immediately after ')' (or optional '-> RetType'), so stop scanning params here!
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "->"))
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    end
+                    break
+                end
+                continue
             if p_tok.tok_kind == TOK_ARROW() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "->")
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
                 break
+            if fn_paren_depth == 0
+                pk_b = p_tok.tok_kind
+                pt_b = p_tok.tok_text
+                if pk_b == TOK_KW_RETURN() or pk_b == TOK_KW_IF() or pk_b == TOK_KW_WHILE() or pk_b == TOK_KW_FOR() or pk_b == TOK_KW_PRINT() or pk_b == TOK_KW_END() or pk_b == TOK_DIR_END() or (pk_b == TOK_IDENT() and (pt_b == "return" or pt_b == "ফেরত" or pt_b == "end" or pt_b == "শেষ" or pt_b == "@end"))
+                    break
+                end
+            end
             if p_tok.tok_kind == TOK_IDENT()
                 pname = p_tok.tok_text
                 push(params, pname)
                 p_uflag = 0
+                p_itype = ""
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 // Parse optional type annotation: : type
                 if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
-                        if arm64_is_uint_type(toks[get(pos_box, 0)].tok_text) == 1
+                        pt_txt = toks[get(pos_box, 0)].tok_text
+                        if arm64_is_uint_type(pt_txt) == 1
                             p_uflag = 1
+                        end
+                        if arm64_is_narrow_int_type(pt_txt) == 1
+                            p_itype = pt_txt
                         end
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                     end
                 end
                 push(param_is_uint, p_uflag)
+                push(param_int_types, p_itype)
             else
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
@@ -1667,6 +1732,113 @@ fn arm64_synth_compile_statement s toks pos_box
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or toks[get(pos_box, 0)].tok_text == "{")
             fn_braced = 1
             list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+
+        // ── Direct ARM64 SSA CFG Replacement (--ssa-codegen) ─────────────────
+        if g_arm64_ssa_codegen == 1 and s.a64_ssa_lower_res != 0 and s.a64_ssa_lower_res.slr_success == 1
+            a_slr = s.a64_ssa_lower_res
+            a_mi = 0 - 1
+            if a_slr.slr_fn_eligible != 0
+                asfi = 0
+                while asfi < a_slr.slr_fn_names.len() and asfi < a_slr.slr_fn_eligible.len()
+                    if a_slr.slr_fn_names[asfi] == fn_name and a_slr.slr_fn_eligible[asfi] == 1
+                        a_mi = asfi
+                        break
+                    end
+                    asfi = asfi + 1
+                end
+            end
+            if a_mi >= 0 and a_mi < a_slr.slr_fn_offsets.len() and a_mi < a_slr.slr_fn_sizes.len()
+                a_off = a_slr.slr_fn_offsets[a_mi]
+                a_sz = a_slr.slr_fn_sizes[a_mi]
+                a_clen = 0
+                if a_slr.slr_code_buf != 0
+                    a_clen = buf_len(a_slr.slr_code_buf)
+                elif a_slr.slr_code != 0
+                    a_clen = a_slr.slr_code.len()
+                end
+                if a_sz > 0 and (a_off + a_sz) <= a_clen
+                    dst_a_base = s.synth_code.len()
+                    if a_slr.slr_code_buf != 0
+                        a_cp = buf_ptr(a_slr.slr_code_buf)
+                        abi = 0
+                        while abi < a_sz
+                            push(s.synth_code, mem_byte_read(a_cp, a_off + abi))
+                            abi = abi + 1
+                        end
+                    else
+                        abi = 0
+                        while abi < a_sz
+                            push(s.synth_code, a_slr.slr_code[a_off + abi])
+                            abi = abi + 1
+                        end
+                    end
+                    if a_slr.slr_call_relocs != 0
+                        acri = 0
+                        while acri < a_slr.slr_call_relocs.len()
+                            ajp = a_slr.slr_call_relocs[acri]
+                            if ajp.sjp_offset >= a_off and ajp.sjp_offset < (a_off + a_sz)
+                                acrel = Arm64CallReloc()
+                                acrel.a64_cr_patch_offset = dst_a_base + (ajp.sjp_offset - a_off)
+                                acrel.a64_cr_target_name = ajp.sjp_target
+                                push(s.synth_call_relocs, acrel)
+                            end
+                            acri = acri + 1
+                        end
+                    end
+                    if fn_braced == 1
+                        ask_d = 1
+                        while get(pos_box, 0) < toks.len() and ask_d > 0
+                            ask_t = toks[get(pos_box, 0)]
+                            if ask_t.tok_kind == TOK_LBRACE() or (ask_t.tok_kind != TOK_STR() and ask_t.tok_text == "{")
+                                ask_d = ask_d + 1
+                            elif ask_t.tok_kind == TOK_RBRACE() or (ask_t.tok_kind != TOK_STR() and ask_t.tok_text == "}")
+                                ask_d = ask_d - 1
+                            end
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    else
+                        a_sl_nest = 0
+                        while get(pos_box, 0) < toks.len()
+                            arm64_synth_skip_whitespace_tokens(toks, pos_box)
+                            asp_c = get(pos_box, 0)
+                            if asp_c >= toks.len() break end
+                            ast_c = toks[asp_c]
+                            if ast_c.tok_span.span_start_line == base_line and (ast_c.tok_kind == TOK_KW_IF() or ast_c.tok_kind == TOK_KW_WHILE() or ast_c.tok_kind == TOK_KW_FOR() or ast_c.tok_kind == TOK_KW_MATCH() or ast_c.tok_kind == TOK_KW_TRY())
+                                a_sl_nest = a_sl_nest + 1
+                            end
+                            if ast_c.tok_kind == TOK_KW_END() or ast_c.tok_kind == TOK_DIR_END() or (ast_c.tok_kind == TOK_IDENT() and (ast_c.tok_text == "end" or ast_c.tok_text == "শেষ" or ast_c.tok_text == "@end"))
+                                if ast_c.tok_span.span_start_col <= base_col or (ast_c.tok_span.span_start_line == base_line and a_sl_nest == 0)
+                                    list_set(pos_box, 0, asp_c + 1)
+                                    break
+                                end
+                                if ast_c.tok_span.span_start_line == base_line and a_sl_nest > 0
+                                    a_sl_nest = a_sl_nest - 1
+                                end
+                            end
+                            if ast_c.tok_span.span_start_line > base_line and ast_c.tok_span.span_start_col <= base_col
+                                break
+                            end
+                            list_set(pos_box, 0, asp_c + 1)
+                        end
+                    end
+                    after_a_off = s.synth_code.len()
+                    fn_entry.a64_fn_end_offset = after_a_off
+                    s.a64_ssa_replaced_cnt = s.a64_ssa_replaced_cnt + 1
+                    s.a64_ssa_replaced_bytes = s.a64_ssa_replaced_bytes + a_sz
+                    s.synth_locals = saved_arm_locals
+                    s.synth_stack_offset = saved_arm_stack_off
+                    s.a64_sp_delta = saved_arm_sp_delta
+                    s.a64_in_function = 0
+                    s.a64_try_patches = saved_arm_try_patches
+                    s.a64_boxed_vars = saved_arm_boxed
+                    s.a64_defer_starts = saved_arm_ds
+                    s.a64_defer_ends = saved_arm_de
+                    a_rel_w = (after_a_off - fn_jmp_patch) / 4
+                    arm64_synth_patch_u32(s, fn_jmp_patch, 335544320 | (a_rel_w & 67108863))
+                    return 0
+                end
+            end
         end
 
         // Prescan function body for variables mutated inside nested closures
@@ -1681,11 +1853,27 @@ fn arm64_synth_compile_statement s toks pos_box
             pname = params[pi]
             off = arm64_synth_alloc_var(s, pname)
             plv_u = arm64_find_local_var(s, pname)
+            p_it = ""
             if plv_u != 0 and pi < param_is_uint.len()
                 plv_u.a64_lv_is_uint = param_is_uint[pi]
             end
+            if plv_u != 0 and pi < param_int_types.len()
+                p_it = param_int_types[pi]
+                plv_u.a64_lv_int_type = p_it
+            end
             if pi < 8
+                if arm64_is_narrow_int_type(p_it) == 1
+                    arm64_emit_truncate_int_width(s, pi, p_it)
+                end
                 arm64_emit_str_reg_sp(s, pi, off)
+            else
+                // AAPCS64 stack parameter pi >= 8 sits at [x29 + 16 + (pi - 8) * 8] above saved {x29, x30}
+                arm64_emit_ldr_x_off(s, 9, 29, 16 + ((pi - 8) * 8))
+                if arm64_is_narrow_int_type(p_it) == 1
+                    arm64_emit_truncate_int_width(s, 9, p_it)
+                end
+                arm64_emit_str_reg_sp(s, 9, off)
+            end
             pi = pi + 1
         // Wrap any closure-mutated parameter into a shared 8-byte heap upvalue cell
         pi = 0

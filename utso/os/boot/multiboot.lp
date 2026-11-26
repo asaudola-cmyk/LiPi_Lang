@@ -1,9 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL MULTIBOOT SPECIFICATION
+@! @deprecated [LEGACY HOSTED MULTIBOOT SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal Multiboot2 tag parsing and `--target=multiboot2-bare`,
+@! import `utso/silicon/multiboot2.lp` instead!
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! Module: utso/os/boot/multiboot.lp
-@! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: Multiboot 1 & Multiboot 2 Header Emission, Framebuffer Request Tags
 @! ============================================================================
 
 import "utso/core/collections"

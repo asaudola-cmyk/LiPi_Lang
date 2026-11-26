@@ -192,6 +192,30 @@ fn mem_read_u64 addr offset
 fn mem_write_u64 addr offset value
     return mem_write(addr, offset, value)
 
+// ── ৭.১. IEEE-754 ডাবল/ফ্লোট মেমরি রিড ও রাইট (64-bit / 32-bit Float Memory Ops) ──
+// WHY: C-ABI / FFI / SIMD বাফার থেকে সরাসরি IEEE-754 f64/f32 পড়া ও লেখা (cvtsi2sd ছাড়াই)।
+// Note: Direct calls to mem_read_f64 / mem_write_f64 / f64_from_bits / f64_to_bits are
+// lowered inline by x86_64/codegen_expr.lp; these definitions ensure first-class symbol
+// availability and Stage-1 bootstrap compatibility.
+fn f64_from_bits(bits) -> f64
+    return bits
+
+fn f64_to_bits(val) -> i64
+    return val
+
+fn mem_read_f64(addr, offset) -> f64
+    return f64_from_bits(mem_read(addr, offset))
+
+fn mem_write_f64(addr, offset, value) -> f64
+    mem_write(addr, offset, f64_to_bits(value))
+    return value
+
+fn মেমরি_দশমিক_পড়ো(addr, offset) -> f64
+    return mem_read_f64(addr, offset)
+
+fn মেমরি_দশমিক_লেখো(addr, offset, value) -> f64
+    return mem_write_f64(addr, offset, value)
+
 // ── ৮. সভেরিন সেগ্রিগেটেড স্ল্যাব অ্যালোকেটর (Segregated Slab Allocator) ────────
 // WHY: ছোট ছোট মেমরি বরাদ্দ (16B থেকে 2048B) সরাসরি কার্নেল সিসকল ছাড়া O(1) LIFO
 // ফ্রি-লিস্টে তাৎক্ষণিক রিসাইক্লিং করে মেমরি ফ্র্যাগমেন্টেশন ও কার্নেল ট্রানজিশন দূর করা।

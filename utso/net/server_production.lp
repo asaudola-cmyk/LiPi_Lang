@@ -208,7 +208,10 @@ fn prod_write_all fd ptr total
     sent = 0
     retries = 0
     while sent < total
-        n = syscall(SYS_WRITE, fd, ptr + sent, total - sent, 0, 0, 0)
+        n = syscall(44, fd, ptr + sent, total - sent, 16384, 0, 0)
+        if n == (0 - 88)
+            n = syscall(SYS_WRITE, fd, ptr + sent, total - sent, 0, 0, 0)
+        end
         if n == (0 - 4)
             continue
         if n == (0 - 11)
@@ -346,16 +349,23 @@ fn prod_epoll_del epfd fd
 // ── Non-Blocking Per-Connection Write Queue (Zero-Spin EPOLLOUT Backpressure) ──
 fn _prod_conn_enqueue_raw srv epfd c: ProdConn ptr total
     // WHY: Low-level non-blocking write queue for already-framed wire bytes (plaintext or TLS ciphertext).
+    // Uses SYS_sendto (44) + MSG_NOSIGNAL (0x4000) so disconnected peers never kill the server via SIGPIPE.
     if c == 0 or c.pconn_closed == 1 or total <= 0 return 0 end
     off = 0
     if buf_len(c.pconn_write_buf) == 0
         while off < total
-            n = syscall(SYS_WRITE, c.pconn_fd, ptr + off, total - off, 0, 0, 0)
+            n = syscall(44, c.pconn_fd, ptr + off, total - off, 16384, 0, 0)
+            if n == (0 - 88)
+                n = syscall(SYS_WRITE, c.pconn_fd, ptr + off, total - off, 0, 0, 0)
+            end
             if n == (0 - 4) continue end
             if n > 0
                 off = off + n
-            else
+            elif n == (0 - 11)
                 break
+            else
+                _prod_close_conn(srv, epfd, c)
+                return 0 - 1
             end
         end
     end
@@ -397,17 +407,28 @@ fn prod_conn_flush_writes srv epfd c: ProdConn
     if wlen <= 0 return 0 end
     wptr = buf_ptr(c.pconn_write_buf)
     sent = 0
+    fatal_err = 0
     while sent < wlen
-        n = syscall(SYS_WRITE, c.pconn_fd, wptr + sent, wlen - sent, 0, 0, 0)
+        n = syscall(44, c.pconn_fd, wptr + sent, wlen - sent, 16384, 0, 0)
+        if n == (0 - 88)
+            n = syscall(SYS_WRITE, c.pconn_fd, wptr + sent, wlen - sent, 0, 0, 0)
+        end
         if n == (0 - 4) continue end
         if n > 0
             sent = sent + n
+        elif n == (0 - 11)
+            break
         else
+            fatal_err = 1
             break
         end
     end
     if sent > 0
         _prod_buf_consume(c.pconn_write_buf, sent)
+    end
+    if fatal_err == 1
+        _prod_close_conn(srv, epfd, c)
+        return 0 - 1
     end
     if buf_len(c.pconn_write_buf) == 0
         if c.pconn_close_after_write == 1
@@ -768,6 +789,79 @@ fn prod_send_response fd status_code content_type body
 fn prod_send_json_response fd status_code json_payload
     return prod_send_response(fd, status_code, "application/json; charset=utf-8", json_payload)
 
+fn prod_sse_start_conn srv epfd c: ProdConn
+    // WHY: Non-blocking, TLS-1.3-transparent SSE stream initializer routed through prod_conn_enqueue_write.
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    hdr = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+    prod_conn_enqueue_write(srv, epfd, c, _prod_raw_ptr(hdr), len(hdr))
+    return 1
+end
+
+fn prod_sse_send_chunk_conn srv epfd c: ProdConn data
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    ds = str(data)
+    dlen = len(ds)
+    if dlen <= 0 return 0 end
+    hex_sz = _prod_int_to_hex(dlen)
+    b = buf_new(dlen + 16)
+    buf_write_str(b, hex_sz)
+    buf_write_str(b, "\r\n")
+    buf_write_mem(b, ds, dlen)
+    buf_write_str(b, "\r\n")
+    prod_conn_enqueue_write(srv, epfd, c, buf_ptr(b), buf_len(b))
+    buf_free(b)
+    return dlen
+end
+
+fn prod_sse_send_event_conn srv epfd c: ProdConn event_name data
+    payload = ""
+    if len(event_name) > 0
+        payload = "event: " + event_name + "\n"
+    end
+    payload = payload + "data: " + str(data) + "\n\n"
+    return prod_sse_send_chunk_conn(srv, epfd, c, payload)
+end
+
+fn prod_sse_end_conn srv epfd c: ProdConn
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    term = "0\r\n\r\n"
+    prod_conn_enqueue_write(srv, epfd, c, _prod_raw_ptr(term), 5)
+    if buf_len(c.pconn_write_buf) > 0
+        c.pconn_close_after_write = 1
+    else
+        _prod_close_conn(srv, epfd, c)
+    end
+    return 1
+end
+
+fn prod_sse_start_req req: ProdReq
+    if req == 0 or req.preq_srv == 0 return prod_sse_start(req.preq_fd) end
+    c = _prod_find_conn(req.preq_srv, req.preq_fd)
+    if c == 0 return prod_sse_start(req.preq_fd) end
+    return prod_sse_start_conn(req.preq_srv, get(req.preq_srv, 2), c)
+end
+
+fn prod_sse_send_chunk_req req: ProdReq data
+    if req == 0 or req.preq_srv == 0 return prod_sse_send_chunk(req.preq_fd, data) end
+    c = _prod_find_conn(req.preq_srv, req.preq_fd)
+    if c == 0 return prod_sse_send_chunk(req.preq_fd, data) end
+    return prod_sse_send_chunk_conn(req.preq_srv, get(req.preq_srv, 2), c, data)
+end
+
+fn prod_sse_send_event_req req: ProdReq event_name data
+    if req == 0 or req.preq_srv == 0 return 0 end
+    c = _prod_find_conn(req.preq_srv, req.preq_fd)
+    if c == 0 return 0 end
+    return prod_sse_send_event_conn(req.preq_srv, get(req.preq_srv, 2), c, event_name, data)
+end
+
+fn prod_sse_end_req req: ProdReq
+    if req == 0 or req.preq_srv == 0 return prod_sse_end(req.preq_fd) end
+    c = _prod_find_conn(req.preq_srv, req.preq_fd)
+    if c == 0 return prod_sse_end(req.preq_fd) end
+    return prod_sse_end_conn(req.preq_srv, get(req.preq_srv, 2), c)
+end
+
 fn prod_sse_start fd
     hdr = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
     prod_write_all(fd, _prod_raw_ptr(hdr), len(hdr))
@@ -791,6 +885,99 @@ fn prod_sse_end fd
     term = "0\r\n\r\n"
     prod_write_all(fd, _prod_raw_ptr(term), 5)
     return 1
+
+fn prod_ws_encode_server_frame_buf opcode data_ptr plen fin
+    // WHY: Encodes RFC 6455 unmasked server->client frame into an O(N) ByteBuffer so it can be
+    // transparently encrypted over TLS 1.3 (WSS) and queued via non-blocking EPOLLOUT backpressure.
+    b = buf_new(16 + plen)
+    b0 = opcode & 15
+    if fin != 0
+        b0 = b0 | 128
+    end
+    buf_write_byte(b, b0)
+    if plen <= 125
+        buf_write_byte(b, plen & 127)
+    elif plen <= 65535
+        buf_write_byte(b, 126)
+        buf_write_byte(b, (plen >> 8) & 255)
+        buf_write_byte(b, plen & 255)
+    else
+        buf_write_byte(b, 127)
+        buf_write_byte(b, (plen >> 56) & 255)
+        buf_write_byte(b, (plen >> 48) & 255)
+        buf_write_byte(b, (plen >> 40) & 255)
+        buf_write_byte(b, (plen >> 32) & 255)
+        buf_write_byte(b, (plen >> 24) & 255)
+        buf_write_byte(b, (plen >> 16) & 255)
+        buf_write_byte(b, (plen >> 8) & 255)
+        buf_write_byte(b, plen & 255)
+    end
+    if plen > 0 and data_ptr != 0
+        buf_write_mem(b, data_ptr, plen)
+    end
+    return b
+end
+
+fn prod_ws_send_frame_conn srv epfd c: ProdConn opcode data_ptr plen fin
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    b = prod_ws_encode_server_frame_buf(opcode, data_ptr, plen, fin)
+    res = prod_conn_enqueue_write(srv, epfd, c, buf_ptr(b), buf_len(b))
+    buf_free(b)
+    return res
+end
+
+fn prod_ws_send_text_conn srv epfd c: ProdConn msg
+    ms = str(msg)
+    return prod_ws_send_frame_conn(srv, epfd, c, 1, _prod_raw_ptr(ms), len(ms), 1)
+end
+
+fn prod_ws_send_binary_conn srv epfd c: ProdConn data_ptr data_len
+    return prod_ws_send_frame_conn(srv, epfd, c, 2, data_ptr, data_len, 1)
+end
+
+fn prod_ws_send_pong_conn srv epfd c: ProdConn payload_ptr payload_len
+    plen = payload_len
+    if plen > 125 plen = 125 end
+    return prod_ws_send_frame_conn(srv, epfd, c, 10, payload_ptr, plen, 1)
+end
+
+fn prod_ws_send_close_conn srv epfd c: ProdConn status_code
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    code = status_code
+    if code <= 0 code = 1000 end
+    cb = prod_malloc(8)
+    mem_byte_write(cb, 0, (code >> 8) & 255)
+    mem_byte_write(cb, 1, code & 255)
+    res = prod_ws_send_frame_conn(srv, epfd, c, 8, cb, 2, 1)
+    prod_free(cb, 8)
+    return res
+end
+
+fn prod_ws_send_fd srv fd opcode payload plen
+    // WHY: Lets custom WebSocket handlers push non-blocking WS / TLS 1.3 WSS frames by fd!
+    c = _prod_find_conn(srv, fd)
+    if c == 0 return 0 end
+    return prod_ws_send_frame_conn(srv, get(srv, 2), c, opcode, _prod_raw_ptr(payload), plen, 1)
+end
+
+fn prod_ws_send_text_fd srv fd msg
+    ms = str(msg)
+    return prod_ws_send_fd(srv, fd, 1, ms, len(ms))
+end
+
+fn prod_send_ws_upgrade_response_conn srv epfd c: ProdConn client_key
+    // WHY: Enqueues HTTP/1.1 101 WebSocket Upgrade via prod_conn_enqueue_write so WSS over TLS 1.3
+    // encrypts the 101 Switching Protocols handshake and never blocks the epoll event loop!
+    if c == 0 or c.pconn_closed == 1 return 0 end
+    use_key = client_key
+    if len(use_key) == 0
+        use_key = "dGhlIHNhbXBsZSBub25jZQ=="
+    end
+    accept_tok = ws_compute_accept_key(use_key)
+    resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept_tok + "\r\n\r\n"
+    prod_conn_enqueue_write(srv, epfd, c, _prod_raw_ptr(resp), len(resp))
+    return 1
+end
 
 fn prod_send_ws_upgrade_response_key fd client_key
     use_key = client_key
@@ -883,6 +1070,11 @@ fn _prod_drain_tls_records srv c: ProdConn
             _prod_buf_consume(c.pconn_tls_raw_buf, tot)
             continue
         end
+        if ctype == 21
+            // Plaintext TLS Alert record: close connection cleanly
+            _prod_buf_consume(c.pconn_tls_raw_buf, tot)
+            return 0 - 1
+        end
         rec = list()
         ri = 0
         while ri < tot
@@ -910,8 +1102,8 @@ fn _prod_dispatch_ws srv c: ProdConn opcode payload plen
                 hfn(c.pconn_fd, opcode, payload, plen)
                 return 1
         i = i + 1
-    // Default echo if no custom WebSocket route registered
-    ws_send_frame(c.pconn_fd, opcode, _prod_raw_ptr(payload), plen, 1)
+    // Default echo if no custom WebSocket route registered (non-blocking + TLS 1.3 WSS safe!)
+    prod_ws_send_frame_conn(srv, get(srv, 2), c, opcode, _prod_raw_ptr(payload), plen, 1)
     return 1
 
 fn _prod_process_ws_frames srv epfd c: ProdConn
@@ -921,19 +1113,27 @@ fn _prod_process_ws_frames srv epfd c: ProdConn
         fr = ws_parse_frame(buf_ptr(c.pconn_read_buf), av, 1)
         if fr.ws_ok == 0 break
         if fr.ws_ok < 0
-            ws_send_close(c.pconn_fd, 1002)
-            _prod_close_conn(srv, epfd, c)
+            prod_ws_send_close_conn(srv, epfd, c, 1002)
+            if buf_len(c.pconn_write_buf) > 0
+                c.pconn_close_after_write = 1
+            else
+                _prod_close_conn(srv, epfd, c)
+            end
             break
         _prod_buf_consume(c.pconn_read_buf, fr.ws_consumed)
         op = fr.ws_opcode
         if op == 8
-            // RFC 6455 Close handshake: reply Close and shut down connection cleanly
-            ws_send_close(c.pconn_fd, 1000)
-            _prod_close_conn(srv, epfd, c)
+            // RFC 6455 Close handshake: enqueue non-blocking Close (TLS 1.3 safe) and flush before shutdown
+            prod_ws_send_close_conn(srv, epfd, c, 1000)
+            if buf_len(c.pconn_write_buf) > 0
+                c.pconn_close_after_write = 1
+            else
+                _prod_close_conn(srv, epfd, c)
+            end
             break
         elif op == 9
-            // RFC 6455 Ping -> automatic Pong with exact echoed payload
-            ws_send_pong(c.pconn_fd, _prod_raw_ptr(fr.ws_payload), fr.ws_payload_len)
+            // RFC 6455 Ping -> automatic non-blocking Pong (TLS 1.3 WSS safe) with exact echoed payload
+            prod_ws_send_pong_conn(srv, epfd, c, _prod_raw_ptr(fr.ws_payload), fr.ws_payload_len)
         elif op == 10
             // Pong received: keepalive acknowledged
             _nop = 0
@@ -1011,10 +1211,10 @@ fn _prod_process_http srv epfd c: ProdConn
             path = str_sub(raw_target, 0, qpos)
             query = str_sub(raw_target, qpos + 1, len(raw_target))
 
-        // Check WebSocket Upgrade
+        // Check WebSocket Upgrade (non-blocking + TLS 1.3 WSS transparent via prod_conn_enqueue_write!)
         if prod_is_websocket_upgrade(p, hend) == 1
             ws_k = ws_extract_key(hdr_s + "\r\n")
-            prod_send_ws_upgrade_response_key(c.pconn_fd, ws_k)
+            prod_send_ws_upgrade_response_conn(srv, epfd, c, ws_k)
             _prod_buf_consume(c.pconn_read_buf, body_off)
             c.pconn_mode = 1
             c.pconn_ws_path = path

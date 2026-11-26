@@ -22,7 +22,8 @@ fn ir_verify_function fn_obj
         say "❌ [IR Verifier Error]: Null function object passed to verifier."
         return 0
 
-    defined_set = list() // Tracks all defined SSA value IDs to enforce single assignment
+    defined_set = dict() // O(1) defined SSA value ID set to enforce single assignment
+    use_cache = dict()   // Lazy O(1) use-set cache for high-fanout values (len(uses) > 8)
 
     // ── Check 1: Register Formal Parameters ───────────────────────────────────
     i = 0
@@ -32,14 +33,10 @@ fn ir_verify_function fn_obj
         if param == 0
             say "❌ [IR Verifier Error in " + fn_obj.name + "]: Null parameter at index " + str(i)
             return 0
-        // Check for duplicate parameter definition
-        j = 0
-        while j < len(defined_set)
-            if get(defined_set, j) == param.id
-                say "❌ [IR Verifier SSA Violation in " + fn_obj.name + "]: Parameter " + param.id + " defined multiple times!"
-                return 0
-            j = j + 1
-        push(defined_set, param.id)
+        if has_key(defined_set, param.id) == 1
+            say "❌ [IR Verifier SSA Violation in " + fn_obj.name + "]: Parameter " + param.id + " defined multiple times!"
+            return 0
+        defined_set[param.id] = 1
         i = i + 1
 
     // ── Check 2: Verify Basic Blocks and Instructions ─────────────────────────
@@ -48,12 +45,14 @@ fn ir_verify_function fn_obj
         say "❌ [IR Verifier Error in " + fn_obj.name + "]: Function has zero basic blocks."
         return 0
 
+    bb_map = dict()
     bi = 0
     while bi < bcnt
         bb = get(fn_obj.blocks, bi)
         if bb == 0
             say "❌ [IR Verifier Error in " + fn_obj.name + "]: Null basic block at index " + str(bi)
             return 0
+        bb_map[bb.label] = bb
 
         icnt = len(bb.instructions)
         if icnt == 0
@@ -91,17 +90,13 @@ fn ir_verify_function fn_obj
             else
                 saw_non_phi = 1
 
-            // Check Single-Assignment Invariant: instruction result defined only once
+            // Check Single-Assignment Invariant: instruction result defined only once (O(1))
             if inst.result != 0
                 res_id = inst.result.id
-                d_idx = 0
-                dlen = len(defined_set)
-                while d_idx < dlen
-                    if get(defined_set, d_idx) == res_id
-                        say "❌ [IR Verifier SSA Violation in " + fn_obj.name + "]: Value " + res_id + " defined multiple times! (Single-Assignment violated)"
-                        return 0
-                    d_idx = d_idx + 1
-                push(defined_set, res_id)
+                if has_key(defined_set, res_id) == 1
+                    say "❌ [IR Verifier SSA Violation in " + fn_obj.name + "]: Value " + res_id + " defined multiple times! (Single-Assignment violated)"
+                    return 0
+                defined_set[res_id] = 1
 
             // Check Def-Use Integrity: each operand's use list must contain this instruction
             oi = 0
@@ -110,12 +105,25 @@ fn ir_verify_function fn_obj
                 opnd = get(inst.operands, oi)
                 if opnd != 0
                     found_in_uses = 0
-                    ui = 0
                     ucnt = len(opnd.uses)
-                    while ui < ucnt
-                        if get(opnd.uses, ui) == inst
-                            found_in_uses = 1
-                        ui = ui + 1
+                    if ucnt <= 8
+                        ui = 0
+                        while ui < ucnt
+                            if get(opnd.uses, ui) == inst
+                                found_in_uses = 1
+                                break
+                            ui = ui + 1
+                    else
+                        if has_key(use_cache, opnd) == 0
+                            uset = dict()
+                            ui = 0
+                            while ui < ucnt
+                                uset[get(opnd.uses, ui)] = 1
+                                ui = ui + 1
+                            use_cache[opnd] = uset
+                        end
+                        found_in_uses = has_key(use_cache[opnd], inst)
+                    end
                     if found_in_uses == 0
                         say "❌ [IR Verifier Def-Use Invariant Broken in " + fn_obj.name + "]: Instruction " + str(inst.id) + " consumes " + opnd.id + ", but is missing from its def-use list!"
                         return 0
@@ -124,7 +132,7 @@ fn ir_verify_function fn_obj
             ii = ii + 1
         bi = bi + 1
 
-    // ── Check 3: Verify CFG Edge Symmetry ─────────────────────────────────────
+    // ── Check 3: Verify CFG Edge Symmetry (O(1) block lookup) ─────────────────
     // WHY: If block A lists B in successors, B must list A in predecessors.
     bi = 0
     while bi < bcnt
@@ -133,7 +141,10 @@ fn ir_verify_function fn_obj
         scnt = len(bb.successors)
         while si < scnt
             succ_lbl = get(bb.successors, si)
-            succ_bb = ir_function_find_block(fn_obj, succ_lbl)
+            succ_bb = 0
+            if has_key(bb_map, succ_lbl) == 1
+                succ_bb = bb_map[succ_lbl]
+            end
             if succ_bb == 0
                 say "❌ [IR Verifier CFG Violation in " + fn_obj.name + "]: Block " + bb.label + " targets non-existent successor " + succ_lbl
                 return 0

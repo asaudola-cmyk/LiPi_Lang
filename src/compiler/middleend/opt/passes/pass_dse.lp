@@ -57,112 +57,156 @@ fn dse_is_alloca_loaded_or_escaped fn_obj alloca_val
 fn pass_dse_run fn_obj
     if fn_obj == 0 return 0
     eliminated_stores = 0
+    bcnt = len(fn_obj.blocks)
 
-    // ── Phase 1: Eliminate Stores to Unread Local Allocas ─────────────────────
-    // WHY: If a variable is assigned locally but never read before return, all writes to it are dead.
-    ai = 0
-    while ai < len(fn_obj.allocas)
-        alloca_inst = get(fn_obj.allocas, ai)
-        ptr_val = alloca_inst.result
-        if ptr_val != 0
-            if dse_is_alloca_loaded_or_escaped(fn_obj, ptr_val) == 0
-                // Pointer is never read and never escapes: eliminate all stores to it!
-                bi = 0
-                while bi < len(fn_obj.blocks)
-                    bb = get(fn_obj.blocks, bi)
+    // ── Phase 1: Eliminate Stores to Unread Local Allocas in O(N + A) ─────────
+    // WHY: Single pass collects every loaded/escaped pointer into a DICT0 set,
+    // replacing O(A * N) per-alloca whole-function rescans with O(N) linear scan.
+    acnt = len(fn_obj.allocas)
+    if acnt > 0
+        live_ptrs = dict()
+        bi = 0
+        while bi < bcnt
+            bb = get(fn_obj.blocks, bi)
+            insts = bb.instructions
+            icnt = len(insts)
+            ii = 0
+            while ii < icnt
+                inst = get(insts, ii)
+                iop = inst.op
+                if iop == OP_LOAD
+                    if len(inst.operands) > 0
+                        live_ptrs[get(inst.operands, 0)] = 1
+                    end
+                elif iop == OP_CALL
+                    oi = 0
+                    ocnt = len(inst.operands)
+                    while oi < ocnt
+                        live_ptrs[get(inst.operands, oi)] = 1
+                        oi = oi + 1
+                    end
+                elif iop == OP_STORE
+                    if len(inst.operands) >= 2
+                        live_ptrs[get(inst.operands, 0)] = 1
+                    end
+                end
+                ii = ii + 1
+            end
+            bi = bi + 1
+        end
+
+        dead_allocas = dict()
+        dead_cnt = 0
+        ai = 0
+        while ai < acnt
+            alloca_inst = get(fn_obj.allocas, ai)
+            ptr_val = alloca_inst.result
+            if ptr_val != 0 and has_key(live_ptrs, ptr_val) == 0
+                dead_allocas[ptr_val] = 1
+                dead_cnt = dead_cnt + 1
+            end
+            ai = ai + 1
+        end
+
+        if dead_cnt > 0
+            bi = 0
+            while bi < bcnt
+                bb = get(fn_obj.blocks, bi)
+                insts = bb.instructions
+                icnt = len(insts)
+                blk_changed = 0
+                ii = 0
+                while ii < icnt
+                    inst = get(insts, ii)
+                    if inst.op == OP_STORE and len(inst.operands) >= 2 and has_key(dead_allocas, get(inst.operands, 1)) == 1
+                        ssa_instr_remove_from_operands_use_lists(inst)
+                        inst.is_dead = 1
+                        eliminated_stores = eliminated_stores + 1
+                        blk_changed = 1
+                    end
+                    ii = ii + 1
+                end
+                if blk_changed == 1
                     new_insts = list()
                     ii = 0
-                    while ii < len(bb.instructions)
-                        inst = get(bb.instructions, ii)
-                        if inst.op == OP_STORE and len(inst.operands) >= 2 and get(inst.operands, 1) == ptr_val
-                            // Eliminate dead store
-                            ssa_instr_remove_from_operands_use_lists(inst)
-                            inst.is_dead = 1
-                            eliminated_stores = eliminated_stores + 1
-                        else
-                            push(new_insts, inst)
+                    while ii < icnt
+                        it = get(insts, ii)
+                        if it.is_dead == 0
+                            push(new_insts, it)
+                        end
                         ii = ii + 1
+                    end
                     bb.instructions = new_insts
-                    bi = bi + 1
-        ai = ai + 1
+                end
+                bi = bi + 1
+            end
+        end
+    end
 
-    // ── Phase 2: Eliminate Overwritten Stores Within Basic Blocks ─────────────
-    // WHY: Within a straight-line basic block, if store(ptr, v1) is followed by store(ptr, v2)
-    //      with no intervening load(ptr) or call, store(ptr, v1) is provably dead.
+    // ── Phase 2: Eliminate Overwritten Stores Within Basic Blocks in O(N) ─────
+    // WHY: Uses O(1) DICT0 map ptr -> pending_store_inst (0 per-load list reallocations).
     bi = 0
-    while bi < len(fn_obj.blocks)
+    while bi < bcnt
         bb = get(fn_obj.blocks, bi)
-        new_insts = list()
-
-        active_stores_ptrs = list()
-        active_stores_insts = list()
+        insts = bb.instructions
+        icnt = len(insts)
+        active_stores = dict()
+        active_cnt = 0
+        blk_killed = 0
 
         ii = 0
-        while ii < len(bb.instructions)
-            inst = get(bb.instructions, ii)
+        while ii < icnt
+            inst = get(insts, ii)
+            iop = inst.op
 
-            if inst.op == OP_STORE and len(inst.operands) >= 2
+            if iop == OP_STORE and len(inst.operands) >= 2
                 ptr = get(inst.operands, 1)
-
-                // Check if this pointer already has an active pending store
-                found_idx = 0 - 1
-                si = 0
-                while si < len(active_stores_ptrs)
-                    if get(active_stores_ptrs, si) == ptr
-                        found_idx = si
-                    si = si + 1
-
-                if found_idx >= 0
-                    // Overwritten dead store found!
-                    dead_prev = get(active_stores_insts, found_idx)
-                    ssa_instr_remove_from_operands_use_lists(dead_prev)
-                    dead_prev.is_dead = 1
-                    eliminated_stores = eliminated_stores + 1
-
-                    // Update tracking with latest store
-                    list_set(active_stores_insts, found_idx, inst)
+                if has_key(active_stores, ptr) == 1
+                    dead_prev = active_stores[ptr]
+                    if dead_prev != 0
+                        ssa_instr_remove_from_operands_use_lists(dead_prev)
+                        dead_prev.is_dead = 1
+                        eliminated_stores = eliminated_stores + 1
+                        blk_killed = 1
+                    end
                 else
-                    push(active_stores_ptrs, ptr)
-                    push(active_stores_insts, inst)
+                    active_cnt = active_cnt + 1
+                end
+                active_stores[ptr] = inst
 
-                push(new_insts, inst)
+            elif iop == OP_LOAD and len(inst.operands) >= 1
+                if active_cnt > 0
+                    loaded_ptr = get(inst.operands, 0)
+                    if has_key(active_stores, loaded_ptr) == 1
+                        del_key(active_stores, loaded_ptr)
+                        active_cnt = active_cnt - 1
+                    end
+                end
 
-            elif inst.op == OP_LOAD and len(inst.operands) >= 1
-                // Intervening load: clear tracked store for this pointer
-                loaded_ptr = get(inst.operands, 0)
-                new_ptrs = list()
-                new_inst_list = list()
-                si = 0
-                while si < len(active_stores_ptrs)
-                    if get(active_stores_ptrs, si) != loaded_ptr
-                        push(new_ptrs, get(active_stores_ptrs, si))
-                        push(new_inst_list, get(active_stores_insts, si))
-                    si = si + 1
-                active_stores_ptrs = new_ptrs
-                active_stores_insts = new_inst_list
-                push(new_insts, inst)
-
-            elif inst.op == OP_CALL
-                // Call might read any pointer: clear all tracked pending stores
-                active_stores_ptrs = list()
-                active_stores_insts = list()
-                push(new_insts, inst)
-
-            else
-                push(new_insts, inst)
+            elif iop == OP_CALL
+                if active_cnt > 0
+                    active_stores = dict()
+                    active_cnt = 0
+                end
+            end
 
             ii = ii + 1
+        end
 
-        // Filter out instructions marked as dead
-        cleaned_insts = list()
-        ci = 0
-        while ci < len(new_insts)
-            item = get(new_insts, ci)
-            if item.is_dead == 0
-                push(cleaned_insts, item)
-            ci = ci + 1
-        bb.instructions = cleaned_insts
+        if blk_killed == 1
+            cleaned_insts = list()
+            ci = 0
+            while ci < icnt
+                item = get(insts, ci)
+                if item.is_dead == 0
+                    push(cleaned_insts, item)
+                end
+                ci = ci + 1
+            end
+            bb.instructions = cleaned_insts
+        end
 
         bi = bi + 1
+    end
 
     return eliminated_stores

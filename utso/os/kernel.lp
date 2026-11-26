@@ -1,7 +1,9 @@
 @! ============================================================================
+@! @deprecated [LEGACY HOSTED OS SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real freestanding Ring-0 kernels (`--freestanding`, `--target=multiboot2-bare`,
+@! `--target=elf-kernel`, `--target=raw-bin`), import `utso/silicon/*` & `utso/bare/*`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! LIPI SOVEREIGN OS MICROKERNEL — utso/os/kernel.lp
-@! 100% Written in Pure Lipi Language — Complete Zero libc / Zero C Dependencies
-@! Master Kernel Entry Point, Subsystem Orchestration, and Event Loop
 @! ============================================================================
 
 import "utso/os/syscalls"

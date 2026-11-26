@@ -1,10 +1,8 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL PHYSICAL MEMORY & 4-LEVEL PAGING
+@! @deprecated [LEGACY HOSTED PHYSICAL MEMORY SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal page/frame & MMIO management, import `utso/bare/core.lp` & `utso/silicon/cpu.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! Module: utso/os/drivers/memory.lp
-@! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: Physical Page Frame Allocator (4KB Frames), PML4/PDPT/PD/PT
-@! 4-Level Paging Table Descriptors and Address Translation Math
 @! ============================================================================
 
 import "utso/core/collections"

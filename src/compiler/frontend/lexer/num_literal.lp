@@ -116,22 +116,20 @@ import "compiler/frontend/lexer/char_stream"
   @if is_hex_prefix == 1
     i = i + hex_prefix_len
     hex_val = 0
-    raw_text = str_slice(source, start_pos, i)
     digit_count = 0
     @while i < num_items
       cur = str_char_at(source, i)
       @if cur == 95 // '_' separator
-        raw_text = str_concat(raw_text, "_")
         i = i + 1
       @else
         hval = num_hex_char_to_val(cur)
         @if hval >= 0
-          raw_text = str_concat(raw_text, str_from_char_code(cur))
           hex_val = (hex_val * 16) + hval
           digit_count = digit_count + 1
           i = i + 1
         @else
           // Non-hex character marks end of literal
+          raw_text = str_slice(source, start_pos, i)
           @if digit_count > 0
             return { num_is_valid: 1, num_is_float: 0, num_int_val: hex_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
           @else
@@ -140,6 +138,7 @@ import "compiler/frontend/lexer/char_stream"
         @end
       @end
     @end
+    raw_text = str_slice(source, start_pos, i)
     @if digit_count > 0
       return { num_is_valid: 1, num_is_float: 0, num_int_val: hex_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
     @end
@@ -166,15 +165,12 @@ import "compiler/frontend/lexer/char_stream"
   @if is_bin_prefix == 1
     i = i + bin_prefix_len
     bin_val = 0
-    raw_text = str_slice(source, start_pos, i)
     digit_count = 0
     @while i < num_items
       cur = str_char_at(source, i)
       @if cur == 95 // '_' separator
-        raw_text = str_concat(raw_text, "_")
         i = i + 1
       @elif cur == 48 || cur == 49 // ASCII '0' or '1'
-        raw_text = str_concat(raw_text, str_from_char_code(cur))
         bit = 0
         @if cur == 49 bit = 1 @end
         bin_val = (bin_val * 2) + bit
@@ -183,15 +179,15 @@ import "compiler/frontend/lexer/char_stream"
       @elif num_is_bengali_digit_at(source, i, num_items) == 1
         b_digit = num_bengali_digit_val_at(source, i)
         @if b_digit == 0 || b_digit == 1
-          raw_text = str_concat(raw_text, str_slice(source, i, i + 3))
           bin_val = (bin_val * 2) + b_digit
           digit_count = digit_count + 1
           i = i + 3
         @else
           // Bengali digit > 1 in binary literal is invalid
-          return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+          return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: str_slice(source, start_pos, i), num_consumed: i - start_pos }
         @end
       @else
+        raw_text = str_slice(source, start_pos, i)
         @if digit_count > 0
           return { num_is_valid: 1, num_is_float: 0, num_int_val: bin_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
         @else
@@ -199,6 +195,7 @@ import "compiler/frontend/lexer/char_stream"
         @end
       @end
     @end
+    raw_text = str_slice(source, start_pos, i)
     @if digit_count > 0
       return { num_is_valid: 1, num_is_float: 0, num_int_val: bin_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
     @end
@@ -225,29 +222,26 @@ import "compiler/frontend/lexer/char_stream"
   @if is_oct_prefix == 1
     i = i + oct_prefix_len
     oct_val = 0
-    raw_text = str_slice(source, start_pos, i)
     digit_count = 0
     @while i < num_items
       cur = str_char_at(source, i)
       @if cur == 95 // '_' separator
-        raw_text = str_concat(raw_text, "_")
         i = i + 1
       @elif cur >= 48 && cur <= 55 // ASCII '0'..'7'
-        raw_text = str_concat(raw_text, str_from_char_code(cur))
         oct_val = (oct_val * 8) + (cur - 48)
         digit_count = digit_count + 1
         i = i + 1
       @elif num_is_bengali_digit_at(source, i, num_items) == 1
         b_digit = num_bengali_digit_val_at(source, i)
         @if b_digit >= 0 && b_digit <= 7
-          raw_text = str_concat(raw_text, str_slice(source, i, i + 3))
           oct_val = (oct_val * 8) + b_digit
           digit_count = digit_count + 1
           i = i + 3
         @else
-          return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
+          return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: str_slice(source, start_pos, i), num_consumed: i - start_pos }
         @end
       @else
+        raw_text = str_slice(source, start_pos, i)
         @if digit_count > 0
           return { num_is_valid: 1, num_is_float: 0, num_int_val: oct_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
         @else
@@ -255,6 +249,7 @@ import "compiler/frontend/lexer/char_stream"
         @end
       @end
     @end
+    raw_text = str_slice(source, start_pos, i)
     @if digit_count > 0
       return { num_is_valid: 1, num_is_float: 0, num_int_val: oct_val, num_float_val: 0.0, num_text: raw_text, num_consumed: i - start_pos }
     @end
@@ -264,7 +259,6 @@ import "compiler/frontend/lexer/char_stream"
   // ── C. Decimal Integer & Floating Point (Western & Bengali) ────────────────
   int_val = 0
   is_float = 0
-  raw_text = ""
   digit_count = 0
   has_dot = 0
   frac_divisor = 1.0
@@ -275,12 +269,10 @@ import "compiler/frontend/lexer/char_stream"
 
     // Underscore separator
     @if cur == 95
-      raw_text = str_concat(raw_text, "_")
       i = i + 1
 
     // ASCII Digit
     @elif num_is_ascii_digit(cur) == 1
-      raw_text = str_concat(raw_text, str_from_char_code(cur))
       d = cur - 48
       @if has_dot == 0
         int_val = (int_val * 10) + d
@@ -293,7 +285,6 @@ import "compiler/frontend/lexer/char_stream"
 
     // Bengali Digit (৩-byte UTF-8)
     @elif num_is_bengali_digit_at(source, i, num_items) == 1
-      raw_text = str_concat(raw_text, str_slice(source, i, i + 3))
       d = num_bengali_digit_val_at(source, i)
       @if has_dot == 0
         int_val = (int_val * 10) + d
@@ -310,28 +301,23 @@ import "compiler/frontend/lexer/char_stream"
       has_dot = 1
       is_float = 1
       float_val = int_val + 0.0
-      raw_text = str_concat(raw_text, ".")
       i = i + 1
 
     // Exponent 'e' or 'E' (supports both integer 1e5 and decimal 1.5e-3 mantissas)
     @elif (cur == 101 || cur == 69) && digit_count > 0 && (i + 1 < num_items)
       saved_exp_i = i
-      saved_exp_text = raw_text
-      raw_text = str_concat(raw_text, str_from_char_code(cur))
       i = i + 1
       exp_neg = 0
       @if i < num_items && (str_char_at(source, i) == 43 || str_char_at(source, i) == 45) // '+' or '-'
         @if str_char_at(source, i) == 45
           exp_neg = 1
         @end
-        raw_text = str_concat(raw_text, str_from_char_code(str_char_at(source, i)))
         i = i + 1
       @end
       exp_digits = 0
       exp_val = 0
       @while i < num_items && num_is_ascii_digit(str_char_at(source, i)) == 1
         ec = str_char_at(source, i)
-        raw_text = str_concat(raw_text, str_from_char_code(ec))
         @if exp_val < 320
           exp_val = (exp_val * 10) + (ec - 48)
         @end
@@ -341,11 +327,10 @@ import "compiler/frontend/lexer/char_stream"
       @if exp_digits == 0
         // Not a scientific exponent (e.g. `1e_foo`); restore before 'e' and return mantissa
         i = saved_exp_i
-        raw_text = saved_exp_text
         @if is_float == 0
           float_val = int_val + 0.0
         @end
-        return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: raw_text, num_consumed: i - start_pos }
+        return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: str_slice(source, start_pos, i), num_consumed: i - start_pos }
       @end
       @if is_float == 0
         float_val = int_val + 0.0
@@ -359,7 +344,7 @@ import "compiler/frontend/lexer/char_stream"
         @end
         ek = ek + 1
       @end
-      return { num_is_valid: 1, num_is_float: 1, num_int_val: int_val, num_float_val: float_val, num_text: raw_text, num_consumed: i - start_pos }
+      return { num_is_valid: 1, num_is_float: 1, num_int_val: int_val, num_float_val: float_val, num_text: str_slice(source, start_pos, i), num_consumed: i - start_pos }
 
     @else
       // Non-digit character ends numeric literal
@@ -367,9 +352,9 @@ import "compiler/frontend/lexer/char_stream"
         @if is_float == 0
           float_val = int_val + 0.0
         @end
-        return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: raw_text, num_consumed: i - start_pos }
+        return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: str_slice(source, start_pos, i), num_consumed: i - start_pos }
       @end
-      return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: raw_text, num_consumed: 0 }
+      return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: "", num_consumed: 0 }
     @end
   @end
 
@@ -377,7 +362,7 @@ import "compiler/frontend/lexer/char_stream"
     @if is_float == 0
       float_val = int_val + 0.0
     @end
-    return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: raw_text, num_consumed: i - start_pos }
+    return { num_is_valid: 1, num_is_float: is_float, num_int_val: int_val, num_float_val: float_val, num_text: str_slice(source, start_pos, i), num_consumed: i - start_pos }
   @end
 
   return { num_is_valid: 0, num_is_float: 0, num_int_val: 0, num_float_val: 0.0, num_text: "", num_consumed: 0 }

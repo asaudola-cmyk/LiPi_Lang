@@ -54,9 +54,32 @@ fn inline_map_set im old_val new_val
 //      yields optimal instruction cache efficiency.
 
 fn inlining_is_candidate callee_fn caller_fn threshold
-    if callee_fn == 0 return 0
+    if callee_fn == 0 or caller_fn == 0 return 0
     if callee_fn == caller_fn return 0 // Guard against direct recursion
-    inst_count = ir_function_count_insts(callee_fn)
+    if callee_fn.name == "main" or callee_fn.name == "মূল" return 0
+    if len(callee_fn.blocks) == 0 return 0
+    // WHY: Never inline a non-SSA-native function (e.g. containing syscall/asm/closures) into an
+    // SSA-native caller; doing so injects unlowerable calls like `syscall` into Phase 8 native SSA!
+    if caller_fn.is_ssa_native_ready == 1 and callee_fn.is_ssa_native_ready == 0 return 0
+    inst_count = 0
+    bi = 0
+    while bi < len(callee_fn.blocks)
+        bb = get(callee_fn.blocks, bi)
+        ii = 0
+        while ii < len(bb.instructions)
+            inst = get(bb.instructions, ii)
+            if inst.is_dead == 0
+                inst_count = inst_count + 1
+                if inst.op == OP_CALL
+                    if inst.extra_str == caller_fn.name or inst.extra_str == callee_fn.name
+                        return 0 // Guard against direct & mutual recursion cycles
+                    end
+                end
+            end
+            ii = ii + 1
+        end
+        bi = bi + 1
+    end
     if inst_count == 0 or inst_count > threshold return 0
     return 1
 
@@ -75,6 +98,44 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
             inline_map_set(imap, param, arg)
         pi = pi + 1
 
+    // Step 1b: Count live OP_RET terminators so multi-return callees merge cleanly via an alloca slot
+    live_ret_cnt = 0
+    rbi = 0
+    while rbi < len(callee_fn.blocks)
+        rbb = get(callee_fn.blocks, rbi)
+        rii = 0
+        while rii < len(rbb.instructions)
+            ri_inst = get(rbb.instructions, rii)
+            if ri_inst.is_dead == 0 and ri_inst.op == OP_RET
+                live_ret_cnt = live_ret_cnt + 1
+            end
+            rii = rii + 1
+        end
+        rbi = rbi + 1
+    end
+
+    ret_slot = 0
+    if live_ret_cnt > 1 and call_inst.result != 0 and caller_fn.entry_block != 0
+        ret_slot = caller_fn.new_val(call_inst.result.vtype)
+        ret_alloca = ir_build_alloca(1, ret_slot, call_inst.result.vtype, 0)
+        ret_alloca.parent_bb = caller_fn.entry_block
+        ir_function_register_alloca(caller_fn, ret_alloca)
+        // Prepend alloca at entry block start so dominance holds over all cloned return paths
+        entry_old = caller_fn.entry_block.instructions
+        entry_new = list()
+        push(entry_new, ret_alloca)
+        ei_a = 0
+        while ei_a < len(entry_old)
+            push(entry_new, get(entry_old, ei_a))
+            ei_a = ei_a + 1
+        end
+        caller_fn.entry_block.instructions = entry_new
+        // Adjust call_idx if caller_bb IS the entry block (prepended 1 instruction at index 0)
+        if caller_bb == caller_fn.entry_block
+            call_idx = call_idx + 1
+        end
+    end
+
     // Step 2: Split caller basic block into before and after continuation blocks
     after_bb = ir_function_create_block(caller_fn, "inline_cont")
 
@@ -84,6 +145,15 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
     while i < call_idx
         push(new_caller_insts, get(caller_bb.instructions, i))
         i = i + 1
+
+    ret_val = 0
+    if ret_slot != 0
+        // Multi-return merge: load unified return value at start of continuation block
+        ret_val = caller_fn.new_val(call_inst.result.vtype)
+        load_ret = ir_build_load(1, ret_val, ret_slot)
+        load_ret.parent_bb = after_bb
+        push(after_bb.instructions, load_ret)
+    end
 
     j = call_idx + 1
     while j < len(caller_bb.instructions)
@@ -110,9 +180,7 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
 
     cloned_entry = get(cloned_blocks, 0)
 
-    // Step 4: Clone instructions from callee into cloned blocks
-    ret_val = 0
-
+    // Step 4: Clone live instructions from callee into cloned blocks
     bi = 0
     while bi < len(callee_fn.blocks)
         orig_bb = get(callee_fn.blocks, bi)
@@ -121,12 +189,27 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
         ii = 0
         while ii < len(orig_bb.instructions)
             orig_inst = get(orig_bb.instructions, ii)
+            if orig_inst.is_dead == 1
+                ii = ii + 1
+                continue
+            end
 
             if orig_inst.op == OP_RET
-                // Return instruction: capture return value and branch to after_bb
+                // Return instruction: capture/store return value and branch to after_bb
+                mapped_rv = 0
                 if len(orig_inst.operands) > 0
                     r_opnd = get(orig_inst.operands, 0)
-                    ret_val = inline_map_get(imap, r_opnd)
+                    mapped_rv = inline_map_get(imap, r_opnd)
+                end
+                if ret_slot != 0
+                    if mapped_rv == 0
+                        mapped_rv = ssa_value_new_const(0, "i64")
+                    end
+                    st_ret = ir_build_store(1, mapped_rv, ret_slot)
+                    basic_block_append_inst(target_bb, st_ret)
+                elif mapped_rv != 0
+                    ret_val = mapped_rv
+                end
                 // Replace ret with jmp to after_bb
                 jmp_cont = ir_build_jmp(1, after_bb.label)
                 basic_block_append_inst(target_bb, jmp_cont)
@@ -150,6 +233,7 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
                         ti = ti + 1
 
                 if orig_inst.op == OP_BR
+                    c_inst.extra_list = list()
                     ci = 0
                     while ci < len(orig_inst.extra_list)
                         tgt = get(orig_inst.extra_list, ci)
@@ -159,6 +243,15 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
                                 push(c_inst.extra_list, get(cloned_labels, ti))
                             ti = ti + 1
                         ci = ci + 1
+                    if len(orig_inst.extra_str) > 0
+                        ti_s = 0
+                        while ti_s < len(callee_fn.blocks)
+                            if get(callee_fn.blocks, ti_s).label == orig_inst.extra_str
+                                c_inst.extra_str = get(cloned_labels, ti_s)
+                            end
+                            ti_s = ti_s + 1
+                        end
+                    end
 
                 // Map operands
                 oi = 0
@@ -168,6 +261,10 @@ fn inline_call_site caller_fn callee_fn caller_bb call_inst call_idx inline_id
                     push(c_inst.operands, mapped)
                     ssa_value_add_use(mapped, c_inst)
                     oi = oi + 1
+
+                if orig_inst.op == OP_ALLOCA
+                    ir_function_register_alloca(caller_fn, c_inst)
+                end
 
                 push(target_bb.instructions, c_inst)
 
@@ -200,17 +297,20 @@ fn pass_inlining_run mod_obj
     while fi < len(mod_obj.functions)
         caller_fn = get(mod_obj.functions, fi)
 
-        // Scan caller blocks for OP_CALL
+        // Scan caller blocks for live OP_CALL
         bi = 0
         while bi < len(caller_fn.blocks)
+            if ir_function_count_insts(caller_fn) > 400
+                break
+            end
             bb = get(caller_fn.blocks, bi)
             ii = 0
             while ii < len(bb.instructions)
                 inst = get(bb.instructions, ii)
-                if inst.op == OP_CALL
+                if inst.is_dead == 0 and inst.op == OP_CALL
                     callee_name = inst.extra_str
                     callee_fn = ir_module_find_function(mod_obj, callee_name)
-                    if callee_fn != 0 and inlining_is_candidate(callee_fn, caller_fn, threshold) == 1
+                    if callee_fn != 0 and len(inst.operands) == len(callee_fn.params) and inlining_is_candidate(callee_fn, caller_fn, threshold) == 1
                         inline_call_site(caller_fn, callee_fn, bb, inst, ii, inline_id)
                         inline_id = inline_id + 1
                         inlined_count = inlined_count + 1

@@ -1,7 +1,8 @@
 @! ============================================================================
-@! LIPI UNIVERSE OS — ADVANCED KEYBOARD DRIVER (PS/2 & USB HID)
-@! Scancode Translation, Modifier State, Keymaps, Interrupt Handling
-@! 100% Written in Pure Lipi Language
+@! @deprecated [LEGACY HOSTED KEYBOARD SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal USB HID / xHCI input, import `utso/silicon/xhci.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
+@! Module: utso/os/drivers/keyboard.lp
 @! ============================================================================
 
 import "utso/os/syscalls"

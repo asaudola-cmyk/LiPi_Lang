@@ -83,52 +83,123 @@ fn cse_instruction_dominates dt earlier_inst later_inst
     // Different basic blocks: query Dominator Tree
     return dom_tree_dominates(dt, bb1.label, bb2.label)
 
-// ── 3. Main CSE Pass ──────────────────────────────────────────────────────────
+// ── 3. Main CSE Pass (O(N) Hash-Bucketed Value Numbering) ────────────────────
+
+fn cse_expr_hash inst
+    // WHY: Zero-allocation 64-bit integer hash for pure SSA expressions (commutative-canonicalized).
+    op = inst.op
+    if ssa_is_binary_arithmetic(op) == 0 and ssa_is_bitwise(op) == 0 and op != OP_CMP and op != OP_NEG
+        return 0
+    end
+    if op == OP_NEG
+        if len(inst.operands) != 1 return 0 end
+        o0 = get(inst.operands, 0)
+        return ((op * 1000003) ^ (o0 * 2654435761)) | 1
+    end
+    if len(inst.operands) != 2 return 0 end
+    l = get(inst.operands, 0)
+    r = get(inst.operands, 1)
+    is_comm = 0
+    if op == OP_CMP
+        if inst.extra_int == CMP_EQ or inst.extra_int == CMP_NE
+            is_comm = 1
+        end
+    elif ssa_is_commutative(op) == 1
+        is_comm = 1
+    end
+    if is_comm == 1 and l > r
+        tmp = l
+        l = r
+        r = tmp
+    end
+    h = (op * 1315423911) ^ (inst.extra_int * 2654435761)
+    h = (h * 31) ^ (l * 11400714819323198485)
+    h = (h * 31) ^ (r * 14029467366897019727)
+    return h | 1
 
 fn pass_cse_run fn_obj
     if fn_obj == 0 return 0
+    bcnt = len(fn_obj.blocks)
+    if bcnt == 0 return 0 end
 
-    dt = dom_tree_compute(fn_obj)
-    rpo_list = cfg_compute_rpo(fn_obj)
+    dt = 0
+    rpo_list = fn_obj.blocks
+    if bcnt > 1
+        dt = dom_tree_compute(fn_obj)
+        rpo_list = cfg_compute_rpo(fn_obj)
+    end
 
-    available_insts = list()
+    // O(1) hash-bucketed map: expr_hash -> list of available SSAInstr candidates
+    avail_map = dict()
     cse_count = 0
 
     // Traverse in Reverse Post-Order so definitions are processed before uses
     bi = 0
-    while bi < len(rpo_list)
+    rcnt = len(rpo_list)
+    while bi < rcnt
         bb = get(rpo_list, bi)
-        new_insts = list()
+        insts = bb.instructions
+        icnt = len(insts)
+        blk_changed = 0
         ii = 0
-        while ii < len(bb.instructions)
-            inst = get(bb.instructions, ii)
+        while ii < icnt
+            inst = get(insts, ii)
             eliminated = 0
 
-            // Check against all previously seen available expressions
             if inst.result != 0 and ssa_has_side_effects(inst.op) == 0
-                ai = 0
-                while ai < len(available_insts)
-                    avail = get(available_insts, ai)
-                    if cse_are_instructions_equivalent(avail, inst) == 1
-                        // Verify avail strictly dominates inst
-                        if cse_instruction_dominates(dt, avail, inst) == 1
-                            // Replace all uses of inst.result with avail.result!
-                            ssa_value_replace_all_uses_with(inst.result, avail.result)
-                            ssa_instr_remove_from_operands_use_lists(inst)
-                            inst.is_dead = 1
-                            eliminated = 1
-                            cse_count = cse_count + 1
-                            ai = len(available_insts) // break
-                    ai = ai + 1
-
-            if eliminated == 0
-                push(new_insts, inst)
-                if inst.result != 0 and ssa_has_side_effects(inst.op) == 0
-                    push(available_insts, inst)
+                eh = cse_expr_hash(inst)
+                if eh != 0
+                    if has_key(avail_map, eh) == 1
+                        bucket = avail_map[eh]
+                        ai = 0
+                        blen = len(bucket)
+                        while ai < blen
+                            avail = get(bucket, ai)
+                            if cse_are_instructions_equivalent(avail, inst) == 1
+                                // Since RPO + in-block forward order guarantees earlier placement in same block:
+                                dom_ok = 0
+                                if avail.parent_bb == bb
+                                    dom_ok = 1
+                                elif dt != 0 and avail.parent_bb != 0
+                                    dom_ok = dom_tree_dominates(dt, avail.parent_bb.label, bb.label)
+                                end
+                                if dom_ok == 1
+                                    ssa_value_replace_all_uses_with(inst.result, avail.result)
+                                    ssa_instr_remove_from_operands_use_lists(inst)
+                                    inst.is_dead = 1
+                                    eliminated = 1
+                                    blk_changed = 1
+                                    cse_count = cse_count + 1
+                                    break
+                                end
+                            end
+                            ai = ai + 1
+                        end
+                        if eliminated == 0
+                            push(bucket, inst)
+                        end
+                    else
+                        avail_map[eh] = [inst]
+                    end
+                end
+            end
 
             ii = ii + 1
+        end
 
-        bb.instructions = new_insts
+        if blk_changed == 1
+            new_insts = list()
+            ii = 0
+            while ii < icnt
+                it = get(insts, ii)
+                if it.is_dead == 0
+                    push(new_insts, it)
+                end
+                ii = ii + 1
+            end
+            bb.instructions = new_insts
+        end
         bi = bi + 1
+    end
 
     return cse_count

@@ -82,12 +82,59 @@ struct WasmSynthesizer
     ws_last_expr_is_str   // 1 if last compiled expression yielded a linear-memory string pointer
     ws_float_vars         // Active local variable names holding IEEE-754 f64 values
     ws_str_vars           // Active local variable names holding linear-memory string pointers
+    ws_narrow_vars        // Active local variable names with fixed narrow int widths
+    ws_narrow_types       // Parallel list of narrow int types ("u8","byte","u16","u32","i8","i16","i32")
     ws_freestanding       // 1 in --freestanding mode: zero WASI imports, zero fd_write, pure standalone WASM
+    ws_ssa_replaced_cnt   // Count of functions lowered directly from SSA CFG under --ssa-codegen
+    ws_ssa_replaced_bytes // Total WASM MVP bytecode bytes spliced from SSA CFG
 
 global g_wasm_freestanding = 0
+global g_wasm_ssa_codegen = 0
 
 fn wasm_synth_set_freestanding flag
     g_wasm_freestanding = flag
+    return 0
+end
+
+fn wasm_synth_set_ssa_codegen flag
+    g_wasm_ssa_codegen = flag
+    return 0
+end
+
+fn wasm_is_narrow_int_type tname
+    if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "i8" or tname == "i16" or tname == "i32"
+        return 1
+    end
+    return 0
+end
+
+fn wasm_emit_truncate_int_width code tname
+    // WHY: Wraps top-of-stack i64 value to exact signed/unsigned narrow integer bit-width in WASM MVP.
+    if tname == "u8" or tname == "byte"
+        wasm_emit_i64_const(code, 255)
+        push(code, 131) // i64.and (0x83)
+    elif tname == "u16"
+        wasm_emit_i64_const(code, 65535)
+        push(code, 131)
+    elif tname == "u32"
+        wasm_emit_i64_const(code, 4294967295)
+        push(code, 131)
+    elif tname == "i8"
+        wasm_emit_i64_const(code, 56)
+        push(code, 134) // i64.shl (0x86)
+        wasm_emit_i64_const(code, 56)
+        push(code, 135) // i64.shr_s (0x87)
+    elif tname == "i16"
+        wasm_emit_i64_const(code, 48)
+        push(code, 134)
+        wasm_emit_i64_const(code, 48)
+        push(code, 135)
+    elif tname == "i32"
+        wasm_emit_i64_const(code, 32)
+        push(code, 134)
+        wasm_emit_i64_const(code, 32)
+        push(code, 135)
+    end
     return 0
 end
 

@@ -55,125 +55,89 @@ import "compiler/semantics/symbol"
   tab_count: i64
   tab_buckets: array
   tab_all_symbols: array
+  tab_map: i64
+  tab_idx_map: i64
+  tab_writes: i64
 @end
 
 @fn symtab_new(capacity)
-  // WHY: Allocates FastSymbolTable with named constructor and bucket array
+  // WHY: Allocates FastSymbolTable backed by native O(1) Silicon DICT0 hashmap
+  // while preserving tab_all_symbols and tab_count for deterministic iteration.
   cap = capacity
   @if cap <= 0 cap = 64 @end
-
-  bucket_list = []
-  i = 0
-  @while i < cap
-    bucket_list = bucket_list.push([])
-    i = i + 1
-  @end
 
   tab = FastSymbolTable()
   tab.tab_capacity = cap
   tab.tab_count = 0
-  tab.tab_buckets = bucket_list
+  tab.tab_buckets = []
   tab.tab_all_symbols = []
+  tab.tab_map = dict()
+  tab.tab_idx_map = dict()
+  tab.tab_writes = 0
   return tab
 @end
 
 @fn symtab_put(tab, sym)
-  // WHY: Inserts symbol into bucket; updates if matching identifier exists
+  // WHY: O(1) insert/update into native hashmap; keeps tab_all_symbols synchronized in O(1)
   @if tab == 0 || sym == 0 return 0 @end
+  tab.tab_writes = tab.tab_writes + 1
 
-  b_idx = symtab_hash(sym.sym_name, tab.tab_capacity)
-  bucket = tab.tab_buckets[b_idx]
-
-  i = 0
-  n = bucket.len()
-  @while i < n
-    existing = bucket[i]
-    @if str_eq(existing.sym_name, sym.sym_name) == 1
-      bucket[i] = sym
-      j = 0
-      m = tab.tab_all_symbols.len()
-      @while j < m
-        @if str_eq(tab.tab_all_symbols[j].sym_name, sym.sym_name) == 1
-          tab.tab_all_symbols[j] = sym
-          return 1
-        @end
-        j = j + 1
+  @if has_key(tab.tab_map, sym.sym_name) == 1
+    tab.tab_map[sym.sym_name] = sym
+    @if tab.tab_idx_map != 0 && has_key(tab.tab_idx_map, sym.sym_name) == 1
+      e_idx = tab.tab_idx_map[sym.sym_name]
+      @if e_idx >= 0 && e_idx < tab.tab_all_symbols.len()
+        tab.tab_all_symbols[e_idx] = sym
+        return 1
       @end
-      return 1
     @end
-    i = i + 1
+    return 1
   @end
 
-  bucket = bucket.push(sym)
-  tab.tab_buckets[b_idx] = bucket
+  tab.tab_map[sym.sym_name] = sym
+  @if tab.tab_idx_map != 0
+    tab.tab_idx_map[sym.sym_name] = tab.tab_all_symbols.len()
+  @end
   tab.tab_all_symbols = tab.tab_all_symbols.push(sym)
   tab.tab_count = tab.tab_count + 1
   return 1
 @end
 
 @fn symtab_get(tab, name)
-  // WHY: O(1) expected symbol retrieval
+  // WHY: O(1) expected symbol retrieval via native DICT0 lookup
   @if tab == 0 || tab.tab_count == 0 return 0 @end
-
-  b_idx = symtab_hash(name, tab.tab_capacity)
-  bucket = tab.tab_buckets[b_idx]
-
-  i = 0
-  n = bucket.len()
-  @while i < n
-    s = bucket[i]
-    @if str_eq(s.sym_name, name) == 1
-      return s
-    @end
-    i = i + 1
+  @if has_key(tab.tab_map, name) == 1
+    return tab.tab_map[name]
   @end
-
   return 0
 @end
 
 @fn symtab_has(tab, name)
-  res = symtab_get(tab, name)
-  @if res == 0 return 0 @end
-  return 1
+  @if tab == 0 || tab.tab_count == 0 return 0 @end
+  return has_key(tab.tab_map, name)
 @end
 
 @fn symtab_remove(tab, name)
   @if tab == 0 || tab.tab_count == 0 return 0 @end
+  @if has_key(tab.tab_map, name) == 0 return 0 @end
 
-  b_idx = symtab_hash(name, tab.tab_capacity)
-  bucket = tab.tab_buckets[b_idx]
-
-  new_bucket = []
-  found = 0
-  i = 0
-  n = bucket.len()
-  @while i < n
-    s = bucket[i]
-    @if str_eq(s.sym_name, name) == 1
-      found = 1
-    @else
-      new_bucket = new_bucket.push(s)
+  del_key(tab.tab_map, name)
+  new_all = []
+  new_idx = dict()
+  j = 0
+  m = tab.tab_all_symbols.len()
+  @while j < m
+    @if str_eq(tab.tab_all_symbols[j].sym_name, name) == 0
+      new_idx[tab.tab_all_symbols[j].sym_name] = new_all.len()
+      new_all = new_all.push(tab.tab_all_symbols[j])
     @end
-    i = i + 1
+    j = j + 1
   @end
-
-  @if found == 1
-    tab.tab_buckets[b_idx] = new_bucket
-    new_all = []
-    j = 0
-    m = tab.tab_all_symbols.len()
-    @while j < m
-      @if str_eq(tab.tab_all_symbols[j].sym_name, name) == 0
-        new_all = new_all.push(tab.tab_all_symbols[j])
-      @end
-      j = j + 1
-    @end
-    tab.tab_all_symbols = new_all
-    tab.tab_count = tab.tab_count - 1
-    return 1
-  @end
-
-  return 0
+  tab.tab_all_symbols = new_all
+  tab.tab_idx_map = new_idx
+  tab.tab_writes = tab.tab_writes + 1
+  tab.tab_count = tab.tab_count - 1
+  return 1
 @end
 
 @fn symtab_size(tab)

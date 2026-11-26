@@ -35,7 +35,8 @@ fn print_cli_usage
     say "  -c, --emit=obj             রিলোকেটেবল ELF64 অবজেক্ট ফাইল (.o / ET_REL)"
     say "  --cache-dir=<dir>          কন্টেন্ট-হ্যাশড .lpo অবজেক্ট বিল্ড ক্যাশ ডিরেক্টরি"
     say "  link <a.o> <b.o> -o <out>  ১০০% খাঁটি লিপি মাল্টি-অবজেক্ট ELF64 লিংকার (0% GNU ld)"
-    say "  --ssa-codegen              ডাইরেক্ট SSA IR ব্যাকএন্ড কোডজেন"
+    say "  --ssa-codegen              ডাইরেক্ট SSA IR ব্যাকএন্ড কোডজেন (ডিফল্ট সক্রিয় / Default ON)"
+    say "  --no-ssa-codegen           লিগ্যাসি AST-টোকেন ব্যাকএন্ড ব্যবহার (Disable SSA CFG codegen)"
     say "  --omni                     অমনিভার্স এককালীন সব প্ল্যাটফর্ম বিল্ড (Synthesize 6 silicon targets at once)"
     say "  --run-rv64, --vm=riscv64   খাঁটি লিপি আরআইএসসি-ভি সিপিইউ-তে এক্সিকিউট (Run in pure LiPi RV64 VM core)"
     say "  --verify                   বাইনারি ফরম্যাট সার্বভৌম ভেরিফিকেশন (Validate PE/Mach-O/SPIR-V binary)"
@@ -288,10 +289,18 @@ fn cli_resolve_target_spec t_arg cur_arch cur_fmt
         return [cur_arch, FORMAT_PE(), 1]
     elif t_arg == "uefi" or t_arg == "efi" or t_arg == "uefi-x86_64"
         return [TARGET_ID_X86_64(), FORMAT_UEFI(), 1]
+    elif t_arg == "arm64-raw-bin" or t_arg == "aarch64-raw-bin"
+        return [TARGET_ID_ARM64(), FORMAT_RAW_BIN(), 1]
+    elif t_arg == "arm64-elf-kernel" or t_arg == "arm64-kernel" or t_arg == "aarch64-elf-kernel" or t_arg == "aarch64-kernel"
+        return [TARGET_ID_ARM64(), FORMAT_ELF_KERNEL(), 1]
+    elif t_arg == "riscv64-raw-bin" or t_arg == "riscv-raw-bin"
+        return [TARGET_ID_RISCV64(), FORMAT_RAW_BIN(), 1]
+    elif t_arg == "riscv64-elf-kernel" or t_arg == "riscv64-kernel" or t_arg == "riscv-elf-kernel" or t_arg == "riscv-kernel"
+        return [TARGET_ID_RISCV64(), FORMAT_ELF_KERNEL(), 1]
     elif t_arg == "raw-bin" or t_arg == "raw" or t_arg == "flat"
-        return [TARGET_ID_X86_64(), FORMAT_RAW_BIN(), 1]
+        return [cur_arch, FORMAT_RAW_BIN(), 1]
     elif t_arg == "elf-kernel" or t_arg == "kernel" or t_arg == "freestanding"
-        return [TARGET_ID_X86_64(), FORMAT_ELF_KERNEL(), 1]
+        return [cur_arch, FORMAT_ELF_KERNEL(), 1]
     elif t_arg == "obj" or t_arg == "object" or t_arg == "reloc"
         return [TARGET_ID_X86_64(), FORMAT_OBJ(), 1]
     elif t_arg == "macos-arm64" or t_arg == "darwin-arm64" or t_arg == "apple-silicon"
@@ -374,7 +383,7 @@ fn main
     strict_types_mode = 0
     kavach_mode = 0
     freestanding_mode = 0
-    ssa_codegen_mode = 0
+    ssa_codegen_mode = 1
     base_vaddr_val = 1073741824
     entry_sym_val = ""
     cache_dir_val = ""
@@ -463,6 +472,8 @@ fn main
             freestanding_mode = 1
         elif arg == "--ssa-codegen"
             ssa_codegen_mode = 1
+        elif arg == "--no-ssa-codegen" or arg == "--legacy-codegen"
+            ssa_codegen_mode = 0
         elif arg == "-c" or arg == "--emit=obj" or arg == "--obj"
             emit_format = FORMAT_OBJ()
         elif arg == "--base-addr"

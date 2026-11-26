@@ -1536,6 +1536,66 @@ fn x86_synth_expr_primary s toks pos_box
             elif arg_count == 2 and (var_name == "sys_poke64" or var_name == "mmio_w64" or var_name == "mmio_write64" or var_name == "mem_u64_write")
                 x86_synth_emit_bytes(s, [88, 95, 72, 137, 7])  // pop rax; pop rdi; mov qword ptr [rdi], rax
                 s.synth_last_expr_type = "int"
+            // ── Intrinsic 6c: IEEE-754 Float/Double Raw Memory & Bit-Reinterpretation ──
+            // WHY: Eliminates cvtsi2sd misinterpretation when reading C-ABI / FFI / SIMD double pointers.
+            elif var_name == "mem_read_f64" or var_name == "মেমরি_দশমিক_পড়ো"
+                if arg_count >= 2
+                    x86_synth_emit_bytes(s, [94, 95, 72, 139, 4, 55]) // pop rsi; pop rdi; mov rax, [rdi + rsi]
+                elif arg_count == 1
+                    x86_synth_emit_bytes(s, [95, 72, 139, 7])         // pop rdi; mov rax, [rdi]
+                else
+                    x86_synth_emit_bytes(s, [49, 192])                // xor eax, eax
+                end
+                s.synth_last_expr_type = "float"
+            elif var_name == "mem_write_f64" or var_name == "মেমরি_দশমিক_লেখো"
+                if arg_count >= 3
+                    x86_synth_emit_bytes(s, [90, 94, 95])             // pop rdx (val); pop rsi (off); pop rdi (addr)
+                    if arg_expr_types.len() >= 3 and (arg_expr_types[2] == "int" or arg_expr_types[2] == "uint")
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 194, 102, 72, 15, 126, 194]) // cvtsi2sd xmm0, rdx; movq rdx, xmm0
+                    end
+                    x86_synth_emit_bytes(s, [72, 137, 20, 55, 72, 137, 208]) // mov [rdi + rsi], rdx; mov rax, rdx
+                elif arg_count == 2
+                    x86_synth_emit_bytes(s, [90, 95])                 // pop rdx (val); pop rdi (addr)
+                    if arg_expr_types.len() >= 2 and (arg_expr_types[1] == "int" or arg_expr_types[1] == "uint")
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 194, 102, 72, 15, 126, 194])
+                    end
+                    x86_synth_emit_bytes(s, [72, 137, 23, 72, 137, 208])     // mov [rdi], rdx; mov rax, rdx
+                else
+                    x86_synth_emit_bytes(s, [49, 192])
+                end
+                s.synth_last_expr_type = "float"
+            elif var_name == "mem_read_f32"
+                if arg_count >= 2
+                    x86_synth_emit_bytes(s, [94, 95, 243, 15, 16, 4, 55, 243, 15, 90, 192, 102, 72, 15, 126, 192]) // pop rsi; pop rdi; movss xmm0, [rdi+rsi]; cvtss2sd xmm0, xmm0; movq rax, xmm0
+                elif arg_count == 1
+                    x86_synth_emit_bytes(s, [95, 243, 15, 16, 7, 243, 15, 90, 192, 102, 72, 15, 126, 192])
+                else
+                    x86_synth_emit_bytes(s, [49, 192])
+                end
+                s.synth_last_expr_type = "float"
+            elif var_name == "mem_write_f32"
+                if arg_count >= 3
+                    x86_synth_emit_bytes(s, [90, 94, 95]) // pop rdx (val); pop rsi (off); pop rdi (addr)
+                    if arg_expr_types.len() >= 3 and (arg_expr_types[2] == "int" or arg_expr_types[2] == "uint")
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 194, 102, 72, 15, 126, 194])
+                    end
+                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 194, 242, 15, 90, 192, 243, 15, 17, 4, 55, 72, 137, 208])
+                elif arg_count == 2
+                    x86_synth_emit_bytes(s, [90, 95])
+                    if arg_expr_types.len() >= 2 and (arg_expr_types[1] == "int" or arg_expr_types[1] == "uint")
+                        x86_synth_emit_bytes(s, [242, 72, 15, 42, 194, 102, 72, 15, 126, 194])
+                    end
+                    x86_synth_emit_bytes(s, [102, 72, 15, 110, 194, 242, 15, 90, 192, 243, 15, 17, 7, 72, 137, 208])
+                else
+                    x86_synth_emit_bytes(s, [49, 192])
+                end
+                s.synth_last_expr_type = "float"
+            elif arg_count == 1 and (var_name == "f64_from_bits" or var_name == "float_from_bits")
+                x86_synth_emit_byte(s, 88) // pop rax (zero-cost IEEE-754 bitcast to float)
+                s.synth_last_expr_type = "float"
+            elif arg_count == 1 and (var_name == "f64_to_bits" or var_name == "float_to_bits")
+                x86_synth_emit_byte(s, 88) // pop rax (zero-cost IEEE-754 bitcast to i64/u64 bits)
+                s.synth_last_expr_type = "int"
             // ── Intrinsic 7: exit / বিদায় ─────────────────────────────────────
             elif var_name == "exit" or var_name == "বিদায়"
                 // WHY: Linux SYS_exit_group (231) terminates the entire process & all OS threads cleanly

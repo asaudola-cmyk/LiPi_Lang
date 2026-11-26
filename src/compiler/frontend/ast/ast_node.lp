@@ -100,35 +100,40 @@ import "compiler/frontend/lexer/token"
 
 // ── 3. Base Constructors & Initializers ───────────────────────────────────────
 
+// WHY: Single shared read-only empty list sentinel eliminates 7 heap-allocated `[]`
+// lists per ASTNode (~1.4KB wasted per literal/identifier/op -> ~650MB saved in Phase 3).
+global g_ast_empty_list = 0
+
+@fn ast_node_init_sentinels()
+  @if g_ast_empty_list == 0
+    g_ast_empty_list = []
+  @end
+  return 0
+@end
+
 @fn ast_node_new(tag: i64, kind: string, span: SourceSpan)
   // WHY: Primary constructor allocating a pristine base AST node with tag and span
-  return {
-    kind: kind,
-    name: "",
-    params: [],
-    body: [],
-    ret_type: "void",
-    val: 0,
-    op: "",
-    left: 0,
-    right: 0,
-    expr: 0,
-    condition: 0,
-    then_body: [],
-    elif_branches: [],
-    else_body: [],
-    target: "",
-    value: 0,
-    elements: [],
-    args: [],
-    func: 0,
-    variable: "",
-    iterable: 0,
-    index: 0,
-    cond: 0,
-    tag: tag,
-    span: span
-  }
+  @if g_ast_empty_list == 0
+    g_ast_empty_list = []
+  @end
+  el = g_ast_empty_list
+  node = ASTNode()
+  node.kind = kind
+  node.name = ""
+  node.params = el
+  node.body = el
+  node.ret_type = "void"
+  node.op = ""
+  node.then_body = el
+  node.elif_branches = el
+  node.else_body = el
+  node.target = ""
+  node.elements = el
+  node.args = el
+  node.variable = ""
+  node.tag = tag
+  node.span = span
+  return node
 @end
 
 @fn ast_node(kind: string)

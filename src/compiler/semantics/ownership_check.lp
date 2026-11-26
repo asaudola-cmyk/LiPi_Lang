@@ -158,23 +158,21 @@ import "compiler/frontend/ast/ast_node"
   curr_depth = oc.oc_scope_depth
   oc.oc_scope_depth = oc.oc_scope_depth - 1
 
-  new_bindings = []
-  i = 0
-  n = oc.oc_bindings.len()
-  @while i < n
-    b = oc.oc_bindings[i]
-    @if b.rb_scope_depth == curr_depth
-      @if b.rb_shared_borrow_count > 0 || b.rb_state == OWN_STATE_BORROWED_MUT()
-        oc_record_error(oc, ERR_BORROW_OUTLIVES_SCOPE(), "Resource '" + b.rb_name + "' dropped while active borrows exist", b.rb_declared_span)
-      @end
-      b.rb_state = OWN_STATE_DROPPED()
-    @else
-      new_bindings = new_bindings.push(b)
+  // WHY: Bindings are pushed monotonically by scope depth, so popping from the tail
+  // exits the scope in O(k_local) time with ZERO array reallocation or copying!
+  @while oc.oc_bindings.len() > 0
+    last_idx = oc.oc_bindings.len() - 1
+    b = oc.oc_bindings[last_idx]
+    @if b.rb_scope_depth != curr_depth
+      break
     @end
-    i = i + 1
+    @if b.rb_shared_borrow_count > 0 || b.rb_state == OWN_STATE_BORROWED_MUT()
+      oc_record_error(oc, ERR_BORROW_OUTLIVES_SCOPE(), "Resource '" + b.rb_name + "' dropped while active borrows exist", b.rb_declared_span)
+    @end
+    b.rb_state = OWN_STATE_DROPPED()
+    pop(oc.oc_bindings)
   @end
 
-  oc.oc_bindings = new_bindings
   return oc.oc_scope_depth
 @end
 
@@ -682,6 +680,7 @@ import "compiler/frontend/ast/ast_node"
   @while pass_num < 8
     any_changed = 0
     fi = 0
+    m_oc_s = arena_mark()
     @while fi < fn_list.len()
       fd = fn_list[fi]
       flags = oc.oc_fn_consumes[fd.name]
@@ -704,7 +703,15 @@ import "compiler/frontend/ast/ast_node"
         @end
       @end
       fi = fi + 1
+      @if (fi % 16) == 0
+        param_origin = 0
+        origin_keys = 0
+        arena_reset(m_oc_s)
+      @end
     @end
+    param_origin = 0
+    origin_keys = 0
+    arena_reset(m_oc_s)
     @if any_changed == 0
       break
     @end
@@ -713,13 +720,28 @@ import "compiler/frontend/ast/ast_node"
   return 1
 @end
 
+@fn oc_node_span(node: ASTNode)
+  // WHY: Converts a lexer SourceSpan attached to an ASTNode (field 24 via typed ast_get_span)
+  // into a semantic SourceSpan so ownership diagnostics report exact file:line:col instead of <built-in>:0:0.
+  @if node == 0 return span_default() @end
+  nsp = ast_get_span(node)
+  @if nsp == 0 return span_default() @end
+  @if nsp.span_start_line > 0
+    sf = nsp.span_file
+    @if sf == "" sf = "<source>" @end
+    return span_new(nsp.span_start_line, nsp.span_start_col, nsp.span_end_line, nsp.span_end_col, sf)
+  @end
+  return span_default()
+@end
+
 @fn oc_analyze_expr(oc, expr)
   @if expr == 0 return 1 @end
   k = expr.kind
+  esp = oc_node_span(expr)
   @if str_eq(k, "Variable") == 1 || str_eq(k, "IDENT") == 1 || str_eq(k, "Identifier") == 1
     vname = expr.name
     @if vname == "" vname = expr.target @end
-    oc_check_read(oc, vname, span_default())
+    oc_check_read(oc, vname, esp)
     return 1
   @end
   @if str_eq(k, "ExprStmt") == 1 || str_eq(k, "ExpressionStmt") == 1
@@ -749,8 +771,10 @@ import "compiler/frontend/ast/ast_node"
       @if a0 != 0 && (str_eq(a0.kind, "Variable") == 1 || str_eq(a0.kind, "IDENT") == 1 || str_eq(a0.kind, "Identifier") == 1)
         aname = a0.name
         @if aname == "" aname = a0.target @end
-        oc_check_read(oc, aname, span_default())
-        oc_force_move(oc, aname, span_default())
+        a0_sp = oc_node_span(a0)
+        @if a0_sp.sp_start_line == 0 a0_sp = esp @end
+        oc_check_read(oc, aname, a0_sp)
+        oc_force_move(oc, aname, a0_sp)
         @if call_args.len() > 1
           pi2 = 1
           @while pi2 < call_args.len()
@@ -767,6 +791,7 @@ import "compiler/frontend/ast/ast_node"
       // Phase 1: Check all arguments for reads & detect aliasing between consumed and borrowed positions
       consumed_names = []
       consumed_idxs = []
+      consumed_spans = []
       pi_c = 0
       @while pi_c < call_args.len()
         arg_c = call_args[pi_c]
@@ -774,9 +799,12 @@ import "compiler/frontend/ast/ast_node"
         @if pi_c < c_flags.len() && c_flags[pi_c] == 1 && arg_c != 0 && (str_eq(arg_c.kind, "Variable") == 1 || str_eq(arg_c.kind, "IDENT") == 1 || str_eq(arg_c.kind, "Identifier") == 1)
           an_c = arg_c.name
           @if an_c == "" an_c = arg_c.target @end
-          oc_check_read(oc, an_c, span_default())
+          ac_sp = oc_node_span(arg_c)
+          @if ac_sp.sp_start_line == 0 ac_sp = esp @end
+          oc_check_read(oc, an_c, ac_sp)
           consumed_names = consumed_names.push(an_c)
           consumed_idxs = consumed_idxs.push(pi_c)
+          consumed_spans = consumed_spans.push(ac_sp)
           is_cvar = 1
         @end
         @if is_cvar == 0
@@ -798,7 +826,7 @@ import "compiler/frontend/ast/ast_node"
                 bn_a = arg_b.name
                 @if bn_a == "" bn_a = arg_b.target @end
                 @if str_eq(bn_a, cn_a) == 1
-                  oc_record_error(oc, ERR_USE_AFTER_MOVE(), "Aliasing use of value '" + cn_a + "' passed both as consumed and borrowed argument in call to '" + cname + "'", span_default())
+                  oc_record_error(oc, ERR_USE_AFTER_MOVE(), "Aliasing use of value '" + cn_a + "' passed both as consumed and borrowed argument in call to '" + cname + "'", esp)
                 @end
               @end
             @end
@@ -810,7 +838,7 @@ import "compiler/frontend/ast/ast_node"
       // Phase 2: Move all consumed variable arguments
       ci_m = 0
       @while ci_m < consumed_names.len()
-        oc_force_move(oc, consumed_names[ci_m], span_default())
+        oc_force_move(oc, consumed_names[ci_m], consumed_spans[ci_m])
         ci_m = ci_m + 1
       @end
       return 1
@@ -835,11 +863,13 @@ import "compiler/frontend/ast/ast_node"
       @if str_eq(inner.kind, "Variable") == 1 || str_eq(inner.kind, "IDENT") == 1 || str_eq(inner.kind, "Identifier") == 1
         bn = inner.name
         @if bn == "" bn = inner.target @end
-        oc_check_read(oc, bn, span_default())
+        in_sp = oc_node_span(inner)
+        @if in_sp.sp_start_line == 0 in_sp = esp @end
+        oc_check_read(oc, bn, in_sp)
         @if str_eq(expr.op, "&mut") == 1
-          oc_borrow_mut(oc, bn, span_default())
+          oc_borrow_mut(oc, bn, in_sp)
         @else
-          oc_borrow_shared(oc, bn, span_default())
+          oc_borrow_shared(oc, bn, in_sp)
         @end
         oc_release_borrow(oc, bn)
         return 1
@@ -877,7 +907,7 @@ import "compiler/frontend/ast/ast_node"
         pm = expr.params[pi]
         pname = pm.param_name
         @if pname == "" pname = pm.name @end
-        @if pname != "" oc_declare(oc, pname, 1, span_default()) @end
+        @if pname != "" oc_declare(oc, pname, 1, esp) @end
         pi = pi + 1
       @end
     @end
@@ -965,6 +995,7 @@ import "compiler/frontend/ast/ast_node"
   @if stmt == 0 return 1 @end
 
   k = stmt.kind
+  ssp = oc_node_span(stmt)
 
   // 0. Struct Definition: register struct name as non-Copy owned type
   @if str_eq(k, "StructDef") == 1 || str_eq(k, "Struct") == 1 || str_eq(k, "গঠন") == 1
@@ -983,7 +1014,7 @@ import "compiler/frontend/ast/ast_node"
         pm = stmt.params[pi]
         pname = pm.param_name
         @if pname == "" pname = pm.name @end
-        @if pname != "" oc_declare(oc, pname, 1, span_default()) @end
+        @if pname != "" oc_declare(oc, pname, 1, ssp) @end
         pi = pi + 1
       @end
     @end
@@ -1018,16 +1049,18 @@ import "compiler/frontend/ast/ast_node"
 
     oc_analyze_expr(oc, val_node)
     @if move_src != "" && str_eq(move_src, target) == 0
-      oc_mark_move(oc, move_src, span_default())
+      mv_sp = oc_node_span(val_node)
+      @if mv_sp.sp_start_line == 0 mv_sp = ssp @end
+      oc_mark_move(oc, move_src, mv_sp)
     @end
 
     @if stmt.index != 0 || str_contains(target, ".") == 1 || str_contains(target, "[") == 1
       root_t = oc_extract_root_var(target)
       rb_root = oc_lookup(oc, root_t)
       @if rb_root != 0
-        oc_check_read(oc, root_t, span_default())
+        oc_check_read(oc, root_t, ssp)
         @if rb_root.rb_shared_borrow_count > 0 || rb_root.rb_state == OWN_STATE_BORROWED_SHARED()
-          oc_record_error(oc, ERR_MUTATE_WHILE_BORROWED(), "Cannot mutate '" + root_t + "' through field/index while borrowed", span_default())
+          oc_record_error(oc, ERR_MUTATE_WHILE_BORROWED(), "Cannot mutate '" + root_t + "' through field/index while borrowed", ssp)
         @end
       @end
       return 1
@@ -1035,9 +1068,9 @@ import "compiler/frontend/ast/ast_node"
 
     b = oc_lookup(oc, target)
     @if b == 0
-      oc_declare(oc, target, rhs_is_copy, span_default())
+      oc_declare(oc, target, rhs_is_copy, ssp)
     @else
-      oc_check_write(oc, target, span_default())
+      oc_check_write(oc, target, ssp)
       b.rb_is_copy = rhs_is_copy
     @end
     return 1
@@ -1077,7 +1110,7 @@ import "compiler/frontend/ast/ast_node"
     oc_enter_scope(oc)
     fvar = stmt.variable
     @if fvar == "" fvar = stmt.target @end
-    @if fvar != "" oc_declare(oc, fvar, 1, span_default()) @end
+    @if fvar != "" oc_declare(oc, fvar, 1, ssp) @end
     oc_analyze_stmt_list(oc, stmt.body)
     oc_analyze_stmt_list(oc, stmt.body)
     oc_exit_scope(oc)

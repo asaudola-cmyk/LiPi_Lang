@@ -111,6 +111,9 @@ import "utso/memory"
   eden_lo = gc.eden_start
   eden_hi = gc.eden_start + gc.config.eden_size
   found = 0
+  // WHY: Two-phase scan collects candidate stack words BEFORE inspecting alloc_objects so
+  // iterating alloc_objects[oi] never spills dead candidate addresses into our own stack frame!
+  cand_words = []
   cur = sp
   @while cur + 8 <= sb
     w = mem_read(cur, 0)
@@ -120,19 +123,28 @@ import "utso/memory"
     @elif eden_lo > 65536 && w >= eden_lo && w < eden_hi
       in_heap = 1
     @end
-    @if in_heap == 1 && alloc_objects != 0
+    @if in_heap == 1
+      cand_words = cand_words.push(w)
+    @end
+    cur = cur + 8
+  @end
+  @if alloc_objects != 0
+    wi = 0
+    wn = cand_words.len()
+    on = alloc_objects.len()
+    @while wi < wn
+      cw = cand_words[wi]
       oi = 0
-      on = alloc_objects.len()
       @while oi < on
         obj_p = alloc_objects[oi]
-        @if obj_p > 65536 && (w == obj_p || (w > obj_p && w < obj_p + 64))
+        @if obj_p > 65536 && (cw == obj_p || (cw > obj_p && cw < obj_p + 64))
           gc_register_root(gc, obj_p)
           found = found + 1
         @end
         oi = oi + 1
       @end
+      wi = wi + 1
     @end
-    cur = cur + 8
   @end
   return found
 @end

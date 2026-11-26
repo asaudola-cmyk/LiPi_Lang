@@ -357,12 +357,13 @@ end
 // ── 2. Constructor & Emitter Primitives ───────────────────────────────────────
 
 fn x86_synth_hash4096 name
-    // WHY: Deterministic FNV-1a-style 12-bit hash avoiding O(N) scans across 80k symbols.
+    // WHY: Deterministic FNV-1a-style 12-bit hash avoiding O(N) scans across 80k symbols
+    // and using zero-allocation inline mem_byte_read instead of heap-allocating char_at().
     h = 2166136261
     n = len(name)
     i = 0
     while i < n
-        h = ((h ^ ord(char_at(name, i))) * 16777619) & 2147483647
+        h = ((h ^ mem_byte_read(name, i)) * 16777619) & 2147483647
         i = i + 1
     return h & 4095
 
@@ -433,10 +434,11 @@ fn x86_synth_find_fn_last_idx s name
     return 0 - 1
 
 fn x86_synth_new
-    // WHY: Allocates and initializes clean synthesizer state.
+    // WHY: Allocates and initializes clean synthesizer state using compact ByteBuffers
+    // (1 byte per machine-code byte instead of 8-byte GC list slots, cutting RAM by 8x).
     s = X86Synthesizer()
-    s.synth_code = list()
-    s.synth_rodata = list()
+    s.synth_code = buf_new(65536)
+    s.synth_rodata = buf_new(16384)
     s.synth_str_relocs = list()
     s.synth_call_relocs = list()
     s.synth_locals = list()
@@ -554,6 +556,41 @@ fn x86_synth_is_uint_type tname
     // WHY: Identifies unsigned integer annotations so arithmetic, shifts, relational comparisons,
     // and decimal formatting emit unsigned x86-64 instructions (setb/seta/shr/div/_lipi_print_uint).
     if tname == "u64" or tname == "u32" or tname == "u16" or tname == "u8" or tname == "usize" or tname == "byte"
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_is_narrow_int_type tname
+    // WHY: Identifies fixed-width integer annotations narrower than 64 bits (u8/u16/u32/i8/i16/i32/byte)
+    // so assignments, compound assignments, and parameters truncate/wrap to exact hardware bit-width.
+    if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "i8" or tname == "i16" or tname == "i32"
+        return 1
+    end
+    return 0
+end
+
+fn x86_synth_emit_truncate_int_width s tname
+    // WHY: Enforces exact hardware bit-width wrapping in %rax for fixed-width local/global/param variables:
+    // u8/byte -> movzx eax, al; u16 -> movzx eax, ax; u32 -> mov eax, eax (implicit zero-extend to rax);
+    // i8 -> movsx rax, al; i16 -> movsx rax, ax; i32 -> movsxd rax, eax.
+    if tname == "u8" or tname == "byte"
+        x86_synth_emit_bytes(s, [15, 182, 192])      // movzx eax, al (0F B6 C0)
+        return 1
+    elif tname == "u16"
+        x86_synth_emit_bytes(s, [15, 183, 192])      // movzx eax, ax (0F B7 C0)
+        return 1
+    elif tname == "u32"
+        x86_synth_emit_bytes(s, [137, 192])          // mov eax, eax (89 C0)
+        return 1
+    elif tname == "i8"
+        x86_synth_emit_bytes(s, [72, 15, 190, 192])  // movsx rax, al (48 0F BE C0)
+        return 1
+    elif tname == "i16"
+        x86_synth_emit_bytes(s, [72, 15, 191, 192])  // movsx rax, ax (48 0F BF C0)
+        return 1
+    elif tname == "i32"
+        x86_synth_emit_bytes(s, [72, 99, 192])       // movsxd rax, eax (48 63 C0)
         return 1
     end
     return 0
@@ -790,7 +827,7 @@ fn x86_synth_emit_tag_init_stub_if_needed s tag_init_patch
         return 0
     end
     stub_off = s.synth_code.len()
-    list_set(s.synth_code, tag_init_patch, 232) // 0xE8: call rel32
+    mem_byte_write(buf_ptr(s.synth_code), tag_init_patch, 232) // 0xE8: call rel32
     x86_synth_patch_u32(s, tag_init_patch + 1, stub_off - (tag_init_patch + 5))
     ti = 0
     tn = s.synth_fn_tag_offs.len()
@@ -1327,7 +1364,7 @@ fn x86_synth_body_has_defer toks start_pos base_col base_line
                 continue
             end
         end
-        if k == TOK_KW_DEFER() or (k == TOK_IDENT() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব"))
+        if k == TOK_KW_DEFER() or k == TOK_DIR_DEFER() or (k == TOK_IDENT() and (txt == "defer" or txt == "@defer" or txt == "বিলম্ব"))
             if i + 1 >= n
                 return 1
             else
@@ -1668,66 +1705,83 @@ fn x86_synth_prescan_boxed_vars toks start_pos base_col base_line
     return res
 end
 
+fn x86_synth_buf_to_list b
+    // WHY: Compatibility bridge converting a compact ByteBuffer into an integer list
+    // solely for legacy test harnesses and secondary container emitters that expect lists.
+    out = list()
+    if b == 0
+        return out
+    end
+    n = buf_len(b)
+    p = buf_ptr(b)
+    i = 0
+    while i < n
+        push(out, mem_byte_read(p, i))
+        i = i + 1
+    end
+    return out
+end
+
 fn x86_synth_emit_byte s byte_val
-    // WHY: Emits a single raw machine instruction byte using 1-cycle bitwise AND (zero IDIV overhead).
+    // WHY: Emits a single raw machine instruction byte directly into compact ByteBuffer (1B/byte).
     code = s.synth_code
-    push(code, byte_val & 255)
-    return code.len()
+    buf_write_byte(code, byte_val & 255)
+    return buf_len(code)
 
 fn x86_synth_emit_bytes s byte_list
-    // WHY: Appends an array of byte values sequentially with cached code list reference and bitwise mask.
+    // WHY: Appends an array of byte values sequentially into compact ByteBuffer.
     code = s.synth_code
     i = 0
     n = byte_list.len()
     while i < n
-        push(code, byte_list[i] & 255)
+        buf_write_byte(code, byte_list[i] & 255)
         i = i + 1
-    return code.len()
+    return buf_len(code)
 
 fn x86_synth_emit_u32 s val
-    // WHY: Emits 32-bit little-endian word using shift+mask (0 IDIV instructions vs 6 IDIVs previously).
+    // WHY: Emits 32-bit little-endian word into compact ByteBuffer using shift+mask (0 IDIVs).
     code = s.synth_code
-    push(code, val & 255)
-    push(code, (val >> 8) & 255)
-    push(code, (val >> 16) & 255)
-    push(code, (val >> 24) & 255)
-    return code.len()
+    buf_write_byte(code, val & 255)
+    buf_write_byte(code, (val >> 8) & 255)
+    buf_write_byte(code, (val >> 16) & 255)
+    buf_write_byte(code, (val >> 24) & 255)
+    return buf_len(code)
 
 fn x86_synth_emit_u64 s val
-    // WHY: Emits 64-bit little-endian qword using shift+mask (0 IDIV instructions; exact two's complement).
+    // WHY: Emits 64-bit little-endian qword into compact ByteBuffer using shift+mask.
     code = s.synth_code
-    push(code, val & 255)
-    push(code, (val >> 8) & 255)
-    push(code, (val >> 16) & 255)
-    push(code, (val >> 24) & 255)
-    push(code, (val >> 32) & 255)
-    push(code, (val >> 40) & 255)
-    push(code, (val >> 48) & 255)
-    push(code, (val >> 56) & 255)
-    return code.len()
+    buf_write_byte(code, val & 255)
+    buf_write_byte(code, (val >> 8) & 255)
+    buf_write_byte(code, (val >> 16) & 255)
+    buf_write_byte(code, (val >> 24) & 255)
+    buf_write_byte(code, (val >> 32) & 255)
+    buf_write_byte(code, (val >> 40) & 255)
+    buf_write_byte(code, (val >> 48) & 255)
+    buf_write_byte(code, (val >> 56) & 255)
+    return buf_len(code)
 
 fn x86_synth_patch_u32 s offset val
-    // WHY: Backpatches 4 bytes at a predetermined location in code_bytes using 1-cycle shift+mask.
+    // WHY: Backpatches 4 bytes directly in ByteBuffer backing memory via inline mem_byte_write.
     // Also invalidates basic-block store-forwarding state since a jump target was bound here.
     s.synth_last_store_end = 0 - 1
-    code = s.synth_code
-    list_set(code, offset, val & 255)
-    list_set(code, offset + 1, (val >> 8) & 255)
-    list_set(code, offset + 2, (val >> 16) & 255)
-    list_set(code, offset + 3, (val >> 24) & 255)
+    cp = buf_ptr(s.synth_code)
+    mem_byte_write(cp, offset, val & 255)
+    mem_byte_write(cp, offset + 1, (val >> 8) & 255)
+    mem_byte_write(cp, offset + 2, (val >> 16) & 255)
+    mem_byte_write(cp, offset + 3, (val >> 24) & 255)
     return 0
 
 fn x86_synth_patch_u64 s offset val
-    // WHY: Backpatches 8 bytes for 64-bit absolute virtual address relocations using shift+mask.
-    code = s.synth_code
-    list_set(code, offset, val & 255)
-    list_set(code, offset + 1, (val >> 8) & 255)
-    list_set(code, offset + 2, (val >> 16) & 255)
-    list_set(code, offset + 3, (val >> 24) & 255)
-    list_set(code, offset + 4, (val >> 32) & 255)
-    list_set(code, offset + 5, (val >> 40) & 255)
-    list_set(code, offset + 6, (val >> 48) & 255)
-    list_set(code, offset + 7, (val >> 56) & 255)
+    // WHY: Backpatches 8 bytes for 64-bit absolute virtual address relocations directly in ByteBuffer.
+    cp = buf_ptr(s.synth_code)
+    mem_byte_write(cp, offset, val & 255)
+    mem_byte_write(cp, offset + 1, (val >> 8) & 255)
+    mem_byte_write(cp, offset + 2, (val >> 16) & 255)
+    mem_byte_write(cp, offset + 3, (val >> 24) & 255)
+    mem_byte_write(cp, offset + 4, (val >> 32) & 255)
+    mem_byte_write(cp, offset + 5, (val >> 40) & 255)
+    mem_byte_write(cp, offset + 6, (val >> 48) & 255)
+    mem_byte_write(cp, offset + 7, (val >> 56) & 255)
     return 0
 
 fn x86_synth_record_reloc_patch s u64_patch_off file_target_off
@@ -1744,8 +1798,9 @@ fn x86_synth_patch_lea_rip s u64_patch_off target_file_off text_file_off
     if inst_off < 0 or u64_patch_off + 8 > s.synth_code.len()
         return 0
     end
-    rex = s.synth_code[inst_off]
-    op = s.synth_code[inst_off + 1]
+    cp = buf_ptr(s.synth_code)
+    rex = mem_byte_read(cp, inst_off)
+    op = mem_byte_read(cp, inst_off + 1)
     if (rex == 72 or rex == 73) and op >= 184 and op <= 191
         reg = op - 184
         new_rex = 72
@@ -1753,13 +1808,13 @@ fn x86_synth_patch_lea_rip s u64_patch_off target_file_off text_file_off
             new_rex = 76
         end
         disp32 = target_file_off - (text_file_off + inst_off + 7)
-        list_set(s.synth_code, inst_off + 0, new_rex)
-        list_set(s.synth_code, inst_off + 1, 141)
-        list_set(s.synth_code, inst_off + 2, 5 + (reg * 8))
+        mem_byte_write(cp, inst_off + 0, new_rex)
+        mem_byte_write(cp, inst_off + 1, 141)
+        mem_byte_write(cp, inst_off + 2, 5 + (reg * 8))
         x86_synth_patch_u32(s, inst_off + 3, disp32)
-        list_set(s.synth_code, inst_off + 7, 144)
-        list_set(s.synth_code, inst_off + 8, 144)
-        list_set(s.synth_code, inst_off + 9, 144)
+        mem_byte_write(cp, inst_off + 7, 144)
+        mem_byte_write(cp, inst_off + 8, 144)
+        mem_byte_write(cp, inst_off + 9, 144)
     end
     return 0
 
@@ -1809,29 +1864,30 @@ include "src/compiler/backend/targets/x86_64/silicon_opt.lp"
 
 fn x86_synth_add_rodata_str s str_text with_newline
     // WHY: Prepend 8-byte STR0 header (lower 32-bit length, upper 32-bit 0x53545230 'STR0')
-    // so all emitted string literals are instantly recognized by runtime helpers in 1 CPU cycle.
-    slen = len(str_text)
+    // and bulk-copy string payload via hardware ERMS rep movsb (zero char_at heap churn).
+    raw_len = len(str_text)
+    slen = raw_len
     if with_newline == 1
         slen = slen + 1
-    push(s.synth_rodata, slen % 256)
-    push(s.synth_rodata, (slen / 256) % 256)
-    push(s.synth_rodata, (slen / 65536) % 256)
-    push(s.synth_rodata, (slen / 16777216) % 256)
-    push(s.synth_rodata, 48)  // '0'
-    push(s.synth_rodata, 82)  // 'R'
-    push(s.synth_rodata, 84)  // 'T'
-    push(s.synth_rodata, 83)  // 'S'
+    end
+    ro = s.synth_rodata
+    buf_write_byte(ro, slen & 255)
+    buf_write_byte(ro, (slen >> 8) & 255)
+    buf_write_byte(ro, (slen >> 16) & 255)
+    buf_write_byte(ro, (slen >> 24) & 255)
+    buf_write_byte(ro, 48)  // '0'
+    buf_write_byte(ro, 82)  // 'R'
+    buf_write_byte(ro, 84)  // 'T'
+    buf_write_byte(ro, 83)  // 'S'
 
-    start_off = s.synth_rodata.len()
-    i = 0
-    raw_len = len(str_text)
-    while i < raw_len
-        c = char_at(str_text, i)
-        push(s.synth_rodata, ord(c))
-        i = i + 1
+    start_off = buf_len(ro)
+    if raw_len > 0
+        buf_write_mem(ro, str_text, raw_len)
+    end
     if with_newline == 1
-        push(s.synth_rodata, 10) // '\n'
-    push(s.synth_rodata, 0)      // Null-terminator
+        buf_write_byte(ro, 10) // '\n'
+    end
+    buf_write_byte(ro, 0)      // Null-terminator
     return start_off
 
 // ── 4. AMD64 Machine Instruction Primitives ───────────────────────────────────

@@ -203,9 +203,12 @@ import "utso/net/dns_client"
 
   total_sent = 0
   @while total_sent < dlen
-    written = sys_write(sockfd, d_ptr + total_sent, dlen - total_sent)
+    written = syscall(44, sockfd, d_ptr + total_sent, dlen - total_sent, 16384, 0, 0)
     @if written == (0 - 4)
       continue
+    @end
+    @if written == (0 - 88)
+      written = sys_write(sockfd, d_ptr + total_sent, dlen - total_sent)
     @end
     @if written <= 0
       @if total_sent > 0 return total_sent @end

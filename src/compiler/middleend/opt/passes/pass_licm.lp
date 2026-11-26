@@ -66,6 +66,7 @@ fn licm_is_inst_invariant inst lp hoisted_vals
 
 fn pass_licm_run fn_obj
     if fn_obj == 0 return 0
+    if len(fn_obj.blocks) <= 1 return 0 end
 
     cfg_rebuild_edges(fn_obj)
     dt = dom_tree_compute(fn_obj)

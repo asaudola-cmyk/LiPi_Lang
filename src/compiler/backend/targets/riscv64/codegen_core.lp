@@ -53,6 +53,7 @@ struct Riscv64LocalVar
     rv_lv_offset           // Positive stack offset in bytes: accessed as [sp + rv_lv_offset]
     rv_lv_is_boxed         // 1 if heap-boxed in an 8-byte upvalue cell for mutable closure capture
     rv_lv_is_uint          // 1 if unsigned integer type (u8/u16/u32/u64/usize)
+    rv_lv_int_type         // Declared narrow int type ("u8","u16","u32","i8","i16","i32","byte") or ""
     rv_lv_prim_type        // Primitive type tag: "int", "float", "str", "dyn_tagged"
     rv_lv_tag_off          // Positive stack offset for runtime val_tag (0 if unused)
 
@@ -152,29 +153,94 @@ struct Riscv64Synthesizer
     rv_print_tagged_off    // Byte offset of __print_tagged helper
     rv_needs_print_uint    // 1 if unsigned 64-bit __print_uint helper must be emitted
     rv_print_uint_off      // Byte offset of __print_uint helper
+    rv_needs_str_helpers   // 1 if __int_to_str / __uint_to_str / __str_concat / __tagged_to_str must be emitted
+    rv_int_to_str_off      // Byte offset of __int_to_str helper
+    rv_uint_to_str_off     // Byte offset of __uint_to_str helper
+    rv_str_concat_off      // Byte offset of __str_concat helper
+    rv_tagged_to_str_off   // Byte offset of __tagged_to_str helper
+    rv_ssa_lower_res       // Attached SsaLowerResult for direct RISC-V 64 SSA CFG replacement
+    rv_ssa_replaced_cnt    // Count of functions replaced directly from SSA CFG
+    rv_ssa_replaced_bytes  // Total native RV64IM bytes emitted directly from SSA CFG
 
 fn riscv64_is_uint_type tname
-    if tname == "u8" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
+    if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
+        return 1
+    end
+    return 0
+end
+
+fn riscv64_is_narrow_int_type tname
+    if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "i8" or tname == "i16" or tname == "i32"
         return 1
     end
     return 0
 end
 
 global g_rv64_freestanding = 0
+global g_rv64_base_vaddr = 4194304
+global g_rv64_code_file_off = 232
+global g_rv64_ssa_codegen = 0
 
 fn riscv64_synth_set_freestanding flag
     g_rv64_freestanding = flag
     return flag
 
+fn riscv64_synth_set_ssa_codegen flag
+    g_rv64_ssa_codegen = flag
+    return flag
+
+fn riscv64_synth_set_base_vaddr vaddr
+    g_rv64_base_vaddr = vaddr
+    return vaddr
+
+fn riscv64_synth_set_code_file_off off
+    g_rv64_code_file_off = off
+    return off
+
 fn riscv64_verify_zero_linux_ecalls code_bytes
     // WHY: Bare-Metal Purity Gate for RISC-V 64 --freestanding: scans 32-bit aligned words
-    // for Linux `ecall` (0x00000073 -> [0x73, 0x00, 0x00, 0x00]).
+    // for forbidden Linux `ecall` (0x00000073 -> [115, 0, 0, 0]).
+    // Distinguishes OpenSBI S-mode traps from Linux syscalls:
+    //   1. Legitimate OpenSBI S-mode `sbi_ecall*` intrinsics are immediately preceded by the
+    //      canonical RISC-V architectural HINT `addi x0, x0, 0x5B1` (0x5B100013 = [19, 0, 16, 91]).
+    //   2. Any unmarked `ecall` (e.g. Linux `syscall(...)` / `exit(...)`) is strictly rejected!
+    //   3. Even on a HINT-marked `ecall`, if a preceding `addi a7, x0, imm12` loads a Linux
+    //      syscall number in [56..290] (e.g. write=64, exit=93, exit_group=94, mmap=222) instead
+    //      of an OpenSBI EID (0..16 or 4-byte ASCII >= 0x10000), it is STILL rejected!
     cnt = 0
     i = 0
     n = code_bytes.len()
     while i + 3 < n
         if code_bytes[i] == 115 and code_bytes[i + 1] == 0 and code_bytes[i + 2] == 0 and code_bytes[i + 3] == 0
-            cnt = cnt + 1
+            is_valid_sbi = 0
+            if i >= 4 and code_bytes[i - 4] == 19 and code_bytes[i - 3] == 0 and code_bytes[i - 2] == 16 and code_bytes[i - 1] == 91
+                is_valid_sbi = 1
+                // Inspect preceding window (up to 6 instructions) for static Linux syscall number in a7 (x17)
+                // Pattern: `addi x17, x0, imm12` -> low 20 bits == 0x00893 (b0=0x93=147, b1=0x08=8, b2&0x0F==0)
+                k = i - 8
+                k_min = i - 28
+                if k_min < 0 k_min = 0 end
+                while k >= k_min
+                    b0 = code_bytes[k] & 255
+                    b1 = code_bytes[k + 1] & 255
+                    b2 = code_bytes[k + 2] & 255
+                    b3 = code_bytes[k + 3] & 255
+                    if b0 == 147 and b1 == 8 and (b2 & 15) == 0
+                        imm12 = ((b2 >> 4) & 15) | (b3 << 4)
+                        if imm12 >= 2048
+                            imm12 = imm12 - 4096
+                        end
+                        if imm12 >= 56 and imm12 <= 290
+                            is_valid_sbi = 0
+                        end
+                        break
+                    end
+                    k = k - 4
+                end
+            end
+            if is_valid_sbi == 0
+                cnt = cnt + 1
+            end
         end
         i = i + 4
     end
@@ -298,6 +364,14 @@ fn riscv64_synth_new
     s.rv_print_tagged_off = 0
     s.rv_needs_print_uint = 0
     s.rv_print_uint_off = 0
+    s.rv_needs_str_helpers = 0
+    s.rv_int_to_str_off = 0
+    s.rv_uint_to_str_off = 0
+    s.rv_str_concat_off = 0
+    s.rv_tagged_to_str_off = 0
+    s.rv_ssa_lower_res = 0
+    s.rv_ssa_replaced_cnt = 0
+    s.rv_ssa_replaced_bytes = 0
     riscv64_enum_register(s, "Ok", 1001, 1)
     riscv64_enum_register(s, "Err", 1002, 1)
     riscv64_enum_register(s, "Some", 1003, 1)
@@ -524,6 +598,35 @@ fn riscv64_emit_srli s rd rs1 shamt
     riscv64_synth_emit_bytes(s, bytes)
     return 0
 
+fn riscv64_emit_srai s rd rs1 shamt
+    // WHY: SRAI rd, rs1, shamt (opcode 0x13 = 19, funct3=5, bit30=1 -> imm12=1024|shamt). Arithmetic right shift immediate.
+    bytes = rv64_encode_i(19, rd, 5, rs1, 1024 | (shamt & 63))
+    riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+fn riscv64_emit_truncate_int_width s reg tname
+    // WHY: Enforces exact RV64I bit-width wrapping/sign-extension for local u8/u16/u32/i8/i16/i32.
+    if tname == "u8" or tname == "byte"
+        riscv64_emit_andi(s, reg, reg, 255)
+    elif tname == "u16"
+        riscv64_emit_slli(s, reg, reg, 48)
+        riscv64_emit_srli(s, reg, reg, 48)
+    elif tname == "u32"
+        riscv64_emit_slli(s, reg, reg, 32)
+        riscv64_emit_srli(s, reg, reg, 32)
+    elif tname == "i8"
+        riscv64_emit_slli(s, reg, reg, 56)
+        riscv64_emit_srai(s, reg, reg, 56)
+    elif tname == "i16"
+        riscv64_emit_slli(s, reg, reg, 48)
+        riscv64_emit_srai(s, reg, reg, 48)
+    elif tname == "i32"
+        riscv64_emit_slli(s, reg, reg, 32)
+        riscv64_emit_srai(s, reg, reg, 32)
+    end
+    return 0
+end
+
 fn riscv64_emit_sd s rs2 rs1 offset12
     // WHY: SD rs2, offset12(rs1) (opcode 0x23 = 35, funct3=3). 64-bit memory store.
     bytes = rv64_emit_sd(rs2, rs1, offset12)
@@ -665,6 +768,25 @@ fn riscv64_synth_patch_lui_addi s offset rd target_vaddr
     list_set(s.rv_code, offset + 1, get(w_lui_bytes, 1))
     list_set(s.rv_code, offset + 2, get(w_lui_bytes, 2))
     list_set(s.rv_code, offset + 3, get(w_lui_bytes, 3))
+    list_set(s.rv_code, offset + 4, get(w_addi_bytes, 0))
+    list_set(s.rv_code, offset + 5, get(w_addi_bytes, 1))
+    list_set(s.rv_code, offset + 6, get(w_addi_bytes, 2))
+    list_set(s.rv_code, offset + 7, get(w_addi_bytes, 3))
+    return 0
+
+fn riscv64_synth_patch_auipc_addi s offset rd delta
+    // WHY: Patches an 8-byte AUIPC+ADDI pair with PC-relative signed delta (works at any 64-bit base address!).
+    lo = delta & 4095
+    if lo >= 2048
+        lo = lo - 4096
+    end
+    hi = ((delta - lo) >> 12) & 1048575
+    w_auipc_bytes = rv64_encode_u(23, rd, hi)
+    w_addi_bytes = rv64_encode_i(19, rd, 0, rd, lo)
+    list_set(s.rv_code, offset, get(w_auipc_bytes, 0))
+    list_set(s.rv_code, offset + 1, get(w_auipc_bytes, 1))
+    list_set(s.rv_code, offset + 2, get(w_auipc_bytes, 2))
+    list_set(s.rv_code, offset + 3, get(w_auipc_bytes, 3))
     list_set(s.rv_code, offset + 4, get(w_addi_bytes, 0))
     list_set(s.rv_code, offset + 5, get(w_addi_bytes, 1))
     list_set(s.rv_code, offset + 6, get(w_addi_bytes, 2))
@@ -1096,6 +1218,7 @@ fn riscv64_synth_alloc_var s name
     lv.rv_lv_offset = off
     lv.rv_lv_is_boxed = riscv64_is_boxed_name(s, name)
     lv.rv_lv_is_uint = 0
+    lv.rv_lv_int_type = ""
     lv.rv_lv_prim_type = "int"
     lv.rv_lv_tag_off = 0
     push(s.rv_locals, lv)

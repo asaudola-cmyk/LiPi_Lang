@@ -1,10 +1,8 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL PS/2 KEYBOARD & MOUSE DRIVERS
+@! @deprecated [LEGACY HOSTED PS/2 SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal I/O port & USB HID input, import `utso/silicon/cpu.lp` & `utso/silicon/xhci.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! Module: utso/os/drivers/ps2.lp
-@! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: Scancode Set 1 & 2 Decoders, Shift/Ctrl/Alt Modifier States,
-@! 3-Byte PS/2 Mouse Packet Decoder (Buttons, Sign Extension, X/Y Deltas)
 @! ============================================================================
 
 import "utso/core/collections"

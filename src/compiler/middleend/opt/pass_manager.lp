@@ -155,11 +155,13 @@ fn pass_manager_run_on_function pm fn_obj
 
         pm.stat_passes_run = pm.stat_passes_run + 6
 
-        // Verify SSA integrity after every global iteration
-        if pm.verify_each_pass == 1
+        // Verify SSA integrity when any optimization pass mutated IR in this iteration
+        if pm.verify_each_pass == 1 and iter_changed == 1
             if ir_verify_function(fn_obj) == 0
                 say "❌ [PassManager]: Verification failed after iteration " + str(iter)
                 return 0
+            end
+        end
 
         iter = iter + 1
 
@@ -170,8 +172,9 @@ fn pass_manager_run_on_function pm fn_obj
     pm.stat_dce = pm.stat_dce + final_d
     pm.stat_passes_run = pm.stat_passes_run + 2
 
-    if pm.verify_each_pass == 1
+    if pm.verify_each_pass == 1 and (final_p > 0 or final_d > 0)
         ir_verify_function(fn_obj)
+    end
 
     return 1
 
@@ -192,17 +195,13 @@ fn pass_manager_run_on_module pm mod_obj
         pm.stat_inlined = pm.stat_inlined + inlined
         pm.stat_passes_run = pm.stat_passes_run + 1
 
-    // Optimize each function
+    // Optimize each function (each function is already SSA-verified inside pass_manager_run_on_function)
     fi = 0
     fcnt = len(mod_obj.functions)
     while fi < fcnt
         fn_obj = get(mod_obj.functions, fi)
         pass_manager_run_on_function(pm, fn_obj)
         fi = fi + 1
-
-    // Final Module Verification
-    if pm.verify_each_pass == 1
-        ir_verify_module(mod_obj)
 
     return 1
 

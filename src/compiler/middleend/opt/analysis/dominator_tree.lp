@@ -22,6 +22,7 @@ struct DomTree
     idoms         // list of immediate dominator labels parallel to block_labels
     rpo_nums      // list of integer RPO ranks parallel to block_labels
     df_lists      // list of string lists (dominance frontier for each block)
+    label_idx_map // dict: block_label -> integer index (O(1) lookup, eliminates O(B^3) scans!)
 
 fn dom_tree_new fn_ref
     dt = DomTree()
@@ -30,11 +31,18 @@ fn dom_tree_new fn_ref
     dt.idoms = list()
     dt.rpo_nums = list()
     dt.df_lists = list()
+    dt.label_idx_map = dict()
     return dt
 
 // ── 2. Internal Lookup Helpers ────────────────────────────────────────────────
 
 fn dom_tree_find_idx dt label
+    if dt.label_idx_map != 0
+        if has_key(dt.label_idx_map, label) == 1
+            return dt.label_idx_map[label]
+        end
+        return 0 - 1
+    end
     i = 0
     cnt = len(dt.block_labels)
     while i < cnt
@@ -90,7 +98,7 @@ fn dom_tree_compute fn_obj
 
     entry_lbl = fn_obj.entry_block.label
 
-    // Step 2: Initialize data arrays
+    // Step 2: Initialize data arrays + O(1) label -> index map
     i = 0
     while i < rpo_cnt
         bb = get(rpo_list, i)
@@ -98,6 +106,7 @@ fn dom_tree_compute fn_obj
         push(dt.idoms, "")
         push(dt.rpo_nums, i)
         push(dt.df_lists, list())
+        dt.label_idx_map[bb.label] = i
         i = i + 1
 
     // Entry block dominates itself

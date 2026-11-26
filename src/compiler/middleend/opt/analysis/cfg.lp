@@ -23,15 +23,17 @@ fn cfg_rebuild_edges fn_obj
     if fn_obj == 0 return 0
     bcnt = len(fn_obj.blocks)
 
-    // Step 1: Clear existing edge lists on all blocks
+    // Step 1: Clear existing edge lists and build O(1) label -> BasicBlock map
+    bb_map = dict()
     bi = 0
     while bi < bcnt
         bb = get(fn_obj.blocks, bi)
         bb.predecessors = list()
         bb.successors = list()
+        bb_map[bb.label] = bb
         bi = bi + 1
 
-    // Step 2: Scan terminator instructions and reconstruct edges
+    // Step 2: Scan terminator instructions and reconstruct edges in O(B)
     bi = 0
     while bi < bcnt
         bb = get(fn_obj.blocks, bi)
@@ -40,9 +42,9 @@ fn cfg_rebuild_edges fn_obj
             if term.op == OP_JMP
                 target_lbl = term.extra_str
                 basic_block_add_succ(bb, target_lbl)
-                target_bb = ir_function_find_block(fn_obj, target_lbl)
-                if target_bb != 0
-                    basic_block_add_pred(target_bb, bb.label)
+                if has_key(bb_map, target_lbl) == 1
+                    basic_block_add_pred(bb_map[target_lbl], bb.label)
+                end
 
             if term.op == OP_BR
                 if len(term.extra_list) >= 2
@@ -50,19 +52,33 @@ fn cfg_rebuild_edges fn_obj
                     false_lbl = get(term.extra_list, 1)
 
                     basic_block_add_succ(bb, true_lbl)
-                    true_bb = ir_function_find_block(fn_obj, true_lbl)
-                    if true_bb != 0
-                        basic_block_add_pred(true_bb, bb.label)
+                    if has_key(bb_map, true_lbl) == 1
+                        basic_block_add_pred(bb_map[true_lbl], bb.label)
+                    end
 
                     basic_block_add_succ(bb, false_lbl)
-                    false_bb = ir_function_find_block(fn_obj, false_lbl)
-                    if false_bb != 0
-                        basic_block_add_pred(false_bb, bb.label)
+                    if has_key(bb_map, false_lbl) == 1
+                        basic_block_add_pred(bb_map[false_lbl], bb.label)
+                    end
         bi = bi + 1
 
     return 1
 
 // ── 2. Depth-First Search & Post-Order Traversal ───────────────────────────────
+
+fn cfg_dfs_post_order_fast bb_map current_bb visited_map post_order_list
+    if current_bb == 0 return 0
+    visited_map[current_bb.label] = 1
+    si = 0
+    scnt = len(current_bb.successors)
+    while si < scnt
+        succ_lbl = get(current_bb.successors, si)
+        if has_key(visited_map, succ_lbl) == 0 and has_key(bb_map, succ_lbl) == 1
+            cfg_dfs_post_order_fast(bb_map, bb_map[succ_lbl], visited_map, post_order_list)
+        end
+        si = si + 1
+    push(post_order_list, current_bb)
+    return 1
 
 fn cfg_dfs_post_order fn_obj current_bb visited_labels post_order_list
     if current_bb == 0 return 0
@@ -81,6 +97,7 @@ fn cfg_dfs_post_order fn_obj current_bb visited_labels post_order_list
         while vi < len(visited_labels)
             if get(visited_labels, vi) == succ_lbl
                 already_visited = 1
+                break
             vi = vi + 1
 
         if already_visited == 0
@@ -93,12 +110,23 @@ fn cfg_dfs_post_order fn_obj current_bb visited_labels post_order_list
     push(post_order_list, current_bb)
     return 1
 
-// Computes standard Post-Order list of basic blocks reachable from entry
+// Computes standard Post-Order list of basic blocks reachable from entry in O(B + E)
 fn cfg_compute_post_order fn_obj
     post_order_list = list()
     if fn_obj == 0 or fn_obj.entry_block == 0 return post_order_list
-    visited_labels = list()
-    cfg_dfs_post_order(fn_obj, fn_obj.entry_block, visited_labels, post_order_list)
+    bcnt = len(fn_obj.blocks)
+    if bcnt == 1
+        push(post_order_list, fn_obj.entry_block)
+        return post_order_list
+    end
+    bb_map = dict()
+    bi = 0
+    while bi < bcnt
+        b = get(fn_obj.blocks, bi)
+        bb_map[b.label] = b
+        bi = bi + 1
+    visited_map = dict()
+    cfg_dfs_post_order_fast(bb_map, fn_obj.entry_block, visited_map, post_order_list)
     return post_order_list
 
 // ── 3. Reverse Post-Order (RPO) Traversal ─────────────────────────────────────
@@ -121,25 +149,27 @@ fn cfg_compute_rpo fn_obj
 fn cfg_get_unreachable_blocks fn_obj
     unreachable = list()
     if fn_obj == 0 return unreachable
+    bcnt = len(fn_obj.blocks)
+    if bcnt <= 1 return unreachable end
 
-    visited = list()
+    bb_map = dict()
+    bi = 0
+    while bi < bcnt
+        b = get(fn_obj.blocks, bi)
+        bb_map[b.label] = b
+        bi = bi + 1
+    visited_map = dict()
     po = list()
     if fn_obj.entry_block != 0
-        cfg_dfs_post_order(fn_obj, fn_obj.entry_block, visited, po)
+        cfg_dfs_post_order_fast(bb_map, fn_obj.entry_block, visited_map, po)
 
-    // Compare visited against all blocks in function
+    // Compare visited against all blocks in function in O(B)
     bi = 0
-    bcnt = len(fn_obj.blocks)
     while bi < bcnt
         bb = get(fn_obj.blocks, bi)
-        is_visited = 0
-        vi = 0
-        while vi < len(visited)
-            if get(visited, vi) == bb.label
-                is_visited = 1
-            vi = vi + 1
-        if is_visited == 0
+        if has_key(visited_map, bb.label) == 0
             push(unreachable, bb)
+        end
         bi = bi + 1
 
     return unreachable

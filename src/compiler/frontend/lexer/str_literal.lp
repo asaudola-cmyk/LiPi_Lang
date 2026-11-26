@@ -153,32 +153,38 @@ import "utso/collections"
     return { str_decoded_text: "", str_raw_text: "", str_has_interp: 0, str_is_terminated: 0, str_consumed: 0, str_lines_consumed: 0, str_end_col: start_col }
   @end
 
-  quote_str = chr(quote_c)
-  raw_text = quote_str
-  decoded_text = ""
+  // WHY: O(N) zero-churn scanner. Strings without escapes slice once via str_slice();
+  // strings with backslash escapes materialize into a compact ByteBuffer (zero O(N^2) concat).
   has_interp = 0
+  has_escape = 0
   lines_consumed = 0
   col = start_col + 1
   i = start_pos + 1
+  dbuf = 0
 
   @while i < num_items && str_char_at(source, i) != quote_c
     cur = str_char_at(source, i)
 
     // Backslash Escape '\'
     @if cur == 92 && i + 1 < num_items
+      @if has_escape == 0
+        has_escape = 1
+        dbuf = buf_new(64)
+        @if i > start_pos + 1
+          buf_write_str(dbuf, str_slice(source, start_pos + 1, i))
+        @end
+      @end
       esc_res = str_decode_escape(source, i + 1, num_items)
-      decoded_text = decoded_text + esc_res.esc_char_str
-      // Append raw escape sequence to raw_text
-      raw_esc = str_slice(source, i, esc_res.esc_next_pos)
-      raw_text = raw_text + raw_esc
+      buf_write_str(dbuf, esc_res.esc_char_str)
       adv = esc_res.esc_next_pos - i
       col = col + adv
       i = esc_res.esc_next_pos
 
     // Embedded Newline
     @elif cur == 10
-      raw_text = raw_text + "\n"
-      decoded_text = decoded_text + "\n"
+      @if has_escape == 1
+        buf_write_byte(dbuf, 10)
+      @end
       lines_consumed = lines_consumed + 1
       col = 1
       i = i + 1
@@ -193,24 +199,32 @@ import "utso/collections"
           has_interp = 1
         @end
       @end
-
-      ch_str = chr(cur)
-      raw_text = raw_text + ch_str
-      decoded_text = decoded_text + ch_str
+      @if has_escape == 1
+        buf_write_byte(dbuf, cur)
+      @end
       col = col + 1
       i = i + 1
     @end
   @end
 
+  end_inner = i
+  decoded_text = ""
+  @if has_escape == 1
+    decoded_text = buf_to_str(dbuf)
+    buf_free(dbuf)
+  @else
+    decoded_text = str_slice(source, start_pos + 1, end_inner)
+  @end
+
   // Check matching closing quote
   is_term = 0
   @if i < num_items && str_char_at(source, i) == quote_c
-    raw_text = raw_text + quote_str
     is_term = 1
     col = col + 1
     i = i + 1
   @end
 
+  raw_text = str_slice(source, start_pos, i)
   consumed = i - start_pos
   return {
     str_decoded_text: decoded_text,

@@ -1,8 +1,8 @@
 @! ============================================================================
-@! LIPI 4-LEVEL MMU PAGING ENGINE (x86-64) — utso/os/boot/paging.lp
-@! 100% Written in Pure Lipi Language — Zero C / Zero Libc Dependencies
-@! Features: PML4, PDPT, PD (2MB Huge Pages), PT (4KB Standard Pages),
-@! Page Table Entry Encoder/Decoder, Virtual Address Decomposition
+@! @deprecated [LEGACY HOSTED PAGING SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real Ring-0 MMU / CR3 / page-table primitives, import `utso/silicon/cpu.lp` & `utso/bare/core.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
+@! Module: utso/os/boot/paging.lp
 @! ============================================================================
 
 @! ----------------------------------------------------------------------------

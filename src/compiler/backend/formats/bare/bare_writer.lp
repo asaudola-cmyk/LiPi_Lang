@@ -94,6 +94,20 @@ fn bare_verify_zero_linux_syscalls code_bytes
     end
     return cnt
 
+fn bare_verify_zero_linux_syscalls_buf code_buf
+    // WHY: Zero-copy ByteBuffer Bare-Metal Purity Gate scanning raw backing memory directly.
+    cnt = 0
+    n = buf_len(code_buf)
+    cp = buf_ptr(code_buf)
+    i = 0
+    while i + 1 < n
+        if mem_byte_read(cp, i) == 15 and mem_byte_read(cp, i + 1) == 5
+            cnt = cnt + 1
+        end
+        i = i + 1
+    end
+    return cnt
+
 // ── 1. Flat Raw Binary Format (--target=raw-bin) ──────────────────────────────
 
 fn bare_emit_raw_bin code_bytes rodata_bytes output_path
@@ -116,30 +130,94 @@ fn bare_emit_raw_bin code_bytes rodata_bytes output_path
     res.bw_error_msg = ""
     return res
 
+fn bare_emit_raw_bin_buf code_buf rodata_buf output_path
+    // WHY: Zero-copy streaming flat raw binary writer directly from ByteBuffers.
+    c_len = buf_len(code_buf)
+    r_len = buf_len(rodata_buf)
+    res = BareWriteResult()
+    sys_unlink(output_path)
+    fd = sys_open(output_path, 577, 493)
+    if fd < 0
+        res.bw_success = 0
+        res.bw_file_size = 0
+        res.bw_entry_vaddr = 0
+        res.bw_error_msg = "Failed to open raw binary path " + output_path
+        return res
+    end
+    ok = 1
+    if c_len > 0 and elf_write_fd_all(fd, buf_ptr(code_buf), c_len) < 0 ok = 0 end
+    if ok == 1 and r_len > 0 and elf_write_fd_all(fd, buf_ptr(rodata_buf), r_len) < 0 ok = 0 end
+    sys_close(fd)
+    sys_chmod(output_path, 493)
+    if ok == 0
+        res.bw_success = 0
+        res.bw_file_size = 0
+        res.bw_entry_vaddr = 0
+        res.bw_error_msg = "Failed to stream raw binary to " + output_path
+        return res
+    end
+    res.bw_success = 1
+    res.bw_file_size = c_len + r_len
+    res.bw_entry_vaddr = 0
+    res.bw_error_msg = ""
+    return res
+
 // ── 2. Freestanding ELF64 Kernel at Configurable Base Address (--target=elf-kernel) ──
 
-fn bare_emit_elf64_kernel code_bytes rodata_bytes bss_size base_vaddr debug_line debug_info debug_abbrev eh_frame output_path
-    // WHY: Sovereign freestanding ELF64 ET_EXEC kernel image supporting arbitrary virtual
-    // base addresses (e.g. 0x100000 physical or 0xFFFFFFFF80000000 higher-half), zero Linux
-    // _start stub (direct entry at base_vaddr + 304), strict W^X RX+RW PT_LOAD segments,
-    // and optional DWARF v4 + .eh_frame for live QEMU+GDB source debugging!
-    code_file_off = 304 // 64B Ehdr + 3*56B Phdrs + 72B pad -> matches synth_code_file_off=304
-    entry_vaddr = base_vaddr + code_file_off
+fn bare_emit_elf64_kernel_arch code_bytes rodata_bytes bss_size base_vaddr debug_line debug_info debug_abbrev eh_frame machine_id output_path
+    // WHY: Sovereign freestanding ELF64 ET_EXEC kernel image parameterized by target e_machine
+    // (62=EM_X86_64, 183=EM_AARCH64, 243=EM_RISCV), supporting arbitrary virtual/physical base
+    // addresses (e.g. 0x100000, 0x40080000, 0x80200000, 0xFFFFFFFF80000000), zero Linux _start
+    // stub (direct entry at base_vaddr + 304), strict W^X RX+RW PT_LOAD segments, and optional DWARF/eh_frame.
+    eff_mach = machine_id
+    if eff_mach <= 0 eff_mach = 62 end
+
+    // WHY: For ARM64 (183) and RISC-V 64 (243), place .text at page-aligned file offset 0x1000
+    // with PT_LOAD[0].p_offset = 0x1000 and p_vaddr = p_paddr = e_entry = base_vaddr so
+    // OpenSBI fw_dynamic (0x80200000) and QEMU virt ARM64 (0x40080000) jump straight into byte 0
+    // of machine code (never executing "\x7fELF"), and reserve >= 64KB zeroed RW .bss kernel stack!
+    is_page_entry = 0
+    if eff_mach == 183 or eff_mach == 243
+        is_page_entry = 1
+    end
+
     code_size = code_bytes.len()
-    code_vaddr = base_vaddr + code_file_off
-
-    ro_file_off = code_file_off + code_size
     ro_size = rodata_bytes.len()
-    ro_vaddr = base_vaddr + ro_file_off
+    eff_bss = bss_size
+    if is_page_entry == 1 and eff_bss < 65536
+        eff_bss = 65536
+    end
 
+    code_file_off = 304 // x86_64: 64B Ehdr + 3*56B Phdrs + 72B pad -> matches synth_code_file_off=304
+    rx_p_offset = 0
+    entry_vaddr = base_vaddr + code_file_off
+    code_vaddr = base_vaddr + code_file_off
+    ro_file_off = code_file_off + code_size
+    ro_vaddr = base_vaddr + ro_file_off
     text_ro_end = ro_file_off + ro_size
+    rx_p_filesz = text_ro_end
     data_file_off = bare_align_up(text_ro_end, 4096)
-    pad_bytes = data_file_off - text_ro_end
     data_vaddr = base_vaddr + data_file_off
 
-    // 4KB RW globals header + extra bss_size in SHT_NOBITS (zero disk cost for large @bss!)
+    if is_page_entry == 1
+        code_file_off = 4096
+        rx_p_offset = 4096
+        entry_vaddr = base_vaddr
+        code_vaddr = base_vaddr
+        ro_file_off = 4096 + code_size
+        ro_vaddr = base_vaddr + code_size
+        rx_p_filesz = code_size + ro_size
+        rx_aligned_mem = bare_align_up(rx_p_filesz, 4096)
+        if rx_aligned_mem == 0
+            rx_aligned_mem = 4096
+        end
+        data_file_off = 4096 + rx_aligned_mem
+        data_vaddr = base_vaddr + rx_aligned_mem
+    end
+
+    // 4KB RW globals header + extra eff_bss in SHT_NOBITS (zero disk cost for large @bss / kernel stack!)
     data_filesz = 4096
-    data_memsz = data_filesz + bss_size
+    data_memsz = data_filesz + eff_bss
 
     has_dbg = 0
     if debug_line != 0 and debug_line.len() > 0
@@ -195,12 +273,12 @@ fn bare_emit_elf64_kernel code_bytes rodata_bytes bss_size base_vaddr debug_line
     shstr_idx = num_secs - 1
 
     bin = list()
-    // ELF64 Header (64 bytes, ET_EXEC=2, EM_X86_64=62, e_phnum=3)
+    // ELF64 Header (64 bytes, ET_EXEC=2, e_machine=eff_mach, e_phnum=3)
     push(bin, 127) push(bin, 69) push(bin, 76) push(bin, 70)
     push(bin, 2) push(bin, 1) push(bin, 1) push(bin, 0)
     bare_pad_to(bin, 16)
     bare_push_u16(bin, 2)           // ET_EXEC
-    bare_push_u16(bin, 62)          // EM_X86_64
+    bare_push_u16(bin, eff_mach)    // EM_X86_64(62) / EM_AARCH64(183) / EM_RISCV(243)
     bare_push_u32(bin, 1)           // EV_CURRENT
     bare_push_u64(bin, entry_vaddr) // e_entry
     bare_push_u64(bin, 64)          // e_phoff
@@ -216,11 +294,11 @@ fn bare_emit_elf64_kernel code_bytes rodata_bytes bss_size base_vaddr debug_line
     // Program Header 1: PT_LOAD RX (.text + .rodata)
     bare_push_u32(bin, 1)           // PT_LOAD
     bare_push_u32(bin, 5)           // PF_R | PF_X
-    bare_push_u64(bin, 0)           // p_offset
+    bare_push_u64(bin, rx_p_offset) // p_offset (0 for x86_64, 0x1000 for ARM64/RV64)
     bare_push_u64(bin, base_vaddr)  // p_vaddr
     bare_push_u64(bin, base_vaddr)  // p_paddr
-    bare_push_u64(bin, text_ro_end) // p_filesz
-    bare_push_u64(bin, text_ro_end) // p_memsz
+    bare_push_u64(bin, rx_p_filesz) // p_filesz
+    bare_push_u64(bin, rx_p_filesz) // p_memsz
     bare_push_u64(bin, 4096)        // p_align
 
     // Program Header 2: PT_LOAD RW (.data + .bss)
@@ -273,7 +351,7 @@ fn bare_emit_elf64_kernel code_bytes rodata_bytes bss_size base_vaddr debug_line
     // .data (SHT_PROGBITS=1, SHF_WRITE|SHF_ALLOC=3)
     bare_push_u32(bin, 15) bare_push_u32(bin, 1) bare_push_u64(bin, 3) bare_push_u64(bin, data_vaddr) bare_push_u64(bin, data_file_off) bare_push_u64(bin, data_filesz) bare_push_u32(bin, 0) bare_push_u32(bin, 0) bare_push_u64(bin, 16) bare_push_u64(bin, 0)
     // .bss (SHT_NOBITS=8, SHF_WRITE|SHF_ALLOC=3)
-    bare_push_u32(bin, 21) bare_push_u32(bin, 8) bare_push_u64(bin, 3) bare_push_u64(bin, data_vaddr + data_filesz) bare_push_u64(bin, data_file_off + data_filesz) bare_push_u64(bin, bss_size) bare_push_u32(bin, 0) bare_push_u32(bin, 0) bare_push_u64(bin, 4096) bare_push_u64(bin, 0)
+    bare_push_u32(bin, 21) bare_push_u32(bin, 8) bare_push_u64(bin, 3) bare_push_u64(bin, data_vaddr + data_filesz) bare_push_u64(bin, data_file_off + data_filesz) bare_push_u64(bin, eff_bss) bare_push_u32(bin, 0) bare_push_u32(bin, 0) bare_push_u64(bin, 4096) bare_push_u64(bin, 0)
     if has_eh == 1
         bare_push_u32(bin, 26) bare_push_u32(bin, 1) bare_push_u64(bin, 2) bare_push_u64(bin, 0) bare_push_u64(bin, eh_off) bare_push_u64(bin, eh_sz) bare_push_u32(bin, 0) bare_push_u32(bin, 0) bare_push_u64(bin, 8) bare_push_u64(bin, 0)
     end
@@ -299,6 +377,9 @@ fn bare_emit_elf64_kernel code_bytes rodata_bytes bss_size base_vaddr debug_line
     res.bw_entry_vaddr = entry_vaddr
     res.bw_error_msg = ""
     return res
+
+fn bare_emit_elf64_kernel code_bytes rodata_bytes bss_size base_vaddr debug_line debug_info debug_abbrev eh_frame output_path
+    return bare_emit_elf64_kernel_arch(code_bytes, rodata_bytes, bss_size, base_vaddr, debug_line, debug_info, debug_abbrev, eh_frame, 62, output_path)
 
 // ── 3. Dual Multiboot1+Multiboot2 32->64-bit Long-Mode Kernel (--target=multiboot2-bare / unikernel) ──
 

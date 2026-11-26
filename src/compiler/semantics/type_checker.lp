@@ -80,10 +80,11 @@ import "compiler/frontend/ast/ast_node"
   tc_warnings: array
   tc_enum_names: array
   tc_enum_variants: array
+  tc_builtin_cache: i64
 @end
 
 @fn type_checker_new(reg, symtab, scopes)
-  // WHY: Initializes type checking pipeline with named constructor
+  // WHY: Initializes type checking pipeline with named constructor and O(1) builtin memo cache
   ctx = infer_ctx_new(reg, scopes)
   tc = TypeChecker()
   tc.tc_reg = reg
@@ -97,6 +98,7 @@ import "compiler/frontend/ast/ast_node"
   tc.tc_warnings = []
   tc.tc_enum_names = []
   tc.tc_enum_variants = []
+  tc.tc_builtin_cache = dict()
   return tc
 @end
 
@@ -137,6 +139,7 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "to_str") == 1 || str_eq(fn_name, "str") == 1 || str_eq(fn_name, "স্ট্রিং") == 1 || str_eq(fn_name, "is_str") == 1 || str_eq(fn_name, "is_string") == 1 return 1 @end
   @if str_eq(fn_name, "malloc") == 1 || str_eq(fn_name, "alloc") == 1 || str_eq(fn_name, "বরাদ্দ") == 1 || str_eq(fn_name, "mem_alloc") == 1 || str_eq(fn_name, "মেমরি_বরাদ্দ") == 1 || str_eq(fn_name, "user_alloc") == 1 || str_eq(fn_name, "user_free") == 1 || str_eq(fn_name, "free") == 1 || str_eq(fn_name, "মুক্ত") == 1 || str_eq(fn_name, "mem_free") == 1 || str_eq(fn_name, "sys_free") == 1 || str_eq(fn_name, "মেমরি_মুক্তি") == 1 || str_eq(fn_name, "gc_collect") == 1 || str_eq(fn_name, "lipi_gc_collect") == 1 || str_eq(fn_name, "gc_live_bytes") == 1 || str_eq(fn_name, "gc_set_threshold") == 1 || str_eq(fn_name, "gc_set_auto") == 1 || str_eq(fn_name, "gc_init") == 1 || str_eq(fn_name, "gc_alloc") == 1 || str_eq(fn_name, "gc_free") == 1 || str_eq(fn_name, "gc_base") == 1 return 1 @end
   @if str_eq(fn_name, "mem_word_read") == 1 || str_eq(fn_name, "mem_read") == 1 || str_eq(fn_name, "mem_read_word") == 1 || str_eq(fn_name, "মেমরি_পড়ো") == 1 || str_eq(fn_name, "মেমরি_শব্দ_পড়ো") == 1 return 1 @end
+  @if str_eq(fn_name, "mem_read_f64") == 1 || str_eq(fn_name, "mem_write_f64") == 1 || str_eq(fn_name, "mem_read_f32") == 1 || str_eq(fn_name, "mem_write_f32") == 1 || str_eq(fn_name, "f64_from_bits") == 1 || str_eq(fn_name, "float_from_bits") == 1 || str_eq(fn_name, "f64_to_bits") == 1 || str_eq(fn_name, "float_to_bits") == 1 || str_eq(fn_name, "মেমরি_দশমিক_পড়ো") == 1 || str_eq(fn_name, "মেমরি_দশমিক_লেখো") == 1 return 1 @end
   @if str_eq(fn_name, "mem_word_write") == 1 || str_eq(fn_name, "mem_write") == 1 || str_eq(fn_name, "mem_write_word") == 1 || str_eq(fn_name, "মেমরি_লেখো") == 1 || str_eq(fn_name, "মেমরি_শব্দ_লেখো") == 1 return 1 @end
   @if str_eq(fn_name, "mem_byte_read") == 1 || str_eq(fn_name, "mem_read_byte") == 1 || str_eq(fn_name, "mem_byte_পড়ো") == 1 || str_eq(fn_name, "মেমরি_বাইট_পড়ো") == 1 || str_eq(fn_name, "sys_peek8") == 1 || str_eq(fn_name, "sys_peek") == 1 return 1 @end
   @if str_eq(fn_name, "mem_byte_write") == 1 || str_eq(fn_name, "mem_write_byte") == 1 || str_eq(fn_name, "mem_byte_লেখো") == 1 || str_eq(fn_name, "মেমরি_বাইট_লেখো") == 1 || str_eq(fn_name, "sys_poke8") == 1 || str_eq(fn_name, "sys_poke") == 1 return 1 @end
@@ -154,7 +157,7 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "cpu_has_avx2") == 1 || str_eq(fn_name, "cpuid_avx2") == 1 || str_eq(fn_name, "cpu_has_avx512") == 1 || str_eq(fn_name, "cpu_has_avx512f") == 1 || str_eq(fn_name, "cpuid_avx512") == 1 || str_eq(fn_name, "cpu_has_amx") == 1 || str_eq(fn_name, "cpuid_amx") == 1 || str_eq(fn_name, "সিপিইউ_এএমএক্স") == 1 || str_eq(fn_name, "cpu_has_vnni") == 1 || str_eq(fn_name, "cpuid_vnni") == 1 || str_eq(fn_name, "সিপিইউ_ভিএনএনআই") == 1 return 1 @end
   @if str_eq(fn_name, "simd_avx2_sum") == 1 || str_eq(fn_name, "simd_avx512_sum") == 1 || str_eq(fn_name, "simd_avx512_sum_u64") == 1 || str_eq(fn_name, "ভেক্টর_যোগ_২৫৬") == 1 || str_eq(fn_name, "simd_avx512_dot") == 1 || str_eq(fn_name, "simd_sse2_dot_f64") == 1 || str_eq(fn_name, "simd_sse2_gemv_f64") == 1 return 1 @end
   @if str_eq(fn_name, "matmul") == 1 || str_eq(fn_name, "ম্যাট্রিক্স_গুণ") == 1 || str_eq(fn_name, "_lipi_matmul") == 1 return 1 @end
-  @if len(fn_name) >= 5 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "i" && char_at(fn_name, 2) == "m" && char_at(fn_name, 3) == "d" && char_at(fn_name, 4) == "_" return 1 @end
+  @if len(fn_name) >= 5 && mem_byte_read(fn_name, 0) == 115 && mem_byte_read(fn_name, 1) == 105 && mem_byte_read(fn_name, 2) == 109 && mem_byte_read(fn_name, 3) == 100 && mem_byte_read(fn_name, 4) == 95 return 1 @end
   @if str_eq(fn_name, "str_ptr") == 1 || str_eq(fn_name, "lipi_str_ptr") == 1 || str_eq(fn_name, "lipi_str_new") == 1 return 1 @end
   @if str_eq(fn_name, "thread_spawn_vm") == 1 || str_eq(fn_name, "thread_spawn_vm_joinable") == 1 || str_eq(fn_name, "থ্রেড_চালু_ভিএম") == 1 || str_eq(fn_name, "futex_wait") == 1 || str_eq(fn_name, "ফিউটেক্স_অপেক্ষা") == 1 || str_eq(fn_name, "futex_wake") == 1 || str_eq(fn_name, "ফিউটেক্স_জাগাও") == 1 return 1 @end
   @if str_eq(fn_name, "stack_bottom") == 1 || str_eq(fn_name, "heap_base_ptr") == 1 || str_eq(fn_name, "heap_curr_ptr") == 1 || str_eq(fn_name, "exc_throw") == 1 || str_eq(fn_name, "stack_trace") == 1 || str_eq(fn_name, "backtrace") == 1 || str_eq(fn_name, "স্ট্যাক_ট্রেস") == 1 || str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1 || str_eq(fn_name, "move") == 1 || str_eq(fn_name, "drop") == 1 || str_eq(fn_name, "float_to_str") == 1 || str_eq(fn_name, "print_float") == 1 return 1 @end
@@ -164,22 +167,41 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "port_in8") == 1 || str_eq(fn_name, "port_out8") == 1 || str_eq(fn_name, "port_in16") == 1 || str_eq(fn_name, "port_out16") == 1 || str_eq(fn_name, "port_in32") == 1 || str_eq(fn_name, "port_out32") == 1 || str_eq(fn_name, "inb") == 1 || str_eq(fn_name, "outb") == 1 || str_eq(fn_name, "inw") == 1 || str_eq(fn_name, "outw") == 1 || str_eq(fn_name, "inl") == 1 || str_eq(fn_name, "outl") == 1 || str_eq(fn_name, "io_wait") == 1 || str_eq(fn_name, "port_io_wait") == 1 return 1 @end
   @if str_eq(fn_name, "পোর্ট_পড়ো৮") == 1 || str_eq(fn_name, "পোর্ট_লেখো৮") == 1 || str_eq(fn_name, "পোর্ট_পড়ো১৬") == 1 || str_eq(fn_name, "পোর্ট_লেখো১৬") == 1 || str_eq(fn_name, "পোর্ট_পড়ো৩২") == 1 || str_eq(fn_name, "পোর্ট_লেখো৩২") == 1 return 1 @end
   @if str_eq(fn_name, "mmio_r8") == 1 || str_eq(fn_name, "mmio_w8") == 1 || str_eq(fn_name, "mmio_r16") == 1 || str_eq(fn_name, "mmio_w16") == 1 || str_eq(fn_name, "mmio_r32") == 1 || str_eq(fn_name, "mmio_w32") == 1 || str_eq(fn_name, "mmio_r64") == 1 || str_eq(fn_name, "mmio_w64") == 1 || str_eq(fn_name, "mmio_read8") == 1 || str_eq(fn_name, "mmio_write8") == 1 || str_eq(fn_name, "mmio_read16") == 1 || str_eq(fn_name, "mmio_write16") == 1 || str_eq(fn_name, "mmio_read32_hw") == 1 || str_eq(fn_name, "mmio_write32_hw") == 1 || str_eq(fn_name, "mmio_read64") == 1 || str_eq(fn_name, "mmio_write64") == 1 return 1 @end
-  @if str_eq(fn_name, "cpu_fence") == 1 || str_eq(fn_name, "cpu_dmb") == 1 || str_eq(fn_name, "cpu_dsb") == 1 || str_eq(fn_name, "cpu_isb") == 1 || str_eq(fn_name, "cpu_wfi") == 1 || str_eq(fn_name, "cpu_nop") == 1 || str_eq(fn_name, "cpu_rdcycle") == 1 || str_eq(fn_name, "cpu_rdtime") == 1 || str_eq(fn_name, "Ok") == 1 || str_eq(fn_name, "Err") == 1 || str_eq(fn_name, "Some") == 1 || str_eq(fn_name, "None") == 1 return 1 @end
+  @if str_eq(fn_name, "cpu_fence") == 1 || str_eq(fn_name, "cpu_dmb") == 1 || str_eq(fn_name, "cpu_dsb") == 1 || str_eq(fn_name, "cpu_isb") == 1 || str_eq(fn_name, "cpu_wfi") == 1 || str_eq(fn_name, "cpu_halt") == 1 || str_eq(fn_name, "cpu_nop") == 1 || str_eq(fn_name, "cpu_rdcycle") == 1 || str_eq(fn_name, "cpu_rdtime") == 1 || str_eq(fn_name, "psci_call") == 1 || str_eq(fn_name, "Ok") == 1 || str_eq(fn_name, "Err") == 1 || str_eq(fn_name, "Some") == 1 || str_eq(fn_name, "None") == 1 return 1 @end
   @if str_eq(fn_name, "mem_u8_read") == 1 || str_eq(fn_name, "mem_u8_write") == 1 || str_eq(fn_name, "mem_u16_read") == 1 || str_eq(fn_name, "mem_u16_write") == 1 || str_eq(fn_name, "mem_u32_read") == 1 || str_eq(fn_name, "mem_u32_write") == 1 || str_eq(fn_name, "mem_u64_read") == 1 || str_eq(fn_name, "mem_u64_write") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_cli") == 1 || str_eq(fn_name, "cli") == 1 || str_eq(fn_name, "cpu_sti") == 1 || str_eq(fn_name, "sti") == 1 || str_eq(fn_name, "cpu_hlt") == 1 || str_eq(fn_name, "hlt") == 1 || str_eq(fn_name, "cpu_pause") == 1 || str_eq(fn_name, "cpu_lgdt") == 1 || str_eq(fn_name, "lgdt") == 1 || str_eq(fn_name, "cpu_lidt") == 1 || str_eq(fn_name, "lidt") == 1 || str_eq(fn_name, "cpu_sgdt") == 1 || str_eq(fn_name, "sgdt") == 1 || str_eq(fn_name, "cpu_sidt") == 1 || str_eq(fn_name, "sidt") == 1 || str_eq(fn_name, "cpu_ltr") == 1 || str_eq(fn_name, "ltr") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_read_cr0") == 1 || str_eq(fn_name, "read_cr0") == 1 || str_eq(fn_name, "cpu_write_cr0") == 1 || str_eq(fn_name, "write_cr0") == 1 || str_eq(fn_name, "cpu_read_cr2") == 1 || str_eq(fn_name, "read_cr2") == 1 || str_eq(fn_name, "cpu_read_cr3") == 1 || str_eq(fn_name, "read_cr3") == 1 || str_eq(fn_name, "cpu_write_cr3") == 1 || str_eq(fn_name, "write_cr3") == 1 || str_eq(fn_name, "cpu_read_cr4") == 1 || str_eq(fn_name, "read_cr4") == 1 || str_eq(fn_name, "cpu_write_cr4") == 1 || str_eq(fn_name, "write_cr4") == 1 return 1 @end
   @if str_eq(fn_name, "cpu_rdmsr") == 1 || str_eq(fn_name, "rdmsr") == 1 || str_eq(fn_name, "cpu_wrmsr") == 1 || str_eq(fn_name, "wrmsr") == 1 || str_eq(fn_name, "cpu_invlpg") == 1 || str_eq(fn_name, "invlpg") == 1 || str_eq(fn_name, "cpu_swapgs") == 1 || str_eq(fn_name, "swapgs") == 1 || str_eq(fn_name, "cpu_wbinvd") == 1 || str_eq(fn_name, "cpu_rdtsc") == 1 || str_eq(fn_name, "rdtsc") == 1 || str_eq(fn_name, "cpu_read_rflags") == 1 || str_eq(fn_name, "read_rflags") == 1 || str_eq(fn_name, "cpu_read_rsp") == 1 || str_eq(fn_name, "cpu_cpuid") == 1 || str_eq(fn_name, "cpuid") == 1 return 1 @end
   @if str_eq(fn_name, "atomic_cas32") == 1 || str_eq(fn_name, "atomic_cas64") == 1 || str_eq(fn_name, "atomic_xchg32") == 1 || str_eq(fn_name, "atomic_xchg64") == 1 || str_eq(fn_name, "atomic_add32") == 1 || str_eq(fn_name, "atomic_add64") == 1 || str_eq(fn_name, "fence_full") == 1 || str_eq(fn_name, "mfence") == 1 || str_eq(fn_name, "fence_store") == 1 || str_eq(fn_name, "sfence") == 1 || str_eq(fn_name, "fence_load") == 1 || str_eq(fn_name, "lfence") == 1 || str_eq(fn_name, "মেমরি_ব্যারিয়ার") == 1 return 1 @end
-  @if str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 || str_eq(fn_name, "@asm") == 1 || str_eq(fn_name, "@অ্যাসেম্বলি") == 1 return 1 @end
-  @if len(fn_name) >= 4 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "y" && char_at(fn_name, 2) == "s" && char_at(fn_name, 3) == "_" return 1 @end
-  @if len(fn_name) >= 6 && char_at(fn_name, 0) == "_" && char_at(fn_name, 1) == "l" && char_at(fn_name, 2) == "i" && char_at(fn_name, 3) == "p" && char_at(fn_name, 4) == "i" && char_at(fn_name, 5) == "_" return 1 @end
+  @if str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "sbi_ecall") == 1 || str_eq(fn_name, "sbi_ecall_val") == 1 || str_eq(fn_name, "sbi_ecall_ret") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 || str_eq(fn_name, "@asm") == 1 || str_eq(fn_name, "@অ্যাসেম্বলি") == 1 return 1 @end
+  @if len(fn_name) >= 4 && mem_byte_read(fn_name, 0) == 115 && mem_byte_read(fn_name, 1) == 121 && mem_byte_read(fn_name, 2) == 115 && mem_byte_read(fn_name, 3) == 95 return 1 @end
+  @if len(fn_name) >= 6 && mem_byte_read(fn_name, 0) == 95 && mem_byte_read(fn_name, 1) == 108 && mem_byte_read(fn_name, 2) == 105 && mem_byte_read(fn_name, 3) == 112 && mem_byte_read(fn_name, 4) == 105 && mem_byte_read(fn_name, 5) == 95 return 1 @end
   return 0
+@end
+
+@fn tc_is_builtin_fast(tc, fn_name)
+  // WHY: O(1) memoized builtin check scoped to TypeChecker's Phase-4 arena lifetime
+  @if fn_name == "" return 0 @end
+  @if tc != 0 && tc.tc_builtin_cache != 0
+    @if has_key(tc.tc_builtin_cache, fn_name) == 1
+      @if tc.tc_builtin_cache[fn_name] == 1 return 1 @end
+      return 0
+    @end
+    res = tc_is_builtin_call(fn_name)
+    @if res == 1
+      tc.tc_builtin_cache[fn_name] = 1
+    @else
+      tc.tc_builtin_cache[fn_name] = 2
+    @end
+    return res
+  @end
+  return tc_is_builtin_call(fn_name)
 @end
 
 // WHY: Assigns concrete return types to built-in system intrinsics for static type propagation.
 @fn tc_builtin_ret_type(fn_name)
   @if str_eq(fn_name, "matmul") == 1 || str_eq(fn_name, "ম্যাট্রিক্স_গুণ") == 1 || str_eq(fn_name, "_lipi_matmul") == 1 return TYPE_ID_ANY() @end
-  @if str_eq(fn_name, "ভেক্টর_যোগ_২৫৬") == 1 || (len(fn_name) >= 5 && char_at(fn_name, 0) == "s" && char_at(fn_name, 1) == "i" && char_at(fn_name, 2) == "m" && char_at(fn_name, 3) == "d" && char_at(fn_name, 4) == "_") return TYPE_ID_I64() @end
+  @if str_eq(fn_name, "ভেক্টর_যোগ_২৫৬") == 1 || (len(fn_name) >= 5 && mem_byte_read(fn_name, 0) == 115 && mem_byte_read(fn_name, 1) == 105 && mem_byte_read(fn_name, 2) == 109 && mem_byte_read(fn_name, 3) == 100 && mem_byte_read(fn_name, 4) == 95) return TYPE_ID_I64() @end
   @if str_eq(fn_name, "say") == 1 || str_eq(fn_name, "println") == 1 || str_eq(fn_name, "print") == 1 || str_eq(fn_name, "বলো") == 1 || str_eq(fn_name, "দেখাও") == 1 || str_eq(fn_name, "বলুন") == 1 || str_eq(fn_name, "প্রিন্ট") == 1 return TYPE_ID_VOID() @end
   @if str_eq(fn_name, "len") == 1 || str_eq(fn_name, "length") == 1 || str_eq(fn_name, "দৈর্ঘ্য") == 1 || str_eq(fn_name, "str_len") == 1 || str_eq(fn_name, "list_len") == 1 || str_eq(fn_name, "file_size") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "floor") == 1 || str_eq(fn_name, "মেঝে") == 1 return TYPE_ID_I64() @end
@@ -187,12 +209,14 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(fn_name, "to_str") == 1 || str_eq(fn_name, "str") == 1 || str_eq(fn_name, "স্ট্রিং") == 1 || str_eq(fn_name, "stack_trace") == 1 || str_eq(fn_name, "backtrace") == 1 || str_eq(fn_name, "স্ট্যাক_ট্রেস") == 1 || str_eq(fn_name, "file_read") == 1 || str_eq(fn_name, "str_sub") == 1 || str_eq(fn_name, "char_at") == 1 || str_eq(fn_name, "অক্ষর") == 1 || str_eq(fn_name, "str_concat") == 1 || str_eq(fn_name, "str_from_byte") == 1 || str_eq(fn_name, "chr") == 1 || str_eq(fn_name, "অক্ষর_চিহ্ন") == 1 || str_eq(fn_name, "str_slice") == 1 || str_eq(fn_name, "str_substr") == 1 || str_eq(fn_name, "buf_to_str") == 1 || str_eq(fn_name, "bytes_to_str") == 1 || str_eq(fn_name, "mem_to_str") == 1 || str_eq(fn_name, "বাফার_স্ট্রিংয়ে") == 1 || str_eq(fn_name, "বাইট_থেকে_স্ট্রিং") == 1 || str_eq(fn_name, "float_to_str") == 1 return TYPE_ID_STRING() @end
   @if str_eq(fn_name, "is_str") == 1 || str_eq(fn_name, "is_string") == 1 || str_eq(fn_name, "file_exists") == 1 || str_eq(fn_name, "str_eq") == 1 || str_eq(fn_name, "str_starts_with") == 1 || str_eq(fn_name, "str_ends_with") == 1 return TYPE_ID_BOOL() @end
   @if str_eq(fn_name, "syscall") == 1 || str_eq(fn_name, "সিসকল") == 1 || str_eq(fn_name, "sys_syscall") == 1 || str_eq(fn_name, "exit") == 1 || str_eq(fn_name, "বিদায়") == 1 || str_eq(fn_name, "sys_mmap") == 1 return TYPE_ID_I64() @end
+  @if str_eq(fn_name, "mem_read_f64") == 1 || str_eq(fn_name, "mem_write_f64") == 1 || str_eq(fn_name, "mem_read_f32") == 1 || str_eq(fn_name, "mem_write_f32") == 1 || str_eq(fn_name, "f64_from_bits") == 1 || str_eq(fn_name, "float_from_bits") == 1 || str_eq(fn_name, "মেমরি_দশমিক_পড়ো") == 1 || str_eq(fn_name, "মেমরি_দশমিক_লেখো") == 1 return TYPE_ID_F64() @end
+  @if str_eq(fn_name, "f64_to_bits") == 1 || str_eq(fn_name, "float_to_bits") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "mem_word_read") == 1 || str_eq(fn_name, "mem_read") == 1 || str_eq(fn_name, "মেমরি_পড়ো") == 1 || str_eq(fn_name, "মেমরি_শব্দ_পড়ো") == 1 || str_eq(fn_name, "mem_byte_read") == 1 || str_eq(fn_name, "mem_read_byte") == 1 || str_eq(fn_name, "mem_byte_পড়ো") == 1 || str_eq(fn_name, "মেমরি_বাইট_পড়ো") == 1 || str_eq(fn_name, "sys_peek8") == 1 || str_eq(fn_name, "sys_peek") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "file_write") == 1 || str_eq(fn_name, "file_write_bytes") == 1 || str_eq(fn_name, "sys_exit") == 1 || str_eq(fn_name, "sys_exit_group") == 1 || str_eq(fn_name, "প্রস্থান") == 1 || str_eq(fn_name, "mem_word_write") == 1 || str_eq(fn_name, "mem_write") == 1 || str_eq(fn_name, "mem_write_word") == 1 || str_eq(fn_name, "মেমরি_লেখো") == 1 || str_eq(fn_name, "মেমরি_শব্দ_লেখো") == 1 || str_eq(fn_name, "mem_byte_write") == 1 || str_eq(fn_name, "mem_write_byte") == 1 || str_eq(fn_name, "mem_byte_লেখো") == 1 || str_eq(fn_name, "মেমরি_বাইট_লেখো") == 1 || str_eq(fn_name, "sys_poke8") == 1 || str_eq(fn_name, "sys_poke") == 1 return TYPE_ID_VOID() @end
   @if str_eq(fn_name, "push") == 1 || str_eq(fn_name, "set") == 1 || str_eq(fn_name, "list_push") == 1 || str_eq(fn_name, "list_set") == 1 || str_eq(fn_name, "argv") == 1 || str_eq(fn_name, "আর্গস") == 1 || str_eq(fn_name, "pop") == 1 || str_eq(fn_name, "list_pop") == 1 || str_eq(fn_name, "বাদ_দাও") == 1 || str_eq(fn_name, "get") == 1 || str_eq(fn_name, "list") == 1 || str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "keys") == 1 || str_eq(fn_name, "values") == 1 || str_eq(fn_name, "dict_keys") == 1 || str_eq(fn_name, "dict_values") == 1 || str_eq(fn_name, "dict_get") == 1 || str_eq(fn_name, "dict_set") == 1 || str_eq(fn_name, "map_new") == 1 || str_eq(fn_name, "map_set") == 1 || str_eq(fn_name, "map_get") == 1 || str_eq(fn_name, "map_keys") == 1 || str_eq(fn_name, "map_values") == 1 || str_eq(fn_name, "hashmap_delete") == 1 || str_eq(fn_name, "malloc") == 1 || str_eq(fn_name, "alloc") == 1 || str_eq(fn_name, "mem_alloc") == 1 || str_eq(fn_name, "মেমরি_বরাদ্দ") == 1 || str_eq(fn_name, "user_alloc") == 1 || str_eq(fn_name, "user_free") == 1 || str_eq(fn_name, "free") == 1 return TYPE_ID_ANY() @end
   @if str_eq(fn_name, "has_key") == 1 || str_eq(fn_name, "del_key") == 1 || str_eq(fn_name, "dict_has") == 1 || str_eq(fn_name, "dict_del") == 1 || str_eq(fn_name, "map_has") == 1 || str_eq(fn_name, "map_del") == 1 || str_eq(fn_name, "async_yield") == 1 || str_eq(fn_name, "async_wait_fd") == 1 return TYPE_ID_I64() @end
   @if str_eq(fn_name, "sizeof") == 1 || str_eq(fn_name, "size_of") == 1 || str_eq(fn_name, "সাইজ_অফ") == 1 || str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1 return TYPE_ID_I64() @end
-  @if str_eq(fn_name, "port_in8") == 1 || str_eq(fn_name, "port_in16") == 1 || str_eq(fn_name, "port_in32") == 1 || str_eq(fn_name, "inb") == 1 || str_eq(fn_name, "inw") == 1 || str_eq(fn_name, "inl") == 1 || str_eq(fn_name, "mmio_r8") == 1 || str_eq(fn_name, "mmio_r16") == 1 || str_eq(fn_name, "mmio_r32") == 1 || str_eq(fn_name, "mmio_r64") == 1 || str_eq(fn_name, "atomic_cas32") == 1 || str_eq(fn_name, "atomic_cas64") == 1 || str_eq(fn_name, "atomic_xchg32") == 1 || str_eq(fn_name, "atomic_xchg64") == 1 || str_eq(fn_name, "atomic_add32") == 1 || str_eq(fn_name, "atomic_add64") == 1 || str_eq(fn_name, "cpu_read_cr0") == 1 || str_eq(fn_name, "cpu_read_cr2") == 1 || str_eq(fn_name, "cpu_read_cr3") == 1 || str_eq(fn_name, "cpu_read_cr4") == 1 || str_eq(fn_name, "cpu_rdmsr") == 1 || str_eq(fn_name, "cpu_rdtsc") == 1 || str_eq(fn_name, "cpu_read_rflags") == 1 || str_eq(fn_name, "cpu_read_rsp") == 1 || str_eq(fn_name, "cpu_cpuid") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 return TYPE_ID_I64() @end
+  @if str_eq(fn_name, "port_in8") == 1 || str_eq(fn_name, "port_in16") == 1 || str_eq(fn_name, "port_in32") == 1 || str_eq(fn_name, "inb") == 1 || str_eq(fn_name, "inw") == 1 || str_eq(fn_name, "inl") == 1 || str_eq(fn_name, "mmio_r8") == 1 || str_eq(fn_name, "mmio_r16") == 1 || str_eq(fn_name, "mmio_r32") == 1 || str_eq(fn_name, "mmio_r64") == 1 || str_eq(fn_name, "atomic_cas32") == 1 || str_eq(fn_name, "atomic_cas64") == 1 || str_eq(fn_name, "atomic_xchg32") == 1 || str_eq(fn_name, "atomic_xchg64") == 1 || str_eq(fn_name, "atomic_add32") == 1 || str_eq(fn_name, "atomic_add64") == 1 || str_eq(fn_name, "cpu_read_cr0") == 1 || str_eq(fn_name, "cpu_read_cr2") == 1 || str_eq(fn_name, "cpu_read_cr3") == 1 || str_eq(fn_name, "cpu_read_cr4") == 1 || str_eq(fn_name, "cpu_rdmsr") == 1 || str_eq(fn_name, "cpu_rdtsc") == 1 || str_eq(fn_name, "cpu_read_rflags") == 1 || str_eq(fn_name, "cpu_read_rsp") == 1 || str_eq(fn_name, "cpu_cpuid") == 1 || str_eq(fn_name, "uefi_call") == 1 || str_eq(fn_name, "ms_x64_call") == 1 || str_eq(fn_name, "sbi_ecall") == 1 || str_eq(fn_name, "sbi_ecall_val") == 1 || str_eq(fn_name, "sbi_ecall_ret") == 1 || str_eq(fn_name, "psci_call") == 1 || str_eq(fn_name, "file_write_mem") == 1 || str_eq(fn_name, "file_append_mem") == 1 return TYPE_ID_I64() @end
   return TYPE_ID_ANY()
 @end
 
@@ -234,7 +258,7 @@ import "compiler/frontend/ast/ast_node"
     @end
 
     @if sym == 0
-      @if tc_is_builtin_call(v_name) == 1
+      @if tc_is_builtin_fast(tc, v_name) == 1
         return TYPE_ID_ANY()
       @end
       tc_error(tc, ERR_UNDEFINED_VARIABLE(), "In function '" + tc.tc_current_fn_name + "': Undefined variable '" + v_name + "'", span_default())
@@ -385,7 +409,7 @@ import "compiler/frontend/ast/ast_node"
     @end
 
     // WHY: Built-in system intrinsics and hardware runtime primitives are validated directly
-    @if tc_is_builtin_call(fn_name) == 1
+    @if tc_is_builtin_fast(tc, fn_name) == 1
       @if str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1
         return TYPE_ID_I64()
       @end
@@ -809,7 +833,7 @@ import "compiler/frontend/ast/ast_node"
       decl_tid = tc_resolve_annotation_id(tc, stmt.op)
       @if decl_tid != TYPE_ID_ANY() && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
         ann_ok = type_is_assignable(tc.tc_reg, decl_tid, rhs_t)
-        @if (decl_tid == TYPE_ID_I64() && rhs_t == TYPE_ID_BOOL()) || (decl_tid == TYPE_ID_BOOL() && rhs_t == TYPE_ID_I64())
+        @if (decl_tid == TYPE_ID_I64() && rhs_t == TYPE_ID_BOOL()) || (decl_tid == TYPE_ID_BOOL() && rhs_t == TYPE_ID_I64()) || (decl_tid == TYPE_ID_BYTE() && rhs_t == TYPE_ID_I64())
           ann_ok = 1
         @end
         @if ann_ok == 0
@@ -903,7 +927,7 @@ import "compiler/frontend/ast/ast_node"
         @end
       @end
 
-      @if type_is_assignable(tc.tc_reg, sym.sym_type_ref, rhs_t) == 0
+      @if type_is_assignable(tc.tc_reg, sym.sym_type_ref, rhs_t) == 0 && (sym.sym_type_ref != TYPE_ID_BYTE() || rhs_t != TYPE_ID_I64())
         @if sym.sym_kind == SYM_KIND_VARIABLE() && sym.sym_is_const == 0 && sym.sym_is_annotated == 0 && decl_tid == TYPE_ID_ANY()
           sym.sym_type_ref = TYPE_ID_ANY()
         @else
@@ -922,7 +946,9 @@ import "compiler/frontend/ast/ast_node"
         new_sym.sym_is_annotated = 1
       @end
       scope_define_in_scope_id(tc.tc_scopes, target_scope_id, new_sym)
-      symtab_put(tc.tc_symtab, new_sym)
+      @if fn_sid < 0 || str_starts_with(target_name, "g_") == 1
+        symtab_put(tc.tc_symtab, new_sym)
+      @end
     @end
     return 1
   @end

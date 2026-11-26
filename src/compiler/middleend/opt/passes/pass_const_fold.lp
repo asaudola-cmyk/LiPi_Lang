@@ -119,12 +119,15 @@ fn pass_const_fold_run fn_obj
     folds_count = 0
 
     bi = 0
-    while bi < len(fn_obj.blocks)
+    bcnt = len(fn_obj.blocks)
+    while bi < bcnt
         bb = get(fn_obj.blocks, bi)
-        new_insts = list()
+        insts = bb.instructions
+        icnt = len(insts)
+        blk_folded = 0
         ii = 0
-        while ii < len(bb.instructions)
-            inst = get(bb.instructions, ii)
+        while ii < icnt
+            inst = get(insts, ii)
             folded = 0
 
             // Case A: Binary arithmetic / bitwise with 2 constant operands
@@ -133,17 +136,16 @@ fn pass_const_fold_run fn_obj
                 op1 = get(inst.operands, 1)
                 if op0.kind == VAL_KIND_CONST and op1.kind == VAL_KIND_CONST
                     // Check division / modulo by zero
-                    if (inst.op == OP_DIV or inst.op == OP_MOD) and op1.const_val == 0
-                        // Do not fold division by zero to preserve exception semantics
-                        push(new_insts, inst)
-                    else
+                    if not ((inst.op == OP_DIV or inst.op == OP_MOD) and op1.const_val == 0)
                         c_res = const_fold_eval_binary(inst.op, op0.const_val, op1.const_val)
                         const_val = ssa_value_new_const(c_res, inst.result.vtype)
                         ssa_value_replace_all_uses_with(inst.result, const_val)
                         ssa_instr_remove_from_operands_use_lists(inst)
                         inst.is_dead = 1
                         folded = 1
+                        blk_folded = 1
                         folds_count = folds_count + 1
+                    end
 
             // Case B: Unary negation on constant operand
             if folded == 0 and inst.op == OP_NEG and len(inst.operands) == 1
@@ -155,6 +157,7 @@ fn pass_const_fold_run fn_obj
                     ssa_instr_remove_from_operands_use_lists(inst)
                     inst.is_dead = 1
                     folded = 1
+                    blk_folded = 1
                     folds_count = folds_count + 1
 
             // Case C: Relational comparison on two constant operands
@@ -168,6 +171,7 @@ fn pass_const_fold_run fn_obj
                     ssa_instr_remove_from_operands_use_lists(inst)
                     inst.is_dead = 1
                     folded = 1
+                    blk_folded = 1
                     folds_count = folds_count + 1
 
             // Case D: Conditional branch with constant condition
@@ -178,38 +182,43 @@ fn pass_const_fold_run fn_obj
                     false_lbl = get(inst.extra_list, 1)
 
                     if cond_val.const_val != 0
-                        // Condition is statically true: rewrite to jmp true_lbl
                         inst.op = OP_JMP
                         inst.extra_str = true_lbl
                         inst.operands = list()
-                        inst.extra_list = list()
+                        inst.extra_list = ssa_instr_empty_list()
                         ssa_value_remove_use(cond_val, inst)
 
-                        // Prune dead edge to false_lbl
                         false_bb = ir_function_find_block(fn_obj, false_lbl)
                         const_fold_prune_phi_incoming(false_bb, bb.label)
                     else
-                        // Condition is statically false: rewrite to jmp false_lbl
                         inst.op = OP_JMP
                         inst.extra_str = false_lbl
                         inst.operands = list()
-                        inst.extra_list = list()
+                        inst.extra_list = ssa_instr_empty_list()
                         ssa_value_remove_use(cond_val, inst)
 
-                        // Prune dead edge to true_lbl
                         true_bb = ir_function_find_block(fn_obj, true_lbl)
                         const_fold_prune_phi_incoming(true_bb, bb.label)
 
                     folded = 1
                     folds_count = folds_count + 1
-                    push(new_insts, inst)
-
-            if folded == 0
-                push(new_insts, inst)
 
             ii = ii + 1
+        end
 
-        bb.instructions = new_insts
+        if blk_folded == 1
+            new_insts = list()
+            ii = 0
+            while ii < icnt
+                it = get(insts, ii)
+                if it.is_dead == 0
+                    push(new_insts, it)
+                end
+                ii = ii + 1
+            end
+            bb.instructions = new_insts
+        end
         bi = bi + 1
+    end
 
     return folds_count

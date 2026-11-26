@@ -308,11 +308,16 @@ fn riscv64_emit_closure_literal s toks pos_box c_params
     s.rv_defer_ends = list()
 
     riscv64_emit_prologue(s)
-    // Save incoming arguments a0..a7
+    // Save incoming arguments a0..a7 + RV64 LP64 stack arguments pi >= 8 at [s0 + (pi - 8) * 8]
     pi = 0
-    while pi < c_params.len() and pi < 8
+    while pi < c_params.len()
         poff = riscv64_synth_alloc_var(s, c_params[pi])
-        riscv64_emit_local_sd(s, 10 + pi, poff)
+        if pi < 8
+            riscv64_emit_local_sd(s, 10 + pi, poff)
+        else
+            riscv64_emit_ld(s, 5, 8, (pi - 8) * 8)
+            riscv64_emit_local_sd(s, 5, poff)
+        end
         pi = pi + 1
     end
     // Unpack captured outer variables from t5 (x30) closure env pointer
@@ -1393,6 +1398,229 @@ fn riscv64_synth_emit_print_tagged_helpers s
     riscv64_emit_ld(s, 1, 2, 8)
     riscv64_emit_addi(s, 2, 2, 16)
     riscv64_emit_ret(s)
+    return 0
+end
+
+fn riscv64_synth_emit_str_helpers s
+    // WHY: Sovereign pure-RV64IM string conversion & concatenation helpers (zero libc):
+    //   __uint_to_str(a0=u64) -> a0=cstr
+    //   __int_to_str(a0=i64)  -> a0=cstr (handles 0, negatives, INT64_MIN via divu/remu)
+    //   __str_concat(a0=s1, a1=s2) -> a0=cstr
+    //   __tagged_to_str(a0=val, a1=tag) -> a0=cstr
+
+    // ── __uint_to_str(a0=uval) -> a0=cstr ──
+    s.rv_uint_to_str_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 64)
+    riscv64_emit_sd(s, 1, 2, 56)
+    riscv64_emit_sd(s, 9, 2, 48)              // s1
+    riscv64_emit_sd(s, 18, 2, 40)             // s2
+    riscv64_emit_mv(s, 9, 10)                 // s1 = uval
+    riscv64_emit_li(s, 28, 10)                // t3 = 10
+    riscv64_emit_li(s, 18, 0)                 // s2 = digit count
+    bne_ruts_nz = s.rv_code.len()
+    riscv64_emit_bne(s, 9, 0, 0)
+    riscv64_emit_li(s, 5, 48)                 // '0'
+    riscv64_emit_sb(s, 5, 2, 0)
+    riscv64_emit_li(s, 18, 1)
+    jmp_ruts_alloc = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    ruts_nz_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_ruts_nz, 1, 9, 0, ruts_nz_off)
+    ruts_loop = s.rv_code.len()
+    beq_ruts_done = s.rv_code.len()
+    riscv64_emit_beq(s, 9, 0, 0)
+    riscv64_emit_remu(s, 5, 9, 28)
+    riscv64_emit_divu(s, 9, 9, 28)
+    riscv64_emit_addi(s, 5, 5, 48)
+    riscv64_emit_add(s, 6, 2, 18)
+    riscv64_emit_sb(s, 5, 6, 0)
+    riscv64_emit_addi(s, 18, 18, 1)
+    riscv64_emit_jal(s, 0, ruts_loop - s.rv_code.len())
+    ruts_alloc_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_ruts_done, 0, 9, 0, ruts_alloc_off)
+    riscv64_synth_patch_jal(s, jmp_ruts_alloc, 0, ruts_alloc_off)
+    riscv64_emit_addi(s, 10, 18, 1)
+    riscv64_synth_emit_call_alloc(s)          // a0 = out_ptr (s2 preserved!)
+    riscv64_emit_li(s, 5, 0)                  // t0 = i
+    ruts_cp = s.rv_code.len()
+    bge_ruts_cp = s.rv_code.len()
+    riscv64_emit_bge(s, 5, 18, 0)
+    riscv64_emit_sub(s, 6, 18, 5)
+    riscv64_emit_addi(s, 6, 6, 0 - 1)
+    riscv64_emit_add(s, 6, 2, 6)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    riscv64_emit_add(s, 6, 10, 5)
+    riscv64_emit_sb(s, 7, 6, 0)
+    riscv64_emit_addi(s, 5, 5, 1)
+    riscv64_emit_jal(s, 0, ruts_cp - s.rv_code.len())
+    ruts_cp_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_ruts_cp, 5, 5, 18, ruts_cp_done)
+    riscv64_emit_add(s, 6, 10, 18)
+    riscv64_emit_sb(s, 0, 6, 0)
+    riscv64_emit_ld(s, 18, 2, 40)
+    riscv64_emit_ld(s, 9, 2, 48)
+    riscv64_emit_ld(s, 1, 2, 56)
+    riscv64_emit_addi(s, 2, 2, 64)
+    riscv64_emit_ret(s)
+
+    // ── __int_to_str(a0=val) -> a0=cstr ──
+    s.rv_int_to_str_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 64)
+    riscv64_emit_sd(s, 1, 2, 56)
+    riscv64_emit_sd(s, 9, 2, 48)              // s1 = uval / count
+    riscv64_emit_sd(s, 18, 2, 40)             // s2 = is_neg
+    riscv64_emit_li(s, 18, 0)
+    riscv64_emit_mv(s, 9, 10)
+    bge_rits_pos = s.rv_code.len()
+    riscv64_emit_bge(s, 10, 0, 0)
+    riscv64_emit_li(s, 18, 1)
+    riscv64_emit_sub(s, 9, 0, 10)             // s1 = 0 - a0 (exact unsigned abs even for INT64_MIN)
+    rits_pos_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_rits_pos, 5, 10, 0, rits_pos_off)
+    riscv64_emit_li(s, 28, 10)                // t3 = 10
+    riscv64_emit_li(s, 29, 0)                 // t4 = digit count
+    bne_rits_nz = s.rv_code.len()
+    riscv64_emit_bne(s, 9, 0, 0)
+    riscv64_emit_li(s, 5, 48)
+    riscv64_emit_sb(s, 5, 2, 0)
+    riscv64_emit_li(s, 29, 1)
+    jmp_rits_alloc = s.rv_code.len()
+    riscv64_emit_jal(s, 0, 0)
+    rits_nz_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_rits_nz, 1, 9, 0, rits_nz_off)
+    rits_loop = s.rv_code.len()
+    beq_rits_done = s.rv_code.len()
+    riscv64_emit_beq(s, 9, 0, 0)
+    riscv64_emit_remu(s, 5, 9, 28)
+    riscv64_emit_divu(s, 9, 9, 28)
+    riscv64_emit_addi(s, 5, 5, 48)
+    riscv64_emit_add(s, 6, 2, 29)
+    riscv64_emit_sb(s, 5, 6, 0)
+    riscv64_emit_addi(s, 29, 29, 1)
+    riscv64_emit_jal(s, 0, rits_loop - s.rv_code.len())
+    rits_alloc_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_rits_done, 0, 9, 0, rits_alloc_off)
+    riscv64_synth_patch_jal(s, jmp_rits_alloc, 0, rits_alloc_off)
+    riscv64_emit_mv(s, 9, 29)                 // s1 = digit count (preserved across __alloc!)
+    riscv64_emit_add(s, 10, 9, 18)
+    riscv64_emit_addi(s, 10, 10, 1)
+    riscv64_synth_emit_call_alloc(s)          // a0 = out_ptr
+    riscv64_emit_li(s, 28, 0)                 // t3 = write offset
+    beq_rits_nosign = s.rv_code.len()
+    riscv64_emit_beq(s, 18, 0, 0)
+    riscv64_emit_li(s, 5, 45)                 // '-'
+    riscv64_emit_sb(s, 5, 10, 0)
+    riscv64_emit_li(s, 28, 1)
+    rits_nosign_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_rits_nosign, 0, 18, 0, rits_nosign_off)
+    riscv64_emit_li(s, 5, 0)                  // t0 = i
+    rits_cp = s.rv_code.len()
+    bge_rits_cp = s.rv_code.len()
+    riscv64_emit_bge(s, 5, 9, 0)
+    riscv64_emit_sub(s, 6, 9, 5)
+    riscv64_emit_addi(s, 6, 6, 0 - 1)
+    riscv64_emit_add(s, 6, 2, 6)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    riscv64_emit_add(s, 6, 28, 5)
+    riscv64_emit_add(s, 6, 10, 6)
+    riscv64_emit_sb(s, 7, 6, 0)
+    riscv64_emit_addi(s, 5, 5, 1)
+    riscv64_emit_jal(s, 0, rits_cp - s.rv_code.len())
+    rits_cp_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_rits_cp, 5, 5, 9, rits_cp_done)
+    riscv64_emit_add(s, 6, 28, 9)
+    riscv64_emit_add(s, 6, 10, 6)
+    riscv64_emit_sb(s, 0, 6, 0)
+    riscv64_emit_ld(s, 18, 2, 40)
+    riscv64_emit_ld(s, 9, 2, 48)
+    riscv64_emit_ld(s, 1, 2, 56)
+    riscv64_emit_addi(s, 2, 2, 64)
+    riscv64_emit_ret(s)
+
+    // ── __str_concat(a0=s1, a1=s2) -> a0=cstr ──
+    s.rv_str_concat_off = s.rv_code.len()
+    riscv64_emit_addi(s, 2, 2, 0 - 48)
+    riscv64_emit_sd(s, 1, 2, 40)
+    riscv64_emit_sd(s, 9, 2, 32)              // s1 = str1
+    riscv64_emit_sd(s, 18, 2, 24)             // s2 = str2
+    riscv64_emit_sd(s, 19, 2, 16)             // s3 = len1
+    riscv64_emit_sd(s, 20, 2, 8)              // s4 = len2
+    riscv64_emit_mv(s, 9, 10)
+    riscv64_emit_mv(s, 18, 11)
+    riscv64_emit_li(s, 19, 0)
+    beq_rsc_l1d = s.rv_code.len()
+    riscv64_emit_beq(s, 9, 0, 0)
+    rsc_l1 = s.rv_code.len()
+    riscv64_emit_add(s, 6, 9, 19)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    beq_rsc_l1d2 = s.rv_code.len()
+    riscv64_emit_beq(s, 7, 0, 0)
+    riscv64_emit_addi(s, 19, 19, 1)
+    riscv64_emit_jal(s, 0, rsc_l1 - s.rv_code.len())
+    rsc_l1_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_rsc_l1d, 0, 9, 0, rsc_l1_done)
+    riscv64_synth_patch_b(s, beq_rsc_l1d2, 0, 7, 0, rsc_l1_done)
+    riscv64_emit_li(s, 20, 0)
+    beq_rsc_l2d = s.rv_code.len()
+    riscv64_emit_beq(s, 18, 0, 0)
+    rsc_l2 = s.rv_code.len()
+    riscv64_emit_add(s, 6, 18, 20)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    beq_rsc_l2d2 = s.rv_code.len()
+    riscv64_emit_beq(s, 7, 0, 0)
+    riscv64_emit_addi(s, 20, 20, 1)
+    riscv64_emit_jal(s, 0, rsc_l2 - s.rv_code.len())
+    rsc_l2_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, beq_rsc_l2d, 0, 18, 0, rsc_l2_done)
+    riscv64_synth_patch_b(s, beq_rsc_l2d2, 0, 7, 0, rsc_l2_done)
+    riscv64_emit_add(s, 10, 19, 20)
+    riscv64_emit_addi(s, 10, 10, 1)
+    riscv64_synth_emit_call_alloc(s)          // a0 = out
+    riscv64_emit_li(s, 5, 0)
+    rsc_cp1 = s.rv_code.len()
+    bge_rsc_cp1 = s.rv_code.len()
+    riscv64_emit_bge(s, 5, 19, 0)
+    riscv64_emit_add(s, 6, 9, 5)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    riscv64_emit_add(s, 6, 10, 5)
+    riscv64_emit_sb(s, 7, 6, 0)
+    riscv64_emit_addi(s, 5, 5, 1)
+    riscv64_emit_jal(s, 0, rsc_cp1 - s.rv_code.len())
+    rsc_cp1_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_rsc_cp1, 5, 5, 19, rsc_cp1_done)
+    riscv64_emit_li(s, 5, 0)
+    rsc_cp2 = s.rv_code.len()
+    bge_rsc_cp2 = s.rv_code.len()
+    riscv64_emit_bge(s, 5, 20, 0)
+    riscv64_emit_add(s, 6, 18, 5)
+    riscv64_emit_lbu(s, 7, 6, 0)
+    riscv64_emit_add(s, 28, 19, 5)
+    riscv64_emit_add(s, 6, 10, 28)
+    riscv64_emit_sb(s, 7, 6, 0)
+    riscv64_emit_addi(s, 5, 5, 1)
+    riscv64_emit_jal(s, 0, rsc_cp2 - s.rv_code.len())
+    rsc_cp2_done = s.rv_code.len()
+    riscv64_synth_patch_b(s, bge_rsc_cp2, 5, 5, 20, rsc_cp2_done)
+    riscv64_emit_add(s, 28, 19, 20)
+    riscv64_emit_add(s, 6, 10, 28)
+    riscv64_emit_sb(s, 0, 6, 0)
+    riscv64_emit_ld(s, 20, 2, 8)
+    riscv64_emit_ld(s, 19, 2, 16)
+    riscv64_emit_ld(s, 18, 2, 24)
+    riscv64_emit_ld(s, 9, 2, 32)
+    riscv64_emit_ld(s, 1, 2, 40)
+    riscv64_emit_addi(s, 2, 2, 48)
+    riscv64_emit_ret(s)
+
+    // ── __tagged_to_str(a0=val, a1=tag) -> a0=cstr ──
+    s.rv_tagged_to_str_off = s.rv_code.len()
+    riscv64_emit_li(s, 5, 2)
+    bne_rtts_int = s.rv_code.len()
+    riscv64_emit_bne(s, 11, 5, 0)
+    riscv64_emit_ret(s)                       // tag == 2: already cstr in a0
+    rtts_int_off = s.rv_code.len()
+    riscv64_synth_patch_b(s, bne_rtts_int, 1, 11, 5, rtts_int_off)
+    riscv64_emit_jal(s, 0, s.rv_int_to_str_off - s.rv_code.len())
     return 0
 end
 

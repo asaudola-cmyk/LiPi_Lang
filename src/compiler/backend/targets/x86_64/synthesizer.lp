@@ -193,6 +193,8 @@ fn x86_synth_compile_fn_def s toks pos_box
                 break
             if pk == TOK_ARROW() or (pk != TOK_STR() and ptxt == "->")
                 break
+            if pk == TOK_LBRACE() or (pk != TOK_STR() and ptxt == "{")
+                break
             if pk == TOK_NEWLINE() or pk == TOK_SEMI() or (pk != TOK_STR() and (ptxt == "\n" or ptxt == ";"))
                 list_set(pos_box, 0, cur_p_idx + 1)
                 break
@@ -285,39 +287,68 @@ fn x86_synth_compile_fn_def s toks pos_box
             slr = s.synth_ssa_lower_res
             ssa_match_i = 0 - 1
             if slr.slr_fn_eligible != 0
-                sfi = 0
-                while sfi < slr.slr_fn_names.len() and sfi < slr.slr_fn_eligible.len()
-                    if slr.slr_fn_names[sfi] == fn_name and slr.slr_fn_eligible[sfi] == 1
-                        ssa_match_i = sfi
-                        break
+                if slr.slr_fn_name_map != 0
+                    if has_key(slr.slr_fn_name_map, fn_name) == 1
+                        cand_i = slr.slr_fn_name_map[fn_name] - 1
+                        if cand_i >= 0 and cand_i < slr.slr_fn_eligible.len() and slr.slr_fn_eligible[cand_i] == 1
+                            ssa_match_i = cand_i
+                        end
                     end
-                    sfi = sfi + 1
+                else
+                    sfi = 0
+                    while sfi < slr.slr_fn_names.len() and sfi < slr.slr_fn_eligible.len()
+                        if slr.slr_fn_names[sfi] == fn_name and slr.slr_fn_eligible[sfi] == 1
+                            ssa_match_i = sfi
+                            break
+                        end
+                        sfi = sfi + 1
+                    end
                 end
             end
             if ssa_match_i >= 0 and s.synth_pending_fn_async == 0 and ssa_match_i < slr.slr_fn_offsets.len() and ssa_match_i < slr.slr_fn_sizes.len()
                 ssa_off = slr.slr_fn_offsets[ssa_match_i]
                 ssa_sz = slr.slr_fn_sizes[ssa_match_i]
-                if ssa_sz > 0 and (ssa_off + ssa_sz) <= slr.slr_code.len()
-                    // Merge slr_rodata into synth_rodata once so STR0 string relocs stay exact
-                    if s.synth_ssa_rodata_base < 0 and slr.slr_rodata != 0 and slr.slr_rodata.len() > 0
-                        s.synth_ssa_rodata_base = s.synth_rodata.len()
-                        sri = 0
-                        while sri < slr.slr_rodata.len()
-                            push(s.synth_rodata, slr.slr_rodata[sri])
-                            sri = sri + 1
+                slr_code_len = 0
+                if slr.slr_code_buf != 0
+                    slr_code_len = buf_len(slr.slr_code_buf)
+                elif slr.slr_code != 0
+                    slr_code_len = slr.slr_code.len()
+                end
+                if ssa_sz > 0 and (ssa_off + ssa_sz) <= slr_code_len
+                    // Merge slr_rodata into synth_rodata once via hardware ERMS rep movsb so STR0 relocs stay exact
+                    if s.synth_ssa_rodata_base < 0
+                        if slr.slr_rodata_buf != 0 and buf_len(slr.slr_rodata_buf) > 0
+                            s.synth_ssa_rodata_base = buf_len(s.synth_rodata)
+                            buf_write_mem(s.synth_rodata, buf_ptr(slr.slr_rodata_buf), buf_len(slr.slr_rodata_buf))
+                        elif slr.slr_rodata != 0 and slr.slr_rodata.len() > 0
+                            s.synth_ssa_rodata_base = buf_len(s.synth_rodata)
+                            sri = 0
+                            while sri < slr.slr_rodata.len()
+                                buf_write_byte(s.synth_rodata, slr.slr_rodata[sri])
+                                sri = sri + 1
+                            end
                         end
                     end
-                    dst_ssa_base = s.synth_code.len()
-                    // Emit SSA-lowered native x86-64 machine code directly (ZERO token re-parsing!)
-                    sbi = 0
-                    while sbi < ssa_sz
-                        push(s.synth_code, slr.slr_code[ssa_off + sbi])
-                        sbi = sbi + 1
+                    dst_ssa_base = buf_len(s.synth_code)
+                    // Emit SSA-lowered native x86-64 machine code directly via ERMS (ZERO token re-parsing!)
+                    if slr.slr_code_buf != 0
+                        buf_write_mem(s.synth_code, buf_ptr(slr.slr_code_buf) + ssa_off, ssa_sz)
+                    else
+                        sbi = 0
+                        while sbi < ssa_sz
+                            buf_write_byte(s.synth_code, slr.slr_code[ssa_off + sbi])
+                            sbi = sbi + 1
+                        end
                     end
-                    // Translate STR0 string relocations falling inside this function slice
+                    // Translate STR0 string relocations falling inside this function slice (O(k) indexed when available)
                     if slr.slr_str_relocs != 0 and s.synth_ssa_rodata_base >= 0
                         sri2 = 0
-                        while sri2 < slr.slr_str_relocs.len()
+                        sri2_end = slr.slr_str_relocs.len()
+                        if slr.slr_fn_str_start != 0 and ssa_match_i < slr.slr_fn_str_start.len() and slr.slr_fn_str_end != 0 and ssa_match_i < slr.slr_fn_str_end.len()
+                            sri2 = slr.slr_fn_str_start[ssa_match_i]
+                            sri2_end = slr.slr_fn_str_end[ssa_match_i]
+                        end
+                        while sri2 < sri2_end
                             sr_item = slr.slr_str_relocs[sri2]
                             sr_c = sr_item[0]
                             if sr_c >= ssa_off and sr_c < (ssa_off + ssa_sz)
@@ -329,10 +360,15 @@ fn x86_synth_compile_fn_def s toks pos_box
                             sri2 = sri2 + 1
                         end
                     end
-                    // Translate OP_CALL / _lipi_user_alloc / _lipi_throw_null_deref relocations inside this slice
+                    // Translate OP_CALL / _lipi_user_alloc / _lipi_throw_null_deref relocations inside this slice (O(k) indexed!)
                     if slr.slr_call_relocs != 0
                         cri = 0
-                        while cri < slr.slr_call_relocs.len()
+                        cri_end = slr.slr_call_relocs.len()
+                        if slr.slr_fn_call_start != 0 and ssa_match_i < slr.slr_fn_call_start.len() and slr.slr_fn_call_end != 0 and ssa_match_i < slr.slr_fn_call_end.len()
+                            cri = slr.slr_fn_call_start[ssa_match_i]
+                            cri_end = slr.slr_fn_call_end[ssa_match_i]
+                        end
+                        while cri < cri_end
                             jp_c = slr.slr_call_relocs[cri]
                             if jp_c.sjp_offset >= ssa_off and jp_c.sjp_offset < (ssa_off + ssa_sz)
                                 crel = X86CallReloc()
@@ -495,6 +531,11 @@ fn x86_synth_compile_fn_def s toks pos_box
             end
         end
         x86_synth_emit_store_param(s, pi, off)
+        if x86_synth_is_narrow_int_type(ptype) == 1
+            x86_synth_emit_load_var(s, 0, off)
+            x86_synth_emit_truncate_int_width(s, ptype)
+            x86_synth_emit_store_var(s, 0, off)
+        end
         if s.synth_freestanding == 0 and x86_synth_is_dyn_var(s, pname) == 1
             lv_pdyn = x86_synth_find_local_var(s, pname)
             if lv_pdyn != 0
@@ -773,6 +814,12 @@ fn x86_synth_compile_fn_def s toks pos_box
     s.synth_fn_dyn_vars = saved_fn_dyn_vars
     s.synth_in_function = saved_in_function
     s.synth_current_fn = saved_current_fn
+    // WHY: Recycle transient byte-list/prescan slabs during legacy AST synthesis on huge bundles
+    // (e.g. self-hosting ~600 legacy fns) so Phase-8 RSS stays bounded without slowing small builds.
+    leg_cnt_gc = s.synth_functions.len() - s.synth_ssa_replaced_cnt
+    if saved_in_function == 0 and s.synth_code.len() > 200000 and leg_cnt_gc > 0 and (leg_cnt_gc % 50) == 0
+        gc_collect()
+    end
     return 0
 
 // ── 8. Master Program Synthesizer Entry Point ──────────────────────────────────
@@ -1250,7 +1297,15 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
     // duplicating already-emitted AST functions (fixes 2x binary bloat under `--ssa-codegen`).
     // Copies ONLY unique SSA function byte slices that are not already present in `s.synth_functions`.
     s.synth_ssa_lower_res = ssa_lower_res
-    if ssa_lower_res != 0 and ssa_lower_res.slr_code.len() > 0
+    slr_c_len = 0
+    if ssa_lower_res != 0
+        if ssa_lower_res.slr_code_buf != 0
+            slr_c_len = buf_len(ssa_lower_res.slr_code_buf)
+        elif ssa_lower_res.slr_code != 0
+            slr_c_len = ssa_lower_res.slr_code.len()
+        end
+    end
+    if ssa_lower_res != 0 and slr_c_len > 0
         attached_cnt = 0
         attached_bytes = 0
         fi = 0
@@ -1263,37 +1318,45 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
             elif fi + 1 < ssa_lower_res.slr_fn_offsets.len()
                 src_sz = ssa_lower_res.slr_fn_offsets[fi + 1] - src_off
             else
-                src_sz = ssa_lower_res.slr_code.len() - src_off
+                src_sz = slr_c_len - src_off
             end
             already_exists = 0
             if x86_synth_find_fn_first(s, fn_name) != 0
                 already_exists = 1
             end
-            if already_exists == 0 and src_sz > 0
-                dst_off = s.synth_code.len()
-                bi = 0
-                while bi < src_sz and (src_off + bi) < ssa_lower_res.slr_code.len()
-                    push(s.synth_code, ssa_lower_res.slr_code[src_off + bi])
-                    bi = bi + 1
+            if already_exists == 0 and src_sz > 0 and (src_off + src_sz) <= slr_c_len
+                dst_off = buf_len(s.synth_code)
+                if ssa_lower_res.slr_code_buf != 0
+                    buf_write_mem(s.synth_code, buf_ptr(ssa_lower_res.slr_code_buf) + src_off, src_sz)
+                else
+                    bi = 0
+                    while bi < src_sz and (src_off + bi) < slr_c_len
+                        buf_write_byte(s.synth_code, ssa_lower_res.slr_code[src_off + bi])
+                        bi = bi + 1
+                    end
                 end
                 fn_item = X86Function()
                 fn_item.fn_name = fn_name
                 fn_item.fn_entry_offset = dst_off
-                fn_item.fn_end_offset = s.synth_code.len()
+                fn_item.fn_end_offset = buf_len(s.synth_code)
                 fn_item.fn_ret_type = ""
                 fn_item.fn_tok_pos = 0 - 1
                 fn_item.fn_param_types = list()
                 x86_synth_register_fn_obj(s, fn_item)
                 attached_cnt = attached_cnt + 1
-                attached_bytes = attached_bytes + bi
+                attached_bytes = attached_bytes + src_sz
             end
             fi = fi + 1
         end
         if attached_cnt > 0 and s.synth_ssa_rodata_base < 0
-            ri = 0
-            while ri < ssa_lower_res.slr_rodata.len()
-                push(s.synth_rodata, ssa_lower_res.slr_rodata[ri])
-                ri = ri + 1
+            if ssa_lower_res.slr_rodata_buf != 0 and buf_len(ssa_lower_res.slr_rodata_buf) > 0
+                buf_write_mem(s.synth_rodata, buf_ptr(ssa_lower_res.slr_rodata_buf), buf_len(ssa_lower_res.slr_rodata_buf))
+            elif ssa_lower_res.slr_rodata != 0
+                ri = 0
+                while ri < ssa_lower_res.slr_rodata.len()
+                    buf_write_byte(s.synth_rodata, ssa_lower_res.slr_rodata[ri])
+                    ri = ri + 1
+                end
             end
         end
         if g_x86_ssa_codegen == 1
@@ -1303,14 +1366,20 @@ fn x86_synth_attach_ssa_lower_res s ssa_lower_res
     return 0
 
 fn x86_synth_compile_program_full tokens opt_const_names opt_const_vals reg_names reg_regs ssa_lower_res
-    // WHY: Full compiler pipeline entry point integrating tokens, harvested SSA constants,
-    // linear scan register allocations, and lowered SSA CFG artifacts into silicon AMD64 binary.
+    // WHY: Full compiler pipeline entry point returning compact ByteBuffers in synth_code/synth_rodata.
     return x86_synth_compile_program_opt_internal(tokens, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
 
 fn x86_synth_compile_program_opt tokens opt_const_names opt_const_vals reg_names reg_regs
-    // WHY: Backward compatibility wrapper invoking optimization-aware machine code synthesizer
-    return x86_synth_compile_program_opt_internal(tokens, opt_const_names, opt_const_vals, reg_names, reg_regs, 0)
+    // WHY: Backward compatibility wrapper returning integer lists in synth_code/synth_rodata for unit tests.
+    s = x86_synth_compile_program_opt_internal(tokens, opt_const_names, opt_const_vals, reg_names, reg_regs, 0)
+    code_b = s.synth_code
+    ro_b = s.synth_rodata
+    s.synth_code = x86_synth_buf_to_list(code_b)
+    s.synth_rodata = x86_synth_buf_to_list(ro_b)
+    buf_free(code_b)
+    buf_free(ro_b)
+    return s
 
 fn x86_synth_compile_program tokens
-    // WHY: Backward compatibility wrapper invoking optimization-aware machine code synthesizer
-    return x86_synth_compile_program_opt_internal(tokens, list(), list(), list(), list(), 0)
+    // WHY: Backward compatibility wrapper returning integer lists in synth_code/synth_rodata for unit tests.
+    return x86_synth_compile_program_opt(tokens, list(), list(), list(), list())

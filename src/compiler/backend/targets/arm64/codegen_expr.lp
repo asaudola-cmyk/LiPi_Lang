@@ -231,12 +231,14 @@ fn arm64_synth_expr_primary s toks pos_box
         // Function call: name(...)
         if next_pos < toks.len() and toks[next_pos].tok_kind == TOK_LPAREN()
             list_set(pos_box, 0, next_pos + 1) // Consume '('
-            // Parse arguments and push to stack in order (also track arg types for tagged dict_set)
+            // Parse arguments and push to stack in order (also track arg types & uint flags for str/dict_set)
             arg_count = 0
             arg_types = list()
+            arg_is_uints = list()
             while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
                 arm64_synth_compile_expr(s, toks, pos_box)
                 push(arg_types, s.a64_last_expr_type)
+                push(arg_is_uints, s.a64_last_is_uint)
                 arm64_push_reg(s, 0) // Push X0
                 arg_count = arg_count + 1
                 cur_pos = get(pos_box, 0)
@@ -752,6 +754,19 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_emit_movz_x(s, 0, 0, 0)
                 return 0
             end
+            if var_name == "psci_call"
+                // WHY: ARM64 PSCI v0.2+ hypervisor call (`hvc #0` = 0xD4000002) for EL1 poweroff/reboot/CPU_ON
+                // on QEMU `virt` and ARMv8 SoCs. Passes fn_id..a3 in x0..x3 with ZERO Linux `svc #0`!
+                if arg_count > 4
+                    while arg_count > 4 arm64_pop_reg(s, 9) arg_count = arg_count - 1 end
+                end
+                if arg_count >= 4 arm64_pop_reg(s, 3) else arm64_emit_movz_x(s, 3, 0, 0) end
+                if arg_count >= 3 arm64_pop_reg(s, 2) else arm64_emit_movz_x(s, 2, 0, 0) end
+                if arg_count >= 2 arm64_pop_reg(s, 1) else arm64_emit_movz_x(s, 1, 0, 0) end
+                if arg_count >= 1 arm64_pop_reg(s, 0) else arm64_emit_movz_x(s, 0, 0, 0) end
+                arm64_synth_emit32(s, 3556769794) // hvc #0 (0xD4000002)
+                return 0
+            end
             if var_name == "cpu_dmb" or var_name == "cpu_dsb" or var_name == "cpu_isb" or var_name == "cpu_wfi" or var_name == "cpu_nop" or var_name == "cpu_halt" or var_name == "cpu_fence"
                 while arg_count > 0 arm64_pop_reg(s, 1) arg_count = arg_count - 1 end
                 if var_name == "cpu_dmb" or var_name == "cpu_fence" arm64_synth_emit32(s, 3573759935) // dmb sy
@@ -764,6 +779,36 @@ fn arm64_synth_expr_primary s toks pos_box
                     arm64_emit_b(s, 0 - 1)            // b -4
                 end
                 arm64_emit_movz_x(s, 0, 0, 0)
+                return 0
+            end
+            if var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "uint_to_str"
+                s.a64_needs_str_helpers = 1
+                s.synth_needs_alloc = 1
+                if arg_count >= 1
+                    while arg_count > 1
+                        arm64_pop_reg(s, 9)
+                        arg_count = arg_count - 1
+                    end
+                    // Note: X1 (dyn_tagged tag) is untouched by arm64_push_reg / arm64_pop_reg!
+                    arm64_pop_reg(s, 0)
+                    a0_t = "int"
+                    a0_u = 0
+                    if arg_types.len() >= 1 a0_t = arg_types[0] end
+                    if arg_is_uints.len() >= 1 a0_u = arg_is_uints[0] end
+                    if var_name == "uint_to_str" or a0_t == "uint" or a0_u == 1
+                        arm64_synth_emit_call_helper(s, "__uint_to_str")
+                    elif a0_t == "str"
+                        // Already a cstr pointer in X0
+                    elif a0_t == "dyn_tagged"
+                        arm64_synth_emit_call_helper(s, "__tagged_to_str")
+                    else
+                        arm64_synth_emit_call_helper(s, "__int_to_str")
+                    end
+                else
+                    arm64_emit_load_rodata_str(s, 0, "")
+                end
+                s.a64_last_expr_type = "str"
+                s.a64_last_is_uint = 0
                 return 0
             end
             if var_name == "stack_trace" or var_name == "backtrace" or var_name == "স্ট্যাক_ট্রেস"
@@ -825,23 +870,46 @@ fn arm64_synth_expr_primary s toks pos_box
                 s.a64_last_struct = var_name
                 return 0
 
-            // ── Normal Function Call: Pop arguments into AAPCS64 registers X0..X7
-            if arg_count >= 8
-                arm64_pop_reg(s, 7)
-            if arg_count >= 7
-                arm64_pop_reg(s, 6)
-            if arg_count >= 6
-                arm64_pop_reg(s, 5)
-            if arg_count >= 5
-                arm64_pop_reg(s, 4)
-            if arg_count >= 4
-                arm64_pop_reg(s, 3)
-            if arg_count >= 3
-                arm64_pop_reg(s, 2)
-            if arg_count >= 2
-                arm64_pop_reg(s, 1)
-            if arg_count >= 1
-                arm64_pop_reg(s, 0)
+            // ── Normal Function Call: AAPCS64 register args (X0..X7) + >8 stack args ([sp+0], [sp+8], ...) ──
+            a64_cleanup_bytes = 0
+            if arg_count <= 8
+                if arg_count >= 8
+                    arm64_pop_reg(s, 7)
+                if arg_count >= 7
+                    arm64_pop_reg(s, 6)
+                if arg_count >= 6
+                    arm64_pop_reg(s, 5)
+                if arg_count >= 5
+                    arm64_pop_reg(s, 4)
+                if arg_count >= 4
+                    arm64_pop_reg(s, 3)
+                if arg_count >= 3
+                    arm64_pop_reg(s, 2)
+                if arg_count >= 2
+                    arm64_pop_reg(s, 1)
+                if arg_count >= 1
+                    arm64_pop_reg(s, 0)
+            else
+                // WHY: All `arg_count` arguments were pushed 16B-apart; arg_k sits at [X9 + (arg_count - 1 - k)*16].
+                // Allocate 16B-aligned outgoing stack arg area below X9 so source and destination NEVER overlap!
+                n_stack = arg_count - 8
+                stack_pad = ((n_stack + 1) / 2) * 16
+                a64_cleanup_bytes = (arg_count * 16) + stack_pad
+                arm64_emit_add_imm(s, 9, 31, 0) // X9 = sp (saved push base)
+                ri_a = 0
+                while ri_a < 8
+                    arm64_emit_ldr_x_off(s, ri_a, 9, (arg_count - 1 - ri_a) * 16)
+                    ri_a = ri_a + 1
+                end
+                arm64_emit_sub_imm(s, 31, 31, stack_pad)
+                s.a64_sp_delta = s.a64_sp_delta + stack_pad
+                sj_a = 0
+                while sj_a < n_stack
+                    arm64_emit_ldr_x_off(s, 10, 9, (n_stack - 1 - sj_a) * 16)
+                    arm64_emit_str_x_off(s, 10, 31, sj_a * 8)
+                    sj_a = sj_a + 1
+                end
+            end
 
             // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
             lv_call = arm64_find_local_var(s, var_name)
@@ -863,6 +931,15 @@ fn arm64_synth_expr_primary s toks pos_box
                 call_rel.a64_cr_patch_offset = call_off
                 call_rel.a64_cr_target_name = var_name
                 push(s.synth_call_relocs, call_rel)
+            end
+
+            if a64_cleanup_bytes > 0
+                arm64_emit_add_imm(s, 31, 31, a64_cleanup_bytes)
+                if s.a64_sp_delta >= a64_cleanup_bytes
+                    s.a64_sp_delta = s.a64_sp_delta - a64_cleanup_bytes
+                else
+                    s.a64_sp_delta = 0
+                end
             end
 
             // WHY: Check callee-saved X27 exception flag after call returns. If active, jump to
@@ -1132,25 +1209,71 @@ fn arm64_synth_expr_additive s toks pos_box
             break
         list_set(pos_box, 0, pos + 1) // Consume operator
         lhs_ua = s.a64_last_is_uint
+        lhs_ta = s.a64_last_expr_type
 
-        // Push left operand (X0) to stack
+        // Push left operand (X0) to stack (plus X1 tag if dyn_tagged so str+dyn_tagged stays exact)
         arm64_push_reg(s, 0)
+        if k == TOK_PLUS() and lhs_ta == "dyn_tagged"
+            arm64_push_reg(s, 1)
+        end
 
         // Evaluate right operand into X0
         arm64_synth_expr_multiplicative(s, toks, pos_box)
         rhs_ua = s.a64_last_is_uint
+        rhs_ta = s.a64_last_expr_type
 
-        // Move right operand to X1, pop left operand back into X0
-        arm64_emit_mov_reg(s, 1, 0)
-        arm64_pop_reg(s, 0)
-
-        if k == TOK_PLUS()
+        if k == TOK_PLUS() and (lhs_ta == "str" or rhs_ta == "str")
+            s.a64_needs_str_helpers = 1
+            s.synth_needs_alloc = 1
+            // Auto-stringify non-string RHS cleanly (prevents segfault on "val=" + int/u64/dyn_tagged)
+            if rhs_ta != "str"
+                if rhs_ta == "dyn_tagged"
+                    arm64_synth_emit_call_helper(s, "__tagged_to_str")
+                elif rhs_ua == 1 or rhs_ta == "uint"
+                    arm64_synth_emit_call_helper(s, "__uint_to_str")
+                else
+                    arm64_synth_emit_call_helper(s, "__int_to_str")
+                end
+            end
+            if lhs_ta != "str"
+                arm64_emit_mov_reg(s, 1, 0) // X1 = rhs_str
+                if lhs_ta == "dyn_tagged"
+                    arm64_pop_reg(s, 9) // X9 = lhs_tag
+                end
+                arm64_pop_reg(s, 0) // X0 = lhs
+                arm64_push_reg(s, 1) // save rhs_str on stack
+                if lhs_ta == "dyn_tagged"
+                    arm64_emit_mov_reg(s, 1, 9)
+                    arm64_synth_emit_call_helper(s, "__tagged_to_str")
+                elif lhs_ua == 1 or lhs_ta == "uint"
+                    arm64_synth_emit_call_helper(s, "__uint_to_str")
+                else
+                    arm64_synth_emit_call_helper(s, "__int_to_str")
+                end
+                arm64_pop_reg(s, 1) // X1 = rhs_str
+            else
+                arm64_emit_mov_reg(s, 1, 0)
+                arm64_pop_reg(s, 0)
+            end
+            arm64_synth_emit_call_helper(s, "__str_concat")
+            s.a64_last_is_uint = 0
+            s.a64_last_expr_type = "str"
+        elif k == TOK_PLUS()
+            if lhs_ta == "dyn_tagged"
+                arm64_pop_reg(s, 9) // discard saved lhs tag
+            end
+            arm64_emit_mov_reg(s, 1, 0)
+            arm64_pop_reg(s, 0)
             arm64_emit_add_x(s, 0, 0, 1)
+            if lhs_ua == 1 or rhs_ua == 1 s.a64_last_is_uint = 1 else s.a64_last_is_uint = 0 end
+            s.a64_last_expr_type = "int"
         elif k == TOK_MINUS()
+            arm64_emit_mov_reg(s, 1, 0)
+            arm64_pop_reg(s, 0)
             arm64_emit_sub_x(s, 0, 0, 1)
+            if lhs_ua == 1 or rhs_ua == 1 s.a64_last_is_uint = 1 else s.a64_last_is_uint = 0 end
+            s.a64_last_expr_type = "int"
         end
-        if lhs_ua == 1 or rhs_ua == 1 s.a64_last_is_uint = 1 else s.a64_last_is_uint = 0 end
-        s.a64_last_expr_type = "int"
     return 0
 
 fn arm64_synth_expr_shift s toks pos_box

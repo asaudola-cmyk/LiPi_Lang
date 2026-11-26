@@ -58,6 +58,8 @@ fn kavach_is_silicon_crowned fn_name
     "mem_read_byte", "mem_byte_read", "mem_write_byte", "mem_byte_write", "মেমরি_বাইট_লেখো",
     "mem_write_idx", "মেমরি_সূচক_লেখো", "mem_read_idx", "মেমরি_সূচক_পড়ো",
     "mem_read_u32", "mem_write_u32", "mem_read_u64", "mem_write_u64",
+    "mem_read_f64", "mem_write_f64", "mem_read_f32", "mem_write_f32",
+    "মেমরি_দশমিক_পড়ো", "মেমরি_দশমিক_লেখো", "f64_from_bits", "f64_to_bits",
     "mem_cacheline_align_up", "মেমরি_ক্যাশলাইন_অ্যালাইন", "mem_alloc_cacheline", "মেমরি_বরাদ্দ_ক্যাশলাইন",
     "slab_alloc", "স্ল্যাব_বরাদ্দ", "slab_free", "স্ল্যাব_মুক্তি",
     "slab_get_class_index", "slab_get_slot_size", "get_slab_buckets",
@@ -94,7 +96,7 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "mem_byte_write" or call_name == "mem_write_byte" or call_name == "মেমরি_বাইট_লেখো" or call_name == "mem_byte_লেখো"
     return 1
   end
-  if call_name == "mem_write_u64" or call_name == "mem_write_u32" or call_name == "mem_write_idx" or call_name == "মেমরি_সূচক_লেখো"
+  if call_name == "mem_write_u64" or call_name == "mem_write_u32" or call_name == "mem_write_f64" or call_name == "mem_write_f32" or call_name == "মেমরি_দশমিক_লেখো" or call_name == "mem_write_idx" or call_name == "মেমরি_সূচক_লেখো"
     return 1
   end
   if call_name == "mem_copy" or call_name == "মেমরি_কপি" or call_name == "mem_fill" or call_name == "মেমরি_ভরাট" or call_name == "mem_zero" or call_name == "মেমরি_শূন্য"
@@ -103,7 +105,7 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "mem_read" or call_name == "mem_word_read" or call_name == "মেমরি_পড়ো" or call_name == "মেমরি_শব্দ_পড়ো" or call_name == "mem_read_word"
     return 1
   end
-  if call_name == "mem_byte_read" or call_name == "mem_read_byte" or call_name == "মেমরি_বাইট_পড়ো" or call_name == "mem_read_u64" or call_name == "mem_read_u32" or call_name == "mem_read_idx" or call_name == "মেমরি_সূচক_পড়ো"
+  if call_name == "mem_byte_read" or call_name == "mem_read_byte" or call_name == "মেমরি_বাইট_পড়ো" or call_name == "mem_read_u64" or call_name == "mem_read_u32" or call_name == "mem_read_f64" or call_name == "mem_read_f32" or call_name == "মেমরি_দশমিক_পড়ো" or call_name == "mem_read_idx" or call_name == "মেমরি_সূচক_পড়ো"
     return 1
   end
   if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap"

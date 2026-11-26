@@ -62,6 +62,66 @@ fn x86_synth_emit_defers s toks
     s.synth_emitting_defer = 0
     return 0
 
+fn x86_synth_emit_defers_range s toks start_idx
+    // WHY: Replays deferred statements registered within a `try` scope (indices [start_idx .. len-1])
+    // in strict LIFO order upon exiting the `try/catch/finally` statement (normal exit, caught throw,
+    // uncaught rethrow, or return inside try). Uses x86-64 `btr` (bit test & reset) on defer_mask so
+    // each defer runs at most once and is NEVER double-executed at enclosing function exit, while still
+    // running on the function unwind pad if `catch` throws a new exception before reaching this point!
+    if s.synth_emitting_defer == 1
+        return 0
+    end
+    cur_len = s.synth_defer_starts.len()
+    if cur_len <= start_idx
+        return 0
+    end
+    s.synth_emitting_defer = 1
+    ret_save_off = x86_synth_alloc_var(s, "__defer_try_ret_save")
+    x86_synth_emit_store_var(s, 0, ret_save_off)
+    di = cur_len - 1
+    while di >= start_idx
+        d_skip_patch = 0 - 1
+        if s.synth_has_defer_unwind == 1 and di < 64
+            // btr qword ptr [rbp - defer_mask_off], di; jnc skip_defer (atomic test-and-clear!)
+            x86_synth_emit_bytes(s, [72, 15, 186, 181])
+            x86_synth_emit_u32(s, 0 - s.synth_defer_mask_off)
+            x86_synth_emit_byte(s, di)
+            x86_synth_emit_bytes(s, [15, 131]) // jnc rel32
+            d_skip_patch = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            s.synth_last_store_end = 0 - 1
+        end
+        d_pos = [s.synth_defer_starts[di]]
+        d_end = s.synth_defer_ends[di]
+        while get(d_pos, 0) < d_end
+            x86_synth_skip_whitespace_tokens(toks, d_pos)
+            cur_d = get(d_pos, 0)
+            if cur_d >= d_end
+                break
+            end
+            x86_synth_compile_statement(s, toks, d_pos)
+            if get(d_pos, 0) <= cur_d
+                list_set(d_pos, 0, cur_d + 1)
+            end
+        end
+        if d_skip_patch >= 0
+            d_after_off = s.synth_code.len()
+            x86_synth_patch_u32(s, d_skip_patch, d_after_off - (d_skip_patch + 4))
+            s.synth_last_store_end = 0 - 1
+        end
+        di = di - 1
+    end
+    // If function has no defer_mask (e.g. closure), trim replayed entries so epilogue won't double-run them
+    if s.synth_has_defer_unwind == 0
+        while s.synth_defer_starts.len() > start_idx
+            s.synth_defer_starts = pop(s.synth_defer_starts)
+            s.synth_defer_ends = pop(s.synth_defer_ends)
+        end
+    end
+    x86_synth_emit_load_var(s, 0, ret_save_off)
+    s.synth_emitting_defer = 0
+    return 0
+
 fn x86_synth_compile_statement s toks pos_box
     // WHY: Synthesizes execution bytes for statements (control flow, structs, loops, calls).
     pos = get(pos_box, 0)
@@ -370,7 +430,7 @@ fn x86_synth_compile_statement s toks pos_box
         has_expr = 0
         if next_pos < toks.len()
             nt = toks[next_pos]
-            if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF()
+            if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF() and nt.tok_kind != TOK_RBRACE() and (nt.tok_kind == TOK_STR() or nt.tok_text != "}")
                 has_expr = 1
 
         ret_expr_t = ""
@@ -597,6 +657,27 @@ fn x86_synth_compile_statement s toks pos_box
     // ── 3. Loop Control: break / থামো & continue / চলুক ───────────────────────
     if k == TOK_KW_BREAK() or (k == TOK_IDENT() and (txt == "break" or txt == "থামো"))
         list_set(pos_box, 0, pos + 1)
+        // WHY: If breaking out of a try/catch/finally block entered inside the active loop,
+        // route through enclosing finally + try-scoped defers via fin_flag = 3!
+        if s.synth_try_frames.len() > 0 and s.synth_loop_try_depths.len() > 0
+            cur_tframe_b = s.synth_try_frames[s.synth_try_frames.len() - 1]
+            l_td_b = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
+            if cur_tframe_b[3] >= l_td_b
+                pops_brk = s.synth_try_depth - cur_tframe_b[3]
+                ti_b = 0
+                while ti_b < pops_brk
+                    x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                    ti_b = ti_b + 1
+                end
+                x86_synth_emit_bytes(s, [184, 3, 0, 0, 0]) // mov eax, 3 (pending break)
+                x86_synth_emit_store_var(s, 0, cur_tframe_b[0])
+                x86_synth_emit_byte(s, 233) // jmp rel32 -> enclosing finally
+                bj_off = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                push(cur_tframe_b[2], bj_off)
+                return 0
+            end
+        end
         if s.synth_loop_try_depths.len() > 0
             l_td = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
             diff_td = s.synth_try_depth - l_td
@@ -616,6 +697,27 @@ fn x86_synth_compile_statement s toks pos_box
 
     if k == TOK_KW_CONTINUE() or k == TOK_DIR_CONTINUE()
         list_set(pos_box, 0, pos + 1)
+        // WHY: If continuing out of a try/catch/finally block entered inside the active loop,
+        // route through enclosing finally + try-scoped defers via fin_flag = 4!
+        if s.synth_try_frames.len() > 0 and s.synth_loop_try_depths.len() > 0
+            cur_tframe_c = s.synth_try_frames[s.synth_try_frames.len() - 1]
+            l_td_c = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
+            if cur_tframe_c[3] >= l_td_c
+                pops_cnt = s.synth_try_depth - cur_tframe_c[3]
+                ti_c = 0
+                while ti_c < pops_cnt
+                    x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                    ti_c = ti_c + 1
+                end
+                x86_synth_emit_bytes(s, [184, 4, 0, 0, 0]) // mov eax, 4 (pending continue)
+                x86_synth_emit_store_var(s, 0, cur_tframe_c[0])
+                x86_synth_emit_byte(s, 233) // jmp rel32 -> enclosing finally
+                cj_off = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                push(cur_tframe_c[2], cj_off)
+                return 0
+            end
+        end
         if s.synth_loop_try_depths.len() > 0
             l_td = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
             diff_td = s.synth_try_depth - l_td
@@ -1491,7 +1593,10 @@ fn x86_synth_compile_statement s toks pos_box
                     break
                 end
             else
-                // Check if we hit elif, else, or end
+                // Check if we hit closing '}' of enclosing braced block, elif, else, or end
+                if cur_k == TOK_RBRACE() or (cur_k != TOK_STR() and cur_txt == "}")
+                    break
+                end
                 if cur_k == TOK_KW_ELIF() or cur_k == TOK_DIR_ELIF() or cur_k == TOK_KW_ELSE() or cur_k == TOK_DIR_ELSE()
                     break
                 if cur_k == TOK_IDENT() and (cur_txt == "elif" or cur_txt == "নাহলে_যদি" or cur_txt == "নতুবা_যদি" or cur_txt == "@elif" or cur_txt == "else" or cur_txt == "নাহলে" or cur_txt == "অন্যথায়" or cur_txt == "নতুবা" or cur_txt == "@else")
@@ -1594,6 +1699,9 @@ fn x86_synth_compile_statement s toks pos_box
                         break
                     end
                 else
+                    if ck2 == TOK_RBRACE() or (ck2 != TOK_STR() and cx2 == "}")
+                        break
+                    end
                     if ck2 == TOK_KW_ELIF() or ck2 == TOK_DIR_ELIF() or ck2 == TOK_KW_ELSE() or ck2 == TOK_DIR_ELSE()
                         break
                     if ck2 == TOK_IDENT() and (cx2 == "elif" or cx2 == "নাহলে_যদি" or cx2 == "নতুবা_যদি" or cx2 == "@elif" or cx2 == "else" or cx2 == "নাহলে" or cx2 == "অন্যথায়" or cx2 == "নতুবা" or cx2 == "@else")
@@ -1657,6 +1765,9 @@ fn x86_synth_compile_statement s toks pos_box
                             break
                         end
                     else
+                        if ck3 == TOK_RBRACE() or (ck3 != TOK_STR() and cx3 == "}")
+                            break
+                        end
                         if x86_synth_is_block_end(toks, cur_p3) == 1
                             break
                         if ct3.tok_span.span_start_line > else_line and ct3.tok_span.span_start_col <= base_col
@@ -1774,6 +1885,13 @@ fn x86_synth_compile_statement s toks pos_box
                             int_lit_val = rhs_tok.tok_int_val
                 list_set(pos_box, 0, eq_pos + 1)
                 x86_synth_compile_expr(s, toks, pos_box)
+                eff_let_type = assigned_type
+                if eff_let_type == ""
+                    eff_let_type = x86_synth_get_var_type(s, var_name)
+                end
+                if x86_synth_is_narrow_int_type(eff_let_type) == 1
+                    x86_synth_emit_truncate_int_width(s, eff_let_type)
+                end
                 off = x86_synth_bind_reg_var(s, var_name, is_reg)
                 lv_let_post = x86_synth_find_local_var(s, var_name)
                 if assigned_type != ""
@@ -1787,10 +1905,10 @@ fn x86_synth_compile_statement s toks pos_box
                     elif assigned_type == "str" or assigned_type == "string"
                         x86_synth_set_prim_type(s, var_name, "str")
                 if is_int_lit == 1
-                    if s.synth_in_function == 0 and x86_synth_is_uint_type(assigned_type) == 0 and x86_synth_is_ptr_type(assigned_type) == 0
+                    if s.synth_in_function == 0 and x86_synth_is_uint_type(eff_let_type) == 0 and x86_synth_is_narrow_int_type(eff_let_type) == 0 and x86_synth_is_ptr_type(eff_let_type) == 0
                         x86_synth_set_global_const(s, var_name, int_lit_val)
                     end
-                    if x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1
+                    if x86_synth_is_uint_type(eff_let_type) == 1 or x86_synth_is_ptr_type(eff_let_type) == 1
                         x86_synth_set_prim_type(s, var_name, "uint")
                     elif assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
                         x86_synth_set_prim_type(s, var_name, "dyn_tagged")
@@ -1799,7 +1917,7 @@ fn x86_synth_compile_statement s toks pos_box
                     end
                 elif assigned_type == "" and lv_let_post != 0 and lv_let_post.lv_tag_off > 0
                     x86_synth_set_prim_type(s, var_name, "dyn_tagged")
-                elif x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1 or s.synth_last_expr_type == "uint"
+                elif x86_synth_is_uint_type(eff_let_type) == 1 or x86_synth_is_ptr_type(eff_let_type) == 1 or s.synth_last_expr_type == "uint"
                     x86_synth_set_prim_type(s, var_name, "uint")
                 elif s.synth_last_expr_type == "int"
                     x86_synth_set_prim_type(s, var_name, "int")
@@ -1809,7 +1927,7 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_set_prim_type(s, var_name, "str")
                 elif s.synth_last_expr_type == "dyn_tagged"
                     x86_synth_set_prim_type(s, var_name, "dyn_tagged")
-                elif assigned_type == ""
+                elif eff_let_type == ""
                     x86_synth_set_prim_type(s, var_name, "")
         return 0
 
@@ -1835,11 +1953,15 @@ fn x86_synth_compile_statement s toks pos_box
         base_col = t.tok_span.span_start_col
         base_line = t.tok_span.span_start_line
         list_set(pos_box, 0, pos + 1)
-        // Reserve 96B exception frame [rbp - exc_off]; +64/+72 store pending uncaught exc for finally
+        // Reserve 96B exception frame [rbp - exc_off] (+0..+71 = 72B _lipi_exc_push frame);
+        // +72 (exc_off - 72) and +80 (exc_off - 80) store pending uncaught exc / return state for finally.
+        // Advance synth_stack_offset past exc_off so local vars inside try NEVER overwrite [rbp - exc_off]!
         s.synth_stack_offset = ((s.synth_stack_offset + 15) / 16) * 16 + 96
         exc_off = s.synth_stack_offset
-        fin_flag_off = exc_off - 64
-        fin_val_off = exc_off - 72
+        fin_flag_off = exc_off - 72
+        fin_val_off = exc_off - 80
+        s.synth_stack_offset = exc_off + 8
+        try_defer_start_idx = s.synth_defer_starts.len()
         x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
         x86_synth_emit_store_var(s, 0, fin_flag_off)
 
@@ -1877,6 +1999,9 @@ fn x86_synth_compile_statement s toks pos_box
                     break
                 end
             else
+                if ct_t.tok_kind == TOK_RBRACE() or (ct_t.tok_kind != TOK_STR() and ct_t.tok_text == "}")
+                    break
+                end
                 if ct_t.tok_kind == TOK_KW_CATCH() or ct_t.tok_kind == TOK_DIR_CATCH() or (ct_t.tok_kind == TOK_IDENT() and (ct_t.tok_text == "finally" or ct_t.tok_text == "অবশেষে" or ct_t.tok_text == "@finally"))
                     break
                 end
@@ -1902,6 +2027,8 @@ fn x86_synth_compile_statement s toks pos_box
         s.synth_last_store_end = 0 - 1
 
         has_catch_blk = 0
+        catch_braced = 1
+        jmp_catch_normal_to_fin = 0 - 1
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         if get(pos_box, 0) < toks.len()
             ct_c = toks[get(pos_box, 0)]
@@ -1915,6 +2042,19 @@ fn x86_synth_compile_statement s toks pos_box
                     // Exception value arrives in %rax; bind to err_vname
                     x86_synth_bind_var(s, err_vname)
                 end
+                // WHY: Guard catch body against same-function rethrow by reusing [rbp - exc_off]
+                // (already popped on entry to catch). If catch throws a new exception, unwind through
+                // inner finally AND inner try/catch defers BEFORE rethrowing to outer catch!
+                x86_synth_emit_bytes(s, [72, 141, 189])
+                x86_synth_emit_u32(s, 0 - exc_off)
+                x86_synth_emit_bytes(s, [72, 141, 53])
+                catch_rethrow_lea_patch = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                x86_synth_emit_bytes(s, [72, 137, 234, 72, 137, 225])
+                x86_synth_emit_call_helper(s, "_lipi_exc_push")
+                s.synth_last_store_end = 0 - 1
+                s.synth_try_depth = outer_try_depth + 1
+
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
                 catch_braced = 0
                 if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
@@ -1932,6 +2072,9 @@ fn x86_synth_compile_statement s toks pos_box
                             break
                         end
                     else
+                        if ct_c2.tok_kind == TOK_RBRACE() or (ct_c2.tok_kind != TOK_STR() and ct_c2.tok_text == "}")
+                            break
+                        end
                         if ct_c2.tok_kind == TOK_IDENT() and (ct_c2.tok_text == "finally" or ct_c2.tok_text == "অবশেষে" or ct_c2.tok_text == "@finally")
                             break
                         end
@@ -1942,6 +2085,21 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_compile_statement(s, toks, pos_box)
                     if get(pos_box, 0) <= bp_c list_set(pos_box, 0, bp_c + 1) end
                 end
+
+                s.synth_try_depth = outer_try_depth
+                // Normal catch completion: pop catch-rethrow guard and jump into finally (fin_flag remains 0)
+                x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                x86_synth_emit_byte(s, 233)
+                jmp_catch_normal_to_fin = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+
+                // Rethrow landing pad for exceptions thrown inside catch: record fin_val/fin_flag=1 and run finally+defers!
+                catch_rethrow_off = s.synth_code.len()
+                x86_synth_patch_u32(s, catch_rethrow_lea_patch, catch_rethrow_off - (catch_rethrow_lea_patch + 4))
+                s.synth_last_store_end = 0 - 1
+                x86_synth_emit_store_var(s, 0, fin_val_off)
+                x86_synth_emit_mov_rax_imm64(s, 1)
+                x86_synth_emit_store_var(s, 0, fin_flag_off)
             end
         end
 
@@ -1954,6 +2112,9 @@ fn x86_synth_compile_statement s toks pos_box
 
         finally_entry_off = s.synth_code.len()
         x86_synth_patch_u32(s, jmp_after_catch, finally_entry_off - (jmp_after_catch + 4))
+        if jmp_catch_normal_to_fin >= 0
+            x86_synth_patch_u32(s, jmp_catch_normal_to_fin, finally_entry_off - (jmp_catch_normal_to_fin + 4))
+        end
         rp_i = 0
         while rp_i < try_ret_patches.len()
             rp_off = try_ret_patches[rp_i]
@@ -1963,10 +2124,13 @@ fn x86_synth_compile_statement s toks pos_box
         s.synth_try_frames = pop(s.synth_try_frames)
         s.synth_last_store_end = 0 - 1
 
+        has_fin_blk = 0
+        fin_braced = 1
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         if get(pos_box, 0) < toks.len()
             ct_f = toks[get(pos_box, 0)]
             if ct_f.tok_kind == TOK_IDENT() and (ct_f.tok_text == "finally" or ct_f.tok_text == "অবশেষে" or ct_f.tok_text == "@finally")
+                has_fin_blk = 1
                 f_line = ct_f.tok_span.span_start_line
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
@@ -1986,6 +2150,9 @@ fn x86_synth_compile_statement s toks pos_box
                             break
                         end
                     else
+                        if ct_f2.tok_kind == TOK_RBRACE() or (ct_f2.tok_kind != TOK_STR() and ct_f2.tok_text == "}")
+                            break
+                        end
                         if x86_synth_is_block_end(toks, cur_pf) == 1 break end
                         if ct_f2.tok_span.span_start_line > f_line and ct_f2.tok_span.span_start_col <= base_col break end
                     end
@@ -1996,23 +2163,32 @@ fn x86_synth_compile_statement s toks pos_box
             end
         end
 
-        if try_braced == 0
+        any_unbraced = 0
+        if try_braced == 0 or (has_catch_blk == 1 and catch_braced == 0) or (has_fin_blk == 1 and fin_braced == 0)
+            any_unbraced = 1
+        end
+        if any_unbraced == 1
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             if get(pos_box, 0) < toks.len() and x86_synth_is_block_end(toks, get(pos_box, 0)) == 1 and toks[get(pos_box, 0)].tok_span.span_start_col >= base_col
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
         end
 
-        if has_catch_blk == 0
-            x86_synth_emit_load_var(s, 0, fin_flag_off)
-            x86_synth_emit_bytes(s, [72, 131, 248, 1, 15, 133]) // cmp rax, 1; jne rel32
-            skip_rethrow_patch = s.synth_code.len()
-            x86_synth_emit_u32(s, 0)
-            x86_synth_emit_load_var(s, 7, fin_val_off) // mov rdi, [rbp - fin_val_off]
-            x86_synth_emit_call_helper(s, "_lipi_exc_throw")
-            after_rethrow = s.synth_code.len()
-            x86_synth_patch_u32(s, skip_rethrow_patch, after_rethrow - (skip_rethrow_patch + 4))
+        // Replay any defers registered inside this try/catch/finally block (atomic btr clears mask bits
+        // so enclosing function exit will NOT double-run them, while running on throw/rethrow/return/normal exit!)
+        if s.synth_defer_starts.len() > try_defer_start_idx
+            x86_synth_emit_defers_range(s, toks, try_defer_start_idx)
         end
+
+        // Rethrow any pending uncaught exception (either from try-without-catch OR rethrown from catch body!)
+        x86_synth_emit_load_var(s, 0, fin_flag_off)
+        x86_synth_emit_bytes(s, [72, 131, 248, 1, 15, 133]) // cmp rax, 1; jne rel32
+        skip_rethrow_patch = s.synth_code.len()
+        x86_synth_emit_u32(s, 0)
+        x86_synth_emit_load_var(s, 7, fin_val_off) // mov rdi, [rbp - fin_val_off]
+        x86_synth_emit_call_helper(s, "_lipi_exc_throw")
+        after_rethrow = s.synth_code.len()
+        x86_synth_patch_u32(s, skip_rethrow_patch, after_rethrow - (skip_rethrow_patch + 4))
 
         // Propagate or emit epilogue for pending return (fin_flag == 2)
         x86_synth_emit_load_var(s, 0, fin_flag_off)
@@ -2050,6 +2226,78 @@ fn x86_synth_compile_statement s toks pos_box
         after_fin_ret = s.synth_code.len()
         x86_synth_patch_u32(s, skip_fin_ret_patch, after_fin_ret - (skip_fin_ret_patch + 4))
 
+        // Propagate or dispatch pending loop break (fin_flag == 3) and continue (fin_flag == 4)
+        // AFTER finally AND try-scoped defers have finished executing!
+        if s.synth_loop_try_depths.len() > 0 and outer_try_depth >= s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
+            l_td_fin = s.synth_loop_try_depths[s.synth_loop_try_depths.len() - 1]
+            has_parent_loop_try = 0
+            if s.synth_try_frames.len() > 0
+                pf_lc = s.synth_try_frames[s.synth_try_frames.len() - 1]
+                if pf_lc[3] >= l_td_fin
+                    has_parent_loop_try = 1
+                end
+            end
+            // Pending break (fin_flag == 3)
+            x86_synth_emit_load_var(s, 0, fin_flag_off)
+            x86_synth_emit_bytes(s, [72, 131, 248, 3, 15, 133]) // cmp rax, 3; jne rel32
+            skip_fin_brk_patch = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            if has_parent_loop_try == 1
+                pf_b = s.synth_try_frames[s.synth_try_frames.len() - 1]
+                p_pops_b = outer_try_depth - pf_b[3]
+                pib = 0
+                while pib < p_pops_b
+                    x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                    pib = pib + 1
+                end
+                x86_synth_emit_bytes(s, [184, 3, 0, 0, 0])
+                x86_synth_emit_store_var(s, 0, pf_b[0])
+                x86_synth_emit_byte(s, 233)
+                pb_jmp = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                push(pf_b[2], pb_jmp)
+            elif s.synth_loop_breaks.len() > 0
+                x86_synth_emit_byte(s, 233)
+                fb_jmp = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                push(s.synth_loop_breaks[s.synth_loop_breaks.len() - 1], fb_jmp)
+            end
+            after_fin_brk = s.synth_code.len()
+            x86_synth_patch_u32(s, skip_fin_brk_patch, after_fin_brk - (skip_fin_brk_patch + 4))
+
+            // Pending continue (fin_flag == 4)
+            x86_synth_emit_load_var(s, 0, fin_flag_off)
+            x86_synth_emit_bytes(s, [72, 131, 248, 4, 15, 133]) // cmp rax, 4; jne rel32
+            skip_fin_cnt_patch = s.synth_code.len()
+            x86_synth_emit_u32(s, 0)
+            if has_parent_loop_try == 1
+                pf_c = s.synth_try_frames[s.synth_try_frames.len() - 1]
+                p_pops_c = outer_try_depth - pf_c[3]
+                pic = 0
+                while pic < p_pops_c
+                    x86_synth_emit_call_helper(s, "_lipi_exc_pop")
+                    pic = pic + 1
+                end
+                x86_synth_emit_bytes(s, [184, 4, 0, 0, 0])
+                x86_synth_emit_store_var(s, 0, pf_c[0])
+                x86_synth_emit_byte(s, 233)
+                pc_jmp = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                push(pf_c[2], pc_jmp)
+            elif s.synth_loop_continues.len() > 0
+                x86_synth_emit_byte(s, 233)
+                fc_jmp = s.synth_code.len()
+                x86_synth_emit_u32(s, 0)
+                push(s.synth_loop_continues[s.synth_loop_continues.len() - 1], fc_jmp)
+            elif s.synth_loop_starts.len() > 0
+                lh_f = s.synth_loop_starts[s.synth_loop_starts.len() - 1]
+                x86_synth_emit_byte(s, 233)
+                x86_synth_emit_u32(s, lh_f - (s.synth_code.len() + 4))
+            end
+            after_fin_cnt = s.synth_code.len()
+            x86_synth_patch_u32(s, skip_fin_cnt_patch, after_fin_cnt - (skip_fin_cnt_patch + 4))
+        end
+
         s.synth_last_store_end = 0 - 1
         return 0
 
@@ -2086,6 +2334,9 @@ fn x86_synth_compile_statement s toks pos_box
                     continue
                 end
             else
+                if ct_m.tok_kind == TOK_RBRACE() or (ct_m.tok_kind != TOK_STR() and ct_m.tok_text == "}")
+                    break
+                end
                 if x86_synth_is_block_end(toks, cur_pm) == 1
                     if ct_m.tok_span.span_start_col >= base_col
                         list_set(pos_box, 0, cur_pm + 1)
@@ -2223,6 +2474,9 @@ fn x86_synth_compile_statement s toks pos_box
                     break
                 end
             else
+                if ct_r.tok_kind == TOK_RBRACE() or (ct_r.tok_kind != TOK_STR() and ct_r.tok_text == "}")
+                    break
+                end
                 if x86_synth_is_block_end(toks, cur_pr) == 1
                     if ct_r.tok_span.span_start_col >= reg_base_col
                         list_set(pos_box, 0, cur_pr + 1)
@@ -2261,13 +2515,22 @@ fn x86_synth_compile_statement s toks pos_box
                 if g_eqp < toks.len() and (toks[g_eqp].tok_kind == TOK_ASSIGN() or (toks[g_eqp].tok_kind != TOK_STR() and toks[g_eqp].tok_text == "="))
                     list_set(pos_box, 0, g_eqp + 1)
                     x86_synth_compile_expr(s, toks, pos_box)
+                    if x86_synth_is_narrow_int_type(g_ann_type) == 1
+                        x86_synth_emit_truncate_int_width(s, g_ann_type)
+                    end
                     x86_synth_emit_mutable_global_write(s, g_off)
                     g_prim = s.synth_last_expr_type
                     g_st = s.synth_last_struct
                     if x86_synth_is_uint_type(g_ann_type) == 1
                         g_prim = "uint"
+                        if x86_synth_is_narrow_int_type(g_ann_type) == 1
+                            g_st = g_ann_type
+                        end
                     elif g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "i16" or g_ann_type == "i8"
                         g_prim = "int"
+                        if x86_synth_is_narrow_int_type(g_ann_type) == 1
+                            g_st = g_ann_type
+                        end
                     elif g_ann_type == "float" or g_ann_type == "f64" or g_ann_type == "f32"
                         g_prim = "float"
                     elif g_ann_type == "str" or g_ann_type == "string"
@@ -2281,8 +2544,14 @@ fn x86_synth_compile_statement s toks pos_box
                     g_s2 = ""
                     if x86_synth_is_uint_type(g_ann_type) == 1
                         g_p2 = "uint"
+                        if x86_synth_is_narrow_int_type(g_ann_type) == 1
+                            g_s2 = g_ann_type
+                        end
                     elif g_ann_type == "int" or g_ann_type == "i64" or g_ann_type == "i32" or g_ann_type == "i16" or g_ann_type == "i8"
                         g_p2 = "int"
+                        if x86_synth_is_narrow_int_type(g_ann_type) == 1
+                            g_s2 = g_ann_type
+                        end
                     elif g_ann_type == "float" or g_ann_type == "f64" or g_ann_type == "f32"
                         g_p2 = "float"
                     elif g_ann_type == "str" or g_ann_type == "string"
@@ -2514,13 +2783,26 @@ fn x86_synth_compile_statement s toks pos_box
                     x86_synth_compile_expr(s, toks, pos_box)
                     if is_mg_target == 1
                         mg_slot = x86_synth_alloc_mutable_global(s, var_name)
+                        eff_mg_t = assigned_type
+                        if eff_mg_t == ""
+                            eff_mg_t = x86_synth_get_mutable_global_struct(s, var_name)
+                        end
+                        if x86_synth_is_narrow_int_type(eff_mg_t) == 1
+                            x86_synth_emit_truncate_int_width(s, eff_mg_t)
+                        end
                         x86_synth_emit_mutable_global_write(s, mg_slot)
                         mg_p = s.synth_last_expr_type
                         mg_st = s.synth_last_struct
-                        if x86_synth_is_uint_type(assigned_type) == 1
+                        if x86_synth_is_uint_type(eff_mg_t) == 1
                             mg_p = "uint"
-                        elif assigned_type == "int" or assigned_type == "i64" or assigned_type == "i32" or assigned_type == "i16" or assigned_type == "i8"
+                            if x86_synth_is_narrow_int_type(eff_mg_t) == 1
+                                mg_st = eff_mg_t
+                            end
+                        elif eff_mg_t == "int" or eff_mg_t == "i64" or eff_mg_t == "i32" or eff_mg_t == "i16" or eff_mg_t == "i8"
                             mg_p = "int"
+                            if x86_synth_is_narrow_int_type(eff_mg_t) == 1
+                                mg_st = eff_mg_t
+                            end
                         elif assigned_type == "float" or assigned_type == "f64" or assigned_type == "f32"
                             mg_p = "float"
                         elif assigned_type == "str" or assigned_type == "string"
@@ -2531,6 +2813,13 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_mutable_global_types(s, var_name, mg_p, mg_st)
                         s.synth_last_elem_type = ""
                         return 0
+                    end
+                    eff_asg_type = assigned_type
+                    if eff_asg_type == ""
+                        eff_asg_type = x86_synth_get_var_type(s, var_name)
+                    end
+                    if x86_synth_is_narrow_int_type(eff_asg_type) == 1
+                        x86_synth_emit_truncate_int_width(s, eff_asg_type)
                     end
                     off = x86_synth_bind_var(s, var_name)
                     lv_asg_post = x86_synth_find_local_var(s, var_name)
@@ -2545,10 +2834,10 @@ fn x86_synth_compile_statement s toks pos_box
                         elif assigned_type == "str" or assigned_type == "string"
                             x86_synth_set_prim_type(s, var_name, "str")
                     if is_int_lit == 1
-                        if s.synth_in_function == 0 and x86_synth_is_uint_type(assigned_type) == 0 and x86_synth_is_ptr_type(assigned_type) == 0
+                        if s.synth_in_function == 0 and x86_synth_is_uint_type(eff_asg_type) == 0 and x86_synth_is_narrow_int_type(eff_asg_type) == 0 and x86_synth_is_ptr_type(eff_asg_type) == 0
                             x86_synth_set_global_const(s, var_name, int_lit_val)
                         end
-                        if x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1
+                        if x86_synth_is_uint_type(eff_asg_type) == 1 or x86_synth_is_ptr_type(eff_asg_type) == 1
                             x86_synth_set_prim_type(s, var_name, "uint")
                         elif assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
                             x86_synth_set_prim_type(s, var_name, "dyn_tagged")
@@ -2557,7 +2846,7 @@ fn x86_synth_compile_statement s toks pos_box
                         end
                     elif assigned_type == "" and lv_asg_post != 0 and lv_asg_post.lv_tag_off > 0
                         x86_synth_set_prim_type(s, var_name, "dyn_tagged")
-                    elif x86_synth_is_uint_type(assigned_type) == 1 or x86_synth_is_ptr_type(assigned_type) == 1 or s.synth_last_expr_type == "uint"
+                    elif x86_synth_is_uint_type(eff_asg_type) == 1 or x86_synth_is_ptr_type(eff_asg_type) == 1 or s.synth_last_expr_type == "uint"
                         x86_synth_set_prim_type(s, var_name, "uint")
                     elif s.synth_last_expr_type == "int"
                         x86_synth_set_prim_type(s, var_name, "int")
@@ -2567,7 +2856,7 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_set_prim_type(s, var_name, "str")
                     elif s.synth_last_expr_type == "dyn_tagged"
                         x86_synth_set_prim_type(s, var_name, "dyn_tagged")
-                    elif assigned_type == ""
+                    elif eff_asg_type == ""
                         x86_synth_set_prim_type(s, var_name, "")
                     return 0
                 else
@@ -2779,11 +3068,19 @@ fn x86_synth_compile_statement s toks pos_box
                         // xor rax, rcx (0x48 0x31 0xC8)
                         x86_synth_emit_bytes(s, [72, 49, 200])
                     end
-                    // Store updated value back to target
+                    // Truncate to fixed narrow integer bit-width (u8/u16/u32/i8/i16/i32) before storing
                     if is_mg_target == 1
+                        mg_ct = x86_synth_get_mutable_global_struct(s, var_name)
+                        if x86_synth_is_narrow_int_type(mg_ct) == 1
+                            x86_synth_emit_truncate_int_width(s, mg_ct)
+                        end
                         x86_synth_emit_mutable_global_write(s, mg_cur_off)
-                        x86_synth_set_mutable_global_types(s, var_name, res_comp_prim, x86_synth_get_mutable_global_struct(s, var_name))
+                        x86_synth_set_mutable_global_types(s, var_name, res_comp_prim, mg_ct)
                     else
+                        lv_ct = x86_synth_get_var_type(s, var_name)
+                        if x86_synth_is_narrow_int_type(lv_ct) == 1
+                            x86_synth_emit_truncate_int_width(s, lv_ct)
+                        end
                         x86_synth_set_prim_type(s, var_name, res_comp_prim)
                         if lv_tgt != 0 and lv_tgt.lv_is_boxed == 1
                             x86_synth_emit_load_var(s, 2, off) // mov rdx, [rbp - off] (cell ptr)

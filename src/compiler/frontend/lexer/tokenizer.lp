@@ -131,10 +131,50 @@ import "compiler/frontend/lexer/comment_doc"
 @end
 
 @fn lexer_tokenize(source: string, filename: string)
-  // WHY: Main scanner loop converting source text into a sequential array of Tokens
+  // WHY: Main scanner loop converting source text into a sequential array of Tokens.
+  // Uses zero-alloc ASCII fast paths for decimal integers (0..255 cached strings, no NumParseResult)
+  // and ASCII identifiers/keywords while preserving 100% identical spans and Bengali Unicode support.
   tokens = []
   stream = char_stream_new(source)
   num_items = stream.cs_len
+
+  // Pre-build 256-entry small integer text cache (eliminates ~120K heap strings for byte tables)
+  int_str_cache = []
+  ic_i = 0
+  @while ic_i < 256
+    int_str_cache = int_str_cache.push(str(ic_i))
+    ic_i = ic_i + 1
+  @end
+
+  // Pre-build 128-entry single-ASCII-char identifier cache (eliminates heap strings for i, s, t, k, p, x, ...)
+  ascii_ch_cache = []
+  ac_i = 0
+  @while ac_i < 128
+    ascii_ch_cache = ascii_ch_cache.push(chr(ac_i))
+    ac_i = ac_i + 1
+  @end
+
+  // Pre-warm O(1) keyword kind cache (avoids repeated linear keyword scans with zero extra string allocations)
+  kw_kind_cache = dict()
+  kw_name_cache = dict()
+  kw_kind_cache["continue"] = TOK_KW_CONTINUE()
+  kw_name_cache["continue"] = "KW_CONTINUE"
+  kw_kind_cache["struct"] = TOK_KW_STRUCT()
+  kw_name_cache["struct"] = "KW_STRUCT"
+  kw_kind_cache["import"] = TOK_KW_IMPORT()
+  kw_name_cache["import"] = "KW_IMPORT"
+  kw_kind_cache["match"] = TOK_KW_MATCH()
+  kw_name_cache["match"] = "KW_MATCH"
+  kw_kind_cache["const"] = TOK_KW_CONST()
+  kw_name_cache["const"] = "KW_CONST"
+  kw_kind_cache["catch"] = TOK_KW_CATCH()
+  kw_name_cache["catch"] = "KW_CATCH"
+  kw_kind_cache["defer"] = TOK_KW_DEFER()
+  kw_name_cache["defer"] = "KW_DEFER"
+  kw_kind_cache["print"] = TOK_KW_PRINT()
+  kw_name_cache["print"] = "KW_PRINT"
+  kw_kind_cache["syscall"] = TOK_KW_SYSCALL()
+  kw_name_cache["syscall"] = "KW_SYSCALL"
 
   @while char_stream_is_eof(stream) == 0
     start_pos = stream.cs_pos
@@ -155,14 +195,26 @@ import "compiler/frontend/lexer/comment_doc"
 
     // ── 3. Comments (Line //, ///, @!, and Block /*, /**) ──
     @elif (b == 47 && char_stream_peek_byte_ahead(stream, 1) == 47) || (b == 64 && char_stream_peek_byte_ahead(stream, 1) == 33)
-      comm_res = comment_parse_line(source, start_pos)
-      @if comm_res.comm_is_doc == 1
+      @if b == 47 && char_stream_peek_byte_ahead(stream, 2) == 47
+        comm_res = comment_parse_line(source, start_pos)
         span = source_span_new(filename, start_line, start_col, stream.cs_line, start_col + comm_res.comm_consumed, start_pos + comm_res.comm_consumed)
         tok = token_new(TOK_COMMENT_DOC(), "COMMENT_DOC", comm_res.comm_content, 0, 0.0, span)
         tokens = tokens.push(tok)
+        stream.cs_pos = stream.cs_pos + comm_res.comm_consumed
+        stream.cs_col = stream.cs_col + comm_res.comm_consumed
+      @else
+        // Fast zero-allocation skip for ordinary non-doc `//` and `@!` line comments
+        ci_skip = start_pos + 2
+        @while ci_skip < num_items
+          cb_s = str_char_at(source, ci_skip)
+          @if cb_s == 10 || cb_s == 13
+            break
+          @end
+          ci_skip = ci_skip + 1
+        @end
+        stream.cs_col = stream.cs_col + (ci_skip - start_pos)
+        stream.cs_pos = ci_skip
       @end
-      stream.cs_pos = stream.cs_pos + comm_res.comm_consumed
-      stream.cs_col = stream.cs_col + comm_res.comm_consumed
 
     @elif b == 47 && char_stream_peek_byte_ahead(stream, 1) == 42 // '/*'
       comm_res = comment_parse_block(source, start_pos)
@@ -181,21 +233,70 @@ import "compiler/frontend/lexer/comment_doc"
 
     // ── 4. Numeric Literals (Western 0..9 and Bengali ০..৯) ──
     @elif (b >= 48 && b <= 57) || (b == 224 && num_is_bengali_digit_at(source, start_pos, num_items) == 1)
-      num_res = num_parse_literal(source, start_pos)
-      @if num_res.num_is_valid == 1
-        stream.cs_pos = stream.cs_pos + num_res.num_consumed
-        stream.cs_col = stream.cs_col + num_res.num_consumed
-        span = source_span_new(filename, start_line, start_col, start_line, stream.cs_col, stream.cs_pos)
-        kind = TOK_INT()
-        kind_name = "INT"
-        @if num_res.num_is_float == 1
-          kind = TOK_FLOAT()
-          kind_name = "FLOAT"
+      fast_int_ok = 0
+      @if b >= 48 && b <= 57
+        fi_p = start_pos
+        fi_val = 0
+        fi_digits = 0
+        @while fi_p < num_items
+          fb = str_char_at(source, fi_p)
+          @if fb >= 48 && fb <= 57
+            fi_val = (fi_val * 10) + (fb - 48)
+            fi_digits = fi_digits + 1
+            fi_p = fi_p + 1
+            @if fi_digits > 18
+              break
+            @end
+          @else
+            break
+          @end
         @end
-        tok = token_new(kind, kind_name, num_res.num_text, num_res.num_int_val, num_res.num_float_val, span)
-        tokens = tokens.push(tok)
-      @else
-        char_stream_advance_byte(stream)
+        @if fi_digits >= 1 && fi_digits <= 18
+          next_after = 0
+          @if fi_p < num_items
+            next_after = str_char_at(source, fi_p)
+          @end
+          // Reject fast path if hex/bin/oct/exp/underscore/float (allow `..` range operator!)
+          is_special_num = 0
+          @if next_after == 120 || next_after == 88 || next_after == 98 || next_after == 66 || next_after == 111 || next_after == 79 || next_after == 101 || next_after == 69 || next_after == 95
+            is_special_num = 1
+          @elif next_after == 46
+            @if fi_p + 1 < num_items && str_char_at(source, fi_p + 1) != 46
+              is_special_num = 1
+            @end
+          @end
+          @if is_special_num == 0
+            fast_int_ok = 1
+            stream.cs_pos = fi_p
+            stream.cs_col = start_col + fi_digits
+            span = source_span_new(filename, start_line, start_col, start_line, stream.cs_col, fi_p)
+            int_txt = ""
+            @if fi_val >= 0 && fi_val < 256 && (fi_digits == 1 || b != 48)
+              int_txt = int_str_cache[fi_val]
+            @else
+              int_txt = char_stream_slice(stream, start_pos, fi_p)
+            @end
+            tokens = tokens.push(token_new(TOK_INT(), "INT", int_txt, fi_val, 0.0, span))
+          @end
+        @end
+      @end
+      @if fast_int_ok == 0
+        num_res = num_parse_literal(source, start_pos)
+        @if num_res.num_is_valid == 1
+          stream.cs_pos = stream.cs_pos + num_res.num_consumed
+          stream.cs_col = stream.cs_col + num_res.num_consumed
+          span = source_span_new(filename, start_line, start_col, start_line, stream.cs_col, stream.cs_pos)
+          kind = TOK_INT()
+          kind_name = "INT"
+          @if num_res.num_is_float == 1
+            kind = TOK_FLOAT()
+            kind_name = "FLOAT"
+          @end
+          tok = token_new(kind, kind_name, num_res.num_text, num_res.num_int_val, num_res.num_float_val, span)
+          tokens = tokens.push(tok)
+        @else
+          char_stream_advance_byte(stream)
+        @end
       @end
 
     // ── 5. String Literals ("..." and '...') ──
@@ -292,7 +393,7 @@ import "compiler/frontend/lexer/comment_doc"
       @end
 
     @elif b == 64 // '@'
-      dir_name = "@"
+      dir_start = stream.cs_pos
       char_stream_advance_byte(stream)
       // Check if followed by '=': '@='
       @if char_stream_is_eof(stream) == 0 && char_stream_peek_byte(stream) == 61 // '='
@@ -304,12 +405,12 @@ import "compiler/frontend/lexer/comment_doc"
         @while char_stream_is_eof(stream) == 0 && dir_cont == 1
           cur = char_stream_peek_byte(stream)
           @if (cur >= 65 && cur <= 90) || (cur >= 97 && cur <= 122) || (cur >= 48 && cur <= 57) || cur == 95
-            dir_name = dir_name + chr(cur)
             char_stream_advance_byte(stream)
           @else
             dir_cont = 0
           @end
         @end
+        dir_name = char_stream_slice(stream, dir_start, stream.cs_pos)
         span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
         @if dir_name == "@"
           // Infix Matrix / Tensor Multiplication Operator
@@ -570,7 +671,115 @@ import "compiler/frontend/lexer/comment_doc"
       span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
       tokens = tokens.push(token_new(TOK_DARI(), "DARI", "।", 0, 0.0, span))
 
-    // ── 9. Identifiers & Bilingual Keywords (Bengali runes & ASCII) ──
+    // ── 9. Identifiers & Bilingual Keywords (Fast ASCII path + Bengali Unicode runes) ──
+    @elif (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b == 95
+      id_p = start_pos + 1
+      has_utf8_cont = 0
+      @while id_p < num_items
+        ib = str_char_at(source, id_p)
+        @if (ib >= 65 && ib <= 90) || (ib >= 97 && ib <= 122) || (ib >= 48 && ib <= 57) || ib == 95
+          id_p = id_p + 1
+        @elif ib >= 128
+          has_utf8_cont = 1
+          break
+        @else
+          break
+        @end
+      @end
+      @if has_utf8_cont == 0
+        id_len = id_p - start_pos
+        stream.cs_pos = id_p
+        stream.cs_col = start_col + id_len
+        span = source_span_new(filename, start_line, start_col, start_line, stream.cs_col, id_p)
+        @if id_len == 1
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", ascii_ch_cache[b], 0, 0.0, span))
+        @elif id_len == 2 && b == 105 && str_char_at(source, start_pos + 1) == 102
+          tokens = tokens.push(token_new(TOK_KW_IF(), "KW_IF", "if", 0, 0.0, span))
+        @elif id_len == 2 && b == 102 && str_char_at(source, start_pos + 1) == 110
+          tokens = tokens.push(token_new(TOK_KW_FN(), "KW_FN", "fn", 0, 0.0, span))
+        @elif id_len == 2 && b == 111 && str_char_at(source, start_pos + 1) == 114
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "or", 0, 0.0, span))
+        @elif id_len == 2 && b == 105 && str_char_at(source, start_pos + 1) == 110
+          tokens = tokens.push(token_new(TOK_KW_IN(), "KW_IN", "in", 0, 0.0, span))
+        @elif id_len == 3 && b == 101 && str_char_at(source, start_pos + 1) == 110 && str_char_at(source, start_pos + 2) == 100
+          tokens = tokens.push(token_new(TOK_KW_END(), "KW_END", "end", 0, 0.0, span))
+        @elif id_len == 3 && b == 97 && str_char_at(source, start_pos + 1) == 110 && str_char_at(source, start_pos + 2) == 100
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "and", 0, 0.0, span))
+        @elif id_len == 3 && b == 108 && str_char_at(source, start_pos + 1) == 101 && str_char_at(source, start_pos + 2) == 110
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "len", 0, 0.0, span))
+        @elif id_len == 3 && b == 103 && str_char_at(source, start_pos + 1) == 101 && str_char_at(source, start_pos + 2) == 116
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "get", 0, 0.0, span))
+        @elif id_len == 3 && b == 102 && str_char_at(source, start_pos + 1) == 111 && str_char_at(source, start_pos + 2) == 114
+          tokens = tokens.push(token_new(TOK_KW_FOR(), "KW_FOR", "for", 0, 0.0, span))
+        @elif id_len == 3 && b == 108 && str_char_at(source, start_pos + 1) == 101 && str_char_at(source, start_pos + 2) == 116
+          tokens = tokens.push(token_new(TOK_KW_LET(), "KW_LET", "let", 0, 0.0, span))
+        @elif id_len == 3 && b == 115 && str_char_at(source, start_pos + 1) == 97 && str_char_at(source, start_pos + 2) == 121
+          tokens = tokens.push(token_new(TOK_KW_PRINT(), "KW_PRINT", "say", 0, 0.0, span))
+        @elif id_len == 3 && b == 115 && str_char_at(source, start_pos + 1) == 116 && str_char_at(source, start_pos + 2) == 114
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "str", 0, 0.0, span))
+        @elif id_len == 4 && b == 101 && str_char_at(source, start_pos + 1) == 108 && str_char_at(source, start_pos + 2) == 115 && str_char_at(source, start_pos + 3) == 101
+          tokens = tokens.push(token_new(TOK_KW_ELSE(), "KW_ELSE", "else", 0, 0.0, span))
+        @elif id_len == 4 && b == 101 && str_char_at(source, start_pos + 1) == 108 && str_char_at(source, start_pos + 2) == 105 && str_char_at(source, start_pos + 3) == 102
+          tokens = tokens.push(token_new(TOK_KW_ELIF(), "KW_ELIF", "elif", 0, 0.0, span))
+        @elif id_len == 4 && b == 112 && str_char_at(source, start_pos + 1) == 117 && str_char_at(source, start_pos + 2) == 115 && str_char_at(source, start_pos + 3) == 104
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "push", 0, 0.0, span))
+        @elif id_len == 4 && b == 108 && str_char_at(source, start_pos + 1) == 105 && str_char_at(source, start_pos + 2) == 115 && str_char_at(source, start_pos + 3) == 116
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "list", 0, 0.0, span))
+        @elif id_len == 4 && b == 100 && str_char_at(source, start_pos + 1) == 105 && str_char_at(source, start_pos + 2) == 99 && str_char_at(source, start_pos + 3) == 116
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "dict", 0, 0.0, span))
+        @elif id_len == 4 && b == 116 && str_char_at(source, start_pos + 1) == 114 && str_char_at(source, start_pos + 2) == 117 && str_char_at(source, start_pos + 3) == 101
+          tokens = tokens.push(token_new(TOK_BOOL(), "BOOL", "true", 1, 0.0, span))
+        @elif id_len == 4 && b == 115 && str_char_at(source, start_pos + 1) == 101 && str_char_at(source, start_pos + 2) == 108 && str_char_at(source, start_pos + 3) == 102
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", "self", 0, 0.0, span))
+        @elif id_len == 5 && b == 119 && str_char_at(source, start_pos + 1) == 104 && str_char_at(source, start_pos + 2) == 105 && str_char_at(source, start_pos + 3) == 108 && str_char_at(source, start_pos + 4) == 101
+          tokens = tokens.push(token_new(TOK_KW_WHILE(), "KW_WHILE", "while", 0, 0.0, span))
+        @elif id_len == 5 && b == 98 && str_char_at(source, start_pos + 1) == 114 && str_char_at(source, start_pos + 2) == 101 && str_char_at(source, start_pos + 3) == 97 && str_char_at(source, start_pos + 4) == 107
+          tokens = tokens.push(token_new(TOK_KW_BREAK(), "KW_BREAK", "break", 0, 0.0, span))
+        @elif id_len == 5 && b == 102 && str_char_at(source, start_pos + 1) == 97 && str_char_at(source, start_pos + 2) == 108 && str_char_at(source, start_pos + 3) == 115 && str_char_at(source, start_pos + 4) == 101
+          tokens = tokens.push(token_new(TOK_BOOL(), "BOOL", "false", 0, 0.0, span))
+        @elif id_len == 6 && b == 114 && str_char_at(source, start_pos + 1) == 101 && str_char_at(source, start_pos + 2) == 116 && str_char_at(source, start_pos + 3) == 117 && str_char_at(source, start_pos + 4) == 114 && str_char_at(source, start_pos + 5) == 110
+          tokens = tokens.push(token_new(TOK_KW_RETURN(), "KW_RETURN", "return", 0, 0.0, span))
+        @else
+          ident_text = char_stream_slice(stream, start_pos, id_p)
+          @if ident_text == "none" || ident_text == "nil" || ident_text == "null"
+            tokens = tokens.push(token_new(TOK_NONE(), "NONE", ident_text, 0, 0.0, span))
+          @elif has_key(kw_kind_cache, ident_text) == 1
+            tokens = tokens.push(token_new(kw_kind_cache[ident_text], kw_name_cache[ident_text], ident_text, 0, 0.0, span))
+          @else
+            kw_kind = lexer_lookup_keyword(ident_text)
+            @if kw_kind >= 0
+              kwn = token_kind_name(kw_kind)
+              kw_kind_cache[ident_text] = kw_kind
+              kw_name_cache[ident_text] = kwn
+              tokens = tokens.push(token_new(kw_kind, kwn, ident_text, 0, 0.0, span))
+            @else
+              tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", ident_text, 0, 0.0, span))
+            @end
+          @end
+        @end
+      @else
+        ident_start = stream.cs_pos
+        ident_start_col = stream.cs_col
+        char_stream_advance_rune(stream)
+        ident_cont = 1
+        @while char_stream_is_eof(stream) == 0 && ident_cont == 1
+          next_rune = char_stream_peek_rune(stream)
+          @if is_bengali_ident_continue(next_rune) == 1
+            char_stream_advance_rune(stream)
+          @else
+            ident_cont = 0
+          @end
+        @end
+        ident_text = char_stream_slice(stream, ident_start, stream.cs_pos)
+        span = source_span_new(filename, start_line, ident_start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
+        kw_kind = lexer_lookup_keyword(ident_text)
+        @if kw_kind >= 0
+          tokens = tokens.push(token_new(kw_kind, token_kind_name(kw_kind), ident_text, 0, 0.0, span))
+        @else
+          tokens = tokens.push(token_new(TOK_IDENT(), "IDENT", ident_text, 0, 0.0, span))
+        @end
+      @end
+
     @else
       rune = char_stream_peek_rune(stream)
       @if is_bengali_ident_start(rune) == 1

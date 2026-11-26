@@ -126,7 +126,7 @@ fn riscv64_synth_compile_statement s toks pos_box
         has_expr = 0
         if next_pos < toks.len()
             nt = toks[next_pos]
-            if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF()
+            if nt.tok_kind != TOK_NEWLINE() and nt.tok_kind != TOK_SEMI() and nt.tok_kind != TOK_EOF() and nt.tok_kind != TOK_KW_END() and nt.tok_kind != TOK_DIR_END() and nt.tok_kind != TOK_RBRACE() and not (nt.tok_kind == TOK_IDENT() and (nt.tok_text == "end" or nt.tok_text == "শেষ" or nt.tok_text == "@end"))
                 has_expr = 1
 
         if has_expr == 1
@@ -1298,6 +1298,13 @@ fn riscv64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, eq_pos + 1)
                 riscv64_synth_compile_expr(s, toks, pos_box)
                 prev_lv = riscv64_find_local_var(s, var_name)
+                eff_let_itype = let_decl_type
+                if eff_let_itype == "" and prev_lv != 0
+                    eff_let_itype = prev_lv.rv_lv_int_type
+                end
+                if riscv64_is_narrow_int_type(eff_let_itype) == 1
+                    riscv64_emit_truncate_int_width(s, 10, eff_let_itype)
+                end
                 if prev_lv == 0
                     off = riscv64_synth_alloc_var(s, var_name)
                     if riscv64_is_boxed_name(s, var_name) == 1
@@ -1323,6 +1330,13 @@ fn riscv64_synth_compile_statement s toks pos_box
                     elif let_decl_type != ""
                         prev_lv.rv_lv_is_uint = 0
                     end
+                    if let_decl_type != ""
+                        if riscv64_is_narrow_int_type(let_decl_type) == 1
+                            prev_lv.rv_lv_int_type = let_decl_type
+                        else
+                            prev_lv.rv_lv_int_type = ""
+                        end
+                    end
                     prev_lv.rv_lv_prim_type = s.rv_last_expr_type
                     if s.rv_last_expr_type == "dyn_tagged"
                         t_off = riscv64_synth_alloc_tag_slot(s, prev_lv)
@@ -1347,6 +1361,13 @@ fn riscv64_synth_compile_statement s toks pos_box
             list_set(pos_box, 0, next_pos + 1) // Consume ident [: type] and '='
             riscv64_synth_compile_expr(s, toks, pos_box)
             prev_lv = riscv64_find_local_var(s, var_name)
+            eff_as_itype = decl_type_rv
+            if eff_as_itype == "" and prev_lv != 0
+                eff_as_itype = prev_lv.rv_lv_int_type
+            end
+            if riscv64_is_narrow_int_type(eff_as_itype) == 1
+                riscv64_emit_truncate_int_width(s, 10, eff_as_itype)
+            end
             if prev_lv == 0
                 off = riscv64_synth_alloc_var(s, var_name)
                 if riscv64_is_boxed_name(s, var_name) == 1
@@ -1371,6 +1392,13 @@ fn riscv64_synth_compile_statement s toks pos_box
                     prev_lv.rv_lv_is_uint = 1
                 elif decl_type_rv != ""
                     prev_lv.rv_lv_is_uint = 0
+                end
+                if decl_type_rv != ""
+                    if riscv64_is_narrow_int_type(decl_type_rv) == 1
+                        prev_lv.rv_lv_int_type = decl_type_rv
+                    else
+                        prev_lv.rv_lv_int_type = ""
+                    end
                 end
                 prev_lv.rv_lv_prim_type = s.rv_last_expr_type
                 if s.rv_last_expr_type == "dyn_tagged"
@@ -1430,6 +1458,9 @@ fn riscv64_synth_compile_statement s toks pos_box
                     riscv64_emit_xor(s, 10, 10, 11)
                 end
                 if ca_lv != 0
+                    if riscv64_is_narrow_int_type(ca_lv.rv_lv_int_type) == 1
+                        riscv64_emit_truncate_int_width(s, 10, ca_lv.rv_lv_int_type)
+                    end
                     if ca_lv.rv_lv_is_boxed == 1
                         riscv64_emit_local_ld(s, 5, ca_lv.rv_lv_offset)
                         riscv64_emit_sd(s, 10, 5, 0)
@@ -1491,9 +1522,11 @@ fn riscv64_synth_compile_statement s toks pos_box
         s.rv_defer_starts = list()
         s.rv_defer_ends = list()
 
-        // Parse parameter names & unsigned type annotations until newline, '{', or return arrow
+        // Parse parameter names & unsigned/narrow int type annotations until ')', newline, '{', '->', or inline body keyword
         params = list()
         param_is_uint = list()
+        param_int_types = list()
+        fn_paren_depth = 0
         while get(pos_box, 0) < toks.len()
             p_tok = toks[get(pos_box, 0)]
             if p_tok.tok_kind == TOK_NEWLINE() or p_tok.tok_kind == TOK_SEMI()
@@ -1501,28 +1534,60 @@ fn riscv64_synth_compile_statement s toks pos_box
                 break
             if p_tok.tok_kind == TOK_LBRACE() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "{")
                 break
+            if p_tok.tok_kind == TOK_LPAREN() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "(")
+                fn_paren_depth = fn_paren_depth + 1
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                continue
+            if p_tok.tok_kind == TOK_RPAREN() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == ")")
+                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                fn_paren_depth = fn_paren_depth - 1
+                if fn_paren_depth <= 0
+                    // WHY: Single-line functions (`fn RV_UART0_BASE() return 268435456 end`) place their body
+                    // immediately after ')' (or optional '-> RetType'), so stop scanning params here!
+                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_ARROW() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "->"))
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    end
+                    break
+                end
+                continue
             if p_tok.tok_kind == TOK_ARROW() or (p_tok.tok_kind != TOK_STR() and p_tok.tok_text == "->")
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
                 break
+            if fn_paren_depth == 0
+                pk_b = p_tok.tok_kind
+                pt_b = p_tok.tok_text
+                if pk_b == TOK_KW_RETURN() or pk_b == TOK_KW_IF() or pk_b == TOK_KW_WHILE() or pk_b == TOK_KW_FOR() or pk_b == TOK_KW_PRINT() or pk_b == TOK_KW_END() or pk_b == TOK_DIR_END() or (pk_b == TOK_IDENT() and (pt_b == "return" or pt_b == "ফেরত" or pt_b == "end" or pt_b == "শেষ" or pt_b == "@end"))
+                    break
+                end
+            end
             if p_tok.tok_kind == TOK_IDENT()
                 pname = p_tok.tok_text
                 push(params, pname)
                 p_uflag = 0
+                p_itype = ""
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 // Parse optional type annotation: : type
                 if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
-                        if riscv64_is_uint_type(toks[get(pos_box, 0)].tok_text) == 1
+                        pt_txt = toks[get(pos_box, 0)].tok_text
+                        if riscv64_is_uint_type(pt_txt) == 1
                             p_uflag = 1
+                        end
+                        if riscv64_is_narrow_int_type(pt_txt) == 1
+                            p_itype = pt_txt
                         end
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                     end
                 end
                 push(param_is_uint, p_uflag)
+                push(param_int_types, p_itype)
             else
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
@@ -1532,6 +1597,112 @@ fn riscv64_synth_compile_statement s toks pos_box
         if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or toks[get(pos_box, 0)].tok_text == "{")
             fn_braced = 1
             list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
+
+        // ── Direct RISC-V 64 SSA CFG Replacement (--ssa-codegen) ─────────────
+        if g_rv64_ssa_codegen == 1 and s.rv_ssa_lower_res != 0 and s.rv_ssa_lower_res.slr_success == 1
+            r_slr = s.rv_ssa_lower_res
+            r_mi = 0 - 1
+            if r_slr.slr_fn_eligible != 0
+                rsfi = 0
+                while rsfi < r_slr.slr_fn_names.len() and rsfi < r_slr.slr_fn_eligible.len()
+                    if r_slr.slr_fn_names[rsfi] == fn_name and r_slr.slr_fn_eligible[rsfi] == 1
+                        r_mi = rsfi
+                        break
+                    end
+                    rsfi = rsfi + 1
+                end
+            end
+            if r_mi >= 0 and r_mi < r_slr.slr_fn_offsets.len() and r_mi < r_slr.slr_fn_sizes.len()
+                r_off = r_slr.slr_fn_offsets[r_mi]
+                r_sz = r_slr.slr_fn_sizes[r_mi]
+                r_clen = 0
+                if r_slr.slr_code_buf != 0
+                    r_clen = buf_len(r_slr.slr_code_buf)
+                elif r_slr.slr_code != 0
+                    r_clen = r_slr.slr_code.len()
+                end
+                if r_sz > 0 and (r_off + r_sz) <= r_clen
+                    dst_r_base = s.rv_code.len()
+                    if r_slr.slr_code_buf != 0
+                        r_cp = buf_ptr(r_slr.slr_code_buf)
+                        rbi = 0
+                        while rbi < r_sz
+                            push(s.rv_code, mem_byte_read(r_cp, r_off + rbi))
+                            rbi = rbi + 1
+                        end
+                    else
+                        rbi = 0
+                        while rbi < r_sz
+                            push(s.rv_code, r_slr.slr_code[r_off + rbi])
+                            rbi = rbi + 1
+                        end
+                    end
+                    if r_slr.slr_call_relocs != 0
+                        rcri = 0
+                        while rcri < r_slr.slr_call_relocs.len()
+                            rjp = r_slr.slr_call_relocs[rcri]
+                            if rjp.sjp_offset >= r_off and rjp.sjp_offset < (r_off + r_sz)
+                                rcrel = Riscv64CallReloc()
+                                rcrel.rv_cr_patch_offset = dst_r_base + (rjp.sjp_offset - r_off)
+                                rcrel.rv_cr_target_name = rjp.sjp_target
+                                push(s.rv_call_relocs, rcrel)
+                            end
+                            rcri = rcri + 1
+                        end
+                    end
+                    if fn_braced == 1
+                        rsk_d = 1
+                        while get(pos_box, 0) < toks.len() and rsk_d > 0
+                            rsk_t = toks[get(pos_box, 0)]
+                            if rsk_t.tok_kind == TOK_LBRACE() or (rsk_t.tok_kind != TOK_STR() and rsk_t.tok_text == "{")
+                                rsk_d = rsk_d + 1
+                            elif rsk_t.tok_kind == TOK_RBRACE() or (rsk_t.tok_kind != TOK_STR() and rsk_t.tok_text == "}")
+                                rsk_d = rsk_d - 1
+                            end
+                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                        end
+                    else
+                        r_sl_nest = 0
+                        while get(pos_box, 0) < toks.len()
+                            riscv64_synth_skip_whitespace_tokens(toks, pos_box)
+                            rsp_c = get(pos_box, 0)
+                            if rsp_c >= toks.len() break end
+                            rst_c = toks[rsp_c]
+                            if rst_c.tok_span.span_start_line == fn_base_line and (rst_c.tok_kind == TOK_KW_IF() or rst_c.tok_kind == TOK_KW_WHILE() or rst_c.tok_kind == TOK_KW_FOR() or rst_c.tok_kind == TOK_KW_MATCH() or rst_c.tok_kind == TOK_KW_TRY())
+                                r_sl_nest = r_sl_nest + 1
+                            end
+                            if rst_c.tok_kind == TOK_KW_END() or rst_c.tok_kind == TOK_DIR_END() or (rst_c.tok_kind == TOK_IDENT() and (rst_c.tok_text == "end" or rst_c.tok_text == "শেষ" or rst_c.tok_text == "@end"))
+                                if rst_c.tok_span.span_start_col <= fn_base_col or (rst_c.tok_span.span_start_line == fn_base_line and r_sl_nest == 0)
+                                    list_set(pos_box, 0, rsp_c + 1)
+                                    break
+                                end
+                                if rst_c.tok_span.span_start_line == fn_base_line and r_sl_nest > 0
+                                    r_sl_nest = r_sl_nest - 1
+                                end
+                            end
+                            if rst_c.tok_span.span_start_line > fn_base_line and rst_c.tok_span.span_start_col <= fn_base_col
+                                break
+                            end
+                            list_set(pos_box, 0, rsp_c + 1)
+                        end
+                    end
+                    after_r_off = s.rv_code.len()
+                    fn_entry.rv_fn_end_offset = after_r_off
+                    s.rv_ssa_replaced_cnt = s.rv_ssa_replaced_cnt + 1
+                    s.rv_ssa_replaced_bytes = s.rv_ssa_replaced_bytes + r_sz
+                    s.rv_locals = saved_rv_locals
+                    s.rv_stack_offset = saved_rv_stack_off
+                    s.rv_try_patches = saved_rv_try_patches
+                    s.rv_sp_delta = saved_rv_sp_delta
+                    s.rv_boxed_vars = saved_rv_boxed
+                    s.rv_defer_starts = saved_rv_ds
+                    s.rv_defer_ends = saved_rv_de
+                    s.rv_in_function = 0
+                    riscv64_synth_patch_jal(s, fn_jmp_patch, 0, after_r_off)
+                    return 0
+                end
+            end
         end
 
         // Prescan function body for variables mutated inside nested closures
@@ -1546,12 +1717,28 @@ fn riscv64_synth_compile_statement s toks pos_box
             pname = params[pi]
             off = riscv64_synth_alloc_var(s, pname)
             plv_u = riscv64_find_local_var(s, pname)
+            p_it = ""
             if plv_u != 0 and pi < param_is_uint.len()
                 plv_u.rv_lv_is_uint = param_is_uint[pi]
             end
+            if plv_u != 0 and pi < param_int_types.len()
+                p_it = param_int_types[pi]
+                plv_u.rv_lv_int_type = p_it
+            end
             if pi < 8
                 arg_reg = 10 + pi
+                if riscv64_is_narrow_int_type(p_it) == 1
+                    riscv64_emit_truncate_int_width(s, arg_reg, p_it)
+                end
                 riscv64_emit_local_sd(s, arg_reg, off)
+            else
+                // RV64 LP64 stack parameter pi >= 8 sits at [s0 + (pi - 8) * 8] (s0 == sp_at_call)
+                riscv64_emit_ld(s, 5, 8, (pi - 8) * 8)
+                if riscv64_is_narrow_int_type(p_it) == 1
+                    riscv64_emit_truncate_int_width(s, 5, p_it)
+                end
+                riscv64_emit_local_sd(s, 5, off)
+            end
             pi = pi + 1
         // Wrap any closure-mutated parameter into a shared 8-byte heap upvalue cell
         pi = 0

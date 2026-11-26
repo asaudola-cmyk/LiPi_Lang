@@ -141,13 +141,26 @@ fn arm64_synth_emit_file_write_helper s
 
 // ── 9. Master Program Synthesizer Entry Point ──────────────────────────────────
 
-fn arm64_synth_compile_program tokens
+fn arm64_synth_compile_program_ssa tokens ssa_lower_res
     // WHY: Master orchestration entry point. Transforms complete token stream into
-    // relocatable ARM64 machine code, sets up top-level stack frames, patches string relocations
-    // against the Linux ELF virtual address space (0x400000+), and resolves call sites.
+    // relocatable ARM64 machine code, splicing SSA CFG-lowered functions when --ssa-codegen is active.
     s = arm64_synth_new()
+    s.a64_ssa_lower_res = ssa_lower_res
 
-    // 1. Zero initial frame pointer X29 so LSYM0 stack_trace() terminates cleanly at root,
+    // 1. In freestanding bare-metal mode (EL1h reset has SP=0!), initialize SP to the 16B-aligned
+    // top of the 64KB kernel stack inside PT_LOAD[1] (.bss) before touching any stack memory.
+    boot_sp_patch = 0 - 1
+    if s.a64_freestanding == 1
+        boot_sp_patch = s.synth_code.len()
+        arm64_emit_movz_x(s, 9, 0, 0)
+        arm64_emit_movk_x(s, 9, 0, 16)
+        arm64_emit_movk_x(s, 9, 0, 32)
+        arm64_emit_movk_x(s, 9, 0, 48)
+        // mov sp, x9 (add sp, x9, #0 = 0x9100013F = 2432696639)
+        arm64_synth_emit32(s, 2432696639)
+    end
+
+    // Zero initial frame pointer X29 so LSYM0 stack_trace() terminates cleanly at root,
     // emit top-level stack frame prologue, and clear exception registers (X27=flag, X28=value).
     arm64_emit_movz_x(s, 29, 0, 0)
     arm64_emit_prologue(s)
@@ -245,6 +258,9 @@ fn arm64_synth_compile_program tokens
     if s.a64_needs_buf == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_buf_helpers(s)
+    if s.a64_needs_str_helpers == 1
+        s.synth_needs_alloc = 1
+        arm64_synth_emit_str_helpers(s)
     if s.a64_needs_file_write == 1
         arm64_synth_emit_file_write_helper(s)
     if s.synth_needs_alloc == 1
@@ -270,6 +286,18 @@ fn arm64_synth_compile_program tokens
             found_rel = 1
         elif cr.a64_cr_target_name == "__print_tagged"
             resolved_addr = s.a64_print_tagged_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__int_to_str"
+            resolved_addr = s.a64_int_to_str_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__uint_to_str"
+            resolved_addr = s.a64_uint_to_str_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__str_concat"
+            resolved_addr = s.a64_str_concat_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__tagged_to_str"
+            resolved_addr = s.a64_tagged_to_str_off
             found_rel = 1
         elif cr.a64_cr_target_name == "_lipi_throw_null_deref"
             resolved_addr = s.a64_throw_null_off
@@ -357,11 +385,11 @@ fn arm64_synth_compile_program tokens
         lsym_ro_off = arm64_synth_emit_lsym_rodata(s)
     end
     total_code_size = s.synth_code.len()
-    code_base_vaddr = 4194536 // 0x4000E8
-    rodata_base_vaddr = code_base_vaddr + total_code_size
+    code_base_vaddr = g_arm64_base_vaddr - (0 - g_arm64_code_file_off)
+    rodata_base_vaddr = code_base_vaddr - (0 - total_code_size)
 
     if s.a64_lsym_patch_lsym >= 0
-        arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_lsym, 22, rodata_base_vaddr + lsym_ro_off)
+        arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_lsym, 22, rodata_base_vaddr - (0 - lsym_ro_off))
     end
     if s.a64_lsym_patch_code >= 0
         arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_code, 23, code_base_vaddr)
@@ -370,21 +398,50 @@ fn arm64_synth_compile_program tokens
         arm64_synth_patch_mov_imm64(s, s.a64_lsym_patch_ro, 24, rodata_base_vaddr)
     end
 
+    if boot_sp_patch >= 0
+        rx_tot_sp = g_arm64_code_file_off + total_code_size + s.synth_rodata.len()
+        rw_f_sp = ((rx_tot_sp + 4095) / 4096) * 4096
+        if rw_f_sp == 0 rw_f_sp = 4096 end
+        if g_arm64_base_vaddr == 0
+            // Position-independent ADRP X9, #page_delta; ADD X9, X9, #4080; NOP; NOP for base-0 raw-bin
+            sp_pages = (rw_f_sp + 4096 + 61440) / 4096
+            immlo = sp_pages & 3
+            immhi = (sp_pages >> 2) & 524287
+            arm64_synth_patch_u32(s, boot_sp_patch, 2415919104 | (immlo << 29) | (immhi << 5) | 9)
+            arm64_synth_patch_u32(s, boot_sp_patch + 4, 2432696320 | (4080 << 10) | (9 << 5) | 9)
+            arm64_synth_patch_u32(s, boot_sp_patch + 8, 3573751839)
+            arm64_synth_patch_u32(s, boot_sp_patch + 12, 3573751839)
+        else
+            sp_top = g_arm64_base_vaddr - (0 - (rw_f_sp + 4096 + 65520))
+            arm64_synth_patch_mov_imm64(s, boot_sp_patch, 9, sp_top)
+        end
+    end
+
     if s.synth_needs_alloc == 1 and s.a64_alloc_rw_patch_off >= 0
-        rx_tot = 232 + total_code_size + s.synth_rodata.len()
+        rx_tot = g_arm64_code_file_off + total_code_size + s.synth_rodata.len()
         rw_f_off = ((rx_tot + 4095) / 4096) * 4096
         rw_vaddr_target = 4259840 + rw_f_off
+        if s.a64_freestanding == 1 or g_arm64_base_vaddr != 4194304 or g_arm64_code_file_off != 232
+            rw_vaddr_target = g_arm64_base_vaddr - (0 - rw_f_off)
+        end
         arm64_synth_patch_mov_imm64(s, s.a64_alloc_rw_patch_off, 1, rw_vaddr_target)
     end
 
     ri = 0
     while ri < s.synth_str_relocs.len()
         rel = s.synth_str_relocs[ri]
-        target_vaddr = rodata_base_vaddr + rel.sr_rodata_offset
+        target_vaddr = rodata_base_vaddr - (0 - rel.sr_rodata_offset)
         arm64_synth_patch_mov_imm64(s, rel.sr_patch_offset, rel.sr_reg, target_vaddr)
         ri = ri + 1
 
+    if g_arm64_ssa_codegen == 1 and ssa_lower_res != 0
+        say "    [arm64_synth] --ssa-codegen active: replaced " + str(s.a64_ssa_replaced_cnt) + "/" + str(ssa_lower_res.slr_fn_names.len()) + " functions directly from SSA CFG (" + str(s.a64_ssa_replaced_bytes) + " bytes native AAPCS64 IR, " + str(ssa_lower_res.slr_total_insts) + " IR insts)"
+    end
+
     return s
+
+fn arm64_synth_compile_program tokens
+    return arm64_synth_compile_program_ssa(tokens, 0)
 
 // ── 10. ELF64 AArch64 Container Header Generator (Strict W^X 3-PHDR Layout) ─
 

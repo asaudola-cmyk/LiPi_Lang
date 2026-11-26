@@ -887,3 +887,362 @@ import "src/compiler/backend/formats/elf/relocation.lp"
   // WHY: Strict W^X ELF64 emitter (unified with default elf_emit_executable_target).
   return elf_emit_executable_target(code_bytes, rodata_bytes, data_bytes, bss_size, 62, output_path)
 @end
+
+// ============================================================================
+// 6. ZERO-COPY STREAMING BYTEBUFFER ELF64 EMITTERS (Wave V)
+// ============================================================================
+
+@fn elf_write_fd_all(fd, ptr, byte_len)
+  // WHY: Reliable complete write loop over raw memory pointer (handles partial kernel writes).
+  @if byte_len <= 0 return 0 @end
+  written = 0
+  @while written < byte_len
+    w_chunk = sys_write(fd, ptr + written, byte_len - written)
+    @if w_chunk <= 0
+      return 0 - 1
+    @end
+    written = written + w_chunk
+  @end
+  return written
+@end
+
+@fn elf_write_list_chunk(fd, byte_list)
+  // WHY: Streams a small metadata list (headers/stubs/debug/shdrs) via temporary ByteBuffer.
+  @if byte_list == 0 return 0 @end
+  n = byte_list.len()
+  @if n <= 0 return 0 @end
+  tb = buf_new(n)
+  i = 0
+  @while i < n
+    buf_write_byte(tb, byte_list[i] & 255)
+    i = i + 1
+  @end
+  rc = elf_write_fd_all(fd, buf_ptr(tb), n)
+  buf_free(tb)
+  return rc
+@end
+
+@fn elf_write_zeros_chunk(fd, zero_len)
+  // WHY: Streams zero-padding and 4KB RW globals header without allocating large byte lists.
+  @if zero_len <= 0 return 0 @end
+  zb = buf_new(4096)
+  zp = buf_ptr(zb)
+  zi = 0
+  @while zi < 4096
+    mem_byte_write(zp, zi, 0)
+    zi = zi + 1
+  @end
+  rem = zero_len
+  @while rem > 0
+    chunk = 4096
+    @if rem < chunk
+      chunk = rem
+    @end
+    rc = elf_write_fd_all(fd, zp, chunk)
+    @if rc < 0
+      buf_free(zb)
+      return 0 - 1
+    @end
+    rem = rem - chunk
+  @end
+  buf_free(zb)
+  return zero_len
+@end
+
+@fn elf_emit_executable_buf_mode(code_buf, rodata_buf, data_bytes, bss_size, machine, is_pie, output_path)
+  // WHY: Zero-copy streaming ELF64 writer operating directly on compact ByteBuffers.
+  // Eliminates both 8x list() bloat and full-binary mmap intermediate buffers while producing
+  // bit-identical W^X / Static-PIE ELF64 executables.
+  base_vaddr = 1073741824
+  e_type = 2
+  @if is_pie == 1
+    base_vaddr = 0
+    e_type = 3
+  @end
+  start_stub_offset = 240
+  entry_point_vaddr = base_vaddr + start_stub_offset
+
+  stub_size = 0
+  @if machine == 0 || machine == 62
+    stub_size = 64
+  @end
+
+  code_len = buf_len(code_buf)
+  rodata_len = buf_len(rodata_buf)
+  code_file_offset = start_stub_offset
+  code_size = stub_size + code_len
+  code_vaddr = base_vaddr + code_file_offset
+
+  rodata_file_offset = code_file_offset + code_size
+  rodata_size = rodata_len
+  rodata_vaddr = base_vaddr + rodata_file_offset
+
+  text_ro_end = rodata_file_offset + rodata_size
+  rem_page = text_ro_end % 4096
+  pad_bytes = 0
+  @if rem_page != 0
+    pad_bytes = 4096 - rem_page
+  @end
+
+  data_file_offset = text_ro_end + pad_bytes
+  data_vaddr = base_vaddr + data_file_offset
+
+  start_stub = list()
+  @if machine == 0 || machine == 62
+    @if is_pie == 1
+      start_stub = elf_build_start_stub_pie(0, data_file_offset)
+    @else
+      start_stub = elf_build_start_stub_wx(0, data_vaddr)
+    @end
+  @end
+
+  user_data_len = 0
+  @if data_bytes != 0
+    user_data_len = data_bytes.len()
+  @end
+  data_size = 4096 + user_data_len
+  data_memsz = data_size + bss_size
+
+  shstr_file_offset = data_file_offset + data_size
+  shstr_bytes = [
+    0,
+    46, 116, 101, 120, 116, 0,
+    46, 114, 111, 100, 97, 116, 97, 0,
+    46, 100, 97, 116, 97, 0,
+    46, 98, 115, 115, 0,
+    46, 115, 104, 115, 116, 114, 116, 97, 98, 0
+  ]
+  shstr_size = shstr_bytes.len()
+
+  sh_offset = shstr_file_offset + shstr_size
+  num_sections = 6
+  shstr_idx = 5
+  total_size = sh_offset + 384
+
+  target_mach = 62
+  @if machine != 0
+    target_mach = machine
+  @end
+
+  hdr = list()
+  elf_emit_header_machine_type(hdr, entry_point_vaddr, sh_offset, num_sections, shstr_idx, target_mach, e_type)
+  elf_emit_wx_split_phdrs_base(hdr, base_vaddr, text_ro_end, data_file_offset, data_vaddr, data_size, data_memsz)
+  pi = 0
+  @while pi < 8
+    push(hdr, 0)
+    pi = pi + 1
+  @end
+  elf_concat(hdr, start_stub)
+
+  tail = list()
+  elf_concat(tail, shstr_bytes)
+  k = 0
+  @while k < 64
+    push(tail, 0)
+    k = k + 1
+  @end
+  elf_emit_shdr_bits(tail, 1, 6, code_vaddr, code_file_offset, code_size)
+  elf_emit_shdr_bits(tail, 7, 2, rodata_vaddr, rodata_file_offset, rodata_size)
+  elf_emit_shdr_bits(tail, 15, 3, data_vaddr, data_file_offset, data_size)
+  elf_emit_shdr_nobits(tail, 21, data_vaddr + data_size, data_file_offset + data_size, bss_size)
+  elf_emit_shdr_strtab(tail, 26, shstr_file_offset, shstr_size)
+
+  res = ElfWriteResult()
+  res.ew_out_path = output_path
+  res.ew_entry_vaddr = entry_point_vaddr
+  res.ew_bytes = hdr
+
+  @if output_path == ""
+    res.ew_success = 1
+    res.ew_file_size = total_size
+    res.ew_error_msg = ""
+    return res
+  @end
+
+  sys_unlink(output_path)
+  fd = sys_open(output_path, 577, 493)
+  @if fd < 0
+    res.ew_success = 0
+    res.ew_file_size = 0
+    res.ew_error_msg = "Failed to open ELF64 output path"
+    return res
+  @end
+
+  ok = 1
+  @if elf_write_list_chunk(fd, hdr) < 0 ok = 0 @end
+  @if ok == 1 && code_len > 0 && elf_write_fd_all(fd, buf_ptr(code_buf), code_len) < 0 ok = 0 @end
+  @if ok == 1 && rodata_len > 0 && elf_write_fd_all(fd, buf_ptr(rodata_buf), rodata_len) < 0 ok = 0 @end
+  @if ok == 1 && elf_write_zeros_chunk(fd, pad_bytes + 4096) < 0 ok = 0 @end
+  @if ok == 1 && user_data_len > 0 && elf_write_list_chunk(fd, data_bytes) < 0 ok = 0 @end
+  @if ok == 1 && elf_write_list_chunk(fd, tail) < 0 ok = 0 @end
+  sys_close(fd)
+  sys_chmod(output_path, 493)
+
+  @if ok == 0
+    res.ew_success = 0
+    res.ew_file_size = 0
+    res.ew_error_msg = "Failed to stream ELF64 binary to filesystem"
+    return res
+  @end
+  res.ew_success = 1
+  res.ew_file_size = total_size
+  res.ew_error_msg = ""
+  return res
+@end
+
+@fn elf_emit_executable_pie_buf(code_buf, rodata_buf, data_bytes, bss_size, output_path)
+  return elf_emit_executable_buf_mode(code_buf, rodata_buf, data_bytes, bss_size, 62, 1, output_path)
+@end
+
+@fn elf_emit_executable_buf(code_buf, rodata_buf, data_bytes, bss_size, output_path)
+  return elf_emit_executable_buf_mode(code_buf, rodata_buf, data_bytes, bss_size, 62, 0, output_path)
+@end
+
+@fn elf_emit_executable_debug_buf_mode(code_buf, rodata_buf, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, is_pie, output_path)
+  // WHY: Zero-copy streaming ELF64 + DWARF v4/v5 writer operating directly on compact ByteBuffers.
+  base_vaddr = 1073741824
+  e_type = 2
+  @if is_pie == 1
+    base_vaddr = 0
+    e_type = 3
+  @end
+  start_stub_offset = 240
+  entry_point_vaddr = base_vaddr + start_stub_offset
+
+  code_len = buf_len(code_buf)
+  rodata_len = buf_len(rodata_buf)
+  code_file_offset = start_stub_offset
+  code_size = 64 + code_len
+  code_vaddr = base_vaddr + code_file_offset
+
+  rodata_file_offset = code_file_offset + code_size
+  rodata_size = rodata_len
+  rodata_vaddr = base_vaddr + rodata_file_offset
+
+  text_ro_end = rodata_file_offset + rodata_size
+  rem_page = text_ro_end % 4096
+  pad_bytes = 0
+  @if rem_page != 0
+    pad_bytes = 4096 - rem_page
+  @end
+
+  data_file_offset = text_ro_end + pad_bytes
+  data_vaddr = base_vaddr + data_file_offset
+
+  @if is_pie == 1
+    start_stub = elf_build_start_stub_pie(0, data_file_offset)
+  @else
+    start_stub = elf_build_start_stub_wx(0, data_vaddr)
+  @end
+
+  user_data_len = 0
+  @if data_bytes != 0
+    user_data_len = data_bytes.len()
+  @end
+  data_size = 4096 + user_data_len
+  data_memsz = data_size + bss_size
+
+  debug_line_file_offset = data_file_offset + data_size
+  debug_line_size = debug_line.len()
+  debug_info_file_offset = debug_line_file_offset + debug_line_size
+  debug_info_size = debug_info.len()
+  debug_abbrev_file_offset = debug_info_file_offset + debug_info_size
+  debug_abbrev_size = debug_abbrev.len()
+
+  shstr_file_offset = debug_abbrev_file_offset + debug_abbrev_size
+  shstr_bytes = [
+    0,
+    46, 116, 101, 120, 116, 0,
+    46, 114, 111, 100, 97, 116, 97, 0,
+    46, 100, 97, 116, 97, 0,
+    46, 98, 115, 115, 0,
+    46, 100, 101, 98, 117, 103, 95, 108, 105, 110, 101, 0,
+    46, 100, 101, 98, 117, 103, 95, 105, 110, 102, 111, 0,
+    46, 100, 101, 98, 117, 103, 95, 97, 98, 98, 114, 101, 118, 0,
+    46, 115, 104, 115, 116, 114, 116, 97, 98, 0
+  ]
+  shstr_size = shstr_bytes.len()
+  sh_offset = shstr_file_offset + shstr_size
+  num_sections = 9
+  shstr_idx = 8
+  total_size = sh_offset + 576
+
+  hdr = list()
+  elf_emit_header_machine_type(hdr, entry_point_vaddr, sh_offset, num_sections, shstr_idx, 62, e_type)
+  elf_emit_wx_split_phdrs_base(hdr, base_vaddr, text_ro_end, data_file_offset, data_vaddr, data_size, data_memsz)
+  pi = 0
+  @while pi < 8
+    push(hdr, 0)
+    pi = pi + 1
+  @end
+  elf_concat(hdr, start_stub)
+
+  tail = list()
+  elf_concat(tail, shstr_bytes)
+  k = 0
+  @while k < 64
+    push(tail, 0)
+    k = k + 1
+  @end
+  elf_emit_shdr_bits(tail, 1, 6, code_vaddr, code_file_offset, code_size)
+  elf_emit_shdr_bits(tail, 7, 2, rodata_vaddr, rodata_file_offset, rodata_size)
+  elf_emit_shdr_bits(tail, 15, 3, data_vaddr, data_file_offset, data_size)
+  elf_emit_shdr_nobits(tail, 21, data_vaddr + data_size, data_file_offset + data_size, bss_size)
+  elf_emit_shdr_bits(tail, 26, 0, 0, debug_line_file_offset, debug_line_size)
+  elf_emit_shdr_bits(tail, 38, 0, 0, debug_info_file_offset, debug_info_size)
+  elf_emit_shdr_bits(tail, 50, 0, 0, debug_abbrev_file_offset, debug_abbrev_size)
+  elf_emit_shdr_strtab(tail, 64, shstr_file_offset, shstr_size)
+
+  res = ElfWriteResult()
+  res.ew_out_path = output_path
+  res.ew_entry_vaddr = entry_point_vaddr
+  res.ew_bytes = hdr
+
+  @if output_path == ""
+    res.ew_success = 1
+    res.ew_file_size = total_size
+    res.ew_error_msg = ""
+    return res
+  @end
+
+  sys_unlink(output_path)
+  fd = sys_open(output_path, 577, 493)
+  @if fd < 0
+    res.ew_success = 0
+    res.ew_file_size = 0
+    res.ew_error_msg = "Failed to open ELF64 debug output path"
+    return res
+  @end
+
+  ok = 1
+  @if elf_write_list_chunk(fd, hdr) < 0 ok = 0 @end
+  @if ok == 1 && code_len > 0 && elf_write_fd_all(fd, buf_ptr(code_buf), code_len) < 0 ok = 0 @end
+  @if ok == 1 && rodata_len > 0 && elf_write_fd_all(fd, buf_ptr(rodata_buf), rodata_len) < 0 ok = 0 @end
+  @if ok == 1 && elf_write_zeros_chunk(fd, pad_bytes + 4096) < 0 ok = 0 @end
+  @if ok == 1 && user_data_len > 0 && elf_write_list_chunk(fd, data_bytes) < 0 ok = 0 @end
+  @if ok == 1 && debug_line_size > 0 && elf_write_list_chunk(fd, debug_line) < 0 ok = 0 @end
+  @if ok == 1 && debug_info_size > 0 && elf_write_list_chunk(fd, debug_info) < 0 ok = 0 @end
+  @if ok == 1 && debug_abbrev_size > 0 && elf_write_list_chunk(fd, debug_abbrev) < 0 ok = 0 @end
+  @if ok == 1 && elf_write_list_chunk(fd, tail) < 0 ok = 0 @end
+  sys_close(fd)
+  sys_chmod(output_path, 493)
+
+  @if ok == 0
+    res.ew_success = 0
+    res.ew_file_size = 0
+    res.ew_error_msg = "Failed to stream ELF64 debug binary to filesystem"
+    return res
+  @end
+  res.ew_success = 1
+  res.ew_file_size = total_size
+  res.ew_error_msg = ""
+  return res
+@end
+
+@fn elf_emit_executable_pie_with_debug_buf(code_buf, rodata_buf, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, output_path)
+  return elf_emit_executable_debug_buf_mode(code_buf, rodata_buf, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, 1, output_path)
+@end
+
+@fn elf_emit_executable_with_debug_buf(code_buf, rodata_buf, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, output_path)
+  return elf_emit_executable_debug_buf_mode(code_buf, rodata_buf, data_bytes, bss_size, debug_line, debug_info, debug_abbrev, 0, output_path)
+@end

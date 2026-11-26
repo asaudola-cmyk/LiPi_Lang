@@ -44,10 +44,12 @@ import "compiler/semantics/symbol"
   sc_child_ids: array
   sc_ret_type: i64
   sc_is_loop: i64
+  sc_sym_map: i64
 @end
 
 @fn scope_new(id, kind, parent_id, depth, name)
-  // WHY: Allocates a clean lexical environment node with named constructor
+  // WHY: Allocates a clean lexical environment node with named constructor.
+  // Global/Module scopes get an immediate O(1) dict; function/block scopes upgrade lazily at >=4 symbols.
   sc = Scope()
   sc.sc_name = name
   sc.sc_kind = kind
@@ -59,6 +61,11 @@ import "compiler/semantics/symbol"
   sc.sc_child_ids = []
   sc.sc_ret_type = 0
   sc.sc_is_loop = 0
+  @if kind == SCOPE_GLOBAL() || kind == SCOPE_MODULE()
+    sc.sc_sym_map = dict()
+  @else
+    sc.sc_sym_map = 0
+  @end
   return sc
 @end
 
@@ -141,15 +148,8 @@ import "compiler/semantics/symbol"
   current_scope = stack.stk_scopes[exited_id]
   new_current_id = current_scope.sc_parent_id
 
-  // Pop from active chain
-  new_chain = []
-  i = 0
-  chain_len = stack.stk_chain.len() - 1
-  @while i < chain_len
-    new_chain = new_chain.push(stack.stk_chain[i])
-    i = i + 1
-  @end
-  stack.stk_chain = new_chain
+  // Pop from active chain in O(1)
+  pop(stack.stk_chain)
   stack.stk_current_id = new_current_id
 
   return exited_id
@@ -158,11 +158,23 @@ import "compiler/semantics/symbol"
 // ── 4. SYMBOL REGISTRATION & LOOKUP ──────────────────────────────────────────
 
 @fn scope_define_in_scope_id(stack, scope_id, sym)
-  // WHY: Registers a symbol in a specific scope node and writes it back to stack.stk_scopes arena
+  // WHY: Registers a symbol in a specific scope node with O(1) dict duplicate check
   @if stack == 0 || sym == 0 || scope_id < 0 || scope_id >= stack.stk_scopes.len()
     return 0
   @end
   sc = stack.stk_scopes[scope_id]
+  smap = sc.sc_sym_map
+  @if smap != 0
+    @if has_key(smap, sym.sym_name) == 1
+      return 0
+    @end
+    sym.sym_scope_id = scope_id
+    smap[sym.sym_name] = sym
+    sc.sc_symbols = sc.sc_symbols.push(sym)
+    sc.sc_symbol_names = sc.sc_symbol_names.push(sym.sym_name)
+    return 1
+  @end
+
   i = 0
   num_symbols = sc.sc_symbol_names.len()
   @while i < num_symbols
@@ -175,7 +187,17 @@ import "compiler/semantics/symbol"
   sym.sym_scope_id = scope_id
   sc.sc_symbols = sc.sc_symbols.push(sym)
   sc.sc_symbol_names = sc.sc_symbol_names.push(sym.sym_name)
-  list_set(stack.stk_scopes, scope_id, sc)
+  @if num_symbols >= 3
+    smap = dict()
+    mi = 0
+    mn = sc.sc_symbols.len()
+    @while mi < mn
+      ms = sc.sc_symbols[mi]
+      smap[ms.sym_name] = ms
+      mi = mi + 1
+    @end
+    sc.sc_sym_map = smap
+  @end
   return 1
 @end
 
@@ -183,6 +205,18 @@ import "compiler/semantics/symbol"
   // WHY: Registers a symbol in a specific scope node (e.g. enclosing function scope)
   @if curr == 0 || sym == 0
     return 0
+  @end
+
+  smap = curr.sc_sym_map
+  @if smap != 0
+    @if has_key(smap, sym.sym_name) == 1
+      return 0
+    @end
+    sym.sym_scope_id = curr.sc_id
+    smap[sym.sym_name] = sym
+    curr.sc_symbols = curr.sc_symbols.push(sym)
+    curr.sc_symbol_names = curr.sc_symbol_names.push(sym.sym_name)
+    return 1
   @end
 
   i = 0
@@ -197,6 +231,17 @@ import "compiler/semantics/symbol"
   sym.sym_scope_id = curr.sc_id
   curr.sc_symbols = curr.sc_symbols.push(sym)
   curr.sc_symbol_names = curr.sc_symbol_names.push(sym.sym_name)
+  @if num_symbols >= 3
+    smap = dict()
+    mi = 0
+    mn = curr.sc_symbols.len()
+    @while mi < mn
+      ms = curr.sc_symbols[mi]
+      smap[ms.sym_name] = ms
+      mi = mi + 1
+    @end
+    curr.sc_sym_map = smap
+  @end
   return 1
 @end
 
@@ -210,6 +255,13 @@ import "compiler/semantics/symbol"
   // WHY: Checks ONLY the current scope without walking parent pointers
   curr = scope_stack_current(stack)
   @if curr == 0
+    return 0
+  @end
+  smap = curr.sc_sym_map
+  @if smap != 0
+    @if has_key(smap, name) == 1
+      return smap[name]
+    @end
     return 0
   @end
 
@@ -227,19 +279,25 @@ import "compiler/semantics/symbol"
 @end
 
 @fn scope_lookup(stack, name)
-  // WHY: Canonical Lexical Scope Resolution Algorithm
-  // Traverses upwards from current scope through parent pointers to Global root
+  // WHY: Canonical Lexical Scope Resolution Algorithm — O(1) per scope via DICT0 when populated
   curr_id = stack.stk_current_id
   @while curr_id >= 0
     sc = stack.stk_scopes[curr_id]
-    i = 0
-    n = sc.sc_symbols.len()
-    @while i < n
-      s = sc.sc_symbols[i]
-      @if str_eq(s.sym_name, name) == 1
-        return s
+    smap = sc.sc_sym_map
+    @if smap != 0
+      @if has_key(smap, name) == 1
+        return smap[name]
       @end
-      i = i + 1
+    @else
+      i = 0
+      n = sc.sc_symbols.len()
+      @while i < n
+        s = sc.sc_symbols[i]
+        @if str_eq(s.sym_name, name) == 1
+          return s
+        @end
+        i = i + 1
+      @end
     @end
     curr_id = sc.sc_parent_id
   @end
@@ -252,14 +310,21 @@ import "compiler/semantics/symbol"
   curr_id = start_scope_id
   @while curr_id >= 0 && curr_id < stack.stk_scopes.len()
     sc = stack.stk_scopes[curr_id]
-    i = 0
-    n = sc.sc_symbols.len()
-    @while i < n
-      s = sc.sc_symbols[i]
-      @if str_eq(s.sym_name, name) == 1
-        return s
+    smap = sc.sc_sym_map
+    @if smap != 0
+      @if has_key(smap, name) == 1
+        return smap[name]
       @end
-      i = i + 1
+    @else
+      i = 0
+      n = sc.sc_symbols.len()
+      @while i < n
+        s = sc.sc_symbols[i]
+        @if str_eq(s.sym_name, name) == 1
+          return s
+        @end
+        i = i + 1
+      @end
     @end
     curr_id = sc.sc_parent_id
   @end

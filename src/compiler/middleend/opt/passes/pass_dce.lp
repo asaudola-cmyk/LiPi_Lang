@@ -53,34 +53,44 @@ fn dce_prune_phi_edges_for_block fn_obj dead_bb
 fn dce_sweep_dead_instructions fn_obj
     eliminated = 0
     bi = 0
-    while bi < len(fn_obj.blocks)
+    bcnt = len(fn_obj.blocks)
+    while bi < bcnt
         bb = get(fn_obj.blocks, bi)
-        new_insts = list()
+        insts = bb.instructions
+        icnt = len(insts)
+        blk_killed = 0
         ii = 0
-        while ii < len(bb.instructions)
-            inst = get(bb.instructions, ii)
-            // Check if instruction is dead
-            is_dead = 0
-            if inst.result != 0 and ssa_has_side_effects(inst.op) == 0
-                if ssa_value_use_count(inst.result) == 0
-                    is_dead = 1
-
-            if is_dead == 1
+        while ii < icnt
+            inst = get(insts, ii)
+            if inst.result != 0 and ssa_has_side_effects(inst.op) == 0 and ssa_value_use_count(inst.result) == 0
                 ssa_instr_remove_from_operands_use_lists(inst)
                 inst.is_dead = 1
                 eliminated = eliminated + 1
-            else
-                push(new_insts, inst)
+                blk_killed = 1
+            end
             ii = ii + 1
-
-        bb.instructions = new_insts
+        end
+        if blk_killed == 1
+            new_insts = list()
+            ii = 0
+            while ii < icnt
+                it = get(insts, ii)
+                if it.is_dead == 0
+                    push(new_insts, it)
+                end
+                ii = ii + 1
+            end
+            bb.instructions = new_insts
+        end
         bi = bi + 1
+    end
 
     return eliminated
 
 // ── 3. Unreachable Block Sweeper ──────────────────────────────────────────────
 
 fn dce_sweep_unreachable_blocks fn_obj
+    if len(fn_obj.blocks) <= 1 return 0 end
     unreachable = cfg_get_unreachable_blocks(fn_obj)
     if len(unreachable) == 0 return 0
 

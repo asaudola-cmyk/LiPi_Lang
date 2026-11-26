@@ -135,13 +135,23 @@ fn riscv64_synth_emit_file_write_helper s
 
 // ── 12. Master Program Synthesizer Entry Point ─────────────────────────────────
 
-fn riscv64_synth_compile_program tokens
+fn riscv64_synth_compile_program_ssa tokens ssa_lower_res
     // WHY: Master orchestration entry point. Transforms complete token stream into
-    // relocatable RISC-V 64 machine code, sets up top-level stack frames, patches string relocations
-    // against the Linux ELF virtual address space (0x400000+), and resolves call sites.
+    // relocatable RISC-V 64 machine code, splicing SSA CFG-lowered functions when --ssa-codegen is active.
     s = riscv64_synth_new()
+    s.rv_ssa_lower_res = ssa_lower_res
 
-    // 1. Zero initial frame pointer s0 (x8) so LSYM0 stack_trace() terminates cleanly at root,
+    // 1. In freestanding bare-metal mode (OpenSBI S-mode handoff gives a0=hartid, a1=dtb and no
+    // guaranteed kernel stack), initialize SP (x2) PC-relatively to the 16B-aligned top of the 64KB
+    // kernel stack inside PT_LOAD[1] (.bss) before touching any stack memory.
+    boot_sp_patch = 0 - 1
+    if s.rv_freestanding == 1
+        boot_sp_patch = s.rv_code.len()
+        riscv64_emit_lui(s, 2, 0)
+        riscv64_emit_addi(s, 2, 2, 0)
+    end
+
+    // Zero initial frame pointer s0 (x8) so LSYM0 stack_trace() terminates cleanly at root,
     // emit top-level stack frame prologue, and clear exception registers (x26=s10 flag, x27=s11 value).
     riscv64_emit_addi(s, 8, 0, 0)
     riscv64_emit_prologue(s)
@@ -238,6 +248,9 @@ fn riscv64_synth_compile_program tokens
     if s.rv_needs_buf == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_buf_helpers(s)
+    if s.rv_needs_str_helpers == 1
+        s.rv_needs_alloc = 1
+        riscv64_synth_emit_str_helpers(s)
     if s.rv_needs_file_write == 1
         riscv64_synth_emit_file_write_helper(s)
     if s.rv_needs_alloc == 1
@@ -263,6 +276,18 @@ fn riscv64_synth_compile_program tokens
             found_rel = 1
         elif cr.rv_cr_target_name == "__print_tagged"
             resolved_addr = s.rv_print_tagged_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__int_to_str"
+            resolved_addr = s.rv_int_to_str_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__uint_to_str"
+            resolved_addr = s.rv_uint_to_str_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__str_concat"
+            resolved_addr = s.rv_str_concat_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__tagged_to_str"
+            resolved_addr = s.rv_tagged_to_str_off
             found_rel = 1
         elif cr.rv_cr_target_name == "_lipi_throw_null_deref"
             resolved_addr = s.rv_throw_null_off
@@ -346,37 +371,76 @@ fn riscv64_synth_compile_program tokens
         lsym_ro_off = riscv64_synth_emit_lsym_rodata(s)
     end
     total_code_size = s.rv_code.len()
-    code_base_vaddr = 4194536 // 0x4000E8 (232B header)
-    rodata_base_vaddr = code_base_vaddr + total_code_size
+    code_base_vaddr = g_rv64_base_vaddr - (0 - g_rv64_code_file_off)
+    rodata_base_vaddr = code_base_vaddr - (0 - total_code_size)
+    use_pc_rel = 0
+    if s.rv_freestanding == 1 or code_base_vaddr >= 2147483648 or code_base_vaddr < 0 or code_base_vaddr == 0
+        use_pc_rel = 1
+    end
 
     if s.rv_lsym_patch_lsym >= 0
-        riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_lsym, 20, rodata_base_vaddr + lsym_ro_off)
+        if use_pc_rel == 1
+            riscv64_synth_patch_auipc_addi(s, s.rv_lsym_patch_lsym, 20, (total_code_size + lsym_ro_off) - s.rv_lsym_patch_lsym)
+        else
+            riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_lsym, 20, rodata_base_vaddr + lsym_ro_off)
+        end
     end
     if s.rv_lsym_patch_code >= 0
-        riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_code, 21, code_base_vaddr)
+        if use_pc_rel == 1
+            riscv64_synth_patch_auipc_addi(s, s.rv_lsym_patch_code, 21, 0 - s.rv_lsym_patch_code)
+        else
+            riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_code, 21, code_base_vaddr)
+        end
     end
     if s.rv_lsym_patch_ro >= 0
-        riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_ro, 22, rodata_base_vaddr)
+        if use_pc_rel == 1
+            riscv64_synth_patch_auipc_addi(s, s.rv_lsym_patch_ro, 22, total_code_size - s.rv_lsym_patch_ro)
+        else
+            riscv64_synth_patch_lui_addi(s, s.rv_lsym_patch_ro, 22, rodata_base_vaddr)
+        end
     end
 
     ri = 0
     while ri < s.rv_str_relocs.len()
         rel = s.rv_str_relocs[ri]
-        target_vaddr = rodata_base_vaddr + rel.rv_sr_rodata_offset
-        riscv64_synth_patch_lui_addi(s, rel.rv_sr_patch_offset, rel.rv_sr_reg, target_vaddr)
+        if use_pc_rel == 1
+            riscv64_synth_patch_auipc_addi(s, rel.rv_sr_patch_offset, rel.rv_sr_reg, (total_code_size + rel.rv_sr_rodata_offset) - rel.rv_sr_patch_offset)
+        else
+            target_vaddr = rodata_base_vaddr + rel.rv_sr_rodata_offset
+            riscv64_synth_patch_lui_addi(s, rel.rv_sr_patch_offset, rel.rv_sr_reg, target_vaddr)
+        end
         ri = ri + 1
 
+    if boot_sp_patch >= 0
+        rx_tot_sp = g_rv64_code_file_off + total_code_size + s.rv_rodata.len()
+        rw_f_sp = ((rx_tot_sp + 4095) / 4096) * 4096
+        if rw_f_sp == 0 rw_f_sp = 4096 end
+        sp_rel_delta = (rw_f_sp - g_rv64_code_file_off) + 4096 + 65520 - boot_sp_patch
+        riscv64_synth_patch_auipc_addi(s, boot_sp_patch, 2, sp_rel_delta)
+    end
+
     if s.rv_needs_alloc == 1 and s.rv_alloc_rw_patch_off >= 0
-        rx_tot = 232 + total_code_size + s.rv_rodata.len()
+        rx_tot = g_rv64_code_file_off + total_code_size + s.rv_rodata.len()
         rem_rx = rx_tot % 4096
         rx_pad = 0
         if rem_rx != 0
             rx_pad = 4096 - rem_rx
         rw_f_off = rx_tot + rx_pad
-        rw_vaddr_target = 4198400 + rw_f_off // 0x401000 + rw_f_off (strict W^X RW .data inside 64KB VM window)
-        riscv64_synth_patch_lui_addi(s, s.rv_alloc_rw_patch_off, 5, rw_vaddr_target)
+        if use_pc_rel == 1
+            riscv64_synth_patch_auipc_addi(s, s.rv_alloc_rw_patch_off, 5, (rw_f_off - g_rv64_code_file_off) - s.rv_alloc_rw_patch_off)
+        else
+            rw_vaddr_target = 4198400 + rw_f_off // 0x401000 + rw_f_off (strict W^X RW .data inside 64KB VM window)
+            riscv64_synth_patch_lui_addi(s, s.rv_alloc_rw_patch_off, 5, rw_vaddr_target)
+        end
+
+    if g_rv64_ssa_codegen == 1 and ssa_lower_res != 0
+        say "    [riscv64_synth] --ssa-codegen active: replaced " + str(s.rv_ssa_replaced_cnt) + "/" + str(ssa_lower_res.slr_fn_names.len()) + " functions directly from SSA CFG (" + str(s.rv_ssa_replaced_bytes) + " bytes native RV64IM IR, " + str(ssa_lower_res.slr_total_insts) + " IR insts)"
+    end
 
     return s
+
+fn riscv64_synth_compile_program tokens
+    return riscv64_synth_compile_program_ssa(tokens, 0)
 
 // ── 13. ELF64 RISC-V Container Header Generator ───────────────────────────────
 

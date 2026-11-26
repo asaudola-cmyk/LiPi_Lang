@@ -385,9 +385,9 @@ fn resolve_bin_path rel_name
     free(exe_buf, 256)
     return rel_name
 
-fn handle_eval expr
+fn handle_eval expr eval_flags
     if len(expr) == 0
-        say "❌ Error: Code snippet required: lipi -e '<code snippet>'"
+        say "❌ Error: Code snippet required: lipi -e '<code snippet>' [flags...]"
         return 1
 
     cur_pid = syscall(39, 0, 0, 0, 0, 0, 0)
@@ -404,7 +404,17 @@ fn handle_eval expr
     syscall(3, fd, 0, 0, 0, 0, 0)
 
     c_bin = resolve_bin_path("lipc_bin")
-    code = spawn_exec_cmd(c_bin, tmp_src, tmp_bin, "", "")
+    c_args = list()
+    push(c_args, tmp_src)
+    push(c_args, tmp_bin)
+    if eval_flags != 0
+        fi_e = 0
+        while fi_e < len(eval_flags)
+            push(c_args, get(eval_flags, fi_e))
+            fi_e = fi_e + 1
+        end
+    end
+    code = spawn_exec_list(c_bin, c_args)
     if code != 0
         syscall(87, tmp_src, 0, 0, 0, 0, 0)
         syscall(87, tmp_bin, 0, 0, 0, 0, 0)
@@ -416,19 +426,11 @@ fn handle_eval expr
     return exec_code
 
 
-fn handle_run file_path a1 a2 a3 a4
+fn handle_run file_path comp_flags run_args is_jit
     if len(file_path) == 0
-        say "❌ Error: Source file required: lipi run <file.lp> [args...]"
+        say "❌ Error: Source file required: lipi run [compiler-flags...] <file.lp> [program-args...]"
         return 1
-
-    is_jit = 0
-    src_target = file_path
-    if file_path == "--jit" or file_path == "-j"
-        is_jit = 1
-        src_target = a1
-        if len(src_target) == 0
-            say "❌ Error: Source file required for JIT execution: lipi run --jit <file.lp>"
-            return 1
+    end
 
     // WHY: Use PID-isolated temporary binary to prevent ETXTBSY collisions
     // when running multiple Lipi programs or long-running servers concurrently.
@@ -437,28 +439,37 @@ fn handle_run file_path a1 a2 a3 a4
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
 
     if is_jit == 1
-        say "\033[1;35m[LIPI JIT]\033[0m Initializing in-memory JIT execution engine for " + src_target + "..."
+        say "\033[1;35m[LIPI JIT]\033[0m Initializing in-memory JIT execution engine for " + file_path + "..."
     else
-        say "\033[1;34m[LIPI RUN]\033[0m Compiling " + src_target + "..."
+        say "\033[1;34m[LIPI RUN]\033[0m Compiling " + file_path + "..."
+    end
 
     c_bin = resolve_bin_path("lipc_bin")
-    code = spawn_exec_cmd(c_bin, src_target, tmp_bin, "", "")
+    c_args = list()
+    push(c_args, file_path)
+    push(c_args, tmp_bin)
+    if comp_flags != 0
+        cfi = 0
+        while cfi < len(comp_flags)
+            push(c_args, get(comp_flags, cfi))
+            cfi = cfi + 1
+        end
+    end
+    code = spawn_exec_list(c_bin, c_args)
     if code != 0
         say "❌ Compilation failed (Compiler exit code " + str(code) + ")"
         syscall(87, tmp_bin, 0, 0, 0, 0, 0)
         return code
+    end
 
     if is_jit == 1
         say "⚡ \033[1;32mJIT Engine: Executing machine code purely in RAM (Zero Disk Latency)...\033[0m"
     else
         say "⚡ Executing in-memory binary..."
+    end
 
     say "--------------------------------------------------"
-    exec_code = 0
-    if is_jit == 1
-        exec_code = spawn_exec_cmd(tmp_bin, a2, a3, a4, "")
-    else
-        exec_code = spawn_exec_cmd(tmp_bin, a1, a2, a3, a4)
+    exec_code = spawn_exec_list(tmp_bin, run_args)
     say "--------------------------------------------------"
     say "✔ Execution finished (Exit code: " + str(exec_code) + ")"
 
@@ -966,7 +977,12 @@ fn handle_ai model_path prompt extra1 extra2
         return 1
     end
 
-    return handle_run(ai_runner, model_path, prompt, extra1, extra2)
+    ai_run_args = list()
+    if len(model_path) > 0 push(ai_run_args, model_path) end
+    if len(prompt) > 0 push(ai_run_args, prompt) end
+    if len(extra1) > 0 push(ai_run_args, extra1) end
+    if len(extra2) > 0 push(ai_run_args, extra2) end
+    return handle_run(ai_runner, list(), ai_run_args, 0)
 
 // ── Cellular Self-Replication Architecture (বীজ পুনঃউৎপাদন ব্যবস্থা) ───────────
 // WHY: A sovereign language must possess autonomous cellular self-replication.
@@ -1105,11 +1121,48 @@ fn main
         show_version()
         return 0
 
-    if cmd == "-e"
-        if argc < 3
-            say "Usage: lipi -e '<expression>'"
-            return 1
-        return handle_eval(get(args, 2))
+    if cmd == "-e" or (len(cmd) > 1 and char_at(cmd, 0) == "-" and char_at(cmd, 1) == "-")
+        has_e_flag = 0
+        if cmd == "-e"
+            has_e_flag = 1
+        else
+            chk_i = 2
+            while chk_i < argc
+                if get(args, chk_i) == "-e"
+                    has_e_flag = 1
+                    break
+                end
+                chk_i = chk_i + 1
+            end
+        end
+        if has_e_flag == 1
+            if argc < 3
+                say "Usage: lipi -e '<expression>' [--strict-ownership|--strict-types|--kavach|--ssa-codegen]"
+                return 1
+            end
+            eval_code = ""
+            eval_flags = list()
+            ei_a = 1
+            while ei_a < argc
+                cur_ea = get(args, ei_a)
+                if cur_ea == "-e"
+                    if ei_a + 1 < argc and len(eval_code) == 0
+                        eval_code = get(args, ei_a + 1)
+                        ei_a = ei_a + 2
+                        continue
+                    end
+                elif len(cur_ea) > 1 and char_at(cur_ea, 0) == "-" and char_at(cur_ea, 1) == "-"
+                    push(eval_flags, cur_ea)
+                elif len(eval_code) == 0
+                    eval_code = cur_ea
+                else
+                    push(eval_flags, cur_ea)
+                end
+                ei_a = ei_a + 1
+            end
+            return handle_eval(eval_code, eval_flags)
+        end
+    end
 
     if cmd == "run"
         if argc < 3
@@ -1117,18 +1170,45 @@ fn main
             return 1
         if get(args, 2) == "-e"
             if argc < 4
-                say "Usage: lipi run -e '<expression>'"
+                say "Usage: lipi run -e '<expression>' [flags...]"
                 return 1
-            return handle_eval(get(args, 3))
-        a1 = ""
-        a2 = ""
-        a3 = ""
-        a4 = ""
-        if argc >= 4 a1 = get(args, 3)
-        if argc >= 5 a2 = get(args, 4)
-        if argc >= 6 a3 = get(args, 5)
-        if argc >= 7 a4 = get(args, 6)
-        return handle_run(get(args, 2), a1, a2, a3, a4)
+            end
+            re_code = ""
+            re_flags = list()
+            rei = 3
+            while rei < argc
+                cur_re = get(args, rei)
+                if len(cur_re) > 1 and char_at(cur_re, 0) == "-" and char_at(cur_re, 1) == "-"
+                    push(re_flags, cur_re)
+                elif len(re_code) == 0
+                    re_code = cur_re
+                else
+                    push(re_flags, cur_re)
+                end
+                rei = rei + 1
+            end
+            return handle_eval(re_code, re_flags)
+        run_src = ""
+        run_c_flags = list()
+        run_p_args = list()
+        run_is_jit = 0
+        ri = 2
+        while ri < argc
+            cur_r = get(args, ri)
+            if len(run_src) == 0
+                if cur_r == "--jit" or cur_r == "-j"
+                    run_is_jit = 1
+                elif len(cur_r) > 0 and char_at(cur_r, 0) == "-"
+                    push(run_c_flags, cur_r)
+                else
+                    run_src = cur_r
+                end
+            else
+                push(run_p_args, cur_r)
+            end
+            ri = ri + 1
+        end
+        return handle_run(run_src, run_c_flags, run_p_args, run_is_jit)
 
     if cmd == "build"
         if argc < 3

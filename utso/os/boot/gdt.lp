@@ -1,8 +1,8 @@
 @! ============================================================================
-@! LIPI 64-BIT LONG MODE GLOBAL DESCRIPTOR TABLE (GDT) — utso/os/boot/gdt.lp
-@! 100% Written in Pure Lipi Language — Zero C / Foreign Toolchain Dependencies
-@! Features: Long Mode Kernel/User Code & Data Segments, TSS 64-Bit System Descriptors,
-@! and GDTR Register Serialization
+@! @deprecated [LEGACY HOSTED GDT SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real Ring-0 x86_64 CPU/GDT/CR/MSR instructions, import `utso/silicon/cpu.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
+@! Module: utso/os/boot/gdt.lp
 @! ============================================================================
 
 @! ----------------------------------------------------------------------------

@@ -43,6 +43,30 @@ fn replace_operand inst old_val new_val
 
 // ── 4. Constructors ───────────────────────────────────────────────────────────
 
+global g_ssa_empty_uses = 0
+global g_ssa_const_id_cache = 0
+
+fn ssa_value_init_sentinels
+    if g_ssa_empty_uses == 0
+        g_ssa_empty_uses = list()
+    end
+    if g_ssa_const_id_cache == 0
+        g_ssa_const_id_cache = list()
+        ci_init = 0
+        while ci_init < 256
+            push(g_ssa_const_id_cache, str(ci_init))
+            ci_init = ci_init + 1
+        end
+    end
+    return 0
+end
+
+fn ssa_empty_uses_list
+    if g_ssa_empty_uses == 0
+        g_ssa_empty_uses = list()
+    end
+    return g_ssa_empty_uses
+
 // Base constructor for SSAValue
 fn ssa_value_new id vtype kind
     val = SSAValue()
@@ -52,7 +76,7 @@ fn ssa_value_new id vtype kind
     val.val_kind = kind
     val.const_val = 0
     val.def_inst = 0
-    val.uses = list()
+    val.uses = ssa_empty_uses_list()
     return val
 
 // Creates a value produced as the result of an SSA instruction
@@ -66,7 +90,20 @@ fn ssa_value_new_inst id vtype def_inst
 // WHY: Constants are treated as first-class SSA values with no defining instruction,
 //      simplifying uniform operand handling across all IR instructions.
 fn ssa_value_new_const const_int vtype
-    id_str = str(const_int)
+    id_str = ""
+    if const_int >= 0 and const_int < 256
+        if g_ssa_const_id_cache == 0
+            g_ssa_const_id_cache = list()
+            ci_init = 0
+            while ci_init < 256
+                push(g_ssa_const_id_cache, str(ci_init))
+                ci_init = ci_init + 1
+            end
+        end
+        id_str = g_ssa_const_id_cache[const_int]
+    else
+        id_str = str(const_int)
+    end
     val = ssa_value_new(id_str, vtype, VAL_KIND_CONST)
     val.const_val = const_int
     return val
@@ -85,10 +122,14 @@ fn ssa_value_new_global name vtype
 
 // Registers a consuming instruction in this value's def-use list
 // WHY: Allows the value to know exactly which instructions must be notified or updated
-//      if this value is replaced, folded, or deleted.
+//      if this value is replaced, folded, or deleted. Allocates uses list lazily on first use.
 fn ssa_value_add_use val inst
     if val == 0 or inst == 0
         return 0
+    if val.uses == g_ssa_empty_uses
+        val.uses = [inst]
+        return 1
+    end
     i = 0
     cnt = len(val.uses)
     while i < cnt
@@ -110,9 +151,19 @@ fn add_use val inst
 fn ssa_value_remove_use val inst
     if val == 0 or inst == 0
         return 0
+    cnt = len(val.uses)
+    if cnt == 0
+        return 0
+    end
+    if cnt == 1
+        if get(val.uses, 0) == inst
+            val.uses = ssa_empty_uses_list()
+            return 1
+        end
+        return 0
+    end
     new_uses = list()
     i = 0
-    cnt = len(val.uses)
     found = 0
     while i < cnt
         item = get(val.uses, i)
@@ -121,7 +172,11 @@ fn ssa_value_remove_use val inst
         else
             found = 1
         i = i + 1
-    val.uses = new_uses
+    if len(new_uses) == 0
+        val.uses = ssa_empty_uses_list()
+    else
+        val.uses = new_uses
+    end
     return found
 
 fn SSAValue.remove_use self inst
@@ -187,7 +242,7 @@ fn ssa_value_replace_all_uses_with old_val new_val
         idx = idx + 1
     
     // Clear out this value's uses now that all consumers have transitioned
-    old_val.uses = list()
+    old_val.uses = ssa_empty_uses_list()
     return replaced_count
 
 fn SSAValue.replace_all_uses_with self new_val

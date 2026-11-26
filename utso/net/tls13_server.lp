@@ -1423,7 +1423,11 @@ fn _tls13s_write_list_fd fd arr
     end
     sent = 0
     while sent < n
-        w = syscall(1, fd, buf + sent, n - sent, 0, 0, 0)
+        w = syscall(44, fd, buf + sent, n - sent, 16384, 0, 0)
+        if w == (0 - 4) continue end
+        if w == (0 - 88)
+            w = syscall(1, fd, buf + sent, n - sent, 0, 0, 0)
+        end
         if w <= 0
             free(buf, n)
             return -1

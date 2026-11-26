@@ -36,6 +36,21 @@ struct SSAInstr
 
 // ── 2. Base Constructor ───────────────────────────────────────────────────────
 
+global g_ssa_empty_list = 0
+
+fn ssa_instr_init_sentinels
+    if g_ssa_empty_list == 0
+        g_ssa_empty_list = list()
+    end
+    return 0
+end
+
+fn ssa_instr_empty_list
+    if g_ssa_empty_list == 0
+        g_ssa_empty_list = list()
+    end
+    return g_ssa_empty_list
+
 fn ssa_instr_new id op result parent_bb
     inst = SSAInstr()
     inst.id = id
@@ -50,7 +65,7 @@ fn ssa_instr_new id op result parent_bb
     inst.parent_bb = parent_bb
     inst.extra_int = 0
     inst.extra_str = ""
-    inst.extra_list = list()
+    inst.extra_list = ssa_instr_empty_list()
     inst.is_dead = 0
 
     // If this instruction defines an SSA value, link value's def_inst back to here
@@ -135,8 +150,7 @@ fn ir_build_br id cond_val true_lbl false_lbl
     inst = ssa_instr_new(id, OP_BR, 0, 0)
     push(inst.operands, cond_val)
     ssa_value_add_use(cond_val, inst)
-    push(inst.extra_list, true_lbl)
-    push(inst.extra_list, false_lbl)
+    inst.extra_list = [true_lbl, false_lbl]
     return inst
 
 // jmp target_label

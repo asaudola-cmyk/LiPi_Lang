@@ -1,10 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL IDT & PIC 8259A INTERRUPT CONTROLLER
+@! @deprecated [LEGACY HOSTED IDT/PIC SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal interrupt controllers, import `utso/silicon/apic.lp` (x86_64)
+@! or `utso/silicon/gic.lp` (ARM64) or `utso/silicon/opensbi.lp` (RISC-V 64).
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! Module: utso/os/drivers/idt.lp
-@! Milestone: Grand Sovereign Pillar 4
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: 64-Bit IDT Gate Descriptors, PIC 8259A Remapping (0x20-0x28),
-@! PIT Timer (0x40/0x43) Frequency Setup
 @! ============================================================================
 
 import "utso/core/collections"

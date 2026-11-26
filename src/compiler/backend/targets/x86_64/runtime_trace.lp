@@ -14,14 +14,11 @@
 // ==============================================================================
 
 fn x86_synth_rodata_push_u32 s val
-    v = val
-    if v < 0
-        v = v + 4294967296
-    end
-    push(s.synth_rodata, v % 256)
-    push(s.synth_rodata, (v / 256) % 256)
-    push(s.synth_rodata, (v / 65536) % 256)
-    push(s.synth_rodata, (v / 16777216) % 256)
+    ro = s.synth_rodata
+    buf_write_byte(ro, val & 255)
+    buf_write_byte(ro, (val >> 8) & 255)
+    buf_write_byte(ro, (val >> 16) & 255)
+    buf_write_byte(ro, (val >> 24) & 255)
     return 0
 end
 
@@ -48,20 +45,21 @@ fn x86_synth_emit_lsym_rodata s
     end
 
     // Align LSYM0 header to 8-byte boundary
-    while (s.synth_rodata.len() % 8) != 0
-        push(s.synth_rodata, 0)
+    ro = s.synth_rodata
+    while (buf_len(ro) % 8) != 0
+        buf_write_byte(ro, 0)
     end
-    lsym_off = s.synth_rodata.len()
+    lsym_off = buf_len(ro)
 
     // Magic: "LIPLSYM0" (0x304D59534C50494C)
-    push(s.synth_rodata, 76) // 'L'
-    push(s.synth_rodata, 73) // 'I'
-    push(s.synth_rodata, 80) // 'P'
-    push(s.synth_rodata, 76) // 'L'
-    push(s.synth_rodata, 83) // 'S'
-    push(s.synth_rodata, 89) // 'Y'
-    push(s.synth_rodata, 77) // 'M'
-    push(s.synth_rodata, 48) // '0'
+    buf_write_byte(ro, 76) // 'L'
+    buf_write_byte(ro, 73) // 'I'
+    buf_write_byte(ro, 80) // 'P'
+    buf_write_byte(ro, 76) // 'L'
+    buf_write_byte(ro, 83) // 'S'
+    buf_write_byte(ro, 89) // 'Y'
+    buf_write_byte(ro, 77) // 'M'
+    buf_write_byte(ro, 48) // '0'
 
     fcnt = fn_starts.len()
     lcnt = s.synth_line_pcs.len()

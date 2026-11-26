@@ -131,6 +131,9 @@ fn x86_synth_emit__lipi_gc_collect s
     x86_synth_register_helper_fn(s, "lipi_gc_collect", off)
     x86_synth_register_helper_fn(s, "আবর্জনা_পরিষ্কার", off)
     x86_synth_emit_bytes(s, [85, 72, 137, 229, 83, 65, 84, 65, 85, 65, 86, 65, 87, 72, 131, 236, 72])
+    // WHY: Zero all 72B of _lipi_gc_collect's own local frame before scanning [rsp..stack_bottom) so
+    // stale dead pointers left on the stack by just-returned callers (especially SSA stack frames) are never falsely retained.
+    x86_synth_emit_bytes(s, [49, 192, 72, 137, 4, 36, 72, 137, 68, 36, 8, 72, 137, 68, 36, 16, 72, 137, 68, 36, 24, 72, 137, 68, 36, 32, 72, 137, 68, 36, 40, 72, 137, 68, 36, 48, 72, 137, 68, 36, 56, 72, 137, 68, 36, 64])
     x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
     x86_synth_emit_bytes(s, [73, 137, 198, 49, 219, 65, 131, 190, 176, 1, 0, 0, 0, 116, 10])
     x86_synth_emit_call_helper(s, "_lipi_gc_park_self")

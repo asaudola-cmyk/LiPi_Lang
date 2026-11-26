@@ -107,32 +107,26 @@ fn compiler_driver_has_include content
     return 0
 
 fn compiler_driver_join_chunks chunks
-    // WHY: Balanced pairwise tree merge reduces intermediate string allocation churn from O(N^2) to O(N log N).
-    // For 500 chunks totaling ~700KB, total memory allocated across all log2(500) passes is ~6.3MB instead of >1GB!
-    if chunks.len() == 0
+    // WHY: Single-pass O(N) ERMS ByteBuffer join eliminates all intermediate string allocations.
+    n = chunks.len()
+    if n == 0
         return ""
-    cur = chunks
-    while cur.len() > 1
-        next_ch = list()
-        ci = 0
-        clen = cur.len()
-        while ci < clen
-            if ci + 1 < clen
-                c1 = cur[ci]
-                c2 = cur[ci + 1]
-                if len(c1) == 0
-                    push(next_ch, c2)
-                elif len(c2) == 0
-                    push(next_ch, c1)
-                else
-                    push(next_ch, c1 + c2)
-            else
-                push(next_ch, cur[ci])
-            ci = ci + 2
-        cur = next_ch
-    if cur.len() == 1
-        return cur[0]
-    return ""
+    end
+    if n == 1
+        return chunks[0]
+    end
+    jb = buf_new(8192)
+    i = 0
+    while i < n
+        c = chunks[i]
+        if len(c) > 0
+            buf_write_str(jb, c)
+        end
+        i = i + 1
+    end
+    out = buf_to_str(jb)
+    buf_free(jb)
+    return out
 
 fn compiler_driver_resolve_std target
     // WHY: Seamlessly translates developer-friendly short primitive syntax ('utso/io', 'utso/memory')
@@ -176,6 +170,9 @@ fn compiler_driver_resolve_std target
     if target == "utso/silicon/ahci" or target == "utso/silicon/ahci.lp" return "utso/silicon/ahci.lp"
     if target == "utso/silicon/xhci" or target == "utso/silicon/xhci.lp" return "utso/silicon/xhci.lp"
     if target == "utso/silicon/hda" or target == "utso/silicon/hda.lp" return "utso/silicon/hda.lp"
+    if target == "utso/silicon/pl011" or target == "utso/silicon/pl011.lp" return "utso/silicon/pl011.lp"
+    if target == "utso/silicon/gic" or target == "utso/silicon/gic.lp" return "utso/silicon/gic.lp"
+    if target == "utso/silicon/opensbi" or target == "utso/silicon/opensbi.lp" return "utso/silicon/opensbi.lp"
 
     // 2. Legacy 'universe/core/*' and 'universe/os/*' mapping to sovereign primitives:
     if target == "universe/core/memory.lp" or target == "universe/core/memory" return "utso/memory.lp"

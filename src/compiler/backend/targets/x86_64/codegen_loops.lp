@@ -237,7 +237,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
             c_ok_after = 1
         else
             c_ak = toks[c_p0 + 3].tok_kind
-            if c_ak == TOK_NEWLINE() or c_ak == TOK_SEMI() or c_ak == TOK_COMMENT_LINE() or c_ak == TOK_COMMENT_BLOCK()
+            if c_ak == TOK_NEWLINE() or c_ak == TOK_SEMI() or c_ak == TOK_COMMENT_LINE() or c_ak == TOK_COMMENT_BLOCK() or c_ak == TOK_LBRACE() or (c_ak != TOK_STR() and toks[c_p0 + 3].tok_text == "{")
                 c_ok_after = 1
             end
         end
@@ -317,8 +317,13 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
     end
 
     x86_synth_skip_whitespace_tokens(toks, pos_box)
+    while_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        while_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
 
-    // Compile while body statements
+    // Compile while body statements (supports BOTH braced `{ ... }` AND indentation/`end`)
     while get(pos_box, 0) < toks.len()
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         cur_p = get(pos_box, 0)
@@ -326,25 +331,37 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
             break
         cur_t = toks[cur_p]
 
-        if x86_synth_is_block_end(toks, cur_p) == 1
-            break
-        if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-            break
+        if while_braced == 1
+            if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                list_set(pos_box, 0, cur_p + 1)
+                break
+            end
+        else
+            if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                break
+            end
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                break
+            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                break
+        end
 
         b_p = get(pos_box, 0)
         x86_synth_compile_statement(s, toks, pos_box)
         if get(pos_box, 0) == b_p
             list_set(pos_box, 0, b_p + 1)
 
-        if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
+        if while_braced == 0 and cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
             break
 
-    // Consume optional end / @end / শেষ
-    x86_synth_skip_whitespace_tokens(toks, pos_box)
-    cur_p = get(pos_box, 0)
-    if cur_p < toks.len()
-        if x86_synth_is_block_end(toks, cur_p) == 1
-            list_set(pos_box, 0, cur_p + 1)
+    // Consume optional end / @end / শেষ (only when not braced)
+    if while_braced == 0
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cur_p = get(pos_box, 0)
+        if cur_p < toks.len()
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                list_set(pos_box, 0, cur_p + 1)
+    end
 
     // Backpatch all continue jumps to loop_header (condition re-evaluation)
     ci = 0
@@ -495,6 +512,11 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
         x86_synth_emit_store_var(s, 0, elem_off)
 
         x86_synth_skip_whitespace_tokens(toks, pos_box)
+        fc_braced = 0
+        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+            fc_braced = 1
+            list_set(pos_box, 0, get(pos_box, 0) + 1)
+        end
         while get(pos_box, 0) < toks.len()
             x86_synth_skip_whitespace_tokens(toks, pos_box)
             cur_p = get(pos_box, 0)
@@ -502,27 +524,39 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
                 break
             end
             cur_t = toks[cur_p]
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                break
-            end
-            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-                break
+            if fc_braced == 1
+                if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                    list_set(pos_box, 0, cur_p + 1)
+                    break
+                end
+            else
+                if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                    break
+                end
+                if x86_synth_is_block_end(toks, cur_p) == 1
+                    break
+                end
+                if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                    break
+                end
             end
             b_p = get(pos_box, 0)
             x86_synth_compile_statement(s, toks, pos_box)
             if get(pos_box, 0) == b_p
                 list_set(pos_box, 0, b_p + 1)
             end
-            if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
+            if fc_braced == 0 and cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
                 break
             end
         end
 
-        x86_synth_skip_whitespace_tokens(toks, pos_box)
-        cur_p = get(pos_box, 0)
-        if cur_p < toks.len()
-            if x86_synth_is_block_end(toks, cur_p) == 1
-                list_set(pos_box, 0, cur_p + 1)
+        if fc_braced == 0
+            x86_synth_skip_whitespace_tokens(toks, pos_box)
+            cur_p = get(pos_box, 0)
+            if cur_p < toks.len()
+                if x86_synth_is_block_end(toks, cur_p) == 1
+                    list_set(pos_box, 0, cur_p + 1)
+                end
             end
         end
 
@@ -644,8 +678,13 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
     x86_synth_emit_u32(s, 0)
 
     x86_synth_skip_whitespace_tokens(toks, pos_box)
+    for_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        for_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
 
-    // Compile for body statements
+    // Compile for body statements (supports BOTH braced `{ ... }` AND indentation/`end`)
     while get(pos_box, 0) < toks.len()
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         cur_p = get(pos_box, 0)
@@ -653,25 +692,37 @@ fn x86_synth_compile_for s toks pos_box base_col base_line
             break
         cur_t = toks[cur_p]
 
-        if x86_synth_is_block_end(toks, cur_p) == 1
-            break
-        if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-            break
+        if for_braced == 1
+            if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                list_set(pos_box, 0, cur_p + 1)
+                break
+            end
+        else
+            if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                break
+            end
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                break
+            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                break
+        end
 
         b_p = get(pos_box, 0)
         x86_synth_compile_statement(s, toks, pos_box)
         if get(pos_box, 0) == b_p
             list_set(pos_box, 0, b_p + 1)
 
-        if cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
+        if for_braced == 0 and cur_t.tok_span.span_start_line == base_line and x86_synth_should_stop_inline(toks, pos_box, base_line) == 1
             break
 
-    // Consume optional end / @end / শেষ
-    x86_synth_skip_whitespace_tokens(toks, pos_box)
-    cur_p = get(pos_box, 0)
-    if cur_p < toks.len()
-        if x86_synth_is_block_end(toks, cur_p) == 1
-            list_set(pos_box, 0, cur_p + 1)
+    // Consume optional end / @end / শেষ (only when not braced)
+    if for_braced == 0
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cur_p = get(pos_box, 0)
+        if cur_p < toks.len()
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                list_set(pos_box, 0, cur_p + 1)
+    end
 
     // Loop latch: backpatch continue jumps to latch offset (variable increment)
     latch_off = s.synth_code.len()
@@ -793,8 +844,13 @@ fn x86_synth_compile_repeat s toks pos_box base_col base_line
     x86_synth_emit_u32(s, 0)
 
     x86_synth_skip_whitespace_tokens(toks, pos_box)
+    rep_braced = 0
+    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "{"))
+        rep_braced = 1
+        list_set(pos_box, 0, get(pos_box, 0) + 1)
+    end
 
-    // Compile repeat body statements
+    // Compile repeat body statements (supports BOTH braced `{ ... }` AND indentation/`end`)
     while get(pos_box, 0) < toks.len()
         x86_synth_skip_whitespace_tokens(toks, pos_box)
         cur_p = get(pos_box, 0)
@@ -803,11 +859,21 @@ fn x86_synth_compile_repeat s toks pos_box base_col base_line
         end
         cur_t = toks[cur_p]
 
-        if x86_synth_is_block_end(toks, cur_p) == 1
-            break
-        end
-        if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
-            break
+        if rep_braced == 1
+            if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                list_set(pos_box, 0, cur_p + 1)
+                break
+            end
+        else
+            if cur_t.tok_kind == TOK_RBRACE() or (cur_t.tok_kind != TOK_STR() and cur_t.tok_text == "}")
+                break
+            end
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                break
+            end
+            if cur_t.tok_span.span_start_line > base_line and cur_t.tok_span.span_start_col <= base_col
+                break
+            end
         end
 
         b_p = get(pos_box, 0)
@@ -816,17 +882,19 @@ fn x86_synth_compile_repeat s toks pos_box base_col base_line
             list_set(pos_box, 0, b_p + 1)
         end
 
-        if cur_t.tok_span.span_start_line == base_line
+        if rep_braced == 0 and cur_t.tok_span.span_start_line == base_line
             break
         end
     end
 
-    // Consume optional end / @end / শেষ
-    x86_synth_skip_whitespace_tokens(toks, pos_box)
-    cur_p = get(pos_box, 0)
-    if cur_p < toks.len()
-        if x86_synth_is_block_end(toks, cur_p) == 1
-            list_set(pos_box, 0, cur_p + 1)
+    // Consume optional end / @end / শেষ (only when not braced)
+    if rep_braced == 0
+        x86_synth_skip_whitespace_tokens(toks, pos_box)
+        cur_p = get(pos_box, 0)
+        if cur_p < toks.len()
+            if x86_synth_is_block_end(toks, cur_p) == 1
+                list_set(pos_box, 0, cur_p + 1)
+            end
         end
     end
 

@@ -1,13 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — BARE-METAL & UNIKERNEL BUILD TOOLING
-@! Module: tools/build_unikernel.lp
-@! Milestone: Grand Sovereign Pillar 5 — Bare-Metal Unikernel Generation
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features:
-@! 1. Serializes valid Multiboot2 Header (Magic 0xE85250D6, Arch 0, Length 44 bytes, Checksum)
-@! 2. Embeds x86-64 64-bit/32-bit compatible Entry Stub (COM1 UART 16550 & VGA 0xB8000)
-@! 3. Emits bootable binary via direct Linux kernel syscalls (sys_open, sys_write, sys_chmod 0755)
-@! 4. Provides CLI interface: build_unikernel <kernel_name> [output_image]
+@! @deprecated [LEGACY HOSTED UNIKERNEL BUILDER — USE `lipc --target=multiboot2-bare` / `elf-kernel` / `raw-bin`]
+@! Native bare-metal image emission is now built directly into Lipi's compiler pipeline
+@! across x86_64, ARM64 (`--target=arm64-elf-kernel`), and RISC-V 64 (`--target=riscv64-elf-kernel`).
+@! Retained strictly for backward compatibility with legacy hosted tests.
+@! Module: utso/os/build_unikernel.lp
 @! ============================================================================
 
 import "utso/os/boot/multiboot"

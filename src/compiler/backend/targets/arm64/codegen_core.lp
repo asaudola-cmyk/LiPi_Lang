@@ -49,6 +49,7 @@ struct Arm64LocalVar
     a64_lv_struct_type      // Struct type name string for accurate field offset resolution
     a64_lv_is_boxed         // 1 if heap-boxed in an 8-byte upvalue cell for mutable closure capture
     a64_lv_is_uint          // 1 if unsigned integer type (u8/u16/u32/u64/usize)
+    a64_lv_int_type         // Declared narrow int type ("u8","u16","u32","i8","i16","i32","byte") or ""
     a64_lv_prim_type        // Primitive type tag: "int", "float", "str", "dyn_tagged"
     a64_lv_tag_off          // Positive stack offset for runtime val_tag (0 if unused)
 
@@ -150,19 +151,67 @@ struct Arm64Synthesizer
     a64_print_tagged_off  // Byte offset of __print_tagged helper
     a64_needs_print_uint  // 1 if unsigned 64-bit __print_uint helper must be emitted
     a64_print_uint_off    // Byte offset of __print_uint helper
+    a64_needs_str_helpers // 1 if __int_to_str / __uint_to_str / __str_concat / __tagged_to_str must be emitted
+    a64_int_to_str_off    // Byte offset of __int_to_str helper
+    a64_uint_to_str_off   // Byte offset of __uint_to_str helper
+    a64_str_concat_off    // Byte offset of __str_concat helper
+    a64_tagged_to_str_off // Byte offset of __tagged_to_str helper
+    a64_ssa_lower_res     // Attached SsaLowerResult for direct ARM64 SSA CFG replacement
+    a64_ssa_replaced_cnt  // Count of functions replaced directly from SSA CFG
+    a64_ssa_replaced_bytes // Total native AAPCS64 bytes emitted directly from SSA CFG
 
 fn arm64_is_uint_type tname
-    if tname == "u8" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
+    if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
         return 1
     end
     return 0
 end
 
+fn arm64_is_narrow_int_type tname
+    if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "i8" or tname == "i16" or tname == "i32"
+        return 1
+    end
+    return 0
+end
+
+fn arm64_emit_truncate_int_width s reg tname
+    // WHY: Enforces exact ARM64 bit-width wrapping/sign-extension for local u8/u16/u32/i8/i16/i32.
+    if tname == "u8" or tname == "byte"
+        arm64_synth_emit32(s, 3544194048 | (reg << 5) | reg) // ubfm Xd, Xd, #0, #7 (uxtb)
+    elif tname == "u16"
+        arm64_synth_emit32(s, 3544202240 | (reg << 5) | reg) // ubfm Xd, Xd, #0, #15 (uxth)
+    elif tname == "u32"
+        arm64_synth_emit32(s, 3544218624 | (reg << 5) | reg) // ubfm Xd, Xd, #0, #31 (zero-extend 32-bit)
+    elif tname == "i8"
+        arm64_synth_emit32(s, 2470452224 | (reg << 5) | reg) // sbfm Xd, Xd, #0, #7 (sxtb)
+    elif tname == "i16"
+        arm64_synth_emit32(s, 2470460416 | (reg << 5) | reg) // sbfm Xd, Xd, #0, #15 (sxth)
+    elif tname == "i32"
+        arm64_synth_emit32(s, 2470476800 | (reg << 5) | reg) // sbfm Xd, Xd, #0, #31 (sxtw)
+    end
+    return 0
+end
+
 global g_arm64_freestanding = 0
+global g_arm64_base_vaddr = 4194304
+global g_arm64_code_file_off = 232
+global g_arm64_ssa_codegen = 0
 
 fn arm64_synth_set_freestanding flag
     g_arm64_freestanding = flag
     return flag
+
+fn arm64_synth_set_ssa_codegen flag
+    g_arm64_ssa_codegen = flag
+    return flag
+
+fn arm64_synth_set_base_vaddr vaddr
+    g_arm64_base_vaddr = vaddr
+    return vaddr
+
+fn arm64_synth_set_code_file_off off
+    g_arm64_code_file_off = off
+    return off
 
 fn arm64_verify_zero_linux_svcs code_bytes
     // WHY: Bare-Metal Purity Gate for ARM64 --freestanding: scans 32-bit aligned words
@@ -300,6 +349,14 @@ fn arm64_synth_new
     s.a64_print_tagged_off = 0
     s.a64_needs_print_uint = 0
     s.a64_print_uint_off = 0
+    s.a64_needs_str_helpers = 0
+    s.a64_int_to_str_off = 0
+    s.a64_uint_to_str_off = 0
+    s.a64_str_concat_off = 0
+    s.a64_tagged_to_str_off = 0
+    s.a64_ssa_lower_res = 0
+    s.a64_ssa_replaced_cnt = 0
+    s.a64_ssa_replaced_bytes = 0
     arm64_enum_register(s, "Ok", 1001, 1)
     arm64_enum_register(s, "Err", 1002, 1)
     arm64_enum_register(s, "Some", 1003, 1)
@@ -856,12 +913,12 @@ fn arm64_synth_emit_alloc_helper s
     // Inputs: X0 = requested byte size. Output: X0 = pointer to allocated memory.
     s.synth_alloc_off = s.synth_code.len()
 
-    // 0: add x0, x0, 15 -> round up
-    arm64_synth_emit32(s, 2432699392)
+    // 0: add x0, x0, #15 (0x91003C00 = 2432711680) -> round up for 16-byte alignment (fixes <13B zero-bump!)
+    arm64_synth_emit32(s, 2432711680)
     // 1: movz x1, 15, 0
     arm64_emit_movz_x(s, 1, 15, 0)
-    // 2: bic x0, x0, x1 -> align to 16 bytes
-    arm64_synth_emit32(s, 2317484032)
+    // 2: bic x0, x0, x1 (0x8A210000 = 2317418496) -> align to 16 bytes (rm=1, NOT rm=2!)
+    arm64_synth_emit32(s, 2317418496)
     // 3..6: movz/movk x1, RW_DATA_VADDR (_heap_ptr slot in strict RW segment, patched by linker)
     s.a64_alloc_rw_patch_off = s.synth_code.len()
     arm64_emit_movz_x(s, 1, 0, 0)
@@ -992,6 +1049,7 @@ fn arm64_synth_alloc_var s name
     lv.a64_lv_struct_type = ""
     lv.a64_lv_is_boxed = arm64_is_boxed_name(s, name)
     lv.a64_lv_is_uint = 0
+    lv.a64_lv_int_type = ""
     lv.a64_lv_prim_type = "int"
     lv.a64_lv_tag_off = 0
     push(s.synth_locals, lv)

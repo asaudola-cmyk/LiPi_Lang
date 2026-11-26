@@ -70,10 +70,11 @@ fn x86_silicon_optimize_code s
     //   2. Small-Buffer Guarded Mode (code_len <= 4096 with no pre-recorded sites): runs full
     //      relocation-guarded pattern scanning for unit tests and small kernels.
     stats = silicon_opt_stats_new()
-    code_len = s.synth_code.len()
+    code_len = buf_len(s.synth_code)
     if code_len < 2
         return stats
     end
+    cp = buf_ptr(s.synth_code)
 
     // Mode 1: Basic-block-verified O(K) peephole pass over recorded instruction boundaries
     if s.synth_peep_offsets != 0 and s.synth_peep_offsets.len() > 0
@@ -84,24 +85,24 @@ fn x86_silicon_optimize_code s
             pkind = s.synth_peep_kinds[pi]
             if pkind == 2 and poff + 3 < code_len
                 // Verify exact 4-byte `mov rax, [rbp - disp8]` (48 8B 45 disp8)
-                if s.synth_code[poff] == 72 and s.synth_code[poff + 1] == 139 and s.synth_code[poff + 2] == 69
-                    list_set(s.synth_code, poff, 144)
-                    list_set(s.synth_code, poff + 1, 144)
-                    list_set(s.synth_code, poff + 2, 144)
-                    list_set(s.synth_code, poff + 3, 144)
+                if mem_byte_read(cp, poff) == 72 and mem_byte_read(cp, poff + 1) == 139 and mem_byte_read(cp, poff + 2) == 69
+                    mem_byte_write(cp, poff, 144)
+                    mem_byte_write(cp, poff + 1, 144)
+                    mem_byte_write(cp, poff + 2, 144)
+                    mem_byte_write(cp, poff + 3, 144)
                     stats.opt_redundant_loads = stats.opt_redundant_loads + 1
                     stats.opt_total_saved_bytes = stats.opt_total_saved_bytes + 4
                 end
             elif pkind == 3 and poff + 6 < code_len
                 // Verify exact 7-byte `mov rax, [rbp - disp32]` (48 8B 85 disp32)
-                if s.synth_code[poff] == 72 and s.synth_code[poff + 1] == 139 and s.synth_code[poff + 2] == 133
-                    list_set(s.synth_code, poff, 144)
-                    list_set(s.synth_code, poff + 1, 144)
-                    list_set(s.synth_code, poff + 2, 144)
-                    list_set(s.synth_code, poff + 3, 144)
-                    list_set(s.synth_code, poff + 4, 144)
-                    list_set(s.synth_code, poff + 5, 144)
-                    list_set(s.synth_code, poff + 6, 144)
+                if mem_byte_read(cp, poff) == 72 and mem_byte_read(cp, poff + 1) == 139 and mem_byte_read(cp, poff + 2) == 133
+                    mem_byte_write(cp, poff, 144)
+                    mem_byte_write(cp, poff + 1, 144)
+                    mem_byte_write(cp, poff + 2, 144)
+                    mem_byte_write(cp, poff + 3, 144)
+                    mem_byte_write(cp, poff + 4, 144)
+                    mem_byte_write(cp, poff + 5, 144)
+                    mem_byte_write(cp, poff + 6, 144)
                     stats.opt_redundant_loads = stats.opt_redundant_loads + 1
                     stats.opt_total_saved_bytes = stats.opt_total_saved_bytes + 7
                 end
@@ -118,15 +119,15 @@ fn x86_silicon_optimize_code s
 
     i = 0
     while i < code_len - 1
-        b0 = s.synth_code[i]
-        b1 = s.synth_code[i + 1]
+        b0 = mem_byte_read(cp, i)
+        b1 = mem_byte_read(cp, i + 1)
 
         // ── 1. Pattern: push rax (0x50) followed immediately by pop rax (0x58) ────────
         // Replace with 2 NOPs (0x90 0x90). Zero stack access, zero latency on modern CPU frontends.
         if b0 == 80 and b1 == 88
             if x86_silicon_is_reloc_target(s, i, 2) == 0
-                list_set(s.synth_code, i, 144)
-                list_set(s.synth_code, i + 1, 144)
+                mem_byte_write(cp, i, 144)
+                mem_byte_write(cp, i + 1, 144)
                 stats.opt_push_pop_pairs = stats.opt_push_pop_pairs + 1
                 stats.opt_total_saved_bytes = stats.opt_total_saved_bytes + 2
                 i = i + 2
@@ -137,15 +138,15 @@ fn x86_silicon_optimize_code s
         // mov rax, [rbp - disp8]  (4 bytes: 0x48 0x8B 0x45 disp8)
         // Since %rax already contains the exact value stored, the second load is dead.
         if i + 7 < code_len
-            if b0 == 72 and b1 == 137 and s.synth_code[i + 2] == 69
-                disp8 = s.synth_code[i + 3]
-                if s.synth_code[i + 4] == 72 and s.synth_code[i + 5] == 139 and s.synth_code[i + 6] == 69 and s.synth_code[i + 7] == disp8
+            if b0 == 72 and b1 == 137 and mem_byte_read(cp, i + 2) == 69
+                disp8 = mem_byte_read(cp, i + 3)
+                if mem_byte_read(cp, i + 4) == 72 and mem_byte_read(cp, i + 5) == 139 and mem_byte_read(cp, i + 6) == 69 and mem_byte_read(cp, i + 7) == disp8
                     if x86_silicon_is_reloc_target(s, i + 4, 4) == 0
                         // Replace second load with 4 NOPs (144)
-                        list_set(s.synth_code, i + 4, 144)
-                        list_set(s.synth_code, i + 5, 144)
-                        list_set(s.synth_code, i + 6, 144)
-                        list_set(s.synth_code, i + 7, 144)
+                        mem_byte_write(cp, i + 4, 144)
+                        mem_byte_write(cp, i + 5, 144)
+                        mem_byte_write(cp, i + 6, 144)
+                        mem_byte_write(cp, i + 7, 144)
                         stats.opt_redundant_loads = stats.opt_redundant_loads + 1
                         stats.opt_total_saved_bytes = stats.opt_total_saved_bytes + 4
                         i = i + 8
@@ -155,21 +156,21 @@ fn x86_silicon_optimize_code s
         // mov [rbp - disp32], rax (7 bytes: 0x48 0x89 0x85 d0 d1 d2 d3)
         // mov rax, [rbp - disp32] (7 bytes: 0x48 0x8B 0x85 d0 d1 d2 d3)
         if i + 13 < code_len
-            if b0 == 72 and b1 == 137 and s.synth_code[i + 2] == 133
-                d0 = s.synth_code[i + 3]
-                d1 = s.synth_code[i + 4]
-                d2 = s.synth_code[i + 5]
-                d3 = s.synth_code[i + 6]
-                if s.synth_code[i + 7] == 72 and s.synth_code[i + 8] == 139 and s.synth_code[i + 9] == 133
-                    if s.synth_code[i + 10] == d0 and s.synth_code[i + 11] == d1 and s.synth_code[i + 12] == d2 and s.synth_code[i + 13] == d3
+            if b0 == 72 and b1 == 137 and mem_byte_read(cp, i + 2) == 133
+                d0 = mem_byte_read(cp, i + 3)
+                d1 = mem_byte_read(cp, i + 4)
+                d2 = mem_byte_read(cp, i + 5)
+                d3 = mem_byte_read(cp, i + 6)
+                if mem_byte_read(cp, i + 7) == 72 and mem_byte_read(cp, i + 8) == 139 and mem_byte_read(cp, i + 9) == 133
+                    if mem_byte_read(cp, i + 10) == d0 and mem_byte_read(cp, i + 11) == d1 and mem_byte_read(cp, i + 12) == d2 and mem_byte_read(cp, i + 13) == d3
                         if x86_silicon_is_reloc_target(s, i + 7, 7) == 0
-                            list_set(s.synth_code, i + 7, 144)
-                            list_set(s.synth_code, i + 8, 144)
-                            list_set(s.synth_code, i + 9, 144)
-                            list_set(s.synth_code, i + 10, 144)
-                            list_set(s.synth_code, i + 11, 144)
-                            list_set(s.synth_code, i + 12, 144)
-                            list_set(s.synth_code, i + 13, 144)
+                            mem_byte_write(cp, i + 7, 144)
+                            mem_byte_write(cp, i + 8, 144)
+                            mem_byte_write(cp, i + 9, 144)
+                            mem_byte_write(cp, i + 10, 144)
+                            mem_byte_write(cp, i + 11, 144)
+                            mem_byte_write(cp, i + 12, 144)
+                            mem_byte_write(cp, i + 13, 144)
                             stats.opt_redundant_loads = stats.opt_redundant_loads + 1
                             stats.opt_total_saved_bytes = stats.opt_total_saved_bytes + 7
                             i = i + 14
@@ -179,14 +180,14 @@ fn x86_silicon_optimize_code s
         // add rax, 0 (4 bytes: 0x48 0x83 0xC0 0x00)
         // sub rax, 0 (4 bytes: 0x48 0x83 0xE8 0x00)
         if i + 3 < code_len
-            if b0 == 72 and b1 == 131 and s.synth_code[i + 3] == 0
-                op_byte = s.synth_code[i + 2]
+            if b0 == 72 and b1 == 131 and mem_byte_read(cp, i + 3) == 0
+                op_byte = mem_byte_read(cp, i + 2)
                 if op_byte == 192 or op_byte == 232
                     if x86_silicon_is_reloc_target(s, i, 4) == 0
-                        list_set(s.synth_code, i, 144)
-                        list_set(s.synth_code, i + 1, 144)
-                        list_set(s.synth_code, i + 2, 144)
-                        list_set(s.synth_code, i + 3, 144)
+                        mem_byte_write(cp, i, 144)
+                        mem_byte_write(cp, i + 1, 144)
+                        mem_byte_write(cp, i + 2, 144)
+                        mem_byte_write(cp, i + 3, 144)
                         stats.opt_identity_arith = stats.opt_identity_arith + 1
                         stats.opt_total_saved_bytes = stats.opt_total_saved_bytes + 4
                         i = i + 4

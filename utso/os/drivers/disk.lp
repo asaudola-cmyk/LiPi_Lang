@@ -1,8 +1,9 @@
 @! ============================================================================
-@! LIPI OS - ATA PIO / AHCI SATA DISK DRIVER
-@! 100% Written in Pure Lipi Language
-@! Features: LBA48 Addressing, DMA Scatter/Gather, NCQ (Native Command Queuing),
-@! MBR Partition Table Parsing, GPT Header Validation & In-Memory Sector Store
+@! @deprecated [LEGACY HOSTED DISK SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal AHCI / NVMe / VirtIO block drivers, import
+@! `utso/silicon/ahci.lp`, `utso/silicon/nvme.lp`, or `utso/silicon/virtio.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
+@! Module: utso/os/drivers/disk.lp
 @! ============================================================================
 
 import "utso/os/syscalls"

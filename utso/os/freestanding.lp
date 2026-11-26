@@ -1,10 +1,9 @@
 @! ============================================================================
-@! LIPI UNIVERSAL ARCHITECTURE — THE EDGE (FREESTANDING #[NO_OS] ENGINE)
+@! @deprecated [LEGACY HOSTED FREESTANDING SIMULATOR — NOT REAL RING-0 HARDWARE]
+@! For real bare-metal `--freestanding` builds across x86_64/ARM64/RISC-V 64,
+@! import `utso/bare/core.lp` and `utso/silicon/{cpu,pl011,gic,opensbi,serial}.lp`.
+@! Retained strictly for backward compatibility with legacy hosted tests.
 @! Module: utso/os/freestanding.lp
-@! Milestone: Grand Sovereign Ecosystem — Full Deep Implementation
-@! 100% Pure Lipi Implementation — Zero External Dependencies
-@! Features: Freestanding #[no_os] RISC-V Engine, Fixed Memory Arena Allocator,
-@! Full Two-Finger Compaction & Defragmenting Garbage Collector for 2MB RAM IoT Chips
 @! ============================================================================
 
 import "utso/core/collections"

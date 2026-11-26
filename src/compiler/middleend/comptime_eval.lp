@@ -21,6 +21,7 @@ import "utso/string"
   ct_names: array
   ct_values: array
   ct_is_const: array
+  ct_map: any
 @end
 
 @fn comptime_env_new()
@@ -28,49 +29,23 @@ import "utso/string"
   env.ct_names = []
   env.ct_values = []
   env.ct_is_const = []
+  env.ct_map = dict()
   return env
 @end
 
 @fn comptime_env_set(env: ComptimeEnv, name, val)
-  // WHY: Search if variable already exists in comptime environment
-  i = 0
-  n = env.ct_names.len()
-  @while i < n
-    @if str_eq(env.ct_names[i], name) == 1
-      list_set(env.ct_values, i, val)
-      list_set(env.ct_is_const, i, 1)
-      return 1
-    @end
-    i = i + 1
-  @end
-  
-  // New binding
-  env.ct_names = env.ct_names.push(name)
-  env.ct_values = env.ct_values.push(val)
-  env.ct_is_const = env.ct_is_const.push(1)
+  // WHY: O(1) DICT0-backed constant environment avoids O(N^2) scanning across 12,000+ folded constants.
+  env.ct_map[name] = val
   return 1
 @end
 
 @fn comptime_env_has(env: ComptimeEnv, name)
-  i = 0
-  n = env.ct_names.len()
-  @while i < n
-    @if str_eq(env.ct_names[i], name) == 1
-      return 1
-    @end
-    i = i + 1
-  @end
-  return 0
+  return has_key(env.ct_map, name)
 @end
 
 @fn comptime_env_get(env: ComptimeEnv, name)
-  i = 0
-  n = env.ct_names.len()
-  @while i < n
-    @if str_eq(env.ct_names[i], name) == 1
-      return env.ct_values[i]
-    @end
-    i = i + 1
+  @if has_key(env.ct_map, name) == 1
+    return env.ct_map[name]
   @end
   return 0
 @end

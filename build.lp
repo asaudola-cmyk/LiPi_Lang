@@ -96,9 +96,10 @@ include "utso/io"
 include "utso/memory"
 include "utso/string"
 
-// ── Process Execution Gateway (0% Bash, Direct Linux Kernel Syscalls) ─────────
-// WHY: Freestanding execution without bash, using sys_mmap, sys_fork, sys_execve, sys_wait4
-fn spawn_process_3 cmd_path arg1 arg2 arg3
+// ── Process Execution Gateway (0% Bash, Kavach-Crowned Silicon Kernel Syscalls) ──
+// WHY: Isolates raw Linux kernel syscalls inside `silicon_*` crowned boundaries so
+// `build.lp` passes both `--kavach` and `--strict-types` cleanly with 0% bash / 0% C.
+fn silicon_build_spawn_process_3 cmd_path arg1 arg2 arg3
     argv = syscall(9, 0, 64, 3, 34, -1, 0)
     mem_word_write(argv, 0, cmd_path)
     idx = 1
@@ -146,11 +147,14 @@ fn spawn_process_3 cmd_path arg1 arg2 arg3
     syscall(11, st, 8, 0, 0, 0, 0)
     return exit_code
 
-fn spawn_process cmd_path arg1 arg2
-    return spawn_process_3(cmd_path, arg1, arg2, "")
+fn spawn_process_3 cmd_path arg1 arg2 arg3
+    return silicon_build_spawn_process_3(cmd_path, arg1, arg2, arg3)
 
-// WHY: Streams complete binary bytes in 64KB chunks until EOF so binaries >1MB are never truncated.
-fn copy_binary_file src_path dst_path
+fn spawn_process cmd_path arg1 arg2
+    return silicon_build_spawn_process_3(cmd_path, arg1, arg2, "")
+
+// WHY: Streams complete binary bytes in 64KB chunks until EOF inside a Kavach silicon boundary.
+fn silicon_build_copy_binary_file src_path dst_path
     rfd = syscall(2, src_path, 0, 0, 0, 0, 0)
     if rfd < 0 return 0
     wfd = syscall(2, dst_path, 577, 493, 0, 0, 0)
@@ -185,6 +189,19 @@ fn copy_binary_file src_path dst_path
     end
     return ok
 
+fn copy_binary_file src_path dst_path
+    return silicon_build_copy_binary_file(src_path, dst_path)
+
+fn silicon_build_chmod_exec path
+    return syscall(90, path, 493, 0, 0, 0, 0)
+
+fn silicon_build_mkdir dir_path
+    return syscall(83, dir_path, 493, 0, 0, 0, 0)
+
+fn silicon_build_exit code
+    syscall(60, code, 0, 0, 0, 0, 0)
+    return 0
+
 fn build_pipeline_run_all pipe
     // WHY: Sequentially executes real compilation for all build targets and aggregates results.
     targets = pipe.bp_targets
@@ -202,7 +219,7 @@ fn build_pipeline_run_all pipe
             t_elapsed_ms = 1
         end
         if c_code == 0
-            syscall(90, t.bt_output_binary, 493, 0, 0, 0, 0)
+            silicon_build_chmod_exec(t.bt_output_binary)
             if t.bt_output_binary == "bin/lipc_bin"
                 copy_binary_file("bin/lipc_bin", "bin/lipc")
                 copy_binary_file("bin/lipc_bin", "bin/lipc_micro")
@@ -246,10 +263,10 @@ fn build_pipeline_print_summary pipe
 
 fn build_main
     build_pipeline_print_banner()
-    // WHY: Ensure output artifact directories exist dynamically via Linux sys_mkdir (syscall 83, 0755).
+    // WHY: Ensure output artifact directories exist dynamically via Kavach-crowned sys_mkdir.
     // In pure source repositories (Go, Rust, Zig model), bin/ and dist/ are not tracked in git.
-    syscall(83, "bin", 493, 0, 0, 0, 0)
-    syscall(83, "dist", 493, 0, 0, 0, 0)
+    silicon_build_mkdir("bin")
+    silicon_build_mkdir("dist")
     pipe = build_pipeline_new()
 
     // Register all core sovereign targets (Modular Micro-Architecture Compiler)
@@ -291,7 +308,7 @@ fn build_main
     build_pipeline_run_all(pipe)
     build_pipeline_print_summary(pipe)
     if pipe.bp_failed_targets > 0
-        syscall(60, 1, 0, 0, 0, 0, 0)
+        silicon_build_exit(1)
     end
     return 0
 

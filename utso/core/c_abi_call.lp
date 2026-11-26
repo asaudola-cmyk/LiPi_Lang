@@ -169,6 +169,42 @@ fn c_abi_call fn_ptr int_args flt_args
     return [rax_res, xmm_res]
 end
 
+// Direct IEEE-754 f64-returning C-ABI wrapper (avoids manual mem_read/f64_from_bits boilerplate)
+fn c_abi_call_f64(fn_ptr, int_args, flt_args) -> f64
+    if fn_ptr <= 0 return 0.0 end
+    if c_abi_init_trampoline() <= 0 return 0.0 end
+    n_i = 0
+    if int_args != 0 n_i = len(int_args) end
+    n_f = 0
+    if flt_args != 0 n_f = len(flt_args) end
+    i_buf = 0
+    if n_i > 0
+        i_buf = alloc(n_i * 8)
+        ii = 0
+        while ii < n_i
+            mem_write(i_buf, ii * 8, get(int_args, ii))
+            ii = ii + 1
+        end
+    end
+    f_buf = 0
+    if n_f > 0
+        f_buf = alloc(n_f * 8)
+        fi = 0
+        while fi < n_f
+            mem_write(f_buf, fi * 8, get(flt_args, fi))
+            fi = fi + 1
+        end
+    end
+    out_xmm = alloc(8)
+    mem_write(out_xmm, 0, 0)
+    c_abi_invoke_full(fn_ptr, i_buf, n_i, f_buf, n_f, out_xmm)
+    f_res = mem_read_f64(out_xmm, 0)
+    free(out_xmm)
+    if i_buf != 0 free(i_buf) end
+    if f_buf != 0 free(f_buf) end
+    return f_res
+end
+
 // ৫. C-to-Lipi কলব্যাক ট্রাম্পোলাইন (Strict W^X Callback Bridge for Plain Functions & Closures!)
 // WHY: Plain Lipi functions already match SysV AMD64 ABI directly (zero overhead!).
 // Heap closures (`CLOS` magic 0x434C4F53) expect %r10 = closure_ptr; this allocates a

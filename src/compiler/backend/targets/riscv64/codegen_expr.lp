@@ -6,6 +6,78 @@
 
 // ── 10. Recursive-Descent Expression Synthesizer ───────────────────────────────
 
+fn riscv64_try_eval_const_arg0 toks start_p
+    // WHY: Evaluates compile-time constant integer expressions (including +, -, *, &, |, ^, <<, >>
+    // and unary '-') for the first argument of sbi_ecall* so Linux syscall smuggling such as
+    // `sbi_ecall(60 + 4, ...)` is caught statically by the Bare-Metal Purity Gate!
+    // Returns [is_const, val].
+    n = toks.len()
+    p = start_p
+    if p >= n return [0, 0] end
+    // Parse left-associative constant integer expression up to ',' or ')'
+    has_val = 0
+    acc = 0
+    pending_op = 0 // 0=none, 1=+, 2=-, 3=*, 4=|, 5=&, 6=^, 7=<<, 8=>>
+    while p < n
+        tk = toks[p]
+        k = tk.tok_kind
+        if k == TOK_COMMA() or k == TOK_RPAREN()
+            break
+        end
+        if k == TOK_LPAREN() or k == TOK_RPAREN()
+            // Bail out on nested parens -> treated as dynamic (runtime-guarded!)
+            return [0, 0]
+        end
+        if has_val == 0 or pending_op != 0
+            neg = 0
+            if k == TOK_MINUS() or (k != TOK_STR() and tk.tok_text == "-")
+                neg = 1
+                p = p + 1
+                if p >= n return [0, 0] end
+                tk = toks[p]
+                k = tk.tok_kind
+            end
+            if k != TOK_INT()
+                return [0, 0]
+            end
+            v = tk.tok_int_val
+            if neg == 1 v = 0 - v end
+            if has_val == 0
+                acc = v
+                has_val = 1
+            elif pending_op == 1 acc = acc + v
+            elif pending_op == 2 acc = acc - v
+            elif pending_op == 3 acc = acc * v
+            elif pending_op == 4 acc = acc | v
+            elif pending_op == 5 acc = acc & v
+            elif pending_op == 6 acc = acc ^ v
+            elif pending_op == 7 acc = acc << v
+            elif pending_op == 8 acc = acc >> v
+            end
+            pending_op = 0
+            p = p + 1
+        else
+            tx = tk.tok_text
+            if k == TOK_PLUS() or (k != TOK_STR() and tx == "+") pending_op = 1
+            elif k == TOK_MINUS() or (k != TOK_STR() and tx == "-") pending_op = 2
+            elif k == TOK_STAR() or (k != TOK_STR() and tx == "*") pending_op = 3
+            elif k == TOK_BAR() or (k != TOK_STR() and tx == "|") pending_op = 4
+            elif k == TOK_AMP() or (k != TOK_STR() and tx == "&") pending_op = 5
+            elif k == TOK_CARET() or (k != TOK_STR() and tx == "^") pending_op = 6
+            elif k == TOK_SHL() or (k != TOK_STR() and tx == "<<") pending_op = 7
+            elif k == TOK_SHR() or (k != TOK_STR() and tx == ">>") pending_op = 8
+            else
+                return [0, 0]
+            end
+            p = p + 1
+        end
+    end
+    if has_val == 1 and pending_op == 0
+        return [1, acc]
+    end
+    return [0, 0]
+end
+
 fn riscv64_synth_expr_primary s toks pos_box
     // WHY: Parses and synthesizes primary operands (integers, strings, identifiers, calls, grouping).
     // Result is always computed into primary register a0 (x10).
@@ -222,12 +294,21 @@ fn riscv64_synth_expr_primary s toks pos_box
         // Function call: name(...)
         if next_pos < toks.len() and toks[next_pos].tok_kind == TOK_LPAREN()
             list_set(pos_box, 0, next_pos + 1) // Consume '('
-            // Parse arguments and push to stack in order (also track arg types for tagged dict_set)
+            // Parse arguments and push to stack in order (track arg types, uint flags & static EID for OpenSBI gate)
             arg_count = 0
             arg_types = list()
+            arg_is_uints = list()
+            first_arg_is_int_lit = 0
+            first_arg_lit_val = 0
+            if var_name == "sbi_ecall" or var_name == "sbi_ecall_val" or var_name == "sbi_ecall_ret"
+                ce0 = riscv64_try_eval_const_arg0(toks, get(pos_box, 0))
+                first_arg_is_int_lit = ce0[0]
+                first_arg_lit_val = ce0[1]
+            end
             while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
                 riscv64_synth_compile_expr(s, toks, pos_box)
                 push(arg_types, s.rv_last_expr_type)
+                push(arg_is_uints, s.rv_last_is_uint)
                 riscv64_push_reg(s, 10) // Push a0
                 arg_count = arg_count + 1
                 cur_pos = get(pos_box, 0)
@@ -236,6 +317,77 @@ fn riscv64_synth_expr_primary s toks pos_box
 
             if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RPAREN()
                 list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume ')'
+
+            // ── Intrinsic 0: OpenSBI S-mode Supervisor Binary Interface (sbi_ecall / sbi_ecall_val / sbi_ecall_ret) ──
+            // RISC-V SBI Spec v0.2/v2.0: a7 = EID, a6 = FID, a0..a5 = args; returns sbiret{error=a0, value=a1}.
+            // Preceded by architectural HINT `addi x0, x0, 0x5B1` (0x5B100013) so the Bare-Metal Purity Gate
+            // distinguishes legitimate OpenSBI S-mode traps from forbidden Linux syscalls!
+            if var_name == "sbi_ecall" or var_name == "sbi_ecall_val" or var_name == "sbi_ecall_ret"
+                is_sbi_ret = 0
+                if var_name == "sbi_ecall_ret" is_sbi_ret = 1 end
+                if is_sbi_ret == 1
+                    // sbi_ecall_ret(eid, fid, out_val_ptr, a0..a5) — full 9-arg SBI ABI with clean excess pop
+                    while arg_count > 9
+                        riscv64_pop_reg(s, 5)
+                        arg_count = arg_count - 1
+                    end
+                    if arg_count >= 9 riscv64_pop_reg(s, 15) else riscv64_emit_addi(s, 15, 0, 0) end
+                    if arg_count >= 8 riscv64_pop_reg(s, 14) else riscv64_emit_addi(s, 14, 0, 0) end
+                    if arg_count >= 7 riscv64_pop_reg(s, 13) else riscv64_emit_addi(s, 13, 0, 0) end
+                    if arg_count >= 6 riscv64_pop_reg(s, 12) else riscv64_emit_addi(s, 12, 0, 0) end
+                    if arg_count >= 5 riscv64_pop_reg(s, 11) else riscv64_emit_addi(s, 11, 0, 0) end
+                    if arg_count >= 4 riscv64_pop_reg(s, 10) else riscv64_emit_addi(s, 10, 0, 0) end
+                    if arg_count >= 3 riscv64_pop_reg(s, 5) else riscv64_emit_addi(s, 5, 0, 0) end
+                    if arg_count >= 2 riscv64_pop_reg(s, 16) else riscv64_emit_addi(s, 16, 0, 0) end
+                    if arg_count >= 1 riscv64_pop_reg(s, 17) else riscv64_emit_addi(s, 17, 0, 0) end
+                    riscv64_push_reg(s, 5) // preserve out_val_ptr on stack across SBI ecall
+                else
+                    // sbi_ecall(eid, fid, a0..a5) / sbi_ecall_val(eid, fid, a0..a5)
+                    while arg_count > 8
+                        riscv64_pop_reg(s, 5)
+                        arg_count = arg_count - 1
+                    end
+                    if arg_count >= 8 riscv64_pop_reg(s, 15) else riscv64_emit_addi(s, 15, 0, 0) end
+                    if arg_count >= 7 riscv64_pop_reg(s, 14) else riscv64_emit_addi(s, 14, 0, 0) end
+                    if arg_count >= 6 riscv64_pop_reg(s, 13) else riscv64_emit_addi(s, 13, 0, 0) end
+                    if arg_count >= 5 riscv64_pop_reg(s, 12) else riscv64_emit_addi(s, 12, 0, 0) end
+                    if arg_count >= 4 riscv64_pop_reg(s, 11) else riscv64_emit_addi(s, 11, 0, 0) end
+                    if arg_count >= 3 riscv64_pop_reg(s, 10) else riscv64_emit_addi(s, 10, 0, 0) end
+                    if arg_count >= 2 riscv64_pop_reg(s, 16) else riscv64_emit_addi(s, 16, 0, 0) end
+                    if arg_count >= 1 riscv64_pop_reg(s, 17) else riscv64_emit_addi(s, 17, 0, 0) end
+                end
+                // WHY: Two-layer OpenSBI Linux-syscall purity shield:
+                //   Layer 1 (Compile-Time): Static/const-expr EID in Linux range [56..290] omits the
+                //     0x5B1 architectural HINT so riscv64_verify_zero_linux_ecalls rejects the binary.
+                //   Layer 2 (Hardware Runtime): Dynamic EIDs emit a 6-instruction range check rejecting
+                //     a7 in [56..290] with SBI_ERR_NOT_SUPPORTED (-2) before `ecall` can ever fire!
+                if first_arg_is_int_lit == 1 and first_arg_lit_val >= 56 and first_arg_lit_val <= 290
+                    riscv64_emit_ecall(s)
+                else
+                    if first_arg_is_int_lit == 0
+                        riscv64_emit_addi(s, 6, 17, 0 - 56)    // t1 = a7 - 56
+                        riscv64_emit_sltiu(s, 6, 6, 235)       // t1 = ((u64)(a7 - 56) < 235) -> [56..290]
+                        riscv64_emit_beq(s, 6, 0, 16)          // if safe (t1 == 0), branch to HINT + ecall
+                        riscv64_emit_addi(s, 10, 0, 0 - 2)     // a0 = SBI_ERR_NOT_SUPPORTED (-2)
+                        riscv64_emit_addi(s, 11, 0, 0)         // a1 = 0
+                        riscv64_emit_jal(s, 0, 12)             // skip HINT + ecall
+                    end
+                    riscv64_emit_addi(s, 0, 0, 1457) // architectural HINT: addi x0, x0, 0x5B1 (0x5B100013)
+                    riscv64_emit_ecall(s)
+                end
+                if is_sbi_ret == 1
+                    riscv64_pop_reg(s, 5)
+                    beq_sbi_null = s.rv_code.len()
+                    riscv64_emit_beq(s, 5, 0, 0)
+                    riscv64_emit_sd(s, 11, 5, 0) // *out_val_ptr = sbiret.value (a1)
+                    riscv64_synth_patch_b(s, beq_sbi_null, 0, 5, 0, s.rv_code.len())
+                elif var_name == "sbi_ecall_val"
+                    riscv64_emit_mv(s, 10, 11) // return sbiret.value in a0
+                end
+                s.rv_last_expr_type = "int"
+                s.rv_last_is_uint = 0
+                return 0
+            end
 
             // ── Intrinsic 1: syscall / সিসকল ─────────────────────────────────
             // Linux RISC-V 64: a7 = syscall number, a0..a5 = args 1..6
@@ -757,6 +909,36 @@ fn riscv64_synth_expr_primary s toks pos_box
                 end
                 return 0
             end
+            if var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "uint_to_str"
+                s.rv_needs_str_helpers = 1
+                s.rv_needs_alloc = 1
+                if arg_count >= 1
+                    while arg_count > 1
+                        riscv64_pop_reg(s, 5)
+                        arg_count = arg_count - 1
+                    end
+                    // Note: a1 (dyn_tagged tag) is untouched by riscv64_push_reg / riscv64_pop_reg!
+                    riscv64_pop_reg(s, 10)
+                    a0_t = "int"
+                    a0_u = 0
+                    if arg_types.len() >= 1 a0_t = arg_types[0] end
+                    if arg_is_uints.len() >= 1 a0_u = arg_is_uints[0] end
+                    if var_name == "uint_to_str" or a0_t == "uint" or a0_u == 1
+                        riscv64_synth_emit_call_helper(s, "__uint_to_str")
+                    elif a0_t == "str"
+                        // Already a cstr pointer in a0
+                    elif a0_t == "dyn_tagged"
+                        riscv64_synth_emit_call_helper(s, "__tagged_to_str")
+                    else
+                        riscv64_synth_emit_call_helper(s, "__int_to_str")
+                    end
+                else
+                    riscv64_emit_load_rodata_str(s, 10, "")
+                end
+                s.rv_last_expr_type = "str"
+                s.rv_last_is_uint = 0
+                return 0
+            end
             if var_name == "stack_trace" or var_name == "backtrace" or var_name == "স্ট্যাক_ট্রেস"
                 while arg_count > 0 riscv64_pop_reg(s, 11) arg_count = arg_count - 1 end
                 if s.rv_freestanding == 1
@@ -812,23 +994,46 @@ fn riscv64_synth_expr_primary s toks pos_box
                     riscv64_emit_addi(s, 10, 28, 0) // restore struct pointer into a0
                 return 0
 
-            // ── Normal Function Call: Pop arguments into LP64 registers a0..a7
-            if arg_count >= 8
-                riscv64_pop_reg(s, 17)
-            if arg_count >= 7
-                riscv64_pop_reg(s, 16)
-            if arg_count >= 6
-                riscv64_pop_reg(s, 15)
-            if arg_count >= 5
-                riscv64_pop_reg(s, 14)
-            if arg_count >= 4
-                riscv64_pop_reg(s, 13)
-            if arg_count >= 3
-                riscv64_pop_reg(s, 12)
-            if arg_count >= 2
-                riscv64_pop_reg(s, 11)
-            if arg_count >= 1
-                riscv64_pop_reg(s, 10)
+            // ── Normal Function Call: LP64 register args (a0..a7) + >8 stack args ([sp+0], [sp+8], ...) ──
+            rv_cleanup_bytes = 0
+            if arg_count <= 8
+                if arg_count >= 8
+                    riscv64_pop_reg(s, 17)
+                if arg_count >= 7
+                    riscv64_pop_reg(s, 16)
+                if arg_count >= 6
+                    riscv64_pop_reg(s, 15)
+                if arg_count >= 5
+                    riscv64_pop_reg(s, 14)
+                if arg_count >= 4
+                    riscv64_pop_reg(s, 13)
+                if arg_count >= 3
+                    riscv64_pop_reg(s, 12)
+                if arg_count >= 2
+                    riscv64_pop_reg(s, 11)
+                if arg_count >= 1
+                    riscv64_pop_reg(s, 10)
+            else
+                // WHY: All `arg_count` arguments were pushed 16B-apart; arg_k sits at [t0 + (arg_count - 1 - k)*16].
+                // Allocate 16B-aligned outgoing stack arg area below t0 so source and destination NEVER overlap!
+                n_stack = arg_count - 8
+                stack_pad = ((n_stack + 1) / 2) * 16
+                rv_cleanup_bytes = (arg_count * 16) + stack_pad
+                riscv64_emit_mv(s, 5, 2) // t0 = sp (saved push base)
+                ri_r = 0
+                while ri_r < 8
+                    riscv64_emit_ld(s, 10 + ri_r, 5, (arg_count - 1 - ri_r) * 16)
+                    ri_r = ri_r + 1
+                end
+                riscv64_emit_addi(s, 2, 2, 0 - stack_pad)
+                s.rv_sp_delta = s.rv_sp_delta + stack_pad
+                sj_r = 0
+                while sj_r < n_stack
+                    riscv64_emit_ld(s, 6, 5, (n_stack - 1 - sj_r) * 16)
+                    riscv64_emit_sd(s, 6, 2, sj_r * 8)
+                    sj_r = sj_r + 1
+                end
+            end
 
             // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
             lv_call = riscv64_find_local_var(s, var_name)
@@ -850,6 +1055,15 @@ fn riscv64_synth_expr_primary s toks pos_box
                 call_rel.rv_cr_patch_offset = call_off
                 call_rel.rv_cr_target_name = var_name
                 push(s.rv_call_relocs, call_rel)
+            end
+
+            if rv_cleanup_bytes > 0
+                riscv64_emit_addi(s, 2, 2, rv_cleanup_bytes)
+                if s.rv_sp_delta >= rv_cleanup_bytes
+                    s.rv_sp_delta = s.rv_sp_delta - rv_cleanup_bytes
+                else
+                    s.rv_sp_delta = 0
+                end
             end
 
             // WHY: Check callee-saved s10 (x26) exception flag after call returns. If active,
@@ -1114,25 +1328,72 @@ fn riscv64_synth_expr_add s toks pos_box
         op_kind = k
         list_set(pos_box, 0, pos + 1) // Consume operator
         lhs_ua = s.rv_last_is_uint
+        lhs_ta = s.rv_last_expr_type
 
-        // Push left operand (a0) to stack
+        // Push left operand (a0) to stack (plus a1 tag if dyn_tagged so str+dyn_tagged stays exact)
         riscv64_push_reg(s, 10)
+        if op_kind == TOK_PLUS() and lhs_ta == "dyn_tagged"
+            riscv64_push_reg(s, 11)
+        end
 
         // Evaluate right operand with multiplicative precedence into a0
         riscv64_synth_expr_mul(s, toks, pos_box)
         rhs_ua = s.rv_last_is_uint
+        rhs_ta = s.rv_last_expr_type
 
-        // Move right operand to a1, pop left operand back into a0
-        riscv64_emit_mv(s, 11, 10)
-        riscv64_pop_reg(s, 10)
-
-        if op_kind == TOK_PLUS()
+        if op_kind == TOK_PLUS() and (lhs_ta == "str" or rhs_ta == "str")
+            s.rv_needs_str_helpers = 1
+            s.rv_needs_alloc = 1
+            // Auto-stringify non-string RHS cleanly (prevents segfault on "val=" + int/u64/dyn_tagged)
+            if rhs_ta != "str"
+                if rhs_ta == "dyn_tagged"
+                    riscv64_synth_emit_call_helper(s, "__tagged_to_str")
+                elif rhs_ua == 1 or rhs_ta == "uint"
+                    riscv64_synth_emit_call_helper(s, "__uint_to_str")
+                else
+                    riscv64_synth_emit_call_helper(s, "__int_to_str")
+                end
+            end
+            if lhs_ta != "str"
+                // Save converted RHS string, pop LHS (+ tag if dyn_tagged), convert LHS, restore RHS into a1
+                riscv64_emit_mv(s, 11, 10) // a1 = rhs_str
+                if lhs_ta == "dyn_tagged"
+                    riscv64_pop_reg(s, 5) // t0 = lhs_tag
+                end
+                riscv64_pop_reg(s, 10) // a0 = lhs
+                riscv64_push_reg(s, 11) // save rhs_str on stack
+                if lhs_ta == "dyn_tagged"
+                    riscv64_emit_mv(s, 11, 5)
+                    riscv64_synth_emit_call_helper(s, "__tagged_to_str")
+                elif lhs_ua == 1 or lhs_ta == "uint"
+                    riscv64_synth_emit_call_helper(s, "__uint_to_str")
+                else
+                    riscv64_synth_emit_call_helper(s, "__int_to_str")
+                end
+                riscv64_pop_reg(s, 11) // a1 = rhs_str
+            else
+                riscv64_emit_mv(s, 11, 10)
+                riscv64_pop_reg(s, 10)
+            end
+            riscv64_synth_emit_call_helper(s, "__str_concat")
+            s.rv_last_is_uint = 0
+            s.rv_last_expr_type = "str"
+        elif op_kind == TOK_PLUS()
+            if lhs_ta == "dyn_tagged"
+                riscv64_pop_reg(s, 5) // discard saved lhs tag
+            end
+            riscv64_emit_mv(s, 11, 10)
+            riscv64_pop_reg(s, 10)
             riscv64_emit_add(s, 10, 10, 11)
+            if lhs_ua == 1 or rhs_ua == 1 s.rv_last_is_uint = 1 else s.rv_last_is_uint = 0 end
+            s.rv_last_expr_type = "int"
         elif op_kind == TOK_MINUS()
+            riscv64_emit_mv(s, 11, 10)
+            riscv64_pop_reg(s, 10)
             riscv64_emit_sub(s, 10, 10, 11)
+            if lhs_ua == 1 or rhs_ua == 1 s.rv_last_is_uint = 1 else s.rv_last_is_uint = 0 end
+            s.rv_last_expr_type = "int"
         end
-        if lhs_ua == 1 or rhs_ua == 1 s.rv_last_is_uint = 1 else s.rv_last_is_uint = 0 end
-        s.rv_last_expr_type = "int"
 
     return 0
 
