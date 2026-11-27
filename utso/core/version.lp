@@ -12,7 +12,7 @@ LICENSE          = "MIT"
 UNICODE_SUPPORT  = 1
 GLOBAL_STANDARD  = 1
 
-fn version_string = "Lipi " + VERSION_NAME + " (\" + CODENAME + "\")"
+fn version_string = "Lipi " + VERSION_NAME + " (" + CODENAME + ")"
 fn runtime_string = "lipc " + RUNTIME_VERSION + " (Native Sovereign Toolchain)"
 
 say "Lipi First 1.0 - Sovereign"

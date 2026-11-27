@@ -171,11 +171,13 @@ fn x86_synth_emit_silicon_atomics_and_fences s
     end
     x86_synth_emit_bytes(s, [72, 137, 240, 240, 72, 15, 193, 7, 195])
 
-    // fence_full() / mfence / cpu_fence
+    // fence_full() / mfence / cpu_fence / cpu_dmb / cpu_dsb (cross-arch barrier parity)
     off_mf = s.synth_code.len()
     x86_synth_register_helper_fn(s, "fence_full", off_mf)
     x86_synth_register_helper_fn(s, "mfence", off_mf)
     x86_synth_register_helper_fn(s, "cpu_fence", off_mf)
+    x86_synth_register_helper_fn(s, "cpu_dmb", off_mf)
+    x86_synth_register_helper_fn(s, "cpu_dsb", off_mf)
     x86_synth_register_helper_fn(s, "মেমরি_ব্যারিয়ার", off_mf)
     x86_synth_emit_bytes(s, [15, 174, 240, 195])
 
@@ -185,15 +187,17 @@ fn x86_synth_emit_silicon_atomics_and_fences s
     x86_synth_register_helper_fn(s, "sfence", off_sf)
     x86_synth_emit_bytes(s, [15, 174, 248, 195])
 
-    // fence_load() / lfence
+    // fence_load() / lfence / cpu_isb (cross-arch instruction barrier parity)
     off_lf = s.synth_code.len()
     x86_synth_register_helper_fn(s, "fence_load", off_lf)
     x86_synth_register_helper_fn(s, "lfence", off_lf)
+    x86_synth_register_helper_fn(s, "cpu_isb", off_lf)
     x86_synth_emit_bytes(s, [15, 174, 232, 195])
 
-    // cpu_pause()
+    // cpu_pause() / cpu_wfi() (cross-arch low-power wait parity)
     off_pause = s.synth_code.len()
     x86_synth_register_helper_fn(s, "cpu_pause", off_pause)
+    x86_synth_register_helper_fn(s, "cpu_wfi", off_pause)
     x86_synth_emit_bytes(s, [243, 144, 195])
 
     // cpu_nop() (cross-arch bare-metal parity with ARM64 & RISC-V 64)
@@ -318,10 +322,12 @@ fn x86_synth_emit_silicon_cpu_control s
     x86_synth_register_helper_fn(s, "cpu_wbinvd", off_wbinvd)
     x86_synth_emit_bytes(s, [15, 9, 195])
 
-    // cpu_rdtsc() -> u64 timestamp counter
+    // cpu_rdtsc() / cpu_rdcycle() / cpu_rdtime() -> u64 timestamp counter
     off_rdtsc = s.synth_code.len()
     x86_synth_register_helper_fn(s, "cpu_rdtsc", off_rdtsc)
     x86_synth_register_helper_fn(s, "rdtsc", off_rdtsc)
+    x86_synth_register_helper_fn(s, "cpu_rdcycle", off_rdtsc)
+    x86_synth_register_helper_fn(s, "cpu_rdtime", off_rdtsc)
     x86_synth_emit_bytes(s, [15, 49, 72, 193, 226, 32, 72, 9, 208, 195])
 
     // cpu_read_rflags() -> u64 RFLAGS
@@ -379,6 +385,19 @@ fn x86_synth_emit_silicon_cpu_control s
         93,                       // pop rbp
         195                       // ret
     ])
+
+    // Cross-arch firmware traps (ARM64 PSCI & RISC-V OpenSBI) return NOT_SUPPORTED (-2) on x86_64
+    // WHY: Allows multi-architecture utso/silicon/{gic,pl011,opensbi}.lp drivers to compile cleanly on x86_64 hosts.
+    off_fw_nosys = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "psci_call", off_fw_nosys)
+    x86_synth_register_helper_fn(s, "sbi_ecall", off_fw_nosys)
+    x86_synth_register_helper_fn(s, "sbi_ecall_val", off_fw_nosys)
+    x86_synth_emit_bytes(s, [72, 199, 192, 254, 255, 255, 255, 195]) // mov rax, -2; ret
+
+    // sbi_ecall_ret(eid=%rdi, fid=%rsi, out_val_ptr=%rdx, ...) -> zero *out_val_ptr if non-null, return -2
+    off_sbi_ret_nosys = s.synth_code.len()
+    x86_synth_register_helper_fn(s, "sbi_ecall_ret", off_sbi_ret_nosys)
+    x86_synth_emit_bytes(s, [72, 133, 210, 116, 7, 72, 199, 2, 0, 0, 0, 0, 72, 199, 192, 254, 255, 255, 255, 195])
     return 0
 
 fn x86_synth_emit_all_silicon_helpers s

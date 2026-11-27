@@ -143,8 +143,6 @@ import "utso/core/string"
 
 @fn dns_decompress_label(data: array, offset: i64) -> string
   return dns_decompress_label_bounded(data, offset, 0)
-
-  return domain
 @end
 
 @! ----------------------------------------------------------------------------
