@@ -302,7 +302,7 @@ fn cli_resolve_target_spec t_arg cur_arch cur_fmt
     elif t_arg == "elf-kernel" or t_arg == "kernel" or t_arg == "freestanding"
         return [cur_arch, FORMAT_ELF_KERNEL(), 1]
     elif t_arg == "obj" or t_arg == "object" or t_arg == "reloc"
-        return [TARGET_ID_X86_64(), FORMAT_OBJ(), 1]
+        return [cur_arch, FORMAT_OBJ(), 1]
     elif t_arg == "macos-arm64" or t_arg == "darwin-arm64" or t_arg == "apple-silicon"
         return [TARGET_ID_ARM64(), FORMAT_MACHO(), 1]
     elif t_arg == "macos-x86_64" or t_arg == "darwin-x86_64"

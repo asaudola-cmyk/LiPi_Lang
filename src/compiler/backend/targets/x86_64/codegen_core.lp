@@ -25,6 +25,7 @@ import "utso/string"
 
 import "compiler/frontend/lexer/token_kind"
 import "compiler/frontend/lexer/token"
+import "compiler/frontend/lexer/tokenizer"
 
 // ── 1. Data Models ────────────────────────────────────────────────────────────
 
@@ -60,6 +61,10 @@ struct X86Function
     fn_section          // Optional custom ELF/PE section name from `@section(".boot")` ("" for default .text)
     fn_ret_explicit     // 1 if return type was explicitly declared via `-> Type`, 0 if inferred
     fn_is_async         // 1 if declared `async fn`, 0 for regular function
+    fn_min_params       // Minimum required params when defaults/variadics present (-1 if same as fn_param_count)
+    fn_variadic_idx     // 0-based index of variadic `...` param (-1 if non-variadic)
+    fn_default_starts   // Parallel list of token start indices for default param exprs (-1 if required)
+    fn_default_ends     // Parallel list of token end indices for default param exprs (-1 if required)
 
 // WHY: Records an unresolved 32-bit relative call displacement
 struct X86CallReloc
@@ -84,6 +89,7 @@ struct X86StructDef
     sd_is_union         // 1 if `union` (all fields share offset 0, size = max field size), 0 if `struct`
     sd_field_bit_offsets // Parallel list of bit offsets within storage unit (0 if not bitfield)
     sd_field_bit_widths  // Parallel list of bit widths 1..64 (0 if not bitfield)
+    sd_type_id           // Deterministic 31-bit FNV-1a Sovereign dyn-Trait runtime type tag (| 1)
 
 // WHY: Models Algebraic Data Type (Tagged Enum) & C-style Integer Enum schemas
 struct X86EnumDef
@@ -219,6 +225,7 @@ struct X86Synthesizer
     synth_async_sched_slot_off // Byte offset of _lipi_async_sched_slot helper for GC-traced async scheduler
     synth_pending_fn_async     // 1 when `async` modifier precedes next fn definition
     synth_pending_fn_base_col  // Preserved column of `async` modifier for indented block boundaries
+    synth_source_toks          // Full module token stream (for default-arg & mono evaluation inside ${expr} sub-streams)
 
 global g_x86_strict_types = 0
 global g_x86_freestanding = 0
@@ -366,6 +373,19 @@ fn x86_synth_hash4096 name
         h = ((h ^ mem_byte_read(name, i)) * 16777619) & 2147483647
         i = i + 1
     return h & 4095
+
+fn x86_synth_type_tag_hash name
+    // WHY: Deterministic 31-bit non-zero type tag matching ssa_lowerer.lp OP_STRUCT_NEW
+    // so both SSA-compiled and x86_synth-compiled struct constructors carry identical [ptr - 32] tags.
+    h = 2166136261
+    n = len(name)
+    i = 0
+    while i < n
+        h = ((h ^ mem_byte_read(name, i)) * 16777619) & 2147483647
+        i = i + 1
+    end
+    return h | 1
+end
 
 fn x86_synth_make_buckets_4096
     // WHY: Pre-allocates 4096 zero slots lazily populated on first bucket collision.
@@ -550,6 +570,7 @@ fn x86_synth_new
     s.synth_async_sched_slot_off = 0
     s.synth_pending_fn_async = 0
     s.synth_pending_fn_base_col = 0
+    s.synth_source_toks = 0
     return s
 
 fn x86_synth_is_uint_type tname
@@ -3629,6 +3650,8 @@ fn x86_synth_parse_type_list toks pos_box require_lparen
         elif x86_synth_is_ident_token(tk) == 1
             if cur_item == "*" and (tx == "const" or tx == "mut")
                 cur_item = cur_item + tx + " "
+            elif cur_item == "" and tx == "dyn"
+                cur_item = "dyn "
             else
                 cur_item = cur_item + tx
             end
@@ -3693,6 +3716,10 @@ fn x86_synth_parse_type_expr toks pos_box
     end
     if x86_synth_is_ident_token(toks[p].tok_kind) == 0 return "" end
     base_t = toks[p].tok_text
+    if base_t == "dyn" and p + 1 < toks.len() and x86_synth_is_ident_token(toks[p + 1].tok_kind) == 1
+        list_set(pos_box, 0, p + 2)
+        return "dyn " + toks[p + 1].tok_text
+    end
     list_set(pos_box, 0, p + 1)
     targs = x86_synth_parse_type_list(toks, pos_box, 0)
     if targs != 0 and targs.len() > 0
@@ -3739,6 +3766,7 @@ fn x86_synth_specialize_struct s base_sdef targs
     ns.sd_field_types = new_ftypes
     ns.sd_is_packed = base_sdef.sd_is_packed
     ns.sd_align = base_sdef.sd_align
+    ns.sd_type_id = x86_synth_type_tag_hash(mangled)
     x86_synth_compute_struct_layout(s, ns)
     push(s.synth_structs, ns)
     return ns
@@ -4220,6 +4248,7 @@ fn x86_synth_compile_struct_def s toks pos_box base_col base_line
     sdef.sd_align = s.synth_pending_struct_align
     sdef.sd_is_union = is_union_def
     sdef.sd_field_bit_widths = field_bit_widths
+    sdef.sd_type_id = x86_synth_type_tag_hash(sname)
     s.synth_pending_struct_packed = 0
     s.synth_pending_struct_align = 0
     x86_synth_compute_struct_layout(s, sdef)

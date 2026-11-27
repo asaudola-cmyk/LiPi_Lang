@@ -34,8 +34,9 @@ fn lpo_emit_str_bytes arr s
     push(arr, 0)
     return 0
 
-fn lpo_emit_elf64_relocatable_full code_bytes rodata_bytes bss_size fn_items call_relocs str_relocs rw_patch_offs rw_patch_targets output_path
-    // WHY: Emits a 100% standards-compliant ELF64 ET_REL (.o) object file containing:
+fn lpo_emit_elf64_relocatable_arch code_bytes rodata_bytes bss_size fn_items call_relocs str_relocs rw_patch_offs rw_patch_targets e_machine output_path
+    // WHY: Emits a 100% standards-compliant ELF64 ET_REL (.o) object file for x86_64 (62),
+    // AArch64 (183), or RISC-V (243) containing:
     //   Sec 0: NULL
     //   Sec 1: .text (PROGBITS, AX)
     //   Sec 2: .rodata (PROGBITS, A)
@@ -283,8 +284,8 @@ fn lpo_emit_elf64_relocatable_full code_bytes rodata_bytes bss_size fn_items cal
     push(bin, 127) push(bin, 69) push(bin, 76) push(bin, 70)
     push(bin, 2) push(bin, 1) push(bin, 1) push(bin, 0)
     bare_pad_to(bin, 16)
-    bare_push_u16(bin, 1)       // ET_REL (1 = relocatable .o object!)
-    bare_push_u16(bin, 62)      // EM_X86_64
+    bare_push_u16(bin, 1)         // ET_REL (1 = relocatable .o object!)
+    bare_push_u16(bin, e_machine) // EM_X86_64 (62) / EM_AARCH64 (183) / EM_RISCV (243)
     bare_push_u32(bin, 1)       // EV_CURRENT
     bare_push_u64(bin, 0)       // e_entry = 0
     bare_push_u64(bin, 0)       // e_phoff = 0
@@ -352,8 +353,12 @@ fn lpo_emit_elf64_relocatable_full code_bytes rodata_bytes bss_size fn_items cal
     res.ow_error_msg = ""
     return res
 
+fn lpo_emit_elf64_relocatable_full code_bytes rodata_bytes bss_size fn_items call_relocs str_relocs rw_patch_offs rw_patch_targets output_path
+    return lpo_emit_elf64_relocatable_arch(code_bytes, rodata_bytes, bss_size, fn_items, call_relocs, str_relocs, rw_patch_offs, rw_patch_targets, 62, output_path)
+end
+
 fn lpo_emit_elf64_relocatable code_bytes rodata_bytes bss_size fn_items call_relocs output_path
-    return lpo_emit_elf64_relocatable_full(code_bytes, rodata_bytes, bss_size, fn_items, call_relocs, 0, 0, 0, output_path)
+    return lpo_emit_elf64_relocatable_arch(code_bytes, rodata_bytes, bss_size, fn_items, call_relocs, 0, 0, 0, 62, output_path)
 end
 
 // ── DWARF Call Frame Information (.eh_frame CIE + per-function FDEs) ──────────

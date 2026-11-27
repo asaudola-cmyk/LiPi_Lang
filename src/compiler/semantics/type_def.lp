@@ -84,6 +84,8 @@ import "utso/string"
   ty_align_bytes: i64
   ty_is_mut: i64
   ty_generic_var_id: i64
+  ty_min_params: i64
+  ty_is_variadic: i64
 @end
 
 @fn type_def_new(id, kind, name, size_bytes, align_bytes)
@@ -101,6 +103,8 @@ import "utso/string"
   ty.ty_align_bytes = align_bytes
   ty.ty_is_mut = 0
   ty.ty_generic_var_id = 0
+  ty.ty_min_params = -1
+  ty.ty_is_variadic = 0
   return ty
 @end
 
@@ -109,6 +113,7 @@ import "utso/string"
 @struct TypeRegistry
   tr_types: array
   tr_next_id: i64
+  tr_trait_impls: i64
 @end
 
 @fn type_registry_new()
@@ -116,6 +121,7 @@ import "utso/string"
   reg = TypeRegistry()
   reg.tr_types = []
   reg.tr_next_id = 9
+  reg.tr_trait_impls = dict()
 
   // Index 0: Invalid / Null type placeholder
   null_t = type_def_new(0, 0, "<invalid>", 0, 1)

@@ -390,8 +390,9 @@ fn x86_synth_interp_can_resolve s inner
     return 0
 
 fn x86_synth_emit_interp_str s txt
-    // WHY: Safely expands ONLY `{ident}` placeholders whose identifier resolves in scope.
-    // CSS/JS/JSON strings like "body {margin:0}" or "{return 1}" stay 100% literal in .rodata!
+    // WHY: Safely expands `{ident}` placeholders whose identifier resolves in scope AND
+    // `${expr}` arbitrary expressions (e.g. "sum=${x + 1}"), while keeping CSS/JS/JSON strings
+    // ("body {margin:0}") and LSP snippets ("${1:name}") 100% literal in .rodata!
     tlen = len(txt)
     chunk_types = list()
     chunk_vals = list()
@@ -400,6 +401,57 @@ fn x86_synth_emit_interp_str s txt
     i = 0
     while i < tlen
         ch = char_at(txt, i)
+        if ch == "$" and i + 2 < tlen and char_at(txt, i + 1) == "{"
+            // Skip LSP snippet placeholders `${<digits>:...}`
+            sn_p = i + 2
+            sn_dig = 0
+            while sn_p < tlen
+                sn_b = mem_byte_read(txt, sn_p)
+                if sn_b >= 48 and sn_b <= 57
+                    sn_dig = 1
+                    sn_p = sn_p + 1
+                else
+                    break
+                end
+            end
+            is_lsp_snip = 0
+            if sn_dig == 1 and sn_p < tlen and mem_byte_read(txt, sn_p) == 58
+                is_lsp_snip = 1
+            end
+            if is_lsp_snip == 0
+                j = i + 2
+                bd = 1
+                found_dclose = 0
+                while j < tlen
+                    cj = char_at(txt, j)
+                    if cj == "{"
+                        bd = bd + 1
+                    elif cj == "}"
+                        bd = bd - 1
+                        if bd == 0
+                            found_dclose = 1
+                            break
+                        end
+                    elif cj == "\n" or cj == "\r"
+                        break
+                    end
+                    j = j + 1
+                end
+                if found_dclose == 1 and j > i + 2
+                    inner_e = str_sub(txt, i + 2, j)
+                    if len(cur_lit) > 0
+                        push(chunk_types, 0)
+                        push(chunk_vals, cur_lit)
+                        cur_lit = ""
+                    end
+                    push(chunk_types, 2)
+                    push(chunk_vals, inner_e)
+                    has_any_var = 1
+                    i = j + 1
+                    continue
+                end
+            end
+        end
         if ch == "{"
             j = i + 1
             found_close = 0
@@ -450,6 +502,22 @@ fn x86_synth_emit_interp_str s txt
         end
         if chunk_types[ci] == 0
             x86_synth_interp_load_rodata(s, chunk_vals[ci])
+        elif chunk_types[ci] == 2
+            sub_toks = lexer_tokenize(chunk_vals[ci], "<interp>")
+            sub_box = [0]
+            x86_synth_compile_expr(s, sub_toks, sub_box)
+            expr_et = s.synth_last_expr_type
+            x86_synth_emit_bytes(s, [72, 137, 199]) // mov rdi, rax
+            if expr_et == "float"
+                x86_synth_emit_call_helper(s, "_lipi_float_to_str")
+            elif expr_et == "uint"
+                x86_synth_emit_call_helper(s, "_lipi_uint_to_str")
+            elif expr_et == "dyn_tagged"
+                x86_synth_emit_bytes(s, [72, 137, 214]) // mov rsi, rdx
+                x86_synth_emit_call_helper(s, "_lipi_ensure_str_tagged")
+            else
+                x86_synth_emit_call_helper(s, "_lipi_ensure_str")
+            end
         else
             vname = chunk_vals[ci]
             lv = x86_synth_find_local_var(s, vname)
@@ -489,6 +557,8 @@ fn x86_synth_emit_interp_str s txt
         end
         ci = ci + 1
     end
+    s.synth_last_expr_type = "str"
+    s.synth_last_struct = ""
     return 0
 
 fn x86_synth_expr_primary s toks pos_box
@@ -1113,6 +1183,7 @@ fn x86_synth_expr_primary s toks pos_box
                     ki_init = ki_init + 1
                 end
                 anon_sdef.sd_field_types = anon_types
+                anon_sdef.sd_type_id = x86_synth_type_tag_hash(anon_sdef.sd_name)
                 push(s.synth_structs, anon_sdef)
                 sname = anon_sdef.sd_name
                 is_anon_s = 1
@@ -1148,6 +1219,15 @@ fn x86_synth_expr_primary s toks pos_box
         // Allocate heap memory for struct: _lipi_alloc_helper(alloc_sz)
         x86_synth_emit_mov_rdi_imm64(s, alloc_sz)
         x86_synth_emit_call_alloc(s)
+        if s.synth_freestanding == 0 and sname != ""
+            rec_sd = x86_synth_find_struct(s, sname)
+            if rec_sd != 0 and rec_sd.sd_type_id > 0
+                rec_tag = (1415139397 << 32) | rec_sd.sd_type_id
+                x86_synth_emit_bytes(s, [73, 187]) // movabs r11, rec_tag
+                x86_synth_emit_u64(s, rec_tag)
+                x86_synth_emit_bytes(s, [76, 137, 88, 224]) // mov [rax - 32], r11
+            end
+        end
 
         // Preserve base struct pointer on stack across field evaluations: push rax (0x50)
         x86_synth_emit_byte(s, 80)
@@ -1796,6 +1876,12 @@ fn x86_synth_expr_primary s toks pos_box
                         end
                         x86_synth_emit_mov_rdi_imm64(s, alloc_sz)
                         x86_synth_emit_call_alloc(s)
+                        if s.synth_freestanding == 0 and sdef.sd_type_id > 0
+                            sd_tag = (1415139397 << 32) | sdef.sd_type_id
+                            x86_synth_emit_bytes(s, [73, 187]) // movabs r11, sd_tag
+                            x86_synth_emit_u64(s, sd_tag)
+                            x86_synth_emit_bytes(s, [76, 137, 88, 224]) // mov [rax - 32], r11
+                        end
                         if arg_count > 0
                             // Preserve struct pointer in %r10 across argument pops: mov r10, rax
                             x86_synth_emit_byte(s, 73)  // REX.W + REX.B (0x49)
@@ -1847,18 +1933,90 @@ fn x86_synth_expr_primary s toks pos_box
                             x86_synth_emit_indirect_call_rax(s)
                             x86_synth_emit_cleanup_stack_args(s, fn_cleanup)
                         else
-                            if s.synth_strict_types == 1
-                                arity_fn = x86_synth_find_fn_first(s, var_name)
-                                if arity_fn != 0 and arity_fn.fn_param_count >= 0 and arg_count != arity_fn.fn_param_count
-                                    say "❌ [Strict Arity Error]: Function '" + var_name + "' expects " + str(arity_fn.fn_param_count) + " argument(s), got " + str(arg_count) + " at line " + str(t.tok_span.span_start_line)
+                            orig_fn = x86_synth_find_fn_first(s, var_name)
+                            fn_is_var = 0
+                            fn_vidx = 0
+                            fn_min_req = 0 - 1
+                            if orig_fn != 0
+                                if orig_fn.fn_variadic_idx > 0
+                                    fn_is_var = 1
+                                    fn_vidx = orig_fn.fn_variadic_idx - 1
+                                end
+                                if orig_fn.fn_default_starts != 0 or fn_is_var == 1
+                                    fn_min_req = orig_fn.fn_min_params
+                                else
+                                    fn_min_req = orig_fn.fn_param_count
+                                end
+                            end
+                            if s.synth_strict_types == 1 and orig_fn != 0 and orig_fn.fn_param_count >= 0
+                                arity_bad = 0
+                                if fn_is_var == 1
+                                    if arg_count < fn_min_req arity_bad = 1 end
+                                else
+                                    if arg_count < fn_min_req or arg_count > orig_fn.fn_param_count arity_bad = 1 end
+                                end
+                                if arity_bad == 1
+                                    say "❌ [Strict Arity Error]: Function '" + var_name + "' expects " + str(fn_min_req) + ".." + str(orig_fn.fn_param_count) + " argument(s), got " + str(arg_count) + " at line " + str(t.tok_span.span_start_line)
                                     exit(1)
                                 end
+                            end
+                            // Fill missing default parameter values before variadic packing / call pop
+                            if orig_fn != 0 and orig_fn.fn_default_starts != 0
+                                def_limit = orig_fn.fn_param_count
+                                if fn_is_var == 1
+                                    def_limit = fn_vidx
+                                end
+                                while arg_count < def_limit and arg_count < orig_fn.fn_default_starts.len()
+                                    d_tok_st = orig_fn.fn_default_starts[arg_count]
+                                    if d_tok_st >= 0
+                                        def_toks = s.synth_source_toks
+                                        if def_toks == 0
+                                            def_toks = toks
+                                        end
+                                        def_box = [d_tok_st]
+                                        x86_synth_compile_expr(s, def_toks, def_box)
+                                        push(arg_expr_types, s.synth_last_expr_type)
+                                        push(arg_struct_types, s.synth_last_struct)
+                                        x86_synth_emit_byte(s, 80) // push rax (default arg value)
+                                        arg_count = arg_count + 1
+                                    else
+                                        break
+                                    end
+                                end
+                            end
+                            // Pack trailing variadic arguments into a first-class GC-traced list
+                            if fn_is_var == 1 and arg_count >= fn_vidx
+                                v_cnt = arg_count - fn_vidx
+                                if v_cnt == 0
+                                    x86_synth_emit_bytes(s, [49, 255, 49, 246]) // xor edi, edi; xor esi, esi
+                                    x86_synth_emit_call_helper(s, "_lipi_list_create")
+                                    x86_synth_emit_byte(s, 80) // push rax (empty variadic list)
+                                else
+                                    x86_synth_emit_mov_rdi_imm64(s, v_cnt)
+                                    x86_synth_emit_bytes(s, [49, 246]) // xor esi, esi
+                                    x86_synth_emit_call_helper(s, "_lipi_list_create")
+                                    x86_synth_emit_bytes(s, [73, 137, 194]) // mov r10, rax
+                                    x86_synth_emit_bytes(s, [76, 139, 88, 16]) // mov r11, [rax + 16]
+                                    vi = v_cnt - 1
+                                    while vi >= 0
+                                        x86_synth_emit_byte(s, 88) // pop rax
+                                        v_off = vi * 8
+                                        if v_off < 128
+                                            x86_synth_emit_bytes(s, [73, 137, 67, v_off]) // mov [r11 + disp8], rax
+                                        else
+                                            x86_synth_emit_bytes(s, [73, 137, 131])
+                                            x86_synth_emit_u32(s, v_off)
+                                        end
+                                        vi = vi - 1
+                                    end
+                                    x86_synth_emit_bytes(s, [65, 82]) // push r10 (variadic list ptr)
+                                end
+                                arg_count = fn_vidx + 1
                             end
                             // WHY: Sovereign Compile-Time Monomorphization (0% boxing, 0% runtime overhead!).
                             // Supports BOTH explicit/inferred Generic Functions (`fn pair_sum<T>(a: T, b: T) -> T`)
                             // AND untyped Float Monomorphization (`fn add(x, y)` called with float args).
                             call_target_name = var_name
-                            orig_fn = x86_synth_find_fn_first(s, var_name)
                             did_generic_mono = 0
                             if orig_fn != 0 and orig_fn.fn_tok_pos >= 0 and orig_fn.fn_type_params != 0 and orig_fn.fn_type_params.len() > 0 and orig_fn.fn_param_count == arg_count
                                 g_targs = call_targs

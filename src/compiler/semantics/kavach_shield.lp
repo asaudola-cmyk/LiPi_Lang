@@ -23,11 +23,13 @@ import "src/compiler/frontend/ast/ast_node"
 struct KavachChecker
   kv_error_count
   kv_first_msg
+  kv_utso_ranges
 
 fn kavach_checker_new
   kv = KavachChecker()
   kv.kv_error_count = 0
   kv.kv_first_msg = ""
+  kv.kv_utso_ranges = 0
   return kv
 
 fn kavach_record_error kv fn_name call_name
@@ -37,51 +39,43 @@ fn kavach_record_error kv fn_name call_name
   kv.kv_error_count = kv.kv_error_count + 1
   return 0
 
+fn kavach_line_in_utso line_no utso_ranges
+  // WHY: Verifies whether a 1-based bundled source line originates from an authentic `utso/`
+  // stdlib file recorded by the driver bundler, preventing user-space function name spoofing.
+  if utso_ranges == 0 or line_no <= 0
+    return 0
+  end
+  ri = 0
+  rlen = utso_ranges.len()
+  while ri + 1 < rlen
+    if line_no >= utso_ranges[ri] and line_no <= utso_ranges[ri + 1]
+      return 1
+    end
+    ri = ri + 2
+  end
+  return 0
+end
+
+fn kavach_node_in_utso(node: ASTNode, utso_ranges)
+  if node == 0 or utso_ranges == 0
+    return 0
+  end
+  sp: SourceSpan = node.span
+  if sp == 0
+    return 0
+  end
+  return kavach_line_in_utso(sp.span_start_line, utso_ranges)
+end
+
 fn kavach_is_silicon_crowned fn_name
+  // WHY: Outside authentic `utso/` stdlib provenance ranges, ONLY explicitly crowned
+  // `silicon_*` / `সিলিকন_*` functions may invoke raw hardware/kernel operations.
+  // Never exempt user functions by spoofable names like `file_open`, `malloc`, or `_lipi_*`.
   if len(fn_name) == 0
     return 0
   end
   if str_starts_with(fn_name, "silicon_") == 1 or str_starts_with(fn_name, "সিলিকন_") == 1
     return 1
-  end
-  if str_starts_with(fn_name, "_lipi_") == 1
-    return 1
-  end
-  // Exact-name allowlist of authentic utso/core/io.lp and utso/core/memory.lp primitives
-  // (Prevents spoofable user prefixes like mem_pwn or sys_backdoor from bypassing --kavach)
-  allowed_utso = [
-    "malloc", "মেমরি_বরাদ্দ", "mem_alloc", "alloc", "বরাদ্দ",
-    "free", "মেমরি_মুক্তি", "mem_free", "মুক্ত",
-    "mem_copy", "মেমরি_কপি", "mem_fill", "মেমরি_ভরাট", "mem_zero", "মেমরি_শূন্য",
-    "mem_read", "mem_write", "মেমরি_লেখো", "মেমরি_পড়ো",
-    "mem_word_read", "mem_word_write", "মেমরি_শব্দ_পড়ো", "মেমরি_শব্দ_লেখো",
-    "mem_read_byte", "mem_byte_read", "mem_write_byte", "mem_byte_write", "মেমরি_বাইট_লেখো",
-    "mem_write_idx", "মেমরি_সূচক_লেখো", "mem_read_idx", "মেমরি_সূচক_পড়ো",
-    "mem_read_u32", "mem_write_u32", "mem_read_u64", "mem_write_u64",
-    "mem_read_f64", "mem_write_f64", "mem_read_f32", "mem_write_f32",
-    "মেমরি_দশমিক_পড়ো", "মেমরি_দশমিক_লেখো", "f64_from_bits", "f64_to_bits",
-    "mem_cacheline_align_up", "মেমরি_ক্যাশলাইন_অ্যালাইন", "mem_alloc_cacheline", "মেমরি_বরাদ্দ_ক্যাশলাইন",
-    "slab_alloc", "স্ল্যাব_বরাদ্দ", "slab_free", "স্ল্যাব_মুক্তি",
-    "slab_get_class_index", "slab_get_slot_size", "get_slab_buckets",
-    "obj_header_init", "অবজেক্ট_হেডার_তৈরি", "obj_set_color", "অবজেক্ট_রং_নির্ধারণ",
-    "obj_get_size", "অবজেক্ট_সাইজ", "obj_get_type", "অবজেক্ট_টাইপ",
-    "obj_get_color", "অবজেক্ট_রং", "obj_get_flags", "অবজেক্ট_ফ্ল্যাগ", "obj_has_ptrs",
-    "print_raw", "প্রিন্ট_র", "print_inline", "প্রিন্ট_ইনলাইন", "write_out", "write_err", "println",
-    "read_line", "রিড_লাইন", "write_file", "read_file", "path_exists", "ফাইল_বিদ্যমান",
-    "buf_reader_new", "buf_reader_free", "buf_reader_fill", "buf_reader_read", "buf_reader_read_line",
-    "buf_writer_new", "buf_writer_free", "buf_writer_flush", "buf_writer_write", "buf_writer_write_byte",
-    "file_open", "ফাইল_খোলো", "ফাইল_তৈরি", "ফাইল_খোলো_যুক্ত",
-    "file_close", "ফাইল_বন্ধ", "file_read_fd", "ফাইল_পড়ো",
-    "file_write_fd", "ফাইল_লেখো", "file_seek", "ফাইল_সিক",
-    "file_sync", "ফাইল_সিঙ্ক", "file_append", "append_file",
-    "sys_exit", "sys_mmap", "sys_peek", "sys_peek8", "sys_poke", "sys_poke8"
-  ]
-  ai = 0
-  while ai < allowed_utso.len()
-    if fn_name == allowed_utso[ai]
-      return 1
-    end
-    ai = ai + 1
   end
   return 0
 end
@@ -108,7 +102,7 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "mem_byte_read" or call_name == "mem_read_byte" or call_name == "মেমরি_বাইট_পড়ো" or call_name == "mem_read_u64" or call_name == "mem_read_u32" or call_name == "mem_read_f64" or call_name == "mem_read_f32" or call_name == "মেমরি_দশমিক_পড়ো" or call_name == "mem_read_idx" or call_name == "মেমরি_সূচক_পড়ো"
     return 1
   end
-  if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap"
+  if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap" or call_name == "sys_munmap"
     return 1
   end
   // Sovereign Ring-0 Privileged & Hardware MMIO / Port I/O / Inline Assembly Authority Guard
@@ -130,12 +124,116 @@ fn kavach_is_raw_hw_op call_name
   return 0
 end
 
+fn kavach_is_ident_byte b
+  if (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or (b >= 48 and b <= 57) or b == 95 or b == 64 or b >= 128
+    return 1
+  end
+  return 0
+end
+
+fn kavach_scan_interp_str kv fn_name stext
+  // WHY: Interpolated strings (`"${expr}"` / `"{expr}"`) are re-lexed and compiled by backends.
+  // Scanning every identifier inside `${...}` and `{...}` blocks raw hardware ops like
+  // `"${syscall(60, 42, 0, 0, 0, 0, 0)}"` from bypassing --kavach!
+  n = len(stext)
+  i = 0
+  while i < n
+    b = mem_byte_read(stext, i) & 255
+    is_expr_start = 0
+    expr_start = 0
+    if b == 36 and i + 1 < n and (mem_byte_read(stext, i + 1) & 255) == 123
+      is_expr_start = 1
+      expr_start = i + 2
+    elif b == 123
+      is_expr_start = 1
+      expr_start = i + 1
+    end
+    if is_expr_start == 1
+      // Find matching '}' respecting nested braces and quoted strings
+      dep = 1
+      j = expr_start
+      in_q = 0
+      while j < n and dep > 0
+        c = mem_byte_read(stext, j) & 255
+        if in_q != 0
+          if c == 92 and j + 1 < n
+            j = j + 2
+            continue
+          elif c == in_q
+            in_q = 0
+          end
+        else
+          if c == 34 or c == 39
+            in_q = c
+          elif c == 123
+            dep = dep + 1
+          elif c == 125
+            dep = dep - 1
+            if dep == 0
+              break
+            end
+          end
+        end
+        j = j + 1
+      end
+      // Scan identifiers inside [expr_start .. j) (outside nested string literals)
+      k = expr_start
+      q2 = 0
+      while k < j
+        c2 = mem_byte_read(stext, k) & 255
+        if q2 != 0
+          if c2 == 92 and k + 1 < j
+            k = k + 2
+            continue
+          elif c2 == q2
+            q2 = 0
+          end
+          k = k + 1
+          continue
+        end
+        if c2 == 34 or c2 == 39
+          q2 = c2
+          k = k + 1
+          continue
+        end
+        if kavach_is_ident_byte(c2) == 1
+          id_s = k
+          while k < j and kavach_is_ident_byte(mem_byte_read(stext, k) & 255) == 1
+            k = k + 1
+          end
+          ident = str_sub(stext, id_s, k)
+          if kavach_is_raw_hw_op(ident) == 1
+            kavach_record_error(kv, fn_name, ident)
+          end
+          continue
+        end
+        k = k + 1
+      end
+      if j < n
+        i = j + 1
+      else
+        i = n
+      end
+      continue
+    end
+    i = i + 1
+  end
+  return 0
+end
+
 fn kavach_scan_expr kv fn_name expr
   if expr == 0
     return 0
   end
   k = expr.kind
   tag = expr.tag
+
+  if k == "LiteralStr" or k == "StrLiteral" or tag == AST_TAG_LITERAL_STR()
+    if expr.op == "interp" and expr.name != 0 and len(expr.name) > 0
+      kavach_scan_interp_str(kv, fn_name, expr.name)
+    end
+    return 0
+  end
 
   if k == "ExprStmt" or k == "ExpressionStmt" or tag == AST_TAG_EXPR_STMT()
     return kavach_scan_expr(kv, fn_name, expr.expr)
@@ -236,6 +334,16 @@ fn kavach_scan_expr kv fn_name expr
     return 0
   end
 
+  if k == "MatchExpr"
+    if expr.expr != 0
+      kavach_scan_expr(kv, fn_name, expr.expr)
+    end
+    if expr.body != 0
+      kavach_scan_stmt_list(kv, fn_name, expr.body)
+    end
+    return 0
+  end
+
   return 0
 end
 
@@ -243,8 +351,22 @@ fn kavach_scan_stmt kv fn_name stmt
   if stmt == 0
     return 0
   end
+  if kavach_node_in_utso(stmt, kv.kv_utso_ranges) == 1
+    return 0
+  end
   k = stmt.kind
   tag = stmt.tag
+
+  if k == "MultiAssign"
+    if stmt.args != 0
+      mi = 0
+      while mi < stmt.args.len()
+        kavach_scan_expr(kv, fn_name, stmt.args[mi])
+        mi = mi + 1
+      end
+    end
+    return 0
+  end
 
   if k == "Assign" or k == "AssignOp" or tag == AST_TAG_ASSIGN() or tag == AST_TAG_ASSIGN_OP()
     if stmt.index != 0
@@ -264,6 +386,23 @@ fn kavach_scan_stmt kv fn_name stmt
   end
 
   if k == "Return" or k == "ফেরত" or tag == AST_TAG_RETURN()
+    if stmt.expr != 0
+      kavach_scan_expr(kv, fn_name, stmt.expr)
+    end
+    if stmt.value != 0
+      kavach_scan_expr(kv, fn_name, stmt.value)
+    end
+    if stmt.args != 0
+      rai = 0
+      while rai < stmt.args.len()
+        kavach_scan_expr(kv, fn_name, stmt.args[rai])
+        rai = rai + 1
+      end
+    end
+    return 0
+  end
+
+  if k == "Print" or k == "Say" or k == "Throw"
     if stmt.expr != 0
       kavach_scan_expr(kv, fn_name, stmt.expr)
     end
@@ -315,7 +454,7 @@ fn kavach_scan_stmt kv fn_name stmt
     return 0
   end
 
-  if k == "Block" or tag == AST_TAG_BLOCK() or k == "Defer" or tag == AST_TAG_DEFER()
+  if k == "Block" or tag == AST_TAG_BLOCK() or k == "Defer" or tag == AST_TAG_DEFER() or k == "Region"
     kavach_scan_stmt_list(kv, fn_name, stmt.body)
     if stmt.expr != 0
       kavach_scan_expr(kv, fn_name, stmt.expr)
@@ -360,8 +499,9 @@ fn kavach_scan_stmt_list kv fn_name stmts
   end
   return 0
 
-fn kavach_verify_program ast_decls
+fn kavach_verify_program_with_utso ast_decls utso_ranges
   kv = kavach_checker_new()
+  kv.kv_utso_ranges = utso_ranges
   if ast_decls == 0
     return kv
   end
@@ -377,7 +517,32 @@ fn kavach_verify_program ast_decls
         if fn_ctx == ""
           fn_ctx = "<toplevel>"
         end
-        if kavach_is_silicon_crowned(fn_ctx) == 0
+        // WHY: Synthetic or explicit `main`/`মূল` may contain prepended top-level statements
+        // from authentic `utso/` modules alongside user code; scan statement-by-statement so
+        // authentic `utso/` lines pass while user code in `main` is strictly verified.
+        if fn_ctx == "main" or fn_ctx == "মূল"
+          if decl.params != 0 and kavach_node_in_utso(decl, utso_ranges) == 0
+            dpi = 0
+            while dpi < decl.params.len()
+              dp = decl.params[dpi]
+              if dp != 0 and dp.param_default != 0
+                kavach_scan_expr(kv, fn_ctx, dp.param_default)
+              end
+              dpi = dpi + 1
+            end
+          end
+          kavach_scan_stmt_list(kv, fn_ctx, decl.body)
+        elif kavach_is_silicon_crowned(fn_ctx) == 0 and kavach_node_in_utso(decl, utso_ranges) == 0
+          if decl.params != 0
+            dpi = 0
+            while dpi < decl.params.len()
+              dp = decl.params[dpi]
+              if dp != 0 and dp.param_default != 0
+                kavach_scan_expr(kv, fn_ctx, dp.param_default)
+              end
+              dpi = dpi + 1
+            end
+          end
           kavach_scan_stmt_list(kv, fn_ctx, decl.body)
         end
       elif dk != "StructDef" and dk != "EnumDef" and dtag != AST_TAG_STRUCT_DEF() and dtag != AST_TAG_ENUM_DEF()
@@ -387,3 +552,8 @@ fn kavach_verify_program ast_decls
     di = di + 1
   end
   return kv
+end
+
+fn kavach_verify_program ast_decls
+  return kavach_verify_program_with_utso(ast_decls, 0)
+end

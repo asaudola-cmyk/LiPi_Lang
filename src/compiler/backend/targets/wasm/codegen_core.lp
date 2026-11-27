@@ -51,6 +51,8 @@ struct WasmFuncDef
     wfn_var_locals      // List of non-parameter local variable name strings
     wfn_code            // Emitted bytecode byte list
     wfn_has_returned    // 1 if explicit return was emitted at current flow level
+    wfn_is_variadic     // 1 if final parameter is variadic (`...args` / `nums: ...T`)
+    wfn_def_starts      // List of default-arg token start indices (-1 if required)
 
 // WHY: Tracks structured control block nesting depth for computing relative branch labels
 struct WasmLoopContext
@@ -59,10 +61,12 @@ struct WasmLoopContext
     wlc_is_for          // 1 if synthesized for-loop with induction variable
     wlc_var_idx         // Local index of induction counter variable
 
-// WHY: Models struct schema definitions and field member offsets in linear memory
+// WHY: Models struct/union schema definitions, union layout flag, and runtime type tag ID
 struct WasmStructDef
-    wsd_name            // Struct type name string
+    wsd_name            // Struct/union type name string
     wsd_fields          // List of field name strings
+    wsd_is_union        // 1 if union (all fields share offset 0), 0 if struct
+    wsd_type_id         // Unique 1..N runtime type tag for sovereign dyn Trait dispatch
 
 // WHY: Encapsulates mutable compilation state for WebAssembly binary bytecode generation
 struct WasmSynthesizer
@@ -87,6 +91,12 @@ struct WasmSynthesizer
     ws_freestanding       // 1 in --freestanding mode: zero WASI imports, zero fd_write, pure standalone WASM
     ws_ssa_replaced_cnt   // Count of functions lowered directly from SSA CFG under --ssa-codegen
     ws_ssa_replaced_bytes // Total WASM MVP bytecode bytes spliced from SSA CFG
+    ws_var_struct_names   // Active local variable names bound to struct/union types
+    ws_var_struct_types   // Parallel list of struct/union type names
+    ws_last_struct        // Struct/union type of most recently synthesized primary expression
+    ws_impl_type          // Active impl target struct/union name ("" outside impl blocks)
+    ws_next_type_id       // Next unique runtime type ID (1..N) for struct/union tags
+    ws_source_toks        // Full module token stream for default-arg evaluation
 
 global g_wasm_freestanding = 0
 global g_wasm_ssa_codegen = 0

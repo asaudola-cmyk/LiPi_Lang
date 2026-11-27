@@ -81,6 +81,8 @@ import "compiler/frontend/ast/ast_node"
   tc_enum_names: array
   tc_enum_variants: array
   tc_builtin_cache: i64
+  tc_strict_types: i64
+  tc_dict_tid: i64
 @end
 
 @fn type_checker_new(reg, symtab, scopes)
@@ -99,7 +101,16 @@ import "compiler/frontend/ast/ast_node"
   tc.tc_enum_names = []
   tc.tc_enum_variants = []
   tc.tc_builtin_cache = dict()
+  tc.tc_strict_types = 0
+  tc.tc_dict_tid = type_make_struct(reg, "dict", [])
   return tc
+@end
+
+@fn tc_is_assignable(tc, target_id, src_id)
+  @if tc != 0 && tc.tc_strict_types == 1
+    return type_is_assignable_strict(tc.tc_reg, target_id, src_id)
+  @end
+  return type_is_assignable(tc.tc_reg, target_id, src_id)
 @end
 
 @fn tc_error(tc, code, msg, span)
@@ -285,6 +296,15 @@ import "compiler/frontend/ast/ast_node"
       @if t_left == TYPE_ID_ANY() || t_right == TYPE_ID_ANY() || t_left == TYPE_ID_UNKNOWN() || t_right == TYPE_ID_UNKNOWN() || t_left == 0 || t_right == 0
         return TYPE_ID_ANY()
       @end
+      // Scaled pointer arithmetic: (*T + int -> *T) and (int + *T -> *T)
+      tl_ty = type_registry_get(tc.tc_reg, t_left)
+      tr_ty = type_registry_get(tc.tc_reg, t_right)
+      @if tl_ty != 0 && tl_ty.ty_kind == TYPE_KIND_POINTER() && type_is_numeric(tc.tc_reg, t_right) == 1
+        return t_left
+      @end
+      @if tr_ty != 0 && tr_ty.ty_kind == TYPE_KIND_POINTER() && type_is_numeric(tc.tc_reg, t_left) == 1
+        return t_right
+      @end
       @if type_is_numeric(tc.tc_reg, t_left) == 0 || type_is_numeric(tc.tc_reg, t_right) == 0
         tc_error(tc, ERR_INVALID_OPERAND_TYPE(), "Operator '+' requires numeric or string operands", span_default())
       @end
@@ -300,6 +320,16 @@ import "compiler/frontend/ast/ast_node"
         // WHY: Matrix/Tensor multiplication accepts vectors, 2D arrays, tensors, or numeric scalars
         return TYPE_ID_ANY()
       @end
+      @if op == "-"
+        tl_ty_m = type_registry_get(tc.tc_reg, t_left)
+        tr_ty_m = type_registry_get(tc.tc_reg, t_right)
+        @if tl_ty_m != 0 && tl_ty_m.ty_kind == TYPE_KIND_POINTER() && type_is_numeric(tc.tc_reg, t_right) == 1
+          return t_left
+        @end
+        @if tl_ty_m != 0 && tr_ty_m != 0 && tl_ty_m.ty_kind == TYPE_KIND_POINTER() && tr_ty_m.ty_kind == TYPE_KIND_POINTER()
+          return TYPE_ID_I64()
+        @end
+      @end
       @if type_is_numeric(tc.tc_reg, t_left) == 0 || type_is_numeric(tc.tc_reg, t_right) == 0
         tc_error(tc, ERR_INVALID_OPERAND_TYPE(), "In function '" + tc.tc_current_fn_name + "': Arithmetic operator '" + op + "' requires numeric operands, got " + type_to_string(tc.tc_reg, t_left) + " and " + type_to_string(tc.tc_reg, t_right), span_default())
       @end
@@ -308,11 +338,19 @@ import "compiler/frontend/ast/ast_node"
 
     // Relational comparisons (<, <=, >, >=)
     @if op == "<" || op == "<=" || op == ">" || op == ">="
-      // WHY: Dynamic operands in comparisons evaluate to boolean at runtime
+      // WHY: Dynamic operands and raw pointer bounds comparisons evaluate to boolean at runtime
       @if t_left == TYPE_ID_ANY() || t_right == TYPE_ID_ANY() || t_left == TYPE_ID_UNKNOWN() || t_right == TYPE_ID_UNKNOWN() || t_left == 0 || t_right == 0
         return TYPE_ID_BOOL()
       @end
-      @if type_is_numeric(tc.tc_reg, t_left) == 0 || type_is_numeric(tc.tc_reg, t_right) == 0
+      rl_ty = type_registry_get(tc.tc_reg, t_left)
+      rr_ty = type_registry_get(tc.tc_reg, t_right)
+      rl_ok = type_is_numeric(tc.tc_reg, t_left)
+      rr_ok = type_is_numeric(tc.tc_reg, t_right)
+      @if rl_ty != 0 && rl_ty.ty_kind == TYPE_KIND_POINTER() rl_ok = 1 @end
+      @if rr_ty != 0 && rr_ty.ty_kind == TYPE_KIND_POINTER() rr_ok = 1 @end
+      @if t_left == TYPE_ID_BOOL() rl_ok = 1 @end
+      @if t_right == TYPE_ID_BOOL() rr_ok = 1 @end
+      @if rl_ok == 0 || rr_ok == 0
         tc_error(tc, ERR_INVALID_OPERAND_TYPE(), "Relational operator '" + op + "' requires numeric operands", span_default())
       @end
       return TYPE_ID_BOOL()
@@ -358,6 +396,7 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(k, "UnaryOp") == 1
     t_inner = tc_check_expr(tc, expr.expr)
     @if expr.op == "await" return t_inner @end
+    @if expr.op == "?" return TYPE_ID_ANY() @end
     @if expr.op == "!" || expr.op == "not" || expr.op == "না" return TYPE_ID_BOOL() @end
     @if expr.op == "-"
       @if t_inner == TYPE_ID_ANY() || t_inner == TYPE_ID_UNKNOWN() || t_inner == 0
@@ -422,6 +461,14 @@ import "compiler/frontend/ast/ast_node"
         tc_check_expr(tc, expr.args[i])
         i = i + 1
       @end
+      @if tc.tc_strict_types == 1
+        @if str_eq(fn_name, "list") == 1 || str_eq(fn_name, "তালিকা") == 1
+          return type_make_array(tc.tc_reg, TYPE_ID_ANY(), -1)
+        @end
+        @if str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "map_new") == 1
+          return tc.tc_dict_tid
+        @end
+      @end
       return tc_builtin_ret_type(fn_name)
     @end
 
@@ -460,7 +507,18 @@ import "compiler/frontend/ast/ast_node"
     @end
 
     @if f_sym == 0
-      @if is_method_call == 1 && recv_t == TYPE_ID_ANY()
+      is_dyn_recv = 0
+      @if is_method_call == 1
+        @if recv_t == TYPE_ID_ANY()
+          is_dyn_recv = 1
+        @else
+          dyn_t_def = type_registry_get(tc.tc_reg, recv_t)
+          @if dyn_t_def != 0 && str_starts_with(dyn_t_def.ty_name, "dyn ") == 1
+            is_dyn_recv = 1
+          @end
+        @end
+      @end
+      @if is_dyn_recv == 1
         i = 0
         @while i < expr.args.len()
           tc_check_expr(tc, expr.args[i])
@@ -482,50 +540,77 @@ import "compiler/frontend/ast/ast_node"
     @end
 
     num_params = f_type.ty_param_types.len()
+    min_params = num_params
+    @if f_type.ty_min_params >= 0
+      min_params = f_type.ty_min_params
+    @end
+    is_var_fn = f_type.ty_is_variadic
     num_args = expr.args.len()
     effective_args = num_args
     @if is_method_call == 1
       effective_args = num_args + 1
     @end
 
-    @if effective_args != num_params
-      @if is_method_call == 1 && num_args == num_params
+    arity_ok = 0
+    @if is_var_fn == 1
+      @if effective_args >= min_params
+        arity_ok = 1
+      @end
+    @else
+      @if effective_args >= min_params && effective_args <= num_params
+        arity_ok = 1
+      @end
+    @end
+
+    @if arity_ok == 0
+      @if is_method_call == 1 && ((is_var_fn == 1 && num_args >= min_params) || (is_var_fn == 0 && num_args >= min_params && num_args <= num_params))
         effective_args = num_args
         is_method_call = 0
       @elif str_eq(fn_name, "main") == 1 || str_eq(fn_name, "মূল") == 1
         // Entry point main may be called by runtime with 0 arguments or argc/argv
       @else
-        tc_error(tc, ERR_INVALID_ARG_COUNT(), "Function '" + fn_name + "' expects " + to_str(num_params) + " arguments, got " + to_str(effective_args), span_default())
+        @if is_var_fn == 1
+          tc_error(tc, ERR_INVALID_ARG_COUNT(), "Function '" + fn_name + "' expects at least " + to_str(min_params) + " arguments, got " + to_str(effective_args), span_default())
+        @elif min_params != num_params
+          tc_error(tc, ERR_INVALID_ARG_COUNT(), "Function '" + fn_name + "' expects " + to_str(min_params) + ".." + to_str(num_params) + " arguments, got " + to_str(effective_args), span_default())
+        @else
+          tc_error(tc, ERR_INVALID_ARG_COUNT(), "Function '" + fn_name + "' expects " + to_str(num_params) + " arguments, got " + to_str(effective_args), span_default())
+        @end
       @end
     @end
 
+    fixed_param_limit = num_params
+    @if is_var_fn == 1 && fixed_param_limit > 0
+      fixed_param_limit = fixed_param_limit - 1
+    @end
+
     @if is_method_call == 1
-      @if num_params > 0
+      @if fixed_param_limit > 0
         p0_t = f_type.ty_param_types[0]
-        @if type_is_assignable(tc.tc_reg, p0_t, recv_t) == 0
+        @if tc_is_assignable(tc, p0_t, recv_t) == 0
           tc_error(tc, ERR_TYPE_MISMATCH(), "Receiver of '" + fn_name + "' expects " + type_to_string(tc.tc_reg, p0_t) + ", got " + type_to_string(tc.tc_reg, recv_t), span_default())
         @end
       @end
       j = 0
-      check_len = num_args
-      @if num_params - 1 < check_len check_len = num_params - 1 @end
-      @while j < check_len
+      @while j < num_args
         arg_t = tc_check_expr(tc, expr.args[j])
-        param_t = f_type.ty_param_types[j + 1]
-        @if type_is_assignable(tc.tc_reg, param_t, arg_t) == 0
-          tc_error(tc, ERR_TYPE_MISMATCH(), "Argument " + to_str(j + 1) + " of '" + fn_name + "' expects " + type_to_string(tc.tc_reg, param_t) + ", got " + type_to_string(tc.tc_reg, arg_t), span_default())
+        @if j + 1 < fixed_param_limit
+          param_t = f_type.ty_param_types[j + 1]
+          @if tc_is_assignable(tc, param_t, arg_t) == 0
+            tc_error(tc, ERR_TYPE_MISMATCH(), "Argument " + to_str(j + 1) + " of '" + fn_name + "' expects " + type_to_string(tc.tc_reg, param_t) + ", got " + type_to_string(tc.tc_reg, arg_t), span_default())
+          @end
         @end
         j = j + 1
       @end
     @else
-      check_len = num_args
-      @if num_params < check_len check_len = num_params @end
       j = 0
-      @while j < check_len
+      @while j < num_args
         arg_t = tc_check_expr(tc, expr.args[j])
-        param_t = f_type.ty_param_types[j]
-        @if type_is_assignable(tc.tc_reg, param_t, arg_t) == 0
-          tc_error(tc, ERR_TYPE_MISMATCH(), "Argument " + to_str(j + 1) + " of '" + fn_name + "' expects " + type_to_string(tc.tc_reg, param_t) + ", got " + type_to_string(tc.tc_reg, arg_t), span_default())
+        @if j < fixed_param_limit
+          param_t = f_type.ty_param_types[j]
+          @if tc_is_assignable(tc, param_t, arg_t) == 0
+            tc_error(tc, ERR_TYPE_MISMATCH(), "Argument " + to_str(j + 1) + " of '" + fn_name + "' expects " + type_to_string(tc.tc_reg, param_t) + ", got " + type_to_string(tc.tc_reg, arg_t), span_default())
+          @end
         @end
         j = j + 1
       @end
@@ -591,18 +676,100 @@ import "compiler/frontend/ast/ast_node"
   @end
 
   @if str_eq(k, "StructLit") == 1 || str_eq(k, "MapLit") == 1
+    val_types = []
     i = 0
     n = expr.elements.len()
     @while i < n
       f_ast = expr.elements[i]
+      ft_i = TYPE_ID_ANY()
       @if f_ast.value != 0
-        tc_check_expr(tc, f_ast.value)
+        ft_i = tc_check_expr(tc, f_ast.value)
       @elif f_ast.expr != 0
-        tc_check_expr(tc, f_ast.expr)
+        ft_i = tc_check_expr(tc, f_ast.expr)
       @else
-        tc_check_expr(tc, f_ast)
+        ft_i = tc_check_expr(tc, f_ast)
       @end
+      val_types = val_types.push(ft_i)
       i = i + 1
+    @end
+    @if str_eq(k, "MapLit") == 1 && tc.tc_strict_types == 1
+      @if n > 0
+        all_rec_keys = 1
+        ri = 0
+        @while ri < n
+          rf = expr.elements[ri]
+          @if rf == 0 || str_eq(rf.op, "str_key") == 1 || str_eq(rf.name, "__computed__") == 1 || str_len(rf.name) == 0
+            all_rec_keys = 0
+            break
+          @end
+          ri = ri + 1
+        @end
+        @if all_rec_keys == 1 && tc.tc_reg != 0
+          name_match_ty = 0
+          bad_fld_name = ""
+          bad_exp_tid = 0
+          bad_got_tid = 0
+          ti = 0
+          tn = tc.tc_reg.tr_types.len()
+          @while ti < tn
+            cand_ty = tc.tc_reg.tr_types[ti]
+            @if cand_ty != 0 && cand_ty.ty_kind == TYPE_KIND_STRUCT() && cand_ty.ty_fields.len() == n
+              all_match = 1
+              all_types_ok = 1
+              m_bad_f = ""
+              m_exp_t = 0
+              m_got_t = 0
+              fi = 0
+              @while fi < n
+                fld_def = cand_ty.ty_fields[fi]
+                fld_nm = fld_def.fd_name
+                found_f = 0
+                ej = 0
+                @while ej < n
+                  @if str_eq(expr.elements[ej].name, fld_nm) == 1
+                    found_f = 1
+                    v_tid = val_types[ej]
+                    @if fld_def.fd_type_id != TYPE_ID_ANY() && fld_def.fd_type_id != TYPE_ID_UNKNOWN() && fld_def.fd_type_id != 0 && v_tid != TYPE_ID_ANY() && v_tid != TYPE_ID_UNKNOWN() && v_tid != 0
+                      @if tc_is_assignable(tc, fld_def.fd_type_id, v_tid) == 0
+                        all_types_ok = 0
+                        @if m_bad_f == ""
+                          m_bad_f = fld_nm
+                          m_exp_t = fld_def.fd_type_id
+                          m_got_t = v_tid
+                        @end
+                      @end
+                    @end
+                    break
+                  @end
+                  ej = ej + 1
+                @end
+                @if found_f == 0
+                  all_match = 0
+                  break
+                @end
+                fi = fi + 1
+              @end
+              @if all_match == 1
+                @if all_types_ok == 1
+                  return cand_ty.ty_id
+                @end
+                @if name_match_ty == 0
+                  name_match_ty = cand_ty
+                  bad_fld_name = m_bad_f
+                  bad_exp_tid = m_exp_t
+                  bad_got_tid = m_got_t
+                @end
+              @end
+            @end
+            ti = ti + 1
+          @end
+          @if name_match_ty != 0
+            tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Struct literal for '" + name_match_ty.ty_name + "' field '" + bad_fld_name + "' expects " + type_to_string(tc.tc_reg, bad_exp_tid) + ", got " + type_to_string(tc.tc_reg, bad_got_tid), span_default())
+            return name_match_ty.ty_id
+          @end
+        @end
+      @end
+      return tc.tc_dict_tid
     @end
     return infer_expr_type(tc.tc_infer_ctx, expr)
   @end
@@ -788,10 +955,16 @@ import "compiler/frontend/ast/ast_node"
 
 @fn tc_resolve_annotation_id(tc, tname)
   @if tname == "" return TYPE_ID_ANY() @end
+  @if str_eq(tname, "void") == 1 || str_eq(tname, "শূন্য") == 1
+    return TYPE_ID_VOID()
+  @end
+  @if str_eq(tname, "any") == 1 || str_eq(tname, "যেকোনো") == 1
+    return TYPE_ID_ANY()
+  @end
   @if str_eq(tname, "i64") == 1 || str_eq(tname, "int") == 1 || str_eq(tname, "i32") == 1 || str_eq(tname, "i16") == 1 || str_eq(tname, "i8") == 1 || str_eq(tname, "u64") == 1 || str_eq(tname, "u32") == 1 || str_eq(tname, "u16") == 1 || str_eq(tname, "u8") == 1 || str_eq(tname, "usize") == 1 || str_eq(tname, "isize") == 1 || str_eq(tname, "ptr") == 1 || str_eq(tname, "সংখ্যা") == 1 || str_eq(tname, "পূর্ণসংখ্যা") == 1
     return TYPE_ID_I64()
   @end
-  @if str_eq(tname, "f64") == 1 || str_eq(tname, "float") == 1 || str_eq(tname, "দশমিক") == 1
+  @if str_eq(tname, "f64") == 1 || str_eq(tname, "f32") == 1 || str_eq(tname, "float") == 1 || str_eq(tname, "দশমিক") == 1
     return TYPE_ID_F64()
   @end
   @if str_eq(tname, "bool") == 1 || str_eq(tname, "boolean") == 1 || str_eq(tname, "বুলিয়ান") == 1
@@ -803,11 +976,67 @@ import "compiler/frontend/ast/ast_node"
   @if str_eq(tname, "byte") == 1 || str_eq(tname, "বাইট") == 1
     return TYPE_ID_BYTE()
   @end
+  @if str_starts_with(tname, "*") == 1
+    return type_make_pointer(tc.tc_reg, TYPE_ID_ANY(), 1)
+  @end
+  @if str_eq(tname, "list") == 1 || str_eq(tname, "array") == 1 || str_eq(tname, "vec") == 1 || str_eq(tname, "slice") == 1 || str_eq(tname, "তালিকা") == 1
+    return type_make_array(tc.tc_reg, TYPE_ID_ANY(), -1)
+  @end
+  @if str_starts_with(tname, "list<") == 1 || str_starts_with(tname, "array<") == 1 || str_starts_with(tname, "vec<") == 1 || str_starts_with(tname, "slice<") == 1
+    lt_pos = 0
+    tn_len = str_len(tname)
+    @while lt_pos < tn_len && str_char_at(tname, lt_pos) != 60
+      lt_pos = lt_pos + 1
+    @end
+    @if lt_pos + 1 < tn_len && str_char_at(tname, tn_len - 1) == 62
+      inner_t = str_slice(tname, lt_pos + 1, tn_len - 1)
+      elem_tid = tc_resolve_annotation_id(tc, inner_t)
+      return type_make_array(tc.tc_reg, elem_tid, -1)
+    @end
+    return type_make_array(tc.tc_reg, TYPE_ID_ANY(), -1)
+  @end
+  @if str_eq(tname, "dict") == 1 || str_eq(tname, "map") == 1 || str_eq(tname, "hashmap") == 1 || str_eq(tname, "অভিধান") == 1 || str_starts_with(tname, "dict<") == 1 || str_starts_with(tname, "map<") == 1
+    return tc.tc_dict_tid
+  @end
+  @if str_starts_with(tname, "dyn ") == 1
+    d_sym = symtab_get(tc.tc_symtab, tname)
+    @if d_sym != 0
+      return d_sym.sym_type_ref
+    @end
+    d_tid = type_make_struct(tc.tc_reg, tname, [])
+    d_nsym = symbol_struct(tname, d_tid, span_default(), tc.tc_scopes.stk_current_id)
+    symtab_put(tc.tc_symtab, d_nsym)
+    return d_tid
+  @end
   st_s = symtab_get(tc.tc_symtab, tname)
   @if st_s != 0 && st_s.sym_kind == SYM_KIND_STRUCT()
     return st_s.sym_type_ref
   @end
   return TYPE_ID_ANY()
+@end
+
+@fn tc_check_array_lit_target(tc, target_tid, val_expr, ctx_label)
+  // WHY: When assigning or returning a heterogeneous ArrayLit (e.g. `[A(1), Dog(2)]`) to a typed
+  // `list<T>` / `list<dyn Trait>` under --strict-types, every element must satisfy `T`.
+  @if tc == 0 || tc.tc_strict_types != 1 || val_expr == 0 return 1 @end
+  @if str_eq(val_expr.kind, "ArrayLit") == 0 && str_eq(val_expr.kind, "Array") == 0 return 1 @end
+  t_def = type_registry_get(tc.tc_reg, target_tid)
+  @if t_def == 0 || t_def.ty_kind != TYPE_KIND_ARRAY() return 1 @end
+  el_tid = t_def.ty_elem_type_id
+  @if el_tid == TYPE_ID_ANY() || el_tid == TYPE_ID_UNKNOWN() || el_tid == 0 return 1 @end
+  ei = 0
+  en = val_expr.elements.len()
+  @while ei < en
+    et = tc_check_expr(tc, val_expr.elements[ei])
+    @if et != TYPE_ID_ANY() && et != TYPE_ID_UNKNOWN() && et != 0
+      @if tc_is_assignable(tc, el_tid, et) == 0
+        tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Element " + to_str(ei) + " of " + ctx_label + " expects " + type_to_string(tc.tc_reg, el_tid) + ", got " + type_to_string(tc.tc_reg, et), span_default())
+        return 0
+      @end
+    @end
+    ei = ei + 1
+  @end
+  return 1
 @end
 
 @fn tc_check_statement(tc, stmt)
@@ -832,12 +1061,14 @@ import "compiler/frontend/ast/ast_node"
     @if str_eq(k, "Assign") == 1 && stmt.op != ""
       decl_tid = tc_resolve_annotation_id(tc, stmt.op)
       @if decl_tid != TYPE_ID_ANY() && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
-        ann_ok = type_is_assignable(tc.tc_reg, decl_tid, rhs_t)
+        ann_ok = tc_is_assignable(tc, decl_tid, rhs_t)
         @if (decl_tid == TYPE_ID_I64() && rhs_t == TYPE_ID_BOOL()) || (decl_tid == TYPE_ID_BOOL() && rhs_t == TYPE_ID_I64()) || (decl_tid == TYPE_ID_BYTE() && rhs_t == TYPE_ID_I64())
           ann_ok = 1
         @end
         @if ann_ok == 0
           tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Annotated type '" + stmt.op + "' is incompatible with assigned " + type_to_string(tc.tc_reg, rhs_t), span_default())
+        @else
+          tc_check_array_lit_target(tc, decl_tid, val_expr, "annotated list '" + target_name + "'")
         @end
       @end
     @end
@@ -882,7 +1113,7 @@ import "compiler/frontend/ast/ast_node"
                 cur_ftid = TYPE_ID_ANY()
               @elif seg_i == len(target_name)
                 @if fd_s.fd_type_id != TYPE_ID_ANY() && fd_s.fd_type_id != TYPE_ID_UNKNOWN() && fd_s.fd_type_id != 0
-                  @if type_is_assignable(tc.tc_reg, fd_s.fd_type_id, rhs_t) == 0
+                  @if tc_is_assignable(tc, fd_s.fd_type_id, rhs_t) == 0
                     tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot assign " + type_to_string(tc.tc_reg, rhs_t) + " to field '" + target_name + "' of type " + type_to_string(tc.tc_reg, fd_s.fd_type_id), span_default())
                   @end
                 @end
@@ -906,10 +1137,23 @@ import "compiler/frontend/ast/ast_node"
     @if sym != 0 && sym.sym_kind == SYM_KIND_FUNCTION()
       sym = scope_lookup_current(tc.tc_scopes, target_name)
     @end
+    // WHY: Pass 1 pre-populates main() variables in scope 0 with TYPE_ID_ANY() for script-global
+    // compatibility. Under --strict-types (or explicit `: Type` annotation), shadow unannotated
+    // scope-0 ANY variables locally so each function tracks nominal types without polluting others.
+    @if (tc.tc_strict_types == 1 || decl_tid != TYPE_ID_ANY()) && sym != 0 && sym.sym_scope_id == 0 && tc.tc_scopes.stk_current_id != 0 && sym.sym_kind == SYM_KIND_VARIABLE() && sym.sym_is_annotated == 0 && sym.sym_is_const == 0 && sym.sym_type_ref == TYPE_ID_ANY() && str_starts_with(target_name, "g_") == 0
+      sym = 0
+    @end
 
     effective_t = rhs_t
     @if decl_tid != TYPE_ID_ANY()
       effective_t = decl_tid
+    @elif effective_t != TYPE_ID_ANY() && effective_t != TYPE_ID_UNKNOWN() && effective_t != 0
+      // WHY: Bracketless calls (e.g. `valid = manifest_validate pkg`) may parse as a bare function
+      // identifier in Phase 3; avoid locking unannotated variables to TYPE_KIND_FUNCTION().
+      eff_td = type_registry_get(tc.tc_reg, effective_t)
+      @if eff_td != 0 && eff_td.ty_kind == TYPE_KIND_FUNCTION()
+        effective_t = TYPE_ID_ANY()
+      @end
     @end
 
     @if sym != 0
@@ -917,9 +1161,9 @@ import "compiler/frontend/ast/ast_node"
         tc_error(tc, ERR_CANNOT_ASSIGN_CONST(), "Cannot reassign to constant '" + target_name + "'", span_default())
       @end
 
-      // WHY: Pass 1 pre-populates main() variables with TYPE_ID_ANY(); apply explicit `: Type` annotation on declaration.
+      // WHY: Apply explicit `: Type` annotation on declaration and enforce on redeclaration.
       @if decl_tid != TYPE_ID_ANY()
-        @if sym.sym_is_annotated == 1 && type_is_assignable(tc.tc_reg, sym.sym_type_ref, decl_tid) == 0
+        @if sym.sym_is_annotated == 1 && tc_is_assignable(tc, sym.sym_type_ref, decl_tid) == 0
           tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot redeclare annotated variable '" + target_name + "' as " + type_to_string(tc.tc_reg, decl_tid), span_default())
         @else
           sym.sym_type_ref = decl_tid
@@ -927,7 +1171,7 @@ import "compiler/frontend/ast/ast_node"
         @end
       @end
 
-      @if type_is_assignable(tc.tc_reg, sym.sym_type_ref, rhs_t) == 0 && (sym.sym_type_ref != TYPE_ID_BYTE() || rhs_t != TYPE_ID_I64())
+      @if tc_is_assignable(tc, sym.sym_type_ref, rhs_t) == 0 && (sym.sym_type_ref != TYPE_ID_BYTE() || rhs_t != TYPE_ID_I64())
         @if sym.sym_kind == SYM_KIND_VARIABLE() && sym.sym_is_const == 0 && sym.sym_is_annotated == 0 && decl_tid == TYPE_ID_ANY()
           sym.sym_type_ref = TYPE_ID_ANY()
         @else
@@ -935,7 +1179,12 @@ import "compiler/frontend/ast/ast_node"
         @end
       @end
     @else
-      infer_var_declaration(tc.tc_infer_ctx, target_name, val_expr, 0, span_default())
+      // WHY: Under --strict-types or explicit `: Type` annotation, register new_sym directly with
+      // verified effective_t and sym_is_annotated so infer_var_declaration cannot clobber it.
+      // In gradual non-strict mode for unannotated locals, keep gradual inference via infer_var_declaration.
+      @if tc.tc_strict_types == 0 && decl_tid == TYPE_ID_ANY()
+        infer_var_declaration(tc.tc_infer_ctx, target_name, val_expr, 0, span_default())
+      @end
       fn_sid = scope_get_enclosing_function_id(tc.tc_scopes)
       target_scope_id = tc.tc_scopes.stk_current_id
       @if fn_sid >= 0
@@ -953,6 +1202,58 @@ import "compiler/frontend/ast/ast_node"
     return 1
   @end
 
+  // 1b. Multi-Variable Tuple Destructuring Assignment: [let] a, b = rhs1, rhs2 / a, b = pair()
+  @if str_eq(k, "MultiAssign") == 1
+    rhs_types = []
+    @if stmt.args != 0
+      ri = 0
+      @while ri < stmt.args.len()
+        rt_i = tc_check_expr(tc, stmt.args[ri])
+        rhs_types = rhs_types.push(rt_i)
+        ri = ri + 1
+      @end
+    @end
+    @if stmt.params != 0
+      li = 0
+      @while li < stmt.params.len()
+        lhs_node = stmt.params[li]
+        lname = ""
+        @if lhs_node != 0
+          lname = lhs_node.name
+        @end
+        @if lname != ""
+          lt = TYPE_ID_ANY()
+          @if rhs_types.len() == stmt.params.len() && li < rhs_types.len()
+            lt = rhs_types[li]
+          @end
+          lsym = scope_lookup(tc.tc_scopes, lname)
+          @if lsym == 0
+            fn_sid_m = scope_get_enclosing_function_id(tc.tc_scopes)
+            t_sc_m = tc.tc_scopes.stk_current_id
+            @if fn_sid_m >= 0
+              t_sc_m = fn_sid_m
+            @end
+            nsym_m = symbol_variable(lname, lt, 0, span_default(), t_sc_m)
+            scope_define_in_scope_id(tc.tc_scopes, t_sc_m, nsym_m)
+            @if fn_sid_m < 0 || str_starts_with(lname, "g_") == 1
+              symtab_put(tc.tc_symtab, nsym_m)
+            @end
+          @else
+            @if lsym.sym_is_const == 1 || lsym.sym_kind == SYM_KIND_CONSTANT()
+              tc_error(tc, ERR_CANNOT_ASSIGN_CONST(), "Cannot reassign to constant '" + lname + "'", span_default())
+            @elif lsym.sym_is_annotated == 1 && lt != TYPE_ID_ANY() && lt != TYPE_ID_UNKNOWN() && lt != 0
+              @if tc_is_assignable(tc, lsym.sym_type_ref, lt) == 0 && (lsym.sym_type_ref != TYPE_ID_BYTE() || lt != TYPE_ID_I64())
+                tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot assign " + type_to_string(tc.tc_reg, lt) + " to variable '" + lname + "' of type " + type_to_string(tc.tc_reg, lsym.sym_type_ref), span_default())
+              @end
+            @end
+          @end
+        @end
+        li = li + 1
+      @end
+    @end
+    return 1
+  @end
+
   // 2. Return Statement
   @if str_eq(k, "Return") == 1
     ret_expr = stmt.value
@@ -965,13 +1266,15 @@ import "compiler/frontend/ast/ast_node"
 
     expected_t = tc.tc_current_fn_ret_type
     @if expected_t > 0 && expected_t != TYPE_ID_ANY()
-      is_ok = type_is_assignable(tc.tc_reg, expected_t, actual_ret_t)
+      is_ok = tc_is_assignable(tc, expected_t, actual_ret_t)
       // WHY: Allow i64 <-> bool assignability for returns since boolean is represented as 0/1 in silicon register %rax
       @if (expected_t == TYPE_ID_I64() && actual_ret_t == TYPE_ID_BOOL()) || (expected_t == TYPE_ID_BOOL() && actual_ret_t == TYPE_ID_I64())
         is_ok = 1
       @end
       @if is_ok == 0
         tc_error(tc, ERR_RETURN_TYPE_MISMATCH(), "Function '" + tc.tc_current_fn_name + "' expected return type " + type_to_string(tc.tc_reg, expected_t) + ", but returned " + type_to_string(tc.tc_reg, actual_ret_t), span_default())
+      @else
+        tc_check_array_lit_target(tc, expected_t, ret_expr, "returned list")
       @end
     @end
     return 1
@@ -1109,6 +1412,9 @@ import "compiler/frontend/ast/ast_node"
   fn_name = fn_node.name
 
   param_types = []
+  min_params = 0
+  has_optional = 0
+  is_variadic = 0
   i = 0
   n = fn_node.params.len()
   @while i < n
@@ -1116,6 +1422,14 @@ import "compiler/frontend/ast/ast_node"
     p_type_id = TYPE_ID_ANY()
     p_t_str = ""
     @if param != 0
+      @if param.param_is_variadic == 1
+        is_variadic = 1
+        has_optional = 1
+      @elif param.param_default != 0
+        has_optional = 1
+      @elif has_optional == 0
+        min_params = min_params + 1
+      @end
       @if param.param_type != ""
         p_t_str = param.param_type
       @elif param.ret_type != ""
@@ -1125,18 +1439,7 @@ import "compiler/frontend/ast/ast_node"
       @end
     @end
     @if p_t_str != ""
-      @if str_eq(p_t_str, "i64") == 1 || str_eq(p_t_str, "int") == 1 || str_eq(p_t_str, "i32") == 1 || str_eq(p_t_str, "u64") == 1 || str_eq(p_t_str, "u32") == 1 || str_eq(p_t_str, "সংখ্যা") == 1 || str_eq(p_t_str, "পূর্ণসংখ্যা") == 1 p_type_id = TYPE_ID_I64() @end
-      @if str_eq(p_t_str, "f64") == 1 || str_eq(p_t_str, "float") == 1 || str_eq(p_t_str, "দশমিক") == 1 p_type_id = TYPE_ID_F64() @end
-      @if str_eq(p_t_str, "bool") == 1 || str_eq(p_t_str, "boolean") == 1 || str_eq(p_t_str, "বুলিয়ান") == 1 p_type_id = TYPE_ID_BOOL() @end
-      @if str_eq(p_t_str, "string") == 1 || str_eq(p_t_str, "str") == 1 || str_eq(p_t_str, "স্ট্রিং") == 1 || str_eq(p_t_str, "বর্ণমালা") == 1 p_type_id = TYPE_ID_STRING() @end
-      @if str_eq(p_t_str, "byte") == 1 || str_eq(p_t_str, "বাইট") == 1 p_type_id = TYPE_ID_BYTE() @end
-      @if str_eq(p_t_str, "any") == 1 || str_eq(p_t_str, "যেকোনো") == 1 p_type_id = TYPE_ID_ANY() @end
-      @if p_type_id == TYPE_ID_ANY()
-        st_sym = symtab_get(tc.tc_symtab, p_t_str)
-        @if st_sym != 0 && st_sym.sym_kind == SYM_KIND_STRUCT()
-          p_type_id = st_sym.sym_type_ref
-        @end
-      @end
+      p_type_id = tc_resolve_annotation_id(tc, p_t_str)
     @end
     param_types = param_types.push(p_type_id)
     i = i + 1
@@ -1144,15 +1447,15 @@ import "compiler/frontend/ast/ast_node"
 
   ret_type_id = TYPE_ID_ANY()
   @if fn_node.ret_type != ""
-    @if str_eq(fn_node.ret_type, "void") == 1 || str_eq(fn_node.ret_type, "শূন্য") == 1 ret_type_id = TYPE_ID_VOID() @end
-    @if str_eq(fn_node.ret_type, "i64") == 1 || str_eq(fn_node.ret_type, "int") == 1 || str_eq(fn_node.ret_type, "i32") == 1 || str_eq(fn_node.ret_type, "u64") == 1 || str_eq(fn_node.ret_type, "u32") == 1 || str_eq(fn_node.ret_type, "সংখ্যা") == 1 || str_eq(fn_node.ret_type, "পূর্ণসংখ্যা") == 1 ret_type_id = TYPE_ID_I64() @end
-    @if str_eq(fn_node.ret_type, "f64") == 1 || str_eq(fn_node.ret_type, "float") == 1 || str_eq(fn_node.ret_type, "দশমিক") == 1 ret_type_id = TYPE_ID_F64() @end
-    @if str_eq(fn_node.ret_type, "bool") == 1 || str_eq(fn_node.ret_type, "boolean") == 1 || str_eq(fn_node.ret_type, "বুলিয়ান") == 1 ret_type_id = TYPE_ID_BOOL() @end
-    @if str_eq(fn_node.ret_type, "string") == 1 || str_eq(fn_node.ret_type, "str") == 1 || str_eq(fn_node.ret_type, "স্ট্রিং") == 1 || str_eq(fn_node.ret_type, "বর্ণমালা") == 1 ret_type_id = TYPE_ID_STRING() @end
-    @if str_eq(fn_node.ret_type, "byte") == 1 || str_eq(fn_node.ret_type, "বাইট") == 1 ret_type_id = TYPE_ID_BYTE() @end
+    ret_type_id = tc_resolve_annotation_id(tc, fn_node.ret_type)
   @end
 
   fn_type_id = type_make_function(tc.tc_reg, param_types, ret_type_id)
+  fn_tdef_p = type_registry_get(tc.tc_reg, fn_type_id)
+  @if fn_tdef_p != 0
+    fn_tdef_p.ty_min_params = min_params
+    fn_tdef_p.ty_is_variadic = is_variadic
+  @end
   fn_sym = symbol_function(fn_name, fn_type_id, span_default(), tc.tc_scopes.stk_current_id, 1)
   scope_define(tc.tc_scopes, fn_sym)
   symtab_put(tc.tc_symtab, fn_sym)
@@ -1195,6 +1498,12 @@ import "compiler/frontend/ast/ast_node"
     @if j < param_types.len() p_tid = param_types[j] @end
     p_sym = symbol_parameter(p_name, p_tid, span_default(), tc.tc_scopes.stk_current_id)
     scope_define(tc.tc_scopes, p_sym)
+    @if param != 0 && param.param_default != 0
+      def_t = tc_check_expr(tc, param.param_default)
+      @if p_tid != TYPE_ID_ANY() && def_t != TYPE_ID_ANY() && tc_is_assignable(tc, p_tid, def_t) == 0
+        tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + fn_name + "': Default value for parameter '" + p_name + "' expects " + type_to_string(tc.tc_reg, p_tid) + ", got " + type_to_string(tc.tc_reg, def_t), span_default())
+      @end
+    @end
     j = j + 1
   @end
 
@@ -1229,17 +1538,9 @@ import "compiler/frontend/ast/ast_node"
     n = elems.len()
     @while i < n
       f_node = elems[i]
-      f_t_id = TYPE_ID_ANY()
-      f_t_str = f_node.ret_type
-      @if len(f_t_str) == 0 f_t_str = f_node.field_type @end
-      @if str_eq(f_t_str, "i64") == 1 || str_eq(f_t_str, "int") == 1 || str_eq(f_t_str, "i32") == 1 || str_eq(f_t_str, "u64") == 1 || str_eq(f_t_str, "u32") == 1 || str_eq(f_t_str, "সংখ্যা") == 1 || str_eq(f_t_str, "পূর্ণসংখ্যা") == 1 f_t_id = TYPE_ID_I64() @end
-      @if str_eq(f_t_str, "f64") == 1 || str_eq(f_t_str, "float") == 1 || str_eq(f_t_str, "দশমিক") == 1 f_t_id = TYPE_ID_F64() @end
-      @if str_eq(f_t_str, "bool") == 1 || str_eq(f_t_str, "boolean") == 1 || str_eq(f_t_str, "বুলিয়ান") == 1 f_t_id = TYPE_ID_BOOL() @end
-      @if str_eq(f_t_str, "string") == 1 || str_eq(f_t_str, "str") == 1 || str_eq(f_t_str, "স্ট্রিং") == 1 || str_eq(f_t_str, "বর্ণমালা") == 1 f_t_id = TYPE_ID_STRING() @end
-      @if str_eq(f_t_str, "byte") == 1 || str_eq(f_t_str, "বাইট") == 1 f_t_id = TYPE_ID_BYTE() @end
-
-      f_name = f_node.name
-      @if len(f_name) == 0 f_name = f_node.field_name @end
+      f_t_str = f_node.field_type
+      f_t_id = tc_resolve_annotation_id(tc, f_t_str)
+      f_name = f_node.field_name
       f_def = type_make_field(f_name, f_t_id, 0, 8, 1)
       fields = fields.push(f_def)
       i = i + 1
@@ -1263,8 +1564,13 @@ import "compiler/frontend/ast/ast_node"
     st = statements[i]
     @if str_eq(st.kind, "StructDef") == 1
       tc_check_struct_def(tc, st)
+    @elif str_eq(st.kind, "TraitImpl") == 1
+      @if tc.tc_reg != 0 && tc.tc_reg.tr_trait_impls != 0 && st.name != "" && st.target != ""
+        tc.tc_reg.tr_trait_impls[st.name + "::" + st.target] = 1
+      @end
     @elif str_eq(st.kind, "EnumDef") == 1
       e_name = st.name
+      e_tid = TYPE_ID_ANY()
       @if e_name != ""
         e_tid = type_make_struct(tc.tc_reg, e_name, [])
         e_sym = symbol_struct(e_name, e_tid, span_default(), tc.tc_scopes.stk_current_id)
@@ -1289,7 +1595,7 @@ import "compiler/frontend/ast/ast_node"
               ev_ptypes = ev_ptypes.push(TYPE_ID_ANY())
               ea_i = ea_i + 1
             @end
-            ev_ftid = type_make_function(tc.tc_reg, ev_ptypes, TYPE_ID_ANY())
+            ev_ftid = type_make_function(tc.tc_reg, ev_ptypes, e_tid)
             ev_fsym = symbol_function(ev_name, ev_ftid, span_default(), tc.tc_scopes.stk_current_id, 1)
             scope_define(tc.tc_scopes, ev_fsym)
             symtab_put(tc.tc_symtab, ev_fsym)
@@ -1299,11 +1605,11 @@ import "compiler/frontend/ast/ast_node"
               symtab_put(tc.tc_symtab, q_fsym)
             @end
           @else
-            ev_sym = symbol_variable(ev_name, TYPE_ID_ANY(), 1, span_default(), tc.tc_scopes.stk_current_id)
+            ev_sym = symbol_variable(ev_name, e_tid, 1, span_default(), tc.tc_scopes.stk_current_id)
             scope_define(tc.tc_scopes, ev_sym)
             symtab_put(tc.tc_symtab, ev_sym)
             @if e_name != ""
-              q_vsym = symbol_variable(e_name + "::" + ev_name, TYPE_ID_ANY(), 1, span_default(), tc.tc_scopes.stk_current_id)
+              q_vsym = symbol_variable(e_name + "::" + ev_name, e_tid, 1, span_default(), tc.tc_scopes.stk_current_id)
               scope_define(tc.tc_scopes, q_vsym)
               symtab_put(tc.tc_symtab, q_vsym)
             @end
@@ -1317,6 +1623,19 @@ import "compiler/frontend/ast/ast_node"
         v_sym = symbol_variable(v_name, TYPE_ID_ANY(), 0, span_default(), tc.tc_scopes.stk_current_id)
         scope_define(tc.tc_scopes, v_sym)
         symtab_put(tc.tc_symtab, v_sym)
+      @end
+    @elif str_eq(st.kind, "MultiAssign") == 1
+      @if st.params != 0
+        mi_p = 0
+        @while mi_p < st.params.len()
+          mn_p = st.params[mi_p]
+          @if mn_p != 0 && mn_p.name != ""
+            mv_sym = symbol_variable(mn_p.name, TYPE_ID_ANY(), 0, span_default(), tc.tc_scopes.stk_current_id)
+            scope_define(tc.tc_scopes, mv_sym)
+            symtab_put(tc.tc_symtab, mv_sym)
+          @end
+          mi_p = mi_p + 1
+        @end
       @end
     @elif (str_eq(st.kind, "FnDef") == 1 || str_eq(st.kind, "Function") == 1) && (str_eq(st.name, "main") == 1 || str_eq(st.name, "মূল") == 1)
       b_idx = 0
@@ -1353,7 +1672,7 @@ import "compiler/frontend/ast/ast_node"
     st = statements[k]
     @if str_eq(st.kind, "FnDef") == 1 || str_eq(st.kind, "Function") == 1
       tc_check_function_body(tc, st)
-    @elif str_eq(st.kind, "StructDef") == 0 && str_eq(st.kind, "EnumDef") == 0
+    @elif str_eq(st.kind, "StructDef") == 0 && str_eq(st.kind, "EnumDef") == 0 && str_eq(st.kind, "TraitImpl") == 0
       tc_check_statement(tc, st)
     @end
     k = k + 1

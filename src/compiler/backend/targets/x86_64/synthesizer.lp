@@ -164,9 +164,14 @@ fn x86_synth_compile_fn_def s toks pos_box
     saved_fn_dyn_vars = s.synth_fn_dyn_vars
     s.synth_fn_dyn_vars = list()
 
-    // Parse parameter names (supporting parentheses, commas, and type annotations)
+    // Parse parameter names (supporting parentheses, commas, type annotations, defaults, and `...` variadics)
     params = list()
     param_types = list()
+    fn_def_starts = list()
+    fn_def_ends = list()
+    fn_min_p = 0
+    fn_has_opt = 0
+    fn_var_p1 = 0
     has_paren = 0
     if get(pos_box, 0) < toks.len()
         first_p_tok = toks[get(pos_box, 0)]
@@ -199,22 +204,81 @@ fn x86_synth_compile_fn_def s toks pos_box
                 list_set(pos_box, 0, cur_p_idx + 1)
                 break
 
+        is_vp = 0
+        if pk == TOK_DOTDOT() and cur_p_idx + 2 < toks.len() and toks[cur_p_idx + 1].tok_kind == TOK_DOT() and x86_synth_is_ident_token(toks[cur_p_idx + 2].tok_kind) == 1
+            is_vp = 1
+            cur_p_idx = cur_p_idx + 2
+            p_tok = toks[cur_p_idx]
+            pk = p_tok.tok_kind
+            ptxt = p_tok.tok_text
+        end
         if x86_synth_is_ident_token(pk) == 1
+            cur_param_slot = params.len()
             push(params, ptxt)
             param_type = ""
+            if is_vp == 1
+                param_type = "list"
+                fn_var_p1 = cur_param_slot + 1
+                fn_has_opt = 1
+            end
             list_set(pos_box, 0, cur_p_idx + 1) // Consume param name
             if has_paren == 1
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
-                // Skip optional type annotation: : type[<...>]
             after_p = get(pos_box, 0)
             if after_p < toks.len() and (toks[after_p].tok_kind == TOK_COLON() or (toks[after_p].tok_kind != TOK_STR() and toks[after_p].tok_text == ":"))
                 list_set(pos_box, 0, after_p + 1) // Consume ':'
                 if has_paren == 1
                     x86_synth_skip_whitespace_tokens(toks, pos_box)
                 end
-                param_type = x86_synth_parse_type_expr(toks, pos_box)
+                vp_i = get(pos_box, 0)
+                if vp_i + 1 < toks.len() and toks[vp_i].tok_kind == TOK_DOTDOT() and toks[vp_i + 1].tok_kind == TOK_DOT()
+                    fn_var_p1 = cur_param_slot + 1
+                    fn_has_opt = 1
+                    param_type = "list"
+                    list_set(pos_box, 0, vp_i + 2)
+                    x86_synth_parse_type_expr(toks, pos_box)
+                else
+                    parsed_pt = x86_synth_parse_type_expr(toks, pos_box)
+                    if is_vp == 0
+                        param_type = parsed_pt
+                    end
+                end
             end
             push(param_types, param_type)
+            if has_paren == 1
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+            end
+            ds_idx = 0 - 1
+            de_idx = 0 - 1
+            eq_p_i = get(pos_box, 0)
+            if has_paren == 1 and eq_p_i < toks.len() and (toks[eq_p_i].tok_kind == TOK_ASSIGN() or (toks[eq_p_i].tok_kind != TOK_STR() and toks[eq_p_i].tok_text == "="))
+                list_set(pos_box, 0, eq_p_i + 1)
+                x86_synth_skip_whitespace_tokens(toks, pos_box)
+                ds_idx = get(pos_box, 0)
+                fn_has_opt = 1
+                dd_p = 0
+                while get(pos_box, 0) < toks.len()
+                    dp_i = get(pos_box, 0)
+                    dk_c = toks[dp_i].tok_kind
+                    dt_c = toks[dp_i].tok_text
+                    if dk_c == TOK_LPAREN() or dk_c == TOK_LBRACKET() or dk_c == TOK_LBRACE() or (dk_c != TOK_STR() and (dt_c == "(" or dt_c == "[" or dt_c == "{"))
+                        dd_p = dd_p + 1
+                    elif dk_c == TOK_RPAREN() or dk_c == TOK_RBRACKET() or dk_c == TOK_RBRACE() or (dk_c != TOK_STR() and (dt_c == ")" or dt_c == "]" or dt_c == "}"))
+                        if dd_p == 0
+                            break
+                        end
+                        dd_p = dd_p - 1
+                    elif dd_p == 0 and (dk_c == TOK_COMMA() or (dk_c != TOK_STR() and dt_c == ","))
+                        break
+                    end
+                    list_set(pos_box, 0, dp_i + 1)
+                end
+                de_idx = get(pos_box, 0)
+            elif fn_has_opt == 0
+                fn_min_p = fn_min_p + 1
+            end
+            push(fn_def_starts, ds_idx)
+            push(fn_def_ends, de_idx)
             if has_paren == 1
                 x86_synth_skip_whitespace_tokens(toks, pos_box)
             // Skip optional comma: ,
@@ -244,6 +308,12 @@ fn x86_synth_compile_fn_def s toks pos_box
     fn_entry.fn_param_count = params.len()
     fn_entry.fn_type_params = fn_tparams
     fn_entry.fn_type_bounds = fn_tbounds
+    fn_entry.fn_min_params = fn_min_p
+    fn_entry.fn_variadic_idx = fn_var_p1
+    if fn_has_opt == 1
+        fn_entry.fn_default_starts = fn_def_starts
+        fn_entry.fn_default_ends = fn_def_ends
+    end
     if s.synth_pending_section != ""
         fn_entry.fn_section = s.synth_pending_section
         s.synth_pending_section = ""
@@ -252,6 +322,12 @@ fn x86_synth_compile_fn_def s toks pos_box
         fn_alias.fn_param_count = params.len()
         fn_alias.fn_type_params = fn_tparams
         fn_alias.fn_type_bounds = fn_tbounds
+        fn_alias.fn_min_params = fn_min_p
+        fn_alias.fn_variadic_idx = fn_var_p1
+        if fn_has_opt == 1
+            fn_alias.fn_default_starts = fn_def_starts
+            fn_alias.fn_default_ends = fn_def_ends
+        end
     end
 
     if method_alias != "" and params.len() > 0
@@ -282,7 +358,7 @@ fn x86_synth_compile_fn_def s toks pos_box
     end
 
     // ── Direct SSA CFG Replacement (--ssa-codegen): Bypass Token Re-Parser for Eligible Functions (i64, f64, str, structs, inter-fn calls) ──
-    if g_x86_ssa_codegen == 1 and s.synth_freestanding == 0 and s.synth_ssa_lower_res != 0 and s.synth_ssa_lower_res.slr_success == 1 and fn_tparams.len() == 0 and method_alias == "" and mono_name == "" and s.synth_pending_fn_naked == 0 and s.synth_pending_fn_interrupt == 0
+    if g_x86_ssa_codegen == 1 and s.synth_freestanding == 0 and s.synth_ssa_lower_res != 0 and s.synth_ssa_lower_res.slr_success == 1 and fn_tparams.len() == 0 and method_alias == "" and mono_name == "" and s.synth_pending_fn_naked == 0 and s.synth_pending_fn_interrupt == 0 and fn_has_opt == 0 and fn_var_p1 == 0
         if 1 == 1
             slr = s.synth_ssa_lower_res
             ssa_match_i = 0 - 1
@@ -879,6 +955,7 @@ fn x86_synth_compile_program_opt_internal tokens opt_const_names opt_const_vals 
         x86_synth_emit_u64(s, 0)
         x86_synth_emit_bytes(s, [72, 137, 8]) // mov [rax], rcx
     end
+    s.synth_source_toks = tokens
     x86_synth_prescan_signatures(s, tokens)
     s.synth_boxed_vars = x86_synth_prescan_boxed_vars(tokens, 0, 0 - 1, 0 - 1)
     if s.synth_freestanding == 0

@@ -6,6 +6,180 @@
 
 // ── 7. Recursive-Descent Expression Synthesizer ────────────────────────────────
 
+fn arm64_interp_is_ident inner
+    ilen = len(inner)
+    if ilen == 0 return 0 end
+    c0 = ord(char_at(inner, 0))
+    if not ((c0 >= 65 and c0 <= 90) or (c0 >= 97 and c0 <= 122) or c0 == 95 or c0 >= 128)
+        return 0
+    end
+    k = 1
+    while k < ilen
+        ck = ord(char_at(inner, k))
+        if not ((ck >= 65 and ck <= 90) or (ck >= 97 and ck <= 122) or (ck >= 48 and ck <= 57) or ck == 95 or ck >= 128)
+            return 0
+        end
+        k = k + 1
+    end
+    return 1
+
+fn arm64_interp_is_lsp_snippet inner
+    // WHY: Preserves LSP snippet placeholders like "${1:name}" as literal strings.
+    ilen = len(inner)
+    idx = 0
+    saw_dig = 0
+    while idx < ilen
+        c = ord(char_at(inner, idx))
+        if c >= 48 and c <= 57
+            saw_dig = 1
+            idx = idx + 1
+        else
+            break
+        end
+    end
+    if saw_dig == 1 and idx < ilen and ord(char_at(inner, idx)) == 58
+        return 1
+    end
+    return 0
+
+fn arm64_synth_emit_interp_str s txt
+    // WHY: Compiles both `${expr}` (full arbitrary expression) and `{ident}` (in-scope local)
+    // string interpolations directly into native ARM64 `__str_concat` chains.
+    tlen = len(txt)
+    chunk_types = list()  // 0 = literal, 1 = {ident}, 2 = ${expr}
+    chunk_vals = list()
+    has_any = 0
+    cur_lit = ""
+    i = 0
+    while i < tlen
+        ch = char_at(txt, i)
+        if ch == "$" and i + 1 < tlen and char_at(txt, i + 1) == "{"
+            j = i + 2
+            bd = 1
+            found_c = 0
+            while j < tlen
+                cj = char_at(txt, j)
+                if cj == "{"
+                    bd = bd + 1
+                elif cj == "}"
+                    bd = bd - 1
+                    if bd == 0
+                        found_c = 1
+                        break
+                    end
+                elif cj == "\n" or cj == "\r"
+                    break
+                end
+                j = j + 1
+            end
+            if found_c == 1
+                inner = str_sub(txt, i + 2, j)
+                if len(inner) > 0 and arm64_interp_is_lsp_snippet(inner) == 0
+                    if len(cur_lit) > 0
+                        push(chunk_types, 0)
+                        push(chunk_vals, cur_lit)
+                        cur_lit = ""
+                    end
+                    push(chunk_types, 2)
+                    push(chunk_vals, inner)
+                    has_any = 1
+                    i = j + 1
+                    continue
+                end
+            end
+        elif ch == "{"
+            j = i + 1
+            found_c = 0
+            while j < tlen
+                cj = char_at(txt, j)
+                if cj == "}"
+                    found_c = 1
+                    break
+                end
+                if cj == "{" or cj == "\n" or cj == "\r"
+                    break
+                end
+                j = j + 1
+            end
+            if found_c == 1
+                inner = str_sub(txt, i + 1, j)
+                if arm64_interp_is_ident(inner) == 1 and arm64_find_local_var(s, inner) != 0
+                    if len(cur_lit) > 0
+                        push(chunk_types, 0)
+                        push(chunk_vals, cur_lit)
+                        cur_lit = ""
+                    end
+                    push(chunk_types, 1)
+                    push(chunk_vals, inner)
+                    has_any = 1
+                    i = j + 1
+                    continue
+                end
+            end
+        end
+        cur_lit = cur_lit + ch
+        i = i + 1
+    end
+    if has_any == 0
+        arm64_emit_load_rodata_str(s, 0, txt)
+        s.a64_last_expr_type = "str"
+        return 0
+    end
+    if len(cur_lit) > 0
+        push(chunk_types, 0)
+        push(chunk_vals, cur_lit)
+    end
+    s.a64_needs_str_helpers = 1
+    s.synth_needs_alloc = 1
+    ci = 0
+    while ci < chunk_types.len()
+        if ci > 0
+            arm64_push_reg(s, 0)
+        end
+        cty = chunk_types[ci]
+        if cty == 0
+            arm64_emit_load_rodata_str(s, 0, chunk_vals[ci])
+        elif cty == 1
+            lv = arm64_find_local_var(s, chunk_vals[ci])
+            arm64_emit_ldr_reg_sp(s, 0, lv.lv_offset)
+            if lv.a64_lv_is_boxed == 1
+                arm64_emit_ldr_x_off(s, 0, 0, 0)
+            end
+            if lv.a64_lv_prim_type == "str"
+                // X0 is already a cstr pointer
+            elif lv.a64_lv_prim_type == "dyn_tagged" and lv.a64_lv_tag_off > 0
+                arm64_emit_ldr_reg_sp(s, 1, lv.a64_lv_tag_off)
+                arm64_synth_emit_call_helper(s, "__tagged_to_str")
+            elif lv.a64_lv_is_uint == 1
+                arm64_synth_emit_call_helper(s, "__uint_to_str")
+            else
+                arm64_synth_emit_call_helper(s, "__int_to_str")
+            end
+        else
+            sub_toks = tokenize_source(chunk_vals[ci])
+            sub_pb = [0]
+            arm64_synth_compile_expr(s, sub_toks, sub_pb)
+            if s.a64_last_expr_type == "str"
+                // X0 is already a cstr pointer
+            elif s.a64_last_expr_type == "dyn_tagged"
+                arm64_synth_emit_call_helper(s, "__tagged_to_str")
+            elif s.a64_last_is_uint == 1
+                arm64_synth_emit_call_helper(s, "__uint_to_str")
+            else
+                arm64_synth_emit_call_helper(s, "__int_to_str")
+            end
+        end
+        if ci > 0
+            arm64_emit_mov_reg(s, 1, 0)
+            arm64_pop_reg(s, 0)
+            arm64_synth_emit_call_helper(s, "__str_concat")
+        end
+        ci = ci + 1
+    end
+    s.a64_last_expr_type = "str"
+    s.a64_last_is_uint = 0
+    return 0
+
 fn arm64_synth_expr_primary s toks pos_box
     // WHY: Parses and synthesizes primary operands (integers, strings, identifiers, calls, grouping).
     // Result is always computed into X0.
@@ -200,7 +374,7 @@ fn arm64_synth_expr_primary s toks pos_box
         handled = 1
     end
 
-    // 2. String Literal
+    // 2. String Literal & Interpolated String Literal
     if handled == 0 and k == TOK_STR()
         list_set(pos_box, 0, pos + 1)
         ro_off = arm64_synth_add_rodata_str(s, t.tok_text, 0)
@@ -216,6 +390,10 @@ fn arm64_synth_expr_primary s toks pos_box
         rel.sr_reg = 0
         push(s.synth_str_relocs, rel)
         s.a64_last_expr_type = "str"
+        handled = 1
+    elif handled == 0 and k == TOK_INTERP_STR()
+        list_set(pos_box, 0, pos + 1)
+        arm64_synth_emit_interp_str(s, t.tok_text)
         handled = 1
 
     // 3. Identifier or Call (Variable lookup, Field access, or Function Call)
@@ -846,120 +1024,174 @@ fn arm64_synth_expr_primary s toks pos_box
                 return 0
             end
 
-            // ── Struct Constructor: StructName(...) ─────────────────────────
+            // ── Struct / Union Constructor: StructName(...) ─────────────────
             sdef = arm64_synth_find_struct(s, var_name)
             if sdef != 0
                 fcount = sdef.sd_fields.len()
                 alloc_sz = (fcount + 1) * 8
                 if alloc_sz < 32
                     alloc_sz = 32
-                arm64_emit_mov_imm64(s, 0, alloc_sz)
+                // Allocate +16B header so [ptr - 8] stores sovereign type tag while ptr stays 16B-aligned
+                arm64_emit_mov_imm64(s, 0, alloc_sz + 16)
                 arm64_synth_emit_call_alloc(s)
-                // Struct pointer is now in X0
+                arm64_emit_mov_imm64(s, 10, (1415139397 << 32) | sdef.a64_sd_type_id)
+                arm64_emit_str_x_off(s, 10, 0, 8)
+                arm64_emit_add_imm(s, 0, 0, 16)
+                // Struct/union pointer is now in X0
                 if arg_count > 0
                     arm64_emit_mov_reg(s, 9, 0) // X9 = struct ptr (keep SP pointing to args)
                     ai = arg_count - 1
                     while ai >= 0
                         arm64_pop_reg(s, 1) // pop field value into X1
-                        // str x1, [x9, #ai*8]
                         scaled_ai = ai & 4095
+                        if sdef.a64_sd_is_union == 1
+                            scaled_ai = 0
+                        end
                         st_word = 4177526784 | (scaled_ai << 10) | (9 << 5) | 1
                         arm64_synth_emit32(s, st_word)
                         ai = ai - 1
                     arm64_emit_mov_reg(s, 0, 9) // return struct pointer in X0
+                cur_struct = var_name
                 s.a64_last_struct = var_name
-                return 0
-
-            // ── Normal Function Call: AAPCS64 register args (X0..X7) + >8 stack args ([sp+0], [sp+8], ...) ──
-            a64_cleanup_bytes = 0
-            if arg_count <= 8
-                if arg_count >= 8
-                    arm64_pop_reg(s, 7)
-                if arg_count >= 7
-                    arm64_pop_reg(s, 6)
-                if arg_count >= 6
-                    arm64_pop_reg(s, 5)
-                if arg_count >= 5
-                    arm64_pop_reg(s, 4)
-                if arg_count >= 4
-                    arm64_pop_reg(s, 3)
-                if arg_count >= 3
-                    arm64_pop_reg(s, 2)
-                if arg_count >= 2
-                    arm64_pop_reg(s, 1)
-                if arg_count >= 1
-                    arm64_pop_reg(s, 0)
             else
-                // WHY: All `arg_count` arguments were pushed 16B-apart; arg_k sits at [X9 + (arg_count - 1 - k)*16].
-                // Allocate 16B-aligned outgoing stack arg area below X9 so source and destination NEVER overlap!
-                n_stack = arg_count - 8
-                stack_pad = ((n_stack + 1) / 2) * 16
-                a64_cleanup_bytes = (arg_count * 16) + stack_pad
-                arm64_emit_add_imm(s, 9, 31, 0) // X9 = sp (saved push base)
-                ri_a = 0
-                while ri_a < 8
-                    arm64_emit_ldr_x_off(s, ri_a, 9, (arg_count - 1 - ri_a) * 16)
-                    ri_a = ri_a + 1
+                // ── Variadic Packing & Default Argument Filling ──
+                fsig = arm64_synth_find_fn_sig(s, var_name)
+                if fsig != 0
+                    if fsig.a64_sig_is_variadic == 1
+                        fixed_n = fsig.a64_sig_param_count - 1
+                        var_cnt = arg_count - fixed_n
+                        if var_cnt < 0 var_cnt = 0 end
+                        s.a64_needs_list_create = 1
+                        s.synth_needs_alloc = 1
+                        arm64_emit_mov_imm64(s, 0, var_cnt)
+                        vl_off = s.synth_code.len()
+                        arm64_emit_bl(s, 0)
+                        vl_rel = Arm64CallReloc()
+                        vl_rel.a64_cr_patch_offset = vl_off
+                        vl_rel.a64_cr_target_name = "__list_create"
+                        push(s.synth_call_relocs, vl_rel)
+                        if var_cnt > 0
+                            arm64_emit_mov_reg(s, 9, 0)
+                            arm64_synth_emit32(s, 4181721088 | (2 << 10) | (9 << 5) | 10) // ldr x10, [x9, #16]
+                            vi_v = var_cnt - 1
+                            while vi_v >= 0
+                                arm64_pop_reg(s, 1)
+                                arm64_emit_mov_imm64(s, 2, vi_v * 8)
+                                arm64_emit_add_x(s, 2, 10, 2)
+                                arm64_synth_emit32(s, 4177526784 | (0 << 10) | (2 << 5) | 1) // str x1, [x2, #0]
+                                vi_v = vi_v - 1
+                            end
+                            arm64_emit_mov_reg(s, 0, 9)
+                        end
+                        arm64_push_reg(s, 0)
+                        arg_count = fixed_n + 1
+                    elif arg_count < fsig.a64_sig_param_count and s.a64_source_toks != 0
+                        def_i = arg_count
+                        while def_i < fsig.a64_sig_param_count
+                            def_st = fsig.a64_sig_def_starts[def_i]
+                            if def_st >= 0
+                                def_box = [def_st]
+                                arm64_synth_compile_expr(s, s.a64_source_toks, def_box)
+                                arm64_push_reg(s, 0)
+                                arg_count = arg_count + 1
+                            else
+                                break
+                            end
+                            def_i = def_i + 1
+                        end
+                    end
                 end
-                arm64_emit_sub_imm(s, 31, 31, stack_pad)
-                s.a64_sp_delta = s.a64_sp_delta + stack_pad
-                sj_a = 0
-                while sj_a < n_stack
-                    arm64_emit_ldr_x_off(s, 10, 9, (n_stack - 1 - sj_a) * 16)
-                    arm64_emit_str_x_off(s, 10, 31, sj_a * 8)
-                    sj_a = sj_a + 1
-                end
-            end
-
-            // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
-            lv_call = arm64_find_local_var(s, var_name)
-            if lv_call != 0
-                arm64_emit_ldr_reg_sp(s, 11, lv_call.lv_offset)
-                if lv_call.a64_lv_is_boxed == 1
-                    arm64_emit_ldr_x_off(s, 11, 11, 0)
-                end
-                arm64_emit_indirect_call_x11(s)
-            else
-                // Emit BL instruction with relocation placeholder
-                if var_name == "main" or var_name == "মূল"
-                    if s.a64_in_function == 0
-                        s.a64_called_main = 1
-                call_off = s.synth_code.len()
-                arm64_emit_bl(s, 0)
-
-                call_rel = Arm64CallReloc()
-                call_rel.a64_cr_patch_offset = call_off
-                call_rel.a64_cr_target_name = var_name
-                push(s.synth_call_relocs, call_rel)
-            end
-
-            if a64_cleanup_bytes > 0
-                arm64_emit_add_imm(s, 31, 31, a64_cleanup_bytes)
-                if s.a64_sp_delta >= a64_cleanup_bytes
-                    s.a64_sp_delta = s.a64_sp_delta - a64_cleanup_bytes
+                // ── Normal Function Call: AAPCS64 register args (X0..X7) + >8 stack args ([sp+0], [sp+8], ...) ──
+                a64_cleanup_bytes = 0
+                if arg_count <= 8
+                    if arg_count >= 8
+                        arm64_pop_reg(s, 7)
+                    if arg_count >= 7
+                        arm64_pop_reg(s, 6)
+                    if arg_count >= 6
+                        arm64_pop_reg(s, 5)
+                    if arg_count >= 5
+                        arm64_pop_reg(s, 4)
+                    if arg_count >= 4
+                        arm64_pop_reg(s, 3)
+                    if arg_count >= 3
+                        arm64_pop_reg(s, 2)
+                    if arg_count >= 2
+                        arm64_pop_reg(s, 1)
+                    if arg_count >= 1
+                        arm64_pop_reg(s, 0)
                 else
-                    s.a64_sp_delta = 0
+                    // WHY: All `arg_count` arguments were pushed 16B-apart; arg_k sits at [X9 + (arg_count - 1 - k)*16].
+                    // Allocate 16B-aligned outgoing stack arg area below X9 so source and destination NEVER overlap!
+                    n_stack = arg_count - 8
+                    stack_pad = ((n_stack + 1) / 2) * 16
+                    a64_cleanup_bytes = (arg_count * 16) + stack_pad
+                    arm64_emit_add_imm(s, 9, 31, 0) // X9 = sp (saved push base)
+                    ri_a = 0
+                    while ri_a < 8
+                        arm64_emit_ldr_x_off(s, ri_a, 9, (arg_count - 1 - ri_a) * 16)
+                        ri_a = ri_a + 1
+                    end
+                    arm64_emit_sub_imm(s, 31, 31, stack_pad)
+                    s.a64_sp_delta = s.a64_sp_delta + stack_pad
+                    sj_a = 0
+                    while sj_a < n_stack
+                        arm64_emit_ldr_x_off(s, 10, 9, (n_stack - 1 - sj_a) * 16)
+                        arm64_emit_str_x_off(s, 10, 31, sj_a * 8)
+                        sj_a = sj_a + 1
+                    end
                 end
-            end
 
-            // WHY: Check callee-saved X27 exception flag after call returns. If active, jump to
-            // the innermost try/catch handler or immediately unwind the current stack frame.
-            if s.a64_try_patches.len() > 0
-                arm64_emit_cmp_x(s, 27, 31)
-                exc_bne_off = s.synth_code.len()
-                arm64_emit_b_cond(s, 1, 0)
-                active_tp = s.a64_try_patches[s.a64_try_patches.len() - 1]
-                push(active_tp, [exc_bne_off, 1])
-            elif s.a64_in_function == 1
-                arm64_emit_cmp_x(s, 27, 31)
-                skip_eq_off = s.synth_code.len()
-                arm64_emit_b_cond(s, 0, 0)
-                arm64_emit_defers(s, toks)
-                arm64_emit_epilogue(s)
-                skip_words = (s.synth_code.len() - skip_eq_off) / 4
-                arm64_synth_patch_u32(s, skip_eq_off, 1409286144 | ((skip_words & 524287) << 5) | 0)
+                // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
+                lv_call = arm64_find_local_var(s, var_name)
+                if lv_call != 0
+                    arm64_emit_ldr_reg_sp(s, 11, lv_call.lv_offset)
+                    if lv_call.a64_lv_is_boxed == 1
+                        arm64_emit_ldr_x_off(s, 11, 11, 0)
+                    end
+                    arm64_emit_indirect_call_x11(s)
+                else
+                    // Emit BL instruction with relocation placeholder
+                    if var_name == "main" or var_name == "মূল"
+                        if s.a64_in_function == 0
+                            s.a64_called_main = 1
+                    call_off = s.synth_code.len()
+                    arm64_emit_bl(s, 0)
+
+                    call_rel = Arm64CallReloc()
+                    call_rel.a64_cr_patch_offset = call_off
+                    call_rel.a64_cr_target_name = var_name
+                    push(s.synth_call_relocs, call_rel)
+                end
+
+                if a64_cleanup_bytes > 0
+                    arm64_emit_add_imm(s, 31, 31, a64_cleanup_bytes)
+                    if s.a64_sp_delta >= a64_cleanup_bytes
+                        s.a64_sp_delta = s.a64_sp_delta - a64_cleanup_bytes
+                    else
+                        s.a64_sp_delta = 0
+                    end
+                end
+
+                // WHY: Check callee-saved X27 exception flag after call returns. If active, jump to
+                // the innermost try/catch handler or immediately unwind the current stack frame.
+                if s.a64_try_patches.len() > 0
+                    arm64_emit_cmp_x(s, 27, 31)
+                    exc_bne_off = s.synth_code.len()
+                    arm64_emit_b_cond(s, 1, 0)
+                    active_tp = s.a64_try_patches[s.a64_try_patches.len() - 1]
+                    push(active_tp, [exc_bne_off, 1])
+                elif s.a64_in_function == 1
+                    arm64_emit_cmp_x(s, 27, 31)
+                    skip_eq_off = s.synth_code.len()
+                    arm64_emit_b_cond(s, 0, 0)
+                    arm64_emit_defers(s, toks)
+                    arm64_emit_epilogue(s)
+                    skip_words = (s.synth_code.len() - skip_eq_off) / 4
+                    arm64_synth_patch_u32(s, skip_eq_off, 1409286144 | ((skip_words & 524287) << 5) | 0)
+                end
+                s.a64_last_expr_type = "dyn_tagged"
             end
-            s.a64_last_expr_type = "dyn_tagged"
         else
             // Unit ADT Variant (e.g. None or zero-arity enum variant) vs Local Variable Load
             ae_u = arm64_enum_find_idx(s, var_name)
@@ -1020,10 +1252,10 @@ fn arm64_synth_expr_primary s toks pos_box
                 np = get(pos_box, 0)
                 if np < toks.len() and toks[np].tok_kind == TOK_LPAREN()
                     list_set(pos_box, 0, np + 1)
+                    // Always push receiver X0 before evaluating explicit args (uniform 0..7 arg ABI)
+                    arm64_push_reg(s, 0)
                     m_args = 0
                     while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
-                        if m_args == 0
-                            arm64_push_reg(s, 0)
                         arm64_synth_compile_expr(s, toks, pos_box)
                         arm64_push_reg(s, 0)
                         m_args = m_args + 1
@@ -1035,10 +1267,10 @@ fn arm64_synth_expr_primary s toks pos_box
                     if fn_tok.tok_text == "len" or fn_tok.tok_text == "length"
                         while m_args > 0
                             arm64_pop_reg(s, 1)
-                            if m_args == 1
-                                arm64_pop_reg(s, 0)
                             m_args = m_args - 1
+                        arm64_pop_reg(s, 0)
                         arm64_synth_emit32(s, 4181721088) // ldr x0, [x0, #0]
+                        s.a64_last_expr_type = "int"
                     elif fn_tok.tok_text == "push"
                         while m_args > 1
                             arm64_pop_reg(s, 1)
@@ -1055,14 +1287,101 @@ fn arm64_synth_expr_primary s toks pos_box
                             mp_rel.a64_cr_target_name = "__list_push"
                             push(s.synth_call_relocs, mp_rel)
                         else
+                            arm64_pop_reg(s, 0)
                             arm64_emit_movz_x(s, 0, 0, 0)
+                        end
                     else
-                        while m_args > 0
-                            arm64_pop_reg(s, 1)
-                            if m_args == 1
-                                arm64_pop_reg(s, 0)
-                            m_args = m_args - 1
-                        arm64_emit_movz_x(s, 0, 0, 0)
+                        // General trait/impl method call & sovereign dyn Trait runtime dispatch!
+                        tot_m = 1 + m_args
+                        while tot_m > 8
+                            arm64_pop_reg(s, 9)
+                            tot_m = tot_m - 1
+                        end
+                        if tot_m >= 8 arm64_pop_reg(s, 7) end
+                        if tot_m >= 7 arm64_pop_reg(s, 6) end
+                        if tot_m >= 6 arm64_pop_reg(s, 5) end
+                        if tot_m >= 5 arm64_pop_reg(s, 4) end
+                        if tot_m >= 4 arm64_pop_reg(s, 3) end
+                        if tot_m >= 3 arm64_pop_reg(s, 2) end
+                        if tot_m >= 2 arm64_pop_reg(s, 1) end
+                        if tot_m >= 1 arm64_pop_reg(s, 0) end
+                        m_nm = fn_tok.tok_text
+                        direct_tgt = ""
+                        if cur_struct != "" and str_starts_with(cur_struct, "dyn ") == 0 and arm64_synth_has_impl_method(s, cur_struct, m_nm) == 1
+                            direct_tgt = cur_struct + "_" + m_nm
+                        end
+                        if direct_tgt != ""
+                            mc_off = s.synth_code.len()
+                            arm64_emit_bl(s, 0)
+                            mc_rel = Arm64CallReloc()
+                            mc_rel.a64_cr_patch_offset = mc_off
+                            mc_rel.a64_cr_target_name = direct_tgt
+                            push(s.synth_call_relocs, mc_rel)
+                        else
+                            m_cands = arm64_synth_find_method_candidates(s, m_nm)
+                            if m_cands.len() == 1
+                                mc_off = s.synth_code.len()
+                                arm64_emit_bl(s, 0)
+                                mc_rel = Arm64CallReloc()
+                                mc_rel.a64_cr_patch_offset = mc_off
+                                mc_rel.a64_cr_target_name = m_cands[0][1]
+                                push(s.synth_call_relocs, mc_rel)
+                            elif m_cands.len() >= 2
+                                // Sovereign dyn Trait runtime dispatch: inspect [X0 - 8] type tag
+                                arm64_emit_null_guard_reg(s, toks, 0)
+                                arm64_emit_ldur_x_off(s, 9, 0, 0 - 8)
+                                done_jumps = list()
+                                dci = 0
+                                while dci < m_cands.len()
+                                    dc = m_cands[dci]
+                                    arm64_emit_mov_imm64(s, 10, (1415139397 << 32) | dc[0])
+                                    arm64_emit_cmp_x(s, 9, 10)
+                                    bne_next = s.synth_code.len()
+                                    arm64_emit_b_cond(s, 1, 0)
+                                    mc_off = s.synth_code.len()
+                                    arm64_emit_bl(s, 0)
+                                    mc_rel = Arm64CallReloc()
+                                    mc_rel.a64_cr_patch_offset = mc_off
+                                    mc_rel.a64_cr_target_name = dc[1]
+                                    push(s.synth_call_relocs, mc_rel)
+                                    j_done = s.synth_code.len()
+                                    arm64_emit_b(s, 0)
+                                    push(done_jumps, j_done)
+                                    arm64_patch_b_cond(s, bne_next, 1, s.synth_code.len())
+                                    dci = dci + 1
+                                end
+                                arm64_emit_movz_x(s, 0, 0, 0)
+                                arm64_emit_movz_x(s, 1, 0, 0)
+                                end_disp_off = s.synth_code.len()
+                                dji = 0
+                                while dji < done_jumps.len()
+                                    arm64_patch_b(s, done_jumps[dji], end_disp_off)
+                                    dji = dji + 1
+                                end
+                            else
+                                mc_off = s.synth_code.len()
+                                arm64_emit_bl(s, 0)
+                                mc_rel = Arm64CallReloc()
+                                mc_rel.a64_cr_patch_offset = mc_off
+                                mc_rel.a64_cr_target_name = m_nm
+                                push(s.synth_call_relocs, mc_rel)
+                            end
+                        end
+                        if s.a64_try_patches.len() > 0
+                            arm64_emit_cmp_x(s, 27, 31)
+                            m_exc_bne = s.synth_code.len()
+                            arm64_emit_b_cond(s, 1, 0)
+                            push(s.a64_try_patches[s.a64_try_patches.len() - 1], [m_exc_bne, 1])
+                        elif s.a64_in_function == 1
+                            arm64_emit_cmp_x(s, 27, 31)
+                            m_skip_eq = s.synth_code.len()
+                            arm64_emit_b_cond(s, 0, 0)
+                            arm64_emit_defers(s, toks)
+                            arm64_emit_epilogue(s)
+                            arm64_patch_b_cond(s, m_skip_eq, 0, s.synth_code.len())
+                        end
+                        s.a64_last_expr_type = "dyn_tagged"
+                    end
                     cur_struct = ""
                 else
                     arm64_emit_null_guard_reg(s, toks, 0)

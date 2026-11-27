@@ -483,27 +483,54 @@ fn handle_build file_path out_file target_flag extra_flags
     end
     is_shared = 0
     is_unikernel = 0
+    is_wasm = 0
+    is_verilog = 0
+    is_pe = 0
+    is_obj = 0
     ei = 0
     while ei < len(extra_flags)
         ef = get(extra_flags, ei)
         if ef == "--shared" or ef == "-shared"
             is_shared = 1
-        elif ef == "--format=multiboot2" or ef == "--unikernel"
+        elif ef == "--format=multiboot2" or ef == "--unikernel" or ef == "--target=unikernel" or ef == "--target=multiboot2" or ef == "--target=multiboot2-bare" or ef == "--target=baremetal"
             is_unikernel = 1
+        elif ef == "--target=wasm" or ef == "--target=wasm32" or ef == "--target=web"
+            is_wasm = 1
+        elif ef == "--target=verilog" or ef == "--target=hdl"
+            is_verilog = 1
+        elif ef == "--target=windows" or ef == "--target=win64" or ef == "--target=win" or ef == "--target=pe"
+            is_pe = 1
+        elif ef == "--target=obj" or ef == "--target=object" or ef == "--target=reloc" or ef == "--emit=obj" or ef == "-c"
+            is_obj = 1
         end
         ei = ei + 1
     end
+    if target_flag == "--target=wasm" or target_flag == "--target=wasm32" or target_flag == "--target=web"
+        is_wasm = 1
+    elif target_flag == "--target=verilog" or target_flag == "--target=hdl"
+        is_verilog = 1
+    elif target_flag == "--target=unikernel" or target_flag == "--format=multiboot2"
+        is_unikernel = 1
+    elif target_flag == "--target=windows" or target_flag == "--target=win64" or target_flag == "--target=win" or target_flag == "--target=pe"
+        is_pe = 1
+    elif target_flag == "--shared"
+        is_shared = 1
+    elif target_flag == "--target=obj" or target_flag == "--target=object" or target_flag == "--target=reloc"
+        is_obj = 1
+    end
     dest = out_file
     if len(dest) == 0
-        if target_flag == "--target=wasm" or target_flag == "--target=web"
+        if is_obj == 1
+            dest = file_path + ".o"
+        elif is_wasm == 1
             dest = file_path + ".wasm"
-        elif target_flag == "--target=verilog" or target_flag == "--target=hdl"
+        elif is_verilog == 1
             dest = file_path + ".v"
-        elif target_flag == "--target=unikernel" or target_flag == "--format=multiboot2" or is_unikernel == 1
+        elif is_unikernel == 1
             dest = file_path + ".kernel.bin"
-        elif target_flag == "--target=windows" or target_flag == "--target=win64" or target_flag == "--target=pe"
+        elif is_pe == 1
             dest = file_path + ".exe"
-        elif target_flag == "--shared" or is_shared == 1
+        elif is_shared == 1
             dest = file_path + ".so"
         else
             dest = file_path + ".bin"
@@ -1215,8 +1242,8 @@ fn main
             say "Usage: lipi build [flags...] <file.lp> [-o <out>] [--target=<arch>] [--strict-types] [--kavach]"
             return 1
         end
-        // WHY: Order-independent argument scanning allows flags like --strict-types or --kavach
-        // before or after the source filename (e.g. `lipi build --strict-types app.lp -o app`).
+        // WHY: Order-independent argument scanning allows flags like --strict-types, --kavach,
+        // and multi-part targets (`--target=arm64 --target=elf-kernel`) in any order without overwriting earlier flags.
         src_file = ""
         out_f = ""
         target_f = ""
@@ -1229,9 +1256,10 @@ fn main
                 out_f = get(args, ai)
             elif (cur == "--target" or cur == "-target") and ai + 1 < argc
                 ai = ai + 1
-                target_f = "--target=" + get(args, ai)
-            elif len(cur) > 9 and str_sub(cur, 0, 9) == "--target="
-                target_f = cur
+                push(extra_flags, "--target=" + get(args, ai))
+            elif (cur == "--base-addr" or cur == "--entry" or cur == "--cache-dir" or cur == "--emit") and ai + 1 < argc
+                ai = ai + 1
+                push(extra_flags, cur + "=" + get(args, ai))
             elif len(cur) > 0 and char_at(cur, 0) == "-"
                 push(extra_flags, cur)
             else

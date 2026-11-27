@@ -1485,6 +1485,16 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave_y_sovereign_compiler_parity.lp", "test_wave_y_sovereign_compiler_parity") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_z_time_deflate_tls_psk.lp", "test_wave_z_time_deflate_tls_psk") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

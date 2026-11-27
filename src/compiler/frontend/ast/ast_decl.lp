@@ -31,6 +31,7 @@ import "compiler/frontend/ast/ast_node"
   ret_type: string
   param_default: ASTNode
   param_span: SourceSpan
+  param_is_variadic: i64
 @end
 
 // WHY: Struct field declaration descriptor with memory layout index
@@ -79,6 +80,7 @@ import "compiler/frontend/ast/ast_node"
   p.ret_type = type_name
   p.param_default = default_val
   p.param_span = span
+  p.param_is_variadic = 0
   return p
 @end
 

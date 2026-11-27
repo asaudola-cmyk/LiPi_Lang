@@ -53,6 +53,9 @@ struct AstToSsaContext
     ctx_target_name     // target architecture string ("x86_64", "arm64", "riscv64", "wasm")
     ctx_has_float_dict  // 1 if a float was stored into a dict/list in this function
     ctx_inferred_ret    // inferred return type from OP_RET statements ("", "i64", "f64", "str", struct)
+    ctx_fn_has_float_cont // 1 if THIS function contains float dict/list writes/literals
+    ctx_local_nonfloat_conts // dict of local var names proven to be non-float containers created in this fn
+    ctx_in_member_base  // 1 while lowering base of MemberAccess (e.g. arr[i].field is a struct ptr, never f64)
 
 fn ast_to_ssa_context_new mod_obj fn_obj
     // WHY: Initializes isolated lowering context with pristine scope tables
@@ -84,6 +87,9 @@ fn ast_to_ssa_context_new mod_obj fn_obj
     ctx.ctx_target_name = "x86_64"
     ctx.ctx_has_float_dict = 0
     ctx.ctx_inferred_ret = ""
+    ctx.ctx_fn_has_float_cont = 0
+    ctx.ctx_local_nonfloat_conts = dict()
+    ctx.ctx_in_member_base = 0
     return ctx
 
 fn ssa_is_narrow_int_type tname
@@ -585,14 +591,50 @@ fn ast_to_ssa_lower_expr ctx expr
         fbits = ssa_parse_float_bits(ftext)
         return ssa_value_new_const(fbits, "f64")
 
+    if ekind == "LiteralNone" or ekind == "None"
+        return ssa_value_new_const(0, "i64_int")
+    end
+
     if ekind == "LiteralStr" or ekind == "StrLiteral"
         stext = ""
         if expr.name != 0
             stext = expr.name
         end
-        if str_contains(stext, "{") == 1
-            ctx.ctx_has_unsupported = 1
-            return ssa_value_new_const(0, "str")
+        if expr.op == "interp"
+            // Only bail on actual `${...}` or `{ident}` interpolation; keep literal JSON/CSS/code strings like "body {margin:0}" in SSA!
+            has_real_interp = 0
+            si_chk = 0
+            sn_chk = len(stext)
+            while si_chk < sn_chk
+                cb_chk = mem_byte_read(stext, si_chk)
+                if cb_chk == 36 and si_chk + 1 < sn_chk and mem_byte_read(stext, si_chk + 1) == 123
+                    has_real_interp = 1
+                    break
+                elif cb_chk == 123 and si_chk + 1 < sn_chk
+                    sj_chk = si_chk + 1
+                    ok_id = 1
+                    id_len_c = 0
+                    while sj_chk < sn_chk and mem_byte_read(stext, sj_chk) != 125
+                        ic = mem_byte_read(stext, sj_chk)
+                        if (ic >= 65 and ic <= 90) or (ic >= 97 and ic <= 122) or (ic >= 48 and ic <= 57) or ic == 95 or ic >= 128
+                            id_len_c = id_len_c + 1
+                        else
+                            ok_id = 0
+                            break
+                        end
+                        sj_chk = sj_chk + 1
+                    end
+                    if ok_id == 1 and id_len_c > 0 and sj_chk < sn_chk and mem_byte_read(stext, sj_chk) == 125
+                        has_real_interp = 1
+                        break
+                    end
+                end
+                si_chk = si_chk + 1
+            end
+            if has_real_interp == 1
+                ctx.ctx_has_unsupported = 1
+                return ssa_value_new_const(0, "str")
+            end
         end
         fn_obj = ctx.ctx_curr_fn
         res_s = fn_obj.new_val("str")
@@ -631,11 +673,22 @@ fn ast_to_ssa_lower_expr ctx expr
             ctx.ctx_has_unsupported = 1
             return ssa_value_new_const(0, "i64")
         end
+        saved_mb_idx = ctx.ctx_in_member_base
+        ctx.ctx_in_member_base = 0
         cont_v = ast_to_ssa_lower_expr(ctx, cont_node)
         idx_v = ast_to_ssa_lower_expr(ctx, idx_node)
-        if ctx.ctx_mod_has_float_cont == 1
-            // WHY: Modules with float-valued dicts/lists rely on flow-sensitive dyn_tagged (%rdx tag)
-            // tracking in x86_synth for subscript indexing; fall back cleanly so floats aren't misread as ints.
+        ctx.ctx_in_member_base = saved_mb_idx
+        is_local_nf = 0
+        if cont_node.kind == "Variable" or cont_node.kind == "Ident"
+            if ctx.ctx_local_nonfloat_conts != 0 and has_key(ctx.ctx_local_nonfloat_conts, cont_node.name) == 1
+                is_local_nf = 1
+            end
+        end
+        if ctx.ctx_fn_has_float_cont == 1 or ctx.ctx_has_float_dict == 1
+            ctx.ctx_has_unsupported = 1
+        elif ctx.ctx_mod_has_float_cont == 1 and saved_mb_idx == 0 and is_local_nf == 0
+            // WHY: Only fall back when module has float containers AND this subscript is neither a
+            // locally proven non-float list/dict nor a struct-pointer base of `arr[i].field`.
             ctx.ctx_has_unsupported = 1
         end
         fn_obj = ctx.ctx_curr_fn
@@ -658,6 +711,9 @@ fn ast_to_ssa_lower_expr ctx expr
             aec = len(expr.elements)
             while aei < aec
                 el_v = ast_to_ssa_lower_expr(ctx, get(expr.elements, aei))
+                if el_v.vtype == "f64"
+                    ctx.ctx_has_float_dict = 1
+                end
                 p_tmp = fn_obj.new_val("i64")
                 p_inst = ir_build_call(ctx.ctx_inst_counter, p_tmp, "_lipi_list_push", [arr_v, el_v])
                 ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
@@ -668,13 +724,66 @@ fn ast_to_ssa_lower_expr ctx expr
         return arr_v
     end
 
+    // 2a3. Map / Dict Literal: {} or {"k": v, ...} (unquoted record literals { f: v } stay in x86_synth)
+    if ekind == "MapLit"
+        all_str_keys = 1
+        if expr.elements != 0 and len(expr.elements) > 0
+            mki = 0
+            while mki < len(expr.elements)
+                mel = get(expr.elements, mki)
+                if mel == 0 or mel.op != "str_key" or mel.name == "__computed__"
+                    all_str_keys = 0
+                    break
+                end
+                mki = mki + 1
+            end
+        end
+        if all_str_keys == 0
+            ctx.ctx_has_unsupported = 1
+            return ssa_value_new_const(0, "i64")
+        end
+        fn_obj = ctx.ctx_curr_fn
+        d_v = fn_obj.new_val("i64")
+        dn_inst = ir_build_call(ctx.ctx_inst_counter, d_v, "_lipi_dict_new", [ssa_value_new_const(16, "i64_int")])
+        ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+        basic_block_append_inst(ctx.ctx_curr_bb, dn_inst)
+        if expr.elements != 0
+            mei = 0
+            mec = len(expr.elements)
+            while mei < mec
+                mel2 = get(expr.elements, mei)
+                k_val = fn_obj.new_val("str")
+                ks_inst = ir_build_str_lit(ctx.ctx_inst_counter, k_val, mel2.name)
+                ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+                basic_block_append_inst(ctx.ctx_curr_bb, ks_inst)
+                mv_val = ast_to_ssa_lower_expr(ctx, mel2.value)
+                dt_tmp = fn_obj.new_val("i64")
+                if mv_val.vtype == "f64"
+                    ctx.ctx_has_float_dict = 1
+                    ds_inst = ir_build_call(ctx.ctx_inst_counter, dt_tmp, "_lipi_list_set_typed", [d_v, k_val, mv_val, ssa_value_new_const(1, "i64_int")])
+                elif mv_val.vtype == "str"
+                    ds_inst = ir_build_call(ctx.ctx_inst_counter, dt_tmp, "_lipi_list_set_typed", [d_v, k_val, mv_val, ssa_value_new_const(2, "i64_int")])
+                else
+                    ds_inst = ir_build_call(ctx.ctx_inst_counter, dt_tmp, "_lipi_list_set", [d_v, k_val, mv_val])
+                end
+                ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+                basic_block_append_inst(ctx.ctx_curr_bb, ds_inst)
+                mei = mei + 1
+            end
+        end
+        return d_v
+    end
+
     // 2b. Struct Member Access: obj.field
     if ekind == "MemberAccess"
         obj_node = expr.left
         if obj_node == 0
             obj_node = expr.target
         end
+        prev_mb = ctx.ctx_in_member_base
+        ctx.ctx_in_member_base = 1
         obj_val = ast_to_ssa_lower_expr(ctx, obj_node)
+        ctx.ctx_in_member_base = prev_mb
         fname = ""
         if expr.name != 0
             fname = expr.name
@@ -937,12 +1046,27 @@ fn ast_to_ssa_lower_expr ctx expr
                 m_callee = "_lipi_dict_values"
                 m_ret_t = "i64"
             else
-                // Try direct struct impl method resolution if receiver struct type is known
-                m_full = recv_val.vtype + "." + callee_name
-                m_uf = ast_to_ssa_find_user_fn_idx(ctx, m_full)
+                // Direct struct impl method resolution (`Type_method`, matching pipeline.lp mangling!)
+                m_uf = 0 - 1
+                m_full = ""
+                if ast_to_ssa_find_struct_idx(ctx, recv_val.vtype) >= 0
+                    m_full = recv_val.vtype + "_" + callee_name
+                    m_uf = ast_to_ssa_find_user_fn_idx(ctx, m_full)
+                end
                 if m_uf >= 0 and m_args.len() <= 16 and m_args.len() == ctx.ctx_fn_param_cnts[m_uf]
                     m_callee = m_full
                     m_ret_t = ctx.ctx_fn_ret_types[m_uf]
+                    if m_uf < ctx.ctx_fn_param_types.len()
+                        m_ptypes = ctx.ctx_fn_param_types[m_uf]
+                        mpi_c = 0
+                        while mpi_c < m_args.len() and mpi_c < m_ptypes.len()
+                            if m_args[mpi_c].vtype == "f64" and m_ptypes[mpi_c] != "f64"
+                                ctx.ctx_has_unsupported = 1
+                                break
+                            end
+                            mpi_c = mpi_c + 1
+                        end
+                    end
                 else
                     ctx.ctx_has_unsupported = 1
                     return ssa_value_new_const(0, "i64")
@@ -985,6 +1109,12 @@ fn ast_to_ssa_lower_expr ctx expr
 
         // 5b. Inter-Function Call to known user function (up to 16 args) OR verified SysV ABI runtime builtin
         ac = arg_values.len()
+
+        // Hardware syscall intrinsics must always be lowered by the target backend, never as a regular user fn call
+        if callee_name == "syscall" or callee_name == "সিসকল" or callee_name == "sys_syscall"
+            ctx.ctx_has_unsupported = 1
+            return ssa_value_new_const(0, "i64")
+        end
 
         // 5b-pre. Direct IEEE-754 bitcast & raw f64 memory intrinsics (zero cvtsi2sd conversion!)
         if callee_name == "f64_from_bits" and ac == 1
@@ -1270,12 +1400,60 @@ fn ast_to_ssa_lower_stmt ctx stmt
     if skind == "Assign"
         target_name = stmt.target
         if stmt.index != 0
-            cont_slot = ast_to_ssa_find_var(ctx, target_name)
-            if cont_slot == 0 or str_contains(target_name, ".") == 1 or str_contains(target_name, "[") == 1
+            cont_v = 0
+            if str_contains(target_name, "[") == 1
                 ctx.ctx_has_unsupported = 1
                 return 0
+            elif str_contains(target_name, ".") == 1
+                // Struct field array element store: a.items[i] = val
+                fsegs = list()
+                ftlen = len(target_name)
+                fseg_st = 0
+                fsi = 0
+                while fsi <= ftlen
+                    if fsi == ftlen or mem_byte_read(target_name, fsi) == 46
+                        push(fsegs, str_slice(target_name, fseg_st, fsi))
+                        fseg_st = fsi + 1
+                    end
+                    fsi = fsi + 1
+                end
+                if fsegs.len() < 2
+                    ctx.ctx_has_unsupported = 1
+                    return 0
+                end
+                fobj_slot = ast_to_ssa_find_var(ctx, fsegs[0])
+                if fobj_slot == 0
+                    ctx.ctx_has_unsupported = 1
+                    return 0
+                end
+                fcur_t = ast_to_ssa_get_var_type(ctx, fsegs[0])
+                fcur_v = ast_to_ssa_emit_load_typed(ctx, fobj_slot, fcur_t)
+                fn_obj = ctx.ctx_curr_fn
+                fsg = 1
+                while fsg < fsegs.len()
+                    foff_a = ast_to_ssa_resolve_field_offset(ctx, fcur_t, fsegs[fsg])
+                    if foff_a < 0
+                        ctx.ctx_has_unsupported = 1
+                        return 0
+                    end
+                    ft_a = ast_to_ssa_resolve_field_type(ctx, fcur_t, fsegs[fsg])
+                    fnxt_v = fn_obj.new_val(ft_a)
+                    fl_a = ir_build_field_load(ctx.ctx_inst_counter, fnxt_v, fcur_v, foff_a)
+                    ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+                    basic_block_append_inst(ctx.ctx_curr_bb, fl_a)
+                    fcur_v = fnxt_v
+                    fcur_t = ft_a
+                    fsg = fsg + 1
+                end
+                cont_v = fcur_v
+            else
+                cont_slot = ast_to_ssa_find_var(ctx, target_name)
+                if cont_slot == 0
+                    ctx.ctx_has_unsupported = 1
+                    return 0
+                end
+                cont_v = ast_to_ssa_emit_load_typed(ctx, cont_slot, ast_to_ssa_get_var_type(ctx, target_name))
             end
-            cont_v = ast_to_ssa_emit_load_typed(ctx, cont_slot, ast_to_ssa_get_var_type(ctx, target_name))
             idx_v = ast_to_ssa_lower_expr(ctx, stmt.index)
             rhs_v = ast_to_ssa_lower_expr(ctx, stmt.value)
             fn_obj = ctx.ctx_curr_fn
@@ -1366,6 +1544,14 @@ fn ast_to_ssa_lower_stmt ctx stmt
             end
         end
         rhs_val = ast_to_ssa_lower_expr(ctx, stmt.value)
+        if ctx.ctx_local_nonfloat_conts != 0 and stmt.value != 0 and ctx.ctx_fn_has_float_cont == 0
+            rk_v = stmt.value.kind
+            if rk_v == "ArrayLit" or rk_v == "MapLit"
+                ctx.ctx_local_nonfloat_conts[target_name] = 1
+            elif rk_v == "Call" and (stmt.value.name == "list" or stmt.value.name == "dict" or stmt.value.name == "তালিকা" or stmt.value.name == "list_create" or stmt.value.name == "map_new")
+                ctx.ctx_local_nonfloat_conts[target_name] = 1
+            end
+        end
         if decl_t == "f64" and rhs_val.vtype != "f64"
             rhs_val = ast_to_ssa_ensure_f64(ctx, rhs_val)
         end
@@ -1406,10 +1592,48 @@ fn ast_to_ssa_lower_stmt ctx stmt
         basic_block_append_inst(ctx.ctx_curr_bb, store_inst)
         return 1
 
-    // 3. Compound Assignment: target <op>= value (local or struct field)
+    // 3. Compound Assignment: target <op>= value (local, arr[i], or struct field)
     if skind == "AssignOp"
         target_name = stmt.target
-        if stmt.index != 0 or str_contains(target_name, "[") == 1
+        if stmt.index != 0
+            if str_contains(target_name, ".") == 1 or str_contains(target_name, "[") == 1 or ctx.ctx_fn_has_float_cont == 1 or ctx.ctx_has_float_dict == 1
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
+            ia_slot = ast_to_ssa_find_var(ctx, target_name)
+            if ia_slot == 0
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
+            fn_obj = ctx.ctx_curr_fn
+            ia_cont = ast_to_ssa_emit_load_typed(ctx, ia_slot, ast_to_ssa_get_var_type(ctx, target_name))
+            ia_idx = ast_to_ssa_lower_expr(ctx, stmt.index)
+            ia_cur = fn_obj.new_val("i64")
+            ia_get = ir_build_call(ctx.ctx_inst_counter, ia_cur, "_lipi_list_get", [ia_cont, ia_idx])
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, ia_get)
+            ia_rhs = ast_to_ssa_lower_expr(ctx, stmt.value)
+            if ia_rhs.vtype == "f64"
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
+            ia_op = ast_to_ssa_map_binop(stmt.op)
+            if ia_op == OP_ADD
+                ia_res = fn_obj.new_val("i64")
+                ia_bin = ir_build_binop(ctx.ctx_inst_counter, OP_ADD_DYN, ia_res, ia_cur, ia_rhs)
+            else
+                ia_res = fn_obj.new_val("i64_int")
+                ia_bin = ir_build_binop(ctx.ctx_inst_counter, ia_op, ia_res, ia_cur, ia_rhs)
+            end
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, ia_bin)
+            ia_tmp = fn_obj.new_val("i64")
+            ia_set = ir_build_call(ctx.ctx_inst_counter, ia_tmp, "_lipi_list_set", [ia_cont, ia_idx, ia_res])
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, ia_set)
+            return 1
+        end
+        if str_contains(target_name, "[") == 1
             ctx.ctx_has_unsupported = 1
             return 0
         end
@@ -1533,9 +1757,34 @@ fn ast_to_ssa_lower_stmt ctx stmt
         basic_block_append_inst(ctx.ctx_curr_bb, store_inst)
         return 1
 
-    // 4. Conditional Statement: if / elif / else
+    // 4. Conditional Statement: if / elif / else (and scoped memory `region`)
     if skind == "IfStmt"
-        if stmt.op == "match" or stmt.op == "try" or stmt.op == "region"
+        if stmt.op == "region"
+            if ast_to_ssa_stmts_have_return(stmt.then_body) == 1
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
+            fn_obj = ctx.ctx_curr_fn
+            rg_mk = fn_obj.new_val("i64_int")
+            rg_mi = ir_build_call(ctx.ctx_inst_counter, rg_mk, "_lipi_arena_mark", list())
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, rg_mi)
+            if stmt.then_body != 0
+                rbi = 0
+                while rbi < len(stmt.then_body)
+                    ast_to_ssa_lower_stmt(ctx, get(stmt.then_body, rbi))
+                    rbi = rbi + 1
+                end
+            end
+            if basic_block_get_terminator(ctx.ctx_curr_bb) == 0
+                rg_rst = fn_obj.new_val("i64_int")
+                rg_ri = ir_build_call(ctx.ctx_inst_counter, rg_rst, "_lipi_arena_reset", [rg_mk])
+                ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+                basic_block_append_inst(ctx.ctx_curr_bb, rg_ri)
+            end
+            return 1
+        end
+        if stmt.op == "match" or stmt.op == "try"
             ctx.ctx_has_unsupported = 1
         end
         cond_node = stmt.condition
@@ -1634,6 +1883,178 @@ fn ast_to_ssa_lower_stmt ctx stmt
         ctx.ctx_curr_bb = exit_bb
         return 1
 
+    // 5b. For Loop Statement: inclusive range `for i in a..b` OR collection `for x in arr`
+    if skind == "For" or skind == "ForLoop"
+        fn_obj = ctx.ctx_curr_fn
+        iter_n = stmt.iterable
+        var_nm = stmt.variable
+        if iter_n == 0 or var_nm == 0 or var_nm == ""
+            ctx.ctx_has_unsupported = 1
+            return 0
+        end
+        if iter_n.kind == "BinaryOp" and (iter_n.op == ".." or iter_n.op == "..=")
+            st_v = ast_to_ssa_lower_expr(ctx, iter_n.left)
+            en_v = ast_to_ssa_lower_expr(ctx, iter_n.right)
+            en_slot = ast_to_ssa_alloc_var(ctx, "__for_end_" + str(ctx.ctx_inst_counter), "i64_int")
+            st_en = ir_build_store(ctx.ctx_inst_counter, en_v, en_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_en)
+            v_slot = ast_to_ssa_find_var(ctx, var_nm)
+            if v_slot == 0
+                v_slot = ast_to_ssa_alloc_var(ctx, var_nm, "i64_int")
+            else
+                ast_to_ssa_set_var_type(ctx, var_nm, "i64_int")
+            end
+            st_iv = ir_build_store(ctx.ctx_inst_counter, st_v, v_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_iv)
+            hdr_bb = fn_obj.create_block("for_hdr")
+            body_bb = fn_obj.create_block("for_body")
+            step_bb = fn_obj.create_block("for_step")
+            exit_bb = fn_obj.create_block("for_exit")
+            j_fh = ir_build_jmp(ctx.ctx_inst_counter, hdr_bb.label)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, j_fh)
+            ctx.ctx_curr_bb = hdr_bb
+            cur_iv = ast_to_ssa_emit_load_typed(ctx, v_slot, "i64_int")
+            lim_iv = ast_to_ssa_emit_load_typed(ctx, en_slot, "i64_int")
+            cmp_r = fn_obj.new_val("bool")
+            cmp_i = ir_build_cmp(ctx.ctx_inst_counter, ast_to_ssa_map_cmp("<="), cmp_r, cur_iv, lim_iv)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, cmp_i)
+            br_f = ir_build_br(ctx.ctx_inst_counter, cmp_r, body_bb.label, exit_bb.label)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, br_f)
+            push(ctx.ctx_loop_headers, step_bb)
+            push(ctx.ctx_loop_exits, exit_bb)
+            ctx.ctx_curr_bb = body_bb
+            if stmt.body != 0
+                fbi = 0
+                while fbi < len(stmt.body)
+                    ast_to_ssa_lower_stmt(ctx, get(stmt.body, fbi))
+                    fbi = fbi + 1
+                end
+            end
+            if basic_block_get_terminator(ctx.ctx_curr_bb) == 0
+                j_st = ir_build_jmp(ctx.ctx_inst_counter, step_bb.label)
+                ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+                basic_block_append_inst(ctx.ctx_curr_bb, j_st)
+            end
+            pop(ctx.ctx_loop_headers)
+            pop(ctx.ctx_loop_exits)
+            ctx.ctx_curr_bb = step_bb
+            cur_iv2 = ast_to_ssa_emit_load_typed(ctx, v_slot, "i64_int")
+            nxt_iv = fn_obj.new_val("i64_int")
+            inc_i = ir_build_binop(ctx.ctx_inst_counter, OP_ADD, nxt_iv, cur_iv2, ssa_value_new_const(1, "i64_int"))
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, inc_i)
+            st_nxt = ir_build_store(ctx.ctx_inst_counter, nxt_iv, v_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_nxt)
+            j_bk = ir_build_jmp(ctx.ctx_inst_counter, hdr_bb.label)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, j_bk)
+            ctx.ctx_curr_bb = exit_bb
+            return 1
+        else
+            // Collection iteration: for x in arr (uses x86_64 runtime _lipi_len/_lipi_list_get)
+            if ctx.ctx_target_name != "x86_64"
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
+            is_f_nf = 0
+            if iter_n.kind == "Variable" or iter_n.kind == "Ident"
+                if ctx.ctx_local_nonfloat_conts != 0 and has_key(ctx.ctx_local_nonfloat_conts, iter_n.name) == 1
+                    is_f_nf = 1
+                end
+            end
+            if ctx.ctx_fn_has_float_cont == 1 or ctx.ctx_has_float_dict == 1 or (ctx.ctx_mod_has_float_cont == 1 and is_f_nf == 0)
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
+            coll_v = ast_to_ssa_lower_expr(ctx, iter_n)
+            c_slot = ast_to_ssa_alloc_var(ctx, "__for_col_" + str(ctx.ctx_inst_counter), "i64")
+            st_c = ir_build_store(ctx.ctx_inst_counter, coll_v, c_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_c)
+            len_v = fn_obj.new_val("i64_int")
+            li_i = ir_build_call(ctx.ctx_inst_counter, len_v, "_lipi_len", [coll_v])
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, li_i)
+            l_slot = ast_to_ssa_alloc_var(ctx, "__for_len_" + str(ctx.ctx_inst_counter), "i64_int")
+            st_l = ir_build_store(ctx.ctx_inst_counter, len_v, l_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_l)
+            idx_slot = ast_to_ssa_alloc_var(ctx, "__for_idx_" + str(ctx.ctx_inst_counter), "i64_int")
+            st_idx0 = ir_build_store(ctx.ctx_inst_counter, ssa_value_new_const(0, "i64_int"), idx_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_idx0)
+            v_slot2 = ast_to_ssa_find_var(ctx, var_nm)
+            if v_slot2 == 0
+                v_slot2 = ast_to_ssa_alloc_var(ctx, var_nm, "i64")
+            else
+                ast_to_ssa_set_var_type(ctx, var_nm, "i64")
+            end
+            hdr_bb2 = fn_obj.create_block("for_hdr")
+            body_bb2 = fn_obj.create_block("for_body")
+            step_bb2 = fn_obj.create_block("for_step")
+            exit_bb2 = fn_obj.create_block("for_exit")
+            j_fh2 = ir_build_jmp(ctx.ctx_inst_counter, hdr_bb2.label)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, j_fh2)
+            ctx.ctx_curr_bb = hdr_bb2
+            ci_v = ast_to_ssa_emit_load_typed(ctx, idx_slot, "i64_int")
+            cl_v = ast_to_ssa_emit_load_typed(ctx, l_slot, "i64_int")
+            cmp_r2 = fn_obj.new_val("bool")
+            cmp_i2 = ir_build_cmp(ctx.ctx_inst_counter, ast_to_ssa_map_cmp("<"), cmp_r2, ci_v, cl_v)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, cmp_i2)
+            br_f2 = ir_build_br(ctx.ctx_inst_counter, cmp_r2, body_bb2.label, exit_bb2.label)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, br_f2)
+            push(ctx.ctx_loop_headers, step_bb2)
+            push(ctx.ctx_loop_exits, exit_bb2)
+            ctx.ctx_curr_bb = body_bb2
+            cc_v = ast_to_ssa_emit_load_typed(ctx, c_slot, "i64")
+            ci_v2 = ast_to_ssa_emit_load_typed(ctx, idx_slot, "i64_int")
+            el_gv = fn_obj.new_val("i64")
+            ge_i = ir_build_call(ctx.ctx_inst_counter, el_gv, "_lipi_list_get", [cc_v, ci_v2])
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, ge_i)
+            st_el = ir_build_store(ctx.ctx_inst_counter, el_gv, v_slot2)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_el)
+            if stmt.body != 0
+                fbi2 = 0
+                while fbi2 < len(stmt.body)
+                    ast_to_ssa_lower_stmt(ctx, get(stmt.body, fbi2))
+                    fbi2 = fbi2 + 1
+                end
+            end
+            if basic_block_get_terminator(ctx.ctx_curr_bb) == 0
+                j_st2 = ir_build_jmp(ctx.ctx_inst_counter, step_bb2.label)
+                ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+                basic_block_append_inst(ctx.ctx_curr_bb, j_st2)
+            end
+            pop(ctx.ctx_loop_headers)
+            pop(ctx.ctx_loop_exits)
+            ctx.ctx_curr_bb = step_bb2
+            ci_v3 = ast_to_ssa_emit_load_typed(ctx, idx_slot, "i64_int")
+            nxt_i2 = fn_obj.new_val("i64_int")
+            inc_i2 = ir_build_binop(ctx.ctx_inst_counter, OP_ADD, nxt_i2, ci_v3, ssa_value_new_const(1, "i64_int"))
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, inc_i2)
+            st_n2 = ir_build_store(ctx.ctx_inst_counter, nxt_i2, idx_slot)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, st_n2)
+            j_bk2 = ir_build_jmp(ctx.ctx_inst_counter, hdr_bb2.label)
+            ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
+            basic_block_append_inst(ctx.ctx_curr_bb, j_bk2)
+            ctx.ctx_curr_bb = exit_bb2
+            return 1
+        end
+    end
+
     // 6. Break Statement
     if skind == "Break"
         if len(ctx.ctx_loop_exits) > 0
@@ -1665,6 +2086,27 @@ fn ast_to_ssa_lower_stmt ctx stmt
     return 0
 
 // ── 6. Function & Module Lowering ─────────────────────────────────────────────
+
+fn ast_to_ssa_stmts_have_return stmts
+    if stmts == 0 return 0 end
+    si = 0
+    sn = len(stmts)
+    while si < sn
+        st = get(stmts, si)
+        if st != 0
+            sk = st.kind
+            if sk == "Return" return 1 end
+            if sk == "IfStmt"
+                if ast_to_ssa_stmts_have_return(st.then_body) == 1 return 1 end
+                if ast_to_ssa_stmts_have_return(st.else_body) == 1 return 1 end
+            elif sk == "While" or sk == "WhileLoop" or sk == "For" or sk == "ForLoop" or sk == "Block"
+                if ast_to_ssa_stmts_have_return(st.body) == 1 return 1 end
+            end
+        end
+        si = si + 1
+    end
+    return 0
+end
 
 fn ast_to_ssa_prescan_ret_hint stmts
     if stmts == 0 return "i64" end
@@ -1822,10 +2264,11 @@ fn ast_to_ssa_lower_fn_impl mod_obj fn_decl struct_names struct_fields struct_id
     ctx.ctx_mod_const_map = mod_const_map
     ctx.ctx_mod_mut_globals = mod_mut_globals
     ctx.ctx_mod_has_float_cont = mod_has_float_cont
+    ctx.ctx_fn_has_float_cont = ast_to_ssa_node_has_float_cont(fn_decl)
     ctx.ctx_target_name = target_name
 
-    if fn_name == "f64_from_bits" or fn_name == "f64_to_bits"
-        // WHY: Bitcast helpers reinterpret raw 64-bit IEEE-754 patterns without cvtsi2sd.
+    if fn_name == "f64_from_bits" or fn_name == "f64_to_bits" or fn_name == "syscall" or fn_name == "সিসকল" or fn_name == "sys_syscall"
+        // WHY: Bitcast & hardware syscall wrappers must stay in target backend synthesis.
         ctx.ctx_has_unsupported = 1
     end
 
@@ -1843,6 +2286,9 @@ fn ast_to_ssa_lower_fn_impl mod_obj fn_decl struct_names struct_fields struct_id
         end
         while pi < pcnt
             pnode = get(params, pi)
+            if pnode != 0 and (pnode.param_is_variadic == 1 or pnode.param_default != 0)
+                ctx.ctx_has_unsupported = 1
+            end
             p_name = pnode.param_name
             raw_pt = ""
             p_type = "i64"
@@ -2008,9 +2454,13 @@ fn ast_to_ssa_collect_schemas ast_nodes
             push(sch.sch_struct_fields, flist)
             sch.sch_struct_idx_map[sname] = sch.sch_struct_names.len()
         elif dkind == "FnDef" or dkind == "Function" or dkind == "কাজ"
-            push(sch.sch_fn_names, decl.name)
-            sch.sch_fn_idx_map[decl.name] = sch.sch_fn_names.len()
-            sch.sch_mod_fn_set[decl.name] = 1
+            if decl.name == "syscall" or decl.name == "সিসকল" or decl.name == "sys_syscall"
+                push(sch.sch_fn_names, "")
+            else
+                push(sch.sch_fn_names, decl.name)
+                sch.sch_fn_idx_map[decl.name] = sch.sch_fn_names.len()
+                sch.sch_mod_fn_set[decl.name] = 1
+            end
             rt = "i64"
             if decl.ret_type != 0 and len(decl.ret_type) > 0
                 rt = ssa_normalize_type(decl.ret_type)
@@ -2022,6 +2472,7 @@ fn ast_to_ssa_collect_schemas ast_nodes
             end
             push(sch.sch_fn_ret_types, rt)
             pc = 0
+            has_var_or_def = 0
             pt_list = list()
             if decl.params != 0
                 pc = len(decl.params)
@@ -2029,12 +2480,20 @@ fn ast_to_ssa_collect_schemas ast_nodes
                 while pti_p < pc
                     pnd = get(decl.params, pti_p)
                     pt_s = ""
-                    if pnd != 0 and pnd.param_type != 0 and pnd.param_type != ""
-                        pt_s = ssa_normalize_type(pnd.param_type)
+                    if pnd != 0
+                        if pnd.param_is_variadic == 1
+                            has_var_or_def = 1
+                        end
+                        if pnd.param_type != 0 and pnd.param_type != ""
+                            pt_s = ssa_normalize_type(pnd.param_type)
+                        end
                     end
                     push(pt_list, pt_s)
                     pti_p = pti_p + 1
                 end
+            end
+            if has_var_or_def == 1
+                pc = 0 - 1
             end
             push(sch.sch_fn_param_cnts, pc)
             push(sch.sch_fn_param_types, pt_list)

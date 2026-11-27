@@ -191,11 +191,22 @@ import "utso/collections"
 
     // General Character
     @else
-      // Check for interpolation "{var}" in double quotes
+      // Check for interpolation "{var}" or "${expr}" in double quotes (excluding LSP snippet "${1:label}")
       @if quote_c == 34 && cur == 123 && i + 1 < num_items
         next_c = str_char_at(source, i + 1)
         // Check if next character is identifier-like (letter or underscore)
         @if (next_c >= 65 && next_c <= 90) || (next_c >= 97 && next_c <= 122) || next_c == 95 || next_c >= 224
+          has_interp = 1
+        @end
+      @end
+      @if quote_c == 34 && cur == 36 && i + 2 < num_items && str_char_at(source, i + 1) == 123
+        sn_p = i + 2
+        sn_dig = 0
+        @while sn_p < num_items && str_char_at(source, sn_p) >= 48 && str_char_at(source, sn_p) <= 57
+          sn_dig = 1
+          sn_p = sn_p + 1
+        @end
+        @if !(sn_dig == 1 && sn_p < num_items && str_char_at(source, sn_p) == 58)
           has_interp = 1
         @end
       @end

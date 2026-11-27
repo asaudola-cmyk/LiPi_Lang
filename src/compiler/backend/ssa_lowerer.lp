@@ -655,6 +655,20 @@ fn ssa_lower_instruction_x86 low inst
             jp_al.sjp_target = "_lipi_user_alloc"
             jp_al.sjp_kind = 10
             push(low.low_call_patches, jp_al)
+            // Stamp Sovereign dyn-Trait runtime type tag into unused [rax - 32] GC header slot
+            if inst.extra_str != 0 and len(inst.extra_str) > 0
+                th_h = 2166136261
+                th_n = len(inst.extra_str)
+                th_i = 0
+                while th_i < th_n
+                    th_h = ((th_h ^ mem_byte_read(inst.extra_str, th_i)) * 16777619) & 2147483647
+                    th_i = th_i + 1
+                end
+                ssa_lowerer_emit_bytes(low, [73, 187]) // movabs r11, (1415139397 << 32) | (th_h | 1)
+                ssa_lowerer_emit_u32(low, th_h | 1)
+                ssa_lowerer_emit_u32(low, 1415139397)
+                ssa_lowerer_emit_bytes(low, [76, 137, 88, 224]) // mov [rax - 32], r11
+            end
             // Initialize fields directly with ptr in %rax and val loaded into %rcx (ZERO push/pop!)
             // Operands have spans_call=1 (guaranteed in callee-saved reg or stack slot).
             fi = 0

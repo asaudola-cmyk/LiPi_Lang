@@ -223,6 +223,11 @@ fn x86_synth_prescan_signatures s tokens
             pcount = 0
             fparams = list()
             p_types = list()
+            p_def_starts = list()
+            p_def_ends = list()
+            p_min_cnt = 0
+            p_has_opt = 0
+            p_var_p1 = 0
             has_paren = 0
             if p < n and (tokens[p].tok_kind == TOK_LPAREN() or (tokens[p].tok_kind != TOK_STR() and tokens[p].tok_text == "("))
                 has_paren = 1
@@ -248,10 +253,23 @@ fn x86_synth_prescan_signatures s tokens
                         break
                     end
                 end
+                is_var_pref = 0
+                if pk == TOK_DOTDOT() and p + 2 < n and tokens[p + 1].tok_kind == TOK_DOT() and x86_synth_is_ident_token(tokens[p + 2].tok_kind) == 1
+                    is_var_pref = 1
+                    p = p + 2
+                    pk = tokens[p].tok_kind
+                    ptxt = tokens[p].tok_text
+                end
                 if x86_synth_is_ident_token(pk) == 1
                     pname_ps = ptxt
+                    p_idx_cur = pcount
                     pcount = pcount + 1
                     pt_decl = ""
+                    if is_var_pref == 1
+                        pt_decl = "list"
+                        p_var_p1 = p_idx_cur + 1
+                        p_has_opt = 1
+                    end
                     p = p + 1
                     while has_paren == 1 and p < n and (tokens[p].tok_kind == TOK_NEWLINE() or tokens[p].tok_kind == TOK_COMMENT_LINE())
                         p = p + 1
@@ -261,17 +279,63 @@ fn x86_synth_prescan_signatures s tokens
                         while has_paren == 1 and p < n and tokens[p].tok_kind == TOK_NEWLINE()
                             p = p + 1
                         end
-                        pt_box = [p]
-                        pt_ps = x86_synth_parse_type_expr(tokens, pt_box)
-                        if pt_ps != ""
-                            pt_decl = pt_ps
-                            if pt_ps == "float" or pt_ps == "f64" or pt_ps == "f32"
-                                push(fparams, pname_ps)
+                        if p + 1 < n and tokens[p].tok_kind == TOK_DOTDOT() and tokens[p + 1].tok_kind == TOK_DOT()
+                            p_var_p1 = p_idx_cur + 1
+                            p_has_opt = 1
+                            pt_decl = "list"
+                            p = p + 2
+                            pt_skip_b = [p]
+                            x86_synth_parse_type_expr(tokens, pt_skip_b)
+                            p = get(pt_skip_b, 0)
+                        else
+                            pt_box = [p]
+                            pt_ps = x86_synth_parse_type_expr(tokens, pt_box)
+                            if pt_ps != ""
+                                if is_var_pref == 0
+                                    pt_decl = pt_ps
+                                    if pt_ps == "float" or pt_ps == "f64" or pt_ps == "f32"
+                                        push(fparams, pname_ps)
+                                    end
+                                end
+                                p = get(pt_box, 0)
                             end
-                            p = get(pt_box, 0)
                         end
                     end
                     push(p_types, pt_decl)
+                    while has_paren == 1 and p < n and tokens[p].tok_kind == TOK_NEWLINE()
+                        p = p + 1
+                    end
+                    d_st = 0 - 1
+                    d_en = 0 - 1
+                    if has_paren == 1 and p < n and (tokens[p].tok_kind == TOK_ASSIGN() or (tokens[p].tok_kind != TOK_STR() and tokens[p].tok_text == "="))
+                        p = p + 1
+                        while p < n and tokens[p].tok_kind == TOK_NEWLINE()
+                            p = p + 1
+                        end
+                        d_st = p
+                        p_has_opt = 1
+                        dd = 0
+                        while p < n
+                            dk_d = tokens[p].tok_kind
+                            dt_d = tokens[p].tok_text
+                            if dk_d == TOK_LPAREN() or dk_d == TOK_LBRACKET() or dk_d == TOK_LBRACE() or (dk_d != TOK_STR() and (dt_d == "(" or dt_d == "[" or dt_d == "{"))
+                                dd = dd + 1
+                            elif dk_d == TOK_RPAREN() or dk_d == TOK_RBRACKET() or dk_d == TOK_RBRACE() or (dk_d != TOK_STR() and (dt_d == ")" or dt_d == "]" or dt_d == "}"))
+                                if dd == 0
+                                    break
+                                end
+                                dd = dd - 1
+                            elif dd == 0 and (dk_d == TOK_COMMA() or (dk_d != TOK_STR() and dt_d == ","))
+                                break
+                            end
+                            p = p + 1
+                        end
+                        d_en = p
+                    elif p_has_opt == 0
+                        p_min_cnt = p_min_cnt + 1
+                    end
+                    push(p_def_starts, d_st)
+                    push(p_def_ends, d_en)
                     while has_paren == 1 and p < n and tokens[p].tok_kind == TOK_NEWLINE()
                         p = p + 1
                     end
@@ -422,6 +486,7 @@ fn x86_synth_prescan_signatures s tokens
                                             an_sd.sd_type_params = list()
                                             an_sd.sd_is_packed = 0
                                             an_sd.sd_align = 0
+                                            an_sd.sd_type_id = x86_synth_type_tag_hash(an_sd.sd_name)
                                             x86_synth_compute_struct_layout(s, an_sd)
                                             push(s.synth_structs, an_sd)
                                             m_an = an_sd.sd_name
@@ -533,6 +598,12 @@ fn x86_synth_prescan_signatures s tokens
             fe.fn_param_types = p_types
             fe.fn_type_params = fn_tparams
             fe.fn_type_bounds = fn_tbounds
+            fe.fn_min_params = p_min_cnt
+            fe.fn_variadic_idx = p_var_p1
+            if p_has_opt == 1
+                fe.fn_default_starts = p_def_starts
+                fe.fn_default_ends = p_def_ends
+            end
             x86_synth_register_fn_obj(s, fe)
             if method_alias != ""
                 fa = X86Function()
@@ -547,6 +618,12 @@ fn x86_synth_prescan_signatures s tokens
                 fa.fn_param_types = p_types
                 fa.fn_type_params = fn_tparams
                 fa.fn_type_bounds = fn_tbounds
+                fa.fn_min_params = p_min_cnt
+                fa.fn_variadic_idx = p_var_p1
+                if p_has_opt == 1
+                    fa.fn_default_starts = p_def_starts
+                    fa.fn_default_ends = p_def_ends
+                end
                 x86_synth_register_fn_obj(s, fa)
             end
             i = p

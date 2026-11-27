@@ -418,6 +418,29 @@ end
 //   f[8]: step_count (number of execution slices yielded)
 //   f[9]: sched_sp_slot (pointer to 64-byte Silicon Fiber Descriptor)
 
+fn _fiber_gc_unlink_node sched target
+    if sched <= 0 or target <= 0
+        return 0
+    end
+    head = mem_read(sched, 56)
+    if head == target
+        mem_write(sched, 56, mem_read(target, 136))
+        mem_write(target, 136, 0)
+        return 1
+    end
+    prev = head
+    while prev != 0
+        nxt = mem_read(prev, 136)
+        if nxt == target
+            mem_write(prev, 136, mem_read(target, 136))
+            mem_write(target, 136, 0)
+            return 1
+        end
+        prev = nxt
+    end
+    return 0
+end
+
 fn fiber_new id fn_code arg stack_size
     f = list()
     if stack_size < 1024
@@ -441,18 +464,13 @@ fn fiber_new id fn_code arg stack_size
     engine = fiber_get_swap_engine()
     boot_entry = engine + 64 // offset 64 is fiber_bootstrap
 
-    // Allocate 64-byte Silicon Fiber Descriptor
-    // Layout:
-    //   desc + 0:  sched_sp (8B) - saved scheduler %rsp
-    //   desc + 8:  state (8B)
-    //   desc + 16: fiber_sp (8B) - saved fiber %rsp
-    //   desc + 24: fn_code (8B)
-    //   desc + 32: arg (8B)
-    //   desc + 40: result (8B)
-    //   desc + 48: step_count (8B)
-    //   desc + 56: fiber_id (8B)
-    desc = malloc(64)
-    mem_zero(desc, 64)
+    // Allocate 512-byte Silicon Fiber Descriptor + GC root scan nodes:
+    //   desc + 0..56:   original 64B silicon descriptor (sched_sp, state, fiber_sp, fn_code, arg, result, step_count, fiber_id)
+    //   desc + 64:      gc_sched (AsyncSched*)
+    //   desc + 128..287: gc_node (160B FUTR-layout descriptor for suspended fiber stack)
+    //   desc + 320..479: parent_node (160B FUTR-layout descriptor for suspended scheduler stack)
+    desc = malloc(512)
+    mem_zero(desc, 512)
     mem_write(desc, 0, 0)
     mem_write(desc, 8, FIBER_READY)
     mem_write(desc, 24, fn_code)
@@ -484,6 +502,23 @@ fn fiber_new id fn_code arg stack_size
 
     initial_sp = stk_top - 56
     mem_write(desc, 16, initial_sp)
+
+    // Register fiber & parent stack GC scan nodes on runtime AsyncSched->all_live_head
+    gc_sched = _lipi_async_get_sched()
+    mem_write(desc, 64, gc_sched)
+    if gc_sched > 0
+        gc_node = desc + 128
+        parent_node = desc + 320
+        mem_write(gc_node, 8, 2)
+        mem_write(gc_node, 16, initial_sp)
+        mem_write(gc_node, 24, stk - 4096)
+        mem_write(gc_node, 32, stack_size + 4096)
+        mem_write(parent_node, 8, 3)
+        old_hd = mem_read(gc_sched, 56)
+        mem_write(gc_node, 136, old_hd)
+        mem_write(parent_node, 136, gc_node)
+        mem_write(gc_sched, 56, parent_node)
+    end
 
     push(f, id)            // 0: id
     push(f, FIBER_READY)   // 1: state
@@ -530,7 +565,16 @@ fn fiber_free f
     if len(f) > 9
         slot = get(f, 9)
         if slot > 0
-            free(slot, 64)
+            gc_node = slot + 128
+            parent_node = slot + 320
+            mem_write(gc_node, 8, 3)
+            mem_write(parent_node, 8, 3)
+            gc_sched = mem_read(slot, 64)
+            if gc_sched > 0
+                _fiber_gc_unlink_node(gc_sched, parent_node)
+                _fiber_gc_unlink_node(gc_sched, gc_node)
+            end
+            free(slot, 512)
             list_set(f, 9, 0)
         end
     end
@@ -673,10 +717,29 @@ fn fiber_execute_slice f
         return get(f, 1)
     end
 
-    // Read current fiber stack pointer
+    // Read current fiber stack pointer & prepare GC-safe stack bounds
     fiber_sp = mem_read(desc, 16)
+    f_stk = get(f, 2)
+    f_ssz = get(f, 3)
+    slab = _lipi_slab_buckets_ptr()
+    parent_sb = mem_read(slab, 80)
+    parent_rsp = stack_pointer()
+    gc_node = desc + 128
+    parent_node = desc + 320
+    if parent_rsp > 4104 and parent_rsp < parent_sb and (parent_sb - parent_rsp) <= 16777216
+        p_base = parent_rsp - 4104
+        mem_write(parent_node, 24, p_base)
+        mem_write(parent_node, 32, parent_sb - p_base)
+        mem_write(parent_node, 16, parent_rsp)
+        mem_write(parent_node, 8, 2)
+    end
+    mem_write(gc_node, 8, 3)
+    if f_stk > 0 and f_ssz > 0
+        mem_write(slab, 80, f_stk + f_ssz)
+    end
 
     // Set active fiber for parameterless yields
+    prev_fiber = G_CURRENT_FIBER
     G_CURRENT_FIBER = f
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -686,10 +749,24 @@ fn fiber_execute_slice f
     // 3. Sets CPU %rsp to fiber_sp
     // 4. Restores fiber registers and resumes/starts execution in fiber context
     // ──────────────────────────────────────────────────────────────────────────
-    sw_fn(desc, fiber_sp)
+    try
+        sw_fn(desc, fiber_sp)
+    catch fib_err
+        mem_write(slab, 80, parent_sb)
+        mem_write(parent_node, 8, 3)
+        mem_write(gc_node, 8, 3)
+        mem_write(desc, 8, FIBER_DEAD)
+        list_set(f, 1, FIBER_DEAD)
+        G_CURRENT_FIBER = prev_fiber
+        throw fib_err
+    end
+
+    // Immediately restore scheduler _lipi_stack_bottom and update GC scan nodes
+    mem_write(slab, 80, parent_sb)
+    mem_write(parent_node, 8, 3)
 
     // Clear active fiber context
-    G_CURRENT_FIBER = 0
+    G_CURRENT_FIBER = prev_fiber
 
     // Resumed back in scheduler context:
     // Synchronize state, stack pointer, result, and step_count from silicon descriptor
@@ -697,6 +774,13 @@ fn fiber_execute_slice f
     new_sp = mem_read(desc, 16)
     new_res = mem_read(desc, 40)
     new_steps = mem_read(desc, 48)
+
+    if new_state != FIBER_DEAD
+        mem_write(gc_node, 16, new_sp)
+        mem_write(gc_node, 8, 2)
+    else
+        mem_write(gc_node, 8, 3)
+    end
 
     list_set(f, 1, new_state)
     list_set(f, 4, new_sp)

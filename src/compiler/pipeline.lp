@@ -134,6 +134,7 @@ struct CompilerConfig
     cfg_base_vaddr          // Configurable virtual/physical base address (--base-addr=0x...)
     cfg_ssa_codegen         // 1 when --ssa-codegen prefers direct SSA IR machine code emission
     cfg_entry_sym           // Custom entry symbol name (--entry=<sym>, default "")
+    cfg_utso_ranges         // Flat [start_line, end_line, ...] intervals of authentic utso/ stdlib chunks
 
 struct CompilerResult
     res_success             // 1 on success, 0 on failure
@@ -325,8 +326,11 @@ fn pipeline_parse_primary toks pos_box sp
         node = ast_expr_literal_bool(t.tok_int_val, sp)
     elif k == TOK_NONE()
         node = ast_expr_literal_none(sp)
-    elif k == TOK_STR() or k == TOK_INTERP_STR()
+    elif k == TOK_STR()
         node = ast_expr_literal_str(txt, sp)
+    elif k == TOK_INTERP_STR()
+        node = ast_expr_literal_str(txt, sp)
+        node.op = "interp"
     elif k == TOK_MINUS() or (k != TOK_STR() and txt == "-")
         sub_e = pipeline_parse_primary(toks, pos_box, sp)
         return ast_expr_unary("-", sub_e, sp)
@@ -884,6 +888,35 @@ fn pipeline_skip_type_args toks pos_box require_lparen
     return 1
 end
 
+fn pipeline_capture_type_args toks pos_box base_name
+    // WHY: Preserves `<T>` element type annotations on parameterized containers (`list<User>`,
+    // `list<dyn Greet>`, `array<i64>`) so `--strict-types` validates element soundness instead
+    // of erasing them to `[]any`.
+    start_p = get(pos_box, 0)
+    ok = pipeline_skip_type_args(toks, pos_box, 0)
+    if ok == 0
+        return ""
+    end
+    if base_name != "list" and base_name != "array" and base_name != "vec" and base_name != "slice"
+        return ""
+    end
+    end_p = get(pos_box, 0)
+    out = ""
+    ci = start_p
+    while ci < end_p
+        ck = toks[ci].tok_kind
+        ct = toks[ci].tok_text
+        if ck != TOK_NEWLINE()
+            out = out + ct
+            if ct == "dyn" or ct == "const" or ct == "mut"
+                out = out + " "
+            end
+        end
+        ci = ci + 1
+    end
+    return out
+end
+
 fn pipeline_try_parse_adt_pat_binds toks pos_box
     // WHY: Detects ADT destructuring patterns `[Enum::]Variant(x, y)` before `=>`/`->`/`:`
     // and returns the list of bound variable names while advancing pos_box past the pattern.
@@ -1358,7 +1391,22 @@ fn pipeline_build_statement toks pos_box sp
             end
         end
         if has_expr == 1
+            ret_line = t.tok_span.span_start_line
             ret_val = pipeline_parse_expr(toks, pos_box, sp)
+            cp_r = get(pos_box, 0)
+            if cp_r < toks.len() and (toks[cp_r].tok_kind == TOK_COMMA() or (toks[cp_r].tok_kind != TOK_STR() and toks[cp_r].tok_text == ",")) and toks[cp_r].tok_span.span_start_line == ret_line
+                ret_elems = [ret_val]
+                while get(pos_box, 0) < toks.len()
+                    cr_p = get(pos_box, 0)
+                    if (toks[cr_p].tok_kind == TOK_COMMA() or (toks[cr_p].tok_kind != TOK_STR() and toks[cr_p].tok_text == ",")) and toks[cr_p].tok_span.span_start_line == ret_line
+                        list_set(pos_box, 0, cr_p + 1)
+                        push(ret_elems, pipeline_parse_expr(toks, pos_box, sp))
+                    else
+                        break
+                    end
+                end
+                ret_val = ast_expr_array_lit(ret_elems, sp)
+            end
             return ast_stmt_return(ret_val, sp)
         end
         return ast_stmt_return(ast_expr_literal_int(0, sp), sp)
@@ -1704,10 +1752,48 @@ fn pipeline_build_statement toks pos_box sp
     if is_decl_kw == 1
         scan_p = cp + 1
         if scan_p < toks.len() and pipeline_is_ident_token(toks[scan_p].tok_kind) == 1
+            // Multi-variable destructuring: let a, b [, c...] = rhs1 [, rhs2...]
+            if scan_p + 1 < toks.len() and (toks[scan_p + 1].tok_kind == TOK_COMMA() or (toks[scan_p + 1].tok_kind != TOK_STR() and toks[scan_p + 1].tok_text == ","))
+                ma_lhs = [ast_expr_ident(toks[scan_p].tok_text, sp)]
+                ma_p = scan_p + 1
+                ma_ok = 1
+                while ma_p < toks.len()
+                    if toks[ma_p].tok_kind == TOK_COMMA() or (toks[ma_p].tok_kind != TOK_STR() and toks[ma_p].tok_text == ",")
+                        ma_p = ma_p + 1
+                        if ma_p < toks.len() and pipeline_is_ident_token(toks[ma_p].tok_kind) == 1
+                            push(ma_lhs, ast_expr_ident(toks[ma_p].tok_text, sp))
+                            ma_p = ma_p + 1
+                        else
+                            ma_ok = 0
+                            break
+                        end
+                    else
+                        break
+                    end
+                end
+                if ma_ok == 1 and ma_lhs.len() >= 2 and ma_p < toks.len() and (toks[ma_p].tok_kind == TOK_ASSIGN() or (toks[ma_p].tok_kind != TOK_STR() and toks[ma_p].tok_text == "="))
+                    ma_line = toks[ma_p].tok_span.span_start_line
+                    list_set(pos_box, 0, ma_p + 1)
+                    ma_rhs = [pipeline_parse_expr(toks, pos_box, sp)]
+                    while get(pos_box, 0) < toks.len()
+                        mr_p = get(pos_box, 0)
+                        if (toks[mr_p].tok_kind == TOK_COMMA() or (toks[mr_p].tok_kind != TOK_STR() and toks[mr_p].tok_text == ",")) and toks[mr_p].tok_span.span_start_line == ma_line
+                            list_set(pos_box, 0, mr_p + 1)
+                            push(ma_rhs, pipeline_parse_expr(toks, pos_box, sp))
+                        else
+                            break
+                        end
+                    end
+                    ma_n = ast_node_new(AST_TAG_ASSIGN(), "MultiAssign", sp)
+                    ma_n.params = ma_lhs
+                    ma_n.args = ma_rhs
+                    return ma_n
+                end
+            end
             var_name = toks[scan_p].tok_text
             decl_type = ""
             scan_p = scan_p + 1
-            // Optional type annotation: : [*[const|mut]] Type[<...>]
+            // Optional type annotation: : [*[const|mut]] [dyn] Type[<...>]
             if scan_p < toks.len() and (toks[scan_p].tok_kind == TOK_COLON() or (toks[scan_p].tok_kind != TOK_STR() and toks[scan_p].tok_text == ":"))
                 scan_p = scan_p + 1
                 while scan_p < toks.len() and (toks[scan_p].tok_kind == TOK_STAR() or (toks[scan_p].tok_kind != TOK_STR() and toks[scan_p].tok_text == "*"))
@@ -1718,11 +1804,15 @@ fn pipeline_build_statement toks pos_box sp
                         scan_p = scan_p + 1
                     end
                 end
-                if scan_p < toks.len() and pipeline_is_ident_token(toks[scan_p].tok_kind) == 1
-                    decl_type = decl_type + toks[scan_p].tok_text
+                if scan_p + 1 < toks.len() and toks[scan_p].tok_kind == TOK_IDENT() and toks[scan_p].tok_text == "dyn" and pipeline_is_ident_token(toks[scan_p + 1].tok_kind) == 1
+                    decl_type = decl_type + "dyn " + toks[scan_p + 1].tok_text
+                    scan_p = scan_p + 2
+                elif scan_p < toks.len() and pipeline_is_ident_token(toks[scan_p].tok_kind) == 1
+                    base_dt = toks[scan_p].tok_text
+                    decl_type = decl_type + base_dt
                     scan_p = scan_p + 1
                     sp_box = [scan_p]
-                    pipeline_skip_type_args(toks, sp_box, 0)
+                    decl_type = decl_type + pipeline_capture_type_args(toks, sp_box, base_dt)
                     scan_p = get(sp_box, 0)
                 end
             end
@@ -1869,10 +1959,48 @@ fn pipeline_build_statement toks pos_box sp
         end
     end
 
-    // 5. Direct assignment: ident = expr, ident += expr, ident -= expr, OR typed declaration: ident: Type = expr
+    // 5. Direct assignment: ident = expr, ident += expr, multi-var destructuring a, b = rhs1, rhs2, OR typed declaration: ident: Type = expr
     if pipeline_is_ident_token(k) == 1 and cp + 1 < toks.len()
         n1 = toks[cp + 1]
-        // Case A: Typed declaration/assignment (e.g. search_res: PageSearchLeafResult = ..., p: *const u32 = ...)
+        // Case 0: Multi-variable tuple destructuring: a, b [, c...] = rhs1 [, rhs2...]
+        if n1.tok_kind == TOK_COMMA() or (n1.tok_kind != TOK_STR() and n1.tok_text == ",")
+            da_lhs = [ast_expr_ident(txt, sp)]
+            da_p = cp + 1
+            da_ok = 1
+            while da_p < toks.len()
+                if toks[da_p].tok_kind == TOK_COMMA() or (toks[da_p].tok_kind != TOK_STR() and toks[da_p].tok_text == ",")
+                    da_p = da_p + 1
+                    if da_p < toks.len() and pipeline_is_ident_token(toks[da_p].tok_kind) == 1
+                        push(da_lhs, ast_expr_ident(toks[da_p].tok_text, sp))
+                        da_p = da_p + 1
+                    else
+                        da_ok = 0
+                        break
+                    end
+                else
+                    break
+                end
+            end
+            if da_ok == 1 and da_lhs.len() >= 2 and da_p < toks.len() and (toks[da_p].tok_kind == TOK_ASSIGN() or (toks[da_p].tok_kind != TOK_STR() and toks[da_p].tok_text == "="))
+                da_line = toks[da_p].tok_span.span_start_line
+                list_set(pos_box, 0, da_p + 1)
+                da_rhs = [pipeline_parse_expr(toks, pos_box, sp)]
+                while get(pos_box, 0) < toks.len()
+                    dr_p = get(pos_box, 0)
+                    if (toks[dr_p].tok_kind == TOK_COMMA() or (toks[dr_p].tok_kind != TOK_STR() and toks[dr_p].tok_text == ",")) and toks[dr_p].tok_span.span_start_line == da_line
+                        list_set(pos_box, 0, dr_p + 1)
+                        push(da_rhs, pipeline_parse_expr(toks, pos_box, sp))
+                    else
+                        break
+                    end
+                end
+                da_n = ast_node_new(AST_TAG_ASSIGN(), "MultiAssign", sp)
+                da_n.params = da_lhs
+                da_n.args = da_rhs
+                return da_n
+            end
+        end
+        // Case A: Typed declaration/assignment (e.g. search_res: PageSearchLeafResult = ..., p: *const u32 = ..., g: dyn Greet = ...)
         if n1.tok_kind == TOK_COLON() or (n1.tok_kind != TOK_STR() and n1.tok_text == ":")
             tp_scan = cp + 2
             decl_pref = ""
@@ -1884,15 +2012,27 @@ fn pipeline_build_statement toks pos_box sp
                     tp_scan = tp_scan + 1
                 end
             end
-            if tp_scan < toks.len() and pipeline_is_ident_token(toks[tp_scan].tok_kind) == 1
+            if tp_scan + 1 < toks.len() and toks[tp_scan].tok_kind == TOK_IDENT() and toks[tp_scan].tok_text == "dyn" and pipeline_is_ident_token(toks[tp_scan + 1].tok_kind) == 1
+                eq_i = tp_scan + 2
+                if eq_i < toks.len() and (toks[eq_i].tok_kind == TOK_ASSIGN() or (toks[eq_i].tok_kind != TOK_STR() and toks[eq_i].tok_text == "="))
+                    var_name = txt
+                    decl_type = decl_pref + "dyn " + toks[tp_scan + 1].tok_text
+                    list_set(pos_box, 0, eq_i + 1)
+                    val_e = pipeline_parse_expr(toks, pos_box, sp)
+                    td_n = ast_stmt_assign(var_name, val_e, sp)
+                    td_n.op = decl_type
+                    return td_n
+                end
+            elif tp_scan < toks.len() and pipeline_is_ident_token(toks[tp_scan].tok_kind) == 1
+                base_td = toks[tp_scan].tok_text
                 td_box = [tp_scan + 1]
-                pipeline_skip_type_args(toks, td_box, 0)
+                td_args = pipeline_capture_type_args(toks, td_box, base_td)
                 eq_i = get(td_box, 0)
                 if eq_i < toks.len()
                     n3 = toks[eq_i]
                     if n3.tok_kind == TOK_ASSIGN() or (n3.tok_kind != TOK_STR() and n3.tok_text == "=")
                         var_name = txt
-                        decl_type = decl_pref + toks[tp_scan].tok_text
+                        decl_type = decl_pref + base_td + td_args
                         list_set(pos_box, 0, eq_i + 1)
                         val_e = pipeline_parse_expr(toks, pos_box, sp)
                         td_n = ast_stmt_assign(var_name, val_e, sp)
@@ -2389,10 +2529,14 @@ fn pipeline_build_ast_declarations toks src_path
         end
 
         if k == TOK_KW_FN() or k == TOK_DIR_FN() or is_comp == 1 or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn"))
+            fn_sp = sp
+            if t.tok_span != 0
+                fn_sp = t.tok_span
+            end
             list_set(pos_box, 0, cp + 1)
             fn_name = ""
             method_recv_type = ""
-            if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+            if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                 fn_name = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 mp = get(pos_box, 0)
@@ -2426,31 +2570,77 @@ fn pipeline_build_ast_declarations toks src_path
                     end
                     if pt.tok_kind == TOK_NEWLINE() or pt.tok_kind == TOK_SEMI() or pt.tok_kind == TOK_COMMENT_LINE() or pt.tok_kind == TOK_COMMENT_BLOCK()
                         list_set(pos_box, 0, p_idx + 1)
-                    elif pipeline_is_ident_token(pt.tok_kind) == 1
+                    elif (pt.tok_kind == TOK_DOTDOT() and p_idx + 2 < toks.len() and toks[p_idx + 1].tok_kind == TOK_DOT() and pipeline_is_ident_token(toks[p_idx + 2].tok_kind) == 1) or pipeline_is_ident_token(pt.tok_kind) == 1
+                        p_is_var = 0
+                        if pt.tok_kind == TOK_DOTDOT()
+                            p_is_var = 1
+                            p_idx = p_idx + 2
+                            pt = toks[p_idx]
+                        end
                         p_name = pt.tok_text
                         p_type = ""
+                        if p_is_var == 1
+                            p_type = "list"
+                        end
+                        p_def = 0
                         list_set(pos_box, 0, p_idx + 1)
                         if get(pos_box, 0) < toks.len()
                             nxt_k = toks[get(pos_box, 0)].tok_kind
                             nxt_t = toks[get(pos_box, 0)].tok_text
                             if nxt_k == TOK_COLON() or (nxt_k != TOK_STR() and nxt_t == ":")
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STAR() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "*"))
-                                    p_type = p_type + "*"
-                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_text == "const" or toks[get(pos_box, 0)].tok_text == "mut")
-                                        p_type = p_type + toks[get(pos_box, 0)].tok_text + " "
+                                vp_c = get(pos_box, 0)
+                                if vp_c + 1 < toks.len() and toks[vp_c].tok_kind == TOK_DOTDOT() and toks[vp_c + 1].tok_kind == TOK_DOT()
+                                    p_is_var = 1
+                                    p_type = "list"
+                                    list_set(pos_box, 0, vp_c + 2)
+                                    // Skip optional element type after `...` (e.g. `...int`, `...*u8`)
+                                    while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STAR() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "*"))
                                         list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_text == "const" or toks[get(pos_box, 0)].tok_text == "mut")
+                                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        end
                                     end
-                                end
-                                if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
-                                    p_type = p_type + toks[get(pos_box, 0)].tok_text
-                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                    pipeline_skip_type_args(toks, pos_box, 0)
+                                    if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        pipeline_skip_type_args(toks, pos_box, 0)
+                                    end
+                                else
+                                    while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STAR() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "*"))
+                                        p_type = p_type + "*"
+                                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_text == "const" or toks[get(pos_box, 0)].tok_text == "mut")
+                                            p_type = p_type + toks[get(pos_box, 0)].tok_text + " "
+                                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        end
+                                    end
+                                    if get(pos_box, 0) + 1 < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT() and toks[get(pos_box, 0)].tok_text == "dyn" and pipeline_is_ident_token(toks[get(pos_box, 0) + 1].tok_kind) == 1
+                                        if p_is_var == 0
+                                            p_type = p_type + "dyn " + toks[get(pos_box, 0) + 1].tok_text
+                                        end
+                                        list_set(pos_box, 0, get(pos_box, 0) + 2)
+                                    elif get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                                        base_pt1 = toks[get(pos_box, 0)].tok_text
+                                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        pt1_args = pipeline_capture_type_args(toks, pos_box, base_pt1)
+                                        if p_is_var == 0
+                                            p_type = p_type + base_pt1 + pt1_args
+                                        end
+                                    end
                                 end
                             end
                         end
-                        p_node = ast_param_new(p_name, p_type, 0, sp)
+                        // Optional default parameter value: `= <expr>` (parenthesized param lists)
+                        if get(pos_box, 0) < toks.len()
+                            dk_p = toks[get(pos_box, 0)].tok_kind
+                            dt_p = toks[get(pos_box, 0)].tok_text
+                            if dk_p == TOK_ASSIGN() or (dk_p != TOK_STR() and dt_p == "=")
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                p_def = pipeline_parse_expr(toks, pos_box, sp)
+                            end
+                        end
+                        p_node = ast_param_new(p_name, p_type, p_def, sp)
+                        p_node.param_is_variadic = p_is_var
                         push(params, p_node)
                     elif pt.tok_kind == TOK_COMMA() or (pt.tok_kind != TOK_STR() and pt.tok_text == ",")
                         list_set(pos_box, 0, p_idx + 1)
@@ -2464,31 +2654,60 @@ fn pipeline_build_ast_declarations toks src_path
                     if pt.tok_kind == TOK_ARROW() or (pt.tok_kind != TOK_STR() and pt.tok_text == "->")
                         break
                     end
-                    if pipeline_is_ident_token(pt.tok_kind) == 1
+                    if (pt.tok_kind == TOK_DOTDOT() and p_idx + 2 < toks.len() and toks[p_idx + 1].tok_kind == TOK_DOT() and pipeline_is_ident_token(toks[p_idx + 2].tok_kind) == 1) or pipeline_is_ident_token(pt.tok_kind) == 1
+                        p_is_var = 0
+                        if pt.tok_kind == TOK_DOTDOT()
+                            p_is_var = 1
+                            p_idx = p_idx + 2
+                            pt = toks[p_idx]
+                        end
                         p_name = pt.tok_text
                         p_type = ""
+                        if p_is_var == 1
+                            p_type = "list"
+                        end
                         list_set(pos_box, 0, p_idx + 1)
                         if get(pos_box, 0) < toks.len()
                             nxt_k = toks[get(pos_box, 0)].tok_kind
                             nxt_t = toks[get(pos_box, 0)].tok_text
                             if nxt_k == TOK_COLON() or (nxt_k != TOK_STR() and nxt_t == ":")
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STAR() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "*"))
-                                    p_type = p_type + "*"
-                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                    if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_text == "const" or toks[get(pos_box, 0)].tok_text == "mut")
-                                        p_type = p_type + toks[get(pos_box, 0)].tok_text + " "
+                                vp_u = get(pos_box, 0)
+                                if vp_u + 1 < toks.len() and toks[vp_u].tok_kind == TOK_DOTDOT() and toks[vp_u + 1].tok_kind == TOK_DOT()
+                                    p_is_var = 1
+                                    p_type = "list"
+                                    list_set(pos_box, 0, vp_u + 2)
+                                    if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
                                         list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        pipeline_skip_type_args(toks, pos_box, 0)
                                     end
-                                end
-                                if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
-                                    p_type = p_type + toks[get(pos_box, 0)].tok_text
-                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                    pipeline_skip_type_args(toks, pos_box, 0)
+                                else
+                                    while get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_STAR() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == "*"))
+                                        p_type = p_type + "*"
+                                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_text == "const" or toks[get(pos_box, 0)].tok_text == "mut")
+                                            p_type = p_type + toks[get(pos_box, 0)].tok_text + " "
+                                            list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        end
+                                    end
+                                    if get(pos_box, 0) + 1 < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT() and toks[get(pos_box, 0)].tok_text == "dyn" and pipeline_is_ident_token(toks[get(pos_box, 0) + 1].tok_kind) == 1
+                                        if p_is_var == 0
+                                            p_type = p_type + "dyn " + toks[get(pos_box, 0) + 1].tok_text
+                                        end
+                                        list_set(pos_box, 0, get(pos_box, 0) + 2)
+                                    elif get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                                        base_pt1 = toks[get(pos_box, 0)].tok_text
+                                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                        pt1_args = pipeline_capture_type_args(toks, pos_box, base_pt1)
+                                        if p_is_var == 0
+                                            p_type = p_type + base_pt1 + pt1_args
+                                        end
+                                    end
                                 end
                             end
                         end
                         p_node = ast_param_new(p_name, p_type, 0, sp)
+                        p_node.param_is_variadic = p_is_var
                         push(params, p_node)
                     elif pt.tok_kind == TOK_COMMA() or (pt.tok_kind != TOK_STR() and pt.tok_text == ",")
                         list_set(pos_box, 0, p_idx + 1)
@@ -2497,7 +2716,7 @@ fn pipeline_build_ast_declarations toks src_path
                     end
                 end
 
-            // Extract return type annotation: -> type[<...>] or : type[<...>]
+            // Extract return type annotation: -> [dyn] type[<...>] or : [dyn] type[<...>]
             ret_type_str = ""
             if get(pos_box, 0) < toks.len()
                 rk = toks[get(pos_box, 0)].tok_kind
@@ -2512,10 +2731,14 @@ fn pipeline_build_ast_declarations toks src_path
                             list_set(pos_box, 0, get(pos_box, 0) + 1)
                         end
                     end
-                    if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
-                        ret_type_str = ret_type_str + toks[get(pos_box, 0)].tok_text
+                    if get(pos_box, 0) + 1 < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT() and toks[get(pos_box, 0)].tok_text == "dyn" and pipeline_is_ident_token(toks[get(pos_box, 0) + 1].tok_kind) == 1
+                        ret_type_str = ret_type_str + "dyn " + toks[get(pos_box, 0) + 1].tok_text
+                        list_set(pos_box, 0, get(pos_box, 0) + 2)
+                    elif get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                        base_rt = toks[get(pos_box, 0)].tok_text
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
-                        pipeline_skip_type_args(toks, pos_box, 0)
+                        rt_args = pipeline_capture_type_args(toks, pos_box, base_rt)
+                        ret_type_str = ret_type_str + base_rt + rt_args
                     end
                 end
             end
@@ -2595,9 +2818,9 @@ fn pipeline_build_ast_declarations toks src_path
                 if len(ret_type_str) == 0
                     ret_type_str = "Component"
                 end
-                fn_decl = ast_decl_component(fn_name, params, ret_type_str, body, sp)
+                fn_decl = ast_decl_component(fn_name, params, ret_type_str, body, fn_sp)
             else
-                fn_decl = ast_decl_fn(fn_name, params, ret_type_str, body, 1, sp)
+                fn_decl = ast_decl_fn(fn_name, params, ret_type_str, body, 1, fn_sp)
             end
             push(decls, fn_decl)
         elif k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct" or txt == "union" or txt == "ইউনিয়ন" or txt == "@union"))
@@ -2685,9 +2908,10 @@ fn pipeline_build_ast_declarations toks src_path
                                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                                 end
                             elif get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
-                                fld_type = ptr_pref + toks[get(pos_box, 0)].tok_text
+                                base_ft = toks[get(pos_box, 0)].tok_text
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
-                                pipeline_skip_type_args(toks, pos_box, 0)
+                                ft_args = pipeline_capture_type_args(toks, pos_box, base_ft)
+                                fld_type = ptr_pref + base_ft + ft_args
                             end
                             // Skip optional bitfield width `: <int>`
                             if get(pos_box, 0) + 1 < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or toks[get(pos_box, 0)].tok_text == ":") and toks[get(pos_box, 0) + 1].tok_kind == TOK_INT()
@@ -2741,19 +2965,30 @@ fn pipeline_build_ast_declarations toks src_path
                 end
             end
         elif k == TOK_KW_IMPL() or k == TOK_DIR_IMPL() or (k == TOK_IDENT() and (txt == "impl" or txt == "বাস্তবায়ন" or txt == "@impl"))
-            // Parse `impl [Trait for] Type { fn ... }` header so inner methods are built as regular AST fn decls!
+            // Parse `impl [Trait for] Type { fn ... }` header so inner methods are built as regular AST fn decls,
+            // and emit a `TraitImpl` marker so `--strict-types` enforces real `impl Trait for Type` soundness!
             list_set(pos_box, 0, cp + 1)
             pipeline_skip_type_args(toks, pos_box, 0)
+            impl_first = ""
             if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                impl_first = toks[get(pos_box, 0)].tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
             pipeline_skip_type_args(toks, pos_box, 0)
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_KW_FOR() or toks[get(pos_box, 0)].tok_text == "for" or toks[get(pos_box, 0)].tok_text == "জন্য")
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+                impl_target = ""
                 if get(pos_box, 0) < toks.len() and pipeline_is_ident_token(toks[get(pos_box, 0)].tok_kind) == 1
+                    impl_target = toks[get(pos_box, 0)].tok_text
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
                 pipeline_skip_type_args(toks, pos_box, 0)
+                if len(impl_first) > 0 and len(impl_target) > 0
+                    ti_node = ast_node_new(AST_TAG_STRUCT_DEF(), "TraitImpl", sp)
+                    ti_node.name = impl_first
+                    ti_node.target = impl_target
+                    push(decls, ti_node)
+                end
             end
             pipeline_skip_whitespace(toks, pos_box)
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or toks[get(pos_box, 0)].tok_text == "{")
@@ -2919,6 +3154,7 @@ fn compiler_config_new src out_bin arch opt fmt dry_run
     cfg.cfg_base_vaddr = 1073741824
     cfg.cfg_ssa_codegen = 0
     cfg.cfg_entry_sym = ""
+    cfg.cfg_utso_ranges = 0
     return cfg
 
 fn compiler_result_new
@@ -4532,6 +4768,384 @@ fn pipe_mmap_unpack pms opt_const_names opt_const_vals reg_names reg_regs want_s
     return slr
 end
 
+fn pipeline_free_ssa_res ssa_lower_res
+    if ssa_lower_res != 0
+        if ssa_lower_res.slr_code_buf != 0
+            buf_free(ssa_lower_res.slr_code_buf)
+            ssa_lower_res.slr_code_buf = 0
+        end
+        if ssa_lower_res.slr_rodata_buf != 0
+            buf_free(ssa_lower_res.slr_rodata_buf)
+            ssa_lower_res.slr_rodata_buf = 0
+        end
+    end
+    return 0
+end
+
+fn pipeline_validate_syntax toks
+    // WHY: Sovereign fail-fast syntax & lexical validator executed right after Phase 2 tokenization.
+    // Prevents malformed constructs (unterminated strings, stray bytes, unmatched delimiters, missing
+    // RHS/targets, invalid function signatures) from ever being silently swallowed or miscompiled.
+    n = toks.len()
+    d_kinds = list()
+    d_lines = list()
+    stmt_start = 1
+    i = 0
+    while i < n
+        t = toks[i]
+        k = t.tok_kind
+        txt = t.tok_text
+        ln = t.tok_span.span_start_line
+        col = t.tok_span.span_start_col
+
+        if k == TOK_EOF()
+            break
+        end
+        if k == TOK_ERROR()
+            return "Lexical Error at line " + str(ln) + ", col " + str(col) + ": " + txt
+        end
+        if k == TOK_COMMENT_LINE() or k == TOK_COMMENT_DOC() or k == TOK_COMMENT_BLOCK()
+            i = i + 1
+            continue
+        end
+        if k == TOK_NEWLINE() or k == TOK_SEMI()
+            stmt_start = 1
+            i = i + 1
+            continue
+        end
+
+        // Skip inline `@asm [ ... ]` / `@asm { ... }` payload after checking its outer delimiter balance
+        if k == TOK_IDENT() and (txt == "@asm" or txt == "@অ্যাসেম্বলি")
+            stmt_start = 0
+            i = i + 1
+            while i < n and (toks[i].tok_kind == TOK_NEWLINE() or toks[i].tok_kind == TOK_COMMENT_LINE())
+                i = i + 1
+            end
+            if i < n and (toks[i].tok_kind == TOK_LBRACKET() or toks[i].tok_kind == TOK_LBRACE())
+                open_k = toks[i].tok_kind
+                close_k = TOK_RBRACKET()
+                if open_k == TOK_LBRACE() close_k = TOK_RBRACE() end
+                a_dep = 1
+                a_ln = toks[i].tok_span.span_start_line
+                i = i + 1
+                while i < n and a_dep > 0
+                    if toks[i].tok_kind == TOK_ERROR()
+                        return "Lexical Error at line " + str(toks[i].tok_span.span_start_line) + ": " + toks[i].tok_text
+                    end
+                    if toks[i].tok_kind == open_k
+                        a_dep = a_dep + 1
+                    elif toks[i].tok_kind == close_k
+                        a_dep = a_dep - 1
+                    end
+                    i = i + 1
+                end
+                if a_dep > 0
+                    return "Syntax Error at line " + str(a_ln) + ": unclosed @asm block"
+                end
+            end
+            continue
+        end
+
+        // 1. Delimiter balance tracking: (), [], {}
+        if k == TOK_LPAREN() or k == TOK_LBRACKET() or k == TOK_LBRACE()
+            push(d_kinds, k)
+            push(d_lines, ln)
+            if k == TOK_LBRACE()
+                stmt_start = 1
+            else
+                stmt_start = 0
+            end
+            i = i + 1
+            continue
+        end
+        if k == TOK_RPAREN() or k == TOK_RBRACKET() or k == TOK_RBRACE()
+            if d_kinds.len() == 0
+                return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": unmatched closing '" + txt + "'"
+            end
+            top_k = d_kinds[d_kinds.len() - 1]
+            top_ln = d_lines[d_lines.len() - 1]
+            pop(d_kinds)
+            pop(d_lines)
+            exp_close = ")"
+            matched = 0
+            if top_k == TOK_LPAREN()
+                exp_close = ")"
+                if k == TOK_RPAREN() matched = 1 end
+            elif top_k == TOK_LBRACKET()
+                exp_close = "]"
+                if k == TOK_RBRACKET() matched = 1 end
+            elif top_k == TOK_LBRACE()
+                exp_close = "}"
+                if k == TOK_RBRACE() matched = 1 end
+            end
+            if matched == 0
+                return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": mismatched closing '" + txt + "' (expected '" + exp_close + "' matching line " + str(top_ln) + ")"
+            end
+            if k == TOK_RBRACE()
+                stmt_start = 1
+            else
+                stmt_start = 0
+            end
+            i = i + 1
+            continue
+        end
+
+        // 1b. Unclosed `${...}` interpolation inside TOK_INTERP_STR
+        if k == TOK_INTERP_STR()
+            is_len = len(txt)
+            is_p = 0
+            while is_p + 1 < is_len
+                if (mem_byte_read(txt, is_p) & 255) == 36 and (mem_byte_read(txt, is_p + 1) & 255) == 123
+                    dep_i = 1
+                    jp = is_p + 2
+                    inq = 0
+                    while jp < is_len and dep_i > 0
+                        cb = mem_byte_read(txt, jp) & 255
+                        if inq != 0
+                            if cb == 92 and jp + 1 < is_len
+                                jp = jp + 2
+                                continue
+                            elif cb == inq
+                                inq = 0
+                            end
+                        else
+                            if cb == 34 or cb == 39
+                                inq = cb
+                            elif cb == 123
+                                dep_i = dep_i + 1
+                            elif cb == 125
+                                dep_i = dep_i - 1
+                                if dep_i == 0
+                                    break
+                                end
+                            end
+                        end
+                        jp = jp + 1
+                    end
+                    if dep_i > 0
+                        return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": unclosed interpolation expression in string literal"
+                    end
+                    is_p = jp + 1
+                    continue
+                end
+                is_p = is_p + 1
+            end
+        end
+
+        // 2. Statement-start checks
+        if stmt_start == 1
+            in_stmt_ctx = 0
+            if d_kinds.len() == 0
+                in_stmt_ctx = 1
+            elif d_kinds[d_kinds.len() - 1] == TOK_LBRACE()
+                in_stmt_ctx = 1
+            end
+            if k == TOK_ASSIGN()
+                return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": unexpected '=' with no assignment target"
+            end
+            // Literal on LHS of '=': e.g. `123 = 5` or `"x" = 5` (at top-level OR inside `{ ... }`)
+            if in_stmt_ctx == 1 and (k == TOK_INT() or k == TOK_FLOAT() or k == TOK_STR() or k == TOK_INTERP_STR() or k == TOK_BOOL() or k == TOK_NONE())
+                if i + 1 < n and toks[i + 1].tok_kind == TOK_ASSIGN() and toks[i + 1].tok_span.span_start_line == ln
+                    return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": cannot assign to literal '" + txt + "'"
+                end
+            end
+            // `let` / `var` without variable name
+            if k == TOK_KW_LET() or (k == TOK_IDENT() and (txt == "let" or txt == "var" or txt == "ধরি" or txt == "চলক"))
+                if i + 1 >= n or toks[i + 1].tok_kind == TOK_ASSIGN() or toks[i + 1].tok_kind == TOK_NEWLINE() or toks[i + 1].tok_kind == TOK_EOF() or toks[i + 1].tok_kind == TOK_SEMI() or toks[i + 1].tok_kind == TOK_RBRACE()
+                    return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": expected variable name after '" + txt + "'"
+                end
+            end
+            // Multi-variable tuple destructuring arity check: `[let] a, b, c = 1, 2` (when rhs_cnt > 1 && rhs_cnt != lhs_cnt)
+            if in_stmt_ctx == 1
+                ma_s = i
+                if k == TOK_KW_LET() or (k == TOK_IDENT() and (txt == "let" or txt == "var" or txt == "ধরি" or txt == "চলক"))
+                    ma_s = i + 1
+                end
+                if ma_s + 2 < n and pipeline_is_ident_token(toks[ma_s].tok_kind) == 1 and toks[ma_s + 1].tok_kind == TOK_COMMA()
+                    lhs_cnt = 1
+                    mp = ma_s + 1
+                    ma_ok = 1
+                    while mp < n
+                        if toks[mp].tok_kind == TOK_COMMA()
+                            mp = mp + 1
+                            if mp < n and pipeline_is_ident_token(toks[mp].tok_kind) == 1
+                                lhs_cnt = lhs_cnt + 1
+                                mp = mp + 1
+                            else
+                                ma_ok = 0
+                                break
+                            end
+                        else
+                            break
+                        end
+                    end
+                    if ma_ok == 1 and lhs_cnt >= 2 and mp < n and toks[mp].tok_kind == TOK_ASSIGN() and toks[mp].tok_span.span_start_line == ln
+                        rp = mp + 1
+                        r_dep = 0
+                        r_commas = 0
+                        while rp < n
+                            rk_m = toks[rp].tok_kind
+                            if r_dep == 0 and (rk_m == TOK_NEWLINE() or rk_m == TOK_SEMI() or rk_m == TOK_RBRACE() or rk_m == TOK_EOF())
+                                break
+                            end
+                            if rk_m == TOK_LPAREN() or rk_m == TOK_LBRACKET() or rk_m == TOK_LBRACE()
+                                r_dep = r_dep + 1
+                            elif rk_m == TOK_RPAREN() or rk_m == TOK_RBRACKET() or rk_m == TOK_RBRACE()
+                                if r_dep > 0 r_dep = r_dep - 1 end
+                            elif r_dep == 0 and rk_m == TOK_COMMA()
+                                r_commas = r_commas + 1
+                            end
+                            rp = rp + 1
+                        end
+                        rhs_cnt = 1 + r_commas
+                        if rhs_cnt > 1 and rhs_cnt != lhs_cnt
+                            return "Syntax Error at line " + str(ln) + ": tuple destructuring arity mismatch (" + str(lhs_cnt) + " targets, " + str(rhs_cnt) + " values)"
+                        end
+                    end
+                end
+            end
+            // Validate parenthesized function parameter list signature `fn name(...)`
+            if k == TOK_KW_FN() or k == TOK_DIR_FN() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn"))
+                fp = i + 1
+                if fp < n and pipeline_is_ident_token(toks[fp].tok_kind) == 1
+                    fp = fp + 1
+                    if fp + 1 < n and toks[fp].tok_kind == TOK_DOT() and pipeline_is_ident_token(toks[fp + 1].tok_kind) == 1
+                        fp = fp + 2
+                    end
+                    g_box = [fp]
+                    pipeline_skip_type_args(toks, g_box, 0)
+                    fp = get(g_box, 0)
+                    if fp < n and toks[fp].tok_kind == TOK_LPAREN()
+                        fp = fp + 1
+                        expect_p = 1
+                        p_dep = 1
+                        in_p_expr = 0
+                        saw_var_p = 0
+                        saw_def_p = 0
+                        cur_has_def = 0
+                        cur_is_var = 0
+                        has_any_p = 0
+                        while fp < n and p_dep > 0
+                            fk = toks[fp].tok_kind
+                            ftx = toks[fp].tok_text
+                            fln = toks[fp].tok_span.span_start_line
+                            if fk == TOK_NEWLINE() or fk == TOK_COMMENT_LINE() or fk == TOK_COMMENT_DOC() or fk == TOK_COMMENT_BLOCK()
+                                fp = fp + 1
+                                continue
+                            end
+                            if fk == TOK_LPAREN() or fk == TOK_LBRACKET() or fk == TOK_LBRACE()
+                                p_dep = p_dep + 1
+                                fp = fp + 1
+                                continue
+                            end
+                            if fk == TOK_RPAREN() or fk == TOK_RBRACKET() or fk == TOK_RBRACE()
+                                p_dep = p_dep - 1
+                                if p_dep == 0
+                                    if has_any_p == 1 and expect_p == 0 and saw_def_p == 1 and cur_has_def == 0 and cur_is_var == 0
+                                        return "Syntax Error at line " + str(fln) + ": non-default parameter cannot follow default parameter"
+                                    end
+                                    break
+                                end
+                                fp = fp + 1
+                                continue
+                            end
+                            if p_dep == 1
+                                if fk == TOK_COMMA()
+                                    if expect_p == 1
+                                        return "Syntax Error at line " + str(fln) + ": unexpected ',' in function parameter list"
+                                    end
+                                    if saw_def_p == 1 and cur_has_def == 0 and cur_is_var == 0
+                                        return "Syntax Error at line " + str(fln) + ": non-default parameter cannot follow default parameter"
+                                    end
+                                    expect_p = 1
+                                    in_p_expr = 0
+                                    cur_has_def = 0
+                                    cur_is_var = 0
+                                elif expect_p == 1
+                                    if saw_var_p == 1
+                                        return "Syntax Error at line " + str(fln) + ": variadic parameter must be the last parameter"
+                                    end
+                                    if fk == TOK_DOTDOT() and fp + 1 < n and toks[fp + 1].tok_kind == TOK_DOT()
+                                        if fp + 2 >= n or pipeline_is_ident_token(toks[fp + 2].tok_kind) == 0
+                                            return "Syntax Error at line " + str(fln) + ": expected parameter name after '...'"
+                                        end
+                                        fp = fp + 2
+                                        expect_p = 0
+                                        has_any_p = 1
+                                        cur_is_var = 1
+                                        saw_var_p = 1
+                                    elif pipeline_is_ident_token(fk) == 1
+                                        expect_p = 0
+                                        has_any_p = 1
+                                    else
+                                        return "Syntax Error at line " + str(fln) + ": invalid parameter '" + ftx + "' in function signature"
+                                    end
+                                elif fk == TOK_ASSIGN()
+                                    in_p_expr = 1
+                                    cur_has_def = 1
+                                    saw_def_p = 1
+                                elif fk == TOK_COLON()
+                                    in_p_expr = 1
+                                    if fp + 2 < n and toks[fp + 1].tok_kind == TOK_DOTDOT() and toks[fp + 2].tok_kind == TOK_DOT()
+                                        cur_is_var = 1
+                                        saw_var_p = 1
+                                    end
+                                elif in_p_expr == 0 and pipeline_is_ident_token(fk) == 1
+                                    return "Syntax Error at line " + str(fln) + ": expected ',' between function parameters (near '" + ftx + "')"
+                                end
+                            end
+                            fp = fp + 1
+                        end
+                    end
+                end
+            end
+        end
+
+        // 3. Trailing comma immediately before '=': e.g. `a, = 10`
+        if k == TOK_COMMA() and i + 1 < n and toks[i + 1].tok_kind == TOK_ASSIGN()
+            return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": unexpected ',' before '='"
+        end
+
+        // 4. Missing RHS after assignment or binary operator (`=`, `+=`, ..., `+`, `/`, `%`, `==`, `!=`, `<=`, `>=`, `&&`, `||`)
+        if k == TOK_ASSIGN() or k == TOK_PLUSEQ() or k == TOK_MINUSEQ() or k == TOK_STAREQ() or k == TOK_SLASHEQ() or k == TOK_PERCENTEQ() or k == TOK_PLUS() or k == TOK_SLASH() or k == TOK_PERCENT() or k == TOK_EQ() or k == TOK_NEQ() or k == TOK_LTE() or k == TOK_GTE() or k == TOK_AND() or k == TOK_OR()
+            np = i + 1
+            while np < n and (toks[np].tok_kind == TOK_COMMENT_LINE() or toks[np].tok_kind == TOK_COMMENT_DOC() or toks[np].tok_kind == TOK_COMMENT_BLOCK())
+                np = np + 1
+            end
+            if np >= n or toks[np].tok_kind == TOK_EOF() or toks[np].tok_kind == TOK_SEMI() or toks[np].tok_kind == TOK_RBRACE() or toks[np].tok_kind == TOK_RPAREN() or toks[np].tok_kind == TOK_RBRACKET() or toks[np].tok_kind == TOK_COMMA()
+                return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": missing expression after '" + txt + "'"
+            end
+            if toks[np].tok_kind == TOK_NEWLINE()
+                np2 = np + 1
+                while np2 < n and (toks[np2].tok_kind == TOK_NEWLINE() or toks[np2].tok_kind == TOK_COMMENT_LINE() or toks[np2].tok_kind == TOK_COMMENT_DOC() or toks[np2].tok_kind == TOK_COMMENT_BLOCK())
+                    np2 = np2 + 1
+                end
+                if np2 >= n
+                    return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": missing expression after '" + txt + "'"
+                end
+                nk2 = toks[np2].tok_kind
+                nt2 = toks[np2].tok_text
+                if nk2 == TOK_EOF() or nk2 == TOK_RBRACE() or nk2 == TOK_KW_END() or nk2 == TOK_DIR_END() or nk2 == TOK_KW_FN() or nk2 == TOK_DIR_FN() or nk2 == TOK_KW_STRUCT() or nk2 == TOK_DIR_STRUCT() or nk2 == TOK_KW_RETURN() or nk2 == TOK_KW_IF() or nk2 == TOK_KW_ELIF() or nk2 == TOK_KW_ELSE() or nk2 == TOK_KW_WHILE() or nk2 == TOK_KW_FOR() or nk2 == TOK_KW_LET() or nk2 == TOK_KW_PRINT() or (nk2 == TOK_IDENT() and (nt2 == "say" or nt2 == "বলো" or nt2 == "end" or nt2 == "শেষ"))
+                    return "Syntax Error at line " + str(ln) + ", col " + str(col) + ": missing expression after '" + txt + "'"
+                end
+            end
+        end
+
+        stmt_start = 0
+        i = i + 1
+    end
+
+    if d_kinds.len() > 0
+        un_k = d_kinds[d_kinds.len() - 1]
+        un_ln = d_lines[d_lines.len() - 1]
+        un_ch = "("
+        if un_k == TOK_LBRACKET() un_ch = "["
+        elif un_k == TOK_LBRACE() un_ch = "{" end
+        return "Syntax Error at line " + str(un_ln) + ": unclosed delimiter '" + un_ch + "'"
+    end
+    return ""
+end
+
 // ── 4. End-to-End Modular Pipeline Execution ──────────────────────────────────
 
 fn compiler_pipeline_execute config source_code
@@ -4562,6 +5176,16 @@ fn compiler_pipeline_execute config source_code
     // Release raw source string early to keep peak RSS minimal
     source_code = 0
     say "  [pipeline] Phase 2: Tokenized " + str(tok_count) + " tokens"
+
+    // Phase 2b: Sovereign Fail-Fast Lexical & Structural Syntax Validation
+    syn_err = pipeline_validate_syntax(toks)
+    if syn_err != ""
+        result.res_error_count = 1
+        result.res_error_msg = syn_err
+        result.res_stage_reached = PIPELINE_STAGE_LEX()
+        result.res_success = 0
+        return result
+    end
     
     // Count executable tokens (ignoring whitespace newlines and trailing EOF)
     meaningful = 0
@@ -4650,7 +5274,7 @@ fn compiler_pipeline_execute config source_code
     if config.cfg_kavach_mode == 1
         config.cfg_strict_ownership = 1
         config.cfg_strict_proof = 1
-        kv_res = kavach_verify_program(ast_decls)
+        kv_res = kavach_verify_program_with_utso(ast_decls, config.cfg_utso_ranges)
         if kv_res.kv_error_count > 0
             result.res_error_count = result.res_error_count + kv_res.kv_error_count
             result.res_error_msg = kv_res.kv_first_msg
@@ -4665,6 +5289,7 @@ fn compiler_pipeline_execute config source_code
     scope_stk = scope_stack_new()
     ty_reg = type_registry_new()
     tc = type_checker_new(ty_reg, sym_table, scope_stk)
+    tc.tc_strict_types = config.cfg_strict_types
     tc_check_program(tc, ast_decls)
     if tc_has_errors(tc) == 1
         fatal_count = 0
@@ -4756,7 +5381,7 @@ fn compiler_pipeline_execute config source_code
                 if pipeline_is_strict_proof_exempt_fn(decl.name) == 1
                     is_cleanup_fn = 1
                 end
-            elif decl.name == "main" or decl.name == "মূল" or pipeline_is_memory_exempt_fn(decl.name) == 1
+            elif decl.name == "main" or decl.name == "মূল" or pipeline_is_memory_exempt_fn(decl.name) == 1 or kavach_node_in_utso(decl, config.cfg_utso_ranges) == 1
                 is_cleanup_fn = 1
             end
             if is_cleanup_fn == 0
@@ -5260,6 +5885,8 @@ fn compiler_pipeline_execute config source_code
         if config.cfg_emit_format == FORMAT_SHARED()
             // Sovereign Shared Object (.so) Emission via System V AMD64 Dynamic ABI
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             exp_names = list()
             exp_offs = list()
             f_idx = 0
@@ -5285,6 +5912,8 @@ fn compiler_pipeline_execute config source_code
                 push(exp_names, "_start")
                 push(exp_offs, 0)
             so_size = so_emit_shared_library(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), exp_names, exp_offs, config.cfg_out_path)
+            buf_free(synth.synth_code)
+            buf_free(synth.synth_rodata)
             if so_size > 0
                 result.res_output_bytes = so_size
             else
@@ -5296,7 +5925,11 @@ fn compiler_pipeline_execute config source_code
         elif config.cfg_emit_format == FORMAT_MACHO()
             // Sovereign Mach-O 64-bit Binary Emission (macOS Darwin x86_64 / ARM64 Apple Silicon)
             if config.cfg_target_arch == TARGET_ID_ARM64()
-                arm_synth = arm64_synth_compile_program(toks)
+                arm64_synth_set_freestanding(config.cfg_freestanding)
+                arm64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
+                arm_synth = arm64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 if arm_synth.a64_error_count > 0
                     result.res_error_count = arm_synth.a64_error_count
                     result.res_error_msg = arm_synth.a64_error_msg
@@ -5315,7 +5948,11 @@ fn compiler_pipeline_execute config source_code
                     return result
             else
                 synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 m_res = macho_emit_executable(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), 0, 16777223, config.cfg_out_path)
+                buf_free(synth.synth_code)
+                buf_free(synth.synth_rodata)
                 if m_res.mw_success == 1
                     result.res_output_bytes = m_res.mw_file_size
                 else
@@ -5327,6 +5964,8 @@ fn compiler_pipeline_execute config source_code
         elif config.cfg_emit_format == FORMAT_PE()
             // Sovereign Windows PE32+ (.exe) Executable Emission (x86-64 COFF, zero Linux syscalls)
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             pe_bss = 0
             pe_need = 512 + (synth.synth_mutable_globals.len() * 8)
             if synth.synth_bss_cursor > 0
@@ -5338,6 +5977,8 @@ fn compiler_pipeline_execute config source_code
                 pe_bss = bare_align_up(pe_need - 4096, 4096)
             end
             pe_res = pe_emit_executable(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), [], pe_bss, 0, config.cfg_out_path)
+            buf_free(synth.synth_code)
+            buf_free(synth.synth_rodata)
             if pe_res.pe_success == 1
                 result.res_output_bytes = pe_res.pe_file_size
             else
@@ -5354,9 +5995,12 @@ fn compiler_pipeline_execute config source_code
             end
             if config.cfg_target_arch == TARGET_ID_ARM64()
                 arm64_synth_set_freestanding(1)
+                arm64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
                 arm64_synth_set_base_vaddr(raw_base)
                 arm64_synth_set_code_file_off(0)
-                arm_synth = arm64_synth_compile_program(toks)
+                arm_synth = arm64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 if arm_synth.a64_error_count > 0
                     result.res_error_count = arm_synth.a64_error_count
                     result.res_error_msg = arm_synth.a64_error_msg
@@ -5375,9 +6019,12 @@ fn compiler_pipeline_execute config source_code
                 raw_res = bare_emit_raw_bin(arm_synth.synth_code, arm_synth.synth_rodata, config.cfg_out_path)
             elif config.cfg_target_arch == TARGET_ID_RISCV64()
                 riscv64_synth_set_freestanding(1)
+                riscv64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
                 riscv64_synth_set_base_vaddr(raw_base)
                 riscv64_synth_set_code_file_off(0)
-                rv_synth = riscv64_synth_compile_program(toks)
+                rv_synth = riscv64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 if rv_synth.rv_error_count > 0
                     result.res_error_count = rv_synth.rv_error_count
                     result.res_error_msg = rv_synth.rv_error_msg
@@ -5399,12 +6046,16 @@ fn compiler_pipeline_execute config source_code
                 x86_synth_set_base_vaddr(raw_base)
                 x86_synth_set_code_file_off(0)
                 synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 if raw_base == 0 and config.cfg_no_pie == 0
                     x86_synth_convert_to_pie(synth)
                 end
                 // Bare-Metal Purity Gate: fail compilation if any Linux `syscall` (0x0F 0x05) leaked into raw-bin
                 raw_sc = bare_verify_zero_linux_syscalls_buf(synth.synth_code)
                 if raw_sc > 0
+                    buf_free(synth.synth_code)
+                    buf_free(synth.synth_rodata)
                     result.res_error_count = 1
                     result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(raw_sc) + " forbidden Linux syscall (0F 05) instruction(s) in raw-bin output"
                     result.res_stage_reached = PIPELINE_STAGE_EMIT()
@@ -5412,6 +6063,8 @@ fn compiler_pipeline_execute config source_code
                     return result
                 end
                 raw_res = bare_emit_raw_bin_buf(synth.synth_code, synth.synth_rodata, config.cfg_out_path)
+                buf_free(synth.synth_code)
+                buf_free(synth.synth_rodata)
             end
             if raw_res.bw_success == 1
                 result.res_output_bytes = raw_res.bw_file_size
@@ -5428,8 +6081,12 @@ fn compiler_pipeline_execute config source_code
             x86_synth_set_base_vaddr(4194304)
             x86_synth_set_code_file_off(4128) // 0x1000 (.text RVA) + 32B MS x64 -> SysV entry stub
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             efi_sc = bare_verify_zero_linux_syscalls_buf(synth.synth_code)
             if efi_sc > 0
+                buf_free(synth.synth_code)
+                buf_free(synth.synth_rodata)
                 result.res_error_count = 1
                 result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(efi_sc) + " forbidden Linux syscall (0F 05) instruction(s) in UEFI output"
                 result.res_stage_reached = PIPELINE_STAGE_EMIT()
@@ -5459,6 +6116,8 @@ fn compiler_pipeline_execute config source_code
                 efi_bss = bare_align_up(efi_need - 4096, 4096)
             end
             efi_res = bare_emit_uefi_pe32plus_reloc(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), efi_bss, efi_abs_patches, config.cfg_out_path)
+            buf_free(synth.synth_code)
+            buf_free(synth.synth_rodata)
             if efi_res.bw_success == 1
                 result.res_output_bytes = efi_res.bw_file_size
             else
@@ -5478,8 +6137,12 @@ fn compiler_pipeline_execute config source_code
             x86_synth_set_base_vaddr(mb_phys)
             x86_synth_set_code_file_off(304)
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             mb_sc = bare_verify_zero_linux_syscalls_buf(synth.synth_code)
             if mb_sc > 0
+                buf_free(synth.synth_code)
+                buf_free(synth.synth_rodata)
                 result.res_error_count = 1
                 result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(mb_sc) + " forbidden Linux syscall (0F 05) instruction(s) in multiboot2-bare output"
                 result.res_stage_reached = PIPELINE_STAGE_EMIT()
@@ -5497,6 +6160,8 @@ fn compiler_pipeline_execute config source_code
                 mb_bss = bare_align_up(mb_need - 4096, 4096)
             end
             mb_res = bare_emit_multiboot2_kernel(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), mb_bss, synth.synth_base_vaddr, config.cfg_out_path)
+            buf_free(synth.synth_code)
+            buf_free(synth.synth_rodata)
             if mb_res.bw_success == 1
                 result.res_output_bytes = mb_res.bw_file_size
             else
@@ -5509,6 +6174,8 @@ fn compiler_pipeline_execute config source_code
         elif config.cfg_emit_format == FORMAT_UNIKERNEL()
             // Sovereign ELF64 3-PHDR W^X Multiboot2 Unikernel (--target=unikernel / multiboot2)
             synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             mb2_code = [
                 214, 80, 82, 232, 0, 0, 0, 0, 40, 0, 0, 0, 2, 175, 173, 23,
                 3, 0, 0, 0, 12, 0, 0, 0, 88, 1, 64, 0, 0, 0, 0, 0,
@@ -5522,6 +6189,8 @@ fn compiler_pipeline_execute config source_code
                 si_u = si_u + 1
             end
             emit_res = elf_emit_executable(mb2_code, x86_synth_buf_to_list(synth.synth_rodata), [], 0, config.cfg_out_path)
+            buf_free(synth.synth_code)
+            buf_free(synth.synth_rodata)
             if emit_res.ew_success == 1
                 result.res_output_bytes = emit_res.ew_file_size
             else
@@ -5539,9 +6208,12 @@ fn compiler_pipeline_execute config source_code
                     k_base_a64 = 1074266112 // 0x40080000 (standard ARM64 QEMU virt kernel load address)
                 end
                 arm64_synth_set_freestanding(1)
+                arm64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
                 arm64_synth_set_base_vaddr(k_base_a64)
                 arm64_synth_set_code_file_off(0)
-                arm_synth = arm64_synth_compile_program(toks)
+                arm_synth = arm64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 if arm_synth.a64_error_count > 0
                     result.res_error_count = arm_synth.a64_error_count
                     result.res_error_msg = arm_synth.a64_error_msg
@@ -5564,9 +6236,12 @@ fn compiler_pipeline_execute config source_code
                     k_base_rv = 2149580800 // 0x80200000 (standard OpenSBI RISC-V 64 kernel load address)
                 end
                 riscv64_synth_set_freestanding(1)
+                riscv64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
                 riscv64_synth_set_base_vaddr(k_base_rv)
                 riscv64_synth_set_code_file_off(0)
-                rv_synth = riscv64_synth_compile_program(toks)
+                rv_synth = riscv64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 if rv_synth.rv_error_count > 0
                     result.res_error_count = rv_synth.rv_error_count
                     result.res_error_msg = rv_synth.rv_error_msg
@@ -5592,8 +6267,12 @@ fn compiler_pipeline_execute config source_code
                 x86_synth_set_base_vaddr(k_base)
                 x86_synth_set_code_file_off(304)
                 synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
                 k_sc = bare_verify_zero_linux_syscalls_buf(synth.synth_code)
                 if k_sc > 0
+                    buf_free(synth.synth_code)
+                    buf_free(synth.synth_rodata)
                     result.res_error_count = 1
                     result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(k_sc) + " forbidden Linux syscall (0F 05) instruction(s) in freestanding elf-kernel output"
                     result.res_stage_reached = PIPELINE_STAGE_EMIT()
@@ -5668,6 +6347,8 @@ fn compiler_pipeline_execute config source_code
                     k_di = dwarf_info_serialize(k_cu)
                 end
                 k_res = bare_emit_elf64_kernel(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), k_bss, eff_k_base, k_dl, k_di, k_da, k_eh, config.cfg_out_path)
+                buf_free(synth.synth_code)
+                buf_free(synth.synth_rodata)
             end
             if k_res.bw_success == 1
                 result.res_output_bytes = k_res.bw_file_size
@@ -5679,24 +6360,108 @@ fn compiler_pipeline_execute config source_code
                 return result
             end
         elif config.cfg_emit_format == FORMAT_OBJ()
-            // Sovereign ELF64 Relocatable Object (.o / ET_REL = 1) Emission (-c / --emit=obj)
-            x86_synth_set_freestanding(config.cfg_freestanding)
-            x86_synth_set_emit_obj(1)
-            x86_synth_set_base_vaddr(0)
-            x86_synth_set_code_file_off(0)
-            synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
-            if config.cfg_freestanding == 1
-                obj_sc = bare_verify_zero_linux_syscalls_buf(synth.synth_code)
-                if obj_sc > 0
-                    result.res_error_count = 1
-                    result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(obj_sc) + " forbidden Linux syscall (0F 05) instruction(s) in freestanding .o output"
+            // Sovereign Multi-Arch ELF64 Relocatable Object (.o / ET_REL = 1) Emission (-c / --emit=obj / --target=obj)
+            if config.cfg_target_arch == TARGET_ID_ARM64()
+                arm64_synth_set_freestanding(config.cfg_freestanding)
+                arm64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
+                arm64_synth_set_base_vaddr(0)
+                arm64_synth_set_code_file_off(0)
+                arm_synth = arm64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
+                if arm_synth.a64_error_count > 0
+                    result.res_error_count = arm_synth.a64_error_count
+                    result.res_error_msg = arm_synth.a64_error_msg
                     result.res_stage_reached = PIPELINE_STAGE_EMIT()
                     result.res_success = 0
                     return result
                 end
+                if config.cfg_freestanding == 1
+                    a64_svcs = arm64_verify_zero_linux_svcs(arm_synth.synth_code)
+                    if a64_svcs > 0
+                        result.res_error_count = 1
+                        result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(a64_svcs) + " forbidden Linux svc #0 instruction(s) in ARM64 freestanding .o output"
+                        result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                        result.res_success = 0
+                        return result
+                    end
+                end
+                a64_obj_fns = list()
+                afi = 0
+                while afi < arm_synth.synth_functions.len()
+                    af = arm_synth.synth_functions[afi]
+                    xf = X86Function()
+                    xf.fn_name = af.fn_name
+                    xf.fn_entry_offset = af.fn_entry_offset
+                    xf.fn_end_offset = af.a64_fn_end_offset
+                    xf.fn_decl_line = af.a64_fn_decl_line
+                    push(a64_obj_fns, xf)
+                    afi = afi + 1
+                end
+                obj_res = lpo_emit_elf64_relocatable_arch(arm_synth.synth_code, arm_synth.synth_rodata, 0, a64_obj_fns, 0, 0, 0, 0, 183, config.cfg_out_path)
+            elif config.cfg_target_arch == TARGET_ID_RISCV64()
+                riscv64_synth_set_freestanding(config.cfg_freestanding)
+                riscv64_synth_set_ssa_codegen(config.cfg_ssa_codegen)
+                riscv64_synth_set_base_vaddr(0)
+                riscv64_synth_set_code_file_off(0)
+                rv_synth = riscv64_synth_compile_program_ssa(toks, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
+                if rv_synth.rv_error_count > 0
+                    result.res_error_count = rv_synth.rv_error_count
+                    result.res_error_msg = rv_synth.rv_error_msg
+                    result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                    result.res_success = 0
+                    return result
+                end
+                if config.cfg_freestanding == 1
+                    rv_ecalls = riscv64_verify_zero_linux_ecalls(rv_synth.rv_code)
+                    if rv_ecalls > 0
+                        result.res_error_count = 1
+                        result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(rv_ecalls) + " forbidden Linux ecall instruction(s) in RISC-V 64 freestanding .o output"
+                        result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                        result.res_success = 0
+                        return result
+                    end
+                end
+                rv_obj_fns = list()
+                rfi = 0
+                while rfi < rv_synth.rv_functions.len()
+                    rf = rv_synth.rv_functions[rfi]
+                    xf = X86Function()
+                    xf.fn_name = rf.rv_fn_name
+                    xf.fn_entry_offset = rf.rv_fn_entry_offset
+                    xf.fn_end_offset = rf.rv_fn_end_offset
+                    xf.fn_decl_line = rf.rv_fn_decl_line
+                    push(rv_obj_fns, xf)
+                    rfi = rfi + 1
+                end
+                obj_res = lpo_emit_elf64_relocatable_arch(rv_synth.rv_code, rv_synth.rv_rodata, 0, rv_obj_fns, 0, 0, 0, 0, 243, config.cfg_out_path)
+            else
+                x86_synth_set_freestanding(config.cfg_freestanding)
+                x86_synth_set_emit_obj(1)
+                x86_synth_set_base_vaddr(0)
+                x86_synth_set_code_file_off(0)
+                synth = x86_synth_compile_program_full(toks, opt_const_names, opt_const_vals, reg_names, reg_regs, ssa_lower_res)
+                pipeline_free_ssa_res(ssa_lower_res)
+                ssa_lower_res = 0
+                if config.cfg_freestanding == 1
+                    obj_sc = bare_verify_zero_linux_syscalls_buf(synth.synth_code)
+                    if obj_sc > 0
+                        buf_free(synth.synth_code)
+                        buf_free(synth.synth_rodata)
+                        result.res_error_count = 1
+                        result.res_error_msg = "Bare-Metal Purity Gate failed: detected " + str(obj_sc) + " forbidden Linux syscall (0F 05) instruction(s) in freestanding .o output"
+                        result.res_stage_reached = PIPELINE_STAGE_EMIT()
+                        result.res_success = 0
+                        return result
+                    end
+                end
+                obj_bss = bare_align_up(synth.synth_bss_cursor, 16)
+                obj_res = lpo_emit_elf64_relocatable_arch(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), obj_bss, synth.synth_functions, synth.synth_call_relocs, synth.synth_str_relocs, synth.synth_rw_patch_offs, synth.synth_rw_patch_targets, 62, config.cfg_out_path)
+                buf_free(synth.synth_code)
+                buf_free(synth.synth_rodata)
             end
-            obj_bss = bare_align_up(synth.synth_bss_cursor, 16)
-            obj_res = lpo_emit_elf64_relocatable_full(x86_synth_buf_to_list(synth.synth_code), x86_synth_buf_to_list(synth.synth_rodata), obj_bss, synth.synth_functions, synth.synth_call_relocs, synth.synth_str_relocs, synth.synth_rw_patch_offs, synth.synth_rw_patch_targets, config.cfg_out_path)
             if obj_res.ow_success == 1
                 result.res_output_bytes = obj_res.ow_file_size
             else
@@ -5929,6 +6694,8 @@ fn compiler_pipeline_execute config source_code
                 return result
         elif config.cfg_target_arch == TARGET_ID_VERILOG() or config.cfg_emit_format == FORMAT_VERILOG()
             // Direct Verilog IEEE 1364-2001 RTL Silicon Synthesis
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             v_res = verilog_synth_compile_program(toks, config.cfg_src_path)
             if v_res.vs_success == 1
                 if config.cfg_is_dry_run == 0
@@ -5951,6 +6718,8 @@ fn compiler_pipeline_execute config source_code
                 return result
         else
             // Fallback for unknown target architecture
+            pipeline_free_ssa_res(ssa_lower_res)
+            ssa_lower_res = 0
             code_bytes = [72, 199, 192, 0, 0, 0, 0, 195] // mov rax, 0; ret
             empty_rodata = []
             empty_data = []
@@ -5964,6 +6733,7 @@ fn compiler_pipeline_execute config source_code
                 result.res_success = 0
                 return result
 
+    pipeline_free_ssa_res(ssa_lower_res)
     // Mark compilation successful
     result.res_success = 1
     return result

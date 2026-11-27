@@ -1600,3 +1600,423 @@ g_tls13_disable_sys = 0
 
   return 0
 @end
+
+// ── 10. RFC 8446 TLS 1.3 Client PSK Session Resumption & Ticket Cache ────────
+
+@struct Tls13SessionTicket
+  tst_host: string
+  tst_alpn: string
+  tst_cipher: i64
+  tst_ticket_id: array
+  tst_psk: array
+  tst_age_add: i64
+  tst_lifetime: i64
+  tst_received_ms: i64
+@end
+
+global g_tls13_psk_tickets = 0
+global g_tls13_psk_lock = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
+
+@fn _tls13_psk_lock()
+  @if g_tls13_psk_lock > 0
+    @while atomic_cas(g_tls13_psk_lock, 0, 1) == 0
+      syscall(24, 0, 0, 0, 0, 0, 0)
+    @end
+  @end
+  return 0
+@end
+
+@fn _tls13_psk_unlock()
+  @if g_tls13_psk_lock > 0
+    atomic_cas(g_tls13_psk_lock, 1, 0)
+  @end
+  return 0
+@end
+
+@fn tls13_cache_clear()
+  _tls13_psk_lock()
+  g_tls13_psk_tickets = []
+  _tls13_psk_unlock()
+  return 0
+@end
+
+@fn tls13_cache_count()
+  _tls13_psk_lock()
+  cnt = 0
+  @if g_tls13_psk_tickets != 0
+    cnt = g_tls13_psk_tickets.len()
+  @end
+  _tls13_psk_unlock()
+  return cnt
+@end
+
+@fn tls13_cache_store_ticket(host, alpn, cipher, ticket_id, psk, age_add, lifetime)
+  // WHY: Caches an authenticated RFC 8446 NewSessionTicket bound to (host, alpn, cipher)
+  // under an atomic spinlock so multi-threaded HTTPS/HTTP2 clients resume safely in 1-RTT.
+  // Enforces RFC 8446 §4.6.1 maximum 7-day (604800s) ticket lifetime ceiling.
+  @if host == "" || ticket_id.len() == 0 || psk.len() == 0 || lifetime <= 0
+    return 0
+  @end
+  eff_life = lifetime
+  @if eff_life > 604800
+    eff_life = 604800
+  @end
+  now_ms = clock_ms()
+  t = Tls13SessionTicket(host, alpn, cipher, ticket_id, psk, age_add, eff_life, now_ms)
+  _tls13_psk_lock()
+  @if g_tls13_psk_tickets == 0
+    g_tls13_psk_tickets = []
+  @end
+  i = 0
+  n = g_tls13_psk_tickets.len()
+  @while i < n
+    cur: Tls13SessionTicket = g_tls13_psk_tickets[i]
+    @if cur.tst_host == host && cur.tst_alpn == alpn
+      list_set(g_tls13_psk_tickets, i, t)
+      _tls13_psk_unlock()
+      return t
+    @end
+    i = i + 1
+  @end
+  @if n >= 64
+    // Evict oldest entry when cache reaches capacity
+    trimmed = []
+    ti = 1
+    @while ti < n
+      trimmed = trimmed.push(g_tls13_psk_tickets[ti])
+      ti = ti + 1
+    @end
+    g_tls13_psk_tickets = trimmed
+  @end
+  g_tls13_psk_tickets = g_tls13_psk_tickets.push(t)
+  _tls13_psk_unlock()
+  return t
+@end
+
+@fn tls13_cache_lookup_ticket(host, alpn)
+  @if host == "" return 0 @end
+  _tls13_psk_lock()
+  @if g_tls13_psk_tickets == 0
+    _tls13_psk_unlock()
+    return 0
+  @end
+  now_ms = clock_ms()
+  found = 0
+  fresh = []
+  saw_expired = 0
+  i = 0
+  n = g_tls13_psk_tickets.len()
+  @while i < n
+    cur: Tls13SessionTicket = g_tls13_psk_tickets[i]
+    age_ms = now_ms - cur.tst_received_ms
+    @if age_ms < 0 age_ms = 0 @end
+    @if age_ms < (cur.tst_lifetime * 1000)
+      fresh = fresh.push(cur)
+      @if found == 0 && cur.tst_host == host && cur.tst_alpn == alpn
+        found = cur
+      @end
+    @else
+      saw_expired = 1
+    @end
+    i = i + 1
+  @end
+  @if saw_expired == 1
+    g_tls13_psk_tickets = fresh
+  @end
+  _tls13_psk_unlock()
+  return found
+@end
+
+@fn tls13_derive_resumption_master_secret(cipher, master_secret, full_transcript_hash)
+  // WHY: RFC 8446 §7.1: resumption_master_secret = Derive-Secret(Master Secret, "res master", H(CH..CF)).
+  @if master_secret.len() == 0 || full_transcript_hash.len() == 0
+    return []
+  @end
+  @if cipher == 4866
+    return tls13_hkdf_expand_label_384(master_secret, "res master", full_transcript_hash, 48)
+  @end
+  return tls13_hkdf_expand_label(master_secret, "res master", full_transcript_hash, 32)
+@end
+
+@fn tls13_parse_new_session_ticket(nst_msg, cipher, resumption_master_secret, host, alpn)
+  // WHY: Parses RFC 8446 §4.6.1 NewSessionTicket (handshake type 4), derives
+  // PSK = HKDF-Expand-Label(resumption_master_secret, "resumption", ticket_nonce, Hash.length),
+  // and stores the ticket in the process session cache.
+  n = nst_msg.len()
+  @if n < 17 || (nst_msg[0] & 255) != 4 || resumption_master_secret.len() == 0
+    return 0
+  @end
+  mlen = ((nst_msg[1] & 255) << 16) | ((nst_msg[2] & 255) << 8) | (nst_msg[3] & 255)
+  @if 4 + mlen > n || mlen < 13
+    return 0
+  @end
+  end_p = 4 + mlen
+  pos = 4
+  lifetime = ((nst_msg[pos] & 255) << 24) | ((nst_msg[pos + 1] & 255) << 16) | ((nst_msg[pos + 2] & 255) << 8) | (nst_msg[pos + 3] & 255)
+  pos = pos + 4
+  age_add = ((nst_msg[pos] & 255) << 24) | ((nst_msg[pos + 1] & 255) << 16) | ((nst_msg[pos + 2] & 255) << 8) | (nst_msg[pos + 3] & 255)
+  pos = pos + 4
+  nonce_len = nst_msg[pos] & 255
+  pos = pos + 1
+  @if pos + nonce_len + 2 > end_p return 0 @end
+  nonce = []
+  ni = 0
+  @while ni < nonce_len
+    nonce = nonce.push(nst_msg[pos + ni] & 255)
+    ni = ni + 1
+  @end
+  pos = pos + nonce_len
+  tlen = ((nst_msg[pos] & 255) << 8) | (nst_msg[pos + 1] & 255)
+  pos = pos + 2
+  @if tlen <= 0 || pos + tlen + 2 > end_p return 0 @end
+  ticket_id = []
+  ti = 0
+  @while ti < tlen
+    ticket_id = ticket_id.push(nst_msg[pos + ti] & 255)
+    ti = ti + 1
+  @end
+  pos = pos + tlen
+  ext_len = ((nst_msg[pos] & 255) << 8) | (nst_msg[pos + 1] & 255)
+  @if pos + 2 + ext_len > end_p return 0 @end
+
+  psk = []
+  @if cipher == 4866
+    psk = tls13_hkdf_expand_label_384(resumption_master_secret, "resumption", nonce, 48)
+  @else
+    psk = tls13_hkdf_expand_label(resumption_master_secret, "resumption", nonce, 32)
+  @end
+  return tls13_cache_store_ticket(host, alpn, cipher, ticket_id, psk, age_add, lifetime)
+@end
+
+@fn tls13_compute_psk_binder(psk, cipher, trunc_ch_hs_bytes)
+  // WHY: RFC 8446 §4.2.11.2: binder = HMAC(HKDF-Expand-Label(binder_key, "finished", "", H), Hash(truncated CH)).
+  @if cipher == 4866
+    z48 = []
+    zi = 0
+    @while zi < 48
+      z48 = z48.push(0)
+      zi = zi + 1
+    @end
+    early = tls13_hkdf_extract_384(z48, psk)
+    bkey = tls13_hkdf_expand_label_384(early, "res binder", sha384_hash_bytes([]), 48)
+    fkey = tls13_hkdf_expand_label_384(bkey, "finished", [], 48)
+    return tls13_hmac_sha384(fkey, sha384_hash_bytes(trunc_ch_hs_bytes))
+  @end
+  z32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  early = tls13_hkdf_extract(z32, psk)
+  bkey = tls13_hkdf_expand_label(early, "res binder", sha256_hash_bytes([]), 32)
+  fkey = tls13_hkdf_expand_label(bkey, "finished", [], 32)
+  return tls13_hmac_sha256(fkey, sha256_hash_bytes(trunc_ch_hs_bytes))
+@end
+
+@fn tls13_derive_psk_handshake_keys(psk, shared_secret_bytes, transcript_hash_bytes, cipher)
+  // WHY: RFC 8446 §7.1 PSK-DHE key schedule starting from early_secret = HKDF-Extract(0, PSK).
+  @if cipher == 4866
+    z48 = []
+    zi = 0
+    @while zi < 48
+      z48 = z48.push(0)
+      zi = zi + 1
+    @end
+    early = tls13_hkdf_extract_384(z48, psk)
+    derived = tls13_hkdf_expand_label_384(early, "derived", sha384_hash_bytes([]), 48)
+    hs_sec = tls13_hkdf_extract_384(derived, shared_secret_bytes)
+    c_hts = tls13_hkdf_expand_label_384(hs_sec, "c hs traffic", transcript_hash_bytes, 48)
+    s_hts = tls13_hkdf_expand_label_384(hs_sec, "s hs traffic", transcript_hash_bytes, 48)
+    return {
+      handshake_secret: hs_sec,
+      client_handshake_traffic_secret: c_hts,
+      server_handshake_traffic_secret: s_hts,
+      client_write_key: tls13_hkdf_expand_label_384(c_hts, "key", [], 32),
+      client_write_iv: tls13_hkdf_expand_label_384(c_hts, "iv", [], 12),
+      server_write_key: tls13_hkdf_expand_label_384(s_hts, "key", [], 32),
+      server_write_iv: tls13_hkdf_expand_label_384(s_hts, "iv", [], 12)
+    }
+  @end
+  z32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  early = tls13_hkdf_extract(z32, psk)
+  derived = tls13_hkdf_expand_label(early, "derived", sha256_hash_bytes([]), 32)
+  hs_sec = tls13_hkdf_extract(derived, shared_secret_bytes)
+  c_hts = tls13_hkdf_expand_label(hs_sec, "c hs traffic", transcript_hash_bytes, 32)
+  s_hts = tls13_hkdf_expand_label(hs_sec, "s hs traffic", transcript_hash_bytes, 32)
+  kl = 16
+  @if cipher == 4867 kl = 32 @end
+  return {
+    handshake_secret: hs_sec,
+    client_handshake_traffic_secret: c_hts,
+    server_handshake_traffic_secret: s_hts,
+    client_write_key: tls13_hkdf_expand_label(c_hts, "key", [], kl),
+    client_write_iv: tls13_hkdf_expand_label(c_hts, "iv", [], 12),
+    server_write_key: tls13_hkdf_expand_label(s_hts, "key", [], kl),
+    server_write_iv: tls13_hkdf_expand_label(s_hts, "iv", [], 12)
+  }
+@end
+
+@fn tls13_build_client_hello_psk(server_name, client_pub_key, alpn_protos, ticket: Tls13SessionTicket)
+  // WHY: Builds an RFC 8446 ClientHello offering a cached PSK via psk_key_exchange_modes (0x002D)
+  // and pre_shared_key (0x0029, strictly last extension) with a valid HMAC PSK binder, while also
+  // offering full X25519 ECDHE + signature_algorithms for seamless fallback if server declines PSK.
+  @if ticket == 0 || ticket.tst_ticket_id.len() == 0 || ticket.tst_psk.len() == 0
+    return tls13_build_client_hello_alpn(server_name, client_pub_key, alpn_protos)
+  @end
+
+  c_rand = []
+  rng_buf = alloc(32)
+  rng_ok = syscall(318, rng_buf, 32, 0, 0, 0, 0)
+  @if rng_ok != 32
+    free(rng_buf)
+    return { wire_bytes: [], client_random: [], client_pub_key: client_pub_key, server_name: server_name }
+  @end
+  r_i = 0
+  @while r_i < 32
+    c_rand = c_rand.push(mem_byte_read(rng_buf, r_i) & 255)
+    r_i = r_i + 1
+  @end
+  free(rng_buf)
+
+  tcipher = ticket.tst_cipher
+  hlen = 32
+  @if tcipher == 4866 hlen = 48 @end
+
+  ch_body = [3, 3]
+  ch_body = tls_append_bytes(ch_body, c_rand)
+
+  // Legacy Session ID (32 bytes)
+  ch_body = ch_body.push(32)
+  s_i = 0
+  @while s_i < 32
+    ch_body = ch_body.push(s_i & 255)
+    s_i = s_i + 1
+  @end
+
+  // Offer ticket's cipher first, then remaining TLS 1.3 suites for clean fallback
+  ch_body = ch_body.push(0)
+  ch_body = ch_body.push(6)
+  ch_body = ch_body.push((tcipher >> 8) & 255)
+  ch_body = ch_body.push(tcipher & 255)
+  @if tcipher != 4865
+    ch_body = ch_body.push(19)
+    ch_body = ch_body.push(1)
+  @end
+  @if tcipher != 4866
+    ch_body = ch_body.push(19)
+    ch_body = ch_body.push(2)
+  @end
+  @if tcipher != 4867
+    ch_body = ch_body.push(19)
+    ch_body = ch_body.push(3)
+  @end
+
+  // Legacy Compression Methods
+  ch_body = ch_body.push(1)
+  ch_body = ch_body.push(0)
+
+  ext_bytes = []
+
+  // Ext 1: SNI (0x0000)
+  sn_len = str_len(server_name)
+  @if sn_len > 0
+    sni_data_len = 5 + sn_len
+    list_len = 3 + sn_len
+    ext_bytes = tls_append_bytes(ext_bytes, [0, 0, (sni_data_len >> 8) & 255, sni_data_len & 255, (list_len >> 8) & 255, list_len & 255, 0, (sn_len >> 8) & 255, sn_len & 255])
+    si = 0
+    @while si < sn_len
+      ext_bytes = ext_bytes.push(str_char_at(server_name, si) & 255)
+      si = si + 1
+    @end
+  @end
+
+  // Ext 2: Supported Versions (0x002B) -> TLS 1.3
+  ext_bytes = tls_append_bytes(ext_bytes, [0, 43, 0, 3, 2, 3, 4])
+
+  // Ext 3: Supported Groups (0x000A) -> X25519
+  ext_bytes = tls_append_bytes(ext_bytes, [0, 10, 0, 4, 0, 2, 0, 29])
+
+  // Ext 4: Key Share (0x0033) -> X25519 client_pub_key
+  klen = client_pub_key.len()
+  ks_ext_len = 6 + klen
+  cs_list_len = 4 + klen
+  ext_bytes = tls_append_bytes(ext_bytes, [0, 51, (ks_ext_len >> 8) & 255, ks_ext_len & 255, (cs_list_len >> 8) & 255, cs_list_len & 255, 0, 29, (klen >> 8) & 255, klen & 255])
+  ext_bytes = tls_append_bytes(ext_bytes, client_pub_key)
+
+  // Ext 5: Signature Algorithms (0x000D)
+  ext_bytes = tls_append_bytes(ext_bytes, [0, 13, 0, 12, 0, 10, 4, 3, 5, 3, 8, 4, 8, 5, 8, 7])
+
+  // Ext 6: Optional ALPN (0x0010)
+  @if alpn_protos.len() > 0
+    alpn_list = []
+    ai = 0
+    @while ai < alpn_protos.len()
+      pstr = alpn_protos[ai]
+      plen = str_len(pstr)
+      @if plen > 0 && plen < 256
+        alpn_list = alpn_list.push(plen & 255)
+        pi = 0
+        @while pi < plen
+          alpn_list = alpn_list.push(str_char_at(pstr, pi) & 255)
+          pi = pi + 1
+        @end
+      @end
+      ai = ai + 1
+    @end
+    @if alpn_list.len() > 0
+      al_len = alpn_list.len()
+      ext_bytes = tls_append_bytes(ext_bytes, [0, 16, ((al_len + 2) >> 8) & 255, (al_len + 2) & 255, (al_len >> 8) & 255, al_len & 255])
+      ext_bytes = tls_append_bytes(ext_bytes, alpn_list)
+    @end
+  @end
+
+  // Ext 7: psk_key_exchange_modes (0x002D = 45): psk_dhe_ke (1)
+  ext_bytes = tls_append_bytes(ext_bytes, [0, 45, 0, 2, 1, 1])
+
+  // Ext 8 (MUST BE LAST per RFC 8446 §4.2.11): pre_shared_key (0x0029 = 41)
+  tid = ticket.tst_ticket_id
+  tid_len = tid.len()
+  ids_len = 2 + tid_len + 4
+  binders_len = 1 + hlen
+  psk_ext_len = 2 + ids_len + 2 + binders_len
+  age_ms = clock_ms() - ticket.tst_received_ms
+  @if age_ms < 0 age_ms = 0 @end
+  obf_age = (age_ms + ticket.tst_age_add) & 4294967295
+
+  psk_prefix = [
+    0, 41,
+    (psk_ext_len >> 8) & 255, psk_ext_len & 255,
+    (ids_len >> 8) & 255, ids_len & 255,
+    (tid_len >> 8) & 255, tid_len & 255
+  ]
+  psk_prefix = tls_append_bytes(psk_prefix, tid)
+  psk_prefix = tls_append_bytes(psk_prefix, [
+    (obf_age >> 24) & 255,
+    (obf_age >> 16) & 255,
+    (obf_age >> 8) & 255,
+    obf_age & 255
+  ])
+
+  total_ext_len = ext_bytes.len() + psk_prefix.len() + 2 + binders_len
+  ch_body = ch_body.push((total_ext_len >> 8) & 255)
+  ch_body = ch_body.push(total_ext_len & 255)
+  ch_body = tls_append_bytes(ch_body, ext_bytes)
+  ch_body = tls_append_bytes(ch_body, psk_prefix)
+
+  full_body_len = ch_body.len() + 2 + binders_len
+  trunc_hs = [1, (full_body_len >> 16) & 255, (full_body_len >> 8) & 255, full_body_len & 255]
+  trunc_hs = tls_append_bytes(trunc_hs, ch_body)
+
+  binder = tls13_compute_psk_binder(ticket.tst_psk, tcipher, trunc_hs)
+  full_hs = tls_append_bytes([], trunc_hs)
+  full_hs = full_hs.push((binders_len >> 8) & 255)
+  full_hs = full_hs.push(binders_len & 255)
+  full_hs = full_hs.push(hlen & 255)
+  full_hs = tls_append_bytes(full_hs, binder)
+
+  fl = full_hs.len()
+  wire = [22, 3, 1, (fl >> 8) & 255, fl & 255]
+  wire = tls_append_bytes(wire, full_hs)
+  return {
+    wire_bytes: wire,
+    client_random: c_rand,
+    client_pub_key: client_pub_key,
+    server_name: server_name
+  }
+@end

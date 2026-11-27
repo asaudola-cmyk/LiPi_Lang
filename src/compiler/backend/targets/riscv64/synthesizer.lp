@@ -157,6 +157,7 @@ fn riscv64_synth_compile_program_ssa tokens ssa_lower_res
     riscv64_emit_prologue(s)
     riscv64_emit_addi(s, 26, 0, 0)
     riscv64_emit_addi(s, 27, 0, 0)
+    riscv64_synth_prescan_decls(s, tokens)
     s.rv_boxed_vars = riscv64_prescan_boxed_vars(tokens, 0, 0 - 1, 0 - 1)
 
     // 2. Synthesize all functions, structs, and statements
@@ -170,9 +171,9 @@ fn riscv64_synth_compile_program_ssa tokens ssa_lower_res
 
         tok_item = tokens[cur_pos]
         is_fn_tok = 0
-        if tok_item.tok_kind == TOK_KW_FN() or tok_item.tok_kind == TOK_DIR_FN() or tok_item.tok_kind == TOK_KW_COMPONENT()
+        if tok_item.tok_kind == TOK_KW_FN() or tok_item.tok_kind == TOK_DIR_FN() or tok_item.tok_kind == TOK_KW_COMPONENT() or tok_item.tok_kind == TOK_KW_ASYNC() or tok_item.tok_kind == TOK_KW_IMPL() or tok_item.tok_kind == TOK_DIR_IMPL() or tok_item.tok_kind == TOK_DIR_TRAIT() or tok_item.tok_kind == TOK_KW_ENUM() or tok_item.tok_kind == TOK_DIR_ENUM()
             is_fn_tok = 1
-        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn" or tok_item.tok_text == "component" or tok_item.tok_text == "উপাদান")
+        if tok_item.tok_kind == TOK_IDENT() and (tok_item.tok_text == "fn" or tok_item.tok_text == "কাজ" or tok_item.tok_text == "@fn" or tok_item.tok_text == "component" or tok_item.tok_text == "উপাদান" or tok_item.tok_text == "async" or tok_item.tok_text == "@async" or tok_item.tok_text == "union" or tok_item.tok_text == "@union" or tok_item.tok_text == "ইউনিয়ন" or tok_item.tok_text == "trait" or tok_item.tok_text == "@trait" or tok_item.tok_text == "বৈশিষ্ট্য" or tok_item.tok_text == "impl" or tok_item.tok_text == "@impl" or tok_item.tok_text == "বাস্তবায়ন" or tok_item.tok_text == "enum" or tok_item.tok_text == "@enum")
             is_fn_tok = 1
         if tok_item.tok_kind == TOK_KW_STRUCT() or tok_item.tok_kind == TOK_DIR_STRUCT()
             is_fn_tok = 1

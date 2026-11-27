@@ -138,6 +138,7 @@ import "compiler/frontend/ast/ast_node"
 
 @fn infer_unary_op_type(ctx, op, inner_t)
   @if op == "!" || op == "not" return TYPE_ID_BOOL() @end
+  @if op == "?"                return TYPE_ID_ANY() @end
   @if op == "-" || op == "+"   return inner_t @end
   @if op == "~"                return TYPE_ID_I64() @end
 

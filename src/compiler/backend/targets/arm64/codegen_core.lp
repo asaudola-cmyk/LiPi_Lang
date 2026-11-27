@@ -33,6 +33,7 @@ import "utso/string"
 
 import "compiler/frontend/lexer/token_kind"
 import "compiler/frontend/lexer/token"
+import "compiler/frontend/lexer/tokenizer"
 
 // ── 1. Data Models ────────────────────────────────────────────────────────────
 
@@ -65,10 +66,12 @@ struct Arm64CallReloc
     a64_cr_patch_offset     // Byte index in code_bytes where the 4-byte BL instruction is located
     a64_cr_target_name      // Target function identifier or "__print_int" / "__alloc"
 
-// WHY: Models struct schema definitions and field member offsets
+// WHY: Models struct/union schema definitions, union layout flag, and runtime type tag ID
 struct Arm64StructDef
-    sd_name             // Struct type name string
+    sd_name             // Struct/union type name string
     sd_fields           // List of field name strings
+    a64_sd_is_union     // 1 if union (all fields share offset 0), 0 if struct
+    a64_sd_type_id      // Unique 1..N runtime type tag for sovereign dyn Trait dispatch
 
 // WHY: Return container for ELF64 container synthesis results
 struct Arm64ElfResult
@@ -159,6 +162,17 @@ struct Arm64Synthesizer
     a64_ssa_lower_res     // Attached SsaLowerResult for direct ARM64 SSA CFG replacement
     a64_ssa_replaced_cnt  // Count of functions replaced directly from SSA CFG
     a64_ssa_replaced_bytes // Total native AAPCS64 bytes emitted directly from SSA CFG
+    a64_impl_type         // Active impl target struct/union name ("" outside impl blocks)
+    a64_next_type_id      // Next unique runtime type ID (1..N) for struct/union tags
+    a64_impl_methods      // Prescanned list of [TargetType, method_name] pairs for dispatch
+    a64_fn_sigs           // Prescanned Arm64FnSig list for variadic & default-param calls
+    a64_source_toks       // Full module token stream for default-arg evaluation
+
+struct Arm64FnSig
+    a64_sig_name
+    a64_sig_param_count
+    a64_sig_is_variadic
+    a64_sig_def_starts
 
 fn arm64_is_uint_type tname
     if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
@@ -357,6 +371,11 @@ fn arm64_synth_new
     s.a64_ssa_lower_res = 0
     s.a64_ssa_replaced_cnt = 0
     s.a64_ssa_replaced_bytes = 0
+    s.a64_impl_type = ""
+    s.a64_next_type_id = 1
+    s.a64_impl_methods = list()
+    s.a64_fn_sigs = list()
+    s.a64_source_toks = 0
     arm64_enum_register(s, "Ok", 1001, 1)
     arm64_enum_register(s, "Err", 1002, 1)
     arm64_enum_register(s, "Some", 1003, 1)
@@ -995,16 +1014,400 @@ fn arm64_synth_find_struct s sname
         i = i + 1
     return 0
 
+fn arm64_emit_ldur_x_off s rt rn simm9
+    // WHY: Unscaled 9-bit signed offset 64-bit load `ldur Xt, [Xn, #simm9]` (reads [ptr - 8] type tag).
+    imm9 = simm9 & 511
+    word = 4164943872 | (imm9 << 12) | ((rn & 31) << 5) | (rt & 31)
+    arm64_synth_emit32(s, word)
+    return 0
+
+fn arm64_synth_add_impl_method s tname mname
+    // WHY: Registers a [TargetType, method_name] pair deduplicated for forward & dyn Trait dispatch.
+    i = 0
+    while i < s.a64_impl_methods.len()
+        ent = s.a64_impl_methods[i]
+        if ent[0] == tname and ent[1] == mname
+            return 0
+        end
+        i = i + 1
+    end
+    push(s.a64_impl_methods, [tname, mname])
+    return 0
+
+fn arm64_synth_has_impl_method s tname mname
+    i = 0
+    while i < s.a64_impl_methods.len()
+        ent = s.a64_impl_methods[i]
+        if ent[0] == tname and ent[1] == mname
+            return 1
+        end
+        i = i + 1
+    end
+    if arm64_synth_find_fn(s, tname + "_" + mname) != 0
+        return 1
+    end
+    return 0
+
+fn arm64_synth_find_method_candidates s mname
+    // WHY: Returns list of [type_id, mangled_fn_name] candidates implementing `.mname()` for dyn Trait dispatch.
+    out = list()
+    i = 0
+    while i < s.a64_impl_methods.len()
+        ent = s.a64_impl_methods[i]
+        if ent[1] == mname
+            sd = arm64_synth_find_struct(s, ent[0])
+            tid = 0
+            if sd != 0
+                tid = sd.a64_sd_type_id
+            end
+            push(out, [tid, ent[0] + "_" + mname])
+        end
+        i = i + 1
+    end
+    return out
+
+fn arm64_synth_find_fn_sig s fname
+    if s.a64_fn_sigs == 0 return 0 end
+    i = 0
+    while i < s.a64_fn_sigs.len()
+        if s.a64_fn_sigs[i].a64_sig_name == fname
+            return s.a64_fn_sigs[i]
+        end
+        i = i + 1
+    end
+    return 0
+end
+
+fn arm64_synth_prescan_decls s toks
+    // WHY: Pre-populates struct/union schemas, impl/Type.method pairs, and function variadic/default
+    // signatures before codegen so forward instantiation, dyn Trait, variadic, and default calls resolve.
+    s.a64_source_toks = toks
+    n = toks.len()
+    i = 0
+    impl_ctx = ""
+    impl_col = 0
+    impl_braced = 0
+    impl_bd = 0
+    while i < n
+        t = toks[i]
+        k = t.tok_kind
+        txt = t.tok_text
+        if k == TOK_EOF() break end
+        // Skip trait blocks so trait signatures are never treated as concrete impl methods
+        if (k == TOK_DIR_TRAIT() or (k == TOK_IDENT() and (txt == "trait" or txt == "বৈশিষ্ট্য" or txt == "@trait"))) and i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
+            tr_col = t.tok_span.span_start_col
+            tr_line = t.tok_span.span_start_line
+            i = i + 2
+            tr_bd = 0
+            tr_saw = 0
+            while i < n
+                tt = toks[i]
+                if tt.tok_kind == TOK_EOF() break end
+                if tt.tok_kind == TOK_LBRACE() or (tt.tok_kind != TOK_STR() and tt.tok_text == "{")
+                    tr_bd = tr_bd + 1
+                    tr_saw = 1
+                elif tt.tok_kind == TOK_RBRACE() or (tt.tok_kind != TOK_STR() and tt.tok_text == "}")
+                    if tr_bd > 0
+                        tr_bd = tr_bd - 1
+                        if tr_bd == 0 and tr_saw == 1
+                            i = i + 1
+                            break
+                        end
+                    end
+                elif tr_saw == 0
+                    if (tt.tok_kind == TOK_KW_END() or tt.tok_kind == TOK_DIR_END() or (tt.tok_kind == TOK_IDENT() and (tt.tok_text == "end" or tt.tok_text == "শেষ" or tt.tok_text == "@end"))) and tt.tok_span.span_start_col <= tr_col
+                        i = i + 1
+                        break
+                    end
+                    if tt.tok_span.span_start_line > tr_line and tt.tok_span.span_start_col <= tr_col and tt.tok_kind != TOK_NEWLINE()
+                        break
+                    end
+                end
+                i = i + 1
+            end
+            continue
+        end
+        // Pre-register struct / union schemas with unique type_ids
+        is_su = 0
+        is_u = 0
+        if k == TOK_KW_STRUCT() or k == TOK_DIR_STRUCT() or (k == TOK_IDENT() and (txt == "struct" or txt == "গঠন" or txt == "@struct"))
+            is_su = 1
+        elif k == TOK_IDENT() and (txt == "union" or txt == "ইউনিয়ন" or txt == "@union")
+            is_su = 1
+            is_u = 1
+        end
+        if is_su == 1 and i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
+            su_col = t.tok_span.span_start_col
+            su_line = t.tok_span.span_start_line
+            sname = toks[i + 1].tok_text
+            sp = i + 2
+            while sp < n and (toks[sp].tok_kind == TOK_NEWLINE() or toks[sp].tok_kind == TOK_COMMENT_LINE() or toks[sp].tok_kind == TOK_COMMENT_DOC() or toks[sp].tok_kind == TOK_COMMENT_BLOCK())
+                sp = sp + 1
+            end
+            su_braced = 0
+            if sp < n and (toks[sp].tok_kind == TOK_LBRACE() or toks[sp].tok_text == "{")
+                su_braced = 1
+                sp = sp + 1
+            end
+            flds = list()
+            while sp < n
+                while sp < n and (toks[sp].tok_kind == TOK_NEWLINE() or toks[sp].tok_kind == TOK_SEMI() or toks[sp].tok_kind == TOK_COMMENT_LINE() or toks[sp].tok_kind == TOK_COMMENT_DOC() or toks[sp].tok_kind == TOK_COMMENT_BLOCK())
+                    sp = sp + 1
+                end
+                if sp >= n break end
+                ft = toks[sp]
+                fk = ft.tok_kind
+                fx = ft.tok_text
+                if fk == TOK_EOF() break end
+                if su_braced == 1
+                    if fk == TOK_RBRACE() or fx == "}"
+                        sp = sp + 1
+                        break
+                    end
+                    if fk == TOK_COMMA() or fx == ","
+                        sp = sp + 1
+                        continue
+                    end
+                else
+                    if fk == TOK_KW_END() or fk == TOK_DIR_END() or (fk == TOK_IDENT() and (fx == "end" or fx == "শেষ" or fx == "@end"))
+                        sp = sp + 1
+                        break
+                    end
+                    if ft.tok_span.span_start_line > su_line and ft.tok_span.span_start_col <= su_col
+                        break
+                    end
+                end
+                if fk == TOK_IDENT()
+                    push(flds, fx)
+                    sp = sp + 1
+                    if sp < n and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
+                        sp = sp + 1
+                        if sp < n and toks[sp].tok_kind == TOK_IDENT()
+                            sp = sp + 1
+                        end
+                    end
+                else
+                    sp = sp + 1
+                end
+            end
+            if arm64_synth_find_struct(s, sname) == 0
+                sd_new = Arm64StructDef()
+                sd_new.sd_name = sname
+                sd_new.sd_fields = flds
+                sd_new.a64_sd_is_union = is_u
+                sd_new.a64_sd_type_id = s.a64_next_type_id
+                s.a64_next_type_id = s.a64_next_type_id + 1
+                push(s.synth_structs, sd_new)
+            end
+            i = sp
+            continue
+        end
+        // Track impl [Trait for] TargetType { ... } context
+        if (k == TOK_KW_IMPL() or k == TOK_DIR_IMPL() or (k == TOK_IDENT() and (txt == "impl" or txt == "বাস্তবায়ন" or txt == "@impl"))) and i + 1 < n
+            ip = i + 1
+            if ip < n and toks[ip].tok_text == "<"
+                gd = 1
+                ip = ip + 1
+                while ip < n and gd > 0
+                    if toks[ip].tok_text == "<" gd = gd + 1
+                    elif toks[ip].tok_text == ">" gd = gd - 1 end
+                    ip = ip + 1
+                end
+            end
+            if ip < n and toks[ip].tok_kind == TOK_IDENT()
+                imp_t = toks[ip].tok_text
+                ip = ip + 1
+                if ip < n and toks[ip].tok_text == "<"
+                    gd = 1
+                    ip = ip + 1
+                    while ip < n and gd > 0
+                        if toks[ip].tok_text == "<" gd = gd + 1
+                        elif toks[ip].tok_text == ">" gd = gd - 1 end
+                        ip = ip + 1
+                    end
+                end
+                if ip < n and (toks[ip].tok_kind == TOK_KW_FOR() or toks[ip].tok_text == "for" or toks[ip].tok_text == "জন্য")
+                    ip = ip + 1
+                    if ip < n and toks[ip].tok_kind == TOK_IDENT()
+                        imp_t = toks[ip].tok_text
+                        ip = ip + 1
+                    end
+                    if ip < n and toks[ip].tok_text == "<"
+                        gd = 1
+                        ip = ip + 1
+                        while ip < n and gd > 0
+                            if toks[ip].tok_text == "<" gd = gd + 1
+                            elif toks[ip].tok_text == ">" gd = gd - 1 end
+                            ip = ip + 1
+                        end
+                    end
+                end
+                impl_ctx = imp_t
+                impl_col = t.tok_span.span_start_col
+                impl_braced = 0
+                impl_bd = 0
+                while ip < n and (toks[ip].tok_kind == TOK_NEWLINE() or toks[ip].tok_kind == TOK_COMMENT_LINE())
+                    ip = ip + 1
+                end
+                if ip < n and (toks[ip].tok_kind == TOK_LBRACE() or toks[ip].tok_text == "{")
+                    impl_braced = 1
+                    impl_bd = 1
+                    ip = ip + 1
+                end
+                i = ip
+                continue
+            end
+        end
+        if impl_ctx != ""
+            if impl_braced == 1
+                if k == TOK_LBRACE() or (k != TOK_STR() and txt == "{")
+                    impl_bd = impl_bd + 1
+                elif k == TOK_RBRACE() or (k != TOK_STR() and txt == "}")
+                    impl_bd = impl_bd - 1
+                    if impl_bd <= 0
+                        impl_ctx = ""
+                        impl_braced = 0
+                        i = i + 1
+                        continue
+                    end
+                end
+            else
+                if (k == TOK_KW_END() or k == TOK_DIR_END() or (k == TOK_IDENT() and (txt == "end" or txt == "শেষ" or txt == "@end"))) and t.tok_span.span_start_col <= impl_col
+                    impl_ctx = ""
+                    i = i + 1
+                    continue
+                elif t.tok_span.span_start_col <= impl_col and k != TOK_NEWLINE() and k != TOK_COMMENT_LINE() and k != TOK_COMMENT_BLOCK()
+                    impl_ctx = ""
+                end
+            end
+        end
+        // Record impl methods, `fn Type.method` declarations, and function variadic/default signatures
+        is_mfn = 0
+        if k == TOK_KW_FN() or k == TOK_DIR_FN() or (k == TOK_IDENT() and (txt == "fn" or txt == "কাজ" or txt == "@fn"))
+            is_mfn = 1
+        end
+        if is_mfn == 1 and i + 1 < n and toks[i + 1].tok_kind == TOK_IDENT()
+            fn_nm = toks[i + 1].tok_text
+            sig_full_nm = fn_nm
+            sp_fn = i + 2
+            if i + 3 < n and (toks[i + 2].tok_kind == TOK_DOT() or toks[i + 2].tok_text == ".") and toks[i + 3].tok_kind == TOK_IDENT()
+                arm64_synth_add_impl_method(s, fn_nm, toks[i + 3].tok_text)
+                sig_full_nm = fn_nm + "_" + toks[i + 3].tok_text
+                sp_fn = i + 4
+            elif impl_ctx != ""
+                arm64_synth_add_impl_method(s, impl_ctx, fn_nm)
+                sig_full_nm = impl_ctx + "_" + fn_nm
+            end
+            // Skip optional generic params `<T, U>`
+            if sp_fn < n and toks[sp_fn].tok_text == "<"
+                fgd = 1
+                sp_fn = sp_fn + 1
+                while sp_fn < n and fgd > 0
+                    if toks[sp_fn].tok_text == "<" fgd = fgd + 1
+                    elif toks[sp_fn].tok_text == ">" fgd = fgd - 1 end
+                    sp_fn = sp_fn + 1
+                end
+            end
+            if sp_fn < n and (toks[sp_fn].tok_kind == TOK_LPAREN() or toks[sp_fn].tok_text == "(")
+                sp_fn = sp_fn + 1
+                p_cnt = 0
+                p_var = 0
+                def_starts = list()
+                cur_def = 0 - 1
+                p_dep = 1
+                in_p = 0
+                while sp_fn < n and p_dep > 0
+                    fk = toks[sp_fn].tok_kind
+                    fx = toks[sp_fn].tok_text
+                    if fk == TOK_LPAREN() or fk == TOK_LBRACKET() or fk == TOK_LBRACE()
+                        p_dep = p_dep + 1
+                        sp_fn = sp_fn + 1
+                        continue
+                    end
+                    if fk == TOK_RPAREN() or fk == TOK_RBRACKET() or fk == TOK_RBRACE()
+                        p_dep = p_dep - 1
+                        if p_dep == 0
+                            if in_p == 1
+                                p_cnt = p_cnt + 1
+                                push(def_starts, cur_def)
+                            end
+                            sp_fn = sp_fn + 1
+                            break
+                        end
+                        sp_fn = sp_fn + 1
+                        continue
+                    end
+                    if p_dep == 1
+                        if fk == TOK_COMMA()
+                            if in_p == 1
+                                p_cnt = p_cnt + 1
+                                push(def_starts, cur_def)
+                            end
+                            in_p = 0
+                            cur_def = 0 - 1
+                        elif in_p == 0
+                            if fk == TOK_DOTDOT() and sp_fn + 1 < n and toks[sp_fn + 1].tok_kind == TOK_DOT()
+                                p_var = 1
+                                sp_fn = sp_fn + 2
+                                if sp_fn < n and toks[sp_fn].tok_kind == TOK_IDENT()
+                                    in_p = 1
+                                end
+                            elif fk == TOK_KW_MUT() or (fk == TOK_IDENT() and fx == "mut")
+                                // skip mut
+                            elif fk == TOK_IDENT()
+                                in_p = 1
+                            end
+                        elif fk == TOK_COLON()
+                            if sp_fn + 2 < n and toks[sp_fn + 1].tok_kind == TOK_DOTDOT() and toks[sp_fn + 2].tok_kind == TOK_DOT()
+                                p_var = 1
+                            end
+                        elif fk == TOK_ASSIGN() and cur_def < 0
+                            cur_def = sp_fn + 1
+                        end
+                    end
+                    sp_fn = sp_fn + 1
+                end
+                if p_var == 1 or p_cnt > 0
+                    has_any_def = 0
+                    di_s = 0
+                    while di_s < def_starts.len()
+                        if def_starts[di_s] >= 0 has_any_def = 1 end
+                        di_s = di_s + 1
+                    end
+                    if p_var == 1 or has_any_def == 1
+                        fs = Arm64FnSig()
+                        fs.a64_sig_name = sig_full_nm
+                        fs.a64_sig_param_count = p_cnt
+                        fs.a64_sig_is_variadic = p_var
+                        fs.a64_sig_def_starts = def_starts
+                        push(s.a64_fn_sigs, fs)
+                    end
+                end
+                i = sp_fn
+                continue
+            end
+            i = sp_fn
+            continue
+        end
+        i = i + 1
+    end
+    return 0
+
 fn arm64_synth_get_field_offset s sname fname
-    // WHY: Resolves the 8-byte scaled offset of struct field fname.
+    // WHY: Resolves the 8-byte scaled offset of struct field fname (unions always return offset 0).
     if sname != ""
         sdef = arm64_synth_find_struct(s, sname)
         if sdef != 0
             f = 0
             while f < sdef.sd_fields.len()
                 if sdef.sd_fields[f] == fname
+                    if sdef.a64_sd_is_union == 1
+                        return 0
+                    end
                     return f * 8
+                end
                 f = f + 1
+            end
 
     // Fallback: search across all defined structs
     i = 0
@@ -1013,9 +1416,15 @@ fn arm64_synth_get_field_offset s sname fname
         f = 0
         while f < cur_def.sd_fields.len()
             if cur_def.sd_fields[f] == fname
+                if cur_def.a64_sd_is_union == 1
+                    return 0
+                end
                 return f * 8
+            end
             f = f + 1
+        end
         i = i + 1
+    end
 
     // Fallback 2: search global fields registry
     gi = 0

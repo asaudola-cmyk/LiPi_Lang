@@ -435,7 +435,45 @@ fn x86_synth_compile_statement s toks pos_box
 
         ret_expr_t = ""
         if has_expr == 1
+            ret_ln = t.tok_span.span_start_line
             x86_synth_compile_expr(s, toks, pos_box)
+            // Tuple return: `return e1, e2 [, ...]` packs values into a first-class list
+            cp_rt = get(pos_box, 0)
+            if cp_rt < toks.len() and (toks[cp_rt].tok_kind == TOK_COMMA() or (toks[cp_rt].tok_kind != TOK_STR() and toks[cp_rt].tok_text == ",")) and toks[cp_rt].tok_span.span_start_line == ret_ln
+                x86_synth_emit_byte(s, 80) // push rax
+                rt_cnt = 1
+                while get(pos_box, 0) < toks.len()
+                    cp_r2 = get(pos_box, 0)
+                    if (toks[cp_r2].tok_kind == TOK_COMMA() or (toks[cp_r2].tok_kind != TOK_STR() and toks[cp_r2].tok_text == ",")) and toks[cp_r2].tok_span.span_start_line == ret_ln
+                        list_set(pos_box, 0, cp_r2 + 1)
+                        x86_synth_compile_expr(s, toks, pos_box)
+                        x86_synth_emit_byte(s, 80) // push rax
+                        rt_cnt = rt_cnt + 1
+                    else
+                        break
+                    end
+                end
+                x86_synth_emit_mov_rdi_imm64(s, rt_cnt)
+                x86_synth_emit_bytes(s, [49, 246]) // xor esi, esi
+                x86_synth_emit_call_helper(s, "_lipi_list_create")
+                x86_synth_emit_bytes(s, [73, 137, 194]) // mov r10, rax
+                x86_synth_emit_bytes(s, [76, 139, 88, 16]) // mov r11, [rax + 16]
+                ri_t = rt_cnt - 1
+                while ri_t >= 0
+                    x86_synth_emit_byte(s, 88) // pop rax
+                    r_off = ri_t * 8
+                    if r_off < 128
+                        x86_synth_emit_bytes(s, [73, 137, 67, r_off])
+                    else
+                        x86_synth_emit_bytes(s, [73, 137, 131])
+                        x86_synth_emit_u32(s, r_off)
+                    end
+                    ri_t = ri_t - 1
+                end
+                x86_synth_emit_bytes(s, [76, 137, 208]) // mov rax, r10
+                s.synth_last_expr_type = ""
+                s.synth_last_struct = ""
+            end
             ret_expr_t = s.synth_last_expr_type
             if s.synth_current_fn_idx >= 0 and s.synth_current_fn_idx < s.synth_functions.len()
                 ret_fn_obj = s.synth_functions[s.synth_current_fn_idx]
@@ -1861,6 +1899,91 @@ fn x86_synth_compile_statement s toks pos_box
         list_set(pos_box, 0, pos + 1) // Consume let
         var_pos = get(pos_box, 0)
         if var_pos < toks.len() and x86_synth_is_ident_token(toks[var_pos].tok_kind) == 1
+            // Multi-variable tuple destructuring: let a, b [, c...] = rhs1 [, rhs2...]
+            if var_pos + 1 < toks.len() and (toks[var_pos + 1].tok_kind == TOK_COMMA() or (toks[var_pos + 1].tok_kind != TOK_STR() and toks[var_pos + 1].tok_text == ","))
+                ml_names = [toks[var_pos].tok_text]
+                ml_p = var_pos + 1
+                ml_ok = 1
+                while ml_p < toks.len()
+                    if toks[ml_p].tok_kind == TOK_COMMA() or (toks[ml_p].tok_kind != TOK_STR() and toks[ml_p].tok_text == ",")
+                        ml_p = ml_p + 1
+                        if ml_p < toks.len() and x86_synth_is_ident_token(toks[ml_p].tok_kind) == 1
+                            push(ml_names, toks[ml_p].tok_text)
+                            ml_p = ml_p + 1
+                        else
+                            ml_ok = 0
+                            break
+                        end
+                    else
+                        break
+                    end
+                end
+                if ml_ok == 1 and ml_names.len() >= 2 and ml_p < toks.len() and (toks[ml_p].tok_kind == TOK_ASSIGN() or (toks[ml_p].tok_kind != TOK_STR() and toks[ml_p].tok_text == "="))
+                    ml_ln = toks[ml_p].tok_span.span_start_line
+                    list_set(pos_box, 0, ml_p + 1)
+                    ml_rhs_types = list()
+                    ml_rhs_structs = list()
+                    ml_rcnt = 0
+                    while 1 == 1
+                        x86_synth_compile_expr(s, toks, pos_box)
+                        push(ml_rhs_types, s.synth_last_expr_type)
+                        push(ml_rhs_structs, s.synth_last_struct)
+                        x86_synth_emit_byte(s, 80) // push rax
+                        ml_rcnt = ml_rcnt + 1
+                        mp_c = get(pos_box, 0)
+                        if mp_c < toks.len() and (toks[mp_c].tok_kind == TOK_COMMA() or (toks[mp_c].tok_kind != TOK_STR() and toks[mp_c].tok_text == ",")) and toks[mp_c].tok_span.span_start_line == ml_ln
+                            list_set(pos_box, 0, mp_c + 1)
+                        else
+                            break
+                        end
+                    end
+                    if ml_rcnt == 1
+                        // Unpack single tuple/list RHS into ml_names[0..N-1]
+                        tup_tmp = s.synth_stack_offset
+                        s.synth_stack_offset = s.synth_stack_offset + 8
+                        x86_synth_emit_byte(s, 88) // pop rax
+                        x86_synth_emit_store_var(s, 0, tup_tmp)
+                        mli = 0
+                        while mli < ml_names.len()
+                            x86_synth_emit_load_var(s, 7, tup_tmp) // mov rdi, [rbp - tup_tmp]
+                            x86_synth_emit_mov_rax_imm64(s, mli)
+                            x86_synth_emit_bytes(s, [72, 137, 198]) // mov rsi, rax
+                            x86_synth_emit_call_helper(s, "_lipi_list_get")
+                            x86_synth_bind_reg_var(s, ml_names[mli], is_reg)
+                            x86_synth_set_var_type(s, ml_names[mli], "")
+                            x86_synth_set_prim_type(s, ml_names[mli], "")
+                            mli = mli + 1
+                        end
+                    else
+                        // Parallel multi-assign (swap-safe: all RHS evaluated on stack before any write!)
+                        while ml_rcnt > ml_names.len()
+                            x86_synth_emit_byte(s, 88) // discard excess RHS
+                            ml_rcnt = ml_rcnt - 1
+                        end
+                        mli_z = ml_names.len() - 1
+                        while mli_z >= ml_rcnt
+                            x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+                            x86_synth_bind_reg_var(s, ml_names[mli_z], is_reg)
+                            x86_synth_set_prim_type(s, ml_names[mli_z], "int")
+                            mli_z = mli_z - 1
+                        end
+                        mli_r = ml_rcnt - 1
+                        while mli_r >= 0
+                            x86_synth_emit_byte(s, 88) // pop rax
+                            mn_r = ml_names[mli_r]
+                            x86_synth_bind_reg_var(s, mn_r, is_reg)
+                            if mli_r < ml_rhs_structs.len() and ml_rhs_structs[mli_r] != ""
+                                x86_synth_set_var_type(s, mn_r, ml_rhs_structs[mli_r])
+                            end
+                            if mli_r < ml_rhs_types.len()
+                                x86_synth_set_prim_type(s, mn_r, ml_rhs_types[mli_r])
+                            end
+                            mli_r = mli_r - 1
+                        end
+                    end
+                    return 0
+                end
+            end
             var_name = toks[var_pos].tok_text
             assigned_type = ""
             list_set(pos_box, 0, var_pos + 1)
@@ -2566,11 +2689,110 @@ fn x86_synth_compile_statement s toks pos_box
         end
     end
 
-    // ── 10. Assignment: <var> = <expr> or <var>: <type> = <expr> or <var> <op>= <expr> ───────────────────
+    // ── 10. Assignment: <var> = <expr>, multi-var destructuring a, b = rhs1, rhs2, <var>: <type> = <expr>, or <var> <op>= <expr> ──
     if x86_synth_is_ident_token(k) == 1
         var_name = txt
         assigned_type = ""
         next_pos = pos + 1
+        // Multi-variable tuple destructuring & swap: a, b [, c...] = rhs1 [, rhs2...]
+        if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_COMMA() or (toks[next_pos].tok_kind != TOK_STR() and toks[next_pos].tok_text == ","))
+            ma_names = [var_name]
+            ma_p = next_pos
+            ma_ok = 1
+            while ma_p < toks.len()
+                if toks[ma_p].tok_kind == TOK_COMMA() or (toks[ma_p].tok_kind != TOK_STR() and toks[ma_p].tok_text == ",")
+                    ma_p = ma_p + 1
+                    if ma_p < toks.len() and x86_synth_is_ident_token(toks[ma_p].tok_kind) == 1
+                        push(ma_names, toks[ma_p].tok_text)
+                        ma_p = ma_p + 1
+                    else
+                        ma_ok = 0
+                        break
+                    end
+                else
+                    break
+                end
+            end
+            if ma_ok == 1 and ma_names.len() >= 2 and ma_p < toks.len() and (toks[ma_p].tok_kind == TOK_ASSIGN() or (toks[ma_p].tok_kind != TOK_STR() and toks[ma_p].tok_text == "="))
+                ma_ln = toks[ma_p].tok_span.span_start_line
+                list_set(pos_box, 0, ma_p + 1)
+                ma_rhs_types = list()
+                ma_rhs_structs = list()
+                ma_rcnt = 0
+                while 1 == 1
+                    x86_synth_compile_expr(s, toks, pos_box)
+                    push(ma_rhs_types, s.synth_last_expr_type)
+                    push(ma_rhs_structs, s.synth_last_struct)
+                    x86_synth_emit_byte(s, 80) // push rax
+                    ma_rcnt = ma_rcnt + 1
+                    mp2 = get(pos_box, 0)
+                    if mp2 < toks.len() and (toks[mp2].tok_kind == TOK_COMMA() or (toks[mp2].tok_kind != TOK_STR() and toks[mp2].tok_text == ",")) and toks[mp2].tok_span.span_start_line == ma_ln
+                        list_set(pos_box, 0, mp2 + 1)
+                    else
+                        break
+                    end
+                end
+                if ma_rcnt == 1
+                    // Unpack single tuple/list RHS into ma_names[0..N-1]
+                    tup_tmp2 = s.synth_stack_offset
+                    s.synth_stack_offset = s.synth_stack_offset + 8
+                    x86_synth_emit_byte(s, 88) // pop rax
+                    x86_synth_emit_store_var(s, 0, tup_tmp2)
+                    mai = 0
+                    while mai < ma_names.len()
+                        mn_u = ma_names[mai]
+                        x86_synth_emit_load_var(s, 7, tup_tmp2) // mov rdi, [rbp - tup_tmp2]
+                        x86_synth_emit_mov_rax_imm64(s, mai)
+                        x86_synth_emit_bytes(s, [72, 137, 198]) // mov rsi, rax
+                        x86_synth_emit_call_helper(s, "_lipi_list_get")
+                        mg_u = x86_synth_find_mutable_global(s, mn_u)
+                        lv_u = x86_synth_find_local_var(s, mn_u)
+                        if lv_u == 0 and mg_u >= 512 and (s.synth_in_function == 0 or x86_synth_is_mutable_global_name(mn_u) == 1 or x86_synth_is_explicit_mutable_global(s, mn_u) == 1)
+                            x86_synth_emit_mutable_global_write(s, mg_u)
+                            x86_synth_set_mutable_global_types(s, mn_u, "", "")
+                        else
+                            x86_synth_bind_var(s, mn_u)
+                            x86_synth_set_var_type(s, mn_u, "")
+                            x86_synth_set_prim_type(s, mn_u, "")
+                        end
+                        mai = mai + 1
+                    end
+                else
+                    while ma_rcnt > ma_names.len()
+                        x86_synth_emit_byte(s, 88) // discard excess RHS
+                        ma_rcnt = ma_rcnt - 1
+                    end
+                    mai_z = ma_names.len() - 1
+                    while mai_z >= ma_rcnt
+                        x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
+                        x86_synth_bind_var(s, ma_names[mai_z])
+                        x86_synth_set_prim_type(s, ma_names[mai_z], "int")
+                        mai_z = mai_z - 1
+                    end
+                    mai_r = ma_rcnt - 1
+                    while mai_r >= 0
+                        x86_synth_emit_byte(s, 88) // pop rax
+                        mn_p = ma_names[mai_r]
+                        mg_p2 = x86_synth_find_mutable_global(s, mn_p)
+                        lv_p2 = x86_synth_find_local_var(s, mn_p)
+                        if lv_p2 == 0 and mg_p2 >= 512 and (s.synth_in_function == 0 or x86_synth_is_mutable_global_name(mn_p) == 1 or x86_synth_is_explicit_mutable_global(s, mn_p) == 1)
+                            x86_synth_emit_mutable_global_write(s, mg_p2)
+                            x86_synth_set_mutable_global_types(s, mn_p, ma_rhs_types[mai_r], ma_rhs_structs[mai_r])
+                        else
+                            x86_synth_bind_var(s, mn_p)
+                            if mai_r < ma_rhs_structs.len() and ma_rhs_structs[mai_r] != ""
+                                x86_synth_set_var_type(s, mn_p, ma_rhs_structs[mai_r])
+                            end
+                            if mai_r < ma_rhs_types.len()
+                                x86_synth_set_prim_type(s, mn_p, ma_rhs_types[mai_r])
+                            end
+                        end
+                        mai_r = mai_r - 1
+                    end
+                end
+                return 0
+            end
+        end
         // WHY: Support typed variable declarations: name: Type[<...>] = expr
         if next_pos < toks.len() and (toks[next_pos].tok_kind == TOK_COLON() or (toks[next_pos].tok_kind != TOK_STR() and toks[next_pos].tok_text == ":"))
             t_scan_box = [next_pos + 1]

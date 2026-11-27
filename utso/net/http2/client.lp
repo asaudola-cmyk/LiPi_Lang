@@ -13,6 +13,7 @@
 
 import "utso/net/tls/tls13"
 import "utso/core/memory"
+import "utso/core/deflate"
 
 H2C_FRAME_DATA          = 0
 H2C_FRAME_HEADERS       = 1
@@ -60,6 +61,10 @@ struct H2Client
     h2_goaway_err
     h2_last_ping_ack
     h2_connected
+    h2_tls_host
+    h2_tls_res_master
+    h2_tls_resumed
+    h2_tls_ph_buf
 end
 
 struct H2Response
@@ -292,13 +297,13 @@ fn _h2c_tls_hash cipher data
 end
 
 fn _h2c_tls_parse_server_hello hs_msg
-    // Returns [ok, cipher_suite, server_x25519_pub32]
+    // Returns [ok, cipher_suite, server_x25519_pub32, has_psk, psk_id]
     n = len(hs_msg)
-    if n < 44 or (get(hs_msg, 0) & 255) != 2 return [0, 0, list()] end
+    if n < 44 or (get(hs_msg, 0) & 255) != 2 return [0, 0, list(), 0, 0] end
     pos = 4 + 2 + 32
     sid_len = get(hs_msg, pos) & 255
     pos = pos + 1 + sid_len
-    if pos + 5 > n return [0, 0, list()] end
+    if pos + 5 > n return [0, 0, list(), 0, 0] end
     cipher = ((get(hs_msg, pos) & 255) << 8) | (get(hs_msg, pos + 1) & 255)
     pos = pos + 3 // cipher(2) + compression(1)
     ext_len = ((get(hs_msg, pos) & 255) << 8) | (get(hs_msg, pos + 1) & 255)
@@ -306,12 +311,17 @@ fn _h2c_tls_parse_server_hello hs_msg
     end_p = pos + ext_len
     if end_p > n end_p = n end
     pub = list()
+    has_psk = 0
+    psk_id = 0
     while pos + 4 <= end_p
         et = ((get(hs_msg, pos) & 255) << 8) | (get(hs_msg, pos + 1) & 255)
         el = ((get(hs_msg, pos + 2) & 255) << 8) | (get(hs_msg, pos + 3) & 255)
         pos = pos + 4
         if pos + el > end_p break end
-        if et == 51 and el >= 36
+        if et == 41 and el == 2
+            has_psk = 1
+            psk_id = ((get(hs_msg, pos) & 255) << 8) | (get(hs_msg, pos + 1) & 255)
+        elif et == 51 and el >= 36
             grp = ((get(hs_msg, pos) & 255) << 8) | (get(hs_msg, pos + 1) & 255)
             klen = ((get(hs_msg, pos + 2) & 255) << 8) | (get(hs_msg, pos + 3) & 255)
             if grp == 29 and klen == 32 and 4 + klen <= el
@@ -320,8 +330,8 @@ fn _h2c_tls_parse_server_hello hs_msg
         end
         pos = pos + el
     end
-    if len(pub) != 32 return [0, 0, list()] end
-    return [1, cipher, pub]
+    if len(pub) != 32 return [0, 0, list(), 0, 0] end
+    return [1, cipher, pub, has_psk, psk_id]
 end
 
 fn _h2c_tls_extract_certs msg
@@ -615,13 +625,21 @@ fn _h2c_hpack_encode_request method scheme authority path extra_names extra_vals
     // user-agent (static 58)
     _h2c_hpack_write_int(blk, 0, 4, 58)
     _h2c_hpack_write_str(blk, "lipi-h2/1.0.1")
-    // Extra user headers
+    // Extra user headers + default accept-encoding: gzip, deflate (RFC 7541 static index 16 = 0x90)
+    has_ae = 0
     i = 0
     while i < len(extra_names) and i < len(extra_vals)
+        ename = get(extra_names, i)
+        if str_to_lower(ename) == "accept-encoding"
+            has_ae = 1
+        end
         push(blk, 0) // literal without indexing, new name
-        _h2c_hpack_write_str(blk, get(extra_names, i))
+        _h2c_hpack_write_str(blk, ename)
         _h2c_hpack_write_str(blk, get(extra_vals, i))
         i = i + 1
+    end
+    if has_ae == 0
+        push(blk, 144) // 0x80 | 16 -> accept-encoding: gzip, deflate
     end
     return blk
 end
@@ -677,7 +695,24 @@ fn _h2c_wire_read_exact cli need
         if unw[0] != 1 return list() end
         cli.h2_tls_s_seq = cli.h2_tls_s_seq + 1
         if unw[1] == 21 return list() end // Encrypted Alert (e.g. close_notify)
-        if unw[1] == 23
+        if unw[1] == 22
+            // Capture post-handshake RFC 8446 NewSessionTicket (type 4) across coalesced OR fragmented records
+            _h2c_append(cli.h2_tls_ph_buf, unw[2])
+            ph_p = 0
+            while ph_p + 4 <= len(cli.h2_tls_ph_buf)
+                ph_t = get(cli.h2_tls_ph_buf, ph_p) & 255
+                ph_l = ((get(cli.h2_tls_ph_buf, ph_p + 1) & 255) << 16) | ((get(cli.h2_tls_ph_buf, ph_p + 2) & 255) << 8) | (get(cli.h2_tls_ph_buf, ph_p + 3) & 255)
+                if ph_p + 4 + ph_l > len(cli.h2_tls_ph_buf) break end
+                if ph_t == 4 and len(cli.h2_tls_res_master) > 0
+                    nst = _h2c_slice(cli.h2_tls_ph_buf, ph_p, ph_p + 4 + ph_l)
+                    tls13_parse_new_session_ticket(nst, cli.h2_tls_cipher, cli.h2_tls_res_master, cli.h2_tls_host, "h2")
+                end
+                ph_p = ph_p + 4 + ph_l
+            end
+            if ph_p > 0
+                cli.h2_tls_ph_buf = _h2c_slice(cli.h2_tls_ph_buf, ph_p, len(cli.h2_tls_ph_buf))
+            end
+        elif unw[1] == 23
             _h2c_append(cli.h2_tls_rx, unw[2])
         end
     end
@@ -691,7 +726,7 @@ fn _h2c_new_client fd is_tls alpn
         fd, is_tls, 0, list(), list(), list(), list(), 0, 0, alpn, list(),
         1, 16384, 65535, list(), list(),
         list(), list(), list(), list(), list(), list(), list(),
-        0, 0, 0, list(), 1
+        0, 0, 0, list(), 1, "", list(), 0, list()
     )
 end
 
@@ -746,8 +781,14 @@ fn h2_connect_tls host_ip sni_host port verify_cert
     free(rng, 32)
     c_pub = x25519_public_key(c_priv)
 
-    // 2. ClientHello with ALPN ["h2", "http/1.1"]
-    ch = tls13_build_client_hello_alpn(sni_host, c_pub, ["h2", "http/1.1"])
+    // 2. ClientHello with ALPN ["h2", "http/1.1"] (offering cached PSK ticket when available)
+    cached_t = tls13_cache_lookup_ticket(sni_host, "h2")
+    ch = 0
+    if cached_t != 0
+        ch = tls13_build_client_hello_psk(sni_host, c_pub, ["h2", "http/1.1"], cached_t)
+    else
+        ch = tls13_build_client_hello_alpn(sni_host, c_pub, ["h2", "http/1.1"])
+    end
     if len(ch.wire_bytes) < 46
         syscall(3, fd, 0, 0, 0, 0, 0)
         return bad
@@ -772,6 +813,15 @@ fn h2_connect_tls host_ip sni_host port verify_cert
     end
     cipher = shi[1]
     s_pub = shi[2]
+    used_psk = 0
+    if shi[3] == 1
+        // RFC 8446 §4.2.11: Abort if server returns unsolicited PSK, out-of-range identity, or mismatched cipher
+        if cached_t == 0 or shi[4] != 0 or cipher != cached_t.tst_cipher
+            syscall(3, fd, 0, 0, 0, 0, 0)
+            return bad
+        end
+        used_psk = 1
+    end
 
     transcript = _h2c_append(list(), ch_hs)
     _h2c_append(transcript, sh_hs)
@@ -783,7 +833,13 @@ fn h2_connect_tls host_ip sni_host port verify_cert
     c_hs_iv = list()
     s_hs_key = list()
     s_hs_iv = list()
-    if cipher == 4866
+    if used_psk == 1
+        hs_keys = tls13_derive_psk_handshake_keys(cached_t.tst_psk, shared, th1, cipher)
+        c_hs_key = hs_keys.client_write_key
+        c_hs_iv = hs_keys.client_write_iv
+        s_hs_key = hs_keys.server_write_key
+        s_hs_iv = hs_keys.server_write_iv
+    elif cipher == 4866
         hs_keys = tls13_derive_handshake_keys_384(shared, th1)
         c_hs_key = hs_keys.client_write_key
         c_hs_iv = hs_keys.client_write_iv
@@ -885,7 +941,7 @@ fn h2_connect_tls host_ip sni_host port verify_cert
         hs_buf = _h2c_slice(hs_buf, pos, len(hs_buf))
     end
 
-    if got_fin != 1 or got_cert != 1 or got_cv != 1
+    if got_fin != 1 or (used_psk == 0 and (got_cert != 1 or got_cv != 1))
         syscall(3, fd, 0, 0, 0, 0, 0)
         return bad
     end
@@ -897,14 +953,15 @@ fn h2_connect_tls host_ip sni_host port verify_cert
     s_app_key = list()
     s_app_iv = list()
     c_fin_msg = list()
+    ms_sec = list()
     if cipher == 4866
         z48 = list()
         zi = 0
         while zi < 48 push(z48, 0) zi = zi + 1 end
         d_s = tls13_hkdf_expand_label_384(hs_keys.handshake_secret, "derived", sha384_hash_bytes(list()), 48)
-        ms = tls13_hkdf_extract_384(d_s, z48)
-        cat = tls13_hkdf_expand_label_384(ms, "c ap traffic", fin_hash, 48)
-        sat = tls13_hkdf_expand_label_384(ms, "s ap traffic", fin_hash, 48)
+        ms_sec = tls13_hkdf_extract_384(d_s, z48)
+        cat = tls13_hkdf_expand_label_384(ms_sec, "c ap traffic", fin_hash, 48)
+        sat = tls13_hkdf_expand_label_384(ms_sec, "s ap traffic", fin_hash, 48)
         c_app_key = tls13_hkdf_expand_label_384(cat, "key", list(), 32)
         c_app_iv = tls13_hkdf_expand_label_384(cat, "iv", list(), 12)
         s_app_key = tls13_hkdf_expand_label_384(sat, "key", list(), 32)
@@ -916,9 +973,9 @@ fn h2_connect_tls host_ip sni_host port verify_cert
         zi = 0
         while zi < 32 push(z32, 0) zi = zi + 1 end
         d_s = tls13_hkdf_expand_label(hs_keys.handshake_secret, "derived", sha256_hash_bytes(list()), 32)
-        ms = tls13_hkdf_extract(d_s, z32)
-        cat = tls13_hkdf_expand_label(ms, "c ap traffic", fin_hash, 32)
-        sat = tls13_hkdf_expand_label(ms, "s ap traffic", fin_hash, 32)
+        ms_sec = tls13_hkdf_extract(d_s, z32)
+        cat = tls13_hkdf_expand_label(ms_sec, "c ap traffic", fin_hash, 32)
+        sat = tls13_hkdf_expand_label(ms_sec, "s ap traffic", fin_hash, 32)
         kl = 16
         if cipher == 4867 kl = 32 end
         c_app_key = tls13_hkdf_expand_label(cat, "key", list(), kl)
@@ -935,12 +992,20 @@ fn h2_connect_tls host_ip sni_host port verify_cert
         return bad
     end
 
+    full_tr = _h2c_append(list(), transcript)
+    _h2c_append(full_tr, c_fin_msg)
+    res_th = _h2c_tls_hash(cipher, full_tr)
+    res_master = tls13_derive_resumption_master_secret(cipher, ms_sec, res_th)
+
     cli = _h2c_new_client(fd, 1, neg_alpn)
     cli.h2_tls_cipher = cipher
     cli.h2_tls_c_key = c_app_key
     cli.h2_tls_c_iv = c_app_iv
     cli.h2_tls_s_key = s_app_key
     cli.h2_tls_s_iv = s_app_iv
+    cli.h2_tls_host = sni_host
+    cli.h2_tls_res_master = res_master
+    cli.h2_tls_resumed = used_psk
     if _h2c_send_client_preface(cli) != 1
         syscall(3, fd, 0, 0, 0, 0, 0)
         cli.h2_connected = 0
@@ -1190,13 +1255,36 @@ fn h2_recv_stream cli sid
     end
     bb = get(cli.h2_s_body_bufs, sidx)
     body_str = buf_to_str(bb)
+    rh_names = get(cli.h2_s_hnames, sidx)
+    rh_vals = get(cli.h2_s_hvals, sidx)
+    ce_val = ""
+    rhi = 0
+    while rhi < len(rh_names) and rhi < len(rh_vals)
+        if str_to_lower(get(rh_names, rhi)) == "content-encoding"
+            ce_p = str_to_lower(str_trim(get(rh_vals, rhi)))
+            if len(ce_p) > 0
+                if len(ce_val) == 0
+                    ce_val = ce_p
+                else
+                    ce_val = ce_val + ", " + ce_p
+                end
+            end
+        end
+        rhi = rhi + 1
+    end
+    if len(ce_val) > 0 and ce_val != "identity"
+        h2_dec = deflate_decompress_http(ce_val, body_str)
+        if h2_dec.dr_ok == 1
+            body_str = h2_dec.dr_data
+        end
+    end
     st_code = get(cli.h2_s_status, sidx)
     err_c = get(cli.h2_s_err, sidx)
     ok_flag = 0
     if get(cli.h2_s_done, sidx) == 1 and err_c == 0 and st_code > 0
         ok_flag = 1
     end
-    return H2Response(ok_flag, sid, st_code, get(cli.h2_s_hnames, sidx), get(cli.h2_s_hvals, sidx), body_str, err_c, cli.h2_alpn)
+    return H2Response(ok_flag, sid, st_code, rh_names, rh_vals, body_str, err_c, cli.h2_alpn)
 end
 
 fn h2_request cli method path authority extra_names extra_vals body_str

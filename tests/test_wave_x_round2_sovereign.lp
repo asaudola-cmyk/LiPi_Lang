@@ -614,8 +614,8 @@ fn main
         exit(1)
     end
     w_clog = file_read("/tmp/lipi_wx_wasm_log.txt")
-    if str_contains(w_clog, "replaced 3/4 functions directly from SSA CFG") != 1
-        say "FAIL X4e WASM SSA did not replace 3/4 functions"
+    if str_contains(w_clog, "replaced 4/4 functions directly from SSA CFG") != 1
+        say "FAIL X4e WASM SSA did not replace 4/4 functions"
         exit(1)
     end
     if syscall(21, "/usr/bin/node", 1, 0, 0, 0, 0) == 0

@@ -307,14 +307,19 @@ import "compiler/frontend/lexer/comment_doc"
         stream.cs_line = stream.cs_line + str_res.str_lines_consumed
         stream.cs_col = str_res.str_end_col
         span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
-        kind = TOK_STR()
-        kind_name = "STR"
-        @if str_res.str_has_interp == 1
-          kind = TOK_INTERP_STR()
-          kind_name = "INTERP_STR"
+        @if str_res.str_is_terminated == 0
+          tok = token_new(TOK_ERROR(), "ERROR", "Unterminated string literal", 0, 0.0, span)
+          tokens = tokens.push(tok)
+        @else
+          kind = TOK_STR()
+          kind_name = "STR"
+          @if str_res.str_has_interp == 1
+            kind = TOK_INTERP_STR()
+            kind_name = "INTERP_STR"
+          @end
+          tok = token_new(kind, kind_name, str_res.str_decoded_text, 0, 0.0, span)
+          tokens = tokens.push(tok)
         @end
-        tok = token_new(kind, kind_name, str_res.str_decoded_text, 0, 0.0, span)
-        tokens = tokens.push(tok)
       @else
         // Guard against zero advancement
         char_stream_advance_byte(stream)
@@ -782,7 +787,11 @@ import "compiler/frontend/lexer/comment_doc"
 
     @else
       rune = char_stream_peek_rune(stream)
-      @if is_bengali_ident_start(rune) == 1
+      is_uni_id = is_bengali_ident_start(rune)
+      @if is_uni_id == 0 && rune >= 192 && rune != 65279 && !(rune >= 8192 && rune <= 8303) && !(rune >= 12288 && rune <= 12351)
+        is_uni_id = 1
+      @end
+      @if is_uni_id == 1
         ident_start = stream.cs_pos
         ident_start_col = stream.cs_col
         char_stream_advance_rune(stream)
@@ -790,7 +799,11 @@ import "compiler/frontend/lexer/comment_doc"
         ident_cont = 1
         @while char_stream_is_eof(stream) == 0 && ident_cont == 1
           next_rune = char_stream_peek_rune(stream)
-          @if is_bengali_ident_continue(next_rune) == 1
+          next_ok = is_bengali_ident_continue(next_rune)
+          @if next_ok == 0 && next_rune >= 192 && next_rune != 65279 && !(next_rune >= 8192 && next_rune <= 8303) && !(next_rune >= 12288 && next_rune <= 12351)
+            next_ok = 1
+          @end
+          @if next_ok == 1
             char_stream_advance_rune(stream)
           @else
             ident_cont = 0
@@ -817,9 +830,20 @@ import "compiler/frontend/lexer/comment_doc"
           @end
         @end
 
-      // Fallback: unrecognized character
+      // Fallback: unrecognized character — emit explicit TOK_ERROR instead of silently dropping!
       @else
-        char_stream_advance_byte(stream)
+        bad_start = stream.cs_pos
+        @if b >= 128
+          char_stream_advance_rune(stream)
+        @else
+          char_stream_advance_byte(stream)
+        @end
+        bad_txt = char_stream_slice(stream, bad_start, stream.cs_pos)
+        // Skip optional UTF-8 BOM (EF BB BF) silently at offset 0
+        @if !(bad_start == 0 && b == 239 && len(bad_txt) == 3)
+          span = source_span_new(filename, start_line, start_col, stream.cs_line, stream.cs_col, stream.cs_pos)
+          tokens = tokens.push(token_new(TOK_ERROR(), "ERROR", "Unexpected character '" + bad_txt + "'", b, 0.0, span))
+        @end
       @end
     @end
   @end

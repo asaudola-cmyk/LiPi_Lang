@@ -211,15 +211,75 @@ import "compiler/semantics/type_def"
   @if t_target.ty_kind == TYPE_KIND_BOOL() && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
   @if t_target.ty_kind == TYPE_KIND_F64() && t_src.ty_kind == TYPE_KIND_BOOL() return 1 @end
 
-  // WHY: Raw silicon memory interoperability: Struct references and pointers are 64-bit addresses in machine registers;
-  // allowing raw integers (such as 0 for null object references) to interoperate with struct and pointer types.
-  @if (t_target.ty_kind == TYPE_KIND_POINTER() || t_target.ty_kind == TYPE_KIND_STRUCT()) && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
-  @if (t_target.ty_kind == TYPE_KIND_I64() || t_target.ty_kind == TYPE_KIND_BYTE()) && (t_src.ty_kind == TYPE_KIND_POINTER() || t_src.ty_kind == TYPE_KIND_STRUCT()) return 1 @end
+  // WHY: Raw silicon memory interoperability (non-strict mode): Struct/array references and pointers are 64-bit
+  // addresses in machine registers; allowing raw integers (e.g. 0 null or malloc() buffers) in non-strict mode.
+  @if (t_target.ty_kind == TYPE_KIND_POINTER() || t_target.ty_kind == TYPE_KIND_STRUCT() || t_target.ty_kind == TYPE_KIND_ARRAY()) && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
+  @if (t_target.ty_kind == TYPE_KIND_I64() || t_target.ty_kind == TYPE_KIND_BYTE()) && (t_src.ty_kind == TYPE_KIND_POINTER() || t_src.ty_kind == TYPE_KIND_STRUCT() || t_src.ty_kind == TYPE_KIND_ARRAY()) return 1 @end
 
   // Slice coercion: Fixed array [T; N] can be passed to dynamic slice []T
   @if t_target.ty_kind == TYPE_KIND_ARRAY() && t_target.ty_array_len == -1
     @if t_src.ty_kind == TYPE_KIND_ARRAY()
       return type_is_assignable(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
+    @end
+  @end
+
+  // Polymorphic `dyn Trait` target accepts concrete struct instances
+  @if t_target.ty_kind == TYPE_KIND_STRUCT() && t_src.ty_kind == TYPE_KIND_STRUCT()
+    @if str_starts_with(t_target.ty_name, "dyn ") == 1 && str_eq(t_src.ty_name, "dict") == 0
+      return 1
+    @end
+  @end
+
+  // Pointer const-decay: *mut T can be assigned to *const T
+  @if t_target.ty_kind == TYPE_KIND_POINTER() && t_src.ty_kind == TYPE_KIND_POINTER()
+    @if t_target.ty_is_mut == 0 && t_src.ty_is_mut == 1
+      return type_is_equal(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
+    @end
+  @end
+
+  return 0
+@end
+
+@fn type_is_assignable_strict(reg, target_id, src_id)
+  // WHY: Enforces nominal soundness under `--strict-types`: forbids implicit `i64 <-> Struct/Enum/Array/Dict`
+  // coercions and mismatched aggregate types while preserving numeric widenings and raw pointer interop.
+  @if target_id == src_id return 1 @end
+  @if target_id == TYPE_ID_ANY() || src_id == TYPE_ID_ANY() return 1 @end
+  @if src_id == TYPE_ID_NEVER() return 1 @end
+
+  @if type_is_equal(reg, target_id, src_id) == 1 return 1 @end
+
+  t_target = type_registry_get(reg, target_id)
+  t_src = type_registry_get(reg, src_id)
+  @if t_target == 0 || t_src == 0 return 0 @end
+
+  // Numeric widenings & bool <-> integer hardware register compatibility
+  @if t_target.ty_kind == TYPE_KIND_I64() && t_src.ty_kind == TYPE_KIND_BYTE() return 1 @end
+  @if t_target.ty_kind == TYPE_KIND_F64() && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
+  @if (t_target.ty_kind == TYPE_KIND_I64() || t_target.ty_kind == TYPE_KIND_BYTE()) && t_src.ty_kind == TYPE_KIND_BOOL() return 1 @end
+  @if t_target.ty_kind == TYPE_KIND_BOOL() && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
+  @if t_target.ty_kind == TYPE_KIND_F64() && t_src.ty_kind == TYPE_KIND_BOOL() return 1 @end
+
+  // Raw pointer (*const/*mut) <-> integer address interoperability (NOT Struct/Enum/Array/Dict!)
+  @if t_target.ty_kind == TYPE_KIND_POINTER() && (t_src.ty_kind == TYPE_KIND_I64() || t_src.ty_kind == TYPE_KIND_BYTE()) return 1 @end
+  @if (t_target.ty_kind == TYPE_KIND_I64() || t_target.ty_kind == TYPE_KIND_BYTE()) && t_src.ty_kind == TYPE_KIND_POINTER() return 1 @end
+
+  // Dynamic/fixed array compatibility (e.g. [1, 2] assigned to list / list<i64>)
+  @if t_target.ty_kind == TYPE_KIND_ARRAY() && t_src.ty_kind == TYPE_KIND_ARRAY()
+    return type_is_assignable_strict(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
+  @end
+
+  // Polymorphic `dyn Trait` target accepts concrete struct instances that implement `Trait`
+  @if t_target.ty_kind == TYPE_KIND_STRUCT() && t_src.ty_kind == TYPE_KIND_STRUCT()
+    @if str_starts_with(t_target.ty_name, "dyn ") == 1 && str_eq(t_src.ty_name, "dict") == 0
+      @if reg != 0 && reg.tr_trait_impls != 0
+        tr_nm = str_slice(t_target.ty_name, 4, str_len(t_target.ty_name))
+        @if has_key(reg.tr_trait_impls, tr_nm + "::" + t_src.ty_name) == 1
+          return 1
+        @end
+        return 0
+      @end
+      return 1
     @end
   @end
 

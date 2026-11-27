@@ -107,13 +107,18 @@ fn x86_synth_expr_postfix s toks pos_box
                 member_name = fn_tok.tok_text
                 list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume member name
 
-                // Check if this is a true method call vs field closure call obj.cb(...)
+                // Check if this is a true method call (concrete, UFCS, or Sovereign `dyn Trait` dispatch) vs field closure call obj.cb(...)
                 cp = get(pos_box, 0)
                 is_method_paren = 0
+                dyn_cands = list()
+                is_dyn_recv_t = 0
+                if len(s.synth_last_struct) >= 4 and str_sub(s.synth_last_struct, 0, 4) == "dyn "
+                    is_dyn_recv_t = 1
+                end
                 if cp < toks.len() and (toks[cp].tok_kind == TOK_LPAREN() or (toks[cp].tok_kind != TOK_STR() and toks[cp].tok_text == "("))
                     if member_name == "push" or member_name == "যোগ_করো" or member_name == "get" or member_name == "নাও" or member_name == "len" or member_name == "length" or member_name == "দৈর্ঘ্য" or member_name == "pop" or member_name == "বাদ_দাও" or member_name == "list_set" or member_name == "set" or member_name == "সেট" or member_name == "to_str" or member_name == "str" or member_name == "স্ট্রিং" or member_name == "restore_extract_single_file"
                         is_method_paren = 1
-                    elif s.synth_last_struct != ""
+                    elif s.synth_last_struct != "" and is_dyn_recv_t == 0
                         chk_st_nm = s.synth_last_struct
                         if x86_synth_is_ptr_type(chk_st_nm) == 1
                             chk_st_nm = x86_synth_ptr_pointee(chk_st_nm)
@@ -137,8 +142,22 @@ fn x86_synth_expr_postfix s toks pos_box
                                 is_method_paren = 1
                             end
                         end
-                    elif x86_synth_find_fn_first(s, member_name) != 0
-                        is_method_paren = 1
+                    else
+                        // Collect all concrete structs implementing `Type_member` for Sovereign `dyn Trait` dispatch
+                        dsi = 0
+                        while dsi < s.synth_structs.len()
+                            dsd = s.synth_structs[dsi]
+                            if dsd.sd_type_id > 0
+                                d_mfn = dsd.sd_name + "_" + member_name
+                                if x86_synth_find_fn_first(s, d_mfn) != 0
+                                    push(dyn_cands, [dsd.sd_type_id, d_mfn])
+                                end
+                            end
+                            dsi = dsi + 1
+                        end
+                        if dyn_cands.len() > 0 or x86_synth_find_fn_first(s, member_name) != 0
+                            is_method_paren = 1
+                        end
                     end
                 end
                 if is_method_paren == 1
@@ -188,7 +207,8 @@ fn x86_synth_expr_postfix s toks pos_box
                         s.synth_last_expr_type = "str"
                     else
                         call_tgt = member_name
-                        if recv_struct != ""
+                        did_dyn_disp = 0
+                        if recv_struct != "" and is_dyn_recv_t == 0
                             eff_recv = recv_struct
                             if x86_synth_is_ptr_type(eff_recv) == 1
                                 eff_recv = x86_synth_ptr_pointee(eff_recv)
@@ -197,12 +217,77 @@ fn x86_synth_expr_postfix s toks pos_box
                             if x86_synth_find_fn_first(s, mangled_tgt) != 0
                                 call_tgt = mangled_tgt
                             end
+                        elif dyn_cands.len() == 1 and x86_synth_find_fn_first(s, member_name) == 0
+                            call_tgt = dyn_cands[0][1]
+                        elif dyn_cands.len() >= 1 and s.synth_freestanding == 0
+                            // WHY: Sovereign `dyn Trait` runtime dispatch via [rdi - 32] type tag (0 vtables, 0 fat pointers).
+                            // Preserves all SysV ABI argument registers (%rdi..%r9) & stack args using only %r10/%r11!
+                            did_dyn_disp = 1
+                            x86_synth_emit_bytes(s, [72, 129, 255, 0, 16, 0, 0]) // cmp rdi, 4096
+                            x86_synth_emit_bytes(s, [15, 130])                    // jb fallback
+                            fb_patch = s.synth_code.len()
+                            x86_synth_emit_u32(s, 0)
+                            x86_synth_emit_bytes(s, [76, 139, 87, 224])          // mov r10, [rdi - 32]
+                            disp_done_patches = list()
+                            dci = 0
+                            while dci < dyn_cands.len()
+                                dc_tid = dyn_cands[dci][0]
+                                dc_mfn = dyn_cands[dci][1]
+                                dc_tag = (1415139397 << 32) | dc_tid
+                                x86_synth_emit_bytes(s, [73, 187])               // movabs r11, dc_tag
+                                x86_synth_emit_u64(s, dc_tag)
+                                x86_synth_emit_bytes(s, [77, 57, 218])           // cmp r10, r11
+                                x86_synth_emit_bytes(s, [15, 133])               // jne next_cand
+                                next_c_patch = s.synth_code.len()
+                                x86_synth_emit_u32(s, 0)
+                                x86_synth_emit_call_helper(s, dc_mfn)
+                                x86_synth_emit_byte(s, 233)                      // jmp done_disp
+                                dp_p = s.synth_code.len()
+                                x86_synth_emit_u32(s, 0)
+                                push(disp_done_patches, dp_p)
+                                next_c_off = s.synth_code.len()
+                                x86_synth_patch_u32(s, next_c_patch, next_c_off - (next_c_patch + 4))
+                                dci = dci + 1
+                            end
+                            fb_off = s.synth_code.len()
+                            x86_synth_patch_u32(s, fb_patch, fb_off - (fb_patch + 4))
+                            if x86_synth_find_fn_first(s, member_name) != 0
+                                x86_synth_emit_call_helper(s, member_name)
+                            else
+                                x86_synth_emit_bytes(s, [49, 192])               // xor eax, eax
+                            end
+                            done_disp_off = s.synth_code.len()
+                            dpi = 0
+                            while dpi < disp_done_patches.len()
+                                x86_synth_patch_u32(s, disp_done_patches[dpi], done_disp_off - (disp_done_patches[dpi] + 4))
+                                dpi = dpi + 1
+                            end
+                            s.synth_last_store_end = 0 - 1
                         end
-                        x86_synth_emit_call_helper(s, call_tgt)
+                        if did_dyn_disp == 0
+                            x86_synth_emit_call_helper(s, call_tgt)
+                        end
                         s.synth_last_expr_type = ""
                         s.synth_last_struct = ""
                         s.synth_last_elem_type = ""
-                        if member_name == "restore_extract_single_file"
+                        if did_dyn_disp == 1
+                            common_rt = x86_synth_lookup_fn_ret_type(s, dyn_cands[0][1])
+                            cri = 1
+                            while cri < dyn_cands.len()
+                                if x86_synth_lookup_fn_ret_type(s, dyn_cands[cri][1]) != common_rt
+                                    common_rt = ""
+                                    break
+                                end
+                                cri = cri + 1
+                            end
+                            if common_rt == "float" or common_rt == "f64" or common_rt == "f32"
+                                s.synth_last_expr_type = "float"
+                            elif common_rt == "int" or common_rt == "i64" or common_rt == "i32" or common_rt == "i16" or common_rt == "i8"
+                                s.synth_last_expr_type = "int"
+                            elif common_rt == "str" or common_rt == "string"
+                                s.synth_last_expr_type = "str"
+                            end
+                        elif member_name == "restore_extract_single_file"
                             s.synth_last_struct = "ExtractedSingleFile"
                         else
                             rt_m = x86_synth_lookup_fn_ret_type(s, call_tgt)

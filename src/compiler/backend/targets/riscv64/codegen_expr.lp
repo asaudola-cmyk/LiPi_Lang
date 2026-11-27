@@ -78,6 +78,180 @@ fn riscv64_try_eval_const_arg0 toks start_p
     return [0, 0]
 end
 
+fn riscv64_interp_is_ident inner
+    ilen = len(inner)
+    if ilen == 0 return 0 end
+    c0 = ord(char_at(inner, 0))
+    if not ((c0 >= 65 and c0 <= 90) or (c0 >= 97 and c0 <= 122) or c0 == 95 or c0 >= 128)
+        return 0
+    end
+    k = 1
+    while k < ilen
+        ck = ord(char_at(inner, k))
+        if not ((ck >= 65 and ck <= 90) or (ck >= 97 and ck <= 122) or (ck >= 48 and ck <= 57) or ck == 95 or ck >= 128)
+            return 0
+        end
+        k = k + 1
+    end
+    return 1
+
+fn riscv64_interp_is_lsp_snippet inner
+    // WHY: Preserves LSP snippet placeholders like "${1:name}" as literal strings.
+    ilen = len(inner)
+    idx = 0
+    saw_dig = 0
+    while idx < ilen
+        c = ord(char_at(inner, idx))
+        if c >= 48 and c <= 57
+            saw_dig = 1
+            idx = idx + 1
+        else
+            break
+        end
+    end
+    if saw_dig == 1 and idx < ilen and ord(char_at(inner, idx)) == 58
+        return 1
+    end
+    return 0
+
+fn riscv64_synth_emit_interp_str s txt
+    // WHY: Compiles both `${expr}` (full arbitrary expression) and `{ident}` (in-scope local)
+    // string interpolations directly into native RV64 `__str_concat` chains.
+    tlen = len(txt)
+    chunk_types = list()
+    chunk_vals = list()
+    has_any = 0
+    cur_lit = ""
+    i = 0
+    while i < tlen
+        ch = char_at(txt, i)
+        if ch == "$" and i + 1 < tlen and char_at(txt, i + 1) == "{"
+            j = i + 2
+            bd = 1
+            found_c = 0
+            while j < tlen
+                cj = char_at(txt, j)
+                if cj == "{"
+                    bd = bd + 1
+                elif cj == "}"
+                    bd = bd - 1
+                    if bd == 0
+                        found_c = 1
+                        break
+                    end
+                elif cj == "\n" or cj == "\r"
+                    break
+                end
+                j = j + 1
+            end
+            if found_c == 1
+                inner = str_sub(txt, i + 2, j)
+                if len(inner) > 0 and riscv64_interp_is_lsp_snippet(inner) == 0
+                    if len(cur_lit) > 0
+                        push(chunk_types, 0)
+                        push(chunk_vals, cur_lit)
+                        cur_lit = ""
+                    end
+                    push(chunk_types, 2)
+                    push(chunk_vals, inner)
+                    has_any = 1
+                    i = j + 1
+                    continue
+                end
+            end
+        elif ch == "{"
+            j = i + 1
+            found_c = 0
+            while j < tlen
+                cj = char_at(txt, j)
+                if cj == "}"
+                    found_c = 1
+                    break
+                end
+                if cj == "{" or cj == "\n" or cj == "\r"
+                    break
+                end
+                j = j + 1
+            end
+            if found_c == 1
+                inner = str_sub(txt, i + 1, j)
+                if riscv64_interp_is_ident(inner) == 1 and riscv64_find_local_var(s, inner) != 0
+                    if len(cur_lit) > 0
+                        push(chunk_types, 0)
+                        push(chunk_vals, cur_lit)
+                        cur_lit = ""
+                    end
+                    push(chunk_types, 1)
+                    push(chunk_vals, inner)
+                    has_any = 1
+                    i = j + 1
+                    continue
+                end
+            end
+        end
+        cur_lit = cur_lit + ch
+        i = i + 1
+    end
+    if has_any == 0
+        riscv64_emit_load_rodata_str(s, 10, txt)
+        s.rv_last_expr_type = "str"
+        return 0
+    end
+    if len(cur_lit) > 0
+        push(chunk_types, 0)
+        push(chunk_vals, cur_lit)
+    end
+    s.rv_needs_str_helpers = 1
+    s.rv_needs_alloc = 1
+    ci = 0
+    while ci < chunk_types.len()
+        if ci > 0
+            riscv64_push_reg(s, 10)
+        end
+        cty = chunk_types[ci]
+        if cty == 0
+            riscv64_emit_load_rodata_str(s, 10, chunk_vals[ci])
+        elif cty == 1
+            lv = riscv64_find_local_var(s, chunk_vals[ci])
+            riscv64_emit_local_ld(s, 10, lv.rv_lv_offset)
+            if lv.rv_lv_is_boxed == 1
+                riscv64_emit_ld(s, 10, 10, 0)
+            end
+            if lv.rv_lv_prim_type == "str"
+                // a0 is already a cstr pointer
+            elif lv.rv_lv_prim_type == "dyn_tagged" and lv.rv_lv_tag_off > 0
+                riscv64_emit_local_ld(s, 11, lv.rv_lv_tag_off)
+                riscv64_synth_emit_call_helper(s, "__tagged_to_str")
+            elif lv.rv_lv_is_uint == 1
+                riscv64_synth_emit_call_helper(s, "__uint_to_str")
+            else
+                riscv64_synth_emit_call_helper(s, "__int_to_str")
+            end
+        else
+            sub_toks = tokenize_source(chunk_vals[ci])
+            sub_pb = [0]
+            riscv64_synth_compile_expr(s, sub_toks, sub_pb)
+            if s.rv_last_expr_type == "str"
+                // a0 is already a cstr pointer
+            elif s.rv_last_expr_type == "dyn_tagged"
+                riscv64_synth_emit_call_helper(s, "__tagged_to_str")
+            elif s.rv_last_is_uint == 1
+                riscv64_synth_emit_call_helper(s, "__uint_to_str")
+            else
+                riscv64_synth_emit_call_helper(s, "__int_to_str")
+            end
+        end
+        if ci > 0
+            riscv64_emit_mv(s, 11, 10)
+            riscv64_pop_reg(s, 10)
+            riscv64_synth_emit_call_helper(s, "__str_concat")
+        end
+        ci = ci + 1
+    end
+    s.rv_last_expr_type = "str"
+    s.rv_last_is_uint = 0
+    return 0
+
 fn riscv64_synth_expr_primary s toks pos_box
     // WHY: Parses and synthesizes primary operands (integers, strings, identifiers, calls, grouping).
     // Result is always computed into primary register a0 (x10).
@@ -89,6 +263,7 @@ fn riscv64_synth_expr_primary s toks pos_box
     t = toks[pos]
     k = t.tok_kind
     handled = 0
+    cur_struct = ""
     s.rv_last_is_uint = 0
     s.rv_last_expr_type = "int"
 
@@ -265,7 +440,7 @@ fn riscv64_synth_expr_primary s toks pos_box
         handled = 1
     end
 
-    // 2. String Literal
+    // 2. String Literal & Interpolated String Literal
     if handled == 0 and k == TOK_STR()
         list_set(pos_box, 0, pos + 1)
         ro_off = riscv64_synth_add_rodata_str(s, t.tok_text, 0)
@@ -279,6 +454,10 @@ fn riscv64_synth_expr_primary s toks pos_box
         rel.rv_sr_reg = 10
         push(s.rv_str_relocs, rel)
         s.rv_last_expr_type = "str"
+        handled = 1
+    elif handled == 0 and k == TOK_INTERP_STR()
+        list_set(pos_box, 0, pos + 1)
+        riscv64_synth_emit_interp_str(s, t.tok_text)
         handled = 1
 
     // 3. Identifier or Call (Variable lookup, Field access, or Function Call)
@@ -974,114 +1153,171 @@ fn riscv64_synth_expr_primary s toks pos_box
                 return 0
             end
 
-            // ── Struct Constructor: StructName(...) ─────────────────────────
+            // ── Struct / Union Constructor: StructName(...) ─────────────────
             sdef = riscv64_synth_find_struct(s, var_name)
             if sdef != 0
                 fcount = sdef.rv_sd_fields.len()
                 alloc_sz = (fcount + 1) * 8
                 if alloc_sz < 32
                     alloc_sz = 32
-                riscv64_emit_li(s, 10, alloc_sz)
+                // Allocate +16B header so [ptr - 8] stores sovereign type tag while ptr stays 16B-aligned
+                riscv64_emit_li(s, 10, alloc_sz + 16)
                 riscv64_synth_emit_call_alloc(s)
-                // Struct pointer is now in a0
+                riscv64_emit_li(s, 6, (1415139397 << 32) | sdef.rv_sd_type_id)
+                riscv64_emit_sd(s, 6, 10, 8)
+                riscv64_emit_addi(s, 10, 10, 16)
+                // Struct/union pointer is now in a0
                 if arg_count > 0
                     riscv64_emit_addi(s, 28, 10, 0) // t3 = struct ptr (keep SP at args)
                     ai = arg_count - 1
                     while ai >= 0
                         riscv64_pop_reg(s, 11) // pop field value into a1
-                        riscv64_emit_sd(s, 11, 28, ai * 8)
+                        st_off = ai * 8
+                        if sdef.rv_sd_is_union == 1
+                            st_off = 0
+                        end
+                        riscv64_emit_sd(s, 11, 28, st_off)
                         ai = ai - 1
                     riscv64_emit_addi(s, 10, 28, 0) // restore struct pointer into a0
-                return 0
-
-            // ── Normal Function Call: LP64 register args (a0..a7) + >8 stack args ([sp+0], [sp+8], ...) ──
-            rv_cleanup_bytes = 0
-            if arg_count <= 8
-                if arg_count >= 8
-                    riscv64_pop_reg(s, 17)
-                if arg_count >= 7
-                    riscv64_pop_reg(s, 16)
-                if arg_count >= 6
-                    riscv64_pop_reg(s, 15)
-                if arg_count >= 5
-                    riscv64_pop_reg(s, 14)
-                if arg_count >= 4
-                    riscv64_pop_reg(s, 13)
-                if arg_count >= 3
-                    riscv64_pop_reg(s, 12)
-                if arg_count >= 2
-                    riscv64_pop_reg(s, 11)
-                if arg_count >= 1
-                    riscv64_pop_reg(s, 10)
+                cur_struct = var_name
+                s.rv_last_struct = var_name
             else
-                // WHY: All `arg_count` arguments were pushed 16B-apart; arg_k sits at [t0 + (arg_count - 1 - k)*16].
-                // Allocate 16B-aligned outgoing stack arg area below t0 so source and destination NEVER overlap!
-                n_stack = arg_count - 8
-                stack_pad = ((n_stack + 1) / 2) * 16
-                rv_cleanup_bytes = (arg_count * 16) + stack_pad
-                riscv64_emit_mv(s, 5, 2) // t0 = sp (saved push base)
-                ri_r = 0
-                while ri_r < 8
-                    riscv64_emit_ld(s, 10 + ri_r, 5, (arg_count - 1 - ri_r) * 16)
-                    ri_r = ri_r + 1
+                // ── Variadic Packing & Default Argument Filling ──
+                fsig = riscv64_synth_find_fn_sig(s, var_name)
+                if fsig != 0
+                    if fsig.rv_sig_is_variadic == 1
+                        fixed_n = fsig.rv_sig_param_count - 1
+                        var_cnt = arg_count - fixed_n
+                        if var_cnt < 0 var_cnt = 0 end
+                        s.rv_needs_list_create = 1
+                        s.rv_needs_alloc = 1
+                        riscv64_emit_li(s, 10, var_cnt)
+                        vl_off = s.rv_code.len()
+                        riscv64_emit_jal(s, 1, 0)
+                        vl_rel = Riscv64CallReloc()
+                        vl_rel.rv_cr_patch_offset = vl_off
+                        vl_rel.rv_cr_target_name = "__list_create"
+                        push(s.rv_call_relocs, vl_rel)
+                        if var_cnt > 0
+                            riscv64_emit_mv(s, 28, 10)
+                            riscv64_emit_ld(s, 29, 28, 16) // t4 = data_ptr
+                            vi_v = var_cnt - 1
+                            while vi_v >= 0
+                                riscv64_pop_reg(s, 11)
+                                riscv64_emit_li(s, 5, vi_v * 8)
+                                riscv64_emit_add(s, 5, 29, 5)
+                                riscv64_emit_sd(s, 11, 5, 0)
+                                vi_v = vi_v - 1
+                            end
+                            riscv64_emit_mv(s, 10, 28)
+                        end
+                        riscv64_push_reg(s, 10)
+                        arg_count = fixed_n + 1
+                    elif arg_count < fsig.rv_sig_param_count and s.rv_source_toks != 0
+                        def_i = arg_count
+                        while def_i < fsig.rv_sig_param_count
+                            def_st = fsig.rv_sig_def_starts[def_i]
+                            if def_st >= 0
+                                def_box = [def_st]
+                                riscv64_synth_compile_expr(s, s.rv_source_toks, def_box)
+                                riscv64_push_reg(s, 10)
+                                arg_count = arg_count + 1
+                            else
+                                break
+                            end
+                            def_i = def_i + 1
+                        end
+                    end
                 end
-                riscv64_emit_addi(s, 2, 2, 0 - stack_pad)
-                s.rv_sp_delta = s.rv_sp_delta + stack_pad
-                sj_r = 0
-                while sj_r < n_stack
-                    riscv64_emit_ld(s, 6, 5, (n_stack - 1 - sj_r) * 16)
-                    riscv64_emit_sd(s, 6, 2, sj_r * 8)
-                    sj_r = sj_r + 1
-                end
-            end
-
-            // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
-            lv_call = riscv64_find_local_var(s, var_name)
-            if lv_call != 0
-                riscv64_emit_local_ld(s, 29, lv_call.rv_lv_offset)
-                if lv_call.rv_lv_is_boxed == 1
-                    riscv64_emit_ld(s, 29, 29, 0)
-                end
-                riscv64_emit_indirect_call_t4(s)
-            else
-                // Emit JAL instruction with relocation placeholder
-                if var_name == "main" or var_name == "মূল"
-                    if s.rv_in_function == 0
-                        s.rv_called_main = 1
-                call_off = s.rv_code.len()
-                riscv64_emit_jal(s, 1, 0) // JAL ra, 0
-
-                call_rel = Riscv64CallReloc()
-                call_rel.rv_cr_patch_offset = call_off
-                call_rel.rv_cr_target_name = var_name
-                push(s.rv_call_relocs, call_rel)
-            end
-
-            if rv_cleanup_bytes > 0
-                riscv64_emit_addi(s, 2, 2, rv_cleanup_bytes)
-                if s.rv_sp_delta >= rv_cleanup_bytes
-                    s.rv_sp_delta = s.rv_sp_delta - rv_cleanup_bytes
+                // ── Normal Function Call: LP64 register args (a0..a7) + >8 stack args ([sp+0], [sp+8], ...) ──
+                rv_cleanup_bytes = 0
+                if arg_count <= 8
+                    if arg_count >= 8
+                        riscv64_pop_reg(s, 17)
+                    if arg_count >= 7
+                        riscv64_pop_reg(s, 16)
+                    if arg_count >= 6
+                        riscv64_pop_reg(s, 15)
+                    if arg_count >= 5
+                        riscv64_pop_reg(s, 14)
+                    if arg_count >= 4
+                        riscv64_pop_reg(s, 13)
+                    if arg_count >= 3
+                        riscv64_pop_reg(s, 12)
+                    if arg_count >= 2
+                        riscv64_pop_reg(s, 11)
+                    if arg_count >= 1
+                        riscv64_pop_reg(s, 10)
                 else
-                    s.rv_sp_delta = 0
+                    // WHY: All `arg_count` arguments were pushed 16B-apart; arg_k sits at [t0 + (arg_count - 1 - k)*16].
+                    // Allocate 16B-aligned outgoing stack arg area below t0 so source and destination NEVER overlap!
+                    n_stack = arg_count - 8
+                    stack_pad = ((n_stack + 1) / 2) * 16
+                    rv_cleanup_bytes = (arg_count * 16) + stack_pad
+                    riscv64_emit_mv(s, 5, 2) // t0 = sp (saved push base)
+                    ri_r = 0
+                    while ri_r < 8
+                        riscv64_emit_ld(s, 10 + ri_r, 5, (arg_count - 1 - ri_r) * 16)
+                        ri_r = ri_r + 1
+                    end
+                    riscv64_emit_addi(s, 2, 2, 0 - stack_pad)
+                    s.rv_sp_delta = s.rv_sp_delta + stack_pad
+                    sj_r = 0
+                    while sj_r < n_stack
+                        riscv64_emit_ld(s, 6, 5, (n_stack - 1 - sj_r) * 16)
+                        riscv64_emit_sd(s, 6, 2, sj_r * 8)
+                        sj_r = sj_r + 1
+                    end
                 end
-            end
 
-            // WHY: Check callee-saved s10 (x26) exception flag after call returns. If active,
-            // branch to the innermost try/catch handler or restore sp from s0 and unwind frame.
-            if s.rv_try_patches.len() > 0
-                exc_bne_off = s.rv_code.len()
-                riscv64_emit_bne(s, 26, 0, 0)
-                active_tp = s.rv_try_patches[s.rv_try_patches.len() - 1]
-                push(active_tp, [exc_bne_off, 1])
-            elif s.rv_in_function == 1
-                skip_beq_off = s.rv_code.len()
-                riscv64_emit_beq(s, 26, 0, 0)
-                riscv64_emit_addi(s, 2, 8, 0 - 1024)
-                riscv64_emit_defers(s, toks)
-                riscv64_emit_epilogue(s)
-                riscv64_synth_patch_b(s, skip_beq_off, 0, 26, 0, s.rv_code.len())
+                // ── Indirect Closure/Fn-Ptr Call vs Direct Named Function Call ───
+                lv_call = riscv64_find_local_var(s, var_name)
+                if lv_call != 0
+                    riscv64_emit_local_ld(s, 29, lv_call.rv_lv_offset)
+                    if lv_call.rv_lv_is_boxed == 1
+                        riscv64_emit_ld(s, 29, 29, 0)
+                    end
+                    riscv64_emit_indirect_call_t4(s)
+                else
+                    // Emit JAL instruction with relocation placeholder
+                    if var_name == "main" or var_name == "মূল"
+                        if s.rv_in_function == 0
+                            s.rv_called_main = 1
+                    call_off = s.rv_code.len()
+                    riscv64_emit_jal(s, 1, 0) // JAL ra, 0
+
+                    call_rel = Riscv64CallReloc()
+                    call_rel.rv_cr_patch_offset = call_off
+                    call_rel.rv_cr_target_name = var_name
+                    push(s.rv_call_relocs, call_rel)
+                end
+
+                if rv_cleanup_bytes > 0
+                    riscv64_emit_addi(s, 2, 2, rv_cleanup_bytes)
+                    if s.rv_sp_delta >= rv_cleanup_bytes
+                        s.rv_sp_delta = s.rv_sp_delta - rv_cleanup_bytes
+                    else
+                        s.rv_sp_delta = 0
+                    end
+                end
+
+                // WHY: Check callee-saved s10 (x26) exception flag after call returns. If active,
+                // branch to the innermost try/catch handler or restore sp from s0 and unwind frame.
+                if s.rv_try_patches.len() > 0
+                    exc_bne_off = s.rv_code.len()
+                    riscv64_emit_bne(s, 26, 0, 0)
+                    active_tp = s.rv_try_patches[s.rv_try_patches.len() - 1]
+                    push(active_tp, [exc_bne_off, 1])
+                elif s.rv_in_function == 1
+                    skip_beq_off = s.rv_code.len()
+                    riscv64_emit_beq(s, 26, 0, 0)
+                    riscv64_emit_addi(s, 2, 8, 0 - 1024)
+                    riscv64_emit_defers(s, toks)
+                    riscv64_emit_epilogue(s)
+                    riscv64_synth_patch_b(s, skip_beq_off, 0, 26, 0, s.rv_code.len())
+                end
+                s.rv_last_expr_type = "dyn_tagged"
             end
-            s.rv_last_expr_type = "dyn_tagged"
         else
             // Unit ADT Variant (e.g. None or zero-arity enum variant) vs Local Variable Load
             re_u = riscv64_enum_find_idx(s, var_name)
@@ -1091,6 +1327,7 @@ fn riscv64_synth_expr_primary s toks pos_box
                 if lv_rd.rv_lv_is_boxed == 1
                     riscv64_emit_ld(s, 10, 10, 0)
                 end
+                cur_struct = lv_rd.rv_lv_struct_type
                 s.rv_last_is_uint = lv_rd.rv_lv_is_uint
                 if lv_rd.rv_lv_prim_type != ""
                     s.rv_last_expr_type = lv_rd.rv_lv_prim_type
@@ -1120,14 +1357,16 @@ fn riscv64_synth_expr_primary s toks pos_box
         if cur_pos < toks.len() and toks[cur_pos].tok_kind == TOK_RPAREN()
             list_set(pos_box, 0, cur_pos + 1)
         handled = 1
+        cur_struct = s.rv_last_struct
 
     if handled == 0
         // Fallback: advance and clear a0
         list_set(pos_box, 0, pos + 1)
         riscv64_emit_addi(s, 10, 0, 0)
+        s.rv_last_struct = ""
         return 0
 
-    // 5. Postfix operations: .field, .len(), .push(x), [index]
+    // 5. Postfix operations: .field, .len(), .push(x), .method(...), [index]
     while get(pos_box, 0) < toks.len()
         cp = get(pos_box, 0)
         ct = toks[cp]
@@ -1139,10 +1378,10 @@ fn riscv64_synth_expr_primary s toks pos_box
                 np = get(pos_box, 0)
                 if np < toks.len() and toks[np].tok_kind == TOK_LPAREN()
                     list_set(pos_box, 0, np + 1)
+                    // Always push receiver a0 before evaluating explicit args
+                    riscv64_push_reg(s, 10)
                     m_args = 0
                     while get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind != TOK_RPAREN()
-                        if m_args == 0
-                            riscv64_push_reg(s, 10)
                         riscv64_synth_compile_expr(s, toks, pos_box)
                         riscv64_push_reg(s, 10)
                         m_args = m_args + 1
@@ -1154,10 +1393,10 @@ fn riscv64_synth_expr_primary s toks pos_box
                     if fn_tok.tok_text == "len" or fn_tok.tok_text == "length"
                         while m_args > 0
                             riscv64_pop_reg(s, 11)
-                            if m_args == 1
-                                riscv64_pop_reg(s, 10)
                             m_args = m_args - 1
+                        riscv64_pop_reg(s, 10)
                         riscv64_emit_ld(s, 10, 10, 0)
+                        s.rv_last_expr_type = "int"
                     elif fn_tok.tok_text == "push"
                         while m_args > 1
                             riscv64_pop_reg(s, 11)
@@ -1174,18 +1413,105 @@ fn riscv64_synth_expr_primary s toks pos_box
                             mp_rel.rv_cr_target_name = "__list_push"
                             push(s.rv_call_relocs, mp_rel)
                         else
+                            riscv64_pop_reg(s, 10)
                             riscv64_emit_addi(s, 10, 0, 0)
+                        end
                     else
-                        while m_args > 0
-                            riscv64_pop_reg(s, 11)
-                            if m_args == 1
-                                riscv64_pop_reg(s, 10)
-                            m_args = m_args - 1
-                        riscv64_emit_addi(s, 10, 0, 0)
+                        // General trait/impl method call & sovereign dyn Trait runtime dispatch!
+                        tot_m = 1 + m_args
+                        while tot_m > 8
+                            riscv64_pop_reg(s, 5)
+                            tot_m = tot_m - 1
+                        end
+                        if tot_m >= 8 riscv64_pop_reg(s, 17) end
+                        if tot_m >= 7 riscv64_pop_reg(s, 16) end
+                        if tot_m >= 6 riscv64_pop_reg(s, 15) end
+                        if tot_m >= 5 riscv64_pop_reg(s, 14) end
+                        if tot_m >= 4 riscv64_pop_reg(s, 13) end
+                        if tot_m >= 3 riscv64_pop_reg(s, 12) end
+                        if tot_m >= 2 riscv64_pop_reg(s, 11) end
+                        if tot_m >= 1 riscv64_pop_reg(s, 10) end
+                        m_nm = fn_tok.tok_text
+                        direct_tgt = ""
+                        if cur_struct != "" and str_starts_with(cur_struct, "dyn ") == 0 and riscv64_synth_has_impl_method(s, cur_struct, m_nm) == 1
+                            direct_tgt = cur_struct + "_" + m_nm
+                        end
+                        if direct_tgt != ""
+                            mc_off = s.rv_code.len()
+                            riscv64_emit_jal(s, 1, 0)
+                            mc_rel = Riscv64CallReloc()
+                            mc_rel.rv_cr_patch_offset = mc_off
+                            mc_rel.rv_cr_target_name = direct_tgt
+                            push(s.rv_call_relocs, mc_rel)
+                        else
+                            m_cands = riscv64_synth_find_method_candidates(s, m_nm)
+                            if m_cands.len() == 1
+                                mc_off = s.rv_code.len()
+                                riscv64_emit_jal(s, 1, 0)
+                                mc_rel = Riscv64CallReloc()
+                                mc_rel.rv_cr_patch_offset = mc_off
+                                mc_rel.rv_cr_target_name = m_cands[0][1]
+                                push(s.rv_call_relocs, mc_rel)
+                            elif m_cands.len() >= 2
+                                // Sovereign dyn Trait runtime dispatch: inspect -8(a0) type tag
+                                riscv64_emit_null_guard_reg(s, toks, 10)
+                                riscv64_emit_ld(s, 5, 10, 0 - 8)
+                                done_jumps = list()
+                                dci = 0
+                                while dci < m_cands.len()
+                                    dc = m_cands[dci]
+                                    riscv64_emit_li(s, 6, (1415139397 << 32) | dc[0])
+                                    bne_next = s.rv_code.len()
+                                    riscv64_emit_bne(s, 5, 6, 0)
+                                    mc_off = s.rv_code.len()
+                                    riscv64_emit_jal(s, 1, 0)
+                                    mc_rel = Riscv64CallReloc()
+                                    mc_rel.rv_cr_patch_offset = mc_off
+                                    mc_rel.rv_cr_target_name = dc[1]
+                                    push(s.rv_call_relocs, mc_rel)
+                                    j_done = s.rv_code.len()
+                                    riscv64_emit_jal(s, 0, 0)
+                                    push(done_jumps, j_done)
+                                    riscv64_synth_patch_b(s, bne_next, 1, 5, 6, s.rv_code.len())
+                                    dci = dci + 1
+                                end
+                                riscv64_emit_addi(s, 10, 0, 0)
+                                riscv64_emit_addi(s, 11, 0, 0)
+                                end_disp_off = s.rv_code.len()
+                                dji = 0
+                                while dji < done_jumps.len()
+                                    riscv64_synth_patch_jal(s, done_jumps[dji], 0, end_disp_off)
+                                    dji = dji + 1
+                                end
+                            else
+                                mc_off = s.rv_code.len()
+                                riscv64_emit_jal(s, 1, 0)
+                                mc_rel = Riscv64CallReloc()
+                                mc_rel.rv_cr_patch_offset = mc_off
+                                mc_rel.rv_cr_target_name = m_nm
+                                push(s.rv_call_relocs, mc_rel)
+                            end
+                        end
+                        if s.rv_try_patches.len() > 0
+                            m_exc_bne = s.rv_code.len()
+                            riscv64_emit_bne(s, 26, 0, 0)
+                            push(s.rv_try_patches[s.rv_try_patches.len() - 1], [m_exc_bne, 1])
+                        elif s.rv_in_function == 1
+                            m_skip_eq = s.rv_code.len()
+                            riscv64_emit_beq(s, 26, 0, 0)
+                            riscv64_emit_addi(s, 2, 8, 0 - 1024)
+                            riscv64_emit_defers(s, toks)
+                            riscv64_emit_epilogue(s)
+                            riscv64_synth_patch_b(s, m_skip_eq, 0, 26, 0, s.rv_code.len())
+                        end
+                        s.rv_last_expr_type = "dyn_tagged"
+                    end
+                    cur_struct = ""
                 else
                     riscv64_emit_null_guard_reg(s, toks, 10)
-                    f_off = riscv64_synth_get_field_offset(s, "", fn_tok.tok_text)
+                    f_off = riscv64_synth_get_field_offset(s, cur_struct, fn_tok.tok_text)
                     riscv64_emit_ld(s, 10, 10, f_off)
+                    cur_struct = ""
                     s.rv_last_expr_type = "int"
             else
                 break
@@ -1213,6 +1539,7 @@ fn riscv64_synth_expr_primary s toks pos_box
                 riscv64_emit_epilogue(s)
                 riscv64_synth_patch_b(s, npe_skip_eq, 0, 26, 0, s.rv_code.len())
             end
+            cur_struct = ""
         elif ct.tok_kind == TOK_QUERY() or (ct.tok_kind != TOK_STR() and ct.tok_text == "?")
             // Postfix `?` Result/Option propagation: if tag == Err(1002) or None(1004), early return a0; else unwrap [a0+8]
             list_set(pos_box, 0, cp + 1)
@@ -1231,6 +1558,7 @@ fn riscv64_synth_expr_primary s toks pos_box
             q_ok_off = s.rv_code.len()
             riscv64_synth_patch_b(s, bne_q_ok, 1, 5, 6, q_ok_off)
             riscv64_emit_ld(s, 10, 10, 8)
+            cur_struct = ""
         elif ct.tok_kind == TOK_LPAREN() and cp > 0 and ct.tok_span.span_start_line == toks[cp - 1].tok_span.span_start_line
             list_set(pos_box, 0, cp + 1)
             riscv64_push_reg(s, 10) // Save callee closure/fn_ptr
@@ -1256,8 +1584,10 @@ fn riscv64_synth_expr_primary s toks pos_box
             if p_argc >= 1 riscv64_pop_reg(s, 10) end
             riscv64_pop_reg(s, 29) // t4 = callee
             riscv64_emit_indirect_call_t4(s)
+            cur_struct = ""
         else
             break
+    s.rv_last_struct = cur_struct
     return 0
 
 fn riscv64_synth_expr_mul s toks pos_box

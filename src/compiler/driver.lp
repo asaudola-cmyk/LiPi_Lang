@@ -1223,11 +1223,83 @@ end
 
 global G_DRV_IMPORT_STACK = 0
 global G_DRV_ROOT_CHUNKS = 0
+global G_DRV_ROOT_CHUNK_UTSO = 0
+global G_DRV_UTSO_RANGES = 0
+global G_DRV_EXTRA_UTSO_CIDX = 0
+global G_DRV_EXTRA_UTSO_RELS = 0
+global G_DRV_EXTRA_UTSO_RELE = 0
 global G_DRV_MOD_PATHS = 0
 global G_DRV_MOD_PREFIXES = 0
 global G_DRV_MOD_ALL = 0
 global G_DRV_MOD_PUB = 0
 global G_DRV_MOD_HASPUB = 0
+
+fn compiler_driver_count_newlines s
+    n = len(s)
+    cnt = 0
+    i = 0
+    while i < n
+        if mem_byte_read(s, i) == 10
+            cnt = cnt + 1
+        end
+        i = i + 1
+    end
+    return cnt
+end
+
+fn compiler_driver_has_dotdot p
+    n = len(p)
+    i = 0
+    while i + 1 < n
+        if mem_byte_read(p, i) == 46 and mem_byte_read(p, i + 1) == 46
+            prev_ok = 0
+            if i == 0 or mem_byte_read(p, i - 1) == 47
+                prev_ok = 1
+            end
+            next_ok = 0
+            if i + 2 == n or mem_byte_read(p, i + 2) == 47
+                next_ok = 1
+            end
+            if prev_ok == 1 and next_ok == 1
+                return 1
+            end
+        end
+        i = i + 1
+    end
+    return 0
+end
+
+fn compiler_driver_is_authentic_utso file_path lipi_root
+    // WHY: Unspoofable provenance check for authentic LiPi standard library (`utso/`) files.
+    // Rejects `..` traversal and verifies relative `utso/` only when cwd is a verified LiPi root.
+    if len(file_path) == 0
+        return 0
+    end
+    if compiler_driver_has_dotdot(file_path) == 1
+        return 0
+    end
+    p = file_path
+    if len(p) > 2 and mem_byte_read(p, 0) == 46 and mem_byte_read(p, 1) == 47
+        p = str_sub(p, 2, len(p))
+    end
+    if len(lipi_root) > 0 and lipi_root != "."
+        if compiler_driver_starts_with(p, lipi_root + "/utso/") == 1
+            return 1
+        end
+    end
+    if compiler_driver_starts_with(p, "utso/") == 1 and compiler_driver_is_lipi_dir(".") == 1
+        return 1
+    end
+    return 0
+end
+
+fn compiler_driver_push_chunk chunks chunk_utso s is_u
+    push(chunks, s)
+    if chunk_utso != 0
+        push(chunk_utso, is_u)
+    end
+    return 0
+end
 
 fn compiler_driver_load_canonical_mod resolved chunks lipi_root
     // WHY: Loads, collects metadata for, and canonically mangles a scoped module ONCE per compilation
@@ -1251,7 +1323,8 @@ fn compiler_driver_load_canonical_mod resolved chunks lipi_root
     mod_prefix = "__mod_" + mod_id + "__"
     mod_vis = list()
     mod_chunks = list()
-    compiler_driver_bundle_into_chunks(resolved, mod_vis, mod_chunks, lipi_root)
+    mod_utso = list()
+    compiler_driver_bundle_into_chunks_utso(resolved, mod_vis, mod_chunks, mod_utso, lipi_root)
     mod_joined = compiler_driver_join_chunks(mod_chunks)
     meta = compiler_driver_collect_mod_meta(mod_joined)
     m_all = meta[0]
@@ -1259,11 +1332,37 @@ fn compiler_driver_load_canonical_mod resolved chunks lipi_root
     m_has_pub = meta[2]
     mod_mangled = compiler_driver_mangle_module(mod_joined, mod_id, m_all)
     emit_target = chunks
+    emit_utso = 0
     if G_DRV_ROOT_CHUNKS != 0
         emit_target = G_DRV_ROOT_CHUNKS
+        emit_utso = G_DRV_ROOT_CHUNK_UTSO
     end
-    push(emit_target, mod_mangled)
-    push(emit_target, "\n")
+    mod_is_utso = compiler_driver_is_authentic_utso(resolved, lipi_root)
+    cidx_base = emit_target.len()
+    compiler_driver_push_chunk(emit_target, emit_utso, mod_mangled, mod_is_utso)
+    compiler_driver_push_chunk(emit_target, emit_utso, "\n", mod_is_utso)
+    // Preserve relative authentic utso/ line ranges when a user module imports utso/ internally
+    if mod_is_utso == 0 and G_DRV_EXTRA_UTSO_CIDX != 0 and emit_target == G_DRV_ROOT_CHUNKS
+        rel_ln = 0
+        mci = 0
+        while mci < mod_chunks.len()
+            mch = mod_chunks[mci]
+            mnl = compiler_driver_count_newlines(mch)
+            if mci < mod_utso.len() and mod_utso[mci] == 1 and len(mch) > 0
+                rel_end = rel_ln + mnl
+                if mnl > 0 and mem_byte_read(mch, len(mch) - 1) == 10
+                    rel_end = rel_end - 1
+                end
+                if rel_end >= rel_ln
+                    push(G_DRV_EXTRA_UTSO_CIDX, cidx_base)
+                    push(G_DRV_EXTRA_UTSO_RELS, rel_ln)
+                    push(G_DRV_EXTRA_UTSO_RELE, rel_end)
+                end
+            end
+            rel_ln = rel_ln + mnl
+            mci = mci + 1
+        end
+    end
     push(G_DRV_MOD_PATHS, resolved)
     push(G_DRV_MOD_PREFIXES, mod_prefix)
     push(G_DRV_MOD_ALL, m_all)
@@ -1273,6 +1372,10 @@ fn compiler_driver_load_canonical_mod resolved chunks lipi_root
 end
 
 fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
+    return compiler_driver_bundle_into_chunks_utso(file_path, visited, chunks, 0, lipi_root)
+end
+
+fn compiler_driver_bundle_into_chunks_utso file_path visited chunks chunk_utso lipi_root
     // WHY: 3-color DFS recursive dependency bundler (white/grey/black) with explicit circular-import
     // cycle breaking across BOTH plain imports AND scoped (`import ... as alias`, `from ... import`) imports.
     if len(file_path) > 2 and mem_byte_read(file_path, 0) == 46 and mem_byte_read(file_path, 1) == 47
@@ -1306,9 +1409,10 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
     end
 
     content = file_read(file_path)
+    file_is_utso = compiler_driver_is_authentic_utso(file_path, lipi_root)
     if compiler_driver_has_include(content) == 0
-        push(chunks, content)
-        push(chunks, "\n")
+        compiler_driver_push_chunk(chunks, chunk_utso, content, file_is_utso)
+        compiler_driver_push_chunk(chunks, chunk_utso, "\n", file_is_utso)
         _lipi_list_pop(G_DRV_IMPORT_STACK)
         return 0
     end
@@ -1456,7 +1560,7 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
         if is_inc == 1
             if line_start > chunk_start
                 push(local_chunk_idxs, chunks.len())
-                push(chunks, str_sub(content, chunk_start, line_start))
+                compiler_driver_push_chunk(chunks, chunk_utso, str_sub(content, chunk_start, line_start), file_is_utso)
             end
             inc_target = compiler_driver_resolve_std(inc_target)
             resolved = compiler_driver_resolve_path(inc_target, cur_dir, lipi_root)
@@ -1492,14 +1596,14 @@ fn compiler_driver_bundle_into_chunks file_path visited chunks lipi_root
                 push(file_alias_has_pub, m_has_pub)
                 push(file_alias_paths, resolved)
             else
-                compiler_driver_bundle_into_chunks(resolved, visited, chunks, lipi_root)
-                push(chunks, "\n")
+                compiler_driver_bundle_into_chunks_utso(resolved, visited, chunks, chunk_utso, lipi_root)
+                compiler_driver_push_chunk(chunks, chunk_utso, "\n", file_is_utso)
             end
             chunk_start = p
 
     if chunk_start < clen
         push(local_chunk_idxs, chunks.len())
-        push(chunks, str_sub(content, chunk_start, clen))
+        compiler_driver_push_chunk(chunks, chunk_utso, str_sub(content, chunk_start, clen), file_is_utso)
     end
     if file_aliases.len() > 0 or file_sel_locals.len() > 0
         li_c = 0
@@ -1522,7 +1626,13 @@ fn compiler_driver_bundle_source file_path visited
     G_DRV_MOD_PUB = list()
     G_DRV_MOD_HASPUB = list()
     chunks = list()
+    chunk_utso = list()
     G_DRV_ROOT_CHUNKS = chunks
+    G_DRV_ROOT_CHUNK_UTSO = chunk_utso
+    G_DRV_UTSO_RANGES = list()
+    G_DRV_EXTRA_UTSO_CIDX = list()
+    G_DRV_EXTRA_UTSO_RELS = list()
+    G_DRV_EXTRA_UTSO_RELE = list()
     lipi_root = compiler_driver_get_lipi_root()
     real_path = file_path
     if file_exists(real_path) == 0
@@ -1541,7 +1651,43 @@ fn compiler_driver_bundle_source file_path visited
         elif len(lipi_root) > 0 and lipi_root != "."
             if file_exists(lipi_root + "/" + file_path) == 1
                 real_path = lipi_root + "/" + file_path
-    compiler_driver_bundle_into_chunks(real_path, visited, chunks, lipi_root)
+    compiler_driver_bundle_into_chunks_utso(real_path, visited, chunks, chunk_utso, lipi_root)
+    // WHY: Compute exact 1-based [start_line, end_line] intervals for authentic utso/ stdlib chunks
+    // so --kavach verifies provenance by actual source file origin rather than spoofable function names.
+    cur_line = 1
+    chunk_starts = list()
+    ci = 0
+    while ci < chunks.len()
+        ch = chunks[ci]
+        push(chunk_starts, cur_line)
+        nl_cnt = compiler_driver_count_newlines(ch)
+        is_u = 0
+        if ci < chunk_utso.len()
+            is_u = chunk_utso[ci]
+        end
+        if is_u == 1 and len(ch) > 0
+            end_l = cur_line + nl_cnt
+            if nl_cnt > 0 and mem_byte_read(ch, len(ch) - 1) == 10
+                end_l = end_l - 1
+            end
+            if end_l >= cur_line
+                push(G_DRV_UTSO_RANGES, cur_line)
+                push(G_DRV_UTSO_RANGES, end_l)
+            end
+        end
+        cur_line = cur_line + nl_cnt
+        ci = ci + 1
+    end
+    ei = 0
+    while ei < G_DRV_EXTRA_UTSO_CIDX.len()
+        ec_idx = G_DRV_EXTRA_UTSO_CIDX[ei]
+        if ec_idx >= 0 and ec_idx < chunk_starts.len()
+            base_l = chunk_starts[ec_idx]
+            push(G_DRV_UTSO_RANGES, base_l + G_DRV_EXTRA_UTSO_RELS[ei])
+            push(G_DRV_UTSO_RANGES, base_l + G_DRV_EXTRA_UTSO_RELE[ei])
+        end
+        ei = ei + 1
+    end
     return compiler_driver_strip_pub(compiler_driver_join_chunks(chunks))
 
 // ── 2. Driver Execution Wrapper ───────────────────────────────────────────────
@@ -1617,12 +1763,13 @@ fn compiler_driver_compile_file_full src_path out_path target_arch opt_level emi
     cfg.cfg_ssa_codegen = (mode_flags / 128) % 2
     cfg.cfg_base_vaddr = g_driver_base_vaddr
     cfg.cfg_entry_sym = g_driver_entry_sym
+    cfg.cfg_utso_ranges = G_DRV_UTSO_RANGES
     // Content-hashed .lpo object cache fast-path when compiling to FORMAT_OBJ with --cache-dir
     lpo_cache_path = ""
     lpo_src_h = 0
     if emit_fmt == FORMAT_OBJ() and len(g_driver_cache_dir) > 0
-        lpo_src_h = lpo_source_hash(source_code + "|" + str(opt_level) + "|" + str(mode_flags))
-        lpo_cache_path = g_driver_cache_dir + "/obj_" + str(lpo_src_h) + ".lpo"
+        lpo_src_h = lpo_source_hash(source_code + "|" + str(target_arch) + "|" + str(emit_fmt) + "|" + str(opt_level) + "|" + str(mode_flags))
+        lpo_cache_path = g_driver_cache_dir + "/obj_" + str(target_arch) + "_" + str(lpo_src_h) + ".lpo"
         cached_sz = lpo_read_cache(lpo_cache_path, lpo_src_h, out_path)
         if cached_sz > 0
             c_res = compiler_result_new()
