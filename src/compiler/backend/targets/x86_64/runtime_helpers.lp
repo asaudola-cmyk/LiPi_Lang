@@ -49,30 +49,49 @@ fn x86_synth_emit__lipi_is_str s
     // is safely rejected before any memory dereference, guaranteeing zero SEGV_MAPERR.
     x86_synth_emit_bytes(s, [
         72, 133, 255,                                         // test rdi, rdi
-        116, 99,                                              // jz .not_str (+99 bytes to index 104)
-        144, 144, 144, 144, 144, 144, 144, 144, 144, 144, 144, 144, // 12 x NOP (0x90): replaces page check, preserves offsets
+        116, 2,                                               // jz .ret0 (+2 to index 7)
+        235, 3,                                               // jmp +3 to index 10
+        49, 192, 195,                                         // .ret0: xor eax, eax; ret
+        144, 144, 144, 144, 144, 144, 144,                    // 7 x NOP: preserves exact patch offsets (+19, +34, +49, +72)
         72, 184, 0, 0, 0, 0, 0, 0, 0, 0,                      // movabs rax, <rodata_base> (patch offset: off + 19)
         72, 57, 199,                                          // cmp rdi, rax
-        118, 15,                                              // jbe .chk_heap (+15 bytes to index 47): strictly > rodata_base required
+        118, 15,                                              // jbe .chk_heap (+15 bytes to index 47)
         72, 184, 0, 0, 0, 0, 0, 0, 0, 0,                      // movabs rax, <rodata_end> (patch offset: off + 34)
         72, 57, 199,                                          // cmp rdi, rax
-        114, 41,                                              // jb .is_valid (+41 bytes to index 88)
+        114, 92,                                              // jb .is_valid (+92 bytes to index 139)
         72, 184, 0, 0, 0, 0, 0, 0, 0, 0,                      // .chk_heap: movabs rax, <heap_base_addr> (patch offset: off + 49)
         72, 139, 0,                                           // mov rax, [rax] (_heap_base)
         72, 133, 192,                                         // test rax, rax
-        116, 39,                                              // jz .not_str (+39 bytes to index 104)
+        116, 90,                                              // jz .not_str (+90 bytes to index 155)
         72, 57, 199,                                          // cmp rdi, rax
-        118, 34,                                              // jbe .not_str (+34 bytes to index 104): strictly > heap_base required to safely read [rdi - 4]
-        72, 184, 0, 0, 0, 0, 0, 0, 0, 0,                      // movabs rax, <heap_ptr_addr> (patch offset: off + 72)
-        72, 139, 0,                                           // mov rax, [rax] (_heap_ptr)
+        118, 85,                                              // jbe .not_str (+85 bytes to index 155)
+        72, 186, 0, 0, 0, 0, 0, 0, 0, 0,                      // movabs rdx, <heap_ptr_addr> (patch offset: off + 72)
+        72, 139, 2,                                           // mov rax, [rdx] (_heap_ptr)
         72, 57, 199,                                          // cmp rdi, rax
-        115, 16,                                              // jae .not_str (+16 bytes to index 104)
-        139, 71, 252,                                         // .is_valid: mov eax, [rdi - 4]
+        115, 67,                                              // jae .not_str (+67 bytes to index 151)
+        // WHY: When disjoint heap chunks exist ([rdx+0x1f0] != 0), verify rdi lies inside an actually-mapped
+        // chunk [chunk.base+4, chunk.end) before reading [rdi - 4] so unmapped SYS_munmap gaps never SIGSEGV.
+        72, 139, 138, 240, 1, 0, 0,                           // mov rcx, [rdx + 0x1f0] (_heap_chunks_ptr)
+        72, 133, 201,                                         // test rcx, rcx
+        116, 39,                                              // je .is_valid (+39 to index 135)
+        76, 139, 130, 248, 1, 0, 0,                           // mov r8, [rdx + 0x1f8] (_heap_chunks_cnt)
+        77, 133, 192,                                         // .cloop: test r8, r8
+        116, 43,                                              // je .not_str (+43 to index 151)
+        76, 139, 9,                                           // mov r9, [rcx]
+        73, 131, 193, 4,                                      // add r9, 4
+        76, 57, 207,                                          // cmp rdi, r9
+        114, 6,                                               // jb .cnext (+6 to index 126)
+        72, 59, 121, 8,                                       // cmp rdi, [rcx + 8]
+        114, 9,                                               // jb .is_valid (+9 to index 135)
+        72, 131, 193, 16,                                     // .cnext: add rcx, 16
+        73, 255, 200,                                         // dec r8
+        235, 224,                                             // jmp .cloop (-32 to index 103)
+        139, 71, 252,                                         // .is_valid (index 135): mov eax, [rdi - 4]
         61, 48, 82, 84, 83,                                   // cmp eax, 0x53545230 ('STR0')
-        117, 6,                                               // jne .not_str (+6 bytes to index 104)
+        117, 6,                                               // jne .not_str (+6 bytes to index 151)
         184, 1, 0, 0, 0,                                      // mov eax, 1
         195,                                                  // ret
-        49, 192,                                              // .not_str: xor eax, eax
+        49, 192,                                              // .not_str (index 151): xor eax, eax
         195                                                   // ret
     ])
     return off
@@ -107,14 +126,15 @@ fn x86_synth_emit_lipi_fn_list s
     return off
 
 fn x86_synth_emit__lipi_list_get s
-    // WHY: Unified polymorphic element index resolver supporting LIST, STR0 strings, and DICT0 maps.
-    // Supports Python/Lipi negative indexing (`a[-1]`, `s[-1]`) for LIST and STR0 (preserving signed keys for DICT0).
+    // WHY: Unified thread-safe polymorphic element index resolver supporting LIST, STR0 strings, and DICT0 maps.
+    // Protects LIST header/data reads under per-list bit-63 spinlock on [rdi+8] matching _lipi_list_push.
+    // Supports negative indexing (`a[-1]`, `s[-1]`) for LIST and STR0 (preserving signed keys for DICT0).
     // Returns %rax = raw value, %rdx = val_tag (0 for list/str/miss, 0/1/2 for DICT0).
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_get", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 15, 132, 95, 0, 0, 0, 85, 72, 137, 229, 87, 86])
+    x86_synth_emit_bytes(s, [72, 133, 255, 15, 132, 127, 0, 0, 0, 85, 72, 137, 229, 87, 86])
     x86_synth_emit_call_helper(s, "_lipi_is_str")
-    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 54, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 27, 72, 139, 15, 72, 133, 246, 121, 3, 72, 1, 206, 72, 57, 206, 115, 45, 72, 139, 71, 16, 72, 139, 4, 240, 49, 210, 195, 85, 72, 137, 229])
+    x86_synth_emit_bytes(s, [94, 95, 93, 133, 192, 117, 86, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 59, 240, 72, 15, 186, 111, 8, 63, 115, 4, 243, 144, 235, 243, 72, 139, 15, 72, 133, 246, 121, 3, 72, 1, 206, 72, 57, 206, 115, 18, 72, 139, 71, 16, 72, 139, 4, 240, 240, 72, 15, 186, 119, 8, 63, 49, 210, 195, 240, 72, 15, 186, 119, 8, 63, 49, 192, 49, 210, 195, 85, 72, 137, 229])
     x86_synth_emit_call_helper(s, "_lipi_dict_get")
     x86_synth_emit_bytes(s, [93, 195, 139, 79, 248, 72, 133, 246, 121, 3, 72, 1, 206, 72, 57, 206, 115, 7, 15, 182, 4, 55, 49, 210, 195, 49, 192, 49, 210, 195])
     return off
@@ -129,11 +149,11 @@ fn x86_synth_emit__lipi_list_set s
     return off
 
 fn x86_synth_emit__lipi_list_set_typed s
-    // WHY: Tagged polymorphic setter forwarding %rcx = val_tag (0=int/ptr, 1=float, 2=str) into DICT0,
-    // and supporting negative index normalization (`a[-1] = val`) on LISTs.
+    // WHY: Thread-safe tagged polymorphic setter forwarding %rcx = val_tag (0=int/ptr, 1=float, 2=str)
+    // into DICT0, and protecting LIST element stores under per-list bit-63 spinlock on [rdi+8].
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_set_typed", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 40, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 28, 76, 139, 7, 72, 133, 246, 121, 3, 76, 1, 198, 76, 57, 198, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 72, 137, 248, 195, 85, 72, 137, 229])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 60, 72, 184, 76, 73, 80, 68, 73, 67, 84, 48, 72, 57, 71, 24, 116, 48, 240, 72, 15, 186, 111, 8, 63, 115, 4, 243, 144, 235, 243, 76, 139, 7, 72, 133, 246, 121, 3, 76, 1, 198, 76, 57, 198, 115, 8, 72, 139, 71, 16, 72, 137, 20, 240, 240, 72, 15, 186, 119, 8, 63, 72, 137, 248, 195, 85, 72, 137, 229])
     x86_synth_emit_call_helper(s, "_lipi_dict_set_typed")
     x86_synth_emit_bytes(s, [93, 195])
     return off
@@ -195,9 +215,10 @@ fn x86_synth_emit__lipi_div_by_zero s
     return off
 
 fn x86_synth_emit__lipi_list_pop s
+    // WHY: Thread-safe list pop protected by per-list bit-63 spinlock on cap slot [rdi+8].
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_list_pop", off)
-    x86_synth_emit_bytes(s, [72, 133, 255, 116, 23, 72, 139, 15, 72, 133, 201, 116, 15, 72, 255, 201, 72, 137, 15, 72, 139, 71, 16, 72, 139, 4, 200, 195, 49, 192, 195])
+    x86_synth_emit_bytes(s, [72, 133, 255, 116, 50, 240, 72, 15, 186, 111, 8, 63, 115, 4, 243, 144, 235, 243, 72, 139, 15, 72, 133, 201, 116, 22, 72, 255, 201, 72, 137, 15, 72, 139, 71, 16, 72, 139, 4, 200, 240, 72, 15, 186, 119, 8, 63, 195, 240, 72, 15, 186, 119, 8, 63, 49, 192, 195])
     return off
 
 fn x86_synth_emit__lipi_list_push s
@@ -539,6 +560,8 @@ fn x86_synth_emit__lipi_stack_pointer s
 fn x86_synth_emit__lipi_fiber_context_switch s
     // WHY: True silicon-level cooperative context switch in System V AMD64 ABI:
     // Saves callee-saved registers (%rbp, %rbx, %r12-%r15), stores %rsp to [%rdi],
+    // updates _lipi_stack_bottom ([slab+80]) to [rsi+56] whenever %rsi pivots to a stack
+    // outside [cur_sb - 16MiB, cur_sb] so GC never scans across unmapped gaps,
     // restores %rsp from %rsi, and restores callee-saved registers before returning.
     off = s.synth_code.len()
     x86_synth_register_helper_fn(s, "_lipi_fiber_context_switch", off)
@@ -552,8 +575,20 @@ fn x86_synth_emit__lipi_fiber_context_switch s
         65, 85,                           // push r13
         65, 86,                           // push r14
         65, 87,                           // push r15
-        72, 137, 39,                      // mov [rdi], rsp
-        72, 137, 244,                     // mov rsp, rsi
+        72, 137, 39                       // mov [rdi], rsp
+    ])
+    x86_synth_emit_call_helper(s, "_lipi_slab_buckets_ptr")
+    x86_synth_emit_bytes(s, [
+        72, 139, 80, 80,                  // mov rdx, [rax + 80] (_lipi_stack_bottom)
+        72, 57, 242,                      // cmp rdx, rsi
+        118, 15,                          // jbe .set_sb
+        72, 137, 209,                     // mov rcx, rdx
+        72, 41, 241,                      // sub rcx, rsi
+        72, 129, 249, 0, 0, 0, 1,         // cmp rcx, 0x1000000 (16 MiB)
+        118, 8,                           // jbe .sb_ok
+        72, 141, 78, 56,                  // .set_sb: lea rcx, [rsi + 56]
+        72, 137, 72, 80,                  // mov [rax + 80], rcx
+        72, 137, 244,                     // .sb_ok: mov rsp, rsi
         65, 95,                           // pop r15
         65, 94,                           // pop r14
         65, 93,                           // pop r13

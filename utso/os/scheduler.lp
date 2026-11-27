@@ -1,4 +1,8 @@
 @! ============================================================================
+@! @deprecated Simulation-only in-memory task scheduler model.
+@! WHY: Models TCB/MLFQ scheduling logic in userspace dicts rather than bare-metal CPU switching.
+@! For real native execution use `utso/core/fiber_reactor.lp`, `utso/os/thread.lp`, or `utso/silicon/*`.
+@! ============================================================================
 @! LIPI COROUTINE & TASK SCHEDULER — utso/os/scheduler.lp
 @! 100% Pure Lipi Implementation — Zero C / Libc Dependencies
 @! Features: TCB, x86-64 Context Save, Round-Robin & 3-Tier MLFQ Scheduler

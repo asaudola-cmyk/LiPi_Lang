@@ -99,17 +99,32 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "mem_read" or call_name == "mem_word_read" or call_name == "মেমরি_পড়ো" or call_name == "মেমরি_শব্দ_পড়ো" or call_name == "mem_read_word"
     return 1
   end
-  if call_name == "mem_byte_read" or call_name == "mem_read_byte" or call_name == "মেমরি_বাইট_পড়ো" or call_name == "mem_read_u64" or call_name == "mem_read_u32" or call_name == "mem_read_f64" or call_name == "mem_read_f32" or call_name == "মেমরি_দশমিক_পড়ো" or call_name == "mem_read_idx" or call_name == "মেমরি_সূচক_পড়ো"
+  if call_name == "mem_byte_read" or call_name == "mem_read_byte" or call_name == "মেমরি_বাইট_পড়ো" or call_name == "mem_byte_পড়ো" or call_name == "mem_read_u64" or call_name == "mem_read_u32" or call_name == "mem_read_f64" or call_name == "mem_read_f32" or call_name == "মেমরি_দশমিক_পড়ো" or call_name == "mem_read_idx" or call_name == "মেমরি_সূচক_পড়ো"
     return 1
   end
-  if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap" or call_name == "sys_munmap"
+  if call_name == "sys_poke" or call_name == "sys_poke8" or call_name == "sys_peek" or call_name == "sys_peek8" or call_name == "sys_mmap" or call_name == "sys_munmap" or call_name == "sys_exit" or call_name == "sys_exit_group" or call_name == "sys_peek16" or call_name == "sys_poke16" or call_name == "sys_peek32" or call_name == "sys_poke32" or call_name == "sys_peek64" or call_name == "sys_poke64" or call_name == "sys_peek16_hw" or call_name == "sys_poke16_hw" or call_name == "sys_peek32_hw" or call_name == "sys_poke32_hw" or call_name == "sys_peek64_hw" or call_name == "sys_poke64_hw"
+    return 1
+  end
+  // WHY: Block all internal `_lipi_*` raw memory/syscall/atomic/fiber/futex/thread/stack runtime
+  // entrypoints so uncrowned user functions cannot bypass Kavach via internal runtime symbol names.
+  if call_name == "_lipi_mem_byte_read" or call_name == "_lipi_mem_byte_write" or call_name == "_lipi_mem_word_read" or call_name == "_lipi_mem_word_write" or call_name == "_lipi_sys_peek" or call_name == "_lipi_sys_poke" or call_name == "_lipi_sys_mmap" or call_name == "_lipi_sys_exit" or call_name == "_lipi_thread_spawn_vm" or call_name == "_lipi_thread_spawn_joinable" or call_name == "_lipi_thread_exit" or call_name == "_lipi_atomic_add" or call_name == "_lipi_atomic_cas" or call_name == "_lipi_atomic_lock" or call_name == "_lipi_atomic_unlock" or call_name == "_lipi_fiber_context_switch" or call_name == "_lipi_fiber_swap" or call_name == "_lipi_futex_wait" or call_name == "_lipi_futex_wake" or call_name == "_lipi_file_write_mem" or call_name == "_lipi_file_append_mem" or call_name == "_lipi_buf_write_mem" or call_name == "_lipi_bytes_to_str" or call_name == "_lipi_stack_pointer" or call_name == "_lipi_heap_base" or call_name == "_lipi_heap_ptr" or call_name == "_lipi_stack_bottom"
+    return 1
+  end
+  // WHY: Block raw lock-free atomics, raw thread/fiber context switching, futex, and raw address-to-buffer/file I/O.
+  if call_name == "atomic_cas" or call_name == "atomic_cas32" or call_name == "atomic_cas64" or call_name == "atomic_compare_swap" or call_name == "atomic_xchg32" or call_name == "atomic_xchg64" or call_name == "atomic_add" or call_name == "atomic_add32" or call_name == "atomic_add64" or call_name == "atomic_lock" or call_name == "atomic_unlock" or call_name == "অ্যাটমিক_লক" or call_name == "অ্যাটমিক_আনলক"
+    return 1
+  end
+  if call_name == "fiber_switch" or call_name == "fiber_context_switch" or call_name == "thread_spawn_vm" or call_name == "thread_spawn_vm_joinable" or call_name == "থ্রেড_চালু_ভিএম" or call_name == "futex_wait" or call_name == "futex_wake" or call_name == "ফিউটেক্স_অপেক্ষা" or call_name == "ফিউটেক্স_জাগাও"
+    return 1
+  end
+  if call_name == "file_write_mem" or call_name == "file_append_mem" or call_name == "buf_write_mem" or call_name == "buf_append_mem" or call_name == "বাফার_লেখো_মেম" or call_name == "bytes_to_str" or call_name == "mem_to_str" or call_name == "বাইট_থেকে_স্ট্রিং"
     return 1
   end
   // Sovereign Ring-0 Privileged & Hardware MMIO / Port I/O / Inline Assembly Authority Guard
-  if call_name == "@asm" or call_name == "@অ্যাসেম্বলি" or call_name == "uefi_call" or call_name == "ms_x64_call"
+  if call_name == "@asm" or call_name == "@অ্যাসেম্বলি" or call_name == "uefi_call" or call_name == "ms_x64_call" or call_name == "psci_call" or call_name == "sbi_ecall" or call_name == "sbi_ecall_val" or call_name == "sbi_ecall_ret"
     return 1
   end
-  if call_name == "port_in8" or call_name == "port_out8" or call_name == "port_in16" or call_name == "port_out16" or call_name == "port_in32" or call_name == "port_out32" or call_name == "inb" or call_name == "outb" or call_name == "inw" or call_name == "outw" or call_name == "inl" or call_name == "outl" or call_name == "পোর্ট_পড়ো৮" or call_name == "পোর্ট_লেখো৮" or call_name == "পোর্ট_পড়ো১৬" or call_name == "পোর্ট_লেখো১৬" or call_name == "পোর্ট_পড়ো৩২" or call_name == "পোর্ট_লেখো৩২"
+  if call_name == "port_in8" or call_name == "port_out8" or call_name == "port_in16" or call_name == "port_out16" or call_name == "port_in32" or call_name == "port_out32" or call_name == "inb" or call_name == "outb" or call_name == "inw" or call_name == "outw" or call_name == "inl" or call_name == "outl" or call_name == "io_wait" or call_name == "port_io_wait" or call_name == "পোর্ট_পড়ো৮" or call_name == "পোর্ট_লেখো৮" or call_name == "পোর্ট_পড়ো১৬" or call_name == "পোর্ট_লেখো১৬" or call_name == "পোর্ট_পড়ো৩২" or call_name == "পোর্ট_লেখো৩২"
     return 1
   end
   if call_name == "mmio_r8" or call_name == "mmio_w8" or call_name == "mmio_r16" or call_name == "mmio_w16" or call_name == "mmio_r32" or call_name == "mmio_w32" or call_name == "mmio_r64" or call_name == "mmio_w64" or call_name == "mmio_read8" or call_name == "mmio_write8" or call_name == "mmio_read16" or call_name == "mmio_write16" or call_name == "mmio_read32" or call_name == "mmio_write32" or call_name == "mmio_read32_hw" or call_name == "mmio_write32_hw" or call_name == "mmio_read64" or call_name == "mmio_write64"
@@ -118,7 +133,7 @@ fn kavach_is_raw_hw_op call_name
   if call_name == "mem_u8_read" or call_name == "mem_u8_write" or call_name == "mem_u16_read" or call_name == "mem_u16_write" or call_name == "mem_u32_read" or call_name == "mem_u32_write" or call_name == "mem_u64_read" or call_name == "mem_u64_write"
     return 1
   end
-  if call_name == "cpu_cli" or call_name == "cli" or call_name == "cpu_sti" or call_name == "sti" or call_name == "cpu_hlt" or call_name == "hlt" or call_name == "cpu_lgdt" or call_name == "lgdt" or call_name == "cpu_lidt" or call_name == "lidt" or call_name == "cpu_sgdt" or call_name == "sgdt" or call_name == "cpu_sidt" or call_name == "sidt" or call_name == "cpu_ltr" or call_name == "ltr" or call_name == "cpu_read_cr0" or call_name == "read_cr0" or call_name == "cpu_write_cr0" or call_name == "write_cr0" or call_name == "cpu_read_cr2" or call_name == "read_cr2" or call_name == "cpu_read_cr3" or call_name == "read_cr3" or call_name == "cpu_write_cr3" or call_name == "write_cr3" or call_name == "cpu_read_cr4" or call_name == "read_cr4" or call_name == "cpu_write_cr4" or call_name == "write_cr4" or call_name == "cpu_rdmsr" or call_name == "rdmsr" or call_name == "cpu_wrmsr" or call_name == "wrmsr" or call_name == "cpu_invlpg" or call_name == "invlpg" or call_name == "cpu_swapgs" or call_name == "swapgs" or call_name == "cpu_wbinvd"
+  if call_name == "cpu_cli" or call_name == "cli" or call_name == "cpu_sti" or call_name == "sti" or call_name == "cpu_hlt" or call_name == "hlt" or call_name == "cpu_halt" or call_name == "cpu_wfi" or call_name == "cpu_rdcycle" or call_name == "cpu_rdtime" or call_name == "stack_pointer" or call_name == "স্ট্যাক_পয়েন্টার" or call_name == "cpu_read_rsp" or call_name == "cpu_read_rflags" or call_name == "read_rflags" or call_name == "cpu_cpuid" or call_name == "cpuid" or call_name == "cpu_rdtsc" or call_name == "rdtsc" or call_name == "cpu_lgdt" or call_name == "lgdt" or call_name == "cpu_lidt" or call_name == "lidt" or call_name == "cpu_sgdt" or call_name == "sgdt" or call_name == "cpu_sidt" or call_name == "sidt" or call_name == "cpu_ltr" or call_name == "ltr" or call_name == "cpu_read_cr0" or call_name == "read_cr0" or call_name == "cpu_write_cr0" or call_name == "write_cr0" or call_name == "cpu_read_cr2" or call_name == "read_cr2" or call_name == "cpu_read_cr3" or call_name == "read_cr3" or call_name == "cpu_write_cr3" or call_name == "write_cr3" or call_name == "cpu_read_cr4" or call_name == "read_cr4" or call_name == "cpu_write_cr4" or call_name == "write_cr4" or call_name == "cpu_rdmsr" or call_name == "rdmsr" or call_name == "cpu_wrmsr" or call_name == "wrmsr" or call_name == "cpu_invlpg" or call_name == "invlpg" or call_name == "cpu_swapgs" or call_name == "swapgs" or call_name == "cpu_wbinvd"
     return 1
   end
   return 0
@@ -176,9 +191,10 @@ fn kavach_scan_interp_str kv fn_name stext
         end
         j = j + 1
       end
-      // Scan identifiers inside [expr_start .. j) (outside nested string literals)
+      // Scan identifiers and unary pointer dereference `*p` inside [expr_start .. j) (outside nested string literals)
       k = expr_start
       q2 = 0
+      prev_val = 0
       while k < j
         c2 = mem_byte_read(stext, k) & 255
         if q2 != 0
@@ -187,12 +203,23 @@ fn kavach_scan_interp_str kv fn_name stext
             continue
           elif c2 == q2
             q2 = 0
+            prev_val = 1
           end
           k = k + 1
           continue
         end
         if c2 == 34 or c2 == 39
           q2 = c2
+          k = k + 1
+          continue
+        end
+        if c2 == 32 or c2 == 9 or c2 == 10 or c2 == 13
+          k = k + 1
+          continue
+        end
+        if c2 == 42 and prev_val == 0
+          // WHY: Unary `*expr` inside `${...}` is a raw pointer dereference and must require silicon_* crown.
+          kavach_record_error(kv, fn_name, "*ptr")
           k = k + 1
           continue
         end
@@ -205,7 +232,17 @@ fn kavach_scan_interp_str kv fn_name stext
           if kavach_is_raw_hw_op(ident) == 1
             kavach_record_error(kv, fn_name, ident)
           end
+          if ident == "and" or ident == "or" or ident == "not" or ident == "return"
+            prev_val = 0
+          else
+            prev_val = 1
+          end
           continue
+        end
+        if c2 == 41 or c2 == 93
+          prev_val = 1
+        else
+          prev_val = 0
         end
         k = k + 1
       end
@@ -300,6 +337,10 @@ fn kavach_scan_expr kv fn_name expr
   end
 
   if k == "Unary" or k == "UnaryOp" or tag == AST_TAG_UNARY_OP()
+    // WHY: Raw pointer dereference (`*p`) performs direct unchecked memory load and requires a silicon_* crown.
+    if expr.op == "*"
+      kavach_record_error(kv, fn_name, "*ptr")
+    end
     kavach_scan_expr(kv, fn_name, expr.expr)
     return 0
   end
@@ -369,6 +410,13 @@ fn kavach_scan_stmt kv fn_name stmt
   end
 
   if k == "Assign" or k == "AssignOp" or tag == AST_TAG_ASSIGN() or tag == AST_TAG_ASSIGN_OP()
+    // WHY: Raw pointer store (`*p = val`) performs direct unchecked memory write and requires a silicon_* crown.
+    if stmt.op == "deref_assign" or stmt.target == "*"
+      kavach_record_error(kv, fn_name, "*ptr = val")
+    end
+    if stmt.left != 0
+      kavach_scan_expr(kv, fn_name, stmt.left)
+    end
     if stmt.index != 0
       kavach_scan_expr(kv, fn_name, stmt.index)
     end
@@ -431,6 +479,9 @@ fn kavach_scan_stmt kv fn_name stmt
       end
     end
     kavach_scan_stmt_list(kv, fn_name, stmt.else_body)
+    if stmt.op == "try" and stmt.body != 0
+      kavach_scan_stmt_list(kv, fn_name, stmt.body)
+    end
     return 0
   end
 
@@ -457,6 +508,8 @@ fn kavach_scan_stmt kv fn_name stmt
   if k == "Block" or tag == AST_TAG_BLOCK() or k == "Defer" or tag == AST_TAG_DEFER() or k == "Region"
     kavach_scan_stmt_list(kv, fn_name, stmt.body)
     if stmt.expr != 0
+      // WHY: Single-statement `defer stmt` stores the deferred statement node in `stmt.expr`.
+      kavach_scan_stmt(kv, fn_name, stmt.expr)
       kavach_scan_expr(kv, fn_name, stmt.expr)
     end
     return 0
@@ -482,6 +535,9 @@ fn kavach_scan_stmt kv fn_name stmt
   if k == "TryCatch" or tag == AST_TAG_TRY_CATCH()
     kavach_scan_stmt_list(kv, fn_name, stmt.then_body)
     kavach_scan_stmt_list(kv, fn_name, stmt.else_body)
+    if stmt.op == "try" and stmt.body != 0
+      kavach_scan_stmt_list(kv, fn_name, stmt.body)
+    end
     return 0
   end
 

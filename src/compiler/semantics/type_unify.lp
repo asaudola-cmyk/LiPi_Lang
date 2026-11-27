@@ -153,9 +153,25 @@ import "compiler/semantics/type_def"
     return 1
   @end
 
-  // Struct equality is nominal in LiPi
+  // Struct equality is nominal in LiPi (parameterized dict<K, V> compares key & value types)
   @if t1.ty_kind == TYPE_KIND_STRUCT()
-    @if str_eq(t1.ty_name, t2.ty_name) == 1 return 1 @end
+    @if str_eq(t1.ty_name, t2.ty_name) == 1
+      @if str_eq(t1.ty_name, "dict") == 1
+        k1 = t1.ty_ret_type_id
+        v1 = t1.ty_elem_type_id
+        k2 = t2.ty_ret_type_id
+        v2 = t2.ty_elem_type_id
+        @if k1 <= 0 k1 = TYPE_ID_ANY() @end
+        @if v1 <= 0 v1 = TYPE_ID_ANY() @end
+        @if k2 <= 0 k2 = TYPE_ID_ANY() @end
+        @if v2 <= 0 v2 = TYPE_ID_ANY() @end
+        @if type_is_equal(reg, k1, k2) == 1 && type_is_equal(reg, v1, v2) == 1
+          return 1
+        @end
+        return 0
+      @end
+      return 1
+    @end
     return 0
   @end
 
@@ -223,6 +239,24 @@ import "compiler/semantics/type_def"
     @end
   @end
 
+  // Parameterized `dict<K, V>` compatibility
+  @if t_target.ty_kind == TYPE_KIND_STRUCT() && t_src.ty_kind == TYPE_KIND_STRUCT()
+    @if str_eq(t_target.ty_name, "dict") == 1 && str_eq(t_src.ty_name, "dict") == 1
+      tk = t_target.ty_ret_type_id
+      tv = t_target.ty_elem_type_id
+      sk = t_src.ty_ret_type_id
+      sv = t_src.ty_elem_type_id
+      @if tk <= 0 tk = TYPE_ID_ANY() @end
+      @if tv <= 0 tv = TYPE_ID_ANY() @end
+      @if sk <= 0 sk = TYPE_ID_ANY() @end
+      @if sv <= 0 sv = TYPE_ID_ANY() @end
+      @if type_is_assignable(reg, tk, sk) == 1 && type_is_assignable(reg, tv, sv) == 1
+        return 1
+      @end
+      return 0
+    @end
+  @end
+
   // Polymorphic `dyn Trait` target accepts concrete struct instances
   @if t_target.ty_kind == TYPE_KIND_STRUCT() && t_src.ty_kind == TYPE_KIND_STRUCT()
     @if str_starts_with(t_target.ty_name, "dyn ") == 1 && str_eq(t_src.ty_name, "dict") == 0
@@ -230,11 +264,10 @@ import "compiler/semantics/type_def"
     @end
   @end
 
-  // Pointer const-decay: *mut T can be assigned to *const T
+  // Pointer compatibility (non-strict gradual mode): allow `*mut T` <-> `*const T` address-of
+  // (e.g. `px: *mut i64 = &x`) and wildcard `*mut any` annotations.
   @if t_target.ty_kind == TYPE_KIND_POINTER() && t_src.ty_kind == TYPE_KIND_POINTER()
-    @if t_target.ty_is_mut == 0 && t_src.ty_is_mut == 1
-      return type_is_equal(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
-    @end
+    return type_is_assignable(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
   @end
 
   return 0
@@ -269,6 +302,24 @@ import "compiler/semantics/type_def"
     return type_is_assignable_strict(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
   @end
 
+  // Parameterized `dict<K, V>` strict compatibility (dict() / dict<any, any> initializes typed dicts)
+  @if t_target.ty_kind == TYPE_KIND_STRUCT() && t_src.ty_kind == TYPE_KIND_STRUCT()
+    @if str_eq(t_target.ty_name, "dict") == 1 && str_eq(t_src.ty_name, "dict") == 1
+      tk = t_target.ty_ret_type_id
+      tv = t_target.ty_elem_type_id
+      sk = t_src.ty_ret_type_id
+      sv = t_src.ty_elem_type_id
+      @if tk <= 0 tk = TYPE_ID_ANY() @end
+      @if tv <= 0 tv = TYPE_ID_ANY() @end
+      @if sk <= 0 sk = TYPE_ID_ANY() @end
+      @if sv <= 0 sv = TYPE_ID_ANY() @end
+      @if type_is_assignable_strict(reg, tk, sk) == 1 && type_is_assignable_strict(reg, tv, sv) == 1
+        return 1
+      @end
+      return 0
+    @end
+  @end
+
   // Polymorphic `dyn Trait` target accepts concrete struct instances that implement `Trait`
   @if t_target.ty_kind == TYPE_KIND_STRUCT() && t_src.ty_kind == TYPE_KIND_STRUCT()
     @if str_starts_with(t_target.ty_name, "dyn ") == 1 && str_eq(t_src.ty_name, "dict") == 0
@@ -283,11 +334,9 @@ import "compiler/semantics/type_def"
     @end
   @end
 
-  // Pointer const-decay: *mut T can be assigned to *const T
+  // Pointer compatibility under --strict-types: require compatible pointee types.
   @if t_target.ty_kind == TYPE_KIND_POINTER() && t_src.ty_kind == TYPE_KIND_POINTER()
-    @if t_target.ty_is_mut == 0 && t_src.ty_is_mut == 1
-      return type_is_equal(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
-    @end
+    return type_is_assignable_strict(reg, t_target.ty_elem_type_id, t_src.ty_elem_type_id)
   @end
 
   return 0

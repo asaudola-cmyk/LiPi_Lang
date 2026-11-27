@@ -114,6 +114,8 @@ struct Tls13Session
     ts_resumption_master_secret
     ts_is_resumed
     ts_handshake_transcript
+    ts_app_client_secret
+    ts_app_server_secret
 
 struct Tls13RecordEngine
     re_tag
@@ -137,32 +139,60 @@ struct Tls13RecordEngine
     re_ticket_psks
     re_ticket_ciphers
     re_ticket_snis
+    re_ticket_exp
 
 // ── 3. Internal Byte & CSPRNG Utilities ───────────────────────────────────────
 
 fn _tls13s_rand_bytes count
+    // WHY: Loops SYS_getrandom (318) on EINTR (-4) and short reads, falling back ONLY
+    // to kernel /dev/urandom with EINTR retry — NEVER predictable cpu_clock()!
+    if count <= 0
+        return list()
+    end
     buf = malloc(count)
+    if buf <= 0
+        return list()
+    end
+    got = 0
+    failed = 0
+    while got < count
+        r = syscall(318, buf + got, count - got, 0, 0, 0, 0)
+        if r == (0 - 4)
+            continue
+        end
+        if r <= 0
+            ufd = syscall(2, "/dev/urandom", 0, 0, 0, 0, 0)
+            if ufd < 0
+                failed = 1
+                break
+            end
+            while got < count
+                ur = syscall(0, ufd, buf + got, count - got, 0, 0, 0)
+                if ur == (0 - 4)
+                    continue
+                end
+                if ur <= 0
+                    failed = 1
+                    break
+                end
+                got = got + ur
+            end
+            syscall(3, ufd, 0, 0, 0, 0, 0)
+            break
+        end
+        got = got + r
+    end
     out = list()
-    ok = 0
-    if buf > 0
-        if syscall(318, buf, count, 0, 0, 0, 0) == count
-            ok = 1
-        end
-    end
-    i = 0
-    while i < count
-        if ok == 1
+    if failed == 0 and got == count
+        i = 0
+        while i < count
             push(out, mem_byte_read(buf, i) & 255)
-        else
-            // Fallback CSPRNG entropy seed hashed over CPU cycle counter if getrandom blocked
-            push(out, ((cpu_clock() ^ (i * 2654435761)) >> ((i % 4) * 8)) & 255)
+            i = i + 1
         end
-        i = i + 1
     end
-    if buf > 0
-        free(buf, count)
-    end
+    free(buf, count)
     return out
+end
 
 fn _tls13s_append dst src
     i = 0
@@ -181,18 +211,22 @@ fn _tls13s_slice src start_pos end_pos
     end
     return out
 
-fn _tls13s_pad_key32 raw_bytes
-    out = list()
+fn _tls13s_is_all_zero32 raw_bytes
+    // WHY: RFC 7748 §6.1 requires rejecting X25519 low-order points yielding an all-zero shared secret.
+    if len(raw_bytes) != 32
+        return 1
+    end
+    acc = 0
     i = 0
     while i < 32
-        if i < len(raw_bytes)
-            push(out, get(raw_bytes, i) & 255)
-        else
-            push(out, 17)
-        end
+        acc = acc | (get(raw_bytes, i) & 255)
         i = i + 1
     end
-    return out
+    if acc == 0
+        return 1
+    end
+    return 0
+end
 
 fn _tls13s_make_nonce iv seq
     nonce = list()
@@ -323,6 +357,8 @@ fn tls13_session_new cipher_suite secret
     s.ts_resumption_master_secret = list()
     s.ts_is_resumed = 0
     s.ts_handshake_transcript = list()
+    s.ts_app_client_secret = list()
+    s.ts_app_server_secret = list()
     return s
 
 fn tls13_engine_set_identity engine cert_chain_ders ed25519_priv32
@@ -458,6 +494,7 @@ fn tls13_record_engine_new
     re.re_ticket_psks = list()
     re.re_ticket_ciphers = list()
     re.re_ticket_snis = list()
+    re.re_ticket_exp = list()
     return re
 
 // ── 5. Full ClientHello Parser (RFC 8446 Section 4.1.2) ──────────────────────
@@ -806,32 +843,97 @@ fn tls13_record_encrypt_raw session pt_bytes
     return out
 
 fn tls13_record_decrypt_raw session record_bytes
-    // WHY: Binary-safe AEAD decrypt returning [ok, inner_type, payload_bytes] for HTTP/2 and raw protocols.
+    // WHY: Binary-safe AEAD decrypt returning [ok, inner_type, payload_bytes].
+    // Closes session state on AEAD failure or TLS Alert/close_notify, and rotates client
+    // application traffic secrets on RFC 8446 §4.6.3 post-handshake KeyUpdate (type 24).
+    if session == 0 or session.ts_state == TLS_STATE_CLOSED
+        return [0, 0, list()]
+    end
     cipher = session.ts_cipher_suite
     seq = session.ts_client_seq
     unw = _tls13s_aead_unwrap(cipher, session.ts_app_client_key, session.ts_app_client_iv, seq, record_bytes)
     if unw[0] != 1
+        session.ts_state = TLS_STATE_CLOSED
         return [0, 0, list()]
     end
     session.ts_client_seq = seq + 1
+    if unw[1] == TLS_CONTENT_ALERT
+        session.ts_state = TLS_STATE_CLOSED
+        return unw
+    end
+    if unw[1] == TLS_CONTENT_HANDSHAKE
+        hs = unw[2]
+        if len(hs) >= 5 and (get(hs, 0) & 255) == 24
+            ku_req = tls13_parse_key_update_msg(hs)
+            if ku_req < 0 or len(session.ts_app_client_secret) == 0
+                session.ts_state = TLS_STATE_CLOSED
+                return [0, 0, list()]
+            end
+            c_ku = tls13_key_update_next(cipher, session.ts_app_client_secret)
+            session.ts_app_client_secret = c_ku.tku_secret
+            session.ts_app_client_key = c_ku.tku_key
+            session.ts_app_client_iv = c_ku.tku_iv
+            session.ts_client_seq = 0
+        end
+    end
     return unw
+end
+
+fn tls13_server_initiate_key_update session request_update
+    // WHY: Emits an RFC 8446 §4.6.3 KeyUpdate record encrypted under the CURRENT server
+    // traffic key, then advances ts_app_server_secret/key/iv and resets ts_server_seq to 0.
+    if session == 0 or len(session.ts_app_server_secret) == 0
+        return list()
+    end
+    cipher = session.ts_cipher_suite
+    ku_hs = tls13_build_key_update_msg(request_update)
+    wire = _tls13s_aead_wrap(cipher, session.ts_app_server_key, session.ts_app_server_iv, session.ts_server_seq, TLS_CONTENT_HANDSHAKE, ku_hs)
+    s_ku = tls13_key_update_next(cipher, session.ts_app_server_secret)
+    session.ts_app_server_secret = s_ku.tku_secret
+    session.ts_app_server_key = s_ku.tku_key
+    session.ts_app_server_iv = s_ku.tku_iv
+    session.ts_server_seq = 0
+    return wire
+end
 
 fn tls13_record_encrypt session plaintext_str
     return tls13_record_encrypt_raw(session, tls_string_to_bytes(plaintext_str))
+end
+
+fn tls13_record_decrypt_prod session record_bytes
+    // WHY: Production reactor decryptor returning [status, payload]:
+    // status=1 app data string, status=0 benign post-handshake (e.g. KeyUpdate(0)),
+    // status=2 client-initiated KeyUpdate(1) reply wire bytes to enqueue directly, status=-1 fatal/close_notify.
+    unw = tls13_record_decrypt_raw(session, record_bytes)
+    if unw[0] != 1
+        return [-1, ""]
+    end
+    if unw[1] == TLS_CONTENT_ALERT
+        return [-1, ""]
+    end
+    if unw[1] == TLS_CONTENT_APPLICATION_DATA
+        return [1, tls_bytes_to_string(unw[2])]
+    end
+    if unw[1] == TLS_CONTENT_HANDSHAKE
+        hs = unw[2]
+        if len(hs) == 5 and (get(hs, 0) & 255) == 24 and (get(hs, 4) & 255) == 1
+            ku_rep = tls13_server_initiate_key_update(session, 0)
+            if len(ku_rep) > 0
+                return [2, ku_rep]
+            end
+        end
+    end
+    return [0, ""]
+end
 
 fn tls13_record_decrypt session record_bytes
     // WHY: Decrypts & authenticates client->server application record using client app key/iv and client seq.
-    cipher = session.ts_cipher_suite
-    seq = session.ts_client_seq
-    unw = _tls13s_aead_unwrap(cipher, session.ts_app_client_key, session.ts_app_client_iv, seq, record_bytes)
-    if unw[0] != 1
-        return ""
-    end
-    session.ts_client_seq = seq + 1
-    if unw[1] != TLS_CONTENT_APPLICATION_DATA
+    unw = tls13_record_decrypt_raw(session, record_bytes)
+    if unw[0] != 1 or unw[1] != TLS_CONTENT_APPLICATION_DATA
         return ""
     end
     return tls_bytes_to_string(unw[2])
+end
 
 fn tls13_server_record_decrypt_self session record_bytes seq
     unw = _tls13s_aead_unwrap(session.ts_cipher_suite, session.ts_app_server_key, session.ts_app_server_iv, seq, record_bytes)
@@ -959,11 +1061,72 @@ fn _tls13s_compute_psk_binder psk cipher trunc_ch_bytes
     fkey = tls13_hkdf_expand_label(bkey, "finished", [], 32)
     return tls13_hmac_sha256(fkey, sha256_hash_bytes(trunc_ch_bytes))
 
+fn _tls13s_evict_tickets engine max_cap
+    // WHY: Bounds ticket cache memory and removes expired RFC 8446 session tickets.
+    now_ms = clock_ms()
+    n_ids = list()
+    n_psks = list()
+    n_ciphers = list()
+    n_snis = list()
+    n_exp = list()
+    tcnt = len(engine.re_ticket_ids)
+    ecnt = len(engine.re_ticket_exp)
+    i = 0
+    while i < tcnt
+        exp_t = 0
+        if i < ecnt
+            exp_t = get(engine.re_ticket_exp, i)
+        end
+        if exp_t == 0 or now_ms < exp_t
+            push(n_ids, get(engine.re_ticket_ids, i))
+            push(n_psks, get(engine.re_ticket_psks, i))
+            push(n_ciphers, get(engine.re_ticket_ciphers, i))
+            push(n_snis, get(engine.re_ticket_snis, i))
+            push(n_exp, exp_t)
+        end
+        i = i + 1
+    end
+    // Evict oldest entries if cache exceeds max_cap
+    keep_from = 0
+    if len(n_ids) > max_cap
+        keep_from = len(n_ids) - max_cap
+    end
+    if keep_from > 0
+        k_ids = list()
+        k_psks = list()
+        k_ciphers = list()
+        k_snis = list()
+        k_exp = list()
+        ki = keep_from
+        while ki < len(n_ids)
+            push(k_ids, get(n_ids, ki))
+            push(k_psks, get(n_psks, ki))
+            push(k_ciphers, get(n_ciphers, ki))
+            push(k_snis, get(n_snis, ki))
+            push(k_exp, get(n_exp, ki))
+            ki = ki + 1
+        end
+        engine.re_ticket_ids = k_ids
+        engine.re_ticket_psks = k_psks
+        engine.re_ticket_ciphers = k_ciphers
+        engine.re_ticket_snis = k_snis
+        engine.re_ticket_exp = k_exp
+    else
+        engine.re_ticket_ids = n_ids
+        engine.re_ticket_psks = n_psks
+        engine.re_ticket_ciphers = n_ciphers
+        engine.re_ticket_snis = n_snis
+        engine.re_ticket_exp = n_exp
+    end
+    return len(engine.re_ticket_ids)
+end
+
 fn _tls13s_verify_psk_ticket engine ch cipher
     // Returns [status, psk_bytes, ticket_sni]: status=1 valid PSK, 0 not found, -1 bad binder (reject!)
     if ch.ch_has_psk != 1 or ch.ch_has_psk_dhe != 1 or ch.ch_psk_trunc_len <= 0
         return [0, list(), ""]
     end
+    _tls13s_evict_tickets(engine, 256)
     tcnt = len(engine.re_ticket_ids)
     i = 0
     while i < tcnt
@@ -984,6 +1147,7 @@ fn _tls13s_verify_psk_ticket engine ch cipher
         i = i + 1
     end
     return [0, list(), ""]
+end
 
 fn _tls13s_derive_psk_hs_keys psk shared_bytes thash1 cipher
     // WHY: RFC 8446 §7.1 PSK-DHE key schedule starting from early_secret = HKDF-Extract(0, PSK).
@@ -1094,25 +1258,24 @@ fn tls13_engine_process_handshake_with_prefix engine client_hello_bytes transcri
     sel_sni_label = ident[3]
 
     s_priv = _tls13s_rand_bytes(32)
+    if len(s_priv) != 32
+        return 0
+    end
+    c_pub = ch.ch_client_pub_bytes
+    // WHY: RFC 8446 §4.2.8.2 + RFC 7748 strictly mandate exact 32-byte X25519 key shares
+    // and non-zero ECDHE shared secrets (ZERO padding or fallback to c_pub!).
+    if len(c_pub) != 32
+        return 0
+    end
+    shared_bytes = x25519_shared_secret(s_priv, c_pub)
+    if len(shared_bytes) != 32 or _tls13s_is_all_zero32(shared_bytes) == 1
+        return 0
+    end
+
     sh_pair = _tls13s_build_server_hello_with_psk(ch, s_priv, use_psk)
     sh_wire = sh_pair[0]
     sh_hs = sh_pair[1]
     engine.re_last_server_hello = sh_wire
-
-    c_pub = ch.ch_client_pub_bytes
-    shared_bytes = list()
-    if len(c_pub) == 32
-        shared_bytes = x25519_shared_secret(s_priv, c_pub)
-        if len(shared_bytes) != 32
-            return 0
-        end
-    else
-        // Compact vector safeguard (pads short non-standard test key share)
-        shared_bytes = x25519_shared_secret(s_priv, _tls13s_pad_key32(c_pub))
-        if len(shared_bytes) != 32
-            shared_bytes = _tls13s_pad_key32(c_pub)
-        end
-    end
 
     // Compact nonzero scalar summary for backwards telemetry while keeping full 32-byte key in ts_shared_secret_bytes
     sec_tag = (get(shared_bytes, 0) * 16777216) | (get(shared_bytes, 1) * 65536) | (get(shared_bytes, 2) * 256) | get(shared_bytes, 3)
@@ -1194,6 +1357,8 @@ fn tls13_engine_process_handshake_with_prefix engine client_hello_bytes transcri
     // 5. Derive Master Secret & Application Traffic Keys from H(CH..ServerFinished)
     app_thash = _tls13s_hash_transcript(cipher, transcript)
     master = list()
+    c_app = list()
+    s_app = list()
     c_app_key = list()
     c_app_iv = list()
     s_app_key = list()
@@ -1242,8 +1407,21 @@ fn tls13_engine_process_handshake_with_prefix engine client_hello_bytes transcri
     session.ts_master_secret = master
     session.ts_is_resumed = use_psk
     session.ts_handshake_transcript = transcript
+    session.ts_app_client_secret = c_app
+    session.ts_app_server_secret = s_app
 
+    // WHY: Cap re_active_sessions to 256 entries (FIFO eviction) so long-running servers never leak memory.
     sessions = engine.re_active_sessions
+    if len(sessions) >= 256
+        trimmed_s = list()
+        si_t = len(sessions) - 255
+        while si_t < len(sessions)
+            push(trimmed_s, get(sessions, si_t))
+            si_t = si_t + 1
+        end
+        sessions = trimmed_s
+        engine.re_active_sessions = sessions
+    end
     push(sessions, session)
     engine.re_total_handshakes = engine.re_total_handshakes + 1
     return session
@@ -1304,10 +1482,12 @@ fn tls13_server_issue_session_ticket engine session
     else
         psk = tls13_hkdf_expand_label(session.ts_resumption_master_secret, "resumption", ticket_nonce, 32)
     end
+    _tls13s_evict_tickets(engine, 255)
     push(engine.re_ticket_ids, ticket_id)
     push(engine.re_ticket_psks, psk)
     push(engine.re_ticket_ciphers, session.ts_cipher_suite)
     push(engine.re_ticket_snis, session.ts_selected_sni)
+    push(engine.re_ticket_exp, clock_ms() + 3600000)
 
     // Wire NewSessionTicket: lifetime(4=3600) || age_add(4) || nonce_len(1) || nonce(8) || ticket_len(2) || ticket(16) || ext_len(2=0)
     body = [0, 0, 14, 16]
@@ -1402,14 +1582,33 @@ fn tls13_build_psk_client_hello sni_host c_pub32 ticket_id psk cipher
 
 // ── 9. Direct Kernel Socket Live TLS 1.3 Server Loop Driver ──────────────────
 
+fn _tls13s_set_fd_timeout fd sec
+    // WHY: Configures SO_RCVTIMEO (20) and SO_SNDTIMEO (21) so a stalled TLS client
+    // during handshake can never freeze the epoll reactor thread indefinitely.
+    if fd < 0 or sec <= 0 return 0 end
+    tv = malloc(16)
+    if tv <= 0 return 0 end
+    mem_write(tv, 0, sec)
+    mem_write(tv, 8, 0)
+    syscall(54, fd, 1, 20, tv, 16, 0)
+    syscall(54, fd, 1, 21, tv, 16, 0)
+    free(tv, 16)
+    return 1
+end
+
 fn _tls13s_read_exact_fd fd ptr need
+    // WHY: Retries SYS_read on EINTR (-4) so STW GC SIGURG signals never abort live TLS handshakes.
     got = 0
     while got < need
         n = syscall(0, fd, ptr + got, need - got, 0, 0, 0)
+        if n == (0 - 4)
+            continue
+        end
         if n <= 0 return -1 end
         got = got + n
     end
     return got
+end
 
 fn _tls13s_write_list_fd fd arr
     n = len(arr)
@@ -1471,8 +1670,9 @@ fn _tls13s_read_wire_record fd
     return out
 
 fn tls13_server_handshake_fd conn_fd engine
-    // WHY: Reads ClientHello record, handles RFC 8446 §4.1.4 HelloRetryRequest when initial
-    // key_share omits X25519 (e.g. P-256 first), emits Server Flight, and verifies Client Finished.
+    // WHY: Enforces a 5-second SO_RCVTIMEO/SO_SNDTIMEO handshake deadline before reading
+    // ClientHello so stalled peers never freeze the accept loop; handles HRR + Client Finished.
+    _tls13s_set_fd_timeout(conn_fd, 5)
     ch_rec = _tls13s_read_wire_record(conn_fd)
     if len(ch_rec) < 45
         return 0

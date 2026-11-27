@@ -53,6 +53,9 @@ struct WasmFuncDef
     wfn_has_returned    // 1 if explicit return was emitted at current flow level
     wfn_is_variadic     // 1 if final parameter is variadic (`...args` / `nums: ...T`)
     wfn_def_starts      // List of default-arg token start indices (-1 if required)
+    wfn_returns_float   // 1 if function returns IEEE-754 f64 bits in i64
+    wfn_returns_str     // 1 if function returns LPST string pointer
+    wfn_param_is_float  // Parallel list of 0/1 flags indicating IEEE-754 f64 params
 
 // WHY: Tracks structured control block nesting depth for computing relative branch labels
 struct WasmLoopContext
@@ -67,6 +70,8 @@ struct WasmStructDef
     wsd_fields          // List of field name strings
     wsd_is_union        // 1 if union (all fields share offset 0), 0 if struct
     wsd_type_id         // Unique 1..N runtime type tag for sovereign dyn Trait dispatch
+    wsd_float_fields    // Field names storing IEEE-754 f64 bits
+    wsd_str_fields      // Field names storing LPST string pointers
 
 // WHY: Encapsulates mutable compilation state for WebAssembly binary bytecode generation
 struct WasmSynthesizer
@@ -97,6 +102,12 @@ struct WasmSynthesizer
     ws_impl_type          // Active impl target struct/union name ("" outside impl blocks)
     ws_next_type_id       // Next unique runtime type ID (1..N) for struct/union tags
     ws_source_toks        // Full module token stream for default-arg evaluation
+    ws_float_fields       // Global fallback list of struct field names storing IEEE-754 f64
+    ws_str_fields         // Global fallback list of struct field names storing LPST strings
+    ws_float_lists        // Active local names of lists/dicts storing IEEE-754 f64 values
+    ws_str_lists          // Active local names of lists/dicts storing LPST string values
+    ws_last_expr_is_float_list // 1 if last compiled expression yielded a float list/dict
+    ws_last_expr_is_str_list   // 1 if last compiled expression yielded a string list/dict
 
 global g_wasm_freestanding = 0
 global g_wasm_ssa_codegen = 0
@@ -424,9 +435,75 @@ fn wasm_emit_i64_rem_s byte_list
     push(byte_list, WASM_OP_I64_REM_S)
     return byte_list.len()
 
+// WHY: Sovereign runtime tag magic stored at [dict_hdr + 0] ("DICT" = 0x44494354)
+// so polymorphic indexing/len cleanly distinguish dicts from lists at runtime.
+WASM_DICT_MAGIC = 1145652052
+
 fn wasm_emit_i64_and byte_list
     // WHY: Emits 0x83. Pops two i64s, pushes left & right.
     push(byte_list, 131)
+    return byte_list.len()
+
+fn wasm_emit_i64_or byte_list
+    // WHY: Emits 0x84. Pops two i64s, pushes left | right.
+    push(byte_list, 132)
+    return byte_list.len()
+
+fn wasm_emit_i64_xor byte_list
+    // WHY: Emits 0x85. Pops two i64s, pushes left ^ right.
+    push(byte_list, 133)
+    return byte_list.len()
+
+fn wasm_emit_i64_shl byte_list
+    // WHY: Emits 0x86. Pops two i64s, pushes left << right.
+    push(byte_list, 134)
+    return byte_list.len()
+
+fn wasm_emit_i64_shr_u byte_list
+    // WHY: Emits 0x88. Pops two i64s, pushes unsigned right shift.
+    push(byte_list, 136)
+    return byte_list.len()
+
+fn wasm_emit_i64_lt_u byte_list
+    // WHY: Emits 0x54. Unsigned less-than producing i32 boolean.
+    push(byte_list, 84)
+    return byte_list.len()
+
+fn wasm_emit_i64_gt_u byte_list
+    // WHY: Emits 0x56. Unsigned greater-than producing i32 boolean.
+    push(byte_list, 86)
+    return byte_list.len()
+
+fn wasm_emit_i64_ge_u byte_list
+    // WHY: Emits 0x5A. Unsigned greater-or-equal producing i32 boolean.
+    push(byte_list, 90)
+    return byte_list.len()
+
+fn wasm_emit_i64_div_u byte_list
+    // WHY: Emits 0x80. Unsigned 64-bit integer division.
+    push(byte_list, 128)
+    return byte_list.len()
+
+fn wasm_emit_i64_rem_u byte_list
+    // WHY: Emits 0x82. Unsigned 64-bit integer remainder.
+    push(byte_list, 130)
+    return byte_list.len()
+
+fn wasm_emit_i32_eq byte_list
+    // WHY: Emits 0x46. Pops two i32s, pushes i32 boolean (1 if equal).
+    push(byte_list, 70)
+    return byte_list.len()
+
+fn wasm_emit_memory_size byte_list
+    // WHY: Emits 0x3F 0x00 (memory.size memidx=0). Pushes current page count (i32, 64KB per page).
+    push(byte_list, 63)
+    push(byte_list, 0)
+    return byte_list.len()
+
+fn wasm_emit_memory_grow byte_list
+    // WHY: Emits 0x40 0x00 (memory.grow memidx=0). Pops delta pages (i32), pushes prev pages or -1 on OOM.
+    push(byte_list, 64)
+    push(byte_list, 0)
     return byte_list.len()
 
 // WHY: IEEE-754 f64 arithmetic, comparison, and reinterpret/convert opcodes
@@ -454,8 +531,20 @@ fn wasm_emit_f64_ge byte_list
     push(byte_list, 102)
     return byte_list.len()
 
+fn wasm_emit_f64_abs byte_list
+    push(byte_list, 153)
+    return byte_list.len()
+
 fn wasm_emit_f64_neg byte_list
     push(byte_list, 154)
+    return byte_list.len()
+
+fn wasm_emit_f64_floor byte_list
+    push(byte_list, 156)
+    return byte_list.len()
+
+fn wasm_emit_f64_trunc byte_list
+    push(byte_list, 157)
     return byte_list.len()
 
 fn wasm_emit_f64_add byte_list

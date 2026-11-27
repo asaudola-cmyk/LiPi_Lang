@@ -114,17 +114,17 @@ fn main
     
     tls_engine = tls13_record_engine_new()
     
-    // Formulate ClientHello record
+    // Formulate RFC 8446 ClientHello record with valid 32-byte X25519 key share
     ch_bytes = list()
     push(ch_bytes, 22) // Handshake record
     push(ch_bytes, 3)  // Legacy 0x03
     push(ch_bytes, 3)  // 0x03
     push(ch_bytes, 0)
-    push(ch_bytes, 85) // Length
+    push(ch_bytes, 96) // Record payload length
     push(ch_bytes, 1)  // ClientHello
     push(ch_bytes, 0)
     push(ch_bytes, 0)
-    push(ch_bytes, 81)
+    push(ch_bytes, 92) // Handshake body length
     push(ch_bytes, 3)
     push(ch_bytes, 3)
     i = 0
@@ -139,8 +139,8 @@ fn main
     push(ch_bytes, 1)
     push(ch_bytes, 0)
     push(ch_bytes, 0)
-    push(ch_bytes, 38) // Ext length
-    // Ext: supported_versions (43)
+    push(ch_bytes, 49) // Extensions total length (7 + 42)
+    // Ext: supported_versions (43), total 7 bytes
     push(ch_bytes, 0)
     push(ch_bytes, 43)
     push(ch_bytes, 0)
@@ -148,18 +148,26 @@ fn main
     push(ch_bytes, 2)
     push(ch_bytes, 3)
     push(ch_bytes, 4)  // TLS 1.3 (0x0304)
-    // Ext: key_share (51)
+    // Ext: key_share (51), total 42 bytes (header 4 + client_shares_len 2 + group 2 + key_len 2 + key 32)
     push(ch_bytes, 0)
     push(ch_bytes, 51)
     push(ch_bytes, 0)
-    push(ch_bytes, 27)
+    push(ch_bytes, 38)
     push(ch_bytes, 0)
-    push(ch_bytes, 29) // X25519
+    push(ch_bytes, 36) // client_shares length
     push(ch_bytes, 0)
-    push(ch_bytes, 23)
+    push(ch_bytes, 29) // X25519 (0x001D)
+    push(ch_bytes, 0)
+    push(ch_bytes, 32) // Exact 32-byte X25519 public key
+    c_priv32 = list()
     i = 0
-    while i < 23
-        push(ch_bytes, 127)
+    while i < 32
+        push(c_priv32, (i * 7 + 13) & 255)
+        i = i + 1
+    c_pub32 = x25519_public_key(c_priv32)
+    i = 0
+    while i < 32
+        push(ch_bytes, get(c_pub32, i) & 255)
         i = i + 1
     
     session = tls13_engine_process_handshake(tls_engine, ch_bytes)

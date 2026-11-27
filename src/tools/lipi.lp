@@ -439,7 +439,8 @@ fn handle_run file_path comp_flags run_args is_jit
     syscall(87, tmp_bin, 0, 0, 0, 0, 0)
 
     if is_jit == 1
-        say "\033[1;35m[LIPI JIT]\033[0m Initializing in-memory JIT execution engine for " + file_path + "..."
+        // WHY: Report AOT ephemeral execution honestly rather than claiming zero-disk in-memory JIT.
+        say "\033[1;35m[LIPI RUN --jit]\033[0m Fast AOT compile-and-run mode (ephemeral native ELF64) for " + file_path + "..."
     else
         say "\033[1;34m[LIPI RUN]\033[0m Compiling " + file_path + "..."
     end
@@ -463,9 +464,9 @@ fn handle_run file_path comp_flags run_args is_jit
     end
 
     if is_jit == 1
-        say "⚡ \033[1;32mJIT Engine: Executing machine code purely in RAM (Zero Disk Latency)...\033[0m"
+        say "⚡ \033[1;32mExecuting compiled native ELF64 binary (AOT ephemeral runner)...\033[0m"
     else
-        say "⚡ Executing in-memory binary..."
+        say "⚡ Executing compiled native binary..."
     end
 
     say "--------------------------------------------------"

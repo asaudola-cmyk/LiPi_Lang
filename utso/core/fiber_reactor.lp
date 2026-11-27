@@ -145,12 +145,49 @@ fn fiber_execute_slice desc
     elif task_type == 4
         // WHY: True silicon green thread.
         // arg points to a fiber stack context [saved_sp, target_sp].
-        // Invokes native hardware fiber_context_switch to perform callee-saved register
-        // preservation and RSP stack pivot without userspace state-machine emulation.
+        // 1. Preserves the fiber's initial stack top in desc+32 so multi-yield resumes never truncate
+        //    outer fiber call frames from GC scanning.
+        // 2. Registers a temporary 64B GC caller-stack bridge at [slab+360] (when not already inside
+        //    async_sched) so gc_collect() inside the fiber scans BOTH the active fiber stack AND the
+        //    suspended caller/main stack [sp_now - 64 .. saved_sb), preventing UAF of caller locals.
+        // 3. Restores [slab+80] and [slab+360] unconditionally on normal return OR exception unwind.
         if arg > 0
             target_sp = mem_read(arg, 8)
             if target_sp > 0
-                fiber_context_switch(arg, target_sp)
+                slab = slab_buckets_ptr()
+                saved_sb = mem_read(slab, 80)
+                prev_sched = mem_read(slab, 360)
+                fiber_sb = mem_read(desc, 32)
+                if fiber_sb <= target_sp or (fiber_sb - target_sp) > 16777216
+                    fiber_sb = target_sp + 56
+                    mem_write(desc, 32, fiber_sb)
+                end
+                gc_bridge = 0
+                if prev_sched == 0
+                    gc_bridge = malloc(64)
+                    mem_zero(gc_bridge, 64)
+                    mem_write(gc_bridge, 0, 1)
+                    mem_write(gc_bridge, 8, stack_pointer() - 64)
+                    mem_write(gc_bridge, 48, saved_sb)
+                    mem_write(gc_bridge, 56, 0)
+                    mem_write(slab, 360, gc_bridge)
+                end
+                mem_write(slab, 80, fiber_sb)
+                try
+                    fiber_context_switch(arg, target_sp)
+                catch f_err
+                    mem_write(slab, 80, saved_sb)
+                    if prev_sched == 0
+                        mem_write(slab, 360, 0)
+                        free(gc_bridge, 64)
+                    end
+                    throw f_err
+                end
+                mem_write(slab, 80, saved_sb)
+                if prev_sched == 0
+                    mem_write(slab, 360, 0)
+                    free(gc_bridge, 64)
+                end
             end
         end
         mem_write(desc, 8, FIBER_STATE_DONE)

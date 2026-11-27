@@ -12,45 +12,46 @@ import "compiler/backend/jit/jit_memory"
 @! ----------------------------------------------------------------------------
 
 @! Low-level AMD64 indirect call bridges executing function pointers in RAM
-@fn lipi_jit_call0(fn_ptr)
+@fn lipi_jit_call0(target_fn)
   // WHY: Direct Silicon jump to executable JIT machine code page without
   // libc or trampolines, conforming strictly to System V AMD64 ABI.
-  @if fn_ptr == 0
+  // Parameter named target_fn (not fn_ptr) so it never collides with Lipi's fn_ptr() builtin.
+  @if target_fn == 0
     return 0
   @end
-  return fn_ptr()
+  return target_fn()
 @end
 
-@fn lipi_jit_call1(fn_ptr, a1)
+@fn lipi_jit_call1(target_fn, a1)
   // WHY: AMD64 indirect call passing a1 in %rdi
-  @if fn_ptr == 0
+  @if target_fn == 0
     return 0
   @end
-  return fn_ptr(a1)
+  return target_fn(a1)
 @end
 
-@fn lipi_jit_call2(fn_ptr, a1, a2)
+@fn lipi_jit_call2(target_fn, a1, a2)
   // WHY: AMD64 indirect call passing a1 in %rdi, a2 in %rsi
-  @if fn_ptr == 0
+  @if target_fn == 0
     return 0
   @end
-  return fn_ptr(a1, a2)
+  return target_fn(a1, a2)
 @end
 
-@fn lipi_jit_call3(fn_ptr, a1, a2, a3)
+@fn lipi_jit_call3(target_fn, a1, a2, a3)
   // WHY: AMD64 indirect call passing a1 in %rdi, a2 in %rsi, a3 in %rdx
-  @if fn_ptr == 0
+  @if target_fn == 0
     return 0
   @end
-  return fn_ptr(a1, a2, a3)
+  return target_fn(a1, a2, a3)
 @end
 
-@fn lipi_jit_call4(fn_ptr, a1, a2, a3, a4)
+@fn lipi_jit_call4(target_fn, a1, a2, a3, a4)
   // WHY: AMD64 indirect call passing 4 arguments via System V ABI registers
-  @if fn_ptr == 0
+  @if target_fn == 0
     return 0
   @end
-  return fn_ptr(a1, a2, a3, a4)
+  return target_fn(a1, a2, a3, a4)
 @end
 
 @! Invokes a 0-argument JIT-compiled function pointer in RAM

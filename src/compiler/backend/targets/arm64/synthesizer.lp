@@ -215,6 +215,16 @@ fn arm64_synth_compile_program_ssa tokens ssa_lower_res
 
     // 4. Top-level exit epilogue
     arm64_emit_defers(s, tokens)
+    if has_main == 1 and s.a64_freestanding == 0
+        // WHY: Catch any exception unwinding out of auto-called main() (X27 != 0):
+        // print "Uncaught exception: <val>\n" to stderr and exit with code 1 (never 0 on `throw 0`).
+        s.a64_needs_uncaught_throw = 1
+        arm64_emit_cmp_x(s, 27, 31)
+        skip_main_ut = s.synth_code.len()
+        arm64_emit_b_cond(s, 0, 0)
+        arm64_synth_emit_call_helper(s, "__uncaught_throw")
+        arm64_patch_b_cond(s, skip_main_ut, 0, s.synth_code.len())
+    end
     if has_main == 0 and s.a64_called_main == 0
         arm64_emit_movz_x(s, 0, 0, 0) // exit code 0
     if s.a64_freestanding == 1
@@ -259,6 +269,11 @@ fn arm64_synth_compile_program_ssa tokens ssa_lower_res
     if s.a64_needs_buf == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_buf_helpers(s)
+    if s.a64_needs_uncaught_throw == 1
+        s.a64_needs_str_helpers = 1
+        s.synth_needs_alloc = 1
+        arm64_synth_emit_uncaught_throw_helper(s)
+    end
     if s.a64_needs_str_helpers == 1
         s.synth_needs_alloc = 1
         arm64_synth_emit_str_helpers(s)
@@ -293,6 +308,12 @@ fn arm64_synth_compile_program_ssa tokens ssa_lower_res
             found_rel = 1
         elif cr.a64_cr_target_name == "__uint_to_str"
             resolved_addr = s.a64_uint_to_str_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__float_to_str"
+            resolved_addr = s.a64_float_to_str_off
+            found_rel = 1
+        elif cr.a64_cr_target_name == "__uncaught_throw"
+            resolved_addr = s.a64_uncaught_throw_off
             found_rel = 1
         elif cr.a64_cr_target_name == "__str_concat"
             resolved_addr = s.a64_str_concat_off

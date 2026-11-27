@@ -529,6 +529,7 @@ fn arm64_synth_compile_statement s toks pos_box
         end
 
         fields = list()
+        field_types = list()
         while get(pos_box, 0) < toks.len()
             arm64_synth_skip_whitespace_tokens(toks, pos_box)
             cur_p = get(pos_box, 0)
@@ -564,14 +565,17 @@ fn arm64_synth_compile_statement s toks pos_box
 
             if cur_k == TOK_IDENT()
                 push(fields, cur_txt)
+                ft_nm_s = ""
                 list_set(pos_box, 0, cur_p + 1)
-                // Skip optional type annotation: : i64
+                // Capture optional type annotation: : i64 / : f64 / : u64
                 if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_COLON()
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                        ft_nm_s = toks[get(pos_box, 0)].tok_text
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                     end
                 end
+                push(field_types, ft_nm_s)
             else
                 list_set(pos_box, 0, cur_p + 1)
             end
@@ -582,6 +586,7 @@ fn arm64_synth_compile_statement s toks pos_box
             sdef.sd_fields = fields
             sdef.a64_sd_is_union = is_union_decl
             sdef.a64_sd_type_id = s.a64_next_type_id
+            sdef.a64_sd_field_types = field_types
             s.a64_next_type_id = s.a64_next_type_id + 1
             push(s.synth_structs, sdef)
         end
@@ -693,7 +698,7 @@ fn arm64_synth_compile_statement s toks pos_box
         end
     end
 
-    // ── 5. Struct Field Assignment: obj.field = expr ─────────────────────────────
+    // ── 5. Struct Field Assignment: obj.field (= | += | -= | *= | /= | %=) expr ──
     if k == TOK_IDENT()
         p1 = pos + 1
         p2 = pos + 2
@@ -706,38 +711,103 @@ fn arm64_synth_compile_statement s toks pos_box
             if t1.tok_kind == TOK_DOT() or t1.tok_text == "."
                 is_dot = 1
             is_assign = 0
-            if t3.tok_kind == TOK_ASSIGN() or t3.tok_text == "="
+            f_comp_op = 0
+            if t3.tok_kind == TOK_ASSIGN() or (t3.tok_kind != TOK_STR() and t3.tok_text == "=")
                 is_assign = 1
+            elif t3.tok_kind == TOK_PLUSEQ() or (t3.tok_kind != TOK_STR() and t3.tok_text == "+=")
+                is_assign = 1
+                f_comp_op = TOK_PLUS()
+            elif t3.tok_kind == TOK_MINUSEQ() or (t3.tok_kind != TOK_STR() and t3.tok_text == "-=")
+                is_assign = 1
+                f_comp_op = TOK_MINUS()
+            elif t3.tok_kind == TOK_STAREQ() or (t3.tok_kind != TOK_STR() and t3.tok_text == "*=")
+                is_assign = 1
+                f_comp_op = TOK_STAR()
+            elif t3.tok_kind == TOK_SLASHEQ() or (t3.tok_kind != TOK_STR() and t3.tok_text == "/=")
+                is_assign = 1
+                f_comp_op = TOK_SLASH()
+            elif t3.tok_kind == TOK_PERCENTEQ() or (t3.tok_kind != TOK_STR() and t3.tok_text == "%=")
+                is_assign = 1
+                f_comp_op = TOK_PERCENT()
+            end
 
             if is_dot == 1 and arm64_is_ident_token(t2.tok_kind) == 1 and is_assign == 1
                 obj_name = txt
                 field_name = t2.tok_text
-                list_set(pos_box, 0, p3 + 1) // Consume obj, '.', field, '='
+                list_set(pos_box, 0, p3 + 1) // Consume obj, '.', field, op
 
-                // Evaluate expr into X0
+                // Evaluate RHS expr into X0 (plus X1 tag if dyn_tagged)
                 arm64_synth_compile_expr(s, toks, pos_box)
-
-                // Save value: push X0
+                f_rhs_t = s.a64_last_expr_type
+                f_rhs_u = s.a64_last_is_uint
                 arm64_push_reg(s, 0)
+                if f_rhs_t == "dyn_tagged"
+                    arm64_push_reg(s, 1)
+                end
 
-                // Load obj pointer into X1
+                // Load obj pointer into X1 and guard against null/low dereference
                 obj_off = arm64_synth_lookup_var(s, obj_name)
                 if obj_off > 0
                     arm64_emit_ldr_reg_sp(s, 1, obj_off)
                 else
                     arm64_emit_movz_x(s, 1, 0, 0)
-
-                // Pop value into X0
-                arm64_pop_reg(s, 0)
-
-                // Guard obj pointer (X1) against null/low dereference before store
+                end
                 arm64_emit_null_guard_reg(s, toks, 1)
+                arm64_emit_mov_reg(s, 13, 1) // X13 = obj_ptr (preserved across FP/ALU helpers)
 
-                // Store value to field: str X0, [X1, #f_off]
+                // Pop RHS (and optional runtime tag into X11)
+                if f_rhs_t == "dyn_tagged"
+                    arm64_pop_reg(s, 11)
+                end
+                arm64_pop_reg(s, 10) // X10 = rhs
+
                 obj_sname = arm64_synth_get_var_struct(s, obj_name)
                 f_off = arm64_synth_get_field_offset(s, obj_sname, field_name)
+                f_decl_t = arm64_synth_get_field_type(s, obj_sname, field_name)
+                f_is_flt = arm64_is_float_type(f_decl_t)
+                f_is_u = arm64_is_uint_type(f_decl_t)
                 scaled_fo = (f_off / 8) & 4095
-                st_word = 4177526784 | (scaled_fo << 10) | (1 << 5) | 0
+
+                if f_comp_op == 0
+                    arm64_emit_mov_reg(s, 0, 10)
+                    if f_is_flt == 1 and f_rhs_t != "float"
+                        // WHY: Promote integer RHS to IEEE-754 f64 when storing into an f64 struct field.
+                        arm64_emit_load_fp_reg(s, 0, 0, f_rhs_t, f_rhs_u, 11)
+                        arm64_emit_fmov_x_d(s, 0, 0)
+                    end
+                else
+                    // WHY: Load existing field into X0, perform hardware IEEE-754 f64 or guarded integer op.
+                    arm64_synth_emit32(s, 4181721088 | (scaled_fo << 10) | (13 << 5) | 0) // ldr x0, [x13, #f_off]
+                    if f_is_flt == 1 or f_rhs_t == "float"
+                        f_lhs_t = "int"
+                        if f_is_flt == 1 f_lhs_t = "float" end
+                        arm64_emit_load_fp_reg(s, 0, 0, f_lhs_t, f_is_u, 9)
+                        arm64_emit_load_fp_reg(s, 1, 10, f_rhs_t, f_rhs_u, 11)
+                        arm64_emit_fp_arith_op(s, f_comp_op)
+                    else
+                        arm64_emit_mov_reg(s, 1, 10)
+                        fc_u = f_is_u
+                        if f_rhs_u == 1 fc_u = 1 end
+                        if f_comp_op == TOK_PLUS()
+                            arm64_emit_add_x(s, 0, 0, 1)
+                        elif f_comp_op == TOK_MINUS()
+                            arm64_emit_sub_x(s, 0, 0, 1)
+                        elif f_comp_op == TOK_STAR()
+                            arm64_emit_mul_x(s, 0, 0, 1)
+                        elif f_comp_op == TOK_SLASH()
+                            if fc_u == 1 arm64_emit_udiv_x(s, 0, 0, 1) else arm64_emit_sdiv_x(s, 0, 0, 1) end
+                        elif f_comp_op == TOK_PERCENT()
+                            if fc_u == 1 arm64_emit_udiv_x(s, 2, 0, 1) else arm64_emit_sdiv_x(s, 2, 0, 1) end
+                            arm64_emit_mul_x(s, 2, 2, 1)
+                            arm64_emit_sub_x(s, 0, 0, 2)
+                            arm64_emit_cmp_x(s, 1, 31)
+                            arm64_synth_emit32(s, 2592080864) // csel x0, xzr, x0, eq
+                        end
+                    end
+                end
+
+                // Store value to field: str X0, [X13, #f_off]
+                st_word = 4177526784 | (scaled_fo << 10) | (13 << 5) | 0
                 arm64_synth_emit32(s, st_word)
                 return 0
 
@@ -802,6 +872,13 @@ fn arm64_synth_compile_statement s toks pos_box
                         arm64_emit_defers(s, toks)
                         arm64_emit_epilogue(s)
                         arm64_patch_b_cond(s, cs_npe_eq, 0, s.synth_code.len())
+                    elif s.a64_freestanding == 0
+                        s.a64_needs_uncaught_throw = 1
+                        arm64_emit_cmp_x(s, 27, 31)
+                        cs_npe_ut = s.synth_code.len()
+                        arm64_emit_b_cond(s, 0, 0)
+                        arm64_synth_emit_call_helper(s, "__uncaught_throw")
+                        arm64_patch_b_cond(s, cs_npe_ut, 0, s.synth_code.len())
                     end
                 else
                     if cs_rhs_type == "dyn_tagged"
@@ -1548,6 +1625,12 @@ fn arm64_synth_compile_statement s toks pos_box
         elif s.a64_in_function == 1
             arm64_emit_defers(s, toks)
             arm64_emit_epilogue(s)
+        elif s.a64_freestanding == 0
+            // WHY: Top-level uncaught throw runs defers, prints "Uncaught exception: <val>" to stderr, and exits 1.
+            arm64_emit_defers(s, toks)
+            s.a64_needs_uncaught_throw = 1
+            arm64_synth_emit_call_helper(s, "__uncaught_throw")
+        end
         return 0
 
     is_try = 0
@@ -1756,6 +1839,14 @@ fn arm64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, eq_pos + 1)
                 s.a64_last_struct = ""
                 arm64_synth_compile_expr(s, toks, pos_box)
+                if arm64_is_float_type(let_decl_type) == 1
+                    if s.a64_last_expr_type != "float"
+                        arm64_emit_load_fp_reg(s, 0, 0, s.a64_last_expr_type, s.a64_last_is_uint, 1)
+                        arm64_emit_fmov_x_d(s, 0, 0)
+                    end
+                    s.a64_last_expr_type = "float"
+                    s.a64_last_is_uint = 0
+                end
                 prev_lv = arm64_find_local_var(s, var_name)
                 eff_let_itype = let_decl_type
                 if eff_let_itype == "" and prev_lv != 0
@@ -1839,6 +1930,14 @@ fn arm64_synth_compile_statement s toks pos_box
             list_set(pos_box, 0, next_pos + 1) // Consume ident [: type] and '='
             s.a64_last_struct = ""
             arm64_synth_compile_expr(s, toks, pos_box)
+            if arm64_is_float_type(decl_type_a64) == 1
+                if s.a64_last_expr_type != "float"
+                    arm64_emit_load_fp_reg(s, 0, 0, s.a64_last_expr_type, s.a64_last_is_uint, 1)
+                    arm64_emit_fmov_x_d(s, 0, 0)
+                end
+                s.a64_last_expr_type = "float"
+                s.a64_last_is_uint = 0
+            end
             prev_lv = arm64_find_local_var(s, var_name)
             eff_as_itype = decl_type_a64
             if eff_as_itype == "" and prev_lv != 0
@@ -1904,19 +2003,43 @@ fn arm64_synth_compile_statement s toks pos_box
                 list_set(pos_box, 0, next_pos + ca_adv)
                 arm64_synth_compile_expr(s, toks, pos_box) // X0 = rhs
                 ca_rhs_u = s.a64_last_is_uint
-                arm64_emit_mov_reg(s, 1, 0) // X1 = rhs
+                ca_rhs_t = s.a64_last_expr_type
+                if ca_rhs_t == "dyn_tagged"
+                    arm64_emit_mov_reg(s, 11, 1)
+                end
+                arm64_emit_mov_reg(s, 10, 0) // X10 = rhs
+                arm64_emit_mov_reg(s, 1, 0)  // X1 = rhs
                 ca_lv = arm64_find_local_var(s, var_name)
                 ca_u = ca_rhs_u
+                ca_lhs_t = "int"
+                ca_lhs_u = 0
                 if ca_lv != 0
-                    if ca_lv.a64_lv_is_uint == 1 ca_u = 1 end
+                    if ca_lv.a64_lv_is_uint == 1
+                        ca_u = 1
+                        ca_lhs_u = 1
+                    end
+                    if ca_lv.a64_lv_prim_type != ""
+                        ca_lhs_t = ca_lv.a64_lv_prim_type
+                    end
                     arm64_emit_ldr_reg_sp(s, 0, ca_lv.lv_offset)
                     if ca_lv.a64_lv_is_boxed == 1
                         arm64_emit_ldr_x_off(s, 0, 0, 0)
                     end
+                    if ca_lhs_t == "dyn_tagged" and ca_lv.a64_lv_tag_off > 0
+                        arm64_emit_ldr_reg_sp(s, 9, ca_lv.a64_lv_tag_off)
+                    end
                 else
                     arm64_emit_movz_x(s, 0, 0, 0)
                 end
-                if ca_op == TOK_PLUS()
+                if (ca_lhs_t == "float" or ca_rhs_t == "float") and (ca_op == TOK_PLUS() or ca_op == TOK_MINUS() or ca_op == TOK_STAR() or ca_op == TOK_SLASH() or ca_op == TOK_PERCENT())
+                    arm64_emit_load_fp_reg(s, 0, 0, ca_lhs_t, ca_lhs_u, 9)
+                    arm64_emit_load_fp_reg(s, 1, 10, ca_rhs_t, ca_rhs_u, 11)
+                    arm64_emit_fp_arith_op(s, ca_op)
+                    if ca_lv != 0
+                        ca_lv.a64_lv_prim_type = "float"
+                        ca_lv.a64_lv_is_uint = 0
+                    end
+                elif ca_op == TOK_PLUS()
                     arm64_emit_add_x(s, 0, 0, 1)
                 elif ca_op == TOK_MINUS()
                     arm64_emit_sub_x(s, 0, 0, 1)
@@ -1928,6 +2051,9 @@ fn arm64_synth_compile_statement s toks pos_box
                     if ca_u == 1 arm64_emit_udiv_x(s, 2, 0, 1) else arm64_emit_sdiv_x(s, 2, 0, 1) end
                     arm64_emit_mul_x(s, 2, 2, 1)
                     arm64_emit_sub_x(s, 0, 0, 2)
+                    // WHY: Match cross-target `x %= 0 -> 0` instead of AArch64 `x - 0*0 == x`.
+                    arm64_emit_cmp_x(s, 1, 31)
+                    arm64_synth_emit32(s, 2592080864) // csel x0, xzr, x0, eq
                 elif ca_op == TOK_SHR()
                     if ca_lv != 0 and ca_lv.a64_lv_is_uint == 1 arm64_emit_lsrv_x(s, 0, 0, 1) else arm64_emit_asrv_x(s, 0, 0, 1) end
                 elif ca_op == TOK_SHL()
@@ -2039,11 +2165,12 @@ fn arm64_synth_compile_statement s toks pos_box
         s.a64_defer_starts = list()
         s.a64_defer_ends = list()
 
-        // Parse parameter names & unsigned/narrow/struct type annotations until ')', newline, '{', '->', or inline body keyword
+        // Parse parameter names & unsigned/narrow/float/struct type annotations until ')', newline, '{', '->', or inline body keyword
         params = list()
         param_is_uint = list()
         param_int_types = list()
         param_struct_types = list()
+        param_prim_types = list()
         fn_paren_depth = 0
         while get(pos_box, 0) < toks.len()
             p_tok = toks[get(pos_box, 0)]
@@ -2113,6 +2240,7 @@ fn arm64_synth_compile_statement s toks pos_box
                 p_uflag = 0
                 p_itype = ""
                 p_stype = ""
+                p_prim = "int"
                 if pname == "self" and eff_impl_type != ""
                     p_stype = eff_impl_type
                 end
@@ -2131,6 +2259,11 @@ fn arm64_synth_compile_statement s toks pos_box
                         end
                     elif get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
                         pt_txt = toks[get(pos_box, 0)].tok_text
+                        if arm64_is_float_type(pt_txt) == 1
+                            p_prim = "float"
+                        elif pt_txt == "str" or pt_txt == "string"
+                            p_prim = "str"
+                        end
                         if arm64_is_uint_type(pt_txt) == 1
                             p_uflag = 1
                         end
@@ -2171,6 +2304,7 @@ fn arm64_synth_compile_statement s toks pos_box
                 push(param_is_uint, p_uflag)
                 push(param_int_types, p_itype)
                 push(param_struct_types, p_stype)
+                push(param_prim_types, p_prim)
             else
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
@@ -2311,6 +2445,9 @@ fn arm64_synth_compile_statement s toks pos_box
             end
             if plv_u != 0 and pi < param_struct_types.len()
                 plv_u.a64_lv_struct_type = param_struct_types[pi]
+            end
+            if plv_u != 0 and pi < param_prim_types.len()
+                plv_u.a64_lv_prim_type = param_prim_types[pi]
             end
             if pi < 8
                 if arm64_is_narrow_int_type(p_it) == 1

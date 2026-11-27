@@ -623,10 +623,14 @@ fn x86_synth_expr_primary s toks pos_box
         x86_synth_emit_byte(s, 208)
         return 0
 
-    // 0d. Address-of function / local (&fn_name)
+    // 0d. Address-of function / local (&fn_name, &local, &mut local)
     elif (k == TOK_AMP() or (k != TOK_STR() and txt == "&")) and pos + 1 < toks.len()
         list_set(pos_box, 0, pos + 1)
         np_a = get(pos_box, 0)
+        if np_a + 1 < toks.len() and (toks[np_a].tok_kind == TOK_KW_MUT() or (toks[np_a].tok_kind != TOK_STR() and toks[np_a].tok_text == "mut"))
+            np_a = np_a + 1
+            list_set(pos_box, 0, np_a)
+        end
         if np_a < toks.len() and x86_synth_is_ident_token(toks[np_a].tok_kind) == 1
             tname = toks[np_a].tok_text
             list_set(pos_box, 0, np_a + 1)

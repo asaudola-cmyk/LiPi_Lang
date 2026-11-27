@@ -65,6 +65,8 @@ struct H2Client
     h2_tls_res_master
     h2_tls_resumed
     h2_tls_ph_buf
+    h2_tls_c_app_sec
+    h2_tls_s_app_sec
 end
 
 struct H2Response
@@ -696,16 +698,38 @@ fn _h2c_wire_read_exact cli need
         cli.h2_tls_s_seq = cli.h2_tls_s_seq + 1
         if unw[1] == 21 return list() end // Encrypted Alert (e.g. close_notify)
         if unw[1] == 22
-            // Capture post-handshake RFC 8446 NewSessionTicket (type 4) across coalesced OR fragmented records
+            // WHY: Handle post-handshake RFC 8446 NewSessionTicket (type 4) AND KeyUpdate (type 24).
             _h2c_append(cli.h2_tls_ph_buf, unw[2])
             ph_p = 0
             while ph_p + 4 <= len(cli.h2_tls_ph_buf)
                 ph_t = get(cli.h2_tls_ph_buf, ph_p) & 255
                 ph_l = ((get(cli.h2_tls_ph_buf, ph_p + 1) & 255) << 16) | ((get(cli.h2_tls_ph_buf, ph_p + 2) & 255) << 8) | (get(cli.h2_tls_ph_buf, ph_p + 3) & 255)
                 if ph_p + 4 + ph_l > len(cli.h2_tls_ph_buf) break end
+                ph_msg = _h2c_slice(cli.h2_tls_ph_buf, ph_p, ph_p + 4 + ph_l)
                 if ph_t == 4 and len(cli.h2_tls_res_master) > 0
-                    nst = _h2c_slice(cli.h2_tls_ph_buf, ph_p, ph_p + 4 + ph_l)
-                    tls13_parse_new_session_ticket(nst, cli.h2_tls_cipher, cli.h2_tls_res_master, cli.h2_tls_host, "h2")
+                    tls13_parse_new_session_ticket(ph_msg, cli.h2_tls_cipher, cli.h2_tls_res_master, cli.h2_tls_host, "h2")
+                elif ph_t == 24
+                    ku_req = tls13_parse_key_update_msg(ph_msg)
+                    if ku_req < 0 or len(cli.h2_tls_s_app_sec) == 0
+                        return list()
+                    end
+                    s_ku = tls13_key_update_next(cli.h2_tls_cipher, cli.h2_tls_s_app_sec)
+                    cli.h2_tls_s_app_sec = s_ku.tku_secret
+                    cli.h2_tls_s_key = s_ku.tku_key
+                    cli.h2_tls_s_iv = s_ku.tku_iv
+                    cli.h2_tls_s_seq = 0
+                    if ku_req == 1
+                        ku_reply = tls13_build_key_update_msg(0)
+                        ku_rec = _h2c_tls_wrap(cli.h2_tls_cipher, cli.h2_tls_c_key, cli.h2_tls_c_iv, cli.h2_tls_c_seq, 22, ku_reply)
+                        if _h2c_fd_write_exact(cli.h2_fd, ku_rec) != 1
+                            return list()
+                        end
+                        c_ku = tls13_key_update_next(cli.h2_tls_cipher, cli.h2_tls_c_app_sec)
+                        cli.h2_tls_c_app_sec = c_ku.tku_secret
+                        cli.h2_tls_c_key = c_ku.tku_key
+                        cli.h2_tls_c_iv = c_ku.tku_iv
+                        cli.h2_tls_c_seq = 0
+                    end
                 end
                 ph_p = ph_p + 4 + ph_l
             end
@@ -726,7 +750,7 @@ fn _h2c_new_client fd is_tls alpn
         fd, is_tls, 0, list(), list(), list(), list(), 0, 0, alpn, list(),
         1, 16384, 65535, list(), list(),
         list(), list(), list(), list(), list(), list(), list(),
-        0, 0, 0, list(), 1, "", list(), 0, list()
+        0, 0, 0, list(), 1, "", list(), 0, list(), list(), list()
     )
 end
 
@@ -952,6 +976,8 @@ fn h2_connect_tls host_ip sni_host port verify_cert
     c_app_iv = list()
     s_app_key = list()
     s_app_iv = list()
+    cat = list()
+    sat = list()
     c_fin_msg = list()
     ms_sec = list()
     if cipher == 4866
@@ -1006,6 +1032,8 @@ fn h2_connect_tls host_ip sni_host port verify_cert
     cli.h2_tls_host = sni_host
     cli.h2_tls_res_master = res_master
     cli.h2_tls_resumed = used_psk
+    cli.h2_tls_c_app_sec = cat
+    cli.h2_tls_s_app_sec = sat
     if _h2c_send_client_preface(cli) != 1
         syscall(3, fd, 0, 0, 0, 0, 0)
         cli.h2_connected = 0

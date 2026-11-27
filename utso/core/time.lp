@@ -8,34 +8,64 @@
 include "utso/core/memory.lp"
 
 // ── ১. মিলিসেকেন্ড স্লিপ (High-Resolution Sleep via SYS_nanosleep: Syscall 35) ──
-// WHY: সিপিউ সাইকেল অপচয় না করে নির্দিষ্ট মিলিসেকেন্ডের জন্য কার্নেল দ্বারা প্রসেস সাসপেন্ড করা।
+// WHY: Retries SYS_nanosleep on EINTR (-4) using Linux's `rem` timespec output so
+// STW GC SIGURG signals never truncate sleep duration prematurely.
 // Linux struct timespec: { int64_t tv_sec (offset 0), int64_t tv_nsec (offset 8) }
+fn _time_nanosleep_eintr sec nsec
+    if sec < 0 or (sec == 0 and nsec <= 0)
+        return 0
+    end
+    buf = malloc(32)
+    if buf <= 0
+        return -1
+    end
+    // WHY: Pass `buf` and `buf + 16` directly without aliasing `buf` into another variable
+    // so `utso/core/time.lp` stays 100% clean under `--kavach --strict-ownership`.
+    mem_write(buf, 0, sec)
+    mem_write(buf, 8, nsec)
+    mem_write(buf, 16, 0)
+    mem_write(buf, 24, 0)
+    res = syscall(35, buf, buf + 16, 0, 0, 0, 0)
+    while res == (0 - 4)
+        r_sec = mem_read(buf, 16)
+        r_nsec = mem_read(buf, 24)
+        if r_sec <= 0 and r_nsec <= 0
+            res = 0
+            break
+        end
+        mem_write(buf, 0, r_sec)
+        mem_write(buf, 8, r_nsec)
+        mem_write(buf, 16, 0)
+        mem_write(buf, 24, 0)
+        res = syscall(35, buf, buf + 16, 0, 0, 0, 0)
+    end
+    free(buf, 32)
+    return res
+end
+
 fn মিলিসেকেন্ড_ঘুম মিলি
+    if মিলি <= 0
+        return 0
+    end
     sec = মিলি / 1000
     rem_ms = মিলি % 1000
     nsec = rem_ms * 1000000
-    ts_buf = malloc(16)
-    mem_write(ts_buf, 0, sec)
-    mem_write(ts_buf, 8, nsec)
-    res = syscall(35, ts_buf, 0, 0, 0, 0, 0)
-    free(ts_buf, 16)
-    return res
+    return _time_nanosleep_eintr(sec, nsec)
+end
 
 fn sleep_ms ms
     return মিলিসেকেন্ড_ঘুম(ms)
+end
 
 // ── ২. সেকেন্ড স্লিপ (Standard Sleep in Seconds via SYS_nanosleep: Syscall 35) ──
-// WHY: নির্দিষ্ট পূর্ণ সেকেন্ডের জন্য এক্সিকিউশন পজ করা।
+// WHY: নির্দিষ্ট পূর্ণ সেকেন্ডের জন্য এক্সিকিউশন পজ করা (EINTR-safe)।
 fn ঘুম সেকেন্ড
-    ts_buf = malloc(16)
-    mem_write(ts_buf, 0, সেকেন্ড)
-    mem_write(ts_buf, 8, 0)
-    res = syscall(35, ts_buf, 0, 0, 0, 0, 0)
-    free(ts_buf, 16)
-    return res
+    return _time_nanosleep_eintr(সেকেন্ড, 0)
+end
 
 fn sleep sec
     return ঘুম(sec)
+end
 
 // ── ৩. বর্তমান ইউনিক্স টাইমস্ট্যাম্প সেকেন্ড (Current Epoch Time in Seconds) ──────
 // WHY: CLOCK_REALTIME (0) ব্যবহার করে কার্নেল থেকে সঠিক ইউনিক্স epoch সেকেন্ড প্রাপ্তি।
@@ -572,5 +602,565 @@ fn time_parse_http_date s
     if dt.dt_valid != 1 or dt.dt_weekday != exp_wd
         return _time_invalid_dt()
     end
+    return dt
+end
+
+// ── ৭. RFC 8536 TZif v1/v2/v3 Binary Timezone Database Parser ─────────────────
+// WHY: Enables genuine IANA timezone & DST resolution directly from `/etc/localtime`
+// and `/usr/share/zoneinfo/*` in 100% Pure LiPi (0% libc `localtime_r`, 0% external deps).
+
+struct TzInfo
+    tz_valid
+    tz_name
+    tz_version
+    tz_trans_times
+    tz_trans_types
+    tz_tt_utoff
+    tz_tt_isdst
+    tz_tt_abbrs
+    tz_posix_tz
+    tz_default_off
+end
+
+fn _tzif_invalid name
+    tz = TzInfo()
+    tz.tz_valid = 0
+    tz.tz_name = name
+    tz.tz_version = 0
+    tz.tz_trans_times = list()
+    tz.tz_trans_types = list()
+    tz.tz_tt_utoff = list()
+    tz.tz_tt_isdst = list()
+    tz.tz_tt_abbrs = list()
+    tz.tz_posix_tz = ""
+    tz.tz_default_off = 0
+    return tz
+end
+
+fn _tzif_u32_be ptr off
+    b0 = mem_byte_read(ptr, off) & 255
+    b1 = mem_byte_read(ptr, off + 1) & 255
+    b2 = mem_byte_read(ptr, off + 2) & 255
+    b3 = mem_byte_read(ptr, off + 3) & 255
+    return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+end
+
+fn _tzif_i32_be ptr off
+    u = _tzif_u32_be(ptr, off)
+    if u >= 2147483648
+        return u - 4294967296
+    end
+    return u
+end
+
+fn _tzif_i64_be ptr off
+    hi = _tzif_i32_be(ptr, off)
+    lo = _tzif_u32_be(ptr, off + 4)
+    return (hi * 4294967296) + lo
+end
+
+fn _tzif_read_cstr ptr base max_len start_idx
+    if start_idx < 0 or start_idx >= max_len
+        return ""
+    end
+    e = start_idx
+    while e < max_len and (mem_byte_read(ptr, base + e) & 255) != 0
+        e = e + 1
+    end
+    if e <= start_idx
+        return ""
+    end
+    return bytes_to_str(ptr + base + start_idx, e - start_idx)
+end
+
+fn _tzif_check_magic ptr off total_len
+    if off + 44 > total_len
+        return 0
+    end
+    if (mem_byte_read(ptr, off) & 255) != 84 or (mem_byte_read(ptr, off + 1) & 255) != 90 or (mem_byte_read(ptr, off + 2) & 255) != 105 or (mem_byte_read(ptr, off + 3) & 255) != 102
+        return 0
+    end
+    return 1
+end
+
+fn _tzif_parse_raw_buf ptr total_len name
+    // WHY: RFC 8536 specifies v1 (32-bit transitions) followed by an optional 64-bit
+    // v2/v3 header + data block + trailing POSIX TZ footer (`\n<rule>\n`).
+    if _tzif_check_magic(ptr, 0, total_len) != 1
+        return _tzif_invalid(name)
+    end
+    ver_b = mem_byte_read(ptr, 4) & 255
+    isut1 = _tzif_u32_be(ptr, 20)
+    isstd1 = _tzif_u32_be(ptr, 24)
+    leap1 = _tzif_u32_be(ptr, 28)
+    time1 = _tzif_u32_be(ptr, 32)
+    type1 = _tzif_u32_be(ptr, 36)
+    char1 = _tzif_u32_be(ptr, 40)
+    if type1 <= 0 or char1 <= 0
+        return _tzif_invalid(name)
+    end
+
+    v1_body_sz = (time1 * 5) + (type1 * 6) + char1 + (leap1 * 8) + isstd1 + isut1
+    v2_off = 44 + v1_body_sz
+    if v2_off > total_len
+        return _tzif_invalid(name)
+    end
+
+    use_64 = 0
+    hdr_off = 0
+    ver_num = 1
+    if ver_b >= 50 and _tzif_check_magic(ptr, v2_off, total_len) == 1
+        use_64 = 1
+        hdr_off = v2_off
+        if ver_b == 50
+            ver_num = 2
+        elif ver_b == 51
+            ver_num = 3
+        else
+            ver_num = 4
+        end
+    end
+
+    isut = _tzif_u32_be(ptr, hdr_off + 20)
+    isstd = _tzif_u32_be(ptr, hdr_off + 24)
+    leap = _tzif_u32_be(ptr, hdr_off + 28)
+    timecnt = _tzif_u32_be(ptr, hdr_off + 32)
+    typecnt = _tzif_u32_be(ptr, hdr_off + 36)
+    charcnt = _tzif_u32_be(ptr, hdr_off + 40)
+    if typecnt <= 0 or charcnt <= 0
+        return _tzif_invalid(name)
+    end
+
+    tsize = 4
+    lsize = 8
+    if use_64 == 1
+        tsize = 8
+        lsize = 12
+    end
+    pos = hdr_off + 44
+    need_end = pos + (timecnt * (tsize + 1)) + (typecnt * 6) + charcnt + (leap * lsize) + isstd + isut
+    if need_end > total_len
+        return _tzif_invalid(name)
+    end
+
+    trans_times = list()
+    i = 0
+    while i < timecnt
+        if use_64 == 1
+            push(trans_times, _tzif_i64_be(ptr, pos + (i * 8)))
+        else
+            push(trans_times, _tzif_i32_be(ptr, pos + (i * 4)))
+        end
+        i = i + 1
+    end
+    pos = pos + (timecnt * tsize)
+
+    trans_types = list()
+    i = 0
+    while i < timecnt
+        tidx = mem_byte_read(ptr, pos + i) & 255
+        if tidx >= typecnt
+            return _tzif_invalid(name)
+        end
+        push(trans_types, tidx)
+        i = i + 1
+    end
+    pos = pos + timecnt
+
+    tt_off_base = pos
+    char_base = pos + (typecnt * 6)
+
+    tt_utoff = list()
+    tt_isdst = list()
+    tt_abbrs = list()
+    default_off = 0
+    found_std = 0
+    i = 0
+    while i < typecnt
+        rec = tt_off_base + (i * 6)
+        uoff = _tzif_i32_be(ptr, rec)
+        isd = mem_byte_read(ptr, rec + 4) & 255
+        didx = mem_byte_read(ptr, rec + 5) & 255
+        push(tt_utoff, uoff)
+        push(tt_isdst, isd)
+        push(tt_abbrs, _tzif_read_cstr(ptr, char_base, charcnt, didx))
+        if i == 0
+            default_off = uoff
+        end
+        if found_std == 0 and isd == 0
+            default_off = uoff
+            found_std = 1
+        end
+        i = i + 1
+    end
+
+    // Extract optional RFC 8536 §3.3.1 POSIX TZ footer (`\n<tz_str>\n`) for v2/v3
+    posix_tz = ""
+    if use_64 == 1 and need_end + 2 <= total_len and (mem_byte_read(ptr, need_end) & 255) == 10
+        fstart = need_end + 1
+        fend = fstart
+        while fend < total_len and (mem_byte_read(ptr, fend) & 255) != 10
+            fend = fend + 1
+        end
+        if fend > fstart
+            posix_tz = bytes_to_str(ptr + fstart, fend - fstart)
+        end
+    end
+
+    tz = TzInfo()
+    tz.tz_valid = 1
+    tz.tz_name = name
+    tz.tz_version = ver_num
+    tz.tz_trans_times = trans_times
+    tz.tz_trans_types = trans_types
+    tz.tz_tt_utoff = tt_utoff
+    tz.tz_tt_isdst = tt_isdst
+    tz.tz_tt_abbrs = tt_abbrs
+    tz.tz_posix_tz = posix_tz
+    tz.tz_default_off = default_off
+    return tz
+end
+
+fn time_parse_tzif_bytes byte_list name
+    // WHY: Parses a TZif v1/v2/v3 binary payload supplied as a list of byte values.
+    n = len(byte_list)
+    if n < 44
+        return _tzif_invalid(name)
+    end
+    buf = malloc(n)
+    if buf <= 0
+        return _tzif_invalid(name)
+    end
+    i = 0
+    while i < n
+        mem_byte_write(buf, i, get(byte_list, i) & 255)
+        i = i + 1
+    end
+    tz = _tzif_parse_raw_buf(buf, n, name)
+    free(buf, n)
+    return tz
+end
+
+fn time_load_tzif path
+    // WHY: Reads raw binary TZif file via Linux SYS_open/SYS_lseek/SYS_read (NUL-byte safe!).
+    fd = syscall(2, path, 0, 0, 0, 0, 0)
+    if fd < 0
+        return _tzif_invalid(path)
+    end
+    sz = syscall(8, fd, 0, 2, 0, 0, 0) // SYS_lseek(fd, 0, SEEK_END)
+    if sz < 44 or sz > 1048576
+        syscall(3, fd, 0, 0, 0, 0, 0)
+        return _tzif_invalid(path)
+    end
+    syscall(8, fd, 0, 0, 0, 0, 0) // SEEK_SET
+    buf = malloc(sz)
+    if buf <= 0
+        syscall(3, fd, 0, 0, 0, 0, 0)
+        return _tzif_invalid(path)
+    end
+    got = 0
+    while got < sz
+        r = syscall(0, fd, buf + got, sz - got, 0, 0, 0)
+        if r == (0 - 4)
+            continue
+        end
+        if r <= 0
+            break
+        end
+        got = got + r
+    end
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    if got < 44
+        free(buf, sz)
+        return _tzif_invalid(path)
+    end
+    tz = _tzif_parse_raw_buf(buf, got, path)
+    free(buf, sz)
+    return tz
+end
+
+fn _tzif_parse_posix_name s pos
+    // Returns [name_str, next_pos]
+    n = len(s)
+    if pos >= n return ["", pos] end
+    if (mem_byte_read(s, pos) & 255) == 60 // '<' quoted name
+        q = pos + 1
+        while q < n and (mem_byte_read(s, q) & 255) != 62
+            q = q + 1
+        end
+        nm = str_sub(s, pos + 1, q)
+        if q < n q = q + 1 end
+        return [nm, q]
+    end
+    q = pos
+    while q < n
+        c = mem_byte_read(s, q) & 255
+        if (c >= 65 and c <= 90) or (c >= 97 and c <= 122)
+            q = q + 1
+        else
+            break
+        end
+    end
+    return [str_sub(s, pos, q), q]
+end
+
+fn _tzif_parse_posix_hms s pos invert_sign
+    // Parses [+|-]hh[:mm[:ss]] returning [ok, seconds, next_pos]
+    n = len(s)
+    if pos >= n return [0, 0, pos] end
+    sign = 1
+    c0 = mem_byte_read(s, pos) & 255
+    if c0 == 45
+        sign = 0 - 1
+        pos = pos + 1
+    elif c0 == 43
+        pos = pos + 1
+    end
+    if invert_sign == 1
+        sign = 0 - sign
+    end
+    if pos >= n return [0, 0, pos] end
+    ch = mem_byte_read(s, pos) & 255
+    if ch < 48 or ch > 57 return [0, 0, pos] end
+    hh = 0
+    while pos < n
+        d = mem_byte_read(s, pos) & 255
+        if d >= 48 and d <= 57
+            hh = (hh * 10) + (d - 48)
+            pos = pos + 1
+        else
+            break
+        end
+    end
+    mm = 0
+    ss = 0
+    if pos < n and (mem_byte_read(s, pos) & 255) == 58
+        pos = pos + 1
+        while pos < n
+            d = mem_byte_read(s, pos) & 255
+            if d >= 48 and d <= 57
+                mm = (mm * 10) + (d - 48)
+                pos = pos + 1
+            else
+                break
+            end
+        end
+        if pos < n and (mem_byte_read(s, pos) & 255) == 58
+            pos = pos + 1
+            while pos < n
+                d = mem_byte_read(s, pos) & 255
+                if d >= 48 and d <= 57
+                    ss = (ss * 10) + (d - 48)
+                    pos = pos + 1
+                else
+                    break
+                end
+            end
+        end
+    end
+    return [1, sign * ((hh * 3600) + (mm * 60) + ss), pos]
+end
+
+fn _tzif_parse_posix_mrule s pos year
+    // Parses `Mm.w.d[/time]` returning [ok, local_sec_in_year_from_epoch, next_pos]
+    n = len(s)
+    if pos >= n or (mem_byte_read(s, pos) & 255) != 77
+        return [0, 0, pos]
+    end
+    pos = pos + 1
+    mo = 0
+    while pos < n
+        d = mem_byte_read(s, pos) & 255
+        if d >= 48 and d <= 57
+            mo = (mo * 10) + (d - 48)
+            pos = pos + 1
+        else
+            break
+        end
+    end
+    if pos >= n or (mem_byte_read(s, pos) & 255) != 46 return [0, 0, pos] end
+    pos = pos + 1
+    wk = 0
+    while pos < n
+        d = mem_byte_read(s, pos) & 255
+        if d >= 48 and d <= 57
+            wk = (wk * 10) + (d - 48)
+            pos = pos + 1
+        else
+            break
+        end
+    end
+    if pos >= n or (mem_byte_read(s, pos) & 255) != 46 return [0, 0, pos] end
+    pos = pos + 1
+    dow = 0
+    while pos < n
+        d = mem_byte_read(s, pos) & 255
+        if d >= 48 and d <= 57
+            dow = (dow * 10) + (d - 48)
+            pos = pos + 1
+        else
+            break
+        end
+    end
+    t_sec = 7200 // POSIX default transition time: 02:00:00
+    if pos < n and (mem_byte_read(s, pos) & 255) == 47
+        tp = _tzif_parse_posix_hms(s, pos + 1, 0)
+        if get(tp, 0) == 1
+            t_sec = get(tp, 1)
+            pos = get(tp, 2)
+        end
+    end
+    if mo < 1 or mo > 12 or wk < 1 or wk > 5 or dow < 0 or dow > 6
+        return [0, 0, pos]
+    end
+    dim = time_days_in_month(year, mo)
+    d1_days = time_days_from_civil(year, mo, 1)
+    d1_wd = _time_floor_mod(d1_days + 4, 7)
+    delta = dow - d1_wd
+    if delta < 0 delta = delta + 7 end
+    day = 1 + delta + ((wk - 1) * 7)
+    while day > dim
+        day = day - 7
+    end
+    trans_local = (time_days_from_civil(year, mo, day) * 86400) + t_sec
+    return [1, trans_local, pos]
+end
+
+fn _tzif_eval_posix_footer posix_str unix_sec
+    // WHY: Evaluates RFC 8536 §3.3.1 POSIX TZ footer for timestamps beyond the last
+    // explicit transition table entry (e.g., Y2038+ DST rules like `EST5EDT,M3.2.0,M11.1.0`).
+    // Returns [ok, utoff_sec, is_dst, abbr].
+    if len(posix_str) == 0 return [0, 0, 0, ""] end
+    p1 = _tzif_parse_posix_name(posix_str, 0)
+    std_abbr = get(p1, 0)
+    pos = get(p1, 1)
+    if len(std_abbr) == 0 return [0, 0, 0, ""] end
+    o1 = _tzif_parse_posix_hms(posix_str, pos, 1) // POSIX sign is west-positive, invert to east-positive!
+    if get(o1, 0) != 1 return [0, 0, 0, ""] end
+    std_off = get(o1, 1)
+    pos = get(o1, 2)
+    if pos >= len(posix_str)
+        return [1, std_off, 0, std_abbr]
+    end
+    p2 = _tzif_parse_posix_name(posix_str, pos)
+    dst_abbr = get(p2, 0)
+    pos = get(p2, 1)
+    if len(dst_abbr) == 0
+        return [1, std_off, 0, std_abbr]
+    end
+    dst_off = std_off + 3600
+    if pos < len(posix_str) and (mem_byte_read(posix_str, pos) & 255) != 44
+        o2 = _tzif_parse_posix_hms(posix_str, pos, 1)
+        if get(o2, 0) == 1
+            dst_off = get(o2, 1)
+            pos = get(o2, 2)
+        end
+    end
+    if pos >= len(posix_str) or (mem_byte_read(posix_str, pos) & 255) != 44
+        return [1, std_off, 0, std_abbr]
+    end
+    dt_u = time_from_unix_utc(unix_sec)
+    yr = dt_u.dt_year
+    r1 = _tzif_parse_posix_mrule(posix_str, pos + 1, yr)
+    if get(r1, 0) != 1 return [1, std_off, 0, std_abbr] end
+    pos2 = get(r1, 2)
+    if pos2 >= len(posix_str) or (mem_byte_read(posix_str, pos2) & 255) != 44
+        return [1, std_off, 0, std_abbr]
+    end
+    r2 = _tzif_parse_posix_mrule(posix_str, pos2 + 1, yr)
+    if get(r2, 0) != 1 return [1, std_off, 0, std_abbr] end
+    // Start transition occurs in standard time; end transition occurs in DST time.
+    start_utc = get(r1, 1) - std_off
+    end_utc = get(r2, 1) - dst_off
+    in_dst = 0
+    if start_utc < end_utc
+        // Northern hemisphere
+        if unix_sec >= start_utc and unix_sec < end_utc
+            in_dst = 1
+        end
+    else
+        // Southern hemisphere
+        if unix_sec >= start_utc or unix_sec < end_utc
+            in_dst = 1
+        end
+    end
+    if in_dst == 1
+        return [1, dst_off, 1, dst_abbr]
+    end
+    return [1, std_off, 0, std_abbr]
+end
+
+fn _tzif_lookup_info tz: TzInfo unix_sec
+    // Returns [utoff_sec, is_dst, abbr] at unix_sec.
+    if tz == 0 or tz.tz_valid != 1
+        return [0, 0, "UTC"]
+    end
+    tcnt = len(tz.tz_trans_times)
+    if tcnt == 0
+        if len(tz.tz_posix_tz) > 0
+            pf = _tzif_eval_posix_footer(tz.tz_posix_tz, unix_sec)
+            if get(pf, 0) == 1
+                return [get(pf, 1), get(pf, 2), get(pf, 3)]
+            end
+        end
+        if len(tz.tz_tt_utoff) > 0
+            return [get(tz.tz_tt_utoff, 0), get(tz.tz_tt_isdst, 0), get(tz.tz_tt_abbrs, 0)]
+        end
+        return [tz.tz_default_off, 0, ""]
+    end
+    if unix_sec < get(tz.tz_trans_times, 0)
+        // RFC 8536 §3.2: timestamps before first transition use the first non-DST ttinfo
+        i = 0
+        while i < len(tz.tz_tt_utoff)
+            if get(tz.tz_tt_isdst, i) == 0
+                return [get(tz.tz_tt_utoff, i), 0, get(tz.tz_tt_abbrs, i)]
+            end
+            i = i + 1
+        end
+        return [get(tz.tz_tt_utoff, 0), get(tz.tz_tt_isdst, 0), get(tz.tz_tt_abbrs, 0)]
+    end
+    if unix_sec >= get(tz.tz_trans_times, tcnt - 1) and len(tz.tz_posix_tz) > 0
+        pf2 = _tzif_eval_posix_footer(tz.tz_posix_tz, unix_sec)
+        if get(pf2, 0) == 1
+            return [get(pf2, 1), get(pf2, 2), get(pf2, 3)]
+        end
+    end
+    // Binary search for largest idx with trans_times[idx] <= unix_sec
+    lo = 0
+    hi = tcnt - 1
+    while lo < hi
+        mid = lo + ((hi - lo + 1) / 2)
+        if get(tz.tz_trans_times, mid) <= unix_sec
+            lo = mid
+        else
+            hi = mid - 1
+        end
+    end
+    tidx = get(tz.tz_trans_types, lo)
+    return [get(tz.tz_tt_utoff, tidx), get(tz.tz_tt_isdst, tidx), get(tz.tz_tt_abbrs, tidx)]
+end
+
+fn time_tzif_offset_at tz: TzInfo unix_sec
+    // WHY: Returns signed UTC offset in seconds east of UTC (e.g. -18000 EST, -14400 EDT, +21600 +06).
+    info = _tzif_lookup_info(tz, unix_sec)
+    return get(info, 0)
+end
+
+fn time_tzif_is_dst_at tz: TzInfo unix_sec
+    info = _tzif_lookup_info(tz, unix_sec)
+    return get(info, 1)
+end
+
+fn time_tzif_abbr_at tz: TzInfo unix_sec
+    info = _tzif_lookup_info(tz, unix_sec)
+    return get(info, 2)
+end
+
+fn time_from_unix_tz unix_sec tz: TzInfo
+    // WHY: Converts Unix epoch seconds into local civil DateTime using parsed TZif DST rules.
+    off_sec = time_tzif_offset_at(tz, unix_sec)
+    off_min = off_sec / 60
+    rem_sec = off_sec - (off_min * 60)
+    dt = time_from_unix_offset(unix_sec + rem_sec, off_min)
     return dt
 end

@@ -242,19 +242,30 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
             end
         end
         c_jcc = 0
+        c_jcc_u = 0
         if c_op.tok_kind == TOK_LT() or c_op.tok_text == "<"
-            c_jcc = 141 // jge (0x8D)
+            c_jcc = 141   // jge (0x8D)
+            c_jcc_u = 131 // jae (0x83)
         elif c_op.tok_kind == TOK_LTE() or c_op.tok_text == "<="
-            c_jcc = 143 // jg (0x8F)
+            c_jcc = 143   // jg (0x8F)
+            c_jcc_u = 135 // ja (0x87)
         elif c_op.tok_kind == TOK_GT() or c_op.tok_text == ">"
-            c_jcc = 142 // jle (0x8E)
+            c_jcc = 142   // jle (0x8E)
+            c_jcc_u = 134 // jbe (0x86)
         elif c_op.tok_kind == TOK_GTE() or c_op.tok_text == ">="
-            c_jcc = 140 // jl (0x8C)
+            c_jcc = 140   // jl (0x8C)
+            c_jcc_u = 130 // jb (0x82)
         end
         if c_ok_after == 1 and c_jcc > 0 and x86_synth_is_ident_token(c_lhs.tok_kind) == 1
             lv_cl = x86_synth_find_local_var(s, c_lhs.tok_text)
-            if lv_cl != 0 and lv_cl.lv_prim_type != "float" and lv_cl.lv_prim_type != "str" and lv_cl.lv_prim_type != "dyn_tagged" and lv_cl.lv_tag_off == 0
+            // WHY: Boxed closure-captured locals hold a heap cell pointer, not the raw integer;
+            // and unsigned ("uint") variables require unsigned Jcc (jae/ja/jbe/jb) for values >= 2^63.
+            if lv_cl != 0 and lv_cl.lv_is_boxed == 0 and lv_cl.lv_prim_type != "float" and lv_cl.lv_prim_type != "str" and lv_cl.lv_prim_type != "dyn_tagged" and lv_cl.lv_tag_off == 0
                 if c_rhs.tok_kind == TOK_INT()
+                    eff_jcc = c_jcc
+                    if lv_cl.lv_prim_type == "uint"
+                        eff_jcc = c_jcc_u
+                    end
                     if lv_cl.lv_is_spilled == 0 and lv_cl.lv_reg >= 0
                         x86_synth_emit_mov_reg_reg(s, 0, lv_cl.lv_reg)
                     else
@@ -267,14 +278,18 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
                     x86_synth_emit_byte(s, 57)
                     x86_synth_emit_byte(s, 200) // cmp rax, rcx
                     x86_synth_emit_byte(s, 15)
-                    x86_synth_emit_byte(s, c_jcc)
+                    x86_synth_emit_byte(s, eff_jcc)
                     patch_loop_exit = s.synth_code.len()
                     x86_synth_emit_u32(s, 0)
                     list_set(pos_box, 0, c_p0 + 3)
                     fused_cond = 1
                 elif x86_synth_is_ident_token(c_rhs.tok_kind) == 1
                     lv_cr = x86_synth_find_local_var(s, c_rhs.tok_text)
-                    if lv_cr != 0 and lv_cr.lv_prim_type != "float" and lv_cr.lv_prim_type != "str" and lv_cr.lv_prim_type != "dyn_tagged" and lv_cr.lv_tag_off == 0
+                    if lv_cr != 0 and lv_cr.lv_is_boxed == 0 and lv_cr.lv_prim_type != "float" and lv_cr.lv_prim_type != "str" and lv_cr.lv_prim_type != "dyn_tagged" and lv_cr.lv_tag_off == 0
+                        eff_jcc = c_jcc
+                        if lv_cl.lv_prim_type == "uint" or lv_cr.lv_prim_type == "uint"
+                            eff_jcc = c_jcc_u
+                        end
                         if lv_cl.lv_is_spilled == 0 and lv_cl.lv_reg >= 0
                             x86_synth_emit_mov_reg_reg(s, 0, lv_cl.lv_reg)
                         else
@@ -289,7 +304,7 @@ fn x86_synth_compile_while s toks pos_box base_col base_line
                         x86_synth_emit_byte(s, 57)
                         x86_synth_emit_byte(s, 200) // cmp rax, rcx
                         x86_synth_emit_byte(s, 15)
-                        x86_synth_emit_byte(s, c_jcc)
+                        x86_synth_emit_byte(s, eff_jcc)
                         patch_loop_exit = s.synth_code.len()
                         x86_synth_emit_u32(s, 0)
                         list_set(pos_box, 0, c_p0 + 3)

@@ -281,9 +281,6 @@ fn ssa_instr_replace_operand inst old_val new_val
 fn SSAInstr.replace_operand self old_val new_val
     return ssa_instr_replace_operand(self, old_val, new_val)
 
-fn replace_operand inst old_val new_val
-    return ssa_instr_replace_operand(inst, old_val, new_val)
-
 // Removes this instruction from the use lists of all its operands
 // WHY: Must be invoked when an instruction is removed or deleted by Dead Code Elimination.
 fn ssa_instr_remove_from_operands_use_lists inst

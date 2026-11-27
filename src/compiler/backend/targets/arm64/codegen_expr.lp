@@ -147,6 +147,8 @@ fn arm64_synth_emit_interp_str s txt
             end
             if lv.a64_lv_prim_type == "str"
                 // X0 is already a cstr pointer
+            elif lv.a64_lv_prim_type == "float"
+                arm64_synth_emit_call_helper(s, "__float_to_str")
             elif lv.a64_lv_prim_type == "dyn_tagged" and lv.a64_lv_tag_off > 0
                 arm64_emit_ldr_reg_sp(s, 1, lv.a64_lv_tag_off)
                 arm64_synth_emit_call_helper(s, "__tagged_to_str")
@@ -161,6 +163,8 @@ fn arm64_synth_emit_interp_str s txt
             arm64_synth_compile_expr(s, sub_toks, sub_pb)
             if s.a64_last_expr_type == "str"
                 // X0 is already a cstr pointer
+            elif s.a64_last_expr_type == "float"
+                arm64_synth_emit_call_helper(s, "__float_to_str")
             elif s.a64_last_expr_type == "dyn_tagged"
                 arm64_synth_emit_call_helper(s, "__tagged_to_str")
             elif s.a64_last_is_uint == 1
@@ -200,6 +204,16 @@ fn arm64_synth_expr_primary s toks pos_box
         list_set(pos_box, 0, pos + 1)
         arm64_synth_expr_primary(s, toks, pos_box)
         if s.a64_last_expr_type == "float"
+            arm64_emit_movz_x(s, 9, 32768, 48) // 0x8000000000000000
+            arm64_emit_eor_x(s, 0, 0, 9)
+        elif s.a64_last_expr_type == "dyn_tagged"
+            // WHY: Runtime tag X1 == 1 means X0 holds IEEE-754 f64 bits (flip sign bit 63);
+            // otherwise negate as signed integer (prevents corrupting `-ret_f()` via 2's complement!).
+            arm64_emit_movz_x(s, 9, 1, 0)
+            arm64_emit_cmp_x(s, 1, 9)
+            arm64_emit_b_cond(s, 0, 3)         // b.eq .neg_fp (+3 words)
+            arm64_emit_sub_x(s, 0, 31, 0)      // sub x0, xzr, x0
+            arm64_emit_b(s, 3)                 // b .neg_done (+3 words)
             arm64_emit_movz_x(s, 9, 32768, 48) // 0x8000000000000000
             arm64_emit_eor_x(s, 0, 0, 9)
         else
@@ -959,7 +973,25 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_emit_movz_x(s, 0, 0, 0)
                 return 0
             end
-            if var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "uint_to_str"
+            if var_name == "f64_from_bits" or var_name == "f64_to_bits"
+                while arg_count > 1
+                    arm64_pop_reg(s, 9)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    arm64_pop_reg(s, 0)
+                else
+                    arm64_emit_movz_x(s, 0, 0, 0)
+                end
+                if var_name == "f64_from_bits"
+                    s.a64_last_expr_type = "float"
+                else
+                    s.a64_last_expr_type = "int"
+                end
+                s.a64_last_is_uint = 0
+                return 0
+            end
+            if var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "uint_to_str" or var_name == "float_to_str"
                 s.a64_needs_str_helpers = 1
                 s.synth_needs_alloc = 1
                 if arg_count >= 1
@@ -973,7 +1005,9 @@ fn arm64_synth_expr_primary s toks pos_box
                     a0_u = 0
                     if arg_types.len() >= 1 a0_t = arg_types[0] end
                     if arg_is_uints.len() >= 1 a0_u = arg_is_uints[0] end
-                    if var_name == "uint_to_str" or a0_t == "uint" or a0_u == 1
+                    if var_name == "float_to_str" or a0_t == "float"
+                        arm64_synth_emit_call_helper(s, "__float_to_str")
+                    elif var_name == "uint_to_str" or a0_t == "uint" or a0_u == 1
                         arm64_synth_emit_call_helper(s, "__uint_to_str")
                     elif a0_t == "str"
                         // Already a cstr pointer in X0
@@ -1189,8 +1223,27 @@ fn arm64_synth_expr_primary s toks pos_box
                     arm64_emit_epilogue(s)
                     skip_words = (s.synth_code.len() - skip_eq_off) / 4
                     arm64_synth_patch_u32(s, skip_eq_off, 1409286144 | ((skip_words & 524287) << 5) | 0)
+                elif s.a64_freestanding == 0
+                    // WHY: Uncaught top-level call exception prints "Uncaught exception: <val>" and exits 1.
+                    s.a64_needs_uncaught_throw = 1
+                    arm64_emit_cmp_x(s, 27, 31)
+                    skip_ut_off = s.synth_code.len()
+                    arm64_emit_b_cond(s, 0, 0)
+                    arm64_synth_emit_call_helper(s, "__uncaught_throw")
+                    arm64_patch_b_cond(s, skip_ut_off, 0, s.synth_code.len())
                 end
-                s.a64_last_expr_type = "dyn_tagged"
+                if fsig != 0 and fsig.a64_sig_ret_type == "float"
+                    s.a64_last_expr_type = "float"
+                    s.a64_last_is_uint = 0
+                elif fsig != 0 and fsig.a64_sig_ret_type == "uint"
+                    s.a64_last_expr_type = "int"
+                    s.a64_last_is_uint = 1
+                elif fsig != 0 and fsig.a64_sig_ret_type == "str"
+                    s.a64_last_expr_type = "str"
+                    s.a64_last_is_uint = 0
+                else
+                    s.a64_last_expr_type = "dyn_tagged"
+                end
             end
         else
             // Unit ADT Variant (e.g. None or zero-arity enum variant) vs Local Variable Load
@@ -1379,6 +1432,13 @@ fn arm64_synth_expr_primary s toks pos_box
                             arm64_emit_defers(s, toks)
                             arm64_emit_epilogue(s)
                             arm64_patch_b_cond(s, m_skip_eq, 0, s.synth_code.len())
+                        elif s.a64_freestanding == 0
+                            s.a64_needs_uncaught_throw = 1
+                            arm64_emit_cmp_x(s, 27, 31)
+                            m_skip_ut = s.synth_code.len()
+                            arm64_emit_b_cond(s, 0, 0)
+                            arm64_synth_emit_call_helper(s, "__uncaught_throw")
+                            arm64_patch_b_cond(s, m_skip_ut, 0, s.synth_code.len())
                         end
                         s.a64_last_expr_type = "dyn_tagged"
                     end
@@ -1386,11 +1446,24 @@ fn arm64_synth_expr_primary s toks pos_box
                 else
                     arm64_emit_null_guard_reg(s, toks, 0)
                     f_off = arm64_synth_get_field_offset(s, cur_struct, fn_tok.tok_text)
+                    f_type_a64 = arm64_synth_get_field_type(s, cur_struct, fn_tok.tok_text)
                     scaled_fo = (f_off / 8) & 4095
                     ldr_word = 4181721088 | (scaled_fo << 10)
                     arm64_synth_emit32(s, ldr_word)
                     cur_struct = ""
-                    s.a64_last_expr_type = "int"
+                    if arm64_is_float_type(f_type_a64) == 1
+                        s.a64_last_expr_type = "float"
+                        s.a64_last_is_uint = 0
+                    elif arm64_is_uint_type(f_type_a64) == 1
+                        s.a64_last_expr_type = "int"
+                        s.a64_last_is_uint = 1
+                    elif f_type_a64 == "str" or f_type_a64 == "string"
+                        s.a64_last_expr_type = "str"
+                        s.a64_last_is_uint = 0
+                    else
+                        s.a64_last_expr_type = "int"
+                        s.a64_last_is_uint = 0
+                    end
             else
                 break
         elif ct.tok_kind == TOK_LBRACKET()
@@ -1417,6 +1490,13 @@ fn arm64_synth_expr_primary s toks pos_box
                 arm64_emit_defers(s, toks)
                 arm64_emit_epilogue(s)
                 arm64_patch_b_cond(s, npe_skip_eq, 0, s.synth_code.len())
+            elif s.a64_freestanding == 0
+                s.a64_needs_uncaught_throw = 1
+                arm64_emit_cmp_x(s, 27, 31)
+                npe_skip_ut = s.synth_code.len()
+                arm64_emit_b_cond(s, 0, 0)
+                arm64_synth_emit_call_helper(s, "__uncaught_throw")
+                arm64_patch_b_cond(s, npe_skip_ut, 0, s.synth_code.len())
             end
             cur_struct = ""
         elif ct.tok_kind == TOK_QUERY() or (ct.tok_kind != TOK_STR() and ct.tok_text == "?")
@@ -1472,8 +1552,46 @@ fn arm64_synth_expr_primary s toks pos_box
 
 // ── 7. Expression Synthesizer (Pratt / Operator Precedence Hierarchy) ──────────
 
+fn arm64_emit_fp_arith_op s k
+    // WHY: Emits IEEE-754 binary64 hardware arithmetic on d0 (LHS) and d1 (RHS), writing bits to X0.
+    if k == TOK_PLUS()
+        arm64_emit_fadd_d(s, 0, 0, 1)
+    elif k == TOK_MINUS()
+        arm64_emit_fsub_d(s, 0, 0, 1)
+    elif k == TOK_STAR()
+        arm64_emit_fmul_d(s, 0, 0, 1)
+    elif k == TOK_SLASH()
+        arm64_emit_fdiv_d(s, 0, 0, 1)
+    elif k == TOK_PERCENT()
+        // IEEE-754 fmod: d0 - trunc(d0 / d1) * d1
+        arm64_emit_fdiv_d(s, 2, 0, 1)
+        arm64_emit_frintz_d(s, 2, 2)
+        arm64_emit_fmul_d(s, 2, 2, 1)
+        arm64_emit_fsub_d(s, 0, 0, 2)
+    end
+    arm64_emit_fmov_x_d(s, 0, 0)
+    return 0
+
+fn arm64_emit_fcmp_cond_x0 s k
+    // WHY: Emits IEEE-754 NaN-safe AArch64 FP comparison (`fcmp d0, d1`) producing 0/1 in X0.
+    // On NaN: NZCV = 0011 -> EQ=0, NE=1, MI(N=1)=0, LS(C=0|Z=1)=0, GT(Z=0&N=V)=0, GE(N=V)=0.
+    arm64_emit_fcmp_d(s, 0, 1)
+    cc = 0
+    if k == TOK_EQ() cc = 0
+    elif k == TOK_NEQ() cc = 1
+    elif k == TOK_LT() cc = 4
+    elif k == TOK_LTE() cc = 9
+    elif k == TOK_GT() cc = 12
+    elif k == TOK_GTE() cc = 10
+    end
+    arm64_emit_b_cond(s, cc, 3)
+    arm64_emit_movz_x(s, 0, 0, 0)
+    arm64_emit_b(s, 2)
+    arm64_emit_movz_x(s, 0, 1, 0)
+    return 0
+
 fn arm64_synth_expr_multiplicative s toks pos_box
-    // WHY: Pratt precedence level 1 for high-precedence arithmetic (*, /, %)
+    // WHY: Pratt precedence level 1 for high-precedence arithmetic (*, /, %) with hardware IEEE-754 f64.
     arm64_synth_expr_primary(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
@@ -1483,42 +1601,113 @@ fn arm64_synth_expr_multiplicative s toks pos_box
             break
         list_set(pos_box, 0, pos + 1) // Consume operator
         lhs_u = s.a64_last_is_uint
+        lhs_t = s.a64_last_expr_type
 
-        // Push left operand (X0) to stack
+        // Push left operand (X0) to stack (plus X1 tag if dyn_tagged)
         arm64_push_reg(s, 0)
+        if lhs_t == "dyn_tagged"
+            arm64_push_reg(s, 1)
+        end
 
         // Evaluate right operand into X0
         arm64_synth_expr_primary(s, toks, pos_box)
         rhs_u = s.a64_last_is_uint
+        rhs_t = s.a64_last_expr_type
 
-        // Move right operand to X1, pop left operand back into X0
-        arm64_emit_mov_reg(s, 1, 0)
-        arm64_pop_reg(s, 0)
+        if lhs_t == "float" or rhs_t == "float"
+            if rhs_t == "dyn_tagged"
+                arm64_emit_mov_reg(s, 11, 1)
+            end
+            arm64_emit_mov_reg(s, 10, 0)
+            if lhs_t == "dyn_tagged"
+                arm64_pop_reg(s, 9)
+            end
+            arm64_pop_reg(s, 0)
+            arm64_emit_load_fp_reg(s, 0, 0, lhs_t, lhs_u, 9)
+            arm64_emit_load_fp_reg(s, 1, 10, rhs_t, rhs_u, 11)
+            arm64_emit_fp_arith_op(s, k)
+            s.a64_last_is_uint = 0
+            s.a64_last_expr_type = "float"
+        elif lhs_t == "dyn_tagged" or rhs_t == "dyn_tagged"
+            if rhs_t == "dyn_tagged"
+                arm64_emit_mov_reg(s, 11, 1)
+            else
+                arm64_emit_movz_x(s, 11, 0, 0)
+            end
+            arm64_emit_mov_reg(s, 10, 0)
+            if lhs_t == "dyn_tagged"
+                arm64_pop_reg(s, 9)
+            else
+                arm64_emit_movz_x(s, 9, 0, 0)
+            end
+            arm64_pop_reg(s, 0)
+            arm64_emit_mov_reg(s, 1, 10)
+            arm64_emit_movz_x(s, 12, 1, 0)
+            arm64_emit_cmp_x(s, 9, 12)
+            beq_dm_fp1 = s.synth_code.len()
+            arm64_emit_b_cond(s, 0, 0)
+            arm64_emit_cmp_x(s, 11, 12)
+            beq_dm_fp2 = s.synth_code.len()
+            arm64_emit_b_cond(s, 0, 0)
+            if k == TOK_STAR()
+                arm64_emit_mul_x(s, 0, 0, 1)
+            elif k == TOK_SLASH()
+                if lhs_u == 1 or rhs_u == 1 arm64_emit_udiv_x(s, 0, 0, 1) else arm64_emit_sdiv_x(s, 0, 0, 1) end
+            elif k == TOK_PERCENT()
+                if lhs_u == 1 or rhs_u == 1 arm64_emit_udiv_x(s, 2, 0, 1) else arm64_emit_sdiv_x(s, 2, 0, 1) end
+                arm64_emit_mul_x(s, 2, 2, 1)
+                arm64_emit_sub_x(s, 0, 0, 2)
+                // WHY: Guard dyn_tagged `x % 0 == 0` branchlessly matching non-tagged ARM64/x86_64/RV64/WASM.
+                arm64_emit_cmp_x(s, 1, 31)
+                arm64_synth_emit32(s, 2592080864) // csel x0, xzr, x0, eq
+            end
+            arm64_emit_movz_x(s, 1, 0, 0)
+            jmp_dm_done = s.synth_code.len()
+            arm64_emit_b(s, 0)
+            dm_fp_off = s.synth_code.len()
+            arm64_patch_b_cond(s, beq_dm_fp1, 0, dm_fp_off)
+            arm64_patch_b_cond(s, beq_dm_fp2, 0, dm_fp_off)
+            arm64_emit_load_fp_reg(s, 0, 0, "dyn_tagged", lhs_u, 9)
+            arm64_emit_load_fp_reg(s, 1, 10, "dyn_tagged", rhs_u, 11)
+            arm64_emit_fp_arith_op(s, k)
+            arm64_emit_movz_x(s, 1, 1, 0)
+            arm64_patch_b(s, jmp_dm_done, s.synth_code.len())
+            s.a64_last_is_uint = 0
+            s.a64_last_expr_type = "dyn_tagged"
+        else
+            // Move right operand to X1, pop left operand back into X0
+            arm64_emit_mov_reg(s, 1, 0)
+            arm64_pop_reg(s, 0)
 
-        if k == TOK_STAR()
-            arm64_emit_mul_x(s, 0, 0, 1)
-        elif k == TOK_SLASH()
-            if lhs_u == 1 or rhs_u == 1
-                arm64_emit_udiv_x(s, 0, 0, 1)
-            else
-                arm64_emit_sdiv_x(s, 0, 0, 1)
+            if k == TOK_STAR()
+                arm64_emit_mul_x(s, 0, 0, 1)
+            elif k == TOK_SLASH()
+                if lhs_u == 1 or rhs_u == 1
+                    arm64_emit_udiv_x(s, 0, 0, 1)
+                else
+                    arm64_emit_sdiv_x(s, 0, 0, 1)
+                end
+            elif k == TOK_PERCENT()
+                // Remainder in AArch64: X2 = X0 / X1; X2 = X2 * X1; X0 = X0 - X2
+                // WHY: Guard divisor == 0 branchlessly (`cmp x1, xzr; csel x0, xzr, x0, eq`) so `x % 0 == 0`
+                // matches x86_64/RV64/WASM instead of AArch64's `x - 0*0 == x`.
+                if lhs_u == 1 or rhs_u == 1
+                    arm64_emit_udiv_x(s, 2, 0, 1)
+                else
+                    arm64_emit_sdiv_x(s, 2, 0, 1)
+                end
+                arm64_emit_mul_x(s, 2, 2, 1)
+                arm64_emit_sub_x(s, 0, 0, 2)
+                arm64_emit_cmp_x(s, 1, 31)
+                arm64_synth_emit32(s, 2592080864) // csel x0, xzr, x0, eq
             end
-        elif k == TOK_PERCENT()
-            // Remainder in AArch64: X2 = X0 / X1; X2 = X2 * X1; X0 = X0 - X2
-            if lhs_u == 1 or rhs_u == 1
-                arm64_emit_udiv_x(s, 2, 0, 1)
-            else
-                arm64_emit_sdiv_x(s, 2, 0, 1)
-            end
-            arm64_emit_mul_x(s, 2, 2, 1)
-            arm64_emit_sub_x(s, 0, 0, 2)
+            if lhs_u == 1 or rhs_u == 1 s.a64_last_is_uint = 1 else s.a64_last_is_uint = 0 end
+            s.a64_last_expr_type = "int"
         end
-        if lhs_u == 1 or rhs_u == 1 s.a64_last_is_uint = 1 else s.a64_last_is_uint = 0 end
-        s.a64_last_expr_type = "int"
     return 0
 
 fn arm64_synth_expr_additive s toks pos_box
-    // WHY: Pratt precedence level 2 for standard arithmetic (+, -)
+    // WHY: Pratt precedence level 2 for standard arithmetic (+, -) with string concat & hardware IEEE-754 f64.
     arm64_synth_expr_multiplicative(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
@@ -1530,9 +1719,9 @@ fn arm64_synth_expr_additive s toks pos_box
         lhs_ua = s.a64_last_is_uint
         lhs_ta = s.a64_last_expr_type
 
-        // Push left operand (X0) to stack (plus X1 tag if dyn_tagged so str+dyn_tagged stays exact)
+        // Push left operand (X0) to stack (plus X1 tag if dyn_tagged)
         arm64_push_reg(s, 0)
-        if k == TOK_PLUS() and lhs_ta == "dyn_tagged"
+        if lhs_ta == "dyn_tagged"
             arm64_push_reg(s, 1)
         end
 
@@ -1544,9 +1733,11 @@ fn arm64_synth_expr_additive s toks pos_box
         if k == TOK_PLUS() and (lhs_ta == "str" or rhs_ta == "str")
             s.a64_needs_str_helpers = 1
             s.synth_needs_alloc = 1
-            // Auto-stringify non-string RHS cleanly (prevents segfault on "val=" + int/u64/dyn_tagged)
+            // Auto-stringify non-string RHS cleanly (prevents segfault on "val=" + int/float/u64/dyn_tagged)
             if rhs_ta != "str"
-                if rhs_ta == "dyn_tagged"
+                if rhs_ta == "float"
+                    arm64_synth_emit_call_helper(s, "__float_to_str")
+                elif rhs_ta == "dyn_tagged"
                     arm64_synth_emit_call_helper(s, "__tagged_to_str")
                 elif rhs_ua == 1 or rhs_ta == "uint"
                     arm64_synth_emit_call_helper(s, "__uint_to_str")
@@ -1561,7 +1752,9 @@ fn arm64_synth_expr_additive s toks pos_box
                 end
                 arm64_pop_reg(s, 0) // X0 = lhs
                 arm64_push_reg(s, 1) // save rhs_str on stack
-                if lhs_ta == "dyn_tagged"
+                if lhs_ta == "float"
+                    arm64_synth_emit_call_helper(s, "__float_to_str")
+                elif lhs_ta == "dyn_tagged"
                     arm64_emit_mov_reg(s, 1, 9)
                     arm64_synth_emit_call_helper(s, "__tagged_to_str")
                 elif lhs_ua == 1 or lhs_ta == "uint"
@@ -1577,10 +1770,56 @@ fn arm64_synth_expr_additive s toks pos_box
             arm64_synth_emit_call_helper(s, "__str_concat")
             s.a64_last_is_uint = 0
             s.a64_last_expr_type = "str"
-        elif k == TOK_PLUS()
-            if lhs_ta == "dyn_tagged"
-                arm64_pop_reg(s, 9) // discard saved lhs tag
+        elif lhs_ta == "float" or rhs_ta == "float"
+            if rhs_ta == "dyn_tagged"
+                arm64_emit_mov_reg(s, 11, 1)
             end
+            arm64_emit_mov_reg(s, 10, 0)
+            if lhs_ta == "dyn_tagged"
+                arm64_pop_reg(s, 9)
+            end
+            arm64_pop_reg(s, 0)
+            arm64_emit_load_fp_reg(s, 0, 0, lhs_ta, lhs_ua, 9)
+            arm64_emit_load_fp_reg(s, 1, 10, rhs_ta, rhs_ua, 11)
+            arm64_emit_fp_arith_op(s, k)
+            s.a64_last_is_uint = 0
+            s.a64_last_expr_type = "float"
+        elif lhs_ta == "dyn_tagged" or rhs_ta == "dyn_tagged"
+            if rhs_ta == "dyn_tagged"
+                arm64_emit_mov_reg(s, 11, 1)
+            else
+                arm64_emit_movz_x(s, 11, 0, 0)
+            end
+            arm64_emit_mov_reg(s, 10, 0)
+            if lhs_ta == "dyn_tagged"
+                arm64_pop_reg(s, 9)
+            else
+                arm64_emit_movz_x(s, 9, 0, 0)
+            end
+            arm64_pop_reg(s, 0)
+            arm64_emit_mov_reg(s, 1, 10)
+            arm64_emit_movz_x(s, 12, 1, 0)
+            arm64_emit_cmp_x(s, 9, 12)
+            beq_da_fp1 = s.synth_code.len()
+            arm64_emit_b_cond(s, 0, 0)
+            arm64_emit_cmp_x(s, 11, 12)
+            beq_da_fp2 = s.synth_code.len()
+            arm64_emit_b_cond(s, 0, 0)
+            if k == TOK_PLUS() arm64_emit_add_x(s, 0, 0, 1) else arm64_emit_sub_x(s, 0, 0, 1) end
+            arm64_emit_movz_x(s, 1, 0, 0)
+            jmp_da_done = s.synth_code.len()
+            arm64_emit_b(s, 0)
+            da_fp_off = s.synth_code.len()
+            arm64_patch_b_cond(s, beq_da_fp1, 0, da_fp_off)
+            arm64_patch_b_cond(s, beq_da_fp2, 0, da_fp_off)
+            arm64_emit_load_fp_reg(s, 0, 0, "dyn_tagged", lhs_ua, 9)
+            arm64_emit_load_fp_reg(s, 1, 10, "dyn_tagged", rhs_ua, 11)
+            arm64_emit_fp_arith_op(s, k)
+            arm64_emit_movz_x(s, 1, 1, 0)
+            arm64_patch_b(s, jmp_da_done, s.synth_code.len())
+            s.a64_last_is_uint = 0
+            s.a64_last_expr_type = "dyn_tagged"
+        elif k == TOK_PLUS()
             arm64_emit_mov_reg(s, 1, 0)
             arm64_pop_reg(s, 0)
             arm64_emit_add_x(s, 0, 0, 1)
@@ -1619,10 +1858,11 @@ fn arm64_synth_expr_shift s toks pos_box
         end
         s.a64_last_struct = ""
         s.a64_last_is_uint = lhs_us
+        s.a64_last_expr_type = "int"
     return 0
 
 fn arm64_synth_expr_relational s toks pos_box
-    // WHY: Pratt precedence level 3 for comparison operators (==, !=, <, <=, >, >=)
+    // WHY: Pratt precedence level 3 for comparison operators (==, !=, <, <=, >, >=) with IEEE-754 NaN-safe FP compares.
     arm64_synth_expr_shift(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
@@ -1632,59 +1872,126 @@ fn arm64_synth_expr_relational s toks pos_box
             break
         list_set(pos_box, 0, pos + 1) // Consume operator
         lhs_ur = s.a64_last_is_uint
+        lhs_tr = s.a64_last_expr_type
 
-        // Push left operand (X0) to stack
+        // Push left operand (X0) to stack (plus X1 tag if dyn_tagged)
         arm64_push_reg(s, 0)
+        if lhs_tr == "dyn_tagged"
+            arm64_push_reg(s, 1)
+        end
 
         // Evaluate right operand into X0
         arm64_synth_expr_shift(s, toks, pos_box)
         rhs_ur = s.a64_last_is_uint
+        rhs_tr = s.a64_last_expr_type
         cmp_u = 0
         if lhs_ur == 1 or rhs_ur == 1 cmp_u = 1 end
 
-        // Move right operand to X1, pop left operand back into X0
-        arm64_emit_mov_reg(s, 1, 0)
-        arm64_pop_reg(s, 0)
+        if lhs_tr == "float" or rhs_tr == "float"
+            if rhs_tr == "dyn_tagged"
+                arm64_emit_mov_reg(s, 11, 1)
+            end
+            arm64_emit_mov_reg(s, 10, 0)
+            if lhs_tr == "dyn_tagged"
+                arm64_pop_reg(s, 9)
+            end
+            arm64_pop_reg(s, 0)
+            arm64_emit_load_fp_reg(s, 0, 0, lhs_tr, lhs_ur, 9)
+            arm64_emit_load_fp_reg(s, 1, 10, rhs_tr, rhs_ur, 11)
+            arm64_emit_fcmp_cond_x0(s, k)
+        elif lhs_tr == "dyn_tagged" or rhs_tr == "dyn_tagged"
+            if rhs_tr == "dyn_tagged"
+                arm64_emit_mov_reg(s, 11, 1)
+            else
+                arm64_emit_movz_x(s, 11, 0, 0)
+            end
+            arm64_emit_mov_reg(s, 10, 0)
+            if lhs_tr == "dyn_tagged"
+                arm64_pop_reg(s, 9)
+            else
+                arm64_emit_movz_x(s, 9, 0, 0)
+            end
+            arm64_pop_reg(s, 0)
+            arm64_emit_mov_reg(s, 1, 10)
+            arm64_emit_movz_x(s, 12, 1, 0)
+            arm64_emit_cmp_x(s, 9, 12)
+            beq_dr_fp1 = s.synth_code.len()
+            arm64_emit_b_cond(s, 0, 0)
+            arm64_emit_cmp_x(s, 11, 12)
+            beq_dr_fp2 = s.synth_code.len()
+            arm64_emit_b_cond(s, 0, 0)
+            arm64_emit_cmp_x(s, 0, 1)
+            icc_d = 0
+            if k == TOK_EQ() icc_d = 0
+            elif k == TOK_NEQ() icc_d = 1
+            elif k == TOK_LT()
+                if cmp_u == 1 icc_d = 3 else icc_d = 11 end
+            elif k == TOK_LTE()
+                if cmp_u == 1 icc_d = 9 else icc_d = 13 end
+            elif k == TOK_GT()
+                if cmp_u == 1 icc_d = 8 else icc_d = 12 end
+            elif k == TOK_GTE()
+                if cmp_u == 1 icc_d = 2 else icc_d = 10 end
+            end
+            arm64_emit_b_cond(s, icc_d, 3)
+            arm64_emit_movz_x(s, 0, 0, 0)
+            arm64_emit_b(s, 2)
+            arm64_emit_movz_x(s, 0, 1, 0)
+            jmp_dr_done = s.synth_code.len()
+            arm64_emit_b(s, 0)
+            dr_fp_off = s.synth_code.len()
+            arm64_patch_b_cond(s, beq_dr_fp1, 0, dr_fp_off)
+            arm64_patch_b_cond(s, beq_dr_fp2, 0, dr_fp_off)
+            arm64_emit_load_fp_reg(s, 0, 0, "dyn_tagged", lhs_ur, 9)
+            arm64_emit_load_fp_reg(s, 1, 10, "dyn_tagged", rhs_ur, 11)
+            arm64_emit_fcmp_cond_x0(s, k)
+            arm64_patch_b(s, jmp_dr_done, s.synth_code.len())
+        else
+            // Move right operand to X1, pop left operand back into X0
+            arm64_emit_mov_reg(s, 1, 0)
+            arm64_pop_reg(s, 0)
 
-        if k == TOK_EQ()
-            // cmp x0, x1; b.eq +3; mov x0, 0; b +2; mov x0, 1
-            arm64_emit_cmp_x(s, 0, 1)
-            arm64_emit_b_cond(s, 0, 3)
-            arm64_emit_movz_x(s, 0, 0, 0)
-            arm64_emit_b(s, 2)
-            arm64_emit_movz_x(s, 0, 1, 0)
-        elif k == TOK_NEQ()
-            arm64_emit_cmp_x(s, 0, 1)
-            arm64_emit_b_cond(s, 1, 3)
-            arm64_emit_movz_x(s, 0, 0, 0)
-            arm64_emit_b(s, 2)
-            arm64_emit_movz_x(s, 0, 1, 0)
-        elif k == TOK_LT()
-            arm64_emit_cmp_x(s, 0, 1)
-            if cmp_u == 1 arm64_emit_b_cond(s, 3, 3) else arm64_emit_b_cond(s, 11, 3) end
-            arm64_emit_movz_x(s, 0, 0, 0)
-            arm64_emit_b(s, 2)
-            arm64_emit_movz_x(s, 0, 1, 0)
-        elif k == TOK_LTE()
-            arm64_emit_cmp_x(s, 0, 1)
-            if cmp_u == 1 arm64_emit_b_cond(s, 9, 3) else arm64_emit_b_cond(s, 13, 3) end
-            arm64_emit_movz_x(s, 0, 0, 0)
-            arm64_emit_b(s, 2)
-            arm64_emit_movz_x(s, 0, 1, 0)
-        elif k == TOK_GT()
-            arm64_emit_cmp_x(s, 0, 1)
-            if cmp_u == 1 arm64_emit_b_cond(s, 8, 3) else arm64_emit_b_cond(s, 12, 3) end
-            arm64_emit_movz_x(s, 0, 0, 0)
-            arm64_emit_b(s, 2)
-            arm64_emit_movz_x(s, 0, 1, 0)
-        elif k == TOK_GTE()
-            arm64_emit_cmp_x(s, 0, 1)
-            if cmp_u == 1 arm64_emit_b_cond(s, 2, 3) else arm64_emit_b_cond(s, 10, 3) end
-            arm64_emit_movz_x(s, 0, 0, 0)
-            arm64_emit_b(s, 2)
-            arm64_emit_movz_x(s, 0, 1, 0)
+            if k == TOK_EQ()
+                // cmp x0, x1; b.eq +3; mov x0, 0; b +2; mov x0, 1
+                arm64_emit_cmp_x(s, 0, 1)
+                arm64_emit_b_cond(s, 0, 3)
+                arm64_emit_movz_x(s, 0, 0, 0)
+                arm64_emit_b(s, 2)
+                arm64_emit_movz_x(s, 0, 1, 0)
+            elif k == TOK_NEQ()
+                arm64_emit_cmp_x(s, 0, 1)
+                arm64_emit_b_cond(s, 1, 3)
+                arm64_emit_movz_x(s, 0, 0, 0)
+                arm64_emit_b(s, 2)
+                arm64_emit_movz_x(s, 0, 1, 0)
+            elif k == TOK_LT()
+                arm64_emit_cmp_x(s, 0, 1)
+                if cmp_u == 1 arm64_emit_b_cond(s, 3, 3) else arm64_emit_b_cond(s, 11, 3) end
+                arm64_emit_movz_x(s, 0, 0, 0)
+                arm64_emit_b(s, 2)
+                arm64_emit_movz_x(s, 0, 1, 0)
+            elif k == TOK_LTE()
+                arm64_emit_cmp_x(s, 0, 1)
+                if cmp_u == 1 arm64_emit_b_cond(s, 9, 3) else arm64_emit_b_cond(s, 13, 3) end
+                arm64_emit_movz_x(s, 0, 0, 0)
+                arm64_emit_b(s, 2)
+                arm64_emit_movz_x(s, 0, 1, 0)
+            elif k == TOK_GT()
+                arm64_emit_cmp_x(s, 0, 1)
+                if cmp_u == 1 arm64_emit_b_cond(s, 8, 3) else arm64_emit_b_cond(s, 12, 3) end
+                arm64_emit_movz_x(s, 0, 0, 0)
+                arm64_emit_b(s, 2)
+                arm64_emit_movz_x(s, 0, 1, 0)
+            elif k == TOK_GTE()
+                arm64_emit_cmp_x(s, 0, 1)
+                if cmp_u == 1 arm64_emit_b_cond(s, 2, 3) else arm64_emit_b_cond(s, 10, 3) end
+                arm64_emit_movz_x(s, 0, 0, 0)
+                arm64_emit_b(s, 2)
+                arm64_emit_movz_x(s, 0, 1, 0)
+            end
         end
         s.a64_last_is_uint = 0
+        s.a64_last_expr_type = "int"
     return 0
 
 fn arm64_synth_expr_bit_and s toks pos_box

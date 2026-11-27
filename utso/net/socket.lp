@@ -25,13 +25,18 @@ fn সকেট_অপশন_সেট fd মেমরি_ঠিকানা
     return socket_set_reuseaddr(fd, মেমরি_ঠিকানা)
 
 // ৩. নন-ব্লকিং মোড সক্রিয়করণ (Set O_NONBLOCK via SYS_fcntl: syscall 72)
-// WHY: ক্লায়েন্ট সংযোগের জন্য অপেক্ষা করার সময় থ্রেড বা টেস্ট রানার ব্লক না হওয়া।
+// WHY: Bitwise OR (`flags | 2048`) makes enabling O_NONBLOCK idempotent; addition
+// would carry into O_SYNC (4096) and clear O_NONBLOCK if called more than once.
 // F_GETFL = 3, F_SETFL = 4, O_NONBLOCK = 2048 (0x800)
 fn socket_set_nonblocking fd
     flags = syscall(72, fd, 3, 0, 0, 0, 0)
-    new_flags = flags + 2048
+    if flags < 0
+        return flags
+    end
+    new_flags = flags | 2048
     code = syscall(72, fd, 4, new_flags, 0, 0, 0)
     return code
+end
 
 fn সকেট_ননব্লকিং_সেট fd
     return socket_set_nonblocking(fd)
@@ -207,61 +212,72 @@ fn ইপোল_তৈরি
     return epoll_create()
 
 fn epoll_add_fd epfd fd events_mask
-    // WHY: কার্নেল ইপোল তালিকায় নির্দিষ্ট সকেট ফাইল ডেসক্রিপ্টর ও ইভেন্ট মাস্ক যোগ করা।
-    // x86_64 struct epoll_event layout (16 bytes):
-    // offset 0..3: uint32 events
-    // offset 4..7: padding (4 bytes)
-    // offset 8..15: uint64 data (fd)
+    // WHY: Linux x86_64 `struct epoll_event` is `__attribute__((packed))` and strictly
+    // 12 bytes: uint32 events @ offset 0..3, uint64 data @ offset 4..11 (NO padding!).
     ev = malloc(16)
     mem_write_u32(ev, 0, events_mask)
-    mem_write_u32(ev, 4, 0)
-    mem_write(ev, 8, fd)
+    mem_write(ev, 4, fd)
     res = syscall(233, epfd, 1, fd, ev, 0, 0) // EPOLL_CTL_ADD = 1
     free(ev, 16)
     return res
+end
 
 fn ইপোল_যুক্ত epfd fd ইভেন্ট_মাস্ক
     return epoll_add_fd(epfd, fd, ইভেন্ট_মাস্ক)
+end
 
 fn epoll_del_fd epfd fd
     // WHY: কার্নেল ইপোল তালিকা থেকে নির্দিষ্ট সকেট অপসারিত করা (EPOLL_CTL_DEL = 2)।
     return syscall(233, epfd, 2, fd, 0, 0, 0)
+end
 
 fn ইপোল_মুছ epfd fd
     return epoll_del_fd(epfd, fd)
+end
 
 fn epoll_mod_fd epfd fd events_mask
-    // WHY: চলমান সকেট মনিটরিং ইভেন্ট মাস্ক পরিবর্তন করা (EPOLL_CTL_MOD = 3)।
+    // WHY: Packed 12-byte x86_64 `struct epoll_event`: events@+0 (u32), data@+4 (u64).
     ev = malloc(16)
     mem_write_u32(ev, 0, events_mask)
-    mem_write_u32(ev, 4, 0)
-    mem_write(ev, 8, fd)
+    mem_write(ev, 4, fd)
     res = syscall(233, epfd, 3, fd, ev, 0, 0) // EPOLL_CTL_MOD = 3
     free(ev, 16)
     return res
+end
 
 fn ইপোল_পরিবর্তন epfd fd ইভেন্ট_মাস্ক
     return epoll_mod_fd(epfd, fd, ইভেন্ট_মাস্ক)
+end
 
 fn epoll_wait_events epfd events_buf maxevents timeout_ms
-    // WHY: কার্নেলে সক্রিয় সকেট ইভেন্ট আসার জন্য অপেক্ষা (SYS_epoll_wait: syscall 232)।
-    return syscall(232, epfd, events_buf, maxevents, timeout_ms, 0, 0)
+    // WHY: Retry SYS_epoll_wait (232) on EINTR (-4) so STW GC signals never spuriously abort waits.
+    res = syscall(232, epfd, events_buf, maxevents, timeout_ms, 0, 0)
+    while res == -4
+        res = syscall(232, epfd, events_buf, maxevents, timeout_ms, 0, 0)
+    end
+    return res
+end
 
 fn ইপোল_অপেক্ষা epfd ইভেন্টস_বাফার সর্বোচ্চ_ইভেন্ট টাইমআউট
     return epoll_wait_events(epfd, ইভেন্টস_বাফার, সর্বোচ্চ_ইভেন্ট, টাইমআউট)
+end
 
 fn epoll_event_get_fd events_buf idx
-    // WHY: ইপোল রেজাল্ট বাফার থেকে idx-তম সক্রিয় সকেটের ফাইল ডেসক্রিপ্টর নিষ্কাশন।
-    offset = (idx * 16) + 8
+    // WHY: Linux x86_64 epoll_event array stride is 12 bytes with u64 data at +4.
+    offset = (idx * 12) + 4
     return mem_read(events_buf, offset)
+end
 
 fn ইপোল_ঘটনা_এফডি ইভেন্টস_বাফার সূচক
     return epoll_event_get_fd(ইভেন্টস_বাফার, সূচক)
+end
 
 fn epoll_event_get_events events_buf idx
-    // WHY: ইপোল রেজাল্ট বাফার থেকে idx-তম ট্রিগার হওয়া ইভেন্ট ফ্ল্যাগ (EPOLLIN/EPOLLOUT) পড়া।
-    offset = idx * 16
+    // WHY: Linux x86_64 epoll_event array stride is 12 bytes with u32 events at +0.
+    offset = idx * 12
     return mem_read_u32(events_buf, offset)
+end
 
 fn ইপোল_ঘটনা_ইভেন্টস ইভেন্টস_বাফার সূচক
     return epoll_event_get_events(ইভেন্টস_বাফার, সূচক)
+end

@@ -2,6 +2,10 @@ import "utso/core/string"
 import "utso/core/collections"
 
 @! ============================================================================
+@! @deprecated Simulation-only in-memory VFS/RamFS/DevFS model.
+@! WHY: Models inodes and file descriptors in memory rather than invoking Linux kernel syscalls.
+@! For real kernel filesystem I/O use `utso/os/fs.lp` or `utso/silicon/*`.
+@! ============================================================================
 @! LIPI VIRTUAL FILESYSTEM (VFS) — utso/os/vfs.lp
 @! 100% Written in Pure Lipi Language — Complete Zero libc / Zero C Dependencies
 @! Features: Inode RamFS, DevFS (/dev/null, /dev/zero, /dev/random, /dev/tty),

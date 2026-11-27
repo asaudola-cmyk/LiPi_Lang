@@ -267,6 +267,24 @@ fn read_u64 buf off
     w1 = read_u32(buf, off + 4)
     return w0 + (w1 * 4294967296)
 
+fn elf_type_name e_type
+    // WHY: Decodes standard ELF64 e_type values instead of hardcoding ET_EXEC.
+    if e_type == 0 return "ET_NONE"
+    if e_type == 1 return "ET_REL"
+    if e_type == 2 return "ET_EXEC"
+    if e_type == 3 return "ET_DYN"
+    if e_type == 4 return "ET_CORE"
+    return "UNKNOWN"
+
+fn elf_machine_name e_machine
+    // WHY: Decodes standard ELF64 e_machine architectures accurately across x86_64/AArch64/RISC-V.
+    if e_machine == 3 return "EM_386, 0x03"
+    if e_machine == 40 return "EM_ARM, 0x28"
+    if e_machine == 62 return "EM_X86_64, 0x3E"
+    if e_machine == 183 return "EM_AARCH64, 0xB7"
+    if e_machine == 243 return "EM_RISCV, 0xF3"
+    return "UNKNOWN"
+
 fn বাইনারি_ডায়াগনস্টিক bin_path
     say "🔍 টার্গেট বাইনারি ডায়াগনস্টিক: " + bin_path
     fd = syscall(2, bin_path, 0, 0, 0, 0, 0)
@@ -281,13 +299,23 @@ fn বাইনারি_ডায়াগনস্টিক bin_path
         syscall(3, fd, 0, 0, 0, 0, 0)
         return 0
 
+    if mem_byte_read(hdr, 0) != 127 or mem_byte_read(hdr, 1) != 69 or mem_byte_read(hdr, 2) != 76 or mem_byte_read(hdr, 3) != 70
+        say "❌ অবৈধ ELF ম্যাজিক হেডার"
+        free(hdr, 128)
+        syscall(3, fd, 0, 0, 0, 0, 0)
+        return 0
+
     say "  • ELF Magic: 0x7F E L F"
     elf_class = mem_byte_read(hdr, 4)
     if elf_class == 2
         say "  • Class: ELF64 (64-bit Architecture)"
+    elif elf_class == 1
+        say "  • Class: ELF32 (32-bit Architecture)"
     endian = mem_byte_read(hdr, 5)
     if endian == 1
         say "  • Data: Little-Endian (2s complement)"
+    elif endian == 2
+        say "  • Data: Big-Endian"
 
     e_type = read_u16(hdr, 16)
     e_machine = read_u16(hdr, 18)
@@ -302,28 +330,40 @@ fn বাইনারি_ডায়াগনস্টিক bin_path
     e_shnum = read_u16(hdr, 60)
     e_shstrndx = read_u16(hdr, 62)
 
-    say "  • Type (e_type): " + str(e_type) + " (ET_EXEC)"
-    say "  • Architecture (e_machine): " + str(e_machine) + " (EM_X86_64, 0x3E)"
+    say "  • Type (e_type): " + str(e_type) + " (" + elf_type_name(e_type) + ")"
+    say "  • Architecture (e_machine): " + str(e_machine) + " (" + elf_machine_name(e_machine) + ")"
     say "  • Entry Point (e_entry): 0x" + qword_to_hex(e_entry) + " (" + str(e_entry) + ")"
     say "  • Program Headers (e_phoff): " + str(e_phoff) + " (" + str(e_phnum) + " entries)"
     say "  • Section Headers (e_shoff): " + str(e_shoff) + " (" + str(e_shnum) + " entries)"
     say "  • Flags (e_flags): 0x" + to_hex32(e_flags)
     say "  • Header Size (e_ehsize): " + str(e_ehsize) + " bytes"
 
-    if e_phnum > 0 and e_phoff >= 64 and n >= (e_phoff + 56)
-        p_offset = read_u64(hdr, e_phoff + 8)
-        p_vaddr = read_u64(hdr, e_phoff + 16)
-        p_filesz = read_u64(hdr, e_phoff + 32)
-        say "  • Segment [0]: PT_LOAD at offset 0x" + qword_to_hex(p_offset) + ", VAddr 0x" + qword_to_hex(p_vaddr)
-        if e_entry >= p_vaddr and e_entry < (p_vaddr + p_filesz)
-            e_off = p_offset + (e_entry - p_vaddr)
-            say "  ✔ এন্ট্রি পয়েন্ট ফাইল অফসেট: " + e_off + " (0x" + to_hex16(e_off) + ")"
-            syscall(8, fd, e_off, 0, 0, 0, 0)
-            cbuf = malloc(64)
-            cn = syscall(0, fd, cbuf, 64, 0, 0, 0)
-            if cn > 0
-                dbg_disasm(cbuf, cn)
-            free(cbuf, 64)
+    if e_phnum > 0 and e_phoff >= 64 and e_phentsize >= 56 and e_phnum < 64
+        ph_tot = e_phnum * e_phentsize
+        ph_buf = malloc(ph_tot)
+        syscall(8, fd, e_phoff, 0, 0, 0, 0)
+        ph_n = syscall(0, fd, ph_buf, ph_tot, 0, 0, 0)
+        if ph_n >= ph_tot
+            pi = 0
+            while pi < e_phnum
+                pb = pi * e_phentsize
+                p_type = read_u32(ph_buf, pb)
+                if p_type == 1
+                    p_offset = read_u64(ph_buf, pb + 8)
+                    p_vaddr = read_u64(ph_buf, pb + 16)
+                    p_filesz = read_u64(ph_buf, pb + 32)
+                    say "  • Segment [" + str(pi) + "]: PT_LOAD at offset 0x" + qword_to_hex(p_offset) + ", VAddr 0x" + qword_to_hex(p_vaddr)
+                    if e_entry >= p_vaddr and e_entry < (p_vaddr + p_filesz) and e_machine == 62
+                        e_off = p_offset + (e_entry - p_vaddr)
+                        say "  ✔ এন্ট্রি পয়েন্ট ফাইল অফসেট: " + e_off + " (0x" + to_hex16(e_off) + ")"
+                        syscall(8, fd, e_off, 0, 0, 0, 0)
+                        cbuf = malloc(64)
+                        cn = syscall(0, fd, cbuf, 64, 0, 0, 0)
+                        if cn > 0
+                            dbg_disasm(cbuf, cn)
+                        free(cbuf, 64)
+                pi = pi + 1
+        free(ph_buf, ph_tot)
 
     // Parse ELF64 section headers (.text, .symtab, .strtab)
     if e_shoff > 0 and e_shentsize >= 64 and e_shnum > 0 and e_shnum < 128
@@ -441,8 +481,9 @@ fn dbg_stack_inspect
     say "  শীর্ষ ৪টি স্ট্যাক ফ্রেম কোয়াডওয়ার্ড:"
     i = 0
     while i < 4
+        // WHY: mem_word_read takes a byte offset, so slot i is at i * 8 bytes.
         off = i * 8
-        val = mem_word_read(rsp, i)
+        val = mem_word_read(rsp, off)
         say "  [%rsp +" + off + "] @ 0x" + qword_to_hex(rsp + off) + " = 0x" + qword_to_hex(val) + " (" + val + ")"
         i = i + 1
 
@@ -461,23 +502,30 @@ PTRACE_SETREGS    = 13
 PTRACE_ATTACH     = 16
 PTRACE_DETACH     = 17
 
+// WHY: Tracks ptrace word-read/breakpoint status separately so valid 64-bit machine code words
+// with bit 63 set (negative as signed i64) are never mistaken for error sentinel -1.
+global g_dbg_last_err = 0
+
 fn dbg_ptrace req pid addr data
     return syscall(101, req, pid, addr, data, 0, 0)
 
 fn dbg_get_regs pid
     // WHY: Reads Linux x86_64 user_regs_struct (216 bytes = 27 qwords) via PTRACE_GETREGS (12)
+    // using exact byte offsets: rbp=32, rbx=40, rax=80, rcx=88, rdx=96, rsi=104, rdi=112, rip=128, rsp=152.
     regs_buf = alloc(256)
     res = dbg_ptrace(PTRACE_GETREGS, pid, 0, regs_buf)
     if res < 0
         free(regs_buf)
+        g_dbg_last_err = res
         say "  ⚠ [PTRACE_GETREGS] রেজিস্টার পড়া সম্ভব হয়নি (PID: " + str(pid) + ")"
         return 0 - 1
-    rip_val = mem_word_read(regs_buf, 16)
-    rsp_val = mem_word_read(regs_buf, 19)
-    rax_val = mem_word_read(regs_buf, 10)
-    rbx_val = mem_word_read(regs_buf, 5)
-    rcx_val = mem_word_read(regs_buf, 11)
-    rdx_val = mem_word_read(regs_buf, 12)
+    g_dbg_last_err = 0
+    rip_val = mem_word_read(regs_buf, 128)
+    rsp_val = mem_word_read(regs_buf, 152)
+    rax_val = mem_word_read(regs_buf, 80)
+    rbx_val = mem_word_read(regs_buf, 40)
+    rcx_val = mem_word_read(regs_buf, 88)
+    rdx_val = mem_word_read(regs_buf, 96)
     free(regs_buf)
     say "  • [PTRACE_GETREGS] RIP: 0x" + qword_to_hex(rip_val) + " | RSP: 0x" + qword_to_hex(rsp_val)
     say "  • [PTRACE_GETREGS] RAX: 0x" + qword_to_hex(rax_val) + " | RBX: 0x" + qword_to_hex(rbx_val)
@@ -522,22 +570,31 @@ fn dbg_peek_word pid addr
     rc = dbg_ptrace(PTRACE_PEEKDATA, pid, addr, peek_buf)
     if rc < 0
         free(peek_buf)
-        return 0 - 1
+        g_dbg_last_err = rc
+        return 0
     val = mem_word_read(peek_buf, 0)
     free(peek_buf)
+    g_dbg_last_err = 0
     return val
 
 fn dbg_set_breakpoint pid addr
     peek_buf = alloc(16)
+    mem_word_write(peek_buf, 0, 0)
     rc = dbg_ptrace(PTRACE_PEEKDATA, pid, addr, peek_buf)
     if rc < 0
         free(peek_buf)
+        g_dbg_last_err = rc
         say "  ❌ [PTRACE_PEEKDATA] ব্রেকপয়েন্ট পড়া ব্যর্থ @ 0x" + qword_to_hex(addr)
-        return 0 - 1
+        return 0
     orig_word = mem_word_read(peek_buf, 0)
     free(peek_buf)
-    new_word = (orig_word & (-256)) | 204
-    dbg_ptrace(PTRACE_POKEDATA, pid, addr, new_word)
+    new_word = (orig_word & (0 - 256)) | 204
+    prc = dbg_ptrace(PTRACE_POKEDATA, pid, addr, new_word)
+    if prc < 0
+        g_dbg_last_err = prc
+        say "  ❌ [PTRACE_POKEDATA] ব্রেকপয়েন্ট লেখা ব্যর্থ @ 0x" + qword_to_hex(addr)
+        return 0
+    g_dbg_last_err = 0
     say "  ✔ ব্রেকপয়েন্ট (INT3) স্থাপিত @ 0x" + qword_to_hex(addr)
     return orig_word
 
@@ -546,13 +603,62 @@ fn dbg_restore_breakpoint pid addr orig_word
     say "  ✔ মূল অপকোড পুনরুদ্ধার সম্পন্ন @ 0x" + qword_to_hex(addr)
     return 0
 
+fn dbg_rearm_breakpoint pid addr orig_word
+    // WHY: Re-arms 0xCC (INT3) after single-stepping past a restored breakpoint instruction.
+    new_word = (orig_word & (0 - 256)) | 204
+    return dbg_ptrace(PTRACE_POKEDATA, pid, addr, new_word)
+
+fn dbg_step_over_active_bp pid bp_addr bp_orig
+    // WHY: Restores original instruction, single-steps exactly one instruction, then re-arms 0xCC.
+    // Returns 1 if tracee exited or died by signal (low 7 bits != 0x7F), 0 if stopped and re-armed.
+    dbg_ptrace(PTRACE_POKEDATA, pid, bp_addr, bp_orig)
+    s_rc = dbg_ptrace(PTRACE_SINGLESTEP, pid, 0, 0)
+    if s_rc < 0
+        return 0 - 1
+    st = alloc(16)
+    mem_word_write(st, 0, 0)
+    syscall(61, pid, st, 0, 0, 0, 0)
+    raw_st = mem_word_read(st, 0) & 65535
+    free(st)
+    if (raw_st & 127) != 127
+        return 1
+    dbg_rearm_breakpoint(pid, bp_addr, bp_orig)
+    return 0
+
+fn dbg_check_bp_hit pid bp_addrs bp_origs
+    // WHY: When x86_64 executes 0xCC (INT3), RIP advances to bp_addr + 1; rewind RIP to bp_addr
+    // via PTRACE_SETREGS and restore the original opcode byte so execution can resume cleanly.
+    regs_buf = alloc(256)
+    rc = dbg_ptrace(PTRACE_GETREGS, pid, 0, regs_buf)
+    if rc < 0
+        free(regs_buf)
+        return 0 - 1
+    cur_rip = mem_word_read(regs_buf, 128)
+    bi = 0
+    hit_idx = 0 - 1
+    while bi < len(bp_addrs)
+        if get(bp_addrs, bi) == (cur_rip - 1)
+            hit_idx = bi
+            break
+        bi = bi + 1
+    if hit_idx >= 0
+        bp_addr = get(bp_addrs, hit_idx)
+        bp_orig = get(bp_origs, hit_idx)
+        mem_word_write(regs_buf, 128, bp_addr)
+        dbg_ptrace(PTRACE_SETREGS, pid, 0, regs_buf)
+        dbg_ptrace(PTRACE_POKEDATA, pid, bp_addr, bp_orig)
+        say "  🛑 [BREAKPOINT HIT] INT3 @ 0x" + qword_to_hex(bp_addr) + " (RIP rewound & opcode restored)"
+    free(regs_buf)
+    return hit_idx
+
 fn dbg_spawn_traced bin_path
     cpid = syscall(57, 0, 0, 0, 0, 0, 0) // fork
     if cpid == 0
         dbg_ptrace(PTRACE_TRACEME, 0, 0, 0)
         argv = alloc(16)
         mem_word_write(argv, 0, bin_path)
-        mem_word_write(argv, 1, 0)
+        // WHY: Byte offset 8 is argv[1] NULL terminator (offset 1 would clobber argv[0]).
+        mem_word_write(argv, 8, 0)
         env = alloc(8)
         mem_word_write(env, 0, 0)
         syscall(59, bin_path, argv, env, 0, 0, 0)
@@ -560,13 +666,42 @@ fn dbg_spawn_traced bin_path
     if cpid < 0
         return 0 - 1
     st = alloc(16)
+    mem_word_write(st, 0, 0)
     syscall(61, cpid, st, 0, 0, 0, 0)
+    raw_st = mem_word_read(st, 0) & 65535
     free(st)
+    // WHY: If execve fails (e.g. missing binary), tracee exits with 127 instead of stopping on SIGTRAP (0x7F).
+    if (raw_st & 127) != 127
+        say "❌ টার্গেট বাইনারি চালু করা যায়নি: " + bin_path
+        return 0 - 1
     return cpid
+
+fn dbg_resolve_bp_arg pid arg_s
+    // WHY: Supports both absolute hex/dec addresses and RIP-relative offsets (+N) for ASLR PIE binaries.
+    if len(arg_s) > 1 and char_at(arg_s, 0) == "+"
+        delta = parse_hex_or_dec(str_sub(arg_s, 1, len(arg_s)))
+        regs_buf = alloc(256)
+        rc = dbg_ptrace(PTRACE_GETREGS, pid, 0, regs_buf)
+        base_rip = 0
+        if rc >= 0
+            base_rip = mem_word_read(regs_buf, 128)
+        free(regs_buf)
+        return base_rip + delta
+    return parse_hex_or_dec(arg_s)
+
+fn _dbg_find_bp bp_addrs addr
+    bi = 0
+    while bi < len(bp_addrs)
+        if get(bp_addrs, bi) == addr
+            return bi
+        bi = bi + 1
+    return 0 - 1
 
 fn dbg_interactive_loop pid
     bp_addrs = list()
     bp_origs = list()
+    at_bp_idx = 0 - 1
+    exited = 0
     bb = malloc(2)
     while 1
         prm = "(lipidbg) "
@@ -576,7 +711,12 @@ fn dbg_interactive_loop pid
             nr = syscall(0, 0, bb, 1, 0, 0, 0)
             if nr <= 0
                 free(bb, 2)
-                dbg_detach(pid)
+                if exited == 0
+                    bi_e = 0
+                    while bi_e < len(bp_addrs)
+                        dbg_restore_breakpoint(pid, get(bp_addrs, bi_e), get(bp_origs, bi_e))
+                        bi_e = bi_e + 1
+                    dbg_detach(pid)
                 return 0
             b = mem_byte_read(bb, 0)
             if b == 10 or b == 13 break
@@ -586,32 +726,85 @@ fn dbg_interactive_loop pid
         elif line == "regs" or line == "r"
             dbg_get_regs(pid)
         elif line == "step" or line == "si" or line == "s"
-            dbg_single_step(pid)
+            if at_bp_idx >= 0
+                sr = dbg_step_over_active_bp(pid, get(bp_addrs, at_bp_idx), get(bp_origs, at_bp_idx))
+                at_bp_idx = 0 - 1
+                if sr == 1
+                    say "  ✔ টার্গেট প্রসেস সমাপ্ত হয়েছে।"
+                    exited = 1
+                    break
+                dbg_get_regs(pid)
+            else
+                s_rc2 = dbg_ptrace(PTRACE_SINGLESTEP, pid, 0, 0)
+                if s_rc2 < 0
+                    say "  ❌ [PTRACE_SINGLESTEP] সিঙ্গেল স্টেপ ব্যর্থ (PID: " + str(pid) + ")"
+                else
+                    st_s = alloc(16)
+                    mem_word_write(st_s, 0, 0)
+                    syscall(61, pid, st_s, 0, 0, 0, 0)
+                    raw_s = mem_word_read(st_s, 0) & 65535
+                    free(st_s)
+                    if (raw_s & 127) != 127
+                        say "  ✔ টার্গেট প্রসেস সমাপ্ত হয়েছে।"
+                        exited = 1
+                        break
+                    dbg_get_regs(pid)
         elif line == "cont" or line == "c"
+            if at_bp_idx >= 0
+                sr = dbg_step_over_active_bp(pid, get(bp_addrs, at_bp_idx), get(bp_origs, at_bp_idx))
+                at_bp_idx = 0 - 1
+                if sr == 1
+                    say "  ✔ টার্গেট প্রসেস সমাপ্ত হয়েছে।"
+                    exited = 1
+                    break
             dbg_ptrace(PTRACE_CONT, pid, 0, 0)
             st = alloc(16)
+            mem_word_write(st, 0, 0)
             syscall(61, pid, st, 0, 0, 0, 0)
+            raw_st = mem_word_read(st, 0) & 65535
             free(st)
-            dbg_get_regs(pid)
+            low_st = raw_st & 127
+            if low_st == 0
+                ecode = (raw_st / 256) % 256
+                say "  ✔ টার্গেট প্রসেস সমাপ্ত হয়েছে (exit=" + str(ecode) + ")"
+                exited = 1
+                break
+            elif low_st == 127
+                sig_num = (raw_st / 256) % 256
+                if sig_num == 5
+                    at_bp_idx = dbg_check_bp_hit(pid, bp_addrs, bp_origs)
+                dbg_get_regs(pid)
+            else
+                say "  ⚠ টার্গেট প্রসেস সিগন্যালে সমাপ্ত (sig=" + str(low_st) + ")"
+                exited = 1
+                break
         elif len(line) > 2 and char_at(line, 0) == "b" and char_at(line, 1) == " "
-            addr = parse_hex_or_dec(str_sub(line, 2, len(line)))
-            orig = dbg_set_breakpoint(pid, addr)
-            if orig >= 0
-                push(bp_addrs, addr)
-                push(bp_origs, orig)
+            addr = dbg_resolve_bp_arg(pid, str_sub(line, 2, len(line)))
+            // WHY: Never re-read 0xCC over an already-armed breakpoint (would corrupt saved original opcode).
+            if _dbg_find_bp(bp_addrs, addr) >= 0
+                say "  ℹ ব্রেকপয়েন্ট ইতিমধ্যেই স্থাপিত @ 0x" + qword_to_hex(addr)
+            else
+                orig = dbg_set_breakpoint(pid, addr)
+                if g_dbg_last_err == 0
+                    push(bp_addrs, addr)
+                    push(bp_origs, orig)
         elif len(line) > 6 and str_sub(line, 0, 6) == "break "
-            addr = parse_hex_or_dec(str_sub(line, 6, len(line)))
-            orig = dbg_set_breakpoint(pid, addr)
-            if orig >= 0
-                push(bp_addrs, addr)
-                push(bp_origs, orig)
-    // Restore breakpoints before detaching
-    bi = 0
-    while bi < len(bp_addrs)
-        dbg_restore_breakpoint(pid, get(bp_addrs, bi), get(bp_origs, bi))
-        bi = bi + 1
+            addr = dbg_resolve_bp_arg(pid, str_sub(line, 6, len(line)))
+            if _dbg_find_bp(bp_addrs, addr) >= 0
+                say "  ℹ ব্রেকপয়েন্ট ইতিমধ্যেই স্থাপিত @ 0x" + qword_to_hex(addr)
+            else
+                orig = dbg_set_breakpoint(pid, addr)
+                if g_dbg_last_err == 0
+                    push(bp_addrs, addr)
+                    push(bp_origs, orig)
+    // Restore breakpoints before detaching if tracee is still alive
+    if exited == 0
+        bi = 0
+        while bi < len(bp_addrs)
+            dbg_restore_breakpoint(pid, get(bp_addrs, bi), get(bp_origs, bi))
+            bi = bi + 1
+        dbg_detach(pid)
     free(bb, 2)
-    dbg_detach(pid)
     return 0
 
 // ── 7. Sovereign Time-Travel Debugger (TTD) Engine ───────────────────────────
@@ -633,18 +826,23 @@ struct TtdSession
     td_current_tick
     td_max_ticks
     td_is_active
+    td_total_recorded
 
 fn ttd_session_new max_ticks
     s = TtdSession()
     s.td_history = list()
     s.td_current_tick = 0
     s.td_max_ticks = max_ticks
+    if s.td_max_ticks <= 0
+        s.td_max_ticks = 64
     s.td_is_active = 1
+    s.td_total_recorded = 0
     return s
 
 fn ttd_record_snapshot session pc sp rax rbx rcx rdx mem_buf mem_len
+    // WHY: Bounded ring buffer keeps memory O(max_ticks) even on long ptrace single-step traces.
     snap = TtdSnapshot()
-    snap.ts_tick = len(session.td_history)
+    snap.ts_tick = session.td_total_recorded
     snap.ts_pc = pc
     snap.ts_sp = sp
     snap.ts_rax = rax
@@ -660,8 +858,19 @@ fn ttd_record_snapshot session pc sp rax rbx rcx rdx mem_buf mem_len
             i = i + 1
     snap.ts_bytes = b_list
     
-    push(session.td_history, snap)
-    session.td_current_tick = snap.ts_tick
+    if len(session.td_history) >= session.td_max_ticks
+        // Shift ring window cleanly so index 0..len-1 remains chronological
+        new_hist = list()
+        hi = 1
+        while hi < len(session.td_history)
+            push(new_hist, get(session.td_history, hi))
+            hi = hi + 1
+        push(new_hist, snap)
+        session.td_history = new_hist
+    else
+        push(session.td_history, snap)
+    session.td_total_recorded = session.td_total_recorded + 1
+    session.td_current_tick = len(session.td_history) - 1
     return snap.ts_tick
 
 fn ttd_step_back session
@@ -711,47 +920,123 @@ fn ttd_render_snapshot snap
     say "  └────────────────────────────────────────────────────────"
     return 1
 
-fn dbg_run_ttd_demo
+fn dbg_spawn_self_traced
+    // WHY: Forks a real traced child executing live native instructions when `lipidbg ttd`
+    // is invoked without an explicit binary path, producing authentic hardware RIP/RSP/RAX frames.
+    cpid = syscall(57, 0, 0, 0, 0, 0, 0)
+    if cpid == 0
+        dbg_ptrace(PTRACE_TRACEME, 0, 0, 0)
+        my_pid = syscall(39, 0, 0, 0, 0, 0, 0)
+        syscall(62, my_pid, 5, 0, 0, 0, 0) // SIGTRAP self-stop so parent captures real steps
+        acc = 1
+        k = 1
+        while k <= 8
+            acc = (acc * 3) + k
+            k = k + 1
+        syscall(231, 0, 0, 0, 0, 0, 0)
+    if cpid < 0
+        return 0 - 1
+    st = alloc(16)
+    mem_word_write(st, 0, 0)
+    syscall(61, cpid, st, 0, 0, 0, 0)
+    raw_st = mem_word_read(st, 0) & 65535
+    free(st)
+    if (raw_st & 127) != 127
+        return 0 - 1
+    return cpid
+
+fn dbg_run_ttd bin_path max_steps
+    // WHY: Real ptrace single-step register snapshot ring buffer recording live (step, RIP, RSP, RAX)
+    // frames from an actual traced child process instead of fabricated hardcoded addresses.
     say "================================================================="
     say "⏳ LIPIDBG SOVEREIGN TIME-TRAVEL EXECUTION TRACE (0% GDB)"
     say "================================================================="
-    sess = ttd_session_new(100)
-    
-    // Simulate deterministic execution timeline capture
-    sp_base = stack_pointer()
-    ttd_record_snapshot(sess, 4194304, sp_base, 0, 100, 0, 1, 0, 0)
-    ttd_record_snapshot(sess, 4194312, sp_base - 8, 42, 100, 1, 1, 0, 0)
-    ttd_record_snapshot(sess, 4194320, sp_base - 16, 84, 200, 2, 2, 0, 0)
-    ttd_record_snapshot(sess, 4194336, sp_base - 24, 126, 300, 3, 3, 0, 0)
-    
-    say "  ✔ Captured 4 execution snapshots into TTD timeline."
-    say "\n[Current State at Tick 3]:"
-    ttd_render_snapshot(get(sess.td_history, 3))
-    
-    say "\n[Rewinding Execution: Step Back to Tick 2]:"
-    s2 = ttd_step_back(sess)
-    ttd_render_snapshot(s2)
-    
-    say "\n[Rewinding Execution: Step Back to Tick 1]:"
-    s1 = ttd_step_back(sess)
-    ttd_render_snapshot(s1)
-    
-    say "\n[Replaying Forward: Step Forward to Tick 2]:"
-    s2_fwd = ttd_step_forward(sess)
-    ttd_render_snapshot(s2_fwd)
-    
+    steps_cap = max_steps
+    if steps_cap <= 0
+        steps_cap = 16
+    sess = ttd_session_new(steps_cap)
+
+    cpid = 0 - 1
+    if len(bin_path) > 0
+        say "  • Target Binary: " + bin_path
+        cpid = dbg_spawn_traced(bin_path)
+    else
+        say "  • Target Mode  : Live Self-Trace (fork + PTRACE_TRACEME)"
+        cpid = dbg_spawn_self_traced()
+
+    if cpid <= 0
+        say "  ❌ [TTD] Failed to spawn traced child process."
+        return 1
+
+    regs_buf = alloc(256)
+    st = alloc(16)
+    child_alive = 1
+    step_i = 0
+    while step_i < steps_cap and child_alive == 1
+        rc = dbg_ptrace(PTRACE_GETREGS, cpid, 0, regs_buf)
+        if rc < 0
+            break
+        rip_v = mem_word_read(regs_buf, 128)
+        rsp_v = mem_word_read(regs_buf, 152)
+        rax_v = mem_word_read(regs_buf, 80)
+        rbx_v = mem_word_read(regs_buf, 40)
+        rcx_v = mem_word_read(regs_buf, 88)
+        rdx_v = mem_word_read(regs_buf, 96)
+        ttd_record_snapshot(sess, rip_v, rsp_v, rax_v, rbx_v, rcx_v, rdx_v, 0, 0)
+
+        step_i = step_i + 1
+        if step_i >= steps_cap
+            break
+        s_rc = dbg_ptrace(PTRACE_SINGLESTEP, cpid, 0, 0)
+        if s_rc < 0
+            break
+        mem_word_write(st, 0, 0)
+        w_rc = syscall(61, cpid, st, 0, 0, 0, 0)
+        if w_rc <= 0
+            child_alive = 0
+            break
+        raw_st = mem_word_read(st, 0) & 65535
+        if (raw_st & 127) != 127
+            child_alive = 0
+            break
+
+    if child_alive == 1
+        syscall(62, cpid, 9, 0, 0, 0, 0) // SIGKILL traced child to prevent orphan/stopped leak
+        syscall(61, cpid, st, 0, 0, 0, 0)
+    free(regs_buf)
+    free(st)
+
+    total = len(sess.td_history)
+    if total == 0
+        say "  ❌ [TTD] No hardware register frames captured."
+        return 1
+
+    say "  ✔ Captured " + str(total) + " live ptrace hardware execution snapshots into TTD ring buffer."
+    last_idx = total - 1
+    say "\n[Current State at Tick " + str(last_idx) + "]:"
+    ttd_render_snapshot(get(sess.td_history, last_idx))
+
+    if total >= 2
+        say "\n[Rewinding Execution: Step Back]:"
+        s_prev = ttd_step_back(sess)
+        ttd_render_snapshot(s_prev)
+
+        say "\n[Replaying Forward: Step Forward]:"
+        s_fwd = ttd_step_forward(sess)
+        ttd_render_snapshot(s_fwd)
+
     say "\n[Seeking to Tick 0 (Origin Point)]:"
     s0 = ttd_seek(sess, 0)
     ttd_render_snapshot(s0)
-    
-    say "\n🎉 TIME-TRAVEL DEBUGGER PARITY VERIFIED 100%!"
+
+    say "\n🎉 LIVE PTRACE TIME-TRAVEL TRACE VERIFIED!"
     return 0
 
 fn main
     args = argv()
     argc = len(args)
     if argc < 2
-        say "Usage: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | ttd | version"
+        say "Usage: lipidbg <binary_path> | live <bin> | disasm [bin] | inspect <addr> | stack | attach <pid> | break <pid> <addr> | ttd [bin] [steps] | version"
         return 0
     cmd = get(args, 1)
     if cmd == "version" or cmd == "-v" or cmd == "--version"
@@ -759,12 +1044,17 @@ fn main
         say "Target: Linux x86_64 ELF64 (0% Libc, 0% GDB)"
         return 0
     if cmd == "help" or cmd == "-h" or cmd == "--help"
-        say "Usage: lipidbg <binary_path> | disasm | inspect <addr> | stack | attach <pid> | break <pid> <addr> | ttd | version"
+        say "Usage: lipidbg <binary_path> | live <bin> | disasm [bin] | inspect <addr> | stack | attach <pid> | break <pid> <addr> | ttd [bin] [steps] | version"
         return 0
 
     if cmd == "ttd"
-        dbg_run_ttd_demo()
-        return 0
+        ttd_bin = ""
+        ttd_steps = 16
+        if argc >= 3
+            ttd_bin = get(args, 2)
+        if argc >= 4
+            ttd_steps = parse_hex_or_dec(get(args, 3))
+        return dbg_run_ttd(ttd_bin, ttd_steps)
 
     if cmd == "live" and argc >= 3
         cpid = dbg_spawn_traced(get(args, 2))
@@ -773,6 +1063,7 @@ fn main
             dbg_get_regs(cpid)
             dbg_interactive_loop(cpid)
             return 0
+        syscall(231, 1, 0, 0, 0, 0, 0)
         return 1
 
     if cmd == "attach"
@@ -827,22 +1118,6 @@ fn main
 
     // If given a file path, run binary diagnostic directly
     বাইনারি_ডায়াগনস্টিক(cmd)
-    return 0
-
-    say "=== [LIPIDBG Sovereign System Debugger] ==="
-    say "[১] সিপিইউ স্ট্যাক ফ্রেম ইন্সপেকশন:"
-    dbg_stack_inspect()
-    say "\n[২] লাইভ হিপ মেমরি ডাম্প:"
-    tbuf = malloc(16)
-    mem_byte_write(tbuf, 0, 76)
-    mem_byte_write(tbuf, 1, 73)
-    mem_byte_write(tbuf, 2, 80)
-    mem_byte_write(tbuf, 3, 73)
-    dbg_hex_dump(tbuf, 16)
-    free(tbuf, 16)
-    say "\n[৩] বাইনারি ডায়াগনস্টিক (bin/lipc_bin):"
-    বাইনারি_ডায়াগনস্টিক("bin/lipc_bin")
-    say "\n✔ lipidbg ১০০% কার্যকর ও সম্পূর্ণ C-মুক্ত!"
     return 0
 
 main()

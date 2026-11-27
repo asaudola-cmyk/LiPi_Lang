@@ -606,6 +606,7 @@ import "utso/crypto/rsa"
     x5f_key_usage: 0,
     x5f_has_ku: 0,
     x5f_san_dns_list: [],
+    x5f_san_ip_list: [],
     x5f_subject_cn: ""
   }
 @end
@@ -711,6 +712,7 @@ import "utso/crypto/rsa"
   key_usage = 0
   has_ku = 0
   san_dns_list = []
+  san_ip_list = []
 
   @while ptr < tbs_end
     opt = _x509_tlv_bound(cert_der, ptr, tbs_end)
@@ -757,6 +759,10 @@ import "utso/crypto/rsa"
                     @if gn.is_valid != 1 break @end
                     @if gn.tag == 130 && gn.length > 0
                       san_dns_list = san_dns_list.push(_x509_slice(cert_der, gn.val_start, gn.next_offset))
+                    @elif gn.tag == 135 && (gn.length == 4 || gn.length == 16)
+                      // WHY: RFC 5280 §4.2.1.6 iPAddress SAN (ASN.1 context tag [7] = 0x87 = 135),
+                      // strictly 4 bytes (IPv4) or 16 bytes (IPv6).
+                      san_ip_list = san_ip_list.push(_x509_slice(cert_der, gn.val_start, gn.next_offset))
                     @end
                     gp = gn.next_offset
                   @end
@@ -792,6 +798,7 @@ import "utso/crypto/rsa"
     x5f_key_usage: key_usage,
     x5f_has_ku: has_ku,
     x5f_san_dns_list: san_dns_list,
+    x5f_san_ip_list: san_ip_list,
     x5f_subject_cn: subject_cn
   }
 @end
@@ -903,10 +910,224 @@ import "utso/crypto/rsa"
   return 0
 @end
 
+@fn _x509_hex_nib(ch)
+  @if ch >= 48 && ch <= 57 return ch - 48 @end
+  @if ch >= 97 && ch <= 102 return ch - 87 @end
+  @if ch >= 65 && ch <= 70 return ch - 55 @end
+  return -1
+@end
+
+@fn _x509_parse_ipv4_literal(s)
+  slen = str_len(s)
+  @if slen < 7 || slen > 15 return [] @end
+  octets = []
+  curr = 0
+  digits = 0
+  i = 0
+  @while i < slen
+    ch = str_char_at(s, i) & 255
+    @if ch >= 48 && ch <= 57
+      @if digits == 1 && curr == 0 return [] @end
+      curr = (curr * 10) + (ch - 48)
+      digits = digits + 1
+      @if curr > 255 || digits > 3 return [] @end
+    @elif ch == 46
+      @if digits == 0 || octets.len() >= 3 return [] @end
+      octets = octets.push(curr)
+      curr = 0
+      digits = 0
+    @else
+      return []
+    @end
+    i = i + 1
+  @end
+  @if digits == 0 || octets.len() != 3 return [] @end
+  octets = octets.push(curr)
+  return octets
+@end
+
+@fn _x509_parse_ip_literal(s_in)
+  // WHY: Parses an IPv4 literal (4 bytes) or IPv6 literal (16 bytes, optional `[...]` brackets)
+  // for RFC 5280 iPAddress SAN (tag 0x87) validation. Returns [] for DNS hostnames.
+  s = s_in
+  slen = str_len(s)
+  @if slen == 0 return [] @end
+  @if slen >= 2 && (str_char_at(s, 0) & 255) == 91 && (str_char_at(s, slen - 1) & 255) == 93
+    s = str_slice(s, 1, slen - 1)
+    slen = str_len(s)
+  @end
+  v4 = _x509_parse_ipv4_literal(s)
+  @if v4.len() == 4 return v4 @end
+
+  // Must contain ':' to be an IPv6 literal
+  has_colon = 0
+  ci = 0
+  @while ci < slen
+    @if (str_char_at(s, ci) & 255) == 58
+      has_colon = 1
+      break
+    @end
+    ci = ci + 1
+  @end
+  @if has_colon == 0 || slen < 2 return [] @end
+
+  dc_pos = -1
+  i = 0
+  @while i + 1 < slen
+    @if (str_char_at(s, i) & 255) == 58 && (str_char_at(s, i + 1) & 255) == 58
+      @if dc_pos >= 0 return [] @end
+      dc_pos = i
+      i = i + 2
+      continue
+    @end
+    i = i + 1
+  @end
+
+  sides = []
+  @if dc_pos >= 0
+    sides = [str_slice(s, 0, dc_pos), str_slice(s, dc_pos + 2, slen)]
+  @else
+    sides = [s, ""]
+  @end
+
+  left_g = []
+  right_g = []
+  si = 0
+  @while si < 2
+    part = sides[si]
+    plen = str_len(part)
+    @if plen > 0
+      @if (str_char_at(part, 0) & 255) == 58 || (str_char_at(part, plen - 1) & 255) == 58
+        return []
+      @end
+      pos = 0
+      @while pos < plen
+        nc = pos
+        @while nc < plen && (str_char_at(part, nc) & 255) != 58
+          nc = nc + 1
+        @end
+        tok = str_slice(part, pos, nc)
+        tlen = str_len(tok)
+        @if tlen == 0 return [] @end
+        has_dot = 0
+        di = 0
+        @while di < tlen
+          @if (str_char_at(tok, di) & 255) == 46
+            has_dot = 1
+            break
+          @end
+          di = di + 1
+        @end
+        @if has_dot == 1
+          @if nc != plen return [] @end
+          @if dc_pos >= 0 && si == 0 return [] @end
+          ev4 = _x509_parse_ipv4_literal(tok)
+          @if ev4.len() != 4 return [] @end
+          g0 = ((ev4[0] & 255) << 8) | (ev4[1] & 255)
+          g1 = ((ev4[2] & 255) << 8) | (ev4[3] & 255)
+          @if si == 0
+            left_g = left_g.push(g0)
+            left_g = left_g.push(g1)
+          @else
+            right_g = right_g.push(g0)
+            right_g = right_g.push(g1)
+          @end
+        @else
+          @if tlen > 4 return [] @end
+          val = 0
+          hi = 0
+          @while hi < tlen
+            nb = _x509_hex_nib(str_char_at(tok, hi) & 255)
+            @if nb < 0 return [] @end
+            val = (val << 4) | nb
+            hi = hi + 1
+          @end
+          @if si == 0
+            left_g = left_g.push(val)
+          @else
+            right_g = right_g.push(val)
+          @end
+        @end
+        @if nc < plen
+          pos = nc + 1
+        @else
+          pos = plen
+        @end
+      @end
+    @end
+    si = si + 1
+  @end
+
+  lcnt = left_g.len()
+  rcnt = right_g.len()
+  @if dc_pos < 0
+    @if lcnt != 8 return [] @end
+  @else
+    @if lcnt + rcnt >= 8 return [] @end
+  @end
+
+  groups = []
+  gi = 0
+  @while gi < lcnt
+    groups = groups.push(left_g[gi])
+    gi = gi + 1
+  @end
+  @if dc_pos >= 0
+    zs = 8 - (lcnt + rcnt)
+    zi = 0
+    @while zi < zs
+      groups = groups.push(0)
+      zi = zi + 1
+    @end
+    ri = 0
+    @while ri < rcnt
+      groups = groups.push(right_g[ri])
+      ri = ri + 1
+    @end
+  @end
+  @if groups.len() != 8 return [] @end
+
+  out = []
+  oi = 0
+  @while oi < 8
+    gv = groups[oi]
+    out = out.push((gv >> 8) & 255)
+    out = out.push(gv & 255)
+    oi = oi + 1
+  @end
+  return out
+@end
+
 @fn _x509_verify_sni(leaf_cert, expected_sni)
-  @if str_len(expected_sni) == 0 return 1 @end
+  // WHY: Reject empty expected_sni whenever verification is active so callers can never
+  // silently bypass hostname/IP identity verification!
+  @if str_len(expected_sni) == 0 return 0 @end
+  exp_ip = _x509_parse_ip_literal(expected_sni)
+  @if exp_ip.len() == 4 || exp_ip.len() == 16
+    // WHY: RFC 5280 / RFC 6125 require IP literal targets to match an iPAddress SAN (tag 0x87)
+    // exactly (4 bytes for IPv4, 16 bytes for IPv6); never match DNS wildcards or CN.
+    ip_sans = leaf_cert.x5f_san_ip_list
+    ii = 0
+    @while ii < ip_sans.len()
+      cand = ip_sans[ii]
+      @if cand.len() == exp_ip.len()
+        eq = 1
+        bi = 0
+        @while bi < exp_ip.len()
+          @if (cand[bi] & 255) != (exp_ip[bi] & 255)
+            eq = 0
+            break
+          @end
+          bi = bi + 1
+        @end
+        @if eq == 1 return 1 @end
+      @end
+      ii = ii + 1
+    @end
+    return 0
+  @end
   sans = leaf_cert.x5f_san_dns_list
-  @if sans.len() > 0
+  @if sans.len() > 0 || leaf_cert.x5f_san_ip_list.len() > 0
     i = 0
     @while i < sans.len()
       @if _x509_match_dns(sans[i], expected_sni) == 1
@@ -1234,7 +1455,19 @@ import "utso/crypto/rsa"
   @end
 
   @if str_len(san_dns) > 0
-    gn = _x509_der_tlv_wrap(130, _x509_str_to_bytes(san_dns))
+    // WHY: Encode iPAddress SAN (tag 0x87 = 135) when san_dns is an IPv4/IPv6 literal
+    // (or prefixed with "IP:"), and dNSName SAN (tag 0x82 = 130) for DNS hostnames.
+    san_clean = san_dns
+    @if str_len(san_clean) > 3 && (str_char_at(san_clean, 0) & 255) == 73 && (str_char_at(san_clean, 1) & 255) == 80 && (str_char_at(san_clean, 2) & 255) == 58
+      san_clean = str_slice(san_clean, 3, str_len(san_clean))
+    @end
+    san_ip_b = _x509_parse_ip_literal(san_clean)
+    gn = []
+    @if san_ip_b.len() == 4 || san_ip_b.len() == 16
+      gn = _x509_der_tlv_wrap(135, san_ip_b)
+    @else
+      gn = _x509_der_tlv_wrap(130, _x509_str_to_bytes(san_dns))
+    @end
     gn_seq = _x509_der_tlv_wrap(48, gn)
     san_ext = _x509_der_append([6, 3, 85, 29, 17], _x509_der_tlv_wrap(4, gn_seq))
     exts_body = _x509_der_append(exts_body, _x509_der_tlv_wrap(48, san_ext))

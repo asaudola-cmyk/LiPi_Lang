@@ -1495,6 +1495,21 @@ fn main
     else
         failed = failed + 1
 
+    if run_single_test(compiler, "tests/test_wave_aa_numerics_gc_mt.lp", "test_wave_aa_numerics_gc_mt") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_bb_security_types_ownership_net.lp", "test_wave_bb_security_types_ownership_net") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
+    if run_single_test(compiler, "tests/test_wave_cc_tooling_wasm_stdlib.lp", "test_wave_cc_tooling_wasm_stdlib") == 1
+        passed = passed + 1
+    else
+        failed = failed + 1
+
     say "========================================================================"
     say "Total Tests: " + str(passed + failed) + " | Passed: " + str(passed) + " | Failed: " + str(failed)
     say "========================================================================"

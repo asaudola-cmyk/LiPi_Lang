@@ -59,7 +59,7 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             return 0
         end
 
-        // General expression print: runtime detection of LPST tagged string vs signed i64 decimal
+        // General expression print: IEEE-754 float decimal, LPST tagged string, or signed i64 decimal
         l_val = wasm_synth_alloc_local(s, "__wasi_p_val")
         l_pos = wasm_synth_alloc_local(s, "__wasi_p_pos")
         l_neg = wasm_synth_alloc_local(s, "__wasi_p_neg")
@@ -70,36 +70,39 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
         wasm_synth_compile_expr(s, toks, pos_box)
         wasm_emit_local_set(s.ws_code, l_val)
 
-        wasm_emit_i64_const(s.ws_code, 0)
-        wasm_emit_local_set(s.ws_code, l_is_str)
-        wasm_emit_local_get(s.ws_code, l_val)
-        wasm_emit_i64_const(s.ws_code, 1040)
-        wasm_emit_i64_ge_s(s.ws_code)
-        wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
-            wasm_emit_local_get(s.ws_code, l_val)
-            wasm_emit_i64_const(s.ws_code, 262144)
-            wasm_emit_i64_lt_s(s.ws_code)
-            wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
-                wasm_emit_local_get(s.ws_code, l_val)
-                wasm_emit_i64_const(s.ws_code, 7)
-                wasm_emit_i64_and(s.ws_code)
-                wasm_emit_i64_const(s.ws_code, 0)
-                wasm_emit_i64_eq(s.ws_code)
-                wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
-                    wasm_emit_local_get(s.ws_code, l_val)
-                    wasm_emit_i64_const(s.ws_code, 16)
-                    wasm_emit_i64_sub(s.ws_code)
-                    wasm_emit_i32_wrap_i64(s.ws_code)
-                    wasm_emit_i64_load(s.ws_code, 3, 0)
-                    wasm_emit_i64_const(s.ws_code, 1280332628)
-                    wasm_emit_i64_eq(s.ws_code)
-                    wasm_emit_if(s.ws_code, WASM_TYPE_EMPTY)
-                        wasm_emit_i64_const(s.ws_code, 1)
-                        wasm_emit_local_set(s.ws_code, l_is_str)
-                    wasm_emit_end(s.ws_code)
-                wasm_emit_end(s.ws_code)
-            wasm_emit_end(s.ws_code)
-        wasm_emit_end(s.ws_code)
+        if s.ws_last_expr_is_float == 1
+            // WHY: Formats IEEE-754 binary64 value into scratch [128..] matching x86_64/ARM64/RV64
+            // instead of printing raw 64-bit integer bits.
+            l_flen = wasm_synth_alloc_local(s, "__wasi_p_flen")
+            wasm_synth_emit_format_f64_to_scratch(s, l_val, l_flen)
+            wasm_emit_i64_const(s.ws_code, 128)
+            wasm_emit_local_get(s.ws_code, l_flen)
+            wasm_emit_i64_add(s.ws_code)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i64_const(s.ws_code, 10)
+            wasm_emit_i64_store8(s.ws_code, 0, 0)
+
+            wasm_emit_i32_const(s.ws_code, 0)
+            wasm_emit_i32_const(s.ws_code, 128)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+
+            wasm_emit_i32_const(s.ws_code, 4)
+            wasm_emit_local_get(s.ws_code, l_flen)
+            wasm_emit_i64_const(s.ws_code, 1)
+            wasm_emit_i64_add(s.ws_code)
+            wasm_emit_i32_wrap_i64(s.ws_code)
+            wasm_emit_i32_store(s.ws_code, 2, 0)
+
+            wasm_emit_i32_const(s.ws_code, 1)
+            wasm_emit_i32_const(s.ws_code, 0)
+            wasm_emit_i32_const(s.ws_code, 1)
+            wasm_emit_i32_const(s.ws_code, 16)
+            wasm_emit_call(s.ws_code, 0)
+            wasm_emit_drop(s.ws_code)
+            return 0
+        end
+
+        wasm_synth_emit_is_lpst_str(s, l_val, l_is_str)
 
         wasm_emit_local_get(s.ws_code, l_is_str)
         wasm_emit_i64_const(s.ws_code, 1)
@@ -238,6 +241,8 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
         if has_expr == 1
             ret_ln = t.tok_span.span_start_line
             wasm_synth_compile_expr(s, toks, pos_box)
+            ret_was_f = s.ws_last_expr_is_float
+            ret_was_s = s.ws_last_expr_is_str
             cp_rt = get(pos_box, 0)
             if cp_rt < toks.len() and (toks[cp_rt].tok_kind == TOK_COMMA() or (toks[cp_rt].tok_kind != TOK_STR() and toks[cp_rt].tok_text == ",")) and toks[cp_rt].tok_span.span_start_line == ret_ln
                 rt_locs = list()
@@ -258,6 +263,13 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                     end
                 end
                 wasm_synth_emit_pack_locals_into_list(s, rt_locs)
+            elif s.ws_current_fn != 0
+                if ret_was_f == 1
+                    s.ws_current_fn.wfn_returns_float = 1
+                end
+                if ret_was_s == 1
+                    s.ws_current_fn.wfn_returns_str = 1
+                end
             end
         else
             wasm_emit_i64_const(s.ws_code, 0)
@@ -601,6 +613,8 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
 
         // Compile first iterable expression (either range start `a` or collection `arr`)
         wasm_synth_compile_expr(s, toks, pos_box)
+        for_col_is_fl = s.ws_last_expr_is_float_list
+        for_col_is_sl = s.ws_last_expr_is_str_list
         var_idx = wasm_synth_alloc_local(s, var_name)
 
         // Check if range `a..b` or collection `for x in arr`
@@ -611,6 +625,10 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 is_for_range = 1
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
+        end
+        if is_for_range == 0
+            wasm_synth_mark_float_var(s, var_name, for_col_is_fl)
+            wasm_synth_mark_str_var(s, var_name, for_col_is_sl)
         end
 
         ftag = str(s.ws_code.len())
@@ -1122,6 +1140,7 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             var_name = toks[var_pos].tok_text
             list_set(pos_box, 0, var_pos + 1)
             let_decl_type = ""
+            let_elem_type = ""
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_COLON() or (toks[get(pos_box, 0)].tok_kind != TOK_STR() and toks[get(pos_box, 0)].tok_text == ":"))
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_text == "dyn"
@@ -1137,8 +1156,12 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                         lg_d = 1
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                         while get(pos_box, 0) < toks.len() and lg_d > 0
-                            if toks[get(pos_box, 0)].tok_text == "<" lg_d = lg_d + 1
-                            elif toks[get(pos_box, 0)].tok_text == ">" lg_d = lg_d - 1 end
+                            gt_t = toks[get(pos_box, 0)].tok_text
+                            if gt_t == "<" lg_d = lg_d + 1
+                            elif gt_t == ">" lg_d = lg_d - 1
+                            elif lg_d == 1 and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                                let_elem_type = gt_t
+                            end
                             list_set(pos_box, 0, get(pos_box, 0) + 1)
                         end
                     end
@@ -1150,46 +1173,221 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 list_set(pos_box, 0, eq_pos + 1) // Consume '='
                 s.ws_last_struct = ""
                 wasm_synth_compile_expr(s, toks, pos_box)
-                if wasm_is_narrow_int_type(let_decl_type) == 1
+                is_lf = s.ws_last_expr_is_float
+                is_ls = s.ws_last_expr_is_str
+                is_lfl = s.ws_last_expr_is_float_list
+                is_lsl = s.ws_last_expr_is_str_list
+                if wasm_type_is_float_name(let_decl_type) == 1
+                    if is_lf == 0
+                        wasm_emit_f64_convert_i64_s(s.ws_code)
+                        wasm_emit_i64_reinterpret_f64(s.ws_code)
+                    end
+                    is_lf = 1
+                elif wasm_type_is_str_name(let_decl_type) == 1
+                    is_ls = 1
+                elif wasm_is_narrow_int_type(let_decl_type) == 1
                     wasm_synth_set_narrow_type(s, var_name, let_decl_type)
                     wasm_emit_truncate_int_width(s.ws_code, let_decl_type)
                 end
+                if wasm_type_is_float_name(let_elem_type) == 1
+                    is_lfl = 1
+                elif wasm_type_is_str_name(let_elem_type) == 1
+                    is_lsl = 1
+                end
                 var_idx = wasm_synth_alloc_local(s, var_name)
                 wasm_emit_local_set(s.ws_code, var_idx)
-                wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
-                wasm_synth_mark_str_var(s, var_name, s.ws_last_expr_is_str)
+                wasm_synth_mark_float_var(s, var_name, is_lf)
+                wasm_synth_mark_str_var(s, var_name, is_ls)
+                wasm_synth_mark_float_list(s, var_name, is_lfl)
+                wasm_synth_mark_str_list(s, var_name, is_lsl)
                 wasm_synth_set_var_struct(s, var_name, s.ws_last_struct)
         return 0
 
-    // ── 8. Struct Field & Variable Assignment: obj.field = expr / x = expr ────
+    // ── 8. Struct Field, Indexed, & Variable Assignment ────────────────────────
     if k == TOK_IDENT()
         if wasm_try_compile_multi_assign(s, toks, pos_box, pos) == 1
             return 0
         end
-        // Check obj.field = expr (with arbitrary chained a.b.c = expr support)
+        // Check obj.field = expr and obj.field +=/-=/*=//=/%= expr (with chained a.b.c support)
         if pos + 3 < toks.len() and (toks[pos + 1].tok_kind == TOK_DOT() or toks[pos + 1].tok_text == ".") and wasm_is_ident_token(toks[pos + 2].tok_kind) == 1
             scan_f = pos + 1
             fnames = list()
             while scan_f + 1 < toks.len() and (toks[scan_f].tok_kind == TOK_DOT() or toks[scan_f].tok_text == ".") and wasm_is_ident_token(toks[scan_f + 1].tok_kind) == 1
                 push(fnames, toks[scan_f + 1].tok_text)
                 scan_f = scan_f + 2
-            if fnames.len() > 0 and scan_f < toks.len() and (toks[scan_f].tok_kind == TOK_ASSIGN() or toks[scan_f].tok_text == "=")
-                obj_idx = wasm_synth_alloc_local(s, txt)
-                obj_st_w = wasm_synth_get_var_struct(s, txt)
-                wasm_emit_local_get(s.ws_code, obj_idx)
-                fi_m = 0
-                while fi_m < fnames.len() - 1
-                    mid_off = wasm_synth_get_field_offset_for(s, obj_st_w, fnames[fi_m])
-                    obj_st_w = ""
-                    wasm_emit_i32_wrap_i64(s.ws_code)
-                    wasm_emit_i64_load(s.ws_code, 3, mid_off)
-                    fi_m = fi_m + 1
-                wasm_emit_i32_wrap_i64(s.ws_code)
-                last_off = wasm_synth_get_field_offset_for(s, obj_st_w, fnames[fnames.len() - 1])
-                list_set(pos_box, 0, scan_f + 1)
-                wasm_synth_compile_expr(s, toks, pos_box)
-                wasm_emit_i64_store(s.ws_code, 3, last_off)
-                return 0
+            if fnames.len() > 0 and scan_f < toks.len()
+                fop_k = toks[scan_f].tok_kind
+                fop_t = toks[scan_f].tok_text
+                is_f_eq = 0
+                if fop_k == TOK_ASSIGN() or fop_t == "="
+                    is_f_eq = 1
+                end
+                is_f_comp = 0
+                if fop_k == TOK_PLUSEQ() or fop_k == TOK_MINUSEQ() or fop_k == TOK_STAREQ() or fop_k == TOK_SLASHEQ() or fop_k == TOK_PERCENTEQ() or fop_t == "+=" or fop_t == "-=" or fop_t == "*=" or fop_t == "/=" or fop_t == "%="
+                    is_f_comp = 1
+                end
+                if is_f_eq == 1 or is_f_comp == 1
+                    obj_idx = wasm_synth_alloc_local(s, txt)
+                    obj_st_w = wasm_synth_get_var_struct(s, txt)
+                    l_fobj = wasm_synth_alloc_local(s, "__wasi_fobj_" + str(s.ws_code.len()))
+                    wasm_emit_local_get(s.ws_code, obj_idx)
+                    fi_m = 0
+                    while fi_m < fnames.len() - 1
+                        mid_off = wasm_synth_get_field_offset_for(s, obj_st_w, fnames[fi_m])
+                        obj_st_w = ""
+                        wasm_emit_i32_wrap_i64(s.ws_code)
+                        wasm_emit_i64_load(s.ws_code, 3, mid_off)
+                        fi_m = fi_m + 1
+                    wasm_emit_local_set(s.ws_code, l_fobj)
+                    last_fname = fnames[fnames.len() - 1]
+                    last_off = wasm_synth_get_field_offset_for(s, obj_st_w, last_fname)
+                    list_set(pos_box, 0, scan_f + 1)
+                    if is_f_eq == 1
+                        wasm_emit_local_get(s.ws_code, l_fobj)
+                        wasm_emit_i32_wrap_i64(s.ws_code)
+                        wasm_synth_compile_expr(s, toks, pos_box)
+                        if s.ws_last_expr_is_float == 1
+                            wasm_synth_mark_float_field(s, obj_st_w, last_fname)
+                        elif wasm_synth_is_float_field(s, obj_st_w, last_fname) == 1
+                            wasm_emit_f64_convert_i64_s(s.ws_code)
+                            wasm_emit_i64_reinterpret_f64(s.ws_code)
+                        end
+                        if s.ws_last_expr_is_str == 1
+                            wasm_synth_mark_str_field(s, obj_st_w, last_fname)
+                        end
+                        wasm_emit_i64_store(s.ws_code, 3, last_off)
+                    else
+                        fld_is_f = wasm_synth_is_float_field(s, obj_st_w, last_fname)
+                        fld_is_s = wasm_synth_is_str_field(s, obj_st_w, last_fname)
+                        wasm_emit_local_get(s.ws_code, l_fobj)
+                        wasm_emit_i32_wrap_i64(s.ws_code)
+                        wasm_emit_i64_load(s.ws_code, 3, last_off)
+                        wasm_synth_compile_expr(s, toks, pos_box)
+                        rhs_f_c = s.ws_last_expr_is_float
+                        rhs_s_c = s.ws_last_expr_is_str
+                        if (fld_is_f == 1 or rhs_f_c == 1) and fop_k != TOK_PERCENTEQ() and fop_t != "%="
+                            f_op_m = TOK_PLUS()
+                            if fop_k == TOK_MINUSEQ() or fop_t == "-=" f_op_m = TOK_MINUS()
+                            elif fop_k == TOK_STAREQ() or fop_t == "*=" f_op_m = TOK_STAR()
+                            elif fop_k == TOK_SLASHEQ() or fop_t == "/=" f_op_m = TOK_SLASH()
+                            end
+                            wasm_synth_emit_f64_binop(s, fld_is_f, rhs_f_c, f_op_m, 0)
+                            wasm_synth_mark_float_field(s, obj_st_w, last_fname)
+                        elif (fop_k == TOK_PLUSEQ() or fop_t == "+=") and (fld_is_s == 1 or rhs_s_c == 1)
+                            wasm_synth_emit_runtime_str_concat(s)
+                            wasm_synth_mark_str_field(s, obj_st_w, last_fname)
+                        else
+                            if fop_k == TOK_PLUSEQ() or fop_t == "+="
+                                wasm_emit_i64_add(s.ws_code)
+                            elif fop_k == TOK_MINUSEQ() or fop_t == "-="
+                                wasm_emit_i64_sub(s.ws_code)
+                            elif fop_k == TOK_STAREQ() or fop_t == "*="
+                                wasm_emit_i64_mul(s.ws_code)
+                            elif fop_k == TOK_SLASHEQ() or fop_t == "/="
+                                wasm_emit_i64_div_s(s.ws_code)
+                            elif fop_k == TOK_PERCENTEQ() or fop_t == "%="
+                                wasm_emit_i64_rem_s(s.ws_code)
+                            end
+                        end
+                        l_fres = wasm_synth_alloc_local(s, "__wasi_fres_" + str(s.ws_code.len()))
+                        wasm_emit_local_set(s.ws_code, l_fres)
+                        wasm_emit_local_get(s.ws_code, l_fobj)
+                        wasm_emit_i32_wrap_i64(s.ws_code)
+                        wasm_emit_local_get(s.ws_code, l_fres)
+                        wasm_emit_i64_store(s.ws_code, 3, last_off)
+                    end
+                    return 0
+                end
+
+        // Check indexed assignment: d[k] = expr, arr[i] = expr, and compound d[k] += expr / arr[i] *= expr
+        if pos + 3 < toks.len() and toks[pos + 1].tok_kind == TOK_LBRACKET()
+            scan_b = pos + 2
+            br_d = 1
+            while scan_b < toks.len() and br_d > 0
+                bk_s = toks[scan_b].tok_kind
+                if bk_s == TOK_LBRACKET()
+                    br_d = br_d + 1
+                elif bk_s == TOK_RBRACKET()
+                    br_d = br_d - 1
+                end
+                if br_d > 0
+                    scan_b = scan_b + 1
+                end
+            end
+            if br_d == 0 and scan_b + 1 < toks.len()
+                iop_k = toks[scan_b + 1].tok_kind
+                iop_t = toks[scan_b + 1].tok_text
+                is_i_eq = 0
+                if iop_k == TOK_ASSIGN() or iop_t == "="
+                    is_i_eq = 1
+                end
+                is_i_comp = 0
+                if iop_k == TOK_PLUSEQ() or iop_k == TOK_MINUSEQ() or iop_k == TOK_STAREQ() or iop_k == TOK_SLASHEQ() or iop_k == TOK_PERCENTEQ() or iop_t == "+=" or iop_t == "-=" or iop_t == "*=" or iop_t == "/=" or iop_t == "%="
+                    is_i_comp = 1
+                end
+                if is_i_eq == 1 or is_i_comp == 1
+                    itag_a = str(s.ws_code.len())
+                    base_idx = wasm_synth_alloc_local(s, txt)
+                    l_ik = wasm_synth_alloc_local(s, "__wasi_ia_k_" + itag_a)
+                    l_iv = wasm_synth_alloc_local(s, "__wasi_ia_v_" + itag_a)
+                    list_set(pos_box, 0, pos + 2)
+                    wasm_synth_compile_expr(s, toks, pos_box)
+                    wasm_emit_local_set(s.ws_code, l_ik)
+                    if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_kind == TOK_RBRACKET()
+                        list_set(pos_box, 0, get(pos_box, 0) + 1)
+                    end
+                    list_set(pos_box, 0, get(pos_box, 0) + 1) // Consume '=' or op=
+                    base_fl = wasm_synth_is_float_list(s, txt)
+                    base_sl = wasm_synth_is_str_list(s, txt)
+                    if is_i_eq == 1
+                        wasm_synth_compile_expr(s, toks, pos_box)
+                        if s.ws_last_expr_is_float == 1
+                            wasm_synth_mark_float_list(s, txt, 1)
+                        elif base_fl == 1
+                            wasm_emit_f64_convert_i64_s(s.ws_code)
+                            wasm_emit_i64_reinterpret_f64(s.ws_code)
+                        end
+                        if s.ws_last_expr_is_str == 1
+                            wasm_synth_mark_str_list(s, txt, 1)
+                        end
+                        wasm_emit_local_set(s.ws_code, l_iv)
+                        wasm_synth_emit_poly_index_set(s, base_idx, l_ik, l_iv)
+                    else
+                        wasm_synth_emit_poly_index_get(s, base_idx, l_ik)
+                        wasm_synth_compile_expr(s, toks, pos_box)
+                        rhs_if = s.ws_last_expr_is_float
+                        rhs_is = s.ws_last_expr_is_str
+                        if (base_fl == 1 or rhs_if == 1) and iop_k != TOK_PERCENTEQ() and iop_t != "%="
+                            i_op_m = TOK_PLUS()
+                            if iop_k == TOK_MINUSEQ() or iop_t == "-=" i_op_m = TOK_MINUS()
+                            elif iop_k == TOK_STAREQ() or iop_t == "*=" i_op_m = TOK_STAR()
+                            elif iop_k == TOK_SLASHEQ() or iop_t == "/=" i_op_m = TOK_SLASH()
+                            end
+                            wasm_synth_emit_f64_binop(s, base_fl, rhs_if, i_op_m, 0)
+                            wasm_synth_mark_float_list(s, txt, 1)
+                        elif (iop_k == TOK_PLUSEQ() or iop_t == "+=") and (base_sl == 1 or rhs_is == 1)
+                            wasm_synth_emit_runtime_str_concat(s)
+                            wasm_synth_mark_str_list(s, txt, 1)
+                        else
+                            if iop_k == TOK_PLUSEQ() or iop_t == "+="
+                                wasm_emit_i64_add(s.ws_code)
+                            elif iop_k == TOK_MINUSEQ() or iop_t == "-="
+                                wasm_emit_i64_sub(s.ws_code)
+                            elif iop_k == TOK_STAREQ() or iop_t == "*="
+                                wasm_emit_i64_mul(s.ws_code)
+                            elif iop_k == TOK_SLASHEQ() or iop_t == "/="
+                                wasm_emit_i64_div_s(s.ws_code)
+                            elif iop_k == TOK_PERCENTEQ() or iop_t == "%="
+                                wasm_emit_i64_rem_s(s.ws_code)
+                            end
+                        end
+                        wasm_emit_local_set(s.ws_code, l_iv)
+                        wasm_synth_emit_poly_index_set(s, base_idx, l_ik, l_iv)
+                    end
+                    return 0
+                end
+            end
+        end
 
         next_pos = pos + 1
         if next_pos < toks.len()
@@ -1197,10 +1395,11 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
             nk = nt.tok_kind
             ntxt = nt.tok_text
 
-            // Typed local variable declaration: x: u8 = expr / x: list<dyn T> = expr
+            // Typed local variable declaration: x: u8 = expr / x: float = expr / x: list<float> = expr
             if (nk == TOK_COLON() or (nk != TOK_STR() and ntxt == ":")) and next_pos + 2 < toks.len()
                 tp_w = next_pos + 1
                 decl_type = ""
+                decl_elem_type = ""
                 eq_p = tp_w
                 if toks[tp_w].tok_text == "dyn" and tp_w + 1 < toks.len() and toks[tp_w + 1].tok_kind == TOK_IDENT()
                     decl_type = "dyn " + toks[tp_w + 1].tok_text
@@ -1212,8 +1411,12 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                         wg_d = 1
                         eq_p = eq_p + 1
                         while eq_p < toks.len() and wg_d > 0
-                            if toks[eq_p].tok_text == "<" wg_d = wg_d + 1
-                            elif toks[eq_p].tok_text == ">" wg_d = wg_d - 1 end
+                            wt_t = toks[eq_p].tok_text
+                            if wt_t == "<" wg_d = wg_d + 1
+                            elif wt_t == ">" wg_d = wg_d - 1
+                            elif wg_d == 1 and toks[eq_p].tok_kind == TOK_IDENT()
+                                decl_elem_type = wt_t
+                            end
                             eq_p = eq_p + 1
                         end
                     end
@@ -1223,14 +1426,33 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                     list_set(pos_box, 0, eq_p + 1)
                     s.ws_last_struct = ""
                     wasm_synth_compile_expr(s, toks, pos_box)
-                    if wasm_is_narrow_int_type(decl_type) == 1
+                    is_tf = s.ws_last_expr_is_float
+                    is_ts = s.ws_last_expr_is_str
+                    is_tfl = s.ws_last_expr_is_float_list
+                    is_tsl = s.ws_last_expr_is_str_list
+                    if wasm_type_is_float_name(decl_type) == 1
+                        if is_tf == 0
+                            wasm_emit_f64_convert_i64_s(s.ws_code)
+                            wasm_emit_i64_reinterpret_f64(s.ws_code)
+                        end
+                        is_tf = 1
+                    elif wasm_type_is_str_name(decl_type) == 1
+                        is_ts = 1
+                    elif wasm_is_narrow_int_type(decl_type) == 1
                         wasm_synth_set_narrow_type(s, var_name, decl_type)
                         wasm_emit_truncate_int_width(s.ws_code, decl_type)
                     end
+                    if wasm_type_is_float_name(decl_elem_type) == 1
+                        is_tfl = 1
+                    elif wasm_type_is_str_name(decl_elem_type) == 1
+                        is_tsl = 1
+                    end
                     var_idx = wasm_synth_alloc_local(s, var_name)
                     wasm_emit_local_set(s.ws_code, var_idx)
-                    wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
-                    wasm_synth_mark_str_var(s, var_name, s.ws_last_expr_is_str)
+                    wasm_synth_mark_float_var(s, var_name, is_tf)
+                    wasm_synth_mark_str_var(s, var_name, is_ts)
+                    wasm_synth_mark_float_list(s, var_name, is_tfl)
+                    wasm_synth_mark_str_list(s, var_name, is_tsl)
                     wasm_synth_set_var_struct(s, var_name, s.ws_last_struct)
                     return 0
                 end
@@ -1250,6 +1472,8 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 wasm_emit_local_set(s.ws_code, var_idx)
                 wasm_synth_mark_float_var(s, var_name, s.ws_last_expr_is_float)
                 wasm_synth_mark_str_var(s, var_name, s.ws_last_expr_is_str)
+                wasm_synth_mark_float_list(s, var_name, s.ws_last_expr_is_float_list)
+                wasm_synth_mark_str_list(s, var_name, s.ws_last_expr_is_str_list)
                 wasm_synth_set_var_struct(s, var_name, s.ws_last_struct)
                 return 0
 
@@ -1264,24 +1488,45 @@ include "src/compiler/backend/targets/wasm/codegen_expr.lp"
                 var_name = txt
                 list_set(pos_box, 0, next_pos + 1) // Consume ident and op=
                 var_idx = wasm_synth_alloc_local(s, var_name)
+                lhs_cf = wasm_synth_is_float_var(s, var_name)
+                lhs_cs = wasm_synth_is_str_var(s, var_name)
 
                 wasm_emit_local_get(s.ws_code, var_idx)
                 wasm_synth_compile_expr(s, toks, pos_box)
+                rhs_cf = s.ws_last_expr_is_float
+                rhs_cs = s.ws_last_expr_is_str
 
-                if nk == TOK_PLUSEQ() or ntxt == "+="
-                    wasm_emit_i64_add(s.ws_code)
-                elif nk == TOK_MINUSEQ() or ntxt == "-="
-                    wasm_emit_i64_sub(s.ws_code)
-                elif nk == TOK_STAREQ() or ntxt == "*="
-                    wasm_emit_i64_mul(s.ws_code)
-                elif nk == TOK_SLASHEQ() or ntxt == "/="
-                    wasm_emit_i64_div_s(s.ws_code)
-                elif nk == TOK_PERCENTEQ() or ntxt == "%="
-                    wasm_emit_i64_rem_s(s.ws_code)
-
-                nt_comp = wasm_synth_get_narrow_type(s, var_name)
-                if wasm_is_narrow_int_type(nt_comp) == 1
-                    wasm_emit_truncate_int_width(s.ws_code, nt_comp)
+                if (lhs_cf == 1 or rhs_cf == 1) and nk != TOK_PERCENTEQ() and ntxt != "%="
+                    // WHY: Preserves IEEE-754 float semantics for +=, -=, *=, /= instead of corrupting
+                    // bit patterns with i64 integer arithmetic.
+                    c_op_m = TOK_PLUS()
+                    if nk == TOK_MINUSEQ() or ntxt == "-=" c_op_m = TOK_MINUS()
+                    elif nk == TOK_STAREQ() or ntxt == "*=" c_op_m = TOK_STAR()
+                    elif nk == TOK_SLASHEQ() or ntxt == "/=" c_op_m = TOK_SLASH()
+                    end
+                    wasm_synth_emit_f64_binop(s, lhs_cf, rhs_cf, c_op_m, 0)
+                    wasm_synth_mark_float_var(s, var_name, 1)
+                    wasm_synth_mark_str_var(s, var_name, 0)
+                elif (nk == TOK_PLUSEQ() or ntxt == "+=") and (lhs_cs == 1 or rhs_cs == 1)
+                    wasm_synth_emit_runtime_str_concat(s)
+                    wasm_synth_mark_str_var(s, var_name, 1)
+                    wasm_synth_mark_float_var(s, var_name, 0)
+                else
+                    if nk == TOK_PLUSEQ() or ntxt == "+="
+                        wasm_emit_i64_add(s.ws_code)
+                    elif nk == TOK_MINUSEQ() or ntxt == "-="
+                        wasm_emit_i64_sub(s.ws_code)
+                    elif nk == TOK_STAREQ() or ntxt == "*="
+                        wasm_emit_i64_mul(s.ws_code)
+                    elif nk == TOK_SLASHEQ() or ntxt == "/="
+                        wasm_emit_i64_div_s(s.ws_code)
+                    elif nk == TOK_PERCENTEQ() or ntxt == "%="
+                        wasm_emit_i64_rem_s(s.ws_code)
+                    end
+                    nt_comp = wasm_synth_get_narrow_type(s, var_name)
+                    if wasm_is_narrow_int_type(nt_comp) == 1
+                        wasm_emit_truncate_int_width(s.ws_code, nt_comp)
+                    end
                 end
                 wasm_emit_local_set(s.ws_code, var_idx)
                 return 0
@@ -1493,9 +1738,12 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                     user_main_found = 1
                 end
 
-                // Extract parameter names, variadic flag, and default-arg start offsets up to ')', '{', '->', or newline
+                // Extract parameter names, float param flags, return type hints, variadic flag, and defaults
                 param_names = list()
                 p1_def_starts = list()
+                p1_param_is_f = list()
+                p1_ret_float = 0
+                p1_ret_str = 0
                 p1_is_var = 0
                 p1_pd = 0
                 while pp < toks.len()
@@ -1520,6 +1768,11 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                                 pp = pp + 1
                                 if pp < toks.len() and toks[pp].tok_text == "dyn" pp = pp + 1 end
                                 if pp < toks.len() and toks[pp].tok_kind == TOK_IDENT()
+                                    if wasm_type_is_float_name(toks[pp].tok_text) == 1
+                                        p1_ret_float = 1
+                                    elif wasm_type_is_str_name(toks[pp].tok_text) == 1
+                                        p1_ret_str = 1
+                                    end
                                     pp = pp + 1
                                     if pp < toks.len() and toks[pp].tok_text == "<"
                                         gd1 = 1
@@ -1540,6 +1793,11 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                         pp = pp + 1
                         if pp < toks.len() and toks[pp].tok_text == "dyn" pp = pp + 1 end
                         if pp < toks.len() and toks[pp].tok_kind == TOK_IDENT()
+                            if wasm_type_is_float_name(toks[pp].tok_text) == 1
+                                p1_ret_float = 1
+                            elif wasm_type_is_str_name(toks[pp].tok_text) == 1
+                                p1_ret_str = 1
+                            end
                             pp = pp + 1
                         end
                         break
@@ -1556,6 +1814,7 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                     if pt.tok_kind == TOK_IDENT()
                         push(param_names, pt.tok_text)
                         p1_def = 0 - 1
+                        p1_pf = 0
                         pp = pp + 1
                         if pp < toks.len() and (toks[pp].tok_kind == TOK_COLON() or (toks[pp].tok_kind != TOK_STR() and toks[pp].tok_text == ":"))
                             pp = pp + 1
@@ -1565,6 +1824,9 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                             end
                             if pp < toks.len() and toks[pp].tok_text == "dyn" pp = pp + 1 end
                             if pp < toks.len() and toks[pp].tok_kind == TOK_IDENT()
+                                if wasm_type_is_float_name(toks[pp].tok_text) == 1
+                                    p1_pf = 1
+                                end
                                 pp = pp + 1
                                 if pp < toks.len() and toks[pp].tok_text == "<"
                                     gd2 = 1
@@ -1580,6 +1842,9 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                         if pp < toks.len() and toks[pp].tok_kind == TOK_ASSIGN()
                             pp = pp + 1
                             p1_def = pp
+                            if pp < toks.len() and toks[pp].tok_kind == TOK_FLOAT()
+                                p1_pf = 1
+                            end
                             d_nest = 0
                             while pp < toks.len()
                                 dtk = toks[pp].tok_kind
@@ -1595,15 +1860,14 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                             end
                         end
                         push(p1_def_starts, p1_def)
+                        push(p1_param_is_f, p1_pf)
                     else
                         pp = pp + 1
                     end
                 end
 
-                entry = [fn_name, param_names, scan_p, p1_is_var, p1_def_starts]
-                push(fn_headers, entry)
-
-                // Skip entire function body cleanly so body statements never falsely set has_top_level_code!
+                // Skip entire function body cleanly and inspect return expressions for float/str return inference
+                body_start_p1 = pp
                 while pp < toks.len() and (toks[pp].tok_kind == TOK_NEWLINE() or toks[pp].tok_kind == TOK_COMMENT_LINE() or toks[pp].tok_kind == TOK_COMMENT_DOC() or toks[pp].tok_kind == TOK_COMMENT_BLOCK())
                     pp = pp + 1
                 end
@@ -1641,6 +1905,63 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                         pp = pp + 1
                     end
                 end
+                body_end_p1 = pp
+                // Scan return statements in body_start_p1..body_end_p1 for float/string return hints
+                if p1_ret_float == 0 and p1_ret_str == 0
+                    rb_i = body_start_p1
+                    while rb_i < body_end_p1
+                        rbt = toks[rb_i]
+                        rbk = rbt.tok_kind
+                        rbx = rbt.tok_text
+                        if rbk == TOK_KW_RETURN() or rbk == TOK_DIR_RETURN() or (rbk == TOK_IDENT() and (rbx == "return" or rbx == "ফেরত" or rbx == "@return"))
+                            r_ln = rbt.tok_span.span_start_line
+                            rj = rb_i + 1
+                            saw_rel = 0
+                            saw_flt = 0
+                            saw_str = 0
+                            while rj < body_end_p1
+                                rtj = toks[rj]
+                                rjk = rtj.tok_kind
+                                rjx = rtj.tok_text
+                                if rjk == TOK_NEWLINE() or rjk == TOK_SEMI() or rjk == TOK_EOF() or rtj.tok_span.span_start_line != r_ln
+                                    break
+                                end
+                                if rjk == TOK_EQ() or rjk == TOK_NEQ() or rjk == TOK_LT() or rjk == TOK_LTE() or rjk == TOK_GT() or rjk == TOK_GTE()
+                                    saw_rel = 1
+                                elif rjk == TOK_FLOAT()
+                                    saw_flt = 1
+                                elif rjk == TOK_STR() or rjk == TOK_INTERP_STR()
+                                    saw_str = 1
+                                elif rjk == TOK_IDENT()
+                                    if (rjx == "float" or rjx == "দশমিক") and rj + 1 < body_end_p1 and toks[rj + 1].tok_kind == TOK_LPAREN()
+                                        saw_flt = 1
+                                    elif (rjx == "str" or rjx == "to_str" or rjx == "str_concat") and rj + 1 < body_end_p1 and toks[rj + 1].tok_kind == TOK_LPAREN()
+                                        saw_str = 1
+                                    else
+                                        fp_k = 0
+                                        while fp_k < param_names.len()
+                                            if param_names[fp_k] == rjx and p1_param_is_f[fp_k] == 1
+                                                saw_flt = 1
+                                            end
+                                            fp_k = fp_k + 1
+                                        end
+                                    end
+                                end
+                                rj = rj + 1
+                            end
+                            if saw_rel == 0
+                                if saw_flt == 1 p1_ret_float = 1 end
+                                if saw_str == 1 and saw_flt == 0 p1_ret_str = 1 end
+                            end
+                            rb_i = rj
+                        else
+                            rb_i = rb_i + 1
+                        end
+                    end
+                end
+
+                entry = [fn_name, param_names, scan_p, p1_is_var, p1_def_starts, p1_ret_float, p1_ret_str, p1_param_is_f, body_start_p1, body_end_p1]
+                push(fn_headers, entry)
                 scan_p = pp
                 continue
             end
@@ -1664,6 +1985,8 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                     sp = sp + 1
                 end
                 s_fields = list()
+                s_f_floats = list()
+                s_f_strs = list()
                 while sp < toks.len()
                     st_f = toks[sp]
                     sk_f = st_f.tok_kind
@@ -1684,6 +2007,13 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                             if sp < toks.len() and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
                                 sp = sp + 1
                                 if sp < toks.len() and toks[sp].tok_kind == TOK_IDENT()
+                                    if wasm_type_is_float_name(toks[sp].tok_text) == 1
+                                        push(s_f_floats, stxt_f)
+                                        s.ws_float_fields = wasm_list_set_membership(s.ws_float_fields, stxt_f, 1)
+                                    elif wasm_type_is_str_name(toks[sp].tok_text) == 1
+                                        push(s_f_strs, stxt_f)
+                                        s.ws_str_fields = wasm_list_set_membership(s.ws_str_fields, stxt_f, 1)
+                                    end
                                     sp = sp + 1
                         else
                             sp = sp + 1
@@ -1701,6 +2031,13 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                         if sp < toks.len() and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
                             sp = sp + 1
                             if sp < toks.len() and toks[sp].tok_kind == TOK_IDENT()
+                                if wasm_type_is_float_name(toks[sp].tok_text) == 1
+                                    push(s_f_floats, stxt_f)
+                                    s.ws_float_fields = wasm_list_set_membership(s.ws_float_fields, stxt_f, 1)
+                                elif wasm_type_is_str_name(toks[sp].tok_text) == 1
+                                    push(s_f_strs, stxt_f)
+                                    s.ws_str_fields = wasm_list_set_membership(s.ws_str_fields, stxt_f, 1)
+                                end
                                 sp = sp + 1
                     else
                         sp = sp + 1
@@ -1710,6 +2047,8 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                     sdef_new.wsd_fields = s_fields
                     sdef_new.wsd_is_union = is_u_w
                     sdef_new.wsd_type_id = s.ws_next_type_id
+                    sdef_new.wsd_float_fields = s_f_floats
+                    sdef_new.wsd_str_fields = s_f_strs
                     s.ws_next_type_id = s.ws_next_type_id + 1
                     push(s.ws_structs, sdef_new)
                 scan_p = sp
@@ -1736,6 +2075,9 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 main_fn = wasm_synth_create_func(s, hm_name, hm_params)
                 main_fn.wfn_is_variadic = get(hm, 3)
                 main_fn.wfn_def_starts = get(hm, 4)
+                main_fn.wfn_returns_float = get(hm, 5)
+                main_fn.wfn_returns_str = get(hm, 6)
+                main_fn.wfn_param_is_float = get(hm, 7)
                 break
             end
             hi_m = hi_m + 1
@@ -1754,8 +2096,118 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
             wf_c = wasm_synth_create_func(s, h_name, h_params)
             wf_c.wfn_is_variadic = get(h, 3)
             wf_c.wfn_def_starts = get(h, 4)
+            wf_c.wfn_returns_float = get(h, 5)
+            wf_c.wfn_returns_str = get(h, 6)
+            wf_c.wfn_param_is_float = get(h, 7)
         end
         hi = hi + 1
+
+    // Phase 2b: Call-site float parameter inference for unannotated helper functions
+    // WHY: Ensures `fn add_f(a, b) return a + b` called with `add_f(1.5, 2.5)` treats `a, b` as f64.
+    cs_i = 0
+    while cs_i + 1 < toks.len()
+        if toks[cs_i].tok_kind == TOK_IDENT() and toks[cs_i + 1].tok_kind == TOK_LPAREN()
+            is_decl_hdr = 0
+            if cs_i > 0
+                pk_prev = toks[cs_i - 1].tok_kind
+                px_prev = toks[cs_i - 1].tok_text
+                if pk_prev == TOK_KW_FN() or pk_prev == TOK_DIR_FN() or px_prev == "fn" or px_prev == "কাজ" or px_prev == "@fn"
+                    is_decl_hdr = 1
+                end
+            end
+            if is_decl_hdr == 0
+                cf_inf = wasm_synth_find_function(s, toks[cs_i].tok_text)
+                if cf_inf != 0 and cf_inf.wfn_param_count > 0
+                    ap_c = cs_i + 2
+                    a_idx = 0
+                    a_nest = 0
+                    a_has_f = 0
+                    while ap_c < toks.len()
+                        akt = toks[ap_c]
+                        akk = akt.tok_kind
+                        if akk == TOK_LPAREN() or akk == TOK_LBRACKET() or akk == TOK_LBRACE()
+                            a_nest = a_nest + 1
+                        elif akk == TOK_RPAREN()
+                            if a_nest == 0
+                                if a_has_f == 1 and a_idx < cf_inf.wfn_param_is_float.len()
+                                    list_set(cf_inf.wfn_param_is_float, a_idx, 1)
+                                end
+                                break
+                            end
+                            a_nest = a_nest - 1
+                        elif akk == TOK_RBRACKET() or akk == TOK_RBRACE()
+                            if a_nest > 0 a_nest = a_nest - 1 end
+                        elif akk == TOK_COMMA() and a_nest == 0
+                            if a_has_f == 1 and a_idx < cf_inf.wfn_param_is_float.len()
+                                list_set(cf_inf.wfn_param_is_float, a_idx, 1)
+                            end
+                            a_idx = a_idx + 1
+                            a_has_f = 0
+                        elif akk == TOK_FLOAT()
+                            a_has_f = 1
+                        elif akk == TOK_IDENT() and (akt.tok_text == "float" or akt.tok_text == "দশমিক") and ap_c + 1 < toks.len() and toks[ap_c + 1].tok_kind == TOK_LPAREN()
+                            a_has_f = 1
+                        end
+                        ap_c = ap_c + 1
+                    end
+                end
+            end
+        end
+        cs_i = cs_i + 1
+    end
+
+    // Re-check return float status for any function whose params were inferred as float in Phase 2b
+    hi_r = 0
+    while hi_r < fn_headers.len()
+        hr = fn_headers[hi_r]
+        wf_r = wasm_synth_find_function(s, get(hr, 0))
+        if wf_r != 0 and wf_r.wfn_returns_float == 0
+            hr_params = get(hr, 1)
+            hr_bs = get(hr, 8)
+            hr_be = get(hr, 9)
+            any_fp = 0
+            fpi = 0
+            while fpi < wf_r.wfn_param_is_float.len()
+                if wf_r.wfn_param_is_float[fpi] == 1 any_fp = 1 end
+                fpi = fpi + 1
+            end
+            if any_fp == 1
+                rb2 = hr_bs
+                while rb2 < hr_be
+                    rbt2 = toks[rb2]
+                    if rbt2.tok_kind == TOK_KW_RETURN() or rbt2.tok_kind == TOK_DIR_RETURN() or (rbt2.tok_kind == TOK_IDENT() and (rbt2.tok_text == "return" or rbt2.tok_text == "ফেরত"))
+                        rln2 = rbt2.tok_span.span_start_line
+                        rj2 = rb2 + 1
+                        saw_rel2 = 0
+                        saw_fp2 = 0
+                        while rj2 < hr_be
+                            rt2 = toks[rj2]
+                            if rt2.tok_kind == TOK_NEWLINE() or rt2.tok_kind == TOK_SEMI() or rt2.tok_span.span_start_line != rln2 break end
+                            if rt2.tok_kind == TOK_EQ() or rt2.tok_kind == TOK_NEQ() or rt2.tok_kind == TOK_LT() or rt2.tok_kind == TOK_LTE() or rt2.tok_kind == TOK_GT() or rt2.tok_kind == TOK_GTE()
+                                saw_rel2 = 1
+                            elif rt2.tok_kind == TOK_IDENT()
+                                pk2 = 0
+                                while pk2 < hr_params.len() and pk2 < wf_r.wfn_param_is_float.len()
+                                    if hr_params[pk2] == rt2.tok_text and wf_r.wfn_param_is_float[pk2] == 1
+                                        saw_fp2 = 1
+                                    end
+                                    pk2 = pk2 + 1
+                                end
+                            end
+                            rj2 = rj2 + 1
+                        end
+                        if saw_rel2 == 0 and saw_fp2 == 1
+                            wf_r.wfn_returns_float = 1
+                        end
+                        rb2 = rj2
+                    else
+                        rb2 = rb2 + 1
+                    end
+                end
+            end
+        end
+        hi_r = hi_r + 1
+    end
 
     // ── Phase 3: Compile Function Bodies & Top-Level Statements ─────────────────
     pos_box = [0]
@@ -1941,11 +2393,15 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 end
             end
 
-            // Parse parameter narrow & struct types while advancing past parameter list until ')', '{', '->', or newline
+            // Parse parameter narrow, float, string, container & struct types while advancing past header
             p_narrow_names = list()
             p_narrow_types = list()
             p_struct_names = list()
             p_struct_types = list()
+            p_float_names = list()
+            p_str_names = list()
+            p_flist_names = list()
+            p_slist_names = list()
             p3_pd = 0
             while get(pos_box, 0) < toks.len()
                 pt = toks[get(pos_box, 0)]
@@ -2029,6 +2485,10 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                             if wasm_is_narrow_int_type(p_ty_cur) == 1
                                 push(p_narrow_names, p_nm_cur)
                                 push(p_narrow_types, p_ty_cur)
+                            elif wasm_type_is_float_name(p_ty_cur) == 1
+                                push(p_float_names, p_nm_cur)
+                            elif wasm_type_is_str_name(p_ty_cur) == 1
+                                push(p_str_names, p_nm_cur)
                             elif wasm_synth_find_struct(s, p_ty_cur) != 0
                                 push(p_struct_names, p_nm_cur)
                                 push(p_struct_types, p_ty_cur)
@@ -2036,11 +2496,21 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                             list_set(pos_box, 0, get(pos_box, 0) + 1)
                             if get(pos_box, 0) < toks.len() and toks[get(pos_box, 0)].tok_text == "<"
                                 pg_w = 1
+                                pg_last_id = ""
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                                 while get(pos_box, 0) < toks.len() and pg_w > 0
-                                    if toks[get(pos_box, 0)].tok_text == "<" pg_w = pg_w + 1
-                                    elif toks[get(pos_box, 0)].tok_text == ">" pg_w = pg_w - 1 end
+                                    pg_tx = toks[get(pos_box, 0)].tok_text
+                                    if pg_tx == "<" pg_w = pg_w + 1
+                                    elif pg_tx == ">" pg_w = pg_w - 1
+                                    elif pg_w == 1 and toks[get(pos_box, 0)].tok_kind == TOK_IDENT()
+                                        pg_last_id = pg_tx
+                                    end
                                     list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
+                                if wasm_type_is_float_name(pg_last_id) == 1
+                                    push(p_flist_names, p_nm_cur)
+                                elif wasm_type_is_str_name(pg_last_id) == 1
+                                    push(p_slist_names, p_nm_cur)
                                 end
                             end
                         end
@@ -2079,6 +2549,8 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 saved_ws_try_depths = s.ws_try_depths
                 saved_ws_float_vars = s.ws_float_vars
                 saved_ws_str_vars = s.ws_str_vars
+                saved_ws_float_lists = s.ws_float_lists
+                saved_ws_str_lists = s.ws_str_lists
                 saved_ws_narrow_vars = s.ws_narrow_vars
                 saved_ws_narrow_types = s.ws_narrow_types
                 saved_ws_vsn = s.ws_var_struct_names
@@ -2089,6 +2561,8 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 s.ws_try_depths = list()
                 s.ws_float_vars = list()
                 s.ws_str_vars = list()
+                s.ws_float_lists = list()
+                s.ws_str_lists = list()
                 s.ws_narrow_vars = list()
                 s.ws_narrow_types = list()
                 s.ws_var_struct_names = list()
@@ -2098,6 +2572,37 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 while psi < p_struct_names.len()
                     wasm_synth_set_var_struct(s, p_struct_names[psi], p_struct_types[psi])
                     psi = psi + 1
+                end
+
+                // Bind float, string, and typed container parameters from annotations and call-site inference
+                pfi_m = 0
+                while pfi_m < p_float_names.len()
+                    wasm_synth_mark_float_var(s, p_float_names[pfi_m], 1)
+                    pfi_m = pfi_m + 1
+                end
+                if target_fn.wfn_param_is_float != 0
+                    pfi_i = 0
+                    while pfi_i < target_fn.wfn_param_names.len() and pfi_i < target_fn.wfn_param_is_float.len()
+                        if target_fn.wfn_param_is_float[pfi_i] == 1
+                            wasm_synth_mark_float_var(s, target_fn.wfn_param_names[pfi_i], 1)
+                        end
+                        pfi_i = pfi_i + 1
+                    end
+                end
+                ps_m = 0
+                while ps_m < p_str_names.len()
+                    wasm_synth_mark_str_var(s, p_str_names[ps_m], 1)
+                    ps_m = ps_m + 1
+                end
+                pfl_m = 0
+                while pfl_m < p_flist_names.len()
+                    wasm_synth_mark_float_list(s, p_flist_names[pfl_m], 1)
+                    pfl_m = pfl_m + 1
+                end
+                psl_m = 0
+                while psl_m < p_slist_names.len()
+                    wasm_synth_mark_str_list(s, p_slist_names[psl_m], 1)
+                    psl_m = psl_m + 1
                 end
 
                 // Enforce narrow bit-width truncation on incoming parameter values at function entry
@@ -2165,6 +2670,8 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 s.ws_try_depths = saved_ws_try_depths
                 s.ws_float_vars = saved_ws_float_vars
                 s.ws_str_vars = saved_ws_str_vars
+                s.ws_float_lists = saved_ws_float_lists
+                s.ws_str_lists = saved_ws_str_lists
                 s.ws_narrow_vars = saved_ws_narrow_vars
                 s.ws_narrow_types = saved_ws_narrow_types
                 s.ws_var_struct_names = saved_ws_vsn
@@ -2203,7 +2710,22 @@ fn wasm_synth_compile_program_ssa tokens ssa_lower_res
                 s_fnm = ssa_lower_res.slr_fn_names[si_w]
                 if s_fnm != "main" or has_top_level_code == 0
                     w_tgt = wasm_synth_find_function(s, s_fnm)
+                    w_ssa_skip = 0
                     if w_tgt != 0
+                        if w_tgt.wfn_returns_float == 1 or w_tgt.wfn_returns_str == 1
+                            w_ssa_skip = 1
+                        elif w_tgt.wfn_param_is_float != 0
+                            wfp_i = 0
+                            while wfp_i < w_tgt.wfn_param_is_float.len()
+                                if w_tgt.wfn_param_is_float[wfp_i] == 1
+                                    w_ssa_skip = 1
+                                    break
+                                end
+                                wfp_i = wfp_i + 1
+                            end
+                        end
+                    end
+                    if w_tgt != 0 and w_ssa_skip == 0
                         s_off = ssa_lower_res.slr_fn_offsets[si_w]
                         s_sz = ssa_lower_res.slr_fn_sizes[si_w]
                         s_tot_loc = ssa_lower_res.slr_fn_locals[si_w]

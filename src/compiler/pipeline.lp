@@ -341,15 +341,13 @@ fn pipeline_parse_primary toks pos_box sp
         sub_e = pipeline_parse_primary(toks, pos_box, sp)
         return ast_expr_unary("~", sub_e, sp)
     elif k == TOK_AMP() or (k != TOK_STR() and txt == "&")
+        // WHY: Preserve `&x` and `&mut x` as real UnaryOp AST nodes so `--strict-ownership`
+        // enforces shared/mutable borrow rules while TypeChecker resolves `&fn_name` to i64 fn_ptr.
         nxt_p = get(pos_box, 0)
-        if nxt_p < toks.len() and pipeline_is_ident_token(toks[nxt_p].tok_kind) == 1
-            fn_id = ast_expr_ident(toks[nxt_p].tok_text, sp)
+        if nxt_p < toks.len() and (toks[nxt_p].tok_kind == TOK_KW_MUT() or (toks[nxt_p].tok_kind != TOK_STR() and toks[nxt_p].tok_text == "mut"))
             list_set(pos_box, 0, nxt_p + 1)
-            c_args = [fn_id]
-            c_node = ast_expr_call(ast_expr_ident("fn_ptr", sp), c_args, sp)
-            c_node.name = "fn_ptr"
-            c_node.params = c_args
-            return c_node
+            sub_m = pipeline_parse_primary(toks, pos_box, sp)
+            return ast_expr_unary("&mut", sub_m, sp)
         end
         sub_e = pipeline_parse_primary(toks, pos_box, sp)
         return ast_expr_unary("&", sub_e, sp)
@@ -897,7 +895,7 @@ fn pipeline_capture_type_args toks pos_box base_name
     if ok == 0
         return ""
     end
-    if base_name != "list" and base_name != "array" and base_name != "vec" and base_name != "slice"
+    if base_name != "list" and base_name != "array" and base_name != "vec" and base_name != "slice" and base_name != "dict" and base_name != "map" and base_name != "hashmap"
         return ""
     end
     end_p = get(pos_box, 0)
@@ -1828,6 +1826,43 @@ fn pipeline_build_statement toks pos_box sp
         end
     end
 
+    // 4a2. Raw Pointer Dereference Assignment: *ptr_expr = rhs
+    // WHY: Parse `*ptr = val` as an explicit AST node (`op == "deref_assign"`) so `--kavach`
+    // blocks uncrowned pointer stores and `--strict-ownership` / `--strict-types` analyze both sides.
+    if (k == TOK_STAR() or (k != TOK_STR() and txt == "*")) and cp + 2 < toks.len()
+        dp_scan = cp + 1
+        dp_pdepth = 0
+        dp_eq_pos = 0 - 1
+        dp_line = t.tok_span.span_start_line
+        while dp_scan < toks.len()
+            dpt = toks[dp_scan]
+            dpk = dpt.tok_kind
+            dpx = dpt.tok_text
+            if dpk == TOK_NEWLINE() or dpk == TOK_SEMI() or dpk == TOK_EOF() or dpt.tok_span.span_start_line > dp_line
+                break
+            end
+            if dpk == TOK_LPAREN() or dpx == "(" or dpk == TOK_LBRACKET() or dpx == "["
+                dp_pdepth = dp_pdepth + 1
+            elif dpk == TOK_RPAREN() or dpx == ")" or dpk == TOK_RBRACKET() or dpx == "]"
+                if dp_pdepth > 0 dp_pdepth = dp_pdepth - 1 end
+            elif dp_pdepth == 0 and (dpk == TOK_ASSIGN() or (dpk != TOK_STR() and dpx == "="))
+                dp_eq_pos = dp_scan
+                break
+            end
+            dp_scan = dp_scan + 1
+        end
+        if dp_eq_pos > cp + 1
+            list_set(pos_box, 0, cp + 1)
+            ptr_lhs = pipeline_parse_expr(toks, pos_box, sp)
+            list_set(pos_box, 0, dp_eq_pos + 1)
+            ptr_rhs = pipeline_parse_expr(toks, pos_box, sp)
+            da_st = ast_stmt_assign("*", ptr_rhs, sp)
+            da_st.op = "deref_assign"
+            da_st.left = ast_expr_unary("*", ptr_lhs, sp)
+            return da_st
+        end
+    end
+
     // 4b. Struct Field Assignment (arbitrary chaining depth): obj.field = expr, obj.f1.f2 = expr (+=, -=)
     if pipeline_is_ident_token(k) == 1
         scan_fp = cp + 1
@@ -1858,6 +1893,11 @@ fn pipeline_build_statement toks pos_box sp
                 list_set(pos_box, 0, scan_fp + 1)
                 val_e = pipeline_parse_expr(toks, pos_box, sp)
                 return ast_stmt_assign_op(chain_str, val_e, "-=", sp)
+            elif t_eq.tok_kind == TOK_STAREQ() or t_eq.tok_kind == TOK_SLASHEQ() or t_eq.tok_kind == TOK_PERCENTEQ() or (t_eq.tok_kind != TOK_STR() and (t_eq.tok_text == "*=" or t_eq.tok_text == "/=" or t_eq.tok_text == "%="))
+                // WHY: Parse *=, /=, %= on struct fields so SSA never drops compound field ops as bare expressions.
+                list_set(pos_box, 0, scan_fp + 1)
+                val_e = pipeline_parse_expr(toks, pos_box, sp)
+                return ast_stmt_assign_op(chain_str, val_e, t_eq.tok_text, sp)
             elif t_eq.tok_kind == TOK_LBRACKET() or (t_eq.tok_kind != TOK_STR() and t_eq.tok_text == "[")
                 scan_bi = scan_fp + 1
                 bc_f = 1
@@ -1886,6 +1926,14 @@ fn pipeline_build_statement toks pos_box sp
                         farr_as = ast_stmt_assign(chain_str, val_be, sp)
                         farr_as.index = idx_be
                         return farr_as
+                    elif eq_b.tok_kind == TOK_PLUSEQ() or eq_b.tok_kind == TOK_MINUSEQ() or eq_b.tok_kind == TOK_STAREQ() or eq_b.tok_kind == TOK_SLASHEQ() or eq_b.tok_kind == TOK_PERCENTEQ() or (eq_b.tok_kind != TOK_STR() and (eq_b.tok_text == "+=" or eq_b.tok_text == "-=" or eq_b.tok_text == "*=" or eq_b.tok_text == "/=" or eq_b.tok_text == "%="))
+                        idx_b_box = [scan_fp + 1]
+                        idx_be = pipeline_parse_expr(toks, idx_b_box, sp)
+                        list_set(pos_box, 0, scan_bi + 1)
+                        val_be = pipeline_parse_expr(toks, pos_box, sp)
+                        farr_aop = ast_stmt_assign_op(chain_str, val_be, eq_b.tok_text, sp)
+                        farr_aop.index = idx_be
+                        return farr_aop
                     end
                 end
             end
@@ -2181,6 +2229,7 @@ fn pipeline_build_statement toks pos_box sp
         end
         has_fin_ast = 0
         fin_braced = 1
+        fin_body = list()
         pipeline_skip_whitespace(toks, pos_box)
         if get(pos_box, 0) < toks.len()
             ct_f = toks[get(pos_box, 0)]
@@ -2213,7 +2262,7 @@ fn pipeline_build_statement toks pos_box sp
                     end
                     bp_f = get(pos_box, 0)
                     st_f = pipeline_build_statement(toks, pos_box, sp)
-                    if st_f != 0 push(try_body, st_f) end
+                    if st_f != 0 push(fin_body, st_f) end
                     if get(pos_box, 0) <= bp_f list_set(pos_box, 0, bp_f + 1) end
                 end
             end
@@ -2228,6 +2277,7 @@ fn pipeline_build_statement toks pos_box sp
         end
         try_nd = ast_stmt_if(ast_expr_literal_bool(1, sp), try_body, list(), catch_body, sp)
         try_nd.op = "try"
+        try_nd.body = fin_body
         return try_nd
     end
 
@@ -2413,6 +2463,10 @@ fn pipeline_build_ast_declarations toks src_path
     decls = list()
     top_stmts = list()
     pos_box = [0]
+    cur_impl_type = ""
+    cur_impl_braced = 0
+    cur_impl_col = 0
+    cur_impl_line = 0
 
     while get(pos_box, 0) < toks.len()
         while get(pos_box, 0) < toks.len()
@@ -2432,6 +2486,27 @@ fn pipeline_build_ast_declarations toks src_path
 
         if k == TOK_EOF()
             break
+
+        // WHY: Track lexical exit of `impl [Trait for] Type { ... }` / `impl ... end` blocks so
+        // inner methods are isolated as `Type_method` with `self: Type` and outer functions stay bare.
+        if cur_impl_type != ""
+            if cur_impl_braced == 1
+                if k == TOK_RBRACE() or (k != TOK_STR() and txt == "}")
+                    cur_impl_type = ""
+                    cur_impl_braced = 0
+                    list_set(pos_box, 0, cp + 1)
+                    continue
+                end
+            else
+                if pipeline_is_block_end(toks, cp) == 1 and t.tok_span.span_start_col <= cur_impl_col
+                    cur_impl_type = ""
+                    list_set(pos_box, 0, cp + 1)
+                    continue
+                elif t.tok_span.span_start_line > cur_impl_line and t.tok_span.span_start_col <= cur_impl_col
+                    cur_impl_type = ""
+                end
+            end
+        end
 
         // Skip top-level hardware/silicon & strictness attribute directives before declarations
         if k == TOK_IDENT() and (txt == "@naked" or txt == "@interrupt" or txt == "@packed" or txt == "@ring0" or txt == "@silicon" or txt == "@strict" or txt == "@fn_strict" or txt == "@strict_types" or txt == "@strict_ownership" or txt == "@strict_proof" or txt == "@kavach" or txt == "@freestanding" or str_starts_with(txt, "@attr_") == 1)
@@ -2546,6 +2621,9 @@ fn pipeline_build_ast_declarations toks src_path
                         fn_name = fn_name + "_" + toks[mp + 1].tok_text
                         list_set(pos_box, 0, mp + 2)
                     end
+                elif cur_impl_type != ""
+                    method_recv_type = cur_impl_type
+                    fn_name = cur_impl_type + "_" + fn_name
                 end
             end
 
@@ -2793,6 +2871,9 @@ fn pipeline_build_ast_declarations toks src_path
                     if cur_tok.tok_kind == TOK_IDENT() and (cur_tok.tok_text == "fn" or cur_tok.tok_text == "কাজ" or cur_tok.tok_text == "@fn" or cur_tok.tok_text == "component" or cur_tok.tok_text == "উপাদান" or cur_tok.tok_text == "@naked" or cur_tok.tok_text == "@interrupt" or cur_tok.tok_text == "@packed" or cur_tok.tok_text == "@align" or cur_tok.tok_text == "@bss")
                         break
                     end
+                    if cur_impl_braced == 1 and (cur_tok.tok_kind == TOK_RBRACE() or (cur_tok.tok_kind != TOK_STR() and cur_tok.tok_text == "}"))
+                        break
+                    end
                     if pipeline_is_block_end(toks, cur_p) == 1
                         list_set(pos_box, 0, cur_p + 1)
                         break
@@ -2810,7 +2891,7 @@ fn pipeline_build_ast_declarations toks src_path
                     end
 
             if method_recv_type != "" and params.len() > 0
-                if params[0].param_type == ""
+                if params[0].param_type == "" and (cur_impl_type == "" or params[0].param_name == "self" or params[0].param_name == "নিজ")
                     params[0].param_type = method_recv_type
                 end
             end
@@ -2965,8 +3046,10 @@ fn pipeline_build_ast_declarations toks src_path
                 end
             end
         elif k == TOK_KW_IMPL() or k == TOK_DIR_IMPL() or (k == TOK_IDENT() and (txt == "impl" or txt == "বাস্তবায়ন" or txt == "@impl"))
-            // Parse `impl [Trait for] Type { fn ... }` header so inner methods are built as regular AST fn decls,
-            // and emit a `TraitImpl` marker so `--strict-types` enforces real `impl Trait for Type` soundness!
+            // Parse `impl [Trait for] Type { fn ... }` header so inner methods are isolated under
+            // `Type_method` with typed `self: Type`, and emit `TraitImpl` for `impl Trait for Type`.
+            impl_b_line = t.tok_span.span_start_line
+            impl_b_col = t.tok_span.span_start_col
             list_set(pos_box, 0, cp + 1)
             pipeline_skip_type_args(toks, pos_box, 0)
             impl_first = ""
@@ -2975,6 +3058,7 @@ fn pipeline_build_ast_declarations toks src_path
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
             pipeline_skip_type_args(toks, pos_box, 0)
+            impl_recv_t = impl_first
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_KW_FOR() or toks[get(pos_box, 0)].tok_text == "for" or toks[get(pos_box, 0)].tok_text == "জন্য")
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                 impl_target = ""
@@ -2983,6 +3067,9 @@ fn pipeline_build_ast_declarations toks src_path
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
                 pipeline_skip_type_args(toks, pos_box, 0)
+                if len(impl_target) > 0
+                    impl_recv_t = impl_target
+                end
                 if len(impl_first) > 0 and len(impl_target) > 0
                     ti_node = ast_node_new(AST_TAG_STRUCT_DEF(), "TraitImpl", sp)
                     ti_node.name = impl_first
@@ -2990,8 +3077,13 @@ fn pipeline_build_ast_declarations toks src_path
                     push(decls, ti_node)
                 end
             end
+            cur_impl_type = impl_recv_t
+            cur_impl_line = impl_b_line
+            cur_impl_col = impl_b_col
+            cur_impl_braced = 0
             pipeline_skip_whitespace(toks, pos_box)
             if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LBRACE() or toks[get(pos_box, 0)].tok_text == "{")
+                cur_impl_braced = 1
                 list_set(pos_box, 0, get(pos_box, 0) + 1)
             end
         elif k == TOK_KW_ENUM() or k == TOK_DIR_ENUM() or (k == TOK_IDENT() and (txt == "enum" or txt == "@enum" or txt == "গণনা"))
@@ -3011,6 +3103,7 @@ fn pipeline_build_ast_declarations toks src_path
             end
             variants = list()
             var_arities = list()
+            var_payload_types = list()
             while get(pos_box, 0) < toks.len()
                 while get(pos_box, 0) < toks.len()
                     ek_skip = toks[get(pos_box, 0)].tok_kind
@@ -3048,11 +3141,13 @@ fn pipeline_build_ast_declarations toks src_path
                 if pipeline_is_ident_token(ek) == 1
                     push(variants, etxt)
                     v_arity = 0
+                    v_types = list()
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                     if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_kind == TOK_LPAREN() or toks[get(pos_box, 0)].tok_text == "(")
                         list_set(pos_box, 0, get(pos_box, 0) + 1)
                         v_pdepth = 1
                         v_expect = 1
+                        v_cur_pref = ""
                         while get(pos_box, 0) < toks.len() and v_pdepth > 0
                             vk = toks[get(pos_box, 0)].tok_kind
                             vtx = toks[get(pos_box, 0)].tok_text
@@ -3064,17 +3159,42 @@ fn pipeline_build_ast_declarations toks src_path
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                             elif vk == TOK_COMMA() or (vk != TOK_STR() and vtx == ",")
                                 v_expect = 1
+                                v_cur_pref = ""
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
+                            elif vk == TOK_STAR() or (vk != TOK_STR() and vtx == "*")
+                                v_cur_pref = v_cur_pref + "*"
+                                list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                if get(pos_box, 0) < toks.len() and (toks[get(pos_box, 0)].tok_text == "const" or toks[get(pos_box, 0)].tok_text == "mut")
+                                    v_cur_pref = v_cur_pref + toks[get(pos_box, 0)].tok_text + " "
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
+                                end
                             elif vk == TOK_LT() or (vk != TOK_STR() and vtx == "<")
                                 if pipeline_skip_type_args(toks, pos_box, 0) == 0
                                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                                 end
                             elif pipeline_is_ident_token(vk) == 1
                                 if v_expect == 1
-                                    v_arity = v_arity + 1
-                                    v_expect = 0
+                                    // Handle optional named payload field `name: Type` vs bare `Type`
+                                    np_ev = get(pos_box, 0) + 1
+                                    if np_ev < toks.len() and (toks[np_ev].tok_kind == TOK_COLON() or (toks[np_ev].tok_kind != TOK_STR() and toks[np_ev].tok_text == ":"))
+                                        list_set(pos_box, 0, np_ev + 1)
+                                    elif vtx == "dyn" and np_ev < toks.len() and pipeline_is_ident_token(toks[np_ev].tok_kind) == 1
+                                        push(v_types, v_cur_pref + "dyn " + toks[np_ev].tok_text)
+                                        v_arity = v_arity + 1
+                                        v_expect = 0
+                                        v_cur_pref = ""
+                                        list_set(pos_box, 0, np_ev + 1)
+                                    else
+                                        list_set(pos_box, 0, np_ev)
+                                        ev_targs = pipeline_capture_type_args(toks, pos_box, vtx)
+                                        push(v_types, v_cur_pref + vtx + ev_targs)
+                                        v_arity = v_arity + 1
+                                        v_expect = 0
+                                        v_cur_pref = ""
+                                    end
+                                else
+                                    list_set(pos_box, 0, get(pos_box, 0) + 1)
                                 end
-                                list_set(pos_box, 0, get(pos_box, 0) + 1)
                             else
                                 list_set(pos_box, 0, get(pos_box, 0) + 1)
                             end
@@ -3086,6 +3206,7 @@ fn pipeline_build_ast_declarations toks src_path
                         end
                     end
                     push(var_arities, v_arity)
+                    push(var_payload_types, v_types)
                 else
                     list_set(pos_box, 0, get(pos_box, 0) + 1)
                 end
@@ -3093,6 +3214,7 @@ fn pipeline_build_ast_declarations toks src_path
             if len(enum_name) > 0
                 e_decl = ast_decl_enum(enum_name, variants, sp)
                 e_decl.params = var_arities
+                e_decl.args = var_payload_types
                 push(decls, e_decl)
             end
         elif k == TOK_RBRACE() or (k != TOK_STR() and txt == "}") or k == TOK_KW_END() or k == TOK_DIR_END() or (k == TOK_IDENT() and (txt == "end" or txt == "শেষ" or txt == "@end"))

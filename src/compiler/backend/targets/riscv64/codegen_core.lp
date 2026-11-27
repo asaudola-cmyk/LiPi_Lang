@@ -71,12 +71,13 @@ struct Riscv64CallReloc
     rv_cr_patch_offset     // Byte index in rv_code where the 4-byte JAL instruction is located
     rv_cr_target_name      // Target function identifier or "__print_int" / "__alloc"
 
-// WHY: Models struct/union schema definitions, union layout flag, and runtime type tag ID
+// WHY: Models struct/union schema definitions, field types, union layout flag, and runtime type tag ID
 struct Riscv64StructDef
     rv_sd_name             // Struct/union type name string
     rv_sd_fields           // List of field name strings
     rv_sd_is_union         // 1 if union (all fields share offset 0), 0 if struct
     rv_sd_type_id          // Unique 1..N runtime type tag for sovereign dyn Trait dispatch
+    rv_sd_field_types      // Parallel list of field type strings (e.g. "f64", "u64", "str", "")
 
 // WHY: Return container for ELF64 container synthesis results
 struct Riscv64ElfResult
@@ -160,8 +161,11 @@ struct Riscv64Synthesizer
     rv_needs_str_helpers   // 1 if __int_to_str / __uint_to_str / __str_concat / __tagged_to_str must be emitted
     rv_int_to_str_off      // Byte offset of __int_to_str helper
     rv_uint_to_str_off     // Byte offset of __uint_to_str helper
+    rv_float_to_str_off    // Byte offset of __float_to_str helper
     rv_str_concat_off      // Byte offset of __str_concat helper
     rv_tagged_to_str_off   // Byte offset of __tagged_to_str helper
+    rv_needs_uncaught_throw // 1 if __uncaught_throw top-level handler must be emitted
+    rv_uncaught_throw_off   // Byte offset of __uncaught_throw helper
     rv_ssa_lower_res       // Attached SsaLowerResult for direct RISC-V 64 SSA CFG replacement
     rv_ssa_replaced_cnt    // Count of functions replaced directly from SSA CFG
     rv_ssa_replaced_bytes  // Total native RV64IM bytes emitted directly from SSA CFG
@@ -177,6 +181,14 @@ struct Riscv64FnSig
     rv_sig_param_count
     rv_sig_is_variadic
     rv_sig_def_starts
+    rv_sig_ret_type
+
+fn riscv64_is_float_type tname
+    if tname == "f64" or tname == "f32" or tname == "float" or tname == "double" or tname == "দশমিক"
+        return 1
+    end
+    return 0
+end
 
 fn riscv64_is_uint_type tname
     if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
@@ -383,8 +395,11 @@ fn riscv64_synth_new
     s.rv_needs_str_helpers = 0
     s.rv_int_to_str_off = 0
     s.rv_uint_to_str_off = 0
+    s.rv_float_to_str_off = 0
     s.rv_str_concat_off = 0
     s.rv_tagged_to_str_off = 0
+    s.rv_needs_uncaught_throw = 0
+    s.rv_uncaught_throw_off = 0
     s.rv_ssa_lower_res = 0
     s.rv_ssa_replaced_cnt = 0
     s.rv_ssa_replaced_bytes = 0
@@ -730,6 +745,88 @@ fn riscv64_emit_sra s rd rs1 rs2
     // WHY: SRA rd, rs1, rs2 (opcode 0x33 = 51, funct3=5, funct7=32).
     bytes = rv64_encode_r(51, rd, 5, rs1, rs2, 32)
     riscv64_synth_emit_bytes(s, bytes)
+    return 0
+
+// ── 4b. Hardware IEEE-754 Double-Precision (RV64D) FP Instruction Emitters ───
+fn riscv64_emit_fmv_d_x s fd rs1
+    // WHY: FMV.D.X fd, rs1 (OP-FP=83, funct7=121, rs2=0, funct3=0) — bitwise GP64 -> f64.
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, rs1, 0, 121))
+    return 0
+
+fn riscv64_emit_fmv_x_d s rd fs1
+    // WHY: FMV.X.D rd, fs1 (OP-FP=83, funct7=113, rs2=0, funct3=0) — bitwise f64 -> GP64.
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, rd, 0, fs1, 0, 113))
+    return 0
+
+fn riscv64_emit_fcvt_d_l s fd rs1
+    // WHY: FCVT.D.L fd, rs1, RNE (OP-FP=83, funct7=105, rs2=2, funct3=0) — signed i64 -> f64.
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, rs1, 2, 105))
+    return 0
+
+fn riscv64_emit_fcvt_d_lu s fd rs1
+    // WHY: FCVT.D.LU fd, rs1, RNE (OP-FP=83, funct7=105, rs2=3, funct3=0) — unsigned u64 -> f64.
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, rs1, 3, 105))
+    return 0
+
+fn riscv64_emit_fcvt_l_d_rtz s rd fs1
+    // WHY: FCVT.L.D rd, fs1, RTZ (OP-FP=83, funct7=97, rs2=2, funct3=1) — f64 -> signed i64 trunc.
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, rd, 1, fs1, 2, 97))
+    return 0
+
+fn riscv64_emit_fadd_d s fd fs1 fs2
+    // WHY: FADD.D fd, fs1, fs2, RNE (OP-FP=83, funct7=1, funct3=0).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, fs1, fs2, 1))
+    return 0
+
+fn riscv64_emit_fsub_d s fd fs1 fs2
+    // WHY: FSUB.D fd, fs1, fs2, RNE (OP-FP=83, funct7=5, funct3=0).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, fs1, fs2, 5))
+    return 0
+
+fn riscv64_emit_fmul_d s fd fs1 fs2
+    // WHY: FMUL.D fd, fs1, fs2, RNE (OP-FP=83, funct7=9, funct3=0).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, fs1, fs2, 9))
+    return 0
+
+fn riscv64_emit_fdiv_d s fd fs1 fs2
+    // WHY: FDIV.D fd, fs1, fs2, RNE (OP-FP=83, funct7=13, funct3=0).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, fd, 0, fs1, fs2, 13))
+    return 0
+
+fn riscv64_emit_feq_d s rd fs1 fs2
+    // WHY: FEQ.D rd, fs1, fs2 (OP-FP=83, funct7=81, funct3=2) — IEEE-754 ordered equal (0 on NaN).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, rd, 2, fs1, fs2, 81))
+    return 0
+
+fn riscv64_emit_flt_d s rd fs1 fs2
+    // WHY: FLT.D rd, fs1, fs2 (OP-FP=83, funct7=81, funct3=1) — IEEE-754 ordered < (0 on NaN).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, rd, 1, fs1, fs2, 81))
+    return 0
+
+fn riscv64_emit_fle_d s rd fs1 fs2
+    // WHY: FLE.D rd, fs1, fs2 (OP-FP=83, funct7=81, funct3=0) — IEEE-754 ordered <= (0 on NaN).
+    riscv64_synth_emit_bytes(s, rv64_encode_r(83, rd, 0, fs1, fs2, 81))
+    return 0
+
+fn riscv64_emit_load_fp_reg s fd xreg expr_t is_u tag_reg
+    // WHY: Transfers f64 bits via FMV.D.X or promotes int/uint/dyn_tagged to f64 via FCVT.D.L/LU.
+    if expr_t == "float"
+        riscv64_emit_fmv_d_x(s, fd, xreg)
+    elif expr_t == "dyn_tagged"
+        riscv64_emit_li(s, 30, 1)
+        beq_isf = s.rv_code.len()
+        riscv64_emit_beq(s, tag_reg, 30, 0)
+        riscv64_emit_fcvt_d_l(s, fd, xreg)
+        jmp_done = s.rv_code.len()
+        riscv64_emit_jal(s, 0, 0)
+        riscv64_synth_patch_b(s, beq_isf, 0, tag_reg, 30, s.rv_code.len())
+        riscv64_emit_fmv_d_x(s, fd, xreg)
+        riscv64_synth_patch_jal(s, jmp_done, 0, s.rv_code.len())
+    elif is_u == 1
+        riscv64_emit_fcvt_d_lu(s, fd, xreg)
+    else
+        riscv64_emit_fcvt_d_l(s, fd, xreg)
+    end
     return 0
 
 fn riscv64_emit_li s rd val
@@ -1333,6 +1430,7 @@ fn riscv64_synth_prescan_decls s toks
                 sp = sp + 1
             end
             flds = list()
+            ftypes = list()
             while sp < n
                 while sp < n and (toks[sp].tok_kind == TOK_NEWLINE() or toks[sp].tok_kind == TOK_SEMI() or toks[sp].tok_kind == TOK_COMMENT_LINE() or toks[sp].tok_kind == TOK_COMMENT_DOC() or toks[sp].tok_kind == TOK_COMMENT_BLOCK())
                     sp = sp + 1
@@ -1362,13 +1460,16 @@ fn riscv64_synth_prescan_decls s toks
                 end
                 if fk == TOK_IDENT()
                     push(flds, fx)
+                    ftype_nm = ""
                     sp = sp + 1
                     if sp < n and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
                         sp = sp + 1
                         if sp < n and toks[sp].tok_kind == TOK_IDENT()
+                            ftype_nm = toks[sp].tok_text
                             sp = sp + 1
                         end
                     end
+                    push(ftypes, ftype_nm)
                 else
                     sp = sp + 1
                 end
@@ -1379,6 +1480,7 @@ fn riscv64_synth_prescan_decls s toks
                 sd_new.rv_sd_fields = flds
                 sd_new.rv_sd_is_union = is_u
                 sd_new.rv_sd_type_id = s.rv_next_type_id
+                sd_new.rv_sd_field_types = ftypes
                 s.rv_next_type_id = s.rv_next_type_id + 1
                 push(s.rv_structs, sd_new)
             end
@@ -1547,19 +1649,35 @@ fn riscv64_synth_prescan_decls s toks
                     end
                     sp_fn = sp_fn + 1
                 end
-                if p_var == 1 or p_cnt > 0
+                sig_ret_t = ""
+                if sp_fn < n and (toks[sp_fn].tok_kind == TOK_ARROW() or (toks[sp_fn].tok_kind != TOK_STR() and toks[sp_fn].tok_text == "->"))
+                    sp_fn = sp_fn + 1
+                    if sp_fn < n and toks[sp_fn].tok_kind == TOK_IDENT()
+                        rt_nm = toks[sp_fn].tok_text
+                        if riscv64_is_float_type(rt_nm) == 1
+                            sig_ret_t = "float"
+                        elif riscv64_is_uint_type(rt_nm) == 1
+                            sig_ret_t = "uint"
+                        elif rt_nm == "str" or rt_nm == "string"
+                            sig_ret_t = "str"
+                        end
+                        sp_fn = sp_fn + 1
+                    end
+                end
+                if p_var == 1 or p_cnt > 0 or sig_ret_t != ""
                     has_any_def = 0
                     di_s = 0
                     while di_s < def_starts.len()
                         if def_starts[di_s] >= 0 has_any_def = 1 end
                         di_s = di_s + 1
                     end
-                    if p_var == 1 or has_any_def == 1
+                    if p_var == 1 or has_any_def == 1 or sig_ret_t != ""
                         fs = Riscv64FnSig()
                         fs.rv_sig_name = sig_full_nm
                         fs.rv_sig_param_count = p_cnt
                         fs.rv_sig_is_variadic = p_var
                         fs.rv_sig_def_starts = def_starts
+                        fs.rv_sig_ret_type = sig_ret_t
                         push(s.rv_fn_sigs, fs)
                     end
                 end
@@ -1614,6 +1732,36 @@ fn riscv64_synth_get_field_offset s sname fname
         gi = gi + 1
     push(s.rv_global_fields, fname)
     return (s.rv_global_fields.len() - 1) * 8
+
+fn riscv64_synth_get_field_type s sname fname
+    // WHY: Resolves declared field type (e.g. "f64", "u64", "str") so `.field` loads propagate FP/uint types.
+    if sname != ""
+        sdef = riscv64_synth_find_struct(s, sname)
+        if sdef != 0 and sdef.rv_sd_field_types != 0
+            f = 0
+            while f < sdef.rv_sd_fields.len() and f < sdef.rv_sd_field_types.len()
+                if sdef.rv_sd_fields[f] == fname
+                    return sdef.rv_sd_field_types[f]
+                end
+                f = f + 1
+            end
+        end
+    end
+    i = 0
+    while i < s.rv_structs.len()
+        cur_def = s.rv_structs[i]
+        if cur_def.rv_sd_field_types != 0
+            f = 0
+            while f < cur_def.rv_sd_fields.len() and f < cur_def.rv_sd_field_types.len()
+                if cur_def.rv_sd_fields[f] == fname and cur_def.rv_sd_field_types[f] != ""
+                    return cur_def.rv_sd_field_types[f]
+                end
+                f = f + 1
+            end
+        end
+        i = i + 1
+    end
+    return ""
 
 fn riscv64_synth_lookup_var s name
     // WHY: Finds SP-relative stack offset for variable identifier. Returns 0 if not found.

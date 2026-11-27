@@ -1064,9 +1064,39 @@ fn x86_synth_compile_statement s toks pos_box
                         elif lv_comp_op == TOK_STAR()
                             x86_synth_emit_bytes(s, [73, 15, 175, 192])
                         elif lv_comp_op == TOK_SLASH()
-                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            // WHY: Match `/` semantics on chained struct fields: unsigned `div r8` for u64/u32/u16/u8
+                            // and hosted `_lipi_div_by_zero` (saving rcx) on divisor == 0.
+                            if x86_synth_is_uint_type(lf_ft) == 1
+                                if s.synth_freestanding == 0
+                                    x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                                    x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                    x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 5, 49, 210, 73, 247, 240])
+                                else
+                                    x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 5, 49, 210, 73, 247, 240])
+                                end
+                            elif s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            end
                         elif lv_comp_op == TOK_PERCENT()
-                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            if x86_synth_is_uint_type(lf_ft) == 1
+                                if s.synth_freestanding == 0
+                                    x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                                    x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                    x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 8, 49, 210, 73, 247, 240, 72, 137, 208])
+                                else
+                                    x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 8, 49, 210, 73, 247, 240, 72, 137, 208])
+                                end
+                            elif s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            end
                         end
                     end
                     if lf_bw > 0
@@ -1122,9 +1152,23 @@ fn x86_synth_compile_statement s toks pos_box
                         elif lv_comp_op == TOK_STAR()
                             x86_synth_emit_bytes(s, [73, 15, 175, 192])
                         elif lv_comp_op == TOK_SLASH()
-                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            // WHY: Hosted compound `/=` on chained index calls _lipi_div_by_zero on divisor == 0.
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 7])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            end
                         elif lv_comp_op == TOK_PERCENT()
-                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            // WHY: Hosted compound `%=` on chained index calls _lipi_div_by_zero on divisor == 0.
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 7])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            end
                         end
                     end
                     if lv_rhs_t2 == "float"
@@ -1314,9 +1358,39 @@ fn x86_synth_compile_statement s toks pos_box
                     elif fld_comp_op == TOK_STAR()
                         x86_synth_emit_bytes(s, [73, 15, 175, 192]) // imul rax, r8
                     elif fld_comp_op == TOK_SLASH()
-                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                        // WHY: Match `/` semantics on struct fields: unsigned `div r8` for u64/u32/u16/u8
+                        // and hosted `_lipi_div_by_zero` (preserving rcx) on divisor == 0.
+                        if x86_synth_is_uint_type(leaf_ftype) == 1
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 5, 49, 210, 73, 247, 240])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 5, 49, 210, 73, 247, 240])
+                            end
+                        elif s.synth_freestanding == 0
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                            x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                        else
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                        end
                     elif fld_comp_op == TOK_PERCENT()
-                        x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        if x86_synth_is_uint_type(leaf_ftype) == 1
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 8, 49, 210, 73, 247, 240, 72, 137, 208])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 8, 49, 210, 73, 247, 240, 72, 137, 208])
+                            end
+                        elif s.synth_freestanding == 0
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 17, 81, 72, 131, 236, 8])
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                            x86_synth_emit_bytes(s, [72, 131, 196, 8, 89, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        else
+                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                        end
                     end
                 end
 
@@ -1534,9 +1608,23 @@ fn x86_synth_compile_statement s toks pos_box
                         elif arr_comp_op == TOK_STAR()
                             x86_synth_emit_bytes(s, [73, 15, 175, 192])
                         elif arr_comp_op == TOK_SLASH()
-                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            // WHY: Hosted compound `/=` on typed array elements calls _lipi_div_by_zero (16B-aligned).
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 15, 72, 131, 236, 8])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [72, 131, 196, 8, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 16, 73, 131, 248, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 73, 247, 248])
+                            end
                         elif arr_comp_op == TOK_PERCENT()
-                            x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            // WHY: Hosted compound `%=` on typed array elements calls _lipi_div_by_zero (16B-aligned).
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 15, 72, 131, 236, 8])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [72, 131, 196, 8, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            else
+                                x86_synth_emit_bytes(s, [77, 133, 192, 117, 4, 49, 192, 235, 18, 73, 131, 248, 255, 117, 4, 49, 192, 235, 8, 72, 153, 73, 247, 248, 72, 137, 208])
+                            end
                         end
                     end
                 end
@@ -3252,20 +3340,46 @@ fn x86_synth_compile_statement s toks pos_box
                         x86_synth_emit_byte(s, 193)
                     elif comp_op == TOK_SLASH()
                         if is_uint_comp == 1
-                            // WHY: Unsigned division (u8/u16/u32/u64): zero-extend via xor edx, edx; div rcx!
-                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 5, 49, 210, 72, 247, 241])
+                            // WHY: Unsigned division (u8/u16/u32/u64): call _lipi_div_by_zero in hosted mode
+                            // matching `/` so `try { u /= 0 } catch e` throws DivisionByZeroException.
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [235, 5, 49, 210, 72, 247, 241])
+                            else
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 5, 49, 210, 72, 247, 241])
+                            end
                             res_comp_prim = "uint"
+                        elif s.synth_freestanding == 0
+                            // WHY: Hosted compound `/=` calls _lipi_div_by_zero on divisor == 0 (matching `/`)
+                            // and guards INT64_MIN / -1 without #DE SIGFPE.
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                            x86_synth_emit_bytes(s, [235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
                         else
-                            // Division-by-zero & INT64_MIN / -1 guarded cqo; idiv rcx
+                            // Freestanding division-by-zero & INT64_MIN / -1 guarded cqo; idiv rcx
                             x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 16, 72, 131, 249, 255, 117, 5, 72, 247, 216, 235, 5, 72, 153, 72, 247, 249])
                         end
                     elif comp_op == TOK_PERCENT()
                         if is_uint_comp == 1
-                            // WHY: Unsigned modulo (u8/u16/u32/u64): xor edx, edx; div rcx; mov rax, rdx!
-                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 8, 49, 210, 72, 247, 241, 72, 137, 208])
+                            // WHY: Unsigned modulo (u8/u16/u32/u64): call _lipi_div_by_zero in hosted mode
+                            // matching `%` so `try { u %= 0 } catch e` throws DivisionByZeroException.
+                            if s.synth_freestanding == 0
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                                x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                                x86_synth_emit_bytes(s, [235, 8, 49, 210, 72, 247, 241, 72, 137, 208])
+                            else
+                                x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 8, 49, 210, 72, 247, 241, 72, 137, 208])
+                            end
                             res_comp_prim = "uint"
+                        elif s.synth_freestanding == 0
+                            // WHY: Hosted compound `%=` calls _lipi_div_by_zero on divisor == 0 (matching `%`)
+                            // and guards INT64_MIN % -1 -> 0 without #DE SIGFPE.
+                            x86_synth_emit_bytes(s, [72, 133, 201, 117, 7])
+                            x86_synth_emit_call_helper(s, "_lipi_div_by_zero")
+                            x86_synth_emit_bytes(s, [235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
                         else
-                            // Modulo-by-zero & INT64_MIN % -1 guarded cqo; idiv rcx; mov rax, rdx
+                            // Freestanding modulo-by-zero & INT64_MIN % -1 guarded cqo; idiv rcx; mov rax, rdx
                             x86_synth_emit_bytes(s, [72, 133, 201, 117, 4, 49, 192, 235, 18, 72, 131, 249, 255, 117, 4, 49, 192, 235, 8, 72, 153, 72, 247, 249, 72, 137, 208])
                         end
                     elif comp_op == TOK_SHR()

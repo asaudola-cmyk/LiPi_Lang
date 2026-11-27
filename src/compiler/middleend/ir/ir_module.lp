@@ -18,13 +18,15 @@ include "src/compiler/middleend/ir/ir_function.lp"
 //      enables placement into read-only (.rodata) vs read-write (.data/.bss) sections.
 
 struct GlobalVar
-    name      // string: unique symbol identifier (e.g. "@g_table", "@str_hello")
+    g_pad0    // integer: alignment tag so 'name' is at index 1 matching ASTNode/IRFunction
+    name      // string: unique symbol identifier (e.g. "@g_table", "@str_hello") - index 1
     gtype     // string: type descriptor ("i64", "ptr", "string", etc.)
     init_val  // immediate value or string pointer
     is_const  // integer: 1 if read-only constant, 0 if mutable variable
 
 fn global_var_new name gtype init_val is_const
     g = GlobalVar()
+    g.g_pad0 = 0
     g.name = name
     g.gtype = gtype
     g.init_val = init_val
@@ -32,22 +34,27 @@ fn global_var_new name gtype init_val is_const
     return g
 
 // ── 2. IR Module Structure ────────────────────────────────────────────────────
+// WHY: Field indices align 'name' at index 1 (matching ASTNode/IRFunction) and 'functions'
+// at index 4 (matching ASTProgram.functions), preventing untyped field-offset collisions when
+// parser.lp (ASTProgram) and ir_module.lp (IRModule) are compiled into the same binary (e.g. JIT).
 
 struct IRModule
-    name        // string: module identifier (e.g. "core", "math_engine")
-    globals     // list: GlobalVar records
-    functions   // list: IRFunction objects
-    meta_keys   // list: metadata key strings
-    meta_vals   // list: metadata value strings
+    mod_pad0    // integer: alignment tag - index 0
+    name        // string: module identifier (e.g. "core", "math_engine") - index 1
+    globals     // list: GlobalVar records - index 2
+    meta_keys   // list: metadata key strings - index 3
+    functions   // list: IRFunction objects - index 4 (aligned with ASTProgram.functions)
+    meta_vals   // list: metadata value strings - index 5
 
 // ── 3. Constructor ────────────────────────────────────────────────────────────
 
 fn ir_module_new name
     m = IRModule()
+    m.mod_pad0 = 0
     m.name = name
     m.globals = list()
-    m.functions = list()
     m.meta_keys = list()
+    m.functions = list()
     m.meta_vals = list()
     return m
 

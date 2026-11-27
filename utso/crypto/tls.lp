@@ -589,14 +589,36 @@ fn tls_client_hello_create buffer hostname
     mem_byte_write(buffer, pos + 1, 3)
     pos = pos + 2
 
-    // 4. Client Random (32 bytes from Linux kernel SYS_getrandom 318 with RDTSC fallback)
-    rng_ok = syscall(318, buffer + pos, 32, 0, 0, 0, 0)
-    if rng_ok != 32
-        i = 0
-        while i < 32
-            c = cpu_clock() ^ (i * 2654435761)
-            mem_byte_write(buffer, pos + i, c & 255)
-            i = i + 1
+    // 4. Client Random (32 bytes from EINTR-safe Linux SYS_getrandom 318 with /dev/urandom fallback; NEVER clock!)
+    rng_got = 0
+    while rng_got < 32
+        rng_r = syscall(318, buffer + pos + rng_got, 32 - rng_got, 0, 0, 0, 0)
+        if rng_r == (0 - 4)
+            continue
+        end
+        if rng_r <= 0
+            ufd = syscall(2, "/dev/urandom", 0, 0, 0, 0, 0)
+            if ufd < 0
+                syscall(60, 1, 0, 0, 0, 0, 0)
+                return -1
+            end
+            while rng_got < 32
+                ur = syscall(0, ufd, buffer + pos + rng_got, 32 - rng_got, 0, 0, 0)
+                if ur == (0 - 4)
+                    continue
+                end
+                if ur <= 0
+                    syscall(3, ufd, 0, 0, 0, 0, 0)
+                    syscall(60, 1, 0, 0, 0, 0, 0)
+                    return -1
+                end
+                rng_got = rng_got + ur
+            end
+            syscall(3, ufd, 0, 0, 0, 0, 0)
+            break
+        end
+        rng_got = rng_got + rng_r
+    end
     pos = pos + 32
 
     // 5. Legacy Session ID (1 byte length = 0)

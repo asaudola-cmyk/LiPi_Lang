@@ -15,6 +15,10 @@ include "utso/memory"
 include "utso/string"
 include "utso/crypto"
 include "utso/socket"
+include "utso/net/dns_client.lp"
+
+// WHY: Optional pinned Ed25519 public key (64-hex or file path) passed via `--trust-key`.
+global g_aati_cli_trust_key = ""
 // WHY: Built-in sovereign HTTP response and request parsing primitives for haat registry daemon.
 // Decouples aati toolchain from external packages (aati/lipi_web), ensuring zero circular dependencies
 // and preventing top-level framework constants from clobbering the global compiler symbol space.
@@ -228,6 +232,7 @@ fn qword_to_hex val
     buf = alloc(8)
     mem_word_write(buf, 0, val)
     s = to_hex8(mem_byte_read(buf, 7)) + to_hex8(mem_byte_read(buf, 6)) + to_hex8(mem_byte_read(buf, 5)) + to_hex8(mem_byte_read(buf, 4)) + to_hex8(mem_byte_read(buf, 3)) + to_hex8(mem_byte_read(buf, 2)) + to_hex8(mem_byte_read(buf, 1)) + to_hex8(mem_byte_read(buf, 0))
+    free(buf)
     return s
 
 // WHY: Converts a byte buffer of given length into a continuous hexadecimal string.
@@ -275,8 +280,56 @@ fn is_directory path
     buf = alloc(64)
     res = syscall(217, fd, buf, 64, 0, 0, 0)
     syscall(3, fd, 0, 0, 0, 0, 0)
+    free(buf)
     if res >= 0 return 1
     return 0
+
+// WHY: Recursively removes a directory tree using direct Linux syscalls (SYS_getdents64, SYS_unlink, SYS_rmdir)
+// so failed staging unpacks leave zero leaked files or directories behind.
+fn _aati_rm_rf target_path
+    if len(target_path) == 0 or target_path == "/" or target_path == "."
+        return 0
+    if is_directory(target_path) == 0
+        syscall(87, target_path, 0, 0, 0, 0, 0)
+        return 1
+    fd = syscall(2, target_path, 65536, 0, 0, 0, 0)
+    if fd < 0 return 0
+    buf = alloc(4096)
+    children = list()
+    ctypes = list()
+    while 1
+        n = syscall(217, fd, buf, 4096, 0, 0, 0)
+        if n <= 0 break
+        pos = 0
+        while pos < n
+            r0 = mem_byte_read(buf, pos + 16)
+            r1 = mem_byte_read(buf, pos + 17)
+            reclen = r0 + (r1 * 256)
+            dtype = mem_byte_read(buf, pos + 18)
+            name = ""
+            np = pos + 19
+            while 1
+                ch = mem_byte_read(buf, np)
+                if ch == 0 break
+                name = name + chr(ch)
+                np = np + 1
+            if name != "." and name != ".."
+                push(children, target_path + "/" + name)
+                push(ctypes, dtype)
+            pos = pos + reclen
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    free(buf)
+    ci = 0
+    while ci < len(children)
+        cp = get(children, ci)
+        dt = get(ctypes, ci)
+        if dt == 4 or is_directory(cp) == 1
+            _aati_rm_rf(cp)
+        else
+            syscall(87, cp, 0, 0, 0, 0, 0)
+        ci = ci + 1
+    syscall(84, target_path, 0, 0, 0, 0, 0) // SYS_rmdir
+    return 1
 
 // WHY: Recursively traverses directory to collect all source and asset files,
 // skipping VCS directories (.git), build outputs, and signature files.
@@ -314,6 +367,7 @@ fn collect_files dir_path file_list
                         push(file_list, full_path)
             pos = pos + reclen
     syscall(3, fd, 0, 0, 0, 0, 0)
+    free(buf)
     return 0
 
 // WHY: Lexicographically compares two ASCII/UTF-8 strings with zero memory allocations.
@@ -338,9 +392,10 @@ fn pkg_str_cmp s1 s2
 // ensuring strictly deterministic manifest hash calculation across runs and environments.
 fn sort_files raw_list
     n = len(raw_list)
+    res = list()
+    if n == 0 return res
     used = alloc(n)
     mem_fill(used, 0, n)
-    res = list()
     k = 0
     while k < n
         best_idx = -1
@@ -357,6 +412,7 @@ fn sort_files raw_list
             mem_byte_write(used, best_idx, 1)
             push(res, best_val)
         k = k + 1
+    free(used)
     return res
 
 // WHY: Validates relative bundle/package paths to eliminate directory traversal (..),
@@ -385,13 +441,23 @@ fn _aati_is_safe_rel_path p
     return 1
 
 fn _aati_get_env target_key
+    // WHY: Reads NUL-delimited entries from /proc/self/environ using an expandable 64KB buffer
+    // and matches exact key prefix at entry boundary (never substring-matching e.g. XDG_CONFIG_HOME).
     fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
     if fd < 0 return ""
-    buf = alloc(16384)
-    n = syscall(0, fd, buf, 16384, 0, 0, 0)
+    cap = 65536
+    buf = malloc(cap)
+    if buf <= 0
+        syscall(3, fd, 0, 0, 0, 0, 0)
+        return ""
+    n = 0
+    while n < cap
+        r = syscall(0, fd, buf + n, cap - n, 0, 0, 0)
+        if r <= 0 break
+        n = n + r
     syscall(3, fd, 0, 0, 0, 0, 0)
     if n <= 0
-        free(buf)
+        free(buf, cap)
         return ""
     klen = len(target_key)
     out = ""
@@ -403,7 +469,7 @@ fn _aati_get_env target_key
         eq_p = pos
         while eq_p < end_p and mem_byte_read(buf, eq_p) != 61
             eq_p = eq_p + 1
-        if (eq_p - pos) == klen
+        if eq_p < end_p and (eq_p - pos) == klen
             m = 1
             ki = 0
             while ki < klen
@@ -416,10 +482,10 @@ fn _aati_get_env target_key
                 while vi < end_p
                     out = out + chr(mem_byte_read(buf, vi))
                     vi = vi + 1
-                free(buf)
+                free(buf, cap)
                 return out
         pos = end_p + 1
-    free(buf)
+    free(buf, cap)
     return ""
 
 // WHY: Computes authentic SHA-256 digest of an existing file; fails closed on missing files.
@@ -439,43 +505,55 @@ fn pkg_hash_file path
     h = sha256_hex(fc)
     return h
 
-
-
-
-
-
-
-
 // ── ৩. ইউজার এনভায়রনমেন্ট ও কী ম্যানেজমেন্ট (Environment & Key Management) ──────
 
-// WHY: Extracts user HOME directory by reading Linux /proc/self/environ directly,
-// eliminating libc getenv() dependencies while strictly adhering to kernel ABI.
+// WHY: Extracts exact `HOME=` environment entry from /proc/self/environ (never matching
+// XDG_CONFIG_HOME= or similar suffixed variables).
 fn get_home_dir
-    fd = syscall(2, "/proc/self/environ", 0, 0, 0, 0, 0)
-    if fd < 0 return "/tmp"
-    buf = alloc(4096)
-    n = syscall(0, fd, buf, 4096, 0, 0, 0)
-    syscall(3, fd, 0, 0, 0, 0, 0)
-    if n <= 0
-        free(buf)
-        return "/tmp"
-    end
-
-    i = 0
-    home = ""
-    while i < (n - 5)
-        if mem_byte_read(buf, i) == 72 and mem_byte_read(buf, i+1) == 79 and mem_byte_read(buf, i+2) == 77 and mem_byte_read(buf, i+3) == 69 and mem_byte_read(buf, i+4) == 61
-            p = i + 5
-            while p < n
-                b = mem_byte_read(buf, p)
-                if b == 0 break
-                home = home + chr(b)
-                p = p + 1
-            break
-        i = i + 1
-    free(buf)
+    home = _aati_get_env("HOME")
     if len(home) == 0 return "/tmp"
     return home
+
+// WHY: Loads pinned trusted Ed25519 public keys from `--trust-key`, `./aati.pub`, and
+// `~/.lipi/trusted_keys.txt`. If at least one trusted key is configured, rejects any
+// signature whose public_key is not in the trusted keyring (fail-closed pinning).
+fn _aati_append_keyring_text keys_list txt
+    lines = split_delim(txt, "\n")
+    li = 0
+    while li < len(lines)
+        l = trim(get(lines, li))
+        if len(l) >= 64 and starts_with(l, "#") == 0
+            tok = str_sub(l, 0, 64)
+            push(keys_list, tok)
+        li = li + 1
+    return 0
+
+fn aati_collect_trusted_keys
+    keys = list()
+    if len(g_aati_cli_trust_key) > 0
+        if file_exists(g_aati_cli_trust_key) == 1
+            _aati_append_keyring_text(keys, file_read(g_aati_cli_trust_key))
+        else
+            _aati_append_keyring_text(keys, g_aati_cli_trust_key)
+    if file_exists("aati.pub") == 1
+        _aati_append_keyring_text(keys, file_read("aati.pub"))
+    tk_file = get_home_dir() + "/.lipi/trusted_keys.txt"
+    if file_exists(tk_file) == 1
+        _aati_append_keyring_text(keys, file_read(tk_file))
+    return keys
+
+fn aati_verify_trusted_key pub_hex
+    tkeys = aati_collect_trusted_keys()
+    if len(tkeys) == 0
+        return 1
+    i = 0
+    while i < len(tkeys)
+        if get(tkeys, i) == pub_hex
+            say "  ✔ প্রণেতার পাবলিক কী পিন্ড ট্রাস্টেড কীরিং-এ যাচাইকৃত (Pinned Keyring Match)"
+            return 1
+        i = i + 1
+    say "\033[1;31m❌ নিরাপত্তা ত্রুটি: পাবলিক কী ট্রাস্টেড কীরিং-এ নেই (Untrusted Author Public Key): \033[0m" + pub_hex
+    return 0
 
 // WHY: Ensures authentic Ed25519 author keys exist in ~/.lipi/keys/.
 // Generates a cryptographically strong RFC 8032 keypair if no keys are found on disk.
@@ -517,6 +595,7 @@ fn ensure_keypair
     pub_buf = alloc(32)
     Ed25519_derive_pubkey(priv_buf, pub_buf)
     derived_pub_hex = bytes_to_hex(pub_buf, 32)
+    free(pub_buf)
     pub_hex = trim(read_file(pub_path))
     if pub_hex != derived_pub_hex
         pub_hex = derived_pub_hex
@@ -686,6 +765,7 @@ fn cmd_sign target
     end
     sig_buf = Ed25519_sign(priv_buf, m_buf, 64)
     sig_hex = bytes_to_hex(sig_buf, 64)
+    free(m_buf)
 
     // 6. Format and write signature manifest (lipi.sig)
     manifest_doc = "# Lipi Sovereign Package Signature Manifest (RFC 8032 Ed25519)\n"
@@ -770,6 +850,9 @@ fn cmd_verify_bundle target sig_path
         return 1
     end
     say "  ✔ ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর বৈধ (Authentic Ed25519 Signature)"
+    if aati_verify_trusted_key(pub_hex) == 0
+        return 1
+    end
 
     num_fp = len(file_paths)
     if num_fp == 0
@@ -954,6 +1037,9 @@ fn cmd_verify_dir target sig_path
         return 1
     end
     say "  ✔ ক্রিপ্টোগ্রাফিক ডিজিটাল স্বাক্ষর বৈধ (Authentic Ed25519 Signature)"
+    if aati_verify_trusted_key(pub_hex) == 0
+        return 1
+    end
 
     // Step B: Verify manifest hash integrity directly from manifest lines
     num_files = len(file_paths)
@@ -1193,8 +1279,9 @@ fn cmd_verify_lock lock_path
                             mismatches = mismatches + 1
                         else
                             act_h = aati_hash_package(p_dir)
-                            if len(toml_sum) > 0 and act_h != toml_sum
-                                say "  ❌ Lockfile checksum mismatch for " + toml_name
+                            // WHY: Fail closed on missing/empty/truncated checksums in TOML lockfile entries.
+                            if len(toml_sum) != 64 or act_h != toml_sum
+                                say "  ❌ Lockfile checksum mismatch or missing SHA-256 for " + toml_name
                                 mismatches = mismatches + 1
                             elif file_exists(p_dir + "/lipi.sig") == 1 and cmd_verify_dir(p_dir, p_dir + "/lipi.sig") != 0
                                 say "  ❌ Signature verification failed for locked package " + toml_name
@@ -1259,8 +1346,9 @@ fn cmd_verify_lock lock_path
                 mismatches = mismatches + 1
             else
                 act_h = aati_hash_package(p_dir)
-                if len(toml_sum) > 0 and act_h != toml_sum
-                    say "  ❌ Lockfile checksum mismatch for " + toml_name
+                // WHY: Fail closed on missing/empty/truncated checksums in final TOML lockfile entry.
+                if len(toml_sum) != 64 or act_h != toml_sum
+                    say "  ❌ Lockfile checksum mismatch or missing SHA-256 for " + toml_name
                     mismatches = mismatches + 1
                 elif file_exists(p_dir + "/lipi.sig") == 1 and cmd_verify_dir(p_dir, p_dir + "/lipi.sig") != 0
                     say "  ❌ Signature verification failed for locked package " + toml_name
@@ -1480,11 +1568,13 @@ fn pkg_parse_field toml_str field_name
 // WHY: Identifies whether a target string refers to a Git repository URL or remote slug.
 // Filters out .lpkg archive bundles and existing local directories.
 fn pkg_is_git_target target
+    if ends_with(target, ".aati") == 1 or index_of(target, ".aati") >= 0
+        return 0
     if ends_with(target, ".lpkg") == 1 or index_of(target, ".lpkg") >= 0
         return 0
-    if starts_with(target, "packages/") and syscall(21, target, 0, 0, 0, 0, 0) == 0
+    if (starts_with(target, "aati/") or starts_with(target, "packages/")) and syscall(21, target, 0, 0, 0, 0, 0) == 0
         return 0
-    if (starts_with(target, "./") or starts_with(target, "../")) and is_directory(target) == 1
+    if (starts_with(target, "./") or starts_with(target, "../") or starts_with(target, "/")) and is_directory(target) == 1
         return 0
     if index_of(target, "github.com/") >= 0 return 1
     if index_of(target, "gitlab.com/") >= 0 return 1
@@ -1596,32 +1686,16 @@ fn pkg_fetch_git git_url tag target_dir
             return ""
         say "  ✔ Ed25519 ডিজিটাল স্বাক্ষর শতভাগ প্রমাণিত ও অক্ষত।"
 
-    // Compute canonical SHA-256 checksum of package contents
-    // WHY: Single-pass streaming eliminates intermediary dynamic list reallocations,
-    // guaranteeing 100% deterministic bit-for-bit cryptographic integrity across packages of any size.
-    num_f = len(files)
-    prefix = target_dir + "/"
-    canonical_str = ""
-    i = 0
-    while i < num_f
-        fp = get(files, i)
-        rel_p = fp
-        if starts_with(fp, prefix)
-            rel_p = str_sub(fp, len(prefix), len(fp))
-        end
-        f_hash = pkg_hash_file(fp)
-        canonical_str = canonical_str + rel_p + ":" + f_hash + "\n"
-        i = i + 1
-    end
-
-    checksum = sha256_hex(canonical_str)
+    // Compute canonical SHA-256 checksum matching aati_hash_package / aati verify-lock
+    checksum = aati_hash_package(target_dir)
     say "  ✔ প্যাকেজ SHA-256 চেকসাম: " + checksum
     return checksum
 
-// WHY: Unpacks sovereign .aati (or legacy .lpkg) distribution bundle into target directory with zero tar/gzip dependencies.
-// Extracts files, creates subdirectories, verifies SHA-256 checksums from headers, and validates Ed25519 signature if present.
+// WHY: Unpacks sovereign .aati (or legacy .lpkg) distribution bundle into an isolated staging directory
+// and verifies Ed25519 signature + SHA-256 integrity BEFORE moving into destination.
+// Any error or tampered signature deletes staging completely via _aati_rm_rf, leaking zero files to target_dir.
 fn pkg_unpack_bundle bundle_path target_dir
-    say "  📦 আনপ্যাকিং বান্ডেল: " + bundle_path + " -> " + target_dir
+    say "  📦 আনপ্যাকিং বান্ডেল (স্টেজিং-পূর্ব যাচাইকরণ): " + bundle_path + " -> " + target_dir
     b_data = read_file(bundle_path)
     if len(b_data) == 0
         say "❌ বান্ডেল ফাইল পাওয়া যায়নি বা খালি: " + bundle_path
@@ -1631,7 +1705,20 @@ fn pkg_unpack_bundle bundle_path target_dir
         say "❌ অবৈধ বান্ডেল ফরম্যাট (AATI/LPKG হেডার অনুপস্থিত): " + bundle_path
         return 0
 
-    pkg_mkdir_p(target_dir)
+    // Ensure parent directory of target_dir exists so sibling staging directory can be atomically renamed
+    parent_slash = -1
+    psi = len(target_dir) - 1
+    while psi >= 0
+        if char_at(target_dir, psi) == "/"
+            parent_slash = psi
+            break
+        psi = psi - 1
+    if parent_slash > 0
+        pkg_mkdir_p(str_sub(target_dir, 0, parent_slash))
+
+    stage_dir = target_dir + ".aati_stage_" + str(syscall(39, 0, 0, 0, 0, 0, 0))
+    _aati_rm_rf(stage_dir)
+    pkg_mkdir_p(stage_dir)
 
     pos = 0
     dlen = len(b_data)
@@ -1688,6 +1775,7 @@ fn pkg_unpack_bundle bundle_path target_dir
 
         if _aati_is_safe_rel_path(filename) == 0
             say "❌ পাথ ট্রাভার্সাল ব্লক করা হয়েছে: " + filename
+            _aati_rm_rf(stage_dir)
             return 0
         end
 
@@ -1696,12 +1784,14 @@ fn pkg_unpack_bundle bundle_path target_dir
         if file_sz >= 0
             if (line_break + 1 + file_sz) > dlen
                 say "❌ বান্ডেল সাইজ সীমা লঙ্ঘন: " + filename
+                _aati_rm_rf(stage_dir)
                 return 0
             end
             content = str_sub(b_data, line_break + 1, line_break + 1 + file_sz)
             f_end = index_of_from(b_data, end_tag, line_break + 1 + file_sz)
             if f_end < 0
                 say "❌ অসম্পূর্ণ ---ENDFILE--- মার্কার: " + filename
+                _aati_rm_rf(stage_dir)
                 return 0
             end
         else
@@ -1719,9 +1809,10 @@ fn pkg_unpack_bundle bundle_path target_dir
                 say "❌ ফাইলের চেকসাম অমিল: " + filename
                 say "   প্রত্যাশিত: " + exp_hash
                 say "   পাওয়া গেছে : " + act_hash
+                _aati_rm_rf(stage_dir)
                 return 0
 
-        out_path = target_dir + "/" + filename
+        out_path = stage_dir + "/" + filename
         last_slash = -1
         ki = len(out_path) - 1
         while ki >= 0
@@ -1735,26 +1826,47 @@ fn pkg_unpack_bundle bundle_path target_dir
         w_ok = write_file(out_path, content)
         if w_ok == 0
             say "❌ ফাইল লিখতে ব্যর্থ: " + out_path
+            _aati_rm_rf(stage_dir)
             return 0
 
-        say "  ✔ এক্সট্রাক্ট করা হয়েছে: " + filename + " (" + str(len(content)) + " বাইট)"
+        say "  ✔ স্টেজিং-এ এক্সট্রাক্ট: " + filename + " (" + str(len(content)) + " বাইট)"
         extracted_count = extracted_count + 1
         pos = f_end + len(end_tag)
 
     if extracted_count == 0
         say "❌ বান্ডেল থেকে কোনো ফাইল পাওয়া যায়নি।"
+        _aati_rm_rf(stage_dir)
         return 0
 
-    // If unpacked contents include lipi.sig, verify signature
-    if syscall(21, target_dir + "/lipi.sig", 0, 0, 0, 0, 0) == 0
-        say "  🔏 বান্ডেলে lipi.sig পাওয়া গেছে — Ed25519 ক্রিপ্টোগ্রাফিক যাচাইকরণ..."
-        v_res = cmd_verify(target_dir)
+    // Require and verify lipi.sig in staging BEFORE installing into destination
+    has_sig = 0
+    if syscall(21, stage_dir + "/lipi.sig", 0, 0, 0, 0, 0) == 0
+        has_sig = 1
+    if has_sig == 1
+        say "  🔏 স্টেজিং ডিরেক্টরিতে lipi.sig Ed25519 যাচাইকরণ..."
+        v_res = cmd_verify(stage_dir)
         if v_res != 0
-            say "❌ আনপ্যাক করা প্যাকেজের Ed25519 স্বাক্ষর ব্যর্থ হয়েছে!"
+            say "❌ আনপ্যাক করা প্যাকেজের Ed25519 স্বাক্ষর ব্যর্থ! স্টেজিং মুছে ফেলা হচ্ছে..."
+            _aati_rm_rf(stage_dir)
             return 0
         say "  ✔ Ed25519 ডিজিটাল স্বাক্ষর শতভাগ প্রমাণিত।"
+    else
+        allow_unsigned = _aati_get_env("AATI_ALLOW_UNSIGNED")
+        if allow_unsigned != "1"
+            say "❌ নিরাপত্তা ত্রুটি: বান্ডেলে lipi.sig স্বাক্ষর অনুপস্থিত! ইনস্টলেশন বাতিল।"
+            _aati_rm_rf(stage_dir)
+            return 0
 
-    say "  ✔ " + str(extracted_count) + " টি ফাইল সফলভাবে আনপ্যাক করা হয়েছে।"
+    // Verification passed: atomically promote staging directory into target_dir
+    if is_directory(target_dir) == 1 or file_exists(target_dir) == 1
+        _aati_rm_rf(target_dir)
+    rn_rc = syscall(82, stage_dir, target_dir, 0, 0, 0, 0) // SYS_rename
+    if rn_rc < 0
+        say "❌ স্টেজিং থেকে গন্তব্যে স্থানান্তর ব্যর্থ: " + target_dir
+        _aati_rm_rf(stage_dir)
+        return 0
+
+    say "  ✔ " + str(extracted_count) + " টি ফাইল যাচাই শেষে নিরাপদে ইনস্টল হয়েছে -> " + target_dir
     return 1
 
 // // WHY: Generates or updates canonical deterministic lockfile (aati.lock) to guarantee bit-for-bit
@@ -1844,27 +1956,29 @@ fn pkg_update_lockfile pkg_name version source checksum
 
     // Sort package records lexicographically (selection sort for determinism)
     n = len(pkg_records)
-    used = alloc(n)
-    mem_fill(used, 0, n)
     sorted_records = list()
+    if n > 0
+        used = alloc(n)
+        mem_fill(used, 0, n)
 
-    k = 0
-    while k < n
-        best_idx = -1
-        best_name = ""
-        si = 0
-        while si < n
-            if mem_byte_read(used, si) == 0
-                item = get(pkg_records, si)
-                iname = get(item, 0)
-                if best_idx == -1 or pkg_str_cmp(iname, best_name) < 0
-                    best_idx = si
-                    best_name = iname
-            si = si + 1
-        if best_idx >= 0
-            mem_byte_write(used, best_idx, 1)
-            push(sorted_records, get(pkg_records, best_idx))
-        k = k + 1
+        k = 0
+        while k < n
+            best_idx = -1
+            best_name = ""
+            si = 0
+            while si < n
+                if mem_byte_read(used, si) == 0
+                    item = get(pkg_records, si)
+                    iname = get(item, 0)
+                    if best_idx == -1 or pkg_str_cmp(iname, best_name) < 0
+                        best_idx = si
+                        best_name = iname
+                si = si + 1
+            if best_idx >= 0
+                mem_byte_write(used, best_idx, 1)
+                push(sorted_records, get(pkg_records, best_idx))
+            k = k + 1
+        free(used)
 
     // Serialize canonical lockfile
     out = "# 👑 Lipi Sovereign Deterministic Package Lockfile (Format v1)\n"
@@ -1909,13 +2023,188 @@ fn pkg_record_manifest_dep pkg_name version source
     say "  ✔ " + toml_path + " ফাইলে " + pkg_name + " যুক্ত করা হয়েছে।"
     return 1
 
-// WHY: Performs HTTP GET query against sovereign package registry via raw Linux kernel sockets.
+// WHY: Parses SemVer strings ("1.2.3", "v2.0.1") into [major, minor, patch] integers.
+fn aati_semver_parse ver_str
+    s = trim(ver_str)
+    if len(s) > 0 and (char_at(s, 0) == "v" or char_at(s, 0) == "V")
+        s = str_sub(s, 1, len(s))
+    parts = split_delim(s, ".")
+    maj = 0
+    mn = 0
+    pat = 0
+    if len(parts) >= 1 maj = to_int(get(parts, 0))
+    if len(parts) >= 2 mn = to_int(get(parts, 1))
+    if len(parts) >= 3
+        p_raw = get(parts, 2)
+        p_num = ""
+        pi = 0
+        while pi < len(p_raw)
+            pc = ord(char_at(p_raw, pi))
+            if pc >= 48 and pc <= 57
+                p_num = p_num + chr(pc)
+                pi = pi + 1
+            else
+                break
+        if len(p_num) > 0 pat = to_int(p_num)
+    res = list()
+    push(res, maj)
+    push(res, mn)
+    push(res, pat)
+    return res
+
+// WHY: Compares two SemVer versions; returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2.
+fn aati_semver_compare v1 v2
+    a = aati_semver_parse(v1)
+    b = aati_semver_parse(v2)
+    i = 0
+    while i < 3
+        av = get(a, i)
+        bv = get(b, i)
+        if av < bv return 0 - 1
+        if av > bv return 1
+        i = i + 1
+    return 0
+
+// WHY: Evaluates SemVer constraint ("*", "1.2.3", ">=1.0.0", "<=2.0.0", ">1.0.0", "<2.0.0", "^1.2.3", "~1.2.3").
+fn aati_semver_satisfies actual_ver constraint
+    c = trim(constraint)
+    if len(c) == 0 or c == "*" return 1
+    if starts_with(c, ">=") == 1
+        if aati_semver_compare(actual_ver, str_sub(c, 2, len(c))) >= 0 return 1
+        return 0
+    if starts_with(c, "<=") == 1
+        if aati_semver_compare(actual_ver, str_sub(c, 2, len(c))) <= 0 return 1
+        return 0
+    if starts_with(c, ">") == 1
+        if aati_semver_compare(actual_ver, str_sub(c, 1, len(c))) > 0 return 1
+        return 0
+    if starts_with(c, "<") == 1
+        if aati_semver_compare(actual_ver, str_sub(c, 1, len(c))) < 0 return 1
+        return 0
+    if starts_with(c, "^") == 1
+        base_s = str_sub(c, 1, len(c))
+        if aati_semver_compare(actual_ver, base_s) < 0 return 0
+        av = aati_semver_parse(actual_ver)
+        bv = aati_semver_parse(base_s)
+        if get(bv, 0) > 0
+            if get(av, 0) == get(bv, 0) return 1
+            return 0
+        if get(bv, 1) > 0
+            if get(av, 0) == 0 and get(av, 1) == get(bv, 1) return 1
+            return 0
+        if get(av, 0) == 0 and get(av, 1) == 0 and get(av, 2) == get(bv, 2) return 1
+        return 0
+    if starts_with(c, "~") == 1
+        base_s = str_sub(c, 1, len(c))
+        if aati_semver_compare(actual_ver, base_s) < 0 return 0
+        av = aati_semver_parse(actual_ver)
+        bv = aati_semver_parse(base_s)
+        if get(av, 0) == get(bv, 0) and get(av, 1) == get(bv, 1) return 1
+        return 0
+    if aati_semver_compare(actual_ver, c) == 0 return 1
+    return 0
+
+// WHY: Parses [dependencies] entries from aati.toml into a list of [name, version_req, source].
+fn aati_parse_dependencies toml_str
+    deps = list()
+    if len(toml_str) == 0 return deps
+    lines = split_delim(toml_str, "\n")
+    in_deps = 0
+    i = 0
+    while i < len(lines)
+        l = trim(get(lines, i))
+        if len(l) > 0 and starts_with(l, "#") == 0
+            if starts_with(l, "[") == 1
+                if l == "[dependencies]"
+                    in_deps = 1
+                else
+                    in_deps = 0
+            elif in_deps == 1
+                eq_p = index_of(l, "=")
+                if eq_p > 0
+                    dname = trim(str_sub(l, 0, eq_p))
+                    rhs = trim(str_sub(l, eq_p + 1, len(l)))
+                    dver = "*"
+                    dsrc = ""
+                    if starts_with(rhs, "{") == 1
+                        vp = index_of(rhs, "version")
+                        if vp >= 0
+                            q1 = index_of_from(rhs, "\"", vp)
+                            if q1 >= 0
+                                q2 = index_of_from(rhs, "\"", q1 + 1)
+                                if q2 > q1 dver = str_sub(rhs, q1 + 1, q2)
+                        sp = index_of(rhs, "source")
+                        if sp >= 0
+                            q1 = index_of_from(rhs, "\"", sp)
+                            if q1 >= 0
+                                q2 = index_of_from(rhs, "\"", q1 + 1)
+                                if q2 > q1 dsrc = str_sub(rhs, q1 + 1, q2)
+                    else
+                        if starts_with(rhs, "\"") == 1 and ends_with(rhs, "\"") == 1 and len(rhs) >= 2
+                            dver = str_sub(rhs, 1, len(rhs) - 1)
+                        else
+                            dver = rhs
+                    rec = list()
+                    push(rec, dname)
+                    push(rec, dver)
+                    push(rec, dsrc)
+                    push(deps, rec)
+        i = i + 1
+    return deps
+
+// WHY: Extracts [host, port] from http(s)://host:port/path registry URLs cleanly.
+fn _aati_parse_url_host_port url default_host default_port
+    host = default_host
+    port = default_port
+    s = trim(url)
+    if len(s) > 0
+        start_p = 0
+        if starts_with(s, "http://") == 1
+            start_p = 7
+            port = 80
+        elif starts_with(s, "https://") == 1
+            start_p = 8
+            port = 443
+        end_p = len(s)
+        sl = index_of_from(s, "/", start_p)
+        if sl >= 0 end_p = sl
+        hp = str_sub(s, start_p, end_p)
+        col = index_of(hp, ":")
+        if col >= 0
+            host = str_sub(hp, 0, col)
+            ps = str_sub(hp, col + 1, len(hp))
+            if len(ps) > 0 port = to_int(ps)
+        else
+            if len(hp) > 0 host = hp
+    res = list()
+    push(res, host)
+    push(res, port)
+    return res
+
+// WHY: Connects TCP socket to numeric IPv4, localhost, or DNS-resolved non-loopback registry host
+// using pure-Lipi utso/net/dns_client.lp (0% libc getaddrinfo).
+fn _aati_connect_host_port s_fd reg_host reg_port
+    ip_str = reg_host
+    if ip_str == "localhost" or len(ip_str) == 0
+        ip_str = "127.0.0.1"
+    octs = _dnsc_parse_ipv4_octets(ip_str)
+    if len(octs) != 4
+        resolved = dns_resolve_ipv4(ip_str)
+        if len(resolved) == 0
+            return 0 - 1
+        octs = _dnsc_parse_ipv4_octets(resolved)
+        if len(octs) != 4
+            return 0 - 1
+    addr_buf = malloc(16)
+    c_res = socket_connect_ip(s_fd, addr_buf, get(octs, 0), get(octs, 1), get(octs, 2), get(octs, 3), reg_port)
+    free(addr_buf, 16)
+    return c_res
+
+// WHY: Performs HTTP GET query against sovereign package registry via raw Linux kernel sockets + DNS.
 fn pkg_http_get reg_host reg_port path
     s_fd = socket_create()
     if s_fd < 0 return ""
-    addr_buf = malloc(16)
-    c_res = socket_connect_ip(s_fd, addr_buf, 127, 0, 0, 1, reg_port)
-    free(addr_buf, 16)
+    c_res = _aati_connect_host_port(s_fd, reg_host, reg_port)
     if c_res < 0
         socket_close(s_fd)
         return ""
@@ -2028,40 +2317,41 @@ fn cmd_clean
     say "\033[1;32m✅ Cleanup complete!\033[0m"
 
 fn cmd_hash file_path
+    // WHY: Computes authentic NIST FIPS 180-4 SHA-256 cryptographic digest via utso/crypto/sha256.lp
+    // instead of non-cryptographic 32-bit FNV-1a.
     say "\033[1;36m🔐 Cryptographic Hash Calculation: \033[0m" + file_path
-    fd = syscall(2, file_path, 0, 0, 0, 0, 0)
-    if fd < 0
+    if file_exists(file_path) == 0
         say "❌ File not found: " + file_path
-        return 0
+        return 1
+    fc = file_read(file_path)
+    total = len(fc)
+    digest = pkg_hash_file(file_path)
+    if len(digest) != 64
+        say "❌ Failed to hash file: " + file_path
+        return 1
 
-    buf = malloc(4096)
-    hash = 2166136261
-    total = 0
-
-    while 1
-        n = syscall(0, fd, buf, 4096, 0, 0, 0)
-        if n <= 0 break
-        total = total + n
-        i = 0
-        while i < n
-            b = mem_byte_read(buf, i)
-            hash = (hash ^ b) * 16777619
-            i = i + 1
-
-    syscall(3, fd, 0, 0, 0, 0, 0)
-    free(buf, 4096)
-
-    say "  • ফাইল সাইজ : " + total + " বাইট"
-    say "  • অ্যালগরিদম : Sovereign 64-bit FNV-1a Checksum (0% Libc)"
-    say "  • হ্যাশ মান  : 0x" + qword_to_hex(hash) + "\n"
-    return hash
+    say "  • ফাইল সাইজ : " + str(total) + " বাইট"
+    say "  • অ্যালগরিদম : SHA-256 (NIST FIPS 180-4, Pure LiPi 0% Libc)"
+    say "  • হ্যাশ মান  : " + digest + "\n"
+    return 0
 
 fn cmd_info
     say "📦 আঁটি তথ্য (Aati Information):"
-    say "  ম্যানিফেস্ট : aati.toml"
+    mpath = pkg_get_manifest_path(".")
+    say "  ম্যানিফেস্ট : " + mpath
     say "  কম্পাইলার  : bin/lipc_bin (লিপি প্রথম ১.০)"
     say "  লক্ষ্য      : Linux x86_64 ELF64 (static)"
     say "  রেজিস্ট্রি  : https://haat.lipi.dev"
+    if file_exists(mpath) == 1
+        m_txt = file_read(mpath)
+        deps = aati_parse_dependencies(m_txt)
+        if len(deps) > 0
+            say "  ডিপেন্ডেন্সি (" + str(len(deps)) + "):"
+            di = 0
+            while di < len(deps)
+                d = get(deps, di)
+                say "    • " + get(d, 0) + " (" + get(d, 1) + ")"
+                di = di + 1
 
 // ── ৮. প্যাকেজ ইনস্টলেশন ও রিমোট প্রকাশনা (Package Fetch & Publish) ───────────
 // WHY: Comprehensive package resolution engine handling Git repositories, remote/local .aati/.lpkg bundles,
@@ -2138,8 +2428,8 @@ fn cmd_install pkg_target
         u_ok = pkg_unpack_bundle(bundle_file, target_dir)
         if u_ok == 0 return 1
 
-        b_content = read_file(bundle_file)
-        chk = sha256_hex(b_content)
+        // WHY: Use unified aati_hash_package(target_dir) so aati.lock entries always match `aati verify-lock`.
+        chk = aati_hash_package(target_dir)
         ver = "1.0.0"
         m_data = read_file(pkg_get_manifest_path(target_dir))
         v_val = pkg_parse_field(m_data, "version")
@@ -2167,27 +2457,8 @@ fn cmd_install pkg_target
                 say "❌ লোকাল প্যাকেজের Ed25519 স্বাক্ষর অবৈধ!"
                 return 1
 
-        raw_files = list()
-        collect_files(local_dir, raw_files)
-        files = sort_files(raw_files)
-        // WHY: Single-pass streaming eliminates intermediary dynamic list reallocations,
-        // guaranteeing 100% deterministic bit-for-bit cryptographic integrity across packages of any size.
-        num_f = len(files)
-        prefix = local_dir + "/"
-        canonical_str = ""
-        i = 0
-        while i < num_f
-            fp = get(files, i)
-            rel_p = fp
-            if starts_with(fp, prefix)
-                rel_p = str_sub(fp, len(prefix), len(fp))
-            end
-            f_hash = pkg_hash_file(fp)
-            canonical_str = canonical_str + rel_p + ":" + f_hash + "\n"
-            i = i + 1
-        end
-
-        chk = sha256_hex(canonical_str)
+        // WHY: Use unified aati_hash_package(local_dir) so lockfile matches `aati verify-lock` bit-for-bit.
+        chk = aati_hash_package(local_dir)
         ver = "1.0.0"
         m_data = read_file(pkg_get_manifest_path(local_dir))
         v_val = pkg_parse_field(m_data, "version")
@@ -2197,13 +2468,15 @@ fn cmd_install pkg_target
         say "\n\033[1;32m✅ লোকাল প্যাকেজ যাচাই সম্পন্ন ও লকফাইল হালনাগাদ: " + p_name + "\033[0m"
         return 0
 
-    // Case 4: Remote Registry lookup (default http://127.0.0.1:8088)
+    // Case 4: Remote Registry lookup (default http://127.0.0.1:8088, or AATI_REGISTRY env var)
     if _aati_is_safe_rel_path(pkg_target) == 0 or index_of(pkg_target, "/") >= 0
         say "❌ অবৈধ প্যাকেজের নাম: " + pkg_target
         return 1
     end
-    reg_host = "127.0.0.1"
-    reg_port = 8088
+    reg_env = _aati_get_env("AATI_REGISTRY")
+    hp_info = _aati_parse_url_host_port(reg_env, "127.0.0.1", 8088)
+    reg_host = get(hp_info, 0)
+    reg_port = get(hp_info, 1)
     resp = pkg_http_get(reg_host, reg_port, "/api/v1/packages/" + pkg_target)
     if starts_with(resp, "HTTP/1.1 200") or starts_with(resp, "HTTP/1.0 200")
         say "  ✔ সার্বভৌম রেজিস্ট্রি থেকে প্যাকেজ পাওয়া গেছে।"
@@ -2219,7 +2492,7 @@ fn cmd_install pkg_target
             u_ok = pkg_unpack_bundle(temp_bundle, target_dir)
             syscall(87, temp_bundle, 0, 0, 0, 0, 0)
             if u_ok == 1
-                chk = sha256_hex(bundle_body)
+                chk = aati_hash_package(target_dir)
                 ver = "1.0.0"
                 m_data = read_file(pkg_get_manifest_path(target_dir))
                 v_val = pkg_parse_field(m_data, "version")
@@ -2368,47 +2641,31 @@ fn cmd_publish pkg_target reg_url
 
     bundle_hash = sha256_hex(bundle_data)
 
-    // Step 4: Parse registry port
-    reg_port = 8088
-    colon_idx = -1
-    start_p = 7
-    if starts_with(reg_url, "https://") == 1 start_p = 8
-    i = start_p
-    while i < len(reg_url)
-        if char_at(reg_url, i) == ":"
-            colon_idx = i
-            break
-        i = i + 1
+    // Step 4: Parse registry host & port (supports numeric IP, localhost, and DNS hostnames)
+    hp_pub = _aati_parse_url_host_port(reg_url, "127.0.0.1", 8088)
+    reg_host = get(hp_pub, 0)
+    reg_port = get(hp_pub, 1)
 
-    if colon_idx > 0
-        port_s = ""
-        k = colon_idx + 1
-        while k < len(reg_url)
-            c = char_at(reg_url, k)
-            if c == "/" or c == "?" break
-            port_s = port_s + c
-            k = k + 1
-        if len(port_s) > 0 reg_port = to_int(port_s)
-
-    // Step 5: Transmit HTTP POST via sovereign Linux socket
-    say "  📡 সার্বভৌম রেজিস্ট্রি সংযোগ স্থাপন (127.0.0.1:" + str(reg_port) + ")..."
+    // Step 5: Transmit HTTP POST via sovereign Linux socket (+ DNS resolution & Bearer auth)
+    say "  📡 সার্বভৌম রেজিস্ট্রি সংযোগ স্থাপন (" + reg_host + ":" + str(reg_port) + ")..."
     s_fd = socket_create()
     if s_fd < 0
         say "❌ সকেট তৈরিতে ব্যর্থ।"
         return 1
 
-    addr_buf = malloc(16)
-    c_res = socket_connect_ip(s_fd, addr_buf, 127, 0, 0, 1, reg_port)
-    free(addr_buf, 16)
+    c_res = _aati_connect_host_port(s_fd, reg_host, reg_port)
     if c_res < 0
         socket_close(s_fd)
-        say "❌ রেজিস্ট্রির সাথে সংযোগ ব্যর্থ (127.0.0.1:" + str(reg_port) + ")"
+        say "❌ রেজিস্ট্রির সাথে সংযোগ ব্যর্থ (" + reg_host + ":" + str(reg_port) + ")"
         say "   অনুগ্রহ করে সার্ভার চালু রাখুন: 'lipipkg server " + str(reg_port) + "'"
         return 1
 
     blen = len(bundle_data)
+    pub_token = _aati_get_env("AATI_TOKEN")
     http_req = "POST /api/v1/packages/publish HTTP/1.1\r\n"
-    http_req = http_req + "Host: 127.0.0.1:" + str(reg_port) + "\r\n"
+    http_req = http_req + "Host: " + reg_host + ":" + str(reg_port) + "\r\n"
+    if len(pub_token) > 0
+        http_req = http_req + "Authorization: Bearer " + pub_token + "\r\n"
     http_req = http_req + "Content-Type: application/octet-stream\r\n"
     http_req = http_req + "Content-Length: " + str(blen) + "\r\n"
     http_req = http_req + "X-Package-Name: " + pname + "\r\n"
@@ -2744,7 +3001,24 @@ fn cmd_cache action
 // ── ৮. প্রধান এন্ট্রি পয়েন্ট (Main CLI Entry Point) ────────────────────────────
 
 fn main
-    args = argv()
+    raw_args = argv()
+    // WHY: Extract global --trust-key <hex_or_file> flag from anywhere in argv so every
+    // verify / verify-lock / install invocation supports explicit author key pinning cleanly.
+    args = list()
+    if len(raw_args) > 0
+        push(args, get(raw_args, 0))
+    ri = 1
+    while ri < len(raw_args)
+        ra = get(raw_args, ri)
+        if ra == "--trust-key" and (ri + 1) < len(raw_args)
+            g_aati_cli_trust_key = get(raw_args, ri + 1)
+            ri = ri + 2
+        elif starts_with(ra, "--trust-key=") == 1
+            g_aati_cli_trust_key = str_sub(ra, 12, len(ra))
+            ri = ri + 1
+        else
+            push(args, ra)
+            ri = ri + 1
     argc = len(args)
 
     if argc < 2
@@ -2818,7 +3092,8 @@ fn main
             say "Usage: aati hash <file_path>"
             syscall(231, 1, 0, 0, 0, 0, 0)
             return 1
-        cmd_hash(get(args, 2))
+        h_res = cmd_hash(get(args, 2))
+        if h_res != 0 syscall(231, 1, 0, 0, 0, 0, 0)
         return 0
 
     if cmd == "info" or cmd == "তথ্য"
@@ -2827,6 +3102,35 @@ fn main
 
     if cmd == "install" or cmd == "ইনস্টল" or cmd == "tolo" or cmd == "তোলো"
         if argc < 3
+            // WHY: When invoked with no target, install all [dependencies] listed in aati.toml
+            // and enforce declared SemVer constraints via aati_semver_satisfies.
+            m_path = pkg_get_manifest_path(".")
+            if file_exists(m_path) == 1
+                deps = aati_parse_dependencies(file_read(m_path))
+                if len(deps) > 0
+                    di = 0
+                    while di < len(deps)
+                        dep = get(deps, di)
+                        d_name = get(dep, 0)
+                        d_ver_req = get(dep, 1)
+                        d_target = d_name
+                        if len(get(dep, 2)) > 0 d_target = get(dep, 2)
+                        dr = cmd_install(d_target)
+                        if dr != 0
+                            syscall(231, dr, 0, 0, 0, 0, 0)
+                            return dr
+                        if len(d_ver_req) > 0 and d_ver_req != "*"
+                            inst_dir = "aati/" + d_name
+                            if is_directory(inst_dir) == 0 and is_directory("packages/" + d_name) == 1
+                                inst_dir = "packages/" + d_name
+                            inst_ver = pkg_parse_field(read_file(pkg_get_manifest_path(inst_dir)), "version")
+                            if len(inst_ver) == 0 inst_ver = "1.0.0"
+                            if aati_semver_satisfies(inst_ver, d_ver_req) == 0
+                                say "❌ SemVer constraint mismatch for '" + d_name + "': installed " + inst_ver + " does not satisfy " + d_ver_req
+                                syscall(231, 1, 0, 0, 0, 0, 0)
+                                return 1
+                        di = di + 1
+                    return 0
             say "Usage: aati install <package_name> (or 'aati tolo <package_name>')"
             syscall(231, 1, 0, 0, 0, 0, 0)
             return 1
@@ -2893,24 +3197,9 @@ fn main
             if len(custom_dst) > 0 and ord(char_at(custom_dst, 0)) >= 48 and ord(char_at(custom_dst, 0)) <= 57
                 reg_port = to_int(custom_dst)
             else
-                colon_idx = -1
-                start_p = 7
-                if starts_with(custom_dst, "https://") == 1 start_p = 8
-                i = start_p
-                while i < len(custom_dst)
-                    if char_at(custom_dst, i) == ":"
-                        colon_idx = i
-                        break
-                    i = i + 1
-                if colon_idx > 0
-                    port_s = ""
-                    k = colon_idx + 1
-                    while k < len(custom_dst)
-                        c = char_at(custom_dst, k)
-                        if c == "/" or c == "?" break
-                        port_s = port_s + c
-                        k = k + 1
-                    if len(port_s) > 0 reg_port = to_int(port_s)
+                hp_s = _aati_parse_url_host_port(custom_dst, "127.0.0.1", 8088)
+                reg_host = get(hp_s, 0)
+                reg_port = get(hp_s, 1)
         resp = pkg_http_get(reg_host, reg_port, "/api/v1/packages")
         say "\033[1;36m🔍 সার্বভৌম হাট অনুসন্ধান: \033[0m" + query
         if starts_with(resp, "HTTP/1.1 200") or starts_with(resp, "HTTP/1.0 200")

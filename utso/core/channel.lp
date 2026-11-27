@@ -17,9 +17,10 @@ include "utso/core/memory.lp"
 // Offset 24 : Tail Cursor (Write Index) (8B)
 // Offset 32 : Item Count (Live Items) (8B)
 // Offset 40 : Is Closed Flag (1=closed, 0=open) (8B)
-// Total Channel Header Size: 48 Bytes
+// Offset 48 : Hardware Atomic Spinlock Word (8B)
+// Total Channel Header Size: 64 Bytes
 
-CHAN_HDR_SIZE = 48
+CHAN_HDR_SIZE = 64
 
 // ১. নতুন চ্যানেল তৈরি (Allocate Channel Descriptor & Ring Buffer)
 // WHY: Single allocation creates channel control block and ring buffer array
@@ -39,21 +40,33 @@ fn channel_new capacity
     mem_write(chan, 24, 0) // Tail
     mem_write(chan, 32, 0) // Count
     mem_write(chan, 40, 0) // Closed = 0
+    mem_write(chan, 48, 0) // Spinlock = unlocked
+    cpu_fence()
 
     return chan
 
 // ২. চ্যানেলে ডাটা পুশ করা (Send Value into Channel)
 // Returns 1 on success, 0 on channel full (non-blocking), -1 on closed channel
+// WHY: Synchronized via hardware atomic_lock + cpu_fence so concurrent OS threads (thread_spawn)
+// never race on head/tail/count or drop/duplicate ring elements.
 fn channel_send chan val
     if chan <= 0
         return 0
+    lock_ptr = chan + 48
+    atomic_lock(lock_ptr)
+    cpu_fence()
+
     is_closed = mem_read(chan, 40)
     if is_closed == 1
+        cpu_fence()
+        atomic_unlock(lock_ptr)
         return -1
 
     count = mem_read(chan, 32)
     capacity = mem_read(chan, 8)
     if count >= capacity
+        cpu_fence()
+        atomic_unlock(lock_ptr)
         return 0 // Channel buffer is full
 
     buf = mem_read(chan, 0)
@@ -68,6 +81,8 @@ fn channel_send chan val
     mem_write(chan, 24, new_tail)
     mem_write(chan, 32, count + 1)
 
+    cpu_fence()
+    atomic_unlock(lock_ptr)
     return 1
 
 // ৩. চ্যানেল থেকে ডাটা রিড করা (Receive Value from Channel)
@@ -75,9 +90,14 @@ fn channel_send chan val
 fn channel_recv chan
     if chan <= 0
         return 0
+    lock_ptr = chan + 48
+    atomic_lock(lock_ptr)
+    cpu_fence()
 
     count = mem_read(chan, 32)
     if count <= 0
+        cpu_fence()
+        atomic_unlock(lock_ptr)
         return 0 // Channel buffer is empty
 
     buf = mem_read(chan, 0)
@@ -93,12 +113,15 @@ fn channel_recv chan
     mem_write(chan, 16, new_head)
     mem_write(chan, 32, count - 1)
 
+    cpu_fence()
+    atomic_unlock(lock_ptr)
     return val
 
 // ৪. চ্যানেলের বর্তমান আইটেম সংখ্যা (Query Active Message Count)
 fn channel_len chan
     if chan <= 0
         return 0
+    cpu_fence()
     return mem_read(chan, 32)
 
 // ৫. চ্যানেলের মোট ক্যাপাসিটি (Query Maximum Capacity)
@@ -111,7 +134,12 @@ fn channel_cap chan
 fn channel_close chan
     if chan <= 0
         return 0
+    lock_ptr = chan + 48
+    atomic_lock(lock_ptr)
+    cpu_fence()
     mem_write(chan, 40, 1) // Mark closed
+    cpu_fence()
+    atomic_unlock(lock_ptr)
     return 1
 
 // ৭. চ্যানেল মেমরি মুক্ত করা (Free Channel Memory)

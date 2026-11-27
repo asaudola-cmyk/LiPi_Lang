@@ -31,35 +31,15 @@ fn const_fold_eval_binary op l r
     if op == OP_OR  return l | r
     if op == OP_XOR return l ^ r
     if op == OP_SHL
-        // Shift left (bounded to [0, 63])
-        if r < 0 or r >= 64
-            return 0
-        end
-        shift = r
-        res = l
-        while shift > 0
-            res = res * 2
-            shift = shift - 1
-        return res
+        // WHY: Match 64-bit hardware shift semantics across x86_64/ARM64/RV64/WASM (count & 63)
+        // so -O1/-O2/-O3 constant folding never diverges from -O0 runtime execution.
+        shift = r & 63
+        return l << shift
     if op == OP_SHR
-        // Arithmetic right shift toward -inf, safe for negative operands and shifts >= 63
-        if r < 0
-            return l
-        end
-        if r >= 63
-            if l < 0 return 0 - 1 end
-            return 0
-        end
-        shift = r
-        res = l
-        while shift > 0
-            if res >= 0
-                res = res / 2
-            else
-                res = (res - 1) / 2
-            end
-            shift = shift - 1
-        return res
+        // WHY: Match 64-bit hardware arithmetic right-shift semantics (count & 63, exact on INT64_MIN)
+        // so -O1/-O2/-O3 constant folding matches -O0 runtime execution identically.
+        shift = r & 63
+        return l >> shift
     return 0
 
 fn const_fold_eval_cmp pred l r

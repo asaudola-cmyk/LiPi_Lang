@@ -205,6 +205,16 @@ fn riscv64_synth_compile_program_ssa tokens ssa_lower_res
             push(s.rv_call_relocs, call_rel)
 
     // 4. Top-level exit epilogue (preserve main() return code in a0 when auto-called)
+    riscv64_emit_defers(s, tokens)
+    if has_main == 1 and s.rv_freestanding == 0
+        // WHY: Catch any exception unwinding out of auto-called main() (x26 != 0):
+        // print "Uncaught exception: <val>\n" to stderr and exit with code 1 (never 0 on `throw 0`).
+        s.rv_needs_uncaught_throw = 1
+        skip_main_ut = s.rv_code.len()
+        riscv64_emit_beq(s, 26, 0, 0)
+        riscv64_synth_emit_call_helper(s, "__uncaught_throw")
+        riscv64_synth_patch_b(s, skip_main_ut, 0, 26, 0, s.rv_code.len())
+    end
     if has_main == 0 and s.rv_called_main == 0
         riscv64_emit_addi(s, 10, 0, 0) // exit code 0 in a0
     if s.rv_freestanding == 1
@@ -249,6 +259,11 @@ fn riscv64_synth_compile_program_ssa tokens ssa_lower_res
     if s.rv_needs_buf == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_buf_helpers(s)
+    if s.rv_needs_uncaught_throw == 1
+        s.rv_needs_str_helpers = 1
+        s.rv_needs_alloc = 1
+        riscv64_synth_emit_uncaught_throw_helper(s)
+    end
     if s.rv_needs_str_helpers == 1
         s.rv_needs_alloc = 1
         riscv64_synth_emit_str_helpers(s)
@@ -283,6 +298,12 @@ fn riscv64_synth_compile_program_ssa tokens ssa_lower_res
             found_rel = 1
         elif cr.rv_cr_target_name == "__uint_to_str"
             resolved_addr = s.rv_uint_to_str_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__float_to_str"
+            resolved_addr = s.rv_float_to_str_off
+            found_rel = 1
+        elif cr.rv_cr_target_name == "__uncaught_throw"
+            resolved_addr = s.rv_uncaught_throw_off
             found_rel = 1
         elif cr.rv_cr_target_name == "__str_concat"
             resolved_addr = s.rv_str_concat_off

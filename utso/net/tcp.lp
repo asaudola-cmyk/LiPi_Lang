@@ -12,10 +12,214 @@ import "utso/net/dns_client"
 @! ----------------------------------------------------------------------------
 
 @fn AF_INET() return 2 @end
+@fn AF_INET6() return 10 @end
 @fn SOCK_STREAM() return 1 @end
 @fn IPPROTO_TCP() return 6 @end
 @fn SOL_SOCKET() return 1 @end
 @fn SO_REUSEADDR() return 2 @end
+
+@fn tcp_is_ipv6_host(host)
+  hlen = host.len()
+  i = 0
+  @while i < hlen
+    @if str_char_at(host, i) == 58
+      return 1
+    @end
+    i = i + 1
+  @end
+  return 0
+@end
+
+@fn _tcp_hex_nibble(ch)
+  @if ch >= 48 && ch <= 57 return ch - 48 @end
+  @if ch >= 97 && ch <= 102 return ch - 87 @end
+  @if ch >= 65 && ch <= 70 return ch - 55 @end
+  return -1
+@end
+
+@fn parse_ipv6_bytes(host)
+  // WHY: RFC 4291 / RFC 5952 IPv6 literal parser returning 16 network-order bytes.
+  // Supports optional `[...]` brackets, `%zone` suffix, `::` zero compression, and
+  // IPv4-mapped tails like `::ffff:127.0.0.1`.
+  s = host
+  slen = s.len()
+  @if slen >= 2 && str_char_at(s, 0) == 91 && str_char_at(s, slen - 1) == 93
+    s = str_sub(s, 1, slen - 1)
+    slen = s.len()
+  @end
+  // Strip optional zone id (`fe80::1%eth0`)
+  zi = 0
+  @while zi < slen
+    @if str_char_at(s, zi) == 37
+      s = str_sub(s, 0, zi)
+      slen = s.len()
+      break
+    @end
+    zi = zi + 1
+  @end
+  @if slen < 2 return [] @end
+
+  // Locate optional `::` compression marker (at most one allowed)
+  dc_pos = -1
+  i = 0
+  @while i + 1 < slen
+    @if str_char_at(s, i) == 58 && str_char_at(s, i + 1) == 58
+      @if dc_pos >= 0 return [] @end
+      dc_pos = i
+      i = i + 2
+      continue
+    @end
+    i = i + 1
+  @end
+
+  left_groups = []
+  right_groups = []
+  sides = []
+  @if dc_pos >= 0
+    sides = [str_sub(s, 0, dc_pos), str_sub(s, dc_pos + 2, slen)]
+  @else
+    sides = [s, ""]
+  @end
+
+  si = 0
+  @while si < 2
+    part = sides[si]
+    plen = part.len()
+    @if plen > 0
+      // Leading or trailing single ':' inside a half is invalid
+      @if str_char_at(part, 0) == 58 || str_char_at(part, plen - 1) == 58
+        return []
+      @end
+      pos = 0
+      @while pos < plen
+        next_c = pos
+        @while next_c < plen && str_char_at(part, next_c) != 58
+          next_c = next_c + 1
+        @end
+        tok = str_sub(part, pos, next_c)
+        tlen = tok.len()
+        @if tlen == 0 return [] @end
+        // Check for embedded IPv4 dotted quad at the very end of the address
+        has_dot = 0
+        di = 0
+        @while di < tlen
+          @if str_char_at(tok, di) == 46
+            has_dot = 1
+            break
+          @end
+          di = di + 1
+        @end
+        @if has_dot == 1
+          @if next_c != plen return [] @end
+          @if dc_pos >= 0 && si == 0 return [] @end
+          v4 = parse_ipv4_addr(tok)
+          @if v4 < 0 return [] @end
+          b0 = v4 & 255
+          b1 = (v4 >> 8) & 255
+          b2 = (v4 >> 16) & 255
+          b3 = (v4 >> 24) & 255
+          g_hi = (b0 << 8) | b1
+          g_lo = (b2 << 8) | b3
+          @if si == 0
+            left_groups = left_groups.push(g_hi)
+            left_groups = left_groups.push(g_lo)
+          @else
+            right_groups = right_groups.push(g_hi)
+            right_groups = right_groups.push(g_lo)
+          @end
+        @else
+          @if tlen > 4 return [] @end
+          val = 0
+          hi = 0
+          @while hi < tlen
+            nib = _tcp_hex_nibble(str_char_at(tok, hi))
+            @if nib < 0 return [] @end
+            val = (val << 4) | nib
+            hi = hi + 1
+          @end
+          @if si == 0
+            left_groups = left_groups.push(val)
+          @else
+            right_groups = right_groups.push(val)
+          @end
+        @end
+        @if next_c < plen
+          pos = next_c + 1
+        @else
+          pos = plen
+        @end
+      @end
+    @end
+    si = si + 1
+  @end
+
+  lcnt = left_groups.len()
+  rcnt = right_groups.len()
+  @if dc_pos < 0
+    @if lcnt != 8 return [] @end
+  @else
+    @if lcnt + rcnt >= 8 return [] @end
+  @end
+
+  groups = []
+  gi = 0
+  @while gi < lcnt
+    groups = groups.push(left_groups[gi])
+    gi = gi + 1
+  @end
+  @if dc_pos >= 0
+    zeros = 8 - (lcnt + rcnt)
+    zi2 = 0
+    @while zi2 < zeros
+      groups = groups.push(0)
+      zi2 = zi2 + 1
+    @end
+    ri = 0
+    @while ri < rcnt
+      groups = groups.push(right_groups[ri])
+      ri = ri + 1
+    @end
+  @end
+  @if groups.len() != 8 return [] @end
+
+  out = []
+  oi = 0
+  @while oi < 8
+    gv = groups[oi]
+    out = out.push((gv >> 8) & 255)
+    out = out.push(gv & 255)
+    oi = oi + 1
+  @end
+  return out
+@end
+
+@fn _tcp_pack_sockaddr6_buf(host, port, allow_any_empty)
+  // WHY: Linux x86_64 `struct sockaddr_in6` is exactly 28 bytes:
+  // family(2 LE) + port(2 BE) + flowinfo(4) + addr(16 BE) + scope_id(4).
+  ip_host = host
+  @if ip_host == "" && allow_any_empty == 1
+    ip_host = "::"
+  @end
+  ip_bytes = parse_ipv6_bytes(ip_host)
+  @if ip_bytes.len() != 16 return 0 @end
+  buf = lipi_alloc(28)
+  @if buf <= 0 return 0 @end
+  k = 0
+  @while k < 28
+    sys_poke8(buf + k, 0)
+    k = k + 1
+  @end
+  sys_poke8(buf + 0, 10) // AF_INET6 = 10 LE
+  sys_poke8(buf + 1, 0)
+  sys_poke8(buf + 2, (port >> 8) & 255)
+  sys_poke8(buf + 3, port & 255)
+  bi = 0
+  @while bi < 16
+    sys_poke8(buf + 8 + bi, ip_bytes[bi] & 255)
+    bi = bi + 1
+  @end
+  return buf
+@end
 
 @fn htons(val)
   v_byte = val & 255
@@ -150,8 +354,31 @@ import "utso/net/dns_client"
   return fd
 @end
 
+@fn tcp_socket_new_v6()
+  fd = sys_socket(10, 1, 6)
+  return fd
+@end
+
+@fn tcp_bind_v6(sockfd, host, port)
+  @if sockfd < 0 return -1 @end
+  opt_buf = lipi_alloc(8)
+  sys_poke32(opt_buf, 1)
+  sys_setsockopt(sockfd, 1, 2, opt_buf, 4)
+  sys_setsockopt(sockfd, 1, 15, opt_buf, 4)
+  lipi_free(opt_buf)
+
+  addr_buf = _tcp_pack_sockaddr6_buf(host, port, 1)
+  @if addr_buf <= 0 return -1 @end
+  res = sys_bind(sockfd, addr_buf, 28)
+  lipi_free(addr_buf)
+  return res
+@end
+
 @fn tcp_bind(sockfd, host, port)
   @if sockfd < 0 return -1 @end
+  @if tcp_is_ipv6_host(host) == 1
+    return tcp_bind_v6(sockfd, host, port)
+  @end
   @! Enable SO_REUSEADDR (2) & SO_REUSEPORT (15)
   opt_buf = lipi_alloc(8)
   sys_poke32(opt_buf, 1)
@@ -179,8 +406,20 @@ import "utso/net/dns_client"
   return client_fd
 @end
 
+@fn tcp_connect_v6(sockfd, host, port)
+  @if sockfd < 0 return -1 @end
+  addr_buf = _tcp_pack_sockaddr6_buf(host, port, 0)
+  @if addr_buf <= 0 return -1 @end
+  res = sys_connect(sockfd, addr_buf, 28)
+  lipi_free(addr_buf)
+  return res
+@end
+
 @fn tcp_connect(sockfd, host, port)
   @if sockfd < 0 return -1 @end
+  @if tcp_is_ipv6_host(host) == 1
+    return tcp_connect_v6(sockfd, host, port)
+  @end
   ip_str = host
   @if parse_ipv4_addr(ip_str) < 0
     ip_str = dns_resolve_ipv4(host)
@@ -260,7 +499,31 @@ import "utso/net/dns_client"
   tcp_error: string
 @end
 
+@fn tcp_listener_bind_v6(host, port) -> TcpListener
+  fd = tcp_socket_new_v6()
+  @if fd < 0
+    return TcpListener(fd, host, port, "socket_failed")
+  @end
+
+  bind_res = tcp_bind_v6(fd, host, port)
+  @if bind_res < 0
+    tcp_close(fd)
+    return TcpListener(-1, host, port, "bind_failed")
+  @end
+
+  listen_res = tcp_listen(fd, 128)
+  @if listen_res < 0
+    tcp_close(fd)
+    return TcpListener(-1, host, port, "listen_failed")
+  @end
+
+  return TcpListener(fd, host, port, "")
+@end
+
 @fn tcp_listener_bind(host, port) -> TcpListener
+  @if tcp_is_ipv6_host(host) == 1
+    return tcp_listener_bind_v6(host, port)
+  @end
   fd = tcp_socket_new()
   @if fd < 0
     return TcpListener(fd, host, port, "socket_failed")
@@ -303,9 +566,34 @@ import "utso/net/dns_client"
   return 0
 @end
 
+@fn tcp_stream_connect_v6(host, port) -> TcpStream
+  @if host == "" || port <= 0
+    return TcpStream(-1, host, port, "invalid_endpoint")
+  @end
+  @if parse_ipv6_bytes(host).len() != 16
+    return TcpStream(-1, host, port, "invalid_ipv6")
+  @end
+  fd = tcp_socket_new_v6()
+  @if fd < 0
+    return TcpStream(fd, host, port, "socket_failed")
+  @end
+  tcp_set_timeout(fd, 5)
+
+  conn_res = tcp_connect_v6(fd, host, port)
+  @if conn_res < 0
+    tcp_close(fd)
+    return TcpStream(-1, host, port, "connect_failed")
+  @end
+
+  return TcpStream(fd, host, port, "")
+@end
+
 @fn tcp_stream_connect(host, port) -> TcpStream
   @if host == "" || port <= 0
     return TcpStream(-1, host, port, "invalid_endpoint")
+  @end
+  @if tcp_is_ipv6_host(host) == 1
+    return tcp_stream_connect_v6(host, port)
   @end
   resolved_ip = host
   @if parse_ipv4_addr(resolved_ip) < 0

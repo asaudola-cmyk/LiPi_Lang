@@ -28,7 +28,9 @@ import "utso/syscalls"
 @! 2. MEMORY ALLOCATION & DEALLOCATION
 @! ----------------------------------------------------------------------------
 
-@! Allocates anonymous executable RAM page(s) via sys_mmap
+@! Allocates anonymous writable (RW-only, strict W^X) RAM page(s) via sys_mmap.
+@! WHY: Never maps pages RWX (prot=7); callers write code under PROT_READ|PROT_WRITE (3)
+@! and transition to PROT_READ|PROT_EXEC (5) via jit_mem_protect_rx before execution.
 @fn jit_mem_alloc(size_bytes)
   page_sz = jit_page_size()
   req_sz = size_bytes
@@ -39,13 +41,13 @@ import "utso/syscalls"
   @! Align requested size to next 4096-byte page boundary
   aligned_sz = ((req_sz + page_sz - 1) / page_sz) * page_sz
 
-  @! PROT_READ (1) | PROT_WRITE (2) | PROT_EXEC (4) = 7
-  prot_rwx = PROT_READ() | PROT_WRITE() | PROT_EXEC()
+  @! Strict W^X: PROT_READ (1) | PROT_WRITE (2) = 3 (ZERO RWX mappings)
+  prot_rw = PROT_READ() | PROT_WRITE()
   @! MAP_PRIVATE (2) | MAP_ANONYMOUS (32) = 34
   map_flags = MAP_PRIVATE() | MAP_ANONYMOUS()
 
-  @! sys_mmap(addr=0, num_items = aligned_sz, prot=7, flags=34, fd=-1, offset=0)
-  mmap_addr = sys_mmap(0, aligned_sz, prot_rwx, map_flags, 0 - 1, 0)
+  @! sys_mmap(addr=0, length=aligned_sz, prot=3, flags=34, fd=-1, offset=0)
+  mmap_addr = sys_mmap(0, aligned_sz, prot_rw, map_flags, 0 - 1, 0)
 
   @if is_error(mmap_addr) || mmap_addr <= 0
     return {
@@ -62,7 +64,7 @@ import "utso/syscalls"
     size: aligned_sz,
     capacity: aligned_sz,
     used: 0,
-    is_exec: 1
+    is_exec: 0
   }
 @end
 
@@ -113,29 +115,20 @@ import "utso/syscalls"
   return res
 @end
 
-@! Transitions memory page to Read + Write + Execute (RWX)
+@! Enforces strict W^X invariant: RWX (prot=7) is unconditionally forbidden.
 @fn jit_mem_protect_rwx(block)
-  @if block == 0 || block.addr == 0 || block.size <= 0
-    return 0 - 1
-  @end
-
-  prot_rwx = PROT_READ() | PROT_WRITE() | PROT_EXEC()
-  res = sys_mprotect(block.addr, block.size, prot_rwx)
-  @if is_ok(res)
-    block.is_exec = 1
-  @end
-  return res
+  // WHY: W^X forbids simultaneous write and execute permissions; reject RWX requests fail-closed.
+  return 0 - 1
 @end
 
 @! ----------------------------------------------------------------------------
 @! 4. RAM BYTE READ / WRITE OPERATIONS
 @! ----------------------------------------------------------------------------
 
-@! Writes a single byte into the JIT memory block at specified offset
+@! Writes a single byte into the JIT memory block at specified offset (requires RW mode)
 @fn jit_mem_write_byte(block, offset, byte_val)
-  // WHY: Direct byte-level RAM writing into the JIT memory region using
-  // sovereign freestanding memory write syscalls.
-  @if block == 0 || block.addr == 0 || offset < 0 || offset >= block.capacity
+  // WHY: Enforces W^X by refusing writes while block is PROT_EXEC (is_exec == 1).
+  @if block == 0 || block.addr == 0 || block.is_exec == 1 || offset < 0 || offset >= block.capacity
     return 0
   @end
 
@@ -159,10 +152,10 @@ import "utso/syscalls"
   return lipi_mem_read_u8(src_addr)
 @end
 
-@! Writes a contiguous sequence of machine code bytes into the JIT memory block
+@! Writes a contiguous sequence of machine code bytes into the JIT memory block (requires RW mode)
 @fn jit_mem_write_bytes(block, offset, bytes)
-  // WHY: Bulk-emits compiled native machine instructions into executable memory.
-  @if block == 0 || block.addr == 0 || offset < 0
+  // WHY: Bulk-emits compiled native machine instructions into writable RW memory before mprotect(RX).
+  @if block == 0 || block.addr == 0 || block.is_exec == 1 || offset < 0
     return 0
   @end
 

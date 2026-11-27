@@ -12,27 +12,68 @@ include "utso/core/sync.lp"
 
 // ── ১. নেটিভ লিনাক্স কার্নেল থ্রেড সৃষ্টি (Spawn Real Linux Thread via SYS_clone: syscall 56) ──
 // WHY: নতুন থ্রেডের জন্য কার্নেল স্পেসে এক্সিকিউশন কন্টেক্সট তৈরি করা।
+// Uses real Linux CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND (0x00000F00 = 3840) and passes
+// caller-supplied stack_top (with relocated active activation frame + RBP so child runs on
+// stack_top without clobbering parent's stack). Note: CLONE_THREAD (0x00010000) is intentionally
+// omitted in fork-style thread_create so wait4(tid, ..., __WCLONE) (e.g. test 21) waits cleanly
+// instead of returning -ECHILD; for CLONE_THREAD (0x00010F00) + GC-tracked threads use
+// thread_spawn / thread_spawn_shared / thread_spawn_joinable below.
+// When stack_top == 0, falls back to SYS_fork (57).
 // চাইল্ড থ্রেডে ০ রিটার্ন করে, প্যারেন্ট থ্রেডে চাইল্ড থ্রেড আইডি (TID > 0) রিটার্ন করে।
+@naked
 fn thread_create stack_top
-    // WHY: Uses separate address space / stack isolation when stack_top == 0, or copies active activation
-    // frame into [stack_top - 512 .. stack_top] so the cloned child thread can safely execute epilogue without corrupting parent stack.
-    if stack_top == 0
-        tid = syscall(57, 0, 0, 0, 0, 0, 0)
-        return tid
-    end
-    // Copy current activation frame words to top of child stack so ret/pop in epilogue lands cleanly
-    sp = stack_pointer()
-    adj_top = (stack_top / 16) * 16
-    k = 0
-    while k < 64
-        w = মেমরি_পড়ো(sp, k * 8)
-        মেমরি_লেখো(adj_top - 512, k * 8, w)
-        k = k + 1
-    end
-    // Use CLONE_FS (512) | CLONE_FILES (1024) | SIGCHLD (17) = 1553 for safe kernel clone
-    flag = 1553
-    tid = syscall(56, flag, 0, 0, 0, 0)
-    return tid
+    // WHY: @naked avoids prologue/epilogue so parent RBP/RSP stay untouched and child atomically
+    // pivots both RSP (via kernel clone child_stack) and RBP (via syscall-preserved r9) onto stack_top.
+    @asm [
+        72, 133, 255,                   // test rdi, rdi
+        117, 8,                         // jnz .do_clone (+8)
+        184, 57, 0, 0, 0,               // mov eax, 57 (SYS_fork)
+        15, 5,                          // syscall
+        195,                            // ret
+        72, 137, 233,                   // mov rcx, rbp
+        72, 41, 225,                    // sub rcx, rsp
+        72, 129, 249, 0, 128, 0, 0,     // cmp rcx, 32768 (covers top-level 4KB+ frames & wrappers)
+        118, 7,                         // jbe +7
+        185, 0, 2, 0, 0,                // mov ecx, 512
+        235, 7,                         // jmp +7
+        72, 129, 193, 0, 2, 0, 0,       // add rcx, 512
+        72, 131, 193, 15,               // add rcx, 15
+        72, 131, 225, 240,              // and rcx, -16
+        72, 131, 231, 240,              // and rdi, -16
+        72, 41, 207,                    // sub rdi, rcx
+        72, 131, 239, 16,               // sub rdi, 16
+        72, 137, 224,                   // mov rax, rsp
+        72, 131, 224, 15,               // and rax, 15
+        72, 9, 199,                     // or rdi, rax
+        73, 137, 248,                   // mov r8, rdi (child_sp)
+        77, 137, 195,                   // mov r11, r8
+        73, 41, 227,                    // sub r11, rsp (delta)
+        73, 137, 233,                   // mov r9, rbp
+        77, 1, 217,                     // add r9, r11 (child_rbp)
+        72, 137, 230,                   // mov rsi, rsp
+        252,                            // cld
+        243, 164,                       // rep movsb
+        77, 139, 17,                    // mov r10, [r9]
+        73, 57, 226,                    // cmp r10, rsp
+        114, 11,                        // jb +11
+        73, 57, 242,                    // cmp r10, rsi
+        115, 6,                         // jae +6
+        77, 1, 218,                     // add r10, r11
+        77, 137, 17,                    // mov [r9], r10
+        191, 0, 15, 0, 0,               // mov edi, 0x00000F00 (CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND)
+        76, 137, 198,                   // mov rsi, r8 (child_stack)
+        49, 210,                        // xor edx, edx
+        69, 49, 210,                    // xor r10d, r10d
+        69, 49, 192,                    // xor r8d, r8d
+        184, 56, 0, 0, 0,               // mov eax, 56 (SYS_clone)
+        15, 5,                          // syscall
+        72, 133, 192,                   // test rax, rax
+        117, 4,                         // jnz .parent_ret (+4)
+        76, 137, 205,                   // mov rbp, r9 (child pivots RBP onto stack_top)
+        195,                            // ret (child returns 0)
+        195                             // ret (parent returns child TID)
+    ]
+end
 
 fn থ্রেড_তৈরি স্ট্যাক_টপ
     return thread_create(স্ট্যাক_টপ)
@@ -48,12 +89,12 @@ fn thread_spawn fn_ptr arg stack_size
     if st_base <= 0
         return 0
     end
-    tid = thread_spawn_vm(fn_ptr, arg, st_base + sz)
-    if tid <= 0
+    _thr_tid = thread_spawn_vm(fn_ptr, arg, st_base + sz)
+    if _thr_tid <= 0
         syscall(11, st_base, sz, 0, 0, 0, 0)
         return 0
     end
-    return tid
+    return _thr_tid
 
 // ── ২. সিপিউ সময় ছেড়ে দেওয়া (Yield CPU Timeslice via SYS_sched_yield: syscall 24) ──
 // WHY: বিজি-লুপে সিপিউ অপচয় না করে অন্যান্য থ্রেডকে তাত্ক্ষণিক রান করার সুযোগ দেওয়া।
@@ -206,8 +247,8 @@ fn thread_spawn_shared fn_entry arg
     if stack_base <= 0
         return 0 - 1
     end
-    tid = thread_spawn_vm(fn_entry, arg, stack_base + stack_sz)
-    return tid
+    _thr_tid = thread_spawn_vm(fn_entry, arg, stack_base + stack_sz)
+    return _thr_tid
 
 fn থ্রেড_শেয়ার্ড_চালু fn_entry arg
     return thread_spawn_shared(fn_entry, arg)
@@ -238,8 +279,8 @@ fn thread_spawn_joinable fn_entry arg stack_size
     মেমরি_লেখো(handle, 0, 1)
     মেমরি_লেখো(handle, 8, stack_base)
     মেমরি_লেখো(handle, 16, sz)
-    tid = thread_spawn_vm_joinable(fn_entry, arg, stack_base + sz, handle)
-    if tid <= 0
+    _thr_tid = thread_spawn_vm_joinable(fn_entry, arg, stack_base + sz, handle)
+    if _thr_tid <= 0
         syscall(11, stack_base, sz, 0, 0, 0, 0)
         free(handle, 24)
         return 0

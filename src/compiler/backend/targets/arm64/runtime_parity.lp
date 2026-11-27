@@ -262,9 +262,13 @@ fn arm64_emit_defers s toks
     if s.a64_emitting_defer == 1 or s.a64_defer_starts.len() == 0
         return 0
     end
+    // WHY: Preserve BOTH return value (`x0`) AND dynamic return type tag (`x1`) across
+    // deferred statements so cleanup calls cannot clobber `x1` before epilogue return!
     s.a64_emitting_defer = 1
     ret_save_off = arm64_synth_alloc_var(s, "__a64_defer_ret")
+    tag_save_off = arm64_synth_alloc_var(s, "__a64_defer_tag")
     arm64_emit_str_reg_sp(s, 0, ret_save_off)
+    arm64_emit_str_reg_sp(s, 1, tag_save_off)
     di = s.a64_defer_starts.len() - 1
     while di >= 0
         d_pos = [s.a64_defer_starts[di]]
@@ -279,6 +283,7 @@ fn arm64_emit_defers s toks
         di = di - 1
     end
     arm64_emit_ldr_reg_sp(s, 0, ret_save_off)
+    arm64_emit_ldr_reg_sp(s, 1, tag_save_off)
     s.a64_emitting_defer = 0
     return 0
 end
@@ -1175,75 +1180,76 @@ fn arm64_emit_null_guard_reg s toks reg
         arm64_emit_defers(s, toks)
         arm64_emit_epilogue(s)
     else
-        s.a64_needs_print_tagged = 1
-        arm64_emit_mov_reg(s, 0, 28)
-        arm64_synth_emit_call_helper(s, "__print_str")
-        arm64_emit_movz_x(s, 0, 1, 0)
-        arm64_emit_movz_x(s, 8, 94, 0)
-        arm64_emit_svc(s, 0)
+        s.a64_needs_uncaught_throw = 1
+        arm64_synth_emit_call_helper(s, "__uncaught_throw")
     end
     ok_off = s.synth_code.len()
     arm64_patch_b_cond(s, bhs_ok, 2, ok_off)
     return 0
 end
 
-fn arm64_synth_emit_print_tagged_helpers s
-    // WHY: Pure AArch64 integer-only runtime printing for strings, IEEE-754 f64 floats, and dyn_tagged (X0=val, X1=tag).
+fn arm64_emit_format_float_to_stack s append_nl
+    // WHY: Formats IEEE-754 binary64 bits in X19 into stack buffer starting at X20 (sp+16..sp+47),
+    // using sp+48..sp+79 as digit scratch, leaving X20 pointing past the last written byte.
+    // Properly handles NaN (never "-NaN"), Inf, -Inf, 0.0, -0.0, subnormals, and normal values
+    // using pure integer instructions (0 FP instructions in the formatter itself).
+    // abs_bits -> X10, exp_raw -> X21, mant_raw -> X22
+    arm64_emit_movz_x(s, 11, 1, 0)
+    arm64_emit_lslv_x(s, 10, 19, 11)
+    arm64_emit_lsrv_x(s, 10, 10, 11)        // X10 = abs_bits
+    arm64_emit_movz_x(s, 11, 52, 0)
+    arm64_emit_lsrv_x(s, 21, 10, 11)        // X21 = exp_raw (0..2047)
+    arm64_emit_movz_x(s, 12, 1, 0)
+    arm64_emit_lslv_x(s, 12, 12, 11)        // X12 = 1 << 52
+    arm64_emit_sub_imm(s, 9, 12, 1)         // X9 = (1 << 52) - 1
+    arm64_emit_and_x(s, 22, 10, 9)          // X22 = mant_raw
 
-    // ── __print_str(X0=cstr_ptr) ──
-    s.a64_print_str_off = s.synth_code.len()
-    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 32)
-    arm64_emit_str_x_off(s, 19, 31, 16)
-    arm64_emit_mov_reg(s, 19, 0)            // X19 = ptr
-    arm64_emit_cmp_x(s, 19, 31)
-    beq_ps_nl = s.synth_code.len()
+    // Special case: exp_raw == 2047 -> NaN (mant != 0) or +/-Inf (mant == 0)
+    arm64_emit_movz_x(s, 9, 2047, 0)
+    arm64_emit_cmp_x(s, 21, 9)
+    bne_pf_finite = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)
+    arm64_emit_cmp_x(s, 22, 31)
+    beq_pf_inf = s.synth_code.len()
     arm64_emit_b_cond(s, 0, 0)
-    arm64_emit_movz_x(s, 9, 0, 0)           // X9 = len
-    ps_loop = s.synth_code.len()
-    arm64_emit_add_x(s, 10, 19, 9)
-    arm64_emit_ldrb_off(s, 11, 10, 0)
-    arm64_emit_cmp_x(s, 11, 31)
-    beq_ps_w = s.synth_code.len()
-    arm64_emit_b_cond(s, 0, 0)
-    arm64_emit_add_imm(s, 9, 9, 1)
-    arm64_emit_b(s, (ps_loop - s.synth_code.len()) / 4)
-    ps_w_off = s.synth_code.len()
-    arm64_patch_b_cond(s, beq_ps_w, 0, ps_w_off)
+    // Emit "NaN" (always unsigned)
+    arm64_emit_movz_x(s, 9, 78, 0)          // 'N'
+    arm64_emit_strb_off(s, 9, 20, 0)
+    arm64_emit_movz_x(s, 9, 97, 0)          // 'a'
+    arm64_emit_strb_off(s, 9, 20, 1)
+    arm64_emit_movz_x(s, 9, 78, 0)          // 'N'
+    arm64_emit_strb_off(s, 9, 20, 2)
+    arm64_emit_add_imm(s, 20, 20, 3)
+    jmp_pf_done_nan = s.synth_code.len()
+    arm64_emit_b(s, 0)
+    // Emit "Inf" or "-Inf"
+    pf_inf_off = s.synth_code.len()
+    arm64_patch_b_cond(s, beq_pf_inf, 0, pf_inf_off)
+    arm64_emit_movz_x(s, 11, 63, 0)
+    arm64_emit_lsrv_x(s, 9, 19, 11)
     arm64_emit_cmp_x(s, 9, 31)
-    beq_ps_nl2 = s.synth_code.len()
+    beq_pf_pinf = s.synth_code.len()
     arm64_emit_b_cond(s, 0, 0)
-    arm64_emit_movz_x(s, 0, 1, 0)
-    arm64_emit_mov_reg(s, 1, 19)
-    arm64_emit_mov_reg(s, 2, 9)
-    arm64_emit_movz_x(s, 8, 64, 0)
-    arm64_emit_svc(s, 0)
-    ps_nl_off = s.synth_code.len()
-    arm64_patch_b_cond(s, beq_ps_nl, 0, ps_nl_off)
-    arm64_patch_b_cond(s, beq_ps_nl2, 0, ps_nl_off)
-    arm64_emit_movz_x(s, 9, 10, 0)
-    arm64_emit_strb_off(s, 9, 31, 24)
-    arm64_emit_movz_x(s, 0, 1, 0)
-    arm64_emit_add_imm(s, 1, 31, 24)        // X1 = sp + 24
-    arm64_emit_movz_x(s, 2, 1, 0)
-    arm64_emit_movz_x(s, 8, 64, 0)
-    arm64_emit_svc(s, 0)
-    arm64_emit_ldr_x_off(s, 19, 31, 16)
-    arm64_emit_ldp_post(s, 29, 30, 31, 32)
-    arm64_emit_ret(s)
+    arm64_emit_movz_x(s, 9, 45, 0)          // '-'
+    arm64_emit_strb_off(s, 9, 20, 0)
+    arm64_emit_add_imm(s, 20, 20, 1)
+    pf_pinf_off = s.synth_code.len()
+    arm64_patch_b_cond(s, beq_pf_pinf, 0, pf_pinf_off)
+    arm64_emit_movz_x(s, 9, 73, 0)          // 'I'
+    arm64_emit_strb_off(s, 9, 20, 0)
+    arm64_emit_movz_x(s, 9, 110, 0)         // 'n'
+    arm64_emit_strb_off(s, 9, 20, 1)
+    arm64_emit_movz_x(s, 9, 102, 0)         // 'f'
+    arm64_emit_strb_off(s, 9, 20, 2)
+    arm64_emit_add_imm(s, 20, 20, 3)
+    jmp_pf_done_inf = s.synth_code.len()
+    arm64_emit_b(s, 0)
 
-    // ── __print_float(X0=ieee754_f64_bits) ──
-    s.a64_print_float_off = s.synth_code.len()
-    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 128)
-    arm64_emit_str_x_off(s, 19, 31, 80)
-    arm64_emit_str_x_off(s, 20, 31, 88)
-    arm64_emit_str_x_off(s, 21, 31, 96)
-    arm64_emit_str_x_off(s, 22, 31, 104)
-    arm64_emit_str_x_off(s, 23, 31, 112)
-    arm64_emit_mov_reg(s, 19, 0)            // X19 = bits
-    arm64_emit_add_imm(s, 20, 31, 16)       // X20 = out cursor (sp + 16 .. sp + 79)
-    // Sign check
-    arm64_emit_movz_x(s, 10, 63, 0)
-    arm64_emit_lsrv_x(s, 9, 19, 10)
+    // Finite value: check sign bit
+    pf_finite_off = s.synth_code.len()
+    arm64_patch_b_cond(s, bne_pf_finite, 1, pf_finite_off)
+    arm64_emit_movz_x(s, 11, 63, 0)
+    arm64_emit_lsrv_x(s, 9, 19, 11)
     arm64_emit_cmp_x(s, 9, 31)
     beq_pf_pos = s.synth_code.len()
     arm64_emit_b_cond(s, 0, 0)
@@ -1252,12 +1258,13 @@ fn arm64_synth_emit_print_tagged_helpers s
     arm64_emit_add_imm(s, 20, 20, 1)
     pf_pos_off = s.synth_code.len()
     arm64_patch_b_cond(s, beq_pf_pos, 0, pf_pos_off)
-    // abs_bits in X10
-    arm64_emit_movz_x(s, 11, 1, 0)
-    arm64_emit_lslv_x(s, 10, 19, 11)
-    arm64_emit_lsrv_x(s, 10, 10, 11)
-    arm64_emit_cmp_x(s, 10, 31)
+
+    // Exact zero (exp_raw == 0 && mant_raw == 0) -> "0.0"; subnormal (exp_raw == 0 && mant_raw != 0) -> scientific
+    arm64_emit_cmp_x(s, 21, 31)
     bne_pf_nz = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)
+    arm64_emit_cmp_x(s, 22, 31)
+    bne_pf_subnorm = s.synth_code.len()
     arm64_emit_b_cond(s, 1, 0)
     arm64_emit_movz_x(s, 9, 48, 0)
     arm64_emit_strb_off(s, 9, 20, 0)
@@ -1265,23 +1272,36 @@ fn arm64_synth_emit_print_tagged_helpers s
     arm64_emit_strb_off(s, 9, 20, 1)
     arm64_emit_movz_x(s, 9, 48, 0)
     arm64_emit_strb_off(s, 9, 20, 2)
-    arm64_emit_movz_x(s, 9, 10, 0)
-    arm64_emit_strb_off(s, 9, 20, 3)
-    arm64_emit_add_imm(s, 20, 20, 4)
-    jmp_pf_flush0 = s.synth_code.len()
+    arm64_emit_add_imm(s, 20, 20, 3)
+    jmp_pf_done_zero = s.synth_code.len()
     arm64_emit_b(s, 0)
+
+    // Subnormal entry into pure-integer scientific path: m = mant_raw (X23), b = -1074 (X21)
+    pf_subnorm_off = s.synth_code.len()
+    arm64_patch_b_cond(s, bne_pf_subnorm, 1, pf_subnorm_off)
+    arm64_emit_mov_reg(s, 23, 22)
+    arm64_emit_mov_imm64(s, 21, 0 - 1074)
+    jmp_pf_sci_sub = s.synth_code.len()
+    arm64_emit_b(s, 0)
+
     pf_nz_off = s.synth_code.len()
     arm64_patch_b_cond(s, bne_pf_nz, 1, pf_nz_off)
-    // exp -> X21, full_mant -> X22
-    arm64_emit_movz_x(s, 11, 52, 0)
-    arm64_emit_lsrv_x(s, 21, 10, 11)
+    // exp = exp_raw - 1023 -> X21, full_mant = mant_raw | (1 << 52) -> X22
     arm64_emit_sub_imm(s, 21, 21, 1023)
-    arm64_emit_movz_x(s, 12, 1, 0)
-    arm64_emit_lslv_x(s, 12, 12, 11)        // 1 << 52
-    arm64_emit_sub_imm(s, 9, 12, 1)         // (1 << 52) - 1
-    arm64_emit_and_x(s, 22, 10, 9)
     arm64_emit_orr_x(s, 22, 22, 12)
-    // Split into int_part (X23) and f32 (X19)
+    // WHY: Route extreme magnitudes (exp >= 60 -> >=1.15e18, or exp <= -20 -> <1.9e-6) through
+    // pure-integer scientific notation so `full_mant << (exp-52)` never overflows 64 bits and
+    // tiny doubles like 1e-8 format identically to x86_64 (`1.0e-8`) with zero FP instructions!
+    arm64_emit_movz_x(s, 9, 60, 0)
+    arm64_emit_cmp_x(s, 21, 9)
+    bge_pf_sci_hi = s.synth_code.len()
+    arm64_emit_b_cond(s, 10, 0)
+    arm64_emit_mov_imm64(s, 9, 0 - 20)
+    arm64_emit_cmp_x(s, 21, 9)
+    ble_pf_sci_lo = s.synth_code.len()
+    arm64_emit_b_cond(s, 13, 0)
+
+    // Split into int_part (X23) and f32 (X19) for fixed-point range (-19 <= exp <= 59)
     arm64_emit_movz_x(s, 9, 52, 0)
     arm64_emit_cmp_x(s, 21, 9)
     blt_pf_lt52 = s.synth_code.len()
@@ -1359,6 +1379,93 @@ fn arm64_synth_emit_print_tagged_helpers s
     arm64_emit_movz_x(s, 19, 0, 0)
     pf_nc_off = s.synth_code.len()
     arm64_patch_b_cond(s, blt_pf_nc, 11, pf_nc_off)
+    arm64_emit_movz_x(s, 22, 0, 0)          // X22 = sci_flag = 0 (fixed-point)
+    jmp_pf_to_digits = s.synth_code.len()
+    arm64_emit_b(s, 0)
+
+    // ── Pure-Integer Scientific Notation Path (X23=m, X21=b, X22=d) ──────────
+    pf_sci_norm_off = s.synth_code.len()
+    arm64_patch_b_cond(s, bge_pf_sci_hi, 10, pf_sci_norm_off)
+    arm64_patch_b_cond(s, ble_pf_sci_lo, 13, pf_sci_norm_off)
+    arm64_emit_mov_reg(s, 23, 22)           // X23 = full_mant
+    arm64_emit_sub_imm(s, 21, 21, 52)       // X21 = b = exp - 52
+    pf_sci_entry_off = s.synth_code.len()
+    arm64_patch_b(s, jmp_pf_sci_sub, pf_sci_entry_off)
+    arm64_emit_movz_x(s, 22, 0, 0)          // X22 = d = 0
+    arm64_emit_movz_x(s, 12, 10, 0)         // X12 = 10
+    arm64_emit_movz_x(s, 13, 1, 0)          // X13 = 1
+    // While b > 0: if m >= 2^62 -> m=(m+5)/10, d++ else m<<=1, b--
+    arm64_emit_movz_x(s, 10, 16384, 48)     // X10 = 1 << 62
+    pf_sb_pos = s.synth_code.len()
+    arm64_emit_cmp_x(s, 21, 31)
+    ble_pf_sb_pos = s.synth_code.len()
+    arm64_emit_b_cond(s, 13, 0)
+    arm64_emit_cmp_x(s, 23, 10)
+    blo_pf_sb_shl = s.synth_code.len()
+    arm64_emit_b_cond(s, 3, 0)
+    arm64_emit_add_imm(s, 23, 23, 5)
+    arm64_emit_udiv_x(s, 23, 23, 12)
+    arm64_emit_add_imm(s, 22, 22, 1)
+    arm64_emit_b(s, (pf_sb_pos - s.synth_code.len()) / 4)
+    pf_sb_shl_off = s.synth_code.len()
+    arm64_patch_b_cond(s, blo_pf_sb_shl, 3, pf_sb_shl_off)
+    arm64_emit_add_x(s, 23, 23, 23)
+    arm64_emit_sub_imm(s, 21, 21, 1)
+    arm64_emit_b(s, (pf_sb_pos - s.synth_code.len()) / 4)
+    pf_sb_pos_done = s.synth_code.len()
+    arm64_patch_b_cond(s, ble_pf_sb_pos, 13, pf_sb_pos_done)
+    // While b < 0: if m < 2^59 -> m*=10, d-- else m=(m+1)>>1, b++
+    arm64_emit_movz_x(s, 10, 2048, 48)      // X10 = 1 << 59
+    pf_sb_neg = s.synth_code.len()
+    arm64_emit_cmp_x(s, 21, 31)
+    bge_pf_sb_neg = s.synth_code.len()
+    arm64_emit_b_cond(s, 10, 0)
+    arm64_emit_cmp_x(s, 23, 10)
+    bhs_pf_sb_shr = s.synth_code.len()
+    arm64_emit_b_cond(s, 2, 0)
+    arm64_emit_mul_x(s, 23, 23, 12)
+    arm64_emit_sub_imm(s, 22, 22, 1)
+    arm64_emit_b(s, (pf_sb_neg - s.synth_code.len()) / 4)
+    pf_sb_shr_off = s.synth_code.len()
+    arm64_patch_b_cond(s, bhs_pf_sb_shr, 2, pf_sb_shr_off)
+    arm64_emit_add_imm(s, 23, 23, 1)
+    arm64_emit_lsrv_x(s, 23, 23, 13)
+    arm64_emit_add_imm(s, 21, 21, 1)
+    arm64_emit_b(s, (pf_sb_neg - s.synth_code.len()) / 4)
+    pf_sb_neg_done = s.synth_code.len()
+    arm64_patch_b_cond(s, bge_pf_sb_neg, 10, pf_sb_neg_done)
+    // Normalize m into [1000000, 9999999]
+    arm64_emit_mov_imm64(s, 10, 10000000)
+    pf_sn_hi = s.synth_code.len()
+    arm64_emit_cmp_x(s, 23, 10)
+    blo_pf_sn_hi = s.synth_code.len()
+    arm64_emit_b_cond(s, 3, 0)
+    arm64_emit_add_imm(s, 23, 23, 5)
+    arm64_emit_udiv_x(s, 23, 23, 12)
+    arm64_emit_add_imm(s, 22, 22, 1)
+    arm64_emit_b(s, (pf_sn_hi - s.synth_code.len()) / 4)
+    pf_sn_hi_done = s.synth_code.len()
+    arm64_patch_b_cond(s, blo_pf_sn_hi, 3, pf_sn_hi_done)
+    arm64_emit_mov_imm64(s, 11, 1000000)
+    pf_sn_lo = s.synth_code.len()
+    arm64_emit_cmp_x(s, 23, 11)
+    bhs_pf_sn_lo = s.synth_code.len()
+    arm64_emit_b_cond(s, 2, 0)
+    arm64_emit_mul_x(s, 23, 23, 12)
+    arm64_emit_sub_imm(s, 22, 22, 1)
+    arm64_emit_b(s, (pf_sn_lo - s.synth_code.len()) / 4)
+    pf_sn_lo_done = s.synth_code.len()
+    arm64_patch_b_cond(s, bhs_pf_sn_lo, 2, pf_sn_lo_done)
+    // X21 = sci_exp10 = d + 6; X22 = sci_flag = 1; X23 = m / 1000000; X19 = m % 1000000
+    arm64_emit_add_imm(s, 21, 22, 6)
+    arm64_emit_movz_x(s, 22, 1, 0)
+    arm64_emit_udiv_x(s, 9, 23, 11)
+    arm64_emit_mul_x(s, 10, 9, 11)
+    arm64_emit_sub_x(s, 19, 23, 10)
+    arm64_emit_mov_reg(s, 23, 9)
+
+    pf_emit_digits_off = s.synth_code.len()
+    arm64_patch_b(s, jmp_pf_to_digits, pf_emit_digits_off)
     // Emit int_part (X23) backwards into sp+48..sp+79
     arm64_emit_add_imm(s, 10, 31, 79)
     arm64_emit_movz_x(s, 11, 10, 0)
@@ -1443,12 +1550,125 @@ fn arm64_synth_emit_print_tagged_helpers s
     arm64_emit_b(s, (pf_fcp - s.synth_code.len()) / 4)
     pf_fcp_done = s.synth_code.len()
     arm64_patch_b_cond(s, bge_pf_fcp, 10, pf_fcp_done)
-    // Trailing '\n'
-    arm64_emit_movz_x(s, 9, 10, 0)
+
+    // Emit scientific exponent suffix "e+<exp>" / "e-<exp>" when X22 != 0
+    arm64_emit_cmp_x(s, 22, 31)
+    beq_pf_no_exp = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_movz_x(s, 9, 101, 0)         // 'e'
     arm64_emit_strb_off(s, 9, 20, 0)
     arm64_emit_add_imm(s, 20, 20, 1)
-    pf_flush_off = s.synth_code.len()
-    arm64_patch_b(s, jmp_pf_flush0, pf_flush_off)
+    arm64_emit_cmp_x(s, 21, 31)
+    bge_pf_epos = s.synth_code.len()
+    arm64_emit_b_cond(s, 10, 0)
+    arm64_emit_movz_x(s, 9, 45, 0)          // '-'
+    arm64_emit_strb_off(s, 9, 20, 0)
+    arm64_emit_add_imm(s, 20, 20, 1)
+    arm64_emit_sub_x(s, 21, 31, 21)         // X21 = -X21
+    jmp_pf_esign = s.synth_code.len()
+    arm64_emit_b(s, 0)
+    pf_epos_off = s.synth_code.len()
+    arm64_patch_b_cond(s, bge_pf_epos, 10, pf_epos_off)
+    arm64_emit_movz_x(s, 9, 43, 0)          // '+'
+    arm64_emit_strb_off(s, 9, 20, 0)
+    arm64_emit_add_imm(s, 20, 20, 1)
+    pf_esign_off = s.synth_code.len()
+    arm64_patch_b(s, jmp_pf_esign, pf_esign_off)
+    // Emit unsigned exponent digits (X21) backwards into sp+48..sp+79, then copy forward
+    arm64_emit_add_imm(s, 10, 31, 79)
+    arm64_emit_movz_x(s, 11, 10, 0)
+    pf_edig = s.synth_code.len()
+    arm64_emit_udiv_x(s, 12, 21, 11)
+    arm64_emit_mul_x(s, 13, 12, 11)
+    arm64_emit_sub_x(s, 9, 21, 13)
+    arm64_emit_add_imm(s, 9, 9, 48)
+    arm64_emit_strb_off(s, 9, 10, 0)
+    arm64_emit_sub_imm(s, 10, 10, 1)
+    arm64_emit_mov_reg(s, 21, 12)
+    arm64_emit_cmp_x(s, 21, 31)
+    arm64_emit_b_cond(s, 1, (pf_edig - s.synth_code.len()) / 4)
+    arm64_emit_add_imm(s, 10, 10, 1)
+    arm64_emit_add_imm(s, 11, 31, 80)
+    pf_ecp = s.synth_code.len()
+    arm64_emit_cmp_x(s, 10, 11)
+    bge_pf_ecp = s.synth_code.len()
+    arm64_emit_b_cond(s, 10, 0)
+    arm64_emit_ldrb_off(s, 9, 10, 0)
+    arm64_emit_strb_off(s, 9, 20, 0)
+    arm64_emit_add_imm(s, 20, 20, 1)
+    arm64_emit_add_imm(s, 10, 10, 1)
+    arm64_emit_b(s, (pf_ecp - s.synth_code.len()) / 4)
+    pf_ecp_done = s.synth_code.len()
+    arm64_patch_b_cond(s, bge_pf_ecp, 10, pf_ecp_done)
+    arm64_patch_b_cond(s, beq_pf_no_exp, 0, pf_ecp_done)
+
+    pf_done_off = s.synth_code.len()
+    arm64_patch_b(s, jmp_pf_done_nan, pf_done_off)
+    arm64_patch_b(s, jmp_pf_done_inf, pf_done_off)
+    arm64_patch_b(s, jmp_pf_done_zero, pf_done_off)
+    if append_nl == 1
+        arm64_emit_movz_x(s, 9, 10, 0)
+        arm64_emit_strb_off(s, 9, 20, 0)
+        arm64_emit_add_imm(s, 20, 20, 1)
+    end
+    return 0
+end
+
+fn arm64_synth_emit_print_tagged_helpers s
+    // WHY: Pure AArch64 integer-only runtime printing for strings, IEEE-754 f64 floats, and dyn_tagged (X0=val, X1=tag).
+
+    // ── __print_str(X0=cstr_ptr) ──
+    s.a64_print_str_off = s.synth_code.len()
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 32)
+    arm64_emit_str_x_off(s, 19, 31, 16)
+    arm64_emit_mov_reg(s, 19, 0)            // X19 = ptr
+    arm64_emit_cmp_x(s, 19, 31)
+    beq_ps_nl = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_movz_x(s, 9, 0, 0)           // X9 = len
+    ps_loop = s.synth_code.len()
+    arm64_emit_add_x(s, 10, 19, 9)
+    arm64_emit_ldrb_off(s, 11, 10, 0)
+    arm64_emit_cmp_x(s, 11, 31)
+    beq_ps_w = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_add_imm(s, 9, 9, 1)
+    arm64_emit_b(s, (ps_loop - s.synth_code.len()) / 4)
+    ps_w_off = s.synth_code.len()
+    arm64_patch_b_cond(s, beq_ps_w, 0, ps_w_off)
+    arm64_emit_cmp_x(s, 9, 31)
+    beq_ps_nl2 = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_movz_x(s, 0, 1, 0)
+    arm64_emit_mov_reg(s, 1, 19)
+    arm64_emit_mov_reg(s, 2, 9)
+    arm64_emit_movz_x(s, 8, 64, 0)
+    arm64_emit_svc(s, 0)
+    ps_nl_off = s.synth_code.len()
+    arm64_patch_b_cond(s, beq_ps_nl, 0, ps_nl_off)
+    arm64_patch_b_cond(s, beq_ps_nl2, 0, ps_nl_off)
+    arm64_emit_movz_x(s, 9, 10, 0)
+    arm64_emit_strb_off(s, 9, 31, 24)
+    arm64_emit_movz_x(s, 0, 1, 0)
+    arm64_emit_add_imm(s, 1, 31, 24)        // X1 = sp + 24
+    arm64_emit_movz_x(s, 2, 1, 0)
+    arm64_emit_movz_x(s, 8, 64, 0)
+    arm64_emit_svc(s, 0)
+    arm64_emit_ldr_x_off(s, 19, 31, 16)
+    arm64_emit_ldp_post(s, 29, 30, 31, 32)
+    arm64_emit_ret(s)
+
+    // ── __print_float(X0=ieee754_f64_bits) ──
+    s.a64_print_float_off = s.synth_code.len()
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 128)
+    arm64_emit_str_x_off(s, 19, 31, 80)
+    arm64_emit_str_x_off(s, 20, 31, 88)
+    arm64_emit_str_x_off(s, 21, 31, 96)
+    arm64_emit_str_x_off(s, 22, 31, 104)
+    arm64_emit_str_x_off(s, 23, 31, 112)
+    arm64_emit_mov_reg(s, 19, 0)            // X19 = bits
+    arm64_emit_add_imm(s, 20, 31, 16)       // X20 = out cursor (sp + 16 .. sp + 47)
+    arm64_emit_format_float_to_stack(s, 1)
     arm64_emit_add_imm(s, 1, 31, 16)        // X1 = sp + 16
     arm64_emit_sub_x(s, 2, 20, 1)           // X2 = len
     arm64_emit_movz_x(s, 0, 1, 0)           // X0 = stdout
@@ -1713,16 +1933,119 @@ fn arm64_synth_emit_str_helpers s
     arm64_emit_ldp_post(s, 29, 30, 31, 64)
     arm64_emit_ret(s)
 
+    // ── __float_to_str(X0=ieee754_f64_bits) -> X0=cstr ──
+    s.a64_float_to_str_off = s.synth_code.len()
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 128)
+    arm64_emit_str_x_off(s, 19, 31, 80)
+    arm64_emit_str_x_off(s, 20, 31, 88)
+    arm64_emit_str_x_off(s, 21, 31, 96)
+    arm64_emit_str_x_off(s, 22, 31, 104)
+    arm64_emit_str_x_off(s, 23, 31, 112)
+    arm64_emit_mov_reg(s, 19, 0)
+    arm64_emit_add_imm(s, 20, 31, 16)
+    arm64_emit_format_float_to_stack(s, 0)
+    arm64_emit_add_imm(s, 19, 31, 16)         // X19 = sp + 16
+    arm64_emit_sub_x(s, 21, 20, 19)           // X21 = formatted byte len
+    arm64_emit_add_imm(s, 0, 21, 1)
+    arm64_synth_emit_call_alloc(s)            // X0 = out_ptr
+    arm64_emit_movz_x(s, 9, 0, 0)
+    fts_cp = s.synth_code.len()
+    arm64_emit_cmp_x(s, 9, 21)
+    bge_fts_cp = s.synth_code.len()
+    arm64_emit_b_cond(s, 10, 0)
+    arm64_emit_add_x(s, 10, 19, 9)
+    arm64_emit_ldrb_off(s, 11, 10, 0)
+    arm64_emit_add_x(s, 10, 0, 9)
+    arm64_emit_strb_off(s, 11, 10, 0)
+    arm64_emit_add_imm(s, 9, 9, 1)
+    arm64_emit_b(s, (fts_cp - s.synth_code.len()) / 4)
+    fts_cp_done = s.synth_code.len()
+    arm64_patch_b_cond(s, bge_fts_cp, 10, fts_cp_done)
+    arm64_emit_add_x(s, 10, 0, 21)
+    arm64_emit_strb_off(s, 31, 10, 0)
+    arm64_emit_ldr_x_off(s, 23, 31, 112)
+    arm64_emit_ldr_x_off(s, 22, 31, 104)
+    arm64_emit_ldr_x_off(s, 21, 31, 96)
+    arm64_emit_ldr_x_off(s, 20, 31, 88)
+    arm64_emit_ldr_x_off(s, 19, 31, 80)
+    arm64_emit_ldp_post(s, 29, 30, 31, 128)
+    arm64_emit_ret(s)
+
     // ── __tagged_to_str(X0=val, X1=tag) -> X0=cstr ──
     s.a64_tagged_to_str_off = s.synth_code.len()
     arm64_emit_movz_x(s, 9, 2, 0)
     arm64_emit_cmp_x(s, 1, 9)
-    bne_tts_int = s.synth_code.len()
+    bne_tts_chk_flt = s.synth_code.len()
     arm64_emit_b_cond(s, 1, 0)
     arm64_emit_ret(s)                         // tag == 2: already a cstr in X0!
+    tts_chk_flt_off = s.synth_code.len()
+    arm64_patch_b_cond(s, bne_tts_chk_flt, 1, tts_chk_flt_off)
+    arm64_emit_movz_x(s, 9, 1, 0)
+    arm64_emit_cmp_x(s, 1, 9)
+    bne_tts_int = s.synth_code.len()
+    arm64_emit_b_cond(s, 1, 0)
+    arm64_emit_b(s, (s.a64_float_to_str_off - s.synth_code.len()) / 4)
     tts_int_off = s.synth_code.len()
     arm64_patch_b_cond(s, bne_tts_int, 1, tts_int_off)
     arm64_emit_b(s, (s.a64_int_to_str_off - s.synth_code.len()) / 4)
+    return 0
+end
+
+fn arm64_synth_emit_uncaught_throw_helper s
+    // WHY: Hosted-mode uncaught exception handler (X27=tag+1, X28=val): formats payload via
+    // __tagged_to_str, writes "Uncaught exception: <val>\n" to stderr (fd 2), and exits with code 1
+    // (exact x86_64 parity; never exits 0 on `throw 0`).
+    s.a64_uncaught_throw_off = s.synth_code.len()
+    arm64_emit_stp_pre(s, 29, 30, 31, 0 - 32)
+    arm64_emit_str_x_off(s, 19, 31, 16)
+    arm64_emit_mov_reg(s, 0, 28)
+    arm64_emit_sub_imm(s, 1, 27, 1)           // X1 = tag (0=int, 1=float, 2=str)
+    arm64_synth_emit_call_helper(s, "__tagged_to_str")
+    arm64_emit_mov_reg(s, 19, 0)              // X19 = formatted cstr
+    // Write prefix "Uncaught exception: " (20 bytes) to stderr (fd 2)
+    arm64_emit_movz_x(s, 0, 2, 0)
+    arm64_emit_load_rodata_str(s, 1, "Uncaught exception: ")
+    arm64_emit_movz_x(s, 2, 20, 0)
+    arm64_emit_movz_x(s, 8, 64, 0)
+    arm64_emit_svc(s, 0)
+    // Compute strlen(X19) in X9 and write value to stderr (fd 2)
+    arm64_emit_cmp_x(s, 19, 31)
+    beq_ut_nl = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_movz_x(s, 9, 0, 0)
+    ut_len_loop = s.synth_code.len()
+    arm64_emit_add_x(s, 10, 19, 9)
+    arm64_emit_ldrb_off(s, 11, 10, 0)
+    arm64_emit_cmp_x(s, 11, 31)
+    beq_ut_write = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_add_imm(s, 9, 9, 1)
+    arm64_emit_b(s, (ut_len_loop - s.synth_code.len()) / 4)
+    ut_write_off = s.synth_code.len()
+    arm64_patch_b_cond(s, beq_ut_write, 0, ut_write_off)
+    arm64_emit_cmp_x(s, 9, 31)
+    beq_ut_nl2 = s.synth_code.len()
+    arm64_emit_b_cond(s, 0, 0)
+    arm64_emit_movz_x(s, 0, 2, 0)
+    arm64_emit_mov_reg(s, 1, 19)
+    arm64_emit_mov_reg(s, 2, 9)
+    arm64_emit_movz_x(s, 8, 64, 0)
+    arm64_emit_svc(s, 0)
+    ut_nl_off = s.synth_code.len()
+    arm64_patch_b_cond(s, beq_ut_nl, 0, ut_nl_off)
+    arm64_patch_b_cond(s, beq_ut_nl2, 0, ut_nl_off)
+    // Write trailing '\n' to stderr (fd 2)
+    arm64_emit_movz_x(s, 9, 10, 0)
+    arm64_emit_strb_off(s, 9, 31, 24)
+    arm64_emit_movz_x(s, 0, 2, 0)
+    arm64_emit_add_imm(s, 1, 31, 24)
+    arm64_emit_movz_x(s, 2, 1, 0)
+    arm64_emit_movz_x(s, 8, 64, 0)
+    arm64_emit_svc(s, 0)
+    // Exit process with status code 1 via Linux SYS_exit_group (94)
+    arm64_emit_movz_x(s, 0, 1, 0)
+    arm64_emit_movz_x(s, 8, 94, 0)
+    arm64_emit_svc(s, 0)
     return 0
 end
 

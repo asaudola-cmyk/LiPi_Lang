@@ -32,6 +32,8 @@ import "utso/net/tls/tls13"
   s_key: array
   s_iv: array
   master_secret: array
+  c_app_secret: array
+  s_app_secret: array
 @end
 
 @struct HttpResponse
@@ -460,37 +462,76 @@ import "utso/net/tls/tls13"
 @! ----------------------------------------------------------------------------
 
 @fn http_parse_url(url) -> HttpUrl
+  // WHY: Parses HTTP/HTTPS URLs including RFC 3986 bracketed IPv6 host literals
+  // such as `http://[::1]:8080/path` -> host="::1", port=8080, path="/path".
   proto = "http"
   host = "localhost"
   port = 80
   path = "/"
 
   rem = url
-  @if starts_with(rem, "http://") == 1
+  // WHY: RFC 3986 §3.1 defines URI schemes as case-insensitive (`HTTP://`, `HTTPS://`).
+  rem_low = str_to_lower(rem)
+  @if starts_with(rem_low, "http://") == 1
     rem = str_substr(rem, 7, str_len(rem))
-  @elif starts_with(rem, "https://") == 1
+  @elif starts_with(rem_low, "https://") == 1
     rem = str_substr(rem, 8, str_len(rem))
     proto = "https"
     port = 443
   @end
 
-  slash_pos = str_index_of(rem, "/")
+  // Find earliest path/query/fragment delimiter ('/', '?', '#')
+  rlen = str_len(rem)
+  delim_pos = -1
+  di = 0
+  @while di < rlen
+    dch = str_char_at(rem, di) & 255
+    @if dch == 47 || dch == 63 || dch == 35
+      delim_pos = di
+      break
+    @end
+    di = di + 1
+  @end
+
   host_port = ""
-  @if slash_pos >= 0
-    host_port = str_substr(rem, 0, slash_pos)
-    path = str_substr(rem, slash_pos, str_len(rem))
+  @if delim_pos >= 0
+    host_port = str_substr(rem, 0, delim_pos)
+    @if (str_char_at(rem, delim_pos) & 255) == 47
+      path = str_substr(rem, delim_pos, rlen)
+    @else
+      path = string_concat("/", str_substr(rem, delim_pos, rlen))
+    @end
   @else
     host_port = rem
     path = "/"
   @end
 
-  colon_pos = str_index_of(host_port, ":")
-  @if colon_pos >= 0
-    host = str_substr(host_port, 0, colon_pos)
-    port_str = str_substr(host_port, colon_pos + 1, str_len(host_port))
-    port = parse_int_str(port_str)
+  hplen = str_len(host_port)
+  @if hplen >= 2 && (str_char_at(host_port, 0) & 255) == 91
+    // Bracketed IPv6 literal: [::1] or [::1]:8080
+    rb = str_index_of(host_port, "]")
+    @if rb > 1
+      host = str_substr(host_port, 1, rb)
+      @if rb + 2 <= hplen && (str_char_at(host_port, rb + 1) & 255) == 58
+        p_str = str_substr(host_port, rb + 2, hplen)
+        @if str_len(p_str) > 0
+          port = parse_int_str(p_str)
+        @end
+      @end
+    @else
+      host = host_port
+    @end
   @else
-    host = host_port
+    colon_pos = str_index_of(host_port, ":")
+    @if colon_pos >= 0
+      host = str_substr(host_port, 0, colon_pos)
+      port_str = str_substr(host_port, colon_pos + 1, hplen)
+      @if str_len(port_str) > 0
+        port = parse_int_str(port_str)
+      @end
+    @else
+      host = host_port
+    @end
   @end
 
   @if host == "" host = "localhost" @end
@@ -503,11 +544,37 @@ import "utso/net/tls/tls13"
 @! ----------------------------------------------------------------------------
 
 @fn _http_tls_rand32()
+  // WHY: Loops SYS_getrandom (318) across EINTR (-4) and short reads, falling back
+  // only to /dev/urandom so TLS ephemeral keys never truncate under STW GC signals.
   buf = lipi_alloc(32)
   @if buf <= 0 return [] @end
-  got = syscall(318, buf, 32, 0, 0, 0, 0)
+  got = 0
+  failed = 0
+  @while got < 32
+    r = syscall(318, buf + got, 32 - got, 0, 0, 0, 0)
+    @if r == (0 - 4) continue @end
+    @if r <= 0
+      ufd = syscall(2, "/dev/urandom", 0, 0, 0, 0, 0)
+      @if ufd < 0
+        failed = 1
+        break
+      @end
+      @while got < 32
+        ur = syscall(0, ufd, buf + got, 32 - got, 0, 0, 0)
+        @if ur == (0 - 4) continue @end
+        @if ur <= 0
+          failed = 1
+          break
+        @end
+        got = got + ur
+      @end
+      syscall(3, ufd, 0, 0, 0, 0, 0)
+      break
+    @end
+    got = got + r
+  @end
   out = []
-  @if got == 32
+  @if failed == 0 && got == 32
     i = 0
     @while i < 32
       out = out.push(sys_peek8(buf + i) & 255)
@@ -568,6 +635,9 @@ import "utso/net/tls/tls13"
   got = 0
   @while got < count
     r = sys_read(fd, buf + got, count - got)
+    @if r == (0 - 4)
+      continue
+    @end
     @if r <= 0
       lipi_free_sized(buf, count)
       return []
@@ -914,7 +984,9 @@ import "utso/net/tls/tls13"
       tls13_hkdf_expand_label_384(c_app, "iv", [], 12),
       tls13_hkdf_expand_label_384(s_app, "key", [], 32),
       tls13_hkdf_expand_label_384(s_app, "iv", [], 12),
-      master
+      master,
+      c_app,
+      s_app
     )
   @end
   zero32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -932,7 +1004,9 @@ import "utso/net/tls/tls13"
     tls13_hkdf_expand_label(c_app, "iv", [], 12),
     tls13_hkdf_expand_label(s_app, "key", [], klen),
     tls13_hkdf_expand_label(s_app, "iv", [], 12),
-    master
+    master,
+    c_app,
+    s_app
   )
 @end
 
@@ -1064,6 +1138,8 @@ import "utso/net/tls/tls13"
   hts_host: string
   hts_res_master: array
   hts_resumed: i64
+  hts_c_app_secret: array
+  hts_s_app_secret: array
 @end
 
 global g_http_last_tls_resumed = 0
@@ -1073,7 +1149,7 @@ global g_http_last_tls_resumed = 0
 @end
 
 @fn _http_tls_session_invalid() -> HttpTlsSession
-  return HttpTlsSession(0, 0 - 1, 0, [], [], [], [], 0, 0, "", [], 0)
+  return HttpTlsSession(0, 0 - 1, 0, [], [], [], [], 0, 0, "", [], 0, [], [])
 @end
 
 @fn _http_tls_connect_session(stream: TcpStream, host) -> HttpTlsSession
@@ -1267,7 +1343,7 @@ global g_http_last_tls_resumed = 0
   res_master = tls13_derive_resumption_master_secret(cipher, app_keys.master_secret, res_thash)
   g_http_last_tls_resumed = used_psk
 
-  return HttpTlsSession(1, stream.tcp_fd, cipher, app_keys.c_key, app_keys.c_iv, app_keys.s_key, app_keys.s_iv, 0, 0, host, res_master, used_psk)
+  return HttpTlsSession(1, stream.tcp_fd, cipher, app_keys.c_key, app_keys.c_iv, app_keys.s_key, app_keys.s_iv, 0, 0, host, res_master, used_psk, app_keys.c_app_secret, app_keys.s_app_secret)
 @end
 
 @fn _http_tls_session_exchange(sess: HttpTlsSession, req_str)
@@ -1332,18 +1408,51 @@ global g_http_last_tls_resumed = 0
       sess.hts_ok = 0
       break
     @elif dec.tls_pt_type == 22
-      // Capture post-handshake RFC 8446 NewSessionTicket (type 4) across coalesced OR fragmented TLS records
+      // WHY: Handle post-handshake RFC 8446 NewSessionTicket (type 4) AND KeyUpdate (type 24).
       ph_buf = tls_append_bytes(ph_buf, dec.tls_pt_data)
       ph_pos = 0
+      ku_abort = 0
       @while ph_pos + 4 <= ph_buf.len()
         ph_t = ph_buf[ph_pos] & 255
         ph_l = ((ph_buf[ph_pos + 1] & 255) << 16) | ((ph_buf[ph_pos + 2] & 255) << 8) | (ph_buf[ph_pos + 3] & 255)
         @if ph_pos + 4 + ph_l > ph_buf.len() break @end
+        ph_msg = _http_tls_slice(ph_buf, ph_pos, ph_pos + 4 + ph_l)
         @if ph_t == 4 && sess.hts_res_master.len() > 0
-          nst_msg = _http_tls_slice(ph_buf, ph_pos, ph_pos + 4 + ph_l)
-          tls13_parse_new_session_ticket(nst_msg, cipher, sess.hts_res_master, sess.hts_host, "http/1.1")
+          tls13_parse_new_session_ticket(ph_msg, cipher, sess.hts_res_master, sess.hts_host, "http/1.1")
+        @elif ph_t == 24
+          ku_req = tls13_parse_key_update_msg(ph_msg)
+          @if ku_req < 0 || sess.hts_s_app_secret.len() == 0
+            ku_abort = 1
+            break
+          @end
+          // Rotate server read traffic secret + reset server record sequence number to 0
+          s_ku = tls13_key_update_next(cipher, sess.hts_s_app_secret)
+          sess.hts_s_app_secret = s_ku.tku_secret
+          sess.hts_s_key = s_ku.tku_key
+          sess.hts_s_iv = s_ku.tku_iv
+          sess.hts_s_seq = 0
+          @if ku_req == 1
+            // RFC 8446 §4.6.3: reply with KeyUpdate(update_not_requested=0) using CURRENT client keys,
+            // then rotate client write traffic secret + reset client sequence number to 0.
+            ku_reply = tls13_build_key_update_msg(0)
+            ku_rec = _http_tls_wrap_aead_record_suite(cipher, sess.hts_c_key, sess.hts_c_iv, sess.hts_c_seq, 22, ku_reply)
+            @if _http_tls_write_exact(sess.hts_fd, ku_rec) <= 0
+              ku_abort = 1
+              break
+            @end
+            c_ku = tls13_key_update_next(cipher, sess.hts_c_app_secret)
+            sess.hts_c_app_secret = c_ku.tku_secret
+            sess.hts_c_key = c_ku.tku_key
+            sess.hts_c_iv = c_ku.tku_iv
+            sess.hts_c_seq = 0
+          @end
         @end
         ph_pos = ph_pos + 4 + ph_l
+      @end
+      @if ku_abort == 1
+        sess.hts_ok = 0
+        buf_free(resp_buf)
+        return ""
       @end
       @if ph_pos > 0
         ph_buf = _http_tls_slice(ph_buf, ph_pos, ph_buf.len())
@@ -1395,7 +1504,10 @@ global g_http_last_tls_resumed = 0
   @end
   @if has_host == 0
     host_hdr = u.host
-    @if u.port != 80 && u.port != 443
+    @if tcp_is_ipv6_host(host_hdr) == 1 && starts_with(host_hdr, "[") == 0
+      host_hdr = string_concat("[", string_concat(host_hdr, "]"))
+    @end
+    @if !((u.protocol == "http" && u.port == 80) || (u.protocol == "https" && u.port == 443))
       host_hdr = string_concat(host_hdr, string_concat(":", int_to_str(u.port)))
     @end
     req_hdrs = req_hdrs.push(HttpHeader("Host", host_hdr))
@@ -1411,22 +1523,196 @@ global g_http_last_tls_resumed = 0
   return req_hdrs
 @end
 
-@fn _http_resolve_redirect(base_u: HttpUrl, loc)
-  @if starts_with(loc, "http://") == 1 || starts_with(loc, "https://") == 1
-    return loc
+@fn _http_format_origin(u: HttpUrl)
+  host_s = u.host
+  @if tcp_is_ipv6_host(host_s) == 1 && starts_with(host_s, "[") == 0
+    host_s = string_concat("[", string_concat(host_s, "]"))
   @end
   port_part = ""
-  @if base_u.port != 80 && base_u.port != 443
-    port_part = string_concat(":", int_to_str(base_u.port))
+  @if !((u.protocol == "http" && u.port == 80) || (u.protocol == "https" && u.port == 443))
+    port_part = string_concat(":", int_to_str(u.port))
+  @end
+  return string_concat(u.protocol, string_concat("://", string_concat(host_s, port_part)))
+@end
+
+@fn _http_remove_dot_segments(raw_path)
+  // WHY: RFC 3986 §5.2.4 dot-segment normalization (`./`, `../`, trailing `.`/`..`)
+  // preserving query/fragment suffix untouched.
+  n = str_len(raw_path)
+  qpos = -1
+  qi = 0
+  @while qi < n
+    c = str_char_at(raw_path, qi) & 255
+    @if c == 63 || c == 35
+      qpos = qi
+      break
+    @end
+    qi = qi + 1
+  @end
+  p_only = raw_path
+  suffix = ""
+  @if qpos >= 0
+    p_only = str_substr(raw_path, 0, qpos)
+    suffix = str_substr(raw_path, qpos, n)
+  @end
+  pn = str_len(p_only)
+  @if pn == 0
+    return string_concat("/", suffix)
+  @end
+  trailing_slash = 0
+  @if (str_char_at(p_only, pn - 1) & 255) == 47
+    trailing_slash = 1
+  @end
+  segs = []
+  pos = 0
+  @while pos < pn
+    @while pos < pn && (str_char_at(p_only, pos) & 255) == 47
+      pos = pos + 1
+    @end
+    @if pos >= pn break @end
+    end_p = pos
+    @while end_p < pn && (str_char_at(p_only, end_p) & 255) != 47
+      end_p = end_p + 1
+    @end
+    seg = str_substr(p_only, pos, end_p)
+    @if seg == "."
+      @if end_p == pn trailing_slash = 1 @end
+    @elif seg == ".."
+      @if segs.len() > 0
+        new_segs = []
+        si = 0
+        @while si < segs.len() - 1
+          new_segs = new_segs.push(segs[si])
+          si = si + 1
+        @end
+        segs = new_segs
+      @end
+      @if end_p == pn trailing_slash = 1 @end
+    @else
+      segs = segs.push(seg)
+    @end
+    pos = end_p
+  @end
+  bb = buf_new(pn + 8)
+  @if segs.len() == 0
+    buf_write_str(bb, "/")
+  @else
+    i = 0
+    @while i < segs.len()
+      buf_write_str(bb, "/")
+      buf_write_str(bb, segs[i])
+      i = i + 1
+    @end
+    @if trailing_slash == 1
+      buf_write_str(bb, "/")
+    @end
+  @end
+  @if str_len(suffix) > 0
+    buf_write_str(bb, suffix)
+  @end
+  out = buf_to_str(bb)
+  buf_free(bb)
+  return out
+@end
+
+@fn _http_resolve_redirect(base_u: HttpUrl, loc)
+  // WHY: RFC 3986 §5.2 relative reference resolution against current request path directory,
+  // supporting case-insensitive absolute URLs, protocol-relative `//`, `/`, `?query`, `#frag`, and `../`.
+  loc_low = str_to_lower(loc)
+  @if starts_with(loc_low, "http://") == 1
+    return string_concat("http://", str_substr(loc, 7, str_len(loc)))
+  @end
+  @if starts_with(loc_low, "https://") == 1
+    return string_concat("https://", str_substr(loc, 8, str_len(loc)))
   @end
   @if starts_with(loc, "//") == 1
     return string_concat(base_u.protocol, string_concat(":", loc))
   @end
-  prefix = string_concat(base_u.protocol, string_concat("://", string_concat(base_u.host, port_part)))
-  @if starts_with(loc, "/") == 1
-    return string_concat(prefix, loc)
+  prefix = _http_format_origin(base_u)
+  @if loc == ""
+    return string_concat(prefix, base_u.path)
   @end
-  return string_concat(prefix, string_concat("/", loc))
+  // Strip query/fragment from base_u.path for relative resolution
+  bpath = base_u.path
+  @if bpath == "" bpath = "/" @end
+  blen = str_len(bpath)
+  bq = -1
+  bf = -1
+  bi = 0
+  @while bi < blen
+    bc = str_char_at(bpath, bi) & 255
+    @if bc == 63 && bq < 0 bq = bi @end
+    @if bc == 35 && bf < 0 bf = bi @end
+    bi = bi + 1
+  @end
+  @if starts_with(loc, "#") == 1
+    base_no_frag = bpath
+    @if bf >= 0 base_no_frag = str_substr(bpath, 0, bf) @end
+    return string_concat(prefix, string_concat(base_no_frag, loc))
+  @end
+  base_no_qf = bpath
+  cut_p = blen
+  @if bq >= 0 && bq < cut_p cut_p = bq @end
+  @if bf >= 0 && bf < cut_p cut_p = bf @end
+  @if cut_p < blen
+    base_no_qf = str_substr(bpath, 0, cut_p)
+  @end
+  @if starts_with(loc, "?") == 1
+    return string_concat(prefix, string_concat(base_no_qf, loc))
+  @end
+  @if starts_with(loc, "/") == 1
+    return string_concat(prefix, _http_remove_dot_segments(loc))
+  @end
+  // Relative path against current request directory (up to and including last '/')
+  last_sl = -1
+  si = str_len(base_no_qf) - 1
+  @while si >= 0
+    @if (str_char_at(base_no_qf, si) & 255) == 47
+      last_sl = si
+      break
+    @end
+    si = si - 1
+  @end
+  base_dir = "/"
+  @if last_sl >= 0
+    base_dir = str_substr(base_no_qf, 0, last_sl + 1)
+  @end
+  merged = string_concat(base_dir, loc)
+  return string_concat(prefix, _http_remove_dot_segments(merged))
+@end
+
+@fn _http_is_same_origin(u1: HttpUrl, u2: HttpUrl)
+  @if str_to_lower(u1.protocol) != str_to_lower(u2.protocol) return 0 @end
+  @if str_to_lower(u1.host) != str_to_lower(u2.host) return 0 @end
+  @if u1.port != u2.port return 0 @end
+  return 1
+@end
+
+@fn http_filter_redirect_headers(prev_url, next_url, headers)
+  // WHY: Security defense against credential leakage (RFC 9110 §15.4 / Fetch spec):
+  // strips Authorization, Cookie, and Proxy-Authorization (case-insensitively) on any
+  // cross-origin redirect OR HTTPS->HTTP protocol downgrade.
+  prev_u = http_parse_url(prev_url)
+  next_u = http_parse_url(next_url)
+  same_orig = _http_is_same_origin(prev_u, next_u)
+  is_downgrade = 0
+  @if str_to_lower(prev_u.protocol) == "https" && str_to_lower(next_u.protocol) != "https"
+    is_downgrade = 1
+  @end
+  @if same_orig == 1 && is_downgrade == 0
+    return headers
+  @end
+  filtered = []
+  i = 0
+  @while i < headers.len()
+    h = headers[i]
+    hn = str_to_lower(_http_hdr_name(h))
+    @if hn != "authorization" && hn != "cookie" && hn != "proxy-authorization" && hn != "host"
+      filtered = filtered.push(h)
+    @end
+    i = i + 1
+  @end
+  return filtered
 @end
 
 @fn _http_find_header_value(headers, name_lower)
@@ -1477,15 +1763,18 @@ global g_http_last_tls_resumed = 0
   cur_method = method
   cur_url = url
   cur_body = body
+  cur_headers = extra_headers
   hop = 0
   resp = HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
   @while hop < 6
-    resp = _http_execute_single_to(cur_method, cur_url, extra_headers, cur_body, timeout_ms)
+    resp = _http_execute_single_to(cur_method, cur_url, cur_headers, cur_body, timeout_ms)
     sc = resp.status_code
     @if sc == 301 || sc == 302 || sc == 303 || sc == 307 || sc == 308
       loc = _http_find_header_value(resp.headers, "location")
       @if loc == "" break @end
-      cur_url = _http_resolve_redirect(http_parse_url(cur_url), loc)
+      next_url = _http_resolve_redirect(http_parse_url(cur_url), loc)
+      cur_headers = http_filter_redirect_headers(cur_url, next_url, cur_headers)
+      cur_url = next_url
       @if sc == 301 || sc == 302 || sc == 303
         cur_method = "GET"
         cur_body = ""
@@ -2410,4 +2699,381 @@ global g_http_last_tls_resumed = 0
 
   tcp_close(listener.tcpl_fd)
   return 0
+@end
+
+@! ----------------------------------------------------------------------------
+@! 9. RFC 6265 HTTP Cookie Jar (`http_cookie_jar_*`) & RFC 7578 Multipart Builder
+@! ----------------------------------------------------------------------------
+
+@struct HttpCookie
+  hc_name: string
+  hc_value: string
+  hc_domain: string
+  hc_path: string
+  hc_secure: i64
+  hc_http_only: i64
+  hc_host_only: i64
+  hc_expires_ms: i64
+@end
+
+@struct HttpCookieJar
+  hcj_cookies: array
+@end
+
+@fn http_cookie_jar_new() -> HttpCookieJar
+  return HttpCookieJar([])
+@end
+
+@fn _http_cookie_default_path(req_path)
+  // WHY: RFC 6265 §5.1.4 default-path algorithm strips query/fragment and truncates at last '/'.
+  p = req_path
+  q = str_index_of(p, "?")
+  @if q >= 0 p = str_substr(p, 0, q) @end
+  @if str_len(p) == 0 || starts_with(p, "/") == 0
+    return "/"
+  @end
+  last_s = -1
+  i = str_len(p) - 1
+  @while i >= 0
+    @if (str_char_at(p, i) & 255) == 47
+      last_s = i
+      break
+    @end
+    i = i - 1
+  @end
+  @if last_s <= 0 return "/" @end
+  return str_substr(p, 0, last_s)
+@end
+
+@fn _http_cookie_domain_matches(req_host, cookie_dom, host_only)
+  // WHY: RFC 6265 §5.1.3 domain-matching (exact for host-only, exact or label-boundary suffix for Domain=).
+  rh = str_to_lower(req_host)
+  cd = str_to_lower(cookie_dom)
+  @if rh == cd return 1 @end
+  @if host_only == 1 return 0 @end
+  rlen = str_len(rh)
+  clen = str_len(cd)
+  @if rlen <= clen return 0 @end
+  tail = str_substr(rh, rlen - clen, rlen)
+  @if tail != cd return 0 @end
+  @if (str_char_at(rh, rlen - clen - 1) & 255) == 46
+    return 1
+  @end
+  return 0
+@end
+
+@fn _http_cookie_path_matches(req_path, cookie_path)
+  // WHY: RFC 6265 §5.1.4 path-matching prevents `/app` from matching `/apple`.
+  rp = req_path
+  q = str_index_of(rp, "?")
+  @if q >= 0 rp = str_substr(rp, 0, q) @end
+  @if rp == "" rp = "/" @end
+  @if rp == cookie_path return 1 @end
+  @if starts_with(rp, cookie_path) == 1
+    clen = str_len(cookie_path)
+    @if clen > 0 && (str_char_at(cookie_path, clen - 1) & 255) == 47
+      return 1
+    @end
+    @if str_len(rp) > clen && (str_char_at(rp, clen) & 255) == 47
+      return 1
+    @end
+  @end
+  return 0
+@end
+
+@fn _http_trim_ascii_ws(s)
+  n = str_len(s)
+  st = 0
+  @while st < n && ((str_char_at(s, st) & 255) == 32 || (str_char_at(s, st) & 255) == 9)
+    st = st + 1
+  @end
+  en = n
+  @while en > st && ((str_char_at(s, en - 1) & 255) == 32 || (str_char_at(s, en - 1) & 255) == 9)
+    en = en - 1
+  @end
+  @if st >= en return "" @end
+  return str_substr(s, st, en)
+@end
+
+@fn _http_parse_signed_int(s)
+  ts = _http_trim_ascii_ws(s)
+  n = str_len(ts)
+  @if n == 0 return 0 @end
+  neg = 0
+  i = 0
+  @if (str_char_at(ts, 0) & 255) == 45
+    neg = 1
+    i = 1
+  @elif (str_char_at(ts, 0) & 255) == 43
+    i = 1
+  @end
+  val = 0
+  @while i < n
+    ch = str_char_at(ts, i) & 255
+    @if ch >= 48 && ch <= 57
+      val = (val * 10) + (ch - 48)
+    @else
+      break
+    @end
+    i = i + 1
+  @end
+  @if neg == 1 return 0 - val @end
+  return val
+@end
+
+@fn http_cookie_jar_set_cookie(jar: HttpCookieJar, url, set_cookie_header)
+  // WHY: Parses one RFC 6265 Set-Cookie header (`name=val; Domain=...; Path=...; Secure; HttpOnly; Max-Age=...`)
+  // and inserts/replaces/expires the matching cookie in the jar with domain-boundary safety.
+  @if jar == 0 || str_len(set_cookie_header) == 0 return 0 @end
+  u = http_parse_url(url)
+  req_host = str_to_lower(u.host)
+  c_domain = req_host
+  c_host_only = 1
+  c_path = _http_cookie_default_path(u.path)
+  c_secure = 0
+  c_http_only = 0
+  c_expires = 0
+  delete_cookie = 0
+
+  // Split header on ';'
+  parts = []
+  slen = str_len(set_cookie_header)
+  pos = 0
+  @while pos <= slen
+    semi = pos
+    @while semi < slen && (str_char_at(set_cookie_header, semi) & 255) != 59
+      semi = semi + 1
+    @end
+    parts = parts.push(_http_trim_ascii_ws(str_substr(set_cookie_header, pos, semi)))
+    pos = semi + 1
+  @end
+  @if parts.len() == 0 return 0 @end
+
+  first = parts[0]
+  eq = str_index_of(first, "=")
+  @if eq <= 0 return 0 @end
+  c_name = _http_trim_ascii_ws(str_substr(first, 0, eq))
+  c_val = _http_trim_ascii_ws(str_substr(first, eq + 1, str_len(first)))
+  @if c_name == "" return 0 @end
+
+  pi = 1
+  @while pi < parts.len()
+    av = parts[pi]
+    @if av != ""
+      aeq = str_index_of(av, "=")
+      aname = str_to_lower(av)
+      aval = ""
+      @if aeq >= 0
+        aname = str_to_lower(_http_trim_ascii_ws(str_substr(av, 0, aeq)))
+        aval = _http_trim_ascii_ws(str_substr(av, aeq + 1, str_len(av)))
+      @end
+      @if aname == "domain" && aval != ""
+        dom_n = str_to_lower(aval)
+        @if starts_with(dom_n, ".") == 1
+          dom_n = str_substr(dom_n, 1, str_len(dom_n))
+        @end
+        // Reject cross-domain cookie planting (request host must domain-match cookie Domain)
+        @if _http_cookie_domain_matches(req_host, dom_n, 0) == 1
+          c_domain = dom_n
+          c_host_only = 0
+        @else
+          return 0
+        @end
+      @elif aname == "path" && starts_with(aval, "/") == 1
+        c_path = aval
+      @elif aname == "secure"
+        c_secure = 1
+      @elif aname == "httponly"
+        c_http_only = 1
+      @elif aname == "max-age" && aval != ""
+        ma = _http_parse_signed_int(aval)
+        @if ma <= 0
+          delete_cookie = 1
+        @else
+          c_expires = clock_ms() + (ma * 1000)
+        @end
+      @end
+    @end
+    pi = pi + 1
+  @end
+
+  // Remove any previous entry with matching (name, domain, path)
+  kept = []
+  ci = 0
+  @while ci < jar.hcj_cookies.len()
+    ck = jar.hcj_cookies[ci]
+    @if !(ck.hc_name == c_name && ck.hc_domain == c_domain && ck.hc_path == c_path)
+      kept = kept.push(ck)
+    @end
+    ci = ci + 1
+  @end
+  @if delete_cookie == 0
+    kept = kept.push(HttpCookie(c_name, c_val, c_domain, c_path, c_secure, c_http_only, c_host_only, c_expires))
+  @end
+  jar.hcj_cookies = kept
+  return 1
+@end
+
+@fn http_cookie_jar_store_from_headers(jar: HttpCookieJar, url, headers)
+  @if jar == 0 return 0 @end
+  stored = 0
+  i = 0
+  @while i < headers.len()
+    h = headers[i]
+    @if str_to_lower(_http_hdr_name(h)) == "set-cookie"
+      @if http_cookie_jar_set_cookie(jar, url, _http_hdr_value(h)) == 1
+        stored = stored + 1
+      @end
+    @end
+    i = i + 1
+  @end
+  return stored
+@end
+
+@fn http_cookie_jar_build_header(jar: HttpCookieJar, url)
+  // WHY: Emits RFC 6265 `Cookie` header value matching domain, path, Secure (HTTPS-only), and expiry.
+  @if jar == 0 return "" @end
+  u = http_parse_url(url)
+  is_https = 0
+  @if str_to_lower(u.protocol) == "https" is_https = 1 @end
+  now_ms = clock_ms()
+  bb = buf_new(128)
+  first = 1
+  i = 0
+  @while i < jar.hcj_cookies.len()
+    ck = jar.hcj_cookies[i]
+    ok = 1
+    @if ck.hc_secure == 1 && is_https == 0 ok = 0 @end
+    @if ok == 1 && ck.hc_expires_ms > 0 && now_ms >= ck.hc_expires_ms ok = 0 @end
+    @if ok == 1 && _http_cookie_domain_matches(u.host, ck.hc_domain, ck.hc_host_only) != 1 ok = 0 @end
+    @if ok == 1 && _http_cookie_path_matches(u.path, ck.hc_path) != 1 ok = 0 @end
+    @if ok == 1
+      @if first == 0 buf_write_str(bb, "; ") @end
+      buf_write_str(bb, ck.hc_name)
+      buf_write_str(bb, "=")
+      buf_write_str(bb, ck.hc_value)
+      first = 0
+    @end
+    i = i + 1
+  @end
+  out = buf_to_str(bb)
+  buf_free(bb)
+  return out
+@end
+
+@fn http_cookie_jar_request(jar: HttpCookieJar, method, url, extra_headers, body) -> HttpResponse
+  // WHY: Executes an HTTP/HTTPS request with automatic RFC 6265 Cookie Jar capture & replay
+  // across redirects while stripping sensitive headers on cross-origin/downgrade hops.
+  cur_method = method
+  cur_url = url
+  cur_body = body
+  cur_headers = extra_headers
+  hop = 0
+  resp = HttpResponse(0, "Connection failed", "HTTP/1.1", [], "")
+  @while hop < 6
+    req_hdrs = []
+    hi = 0
+    @while hi < cur_headers.len()
+      req_hdrs = req_hdrs.push(cur_headers[hi])
+      hi = hi + 1
+    @end
+    ck_val = http_cookie_jar_build_header(jar, cur_url)
+    @if ck_val != ""
+      req_hdrs = req_hdrs.push(HttpHeader("Cookie", ck_val))
+    @end
+    resp = _http_execute_single_to(cur_method, cur_url, req_hdrs, cur_body, 0)
+    http_cookie_jar_store_from_headers(jar, cur_url, resp.headers)
+    sc = resp.status_code
+    @if sc == 301 || sc == 302 || sc == 303 || sc == 307 || sc == 308
+      loc = _http_find_header_value(resp.headers, "location")
+      @if loc == "" break @end
+      next_url = _http_resolve_redirect(http_parse_url(cur_url), loc)
+      cur_headers = http_filter_redirect_headers(cur_url, next_url, cur_headers)
+      cur_url = next_url
+      @if sc == 301 || sc == 302 || sc == 303
+        cur_method = "GET"
+        cur_body = ""
+      @end
+      hop = hop + 1
+    @else
+      break
+    @end
+  @end
+  return resp
+@end
+
+@struct HttpMultipartPart
+  hmp_name: string
+  hmp_filename: string
+  hmp_content_type: string
+  hmp_data: string
+@end
+
+@fn http_multipart_field(name, value) -> HttpMultipartPart
+  return HttpMultipartPart(name, "", "", value)
+@end
+
+@fn http_multipart_file(name, filename, content_type, data) -> HttpMultipartPart
+  return HttpMultipartPart(name, filename, content_type, data)
+@end
+
+@fn http_multipart_content_type(boundary)
+  return string_concat("multipart/form-data; boundary=", _http_strip_crlf(boundary))
+@end
+
+@fn _http_mp_escape_param(s)
+  ss = _http_strip_crlf(s)
+  n = str_len(ss)
+  bb = buf_new(n + 8)
+  i = 0
+  @while i < n
+    ch = mem_byte_read(ss, i) & 255
+    @if ch == 34
+      buf_write_str(bb, "%22")
+    @else
+      buf_write_byte(bb, ch)
+    @end
+    i = i + 1
+  @end
+  out = buf_to_str(bb)
+  buf_free(bb)
+  return out
+@end
+
+@fn http_multipart_build(boundary, parts)
+  // WHY: Encodes RFC 7578 `multipart/form-data` bodies in O(N) via ByteBuffer,
+  // escaping quotes/CRLF in disposition parameters to prevent header injection.
+  b_clean = _http_strip_crlf(boundary)
+  @if b_clean == "" b_clean = "----LiPiMultipartBoundary7MA4YWxkTrZu0gW" @end
+  bb = buf_new(512)
+  i = 0
+  @while i < parts.len()
+    p = parts[i]
+    buf_write_str(bb, "--")
+    buf_write_str(bb, b_clean)
+    buf_write_str(bb, "\r\nContent-Disposition: form-data; name=\"")
+    buf_write_str(bb, _http_mp_escape_param(p.hmp_name))
+    buf_write_str(bb, "\"")
+    @if str_len(p.hmp_filename) > 0
+      buf_write_str(bb, "; filename=\"")
+      buf_write_str(bb, _http_mp_escape_param(p.hmp_filename))
+      buf_write_str(bb, "\"")
+    @end
+    buf_write_str(bb, "\r\n")
+    @if str_len(p.hmp_content_type) > 0
+      buf_write_str(bb, "Content-Type: ")
+      buf_write_str(bb, _http_strip_crlf(p.hmp_content_type))
+      buf_write_str(bb, "\r\n")
+    @end
+    buf_write_str(bb, "\r\n")
+    buf_write_str(bb, p.hmp_data)
+    buf_write_str(bb, "\r\n")
+    i = i + 1
+  @end
+  buf_write_str(bb, "--")
+  buf_write_str(bb, b_clean)
+  buf_write_str(bb, "--\r\n")
+  out = buf_to_str(bb)
+  buf_free(bb)
+  return out
 @end

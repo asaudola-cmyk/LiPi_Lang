@@ -146,17 +146,48 @@ fn _pqc_rand_bytes count
     return out
 
 fn pqc_entropy_word idx salt
-    // WHY: Draws full 64-bit hardware entropy via SYS_getrandom (318) and frees buffer unconditionally.
+    // WHY: Draws full 64-bit CSPRNG entropy via EINTR-safe SYS_getrandom (318) with
+    // kernel `/dev/urandom` fallback (NEVER predictable `cpu_clock()`!).
     buf = alloc(16)
-    r = syscall(318, buf, 8, 0, 0, 0, 0)
-    v = 0
-    if r == 8
-        v = mem_word_read(buf, 0)
-    else
-        v = cpu_clock() ^ (idx * 2654435761)
+    got = 0
+    failed = 0
+    while got < 8
+        r = syscall(318, buf + got, 8 - got, 0, 0, 0, 0)
+        if r == (0 - 4)
+            continue
+        end
+        if r <= 0
+            ufd = syscall(2, "/dev/urandom", 0, 0, 0, 0, 0)
+            if ufd < 0
+                failed = 1
+                break
+            end
+            while got < 8
+                ur = syscall(0, ufd, buf + got, 8 - got, 0, 0, 0)
+                if ur == (0 - 4)
+                    continue
+                end
+                if ur <= 0
+                    failed = 1
+                    break
+                end
+                got = got + ur
+            end
+            syscall(3, ufd, 0, 0, 0, 0, 0)
+            break
+        end
+        got = got + r
+    end
+    if failed != 0 or got != 8
+        free(buf)
+        syscall(60, 1, 0, 0, 0, 0, 0)
+        return 0
+    end
+    v = mem_word_read(buf, 0)
     free(buf)
     v = v ^ ((idx + 1) * 2654435761) ^ (salt * 2246822519)
     return v & 9223372036854775807
+end
 
 // ── 5. Kyber-512 Key Generation (A * s + e = t) with CBD_2 Noise ──────────────
 fn pqc_keygen n

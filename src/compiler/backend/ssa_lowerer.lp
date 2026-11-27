@@ -603,23 +603,31 @@ fn ssa_lower_instruction_x86 low inst
 
     if op == OP_FCMP
         if inst.operands.len() >= 2 and inst.result != 0
+            // WHY: IEEE-754 ucomisd sets ZF=1, PF=1, CF=1 on NaN (unordered); check PF via setnp/setp
+            // for ==/!= and operand-swapped seta/setae (CF=0) for </<= so NaN never produces false positives.
             ssa_lower_x86_load_val_to_reg(low, inst.operands[0], 0)
             ssa_lower_x86_load_val_to_reg(low, inst.operands[1], 1)
-            // movq xmm0, rax; movq xmm1, rcx; ucomisd xmm0, xmm1 (ZERO push/pop!)
-            ssa_lowerer_emit_bytes(low, [102, 72, 15, 110, 192, 102, 72, 15, 110, 201, 102, 15, 46, 193])
+            // movq xmm0, rax; movq xmm1, rcx (ZERO push/pop!)
+            ssa_lowerer_emit_bytes(low, [102, 72, 15, 110, 192, 102, 72, 15, 110, 201])
             pred = inst.extra_int
             if pred == CMP_EQ
-                ssa_lowerer_emit_bytes(low, [15, 148, 192]) // sete al
+                // ucomisd xmm0, xmm1; sete al; setnp cl; and al, cl
+                ssa_lowerer_emit_bytes(low, [102, 15, 46, 193, 15, 148, 192, 15, 155, 193, 32, 200])
             elif pred == CMP_NE
-                ssa_lowerer_emit_bytes(low, [15, 149, 192]) // setne al
+                // ucomisd xmm0, xmm1; setne al; setp cl; or al, cl
+                ssa_lowerer_emit_bytes(low, [102, 15, 46, 193, 15, 149, 192, 15, 154, 193, 8, 200])
             elif pred == CMP_SLT
-                ssa_lowerer_emit_bytes(low, [15, 146, 192]) // setb al
+                // ucomisd xmm1, xmm0; seta al (CF=0 && ZF=0 -> false on NaN)
+                ssa_lowerer_emit_bytes(low, [102, 15, 46, 200, 15, 151, 192])
             elif pred == CMP_SLE
-                ssa_lowerer_emit_bytes(low, [15, 150, 192]) // setbe al
+                // ucomisd xmm1, xmm0; setae al (CF=0 -> false on NaN)
+                ssa_lowerer_emit_bytes(low, [102, 15, 46, 200, 15, 147, 192])
             elif pred == CMP_SGT
-                ssa_lowerer_emit_bytes(low, [15, 151, 192]) // seta al
+                // ucomisd xmm0, xmm1; seta al (CF=0 && ZF=0 -> false on NaN)
+                ssa_lowerer_emit_bytes(low, [102, 15, 46, 193, 15, 151, 192])
             else
-                ssa_lowerer_emit_bytes(low, [15, 147, 192]) // setae al
+                // CMP_SGE: ucomisd xmm0, xmm1; setae al (CF=0 -> false on NaN)
+                ssa_lowerer_emit_bytes(low, [102, 15, 46, 193, 15, 147, 192])
             end
             ssa_lowerer_emit_bytes(low, [72, 15, 182, 192]) // movzx rax, al
             ssa_lower_x86_store_rax_to_slot(low, inst.result.id)
@@ -2127,6 +2135,15 @@ fn ssa_lower_function_ra low fn_obj mod_fn_set ra_res
                                 break
                             end
                         end
+                        if wop_v == OP_CMP and (ei_w.extra_int == CMP_EQ or ei_w.extra_int == CMP_NE)
+                            // WHY: Two non-constant runtime values may be LPST heap strings;
+                            // defer to wasm_synth so `==`/`!=` performs byte-content equality instead of raw i64.eq.
+                            // Use SSAValue.val_kind (unique field) instead of `.is_const` (collides with GlobalVar.is_const!).
+                            if ei_w.operands.len() >= 2 and ei_w.operands[0].val_kind != VAL_KIND_CONST and ei_w.operands[1].val_kind != VAL_KIND_CONST
+                                fn_elig_w = 0
+                                break
+                            end
+                        end
                     end
                     eii_w = eii_w + 1
                 end
@@ -2203,14 +2220,63 @@ fn ssa_lower_function_ra low fn_obj mod_fn_set ra_res
                             ssa_wasm_emit_val(low, iw.operands[0])
                             ssa_lowerer_emit_byte(low, 33)
                             ssa_wasm_emit_uleb(low, ssa_wasm_slot_idx(low, iw.result.id))
-                        elif (wop == OP_ADD or wop == OP_SUB or wop == OP_MUL or wop == OP_DIV or wop == OP_MOD or wop == OP_AND or wop == OP_OR or wop == OP_XOR or wop == OP_SHL or wop == OP_SHR) and iw.operands.len() >= 2 and iw.result != 0
+                        elif (wop == OP_DIV or wop == OP_MOD) and iw.operands.len() >= 2 and iw.result != 0
+                            // WHY: WebAssembly i64.div_s / i64.rem_s trap on divisor == 0 or INT64_MIN / -1.
+                            // Guard divisor == 0 -> 0 and divisor == -1 -> (0 - lhs) for div / 0 for rem
+                            // so WASM SSA matches x86_64/ARM64/RV64 without ever trapping in V8/Wasmtime.
+                            dlhs_slot = ssa_wasm_slot_idx(low, "__wasm_div_lhs")
+                            drhs_slot = ssa_wasm_slot_idx(low, "__wasm_div_rhs")
+                            ssa_wasm_emit_val(low, iw.operands[0])
+                            ssa_lowerer_emit_byte(low, 33) // local.set $dlhs
+                            ssa_wasm_emit_uleb(low, dlhs_slot)
+                            ssa_wasm_emit_val(low, iw.operands[1])
+                            ssa_lowerer_emit_byte(low, 33) // local.set $drhs
+                            ssa_wasm_emit_uleb(low, drhs_slot)
+                            ssa_lowerer_emit_byte(low, 32) // local.get $drhs
+                            ssa_wasm_emit_uleb(low, drhs_slot)
+                            ssa_lowerer_emit_byte(low, 80) // i64.eqz (0x50)
+                            ssa_lowerer_emit_byte(low, 4)  // if (result i64)
+                            ssa_lowerer_emit_byte(low, 126)
+                            ssa_lowerer_emit_byte(low, 66) // i64.const 0
+                            ssa_lowerer_emit_byte(low, 0)
+                            ssa_lowerer_emit_byte(low, 5)  // else
+                            ssa_lowerer_emit_byte(low, 32) // local.get $drhs
+                            ssa_wasm_emit_uleb(low, drhs_slot)
+                            ssa_lowerer_emit_byte(low, 66) // i64.const -1
+                            ssa_lowerer_emit_byte(low, 127)
+                            ssa_lowerer_emit_byte(low, 81) // i64.eq (0x51)
+                            ssa_lowerer_emit_byte(low, 4)  // if (result i64)
+                            ssa_lowerer_emit_byte(low, 126)
+                            if wop == OP_DIV
+                                ssa_lowerer_emit_byte(low, 66) // i64.const 0
+                                ssa_lowerer_emit_byte(low, 0)
+                                ssa_lowerer_emit_byte(low, 32) // local.get $dlhs
+                                ssa_wasm_emit_uleb(low, dlhs_slot)
+                                ssa_lowerer_emit_byte(low, 125) // i64.sub (wraps INT64_MIN/-1 -> INT64_MIN)
+                            else
+                                ssa_lowerer_emit_byte(low, 66) // i64.const 0
+                                ssa_lowerer_emit_byte(low, 0)
+                            end
+                            ssa_lowerer_emit_byte(low, 5)  // else
+                            ssa_lowerer_emit_byte(low, 32) // local.get $dlhs
+                            ssa_wasm_emit_uleb(low, dlhs_slot)
+                            ssa_lowerer_emit_byte(low, 32) // local.get $drhs
+                            ssa_wasm_emit_uleb(low, drhs_slot)
+                            if wop == OP_DIV
+                                ssa_lowerer_emit_byte(low, 127) // i64.div_s (0x7F)
+                            else
+                                ssa_lowerer_emit_byte(low, 129) // i64.rem_s (0x81)
+                            end
+                            ssa_lowerer_emit_byte(low, 11) // end inner if
+                            ssa_lowerer_emit_byte(low, 11) // end outer if
+                            ssa_lowerer_emit_byte(low, 33) // local.set $res
+                            ssa_wasm_emit_uleb(low, ssa_wasm_slot_idx(low, iw.result.id))
+                        elif (wop == OP_ADD or wop == OP_SUB or wop == OP_MUL or wop == OP_AND or wop == OP_OR or wop == OP_XOR or wop == OP_SHL or wop == OP_SHR) and iw.operands.len() >= 2 and iw.result != 0
                             ssa_wasm_emit_val(low, iw.operands[0])
                             ssa_wasm_emit_val(low, iw.operands[1])
                             if wop == OP_ADD ssa_lowerer_emit_byte(low, 124)     // i64.add (0x7C)
                             elif wop == OP_SUB ssa_lowerer_emit_byte(low, 125)   // i64.sub (0x7D)
                             elif wop == OP_MUL ssa_lowerer_emit_byte(low, 126)   // i64.mul (0x7E)
-                            elif wop == OP_DIV ssa_lowerer_emit_byte(low, 127)   // i64.div_s (0x7F)
-                            elif wop == OP_MOD ssa_lowerer_emit_byte(low, 129)   // i64.rem_s (0x81)
                             elif wop == OP_AND ssa_lowerer_emit_byte(low, 131)   // i64.and (0x83)
                             elif wop == OP_OR ssa_lowerer_emit_byte(low, 132)    // i64.or (0x84)
                             elif wop == OP_XOR ssa_lowerer_emit_byte(low, 133)   // i64.xor (0x85)

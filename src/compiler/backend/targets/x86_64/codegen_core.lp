@@ -571,12 +571,21 @@ fn x86_synth_new
     s.synth_pending_fn_async = 0
     s.synth_pending_fn_base_col = 0
     s.synth_source_toks = 0
+    // WHY: Permanently reserve mutable global slots 0..2 at rw+512..528:
+    //   rw+512 ([_heap_base+0x1f0] == [_heap_ptr+0x1e8]): __lipi_heap_bump (disjoint active chunk cursor)
+    //   rw+520 ([_heap_base+0x1f8] == [_heap_ptr+0x1f0] == [slab+0x1e8]): __lipi_heap_chunks_ptr (256x {base,end})
+    //   rw+528 ([_heap_base+0x200] == [_heap_ptr+0x1f8] == [slab+0x1f0]): __lipi_heap_chunks_cnt
+    // Recording every disjoint chunk lets GC and _lipi_is_str verify candidate pointers lie inside an
+    // actually-mapped heap chunk without ever dereferencing unmapped holes left by SYS_munmap between chunks.
+    x86_synth_alloc_mutable_global(s, "__lipi_heap_bump")
+    x86_synth_alloc_mutable_global(s, "__lipi_heap_chunks_ptr")
+    x86_synth_alloc_mutable_global(s, "__lipi_heap_chunks_cnt")
     return s
 
 fn x86_synth_is_uint_type tname
     // WHY: Identifies unsigned integer annotations so arithmetic, shifts, relational comparisons,
     // and decimal formatting emit unsigned x86-64 instructions (setb/seta/shr/div/_lipi_print_uint).
-    if tname == "u64" or tname == "u32" or tname == "u16" or tname == "u8" or tname == "usize" or tname == "byte"
+    if tname == "u64" or tname == "u32" or tname == "u16" or tname == "u8" or tname == "usize" or tname == "byte" or tname == "uint"
         return 1
     end
     return 0
@@ -2170,11 +2179,16 @@ fn x86_synth_emit_call_alloc s
     return 0
 
 fn x86_synth_emit_alloc_helper s
-    // WHY: Emits lock-free CAS bump-arena memory allocator with automatic heap overflow expansion.
-    // Fast path uses lock cmpxchg [rdx+8] bounded by _heap_end ([rdx+384] == rw+400).
-    // Slow path acquires [rdx+104] (rw+120), expands via SYS_mmap (with _heap_end hint), and aborts (137) on OOM/negative sizes.
+    // WHY: Emits atomic lock-guarded bump-arena allocator with safe contiguous & lower-chunk sub-allocation.
+    // Serializes bump + expansion under _alloc_lock ([rdx+104] == rw+120 == [slab+88]) so fast-path
+    // bumps never race with expansion or arena_reset. On expansion, first tries MAP_FIXED_NOREPLACE
+    // at _heap_end ([rdx+384]); if fallback returns a lower chunk (< old_heap_ptr), updates _heap_base
+    // to min(old_base, new_base), keeps monotonic _heap_ptr >= old_heap_ptr (so Chunk 1 & Chunk 2 both
+    // stay inside [_heap_base, _heap_ptr) for _lipi_is_str & GC), and tracks the active chunk bump cursor
+    // in _heap_bump ([rdx+0x1f0] == rw+512) so all subsequent allocations sub-allocate out of that chunk
+    // instead of mmap'ing a fresh 4 GiB VMA per allocation!
     s.synth_alloc_off = s.synth_code.len()
-    alloc_bytes = [72, 133, 255, 15, 136, 228, 0, 0, 0, 72, 131, 199, 15, 72, 131, 231, 240, 72, 186, 136, 119, 102, 85, 68, 51, 34, 17, 72, 139, 66, 8, 72, 133, 192, 116, 26, 72, 137, 193, 72, 1, 249, 114, 18, 72, 59, 138, 128, 1, 0, 0, 119, 9, 240, 72, 15, 177, 74, 8, 117, 222, 195, 240, 72, 15, 186, 106, 104, 0, 114, 247, 72, 139, 66, 8, 72, 133, 192, 116, 29, 72, 137, 193, 72, 1, 249, 114, 21, 72, 59, 138, 128, 1, 0, 0, 119, 12, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 72, 141, 183, 255, 15, 0, 0, 72, 129, 230, 0, 240, 255, 255, 185, 0, 240, 255, 255, 72, 57, 206, 115, 3, 72, 137, 206, 87, 82, 86, 72, 139, 186, 128, 1, 0, 0, 186, 3, 0, 0, 0, 65, 186, 34, 0, 0, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0, 0, 0, 15, 5, 94, 90, 95, 72, 133, 192, 120, 48, 72, 139, 10, 72, 133, 201, 117, 5, 72, 137, 2, 235, 8, 72, 57, 200, 115, 3, 72, 137, 2, 72, 141, 12, 48, 72, 137, 138, 128, 1, 0, 0, 72, 141, 12, 56, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 240, 72, 15, 186, 114, 104, 0, 191, 137, 0, 0, 0, 184, 231, 0, 0, 0, 15, 5]
+    alloc_bytes = [72, 133, 255, 15, 136, 3, 2, 0, 0, 72, 131, 199, 15, 72, 131, 231, 240, 72, 186, 136, 119, 102, 85, 68, 51, 34, 17, 240, 72, 15, 186, 106, 104, 0, 114, 247, 72, 139, 130, 240, 1, 0, 0, 72, 133, 192, 117, 38, 72, 139, 66, 8, 72, 133, 192, 116, 71, 72, 137, 193, 72, 1, 249, 114, 63, 72, 59, 138, 128, 1, 0, 0, 119, 54, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 72, 137, 193, 72, 1, 249, 114, 34, 72, 59, 138, 128, 1, 0, 0, 119, 25, 72, 137, 138, 240, 1, 0, 0, 72, 59, 74, 8, 118, 4, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 72, 141, 183, 255, 15, 0, 0, 72, 129, 230, 0, 240, 255, 255, 185, 0, 240, 255, 255, 72, 57, 206, 115, 3, 72, 137, 206, 87, 82, 86, 72, 139, 186, 128, 1, 0, 0, 72, 133, 255, 116, 39, 186, 3, 0, 0, 0, 65, 186, 34, 0, 16, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0, 0, 0, 15, 5, 72, 133, 192, 121, 34, 72, 139, 52, 36, 49, 255, 186, 3, 0, 0, 0, 65, 186, 34, 0, 0, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0, 0, 0, 15, 5, 94, 90, 95, 72, 133, 192, 15, 136, 12, 1, 0, 0, 76, 139, 10, 76, 139, 130, 128, 1, 0, 0, 77, 133, 192, 15, 132, 168, 0, 0, 0, 72, 131, 186, 248, 1, 0, 0, 0, 117, 111, 76, 57, 192, 15, 132, 149, 0, 0, 0, 80, 86, 87, 82, 65, 80, 65, 81, 49, 255, 190, 0, 16, 0, 0, 186, 3, 0, 0, 0, 65, 186, 34, 0, 0, 0, 73, 199, 192, 255, 255, 255, 255, 69, 49, 201, 184, 9, 0, 0, 0, 15, 5, 73, 137, 194, 65, 89, 65, 88, 90, 95, 94, 88, 77, 133, 210, 15, 136, 167, 0, 0, 0, 77, 137, 10, 77, 137, 66, 8, 73, 137, 66, 16, 72, 141, 12, 48, 73, 137, 74, 24, 72, 199, 130, 0, 2, 0, 0, 2, 0, 0, 0, 76, 137, 146, 248, 1, 0, 0, 235, 47, 76, 139, 146, 248, 1, 0, 0, 76, 139, 154, 0, 2, 0, 0, 73, 129, 251, 0, 1, 0, 0, 115, 24, 73, 193, 227, 4, 75, 137, 4, 26, 72, 141, 12, 48, 75, 137, 76, 26, 8, 72, 255, 130, 0, 2, 0, 0, 77, 133, 201, 116, 5, 76, 57, 200, 115, 3, 72, 137, 2, 72, 141, 12, 48, 72, 137, 138, 128, 1, 0, 0, 72, 141, 12, 56, 72, 131, 122, 8, 0, 116, 34, 72, 59, 74, 8, 118, 19, 72, 137, 74, 8, 76, 57, 192, 117, 10, 72, 131, 186, 240, 1, 0, 0, 0, 116, 13, 72, 137, 138, 240, 1, 0, 0, 235, 4, 72, 137, 74, 8, 240, 72, 15, 186, 114, 104, 0, 195, 240, 72, 15, 186, 114, 104, 0, 191, 137, 0, 0, 0, 184, 231, 0, 0, 0, 15, 5, 244]
     x86_synth_emit_bytes(s, alloc_bytes)
     return 0
 

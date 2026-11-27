@@ -184,17 +184,18 @@ import "utso/crypto/sha512"
 @! ============================================================================
 @! ARBITRARY-PRECISION MULTI-LIMB BIGINT & RSA-OAEP (>= 2048-BIT SAFE)
 @! Base = 2^30 (1073741824), little-endian limbs so limb * limb <= 2^60 < 2^63.
+@! WHY: Namespaced `_rsa30_bi_*` to prevent collisions with stdlib `utso/core/bigint.lp`.
 @! ============================================================================
 
-@fn bigint_zero()
+@fn _rsa30_bi_zero()
   return [0]
 @end
 
-@fn bigint_one()
+@fn _rsa30_bi_one()
   return [1]
 @end
 
-@fn bigint_trim(a)
+@fn _rsa30_bi_trim(a)
   res = []
   i = 0
   n = a.len()
@@ -217,7 +218,7 @@ import "utso/crypto/sha512"
   return res
 @end
 
-@fn bigint_from_int(v)
+@fn _rsa30_bi_from_int(v)
   @if v <= 0 return [0] @end
   base = 1073741824
   limbs = []
@@ -229,9 +230,9 @@ import "utso/crypto/sha512"
   return limbs
 @end
 
-@fn bigint_cmp(a, b)
-  ta = bigint_trim(a)
-  tb = bigint_trim(b)
+@fn _rsa30_bi_cmp(a, b)
+  ta = _rsa30_bi_trim(a)
+  tb = _rsa30_bi_trim(b)
   @if ta.len() > tb.len() return 1 @end
   @if ta.len() < tb.len() return -1 @end
   i = ta.len() - 1
@@ -243,19 +244,19 @@ import "utso/crypto/sha512"
   return 0
 @end
 
-@fn bigint_is_zero(a)
-  ta = bigint_trim(a)
+@fn _rsa30_bi_is_zero(a)
+  ta = _rsa30_bi_trim(a)
   @if ta.len() == 1 && ta[0] == 0 return 1 @end
   return 0
 @end
 
-@fn bigint_is_even(a)
+@fn _rsa30_bi_is_even(a)
   @if a.len() == 0 return 1 @end
   @if (a[0] & 1) == 0 return 1 @end
   return 0
 @end
 
-@fn bigint_add(a, b)
+@fn _rsa30_bi_add(a, b)
   base = 1073741824
   na = a.len()
   nb = b.len()
@@ -274,12 +275,12 @@ import "utso/crypto/sha512"
     carry = s / base
     i = i + 1
   @end
-  return bigint_trim(out)
+  return _rsa30_bi_trim(out)
 @end
 
-@fn bigint_sub(a, b)
+@fn _rsa30_bi_sub(a, b)
   @! Assumes a >= b; clamps to 0 if a < b.
-  @if bigint_cmp(a, b) < 0 return [0] @end
+  @if _rsa30_bi_cmp(a, b) < 0 return [0] @end
   base = 1073741824
   na = a.len()
   nb = b.len()
@@ -299,10 +300,10 @@ import "utso/crypto/sha512"
     out = out.push(d)
     i = i + 1
   @end
-  return bigint_trim(out)
+  return _rsa30_bi_trim(out)
 @end
 
-@fn bigint_mul(a, b)
+@fn _rsa30_bi_mul(a, b)
   base = 1073741824
   na = a.len()
   nb = b.len()
@@ -328,11 +329,11 @@ import "utso/crypto/sha512"
     @end
     i = i + 1
   @end
-  return bigint_trim(out)
+  return _rsa30_bi_trim(out)
 @end
 
-@fn bigint_bit_len(a)
-  ta = bigint_trim(a)
+@fn _rsa30_bi_bit_len(a)
+  ta = _rsa30_bi_trim(a)
   @if ta.len() == 1 && ta[0] == 0 return 0 @end
   top = ta[ta.len() - 1]
   bits = (ta.len() - 1) * 30
@@ -343,13 +344,13 @@ import "utso/crypto/sha512"
   return bits
 @end
 
-@fn bigint_get_bit(a, bit_idx)
+@fn _rsa30_bi_get_bit(a, bit_idx)
   limb_idx = bit_idx / 30
   @if limb_idx >= a.len() return 0 @end
   return (a[limb_idx] >> (bit_idx % 30)) & 1
 @end
 
-@fn bigint_shl1_with_bit(a, low_bit)
+@fn _rsa30_bi_shl1_with_bit(a, low_bit)
   base = 1073741824
   out = []
   carry = low_bit & 1
@@ -363,10 +364,10 @@ import "utso/crypto/sha512"
   @if carry > 0
     out = out.push(carry)
   @end
-  return bigint_trim(out)
+  return _rsa30_bi_trim(out)
 @end
 
-@fn bigint_shr1(a)
+@fn _rsa30_bi_shr1(a)
   @if a.len() == 0 return [0] @end
   half_base = 536870912
   out = []
@@ -383,10 +384,10 @@ import "utso/crypto/sha512"
     carry = v & 1
     i = i - 1
   @end
-  return bigint_trim(out)
+  return _rsa30_bi_trim(out)
 @end
 
-@fn bigint_set_bit(a, bit_idx)
+@fn _rsa30_bi_set_bit(a, bit_idx)
   limb_idx = bit_idx / 30
   out = []
   i = 0
@@ -402,99 +403,99 @@ import "utso/crypto/sha512"
   return out
 @end
 
-@fn bigint_divmod(a, b)
-  @if bigint_is_zero(b) == 1
+@fn _rsa30_bi_divmod(a, b)
+  @if _rsa30_bi_is_zero(b) == 1
     return [[0], [0]]
   @end
-  @if bigint_cmp(a, b) < 0
-    return [[0], bigint_trim(a)]
+  @if _rsa30_bi_cmp(a, b) < 0
+    return [[0], _rsa30_bi_trim(a)]
   @end
-  blen = bigint_bit_len(a)
+  blen = _rsa30_bi_bit_len(a)
   q = [0]
   r = [0]
   i = blen - 1
   @while i >= 0
-    r = bigint_shl1_with_bit(r, bigint_get_bit(a, i))
-    @if bigint_cmp(r, b) >= 0
-      r = bigint_sub(r, b)
-      q = bigint_set_bit(q, i)
+    r = _rsa30_bi_shl1_with_bit(r, _rsa30_bi_get_bit(a, i))
+    @if _rsa30_bi_cmp(r, b) >= 0
+      r = _rsa30_bi_sub(r, b)
+      q = _rsa30_bi_set_bit(q, i)
     @end
     i = i - 1
   @end
-  return [bigint_trim(q), bigint_trim(r)]
+  return [_rsa30_bi_trim(q), _rsa30_bi_trim(r)]
 @end
 
-@fn bigint_mod(a, m)
-  qr = bigint_divmod(a, m)
+@fn _rsa30_bi_mod(a, m)
+  qr = _rsa30_bi_divmod(a, m)
   return qr[1]
 @end
 
-@fn bigint_mod_mul(a, b, m)
-  prod = bigint_mul(a, b)
-  return bigint_mod(prod, m)
+@fn _rsa30_bi_mod_mul(a, b, m)
+  prod = _rsa30_bi_mul(a, b)
+  return _rsa30_bi_mod(prod, m)
 @end
 
-@fn bigint_mod_pow(base_v, exp_v, mod_v)
-  @if bigint_is_zero(mod_v) == 1 return [0] @end
+@fn _rsa30_bi_mod_pow(base_v, exp_v, mod_v)
+  @if _rsa30_bi_is_zero(mod_v) == 1 return [0] @end
   @if mod_v.len() == 1 && mod_v[0] == 1 return [0] @end
   res = [1]
-  b = bigint_mod(base_v, mod_v)
-  nb = bigint_bit_len(exp_v)
+  b = _rsa30_bi_mod(base_v, mod_v)
+  nb = _rsa30_bi_bit_len(exp_v)
   i = 0
   @while i < nb
-    @if bigint_get_bit(exp_v, i) == 1
-      res = bigint_mod_mul(res, b, mod_v)
+    @if _rsa30_bi_get_bit(exp_v, i) == 1
+      res = _rsa30_bi_mod_mul(res, b, mod_v)
     @end
     @if i + 1 < nb
-      b = bigint_mod_mul(b, b, mod_v)
+      b = _rsa30_bi_mod_mul(b, b, mod_v)
     @end
     i = i + 1
   @end
   return res
 @end
 
-@fn bigint_gcd(a, b)
-  x = bigint_trim(a)
-  y = bigint_trim(b)
-  @while bigint_is_zero(y) == 0
-    rem = bigint_mod(x, y)
+@fn _rsa30_bi_gcd(a, b)
+  x = _rsa30_bi_trim(a)
+  y = _rsa30_bi_trim(b)
+  @while _rsa30_bi_is_zero(y) == 0
+    rem = _rsa30_bi_mod(x, y)
     x = y
     y = rem
   @end
   return x
 @end
 
-@fn bigint_mod_inverse(e, phi)
+@fn _rsa30_bi_mod_inverse(e, phi)
   @! Extended Euclidean algorithm over signed-pair representations [val, is_neg]
-  r0 = bigint_trim(phi)
-  r1 = bigint_trim(e)
+  r0 = _rsa30_bi_trim(phi)
+  r1 = _rsa30_bi_trim(e)
   t0 = [0]
   t0_neg = 0
   t1 = [1]
   t1_neg = 0
 
-  @while bigint_is_zero(r1) == 0
-    qr = bigint_divmod(r0, r1)
+  @while _rsa30_bi_is_zero(r1) == 0
+    qr = _rsa30_bi_divmod(r0, r1)
     q = qr[0]
     next_r = qr[1]
-    qt1 = bigint_mul(q, t1)
+    qt1 = _rsa30_bi_mul(q, t1)
 
     @! Compute new_t = t0 - q * t1 cleanly with sign tracking
     new_t = [0]
     new_neg = 0
     @if t0_neg == t1_neg
-      @if bigint_cmp(t0, qt1) >= 0
-        new_t = bigint_sub(t0, qt1)
+      @if _rsa30_bi_cmp(t0, qt1) >= 0
+        new_t = _rsa30_bi_sub(t0, qt1)
         new_neg = t0_neg
       @else
-        new_t = bigint_sub(qt1, t0)
+        new_t = _rsa30_bi_sub(qt1, t0)
         new_neg = 1 - t0_neg
       @end
     @else
-      new_t = bigint_add(t0, qt1)
+      new_t = _rsa30_bi_add(t0, qt1)
       new_neg = t0_neg
     @end
-    @if bigint_is_zero(new_t) == 1 new_neg = 0 @end
+    @if _rsa30_bi_is_zero(new_t) == 1 new_neg = 0 @end
 
     r0 = r1
     r1 = next_r
@@ -507,32 +508,32 @@ import "utso/crypto/sha512"
   @if r0.len() != 1 || r0[0] != 1
     return [0]
   @end
-  t0 = bigint_mod(t0, phi)
-  @if t0_neg == 1 && bigint_is_zero(t0) == 0
-    return bigint_sub(phi, t0)
+  t0 = _rsa30_bi_mod(t0, phi)
+  @if t0_neg == 1 && _rsa30_bi_is_zero(t0) == 0
+    return _rsa30_bi_sub(phi, t0)
   @end
   return t0
 @end
 
-@fn bigint_is_probable_prime(n, rounds)
-  @if bigint_cmp(n, [2]) < 0 return 0 @end
+@fn _rsa30_bi_is_probable_prime(n, rounds)
+  @if _rsa30_bi_cmp(n, [2]) < 0 return 0 @end
   @if n.len() == 1 && (n[0] == 2 || n[0] == 3) return 1 @end
-  @if bigint_is_even(n) == 1 return 0 @end
+  @if _rsa30_bi_is_even(n) == 1 return 0 @end
 
   small_primes = [3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
   si = 0
   @while si < small_primes.len()
     sp = [small_primes[si]]
-    @if bigint_cmp(n, sp) == 0 return 1 @end
-    @if bigint_is_zero(bigint_mod(n, sp)) == 1 return 0 @end
+    @if _rsa30_bi_cmp(n, sp) == 0 return 1 @end
+    @if _rsa30_bi_is_zero(_rsa30_bi_mod(n, sp)) == 1 return 0 @end
     si = si + 1
   @end
 
-  n_minus_1 = bigint_sub(n, [1])
+  n_minus_1 = _rsa30_bi_sub(n, [1])
   d = n_minus_1
   s = 0
-  @while bigint_is_even(d) == 1
-    d = bigint_shr1(d)
+  @while _rsa30_bi_is_even(d) == 1
+    d = _rsa30_bi_shr1(d)
     s = s + 1
   @end
 
@@ -542,17 +543,17 @@ import "utso/crypto/sha512"
   wi = 0
   @while wi < lim
     a = [witnesses[wi]]
-    @if bigint_cmp(a, n) >= 0 break @end
-    x = bigint_mod_pow(a, d, n)
-    @if (x.len() == 1 && x[0] == 1) || bigint_cmp(x, n_minus_1) == 0
+    @if _rsa30_bi_cmp(a, n) >= 0 break @end
+    x = _rsa30_bi_mod_pow(a, d, n)
+    @if (x.len() == 1 && x[0] == 1) || _rsa30_bi_cmp(x, n_minus_1) == 0
       wi = wi + 1
       continue
     @end
     comp = 1
     r = 1
     @while r < s
-      x = bigint_mod_mul(x, x, n)
-      @if bigint_cmp(x, n_minus_1) == 0
+      x = _rsa30_bi_mod_mul(x, x, n)
+      @if _rsa30_bi_cmp(x, n_minus_1) == 0
         comp = 0
         break
       @end
@@ -566,28 +567,28 @@ import "utso/crypto/sha512"
   return 1
 @end
 
-@fn bigint_from_bytes(bytes)
+@fn _rsa30_bi_from_bytes(bytes)
   res = [0]
   b256 = [256]
   i = 0
   @while i < bytes.len()
-    res = bigint_add(bigint_mul(res, b256), [bytes[i] & 255])
+    res = _rsa30_bi_add(_rsa30_bi_mul(res, b256), [bytes[i] & 255])
     i = i + 1
   @end
   return res
 @end
 
-@fn bigint_to_bytes(a, out_len)
-  tmp = bigint_trim(a)
+@fn _rsa30_bi_to_bytes(a, out_len)
+  tmp = _rsa30_bi_trim(a)
   rev = []
   b256 = [256]
   @while rev.len() < out_len
-    qr = bigint_divmod(tmp, b256)
+    qr = _rsa30_bi_divmod(tmp, b256)
     tmp = qr[0]
     rem = qr[1]
     rev = rev.push(rem[0] & 255)
   @end
-  @if bigint_is_zero(tmp) == 0
+  @if _rsa30_bi_is_zero(tmp) == 0
     return []
   @end
   out = []
@@ -856,18 +857,18 @@ import "utso/crypto/sha512"
 @fn rsa_bigint_encrypt_oaep(msg_bytes, e_bi, n_bi, k_len, seed32)
   em = rsa_oaep_encode(msg_bytes, [], k_len, seed32)
   @if em.len() != k_len return [] @end
-  m_int = bigint_from_bytes(em)
-  @if bigint_cmp(m_int, n_bi) >= 0 return [] @end
-  c_int = bigint_mod_pow(m_int, e_bi, n_bi)
-  return bigint_to_bytes(c_int, k_len)
+  m_int = _rsa30_bi_from_bytes(em)
+  @if _rsa30_bi_cmp(m_int, n_bi) >= 0 return [] @end
+  c_int = _rsa30_bi_mod_pow(m_int, e_bi, n_bi)
+  return _rsa30_bi_to_bytes(c_int, k_len)
 @end
 
 @fn rsa_bigint_decrypt_oaep(ct_bytes, d_bi, n_bi, k_len)
   @if ct_bytes.len() != k_len return [] @end
-  c_int = bigint_from_bytes(ct_bytes)
-  @if bigint_cmp(c_int, n_bi) >= 0 return [] @end
-  m_int = bigint_mod_pow(c_int, d_bi, n_bi)
-  em = bigint_to_bytes(m_int, k_len)
+  c_int = _rsa30_bi_from_bytes(ct_bytes)
+  @if _rsa30_bi_cmp(c_int, n_bi) >= 0 return [] @end
+  m_int = _rsa30_bi_mod_pow(c_int, d_bi, n_bi)
+  em = _rsa30_bi_to_bytes(m_int, k_len)
   return rsa_oaep_decode(em, [])
 @end
 

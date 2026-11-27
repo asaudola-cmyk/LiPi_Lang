@@ -219,6 +219,8 @@ fn riscv64_synth_emit_interp_str s txt
             end
             if lv.rv_lv_prim_type == "str"
                 // a0 is already a cstr pointer
+            elif lv.rv_lv_prim_type == "float"
+                riscv64_synth_emit_call_helper(s, "__float_to_str")
             elif lv.rv_lv_prim_type == "dyn_tagged" and lv.rv_lv_tag_off > 0
                 riscv64_emit_local_ld(s, 11, lv.rv_lv_tag_off)
                 riscv64_synth_emit_call_helper(s, "__tagged_to_str")
@@ -233,6 +235,8 @@ fn riscv64_synth_emit_interp_str s txt
             riscv64_synth_compile_expr(s, sub_toks, sub_pb)
             if s.rv_last_expr_type == "str"
                 // a0 is already a cstr pointer
+            elif s.rv_last_expr_type == "float"
+                riscv64_synth_emit_call_helper(s, "__float_to_str")
             elif s.rv_last_expr_type == "dyn_tagged"
                 riscv64_synth_emit_call_helper(s, "__tagged_to_str")
             elif s.rv_last_is_uint == 1
@@ -275,6 +279,19 @@ fn riscv64_synth_expr_primary s toks pos_box
             riscv64_emit_li(s, 5, 1)
             riscv64_emit_slli(s, 5, 5, 63)
             riscv64_emit_xor(s, 10, 10, 5)
+        elif s.rv_last_expr_type == "dyn_tagged"
+            // WHY: Runtime tag a1 == 1 means a0 holds IEEE-754 f64 bits (flip sign bit 63);
+            // otherwise negate as signed integer (prevents corrupting `-ret_f()` via 2's complement!).
+            riscv64_emit_li(s, 5, 1)
+            beq_rneg_fp = s.rv_code.len()
+            riscv64_emit_beq(s, 11, 5, 0)
+            riscv64_emit_sub(s, 10, 0, 10)
+            jmp_rneg_done = s.rv_code.len()
+            riscv64_emit_jal(s, 0, 0)
+            riscv64_synth_patch_b(s, beq_rneg_fp, 0, 11, 5, s.rv_code.len())
+            riscv64_emit_slli(s, 5, 5, 63)
+            riscv64_emit_xor(s, 10, 10, 5)
+            riscv64_synth_patch_jal(s, jmp_rneg_done, 0, s.rv_code.len())
         else
             riscv64_emit_sub(s, 10, 0, 10) // sub a0, x0, a0
         end
@@ -1088,7 +1105,25 @@ fn riscv64_synth_expr_primary s toks pos_box
                 end
                 return 0
             end
-            if var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "uint_to_str"
+            if var_name == "f64_from_bits" or var_name == "f64_to_bits"
+                while arg_count > 1
+                    riscv64_pop_reg(s, 5)
+                    arg_count = arg_count - 1
+                end
+                if arg_count == 1
+                    riscv64_pop_reg(s, 10)
+                else
+                    riscv64_emit_addi(s, 10, 0, 0)
+                end
+                if var_name == "f64_from_bits"
+                    s.rv_last_expr_type = "float"
+                else
+                    s.rv_last_expr_type = "int"
+                end
+                s.rv_last_is_uint = 0
+                return 0
+            end
+            if var_name == "str" or var_name == "to_str" or var_name == "স্ট্রিং" or var_name == "uint_to_str" or var_name == "float_to_str"
                 s.rv_needs_str_helpers = 1
                 s.rv_needs_alloc = 1
                 if arg_count >= 1
@@ -1102,7 +1137,9 @@ fn riscv64_synth_expr_primary s toks pos_box
                     a0_u = 0
                     if arg_types.len() >= 1 a0_t = arg_types[0] end
                     if arg_is_uints.len() >= 1 a0_u = arg_is_uints[0] end
-                    if var_name == "uint_to_str" or a0_t == "uint" or a0_u == 1
+                    if var_name == "float_to_str" or a0_t == "float"
+                        riscv64_synth_emit_call_helper(s, "__float_to_str")
+                    elif var_name == "uint_to_str" or a0_t == "uint" or a0_u == 1
                         riscv64_synth_emit_call_helper(s, "__uint_to_str")
                     elif a0_t == "str"
                         // Already a cstr pointer in a0
@@ -1315,8 +1352,26 @@ fn riscv64_synth_expr_primary s toks pos_box
                     riscv64_emit_defers(s, toks)
                     riscv64_emit_epilogue(s)
                     riscv64_synth_patch_b(s, skip_beq_off, 0, 26, 0, s.rv_code.len())
+                elif s.rv_freestanding == 0
+                    // WHY: Uncaught top-level call exception prints "Uncaught exception: <val>" and exits 1.
+                    s.rv_needs_uncaught_throw = 1
+                    skip_ut_off = s.rv_code.len()
+                    riscv64_emit_beq(s, 26, 0, 0)
+                    riscv64_synth_emit_call_helper(s, "__uncaught_throw")
+                    riscv64_synth_patch_b(s, skip_ut_off, 0, 26, 0, s.rv_code.len())
                 end
-                s.rv_last_expr_type = "dyn_tagged"
+                if fsig != 0 and fsig.rv_sig_ret_type == "float"
+                    s.rv_last_expr_type = "float"
+                    s.rv_last_is_uint = 0
+                elif fsig != 0 and fsig.rv_sig_ret_type == "uint"
+                    s.rv_last_expr_type = "int"
+                    s.rv_last_is_uint = 1
+                elif fsig != 0 and fsig.rv_sig_ret_type == "str"
+                    s.rv_last_expr_type = "str"
+                    s.rv_last_is_uint = 0
+                else
+                    s.rv_last_expr_type = "dyn_tagged"
+                end
             end
         else
             // Unit ADT Variant (e.g. None or zero-arity enum variant) vs Local Variable Load
@@ -1503,6 +1558,12 @@ fn riscv64_synth_expr_primary s toks pos_box
                             riscv64_emit_defers(s, toks)
                             riscv64_emit_epilogue(s)
                             riscv64_synth_patch_b(s, m_skip_eq, 0, 26, 0, s.rv_code.len())
+                        elif s.rv_freestanding == 0
+                            s.rv_needs_uncaught_throw = 1
+                            m_skip_ut = s.rv_code.len()
+                            riscv64_emit_beq(s, 26, 0, 0)
+                            riscv64_synth_emit_call_helper(s, "__uncaught_throw")
+                            riscv64_synth_patch_b(s, m_skip_ut, 0, 26, 0, s.rv_code.len())
                         end
                         s.rv_last_expr_type = "dyn_tagged"
                     end
@@ -1510,9 +1571,22 @@ fn riscv64_synth_expr_primary s toks pos_box
                 else
                     riscv64_emit_null_guard_reg(s, toks, 10)
                     f_off = riscv64_synth_get_field_offset(s, cur_struct, fn_tok.tok_text)
+                    f_type_rv = riscv64_synth_get_field_type(s, cur_struct, fn_tok.tok_text)
                     riscv64_emit_ld(s, 10, 10, f_off)
                     cur_struct = ""
-                    s.rv_last_expr_type = "int"
+                    if riscv64_is_float_type(f_type_rv) == 1
+                        s.rv_last_expr_type = "float"
+                        s.rv_last_is_uint = 0
+                    elif riscv64_is_uint_type(f_type_rv) == 1
+                        s.rv_last_expr_type = "int"
+                        s.rv_last_is_uint = 1
+                    elif f_type_rv == "str" or f_type_rv == "string"
+                        s.rv_last_expr_type = "str"
+                        s.rv_last_is_uint = 0
+                    else
+                        s.rv_last_expr_type = "int"
+                        s.rv_last_is_uint = 0
+                    end
             else
                 break
         elif ct.tok_kind == TOK_LBRACKET()
@@ -1538,6 +1612,12 @@ fn riscv64_synth_expr_primary s toks pos_box
                 riscv64_emit_defers(s, toks)
                 riscv64_emit_epilogue(s)
                 riscv64_synth_patch_b(s, npe_skip_eq, 0, 26, 0, s.rv_code.len())
+            elif s.rv_freestanding == 0
+                s.rv_needs_uncaught_throw = 1
+                npe_skip_ut = s.rv_code.len()
+                riscv64_emit_beq(s, 26, 0, 0)
+                riscv64_synth_emit_call_helper(s, "__uncaught_throw")
+                riscv64_synth_patch_b(s, npe_skip_ut, 0, 26, 0, s.rv_code.len())
             end
             cur_struct = ""
         elif ct.tok_kind == TOK_QUERY() or (ct.tok_kind != TOK_STR() and ct.tok_text == "?")
@@ -1590,8 +1670,48 @@ fn riscv64_synth_expr_primary s toks pos_box
     s.rv_last_struct = cur_struct
     return 0
 
+fn riscv64_emit_fp_arith_op s op_kind
+    // WHY: Emits RV64D IEEE-754 binary64 arithmetic on fa0 (10) and fa1 (11), writing bits into a0 (10).
+    if op_kind == TOK_PLUS()
+        riscv64_emit_fadd_d(s, 10, 10, 11)
+    elif op_kind == TOK_MINUS()
+        riscv64_emit_fsub_d(s, 10, 10, 11)
+    elif op_kind == TOK_STAR()
+        riscv64_emit_fmul_d(s, 10, 10, 11)
+    elif op_kind == TOK_SLASH()
+        riscv64_emit_fdiv_d(s, 10, 10, 11)
+    elif op_kind == TOK_PERCENT()
+        // IEEE-754 fmod: fa0 - trunc(fa0 / fa1) * fa1
+        riscv64_emit_fdiv_d(s, 12, 10, 11)
+        riscv64_emit_fcvt_l_d_rtz(s, 5, 12)
+        riscv64_emit_fcvt_d_l(s, 12, 5)
+        riscv64_emit_fmul_d(s, 12, 12, 11)
+        riscv64_emit_fsub_d(s, 10, 10, 12)
+    end
+    riscv64_emit_fmv_x_d(s, 10, 10)
+    return 0
+
+fn riscv64_emit_fcmp_a0 s op_kind
+    // WHY: Emits branchless IEEE-754 NaN-safe RV64D comparisons on fa0 (10) and fa1 (11) -> 0/1 in a0 (10).
+    // FEQ.D/FLT.D/FLE.D return 0 on any NaN; `!=` inverts FEQ.D so NaN != x returns 1.
+    if op_kind == TOK_EQ()
+        riscv64_emit_feq_d(s, 10, 10, 11)
+    elif op_kind == TOK_NEQ()
+        riscv64_emit_feq_d(s, 10, 10, 11)
+        riscv64_emit_xori(s, 10, 10, 1)
+    elif op_kind == TOK_LT()
+        riscv64_emit_flt_d(s, 10, 10, 11)
+    elif op_kind == TOK_LTE()
+        riscv64_emit_fle_d(s, 10, 10, 11)
+    elif op_kind == TOK_GT()
+        riscv64_emit_flt_d(s, 10, 11, 10)
+    elif op_kind == TOK_GTE()
+        riscv64_emit_fle_d(s, 10, 11, 10)
+    end
+    return 0
+
 fn riscv64_synth_expr_mul s toks pos_box
-    // WHY: Pratt precedence level 1 for multiplicative operations (*, /, %) in RISC-V 64.
+    // WHY: Pratt precedence level 1 for multiplicative operations (*, /, %) with hardware RV64D f64.
     riscv64_synth_expr_primary(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
@@ -1608,40 +1728,130 @@ fn riscv64_synth_expr_mul s toks pos_box
         op_kind = k
         list_set(pos_box, 0, pos + 1) // Consume operator
         lhs_u = s.rv_last_is_uint
+        lhs_t = s.rv_last_expr_type
 
-        // Push left operand (a0) to stack
+        // Push left operand (a0) to stack (plus a1 tag if dyn_tagged)
         riscv64_push_reg(s, 10)
+        if lhs_t == "dyn_tagged"
+            riscv64_push_reg(s, 11)
+        end
 
         // Evaluate right operand into a0
         riscv64_synth_expr_primary(s, toks, pos_box)
         rhs_u = s.rv_last_is_uint
+        rhs_t = s.rv_last_expr_type
 
-        // Move right operand to a1, pop left operand back into a0
-        riscv64_emit_mv(s, 11, 10)
-        riscv64_pop_reg(s, 10)
+        if lhs_t == "float" or rhs_t == "float"
+            if rhs_t == "dyn_tagged"
+                riscv64_emit_mv(s, 7, 11)
+            end
+            riscv64_emit_mv(s, 6, 10)
+            if lhs_t == "dyn_tagged"
+                riscv64_pop_reg(s, 5)
+            end
+            riscv64_pop_reg(s, 10)
+            riscv64_emit_load_fp_reg(s, 10, 10, lhs_t, lhs_u, 5)
+            riscv64_emit_load_fp_reg(s, 11, 6, rhs_t, rhs_u, 7)
+            riscv64_emit_fp_arith_op(s, op_kind)
+            s.rv_last_is_uint = 0
+            s.rv_last_expr_type = "float"
+        elif lhs_t == "dyn_tagged" or rhs_t == "dyn_tagged"
+            if rhs_t == "dyn_tagged"
+                riscv64_emit_mv(s, 7, 11)
+            else
+                riscv64_emit_li(s, 7, 0)
+            end
+            riscv64_emit_mv(s, 6, 10)
+            if lhs_t == "dyn_tagged"
+                riscv64_pop_reg(s, 5)
+            else
+                riscv64_emit_li(s, 5, 0)
+            end
+            riscv64_pop_reg(s, 10)
+            riscv64_emit_mv(s, 11, 6)
+            riscv64_emit_li(s, 28, 1)
+            beq_dm_fp1 = s.rv_code.len()
+            riscv64_emit_beq(s, 5, 28, 0)
+            beq_dm_fp2 = s.rv_code.len()
+            riscv64_emit_beq(s, 7, 28, 0)
+            if op_kind == TOK_STAR()
+                riscv64_emit_mul(s, 10, 10, 11)
+            elif op_kind == TOK_SLASH()
+                bne_dz_d = s.rv_code.len()
+                riscv64_emit_bne(s, 11, 0, 0)
+                riscv64_emit_addi(s, 10, 0, 0)
+                jmp_dz_d = s.rv_code.len()
+                riscv64_emit_jal(s, 0, 0)
+                riscv64_synth_patch_b(s, bne_dz_d, 1, 11, 0, s.rv_code.len())
+                if lhs_u == 1 or rhs_u == 1 riscv64_emit_divu(s, 10, 10, 11) else riscv64_emit_div(s, 10, 10, 11) end
+                riscv64_synth_patch_jal(s, jmp_dz_d, 0, s.rv_code.len())
+            elif op_kind == TOK_PERCENT()
+                bne_rz_d = s.rv_code.len()
+                riscv64_emit_bne(s, 11, 0, 0)
+                riscv64_emit_addi(s, 10, 0, 0)
+                jmp_rz_d = s.rv_code.len()
+                riscv64_emit_jal(s, 0, 0)
+                riscv64_synth_patch_b(s, bne_rz_d, 1, 11, 0, s.rv_code.len())
+                if lhs_u == 1 or rhs_u == 1 riscv64_emit_remu(s, 10, 10, 11) else riscv64_emit_rem(s, 10, 10, 11) end
+                riscv64_synth_patch_jal(s, jmp_rz_d, 0, s.rv_code.len())
+            end
+            riscv64_emit_li(s, 11, 0)
+            jmp_dm_done = s.rv_code.len()
+            riscv64_emit_jal(s, 0, 0)
+            dm_fp_off = s.rv_code.len()
+            riscv64_synth_patch_b(s, beq_dm_fp1, 0, 5, 28, dm_fp_off)
+            riscv64_synth_patch_b(s, beq_dm_fp2, 0, 7, 28, dm_fp_off)
+            riscv64_emit_load_fp_reg(s, 10, 10, "dyn_tagged", lhs_u, 5)
+            riscv64_emit_load_fp_reg(s, 11, 6, "dyn_tagged", rhs_u, 7)
+            riscv64_emit_fp_arith_op(s, op_kind)
+            riscv64_emit_li(s, 11, 1)
+            riscv64_synth_patch_jal(s, jmp_dm_done, 0, s.rv_code.len())
+            s.rv_last_is_uint = 0
+            s.rv_last_expr_type = "dyn_tagged"
+        else
+            // Move right operand to a1, pop left operand back into a0
+            riscv64_emit_mv(s, 11, 10)
+            riscv64_pop_reg(s, 10)
 
-        if op_kind == TOK_STAR()
-            riscv64_emit_mul(s, 10, 10, 11)
-        elif op_kind == TOK_SLASH()
-            if lhs_u == 1 or rhs_u == 1
-                riscv64_emit_divu(s, 10, 10, 11)
-            else
-                riscv64_emit_div(s, 10, 10, 11)
+            if op_kind == TOK_STAR()
+                riscv64_emit_mul(s, 10, 10, 11)
+            elif op_kind == TOK_SLASH()
+                // WHY: Align legacy RV64 div-by-0 with SSA RV64 (return 0 instead of hardware -1).
+                bne_dz = s.rv_code.len()
+                riscv64_emit_bne(s, 11, 0, 0)
+                riscv64_emit_addi(s, 10, 0, 0)
+                jmp_dz = s.rv_code.len()
+                riscv64_emit_jal(s, 0, 0)
+                riscv64_synth_patch_b(s, bne_dz, 1, 11, 0, s.rv_code.len())
+                if lhs_u == 1 or rhs_u == 1
+                    riscv64_emit_divu(s, 10, 10, 11)
+                else
+                    riscv64_emit_div(s, 10, 10, 11)
+                end
+                riscv64_synth_patch_jal(s, jmp_dz, 0, s.rv_code.len())
+            elif op_kind == TOK_PERCENT()
+                // WHY: Align legacy RV64 rem-by-0 with SSA RV64 (return 0 instead of hardware dividend x).
+                bne_rz = s.rv_code.len()
+                riscv64_emit_bne(s, 11, 0, 0)
+                riscv64_emit_addi(s, 10, 0, 0)
+                jmp_rz = s.rv_code.len()
+                riscv64_emit_jal(s, 0, 0)
+                riscv64_synth_patch_b(s, bne_rz, 1, 11, 0, s.rv_code.len())
+                if lhs_u == 1 or rhs_u == 1
+                    riscv64_emit_remu(s, 10, 10, 11)
+                else
+                    riscv64_emit_rem(s, 10, 10, 11)
+                end
+                riscv64_synth_patch_jal(s, jmp_rz, 0, s.rv_code.len())
             end
-        elif op_kind == TOK_PERCENT()
-            if lhs_u == 1 or rhs_u == 1
-                riscv64_emit_remu(s, 10, 10, 11)
-            else
-                riscv64_emit_rem(s, 10, 10, 11)
-            end
+            if lhs_u == 1 or rhs_u == 1 s.rv_last_is_uint = 1 else s.rv_last_is_uint = 0 end
+            s.rv_last_expr_type = "int"
         end
-        if lhs_u == 1 or rhs_u == 1 s.rv_last_is_uint = 1 else s.rv_last_is_uint = 0 end
-        s.rv_last_expr_type = "int"
 
     return 0
 
 fn riscv64_synth_expr_add s toks pos_box
-    // WHY: Pratt precedence level 2 for additive operations (+, -) in RISC-V 64.
+    // WHY: Pratt precedence level 2 for additive operations (+, -) with string concat & hardware RV64D f64.
     riscv64_synth_expr_mul(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
@@ -1660,9 +1870,9 @@ fn riscv64_synth_expr_add s toks pos_box
         lhs_ua = s.rv_last_is_uint
         lhs_ta = s.rv_last_expr_type
 
-        // Push left operand (a0) to stack (plus a1 tag if dyn_tagged so str+dyn_tagged stays exact)
+        // Push left operand (a0) to stack (plus a1 tag if dyn_tagged)
         riscv64_push_reg(s, 10)
-        if op_kind == TOK_PLUS() and lhs_ta == "dyn_tagged"
+        if lhs_ta == "dyn_tagged"
             riscv64_push_reg(s, 11)
         end
 
@@ -1674,9 +1884,11 @@ fn riscv64_synth_expr_add s toks pos_box
         if op_kind == TOK_PLUS() and (lhs_ta == "str" or rhs_ta == "str")
             s.rv_needs_str_helpers = 1
             s.rv_needs_alloc = 1
-            // Auto-stringify non-string RHS cleanly (prevents segfault on "val=" + int/u64/dyn_tagged)
+            // Auto-stringify non-string RHS cleanly (prevents segfault on "val=" + int/float/u64/dyn_tagged)
             if rhs_ta != "str"
-                if rhs_ta == "dyn_tagged"
+                if rhs_ta == "float"
+                    riscv64_synth_emit_call_helper(s, "__float_to_str")
+                elif rhs_ta == "dyn_tagged"
                     riscv64_synth_emit_call_helper(s, "__tagged_to_str")
                 elif rhs_ua == 1 or rhs_ta == "uint"
                     riscv64_synth_emit_call_helper(s, "__uint_to_str")
@@ -1692,7 +1904,9 @@ fn riscv64_synth_expr_add s toks pos_box
                 end
                 riscv64_pop_reg(s, 10) // a0 = lhs
                 riscv64_push_reg(s, 11) // save rhs_str on stack
-                if lhs_ta == "dyn_tagged"
+                if lhs_ta == "float"
+                    riscv64_synth_emit_call_helper(s, "__float_to_str")
+                elif lhs_ta == "dyn_tagged"
                     riscv64_emit_mv(s, 11, 5)
                     riscv64_synth_emit_call_helper(s, "__tagged_to_str")
                 elif lhs_ua == 1 or lhs_ta == "uint"
@@ -1708,10 +1922,54 @@ fn riscv64_synth_expr_add s toks pos_box
             riscv64_synth_emit_call_helper(s, "__str_concat")
             s.rv_last_is_uint = 0
             s.rv_last_expr_type = "str"
-        elif op_kind == TOK_PLUS()
-            if lhs_ta == "dyn_tagged"
-                riscv64_pop_reg(s, 5) // discard saved lhs tag
+        elif lhs_ta == "float" or rhs_ta == "float"
+            if rhs_ta == "dyn_tagged"
+                riscv64_emit_mv(s, 7, 11)
             end
+            riscv64_emit_mv(s, 6, 10)
+            if lhs_ta == "dyn_tagged"
+                riscv64_pop_reg(s, 5)
+            end
+            riscv64_pop_reg(s, 10)
+            riscv64_emit_load_fp_reg(s, 10, 10, lhs_ta, lhs_ua, 5)
+            riscv64_emit_load_fp_reg(s, 11, 6, rhs_ta, rhs_ua, 7)
+            riscv64_emit_fp_arith_op(s, op_kind)
+            s.rv_last_is_uint = 0
+            s.rv_last_expr_type = "float"
+        elif lhs_ta == "dyn_tagged" or rhs_ta == "dyn_tagged"
+            if rhs_ta == "dyn_tagged"
+                riscv64_emit_mv(s, 7, 11)
+            else
+                riscv64_emit_li(s, 7, 0)
+            end
+            riscv64_emit_mv(s, 6, 10)
+            if lhs_ta == "dyn_tagged"
+                riscv64_pop_reg(s, 5)
+            else
+                riscv64_emit_li(s, 5, 0)
+            end
+            riscv64_pop_reg(s, 10)
+            riscv64_emit_mv(s, 11, 6)
+            riscv64_emit_li(s, 28, 1)
+            beq_da_fp1 = s.rv_code.len()
+            riscv64_emit_beq(s, 5, 28, 0)
+            beq_da_fp2 = s.rv_code.len()
+            riscv64_emit_beq(s, 7, 28, 0)
+            if op_kind == TOK_PLUS() riscv64_emit_add(s, 10, 10, 11) else riscv64_emit_sub(s, 10, 10, 11) end
+            riscv64_emit_li(s, 11, 0)
+            jmp_da_done = s.rv_code.len()
+            riscv64_emit_jal(s, 0, 0)
+            da_fp_off = s.rv_code.len()
+            riscv64_synth_patch_b(s, beq_da_fp1, 0, 5, 28, da_fp_off)
+            riscv64_synth_patch_b(s, beq_da_fp2, 0, 7, 28, da_fp_off)
+            riscv64_emit_load_fp_reg(s, 10, 10, "dyn_tagged", lhs_ua, 5)
+            riscv64_emit_load_fp_reg(s, 11, 6, "dyn_tagged", rhs_ua, 7)
+            riscv64_emit_fp_arith_op(s, op_kind)
+            riscv64_emit_li(s, 11, 1)
+            riscv64_synth_patch_jal(s, jmp_da_done, 0, s.rv_code.len())
+            s.rv_last_is_uint = 0
+            s.rv_last_expr_type = "dyn_tagged"
+        elif op_kind == TOK_PLUS()
             riscv64_emit_mv(s, 11, 10)
             riscv64_pop_reg(s, 10)
             riscv64_emit_add(s, 10, 10, 11)
@@ -1750,10 +2008,11 @@ fn riscv64_synth_expr_shift s toks pos_box
             riscv64_emit_sra(s, 10, 10, 11)
         end
         s.rv_last_is_uint = lhs_us
+        s.rv_last_expr_type = "int"
     return 0
 
 fn riscv64_synth_expr_rel s toks pos_box
-    // WHY: Pratt precedence level 4 for comparison operators (==, !=, <, <=, >, >=) in RISC-V 64.
+    // WHY: Pratt precedence level 4 for comparison operators (==, !=, <, <=, >, >=) with IEEE-754 NaN-safe RV64D FP compares.
     riscv64_synth_expr_shift(s, toks, pos_box)
 
     while get(pos_box, 0) < toks.len()
@@ -1770,56 +2029,121 @@ fn riscv64_synth_expr_rel s toks pos_box
         op_kind = k
         list_set(pos_box, 0, pos + 1) // Consume operator
         lhs_ur = s.rv_last_is_uint
+        lhs_tr = s.rv_last_expr_type
 
-        // Push left operand (a0) to stack
+        // Push left operand (a0) to stack (plus a1 tag if dyn_tagged)
         riscv64_push_reg(s, 10)
+        if lhs_tr == "dyn_tagged"
+            riscv64_push_reg(s, 11)
+        end
 
         // Evaluate right operand into a0
         riscv64_synth_expr_shift(s, toks, pos_box)
         rhs_ur = s.rv_last_is_uint
+        rhs_tr = s.rv_last_expr_type
         cmp_u = 0
         if lhs_ur == 1 or rhs_ur == 1 cmp_u = 1 end
 
-        // Move right operand to a1, pop left operand back into a0
-        riscv64_emit_mv(s, 11, 10)
-        riscv64_pop_reg(s, 10)
+        if lhs_tr == "float" or rhs_tr == "float"
+            if rhs_tr == "dyn_tagged"
+                riscv64_emit_mv(s, 7, 11)
+            end
+            riscv64_emit_mv(s, 6, 10)
+            if lhs_tr == "dyn_tagged"
+                riscv64_pop_reg(s, 5)
+            end
+            riscv64_pop_reg(s, 10)
+            riscv64_emit_load_fp_reg(s, 10, 10, lhs_tr, lhs_ur, 5)
+            riscv64_emit_load_fp_reg(s, 11, 6, rhs_tr, rhs_ur, 7)
+            riscv64_emit_fcmp_a0(s, op_kind)
+        elif lhs_tr == "dyn_tagged" or rhs_tr == "dyn_tagged"
+            if rhs_tr == "dyn_tagged"
+                riscv64_emit_mv(s, 7, 11)
+            else
+                riscv64_emit_li(s, 7, 0)
+            end
+            riscv64_emit_mv(s, 6, 10)
+            if lhs_tr == "dyn_tagged"
+                riscv64_pop_reg(s, 5)
+            else
+                riscv64_emit_li(s, 5, 0)
+            end
+            riscv64_pop_reg(s, 10)
+            riscv64_emit_mv(s, 11, 6)
+            riscv64_emit_li(s, 28, 1)
+            beq_dr_fp1 = s.rv_code.len()
+            riscv64_emit_beq(s, 5, 28, 0)
+            beq_dr_fp2 = s.rv_code.len()
+            riscv64_emit_beq(s, 7, 28, 0)
+            if op_kind == TOK_EQ()
+                riscv64_emit_sub(s, 10, 10, 11)
+                riscv64_emit_sltiu(s, 10, 10, 1)
+            elif op_kind == TOK_NEQ()
+                riscv64_emit_sub(s, 10, 10, 11)
+                riscv64_emit_sltu(s, 10, 0, 10)
+            elif op_kind == TOK_LT()
+                if cmp_u == 1 riscv64_emit_sltu(s, 10, 10, 11) else riscv64_emit_slt(s, 10, 10, 11) end
+            elif op_kind == TOK_LTE()
+                if cmp_u == 1 riscv64_emit_sltu(s, 10, 11, 10) else riscv64_emit_slt(s, 10, 11, 10) end
+                riscv64_emit_xori(s, 10, 10, 1)
+            elif op_kind == TOK_GT()
+                if cmp_u == 1 riscv64_emit_sltu(s, 10, 11, 10) else riscv64_emit_slt(s, 10, 11, 10) end
+            elif op_kind == TOK_GTE()
+                if cmp_u == 1 riscv64_emit_sltu(s, 10, 10, 11) else riscv64_emit_slt(s, 10, 10, 11) end
+                riscv64_emit_xori(s, 10, 10, 1)
+            end
+            jmp_dr_done = s.rv_code.len()
+            riscv64_emit_jal(s, 0, 0)
+            dr_fp_off = s.rv_code.len()
+            riscv64_synth_patch_b(s, beq_dr_fp1, 0, 5, 28, dr_fp_off)
+            riscv64_synth_patch_b(s, beq_dr_fp2, 0, 7, 28, dr_fp_off)
+            riscv64_emit_load_fp_reg(s, 10, 10, "dyn_tagged", lhs_ur, 5)
+            riscv64_emit_load_fp_reg(s, 11, 6, "dyn_tagged", rhs_ur, 7)
+            riscv64_emit_fcmp_a0(s, op_kind)
+            riscv64_synth_patch_jal(s, jmp_dr_done, 0, s.rv_code.len())
+        else
+            // Move right operand to a1, pop left operand back into a0
+            riscv64_emit_mv(s, 11, 10)
+            riscv64_pop_reg(s, 10)
 
-        if op_kind == TOK_EQ()
-            // Branchless equality: sub a0, a0, a1; sltiu a0, a0, 1
-            riscv64_emit_sub(s, 10, 10, 11)
-            riscv64_emit_sltiu(s, 10, 10, 1)
-        elif op_kind == TOK_NEQ()
-            // Branchless inequality: sub a0, a0, a1; sltu a0, x0, a0
-            riscv64_emit_sub(s, 10, 10, 11)
-            riscv64_emit_sltu(s, 10, 0, 10)
-        elif op_kind == TOK_LT()
-            if cmp_u == 1
-                riscv64_emit_sltu(s, 10, 10, 11)
-            else
-                riscv64_emit_slt(s, 10, 10, 11)
+            if op_kind == TOK_EQ()
+                // Branchless equality: sub a0, a0, a1; sltiu a0, a0, 1
+                riscv64_emit_sub(s, 10, 10, 11)
+                riscv64_emit_sltiu(s, 10, 10, 1)
+            elif op_kind == TOK_NEQ()
+                // Branchless inequality: sub a0, a0, a1; sltu a0, x0, a0
+                riscv64_emit_sub(s, 10, 10, 11)
+                riscv64_emit_sltu(s, 10, 0, 10)
+            elif op_kind == TOK_LT()
+                if cmp_u == 1
+                    riscv64_emit_sltu(s, 10, 10, 11)
+                else
+                    riscv64_emit_slt(s, 10, 10, 11)
+                end
+            elif op_kind == TOK_LTE()
+                if cmp_u == 1
+                    riscv64_emit_sltu(s, 10, 11, 10)
+                else
+                    riscv64_emit_slt(s, 10, 11, 10)
+                end
+                riscv64_emit_xori(s, 10, 10, 1)
+            elif op_kind == TOK_GT()
+                if cmp_u == 1
+                    riscv64_emit_sltu(s, 10, 11, 10)
+                else
+                    riscv64_emit_slt(s, 10, 11, 10)
+                end
+            elif op_kind == TOK_GTE()
+                if cmp_u == 1
+                    riscv64_emit_sltu(s, 10, 10, 11)
+                else
+                    riscv64_emit_slt(s, 10, 10, 11)
+                end
+                riscv64_emit_xori(s, 10, 10, 1)
             end
-        elif op_kind == TOK_LTE()
-            if cmp_u == 1
-                riscv64_emit_sltu(s, 10, 11, 10)
-            else
-                riscv64_emit_slt(s, 10, 11, 10)
-            end
-            riscv64_emit_xori(s, 10, 10, 1)
-        elif op_kind == TOK_GT()
-            if cmp_u == 1
-                riscv64_emit_sltu(s, 10, 11, 10)
-            else
-                riscv64_emit_slt(s, 10, 11, 10)
-            end
-        elif op_kind == TOK_GTE()
-            if cmp_u == 1
-                riscv64_emit_sltu(s, 10, 10, 11)
-            else
-                riscv64_emit_slt(s, 10, 10, 11)
-            end
-            riscv64_emit_xori(s, 10, 10, 1)
         end
         s.rv_last_is_uint = 0
+        s.rv_last_expr_type = "int"
 
     return 0
 

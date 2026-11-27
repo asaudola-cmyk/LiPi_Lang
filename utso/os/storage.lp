@@ -1,4 +1,8 @@
 @! ============================================================================
+@! @deprecated Simulation-only block storage abstraction over simulated disk sectors.
+@! WHY: Wraps in-memory sector arrays rather than real hardware/kernel block I/O.
+@! For real file/block I/O use `utso/os/fs.lp` or `utso/silicon/*`.
+@! ============================================================================
 @! LIPI UNIVERSE OS — HIGH-LEVEL BLOCK STORAGE INTERFACE (utso/os/storage)
 @! 100% Written in Pure Lipi Language — Zero External Dependencies
 @! ============================================================================

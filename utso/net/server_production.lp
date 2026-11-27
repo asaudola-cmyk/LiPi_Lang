@@ -1083,9 +1083,41 @@ fn _prod_drain_tls_records srv c: ProdConn
         end
         _prod_buf_consume(c.pconn_tls_raw_buf, tot)
         pt = dec_fn(c.pconn_tls_session, rec)
-        pt_len = len(pt)
-        if pt_len > 0
+        if is_str(pt) == 1
+            pt_len = len(pt)
+            if pt_len == 0
+                // WHY: AEAD decrypt failure or close_notify on legacy string decryptor closes connection.
+                return 0 - 1
+            end
             buf_write_mem(c.pconn_read_buf, pt, pt_len)
+        else
+            // WHY: Status-aware decryptor [status, payload]: -1 = AEAD failure/close_notify (close!),
+            // 0 = benign post-handshake (e.g. KeyUpdate(0)), 1 = decrypted application payload,
+            // 2 = server KeyUpdate(0) encrypted wire byte list to enqueue directly on socket.
+            d_st = get(pt, 0)
+            if d_st < 0
+                return 0 - 1
+            end
+            if d_st == 1
+                d_txt = get(pt, 1)
+                d_len = len(d_txt)
+                if d_len > 0
+                    buf_write_mem(c.pconn_read_buf, d_txt, d_len)
+                end
+            elif d_st == 2
+                ku_wire = get(pt, 1)
+                ku_n = len(ku_wire)
+                if ku_n > 0
+                    ku_b = buf_new(ku_n)
+                    ki = 0
+                    while ki < ku_n
+                        buf_write_byte(ku_b, get(ku_wire, ki) & 255)
+                        ki = ki + 1
+                    end
+                    _prod_conn_enqueue_raw(srv, get(srv, 2), c, buf_ptr(ku_b), buf_len(ku_b))
+                    buf_free(ku_b)
+                end
+            end
         end
     end
     return 1
@@ -1161,6 +1193,61 @@ fn _prod_process_ws_frames srv epfd c: ProdConn
                 _prod_dispatch_ws(srv, c, use_op, full_payload, full_len)
     return 0
 
+fn _prod_validate_framing_headers hdr_str
+    // WHY: RFC 9112 §6.3 HTTP request smuggling defense: rejects requests containing BOTH
+    // Transfer-Encoding AND Content-Length, conflicting duplicate Content-Length headers,
+    // or non-numeric Content-Length values with 400 Bad Request.
+    // Returns [ok, is_chunked, content_length].
+    lines = string_split(hdr_str, "\n")
+    has_te = 0
+    is_chunked = 0
+    cl_count = 0
+    cl_val = 0
+    i = 1
+    while i < len(lines)
+        ln = str_trim(get(lines, i))
+        colon = str_index_of(ln, ":")
+        if colon > 0
+            hn = _prod_to_lower_ascii(str_trim(str_sub(ln, 0, colon)))
+            hv = str_trim(str_sub(ln, colon + 1, len(ln)))
+            if hn == "transfer-encoding"
+                has_te = 1
+                if str_contains(_prod_to_lower_ascii(hv), "chunked") == 1
+                    is_chunked = 1
+                end
+            elif hn == "content-length"
+                // WHY: Guard against 64-bit signed integer wrap (> 15 digits) as well as non-digits!
+                if len(hv) == 0 or len(hv) > 15
+                    return [0, 0, 0]
+                end
+                // Validate strict non-negative ASCII digits only
+                ci = 0
+                cur_cl = 0
+                while ci < len(hv)
+                    ch = mem_byte_read(hv, ci) & 255
+                    if ch < 48 or ch > 57
+                        return [0, 0, 0]
+                    end
+                    cur_cl = (cur_cl * 10) + (ch - 48)
+                    ci = ci + 1
+                end
+                if cl_count > 0 and cur_cl != cl_val
+                    return [0, 0, 0]
+                end
+                cl_val = cur_cl
+                cl_count = cl_count + 1
+            end
+        end
+        i = i + 1
+    end
+    // WHY: RFC 9112 §6.3 forbids BOTH Transfer-Encoding + Content-Length AND any request
+    // Transfer-Encoding whose final encoding is not `chunked` (classic TE smuggling vectors).
+    if has_te == 1 and (cl_count > 0 or is_chunked == 0)
+        return [0, 0, 0]
+    end
+    return [1, is_chunked, cl_val]
+end
+
 fn _prod_extract_hdr_value hdr_str target_lower
     lines = string_split(hdr_str, "\n")
     i = 1
@@ -1221,11 +1308,21 @@ fn _prod_process_http srv epfd c: ProdConn
             _prod_process_ws_frames(srv, epfd, c)
             break
 
-        // Determine body framing (Transfer-Encoding: chunked vs Content-Length)
-        te_v = _prod_to_lower_ascii(_prod_extract_hdr_value(hdr_s, "transfer-encoding"))
+        // Determine body framing (Transfer-Encoding: chunked vs Content-Length) with RFC 9112 smuggling guard
+        fr_chk = _prod_validate_framing_headers(hdr_s)
+        if get(fr_chk, 0) != 1
+            prod_send_response_conn(srv, epfd, c, 400, "text/plain; charset=utf-8", "Bad Request")
+            _prod_buf_consume(c.pconn_read_buf, av)
+            if buf_len(c.pconn_write_buf) > 0
+                c.pconn_close_after_write = 1
+            else
+                _prod_close_conn(srv, epfd, c)
+            end
+            break
+        end
         body_str = ""
         total_req_bytes = body_off
-        if str_contains(te_v, "chunked") == 1
+        if get(fr_chk, 1) == 1
             chk = _prod_decode_chunked_check(p + body_off, body_av)
             if get(chk, 0) == 0
                 // Wait for remaining chunks
@@ -1233,10 +1330,7 @@ fn _prod_process_http srv epfd c: ProdConn
             total_req_bytes = body_off + get(chk, 1)
             body_str = get(chk, 2)
         else
-            cl_s = _prod_extract_hdr_value(hdr_s, "content-length")
-            clen = 0
-            if len(cl_s) > 0
-                clen = _prod_parse_int(cl_s)
+            clen = get(fr_chk, 2)
             if body_av < clen
                 // Wait for full Content-Length body across non-blocking reads
                 break
@@ -1278,13 +1372,14 @@ fn _prod_process_http srv epfd c: ProdConn
         end
 
         if matched == 0
-            // Backwards-compatible default routes (non-blocking EPOLLOUT queued!)
+            // WHY: Preserve built-in /health & /metrics probes, but return RFC 9110 404 Not Found
+            // on all unmatched routes instead of returning a misleading 200 OK.
             if path == "/health"
                 prod_send_json_response_conn(srv, epfd, c, 200, "{\"status\":\"UP\",\"server\":\"Lipi-Production\"}")
             elif path == "/metrics"
                 prod_send_json_response_conn(srv, epfd, c, 200, "{\"uptime_cycles\":1000000,\"status\":200}")
             else
-                prod_send_json_response_conn(srv, epfd, c, 200, "{\"message\":\"Lipi Sovereign Enterprise Server\"}")
+                prod_send_json_response_conn(srv, epfd, c, 404, "{\"error\":\"Not Found\"}")
             end
         end
 
@@ -1314,6 +1409,9 @@ fn prod_server_tick srv timeout_ms
     tls_acc = get(srv, 18)
 
     nfds = syscall(SYS_EPOLL_WAIT, epfd, ev_buf, max_events, timeout_ms, 0, 0)
+    if nfds == (0 - 4)
+        nfds = syscall(SYS_EPOLL_WAIT, epfd, ev_buf, max_events, timeout_ms, 0, 0)
+    end
 
     // Automatic Slowloris / idle keep-alive reaper
     if idle_ms > 0
@@ -1341,9 +1439,19 @@ fn prod_server_tick srv timeout_ms
             // Accept ALL pending connections in the listen backlog
             while 1 == 1
                 client_fd = syscall(SYS_ACCEPT, listen_fd, 0, 0, 0, 0, 0)
+                if client_fd == (0 - 4) continue end
                 if client_fd < 0 break
                 tls_sess = 0
                 if tls_eng != 0 and tls_acc != 0
+                    // Enforce 5s handshake SO_RCVTIMEO/SO_SNDTIMEO before blocking TLS accept
+                    tv_hs = malloc(16)
+                    if tv_hs > 0
+                        mem_write(tv_hs, 0, 5)
+                        mem_write(tv_hs, 8, 0)
+                        syscall(54, client_fd, 1, 20, tv_hs, 16, 0)
+                        syscall(54, client_fd, 1, 21, tv_hs, 16, 0)
+                        free(tv_hs, 16)
+                    end
                     tls_sess = tls_acc(client_fd, tls_eng)
                     if tls_sess == 0
                         syscall(SYS_CLOSE, client_fd, 0, 0, 0, 0, 0)

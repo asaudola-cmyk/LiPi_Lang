@@ -66,12 +66,13 @@ struct Arm64CallReloc
     a64_cr_patch_offset     // Byte index in code_bytes where the 4-byte BL instruction is located
     a64_cr_target_name      // Target function identifier or "__print_int" / "__alloc"
 
-// WHY: Models struct/union schema definitions, union layout flag, and runtime type tag ID
+// WHY: Models struct/union schema definitions, field types, union layout flag, and runtime type tag ID
 struct Arm64StructDef
     sd_name             // Struct/union type name string
     sd_fields           // List of field name strings
     a64_sd_is_union     // 1 if union (all fields share offset 0), 0 if struct
     a64_sd_type_id      // Unique 1..N runtime type tag for sovereign dyn Trait dispatch
+    a64_sd_field_types  // Parallel list of field type strings (e.g. "f64", "u64", "str", "")
 
 // WHY: Return container for ELF64 container synthesis results
 struct Arm64ElfResult
@@ -157,8 +158,11 @@ struct Arm64Synthesizer
     a64_needs_str_helpers // 1 if __int_to_str / __uint_to_str / __str_concat / __tagged_to_str must be emitted
     a64_int_to_str_off    // Byte offset of __int_to_str helper
     a64_uint_to_str_off   // Byte offset of __uint_to_str helper
+    a64_float_to_str_off  // Byte offset of __float_to_str helper
     a64_str_concat_off    // Byte offset of __str_concat helper
     a64_tagged_to_str_off // Byte offset of __tagged_to_str helper
+    a64_needs_uncaught_throw // 1 if __uncaught_throw top-level handler must be emitted
+    a64_uncaught_throw_off   // Byte offset of __uncaught_throw helper
     a64_ssa_lower_res     // Attached SsaLowerResult for direct ARM64 SSA CFG replacement
     a64_ssa_replaced_cnt  // Count of functions replaced directly from SSA CFG
     a64_ssa_replaced_bytes // Total native AAPCS64 bytes emitted directly from SSA CFG
@@ -173,6 +177,14 @@ struct Arm64FnSig
     a64_sig_param_count
     a64_sig_is_variadic
     a64_sig_def_starts
+    a64_sig_ret_type
+
+fn arm64_is_float_type tname
+    if tname == "f64" or tname == "f32" or tname == "float" or tname == "double" or tname == "দশমিক"
+        return 1
+    end
+    return 0
+end
 
 fn arm64_is_uint_type tname
     if tname == "u8" or tname == "byte" or tname == "u16" or tname == "u32" or tname == "u64" or tname == "usize" or tname == "uint"
@@ -366,8 +378,11 @@ fn arm64_synth_new
     s.a64_needs_str_helpers = 0
     s.a64_int_to_str_off = 0
     s.a64_uint_to_str_off = 0
+    s.a64_float_to_str_off = 0
     s.a64_str_concat_off = 0
     s.a64_tagged_to_str_off = 0
+    s.a64_needs_uncaught_throw = 0
+    s.a64_uncaught_throw_off = 0
     s.a64_ssa_lower_res = 0
     s.a64_ssa_replaced_cnt = 0
     s.a64_ssa_replaced_bytes = 0
@@ -591,6 +606,76 @@ fn arm64_emit_lsrv_x s rd rn rm
     // WHY: `lsrv x<rd>, x<rn>, x<rm>` (0x9AC02400) — logical right shift for unsigned types.
     word = 2596283392 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rd & 31)
     arm64_synth_emit32(s, word)
+    return 0
+
+// ── 4b. Hardware IEEE-754 Double-Precision (f64) AArch64 FP Emitters ──────────
+fn arm64_emit_fmov_d_x s dd xn
+    // WHY: `fmov d<dd>, x<xn>` (0x9E670000) — bitwise transfer GP64 -> IEEE-754 f64.
+    arm64_synth_emit32(s, 2657550336 | ((xn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_fmov_x_d s xd dn
+    // WHY: `fmov x<xd>, d<dn>` (0x9E660000) — bitwise transfer IEEE-754 f64 -> GP64.
+    arm64_synth_emit32(s, 2657484800 | ((dn & 31) << 5) | (xd & 31))
+    return 0
+
+fn arm64_emit_scvtf_d_x s dd xn
+    // WHY: `scvtf d<dd>, x<xn>` (0x9E620000) — signed 64-bit integer to f64 conversion.
+    arm64_synth_emit32(s, 2657222656 | ((xn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_ucvtf_d_x s dd xn
+    // WHY: `ucvtf d<dd>, x<xn>` (0x9E630000) — unsigned 64-bit integer to f64 conversion.
+    arm64_synth_emit32(s, 2657288192 | ((xn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_fadd_d s dd dn dm
+    // WHY: `fadd d<dd>, d<dn>, d<dm>` (0x1E602800) — IEEE-754 binary64 addition.
+    arm64_synth_emit32(s, 509618176 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_fsub_d s dd dn dm
+    // WHY: `fsub d<dd>, d<dn>, d<dm>` (0x1E603800) — IEEE-754 binary64 subtraction.
+    arm64_synth_emit32(s, 509622272 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_fmul_d s dd dn dm
+    // WHY: `fmul d<dd>, d<dn>, d<dm>` (0x1E600800) — IEEE-754 binary64 multiplication.
+    arm64_synth_emit32(s, 509609984 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_fdiv_d s dd dn dm
+    // WHY: `fdiv d<dd>, d<dn>, d<dm>` (0x1E601800) — IEEE-754 binary64 division.
+    arm64_synth_emit32(s, 509614080 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_frintz_d s dd dn
+    // WHY: `frintz d<dd>, d<dn>` (0x1E65C000) — round toward zero for IEEE-754 f64 remainder.
+    arm64_synth_emit32(s, 509984768 | ((dn & 31) << 5) | (dd & 31))
+    return 0
+
+fn arm64_emit_fcmp_d s dn dm
+    // WHY: `fcmp d<dn>, d<dm>` (0x1E602000) — sets NZCV (on NaN: N=0,Z=0,C=1,V=1).
+    arm64_synth_emit32(s, 509616128 | ((dm & 31) << 16) | ((dn & 31) << 5))
+    return 0
+
+fn arm64_emit_load_fp_reg s dd xreg expr_t is_u tag_reg
+    // WHY: Moves an f64 bit-pattern directly via FMOV or promotes int/uint/dyn_tagged to f64 via SCVTF/UCVTF.
+    if expr_t == "float"
+        arm64_emit_fmov_d_x(s, dd, xreg)
+    elif expr_t == "dyn_tagged"
+        // Runtime tag == 1 means xreg already holds IEEE-754 f64 bits; otherwise signed int -> scvtf
+        arm64_emit_movz_x(s, 14, 1, 0)
+        arm64_emit_cmp_x(s, tag_reg, 14)
+        arm64_emit_b_cond(s, 0, 3)         // b.eq is_flt (+3 words)
+        arm64_emit_scvtf_d_x(s, dd, xreg)
+        arm64_emit_b(s, 2)                 // b done (+2 words)
+        arm64_emit_fmov_d_x(s, dd, xreg)
+    elif is_u == 1
+        arm64_emit_ucvtf_d_x(s, dd, xreg)
+    else
+        arm64_emit_scvtf_d_x(s, dd, xreg)
+    end
     return 0
 
 fn arm64_emit_cmp_x s rn rm
@@ -1150,6 +1235,7 @@ fn arm64_synth_prescan_decls s toks
                 sp = sp + 1
             end
             flds = list()
+            ftypes = list()
             while sp < n
                 while sp < n and (toks[sp].tok_kind == TOK_NEWLINE() or toks[sp].tok_kind == TOK_SEMI() or toks[sp].tok_kind == TOK_COMMENT_LINE() or toks[sp].tok_kind == TOK_COMMENT_DOC() or toks[sp].tok_kind == TOK_COMMENT_BLOCK())
                     sp = sp + 1
@@ -1179,13 +1265,16 @@ fn arm64_synth_prescan_decls s toks
                 end
                 if fk == TOK_IDENT()
                     push(flds, fx)
+                    ftype_nm = ""
                     sp = sp + 1
                     if sp < n and (toks[sp].tok_kind == TOK_COLON() or (toks[sp].tok_kind != TOK_STR() and toks[sp].tok_text == ":"))
                         sp = sp + 1
                         if sp < n and toks[sp].tok_kind == TOK_IDENT()
+                            ftype_nm = toks[sp].tok_text
                             sp = sp + 1
                         end
                     end
+                    push(ftypes, ftype_nm)
                 else
                     sp = sp + 1
                 end
@@ -1196,6 +1285,7 @@ fn arm64_synth_prescan_decls s toks
                 sd_new.sd_fields = flds
                 sd_new.a64_sd_is_union = is_u
                 sd_new.a64_sd_type_id = s.a64_next_type_id
+                sd_new.a64_sd_field_types = ftypes
                 s.a64_next_type_id = s.a64_next_type_id + 1
                 push(s.synth_structs, sd_new)
             end
@@ -1367,19 +1457,35 @@ fn arm64_synth_prescan_decls s toks
                     end
                     sp_fn = sp_fn + 1
                 end
-                if p_var == 1 or p_cnt > 0
+                sig_ret_t = ""
+                if sp_fn < n and (toks[sp_fn].tok_kind == TOK_ARROW() or (toks[sp_fn].tok_kind != TOK_STR() and toks[sp_fn].tok_text == "->"))
+                    sp_fn = sp_fn + 1
+                    if sp_fn < n and toks[sp_fn].tok_kind == TOK_IDENT()
+                        rt_nm = toks[sp_fn].tok_text
+                        if arm64_is_float_type(rt_nm) == 1
+                            sig_ret_t = "float"
+                        elif arm64_is_uint_type(rt_nm) == 1
+                            sig_ret_t = "uint"
+                        elif rt_nm == "str" or rt_nm == "string"
+                            sig_ret_t = "str"
+                        end
+                        sp_fn = sp_fn + 1
+                    end
+                end
+                if p_var == 1 or p_cnt > 0 or sig_ret_t != ""
                     has_any_def = 0
                     di_s = 0
                     while di_s < def_starts.len()
                         if def_starts[di_s] >= 0 has_any_def = 1 end
                         di_s = di_s + 1
                     end
-                    if p_var == 1 or has_any_def == 1
+                    if p_var == 1 or has_any_def == 1 or sig_ret_t != ""
                         fs = Arm64FnSig()
                         fs.a64_sig_name = sig_full_nm
                         fs.a64_sig_param_count = p_cnt
                         fs.a64_sig_is_variadic = p_var
                         fs.a64_sig_def_starts = def_starts
+                        fs.a64_sig_ret_type = sig_ret_t
                         push(s.a64_fn_sigs, fs)
                     end
                 end
@@ -1434,6 +1540,36 @@ fn arm64_synth_get_field_offset s sname fname
         gi = gi + 1
     push(s.synth_global_fields, fname)
     return (s.synth_global_fields.len() - 1) * 8
+
+fn arm64_synth_get_field_type s sname fname
+    // WHY: Resolves declared field type (e.g. "f64", "u64", "str") so `.field` loads propagate FP/uint types.
+    if sname != ""
+        sdef = arm64_synth_find_struct(s, sname)
+        if sdef != 0 and sdef.a64_sd_field_types != 0
+            f = 0
+            while f < sdef.sd_fields.len() and f < sdef.a64_sd_field_types.len()
+                if sdef.sd_fields[f] == fname
+                    return sdef.a64_sd_field_types[f]
+                end
+                f = f + 1
+            end
+        end
+    end
+    i = 0
+    while i < s.synth_structs.len()
+        cur_def = s.synth_structs[i]
+        if cur_def.a64_sd_field_types != 0
+            f = 0
+            while f < cur_def.sd_fields.len() and f < cur_def.a64_sd_field_types.len()
+                if cur_def.sd_fields[f] == fname and cur_def.a64_sd_field_types[f] != ""
+                    return cur_def.a64_sd_field_types[f]
+                end
+                f = f + 1
+            end
+        end
+        i = i + 1
+    end
+    return ""
 
 fn arm64_synth_lookup_var s name
     // WHY: Finds SP-relative stack offset for variable identifier. Returns 0 if not found.

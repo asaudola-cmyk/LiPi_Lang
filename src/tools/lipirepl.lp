@@ -108,8 +108,9 @@ fn রেপল_স্ট্যাক
     say "  শীর্ষ ৪টি ফ্রেম কোয়াডওয়ার্ড:"
     i = 0
     while i < 4
+        // WHY: mem_word_read takes a byte offset (i * 8), not a qword index.
         off = i * 8
-        val = mem_word_read(rsp, i)
+        val = mem_word_read(rsp, off)
         say "  [%rsp +" + off + "] @ 0x" + qword_to_hex(rsp + off) + " = 0x" + qword_to_hex(val) + " (" + val + ")"
         i = i + 1
     say ""
@@ -291,7 +292,7 @@ fn repl_spawn_exec cmd_path arg1 arg2 arg3
     raw_status = mem_word_read(st, 0)
     exit_code = (raw_status / 256) % 256
 
-    syscall(11, argv, 64, 0, 0, 0, 0)
+    // WHY: Unmap argv exactly once (double sys_munmap could unmap a reused adjacent mapping).
     syscall(11, argv, 64, 0, 0, 0, 0)
     syscall(11, env, 32, 0, 0, 0, 0)
     syscall(11, st, 8, 0, 0, 0, 0)
@@ -323,18 +324,93 @@ fn _repl_trim s
         b = b - 1
     return str_sub(s, a, b)
 
+// WHY: Persistent REPL session accumulators shared across interactive loop and :eval commands
+// so variables, structs, and functions remain live across all subsequent REPL inputs.
+global g_repl_defs = ""
+global g_repl_body = ""
+
 fn _repl_is_def_header t
-    if starts_with(t, "fn ") or starts_with(t, "@fn ") or starts_with(t, "কাজ ") or starts_with(t, "struct ") or starts_with(t, "@struct ") or starts_with(t, "গঠন ") or starts_with(t, "কাঠামো ") or starts_with(t, "import ") or starts_with(t, "include ")
+    if starts_with(t, "pub fn ") or starts_with(t, "async fn ") or starts_with(t, "pub async fn ") or starts_with(t, "fn ") or starts_with(t, "@fn ") or starts_with(t, "কাজ ") or starts_with(t, "struct ") or starts_with(t, "@struct ") or starts_with(t, "enum ") or starts_with(t, "গঠন ") or starts_with(t, "কাঠামো ") or starts_with(t, "import ") or starts_with(t, "include ")
         return 1
     return 0
+
+// WHY: Detects true assignment statements (`let x = ...`, `x = (a == b)`, `a += 1`, `arr[0] = 2`)
+// by checking for a top-level assignment `=` (not `==`/`!=`/`<=`/`>=`/`=>`) outside parens/quotes.
+fn _repl_is_assignment t
+    if starts_with(t, "let ") or starts_with(t, "@let ") or starts_with(t, "চলক ") or starts_with(t, "ধরি ")
+        return 1
+    n = len(t)
+    pdepth = 0
+    in_dq = 0
+    in_sq = 0
+    i = 0
+    while i < n
+        c = char_at(t, i)
+        if in_dq == 1
+            if c == "\\" and i + 1 < n
+                i = i + 2
+                continue
+            if c == "\"" in_dq = 0
+            i = i + 1
+            continue
+        if in_sq == 1
+            if c == "\\" and i + 1 < n
+                i = i + 2
+                continue
+            if c == "'" in_sq = 0
+            i = i + 1
+            continue
+        if c == "\""
+            in_dq = 1
+        elif c == "'"
+            in_sq = 1
+        elif c == "(" or c == "[" or c == "{"
+            pdepth = pdepth + 1
+        elif c == ")" or c == "]" or c == "}"
+            if pdepth > 0 pdepth = pdepth - 1
+        elif c == "=" and pdepth == 0
+            prev_c = ""
+            next_c = ""
+            if i > 0 prev_c = char_at(t, i - 1)
+            if i + 1 < n next_c = char_at(t, i + 1)
+            if prev_c != "=" and prev_c != "!" and prev_c != "<" and prev_c != ">" and next_c != "=" and next_c != ">"
+                return 1
+        i = i + 1
+    return 0
+
+// WHY: Prefixes every line of a multi-line REPL statement block with `prefix` so its `end`
+// stays nested inside `@fn _repl_entry()` instead of closing the wrapper function at column 0.
+fn _repl_indent_block blk prefix
+    n = len(blk)
+    out = ""
+    ls = 0
+    i = 0
+    while i <= n
+        if i == n or char_at(blk, i) == "\n"
+            line = str_sub(blk, ls, i)
+            if len(_repl_trim(line)) > 0
+                out = out + prefix + line + "\n"
+            ls = i + 1
+        i = i + 1
+    return out
 
 fn _repl_block_delta t
     if t == "@end" or t == "end" or t == "শেষ" or t == "}"
         return 0 - 1
-    if starts_with(t, "@fn ") or starts_with(t, "@struct ") or starts_with(t, "@if ") or starts_with(t, "@while ") or starts_with(t, "@for ")
-        if contains(t, "@end") == 0
-            return 1
+    if contains(t, " @end") == 1 or contains(t, " end") == 1 or contains(t, " শেষ") == 1
+        return 0
     if len(t) > 0 and char_at(t, len(t) - 1) == "{"
+        return 1
+    if contains(t, "{") == 1 and contains(t, "}") == 1
+        return 0
+    if starts_with(t, "@fn ") or starts_with(t, "@struct ") or starts_with(t, "@if ") or starts_with(t, "@while ") or starts_with(t, "@for ")
+        return 1
+    if starts_with(t, "fn ") or starts_with(t, "pub fn ") or starts_with(t, "async fn ") or starts_with(t, "pub async fn ") or starts_with(t, "কাজ ")
+        // Single-line `fn f x = expr` needs no block terminator; multi-line `fn f x` waits for `end`
+        if index_of(t, "=") >= 0 and index_of(t, "(") < 0
+            return 0
+        return 1
+    if starts_with(t, "struct ") or starts_with(t, "enum ") or starts_with(t, "if ") or starts_with(t, "while ") or starts_with(t, "for ")
         return 1
     return 0
 
@@ -363,19 +439,28 @@ fn _repl_run_program defs_str body_str eval_tail is_def
     syscall(87, tmp_src, 0, 0, 0, 0, 0)
     return 0
 
-// WHY: Executes general LiPi expressions, statements, and prints dynamically with session history.
+// WHY: Executes general LiPi expressions, statements, and definitions with full persistent
+// g_repl_defs & g_repl_body session state wired in.
 fn repl_dynamic_eval cmd
     trimmed = _repl_trim(cmd)
     if len(trimmed) == 0 return 1
     is_d = _repl_is_def_header(trimmed)
     tail = ""
+    is_assign = 0
     if is_d == 1
         tail = trimmed + "\n"
-    elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "print(") or starts_with(trimmed, "println(") or starts_with(trimmed, "for ") or starts_with(trimmed, "@for ") or starts_with(trimmed, "while ") or starts_with(trimmed, "@while ") or starts_with(trimmed, "if ") or starts_with(trimmed, "@if ") or starts_with(trimmed, "যদি ") or index_of(trimmed, "=") >= 0
+    elif _repl_is_assignment(trimmed) == 1
+        tail = "  " + trimmed + "\n"
+        is_assign = 1
+    elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "print(") or starts_with(trimmed, "println(") or starts_with(trimmed, "for ") or starts_with(trimmed, "@for ") or starts_with(trimmed, "while ") or starts_with(trimmed, "@while ") or starts_with(trimmed, "if ") or starts_with(trimmed, "@if ") or starts_with(trimmed, "যদি ")
         tail = "  " + trimmed + "\n"
     else
         tail = "  say " + trimmed + "\n"
-    if _repl_run_program("", "", tail, is_d) == 1
+    if _repl_run_program(g_repl_defs, g_repl_body, tail, is_d) == 1
+        if is_d == 1
+            g_repl_defs = g_repl_defs + tail
+        elif is_assign == 1
+            g_repl_body = g_repl_body + tail
         return 1
     say "  ❌ সংকলন বা মূল্যায়ন ত্রুটি: " + cmd
     return 1
@@ -460,8 +545,8 @@ fn main
             return 0
 
     প্রিন্ট_রেপল_ব্যানার()
-    session_defs = ""
-    session_body = ""
+    g_repl_defs = ""
+    g_repl_body = ""
     pending_buf = ""
     pending_depth = 0
     running = 1
@@ -470,8 +555,8 @@ fn main
         trimmed = _repl_trim(input_line)
         if pending_depth == 0
             if trimmed == ":clear" or trimmed == ":reset"
-                session_defs = ""
-                session_body = ""
+                g_repl_defs = ""
+                g_repl_body = ""
                 say "✔ REPL সেশন রিসেট সম্পন্ন।"
                 continue
             if trimmed == ":exit" or trimmed == ":quit" or trimmed == ":বিদায়" or trimmed == ":q"
@@ -485,22 +570,29 @@ fn main
 
         d = _repl_block_delta(trimmed)
         if pending_depth > 0 or d > 0
-            pending_buf = pending_buf + input_line + "\n"
+            // WHY: Auto-indent unindented interior lines typed interactively inside multi-line blocks
+            // so LiPi's indentation-aware parser keeps body lines inside the enclosing fn/if/while.
+            add_line = input_line
+            if pending_depth > 0 and d >= 0 and len(trimmed) > 0 and char_at(input_line, 0) != " " and char_at(input_line, 0) != "\t"
+                add_line = "    " + input_line
+            end
+            pending_buf = pending_buf + add_line + "\n"
             pending_depth = pending_depth + d
             if pending_depth > 0
                 continue
             trimmed_blk = _repl_trim(pending_buf)
             is_d = _repl_is_def_header(trimmed_blk)
             if is_d == 1
-                cand_defs = session_defs + pending_buf + "\n"
+                cand_defs = g_repl_defs + pending_buf + "\n"
                 if _repl_run_program(cand_defs, "", "", 1) == 1
-                    session_defs = cand_defs
+                    g_repl_defs = cand_defs
                     say "✔ সংজ্ঞা সংরক্ষিত।"
                 else
                     say "  ❌ সংকলন ত্রুটি"
             else
-                if _repl_run_program(session_defs, session_body, "  " + pending_buf + "\n", 0) == 1
-                    session_body = session_body + "  " + pending_buf + "\n"
+                ind_blk = _repl_indent_block(pending_buf, "  ")
+                if _repl_run_program(g_repl_defs, g_repl_body, ind_blk, 0) == 1
+                    g_repl_body = g_repl_body + ind_blk
                 else
                     say "  ❌ সংকলন বা মূল্যায়ন ত্রুটি"
             pending_buf = ""
@@ -508,23 +600,23 @@ fn main
             continue
 
         if _repl_is_def_header(trimmed) == 1
-            cand_defs = session_defs + trimmed + "\n"
+            cand_defs = g_repl_defs + trimmed + "\n"
             if _repl_run_program(cand_defs, "", "", 1) == 1
-                session_defs = cand_defs
+                g_repl_defs = cand_defs
                 say "✔ সংজ্ঞা সংরক্ষিত।"
             else
                 say "  ❌ সংকলন ত্রুটি: " + trimmed
-        elif starts_with(trimmed, "let ") or starts_with(trimmed, "@let ") or (index_of(trimmed, "=") >= 0 and index_of(trimmed, "==") < 0 and index_of(trimmed, "!=") < 0 and index_of(trimmed, "<=") < 0 and index_of(trimmed, ">=") < 0)
-            if _repl_run_program(session_defs, session_body, "  " + trimmed + "\n", 0) == 1
-                session_body = session_body + "  " + trimmed + "\n"
+        elif _repl_is_assignment(trimmed) == 1
+            if _repl_run_program(g_repl_defs, g_repl_body, "  " + trimmed + "\n", 0) == 1
+                g_repl_body = g_repl_body + "  " + trimmed + "\n"
             else
                 say "  ❌ সংকলন ত্রুটি: " + trimmed
         elif starts_with(trimmed, "say ") or starts_with(trimmed, "বলো ") or starts_with(trimmed, "println(") or starts_with(trimmed, "print(")
-            if _repl_run_program(session_defs, session_body, "  " + trimmed + "\n", 0) != 1
+            if _repl_run_program(g_repl_defs, g_repl_body, "  " + trimmed + "\n", 0) != 1
                 say "  ❌ মূল্যায়ন ত্রুটি: " + trimmed
         else
-            if len(session_defs) > 0 or len(session_body) > 0
-                if _repl_run_program(session_defs, session_body, "  say (" + trimmed + ")\n", 0) != 1
+            if len(g_repl_defs) > 0 or len(g_repl_body) > 0
+                if _repl_run_program(g_repl_defs, g_repl_body, "  say (" + trimmed + ")\n", 0) != 1
                     say "  ❌ মূল্যায়ন ত্রুটি: " + trimmed
             else
                 repl_eval_expr_string(trimmed)

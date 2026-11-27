@@ -414,6 +414,9 @@ fn x86_synth_compile_expr_mul s toks pos_box
                             // Zero divisor guard: xor eax, eax
                             x86_synth_emit_byte(s, 49)
                             x86_synth_emit_byte(s, 192)
+                        elif const_val == -1
+                            // WHY: Signed x % -1 is always 0; avoids hardware #DE SIGFPE on INT64_MIN % -1.
+                            x86_synth_emit_bytes(s, [49, 192]) // xor eax, eax
                         else
                             // Exact signed hardware modulo: mov rcx, const_val; cqo; idiv rcx; mov rax, rdx
                             x86_synth_emit_byte(s, 72)

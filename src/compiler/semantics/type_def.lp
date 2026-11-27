@@ -234,6 +234,15 @@ import "utso/string"
   return type_register_custom(reg, ty)
 @end
 
+@fn type_make_dict(reg, key_type_id, val_type_id)
+  // WHY: Represents parameterized `dict<K, V>` / `map<K, V>` types using nominal struct kind `"dict"`
+  // with `ty_ret_type_id = K` and `ty_elem_type_id = V` for full `--strict-types` key/value soundness.
+  ty = type_def_new(0, TYPE_KIND_STRUCT(), "dict", 16, 8)
+  ty.ty_ret_type_id = key_type_id
+  ty.ty_elem_type_id = val_type_id
+  return type_register_custom(reg, ty)
+@end
+
 @fn type_make_array(reg, elem_type_id, fixed_len)
   elem_t = type_registry_get(reg, elem_type_id)
   e_size = 8
@@ -375,6 +384,15 @@ import "utso/string"
   @if ty.ty_kind == TYPE_KIND_NEVER()  return "never"  @end
 
   @if ty.ty_kind == TYPE_KIND_STRUCT()
+    @if str_eq(ty.ty_name, "dict") == 1 && (ty.ty_ret_type_id > 0 || ty.ty_elem_type_id > 0)
+      k_id = ty.ty_ret_type_id
+      v_id = ty.ty_elem_type_id
+      @if k_id <= 0 k_id = TYPE_ID_ANY() @end
+      @if v_id <= 0 v_id = TYPE_ID_ANY() @end
+      @if k_id != TYPE_ID_ANY() || v_id != TYPE_ID_ANY()
+        return "dict<" + type_to_string(reg, k_id) + ", " + type_to_string(reg, v_id) + ">"
+      @end
+    @end
     return ty.ty_name
   @end
 

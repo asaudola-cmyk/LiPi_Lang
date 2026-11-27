@@ -1,4 +1,8 @@
 @! ============================================================================
+@! @deprecated Simulation-only in-memory IPC model (FIFOs/SHM/sockets/semaphores in arrays).
+@! WHY: Models IPC primitives inside a single process rather than using kernel syscalls.
+@! For real kernel IPC use `utso/os/shm.lp`, `utso/os/wayland.lp`, `utso/os/pty.lp`, or `utso/core/sync.lp`.
+@! ============================================================================
 @! LIPI INTER-PROCESS COMMUNICATION (IPC) — utso/os/ipc.lp
 @! 100% Written in Pure Lipi Language — Zero Foreign / Zero libc Dependencies
 @! Features: Named Pipes (FIFO), Shared Memory, Unix Domain Sockets (Stream/Dgram),

@@ -274,7 +274,8 @@ fn _lsp_utf16_col_to_byte text line_start line_end target_u16
     return p
 
 // ─── Sovereign Diagnostics & Symbol Collector ─────────────────────────────────
-// WHY: Validates literal quote termination, brackets/parens/braces balance, and unmatched block closers with exact UTF-16 LSP columns.
+// WHY: Validates literal quote termination (double & single quotes), brackets/parens/braces balance
+// while cleanly skipping //, #, @! line comments and /* ... */ block comments with exact UTF-16 LSP columns.
 fn lsp_compute_diagnostics text
     n = len(text)
     if n == 0
@@ -285,8 +286,12 @@ fn lsp_compute_diagnostics text
     line = 0
     line_start = 0
     in_str = 0
+    in_squote = 0
     str_start_byte = 0
     in_comment = 0
+    in_block_comment = 0
+    blk_line = 0
+    blk_col = 0
     paren_depth = 0
     paren_line = 0
     paren_col = 0
@@ -302,6 +307,17 @@ fn lsp_compute_diagnostics text
         b = ord(char_at(text, i)) & 255
         step = _lsp_utf8_step_bytes(b)
         c = char_at(text, i)
+        if in_block_comment == 1
+            if c == "*" and i + 1 < n and char_at(text, i + 1) == "/"
+                in_block_comment = 0
+                i = i + 2
+                continue
+            if c == "\n"
+                line = line + 1
+                line_start = i + 1
+            i = i + step
+            continue
+
         if in_comment == 1
             if c == "\n"
                 in_comment = 0
@@ -342,12 +358,65 @@ fn lsp_compute_diagnostics text
             i = i + step
             continue
 
-        if c == "/" and i + 1 < n and char_at(text, i + 1) == "/"
+        if in_squote == 1
+            if c == "\\" and i + 1 < n
+                nx = char_at(text, i + 1)
+                if nx == "\n"
+                    sc_u16 = _lsp_byte_col_to_utf16(text, line_start, str_start_byte)
+                    ec_u16 = _lsp_byte_col_to_utf16(text, line_start, i + 1)
+                    if diag_cnt > 0 diags = diags + ","
+                    diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated character literal\"}"
+                    diag_cnt = diag_cnt + 1
+                    in_squote = 0
+                    line = line + 1
+                    line_start = i + 2
+                i = i + 2
+                continue
+            if c == "'"
+                in_squote = 0
+                i = i + 1
+                continue
+            if c == "\n"
+                sc_u16 = _lsp_byte_col_to_utf16(text, line_start, str_start_byte)
+                ec_u16 = _lsp_byte_col_to_utf16(text, line_start, i)
+                if diag_cnt > 0 diags = diags + ","
+                diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated character literal\"}"
+                diag_cnt = diag_cnt + 1
+                in_squote = 0
+                line = line + 1
+                line_start = i + 1
+                i = i + 1
+                continue
+            i = i + step
+            continue
+
+        if c == "/" and i + 1 < n
+            nc = char_at(text, i + 1)
+            if nc == "/"
+                in_comment = 1
+                i = i + 2
+                continue
+            elif nc == "*"
+                in_block_comment = 1
+                blk_line = line
+                blk_col = _lsp_byte_col_to_utf16(text, line_start, i)
+                i = i + 2
+                continue
+        if c == "#"
+            in_comment = 1
+            i = i + 1
+            continue
+        if c == "@" and i + 1 < n and char_at(text, i + 1) == "!"
             in_comment = 1
             i = i + 2
             continue
         if c == "\""
             in_str = 1
+            str_start_byte = i
+            i = i + 1
+            continue
+        if c == "'"
+            in_squote = 1
             str_start_byte = i
             i = i + 1
             continue
@@ -403,6 +472,19 @@ fn lsp_compute_diagnostics text
         diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated string literal at EOF\"}"
         diag_cnt = diag_cnt + 1
 
+    if in_squote == 1
+        sc_u16 = _lsp_byte_col_to_utf16(text, line_start, str_start_byte)
+        ec_u16 = _lsp_byte_col_to_utf16(text, line_start, n)
+        if diag_cnt > 0 diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(sc_u16) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(ec_u16) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated character literal at EOF\"}"
+        diag_cnt = diag_cnt + 1
+
+    if in_block_comment == 1
+        // WHY: Report unclosed /* ... block comments at EOF instead of silently swallowing the rest of the file.
+        if diag_cnt > 0 diags = diags + ","
+        diags = diags + "{\"range\":{\"start\":{\"line\":" + str(blk_line) + ",\"character\":" + str(blk_col) + "},\"end\":{\"line\":" + str(blk_line) + ",\"character\":" + str(blk_col + 2) + "}},\"severity\":1,\"source\":\"lipilsp\",\"message\":\"Unterminated block comment '/*'\"}"
+        diag_cnt = diag_cnt + 1
+
     if paren_depth > 0
         if diag_cnt > 0 diags = diags + ","
         diags = diags + "{\"range\":{\"start\":{\"line\":" + str(paren_line) + ",\"character\":" + str(paren_col) + "},\"end\":{\"line\":" + str(paren_line) + ",\"character\":" + str(paren_col + 1) + "}},\"severity\":2,\"source\":\"lipilsp\",\"message\":\"Unclosed opening parenthesis '('\"}"
@@ -431,7 +513,172 @@ fn lsp_sub_eq s start pat
         j = j + 1
     return 1
 
-// WHY: Extracts function, struct, and enum DocumentSymbol entries for outline view & breadcrumbs.
+// WHY: Parses a single declaration header line (stripping optional pub/async modifiers)
+// and returns [kind_code, comp_kind, kind_label, name, name_byte_offset_from_line_start] or empty list.
+fn _lsp_parse_decl_on_line text line_start eol
+    p = line_start
+    while p < eol and (char_at(text, p) == " " or char_at(text, p) == "\t")
+        p = p + 1
+    if p >= eol
+        return list()
+    if lsp_sub_eq(text, p, "pub ") == 1
+        p = p + 4
+        while p < eol and (char_at(text, p) == " " or char_at(text, p) == "\t")
+            p = p + 1
+    if lsp_sub_eq(text, p, "async ") == 1
+        p = p + 6
+        while p < eol and (char_at(text, p) == " " or char_at(text, p) == "\t")
+            p = p + 1
+
+    kind = 0
+    comp_kind = 0
+    klabel = ""
+    kw_len = 0
+    if lsp_sub_eq(text, p, "fn ") == 1
+        kind = 12
+        comp_kind = 3
+        klabel = "fn"
+        kw_len = 3
+    elif lsp_sub_eq(text, p, "@fn ") == 1
+        kind = 12
+        comp_kind = 3
+        klabel = "fn"
+        kw_len = 4
+    elif lsp_sub_eq(text, p, "কাজ ") == 1
+        kind = 12
+        comp_kind = 3
+        klabel = "fn"
+        kw_len = len("কাজ ")
+    elif lsp_sub_eq(text, p, "struct ") == 1
+        kind = 23
+        comp_kind = 22
+        klabel = "struct"
+        kw_len = 7
+    elif lsp_sub_eq(text, p, "@struct ") == 1
+        kind = 23
+        comp_kind = 22
+        klabel = "struct"
+        kw_len = 8
+    elif lsp_sub_eq(text, p, "গঠন ") == 1
+        kind = 23
+        comp_kind = 22
+        klabel = "struct"
+        kw_len = len("গঠন ")
+    elif lsp_sub_eq(text, p, "কাঠামো ") == 1
+        kind = 23
+        comp_kind = 22
+        klabel = "struct"
+        kw_len = len("কাঠামো ")
+    elif lsp_sub_eq(text, p, "enum ") == 1
+        kind = 10
+        comp_kind = 13
+        klabel = "enum"
+        kw_len = 5
+    elif lsp_sub_eq(text, p, "@enum ") == 1
+        kind = 10
+        comp_kind = 13
+        klabel = "enum"
+        kw_len = 6
+    elif lsp_sub_eq(text, p, "trait ") == 1
+        kind = 11
+        comp_kind = 8
+        klabel = "trait"
+        kw_len = 6
+    elif lsp_sub_eq(text, p, "@trait ") == 1
+        kind = 11
+        comp_kind = 8
+        klabel = "trait"
+        kw_len = 7
+    elif lsp_sub_eq(text, p, "union ") == 1
+        kind = 23
+        comp_kind = 22
+        klabel = "union"
+        kw_len = 6
+    elif lsp_sub_eq(text, p, "impl ") == 1
+        kind = 5
+        comp_kind = 7
+        klabel = "impl"
+        kw_len = 5
+    elif lsp_sub_eq(text, p, "@impl ") == 1
+        kind = 5
+        comp_kind = 7
+        klabel = "impl"
+        kw_len = 6
+
+    if kind == 0
+        return list()
+
+    ns = p + kw_len
+    while ns < eol and (char_at(text, ns) == " " or char_at(text, ns) == "\t")
+        ns = ns + 1
+    ne = ns
+    name = ""
+    while ne < eol
+        ch = char_at(text, ne)
+        if ch == " " or ch == "\t" or ch == "(" or ch == ":" or ch == "=" or ch == "\r" or ch == "<" or ch == "{"
+            break
+        name = name + ch
+        ne = ne + 1
+    if len(name) == 0
+        return list()
+    res = list()
+    push(res, kind)
+    push(res, comp_kind)
+    push(res, klabel)
+    push(res, name)
+    push(res, ns)
+    push(res, ne)
+    return res
+
+// WHY: Advances multi-line /* ... */ block-comment state across a single line [line_start, eol)
+// while respecting string/char literals and //, #, @! line comments.
+fn _lsp_update_block_comment text line_start eol in_blk
+    st = in_blk
+    in_dq = 0
+    in_sq = 0
+    i = line_start
+    while i < eol
+        c = char_at(text, i)
+        if st == 1
+            if c == "*" and i + 1 < eol and char_at(text, i + 1) == "/"
+                st = 0
+                i = i + 2
+                continue
+            i = i + 1
+            continue
+        if in_dq == 1
+            if c == "\\" and i + 1 < eol
+                i = i + 2
+                continue
+            if c == "\"" in_dq = 0
+            i = i + 1
+            continue
+        if in_sq == 1
+            if c == "\\" and i + 1 < eol
+                i = i + 2
+                continue
+            if c == "'" in_sq = 0
+            i = i + 1
+            continue
+        if c == "\""
+            in_dq = 1
+        elif c == "'"
+            in_sq = 1
+        elif c == "/" and i + 1 < eol
+            nc = char_at(text, i + 1)
+            if nc == "/" break
+            elif nc == "*"
+                st = 1
+                i = i + 2
+                continue
+        elif c == "#"
+            break
+        elif c == "@" and i + 1 < eol and char_at(text, i + 1) == "!"
+            break
+        i = i + 1
+    return st
+
+// WHY: Extracts function, struct, enum, trait, union, and impl DocumentSymbol entries for outline view & breadcrumbs.
 fn lsp_collect_document_symbols text
     n = len(text)
     if n == 0
@@ -440,58 +687,20 @@ fn lsp_collect_document_symbols text
     sym_cnt = 0
     line = 0
     pos = 0
+    in_blk = 0
 
     while pos < n
         eol = pos
         while eol < n and char_at(text, eol) != "\n"
             eol = eol + 1
-        line_len = eol - pos
 
-        p = pos
-        while p < eol and (char_at(text, p) == " " or char_at(text, p) == "\t")
-            p = p + 1
-
-        kind = 0
-        kw_len = 0
-        if p < eol
-            if lsp_sub_eq(text, p, "fn ") == 1
-                kind = 12
-                kw_len = 3
-            elif lsp_sub_eq(text, p, "@fn ") == 1
-                kind = 12
-                kw_len = 4
-            elif lsp_sub_eq(text, p, "কাজ ") == 1
-                kind = 12
-                kw_len = len("কাজ ")
-            elif lsp_sub_eq(text, p, "struct ") == 1
-                kind = 23
-                kw_len = 7
-            elif lsp_sub_eq(text, p, "@struct ") == 1
-                kind = 23
-                kw_len = 8
-            elif lsp_sub_eq(text, p, "গঠন ") == 1
-                kind = 23
-                kw_len = len("গঠন ")
-            elif lsp_sub_eq(text, p, "কাঠামো ") == 1
-                kind = 23
-                kw_len = len("কাঠামো ")
-            elif lsp_sub_eq(text, p, "enum ") == 1
-                kind = 10
-                kw_len = 5
-
-        if kind > 0
-            ns = p + kw_len
-            while ns < eol and (char_at(text, ns) == " " or char_at(text, ns) == "\t")
-                ns = ns + 1
-            ne = ns
-            name = ""
-            while ne < eol
-                ch = char_at(text, ne)
-                if ch == " " or ch == "\t" or ch == "(" or ch == ":" or ch == "=" or ch == "\r"
-                    break
-                name = name + ch
-                ne = ne + 1
-            if len(name) > 0
+        if in_blk == 0
+            decl = _lsp_parse_decl_on_line(text, pos, eol)
+            if len(decl) >= 6
+                kind = get(decl, 0)
+                name = get(decl, 3)
+                ns = get(decl, 4)
+                ne = get(decl, 5)
                 col_s = _lsp_byte_col_to_utf16(text, pos, ns)
                 col_e = _lsp_byte_col_to_utf16(text, pos, ne)
                 line_u16_end = _lsp_byte_col_to_utf16(text, pos, eol)
@@ -501,11 +710,75 @@ fn lsp_collect_document_symbols text
                 out = out + ",\"range\":{\"start\":{\"line\":" + str(line) + ",\"character\":0},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(line_u16_end) + "}}"
                 out = out + ",\"selectionRange\":{\"start\":{\"line\":" + str(line) + ",\"character\":" + str(col_s) + "},\"end\":{\"line\":" + str(line) + ",\"character\":" + str(col_e) + "}}}"
                 sym_cnt = sym_cnt + 1
+        in_blk = _lsp_update_block_comment(text, pos, eol, in_blk)
 
         line = line + 1
         pos = eol + 1
 
     return out + "]"
+
+// WHY: Parses live document-defined symbols (fn, struct, enum, trait) to enrich completion & hover.
+fn _lsp_build_doc_completion_items text
+    n = len(text)
+    if n == 0
+        return ""
+    out = ""
+    seen = list()
+    line = 0
+    pos = 0
+    in_blk = 0
+    while pos < n
+        eol = pos
+        while eol < n and char_at(text, eol) != "\n"
+            eol = eol + 1
+        if in_blk == 0
+            decl = _lsp_parse_decl_on_line(text, pos, eol)
+            if len(decl) >= 6
+                comp_kind = get(decl, 1)
+                klabel = get(decl, 2)
+                name = get(decl, 3)
+                if klabel == "fn" or klabel == "struct" or klabel == "enum" or klabel == "trait"
+                    dup = 0
+                    si = 0
+                    while si < len(seen)
+                        if get(seen, si) == name
+                            dup = 1
+                            break
+                        si = si + 1
+                    if dup == 0
+                        push(seen, name)
+                        sig_line = str_trim(str_sub(text, pos, eol))
+                        if len(out) > 0
+                            out = out + ","
+                        out = out + "{\"label\":\"" + json_escape(name) + "\",\"kind\":" + str(comp_kind) + ",\"detail\":\"" + json_escape(sig_line) + "\",\"documentation\":\"" + json_escape("Document symbol (" + klabel + ") defined at line " + str(line + 1)) + "\"}"
+        in_blk = _lsp_update_block_comment(text, pos, eol, in_blk)
+        line = line + 1
+        pos = eol + 1
+    return out
+
+fn _lsp_find_doc_symbol_hover text word
+    if len(text) == 0 or len(word) == 0
+        return ""
+    n = len(text)
+    line = 0
+    pos = 0
+    in_blk = 0
+    while pos < n
+        eol = pos
+        while eol < n and char_at(text, eol) != "\n"
+            eol = eol + 1
+        if in_blk == 0
+            decl = _lsp_parse_decl_on_line(text, pos, eol)
+            if len(decl) >= 6
+                klabel = get(decl, 2)
+                name = get(decl, 3)
+                if name == word
+                    sig_line = str_trim(str_sub(text, pos, eol))
+                    return "### `" + klabel + " " + name + "` (Line " + str(line + 1) + ")\n```lipi\n" + sig_line + "\n```"
+        in_blk = _lsp_update_block_comment(text, pos, eol, in_blk)
+        line = line + 1
+        pos = eol + 1
+    return ""
 
 // ─── Header Parser ────────────────────────────────────────────────────────────
 // WHY: Reads "Content-Length: N\r\n" and extracts byte count for JSON body framing.
@@ -629,7 +902,8 @@ fn workspace_close_file tracked_uris tracked_texts uri
     return 0
 
 // ─── Token & Word Extraction ──────────────────────────────────────────────────
-// WHY: Identifies the token under the editor cursor for hover and completion lookups.
+// WHY: Identifies identifier characters under the editor cursor; excludes '.' and '/'
+// so member access (obj.field) and path separators isolate clean identifier tokens.
 fn is_token_char ch
     code = ord(ch)
     if code > 127 return 1 // Non-ASCII (UTF-8 Bengali characters)
@@ -637,8 +911,6 @@ fn is_token_char ch
     if code >= 65 and code <= 90 return 1 // A-Z
     if code >= 48 and code <= 57 return 1 // 0-9
     if code == 95 return 1 // _
-    if code == 47 return 1 // /
-    if code == 46 return 1 // .
     return 0
 
 fn get_word_at_pos text target_line target_char
@@ -676,13 +948,19 @@ fn get_word_at_pos text target_line target_char
     return str_sub(text, w_start, w_end)
 
 // ─── Symbol Definition Locator ────────────────────────────────────────────────
-// WHY: Enables textDocument/definition (Go-to-Definition) for LSP clients (e.g. VS Code).
-// Scans lines in document for function, struct, or variable bindings matching the queried identifier.
-fn find_symbol_definition_in_text text symbol
-    if len(symbol) == 0 return -1
+// WHY: Enables textDocument/definition (Go-to-Definition) with exact UTF-16 columns for
+// pub fn, async fn, pub async fn, fn, struct, enum, trait, impl, union, let, global, and bindings.
+fn find_symbol_definition_loc text symbol
+    not_found = list()
+    push(not_found, 0 - 1)
+    push(not_found, 0)
+    push(not_found, 0)
+    if len(symbol) == 0 return not_found
     tlen = len(text)
+    s_len = len(symbol)
     cur_line = 0
     line_start = 0
+    in_blk = 0
     i = 0
     while i <= tlen
         is_eol = 0
@@ -690,67 +968,81 @@ fn find_symbol_definition_in_text text symbol
             is_eol = 1
         elif char_at(text, i) == "\n"
             is_eol = 1
-            
-        if is_eol == 1
-            line = str_sub(text, line_start, i)
-            trimmed = str_trim(line)
-            t_len = len(trimmed)
-            s_len = len(symbol)
-            matched = 0
-            
-            // 1. Function declarations: fn, @fn, কাজ
-            if starts_with_keyword(trimmed, "fn") == 1
-                rem = str_trim(str_sub(trimmed, 2, t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            elif starts_with_keyword(trimmed, "@fn") == 1
-                rem = str_trim(str_sub(trimmed, 3, t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            elif starts_with_keyword(trimmed, "কাজ") == 1
-                rem = str_trim(str_sub(trimmed, len("কাজ"), t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            // 2. Struct declarations: struct, @struct, কাঠামো, দল
-            elif starts_with_keyword(trimmed, "struct") == 1
-                rem = str_trim(str_sub(trimmed, 6, t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            elif starts_with_keyword(trimmed, "@struct") == 1
-                rem = str_trim(str_sub(trimmed, 7, t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            elif starts_with_keyword(trimmed, "কাঠামো") == 1
-                rem = str_trim(str_sub(trimmed, len("কাঠামো"), t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            // 3. Variable declarations: let, @let, চলক, ধরি
-            elif starts_with_keyword(trimmed, "let") == 1
-                rem = str_trim(str_sub(trimmed, 3, t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            elif starts_with_keyword(trimmed, "@let") == 1
-                rem = str_trim(str_sub(trimmed, 4, t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            elif starts_with_keyword(trimmed, "চলক") == 1
-                rem = str_trim(str_sub(trimmed, len("চলক"), t_len))
-                if starts_with_keyword(rem, symbol) == 1
-                    matched = 1
-            // 4. Assignment bindings: symbol = ...
-            elif starts_with_keyword(trimmed, symbol) == 1
-                rem = str_trim(str_sub(trimmed, s_len, t_len))
-                if len(rem) > 0 and char_at(rem, 0) == "="
-                    matched = 1
 
-            if matched == 1
-                return cur_line
-                
+        if is_eol == 1
+            if in_blk == 0
+                // 1. Check structured declarations (pub/async fn, struct, enum, trait, union, impl)
+                decl = _lsp_parse_decl_on_line(text, line_start, i)
+                if len(decl) >= 6
+                    dname = get(decl, 3)
+                    if dname == symbol
+                        col_s = _lsp_byte_col_to_utf16(text, line_start, get(decl, 4))
+                        col_e = _lsp_byte_col_to_utf16(text, line_start, get(decl, 5))
+                        loc = list()
+                        push(loc, cur_line)
+                        push(loc, col_s)
+                        push(loc, col_e)
+                        return loc
+
+                // 2. Check variable/global declarations and assignments
+                p = line_start
+                while p < i and (char_at(text, p) == " " or char_at(text, p) == "\t")
+                    p = p + 1
+                if p < i
+                    line = str_sub(text, line_start, i)
+                    trimmed = str_trim(line)
+                    t_len = len(trimmed)
+                    kw_skip = 0
+                    if starts_with_keyword(trimmed, "let") == 1
+                        kw_skip = 3
+                    elif starts_with_keyword(trimmed, "@let") == 1
+                        kw_skip = 4
+                    elif starts_with_keyword(trimmed, "global") == 1
+                        kw_skip = 6
+                    elif starts_with_keyword(trimmed, "const") == 1
+                        kw_skip = 5
+                    elif starts_with_keyword(trimmed, "চলক") == 1
+                        kw_skip = len("চলক")
+                    elif starts_with_keyword(trimmed, "ধরি") == 1
+                        kw_skip = len("ধরি")
+
+                    if kw_skip > 0
+                        ns = p + kw_skip
+                        while ns < i and (char_at(text, ns) == " " or char_at(text, ns) == "\t")
+                            ns = ns + 1
+                        if ns + s_len <= i and lsp_sub_eq(text, ns, symbol) == 1
+                            after_ok = 1
+                            if ns + s_len < i and is_token_char(char_at(text, ns + s_len)) == 1
+                                after_ok = 0
+                            if after_ok == 1
+                                col_s = _lsp_byte_col_to_utf16(text, line_start, ns)
+                                col_e = _lsp_byte_col_to_utf16(text, line_start, ns + s_len)
+                                loc = list()
+                                push(loc, cur_line)
+                                push(loc, col_s)
+                                push(loc, col_e)
+                                return loc
+                    elif starts_with_keyword(trimmed, symbol) == 1
+                        rem = str_trim(str_sub(trimmed, s_len, t_len))
+                        if len(rem) > 0 and char_at(rem, 0) == "=" and (len(rem) < 2 or char_at(rem, 1) != "=")
+                            col_s = _lsp_byte_col_to_utf16(text, line_start, p)
+                            col_e = _lsp_byte_col_to_utf16(text, line_start, p + s_len)
+                            loc = list()
+                            push(loc, cur_line)
+                            push(loc, col_s)
+                            push(loc, col_e)
+                            return loc
+
+            in_blk = _lsp_update_block_comment(text, line_start, i, in_blk)
             cur_line = cur_line + 1
             line_start = i + 1
         i = i + 1
-        
-    return -1
+
+    return not_found
+
+fn find_symbol_definition_in_text text symbol
+    loc = find_symbol_definition_loc(text, symbol)
+    return get(loc, 0)
 
 // ─── Completion Provider ──────────────────────────────────────────────────────
 // WHY: Supplies full autocompletion items for English keywords, Bengali keywords,
@@ -955,63 +1247,293 @@ fn count_newlines text
         i = i + 1
     return count
 
+fn _lsp_count_leading_spaces s
+    slen = len(s)
+    i = 0
+    cnt = 0
+    while i < slen
+        c = char_at(s, i)
+        if c == " "
+            cnt = cnt + 1
+        elif c == "\t"
+            cnt = cnt + 4
+        else
+            break
+        i = i + 1
+    return cnt
+
+fn _lsp_strip_line_comment s
+    slen = len(s)
+    in_dq = 0
+    in_sq = 0
+    in_blk = 0
+    i = 0
+    while i < slen
+        c = char_at(s, i)
+        if in_blk == 1
+            if c == "*" and i + 1 < slen and char_at(s, i + 1) == "/"
+                in_blk = 0
+                i = i + 2
+                continue
+            i = i + 1
+            continue
+        if in_dq == 1
+            if c == "\\" and i + 1 < slen
+                i = i + 2
+                continue
+            if c == "\"" in_dq = 0
+            i = i + 1
+            continue
+        if in_sq == 1
+            if c == "\\" and i + 1 < slen
+                i = i + 2
+                continue
+            if c == "'" in_sq = 0
+            i = i + 1
+            continue
+        if c == "\""
+            in_dq = 1
+        elif c == "'"
+            in_sq = 1
+        elif c == "/" and i + 1 < slen
+            nc = char_at(s, i + 1)
+            if nc == "/"
+                return str_trim_end(str_sub(s, 0, i))
+            elif nc == "*"
+                in_blk = 1
+                i = i + 2
+                continue
+        elif c == "#"
+            return str_trim_end(str_sub(s, 0, i))
+        elif c == "@" and i + 1 < slen and char_at(s, i + 1) == "!"
+            return str_trim_end(str_sub(s, 0, i))
+        i = i + 1
+    return str_trim_end(s)
+
+fn _lsp_has_top_level_eq s
+    slen = len(s)
+    pdepth = 0
+    in_dq = 0
+    in_sq = 0
+    i = 0
+    while i < slen
+        c = char_at(s, i)
+        if in_dq == 1
+            if c == "\\" and i + 1 < slen
+                i = i + 2
+                continue
+            if c == "\"" in_dq = 0
+            i = i + 1
+            continue
+        if in_sq == 1
+            if c == "\\" and i + 1 < slen
+                i = i + 2
+                continue
+            if c == "'" in_sq = 0
+            i = i + 1
+            continue
+        if c == "\""
+            in_dq = 1
+        elif c == "'"
+            in_sq = 1
+        elif c == "(" or c == "[" or c == "{"
+            pdepth = pdepth + 1
+        elif c == ")" or c == "]" or c == "}"
+            if pdepth > 0 pdepth = pdepth - 1
+        elif c == "=" and pdepth == 0
+            prev_c = ""
+            next_c = ""
+            if i > 0 prev_c = char_at(s, i - 1)
+            if i + 1 < slen next_c = char_at(s, i + 1)
+            if prev_c != "=" and prev_c != "!" and prev_c != "<" and prev_c != ">" and next_c != "=" and next_c != ">"
+                return 1
+        i = i + 1
+    return 0
+
+fn _lsp_is_block_opener line
+    code_part = _lsp_strip_line_comment(line)
+    if len(code_part) == 0 or lsp_sub_eq(code_part, 0, "/*") == 1
+        return 0
+    head = code_part
+    if starts_with_keyword(head, "pub") == 1
+        head = str_trim(str_sub(head, 3, len(head)))
+    if starts_with_keyword(head, "async") == 1
+        head = str_trim(str_sub(head, 5, len(head)))
+    if (starts_with_keyword(head, "fn") or starts_with_keyword(head, "@fn") or starts_with_keyword(head, "কাজ")) and _lsp_has_top_level_eq(head) == 0
+        return 1
+    if starts_with_keyword(head, "if") or starts_with_keyword(head, "@if") or starts_with_keyword(head, "যদি") or starts_with_keyword(head, "while") or starts_with_keyword(head, "@while") or starts_with_keyword(head, "যতক্ষণ") or starts_with_keyword(head, "for") or starts_with_keyword(head, "@for") or starts_with_keyword(head, "প্রতিটি") or starts_with_keyword(head, "struct") or starts_with_keyword(head, "@struct") or starts_with_keyword(head, "গঠন") or starts_with_keyword(head, "কাঠামো") or starts_with_keyword(head, "enum") or starts_with_keyword(head, "@enum") or starts_with_keyword(head, "trait") or starts_with_keyword(head, "@trait") or starts_with_keyword(head, "impl") or starts_with_keyword(head, "@impl") or starts_with_keyword(head, "union") or starts_with_keyword(head, "match") or starts_with_keyword(head, "try") or starts_with_keyword(head, "catch") or starts_with_keyword(head, "defer") or starts_with_keyword(head, "region") or starts_with_keyword(head, "else") or starts_with_keyword(head, "@else") or starts_with_keyword(head, "নাহলে") or starts_with_keyword(head, "elif") or starts_with_keyword(head, "@elif") or starts_with_keyword(head, "নাহলে_যদি")
+        return 1
+    if len(code_part) > 0 and char_at(code_part, len(code_part) - 1) == "{"
+        return 1
+    return 0
+
 fn format_lipi_code text
+    // WHY: Uses an indentation stack whenever the document already carries structural indentation
+    // (max_indent > 0) so indentation-based .lp files NEVER staircase to infinity on dedents;
+    // falls back to block-depth synthesis only for completely flat (max_indent == 0) files.
     tlen = len(text)
-    result = ""
-    indent = 0
+    raw_lines = list()
+    max_indent = 0
     line_start = 0
     i = 0
-
     while i <= tlen
         is_eol = 0
         if i == tlen
             is_eol = 1
         elif char_at(text, i) == "\n"
             is_eol = 1
-
         if is_eol == 1
-            raw_line = str_sub(text, line_start, i)
-            line = str_trim(raw_line)
-
-            if len(line) == 0
-                result = result + "\n"
-            else
-                is_dedent = 0
-                is_full_close = 0
-                if starts_with_keyword(line, "else") or starts_with_keyword(line, "@else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "@elif") or starts_with_keyword(line, "নাহলে_যদি")
-                    is_dedent = 1
-                elif line == "end" or line == "@end" or line == "শেষ" or char_at(line, 0) == "}"
-                    is_dedent = 1
-                    is_full_close = 1
-
-                print_indent = indent
-                if is_dedent == 1 and print_indent > 0
-                    print_indent = print_indent - 1
-
-                sp = ""
-                s_i = 0
-                while s_i < print_indent * 4
-                    sp = sp + " "
-                    s_i = s_i + 1
-
-                result = result + sp + line + "\n"
-
-                is_indent = 0
-                if is_full_close == 0
-                    if starts_with_keyword(line, "fn") or starts_with_keyword(line, "@fn") or starts_with_keyword(line, "কাজ") or starts_with_keyword(line, "if") or starts_with_keyword(line, "@if") or starts_with_keyword(line, "যদি") or starts_with_keyword(line, "while") or starts_with_keyword(line, "@while") or starts_with_keyword(line, "যতক্ষণ") or starts_with_keyword(line, "for") or starts_with_keyword(line, "@for") or starts_with_keyword(line, "প্রতিটি") or starts_with_keyword(line, "struct") or starts_with_keyword(line, "@struct") or starts_with_keyword(line, "গঠন") or starts_with_keyword(line, "কাঠামো") or starts_with_keyword(line, "else") or starts_with_keyword(line, "@else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "@elif") or starts_with_keyword(line, "নাহলে_যদি")
-                        is_indent = 1
-                    if char_at(line, len(line) - 1) == "{"
-                        is_indent = 1
-
-                if is_dedent == 1
-                    indent = print_indent
-                if is_indent == 1
-                    indent = indent + 1
-
+            if i < tlen or line_start < tlen
+                rl = str_sub(text, line_start, i)
+                push(raw_lines, rl)
+                tl = str_trim(rl)
+                if len(tl) > 0
+                    sp_c = _lsp_count_leading_spaces(rl)
+                    if sp_c > max_indent
+                        max_indent = sp_c
             line_start = i + 1
         i = i + 1
 
+    result = ""
+    indent_stack = list()
+    push(indent_stack, 0)
+    indent = 0
+    in_blk = 0
+    li = 0
+    total = len(raw_lines)
+    while li < total
+        raw_line = get(raw_lines, li)
+        line = str_trim(raw_line)
+        if len(line) == 0
+            result = result + "\n"
+        else
+            was_in_blk = in_blk
+            in_blk = _lsp_update_block_comment(line, 0, len(line), in_blk)
+            print_indent = 0
+            if max_indent > 0
+                sp_in = _lsp_count_leading_spaces(raw_line)
+                top_sp = get(indent_stack, len(indent_stack) - 1)
+                if sp_in > top_sp
+                    push(indent_stack, sp_in)
+                elif sp_in < top_sp
+                    while len(indent_stack) > 1 and sp_in < get(indent_stack, len(indent_stack) - 1)
+                        nstack = list()
+                        ni = 0
+                        nlen = len(indent_stack) - 1
+                        while ni < nlen
+                            push(nstack, get(indent_stack, ni))
+                            ni = ni + 1
+                        indent_stack = nstack
+                    // WHY: Keep intermediate non-zero dedent levels instead of collapsing body lines to col 0.
+                    if sp_in > get(indent_stack, len(indent_stack) - 1)
+                        push(indent_stack, sp_in)
+                print_indent = len(indent_stack) - 1
+            else
+                if was_in_blk == 1
+                    print_indent = indent
+                else
+                    is_dedent = 0
+                    is_full_close = 0
+                    if starts_with_keyword(line, "else") or starts_with_keyword(line, "@else") or starts_with_keyword(line, "নাহলে") or starts_with_keyword(line, "elif") or starts_with_keyword(line, "@elif") or starts_with_keyword(line, "নাহলে_যদি") or starts_with_keyword(line, "catch")
+                        is_dedent = 1
+                    elif line == "end" or line == "@end" or line == "শেষ" or char_at(line, 0) == "}"
+                        is_dedent = 1
+                        is_full_close = 1
+
+                    print_indent = indent
+                    if is_dedent == 1 and print_indent > 0
+                        print_indent = print_indent - 1
+
+                    is_indent = 0
+                    if is_full_close == 0 and _lsp_is_block_opener(line) == 1
+                        if str_find_from(line, " end", 0) < 0 and str_find_from(line, " @end", 0) < 0 and str_find_from(line, " শেষ", 0) < 0
+                            is_indent = 1
+                    if is_dedent == 1
+                        indent = print_indent
+                    if is_indent == 1
+                        indent = indent + 1
+
+            sp = ""
+            s_i = 0
+            while s_i < print_indent * 4
+                sp = sp + " "
+                s_i = s_i + 1
+            result = result + sp + line + "\n"
+        li = li + 1
+
     return result
+
+fn _lsp_getcwd
+    // WHY: Uses Linux SYS_getcwd (79) to turn workspace-relative include paths into valid file:///abs/path URIs.
+    cbuf = malloc(4096)
+    rc = syscall(79, cbuf, 4096, 0, 0, 0, 0)
+    cwd = ""
+    if rc > 0
+        ci = 0
+        while ci < 4095
+            b = mem_byte_read(cbuf, ci)
+            if b == 0 break
+            cwd = cwd + chr(b)
+            ci = ci + 1
+    free(cbuf, 4096)
+    return cwd
+
+fn _lsp_uri_to_fs_path uri
+    if len(uri) >= 7 and lsp_sub_eq(uri, 0, "file://") == 1
+        return str_sub(uri, 7, len(uri))
+    return uri
+
+fn _lsp_dirname path
+    plen = len(path)
+    i = plen - 1
+    while i >= 0
+        if char_at(path, i) == "/"
+            if i == 0 return "/"
+            return str_sub(path, 0, i)
+        i = i - 1
+    return ""
+
+fn _lsp_normalize_abs_path path
+    // WHY: Normalizes '.' and '..' path segments so emitted file:///abs/path URIs are strictly canonical.
+    full = path
+    if len(full) == 0 or char_at(full, 0) != "/"
+        cwd = _lsp_getcwd()
+        if len(cwd) > 0
+            full = cwd + "/" + full
+    segs = list()
+    flen = len(full)
+    i = 0
+    while i < flen
+        while i < flen and char_at(full, i) == "/"
+            i = i + 1
+        s = i
+        while i < flen and char_at(full, i) != "/"
+            i = i + 1
+        if i > s
+            part = str_sub(full, s, i)
+            if part == "."
+                // skip
+            elif part == ".."
+                if len(segs) > 0
+                    nsegs = list()
+                    ni = 0
+                    while ni < len(segs) - 1
+                        push(nsegs, get(segs, ni))
+                        ni = ni + 1
+                    segs = nsegs
+            else
+                push(segs, part)
+    out = ""
+    si = 0
+    while si < len(segs)
+        out = out + "/" + get(segs, si)
+        si = si + 1
+    if len(out) == 0 return "/"
+    return out
+
+fn _lsp_fs_path_to_uri path
+    abs_p = _lsp_normalize_abs_path(path)
+    return "file://" + abs_p
 
 fn _lsp_resolve_include_paths text
     paths = list()
@@ -1022,32 +1544,109 @@ fn _lsp_resolve_include_paths text
         while eol < tlen and char_at(text, eol) != "\n"
             eol = eol + 1
         line = str_trim(str_sub(text, pos, eol))
-        if starts_with_keyword(line, "import") == 1 or starts_with_keyword(line, "include") == 1
+        if starts_with_keyword(line, "import") == 1 or starts_with_keyword(line, "include") == 1 or starts_with_keyword(line, "অন্তর্ভুক্ত") == 1
             q1 = str_find_from(line, "\"", 0)
             if q1 >= 0
                 q2 = str_find_from(line, "\"", q1 + 1)
                 if q2 > q1 + 1
                     raw_p = str_sub(line, q1 + 1, q2)
-                    if str_find_from(raw_p, ".lp", 0) < 0
+                    rplen = len(raw_p)
+                    if rplen < 3 or str_sub(raw_p, rplen - 3, rplen) != ".lp"
                         raw_p = raw_p + ".lp"
                     push(paths, raw_p)
         pos = eol + 1
     return paths
 
 fn _lsp_collect_refs_in_text text symbol uri
+    // WHY: Scans for exact identifier references while skipping //, #, @! line comments,
+    // /* ... */ block comments, and double/single-quoted string literals.
     out = ""
     if len(symbol) == 0 or len(text) == 0 return ""
     tlen = len(text)
     slen = len(symbol)
     cur_line = 0
     line_start = 0
+    in_dq = 0
+    in_sq = 0
+    in_line_c = 0
+    in_blk_c = 0
     i = 0
     while i < tlen
-        if char_at(text, i) == "\n"
+        c = char_at(text, i)
+        if in_blk_c == 1
+            if c == "*" and i + 1 < tlen and char_at(text, i + 1) == "/"
+                in_blk_c = 0
+                i = i + 2
+                continue
+            if c == "\n"
+                cur_line = cur_line + 1
+                line_start = i + 1
+            i = i + 1
+            continue
+        if in_line_c == 1
+            if c == "\n"
+                in_line_c = 0
+                cur_line = cur_line + 1
+                line_start = i + 1
+            i = i + 1
+            continue
+        if in_dq == 1
+            if c == "\\" and i + 1 < tlen
+                i = i + 2
+                continue
+            if c == "\""
+                in_dq = 0
+            elif c == "\n"
+                in_dq = 0
+                cur_line = cur_line + 1
+                line_start = i + 1
+            i = i + 1
+            continue
+        if in_sq == 1
+            if c == "\\" and i + 1 < tlen
+                i = i + 2
+                continue
+            if c == "'"
+                in_sq = 0
+            elif c == "\n"
+                in_sq = 0
+                cur_line = cur_line + 1
+                line_start = i + 1
+            i = i + 1
+            continue
+
+        if c == "\n"
             cur_line = cur_line + 1
             line_start = i + 1
             i = i + 1
             continue
+        if c == "\""
+            in_dq = 1
+            i = i + 1
+            continue
+        if c == "'"
+            in_sq = 1
+            i = i + 1
+            continue
+        if c == "/" and i + 1 < tlen
+            nc = char_at(text, i + 1)
+            if nc == "/"
+                in_line_c = 1
+                i = i + 2
+                continue
+            elif nc == "*"
+                in_blk_c = 1
+                i = i + 2
+                continue
+        if c == "#"
+            in_line_c = 1
+            i = i + 1
+            continue
+        if c == "@" and i + 1 < tlen and char_at(text, i + 1) == "!"
+            in_line_c = 1
+            i = i + 2
+            continue
+
         if i + slen <= tlen and lsp_sub_eq(text, i, symbol) == 1
             left_ok = 1
             if i > line_start and is_token_char(char_at(text, i - 1)) == 1
@@ -1112,7 +1711,7 @@ fn lsp_main_loop
                 workspace_set_file(tracked_uris, tracked_texts, uri, doc_text)
                 lsp_log("didOpen tracked file: " + uri)
                 diags_json = lsp_compute_diagnostics(doc_text)
-                diag_params = "{\"uri\":\"" + uri + "\",\"diagnostics\":" + diags_json + "}"
+                diag_params = "{\"uri\":\"" + json_escape(uri) + "\",\"diagnostics\":" + diags_json + "}"
                 lsp_send_notification("textDocument/publishDiagnostics", diag_params)
 
             // ── 4. textDocument/didChange ──
@@ -1123,7 +1722,7 @@ fn lsp_main_loop
                 workspace_set_file(tracked_uris, tracked_texts, uri, doc_text)
                 lsp_log("didChange updated file: " + uri)
                 diags_json = lsp_compute_diagnostics(doc_text)
-                diag_params = "{\"uri\":\"" + uri + "\",\"diagnostics\":" + diags_json + "}"
+                diag_params = "{\"uri\":\"" + json_escape(uri) + "\",\"diagnostics\":" + diags_json + "}"
                 lsp_send_notification("textDocument/publishDiagnostics", diag_params)
 
             // ── 4b. textDocument/documentSymbol ──
@@ -1141,8 +1740,14 @@ fn lsp_main_loop
 
             // ── 6. textDocument/completion ──
             elif method == "textDocument/completion"
+                uri = json_extract_str_value(raw_msg, "uri")
+                doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)
                 lsp_log("Completion request (id: " + req_id + ")")
-                resp = "{\"isIncomplete\":false,\"items\":" + completion_items + "}"
+                doc_items = _lsp_build_doc_completion_items(doc_text)
+                all_items = completion_items
+                if len(doc_items) > 0
+                    all_items = "[" + doc_items + "," + str_sub(completion_items, 1, len(completion_items))
+                resp = "{\"isIncomplete\":false,\"items\":" + all_items + "}"
                 lsp_send_response(req_id, resp)
 
             // ── 7. textDocument/hover ──
@@ -1153,7 +1758,15 @@ fn lsp_main_loop
                 
                 doc_text = workspace_get_file(tracked_uris, tracked_texts, uri)
                 word = get_word_at_pos(doc_text, line, char_pos)
-                docstring = get_hover_documentation(word)
+                docstring = _lsp_find_doc_symbol_hover(doc_text, word)
+                if len(docstring) == 0
+                    ht_i = 0
+                    while ht_i < len(tracked_uris) and len(docstring) == 0
+                        if get(tracked_uris, ht_i) != uri
+                            docstring = _lsp_find_doc_symbol_hover(get(tracked_texts, ht_i), word)
+                        ht_i = ht_i + 1
+                if len(docstring) == 0
+                    docstring = get_hover_documentation(word)
                 
                 lsp_log("Hover at L" + str(line) + ":C" + str(char_pos) + " word: [" + word + "]")
                 resp = "{\"contents\":{\"kind\":\"markdown\",\"value\":\"" + json_escape(docstring) + "\"}}"
@@ -1169,7 +1782,10 @@ fn lsp_main_loop
                 word = get_word_at_pos(doc_text, line, char_pos)
                 lsp_log("Definition lookup for: [" + word + "] in " + uri)
 
-                found_line = find_symbol_definition_in_text(doc_text, word)
+                loc = find_symbol_definition_loc(doc_text, word)
+                found_line = get(loc, 0)
+                found_col_s = get(loc, 1)
+                found_col_e = get(loc, 2)
                 found_uri = uri
 
                 if found_line < 0
@@ -1179,27 +1795,40 @@ fn lsp_main_loop
                         other_u = get(tracked_uris, t_idx)
                         if other_u != uri
                             other_t = get(tracked_texts, t_idx)
-                            other_l = find_symbol_definition_in_text(other_t, word)
-                            if other_l >= 0
-                                found_line = other_l
+                            oloc = find_symbol_definition_loc(other_t, word)
+                            if get(oloc, 0) >= 0
+                                found_line = get(oloc, 0)
+                                found_col_s = get(oloc, 1)
+                                found_col_e = get(oloc, 2)
                                 found_uri = other_u
                         t_idx = t_idx + 1
 
                 if found_line < 0
+                    doc_fs = _lsp_uri_to_fs_path(uri)
+                    doc_dir = _lsp_dirname(doc_fs)
                     inc_paths = _lsp_resolve_include_paths(doc_text)
                     ii = 0
                     while ii < len(inc_paths) and found_line < 0
                         ip = get(inc_paths, ii)
-                        if file_exists(ip) == 1
-                            inc_txt = file_read(ip)
-                            il = find_symbol_definition_in_text(inc_txt, word)
-                            if il >= 0
-                                found_line = il
-                                found_uri = "file://" + ip
+                        cand_p = ""
+                        if len(doc_dir) > 0 and len(ip) > 0 and char_at(ip, 0) != "/"
+                            rel_cand = doc_dir + "/" + ip
+                            if file_exists(rel_cand) == 1
+                                cand_p = rel_cand
+                        if len(cand_p) == 0 and file_exists(ip) == 1
+                            cand_p = ip
+                        if len(cand_p) > 0
+                            inc_txt = file_read(cand_p)
+                            iloc = find_symbol_definition_loc(inc_txt, word)
+                            if get(iloc, 0) >= 0
+                                found_line = get(iloc, 0)
+                                found_col_s = get(iloc, 1)
+                                found_col_e = get(iloc, 2)
+                                found_uri = _lsp_fs_path_to_uri(cand_p)
                         ii = ii + 1
 
                 if found_line >= 0
-                    resp = "{\"uri\":\"" + found_uri + "\",\"range\":{\"start\":{\"line\":" + str(found_line) + ",\"character\":0},\"end\":{\"line\":" + str(found_line) + ",\"character\":0}}}"
+                    resp = "{\"uri\":\"" + json_escape(found_uri) + "\",\"range\":{\"start\":{\"line\":" + str(found_line) + ",\"character\":" + str(found_col_s) + "},\"end\":{\"line\":" + str(found_line) + ",\"character\":" + str(found_col_e) + "}}}"
                     lsp_send_response(req_id, resp)
                 else
                     lsp_send_response(req_id, "null")

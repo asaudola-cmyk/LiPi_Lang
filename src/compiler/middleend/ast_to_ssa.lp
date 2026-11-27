@@ -99,6 +99,15 @@ fn ssa_is_narrow_int_type tname
     return 0
 end
 
+fn ssa_is_unsigned_int_type tname
+    // WHY: Identifies unsigned integer types (u64/u32/u16/u8/uint/usize/byte) so SSA never
+    // silently lowers unsigned /, %, >>, <, <=, >, >= to signed idiv/sar/jl.
+    if tname == "u64" or tname == "uint" or tname == "usize" or tname == "u32" or tname == "u16" or tname == "u8" or tname == "byte"
+        return 1
+    end
+    return 0
+end
+
 fn ssa_normalize_type tname
     if tname == 0 or tname == "" or tname == "int" or tname == "i64" or tname == "bool" or tname == "any" or tname == "void"
         return "i64"
@@ -542,10 +551,10 @@ fn ast_to_ssa_is_cmp_op op_str
 // ── 4. Expression Lowering ────────────────────────────────────────────────────
 
 fn ast_to_ssa_is_pure_int val
-    // WHY: Distinguishes provably pure integer/bool SSA values ("i64_int"/"bool"/int const)
+    // WHY: Distinguishes provably pure integer/bool SSA values ("i64_int"/"bool"/unsigned/int const)
     // from untyped dynamic values ("i64" from unannotated params/fields/calls that may hold STR0 pointers).
     if val == 0 return 0
-    if val.vtype == "i64_int" or val.vtype == "bool"
+    if val.vtype == "i64_int" or val.vtype == "bool" or ssa_is_unsigned_int_type(val.vtype) == 1
         return 1
     end
     if (val.kind == VAL_KIND_CONST or val.val_kind == VAL_KIND_CONST) and val.vtype == "i64"
@@ -917,8 +926,17 @@ fn ast_to_ssa_lower_expr ctx expr
         if ast_to_ssa_is_pure_int(lhs_val) == 1 or ast_to_ssa_is_pure_int(rhs_val) == 1
             any_int = 1
         end
+        is_uint_op = 0
+        if ssa_is_unsigned_int_type(lhs_val.vtype) == 1 or ssa_is_unsigned_int_type(rhs_val.vtype) == 1
+            is_uint_op = 1
+        end
         if ast_to_ssa_is_cmp_op(op_str) == 1
             pred = ast_to_ssa_map_cmp(op_str)
+            // WHY: Signed SSA CMP_SLT/SLE/SGT/SGE gives wrong results on unsigned u64/u32/u16/u8 values >= 2^63;
+            // fall back cleanly to legacy unsigned codegen (setb/setbe/seta/setae) for ordered unsigned compares.
+            if is_uint_op == 1 and pred != CMP_EQ and pred != CMP_NE
+                ctx.ctx_has_unsupported = 1
+            end
             res_val = fn_obj.new_val("bool")
             // WHY: Non-x86_64 targets (WASM/ARM64/RV64) do not have x86_64 STR0 polymorphic
             // _lipi_cmp_dynamic runtime tagging; non-string compares are direct integer OP_CMP.
@@ -932,6 +950,11 @@ fn ast_to_ssa_lower_expr ctx expr
             return res_val
         else
             op_code = ast_to_ssa_map_binop(op_str)
+            // WHY: Signed SSA OP_DIV/OP_MOD/OP_SHR would silently emit idiv/sar for unsigned struct fields;
+            // fall back cleanly to legacy unsigned codegen (div/shr) for exact hardware unsigned semantics.
+            if is_uint_op == 1 and (op_code == OP_DIV or op_code == OP_MOD or op_code == OP_SHR)
+                ctx.ctx_has_unsupported = 1
+            end
             // WHY: Match canonical x86_64/codegen_operators.lp:951 semantics:
             // (left_is_int OR right_is_int) AND neither side is statically "str" => raw integer/pointer
             // addition; on non-x86_64 targets (WASM/ARM64/RV64), non-string `+` is direct integer OP_ADD.
@@ -949,7 +972,11 @@ fn ast_to_ssa_lower_expr ctx expr
             if is_str_op == 1
                 ctx.ctx_has_unsupported = 1
             end
-            res_val = fn_obj.new_val("i64_int")
+            bin_res_t = "i64_int"
+            if is_uint_op == 1
+                bin_res_t = "u64"
+            end
+            res_val = fn_obj.new_val(bin_res_t)
             bin_inst = ir_build_binop(ctx.ctx_inst_counter, op_code, res_val, lhs_val, rhs_val)
             ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
             basic_block_append_inst(ctx.ctx_curr_bb, bin_inst)
@@ -1221,6 +1248,9 @@ fn ast_to_ssa_lower_expr ctx expr
             if arg_values[0].vtype == "f64"
                 emit_callee = "_lipi_float_to_str"
                 call_ret_t = "str"
+            elif ssa_is_unsigned_int_type(arg_values[0].vtype) == 1
+                emit_callee = "_lipi_uint_to_str"
+                call_ret_t = "str"
             elif ctx.ctx_has_float_dict == 1 and arg_values[0].vtype == "i64"
                 ctx.ctx_has_unsupported = 1
             else
@@ -1299,9 +1329,10 @@ fn ast_to_ssa_lower_expr ctx expr
         elif callee_name == "malloc" and ac == 1
             emit_callee = "_lipi_malloc"
             call_ret_t = "i64"
-        elif (callee_name == "free" or callee_name == "mem_free" or callee_name == "sys_free" or callee_name == "মুক্ত" or callee_name == "মেমরি_মুক্তি" or callee_name == "drop") and (ac == 1 or ac == 2)
+        elif (callee_name == "free" or callee_name == "mem_free" or callee_name == "sys_free" or callee_name == "মুক্ত" or callee_name == "মেমরি_মুক্তি" or callee_name == "drop") and ac == 1
+            // WHY: Only intercept 1-arg slab free(ptr) as _lipi_user_free(ptr); leave 2-arg
+            // free(addr, size) untouched so utso/core/memory.lp SYS_munmap never silently drops size!
             emit_callee = "_lipi_user_free"
-            arg_values = [arg_values[0]]
             call_ret_t = "i64_int"
         elif callee_name == "file_exists" and ac == 1
             emit_callee = "_lipi_file_exists"
@@ -1336,6 +1367,9 @@ fn ast_to_ssa_lower_expr ctx expr
         elif (callee_name == "say" or callee_name == "বলো" or callee_name == "print" or callee_name == "println") and ac == 1
             if arg_values[0].vtype == "f64"
                 emit_callee = "_lipi_print_float"
+                call_ret_t = "i64_int"
+            elif ssa_is_unsigned_int_type(arg_values[0].vtype) == 1
+                emit_callee = "_lipi_print_uint"
                 call_ret_t = "i64_int"
             elif ctx.ctx_has_float_dict == 1 and arg_values[0].vtype == "i64"
                 ctx.ctx_has_unsupported = 1
@@ -1398,6 +1432,10 @@ fn ast_to_ssa_lower_stmt ctx stmt
 
     // 2. Simple Variable Assignment, Indexed Assignment (a[i]=v), OR Chained Struct Field Assignment (a.b.c=v)
     if skind == "Assign"
+        if stmt.op == "deref_assign" or stmt.target == "*"
+            ctx.ctx_has_unsupported = 1
+            return 0
+        end
         target_name = stmt.target
         if stmt.index != 0
             cont_v = 0
@@ -1523,6 +1561,8 @@ fn ast_to_ssa_lower_stmt ctx stmt
             last_ft = ast_to_ssa_resolve_field_type(ctx, cur_t, last_fld)
             if last_ft == "f64" and rhs_v.vtype != "f64"
                 rhs_v = ast_to_ssa_ensure_f64(ctx, rhs_v)
+            elif ssa_is_narrow_int_type(last_ft) == 1
+                rhs_v = ast_to_ssa_emit_truncate_int_width(ctx, rhs_v, last_ft)
             end
             fs_inst = ir_build_field_store(ctx.ctx_inst_counter, cur_v, rhs_v, byte_off)
             ctx.ctx_inst_counter = ctx.ctx_inst_counter + 1
@@ -1657,6 +1697,11 @@ fn ast_to_ssa_lower_stmt ctx stmt
                 ctx.ctx_has_unsupported = 1
                 return 0
             end
+            ao_fld_t = ast_to_ssa_resolve_field_type(ctx, ao_obj_t, ao_fld_nm)
+            if ao_fld_t == "f64" or ssa_is_unsigned_int_type(ao_fld_t) == 1 or ssa_is_narrow_int_type(ao_fld_t) == 1
+                ctx.ctx_has_unsupported = 1
+                return 0
+            end
             fn_obj = ctx.ctx_curr_fn
             ao_obj_v = ast_to_ssa_emit_load_typed(ctx, ao_slot, ao_obj_t)
             ao_cur_v = fn_obj.new_val("i64")
@@ -1718,6 +1763,10 @@ fn ast_to_ssa_lower_stmt ctx stmt
             return 1
         end
         op_code = ast_to_ssa_map_binop(stmt.op)
+        if (ssa_is_unsigned_int_type(curr_val.vtype) == 1 or ssa_is_unsigned_int_type(rhs_val.vtype) == 1) and (op_code == OP_DIV or op_code == OP_MOD or op_code == OP_SHR)
+            // WHY: Compound /=, %=, >>= on unsigned values require hardware div/shr in legacy codegen.
+            ctx.ctx_has_unsupported = 1
+        end
         is_str_ao = 0
         if curr_val.vtype == "str" or rhs_val.vtype == "str"
             is_str_ao = 1
@@ -2435,7 +2484,13 @@ fn ast_to_ssa_collect_schemas ast_nodes
                             sch.sch_field_uniq_off[fnm] = 0
                         end
                         if fn_i.field_type != 0 and fn_i.field_type != ""
-                            ft_n = ssa_normalize_type(fn_i.field_type)
+                            raw_ft = fn_i.field_type
+                            ft_n = ssa_normalize_type(raw_ft)
+                            if ssa_is_unsigned_int_type(raw_ft) == 1
+                                // WHY: Preserve unsigned field types (u64/u32/u16/u8/uint/usize/byte) in
+                                // sch_field_type_map so SSA detects unsigned /, %, >>, <, <=, >, >= cleanly.
+                                ft_n = raw_ft
+                            end
                             if ft_n != "i64"
                                 sch.sch_field_type_map[sname + "::" + fnm] = ft_n
                                 ku = "::" + fnm

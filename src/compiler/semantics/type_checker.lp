@@ -102,7 +102,7 @@ import "compiler/frontend/ast/ast_node"
   tc.tc_enum_variants = []
   tc.tc_builtin_cache = dict()
   tc.tc_strict_types = 0
-  tc.tc_dict_tid = type_make_struct(reg, "dict", [])
+  tc.tc_dict_tid = type_make_dict(reg, TYPE_ID_ANY(), TYPE_ID_ANY())
   return tc
 @end
 
@@ -394,6 +394,16 @@ import "compiler/frontend/ast/ast_node"
 
   // 4. Unary Operations
   @if str_eq(k, "UnaryOp") == 1
+    // WHY: Distinguish `&fn_name` (function pointer address -> i64) from `&local_var` / `&mut local_var`.
+    @if str_eq(expr.op, "&") == 1 && expr.expr != 0 && (str_eq(expr.expr.kind, "Variable") == 1 || str_eq(expr.expr.kind, "IDENT") == 1 || str_eq(expr.expr.kind, "Identifier") == 1)
+      amp_nm = expr.expr.name
+      @if amp_nm == "" && expr.expr.target != "" amp_nm = expr.expr.target @end
+      amp_sym = scope_lookup(tc.tc_scopes, amp_nm)
+      @if amp_sym == 0 amp_sym = symtab_get(tc.tc_symtab, amp_nm) @end
+      @if (amp_sym != 0 && amp_sym.sym_kind == SYM_KIND_FUNCTION()) || (amp_sym == 0 && tc_is_builtin_fast(tc, amp_nm) == 1)
+        return TYPE_ID_I64()
+      @end
+    @end
     t_inner = tc_check_expr(tc, expr.expr)
     @if expr.op == "await" return t_inner @end
     @if expr.op == "?" return TYPE_ID_ANY() @end
@@ -447,8 +457,18 @@ import "compiler/frontend/ast/ast_node"
       return TYPE_ID_ANY()
     @end
 
+    // WHY: Do NOT allow hardcoded builtin `Some`/`Ok`/`Err`/`None` to short-circuit user-defined
+    // enums with the same variant name (e.g. `enum Opt { Some(i64), None }` must check payload types!).
+    user_variant_sym = 0
+    @if str_eq(fn_name, "Some") == 1 || str_eq(fn_name, "Ok") == 1 || str_eq(fn_name, "Err") == 1 || str_eq(fn_name, "None") == 1
+      user_variant_sym = scope_lookup(tc.tc_scopes, fn_name)
+      @if user_variant_sym == 0
+        user_variant_sym = symtab_get(tc.tc_symtab, fn_name)
+      @end
+    @end
+
     // WHY: Built-in system intrinsics and hardware runtime primitives are validated directly
-    @if tc_is_builtin_fast(tc, fn_name) == 1
+    @if user_variant_sym == 0 && tc_is_builtin_fast(tc, fn_name) == 1
       @if str_eq(fn_name, "fn_ptr") == 1 || str_eq(fn_name, "fn_addr") == 1
         return TYPE_ID_I64()
       @end
@@ -456,9 +476,10 @@ import "compiler/frontend/ast/ast_node"
       @if str_eq(fn_name, "sizeof") == 1 || str_eq(fn_name, "size_of") == 1 || str_eq(fn_name, "সাইজ_অফ") == 1 || str_eq(fn_name, "offsetof") == 1 || str_eq(fn_name, "offset_of") == 1 || str_eq(fn_name, "অফসেট_অফ") == 1
         return TYPE_ID_I64()
       @end
+      b_arg_types = []
       i = 0
       @while i < expr.args.len()
-        tc_check_expr(tc, expr.args[i])
+        b_arg_types = b_arg_types.push(tc_check_expr(tc, expr.args[i]))
         i = i + 1
       @end
       @if tc.tc_strict_types == 1
@@ -468,19 +489,68 @@ import "compiler/frontend/ast/ast_node"
         @if str_eq(fn_name, "dict") == 1 || str_eq(fn_name, "map") == 1 || str_eq(fn_name, "অভিধান") == 1 || str_eq(fn_name, "map_new") == 1
           return tc.tc_dict_tid
         @end
+        @if (str_eq(fn_name, "dict_set") == 1 || str_eq(fn_name, "map_set") == 1) && b_arg_types.len() >= 3
+          dt_set = type_registry_get(tc.tc_reg, b_arg_types[0])
+          @if dt_set != 0 && dt_set.ty_kind == TYPE_KIND_STRUCT() && str_eq(dt_set.ty_name, "dict") == 1
+            dk_exp = dt_set.ty_ret_type_id
+            dv_exp = dt_set.ty_elem_type_id
+            @if dk_exp > 0 && dk_exp != TYPE_ID_ANY() && b_arg_types[1] != TYPE_ID_ANY() && b_arg_types[1] != 0
+              @if tc_is_assignable(tc, dk_exp, b_arg_types[1]) == 0
+                tc_error(tc, ERR_INVALID_INDEX_TYPE(), "In function '" + tc.tc_current_fn_name + "': dict key expects " + type_to_string(tc.tc_reg, dk_exp) + ", got " + type_to_string(tc.tc_reg, b_arg_types[1]), span_default())
+              @end
+            @end
+            @if dv_exp > 0 && dv_exp != TYPE_ID_ANY() && b_arg_types[2] != TYPE_ID_ANY() && b_arg_types[2] != 0
+              @if tc_is_assignable(tc, dv_exp, b_arg_types[2]) == 0
+                tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': dict value expects " + type_to_string(tc.tc_reg, dv_exp) + ", got " + type_to_string(tc.tc_reg, b_arg_types[2]), span_default())
+              @end
+            @end
+          @end
+        @end
+        @if (str_eq(fn_name, "dict_get") == 1 || str_eq(fn_name, "map_get") == 1) && b_arg_types.len() >= 2
+          dt_get = type_registry_get(tc.tc_reg, b_arg_types[0])
+          @if dt_get != 0 && dt_get.ty_kind == TYPE_KIND_STRUCT() && str_eq(dt_get.ty_name, "dict") == 1
+            dk_g = dt_get.ty_ret_type_id
+            dv_g = dt_get.ty_elem_type_id
+            @if dk_g > 0 && dk_g != TYPE_ID_ANY() && b_arg_types[1] != TYPE_ID_ANY() && b_arg_types[1] != 0
+              @if tc_is_assignable(tc, dk_g, b_arg_types[1]) == 0
+                tc_error(tc, ERR_INVALID_INDEX_TYPE(), "In function '" + tc.tc_current_fn_name + "': dict key expects " + type_to_string(tc.tc_reg, dk_g) + ", got " + type_to_string(tc.tc_reg, b_arg_types[1]), span_default())
+              @end
+            @end
+            @if dv_g > 0 return dv_g @end
+          @end
+        @end
       @end
       return tc_builtin_ret_type(fn_name)
     @end
 
-    // WHY: Check if call is a struct constructor instantiation
+    // WHY: Check if call is a struct constructor instantiation (validate arg count & field types under --strict-types)
     s_sym = scope_lookup(tc.tc_scopes, fn_name)
     @if s_sym == 0
       s_sym = symtab_get(tc.tc_symtab, fn_name)
     @end
     @if s_sym != 0 && s_sym.sym_kind == SYM_KIND_STRUCT()
+      s_tdef = type_registry_get(tc.tc_reg, s_sym.sym_type_ref)
+      n_cargs = expr.args.len()
+      check_ctor_strict = 0
+      @if tc.tc_strict_types == 1 && n_cargs > 0 && s_tdef != 0 && s_tdef.ty_kind == TYPE_KIND_STRUCT() && str_eq(fn_name, "dict") == 0 && str_starts_with(fn_name, "dyn ") == 0 && tc_find_enum_idx_by_name(tc, fn_name) < 0
+        check_ctor_strict = 1
+        @if n_cargs != s_tdef.ty_fields.len()
+          tc_error(tc, ERR_INVALID_ARG_COUNT(), "In function '" + tc.tc_current_fn_name + "': Struct constructor '" + fn_name + "' expects 0 or " + to_str(s_tdef.ty_fields.len()) + " arguments, got " + to_str(n_cargs), span_default())
+        @end
+      @end
       i = 0
-      @while i < expr.args.len()
-        tc_check_expr(tc, expr.args[i])
+      @while i < n_cargs
+        ca_t = tc_check_expr(tc, expr.args[i])
+        @if check_ctor_strict == 1 && i < s_tdef.ty_fields.len()
+          c_fd = s_tdef.ty_fields[i]
+          @if c_fd.fd_type_id != TYPE_ID_ANY() && c_fd.fd_type_id != TYPE_ID_UNKNOWN() && c_fd.fd_type_id != 0 && ca_t != TYPE_ID_ANY() && ca_t != TYPE_ID_UNKNOWN() && ca_t != 0
+            @if tc_is_assignable(tc, c_fd.fd_type_id, ca_t) == 0
+              tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Struct '" + fn_name + "' constructor argument " + to_str(i + 1) + " (field '" + c_fd.fd_name + "') expects " + type_to_string(tc.tc_reg, c_fd.fd_type_id) + ", got " + type_to_string(tc.tc_reg, ca_t), span_default())
+            @else
+              tc_check_array_lit_target(tc, c_fd.fd_type_id, expr.args[i], "struct '" + fn_name + "' field '" + c_fd.fd_name + "'")
+            @end
+          @end
+        @end
         i = i + 1
       @end
       return s_sym.sym_type_ref
@@ -496,13 +566,26 @@ import "compiler/frontend/ast/ast_node"
       recv_t = tc_check_expr(tc, recv_node)
     @end
 
-    f_sym = s_sym
-    @if f_sym == 0 && is_method_call == 1
+    // WHY: For method calls on a known receiver type T, resolve `T_method` BEFORE bare `method`
+    // so methods with the same name across different `impl` blocks never collide!
+    f_sym = 0
+    @if is_method_call == 1
       t_def = type_registry_get(tc.tc_reg, recv_t)
       @if t_def != 0 && t_def.ty_name != ""
         alt_name = t_def.ty_name + "_" + fn_name
         f_sym = scope_lookup(tc.tc_scopes, alt_name)
         @if f_sym == 0 f_sym = symtab_get(tc.tc_symtab, alt_name) @end
+      @end
+    @end
+    @if f_sym == 0
+      f_sym = s_sym
+    @end
+    @if f_sym == 0 && str_contains(fn_name, "::") == 1
+      // Support associated static `Type::method(...)` resolution to `Type_method`
+      q_t = tc_extract_enum_qualifier(fn_name)
+      q_m = tc_strip_enum_prefix(fn_name)
+      @if q_t != "" && q_m != ""
+        f_sym = symtab_get(tc.tc_symtab, q_t + "_" + q_m)
       @end
     @end
 
@@ -619,7 +702,7 @@ import "compiler/frontend/ast/ast_node"
     return f_type.ty_ret_type_id
   @end
 
-  // 6. Array Indexing
+  // 6. Array & Dict Indexing
   @if str_eq(k, "Index") == 1
     arr_t = tc_check_expr(tc, expr.iterable)
     idx_t = tc_check_expr(tc, expr.index)
@@ -632,6 +715,20 @@ import "compiler/frontend/ast/ast_node"
 
     @if arr_def != 0 && arr_def.ty_kind == TYPE_KIND_ARRAY()
       return arr_def.ty_elem_type_id
+    @end
+    @if arr_def != 0 && arr_def.ty_kind == TYPE_KIND_STRUCT() && str_eq(arr_def.ty_name, "dict") == 1
+      @if tc.tc_strict_types == 1
+        dk_id = arr_def.ty_ret_type_id
+        @if dk_id > 0 && dk_id != TYPE_ID_ANY() && idx_t != TYPE_ID_ANY() && idx_t != TYPE_ID_UNKNOWN() && idx_t != 0
+          @if tc_is_assignable(tc, dk_id, idx_t) == 0
+            tc_error(tc, ERR_INVALID_INDEX_TYPE(), "In function '" + tc.tc_current_fn_name + "': Dict key expects " + type_to_string(tc.tc_reg, dk_id) + ", got " + type_to_string(tc.tc_reg, idx_t), span_default())
+          @end
+        @end
+      @end
+      @if arr_def.ty_elem_type_id > 0
+        return arr_def.ty_elem_type_id
+      @end
+      return TYPE_ID_ANY()
     @end
     @if arr_t == TYPE_ID_STRING()
       return TYPE_ID_BYTE()
@@ -649,6 +746,12 @@ import "compiler/frontend/ast/ast_node"
     @end
     f_def = type_find_field(tc.tc_reg, target_t, expr.name)
     @if f_def == 0
+      @if tc.tc_strict_types == 1
+        t_def_f = type_registry_get(tc.tc_reg, target_t)
+        @if t_def_f != 0 && t_def_f.ty_kind == TYPE_KIND_STRUCT() && str_eq(t_def_f.ty_name, "dict") == 0 && str_starts_with(t_def_f.ty_name, "dyn ") == 0 && tc_find_enum_idx_by_name(tc, t_def_f.ty_name) < 0
+          tc_error(tc, ERR_UNDEFINED_FIELD(), "In function '" + tc.tc_current_fn_name + "': Struct '" + t_def_f.ty_name + "' has no field '" + expr.name + "'", span_default())
+        @end
+      @end
       return TYPE_ID_ANY()
     @end
     return f_def.fd_type_id
@@ -995,7 +1098,46 @@ import "compiler/frontend/ast/ast_node"
     @end
     return type_make_array(tc.tc_reg, TYPE_ID_ANY(), -1)
   @end
-  @if str_eq(tname, "dict") == 1 || str_eq(tname, "map") == 1 || str_eq(tname, "hashmap") == 1 || str_eq(tname, "অভিধান") == 1 || str_starts_with(tname, "dict<") == 1 || str_starts_with(tname, "map<") == 1
+  @if str_eq(tname, "dict") == 1 || str_eq(tname, "map") == 1 || str_eq(tname, "hashmap") == 1 || str_eq(tname, "অভিধান") == 1
+    return tc.tc_dict_tid
+  @end
+  @if str_starts_with(tname, "dict<") == 1 || str_starts_with(tname, "map<") == 1 || str_starts_with(tname, "hashmap<") == 1
+    // WHY: Parse `dict<K, V>` / `map<K, V>` splitting at top-level comma (respecting nested `<...>`).
+    d_lt = 0
+    d_len = str_len(tname)
+    @while d_lt < d_len && str_char_at(tname, d_lt) != 60
+      d_lt = d_lt + 1
+    @end
+    @if d_lt + 1 < d_len && str_char_at(tname, d_len - 1) == 62
+      d_depth = 0
+      d_comma = 0 - 1
+      di_p = d_lt + 1
+      @while di_p < d_len - 1
+        dch = str_char_at(tname, di_p)
+        @if dch == 60
+          d_depth = d_depth + 1
+        @elif dch == 62
+          d_depth = d_depth - 1
+        @elif dch == 44 && d_depth == 0
+          d_comma = di_p
+          break
+        @end
+        di_p = di_p + 1
+      @end
+      @if d_comma > d_lt + 1 && d_comma + 1 < d_len - 1
+        ks = d_lt + 1
+        ke = d_comma
+        @while ks < ke && str_char_at(tname, ks) == 32 ks = ks + 1 @end
+        @while ke > ks && str_char_at(tname, ke - 1) == 32 ke = ke - 1 @end
+        vs = d_comma + 1
+        ve = d_len - 1
+        @while vs < ve && str_char_at(tname, vs) == 32 vs = vs + 1 @end
+        @while ve > vs && str_char_at(tname, ve - 1) == 32 ve = ve - 1 @end
+        k_tid = tc_resolve_annotation_id(tc, str_slice(tname, ks, ke))
+        v_tid = tc_resolve_annotation_id(tc, str_slice(tname, vs, ve))
+        return type_make_dict(tc.tc_reg, k_tid, v_tid)
+      @end
+    @end
     return tc.tc_dict_tid
   @end
   @if str_starts_with(tname, "dyn ") == 1
@@ -1047,8 +1189,17 @@ import "compiler/frontend/ast/ast_node"
 
   // 1. Variable Assignment (target = value or compound target += value)
   @if str_eq(k, "Assign") == 1 || str_eq(k, "AssignOp") == 1
+    // WHY: Raw pointer dereference write `*ptr = val` validates both sides without binding `"*"`.
+    @if str_eq(stmt.op, "deref_assign") == 1 || str_eq(stmt.target, "*") == 1
+      @if stmt.left != 0 tc_check_expr(tc, stmt.left) @end
+      val_da = stmt.value
+      @if val_da == 0 val_da = stmt.expr @end
+      tc_check_expr(tc, val_da)
+      return 1
+    @end
+    idx_assign_t = TYPE_ID_ANY()
     @if stmt.index != 0
-      tc_check_expr(tc, stmt.index)
+      idx_assign_t = tc_check_expr(tc, stmt.index)
     @end
     target_name = stmt.target
     val_expr = stmt.value
@@ -1073,7 +1224,7 @@ import "compiler/frontend/ast/ast_node"
       @end
     @end
 
-    // Check struct field assignments (obj.field = expr) and array element updates (arr[i] = expr)
+    // Check struct field assignments (obj.field = expr) and array/dict element updates (arr[i] = expr, d[k] = v)
     @if str_contains(target_name, ".") == 1 || str_contains(target_name, "[") == 1 || stmt.index != 0
       root_end = len(target_name)
       ri_s = 0
@@ -1094,9 +1245,9 @@ import "compiler/frontend/ast/ast_node"
         @if root_sym.sym_is_const == 1 || root_sym.sym_kind == SYM_KIND_CONSTANT()
           tc_error(tc, ERR_CANNOT_ASSIGN_CONST(), "Cannot mutate field/element of constant '" + root_name + "'", span_default())
         @end
-        @if str_contains(target_name, ".") == 1 && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
+        cur_ftid = root_sym.sym_type_ref
+        @if str_contains(target_name, ".") == 1
           // Resolve dotted chain field type on typed structs
-          cur_ftid = root_sym.sym_type_ref
           seg_start = root_end + 1
           seg_i = seg_start
           @while seg_i <= len(target_name) && cur_ftid != TYPE_ID_ANY() && cur_ftid != 0
@@ -1110,9 +1261,15 @@ import "compiler/frontend/ast/ast_node"
               seg_fld = str_slice(target_name, seg_start, seg_i)
               fd_s = type_find_field(tc.tc_reg, cur_ftid, seg_fld)
               @if fd_s == 0
+                @if tc.tc_strict_types == 1
+                  t_def_fw = type_registry_get(tc.tc_reg, cur_ftid)
+                  @if t_def_fw != 0 && t_def_fw.ty_kind == TYPE_KIND_STRUCT() && str_eq(t_def_fw.ty_name, "dict") == 0 && str_starts_with(t_def_fw.ty_name, "dyn ") == 0 && tc_find_enum_idx_by_name(tc, t_def_fw.ty_name) < 0
+                    tc_error(tc, ERR_UNDEFINED_FIELD(), "In function '" + tc.tc_current_fn_name + "': Struct '" + t_def_fw.ty_name + "' has no field '" + seg_fld + "'", span_default())
+                  @end
+                @end
                 cur_ftid = TYPE_ID_ANY()
-              @elif seg_i == len(target_name)
-                @if fd_s.fd_type_id != TYPE_ID_ANY() && fd_s.fd_type_id != TYPE_ID_UNKNOWN() && fd_s.fd_type_id != 0
+              @elif seg_i == len(target_name) && stmt.index == 0
+                @if rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0 && fd_s.fd_type_id != TYPE_ID_ANY() && fd_s.fd_type_id != TYPE_ID_UNKNOWN() && fd_s.fd_type_id != 0
                   @if tc_is_assignable(tc, fd_s.fd_type_id, rhs_t) == 0
                     tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Cannot assign " + type_to_string(tc.tc_reg, rhs_t) + " to field '" + target_name + "' of type " + type_to_string(tc.tc_reg, fd_s.fd_type_id), span_default())
                   @end
@@ -1124,6 +1281,34 @@ import "compiler/frontend/ast/ast_node"
               seg_start = seg_i + 1
             @end
             seg_i = seg_i + 1
+          @end
+        @end
+        // WHY: Under --strict-types, validate `d[k] = v` on typed `dict<K, V>` and `arr[i] = v` on `list<T>`.
+        @if stmt.index != 0 && tc.tc_strict_types == 1 && cur_ftid != TYPE_ID_ANY() && cur_ftid != 0
+          cont_def = type_registry_get(tc.tc_reg, cur_ftid)
+          @if cont_def != 0 && cont_def.ty_kind == TYPE_KIND_STRUCT() && str_eq(cont_def.ty_name, "dict") == 1
+            dk_a = cont_def.ty_ret_type_id
+            dv_a = cont_def.ty_elem_type_id
+            @if dk_a > 0 && dk_a != TYPE_ID_ANY() && idx_assign_t != TYPE_ID_ANY() && idx_assign_t != TYPE_ID_UNKNOWN() && idx_assign_t != 0
+              @if tc_is_assignable(tc, dk_a, idx_assign_t) == 0
+                tc_error(tc, ERR_INVALID_INDEX_TYPE(), "In function '" + tc.tc_current_fn_name + "': Dict '" + target_name + "' key expects " + type_to_string(tc.tc_reg, dk_a) + ", got " + type_to_string(tc.tc_reg, idx_assign_t), span_default())
+              @end
+            @end
+            @if dv_a > 0 && dv_a != TYPE_ID_ANY() && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
+              @if tc_is_assignable(tc, dv_a, rhs_t) == 0
+                tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Dict '" + target_name + "' value expects " + type_to_string(tc.tc_reg, dv_a) + ", got " + type_to_string(tc.tc_reg, rhs_t), span_default())
+              @end
+            @end
+          @elif cont_def != 0 && cont_def.ty_kind == TYPE_KIND_ARRAY()
+            el_a = cont_def.ty_elem_type_id
+            @if idx_assign_t != TYPE_ID_I64() && idx_assign_t != TYPE_ID_ANY() && idx_assign_t != TYPE_ID_UNKNOWN() && idx_assign_t != 0
+              tc_error(tc, ERR_INVALID_INDEX_TYPE(), "In function '" + tc.tc_current_fn_name + "': Array index must be i64, got " + type_to_string(tc.tc_reg, idx_assign_t), span_default())
+            @end
+            @if el_a > 0 && el_a != TYPE_ID_ANY() && rhs_t != TYPE_ID_ANY() && rhs_t != TYPE_ID_UNKNOWN() && rhs_t != 0
+              @if tc_is_assignable(tc, el_a, rhs_t) == 0
+                tc_error(tc, ERR_TYPE_MISMATCH(), "In function '" + tc.tc_current_fn_name + "': Array '" + target_name + "' element expects " + type_to_string(tc.tc_reg, el_a) + ", got " + type_to_string(tc.tc_reg, rhs_t), span_default())
+              @end
+            @end
           @end
         @end
       @end
@@ -1310,6 +1495,16 @@ import "compiler/frontend/ast/ast_node"
       @while j < e_len
         tc_check_statement(tc, stmt.else_body[j])
         j = j + 1
+      @end
+      scope_stack_pop(tc.tc_scopes)
+    @end
+
+    @if str_eq(stmt.op, "try") == 1 && stmt.body != 0 && stmt.body.len() > 0
+      scope_stack_push(tc.tc_scopes, SCOPE_BLOCK(), "try_finally")
+      fi_t = 0
+      @while fi_t < stmt.body.len()
+        tc_check_statement(tc, stmt.body[fi_t])
+        fi_t = fi_t + 1
       @end
       scope_stack_pop(tc.tc_scopes)
     @end
@@ -1558,7 +1753,7 @@ import "compiler/frontend/ast/ast_node"
   @if statements == 0 return 1 @end
 
   n = statements.len()
-  // Pass 1: Struct definitions and top-level global variables registered in global symbol table
+  // Pass 1a: Struct definitions, TraitImpls, Enum nominal types, and top-level globals
   i = 0
   @while i < n
     st = statements[i]
@@ -1570,7 +1765,6 @@ import "compiler/frontend/ast/ast_node"
       @end
     @elif str_eq(st.kind, "EnumDef") == 1
       e_name = st.name
-      e_tid = TYPE_ID_ANY()
       @if e_name != ""
         e_tid = type_make_struct(tc.tc_reg, e_name, [])
         e_sym = symbol_struct(e_name, e_tid, span_default(), tc.tc_scopes.stk_current_id)
@@ -1578,44 +1772,6 @@ import "compiler/frontend/ast/ast_node"
         symtab_put(tc.tc_symtab, e_sym)
         tc.tc_enum_names = tc.tc_enum_names.push(e_name)
         tc.tc_enum_variants = tc.tc_enum_variants.push(st.elements)
-      @end
-      ev_idx = 0
-      ev_len = st.elements.len()
-      @while ev_idx < ev_len
-        ev_name = st.elements[ev_idx]
-        ev_arity = 0
-        @if st.params != 0 && ev_idx < st.params.len()
-          ev_arity = st.params[ev_idx]
-        @end
-        @if ev_name != ""
-          @if ev_arity > 0
-            ev_ptypes = []
-            ea_i = 0
-            @while ea_i < ev_arity
-              ev_ptypes = ev_ptypes.push(TYPE_ID_ANY())
-              ea_i = ea_i + 1
-            @end
-            ev_ftid = type_make_function(tc.tc_reg, ev_ptypes, e_tid)
-            ev_fsym = symbol_function(ev_name, ev_ftid, span_default(), tc.tc_scopes.stk_current_id, 1)
-            scope_define(tc.tc_scopes, ev_fsym)
-            symtab_put(tc.tc_symtab, ev_fsym)
-            @if e_name != ""
-              q_fsym = symbol_function(e_name + "::" + ev_name, ev_ftid, span_default(), tc.tc_scopes.stk_current_id, 1)
-              scope_define(tc.tc_scopes, q_fsym)
-              symtab_put(tc.tc_symtab, q_fsym)
-            @end
-          @else
-            ev_sym = symbol_variable(ev_name, e_tid, 1, span_default(), tc.tc_scopes.stk_current_id)
-            scope_define(tc.tc_scopes, ev_sym)
-            symtab_put(tc.tc_symtab, ev_sym)
-            @if e_name != ""
-              q_vsym = symbol_variable(e_name + "::" + ev_name, e_tid, 1, span_default(), tc.tc_scopes.stk_current_id)
-              scope_define(tc.tc_scopes, q_vsym)
-              symtab_put(tc.tc_symtab, q_vsym)
-            @end
-          @end
-        @end
-        ev_idx = ev_idx + 1
       @end
     @elif str_eq(st.kind, "Assign") == 1 || str_eq(st.kind, "VarDecl") == 1
       v_name = st.target
@@ -1654,6 +1810,68 @@ import "compiler/frontend/ast/ast_node"
       @end
     @end
     i = i + 1
+  @end
+
+  // Pass 1b: Register Enum variant constructors with concrete resolved payload types
+  // WHY: Running after Pass 1a guarantees struct/enum types referenced in variant payloads are registered.
+  i_e = 0
+  @while i_e < n
+    st = statements[i_e]
+    @if str_eq(st.kind, "EnumDef") == 1
+      e_name = st.name
+      e_tid = TYPE_ID_ANY()
+      @if e_name != ""
+        e_sym2 = symtab_get(tc.tc_symtab, e_name)
+        @if e_sym2 != 0 e_tid = e_sym2.sym_type_ref @end
+      @end
+      ev_idx = 0
+      ev_len = st.elements.len()
+      @while ev_idx < ev_len
+        ev_name = st.elements[ev_idx]
+        ev_arity = 0
+        @if st.params != 0 && ev_idx < st.params.len()
+          ev_arity = st.params[ev_idx]
+        @end
+        ev_tlist = 0
+        @if st.args != 0 && ev_idx < st.args.len()
+          ev_tlist = st.args[ev_idx]
+        @end
+        @if ev_name != ""
+          @if ev_arity > 0
+            ev_ptypes = []
+            ea_i = 0
+            @while ea_i < ev_arity
+              p_tid_e = TYPE_ID_ANY()
+              @if tc.tc_strict_types == 1 && ev_tlist != 0 && ea_i < ev_tlist.len() && ev_tlist[ea_i] != ""
+                p_tid_e = tc_resolve_annotation_id(tc, ev_tlist[ea_i])
+              @end
+              ev_ptypes = ev_ptypes.push(p_tid_e)
+              ea_i = ea_i + 1
+            @end
+            ev_ftid = type_make_function(tc.tc_reg, ev_ptypes, e_tid)
+            ev_fsym = symbol_function(ev_name, ev_ftid, span_default(), tc.tc_scopes.stk_current_id, 1)
+            scope_define(tc.tc_scopes, ev_fsym)
+            symtab_put(tc.tc_symtab, ev_fsym)
+            @if e_name != ""
+              q_fsym = symbol_function(e_name + "::" + ev_name, ev_ftid, span_default(), tc.tc_scopes.stk_current_id, 1)
+              scope_define(tc.tc_scopes, q_fsym)
+              symtab_put(tc.tc_symtab, q_fsym)
+            @end
+          @else
+            ev_sym = symbol_variable(ev_name, e_tid, 1, span_default(), tc.tc_scopes.stk_current_id)
+            scope_define(tc.tc_scopes, ev_sym)
+            symtab_put(tc.tc_symtab, ev_sym)
+            @if e_name != ""
+              q_vsym = symbol_variable(e_name + "::" + ev_name, e_tid, 1, span_default(), tc.tc_scopes.stk_current_id)
+              scope_define(tc.tc_scopes, q_vsym)
+              symtab_put(tc.tc_symtab, q_vsym)
+            @end
+          @end
+        @end
+        ev_idx = ev_idx + 1
+      @end
+    @end
+    i_e = i_e + 1
   @end
 
   // Pass 2: Function signature forward declarations (enables mutual recursion and forward calls)

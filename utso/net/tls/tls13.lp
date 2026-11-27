@@ -2020,3 +2020,57 @@ global g_tls13_psk_lock = syscall(9, 0, 4096, 3, 34, 0 - 1, 0)
     server_name: server_name
   }
 @end
+
+// ── RFC 8446 §4.6.3 & §7.2 Post-Handshake KeyUpdate ─────────────────────────
+@struct Tls13KeyUpdateState
+  tku_secret: array
+  tku_key: array
+  tku_iv: array
+@end
+
+@fn tls13_update_traffic_secret(cipher, secret_bytes)
+  // WHY: RFC 8446 §7.2: application_traffic_secret_{N+1} =
+  // HKDF-Expand-Label(application_traffic_secret_N, "traffic upd", "", Hash.length).
+  @if cipher == 4866
+    return tls13_hkdf_expand_label_384(secret_bytes, "traffic upd", [], 48)
+  @end
+  return tls13_hkdf_expand_label(secret_bytes, "traffic upd", [], 32)
+@end
+
+@fn tls13_derive_traffic_keys(cipher, secret_bytes) -> Tls13KeyUpdateState
+  // WHY: RFC 8446 §7.3 traffic key/IV derivation for AES-128-GCM (4865),
+  // AES-256-GCM-SHA384 (4866), and ChaCha20-Poly1305 (4867).
+  @if cipher == 4866
+    k384 = tls13_hkdf_expand_label_384(secret_bytes, "key", [], 32)
+    iv384 = tls13_hkdf_expand_label_384(secret_bytes, "iv", [], 12)
+    return Tls13KeyUpdateState(secret_bytes, k384, iv384)
+  @end
+  klen = 16
+  @if cipher == 4867 klen = 32 @end
+  k256 = tls13_hkdf_expand_label(secret_bytes, "key", [], klen)
+  iv256 = tls13_hkdf_expand_label(secret_bytes, "iv", [], 12)
+  return Tls13KeyUpdateState(secret_bytes, k256, iv256)
+@end
+
+@fn tls13_key_update_next(cipher, current_secret) -> Tls13KeyUpdateState
+  next_sec = tls13_update_traffic_secret(cipher, current_secret)
+  return tls13_derive_traffic_keys(cipher, next_sec)
+@end
+
+@fn tls13_build_key_update_msg(request_update)
+  // WHY: RFC 8446 §4.6.3 KeyUpdate handshake message (type 24, length 1, request_update 0 or 1).
+  req_b = 0
+  @if request_update != 0 req_b = 1 @end
+  return [24, 0, 0, 1, req_b]
+@end
+
+@fn tls13_parse_key_update_msg(hs_bytes)
+  // WHY: Validates RFC 8446 §4.6.3 KeyUpdate framing (exact 5 bytes: type=24, len=1, req in {0,1});
+  // returns 0 (update_not_requested), 1 (update_requested), or -1 if malformed (illegal_parameter).
+  @if hs_bytes.len() != 5 return -1 @end
+  @if (hs_bytes[0] & 255) != 24 return -1 @end
+  @if (hs_bytes[1] & 255) != 0 || (hs_bytes[2] & 255) != 0 || (hs_bytes[3] & 255) != 1 return -1 @end
+  val = hs_bytes[4] & 255
+  @if val != 0 && val != 1 return -1 @end
+  return val
+@end

@@ -33,43 +33,84 @@ AES256_IV      = 12   // 96-bit nonce for GCM
 AES256_TAG     = 16   // 128-bit auth tag
 
 // ─── CSPRNG ───────────────────────────────────────────────────────────────────
-// WHY: Security depends on unpredictable random numbers.
-// Must use hardware RNG (getrandom syscall 318 on Linux AMD64).
+// WHY: Security depends on unpredictable random numbers. Uses SYS_getrandom (318)
+// with EINTR/short-read retry, falling back only to /dev/urandom (never cpu_clock()).
+fn _adv_read_urandom_exact buffer size
+    fd = syscall(2, "/dev/urandom", 0, 0, 0, 0, 0)
+    if fd < 0
+        return -1
+    end
+    got = 0
+    while got < size
+        r = syscall(0, fd, buffer + got, size - got, 0, 0, 0)
+        if r == -4
+            continue
+        end
+        if r <= 0
+            syscall(3, fd, 0, 0, 0, 0, 0)
+            return -1
+        end
+        got = got + r
+    end
+    syscall(3, fd, 0, 0, 0, 0, 0)
+    return got
+end
+
 fn CRYPTO_random_bytes buffer size
-    bytes_read = syscall(318, buffer, size, 0)
-    if bytes_read < 0
-        // Fallback: fill buffer using RDTSC cpu cycle entropy
-        i = 0
-        while i < size
-            c = cpu_clock() + (i * 104729)
-            if c < 0
-                c = 0 - c
-            mem_byte_write(buffer, i, c % 256)
-            i = i + 1
-        return size
-    return bytes_read
+    if size <= 0
+        return 0
+    end
+    got = 0
+    while got < size
+        r = syscall(318, buffer + got, size - got, 0, 0, 0, 0)
+        if r == -4
+            continue
+        end
+        if r <= 0
+            rem = _adv_read_urandom_exact(buffer + got, size - got)
+            if rem != (size - got)
+                return -1
+            end
+            return size
+        end
+        got = got + r
+    end
+    return got
+end
 
 fn CRYPTO_random_u64
-    // WHY: Secure 64-bit random number from kernel entropy
+    // WHY: Full 64-bit kernel entropy without INT64_MIN negation bug or clock() fallback
     buf = malloc(8)
     res = CRYPTO_random_bytes(buf, 8)
-    val = 0
-    if res > 0
-        val = mem_read(buf, 0)
-    else
-        val = cpu_clock()
+    if res != 8
+        free(buf, 8)
+        syscall(60, 1, 0, 0, 0, 0, 0)
+        return 0
+    end
+    val = mem_read(buf, 0)
     free(buf, 8)
-    if val < 0
-        val = 0 - val
     return val
+end
 
 fn CRYPTO_random_range min max
-    // WHY: Secure random integer uniformly bounded in range [min, max]
+    // WHY: Rejection-sampled uniform integer in [min, max] using 63-bit mask
     range = max - min + 1
     if range <= 0
         return min
-    n = CRYPTO_random_u64()
+    end
+    max_u63 = 9223372036854775807
+    limit = (max_u63 / range) * range
+    tries = 0
+    while tries < 16
+        n = CRYPTO_random_u64() & max_u63
+        if n < limit or limit <= 0
+            return min + (n % range)
+        end
+        tries = tries + 1
+    end
+    n = CRYPTO_random_u64() & max_u63
     return min + (n % range)
+end
 
 // ─── BLAKE3 ───────────────────────────────────────────────────────────────────
 // WHY: BLAKE3 provides tree-hashing and high-throughput cryptographic hashing
